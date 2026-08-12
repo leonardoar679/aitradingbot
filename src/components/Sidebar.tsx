@@ -54,6 +54,29 @@ export function Sidebar({
         )}
       </div>
 
+      {!collapsed && (
+        <div style={{ padding: '0.75rem 0.75rem 0' }}>
+          <select
+            value="local"
+            onChange={() => {}}
+            aria-label="Workspace"
+            style={{
+              width: '100%',
+              background: 'var(--bg-app)',
+              color: 'var(--text-primary)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '0.45rem 0.6rem',
+              fontSize: '0.8rem',
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            <option value="local">local</option>
+          </select>
+        </div>
+      )}
+
       <div
         style={{
           display: 'flex',

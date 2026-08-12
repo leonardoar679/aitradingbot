@@ -25,8 +25,11 @@ export const IpcChannel = {
 export type IpcChannel = (typeof IpcChannel)[keyof typeof IpcChannel]
 
 export interface AppSettings {
-  theme: 'light' | 'dark'
+  theme: 'dark' | 'light' | 'colorblind'
   bots: Bot[]
+  botRuns: BotRun[]
+  executors: ExecutorConfig[]
+  routines: RoutineConfig[]
 }
 
 /** Status of a stored exchange API credential. Crosses IPC — never the raw key/secret, which
@@ -171,4 +174,87 @@ export interface Bot {
   /** Unix seconds when this bot was last turned on — null while disabled. Dry-run paper trades
    * are only counted from this point on, not from the indicator warmup lookback before it. */
   enabledAt: number | null
+  /** Archived bots are hidden from the Active tab and can no longer be enabled, but are kept
+   * (not deleted) so their Runs history stays attributable. */
+  archived: boolean
+}
+
+/** A completed dry-run session, recorded when a bot is disabled — one row per enable/disable
+ * cycle, independent of whether the bot is later archived or re-enabled. */
+export interface BotRun {
+  id: string
+  botId: string
+  botName: string
+  exchange: Exchange
+  symbol: string
+  startedAt: number
+  endedAt: number
+  trades: number
+  wins: number
+  netPct: number
+}
+
+export type ExecutorType = 'grid' | 'dca' | 'twap'
+export type ExecutorSide = 'buy' | 'sell'
+
+export interface GridExecutorParams {
+  side: ExecutorSide
+  startPrice: number
+  endPrice: number
+  totalAmountQuote: number
+  maxOpenOrders: number
+  levelSpreadPct: number
+  takeProfitPct: number
+  limitPrice: number | null
+}
+
+export interface DcaLevel {
+  priceOffsetPct: number
+  amountQuote: number
+}
+
+export interface DcaExecutorParams {
+  side: ExecutorSide
+  levels: DcaLevel[]
+  takeProfitPct: number
+  stopLossPct: number | null
+  timeLimitSec: number | null
+}
+
+export interface TwapExecutorParams {
+  side: ExecutorSide
+  totalAmountQuote: number
+  totalDurationSec: number
+  orderIntervalSec: number
+}
+
+export type ExecutorStatus = 'active' | 'stopped'
+
+export interface ExecutorConfig {
+  id: string
+  name: string
+  type: ExecutorType
+  exchange: Exchange
+  symbol: string
+  baseAsset: string
+  quoteAsset: string
+  createdAt: number
+  status: ExecutorStatus
+  stoppedAt: number | null
+  params: GridExecutorParams | DcaExecutorParams | TwapExecutorParams
+}
+
+/** A saved recurring backtest, re-run on a client-side timer while the app is open (Condor's
+ * routines are scheduled Python workflows; there's no backend here to host that, so this is the
+ * closest honest adaptation). Run reports are session-only — see src/routines/routineStore.ts. */
+export interface RoutineConfig {
+  id: string
+  name: string
+  exchange: Exchange
+  symbol: string
+  interval: Interval
+  scheduleSec: number
+  enabled: boolean
+  createdAt: number
+  lastRunAt: number | null
 }

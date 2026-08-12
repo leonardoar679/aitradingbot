@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react'
-import { KeyRound, ShieldCheck, Trash2 } from 'lucide-react'
+import { KeyRound, ShieldCheck, Trash2, Moon, Sun, Eye } from 'lucide-react'
 import { Card } from '../components/Card'
+import { useTheme } from '../theme/ThemeContext'
+import type { Theme } from '../theme/palette'
 import type { CredentialStatus, Exchange } from '../../shared/ipc'
+
+const THEME_OPTIONS: { id: Theme; label: string; icon: typeof Moon }[] = [
+  { id: 'dark', label: 'Dark', icon: Moon },
+  { id: 'light', label: 'Light', icon: Sun },
+  { id: 'colorblind', label: 'Colorblind', icon: Eye }
+]
 
 // Live trading is Binance-only for now (see the live-trading design plan) — this screen only
 // offers credential management for exchanges that actually have a trading adapter, rather than
@@ -182,6 +190,7 @@ function CredentialRow({
 
 export function SettingsPanel(): React.JSX.Element {
   const [statuses, setStatuses] = useState<CredentialStatus[]>([])
+  const { theme, setTheme } = useTheme()
 
   function refresh(): void {
     void window.api.credentials.list().then(setStatuses)
@@ -193,8 +202,34 @@ export function SettingsPanel(): React.JSX.Element {
 
   return (
     <>
-      <Card title="Settings">
-        <p style={{ color: 'var(--text-secondary)', margin: 0 }}>Settings placeholder.</p>
+      <Card title="Appearance">
+        <div style={{ display: 'flex', gap: '0.6rem' }}>
+          {THEME_OPTIONS.map(({ id, label, icon: Icon }) => {
+            const active = theme === id
+            return (
+              <button
+                key={id}
+                onClick={() => setTheme(id)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  padding: '0.6rem 1rem',
+                  border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                  borderRadius: 'var(--radius-sm)',
+                  background: active ? 'var(--accent-soft)' : 'var(--bg-app)',
+                  color: active ? 'var(--accent)' : 'var(--text-primary)',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                <Icon size={15} />
+                {label}
+              </button>
+            )
+          })}
+        </div>
       </Card>
 
       <Card title="Live Trading — API Credentials">

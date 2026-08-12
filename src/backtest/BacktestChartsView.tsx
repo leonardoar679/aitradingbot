@@ -10,6 +10,8 @@ import {
   type UTCTimestamp
 } from 'lightweight-charts'
 import { ChevronDown, ChevronRight } from 'lucide-react'
+import { useTheme } from '../theme/ThemeContext'
+import { CHART_PALETTE, type ChartPalette } from '../theme/palette'
 import type { Candle } from '../../shared/ipc'
 import type { Trade } from './engine'
 
@@ -28,20 +30,20 @@ function exitReasonLabel(reason: Trade['exitReason']): string {
   return 'SIGNAL'
 }
 
-function markersForTrade(t: Trade): SeriesMarker<Time>[] {
+function markersForTrade(t: Trade, palette: ChartPalette): SeriesMarker<Time>[] {
   return [
     {
       time: t.entryTime as UTCTimestamp,
       position: t.side === 'long' ? 'belowBar' : 'aboveBar',
       shape: t.side === 'long' ? 'arrowUp' : 'arrowDown',
-      color: t.side === 'long' ? '#3b82f6' : '#ef5350',
+      color: t.side === 'long' ? palette.accent : palette.down,
       text: t.side === 'long' ? 'BUY · LONG' : 'SELL · SHORT'
     },
     {
       time: t.exitTime as UTCTimestamp,
       position: t.side === 'long' ? 'aboveBar' : 'belowBar',
       shape: t.side === 'long' ? 'arrowDown' : 'arrowUp',
-      color: t.side === 'long' ? '#ef5350' : '#3b82f6',
+      color: t.side === 'long' ? palette.down : palette.accent,
       text: t.side === 'long' ? 'SELL · LONG' : 'BUY · SHORT'
     }
   ]
@@ -66,6 +68,8 @@ export function BacktestChartsView({ candles, trades }: BacktestChartsViewProps)
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
   const [tradesVisible, setTradesVisible] = useState(true)
   const [selectedIndex, setSelectedIndex] = useState(0)
+  const { theme } = useTheme()
+  const palette = CHART_PALETTE[theme]
 
   useEffect(() => {
     const container = containerRef.current
@@ -73,22 +77,22 @@ export function BacktestChartsView({ candles, trades }: BacktestChartsViewProps)
 
     const chart: IChartApi = createChart(container, {
       autoSize: true,
-      layout: { background: { color: 'transparent' }, textColor: '#c7cad1' },
+      layout: { background: { color: palette.background }, textColor: palette.text },
       grid: {
-        vertLines: { color: 'rgba(120,120,130,0.15)' },
-        horzLines: { color: 'rgba(120,120,130,0.15)' }
+        vertLines: { color: palette.grid },
+        horzLines: { color: palette.grid }
       },
       timeScale: { timeVisible: true, secondsVisible: false },
-      rightPriceScale: { borderColor: 'var(--border)' }
+      rightPriceScale: { borderColor: palette.border }
     })
     chartRef.current = chart
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#26a69a',
-      downColor: '#ef5350',
+      upColor: palette.up,
+      downColor: palette.down,
       borderVisible: false,
-      wickUpColor: '#26a69a',
-      wickDownColor: '#ef5350'
+      wickUpColor: palette.up,
+      wickDownColor: palette.down
     })
     candleSeries.setData(
       candles.map((c) => ({
@@ -108,7 +112,7 @@ export function BacktestChartsView({ candles, trades }: BacktestChartsViewProps)
       chartRef.current = null
       markersRef.current = null
     }
-  }, [candles])
+  }, [candles, palette])
 
   useEffect(() => {
     const chart = chartRef.current
@@ -116,7 +120,7 @@ export function BacktestChartsView({ candles, trades }: BacktestChartsViewProps)
     const trade = trades[selectedIndex]
     if (!chart || !markers || !trade || candles.length === 0) return
 
-    markers.setMarkers(tradesVisible ? markersForTrade(trade) : [])
+    markers.setMarkers(tradesVisible ? markersForTrade(trade, palette) : [])
 
     const entryIdx = nearestCandleIndex(candles, trade.entryTime)
     const exitIdx = nearestCandleIndex(candles, trade.exitTime)
@@ -126,7 +130,7 @@ export function BacktestChartsView({ candles, trades }: BacktestChartsViewProps)
       from: candles[fromIdx].time as UTCTimestamp,
       to: candles[toIdx].time as UTCTimestamp
     })
-  }, [selectedIndex, tradesVisible, trades, candles])
+  }, [selectedIndex, tradesVisible, trades, candles, palette])
 
   return (
     <div style={{ display: 'flex', gap: '1.25rem', height: 560 }}>

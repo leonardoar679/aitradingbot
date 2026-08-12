@@ -20,6 +20,8 @@ import type { TimeAnchorSettings } from '../components/timeTools/TimeToolsModal'
 import type { IndicatorSettings } from '../components/indicators/IndicatorsPopover'
 import { requestAiSignal } from '../ai/aiClient'
 import { formatQuotePrice } from '../utils/formatCurrency'
+import { useTheme } from '../theme/ThemeContext'
+import { CHART_PALETTE } from '../theme/palette'
 import { DEFAULT_INTERVAL, type Candle, type Exchange, type Interval } from '../../shared/ipc'
 
 const EMA_PERIOD = 20
@@ -44,6 +46,8 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
   const [status, setStatus] = useState<'loading' | 'live' | 'error'>('loading')
   const [lastPrice, setLastPrice] = useState<number | null>(null)
   const [interval, setChartInterval] = useState<Interval>(DEFAULT_INTERVAL)
+  const { theme } = useTheme()
+  const palette = CHART_PALETTE[theme]
   const [anchorSettings, setAnchorSettings] = useState<TimeAnchorSettings>({
     enabled: true,
     anchorLine: false,
@@ -115,17 +119,17 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
     const chart: IChartApi = createChart(container, {
       autoSize: true,
       layout: {
-        background: { color: 'transparent' },
-        textColor: '#c7cad1',
+        background: { color: palette.background },
+        textColor: palette.text,
         panes: {
-          separatorColor: '#22262c',
-          separatorHoverColor: 'rgba(59,130,246,0.15)',
+          separatorColor: palette.grid,
+          separatorHoverColor: `${palette.accent}26`,
           enableResize: true
         }
       },
       grid: {
-        vertLines: { color: 'rgba(120,120,130,0.15)' },
-        horzLines: { color: 'rgba(120,120,130,0.15)' }
+        vertLines: { color: palette.grid },
+        horzLines: { color: palette.grid }
       },
       timeScale: { timeVisible: true, secondsVisible: false },
       crosshair: { mode: 0 }
@@ -141,11 +145,11 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
     })
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#26a69a',
-      downColor: '#ef5350',
+      upColor: palette.up,
+      downColor: palette.down,
       borderVisible: false,
-      wickUpColor: '#26a69a',
-      wickDownColor: '#ef5350'
+      wickUpColor: palette.up,
+      wickDownColor: palette.down
     })
 
     const volumeSeries = chart.addSeries(HistogramSeries, {
@@ -157,7 +161,7 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
     volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } })
 
     const emaSeries = chart.addSeries(LineSeries, {
-      color: '#f0b90b',
+      color: palette.gold,
       lineWidth: 2,
       priceLineVisible: false,
       lastValueVisible: false
@@ -174,7 +178,7 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
 
     const macdPane = chart.addPane()
     const macdLineSeries: ISeriesApi<'Line'> = macdPane.addSeries(LineSeries, {
-      color: '#3b82f6',
+      color: palette.accent,
       lineWidth: 1
     })
     const macdSignalSeries: ISeriesApi<'Line'> = macdPane.addSeries(LineSeries, {
@@ -221,7 +225,7 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
         candles.map((c) => ({
           time: toTime(c.time),
           value: c.volume,
-          color: c.close >= c.open ? 'rgba(38,166,154,0.5)' : 'rgba(239,83,80,0.5)'
+          color: c.close >= c.open ? `${palette.up}80` : `${palette.down}80`
         }))
       )
 
@@ -259,7 +263,7 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
           macdHistData.push({
             time,
             value: entry.histogram,
-            color: entry.histogram >= 0 ? 'rgba(38,166,154,0.6)' : 'rgba(239,83,80,0.6)'
+            color: entry.histogram >= 0 ? `${palette.up}99` : `${palette.down}99`
           })
         }
       })
@@ -280,7 +284,7 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
           time: toTime(time),
           position: isBuy ? 'belowBar' : 'aboveBar',
           shape: isBuy ? 'arrowUp' : 'arrowDown',
-          color: isBuy ? '#26a69a' : '#ef5350',
+          color: isBuy ? palette.up : palette.down,
           text: signal.recommendation.toUpperCase()
         }
         markerList = [...markerList, newMarker].slice(-MAX_MARKERS)
@@ -321,7 +325,7 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
         to: toTime(nearest + span / 2)
       })
       if (anchorSettingsRef.current.anchorLine) {
-        anchorMarker = { time: toTime(nearest), position: 'aboveBar', shape: 'circle', color: '#c7cad1', text: 'Anchor' }
+        anchorMarker = { time: toTime(nearest), position: 'aboveBar', shape: 'circle', color: palette.text, text: 'Anchor' }
         updateMarkers()
       }
     }
@@ -370,7 +374,7 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
       macdHistSeriesRef.current = null
       candlesRef.current.clear()
     }
-  }, [exchange, symbol, interval])
+  }, [exchange, symbol, interval, palette])
 
   function handleJumpToDate(date: Date): void {
     const chart = chartRef.current

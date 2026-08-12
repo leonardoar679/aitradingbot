@@ -15,6 +15,8 @@ import {
 import { ArrowLeft } from 'lucide-react'
 import { EXCHANGES } from '../../shared/ipc'
 import { useDryRun } from './useDryRun'
+import { useTheme } from '../theme/ThemeContext'
+import { CHART_PALETTE } from '../theme/palette'
 import type { Trade } from '../backtest/engine'
 import type { Bot } from './types'
 
@@ -42,6 +44,8 @@ export function BotDetailView({ bot, onBack }: BotDetailViewProps): React.JSX.El
 
   const dryRun = useDryRun(bot.exchange, bot.symbol, true, bot.enabledAt)
   const exchangeName = EXCHANGES.find((e) => e.id === bot.exchange)?.name ?? bot.exchange
+  const { theme } = useTheme()
+  const palette = CHART_PALETTE[theme]
 
   const paperTrades =
     bot.enabledAt !== null && dryRun.result ? dryRun.result.trades.filter((t) => t.entryTime >= bot.enabledAt!) : []
@@ -56,22 +60,22 @@ export function BotDetailView({ bot, onBack }: BotDetailViewProps): React.JSX.El
 
     const chart = createChart(container, {
       autoSize: true,
-      layout: { background: { color: 'transparent' }, textColor: '#c7cad1' },
+      layout: { background: { color: palette.background }, textColor: palette.text },
       grid: {
-        vertLines: { color: 'rgba(120,120,130,0.15)' },
-        horzLines: { color: 'rgba(120,120,130,0.15)' }
+        vertLines: { color: palette.grid },
+        horzLines: { color: palette.grid }
       },
       timeScale: { timeVisible: true, secondsVisible: false },
-      rightPriceScale: { borderColor: 'var(--border)' }
+      rightPriceScale: { borderColor: palette.border }
     })
     chartRef.current = chart
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#26a69a',
-      downColor: '#ef5350',
+      upColor: palette.up,
+      downColor: palette.down,
       borderVisible: false,
-      wickUpColor: '#26a69a',
-      wickDownColor: '#ef5350'
+      wickUpColor: palette.up,
+      wickDownColor: palette.down
     })
     seriesRef.current = candleSeries
     markersRef.current = createSeriesMarkers(candleSeries, [])
@@ -83,7 +87,7 @@ export function BotDetailView({ bot, onBack }: BotDetailViewProps): React.JSX.El
       markersRef.current = null
       stopLineRef.current = null
     }
-  }, [])
+  }, [palette])
 
   useEffect(() => {
     const chart = chartRef.current
@@ -107,14 +111,14 @@ export function BotDetailView({ bot, onBack }: BotDetailViewProps): React.JSX.El
         time: t.entryTime as UTCTimestamp,
         position: 'belowBar',
         shape: 'arrowUp',
-        color: '#3b82f6',
+        color: palette.accent,
         text: 'BUY'
       })
       tradeMarkers.push({
         time: t.exitTime as UTCTimestamp,
         position: 'aboveBar',
         shape: 'arrowDown',
-        color: t.pnl >= 0 ? '#26a69a' : '#ef5350',
+        color: t.pnl >= 0 ? palette.up : palette.down,
         text: exitReasonLabel(t.exitReason).toUpperCase()
       })
     }
@@ -123,7 +127,7 @@ export function BotDetailView({ bot, onBack }: BotDetailViewProps): React.JSX.El
         time: openPosition.entryTime as UTCTimestamp,
         position: 'belowBar',
         shape: 'arrowUp',
-        color: '#3b82f6',
+        color: palette.accent,
         text: 'BUY'
       })
     }
@@ -136,7 +140,7 @@ export function BotDetailView({ bot, onBack }: BotDetailViewProps): React.JSX.El
     if (openPosition) {
       stopLineRef.current = series.createPriceLine({
         price: openPosition.stopPrice,
-        color: '#ef5350',
+        color: palette.down,
         lineWidth: 1,
         lineStyle: LineStyle.Dashed,
         axisLabelVisible: true,
@@ -147,7 +151,7 @@ export function BotDetailView({ bot, onBack }: BotDetailViewProps): React.JSX.El
     chart.timeScale().fitContent()
     // paperTrades is derived fresh each render from dryRun.result — depend on that instead
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dryRun.candles, dryRun.result, openPosition])
+  }, [dryRun.candles, dryRun.result, openPosition, palette])
 
   return (
     <div>

@@ -1,4 +1,4 @@
-import { Bot as BotIcon, Trash2 } from 'lucide-react'
+import { Bot as BotIcon, Archive } from 'lucide-react'
 import { EXCHANGES } from '../../shared/ipc'
 import { useDryRun } from './useDryRun'
 import type { Bot } from './types'
@@ -6,7 +6,7 @@ import type { Bot } from './types'
 interface BotCardProps {
   bot: Bot
   onToggle: (id: string) => void
-  onRemove: (id: string) => void
+  onArchive: (id: string) => void
   onViewDetail: (id: string) => void
 }
 
@@ -83,7 +83,7 @@ function DryRunPanel({ bot }: { bot: Bot }): React.JSX.Element {
   )
 }
 
-export function BotCard({ bot, onToggle, onRemove, onViewDetail }: BotCardProps): React.JSX.Element {
+export function BotCard({ bot, onToggle, onArchive, onViewDetail }: BotCardProps): React.JSX.Element {
   const exchangeName = EXCHANGES.find((e) => e.id === bot.exchange)?.name ?? bot.exchange
 
   return (
@@ -113,11 +113,11 @@ export function BotCard({ bot, onToggle, onRemove, onViewDetail }: BotCardProps)
           <BotIcon size={13} color="var(--accent)" />
         </div>
         <button
-          onClick={() => onRemove(bot.id)}
-          title="Remove bot"
+          onClick={() => onArchive(bot.id)}
+          title="Archive bot"
           style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '0.2rem' }}
         >
-          <Trash2 size={14} />
+          <Archive size={14} />
         </button>
       </div>
 

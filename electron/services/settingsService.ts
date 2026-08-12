@@ -5,7 +5,10 @@ import type { AppSettings } from '../../shared/ipc'
 
 const DEFAULT_SETTINGS: AppSettings = {
   theme: 'dark',
-  bots: []
+  bots: [],
+  botRuns: [],
+  executors: [],
+  routines: []
 }
 
 let cache: AppSettings | null = null

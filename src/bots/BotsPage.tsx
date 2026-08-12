@@ -1,21 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
-import { Copy, LineChart, Layers, PieChart, Plus, Shuffle, Star, type LucideIcon } from 'lucide-react'
+import { Activity, Archive, Plus, Zap, type LucideIcon } from 'lucide-react'
 import { PageHeader } from '../components/PageHeader'
 import { BotCard } from './BotCard'
 import { AddBotModal } from './AddBotModal'
 import { BotDetailView } from './BotDetailView'
+import { RunsTab } from './RunsTab'
+import { ArchivedTab } from './ArchivedTab'
+import { runBacktest } from '../backtest/engine'
 import type { Bot } from './types'
-import type { Exchange, SymbolInfo } from '../../shared/ipc'
+import type { BotRun, Exchange, SymbolInfo } from '../../shared/ipc'
 
-type Tab = 'for-you' | 'baskets' | 'strategies' | 'copy' | 'tradingview' | 'arbitrage'
+type Tab = 'active' | 'runs' | 'archived'
 
 const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
-  { id: 'for-you', label: 'For you', icon: Star },
-  { id: 'baskets', label: 'Crypto baskets', icon: PieChart },
-  { id: 'strategies', label: 'Strategies', icon: Layers },
-  { id: 'copy', label: 'Copy Trading', icon: Copy },
-  { id: 'tradingview', label: 'TradingView', icon: LineChart },
-  { id: 'arbitrage', label: 'Arbitrage', icon: Shuffle }
+  { id: 'active', label: 'Active', icon: Zap },
+  { id: 'runs', label: 'Runs', icon: Activity },
+  { id: 'archived', label: 'Archived', icon: Archive }
 ]
 
 function tabButtonStyle(active: boolean): React.CSSProperties {
@@ -35,9 +35,41 @@ function tabButtonStyle(active: boolean): React.CSSProperties {
   }
 }
 
+// Fetches the bot's own enabled-window candles and replays the same backtest engine used by its
+// live dry-run, to record a permanent BotRun summary at the moment it's disabled — otherwise
+// that dry-run history (only ever recomputed live, never stored) would simply vanish.
+async function buildRunRecord(bot: Bot, endedAt: number): Promise<BotRun | null> {
+  if (bot.enabledAt === null) return null
+  try {
+    const { candles } = await window.api.market.fetchHistoricalRange(bot.exchange, bot.symbol, '4h', bot.enabledAt, endedAt)
+    if (candles.length === 0) return null
+    const result = runBacktest(candles, { forceCloseAtEnd: false })
+    const trades = result.trades.filter((t) => t.entryTime >= bot.enabledAt!)
+    if (trades.length === 0 && endedAt - bot.enabledAt < 300) return null
+    const wins = trades.filter((t) => t.pnl > 0).length
+    const netPct = trades.length > 0 ? (trades.reduce((acc, t) => acc * (1 + t.returnPct / 100), 1) - 1) * 100 : 0
+    return {
+      id: crypto.randomUUID(),
+      botId: bot.id,
+      botName: bot.name,
+      exchange: bot.exchange,
+      symbol: bot.symbol,
+      startedAt: bot.enabledAt,
+      endedAt,
+      trades: trades.length,
+      wins,
+      netPct
+    }
+  } catch (error) {
+    console.error('Failed to build bot run record:', error)
+    return null
+  }
+}
+
 export function BotsPage(): React.JSX.Element {
-  const [tab, setTab] = useState<Tab>('for-you')
+  const [tab, setTab] = useState<Tab>('active')
   const [bots, setBots] = useState<Bot[]>([])
+  const [botRuns, setBotRuns] = useState<BotRun[]>([])
   const [showAdd, setShowAdd] = useState(false)
   const [selectedBotId, setSelectedBotId] = useState<string | null>(null)
   const loadedRef = useRef(false)
@@ -47,6 +79,7 @@ export function BotsPage(): React.JSX.Element {
     window.api.settings.get().then((settings) => {
       if (cancelled) return
       setBots(settings.bots)
+      setBotRuns(settings.botRuns)
       loadedRef.current = true
     })
     return () => {
@@ -71,26 +104,49 @@ export function BotsPage(): React.JSX.Element {
         quoteAsset: input.pair.quoteAsset,
         strategy: input.strategy,
         enabled: false,
-        enabledAt: null
+        enabledAt: null,
+        archived: false
       }
     ])
     setShowAdd(false)
   }
 
   function handleToggle(id: string): void {
-    setBots((prev) =>
-      prev.map((b) =>
-        b.id === id ? { ...b, enabled: !b.enabled, enabledAt: !b.enabled ? Math.floor(Date.now() / 1000) : null } : b
-      )
-    )
+    const bot = bots.find((b) => b.id === id)
+    if (!bot) return
+
+    const turningOff = bot.enabled
+    const nowSec = Math.floor(Date.now() / 1000)
+    setBots((prev) => prev.map((b) => (b.id === id ? { ...b, enabled: !b.enabled, enabledAt: turningOff ? null : nowSec } : b)))
+
+    if (turningOff) {
+      void buildRunRecord(bot, nowSec).then((run) => {
+        if (!run) return
+        setBotRuns((prev) => {
+          const next = [...prev, run]
+          void window.api.settings.set({ botRuns: next })
+          return next
+        })
+      })
+    }
   }
 
-  function handleRemove(id: string): void {
-    setBots((prev) => prev.filter((b) => b.id !== id))
+  function handleArchive(id: string): void {
+    setBots((prev) => prev.map((b) => (b.id === id ? { ...b, archived: true, enabled: false } : b)))
     setSelectedBotId((prev) => (prev === id ? null : prev))
   }
 
-  const selectedBot = bots.find((b) => b.id === selectedBotId) ?? null
+  function handleRestore(id: string): void {
+    setBots((prev) => prev.map((b) => (b.id === id ? { ...b, archived: false } : b)))
+  }
+
+  function handleDeletePermanently(id: string): void {
+    setBots((prev) => prev.filter((b) => b.id !== id))
+  }
+
+  const activeBots = bots.filter((b) => !b.archived)
+  const archivedBots = bots.filter((b) => b.archived)
+  const selectedBot = activeBots.find((b) => b.id === selectedBotId) ?? null
 
   return (
     <>
@@ -101,11 +157,12 @@ export function BotsPage(): React.JSX.Element {
           <button key={id} style={tabButtonStyle(tab === id)} onClick={() => setTab(id)}>
             <Icon size={15} />
             {label}
+            {id === 'archived' && archivedBots.length > 0 && ` (${archivedBots.length})`}
           </button>
         ))}
       </div>
 
-      {tab === 'for-you' && (
+      {tab === 'active' && (
         <>
           {!selectedBot && (
             <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', margin: '0.9rem 0 0' }}>
@@ -129,8 +186,8 @@ export function BotsPage(): React.JSX.Element {
               marginTop: '0.9rem'
             }}
           >
-            {bots.map((bot) => (
-              <BotCard key={bot.id} bot={bot} onToggle={handleToggle} onRemove={handleRemove} onViewDetail={setSelectedBotId} />
+            {activeBots.map((bot) => (
+              <BotCard key={bot.id} bot={bot} onToggle={handleToggle} onArchive={handleArchive} onViewDetail={setSelectedBotId} />
             ))}
             <button
               onClick={() => setShowAdd(true)}
@@ -157,20 +214,10 @@ export function BotsPage(): React.JSX.Element {
         </>
       )}
 
-      {tab !== 'for-you' && (
-        <div
-          style={{
-            marginTop: '0.9rem',
-            padding: '3rem 1rem',
-            textAlign: 'center',
-            color: 'var(--text-muted)',
-            fontSize: '0.85rem',
-            border: '1px dashed var(--border)',
-            borderRadius: 'var(--radius-md)'
-          }}
-        >
-          {TABS.find((t) => t.id === tab)?.label} is coming soon.
-        </div>
+      {tab === 'runs' && <RunsTab runs={botRuns} />}
+
+      {tab === 'archived' && (
+        <ArchivedTab bots={archivedBots} onRestore={handleRestore} onDelete={handleDeletePermanently} />
       )}
 
       {showAdd && <AddBotModal onCreate={handleCreate} onClose={() => setShowAdd(false)} />}

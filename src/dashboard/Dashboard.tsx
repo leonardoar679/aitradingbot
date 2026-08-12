@@ -16,7 +16,7 @@ export function Dashboard(): React.JSX.Element {
 
   return (
     <>
-      <PageHeader title="Dashboard" subtitle="Live market overview and account status" />
+      <PageHeader title="Market" subtitle="Live market overview and account status" />
       <MarketTicker
         exchange={exchange}
         pair={pair}
