@@ -10,3 +10,4 @@ backend/dist/
 .DS_Store
 *.pfx
 build/cert.pass
+package-lock.json
