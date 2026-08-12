@@ -1,45 +1,103 @@
-import type { PriceUpdate } from '../../shared/ipc'
+import type { Candle, Exchange, Interval, SymbolInfo, Ticker24h } from '../../shared/ipc'
+import { binanceAdapter } from './exchanges/binance'
+import { coinbaseAdapter } from './exchanges/coinbase'
+import { krakenAdapter } from './exchanges/kraken'
+import { bithumbAdapter } from './exchanges/bithumb'
+import { upbitAdapter } from './exchanges/upbit'
+import { coinoneAdapter } from './exchanges/coinone'
+import { korbitAdapter } from './exchanges/korbit'
+import { gopaxAdapter } from './exchanges/gopax'
+import type { ExchangeAdapter } from './exchanges/types'
 
-// Simulated tick feed — replace with a real exchange/websocket connection later.
-// Everything above this line is the only part that should need to change.
-
-type Listener = (update: PriceUpdate) => void
-
-const timers = new Map<string, ReturnType<typeof setInterval>>()
-const lastPrice = new Map<string, number>()
-const listeners = new Set<Listener>()
-
-export function onPriceUpdate(listener: Listener): () => void {
-  listeners.add(listener)
-  return () => listeners.delete(listener)
+const ADAPTERS: Record<Exchange, ExchangeAdapter> = {
+  binance: binanceAdapter,
+  coinbase: coinbaseAdapter,
+  kraken: krakenAdapter,
+  bithumb: bithumbAdapter,
+  upbit: upbitAdapter,
+  coinone: coinoneAdapter,
+  korbit: korbitAdapter,
+  gopax: gopaxAdapter
 }
 
-export function subscribe(symbol: string): void {
-  if (timers.has(symbol)) return
-
-  const base = lastPrice.get(symbol) ?? 100 + Math.random() * 900
-  lastPrice.set(symbol, base)
-
-  const timer = setInterval(() => {
-    const prev = lastPrice.get(symbol) ?? base
-    const next = Math.max(0.01, prev * (1 + (Math.random() - 0.5) * 0.01))
-    lastPrice.set(symbol, next)
-
-    const update: PriceUpdate = { symbol, price: Number(next.toFixed(2)), timestamp: Date.now() }
-    for (const listener of listeners) listener(update)
-  }, 1000)
-
-  timers.set(symbol, timer)
+function getAdapter(exchange: Exchange): ExchangeAdapter {
+  const adapter = ADAPTERS[exchange]
+  if (!adapter) throw new Error(`Unknown exchange: ${exchange}`)
+  return adapter
 }
 
-export function unsubscribe(symbol: string): void {
-  const timer = timers.get(symbol)
-  if (timer) {
-    clearInterval(timer)
-    timers.delete(symbol)
-  }
+const candleListeners = new Set<(candle: Candle) => void>()
+const tickerListeners = new Set<(ticker: Ticker24h) => void>()
+let stopCandleStream: (() => void) | null = null
+let stopTickerStream: (() => void) | null = null
+
+export function onCandleUpdate(listener: (candle: Candle) => void): () => void {
+  candleListeners.add(listener)
+  return () => candleListeners.delete(listener)
 }
 
-export function unsubscribeAll(): void {
-  for (const symbol of timers.keys()) unsubscribe(symbol)
+export function onTickerUpdate(listener: (ticker: Ticker24h) => void): () => void {
+  tickerListeners.add(listener)
+  return () => tickerListeners.delete(listener)
+}
+
+export function listSymbols(exchange: Exchange): Promise<SymbolInfo[]> {
+  return getAdapter(exchange).listSymbols()
+}
+
+export function fetchHistoricalCandles(
+  exchange: Exchange,
+  symbol: string,
+  interval: Interval,
+  limit?: number
+): Promise<Candle[]> {
+  return getAdapter(exchange).fetchHistoricalCandles(symbol, interval, limit)
+}
+
+export function fetchTicker24h(exchange: Exchange, symbol: string): Promise<Ticker24h> {
+  return getAdapter(exchange).fetchTicker24h(symbol)
+}
+
+let rangeFetchCancelled = false
+
+export function fetchHistoricalRange(
+  exchange: Exchange,
+  symbol: string,
+  interval: Interval,
+  startSec: number,
+  endSec: number,
+  onProgress: (done: number, total: number) => void
+): Promise<{ candles: Candle[]; cancelled: boolean }> {
+  rangeFetchCancelled = false
+  return getAdapter(exchange)
+    .fetchHistoricalRange(symbol, interval, startSec, endSec, onProgress, () => rangeFetchCancelled)
+    .then((candles) => ({ candles, cancelled: rangeFetchCancelled }))
+}
+
+export function cancelHistoricalRangeFetch(): void {
+  rangeFetchCancelled = true
+}
+
+export async function subscribeCandles(exchange: Exchange, symbol: string, interval: Interval): Promise<void> {
+  stopCandleStream?.()
+  stopCandleStream = await getAdapter(exchange).subscribeCandles(symbol, interval, (candle) => {
+    for (const listener of candleListeners) listener(candle)
+  })
+}
+
+export function unsubscribeCandles(): void {
+  stopCandleStream?.()
+  stopCandleStream = null
+}
+
+export async function subscribeTicker(exchange: Exchange, symbol: string): Promise<void> {
+  stopTickerStream?.()
+  stopTickerStream = await getAdapter(exchange).subscribeTicker(symbol, (ticker) => {
+    for (const listener of tickerListeners) listener(ticker)
+  })
+}
+
+export function unsubscribeTicker(): void {
+  stopTickerStream?.()
+  stopTickerStream = null
 }

@@ -2,8 +2,11 @@ node_modules
 .claude
 out/
 dist/
+release/
 backend/dist/
 .env
 .env.*
 *.log
 .DS_Store
+*.pfx
+build/cert.pass

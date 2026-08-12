@@ -2,8 +2,26 @@ import type { PropsWithChildren } from 'react'
 
 export function Card({ title, children }: PropsWithChildren<{ title: string }>): React.JSX.Element {
   return (
-    <section style={{ border: '1px solid #444', borderRadius: 8, padding: '1rem' }}>
-      <h2 style={{ marginTop: 0, fontSize: '1rem' }}>{title}</h2>
+    <section
+      style={{
+        background: 'var(--bg-surface)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-md)',
+        padding: '1.25rem'
+      }}
+    >
+      <h2
+        style={{
+          margin: '0 0 0.9rem',
+          fontSize: '0.7rem',
+          fontWeight: 600,
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+          color: 'var(--text-secondary)'
+        }}
+      >
+        {title}
+      </h2>
       {children}
     </section>
   )

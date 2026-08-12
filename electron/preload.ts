@@ -1,6 +1,17 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import { IpcChannel, type AppSettings, type PriceUpdate } from '../shared/ipc'
+import {
+  IpcChannel,
+  type AppSettings,
+  type Candle,
+  type CredentialStatus,
+  type Exchange,
+  type HistoricalRangeProgress,
+  type HistoricalRangeResult,
+  type Interval,
+  type SymbolInfo,
+  type Ticker24h
+} from '../shared/ipc'
 
 const api = {
   ping: (): Promise<string> => ipcRenderer.invoke(IpcChannel.AppPing),
@@ -11,14 +22,46 @@ const api = {
       ipcRenderer.invoke(IpcChannel.SettingsSet, patch)
   },
   market: {
-    subscribe: (symbol: string): Promise<void> => ipcRenderer.invoke(IpcChannel.MarketSubscribe, symbol),
-    unsubscribe: (symbol: string): Promise<void> =>
-      ipcRenderer.invoke(IpcChannel.MarketUnsubscribe, symbol),
-    onPriceUpdate: (listener: (update: PriceUpdate) => void): (() => void) => {
-      const handler = (_event: IpcRendererEvent, update: PriceUpdate): void => listener(update)
-      ipcRenderer.on(IpcChannel.MarketPriceUpdate, handler)
-      return () => ipcRenderer.removeListener(IpcChannel.MarketPriceUpdate, handler)
+    listSymbols: (exchange: Exchange): Promise<SymbolInfo[]> =>
+      ipcRenderer.invoke(IpcChannel.MarketListSymbols, exchange),
+    subscribeCandles: (exchange: Exchange, symbol: string, interval: Interval): Promise<Candle[]> =>
+      ipcRenderer.invoke(IpcChannel.MarketSubscribeCandles, exchange, symbol, interval),
+    unsubscribeCandles: (): Promise<void> => ipcRenderer.invoke(IpcChannel.MarketUnsubscribeCandles),
+    onCandleUpdate: (listener: (candle: Candle) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, candle: Candle): void => listener(candle)
+      ipcRenderer.on(IpcChannel.MarketCandleUpdate, handler)
+      return () => ipcRenderer.removeListener(IpcChannel.MarketCandleUpdate, handler)
+    },
+    subscribeTicker: (exchange: Exchange, symbol: string): Promise<Ticker24h> =>
+      ipcRenderer.invoke(IpcChannel.MarketSubscribeTicker, exchange, symbol),
+    unsubscribeTicker: (): Promise<void> => ipcRenderer.invoke(IpcChannel.MarketUnsubscribeTicker),
+    onTickerUpdate: (listener: (ticker: Ticker24h) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, ticker: Ticker24h): void => listener(ticker)
+      ipcRenderer.on(IpcChannel.MarketTickerUpdate, handler)
+      return () => ipcRenderer.removeListener(IpcChannel.MarketTickerUpdate, handler)
+    },
+    fetchHistoricalRange: (
+      exchange: Exchange,
+      symbol: string,
+      interval: Interval,
+      startSec: number,
+      endSec: number
+    ): Promise<HistoricalRangeResult> =>
+      ipcRenderer.invoke(IpcChannel.MarketFetchHistoricalRange, exchange, symbol, interval, startSec, endSec),
+    cancelHistoricalRange: (): Promise<void> => ipcRenderer.invoke(IpcChannel.MarketCancelHistoricalRange),
+    onHistoricalRangeProgress: (listener: (progress: HistoricalRangeProgress) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, progress: HistoricalRangeProgress): void => listener(progress)
+      ipcRenderer.on(IpcChannel.MarketHistoricalRangeProgress, handler)
+      return () => ipcRenderer.removeListener(IpcChannel.MarketHistoricalRangeProgress, handler)
     }
+  },
+  credentials: {
+    list: (): Promise<CredentialStatus[]> => ipcRenderer.invoke(IpcChannel.CredentialsList),
+    set: (exchange: Exchange, apiKey: string, apiSecret: string): Promise<CredentialStatus> =>
+      ipcRenderer.invoke(IpcChannel.CredentialsSet, exchange, apiKey, apiSecret),
+    test: (exchange: Exchange): Promise<{ ok: boolean; message: string }> =>
+      ipcRenderer.invoke(IpcChannel.CredentialsTest, exchange),
+    remove: (exchange: Exchange): Promise<void> => ipcRenderer.invoke(IpcChannel.CredentialsRemove, exchange)
   }
 }
 

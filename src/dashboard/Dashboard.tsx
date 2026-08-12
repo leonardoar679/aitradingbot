@@ -1,20 +1,29 @@
-import { useEffect, useState } from 'react'
-import { Card } from '../components/Card'
-import { PriceChart } from '../charts/PriceChart'
-import { SettingsPanel } from '../settings/SettingsPanel'
+import { useState } from 'react'
+import { PageHeader } from '../components/PageHeader'
+import { MarketTicker } from './MarketTicker'
+import { TradingChart } from '../charts/TradingChart'
+import { EXCHANGES, type Exchange, type SymbolInfo } from '../../shared/ipc'
 
 export function Dashboard(): React.JSX.Element {
-  const [status, setStatus] = useState('checking...')
+  const [exchange, setExchange] = useState<Exchange>(EXCHANGES[0].id)
+  const [pair, setPair] = useState<SymbolInfo>(EXCHANGES[0].defaultSymbol)
 
-  useEffect(() => {
-    window.api?.ping().then(setStatus)
-  }, [])
+  function handleExchangeChange(next: Exchange): void {
+    setExchange(next)
+    const info = EXCHANGES.find((e) => e.id === next)
+    if (info) setPair(info.defaultSymbol)
+  }
 
   return (
-    <div style={{ display: 'grid', gap: '1rem', padding: '1rem' }}>
-      <Card title="Backend status">{status}</Card>
-      <PriceChart />
-      <SettingsPanel />
-    </div>
+    <>
+      <PageHeader title="Dashboard" subtitle="Live market overview and account status" />
+      <MarketTicker
+        exchange={exchange}
+        pair={pair}
+        onExchangeChange={handleExchangeChange}
+        onPairChange={setPair}
+      />
+      <TradingChart exchange={exchange} symbol={pair.symbol} quoteAsset={pair.quoteAsset} />
+    </>
   )
 }

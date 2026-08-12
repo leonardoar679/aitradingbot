@@ -5,6 +5,21 @@
   "main": "./out/main/index.js",
   "author": "",
   "private": true,
+  "build": {
+    "appId": "com.traderspider.app",
+    "productName": "TraderSpider",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*"
+    ],
+    "afterPack": "scripts/afterPack.js",
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    }
+  },
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
@@ -12,13 +27,17 @@
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "lint": "eslint . --ext .ts,.tsx",
-    "build:win": "electron-vite build && electron-builder --win",
+    "build:win": "node scripts/build-win-signed.js",
     "build:mac": "electron-vite build && electron-builder --mac",
     "build:linux": "electron-vite build && electron-builder --linux"
   },
   "dependencies": {
+    "lightweight-charts": "^5.2.0",
+    "lucide-react": "^1.28.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "technicalindicators": "^3.1.0",
+    "ws": "^8.21.2"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-ts": "^2.0.0",
@@ -27,11 +46,14 @@
     "@electron-toolkit/utils": "^3.0.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.3.3",
     "electron": "^33.2.0",
     "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",
     "eslint": "^8.57.1",
+    "png-to-ico": "^3.0.2",
+    "resedit": "^3.0.2",
     "typescript": "^5.6.3",
     "vite": "^5.4.10"
   }

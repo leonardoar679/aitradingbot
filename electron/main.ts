@@ -2,6 +2,7 @@ import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc'
+import icon from '../build/icon.png?asset'
 
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -9,6 +10,7 @@ function createWindow(): BrowserWindow {
     height: 800,
     show: false,
     autoHideMenuBar: true,
+    icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -35,23 +37,41 @@ function createWindow(): BrowserWindow {
   return mainWindow
 }
 
-app.whenReady().then(() => {
-  electronApp.setAppUserModelId('com.newtradingbot.app')
+// Only one instance of the app should run at a time. If a second launch is attempted,
+// this process (which already holds the lock) is handed the new launch's args instead —
+// we just use that as a signal to refocus the existing window, then let the second
+// process's own app.quit() (below) end it.
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
 
-  app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
+if (!gotSingleInstanceLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    const [existingWindow] = BrowserWindow.getAllWindows()
+    if (existingWindow) {
+      if (existingWindow.isMinimized()) existingWindow.restore()
+      existingWindow.focus()
+    }
   })
 
-  const mainWindow = createWindow()
-  registerIpcHandlers(mainWindow)
+  app.whenReady().then(() => {
+    electronApp.setAppUserModelId('com.newtradingbot.app')
 
-  app.on('activate', function () {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    app.on('browser-window-created', (_, window) => {
+      optimizer.watchWindowShortcuts(window)
+    })
+
+    const mainWindow = createWindow()
+    registerIpcHandlers(mainWindow)
+
+    app.on('activate', function () {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    })
   })
-})
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
-})
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+      app.quit()
+    }
+  })
+}

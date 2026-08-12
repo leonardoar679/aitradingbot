@@ -1,0 +1,12 @@
+import { ipcMain } from 'electron'
+import { IpcChannel, type Exchange } from '../../../shared/ipc'
+import { listCredentialStatus, setCredential, testCredential, removeCredential } from '../../services/credentialsService'
+
+export function registerCredentialsHandlers(): void {
+  ipcMain.handle(IpcChannel.CredentialsList, () => listCredentialStatus())
+  ipcMain.handle(IpcChannel.CredentialsSet, (_event, exchange: Exchange, apiKey: string, apiSecret: string) =>
+    setCredential(exchange, apiKey, apiSecret)
+  )
+  ipcMain.handle(IpcChannel.CredentialsTest, (_event, exchange: Exchange) => testCredential(exchange))
+  ipcMain.handle(IpcChannel.CredentialsRemove, (_event, exchange: Exchange) => removeCredential(exchange))
+}

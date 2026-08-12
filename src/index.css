@@ -1,6 +1,26 @@
 :root {
-  color-scheme: light dark;
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --bg-app: #0b0e11;
+  --bg-surface: #14171c;
+  --bg-surface-hover: #1c2127;
+  --border: #22262c;
+  --border-strong: #2c3138;
+  --text-primary: #eaecef;
+  --text-secondary: #848e9c;
+  --text-muted: #5e6673;
+  --accent: #3b82f6;
+  --accent-soft: rgba(59, 130, 246, 0.15);
+  --up: #26a69a;
+  --down: #ef5350;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --font-sans:
+    -apple-system, 'Segoe UI', system-ui, Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  color-scheme: dark;
+}
+
+html {
+  font-size: 14px;
 }
 
 * {
@@ -10,4 +30,73 @@
 body {
   margin: 0;
   min-height: 100vh;
+  background: var(--bg-app);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: inherit;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3a4048;
+}
+
+.nav-item {
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.nav-item:hover:not(.nav-item-active) {
+  background: var(--bg-surface-hover);
+}
+.nav-item-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.icon-button {
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.icon-button:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.dropdown-item {
+  transition: background 0.1s ease;
+}
+.dropdown-item:hover {
+  background: var(--bg-surface-hover);
+}
+
+.select-trigger {
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
+}
+.select-trigger:hover {
+  background: var(--bg-surface-hover);
+  border-color: var(--border-strong);
+}
+
+@keyframes backtest-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
