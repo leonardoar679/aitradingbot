@@ -9,6 +9,7 @@ import {
   type HistoricalRangeProgress,
   type HistoricalRangeResult,
   type Interval,
+  type LiveExitResult,
   type LiveOrderRecord,
   type LivePosition,
   type LiveTradingStatus,
@@ -81,7 +82,32 @@ const api = {
     pollOpenOrders: (): Promise<{ executorId: string; liveOrder: LiveOrderRecord }[]> =>
       ipcRenderer.invoke(IpcChannel.LiveTradingPollOpenOrders),
     cancelOrder: (liveOrderId: string): Promise<LiveOrderRecord> =>
-      ipcRenderer.invoke(IpcChannel.LiveTradingCancelOrder, liveOrderId)
+      ipcRenderer.invoke(IpcChannel.LiveTradingCancelOrder, liveOrderId),
+    createWatcher: (
+      executorId: string,
+      exchange: Exchange,
+      symbol: string,
+      entryPrice: number,
+      takeProfitPct: number | null,
+      stopLossPct: number | null,
+      timeLimitSec: number | null,
+      trailingStop: { activationPct: number; trailPct: number } | null
+    ): Promise<{ id: string }> =>
+      ipcRenderer.invoke(
+        IpcChannel.LiveTradingCreateWatcher,
+        executorId,
+        exchange,
+        symbol,
+        entryPrice,
+        takeProfitPct,
+        stopLossPct,
+        timeLimitSec,
+        trailingStop
+      ),
+    listActiveWatchers: (): Promise<{ exchange: Exchange; symbol: string }[]> => ipcRenderer.invoke(IpcChannel.LiveTradingListActiveWatchers),
+    stopWatcher: (watcherId: string): Promise<LiveExitResult | null> => ipcRenderer.invoke(IpcChannel.LiveTradingStopWatcher, watcherId),
+    drainWatcherEvents: (): Promise<{ executorId: string; liveExitResult: LiveExitResult }[]> =>
+      ipcRenderer.invoke(IpcChannel.LiveTradingDrainWatcherEvents)
   },
   executors: {
     placeLiveOrder: (

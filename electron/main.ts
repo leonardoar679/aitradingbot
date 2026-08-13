@@ -2,6 +2,7 @@ import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc'
+import { startLivePositionWatcherLoop } from './services/livePositionWatchersService'
 import icon from '../build/icon.png?asset'
 
 function createWindow(): BrowserWindow {
@@ -63,6 +64,10 @@ if (!gotSingleInstanceLock) {
 
     const mainWindow = createWindow()
     registerIpcHandlers(mainWindow)
+    // Watches every real live Position, unattended, for a take-profit/stop-loss/trailing-stop/
+    // time-limit exit — main-process-resident, independent of any BrowserWindow, since this is
+    // what actually protects real money. See livePositionWatchersService.ts.
+    startLivePositionWatcherLoop()
 
     app.on('activate', function () {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()

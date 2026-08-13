@@ -1,5 +1,5 @@
 import { Grid3x3, Layers3, Timer, Target, FileText, Shuffle, Scale, Waves } from 'lucide-react'
-import { EXCHANGES, type ExecutorConfig, type OrderExecutorParams } from '../../shared/ipc'
+import { EXCHANGES, type ExecutorConfig, type OrderExecutorParams, type PositionExecutorParams } from '../../shared/ipc'
 import { useExecutorSimulation } from './useExecutorSimulation'
 import { useSpreadExecutorSimulation } from './useSpreadExecutorSimulation'
 import { formatQuotePrice } from '../utils/formatCurrency'
@@ -19,7 +19,8 @@ const EXIT_REASON_LABEL: Record<string, string> = {
   take_profit: 'Take Profit',
   stop_loss: 'Stop Loss',
   time_limit: 'Time Limit',
-  trailing_stop: 'Trailing Stop'
+  trailing_stop: 'Trailing Stop',
+  manual: 'Manual Stop'
 }
 
 function pctColor(pct: number): string {
@@ -37,9 +38,46 @@ function MetricsPanel({ executor }: { executor: ExecutorConfig }): React.JSX.Ele
 }
 
 /** Live executors never run the simulation hooks — there's nothing to simulate, the order
- * already really happened (or, for a resting limit order, is really still open on Binance). This
- * reads state straight off the executor's own config rather than replaying anything. */
+ * already really happened (or, for a resting limit order, is really still open on Binance; or,
+ * for a live Position, is really being watched right now for an automatic exit). This reads
+ * state straight off the executor's own config rather than replaying anything. */
 function LiveOrderMetrics({ executor }: { executor: ExecutorConfig }): React.JSX.Element {
+  if (executor.type === 'position') {
+    if (executor.liveWatcherId) {
+      const params = executor.params as PositionExecutorParams
+      const conditions: string[] = []
+      if (params.stopLossPct !== null) conditions.push(`SL -${params.stopLossPct}%`)
+      if (params.takeProfitPct !== null) conditions.push(`TP +${params.takeProfitPct}%`)
+      if (params.trailingStop !== null) conditions.push(`Trail ${params.trailingStop.trailPct}% (act. +${params.trailingStop.activationPct}%)`)
+      if (params.timeLimitSec !== null) conditions.push(`${Math.round(params.timeLimitSec / 3600)}h limit`)
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
+          <span style={{ color: 'var(--down)', fontWeight: 600 }}>Watching — real position open</span>
+          <span style={{ color: 'var(--text-secondary)' }}>
+            {params.amountQuote} {executor.quoteAsset} @ {formatQuotePrice(params.entryPrice ?? 0, executor.quoteAsset)} (entry)
+          </span>
+          {conditions.length > 0 && <span style={{ color: 'var(--text-muted)' }}>{conditions.join(' · ')}</span>}
+          <span style={{ color: 'var(--text-muted)' }}>Stop force-exits this position on Binance</span>
+        </div>
+      )
+    }
+    if (executor.liveExitResult) {
+      const { entryPrice, exitPrice, exitReason, realizedPnl, closedAt } = executor.liveExitResult
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
+          <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Closed — real exit ({EXIT_REASON_LABEL[exitReason]})</span>
+          <span style={{ color: 'var(--text-secondary)' }}>
+            {formatQuotePrice(entryPrice, executor.quoteAsset)} → {formatQuotePrice(exitPrice, executor.quoteAsset)}
+          </span>
+          <span style={{ color: pctColor(realizedPnl), fontWeight: 600 }}>
+            {realizedPnl >= 0 ? '+' : ''}
+            {formatQuotePrice(realizedPnl, executor.quoteAsset)} · {new Date(closedAt * 1000).toLocaleString()}
+          </span>
+        </div>
+      )
+    }
+    return <div style={{ fontSize: '0.75rem', color: 'var(--down)' }}>Entry failed — see name for details</div>
+  }
   if (executor.pendingLiveOrderId) {
     const params = executor.params as OrderExecutorParams
     return (

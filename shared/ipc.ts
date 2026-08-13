@@ -30,6 +30,10 @@ export const IpcChannel = {
   LiveTradingClosePosition: 'liveTrading:closePosition',
   LiveTradingPollOpenOrders: 'liveTrading:pollOpenOrders',
   LiveTradingCancelOrder: 'liveTrading:cancelOrder',
+  LiveTradingCreateWatcher: 'liveTrading:createWatcher',
+  LiveTradingListActiveWatchers: 'liveTrading:listActiveWatchers',
+  LiveTradingStopWatcher: 'liveTrading:stopWatcher',
+  LiveTradingDrainWatcherEvents: 'liveTrading:drainWatcherEvents',
   ExecutorPlaceLiveOrder: 'executor:placeLiveOrder',
   ExecutorPlaceLiveLimitOrder: 'executor:placeLiveLimitOrder'
 } as const
@@ -122,6 +126,18 @@ export interface LiveOrder {
   avgFillPrice: number | null
   placedAt: number
   resolvedAt: number | null
+}
+
+/** The result of a live Position executor's automatic exit — mirrors PositionExecutorState's
+ * shape (src/executors/types.ts) but with a *real* fill price/P&L from the actual market sell,
+ * never the nominal barrier target (a fast move between watcher polls can mean a worse real fill
+ * than "the stop-loss price," same as a real stop order isn't a price guarantee either). */
+export interface LiveExitResult {
+  entryPrice: number
+  exitReason: 'take_profit' | 'stop_loss' | 'time_limit' | 'trailing_stop' | 'manual'
+  exitPrice: number
+  realizedPnl: number
+  closedAt: number
 }
 
 /** OHLCV candle. `time` is a Unix timestamp in seconds (UTC), matching lightweight-charts. */
@@ -397,6 +413,14 @@ export interface ExecutorConfig {
   /** Non-null only while a live limit order is still resting (status stays 'active' the whole
    * time) — points at the LiveOrder record LiveOrderScheduler is polling. Null once resolved. */
   pendingLiveOrderId: string | null
+  /** Non-null only while a live Position executor's entry has filled and its exit conditions are
+   * being watched for automatically (status stays 'active' the whole time) — points at the
+   * watcher record in livePositionWatchersService.ts. Null once the exit fires or the executor
+   * is stopped manually. */
+  liveWatcherId: string | null
+  /** Set once a live Position executor's watcher triggers a real exit (or Stop force-closes it).
+   * Null for every paper executor and for a live Position still being watched. */
+  liveExitResult: LiveExitResult | null
   params: GridExecutorParams | DcaExecutorParams | TwapExecutorParams | PositionExecutorParams | OrderExecutorParams | XemmExecutorParams | ArbitrageExecutorParams | MarketMakingExecutorParams
 }
 

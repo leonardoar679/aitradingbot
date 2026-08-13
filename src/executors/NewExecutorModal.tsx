@@ -191,11 +191,23 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
     }
   }, [])
 
-  const canGoLive =
+  const canGoLiveOrder =
     type === 'order' &&
-    exchange === 'binance' &&
     (orderParams.executionStrategy === 'market' || orderParams.executionStrategy === 'limit') &&
-    (orderParams.executionStrategy !== 'limit' || orderParams.limitPrice !== null) &&
+    (orderParams.executionStrategy !== 'limit' || orderParams.limitPrice !== null)
+
+  // Buy-only, market-entry-only, and at least one exit condition required — a live position with
+  // no take-profit/stop-loss/trailing-stop/time-limit would sit unmonitored indefinitely, which
+  // this app shouldn't offer even as an option (see the Phase 3 plan).
+  const canGoLivePosition =
+    type === 'position' &&
+    positionParams.side === 'buy' &&
+    positionParams.entryPrice === null &&
+    (positionParams.takeProfitPct !== null || positionParams.stopLossPct !== null || positionParams.trailingStop !== null || positionParams.timeLimitSec !== null)
+
+  const canGoLive =
+    (canGoLiveOrder || canGoLivePosition) &&
+    exchange === 'binance' &&
     binanceCredentialConfigured &&
     liveTradingStatus !== null &&
     liveTradingStatus.sessionArmed &&
@@ -242,7 +254,8 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
     setKeepPosition(DEFAULT_KEEP_POSITION[next])
   }
 
-  const liveAmountOk = liveTradingStatus === null || orderParams.amountQuote <= liveTradingStatus.maxOrderQuote
+  const liveAmountQuote = type === 'position' ? positionParams.amountQuote : orderParams.amountQuote
+  const liveAmountOk = liveTradingStatus === null || liveAmountQuote <= liveTradingStatus.maxOrderQuote
   const liveConfirmOk = liveConfirmText.trim() === LIVE_CONFIRM_PHRASE
   const canSubmitLive = mode !== 'live' || (canGoLive && liveAmountOk && liveConfirmOk)
 
@@ -373,7 +386,7 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
             </p>
           )}
 
-          {type === 'order' && (
+          {(type === 'order' || type === 'position') && (
             <div
               style={{
                 border: `1px solid ${mode === 'live' ? 'var(--down)' : 'var(--border)'}`,
@@ -406,17 +419,23 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
                   }}
                 />
                 <AlertTriangle size={14} />
-                Live Trading — places a real order with real money
+                {type === 'position' ? 'Live Trading — enters and watches a real position' : 'Live Trading — places a real order with real money'}
               </label>
 
               {!canGoLive && (
                 <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
                   {exchange !== 'binance'
                     ? 'Live trading is only available on Binance.'
-                    : orderParams.executionStrategy !== 'market' && orderParams.executionStrategy !== 'limit'
-                      ? 'Live trading only supports market and limit orders so far.'
-                      : orderParams.executionStrategy === 'limit' && orderParams.limitPrice === null
-                        ? 'Set a limit price first.'
+                    : type === 'order' && !canGoLiveOrder
+                      ? orderParams.executionStrategy !== 'market' && orderParams.executionStrategy !== 'limit'
+                        ? 'Live trading only supports market and limit orders so far.'
+                        : 'Set a limit price first.'
+                      : type === 'position' && !canGoLivePosition
+                        ? positionParams.side !== 'buy'
+                          ? 'Live Position entries are buy-only — spot trading can’t open a short.'
+                          : positionParams.entryPrice !== null
+                            ? 'Set a market entry (leave Entry Price blank) for live — a resting live entry isn’t supported yet.'
+                            : 'Set at least one exit condition — take-profit, stop-loss, trailing stop, or time limit — before going live.'
                         : !binanceCredentialConfigured
                           ? 'Add a verified Binance API key in Settings first.'
                           : liveTradingStatus?.killSwitchEngaged
@@ -428,9 +447,11 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
               {mode === 'live' && (
                 <>
                   <p style={{ fontSize: '0.75rem', color: 'var(--down)', margin: 0, fontWeight: 600 }}>
-                    {orderParams.executionStrategy === 'limit'
-                      ? `This will place a real resting LIMIT ${orderParams.side.toUpperCase()} order for ${orderParams.amountQuote} ${pair.quoteAsset} of ${pair.symbol} at ${orderParams.limitPrice} on Binance — it may not fill immediately, and can be cancelled from the Executors page (Stop) while open.`
-                      : `This will immediately place a real ${orderParams.side.toUpperCase()} market order for ${orderParams.amountQuote} ${pair.quoteAsset} of ${pair.symbol} on Binance.`}
+                    {type === 'position'
+                      ? `This will immediately place a real BUY market order for ${positionParams.amountQuote} ${pair.quoteAsset} of ${pair.symbol} on Binance, then watch it for take-profit/stop-loss/trailing-stop/time-limit and exit automatically with a real sell — no per-exit confirmation. Stop on the Executors page force-exits it manually at any time.`
+                      : orderParams.executionStrategy === 'limit'
+                        ? `This will place a real resting LIMIT ${orderParams.side.toUpperCase()} order for ${orderParams.amountQuote} ${pair.quoteAsset} of ${pair.symbol} at ${orderParams.limitPrice} on Binance — it may not fill immediately, and can be cancelled from the Executors page (Stop) while open.`
+                        : `This will immediately place a real ${orderParams.side.toUpperCase()} market order for ${orderParams.amountQuote} ${pair.quoteAsset} of ${pair.symbol} on Binance.`}
                   </p>
                   {!liveAmountOk && liveTradingStatus && (
                     <p style={{ fontSize: '0.75rem', color: 'var(--down)', margin: 0 }}>
@@ -475,7 +496,7 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
               opacity: name.trim() && canSubmitLive ? 1 : 0.6
             }}
           >
-            {mode === 'live' ? 'Place Real Order' : 'Create Executor'}
+            {mode === 'live' ? (type === 'position' ? 'Enter Real Position' : 'Place Real Order') : 'Create Executor'}
           </button>
         </div>
       </div>

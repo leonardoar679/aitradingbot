@@ -7,14 +7,15 @@ import {
   releaseKillSwitch,
   setSessionArmed,
   canPlaceLiveOrder,
-  canCloseLivePosition,
   recordLiveOrderUsage,
   checkLossLimitAndAutoDisarm
 } from '../../services/liveTradingService'
 import { listOpenLivePositions, listClosedLivePositions, getLivePosition, recordLiveFill } from '../../services/livePositionsService'
 import { createLiveOrder, listOpenLiveOrders, getLiveOrder, resolveLiveOrder } from '../../services/liveOrdersService'
+import { executeLiveClose } from '../../services/liveExecutionService'
+import { createWatcher, listActiveWatchers, deactivateWatcher, drainResolvedWatcherEvents } from '../../services/livePositionWatchersService'
 import { getDecryptedCredential } from '../../services/credentialsService'
-import { placeMarketOrder, placeMarketSellByQuantity, placeLimitOrder, queryOrder, cancelOrder } from '../../services/exchanges/binanceTrading'
+import { placeMarketOrder, placeLimitOrder, queryOrder, cancelOrder } from '../../services/exchanges/binanceTrading'
 
 /** Binance's own status strings, mapped onto the three-way resolution LiveOrder cares about.
  * Null means still resting (NEW/PARTIALLY_FILLED/PENDING_CANCEL) — nothing to do yet. */
@@ -65,28 +66,15 @@ export function registerLiveTradingHandlers(): void {
     }
   )
 
-  // Closing an existing live position — gated by canCloseLivePosition, not canPlaceLiveOrder:
-  // closing only ever reduces risk, so it's never subject to the size/cap/loss-limit gates that
-  // bound new exposure (see liveTradingService.canCloseLivePosition for the full reasoning).
-  // `quantity` lets the caller close part of a position instead of all of it — defaults to a
-  // full close from the UI's Close button, but the ledger (recordLiveFill) already handles a
-  // partial reduction correctly on its own (the same code path an executor's own partial sell
-  // fill already used before this existed).
+  // Closing an existing live position — the actual execution is executeLiveClose
+  // (liveExecutionService.ts), shared with the live Position watcher's automatic exits so a
+  // user-initiated close and a triggered stop-loss/take-profit behave identically. `quantity`
+  // lets the caller close part of a position instead of all of it.
   ipcMain.handle(IpcChannel.LiveTradingClosePosition, async (_event, positionId: string, quantity: number) => {
     const position = await getLivePosition(positionId)
     if (!position || position.closedAt !== null) throw new Error('Position not found or already closed')
     if (position.exchange !== 'binance') throw new Error('Live trading is only supported on Binance')
-    if (!(quantity > 0) || quantity > position.qty) throw new Error(`Close quantity must be between 0 and ${position.qty}`)
-
-    const gate = await canCloseLivePosition()
-    if (!gate.allowed) throw new Error(gate.reason ?? 'Close blocked')
-
-    const { apiKey, apiSecret } = await getDecryptedCredential(position.exchange)
-    const result = await placeMarketSellByQuantity(apiKey, apiSecret, position.symbol, quantity)
-    await recordLiveOrderUsage(result.cummulativeQuoteQty)
-    await recordLiveFill(position.exchange, position.symbol, position.baseAsset, position.quoteAsset, 'sell', result.filledQty, result.avgFillPrice)
-    await checkLossLimitAndAutoDisarm()
-    return { ...result, placedAt: Math.floor(Date.now() / 1000) }
+    return executeLiveClose(position, quantity)
   })
 
   // Placing a real resting limit order — gated exactly like a market order (canPlaceLiveOrder):
@@ -173,4 +161,76 @@ export function registerLiveTradingHandlers(): void {
     }
     return { ...result, placedAt: order.placedAt }
   })
+
+  // Creating a watcher assumes the entry order (ExecutorPlaceLiveOrder, called just before this
+  // from ExecutorsPage) already filled and landed in the live position ledger — this just finds
+  // that position and starts watching it. Only one active watcher per symbol+exchange is allowed
+  // (see the file-level comment in livePositionWatchersService.ts for why).
+  ipcMain.handle(
+    IpcChannel.LiveTradingCreateWatcher,
+    async (
+      _event,
+      executorId: string,
+      exchange: Exchange,
+      symbol: string,
+      entryPrice: number,
+      takeProfitPct: number | null,
+      stopLossPct: number | null,
+      timeLimitSec: number | null,
+      trailingStop: { activationPct: number; trailPct: number } | null
+    ) => {
+      const openPositions = await listOpenLivePositions()
+      const position = openPositions.find((p) => p.exchange === exchange && p.symbol === symbol)
+      if (!position) throw new Error('No open live position found to watch — did the entry order fill?')
+
+      return createWatcher({ executorId, livePositionId: position.id, exchange, symbol, entryPrice, takeProfitPct, stopLossPct, timeLimitSec, trailingStop })
+    }
+  )
+
+  // Lets the renderer check for a symbol conflict *before* spending a real entry order — the
+  // real gate is still the conflict check inside createWatcher, but checking first avoids the
+  // (recoverable, but unpleasant) case of a real BUY firing and then having nothing watch it.
+  ipcMain.handle(IpcChannel.LiveTradingListActiveWatchers, async () => {
+    const watchers = await listActiveWatchers()
+    return watchers.map((w) => ({ exchange: w.exchange, symbol: w.symbol }))
+  })
+
+  // Stop on a live Position executor that's still being watched: force-exit now, for real, same
+  // as the manual Close button on a live position (canCloseLivePosition inside executeLiveClose
+  // — kill-switch/session-arm only, never size/cap/loss-limit, since exiting only reduces risk).
+  // Returns a real LiveExitResult (read back from the ledger after closing, same as the
+  // automatic watcher loop does) rather than a raw order result, so the UI never has to guess at
+  // or fabricate P&L — exitReason is 'manual' to distinguish it honestly from a triggered barrier.
+  ipcMain.handle(IpcChannel.LiveTradingStopWatcher, async (_event, watcherId: string) => {
+    const watcher = (await listActiveWatchers()).find((w) => w.id === watcherId)
+    if (!watcher) throw new Error('Watcher not found or already resolved')
+
+    const position = await getLivePosition(watcher.livePositionId)
+    if (!position || position.closedAt !== null || position.qty <= 0) {
+      // Nothing left to close (e.g. the auto-watcher loop already exited it a moment ago) — safe
+      // to deactivate.
+      await deactivateWatcher(watcherId)
+      return null
+    }
+
+    // Deactivate only AFTER the close actually succeeds — if executeLiveClose throws (e.g. the
+    // kill switch is engaged), the watcher must stay active so it keeps protecting the still-open
+    // real position. Deactivating first would silently abandon a real, unprotected position the
+    // moment a close attempt merely failed.
+    await executeLiveClose(position, position.qty)
+    await deactivateWatcher(watcherId)
+    const closedPosition = await getLivePosition(watcher.livePositionId)
+    if (!closedPosition || closedPosition.exitPrice === null || closedPosition.realizedPnl === null) return null
+
+    return {
+      entryPrice: watcher.entryPrice,
+      exitReason: 'manual' as const,
+      exitPrice: closedPosition.exitPrice,
+      realizedPnl: closedPosition.realizedPnl,
+      closedAt: closedPosition.closedAt ?? Math.floor(Date.now() / 1000)
+    }
+  })
+
+  // Polled by the same renderer-side scheduler that polls live orders — see LiveOrderScheduler.tsx.
+  ipcMain.handle(IpcChannel.LiveTradingDrainWatcherEvents, () => drainResolvedWatcherEvents())
 }

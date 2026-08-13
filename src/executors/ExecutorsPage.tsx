@@ -22,7 +22,8 @@ import {
   type XemmExecutorParams,
   type ArbitrageExecutorParams,
   type MarketMakingExecutorParams,
-  type HeldPosition
+  type HeldPosition,
+  type LiveOrderRecord
 } from '../../shared/ipc'
 import type { Bot } from '../bots/types'
 
@@ -86,9 +87,9 @@ export function ExecutorsPage(): React.JSX.Element {
     mode: 'paper' | 'live'
     params: GridExecutorParams | DcaExecutorParams | TwapExecutorParams | PositionExecutorParams | OrderExecutorParams | XemmExecutorParams | ArbitrageExecutorParams | MarketMakingExecutorParams
   }): Promise<void> {
-    // Defense in depth — the UI only ever offers 'live' for type 'order', but this is the last
-    // line of defense before anything real could happen.
-    const mode = input.mode === 'live' && input.type === 'order' ? 'live' : 'paper'
+    // Defense in depth — the UI only ever offers 'live' for type 'order' or 'position', but
+    // this is the last line of defense before anything real could happen.
+    const mode = input.mode === 'live' && (input.type === 'order' || input.type === 'position') ? 'live' : 'paper'
 
     const base: ExecutorConfig = {
       id: crypto.randomUUID(),
@@ -105,12 +106,69 @@ export function ExecutorsPage(): React.JSX.Element {
       mode,
       liveOrder: null,
       pendingLiveOrderId: null,
+      liveWatcherId: null,
+      liveExitResult: null,
       params: input.params
     }
     setShowNew(false)
 
     if (mode === 'paper') {
       setExecutors((prev) => [...prev, base])
+      return
+    }
+
+    if (input.type === 'position') {
+      // Live Position: entry is just a live BUY market order (the exact same path as the Order
+      // executor), then — once it fills — a watcher starts monitoring for the automatic exit.
+      // Buy-only and market-entry-only; NewExecutorModal's canGoLive already enforces both.
+      const positionParams = input.params as PositionExecutorParams
+      let entryResult: LiveOrderRecord | null = null
+      try {
+        const activeWatchers = await window.api.liveTrading.listActiveWatchers()
+        if (activeWatchers.some((w) => w.exchange === input.exchange && w.symbol === input.pair.symbol)) {
+          throw new Error(`Already watching a live position on ${input.pair.symbol} — only one at a time is supported`)
+        }
+        entryResult = await window.api.executors.placeLiveOrder(
+          input.exchange,
+          input.pair.symbol,
+          input.pair.baseAsset,
+          input.pair.quoteAsset,
+          'buy',
+          positionParams.amountQuote
+        )
+        const watcher = await window.api.liveTrading.createWatcher(
+          base.id,
+          input.exchange,
+          input.pair.symbol,
+          entryResult.avgFillPrice,
+          positionParams.takeProfitPct,
+          positionParams.stopLossPct,
+          positionParams.timeLimitSec,
+          positionParams.trailingStop
+        )
+        setExecutors((prev) => [...prev, { ...base, liveWatcherId: watcher.id }])
+      } catch (error) {
+        console.error('Live position entry failed:', error)
+        const message = error instanceof Error ? error.message : String(error)
+        const stoppedAt = Math.floor(Date.now() / 1000)
+        if (entryResult) {
+          // The real BUY already happened — only watcher creation failed (e.g. another watcher
+          // is already active on this symbol). Never hide this: the position is real and
+          // currently unmonitored until closed manually from the Positions page.
+          setExecutors((prev) => [
+            ...prev,
+            {
+              ...base,
+              name: `${base.name} (filled but NOT being watched — close manually on Positions: ${message})`,
+              status: 'stopped',
+              stoppedAt,
+              liveOrder: entryResult
+            }
+          ])
+        } else {
+          setExecutors((prev) => [...prev, { ...base, name: `${base.name} (failed: ${message})`, status: 'stopped', stoppedAt }])
+        }
+      }
       return
     }
 
@@ -186,6 +244,23 @@ export function ExecutorsPage(): React.JSX.Element {
         setExecutors((prev) =>
           prev.map((e) => (e.id === id ? { ...e, status: 'stopped', stoppedAt: Math.floor(Date.now() / 1000) } : e))
         )
+      }
+      return
+    }
+
+    // A live Position executor still being watched: Stop force-closes the position now, for
+    // real — same gate as the manual Close button on the Positions page (kill-switch/session-arm
+    // only, never blocked by size/cap/loss-limit, since exiting only reduces risk).
+    if (executor && executor.mode === 'live' && executor.liveWatcherId) {
+      const stoppedAt = Math.floor(Date.now() / 1000)
+      try {
+        // The main process reads the real result back from the ledger after closing — never
+        // fabricated client-side.
+        const liveExitResult = await window.api.liveTrading.stopWatcher(executor.liveWatcherId)
+        setExecutors((prev) => prev.map((e) => (e.id === id ? { ...e, status: 'stopped', stoppedAt, liveWatcherId: null, liveExitResult } : e)))
+      } catch (error) {
+        console.error('Failed to force-close watched live position:', error)
+        setExecutors((prev) => prev.map((e) => (e.id === id ? { ...e, status: 'stopped', stoppedAt, liveWatcherId: null } : e)))
       }
       return
     }
