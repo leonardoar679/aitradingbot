@@ -194,7 +194,8 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
   const canGoLive =
     type === 'order' &&
     exchange === 'binance' &&
-    orderParams.executionStrategy === 'market' &&
+    (orderParams.executionStrategy === 'market' || orderParams.executionStrategy === 'limit') &&
+    (orderParams.executionStrategy !== 'limit' || orderParams.limitPrice !== null) &&
     binanceCredentialConfigured &&
     liveTradingStatus !== null &&
     liveTradingStatus.sessionArmed &&
@@ -359,10 +360,18 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
             {type === 'marketmaking' && <MarketMakingForm params={marketMakingParams} onChange={setMarketMakingParams} />}
           </div>
 
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-primary)', cursor: isSpreadType ? 'not-allowed' : 'pointer', opacity: isSpreadType ? 0.5 : 1 }}>
-            <input type="checkbox" checked={keepPosition} disabled={isSpreadType} onChange={(e) => setKeepPosition(e.target.checked)} />
-            Keep position when stopped (hand over to Inventory)
-          </label>
+          {mode !== 'live' && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-primary)', cursor: isSpreadType ? 'not-allowed' : 'pointer', opacity: isSpreadType ? 0.5 : 1 }}>
+              <input type="checkbox" checked={keepPosition} disabled={isSpreadType} onChange={(e) => setKeepPosition(e.target.checked)} />
+              Keep position when stopped (hand over to Inventory)
+            </label>
+          )}
+          {mode === 'live' && (
+            <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
+              Position Handover doesn't apply to live orders — a real fill is always tracked on the Positions page
+              regardless of this setting.
+            </p>
+          )}
 
           {type === 'order' && (
             <div
@@ -404,21 +413,24 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
                 <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
                   {exchange !== 'binance'
                     ? 'Live trading is only available on Binance.'
-                    : orderParams.executionStrategy !== 'market'
-                      ? 'Live trading only supports market orders so far.'
-                      : !binanceCredentialConfigured
-                        ? 'Add a verified Binance API key in Settings first.'
-                        : liveTradingStatus?.killSwitchEngaged
-                          ? 'The kill switch is engaged — release it from the live trading bar first.'
-                          : 'Arm live trading for this session from the live trading bar first.'}
+                    : orderParams.executionStrategy !== 'market' && orderParams.executionStrategy !== 'limit'
+                      ? 'Live trading only supports market and limit orders so far.'
+                      : orderParams.executionStrategy === 'limit' && orderParams.limitPrice === null
+                        ? 'Set a limit price first.'
+                        : !binanceCredentialConfigured
+                          ? 'Add a verified Binance API key in Settings first.'
+                          : liveTradingStatus?.killSwitchEngaged
+                            ? 'The kill switch is engaged — release it from the live trading bar first.'
+                            : 'Arm live trading for this session from the live trading bar first.'}
                 </p>
               )}
 
               {mode === 'live' && (
                 <>
                   <p style={{ fontSize: '0.75rem', color: 'var(--down)', margin: 0, fontWeight: 600 }}>
-                    This will immediately place a real {orderParams.side.toUpperCase()} market order for{' '}
-                    {orderParams.amountQuote} {pair.quoteAsset} of {pair.symbol} on Binance.
+                    {orderParams.executionStrategy === 'limit'
+                      ? `This will place a real resting LIMIT ${orderParams.side.toUpperCase()} order for ${orderParams.amountQuote} ${pair.quoteAsset} of ${pair.symbol} at ${orderParams.limitPrice} on Binance — it may not fill immediately, and can be cancelled from the Executors page (Stop) while open.`
+                      : `This will immediately place a real ${orderParams.side.toUpperCase()} market order for ${orderParams.amountQuote} ${pair.quoteAsset} of ${pair.symbol} on Binance.`}
                   </p>
                   {!liveAmountOk && liveTradingStatus && (
                     <p style={{ fontSize: '0.75rem', color: 'var(--down)', margin: 0 }}>

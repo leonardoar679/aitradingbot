@@ -152,3 +152,45 @@ export async function placeMarketSellByQuantity(apiKey: string, apiSecret: strin
   )) as BinanceOrderResponse
   return parseOrderResponse(data)
 }
+
+/** Phase 2c: a real resting limit order. GTC (good-till-cancelled) only — this app doesn't
+ * support limit_maker (post-only) or limit_chaser (continuous re-quoting) live, since the paper
+ * simulator doesn't meaningfully distinguish either from plain limit/market (see engine.ts's
+ * simulateOrder comment). Binance can return FILLED synchronously if the price already crosses
+ * the book when placed — the caller treats that the same as a resting order that fills later,
+ * just immediately. */
+export async function placeLimitOrder(
+  apiKey: string,
+  apiSecret: string,
+  symbol: string,
+  side: 'BUY' | 'SELL',
+  quantity: number,
+  price: number
+): Promise<LiveOrderResult> {
+  const data = (await signedRequest(
+    apiKey,
+    apiSecret,
+    '/order',
+    { symbol, side, type: 'LIMIT', timeInForce: 'GTC', quantity: String(quantity), price: String(price) },
+    'POST'
+  )) as BinanceOrderResponse
+  return parseOrderResponse(data)
+}
+
+/** Polled by LiveOrderScheduler every few seconds for every open LiveOrder — deliberately
+ * polling rather than an authenticated user-data-stream websocket (listenKey lifecycle,
+ * keep-alive renewal, reconnect handling); see the Phase 2c plan for why that's disproportionate
+ * here. */
+export async function queryOrder(apiKey: string, apiSecret: string, symbol: string, orderId: number): Promise<LiveOrderResult> {
+  const data = (await signedRequest(apiKey, apiSecret, '/order', { symbol, orderId: String(orderId) }, 'GET')) as BinanceOrderResponse
+  return parseOrderResponse(data)
+}
+
+/** Cancels a resting order. Binance's cancel response already includes `executedQty` for
+ * whatever partially filled before cancellation, so no follow-up query is needed. Deliberately
+ * has no gate check anywhere in this app — see liveTradingService.ts: cancellation only ever
+ * reduces risk, so it's never blocked by session-arm, the kill switch, or any cap. */
+export async function cancelOrder(apiKey: string, apiSecret: string, symbol: string, orderId: number): Promise<LiveOrderResult> {
+  const data = (await signedRequest(apiKey, apiSecret, '/order', { symbol, orderId: String(orderId) }, 'DELETE')) as BinanceOrderResponse
+  return parseOrderResponse(data)
+}

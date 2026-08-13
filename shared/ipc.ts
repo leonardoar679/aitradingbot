@@ -27,7 +27,10 @@ export const IpcChannel = {
   LiveTradingSetSessionArmed: 'liveTrading:setSessionArmed',
   LiveTradingListPositions: 'liveTrading:listPositions',
   LiveTradingClosePosition: 'liveTrading:closePosition',
-  ExecutorPlaceLiveOrder: 'executor:placeLiveOrder'
+  LiveTradingPollOpenOrders: 'liveTrading:pollOpenOrders',
+  LiveTradingCancelOrder: 'liveTrading:cancelOrder',
+  ExecutorPlaceLiveOrder: 'executor:placeLiveOrder',
+  ExecutorPlaceLiveLimitOrder: 'executor:placeLiveLimitOrder'
 } as const
 
 export type IpcChannel = (typeof IpcChannel)[keyof typeof IpcChannel]
@@ -96,6 +99,28 @@ export interface LivePosition {
   /** Null until the first reducing/closing sell fill; accumulates from there (a position can be
    * partially reduced by a live Order executor sell and stay open with qty > 0). */
   realizedPnl: number | null
+}
+
+/** A real resting live limit order — the only genuinely asynchronous real-money state this app
+ * holds, since a live market order resolves synchronously. Survives app restarts (see
+ * electron/services/liveOrdersService.ts): `LiveOrderScheduler` polls every `status === 'open'`
+ * record regardless of which executor created it or whether the app was closed in between. */
+export interface LiveOrder {
+  id: string
+  executorId: string
+  exchange: Exchange
+  symbol: string
+  baseAsset: string
+  quoteAsset: string
+  side: ExecutorSide
+  orderId: number
+  limitPrice: number
+  quantity: number
+  status: 'open' | 'filled' | 'cancelled' | 'expired'
+  filledQty: number
+  avgFillPrice: number | null
+  placedAt: number
+  resolvedAt: number | null
 }
 
 /** OHLCV candle. `time` is a Unix timestamp in seconds (UTC), matching lightweight-charts. */
@@ -359,12 +384,18 @@ export interface ExecutorConfig {
   /** Mirrors Condor's Position Handover: when true, an open/unrealized position is transferred
    * into the Positions → Inventory list on stop, instead of being discarded. */
   keepPosition: boolean
-  /** 'live' only ever means anything for type 'order' with executionStrategy 'market' on
-   * Binance — every other combination is always 'paper'. See liveTradingService.ts for the
-   * gates a live order must pass, and ExecutorPlaceLiveOrder for where it's actually placed. */
+  /** 'live' only ever means anything for type 'order' with executionStrategy 'market' or
+   * 'limit' on Binance — every other combination is always 'paper'. See liveTradingService.ts
+   * for the gates a live order must pass, ExecutorPlaceLiveOrder/ExecutorPlaceLiveLimitOrder for
+   * where it's actually placed. */
   mode: 'paper' | 'live'
-  /** Set once, after a live executor's one real order fills. Null for every paper executor. */
+  /** Set once a live executor's order actually fills (market: immediately; limit: whenever
+   * LiveOrderScheduler detects the resting order resolved). Null for every paper executor and
+   * for a live limit order still resting. */
   liveOrder: LiveOrderRecord | null
+  /** Non-null only while a live limit order is still resting (status stays 'active' the whole
+   * time) — points at the LiveOrder record LiveOrderScheduler is polling. Null once resolved. */
+  pendingLiveOrderId: string | null
   params: GridExecutorParams | DcaExecutorParams | TwapExecutorParams | PositionExecutorParams | OrderExecutorParams | XemmExecutorParams | ArbitrageExecutorParams | MarketMakingExecutorParams
 }
 

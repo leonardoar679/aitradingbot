@@ -26,12 +26,15 @@ import {
 } from '../../shared/ipc'
 import type { Bot } from '../bots/types'
 
+const EXECUTORS_POLL_MS = 10_000
+
 export function ExecutorsPage(): React.JSX.Element {
   const [bots, setBots] = useState<Bot[]>([])
   const [executors, setExecutors] = useState<ExecutorConfig[]>([])
   const [showNew, setShowNew] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const loadedRef = useRef(false)
+  const lastSerializedRef = useRef('')
 
   useEffect(() => {
     let cancelled = false
@@ -39,6 +42,7 @@ export function ExecutorsPage(): React.JSX.Element {
       if (cancelled) return
       setBots(settings.bots)
       setExecutors(settings.executors)
+      lastSerializedRef.current = JSON.stringify(settings.executors)
       loadedRef.current = true
     })
     return () => {
@@ -48,8 +52,30 @@ export function ExecutorsPage(): React.JSX.Element {
 
   useEffect(() => {
     if (!loadedRef.current) return
+    lastSerializedRef.current = JSON.stringify(executors)
     void window.api.settings.set({ executors })
   }, [executors])
+
+  // LiveOrderScheduler (mounted at the App level) can resolve a live limit order's fill/cancel
+  // and patch settings.executors at any time, independent of whether this page is open — this
+  // light poll-and-diff (same pattern RoutineScheduler already uses) is what makes that show up
+  // here without requiring navigation away and back.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (!loadedRef.current) return
+      window.api.settings
+        .get()
+        .then((settings) => {
+          const serialized = JSON.stringify(settings.executors)
+          if (serialized !== lastSerializedRef.current) {
+            lastSerializedRef.current = serialized
+            setExecutors(settings.executors)
+          }
+        })
+        .catch((error) => console.error('Failed to poll executors:', error))
+    }, EXECUTORS_POLL_MS)
+    return () => clearInterval(timer)
+  }, [])
 
   async function handleCreate(input: {
     name: string
@@ -78,6 +104,7 @@ export function ExecutorsPage(): React.JSX.Element {
       keepPosition: input.keepPosition,
       mode,
       liveOrder: null,
+      pendingLiveOrderId: null,
       params: input.params
     }
     setShowNew(false)
@@ -87,10 +114,40 @@ export function ExecutorsPage(): React.JSX.Element {
       return
     }
 
-    // Live: place the one real order now — this is the only place in the app that does. The
-    // executor is created already 'stopped' either way, since a live Order executor is one-shot.
     const orderParams = input.params as OrderExecutorParams
     const stoppedAt = Math.floor(Date.now() / 1000)
+
+    if (orderParams.executionStrategy === 'limit') {
+      // Live limit order: may resolve immediately (Binance can fill a marketable limit order
+      // synchronously) or rest open — in which case the executor stays 'active' with
+      // pendingLiveOrderId set, and LiveOrderScheduler picks up its resolution later.
+      const limitPrice = orderParams.limitPrice as number
+      try {
+        const result = await window.api.executors.placeLiveLimitOrder(
+          base.id,
+          input.exchange,
+          input.pair.symbol,
+          input.pair.baseAsset,
+          input.pair.quoteAsset,
+          orderParams.side,
+          orderParams.amountQuote,
+          limitPrice
+        )
+        if (result.resolved) {
+          setExecutors((prev) => [...prev, { ...base, status: 'stopped', stoppedAt, liveOrder: result.liveOrder }])
+        } else {
+          setExecutors((prev) => [...prev, { ...base, pendingLiveOrderId: result.pendingLiveOrderId }])
+        }
+      } catch (error) {
+        console.error('Live limit order failed:', error)
+        const message = error instanceof Error ? error.message : String(error)
+        setExecutors((prev) => [...prev, { ...base, name: `${base.name} (failed: ${message})`, status: 'stopped', stoppedAt }])
+      }
+      return
+    }
+
+    // Live market order: place the one real order now — resolves synchronously, so the
+    // executor is created already 'stopped'.
     try {
       const result = await window.api.executors.placeLiveOrder(
         input.exchange,
@@ -108,12 +165,38 @@ export function ExecutorsPage(): React.JSX.Element {
     }
   }
 
-  function handleStop(id: string): void {
+  async function handleStop(id: string): Promise<void> {
     const executor = executors.find((e) => e.id === id)
+
+    // A live executor with a still-resting limit order: Stop is the real cancel action. Cancel
+    // first (best-effort — if it fails, e.g. the order already resolved a moment ago, the
+    // executor still gets marked stopped below rather than getting stuck).
+    if (executor && executor.mode === 'live' && executor.pendingLiveOrderId) {
+      try {
+        const liveOrder = await window.api.liveTrading.cancelOrder(executor.pendingLiveOrderId)
+        setExecutors((prev) =>
+          prev.map((e) =>
+            e.id === id
+              ? { ...e, status: 'stopped', stoppedAt: Math.floor(Date.now() / 1000), liveOrder, pendingLiveOrderId: null }
+              : e
+          )
+        )
+      } catch (error) {
+        console.error('Failed to cancel live order:', error)
+        setExecutors((prev) =>
+          prev.map((e) => (e.id === id ? { ...e, status: 'stopped', stoppedAt: Math.floor(Date.now() / 1000) } : e))
+        )
+      }
+      return
+    }
+
     setExecutors((prev) =>
       prev.map((e) => (e.id === id ? { ...e, status: 'stopped', stoppedAt: Math.floor(Date.now() / 1000) } : e))
     )
-    if (!executor || !executor.keepPosition) return
+    // Position Handover is paper-only bookkeeping — a live fill already has its own ledger
+    // (LivePosition) regardless of keepPosition. Re-running paper candle replay on a live
+    // executor and stuffing the result into paper Inventory would be wrong.
+    if (!executor || executor.mode === 'live' || !executor.keepPosition) return
 
     // Position Handover: fire the check as a background job — the executor's status already
     // flipped above, this only decides whether an open position gets a row in Inventory.

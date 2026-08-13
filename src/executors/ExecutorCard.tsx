@@ -1,5 +1,5 @@
 import { Grid3x3, Layers3, Timer, Target, FileText, Shuffle, Scale, Waves } from 'lucide-react'
-import { EXCHANGES, type ExecutorConfig } from '../../shared/ipc'
+import { EXCHANGES, type ExecutorConfig, type OrderExecutorParams } from '../../shared/ipc'
 import { useExecutorSimulation } from './useExecutorSimulation'
 import { useSpreadExecutorSimulation } from './useSpreadExecutorSimulation'
 import { formatQuotePrice } from '../utils/formatCurrency'
@@ -37,8 +37,21 @@ function MetricsPanel({ executor }: { executor: ExecutorConfig }): React.JSX.Ele
 }
 
 /** Live executors never run the simulation hooks — there's nothing to simulate, the order
- * already really happened. This reads the one real fill straight off the executor's own config. */
+ * already really happened (or, for a resting limit order, is really still open on Binance). This
+ * reads state straight off the executor's own config rather than replaying anything. */
 function LiveOrderMetrics({ executor }: { executor: ExecutorConfig }): React.JSX.Element {
+  if (executor.pendingLiveOrderId) {
+    const params = executor.params as OrderExecutorParams
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
+        <span style={{ color: 'var(--down)', fontWeight: 600 }}>Resting — real limit order</span>
+        <span style={{ color: 'var(--text-secondary)' }}>
+          {params.side.toUpperCase()} {params.amountQuote} {executor.quoteAsset} @ {formatQuotePrice(params.limitPrice ?? 0, executor.quoteAsset)}
+        </span>
+        <span style={{ color: 'var(--text-muted)' }}>Stop cancels this order on Binance</span>
+      </div>
+    )
+  }
   if (!executor.liveOrder) {
     return <div style={{ fontSize: '0.75rem', color: 'var(--down)' }}>Order failed — see name for details</div>
   }

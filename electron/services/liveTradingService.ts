@@ -169,12 +169,17 @@ export async function canCloseLivePosition(): Promise<LiveOrderGateResult> {
   return { allowed: true, reason: null }
 }
 
-/** Only called after a real order actually places — never speculatively. */
+/** Called after a real order actually places — never speculatively. `quoteAmount` can be
+ * negative: a resting live limit order reserves its full notional against the daily cap the
+ * moment it's placed (capital is committed then, not only once it fills), and a negative delta
+ * refunds whatever didn't end up executing once the order resolves (filled less than reserved,
+ * or cancelled outright) — see ExecutorPlaceLiveLimitOrder / LiveTradingPollOpenOrders /
+ * LiveTradingCancelOrder. Clamped at 0 so a refund can never push usage negative. */
 export async function recordLiveOrderUsage(quoteAmount: number): Promise<void> {
   const state = await load()
   const today = todayUtc()
   const usedToday = state.dailyUsage && state.dailyUsage.date === today ? state.dailyUsage.usedQuote : 0
-  state.dailyUsage = { date: today, usedQuote: usedToday + quoteAmount }
+  state.dailyUsage = { date: today, usedQuote: Math.max(0, usedToday + quoteAmount) }
   await persist()
 }
 

@@ -76,7 +76,11 @@ const api = {
       ipcRenderer.invoke(IpcChannel.LiveTradingSetSessionArmed, armed),
     listPositions: (): Promise<LivePosition[]> => ipcRenderer.invoke(IpcChannel.LiveTradingListPositions),
     closePosition: (positionId: string): Promise<LiveOrderRecord> =>
-      ipcRenderer.invoke(IpcChannel.LiveTradingClosePosition, positionId)
+      ipcRenderer.invoke(IpcChannel.LiveTradingClosePosition, positionId),
+    pollOpenOrders: (): Promise<{ executorId: string; liveOrder: LiveOrderRecord }[]> =>
+      ipcRenderer.invoke(IpcChannel.LiveTradingPollOpenOrders),
+    cancelOrder: (liveOrderId: string): Promise<LiveOrderRecord> =>
+      ipcRenderer.invoke(IpcChannel.LiveTradingCancelOrder, liveOrderId)
   },
   executors: {
     placeLiveOrder: (
@@ -87,7 +91,28 @@ const api = {
       side: 'buy' | 'sell',
       quoteAmount: number
     ): Promise<LiveOrderRecord> =>
-      ipcRenderer.invoke(IpcChannel.ExecutorPlaceLiveOrder, exchange, symbol, baseAsset, quoteAsset, side, quoteAmount)
+      ipcRenderer.invoke(IpcChannel.ExecutorPlaceLiveOrder, exchange, symbol, baseAsset, quoteAsset, side, quoteAmount),
+    placeLiveLimitOrder: (
+      executorId: string,
+      exchange: Exchange,
+      symbol: string,
+      baseAsset: string,
+      quoteAsset: string,
+      side: 'buy' | 'sell',
+      amountQuote: number,
+      limitPrice: number
+    ): Promise<{ resolved: true; liveOrder: LiveOrderRecord } | { resolved: false; pendingLiveOrderId: string }> =>
+      ipcRenderer.invoke(
+        IpcChannel.ExecutorPlaceLiveLimitOrder,
+        executorId,
+        exchange,
+        symbol,
+        baseAsset,
+        quoteAsset,
+        side,
+        amountQuote,
+        limitPrice
+      )
   }
 }
 
