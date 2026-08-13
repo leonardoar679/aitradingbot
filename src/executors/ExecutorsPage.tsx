@@ -6,6 +6,8 @@ import { StatCard } from '../components/StatCard'
 import { NewExecutorModal } from './NewExecutorModal'
 import { ExecutorCard } from './ExecutorCard'
 import { ExecutorDetailView } from './ExecutorDetailView'
+import { SpreadExecutorDetailView } from './SpreadExecutorDetailView'
+import { computeExecutorPosition } from './computeSnapshot'
 import {
   EXCHANGES,
   type ExecutorConfig,
@@ -14,7 +16,12 @@ import {
   type SymbolInfo,
   type GridExecutorParams,
   type DcaExecutorParams,
-  type TwapExecutorParams
+  type TwapExecutorParams,
+  type PositionExecutorParams,
+  type OrderExecutorParams,
+  type XemmExecutorParams,
+  type ArbitrageExecutorParams,
+  type HeldPosition
 } from '../../shared/ipc'
 import type { Bot } from '../bots/types'
 
@@ -48,7 +55,8 @@ export function ExecutorsPage(): React.JSX.Element {
     type: ExecutorType
     exchange: Exchange
     pair: SymbolInfo
-    params: GridExecutorParams | DcaExecutorParams | TwapExecutorParams
+    keepPosition: boolean
+    params: GridExecutorParams | DcaExecutorParams | TwapExecutorParams | PositionExecutorParams | OrderExecutorParams | XemmExecutorParams | ArbitrageExecutorParams
   }): void {
     setExecutors((prev) => [
       ...prev,
@@ -63,6 +71,7 @@ export function ExecutorsPage(): React.JSX.Element {
         createdAt: Math.floor(Date.now() / 1000),
         status: 'active',
         stoppedAt: null,
+        keepPosition: input.keepPosition,
         params: input.params
       }
     ])
@@ -70,9 +79,37 @@ export function ExecutorsPage(): React.JSX.Element {
   }
 
   function handleStop(id: string): void {
+    const executor = executors.find((e) => e.id === id)
     setExecutors((prev) =>
       prev.map((e) => (e.id === id ? { ...e, status: 'stopped', stoppedAt: Math.floor(Date.now() / 1000) } : e))
     )
+    if (!executor || !executor.keepPosition) return
+
+    // Position Handover: fire the check as a background job — the executor's status already
+    // flipped above, this only decides whether an open position gets a row in Inventory.
+    void (async () => {
+      try {
+        const position = await computeExecutorPosition(executor)
+        if (!position) return
+        const settings = await window.api.settings.get()
+        const held: HeldPosition = {
+          id: crypto.randomUUID(),
+          sourceExecutorId: executor.id,
+          sourceExecutorName: executor.name,
+          exchange: executor.exchange,
+          symbol: executor.symbol,
+          baseAsset: executor.baseAsset,
+          quoteAsset: executor.quoteAsset,
+          side: position.side,
+          entryPrice: position.entryPrice,
+          amountQuote: position.amountQuote,
+          openedAt: Math.floor(Date.now() / 1000)
+        }
+        await window.api.settings.set({ heldPositions: [...settings.heldPositions, held] })
+      } catch (error) {
+        console.error('Failed to hand over position on stop:', error)
+      }
+    })()
   }
 
   const activeBots = bots.filter((b) => b.enabled)
@@ -81,6 +118,9 @@ export function ExecutorsPage(): React.JSX.Element {
   const selected = executors.find((e) => e.id === selectedId) ?? null
 
   if (selected) {
+    if (selected.type === 'xemm' || selected.type === 'arbitrage') {
+      return <SpreadExecutorDetailView executor={selected} onBack={() => setSelectedId(null)} />
+    }
     return <ExecutorDetailView executor={selected} onBack={() => setSelectedId(null)} />
   }
 
@@ -108,7 +148,7 @@ export function ExecutorsPage(): React.JSX.Element {
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <h2 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-          Grid / DCA / TWAP Executors
+          Executors
         </h2>
         <button
           onClick={() => setShowNew(true)}
@@ -132,8 +172,8 @@ export function ExecutorsPage(): React.JSX.Element {
 
       {executors.length === 0 && (
         <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>
-          No executors yet. Create a Grid, DCA, or TWAP executor to start a paper-trading strategy against live
-          market data.
+          No executors yet. Create a Grid, DCA, TWAP, Position, Order, XEMM, or Arbitrage executor to start a
+          paper-trading strategy against live market data.
         </p>
       )}
 

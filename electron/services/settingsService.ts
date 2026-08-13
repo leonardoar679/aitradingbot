@@ -8,7 +8,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   bots: [],
   botRuns: [],
   executors: [],
-  routines: []
+  routines: [],
+  heldPositions: [],
+  controllers: []
 }
 
 let cache: AppSettings | null = null

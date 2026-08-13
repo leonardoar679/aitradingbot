@@ -4,7 +4,7 @@ import { PageHeader } from '../components/PageHeader'
 import { Card } from '../components/Card'
 import { ExchangeSelect } from '../components/ExchangeSelect'
 import { SymbolSearch } from '../components/SymbolSearch'
-import { RoutineReportChart } from './RoutineReportChart'
+import { EquityCurveChart } from '../components/EquityCurveChart'
 import { useRoutineReports } from './routineStore'
 import { runRoutineNow } from './RoutineScheduler'
 import { SCHEDULE_PRESETS } from './types'
@@ -174,7 +174,7 @@ function ReportRow({ report }: { report: ReturnType<typeof useRoutineReports>[nu
               </div>
             </div>
           </div>
-          <RoutineReportChart equityCurve={report.result.equityCurve} />
+          <EquityCurveChart equityCurve={report.result.equityCurve} />
         </div>
       )}
     </div>

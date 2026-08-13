@@ -9,7 +9,7 @@ import {
   type UTCTimestamp
 } from 'lightweight-charts'
 import { ArrowLeft } from 'lucide-react'
-import { EXCHANGES, type ExecutorConfig, type GridExecutorParams } from '../../shared/ipc'
+import { EXCHANGES, type ExecutorConfig, type GridExecutorParams, type PositionExecutorParams } from '../../shared/ipc'
 import { useExecutorSimulation } from './useExecutorSimulation'
 import { useTheme } from '../theme/ThemeContext'
 import { CHART_PALETTE } from '../theme/palette'
@@ -130,6 +130,44 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
           lineStyle: LineStyle.Solid,
           axisLabelVisible: true,
           title: 'VWAP'
+        })
+      )
+    } else if (sim.state.kind === 'position') {
+      const params = executor.params as PositionExecutorParams
+      const isBuy = sim.state.side === 'buy'
+      if (sim.state.entryPrice !== null) {
+        newLines.push(
+          series.createPriceLine({
+            price: sim.state.entryPrice,
+            color: palette.gold,
+            lineWidth: 2,
+            lineStyle: LineStyle.Solid,
+            axisLabelVisible: true,
+            title: 'Entry'
+          })
+        )
+        if (params.takeProfitPct !== null) {
+          const tp = isBuy ? sim.state.entryPrice * (1 + params.takeProfitPct / 100) : sim.state.entryPrice * (1 - params.takeProfitPct / 100)
+          newLines.push(
+            series.createPriceLine({ price: tp, color: palette.up, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: 'TP' })
+          )
+        }
+        if (params.stopLossPct !== null) {
+          const sl = isBuy ? sim.state.entryPrice * (1 - params.stopLossPct / 100) : sim.state.entryPrice * (1 + params.stopLossPct / 100)
+          newLines.push(
+            series.createPriceLine({ price: sl, color: palette.down, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: 'SL' })
+          )
+        }
+      }
+    } else if (sim.state.kind === 'order' && sim.state.fillPrice !== null) {
+      newLines.push(
+        series.createPriceLine({
+          price: sim.state.fillPrice,
+          color: palette.gold,
+          lineWidth: 2,
+          lineStyle: LineStyle.Solid,
+          axisLabelVisible: true,
+          title: 'Fill'
         })
       )
     }

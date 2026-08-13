@@ -1,19 +1,68 @@
-import { Grid3x3, Layers3, Timer } from 'lucide-react'
+import { Grid3x3, Layers3, Timer, Target, FileText, Shuffle, Scale } from 'lucide-react'
 import { EXCHANGES, type ExecutorConfig } from '../../shared/ipc'
 import { useExecutorSimulation } from './useExecutorSimulation'
+import { useSpreadExecutorSimulation } from './useSpreadExecutorSimulation'
 import { formatQuotePrice } from '../utils/formatCurrency'
 
 const TYPE_META = {
   grid: { label: 'Grid', icon: Grid3x3, color: '#3b82f6' },
   dca: { label: 'DCA', icon: Layers3, color: '#d4a94a' },
-  twap: { label: 'TWAP', icon: Timer, color: '#3ecf6a' }
+  twap: { label: 'TWAP', icon: Timer, color: '#3ecf6a' },
+  position: { label: 'Position', icon: Target, color: '#f97316' },
+  order: { label: 'Order', icon: FileText, color: '#94a3b8' },
+  xemm: { label: 'XEMM', icon: Shuffle, color: '#a855f7' },
+  arbitrage: { label: 'Arbitrage', icon: Scale, color: '#ec4899' }
 } as const
+
+const EXIT_REASON_LABEL: Record<string, string> = {
+  take_profit: 'Take Profit',
+  stop_loss: 'Stop Loss',
+  time_limit: 'Time Limit',
+  trailing_stop: 'Trailing Stop'
+}
 
 function pctColor(pct: number): string {
   return pct >= 0 ? 'var(--up)' : 'var(--down)'
 }
 
 function MetricsPanel({ executor }: { executor: ExecutorConfig }): React.JSX.Element {
+  if (executor.type === 'xemm' || executor.type === 'arbitrage') {
+    return <SpreadMetrics executor={executor} />
+  }
+  return <SingleMarketMetrics executor={executor} />
+}
+
+function SpreadMetrics({ executor }: { executor: ExecutorConfig }): React.JSX.Element {
+  const sim = useSpreadExecutorSimulation(executor)
+
+  if (executor.status === 'stopped') {
+    return <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Stopped</div>
+  }
+  if (sim.status === 'loading') {
+    return <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Loading market data…</div>
+  }
+  if (sim.status === 'error') {
+    return <div style={{ fontSize: '0.75rem', color: 'var(--down)' }}>Error: {sim.error}</div>
+  }
+  if (!sim.state) return <></>
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
+      <span style={{ color: 'var(--text-primary)' }}>
+        {sim.state.captures.length} capture{sim.state.captures.length === 1 ? '' : 's'}
+      </span>
+      {sim.state.lastSpreadPct !== null && (
+        <span style={{ color: 'var(--text-secondary)' }}>Spread {sim.state.lastSpreadPct.toFixed(3)}%</span>
+      )}
+      <span style={{ color: pctColor(sim.state.realizedPnl), fontWeight: 600 }}>
+        {sim.state.realizedPnl >= 0 ? '+' : ''}
+        {formatQuotePrice(sim.state.realizedPnl, executor.quoteAsset)} realized
+      </span>
+    </div>
+  )
+}
+
+function SingleMarketMetrics({ executor }: { executor: ExecutorConfig }): React.JSX.Element {
   const sim = useExecutorSimulation(executor)
 
   if (executor.status === 'stopped') {
@@ -77,14 +126,55 @@ function MetricsPanel({ executor }: { executor: ExecutorConfig }): React.JSX.Ele
     )
   }
 
+  if (sim.state.kind === 'twap') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
+        <span style={{ color: 'var(--text-primary)' }}>{sim.state.progressPct.toFixed(0)}% complete</span>
+        <span style={{ color: 'var(--text-muted)' }}>
+          {sim.state.fills.length} / {sim.state.numOrders} slices
+        </span>
+        {sim.state.vwap !== null && (
+          <span style={{ color: 'var(--text-secondary)' }}>VWAP {formatQuotePrice(sim.state.vwap, executor.quoteAsset)}</span>
+        )}
+      </div>
+    )
+  }
+
+  if (sim.state.kind === 'position') {
+    const current = sim.latestCandle?.close ?? null
+    const rawPct =
+      sim.state.entryPrice && current ? ((current - sim.state.entryPrice) / sim.state.entryPrice) * 100 : 0
+    const unrealizedPct = sim.state.side === 'sell' ? -rawPct : rawPct
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
+        <span style={{ color: 'var(--text-primary)' }}>
+          {sim.state.status === 'pending' ? 'Waiting for entry' : sim.state.status === 'open' ? 'Open' : 'Closed'}
+        </span>
+        {sim.state.entryPrice !== null && (
+          <span style={{ color: 'var(--text-secondary)' }}>Entry {formatQuotePrice(sim.state.entryPrice, executor.quoteAsset)}</span>
+        )}
+        {sim.state.status === 'closed' && sim.state.realizedPnl !== null && (
+          <span style={{ color: pctColor(sim.state.realizedPnl), fontWeight: 600 }}>
+            {sim.state.realizedPnl >= 0 ? '+' : ''}
+            {formatQuotePrice(sim.state.realizedPnl, executor.quoteAsset)} ({sim.state.exitReason ? EXIT_REASON_LABEL[sim.state.exitReason] : ''})
+          </span>
+        )}
+        {sim.state.status === 'open' && current && (
+          <span style={{ color: pctColor(unrealizedPct), fontWeight: 600 }}>
+            {unrealizedPct >= 0 ? '+' : ''}
+            {unrealizedPct.toFixed(2)}% unrealized
+          </span>
+        )}
+      </div>
+    )
+  }
+
+  // sim.state.kind === 'order'
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
-      <span style={{ color: 'var(--text-primary)' }}>{sim.state.progressPct.toFixed(0)}% complete</span>
-      <span style={{ color: 'var(--text-muted)' }}>
-        {sim.state.fills.length} / {sim.state.numOrders} slices
-      </span>
-      {sim.state.vwap !== null && (
-        <span style={{ color: 'var(--text-secondary)' }}>VWAP {formatQuotePrice(sim.state.vwap, executor.quoteAsset)}</span>
+      <span style={{ color: 'var(--text-primary)' }}>{sim.state.status === 'filled' ? 'Filled' : 'Pending'}</span>
+      {sim.state.fillPrice !== null && (
+        <span style={{ color: 'var(--text-secondary)' }}>Fill {formatQuotePrice(sim.state.fillPrice, executor.quoteAsset)}</span>
       )}
     </div>
   )

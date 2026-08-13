@@ -1,5 +1,22 @@
-import type { Candle, ExecutorConfig, DcaLevel, GridExecutorParams, DcaExecutorParams, TwapExecutorParams } from '../../shared/ipc'
-import type { GridExecutorState, DcaExecutorState, TwapExecutorState, ExecutorRuntimeState, GridLevelState } from './types'
+import type {
+  Candle,
+  ExecutorConfig,
+  DcaLevel,
+  GridExecutorParams,
+  DcaExecutorParams,
+  TwapExecutorParams,
+  PositionExecutorParams,
+  OrderExecutorParams
+} from '../../shared/ipc'
+import type {
+  GridExecutorState,
+  DcaExecutorState,
+  TwapExecutorState,
+  PositionExecutorState,
+  OrderExecutorState,
+  SingleMarketExecutorState,
+  GridLevelState
+} from './types'
 
 const MAX_GRID_LEVELS = 40
 
@@ -182,8 +199,106 @@ export function simulateTwap(candles: Candle[], params: TwapExecutorParams, crea
   }
 }
 
-export function runExecutorSimulation(candles: Candle[], config: ExecutorConfig, basePrice: number): ExecutorRuntimeState {
+/** Triple Barrier Method: enters at `entryPrice` when touched (or the first candle's open when
+ * `entryPrice` is null, i.e. a market entry), then each candle checks stop-loss, take-profit,
+ * trailing-stop, and time-limit in that priority — the first barrier crossed closes the position. */
+export function simulatePosition(candles: Candle[], params: PositionExecutorParams): PositionExecutorState {
+  const isBuy = params.side === 'buy'
+  let status: PositionExecutorState['status'] = 'pending'
+  let entryPrice: number | null = null
+  let enteredAt: number | null = null
+  let trailingPeakPrice: number | null = null
+  let exitReason: PositionExecutorState['exitReason'] = null
+  let exitPrice: number | null = null
+  let closedAt: number | null = null
+  let realizedPnl: number | null = null
+
+  for (const candle of candles) {
+    if (status === 'pending') {
+      if (params.entryPrice === null) {
+        entryPrice = candle.open
+        status = 'open'
+        enteredAt = candle.time
+        trailingPeakPrice = entryPrice
+      } else if (candle.low <= params.entryPrice && params.entryPrice <= candle.high) {
+        entryPrice = params.entryPrice
+        status = 'open'
+        enteredAt = candle.time
+        trailingPeakPrice = entryPrice
+      }
+      if (status === 'pending') continue
+    }
+
+    if (status !== 'open' || entryPrice === null || enteredAt === null) continue
+
+    if (trailingPeakPrice === null) trailingPeakPrice = entryPrice
+    trailingPeakPrice = isBuy ? Math.max(trailingPeakPrice, candle.high) : Math.min(trailingPeakPrice, candle.low)
+
+    const slTarget = params.stopLossPct !== null ? (isBuy ? entryPrice * (1 - params.stopLossPct / 100) : entryPrice * (1 + params.stopLossPct / 100)) : null
+    const slHit = slTarget !== null && (isBuy ? candle.low <= slTarget : candle.high >= slTarget)
+
+    const tpTarget = params.takeProfitPct !== null ? (isBuy ? entryPrice * (1 + params.takeProfitPct / 100) : entryPrice * (1 - params.takeProfitPct / 100)) : null
+    const tpHit = tpTarget !== null && (isBuy ? candle.high >= tpTarget : candle.low <= tpTarget)
+
+    let trailHit = false
+    let trailTarget: number | null = null
+    if (params.trailingStop !== null) {
+      const activationTarget = isBuy
+        ? entryPrice * (1 + params.trailingStop.activationPct / 100)
+        : entryPrice * (1 - params.trailingStop.activationPct / 100)
+      const activated = isBuy ? trailingPeakPrice >= activationTarget : trailingPeakPrice <= activationTarget
+      if (activated) {
+        trailTarget = isBuy
+          ? trailingPeakPrice * (1 - params.trailingStop.trailPct / 100)
+          : trailingPeakPrice * (1 + params.trailingStop.trailPct / 100)
+        trailHit = isBuy ? candle.low <= trailTarget : candle.high >= trailTarget
+      }
+    }
+
+    const timeUp = params.timeLimitSec !== null && candle.time - enteredAt >= params.timeLimitSec
+
+    if (slHit || tpHit || trailHit || timeUp) {
+      exitReason = slHit ? 'stop_loss' : tpHit ? 'take_profit' : trailHit ? 'trailing_stop' : 'time_limit'
+      exitPrice = slHit ? (slTarget as number) : tpHit ? (tpTarget as number) : trailHit ? (trailTarget as number) : candle.close
+      realizedPnl = isBuy ? (params.amountQuote / entryPrice) * (exitPrice - entryPrice) : (params.amountQuote / entryPrice) * (entryPrice - exitPrice)
+      status = 'closed'
+      closedAt = candle.time
+      break
+    }
+  }
+
+  return { kind: 'position', side: params.side, status, entryPrice, enteredAt, trailingPeakPrice, exitReason, exitPrice, closedAt, realizedPnl }
+}
+
+/** `market`/`limit_chaser` fill at the first candle's open — without a real order book,
+ * "chasing" the best price isn't modelable, so it's treated as an immediate market fill.
+ * `limit`/`limit_maker` fill the first time a candle's range touches `limitPrice`. */
+export function simulateOrder(candles: Candle[], params: OrderExecutorParams): OrderExecutorState {
+  if (candles.length === 0) return { kind: 'order', status: 'pending', fillPrice: null, filledAt: null }
+
+  if (params.executionStrategy === 'market' || params.executionStrategy === 'limit_chaser') {
+    const first = candles[0]
+    return { kind: 'order', status: 'filled', fillPrice: first.open, filledAt: first.time }
+  }
+
+  const limitPrice = params.limitPrice
+  if (limitPrice === null) return { kind: 'order', status: 'pending', fillPrice: null, filledAt: null }
+
+  for (const candle of candles) {
+    if (candle.low <= limitPrice && limitPrice <= candle.high) {
+      return { kind: 'order', status: 'filled', fillPrice: limitPrice, filledAt: candle.time }
+    }
+  }
+  return { kind: 'order', status: 'pending', fillPrice: null, filledAt: null }
+}
+
+/** Dispatches the single-market executor types only — xemm/arbitrage need two candle series at
+ * once and are simulated separately via spreadEngine.ts + useSpreadExecutorSimulation. */
+export function runExecutorSimulation(candles: Candle[], config: ExecutorConfig, basePrice: number): SingleMarketExecutorState {
   if (config.type === 'grid') return simulateGrid(candles, config.params as GridExecutorParams)
   if (config.type === 'dca') return simulateDca(candles, config.params as DcaExecutorParams, basePrice)
-  return simulateTwap(candles, config.params as TwapExecutorParams, config.createdAt)
+  if (config.type === 'twap') return simulateTwap(candles, config.params as TwapExecutorParams, config.createdAt)
+  if (config.type === 'position') return simulatePosition(candles, config.params as PositionExecutorParams)
+  if (config.type === 'order') return simulateOrder(candles, config.params as OrderExecutorParams)
+  throw new Error(`${config.type} executors are simulated via useSpreadExecutorSimulation, not runExecutorSimulation`)
 }

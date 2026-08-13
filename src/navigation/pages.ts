@@ -3,6 +3,7 @@ import {
   ArrowLeftRight,
   Bot,
   Activity,
+  Boxes,
   Anchor,
   Atom,
   Repeat,
@@ -18,6 +19,7 @@ export type Page =
   | 'trade'
   | 'bots'
   | 'executors'
+  | 'controllers'
   | 'positions'
   | 'agents'
   | 'routines'
@@ -37,6 +39,7 @@ export const NAV_ITEMS: NavItem[] = [
   { page: 'trade', label: 'Trade', icon: ArrowLeftRight },
   { page: 'bots', label: 'Bots', icon: Bot },
   { page: 'executors', label: 'Executors', icon: Activity },
+  { page: 'controllers', label: 'Controllers', icon: Boxes },
   { page: 'positions', label: 'Positions', icon: Anchor },
   { page: 'agents', label: 'Agents', icon: Atom },
   { page: 'routines', label: 'Routines', icon: Repeat },

@@ -30,6 +30,8 @@ export interface AppSettings {
   botRuns: BotRun[]
   executors: ExecutorConfig[]
   routines: RoutineConfig[]
+  heldPositions: HeldPosition[]
+  controllers: ControllerConfig[]
 }
 
 /** Status of a stored exchange API credential. Crosses IPC — never the raw key/secret, which
@@ -194,7 +196,7 @@ export interface BotRun {
   netPct: number
 }
 
-export type ExecutorType = 'grid' | 'dca' | 'twap'
+export type ExecutorType = 'grid' | 'dca' | 'twap' | 'position' | 'order' | 'xemm' | 'arbitrage'
 export type ExecutorSide = 'buy' | 'sell'
 
 export interface GridExecutorParams {
@@ -228,6 +230,49 @@ export interface TwapExecutorParams {
   orderIntervalSec: number
 }
 
+export interface PositionExecutorParams {
+  side: ExecutorSide
+  /** null = enter at market (the first candle's open) instead of waiting for a touch. */
+  entryPrice: number | null
+  amountQuote: number
+  takeProfitPct: number | null
+  stopLossPct: number | null
+  timeLimitSec: number | null
+  trailingStop: { activationPct: number; trailPct: number } | null
+}
+
+export type OrderExecutionStrategy = 'limit' | 'limit_maker' | 'market' | 'limit_chaser'
+
+export interface OrderExecutorParams {
+  side: ExecutorSide
+  amountQuote: number
+  executionStrategy: OrderExecutionStrategy
+  /** Required for limit/limit_maker/limit_chaser; ignored for market. */
+  limitPrice: number | null
+}
+
+export interface SpreadMarket {
+  exchange: Exchange
+  symbol: string
+  baseAsset: string
+  quoteAsset: string
+}
+
+export interface XemmExecutorParams {
+  buyingMarket: SpreadMarket
+  sellingMarket: SpreadMarket
+  makerSide: ExecutorSide
+  orderAmountQuote: number
+  minProfitabilityPct: number
+}
+
+export interface ArbitrageExecutorParams {
+  buyingMarket: SpreadMarket
+  sellingMarket: SpreadMarket
+  orderAmountQuote: number
+  minProfitabilityPct: number
+}
+
 export type ExecutorStatus = 'active' | 'stopped'
 
 export interface ExecutorConfig {
@@ -241,7 +286,45 @@ export interface ExecutorConfig {
   createdAt: number
   status: ExecutorStatus
   stoppedAt: number | null
-  params: GridExecutorParams | DcaExecutorParams | TwapExecutorParams
+  /** Mirrors Condor's Position Handover: when true, an open/unrealized position is transferred
+   * into the Positions → Inventory list on stop, instead of being discarded. */
+  keepPosition: boolean
+  params: GridExecutorParams | DcaExecutorParams | TwapExecutorParams | PositionExecutorParams | OrderExecutorParams | XemmExecutorParams | ArbitrageExecutorParams
+}
+
+/** A position handed over from a stopped executor (Condor's "Position Handover" → agent
+ * inventory) instead of being discarded when the executor that opened it terminates. Purely
+ * local bookkeeping — closing one never places a real order. */
+export interface HeldPosition {
+  id: string
+  sourceExecutorId: string
+  sourceExecutorName: string
+  exchange: Exchange
+  symbol: string
+  baseAsset: string
+  quoteAsset: string
+  side: ExecutorSide
+  entryPrice: number
+  amountQuote: number
+  openedAt: number
+}
+
+export interface ControllerRiskControls {
+  globalStopLossPct: number | null
+  globalTakeProfitPct: number | null
+  maxDrawdownPct: number | null
+}
+
+/** A named group of executors with shared risk controls and periodic aggregate P&L snapshots —
+ * adapts Condor's Controller concept (which supervises multiple executors inside a bot
+ * container) onto this app's executor list, since there's no bot-container runtime here. */
+export interface ControllerConfig {
+  id: string
+  name: string
+  executorIds: string[]
+  riskControls: ControllerRiskControls
+  status: 'active' | 'stopped'
+  createdAt: number
 }
 
 /** A saved recurring backtest, re-run on a client-side timer while the app is open (Condor's

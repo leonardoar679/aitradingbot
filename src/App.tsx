@@ -5,6 +5,8 @@ import { PortfolioPage } from './portfolio/PortfolioPage'
 import { TradePage } from './trade/TradePage'
 import { BotsPage } from './bots/BotsPage'
 import { ExecutorsPage } from './executors/ExecutorsPage'
+import { ControllersPage } from './controllers/ControllersPage'
+import { ControllerScheduler } from './controllers/ControllerScheduler'
 import { PositionsPage } from './positions/PositionsPage'
 import { AgentsPage } from './agents/AgentsPage'
 import { RoutinesPage } from './routines/RoutinesPage'
@@ -21,6 +23,7 @@ function App(): React.JSX.Element {
   return (
     <div style={{ display: 'flex', height: '100vh' }}>
       <RoutineScheduler />
+      <ControllerScheduler />
       <Sidebar
         currentPage={page}
         onNavigate={setPage}
@@ -42,6 +45,7 @@ function App(): React.JSX.Element {
         {page === 'trade' && <TradePage />}
         {page === 'bots' && <BotsPage />}
         {page === 'executors' && <ExecutorsPage />}
+        {page === 'controllers' && <ControllersPage />}
         {page === 'positions' && <PositionsPage />}
         {page === 'agents' && <AgentsPage />}
         {page === 'routines' && <RoutinesPage />}

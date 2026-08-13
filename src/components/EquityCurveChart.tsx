@@ -4,7 +4,7 @@ import { useTheme } from '../theme/ThemeContext'
 import { CHART_PALETTE } from '../theme/palette'
 import type { EquityPoint } from '../backtest/engine'
 
-export function RoutineReportChart({ equityCurve }: { equityCurve: EquityPoint[] }): React.JSX.Element {
+export function EquityCurveChart({ equityCurve }: { equityCurve: EquityPoint[] }): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const { theme } = useTheme()
   const palette = CHART_PALETTE[theme]

@@ -6,7 +6,13 @@ export type {
   GridExecutorParams,
   DcaExecutorParams,
   DcaLevel,
-  TwapExecutorParams
+  TwapExecutorParams,
+  PositionExecutorParams,
+  OrderExecutorParams,
+  OrderExecutionStrategy,
+  XemmExecutorParams,
+  ArbitrageExecutorParams,
+  SpreadMarket
 } from '../../shared/ipc'
 
 export interface GridLevelState {
@@ -59,4 +65,44 @@ export interface TwapExecutorState {
   done: boolean
 }
 
-export type ExecutorRuntimeState = GridExecutorState | DcaExecutorState | TwapExecutorState
+export type PositionExitReason = 'take_profit' | 'stop_loss' | 'time_limit' | 'trailing_stop'
+
+export interface PositionExecutorState {
+  kind: 'position'
+  side: 'buy' | 'sell'
+  status: 'pending' | 'open' | 'closed'
+  entryPrice: number | null
+  enteredAt: number | null
+  /** High-water (buy) / low-water (sell) price since entry — drives the trailing-stop exit. */
+  trailingPeakPrice: number | null
+  exitReason: PositionExitReason | null
+  exitPrice: number | null
+  closedAt: number | null
+  realizedPnl: number | null
+}
+
+export interface OrderExecutorState {
+  kind: 'order'
+  status: 'pending' | 'filled'
+  fillPrice: number | null
+  filledAt: number | null
+}
+
+export interface SpreadCapture {
+  time: number
+  spreadPct: number
+  profitQuote: number
+}
+
+export interface SpreadExecutorState {
+  kind: 'xemm' | 'arbitrage'
+  captures: SpreadCapture[]
+  realizedPnl: number
+  lastSpreadPct: number | null
+}
+
+/** What runExecutorSimulation (the single-market dispatcher) can actually return — excludes
+ * SpreadExecutorState, which only ever comes from useSpreadExecutorSimulation. */
+export type SingleMarketExecutorState = GridExecutorState | DcaExecutorState | TwapExecutorState | PositionExecutorState | OrderExecutorState
+
+export type ExecutorRuntimeState = SingleMarketExecutorState | SpreadExecutorState

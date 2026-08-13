@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
 import { Card } from '../components/Card'
 import { MarketTicker } from '../dashboard/MarketTicker'
 import { formatQuotePrice } from '../utils/formatCurrency'
-import { EXCHANGES, type Exchange, type SymbolInfo, type Ticker24h } from '../../shared/ipc'
+import { useLastPrice } from '../hooks/useLastPrice'
+import { EXCHANGES, type Exchange, type SymbolInfo } from '../../shared/ipc'
 
 type Side = 'buy' | 'sell'
 type OrderType = 'market' | 'limit'
@@ -65,37 +66,6 @@ const labelStyle: React.CSSProperties = {
   marginBottom: '0.3rem'
 }
 
-/** Last-price feed for the order ticket. MarketTicker owns its own subscription and doesn't
- * expose the snapshot upward, so this is a second lightweight subscription to the same channel. */
-function useLastPrice(exchange: Exchange, symbol: string): number | null {
-  const [price, setPrice] = useState<number | null>(null)
-
-  useEffect(() => {
-    setPrice(null)
-    let cancelled = false
-    let unsubscribe: (() => void) | null = null
-
-    async function start(): Promise<void> {
-      try {
-        const snapshot = await window.api.market.subscribeTicker(exchange, symbol)
-        if (cancelled) return
-        setPrice(snapshot.lastPrice)
-        unsubscribe = window.api.market.onTickerUpdate((t: Ticker24h) => setPrice(t.lastPrice))
-      } catch (error) {
-        console.error('Failed to load ticker:', error)
-      }
-    }
-    void start()
-
-    return () => {
-      cancelled = true
-      unsubscribe?.()
-      void window.api.market.unsubscribeTicker()
-    }
-  }, [exchange, symbol])
-
-  return price
-}
 
 export function TradePage(): React.JSX.Element {
   const [exchange, setExchange] = useState<Exchange>(EXCHANGES[0].id)

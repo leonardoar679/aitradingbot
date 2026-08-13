@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Candle, ExecutorConfig } from '../../shared/ipc'
 import { runExecutorSimulation } from './engine'
-import type { ExecutorRuntimeState } from './types'
+import type { SingleMarketExecutorState } from './types'
 
 const POLL_MS = 60_000
 
@@ -10,7 +10,7 @@ export type ExecutorSimStatus = 'loading' | 'running' | 'error'
 export interface ExecutorSimResult {
   status: ExecutorSimStatus
   error: string | null
-  state: ExecutorRuntimeState | null
+  state: SingleMarketExecutorState | null
   latestCandle: Candle | null
   candles: Candle[]
 }
