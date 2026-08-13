@@ -19,7 +19,13 @@ export const IpcChannel = {
   CredentialsList: 'credentials:list',
   CredentialsSet: 'credentials:set',
   CredentialsTest: 'credentials:test',
-  CredentialsRemove: 'credentials:remove'
+  CredentialsRemove: 'credentials:remove',
+  LiveTradingGetStatus: 'liveTrading:getStatus',
+  LiveTradingSetConfig: 'liveTrading:setConfig',
+  LiveTradingEngageKillSwitch: 'liveTrading:engageKillSwitch',
+  LiveTradingReleaseKillSwitch: 'liveTrading:releaseKillSwitch',
+  LiveTradingSetSessionArmed: 'liveTrading:setSessionArmed',
+  ExecutorPlaceLiveOrder: 'executor:placeLiveOrder'
 } as const
 
 export type IpcChannel = (typeof IpcChannel)[keyof typeof IpcChannel]
@@ -42,6 +48,29 @@ export interface CredentialStatus {
   addedAt: number | null
   lastTestedAt: number | null
   lastTestOk: boolean | null
+}
+
+/** Current state of every real-money safety gate — see electron/services/liveTradingService.ts,
+ * the only place any of this is actually enforced. `sessionArmed` always resets to false on
+ * every app launch and is never persisted. */
+export interface LiveTradingStatus {
+  sessionArmed: boolean
+  killSwitchEngaged: boolean
+  maxOrderQuote: number
+  hardMaxOrderQuote: number
+  dailyCapQuote: number
+  dailyUsedQuote: number
+}
+
+/** The result of one real order fill. `avgFillPrice` is notional-weighted across a market
+ * order's fills, since a market order can cross multiple price levels. */
+export interface LiveOrderRecord {
+  orderId: number
+  status: string
+  filledQty: number
+  avgFillPrice: number
+  cummulativeQuoteQty: number
+  placedAt: number
 }
 
 /** OHLCV candle. `time` is a Unix timestamp in seconds (UTC), matching lightweight-charts. */
@@ -305,6 +334,12 @@ export interface ExecutorConfig {
   /** Mirrors Condor's Position Handover: when true, an open/unrealized position is transferred
    * into the Positions → Inventory list on stop, instead of being discarded. */
   keepPosition: boolean
+  /** 'live' only ever means anything for type 'order' with executionStrategy 'market' on
+   * Binance — every other combination is always 'paper'. See liveTradingService.ts for the
+   * gates a live order must pass, and ExecutorPlaceLiveOrder for where it's actually placed. */
+  mode: 'paper' | 'live'
+  /** Set once, after a live executor's one real order fills. Null for every paper executor. */
+  liveOrder: LiveOrderRecord | null
   params: GridExecutorParams | DcaExecutorParams | TwapExecutorParams | PositionExecutorParams | OrderExecutorParams | XemmExecutorParams | ArbitrageExecutorParams | MarketMakingExecutorParams
 }
 

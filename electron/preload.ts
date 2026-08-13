@@ -9,6 +9,8 @@ import {
   type HistoricalRangeProgress,
   type HistoricalRangeResult,
   type Interval,
+  type LiveOrderRecord,
+  type LiveTradingStatus,
   type SymbolInfo,
   type Ticker24h
 } from '../shared/ipc'
@@ -62,6 +64,19 @@ const api = {
     test: (exchange: Exchange): Promise<{ ok: boolean; message: string }> =>
       ipcRenderer.invoke(IpcChannel.CredentialsTest, exchange),
     remove: (exchange: Exchange): Promise<void> => ipcRenderer.invoke(IpcChannel.CredentialsRemove, exchange)
+  },
+  liveTrading: {
+    getStatus: (): Promise<LiveTradingStatus> => ipcRenderer.invoke(IpcChannel.LiveTradingGetStatus),
+    setConfig: (patch: { maxOrderQuote?: number; dailyCapQuote?: number }): Promise<LiveTradingStatus> =>
+      ipcRenderer.invoke(IpcChannel.LiveTradingSetConfig, patch),
+    engageKillSwitch: (): Promise<LiveTradingStatus> => ipcRenderer.invoke(IpcChannel.LiveTradingEngageKillSwitch),
+    releaseKillSwitch: (): Promise<LiveTradingStatus> => ipcRenderer.invoke(IpcChannel.LiveTradingReleaseKillSwitch),
+    setSessionArmed: (armed: boolean): Promise<LiveTradingStatus> =>
+      ipcRenderer.invoke(IpcChannel.LiveTradingSetSessionArmed, armed)
+  },
+  executors: {
+    placeLiveOrder: (exchange: Exchange, symbol: string, side: 'buy' | 'sell', quoteAmount: number): Promise<LiveOrderRecord> =>
+      ipcRenderer.invoke(IpcChannel.ExecutorPlaceLiveOrder, exchange, symbol, side, quoteAmount)
   }
 }
 

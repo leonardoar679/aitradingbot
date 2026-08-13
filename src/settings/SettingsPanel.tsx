@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { KeyRound, ShieldCheck, Trash2, Moon, Sun, Eye } from 'lucide-react'
+import { KeyRound, ShieldCheck, Trash2, Moon, Sun, Eye, AlertTriangle } from 'lucide-react'
 import { Card } from '../components/Card'
 import { useTheme } from '../theme/ThemeContext'
 import type { Theme } from '../theme/palette'
-import type { CredentialStatus, Exchange } from '../../shared/ipc'
+import type { CredentialStatus, Exchange, LiveTradingStatus } from '../../shared/ipc'
 
 const THEME_OPTIONS: { id: Theme; label: string; icon: typeof Moon }[] = [
   { id: 'dark', label: 'Dark', icon: Moon },
@@ -236,8 +236,9 @@ export function SettingsPanel(): React.JSX.Element {
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.9rem' }}>
           <ShieldCheck size={15} color="var(--text-secondary)" style={{ flexShrink: 0, marginTop: 2 }} />
           <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
-            No bot can place a real order today — real order execution isn't built yet. Keys added here are only used to
-            verify they're valid; they aren't attached to any bot. Only Binance is supported so far.
+            A verified key here can place real market orders — only via a live-mode Order executor, only on Binance,
+            and only once armed from the live trading bar at the top of the app. Every other bot and executor stays
+            paper-only regardless of whether a key is configured here.
           </p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
@@ -252,6 +253,81 @@ export function SettingsPanel(): React.JSX.Element {
           ))}
         </div>
       </Card>
+
+      <LiveTradingLimitsCard />
     </>
+  )
+}
+
+function LiveTradingLimitsCard(): React.JSX.Element {
+  const [status, setStatus] = useState<LiveTradingStatus | null>(null)
+  const [maxOrderQuote, setMaxOrderQuote] = useState('')
+  const [dailyCapQuote, setDailyCapQuote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  function refresh(): void {
+    window.api.liveTrading.getStatus().then((s) => {
+      setStatus(s)
+      setMaxOrderQuote(String(s.maxOrderQuote))
+      setDailyCapQuote(String(s.dailyCapQuote))
+    })
+  }
+
+  useEffect(() => {
+    refresh()
+  }, [])
+
+  async function handleSave(): Promise<void> {
+    setBusy(true)
+    setSaved(false)
+    try {
+      await window.api.liveTrading.setConfig({
+        maxOrderQuote: Number(maxOrderQuote),
+        dailyCapQuote: Number(dailyCapQuote)
+      })
+      refresh()
+      setSaved(true)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!status) return <Card title="Live Trading — Risk Limits">Loading…</Card>
+
+  return (
+    <Card title="Live Trading — Risk Limits">
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.9rem' }}>
+        <AlertTriangle size={15} color="var(--down)" style={{ flexShrink: 0, marginTop: 2 }} />
+        <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+          Max order size has an absolute, code-only ceiling of {status.hardMaxOrderQuote} — nothing here, and no bug
+          in this app, can place a live order above that no matter what's typed below. The daily cap is a running
+          total of live order size placed today (used {status.dailyUsedQuote.toFixed(2)} / {status.dailyCapQuote} so
+          far), not yet a realized-loss limit — that needs live position closing, which doesn't exist yet.
+        </p>
+      </div>
+      <div style={{ display: 'flex', gap: '0.7rem', flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 160px' }}>
+          <label style={fieldLabelStyle()}>Max Order Size (quote, ≤ {status.hardMaxOrderQuote})</label>
+          <input
+            type="number"
+            max={status.hardMaxOrderQuote}
+            value={maxOrderQuote}
+            onChange={(e) => setMaxOrderQuote(e.target.value)}
+            style={textInputStyle()}
+          />
+        </div>
+        <div style={{ flex: '1 1 160px' }}>
+          <label style={fieldLabelStyle()}>Daily Cap (quote)</label>
+          <input type="number" value={dailyCapQuote} onChange={(e) => setDailyCapQuote(e.target.value)} style={textInputStyle()} />
+        </div>
+      </div>
+      <div style={{ marginTop: '0.7rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+        <button onClick={() => void handleSave()} disabled={busy} style={{ ...buttonStyle('primary'), opacity: busy ? 0.6 : 1 }}>
+          Save
+        </button>
+        {saved && <span style={{ fontSize: '0.78rem', color: 'var(--up)' }}>Saved</span>}
+      </div>
+    </Card>
   )
 }

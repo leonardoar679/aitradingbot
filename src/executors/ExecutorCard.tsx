@@ -27,10 +27,33 @@ function pctColor(pct: number): string {
 }
 
 function MetricsPanel({ executor }: { executor: ExecutorConfig }): React.JSX.Element {
+  if (executor.mode === 'live') {
+    return <LiveOrderMetrics executor={executor} />
+  }
   if (executor.type === 'xemm' || executor.type === 'arbitrage') {
     return <SpreadMetrics executor={executor} />
   }
   return <SingleMarketMetrics executor={executor} />
+}
+
+/** Live executors never run the simulation hooks — there's nothing to simulate, the order
+ * already really happened. This reads the one real fill straight off the executor's own config. */
+function LiveOrderMetrics({ executor }: { executor: ExecutorConfig }): React.JSX.Element {
+  if (!executor.liveOrder) {
+    return <div style={{ fontSize: '0.75rem', color: 'var(--down)' }}>Order failed — see name for details</div>
+  }
+  const { avgFillPrice, filledQty, cummulativeQuoteQty, placedAt } = executor.liveOrder
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
+      <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Filled — real order</span>
+      <span style={{ color: 'var(--text-secondary)' }}>
+        {filledQty} {executor.baseAsset} @ avg {formatQuotePrice(avgFillPrice, executor.quoteAsset)}
+      </span>
+      <span style={{ color: 'var(--text-muted)' }}>
+        {formatQuotePrice(cummulativeQuoteQty, executor.quoteAsset)} total · {new Date(placedAt * 1000).toLocaleString()}
+      </span>
+    </div>
+  )
 }
 
 function SpreadMetrics({ executor }: { executor: ExecutorConfig }): React.JSX.Element {
@@ -246,14 +269,31 @@ export function ExecutorCard({
           <Icon size={12} />
           {meta.label}
         </div>
-        <span
-          style={{
-            width: 7,
-            height: 7,
-            borderRadius: '50%',
-            background: executor.status === 'active' ? 'var(--up)' : 'var(--text-muted)'
-          }}
-        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          {executor.mode === 'live' && (
+            <span
+              style={{
+                padding: '0.2rem 0.5rem',
+                borderRadius: 999,
+                background: 'var(--down)',
+                color: '#fff',
+                fontSize: '0.65rem',
+                fontWeight: 800,
+                letterSpacing: '0.04em'
+              }}
+            >
+              LIVE
+            </span>
+          )}
+          <span
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: '50%',
+              background: executor.status === 'active' ? 'var(--up)' : 'var(--text-muted)'
+            }}
+          />
+        </div>
       </div>
 
       <div>

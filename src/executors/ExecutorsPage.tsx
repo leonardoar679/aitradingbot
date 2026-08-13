@@ -51,32 +51,54 @@ export function ExecutorsPage(): React.JSX.Element {
     void window.api.settings.set({ executors })
   }, [executors])
 
-  function handleCreate(input: {
+  async function handleCreate(input: {
     name: string
     type: ExecutorType
     exchange: Exchange
     pair: SymbolInfo
     keepPosition: boolean
+    mode: 'paper' | 'live'
     params: GridExecutorParams | DcaExecutorParams | TwapExecutorParams | PositionExecutorParams | OrderExecutorParams | XemmExecutorParams | ArbitrageExecutorParams | MarketMakingExecutorParams
-  }): void {
-    setExecutors((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        name: input.name,
-        type: input.type,
-        exchange: input.exchange,
-        symbol: input.pair.symbol,
-        baseAsset: input.pair.baseAsset,
-        quoteAsset: input.pair.quoteAsset,
-        createdAt: Math.floor(Date.now() / 1000),
-        status: 'active',
-        stoppedAt: null,
-        keepPosition: input.keepPosition,
-        params: input.params
-      }
-    ])
+  }): Promise<void> {
+    // Defense in depth — the UI only ever offers 'live' for type 'order', but this is the last
+    // line of defense before anything real could happen.
+    const mode = input.mode === 'live' && input.type === 'order' ? 'live' : 'paper'
+
+    const base: ExecutorConfig = {
+      id: crypto.randomUUID(),
+      name: input.name,
+      type: input.type,
+      exchange: input.exchange,
+      symbol: input.pair.symbol,
+      baseAsset: input.pair.baseAsset,
+      quoteAsset: input.pair.quoteAsset,
+      createdAt: Math.floor(Date.now() / 1000),
+      status: 'active',
+      stoppedAt: null,
+      keepPosition: input.keepPosition,
+      mode,
+      liveOrder: null,
+      params: input.params
+    }
     setShowNew(false)
+
+    if (mode === 'paper') {
+      setExecutors((prev) => [...prev, base])
+      return
+    }
+
+    // Live: place the one real order now — this is the only place in the app that does. The
+    // executor is created already 'stopped' either way, since a live Order executor is one-shot.
+    const orderParams = input.params as OrderExecutorParams
+    const stoppedAt = Math.floor(Date.now() / 1000)
+    try {
+      const result = await window.api.executors.placeLiveOrder(input.exchange, input.pair.symbol, orderParams.side, orderParams.amountQuote)
+      setExecutors((prev) => [...prev, { ...base, status: 'stopped', stoppedAt, liveOrder: result }])
+    } catch (error) {
+      console.error('Live order failed:', error)
+      const message = error instanceof Error ? error.message : String(error)
+      setExecutors((prev) => [...prev, { ...base, name: `${base.name} (failed: ${message})`, status: 'stopped', stoppedAt }])
+    }
   }
 
   function handleStop(id: string): void {

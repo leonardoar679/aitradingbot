@@ -78,3 +78,58 @@ export async function fetchAccountBalance(apiKey: string, apiSecret: string): Pr
   const data = (await signedRequest(apiKey, apiSecret, '/account', {}, 'GET')) as BinanceAccountResponse
   return data.balances.map((b) => ({ asset: b.asset, free: Number(b.free), locked: Number(b.locked) }))
 }
+
+export interface LiveOrderResult {
+  orderId: number
+  status: string
+  filledQty: number
+  avgFillPrice: number
+  cummulativeQuoteQty: number
+}
+
+interface BinanceOrderFill {
+  price: string
+  qty: string
+}
+
+interface BinanceOrderResponse {
+  orderId: number
+  status: string
+  executedQty: string
+  cummulativeQuoteQty: string
+  fills?: BinanceOrderFill[]
+}
+
+/** Phase B: the first real write. Market order sized in quote currency (quoteOrderQty), matching
+ * every `orderAmountQuote` field already used throughout this app's paper executors. A market
+ * order can cross multiple price levels, so the average fill price is derived from `fills[]`
+ * (notional-weighted) rather than assumed to be a single price. This function does not check any
+ * safety gate itself — the caller (the ExecutorPlaceLiveOrder IPC handler) must call
+ * liveTradingService.canPlaceLiveOrder immediately before invoking this, every time. */
+export async function placeMarketOrder(
+  apiKey: string,
+  apiSecret: string,
+  symbol: string,
+  side: 'BUY' | 'SELL',
+  quoteAmount: number
+): Promise<LiveOrderResult> {
+  const data = (await signedRequest(
+    apiKey,
+    apiSecret,
+    '/order',
+    { symbol, side, type: 'MARKET', quoteOrderQty: String(quoteAmount) },
+    'POST'
+  )) as BinanceOrderResponse
+
+  const fills = data.fills ?? []
+  const filledQty = Number(data.executedQty)
+  const cummulativeQuoteQty = Number(data.cummulativeQuoteQty)
+  const avgFillPrice =
+    fills.length > 0
+      ? fills.reduce((sum, f) => sum + Number(f.price) * Number(f.qty), 0) / fills.reduce((sum, f) => sum + Number(f.qty), 0)
+      : filledQty > 0
+        ? cummulativeQuoteQty / filledQty
+        : 0
+
+  return { orderId: data.orderId, status: data.status, filledQty, avgFillPrice, cummulativeQuoteQty }
+}

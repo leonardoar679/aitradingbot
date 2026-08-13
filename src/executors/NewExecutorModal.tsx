@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { X } from 'lucide-react'
+import { X, AlertTriangle } from 'lucide-react'
 import { ExchangeSelect } from '../components/ExchangeSelect'
 import { SymbolSearch } from '../components/SymbolSearch'
 import { GridForm } from './GridForm'
@@ -23,8 +23,11 @@ import {
   type OrderExecutorParams,
   type XemmExecutorParams,
   type ArbitrageExecutorParams,
-  type MarketMakingExecutorParams
+  type MarketMakingExecutorParams,
+  type LiveTradingStatus
 } from '../../shared/ipc'
+
+const LIVE_CONFIRM_PHRASE = 'PLACE REAL ORDER'
 
 type AnyExecutorParams =
   | GridExecutorParams
@@ -43,6 +46,7 @@ interface NewExecutorModalProps {
     exchange: Exchange
     pair: SymbolInfo
     keepPosition: boolean
+    mode: 'paper' | 'live'
     params: AnyExecutorParams
   }) => void
   onClose: () => void
@@ -159,8 +163,52 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
     defaultArbitrageParams(defaultSpreadMarket(EXCHANGES[0].id, EXCHANGES[0].defaultSymbol), defaultSpreadMarket(EXCHANGES[1].id, EXCHANGES[1].defaultSymbol))
   )
   const [marketMakingParams, setMarketMakingParams] = useState<MarketMakingExecutorParams>(defaultMarketMakingParams())
+  const [mode, setMode] = useState<'paper' | 'live'>('paper')
+  const [liveConfirmText, setLiveConfirmText] = useState('')
+  const [binanceCredentialConfigured, setBinanceCredentialConfigured] = useState(false)
+  const [liveTradingStatus, setLiveTradingStatus] = useState<LiveTradingStatus | null>(null)
 
   const isSpreadType = SPREAD_TYPES.includes(type)
+
+  // Live trading eligibility is re-checked fresh every time the modal opens — never cached
+  // across sessions — since a credential or the kill switch could have changed since last time.
+  useEffect(() => {
+    let cancelled = false
+    window.api.credentials
+      .list()
+      .then((list) => {
+        if (!cancelled) setBinanceCredentialConfigured(list.some((c) => c.exchange === 'binance' && c.configured))
+      })
+      .catch((error) => console.error('Failed to load credential status:', error))
+    window.api.liveTrading
+      .getStatus()
+      .then((status) => {
+        if (!cancelled) setLiveTradingStatus(status)
+      })
+      .catch((error) => console.error('Failed to load live trading status:', error))
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const canGoLive =
+    type === 'order' &&
+    exchange === 'binance' &&
+    orderParams.executionStrategy === 'market' &&
+    binanceCredentialConfigured &&
+    liveTradingStatus !== null &&
+    liveTradingStatus.sessionArmed &&
+    !liveTradingStatus.killSwitchEngaged
+
+  // Force back to paper the instant anything that made 'live' valid stops being true — switching
+  // type/exchange/execution-strategy, or the session getting disarmed elsewhere, must never leave
+  // a stale 'live' mode armed silently.
+  useEffect(() => {
+    if (!canGoLive && mode === 'live') {
+      setMode('paper')
+      setLiveConfirmText('')
+    }
+  }, [canGoLive, mode])
 
   useEffect(() => {
     if (isSpreadType) return
@@ -193,8 +241,12 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
     setKeepPosition(DEFAULT_KEEP_POSITION[next])
   }
 
+  const liveAmountOk = liveTradingStatus === null || orderParams.amountQuote <= liveTradingStatus.maxOrderQuote
+  const liveConfirmOk = liveConfirmText.trim() === LIVE_CONFIRM_PHRASE
+  const canSubmitLive = mode !== 'live' || (canGoLive && liveAmountOk && liveConfirmOk)
+
   function handleCreate(): void {
-    if (!name.trim()) return
+    if (!name.trim() || !canSubmitLive) return
 
     if (isSpreadType) {
       const params = type === 'xemm' ? xemmParams : arbitrageParams
@@ -205,6 +257,7 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
         exchange: buying.exchange,
         pair: { symbol: buying.symbol, baseAsset: buying.baseAsset, quoteAsset: buying.quoteAsset },
         keepPosition,
+        mode: 'paper',
         params
       })
       return
@@ -222,7 +275,7 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
               : type === 'order'
                 ? orderParams
                 : marketMakingParams
-    onCreate({ name: name.trim(), type, exchange, pair, keepPosition, params })
+    onCreate({ name: name.trim(), type, exchange, pair, keepPosition, mode, params })
   }
 
   return (
@@ -310,6 +363,81 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
             <input type="checkbox" checked={keepPosition} disabled={isSpreadType} onChange={(e) => setKeepPosition(e.target.checked)} />
             Keep position when stopped (hand over to Inventory)
           </label>
+
+          {type === 'order' && (
+            <div
+              style={{
+                border: `1px solid ${mode === 'live' ? 'var(--down)' : 'var(--border)'}`,
+                borderRadius: 'var(--radius-sm)',
+                padding: '0.8rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.6rem',
+                background: mode === 'live' ? 'color-mix(in srgb, var(--down) 8%, transparent)' : 'transparent'
+              }}
+            >
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  color: canGoLive ? 'var(--down)' : 'var(--text-muted)',
+                  cursor: canGoLive ? 'pointer' : 'not-allowed'
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={mode === 'live'}
+                  disabled={!canGoLive}
+                  onChange={(e) => {
+                    setMode(e.target.checked ? 'live' : 'paper')
+                    setLiveConfirmText('')
+                  }}
+                />
+                <AlertTriangle size={14} />
+                Live Trading — places a real order with real money
+              </label>
+
+              {!canGoLive && (
+                <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
+                  {exchange !== 'binance'
+                    ? 'Live trading is only available on Binance.'
+                    : orderParams.executionStrategy !== 'market'
+                      ? 'Live trading only supports market orders so far.'
+                      : !binanceCredentialConfigured
+                        ? 'Add a verified Binance API key in Settings first.'
+                        : liveTradingStatus?.killSwitchEngaged
+                          ? 'The kill switch is engaged — release it from the live trading bar first.'
+                          : 'Arm live trading for this session from the live trading bar first.'}
+                </p>
+              )}
+
+              {mode === 'live' && (
+                <>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--down)', margin: 0, fontWeight: 600 }}>
+                    This will immediately place a real {orderParams.side.toUpperCase()} market order for{' '}
+                    {orderParams.amountQuote} {pair.quoteAsset} of {pair.symbol} on Binance.
+                  </p>
+                  {!liveAmountOk && liveTradingStatus && (
+                    <p style={{ fontSize: '0.75rem', color: 'var(--down)', margin: 0 }}>
+                      Amount exceeds the configured max live order size ({liveTradingStatus.maxOrderQuote}).
+                    </p>
+                  )}
+                  <div>
+                    <label style={fieldLabelStyle()}>Type "{LIVE_CONFIRM_PHRASE}" to confirm</label>
+                    <input
+                      value={liveConfirmText}
+                      onChange={(e) => setLiveConfirmText(e.target.value)}
+                      placeholder={LIVE_CONFIRM_PHRASE}
+                      style={textInputStyle()}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'flex', gap: '0.6rem', padding: '0 1.1rem 1.1rem' }}>
@@ -321,21 +449,21 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
           </button>
           <button
             onClick={handleCreate}
-            disabled={!name.trim()}
+            disabled={!name.trim() || !canSubmitLive}
             style={{
               flex: 1,
-              background: 'linear-gradient(135deg, #7c86ff, #6366f1)',
+              background: mode === 'live' ? 'var(--down)' : 'linear-gradient(135deg, #7c86ff, #6366f1)',
               border: 'none',
               borderRadius: 'var(--radius-sm)',
               padding: '0.7rem',
               color: '#fff',
               fontSize: '0.85rem',
               fontWeight: 700,
-              cursor: name.trim() ? 'pointer' : 'not-allowed',
-              opacity: name.trim() ? 1 : 0.6
+              cursor: name.trim() && canSubmitLive ? 'pointer' : 'not-allowed',
+              opacity: name.trim() && canSubmitLive ? 1 : 0.6
             }}
           >
-            Create Executor
+            {mode === 'live' ? 'Place Real Order' : 'Create Executor'}
           </button>
         </div>
       </div>
