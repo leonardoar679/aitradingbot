@@ -1,4 +1,5 @@
 import { ipcMain, type BrowserWindow } from 'electron'
+import { randomUUID } from 'node:crypto'
 import {
   IpcChannel,
   type Candle,
@@ -73,13 +74,19 @@ export function registerMarketHandlers(mainWindow: BrowserWindow): void {
       symbol: string,
       interval: Interval,
       startSec: number,
-      endSec: number
-    ): Promise<HistoricalRangeResult> =>
-      fetchHistoricalRange(exchange, symbol, interval, startSec, endSec, (done, total) => {
+      endSec: number,
+      requestId?: string
+    ): Promise<HistoricalRangeResult> => {
+      // Callers that never cancel (bot polls, routines, executor/simulation fetches) don't pass
+      // a requestId -- each such call still gets its own internal identity here, so it can never
+      // collide with (or be truncated by) an unrelated cancellable fetch like Backtest's.
+      const id = requestId ?? randomUUID()
+      return fetchHistoricalRange(exchange, symbol, interval, startSec, endSec, id, (done, total) => {
         if (!mainWindow.isDestroyed()) {
-          mainWindow.webContents.send(IpcChannel.MarketHistoricalRangeProgress, { done, total })
+          mainWindow.webContents.send(IpcChannel.MarketHistoricalRangeProgress, { requestId: id, done, total })
         }
       })
+    }
   )
-  ipcMain.handle(IpcChannel.MarketCancelHistoricalRange, () => cancelHistoricalRangeFetch())
+  ipcMain.handle(IpcChannel.MarketCancelHistoricalRange, (_event, requestId: string) => cancelHistoricalRangeFetch(requestId))
 }

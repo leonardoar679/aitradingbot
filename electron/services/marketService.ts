@@ -58,7 +58,11 @@ export function fetchTicker24h(exchange: Exchange, symbol: string): Promise<Tick
   return getAdapter(exchange).fetchTicker24h(symbol)
 }
 
-let rangeFetchCancelled = false
+// Keyed by requestId, not a single shared flag -- several independent fetches (a background bot
+// poll, a scheduled routine, a Backtest run) can be in flight at once, and cancelling one must
+// never truncate another. Each entry is removed once its fetch settles, so this never grows
+// unbounded.
+const cancelledRequestIds = new Set<string>()
 
 export function fetchHistoricalRange(
   exchange: Exchange,
@@ -66,16 +70,17 @@ export function fetchHistoricalRange(
   interval: Interval,
   startSec: number,
   endSec: number,
+  requestId: string,
   onProgress: (done: number, total: number) => void
 ): Promise<{ candles: Candle[]; cancelled: boolean }> {
-  rangeFetchCancelled = false
   return getAdapter(exchange)
-    .fetchHistoricalRange(symbol, interval, startSec, endSec, onProgress, () => rangeFetchCancelled)
-    .then((candles) => ({ candles, cancelled: rangeFetchCancelled }))
+    .fetchHistoricalRange(symbol, interval, startSec, endSec, onProgress, () => cancelledRequestIds.has(requestId))
+    .then((candles) => ({ candles, cancelled: cancelledRequestIds.has(requestId) }))
+    .finally(() => cancelledRequestIds.delete(requestId))
 }
 
-export function cancelHistoricalRangeFetch(): void {
-  rangeFetchCancelled = true
+export function cancelHistoricalRangeFetch(requestId: string): void {
+  cancelledRequestIds.add(requestId)
 }
 
 export async function subscribeCandles(exchange: Exchange, symbol: string, interval: Interval): Promise<void> {

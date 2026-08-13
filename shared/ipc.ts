@@ -162,8 +162,12 @@ export interface Candle {
 }
 
 /** Progress of an in-flight `fetchHistoricalRange` job. `total` is an estimate derived from
- * the requested range and interval; `done` is the real count of candles fetched so far. */
+ * the requested range and interval; `done` is the real count of candles fetched so far.
+ * `requestId` scopes this event to the specific fetch that produced it -- several independent
+ * fetches (a background bot poll, a scheduled routine, a Backtest run) can be in flight at once,
+ * all broadcasting to the same renderer, so a listener must filter on its own requestId. */
 export interface HistoricalRangeProgress {
+  requestId: string
   done: number
   total: number
 }

@@ -50,10 +50,12 @@ const api = {
       symbol: string,
       interval: Interval,
       startSec: number,
-      endSec: number
+      endSec: number,
+      requestId?: string
     ): Promise<HistoricalRangeResult> =>
-      ipcRenderer.invoke(IpcChannel.MarketFetchHistoricalRange, exchange, symbol, interval, startSec, endSec),
-    cancelHistoricalRange: (): Promise<void> => ipcRenderer.invoke(IpcChannel.MarketCancelHistoricalRange),
+      ipcRenderer.invoke(IpcChannel.MarketFetchHistoricalRange, exchange, symbol, interval, startSec, endSec, requestId),
+    cancelHistoricalRange: (requestId: string): Promise<void> =>
+      ipcRenderer.invoke(IpcChannel.MarketCancelHistoricalRange, requestId),
     onHistoricalRangeProgress: (listener: (progress: HistoricalRangeProgress) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, progress: HistoricalRangeProgress): void => listener(progress)
       ipcRenderer.on(IpcChannel.MarketHistoricalRangeProgress, handler)

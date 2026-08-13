@@ -441,6 +441,9 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
         {status === 'live' && lastPrice !== null && formatQuotePrice(lastPrice, quoteAsset)}
       </p>
       <div ref={containerRef} style={{ width: '100%', height: 400 }} />
+      <p style={{ margin: '0.6rem 0 0', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+        AI buy/sell markers are a stub (see Agents) — every signal currently returns hold, so none will appear.
+      </p>
     </Card>
   )
 }

@@ -84,6 +84,7 @@ export function BacktestPage(): React.JSX.Element {
   const [runLabel, setRunLabel] = useState<string | null>(null)
   const [runState, setRunState] = useState<RunState | null>(null)
   const runIdRef = useRef(0)
+  const activeFetchRequestIdRef = useRef<string | null>(null)
   const [exchange, setExchange] = useState<Exchange>(EXCHANGES[0].id)
   const [symbols, setSymbols] = useState<SymbolInfo[]>([])
   const [symbolsLoading, setSymbolsLoading] = useState(false)
@@ -143,6 +144,8 @@ export function BacktestPage(): React.JSX.Element {
     const startSec = Math.floor(new Date(`${startDate}T00:00:00Z`).getTime() / 1000)
     const endSec = Math.floor(new Date(`${endDate}T23:59:59Z`).getTime() / 1000)
     const runId = ++runIdRef.current
+    const requestId = crypto.randomUUID()
+    activeFetchRequestIdRef.current = requestId
     const startedAt = performance.now()
 
     const logs: string[] = []
@@ -152,8 +155,11 @@ export function BacktestPage(): React.JSX.Element {
     log(`Starting fetch: ${exchange} ${route.symbol} ${route.interval}, range ${startDate} → ${endDate}`)
 
     let lastLoggedDecile = -1
-    const unsubscribe = window.api.market.onHistoricalRangeProgress(({ done, total }) => {
-      if (runIdRef.current !== runId) return
+    // requestId scopes this to *this* fetch -- an unrelated bot poll or routine run fetching
+    // candles at the same time gets its own id and never shows up here or gets cancelled by us.
+    const unsubscribe = window.api.market.onHistoricalRangeProgress((progress) => {
+      if (runIdRef.current !== runId || progress.requestId !== requestId) return
+      const { done, total } = progress
       setRunState({ status: 'running', done, total })
       const pct = (done / Math.max(1, total)) * 100
       const decile = Math.floor(pct / 10)
@@ -164,7 +170,7 @@ export function BacktestPage(): React.JSX.Element {
     })
 
     window.api.market
-      .fetchHistoricalRange(exchange, route.symbol, route.interval, startSec, endSec)
+      .fetchHistoricalRange(exchange, route.symbol, route.interval, startSec, endSec, requestId)
       .then((fetchResult) => {
         if (runIdRef.current !== runId) return
         if (fetchResult.cancelled) {
@@ -198,12 +204,17 @@ export function BacktestPage(): React.JSX.Element {
         log(`Error: ${error instanceof Error ? error.message : String(error)}`)
         setRunState({ status: 'error', message: error instanceof Error ? error.message : String(error) })
       })
-      .finally(() => unsubscribe())
+      .finally(() => {
+        unsubscribe()
+        if (activeFetchRequestIdRef.current === requestId) activeFetchRequestIdRef.current = null
+      })
   }
 
   function handleCancel(): void {
     runIdRef.current++
-    if (runState?.status === 'running') void window.api.market.cancelHistoricalRange()
+    if (runState?.status === 'running' && activeFetchRequestIdRef.current) {
+      void window.api.market.cancelHistoricalRange(activeFetchRequestIdRef.current)
+    }
     setTab('configuration')
     setRunLabel(null)
     setRunState(null)
