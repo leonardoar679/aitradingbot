@@ -84,6 +84,7 @@ export function LiveTradingBar(): React.JSX.Element | null {
 
   const engaged = status.killSwitchEngaged
   const armed = status.sessionArmed
+  const lossLimitBreached = !engaged && status.realizedPnlToday <= -status.dailyLossLimitQuote
 
   return (
     <div
@@ -94,17 +95,34 @@ export function LiveTradingBar(): React.JSX.Element | null {
         gap: '1rem',
         padding: '0.5rem 1rem',
         flexShrink: 0,
-        background: engaged ? 'var(--down)' : armed ? 'color-mix(in srgb, var(--down) 20%, var(--bg-app))' : 'var(--bg-app)',
-        borderBottom: `1px solid ${engaged || armed ? 'var(--down)' : 'var(--border)'}`,
+        background: engaged
+          ? 'var(--down)'
+          : lossLimitBreached
+            ? 'color-mix(in srgb, orange 20%, var(--bg-app))'
+            : armed
+              ? 'color-mix(in srgb, var(--down) 20%, var(--bg-app))'
+              : 'var(--bg-app)',
+        borderBottom: `1px solid ${engaged || armed ? 'var(--down)' : lossLimitBreached ? 'orange' : 'var(--border)'}`,
         color: engaged ? '#fff' : 'var(--text-primary)'
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.78rem', fontWeight: 700 }}>
         <AlertTriangle size={14} />
-        {engaged ? 'KILL SWITCH ENGAGED — live trading blocked' : armed ? 'Live trading: ARMED for this session' : 'Live trading: off'}
+        {engaged
+          ? 'KILL SWITCH ENGAGED — live trading blocked'
+          : lossLimitBreached
+            ? 'Daily loss limit reached — live trading auto-disarmed for today'
+            : armed
+              ? 'Live trading: ARMED for this session'
+              : 'Live trading: off'}
         {!engaged && (
-          <span style={{ fontWeight: 500, color: engaged ? '#fff' : 'var(--text-muted)' }}>
-            · today {status.dailyUsedQuote.toFixed(2)} / {status.dailyCapQuote} used
+          <span style={{ fontWeight: 500, color: 'var(--text-muted)' }}>
+            · today {status.dailyUsedQuote.toFixed(2)} / {status.dailyCapQuote} used · P&amp;L{' '}
+            <span style={{ color: status.realizedPnlToday >= 0 ? 'var(--up)' : 'var(--down)' }}>
+              {status.realizedPnlToday >= 0 ? '+' : ''}
+              {status.realizedPnlToday.toFixed(2)}
+            </span>{' '}
+            / limit -{status.dailyLossLimitQuote}
           </span>
         )}
       </div>

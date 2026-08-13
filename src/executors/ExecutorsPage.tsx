@@ -92,7 +92,14 @@ export function ExecutorsPage(): React.JSX.Element {
     const orderParams = input.params as OrderExecutorParams
     const stoppedAt = Math.floor(Date.now() / 1000)
     try {
-      const result = await window.api.executors.placeLiveOrder(input.exchange, input.pair.symbol, orderParams.side, orderParams.amountQuote)
+      const result = await window.api.executors.placeLiveOrder(
+        input.exchange,
+        input.pair.symbol,
+        input.pair.baseAsset,
+        input.pair.quoteAsset,
+        orderParams.side,
+        orderParams.amountQuote
+      )
       setExecutors((prev) => [...prev, { ...base, status: 'stopped', stoppedAt, liveOrder: result }])
     } catch (error) {
       console.error('Live order failed:', error)

@@ -263,6 +263,7 @@ function LiveTradingLimitsCard(): React.JSX.Element {
   const [status, setStatus] = useState<LiveTradingStatus | null>(null)
   const [maxOrderQuote, setMaxOrderQuote] = useState('')
   const [dailyCapQuote, setDailyCapQuote] = useState('')
+  const [dailyLossLimitQuote, setDailyLossLimitQuote] = useState('')
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
 
@@ -271,6 +272,7 @@ function LiveTradingLimitsCard(): React.JSX.Element {
       setStatus(s)
       setMaxOrderQuote(String(s.maxOrderQuote))
       setDailyCapQuote(String(s.dailyCapQuote))
+      setDailyLossLimitQuote(String(s.dailyLossLimitQuote))
     })
   }
 
@@ -284,7 +286,8 @@ function LiveTradingLimitsCard(): React.JSX.Element {
     try {
       await window.api.liveTrading.setConfig({
         maxOrderQuote: Number(maxOrderQuote),
-        dailyCapQuote: Number(dailyCapQuote)
+        dailyCapQuote: Number(dailyCapQuote),
+        dailyLossLimitQuote: Number(dailyLossLimitQuote)
       })
       refresh()
       setSaved(true)
@@ -301,9 +304,11 @@ function LiveTradingLimitsCard(): React.JSX.Element {
         <AlertTriangle size={15} color="var(--down)" style={{ flexShrink: 0, marginTop: 2 }} />
         <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
           Max order size has an absolute, code-only ceiling of {status.hardMaxOrderQuote} — nothing here, and no bug
-          in this app, can place a live order above that no matter what's typed below. The daily cap is a running
-          total of live order size placed today (used {status.dailyUsedQuote.toFixed(2)} / {status.dailyCapQuote} so
-          far), not yet a realized-loss limit — that needs live position closing, which doesn't exist yet.
+          in this app, can place a live order above that no matter what's typed below. The daily cap bounds live
+          order notional (used {status.dailyUsedQuote.toFixed(2)} / {status.dailyCapQuote} so far). The daily loss
+          limit is the real one — it's realized P&amp;L from closed live positions (today: {status.realizedPnlToday.toFixed(2)}
+          ), and breaching it auto-disarms live trading for the rest of the day. Closing a position is never blocked
+          by any of these — they only ever bound new/opening orders.
         </p>
       </div>
       <div style={{ display: 'flex', gap: '0.7rem', flexWrap: 'wrap' }}>
@@ -320,6 +325,15 @@ function LiveTradingLimitsCard(): React.JSX.Element {
         <div style={{ flex: '1 1 160px' }}>
           <label style={fieldLabelStyle()}>Daily Cap (quote)</label>
           <input type="number" value={dailyCapQuote} onChange={(e) => setDailyCapQuote(e.target.value)} style={textInputStyle()} />
+        </div>
+        <div style={{ flex: '1 1 160px' }}>
+          <label style={fieldLabelStyle()}>Daily Loss Limit (quote)</label>
+          <input
+            type="number"
+            value={dailyLossLimitQuote}
+            onChange={(e) => setDailyLossLimitQuote(e.target.value)}
+            style={textInputStyle()}
+          />
         </div>
       </div>
       <div style={{ marginTop: '0.7rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>

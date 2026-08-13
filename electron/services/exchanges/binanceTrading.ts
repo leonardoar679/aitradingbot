@@ -100,6 +100,20 @@ interface BinanceOrderResponse {
   fills?: BinanceOrderFill[]
 }
 
+function parseOrderResponse(data: BinanceOrderResponse): LiveOrderResult {
+  const fills = data.fills ?? []
+  const filledQty = Number(data.executedQty)
+  const cummulativeQuoteQty = Number(data.cummulativeQuoteQty)
+  const avgFillPrice =
+    fills.length > 0
+      ? fills.reduce((sum, f) => sum + Number(f.price) * Number(f.qty), 0) / fills.reduce((sum, f) => sum + Number(f.qty), 0)
+      : filledQty > 0
+        ? cummulativeQuoteQty / filledQty
+        : 0
+
+  return { orderId: data.orderId, status: data.status, filledQty, avgFillPrice, cummulativeQuoteQty }
+}
+
 /** Phase B: the first real write. Market order sized in quote currency (quoteOrderQty), matching
  * every `orderAmountQuote` field already used throughout this app's paper executors. A market
  * order can cross multiple price levels, so the average fill price is derived from `fills[]`
@@ -120,16 +134,21 @@ export async function placeMarketOrder(
     { symbol, side, type: 'MARKET', quoteOrderQty: String(quoteAmount) },
     'POST'
   )) as BinanceOrderResponse
+  return parseOrderResponse(data)
+}
 
-  const fills = data.fills ?? []
-  const filledQty = Number(data.executedQty)
-  const cummulativeQuoteQty = Number(data.cummulativeQuoteQty)
-  const avgFillPrice =
-    fills.length > 0
-      ? fills.reduce((sum, f) => sum + Number(f.price) * Number(f.qty), 0) / fills.reduce((sum, f) => sum + Number(f.qty), 0)
-      : filledQty > 0
-        ? cummulativeQuoteQty / filledQty
-        : 0
-
-  return { orderId: data.orderId, status: data.status, filledQty, avgFillPrice, cummulativeQuoteQty }
+/** Phase 2b: closing a live position. Sized in base-asset quantity (not quote), so it sells
+ * exactly the tracked position qty rather than "however much $X buys" — avoids leaving dust or
+ * drifting from the ledger. Gate with liveTradingService.canCloseLivePosition, not
+ * canPlaceLiveOrder — closing a position is never subject to the size/cap/loss-limit gates that
+ * bound *new* exposure. */
+export async function placeMarketSellByQuantity(apiKey: string, apiSecret: string, symbol: string, quantity: number): Promise<LiveOrderResult> {
+  const data = (await signedRequest(
+    apiKey,
+    apiSecret,
+    '/order',
+    { symbol, side: 'SELL', type: 'MARKET', quantity: String(quantity) },
+    'POST'
+  )) as BinanceOrderResponse
+  return parseOrderResponse(data)
 }

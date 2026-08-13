@@ -3,8 +3,11 @@ import { PageHeader } from '../components/PageHeader'
 import { Card } from '../components/Card'
 import { BotPositionRow } from './BotPositionRow'
 import { HeldPositionRow } from './HeldPositionRow'
+import { LivePositionRow } from './LivePositionRow'
 import type { Bot } from '../bots/types'
-import type { HeldPosition } from '../../shared/ipc'
+import type { HeldPosition, LivePosition } from '../../shared/ipc'
+
+const LIVE_POLL_MS = 15_000
 
 const headerCellStyle: React.CSSProperties = {
   padding: '0 0.9rem 0.6rem',
@@ -19,8 +22,19 @@ const headerCellStyle: React.CSSProperties = {
 export function PositionsPage(): React.JSX.Element {
   const [bots, setBots] = useState<Bot[]>([])
   const [heldPositions, setHeldPositions] = useState<HeldPosition[]>([])
+  const [livePositions, setLivePositions] = useState<LivePosition[]>([])
   const [loaded, setLoaded] = useState(false)
   const loadedRef = useRef(false)
+
+  function refreshLivePositions(): void {
+    window.api.liveTrading.listPositions().then(setLivePositions).catch((error) => console.error('Failed to load live positions:', error))
+  }
+
+  useEffect(() => {
+    refreshLivePositions()
+    const timer = setInterval(refreshLivePositions, LIVE_POLL_MS)
+    return () => clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -75,6 +89,36 @@ export function PositionsPage(): React.JSX.Element {
               <tbody>
                 {activeBots.map((bot) => (
                   <BotPositionRow key={bot.id} bot={bot} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      <Card title="Live Positions — Real Money">
+        {livePositions.length === 0 && (
+          <p style={{ color: 'var(--text-secondary)', margin: 0 }}>
+            No open live positions. A live-mode Order Executor's BUY fill lands here — closing one places a real market
+            sell.
+          </p>
+        )}
+        {livePositions.length > 0 && (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={headerCellStyle}>Symbol</th>
+                  <th style={headerCellStyle}>Qty</th>
+                  <th style={headerCellStyle}>Avg Cost</th>
+                  <th style={headerCellStyle}>Mark</th>
+                  <th style={headerCellStyle}>Unrealized P&amp;L</th>
+                  <th style={headerCellStyle}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {livePositions.map((position) => (
+                  <LivePositionRow key={position.id} position={position} onClosed={refreshLivePositions} />
                 ))}
               </tbody>
             </table>

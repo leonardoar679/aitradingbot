@@ -25,6 +25,8 @@ export const IpcChannel = {
   LiveTradingEngageKillSwitch: 'liveTrading:engageKillSwitch',
   LiveTradingReleaseKillSwitch: 'liveTrading:releaseKillSwitch',
   LiveTradingSetSessionArmed: 'liveTrading:setSessionArmed',
+  LiveTradingListPositions: 'liveTrading:listPositions',
+  LiveTradingClosePosition: 'liveTrading:closePosition',
   ExecutorPlaceLiveOrder: 'executor:placeLiveOrder'
 } as const
 
@@ -60,6 +62,8 @@ export interface LiveTradingStatus {
   hardMaxOrderQuote: number
   dailyCapQuote: number
   dailyUsedQuote: number
+  dailyLossLimitQuote: number
+  realizedPnlToday: number
 }
 
 /** The result of one real order fill. `avgFillPrice` is notional-weighted across a market
@@ -71,6 +75,27 @@ export interface LiveOrderRecord {
   avgFillPrice: number
   cummulativeQuoteQty: number
   placedAt: number
+}
+
+/** Net accumulated base-asset holdings for one symbol, built from live BUY fills and reduced or
+ * closed by live SELL fills — spot only, so always long (never negative `qty`). `avgCost` is a
+ * running weighted average, same accounting as `simulateMarketMaking` in src/executors/engine.ts.
+ * Closed positions (`closedAt !== null`) are kept for realized daily-P&L aggregation — see
+ * electron/services/livePositionsService.ts. */
+export interface LivePosition {
+  id: string
+  exchange: Exchange
+  symbol: string
+  baseAsset: string
+  quoteAsset: string
+  qty: number
+  avgCost: number
+  openedAt: number
+  closedAt: number | null
+  exitPrice: number | null
+  /** Null until the first reducing/closing sell fill; accumulates from there (a position can be
+   * partially reduced by a live Order executor sell and stay open with qty > 0). */
+  realizedPnl: number | null
 }
 
 /** OHLCV candle. `time` is a Unix timestamp in seconds (UTC), matching lightweight-charts. */

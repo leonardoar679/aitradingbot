@@ -10,6 +10,7 @@ import {
   type HistoricalRangeResult,
   type Interval,
   type LiveOrderRecord,
+  type LivePosition,
   type LiveTradingStatus,
   type SymbolInfo,
   type Ticker24h
@@ -67,16 +68,26 @@ const api = {
   },
   liveTrading: {
     getStatus: (): Promise<LiveTradingStatus> => ipcRenderer.invoke(IpcChannel.LiveTradingGetStatus),
-    setConfig: (patch: { maxOrderQuote?: number; dailyCapQuote?: number }): Promise<LiveTradingStatus> =>
+    setConfig: (patch: { maxOrderQuote?: number; dailyCapQuote?: number; dailyLossLimitQuote?: number }): Promise<LiveTradingStatus> =>
       ipcRenderer.invoke(IpcChannel.LiveTradingSetConfig, patch),
     engageKillSwitch: (): Promise<LiveTradingStatus> => ipcRenderer.invoke(IpcChannel.LiveTradingEngageKillSwitch),
     releaseKillSwitch: (): Promise<LiveTradingStatus> => ipcRenderer.invoke(IpcChannel.LiveTradingReleaseKillSwitch),
     setSessionArmed: (armed: boolean): Promise<LiveTradingStatus> =>
-      ipcRenderer.invoke(IpcChannel.LiveTradingSetSessionArmed, armed)
+      ipcRenderer.invoke(IpcChannel.LiveTradingSetSessionArmed, armed),
+    listPositions: (): Promise<LivePosition[]> => ipcRenderer.invoke(IpcChannel.LiveTradingListPositions),
+    closePosition: (positionId: string): Promise<LiveOrderRecord> =>
+      ipcRenderer.invoke(IpcChannel.LiveTradingClosePosition, positionId)
   },
   executors: {
-    placeLiveOrder: (exchange: Exchange, symbol: string, side: 'buy' | 'sell', quoteAmount: number): Promise<LiveOrderRecord> =>
-      ipcRenderer.invoke(IpcChannel.ExecutorPlaceLiveOrder, exchange, symbol, side, quoteAmount)
+    placeLiveOrder: (
+      exchange: Exchange,
+      symbol: string,
+      baseAsset: string,
+      quoteAsset: string,
+      side: 'buy' | 'sell',
+      quoteAmount: number
+    ): Promise<LiveOrderRecord> =>
+      ipcRenderer.invoke(IpcChannel.ExecutorPlaceLiveOrder, exchange, symbol, baseAsset, quoteAsset, side, quoteAmount)
   }
 }
 
