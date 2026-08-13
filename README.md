@@ -1,10 +1,10 @@
 # TraderSpider
 
 A desktop trading dashboard built with Electron, React, and TypeScript. It streams live market
-data from eight exchanges, runs a validated technical-analysis strategy, and provides a full
-paper-trading workspace — bots, multi-type strategy executors, portfolio views, and scheduled
-backtests — modeled on Hummingbot's [Condor](https://condor.hummingbot.org) dashboard, adapted to
-run entirely inside a single Electron process with no server backend.
+data from eight exchanges, runs a pluggable library of validated technical-analysis strategies,
+and provides a full paper-trading workspace — bots, multi-type strategy executors, portfolio
+views, and scheduled backtests — modeled on Hummingbot's [Condor](https://condor.hummingbot.org)
+dashboard, adapted to run entirely inside a single Electron process with no server backend.
 
 **Everything in this app is simulated.** Every bot, executor, and position replays real market
 data through deterministic paper-trading logic — no order is ever placed on a real exchange. The
@@ -31,14 +31,14 @@ The sidebar's page order roughly mirrors Condor's own information architecture.
 |---|---|
 | **Portfolio** | Total value, active-bot count, bot P&L, and system-status stat cards; an equity-evolution chart (value/composition toggle, 1D/1W/1M/3M ranges); a top-holdings list. |
 | **Trade** | A manual paper order ticket — market/limit, live last price, session-only order history. Analogous to Condor's `/trade` (direct exchange trading without an executor). |
-| **Bots** | **Active** / **Runs** / **Archived** tabs. A bot is a single continuous instance of the [built-in EMA-cross strategy](#the-built-in-strategy-ema-crossover--atr-stop) dry-run against one exchange/symbol. Disabling a bot records a `BotRun` (trades, win rate, net %) under **Runs**; removing a bot **Archives** it (kept, not deleted) rather than hard-deleting. |
-| **Executors** | Seven paper-trading strategy types, each running independently against live candles — see [Executors](#executors) below. |
+| **Bots** | **Active** / **Runs** / **Archived** tabs. A bot is a single continuous dry-run of a [chosen strategy](#strategies) against one exchange/symbol. Disabling a bot records a `BotRun` (trades, win rate, net %) under **Runs**; removing a bot **Archives** it (kept, not deleted) rather than hard-deleting. |
+| **Executors** | Eight paper-trading strategy types, each running independently against live candles — see [Executors](#executors) below. |
 | **Controllers** | Groups executors under shared risk controls (global stop-loss / take-profit / max drawdown) with an automatic P&L snapshot every 5 minutes; a breach auto-stops every attached executor. Adapts Condor's Controller concept, which normally supervises executors inside a Hummingbot bot container. |
 | **Positions** | Live paper positions for active bots, plus an **Inventory** table of positions handed over from stopped executors (see [Position Handover](#position-handover--inventory)). |
 | **Agents** | An interactive tester for `requestAiSignal()` — currently a stub returning `hold`/confidence 0 for every symbol (see [AI Assistant](#ai-assistant--stub)). Not a real LLM agent; Condor's actual Trading Agents (LLM + MCP tools) are out of scope for this app (no backend to host them). |
 | **Routines** | Recurring backtests on a saved exchange/symbol/interval/schedule, re-run on a client-side timer while the app is open. Each run produces a session-only report (equity curve, stats) — Condor's routines are server-scheduled Python workflows; this is the closest honest adaptation without a backend. |
 | **Market** | The original dashboard: candlestick chart with indicators, symbol search, live ticker. |
-| **Backtest** | Runs the built-in strategy over a historical range and shows full stats, equity curve vs. buy-and-hold benchmark, monthly breakdown, and a trade log. |
+| **Backtest** | Runs a chosen strategy over a historical range and shows full stats, equity curve vs. buy-and-hold benchmark, monthly breakdown, and a trade log — plus a **Compare Strategies** view that ranks every registered strategy against the same candle range. |
 | **Explorer** | Placeholder — not yet built. |
 | **Settings** | Appearance (Dark / Light / Colorblind-safe themes) and [Credentials](#credentials--api-keys). |
 
@@ -60,6 +60,7 @@ state can never drift from what the market actually did.
 | **Order** | A single order with one of four fill strategies: `market`/`limit_chaser` fill immediately at the next candle's open (chasing the best price isn't modelable without a real order book, so it's approximated as an immediate market fill); `limit`/`limit_maker` fill the first time price touches the limit. |
 | **XEMM** | Cross-exchange market making: monitors a *buying market* and a *selling market* simultaneously; when the spread crosses a minimum-profitability threshold in that direction, books a capture. Edge-triggered (re-arms only once the spread retreats) so a spread that stays wide doesn't produce unrealistic repeated captures. |
 | **Arbitrage** | Like XEMM but bidirectional — captures the spread whichever way it's skewed, since arbitrage isn't tied to a fixed maker/taker leg. |
+| **Market Making** | Classic two-sided quoting: places a bid/ask around the live price at a fixed spread, refreshed on an interval. Optional inventory-skew management biases the quoted mid price back toward a target inventory as fills drift holdings away from it. Fills are tracked with a running average-cost basis, so P&L splits correctly into realized (closed/reduced exposure) and unrealized. |
 
 New executor types, forms, and card/detail-view rendering all follow the same three-file pattern
 (`shared/ipc.ts` param type → `engine.ts`/`spreadEngine.ts` `simulateX()` function → a small
@@ -144,42 +145,46 @@ electron/preload.ts  ── contextBridge ──▶  window.api.*  (renderer)
 
 ## Core Strategy & Simulation Logic
 
-### The built-in strategy: EMA crossover + ATR stop
+### Strategies
 
-`src/backtest/engine.ts`'s `runBacktest()` is the one real trading strategy in the app — it powers
-the Backtest page, every Bot's dry-run, and Routines. Long-only, spot (no shorting, no leverage):
+`src/backtest/engine.ts`'s `runBacktest(candles, strategyId, options)` is pluggable: execution
+(position tracking, fees, the equity curve, and the full stats panel) is shared and untouched
+regardless of strategy — only entry/exit/stop logic, defined per strategy in
+`src/backtest/strategies/`, changes. `STRATEGIES` in that folder's `index.ts` is the registry;
+adding a new one is a self-contained file implementing `generateSignals(candles) →
+{entries, exits, stopPrices, warmupBars}`. All three ship long-only, spot (no shorting, no
+leverage):
 
-- **Entry**: EMA(20) crosses above EMA(50), *and* price is above EMA(200) — a regime filter added
-  after backtesting showed the un-filtered crossover's profit was almost entirely concentrated in
-  the 2023–24 bull run (5 of 6 tested assets were flat-to-negative since). The filter only gates
-  new entries; it doesn't force-close a position that's already open.
-- **Stop-loss**: fixed at entry, `close − ATR(14) × 2`, checked against every candle's low. A
-  gap-down that opens below the stop fills at the worse of open/stop, like a real stop order
-  would.
-- **Exit**: whichever comes first — the stop-loss, or a bearish EMA(20/50) cross.
-- **Fees**: a flat 0.1% taker rate applied to both entry and exit notional.
-- Ported from a reference Freqtrade (Python) strategy into this project's TypeScript engine.
+| Strategy | Entry | Exit |
+|---|---|---|
+| **EMA Crossover + ATR Stop** | EMA(20) crosses above EMA(50) while price is above EMA(200) — a regime filter added after backtesting showed the un-filtered crossover's profit was almost entirely concentrated in the 2023–24 bull run (5 of 6 tested assets were flat-to-negative since). | Stop-loss at `close − ATR(14)×2` (set at entry, checked against every candle's low — a gap-down fills at the worse of open/stop like a real stop order would), or a bearish EMA(20/50) cross. |
+| **RSI Mean-Reversion** | RSI(14) crosses up through 30 (oversold) while price is above EMA(100) — same "regime filter gates entries only" shape as the EMA strategy, so it buys dips in an uptrend rather than a falling knife in a downtrend. | RSI crossing back above 70 (overbought), or the same ATR(14)×2 stop. |
+| **Bollinger Breakout** | Close breaks above the Bollinger Band(20, 2) upper band. | Close back below the middle band (the breakout failed/reverted), or the same ATR(14)×2 stop. |
 
-The result includes a full stats panel (Sharpe/Sortino/Calmar/Omega ratios, drawdown, profit
+Every trade pays a flat 0.1% taker fee on both entry and exit notional. A **Compare Strategies**
+view on the Backtest page runs all three over the same candle range and ranks them (net %, win
+rate, max drawdown, Sharpe, profit factor), so picking one is evidence-based. The result of any
+single run includes a full stats panel (Sharpe/Sortino/Calmar/Omega ratios, drawdown, profit
 factor, win rate, streaks, a monthly P&L breakdown with losing-month/consecutive-losing-month
 counts, and "top 3 months' share of total profit" — a concentration check on whether the edge is
-broad or a few outlier months).
+broad or a few outlier months). The original EMA strategy was ported from a reference Freqtrade
+(Python) strategy into this project's TypeScript engine.
 
 ### Bots
 
-A Bot is one continuous dry-run of the built-in strategy against a chosen exchange/symbol on 4h
-candles, polled every 60s (`src/bots/useDryRun.ts`). It re-runs `runBacktest` over a window that
-always reaches back to when the bot was enabled (plus 220 candles of EMA(200)/ATR(14) warmup) —
-never a fixed lookback — so a bot left running a long time doesn't quietly drop its own older
-paper trades once they'd scroll outside a fixed window. `forceCloseAtEnd` is off, so an open
-position is reported as an open position, not a synthetic closed trade.
+A Bot is one continuous dry-run of its chosen strategy against an exchange/symbol on 4h candles,
+polled every 60s (`src/bots/useDryRun.ts`). It re-runs `runBacktest` over a window that always
+reaches back to when the bot was enabled (plus 220 candles of indicator warmup) — never a fixed
+lookback — so a bot left running a long time doesn't quietly drop its own older paper trades once
+they'd scroll outside a fixed window. `forceCloseAtEnd` is off, so an open position is reported as
+an open position, not a synthetic closed trade.
 
 ### Routines & Controllers
 
-Routines re-run the same `runBacktest` engine over a fixed 90-day window on a schedule; Controllers
-don't run a strategy themselves — they aggregate realized+unrealized P&L (`computeExecutorPnl` in
-`src/executors/computeSnapshot.ts`) across a named group of already-running executors and enforce
-risk limits against it.
+Routines re-run `runBacktest` with their own chosen strategy over a fixed 90-day window on a
+schedule; Controllers don't run a strategy themselves — they aggregate realized+unrealized P&L
+(`computeExecutorPnl` in `src/executors/computeSnapshot.ts`) across a named group of
+already-running executors and enforce risk limits against it.
 
 ## Tech Stack
 
@@ -217,13 +222,14 @@ src/                          React renderer app
   portfolio/                  Portfolio page, equity chart, holdings list
   trade/                      Manual paper order ticket
   bots/                       Bot cards, detail view, Active/Runs/Archived tabs, dry-run hook
-  executors/                  All 7 executor types: engine, spreadEngine, forms, cards, detail views
+  executors/                  All 8 executor types: engine, spreadEngine, forms, cards, detail views
   controllers/                Controller store, headless scheduler, page
   positions/                  Open positions + Inventory (handed-over positions)
   agents/                     AI-signal tester (stub backend)
   routines/                   Scheduled-backtest store, headless scheduler, page
   dashboard/                  Market page (chart + ticker)
-  backtest/                   Backtest engine (the built-in strategy), results UI
+  backtest/                   Execution engine, results UI, Strategy Comparison view
+    strategies/                Pluggable strategy registry (EMA/RSI/Bollinger) — see Strategies
   explorer/                   Placeholder page
   settings/                   Appearance + Credentials
 
