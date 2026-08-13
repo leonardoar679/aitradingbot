@@ -1,0 +1,38 @@
+                    ┌─────────────────┐
+                    │ Exchange API    │
+                    │ price/orderbook │
+                    │ trades/funding  │
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │ Market Data     │
+                    │ Normalization   │
+                    └────────┬────────┘
+                             │
+              ┌──────────────┴──────────────┐
+              ▼                             ▼
+      ┌───────────────┐             ┌────────────────┐
+      │ Quant Strategy│             │ AI Assistant   │
+      │ Indicators    │             │ Analysis       │
+      │ Signals       │             │ Context        │
+      └───────┬───────┘             └───────┬────────┘
+              │                             │
+              └──────────────┬──────────────┘
+                             ▼
+                    ┌─────────────────┐
+                    │ Risk Manager    │
+                    │ Position size   │
+                    │ SL / TP         │
+                    │ Daily limits    │
+                    └────────┬────────┘
+                             ▼
+                    ┌─────────────────┐
+                    │ Execution       │
+                    │ Orders          │
+                    └────────┬────────┘
+                             ▼
+                    ┌─────────────────┐
+                    │ Trade Journal   │
+                    │ P&L / metrics   │
+                    └─────────────────┘

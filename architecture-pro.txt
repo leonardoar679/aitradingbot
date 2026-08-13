@@ -1,0 +1,134 @@
+                         ┌───────────────────────────┐
+                         │       EXCHANGES            │
+                         │ Binance / Bybit / OKX ... │
+                         └─────────────┬─────────────┘
+                                       │
+                         REST / WebSocket / APIs
+                                       │
+                                       ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                        DATA PLATFORM                             │
+│                                                                 │
+│  Market Data Collector                                          │
+│  ├── OHLCV                                                       │
+│  ├── Trades                                                      │
+│  ├── Order Book                                                  │
+│  ├── Funding                                                    │
+│  ├── Open Interest                                               │
+│  └── Liquidations                                                │
+│                                                                 │
+│  Data Normalizer → Validator → Storage → Feature Engine         │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     MARKET ANALYSIS ENGINE                       │
+│                                                                 │
+│  Technical Analysis                                             │
+│  ├── Trend                                                       │
+│  ├── Momentum                                                    │
+│  ├── Volatility                                                  │
+│  ├── Support / Resistance                                        │
+│  └── Market Structure                                            │
+│                                                                 │
+│  Quantitative Features                                           │
+│  ├── Returns                                                     │
+│  ├── Volatility                                                  │
+│  ├── Volume                                                      │
+│  ├── Correlation                                                 │
+│  └── Regime                                                      │
+│                                                                 │
+│  Microstructure                                                 │
+│  ├── Order-book imbalance                                        │
+│  ├── Spread                                                      │
+│  ├── Liquidity                                                   │
+│  └── Trade flow                                                  │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                       STRATEGY ENGINE                            │
+│                                                                 │
+│   Strategy A        Strategy B        Strategy C                 │
+│   Trend Following  Mean Reversion   Breakout                    │
+│                                                                 │
+│              ↓ signals / probabilities                          │
+│                                                                 │
+│             SIGNAL AGGREGATOR                                   │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │
+                               ▼
+                    ┌──────────────────────┐
+                    │    AI ASSISTANT      │
+                    │                      │
+                    │ Context Analysis     │
+                    │ Setup Evaluation     │
+                    │ Market Regime        │
+                    │ Anomaly Detection    │
+                    │ Trade Explanation    │
+                    │ Strategy Research    │
+                    └──────────┬───────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                       DECISION ENGINE                            │
+│                                                                 │
+│  Signal + Quant Data + AI Assessment + Portfolio State          │
+│                              │                                  │
+│                              ▼                                  │
+│                     TRADE DECISION                              │
+│                  LONG / SHORT / NO TRADE                        │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                       RISK ENGINE                                │
+│                                                                 │
+│  Position sizing                                                 │
+│  Stop loss                                                       │
+│  Take profit                                                     │
+│  Leverage limits                                                 │
+│  Portfolio exposure                                              │
+│  Daily loss limit                                                │
+│  Drawdown protection                                             │
+│  Correlation exposure                                            │
+│  Emergency kill switch                                           │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │
+                         APPROVED ORDER
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      EXECUTION ENGINE                            │
+│                                                                 │
+│  Order Manager                                                   │
+│  ├── Market orders                                               │
+│  ├── Limit orders                                                │
+│  ├── Stop orders                                                 │
+│  ├── TP orders                                                   │
+│  └── Order reconciliation                                        │
+│                                                                 │
+│  Execution optimization                                          │
+│  ├── Slippage                                                    │
+│  ├── Liquidity                                                   │
+│  └── Partial fills                                               │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │
+                               ▼
+                         EXCHANGE
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                       OBSERVABILITY                              │
+│                                                                 │
+│  Logs │ Metrics │ Alerts │ Dashboard │ Trade Journal             │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    RESEARCH / LEARNING LOOP                      │
+│                                                                 │
+│  Backtesting → Walk Forward → Paper Trading → Live              │
+│       ↑                                      │                   │
+│       └──────────── Performance ─────────────┘                   │
+└─────────────────────────────────────────────────────────────────┘
