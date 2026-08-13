@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Plus, Trash2, Zap } from 'lucide-react'
+import { Plus, Zap } from 'lucide-react'
 import { Card } from '../components/Card'
 import { PageHeader } from '../components/PageHeader'
 import { BacktestRunningView, type RunningState } from './BacktestRunningView'
@@ -24,16 +24,9 @@ type RunState =
     }
 
 interface TradingRouteRow {
-  id: string
   symbol: string
   interval: Interval
   strategyId: string
-}
-
-interface DataRouteRow {
-  id: string
-  symbol: string
-  interval: Interval
 }
 
 function isoDate(date: Date): string {
@@ -41,7 +34,7 @@ function isoDate(date: Date): string {
 }
 
 function defaultTradingRoute(symbol: string): TradingRouteRow {
-  return { id: crypto.randomUUID(), symbol, interval: '15m', strategyId: DEFAULT_STRATEGY_ID }
+  return { symbol, interval: '15m', strategyId: DEFAULT_STRATEGY_ID }
 }
 
 function fieldStyle(): React.CSSProperties {
@@ -52,38 +45,6 @@ function fieldStyle(): React.CSSProperties {
     padding: '0.6rem 0.75rem',
     color: 'var(--text-primary)',
     fontSize: '0.85rem'
-  }
-}
-
-function pillButtonStyle(): React.CSSProperties {
-  return {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.35rem',
-    background: 'transparent',
-    border: '1px solid var(--border)',
-    borderRadius: 999,
-    padding: '0.4rem 0.75rem',
-    color: 'var(--text-primary)',
-    fontSize: '0.78rem',
-    fontWeight: 600,
-    cursor: 'pointer',
-    whiteSpace: 'nowrap'
-  }
-}
-
-function iconButtonStyle(): React.CSSProperties {
-  return {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 38,
-    background: 'transparent',
-    border: '1px solid var(--border)',
-    borderRadius: 'var(--radius-sm)',
-    color: 'var(--text-secondary)',
-    cursor: 'pointer',
-    flexShrink: 0
   }
 }
 
@@ -126,10 +87,9 @@ export function BacktestPage(): React.JSX.Element {
   const [exchange, setExchange] = useState<Exchange>(EXCHANGES[0].id)
   const [symbols, setSymbols] = useState<SymbolInfo[]>([])
   const [symbolsLoading, setSymbolsLoading] = useState(false)
-  const [tradingRoutes, setTradingRoutes] = useState<TradingRouteRow[]>(() => [
+  const [tradingRoute, setTradingRoute] = useState<TradingRouteRow>(() =>
     defaultTradingRoute(EXCHANGES[0].defaultSymbol.symbol)
-  ])
-  const [dataRoutes, setDataRoutes] = useState<DataRouteRow[]>([])
+  )
   const [startDate, setStartDate] = useState(() => {
     const d = new Date()
     d.setDate(d.getDate() - 90)
@@ -160,33 +120,16 @@ export function BacktestPage(): React.JSX.Element {
   function handleExchangeChange(next: Exchange): void {
     setExchange(next)
     const info = EXCHANGES.find((e) => e.id === next)
-    setTradingRoutes([defaultTradingRoute(info?.defaultSymbol.symbol ?? '')])
-    setDataRoutes([])
+    setTradingRoute(defaultTradingRoute(info?.defaultSymbol.symbol ?? ''))
   }
 
-  function addTradingRoute(): void {
-    setTradingRoutes((prev) => [...prev, defaultTradingRoute(symbols[0]?.symbol ?? '')])
-  }
-  function removeTradingRoute(id: string): void {
-    setTradingRoutes((prev) => prev.filter((r) => r.id !== id))
-  }
-  function updateTradingRoute(id: string, patch: Partial<TradingRouteRow>): void {
-    setTradingRoutes((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)))
-  }
-
-  function addDataRoute(): void {
-    setDataRoutes((prev) => [...prev, { id: crypto.randomUUID(), symbol: symbols[0]?.symbol ?? '', interval: '4h' }])
-  }
-  function removeDataRoute(id: string): void {
-    setDataRoutes((prev) => prev.filter((r) => r.id !== id))
-  }
-  function updateDataRoute(id: string, patch: Partial<DataRouteRow>): void {
-    setDataRoutes((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)))
+  function updateTradingRoute(patch: Partial<TradingRouteRow>): void {
+    setTradingRoute((prev) => ({ ...prev, ...patch }))
   }
 
   function handleStart(): void {
-    const route = tradingRoutes[0]
-    if (!route || !route.symbol) return
+    const route = tradingRoute
+    if (!route.symbol) return
 
     const strategy = getStrategy(route.strategyId)
     const strategyLabel = strategy.name
@@ -269,8 +212,8 @@ export function BacktestPage(): React.JSX.Element {
   // Reuses candles already fetched by the last single-strategy run when available — only
   // fetches fresh if the user hasn't run anything yet this session.
   async function handleCompare(): Promise<void> {
-    const route = tradingRoutes[0]
-    if (!route || !route.symbol) return
+    const route = tradingRoute
+    if (!route.symbol) return
     setTab('compare')
     if (compareCandles) return
 
@@ -365,104 +308,44 @@ export function BacktestPage(): React.JSX.Element {
                 ))}
               </select>
 
-              <SectionHeader
-                label="Routes"
-                actions={
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button onClick={addTradingRoute} style={pillButtonStyle()}>
-                      <Plus size={13} /> Trading Route
-                    </button>
-                    <button onClick={addDataRoute} style={pillButtonStyle()}>
-                      <Plus size={13} /> Data Route
-                    </button>
-                  </div>
-                }
-              />
-              {tradingRoutes.map((route) => (
-                <div key={route.id} style={{ display: 'flex', gap: '0.6rem', marginBottom: '0.6rem' }}>
-                  <select
-                    value={route.symbol}
-                    onChange={(e) => updateTradingRoute(route.id, { symbol: e.target.value })}
-                    style={{ ...fieldStyle(), flex: 1 }}
-                  >
-                    {symbolsLoading && <option>Loading symbols...</option>}
-                    {!symbolsLoading &&
-                      symbols.map((s) => (
-                        <option key={s.symbol} value={s.symbol}>
-                          {s.symbol}
-                        </option>
-                      ))}
-                  </select>
-                  <select
-                    value={route.interval}
-                    onChange={(e) => updateTradingRoute(route.id, { interval: e.target.value as Interval })}
-                    style={{ ...fieldStyle(), width: 90 }}
-                  >
-                    {INTERVALS.map((iv) => (
-                      <option key={iv.id} value={iv.id}>
-                        {iv.label}
+              <SectionHeader label="Route" />
+              <div style={{ display: 'flex', gap: '0.6rem', marginBottom: '0.6rem' }}>
+                <select
+                  value={tradingRoute.symbol}
+                  onChange={(e) => updateTradingRoute({ symbol: e.target.value })}
+                  style={{ ...fieldStyle(), flex: 1 }}
+                >
+                  {symbolsLoading && <option>Loading symbols...</option>}
+                  {!symbolsLoading &&
+                    symbols.map((s) => (
+                      <option key={s.symbol} value={s.symbol}>
+                        {s.symbol}
                       </option>
                     ))}
-                  </select>
-                  <select
-                    value={route.strategyId}
-                    onChange={(e) => updateTradingRoute(route.id, { strategyId: e.target.value })}
-                    style={{ ...fieldStyle(), flex: 1 }}
-                  >
-                    {STRATEGIES.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={() => removeTradingRoute(route.id)}
-                    disabled={tradingRoutes.length <= 1}
-                    style={{ ...iconButtonStyle(), opacity: tradingRoutes.length <= 1 ? 0.4 : 1 }}
-                    title="Remove trading route"
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                </div>
-              ))}
-
-              <SectionHeader label="Data Routes" />
-              {dataRoutes.length === 0 && (
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0 0 0.6rem' }}>
-                  No data routes added.
-                </p>
-              )}
-              {dataRoutes.map((route) => (
-                <div key={route.id} style={{ display: 'flex', gap: '0.6rem', marginBottom: '0.6rem' }}>
-                  <select
-                    value={route.symbol}
-                    onChange={(e) => updateDataRoute(route.id, { symbol: e.target.value })}
-                    style={{ ...fieldStyle(), flex: 1 }}
-                  >
-                    {symbolsLoading && <option>Loading symbols...</option>}
-                    {!symbolsLoading &&
-                      symbols.map((s) => (
-                        <option key={s.symbol} value={s.symbol}>
-                          {s.symbol}
-                        </option>
-                      ))}
-                  </select>
-                  <select
-                    value={route.interval}
-                    onChange={(e) => updateDataRoute(route.id, { interval: e.target.value as Interval })}
-                    style={{ ...fieldStyle(), width: 90 }}
-                  >
-                    {INTERVALS.map((iv) => (
-                      <option key={iv.id} value={iv.id}>
-                        {iv.label}
-                      </option>
-                    ))}
-                  </select>
-                  <button onClick={() => removeDataRoute(route.id)} style={iconButtonStyle()} title="Remove data route">
-                    <Trash2 size={15} />
-                  </button>
-                </div>
-              ))}
+                </select>
+                <select
+                  value={tradingRoute.interval}
+                  onChange={(e) => updateTradingRoute({ interval: e.target.value as Interval })}
+                  style={{ ...fieldStyle(), width: 90 }}
+                >
+                  {INTERVALS.map((iv) => (
+                    <option key={iv.id} value={iv.id}>
+                      {iv.label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={tradingRoute.strategyId}
+                  onChange={(e) => updateTradingRoute({ strategyId: e.target.value })}
+                  style={{ ...fieldStyle(), flex: 1 }}
+                >
+                  {STRATEGIES.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
               <SectionHeader label="Duration" />
               <div style={{ display: 'flex', gap: '0.6rem' }}>
@@ -503,7 +386,7 @@ export function BacktestPage(): React.JSX.Element {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
               <button
                 onClick={handleStart}
-                disabled={symbolsLoading || !tradingRoutes[0]?.symbol}
+                disabled={symbolsLoading || !tradingRoute.symbol}
                 title={symbolsLoading ? 'Symbols are still loading' : undefined}
                 style={{
                   display: 'flex',
@@ -517,15 +400,15 @@ export function BacktestPage(): React.JSX.Element {
                   color: '#fff',
                   fontSize: '0.95rem',
                   fontWeight: 700,
-                  cursor: symbolsLoading || !tradingRoutes[0]?.symbol ? 'not-allowed' : 'pointer',
-                  opacity: symbolsLoading || !tradingRoutes[0]?.symbol ? 0.6 : 1
+                  cursor: symbolsLoading || !tradingRoute.symbol ? 'not-allowed' : 'pointer',
+                  opacity: symbolsLoading || !tradingRoute.symbol ? 0.6 : 1
                 }}
               >
                 <Zap size={16} /> Start
               </button>
               <button
                 onClick={() => void handleCompare()}
-                disabled={symbolsLoading || !tradingRoutes[0]?.symbol || compareLoading}
+                disabled={symbolsLoading || !tradingRoute.symbol || compareLoading}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -538,8 +421,8 @@ export function BacktestPage(): React.JSX.Element {
                   color: 'var(--text-primary)',
                   fontSize: '0.9rem',
                   fontWeight: 600,
-                  cursor: symbolsLoading || !tradingRoutes[0]?.symbol || compareLoading ? 'not-allowed' : 'pointer',
-                  opacity: symbolsLoading || !tradingRoutes[0]?.symbol || compareLoading ? 0.6 : 1
+                  cursor: symbolsLoading || !tradingRoute.symbol || compareLoading ? 'not-allowed' : 'pointer',
+                  opacity: symbolsLoading || !tradingRoute.symbol || compareLoading ? 0.6 : 1
                 }}
               >
                 <Plus size={16} /> Compare Strategies

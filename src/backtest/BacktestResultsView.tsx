@@ -597,10 +597,9 @@ export function BacktestResultsView({
         </div>
 
         <p style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginTop: '0.75rem', lineHeight: 1.5 }}>
-          Simulated with a built-in EMA(20/50) crossover strategy gated by an EMA(200) regime filter (long entries
-          only taken above the 200-period EMA), long-only, ATR(14)×2 stop-loss, cash-settled with no leverage, 0.1%
-          taker fee per fill. This is the only strategy the engine runs — the Strategy field above is a label, not a
-          selector.
+          Long-only: entries, exits, and the stop-loss set at entry all come from the {generalInfo.strategyLabel}
+          strategy selected above (see the debug log for its exact rules). Cash-settled with no leverage, 0.1% taker
+          fee per fill.
         </p>
       </div>
 
