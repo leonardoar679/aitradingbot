@@ -60,6 +60,13 @@ export async function getLivePosition(id: string): Promise<LivePosition | null> 
   return state.positions.find((p) => p.id === id) ?? null
 }
 
+/** History view — every fully-closed live position, most recent first. Read-only; feeds no
+ * gate (that's getRealizedPnlToday, backed by the separate realizedEvents log). */
+export async function listClosedLivePositions(): Promise<LivePosition[]> {
+  const state = await load()
+  return state.positions.filter((p) => p.closedAt !== null).sort((a, b) => (b.closedAt as number) - (a.closedAt as number))
+}
+
 export async function getRealizedPnlToday(): Promise<number> {
   const state = await load()
   const today = todayUtc()

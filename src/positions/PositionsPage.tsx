@@ -4,6 +4,7 @@ import { Card } from '../components/Card'
 import { BotPositionRow } from './BotPositionRow'
 import { HeldPositionRow } from './HeldPositionRow'
 import { LivePositionRow } from './LivePositionRow'
+import { LiveHistoryRow } from './LiveHistoryRow'
 import type { Bot } from '../bots/types'
 import type { HeldPosition, LivePosition } from '../../shared/ipc'
 
@@ -23,11 +24,16 @@ export function PositionsPage(): React.JSX.Element {
   const [bots, setBots] = useState<Bot[]>([])
   const [heldPositions, setHeldPositions] = useState<HeldPosition[]>([])
   const [livePositions, setLivePositions] = useState<LivePosition[]>([])
+  const [liveHistory, setLiveHistory] = useState<LivePosition[]>([])
   const [loaded, setLoaded] = useState(false)
   const loadedRef = useRef(false)
 
   function refreshLivePositions(): void {
     window.api.liveTrading.listPositions().then(setLivePositions).catch((error) => console.error('Failed to load live positions:', error))
+    window.api.liveTrading
+      .listClosedPositions()
+      .then(setLiveHistory)
+      .catch((error) => console.error('Failed to load live trade history:', error))
   }
 
   useEffect(() => {
@@ -119,6 +125,34 @@ export function PositionsPage(): React.JSX.Element {
               <tbody>
                 {livePositions.map((position) => (
                   <LivePositionRow key={position.id} position={position} onClosed={refreshLivePositions} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      <Card title="Live Trade History — Realized P&L">
+        {liveHistory.length === 0 && (
+          <p style={{ color: 'var(--text-secondary)', margin: 0 }}>
+            No closed live positions yet. Once a live position is fully closed, it lands here with its realized P&amp;L.
+          </p>
+        )}
+        {liveHistory.length > 0 && (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={headerCellStyle}>Symbol</th>
+                  <th style={headerCellStyle}>Entry</th>
+                  <th style={headerCellStyle}>Exit</th>
+                  <th style={headerCellStyle}>Realized P&amp;L</th>
+                  <th style={headerCellStyle}>Closed</th>
+                </tr>
+              </thead>
+              <tbody>
+                {liveHistory.map((position) => (
+                  <LiveHistoryRow key={position.id} position={position} />
                 ))}
               </tbody>
             </table>

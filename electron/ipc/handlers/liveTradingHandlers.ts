@@ -11,7 +11,7 @@ import {
   recordLiveOrderUsage,
   checkLossLimitAndAutoDisarm
 } from '../../services/liveTradingService'
-import { listOpenLivePositions, getLivePosition, recordLiveFill } from '../../services/livePositionsService'
+import { listOpenLivePositions, listClosedLivePositions, getLivePosition, recordLiveFill } from '../../services/livePositionsService'
 import { createLiveOrder, listOpenLiveOrders, getLiveOrder, resolveLiveOrder } from '../../services/liveOrdersService'
 import { getDecryptedCredential } from '../../services/credentialsService'
 import { placeMarketOrder, placeMarketSellByQuantity, placeLimitOrder, queryOrder, cancelOrder } from '../../services/exchanges/binanceTrading'
@@ -35,6 +35,7 @@ export function registerLiveTradingHandlers(): void {
   ipcMain.handle(IpcChannel.LiveTradingReleaseKillSwitch, () => releaseKillSwitch())
   ipcMain.handle(IpcChannel.LiveTradingSetSessionArmed, (_event, armed: boolean) => setSessionArmed(armed))
   ipcMain.handle(IpcChannel.LiveTradingListPositions, () => listOpenLivePositions())
+  ipcMain.handle(IpcChannel.LiveTradingListClosedPositions, () => listClosedLivePositions())
 
   // The only path in this app that ever places a real order. Every gate is re-checked here,
   // server-side, immediately before the network call — a renderer-side check is a UX nicety,

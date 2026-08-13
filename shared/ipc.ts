@@ -26,6 +26,7 @@ export const IpcChannel = {
   LiveTradingReleaseKillSwitch: 'liveTrading:releaseKillSwitch',
   LiveTradingSetSessionArmed: 'liveTrading:setSessionArmed',
   LiveTradingListPositions: 'liveTrading:listPositions',
+  LiveTradingListClosedPositions: 'liveTrading:listClosedPositions',
   LiveTradingClosePosition: 'liveTrading:closePosition',
   LiveTradingPollOpenOrders: 'liveTrading:pollOpenOrders',
   LiveTradingCancelOrder: 'liveTrading:cancelOrder',
