@@ -146,7 +146,15 @@ export function ExecutorsPage(): React.JSX.Element {
           positionParams.timeLimitSec,
           positionParams.trailingStop
         )
-        setExecutors((prev) => [...prev, { ...base, liveWatcherId: watcher.id }])
+        // Live entries are market-only, so params.entryPrice is always null going in (it means
+        // "resting target" in paper mode, which doesn't apply here) -- patch in the *real* fill
+        // price now so ExecutorCard/ExecutorDetailView have something real to draw against
+        // instead of showing 0 or nothing.
+        const filledEntryPrice = entryResult.avgFillPrice
+        setExecutors((prev) => [
+          ...prev,
+          { ...base, params: { ...positionParams, entryPrice: filledEntryPrice }, liveWatcherId: watcher.id }
+        ])
       } catch (error) {
         console.error('Live position entry failed:', error)
         const message = error instanceof Error ? error.message : String(error)
@@ -155,6 +163,7 @@ export function ExecutorsPage(): React.JSX.Element {
           // The real BUY already happened — only watcher creation failed (e.g. another watcher
           // is already active on this symbol). Never hide this: the position is real and
           // currently unmonitored until closed manually from the Positions page.
+          const filledEntryPrice = entryResult.avgFillPrice
           setExecutors((prev) => [
             ...prev,
             {
@@ -162,7 +171,8 @@ export function ExecutorsPage(): React.JSX.Element {
               name: `${base.name} (filled but NOT being watched — close manually on Positions: ${message})`,
               status: 'stopped',
               stoppedAt,
-              liveOrder: entryResult
+              liveOrder: entryResult,
+              params: { ...positionParams, entryPrice: filledEntryPrice }
             }
           ])
         } else {

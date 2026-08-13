@@ -53,6 +53,13 @@ export function useExecutorSimulation(config: ExecutorConfig): ExecutorSimResult
             latestCandle: null,
             candles: []
           })
+        } else if (config.mode === 'live') {
+          // Live executors never get a simulated state -- the real outcome already happened (or,
+          // for a resting limit order / watched position, is really in progress on Binance) and
+          // lives on the executor's own liveOrder/liveWatcherId/liveExitResult fields, not a
+          // paper replay of these same candles. Candles are still fetched so the chart has real
+          // market context to draw against.
+          setResult({ status: 'running', error: null, state: null, latestCandle: candles[candles.length - 1], candles })
         } else {
           const basePrice = candles[0].close
           const state = runExecutorSimulation(candles, config, basePrice)

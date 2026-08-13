@@ -41,7 +41,7 @@ function MetricsPanel({ executor }: { executor: ExecutorConfig }): React.JSX.Ele
  * already really happened (or, for a resting limit order, is really still open on Binance; or,
  * for a live Position, is really being watched right now for an automatic exit). This reads
  * state straight off the executor's own config rather than replaying anything. */
-function LiveOrderMetrics({ executor }: { executor: ExecutorConfig }): React.JSX.Element {
+export function LiveOrderMetrics({ executor }: { executor: ExecutorConfig }): React.JSX.Element {
   if (executor.type === 'position') {
     if (executor.liveWatcherId) {
       const params = executor.params as PositionExecutorParams

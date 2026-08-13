@@ -9,8 +9,9 @@ import {
   type UTCTimestamp
 } from 'lightweight-charts'
 import { ArrowLeft } from 'lucide-react'
-import { EXCHANGES, type ExecutorConfig, type GridExecutorParams, type PositionExecutorParams } from '../../shared/ipc'
+import { EXCHANGES, type ExecutorConfig, type GridExecutorParams, type OrderExecutorParams, type PositionExecutorParams } from '../../shared/ipc'
 import { useExecutorSimulation } from './useExecutorSimulation'
+import { LiveOrderMetrics } from './ExecutorCard'
 import { useTheme } from '../theme/ThemeContext'
 import { CHART_PALETTE } from '../theme/palette'
 
@@ -57,7 +58,7 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
   useEffect(() => {
     const chart = chartRef.current
     const series = seriesRef.current
-    if (!chart || !series || sim.candles.length === 0 || !sim.state) return
+    if (!chart || !series || sim.candles.length === 0) return
 
     series.setData(
       sim.candles.map((c) => ({ time: c.time as UTCTimestamp, open: c.open, high: c.high, low: c.low, close: c.close }))
@@ -70,6 +71,7 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
 
     const newLines: IPriceLine[] = []
 
+    if (sim.state) {
     if (sim.state.kind === 'grid') {
       const params = executor.params as GridExecutorParams
       for (const level of sim.state.levels) {
@@ -182,11 +184,90 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
         )
       }
     }
+    } else if (executor.mode === 'live') {
+      // Live executors draw from real state (liveOrder/liveWatcherId/liveExitResult), never a
+      // simulated replay -- sim.state is always null here (see useExecutorSimulation).
+      if (executor.type === 'position') {
+        const params = executor.params as PositionExecutorParams
+        // params.entryPrice is patched to the real fill price when a live Position is created
+        // (ExecutorsPage.handleCreate) -- unlike paper mode it's never a "wait for this price"
+        // resting target here, since live Position entries are market-only.
+        if (params.entryPrice !== null) {
+          const entryPrice = params.entryPrice
+          newLines.push(
+            series.createPriceLine({ price: entryPrice, color: palette.gold, lineWidth: 2, lineStyle: LineStyle.Solid, axisLabelVisible: true, title: 'Entry' })
+          )
+          if (params.takeProfitPct !== null) {
+            newLines.push(
+              series.createPriceLine({
+                price: entryPrice * (1 + params.takeProfitPct / 100),
+                color: palette.up,
+                lineWidth: 1,
+                lineStyle: LineStyle.Dashed,
+                axisLabelVisible: true,
+                title: 'TP'
+              })
+            )
+          }
+          if (params.stopLossPct !== null) {
+            newLines.push(
+              series.createPriceLine({
+                price: entryPrice * (1 - params.stopLossPct / 100),
+                color: palette.down,
+                lineWidth: 1,
+                lineStyle: LineStyle.Dashed,
+                axisLabelVisible: true,
+                title: 'SL'
+              })
+            )
+          }
+        }
+        if (executor.liveExitResult) {
+          newLines.push(
+            series.createPriceLine({
+              price: executor.liveExitResult.exitPrice,
+              color: palette.gold,
+              lineWidth: 2,
+              lineStyle: LineStyle.Solid,
+              axisLabelVisible: true,
+              title: 'Exit'
+            })
+          )
+        }
+      } else if (executor.type === 'order') {
+        if (executor.liveOrder) {
+          newLines.push(
+            series.createPriceLine({
+              price: executor.liveOrder.avgFillPrice,
+              color: palette.gold,
+              lineWidth: 2,
+              lineStyle: LineStyle.Solid,
+              axisLabelVisible: true,
+              title: 'Fill'
+            })
+          )
+        } else if (executor.pendingLiveOrderId) {
+          const params = executor.params as OrderExecutorParams
+          if (params.limitPrice !== null) {
+            newLines.push(
+              series.createPriceLine({
+                price: params.limitPrice,
+                color: palette.grid,
+                lineWidth: 1,
+                lineStyle: LineStyle.Dashed,
+                axisLabelVisible: true,
+                title: 'Limit'
+              })
+            )
+          }
+        }
+      }
+    }
 
     priceLinesRef.current = newLines
 
     chart.timeScale().fitContent()
-  }, [sim.candles, sim.state, executor.params, palette])
+  }, [sim.candles, sim.state, executor, palette])
 
   return (
     <div>
@@ -210,12 +291,43 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
           <ArrowLeft size={14} /> Back to Executors
         </button>
         <div>
-          <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)' }}>{executor.name}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)' }}>{executor.name}</span>
+            {executor.mode === 'live' && (
+              <span
+                style={{
+                  padding: '0.15rem 0.45rem',
+                  borderRadius: 999,
+                  background: 'var(--down)',
+                  color: '#fff',
+                  fontSize: '0.6rem',
+                  fontWeight: 800,
+                  letterSpacing: '0.04em'
+                }}
+              >
+                LIVE
+              </span>
+            )}
+          </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
             {exchangeName} • {executor.symbol} • {executor.type.toUpperCase()}
           </div>
         </div>
       </div>
+
+      {executor.mode === 'live' && (
+        <div
+          style={{
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)',
+            padding: '0.9rem',
+            marginBottom: '1rem'
+          }}
+        >
+          <LiveOrderMetrics executor={executor} />
+        </div>
+      )}
 
       {sim.status === 'error' && <p style={{ color: 'var(--down)', fontSize: '0.85rem' }}>Error: {sim.error}</p>}
       {executor.status === 'stopped' && (
