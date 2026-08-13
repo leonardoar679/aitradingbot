@@ -68,16 +68,21 @@ export function registerLiveTradingHandlers(): void {
   // Closing an existing live position — gated by canCloseLivePosition, not canPlaceLiveOrder:
   // closing only ever reduces risk, so it's never subject to the size/cap/loss-limit gates that
   // bound new exposure (see liveTradingService.canCloseLivePosition for the full reasoning).
-  ipcMain.handle(IpcChannel.LiveTradingClosePosition, async (_event, positionId: string) => {
+  // `quantity` lets the caller close part of a position instead of all of it — defaults to a
+  // full close from the UI's Close button, but the ledger (recordLiveFill) already handles a
+  // partial reduction correctly on its own (the same code path an executor's own partial sell
+  // fill already used before this existed).
+  ipcMain.handle(IpcChannel.LiveTradingClosePosition, async (_event, positionId: string, quantity: number) => {
     const position = await getLivePosition(positionId)
     if (!position || position.closedAt !== null) throw new Error('Position not found or already closed')
     if (position.exchange !== 'binance') throw new Error('Live trading is only supported on Binance')
+    if (!(quantity > 0) || quantity > position.qty) throw new Error(`Close quantity must be between 0 and ${position.qty}`)
 
     const gate = await canCloseLivePosition()
     if (!gate.allowed) throw new Error(gate.reason ?? 'Close blocked')
 
     const { apiKey, apiSecret } = await getDecryptedCredential(position.exchange)
-    const result = await placeMarketSellByQuantity(apiKey, apiSecret, position.symbol, position.qty)
+    const result = await placeMarketSellByQuantity(apiKey, apiSecret, position.symbol, quantity)
     await recordLiveOrderUsage(result.cummulativeQuoteQty)
     await recordLiveFill(position.exchange, position.symbol, position.baseAsset, position.quoteAsset, 'sell', result.filledQty, result.avgFillPrice)
     await checkLossLimitAndAutoDisarm()

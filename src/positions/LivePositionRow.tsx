@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { EXCHANGES, type LivePosition } from '../../shared/ipc'
 import { useLastPrice } from '../hooks/useLastPrice'
 import { formatQuotePrice } from '../utils/formatCurrency'
@@ -21,11 +21,23 @@ export function LivePositionRow({
   const pnlPct = markPrice ? ((markPrice - position.avgCost) / position.avgCost) * 100 : null
   const unrealizedQuote = markPrice ? position.qty * (markPrice - position.avgCost) : null
 
+  const [closeQtyText, setCloseQtyText] = useState(String(position.qty))
   const [confirming, setConfirming] = useState(false)
   const [closing, setClosing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Defaults (and resets) to a full close whenever the tracked qty changes — e.g. after a
+  // partial close, or an external live-order sell reducing this position elsewhere.
+  useEffect(() => {
+    setCloseQtyText(String(position.qty))
+    setConfirming(false)
+  }, [position.qty])
+
+  const closeQty = Number(closeQtyText)
+  const closeQtyValid = Number.isFinite(closeQty) && closeQty > 0 && closeQty <= position.qty
+
   async function handleClose(): Promise<void> {
+    if (!closeQtyValid) return
     if (!confirming) {
       setConfirming(true)
       // Two-step confirm: a real Close is one click too many to be a misclick, but closing is
@@ -37,7 +49,7 @@ export function LivePositionRow({
     setClosing(true)
     setError(null)
     try {
-      await window.api.liveTrading.closePosition(position.id)
+      await window.api.liveTrading.closePosition(position.id, closeQty)
       onClosed()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -64,23 +76,71 @@ export function LivePositionRow({
           : '—'}
       </td>
       <td style={cellStyle}>
-        <button
-          onClick={() => void handleClose()}
-          disabled={closing}
-          style={{
-            background: confirming ? 'var(--down)' : 'transparent',
-            border: '1px solid var(--down)',
-            borderRadius: 'var(--radius-sm)',
-            padding: '0.35rem 0.7rem',
-            color: confirming ? '#fff' : 'var(--down)',
-            fontSize: '0.75rem',
-            fontWeight: 700,
-            cursor: closing ? 'default' : 'pointer'
-          }}
-        >
-          {closing ? 'Closing…' : confirming ? 'Confirm real sell?' : 'Close'}
-        </button>
-        {error && <div style={{ fontSize: '0.7rem', color: 'var(--down)', marginTop: '0.3rem' }}>{error}</div>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', minWidth: 160 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            <input
+              type="number"
+              value={closeQtyText}
+              onChange={(e) => {
+                setCloseQtyText(e.target.value)
+                setConfirming(false)
+              }}
+              disabled={closing}
+              style={{
+                width: 90,
+                background: 'var(--bg-app)',
+                border: `1px solid ${closeQtyValid ? 'var(--border)' : 'var(--down)'}`,
+                borderRadius: 'var(--radius-sm)',
+                padding: '0.3rem 0.4rem',
+                color: 'var(--text-primary)',
+                fontSize: '0.75rem'
+              }}
+            />
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{position.baseAsset}</span>
+          </div>
+          <div style={{ display: 'flex', gap: '0.3rem' }}>
+            {[0.25, 0.5, 0.75, 1].map((frac) => (
+              <button
+                key={frac}
+                onClick={() => {
+                  setCloseQtyText(String(position.qty * frac))
+                  setConfirming(false)
+                }}
+                disabled={closing}
+                style={{
+                  background: 'transparent',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '0.15rem 0.4rem',
+                  color: 'var(--text-secondary)',
+                  fontSize: '0.68rem',
+                  cursor: 'pointer'
+                }}
+              >
+                {frac === 1 ? '100%' : `${frac * 100}%`}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => void handleClose()}
+            disabled={closing || !closeQtyValid}
+            style={{
+              background: confirming ? 'var(--down)' : 'transparent',
+              border: '1px solid var(--down)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '0.35rem 0.7rem',
+              color: confirming ? '#fff' : 'var(--down)',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              cursor: closing || !closeQtyValid ? 'default' : 'pointer',
+              opacity: !closeQtyValid ? 0.5 : 1
+            }}
+          >
+            {closing ? 'Closing…' : confirming ? `Confirm real sell of ${closeQtyText} ${position.baseAsset}?` : 'Close'}
+          </button>
+          {!closeQtyValid && <div style={{ fontSize: '0.68rem', color: 'var(--down)' }}>Enter a qty between 0 and {position.qty}</div>}
+          {error && <div style={{ fontSize: '0.7rem', color: 'var(--down)' }}>{error}</div>}
+        </div>
       </td>
     </tr>
   )

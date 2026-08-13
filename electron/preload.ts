@@ -76,8 +76,8 @@ const api = {
       ipcRenderer.invoke(IpcChannel.LiveTradingSetSessionArmed, armed),
     listPositions: (): Promise<LivePosition[]> => ipcRenderer.invoke(IpcChannel.LiveTradingListPositions),
     listClosedPositions: (): Promise<LivePosition[]> => ipcRenderer.invoke(IpcChannel.LiveTradingListClosedPositions),
-    closePosition: (positionId: string): Promise<LiveOrderRecord> =>
-      ipcRenderer.invoke(IpcChannel.LiveTradingClosePosition, positionId),
+    closePosition: (positionId: string, quantity: number): Promise<LiveOrderRecord> =>
+      ipcRenderer.invoke(IpcChannel.LiveTradingClosePosition, positionId, quantity),
     pollOpenOrders: (): Promise<{ executorId: string; liveOrder: LiveOrderRecord }[]> =>
       ipcRenderer.invoke(IpcChannel.LiveTradingPollOpenOrders),
     cancelOrder: (liveOrderId: string): Promise<LiveOrderRecord> =>
