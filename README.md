@@ -6,15 +6,17 @@ and provides a full paper-trading workspace — bots, multi-type strategy execut
 views, and scheduled backtests — modeled on Hummingbot's [Condor](https://condor.hummingbot.org)
 dashboard, adapted to run entirely inside a single Electron process with no server backend.
 
-**Everything in this app is simulated.** Every bot, executor, and position replays real market
-data through deterministic paper-trading logic — no order is ever placed on a real exchange. The
-one exception is read-only: Settings can verify a Binance API key/secret against a real balance
-call, purely to prove the key works, but nothing in the app is wired to use it for trading (see
-[Credentials](#credentials--api-keys) below).
+**Almost everything in this app is simulated.** Every bot and every executor type except one
+replays real market data through deterministic paper-trading logic — no order is ever placed on a
+real exchange. The one exception is narrow and explicitly gated: a live-mode **Order Executor**
+(market or limit orders, Binance only) can place a real order, behind a stack of safety gates that
+default off and reset every launch — see [Live Trading](#live-trading--real-money) below. Every
+other executor type, every other exchange, and every other order type stays paper-only.
 
 ## Table of Contents
 
 - [Features](#features)
+- [Live Trading (Real Money)](#live-trading--real-money)
 - [Architecture](#architecture)
 - [Core Strategy & Simulation Logic](#core-strategy--simulation-logic)
 - [Tech Stack](#tech-stack)
@@ -34,7 +36,7 @@ The sidebar's page order roughly mirrors Condor's own information architecture.
 | **Bots** | **Active** / **Runs** / **Archived** tabs. A bot is a single continuous dry-run of a [chosen strategy](#strategies) against one exchange/symbol. Disabling a bot records a `BotRun` (trades, win rate, net %) under **Runs**; removing a bot **Archives** it (kept, not deleted) rather than hard-deleting. |
 | **Executors** | Eight paper-trading strategy types, each running independently against live candles — see [Executors](#executors) below. |
 | **Controllers** | Groups executors under shared risk controls (global stop-loss / take-profit / max drawdown) with an automatic P&L snapshot every 5 minutes; a breach auto-stops every attached executor. Adapts Condor's Controller concept, which normally supervises executors inside a Hummingbot bot container. |
-| **Positions** | Live paper positions for active bots, plus an **Inventory** table of positions handed over from stopped executors (see [Position Handover](#position-handover--inventory)). |
+| **Positions** | Live paper positions for active bots; a **Live Positions** table of real Binance holdings from live-mode Order Executor fills, closable (fully or partially) for real; a **Live Trade History** table of realized P&L from closed live positions; an **Inventory** table of positions handed over from stopped paper executors (see [Position Handover](#position-handover--inventory)). |
 | **Agents** | An interactive tester for `requestAiSignal()` — currently a stub returning `hold`/confidence 0 for every symbol (see [AI Assistant](#ai-assistant--stub)). Not a real LLM agent; Condor's actual Trading Agents (LLM + MCP tools) are out of scope for this app (no backend to host them). |
 | **Routines** | Recurring backtests on a saved exchange/symbol/interval/schedule, re-run on a client-side timer while the app is open. Each run produces a session-only report (equity curve, stats) — Condor's routines are server-scheduled Python workflows; this is the closest honest adaptation without a backend. |
 | **Market** | The original dashboard: candlestick chart with indicators, symbol search, live ticker. |
@@ -57,7 +59,7 @@ state can never drift from what the market actually did.
 | **DCA** | A configurable ladder of buy/sell levels at % offsets from a base price; tracks a running volume-weighted average entry and exits the whole position on take-profit / stop-loss / a time limit. |
 | **TWAP** | Slices a total order into equal pieces over a duration, executing one slice per interval at that candle's close; tracks cumulative VWAP and progress. |
 | **Position** | The Triple Barrier Method: one entry (at a set price or at market), then exits on whichever comes first — take-profit, stop-loss, a trailing stop (with its own activation/trail %), or a time limit. |
-| **Order** | A single order with one of four fill strategies: `market`/`limit_chaser` fill immediately at the next candle's open (chasing the best price isn't modelable without a real order book, so it's approximated as an immediate market fill); `limit`/`limit_maker` fill the first time price touches the limit. |
+| **Order** | A single order with one of four fill strategies: `market`/`limit_chaser` fill immediately at the next candle's open (chasing the best price isn't modelable without a real order book, so it's approximated as an immediate market fill); `limit`/`limit_maker` fill the first time price touches the limit. This is the one executor type that can also run for real — see [Live Trading](#live-trading--real-money). |
 | **XEMM** | Cross-exchange market making: monitors a *buying market* and a *selling market* simultaneously; when the spread crosses a minimum-profitability threshold in that direction, books a capture. Edge-triggered (re-arms only once the spread retreats) so a spread that stays wide doesn't produce unrealistic repeated captures. |
 | **Arbitrage** | Like XEMM but bidirectional — captures the spread whichever way it's skewed, since arbitrage isn't tied to a fixed maker/taker leg. |
 | **Market Making** | Classic two-sided quoting: places a bid/ask around the live price at a fixed spread, refreshed on an interval. Optional inventory-skew management biases the quoted mid price back toward a target inventory as fills drift holdings away from it. Fills are tracked with a running average-cost basis, so P&L splits correctly into realized (closed/reduced exposure) and unrealized. |
@@ -88,9 +90,59 @@ makes exactly one authenticated, read-only call (`GET /account`, to list balance
 verify the key is valid before it's ever persisted — a key that fails verification is never
 stored. Keys are encrypted at rest via Electron's `safeStorage` (OS keychain / DPAPI) in a
 separate `credentials.json`, isolated from `settings.json` so a bug in general settings
-persistence can never touch a secret. **No code path in this app places a real order** — the
-credential system exists as groundwork for a possible future live-trading mode, not a feature you
-can use yet.
+persistence can never touch a secret. "No key, no live mode, ever": every live-trading code path
+in this app requires a verified credential first.
+
+## Live Trading — Real Money
+
+A verified Binance key unlocks exactly one real-money surface: a **live-mode Order Executor**,
+placing a market or plain GTC limit order for real. Nothing else in the app can place, cancel, or
+touch a real order — not Grid/DCA/TWAP/Position/XEMM/Arbitrage/Market Making, not any other
+exchange, not `limit_maker` or `limit_chaser`. This is a deliberate, incrementally-expanded scope
+(each increment below shipped as its own reviewed, tested pass), not a full live-trading feature
+turned on all at once.
+
+### Safety gates
+
+Every real order and every real cancel/close passes through `electron/services/liveTradingService.ts`
+— checked server-side (main process), immediately before the network call, never cached and never
+trusted from the renderer:
+
+| Gate | What it does |
+|---|---|
+| **Hard order-size ceiling** | An absolute, code-only constant (`HARD_MAX_ORDER_QUOTE`) no UI, setting, or IPC call can exceed — raising it requires changing the source and rebuilding. |
+| **Max order size** | User-configurable, clamped server-side to the hard ceiling on every read/write. |
+| **Daily cap** | A running total of live order notional placed today (UTC). A resting limit order reserves its full notional the moment it's placed (capital is committed then, not only once it fills) and refunds whatever doesn't end up executing once it resolves. |
+| **Daily loss limit** | A true realized-P&L limit, backed by the live position ledger below — breaching it **auto-disarms** the session the instant the breaching fill is recorded, not on the next order attempt. |
+| **Kill switch** | Persisted, stays engaged until manually released, blocks arming outright while engaged. |
+| **Session-arm** | In-memory only, never persisted — resets to *off* on every app launch. Separate from the kill switch: this is the ordinary daily on/off, the kill switch is the emergency stop. |
+
+**Closing or cancelling is never blocked by any of the above** (only by session-arm/kill-switch for
+closes, and by *nothing at all* for cancels) — those gates exist to bound how much *new* risk a
+single action can create, and closing/cancelling only ever reduces risk. Blocking either would risk
+trapping someone in a losing position or a stale order at exactly the moment they most need out.
+
+### Live position ledger
+
+`electron/services/livePositionsService.ts` tracks net accumulated holdings per symbol (spot,
+long-only) in its own `livePositions.json`, independent of the paper `HeldPosition` Inventory —
+built from live BUY fills, reduced or closed by live SELL fills, using the same weighted-average
+cost-basis accounting as the Market Making executor. A live position can be closed fully or
+partially (real market sell, sized to the exact tracked quantity — never "however much $X buys",
+to avoid drifting from the ledger); closed positions feed the **Live Trade History** table and the
+daily loss-limit gate above.
+
+### Live order ledger (limit orders)
+
+A market order resolves synchronously; a limit order rests until it fills, gets cancelled, or
+expires. `electron/services/liveOrdersService.ts` is the source of truth for every resting order
+(own `liveOrders.json`), polled every 5s by `LiveOrderScheduler` (a headless component mounted in
+`App.tsx`, same shape as `RoutineScheduler`) — deliberately polling rather than an authenticated
+websocket user-data-stream (listenKey lifecycle, keep-alive renewal, reconnect handling), which
+would be disproportionate infrastructure for a tool with no sub-second latency requirement. The
+ledger survives app restarts, so an order still resting when the app closes is picked up correctly
+next launch with no reconciliation logic beyond "poll every open record." The Executors page's
+existing generic **Stop** button doubles as the real cancel action for a resting live order.
 
 ## Architecture
 
@@ -102,8 +154,12 @@ electron/preload.ts  ── contextBridge ──▶  window.api.*  (renderer)
       │
       ├── settings.get() / settings.set(patch)     → electron/services/settingsService.ts
       ├── credentials.list() / set() / test()       → electron/services/credentialsService.ts
-      └── market.*  (symbols, candles, tickers)      → electron/services/marketService.ts
-                                                          + electron/services/exchanges/*
+      ├── market.*  (symbols, candles, tickers)      → electron/services/marketService.ts
+      │                                                   + electron/services/exchanges/*
+      ├── liveTrading.*  (gates, positions, orders)   → electron/services/liveTradingService.ts
+      │                                                   + livePositionsService.ts + liveOrdersService.ts
+      └── executors.placeLiveOrder / placeLiveLimitOrder → electron/ipc/handlers/liveTradingHandlers.ts
+                                                          → electron/services/exchanges/binanceTrading.ts
 ```
 
 - **`shared/ipc.ts`** is the single source of truth for every type and channel name that crosses
@@ -115,6 +171,9 @@ electron/preload.ts  ── contextBridge ──▶  window.api.*  (renderer)
   patch.
 - **Credentials persistence**: a separate, encrypted `credentials.json` — see
   [Credentials](#credentials--api-keys).
+- **Live-trading persistence**: three more files, each its own concern so a bug in one can never
+  weaken another's guarantee — `liveTrading.json` (safety-gate state), `livePositions.json` (the
+  position ledger), `liveOrders.json` (resting limit orders). None of it lives in `settings.json`.
 - **Deterministic replay, everywhere**: bots, executors, routines, and the backtest page all use
   the *same* pattern — fetch historical candles for the exact window that matters, run a pure
   function over them, throw the result away and recompute from scratch on the next poll. Nothing
@@ -125,11 +184,12 @@ electron/preload.ts  ── contextBridge ──▶  window.api.*  (renderer)
   `settings.json` (they'd grow it unboundedly over a long session) — they live in a small
   `useSyncExternalStore`-backed store (`routineStore.ts` / `controllerStore.ts`) and reset when
   the app closes, the same tradeoff the Trade page's session order history makes.
-- **Headless schedulers**: `RoutineScheduler` and `ControllerScheduler` are `return null`
-  components mounted once in `App.tsx`, so their `setInterval`s keep firing regardless of which
-  page is active. Each polls its own settings slice every 10s to notice config changes made on the
-  page component (there's no cross-component push channel), then keeps one timer per active
-  routine/controller at its own schedule.
+- **Headless schedulers**: `RoutineScheduler`, `ControllerScheduler`, and `LiveOrderScheduler` are
+  `return null` components mounted once in `App.tsx`, so their `setInterval`s keep firing
+  regardless of which page is active. `RoutineScheduler`/`ControllerScheduler` poll their own
+  settings slice every 10s to notice config changes made on the page component (there's no
+  cross-component push channel); `LiveOrderScheduler` polls every open live limit order via the
+  main process every 5s and patches the matching executor's status directly.
 - **Charts are a parallel theming system**: `lightweight-charts` renders to canvas, so it can't
   read CSS custom properties. `src/theme/palette.ts`'s `CHART_PALETTE` is the canvas-side source
   of truth that mirrors `index.css`'s `:root` tokens for each of the three themes; every chart
@@ -198,8 +258,10 @@ already-running executors and enforce risk limits against it.
 ## Supported Exchanges
 
 Binance, Coinbase, Kraken, Bithumb, Upbit, Coinone, Korbit, GOPAX — see
-`electron/services/exchanges/`. Live order placement exists for none of them; Binance alone has a
-read-only balance-verification adapter for the Credentials feature.
+`electron/services/exchanges/`. All eight have market-data adapters for paper trading. Binance
+alone has a trading adapter (`binanceTrading.ts`) — balance verification, market/limit order
+placement, order query/cancel — and it's the only exchange the live-mode Order Executor can use;
+every other exchange stays paper-only.
 
 ## Project Structure
 
@@ -207,9 +269,13 @@ read-only balance-verification adapter for the Credentials feature.
 electron/                    Electron main process
   main.ts                    App entry point
   preload.ts                 contextBridge → window.api
-  ipc/handlers/               One handler module per IPC surface (app, settings, market, credentials)
-  services/                  settingsService, credentialsService, marketService
-    exchanges/                Per-exchange REST/WS connectors + aggregate.ts
+  ipc/handlers/               One handler module per IPC surface (app, settings, market,
+                               credentials, liveTrading)
+  services/                  settingsService, credentialsService, marketService,
+                               liveTradingService (safety gates), livePositionsService (ledger),
+                               liveOrdersService (resting limit orders)
+    exchanges/                Per-exchange REST/WS connectors + aggregate.ts; binanceTrading.ts
+                               (the only real order-placement/query/cancel adapter)
 
 backend/                     Standalone Express service (currently unused by the app — see Architecture)
 
@@ -224,7 +290,10 @@ src/                          React renderer app
   bots/                       Bot cards, detail view, Active/Runs/Archived tabs, dry-run hook
   executors/                  All 8 executor types: engine, spreadEngine, forms, cards, detail views
   controllers/                Controller store, headless scheduler, page
-  positions/                  Open positions + Inventory (handed-over positions)
+  livetrading/                LiveTradingBar (arm/kill-switch bar), LiveOrderScheduler (headless
+                               poller for resting limit orders) — see Live Trading
+  positions/                  Open paper positions; Live Positions + Live Trade History (real
+                               money); Inventory (handed-over paper positions)
   agents/                     AI-signal tester (stub backend)
   routines/                   Scheduled-backtest store, headless scheduler, page
   dashboard/                  Market page (chart + ticker)
