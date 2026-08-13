@@ -121,14 +121,20 @@ export async function computeExecutorPnl(executor: ExecutorConfig): Promise<numb
     return 0
   }
 
-  // order
-  if (state.status === 'filled' && state.fillPrice !== null) {
-    const params = executor.params as OrderExecutorParams
-    const isBuy = params.side === 'buy'
-    const qty = params.amountQuote / state.fillPrice
-    return isBuy ? qty * (current - state.fillPrice) : qty * (state.fillPrice - current)
+  if (state.kind === 'order') {
+    if (state.status === 'filled' && state.fillPrice !== null) {
+      const params = executor.params as OrderExecutorParams
+      const isBuy = params.side === 'buy'
+      const qty = params.amountQuote / state.fillPrice
+      return isBuy ? qty * (current - state.fillPrice) : qty * (state.fillPrice - current)
+    }
+    return 0
   }
-  return 0
+
+  // marketmaking: realized P&L from closed round trips, plus unrealized on any net inventory
+  // still held, marked against its average cost basis.
+  const unrealized = state.inventoryBaseQty !== 0 && state.avgCost !== null ? state.inventoryBaseQty * (current - state.avgCost) : 0
+  return state.realizedPnl + unrealized
 }
 
 /** The quote-currency size an executor is configured to commit — used as the capital basis for

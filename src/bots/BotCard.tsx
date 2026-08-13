@@ -23,7 +23,7 @@ function formatShortDate(unixSec: number): string {
 // only counts trades entered after this bot was actually turned on. Conflating the two would
 // present the lookback's historical trades as if they were the user's own dry-run activity.
 function DryRunPanel({ bot }: { bot: Bot }): React.JSX.Element {
-  const { status, error, result, latestCandle } = useDryRun(bot.exchange, bot.symbol, bot.enabled, bot.enabledAt)
+  const { status, error, result, latestCandle } = useDryRun(bot.exchange, bot.symbol, bot.enabled, bot.enabledAt, bot.strategyId)
 
   if (status === 'loading') {
     return <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', padding: '0.5rem 0' }}>Loading market data…</div>

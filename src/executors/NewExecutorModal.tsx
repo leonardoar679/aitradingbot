@@ -9,6 +9,7 @@ import { PositionForm } from './PositionForm'
 import { OrderForm } from './OrderForm'
 import { XemmForm } from './XemmForm'
 import { ArbitrageForm } from './ArbitrageForm'
+import { MarketMakingForm } from './MarketMakingForm'
 import { fieldLabelStyle, textInputStyle } from './formStyles'
 import {
   EXCHANGES,
@@ -21,7 +22,8 @@ import {
   type PositionExecutorParams,
   type OrderExecutorParams,
   type XemmExecutorParams,
-  type ArbitrageExecutorParams
+  type ArbitrageExecutorParams,
+  type MarketMakingExecutorParams
 } from '../../shared/ipc'
 
 type AnyExecutorParams =
@@ -32,6 +34,7 @@ type AnyExecutorParams =
   | OrderExecutorParams
   | XemmExecutorParams
   | ArbitrageExecutorParams
+  | MarketMakingExecutorParams
 
 interface NewExecutorModalProps {
   onCreate: (input: {
@@ -52,12 +55,14 @@ const TYPE_TABS: { id: ExecutorType; label: string }[] = [
   { id: 'position', label: 'Position' },
   { id: 'order', label: 'Order' },
   { id: 'xemm', label: 'XEMM' },
-  { id: 'arbitrage', label: 'Arbitrage' }
+  { id: 'arbitrage', label: 'Arbitrage' },
+  { id: 'marketmaking', label: 'Market Making' }
 ]
 
 // Order Executors always hand their fill over as a position; Position Executors default to
-// keeping one too, since that's usually the point of opening it. Grid/DCA/TWAP default to
-// closing out fully. XEMM/Arbitrage never leave a lingering position by design.
+// keeping one too, since that's usually the point of opening it. Grid/DCA/TWAP/Market Making
+// default to closing out fully — inventory is meant to be continuously recycled, not handed
+// over. XEMM/Arbitrage never leave a lingering position by design.
 const DEFAULT_KEEP_POSITION: Record<ExecutorType, boolean> = {
   grid: false,
   dca: false,
@@ -65,7 +70,8 @@ const DEFAULT_KEEP_POSITION: Record<ExecutorType, boolean> = {
   position: true,
   order: true,
   xemm: false,
-  arbitrage: false
+  arbitrage: false,
+  marketmaking: false
 }
 
 const SPREAD_TYPES: ExecutorType[] = ['xemm', 'arbitrage']
@@ -130,6 +136,10 @@ function defaultArbitrageParams(buying: ArbitrageExecutorParams['buyingMarket'],
   return { buyingMarket: buying, sellingMarket: selling, orderAmountQuote: 500, minProfitabilityPct: 0.4 }
 }
 
+function defaultMarketMakingParams(): MarketMakingExecutorParams {
+  return { side: 'both', spreadPct: 0.5, orderRefreshSec: 60, orderAmountQuote: 200, inventoryTargetPct: null, inventorySkewIntensity: 0.3 }
+}
+
 export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): React.JSX.Element {
   const [name, setName] = useState('')
   const [exchange, setExchange] = useState<Exchange>(EXCHANGES[0].id)
@@ -148,6 +158,7 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
   const [arbitrageParams, setArbitrageParams] = useState<ArbitrageExecutorParams>(
     defaultArbitrageParams(defaultSpreadMarket(EXCHANGES[0].id, EXCHANGES[0].defaultSymbol), defaultSpreadMarket(EXCHANGES[1].id, EXCHANGES[1].defaultSymbol))
   )
+  const [marketMakingParams, setMarketMakingParams] = useState<MarketMakingExecutorParams>(defaultMarketMakingParams())
 
   const isSpreadType = SPREAD_TYPES.includes(type)
 
@@ -208,7 +219,9 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
             ? twapParams
             : type === 'position'
               ? positionParams
-              : orderParams
+              : type === 'order'
+                ? orderParams
+                : marketMakingParams
     onCreate({ name: name.trim(), type, exchange, pair, keepPosition, params })
   }
 
@@ -290,6 +303,7 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
             {type === 'order' && <OrderForm params={orderParams} onChange={setOrderParams} />}
             {type === 'xemm' && <XemmForm params={xemmParams} onChange={setXemmParams} />}
             {type === 'arbitrage' && <ArbitrageForm params={arbitrageParams} onChange={setArbitrageParams} />}
+            {type === 'marketmaking' && <MarketMakingForm params={marketMakingParams} onChange={setMarketMakingParams} />}
           </div>
 
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-primary)', cursor: isSpreadType ? 'not-allowed' : 'pointer', opacity: isSpreadType ? 0.5 : 1 }}>

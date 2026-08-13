@@ -21,6 +21,7 @@ import {
   type OrderExecutorParams,
   type XemmExecutorParams,
   type ArbitrageExecutorParams,
+  type MarketMakingExecutorParams,
   type HeldPosition
 } from '../../shared/ipc'
 import type { Bot } from '../bots/types'
@@ -56,7 +57,7 @@ export function ExecutorsPage(): React.JSX.Element {
     exchange: Exchange
     pair: SymbolInfo
     keepPosition: boolean
-    params: GridExecutorParams | DcaExecutorParams | TwapExecutorParams | PositionExecutorParams | OrderExecutorParams | XemmExecutorParams | ArbitrageExecutorParams
+    params: GridExecutorParams | DcaExecutorParams | TwapExecutorParams | PositionExecutorParams | OrderExecutorParams | XemmExecutorParams | ArbitrageExecutorParams | MarketMakingExecutorParams
   }): void {
     setExecutors((prev) => [
       ...prev,

@@ -171,7 +171,10 @@ export interface Bot {
   symbol: string
   baseAsset: string
   quoteAsset: string
+  /** Human-readable label shown on cards/Archived/Runs — auto-filled from the chosen strategy's
+   * name. `strategyId` is what actually drives dispatch, see src/backtest/strategies/. */
   strategy: string
+  strategyId: string
   enabled: boolean
   /** Unix seconds when this bot was last turned on — null while disabled. Dry-run paper trades
    * are only counted from this point on, not from the indicator warmup lookback before it. */
@@ -196,7 +199,7 @@ export interface BotRun {
   netPct: number
 }
 
-export type ExecutorType = 'grid' | 'dca' | 'twap' | 'position' | 'order' | 'xemm' | 'arbitrage'
+export type ExecutorType = 'grid' | 'dca' | 'twap' | 'position' | 'order' | 'xemm' | 'arbitrage' | 'marketmaking'
 export type ExecutorSide = 'buy' | 'sell'
 
 export interface GridExecutorParams {
@@ -273,6 +276,19 @@ export interface ArbitrageExecutorParams {
   minProfitabilityPct: number
 }
 
+/** Classic two-sided market making: quotes a bid/ask around the live price at a fixed spread,
+ * refreshed on an interval, with optional inventory-skew management — the standard technique of
+ * biasing quotes back toward a target inventory % as fills drift holdings away from it. */
+export interface MarketMakingExecutorParams {
+  side: 'both' | 'buy' | 'sell'
+  spreadPct: number
+  orderRefreshSec: number
+  orderAmountQuote: number
+  /** null = no inventory-skew management; quotes stay symmetric around the reference price. */
+  inventoryTargetPct: number | null
+  inventorySkewIntensity: number
+}
+
 export type ExecutorStatus = 'active' | 'stopped'
 
 export interface ExecutorConfig {
@@ -289,7 +305,7 @@ export interface ExecutorConfig {
   /** Mirrors Condor's Position Handover: when true, an open/unrealized position is transferred
    * into the Positions → Inventory list on stop, instead of being discarded. */
   keepPosition: boolean
-  params: GridExecutorParams | DcaExecutorParams | TwapExecutorParams | PositionExecutorParams | OrderExecutorParams | XemmExecutorParams | ArbitrageExecutorParams
+  params: GridExecutorParams | DcaExecutorParams | TwapExecutorParams | PositionExecutorParams | OrderExecutorParams | XemmExecutorParams | ArbitrageExecutorParams | MarketMakingExecutorParams
 }
 
 /** A position handed over from a stopped executor (Condor's "Position Handover" → agent
@@ -336,6 +352,7 @@ export interface RoutineConfig {
   exchange: Exchange
   symbol: string
   interval: Interval
+  strategyId: string
   scheduleSec: number
   enabled: boolean
   createdAt: number

@@ -6,7 +6,8 @@ import type {
   DcaExecutorParams,
   TwapExecutorParams,
   PositionExecutorParams,
-  OrderExecutorParams
+  OrderExecutorParams,
+  MarketMakingExecutorParams
 } from '../../shared/ipc'
 import type {
   GridExecutorState,
@@ -14,6 +15,7 @@ import type {
   TwapExecutorState,
   PositionExecutorState,
   OrderExecutorState,
+  MarketMakingExecutorState,
   SingleMarketExecutorState,
   GridLevelState
 } from './types'
@@ -292,6 +294,79 @@ export function simulateOrder(candles: Candle[], params: OrderExecutorParams): O
   return { kind: 'order', status: 'pending', fillPrice: null, filledAt: null }
 }
 
+/** Classic two-sided market making: quotes a bid/ask around the live price at a fixed spread,
+ * refreshed on an interval. Fills use exactly the standing bid/ask when a candle's range touches
+ * them (no order-book depth/partial fills, same simplification every other executor makes).
+ * Inventory is tracked with a running average-cost basis so P&L splits correctly into realized
+ * (closed/reduced exposure) and the caller can derive unrealized from `inventoryBaseQty` and the
+ * latest price — the standard accounting method, not specific to any one platform. Optional
+ * inventory-skew shifts the quoted mid price to bias fills back toward a target inventory. */
+export function simulateMarketMaking(candles: Candle[], params: MarketMakingExecutorParams): MarketMakingExecutorState {
+  let bidPrice: number | null = null
+  let askPrice: number | null = null
+  let standingQty = 0
+  let nextRefreshTime = candles.length > 0 ? candles[0].time : 0
+  let inventoryBaseQty = 0
+  let avgCost: number | null = null
+  let realizedPnl = 0
+  let filledBuys = 0
+  let filledSells = 0
+  let refreshedAt: number | null = null
+
+  const allowBuy = params.side === 'both' || params.side === 'buy'
+  const allowSell = params.side === 'both' || params.side === 'sell'
+
+  for (const candle of candles) {
+    if (bidPrice === null || candle.time >= nextRefreshTime) {
+      standingQty = candle.close > 0 ? params.orderAmountQuote / candle.close : 0
+      let skew = 0
+      if (params.inventoryTargetPct !== null && standingQty > 0) {
+        const targetQty = (params.inventoryTargetPct / 100) * standingQty
+        const rawSkew = (inventoryBaseQty - targetQty) / standingQty
+        skew = Math.max(-1, Math.min(1, rawSkew)) * params.inventorySkewIntensity
+      }
+      const skewedMid = candle.close * (1 - skew * (params.spreadPct / 100))
+      const halfSpreadFrac = params.spreadPct / 200
+      bidPrice = skewedMid * (1 - halfSpreadFrac)
+      askPrice = skewedMid * (1 + halfSpreadFrac)
+      refreshedAt = candle.time
+      nextRefreshTime = candle.time + Math.max(1, params.orderRefreshSec)
+    }
+
+    if (allowBuy && bidPrice !== null && candle.low <= bidPrice) {
+      filledBuys++
+      if (inventoryBaseQty >= 0) {
+        const newQty = inventoryBaseQty + standingQty
+        avgCost = avgCost === null ? bidPrice : (avgCost * inventoryBaseQty + bidPrice * standingQty) / newQty
+        inventoryBaseQty = newQty
+      } else {
+        const coverQty = Math.min(standingQty, -inventoryBaseQty)
+        realizedPnl += coverQty * ((avgCost as number) - bidPrice)
+        inventoryBaseQty += standingQty
+        avgCost = inventoryBaseQty > 0 ? bidPrice : inventoryBaseQty === 0 ? null : avgCost
+      }
+    }
+
+    if (allowSell && askPrice !== null && candle.high >= askPrice) {
+      filledSells++
+      if (inventoryBaseQty <= 0) {
+        const newQty = inventoryBaseQty - standingQty
+        avgCost = avgCost === null ? askPrice : (avgCost * -inventoryBaseQty + askPrice * standingQty) / -newQty
+        inventoryBaseQty = newQty
+      } else {
+        const closeQty = Math.min(standingQty, inventoryBaseQty)
+        realizedPnl += closeQty * (askPrice - (avgCost as number))
+        inventoryBaseQty -= standingQty
+        avgCost = inventoryBaseQty < 0 ? askPrice : inventoryBaseQty === 0 ? null : avgCost
+      }
+    }
+  }
+
+  const inventoryPct = standingQty > 0 ? (inventoryBaseQty / standingQty) * 100 : null
+
+  return { kind: 'marketmaking', bidPrice, askPrice, inventoryBaseQty, inventoryPct, avgCost, filledBuys, filledSells, realizedPnl, refreshedAt }
+}
+
 /** Dispatches the single-market executor types only — xemm/arbitrage need two candle series at
  * once and are simulated separately via spreadEngine.ts + useSpreadExecutorSimulation. */
 export function runExecutorSimulation(candles: Candle[], config: ExecutorConfig, basePrice: number): SingleMarketExecutorState {
@@ -300,5 +375,6 @@ export function runExecutorSimulation(candles: Candle[], config: ExecutorConfig,
   if (config.type === 'twap') return simulateTwap(candles, config.params as TwapExecutorParams, config.createdAt)
   if (config.type === 'position') return simulatePosition(candles, config.params as PositionExecutorParams)
   if (config.type === 'order') return simulateOrder(candles, config.params as OrderExecutorParams)
+  if (config.type === 'marketmaking') return simulateMarketMaking(candles, config.params as MarketMakingExecutorParams)
   throw new Error(`${config.type} executors are simulated via useSpreadExecutorSimulation, not runExecutorSimulation`)
 }

@@ -170,6 +170,17 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
           title: 'Fill'
         })
       )
+    } else if (sim.state.kind === 'marketmaking') {
+      if (sim.state.bidPrice !== null) {
+        newLines.push(
+          series.createPriceLine({ price: sim.state.bidPrice, color: palette.up, lineWidth: 1, lineStyle: LineStyle.Solid, axisLabelVisible: true, title: 'Bid' })
+        )
+      }
+      if (sim.state.askPrice !== null) {
+        newLines.push(
+          series.createPriceLine({ price: sim.state.askPrice, color: palette.down, lineWidth: 1, lineStyle: LineStyle.Solid, axisLabelVisible: true, title: 'Ask' })
+        )
+      }
     }
 
     priceLinesRef.current = newLines

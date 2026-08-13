@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { X } from 'lucide-react'
 import { ExchangeSelect } from '../components/ExchangeSelect'
 import { SymbolSearch } from '../components/SymbolSearch'
+import { STRATEGIES, DEFAULT_STRATEGY_ID } from '../backtest/strategies'
 import { EXCHANGES, type Exchange, type SymbolInfo } from '../../shared/ipc'
 
 interface AddBotModalProps {
-  onCreate: (input: { name: string; exchange: Exchange; pair: SymbolInfo; strategy: string }) => void
+  onCreate: (input: { name: string; exchange: Exchange; pair: SymbolInfo; strategyId: string }) => void
   onClose: () => void
 }
 
@@ -29,7 +30,7 @@ export function AddBotModal({ onCreate, onClose }: AddBotModalProps): React.JSX.
   const [name, setName] = useState('')
   const [exchange, setExchange] = useState<Exchange>(EXCHANGES[0].id)
   const [pair, setPair] = useState<SymbolInfo>(EXCHANGES[0].defaultSymbol)
-  const [strategy, setStrategy] = useState('')
+  const [strategyId, setStrategyId] = useState(DEFAULT_STRATEGY_ID)
 
   function handleExchangeChange(next: Exchange): void {
     setExchange(next)
@@ -39,7 +40,7 @@ export function AddBotModal({ onCreate, onClose }: AddBotModalProps): React.JSX.
 
   function handleCreate(): void {
     if (!name.trim()) return
-    onCreate({ name: name.trim(), exchange, pair, strategy: strategy.trim() || 'Untitled Strategy' })
+    onCreate({ name: name.trim(), exchange, pair, strategyId })
   }
 
   return (
@@ -101,12 +102,16 @@ export function AddBotModal({ onCreate, onClose }: AddBotModalProps): React.JSX.
           </div>
           <div>
             <label style={fieldLabelStyle()}>Strategy</label>
-            <input
-              value={strategy}
-              onChange={(e) => setStrategy(e.target.value)}
-              placeholder="Strategy name"
-              style={textInputStyle()}
-            />
+            <select value={strategyId} onChange={(e) => setStrategyId(e.target.value)} style={textInputStyle()}>
+              {STRATEGIES.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '0.4rem 0 0' }}>
+              {STRATEGIES.find((s) => s.id === strategyId)?.description}
+            </p>
           </div>
         </div>
 

@@ -1,4 +1,4 @@
-import { Grid3x3, Layers3, Timer, Target, FileText, Shuffle, Scale } from 'lucide-react'
+import { Grid3x3, Layers3, Timer, Target, FileText, Shuffle, Scale, Waves } from 'lucide-react'
 import { EXCHANGES, type ExecutorConfig } from '../../shared/ipc'
 import { useExecutorSimulation } from './useExecutorSimulation'
 import { useSpreadExecutorSimulation } from './useSpreadExecutorSimulation'
@@ -11,7 +11,8 @@ const TYPE_META = {
   position: { label: 'Position', icon: Target, color: '#f97316' },
   order: { label: 'Order', icon: FileText, color: '#94a3b8' },
   xemm: { label: 'XEMM', icon: Shuffle, color: '#a855f7' },
-  arbitrage: { label: 'Arbitrage', icon: Scale, color: '#ec4899' }
+  arbitrage: { label: 'Arbitrage', icon: Scale, color: '#ec4899' },
+  marketmaking: { label: 'Market Making', icon: Waves, color: '#06b6d4' }
 } as const
 
 const EXIT_REASON_LABEL: Record<string, string> = {
@@ -169,13 +170,35 @@ function SingleMarketMetrics({ executor }: { executor: ExecutorConfig }): React.
     )
   }
 
-  // sim.state.kind === 'order'
+  if (sim.state.kind === 'order') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
+        <span style={{ color: 'var(--text-primary)' }}>{sim.state.status === 'filled' ? 'Filled' : 'Pending'}</span>
+        {sim.state.fillPrice !== null && (
+          <span style={{ color: 'var(--text-secondary)' }}>Fill {formatQuotePrice(sim.state.fillPrice, executor.quoteAsset)}</span>
+        )}
+      </div>
+    )
+  }
+
+  // sim.state.kind === 'marketmaking'
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
-      <span style={{ color: 'var(--text-primary)' }}>{sim.state.status === 'filled' ? 'Filled' : 'Pending'}</span>
-      {sim.state.fillPrice !== null && (
-        <span style={{ color: 'var(--text-secondary)' }}>Fill {formatQuotePrice(sim.state.fillPrice, executor.quoteAsset)}</span>
+      {sim.state.bidPrice !== null && sim.state.askPrice !== null && (
+        <span style={{ color: 'var(--text-secondary)' }}>
+          Bid {formatQuotePrice(sim.state.bidPrice, executor.quoteAsset)} / Ask {formatQuotePrice(sim.state.askPrice, executor.quoteAsset)}
+        </span>
       )}
+      <span style={{ color: 'var(--text-primary)' }}>
+        {sim.state.filledBuys} buys · {sim.state.filledSells} sells
+      </span>
+      {sim.state.inventoryPct !== null && (
+        <span style={{ color: 'var(--text-muted)' }}>Inventory {sim.state.inventoryPct.toFixed(0)}% of one order</span>
+      )}
+      <span style={{ color: pctColor(sim.state.realizedPnl), fontWeight: 600 }}>
+        {sim.state.realizedPnl >= 0 ? '+' : ''}
+        {formatQuotePrice(sim.state.realizedPnl, executor.quoteAsset)} realized
+      </span>
     </div>
   )
 }

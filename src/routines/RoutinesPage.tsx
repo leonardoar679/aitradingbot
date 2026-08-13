@@ -8,6 +8,7 @@ import { EquityCurveChart } from '../components/EquityCurveChart'
 import { useRoutineReports } from './routineStore'
 import { runRoutineNow } from './RoutineScheduler'
 import { SCHEDULE_PRESETS } from './types'
+import { STRATEGIES, DEFAULT_STRATEGY_ID } from '../backtest/strategies'
 import { EXCHANGES, INTERVALS, DEFAULT_INTERVAL, type Exchange, type SymbolInfo, type Interval, type RoutineConfig } from '../../shared/ipc'
 
 function fieldLabelStyle(): React.CSSProperties {
@@ -39,6 +40,7 @@ function NewRoutineForm({ onCreate }: { onCreate: (routine: RoutineConfig) => vo
   const [exchange, setExchange] = useState<Exchange>(EXCHANGES[0].id)
   const [pair, setPair] = useState<SymbolInfo>(EXCHANGES[0].defaultSymbol)
   const [interval, setInterval] = useState<Interval>(DEFAULT_INTERVAL)
+  const [strategyId, setStrategyId] = useState(DEFAULT_STRATEGY_ID)
   const [scheduleSec, setScheduleSec] = useState(SCHEDULE_PRESETS[1].seconds)
 
   function handleExchangeChange(next: Exchange): void {
@@ -55,6 +57,7 @@ function NewRoutineForm({ onCreate }: { onCreate: (routine: RoutineConfig) => vo
       exchange,
       symbol: pair.symbol,
       interval,
+      strategyId,
       scheduleSec,
       enabled: true,
       createdAt: Math.floor(Date.now() / 1000),
@@ -84,6 +87,16 @@ function NewRoutineForm({ onCreate }: { onCreate: (routine: RoutineConfig) => vo
             {INTERVALS.map((iv) => (
               <option key={iv.id} value={iv.id}>
                 {iv.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div style={{ flex: '0 0 170px' }}>
+          <label style={fieldLabelStyle()}>Strategy</label>
+          <select value={strategyId} onChange={(e) => setStrategyId(e.target.value)} style={textInputStyle()}>
+            {STRATEGIES.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
               </option>
             ))}
           </select>
@@ -282,7 +295,7 @@ export function RoutinesPage(): React.JSX.Element {
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.88rem' }}>{routine.name}</div>
                     <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                      {exchangeName} • {routine.symbol} • {routine.interval} • {scheduleLabel(routine.scheduleSec)}
+                      {exchangeName} • {routine.symbol} • {routine.interval} • {STRATEGIES.find((s) => s.id === routine.strategyId)?.name ?? 'Unknown strategy'} • {scheduleLabel(routine.scheduleSec)}
                       {routine.lastRunAt && ` • last run ${new Date(routine.lastRunAt * 1000).toLocaleString()}`}
                     </div>
                   </div>

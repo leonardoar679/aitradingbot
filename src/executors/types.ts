@@ -12,7 +12,8 @@ export type {
   OrderExecutionStrategy,
   XemmExecutorParams,
   ArbitrageExecutorParams,
-  SpreadMarket
+  SpreadMarket,
+  MarketMakingExecutorParams
 } from '../../shared/ipc'
 
 export interface GridLevelState {
@@ -101,8 +102,28 @@ export interface SpreadExecutorState {
   lastSpreadPct: number | null
 }
 
+export interface MarketMakingExecutorState {
+  kind: 'marketmaking'
+  bidPrice: number | null
+  askPrice: number | null
+  inventoryBaseQty: number
+  inventoryPct: number | null
+  /** Average cost basis of the current net inventory — null when flat. */
+  avgCost: number | null
+  filledBuys: number
+  filledSells: number
+  realizedPnl: number
+  refreshedAt: number | null
+}
+
 /** What runExecutorSimulation (the single-market dispatcher) can actually return — excludes
  * SpreadExecutorState, which only ever comes from useSpreadExecutorSimulation. */
-export type SingleMarketExecutorState = GridExecutorState | DcaExecutorState | TwapExecutorState | PositionExecutorState | OrderExecutorState
+export type SingleMarketExecutorState =
+  | GridExecutorState
+  | DcaExecutorState
+  | TwapExecutorState
+  | PositionExecutorState
+  | OrderExecutorState
+  | MarketMakingExecutorState
 
 export type ExecutorRuntimeState = SingleMarketExecutorState | SpreadExecutorState

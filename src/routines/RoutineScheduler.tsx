@@ -13,7 +13,7 @@ export async function runRoutineNow(routine: RoutineConfig): Promise<void> {
   const { candles } = await window.api.market.fetchHistoricalRange(routine.exchange, routine.symbol, routine.interval, startSec, nowSec)
   if (candles.length === 0) return
 
-  const result = runBacktest(candles)
+  const result = runBacktest(candles, routine.strategyId)
   pushRoutineReport({ id: crypto.randomUUID(), routineId: routine.id, ranAt: nowSec, symbolLabel: routine.symbol, result })
 
   const settings = await window.api.settings.get()

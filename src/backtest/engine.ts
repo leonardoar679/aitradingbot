@@ -1,22 +1,10 @@
 import type { Candle } from '../../shared/ipc'
+import { getStrategy, DEFAULT_STRATEGY_ID } from './strategies'
 
-// Built-in strategy: EMA(20)/EMA(50) crossover, long-only, spot (no shorting, no leverage).
-// Enters on a bullish cross when flat AND price is above EMA(200) — a long-term regime filter
-// added after backtesting the un-filtered version showed its profit was almost entirely
-// concentrated in the 2023-24 bull run, with 5 of 6 tested assets flat-to-negative since. The
-// filter blocks new entries during a broader downtrend, on the theory that the crossover has no
-// edge against the prevailing regime. A stop-loss price (entry close − ATR(14) × 2) is fixed at
-// entry and checked against each candle's low. Exits on whichever comes first: the stop-loss, or
-// a bearish EMA(20/50) cross (the regime filter only gates entries, not exits — an open position
-// is not force-closed just because price later dips below EMA(200)). Any open position is
-// force-closed on the final candle. Fee is a flat taker rate applied to both entry and exit
-// notional. Ported from a reference Freqtrade strategy (Python) into this project's TS-only
-// backtest engine.
-const FAST_EMA_PERIOD = 20
-const SLOW_EMA_PERIOD = 50
-const REGIME_EMA_PERIOD = 200
-const ATR_PERIOD = 14
-const ATR_STOP_MULTIPLIER = 2
+// The actual entry/exit/stop logic is pluggable — see src/backtest/strategies/. This engine only
+// owns execution: position tracking, fees, the equity curve, and the full stats panel below. Any
+// open position is force-closed on the final candle (unless forceCloseAtEnd is off). Fee is a
+// flat taker rate applied to both entry and exit notional.
 const TAKER_FEE_RATE = 0.001
 const STARTING_BALANCE = 10000
 
@@ -156,17 +144,6 @@ export interface RunBacktestOptions {
   forceCloseAtEnd?: boolean
 }
 
-function computeEma(values: number[], period: number): number[] {
-  const k = 2 / (period + 1)
-  const out: number[] = new Array(values.length)
-  let prev = values[0]
-  for (let i = 0; i < values.length; i++) {
-    prev = i === 0 ? values[0] : values[i] * k + prev * (1 - k)
-    out[i] = prev
-  }
-  return out
-}
-
 function mean(values: number[]): number {
   return values.length === 0 ? 0 : values.reduce((a, b) => a + b, 0) / values.length
 }
@@ -183,30 +160,6 @@ interface OpenPosition {
   qty: number
   cashBefore: number
   stopPrice: number
-}
-
-// Wilder's smoothed ATR (the same formula talib.ATR uses): seeded by a simple average of the
-// first `period` true ranges, then smoothed forward. Entries before the seed index are NaN.
-function computeAtr(candles: Candle[], period: number): number[] {
-  const out = new Array<number>(candles.length).fill(NaN)
-  if (candles.length === 0) return out
-
-  const trueRange = new Array<number>(candles.length)
-  trueRange[0] = candles[0].high - candles[0].low
-  for (let i = 1; i < candles.length; i++) {
-    const { high, low } = candles[i]
-    const prevClose = candles[i - 1].close
-    trueRange[i] = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose))
-  }
-
-  if (candles.length < period) return out
-  let seedSum = 0
-  for (let i = 0; i < period; i++) seedSum += trueRange[i]
-  out[period - 1] = seedSum / period
-  for (let i = period; i < candles.length; i++) {
-    out[i] = (out[i - 1] * (period - 1) + trueRange[i]) / period
-  }
-  return out
 }
 
 // Groups closed trades by the UTC calendar month they exited in, so a strategy that looks
@@ -250,13 +203,13 @@ function computeMonthlyBreakdown(equityCurve: EquityPoint[], trades: Trade[]): M
     })
 }
 
-export function runBacktest(candles: Candle[], options: RunBacktestOptions = {}): BacktestResult {
+export function runBacktest(
+  candles: Candle[],
+  strategyId: string = DEFAULT_STRATEGY_ID,
+  options: RunBacktestOptions = {}
+): BacktestResult {
   const forceCloseAtEnd = options.forceCloseAtEnd ?? true
-  const closes = candles.map((c) => c.close)
-  const fastEma = computeEma(closes, FAST_EMA_PERIOD)
-  const slowEma = computeEma(closes, SLOW_EMA_PERIOD)
-  const regimeEma = computeEma(closes, REGIME_EMA_PERIOD)
-  const atr = computeAtr(candles, ATR_PERIOD)
+  const signals = getStrategy(strategyId).generateSignals(candles)
 
   let cash = STARTING_BALANCE
   const posBox: { current: OpenPosition | null } = { current: null }
@@ -306,25 +259,20 @@ export function runBacktest(candles: Candle[], options: RunBacktestOptions = {})
     const { time, open, low, close } = candles[i]
     let justStoppedOut = false
 
-    if (i >= REGIME_EMA_PERIOD) {
+    if (i >= signals.warmupBars) {
       const position = posBox.current
       if (position) {
         if (low <= position.stopPrice) {
           // A gap-down can open below the stop price — fill at the worse of open/stop, as a real stop order would.
           closePosition(time, Math.min(open, position.stopPrice), 'stop_loss')
           justStoppedOut = true
-        } else {
-          const bearishCross = fastEma[i - 1] >= slowEma[i - 1] && fastEma[i] < slowEma[i]
-          if (bearishCross) closePosition(time, close, 'signal')
+        } else if (signals.exits[i]) {
+          closePosition(time, close, 'signal')
         }
       }
 
-      if (!posBox.current && !justStoppedOut) {
-        const bullishCross = fastEma[i - 1] <= slowEma[i - 1] && fastEma[i] > slowEma[i]
-        const aboveRegime = close > regimeEma[i]
-        if (bullishCross && aboveRegime) {
-          openLong(time, close, close - atr[i] * ATR_STOP_MULTIPLIER)
-        }
+      if (!posBox.current && !justStoppedOut && signals.entries[i] && signals.stopPrices[i] !== null) {
+        openLong(time, close, signals.stopPrices[i] as number)
       }
     }
 

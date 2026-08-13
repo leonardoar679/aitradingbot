@@ -10,7 +10,7 @@ function pctColor(pct: number): string {
 const cellStyle: React.CSSProperties = { padding: '0.65rem 0.9rem', fontSize: '0.82rem' }
 
 export function BotPositionRow({ bot }: { bot: Bot }): React.JSX.Element {
-  const dryRun = useDryRun(bot.exchange, bot.symbol, true, bot.enabledAt)
+  const dryRun = useDryRun(bot.exchange, bot.symbol, true, bot.enabledAt, bot.strategyId)
   const exchangeName = EXCHANGES.find((e) => e.id === bot.exchange)?.name ?? bot.exchange
   const position = dryRun.result?.openPositionAtEnd ?? null
   const markPrice = dryRun.latestCandle?.close ?? null

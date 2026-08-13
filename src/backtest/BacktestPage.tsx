@@ -5,10 +5,12 @@ import { PageHeader } from '../components/PageHeader'
 import { BacktestRunningView, type RunningState } from './BacktestRunningView'
 import { BacktestResultsView, type ResultsGeneralInfo } from './BacktestResultsView'
 import { BacktestChartsView } from './BacktestChartsView'
+import { StrategyComparisonView } from './StrategyComparisonView'
 import { runBacktest, type BacktestResult } from './engine'
+import { STRATEGIES, DEFAULT_STRATEGY_ID, getStrategy } from './strategies'
 import { EXCHANGES, INTERVALS, type Candle, type Exchange, type Interval, type SymbolInfo } from '../../shared/ipc'
 
-type Tab = 'configuration' | 'progress' | 'charts'
+type Tab = 'configuration' | 'progress' | 'charts' | 'compare'
 
 type RunState =
   | RunningState
@@ -25,7 +27,7 @@ interface TradingRouteRow {
   id: string
   symbol: string
   interval: Interval
-  strategy: string
+  strategyId: string
 }
 
 interface DataRouteRow {
@@ -39,7 +41,7 @@ function isoDate(date: Date): string {
 }
 
 function defaultTradingRoute(symbol: string): TradingRouteRow {
-  return { id: crypto.randomUUID(), symbol, interval: '15m', strategy: '' }
+  return { id: crypto.randomUUID(), symbol, interval: '15m', strategyId: DEFAULT_STRATEGY_ID }
 }
 
 function fieldStyle(): React.CSSProperties {
@@ -135,6 +137,8 @@ export function BacktestPage(): React.JSX.Element {
   })
   const [endDate, setEndDate] = useState(() => isoDate(new Date()))
   const [splitDate, setSplitDate] = useState('')
+  const [compareCandles, setCompareCandles] = useState<Candle[] | null>(null)
+  const [compareLoading, setCompareLoading] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -184,7 +188,8 @@ export function BacktestPage(): React.JSX.Element {
     const route = tradingRoutes[0]
     if (!route || !route.symbol) return
 
-    const strategyLabel = route.strategy.trim() || 'Untitled Strategy'
+    const strategy = getStrategy(route.strategyId)
+    const strategyLabel = strategy.name
     const symbolInfo = symbols.find((s) => s.symbol === route.symbol)
     const symbolLabel = symbolInfo ? `${symbolInfo.baseAsset}-${symbolInfo.quoteAsset}` : route.symbol
     const intervalLabel = INTERVALS.find((iv) => iv.id === route.interval)?.label ?? route.interval
@@ -225,8 +230,8 @@ export function BacktestPage(): React.JSX.Element {
           return
         }
         log(`Fetch complete: ${fetchResult.candles.length.toLocaleString()} candles`)
-        log('Running EMA(20/50) crossover + EMA(200) regime filter + ATR(14) stop-loss simulation...')
-        const result = runBacktest(fetchResult.candles)
+        log(`Running strategy: ${strategy.name} — ${strategy.description}`)
+        const result = runBacktest(fetchResult.candles, route.strategyId)
         log(
           `Simulation complete: ${result.trades.length} trades, net P&L ${result.stats.totalNetProfit.toFixed(2)} (${result.stats.totalNetProfitPct.toFixed(2)}%)`
         )
@@ -243,6 +248,7 @@ export function BacktestPage(): React.JSX.Element {
           splitDate: splitDate && splitDate > startDate && splitDate < endDate ? splitDate : null
         }
         setRunState({ status: 'done', result, candles: fetchResult.candles, elapsedSec, generalInfo, logLines: logs })
+        setCompareCandles(fetchResult.candles)
       })
       .catch((error: unknown) => {
         if (runIdRef.current !== runId) return
@@ -258,6 +264,27 @@ export function BacktestPage(): React.JSX.Element {
     setTab('configuration')
     setRunLabel(null)
     setRunState(null)
+  }
+
+  // Reuses candles already fetched by the last single-strategy run when available — only
+  // fetches fresh if the user hasn't run anything yet this session.
+  async function handleCompare(): Promise<void> {
+    const route = tradingRoutes[0]
+    if (!route || !route.symbol) return
+    setTab('compare')
+    if (compareCandles) return
+
+    setCompareLoading(true)
+    const startSec = Math.floor(new Date(`${startDate}T00:00:00Z`).getTime() / 1000)
+    const endSec = Math.floor(new Date(`${endDate}T23:59:59Z`).getTime() / 1000)
+    try {
+      const fetchResult = await window.api.market.fetchHistoricalRange(exchange, route.symbol, route.interval, startSec, endSec)
+      if (!fetchResult.cancelled) setCompareCandles(fetchResult.candles)
+    } catch (error) {
+      console.error('Failed to fetch candles for strategy comparison:', error)
+    } finally {
+      setCompareLoading(false)
+    }
   }
 
   return (
@@ -276,6 +303,11 @@ export function BacktestPage(): React.JSX.Element {
         {runState?.status === 'done' && (
           <button style={tabButtonStyle(tab === 'charts')} onClick={() => setTab('charts')}>
             Charts
+          </button>
+        )}
+        {compareCandles !== null && (
+          <button style={tabButtonStyle(tab === 'compare')} onClick={() => setTab('compare')}>
+            Compare Strategies
           </button>
         )}
       </div>
@@ -297,6 +329,16 @@ export function BacktestPage(): React.JSX.Element {
       {tab === 'charts' && runState?.status === 'done' && (
         <Card title="Trade charts">
           <BacktestChartsView candles={runState.candles} trades={runState.result.trades} />
+        </Card>
+      )}
+
+      {tab === 'compare' && (
+        <Card title="Strategy comparison">
+          {compareLoading && <p style={{ color: 'var(--text-secondary)', margin: 0 }}>Fetching candles…</p>}
+          {!compareLoading && compareCandles && <StrategyComparisonView candles={compareCandles} />}
+          {!compareLoading && !compareCandles && (
+            <p style={{ color: 'var(--text-secondary)', margin: 0 }}>No candle data loaded yet.</p>
+          )}
         </Card>
       )}
 
@@ -362,12 +404,17 @@ export function BacktestPage(): React.JSX.Element {
                       </option>
                     ))}
                   </select>
-                  <input
-                    value={route.strategy}
-                    onChange={(e) => updateTradingRoute(route.id, { strategy: e.target.value })}
-                    placeholder="Strategy name"
+                  <select
+                    value={route.strategyId}
+                    onChange={(e) => updateTradingRoute(route.id, { strategyId: e.target.value })}
                     style={{ ...fieldStyle(), flex: 1 }}
-                  />
+                  >
+                    {STRATEGIES.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
                   <button
                     onClick={() => removeTradingRoute(route.id)}
                     disabled={tradingRoutes.length <= 1}
@@ -477,8 +524,8 @@ export function BacktestPage(): React.JSX.Element {
                 <Zap size={16} /> Start
               </button>
               <button
-                disabled
-                title="Backtest execution isn't implemented yet"
+                onClick={() => void handleCompare()}
+                disabled={symbolsLoading || !tradingRoutes[0]?.symbol || compareLoading}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -491,11 +538,11 @@ export function BacktestPage(): React.JSX.Element {
                   color: 'var(--text-primary)',
                   fontSize: '0.9rem',
                   fontWeight: 600,
-                  cursor: 'not-allowed',
-                  opacity: 0.6
+                  cursor: symbolsLoading || !tradingRoutes[0]?.symbol || compareLoading ? 'not-allowed' : 'pointer',
+                  opacity: symbolsLoading || !tradingRoutes[0]?.symbol || compareLoading ? 0.6 : 1
                 }}
               >
-                <Plus size={16} /> Start in a new tab
+                <Plus size={16} /> Compare Strategies
               </button>
             </div>
           </div>

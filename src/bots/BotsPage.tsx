@@ -7,6 +7,7 @@ import { BotDetailView } from './BotDetailView'
 import { RunsTab } from './RunsTab'
 import { ArchivedTab } from './ArchivedTab'
 import { runBacktest } from '../backtest/engine'
+import { getStrategy } from '../backtest/strategies'
 import type { Bot } from './types'
 import type { BotRun, Exchange, SymbolInfo } from '../../shared/ipc'
 
@@ -43,7 +44,7 @@ async function buildRunRecord(bot: Bot, endedAt: number): Promise<BotRun | null>
   try {
     const { candles } = await window.api.market.fetchHistoricalRange(bot.exchange, bot.symbol, '4h', bot.enabledAt, endedAt)
     if (candles.length === 0) return null
-    const result = runBacktest(candles, { forceCloseAtEnd: false })
+    const result = runBacktest(candles, bot.strategyId, { forceCloseAtEnd: false })
     const trades = result.trades.filter((t) => t.entryTime >= bot.enabledAt!)
     if (trades.length === 0 && endedAt - bot.enabledAt < 300) return null
     const wins = trades.filter((t) => t.pnl > 0).length
@@ -92,7 +93,7 @@ export function BotsPage(): React.JSX.Element {
     void window.api.settings.set({ bots })
   }, [bots])
 
-  function handleCreate(input: { name: string; exchange: Exchange; pair: SymbolInfo; strategy: string }): void {
+  function handleCreate(input: { name: string; exchange: Exchange; pair: SymbolInfo; strategyId: string }): void {
     setBots((prev) => [
       ...prev,
       {
@@ -102,7 +103,8 @@ export function BotsPage(): React.JSX.Element {
         symbol: input.pair.symbol,
         baseAsset: input.pair.baseAsset,
         quoteAsset: input.pair.quoteAsset,
-        strategy: input.strategy,
+        strategy: getStrategy(input.strategyId).name,
+        strategyId: input.strategyId,
         enabled: false,
         enabledAt: null,
         archived: false
@@ -166,9 +168,9 @@ export function BotsPage(): React.JSX.Element {
         <>
           {!selectedBot && (
             <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', margin: '0.9rem 0 0' }}>
-              Enabling a bot starts a paper-trading dry run — real market data, the same EMA(20/50) + EMA(200) regime
-              filter + ATR(14) strategy that was backtested, and simulated (not real) money. It only runs while this
-              app is open, and never places real orders.
+              Enabling a bot starts a paper-trading dry run — real market data, its chosen strategy replayed the same
+              way it was backtested, and simulated (not real) money. It only runs while this app is open, and never
+              places real orders.
             </p>
           )}
 

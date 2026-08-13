@@ -2,9 +2,8 @@ import { useEffect, useState } from 'react'
 import type { Candle, Exchange } from '../../shared/ipc'
 import { runBacktest, type BacktestResult } from '../backtest/engine'
 
-// The validated setup is EMA(20/50) + EMA(200) regime filter + ATR(14) on 4h candles (see
-// backtest/engine.ts) — the dry-run polls the same interval so its signals match what was
-// actually backtested.
+// The dry-run polls the same 4h interval every backtest strategy is validated on, so its
+// signals always match what was actually backtested for the bot's chosen strategy.
 const DRY_RUN_INTERVAL_SEC = 4 * 60 * 60
 const LOOKBACK_CANDLES = 600
 // Extra candles fetched before enabledAt so EMA(200)/ATR(14) are warmed up by the time the
@@ -34,7 +33,13 @@ const IDLE_STATE: DryRunState = { status: 'loading', error: null, result: null, 
 // The fetch window always reaches back to enabledAt (plus warmup padding), not just a fixed
 // default lookback — otherwise a bot left running longer than the default window would quietly
 // drop its own older paper trades once they scrolled outside a fixed-size fetch.
-export function useDryRun(exchange: Exchange, symbol: string, enabled: boolean, enabledAt: number | null): DryRunState {
+export function useDryRun(
+  exchange: Exchange,
+  symbol: string,
+  enabled: boolean,
+  enabledAt: number | null,
+  strategyId: string
+): DryRunState {
   const [state, setState] = useState<DryRunState>(IDLE_STATE)
 
   useEffect(() => {
@@ -59,7 +64,7 @@ export function useDryRun(exchange: Exchange, symbol: string, enabled: boolean, 
         if (candles.length === 0) {
           setState({ status: 'error', error: 'No candle data returned', result: null, candles: [], latestCandle: null })
         } else {
-          const result = runBacktest(candles, { forceCloseAtEnd: false })
+          const result = runBacktest(candles, strategyId, { forceCloseAtEnd: false })
           setState({ status: 'running', error: null, result, candles, latestCandle: candles[candles.length - 1] })
         }
       } catch (error) {
@@ -78,7 +83,7 @@ export function useDryRun(exchange: Exchange, symbol: string, enabled: boolean, 
       cancelled = true
       if (timer) clearTimeout(timer)
     }
-  }, [exchange, symbol, enabled, enabledAt])
+  }, [exchange, symbol, enabled, enabledAt, strategyId])
 
   return state
 }
