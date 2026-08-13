@@ -1,8 +1,45 @@
+import { useEffect, useState } from 'react'
 import { Grid3x3, Layers3, Timer, Target, FileText, Shuffle, Scale, Waves } from 'lucide-react'
 import { EXCHANGES, type ExecutorConfig, type OrderExecutorParams, type PositionExecutorParams } from '../../shared/ipc'
 import { useExecutorSimulation } from './useExecutorSimulation'
 import { useSpreadExecutorSimulation } from './useSpreadExecutorSimulation'
 import { formatQuotePrice } from '../utils/formatCurrency'
+
+const WATCHER_PEAK_POLL_MS = 5_000
+
+/** Polls the live trailing-peak price for a watched live Position -- null for every other
+ * executor (never polls). Same 5s cadence as LiveOrderScheduler's own poll; the one-watcher-per-
+ * symbol constraint (Phase 3) means this is realistically at most one concurrent poller. */
+function useLiveTrailingPeak(executor: ExecutorConfig): number | null {
+  const [peak, setPeak] = useState<number | null>(null)
+  const watching = executor.type === 'position' && executor.mode === 'live' && executor.liveWatcherId !== null
+
+  useEffect(() => {
+    if (!watching) {
+      setPeak(null)
+      return
+    }
+    let cancelled = false
+    async function poll(): Promise<void> {
+      try {
+        const watchers = await window.api.liveTrading.listActiveWatchers()
+        if (cancelled) return
+        const match = watchers.find((w) => w.executorId === executor.id)
+        setPeak(match ? match.trailingPeakPrice : null)
+      } catch {
+        // Best-effort display only -- a failed poll just leaves the last known peak on screen.
+      }
+    }
+    void poll()
+    const timer = setInterval(poll, WATCHER_PEAK_POLL_MS)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [watching, executor.id])
+
+  return peak
+}
 
 const TYPE_META = {
   grid: { label: 'Grid', icon: Grid3x3, color: '#3b82f6' },
@@ -42,6 +79,7 @@ function MetricsPanel({ executor }: { executor: ExecutorConfig }): React.JSX.Ele
  * for a live Position, is really being watched right now for an automatic exit). This reads
  * state straight off the executor's own config rather than replaying anything. */
 export function LiveOrderMetrics({ executor }: { executor: ExecutorConfig }): React.JSX.Element {
+  const trailingPeak = useLiveTrailingPeak(executor)
   if (executor.type === 'position') {
     if (executor.liveWatcherId) {
       const params = executor.params as PositionExecutorParams
@@ -50,13 +88,28 @@ export function LiveOrderMetrics({ executor }: { executor: ExecutorConfig }): Re
       if (params.takeProfitPct !== null) conditions.push(`TP +${params.takeProfitPct}%`)
       if (params.trailingStop !== null) conditions.push(`Trail ${params.trailingStop.trailPct}% (act. +${params.trailingStop.activationPct}%)`)
       if (params.timeLimitSec !== null) conditions.push(`${Math.round(params.timeLimitSec / 3600)}h limit`)
+      const entryPrice = params.entryPrice ?? 0
+      const trailingStop = params.trailingStop
+      // Mirrors the buy-only activation/trail math in evaluateWatcher (livePositionWatchersService.ts):
+      // the trail target only exists once the peak has risen far enough past entry to activate.
+      const activationTarget = trailingStop !== null ? entryPrice * (1 + trailingStop.activationPct / 100) : null
+      const trailingActive = trailingStop !== null && trailingPeak !== null && activationTarget !== null && trailingPeak >= activationTarget
+      const trailTarget = trailingActive && trailingStop !== null && trailingPeak !== null ? trailingPeak * (1 - trailingStop.trailPct / 100) : null
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
           <span style={{ color: 'var(--down)', fontWeight: 600 }}>Watching — real position open</span>
           <span style={{ color: 'var(--text-secondary)' }}>
-            {params.amountQuote} {executor.quoteAsset} @ {formatQuotePrice(params.entryPrice ?? 0, executor.quoteAsset)} (entry)
+            {params.amountQuote} {executor.quoteAsset} @ {formatQuotePrice(entryPrice, executor.quoteAsset)} (entry)
           </span>
           {conditions.length > 0 && <span style={{ color: 'var(--text-muted)' }}>{conditions.join(' · ')}</span>}
+          {trailingStop !== null && trailingPeak !== null && (
+            <span style={{ color: 'var(--text-muted)' }}>
+              Peak {formatQuotePrice(trailingPeak, executor.quoteAsset)}
+              {trailTarget !== null
+                ? ` · trail stop ${formatQuotePrice(trailTarget, executor.quoteAsset)}`
+                : ' · trailing not yet activated'}
+            </span>
+          )}
           <span style={{ color: 'var(--text-muted)' }}>Stop force-exits this position on Binance</span>
         </div>
       )

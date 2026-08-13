@@ -140,6 +140,17 @@ export interface LiveExitResult {
   closedAt: number
 }
 
+/** What the renderer is allowed to see about an active live Position watcher — used both for the
+ * pre-flight symbol-conflict check (exchange/symbol) and, for a watcher with a configured
+ * trailing stop, to show the live trailing-peak price and dynamic trail target (a real safety
+ * number that would otherwise be invisible until the moment it triggers). */
+export interface LiveWatcherSummary {
+  executorId: string
+  exchange: Exchange
+  symbol: string
+  trailingPeakPrice: number
+}
+
 /** OHLCV candle. `time` is a Unix timestamp in seconds (UTC), matching lightweight-charts. */
 export interface Candle {
   time: number

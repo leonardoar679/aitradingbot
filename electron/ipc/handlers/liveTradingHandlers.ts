@@ -192,7 +192,7 @@ export function registerLiveTradingHandlers(): void {
   // (recoverable, but unpleasant) case of a real BUY firing and then having nothing watch it.
   ipcMain.handle(IpcChannel.LiveTradingListActiveWatchers, async () => {
     const watchers = await listActiveWatchers()
-    return watchers.map((w) => ({ exchange: w.exchange, symbol: w.symbol }))
+    return watchers.map((w) => ({ executorId: w.executorId, exchange: w.exchange, symbol: w.symbol, trailingPeakPrice: w.trailingPeakPrice }))
   })
 
   // Stop on a live Position executor that's still being watched: force-exit now, for real, same

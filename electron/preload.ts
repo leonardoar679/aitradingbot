@@ -13,6 +13,7 @@ import {
   type LiveOrderRecord,
   type LivePosition,
   type LiveTradingStatus,
+  type LiveWatcherSummary,
   type SymbolInfo,
   type Ticker24h
 } from '../shared/ipc'
@@ -104,7 +105,7 @@ const api = {
         timeLimitSec,
         trailingStop
       ),
-    listActiveWatchers: (): Promise<{ exchange: Exchange; symbol: string }[]> => ipcRenderer.invoke(IpcChannel.LiveTradingListActiveWatchers),
+    listActiveWatchers: (): Promise<LiveWatcherSummary[]> => ipcRenderer.invoke(IpcChannel.LiveTradingListActiveWatchers),
     stopWatcher: (watcherId: string): Promise<LiveExitResult | null> => ipcRenderer.invoke(IpcChannel.LiveTradingStopWatcher, watcherId),
     drainWatcherEvents: (): Promise<{ executorId: string; liveExitResult: LiveExitResult }[]> =>
       ipcRenderer.invoke(IpcChannel.LiveTradingDrainWatcherEvents)
