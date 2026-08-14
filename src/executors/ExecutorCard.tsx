@@ -6,8 +6,10 @@ import {
   type OrderExecutorParams,
   type PositionExecutorParams,
   type DcaExecutorParams,
+  type GridExecutorParams,
   type LiveTwapRunSummary
 } from '../../shared/ipc'
+import { buildGridLevels } from './engine'
 import { useExecutorSimulation } from './useExecutorSimulation'
 import { useSpreadExecutorSimulation } from './useSpreadExecutorSimulation'
 import { formatQuotePrice } from '../utils/formatCurrency'
@@ -28,7 +30,9 @@ const EMPTY_WATCHER_INFO: LiveWatcherInfo = { entryPrice: null, trailingPeakPric
 function useLiveWatcherInfo(executor: ExecutorConfig): LiveWatcherInfo {
   const [info, setInfo] = useState<LiveWatcherInfo>(EMPTY_WATCHER_INFO)
   const watching =
-    (executor.type === 'position' || executor.type === 'dca') && executor.mode === 'live' && executor.liveWatcherId !== null
+    (executor.type === 'position' || executor.type === 'dca' || executor.type === 'grid') &&
+    executor.mode === 'live' &&
+    executor.liveWatcherId !== null
 
   useEffect(() => {
     if (!watching) {
@@ -217,6 +221,45 @@ export function LiveOrderMetrics({ executor }: { executor: ExecutorConfig }): Re
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
           <span style={{ color: 'var(--down)', fontWeight: 600 }}>
             {restingCount} of {params.levels.length} levels resting
+          </span>
+          <span style={{ color: 'var(--text-secondary)' }}>TP +{params.takeProfitPct}% from average fill once any level fills</span>
+          <span style={{ color: 'var(--text-muted)' }}>Stop cancels every resting level</span>
+        </div>
+      )
+    }
+    return <div style={{ fontSize: '0.75rem', color: 'var(--down)' }}>Ladder failed — see name for details</div>
+  }
+  if (executor.type === 'grid') {
+    // Bounded live ladder sharing ONE exit -- not full paper Grid's perpetual per-level cycling.
+    // Same watcher/pendingLiveOrderIds mechanism as DCA, just a different level-count source
+    // (buildGridLevels(params) instead of params.levels) and no stop-loss/time-limit (Grid has no
+    // native fields for those, and Stop Price isn't enforced live -- see the Phase 6 plan).
+    const params = executor.params as GridExecutorParams
+    const totalLevels = buildGridLevels(params).length
+    const restingCount = executor.pendingLiveOrderIds.length
+    if (executor.liveWatcherId) {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
+          <span style={{ color: 'var(--down)', fontWeight: 600 }}>Watching — real position open</span>
+          {watcherInfo.entryPrice !== null && (
+            <span style={{ color: 'var(--text-secondary)' }}>Avg entry {formatQuotePrice(watcherInfo.entryPrice, executor.quoteAsset)}</span>
+          )}
+          <span style={{ color: 'var(--text-muted)' }}>TP +{params.takeProfitPct}% (shared, not per-level)</span>
+          {restingCount > 0 && (
+            <span style={{ color: 'var(--text-muted)' }}>
+              {restingCount} more grid level{restingCount === 1 ? '' : 's'} still resting
+            </span>
+          )}
+          <span style={{ color: 'var(--text-muted)' }}>Stop cancels remaining levels and force-exits this position</span>
+        </div>
+      )
+    }
+    if (executor.liveExitResult) return <ClosedLiveMetrics executor={executor} />
+    if (restingCount > 0) {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
+          <span style={{ color: 'var(--down)', fontWeight: 600 }}>
+            {restingCount} of {totalLevels} levels resting (nearest to price)
           </span>
           <span style={{ color: 'var(--text-secondary)' }}>TP +{params.takeProfitPct}% from average fill once any level fills</span>
           <span style={{ color: 'var(--text-muted)' }}>Stop cancels every resting level</span>

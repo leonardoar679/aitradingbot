@@ -19,19 +19,21 @@ import {
 } from '../../shared/ipc'
 import { useExecutorSimulation } from './useExecutorSimulation'
 import { LiveOrderMetrics, useLiveTwapInfo } from './ExecutorCard'
-import { dcaLevelPrice } from './engine'
+import { dcaLevelPrice, buildGridLevels } from './engine'
 import { useTheme } from '../theme/ThemeContext'
 import { CHART_PALETTE } from '../theme/palette'
 
 const WATCHER_POLL_MS = 5_000
 
-/** Real current average entry price for a watched live DCA position -- null until the first
- * poll lands or there's no watcher to poll. Mirrors ExecutorCard's own useLiveWatcherInfo; kept
- * separate rather than shared since this component only ever needs the one number for the chart
- * line, not the full watcher-info shape. */
-function useLiveDcaAvgEntry(executor: ExecutorConfig): number | null {
+/** Real current average entry price for a watched live DCA or Grid position -- null until the
+ * first poll lands or there's no watcher to poll. Both share this exact "several resting orders,
+ * one shared watcher" mechanism (see the Phase 6 plan for Grid). Mirrors ExecutorCard's own
+ * useLiveWatcherInfo; kept separate rather than shared since this component only ever needs the
+ * one number for the chart line, not the full watcher-info shape. */
+function useLiveLadderAvgEntry(executor: ExecutorConfig): number | null {
   const [entryPrice, setEntryPrice] = useState<number | null>(null)
-  const watching = executor.type === 'dca' && executor.mode === 'live' && executor.liveWatcherId !== null
+  const watching =
+    (executor.type === 'dca' || executor.type === 'grid') && executor.mode === 'live' && executor.liveWatcherId !== null
 
   useEffect(() => {
     if (!watching) {
@@ -68,7 +70,7 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
   const { theme } = useTheme()
   const palette = CHART_PALETTE[theme]
   const sim = useExecutorSimulation(executor)
-  const liveDcaAvgEntry = useLiveDcaAvgEntry(executor)
+  const liveLadderAvgEntry = useLiveLadderAvgEntry(executor)
   const liveTwapInfo = useLiveTwapInfo(executor)
   const exchangeName = EXCHANGES.find((e) => e.id === executor.exchange)?.name ?? executor.exchange
 
@@ -300,7 +302,35 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
             )
           }
         }
-        const avgEntry = executor.liveExitResult?.entryPrice ?? liveDcaAvgEntry
+        const avgEntry = executor.liveExitResult?.entryPrice ?? liveLadderAvgEntry
+        if (avgEntry !== null) {
+          newLines.push(
+            series.createPriceLine({ price: avgEntry, color: palette.gold, lineWidth: 2, lineStyle: LineStyle.Solid, axisLabelVisible: true, title: 'Avg Entry' })
+          )
+        }
+        if (executor.liveExitResult) {
+          newLines.push(
+            series.createPriceLine({
+              price: executor.liveExitResult.exitPrice,
+              color: palette.gold,
+              lineWidth: 2,
+              lineStyle: LineStyle.Solid,
+              axisLabelVisible: true,
+              title: 'Exit'
+            })
+          )
+        }
+      } else if (executor.type === 'grid') {
+        // Dotted line per configured level, same as paper Grid draws every levelPrice regardless
+        // of fill status -- buildGridLevels(params) is recomputable directly (no captured
+        // reference price needed, unlike DCA, since Grid's prices are already absolute).
+        const params = executor.params as GridExecutorParams
+        for (const price of buildGridLevels(params)) {
+          newLines.push(
+            series.createPriceLine({ price, color: palette.grid, lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' })
+          )
+        }
+        const avgEntry = executor.liveExitResult?.entryPrice ?? liveLadderAvgEntry
         if (avgEntry !== null) {
           newLines.push(
             series.createPriceLine({ price: avgEntry, color: palette.gold, lineWidth: 2, lineStyle: LineStyle.Solid, axisLabelVisible: true, title: 'Avg Entry' })
@@ -367,7 +397,7 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
     priceLinesRef.current = newLines
 
     chart.timeScale().fitContent()
-  }, [sim.candles, sim.state, executor, palette, liveDcaAvgEntry, liveTwapInfo])
+  }, [sim.candles, sim.state, executor, palette, liveLadderAvgEntry, liveTwapInfo])
 
   return (
     <div>

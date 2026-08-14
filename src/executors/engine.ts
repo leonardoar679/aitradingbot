@@ -27,7 +27,11 @@ const MAX_GRID_LEVELS = 40
 // about "which levels filled" is ever persisted; it's derived from config + candle history, same
 // honesty tradeoff as the bots' dry-run.
 
-function buildGridLevels(params: GridExecutorParams): number[] {
+// Exported for reuse by the live Grid executor path (ExecutorsPage.tsx) and its chart rendering
+// (ExecutorDetailView.tsx) — unlike DCA, Grid's level prices are already absolute values sitting
+// in params (startPrice/endPrice/levelSpreadPct), so there's no reference-price capture needed;
+// this can be recomputed directly from an executor's params at any time.
+export function buildGridLevels(params: GridExecutorParams): number[] {
   const { startPrice, endPrice, levelSpreadPct } = params
   const lo = Math.min(startPrice, endPrice)
   const hi = Math.max(startPrice, endPrice)

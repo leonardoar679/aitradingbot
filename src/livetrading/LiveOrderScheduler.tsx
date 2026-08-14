@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import type { ExecutorConfig, DcaExecutorParams } from '../../shared/ipc'
+import type { ExecutorConfig, DcaExecutorParams, GridExecutorParams } from '../../shared/ipc'
 
 /** Headless — mounted once in App.tsx, same tier as RoutineScheduler/ControllerScheduler.
  * Reconciles main-process-resolved real-money state into settings.executors every 5s, the same
@@ -7,22 +7,25 @@ import type { ExecutorConfig, DcaExecutorParams } from '../../shared/ipc'
  * elsewhere might be showing:
  *   1. Every open live limit order (liveOrdersService.ts) — for anything resolved, removes its id
  *      from the matching executor's pendingLiveOrderIds and patches liveOrder. A live Order limit
- *      always has exactly one id here; a live DCA ladder can have several (one per unfilled
- *      level), any of which can resolve independently in the same tick.
- *   2. A live DCA fill specifically also needs its exit watcher created (on the first fill) or
- *      refreshed (on every later fill, since the true weighted-average cost keeps moving until
- *      the ladder exits or runs out of levels — paper DCA always evaluates TP/SL/time-limit
+ *      always has exactly one id here; a live DCA ladder or Grid's bounded ladder (Phase 6) can
+ *      have several (one per unfilled level/order), any of which can resolve independently in the
+ *      same tick.
+ *   2. A live DCA or Grid fill specifically also needs its exit watcher created (on the first
+ *      fill) or refreshed (on every later fill, since the true weighted-average cost keeps moving
+ *      until the ladder exits or runs out of levels — paper DCA always evaluates TP/SL/time-limit
  *      against the CURRENT average, never a stale snapshot, and the live watcher has to match
- *      that). Position never reaches this path — its one entry resolves synchronously in
- *      ExecutorsPage.handleCreate, not via this poll.
- *   3. Every live Position/DCA watcher's resolved exit (livePositionWatchersService.ts) — the
- *      actual triggering runs continuously in the main process independent of this poll (see
+ *      that; live Grid shares this same "one shared exit across many fills" model rather than
+ *      paper Grid's per-level independent exits — see the Phase 6 plan). Position never reaches
+ *      this path — its one entry resolves synchronously in ExecutorsPage.handleCreate, not via
+ *      this poll.
+ *   3. Every live Position/DCA/Grid watcher's resolved exit (livePositionWatchersService.ts) —
+ *      the actual triggering runs continuously in the main process independent of this poll (see
  *      startLivePositionWatcherLoop in electron/main.ts); this just picks up the result and
  *      patches the matching executor's status/liveExitResult.
  * An executor only goes 'stopped' once BOTH pendingLiveOrderIds is empty AND liveWatcherId is
- * null — a live DCA executor can have unfilled levels and an active watcher at the same time,
- * unlike Order (always exactly one resting order, never a watcher) or Position (never a resting
- * order, always exactly one watcher).
+ * null — a live DCA or Grid executor can have unfilled levels and an active watcher at the same
+ * time, unlike Order (always exactly one resting order, never a watcher) or Position (never a
+ * resting order, always exactly one watcher).
  * Deliberately polling rather than a websocket user-data-stream / continuous renderer-side
  * ticker subscription for either; see the Phase 2c/3 plans for why that's the right-sized choice
  * here. */
@@ -75,14 +78,18 @@ export function LiveOrderScheduler(): null {
           // Skipped if the watcher also resolved THIS tick (e.g. it hit take-profit and its own
           // cleanup cancelled the remaining levels around the same time this poll ran) — nothing
           // left to watch, so there's no point creating or refreshing one.
+          // Live Grid shares this exact create-or-refresh-watcher mechanism with live DCA (see
+          // the Phase 6 plan) -- both place several independent resting orders that fold into one
+          // shared, ever-moving average cost. Grid has no native stop-loss/time-limit fields (and
+          // its Stop Price isn't enforced live -- see the Phase 6 plan), so those stay null.
           const hadFill = myResolutions.some((r) => r.status === 'filled')
-          if (next.type === 'dca' && hadFill && !watcherEvent) {
+          if ((next.type === 'dca' || next.type === 'grid') && hadFill && !watcherEvent) {
             const position = livePositions.find((p) => p.exchange === next.exchange && p.symbol === next.symbol)
             if (position) {
               try {
                 if (next.liveWatcherId) {
                   await window.api.liveTrading.updateWatcherEntryPrice(next.liveWatcherId, position.avgCost)
-                } else {
+                } else if (next.type === 'dca') {
                   const dcaParams = next.params as DcaExecutorParams
                   const watcher = await window.api.liveTrading.createWatcher(
                     next.id,
@@ -95,9 +102,22 @@ export function LiveOrderScheduler(): null {
                     null
                   )
                   next = { ...next, liveWatcherId: watcher.id }
+                } else {
+                  const gridParams = next.params as GridExecutorParams
+                  const watcher = await window.api.liveTrading.createWatcher(
+                    next.id,
+                    next.exchange,
+                    next.symbol,
+                    position.avgCost,
+                    gridParams.takeProfitPct,
+                    null,
+                    null,
+                    null
+                  )
+                  next = { ...next, liveWatcherId: watcher.id }
                 }
               } catch (error) {
-                console.error(`Failed to create/update live DCA watcher for executor ${next.id}:`, error)
+                console.error(`Failed to create/update live ${next.type} watcher for executor ${next.id}:`, error)
               }
             }
           }

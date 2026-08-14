@@ -8,7 +8,7 @@ import { ExecutorCard } from './ExecutorCard'
 import { ExecutorDetailView } from './ExecutorDetailView'
 import { SpreadExecutorDetailView } from './SpreadExecutorDetailView'
 import { computeExecutorPosition } from './computeSnapshot'
-import { dcaLevelPrice, twapNumOrders } from './engine'
+import { dcaLevelPrice, twapNumOrders, buildGridLevels } from './engine'
 import {
   EXCHANGES,
   type ExecutorConfig,
@@ -89,10 +89,11 @@ export function ExecutorsPage(): React.JSX.Element {
     mode: 'paper' | 'live'
     params: GridExecutorParams | DcaExecutorParams | TwapExecutorParams | PositionExecutorParams | OrderExecutorParams | XemmExecutorParams | ArbitrageExecutorParams | MarketMakingExecutorParams
   }): Promise<void> {
-    // Defense in depth — the UI only ever offers 'live' for type 'order', 'position', 'dca', or
-    // 'twap', but this is the last line of defense before anything real could happen.
+    // Defense in depth — the UI only ever offers 'live' for type 'order', 'position', 'dca',
+    // 'twap', or 'grid', but this is the last line of defense before anything real could happen.
     const mode =
-      input.mode === 'live' && (input.type === 'order' || input.type === 'position' || input.type === 'dca' || input.type === 'twap')
+      input.mode === 'live' &&
+      (input.type === 'order' || input.type === 'position' || input.type === 'dca' || input.type === 'twap' || input.type === 'grid')
         ? 'live'
         : 'paper'
 
@@ -181,6 +182,97 @@ export function ExecutorsPage(): React.JSX.Element {
               stoppedAt,
               liveOrder: entryResult,
               params: { ...positionParams, entryPrice: filledEntryPrice }
+            }
+          ])
+        } else {
+          setExecutors((prev) => [...prev, { ...base, name: `${base.name} (failed: ${message})`, status: 'stopped', stoppedAt }])
+        }
+      }
+      return
+    }
+
+    if (input.type === 'grid') {
+      // Live Grid: a bounded ladder sharing ONE exit (take-profit from the shared average fill),
+      // not full paper Grid's perpetual per-level cycling -- see the Phase 6 plan for why. Only
+      // the maxOpenOrders levels nearest a real current price are placed as real resting orders,
+      // since the full ladder (up to MAX_GRID_LEVELS) can be much larger than DCA's typically
+      // hand-curated one -- this bounds how many real orders one click can place. Buy-only;
+      // NewExecutorModal's canGoLive already enforces this.
+      const gridParams = input.params as GridExecutorParams
+      const allLevelPrices = buildGridLevels(gridParams)
+      const amountPerLevel = gridParams.totalAmountQuote / allLevelPrices.length
+      let placedLevelPrices: number[] = []
+      const pendingIds: string[] = []
+      let lastResolvedOrder: LiveOrderRecord | null = null
+      let placedCount = 0
+      try {
+        const ticker = await window.api.market.fetchTicker24h(input.exchange, input.pair.symbol)
+        placedLevelPrices = allLevelPrices
+          .slice()
+          .sort((a, b) => Math.abs(a - ticker.lastPrice) - Math.abs(b - ticker.lastPrice))
+          .slice(0, Math.min(gridParams.maxOpenOrders, allLevelPrices.length))
+
+        for (const levelPrice of placedLevelPrices) {
+          const result = await window.api.executors.placeLiveLimitOrder(
+            base.id,
+            input.exchange,
+            input.pair.symbol,
+            input.pair.baseAsset,
+            input.pair.quoteAsset,
+            gridParams.side,
+            amountPerLevel,
+            levelPrice
+          )
+          placedCount++
+          if (result.resolved) {
+            lastResolvedOrder = result.liveOrder
+          } else {
+            pendingIds.push(result.pendingLiveOrderId)
+          }
+        }
+
+        // Same "first fill creates the watcher" rule DCA/TWAP already follow -- if any selected
+        // level was already marketable against the captured price, it filled synchronously.
+        let watcherId: string | null = null
+        if (lastResolvedOrder) {
+          const positions = await window.api.liveTrading.listPositions()
+          const position = positions.find((p) => p.exchange === input.exchange && p.symbol === input.pair.symbol)
+          if (position) {
+            // Grid has no native stop-loss/time-limit fields, and Stop Price (limitPrice) isn't
+            // enforced live either -- see the Phase 6 plan. Take-profit only.
+            const watcher = await window.api.liveTrading.createWatcher(
+              base.id,
+              input.exchange,
+              input.pair.symbol,
+              position.avgCost,
+              gridParams.takeProfitPct,
+              null,
+              null,
+              null
+            )
+            watcherId = watcher.id
+          }
+        }
+
+        setExecutors((prev) => [
+          ...prev,
+          { ...base, pendingLiveOrderIds: pendingIds, liveWatcherId: watcherId, liveOrder: lastResolvedOrder }
+        ])
+      } catch (error) {
+        console.error('Live Grid ladder placement failed:', error)
+        const message = error instanceof Error ? error.message : String(error)
+        const stoppedAt = Math.floor(Date.now() / 1000)
+        if (placedCount > 0) {
+          // Some levels already placed real resting orders (or filled) before a later one
+          // failed -- never silently drop those. Keep the executor active with whatever
+          // actually went through; the name flags the shortfall instead of hiding it.
+          setExecutors((prev) => [
+            ...prev,
+            {
+              ...base,
+              name: `${base.name} (only ${placedCount}/${placedLevelPrices.length} levels placed — ${message})`,
+              pendingLiveOrderIds: pendingIds,
+              liveOrder: lastResolvedOrder
             }
           ])
         } else {
