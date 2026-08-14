@@ -392,8 +392,9 @@ function SingleMarketMetrics({ executor }: { executor: ExecutorConfig }): React.
   if (sim.state.kind === 'grid') {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
-        <span style={{ color: 'var(--text-primary)' }}>
+        <span style={{ color: sim.state.stoppedAt !== null ? 'var(--down)' : 'var(--text-primary)', fontWeight: sim.state.stoppedAt !== null ? 600 : 400 }}>
           {sim.state.filledCount} / {sim.state.levels.length} levels filled
+          {sim.state.stoppedAt !== null ? ' · stopped — stop price hit' : ''}
         </span>
         <span style={{ color: 'var(--text-muted)' }}>{sim.state.closedLevels} cycles closed</span>
         <span style={{ color: pctColor(sim.state.realizedPnl), fontWeight: 600 }}>

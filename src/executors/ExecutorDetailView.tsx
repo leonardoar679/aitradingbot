@@ -143,7 +143,7 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
             lineWidth: 1,
             lineStyle: LineStyle.Dashed,
             axisLabelVisible: true,
-            title: 'Stop'
+            title: sim.state.stoppedAt !== null ? 'Stop (hit)' : 'Stop'
           })
         )
       }

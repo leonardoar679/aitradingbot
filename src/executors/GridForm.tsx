@@ -95,6 +95,12 @@ export function GridForm({ params, onChange }: GridFormProps): React.JSX.Element
           />
         </div>
       </div>
+
+      <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
+        If price crosses Stop Price, every filled level closes at that price and the grid stops
+        for good — it will not fill another level again, even if price re-enters the range. Not
+        enforced for live Grid.
+      </p>
     </div>
   )
 }

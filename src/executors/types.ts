@@ -30,6 +30,9 @@ export interface GridExecutorState {
   filledCount: number
   realizedPnl: number
   closedLevels: number
+  /** Set once Stop Price is crossed -- every filled level is closed at that price and the grid
+   * never fills another level again, even if price re-enters the range. Null while armed/unset. */
+  stoppedAt: number | null
 }
 
 export interface DcaFill {

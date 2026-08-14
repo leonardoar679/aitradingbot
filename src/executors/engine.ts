@@ -58,9 +58,13 @@ export function simulateGrid(candles: Candle[], params: GridExecutorParams): Gri
 
   let realizedPnl = 0
   let closedLevels = 0
+  let stoppedAt: number | null = null
   const isBuy = params.side === 'buy'
 
   for (const candle of candles) {
+    // Stop Price already hit on a prior candle -- the grid is frozen for good, nothing left to do.
+    if (stoppedAt !== null) break
+
     // Close filled levels whose take-profit target was reached this candle.
     let openCount = levels.filter((l) => l.status === 'filled').length
     for (const level of levels) {
@@ -77,6 +81,25 @@ export function simulateGrid(candles: Candle[], params: GridExecutorParams): Gri
         level.filledAt = null
         closedLevels++
         openCount--
+      }
+    }
+
+    // Stop Price: closes every currently-filled level at once and freezes the grid permanently --
+    // unlike take-profit, this isn't a per-level exit a level can cycle back through.
+    if (params.limitPrice !== null) {
+      const stopHit = isBuy ? candle.low <= params.limitPrice : candle.high >= params.limitPrice
+      if (stopHit) {
+        for (const level of levels) {
+          if (level.status !== 'filled' || level.entryPrice === null) continue
+          const qty = amountPerLevel / level.entryPrice
+          realizedPnl += isBuy ? qty * (params.limitPrice - level.entryPrice) : qty * (level.entryPrice - params.limitPrice)
+          level.status = 'pending'
+          level.entryPrice = null
+          level.filledAt = null
+          closedLevels++
+        }
+        stoppedAt = candle.time
+        continue
       }
     }
 
@@ -99,7 +122,8 @@ export function simulateGrid(candles: Candle[], params: GridExecutorParams): Gri
     amountPerLevel,
     filledCount: levels.filter((l) => l.status === 'filled').length,
     realizedPnl,
-    closedLevels
+    closedLevels,
+    stoppedAt
   }
 }
 

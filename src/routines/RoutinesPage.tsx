@@ -235,7 +235,16 @@ export function RoutinesPage(): React.JSX.Element {
 
   useEffect(() => {
     if (!loadedRef.current) return
-    void window.api.settings.set({ routines })
+    void (async () => {
+      // lastRunAt is also written independently by RoutineScheduler's background timer -- re-read
+      // fresh settings and carry that field over instead of trusting this component's possibly-stale
+      // local copy, or an unrelated edit here (e.g. toggling a different routine) can silently
+      // revert a scheduled run's timestamp.
+      const fresh = await window.api.settings.get()
+      const freshLastRunAt = new Map(fresh.routines.map((r) => [r.id, r.lastRunAt]))
+      const merged = routines.map((r) => ({ ...r, lastRunAt: freshLastRunAt.get(r.id) ?? r.lastRunAt }))
+      await window.api.settings.set({ routines: merged })
+    })()
   }, [routines])
 
   function handleCreate(routine: RoutineConfig): void {
