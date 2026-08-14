@@ -49,6 +49,19 @@ export function SpreadExecutorDetailView({ executor, onBack }: { executor: Execu
         axisLabelVisible: true,
         title: 'Threshold'
       })
+      // Arbitrage captures on the spread crossing the threshold in EITHER direction
+      // (simulateArbitrage checks abs(pct) >= minProfitabilityPct) -- XEMM is directional and
+      // only ever has the one positive threshold.
+      if (executor.type === 'arbitrage') {
+        series.createPriceLine({
+          price: -params.minProfitabilityPct,
+          color: palette.down,
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: 'Threshold'
+        })
+      }
       chart.timeScale().fitContent()
     }
 
@@ -56,7 +69,7 @@ export function SpreadExecutorDetailView({ executor, onBack }: { executor: Execu
       chart.remove()
       chartRef.current = null
     }
-  }, [sim.aligned, palette, params.minProfitabilityPct])
+  }, [sim.aligned, palette, params.minProfitabilityPct, executor.type])
 
   return (
     <div>

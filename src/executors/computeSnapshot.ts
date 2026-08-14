@@ -19,8 +19,9 @@ export interface OpenPosition {
 
 /** Extracts "is there currently an open, unrealized position" for an executor about to be
  * stopped — used to hand it over to Positions → Inventory instead of silently discarding it.
- * Returns null for types with nothing to hand over (Grid/DCA with no open fills, a Position not
- * yet entered, an unfilled Order, or TWAP/XEMM/Arbitrage, which never leave a lingering position). */
+ * Returns null for types with nothing to hand over (Grid/DCA/Market Making with no open
+ * inventory, a Position not yet entered, an unfilled Order, or TWAP/XEMM/Arbitrage, which never
+ * leave a lingering position at all). */
 export async function computeExecutorPosition(executor: ExecutorConfig): Promise<OpenPosition | null> {
   if (executor.type === 'twap' || executor.type === 'xemm' || executor.type === 'arbitrage') return null
 
@@ -49,11 +50,20 @@ export async function computeExecutorPosition(executor: ExecutorConfig): Promise
     return { side: state.side, entryPrice: state.entryPrice, amountQuote: params.amountQuote }
   }
 
-  // order
   if (state.kind === 'order') {
     if (state.status !== 'filled' || state.fillPrice === null) return null
     const params = executor.params as OrderExecutorParams
     return { side: params.side, entryPrice: state.fillPrice, amountQuote: params.amountQuote }
+  }
+
+  // marketmaking — was previously missing entirely, silently discarding any accumulated
+  // inventory on Stop regardless of "Keep position when stopped" (the checkbox is enabled for
+  // this type, unlike TWAP/XEMM/Arbitrage, so leaving this branch out was a real bug, not an
+  // intentional exclusion). Inventory can be net long or net short in the paper simulation.
+  if (state.kind === 'marketmaking') {
+    if (state.inventoryBaseQty === 0 || state.avgCost === null) return null
+    const side: ExecutorSide = state.inventoryBaseQty > 0 ? 'buy' : 'sell'
+    return { side, entryPrice: state.avgCost, amountQuote: Math.abs(state.inventoryBaseQty) * state.avgCost }
   }
 
   return null

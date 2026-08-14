@@ -103,7 +103,7 @@ export function MarketMakingForm({ params, onChange }: MarketMakingFormProps): R
               min="0"
               max="1"
               value={params.inventorySkewIntensity || ''}
-              onChange={(e) => set('inventorySkewIntensity', Number(e.target.value))}
+              onChange={(e) => set('inventorySkewIntensity', Math.min(1, Math.max(0, Number(e.target.value))))}
               style={textInputStyle()}
             />
           </div>

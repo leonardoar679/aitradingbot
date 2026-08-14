@@ -412,7 +412,6 @@ export interface SpreadMarket {
 export interface XemmExecutorParams {
   buyingMarket: SpreadMarket
   sellingMarket: SpreadMarket
-  makerSide: ExecutorSide
   orderAmountQuote: number
   minProfitabilityPct: number
 }

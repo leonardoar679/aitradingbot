@@ -134,7 +134,7 @@ function defaultSpreadMarket(exchange: Exchange, pair: SymbolInfo): XemmExecutor
 }
 
 function defaultXemmParams(buying: XemmExecutorParams['buyingMarket'], selling: XemmExecutorParams['sellingMarket']): XemmExecutorParams {
-  return { buyingMarket: buying, sellingMarket: selling, makerSide: 'buy', orderAmountQuote: 500, minProfitabilityPct: 0.2 }
+  return { buyingMarket: buying, sellingMarket: selling, orderAmountQuote: 500, minProfitabilityPct: 0.2 }
 }
 
 function defaultArbitrageParams(buying: ArbitrageExecutorParams['buyingMarket'], selling: ArbitrageExecutorParams['sellingMarket']): ArbitrageExecutorParams {
@@ -170,6 +170,17 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
   const [liveTradingStatus, setLiveTradingStatus] = useState<LiveTradingStatus | null>(null)
 
   const isSpreadType = SPREAD_TYPES.includes(type)
+
+  // The spread % this executor trades on only means anything if both legs are the same asset
+  // pair (BTC/USDT vs BTC/USDT on two exchanges, say) — comparing two different instruments
+  // (e.g. BTC/USDT vs ETH/USDT) produces a "spread" and "captures" that look real but are
+  // comparing unrelated prices. Nothing enforced this before; block creation until it's fixed
+  // rather than silently accepting it.
+  const spreadLegs = type === 'xemm' ? xemmParams : type === 'arbitrage' ? arbitrageParams : null
+  const spreadAssetsMismatched =
+    spreadLegs !== null &&
+    (spreadLegs.buyingMarket.baseAsset !== spreadLegs.sellingMarket.baseAsset ||
+      spreadLegs.buyingMarket.quoteAsset !== spreadLegs.sellingMarket.quoteAsset)
 
   // Live trading eligibility is re-checked fresh every time the modal opens — never cached
   // across sessions — since a credential or the kill switch could have changed since last time.
@@ -291,7 +302,7 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
   const canSubmitLive = mode !== 'live' || (canGoLive && liveAmountOk && liveConfirmOk)
 
   function handleCreate(): void {
-    if (!name.trim() || !canSubmitLive) return
+    if (!name.trim() || !canSubmitLive || spreadAssetsMismatched) return
 
     if (isSpreadType) {
       const params = type === 'xemm' ? xemmParams : arbitrageParams
@@ -401,6 +412,12 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
             {type === 'order' && <OrderForm params={orderParams} onChange={setOrderParams} />}
             {type === 'xemm' && <XemmForm params={xemmParams} onChange={setXemmParams} />}
             {type === 'arbitrage' && <ArbitrageForm params={arbitrageParams} onChange={setArbitrageParams} />}
+            {isSpreadType && spreadAssetsMismatched && (
+              <p style={{ fontSize: '0.75rem', color: 'var(--down)', margin: '0.6rem 0 0' }}>
+                Buying and Selling Market must be the same asset pair (same base and quote asset) — comparing different
+                instruments produces a meaningless spread. Pick matching pairs on each exchange.
+              </p>
+            )}
             {type === 'marketmaking' && <MarketMakingForm params={marketMakingParams} onChange={setMarketMakingParams} />}
           </div>
 
@@ -538,7 +555,7 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
           </button>
           <button
             onClick={handleCreate}
-            disabled={!name.trim() || !canSubmitLive}
+            disabled={!name.trim() || !canSubmitLive || spreadAssetsMismatched}
             style={{
               flex: 1,
               background: mode === 'live' ? 'var(--down)' : 'linear-gradient(135deg, #7c86ff, #6366f1)',
@@ -548,8 +565,8 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
               color: '#fff',
               fontSize: '0.85rem',
               fontWeight: 700,
-              cursor: name.trim() && canSubmitLive ? 'pointer' : 'not-allowed',
-              opacity: name.trim() && canSubmitLive ? 1 : 0.6
+              cursor: name.trim() && canSubmitLive && !spreadAssetsMismatched ? 'pointer' : 'not-allowed',
+              opacity: name.trim() && canSubmitLive && !spreadAssetsMismatched ? 1 : 0.6
             }}
           >
             {mode === 'live' ? (type === 'position' ? 'Enter Real Position' : 'Place Real Order') : 'Create Executor'}
