@@ -42,7 +42,7 @@ export function BotDetailView({ bot, onBack }: BotDetailViewProps): React.JSX.El
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
   const stopLineRef = useRef<IPriceLine | null>(null)
 
-  const dryRun = useDryRun(bot.exchange, bot.symbol, true, bot.enabledAt, bot.strategyId)
+  const dryRun = useDryRun(bot.exchange, bot.symbol, bot.enabled, bot.enabledAt, bot.strategyId)
   const exchangeName = EXCHANGES.find((e) => e.id === bot.exchange)?.name ?? bot.exchange
   const { theme } = useTheme()
   const palette = CHART_PALETTE[theme]

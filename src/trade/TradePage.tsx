@@ -18,6 +18,11 @@ interface PaperOrder {
   quoteAsset: string
   amount: number
   price: number
+  /** Market orders are always 'filled'. A limit order is only 'filled' if it was marketable
+   * against lastPrice at submit time (buy limit >= lastPrice, sell limit <= lastPrice) --
+   * otherwise it's 'resting': logged as placed, but honestly never actually filled, since this
+   * page has no order book to wait on a price crossing later. */
+  status: 'filled' | 'resting'
 }
 
 function sideButtonStyle(active: boolean, side: Side): React.CSSProperties {
@@ -91,6 +96,8 @@ export function TradePage(): React.JSX.Element {
 
   function handleSubmit(): void {
     if (!canSubmit || execPrice === null) return
+    const marketable =
+      type === 'market' || lastPrice === null || (side === 'buy' ? execPrice >= lastPrice : execPrice <= lastPrice)
     setOrders((prev) => [
       {
         id: crypto.randomUUID(),
@@ -100,7 +107,8 @@ export function TradePage(): React.JSX.Element {
         symbol: pair.symbol,
         quoteAsset: pair.quoteAsset,
         amount: amountNum,
-        price: execPrice
+        price: execPrice,
+        status: marketable ? 'filled' : 'resting'
       },
       ...prev
     ])
@@ -225,9 +233,14 @@ export function TradePage(): React.JSX.Element {
                       <span style={{ color: 'var(--text-muted)', marginLeft: '0.5rem' }}>
                         {o.type} • {new Date(o.time).toLocaleTimeString()}
                       </span>
+                      {o.status === 'resting' && (
+                        <span style={{ color: 'var(--text-muted)', marginLeft: '0.5rem', fontStyle: 'italic' }}>
+                          resting — not marketable at submit, would not have filled
+                        </span>
+                      )}
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ color: 'var(--text-primary)' }}>
+                      <div style={{ color: o.status === 'resting' ? 'var(--text-muted)' : 'var(--text-primary)' }}>
                         {o.amount} @ {formatQuotePrice(o.price, o.quoteAsset)}
                       </div>
                       <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>
