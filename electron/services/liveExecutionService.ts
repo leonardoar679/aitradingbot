@@ -1,9 +1,35 @@
-import type { LiveOrderRecord, LivePosition } from '../../shared/ipc'
-import { canCloseLivePosition, recordLiveOrderUsage, checkLossLimitAndAutoDisarm } from './liveTradingService'
+import type { Exchange, LiveOrderRecord, LivePosition } from '../../shared/ipc'
+import { canCloseLivePosition, canPlaceLiveOrder, recordLiveOrderUsage, checkLossLimitAndAutoDisarm } from './liveTradingService'
 import { recordLiveFill } from './livePositionsService'
 import { getDecryptedCredential } from './credentialsService'
-import { placeMarketSellByQuantity, cancelOrder, type LiveOrderResult } from './exchanges/binanceTrading'
+import { placeMarketOrder, placeMarketSellByQuantity, cancelOrder, type LiveOrderResult } from './exchanges/binanceTrading'
 import { listOpenLiveOrders, getLiveOrder, resolveLiveOrder } from './liveOrdersService'
+
+/** The one place a real market order actually executes — called both by the
+ * ExecutorPlaceLiveOrder IPC handler (Order/Position's synchronous entry) and, from Phase 5 on,
+ * directly by the live TWAP loop (liveTwapService.ts) for every slice after the first. Every gate
+ * is re-checked here, in-process, immediately before the network call — same guarantee as the IPC
+ * handler had, just callable without a round trip for a background loop that isn't a renderer. */
+export async function placeLiveMarketOrder(
+  exchange: Exchange,
+  symbol: string,
+  baseAsset: string,
+  quoteAsset: string,
+  side: 'buy' | 'sell',
+  quoteAmount: number
+): Promise<LiveOrderRecord> {
+  if (exchange !== 'binance') throw new Error('Live trading is only supported on Binance')
+
+  const gate = await canPlaceLiveOrder(quoteAmount)
+  if (!gate.allowed) throw new Error(gate.reason ?? 'Live order blocked')
+
+  const { apiKey, apiSecret } = await getDecryptedCredential(exchange)
+  const result = await placeMarketOrder(apiKey, apiSecret, symbol, side === 'buy' ? 'BUY' : 'SELL', quoteAmount)
+  await recordLiveOrderUsage(quoteAmount)
+  await recordLiveFill(exchange, symbol, baseAsset, quoteAsset, side, result.filledQty, result.avgFillPrice)
+  if (side === 'sell') await checkLossLimitAndAutoDisarm()
+  return { ...result, placedAt: Math.floor(Date.now() / 1000) }
+}
 
 /** The one place a real closing sell actually executes — called both by the
  * LiveTradingClosePosition IPC handler (a user clicking Close) and, from Phase 3 on, directly by

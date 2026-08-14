@@ -8,7 +8,7 @@ import { ExecutorCard } from './ExecutorCard'
 import { ExecutorDetailView } from './ExecutorDetailView'
 import { SpreadExecutorDetailView } from './SpreadExecutorDetailView'
 import { computeExecutorPosition } from './computeSnapshot'
-import { dcaLevelPrice } from './engine'
+import { dcaLevelPrice, twapNumOrders } from './engine'
 import {
   EXCHANGES,
   type ExecutorConfig,
@@ -89,10 +89,12 @@ export function ExecutorsPage(): React.JSX.Element {
     mode: 'paper' | 'live'
     params: GridExecutorParams | DcaExecutorParams | TwapExecutorParams | PositionExecutorParams | OrderExecutorParams | XemmExecutorParams | ArbitrageExecutorParams | MarketMakingExecutorParams
   }): Promise<void> {
-    // Defense in depth — the UI only ever offers 'live' for type 'order', 'position', or 'dca',
-    // but this is the last line of defense before anything real could happen.
+    // Defense in depth — the UI only ever offers 'live' for type 'order', 'position', 'dca', or
+    // 'twap', but this is the last line of defense before anything real could happen.
     const mode =
-      input.mode === 'live' && (input.type === 'order' || input.type === 'position' || input.type === 'dca') ? 'live' : 'paper'
+      input.mode === 'live' && (input.type === 'order' || input.type === 'position' || input.type === 'dca' || input.type === 'twap')
+        ? 'live'
+        : 'paper'
 
     const base: ExecutorConfig = {
       id: crypto.randomUUID(),
@@ -112,6 +114,8 @@ export function ExecutorsPage(): React.JSX.Element {
       liveWatcherId: null,
       liveExitResult: null,
       liveDcaBasePrice: null,
+      liveTwapRunId: null,
+      liveTwapResult: null,
       params: input.params
     }
     setShowNew(false)
@@ -270,6 +274,49 @@ export function ExecutorsPage(): React.JSX.Element {
       return
     }
 
+    if (input.type === 'twap') {
+      // Live TWAP: slice 0 fires immediately, placed synchronously the same way a live Order
+      // market buy or Position entry is -- the exact same real order primitive. Buy-only;
+      // NewExecutorModal's canGoLive already enforces this.
+      const twapParams = input.params as TwapExecutorParams
+      const numOrders = twapNumOrders(twapParams)
+      const amountPerOrder = twapParams.totalAmountQuote / numOrders
+      const stoppedAt = Math.floor(Date.now() / 1000)
+      try {
+        const firstFill = await window.api.executors.placeLiveOrder(
+          input.exchange,
+          input.pair.symbol,
+          input.pair.baseAsset,
+          input.pair.quoteAsset,
+          twapParams.side,
+          amountPerOrder
+        )
+        if (numOrders === 1) {
+          // A degenerate 1-slice TWAP is just a live Order market buy -- no run needed, nothing
+          // left to schedule.
+          setExecutors((prev) => [...prev, { ...base, status: 'stopped', stoppedAt, liveOrder: firstFill }])
+        } else {
+          const run = await window.api.liveTrading.createTwapRun(
+            base.id,
+            input.exchange,
+            input.pair.symbol,
+            input.pair.baseAsset,
+            input.pair.quoteAsset,
+            twapParams.side,
+            amountPerOrder,
+            numOrders,
+            twapParams.orderIntervalSec
+          )
+          setExecutors((prev) => [...prev, { ...base, liveOrder: firstFill, liveTwapRunId: run.id }])
+        }
+      } catch (error) {
+        console.error('Live TWAP first slice failed:', error)
+        const message = error instanceof Error ? error.message : String(error)
+        setExecutors((prev) => [...prev, { ...base, name: `${base.name} (failed: ${message})`, status: 'stopped', stoppedAt }])
+      }
+      return
+    }
+
     const orderParams = input.params as OrderExecutorParams
     const stoppedAt = Math.floor(Date.now() / 1000)
 
@@ -323,6 +370,45 @@ export function ExecutorsPage(): React.JSX.Element {
 
   async function handleStop(id: string): Promise<void> {
     const executor = executors.find((e) => e.id === id)
+
+    // A live TWAP run stops independently of the pendingLiveOrderIds/liveWatcherId machinery
+    // below — every slice is a market order that resolves the instant it's placed, so there's
+    // nothing to cancel, only the run's schedule to halt. stopTwapRun returns the resolution
+    // synchronously (mirrors stopWatcher), so this never needs to wait for a later poll.
+    if (executor && executor.mode === 'live' && executor.liveTwapRunId) {
+      try {
+        const resolution = await window.api.liveTrading.stopTwapRun(executor.liveTwapRunId)
+        if (resolution) {
+          setExecutors((prev) =>
+            prev.map((e) =>
+              e.id === id
+                ? {
+                    ...e,
+                    status: 'stopped',
+                    stoppedAt: Math.floor(Date.now() / 1000),
+                    liveTwapRunId: null,
+                    liveTwapResult: {
+                      ordersPlaced: resolution.ordersPlaced,
+                      numOrders: resolution.numOrders,
+                      totalQuoteFilled: resolution.totalQuoteFilled,
+                      totalBaseFilled: resolution.totalBaseFilled,
+                      failedSlices: resolution.failedSlices,
+                      stoppedEarly: true
+                    }
+                  }
+                : e
+            )
+          )
+        }
+        // A null resolution means the run already finished naturally (LiveOrderScheduler's own
+        // drainTwapEvents poll will pick that up) — nothing to do here.
+      } catch (error) {
+        // The run stays active server-side and liveTwapRunId stays set — genuinely still running,
+        // never silently hidden, same honesty precedent as a failed watcher-stop.
+        console.error('Failed to stop live TWAP run:', error)
+      }
+      return
+    }
 
     // A live executor with real state to tear down: still-resting orders (a single entry for a
     // live Order limit, up to one per unfilled level for a live DCA ladder) and/or an active

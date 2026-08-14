@@ -18,7 +18,7 @@ import {
   type DcaExecutorParams
 } from '../../shared/ipc'
 import { useExecutorSimulation } from './useExecutorSimulation'
-import { LiveOrderMetrics } from './ExecutorCard'
+import { LiveOrderMetrics, useLiveTwapInfo } from './ExecutorCard'
 import { dcaLevelPrice } from './engine'
 import { useTheme } from '../theme/ThemeContext'
 import { CHART_PALETTE } from '../theme/palette'
@@ -69,6 +69,7 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
   const palette = CHART_PALETTE[theme]
   const sim = useExecutorSimulation(executor)
   const liveDcaAvgEntry = useLiveDcaAvgEntry(executor)
+  const liveTwapInfo = useLiveTwapInfo(executor)
   const exchangeName = EXCHANGES.find((e) => e.id === executor.exchange)?.name ?? executor.exchange
 
   useEffect(() => {
@@ -317,6 +318,22 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
             })
           )
         }
+      } else if (executor.type === 'twap') {
+        // Combine slice 0 (executor.liveOrder, resolved synchronously at creation) with whatever
+        // the run itself has placed since, for a correct VWAP -- same combination ExecutorCard
+        // uses, see the LiveTwapRunSummary doc comment in shared/ipc.ts.
+        const slice0Qty = executor.liveOrder?.filledQty ?? 0
+        const slice0Quote = executor.liveOrder?.cummulativeQuoteQty ?? 0
+        const totalBaseFilled = executor.liveTwapResult?.totalBaseFilled ?? liveTwapInfo?.totalBaseFilled ?? 0
+        const totalQuoteFilled = executor.liveTwapResult?.totalQuoteFilled ?? liveTwapInfo?.totalQuoteFilled ?? 0
+        const totalQty = slice0Qty + totalBaseFilled
+        const totalQuote = slice0Quote + totalQuoteFilled
+        const vwap = totalQty > 0 ? totalQuote / totalQty : null
+        if (vwap !== null) {
+          newLines.push(
+            series.createPriceLine({ price: vwap, color: palette.gold, lineWidth: 2, lineStyle: LineStyle.Solid, axisLabelVisible: true, title: 'VWAP' })
+          )
+        }
       } else if (executor.type === 'order') {
         if (executor.liveOrder) {
           newLines.push(
@@ -350,7 +367,7 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
     priceLinesRef.current = newLines
 
     chart.timeScale().fitContent()
-  }, [sim.candles, sim.state, executor, palette, liveDcaAvgEntry])
+  }, [sim.candles, sim.state, executor, palette, liveDcaAvgEntry, liveTwapInfo])
 
   return (
     <div>

@@ -13,6 +13,8 @@ import {
   type LiveOrderRecord,
   type LivePosition,
   type LiveTradingStatus,
+  type LiveTwapRunSummary,
+  type LiveTwapResolution,
   type LiveWatcherSummary,
   type SymbolInfo,
   type Ticker24h
@@ -115,7 +117,33 @@ const api = {
       ipcRenderer.invoke(IpcChannel.LiveTradingUpdateWatcherEntryPrice, watcherId, entryPrice),
     stopWatcher: (watcherId: string): Promise<LiveExitResult | null> => ipcRenderer.invoke(IpcChannel.LiveTradingStopWatcher, watcherId),
     drainWatcherEvents: (): Promise<{ executorId: string; liveExitResult: LiveExitResult }[]> =>
-      ipcRenderer.invoke(IpcChannel.LiveTradingDrainWatcherEvents)
+      ipcRenderer.invoke(IpcChannel.LiveTradingDrainWatcherEvents),
+    createTwapRun: (
+      executorId: string,
+      exchange: Exchange,
+      symbol: string,
+      baseAsset: string,
+      quoteAsset: string,
+      side: 'buy' | 'sell',
+      amountPerOrder: number,
+      numOrders: number,
+      orderIntervalSec: number
+    ): Promise<{ id: string }> =>
+      ipcRenderer.invoke(
+        IpcChannel.LiveTradingCreateTwapRun,
+        executorId,
+        exchange,
+        symbol,
+        baseAsset,
+        quoteAsset,
+        side,
+        amountPerOrder,
+        numOrders,
+        orderIntervalSec
+      ),
+    listActiveTwapRuns: (): Promise<LiveTwapRunSummary[]> => ipcRenderer.invoke(IpcChannel.LiveTradingListActiveTwapRuns),
+    stopTwapRun: (runId: string): Promise<LiveTwapResolution | null> => ipcRenderer.invoke(IpcChannel.LiveTradingStopTwapRun, runId),
+    drainTwapEvents: (): Promise<LiveTwapResolution[]> => ipcRenderer.invoke(IpcChannel.LiveTradingDrainTwapEvents)
   },
   executors: {
     placeLiveOrder: (

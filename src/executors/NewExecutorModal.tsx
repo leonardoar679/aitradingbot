@@ -11,6 +11,7 @@ import { XemmForm } from './XemmForm'
 import { ArbitrageForm } from './ArbitrageForm'
 import { MarketMakingForm } from './MarketMakingForm'
 import { fieldLabelStyle, textInputStyle } from './formStyles'
+import { twapNumOrders } from './engine'
 import {
   EXCHANGES,
   type Exchange,
@@ -210,8 +211,13 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
   // way Position has — the ladder shape itself is the thing that used to be paper-only.
   const canGoLiveDca = type === 'dca' && dcaParams.side === 'buy'
 
+  // Buy-only, same reasoning as Position/DCA. Slice 0 places immediately and the rest follow on
+  // a timer -- no market-entry-only or exit-condition requirement the way Position has, since
+  // TWAP never closes a position at all (it only ever accumulates, same as paper TWAP).
+  const canGoLiveTwap = type === 'twap' && twapParams.side === 'buy'
+
   const canGoLive =
-    (canGoLiveOrder || canGoLivePosition || canGoLiveDca) &&
+    (canGoLiveOrder || canGoLivePosition || canGoLiveDca || canGoLiveTwap) &&
     exchange === 'binance' &&
     binanceCredentialConfigured &&
     liveTradingStatus !== null &&
@@ -260,13 +266,16 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
   }
 
   // For DCA this is the largest single level, not the ladder's total -- each level is placed as
-  // its own independent order, so the per-order cap applies per level, not to the sum.
+  // its own independent order, so the per-order cap applies per level, not to the sum. TWAP is
+  // the same idea: each slice is its own independent order, so the cap applies per slice.
   const liveAmountQuote =
     type === 'position'
       ? positionParams.amountQuote
       : type === 'dca'
         ? Math.max(...dcaParams.levels.map((l) => l.amountQuote))
-        : orderParams.amountQuote
+        : type === 'twap'
+          ? twapParams.totalAmountQuote / twapNumOrders(twapParams)
+          : orderParams.amountQuote
   const liveAmountOk = liveTradingStatus === null || liveAmountQuote <= liveTradingStatus.maxOrderQuote
   const liveConfirmOk = liveConfirmText.trim() === LIVE_CONFIRM_PHRASE
   const canSubmitLive = mode !== 'live' || (canGoLive && liveAmountOk && liveConfirmOk)
@@ -398,7 +407,7 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
             </p>
           )}
 
-          {(type === 'order' || type === 'position' || type === 'dca') && (
+          {(type === 'order' || type === 'position' || type === 'dca' || type === 'twap') && (
             <div
               style={{
                 border: `1px solid ${mode === 'live' ? 'var(--down)' : 'var(--border)'}`,
@@ -435,7 +444,9 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
                   ? 'Live Trading — enters and watches a real position'
                   : type === 'dca'
                     ? 'Live Trading — places a real ladder of resting orders'
-                    : 'Live Trading — places a real order with real money'}
+                    : type === 'twap'
+                      ? 'Live Trading — places a real series of market buy orders over time'
+                      : 'Live Trading — places a real order with real money'}
               </label>
 
               {!canGoLive && (
@@ -454,11 +465,13 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
                             : 'Set at least one exit condition — take-profit, stop-loss, trailing stop, or time limit — before going live.'
                         : type === 'dca' && !canGoLiveDca
                           ? 'Live DCA is buy-only — spot trading can’t open a short.'
-                          : !binanceCredentialConfigured
-                            ? 'Add a verified Binance API key in Settings first.'
-                            : liveTradingStatus?.killSwitchEngaged
-                              ? 'The kill switch is engaged — release it from the live trading bar first.'
-                              : 'Arm live trading for this session from the live trading bar first.'}
+                          : type === 'twap' && !canGoLiveTwap
+                            ? 'Live TWAP is buy-only — spot trading can’t open a short.'
+                            : !binanceCredentialConfigured
+                              ? 'Add a verified Binance API key in Settings first.'
+                              : liveTradingStatus?.killSwitchEngaged
+                                ? 'The kill switch is engaged — release it from the live trading bar first.'
+                                : 'Arm live trading for this session from the live trading bar first.'}
                 </p>
               )}
 
@@ -469,13 +482,15 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
                       ? `This will immediately place a real BUY market order for ${positionParams.amountQuote} ${pair.quoteAsset} of ${pair.symbol} on Binance, then watch it for take-profit/stop-loss/trailing-stop/time-limit and exit automatically with a real sell — no per-exit confirmation. Stop on the Executors page force-exits it manually at any time.`
                       : type === 'dca'
                         ? `This will place ${dcaParams.levels.length} real resting BUY limit order${dcaParams.levels.length === 1 ? '' : 's'} for ${pair.symbol} on Binance, one per level (may fill immediately if a level is already at or above the current price). Once any level fills, the resulting position is watched for take-profit/stop-loss/time-limit and exits automatically with a real sell — no per-exit confirmation. Stop cancels every remaining resting level and force-exits any filled position, all at once.`
-                        : orderParams.executionStrategy === 'limit'
-                          ? `This will place a real resting LIMIT ${orderParams.side.toUpperCase()} order for ${orderParams.amountQuote} ${pair.quoteAsset} of ${pair.symbol} at ${orderParams.limitPrice} on Binance — it may not fill immediately, and can be cancelled from the Executors page (Stop) while open.`
-                          : `This will immediately place a real ${orderParams.side.toUpperCase()} market order for ${orderParams.amountQuote} ${pair.quoteAsset} of ${pair.symbol} on Binance.`}
+                        : type === 'twap'
+                          ? `This will place ${twapNumOrders(twapParams)} real BUY market order${twapNumOrders(twapParams) === 1 ? '' : 's'} for ${pair.symbol} on Binance, ${(twapParams.totalAmountQuote / twapNumOrders(twapParams)).toFixed(2)} ${pair.quoteAsset} each, spread over ${Math.round(twapParams.totalDurationSec / 60)} minutes — the first fires immediately, the rest on a timer that keeps running even if this app is only in the background. It never closes a position on its own. Stop halts any orders not yet placed but never undoes ones already placed.`
+                          : orderParams.executionStrategy === 'limit'
+                            ? `This will place a real resting LIMIT ${orderParams.side.toUpperCase()} order for ${orderParams.amountQuote} ${pair.quoteAsset} of ${pair.symbol} at ${orderParams.limitPrice} on Binance — it may not fill immediately, and can be cancelled from the Executors page (Stop) while open.`
+                            : `This will immediately place a real ${orderParams.side.toUpperCase()} market order for ${orderParams.amountQuote} ${pair.quoteAsset} of ${pair.symbol} on Binance.`}
                   </p>
                   {!liveAmountOk && liveTradingStatus && (
                     <p style={{ fontSize: '0.75rem', color: 'var(--down)', margin: 0 }}>
-                      {type === 'dca' ? 'The largest level' : 'Amount'} exceeds the configured max live order size ({liveTradingStatus.maxOrderQuote}).
+                      {type === 'dca' ? 'The largest level' : type === 'twap' ? 'Each slice' : 'Amount'} exceeds the configured max live order size ({liveTradingStatus.maxOrderQuote}).
                     </p>
                   )}
                   <div>

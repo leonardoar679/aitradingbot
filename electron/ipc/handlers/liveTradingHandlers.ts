@@ -12,7 +12,7 @@ import {
 } from '../../services/liveTradingService'
 import { listOpenLivePositions, listClosedLivePositions, getLivePosition, recordLiveFill } from '../../services/livePositionsService'
 import { createLiveOrder, listOpenLiveOrders, resolveLiveOrder } from '../../services/liveOrdersService'
-import { executeLiveClose, cancelLiveOrderById, cancelSiblingLiveOrders } from '../../services/liveExecutionService'
+import { executeLiveClose, cancelLiveOrderById, cancelSiblingLiveOrders, placeLiveMarketOrder } from '../../services/liveExecutionService'
 import {
   createWatcher,
   listActiveWatchers,
@@ -20,8 +20,9 @@ import {
   drainResolvedWatcherEvents,
   updateWatcherEntryPrice
 } from '../../services/livePositionWatchersService'
+import { createTwapRun, listActiveTwapRuns, stopTwapRun, drainResolvedTwapEvents } from '../../services/liveTwapService'
 import { getDecryptedCredential } from '../../services/credentialsService'
-import { placeMarketOrder, placeLimitOrder, queryOrder } from '../../services/exchanges/binanceTrading'
+import { placeLimitOrder, queryOrder } from '../../services/exchanges/binanceTrading'
 
 /** Binance's own status strings, mapped onto the three-way resolution LiveOrder cares about.
  * Null means still resting (NEW/PARTIALLY_FILLED/PENDING_CANCEL) — nothing to do yet. */
@@ -44,12 +45,12 @@ export function registerLiveTradingHandlers(): void {
   ipcMain.handle(IpcChannel.LiveTradingListPositions, () => listOpenLivePositions())
   ipcMain.handle(IpcChannel.LiveTradingListClosedPositions, () => listClosedLivePositions())
 
-  // The only path in this app that ever places a real order. Every gate is re-checked here,
-  // server-side, immediately before the network call — a renderer-side check is a UX nicety,
-  // never the actual gate. Only Binance has a trading adapter; only market orders are supported.
+  // The only renderer-reachable path that places a real order (the live TWAP loop's later slices
+  // call placeLiveMarketOrder directly in-process — see liveTwapService.ts). Only Binance has a
+  // trading adapter; only market orders are supported here.
   ipcMain.handle(
     IpcChannel.ExecutorPlaceLiveOrder,
-    async (
+    (
       _event,
       exchange: Exchange,
       symbol: string,
@@ -57,19 +58,7 @@ export function registerLiveTradingHandlers(): void {
       quoteAsset: string,
       side: 'buy' | 'sell',
       quoteAmount: number
-    ) => {
-      if (exchange !== 'binance') throw new Error('Live trading is only supported on Binance')
-
-      const gate = await canPlaceLiveOrder(quoteAmount)
-      if (!gate.allowed) throw new Error(gate.reason ?? 'Live order blocked')
-
-      const { apiKey, apiSecret } = await getDecryptedCredential(exchange)
-      const result = await placeMarketOrder(apiKey, apiSecret, symbol, side === 'buy' ? 'BUY' : 'SELL', quoteAmount)
-      await recordLiveOrderUsage(quoteAmount)
-      await recordLiveFill(exchange, symbol, baseAsset, quoteAsset, side, result.filledQty, result.avgFillPrice)
-      if (side === 'sell') await checkLossLimitAndAutoDisarm()
-      return { ...result, placedAt: Math.floor(Date.now() / 1000) }
-    }
+    ) => placeLiveMarketOrder(exchange, symbol, baseAsset, quoteAsset, side, quoteAmount)
   )
 
   // Closing an existing live position — the actual execution is executeLiveClose
@@ -246,4 +235,38 @@ export function registerLiveTradingHandlers(): void {
 
   // Polled by the same renderer-side scheduler that polls live orders — see LiveOrderScheduler.tsx.
   ipcMain.handle(IpcChannel.LiveTradingDrainWatcherEvents, () => drainResolvedWatcherEvents())
+
+  // Creates a live TWAP run to place the remaining slices (slice 0 always resolves synchronously
+  // in ExecutorsPage.handleCreate via ExecutorPlaceLiveOrder, just like Order/Position's entry) —
+  // liveTwapService's main-process-resident loop (started from electron/main.ts) picks it up and
+  // places one real market buy per configured interval, independent of any renderer being open.
+  ipcMain.handle(
+    IpcChannel.LiveTradingCreateTwapRun,
+    (
+      _event,
+      executorId: string,
+      exchange: Exchange,
+      symbol: string,
+      baseAsset: string,
+      quoteAsset: string,
+      side: 'buy' | 'sell',
+      amountPerOrder: number,
+      numOrders: number,
+      orderIntervalSec: number
+    ) => {
+      if (exchange !== 'binance') throw new Error('Live trading is only supported on Binance')
+      return createTwapRun({ executorId, exchange, symbol, baseAsset, quoteAsset, side, amountPerOrder, numOrders, orderIntervalSec })
+    }
+  )
+
+  // Polled every 5s by ExecutorCard/ExecutorDetailView while a run is still active, same pattern
+  // as LiveTradingListActiveWatchers.
+  ipcMain.handle(IpcChannel.LiveTradingListActiveTwapRuns, () => listActiveTwapRuns())
+
+  // Manual Stop: halts remaining slices, never undoes ones already placed (every TWAP slice is a
+  // market order that resolves the instant it's placed — there's nothing resting to cancel).
+  ipcMain.handle(IpcChannel.LiveTradingStopTwapRun, (_event, runId: string) => stopTwapRun(runId))
+
+  // Polled by the same renderer-side scheduler that polls live orders/watchers.
+  ipcMain.handle(IpcChannel.LiveTradingDrainTwapEvents, () => drainResolvedTwapEvents())
 }

@@ -34,11 +34,12 @@ export function LiveOrderScheduler(): null {
 
     async function poll(): Promise<void> {
       try {
-        const [orderResolutions, watcherEvents] = await Promise.all([
+        const [orderResolutions, watcherEvents, twapEvents] = await Promise.all([
           window.api.liveTrading.pollOpenOrders(),
-          window.api.liveTrading.drainWatcherEvents()
+          window.api.liveTrading.drainWatcherEvents(),
+          window.api.liveTrading.drainTwapEvents()
         ])
-        if (cancelled || (orderResolutions.length === 0 && watcherEvents.length === 0)) return
+        if (cancelled || (orderResolutions.length === 0 && watcherEvents.length === 0 && twapEvents.length === 0)) return
 
         const settings = await window.api.settings.get()
         if (cancelled) return
@@ -53,8 +54,9 @@ export function LiveOrderScheduler(): null {
         for (const executor of settings.executors) {
           const myResolutions = orderResolutions.filter((r) => r.executorId === executor.id)
           const watcherEvent = watcherEvents.find((e) => e.executorId === executor.id)
+          const twapEvent = twapEvents.find((e) => e.executorId === executor.id)
 
-          if (myResolutions.length === 0 && !watcherEvent) {
+          if (myResolutions.length === 0 && !watcherEvent && !twapEvent) {
             nextExecutors.push(executor)
             continue
           }
@@ -109,7 +111,27 @@ export function LiveOrderScheduler(): null {
             next = { ...next, liveExitResult: watcherEvent.liveExitResult, liveWatcherId: null, pendingLiveOrderIds: [] }
           }
 
-          if (next.pendingLiveOrderIds.length === 0 && next.liveWatcherId === null) {
+          if (twapEvent) {
+            // A run only ever reaches here via its own automatic "every slice attempted" done
+            // transition -- a manual Stop already resolves synchronously in ExecutorsPage and
+            // never reaches drainTwapEvents (see stopTwapRun's doc comment).
+            next = {
+              ...next,
+              liveTwapRunId: null,
+              liveTwapResult: {
+                ordersPlaced: twapEvent.ordersPlaced,
+                numOrders: twapEvent.numOrders,
+                totalQuoteFilled: twapEvent.totalQuoteFilled,
+                totalBaseFilled: twapEvent.totalBaseFilled,
+                failedSlices: twapEvent.failedSlices,
+                stoppedEarly: twapEvent.status === 'stopped'
+              },
+              status: 'stopped',
+              stoppedAt
+            }
+          }
+
+          if (next.pendingLiveOrderIds.length === 0 && next.liveWatcherId === null && next.liveTwapRunId === null) {
             next = { ...next, status: 'stopped', stoppedAt }
           }
 

@@ -176,8 +176,14 @@ export function simulateDca(candles: Candle[], params: DcaExecutorParams, basePr
   }
 }
 
+/** Shared with the live TWAP creation path (ExecutorsPage.tsx) so paper and live can never
+ * disagree on how many slices a given duration/interval works out to. */
+export function twapNumOrders(params: TwapExecutorParams): number {
+  return Math.max(1, Math.floor(params.totalDurationSec / params.orderIntervalSec))
+}
+
 export function simulateTwap(candles: Candle[], params: TwapExecutorParams, createdAt: number): TwapExecutorState {
-  const numOrders = Math.max(1, Math.floor(params.totalDurationSec / params.orderIntervalSec))
+  const numOrders = twapNumOrders(params)
   const amountPerOrder = params.totalAmountQuote / numOrders
   const fills: TwapExecutorState['fills'] = []
 

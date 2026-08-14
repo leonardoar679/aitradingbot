@@ -36,6 +36,10 @@ export const IpcChannel = {
   LiveTradingUpdateWatcherEntryPrice: 'liveTrading:updateWatcherEntryPrice',
   LiveTradingStopWatcher: 'liveTrading:stopWatcher',
   LiveTradingDrainWatcherEvents: 'liveTrading:drainWatcherEvents',
+  LiveTradingCreateTwapRun: 'liveTrading:createTwapRun',
+  LiveTradingListActiveTwapRuns: 'liveTrading:listActiveTwapRuns',
+  LiveTradingStopTwapRun: 'liveTrading:stopTwapRun',
+  LiveTradingDrainTwapEvents: 'liveTrading:drainTwapEvents',
   ExecutorPlaceLiveOrder: 'executor:placeLiveOrder',
   ExecutorPlaceLiveLimitOrder: 'executor:placeLiveLimitOrder'
 } as const
@@ -152,6 +156,36 @@ export interface LiveWatcherSummary {
   symbol: string
   entryPrice: number
   trailingPeakPrice: number
+}
+
+/** A live TWAP run's progress while still active — polled every 5s by ExecutorCard/
+ * ExecutorDetailView the same way LiveWatcherSummary is. Only ever covers slices the run itself
+ * placed (slice 0 always resolves synchronously at creation and lives on
+ * ExecutorConfig.liveOrder instead — see liveTwapService.ts and the ExecutorConfig doc comment on
+ * liveTwapRunId for why the two are combined for display rather than merged into one record). */
+export interface LiveTwapRunSummary {
+  id: string
+  executorId: string
+  ordersPlaced: number
+  numOrders: number
+  totalQuoteFilled: number
+  totalBaseFilled: number
+  failedSlices: number
+  lastError: string | null
+}
+
+/** Pushed once a live TWAP run finishes — either every slice was attempted (status 'done') or it
+ * was stopped manually before that (status 'stopped'). Drained by LiveOrderScheduler the same way
+ * a live Position/DCA watcher's resolved event is. */
+export interface LiveTwapResolution {
+  executorId: string
+  runId: string
+  status: 'done' | 'stopped'
+  ordersPlaced: number
+  numOrders: number
+  totalQuoteFilled: number
+  totalBaseFilled: number
+  failedSlices: number
 }
 
 /** OHLCV candle. `time` is a Unix timestamp in seconds (UTC), matching lightweight-charts. */
@@ -452,6 +486,24 @@ export interface ExecutorConfig {
    * price (dcaLevelPrice) since there's no candle replay live the way paper mode has. Null for
    * every other executor. */
   liveDcaBasePrice: number | null
+  /** Non-null only while a live TWAP executor still has slices left to place beyond the first
+   * (which always resolves synchronously at creation and lives on `liveOrder` instead) — points
+   * at the run record in liveTwapService.ts, a main-process-resident loop that places the
+   * remaining slices on a timer independent of any renderer being open. Null once every slice has
+   * been attempted or Stop halts the run early. */
+  liveTwapRunId: string | null
+  /** Set once a live TWAP run finishes (every slice attempted, or Stop halted it early). Combines
+   * slice 0 (from `liveOrder`) with every slice the run itself placed, so it's the one place with
+   * the true final count/VWAP — see the LiveTwapRunSummary doc comment for why the two sources
+   * are never merged into a single running record. Null for every other executor. */
+  liveTwapResult: {
+    ordersPlaced: number
+    numOrders: number
+    totalQuoteFilled: number
+    totalBaseFilled: number
+    failedSlices: number
+    stoppedEarly: boolean
+  } | null
   params: GridExecutorParams | DcaExecutorParams | TwapExecutorParams | PositionExecutorParams | OrderExecutorParams | XemmExecutorParams | ArbitrageExecutorParams | MarketMakingExecutorParams
 }
 

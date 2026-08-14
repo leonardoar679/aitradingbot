@@ -3,6 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc'
 import { startLivePositionWatcherLoop } from './services/livePositionWatchersService'
+import { startLiveTwapLoop } from './services/liveTwapService'
 import icon from '../build/icon.png?asset'
 
 function createWindow(): BrowserWindow {
@@ -68,6 +69,9 @@ if (!gotSingleInstanceLock) {
     // time-limit exit — main-process-resident, independent of any BrowserWindow, since this is
     // what actually protects real money. See livePositionWatchersService.ts.
     startLivePositionWatcherLoop()
+    // Places the remaining slices of every live TWAP run on their configured interval, same
+    // main-process-resident reasoning as the watcher loop above. See liveTwapService.ts.
+    startLiveTwapLoop()
 
     app.on('activate', function () {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()

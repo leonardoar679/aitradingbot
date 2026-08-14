@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Grid3x3, Layers3, Timer, Target, FileText, Shuffle, Scale, Waves } from 'lucide-react'
-import { EXCHANGES, type ExecutorConfig, type OrderExecutorParams, type PositionExecutorParams, type DcaExecutorParams } from '../../shared/ipc'
+import {
+  EXCHANGES,
+  type ExecutorConfig,
+  type OrderExecutorParams,
+  type PositionExecutorParams,
+  type DcaExecutorParams,
+  type LiveTwapRunSummary
+} from '../../shared/ipc'
 import { useExecutorSimulation } from './useExecutorSimulation'
 import { useSpreadExecutorSimulation } from './useSpreadExecutorSimulation'
 import { formatQuotePrice } from '../utils/formatCurrency'
@@ -46,6 +53,41 @@ function useLiveWatcherInfo(executor: ExecutorConfig): LiveWatcherInfo {
       clearInterval(timer)
     }
   }, [watching, executor.id])
+
+  return info
+}
+
+/** Polls a live TWAP run's progress while it's still placing slices -- null once liveTwapRunId
+ * clears (either finished or not a live TWAP executor). Mirrors useLiveWatcherInfo's polling
+ * shape, but the run's own accumulators only ever cover slices it placed (not slice 0, which
+ * resolves synchronously at creation and lives on executor.liveOrder instead) -- callers combine
+ * both, see the LiveTwapRunSummary doc comment in shared/ipc.ts. */
+export function useLiveTwapInfo(executor: ExecutorConfig): LiveTwapRunSummary | null {
+  const [info, setInfo] = useState<LiveTwapRunSummary | null>(null)
+  const running = executor.type === 'twap' && executor.mode === 'live' && executor.liveTwapRunId !== null
+
+  useEffect(() => {
+    if (!running) {
+      setInfo(null)
+      return
+    }
+    let cancelled = false
+    async function poll(): Promise<void> {
+      try {
+        const runs = await window.api.liveTrading.listActiveTwapRuns()
+        if (cancelled) return
+        setInfo(runs.find((r) => r.executorId === executor.id) ?? null)
+      } catch {
+        // Best-effort display only -- a failed poll just leaves the last known info on screen.
+      }
+    }
+    void poll()
+    const timer = setInterval(poll, WATCHER_POLL_MS)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [running, executor.id])
 
   return info
 }
@@ -107,6 +149,7 @@ function MetricsPanel({ executor }: { executor: ExecutorConfig }): React.JSX.Ele
  * state straight off the executor's own config rather than replaying anything. */
 export function LiveOrderMetrics({ executor }: { executor: ExecutorConfig }): React.JSX.Element {
   const watcherInfo = useLiveWatcherInfo(executor)
+  const twapInfo = useLiveTwapInfo(executor)
   if (executor.type === 'position') {
     if (executor.liveWatcherId) {
       const params = executor.params as PositionExecutorParams
@@ -181,6 +224,54 @@ export function LiveOrderMetrics({ executor }: { executor: ExecutorConfig }): Re
       )
     }
     return <div style={{ fontSize: '0.75rem', color: 'var(--down)' }}>Ladder failed — see name for details</div>
+  }
+  if (executor.type === 'twap') {
+    // Slice 0 resolved synchronously at creation (executor.liveOrder) -- combine it with
+    // whatever the run itself has placed since, for a correct total count and VWAP. See the
+    // LiveTwapRunSummary doc comment in shared/ipc.ts for why these two sources are separate.
+    const slice0Qty = executor.liveOrder?.filledQty ?? 0
+    const slice0Quote = executor.liveOrder?.cummulativeQuoteQty ?? 0
+    if (executor.liveTwapResult) {
+      const { ordersPlaced, numOrders, totalQuoteFilled, totalBaseFilled, failedSlices, stoppedEarly } = executor.liveTwapResult
+      const totalQty = slice0Qty + totalBaseFilled
+      const totalQuote = slice0Quote + totalQuoteFilled
+      const vwap = totalQty > 0 ? totalQuote / totalQty : null
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
+          <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+            {stoppedEarly ? 'Stopped early' : 'Done'} — {1 + ordersPlaced} of {numOrders} orders placed
+          </span>
+          {vwap !== null && <span style={{ color: 'var(--text-secondary)' }}>VWAP {formatQuotePrice(vwap, executor.quoteAsset)}</span>}
+          {failedSlices > 0 && <span style={{ color: 'var(--down)' }}>{failedSlices} slice{failedSlices === 1 ? '' : 's'} failed to place</span>}
+        </div>
+      )
+    }
+    if (twapInfo) {
+      const totalQty = slice0Qty + twapInfo.totalBaseFilled
+      const totalQuote = slice0Quote + twapInfo.totalQuoteFilled
+      const vwap = totalQty > 0 ? totalQuote / totalQty : null
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
+          <span style={{ color: 'var(--down)', fontWeight: 600 }}>
+            Live — {1 + twapInfo.ordersPlaced} of {twapInfo.numOrders} orders placed
+          </span>
+          {vwap !== null && <span style={{ color: 'var(--text-secondary)' }}>VWAP {formatQuotePrice(vwap, executor.quoteAsset)}</span>}
+          {twapInfo.failedSlices > 0 && (
+            <span style={{ color: 'var(--down)' }}>{twapInfo.failedSlices} slice{twapInfo.failedSlices === 1 ? '' : 's'} failed to place</span>
+          )}
+          <span style={{ color: 'var(--text-muted)' }}>Stop halts remaining orders, never undoes ones already placed</span>
+        </div>
+      )
+    }
+    if (!executor.liveOrder) {
+      return <div style={{ fontSize: '0.75rem', color: 'var(--down)' }}>First slice failed — see name for details</div>
+    }
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
+        <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>1 of 1 orders placed</span>
+        <span style={{ color: 'var(--text-secondary)' }}>VWAP {formatQuotePrice(executor.liveOrder.avgFillPrice, executor.quoteAsset)}</span>
+      </div>
+    )
   }
   if (executor.pendingLiveOrderIds.length > 0) {
     const params = executor.params as OrderExecutorParams
