@@ -11,7 +11,7 @@ export async function runRoutineNow(routine: RoutineConfig): Promise<void> {
   const nowSec = Math.floor(Date.now() / 1000)
   const startSec = nowSec - LOOKBACK_SEC
   const { candles } = await window.api.market.fetchHistoricalRange(routine.exchange, routine.symbol, routine.interval, startSec, nowSec)
-  if (candles.length === 0) return
+  if (candles.length === 0) throw new Error('No candle data available for this window yet')
 
   const result = runBacktest(candles, routine.strategyId)
   pushRoutineReport({ id: crypto.randomUUID(), routineId: routine.id, ranAt: nowSec, symbolLabel: routine.symbol, result })

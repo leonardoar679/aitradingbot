@@ -196,6 +196,7 @@ export function ControllersPage(): React.JSX.Element {
   const [executors, setExecutors] = useState<ExecutorConfig[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [runningId, setRunningId] = useState<string | null>(null)
+  const [runError, setRunError] = useState<{ id: string; message: string } | null>(null)
   const loadedRef = useRef(false)
 
   useEffect(() => {
@@ -227,13 +228,16 @@ export function ControllersPage(): React.JSX.Element {
 
   async function handleRunNow(controller: ControllerConfig): Promise<void> {
     setRunningId(controller.id)
+    setRunError(null)
     try {
       await runControllerSnapshotNow(controller)
       const settings = await window.api.settings.get()
       setControllers(settings.controllers)
       setExecutors(settings.executors)
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
       console.error('Controller snapshot failed:', error)
+      setRunError({ id: controller.id, message })
     } finally {
       setRunningId(null)
     }
@@ -259,8 +263,8 @@ export function ControllersPage(): React.JSX.Element {
               controller.riskControls.maxDrawdownPct !== null && `DD ${controller.riskControls.maxDrawdownPct}%`
             ].filter(Boolean)
             return (
+              <div key={controller.id}>
               <div
-                key={controller.id}
                 onClick={() => setSelectedId(controller.id)}
                 style={{
                   display: 'flex',
@@ -334,6 +338,10 @@ export function ControllersPage(): React.JSX.Element {
                     />
                   </button>
                 </div>
+              </div>
+              {runError?.id === controller.id && (
+                <p style={{ margin: '0.35rem 0 0', fontSize: '0.75rem', color: 'var(--down)' }}>{runError.message}</p>
+              )}
               </div>
             )
           })}

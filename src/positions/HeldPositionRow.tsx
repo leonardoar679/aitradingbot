@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { EXCHANGES, type HeldPosition } from '../../shared/ipc'
 import { useLastPrice } from '../hooks/useLastPrice'
 import { formatQuotePrice } from '../utils/formatCurrency'
@@ -13,6 +14,19 @@ export function HeldPositionRow({ position, onClose }: { position: HeldPosition;
   const exchangeName = EXCHANGES.find((e) => e.id === position.exchange)?.name ?? position.exchange
   const rawPct = markPrice ? ((markPrice - position.entryPrice) / position.entryPrice) * 100 : null
   const pnlPct = rawPct !== null && position.side === 'sell' ? -rawPct : rawPct
+
+  const [confirming, setConfirming] = useState(false)
+
+  function handleCloseClick(): void {
+    if (!confirming) {
+      // Discarding this record is permanent (no undo, no P&L kept) -- a single misclick
+      // shouldn't be enough. Reverts to a plain "Close" if the second click doesn't come quickly.
+      setConfirming(true)
+      setTimeout(() => setConfirming(false), 4000)
+      return
+    }
+    onClose(position.id)
+  }
 
   return (
     <tr style={{ borderBottom: '1px solid var(--border)' }}>
@@ -33,19 +47,19 @@ export function HeldPositionRow({ position, onClose }: { position: HeldPosition;
       </td>
       <td style={cellStyle}>
         <button
-          onClick={() => onClose(position.id)}
+          onClick={handleCloseClick}
           style={{
-            background: 'transparent',
+            background: confirming ? 'var(--down)' : 'transparent',
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-sm)',
             padding: '0.35rem 0.7rem',
-            color: 'var(--text-secondary)',
+            color: confirming ? '#fff' : 'var(--text-secondary)',
             fontSize: '0.75rem',
             fontWeight: 600,
             cursor: 'pointer'
           }}
         >
-          Close
+          {confirming ? 'Confirm discard?' : 'Close'}
         </button>
       </td>
     </tr>

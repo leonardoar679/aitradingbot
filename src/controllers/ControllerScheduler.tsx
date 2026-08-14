@@ -12,7 +12,7 @@ import type { ControllerConfig, ExecutorConfig } from '../../shared/ipc'
 export async function runControllerSnapshotNow(controller: ControllerConfig): Promise<void> {
   const settings = await window.api.settings.get()
   const attached = settings.executors.filter((e) => controller.executorIds.includes(e.id) && e.status === 'active')
-  if (attached.length === 0) return
+  if (attached.length === 0) throw new Error('No active executors attached to this controller')
 
   const pnls = await Promise.all(
     attached.map((e) =>

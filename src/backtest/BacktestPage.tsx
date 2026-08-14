@@ -100,6 +100,7 @@ export function BacktestPage(): React.JSX.Element {
   const [splitDate, setSplitDate] = useState('')
   const [compareCandles, setCompareCandles] = useState<Candle[] | null>(null)
   const [compareLoading, setCompareLoading] = useState(false)
+  const [compareError, setCompareError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -229,13 +230,16 @@ export function BacktestPage(): React.JSX.Element {
     if (compareCandles) return
 
     setCompareLoading(true)
+    setCompareError(null)
     const startSec = Math.floor(new Date(`${startDate}T00:00:00Z`).getTime() / 1000)
     const endSec = Math.floor(new Date(`${endDate}T23:59:59Z`).getTime() / 1000)
     try {
       const fetchResult = await window.api.market.fetchHistoricalRange(exchange, route.symbol, route.interval, startSec, endSec)
       if (!fetchResult.cancelled) setCompareCandles(fetchResult.candles)
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
       console.error('Failed to fetch candles for strategy comparison:', error)
+      setCompareError(message)
     } finally {
       setCompareLoading(false)
     }
@@ -289,8 +293,9 @@ export function BacktestPage(): React.JSX.Element {
       {tab === 'compare' && (
         <Card title="Strategy comparison">
           {compareLoading && <p style={{ color: 'var(--text-secondary)', margin: 0 }}>Fetching candles…</p>}
-          {!compareLoading && compareCandles && <StrategyComparisonView candles={compareCandles} />}
-          {!compareLoading && !compareCandles && (
+          {!compareLoading && compareError && <p style={{ color: 'var(--down)', margin: 0 }}>Error: {compareError}</p>}
+          {!compareLoading && !compareError && compareCandles && <StrategyComparisonView candles={compareCandles} />}
+          {!compareLoading && !compareError && !compareCandles && (
             <p style={{ color: 'var(--text-secondary)', margin: 0 }}>No candle data loaded yet.</p>
           )}
         </Card>

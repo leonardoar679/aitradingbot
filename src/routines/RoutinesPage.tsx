@@ -218,6 +218,7 @@ export function RoutinesPage(): React.JSX.Element {
   const [routines, setRoutines] = useState<RoutineConfig[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [runningId, setRunningId] = useState<string | null>(null)
+  const [runError, setRunError] = useState<{ id: string; message: string } | null>(null)
   const loadedRef = useRef(false)
 
   useEffect(() => {
@@ -248,12 +249,15 @@ export function RoutinesPage(): React.JSX.Element {
 
   async function handleRunNow(routine: RoutineConfig): Promise<void> {
     setRunningId(routine.id)
+    setRunError(null)
     try {
       await runRoutineNow(routine)
       const settings = await window.api.settings.get()
       setRoutines(settings.routines)
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
       console.error('Routine run failed:', error)
+      setRunError({ id: routine.id, message })
     } finally {
       setRunningId(null)
     }
@@ -275,8 +279,8 @@ export function RoutinesPage(): React.JSX.Element {
             const exchangeName = EXCHANGES.find((e) => e.id === routine.exchange)?.name ?? routine.exchange
             const active = selectedId === routine.id
             return (
+              <div key={routine.id}>
               <div
-                key={routine.id}
                 onClick={() => setSelectedId(routine.id)}
                 style={{
                   display: 'flex',
@@ -349,6 +353,10 @@ export function RoutinesPage(): React.JSX.Element {
                     />
                   </button>
                 </div>
+              </div>
+              {runError?.id === routine.id && (
+                <p style={{ margin: '0.35rem 0 0', fontSize: '0.75rem', color: 'var(--down)' }}>{runError.message}</p>
+              )}
               </div>
             )
           })}
