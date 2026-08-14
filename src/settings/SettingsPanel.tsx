@@ -90,17 +90,30 @@ function CredentialRow({
   async function handleTest(): Promise<void> {
     setBusy(true)
     setMessage(null)
-    const result = await window.api.credentials.test(exchangeId)
-    setMessage({ ok: result.ok, text: result.message })
-    setBusy(false)
-    onChanged()
+    try {
+      const result = await window.api.credentials.test(exchangeId)
+      setMessage({ ok: result.ok, text: result.message })
+      onChanged()
+    } catch (error) {
+      const raw = error instanceof Error ? error.message : String(error)
+      setMessage({ ok: false, text: cleanIpcErrorMessage(raw) })
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function handleRemove(): Promise<void> {
     setBusy(true)
-    await window.api.credentials.remove(exchangeId)
-    setBusy(false)
-    onChanged()
+    setMessage(null)
+    try {
+      await window.api.credentials.remove(exchangeId)
+      onChanged()
+    } catch (error) {
+      const raw = error instanceof Error ? error.message : String(error)
+      setMessage({ ok: false, text: cleanIpcErrorMessage(raw) })
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -266,6 +279,7 @@ function LiveTradingLimitsCard(): React.JSX.Element {
   const [dailyLossLimitQuote, setDailyLossLimitQuote] = useState('')
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   function refresh(): void {
     window.api.liveTrading.getStatus().then((s) => {
@@ -283,6 +297,7 @@ function LiveTradingLimitsCard(): React.JSX.Element {
   async function handleSave(): Promise<void> {
     setBusy(true)
     setSaved(false)
+    setSaveError(null)
     try {
       await window.api.liveTrading.setConfig({
         maxOrderQuote: Number(maxOrderQuote),
@@ -291,6 +306,8 @@ function LiveTradingLimitsCard(): React.JSX.Element {
       })
       refresh()
       setSaved(true)
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : String(error))
     } finally {
       setBusy(false)
     }
@@ -341,6 +358,7 @@ function LiveTradingLimitsCard(): React.JSX.Element {
           Save
         </button>
         {saved && <span style={{ fontSize: '0.78rem', color: 'var(--up)' }}>Saved</span>}
+        {saveError && <span style={{ fontSize: '0.78rem', color: 'var(--down)' }}>Failed to save: {saveError}</span>}
       </div>
     </Card>
   )

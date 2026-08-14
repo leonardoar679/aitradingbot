@@ -14,14 +14,16 @@ export async function runControllerSnapshotNow(controller: ControllerConfig): Pr
   const attached = settings.executors.filter((e) => controller.executorIds.includes(e.id) && e.status === 'active')
   if (attached.length === 0) throw new Error('No active executors attached to this controller')
 
-  const pnls = await Promise.all(
-    attached.map((e) =>
-      computeExecutorPnl(e).catch((error) => {
-        console.error(`Failed to compute P&L for executor "${e.name}":`, error)
-        return 0
-      })
-    )
-  )
+  // A failed P&L fetch must not silently become a fabricated 0 — this aggregate feeds both the
+  // displayed snapshot and the stop-loss/take-profit/max-drawdown breach checks below, so a
+  // wrong 0 could mask a real loss (suppressing a breach) or fake one (stopping executors on bad
+  // data). Better to skip the tick entirely and surface the failure than act on unknown P&L.
+  const results = await Promise.allSettled(attached.map((e) => computeExecutorPnl(e)))
+  const failedNames = results.flatMap((r, i) => (r.status === 'rejected' ? [attached[i].name] : []))
+  if (failedNames.length > 0) {
+    throw new Error(`Could not compute P&L for: ${failedNames.join(', ')} — snapshot skipped, risk controls not evaluated this tick`)
+  }
+  const pnls = (results as PromiseFulfilledResult<number>[]).map((r) => r.value)
   const aggregatePnlQuote = pnls.reduce((sum, p) => sum + p, 0)
   const totalAllocatedQuote = attached.reduce((sum, e) => sum + executorAllocatedQuote(e), 0)
   const now = Math.floor(Date.now() / 1000)

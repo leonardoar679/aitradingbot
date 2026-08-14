@@ -26,10 +26,23 @@ export function PositionsPage(): React.JSX.Element {
   const [livePositions, setLivePositions] = useState<LivePosition[]>([])
   const [liveHistory, setLiveHistory] = useState<LivePosition[]>([])
   const [loaded, setLoaded] = useState(false)
+  const [liveError, setLiveError] = useState<string | null>(null)
   const loadedRef = useRef(false)
 
+  // A failed poll must not look like "genuinely no open positions" on a page titled Real Money —
+  // keep whatever was last successfully loaded and surface the failure instead of silently
+  // clearing/freezing the table with no indication anything went wrong.
   function refreshLivePositions(): void {
-    window.api.liveTrading.listPositions().then(setLivePositions).catch((error) => console.error('Failed to load live positions:', error))
+    window.api.liveTrading
+      .listPositions()
+      .then((positions) => {
+        setLivePositions(positions)
+        setLiveError(null)
+      })
+      .catch((error) => {
+        console.error('Failed to load live positions:', error)
+        setLiveError(error instanceof Error ? error.message : String(error))
+      })
     window.api.liveTrading
       .listClosedPositions()
       .then(setLiveHistory)
@@ -103,6 +116,11 @@ export function PositionsPage(): React.JSX.Element {
       </Card>
 
       <Card title="Live Positions — Real Money">
+        {liveError && (
+          <p style={{ color: 'var(--down)', fontSize: '0.78rem', margin: '0 0 0.7rem' }}>
+            Failed to refresh live positions ({liveError}) — the list below may be stale. Retrying every {LIVE_POLL_MS / 1000}s.
+          </p>
+        )}
         {livePositions.length === 0 && (
           <p style={{ color: 'var(--text-secondary)', margin: 0 }}>
             No open live positions. A live-mode Order Executor's BUY fill lands here — closing one places a real market

@@ -39,31 +39,30 @@ function tabButtonStyle(active: boolean): React.CSSProperties {
 // Fetches the bot's own enabled-window candles and replays the same backtest engine used by its
 // live dry-run, to record a permanent BotRun summary at the moment it's disabled — otherwise
 // that dry-run history (only ever recomputed live, never stored) would simply vanish.
+// Null returns here (never enabled, no candles, too-short run) are legitimate "nothing to
+// record" cases and stay silent. A thrown error is not — it's left to the caller to surface,
+// rather than swallowed here, since a bot the user just disabled silently losing its run history
+// with zero feedback is exactly the kind of thing that should be visible.
 async function buildRunRecord(bot: Bot, endedAt: number): Promise<BotRun | null> {
   if (bot.enabledAt === null) return null
-  try {
-    const { candles } = await window.api.market.fetchHistoricalRange(bot.exchange, bot.symbol, '4h', bot.enabledAt, endedAt)
-    if (candles.length === 0) return null
-    const result = runBacktest(candles, bot.strategyId, { forceCloseAtEnd: false })
-    const trades = result.trades.filter((t) => t.entryTime >= bot.enabledAt!)
-    if (trades.length === 0 && endedAt - bot.enabledAt < 300) return null
-    const wins = trades.filter((t) => t.pnl > 0).length
-    const netPct = trades.length > 0 ? (trades.reduce((acc, t) => acc * (1 + t.returnPct / 100), 1) - 1) * 100 : 0
-    return {
-      id: crypto.randomUUID(),
-      botId: bot.id,
-      botName: bot.name,
-      exchange: bot.exchange,
-      symbol: bot.symbol,
-      startedAt: bot.enabledAt,
-      endedAt,
-      trades: trades.length,
-      wins,
-      netPct
-    }
-  } catch (error) {
-    console.error('Failed to build bot run record:', error)
-    return null
+  const { candles } = await window.api.market.fetchHistoricalRange(bot.exchange, bot.symbol, '4h', bot.enabledAt, endedAt)
+  if (candles.length === 0) return null
+  const result = runBacktest(candles, bot.strategyId, { forceCloseAtEnd: false })
+  const trades = result.trades.filter((t) => t.entryTime >= bot.enabledAt!)
+  if (trades.length === 0 && endedAt - bot.enabledAt < 300) return null
+  const wins = trades.filter((t) => t.pnl > 0).length
+  const netPct = trades.length > 0 ? (trades.reduce((acc, t) => acc * (1 + t.returnPct / 100), 1) - 1) * 100 : 0
+  return {
+    id: crypto.randomUUID(),
+    botId: bot.id,
+    botName: bot.name,
+    exchange: bot.exchange,
+    symbol: bot.symbol,
+    startedAt: bot.enabledAt,
+    endedAt,
+    trades: trades.length,
+    wins,
+    netPct
   }
 }
 
@@ -73,6 +72,7 @@ export function BotsPage(): React.JSX.Element {
   const [botRuns, setBotRuns] = useState<BotRun[]>([])
   const [showAdd, setShowAdd] = useState(false)
   const [selectedBotId, setSelectedBotId] = useState<string | null>(null)
+  const [runRecordError, setRunRecordError] = useState<string | null>(null)
   const loadedRef = useRef(false)
 
   useEffect(() => {
@@ -122,14 +122,20 @@ export function BotsPage(): React.JSX.Element {
     setBots((prev) => prev.map((b) => (b.id === id ? { ...b, enabled: !b.enabled, enabledAt: turningOff ? null : nowSec } : b)))
 
     if (turningOff) {
-      void buildRunRecord(bot, nowSec).then((run) => {
-        if (!run) return
-        setBotRuns((prev) => {
-          const next = [...prev, run]
-          void window.api.settings.set({ botRuns: next })
-          return next
+      setRunRecordError(null)
+      void buildRunRecord(bot, nowSec)
+        .then((run) => {
+          if (!run) return
+          setBotRuns((prev) => {
+            const next = [...prev, run]
+            void window.api.settings.set({ botRuns: next })
+            return next
+          })
         })
-      })
+        .catch((error) => {
+          console.error('Failed to build bot run record:', error)
+          setRunRecordError(`Couldn't save run history for "${bot.name}": ${error instanceof Error ? error.message : String(error)}`)
+        })
     }
   }
 
@@ -153,6 +159,10 @@ export function BotsPage(): React.JSX.Element {
   return (
     <>
       <PageHeader title="Bots" subtitle="Configure and manage your AI trading bots" />
+
+      {runRecordError && (
+        <p style={{ color: 'var(--down)', fontSize: '0.78rem', margin: '0 0 0.9rem' }}>{runRecordError}</p>
+      )}
 
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
         {TABS.map(({ id, label, icon: Icon }) => (

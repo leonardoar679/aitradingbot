@@ -130,14 +130,18 @@ function NewControllerForm({ executors, onCreate }: { executors: ExecutorConfig[
 }
 
 function ExecutorBreakdown({ executors }: { executors: ExecutorConfig[] }): React.JSX.Element {
-  const [pnls, setPnls] = useState<Record<string, number>>({})
+  const [pnls, setPnls] = useState<Record<string, number | 'error'>>({})
 
   useEffect(() => {
     let cancelled = false
     Promise.all(
       executors.map(async (e) => {
-        const pnl = await computeExecutorPnl(e).catch(() => 0)
-        return [e.id, pnl] as const
+        try {
+          return [e.id, await computeExecutorPnl(e)] as const
+        } catch (error) {
+          console.error(`Failed to compute P&L for executor "${e.name}":`, error)
+          return [e.id, 'error'] as const
+        }
       })
     ).then((entries) => {
       if (!cancelled) setPnls(Object.fromEntries(entries))
@@ -154,8 +158,8 @@ function ExecutorBreakdown({ executors }: { executors: ExecutorConfig[] }): Reac
         return (
           <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0.7rem', background: 'var(--bg-app)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', fontSize: '0.78rem' }}>
             <span style={{ color: 'var(--text-primary)' }}>{e.name} <span style={{ color: 'var(--text-muted)' }}>({e.type})</span></span>
-            <span style={{ color: pnl !== undefined ? pctColor(pnl) : 'var(--text-muted)', fontWeight: 600 }}>
-              {pnl !== undefined ? `${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} ${e.quoteAsset}` : 'loading…'}
+            <span style={{ color: pnl === 'error' ? 'var(--down)' : pnl !== undefined ? pctColor(pnl) : 'var(--text-muted)', fontWeight: 600 }}>
+              {pnl === 'error' ? 'failed to load' : pnl !== undefined ? `${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} ${e.quoteAsset}` : 'loading…'}
             </span>
           </div>
         )
