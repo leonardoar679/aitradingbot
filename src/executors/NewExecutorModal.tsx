@@ -205,8 +205,13 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
     positionParams.entryPrice === null &&
     (positionParams.takeProfitPct !== null || positionParams.stopLossPct !== null || positionParams.trailingStop !== null || positionParams.timeLimitSec !== null)
 
+  // Buy-only, same reasoning as Position (spot can't short). Every level is placed as its own
+  // real resting order, so there's no market-entry-only or single-exit-condition requirement the
+  // way Position has — the ladder shape itself is the thing that used to be paper-only.
+  const canGoLiveDca = type === 'dca' && dcaParams.side === 'buy'
+
   const canGoLive =
-    (canGoLiveOrder || canGoLivePosition) &&
+    (canGoLiveOrder || canGoLivePosition || canGoLiveDca) &&
     exchange === 'binance' &&
     binanceCredentialConfigured &&
     liveTradingStatus !== null &&
@@ -254,7 +259,14 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
     setKeepPosition(DEFAULT_KEEP_POSITION[next])
   }
 
-  const liveAmountQuote = type === 'position' ? positionParams.amountQuote : orderParams.amountQuote
+  // For DCA this is the largest single level, not the ladder's total -- each level is placed as
+  // its own independent order, so the per-order cap applies per level, not to the sum.
+  const liveAmountQuote =
+    type === 'position'
+      ? positionParams.amountQuote
+      : type === 'dca'
+        ? Math.max(...dcaParams.levels.map((l) => l.amountQuote))
+        : orderParams.amountQuote
   const liveAmountOk = liveTradingStatus === null || liveAmountQuote <= liveTradingStatus.maxOrderQuote
   const liveConfirmOk = liveConfirmText.trim() === LIVE_CONFIRM_PHRASE
   const canSubmitLive = mode !== 'live' || (canGoLive && liveAmountOk && liveConfirmOk)
@@ -386,7 +398,7 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
             </p>
           )}
 
-          {(type === 'order' || type === 'position') && (
+          {(type === 'order' || type === 'position' || type === 'dca') && (
             <div
               style={{
                 border: `1px solid ${mode === 'live' ? 'var(--down)' : 'var(--border)'}`,
@@ -419,7 +431,11 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
                   }}
                 />
                 <AlertTriangle size={14} />
-                {type === 'position' ? 'Live Trading — enters and watches a real position' : 'Live Trading — places a real order with real money'}
+                {type === 'position'
+                  ? 'Live Trading — enters and watches a real position'
+                  : type === 'dca'
+                    ? 'Live Trading — places a real ladder of resting orders'
+                    : 'Live Trading — places a real order with real money'}
               </label>
 
               {!canGoLive && (
@@ -436,11 +452,13 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
                           : positionParams.entryPrice !== null
                             ? 'Set a market entry (leave Entry Price blank) for live — a resting live entry isn’t supported yet.'
                             : 'Set at least one exit condition — take-profit, stop-loss, trailing stop, or time limit — before going live.'
-                        : !binanceCredentialConfigured
-                          ? 'Add a verified Binance API key in Settings first.'
-                          : liveTradingStatus?.killSwitchEngaged
-                            ? 'The kill switch is engaged — release it from the live trading bar first.'
-                            : 'Arm live trading for this session from the live trading bar first.'}
+                        : type === 'dca' && !canGoLiveDca
+                          ? 'Live DCA is buy-only — spot trading can’t open a short.'
+                          : !binanceCredentialConfigured
+                            ? 'Add a verified Binance API key in Settings first.'
+                            : liveTradingStatus?.killSwitchEngaged
+                              ? 'The kill switch is engaged — release it from the live trading bar first.'
+                              : 'Arm live trading for this session from the live trading bar first.'}
                 </p>
               )}
 
@@ -449,13 +467,15 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
                   <p style={{ fontSize: '0.75rem', color: 'var(--down)', margin: 0, fontWeight: 600 }}>
                     {type === 'position'
                       ? `This will immediately place a real BUY market order for ${positionParams.amountQuote} ${pair.quoteAsset} of ${pair.symbol} on Binance, then watch it for take-profit/stop-loss/trailing-stop/time-limit and exit automatically with a real sell — no per-exit confirmation. Stop on the Executors page force-exits it manually at any time.`
-                      : orderParams.executionStrategy === 'limit'
-                        ? `This will place a real resting LIMIT ${orderParams.side.toUpperCase()} order for ${orderParams.amountQuote} ${pair.quoteAsset} of ${pair.symbol} at ${orderParams.limitPrice} on Binance — it may not fill immediately, and can be cancelled from the Executors page (Stop) while open.`
-                        : `This will immediately place a real ${orderParams.side.toUpperCase()} market order for ${orderParams.amountQuote} ${pair.quoteAsset} of ${pair.symbol} on Binance.`}
+                      : type === 'dca'
+                        ? `This will place ${dcaParams.levels.length} real resting BUY limit order${dcaParams.levels.length === 1 ? '' : 's'} for ${pair.symbol} on Binance, one per level (may fill immediately if a level is already at or above the current price). Once any level fills, the resulting position is watched for take-profit/stop-loss/time-limit and exits automatically with a real sell — no per-exit confirmation. Stop cancels every remaining resting level and force-exits any filled position, all at once.`
+                        : orderParams.executionStrategy === 'limit'
+                          ? `This will place a real resting LIMIT ${orderParams.side.toUpperCase()} order for ${orderParams.amountQuote} ${pair.quoteAsset} of ${pair.symbol} at ${orderParams.limitPrice} on Binance — it may not fill immediately, and can be cancelled from the Executors page (Stop) while open.`
+                          : `This will immediately place a real ${orderParams.side.toUpperCase()} market order for ${orderParams.amountQuote} ${pair.quoteAsset} of ${pair.symbol} on Binance.`}
                   </p>
                   {!liveAmountOk && liveTradingStatus && (
                     <p style={{ fontSize: '0.75rem', color: 'var(--down)', margin: 0 }}>
-                      Amount exceeds the configured max live order size ({liveTradingStatus.maxOrderQuote}).
+                      {type === 'dca' ? 'The largest level' : 'Amount'} exceeds the configured max live order size ({liveTradingStatus.maxOrderQuote}).
                     </p>
                   )}
                   <div>

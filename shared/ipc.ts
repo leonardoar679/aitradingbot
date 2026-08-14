@@ -33,6 +33,7 @@ export const IpcChannel = {
   LiveTradingCancelOrder: 'liveTrading:cancelOrder',
   LiveTradingCreateWatcher: 'liveTrading:createWatcher',
   LiveTradingListActiveWatchers: 'liveTrading:listActiveWatchers',
+  LiveTradingUpdateWatcherEntryPrice: 'liveTrading:updateWatcherEntryPrice',
   LiveTradingStopWatcher: 'liveTrading:stopWatcher',
   LiveTradingDrainWatcherEvents: 'liveTrading:drainWatcherEvents',
   ExecutorPlaceLiveOrder: 'executor:placeLiveOrder',
@@ -149,6 +150,7 @@ export interface LiveWatcherSummary {
   executorId: string
   exchange: Exchange
   symbol: string
+  entryPrice: number
   trailingPeakPrice: number
 }
 
@@ -424,19 +426,32 @@ export interface ExecutorConfig {
   mode: 'paper' | 'live'
   /** Set once a live executor's order actually fills (market: immediately; limit: whenever
    * LiveOrderScheduler detects the resting order resolved). Null for every paper executor and
-   * for a live limit order still resting. */
+   * while any live limit order is still resting. For a live DCA executor with more than one
+   * fill, this is only ever the LAST resolved order — see liveOrder history via liveTrading if a
+   * full fill-by-fill record is ever needed; the running position is authoritative, this is just
+   * a "something resolved" breadcrumb. */
   liveOrder: LiveOrderRecord | null
-  /** Non-null only while a live limit order is still resting (status stays 'active' the whole
-   * time) — points at the LiveOrder record LiveOrderScheduler is polling. Null once resolved. */
-  pendingLiveOrderId: string | null
-  /** Non-null only while a live Position executor's entry has filled and its exit conditions are
-   * being watched for automatically (status stays 'active' the whole time) — points at the
-   * watcher record in livePositionWatchersService.ts. Null once the exit fires or the executor
-   * is stopped manually. */
+  /** Ids of still-resting live limit orders — one entry for a live Order executor's single
+   * resting limit, up to one per unfilled level for a live DCA executor's ladder (each level is
+   * its own independent resting order, not a single order like Order/Position). Empty while
+   * nothing is resting (paper executors always have an empty array). LiveOrderScheduler polls
+   * every id in here every 5s and removes entries as they resolve. */
+  pendingLiveOrderIds: string[]
+  /** Non-null only while a live Position or DCA executor has at least one open (filled) position
+   * being watched for an automatic exit (status stays 'active' the whole time) — points at the
+   * watcher record in livePositionWatchersService.ts. For DCA, this is created on the FIRST level
+   * fill and its entryPrice is kept refreshed (updateWatcherEntryPrice) as later levels fill,
+   * since the average cost basis keeps moving until the ladder either exits or runs out of
+   * levels. Null once the exit fires or the executor is stopped manually. */
   liveWatcherId: string | null
-  /** Set once a live Position executor's watcher triggers a real exit (or Stop force-closes it).
-   * Null for every paper executor and for a live Position still being watched. */
+  /** Set once a live Position/DCA executor's watcher triggers a real exit (or Stop force-closes
+   * it). Null for every paper executor and for a live position still being watched. */
   liveExitResult: LiveExitResult | null
+  /** Real market price captured once via market.fetchTicker24h at creation time — only set for a
+   * live DCA executor, which needs a real reference price to compute each level's real limit
+   * price (dcaLevelPrice) since there's no candle replay live the way paper mode has. Null for
+   * every other executor. */
+  liveDcaBasePrice: number | null
   params: GridExecutorParams | DcaExecutorParams | TwapExecutorParams | PositionExecutorParams | OrderExecutorParams | XemmExecutorParams | ArbitrageExecutorParams | MarketMakingExecutorParams
 }
 

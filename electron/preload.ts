@@ -84,8 +84,9 @@ const api = {
     listClosedPositions: (): Promise<LivePosition[]> => ipcRenderer.invoke(IpcChannel.LiveTradingListClosedPositions),
     closePosition: (positionId: string, quantity: number): Promise<LiveOrderRecord> =>
       ipcRenderer.invoke(IpcChannel.LiveTradingClosePosition, positionId, quantity),
-    pollOpenOrders: (): Promise<{ executorId: string; liveOrder: LiveOrderRecord }[]> =>
-      ipcRenderer.invoke(IpcChannel.LiveTradingPollOpenOrders),
+    pollOpenOrders: (): Promise<
+      { executorId: string; liveOrderId: string; liveOrder: LiveOrderRecord; status: 'filled' | 'cancelled' | 'expired' }[]
+    > => ipcRenderer.invoke(IpcChannel.LiveTradingPollOpenOrders),
     cancelOrder: (liveOrderId: string): Promise<LiveOrderRecord> =>
       ipcRenderer.invoke(IpcChannel.LiveTradingCancelOrder, liveOrderId),
     createWatcher: (
@@ -110,6 +111,8 @@ const api = {
         trailingStop
       ),
     listActiveWatchers: (): Promise<LiveWatcherSummary[]> => ipcRenderer.invoke(IpcChannel.LiveTradingListActiveWatchers),
+    updateWatcherEntryPrice: (watcherId: string, entryPrice: number): Promise<void> =>
+      ipcRenderer.invoke(IpcChannel.LiveTradingUpdateWatcherEntryPrice, watcherId, entryPrice),
     stopWatcher: (watcherId: string): Promise<LiveExitResult | null> => ipcRenderer.invoke(IpcChannel.LiveTradingStopWatcher, watcherId),
     drainWatcherEvents: (): Promise<{ executorId: string; liveExitResult: LiveExitResult }[]> =>
       ipcRenderer.invoke(IpcChannel.LiveTradingDrainWatcherEvents)

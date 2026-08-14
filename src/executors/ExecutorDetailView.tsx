@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   createChart,
   CandlestickSeries,
@@ -9,11 +9,56 @@ import {
   type UTCTimestamp
 } from 'lightweight-charts'
 import { ArrowLeft } from 'lucide-react'
-import { EXCHANGES, type ExecutorConfig, type GridExecutorParams, type OrderExecutorParams, type PositionExecutorParams } from '../../shared/ipc'
+import {
+  EXCHANGES,
+  type ExecutorConfig,
+  type GridExecutorParams,
+  type OrderExecutorParams,
+  type PositionExecutorParams,
+  type DcaExecutorParams
+} from '../../shared/ipc'
 import { useExecutorSimulation } from './useExecutorSimulation'
 import { LiveOrderMetrics } from './ExecutorCard'
+import { dcaLevelPrice } from './engine'
 import { useTheme } from '../theme/ThemeContext'
 import { CHART_PALETTE } from '../theme/palette'
+
+const WATCHER_POLL_MS = 5_000
+
+/** Real current average entry price for a watched live DCA position -- null until the first
+ * poll lands or there's no watcher to poll. Mirrors ExecutorCard's own useLiveWatcherInfo; kept
+ * separate rather than shared since this component only ever needs the one number for the chart
+ * line, not the full watcher-info shape. */
+function useLiveDcaAvgEntry(executor: ExecutorConfig): number | null {
+  const [entryPrice, setEntryPrice] = useState<number | null>(null)
+  const watching = executor.type === 'dca' && executor.mode === 'live' && executor.liveWatcherId !== null
+
+  useEffect(() => {
+    if (!watching) {
+      setEntryPrice(null)
+      return
+    }
+    let cancelled = false
+    async function poll(): Promise<void> {
+      try {
+        const watchers = await window.api.liveTrading.listActiveWatchers()
+        if (cancelled) return
+        const match = watchers.find((w) => w.executorId === executor.id)
+        setEntryPrice(match ? match.entryPrice : null)
+      } catch {
+        // Best-effort display only.
+      }
+    }
+    void poll()
+    const timer = setInterval(poll, WATCHER_POLL_MS)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [watching, executor.id])
+
+  return entryPrice
+}
 
 export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorConfig; onBack: () => void }): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -23,6 +68,7 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
   const { theme } = useTheme()
   const palette = CHART_PALETTE[theme]
   const sim = useExecutorSimulation(executor)
+  const liveDcaAvgEntry = useLiveDcaAvgEntry(executor)
   const exchangeName = EXCHANGES.find((e) => e.id === executor.exchange)?.name ?? executor.exchange
 
   useEffect(() => {
@@ -234,6 +280,43 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
             })
           )
         }
+      } else if (executor.type === 'dca') {
+        const params = executor.params as DcaExecutorParams
+        // Dotted line per configured level, same as paper DCA draws every levelPrice regardless
+        // of fill status -- computed from the real reference price captured at creation
+        // (liveDcaBasePrice), since there's no candle replay live the way paper mode has one.
+        if (executor.liveDcaBasePrice !== null) {
+          for (const level of params.levels) {
+            newLines.push(
+              series.createPriceLine({
+                price: dcaLevelPrice(executor.liveDcaBasePrice, level, params.side),
+                color: palette.grid,
+                lineWidth: 1,
+                lineStyle: LineStyle.Dotted,
+                axisLabelVisible: false,
+                title: ''
+              })
+            )
+          }
+        }
+        const avgEntry = executor.liveExitResult?.entryPrice ?? liveDcaAvgEntry
+        if (avgEntry !== null) {
+          newLines.push(
+            series.createPriceLine({ price: avgEntry, color: palette.gold, lineWidth: 2, lineStyle: LineStyle.Solid, axisLabelVisible: true, title: 'Avg Entry' })
+          )
+        }
+        if (executor.liveExitResult) {
+          newLines.push(
+            series.createPriceLine({
+              price: executor.liveExitResult.exitPrice,
+              color: palette.gold,
+              lineWidth: 2,
+              lineStyle: LineStyle.Solid,
+              axisLabelVisible: true,
+              title: 'Exit'
+            })
+          )
+        }
       } else if (executor.type === 'order') {
         if (executor.liveOrder) {
           newLines.push(
@@ -246,7 +329,7 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
               title: 'Fill'
             })
           )
-        } else if (executor.pendingLiveOrderId) {
+        } else if (executor.pendingLiveOrderIds.length > 0) {
           const params = executor.params as OrderExecutorParams
           if (params.limitPrice !== null) {
             newLines.push(
@@ -267,7 +350,7 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
     priceLinesRef.current = newLines
 
     chart.timeScale().fitContent()
-  }, [sim.candles, sim.state, executor, palette])
+  }, [sim.candles, sim.state, executor, palette, liveDcaAvgEntry])
 
   return (
     <div>

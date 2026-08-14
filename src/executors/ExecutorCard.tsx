@@ -1,22 +1,31 @@
 import { useEffect, useState } from 'react'
 import { Grid3x3, Layers3, Timer, Target, FileText, Shuffle, Scale, Waves } from 'lucide-react'
-import { EXCHANGES, type ExecutorConfig, type OrderExecutorParams, type PositionExecutorParams } from '../../shared/ipc'
+import { EXCHANGES, type ExecutorConfig, type OrderExecutorParams, type PositionExecutorParams, type DcaExecutorParams } from '../../shared/ipc'
 import { useExecutorSimulation } from './useExecutorSimulation'
 import { useSpreadExecutorSimulation } from './useSpreadExecutorSimulation'
 import { formatQuotePrice } from '../utils/formatCurrency'
 
-const WATCHER_PEAK_POLL_MS = 5_000
+const WATCHER_POLL_MS = 5_000
 
-/** Polls the live trailing-peak price for a watched live Position -- null for every other
- * executor (never polls). Same 5s cadence as LiveOrderScheduler's own poll; the one-watcher-per-
- * symbol constraint (Phase 3) means this is realistically at most one concurrent poller. */
-function useLiveTrailingPeak(executor: ExecutorConfig): number | null {
-  const [peak, setPeak] = useState<number | null>(null)
-  const watching = executor.type === 'position' && executor.mode === 'live' && executor.liveWatcherId !== null
+interface LiveWatcherInfo {
+  entryPrice: number | null
+  trailingPeakPrice: number | null
+}
+
+const EMPTY_WATCHER_INFO: LiveWatcherInfo = { entryPrice: null, trailingPeakPrice: null }
+
+/** Polls the real entry price (and, for Position, the trailing-peak price) of a watched live
+ * Position or DCA position -- null for every other executor (never polls). Same 5s cadence as
+ * LiveOrderScheduler's own poll; the one-watcher-per-symbol constraint (Phase 3) means this is
+ * realistically at most a handful of concurrent pollers. */
+function useLiveWatcherInfo(executor: ExecutorConfig): LiveWatcherInfo {
+  const [info, setInfo] = useState<LiveWatcherInfo>(EMPTY_WATCHER_INFO)
+  const watching =
+    (executor.type === 'position' || executor.type === 'dca') && executor.mode === 'live' && executor.liveWatcherId !== null
 
   useEffect(() => {
     if (!watching) {
-      setPeak(null)
+      setInfo(EMPTY_WATCHER_INFO)
       return
     }
     let cancelled = false
@@ -25,20 +34,20 @@ function useLiveTrailingPeak(executor: ExecutorConfig): number | null {
         const watchers = await window.api.liveTrading.listActiveWatchers()
         if (cancelled) return
         const match = watchers.find((w) => w.executorId === executor.id)
-        setPeak(match ? match.trailingPeakPrice : null)
+        setInfo(match ? { entryPrice: match.entryPrice, trailingPeakPrice: match.trailingPeakPrice } : EMPTY_WATCHER_INFO)
       } catch {
-        // Best-effort display only -- a failed poll just leaves the last known peak on screen.
+        // Best-effort display only -- a failed poll just leaves the last known info on screen.
       }
     }
     void poll()
-    const timer = setInterval(poll, WATCHER_PEAK_POLL_MS)
+    const timer = setInterval(poll, WATCHER_POLL_MS)
     return () => {
       cancelled = true
       clearInterval(timer)
     }
   }, [watching, executor.id])
 
-  return peak
+  return info
 }
 
 const TYPE_META = {
@@ -64,6 +73,24 @@ function pctColor(pct: number): string {
   return pct >= 0 ? 'var(--up)' : 'var(--down)'
 }
 
+/** Shared between live Position and live DCA -- both resolve into the exact same real
+ * LiveExitResult shape, closed the exact same way (automatic trigger or manual Stop). */
+function ClosedLiveMetrics({ executor }: { executor: ExecutorConfig }): React.JSX.Element {
+  const { entryPrice, exitPrice, exitReason, realizedPnl, closedAt } = executor.liveExitResult!
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
+      <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Closed — real exit ({EXIT_REASON_LABEL[exitReason]})</span>
+      <span style={{ color: 'var(--text-secondary)' }}>
+        {formatQuotePrice(entryPrice, executor.quoteAsset)} → {formatQuotePrice(exitPrice, executor.quoteAsset)}
+      </span>
+      <span style={{ color: pctColor(realizedPnl), fontWeight: 600 }}>
+        {realizedPnl >= 0 ? '+' : ''}
+        {formatQuotePrice(realizedPnl, executor.quoteAsset)} · {new Date(closedAt * 1000).toLocaleString()}
+      </span>
+    </div>
+  )
+}
+
 function MetricsPanel({ executor }: { executor: ExecutorConfig }): React.JSX.Element {
   if (executor.mode === 'live') {
     return <LiveOrderMetrics executor={executor} />
@@ -79,7 +106,7 @@ function MetricsPanel({ executor }: { executor: ExecutorConfig }): React.JSX.Ele
  * for a live Position, is really being watched right now for an automatic exit). This reads
  * state straight off the executor's own config rather than replaying anything. */
 export function LiveOrderMetrics({ executor }: { executor: ExecutorConfig }): React.JSX.Element {
-  const trailingPeak = useLiveTrailingPeak(executor)
+  const watcherInfo = useLiveWatcherInfo(executor)
   if (executor.type === 'position') {
     if (executor.liveWatcherId) {
       const params = executor.params as PositionExecutorParams
@@ -90,6 +117,7 @@ export function LiveOrderMetrics({ executor }: { executor: ExecutorConfig }): Re
       if (params.timeLimitSec !== null) conditions.push(`${Math.round(params.timeLimitSec / 3600)}h limit`)
       const entryPrice = params.entryPrice ?? 0
       const trailingStop = params.trailingStop
+      const trailingPeak = watcherInfo.trailingPeakPrice
       // Mirrors the buy-only activation/trail math in evaluateWatcher (livePositionWatchersService.ts):
       // the trail target only exists once the peak has risen far enough past entry to activate.
       const activationTarget = trailingStop !== null ? entryPrice * (1 + trailingStop.activationPct / 100) : null
@@ -114,24 +142,47 @@ export function LiveOrderMetrics({ executor }: { executor: ExecutorConfig }): Re
         </div>
       )
     }
-    if (executor.liveExitResult) {
-      const { entryPrice, exitPrice, exitReason, realizedPnl, closedAt } = executor.liveExitResult
+    if (executor.liveExitResult) return <ClosedLiveMetrics executor={executor} />
+    return <div style={{ fontSize: '0.75rem', color: 'var(--down)' }}>Entry failed — see name for details</div>
+  }
+  if (executor.type === 'dca') {
+    const params = executor.params as DcaExecutorParams
+    const restingCount = executor.pendingLiveOrderIds.length
+    if (executor.liveWatcherId) {
+      const conditions: string[] = [`TP +${params.takeProfitPct}%`]
+      if (params.stopLossPct !== null) conditions.push(`SL -${params.stopLossPct}%`)
+      if (params.timeLimitSec !== null) conditions.push(`${Math.round(params.timeLimitSec / 3600)}h limit`)
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
-          <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Closed — real exit ({EXIT_REASON_LABEL[exitReason]})</span>
-          <span style={{ color: 'var(--text-secondary)' }}>
-            {formatQuotePrice(entryPrice, executor.quoteAsset)} → {formatQuotePrice(exitPrice, executor.quoteAsset)}
-          </span>
-          <span style={{ color: pctColor(realizedPnl), fontWeight: 600 }}>
-            {realizedPnl >= 0 ? '+' : ''}
-            {formatQuotePrice(realizedPnl, executor.quoteAsset)} · {new Date(closedAt * 1000).toLocaleString()}
-          </span>
+          <span style={{ color: 'var(--down)', fontWeight: 600 }}>Watching — real position open</span>
+          {watcherInfo.entryPrice !== null && (
+            <span style={{ color: 'var(--text-secondary)' }}>Avg entry {formatQuotePrice(watcherInfo.entryPrice, executor.quoteAsset)}</span>
+          )}
+          <span style={{ color: 'var(--text-muted)' }}>{conditions.join(' · ')}</span>
+          {restingCount > 0 && (
+            <span style={{ color: 'var(--text-muted)' }}>
+              {restingCount} more ladder level{restingCount === 1 ? '' : 's'} still resting
+            </span>
+          )}
+          <span style={{ color: 'var(--text-muted)' }}>Stop cancels remaining levels and force-exits this position</span>
         </div>
       )
     }
-    return <div style={{ fontSize: '0.75rem', color: 'var(--down)' }}>Entry failed — see name for details</div>
+    if (executor.liveExitResult) return <ClosedLiveMetrics executor={executor} />
+    if (restingCount > 0) {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
+          <span style={{ color: 'var(--down)', fontWeight: 600 }}>
+            {restingCount} of {params.levels.length} levels resting
+          </span>
+          <span style={{ color: 'var(--text-secondary)' }}>TP +{params.takeProfitPct}% from average fill once any level fills</span>
+          <span style={{ color: 'var(--text-muted)' }}>Stop cancels every resting level</span>
+        </div>
+      )
+    }
+    return <div style={{ fontSize: '0.75rem', color: 'var(--down)' }}>Ladder failed — see name for details</div>
   }
-  if (executor.pendingLiveOrderId) {
+  if (executor.pendingLiveOrderIds.length > 0) {
     const params = executor.params as OrderExecutorParams
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>

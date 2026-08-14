@@ -11,11 +11,17 @@ import {
   checkLossLimitAndAutoDisarm
 } from '../../services/liveTradingService'
 import { listOpenLivePositions, listClosedLivePositions, getLivePosition, recordLiveFill } from '../../services/livePositionsService'
-import { createLiveOrder, listOpenLiveOrders, getLiveOrder, resolveLiveOrder } from '../../services/liveOrdersService'
-import { executeLiveClose } from '../../services/liveExecutionService'
-import { createWatcher, listActiveWatchers, deactivateWatcher, drainResolvedWatcherEvents } from '../../services/livePositionWatchersService'
+import { createLiveOrder, listOpenLiveOrders, resolveLiveOrder } from '../../services/liveOrdersService'
+import { executeLiveClose, cancelLiveOrderById, cancelSiblingLiveOrders } from '../../services/liveExecutionService'
+import {
+  createWatcher,
+  listActiveWatchers,
+  deactivateWatcher,
+  drainResolvedWatcherEvents,
+  updateWatcherEntryPrice
+} from '../../services/livePositionWatchersService'
 import { getDecryptedCredential } from '../../services/credentialsService'
-import { placeMarketOrder, placeLimitOrder, queryOrder, cancelOrder } from '../../services/exchanges/binanceTrading'
+import { placeMarketOrder, placeLimitOrder, queryOrder } from '../../services/exchanges/binanceTrading'
 
 /** Binance's own status strings, mapped onto the three-way resolution LiveOrder cares about.
  * Null means still resting (NEW/PARTIALLY_FILLED/PENDING_CANCEL) — nothing to do yet. */
@@ -118,49 +124,41 @@ export function registerLiveTradingHandlers(): void {
 
   // Polled by LiveOrderScheduler every few seconds — the only place a resting live limit order's
   // fate is discovered. No gate check: querying status is read-only and changes nothing.
-  ipcMain.handle(IpcChannel.LiveTradingPollOpenOrders, async (): Promise<{ executorId: string; liveOrder: LiveOrderRecord }[]> => {
-    const open = await listOpenLiveOrders()
-    const resolutions: { executorId: string; liveOrder: LiveOrderRecord }[] = []
+  ipcMain.handle(
+    IpcChannel.LiveTradingPollOpenOrders,
+    async (): Promise<
+      { executorId: string; liveOrderId: string; liveOrder: LiveOrderRecord; status: 'filled' | 'cancelled' | 'expired' }[]
+    > => {
+      const open = await listOpenLiveOrders()
+      const resolutions: { executorId: string; liveOrderId: string; liveOrder: LiveOrderRecord; status: 'filled' | 'cancelled' | 'expired' }[] =
+        []
 
-    for (const order of open) {
-      try {
-        const { apiKey, apiSecret } = await getDecryptedCredential(order.exchange)
-        const result = await queryOrder(apiKey, apiSecret, order.symbol, order.orderId)
-        const status = resolvedStatus(result.status)
-        if (status === null) continue // still resting
+      for (const order of open) {
+        try {
+          const { apiKey, apiSecret } = await getDecryptedCredential(order.exchange)
+          const result = await queryOrder(apiKey, apiSecret, order.symbol, order.orderId)
+          const status = resolvedStatus(result.status)
+          if (status === null) continue // still resting
 
-        await resolveLiveOrder(order.id, status, result.filledQty, result.filledQty > 0 ? result.avgFillPrice : null)
-        const reserved = order.quantity * order.limitPrice
-        await recordLiveOrderUsage(result.cummulativeQuoteQty - reserved)
-        if (result.filledQty > 0) {
-          await recordLiveFill(order.exchange, order.symbol, order.baseAsset, order.quoteAsset, order.side, result.filledQty, result.avgFillPrice)
-          if (order.side === 'sell') await checkLossLimitAndAutoDisarm()
+          await resolveLiveOrder(order.id, status, result.filledQty, result.filledQty > 0 ? result.avgFillPrice : null)
+          const reserved = order.quantity * order.limitPrice
+          await recordLiveOrderUsage(result.cummulativeQuoteQty - reserved)
+          if (result.filledQty > 0) {
+            await recordLiveFill(order.exchange, order.symbol, order.baseAsset, order.quoteAsset, order.side, result.filledQty, result.avgFillPrice)
+            if (order.side === 'sell') await checkLossLimitAndAutoDisarm()
+          }
+          resolutions.push({ executorId: order.executorId, liveOrderId: order.id, liveOrder: { ...result, placedAt: order.placedAt }, status })
+        } catch (error) {
+          console.error(`Failed to poll live order ${order.id}:`, error)
         }
-        resolutions.push({ executorId: order.executorId, liveOrder: { ...result, placedAt: order.placedAt } })
-      } catch (error) {
-        console.error(`Failed to poll live order ${order.id}:`, error)
       }
+      return resolutions
     }
-    return resolutions
-  })
+  )
 
   // Cancelling a resting order — deliberately ungated. Cancellation only ever reduces risk, so
   // it's never blocked by session-arm, the kill switch, or any cap (see the Phase 2c plan).
-  ipcMain.handle(IpcChannel.LiveTradingCancelOrder, async (_event, liveOrderId: string): Promise<LiveOrderRecord> => {
-    const order = await getLiveOrder(liveOrderId)
-    if (!order || order.status !== 'open') throw new Error('Order not found or already resolved')
-
-    const { apiKey, apiSecret } = await getDecryptedCredential(order.exchange)
-    const result = await cancelOrder(apiKey, apiSecret, order.symbol, order.orderId)
-    await resolveLiveOrder(order.id, 'cancelled', result.filledQty, result.filledQty > 0 ? result.avgFillPrice : null)
-    const reserved = order.quantity * order.limitPrice
-    await recordLiveOrderUsage(result.cummulativeQuoteQty - reserved)
-    if (result.filledQty > 0) {
-      await recordLiveFill(order.exchange, order.symbol, order.baseAsset, order.quoteAsset, order.side, result.filledQty, result.avgFillPrice)
-      if (order.side === 'sell') await checkLossLimitAndAutoDisarm()
-    }
-    return { ...result, placedAt: order.placedAt }
-  })
+  ipcMain.handle(IpcChannel.LiveTradingCancelOrder, async (_event, liveOrderId: string): Promise<LiveOrderRecord> => cancelLiveOrderById(liveOrderId))
 
   // Creating a watcher assumes the entry order (ExecutorPlaceLiveOrder, called just before this
   // from ExecutorsPage) already filled and landed in the live position ledger — this just finds
@@ -192,8 +190,20 @@ export function registerLiveTradingHandlers(): void {
   // (recoverable, but unpleasant) case of a real BUY firing and then having nothing watch it.
   ipcMain.handle(IpcChannel.LiveTradingListActiveWatchers, async () => {
     const watchers = await listActiveWatchers()
-    return watchers.map((w) => ({ executorId: w.executorId, exchange: w.exchange, symbol: w.symbol, trailingPeakPrice: w.trailingPeakPrice }))
+    return watchers.map((w) => ({
+      executorId: w.executorId,
+      exchange: w.exchange,
+      symbol: w.symbol,
+      entryPrice: w.entryPrice,
+      trailingPeakPrice: w.trailingPeakPrice
+    }))
   })
+
+  // Live DCA only: each new level fill shifts the true average cost basis, so the watcher's
+  // target needs refreshing to match (see the doc comment on updateWatcherEntryPrice).
+  ipcMain.handle(IpcChannel.LiveTradingUpdateWatcherEntryPrice, async (_event, watcherId: string, entryPrice: number): Promise<void> =>
+    updateWatcherEntryPrice(watcherId, entryPrice)
+  )
 
   // Stop on a live Position executor that's still being watched: force-exit now, for real, same
   // as the manual Close button on a live position (canCloseLivePosition inside executeLiveClose
@@ -219,6 +229,9 @@ export function registerLiveTradingHandlers(): void {
     // moment a close attempt merely failed.
     await executeLiveClose(position, position.qty)
     await deactivateWatcher(watcherId)
+    // A live DCA executor can still have unfilled ladder levels resting when its watched
+    // position exits -- cancel them now (no-op for Order/Position, which never have any left).
+    await cancelSiblingLiveOrders(watcher.executorId)
     const closedPosition = await getLivePosition(watcher.livePositionId)
     if (!closedPosition || closedPosition.exitPrice === null || closedPosition.realizedPnl === null) return null
 

@@ -8,6 +8,7 @@ import { ExecutorCard } from './ExecutorCard'
 import { ExecutorDetailView } from './ExecutorDetailView'
 import { SpreadExecutorDetailView } from './SpreadExecutorDetailView'
 import { computeExecutorPosition } from './computeSnapshot'
+import { dcaLevelPrice } from './engine'
 import {
   EXCHANGES,
   type ExecutorConfig,
@@ -23,7 +24,8 @@ import {
   type ArbitrageExecutorParams,
   type MarketMakingExecutorParams,
   type HeldPosition,
-  type LiveOrderRecord
+  type LiveOrderRecord,
+  type LiveExitResult
 } from '../../shared/ipc'
 import type { Bot } from '../bots/types'
 
@@ -87,9 +89,10 @@ export function ExecutorsPage(): React.JSX.Element {
     mode: 'paper' | 'live'
     params: GridExecutorParams | DcaExecutorParams | TwapExecutorParams | PositionExecutorParams | OrderExecutorParams | XemmExecutorParams | ArbitrageExecutorParams | MarketMakingExecutorParams
   }): Promise<void> {
-    // Defense in depth — the UI only ever offers 'live' for type 'order' or 'position', but
-    // this is the last line of defense before anything real could happen.
-    const mode = input.mode === 'live' && (input.type === 'order' || input.type === 'position') ? 'live' : 'paper'
+    // Defense in depth — the UI only ever offers 'live' for type 'order', 'position', or 'dca',
+    // but this is the last line of defense before anything real could happen.
+    const mode =
+      input.mode === 'live' && (input.type === 'order' || input.type === 'position' || input.type === 'dca') ? 'live' : 'paper'
 
     const base: ExecutorConfig = {
       id: crypto.randomUUID(),
@@ -105,9 +108,10 @@ export function ExecutorsPage(): React.JSX.Element {
       keepPosition: input.keepPosition,
       mode,
       liveOrder: null,
-      pendingLiveOrderId: null,
+      pendingLiveOrderIds: [],
       liveWatcherId: null,
       liveExitResult: null,
+      liveDcaBasePrice: null,
       params: input.params
     }
     setShowNew(false)
@@ -182,6 +186,90 @@ export function ExecutorsPage(): React.JSX.Element {
       return
     }
 
+    if (input.type === 'dca') {
+      // Live DCA: place every configured level as a real resting limit order against a real
+      // reference price captured right now (there's no candle replay live the way paper mode
+      // has to derive one from). Buy-only; NewExecutorModal's canGoLive already enforces this.
+      const dcaParams = input.params as DcaExecutorParams
+      let basePrice: number | null = null
+      const pendingIds: string[] = []
+      let lastResolvedOrder: LiveOrderRecord | null = null
+      let placedCount = 0
+      try {
+        const ticker = await window.api.market.fetchTicker24h(input.exchange, input.pair.symbol)
+        basePrice = ticker.lastPrice
+
+        for (const level of dcaParams.levels) {
+          const levelPrice = dcaLevelPrice(basePrice, level, dcaParams.side)
+          const result = await window.api.executors.placeLiveLimitOrder(
+            base.id,
+            input.exchange,
+            input.pair.symbol,
+            input.pair.baseAsset,
+            input.pair.quoteAsset,
+            dcaParams.side,
+            level.amountQuote,
+            levelPrice
+          )
+          placedCount++
+          if (result.resolved) {
+            lastResolvedOrder = result.liveOrder
+          } else {
+            pendingIds.push(result.pendingLiveOrderId)
+          }
+        }
+
+        // If any level was already marketable against the captured reference price, it filled
+        // synchronously -- start the exit watcher right away, same "first fill creates the
+        // watcher" rule LiveOrderScheduler applies for a level that fills later, asynchronously.
+        let watcherId: string | null = null
+        if (lastResolvedOrder) {
+          const positions = await window.api.liveTrading.listPositions()
+          const position = positions.find((p) => p.exchange === input.exchange && p.symbol === input.pair.symbol)
+          if (position) {
+            const watcher = await window.api.liveTrading.createWatcher(
+              base.id,
+              input.exchange,
+              input.pair.symbol,
+              position.avgCost,
+              dcaParams.takeProfitPct,
+              dcaParams.stopLossPct,
+              dcaParams.timeLimitSec,
+              null
+            )
+            watcherId = watcher.id
+          }
+        }
+
+        setExecutors((prev) => [
+          ...prev,
+          { ...base, liveDcaBasePrice: basePrice, pendingLiveOrderIds: pendingIds, liveWatcherId: watcherId, liveOrder: lastResolvedOrder }
+        ])
+      } catch (error) {
+        console.error('Live DCA ladder placement failed:', error)
+        const message = error instanceof Error ? error.message : String(error)
+        const stoppedAt = Math.floor(Date.now() / 1000)
+        if (placedCount > 0) {
+          // Some levels already placed real resting orders (or filled) before a later one
+          // failed -- never silently drop those. Keep the executor active with whatever
+          // actually went through; the name flags the shortfall instead of hiding it.
+          setExecutors((prev) => [
+            ...prev,
+            {
+              ...base,
+              name: `${base.name} (only ${placedCount}/${dcaParams.levels.length} levels placed — ${message})`,
+              liveDcaBasePrice: basePrice,
+              pendingLiveOrderIds: pendingIds,
+              liveOrder: lastResolvedOrder
+            }
+          ])
+        } else {
+          setExecutors((prev) => [...prev, { ...base, name: `${base.name} (failed: ${message})`, status: 'stopped', stoppedAt }])
+        }
+      }
+      return
+    }
+
     const orderParams = input.params as OrderExecutorParams
     const stoppedAt = Math.floor(Date.now() / 1000)
 
@@ -204,7 +292,7 @@ export function ExecutorsPage(): React.JSX.Element {
         if (result.resolved) {
           setExecutors((prev) => [...prev, { ...base, status: 'stopped', stoppedAt, liveOrder: result.liveOrder }])
         } else {
-          setExecutors((prev) => [...prev, { ...base, pendingLiveOrderId: result.pendingLiveOrderId }])
+          setExecutors((prev) => [...prev, { ...base, pendingLiveOrderIds: [result.pendingLiveOrderId] }])
         }
       } catch (error) {
         console.error('Live limit order failed:', error)
@@ -236,42 +324,63 @@ export function ExecutorsPage(): React.JSX.Element {
   async function handleStop(id: string): Promise<void> {
     const executor = executors.find((e) => e.id === id)
 
-    // A live executor with a still-resting limit order: Stop is the real cancel action. Cancel
-    // first (best-effort — if it fails, e.g. the order already resolved a moment ago, the
-    // executor still gets marked stopped below rather than getting stuck).
-    if (executor && executor.mode === 'live' && executor.pendingLiveOrderId) {
-      try {
-        const liveOrder = await window.api.liveTrading.cancelOrder(executor.pendingLiveOrderId)
-        setExecutors((prev) =>
-          prev.map((e) =>
-            e.id === id
-              ? { ...e, status: 'stopped', stoppedAt: Math.floor(Date.now() / 1000), liveOrder, pendingLiveOrderId: null }
-              : e
-          )
-        )
-      } catch (error) {
-        console.error('Failed to cancel live order:', error)
-        setExecutors((prev) =>
-          prev.map((e) => (e.id === id ? { ...e, status: 'stopped', stoppedAt: Math.floor(Date.now() / 1000) } : e))
-        )
-      }
-      return
-    }
-
-    // A live Position executor still being watched: Stop force-closes the position now, for
-    // real — same gate as the manual Close button on the Positions page (kill-switch/session-arm
-    // only, never blocked by size/cap/loss-limit, since exiting only reduces risk).
-    if (executor && executor.mode === 'live' && executor.liveWatcherId) {
+    // A live executor with real state to tear down: still-resting orders (a single entry for a
+    // live Order limit, up to one per unfilled level for a live DCA ladder) and/or an active
+    // watcher on an open position (Position, or a DCA ladder with at least one fill) — a DCA
+    // executor can have BOTH at once, unlike Order/Position, so these aren't mutually exclusive.
+    if (executor && executor.mode === 'live' && (executor.pendingLiveOrderIds.length > 0 || executor.liveWatcherId)) {
       const stoppedAt = Math.floor(Date.now() / 1000)
-      try {
-        // The main process reads the real result back from the ledger after closing — never
-        // fabricated client-side.
-        const liveExitResult = await window.api.liveTrading.stopWatcher(executor.liveWatcherId)
-        setExecutors((prev) => prev.map((e) => (e.id === id ? { ...e, status: 'stopped', stoppedAt, liveWatcherId: null, liveExitResult } : e)))
-      } catch (error) {
-        console.error('Failed to force-close watched live position:', error)
-        setExecutors((prev) => prev.map((e) => (e.id === id ? { ...e, status: 'stopped', stoppedAt, liveWatcherId: null } : e)))
+
+      // Cancelling is ungated (it only ever reduces risk) — always attempted first, regardless
+      // of whether a watcher also needs stopping. Best-effort per order: one that already
+      // resolved a moment ago isn't a real failure, but a genuine failure keeps that id tracked
+      // rather than silently losing a real resting order.
+      const stillPendingIds: string[] = []
+      let lastCancelledOrder: LiveOrderRecord | null = null
+      for (const orderId of executor.pendingLiveOrderIds) {
+        try {
+          lastCancelledOrder = await window.api.liveTrading.cancelOrder(orderId)
+        } catch (error) {
+          console.error(`Failed to cancel live order ${orderId}:`, error)
+          stillPendingIds.push(orderId)
+        }
       }
+
+      // Force-close a watched open position — same gate as the manual Close button on the
+      // Positions page (kill-switch/session-arm only, never size/cap/loss-limit, since exiting
+      // only reduces risk). If this is blocked, the real watcher stays active server-side, so
+      // liveWatcherId must stay set here too and the executor must NOT be marked stopped — it's
+      // genuinely still being watched, and clearing the reference here would silently hide that
+      // from the UI (and disable retrying, since Stop is only offered while status === 'active').
+      let liveExitResult: LiveExitResult | null = null
+      let watcherStillActive = false
+      if (executor.liveWatcherId) {
+        try {
+          // The main process reads the real result back from the ledger after closing — never
+          // fabricated client-side.
+          liveExitResult = await window.api.liveTrading.stopWatcher(executor.liveWatcherId)
+        } catch (error) {
+          console.error('Failed to force-close watched live position:', error)
+          watcherStillActive = true
+        }
+      }
+
+      const stillActive = stillPendingIds.length > 0 || watcherStillActive
+      setExecutors((prev) =>
+        prev.map((e) =>
+          e.id === id
+            ? {
+                ...e,
+                status: stillActive ? 'active' : 'stopped',
+                stoppedAt: stillActive ? null : stoppedAt,
+                pendingLiveOrderIds: stillPendingIds,
+                liveOrder: lastCancelledOrder ?? e.liveOrder,
+                liveWatcherId: watcherStillActive ? e.liveWatcherId : null,
+                liveExitResult: liveExitResult ?? e.liveExitResult
+              }
+            : e
+        )
+      )
       return
     }
 

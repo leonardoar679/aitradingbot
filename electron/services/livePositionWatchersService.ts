@@ -4,7 +4,7 @@ import { readFile, writeFile, mkdir } from 'fs/promises'
 import type { Exchange, LiveExitResult } from '../../shared/ipc'
 import { fetchTicker24h } from './marketService'
 import { getLivePosition } from './livePositionsService'
-import { executeLiveClose } from './liveExecutionService'
+import { executeLiveClose, cancelSiblingLiveOrders } from './liveExecutionService'
 
 // The live Position Executor's Triple Barrier watcher — the one piece of this app that has to
 // keep running unattended, watching a real position, and reliably trigger a real exit with no
@@ -120,6 +120,18 @@ export async function deactivateWatcher(id: string): Promise<void> {
   await persist()
 }
 
+/** Live DCA only: each new level fill shifts the position's true weighted-average cost basis, so
+ * a watcher created on the first fill and never touched again would silently drift from it —
+ * paper DCA always evaluates TP/SL/time-limit against the CURRENT average (recomputed fresh every
+ * candle), so the live watcher has to track that too, not just the entry-price snapshot. No-op
+ * for Position (which never calls this — its entry price never changes after creation). */
+export async function updateWatcherEntryPrice(id: string, entryPrice: number): Promise<void> {
+  const state = await load()
+  const watcher = state.watchers.find((w) => w.id === id)
+  if (watcher) watcher.entryPrice = entryPrice
+  await persist()
+}
+
 export async function drainResolvedWatcherEvents(): Promise<ResolvedEvent[]> {
   const state = await load()
   const events = state.resolvedEvents
@@ -187,6 +199,9 @@ async function tick(): Promise<void> {
           watcher.active = false
         } else {
           await executeLiveClose(position, position.qty)
+          // A live DCA executor can still have unfilled ladder levels resting when its watched
+          // position exits -- cancel them now (no-op for Order/Position, which never have any).
+          await cancelSiblingLiveOrders(watcher.executorId)
           const closedPosition = await getLivePosition(watcher.livePositionId)
           watcher.active = false
           if (closedPosition && closedPosition.exitPrice !== null && closedPosition.realizedPnl !== null) {

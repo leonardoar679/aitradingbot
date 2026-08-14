@@ -99,7 +99,11 @@ export function simulateGrid(candles: Candle[], params: GridExecutorParams): Gri
   }
 }
 
-function dcaLevelPrice(basePrice: number, level: DcaLevel, side: 'buy' | 'sell'): number {
+// Exported for reuse by the live DCA executor path (ExecutorsPage.tsx), which needs the exact
+// same offset-from-reference-price formula to compute each level's real limit price -- there's
+// no candle replay live, so the "reference price" is a real ticker snapshot captured once at
+// creation (ExecutorConfig.liveDcaBasePrice) instead of candles[0].close.
+export function dcaLevelPrice(basePrice: number, level: DcaLevel, side: 'buy' | 'sell'): number {
   const sign = side === 'buy' ? -1 : 1
   return basePrice * (1 + (sign * level.priceOffsetPct) / 100)
 }
