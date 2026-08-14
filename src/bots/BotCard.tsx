@@ -1,6 +1,6 @@
 import { Bot as BotIcon, Archive } from 'lucide-react'
 import { EXCHANGES } from '../../shared/ipc'
-import { useDryRun } from './useDryRun'
+import { useDryRun, summarizePaperTrades } from './useDryRun'
 import type { Bot } from './types'
 
 interface BotCardProps {
@@ -34,10 +34,7 @@ function DryRunPanel({ bot }: { bot: Bot }): React.JSX.Element {
   if (!result || !latestCandle) return <></>
 
   const openPosition = result.openPositionAtEnd
-  const paperTrades = bot.enabledAt !== null ? result.trades.filter((t) => t.entryTime >= bot.enabledAt!) : []
-  const paperWins = paperTrades.filter((t) => t.pnl > 0).length
-  const paperNetPct =
-    paperTrades.length > 0 ? (paperTrades.reduce((acc, t) => acc * (1 + t.returnPct / 100), 1) - 1) * 100 : 0
+  const { paperTrades, paperWins, paperNetPct } = summarizePaperTrades(result.trades, bot.enabledAt)
 
   return (
     <div

@@ -66,6 +66,15 @@ export function registerMarketHandlers(mainWindow: BrowserWindow): void {
   )
   ipcMain.handle(IpcChannel.MarketUnsubscribeTicker, () => unsubscribeTicker())
 
+  // A one-off snapshot price for a symbol the renderer isn't (necessarily) subscribed to via
+  // subscribeTicker/onTickerUpdate -- that pair is a single global subscription (one consumer at
+  // a time), which doesn't fit a caller that needs several symbols' prices at once (e.g. the
+  // Portfolio page pricing multiple distinct holdings on each poll).
+  ipcMain.handle(
+    IpcChannel.MarketFetchTicker24h,
+    async (_event, exchange: Exchange, symbol: string): Promise<Ticker24h> => fetchTicker24h(exchange, symbol)
+  )
+
   ipcMain.handle(
     IpcChannel.MarketFetchHistoricalRange,
     async (

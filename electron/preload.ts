@@ -60,7 +60,9 @@ const api = {
       const handler = (_event: IpcRendererEvent, progress: HistoricalRangeProgress): void => listener(progress)
       ipcRenderer.on(IpcChannel.MarketHistoricalRangeProgress, handler)
       return () => ipcRenderer.removeListener(IpcChannel.MarketHistoricalRangeProgress, handler)
-    }
+    },
+    fetchTicker24h: (exchange: Exchange, symbol: string): Promise<Ticker24h> =>
+      ipcRenderer.invoke(IpcChannel.MarketFetchTicker24h, exchange, symbol)
   },
   credentials: {
     list: (): Promise<CredentialStatus[]> => ipcRenderer.invoke(IpcChannel.CredentialsList),

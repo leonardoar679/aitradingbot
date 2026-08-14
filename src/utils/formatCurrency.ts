@@ -39,3 +39,10 @@ export function formatQuotePrice(value: number, quoteAsset: string): string {
   const formatted = formatAssetNumber(value, quoteAsset)
   return symbol ? `${symbol}${formatted}` : `${formatted} ${quote}`
 }
+
+/** Whether a quote asset is one of the dollar-family currencies this app treats as directly
+ * summable (USD/USDT/USDC/BUSD) — used to decide what can safely be folded into a single
+ * dollar total without a real exchange rate (e.g. a KRW-quoted holding can't be). */
+export function isUsdLikeQuote(quoteAsset: string): boolean {
+  return CURRENCY_SYMBOLS[quoteAsset.toUpperCase()] === '$'
+}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Candle, Exchange } from '../../shared/ipc'
-import { runBacktest, type BacktestResult } from '../backtest/engine'
+import { runBacktest, type BacktestResult, type Trade } from '../backtest/engine'
 
 // The dry-run polls the same 4h interval every backtest strategy is validated on, so its
 // signals always match what was actually backtested for the bot's chosen strategy.
@@ -22,6 +22,44 @@ export interface DryRunState {
 }
 
 const IDLE_STATE: DryRunState = { status: 'loading', error: null, result: null, candles: [], latestCandle: null }
+
+/** Imperative counterpart to the hook below, for call sites outside a component's render
+ * lifecycle (e.g. the Portfolio page aggregating every enabled bot at once) — same fetch window
+ * and warmup padding, just a one-shot call instead of a poll/subscribe cycle. Returns null if no
+ * candles were returned (a brand-new symbol/range) rather than throwing, since "nothing to show
+ * yet" isn't really an error. */
+export async function fetchBotDryRunResult(bot: {
+  exchange: Exchange
+  symbol: string
+  enabledAt: number | null
+  strategyId: string
+}): Promise<{ result: BacktestResult; candles: Candle[] } | null> {
+  const endSec = Math.floor(Date.now() / 1000)
+  const defaultStartSec = endSec - LOOKBACK_CANDLES * DRY_RUN_INTERVAL_SEC
+  const startSec =
+    bot.enabledAt !== null
+      ? Math.min(defaultStartSec, bot.enabledAt - WARMUP_CANDLES * DRY_RUN_INTERVAL_SEC)
+      : defaultStartSec
+  const { candles } = await window.api.market.fetchHistoricalRange(bot.exchange, bot.symbol, '4h', startSec, endSec)
+  if (candles.length === 0) return null
+  return { result: runBacktest(candles, bot.strategyId, { forceCloseAtEnd: false }), candles }
+}
+
+/** Bots have no dollar allocation anywhere in this app — this is the only real per-bot
+ * performance figure that exists, a compounded % across only the trades entered after the bot
+ * was actually turned on (see the comment on DryRunPanel in BotCard.tsx for why the lookback's
+ * own historical trades are excluded). Shared by BotCard's display and the Portfolio aggregator
+ * so the two can never drift apart. */
+export function summarizePaperTrades(
+  trades: Trade[],
+  enabledAt: number | null
+): { paperTrades: Trade[]; paperWins: number; paperNetPct: number } {
+  const paperTrades = enabledAt !== null ? trades.filter((t) => t.entryTime >= enabledAt) : []
+  const paperWins = paperTrades.filter((t) => t.pnl > 0).length
+  const paperNetPct =
+    paperTrades.length > 0 ? (paperTrades.reduce((acc, t) => acc * (1 + t.returnPct / 100), 1) - 1) * 100 : 0
+  return { paperTrades, paperWins, paperNetPct }
+}
 
 // Polls the exchange every minute for the newest closed 4h candles (only while this component
 // stays mounted — i.e. only while the app is open) and replays the full backtest engine over
@@ -53,18 +91,12 @@ export function useDryRun(
 
     async function poll(): Promise<void> {
       try {
-        const endSec = Math.floor(Date.now() / 1000)
-        const defaultStartSec = endSec - LOOKBACK_CANDLES * DRY_RUN_INTERVAL_SEC
-        const startSec =
-          enabledAt !== null
-            ? Math.min(defaultStartSec, enabledAt - WARMUP_CANDLES * DRY_RUN_INTERVAL_SEC)
-            : defaultStartSec
-        const { candles } = await window.api.market.fetchHistoricalRange(exchange, symbol, '4h', startSec, endSec)
+        const fetched = await fetchBotDryRunResult({ exchange, symbol, enabledAt, strategyId })
         if (cancelled) return
-        if (candles.length === 0) {
+        if (fetched === null) {
           setState({ status: 'error', error: 'No candle data returned', result: null, candles: [], latestCandle: null })
         } else {
-          const result = runBacktest(candles, strategyId, { forceCloseAtEnd: false })
+          const { result, candles } = fetched
           setState({ status: 'running', error: null, result, candles, latestCandle: candles[candles.length - 1] })
         }
       } catch (error) {

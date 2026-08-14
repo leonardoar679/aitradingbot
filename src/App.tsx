@@ -16,6 +16,7 @@ import { BacktestPage } from './backtest/BacktestPage'
 import { SettingsPanel } from './settings/SettingsPanel'
 import { LiveTradingBar } from './livetrading/LiveTradingBar'
 import { LiveOrderScheduler } from './livetrading/LiveOrderScheduler'
+import { PortfolioScheduler } from './portfolio/PortfolioScheduler'
 import type { Page } from './navigation/pages'
 
 function App(): React.JSX.Element {
@@ -27,6 +28,7 @@ function App(): React.JSX.Element {
       <RoutineScheduler />
       <ControllerScheduler />
       <LiveOrderScheduler />
+      <PortfolioScheduler />
       <LiveTradingBar />
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <Sidebar

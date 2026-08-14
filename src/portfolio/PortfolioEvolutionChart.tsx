@@ -3,7 +3,10 @@ import { createChart, AreaSeries, type IChartApi, type UTCTimestamp } from 'ligh
 import { BarChart3, Layers } from 'lucide-react'
 import { useTheme } from '../theme/ThemeContext'
 import { CHART_PALETTE } from '../theme/palette'
-import { MOCK_HOLDINGS, TIMEFRAMES, generatePortfolioSeries, type Timeframe } from './data'
+import { TIMEFRAMES, TIMEFRAME_LOOKBACK_SEC, type Timeframe } from './data'
+import { usePortfolioSnapshots } from './portfolioStore'
+import { colorForAsset } from './assetColor'
+import { isUsdLikeQuote } from '../utils/formatCurrency'
 
 type ChartMode = 'value' | 'composition'
 
@@ -47,11 +50,17 @@ export function PortfolioEvolutionChart(): React.JSX.Element {
   const { theme } = useTheme()
   const palette = CHART_PALETTE[theme]
 
-  const series = useMemo(() => generatePortfolioSeries(timeframe), [timeframe])
+  const allSnapshots = usePortfolioSnapshots()
+  const snapshots = useMemo(() => {
+    const cutoff = Math.floor(Date.now() / 1000) - TIMEFRAME_LOOKBACK_SEC[timeframe]
+    return allSnapshots.filter((s) => s.takenAt >= cutoff)
+  }, [allSnapshots, timeframe])
+
+  const hasEnoughHistory = snapshots.length >= 2
 
   useEffect(() => {
     const container = containerRef.current
-    if (!container) return
+    if (!container || !hasEnoughHistory) return
 
     const chart = createChart(container, {
       autoSize: true,
@@ -79,30 +88,47 @@ export function PortfolioEvolutionChart(): React.JSX.Element {
         priceLineVisible: false,
         lastValueVisible: false
       })
-      areaSeries.setData(series.map((p) => ({ time: toTime(p.time), value: p.value })))
+      areaSeries.setData(snapshots.map((s) => ({ time: toTime(s.takenAt), value: s.totalValue })))
     } else {
-      // Stacked composition: split the same total-value curve by each holding's current
-      // portfolio share. Series are added smallest-cumulative-last so painter's order stacks
-      // them bottom-to-top in holdings order.
-      const totalShare = MOCK_HOLDINGS.reduce((sum, h) => sum + h.value, 0)
-      let cumulative = 0
-      const cumulativeFractions = MOCK_HOLDINGS.map((h) => {
-        cumulative += h.value / totalShare
-        return cumulative
+      // Real stacked composition, from each snapshot's own real holdings breakdown at that
+      // moment -- not a static current-share projected backward, like the old mock did. Only
+      // USD-family-quoted rows are included, matching totalValue's own definition, so the stack
+      // visually sums to the same line the value mode plots.
+      const seriesKeys = new Set<string>()
+      for (const snapshot of snapshots) {
+        for (const holding of snapshot.holdings) {
+          if (isUsdLikeQuote(holding.quoteAsset)) seriesKeys.add(`${holding.baseAsset}:${holding.quoteAsset}:${holding.isLive}`)
+        }
+      }
+
+      const perSnapshotValues = snapshots.map((snapshot) => {
+        const byKey = new Map<string, number>()
+        for (const holding of snapshot.holdings) {
+          if (isUsdLikeQuote(holding.quoteAsset)) byKey.set(`${holding.baseAsset}:${holding.quoteAsset}:${holding.isLive}`, holding.value)
+        }
+        return byKey
       })
 
-      for (let i = MOCK_HOLDINGS.length - 1; i >= 0; i--) {
-        const holding = MOCK_HOLDINGS[i]
-        const fraction = cumulativeFractions[i]
+      // Painter's order: draw the cumulative-largest series first so later (smaller) series
+      // layer on top and stay visible, same approach the old mock used.
+      const keys = [...seriesKeys]
+      const cumulativeByIndex = snapshots.map((_, i) => {
+        let running = 0
+        return keys.map((key) => (running += perSnapshotValues[i].get(key) ?? 0))
+      })
+
+      for (let k = keys.length - 1; k >= 0; k--) {
+        const [baseAsset] = keys[k].split(':')
+        const color = colorForAsset(baseAsset)
         const areaSeries = chart.addSeries(AreaSeries, {
-          lineColor: holding.color,
-          topColor: `${holding.color}e6`,
-          bottomColor: `${holding.color}e6`,
+          lineColor: color,
+          topColor: `${color}e6`,
+          bottomColor: `${color}e6`,
           lineWidth: 1,
           priceLineVisible: false,
           lastValueVisible: false
         })
-        areaSeries.setData(series.map((p) => ({ time: toTime(p.time), value: p.value * fraction })))
+        areaSeries.setData(snapshots.map((s, i) => ({ time: toTime(s.takenAt), value: cumulativeByIndex[i][k] })))
       }
     }
 
@@ -112,7 +138,7 @@ export function PortfolioEvolutionChart(): React.JSX.Element {
       chart.remove()
       chartRef.current = null
     }
-  }, [series, mode, timeframe, palette])
+  }, [snapshots, mode, timeframe, palette, hasEnoughHistory])
 
   return (
     <section
@@ -160,7 +186,14 @@ export function PortfolioEvolutionChart(): React.JSX.Element {
           </div>
         </div>
       </div>
-      <div ref={containerRef} style={{ width: '100%', height: 360, marginTop: '1rem' }} />
+      {hasEnoughHistory ? (
+        <div ref={containerRef} style={{ width: '100%', height: 360, marginTop: '1rem' }} />
+      ) : (
+        <p style={{ margin: '1rem 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+          Not enough history yet — this chart tracks real values from now forward, not a fabricated past. Leave the
+          app open for a bit and it'll start filling in.
+        </p>
+      )}
     </section>
   )
 }
