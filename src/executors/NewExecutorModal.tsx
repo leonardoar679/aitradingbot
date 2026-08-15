@@ -145,6 +145,13 @@ function defaultMarketMakingParams(): MarketMakingExecutorParams {
   return { side: 'both', spreadPct: 0.5, orderRefreshSec: 60, orderAmountQuote: 200, inventoryTargetPct: null, inventorySkewIntensity: 0.3 }
 }
 
+// XEMM/Arbitrage require both legs to share the same base+quote asset (see spreadAssetsMismatched
+// below) -- EXCHANGES[0]/[1] (Binance BTC/USDT, Coinbase BTC/USD) don't, which left Create disabled
+// out of the box on a fresh spread executor. Bithumb and Upbit both default to BTC/KRW, so use
+// those two as the default legs instead -- a real, commonly-arbitraged pair.
+const DEFAULT_SPREAD_BUY_EXCHANGE = EXCHANGES.find((e) => e.id === 'bithumb') ?? EXCHANGES[0]
+const DEFAULT_SPREAD_SELL_EXCHANGE = EXCHANGES.find((e) => e.id === 'upbit') ?? EXCHANGES[1]
+
 export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): React.JSX.Element {
   const [name, setName] = useState('')
   const [exchange, setExchange] = useState<Exchange>(EXCHANGES[0].id)
@@ -158,10 +165,16 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
   const [positionParams, setPositionParams] = useState<PositionExecutorParams>(defaultPositionParams())
   const [orderParams, setOrderParams] = useState<OrderExecutorParams>(defaultOrderParams())
   const [xemmParams, setXemmParams] = useState<XemmExecutorParams>(
-    defaultXemmParams(defaultSpreadMarket(EXCHANGES[0].id, EXCHANGES[0].defaultSymbol), defaultSpreadMarket(EXCHANGES[1].id, EXCHANGES[1].defaultSymbol))
+    defaultXemmParams(
+      defaultSpreadMarket(DEFAULT_SPREAD_BUY_EXCHANGE.id, DEFAULT_SPREAD_BUY_EXCHANGE.defaultSymbol),
+      defaultSpreadMarket(DEFAULT_SPREAD_SELL_EXCHANGE.id, DEFAULT_SPREAD_SELL_EXCHANGE.defaultSymbol)
+    )
   )
   const [arbitrageParams, setArbitrageParams] = useState<ArbitrageExecutorParams>(
-    defaultArbitrageParams(defaultSpreadMarket(EXCHANGES[0].id, EXCHANGES[0].defaultSymbol), defaultSpreadMarket(EXCHANGES[1].id, EXCHANGES[1].defaultSymbol))
+    defaultArbitrageParams(
+      defaultSpreadMarket(DEFAULT_SPREAD_BUY_EXCHANGE.id, DEFAULT_SPREAD_BUY_EXCHANGE.defaultSymbol),
+      defaultSpreadMarket(DEFAULT_SPREAD_SELL_EXCHANGE.id, DEFAULT_SPREAD_SELL_EXCHANGE.defaultSymbol)
+    )
   )
   const [marketMakingParams, setMarketMakingParams] = useState<MarketMakingExecutorParams>(defaultMarketMakingParams())
   const [mode, setMode] = useState<'paper' | 'live'>('paper')
