@@ -19,6 +19,7 @@ import { useTheme } from '../theme/ThemeContext'
 import { CHART_PALETTE } from '../theme/palette'
 import type { Trade } from '../backtest/engine'
 import type { Bot } from './types'
+import { formatQuotePrice } from '../utils/formatCurrency'
 
 interface BotDetailViewProps {
   bot: Bot
@@ -213,7 +214,7 @@ export function BotDetailView({ bot, onBack }: BotDetailViewProps): React.JSX.El
                 }}
               />
               {openPosition ? (
-                <span style={{ color: 'var(--text-primary)' }}>Long @ {openPosition.entryPrice.toFixed(2)}</span>
+                <span style={{ color: 'var(--text-primary)' }}>Long @ {formatQuotePrice(openPosition.entryPrice, bot.quoteAsset)}</span>
               ) : (
                 <span style={{ color: 'var(--text-secondary)' }}>Flat — waiting for signal</span>
               )}
@@ -260,7 +261,7 @@ export function BotDetailView({ bot, onBack }: BotDetailViewProps): React.JSX.El
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'var(--text-primary)' }}>
-                    {t.entryPrice.toFixed(2)} → {t.exitPrice.toFixed(2)}
+                    {formatQuotePrice(t.entryPrice, bot.quoteAsset)} → {formatQuotePrice(t.exitPrice, bot.quoteAsset)}
                   </span>
                   <span style={{ color: pctColor(t.returnPct), fontWeight: 600 }}>{t.returnPct.toFixed(2)}%</span>
                 </div>

@@ -3,7 +3,16 @@ import { colorForAsset } from './assetColor'
 import { formatQuotePrice, isUsdLikeQuote } from '../utils/formatCurrency'
 
 export function TopHoldings({ holdings, totalValue }: { holdings: PortfolioHoldingRow[]; totalValue: number }): React.JSX.Element {
-  const maxValue = holdings.length > 0 ? Math.max(...holdings.map((h) => h.value)) : 0
+  // Bar widths are scaled within a currency, never across them. `value` is denominated in each
+  // holding's own quote asset, so one KRW position (values in the millions) sitting next to USD
+  // positions would otherwise flatten every USD bar to zero width. The percentage below already
+  // segregates currencies this way -- the bar scale simply hadn't.
+  const scaleKeyFor = (quoteAsset: string): string => (isUsdLikeQuote(quoteAsset) ? 'usd' : quoteAsset)
+  const maxByScale = new Map<string, number>()
+  for (const h of holdings) {
+    const key = scaleKeyFor(h.quoteAsset)
+    maxByScale.set(key, Math.max(maxByScale.get(key) ?? 0, h.value))
+  }
 
   return (
     <section
@@ -25,7 +34,8 @@ export function TopHoldings({ holdings, totalValue }: { holdings: PortfolioHoldi
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
           {holdings.map((holding) => {
             const color = colorForAsset(holding.baseAsset)
-            const width = maxValue > 0 ? (holding.value / maxValue) * 100 : 0
+            const scaleMax = maxByScale.get(scaleKeyFor(holding.quoteAsset)) ?? 0
+            const width = scaleMax > 0 ? (holding.value / scaleMax) * 100 : 0
             const countsTowardTotal = isUsdLikeQuote(holding.quoteAsset)
             const percent = countsTowardTotal && totalValue > 0 ? (holding.value / totalValue) * 100 : null
             return (

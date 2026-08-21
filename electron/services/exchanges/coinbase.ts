@@ -105,6 +105,13 @@ async function fetchHistoricalRange(
   const total = Math.max(1, Math.ceil((endSec - startSec) / granularity))
   let cursor = startSec
   const collected: Candle[] = []
+  // Coinbase's start/end are inclusive and the cursor below advances to the previous page's end
+  // (not past it, the way binance.ts advances to lastTime + interval), so the candle on each page
+  // boundary comes back twice. Nothing downstream tolerates that -- duplicated bars inflate the
+  // count and let a backtest act on the same bar more than once -- so drop repeats by timestamp.
+  // Deduping rather than advancing the cursor keeps this safe whichever way the API treats the
+  // bounds: skipping ahead would risk a gap if `end` were ever exclusive.
+  const seenTimes = new Set<number>()
 
   while (cursor < endSec) {
     if (isCancelled()) break
@@ -116,6 +123,8 @@ async function fetchHistoricalRange(
     }
     const rows = (await response.json()) as CoinbaseCandleRow[]
     for (const [time, low, high, open, close, volume] of rows) {
+      if (seenTimes.has(time)) continue
+      seenTimes.add(time)
       collected.push({ time, open, high, low, close, volume })
     }
     onProgress(Math.min(collected.length, total), total)

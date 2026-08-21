@@ -2,6 +2,7 @@ import { Bot as BotIcon, Archive } from 'lucide-react'
 import { EXCHANGES } from '../../shared/ipc'
 import { useDryRun, summarizePaperTrades } from './useDryRun'
 import type { Bot } from './types'
+import { formatQuotePrice } from '../utils/formatCurrency'
 
 interface BotCardProps {
   bot: Bot
@@ -62,7 +63,7 @@ function DryRunPanel({ bot }: { bot: Bot }): React.JSX.Element {
         />
         {openPosition ? (
           <span style={{ color: 'var(--text-primary)' }}>
-            Long since {formatShortDate(openPosition.entryTime)} @ {openPosition.entryPrice.toFixed(2)}{' '}
+            Long since {formatShortDate(openPosition.entryTime)} @ {formatQuotePrice(openPosition.entryPrice, bot.quoteAsset)}{' '}
             <span style={{ color: latestCandle.close >= openPosition.entryPrice ? 'var(--up)' : 'var(--down)' }}>
               ({((latestCandle.close / openPosition.entryPrice - 1) * 100).toFixed(2)}%)
             </span>
