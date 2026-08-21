@@ -41,7 +41,9 @@ export function ArbitrageForm({ params, onChange }: ArbitrageFormProps): React.J
 
       <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
         Captures the spread in either direction, unlike XEMM which is one-directional (buying
-        market → selling market only).
+        market to selling market only). Both legs pay a fee, so a capture only nets money above
+        roughly 0.2% — a threshold at or below that loses on every capture, no matter how often
+        it triggers.
       </p>
     </div>
   )

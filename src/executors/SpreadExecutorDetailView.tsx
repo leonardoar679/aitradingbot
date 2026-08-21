@@ -134,7 +134,10 @@ export function SpreadExecutorDetailView({ executor, onBack }: { executor: Execu
                 >
                   <span style={{ color: 'var(--text-secondary)' }}>{new Date(c.time * 1000).toLocaleString()}</span>
                   <span style={{ color: 'var(--text-primary)' }}>{c.spreadPct.toFixed(3)}%</span>
-                  <span style={{ color: 'var(--up)', fontWeight: 600 }}>+{formatQuotePrice(c.profitQuote, executor.quoteAsset)}</span>
+                  <span style={{ color: c.profitQuote >= 0 ? 'var(--up)' : 'var(--down)', fontWeight: 600 }}>
+                    {c.profitQuote >= 0 ? '+' : ''}
+                    {formatQuotePrice(c.profitQuote, executor.quoteAsset)}
+                  </span>
                 </div>
               ))}
           </div>

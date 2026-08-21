@@ -1,5 +1,6 @@
 import type { ExecutorConfig, ExecutorSide, GridExecutorParams, DcaExecutorParams, TwapExecutorParams, PositionExecutorParams, OrderExecutorParams, XemmExecutorParams, ArbitrageExecutorParams } from '../../shared/ipc'
 import { runExecutorSimulation } from './engine'
+import { roundTripFee } from '../../shared/fees'
 import { alignByTime, simulateXemm, simulateArbitrage } from './spreadEngine'
 
 // Imperative counterparts to useExecutorSimulation/useSpreadExecutorSimulation for call sites
@@ -98,7 +99,8 @@ export async function computeExecutorPnl(executor: ExecutorConfig): Promise<numb
       .filter((l) => l.status === 'filled' && l.entryPrice !== null)
       .reduce((sum, l) => {
         const qty = state.amountPerLevel / (l.entryPrice as number)
-        return sum + (isBuy ? qty * (current - (l.entryPrice as number)) : qty * ((l.entryPrice as number) - current))
+        const grossLot = isBuy ? qty * (current - (l.entryPrice as number)) : qty * ((l.entryPrice as number) - current)
+        return sum + grossLot - roundTripFee(qty, l.entryPrice as number, current)
       }, 0)
     return state.realizedPnl + unrealized
   }
@@ -109,7 +111,8 @@ export async function computeExecutorPnl(executor: ExecutorConfig): Promise<numb
     const params = executor.params as DcaExecutorParams
     const isBuy = params.side === 'buy'
     const totalQty = state.totalFilledQuote / state.avgEntryPrice
-    return isBuy ? totalQty * (current - state.avgEntryPrice) : totalQty * (state.avgEntryPrice - current)
+    const grossDca = isBuy ? totalQty * (current - state.avgEntryPrice) : totalQty * (state.avgEntryPrice - current)
+    return grossDca - roundTripFee(totalQty, state.avgEntryPrice, current)
   }
 
   if (state.kind === 'twap') {
@@ -117,7 +120,8 @@ export async function computeExecutorPnl(executor: ExecutorConfig): Promise<numb
     const params = executor.params as { side: ExecutorSide; totalAmountQuote: number }
     const isBuy = params.side === 'buy'
     const totalQty = state.fills.reduce((sum, f) => sum + f.amountQuote / f.price, 0)
-    return isBuy ? totalQty * (current - state.vwap) : totalQty * (state.vwap - current)
+    const grossTwap = isBuy ? totalQty * (current - state.vwap) : totalQty * (state.vwap - current)
+    return grossTwap - roundTripFee(totalQty, state.vwap, current)
   }
 
   if (state.kind === 'position') {
@@ -126,7 +130,8 @@ export async function computeExecutorPnl(executor: ExecutorConfig): Promise<numb
       const params = executor.params as PositionExecutorParams
       const isBuy = state.side === 'buy'
       const qty = params.amountQuote / state.entryPrice
-      return isBuy ? qty * (current - state.entryPrice) : qty * (state.entryPrice - current)
+      const grossPos = isBuy ? qty * (current - state.entryPrice) : qty * (state.entryPrice - current)
+      return grossPos - roundTripFee(qty, state.entryPrice, current)
     }
     return 0
   }
@@ -136,14 +141,18 @@ export async function computeExecutorPnl(executor: ExecutorConfig): Promise<numb
       const params = executor.params as OrderExecutorParams
       const isBuy = params.side === 'buy'
       const qty = params.amountQuote / state.fillPrice
-      return isBuy ? qty * (current - state.fillPrice) : qty * (state.fillPrice - current)
+      const grossOrder = isBuy ? qty * (current - state.fillPrice) : qty * (state.fillPrice - current)
+      return grossOrder - roundTripFee(qty, state.fillPrice, current)
     }
     return 0
   }
 
   // marketmaking: realized P&L from closed round trips, plus unrealized on any net inventory
   // still held, marked against its average cost basis.
-  const unrealized = state.inventoryBaseQty !== 0 && state.avgCost !== null ? state.inventoryBaseQty * (current - state.avgCost) : 0
+  const unrealized =
+    state.inventoryBaseQty !== 0 && state.avgCost !== null
+      ? state.inventoryBaseQty * (current - state.avgCost) - roundTripFee(Math.abs(state.inventoryBaseQty), state.avgCost, current)
+      : 0
   return state.realizedPnl + unrealized
 }
 

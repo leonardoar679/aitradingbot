@@ -1,11 +1,12 @@
 import type { Candle } from '../../shared/ipc'
 import { getStrategy, DEFAULT_STRATEGY_ID } from './strategies'
+import { FEE_RATE } from '../../shared/fees'
 
 // The actual entry/exit/stop logic is pluggable — see src/backtest/strategies/. This engine only
 // owns execution: position tracking, fees, the equity curve, and the full stats panel below. Any
 // open position is force-closed on the final candle (unless forceCloseAtEnd is off). Fee is a
-// flat taker rate applied to both entry and exit notional.
-const TAKER_FEE_RATE = 0.001
+// flat rate applied to both entry and exit notional, shared with the executor paper simulations
+// via shared/fees.ts so the two engines can never disagree on what a trade costs.
 const STARTING_BALANCE = 10000
 
 export interface Trade {
@@ -225,7 +226,7 @@ export function runBacktest(
   }
 
   function openLong(time: number, price: number, stopPrice: number): void {
-    const fee = cash * TAKER_FEE_RATE
+    const fee = cash * FEE_RATE
     totalFees += fee
     const notional = cash - fee
     posBox.current = { entryPrice: price, entryTime: time, qty: notional / price, cashBefore: cash, stopPrice }
@@ -236,7 +237,7 @@ export function runBacktest(
     const position = posBox.current
     if (!position) return
     const grossProceeds = position.qty * price
-    const fee = grossProceeds * TAKER_FEE_RATE
+    const fee = grossProceeds * FEE_RATE
     totalFees += fee
     const netProceeds = grossProceeds - fee
     const pnl = netProceeds - position.cashBefore

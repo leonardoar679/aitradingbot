@@ -1,4 +1,5 @@
 import type { Candle, ArbitrageExecutorParams, XemmExecutorParams } from '../../shared/ipc'
+import { spreadCaptureFee } from '../../shared/fees'
 import type { SpreadCapture, SpreadExecutorState } from './types'
 
 export interface AlignedPoint {
@@ -38,7 +39,7 @@ export function simulateXemm(aligned: AlignedPoint[], params: XemmExecutorParams
     lastSpreadPct = pct
 
     if (armed && pct >= params.minProfitabilityPct) {
-      const profitQuote = params.orderAmountQuote * (pct / 100)
+      const profitQuote = params.orderAmountQuote * (pct / 100) - spreadCaptureFee(params.orderAmountQuote, pct)
       captures.push({ time: point.time, spreadPct: pct, profitQuote })
       realizedPnl += profitQuote
       armed = false
@@ -64,7 +65,7 @@ export function simulateArbitrage(aligned: AlignedPoint[], params: ArbitrageExec
     const absPct = Math.abs(pct)
 
     if (armed && absPct >= params.minProfitabilityPct) {
-      const profitQuote = params.orderAmountQuote * (absPct / 100)
+      const profitQuote = params.orderAmountQuote * (absPct / 100) - spreadCaptureFee(params.orderAmountQuote, absPct)
       captures.push({ time: point.time, spreadPct: pct, profitQuote })
       realizedPnl += profitQuote
       armed = false

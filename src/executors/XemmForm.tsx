@@ -38,6 +38,11 @@ export function XemmForm({ params, onChange }: XemmFormProps): React.JSX.Element
           />
         </div>
       </div>
+
+      <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
+        Both legs pay a fee, so a capture only nets money above roughly 0.2%. A threshold at or
+        below that loses on every capture, no matter how often it triggers.
+      </p>
     </div>
   )
 }

@@ -19,6 +19,7 @@ import type {
   SingleMarketExecutorState,
   GridLevelState
 } from './types'
+import { roundTripFee } from '../../shared/fees'
 
 const MAX_GRID_LEVELS = 40
 
@@ -75,7 +76,8 @@ export function simulateGrid(candles: Candle[], params: GridExecutorParams): Gri
       const hit = isBuy ? candle.high >= target : candle.low <= target
       if (hit) {
         const qty = amountPerLevel / level.entryPrice
-        realizedPnl += isBuy ? qty * (target - level.entryPrice) : qty * (level.entryPrice - target)
+        const grossTp = isBuy ? qty * (target - level.entryPrice) : qty * (level.entryPrice - target)
+        realizedPnl += grossTp - roundTripFee(qty, level.entryPrice, target)
         level.status = 'pending'
         level.entryPrice = null
         level.filledAt = null
@@ -92,7 +94,8 @@ export function simulateGrid(candles: Candle[], params: GridExecutorParams): Gri
         for (const level of levels) {
           if (level.status !== 'filled' || level.entryPrice === null) continue
           const qty = amountPerLevel / level.entryPrice
-          realizedPnl += isBuy ? qty * (params.limitPrice - level.entryPrice) : qty * (level.entryPrice - params.limitPrice)
+          const grossStop = isBuy ? qty * (params.limitPrice - level.entryPrice) : qty * (level.entryPrice - params.limitPrice)
+          realizedPnl += grossStop - roundTripFee(qty, level.entryPrice, params.limitPrice)
           level.status = 'pending'
           level.entryPrice = null
           level.filledAt = null
@@ -183,7 +186,8 @@ export function simulateDca(candles: Candle[], params: DcaExecutorParams, basePr
     if (tpHit || slHit || timeUp) {
       const exitPrice = tpHit ? tpTarget : slHit ? (slTarget as number) : candle.close
       const totalQty = fills.reduce((sum, f) => sum + f.amountQuote / f.price, 0)
-      realizedPnl = isBuy ? totalQty * (exitPrice - avg) : totalQty * (avg - exitPrice)
+      const grossDca = isBuy ? totalQty * (exitPrice - avg) : totalQty * (avg - exitPrice)
+      realizedPnl = grossDca - roundTripFee(totalQty, avg, exitPrice)
       status = 'closed'
       closedAt = candle.time
       closePrice = exitPrice
@@ -300,7 +304,9 @@ export function simulatePosition(candles: Candle[], params: PositionExecutorPara
     if (slHit || tpHit || trailHit || timeUp) {
       exitReason = slHit ? 'stop_loss' : tpHit ? 'take_profit' : trailHit ? 'trailing_stop' : 'time_limit'
       exitPrice = slHit ? (slTarget as number) : tpHit ? (tpTarget as number) : trailHit ? (trailTarget as number) : candle.close
-      realizedPnl = isBuy ? (params.amountQuote / entryPrice) * (exitPrice - entryPrice) : (params.amountQuote / entryPrice) * (entryPrice - exitPrice)
+      const posQty = params.amountQuote / entryPrice
+      const grossPos = isBuy ? posQty * (exitPrice - entryPrice) : posQty * (entryPrice - exitPrice)
+      realizedPnl = grossPos - roundTripFee(posQty, entryPrice, exitPrice)
       status = 'closed'
       closedAt = candle.time
       break
@@ -379,7 +385,7 @@ export function simulateMarketMaking(candles: Candle[], params: MarketMakingExec
         inventoryBaseQty = newQty
       } else {
         const coverQty = Math.min(standingQty, -inventoryBaseQty)
-        realizedPnl += coverQty * ((avgCost as number) - bidPrice)
+        realizedPnl += coverQty * ((avgCost as number) - bidPrice) - roundTripFee(coverQty, avgCost as number, bidPrice)
         inventoryBaseQty += standingQty
         avgCost = inventoryBaseQty > 0 ? bidPrice : inventoryBaseQty === 0 ? null : avgCost
       }
@@ -393,7 +399,7 @@ export function simulateMarketMaking(candles: Candle[], params: MarketMakingExec
         inventoryBaseQty = newQty
       } else {
         const closeQty = Math.min(standingQty, inventoryBaseQty)
-        realizedPnl += closeQty * (askPrice - (avgCost as number))
+        realizedPnl += closeQty * (askPrice - (avgCost as number)) - roundTripFee(closeQty, avgCost as number, askPrice)
         inventoryBaseQty -= standingQty
         avgCost = inventoryBaseQty < 0 ? askPrice : inventoryBaseQty === 0 ? null : avgCost
       }

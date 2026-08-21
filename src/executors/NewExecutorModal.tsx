@@ -134,11 +134,11 @@ function defaultSpreadMarket(exchange: Exchange, pair: SymbolInfo): XemmExecutor
 }
 
 function defaultXemmParams(buying: XemmExecutorParams['buyingMarket'], selling: XemmExecutorParams['sellingMarket']): XemmExecutorParams {
-  return { buyingMarket: buying, sellingMarket: selling, orderAmountQuote: 500, minProfitabilityPct: 0.2 }
+  return { buyingMarket: buying, sellingMarket: selling, orderAmountQuote: 500, minProfitabilityPct: 0.5 }
 }
 
 function defaultArbitrageParams(buying: ArbitrageExecutorParams['buyingMarket'], selling: ArbitrageExecutorParams['sellingMarket']): ArbitrageExecutorParams {
-  return { buyingMarket: buying, sellingMarket: selling, orderAmountQuote: 500, minProfitabilityPct: 0.4 }
+  return { buyingMarket: buying, sellingMarket: selling, orderAmountQuote: 500, minProfitabilityPct: 0.5 }
 }
 
 function defaultMarketMakingParams(): MarketMakingExecutorParams {
