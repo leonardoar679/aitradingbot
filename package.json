@@ -29,7 +29,9 @@
     "lint": "eslint . --ext .ts,.tsx",
     "build:win": "node scripts/build-win-signed.js",
     "build:mac": "electron-vite build && electron-builder --mac",
-    "build:linux": "electron-vite build && electron-builder --linux"
+    "build:linux": "electron-vite build && electron-builder --linux",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "lightweight-charts": "^5.2.0",
@@ -55,6 +57,7 @@
     "png-to-ico": "^3.0.2",
     "resedit": "^3.0.2",
     "typescript": "^5.6.3",
-    "vite": "^5.4.10"
+    "vite": "^5.4.10",
+    "vitest": "^4.1.11"
   }
 }

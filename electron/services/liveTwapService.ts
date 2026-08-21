@@ -166,6 +166,25 @@ export async function drainResolvedTwapEvents(): Promise<LiveTwapResolution[]> {
   return events
 }
 
+/** When the next TWAP slice is due, given the one just placed.
+ *
+ * Normally this is a fixed cadence off the original schedule (matching paper's
+ * sliceTime = createdAt + i * orderIntervalSec) rather than nowSec + interval, so a slightly late
+ * tick doesn't compound drift.
+ *
+ * But if the schedule has fallen behind real time -- the app was closed, or the machine slept,
+ * for longer than an interval -- the cadence resumes from now instead. Without that, the whole
+ * backlog is "due" at once and, since tick() runs every few seconds, every remaining slice fires
+ * seconds apart: a real market buy for the entire remaining notional in under a minute, which is
+ * precisely what a TWAP exists to avoid. Finishing late is the correct failure mode; finishing
+ * all at once is not.
+ *
+ * Exported so this can be tested directly -- it is the rule protecting real money here. */
+export function computeNextSliceAt(currentNextSliceAt: number, orderIntervalSec: number, nowSec: number): number {
+  const scheduled = currentNextSliceAt + orderIntervalSec
+  return scheduled <= nowSec ? nowSec + orderIntervalSec : scheduled
+}
+
 async function tick(): Promise<void> {
   const state = await load()
   const active = state.runs.filter((r) => r.status === 'active')
@@ -195,18 +214,7 @@ async function tick(): Promise<void> {
       run.status = 'done'
       pushResolution(state, run)
     } else {
-      // Fixed cadence off the original schedule (matches paper's sliceTime = createdAt + i *
-      // orderIntervalSec) rather than nowSec + interval, so a late tick doesn't compound drift.
-      run.nextSliceAt += run.orderIntervalSec
-      if (run.nextSliceAt <= nowSec) {
-        // ...but if the schedule fell behind real time -- the app was closed, or the machine slept,
-        // for longer than an interval -- resume the cadence from now instead. Without this the
-        // whole backlog is "due" at once and, since tick() runs every few seconds, every remaining
-        // slice fires seconds apart: a real market buy for the entire remaining notional in under
-        // a minute, which is precisely what a TWAP exists to avoid. Finishing late is the correct
-        // failure mode here; finishing all at once is not.
-        run.nextSliceAt = nowSec + run.orderIntervalSec
-      }
+      run.nextSliceAt = computeNextSliceAt(run.nextSliceAt, run.orderIntervalSec, nowSec)
     }
     await persist()
   }

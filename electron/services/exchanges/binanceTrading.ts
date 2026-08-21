@@ -166,7 +166,7 @@ async function getSymbolFilters(symbol: string): Promise<SymbolFilters> {
 }
 
 /** Decimal places implied by a Binance step/tick string ("0.00001000" -> 5, "1.00000000" -> 0). */
-function stepPrecision(step: string): number {
+export function stepPrecision(step: string): number {
   const trimmed = step.replace(/0+$/, '')
   const dot = trimmed.indexOf('.')
   return dot === -1 ? 0 : trimmed.length - dot - 1
@@ -180,7 +180,7 @@ function stepPrecision(step: string): number {
  *
  * toFixed also avoids String()'s exponential notation -- String(1e-7) is "1e-7", which Binance
  * rejects outright, and small-quantity orders on high-priced pairs land in exactly that range. */
-function floorToStep(value: number, step: string): string {
+export function floorToStep(value: number, step: string): string {
   const precision = stepPrecision(step)
   const stepNum = Number(step)
   if (!(stepNum > 0)) return value.toFixed(precision)
