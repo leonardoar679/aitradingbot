@@ -6,12 +6,14 @@ and provides a full paper-trading workspace — bots, multi-type strategy execut
 views, and scheduled backtests — modeled on Hummingbot's [Condor](https://condor.hummingbot.org)
 dashboard, adapted to run entirely inside a single Electron process with no server backend.
 
-**Almost everything in this app is simulated.** Every bot and every executor type except one
-replays real market data through deterministic paper-trading logic — no order is ever placed on a
-real exchange. The one exception is narrow and explicitly gated: a live-mode **Order Executor**
-(market or limit orders, Binance only) can place a real order, behind a stack of safety gates that
-default off and reset every launch — see [Live Trading](#live-trading--real-money) below. Every
-other executor type, every other exchange, and every other order type stays paper-only.
+**Most of this app is simulated, but not all of it.** Every bot and every executor replays real
+market data through deterministic paper-trading logic by default. Five of the eight executor types
+— **Order, Position, DCA, TWAP and Grid** — can additionally be created in *live* mode on Binance,
+where they place real orders with real money, behind a stack of safety gates that default off and
+reset every launch. Live Position, DCA and Grid executors also *exit* on their own, placing a real
+sell with no per-exit confirmation. Read [Live Trading](#live-trading--real-money) before enabling
+any of it. XEMM, Arbitrage and Market Making remain paper-only, as does every non-Binance
+exchange.
 
 ## Table of Contents
 
@@ -55,14 +57,19 @@ state can never drift from what the market actually did.
 
 | Type | Behavior |
 |---|---|
-| **Grid** | Divides a price range into levels spaced by a %; a level fills when price touches it, and closes (booking P&L) when it reaches its own take-profit target, freeing it to refill. |
+| **Grid** | Divides a price range into levels spaced by a %; a level fills when price touches it, and closes (booking P&L) when it reaches its own take-profit target, freeing it to refill. An optional **Stop Price** closes every filled level at that price and freezes the grid for good — it will not fill another level even if price re-enters the range. |
 | **DCA** | A configurable ladder of buy/sell levels at % offsets from a base price; tracks a running volume-weighted average entry and exits the whole position on take-profit / stop-loss / a time limit. |
 | **TWAP** | Slices a total order into equal pieces over a duration, executing one slice per interval at that candle's close; tracks cumulative VWAP and progress. |
 | **Position** | The Triple Barrier Method: one entry (at a set price or at market), then exits on whichever comes first — take-profit, stop-loss, a trailing stop (with its own activation/trail %), or a time limit. |
-| **Order** | A single order with one of four fill strategies: `market`/`limit_chaser` fill immediately at the next candle's open (chasing the best price isn't modelable without a real order book, so it's approximated as an immediate market fill); `limit`/`limit_maker` fill the first time price touches the limit. This is the one executor type that can also run for real — see [Live Trading](#live-trading--real-money). |
+| **Order** | A single order with one of four fill strategies: `market`/`limit_chaser` fill immediately at the next candle's open (chasing the best price isn't modelable without a real order book, so it's approximated as an immediate market fill); `limit`/`limit_maker` fill the first time price touches the limit. |
 | **XEMM** | Cross-exchange market making: monitors a *buying market* and a *selling market* simultaneously; when the spread crosses a minimum-profitability threshold in that direction, books a capture. Edge-triggered (re-arms only once the spread retreats) so a spread that stays wide doesn't produce unrealistic repeated captures. |
 | **Arbitrage** | Like XEMM but bidirectional — captures the spread whichever way it's skewed, since arbitrage isn't tied to a fixed maker/taker leg. |
 | **Market Making** | Classic two-sided quoting: places a bid/ask around the live price at a fixed spread, refreshed on an interval. Optional inventory-skew management biases the quoted mid price back toward a target inventory as fills drift holdings away from it. Fills are tracked with a running average-cost basis, so P&L splits correctly into realized (closed/reduced exposure) and unrealized. |
+
+Five of these — **Order, Position, DCA, TWAP and Grid** — can also be created in live mode against
+real money on Binance; the live behaviour differs from the simulation in ways worth reading before
+you use it (see [Live Trading](#live-trading--real-money)). XEMM, Arbitrage and Market Making are
+paper-only.
 
 New executor types, forms, and card/detail-view rendering all follow the same three-file pattern
 (`shared/ipc.ts` param type → `engine.ts`/`spreadEngine.ts` `simulateX()` function → a small
@@ -95,12 +102,20 @@ in this app requires a verified credential first.
 
 ## Live Trading — Real Money
 
-A verified Binance key unlocks exactly one real-money surface: a **live-mode Order Executor**,
-placing a market or plain GTC limit order for real. Nothing else in the app can place, cancel, or
-touch a real order — not Grid/DCA/TWAP/Position/XEMM/Arbitrage/Market Making, not any other
-exchange, not `limit_maker` or `limit_chaser`. This is a deliberate, incrementally-expanded scope
-(each increment below shipped as its own reviewed, tested pass), not a full live-trading feature
-turned on all at once.
+A verified Binance key unlocks live mode for five of the eight executor types. Each shipped as its
+own reviewed, tested pass rather than as one big switch:
+
+| Executor | What it does with real money |
+|---|---|
+| **Order** | One market or plain GTC limit order. Never exits on its own. |
+| **Position** | A market entry, then an unattended watcher that exits automatically on take-profit, stop-loss, trailing stop or time limit — a real sell, with no per-exit confirmation. |
+| **DCA** | A ladder of real resting limit orders. Once any level fills, one shared watcher exits the whole position from the average fill price. |
+| **TWAP** | Buy-only. Splits one order into timed market slices placed by a main-process loop that keeps running whether or not a window is open. |
+| **Grid** | Buy-only, and *not* full Grid: a bounded ladder of resting orders sharing **one** exit, which stops for good once it exits rather than cycling per level. The in-app warning says so before you confirm. |
+
+Everything else stays paper-only: **XEMM, Arbitrage and Market Making** (they need cross-exchange
+custody or short-selling, neither of which this app has), every non-Binance exchange, sell-side
+DCA/TWAP/Grid, and the `limit_maker` / `limit_chaser` order types.
 
 ### Safety gates
 
@@ -121,6 +136,24 @@ trusted from the renderer:
 closes, and by *nothing at all* for cancels) — those gates exist to bound how much *new* risk a
 single action can create, and closing/cancelling only ever reduces risk. Blocking either would risk
 trapping someone in a losing position or a stale order at exactly the moment they most need out.
+
+### Unattended loops (they run with no window open)
+
+Two main-process loops act on real money without any UI attached, and keep running as long as the
+app process is alive:
+
+- **`livePositionWatchersService.ts`** evaluates every live Position/DCA/Grid exit barrier on a 5s
+  tick and places the closing sell itself when one trips. One watcher per symbol+exchange. If it
+  repeatedly fails to fetch a price it is *not* protecting anything, so consecutive failures are
+  surfaced on the executor card rather than only logged — a stop-loss that has quietly stopped
+  being evaluated is the worst possible silent failure here.
+- **`liveTwapService.ts`** places each remaining TWAP slice on its own schedule. If that schedule
+  falls behind real time (the app was closed, or the machine slept), the cadence resumes from now
+  instead of firing the whole backlog back-to-back — otherwise an interrupted TWAP would place its
+  entire remaining notional within a minute, the exact opposite of its purpose.
+
+Both skip a tick while their previous one is still in flight, so a slow network call cannot cause
+a duplicate order.
 
 ### Live position ledger
 
@@ -221,7 +254,12 @@ leverage):
 | **RSI Mean-Reversion** | RSI(14) crosses up through 30 (oversold) while price is above EMA(100) — same "regime filter gates entries only" shape as the EMA strategy, so it buys dips in an uptrend rather than a falling knife in a downtrend. | RSI crossing back above 70 (overbought), or the same ATR(14)×2 stop. |
 | **Bollinger Breakout** | Close breaks above the Bollinger Band(20, 2) upper band. | Close back below the middle band (the breakout failed/reverted), or the same ATR(14)×2 stop. |
 
-Every trade pays a flat 0.1% taker fee on both entry and exit notional. A **Compare Strategies**
+Every trade pays a flat 0.1% fee on both entry and exit notional, defined once in `shared/fees.ts`
+and applied by the backtest engine *and* the executor paper simulations alike — so a Grid or DCA
+card reports what an account would actually keep, not a gross figure. This matters most where
+margins are thin: at Grid's default 0.5% take-profit per level a round trip costs ~40% of the
+gross, and a spread capture pays two fees, which is why the XEMM/Arbitrage thresholds default
+above their ~0.2% break-even. A **Compare Strategies**
 view on the Backtest page runs all three over the same candle range and ranks them (net %, win
 rate, max drawdown, Sharpe, profit factor), so picking one is evidence-based. The result of any
 single run includes a full stats panel (Sharpe/Sortino/Calmar/Omega ratios, drawdown, profit
@@ -333,12 +371,19 @@ npm run dev
 
 Launches the Electron app with Vite hot-reload via `electron-vite dev`.
 
-### Type checking & linting
+### Type checking, linting & tests
 
 ```bash
 npm run typecheck
 npm run lint
+npm test          # vitest, single run
+npm run test:watch
 ```
+
+The suite covers the money-critical logic specifically: the fee model, Grid's stop-price freeze,
+TWAP slice scheduling under an interrupted schedule, Binance step/tick rounding, the daily-cap
+day boundary, atomic store writes under concurrency, and price formatting. Each case exists
+because the corresponding bug was real.
 
 ## Building
 
