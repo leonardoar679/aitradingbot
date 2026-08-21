@@ -43,8 +43,15 @@ export async function runControllerSnapshotNow(controller: ControllerConfig): Pr
   if (stopLossBreached || takeProfitBreached || drawdownBreached) {
     const attachedIds = new Set(attached.map((e) => e.id))
     const stoppedAt = now
-    const nextExecutors = settings.executors.map((e: ExecutorConfig) => (attachedIds.has(e.id) ? { ...e, status: 'stopped' as const, stoppedAt } : e))
-    const nextControllers = settings.controllers.map((c) => (c.id === controller.id ? { ...c, status: 'stopped' as const } : c))
+    // Re-read immediately before writing rather than reusing the snapshot taken at the top of
+    // this function: computing P&L above does a network fetch per attached executor and can take
+    // seconds, and writing whole arrays built from a stale read would silently revert anything
+    // saved in the meantime (a newly created executor, an edited controller). The breach action
+    // itself is narrow -- stop the attached executors and this controller -- so it applies just as
+    // correctly to a fresh copy.
+    const fresh = await window.api.settings.get()
+    const nextExecutors = fresh.executors.map((e: ExecutorConfig) => (attachedIds.has(e.id) ? { ...e, status: 'stopped' as const, stoppedAt } : e))
+    const nextControllers = fresh.controllers.map((c) => (c.id === controller.id ? { ...c, status: 'stopped' as const } : c))
     await window.api.settings.set({ executors: nextExecutors, controllers: nextControllers })
   }
 }

@@ -53,16 +53,19 @@ export function LiveOrderScheduler(): null {
         const needsPositionLookup = orderResolutions.some((r) => r.status === 'filled')
         const livePositions = needsPositionLookup ? await window.api.liveTrading.listPositions() : []
 
-        const nextExecutors: ExecutorConfig[] = []
+        // Only the executors this tick actually touches are collected, and they're merged into a
+        // FRESH read of settings just before writing (below). Writing the whole array built from
+        // the snapshot taken above would clobber anything saved in between -- and "in between" is
+        // seconds long here, spanning listPositions() and any createWatcher() calls. An executor
+        // the user created during that window would vanish from settings while its real resting
+        // order carried on existing, tracked by nothing.
+        const changed = new Map<string, ExecutorConfig>()
         for (const executor of settings.executors) {
           const myResolutions = orderResolutions.filter((r) => r.executorId === executor.id)
           const watcherEvent = watcherEvents.find((e) => e.executorId === executor.id)
           const twapEvent = twapEvents.find((e) => e.executorId === executor.id)
 
-          if (myResolutions.length === 0 && !watcherEvent && !twapEvent) {
-            nextExecutors.push(executor)
-            continue
-          }
+          if (myResolutions.length === 0 && !watcherEvent && !twapEvent) continue
 
           let next = executor
           if (myResolutions.length > 0) {
@@ -155,10 +158,13 @@ export function LiveOrderScheduler(): null {
             next = { ...next, status: 'stopped', stoppedAt }
           }
 
-          nextExecutors.push(next)
+          changed.set(next.id, next)
         }
 
-        await window.api.settings.set({ executors: nextExecutors })
+        if (changed.size === 0) return
+        const fresh = await window.api.settings.get()
+        if (cancelled) return
+        await window.api.settings.set({ executors: fresh.executors.map((e) => changed.get(e.id) ?? e) })
       } catch (error) {
         console.error('Failed to poll live orders/watchers:', error)
       }
