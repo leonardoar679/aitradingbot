@@ -1,8 +1,17 @@
 import type { PortfolioHoldingRow } from './computePortfolioSnapshot'
+import type { PortfolioStatus } from './portfolioStore'
 import { colorForAsset } from './assetColor'
 import { formatQuotePrice, isUsdLikeQuote } from '../utils/formatCurrency'
 
-export function TopHoldings({ holdings, totalValue }: { holdings: PortfolioHoldingRow[]; totalValue: number }): React.JSX.Element {
+export function TopHoldings({
+  holdings,
+  totalValue,
+  status
+}: {
+  holdings: PortfolioHoldingRow[]
+  totalValue: number
+  status: PortfolioStatus
+}): React.JSX.Element {
   // Bar widths are scaled within a currency, never across them. `value` is denominated in each
   // holding's own quote asset, so one KRW position (values in the millions) sitting next to USD
   // positions would otherwise flatten every USD bar to zero width. The percentage below already
@@ -13,6 +22,23 @@ export function TopHoldings({ holdings, totalValue }: { holdings: PortfolioHoldi
     const key = scaleKeyFor(h.quoteAsset)
     maxByScale.set(key, Math.max(maxByScale.get(key) ?? 0, h.value))
   }
+
+  // Total Value can only sum the dollar family -- this app has no exchange-rate table anywhere,
+  // so a KRW-quoted holding cannot be folded into a dollar figure. It was being dropped in
+  // silence: the row still appeared here with a real ₩ value while contributing nothing to the
+  // headline total and showing a blank percentage. Korean exchanges are first-class here (the
+  // XEMM/Arbitrage defaults are literally Bithumb and Upbit), so this is a normal thing to hold,
+  // and the total has to say what it left out rather than just quietly disagree with the list.
+  const excludedTotals = new Map<string, number>()
+  for (const h of holdings) {
+    if (isUsdLikeQuote(h.quoteAsset)) continue
+    const quote = h.quoteAsset.toUpperCase()
+    excludedTotals.set(quote, (excludedTotals.get(quote) ?? 0) + h.value)
+  }
+  const excludedNote =
+    excludedTotals.size > 0
+      ? [...excludedTotals.entries()].map(([quote, value]) => formatQuotePrice(value, quote)).join(', ')
+      : null
 
   return (
     <section
@@ -26,7 +52,13 @@ export function TopHoldings({ holdings, totalValue }: { holdings: PortfolioHoldi
       <h2 style={{ margin: '0 0 1rem', fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>
         Top Holdings
       </h2>
-      {holdings.length === 0 ? (
+      {status !== 'ready' ? (
+        <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+          {status === 'error'
+            ? "Couldn't read your holdings — retrying automatically."
+            : 'Reading your positions…'}
+        </p>
+      ) : holdings.length === 0 ? (
         <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
           No holdings yet — live positions, held paper positions, and open executors will appear here.
         </p>
@@ -40,9 +72,15 @@ export function TopHoldings({ holdings, totalValue }: { holdings: PortfolioHoldi
             const percent = countsTowardTotal && totalValue > 0 ? (holding.value / totalValue) * 100 : null
             return (
               <div key={`${holding.baseAsset}-${holding.quoteAsset}-${holding.isLive}`} style={{ display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: 110, flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: 150, flexShrink: 0 }}>
                   <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
                   <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)' }}>{holding.baseAsset}</span>
+                  {/* The same base asset can be held against different quotes (BTC/USDT and
+                      BTC/KRW are separate rows on purpose). Without the quote shown, those two
+                      render as an identical "BTC" line twice with no way to tell them apart. */}
+                  <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                    {holding.quoteAsset.toUpperCase()}
+                  </span>
                   {holding.isLive && (
                     <span
                       style={{
@@ -87,6 +125,12 @@ export function TopHoldings({ holdings, totalValue }: { holdings: PortfolioHoldi
             )
           })}
         </div>
+      )}
+      {status === 'ready' && excludedNote !== null && (
+        <p style={{ margin: '0.9rem 0 0', fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+          Total Value covers dollar-quoted holdings only. {excludedNote} in non-dollar positions is listed above
+          but not included — converting it would need an exchange rate this app doesn't have.
+        </p>
       )}
     </section>
   )

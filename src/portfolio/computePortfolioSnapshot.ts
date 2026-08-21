@@ -125,7 +125,17 @@ export async function computePortfolioSnapshot(): Promise<PortfolioSnapshotData>
     if (existing) existing.value += row.value
     else grouped.set(key, { ...row })
   }
-  const holdings = [...grouped.values()].sort((a, b) => b.value - a.value)
+  // Sorting purely by `value` compared raw numbers across currencies, so a ₩800,000 holding
+  // (about $600) outranked a $5,000 one simply because 800,000 > 5,000. Dollar-quoted rows --
+  // the ones that make up the headline total -- come first and are ordered against each other;
+  // every other currency follows, grouped so its rows are at least ranked among their own kind.
+  const holdings = [...grouped.values()].sort((a, b) => {
+    const aUsd = isUsdLikeQuote(a.quoteAsset)
+    const bUsd = isUsdLikeQuote(b.quoteAsset)
+    if (aUsd !== bUsd) return aUsd ? -1 : 1
+    if (!aUsd && a.quoteAsset !== b.quoteAsset) return a.quoteAsset.localeCompare(b.quoteAsset)
+    return b.value - a.value
+  })
 
   const totalValue = holdings.reduce((sum, row) => (isUsdLikeQuote(row.quoteAsset) ? sum + row.value : sum), 0)
 

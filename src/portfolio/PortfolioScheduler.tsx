@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { computePortfolioSnapshot } from './computePortfolioSnapshot'
-import { pushPortfolioSnapshot } from './portfolioStore'
+import { pushPortfolioSnapshot, setPortfolioError } from './portfolioStore'
 
 // Longer than the 60s cadence individual bot/executor cards use -- this one runs continuously in
 // the background across the *entire* bots+executors set on every tick, not just one visible card.
@@ -21,6 +21,7 @@ export function PortfolioScheduler(): null {
         if (!cancelled) pushPortfolioSnapshot(snapshot)
       } catch (error) {
         console.error('Failed to compute portfolio snapshot:', error)
+        if (!cancelled) setPortfolioError(error instanceof Error ? error.message : String(error))
       } finally {
         if (!cancelled) timer = setTimeout(poll, POLL_MS)
       }

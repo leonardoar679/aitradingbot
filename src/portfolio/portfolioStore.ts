@@ -13,7 +13,16 @@ export interface PortfolioSnapshot extends PortfolioSnapshotData {
   takenAt: number
 }
 
+/** Whether a snapshot has ever been computed this session. An empty snapshot list on its own
+ * can't say -- "still working on the first one" and "computed it, you hold nothing" produce the
+ * same empty list but must not produce the same display. The first snapshot needs settings, live
+ * positions, a candle replay per executor, a 600-candle dry run per bot and a ticker per symbol,
+ * so on a slow link "loading" is a state the user really sits in. */
+export type PortfolioStatus = 'loading' | 'ready' | 'error'
+
 let snapshots: PortfolioSnapshot[] = []
+let status: PortfolioStatus = 'loading'
+let errorMessage: string | null = null
 const listeners = new Set<() => void>()
 
 function emit(): void {
@@ -25,6 +34,17 @@ export function pushPortfolioSnapshot(data: PortfolioSnapshotData): void {
   // Oldest-first (unlike ControllerSnapshot's newest-first convention) -- the Evolution chart
   // plots this directly as a time series and shouldn't have to reverse it first.
   snapshots = [...snapshots, snapshot].slice(-MAX_SNAPSHOTS)
+  status = 'ready'
+  errorMessage = null
+  emit()
+}
+
+/** Only moves the page into an error state while nothing has ever been computed. Once a real
+ * snapshot exists, a later failed poll leaves the last known figures on screen rather than
+ * replacing them with an error -- stale-but-real beats blank. */
+export function setPortfolioError(message: string): void {
+  if (snapshots.length === 0) status = 'error'
+  errorMessage = message
   emit()
 }
 
@@ -32,13 +52,31 @@ export function getPortfolioSnapshots(): PortfolioSnapshot[] {
   return snapshots
 }
 
-function subscribe(listener: () => void): () => void {
+/** Exported as plain getters, not just through the hooks below, so the status machine can be
+ * tested without a React renderer -- the hooks are thin wrappers over exactly these. */
+export function getPortfolioStatus(): PortfolioStatus {
+  return status
+}
+
+export function getPortfolioErrorMessage(): string | null {
+  return errorMessage
+}
+
+export function subscribeToPortfolio(listener: () => void): () => void {
   listeners.add(listener)
   return () => listeners.delete(listener)
 }
 
 export function usePortfolioSnapshots(): PortfolioSnapshot[] {
-  return useSyncExternalStore(subscribe, getPortfolioSnapshots)
+  return useSyncExternalStore(subscribeToPortfolio, getPortfolioSnapshots)
+}
+
+export function usePortfolioStatus(): PortfolioStatus {
+  return useSyncExternalStore(subscribeToPortfolio, getPortfolioStatus)
+}
+
+export function usePortfolioErrorMessage(): string | null {
+  return useSyncExternalStore(subscribeToPortfolio, getPortfolioErrorMessage)
 }
 
 export function useLatestPortfolioSnapshot(): PortfolioSnapshot | null {
