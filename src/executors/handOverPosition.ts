@@ -1,0 +1,41 @@
+import type { ExecutorConfig, HeldPosition } from '../../shared/ipc'
+import { computeExecutorPosition } from './computeSnapshot'
+
+/** Moves an executor's still-open paper position into Inventory when it stops, honouring the
+ * executor's "Keep position when stopped (hand over to Inventory)" checkbox.
+ *
+ * Extracted from ExecutorsPage's Stop handler because a controller's risk controls can stop an
+ * executor too (ControllerScheduler, on a global stop-loss / take-profit / max-drawdown breach)
+ * and was dropping the position on the floor -- so whether a ticked checkbox was honoured
+ * depended on *who* pressed stop. A breach is precisely when the position most needs recording.
+ *
+ * Position handover is paper-only bookkeeping: a live fill already has its own ledger
+ * (LivePosition) regardless of keepPosition, and re-running paper candle replay on a live
+ * executor to stuff the result into paper Inventory would be wrong.
+ *
+ * Appends to a freshly re-read heldPositions rather than any caller-held copy -- settings.set
+ * replaces the whole array, and computing the position above is a network round trip long enough
+ * for another writer to land in between. Returns whether a row was actually added. */
+export async function handOverPositionOnStop(executor: ExecutorConfig): Promise<boolean> {
+  if (executor.mode === 'live' || !executor.keepPosition) return false
+
+  const position = await computeExecutorPosition(executor)
+  if (!position) return false
+
+  const settings = await window.api.settings.get()
+  const held: HeldPosition = {
+    id: crypto.randomUUID(),
+    sourceExecutorId: executor.id,
+    sourceExecutorName: executor.name,
+    exchange: executor.exchange,
+    symbol: executor.symbol,
+    baseAsset: executor.baseAsset,
+    quoteAsset: executor.quoteAsset,
+    side: position.side,
+    entryPrice: position.entryPrice,
+    amountQuote: position.amountQuote,
+    openedAt: Math.floor(Date.now() / 1000)
+  }
+  await window.api.settings.set({ heldPositions: [...settings.heldPositions, held] })
+  return true
+}

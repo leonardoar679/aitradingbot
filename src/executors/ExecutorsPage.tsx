@@ -7,7 +7,7 @@ import { NewExecutorModal } from './NewExecutorModal'
 import { ExecutorCard } from './ExecutorCard'
 import { ExecutorDetailView } from './ExecutorDetailView'
 import { SpreadExecutorDetailView } from './SpreadExecutorDetailView'
-import { computeExecutorPosition } from './computeSnapshot'
+import { handOverPositionOnStop } from './handOverPosition'
 import { dcaLevelPrice, twapNumOrders, buildGridLevels } from './engine'
 import {
   EXCHANGES,
@@ -23,7 +23,6 @@ import {
   type XemmExecutorParams,
   type ArbitrageExecutorParams,
   type MarketMakingExecutorParams,
-  type HeldPosition,
   type LiveOrderRecord,
   type LiveExitResult
 } from '../../shared/ipc'
@@ -565,36 +564,15 @@ export function ExecutorsPage(): React.JSX.Element {
     setExecutors((prev) =>
       prev.map((e) => (e.id === id ? { ...e, status: 'stopped', stoppedAt: Math.floor(Date.now() / 1000) } : e))
     )
-    // Position Handover is paper-only bookkeeping — a live fill already has its own ledger
-    // (LivePosition) regardless of keepPosition. Re-running paper candle replay on a live
-    // executor and stuffing the result into paper Inventory would be wrong.
-    if (!executor || executor.mode === 'live' || !executor.keepPosition) return
+    if (!executor) return
 
     // Position Handover: fire the check as a background job — the executor's status already
-    // flipped above, this only decides whether an open position gets a row in Inventory.
-    void (async () => {
-      try {
-        const position = await computeExecutorPosition(executor)
-        if (!position) return
-        const settings = await window.api.settings.get()
-        const held: HeldPosition = {
-          id: crypto.randomUUID(),
-          sourceExecutorId: executor.id,
-          sourceExecutorName: executor.name,
-          exchange: executor.exchange,
-          symbol: executor.symbol,
-          baseAsset: executor.baseAsset,
-          quoteAsset: executor.quoteAsset,
-          side: position.side,
-          entryPrice: position.entryPrice,
-          amountQuote: position.amountQuote,
-          openedAt: Math.floor(Date.now() / 1000)
-        }
-        await window.api.settings.set({ heldPositions: [...settings.heldPositions, held] })
-      } catch (error) {
-        console.error('Failed to hand over position on stop:', error)
-      }
-    })()
+    // flipped above, this only decides whether an open position gets a row in Inventory. The
+    // paper-only and keepPosition rules live in handOverPositionOnStop so the controller's
+    // risk-control stop path applies exactly the same ones.
+    void handOverPositionOnStop(executor).catch((error) => {
+      console.error('Failed to hand over position on stop:', error)
+    })
   }
 
   const activeBots = bots.filter((b) => b.enabled)

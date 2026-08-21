@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { computeExecutorPnl, executorAllocatedQuote } from '../executors/computeSnapshot'
+import { handOverPositionOnStop } from '../executors/handOverPosition'
 import { pushControllerSnapshot, getControllerSnapshots } from './controllerStore'
 import { SNAPSHOT_INTERVAL_MS } from './types'
 import type { ControllerConfig, ExecutorConfig } from '../../shared/ipc'
@@ -53,6 +54,20 @@ export async function runControllerSnapshotNow(controller: ControllerConfig): Pr
     const nextExecutors = fresh.executors.map((e: ExecutorConfig) => (attachedIds.has(e.id) ? { ...e, status: 'stopped' as const, stoppedAt } : e))
     const nextControllers = fresh.controllers.map((c) => (c.id === controller.id ? { ...c, status: 'stopped' as const } : c))
     await window.api.settings.set({ executors: nextExecutors, controllers: nextControllers })
+
+    // Honour "Keep position when stopped" here too. A controller stop used to skip handover
+    // entirely, so whether that ticked checkbox was respected depended on who pressed stop --
+    // and a risk-control breach is exactly when a still-open position most needs recording
+    // rather than silently discarding. Runs after the stop is persisted (the stop is the urgent
+    // part; each handover costs a candle fetch) and sequentially, because each one re-reads and
+    // rewrites the whole heldPositions array.
+    for (const executor of attached) {
+      try {
+        await handOverPositionOnStop(executor)
+      } catch (error) {
+        console.error(`Failed to hand over position for ${executor.name} on controller stop:`, error)
+      }
+    }
   }
 }
 

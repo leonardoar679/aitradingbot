@@ -55,27 +55,42 @@ export function PositionsPage(): React.JSX.Element {
     return () => clearInterval(timer)
   }, [])
 
+  // Inventory is re-read on the same tick as live positions, not just once at mount: a
+  // controller's risk-control breach can hand a position over while this page is open (see
+  // handOverPositionOnStop), and a list frozen at mount would never show it.
+  function refreshSettingsBacked(): void {
+    window.api.settings
+      .get()
+      .then((settings) => {
+        setBots(settings.bots)
+        setHeldPositions(settings.heldPositions)
+        setLoaded(true)
+        loadedRef.current = true
+      })
+      .catch((error) => console.error('Failed to load positions settings:', error))
+  }
+
   useEffect(() => {
-    let cancelled = false
-    window.api.settings.get().then((settings) => {
-      if (cancelled) return
-      setBots(settings.bots)
-      setHeldPositions(settings.heldPositions)
-      setLoaded(true)
-      loadedRef.current = true
-    })
-    return () => {
-      cancelled = true
-    }
+    refreshSettingsBacked()
+    const timer = setInterval(refreshSettingsBacked, LIVE_POLL_MS)
+    return () => clearInterval(timer)
   }, [])
 
-  useEffect(() => {
-    if (!loadedRef.current) return
-    void window.api.settings.set({ heldPositions })
-  }, [heldPositions])
-
+  // Writes against a freshly re-read array rather than persisting local state wholesale.
+  // settings.set replaces the entire heldPositions array, so echoing back a copy loaded at mount
+  // would silently delete anything handed over since -- and closing one row is a removal of one
+  // id, which applies just as correctly to the current array as to the stale one.
   function handleCloseHeldPosition(id: string): void {
-    setHeldPositions((prev) => prev.filter((p) => p.id !== id))
+    void (async () => {
+      try {
+        const fresh = await window.api.settings.get()
+        const next = fresh.heldPositions.filter((p) => p.id !== id)
+        await window.api.settings.set({ heldPositions: next })
+        setHeldPositions(next)
+      } catch (error) {
+        console.error('Failed to close held position:', error)
+      }
+    })()
   }
 
   const activeBots = bots.filter((b) => b.enabled)
@@ -84,7 +99,7 @@ export function PositionsPage(): React.JSX.Element {
     <>
       <PageHeader
         title="Positions"
-        subtitle="Live paper positions from your running bots — real market data, simulated money"
+        subtitle="Paper positions from bots and executors, plus any real-money positions — each section says which it is"
       />
       <Card title="Open Positions">
         {loaded && activeBots.length === 0 && (
