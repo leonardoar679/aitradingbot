@@ -5,6 +5,7 @@ import { MarketTicker } from '../dashboard/MarketTicker'
 import { formatQuotePrice } from '../utils/formatCurrency'
 import { useLastPrice } from '../hooks/useLastPrice'
 import { EXCHANGES, type Exchange, type SymbolInfo } from '../../shared/ipc'
+import { classifyPaperOrder, paperOrderStatusNote, type PaperOrderStatus } from './paperOrderStatus'
 
 type Side = 'buy' | 'sell'
 type OrderType = 'market' | 'limit'
@@ -18,11 +19,9 @@ interface PaperOrder {
   quoteAsset: string
   amount: number
   price: number
-  /** Market orders are always 'filled'. A limit order is only 'filled' if it was marketable
-   * against lastPrice at submit time (buy limit >= lastPrice, sell limit <= lastPrice) --
-   * otherwise it's 'resting': logged as placed, but honestly never actually filled, since this
-   * page has no order book to wait on a price crossing later. */
-  status: 'filled' | 'resting'
+  /** See classifyPaperOrder — 'filled', 'resting', or 'unpriced' when there was no live price to
+   * judge against at submit time. */
+  status: PaperOrderStatus
 }
 
 function sideButtonStyle(active: boolean, side: Side): React.CSSProperties {
@@ -96,8 +95,7 @@ export function TradePage(): React.JSX.Element {
 
   function handleSubmit(): void {
     if (!canSubmit || execPrice === null) return
-    const marketable =
-      type === 'market' || lastPrice === null || (side === 'buy' ? execPrice >= lastPrice : execPrice <= lastPrice)
+    const status = classifyPaperOrder(type, side, execPrice, lastPrice)
     setOrders((prev) => [
       {
         id: crypto.randomUUID(),
@@ -108,7 +106,7 @@ export function TradePage(): React.JSX.Element {
         quoteAsset: pair.quoteAsset,
         amount: amountNum,
         price: execPrice,
-        status: marketable ? 'filled' : 'resting'
+        status
       },
       ...prev
     ])
@@ -233,14 +231,14 @@ export function TradePage(): React.JSX.Element {
                       <span style={{ color: 'var(--text-muted)', marginLeft: '0.5rem' }}>
                         {o.type} • {new Date(o.time).toLocaleTimeString()}
                       </span>
-                      {o.status === 'resting' && (
+                      {paperOrderStatusNote(o.status) !== null && (
                         <span style={{ color: 'var(--text-muted)', marginLeft: '0.5rem', fontStyle: 'italic' }}>
-                          resting — not marketable at submit, would not have filled
+                          {paperOrderStatusNote(o.status)}
                         </span>
                       )}
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ color: o.status === 'resting' ? 'var(--text-muted)' : 'var(--text-primary)' }}>
+                      <div style={{ color: o.status === 'filled' ? 'var(--text-primary)' : 'var(--text-muted)' }}>
                         {o.amount} @ {formatQuotePrice(o.price, o.quoteAsset)}
                       </div>
                       <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>
