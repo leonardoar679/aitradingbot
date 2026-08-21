@@ -63,7 +63,7 @@ export async function cancelLiveOrderById(liveOrderId: string): Promise<LiveOrde
   const result = await cancelOrder(apiKey, apiSecret, order.symbol, order.orderId)
   await resolveLiveOrder(order.id, 'cancelled', result.filledQty, result.filledQty > 0 ? result.avgFillPrice : null)
   const reserved = order.quantity * order.limitPrice
-  await recordLiveOrderUsage(result.cummulativeQuoteQty - reserved)
+  await recordLiveOrderUsage(result.cummulativeQuoteQty - reserved, order.placedAt)
   if (result.filledQty > 0) {
     await recordLiveFill(order.exchange, order.symbol, order.baseAsset, order.quoteAsset, order.side, result.filledQty, result.avgFillPrice)
     if (order.side === 'sell') await checkLossLimitAndAutoDisarm()

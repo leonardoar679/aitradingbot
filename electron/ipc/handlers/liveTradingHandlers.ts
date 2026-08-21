@@ -131,7 +131,7 @@ export function registerLiveTradingHandlers(): void {
 
           await resolveLiveOrder(order.id, status, result.filledQty, result.filledQty > 0 ? result.avgFillPrice : null)
           const reserved = order.quantity * order.limitPrice
-          await recordLiveOrderUsage(result.cummulativeQuoteQty - reserved)
+          await recordLiveOrderUsage(result.cummulativeQuoteQty - reserved, order.placedAt)
           if (result.filledQty > 0) {
             await recordLiveFill(order.exchange, order.symbol, order.baseAsset, order.quoteAsset, order.side, result.filledQty, result.avgFillPrice)
             if (order.side === 'sell') await checkLossLimitAndAutoDisarm()

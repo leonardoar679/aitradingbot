@@ -174,10 +174,25 @@ export async function canCloseLivePosition(): Promise<LiveOrderGateResult> {
  * moment it's placed (capital is committed then, not only once it fills), and a negative delta
  * refunds whatever didn't end up executing once the order resolves (filled less than reserved,
  * or cancelled outright) — see ExecutorPlaceLiveLimitOrder / LiveTradingPollOpenOrders /
- * LiveTradingCancelOrder. Clamped at 0 so a refund can never push usage negative. */
-export async function recordLiveOrderUsage(quoteAmount: number): Promise<void> {
+ * LiveTradingCancelOrder. Clamped at 0 so a refund can never push usage negative. Pass
+ * `reservedAtSec` (the order's placedAt) alongside any refund so it can be discarded when it
+ * belongs to a previous UTC day -- see the comment in the body. */
+export async function recordLiveOrderUsage(quoteAmount: number, reservedAtSec?: number): Promise<void> {
   const state = await load()
   const today = todayUtc()
+
+  // A refund must land on the SAME day bucket that took the reservation. Usage is tracked as one
+  // bucket for the current UTC day, so a resting order placed at 23:50 reserves against day 1 and
+  // may not resolve until day 2 -- at which point crediting the refund to day 2 would hand back
+  // cap that day 2 never spent. ($20 reserved on day 1, $30 traded on day 2, then the day-1 order
+  // expires: day 2's usage drops to $10, granting $40 of headroom against a $50 limit.) Day 1's
+  // bucket is already gone by then, so the correct action is simply to drop the adjustment: the
+  // capital was committed, and counted, on the day it was actually committed.
+  if (reservedAtSec !== undefined) {
+    const reservedOn = new Date(reservedAtSec * 1000).toISOString().slice(0, 10)
+    if (reservedOn !== today) return
+  }
+
   const usedToday = state.dailyUsage && state.dailyUsage.date === today ? state.dailyUsage.usedQuote : 0
   state.dailyUsage = { date: today, usedQuote: Math.max(0, usedToday + quoteAmount) }
   await persist()

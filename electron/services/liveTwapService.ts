@@ -216,7 +216,18 @@ async function tick(): Promise<void> {
 export function startLiveTwapLoop(): void {
   if (loopStarted) return
   loopStarted = true
+  // Guard against re-entry: tick() awaits real network calls (endpoint resolution, /time, the
+  // order itself) that can easily outlast POLL_MS -- notably on the first live call after launch,
+  // when resolveEndpoint probes the geo-blocked primary host before failing over. Without this,
+  // a second timer fire would enter tick() while the first is still awaiting, read the same
+  // not-yet-advanced state, and place a slice a second time. Skipping a tick is harmless; the next
+  // one is only seconds away.
+  let ticking = false
   setInterval(() => {
-    void tick()
+    if (ticking) return
+    ticking = true
+    void tick().finally(() => {
+      ticking = false
+    })
   }, POLL_MS)
 }
