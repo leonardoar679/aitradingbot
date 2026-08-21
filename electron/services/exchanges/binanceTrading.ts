@@ -114,6 +114,80 @@ function parseOrderResponse(data: BinanceOrderResponse): LiveOrderResult {
   return { orderId: data.orderId, status: data.status, filledQty, avgFillPrice, cummulativeQuoteQty }
 }
 
+// Binance rejects any order whose quantity isn't an exact multiple of the symbol's LOT_SIZE
+// stepSize, whose price isn't a multiple of PRICE_FILTER tickSize, or whose notional is under
+// the symbol's minimum -- with terse errors like "Filter failure: LOT_SIZE". Sizes here are
+// derived from a quote amount (amountQuote / limitPrice), which essentially never lands on a
+// valid step, so every live limit order was being sent in a form the exchange would refuse.
+// Fetched per symbol and cached: these filters change very rarely, and an order path should not
+// pay for a full /exchangeInfo download on every placement.
+interface SymbolFilters {
+  stepSize: string
+  minQty: number
+  tickSize: string
+  minNotional: number
+}
+
+interface BinanceFilter {
+  filterType: string
+  stepSize?: string
+  minQty?: string
+  tickSize?: string
+  minNotional?: string
+}
+
+const symbolFiltersCache = new Map<string, { filters: SymbolFilters; fetchedAt: number }>()
+const SYMBOL_FILTERS_TTL_MS = 24 * 60 * 60 * 1000
+
+async function getSymbolFilters(symbol: string): Promise<SymbolFilters> {
+  const cached = symbolFiltersCache.get(symbol)
+  if (cached && Date.now() - cached.fetchedAt < SYMBOL_FILTERS_TTL_MS) return cached.filters
+
+  const endpoint = await resolveEndpoint()
+  const response = await fetch(`${endpoint.restRoot}/exchangeInfo?symbol=${symbol.toUpperCase()}`)
+  if (!response.ok) throw new Error(`Could not load trading rules for ${symbol}: ${response.status} ${response.statusText}`)
+  const data = (await response.json()) as { symbols?: { filters: BinanceFilter[] }[] }
+  const entry = data.symbols?.[0]
+  if (!entry) throw new Error(`Could not load trading rules for ${symbol}: symbol not found on the exchange`)
+
+  const lotSize = entry.filters.find((f) => f.filterType === 'LOT_SIZE')
+  const priceFilter = entry.filters.find((f) => f.filterType === 'PRICE_FILTER')
+  // Binance has used both names for this filter; newer symbols report NOTIONAL.
+  const notional = entry.filters.find((f) => f.filterType === 'NOTIONAL' || f.filterType === 'MIN_NOTIONAL')
+
+  const filters: SymbolFilters = {
+    stepSize: lotSize?.stepSize ?? '0.00000001',
+    minQty: Number(lotSize?.minQty ?? 0),
+    tickSize: priceFilter?.tickSize ?? '0.00000001',
+    minNotional: Number(notional?.minNotional ?? 0)
+  }
+  symbolFiltersCache.set(symbol, { filters, fetchedAt: Date.now() })
+  return filters
+}
+
+/** Decimal places implied by a Binance step/tick string ("0.00001000" -> 5, "1.00000000" -> 0). */
+function stepPrecision(step: string): number {
+  const trimmed = step.replace(/0+$/, '')
+  const dot = trimmed.indexOf('.')
+  return dot === -1 ? 0 : trimmed.length - dot - 1
+}
+
+/** Floors `value` onto the given step and renders it as a plain decimal string.
+ *
+ * Always floors, never rounds up: a quantity rounded up can exceed the balance actually held
+ * (rejected as insufficient funds when closing), and a price rounded up makes a limit order more
+ * aggressive than the user asked for. Flooring is the conservative direction on both.
+ *
+ * toFixed also avoids String()'s exponential notation -- String(1e-7) is "1e-7", which Binance
+ * rejects outright, and small-quantity orders on high-priced pairs land in exactly that range. */
+function floorToStep(value: number, step: string): string {
+  const precision = stepPrecision(step)
+  const stepNum = Number(step)
+  if (!(stepNum > 0)) return value.toFixed(precision)
+  const floored = Math.floor(value / stepNum) * stepNum
+  return floored.toFixed(precision)
+}
+
 /** Phase B: the first real write. Market order sized in quote currency (quoteOrderQty), matching
  * every `orderAmountQuote` field already used throughout this app's paper executors. A market
  * order can cross multiple price levels, so the average fill price is derived from `fills[]`
@@ -143,11 +217,19 @@ export async function placeMarketOrder(
  * canPlaceLiveOrder — closing a position is never subject to the size/cap/loss-limit gates that
  * bound *new* exposure. */
 export async function placeMarketSellByQuantity(apiKey: string, apiSecret: string, symbol: string, quantity: number): Promise<LiveOrderResult> {
+  const filters = await getSymbolFilters(symbol)
+  // Floored, never rounded up: selling more than the ledger tracks would be rejected for
+  // insufficient balance, which would leave a position the user is trying to exit stuck open.
+  const roundedQty = floorToStep(quantity, filters.stepSize)
+  if (Number(roundedQty) <= 0) {
+    throw new Error(`Position size ${quantity} is below ${symbol}'s minimum tradable increment (${filters.stepSize}) and cannot be sold.`)
+  }
+
   const data = (await signedRequest(
     apiKey,
     apiSecret,
     '/order',
-    { symbol, side: 'SELL', type: 'MARKET', quantity: String(quantity) },
+    { symbol, side: 'SELL', type: 'MARKET', quantity: roundedQty },
     'POST'
   )) as BinanceOrderResponse
   return parseOrderResponse(data)
@@ -167,11 +249,29 @@ export async function placeLimitOrder(
   quantity: number,
   price: number
 ): Promise<LiveOrderResult> {
+  const filters = await getSymbolFilters(symbol)
+  const roundedQty = floorToStep(quantity, filters.stepSize)
+  const roundedPrice = floorToStep(price, filters.tickSize)
+
+  // Fail here, with a message naming the actual constraint, rather than sending an order the
+  // exchange will bounce with "Filter failure: LOT_SIZE" / "NOTIONAL".
+  if (Number(roundedQty) <= 0 || Number(roundedQty) < filters.minQty) {
+    throw new Error(
+      `Order size too small for ${symbol}: ${quantity} rounds to ${roundedQty}, below the exchange minimum of ${filters.minQty}. Increase the amount per level.`
+    )
+  }
+  const notional = Number(roundedQty) * Number(roundedPrice)
+  if (filters.minNotional > 0 && notional < filters.minNotional) {
+    throw new Error(
+      `Order value too small for ${symbol}: ${notional.toFixed(2)} is below the exchange minimum of ${filters.minNotional}. Increase the amount per level, or use fewer levels.`
+    )
+  }
+
   const data = (await signedRequest(
     apiKey,
     apiSecret,
     '/order',
-    { symbol, side, type: 'LIMIT', timeInForce: 'GTC', quantity: String(quantity), price: String(price) },
+    { symbol, side, type: 'LIMIT', timeInForce: 'GTC', quantity: roundedQty, price: roundedPrice },
     'POST'
   )) as BinanceOrderResponse
   return parseOrderResponse(data)
