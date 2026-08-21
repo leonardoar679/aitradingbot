@@ -34,6 +34,11 @@ export interface LivePositionWatcher {
   trailingPeakPrice: number
   enteredAt: number
   active: boolean
+  /** Consecutive failed evaluation attempts. A watcher that cannot fetch a price is NOT
+   * protecting anything -- the barriers simply are not being checked -- so this is surfaced to
+   * the UI rather than only logged, otherwise the position reads as "watched" while unguarded. */
+  consecutiveFailures: number
+  lastError: string | null
 }
 
 interface ResolvedEvent {
@@ -106,7 +111,9 @@ export async function createWatcher(input: {
     trailingStop: input.trailingStop,
     trailingPeakPrice: input.entryPrice,
     enteredAt: Math.floor(Date.now() / 1000),
-    active: true
+    active: true,
+    consecutiveFailures: 0,
+    lastError: null
   }
   state.watchers.push(watcher)
   await persist()
@@ -218,9 +225,17 @@ async function tick(): Promise<void> {
           }
         }
       }
+      watcher.consecutiveFailures = 0
+      watcher.lastError = null
       await persist()
     } catch (error) {
-      console.error(`Failed to evaluate live position watcher ${watcher.id}:`, error)
+      watcher.consecutiveFailures++
+      watcher.lastError = error instanceof Error ? error.message : String(error)
+      console.error(
+        `Failed to evaluate live position watcher ${watcher.id} (${watcher.consecutiveFailures} consecutive):`,
+        error
+      )
+      await persist()
     }
   }
 }

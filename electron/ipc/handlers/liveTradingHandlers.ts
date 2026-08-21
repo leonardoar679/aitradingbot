@@ -184,7 +184,9 @@ export function registerLiveTradingHandlers(): void {
       exchange: w.exchange,
       symbol: w.symbol,
       entryPrice: w.entryPrice,
-      trailingPeakPrice: w.trailingPeakPrice
+      trailingPeakPrice: w.trailingPeakPrice,
+      consecutiveFailures: w.consecutiveFailures,
+      lastError: w.lastError
     }))
   })
 

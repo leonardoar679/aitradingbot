@@ -19,9 +19,27 @@ const WATCHER_POLL_MS = 5_000
 interface LiveWatcherInfo {
   entryPrice: number | null
   trailingPeakPrice: number | null
+  consecutiveFailures: number
+  lastError: string | null
 }
 
-const EMPTY_WATCHER_INFO: LiveWatcherInfo = { entryPrice: null, trailingPeakPrice: null }
+const EMPTY_WATCHER_INFO: LiveWatcherInfo = { entryPrice: null, trailingPeakPrice: null, consecutiveFailures: 0, lastError: null }
+
+// A watcher only protects a position while it can actually fetch a price. If evaluation keeps
+// failing (rate limit, network drop) the barriers are simply not being checked -- so say so,
+// rather than leaving "Watching" on screen implying a stop-loss that isn't running. Two ticks of
+// grace (~10s) keeps a single blip from crying wolf.
+const WATCHER_FAILURE_WARN_THRESHOLD = 3
+
+function WatcherHealth({ info }: { info: LiveWatcherInfo }): React.JSX.Element | null {
+  if (info.consecutiveFailures < WATCHER_FAILURE_WARN_THRESHOLD) return null
+  return (
+    <span style={{ color: 'var(--down)', fontWeight: 700 }}>
+      ⚠ Exit checks failing ({info.consecutiveFailures}x) — barriers are NOT being evaluated
+      {info.lastError ? `: ${info.lastError}` : ''}
+    </span>
+  )
+}
 
 /** Polls the real entry price (and, for Position, the trailing-peak price) of a watched live
  * Position or DCA position -- null for every other executor (never polls). Same 5s cadence as
@@ -45,7 +63,16 @@ function useLiveWatcherInfo(executor: ExecutorConfig): LiveWatcherInfo {
         const watchers = await window.api.liveTrading.listActiveWatchers()
         if (cancelled) return
         const match = watchers.find((w) => w.executorId === executor.id)
-        setInfo(match ? { entryPrice: match.entryPrice, trailingPeakPrice: match.trailingPeakPrice } : EMPTY_WATCHER_INFO)
+        setInfo(
+          match
+            ? {
+                entryPrice: match.entryPrice,
+                trailingPeakPrice: match.trailingPeakPrice,
+                consecutiveFailures: match.consecutiveFailures ?? 0,
+                lastError: match.lastError ?? null
+              }
+            : EMPTY_WATCHER_INFO
+        )
       } catch {
         // Best-effort display only -- a failed poll just leaves the last known info on screen.
       }
@@ -173,6 +200,7 @@ export function LiveOrderMetrics({ executor }: { executor: ExecutorConfig }): Re
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
           <span style={{ color: 'var(--down)', fontWeight: 600 }}>Watching — real position open</span>
+          <WatcherHealth info={watcherInfo} />
           <span style={{ color: 'var(--text-secondary)' }}>
             {params.amountQuote} {executor.quoteAsset} @ {formatQuotePrice(entryPrice, executor.quoteAsset)} (entry)
           </span>
@@ -202,6 +230,7 @@ export function LiveOrderMetrics({ executor }: { executor: ExecutorConfig }): Re
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
           <span style={{ color: 'var(--down)', fontWeight: 600 }}>Watching — real position open</span>
+          <WatcherHealth info={watcherInfo} />
           {watcherInfo.entryPrice !== null && (
             <span style={{ color: 'var(--text-secondary)' }}>Avg entry {formatQuotePrice(watcherInfo.entryPrice, executor.quoteAsset)}</span>
           )}
@@ -241,6 +270,7 @@ export function LiveOrderMetrics({ executor }: { executor: ExecutorConfig }): Re
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
           <span style={{ color: 'var(--down)', fontWeight: 600 }}>Watching — real position open</span>
+          <WatcherHealth info={watcherInfo} />
           {watcherInfo.entryPrice !== null && (
             <span style={{ color: 'var(--text-secondary)' }}>Avg entry {formatQuotePrice(watcherInfo.entryPrice, executor.quoteAsset)}</span>
           )}

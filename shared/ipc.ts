@@ -156,6 +156,10 @@ export interface LiveWatcherSummary {
   symbol: string
   entryPrice: number
   trailingPeakPrice: number
+  /** Consecutive failed evaluations. Non-zero means the exit barriers are not currently being
+   * checked, so the UI must stop implying the position is protected. */
+  consecutiveFailures: number
+  lastError: string | null
 }
 
 /** A live TWAP run's progress while still active — polled every 5s by ExecutorCard/
