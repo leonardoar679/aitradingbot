@@ -5,6 +5,7 @@ import { PageHeader } from '../components/PageHeader'
 import { useTheme } from '../theme/ThemeContext'
 import type { Theme } from '../theme/palette'
 import type { CredentialStatus, Exchange, LiveTradingStatus } from '../../shared/ipc'
+import { cleanIpcErrorMessage } from '../utils/ipcError'
 
 const THEME_OPTIONS: { id: Theme; label: string; icon: typeof Moon }[] = [
   { id: 'dark', label: 'Dark', icon: Moon },
@@ -16,13 +17,6 @@ const THEME_OPTIONS: { id: Theme; label: string; icon: typeof Moon }[] = [
 // offers credential management for exchanges that actually have a trading adapter, rather than
 // implying live support that doesn't exist yet for the other 7.
 const SUPPORTED_EXCHANGES: { id: Exchange; name: string }[] = [{ id: 'binance', name: 'Binance' }]
-
-// electron's ipcRenderer.invoke wraps a thrown main-process error as
-// "Error invoking remote method 'channel': Error: <message>" — strip that wrapper so the user
-// sees the actual reason (e.g. "Binance API error: API-key format invalid.") instead of internals.
-function cleanIpcErrorMessage(message: string): string {
-  return message.replace(/^Error invoking remote method '[^']*':\s*/, '').replace(/^Error:\s*/, '')
-}
 
 function fieldLabelStyle(): React.CSSProperties {
   return { fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.4rem', display: 'block' }

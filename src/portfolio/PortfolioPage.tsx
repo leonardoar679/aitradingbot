@@ -6,6 +6,7 @@ import { PortfolioEvolutionChart } from './PortfolioEvolutionChart'
 import { TopHoldings } from './TopHoldings'
 import { usePortfolioSnapshots, usePortfolioStatus, usePortfolioErrorMessage } from './portfolioStore'
 import type { Bot } from '../../shared/ipc'
+import { cleanIpcErrorMessage } from '../utils/ipcError'
 
 function formatUsd(value: number): string {
   const sign = value < 0 ? '-' : ''
@@ -64,7 +65,7 @@ export function PortfolioPage(): React.JSX.Element {
             lineHeight: 1.5
           }}
         >
-          Couldn't read your portfolio{errorMessage ? `: ${errorMessage}` : '.'} Your positions are unaffected —
+          Couldn't read your portfolio{errorMessage ? `: ${cleanIpcErrorMessage(errorMessage)}` : '.'} Your positions are unaffected —
           this page only reads them. It retries automatically every couple of minutes.
         </div>
       )}

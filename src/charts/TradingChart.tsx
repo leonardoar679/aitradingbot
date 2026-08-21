@@ -20,6 +20,7 @@ import type { TimeAnchorSettings } from '../components/timeTools/TimeToolsModal'
 import type { IndicatorSettings } from '../components/indicators/IndicatorsPopover'
 import { requestAiSignal } from '../ai/aiClient'
 import { formatQuotePrice } from '../utils/formatCurrency'
+import { describeError } from '../utils/ipcError'
 import { useTheme } from '../theme/ThemeContext'
 import { CHART_PALETTE } from '../theme/palette'
 import { DEFAULT_INTERVAL, type Candle, type Exchange, type Interval } from '../../shared/ipc'
@@ -44,6 +45,9 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
   const lastClosedTimeRef = useRef<number | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const [status, setStatus] = useState<'loading' | 'live' | 'error'>('loading')
+  const [loadError, setLoadError] = useState<string | null>(null)
+  // Bumping this re-runs the whole chart effect, which is what actually retries the fetch.
+  const [reloadNonce, setReloadNonce] = useState(0)
   const [lastPrice, setLastPrice] = useState<number | null>(null)
   const [interval, setChartInterval] = useState<Interval>(DEFAULT_INTERVAL)
   const { theme } = useTheme()
@@ -333,6 +337,15 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
     let unsubscribeUpdates: (() => void) | null = null
     let cancelled = false
 
+    // Every other data path in this app retries — Positions every 15s, the portfolio snapshot
+    // every 2 minutes, executor simulations every minute. The chart was the one that gave up
+    // permanently: a single connect timeout (binance.us takes 10s to time out, and it really
+    // does happen) left it reading "Failed to load market data." until the user happened to
+    // navigate away and back. Retry a few times with backoff, then leave a button.
+    const RETRY_DELAYS_MS = [2000, 5000, 15000]
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
+    let attempt = 0
+
     async function start(): Promise<void> {
       try {
         const history = await window.api.market.subscribeCandles(exchange, symbol, interval)
@@ -342,6 +355,7 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
         }
         recompute()
         setStatus('live')
+        setLoadError(null)
 
         const settings = anchorSettingsRef.current
         const shouldRestore =
@@ -353,7 +367,18 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
         unsubscribeUpdates = window.api.market.onCandleUpdate(ingest)
       } catch (error) {
         console.error('Failed to load market data:', error)
-        if (!cancelled) setStatus('error')
+        if (cancelled) return
+        const delay = RETRY_DELAYS_MS[attempt]
+        if (delay !== undefined) {
+          attempt += 1
+          retryTimer = setTimeout(() => {
+            if (!cancelled) void start()
+          }, delay)
+          return
+        }
+        // Out of automatic attempts — say what went wrong and hand the user the retry.
+        setLoadError(describeError(error))
+        setStatus('error')
       }
     }
 
@@ -361,6 +386,7 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
 
     return () => {
       cancelled = true
+      if (retryTimer) clearTimeout(retryTimer)
       unsubscribeUpdates?.()
       void window.api.market.unsubscribeCandles()
       chart.remove()
@@ -374,7 +400,7 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
       macdHistSeriesRef.current = null
       candlesRef.current.clear()
     }
-  }, [exchange, symbol, interval, palette])
+  }, [exchange, symbol, interval, palette, reloadNonce])
 
   function handleJumpToDate(date: Date): void {
     const chart = chartRef.current
@@ -437,7 +463,31 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
         }}
       >
         {status === 'loading' && 'Loading market data...'}
-        {status === 'error' && 'Failed to load market data.'}
+        {status === 'error' && (
+          <>
+            Couldn&apos;t load market data{loadError ? `: ${loadError}` : '.'}{' '}
+            <button
+              onClick={() => {
+                setStatus('loading')
+                setLoadError(null)
+                setReloadNonce((n) => n + 1)
+              }}
+              style={{
+                background: 'transparent',
+                border: '1px solid var(--down)',
+                borderRadius: 'var(--radius-sm)',
+                color: 'var(--down)',
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                padding: '0.15rem 0.5rem',
+                marginLeft: '0.3rem',
+                cursor: 'pointer'
+              }}
+            >
+              Retry
+            </button>
+          </>
+        )}
         {status === 'live' && lastPrice !== null && formatQuotePrice(lastPrice, quoteAsset)}
       </p>
       <div ref={containerRef} style={{ width: '100%', height: 400 }} />
