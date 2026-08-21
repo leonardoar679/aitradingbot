@@ -6,7 +6,7 @@ import { AddBotModal } from './AddBotModal'
 import { BotDetailView } from './BotDetailView'
 import { RunsTab } from './RunsTab'
 import { ArchivedTab } from './ArchivedTab'
-import { runBacktest } from '../backtest/engine'
+import { fetchBotDryRunResult, summarizePaperTrades } from './useDryRun'
 import { getStrategy } from '../backtest/strategies'
 import type { Bot } from './types'
 import type { BotRun, Exchange, SymbolInfo } from '../../shared/ipc'
@@ -45,13 +45,21 @@ function tabButtonStyle(active: boolean): React.CSSProperties {
 // with zero feedback is exactly the kind of thing that should be visible.
 async function buildRunRecord(bot: Bot, endedAt: number): Promise<BotRun | null> {
   if (bot.enabledAt === null) return null
-  const { candles } = await window.api.market.fetchHistoricalRange(bot.exchange, bot.symbol, '4h', bot.enabledAt, endedAt)
-  if (candles.length === 0) return null
-  const result = runBacktest(candles, bot.strategyId, { forceCloseAtEnd: false })
-  const trades = result.trades.filter((t) => t.entryTime >= bot.enabledAt!)
-  if (trades.length === 0 && endedAt - bot.enabledAt < 300) return null
-  const wins = trades.filter((t) => t.pnl > 0).length
-  const netPct = trades.length > 0 ? (trades.reduce((acc, t) => acc * (1 + t.returnPct / 100), 1) - 1) * 100 : 0
+  // Reuses the dry-run's own fetch + summary rather than re-deriving them. This previously
+  // fetched candles starting at enabledAt with no warmup padding, while the card the user had
+  // been watching fetches 220 extra candles first so EMA(200)/ATR(14) are actually warmed up.
+  // A bot run of a few days is far shorter than that warmup, so the strategy produced no signals
+  // at all and the permanently-saved record read "0 trades, 0.00%" -- flatly contradicting the
+  // "3 paper trades, +4.2%" shown on the card right up until the moment it was disabled.
+  // summarizePaperTrades is the same helper BotCard displays through, so the record and the card
+  // now cannot drift apart.
+  const fetched = await fetchBotDryRunResult(bot)
+  if (fetched === null) return null
+  const { paperTrades, paperWins, paperNetPct } = summarizePaperTrades(fetched.result.trades, bot.enabledAt)
+  if (paperTrades.length === 0 && endedAt - bot.enabledAt < 300) return null
+  const trades = paperTrades
+  const wins = paperWins
+  const netPct = paperNetPct
   return {
     id: crypto.randomUUID(),
     botId: bot.id,
