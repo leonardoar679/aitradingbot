@@ -197,6 +197,15 @@ async function tick(): Promise<void> {
       // Fixed cadence off the original schedule (matches paper's sliceTime = createdAt + i *
       // orderIntervalSec) rather than nowSec + interval, so a late tick doesn't compound drift.
       run.nextSliceAt += run.orderIntervalSec
+      if (run.nextSliceAt <= nowSec) {
+        // ...but if the schedule fell behind real time -- the app was closed, or the machine slept,
+        // for longer than an interval -- resume the cadence from now instead. Without this the
+        // whole backlog is "due" at once and, since tick() runs every few seconds, every remaining
+        // slice fires seconds apart: a real market buy for the entire remaining notional in under
+        // a minute, which is precisely what a TWAP exists to avoid. Finishing late is the correct
+        // failure mode here; finishing all at once is not.
+        run.nextSliceAt = nowSec + run.orderIntervalSec
+      }
     }
     await persist()
   }

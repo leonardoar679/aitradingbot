@@ -614,7 +614,15 @@ export function ExecutorsPage(): React.JSX.Element {
       <PageHeader title="Executors" subtitle="Where your bots and paper strategies actually run" />
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
-        <StatCard icon={Cpu} label="Executors Online" value="1 / 1" valueColor="var(--positive)" />
+        {/* Was a hardcoded "1 / 1" that never reflected anything -- the Local Executor card below
+            already states this device is running, so this now reports the real running/total count
+            instead of restating that as a fake statistic. */}
+        <StatCard
+          icon={Cpu}
+          label="Executors Running"
+          value={`${activeExecutors.length} / ${executors.length}`}
+          valueColor={executors.length > 0 && activeExecutors.length === executors.length ? 'var(--positive)' : undefined}
+        />
         <StatCard icon={Cpu} label="Active Strategies" value={`${activeBots.length + activeExecutors.length}`} />
       </div>
 
