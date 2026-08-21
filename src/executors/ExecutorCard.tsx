@@ -352,7 +352,13 @@ function SpreadMetrics({ executor }: { executor: ExecutorConfig }): React.JSX.El
     return <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Stopped</div>
   }
   if (sim.status === 'loading') {
-    return <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Loading market data…</div>
+    // Distinguish the normal first-minute wait from a generic fetch -- a brand-new executor has
+    // no closed 1m candle to replay yet, and an indefinite "Loading…" there reads as a hang.
+    return (
+      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+        {sim.waitingForFirstCandle ? 'Waiting for the first 1-minute candle to close…' : 'Loading market data…'}
+      </div>
+    )
   }
   if (sim.status === 'error') {
     return <div style={{ fontSize: '0.75rem', color: 'var(--down)' }}>Error: {sim.error}</div>
@@ -382,7 +388,13 @@ function SingleMarketMetrics({ executor }: { executor: ExecutorConfig }): React.
     return <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Stopped</div>
   }
   if (sim.status === 'loading') {
-    return <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Loading market data…</div>
+    // Distinguish the normal first-minute wait from a generic fetch -- a brand-new executor has
+    // no closed 1m candle to replay yet, and an indefinite "Loading…" there reads as a hang.
+    return (
+      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+        {sim.waitingForFirstCandle ? 'Waiting for the first 1-minute candle to close…' : 'Loading market data…'}
+      </div>
+    )
   }
   if (sim.status === 'error') {
     return <div style={{ fontSize: '0.75rem', color: 'var(--down)' }}>Error: {sim.error}</div>
