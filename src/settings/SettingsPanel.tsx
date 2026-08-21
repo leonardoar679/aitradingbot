@@ -254,9 +254,11 @@ export function SettingsPanel(): React.JSX.Element {
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.9rem' }}>
           <ShieldCheck size={15} color="var(--text-secondary)" style={{ flexShrink: 0, marginTop: 2 }} />
           <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
-            A verified key here can place real market orders — only via a live-mode Order executor, only on Binance,
-            and only once armed from the live trading bar at the top of the app. Every other bot and executor stays
-            paper-only regardless of whether a key is configured here.
+            A verified key here can place real orders — only on Binance, only from an executor you explicitly created
+            in live mode, and only once armed from the live trading bar at the top of the app. Five executor types can
+            be created live: <strong>Order, Position, DCA, TWAP and Grid</strong>. DCA and Grid place a real resting
+            order per ladder level, and TWAP keeps placing timed market buys on its own schedule — those three keep
+            working without you watching. XEMM, Arbitrage and Market Making are always paper, as is every bot.
           </p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>

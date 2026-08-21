@@ -138,7 +138,7 @@ export function PositionsPage(): React.JSX.Element {
         )}
         {livePositions.length === 0 && (
           <p style={{ color: 'var(--text-secondary)', margin: 0 }}>
-            No open live positions. A live-mode Order Executor's BUY fill lands here — closing one places a real market
+            No open live positions. A live-mode Order, Position, DCA, TWAP or Grid executor's BUY fill lands here — closing one places a real market
             sell.
           </p>
         )}
