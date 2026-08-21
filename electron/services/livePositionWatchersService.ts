@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import { join } from 'path'
-import { readFile, writeFile, mkdir } from 'fs/promises'
+import { readFile, mkdir } from 'fs/promises'
+import { writeJsonAtomic } from './atomicWrite'
 import type { Exchange, LiveExitResult } from '../../shared/ipc'
 import { fetchTicker24h } from './marketService'
 import { getLivePosition } from './livePositionsService'
@@ -74,7 +75,7 @@ async function load(): Promise<State> {
 
 async function persist(): Promise<void> {
   await mkdir(app.getPath('userData'), { recursive: true })
-  await writeFile(watchersPath(), JSON.stringify(cache, null, 2), 'utf-8')
+  await writeJsonAtomic(watchersPath(), cache)
 }
 
 export async function listActiveWatchers(): Promise<LivePositionWatcher[]> {

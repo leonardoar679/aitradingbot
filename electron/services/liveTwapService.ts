@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import { join } from 'path'
-import { readFile, writeFile, mkdir } from 'fs/promises'
+import { readFile, mkdir } from 'fs/promises'
+import { writeJsonAtomic } from './atomicWrite'
 import type { Exchange, LiveTwapRunSummary, LiveTwapResolution } from '../../shared/ipc'
 import { placeLiveMarketOrder } from './liveExecutionService'
 
@@ -63,7 +64,7 @@ async function load(): Promise<State> {
 
 async function persist(): Promise<void> {
   await mkdir(app.getPath('userData'), { recursive: true })
-  await writeFile(runsPath(), JSON.stringify(cache, null, 2), 'utf-8')
+  await writeJsonAtomic(runsPath(), cache)
 }
 
 export async function createTwapRun(input: {

@@ -1,6 +1,7 @@
 import { app, safeStorage } from 'electron'
 import { join } from 'path'
-import { readFile, writeFile, mkdir } from 'fs/promises'
+import { readFile, mkdir } from 'fs/promises'
+import { writeJsonAtomic } from './atomicWrite'
 import { fetchAccountBalance } from './exchanges/binanceTrading'
 import type { CredentialStatus, Exchange } from '../../shared/ipc'
 
@@ -45,7 +46,7 @@ async function load(): Promise<StoredCredentialsFile> {
 
 async function persist(): Promise<void> {
   await mkdir(app.getPath('userData'), { recursive: true })
-  await writeFile(credentialsPath(), JSON.stringify(cache, null, 2), 'utf-8')
+  await writeJsonAtomic(credentialsPath(), cache)
 }
 
 function encrypt(value: string): string {

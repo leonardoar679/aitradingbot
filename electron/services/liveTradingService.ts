@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import { join } from 'path'
-import { readFile, writeFile, mkdir } from 'fs/promises'
+import { readFile, mkdir } from 'fs/promises'
+import { writeJsonAtomic } from './atomicWrite'
 import { getRealizedPnlToday } from './livePositionsService'
 
 // Safety state for real order placement — deliberately its own file, separate from
@@ -62,7 +63,7 @@ async function load(): Promise<LiveTradingState> {
 
 async function persist(): Promise<void> {
   await mkdir(app.getPath('userData'), { recursive: true })
-  await writeFile(liveTradingPath(), JSON.stringify(cache, null, 2), 'utf-8')
+  await writeJsonAtomic(liveTradingPath(), cache)
 }
 
 function todayUtc(): string {

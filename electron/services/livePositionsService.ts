@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import { join } from 'path'
-import { readFile, writeFile, mkdir } from 'fs/promises'
+import { readFile, mkdir } from 'fs/promises'
+import { writeJsonAtomic } from './atomicWrite'
 import type { Exchange, ExecutorSide, LivePosition } from '../../shared/ipc'
 
 // The live-position ledger — separate from liveTrading.json (safety gates) and settings.json
@@ -43,7 +44,7 @@ async function load(): Promise<LivePositionsState> {
 
 async function persist(): Promise<void> {
   await mkdir(app.getPath('userData'), { recursive: true })
-  await writeFile(livePositionsPath(), JSON.stringify(cache, null, 2), 'utf-8')
+  await writeJsonAtomic(livePositionsPath(), cache)
 }
 
 function todayUtc(): string {

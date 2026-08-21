@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import { join } from 'path'
-import { readFile, writeFile, mkdir } from 'fs/promises'
+import { readFile, mkdir } from 'fs/promises'
+import { writeJsonAtomic } from './atomicWrite'
 import type { AppSettings } from '../../shared/ipc'
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -38,6 +39,6 @@ export async function setSettings(patch: Partial<AppSettings>): Promise<AppSetti
   const current = await load()
   cache = { ...current, ...patch }
   await mkdir(app.getPath('userData'), { recursive: true })
-  await writeFile(settingsPath(), JSON.stringify(cache, null, 2), 'utf-8')
+  await writeJsonAtomic(settingsPath(), cache)
   return cache
 }
