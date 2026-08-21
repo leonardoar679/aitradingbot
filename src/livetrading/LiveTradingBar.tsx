@@ -3,6 +3,8 @@ import { AlertTriangle, Power, ShieldOff } from 'lucide-react'
 import type { LiveTradingStatus } from '../../shared/ipc'
 
 const POLL_MS = 15_000
+// How long a pending confirmation stays armed before reverting to the plain label.
+const CONFIRM_WINDOW_MS = 5_000
 
 function buttonStyle(kind: 'arm' | 'disarm' | 'kill' | 'release'): React.CSSProperties {
   const base: React.CSSProperties = {
@@ -26,6 +28,19 @@ export function LiveTradingBar(): React.JSX.Element | null {
   const [status, setStatus] = useState<LiveTradingStatus | null>(null)
   const [credentialConfigured, setCredentialConfigured] = useState(false)
   const [busy, setBusy] = useState(false)
+  // Two risk-increasing controls live on this bar, and both used to fire on a single click:
+  // arming the session is the gate that lets real orders through at all, and releasing the kill
+  // switch un-blocks it. Meanwhile discarding a *paper* Inventory row already asks twice, and so
+  // does closing a live position. The app was more careful about deleting a simulated record
+  // than about turning real trading on. Disarming and engaging the kill switch stay one click --
+  // they only ever reduce risk, and hesitating there is the wrong failure mode.
+  const [pendingConfirm, setPendingConfirm] = useState<'arm' | 'release' | null>(null)
+
+  useEffect(() => {
+    if (pendingConfirm === null) return
+    const timer = setTimeout(() => setPendingConfirm(null), CONFIRM_WINDOW_MS)
+    return () => clearTimeout(timer)
+  }, [pendingConfirm])
 
   function refresh(): void {
     window.api.liveTrading.getStatus().then(setStatus).catch((error) => console.error('Failed to load live trading status:', error))
@@ -43,6 +58,12 @@ export function LiveTradingBar(): React.JSX.Element | null {
 
   async function handleArmToggle(): Promise<void> {
     if (!status) return
+    // Only arming needs confirming; disarming takes effect immediately.
+    if (!status.sessionArmed && pendingConfirm !== 'arm') {
+      setPendingConfirm('arm')
+      return
+    }
+    setPendingConfirm(null)
     setBusy(true)
     try {
       await window.api.liveTrading.setSessionArmed(!status.sessionArmed)
@@ -63,6 +84,11 @@ export function LiveTradingBar(): React.JSX.Element | null {
   }
 
   async function handleReleaseKillSwitch(): Promise<void> {
+    if (pendingConfirm !== 'release') {
+      setPendingConfirm('release')
+      return
+    }
+    setPendingConfirm(null)
     setBusy(true)
     try {
       await window.api.liveTrading.releaseKillSwitch()
@@ -129,12 +155,18 @@ export function LiveTradingBar(): React.JSX.Element | null {
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
         {engaged ? (
           <button onClick={() => void handleReleaseKillSwitch()} disabled={busy} style={buttonStyle('release')}>
-            <ShieldOff size={13} /> Release Kill Switch
+            <ShieldOff size={13} />{' '}
+            {pendingConfirm === 'release' ? 'Confirm — allow live orders again?' : 'Release Kill Switch'}
           </button>
         ) : (
           <>
             <button onClick={() => void handleArmToggle()} disabled={busy} style={buttonStyle(armed ? 'disarm' : 'arm')}>
-              <Power size={13} /> {armed ? 'Disarm' : 'Arm for this session'}
+              <Power size={13} />{' '}
+              {armed
+                ? 'Disarm'
+                : pendingConfirm === 'arm'
+                  ? `Confirm — allow real orders up to ${status.maxOrderQuote} each?`
+                  : 'Arm for this session'}
             </button>
             <button onClick={() => void handleKillSwitch()} disabled={busy} style={buttonStyle('kill')}>
               Kill Switch
