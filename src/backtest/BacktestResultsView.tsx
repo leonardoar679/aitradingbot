@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { createChart, LineSeries, type IChartApi, type UTCTimestamp } from 'lightweight-charts'
 import { RotateCw, Undo2, ClipboardList, BarChart3 } from 'lucide-react'
-import { summarizeSegment, type BacktestResult, type MonthlyBreakdownRow, type SegmentSummary } from './engine'
+import {
+  summarizeSegment,
+  MIN_ANNUALIZATION_DAYS,
+  type BacktestResult,
+  type MonthlyBreakdownRow,
+  type SegmentSummary
+} from './engine'
 import { DebugLogsModal } from './DebugLogsModal'
 
 export interface ResultsGeneralInfo {
@@ -33,8 +39,16 @@ function formatPct(n: number): string {
   return `${n >= 0 ? '' : ''}${n.toFixed(2)}%`
 }
 
-function formatRatio(n: number): string {
+function formatRatio(n: number | null): string {
+  if (n === null) return 'N/A'
   return Number.isFinite(n) ? n.toFixed(2) : '∞'
+}
+
+// Annualized figures are withheld on short samples rather than shown as a huge meaningless
+// number — this says which it is and what the run would need to produce a real one.
+function formatAnnualized(value: number | null, periodDays: number): string {
+  if (value !== null) return formatPct(value)
+  return `N/A — needs ${MIN_ANNUALIZATION_DAYS}+ days of data (this run: ${Math.round(periodDays)})`
 }
 
 function formatDuration(sec: number): string {
@@ -435,20 +449,20 @@ export function BacktestResultsView({
           <StatRow index={3} label="Open Trades" value={String(s.openTrades)} />
           <StatRow index={4} label="Total Paid Fees" value={formatUsd(s.totalPaidFees)} />
           <StatRow index={5} label="Max Drawdown" value={formatPct(s.maxDrawdownPct)} />
-          <StatRow index={6} label="Annual Return" value={formatPct(s.annualReturnPct)} />
+          <StatRow index={6} label="Annual Return" value={formatAnnualized(s.annualReturnPct, s.periodDays)} />
           <StatRow index={7} label="Expectancy" value={`${formatUsd(s.expectancy)} (${formatPct(s.expectancyPct)})`} />
           <StatRow index={8} label="Avg Win | Avg Loss" value={`${formatUsd(s.avgWin)} | ${formatUsd(s.avgLoss)}`} />
-          <StatRow index={9} label="Ratio Avg Win / Avg Loss" value={s.avgWinLossRatio.toFixed(2)} />
+          <StatRow index={9} label="Ratio Avg Win / Avg Loss" value={formatRatio(s.avgWinLossRatio)} />
           <StatRow index={10} label="Profit Factor" value={formatRatio(s.profitFactor)} />
           <StatRow index={11} label="Win-rate" value={formatPct(s.winRatePct)} />
           <StatRow index={12} label="Longs | Shorts" value={`${formatPct(s.longPct)} | ${formatPct(s.shortPct)}`} />
           <StatRow index={13} label="Avg Holding Time" value={formatDuration(s.avgHoldingSec)} />
           <StatRow index={14} label="Winning Trades Avg Holding Time" value={formatDuration(s.winningAvgHoldingSec)} />
           <StatRow index={15} label="Losing Trades Avg Holding Time" value={formatDuration(s.losingAvgHoldingSec)} />
-          <StatRow index={16} label="Sharpe Ratio" value={s.sharpeRatio.toFixed(2)} />
-          <StatRow index={17} label="Calmar Ratio" value={s.calmarRatio.toFixed(2)} />
-          <StatRow index={18} label="Sortino Ratio" value={s.sortinoRatio.toFixed(2)} />
-          <StatRow index={19} label="Omega Ratio" value={s.omegaRatio.toFixed(2)} />
+          <StatRow index={16} label="Sharpe Ratio" value={formatRatio(s.sharpeRatio)} />
+          <StatRow index={17} label="Calmar Ratio" value={formatRatio(s.calmarRatio)} />
+          <StatRow index={18} label="Sortino Ratio" value={formatRatio(s.sortinoRatio)} />
+          <StatRow index={19} label="Omega Ratio" value={formatRatio(s.omegaRatio)} />
           <StatRow index={20} label="Winning Streak" value={String(s.winningStreak)} />
           <StatRow index={21} label="Losing Streak" value={String(s.losingStreak)} />
           <StatRow index={22} label="Largest Winning Trade" value={formatUsd(s.largestWinningTrade)} />
@@ -489,8 +503,11 @@ export function BacktestResultsView({
         <p style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginTop: '0.6rem', lineHeight: 1.5 }}>
           For this specific strategy, a realistic range is roughly -10% to +40% annual return with a 15%–25% max
           drawdown. Landing in that range means the pipeline is working correctly — that's success at this stage,
-          not a disappointing result. Here: {formatPct(s.annualReturnPct)} annual return, {formatPct(s.maxDrawdownPct)}{' '}
-          max drawdown.
+          not a disappointing result. Here:{' '}
+          {s.annualReturnPct === null
+            ? `${Math.round(s.periodDays)} days of data — too short to state an annual return`
+            : `${formatPct(s.annualReturnPct)} annual return`}
+          , {formatPct(s.maxDrawdownPct)} max drawdown.
         </p>
 
         {showSampleComparison && inSample && outOfSample && (
@@ -576,7 +593,17 @@ export function BacktestResultsView({
 
         <SectionHeader label="General Info" />
         <div style={{ marginTop: '-0.6rem' }}>
-          <InfoRow label="Period" value={`${generalInfo.periodDays} days (${(generalInfo.periodDays / 30).toFixed(1)} months)`} />
+          {/* The requested range and the range actually returned can differ a lot — a symbol
+              listed partway through it, or an exchange that capped the response. Reporting only
+              what was asked for would overstate how much data the stats above are built on. */}
+          <InfoRow
+            label="Period"
+            value={
+              Math.abs(generalInfo.periodDays - s.periodDays) > 1
+                ? `${Math.round(s.periodDays)} days of data (${generalInfo.periodDays} requested)`
+                : `${generalInfo.periodDays} days (${(generalInfo.periodDays / 30).toFixed(1)} months)`
+            }
+          />
           <InfoRow label="Starting Date" value={generalInfo.startDate} />
           <InfoRow label="Ending Date" value={generalInfo.endDate} />
           <InfoRow label="Exchange" value={generalInfo.exchangeName} />

@@ -8,6 +8,11 @@ import { FEE_RATE } from '../../shared/fees'
 // flat rate applied to both entry and exit notional, shared with the executor paper simulations
 // via shared/fees.ts so the two engines can never disagree on what a trade costs.
 const STARTING_BALANCE = 10000
+// Below this, a compound annual growth rate stops being a description of the strategy and becomes
+// a description of the sample. A week that happened to return +5% annualizes to +1,160%; the same
+// week at -5% annualizes to -93%. Neither number tells a beginner anything true about a year, so
+// the stat is reported as null and the UI says why instead of printing a fantasy.
+export const MIN_ANNUALIZATION_DAYS = 30
 
 export interface Trade {
   side: 'long' | 'short'
@@ -35,7 +40,13 @@ export interface BacktestStats {
   openTrades: number
   totalPaidFees: number
   maxDrawdownPct: number
-  annualReturnPct: number
+  /** Actual span of the returned candle data, which can be shorter than the requested date range
+   * (a symbol listed mid-range, or an exchange that capped the response). */
+  periodDays: number
+  /** Compound annual growth rate. `null` when the sample is shorter than MIN_ANNUALIZATION_DAYS —
+   * extrapolating a 3-day result to a year multiplies noise by 120x and produces numbers like
+   * "+4,000% annual return" that mean nothing. */
+  annualReturnPct: number | null
   expectancy: number
   expectancyPct: number
   avgWin: number
@@ -48,8 +59,12 @@ export interface BacktestStats {
   winningAvgHoldingSec: number
   losingAvgHoldingSec: number
   sharpeRatio: number
-  calmarRatio: number
+  /** Annual return / max drawdown. `null` whenever annualReturnPct is null, since it is derived
+   * from it and would inherit the same short-sample distortion. */
+  calmarRatio: number | null
   sortinoRatio: number
+  /** Sum of positive period returns / sum of negative ones. `Infinity` if the equity curve never
+   * had a down period; `0` if it never had an up one. */
   omegaRatio: number
   winningStreak: number
   losingStreak: number
@@ -298,7 +313,10 @@ export function runBacktest(
 
   const finishingBalance = equityCurve.length > 0 ? equityCurve[equityCurve.length - 1].value : STARTING_BALANCE
   const monthlyBreakdown = computeMonthlyBreakdown(equityCurve, trades)
-  const stats = computeStats(trades, equityCurve, totalFees, finishingBalance, monthlyBreakdown)
+  // Counted after the force-close block, so it is 0 for a normal backtest and 1 only when a
+  // caller passed forceCloseAtEnd: false and a position really is still open.
+  const openTrades = posBox.current ? 1 : 0
+  const stats = computeStats(trades, equityCurve, totalFees, finishingBalance, monthlyBreakdown, openTrades)
 
   return { equityCurve, benchmarkCurve, trades, stats, monthlyBreakdown, openPositionAtEnd }
 }
@@ -308,7 +326,8 @@ function computeStats(
   equityCurve: EquityPoint[],
   totalPaidFees: number,
   finishingBalance: number,
-  monthlyBreakdown: MonthlyBreakdownRow[]
+  monthlyBreakdown: MonthlyBreakdownRow[],
+  openTrades: number
 ): BacktestStats {
   const totalClosedTrades = trades.length
   const totalNetProfit = finishingBalance - STARTING_BALANCE
@@ -324,7 +343,9 @@ function computeStats(
   const periodDays =
     equityCurve.length > 1 ? (equityCurve[equityCurve.length - 1].time - equityCurve[0].time) / 86400 : 0
   const annualReturnPct =
-    periodDays > 0 ? ((finishingBalance / STARTING_BALANCE) ** (365 / periodDays) - 1) * 100 : 0
+    periodDays >= MIN_ANNUALIZATION_DAYS
+      ? ((finishingBalance / STARTING_BALANCE) ** (365 / periodDays) - 1) * 100
+      : null
 
   const expectancy = totalClosedTrades > 0 ? totalNetProfit / totalClosedTrades : 0
   const expectancyPct = (expectancy / STARTING_BALANCE) * 100
@@ -370,11 +391,12 @@ function computeStats(
   const downsideDev = Math.sqrt(mean(periodReturns.map((r) => (r < 0 ? r * r : 0))))
   const sortinoRatio = downsideDev > 0 ? (returnMean / downsideDev) * Math.sqrt(periodsPerYear) : 0
 
-  const calmarRatio = maxDrawdownPct !== 0 ? annualReturnPct / Math.abs(maxDrawdownPct) : 0
+  const calmarRatio =
+    annualReturnPct !== null && maxDrawdownPct !== 0 ? annualReturnPct / Math.abs(maxDrawdownPct) : null
 
   const gains = periodReturns.filter((r) => r > 0).reduce((a, b) => a + b, 0)
   const losses = Math.abs(periodReturns.filter((r) => r < 0).reduce((a, b) => a + b, 0))
-  const omegaRatio = losses > 0 ? gains / losses : 0
+  const omegaRatio = losses > 0 ? gains / losses : gains > 0 ? Infinity : 0
 
   let winningStreak = 0
   let losingStreak = 0
@@ -411,9 +433,10 @@ function computeStats(
     totalNetProfitPct,
     startingBalance: STARTING_BALANCE,
     finishingBalance,
-    openTrades: 0,
+    openTrades,
     totalPaidFees,
     maxDrawdownPct,
+    periodDays,
     annualReturnPct,
     expectancy,
     expectancyPct,
