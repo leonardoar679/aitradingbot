@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { EXCHANGES, type LivePosition } from '../../shared/ipc'
 import { useLastPrice } from '../hooks/useLastPrice'
 import { formatQuotePrice } from '../utils/formatCurrency'
+import { netRealizedPnl } from '../../shared/fees'
 
 function pctColor(pct: number): string {
   return pct >= 0 ? 'var(--up)' : 'var(--down)'
@@ -18,8 +19,12 @@ export function LivePositionRow({
 }): React.JSX.Element {
   const markPrice = useLastPrice(position.exchange, position.symbol)
   const exchangeName = EXCHANGES.find((e) => e.id === position.exchange)?.name ?? position.exchange
-  const pnlPct = markPrice ? ((markPrice - position.avgCost) / position.avgCost) * 100 : null
-  const unrealizedQuote = markPrice ? position.qty * (markPrice - position.avgCost) : null
+  // Net of the round-trip fee, matching what closing at this mark would actually realize and
+  // what every paper position on this same page already reports (computeSnapshot.ts). Shown
+  // gross, a position was "up" while a real close would still have booked a loss.
+  const unrealizedQuote = markPrice !== null ? netRealizedPnl(position.qty, position.avgCost, markPrice) : null
+  const costBasis = position.qty * position.avgCost
+  const pnlPct = unrealizedQuote !== null && costBasis > 0 ? (unrealizedQuote / costBasis) * 100 : null
 
   const [closeQtyText, setCloseQtyText] = useState(String(position.qty))
   const [confirming, setConfirming] = useState(false)

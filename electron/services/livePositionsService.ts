@@ -3,6 +3,7 @@ import { join } from 'path'
 import { readFile, mkdir } from 'fs/promises'
 import { writeJsonAtomic } from './atomicWrite'
 import type { Exchange, ExecutorSide, LivePosition } from '../../shared/ipc'
+import { netRealizedPnl } from '../../shared/fees'
 
 // The live-position ledger — separate from liveTrading.json (safety gates) and settings.json
 // (paper HeldPosition inventory). This is main-process-owned because it feeds the daily
@@ -124,7 +125,10 @@ export async function recordLiveFill(
   // side === 'sell'
   if (!open) return null
   const closeQty = Math.min(filledQty, open.qty)
-  const realizedFromThisFill = closeQty * (avgFillPrice - open.avgCost)
+  // Net of the fees on both fills, not gross. avgCost stays the plain average fill price so it
+  // still matches what the exchange shows for the position; the cost of trading is taken here,
+  // where it decides both the reported P&L and whether the daily loss limit has been breached.
+  const realizedFromThisFill = netRealizedPnl(closeQty, open.avgCost, avgFillPrice)
   open.qty -= closeQty
   open.realizedPnl = (open.realizedPnl ?? 0) + realizedFromThisFill
   if (open.qty <= 1e-9) {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { FEE_RATE, roundTripFee, spreadCaptureFee } from '../shared/fees'
+import { FEE_RATE, roundTripFee, spreadCaptureFee, netRealizedPnl } from '../shared/fees'
 import { simulatePosition } from '../src/executors/engine'
 import { simulateArbitrage, simulateXemm } from '../src/executors/spreadEngine'
 import type { Candle, PositionExecutorParams, ArbitrageExecutorParams, XemmExecutorParams } from '../shared/ipc'
@@ -65,5 +65,35 @@ describe('spread captures account for two legs', () => {
       ...spreadMarkets, orderAmountQuote: 1000, minProfitabilityPct: 0.2
     } as XemmExecutorParams)
     expect(x.realizedPnl).toBeLessThan(0)
+  })
+})
+
+describe('netRealizedPnl', () => {
+  it('subtracts the fee on both fills from the gross move', () => {
+    // 1 unit bought at 100, sold at 110: $10 gross, minus 0.1% of 100 and 0.1% of 110.
+    expect(netRealizedPnl(1, 100, 110)).toBeCloseTo(10 - 0.1 - 0.11, 10)
+  })
+
+  it('turns a flat round trip into a loss', () => {
+    // The real ledger backs the daily loss gate, so a break-even trade must not read as zero.
+    expect(netRealizedPnl(1, 100, 100)).toBeLessThan(0)
+    expect(netRealizedPnl(1, 100, 100)).toBeCloseTo(-0.2, 10)
+  })
+
+  it('makes a loss larger, never smaller', () => {
+    const gross = 1 * (90 - 100)
+    expect(netRealizedPnl(1, 100, 90)).toBeLessThan(gross)
+  })
+
+  it('scales with quantity', () => {
+    expect(netRealizedPnl(3, 100, 110)).toBeCloseTo(3 * netRealizedPnl(1, 100, 110), 10)
+  })
+
+  it('agrees with gross minus roundTripFee', () => {
+    expect(netRealizedPnl(2, 50, 70)).toBeCloseTo(2 * (70 - 50) - roundTripFee(2, 50, 70), 10)
+  })
+
+  it('is zero-qty safe', () => {
+    expect(netRealizedPnl(0, 100, 110)).toBe(0)
   })
 })

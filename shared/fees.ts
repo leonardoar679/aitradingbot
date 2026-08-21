@@ -35,3 +35,14 @@ export function spreadCaptureFee(orderAmountQuote: number, capturedPct: number):
   const sellNotional = orderAmountQuote * (1 + capturedPct / 100)
   return (buyNotional + sellNotional) * FEE_RATE
 }
+
+/** Net P&L for closing `qty` units bought at `entryPrice` and sold at `exitPrice`, after the
+ * fees on both fills. Gross P&L on its own is not what an account keeps, so it is not what
+ * either ledger reports -- paper (computeSnapshot.ts) or real (livePositionsService.ts).
+ *
+ * The real ledger matters twice over: it is what the Live Trade History shows, and it backs the
+ * daily realized-loss gate. A gross figure there makes that gate fire later than the account's
+ * actual losses warrant, which is the wrong direction for a safety limit to be wrong in. */
+export function netRealizedPnl(qty: number, entryPrice: number, exitPrice: number): number {
+  return qty * (exitPrice - entryPrice) - roundTripFee(qty, entryPrice, exitPrice)
+}
