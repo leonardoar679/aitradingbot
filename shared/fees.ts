@@ -46,3 +46,20 @@ export function spreadCaptureFee(orderAmountQuote: number, capturedPct: number):
 export function netRealizedPnl(qty: number, entryPrice: number, exitPrice: number): number {
   return qty * (exitPrice - entryPrice) - roundTripFee(qty, entryPrice, exitPrice)
 }
+
+/** Unrealized P&L as a percentage of cost basis, net of the round trip it would take to realize
+ * it. Quantity cancels out, so this needs only the two prices.
+ *
+ * Every "unrealized %" in the UI used the raw price move. That is the *value* of what is held,
+ * not what closing it would keep -- and it sat directly beside figures that were already net
+ * (a bot card's paper-trade return, an executor's realized P&L, the real-money row on the same
+ * Positions table), so one screen reported the same kind of number two different ways.
+ *
+ * `sell` is the paper short convention used by the executors: the price move is inverted, but
+ * both legs are still charged, so the fee drag is identical. */
+export function netUnrealizedPct(entryPrice: number, markPrice: number, side: 'buy' | 'sell' = 'buy'): number {
+  if (!(entryPrice > 0)) return 0
+  const gross = side === 'sell' ? (entryPrice - markPrice) / entryPrice : (markPrice - entryPrice) / entryPrice
+  const feeDrag = ((entryPrice + markPrice) * FEE_RATE) / entryPrice
+  return (gross - feeDrag) * 100
+}

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { EXCHANGES, type HeldPosition } from '../../shared/ipc'
 import { useLastPrice } from '../hooks/useLastPrice'
 import { formatQuotePrice } from '../utils/formatCurrency'
+import { netUnrealizedPct } from '../../shared/fees'
 
 function pctColor(pct: number): string {
   return pct >= 0 ? 'var(--up)' : 'var(--down)'
@@ -12,8 +13,7 @@ const cellStyle: React.CSSProperties = { padding: '0.65rem 0.9rem', fontSize: '0
 export function HeldPositionRow({ position, onClose }: { position: HeldPosition; onClose: (id: string) => void }): React.JSX.Element {
   const markPrice = useLastPrice(position.exchange, position.symbol)
   const exchangeName = EXCHANGES.find((e) => e.id === position.exchange)?.name ?? position.exchange
-  const rawPct = markPrice ? ((markPrice - position.entryPrice) / position.entryPrice) * 100 : null
-  const pnlPct = rawPct !== null && position.side === 'sell' ? -rawPct : rawPct
+  const pnlPct = markPrice !== null ? netUnrealizedPct(position.entryPrice, markPrice, position.side) : null
 
   const [confirming, setConfirming] = useState(false)
 

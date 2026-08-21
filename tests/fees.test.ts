@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { FEE_RATE, roundTripFee, spreadCaptureFee, netRealizedPnl } from '../shared/fees'
+import { FEE_RATE, roundTripFee, spreadCaptureFee, netRealizedPnl, netUnrealizedPct } from '../shared/fees'
 import { simulatePosition } from '../src/executors/engine'
 import { simulateArbitrage, simulateXemm } from '../src/executors/spreadEngine'
 import type { Candle, PositionExecutorParams, ArbitrageExecutorParams, XemmExecutorParams } from '../shared/ipc'
@@ -95,5 +95,40 @@ describe('netRealizedPnl', () => {
 
   it('is zero-qty safe', () => {
     expect(netRealizedPnl(0, 100, 110)).toBe(0)
+  })
+})
+
+describe('netUnrealizedPct', () => {
+  it('is the price move minus the round trip it would take to realize it', () => {
+    // +10% gross on a 100 -> 110 move, minus 0.1% of each leg measured against the basis.
+    expect(netUnrealizedPct(100, 110)).toBeCloseTo(10 - 0.21, 10)
+  })
+
+  it('agrees with netRealizedPnl over cost basis, at any quantity', () => {
+    for (const qty of [0.001, 1, 37.5]) {
+      const fromPnl = (netRealizedPnl(qty, 100, 110) / (qty * 100)) * 100
+      expect(netUnrealizedPct(100, 110)).toBeCloseTo(fromPnl, 10)
+    }
+  })
+
+  it('reads negative at the entry price, because closing there costs both fees', () => {
+    expect(netUnrealizedPct(100, 100)).toBeCloseTo(-0.2, 10)
+  })
+
+  it('inverts the move for a paper short but still charges both legs', () => {
+    // A short is in profit when price falls, and the fee drag is the same either way.
+    expect(netUnrealizedPct(100, 90, 'sell')).toBeCloseTo(10 - 0.19, 10)
+    expect(netUnrealizedPct(100, 110, 'sell')).toBeCloseTo(-10 - 0.21, 10)
+  })
+
+  it('is always below the gross move', () => {
+    for (const [entry, mark] of [[100, 130], [100, 70], [50000, 51000]]) {
+      expect(netUnrealizedPct(entry, mark)).toBeLessThan(((mark - entry) / entry) * 100)
+    }
+  })
+
+  it('returns 0 for a non-positive entry price rather than dividing by it', () => {
+    expect(netUnrealizedPct(0, 100)).toBe(0)
+    expect(netUnrealizedPct(-5, 100)).toBe(0)
   })
 })

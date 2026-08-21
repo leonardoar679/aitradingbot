@@ -10,6 +10,7 @@ import {
   type LiveTwapRunSummary
 } from '../../shared/ipc'
 import { buildGridLevels } from './engine'
+import { netUnrealizedPct } from '../../shared/fees'
 import { useExecutorSimulation } from './useExecutorSimulation'
 import { useSpreadExecutorSimulation } from './useSpreadExecutorSimulation'
 import { formatQuotePrice } from '../utils/formatCurrency'
@@ -498,9 +499,8 @@ function SingleMarketMetrics({ executor }: { executor: ExecutorConfig }): React.
 
   if (sim.state.kind === 'position') {
     const current = sim.latestCandle?.close ?? null
-    const rawPct =
-      sim.state.entryPrice && current ? ((current - sim.state.entryPrice) / sim.state.entryPrice) * 100 : 0
-    const unrealizedPct = sim.state.side === 'sell' ? -rawPct : rawPct
+    const unrealizedPct =
+      sim.state.entryPrice && current ? netUnrealizedPct(sim.state.entryPrice, current, sim.state.side) : 0
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
         <span style={{ color: 'var(--text-primary)' }}>
