@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { KeyRound, ShieldCheck, Trash2, Moon, Sun, Eye, AlertTriangle } from 'lucide-react'
 import { Card } from '../components/Card'
+import { PageHeader } from '../components/PageHeader'
 import { useTheme } from '../theme/ThemeContext'
 import type { Theme } from '../theme/palette'
 import type { CredentialStatus, Exchange, LiveTradingStatus } from '../../shared/ipc'
@@ -215,6 +216,10 @@ export function SettingsPanel(): React.JSX.Element {
 
   return (
     <>
+      {/* Every other page renders a PageHeader; this one went straight into its first card, so it
+          was the only screen in the app with no title at all. */}
+      <PageHeader title="Settings" subtitle="Appearance, exchange API credentials, and live trading risk limits" />
+
       <Card title="Appearance">
         <div style={{ display: 'flex', gap: '0.6rem' }}>
           {THEME_OPTIONS.map(({ id, label, icon: Icon }) => {
