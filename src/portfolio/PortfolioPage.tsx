@@ -40,6 +40,7 @@ export function PortfolioPage(): React.JSX.Element {
   const holdings = latest?.holdings ?? []
   const activeExecutorCount = latest?.activeExecutorCount ?? 0
   const botsAggregatePct = latest?.botsAggregatePct ?? null
+  const unavailable = latest?.unavailable
 
   // Every figure below comes from the snapshot, so before the first one lands they are all
   // placeholders rather than facts. Rendering the placeholder zeros as real numbers told anyone
@@ -104,7 +105,7 @@ export function PortfolioPage(): React.JSX.Element {
 
       <PortfolioEvolutionChart />
 
-      <TopHoldings holdings={holdings} totalValue={totalValue} status={status} />
+      <TopHoldings holdings={holdings} totalValue={totalValue} status={status} unavailable={unavailable} />
     </>
   )
 }

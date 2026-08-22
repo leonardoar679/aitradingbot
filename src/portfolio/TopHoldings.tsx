@@ -1,4 +1,5 @@
-import type { PortfolioHoldingRow } from './computePortfolioSnapshot'
+import type { PortfolioHoldingRow, PortfolioSnapshotData } from './computePortfolioSnapshot'
+import { describeUnavailable } from './unavailableNote'
 import type { PortfolioStatus } from './portfolioStore'
 import { colorForAsset } from './assetColor'
 import { formatQuotePrice, isUsdLikeQuote } from '../utils/formatCurrency'
@@ -6,12 +7,15 @@ import { formatQuotePrice, isUsdLikeQuote } from '../utils/formatCurrency'
 export function TopHoldings({
   holdings,
   totalValue,
-  status
+  status,
+  unavailable
 }: {
   holdings: PortfolioHoldingRow[]
   totalValue: number
   status: PortfolioStatus
+  unavailable?: PortfolioSnapshotData['unavailable']
 }): React.JSX.Element {
+  const unavailableNote = unavailable ? describeUnavailable(unavailable) : null
   // Bar widths are scaled within a currency, never across them. `value` is denominated in each
   // holding's own quote asset, so one KRW position (values in the millions) sitting next to USD
   // positions would otherwise flatten every USD bar to zero width. The percentage below already
@@ -52,6 +56,21 @@ export function TopHoldings({
       <h2 style={{ margin: '0 0 1rem', fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>
         Top Holdings
       </h2>
+      {unavailableNote !== null && (
+        <p
+          style={{
+            margin: '0 0 0.9rem',
+            fontSize: '0.75rem',
+            lineHeight: 1.45,
+            color: 'var(--down)',
+            border: '1px solid var(--down)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '0.5rem 0.65rem'
+          }}
+        >
+          {unavailableNote}
+        </p>
+      )}
       {status !== 'ready' ? (
         <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
           {status === 'error'
@@ -60,7 +79,12 @@ export function TopHoldings({
         </p>
       ) : holdings.length === 0 ? (
         <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-          No holdings yet — live positions, held paper positions, and open executors will appear here.
+          {/* "No holdings yet" is false when the list is empty only because every position failed
+              to price -- it would contradict the note directly above it, which is the accurate
+              one. */}
+          {unavailableNote !== null
+            ? 'Nothing can be listed until the prices above load.'
+            : 'No holdings yet — live positions, held paper positions, and open executors will appear here.'}
         </p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>

@@ -17,6 +17,23 @@ export interface PortfolioSnapshotData {
   /** Simple mean of paperNetPct across enabled bots that have at least one paper trade so far.
    * Null means no enabled bot has traded yet — distinct from an honest 0%. */
   botsAggregatePct: number | null
+  /** Things left out of totalValue because something FAILED, as opposed to the currency rule
+   * above, which leaves out non-dollar holdings on purpose and already says so.
+   *
+   * Each of these was previously swallowed: a ticker that would not fetch made its position
+   * `continue` out of the rows list, a paper executor whose position could not be computed was
+   * caught to null, and a bot whose dry run threw was dropped from the average. All three
+   * silently shrink the headline numbers on the app's landing page, and none of them said a
+   * word. The failures themselves are fine -- one bad symbol must not block the whole snapshot --
+   * but the total has to admit what is missing from it. */
+  unavailable: {
+    /** Open positions dropped because no price could be fetched for them this tick. */
+    unpricedPositions: number
+    /** Paper executors whose position could not be computed. */
+    failedExecutors: number
+    /** Enabled bots whose dry run could not be produced, so they are absent from the average. */
+    failedBots: number
+  }
 }
 
 function priceKey(exchange: Exchange, symbol: string): string {
@@ -51,16 +68,24 @@ export async function computePortfolioSnapshot(): Promise<PortfolioSnapshotData>
   const [livePositions, paperExecutorPositions, botDryRuns] = await Promise.all([
     window.api.liveTrading.listPositions(),
     Promise.all(
-      paperExecutors.map(async (executor) => ({
-        executor,
-        position: await computeExecutorPosition(executor).catch(() => null)
-      }))
+      // A thrown error and a legitimate "this executor holds nothing" both produced null before,
+      // so a broken executor was indistinguishable from a flat one.
+      paperExecutors.map(async (executor) => {
+        try {
+          return { executor, position: await computeExecutorPosition(executor), failed: false }
+        } catch {
+          return { executor, position: null, failed: true }
+        }
+      })
     ),
     Promise.all(
-      enabledBots.map(async (bot) => ({
-        bot,
-        dryRun: await fetchBotDryRunResult(bot).catch(() => null)
-      }))
+      enabledBots.map(async (bot) => {
+        try {
+          return { bot, dryRun: await fetchBotDryRunResult(bot), failed: false }
+        } catch {
+          return { bot, dryRun: null, failed: true }
+        }
+      })
     )
   ])
 
@@ -86,17 +111,24 @@ export async function computePortfolioSnapshot(): Promise<PortfolioSnapshotData>
   )
 
   const rows: PortfolioHoldingRow[] = []
+  let unpricedPositions = 0
 
   for (const p of livePositions) {
     const price = prices.get(priceKey(p.exchange, p.symbol))
-    if (price === undefined) continue
+    if (price === undefined) {
+      unpricedPositions++
+      continue
+    }
     rows.push({ baseAsset: p.baseAsset, quoteAsset: p.quoteAsset, value: p.qty * price, isLive: true })
   }
 
   for (const { executor, position } of paperExecutorPositions) {
     if (!position) continue
     const price = prices.get(priceKey(executor.exchange, executor.symbol))
-    if (price === undefined) continue
+    if (price === undefined) {
+      unpricedPositions++
+      continue
+    }
     rows.push({
       baseAsset: executor.baseAsset,
       quoteAsset: executor.quoteAsset,
@@ -107,7 +139,10 @@ export async function computePortfolioSnapshot(): Promise<PortfolioSnapshotData>
 
   for (const h of settings.heldPositions as HeldPosition[]) {
     const price = prices.get(priceKey(h.exchange, h.symbol))
-    if (price === undefined) continue
+    if (price === undefined) {
+      unpricedPositions++
+      continue
+    }
     rows.push({
       baseAsset: h.baseAsset,
       quoteAsset: h.quoteAsset,
@@ -146,5 +181,15 @@ export async function computePortfolioSnapshot(): Promise<PortfolioSnapshotData>
     .map((summary) => summary.paperNetPct)
   const botsAggregatePct = tradedBotPcts.length > 0 ? tradedBotPcts.reduce((sum, pct) => sum + pct, 0) / tradedBotPcts.length : null
 
-  return { totalValue, holdings, activeExecutorCount: activeExecutors.length, botsAggregatePct }
+  return {
+    totalValue,
+    holdings,
+    activeExecutorCount: activeExecutors.length,
+    botsAggregatePct,
+    unavailable: {
+      unpricedPositions,
+      failedExecutors: paperExecutorPositions.filter((e) => e.failed).length,
+      failedBots: botDryRuns.filter((b) => b.failed).length
+    }
+  }
 }
