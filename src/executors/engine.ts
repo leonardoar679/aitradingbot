@@ -47,6 +47,20 @@ export function buildGridLevels(params: GridExecutorParams): number[] {
   return levels
 }
 
+/** Fill price for a stop that the candle traded through. A stop order becomes a market order
+ * when triggered, so a candle that *opens* beyond the stop never trades at the stop price at all
+ * — the fill is the open, and it is worse. Reporting the stop price there invents protection the
+ * position did not have, and it does so only on losing exits.
+ *
+ * src/backtest/engine.ts has always modelled this (Math.min(open, stopPrice) on its ATR stop);
+ * the executor simulations did not, so the same gap produced two different answers depending on
+ * which engine you asked. Measured on live 1m data: Binance BTCUSDT opens ≥0.1% from the prior
+ * close on 1.8% of candles, but thin Korean pairs are far worse — GOPAX BTC-KRW had 16 of 23
+ * slots missing entirely, 18% of candles opening ≥0.1% away and 4.5% opening ≥0.5% away. */
+export function stopFillPrice(candleOpen: number, stopPrice: number, isBuy: boolean): number {
+  return isBuy ? Math.min(candleOpen, stopPrice) : Math.max(candleOpen, stopPrice)
+}
+
 export function simulateGrid(candles: Candle[], params: GridExecutorParams): GridExecutorState {
   const levelPrices = buildGridLevels(params)
   const amountPerLevel = params.totalAmountQuote / levelPrices.length
@@ -94,8 +108,9 @@ export function simulateGrid(candles: Candle[], params: GridExecutorParams): Gri
         for (const level of levels) {
           if (level.status !== 'filled' || level.entryPrice === null) continue
           const qty = amountPerLevel / level.entryPrice
-          const grossStop = isBuy ? qty * (params.limitPrice - level.entryPrice) : qty * (level.entryPrice - params.limitPrice)
-          realizedPnl += grossStop - roundTripFee(qty, level.entryPrice, params.limitPrice)
+          const fill = stopFillPrice(candle.open, params.limitPrice, isBuy)
+          const grossStop = isBuy ? qty * (fill - level.entryPrice) : qty * (level.entryPrice - fill)
+          realizedPnl += grossStop - roundTripFee(qty, level.entryPrice, fill)
           level.status = 'pending'
           level.entryPrice = null
           level.filledAt = null
@@ -184,7 +199,15 @@ export function simulateDca(candles: Candle[], params: DcaExecutorParams, basePr
     const timeUp = params.timeLimitSec !== null && firstFillTime !== null && candle.time - firstFillTime >= params.timeLimitSec
 
     if (tpHit || slHit || timeUp) {
-      const exitPrice = tpHit ? tpTarget : slHit ? (slTarget as number) : candle.close
+      // Stop-loss resolves before take-profit when one candle hits both. The path inside a
+      // candle is unknowable, so the losing one is assumed first — the same order simulatePosition
+      // and the backtest engine already use. DCA alone read it the other way, turning an ambiguous
+      // candle into a win here and a loss there for the same price action.
+      const exitPrice = slHit
+        ? stopFillPrice(candle.open, slTarget as number, isBuy)
+        : tpHit
+          ? tpTarget
+          : candle.close
       const totalQty = fills.reduce((sum, f) => sum + f.amountQuote / f.price, 0)
       const grossDca = isBuy ? totalQty * (exitPrice - avg) : totalQty * (avg - exitPrice)
       realizedPnl = grossDca - roundTripFee(totalQty, avg, exitPrice)
@@ -303,7 +326,13 @@ export function simulatePosition(candles: Candle[], params: PositionExecutorPara
 
     if (slHit || tpHit || trailHit || timeUp) {
       exitReason = slHit ? 'stop_loss' : tpHit ? 'take_profit' : trailHit ? 'trailing_stop' : 'time_limit'
-      exitPrice = slHit ? (slTarget as number) : tpHit ? (tpTarget as number) : trailHit ? (trailTarget as number) : candle.close
+      exitPrice = slHit
+        ? stopFillPrice(candle.open, slTarget as number, isBuy)
+        : tpHit
+          ? (tpTarget as number)
+          : trailHit
+            ? stopFillPrice(candle.open, trailTarget as number, isBuy)
+            : candle.close
       const posQty = params.amountQuote / entryPrice
       const grossPos = isBuy ? posQty * (exitPrice - entryPrice) : posQty * (entryPrice - exitPrice)
       realizedPnl = grossPos - roundTripFee(posQty, entryPrice, exitPrice)
