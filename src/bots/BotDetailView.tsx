@@ -14,7 +14,7 @@ import {
 } from 'lightweight-charts'
 import { ArrowLeft } from 'lucide-react'
 import { EXCHANGES } from '../../shared/ipc'
-import { useDryRun } from './useDryRun'
+import { useDryRun, summarizePaperTrades, classifyBotOpenPosition } from './useDryRun'
 import { useTheme } from '../theme/ThemeContext'
 import { CHART_PALETTE } from '../theme/palette'
 import type { Trade } from '../backtest/engine'
@@ -48,12 +48,15 @@ export function BotDetailView({ bot, onBack }: BotDetailViewProps): React.JSX.El
   const { theme } = useTheme()
   const palette = CHART_PALETTE[theme]
 
-  const paperTrades =
-    bot.enabledAt !== null && dryRun.result ? dryRun.result.trades.filter((t) => t.entryTime >= bot.enabledAt!) : []
-  const paperWins = paperTrades.filter((t) => t.pnl > 0).length
-  const paperNetPct =
-    paperTrades.length > 0 ? (paperTrades.reduce((acc, t) => acc * (1 + t.returnPct / 100), 1) - 1) * 100 : 0
-  const openPosition = dryRun.result?.openPositionAtEnd ?? null
+  // Was a hand-rolled copy of summarizePaperTrades. Two copies of the same rule is exactly the
+  // drift the shared helper exists to prevent.
+  const { paperTrades, paperWins, paperNetPct } = summarizePaperTrades(dryRun.result?.trades ?? [], bot.enabledAt)
+  const openClassified = classifyBotOpenPosition(dryRun.result?.openPositionAtEnd ?? null, bot.enabledAt)
+  const openPosition = openClassified.kind === 'bot' ? openClassified.position : null
+  // The chart draws whatever the strategy is actually holding, including a position that predates
+  // this bot: its entry and stop are real levels the replay will exit at, and hiding them would
+  // make the chart less truthful, not more. Only the attribution below is filtered.
+  const chartPosition = openClassified.kind === 'none' ? null : openClassified.position
 
   useEffect(() => {
     const container = containerRef.current
@@ -123,9 +126,9 @@ export function BotDetailView({ bot, onBack }: BotDetailViewProps): React.JSX.El
         text: exitReasonLabel(t.exitReason).toUpperCase()
       })
     }
-    if (openPosition) {
+    if (chartPosition) {
       tradeMarkers.push({
-        time: openPosition.entryTime as UTCTimestamp,
+        time: chartPosition.entryTime as UTCTimestamp,
         position: 'belowBar',
         shape: 'arrowUp',
         color: palette.accent,
@@ -138,9 +141,9 @@ export function BotDetailView({ bot, onBack }: BotDetailViewProps): React.JSX.El
       series.removePriceLine(stopLineRef.current)
       stopLineRef.current = null
     }
-    if (openPosition) {
+    if (chartPosition) {
       stopLineRef.current = series.createPriceLine({
-        price: openPosition.stopPrice,
+        price: chartPosition.stopPrice,
         color: palette.down,
         lineWidth: 1,
         lineStyle: LineStyle.Dashed,
@@ -152,7 +155,7 @@ export function BotDetailView({ bot, onBack }: BotDetailViewProps): React.JSX.El
     chart.timeScale().fitContent()
     // paperTrades is derived fresh each render from dryRun.result — depend on that instead
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dryRun.candles, dryRun.result, openPosition, palette])
+  }, [dryRun.candles, dryRun.result, chartPosition, palette])
 
   return (
     <div>
@@ -213,11 +216,16 @@ export function BotDetailView({ bot, onBack }: BotDetailViewProps): React.JSX.El
                   flexShrink: 0
                 }}
               />
-              {openPosition ? (
-                <span style={{ color: 'var(--text-primary)' }}>Long @ {formatQuotePrice(openPosition.entryPrice, bot.quoteAsset)}</span>
-              ) : (
-                <span style={{ color: 'var(--text-secondary)' }}>Flat — waiting for signal</span>
+              {openClassified.kind === 'bot' && (
+                <span style={{ color: 'var(--text-primary)' }}>Long @ {formatQuotePrice(openClassified.position.entryPrice, bot.quoteAsset)}</span>
               )}
+              {openClassified.kind === 'preexisting' && (
+                <span style={{ color: 'var(--text-secondary)' }}>
+                  Flat — the strategy entered before you enabled this bot (shown on the chart), so it is not counted as
+                  yours
+                </span>
+              )}
+              {openClassified.kind === 'none' && <span style={{ color: 'var(--text-secondary)' }}>Flat — waiting for signal</span>}
             </div>
           </div>
 

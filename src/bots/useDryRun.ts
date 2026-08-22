@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Candle, Exchange } from '../../shared/ipc'
-import { runBacktest, type BacktestResult, type Trade } from '../backtest/engine'
+import { runBacktest, type BacktestResult, type Trade, type OpenPositionSnapshot } from '../backtest/engine'
 
 // The dry-run polls the same 4h interval every backtest strategy is validated on, so its
 // signals always match what was actually backtested for the bot's chosen strategy.
@@ -59,6 +59,34 @@ export function summarizePaperTrades(
   const paperNetPct =
     paperTrades.length > 0 ? (paperTrades.reduce((acc, t) => acc * (1 + t.returnPct / 100), 1) - 1) * 100 : 0
   return { paperTrades, paperWins, paperNetPct }
+}
+
+export type BotOpenPosition =
+  | { kind: 'none' }
+  | { kind: 'bot'; position: OpenPositionSnapshot }
+  | { kind: 'preexisting'; position: OpenPositionSnapshot }
+
+/** The open-position counterpart to summarizePaperTrades, and it exists for the same reason.
+ *
+ * The dry run replays the strategy over a lookback window that reaches back well before the bot
+ * was enabled, so the replay can be holding a position the bot itself never entered. Closed trades
+ * were already filtered by enabledAt; the open one was not, so a bot switched on today could
+ * report "Long since Aug 18 (+19.63%)" for an entry three days older than the bot -- credited with
+ * a gain it had no part in. Observed on a real run, which is what prompted this.
+ *
+ * A pre-existing position is still worth naming rather than hiding: the strategy really is in the
+ * market, so the next thing that happens will be an exit rather than an entry, and that exit will
+ * (correctly) not count as one of the bot's trades either. Callers show it, but never attribute
+ * its entry price or P&L to the bot. */
+export function classifyBotOpenPosition(
+  openPosition: OpenPositionSnapshot | null,
+  enabledAt: number | null
+): BotOpenPosition {
+  if (openPosition === null) return { kind: 'none' }
+  if (enabledAt === null) return { kind: 'preexisting', position: openPosition }
+  return openPosition.entryTime >= enabledAt
+    ? { kind: 'bot', position: openPosition }
+    : { kind: 'preexisting', position: openPosition }
 }
 
 // Polls the exchange every minute for the newest closed 4h candles (only while this component

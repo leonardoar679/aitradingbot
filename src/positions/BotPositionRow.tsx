@@ -1,5 +1,5 @@
 import { EXCHANGES } from '../../shared/ipc'
-import { useDryRun } from '../bots/useDryRun'
+import { useDryRun, classifyBotOpenPosition } from '../bots/useDryRun'
 import { formatQuotePrice } from '../utils/formatCurrency'
 import type { Bot } from '../bots/types'
 import { netUnrealizedPct } from '../../shared/fees'
@@ -13,7 +13,12 @@ const cellStyle: React.CSSProperties = { padding: '0.65rem 0.9rem', fontSize: '0
 export function BotPositionRow({ bot }: { bot: Bot }): React.JSX.Element {
   const dryRun = useDryRun(bot.exchange, bot.symbol, true, bot.enabledAt, bot.strategyId)
   const exchangeName = EXCHANGES.find((e) => e.id === bot.exchange)?.name ?? bot.exchange
-  const position = dryRun.result?.openPositionAtEnd ?? null
+  // Only a position this bot actually entered is shown as the bot's -- see
+  // classifyBotOpenPosition. A position the replay was already holding when the bot was switched
+  // on belongs to the lookback window, not to the user, and attributing its entry price and P&L
+  // here would put an unearned number on the Positions page.
+  const open = classifyBotOpenPosition(dryRun.result?.openPositionAtEnd ?? null, bot.enabledAt)
+  const position = open.kind === 'bot' ? open.position : null
   const markPrice = dryRun.latestCandle?.close ?? null
   const pnlPct = position && markPrice ? netUnrealizedPct(position.entryPrice, markPrice) : null
 
@@ -31,7 +36,14 @@ export function BotPositionRow({ bot }: { bot: Bot }): React.JSX.Element {
         {dryRun.status === 'running' && position && (
           <span style={{ color: 'var(--up)', fontWeight: 600 }}>Long</span>
         )}
-        {dryRun.status === 'running' && !position && <span style={{ color: 'var(--text-muted)' }}>Flat</span>}
+        {dryRun.status === 'running' && !position && (
+          <span style={{ color: 'var(--text-muted)' }}>
+            Flat
+            {open.kind === 'preexisting' && (
+              <div style={{ fontSize: '0.68rem' }}>strategy long since before you enabled this bot</div>
+            )}
+          </span>
+        )}
       </td>
       <td style={cellStyle}>{position ? formatQuotePrice(position.entryPrice, bot.quoteAsset) : '—'}</td>
       <td style={cellStyle}>{markPrice !== null ? formatQuotePrice(markPrice, bot.quoteAsset) : '—'}</td>

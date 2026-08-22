@@ -1,6 +1,6 @@
 import { Bot as BotIcon, Archive } from 'lucide-react'
 import { EXCHANGES } from '../../shared/ipc'
-import { useDryRun, summarizePaperTrades } from './useDryRun'
+import { useDryRun, summarizePaperTrades, classifyBotOpenPosition } from './useDryRun'
 import type { Bot } from './types'
 import { formatQuotePrice } from '../utils/formatCurrency'
 import { netUnrealizedPct } from '../../shared/fees'
@@ -35,7 +35,7 @@ function DryRunPanel({ bot }: { bot: Bot }): React.JSX.Element {
   }
   if (!result || !latestCandle) return <></>
 
-  const openPosition = result.openPositionAtEnd
+  const open = classifyBotOpenPosition(result.openPositionAtEnd, bot.enabledAt)
   const { paperTrades, paperWins, paperNetPct } = summarizePaperTrades(result.trades, bot.enabledAt)
 
   return (
@@ -58,20 +58,25 @@ function DryRunPanel({ bot }: { bot: Bot }): React.JSX.Element {
             width: 7,
             height: 7,
             borderRadius: '50%',
-            background: openPosition ? 'var(--up)' : 'var(--text-muted)',
+            background: open.kind === 'bot' ? 'var(--up)' : 'var(--text-muted)',
             flexShrink: 0
           }}
         />
-        {openPosition ? (
+        {open.kind === 'bot' && (
           <span style={{ color: 'var(--text-primary)' }}>
-            Long since {formatShortDate(openPosition.entryTime)} @ {formatQuotePrice(openPosition.entryPrice, bot.quoteAsset)}{' '}
-            <span style={{ color: latestCandle.close >= openPosition.entryPrice ? 'var(--up)' : 'var(--down)' }}>
-              ({netUnrealizedPct(openPosition.entryPrice, latestCandle.close).toFixed(2)}%)
+            Long since {formatShortDate(open.position.entryTime)} @ {formatQuotePrice(open.position.entryPrice, bot.quoteAsset)}{' '}
+            <span style={{ color: latestCandle.close >= open.position.entryPrice ? 'var(--up)' : 'var(--down)' }}>
+              ({netUnrealizedPct(open.position.entryPrice, latestCandle.close).toFixed(2)}%)
             </span>
           </span>
-        ) : (
-          <span style={{ color: 'var(--text-secondary)' }}>Flat — waiting for signal</span>
         )}
+        {open.kind === 'preexisting' && (
+          <span style={{ color: 'var(--text-secondary)' }}>
+            Flat — the strategy has been long since {formatShortDate(open.position.entryTime)}, from before you enabled
+            this bot, so it is not counted as yours
+          </span>
+        )}
+        {open.kind === 'none' && <span style={{ color: 'var(--text-secondary)' }}>Flat — waiting for signal</span>}
       </div>
       <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
         {paperTrades.length === 0
