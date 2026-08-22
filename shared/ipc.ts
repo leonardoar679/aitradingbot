@@ -481,6 +481,29 @@ export interface ExecutorConfig {
    * since the average cost basis keeps moving until the ladder either exits or runs out of
    * levels. Null once the exit fires or the executor is stopped manually. */
   liveWatcherId: string | null
+  /** Set when arming this executor exit watcher failed, or when a fill happened but no live
+   * position could be found to arm one against. Non-null means a REAL position may be open on the
+   * exchange with no take-profit, stop-loss or time limit on it.
+   *
+   * It exists because that failure used to be a console.error and nothing else: the fill cleared
+   * pendingLiveOrderIds, the failed createWatcher left liveWatcherId null, and the "everything is
+   * empty, so we are done" rule then marked the executor stopped -- reporting an unprotected real
+   * position as a job cleanly finished. While this is set the executor stays active, retries
+   * arming the watcher on every poll, and says so on its card.
+   *
+   * Undefined on executors saved before this field existed; read it as `?? null`. */
+  liveWatcherError: string | null
+  /** Set when arming this executor's exit watcher failed, or when a fill happened but no live
+   * position could be found to arm one against. Non-null means a REAL position may be open on the
+   * exchange with no take-profit, stop-loss or time limit on it.
+   *
+   * It exists because the failure used to be a console.error and nothing else: the fill cleared
+   * pendingLiveOrderIds, the failed createWatcher left liveWatcherId null, and the "everything is
+   * empty, so we are done" rule below then marked the executor stopped -- reporting an unprotected
+   * real position as a job cleanly finished. While this is set the executor stays active, retries
+   * arming the watcher on every poll, and says so on its card.
+   *
+   * Undefined on executors saved before this field existed; read it as 
   /** Set once a live Position/DCA executor's watcher triggers a real exit (or Stop force-closes
    * it). Null for every paper executor and for a live position still being watched. */
   liveExitResult: LiveExitResult | null

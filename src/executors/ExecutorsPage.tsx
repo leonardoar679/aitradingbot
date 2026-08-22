@@ -134,6 +134,7 @@ export function ExecutorsPage(): React.JSX.Element {
       liveOrder: null,
       pendingLiveOrderIds: [],
       liveWatcherId: null,
+      liveWatcherError: null,
       liveExitResult: null,
       liveDcaBasePrice: null,
       liveTwapRunId: null,

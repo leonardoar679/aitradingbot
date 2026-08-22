@@ -1,5 +1,7 @@
 import { useEffect } from 'react'
 import type { ExecutorConfig, DcaExecutorParams, GridExecutorParams } from '../../shared/ipc'
+import { describeError } from '../utils/ipcError'
+import { needsExitWatcherRetry, isFinished } from './liveExecutorState'
 
 /** Headless — mounted once in App.tsx, same tier as RoutineScheduler/ControllerScheduler.
  * Reconciles main-process-resolved real-money state into settings.executors every 5s, the same
@@ -42,15 +44,28 @@ export function LiveOrderScheduler(): null {
           window.api.liveTrading.drainWatcherEvents(),
           window.api.liveTrading.drainTwapEvents()
         ])
-        if (cancelled || (orderResolutions.length === 0 && watcherEvents.length === 0 && twapEvents.length === 0)) return
+        if (cancelled) return
 
         const settings = await window.api.settings.get()
         if (cancelled) return
+
+        // Arming a watcher can fail (a bad signature, a clock skew, a dropped connection) and the
+        // fill that needed it is drained from orderResolutions after one tick -- so waiting for
+        // another fill to retry would mean never retrying. Retry is driven by stored state
+        // instead, which also covers the case where the fill arrived before its position did.
+        const retryIds = new Set(settings.executors.filter(needsExitWatcherRetry).map((e) => e.id))
+        if (
+          orderResolutions.length === 0 &&
+          watcherEvents.length === 0 &&
+          twapEvents.length === 0 &&
+          retryIds.size === 0
+        )
+          return
         const stoppedAt = Math.floor(Date.now() / 1000)
 
         // A live DCA fill this tick needs the position's current weighted-average cost to create
         // or refresh its exit watcher — fetched once and shared, rather than once per executor.
-        const needsPositionLookup = orderResolutions.some((r) => r.status === 'filled')
+        const needsPositionLookup = orderResolutions.some((r) => r.status === 'filled') || retryIds.size > 0
         const livePositions = needsPositionLookup ? await window.api.liveTrading.listPositions() : []
 
         // Only the executors this tick actually touches are collected, and they're merged into a
@@ -65,7 +80,7 @@ export function LiveOrderScheduler(): null {
           const watcherEvent = watcherEvents.find((e) => e.executorId === executor.id)
           const twapEvent = twapEvents.find((e) => e.executorId === executor.id)
 
-          if (myResolutions.length === 0 && !watcherEvent && !twapEvent) continue
+          if (myResolutions.length === 0 && !watcherEvent && !twapEvent && !retryIds.has(executor.id)) continue
 
           let next = executor
           if (myResolutions.length > 0) {
@@ -86,12 +101,13 @@ export function LiveOrderScheduler(): null {
           // shared, ever-moving average cost. Grid has no native stop-loss/time-limit fields (and
           // its Stop Price isn't enforced live -- see the Phase 6 plan), so those stay null.
           const hadFill = myResolutions.some((r) => r.status === 'filled')
-          if ((next.type === 'dca' || next.type === 'grid') && hadFill && !watcherEvent) {
+          if ((next.type === 'dca' || next.type === 'grid') && (hadFill || retryIds.has(next.id)) && !watcherEvent) {
             const position = livePositions.find((p) => p.exchange === next.exchange && p.symbol === next.symbol)
             if (position) {
               try {
                 if (next.liveWatcherId) {
                   await window.api.liveTrading.updateWatcherEntryPrice(next.liveWatcherId, position.avgCost)
+                  next = { ...next, liveWatcherError: null }
                 } else if (next.type === 'dca') {
                   const dcaParams = next.params as DcaExecutorParams
                   const watcher = await window.api.liveTrading.createWatcher(
@@ -104,7 +120,7 @@ export function LiveOrderScheduler(): null {
                     dcaParams.timeLimitSec,
                     null
                   )
-                  next = { ...next, liveWatcherId: watcher.id }
+                  next = { ...next, liveWatcherId: watcher.id, liveWatcherError: null }
                 } else {
                   const gridParams = next.params as GridExecutorParams
                   const watcher = await window.api.liveTrading.createWatcher(
@@ -117,10 +133,18 @@ export function LiveOrderScheduler(): null {
                     null,
                     null
                   )
-                  next = { ...next, liveWatcherId: watcher.id }
+                  next = { ...next, liveWatcherId: watcher.id, liveWatcherError: null }
                 }
               } catch (error) {
                 console.error(`Failed to create/update live ${next.type} watcher for executor ${next.id}:`, error)
+                next = { ...next, liveWatcherError: describeError(error) }
+              }
+            } else {
+              // A fill with no position to arm against. Genuinely anomalous, and silent until now:
+              // the executor fell straight through to the "nothing left, so we are done" rule.
+              next = {
+                ...next,
+                liveWatcherError: `filled, but no open ${next.symbol} position was found to arm an exit watcher against`
               }
             }
           }
@@ -131,7 +155,7 @@ export function LiveOrderScheduler(): null {
             // cancelLiveOrderById -- not through this poll's own queryOrder path, so those ids
             // would never otherwise show up in orderResolutions this tick or any later one).
             // Clear them here rather than waiting for a poll response that will never come.
-            next = { ...next, liveExitResult: watcherEvent.liveExitResult, liveWatcherId: null, pendingLiveOrderIds: [] }
+            next = { ...next, liveExitResult: watcherEvent.liveExitResult, liveWatcherId: null, pendingLiveOrderIds: [], liveWatcherError: null }
           }
 
           if (twapEvent) {
@@ -154,7 +178,7 @@ export function LiveOrderScheduler(): null {
             }
           }
 
-          if (next.pendingLiveOrderIds.length === 0 && next.liveWatcherId === null && next.liveTwapRunId === null) {
+          if (isFinished(next)) {
             next = { ...next, status: 'stopped', stoppedAt }
           }
 

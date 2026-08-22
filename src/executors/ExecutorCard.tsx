@@ -634,6 +634,31 @@ export function ExecutorCard({
         <MetricsPanel executor={executor} />
       </div>
 
+      {(executor.liveWatcherError ?? null) !== null && (
+        <div
+          style={{
+            display: 'flex',
+            gap: '0.45rem',
+            alignItems: 'flex-start',
+            background: 'var(--down)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '0.6rem 0.7rem',
+            fontSize: '0.74rem',
+            lineHeight: 1.45,
+            color: '#fff',
+            fontWeight: 600
+          }}
+        >
+          <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: '0.1rem' }} />
+          <span>
+            This position has NO take-profit or stop-loss on it. Arming its exit watcher failed
+            ({executor.liveWatcherError}). The app keeps retrying every few seconds; until it
+            succeeds, nothing will close this position automatically — close it yourself from
+            Positions if you do not want to wait.
+          </span>
+        </div>
+      )}
+
       {stopError !== null && (
         <div
           style={{
