@@ -108,6 +108,11 @@ describe('createReconnectingSocket', () => {
     expect(connections).toBe(1)
   })
 
+  // Unsubscribe is guarded twice over: `stopped` short-circuits connect(), and the pending
+  // backoff timer is cleared. Either alone is sufficient, so a mutation run will report each as
+  // surviving — they are equivalent mutants, not a coverage gap. Verified by removing them one
+  // at a time (both pass) and then together (this test fails). Leave both in: they are cheap,
+  // and a future async path into connect() would need the flag.
   it('stops reconnecting once unsubscribed', async () => {
     const { server, url } = await startServer()
     let connections = 0
