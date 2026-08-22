@@ -7,6 +7,7 @@ import { BacktestResultsView, type ResultsGeneralInfo } from './BacktestResultsV
 import { BacktestChartsView } from './BacktestChartsView'
 import { StrategyComparisonView } from './StrategyComparisonView'
 import { runBacktest, type BacktestResult } from './engine'
+import { describeError } from '../utils/ipcError'
 import { STRATEGIES, DEFAULT_STRATEGY_ID, getStrategy } from './strategies'
 import { EXCHANGES, INTERVALS, type Candle, type Exchange, type Interval, type SymbolInfo } from '../../shared/ipc'
 
@@ -88,6 +89,13 @@ export function BacktestPage(): React.JSX.Element {
   const [exchange, setExchange] = useState<Exchange>(EXCHANGES[0].id)
   const [symbols, setSymbols] = useState<SymbolInfo[]>([])
   const [symbolsLoading, setSymbolsLoading] = useState(false)
+  /** SymbolSearch already learned this lesson; this page loads its symbols separately and did
+   * not. A failed list left the Route dropdown with zero options, no message anywhere on the
+   * page, and Start still enabled -- because the symbol lives in state (defaulted to the
+   * exchange's own default) even when nothing can be shown for it. Verified by forcing
+   * market:listSymbols to throw: optionCount 0, value "", Start disabled:false, no error text. */
+  const [symbolsError, setSymbolsError] = useState<string | null>(null)
+  const [symbolsReloadKey, setSymbolsReloadKey] = useState(0)
   const [tradingRoute, setTradingRoute] = useState<TradingRouteRow>(() =>
     defaultTradingRoute(EXCHANGES[0].defaultSymbol.symbol)
   )
@@ -105,19 +113,23 @@ export function BacktestPage(): React.JSX.Element {
   useEffect(() => {
     let cancelled = false
     setSymbolsLoading(true)
+    setSymbolsError(null)
     window.api.market
       .listSymbols(exchange)
       .then((list) => {
         if (!cancelled) setSymbols(list)
       })
-      .catch((error) => console.error('Failed to load symbols:', error))
+      .catch((error) => {
+        console.error('Failed to load symbols:', error)
+        if (!cancelled) setSymbolsError(describeError(error))
+      })
       .finally(() => {
         if (!cancelled) setSymbolsLoading(false)
       })
     return () => {
       cancelled = true
     }
-  }, [exchange])
+  }, [exchange, symbolsReloadKey])
 
   function handleExchangeChange(next: Exchange): void {
     setExchange(next)
@@ -324,6 +336,27 @@ export function BacktestPage(): React.JSX.Element {
                 ))}
               </select>
 
+              {symbolsError !== null && (
+                <p style={{ color: 'var(--down)', fontSize: '0.76rem', margin: '0 0 0.6rem', lineHeight: 1.45 }}>
+                  Could not load the symbol list for this exchange ({symbolsError}). Only the
+                  default symbol below is available until it loads.{' '}
+                  <button
+                    onClick={() => setSymbolsReloadKey((k) => k + 1)}
+                    style={{
+                      background: 'transparent',
+                      border: '1px solid var(--down)',
+                      borderRadius: 'var(--radius-sm)',
+                      color: 'var(--down)',
+                      cursor: 'pointer',
+                      fontSize: '0.72rem',
+                      padding: '0.1rem 0.45rem'
+                    }}
+                  >
+                    Retry
+                  </button>
+                </p>
+              )}
+
               <SectionHeader label="Route" />
               <div style={{ display: 'flex', gap: '0.6rem', marginBottom: '0.6rem' }}>
                 <select
@@ -332,6 +365,12 @@ export function BacktestPage(): React.JSX.Element {
                   style={{ ...fieldStyle(), flex: 1 }}
                 >
                   {symbolsLoading && <option>Loading symbols...</option>}
+                  {/* Without this the dropdown renders empty on a failed list while state still
+                      holds a symbol -- the control showing blank for a backtest that would in
+                      fact run against that symbol. */}
+                  {!symbolsLoading && symbols.length === 0 && tradingRoute.symbol !== '' && (
+                    <option value={tradingRoute.symbol}>{tradingRoute.symbol}</option>
+                  )}
                   {!symbolsLoading &&
                     symbols.map((s) => (
                       <option key={s.symbol} value={s.symbol}>
