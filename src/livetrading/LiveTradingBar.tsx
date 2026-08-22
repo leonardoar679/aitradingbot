@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle, Power, ShieldOff } from 'lucide-react'
-import type { LiveTradingStatus } from '../../shared/ipc'
+import type { LiveTradingStatus, LiveWatcherSummary } from '../../shared/ipc'
+import { describeBlockedExits } from './blockedExits'
 
 const POLL_MS = 15_000
 // How long a pending confirmation stays armed before reverting to the plain label.
@@ -27,6 +28,7 @@ function buttonStyle(kind: 'arm' | 'disarm' | 'kill' | 'release'): React.CSSProp
 export function LiveTradingBar(): React.JSX.Element | null {
   const [status, setStatus] = useState<LiveTradingStatus | null>(null)
   const [credentialConfigured, setCredentialConfigured] = useState(false)
+  const [watchers, setWatchers] = useState<LiveWatcherSummary[]>([])
   const [busy, setBusy] = useState(false)
   // Two risk-increasing controls live on this bar, and both used to fire on a single click:
   // arming the session is the gate that lets real orders through at all, and releasing the kill
@@ -48,6 +50,10 @@ export function LiveTradingBar(): React.JSX.Element | null {
       .list()
       .then((list) => setCredentialConfigured(list.some((c) => c.exchange === 'binance' && c.configured)))
       .catch((error) => console.error('Failed to load credential status:', error))
+    window.api.liveTrading
+      .listActiveWatchers()
+      .then(setWatchers)
+      .catch((error) => console.error('Failed to load active live watchers:', error))
   }
 
   useEffect(() => {
@@ -111,8 +117,15 @@ export function LiveTradingBar(): React.JSX.Element | null {
   const engaged = status.killSwitchEngaged
   const armed = status.sessionArmed
   const lossLimitBreached = !engaged && status.realizedPnlToday <= -status.dailyLossLimitQuote
+  const blockedExits = describeBlockedExits({
+    watchedPositions: watchers.length,
+    symbols: [...new Set(watchers.map((w) => w.symbol))],
+    sessionArmed: armed,
+    killSwitchEngaged: engaged
+  })
 
   return (
+    <>
     <div
       style={{
         display: 'flex',
@@ -175,5 +188,25 @@ export function LiveTradingBar(): React.JSX.Element | null {
         )}
       </div>
     </div>
+    {blockedExits !== null && (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: '0.5rem',
+          padding: '0.55rem 1rem',
+          flexShrink: 0,
+          background: 'var(--down)',
+          color: '#fff',
+          fontSize: '0.75rem',
+          fontWeight: 600,
+          lineHeight: 1.45
+        }}
+      >
+        <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: '0.12rem' }} />
+        <span>{blockedExits}</span>
+      </div>
+    )}
+    </>
   )
 }
