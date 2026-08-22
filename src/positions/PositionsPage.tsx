@@ -3,6 +3,7 @@ import { PageHeader } from '../components/PageHeader'
 import { Card } from '../components/Card'
 import { BotPositionRow } from './BotPositionRow'
 import { HeldPositionRow } from './HeldPositionRow'
+import { describeError } from '../utils/ipcError'
 import { LivePositionRow } from './LivePositionRow'
 import { LiveHistoryRow } from './LiveHistoryRow'
 import type { Bot } from '../bots/types'
@@ -27,6 +28,10 @@ export function PositionsPage(): React.JSX.Element {
   const [liveHistory, setLiveHistory] = useState<LivePosition[]>([])
   const [loaded, setLoaded] = useState(false)
   const [liveError, setLiveError] = useState<string | null>(null)
+  /** Closing a held position is a click that either removes the row or does nothing at all --
+   * previously a failed settings write only reached console.error, so "nothing happened" was the
+   * whole of the feedback. */
+  const [heldError, setHeldError] = useState<string | null>(null)
   const loadedRef = useRef(false)
 
   // A failed poll must not look like "genuinely no open positions" on a page titled Real Money —
@@ -82,6 +87,7 @@ export function PositionsPage(): React.JSX.Element {
   // id, which applies just as correctly to the current array as to the stale one.
   function handleCloseHeldPosition(id: string): void {
     void (async () => {
+      setHeldError(null)
       try {
         const fresh = await window.api.settings.get()
         const next = fresh.heldPositions.filter((p) => p.id !== id)
@@ -89,6 +95,7 @@ export function PositionsPage(): React.JSX.Element {
         setHeldPositions(next)
       } catch (error) {
         console.error('Failed to close held position:', error)
+        setHeldError(describeError(error))
       }
     })()
   }
@@ -198,6 +205,12 @@ export function PositionsPage(): React.JSX.Element {
           <p style={{ color: 'var(--text-secondary)', margin: 0 }}>
             Nothing here yet. When an executor with "Keep position when stopped" enabled is stopped mid-trade, its
             open position lands here instead of being discarded.
+          </p>
+        )}
+        {heldError !== null && (
+          <p style={{ color: 'var(--down)', fontSize: '0.78rem', margin: '0 0 0.7rem' }}>
+            That position could not be closed ({heldError}) — it is still listed below, and still
+            counts toward your holdings. Try Close again.
           </p>
         )}
         {heldPositions.length > 0 && (

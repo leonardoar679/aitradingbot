@@ -8,6 +8,8 @@ import { ExecutorCard } from './ExecutorCard'
 import { ExecutorDetailView } from './ExecutorDetailView'
 import { SpreadExecutorDetailView } from './SpreadExecutorDetailView'
 import { handOverPositionOnStop } from './handOverPosition'
+import { describeError } from '../utils/ipcError'
+import { describeIncompleteStop } from './stopFailureMessage'
 import { dcaLevelPrice, twapNumOrders, buildGridLevels } from './engine'
 import {
   EXCHANGES,
@@ -35,6 +37,26 @@ export function ExecutorsPage(): React.JSX.Element {
   const [executors, setExecutors] = useState<ExecutorConfig[]>([])
   const [showNew, setShowNew] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  /** Every failure below used to be a console.error and nothing else. In a packaged app with no
+   * devtools open that is indistinguishable from success: the user clicks Stop, the card does not
+   * visibly change, and there is no way to tell "it worked" from "a real resting order is still
+   * live on the exchange". The state handling was already right (a failed teardown deliberately
+   * leaves the executor active so it can be retried) -- it just never said so. Keyed by executor
+   * id, cleared when that executor is stopped again. */
+  const [stopErrors, setStopErrors] = useState<Record<string, string>>({})
+
+  function noteStopError(id: string, message: string): void {
+    setStopErrors((prev) => ({ ...prev, [id]: message }))
+  }
+
+  function clearStopError(id: string): void {
+    setStopErrors((prev) => {
+      if (!(id in prev)) return prev
+      const next = { ...prev }
+      delete next[id]
+      return next
+    })
+  }
   const loadedRef = useRef(false)
   const lastSerializedRef = useRef('')
 
@@ -461,6 +483,7 @@ export function ExecutorsPage(): React.JSX.Element {
 
   async function handleStop(id: string): Promise<void> {
     const executor = executors.find((e) => e.id === id)
+    clearStopError(id)
 
     // A live TWAP run stops independently of the pendingLiveOrderIds/liveWatcherId machinery
     // below — every slice is a market order that resolves the instant it's placed, so there's
@@ -497,6 +520,7 @@ export function ExecutorsPage(): React.JSX.Element {
         // The run stays active server-side and liveTwapRunId stays set — genuinely still running,
         // never silently hidden, same honesty precedent as a failed watcher-stop.
         console.error('Failed to stop live TWAP run:', error)
+        noteStopError(id, `The TWAP run could not be stopped, so it is still running and placing slices: ${describeError(error)}. Try Stop again.`)
       }
       return
     }
@@ -514,11 +538,14 @@ export function ExecutorsPage(): React.JSX.Element {
       // rather than silently losing a real resting order.
       const stillPendingIds: string[] = []
       let lastCancelledOrder: LiveOrderRecord | null = null
+      let cancelFailure: string | null = null
+      let watcherFailure: string | null = null
       for (const orderId of executor.pendingLiveOrderIds) {
         try {
           lastCancelledOrder = await window.api.liveTrading.cancelOrder(orderId)
         } catch (error) {
           console.error(`Failed to cancel live order ${orderId}:`, error)
+          cancelFailure = describeError(error)
           stillPendingIds.push(orderId)
         }
       }
@@ -538,11 +565,20 @@ export function ExecutorsPage(): React.JSX.Element {
           liveExitResult = await window.api.liveTrading.stopWatcher(executor.liveWatcherId)
         } catch (error) {
           console.error('Failed to force-close watched live position:', error)
+          watcherFailure = describeError(error)
           watcherStillActive = true
         }
       }
 
       const stillActive = stillPendingIds.length > 0 || watcherStillActive
+      const incomplete = describeIncompleteStop({
+        restingOrders: stillPendingIds.length,
+        watcherStillActive,
+        cancelError: cancelFailure,
+        watcherError: watcherFailure
+      })
+      if (incomplete !== null) noteStopError(id, incomplete)
+
       setExecutors((prev) =>
         prev.map((e) =>
           e.id === id
@@ -572,6 +608,13 @@ export function ExecutorsPage(): React.JSX.Element {
     // risk-control stop path applies exactly the same ones.
     void handOverPositionOnStop(executor).catch((error) => {
       console.error('Failed to hand over position on stop:', error)
+      // The executor is already stopped by this point, so a failure here is silent data loss: the
+      // user ticked "keep position", and without this message the position simply never appears
+      // in Inventory and nothing anywhere says why.
+      noteStopError(
+        id,
+        `The executor stopped, but its open position could not be handed over to Positions → Inventory: ${describeError(error)}. That position was not saved anywhere.`
+      )
     })
   }
 
@@ -651,7 +694,13 @@ export function ExecutorsPage(): React.JSX.Element {
       {activeExecutors.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '1rem' }}>
           {activeExecutors.map((executor) => (
-            <ExecutorCard key={executor.id} executor={executor} onStop={handleStop} onViewDetail={setSelectedId} />
+            <ExecutorCard
+                key={executor.id}
+                executor={executor}
+                onStop={handleStop}
+                onViewDetail={setSelectedId}
+                stopError={stopErrors[executor.id] ?? null}
+              />
           ))}
         </div>
       )}
@@ -663,7 +712,13 @@ export function ExecutorsPage(): React.JSX.Element {
           </h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '1rem' }}>
             {stoppedExecutors.map((executor) => (
-              <ExecutorCard key={executor.id} executor={executor} onStop={handleStop} onViewDetail={setSelectedId} />
+              <ExecutorCard
+                key={executor.id}
+                executor={executor}
+                onStop={handleStop}
+                onViewDetail={setSelectedId}
+                stopError={stopErrors[executor.id] ?? null}
+              />
             ))}
           </div>
         </>

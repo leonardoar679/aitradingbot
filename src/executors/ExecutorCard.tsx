@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { AlertTriangle } from 'lucide-react'
 import {
   EXCHANGES,
   type ExecutorConfig,
@@ -550,11 +551,16 @@ function SingleMarketMetrics({ executor }: { executor: ExecutorConfig }): React.
 export function ExecutorCard({
   executor,
   onStop,
-  onViewDetail
+  onViewDetail,
+  stopError = null
 }: {
   executor: ExecutorConfig
   onStop: (id: string) => void
   onViewDetail: (id: string) => void
+  /** Set when the last Stop on this executor did not fully complete. Shown on the card rather
+   * than only in console.error, because a half-finished live teardown can leave a real order
+   * resting on the exchange and the card alone gives no hint of it. */
+  stopError?: string | null
 }): React.JSX.Element {
   const meta = executorTypeMeta(executor.type)
   const Icon = meta.icon
@@ -627,6 +633,26 @@ export function ExecutorCard({
       <div style={{ borderTop: '1px solid var(--border)', paddingTop: '0.6rem' }}>
         <MetricsPanel executor={executor} />
       </div>
+
+      {stopError !== null && (
+        <div
+          style={{
+            display: 'flex',
+            gap: '0.45rem',
+            alignItems: 'flex-start',
+            background: 'color-mix(in srgb, var(--down) 12%, transparent)',
+            border: '1px solid var(--down)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '0.55rem 0.65rem',
+            fontSize: '0.74rem',
+            lineHeight: 1.45,
+            color: 'var(--down)'
+          }}
+        >
+          <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: '0.1rem' }} />
+          <span>{stopError}</span>
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: '0.5rem' }}>
         <button
