@@ -357,7 +357,7 @@ export function BacktestResultsView({
       color: '#f0b90b',
       lineWidth: 2,
       priceLineVisible: false,
-      title: generalInfo.symbolLabel
+      title: `${generalInfo.symbolLabel} (buy & hold)`
     })
     benchmarkSeries.setData(result.benchmarkCurve.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })))
 
@@ -603,6 +603,13 @@ export function BacktestResultsView({
                 ? `${Math.round(s.periodDays)} days of data (${generalInfo.periodDays} requested)`
                 : `${generalInfo.periodDays} days (${(generalInfo.periodDays / 30).toFixed(1)} months)`
             }
+          />
+          {/* The equity curve is flat for this stretch and no trade can happen in it, which
+              otherwise reads as "the strategy found nothing". Buy & hold is measured from the end
+              of it too, so the two lines start together and the comparison is like-for-like. */}
+          <InfoRow
+            label="Indicator Warm-Up"
+            value={`first ${s.warmupBars} candles — no trades possible, buy & hold measured from there too`}
           />
           <InfoRow label="Starting Date" value={generalInfo.startDate} />
           <InfoRow label="Ending Date" value={generalInfo.endDate} />

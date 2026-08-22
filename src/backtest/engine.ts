@@ -43,6 +43,10 @@ export interface BacktestStats {
   /** Actual span of the returned candle data, which can be shorter than the requested date range
    * (a symbol listed mid-range, or an exchange that capped the response). */
   periodDays: number
+  /** Leading candles the strategy structurally cannot trade in, because its indicators are not
+   * warmed up yet. Surfaced so the results panel can explain the flat opening stretch of the
+   * equity curve rather than leaving it looking like the strategy simply found nothing. */
+  warmupBars: number
   /** Compound annual growth rate. `null` when the sample is shorter than MIN_ANNUALIZATION_DAYS —
    * extrapolating a 3-day result to a year multiplies noise by 120x and produces numbers like
    * "+4,000% annual return" that mean nothing. */
@@ -233,7 +237,15 @@ export function runBacktest(
   const trades: Trade[] = []
   const equityCurve: EquityPoint[] = []
   const benchmarkCurve: EquityPoint[] = []
-  const benchmarkQty = candles.length > 0 ? STARTING_BALANCE / candles[0].close : 0
+  // Buy & hold is measured from the first candle the STRATEGY could actually trade on, not from
+  // the first candle fetched. Anchoring it at candles[0] handed the benchmark every bit of the
+  // move that happened while the strategy was still warming up its indicators and structurally
+  // forced to sit in cash -- and this is the line the user compares their equity curve against.
+  // Measured on real BTC data: a 1d backtest of 2023 spends 200 of 366 candles (55% of the range)
+  // in warm-up, over which BTC rose 79.4%. Buy & hold was credited with all of it before the
+  // strategy was allowed to place a single order, so the comparison was not one.
+  const benchmarkStartIndex = candles.length > 0 ? Math.min(signals.warmupBars, candles.length - 1) : 0
+  const benchmarkQty = candles.length > 0 ? STARTING_BALANCE / candles[benchmarkStartIndex].close : 0
 
   function equityAt(price: number): number {
     const position = posBox.current
@@ -293,7 +305,14 @@ export function runBacktest(
     }
 
     equityCurve.push({ time, value: equityAt(close) })
-    benchmarkCurve.push({ time, value: benchmarkQty * close })
+    // Flat at the starting balance until that point, matching the uninvested cash the strategy
+    // itself is holding, so both curves start together at the same value on the same candle.
+    // Mutating `<` to `<=` here survives the test suite, and is an equivalent mutant rather than a
+    // gap: at i === benchmarkStartIndex the other branch computes (STARTING_BALANCE / close) *
+    // close, which is the same number. Checked across 237k prices from 1e-5 to 2e5 -- it differs
+    // at all for 2.66% of them and never by more than 1.8e-12, well under one ulp of 10000. A test
+    // pinning that would be asserting on floating-point noise.
+    benchmarkCurve.push({ time, value: i < benchmarkStartIndex ? STARTING_BALANCE : benchmarkQty * close })
   }
 
   const openPositionAtEnd: OpenPositionSnapshot | null = posBox.current
@@ -316,7 +335,7 @@ export function runBacktest(
   // Counted after the force-close block, so it is 0 for a normal backtest and 1 only when a
   // caller passed forceCloseAtEnd: false and a position really is still open.
   const openTrades = posBox.current ? 1 : 0
-  const stats = computeStats(trades, equityCurve, totalFees, finishingBalance, monthlyBreakdown, openTrades)
+  const stats = computeStats(trades, equityCurve, totalFees, finishingBalance, monthlyBreakdown, openTrades, signals.warmupBars)
 
   return { equityCurve, benchmarkCurve, trades, stats, monthlyBreakdown, openPositionAtEnd }
 }
@@ -327,7 +346,8 @@ function computeStats(
   totalPaidFees: number,
   finishingBalance: number,
   monthlyBreakdown: MonthlyBreakdownRow[],
-  openTrades: number
+  openTrades: number,
+  warmupBars: number
 ): BacktestStats {
   const totalClosedTrades = trades.length
   const totalNetProfit = finishingBalance - STARTING_BALANCE
@@ -437,6 +457,7 @@ function computeStats(
     totalPaidFees,
     maxDrawdownPct,
     periodDays,
+    warmupBars,
     annualReturnPct,
     expectancy,
     expectancyPct,
