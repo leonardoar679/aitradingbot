@@ -356,6 +356,13 @@ export function simulateMarketMaking(candles: Candle[], params: MarketMakingExec
   let filledBuys = 0
   let filledSells = 0
   let refreshedAt: number | null = null
+  // A quote that has been hit is gone until it is requoted. Without this, the same standing
+  // order re-filled on every candle its price stayed crossed: with orderRefreshSec 300 on 1m
+  // candles one order could fill five times, each adding a full orderAmountQuote of inventory
+  // and paying a full round trip. A three-day run that quotes 864 times reported 2094 buys and
+  // 2094 sells, and the fees on trades that never happened dominated its P&L.
+  let bidFilled = false
+  let askFilled = false
 
   const allowBuy = params.side === 'both' || params.side === 'buy'
   const allowSell = params.side === 'both' || params.side === 'sell'
@@ -375,10 +382,13 @@ export function simulateMarketMaking(candles: Candle[], params: MarketMakingExec
       askPrice = skewedMid * (1 + halfSpreadFrac)
       refreshedAt = candle.time
       nextRefreshTime = candle.time + Math.max(1, params.orderRefreshSec)
+      bidFilled = false
+      askFilled = false
     }
 
-    if (allowBuy && bidPrice !== null && candle.low <= bidPrice) {
+    if (allowBuy && !bidFilled && bidPrice !== null && candle.low <= bidPrice) {
       filledBuys++
+      bidFilled = true
       if (inventoryBaseQty >= 0) {
         const newQty = inventoryBaseQty + standingQty
         avgCost = avgCost === null ? bidPrice : (avgCost * inventoryBaseQty + bidPrice * standingQty) / newQty
@@ -391,8 +401,9 @@ export function simulateMarketMaking(candles: Candle[], params: MarketMakingExec
       }
     }
 
-    if (allowSell && askPrice !== null && candle.high >= askPrice) {
+    if (allowSell && !askFilled && askPrice !== null && candle.high >= askPrice) {
       filledSells++
+      askFilled = true
       if (inventoryBaseQty <= 0) {
         const newQty = inventoryBaseQty - standingQty
         avgCost = avgCost === null ? askPrice : (avgCost * -inventoryBaseQty + askPrice * standingQty) / -newQty
