@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { Grid3x3, Layers3, Timer, Target, FileText, Shuffle, Scale, Waves } from 'lucide-react'
 import {
   EXCHANGES,
   type ExecutorConfig,
@@ -10,6 +9,7 @@ import {
   type LiveTwapRunSummary
 } from '../../shared/ipc'
 import { buildGridLevels } from './engine'
+import { executorTypeMeta } from './executorTypeMeta'
 import { netUnrealizedPct } from '../../shared/fees'
 import { useExecutorSimulation } from './useExecutorSimulation'
 import { useSpreadExecutorSimulation } from './useSpreadExecutorSimulation'
@@ -123,17 +123,6 @@ export function useLiveTwapInfo(executor: ExecutorConfig): LiveTwapRunSummary | 
 
   return info
 }
-
-const TYPE_META = {
-  grid: { label: 'Grid', icon: Grid3x3, color: '#3b82f6' },
-  dca: { label: 'DCA', icon: Layers3, color: '#d4a94a' },
-  twap: { label: 'TWAP', icon: Timer, color: '#3ecf6a' },
-  position: { label: 'Position', icon: Target, color: '#f97316' },
-  order: { label: 'Order', icon: FileText, color: '#94a3b8' },
-  xemm: { label: 'XEMM', icon: Shuffle, color: '#a855f7' },
-  arbitrage: { label: 'Arbitrage', icon: Scale, color: '#ec4899' },
-  marketmaking: { label: 'Market Making', icon: Waves, color: '#06b6d4' }
-} as const
 
 const EXIT_REASON_LABEL: Record<string, string> = {
   take_profit: 'Take Profit',
@@ -567,7 +556,7 @@ export function ExecutorCard({
   onStop: (id: string) => void
   onViewDetail: (id: string) => void
 }): React.JSX.Element {
-  const meta = TYPE_META[executor.type]
+  const meta = executorTypeMeta(executor.type)
   const Icon = meta.icon
   const exchangeName = EXCHANGES.find((e) => e.id === executor.exchange)?.name ?? executor.exchange
 
