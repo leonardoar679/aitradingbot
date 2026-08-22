@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { stopFillPrice, simulatePosition, simulateDca, simulateGrid, buildGridLevels } from '../src/executors/engine'
+import { stopFillPrice, simulatePosition, simulateDca, simulateGrid, simulateOrder, buildGridLevels } from '../src/executors/engine'
 import { roundTripFee } from '../shared/fees'
-import type { Candle, DcaExecutorParams, GridExecutorParams, PositionExecutorParams } from '../shared/ipc'
+import type { Candle, DcaExecutorParams, GridExecutorParams, OrderExecutorParams, PositionExecutorParams } from '../shared/ipc'
 
 // A stop order becomes a market order when triggered, so a candle that opens beyond the stop
 // never trades at the stop price at all. src/backtest/engine.ts has always modelled this; the
@@ -114,5 +114,70 @@ describe('simulateGrid stop price fills', () => {
     const qty = state.amountPerLevel / 100
 
     expect(state.realizedPnl).toBeCloseTo(qty * (95 - 100) - roundTripFee(qty, 100, 95), 10)
+  })
+})
+
+describe('simulateOrder limit fills', () => {
+  const limitBuy = (limitPrice: number): OrderExecutorParams => ({
+    side: 'buy', amountQuote: 100, executionStrategy: 'limit', limitPrice
+  })
+  const makerBuy = (limitPrice: number): OrderExecutorParams => ({
+    side: 'buy', amountQuote: 100, executionStrategy: 'limit_maker', limitPrice
+  })
+
+  it('fills a resting order when the candle prints through its price', () => {
+    const state = simulateOrder([c(0, 100, 101, 99, 100), c(1, 99, 99, 94, 95)], limitBuy(96))
+
+    expect(state.status).toBe('filled')
+    expect(state.fillPrice).toBe(96)
+  })
+
+  it('fills a resting order when the candle gaps clean past it', () => {
+    // Range 88-91 never contains 96, but sellers sweeping down took the 96 bid on the way.
+    const state = simulateOrder([c(0, 100, 101, 99, 100), c(1, 90, 91, 88, 89)], limitBuy(96))
+
+    expect(state.status).toBe('filled')
+    // At the limit price, not the open — a resting order holds its own price. This is the
+    // opposite of a stop, which triggers into a market order and takes what the gap leaves.
+    expect(state.fillPrice).toBe(96)
+    expect(state.filledAt).toBe(T + 60)
+  })
+
+  it('leaves an unreached order pending', () => {
+    const state = simulateOrder([c(0, 100, 101, 99, 100), c(1, 100, 102, 99, 101)], limitBuy(90))
+
+    expect(state.status).toBe('pending')
+    expect(state.fillPrice).toBeNull()
+  })
+
+  it('executes a marketable limit at the market, not at the limit', () => {
+    // A buy limit above the market is marketable: it takes immediately at the open.
+    const state = simulateOrder([c(0, 100, 101, 99, 100)], limitBuy(110))
+
+    expect(state.status).toBe('filled')
+    expect(state.fillPrice).toBe(100)
+  })
+
+  it('does not let a post-only order take on placement', () => {
+    // limit_maker is rejected by the exchange rather than crossing the spread.
+    const state = simulateOrder([c(0, 100, 101, 99, 100)], makerBuy(110))
+
+    expect(state.status).toBe('pending')
+  })
+
+  it('still rests a post-only order and fills it when price comes to it', () => {
+    const state = simulateOrder([c(0, 100, 101, 99, 100), c(1, 99, 99, 94, 95)], makerBuy(96))
+
+    expect(state.status).toBe('filled')
+    expect(state.fillPrice).toBe(96)
+  })
+
+  it('mirrors all of it for a sell limit', () => {
+    const sell = (limitPrice: number): OrderExecutorParams => ({
+      side: 'sell', amountQuote: 100, executionStrategy: 'limit', limitPrice
+    })
+    expect(simulateOrder([c(0, 100, 101, 99, 100), c(1, 110, 112, 109, 111)], sell(105)).fillPrice).toBe(105)
+    expect(simulateOrder([c(0, 100, 101, 99, 100)], sell(90)).fillPrice).toBe(100)
+    expect(simulateOrder([c(0, 100, 101, 99, 100)], sell(105)).status).toBe('pending')
   })
 })

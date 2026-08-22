@@ -359,8 +359,31 @@ export function simulateOrder(candles: Candle[], params: OrderExecutorParams): O
   const limitPrice = params.limitPrice
   if (limitPrice === null) return { kind: 'order', status: 'pending', fillPrice: null, filledAt: null }
 
+  const isBuy = params.side === 'buy'
+  const first = candles[0]
+  // Placement. A plain limit order priced through the market is marketable and executes straight
+  // away at the market, not at the limit — the same rule the Trade page's classifyPaperOrder
+  // already applies. limit_maker is post-only: an exchange rejects it outright rather than
+  // letting it take, so it never fills here on placement. (That rejection has no state of its
+  // own yet, so it shows as never filling.)
+  const marketableNow = isBuy ? limitPrice >= first.open : limitPrice <= first.open
+  if (marketableNow) {
+    return params.executionStrategy === 'limit'
+      ? { kind: 'order', status: 'filled', fillPrice: first.open, filledAt: first.time }
+      : // Rejected outright — it never reaches the book, so it cannot fill later either.
+        { kind: 'order', status: 'pending', fillPrice: null, filledAt: null }
+  }
+
   for (const candle of candles) {
-    if (candle.low <= limitPrice && limitPrice <= candle.high) {
+    // Once resting, the order fills whenever price reaches it — including a candle that gaps
+    // clean through without ever printing inside its range. Requiring limitPrice to sit within
+    // [low, high] missed exactly that: a buy limit at 95 and a candle spanning 88-91 left the
+    // order pending forever, when sellers sweeping down the book would have taken the 95 bid on
+    // the way past. The fill is at the limit price, not the open: a resting order holds its own
+    // price and is hit there. That is the opposite of a stop, which triggers into a market order
+    // and takes whatever the gap leaves (see stopFillPrice).
+    const reached = isBuy ? candle.low <= limitPrice : candle.high >= limitPrice
+    if (reached) {
       return { kind: 'order', status: 'filled', fillPrice: limitPrice, filledAt: candle.time }
     }
   }
