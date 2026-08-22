@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, Search } from 'lucide-react'
 import type { Exchange, SymbolInfo } from '../../shared/ipc'
+import { describeError } from '../utils/ipcError'
 
 interface SymbolSearchProps {
   exchange: Exchange
@@ -15,6 +16,7 @@ export function SymbolSearch({ exchange, symbol, onSelect }: SymbolSearchProps):
   const [query, setQuery] = useState('')
   const [symbols, setSymbols] = useState<SymbolInfo[]>([])
   const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -30,6 +32,7 @@ export function SymbolSearch({ exchange, symbol, onSelect }: SymbolSearchProps):
 
     let cancelled = false
     setLoading(true)
+    setLoadError(null)
     window.api.market
       .listSymbols(exchange)
       .then((list) => {
@@ -37,6 +40,10 @@ export function SymbolSearch({ exchange, symbol, onSelect }: SymbolSearchProps):
       })
       .catch((error) => {
         console.error('Failed to load symbol list:', error)
+        // A failed fetch leaves `symbols` empty, which rendered as "No matches" — reporting an
+        // unreachable exchange as an exchange with nothing to trade. Reopening the dropdown
+        // retries, so saying so is also actionable.
+        if (!cancelled) setLoadError(describeError(error))
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -136,7 +143,10 @@ export function SymbolSearch({ exchange, symbol, onSelect }: SymbolSearchProps):
           </div>
           <div style={{ maxHeight: 280, overflowY: 'auto' }}>
             {loading && <StatusRow text="Loading pairs..." />}
-            {!loading && results.length === 0 && <StatusRow text="No matches" />}
+            {!loading && loadError !== null && (
+              <StatusRow text={`Couldn't load pairs (${loadError}) — close and reopen to retry.`} />
+            )}
+            {!loading && loadError === null && results.length === 0 && <StatusRow text="No matches" />}
             {!loading &&
               results.map((s) => (
                 <button

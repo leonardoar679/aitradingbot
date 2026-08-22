@@ -39,7 +39,16 @@ export function MarketTicker({
         const snapshot = await window.api.market.subscribeTicker(exchange, pair.symbol)
         if (cancelled) return
         setTicker(snapshot)
-        unsubscribeUpdates = window.api.market.onTickerUpdate(setTicker)
+        // Ticker updates are broadcast with no symbol attached to the listener, and
+        // marketService keeps one global stream, so a second subscriber on another symbol would
+        // feed its prices straight into this header. Not reachable today — the only other
+        // subscriber on these pages is useLastPrice, always on this same pair — but useLastPrice
+        // already carries this guard and the failure mode (a whole ticker row quietly showing
+        // another asset) is bad enough to guard rather than rely on that staying true.
+        unsubscribeUpdates = window.api.market.onTickerUpdate((t) => {
+          if (t.symbol !== pair.symbol) return
+          setTicker(t)
+        })
       } catch (error) {
         console.error('Failed to load ticker:', error)
       }
@@ -137,7 +146,7 @@ export function MarketTicker({
         label="24h Chg"
         value={
           ticker
-            ? `${formatAssetNumber(ticker.priceChange, pair.quoteAsset)} ${ticker.priceChangePercent >= 0 ? '+' : ''}${ticker.priceChangePercent.toFixed(2)}%`
+            ? `${formatQuotePrice(ticker.priceChange, pair.quoteAsset)} ${ticker.priceChangePercent >= 0 ? '+' : ''}${ticker.priceChangePercent.toFixed(2)}%`
             : '—'
         }
         color={changeColor}
@@ -145,12 +154,12 @@ export function MarketTicker({
       />
       <Stat
         label="24h High"
-        value={ticker ? formatAssetNumber(ticker.highPrice, pair.quoteAsset) : '—'}
+        value={ticker ? formatQuotePrice(ticker.highPrice, pair.quoteAsset) : '—'}
         divider
       />
       <Stat
         label="24h Low"
-        value={ticker ? formatAssetNumber(ticker.lowPrice, pair.quoteAsset) : '—'}
+        value={ticker ? formatQuotePrice(ticker.lowPrice, pair.quoteAsset) : '—'}
         divider
       />
       <Stat
