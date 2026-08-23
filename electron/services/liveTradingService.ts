@@ -3,6 +3,7 @@ import { join } from 'path'
 import { readFile, mkdir } from 'fs/promises'
 import { writeJsonAtomic } from './atomicWrite'
 import { getRealizedPnlToday } from './livePositionsService'
+import { clampLiveLimit, loadedLiveLimit } from '../../shared/liveLimits'
 
 // Safety state for real order placement — deliberately its own file, separate from
 // settings.json and credentials.json, so a bug in either of those can never weaken a gate here.
@@ -57,7 +58,11 @@ async function load(): Promise<LiveTradingState> {
   } catch {
     cache = { ...DEFAULT_STATE }
   }
-  cache.maxOrderQuote = Math.min(cache.maxOrderQuote, HARD_MAX_ORDER_QUOTE)
+  // Heals a file holding a value that is not a usable number, rather than letting it through to
+  // the gates. Falls back to the same defaults a missing file would get.
+  cache.maxOrderQuote = loadedLiveLimit(cache.maxOrderQuote, DEFAULT_MAX_ORDER_QUOTE, HARD_MAX_ORDER_QUOTE)
+  cache.dailyCapQuote = loadedLiveLimit(cache.dailyCapQuote, DEFAULT_DAILY_CAP_QUOTE, null)
+  cache.dailyLossLimitQuote = loadedLiveLimit(cache.dailyLossLimitQuote, DEFAULT_DAILY_LOSS_LIMIT_QUOTE, null)
   return cache
 }
 
@@ -106,9 +111,22 @@ export async function setLiveTradingConfig(patch: {
   dailyLossLimitQuote?: number
 }): Promise<LiveTradingStatus> {
   const state = await load()
-  if (patch.maxOrderQuote !== undefined) state.maxOrderQuote = Math.max(0, Math.min(patch.maxOrderQuote, HARD_MAX_ORDER_QUOTE))
-  if (patch.dailyCapQuote !== undefined) state.dailyCapQuote = Math.max(0, patch.dailyCapQuote)
-  if (patch.dailyLossLimitQuote !== undefined) state.dailyLossLimitQuote = Math.max(0, patch.dailyLossLimitQuote)
+  // Validated before ANY field is assigned, so a bad third value cannot leave the first two
+  // written and the config half-applied.
+  const nextMax =
+    patch.maxOrderQuote !== undefined
+      ? clampLiveLimit('Max order size', patch.maxOrderQuote, HARD_MAX_ORDER_QUOTE)
+      : state.maxOrderQuote
+  const nextCap =
+    patch.dailyCapQuote !== undefined ? clampLiveLimit('Daily cap', patch.dailyCapQuote, null) : state.dailyCapQuote
+  const nextLoss =
+    patch.dailyLossLimitQuote !== undefined
+      ? clampLiveLimit('Daily loss limit', patch.dailyLossLimitQuote, null)
+      : state.dailyLossLimitQuote
+
+  state.maxOrderQuote = nextMax
+  state.dailyCapQuote = nextCap
+  state.dailyLossLimitQuote = nextLoss
   await persist()
   return getLiveTradingStatus()
 }
