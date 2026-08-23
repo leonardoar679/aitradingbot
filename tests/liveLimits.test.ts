@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { clampLiveLimit, loadedLiveLimit } from '../shared/liveLimits'
+import { clampLiveLimit, loadedLiveLimit, describeUnusableOrderSize } from '../shared/liveLimits'
 
 describe('clampLiveLimit', () => {
   it('keeps an ordinary value', () => {
@@ -69,5 +69,37 @@ describe('loadedLiveLimit', () => {
 
   it('floors a stored negative at zero rather than defaulting', () => {
     expect(loadedLiveLimit(-3, 50, null)).toBe(0)
+  })
+})
+
+describe('describeUnusableOrderSize', () => {
+  it('accepts an ordinary order size', () => {
+    expect(describeUnusableOrderSize(10)).toBeNull()
+    expect(describeUnusableOrderSize(0.5)).toBeNull()
+  })
+
+  // Every check in canPlaceLiveOrder is a `>` comparison, and all of them are false for NaN, so
+  // NaN passed the whole gate and reached a real order placement.
+  it('rejects NaN, which passed every threshold check', () => {
+    expect(describeUnusableOrderSize(NaN)).toContain('must be a real number')
+  })
+
+  it('rejects both infinities', () => {
+    expect(describeUnusableOrderSize(Infinity)).toContain('must be a real number')
+    expect(describeUnusableOrderSize(-Infinity)).toContain('must be a real number')
+  })
+
+  // Typeable straight into the executor forms, which are number inputs.
+  it('rejects a negative size', () => {
+    expect(describeUnusableOrderSize(-5)).toContain('greater than 0')
+  })
+
+  it('rejects a zero size', () => {
+    expect(describeUnusableOrderSize(0)).toContain('greater than 0')
+  })
+
+  it('reports the offending value so the reason is not a mystery', () => {
+    expect(describeUnusableOrderSize(-5)).toContain('-5')
+    expect(describeUnusableOrderSize(NaN)).toContain('NaN')
   })
 })

@@ -3,7 +3,7 @@ import { join } from 'path'
 import { readFile, mkdir } from 'fs/promises'
 import { writeJsonAtomic } from './atomicWrite'
 import { getRealizedPnlToday, getLastObservedFeeRate } from './livePositionsService'
-import { clampLiveLimit, loadedLiveLimit } from '../../shared/liveLimits'
+import { clampLiveLimit, loadedLiveLimit, describeUnusableOrderSize } from '../../shared/liveLimits'
 
 // Safety state for real order placement — deliberately its own file, separate from
 // settings.json and credentials.json, so a bug in either of those can never weaken a gate here.
@@ -166,6 +166,12 @@ export interface LiveOrderGateResult {
  * before placeMarketOrder — never earlier, never cached. Deliberately NOT used to gate closing a
  * live position — see canCloseLivePosition below for why. */
 export async function canPlaceLiveOrder(quoteAmount: number): Promise<LiveOrderGateResult> {
+  // Before any threshold comparison: every check below is a `>` test, and those are all false for
+  // NaN, so an unusable size passed the entire gate rather than failing it. See
+  // describeUnusableOrderSize.
+  const unusableSize = describeUnusableOrderSize(quoteAmount)
+  if (unusableSize !== null) return { allowed: false, reason: unusableSize }
+
   const state = await load()
   if (!sessionArmed) return { allowed: false, reason: 'Live trading is not armed for this session' }
   if (state.killSwitchEngaged) return { allowed: false, reason: 'Kill switch is engaged' }

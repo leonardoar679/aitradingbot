@@ -35,3 +35,29 @@ export function loadedLiveLimit(value: unknown, fallback: number, hardMax: numbe
   const atLeastZero = Math.max(0, value)
   return hardMax === null ? atLeastZero : Math.min(atLeastZero, hardMax)
 }
+
+/** Rejects an order size that is not a usable positive number, or null when it is fine.
+ *
+ * canPlaceLiveOrder only ever tested upper bounds -- `quoteAmount > maxOrderQuote` and
+ * `usedToday + quoteAmount > dailyCapQuote` -- and every one of those comparisons is false for
+ * NaN, so NaN, -Infinity, negative sizes and zero all passed straight through to a real order.
+ * Infinity was the only bad value it happened to stop, and only because it is larger than the
+ * ceiling. Checked against the real gate:
+ *
+ *   Infinity  -> blocked        NaN  -> allowed
+ *   -Infinity -> allowed         -5  -> allowed          0 -> allowed
+ *
+ * A negative or zero size is typeable straight into the executor forms, which are number inputs.
+ * The exchange would reject such an order, but this gate is the app's own last line of defence and
+ * should not be relying on that. executeLiveClose already guards its quantity this way -- with
+ * `!(quantity > 0)`, which is NaN-safe for the same reason -- so this is the buy side catching up
+ * with the sell side. */
+export function describeUnusableOrderSize(quoteAmount: number): string | null {
+  if (!Number.isFinite(quoteAmount)) {
+    return `Order size must be a real number (got ${String(quoteAmount)})`
+  }
+  if (quoteAmount <= 0) {
+    return `Order size must be greater than 0 (got ${quoteAmount})`
+  }
+  return null
+}
