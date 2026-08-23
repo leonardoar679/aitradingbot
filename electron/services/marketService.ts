@@ -8,6 +8,7 @@ import { coinoneAdapter } from './exchanges/coinone'
 import { korbitAdapter } from './exchanges/korbit'
 import { gopaxAdapter } from './exchanges/gopax'
 import type { ExchangeAdapter } from './exchanges/types'
+import { createStreamSlot } from './streamSlot'
 
 const ADAPTERS: Record<Exchange, ExchangeAdapter> = {
   binance: binanceAdapter,
@@ -28,8 +29,11 @@ function getAdapter(exchange: Exchange): ExchangeAdapter {
 
 const candleListeners = new Set<(candle: Candle) => void>()
 const tickerListeners = new Set<(ticker: Ticker24h) => void>()
-let stopCandleStream: (() => void) | null = null
-let stopTickerStream: (() => void) | null = null
+// One slot each, rather than a bare stop function: the renderer re-subscribes on every
+// interval change, symbol change and page mount, so two connects are regularly in flight at
+// once and the loser has to be closed rather than left holding a socket nobody can reach.
+const candleSlot = createStreamSlot()
+const tickerSlot = createStreamSlot()
 
 export function onCandleUpdate(listener: (candle: Candle) => void): () => void {
   candleListeners.add(listener)
@@ -83,26 +87,26 @@ export function cancelHistoricalRangeFetch(requestId: string): void {
   cancelledRequestIds.add(requestId)
 }
 
-export async function subscribeCandles(exchange: Exchange, symbol: string, interval: Interval): Promise<void> {
-  stopCandleStream?.()
-  stopCandleStream = await getAdapter(exchange).subscribeCandles(symbol, interval, (candle) => {
-    for (const listener of candleListeners) listener(candle)
-  })
+export function subscribeCandles(exchange: Exchange, symbol: string, interval: Interval): Promise<void> {
+  return candleSlot.open(() =>
+    getAdapter(exchange).subscribeCandles(symbol, interval, (candle) => {
+      for (const listener of candleListeners) listener(candle)
+    })
+  )
 }
 
 export function unsubscribeCandles(): void {
-  stopCandleStream?.()
-  stopCandleStream = null
+  candleSlot.close()
 }
 
-export async function subscribeTicker(exchange: Exchange, symbol: string): Promise<void> {
-  stopTickerStream?.()
-  stopTickerStream = await getAdapter(exchange).subscribeTicker(symbol, (ticker) => {
-    for (const listener of tickerListeners) listener(ticker)
-  })
+export function subscribeTicker(exchange: Exchange, symbol: string): Promise<void> {
+  return tickerSlot.open(() =>
+    getAdapter(exchange).subscribeTicker(symbol, (ticker) => {
+      for (const listener of tickerListeners) listener(ticker)
+    })
+  )
 }
 
 export function unsubscribeTicker(): void {
-  stopTickerStream?.()
-  stopTickerStream = null
+  tickerSlot.close()
 }
