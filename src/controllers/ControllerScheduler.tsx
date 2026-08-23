@@ -3,6 +3,7 @@ import { computeExecutorPnl, executorAllocatedQuote } from '../executors/compute
 import { handOverPositionOnStop } from '../executors/handOverPosition'
 import { pushControllerSnapshot, getControllerSnapshots } from './controllerStore'
 import { SNAPSHOT_INTERVAL_MS } from './types'
+import { controllerDrawdownPct } from './riskMath'
 import type { ControllerConfig, ExecutorConfig } from '../../shared/ipc'
 
 /** One snapshot tick: sums P&L + allocated capital across the controller's still-existing
@@ -32,8 +33,11 @@ export async function runControllerSnapshotNow(controller: ControllerConfig): Pr
   pushControllerSnapshot({ id: crypto.randomUUID(), controllerId: controller.id, takenAt: now, aggregatePnlQuote, executorCount: attached.length })
 
   const history = getControllerSnapshots(controller.id)
-  const peak = history.reduce((max, s) => Math.max(max, s.aggregatePnlQuote), aggregatePnlQuote)
-  const drawdownPct = peak > 0 ? ((peak - aggregatePnlQuote) / peak) * 100 : 0
+  const drawdownPct = controllerDrawdownPct(
+    history.map((s) => s.aggregatePnlQuote),
+    aggregatePnlQuote,
+    totalAllocatedQuote
+  )
   const pnlPct = totalAllocatedQuote > 0 ? (aggregatePnlQuote / totalAllocatedQuote) * 100 : 0
 
   const { riskControls } = controller

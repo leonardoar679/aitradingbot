@@ -96,7 +96,7 @@ function NewControllerForm({ executors, onCreate }: { executors: ExecutorConfig[
             <input type="number" step="0.1" value={takeProfitPct} onChange={(e) => setTakeProfitPct(e.target.value)} style={textInputStyle()} />
           </div>
           <div style={{ flex: '1 1 140px' }}>
-            <label style={fieldLabelStyle()}>Max Drawdown % (optional)</label>
+            <label style={fieldLabelStyle()}>Max Drawdown % of allocated capital (optional)</label>
             <input type="number" step="0.1" value={maxDrawdownPct} onChange={(e) => setMaxDrawdownPct(e.target.value)} style={textInputStyle()} />
           </div>
         </div>
