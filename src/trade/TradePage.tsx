@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { describeTicketProblem } from './orderTicket'
 import { PageHeader } from '../components/PageHeader'
 import { Card } from '../components/Card'
 import { MarketTicker } from '../dashboard/MarketTicker'
@@ -90,8 +91,11 @@ export function TradePage(): React.JSX.Element {
 
   const amountNum = Number(amount)
   const execPrice = type === 'market' ? lastPrice : Number(limitPrice) || null
-  const estValue = execPrice && amountNum > 0 ? execPrice * amountNum : null
-  const canSubmit = amountNum > 0 && execPrice !== null && execPrice > 0
+  const estValue = execPrice && amountNum > 0 && Number.isFinite(amountNum) ? execPrice * amountNum : null
+  // A bare boolean left an unfillable ticket as a greyed-out button with no reason -- and let
+  // Number('1e999') through as a positive amount. See describeTicketProblem.
+  const ticketProblem = describeTicketProblem({ amountRaw: amount, type, limitPriceRaw: limitPrice, lastPrice })
+  const canSubmit = ticketProblem === null
 
   function handleSubmit(): void {
     if (!canSubmit || execPrice === null) return
@@ -172,9 +176,16 @@ export function TradePage(): React.JSX.Element {
               </span>
             </div>
 
+            {ticketProblem !== null && amount.trim() !== '' && (
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.74rem', margin: '0 0 0.6rem', lineHeight: 1.4 }}>
+                {ticketProblem}
+              </p>
+            )}
+
             <button
               onClick={handleSubmit}
               disabled={!canSubmit}
+              title={ticketProblem ?? undefined}
               style={{
                 width: '100%',
                 padding: '0.65rem',
@@ -196,11 +207,14 @@ export function TradePage(): React.JSX.Element {
 
         <div style={{ flex: '1 1 400px', minWidth: 320 }}>
           <Card title="Session Orders">
-            {orders.length === 0 ? (
-              <p style={{ color: 'var(--text-secondary)', margin: 0 }}>
-                No paper orders placed yet this session. Orders here aren't persisted or sent to your exchange.
-              </p>
-            ) : (
+            {/* This warning used to live only in the empty state -- shown when there was nothing
+                to lose, and hidden the moment there was. */}
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.74rem', margin: '0 0 0.7rem', lineHeight: 1.45 }}>
+              {orders.length === 0
+                ? "No paper orders placed yet this session. Orders here aren't persisted or sent to your exchange."
+                : "This list is cleared when you leave the page — it isn't saved, isn't sent to any exchange, and doesn't feed your Portfolio or Positions."}
+            </p>
+            {orders.length === 0 ? null : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 {orders.map((o) => (
                   <div
