@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { describeFeeRateMismatch } from '../../shared/observedFee'
 import { KeyRound, ShieldCheck, Trash2, Moon, Sun, Eye, AlertTriangle } from 'lucide-react'
 import { Card } from '../components/Card'
 import { PageHeader } from '../components/PageHeader'
@@ -316,6 +317,10 @@ function LiveTradingLimitsCard(): React.JSX.Element {
 
   if (!status) return <Card title="Live Trading — Risk Limits">Loading…</Card>
 
+  // The exchange reports what it really charged on every fill, so the app can say when its own
+  // assumed rate is wrong instead of leaving someone to discover it in their balance.
+  const feeMismatch = describeFeeRateMismatch(status.observedFeeRate)
+
   return (
     <Card title="Live Trading — Risk Limits">
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.9rem' }}>
@@ -329,6 +334,21 @@ function LiveTradingLimitsCard(): React.JSX.Element {
           by any of these — they only ever bound new/opening orders.
         </p>
       </div>
+      {feeMismatch !== null && (
+        <p
+          style={{
+            fontSize: '0.76rem',
+            color: 'var(--down)',
+            border: '1px solid var(--down)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '0.55rem 0.7rem',
+            margin: '0 0 0.9rem',
+            lineHeight: 1.5
+          }}
+        >
+          {feeMismatch}
+        </p>
+      )}
       <div style={{ display: 'flex', gap: '0.7rem', flexWrap: 'wrap' }}>
         <div style={{ flex: '1 1 160px' }}>
           <label style={fieldLabelStyle()}>Max Order Size (quote, ≤ {status.hardMaxOrderQuote})</label>

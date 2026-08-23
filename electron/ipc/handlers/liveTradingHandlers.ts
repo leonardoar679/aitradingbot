@@ -98,7 +98,7 @@ export function registerLiveTradingHandlers(): void {
 
       if (result.status === 'FILLED') {
         await recordLiveOrderUsage(result.cummulativeQuoteQty)
-        await recordLiveFill(exchange, symbol, baseAsset, quoteAsset, side, result.filledQty, result.avgFillPrice)
+        await recordLiveFill(exchange, symbol, baseAsset, quoteAsset, side, result.filledQty, result.avgFillPrice, result.commissions)
         if (side === 'sell') await checkLossLimitAndAutoDisarm()
         return { resolved: true, liveOrder: { ...result, placedAt: Math.floor(Date.now() / 1000) } }
       }
@@ -133,7 +133,7 @@ export function registerLiveTradingHandlers(): void {
           const reserved = order.quantity * order.limitPrice
           await recordLiveOrderUsage(result.cummulativeQuoteQty - reserved, order.placedAt)
           if (result.filledQty > 0) {
-            await recordLiveFill(order.exchange, order.symbol, order.baseAsset, order.quoteAsset, order.side, result.filledQty, result.avgFillPrice)
+            await recordLiveFill(order.exchange, order.symbol, order.baseAsset, order.quoteAsset, order.side, result.filledQty, result.avgFillPrice, result.commissions)
             if (order.side === 'sell') await checkLossLimitAndAutoDisarm()
           }
           resolutions.push({ executorId: order.executorId, liveOrderId: order.id, liveOrder: { ...result, placedAt: order.placedAt }, status })

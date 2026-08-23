@@ -26,7 +26,7 @@ export async function placeLiveMarketOrder(
   const { apiKey, apiSecret } = await getDecryptedCredential(exchange)
   const result = await placeMarketOrder(apiKey, apiSecret, symbol, side === 'buy' ? 'BUY' : 'SELL', quoteAmount)
   await recordLiveOrderUsage(quoteAmount)
-  await recordLiveFill(exchange, symbol, baseAsset, quoteAsset, side, result.filledQty, result.avgFillPrice)
+  await recordLiveFill(exchange, symbol, baseAsset, quoteAsset, side, result.filledQty, result.avgFillPrice, result.commissions)
   if (side === 'sell') await checkLossLimitAndAutoDisarm()
   return { ...result, placedAt: Math.floor(Date.now() / 1000) }
 }
@@ -46,7 +46,7 @@ export async function executeLiveClose(position: LivePosition, quantity: number)
   const { apiKey, apiSecret } = await getDecryptedCredential(position.exchange)
   const result = await placeMarketSellByQuantity(apiKey, apiSecret, position.symbol, quantity)
   await recordLiveOrderUsage(result.cummulativeQuoteQty)
-  await recordLiveFill(position.exchange, position.symbol, position.baseAsset, position.quoteAsset, 'sell', result.filledQty, result.avgFillPrice)
+  await recordLiveFill(position.exchange, position.symbol, position.baseAsset, position.quoteAsset, 'sell', result.filledQty, result.avgFillPrice, result.commissions)
   await checkLossLimitAndAutoDisarm()
   return { ...result, placedAt: Math.floor(Date.now() / 1000) }
 }
@@ -65,7 +65,7 @@ export async function cancelLiveOrderById(liveOrderId: string): Promise<LiveOrde
   const reserved = order.quantity * order.limitPrice
   await recordLiveOrderUsage(result.cummulativeQuoteQty - reserved, order.placedAt)
   if (result.filledQty > 0) {
-    await recordLiveFill(order.exchange, order.symbol, order.baseAsset, order.quoteAsset, order.side, result.filledQty, result.avgFillPrice)
+    await recordLiveFill(order.exchange, order.symbol, order.baseAsset, order.quoteAsset, order.side, result.filledQty, result.avgFillPrice, result.commissions)
     if (order.side === 'sell') await checkLossLimitAndAutoDisarm()
   }
   return { ...result, placedAt: order.placedAt }

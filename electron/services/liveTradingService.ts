@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { join } from 'path'
 import { readFile, mkdir } from 'fs/promises'
 import { writeJsonAtomic } from './atomicWrite'
-import { getRealizedPnlToday } from './livePositionsService'
+import { getRealizedPnlToday, getLastObservedFeeRate } from './livePositionsService'
 import { clampLiveLimit, loadedLiveLimit } from '../../shared/liveLimits'
 
 // Safety state for real order placement — deliberately its own file, separate from
@@ -89,6 +89,8 @@ export interface LiveTradingStatus {
   dailyUsedQuote: number
   dailyLossLimitQuote: number
   realizedPnlToday: number
+  /** Mirrors the shared LiveTradingStatus field -- see shared/ipc.ts. */
+  observedFeeRate: number | null
 }
 
 export async function getLiveTradingStatus(): Promise<LiveTradingStatus> {
@@ -101,7 +103,8 @@ export async function getLiveTradingStatus(): Promise<LiveTradingStatus> {
     dailyCapQuote: state.dailyCapQuote,
     dailyUsedQuote: usageForToday(state),
     dailyLossLimitQuote: state.dailyLossLimitQuote,
-    realizedPnlToday: await getRealizedPnlToday()
+    realizedPnlToday: await getRealizedPnlToday(),
+    observedFeeRate: await getLastObservedFeeRate()
   }
 }
 

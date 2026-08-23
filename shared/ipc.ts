@@ -78,6 +78,10 @@ export interface LiveTradingStatus {
   dailyUsedQuote: number
   dailyLossLimitQuote: number
   realizedPnlToday: number
+  /** The fee rate the exchange really charged on the most recent live fill, or null if none has
+   * been seen yet. Reported so Settings can say when FEE_RATE disagrees with reality; it drives
+   * nothing on its own. */
+  observedFeeRate: number | null
 }
 
 /** The result of one real order fill. `avgFillPrice` is notional-weighted across a market

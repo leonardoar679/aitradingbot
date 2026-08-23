@@ -4,6 +4,7 @@ import { readFile, mkdir } from 'fs/promises'
 import { writeJsonAtomic } from './atomicWrite'
 import type { Exchange, ExecutorSide, LivePosition } from '../../shared/ipc'
 import { netRealizedPnl } from '../../shared/fees'
+import { commissionInQuote, observedFeeRate, type Commissions } from '../../shared/observedFee'
 
 // The live-position ledger — separate from liveTrading.json (safety gates) and settings.json
 // (paper HeldPosition inventory). This is main-process-owned because it feeds the daily
@@ -22,6 +23,12 @@ interface LivePositionsState {
   // when a fill only partially reduces a position that stays open (a position's own `closedAt`
   // only tells you when it was fully exited, not every date a partial realize happened on it).
   realizedEvents: RealizedEvent[]
+  /** The fee rate the exchange really charged on the most recent fill it could be derived from.
+   * Recorded, never acted on: it feeds a note in Settings telling the user what FEE_RATE ought to
+   * be, and deliberately changes no P&L figure and no gate by itself. Null until a live fill has
+   * reported a commission this app can value -- a BNB-denominated one cannot be valued without a
+   * rate table, so it leaves this alone rather than writing a wrong number. */
+  lastObservedFeeRate?: number | null
 }
 
 const DEFAULT_STATE: LivePositionsState = { positions: [], realizedEvents: [] }
@@ -83,6 +90,12 @@ export async function getRealizedPnlToday(): Promise<number> {
  * tracked as a live buy) — the order itself already happened; only ledger bookkeeping is
  * skipped. Same average-cost-basis math as simulateMarketMaking() in src/executors/engine.ts,
  * simplified for spot (long-only, no short side). */
+/** The fee rate most recently seen on a real fill, or null if none has been observed yet. */
+export async function getLastObservedFeeRate(): Promise<number | null> {
+  const state = await load()
+  return state.lastObservedFeeRate ?? null
+}
+
 export async function recordLiveFill(
   exchange: Exchange,
   symbol: string,
@@ -90,10 +103,17 @@ export async function recordLiveFill(
   quoteAsset: string,
   side: ExecutorSide,
   filledQty: number,
-  avgFillPrice: number
+  avgFillPrice: number,
+  commissions?: Commissions
 ): Promise<LivePosition | null> {
   const state = await load()
   const now = Math.floor(Date.now() / 1000)
+
+  if (commissions !== undefined) {
+    const feeQuote = commissionInQuote(commissions, baseAsset, quoteAsset, avgFillPrice)
+    const rate = feeQuote === null ? null : observedFeeRate(feeQuote, filledQty * avgFillPrice)
+    if (rate !== null) state.lastObservedFeeRate = rate
+  }
   const open = state.positions.find((p) => p.symbol === symbol && p.exchange === exchange && p.closedAt === null)
 
   if (side === 'buy') {

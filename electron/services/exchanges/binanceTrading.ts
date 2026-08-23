@@ -1,4 +1,5 @@
 import { createHmac } from 'crypto'
+import type { Commissions } from '../../../shared/observedFee'
 import { resolveEndpoint } from './binance'
 
 // Live-trading groundwork for Binance only (see live-trading design plan — Phase A is limited to
@@ -85,11 +86,20 @@ export interface LiveOrderResult {
   filledQty: number
   avgFillPrice: number
   cummulativeQuoteQty: number
+  /** What the exchange actually charged for this order, keyed by the asset it was taken in.
+   * Binance reports it per fill and the app used to drop it on the floor, then model the cost
+   * with a hardcoded FEE_RATE instead -- an assumption standing in for a number already in hand.
+   * Empty for a response that carried no fills (a resting order, or a query rather than a place). */
+  commissions: Commissions
 }
 
 interface BinanceOrderFill {
   price: string
   qty: string
+  /** Present on a fill; absent on responses that report no fills. The asset varies -- base on a
+   * buy, quote on a sell, or BNB when the BNB discount is on. */
+  commission?: string
+  commissionAsset?: string
 }
 
 interface BinanceOrderResponse {
@@ -111,7 +121,15 @@ function parseOrderResponse(data: BinanceOrderResponse): LiveOrderResult {
         ? cummulativeQuoteQty / filledQty
         : 0
 
-  return { orderId: data.orderId, status: data.status, filledQty, avgFillPrice, cummulativeQuoteQty }
+  const commissions: Commissions = {}
+  for (const fill of fills) {
+    const amount = Number(fill.commission)
+    const asset = fill.commissionAsset
+    if (asset === undefined || !Number.isFinite(amount) || amount === 0) continue
+    commissions[asset] = (commissions[asset] ?? 0) + amount
+  }
+
+  return { orderId: data.orderId, status: data.status, filledQty, avgFillPrice, cummulativeQuoteQty, commissions }
 }
 
 // Binance rejects any order whose quantity isn't an exact multiple of the symbol's LOT_SIZE
