@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { runBacktest } from '../backtest/engine'
 import { pushRoutineReport } from './routineStore'
+import { schedulingSignature } from './schedulingSignature'
 import type { RoutineConfig } from '../../shared/ipc'
 
 const LOOKBACK_SEC = 90 * 24 * 3600 // matches BacktestPage's default 90-day window
@@ -22,7 +23,13 @@ export async function runRoutineNow(routine: RoutineConfig): Promise<void> {
 }
 
 /** Headless — mounted once in App.tsx so schedules keep firing regardless of which page is
- * active. Reads settings.routines and keeps one setInterval per enabled routine. */
+ * active. Reads settings.routines and keeps one setInterval per enabled routine.
+ *
+ * Intervals run from when this mounted, not from each routine's lastRunAt, so a routine only ever
+ * fires if the app stays open for a full period of it -- an hourly routine will not fire in a
+ * half-hour session, however long ago it last ran. That is a property of scheduling inside a
+ * desktop app that has to be running to do anything, and is left as is; the bug fixed here was
+ * the different one where the interval never got the chance to elapse at all. */
 const CONFIG_POLL_MS = 10_000
 
 export function RoutineScheduler(): null {
@@ -39,9 +46,12 @@ export function RoutineScheduler(): null {
       try {
         const settings = await window.api.settings.get()
         if (cancelled) return
-        const serialized = JSON.stringify(settings.routines)
-        if (serialized !== lastSerializedRef.current) {
-          lastSerializedRef.current = serialized
+        // Compared on scheduling fields only. Including lastRunAt here made every completed run
+        // look like a config edit, which rebuilt every routine's interval from zero and starved
+        // any routine slower than the fastest one -- see schedulingSignature.
+        const signature = schedulingSignature(settings.routines)
+        if (signature !== lastSerializedRef.current) {
+          lastSerializedRef.current = signature
           setRoutines(settings.routines)
         }
       } catch (error) {
