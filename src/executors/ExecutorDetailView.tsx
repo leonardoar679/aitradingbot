@@ -121,13 +121,18 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
     const newLines: IPriceLine[] = []
 
     if (sim.state) {
+    // Level lines are drawn in accent, not palette.grid. palette.grid is the colour of the
+    // chart's own background gridlines (see the grid config above), so a strategy level painted
+    // with it was indistinguishable from chart decoration -- on a Grid executor, where "where are
+    // my levels" is the entire reason to open this chart, none of them were visible. Filled stays
+    // green and a stop stays red, so the three states now read apart at a glance.
     if (sim.state.kind === 'grid') {
       const params = executor.params as GridExecutorParams
       for (const level of sim.state.levels) {
         newLines.push(
           series.createPriceLine({
             price: level.price,
-            color: level.status === 'filled' ? palette.up : palette.grid,
+            color: level.status === 'filled' ? palette.up : palette.accent,
             lineWidth: 1,
             lineStyle: LineStyle.Dotted,
             axisLabelVisible: false,
@@ -152,7 +157,7 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
         newLines.push(
           series.createPriceLine({
             price,
-            color: palette.grid,
+            color: palette.accent,
             lineWidth: 1,
             lineStyle: LineStyle.Dotted,
             axisLabelVisible: false,
@@ -293,7 +298,7 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
             newLines.push(
               series.createPriceLine({
                 price: dcaLevelPrice(executor.liveDcaBasePrice, level, params.side),
-                color: palette.grid,
+                color: palette.accent,
                 lineWidth: 1,
                 lineStyle: LineStyle.Dotted,
                 axisLabelVisible: false,
@@ -327,7 +332,7 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
         const params = executor.params as GridExecutorParams
         for (const price of buildGridLevels(params)) {
           newLines.push(
-            series.createPriceLine({ price, color: palette.grid, lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' })
+            series.createPriceLine({ price, color: palette.accent, lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' })
           )
         }
         const avgEntry = executor.liveExitResult?.entryPrice ?? liveLadderAvgEntry
@@ -382,7 +387,7 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
             newLines.push(
               series.createPriceLine({
                 price: params.limitPrice,
-                color: palette.grid,
+                color: palette.accent,
                 lineWidth: 1,
                 lineStyle: LineStyle.Dashed,
                 axisLabelVisible: true,
