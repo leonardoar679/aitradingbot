@@ -12,6 +12,7 @@ import {
 } from '../../services/liveTradingService'
 import { listOpenLivePositions, listClosedLivePositions, getLivePosition, recordLiveFill } from '../../services/livePositionsService'
 import { createLiveOrder, listOpenLiveOrders, resolveLiveOrder } from '../../services/liveOrdersService'
+import { singleFlight } from '../../services/singleFlight'
 import { executeLiveClose, cancelLiveOrderById, cancelSiblingLiveOrders, placeLiveMarketOrder } from '../../services/liveExecutionService'
 import {
   createWatcher,
@@ -115,9 +116,14 @@ export function registerLiveTradingHandlers(): void {
   // fate is discovered. No gate check: querying status is read-only and changes nothing.
   ipcMain.handle(
     IpcChannel.LiveTradingPollOpenOrders,
-    async (): Promise<
-      { executorId: string; liveOrderId: string; liveOrder: LiveOrderRecord; status: 'filled' | 'cancelled' | 'expired' }[]
-    > => {
+    // Guarded because this both resolves the order ledger and records the fill against the
+    // position. Two overlapping runs would each see the order still 'open' and each record the
+    // same real fill, doubling the tracked quantity and the daily cap usage. Guarded here rather
+    // than only at the caller so the ledger is safe from any caller.
+    singleFlight(
+      async (): Promise<
+        { executorId: string; liveOrderId: string; liveOrder: LiveOrderRecord; status: 'filled' | 'cancelled' | 'expired' }[]
+      > => {
       const open = await listOpenLiveOrders()
       const resolutions: { executorId: string; liveOrderId: string; liveOrder: LiveOrderRecord; status: 'filled' | 'cancelled' | 'expired' }[] =
         []
@@ -142,7 +148,9 @@ export function registerLiveTradingHandlers(): void {
         }
       }
       return resolutions
-    }
+      },
+      () => []
+    )
   )
 
   // Cancelling a resting order — deliberately ungated. Cancellation only ever reduces risk, so

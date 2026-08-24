@@ -194,8 +194,20 @@ export function LiveOrderScheduler(): null {
       }
     }
 
-    void poll()
-    const timer = setInterval(poll, POLL_MS)
+    // Matches the re-entry guard both main-process loops carry. poll() awaits a credential
+    // decrypt, endpoint resolution and a signed query per open order; an endpoint failover
+    // alone has been measured at a 10s connect timeout against this 5s interval.
+    let polling = false
+    const tick = (): void => {
+      if (polling) return
+      polling = true
+      void poll().finally(() => {
+        polling = false
+      })
+    }
+
+    tick()
+    const timer = setInterval(tick, POLL_MS)
     return () => {
       cancelled = true
       clearInterval(timer)
