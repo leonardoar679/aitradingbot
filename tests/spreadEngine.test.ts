@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { alignByTime, spreadPct, simulateXemm, simulateArbitrage } from '../src/executors/spreadEngine'
+import { spreadCaptureFee } from '../shared/fees'
 import type { Candle, XemmExecutorParams, ArbitrageExecutorParams } from '../shared/ipc'
 
 const c = (time: number, close: number): Candle => ({ time, open: close, high: close, low: close, close, volume: 0 })
@@ -44,6 +45,48 @@ describe('capture arming', () => {
 
   it('ignores a spread that never reaches the threshold', () => {
     expect(simulateXemm([{ time: 1, priceA: 100, priceB: 100.1 }], xemm(1)).captures).toHaveLength(0)
+  })
+})
+
+describe('capture profit', () => {
+  // These tests exercised only capture COUNTS. The profit on a capture could have the fee
+  // dropped entirely, and realizedPnl could overwrite instead of accumulate -- reporting the
+  // last capture as the total -- with the whole file still green.
+  const wide = { time: 1, priceA: 100, priceB: 105 }
+  const retreat = { time: 2, priceA: 100, priceB: 100.1 }
+  const twoCaptures = [wide, retreat, { ...wide, time: 3 }]
+
+  // A 5% spread on 1000 quote: 50 gross, less the fee on both legs of the same round trip.
+  const expectedPerCapture = 1000 * 0.05 - spreadCaptureFee(1000, 5)
+
+  it('charges both legs of a XEMM capture', () => {
+    const s = simulateXemm([wide], xemm(1))
+    expect(s.captures).toHaveLength(1)
+    expect(s.captures[0].profitQuote).toBeCloseTo(expectedPerCapture, 9)
+    expect(s.captures[0].profitQuote).toBeLessThan(50)
+  })
+
+  it('charges both legs of an arbitrage capture, on an inverted spread too', () => {
+    // Arbitrage profits either way, so the fee has to come off the absolute move as well.
+    const s = simulateArbitrage([{ time: 1, priceA: 100, priceB: 95 }], arb(1))
+    expect(s.captures).toHaveLength(1)
+    expect(s.captures[0].profitQuote).toBeCloseTo(expectedPerCapture, 9)
+  })
+
+  it('sums every capture into realized P&L, rather than reporting the last one', () => {
+    const s = simulateXemm(twoCaptures, xemm(1))
+    expect(s.captures).toHaveLength(2)
+    expect(s.realizedPnl).toBeCloseTo(expectedPerCapture * 2, 9)
+  })
+
+  it('sums arbitrage captures too', () => {
+    const s = simulateArbitrage(twoCaptures, arb(1))
+    expect(s.captures).toHaveLength(2)
+    expect(s.realizedPnl).toBeCloseTo(expectedPerCapture * 2, 9)
+  })
+
+  it('reports no profit at all when nothing was captured', () => {
+    expect(simulateXemm([retreat], xemm(1)).realizedPnl).toBe(0)
   })
 })
 
