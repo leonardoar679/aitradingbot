@@ -44,3 +44,40 @@ describe('grid stop price', () => {
     expect(state.stoppedAt).toBeNull()
   })
 })
+
+// tests/stopFills.test.ts already pins the BUY grid's stop fills, gap included. Everything below
+// is the sell side, which nothing covered: the P&L sign, the trigger direction, and the gap
+// adjustment are all behind an isBuy ternary, so buy-only tests leave all three unguarded.
+//
+// One level, so the numbers are checkable by hand: levels are [100, 105, 110] and each carries
+// 300/3 = 100 quote. The candle fills level 110, so qty = 100/110.
+const sell: GridExecutorParams = {
+  side: 'sell', startPrice: 100, endPrice: 110, totalAmountQuote: 300,
+  maxOpenOrders: 10, levelSpreadPct: 5, takeProfitPct: 50, limitPrice: 115
+}
+
+describe('grid stop price on a sell grid', () => {
+  it('triggers upward, and loses money doing it', () => {
+    // A sell grid is stopped out by a RISE, so the trigger reads candle.high, not candle.low.
+    const state = simulateGrid([
+      candle(1, 109, 111, 108, 110),
+      candle(2, 112, 116, 111, 115)
+    ], sell)
+
+    expect(state.stoppedAt).toBe(2)
+    expect(state.filledCount).toBe(0)
+    // gross (100/110) x (110 - 115) = -4.545..., fee (100/110) x (110 + 115) x 0.001 = 0.2045...
+    expect(state.realizedPnl).toBeCloseTo(-4.75, 6)
+  })
+
+  it('fills at the open when the candle gaps above the stop', () => {
+    // Opens at 118, past the 115 stop -- 115 was never available, and for a short the gap is
+    // upward. Reporting 115 here would understate the loss, same as it would for a long.
+    const state = simulateGrid([
+      candle(1, 109, 111, 108, 110),
+      candle(2, 118, 119, 117, 118)
+    ], sell)
+
+    expect(state.realizedPnl).toBeCloseTo(-7.48, 6)
+  })
+})
