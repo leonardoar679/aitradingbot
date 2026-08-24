@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createStreamSlot } from './streamSlot'
+import { createStreamSlot } from '../electron/services/streamSlot'
 
 /** A connect() whose resolution this test controls, so overlapping calls can be interleaved
  * deterministically instead of racing a real websocket. */

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { describeTickerProblem } from './tickerStatus'
+import { describeTickerProblem } from '../src/dashboard/tickerStatus'
 
 describe('describeTickerProblem', () => {
   it('says nothing while the first load is still in flight', () => {
