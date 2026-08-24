@@ -7,6 +7,7 @@ import { BacktestResultsView, type ResultsGeneralInfo } from './BacktestResultsV
 import { BacktestChartsView } from './BacktestChartsView'
 import { StrategyComparisonView } from './StrategyComparisonView'
 import { runBacktest, type BacktestResult } from './engine'
+import { describeRangeProblem, describeEmptyRange } from './rangeProblem'
 import { describeError } from '../utils/ipcError'
 import { STRATEGIES, DEFAULT_STRATEGY_ID, getStrategy } from './strategies'
 import { EXCHANGES, INTERVALS, type Candle, type Exchange, type Interval, type SymbolInfo } from '../../shared/ipc'
@@ -145,6 +146,15 @@ export function BacktestPage(): React.JSX.Element {
     const route = tradingRoute
     if (!route.symbol) return
 
+    // Checked before anything is fetched: a blank or backwards range fetches zero candles
+    // without erroring, and a zero-candle run still renders a complete results page.
+    const rangeProblem = describeRangeProblem({ startDate, endDate })
+    if (rangeProblem !== null) {
+      setTab('progress')
+      setRunState({ status: 'error', message: rangeProblem })
+      return
+    }
+
     const strategy = getStrategy(route.strategyId)
     const strategyLabel = strategy.name
     const symbolInfo = symbols.find((s) => s.symbol === route.symbol)
@@ -192,6 +202,12 @@ export function BacktestPage(): React.JSX.Element {
           return
         }
         log(`Fetch complete: ${fetchResult.candles.length.toLocaleString()} candles`)
+        const empty = describeEmptyRange({ candleCount: fetchResult.candles.length, startDate, endDate })
+        if (empty !== null) {
+          log(empty)
+          setRunState({ status: 'error', message: empty })
+          return
+        }
         log(`Running strategy: ${strategy.name} — ${strategy.description}`)
         const result = runBacktest(fetchResult.candles, route.strategyId)
         log(

@@ -466,7 +466,8 @@ function computeStats(
     avgWinLossRatio,
     winRatePct,
     longPct,
-    shortPct: 100 - longPct,
+    // Guarded like longPct above: 100 - 0 claimed '100% shorts' on a run with no trades.
+    shortPct: totalClosedTrades > 0 ? 100 - longPct : 0,
     avgHoldingSec,
     winningAvgHoldingSec,
     losingAvgHoldingSec,
