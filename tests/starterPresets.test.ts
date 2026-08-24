@@ -9,7 +9,8 @@ import {
 } from '../src/presets/starterPresets'
 import { runExecutorSimulation } from '../src/executors/engine'
 import { describeGridBoundsProblem } from '../src/executors/gridBounds'
-import type { Candle, DcaExecutorParams, GridExecutorParams, MarketMakingExecutorParams, PositionExecutorParams } from '../shared/ipc'
+import { EXCHANGES } from '../shared/ipc'
+import type { Candle, DcaExecutorParams, GridExecutorParams, MarketMakingExecutorParams, PositionExecutorParams, SpreadMarket } from '../shared/ipc'
 
 // These presets exist so someone who has never configured a bot is not handed a blank form. That
 // makes them the one place in the app where a bad default reaches a beginner directly, with no
@@ -210,6 +211,42 @@ describe('a preset refuses to build a dud', () => {
     for (const preset of STARTER_PRESETS) {
       if (preset.needsReferencePrice) continue
       expect(() => buildPresetExecutor(preset, { referencePrice: 0, now: T })).not.toThrow()
+    }
+  })
+})
+
+// Every venue writes the same pair differently -- BTCUSDT, BTC_KRW, KRW-BTC, btc_krw, BTC-KRW.
+// A preset naming a symbol its own exchange does not use still typechecks, still builds, and
+// still creates an executor; it just never fetches a candle. These presets all trade each
+// venue's default pair, so pinning them to the EXCHANGES table catches a swapped format.
+describe('every preset names a symbol its exchange actually uses', () => {
+  const defaultFor = (exchange: string): { symbol: string; baseAsset: string; quoteAsset: string } => {
+    const found = EXCHANGES.find((e) => e.id === exchange)
+    if (!found) throw new Error(`preset references unknown exchange ${exchange}`)
+    return found.defaultSymbol
+  }
+
+  it('uses the venue format for the single-market presets', () => {
+    for (const preset of STARTER_PRESETS) {
+      const expected = defaultFor(preset.exchange)
+      expect(preset.symbol, `${preset.id} on ${preset.exchange}`).toBe(expected.symbol)
+      expect(preset.baseAsset).toBe(expected.baseAsset)
+      expect(preset.quoteAsset).toBe(expected.quoteAsset)
+    }
+  })
+
+  it('uses the venue format on BOTH legs of the spread presets', () => {
+    for (const preset of STARTER_PRESETS) {
+      if (preset.type !== 'xemm' && preset.type !== 'arbitrage') continue
+      const params = preset.buildParams(REF) as { buyingMarket: SpreadMarket; sellingMarket: SpreadMarket }
+      for (const leg of [params.buyingMarket, params.sellingMarket]) {
+        const expected = defaultFor(leg.exchange)
+        expect(leg.symbol, `${preset.id} leg on ${leg.exchange}`).toBe(expected.symbol)
+      }
+      // The two legs must also agree on the asset, or the New Executor form would refuse it.
+      expect(params.buyingMarket.baseAsset).toBe(params.sellingMarket.baseAsset)
+      expect(params.buyingMarket.quoteAsset).toBe(params.sellingMarket.quoteAsset)
+      expect(params.buyingMarket.exchange).not.toBe(params.sellingMarket.exchange)
     }
   })
 })

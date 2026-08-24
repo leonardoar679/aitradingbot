@@ -57,7 +57,7 @@ const BINANCE = { exchange: 'binance' as Exchange, symbol: 'BTCUSDT', baseAsset:
 // (the "kimchi premium"), which is why they are the standard example for the two spread
 // strategies -- and why the repo already defaults its spread executors to exactly this pair.
 const BITHUMB = { exchange: 'bithumb' as Exchange, symbol: 'BTC_KRW', baseAsset: 'BTC', quoteAsset: 'KRW' }
-const UPBIT = { exchange: 'upbit' as Exchange, symbol: 'BTC-KRW', baseAsset: 'BTC', quoteAsset: 'KRW' }
+const UPBIT = { exchange: 'upbit' as Exchange, symbol: 'KRW-BTC', baseAsset: 'BTC', quoteAsset: 'KRW' }
 
 export const STARTER_PRESETS: StarterPreset[] = [
   {
