@@ -66,8 +66,10 @@ if (!gotSingleInstanceLock) {
     const mainWindow = createWindow()
     registerIpcHandlers(mainWindow)
     // Watches every real live Position, unattended, for a take-profit/stop-loss/trailing-stop/
-    // time-limit exit — main-process-resident, independent of any BrowserWindow, since this is
-    // what actually protects real money. See livePositionWatchersService.ts.
+    // time-limit exit — main-process-resident rather than driven by a renderer, so it does not
+    // depend on which page is open or whether the window has focus. It does NOT outlive the app:
+    // window-all-closed quits on Windows and Linux, which ends this loop while any resting order
+    // already placed stays live on the exchange. See livePositionWatchersService.ts.
     startLivePositionWatcherLoop()
     // Places the remaining slices of every live TWAP run on their configured interval, same
     // main-process-resident reasoning as the watcher loop above. See liveTwapService.ts.

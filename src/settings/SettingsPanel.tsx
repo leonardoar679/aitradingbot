@@ -253,7 +253,10 @@ export function SettingsPanel(): React.JSX.Element {
             in live mode, and only once armed from the live trading bar at the top of the app. Five executor types can
             be created live: <strong>Order, Position, DCA, TWAP and Grid</strong>. DCA and Grid place a real resting
             order per ladder level, and TWAP keeps placing timed market buys on its own schedule — those three keep
-            working without you watching. XEMM, Arbitrage and Market Making are always paper, as is every bot.
+            working <strong>while this app is open</strong>, without you watching it. Closing the app stops them: TWAP
+            places no further slices and automatic exits stop being checked, but any resting order already on Binance
+            stays live and can still fill. Live trading also has to be re-armed after every launch before an automatic
+            exit can fire. XEMM, Arbitrage and Market Making are always paper, as is every bot.
           </p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
