@@ -3,6 +3,7 @@ import { X, AlertTriangle } from 'lucide-react'
 import { ExchangeSelect } from '../components/ExchangeSelect'
 import { SymbolSearch } from '../components/SymbolSearch'
 import { GridForm } from './GridForm'
+import { describeGridBoundsProblem } from './gridBounds'
 import { DcaForm } from './DcaForm'
 import { TwapForm } from './TwapForm'
 import { PositionForm } from './PositionForm'
@@ -81,12 +82,15 @@ const DEFAULT_KEEP_POSITION: Record<ExecutorType, boolean> = {
 
 const SPREAD_TYPES: ExecutorType[] = ['xemm', 'arbitrage']
 
+/** With no price yet, the bounds are left at 0 -- which GridForm renders as an empty field --
+ * rather than derived from an invented one. `price ?? 100` produced a plausible-looking 95/105
+ * grid on any pair whose ticker had not arrived, and nothing downstream could tell that apart
+ * from bounds the user meant. */
 function defaultGridParams(price: number | null): GridExecutorParams {
-  const p = price ?? 100
   return {
     side: 'buy',
-    startPrice: Number((p * 0.95).toFixed(6)),
-    endPrice: Number((p * 1.05).toFixed(6)),
+    startPrice: price === null ? 0 : Number((price * 0.95).toFixed(6)),
+    endPrice: price === null ? 0 : Number((price * 1.05).toFixed(6)),
     totalAmountQuote: 1000,
     maxOpenOrders: 5,
     levelSpreadPct: 0.5,
@@ -160,6 +164,8 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
   const [lastPrice, setLastPrice] = useState<number | null>(null)
   const [keepPosition, setKeepPosition] = useState(DEFAULT_KEEP_POSITION.grid)
   const [gridParams, setGridParams] = useState<GridExecutorParams>(defaultGridParams(null))
+  const gridBounds = describeGridBoundsProblem({ startPrice: gridParams.startPrice, endPrice: gridParams.endPrice, lastPrice })
+  const gridBlocked = type === 'grid' && gridBounds.blocking !== null
   const [dcaParams, setDcaParams] = useState<DcaExecutorParams>(defaultDcaParams())
   const [twapParams, setTwapParams] = useState<TwapExecutorParams>(defaultTwapParams())
   const [positionParams, setPositionParams] = useState<PositionExecutorParams>(defaultPositionParams())
@@ -419,6 +425,18 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
 
           <div style={{ borderTop: '1px solid var(--border)', paddingTop: '0.9rem' }}>
             {type === 'grid' && <GridForm params={gridParams} onChange={setGridParams} />}
+            {type === 'grid' && (gridBounds.blocking ?? gridBounds.warning) !== null && (
+              <p
+                style={{
+                  margin: '0.5rem 0 0',
+                  fontSize: '0.72rem',
+                  lineHeight: 1.45,
+                  color: gridBounds.blocking !== null ? 'var(--down)' : 'var(--text-secondary)'
+                }}
+              >
+                {gridBounds.blocking ?? gridBounds.warning}
+              </p>
+            )}
             {type === 'dca' && <DcaForm params={dcaParams} onChange={setDcaParams} />}
             {type === 'twap' && <TwapForm params={twapParams} onChange={setTwapParams} />}
             {type === 'position' && <PositionForm params={positionParams} onChange={setPositionParams} />}
@@ -568,7 +586,8 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
           </button>
           <button
             onClick={handleCreate}
-            disabled={!name.trim() || !canSubmitLive || spreadAssetsMismatched}
+            disabled={!name.trim() || !canSubmitLive || spreadAssetsMismatched || gridBlocked}
+            title={gridBlocked ? (gridBounds.blocking ?? undefined) : undefined}
             style={{
               flex: 1,
               background: mode === 'live' ? 'var(--down)' : 'linear-gradient(135deg, #7c86ff, #6366f1)',
@@ -578,8 +597,8 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
               color: '#fff',
               fontSize: '0.85rem',
               fontWeight: 700,
-              cursor: name.trim() && canSubmitLive && !spreadAssetsMismatched ? 'pointer' : 'not-allowed',
-              opacity: name.trim() && canSubmitLive && !spreadAssetsMismatched ? 1 : 0.6
+              cursor: name.trim() && canSubmitLive && !spreadAssetsMismatched && !gridBlocked ? 'pointer' : 'not-allowed',
+              opacity: name.trim() && canSubmitLive && !spreadAssetsMismatched && !gridBlocked ? 1 : 0.6
             }}
           >
             {mode === 'live' ? (type === 'position' ? 'Enter Real Position' : 'Place Real Order') : 'Create Executor'}
