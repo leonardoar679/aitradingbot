@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import type { ExecutorConfig, DcaExecutorParams, GridExecutorParams } from '../../shared/ipc'
 import { describeError } from '../utils/ipcError'
+import { settingsWrites } from '../utils/settingsWrites'
 import { needsExitWatcherRetry, isFinished } from './liveExecutorState'
 
 /** Headless — mounted once in App.tsx, same tier as RoutineScheduler/ControllerScheduler.
@@ -186,9 +187,13 @@ export function LiveOrderScheduler(): null {
         }
 
         if (changed.size === 0) return
-        const fresh = await window.api.settings.get()
-        if (cancelled) return
-        await window.api.settings.set({ executors: fresh.executors.map((e) => changed.get(e.id) ?? e) })
+        // Read and write together on the shared queue: ExecutorsPage writes the same array, and
+        // a page write landing between this read and this write would drop these patches.
+        await settingsWrites(async () => {
+          const fresh = await window.api.settings.get()
+          if (cancelled) return
+          await window.api.settings.set({ executors: fresh.executors.map((e) => changed.get(e.id) ?? e) })
+        })
       } catch (error) {
         console.error('Failed to poll live orders/watchers:', error)
       }

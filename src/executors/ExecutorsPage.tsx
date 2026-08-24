@@ -8,6 +8,8 @@ import { ExecutorCard } from './ExecutorCard'
 import { ExecutorDetailView } from './ExecutorDetailView'
 import { SpreadExecutorDetailView } from './SpreadExecutorDetailView'
 import { handOverPositionOnStop } from './handOverPosition'
+import { mergeExecutorEdits } from './mergeExecutorEdits'
+import { settingsWrites } from '../utils/settingsWrites'
 import { describeError } from '../utils/ipcError'
 import { describeIncompleteStop } from './stopFailureMessage'
 import { dcaLevelPrice, twapNumOrders, buildGridLevels } from './engine'
@@ -74,10 +76,20 @@ export function ExecutorsPage(): React.JSX.Element {
     }
   }, [])
 
+  // Writes this page's own edits onto current storage rather than overwriting storage with the
+  // whole local array. LiveOrderScheduler patches settings.executors every 5s and this page only
+  // re-reads every 10s, so a wholesale write could revert a resolved order back to pending and
+  // forget an armed exit watcher -- on an executor the user never touched. Queued alongside the
+  // other settings writers so the read and the write cannot be split by one of them.
   useEffect(() => {
     if (!loadedRef.current) return
-    lastSerializedRef.current = JSON.stringify(executors)
-    void window.api.settings.set({ executors })
+    const previous = JSON.parse(lastSerializedRef.current) as ExecutorConfig[]
+    void settingsWrites(async () => {
+      const current = await window.api.settings.get()
+      const merged = mergeExecutorEdits({ previous, local: executors, fresh: current.executors })
+      lastSerializedRef.current = JSON.stringify(merged)
+      await window.api.settings.set({ executors: merged })
+    })
   }, [executors])
 
   // LiveOrderScheduler (mounted at the App level) can resolve a live limit order's fill/cancel
