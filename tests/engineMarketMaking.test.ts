@@ -34,6 +34,17 @@ describe('simulateMarketMaking', () => {
     expect(s.realizedPnl).toBeGreaterThan(0)
   })
 
+  it('books realized profit when a short is covered lower, not a loss', () => {
+    // The first candle clears the ask without reaching the bid, so inventory goes short from
+    // flat; the second drops through the new bid, covering part of it well below. Covering a
+    // short below its average cost is a gain. Every existing test here went long first, so
+    // the short-cover branch could have its sign reversed and the suite stayed green --
+    // a Market Making executor would then report a loss on exactly the trades it won.
+    const s = simulateMarketMaking([c(0, 100, 103, 100.1, 100), c(100, 100, 100.2, 94, 95)], params)
+    expect(s.inventoryBaseQty).toBeLessThan(0)
+    expect(s.realizedPnl).toBeGreaterThan(0)
+  })
+
   it('leaves the residual inventory a requote creates, rather than forcing flat', () => {
     // Standing quantity is orderAmountQuote / price, recomputed at every refresh -- so a sell
     // priced higher than the buy covers slightly less base than was bought, and a little long

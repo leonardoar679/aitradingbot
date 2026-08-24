@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { simulateTwap, simulateOrder, simulatePosition, simulateGrid, twapNumOrders, buildGridLevels } from '../src/executors/engine'
+import { FEE_RATE } from '../shared/fees'
 import type { Candle, TwapExecutorParams, OrderExecutorParams, PositionExecutorParams, GridExecutorParams } from '../shared/ipc'
 
 const c = (time: number, open: number, high: number, low: number, close: number): Candle => ({ time, open, high, low, close, volume: 0 })
@@ -128,5 +129,23 @@ describe('grid level construction and cycling', () => {
     const s = simulateGrid([c(1, 110, 110, 90, 95), c(2, 95, 130, 95, 128)], { ...params, maxOpenOrders: 1 })
     expect(s.closedLevels).toBeGreaterThanOrEqual(1)
     expect(s.realizedPnl).toBeGreaterThan(0)
+  })
+
+  it('takes the round-trip fee out of a take-profit close', () => {
+    // Asserting only "profit" let the fee be dropped entirely from this branch without any
+    // test noticing -- and take-profit is how a grid normally makes money, so every grid
+    // would have reported inflated realized P&L.
+    //
+    // The exact figure needs no reference to which level filled: gross is
+    // qty * (target - entry) where qty = amountPerLevel / entry and target = entry * (1 + tp),
+    // so entry cancels and gross is amountPerLevel * tp. The fee is charged on both sides of
+    // the same round trip, giving amountPerLevel * (2 + tp) * FEE_RATE.
+    const single = { ...params, maxOpenOrders: 1 }
+    const amountPerLevel = single.totalAmountQuote / buildGridLevels(single).length
+    const tp = single.takeProfitPct / 100
+
+    const s = simulateGrid([c(1, 110, 110, 90, 95), c(2, 95, 130, 95, 128)], single)
+    expect(s.closedLevels).toBe(1)
+    expect(s.realizedPnl).toBeCloseTo(amountPerLevel * tp - amountPerLevel * (2 + tp) * FEE_RATE, 9)
   })
 })
