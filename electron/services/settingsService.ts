@@ -11,7 +11,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   executors: [],
   routines: [],
   heldPositions: [],
-  controllers: []
+  controllers: [],
+  paperAccount: null
 }
 
 let cache: AppSettings | null = null

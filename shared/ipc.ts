@@ -46,6 +46,40 @@ export const IpcChannel = {
 
 export type IpcChannel = (typeof IpcChannel)[keyof typeof IpcChannel]
 
+/** One movement of money in or out of the paper account.
+ *
+ * The account's balances are authoritative; this exists so a balance can be EXPLAINED rather than
+ * only asserted. "Why do I have 9,400 USDT when I funded 10,000" has an answer here. */
+export interface AccountLedgerEntry {
+  id: string
+  at: number
+  asset: string
+  /** Negative when money leaves the free balance (funding an executor), positive when it comes
+   * back (an executor stopping, or its profit landing). */
+  delta: number
+  reason: 'fund' | 'allocate' | 'release' | 'adjust' | 'reset'
+  /** The executor this movement belongs to, when there is one. */
+  executorId: string | null
+  note: string
+}
+
+/** The simulated account behind paper trading -- the thing that makes "input asset type and
+ * balance, then start trading" mean something.
+ *
+ * Before this existed, every paper executor invented its own money: two executors could each
+ * commit 10,000 USDT with nothing anywhere recording that you only ever had 10,000. Balances here
+ * are FREE funds only. Money committed to a running executor has left the balance, exactly as it
+ * would if you had moved it into a strategy, and comes back when that executor stops. */
+export interface PaperAccount {
+  /** asset -> free amount. Absent means zero. */
+  balances: Record<string, number>
+  /** What was funded, kept separately so performance can be measured against the starting point
+   * rather than against a number that moves every time an executor opens. */
+  initialBalances: Record<string, number>
+  createdAt: number
+  ledger: AccountLedgerEntry[]
+}
+
 export interface AppSettings {
   theme: 'dark' | 'light' | 'colorblind'
   bots: Bot[]
@@ -54,6 +88,10 @@ export interface AppSettings {
   routines: RoutineConfig[]
   heldPositions: HeldPosition[]
   controllers: ControllerConfig[]
+  /** Null until the user sets up a paper account. Null is not the same as an empty account: it
+   * means "never configured", which is what lets the UI offer setup instead of reporting a
+   * balance of zero as though it were a fact. */
+  paperAccount: PaperAccount | null
 }
 
 /** Status of a stored exchange API credential. Crosses IPC — never the raw key/secret, which
