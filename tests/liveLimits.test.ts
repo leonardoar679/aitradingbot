@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { clampLiveLimit, loadedLiveLimit, describeUnusableOrderSize } from '../shared/liveLimits'
+import { clampLiveLimit, loadedLiveLimit, describeUnusableOrderSize, describeUntrustedLossTally } from '../shared/liveLimits'
 
 describe('clampLiveLimit', () => {
   it('keeps an ordinary value', () => {
@@ -101,5 +101,29 @@ describe('describeUnusableOrderSize', () => {
   it('reports the offending value so the reason is not a mystery', () => {
     expect(describeUnusableOrderSize(-5)).toContain('-5')
     expect(describeUnusableOrderSize(NaN)).toContain('NaN')
+  })
+})
+
+describe('describeUntrustedLossTally', () => {
+  it('trusts an ordinary tally, profit or loss or flat', () => {
+    expect(describeUntrustedLossTally(-17)).toBeNull()
+    expect(describeUntrustedLossTally(0)).toBeNull()
+    expect(describeUntrustedLossTally(42.5)).toBeNull()
+  })
+
+  it('refuses a tally that could not be totalled', () => {
+    // The limit is `realizedPnlToday <= -dailyLossLimitQuote`, false for NaN -- so one unusable
+    // realized event does not skew the limit, it switches it off for the rest of the day.
+    const reason = describeUntrustedLossTally(NaN)
+    expect(reason).not.toBeNull()
+    expect(reason).toContain('daily loss limit cannot be enforced')
+    expect(reason).toContain('blocked')
+  })
+
+  it('refuses an infinite tally in both directions', () => {
+    // -Infinity happens to block via the `<=` test, but only by accident, and +Infinity does not
+    // block at all. Neither is a number this gate should be reasoning about.
+    expect(describeUntrustedLossTally(Infinity)).not.toBeNull()
+    expect(describeUntrustedLossTally(-Infinity)).not.toBeNull()
   })
 })

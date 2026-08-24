@@ -106,6 +106,23 @@ export async function recordLiveFill(
   avgFillPrice: number,
   commissions?: Commissions
 ): Promise<LivePosition | null> {
+  // This ledger feeds the daily realized-loss gate, and that gate is a `<=` comparison -- false
+  // for NaN. A single unusable fill quantity or price would not skew the limit, it would switch
+  // it off (and the auto-disarm with it) for the rest of the day, then vanish on restart because
+  // JSON stores NaN as null and null sums as zero. The fill numbers arrive from Number() over an
+  // exchange response field, so nothing upstream guarantees they are usable.
+  //
+  // Refusing here means the caller sees an error for an order that really did execute, which is
+  // why the message says so: an untracked real fill the user can reconcile is recoverable, a
+  // silently disabled loss limit is not.
+  if (!Number.isFinite(filledQty) || filledQty < 0 || !Number.isFinite(avgFillPrice) || avgFillPrice < 0) {
+    throw new Error(
+      `The ${side} order on ${symbol} executed on the exchange, but came back with an unusable ` +
+        `quantity (${filledQty}) or price (${avgFillPrice}), so it was not recorded. Check the ` +
+        `position on the exchange directly — this app's live ledger does not include it.`
+    )
+  }
+
   const state = await load()
   const now = Math.floor(Date.now() / 1000)
 

@@ -3,7 +3,7 @@ import { join } from 'path'
 import { readFile, mkdir } from 'fs/promises'
 import { writeJsonAtomic } from './atomicWrite'
 import { getRealizedPnlToday, getLastObservedFeeRate } from './livePositionsService'
-import { clampLiveLimit, loadedLiveLimit, describeUnusableOrderSize } from '../../shared/liveLimits'
+import { clampLiveLimit, loadedLiveLimit, describeUnusableOrderSize, describeUntrustedLossTally } from '../../shared/liveLimits'
 
 // Safety state for real order placement — deliberately its own file, separate from
 // settings.json and credentials.json, so a bug in either of those can never weaken a gate here.
@@ -179,6 +179,8 @@ export async function canPlaceLiveOrder(quoteAmount: number): Promise<LiveOrderG
   const usedToday = usageForToday(state)
   if (usedToday + quoteAmount > state.dailyCapQuote) return { allowed: false, reason: `Order would exceed today's live trading cap (${state.dailyCapQuote})` }
   const realizedPnlToday = await getRealizedPnlToday()
+  const untrustedTally = describeUntrustedLossTally(realizedPnlToday)
+  if (untrustedTally !== null) return { allowed: false, reason: untrustedTally }
   if (realizedPnlToday <= -state.dailyLossLimitQuote) {
     return { allowed: false, reason: `Daily loss limit reached (${state.dailyLossLimitQuote}) — live trading is disarmed for today` }
   }
@@ -233,7 +235,9 @@ export async function recordLiveOrderUsage(quoteAmount: number, reservedAtSec?: 
 export async function checkLossLimitAndAutoDisarm(): Promise<void> {
   const state = await load()
   const realizedPnlToday = await getRealizedPnlToday()
-  if (realizedPnlToday <= -state.dailyLossLimitQuote) {
+  // A tally that cannot be totalled disarms too: the auto-shutoff shares the loss limit's `<=`
+  // comparison, so without this a poisoned ledger would silently switch off the shutoff as well.
+  if (describeUntrustedLossTally(realizedPnlToday) !== null || realizedPnlToday <= -state.dailyLossLimitQuote) {
     sessionArmed = false
   }
 }

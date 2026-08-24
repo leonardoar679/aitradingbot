@@ -61,3 +61,18 @@ export function describeUnusableOrderSize(quoteAmount: number): string | null {
   }
   return null
 }
+
+/** Why today's realized-P&L tally cannot be trusted to enforce the daily loss limit, or null if
+ * it can.
+ *
+ * The limit is checked as `realizedPnlToday <= -dailyLossLimitQuote`, which is false for NaN --
+ * so a single unusable number anywhere in the day's realized events does not skew the limit, it
+ * switches it off, along with the auto-disarm that shares the same comparison. Same shape as
+ * describeUnusableOrderSize: a `<=` test cannot be relied on to reject its own bad input.
+ *
+ * Failing closed is the right direction here. A loss limit exists to stop trading after a bad
+ * day; if the app cannot work out how bad the day was, not trading is the safe answer. */
+export function describeUntrustedLossTally(realizedPnlToday: number): string | null {
+  if (Number.isFinite(realizedPnlToday)) return null
+  return `Today's realized P&L could not be totalled (${realizedPnlToday}), so the daily loss limit cannot be enforced — live orders are blocked until this is resolved`
+}
