@@ -1,0 +1,286 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ExecutorConfig } from '../shared/ipc'
+
+// computePortfolioSnapshot produces every number on the landing page -- the one screen a new user
+// is guaranteed to see. It had no tests at all: the existing portfolio test file imports only its
+// type. Thirteen mutations of it, including inverting a short's value and blending real money
+// with paper money into one row, all left the suite green.
+
+const positions = new Map<string, { side: 'buy' | 'sell'; entryPrice: number; amountQuote: number } | null>()
+const throwingExecutors = new Set<string>()
+
+vi.mock('../src/executors/computeSnapshot', () => ({
+  computeExecutorPosition: async (executor: ExecutorConfig) => {
+    if (throwingExecutors.has(executor.id)) throw new Error('boom')
+    return positions.get(executor.id) ?? null
+  }
+}))
+
+const botTrades = new Map<string, number[] | null>()
+
+vi.mock('../src/bots/useDryRun', () => ({
+  fetchBotDryRunResult: async (bot: { id: string }) => {
+    const t = botTrades.get(bot.id)
+    if (t === null || t === undefined) throw new Error('dry run failed')
+    return { result: { trades: t } }
+  },
+  summarizePaperTrades: (trades: number[]) => ({
+    paperTrades: trades,
+    paperWins: 0,
+    paperNetPct: trades.length > 0 ? trades[0] : 0
+  })
+}))
+
+const { computePortfolioSnapshot } = await import('../src/portfolio/computePortfolioSnapshot')
+
+const executor = (id: string, over: Partial<ExecutorConfig> = {}): ExecutorConfig =>
+  ({
+    id,
+    name: id,
+    type: 'position',
+    exchange: 'binance',
+    symbol: 'BTCUSDT',
+    baseAsset: 'BTC',
+    quoteAsset: 'USDT',
+    status: 'active',
+    mode: 'paper',
+    ...over
+  }) as ExecutorConfig
+
+let settings: { executors: ExecutorConfig[]; bots: unknown[]; heldPositions: unknown[] }
+let livePositions: unknown[]
+let prices: Record<string, number>
+
+function install(): void {
+  ;(globalThis as unknown as { window: unknown }).window = {
+    api: {
+      settings: { get: async () => settings },
+      liveTrading: { listPositions: async () => livePositions },
+      market: {
+        fetchTicker24h: async (exchange: string, symbol: string) => {
+          const p = prices[`${exchange}:${symbol}`]
+          if (p === undefined) throw new Error('no price')
+          return { lastPrice: p }
+        }
+      }
+    }
+  }
+}
+
+beforeEach(() => {
+  positions.clear()
+  throwingExecutors.clear()
+  botTrades.clear()
+  settings = { executors: [], bots: [], heldPositions: [] }
+  livePositions = []
+  prices = {}
+  install()
+})
+
+describe('computePortfolioSnapshot values a position', () => {
+  beforeEach(() => {
+    prices = { 'binance:BTCUSDT': 110, 'binance:ETHUSDT': 110 }
+  })
+
+  it('marks a long up when price rises', async () => {
+    settings.executors = [executor('long')]
+    positions.set('long', { side: 'buy', entryPrice: 100, amountQuote: 1000 })
+
+    const snap = await computePortfolioSnapshot()
+    // +10% on 1000.
+    expect(snap.totalValue).toBeCloseTo(1100, 10)
+  })
+
+  it('marks a short DOWN on the same move', async () => {
+    // The whole point of a short. Reading it as a long reports a 10% gain on a losing position.
+    settings.executors = [executor('short', { symbol: 'ETHUSDT', baseAsset: 'ETH' })]
+    positions.set('short', { side: 'sell', entryPrice: 100, amountQuote: 1000 })
+
+    const snap = await computePortfolioSnapshot()
+    expect(snap.totalValue).toBeCloseTo(900, 10)
+  })
+})
+
+describe('computePortfolioSnapshot keeps real money separate', () => {
+  it('never merges a live row into a paper row for the same asset', async () => {
+    // Blending these would show someone a single BTC number mixing money they actually have with
+    // money they do not.
+    prices = { 'binance:BTCUSDT': 110 }
+    livePositions = [{ exchange: 'binance', symbol: 'BTCUSDT', qty: 2, baseAsset: 'BTC', quoteAsset: 'USDT' }]
+    settings.executors = [executor('paper')]
+    positions.set('paper', { side: 'buy', entryPrice: 100, amountQuote: 1000 })
+
+    const snap = await computePortfolioSnapshot()
+
+    expect(snap.holdings).toHaveLength(2)
+    const live = snap.holdings.find((h) => h.isLive)
+    const paper = snap.holdings.find((h) => !h.isLive)
+    expect(live?.value).toBeCloseTo(220, 10)
+    expect(paper?.value).toBeCloseTo(1100, 10)
+  })
+
+  it('never merges two currencies into one row, or into the dollar total', async () => {
+    // There is no exchange-rate table in this app, so a KRW holding summed into a dollar figure
+    // would be off by roughly a thousandfold.
+    prices = { 'binance:BTCUSDT': 110, 'bithumb:BTC_KRW': 110 }
+    settings.executors = [executor('usd')]
+    positions.set('usd', { side: 'buy', entryPrice: 100, amountQuote: 1000 })
+    settings.heldPositions = [
+      { exchange: 'bithumb', symbol: 'BTC_KRW', baseAsset: 'BTC', quoteAsset: 'KRW', entryPrice: 100, amountQuote: 1000, side: 'buy' }
+    ]
+
+    const snap = await computePortfolioSnapshot()
+
+    expect(snap.holdings).toHaveLength(2)
+    expect(snap.totalValue).toBeCloseTo(1100, 10)
+    expect(snap.holdings.map((h) => h.quoteAsset)).toEqual(['USDT', 'KRW'])
+  })
+
+  it('ranks dollar rows first even when another currency has a bigger raw number', async () => {
+    // 800000 KRW is worth far less than 5000 USDT, so sorting on the raw number puts it on top.
+    prices = { 'binance:BTCUSDT': 100, 'bithumb:BTC_KRW': 100 }
+    settings.executors = [executor('usd')]
+    positions.set('usd', { side: 'buy', entryPrice: 100, amountQuote: 5000 })
+    settings.heldPositions = [
+      { exchange: 'bithumb', symbol: 'BTC_KRW', baseAsset: 'BTC', quoteAsset: 'KRW', entryPrice: 100, amountQuote: 800_000, side: 'buy' }
+    ]
+
+    const snap = await computePortfolioSnapshot()
+
+    expect(snap.holdings[0].quoteAsset).toBe('USDT')
+    expect(snap.holdings[0].value).toBeCloseTo(5000, 10)
+  })
+})
+
+describe('computePortfolioSnapshot picks the right executors', () => {
+  it('does not replay a live executor as a paper position', async () => {
+    // A live executor has its own real ledger; simulating it here would double-count it.
+    prices = { 'binance:BTCUSDT': 110 }
+    settings.executors = [executor('live-one', { mode: 'live' })]
+    positions.set('live-one', { side: 'buy', entryPrice: 100, amountQuote: 1000 })
+
+    const snap = await computePortfolioSnapshot()
+
+    expect(snap.holdings).toHaveLength(0)
+    expect(snap.totalValue).toBe(0)
+    // Still counted as running, though -- it is active.
+    expect(snap.activeExecutorCount).toBe(1)
+  })
+
+  it('ignores stopped executors entirely', async () => {
+    prices = { 'binance:BTCUSDT': 110 }
+    settings.executors = [executor('stopped', { status: 'stopped' })]
+    positions.set('stopped', { side: 'buy', entryPrice: 100, amountQuote: 1000 })
+
+    const snap = await computePortfolioSnapshot()
+
+    expect(snap.activeExecutorCount).toBe(0)
+    expect(snap.holdings).toHaveLength(0)
+  })
+})
+
+describe('computePortfolioSnapshot admits what is missing', () => {
+  it('reports a position it could not price instead of quietly shrinking the total', async () => {
+    // Every one of these used to just `continue`, so the headline number got smaller and nothing
+    // said why.
+    prices = {}
+    settings.executors = [executor('unpriced')]
+    positions.set('unpriced', { side: 'buy', entryPrice: 100, amountQuote: 1000 })
+
+    const snap = await computePortfolioSnapshot()
+
+    expect(snap.totalValue).toBe(0)
+    expect(snap.unavailable.unpricedPositions).toBe(1)
+  })
+
+  it('reports an executor whose position could not be computed', async () => {
+    prices = { 'binance:BTCUSDT': 110 }
+    settings.executors = [executor('broken')]
+    throwingExecutors.add('broken')
+
+    const snap = await computePortfolioSnapshot()
+
+    expect(snap.unavailable.failedExecutors).toBe(1)
+  })
+
+  it('reports a bot whose dry run failed', async () => {
+    settings.bots = [{ id: 'bad', enabled: true, enabledAt: 1 }]
+    botTrades.set('bad', null)
+
+    const snap = await computePortfolioSnapshot()
+
+    expect(snap.unavailable.failedBots).toBe(1)
+    expect(snap.botsAggregatePct).toBeNull()
+  })
+})
+
+describe('computePortfolioSnapshot averages bots honestly', () => {
+  it('returns null, not 0%, when no enabled bot has traded yet', async () => {
+    // 0% reads as "tried and broke even". Null is "has not traded", and the page says so.
+    settings.bots = [{ id: 'quiet', enabled: true, enabledAt: 1 }]
+    botTrades.set('quiet', [])
+
+    const snap = await computePortfolioSnapshot()
+
+    expect(snap.botsAggregatePct).toBeNull()
+  })
+
+  it('averages only the bots that actually traded', async () => {
+    settings.bots = [
+      { id: 'traded', enabled: true, enabledAt: 1 },
+      { id: 'quiet', enabled: true, enabledAt: 1 },
+      { id: 'off', enabled: false, enabledAt: 1 }
+    ]
+    botTrades.set('traded', [10])
+    botTrades.set('quiet', [])
+    botTrades.set('off', [999])
+
+    const snap = await computePortfolioSnapshot()
+
+    // A bot with no trades must not drag the average toward zero, and a disabled one is not
+    // fetched at all.
+    expect(snap.botsAggregatePct).toBeCloseTo(10, 10)
+  })
+})
+
+// There are three separate "could not price this" branches -- live positions, paper executors,
+// and handed-over held positions -- each with its own copy of the counter. Mutating any one of
+// them must fail, so each needs its own case; covering one branch leaves the other two free to
+// drop a position silently.
+describe('computePortfolioSnapshot reports an unpriced position from every source', () => {
+  it('counts a live position it could not price', async () => {
+    prices = {}
+    livePositions = [{ exchange: 'binance', symbol: 'BTCUSDT', qty: 2, baseAsset: 'BTC', quoteAsset: 'USDT' }]
+
+    const snap = await computePortfolioSnapshot()
+
+    expect(snap.holdings).toHaveLength(0)
+    expect(snap.unavailable.unpricedPositions).toBe(1)
+  })
+
+  it('counts a held position it could not price', async () => {
+    prices = {}
+    settings.heldPositions = [
+      { exchange: 'bithumb', symbol: 'BTC_KRW', baseAsset: 'BTC', quoteAsset: 'KRW', entryPrice: 100, amountQuote: 1000, side: 'buy' }
+    ]
+
+    const snap = await computePortfolioSnapshot()
+
+    expect(snap.unavailable.unpricedPositions).toBe(1)
+  })
+
+  it('adds up unpriced positions across all three sources', async () => {
+    prices = {}
+    livePositions = [{ exchange: 'binance', symbol: 'BTCUSDT', qty: 2, baseAsset: 'BTC', quoteAsset: 'USDT' }]
+    settings.executors = [executor('paper', { symbol: 'ETHUSDT', baseAsset: 'ETH' })]
+    positions.set('paper', { side: 'buy', entryPrice: 100, amountQuote: 1000 })
+    settings.heldPositions = [
+      { exchange: 'bithumb', symbol: 'BTC_KRW', baseAsset: 'BTC', quoteAsset: 'KRW', entryPrice: 100, amountQuote: 1000, side: 'buy' }
+    ]
+
+    const snap = await computePortfolioSnapshot()
+
+    expect(snap.unavailable.unpricedPositions).toBe(3)
+    expect(snap.totalValue).toBe(0)
+  })
+})
