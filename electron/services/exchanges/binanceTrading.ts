@@ -201,7 +201,14 @@ export function stepPrecision(step: string): number {
 export function floorToStep(value: number, step: string): string {
   const precision = stepPrecision(step)
   const stepNum = Number(step)
-  if (!(stepNum > 0)) return value.toFixed(precision)
+  // An unusable step (the exchange returned "0", an empty string, or something unparseable)
+  // must not reach `value / stepNum` -- that yields NaN, and "NaN" is what would then be sent
+  // as the order quantity. Falling back to plain toFixed was the wrong way out of it: toFixed
+  // ROUNDS, so a 1.5 quantity with no usable step became "2", which is precisely the
+  // rounded-up-past-the-balance case this function exists to avoid. Floor to the precision
+  // instead, so the fallback still honours the rule the rest of the function follows.
+  const factor = 10 ** precision
+  if (!(stepNum > 0)) return (Math.floor(value * factor) / factor).toFixed(precision)
   const floored = Math.floor(value / stepNum) * stepNum
   return floored.toFixed(precision)
 }

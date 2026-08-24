@@ -45,3 +45,35 @@ describe('binance step/tick rounding', () => {
     expect(Number(floorToStep(0.000004, '0.00001000'))).toBe(0)
   })
 })
+
+describe('floorToStep with an unusable step', () => {
+  // getSymbolFilters takes stepSize straight from the exchange response. A "0", an empty string
+  // or anything unparseable makes `value / stepNum` NaN, and "NaN" would go out as the order
+  // quantity. The guard against that used plain toFixed, which rounds -- so it produced a
+  // quantity LARGER than asked for, the one direction this function promises never to go.
+  for (const step of ['0', '', 'abc', 'null']) {
+    it(`floors rather than rounds when the step is ${JSON.stringify(step)}`, () => {
+      expect(Number(floorToStep(1.5, step))).toBeLessThanOrEqual(1.5)
+      expect(Number(floorToStep(1.9, step))).toBeLessThanOrEqual(1.9)
+    })
+
+    it(`never emits NaN when the step is ${JSON.stringify(step)}`, () => {
+      expect(Number.isFinite(Number(floorToStep(1.5, step)))).toBe(true)
+    })
+  }
+
+  it('keeps flooring a usable step, unchanged', () => {
+    expect(floorToStep(1.5009, '0.00100000')).toBe('1.500')
+    expect(Number(floorToStep(1.5009, '0.00100000'))).toBeLessThanOrEqual(1.5009)
+  })
+
+  it('never exceeds the requested quantity for any step it is given', () => {
+    // The property that matters when closing: selling more than is held is rejected outright,
+    // leaving a position the user is trying to exit stuck open.
+    for (const step of ['0.00000001', '0.001', '1.00000000', '0', '', 'abc']) {
+      for (const qty of [0.9, 1.5, 1.999, 123.456]) {
+        expect(Number(floorToStep(qty, step))).toBeLessThanOrEqual(qty)
+      }
+    }
+  })
+})
