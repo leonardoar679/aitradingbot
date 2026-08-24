@@ -6,6 +6,8 @@ import { EquityCurveChart } from '../components/EquityCurveChart'
 import { computeExecutorPnl } from '../executors/computeSnapshot'
 import { useControllerSnapshots } from './controllerStore'
 import { runControllerSnapshotNow } from './ControllerScheduler'
+import { settingsWrites } from '../utils/settingsWrites'
+import { mergeLocalEdits } from '../utils/mergeLocalEdits'
 import type { ControllerConfig, ExecutorConfig } from '../../shared/ipc'
 
 function fieldLabelStyle(): React.CSSProperties {
@@ -202,6 +204,8 @@ export function ControllersPage(): React.JSX.Element {
   const [runningId, setRunningId] = useState<string | null>(null)
   const [runError, setRunError] = useState<{ id: string; message: string } | null>(null)
   const loadedRef = useRef(false)
+  // What this page last knew storage to be. Anything differing from it is an edit made here.
+  const previousRef = useRef<ControllerConfig[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -209,6 +213,7 @@ export function ControllersPage(): React.JSX.Element {
       if (cancelled) return
       setControllers(settings.controllers)
       setExecutors(settings.executors)
+      previousRef.current = settings.controllers
       loadedRef.current = true
     })
     return () => {
@@ -216,9 +221,19 @@ export function ControllersPage(): React.JSX.Element {
     }
   }, [])
 
+  // ControllerScheduler flips a controller to stopped when its risk controls breach, and this
+  // page loads once at mount and never re-reads -- so its copy is stale for the rest of the
+  // session. Writing that copy wholesale reverted the breach stop. Writes this page's own edits
+  // onto current storage instead, queued with the other settings writers.
   useEffect(() => {
     if (!loadedRef.current) return
-    void window.api.settings.set({ controllers })
+    const previous = previousRef.current
+    void settingsWrites(async () => {
+      const current = await window.api.settings.get()
+      const merged = mergeLocalEdits({ previous, local: controllers, fresh: current.controllers })
+      previousRef.current = merged
+      await window.api.settings.set({ controllers: merged })
+    })
   }, [controllers])
 
   function handleCreate(controller: ControllerConfig): void {

@@ -4,6 +4,7 @@ import { Card } from '../components/Card'
 import { BotPositionRow } from './BotPositionRow'
 import { HeldPositionRow } from './HeldPositionRow'
 import { describeError } from '../utils/ipcError'
+import { settingsWrites } from '../utils/settingsWrites'
 import { LivePositionRow } from './LivePositionRow'
 import { LiveHistoryRow } from './LiveHistoryRow'
 import type { Bot } from '../bots/types'
@@ -89,9 +90,14 @@ export function PositionsPage(): React.JSX.Element {
     void (async () => {
       setHeldError(null)
       try {
-        const fresh = await window.api.settings.get()
-        const next = fresh.heldPositions.filter((p) => p.id !== id)
-        await window.api.settings.set({ heldPositions: next })
+        // Queued: re-reading before the write narrows the gap but does not close it, and a
+        // handover landing inside it would be erased by this removal.
+        const next = await settingsWrites(async () => {
+          const fresh = await window.api.settings.get()
+          const remaining = fresh.heldPositions.filter((p) => p.id !== id)
+          await window.api.settings.set({ heldPositions: remaining })
+          return remaining
+        })
         setHeldPositions(next)
       } catch (error) {
         console.error('Failed to close held position:', error)

@@ -12,7 +12,7 @@
  * Anything differing from it is an edit the page made and must win; anything identical to it the
  * page did not touch, so the fresh copy wins. That distinction is the whole fix: it is what lets
  * one page's edit stop meaning "everything I am not currently looking at reverts". */
-export function mergeExecutorEdits<T extends { id: string }>({
+export function mergeLocalEdits<T extends { id: string }>({
   previous,
   local,
   fresh

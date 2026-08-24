@@ -8,7 +8,7 @@ import { ExecutorCard } from './ExecutorCard'
 import { ExecutorDetailView } from './ExecutorDetailView'
 import { SpreadExecutorDetailView } from './SpreadExecutorDetailView'
 import { handOverPositionOnStop } from './handOverPosition'
-import { mergeExecutorEdits } from './mergeExecutorEdits'
+import { mergeLocalEdits } from '../utils/mergeLocalEdits'
 import { settingsWrites } from '../utils/settingsWrites'
 import { describeError } from '../utils/ipcError'
 import { describeIncompleteStop } from './stopFailureMessage'
@@ -86,7 +86,7 @@ export function ExecutorsPage(): React.JSX.Element {
     const previous = JSON.parse(lastSerializedRef.current) as ExecutorConfig[]
     void settingsWrites(async () => {
       const current = await window.api.settings.get()
-      const merged = mergeExecutorEdits({ previous, local: executors, fresh: current.executors })
+      const merged = mergeLocalEdits({ previous, local: executors, fresh: current.executors })
       lastSerializedRef.current = JSON.stringify(merged)
       await window.api.settings.set({ executors: merged })
     })

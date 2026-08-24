@@ -8,6 +8,7 @@ import { EquityCurveChart } from '../components/EquityCurveChart'
 import { useRoutineReports } from './routineStore'
 import { runRoutineNow } from './RoutineScheduler'
 import { SCHEDULE_PRESETS } from './types'
+import { settingsWrites } from '../utils/settingsWrites'
 import { STRATEGIES, DEFAULT_STRATEGY_ID } from '../backtest/strategies'
 import { EXCHANGES, INTERVALS, DEFAULT_INTERVAL, type Exchange, type SymbolInfo, type Interval, type RoutineConfig } from '../../shared/ipc'
 
@@ -235,16 +236,17 @@ export function RoutinesPage(): React.JSX.Element {
 
   useEffect(() => {
     if (!loadedRef.current) return
-    void (async () => {
-      // lastRunAt is also written independently by RoutineScheduler's background timer -- re-read
-      // fresh settings and carry that field over instead of trusting this component's possibly-stale
-      // local copy, or an unrelated edit here (e.g. toggling a different routine) can silently
-      // revert a scheduled run's timestamp.
+    // lastRunAt is also written independently by RoutineScheduler's background timer -- re-read
+    // fresh settings and carry that field over instead of trusting this component's possibly-stale
+    // local copy, or an unrelated edit here (e.g. toggling a different routine) can silently
+    // revert a scheduled run's timestamp. Queued as well as re-read, so the scheduler cannot
+    // write in between this read and this write.
+    void settingsWrites(async () => {
       const fresh = await window.api.settings.get()
       const freshLastRunAt = new Map(fresh.routines.map((r) => [r.id, r.lastRunAt]))
       const merged = routines.map((r) => ({ ...r, lastRunAt: freshLastRunAt.get(r.id) ?? r.lastRunAt }))
       await window.api.settings.set({ routines: merged })
-    })()
+    })
   }, [routines])
 
   function handleCreate(routine: RoutineConfig): void {

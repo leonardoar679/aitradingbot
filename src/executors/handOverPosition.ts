@@ -1,5 +1,6 @@
 import type { ExecutorConfig, HeldPosition } from '../../shared/ipc'
 import { computeExecutorPosition } from './computeSnapshot'
+import { settingsWrites } from '../utils/settingsWrites'
 
 /** Moves an executor's still-open paper position into Inventory when it stops, honouring the
  * executor's "Keep position when stopped (hand over to Inventory)" checkbox.
@@ -22,7 +23,6 @@ export async function handOverPositionOnStop(executor: ExecutorConfig): Promise<
   const position = await computeExecutorPosition(executor)
   if (!position) return false
 
-  const settings = await window.api.settings.get()
   const held: HeldPosition = {
     id: crypto.randomUUID(),
     sourceExecutorId: executor.id,
@@ -36,6 +36,11 @@ export async function handOverPositionOnStop(executor: ExecutorConfig): Promise<
     amountQuote: position.amountQuote,
     openedAt: Math.floor(Date.now() / 1000)
   }
-  await window.api.settings.set({ heldPositions: [...settings.heldPositions, held] })
+  // Queued so the re-read and the append are one step: re-reading alone still leaves a gap a
+  // second handover can land in, and a lost row means a kept position silently discarded.
+  await settingsWrites(async () => {
+    const settings = await window.api.settings.get()
+    await window.api.settings.set({ heldPositions: [...settings.heldPositions, held] })
+  })
   return true
 }
