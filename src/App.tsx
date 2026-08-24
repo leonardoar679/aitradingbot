@@ -37,6 +37,8 @@ const PAGE_LABEL: Record<Page, string> = {
 
 function App(): React.JSX.Element {
   const [page, setPage] = useState<Page>('portfolio')
+  // Set when Portfolio's first-run card is clicked, cleared as soon as Executors has acted on it.
+  const [presetsRequested, setPresetsRequested] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
 
   return (
@@ -84,10 +86,19 @@ function App(): React.JSX.Element {
           {/* Keyed by page so navigating away from a broken page and back retries it, rather than
               the boundary latching its error for the rest of the session. */}
           <ErrorBoundary key={page} label={`The ${PAGE_LABEL[page]} page`}>
-            {page === 'portfolio' && <PortfolioPage />}
+            {page === 'portfolio' && (
+              <PortfolioPage
+                onGetStarted={() => {
+                  setPresetsRequested(true)
+                  setPage('executors')
+                }}
+              />
+            )}
             {page === 'trade' && <TradePage />}
             {page === 'bots' && <BotsPage />}
-            {page === 'executors' && <ExecutorsPage />}
+            {page === 'executors' && (
+              <ExecutorsPage autoOpenPresets={presetsRequested} onPresetsOpened={() => setPresetsRequested(false)} />
+            )}
             {page === 'controllers' && <ControllersPage />}
             {page === 'positions' && <PositionsPage />}
             {page === 'agents' && <AgentsPage />}

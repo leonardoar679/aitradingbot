@@ -35,11 +35,22 @@ import type { Bot } from '../bots/types'
 
 const EXECUTORS_POLL_MS = 10_000
 
-export function ExecutorsPage(): React.JSX.Element {
+export function ExecutorsPage({
+  autoOpenPresets = false,
+  onPresetsOpened
+}: { autoOpenPresets?: boolean; onPresetsOpened?: () => void } = {}): React.JSX.Element {
   const [bots, setBots] = useState<Bot[]>([])
   const [executors, setExecutors] = useState<ExecutorConfig[]>([])
   const [showNew, setShowNew] = useState(false)
   const [showPresets, setShowPresets] = useState(false)
+
+  // Portfolio's first-run card navigates here and asks for the presets straight away, so the
+  // person who clicked "Browse Starter Presets" lands on them rather than on another button.
+  useEffect(() => {
+    if (!autoOpenPresets) return
+    setShowPresets(true)
+    onPresetsOpened?.()
+  }, [autoOpenPresets, onPresetsOpened])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   /** Every failure below used to be a console.error and nothing else. In a packaged app with no
    * devtools open that is indistinguishable from success: the user clicks Stop, the card does not
