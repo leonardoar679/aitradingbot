@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { Cpu, Plus } from 'lucide-react'
+import { Cpu, Plus, Sparkles } from 'lucide-react'
 import { PageHeader } from '../components/PageHeader'
 import { Card } from '../components/Card'
 import { StatCard } from '../components/StatCard'
 import { NewExecutorModal } from './NewExecutorModal'
+import { StarterPresetsModal } from '../presets/StarterPresetsModal'
 import { ExecutorCard } from './ExecutorCard'
 import { ExecutorDetailView } from './ExecutorDetailView'
 import { SpreadExecutorDetailView } from './SpreadExecutorDetailView'
@@ -38,6 +39,7 @@ export function ExecutorsPage(): React.JSX.Element {
   const [bots, setBots] = useState<Bot[]>([])
   const [executors, setExecutors] = useState<ExecutorConfig[]>([])
   const [showNew, setShowNew] = useState(false)
+  const [showPresets, setShowPresets] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   /** Every failure below used to be a console.error and nothing else. In a packaged app with no
    * devtools open that is indistinguishable from success: the user clicks Stop, the card does not
@@ -677,6 +679,25 @@ export function ExecutorsPage(): React.JSX.Element {
         <h2 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>
           Executors
         </h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <button
+          onClick={() => setShowPresets(true)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            background: 'transparent',
+            border: '1px solid var(--border-strong)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '0.55rem 0.9rem',
+            color: 'var(--text-primary)',
+            fontSize: '0.8rem',
+            fontWeight: 700,
+            cursor: 'pointer'
+          }}
+        >
+          <Sparkles size={14} /> Starter Presets
+        </button>
         <button
           onClick={() => setShowNew(true)}
           style={{
@@ -695,12 +716,14 @@ export function ExecutorsPage(): React.JSX.Element {
         >
           <Plus size={14} /> New Executor
         </button>
+        </div>
       </div>
 
       {executors.length === 0 && (
         <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>
-          No executors yet. Create a Grid, DCA, TWAP, Position, Order, XEMM, or Arbitrage executor to start a
-          paper-trading strategy against live market data.
+          No executors yet. If this is your first time, start with Starter Presets above — ready-made paper
+          strategies adapted from Hummingbot, each explaining what it does and how it loses money. Or use New
+          Executor to build a Grid, DCA, TWAP, Position, Order, XEMM, or Arbitrage strategy yourself.
         </p>
       )}
 
@@ -770,6 +793,19 @@ export function ExecutorsPage(): React.JSX.Element {
       )}
 
       {showNew && <NewExecutorModal onCreate={handleCreate} onClose={() => setShowNew(false)} />}
+      {showPresets && (
+        <StarterPresetsModal
+          onClose={() => setShowPresets(false)}
+          onInserted={() => {
+            // insertStarterPack/insertPreset write straight to settings, so pull the result back
+            // in rather than duplicating the new rows into local state.
+            void window.api.settings.get().then((settings) => {
+              lastSerializedRef.current = JSON.stringify(settings.executors)
+              setExecutors(settings.executors)
+            })
+          }}
+        />
+      )}
     </>
   )
 }
