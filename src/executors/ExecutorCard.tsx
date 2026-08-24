@@ -441,9 +441,14 @@ function SingleMarketMetrics({ executor }: { executor: ExecutorConfig }): React.
   if (sim.state.kind === 'dca') {
     const current = sim.latestCandle?.close ?? null
     const side = (executor.params as { side: 'buy' | 'sell' }).side
-    const rawPct =
-      sim.state.avgEntryPrice && current ? ((current - sim.state.avgEntryPrice) / sim.state.avgEntryPrice) * 100 : 0
-    const unrealizedPct = side === 'sell' ? -rawPct : rawPct
+    // netUnrealizedPct, not a gross move computed here: every other unrealized figure in the app
+    // (Position cards, bot cards, both Positions rows) is net of the round trip it would take to
+    // realize it, and this one sat next to them under the same "% unrealized" label showing a
+    // different quantity. The gap is the fee drag, about 0.2%, so any position within that band
+    // of its entry was shown with the opposite sign here: +0.10% where a Position card showed
+    // -0.10% for the very same prices.
+    const unrealizedPct =
+      sim.state.avgEntryPrice && current ? netUnrealizedPct(sim.state.avgEntryPrice, current, side) : 0
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
         <span style={{ color: 'var(--text-primary)' }}>
