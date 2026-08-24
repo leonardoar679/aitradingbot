@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { runBacktest } from '../backtest/engine'
 import { pushRoutineReport } from './routineStore'
 import { schedulingSignature } from './schedulingSignature'
+import { settingsWrites } from '../utils/settingsWrites'
 import type { RoutineConfig } from '../../shared/ipc'
 
 const LOOKBACK_SEC = 90 * 24 * 3600 // matches BacktestPage's default 90-day window
+
 
 /** Fetches the routine's window, runs the backtest engine, pushes a report, and stamps
  * lastRunAt — shared by the scheduled timer below and the RoutinesPage "Run Now" button. */
@@ -17,9 +19,11 @@ export async function runRoutineNow(routine: RoutineConfig): Promise<void> {
   const result = runBacktest(candles, routine.strategyId)
   pushRoutineReport({ id: crypto.randomUUID(), routineId: routine.id, ranAt: nowSec, symbolLabel: routine.symbol, result })
 
-  const settings = await window.api.settings.get()
-  const nextRoutines = settings.routines.map((r) => (r.id === routine.id ? { ...r, lastRunAt: nowSec } : r))
-  await window.api.settings.set({ routines: nextRoutines })
+  await settingsWrites(async () => {
+    const settings = await window.api.settings.get()
+    const nextRoutines = settings.routines.map((r) => (r.id === routine.id ? { ...r, lastRunAt: nowSec } : r))
+    await window.api.settings.set({ routines: nextRoutines })
+  })
 }
 
 /** Headless — mounted once in App.tsx so schedules keep firing regardless of which page is

@@ -4,6 +4,7 @@ import { handOverPositionOnStop } from '../executors/handOverPosition'
 import { pushControllerSnapshot, getControllerSnapshots } from './controllerStore'
 import { SNAPSHOT_INTERVAL_MS } from './types'
 import { controllerDrawdownPct } from './riskMath'
+import { settingsWrites } from '../utils/settingsWrites'
 import type { ControllerConfig, ExecutorConfig } from '../../shared/ipc'
 
 /** One snapshot tick: sums P&L + allocated capital across the controller's still-existing
@@ -54,10 +55,16 @@ export async function runControllerSnapshotNow(controller: ControllerConfig): Pr
     // saved in the meantime (a newly created executor, an edited controller). The breach action
     // itself is narrow -- stop the attached executors and this controller -- so it applies just as
     // correctly to a fresh copy.
-    const fresh = await window.api.settings.get()
-    const nextExecutors = fresh.executors.map((e: ExecutorConfig) => (attachedIds.has(e.id) ? { ...e, status: 'stopped' as const, stoppedAt } : e))
-    const nextControllers = fresh.controllers.map((c) => (c.id === controller.id ? { ...c, status: 'stopped' as const } : c))
-    await window.api.settings.set({ executors: nextExecutors, controllers: nextControllers })
+    // Queued as well as re-read: the re-read narrows the stale window but two controllers
+    // breaching on the same tick are both inside it, and each writes the WHOLE executors array.
+    // Interleaved, the later write reinstates executors the earlier one had just stopped --
+    // a risk-control stop silently undone, which is the one outcome this code exists to prevent.
+    await settingsWrites(async () => {
+      const fresh = await window.api.settings.get()
+      const nextExecutors = fresh.executors.map((e: ExecutorConfig) => (attachedIds.has(e.id) ? { ...e, status: 'stopped' as const, stoppedAt } : e))
+      const nextControllers = fresh.controllers.map((c) => (c.id === controller.id ? { ...c, status: 'stopped' as const } : c))
+      await window.api.settings.set({ executors: nextExecutors, controllers: nextControllers })
+    })
 
     // Honour "Keep position when stopped" here too. A controller stop used to skip handover
     // entirely, so whether that ticked checkbox was respected depended on who pressed stop --
