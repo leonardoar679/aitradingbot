@@ -6,6 +6,9 @@ import type { Exchange, LiveExitResult } from '../../shared/ipc'
 import { fetchTicker24h } from './marketService'
 import { getLivePosition } from './livePositionsService'
 import { executeLiveClose, cancelSiblingLiveOrders } from './liveExecutionService'
+import { evaluateWatcher } from './watcherEvaluation'
+
+export { evaluateWatcher } from './watcherEvaluation'
 
 // The live Position Executor's Triple Barrier watcher — the one piece of this app that has to
 // keep running unattended, watching a real position, and reliably trigger a real exit with no
@@ -148,37 +151,6 @@ export async function drainResolvedWatcherEvents(): Promise<ResolvedEvent[]> {
   return events
 }
 
-/** Pure — ported from simulatePosition (src/executors/engine.ts), buy-only (live spot can't
- * short), adapted from "candle wick touches a target" to "last-traded price crosses a target."
- * Same stop-loss > take-profit > trailing-stop > time-limit priority as the paper engine. Always
- * returns the updated trailing peak so the caller persists it even on a tick with no exit. */
-export function evaluateWatcher(
-  watcher: Pick<LivePositionWatcher, 'entryPrice' | 'takeProfitPct' | 'stopLossPct' | 'timeLimitSec' | 'trailingStop' | 'trailingPeakPrice' | 'enteredAt'>,
-  currentPrice: number,
-  nowSec: number
-): { reason: LiveExitResult['exitReason'] | null; newPeak: number } {
-  const newPeak = Math.max(watcher.trailingPeakPrice, currentPrice)
-
-  const slTarget = watcher.stopLossPct !== null ? watcher.entryPrice * (1 - watcher.stopLossPct / 100) : null
-  const slHit = slTarget !== null && currentPrice <= slTarget
-
-  const tpTarget = watcher.takeProfitPct !== null ? watcher.entryPrice * (1 + watcher.takeProfitPct / 100) : null
-  const tpHit = tpTarget !== null && currentPrice >= tpTarget
-
-  let trailHit = false
-  if (watcher.trailingStop !== null) {
-    const activationTarget = watcher.entryPrice * (1 + watcher.trailingStop.activationPct / 100)
-    if (newPeak >= activationTarget) {
-      const trailTarget = newPeak * (1 - watcher.trailingStop.trailPct / 100)
-      trailHit = currentPrice <= trailTarget
-    }
-  }
-
-  const timeUp = watcher.timeLimitSec !== null && nowSec - watcher.enteredAt >= watcher.timeLimitSec
-
-  const reason = slHit ? 'stop_loss' : tpHit ? 'take_profit' : trailHit ? 'trailing_stop' : timeUp ? 'time_limit' : null
-  return { reason, newPeak }
-}
 
 async function tick(): Promise<void> {
   const state = await load()
@@ -194,6 +166,14 @@ async function tick(): Promise<void> {
       let price = priceCache.get(key)
       if (price === undefined) {
         const ticker = await fetchTicker24h(watcher.exchange, watcher.symbol)
+        // Two adapters pass the exchange's raw field straight through and the rest run it
+        // through Number(), so a malformed response arrives here as NaN rather than as a
+        // thrown error. Left alone it would score as a clean tick: every barrier comparison
+        // is false against NaN, consecutiveFailures would reset to 0, and the position would
+        // report as watched and healthy while nothing was actually being checked.
+        if (!Number.isFinite(ticker.lastPrice) || ticker.lastPrice <= 0) {
+          throw new Error(`${watcher.symbol} returned an unusable price (${ticker.lastPrice}) — barriers were not checked this tick`)
+        }
         price = ticker.lastPrice
         priceCache.set(key, price)
       }
