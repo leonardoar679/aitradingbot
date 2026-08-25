@@ -3,7 +3,7 @@ import { describeLiveShortfall } from '../../shared/liveBalances'
 import { canCloseLivePosition, canPlaceLiveOrder, recordLiveOrderUsage, checkLossLimitAndAutoDisarm } from './liveTradingService'
 import { recordLiveFill } from './livePositionsService'
 import { freeBalanceFor, getDecryptedCredential } from './credentialsService'
-import { placeMarketOrder, placeMarketSellByQuantity, cancelOrder, type LiveOrderResult } from './exchanges/binanceTrading'
+import { placeMarketOrder, placeMarketSellByQuantity, cancelOrder, fetchSymbolRules, type LiveOrderResult } from './exchanges/binanceTrading'
 import { listOpenLiveOrders, getLiveOrder, resolveLiveOrder } from './liveOrdersService'
 
 /** Refuses a buy the account cannot pay for, in words that say what is wrong.
@@ -77,7 +77,13 @@ export async function executeLiveClose(position: LivePosition, quantity: number)
   const { apiKey, apiSecret } = await getDecryptedCredential(position.exchange)
   const result = await placeMarketSellByQuantity(apiKey, apiSecret, position.symbol, quantity)
   await recordLiveOrderUsage(result.cummulativeQuoteQty)
-  await recordLiveFill(position.exchange, position.symbol, position.baseAsset, position.quoteAsset, 'sell', result.filledQty, result.avgFillPrice, result.commissions)
+  // The step size decides what counts as fully closed: the sell above was floored onto it, so a
+  // remainder smaller than one step is dust no exchange will trade. Read from the same cached
+  // rules the order itself used; if it cannot be read the ledger falls back to its own floor.
+  const stepQty = await fetchSymbolRules(position.symbol)
+    .then((rules) => Number(rules.stepSize))
+    .catch(() => undefined)
+  await recordLiveFill(position.exchange, position.symbol, position.baseAsset, position.quoteAsset, 'sell', result.filledQty, result.avgFillPrice, result.commissions, stepQty)
   await checkLossLimitAndAutoDisarm()
   return { ...result, placedAt: Math.floor(Date.now() / 1000) }
 }

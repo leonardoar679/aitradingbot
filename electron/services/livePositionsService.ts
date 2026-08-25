@@ -104,7 +104,13 @@ export async function recordLiveFill(
   side: ExecutorSide,
   filledQty: number,
   avgFillPrice: number,
-  commissions?: Commissions
+  commissions?: Commissions,
+  /** The smallest quantity this symbol can be traded in. A closing sell is FLOORED onto that
+   * step, so selling a whole position almost always leaves a sub-step remainder behind -- 0.0003333
+   * BTC floors to 0.00033333 and leaves 3.3e-9. Against a fixed 1e-9 threshold that residue kept
+   * the position "open" forever: too small for any exchange to sell, too large to be called flat.
+   * Passing the real step makes untradable dust count as closed, which is what it is. */
+  flatBelowQty?: number
 ): Promise<LivePosition | null> {
   // This ledger feeds the daily realized-loss gate, and that gate is a `<=` comparison -- false
   // for NaN. A single unusable fill quantity or price would not skew the limit, it would switch
@@ -168,7 +174,11 @@ export async function recordLiveFill(
   const realizedFromThisFill = netRealizedPnl(closeQty, open.avgCost, avgFillPrice)
   open.qty -= closeQty
   open.realizedPnl = (open.realizedPnl ?? 0) + realizedFromThisFill
-  if (open.qty <= 1e-9) {
+  // Flat when the remainder cannot be traded at all. The 1e-9 floor stays as the backstop for
+  // callers that do not know the symbol's step, and anything unusable falls back to it rather
+  // than widening the definition of "closed" by accident.
+  const flatBelow = Number.isFinite(flatBelowQty) && (flatBelowQty as number) > 0 ? (flatBelowQty as number) : 0
+  if (open.qty <= 1e-9 || open.qty < flatBelow) {
     open.qty = 0
     open.closedAt = now
     open.exitPrice = avgFillPrice

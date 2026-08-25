@@ -2,11 +2,12 @@ import { app } from 'electron'
 import { join } from 'path'
 import { readFile, mkdir } from 'fs/promises'
 import { writeJsonAtomic } from './atomicWrite'
-import type { Exchange, LiveExitResult } from '../../shared/ipc'
+import type { Exchange, LiveExitResult, LivePosition } from '../../shared/ipc'
 import { fetchTicker24h } from './marketService'
 import { getLivePosition } from './livePositionsService'
 import { executeLiveClose, cancelSiblingLiveOrders } from './liveExecutionService'
 import { evaluateWatcher } from './watcherEvaluation'
+import { describeIncompleteExit } from './watcherExit'
 
 export { evaluateWatcher } from './watcherEvaluation'
 
@@ -181,7 +182,11 @@ async function tick(): Promise<void> {
       const { reason, newPeak } = evaluateWatcher(watcher, price, nowSec)
       watcher.trailingPeakPrice = newPeak
 
-      if (reason) {
+      // Re-read after the awaits above. `watcher` is the live object in the shared state, so a
+      // Stop the user pressed while this tick was waiting on the network has already flipped it
+      // -- acting on the decision made before that would place a real sell for a position the
+      // user has just taken control of themselves.
+      if (reason && watcher.active) {
         const position = await getLivePosition(watcher.livePositionId)
         if (!position || position.closedAt !== null || position.qty <= 0) {
           watcher.active = false
@@ -191,19 +196,25 @@ async function tick(): Promise<void> {
           // position exits -- cancel them now (no-op for Order/Position, which never have any).
           await cancelSiblingLiveOrders(watcher.executorId)
           const closedPosition = await getLivePosition(watcher.livePositionId)
+
+          // Deactivation is decided on the ledger, not on the order having been sent. A partial
+          // fill leaves real exposure open, and standing down here would switch off the only
+          // barriers guarding it -- see watcherExit.ts.
+          const incomplete = describeIncompleteExit(closedPosition, watcher.symbol)
+          if (incomplete !== null) throw new Error(incomplete)
+
+          const settled = closedPosition as LivePosition
           watcher.active = false
-          if (closedPosition && closedPosition.exitPrice !== null && closedPosition.realizedPnl !== null) {
-            state.resolvedEvents.push({
-              executorId: watcher.executorId,
-              liveExitResult: {
-                entryPrice: watcher.entryPrice,
-                exitReason: reason,
-                exitPrice: closedPosition.exitPrice,
-                realizedPnl: closedPosition.realizedPnl,
-                closedAt: closedPosition.closedAt ?? nowSec
-              }
-            })
-          }
+          state.resolvedEvents.push({
+            executorId: watcher.executorId,
+            liveExitResult: {
+              entryPrice: watcher.entryPrice,
+              exitReason: reason,
+              exitPrice: settled.exitPrice as number,
+              realizedPnl: settled.realizedPnl as number,
+              closedAt: settled.closedAt ?? nowSec
+            }
+          })
         }
       }
       watcher.consecutiveFailures = 0
