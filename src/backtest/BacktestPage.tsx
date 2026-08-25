@@ -7,6 +7,7 @@ import { BacktestResultsView, type ResultsGeneralInfo } from './BacktestResultsV
 import { BacktestChartsView } from './BacktestChartsView'
 import { StrategyComparisonView } from './StrategyComparisonView'
 import { runBacktest, DEFAULT_STARTING_BALANCE, type BacktestResult } from './engine'
+import { MAX_LEVERAGE, MIN_LEVERAGE, isUsableLeverage, liquidationDistancePct } from '../../shared/perp'
 import { availableBalance } from '../account/paperAccount'
 import { committedFor } from '../account/accountCommitments'
 import { describeRangeProblem, describeEmptyRange } from './rangeProblem'
@@ -119,6 +120,7 @@ export function BacktestPage(): React.JSX.Element {
   const [endDate, setEndDate] = useState(() => isoDate(new Date()))
   const [splitDate, setSplitDate] = useState('')
   const [startingCapital, setStartingCapital] = useState(String(DEFAULT_STARTING_BALANCE))
+  const [leverageInput, setLeverageInput] = useState('')
   /** Once the user types their own number, the account must stop overwriting it -- otherwise
    * switching to a different pair to compare silently replaces the amount they chose. State
    * rather than a ref because the caption has to stop claiming the number came from the account. */
@@ -194,6 +196,14 @@ export function BacktestPage(): React.JSX.Element {
     if (accountAvailable > 0) setStartingCapital(String(accountAvailable))
   }, [accountAvailable, capitalTouched])
 
+  // Blank means spot, and blank is the default: someone who came here to test a strategy should
+  // not have to opt out of leverage. Anything typed is validated rather than silently coerced --
+  // resolveLeverage would quietly turn 500 into 1x and run a spot backtest under a 500x heading.
+  const leverageValue = leverageInput.trim() === '' ? 1 : Number.parseFloat(leverageInput)
+  const leverageProblem =
+    !Number.isFinite(leverageValue) || !isUsableLeverage(leverageValue)
+      ? `Leverage has to be a number between ${MIN_LEVERAGE} and ${MAX_LEVERAGE}. Leave it blank for no leverage.`
+      : null
   const capitalValue = Number.parseFloat(startingCapital)
   const capitalProblem =
     !Number.isFinite(capitalValue) || capitalValue <= 0
@@ -202,7 +212,7 @@ export function BacktestPage(): React.JSX.Element {
 
   function handleStart(): void {
     const route = tradingRoute
-    if (!route.symbol || capitalProblem !== null) return
+    if (!route.symbol || capitalProblem !== null || leverageProblem !== null) return
 
     // Checked before anything is fetched: a blank or backwards range fetches zero candles
     // without erroring, and a zero-candle run still renders a complete results page.
@@ -268,7 +278,7 @@ export function BacktestPage(): React.JSX.Element {
           return
         }
         log(`Running strategy: ${strategy.name} — ${strategy.description}`)
-        const result = runBacktest(fetchResult.candles, route.strategyId, { startingBalance: capitalValue })
+        const result = runBacktest(fetchResult.candles, route.strategyId, { startingBalance: capitalValue, leverage: leverageValue })
         log(
           `Simulation complete: ${result.trades.length} trades, net P&L ${result.stats.totalNetProfit.toFixed(2)} (${result.stats.totalNetProfitPct.toFixed(2)}%)`
         )
@@ -536,13 +546,45 @@ export function BacktestPage(): React.JSX.Element {
               {capitalProblem !== null && (
                 <p style={{ color: 'var(--down)', fontSize: '0.78rem', margin: '0.5rem 0 0' }}>{capitalProblem}</p>
               )}
+
+              <SectionHeader label="Leverage" />
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', margin: '0 0 0.6rem' }}>
+                Leave this blank to test the strategy on spot, which is what it has always been. Above 1x the run can
+                be liquidated — and when it is, it ends with nothing and takes no further trades, exactly as the account
+                would.
+              </p>
+              <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+                <input
+                  type="number"
+                  min={MIN_LEVERAGE}
+                  max={MAX_LEVERAGE}
+                  step="1"
+                  placeholder="1"
+                  value={leverageInput}
+                  onChange={(e) => setLeverageInput(e.target.value)}
+                  style={{ ...fieldStyle(), flex: 1 }}
+                />
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', minWidth: 48 }}>×</span>
+              </div>
+              {leverageProblem !== null ? (
+                <p style={{ color: 'var(--down)', fontSize: '0.78rem', margin: '0.5rem 0 0' }}>{leverageProblem}</p>
+              ) : (
+                leverageValue > 1 && (
+                  <p style={{ color: 'var(--down)', fontSize: '0.78rem', margin: '0.5rem 0 0', fontWeight: 600 }}>
+                    At {leverageValue}x a fall of{' '}
+                    {liquidationDistancePct(leverageValue)?.toFixed(2) ?? '—'}% below an entry ends that trade and the
+                    whole run with it. Funding is charged every 8 hours a position stays open, and every fee is{' '}
+                    {leverageValue} times what it was.
+                  </p>
+                )
+              )}
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
               <button
                 onClick={handleStart}
-                disabled={symbolsLoading || !tradingRoute.symbol || capitalProblem !== null}
-                title={symbolsLoading ? 'Symbols are still loading' : (capitalProblem ?? undefined)}
+                disabled={symbolsLoading || !tradingRoute.symbol || capitalProblem !== null || leverageProblem !== null}
+                title={symbolsLoading ? 'Symbols are still loading' : (capitalProblem ?? leverageProblem ?? undefined)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -555,8 +597,8 @@ export function BacktestPage(): React.JSX.Element {
                   color: '#fff',
                   fontSize: '0.95rem',
                   fontWeight: 700,
-                  cursor: symbolsLoading || !tradingRoute.symbol || capitalProblem !== null ? 'not-allowed' : 'pointer',
-                  opacity: symbolsLoading || !tradingRoute.symbol || capitalProblem !== null ? 0.6 : 1
+                  cursor: symbolsLoading || !tradingRoute.symbol || capitalProblem !== null || leverageProblem !== null ? 'not-allowed' : 'pointer',
+                  opacity: symbolsLoading || !tradingRoute.symbol || capitalProblem !== null || leverageProblem !== null ? 0.6 : 1
                 }}
               >
                 <Zap size={16} /> Start

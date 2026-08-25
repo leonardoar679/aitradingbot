@@ -1,6 +1,14 @@
 import type { Candle } from '../../shared/ipc'
 import { getStrategy, DEFAULT_STRATEGY_ID } from './strategies'
 import { FEE_RATE } from '../../shared/fees'
+import {
+  ASSUMED_FUNDING_RATE,
+  fundingCost,
+  fundingPeriodsBetween,
+  liquidationPrice,
+  notionalFor,
+  resolveLeverage
+} from '../../shared/perp'
 
 // The actual entry/exit/stop logic is pluggable — see src/backtest/strategies/. This engine only
 // owns execution: position tracking, fees, the equity curve, and the full stats panel below. Any
@@ -36,7 +44,7 @@ export interface Trade {
   qty: number
   pnl: number
   returnPct: number
-  exitReason: 'signal' | 'stop_loss' | 'end_of_data'
+  exitReason: 'signal' | 'stop_loss' | 'end_of_data' | 'liquidation'
 }
 
 export interface EquityPoint {
@@ -178,6 +186,11 @@ export interface RunBacktestOptions {
   /** Capital the run starts with, in the pair's quote asset. Defaults to
    * DEFAULT_STARTING_BALANCE. Anything that is not a positive finite number falls back to it. */
   startingBalance?: number
+  /** Simulated leverage. Absent, or anything outside the usable range, means 1x -- the run is
+   * then bit-for-bit the spot backtest it always was. Above 1x the run can be liquidated, and a
+   * liquidated run ends with nothing and takes no further trades, which is the point of offering
+   * it at all. */
+  leverage?: number
 }
 
 function mean(values: number[]): number {
@@ -193,9 +206,18 @@ function stdDev(values: number[]): number {
 interface OpenPosition {
   entryPrice: number
   entryTime: number
+  /** Base-asset quantity. Sized on the NOTIONAL, so at 5x it is five times what the cash could
+   * have bought outright -- which is the whole of what leverage does. */
   qty: number
+  /** The account before the position was opened. At 1x this is what bought the position; above
+   * 1x it is the margin backing it, and the most that can be lost. */
   cashBefore: number
+  /** Charged when the position opened, on the notional. Kept so equity and P&L can be stated as
+   * "margin plus the move, minus what it cost" -- the only form that is right at every leverage. */
+  entryFee: number
   stopPrice: number
+  /** Null at 1x, where nothing can close the position for you. */
+  liquidationPrice: number | null
 }
 
 // Groups closed trades by the UTC calendar month they exited in, so a strategy that looks
@@ -246,6 +268,7 @@ export function runBacktest(
 ): BacktestResult {
   const forceCloseAtEnd = options.forceCloseAtEnd ?? true
   const startingBalance = resolveStartingBalance(options.startingBalance)
+  const leverage = resolveLeverage(options.leverage)
   const signals = getStrategy(strategyId).generateSignals(candles)
 
   let cash = startingBalance
@@ -264,27 +287,72 @@ export function runBacktest(
   const benchmarkStartIndex = candles.length > 0 ? Math.min(signals.warmupBars, candles.length - 1) : 0
   const benchmarkQty = candles.length > 0 ? startingBalance / candles[benchmarkStartIndex].close : 0
 
-  function equityAt(price: number): number {
+  /** Funding owed on an open position up to `time`. Always 0 at 1x -- spot has no funding. */
+  function fundingSoFar(position: OpenPosition, time: number): number {
+    if (leverage === 1) return 0
+    return fundingCost({
+      notionalQuote: position.qty * position.entryPrice,
+      fundingRate: ASSUMED_FUNDING_RATE,
+      periods: fundingPeriodsBetween(position.entryTime, time),
+      side: 'buy'
+    })
+  }
+
+  // Margin, plus what the position has made, minus what holding it has cost. Identical to the
+  // old `qty * price` at 1x -- the algebra cancels exactly -- but that form is only right when
+  // the position was bought outright, since at 5x `qty * price` is five times the money that
+  // exists. Deliberately NOT floored at zero: a caller reading 0 when the true figure is negative
+  // cannot tell that the position needs closing, and the loop below closes it on exactly that
+  // signal. The curve never shows a negative value because the position is gone by then.
+  function equityAt(price: number, time: number): number {
     const position = posBox.current
-    return position ? position.qty * price : cash
+    if (!position) return cash
+    return (
+      position.cashBefore - position.entryFee + position.qty * (price - position.entryPrice) - fundingSoFar(position, time)
+    )
   }
 
   function openLong(time: number, price: number, stopPrice: number): void {
-    const fee = cash * FEE_RATE
+    // Nothing left to trade with. Without this a liquidated run keeps opening zero-sized
+    // positions for the rest of the history and fills the trade list with empty round trips.
+    if (cash <= 0) return
+    const notional = notionalFor(cash, leverage)
+    const fee = notional * FEE_RATE
     totalFees += fee
-    const notional = cash - fee
-    posBox.current = { entryPrice: price, entryTime: time, qty: notional / price, cashBefore: cash, stopPrice }
+    posBox.current = {
+      entryPrice: price,
+      entryTime: time,
+      // At 1x this is (cash - fee) / price, exactly as before: the fee comes out of the money
+      // before it buys anything. Above 1x the fee is paid out of margin instead, because the
+      // notional is borrowed and the position size is what the leverage says it is.
+      qty: leverage === 1 ? (cash - fee) / price : notional / price,
+      cashBefore: cash,
+      entryFee: fee,
+      stopPrice,
+      liquidationPrice: liquidationPrice({ entryPrice: price, leverage, side: 'buy' })
+    }
     cash = 0
   }
 
   function closePosition(time: number, price: number, exitReason: Trade['exitReason']): void {
     const position = posBox.current
     if (!position) return
-    const grossProceeds = position.qty * price
-    const fee = grossProceeds * FEE_RATE
-    totalFees += fee
-    const netProceeds = grossProceeds - fee
-    const pnl = netProceeds - position.cashBefore
+    const exitFee = position.qty * price * FEE_RATE
+    totalFees += exitFee
+    const funding = fundingSoFar(position, time)
+    // Margin plus the move, minus both fees and the funding. At 1x this is arithmetically the
+    // same number the old `netProceeds - cashBefore` produced.
+    const rawPnl = position.qty * (price - position.entryPrice) - position.entryFee - exitFee - funding
+    // A liquidation costs the whole margin, and the arithmetic above does not say so on its own:
+    // priced at the liquidation level the position still nominally holds the maintenance margin
+    // back, which at 50x is a fifth of the deposit. The exchange keeps it, along with a
+    // liquidation fee -- nobody is handed a fifth of their money back for being wiped out. This
+    // also keeps the figure identical to the paper Position executor, which books -amountQuote:
+    // two engines disagreeing about what the worst outcome costs is worse than either answer.
+    //
+    // Every other exit is clamped rather than replaced, so a gap that fills far through a stop
+    // cannot report the account owing money it never had.
+    const pnl = exitReason === 'liquidation' ? -position.cashBefore : Math.max(rawPnl, -position.cashBefore)
     trades.push({
       side: 'long',
       entryTime: position.entryTime,
@@ -296,7 +364,7 @@ export function runBacktest(
       returnPct: (pnl / position.cashBefore) * 100,
       exitReason
     })
-    cash = netProceeds
+    cash = position.cashBefore + pnl
     posBox.current = null
   }
 
@@ -307,12 +375,39 @@ export function runBacktest(
     if (i >= signals.warmupBars) {
       const position = posBox.current
       if (position) {
-        if (low <= position.stopPrice) {
-          // A gap-down can open below the stop price — fill at the worse of open/stop, as a real stop order would.
-          closePosition(time, Math.min(open, position.stopPrice), 'stop_loss')
+        const stopHit = low <= position.stopPrice
+        // A gap-down can open below the stop price — fill at the worse of open/stop, as a real stop order would.
+        const stopFill = stopHit ? Math.min(open, position.stopPrice) : null
+        const liq = position.liquidationPrice
+        const liqHit = liq !== null && low <= liq
+        // A stop set inside the liquidation level is exactly what it is for: price reaches it
+        // first on the way down and the position exits there. A candle that gaps through both
+        // fills the stop at the open, which is already past the level -- the stop came too late,
+        // and reporting it as a stop-loss would tell the user their stop protected them when the
+        // position had already been closed out from under it.
+        const savedByStop = stopFill !== null && liq !== null && stopFill > liq
+
+        // Margin can run out without the price ever reaching the liquidation level, because the
+        // price is not the only thing taking from it. At 100x, funding alone is 1% of the margin
+        // every eight hours while the entry fee is another 10% up front -- a position held long
+        // enough is finished by the cost of holding it, on a chart that never went against it.
+        // The level above cannot see any of that, so equity is checked as well, and reaching zero
+        // is a liquidation by the same name and for the same reason: there is nothing left to
+        // hold the position with.
+        if (liqHit && !savedByStop) {
+          closePosition(time, liq as number, 'liquidation')
+          justStoppedOut = true
+        } else if (stopHit) {
+          closePosition(time, stopFill as number, 'stop_loss')
           justStoppedOut = true
         } else if (signals.exits[i]) {
           closePosition(time, close, 'signal')
+        } else if (equityAt(close, time) <= 0) {
+          // Last, and only for a position that survived everything the candle's prices did to it.
+          // Ahead of the stop it would override a stop that had already filled higher up, turning
+          // a protected exit into a wipeout on the strength of a price the position never saw.
+          closePosition(time, close, 'liquidation')
+          justStoppedOut = true
         }
       }
 
@@ -321,7 +416,7 @@ export function runBacktest(
       }
     }
 
-    equityCurve.push({ time, value: equityAt(close) })
+    equityCurve.push({ time, value: equityAt(close, time) })
     // Flat at the starting balance until that point, matching the uninvested cash the strategy
     // itself is holding, so both curves start together at the same value on the same candle.
     // Mutating `<` to `<=` here survives the test suite, and is an equivalent mutant rather than a
