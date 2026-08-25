@@ -1,9 +1,37 @@
 import type { Exchange, LiveOrderRecord, LivePosition } from '../../shared/ipc'
+import { describeLiveShortfall } from '../../shared/liveBalances'
 import { canCloseLivePosition, canPlaceLiveOrder, recordLiveOrderUsage, checkLossLimitAndAutoDisarm } from './liveTradingService'
 import { recordLiveFill } from './livePositionsService'
-import { getDecryptedCredential } from './credentialsService'
+import { freeBalanceFor, getDecryptedCredential } from './credentialsService'
 import { placeMarketOrder, placeMarketSellByQuantity, cancelOrder, type LiveOrderResult } from './exchanges/binanceTrading'
 import { listOpenLiveOrders, getLiveOrder, resolveLiveOrder } from './liveOrdersService'
+
+/** Refuses a buy the account cannot pay for, in words that say what is wrong.
+ *
+ * The exchange refuses it too -- with "Account has insufficient balance for requested action",
+ * which does not say which asset, how much was needed, how much there is, or that the missing
+ * amount may be sitting in a resting order. For a live ladder (DCA, TWAP, Grid) that message
+ * arrives once per slice with nothing to act on.
+ *
+ * Never blocks on a balance it could not read. The exchange remains the authority on whether
+ * there is money; this exists so that when there isn't, the person is told something useful. */
+export async function assertLiveOrderAffordable(
+  exchange: Exchange,
+  quoteAsset: string,
+  side: 'buy' | 'sell',
+  quoteAmount: number
+): Promise<void> {
+  const free = await freeBalanceFor(exchange, quoteAsset)
+  if (free === null) return
+  const problem = describeLiveShortfall({
+    side,
+    quoteAsset,
+    quoteAmount,
+    free,
+    exchangeLabel: exchange === 'binance' ? 'Binance' : exchange
+  })
+  if (problem !== null) throw new Error(problem)
+}
 
 /** The one place a real market order actually executes — called both by the
  * ExecutorPlaceLiveOrder IPC handler (Order/Position's synchronous entry) and, from Phase 5 on,
@@ -22,6 +50,7 @@ export async function placeLiveMarketOrder(
 
   const gate = await canPlaceLiveOrder(quoteAmount)
   if (!gate.allowed) throw new Error(gate.reason ?? 'Live order blocked')
+  await assertLiveOrderAffordable(exchange, quoteAsset, side, quoteAmount)
 
   const { apiKey, apiSecret } = await getDecryptedCredential(exchange)
   const result = await placeMarketOrder(apiKey, apiSecret, symbol, side === 'buy' ? 'BUY' : 'SELL', quoteAmount)

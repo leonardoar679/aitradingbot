@@ -13,7 +13,7 @@ import {
 import { listOpenLivePositions, listClosedLivePositions, getLivePosition, recordLiveFill } from '../../services/livePositionsService'
 import { createLiveOrder, listOpenLiveOrders, resolveLiveOrder } from '../../services/liveOrdersService'
 import { singleFlight } from '../../services/singleFlight'
-import { executeLiveClose, cancelLiveOrderById, cancelSiblingLiveOrders, placeLiveMarketOrder } from '../../services/liveExecutionService'
+import { assertLiveOrderAffordable, executeLiveClose, cancelLiveOrderById, cancelSiblingLiveOrders, placeLiveMarketOrder } from '../../services/liveExecutionService'
 import {
   createWatcher,
   listActiveWatchers,
@@ -92,6 +92,9 @@ export function registerLiveTradingHandlers(): void {
 
       const gate = await canPlaceLiveOrder(amountQuote)
       if (!gate.allowed) throw new Error(gate.reason ?? 'Live order blocked')
+      // Same funds check as a market buy. A resting buy locks its quote funds the moment it is
+      // accepted, so "can this be paid for" is asked at placement, not at fill.
+      await assertLiveOrderAffordable(exchange, quoteAsset, side, amountQuote)
 
       const quantity = amountQuote / limitPrice
       const { apiKey, apiSecret } = await getDecryptedCredential(exchange)

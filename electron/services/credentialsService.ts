@@ -3,7 +3,7 @@ import { join } from 'path'
 import { readFile, mkdir } from 'fs/promises'
 import { writeJsonAtomic } from './atomicWrite'
 import { fetchAccountBalance, type AccountBalance } from './exchanges/binanceTrading'
-import { readableBalances } from '../../shared/liveBalances'
+import { freeBalance, readableBalances } from '../../shared/liveBalances'
 import type { CredentialStatus, Exchange, LiveBalanceSnapshot } from '../../shared/ipc'
 
 // Credentials live in their own file, separate from settings.json, so a bug in general settings
@@ -170,6 +170,26 @@ export async function readLiveBalances(exchange: Exchange, force = false): Promi
   const snapshot: LiveBalanceSnapshot = { exchange, rows, unreadable, fetchedAt: Date.now() }
   balanceCache.set(exchange, snapshot)
   return snapshot
+}
+
+/** What is spendable in one asset on an exchange, for the check that runs immediately before a
+ * real order.
+ *
+ * Reads fresh rather than from the cache: the cached copy exists to spare repeated page renders a
+ * signed request, and a balance that is fifteen seconds old is exactly wrong for deciding whether
+ * an order placed now can be paid for. A deposit that just landed would otherwise read as absent.
+ *
+ * Answers null -- not known -- rather than throwing when the balance cannot be read, and the
+ * caller treats that as no reason to block. See describeLiveShortfall. */
+export async function freeBalanceFor(exchange: Exchange, asset: string): Promise<number | null> {
+  try {
+    return freeBalance(await readLiveBalances(exchange, true), asset)
+  } catch {
+    // Swallowed on purpose, and reported as "not known" rather than as zero. An exchange that
+    // cannot be reached must not look like an account holding nothing, which would block every
+    // order behind a message about funds when the real problem is the network.
+    return null
+  }
 }
 
 /** Main-process-internal only — never wire this to an IPC handler. The only function in this

@@ -67,3 +67,45 @@ export function freeBalance(readout: BalanceReadout, asset: string): number {
   const row = readout.rows.find((r) => r.asset === asset)
   return row ? row.free : 0
 }
+
+/** Whether the account has the cash a real BUY is about to spend, phrased for someone reading it
+ * in an error box rather than a log.
+ *
+ * Buys only, deliberately. A market SELL in this app is also sized in quote currency, so working
+ * out how much of the base asset the exchange will need means multiplying by a price the app
+ * would have to guess at the moment of the order. Blocking a real order on a guessed price is
+ * worse than letting the exchange answer the question it can answer exactly -- so a sell is left
+ * to the exchange, which rejects it cleanly and costs nothing but a failed order.
+ *
+ * Returns null -- allow -- for anything it cannot judge. This is a message-quality check standing
+ * in front of the exchange's own balance check, not the last line of defence: the exchange still
+ * refuses an order there is no money for. Blocking a legitimate order because a balance could not
+ * be read would be a real failure; letting one through that the exchange then refuses is not. */
+export function describeLiveShortfall({
+  side,
+  quoteAsset,
+  quoteAmount,
+  free,
+  exchangeLabel
+}: {
+  side: 'buy' | 'sell'
+  quoteAsset: string
+  /** What the order will spend, in the quote asset. */
+  quoteAmount: number
+  /** Spendable balance in that asset -- freeBalance(), not including funds locked in orders. */
+  free: number
+  exchangeLabel: string
+}): string | null {
+  if (side !== 'buy') return null
+  // An unusable size is already refused, with its own message, by the live trading gate this
+  // stands beside. Reporting it a second time here as a funding problem would name the wrong
+  // cause -- and NaN loses every comparison, so it would otherwise fall through as affordable.
+  if (!Number.isFinite(quoteAmount) || quoteAmount <= 0) return null
+  // Written as "not less than" rather than "greater or equal" on purpose: an unreadable balance
+  // arrives as NaN, every comparison against NaN is false, and this is the direction in which
+  // that means allow. The other spelling would block every order whenever a balance could not
+  // be read.
+  if (!(free < quoteAmount)) return null
+
+  return `Not enough ${quoteAsset} on ${exchangeLabel}: this order spends ${quoteAmount} and only ${free} is free. Funds held in resting orders do not count -- cancel one, or add ${quoteAmount - free} ${quoteAsset}.`
+}
