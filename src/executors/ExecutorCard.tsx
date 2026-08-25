@@ -130,6 +130,7 @@ const EXIT_REASON_LABEL: Record<string, string> = {
   stop_loss: 'Stop Loss',
   time_limit: 'Time Limit',
   trailing_stop: 'Trailing Stop',
+  liquidation: 'LIQUIDATED',
   manual: 'Manual Stop'
 }
 
@@ -494,15 +495,32 @@ function SingleMarketMetrics({ executor }: { executor: ExecutorConfig }): React.
 
   if (sim.state.kind === 'position') {
     const current = sim.latestCandle?.close ?? null
+    // Scaled by leverage, because netUnrealizedPct returns a move in the PRICE and the figure on
+    // the card is read as a move in the money. At 10x a 3% dip is 30% of the deposit, and showing
+    // the 3% would be quietly reporting a tenth of what has actually happened to it.
     const unrealizedPct =
-      sim.state.entryPrice && current ? netUnrealizedPct(sim.state.entryPrice, current, sim.state.side) : 0
+      sim.state.entryPrice && current
+        ? netUnrealizedPct(sim.state.entryPrice, current, sim.state.side) * sim.state.leverage
+        : 0
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
         <span style={{ color: 'var(--text-primary)' }}>
           {sim.state.status === 'pending' ? 'Waiting for entry' : sim.state.status === 'open' ? 'Open' : 'Closed'}
+          {sim.state.leverage > 1 && <span style={{ color: 'var(--down)', fontWeight: 600 }}> · {sim.state.leverage}x</span>}
         </span>
         {sim.state.entryPrice !== null && (
           <span style={{ color: 'var(--text-secondary)' }}>Entry {formatQuotePrice(sim.state.entryPrice, executor.quoteAsset)}</span>
+        )}
+        {sim.state.status === 'open' && sim.state.liquidationPrice !== null && (
+          <span style={{ color: 'var(--down)' }}>
+            Liquidation {formatQuotePrice(sim.state.liquidationPrice, executor.quoteAsset)}
+          </span>
+        )}
+        {sim.state.status === 'closed' && sim.state.fundingPaid !== 0 && (
+          <span style={{ color: 'var(--text-secondary)' }}>
+            Funding {sim.state.fundingPaid > 0 ? '−' : '+'}
+            {formatQuotePrice(Math.abs(sim.state.fundingPaid), executor.quoteAsset)}
+          </span>
         )}
         {sim.state.status === 'closed' && sim.state.realizedPnl !== null && (
           <span style={{ color: pctColor(sim.state.realizedPnl), fontWeight: 600 }}>

@@ -69,7 +69,7 @@ export interface TwapExecutorState {
   done: boolean
 }
 
-export type PositionExitReason = 'take_profit' | 'stop_loss' | 'time_limit' | 'trailing_stop'
+export type PositionExitReason = 'take_profit' | 'stop_loss' | 'time_limit' | 'trailing_stop' | 'liquidation'
 
 export interface PositionExecutorState {
   kind: 'position'
@@ -83,6 +83,14 @@ export interface PositionExecutorState {
   exitPrice: number | null
   closedAt: number | null
   realizedPnl: number | null
+  /** Simulated leverage. 1 for every position that predates the field, and for spot. */
+  leverage: number
+  /** Where the margin runs out, or null at 1x where there is nothing to liquidate. It depends on
+   * the entry price, so it stays null until the position actually opens. */
+  liquidationPrice: number | null
+  /** Funding paid (positive) or received (negative) over the position's life. Always 0 at 1x:
+   * spot has no funding. */
+  fundingPaid: number
 }
 
 export interface OrderExecutorState {

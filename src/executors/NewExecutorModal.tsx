@@ -7,6 +7,7 @@ import { describeGridBoundsProblem } from './gridBounds'
 import type { ExecutorConfig, PaperAccount } from '../../shared/ipc'
 import { describeExecutorFunding } from '../account/executorFunding'
 import { describeLivePlanShortfall, describeLiveShortfall, freeBalance } from '../../shared/liveBalances'
+import { resolveLeverage } from '../../shared/perp'
 import { executorAllocatedQuote } from './computeSnapshot'
 import { DcaForm } from './DcaForm'
 import { TwapForm } from './TwapForm'
@@ -242,6 +243,10 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
     type === 'position' &&
     positionParams.side === 'buy' &&
     positionParams.entryPrice === null &&
+    // Spot only. This app has no perpetual-futures adapter at all -- a leveraged position exists
+    // here as a simulation and nothing else -- so anything above 1x must not reach a real order
+    // path that would silently place it unlevered on spot for a tenth of the size.
+    resolveLeverage(positionParams.leverage) === 1 &&
     (positionParams.takeProfitPct !== null || positionParams.stopLossPct !== null || positionParams.trailingStop !== null || positionParams.timeLimitSec !== null)
 
   // Buy-only, same reasoning as Position (spot can't short). Every level is placed as its own
@@ -610,11 +615,13 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
                         ? 'Live trading only supports market and limit orders so far.'
                         : 'Set a limit price first.'
                       : type === 'position' && !canGoLivePosition
-                        ? positionParams.side !== 'buy'
-                          ? 'Live Position entries are buy-only — spot trading can’t open a short.'
-                          : positionParams.entryPrice !== null
-                            ? 'Set a market entry (leave Entry Price blank) for live — a resting live entry isn’t supported yet.'
-                            : 'Set at least one exit condition — take-profit, stop-loss, trailing stop, or time limit — before going live.'
+                        ? resolveLeverage(positionParams.leverage) !== 1
+                          ? 'Leverage is simulation-only — this app has no futures connection, so a live Position is 1x spot. Clear the Leverage field to go live.'
+                          : positionParams.side !== 'buy'
+                            ? 'Live Position entries are buy-only — spot trading can’t open a short.'
+                            : positionParams.entryPrice !== null
+                              ? 'Set a market entry (leave Entry Price blank) for live — a resting live entry isn’t supported yet.'
+                              : 'Set at least one exit condition — take-profit, stop-loss, trailing stop, or time limit — before going live.'
                         : type === 'dca' && !canGoLiveDca
                           ? 'Live DCA is buy-only — spot trading can’t open a short.'
                           : type === 'twap' && !canGoLiveTwap

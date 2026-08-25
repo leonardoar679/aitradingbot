@@ -20,6 +20,14 @@ import type {
   GridLevelState
 } from './types'
 import { roundTripFee } from '../../shared/fees'
+import {
+  ASSUMED_FUNDING_RATE,
+  fundingCost,
+  fundingPeriodsBetween,
+  liquidationPrice,
+  notionalFor,
+  resolveLeverage
+} from '../../shared/perp'
 
 const MAX_GRID_LEVELS = 40
 
@@ -271,6 +279,7 @@ export function simulateTwap(candles: Candle[], params: TwapExecutorParams, crea
  * trailing-stop, and time-limit in that priority — the first barrier crossed closes the position. */
 export function simulatePosition(candles: Candle[], params: PositionExecutorParams): PositionExecutorState {
   const isBuy = params.side === 'buy'
+  const leverage = resolveLeverage(params.leverage)
   let status: PositionExecutorState['status'] = 'pending'
   let entryPrice: number | null = null
   let enteredAt: number | null = null
@@ -279,6 +288,8 @@ export function simulatePosition(candles: Candle[], params: PositionExecutorPara
   let exitPrice: number | null = null
   let closedAt: number | null = null
   let realizedPnl: number | null = null
+  let liqPrice: number | null = null
+  let fundingPaid = 0
 
   for (const candle of candles) {
     if (status === 'pending') {
@@ -294,6 +305,7 @@ export function simulatePosition(candles: Candle[], params: PositionExecutorPara
         trailingPeakPrice = entryPrice
       }
       if (status === 'pending') continue
+      liqPrice = liquidationPrice({ entryPrice: entryPrice as number, leverage, side: params.side })
     }
 
     if (status !== 'open' || entryPrice === null || enteredAt === null) continue
@@ -324,25 +336,85 @@ export function simulatePosition(candles: Candle[], params: PositionExecutorPara
 
     const timeUp = params.timeLimitSec !== null && candle.time - enteredAt >= params.timeLimitSec
 
-    if (slHit || tpHit || trailHit || timeUp) {
+    const liqHit = liqPrice !== null && (isBuy ? candle.low <= liqPrice : candle.high >= liqPrice)
+
+    if (slHit || tpHit || trailHit || timeUp || liqHit) {
+      // The price a stop would actually have filled at, worked out before anything else, because
+      // it decides whether the stop saved the position or arrived too late. A stop set inside the
+      // liquidation level normally fills first -- price passes it on the way down -- but a candle
+      // that GAPS straight through both fills the stop at the open, and if that open is already
+      // past the liquidation level the position was gone before the stop could execute.
+      const protectiveFill = slHit
+        ? stopFillPrice(candle.open, slTarget as number, isBuy)
+        : trailHit
+          ? stopFillPrice(candle.open, trailTarget as number, isBuy)
+          : null
+      const savedByStop =
+        protectiveFill !== null && liqPrice !== null && (isBuy ? protectiveFill > liqPrice : protectiveFill < liqPrice)
+
+      // Liquidation outranks a take-profit in the same candle. OHLC cannot say which the market
+      // reached first, and of the two assumptions only one can cost someone real money by being
+      // wrong -- a simulation that quietly reports the winning exit teaches a beginner that the
+      // trade was survivable when it may not have been.
+      if (liqHit && !savedByStop) {
+        exitReason = 'liquidation'
+        exitPrice = liqPrice as number
+        // The whole margin, and no more: an isolated-margin position cannot lose past what was
+        // put into it. The exchange also keeps the maintenance margin and a liquidation fee, so
+        // the true outcome is this bad and occasionally slightly worse -- never better.
+        realizedPnl = -params.amountQuote
+        // No funding is added on top. Not because a liquidated position owes none -- it owes every
+        // period it was open for -- but because the margin is already gone in full and there is
+        // nothing left for it to come out of. (fundingPaid is still 0 here; this branch breaks
+        // before the funding calculation below ever runs.)
+        status = 'closed'
+        closedAt = candle.time
+        break
+      }
+
       exitReason = slHit ? 'stop_loss' : tpHit ? 'take_profit' : trailHit ? 'trailing_stop' : 'time_limit'
       exitPrice = slHit
-        ? stopFillPrice(candle.open, slTarget as number, isBuy)
+        ? (protectiveFill as number)
         : tpHit
           ? (tpTarget as number)
           : trailHit
-            ? stopFillPrice(candle.open, trailTarget as number, isBuy)
+            ? (protectiveFill as number)
             : candle.close
-      const posQty = params.amountQuote / entryPrice
+      // Sized on the NOTIONAL, so both the profit and the fee scale with leverage. The fee part
+      // is the half nobody expects: 10x leverage is 10x the trading cost on the same deposit.
+      const posQty = notionalFor(params.amountQuote, leverage) / entryPrice
       const grossPos = isBuy ? posQty * (exitPrice - entryPrice) : posQty * (entryPrice - exitPrice)
-      realizedPnl = grossPos - roundTripFee(posQty, entryPrice, exitPrice)
       status = 'closed'
       closedAt = candle.time
+      fundingPaid =
+        leverage === 1
+          ? 0
+          : fundingCost({
+              notionalQuote: notionalFor(params.amountQuote, leverage),
+              fundingRate: ASSUMED_FUNDING_RATE,
+              periods: fundingPeriodsBetween(enteredAt, candle.time),
+              side: params.side
+            })
+      realizedPnl = grossPos - roundTripFee(posQty, entryPrice, exitPrice) - fundingPaid
       break
     }
   }
 
-  return { kind: 'position', side: params.side, status, entryPrice, enteredAt, trailingPeakPrice, exitReason, exitPrice, closedAt, realizedPnl }
+  return {
+    kind: 'position',
+    side: params.side,
+    status,
+    entryPrice,
+    enteredAt,
+    trailingPeakPrice,
+    exitReason,
+    exitPrice,
+    closedAt,
+    realizedPnl,
+    leverage,
+    liquidationPrice: liqPrice,
+    fundingPaid
+  }
 }
 
 /** `market`/`limit_chaser` fill at the first candle's open — without a real order book,

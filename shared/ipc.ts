@@ -465,6 +465,12 @@ export interface PositionExecutorParams {
   /** null = enter at market (the first candle's open) instead of waiting for a touch. */
   entryPrice: number | null
   amountQuote: number
+  /** Simulation only, and optional so every executor stored before this existed still loads as
+   * what it was: absent means 1x, which is spot and behaves exactly as before.
+   *
+   * Above 1x the position can be liquidated, and live mode is refused outright -- this app places
+   * no leveraged order on any exchange. See shared/perp.ts. */
+  leverage?: number
   takeProfitPct: number | null
   stopLossPct: number | null
   timeLimitSec: number | null

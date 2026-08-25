@@ -6,6 +6,7 @@ import {
   type IChartApi,
   type ISeriesApi,
   type IPriceLine,
+  type AutoscaleInfo,
   type UTCTimestamp
 } from 'lightweight-charts'
 import { ArrowLeft } from 'lucide-react'
@@ -67,6 +68,9 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const priceLinesRef = useRef<IPriceLine[]>([])
+  /** Prices the vertical scale must cover even when no candle reaches them — see the
+   * autoscaleInfoProvider below. */
+  const extraScalePricesRef = useRef<number[]>([])
   const { theme } = useTheme()
   const palette = CHART_PALETTE[theme]
   const sim = useExecutorSimulation(executor)
@@ -92,7 +96,30 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
       downColor: palette.down,
       borderVisible: false,
       wickUpColor: palette.up,
-      wickDownColor: palette.down
+      wickDownColor: palette.down,
+      // A price line does NOT stretch the price scale on its own, so a level outside the candles'
+      // own range is created and then simply never drawn. That is tolerable for a take-profit the
+      // user chose and can look up; it is not tolerable for a liquidation level, which is the one
+      // line on a leveraged chart that would otherwise stay invisible for exactly as long as the
+      // position is healthy -- and then appear, unannounced, at the moment it stops being.
+      //
+      // Including it can squash the candles at low leverage, where the level is genuinely far
+      // away. That squashing is the honest picture: it is what "far from liquidation" looks like.
+      autoscaleInfoProvider: (original: () => AutoscaleInfo | null) => {
+        const base = original()
+        const extras = extraScalePricesRef.current
+        if (extras.length === 0) return base
+        if (!base || !base.priceRange) {
+          return { priceRange: { minValue: Math.min(...extras), maxValue: Math.max(...extras) } }
+        }
+        return {
+          ...base,
+          priceRange: {
+            minValue: Math.min(base.priceRange.minValue, ...extras),
+            maxValue: Math.max(base.priceRange.maxValue, ...extras)
+          }
+        }
+      }
     })
     seriesRef.current = series
 
@@ -108,6 +135,13 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
     const chart = chartRef.current
     const series = seriesRef.current
     if (!chart || !series || sim.candles.length === 0) return
+
+    // Set before setData, so the very first autoscale already accounts for it rather than
+    // rescaling a frame later.
+    extraScalePricesRef.current =
+      sim.state && sim.state.kind === 'position' && sim.state.liquidationPrice !== null
+        ? [sim.state.liquidationPrice]
+        : []
 
     series.setData(
       sim.candles.map((c) => ({ time: c.time as UTCTimestamp, open: c.open, high: c.high, low: c.low, close: c.close }))
@@ -212,6 +246,21 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
           const sl = isBuy ? sim.state.entryPrice * (1 - params.stopLossPct / 100) : sim.state.entryPrice * (1 + params.stopLossPct / 100)
           newLines.push(
             series.createPriceLine({ price: sl, color: palette.down, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: 'SL' })
+          )
+        }
+        // Solid and thick, unlike the dashed SL beside it, because it is not a level the holder
+        // chose and can move -- it is where the position ends whether they like it or not. Null
+        // at 1x, where there is nothing to draw.
+        if (sim.state.liquidationPrice !== null) {
+          newLines.push(
+            series.createPriceLine({
+              price: sim.state.liquidationPrice,
+              color: palette.down,
+              lineWidth: 2,
+              lineStyle: LineStyle.Solid,
+              axisLabelVisible: true,
+              title: 'LIQUIDATION'
+            })
           )
         }
       }
