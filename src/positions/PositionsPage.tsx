@@ -6,6 +6,7 @@ import { HeldPositionRow } from './HeldPositionRow'
 import { describeError } from '../utils/ipcError'
 import { settingsWrites } from '../utils/settingsWrites'
 import { LivePositionRow } from './LivePositionRow'
+import { LedgerCheck } from './LedgerCheck'
 import { LiveHistoryRow } from './LiveHistoryRow'
 import type { Bot } from '../bots/types'
 import type { HeldPosition, LivePosition } from '../../shared/ipc'
@@ -176,6 +177,7 @@ export function PositionsPage(): React.JSX.Element {
             </table>
           </div>
         )}
+        {livePositions.length > 0 && <LedgerCheck positions={livePositions} />}
       </Card>
 
       <Card title="Live Trade History — Realized P&L">
