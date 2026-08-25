@@ -99,3 +99,46 @@ export function describeAllocationBreach({
   }
   return null
 }
+
+/** Why a whole strategy will not fit inside the allocation, or null if it will.
+ *
+ * Separate from describeAllocationBreach because the two questions are different, and only one of
+ * them should stop anybody. That function asks whether the largest SINGLE order can be placed --
+ * if it cannot, no order the strategy ever places can succeed and creating it is pointless. This
+ * one asks whether every order ADDS UP to more than the allocation, which a ladder only finds out
+ * level by level: it half-fills and then starts being refused, leaving a strategy that is neither
+ * finished nor undone. Knowing that before creating it is the whole point, but it is a warning
+ * rather than a refusal, because capital freed by an earlier level closing may well cover a later
+ * one -- the app cannot know, and refusing on a guess would block a plan that would have worked. */
+export function describeAllocationPlanShortfall({
+  allocationQuote,
+  committedQuote,
+  planTotal,
+  quoteAsset
+}: {
+  allocationQuote: number | null
+  committedQuote: number
+  planTotal: number
+  quoteAsset: string
+}): string | null {
+  // Both of the guards either side of the finite check are provably redundant, and both stay.
+  //
+  // The null one is redundant only because Number.isFinite(null) happens to be false. Leaning on
+  // that would make "no allocation is configured" -- the documented contract of this parameter --
+  // an accident of coercion rather than something the code says.
+  //
+  // The planTotal one is redundant only because allocationRemainingQuote promises never to return
+  // a negative, which makes the comparison below false for any total at or under zero. That is a
+  // promise from a different function, and a guard that depends on one is worth keeping where it
+  // can be read.
+  if (allocationQuote === null) return null
+  if (!Number.isFinite(allocationQuote) || !Number.isFinite(committedQuote) || !Number.isFinite(planTotal)) return null
+  if (planTotal <= 0) return null
+
+  const remaining = allocationRemainingQuote(allocationQuote, committedQuote)
+  // Spelled as "not within" rather than "greater than" so a NaN that slipped past the check above
+  // would fail the comparison into warning rather than out of it.
+  if (!(planTotal > remaining)) return null
+
+  return `Every order this strategy places adds up to ${planTotal.toFixed(2)} ${quoteAsset}, and only ${remaining.toFixed(2)} of your ${allocationQuote.toFixed(2)} ${quoteAsset} allocation is free. The later orders will be refused when they fire unless something closes first.`
+}

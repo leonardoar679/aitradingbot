@@ -3,6 +3,7 @@ import {
   allocationRemainingQuote,
   committedAllocationQuote,
   describeAllocationBreach,
+  describeAllocationPlanShortfall,
   positionCostQuote,
   restingOrderReservedQuote
 } from '../shared/allocation'
@@ -161,5 +162,47 @@ describe('the gate', () => {
     for (const bad of [Number.NaN, 0, -10, Number.POSITIVE_INFINITY]) {
       expect(describeAllocationBreach({ ...base, allocationQuote: 200, orderQuote: bad })).not.toBeNull()
     }
+  })
+})
+
+describe('warning about a whole strategy before it is created', () => {
+  const base = { committedQuote: 30, planTotal: 50, quoteAsset: 'USDT' }
+
+  it('says nothing when no allocation is configured', () => {
+    expect(describeAllocationPlanShortfall({ ...base, allocationQuote: null })).toBeNull()
+  })
+
+  it('says nothing when the whole plan fits', () => {
+    expect(describeAllocationPlanShortfall({ ...base, allocationQuote: 100 })).toBeNull()
+  })
+
+  it('says nothing when the plan fits exactly', () => {
+    // 30 committed of 80 leaves 50, and the plan is 50.
+    expect(describeAllocationPlanShortfall({ ...base, allocationQuote: 80 })).toBeNull()
+  })
+
+  it('warns when the orders add up to more than is free, which a ladder only finds out level by level', () => {
+    // The failure this prevents: a DCA half-fills, then its later levels start being refused, and
+    // the user is left with a strategy that is neither finished nor undone.
+    const warning = describeAllocationPlanShortfall({ ...base, allocationQuote: 60 }) as string
+
+    expect(warning).toContain('50.00')
+    expect(warning).toContain('30.00')
+    expect(warning).toContain('60.00')
+    expect(warning).toContain('refused')
+  })
+
+  it('stays quiet on a plan total that is not a usable number', () => {
+    // Unlike the order gate, this one is a warning and not a refusal, so an unreadable number has
+    // to fall silent rather than raise an alarm nobody can act on. The refusal that actually
+    // protects the user runs in the main process and does not depend on this.
+    for (const bad of [Number.NaN, 0, -5]) {
+      expect(describeAllocationPlanShortfall({ ...base, allocationQuote: 60, planTotal: bad })).toBeNull()
+    }
+  })
+
+  it('stays quiet when the allocation or the committed figure cannot be read', () => {
+    expect(describeAllocationPlanShortfall({ ...base, allocationQuote: Number.NaN })).toBeNull()
+    expect(describeAllocationPlanShortfall({ ...base, allocationQuote: 60, committedQuote: Number.NaN })).toBeNull()
   })
 })

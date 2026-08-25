@@ -7,6 +7,7 @@ import { describeGridBoundsProblem } from './gridBounds'
 import type { ExecutorConfig, PaperAccount } from '../../shared/ipc'
 import { describeExecutorFunding } from '../account/executorFunding'
 import { describeLivePlanShortfall, describeLiveShortfall, freeBalance } from '../../shared/liveBalances'
+import { describeAllocationBreach, describeAllocationPlanShortfall } from '../../shared/allocation'
 import { resolveLeverage } from '../../shared/perp'
 import { executorAllocatedQuote } from './computeSnapshot'
 import { DcaForm } from './DcaForm'
@@ -418,7 +419,30 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
           exchangeLabel: 'Binance'
         })
       : null
-  const liveUnaffordable = liveOrderShortfall !== null
+  // The same two questions again, asked of the managed allocation rather than of the exchange
+  // balance. They are genuinely separate limits: the balance is what the money can buy, the
+  // allocation is how much of it this app was given permission to use, and a strategy can pass
+  // either one while failing the other. Null status means the gate is not configured or could not
+  // be read, and not-known must never block -- the main-process check is the real one regardless.
+  const allocationOrderBreach =
+    mode === 'live' && liveTradingStatus !== null
+      ? describeAllocationBreach({
+          allocationQuote: liveTradingStatus.allocationQuote,
+          committedQuote: liveTradingStatus.allocationCommittedQuote,
+          orderQuote: liveAmountQuote,
+          quoteAsset: pair.quoteAsset
+        })
+      : null
+  const allocationPlanShortfall =
+    mode === 'live' && liveTradingStatus !== null && allocationOrderBreach === null
+      ? describeAllocationPlanShortfall({
+          allocationQuote: liveTradingStatus.allocationQuote,
+          committedQuote: liveTradingStatus.allocationCommittedQuote,
+          planTotal: executorAllocatedQuote({ type, params: pendingParams } as unknown as ExecutorConfig),
+          quoteAsset: pair.quoteAsset
+        })
+      : null
+  const liveUnaffordable = liveOrderShortfall !== null || allocationOrderBreach !== null
 
   function handleCreate(): void {
     if (!name.trim() || !canSubmitLive || spreadAssetsMismatched || underfunded || liveUnaffordable) return
@@ -712,6 +736,12 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
         {livePlanShortfall && (
           <p style={{ margin: '0 1.1rem 0.6rem', fontSize: '0.76rem', color: 'var(--gold)', lineHeight: 1.5 }}>{livePlanShortfall}</p>
         )}
+        {allocationOrderBreach && (
+          <p style={{ margin: '0 1.1rem 0.6rem', fontSize: '0.76rem', color: 'var(--down)', lineHeight: 1.5 }}>{allocationOrderBreach}</p>
+        )}
+        {allocationPlanShortfall && (
+          <p style={{ margin: '0 1.1rem 0.6rem', fontSize: '0.76rem', color: 'var(--gold)', lineHeight: 1.5 }}>{allocationPlanShortfall}</p>
+        )}
 
         <div style={{ display: 'flex', gap: '0.6rem', padding: '0 1.1rem 1.1rem' }}>
           <button
@@ -723,7 +753,7 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
           <button
             onClick={handleCreate}
             disabled={!name.trim() || !canSubmitLive || spreadAssetsMismatched || gridBlocked || underfunded || liveUnaffordable}
-            title={gridBlocked ? (gridBounds.blocking ?? undefined) : (fundingProblem ?? liveOrderShortfall ?? undefined)}
+            title={gridBlocked ? (gridBounds.blocking ?? undefined) : (fundingProblem ?? liveOrderShortfall ?? allocationOrderBreach ?? undefined)}
             style={{
               flex: 1,
               background: mode === 'live' ? 'var(--down)' : 'linear-gradient(135deg, #7c86ff, #6366f1)',
