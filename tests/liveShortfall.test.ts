@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { describeLiveShortfall } from '../shared/liveBalances'
+import { describeLivePlanShortfall, describeLiveShortfall } from '../shared/liveBalances'
 
 // This one runs immediately before real money leaves the account. Its job is not to be the last
 // line of defence -- the exchange refuses an order there is no money for regardless -- but to say
@@ -93,5 +93,74 @@ describe('describeLiveShortfall — when it must not block', () => {
     // order whose real fault is its size.
     expect(ask({ quoteAmount: 0, free: -10 })).toBeNull()
     expect(ask({ quoteAmount: -5, free: -10 })).toBeNull()
+  })
+})
+
+// A ladder is a different question from a single order. Its money only has to be there when each
+// order fires, so falling short on the total is a heads-up rather than a refusal -- but a silent
+// one is the worst of both: the strategy runs, does real work, and then stops being able to.
+
+const plan = (over: Partial<Parameters<typeof describeLivePlanShortfall>[0]> = {}): string | null =>
+  describeLivePlanShortfall({ quoteAsset: 'USDT', planTotal: 100, free: 40, exchangeLabel: 'Binance', ...over })
+
+describe('describeLivePlanShortfall', () => {
+  it('warns when the whole plan costs more than is free', () => {
+    const why = plan()!
+
+    expect(why).toContain('100')
+    expect(why).toContain('40')
+    expect(why).toContain('USDT')
+  })
+
+  it('says the strategy will start and then stop, which is the part that is not obvious', () => {
+    // Without this the user reads it as "this will not run" and looks for a different problem
+    // when it does run.
+    expect(plan()).toMatch(/start.*stop/i)
+  })
+
+  it('says nothing when the plan fits', () => {
+    expect(plan({ planTotal: 100, free: 100 })).toBeNull()
+    expect(plan({ planTotal: 100, free: 250 })).toBeNull()
+  })
+
+  it('says nothing when the balance could not be read', () => {
+    expect(plan({ free: Number.NaN })).toBeNull()
+  })
+
+  it('says nothing about a total that is not a usable number', () => {
+    expect(plan({ planTotal: Number.NaN })).toBeNull()
+    expect(plan({ planTotal: 0 })).toBeNull()
+    expect(plan({ planTotal: -10 })).toBeNull()
+  })
+
+  it('does not warn about an infinite plan total, which no balance can cover', () => {
+    // The case that makes the finiteness guard do real work. Without it, `free < Infinity` holds
+    // for any real balance and the warning reads "This plan places Infinity USDT of orders".
+    expect(plan({ planTotal: Number.POSITIVE_INFINITY, free: 1_000_000 })).toBeNull()
+  })
+
+  it('still says nothing about a zero or negative total when the balance is negative', () => {
+    // The only situation where a non-positive total is even reachable past the comparison, and
+    // reachable at all because readableBalances deliberately keeps a negative balance visible
+    // instead of filtering it away. Without the guard this warns that a plan placing 0 USDT of
+    // orders cannot be afforded.
+    expect(plan({ planTotal: 0, free: -10 })).toBeNull()
+    expect(plan({ planTotal: -5, free: -10 })).toBeNull()
+  })
+
+  it('is a different message from the single-order refusal, not a rewording of it', () => {
+    // They appear in the same place in the same dialog and mean different things: one says this
+    // cannot be done, the other says it can be started but not finished.
+    const refusal = describeLiveShortfall({
+      side: 'buy',
+      quoteAsset: 'USDT',
+      quoteAmount: 100,
+      free: 40,
+      exchangeLabel: 'Binance'
+    })!
+
+    expect(plan()).not.toBe(refusal)
+    expect(refusal).toContain('Not enough')
+    expect(plan()).not.toContain('Not enough')
   })
 })

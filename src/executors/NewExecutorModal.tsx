@@ -6,6 +6,7 @@ import { GridForm } from './GridForm'
 import { describeGridBoundsProblem } from './gridBounds'
 import type { ExecutorConfig, PaperAccount } from '../../shared/ipc'
 import { describeExecutorFunding } from '../account/executorFunding'
+import { describeLivePlanShortfall, describeLiveShortfall, freeBalance } from '../../shared/liveBalances'
 import { executorAllocatedQuote } from './computeSnapshot'
 import { DcaForm } from './DcaForm'
 import { TwapForm } from './TwapForm'
@@ -327,6 +328,32 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
   const liveConfirmOk = liveConfirmText.trim() === LIVE_CONFIRM_PHRASE
   const canSubmitLive = mode !== 'live' || (canGoLive && liveAmountOk && liveConfirmOk)
 
+  // What the exchange says is spendable in this pair's quote asset. Null means "not known":
+  // no key, an exchange that could not be reached, or paper mode -- and not known must never
+  // block anything, the same rule the main-process check follows.
+  const [liveFree, setLiveFree] = useState<number | null>(null)
+  useEffect(() => {
+    if (mode !== 'live' || exchange !== 'binance') {
+      setLiveFree(null)
+      return
+    }
+    let cancelled = false
+    window.api.credentials
+      .balances('binance', false)
+      .then((snapshot) => {
+        if (!cancelled) setLiveFree(freeBalance(snapshot, pair.quoteAsset))
+      })
+      .catch(() => {
+        // Deliberately silent and deliberately not blocking. This is a warning ahead of the real
+        // check, which runs in the main process immediately before the order; a balance that
+        // could not be read here is no reason to stop someone creating a strategy.
+        if (!cancelled) setLiveFree(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [mode, exchange, pair.quoteAsset])
+
   const pendingParams: AnyExecutorParams = isSpreadType
     ? type === 'xemm'
       ? xemmParams
@@ -356,8 +383,37 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
   })
   const underfunded = fundingProblem !== null
 
+  // Every live executor type in this app is buy-only (see canGoLiveOrder and its siblings above),
+  // so the live checks below are always about spending the quote asset.
+  //
+  // Two questions, and they are not the same one. liveAmountQuote is the largest SINGLE order the
+  // strategy will place: if that alone cannot be paid for, no order it ever places can succeed, so
+  // creating it is pointless and the button is disabled -- the same treatment paper mode gets.
+  // The plan total is what every order adds up to; a ladder only needs each amount when that order
+  // fires, so falling short there is a warning, not a refusal.
+  const liveOrderShortfall =
+    mode === 'live' && liveFree !== null
+      ? describeLiveShortfall({
+          side: 'buy',
+          quoteAsset: pair.quoteAsset,
+          quoteAmount: liveAmountQuote,
+          free: liveFree,
+          exchangeLabel: 'Binance'
+        })
+      : null
+  const livePlanShortfall =
+    mode === 'live' && liveFree !== null && liveOrderShortfall === null
+      ? describeLivePlanShortfall({
+          quoteAsset: pair.quoteAsset,
+          planTotal: executorAllocatedQuote({ type, params: pendingParams } as unknown as ExecutorConfig),
+          free: liveFree,
+          exchangeLabel: 'Binance'
+        })
+      : null
+  const liveUnaffordable = liveOrderShortfall !== null
+
   function handleCreate(): void {
-    if (!name.trim() || !canSubmitLive || spreadAssetsMismatched || underfunded) return
+    if (!name.trim() || !canSubmitLive || spreadAssetsMismatched || underfunded || liveUnaffordable) return
 
     if (isSpreadType) {
       const params = type === 'xemm' ? xemmParams : arbitrageParams
@@ -616,6 +672,12 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
         {fundingProblem && (
           <p style={{ margin: '0 1.1rem 0.6rem', fontSize: '0.76rem', color: 'var(--down)', lineHeight: 1.5 }}>{fundingProblem}</p>
         )}
+        {liveOrderShortfall && (
+          <p style={{ margin: '0 1.1rem 0.6rem', fontSize: '0.76rem', color: 'var(--down)', lineHeight: 1.5 }}>{liveOrderShortfall}</p>
+        )}
+        {livePlanShortfall && (
+          <p style={{ margin: '0 1.1rem 0.6rem', fontSize: '0.76rem', color: 'var(--gold)', lineHeight: 1.5 }}>{livePlanShortfall}</p>
+        )}
 
         <div style={{ display: 'flex', gap: '0.6rem', padding: '0 1.1rem 1.1rem' }}>
           <button
@@ -626,8 +688,8 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
           </button>
           <button
             onClick={handleCreate}
-            disabled={!name.trim() || !canSubmitLive || spreadAssetsMismatched || gridBlocked || underfunded}
-            title={gridBlocked ? (gridBounds.blocking ?? undefined) : (fundingProblem ?? undefined)}
+            disabled={!name.trim() || !canSubmitLive || spreadAssetsMismatched || gridBlocked || underfunded || liveUnaffordable}
+            title={gridBlocked ? (gridBounds.blocking ?? undefined) : (fundingProblem ?? liveOrderShortfall ?? undefined)}
             style={{
               flex: 1,
               background: mode === 'live' ? 'var(--down)' : 'linear-gradient(135deg, #7c86ff, #6366f1)',
@@ -637,7 +699,10 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
               color: '#fff',
               fontSize: '0.85rem',
               fontWeight: 700,
-              cursor: name.trim() && canSubmitLive && !spreadAssetsMismatched && !gridBlocked && !underfunded ? 'pointer' : 'not-allowed',
+              cursor:
+                name.trim() && canSubmitLive && !spreadAssetsMismatched && !gridBlocked && !underfunded && !liveUnaffordable
+                  ? 'pointer'
+                  : 'not-allowed',
               opacity: name.trim() && canSubmitLive && !spreadAssetsMismatched && !gridBlocked ? 1 : 0.6
             }}
           >

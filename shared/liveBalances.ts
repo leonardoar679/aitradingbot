@@ -109,3 +109,32 @@ export function describeLiveShortfall({
 
   return `Not enough ${quoteAsset} on ${exchangeLabel}: this order spends ${quoteAmount} and only ${free} is free. Funds held in resting orders do not count -- cancel one, or add ${quoteAmount - free} ${quoteAsset}.`
 }
+
+/** The heads-up for a laddered strategy whose FULL plan costs more than is free, as opposed to
+ * describeLiveShortfall's refusal of one order that cannot be paid for right now.
+ *
+ * Two different facts, so two different messages. A DCA ladder, a TWAP schedule and a live Grid
+ * each place many orders over time, and the money only has to be there when each one fires. That
+ * makes "you cannot afford the whole plan" a warning rather than a refusal: the strategy will run
+ * and do real work, and then quietly stop being able to. Saying so up front is the difference
+ * between a plan the user chose to under-fund and one that failed halfway for no visible reason.
+ *
+ * Returns null when the plan fits, when the total is not a usable number, or when the free
+ * balance could not be read -- the same allow-on-doubt rule as everything else here. */
+export function describeLivePlanShortfall({
+  quoteAsset,
+  planTotal,
+  free,
+  exchangeLabel
+}: {
+  quoteAsset: string
+  /** What every order in the plan adds up to, in the quote asset. */
+  planTotal: number
+  free: number
+  exchangeLabel: string
+}): string | null {
+  if (!Number.isFinite(planTotal) || planTotal <= 0) return null
+  if (!(free < planTotal)) return null
+
+  return `This plan places ${planTotal} ${quoteAsset} of orders in total and only ${free} is free on ${exchangeLabel}. It will start, then stop being able to place its later orders. Fund the difference or reduce the size.`
+}
