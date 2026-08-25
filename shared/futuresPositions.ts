@@ -139,3 +139,16 @@ export function describeFuturesPosition(position: FuturesPosition, quoteAsset = 
       : 'Isolated margin, so only the margin on this position is at stake.'
   return `${base} A ${distance.toFixed(2)}% move against it reaches ${position.liquidationPrice}, where the exchange closes it for you and that margin is gone. ${scope}`
 }
+
+/** What came back from closing a real futures position.
+ *
+ * Lives here rather than beside the code that produces it because the preload bridge is compiled
+ * into both the main and renderer projects, and only shared/ is visible to both. */
+export interface FuturesCloseResult {
+  orderId: number
+  status: string
+  closedQty: number
+  /** Null when the exchange has not reported a fill price yet -- reporting its literal "0" would
+   * show a close at a price of nothing, and a P&L to match. */
+  avgPrice: number | null
+}

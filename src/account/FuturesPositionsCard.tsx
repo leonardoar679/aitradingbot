@@ -4,8 +4,9 @@ import { distanceToLiquidationPct, type FuturesReadout } from '../../shared/futu
 
 /** Real perpetual-futures positions, read from Binance over the user's own key.
  *
- * This app cannot open, close or change any of them -- the module that fetches them contains no
- * order endpoint at all. It is here for one reason: someone holding a leveraged position has a
+ * This app can close one of them and cannot open one -- see binanceFuturesTrading.ts for why
+ * those two halves are not the same decision. It is here for one reason: someone holding a
+ * leveraged position has a
  * liquidation price whether they have looked at it or not, and the paper side of this app spends
  * a great deal of effort teaching what that number means. Showing the real one costs nothing.
  *
@@ -16,10 +17,20 @@ const REFRESH_MS = 20_000
 /** Below this the position is close enough that the distance is the headline, not a detail. */
 const URGENT_DISTANCE_PCT = 10
 
+/** Typed in full, not a click. Closing is risk-reducing and never blocked by the size gates, but
+ * it is still real money moving on a real exchange and it cannot be undone -- and this button
+ * sits next to a liquidation warning, exactly where someone is most likely to be in a hurry. */
+const CLOSE_CONFIRM_PHRASE = 'CLOSE POSITION'
+
 export function FuturesPositionsCard(): React.JSX.Element | null {
   const [readout, setReadout] = useState<FuturesReadout | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [checked, setChecked] = useState(false)
+  const [closing, setClosing] = useState<string | null>(null)
+  const [confirmText, setConfirmText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [closeError, setCloseError] = useState<string | null>(null)
+  const [closed, setClosed] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -47,6 +58,29 @@ export function FuturesPositionsCard(): React.JSX.Element | null {
     }
   }, [])
 
+  async function handleClose(symbol: string): Promise<void> {
+    setBusy(true)
+    setCloseError(null)
+    try {
+      const result = await window.api.credentials.closeFuturesPosition('binance', symbol)
+      setClosed(
+        `Closed ${result.closedQty} ${symbol}${result.avgPrice !== null ? ` at ${result.avgPrice}` : ''} (order ${result.orderId}, ${result.status}).`
+      )
+      setClosing(null)
+      setConfirmText('')
+      // Re-read rather than removing the row locally: a partial fill leaves a smaller position
+      // still open, and crossing it off the list would tell the user they were flat when they
+      // are not.
+      setReadout(await window.api.credentials.futuresPositions('binance'))
+    } catch (e) {
+      // Never cleared automatically. If a close failed, the position is still open and still
+      // leveraged, and that is the single most important thing on this page.
+      setCloseError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   // Nothing to say yet, and nothing worth a card: no key, no futures permission, or genuinely no
   // positions. An empty card claiming "no futures positions" would be a claim this app cannot
   // make when the request never succeeded.
@@ -67,8 +101,9 @@ export function FuturesPositionsCard(): React.JSX.Element | null {
         BINANCE FUTURES — REAL POSITIONS
       </h3>
       <p style={{ margin: '0 0 0.9rem', fontSize: '0.76rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-        Read from your account, closest to liquidation first. This app cannot open, close or change any of these — it
-        has no futures order path at all. Manage them on Binance.
+        Read from your account, closest to liquidation first. This app can <strong>close</strong> one of these for you at
+        the market price — that is the only change it can make to a futures account. It cannot open a leveraged position
+        and has no code to do so, because opening one it could not then watch and exit would leave it to be liquidated.
       </p>
 
       {readout.positions.map((position) => {
@@ -111,9 +146,99 @@ export function FuturesPositionsCard(): React.JSX.Element | null {
                 and that margin is gone.
               </span>
             )}
+
+            {closing === position.symbol ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginTop: '0.3rem' }}>
+                <span style={{ color: 'var(--down)', fontWeight: 600 }}>
+                  This closes your real {position.symbol} position at whatever the market pays, right now. It cannot be
+                  undone. Type CLOSE POSITION to confirm.
+                </span>
+                <input
+                  value={confirmText}
+                  onChange={(e) => setConfirmText(e.target.value)}
+                  placeholder="CLOSE POSITION"
+                  style={{
+                    background: 'var(--surface-2)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)',
+                    color: 'var(--text-primary)',
+                    padding: '0.35rem 0.5rem',
+                    fontSize: '0.78rem'
+                  }}
+                />
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    onClick={() => void handleClose(position.symbol)}
+                    disabled={busy || confirmText.trim() !== CLOSE_CONFIRM_PHRASE}
+                    style={{
+                      background: 'var(--down)',
+                      border: 'none',
+                      borderRadius: 'var(--radius-sm)',
+                      color: '#fff',
+                      padding: '0.35rem 0.7rem',
+                      fontSize: '0.76rem',
+                      fontWeight: 600,
+                      cursor: busy || confirmText.trim() !== CLOSE_CONFIRM_PHRASE ? 'not-allowed' : 'pointer',
+                      opacity: busy || confirmText.trim() !== CLOSE_CONFIRM_PHRASE ? 0.5 : 1
+                    }}
+                  >
+                    {busy ? 'Closing…' : 'Close it for real'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setClosing(null)
+                      setConfirmText('')
+                    }}
+                    disabled={busy}
+                    style={{
+                      background: 'transparent',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-sm)',
+                      color: 'var(--text-secondary)',
+                      padding: '0.35rem 0.7rem',
+                      fontSize: '0.76rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  setClosing(position.symbol)
+                  setConfirmText('')
+                  setCloseError(null)
+                }}
+                style={{
+                  alignSelf: 'flex-start',
+                  marginTop: '0.3rem',
+                  background: 'transparent',
+                  border: '1px solid var(--down)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--down)',
+                  padding: '0.3rem 0.65rem',
+                  fontSize: '0.74rem',
+                  cursor: 'pointer'
+                }}
+              >
+                Close this position
+              </button>
+            )}
           </div>
         )
       })}
+
+      {closed !== null && (
+        <p style={{ margin: '0.6rem 0 0', fontSize: '0.76rem', color: 'var(--up)', lineHeight: 1.5 }}>{closed}</p>
+      )}
+
+      {closeError !== null && (
+        <p style={{ margin: '0.6rem 0 0', fontSize: '0.76rem', color: 'var(--down)', lineHeight: 1.5 }}>
+          Could not close it: {closeError} — the position is still open. Check it on Binance.
+        </p>
+      )}
 
       {readout.unreadable.length > 0 && (
         <p style={{ margin: '0.6rem 0 0', fontSize: '0.76rem', color: 'var(--down)', lineHeight: 1.5 }}>

@@ -5,9 +5,11 @@ import { writeJsonAtomic } from './atomicWrite'
 import { fetchAccountBalance, type AccountBalance } from './exchanges/binanceTrading'
 import { fetchUpbitBalances } from './exchanges/upbitTrading'
 import { fetchFuturesPositions } from './exchanges/binanceFutures'
+import { closeFuturesPosition } from './exchanges/binanceFuturesTrading'
+import { canCloseLivePosition } from './liveTradingService'
 import { freeBalance, readableBalances } from '../../shared/liveBalances'
 import type { CredentialStatus, Exchange, LiveBalanceSnapshot } from '../../shared/ipc'
-import type { FuturesReadout } from '../../shared/futuresPositions'
+import type { FuturesCloseResult, FuturesReadout } from '../../shared/futuresPositions'
 
 // Credentials live in their own file, separate from settings.json, so a bug in general settings
 // persistence can never touch secrets. Each key/secret is encrypted at rest via Electron's
@@ -228,4 +230,34 @@ export async function readFuturesPositions(exchange: Exchange): Promise<FuturesR
   const entry = store[exchange]
   if (!entry) throw new Error(`No API key is connected for ${exchange}`)
   return fetchFuturesPositions(decrypt(entry.apiKeyEnc), decrypt(entry.apiSecretEnc))
+}
+
+/** Closes a real futures position at market. The only write this app can make to a futures
+ * account -- see binanceFuturesTrading.ts for why opening one is deliberately absent.
+ *
+ * Gated by canCloseLivePosition rather than canPlaceLiveOrder: the size, daily-cap and loss-limit
+ * gates exist to bound NEW exposure, and none of them should be able to trap someone inside a
+ * leveraged position they are trying to leave. The kill switch and the session arm still apply,
+ * because both mean "this app should not be touching the exchange at all right now".
+ *
+ * The size is re-read here rather than taken from the caller: the renderer's copy is up to twenty
+ * seconds old, and closing a stale quantity would either leave a remainder open or -- without
+ * reduceOnly, which is also set -- open a position in the opposite direction. */
+export async function closeFuturesPositionFor(exchange: Exchange, symbol: string): Promise<FuturesCloseResult> {
+  if (exchange !== 'binance') throw new Error(`Closing futures positions is not supported for ${exchange}`)
+  const gate = await canCloseLivePosition()
+  if (!gate.allowed) throw new Error(gate.reason ?? 'Closing is not allowed right now')
+
+  const store = await load()
+  const entry = store[exchange]
+  if (!entry) throw new Error(`No API key is connected for ${exchange}`)
+
+  const apiKey = decrypt(entry.apiKeyEnc)
+  const apiSecret = decrypt(entry.apiSecretEnc)
+  const { positions } = await fetchFuturesPositions(apiKey, apiSecret)
+  const position = positions.find((p) => p.symbol === symbol)
+  if (!position) {
+    throw new Error(`Binance reports no open ${symbol} futures position — it may already be closed.`)
+  }
+  return closeFuturesPosition(apiKey, apiSecret, symbol, position.positionAmt)
 }

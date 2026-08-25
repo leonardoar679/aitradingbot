@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import type { FuturesReadout } from '../shared/futuresPositions'
+import type { FuturesCloseResult, FuturesReadout } from '../shared/futuresPositions'
 import {
   IpcChannel,
   type AppSettings,
@@ -78,7 +78,9 @@ const api = {
     balances: (exchange: Exchange, force = false): Promise<LiveBalanceSnapshot> =>
       ipcRenderer.invoke(IpcChannel.CredentialsBalances, exchange, force),
     futuresPositions: (exchange: Exchange): Promise<FuturesReadout> =>
-      ipcRenderer.invoke(IpcChannel.CredentialsFuturesPositions, exchange)
+      ipcRenderer.invoke(IpcChannel.CredentialsFuturesPositions, exchange),
+    closeFuturesPosition: (exchange: Exchange, symbol: string): Promise<FuturesCloseResult> =>
+      ipcRenderer.invoke(IpcChannel.CredentialsCloseFuturesPosition, exchange, symbol)
   },
   liveTrading: {
     getStatus: (): Promise<LiveTradingStatus> => ipcRenderer.invoke(IpcChannel.LiveTradingGetStatus),
