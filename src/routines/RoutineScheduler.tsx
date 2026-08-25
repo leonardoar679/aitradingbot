@@ -16,6 +16,11 @@ export async function runRoutineNow(routine: RoutineConfig): Promise<void> {
   const { candles } = await window.api.market.fetchHistoricalRange(routine.exchange, routine.symbol, routine.interval, startSec, nowSec)
   if (candles.length === 0) throw new Error('No candle data available for this window yet')
 
+  // Deliberately the engine default, not the paper account balance the Backtest page uses. A
+  // routine is a repeated measurement: its saved reports are read side by side to see whether a
+  // strategy is holding up, and re-basing each run on whatever the account happened to hold that
+  // day would make consecutive reports' currency figures incomparable for a reason that has
+  // nothing to do with the strategy. A fixed yardstick is the point.
   const result = runBacktest(candles, routine.strategyId)
   pushRoutineReport({ id: crypto.randomUUID(), routineId: routine.id, ranAt: nowSec, symbolLabel: routine.symbol, result })
 

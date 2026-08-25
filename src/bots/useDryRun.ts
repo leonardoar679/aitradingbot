@@ -42,6 +42,9 @@ export async function fetchBotDryRunResult(bot: {
       : defaultStartSec
   const { candles } = await window.api.market.fetchHistoricalRange(bot.exchange, bot.symbol, '4h', startSec, endSec)
   if (candles.length === 0) return null
+  // Engine default, like RoutineScheduler and for the same reason: a dry run is re-computed on
+  // every poll, and a bot's displayed P&L must not move because an unrelated strategy started or
+  // stopped somewhere else in the app.
   return { result: runBacktest(candles, bot.strategyId, { forceCloseAtEnd: false }), candles }
 }
 

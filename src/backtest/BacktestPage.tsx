@@ -6,11 +6,22 @@ import { BacktestRunningView, type RunningState } from './BacktestRunningView'
 import { BacktestResultsView, type ResultsGeneralInfo } from './BacktestResultsView'
 import { BacktestChartsView } from './BacktestChartsView'
 import { StrategyComparisonView } from './StrategyComparisonView'
-import { runBacktest, type BacktestResult } from './engine'
+import { runBacktest, DEFAULT_STARTING_BALANCE, type BacktestResult } from './engine'
+import { availableBalance } from '../account/paperAccount'
+import { committedFor } from '../account/accountCommitments'
 import { describeRangeProblem, describeEmptyRange } from './rangeProblem'
 import { describeError } from '../utils/ipcError'
 import { STRATEGIES, DEFAULT_STRATEGY_ID, getStrategy } from './strategies'
-import { EXCHANGES, INTERVALS, type Candle, type Exchange, type Interval, type SymbolInfo } from '../../shared/ipc'
+import {
+  EXCHANGES,
+  INTERVALS,
+  type Candle,
+  type Exchange,
+  type ExecutorConfig,
+  type Interval,
+  type PaperAccount,
+  type SymbolInfo
+} from '../../shared/ipc'
 
 type Tab = 'configuration' | 'progress' | 'charts' | 'compare'
 
@@ -107,9 +118,35 @@ export function BacktestPage(): React.JSX.Element {
   })
   const [endDate, setEndDate] = useState(() => isoDate(new Date()))
   const [splitDate, setSplitDate] = useState('')
+  const [startingCapital, setStartingCapital] = useState(String(DEFAULT_STARTING_BALANCE))
+  /** Once the user types their own number, the account must stop overwriting it -- otherwise
+   * switching to a different pair to compare silently replaces the amount they chose. State
+   * rather than a ref because the caption has to stop claiming the number came from the account. */
+  const [capitalTouched, setCapitalTouched] = useState(false)
+  const [account, setAccount] = useState<PaperAccount | null>(null)
+  const [accountExecutors, setAccountExecutors] = useState<ExecutorConfig[]>([])
   const [compareCandles, setCompareCandles] = useState<Candle[] | null>(null)
   const [compareLoading, setCompareLoading] = useState(false)
   const [compareError, setCompareError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    window.api.settings
+      .get()
+      .then((settings) => {
+        if (cancelled) return
+        setAccount(settings.paperAccount ?? null)
+        setAccountExecutors(settings.executors ?? [])
+      })
+      .catch((error: unknown) => {
+        // A backtest does not need the account -- it only defaults the capital field from it.
+        // Falling back to DEFAULT_STARTING_BALANCE beats blocking the page over bookkeeping.
+        console.error('Failed to read the paper account for the starting capital default:', error)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -142,9 +179,30 @@ export function BacktestPage(): React.JSX.Element {
     setTradingRoute((prev) => ({ ...prev, ...patch }))
   }
 
+  // Empty until the symbol list arrives, which is why the default-capital effect below waits for
+  // it: defaulting against '' would charge the run to an asset the account has never held.
+  const quoteAsset = symbols.find((sym) => sym.symbol === tradingRoute.symbol)?.quoteAsset ?? ''
+  // AVAILABLE, not total. Money a running paper strategy is already holding cannot also be the
+  // money this backtest starts with -- the Account page draws the same line.
+  const accountAvailable =
+    account !== null && quoteAsset !== ''
+      ? availableBalance(account, quoteAsset, committedFor(accountExecutors, quoteAsset))
+      : 0
+
+  useEffect(() => {
+    if (capitalTouched) return
+    if (accountAvailable > 0) setStartingCapital(String(accountAvailable))
+  }, [accountAvailable, capitalTouched])
+
+  const capitalValue = Number.parseFloat(startingCapital)
+  const capitalProblem =
+    !Number.isFinite(capitalValue) || capitalValue <= 0
+      ? 'Starting capital has to be a number above 0 — every figure in the results is a share of it.'
+      : null
+
   function handleStart(): void {
     const route = tradingRoute
-    if (!route.symbol) return
+    if (!route.symbol || capitalProblem !== null) return
 
     // Checked before anything is fetched: a blank or backwards range fetches zero candles
     // without erroring, and a zero-candle run still renders a complete results page.
@@ -176,6 +234,7 @@ export function BacktestPage(): React.JSX.Element {
       logs.push(`[${new Date().toISOString().slice(11, 19)}] ${msg}`)
     }
     log(`Starting fetch: ${exchange} ${route.symbol} ${route.interval}, range ${startDate} → ${endDate}`)
+    log(`Starting capital: ${capitalValue.toLocaleString()} ${quoteAsset}`)
 
     let lastLoggedDecile = -1
     // requestId scopes this to *this* fetch -- an unrelated bot poll or routine run fetching
@@ -209,7 +268,7 @@ export function BacktestPage(): React.JSX.Element {
           return
         }
         log(`Running strategy: ${strategy.name} — ${strategy.description}`)
-        const result = runBacktest(fetchResult.candles, route.strategyId)
+        const result = runBacktest(fetchResult.candles, route.strategyId, { startingBalance: capitalValue })
         log(
           `Simulation complete: ${result.trades.length} trades, net P&L ${result.stats.totalNetProfit.toFixed(2)} (${result.stats.totalNetProfitPct.toFixed(2)}%)`
         )
@@ -322,7 +381,7 @@ export function BacktestPage(): React.JSX.Element {
         <Card title="Strategy comparison">
           {compareLoading && <p style={{ color: 'var(--text-secondary)', margin: 0 }}>Fetching candles…</p>}
           {!compareLoading && compareError && <p style={{ color: 'var(--down)', margin: 0 }}>Error: {compareError}</p>}
-          {!compareLoading && !compareError && compareCandles && <StrategyComparisonView candles={compareCandles} />}
+          {!compareLoading && !compareError && compareCandles && <StrategyComparisonView candles={compareCandles} startingBalance={capitalValue} />}
           {!compareLoading && !compareError && !compareCandles && (
             <p style={{ color: 'var(--text-secondary)', margin: 0 }}>No candle data loaded yet.</p>
           )}
@@ -450,15 +509,40 @@ export function BacktestPage(): React.JSX.Element {
                 style={{ ...fieldStyle(), width: '100%', colorScheme: 'dark' }}
               />
 
-              <SectionHeader label="Options" />
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0 }}>No additional options yet.</p>
+              <SectionHeader label="Starting Capital" />
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', margin: '0 0 0.6rem' }}>
+                {accountAvailable <= 0
+                  ? 'What the simulation starts with. Every result is a share of this number, so the same percentage return is a different amount of money on a different starting balance.'
+                  : capitalTouched
+                    ? `Testing a size of your own. Your paper account has ${accountAvailable.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${quoteAsset} available; clear this field and reopen the page to go back to that.`
+                    : `Filled in from your paper account: ${accountAvailable.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${quoteAsset} is available after what your running strategies are already holding. Change it to test a different size.`}
+              </p>
+              <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={startingCapital}
+                  onChange={(e) => {
+                    setCapitalTouched(true)
+                    setStartingCapital(e.target.value)
+                  }}
+                  style={{ ...fieldStyle(), flex: 1 }}
+                />
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', minWidth: 48 }}>
+                  {quoteAsset || '—'}
+                </span>
+              </div>
+              {capitalProblem !== null && (
+                <p style={{ color: 'var(--down)', fontSize: '0.78rem', margin: '0.5rem 0 0' }}>{capitalProblem}</p>
+              )}
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
               <button
                 onClick={handleStart}
-                disabled={symbolsLoading || !tradingRoute.symbol}
-                title={symbolsLoading ? 'Symbols are still loading' : undefined}
+                disabled={symbolsLoading || !tradingRoute.symbol || capitalProblem !== null}
+                title={symbolsLoading ? 'Symbols are still loading' : (capitalProblem ?? undefined)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -471,8 +555,8 @@ export function BacktestPage(): React.JSX.Element {
                   color: '#fff',
                   fontSize: '0.95rem',
                   fontWeight: 700,
-                  cursor: symbolsLoading || !tradingRoute.symbol ? 'not-allowed' : 'pointer',
-                  opacity: symbolsLoading || !tradingRoute.symbol ? 0.6 : 1
+                  cursor: symbolsLoading || !tradingRoute.symbol || capitalProblem !== null ? 'not-allowed' : 'pointer',
+                  opacity: symbolsLoading || !tradingRoute.symbol || capitalProblem !== null ? 0.6 : 1
                 }}
               >
                 <Zap size={16} /> Start

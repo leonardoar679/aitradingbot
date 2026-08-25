@@ -30,19 +30,27 @@ function pctColor(value: number): string {
   return value >= 0 ? 'var(--up)' : 'var(--down)'
 }
 
-export function StrategyComparisonView({ candles }: { candles: Candle[] }): React.JSX.Element {
+export function StrategyComparisonView({
+  candles,
+  startingBalance
+}: {
+  candles: Candle[]
+  /** The same capital the single-strategy run used, so a strategy's row here and its own results
+   * page cannot disagree on what it earned. */
+  startingBalance: number
+}): React.JSX.Element {
   const [sortKey, setSortKey] = useState<SortKey>('totalNetProfitPct')
 
   const rows = useMemo(() => {
     return STRATEGIES.map((strategy) => ({
       strategy,
-      stats: runBacktest(candles, strategy.id).stats
+      stats: runBacktest(candles, strategy.id, { startingBalance }).stats
     })).sort((a, b) => {
       const column = COLUMNS.find((c) => c.key === sortKey)!
       const diff = a.stats[sortKey] - b.stats[sortKey]
       return column.higherIsBetter ? -diff : diff
     })
-  }, [candles, sortKey])
+  }, [candles, sortKey, startingBalance])
 
   return (
     <div style={{ overflowX: 'auto' }}>

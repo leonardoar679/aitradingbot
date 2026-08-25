@@ -7,7 +7,20 @@ import { FEE_RATE } from '../../shared/fees'
 // open position is force-closed on the final candle (unless forceCloseAtEnd is off). Fee is a
 // flat rate applied to both entry and exit notional, shared with the executor paper simulations
 // via shared/fees.ts so the two engines can never disagree on what a trade costs.
-const STARTING_BALANCE = 10000
+/** What a run starts with when the caller does not say. Kept as the fallback rather than
+ * removed, because callers that have no capital of their own deliberately still use it --
+ * see resolveStartingBalance. */
+export const DEFAULT_STARTING_BALANCE = 10000
+
+/** Every currency figure on the results page is derived from the starting balance, so a bad one
+ * does not fail loudly -- it prints "NaN" beside real-looking percentages, or reports a 0% return
+ * on a strategy that doubled. Both bad values arrive as ordinary numbers rather than as obvious
+ * bugs: the paper account balance this is defaulted from is legitimately 0 when every asset is
+ * committed to running strategies, and settings.json cannot store NaN, so one written there
+ * returns as null and reads back as 0. Falling back beats simulating with money that isn't there. */
+export function resolveStartingBalance(value: number | undefined): number {
+  return value !== undefined && Number.isFinite(value) && value > 0 ? value : DEFAULT_STARTING_BALANCE
+}
 // Below this, a compound annual growth rate stops being a description of the strategy and becomes
 // a description of the sample. A week that happened to return +5% annualizes to +1,160%; the same
 // week at -5% annualizes to -93%. Neither number tells a beginner anything true about a year, so
@@ -162,6 +175,9 @@ export interface RunBacktestOptions {
    * that wants to know the strategy's actual current position should pass false — otherwise
    * that position shows up as a synthetic closed trade that never really happened. */
   forceCloseAtEnd?: boolean
+  /** Capital the run starts with, in the pair's quote asset. Defaults to
+   * DEFAULT_STARTING_BALANCE. Anything that is not a positive finite number falls back to it. */
+  startingBalance?: number
 }
 
 function mean(values: number[]): number {
@@ -229,9 +245,10 @@ export function runBacktest(
   options: RunBacktestOptions = {}
 ): BacktestResult {
   const forceCloseAtEnd = options.forceCloseAtEnd ?? true
+  const startingBalance = resolveStartingBalance(options.startingBalance)
   const signals = getStrategy(strategyId).generateSignals(candles)
 
-  let cash = STARTING_BALANCE
+  let cash = startingBalance
   const posBox: { current: OpenPosition | null } = { current: null }
   let totalFees = 0
   const trades: Trade[] = []
@@ -245,7 +262,7 @@ export function runBacktest(
   // in warm-up, over which BTC rose 79.4%. Buy & hold was credited with all of it before the
   // strategy was allowed to place a single order, so the comparison was not one.
   const benchmarkStartIndex = candles.length > 0 ? Math.min(signals.warmupBars, candles.length - 1) : 0
-  const benchmarkQty = candles.length > 0 ? STARTING_BALANCE / candles[benchmarkStartIndex].close : 0
+  const benchmarkQty = candles.length > 0 ? startingBalance / candles[benchmarkStartIndex].close : 0
 
   function equityAt(price: number): number {
     const position = posBox.current
@@ -308,11 +325,11 @@ export function runBacktest(
     // Flat at the starting balance until that point, matching the uninvested cash the strategy
     // itself is holding, so both curves start together at the same value on the same candle.
     // Mutating `<` to `<=` here survives the test suite, and is an equivalent mutant rather than a
-    // gap: at i === benchmarkStartIndex the other branch computes (STARTING_BALANCE / close) *
+    // gap: at i === benchmarkStartIndex the other branch computes (startingBalance / close) *
     // close, which is the same number. Checked across 237k prices from 1e-5 to 2e5 -- it differs
     // at all for 2.66% of them and never by more than 1.8e-12, well under one ulp of 10000. A test
     // pinning that would be asserting on floating-point noise.
-    benchmarkCurve.push({ time, value: i < benchmarkStartIndex ? STARTING_BALANCE : benchmarkQty * close })
+    benchmarkCurve.push({ time, value: i < benchmarkStartIndex ? startingBalance : benchmarkQty * close })
   }
 
   const openPositionAtEnd: OpenPositionSnapshot | null = posBox.current
@@ -330,12 +347,12 @@ export function runBacktest(
     equityCurve[equityCurve.length - 1] = { time: last.time, value: cash }
   }
 
-  const finishingBalance = equityCurve.length > 0 ? equityCurve[equityCurve.length - 1].value : STARTING_BALANCE
+  const finishingBalance = equityCurve.length > 0 ? equityCurve[equityCurve.length - 1].value : startingBalance
   const monthlyBreakdown = computeMonthlyBreakdown(equityCurve, trades)
   // Counted after the force-close block, so it is 0 for a normal backtest and 1 only when a
   // caller passed forceCloseAtEnd: false and a position really is still open.
   const openTrades = posBox.current ? 1 : 0
-  const stats = computeStats(trades, equityCurve, totalFees, finishingBalance, monthlyBreakdown, openTrades, signals.warmupBars)
+  const stats = computeStats(trades, equityCurve, totalFees, startingBalance, finishingBalance, monthlyBreakdown, openTrades, signals.warmupBars)
 
   return { equityCurve, benchmarkCurve, trades, stats, monthlyBreakdown, openPositionAtEnd }
 }
@@ -344,14 +361,15 @@ function computeStats(
   trades: Trade[],
   equityCurve: EquityPoint[],
   totalPaidFees: number,
+  startingBalance: number,
   finishingBalance: number,
   monthlyBreakdown: MonthlyBreakdownRow[],
   openTrades: number,
   warmupBars: number
 ): BacktestStats {
   const totalClosedTrades = trades.length
-  const totalNetProfit = finishingBalance - STARTING_BALANCE
-  const totalNetProfitPct = (totalNetProfit / STARTING_BALANCE) * 100
+  const totalNetProfit = finishingBalance - startingBalance
+  const totalNetProfitPct = (totalNetProfit / startingBalance) * 100
 
   let peak = -Infinity
   let maxDrawdownPct = 0
@@ -364,11 +382,11 @@ function computeStats(
     equityCurve.length > 1 ? (equityCurve[equityCurve.length - 1].time - equityCurve[0].time) / 86400 : 0
   const annualReturnPct =
     periodDays >= MIN_ANNUALIZATION_DAYS
-      ? ((finishingBalance / STARTING_BALANCE) ** (365 / periodDays) - 1) * 100
+      ? ((finishingBalance / startingBalance) ** (365 / periodDays) - 1) * 100
       : null
 
   const expectancy = totalClosedTrades > 0 ? totalNetProfit / totalClosedTrades : 0
-  const expectancyPct = (expectancy / STARTING_BALANCE) * 100
+  const expectancyPct = (expectancy / startingBalance) * 100
 
   const winners = trades.filter((t) => t.pnl > 0)
   const losers = trades.filter((t) => t.pnl <= 0)
@@ -451,7 +469,7 @@ function computeStats(
     totalClosedTrades,
     totalNetProfit,
     totalNetProfitPct,
-    startingBalance: STARTING_BALANCE,
+    startingBalance,
     finishingBalance,
     openTrades,
     totalPaidFees,
