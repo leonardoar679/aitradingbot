@@ -1,7 +1,6 @@
 import type { ExecutorConfig, ExecutorSide, GridExecutorParams, DcaExecutorParams, TwapExecutorParams, PositionExecutorParams, OrderExecutorParams, XemmExecutorParams, ArbitrageExecutorParams } from '../../shared/ipc'
+import { executorPnlFromState } from './executorPnl'
 import { runExecutorSimulation } from './engine'
-import { roundTripFee } from '../../shared/fees'
-import { ASSUMED_FUNDING_RATE, fundingCost, fundingPeriodsBetween, notionalFor } from '../../shared/perp'
 import { alignByTime, simulateXemm, simulateArbitrage } from './spreadEngine'
 
 // Imperative counterparts to useExecutorSimulation/useSpreadExecutorSimulation for call sites
@@ -95,92 +94,11 @@ export async function computeExecutorPnl(executor: ExecutorConfig): Promise<numb
   const { candles } = await fetchSingleMarketCandles(executor)
   if (candles.length === 0) return 0
   const basePrice = candles[0].close
-  const current = candles[candles.length - 1].close
+  const last = candles[candles.length - 1]
   const state = runExecutorSimulation(candles, executor, basePrice)
-
-  if (state.kind === 'grid') {
-    const params = executor.params as GridExecutorParams
-    const isBuy = params.side === 'buy'
-    const unrealized = state.levels
-      .filter((l) => l.status === 'filled' && l.entryPrice !== null)
-      .reduce((sum, l) => {
-        const qty = state.amountPerLevel / (l.entryPrice as number)
-        const grossLot = isBuy ? qty * (current - (l.entryPrice as number)) : qty * ((l.entryPrice as number) - current)
-        return sum + grossLot - roundTripFee(qty, l.entryPrice as number, current)
-      }, 0)
-    return state.realizedPnl + unrealized
-  }
-
-  if (state.kind === 'dca') {
-    if (state.realizedPnl !== null) return state.realizedPnl
-    if (state.avgEntryPrice === null) return 0
-    const params = executor.params as DcaExecutorParams
-    const isBuy = params.side === 'buy'
-    const totalQty = state.totalFilledQuote / state.avgEntryPrice
-    const grossDca = isBuy ? totalQty * (current - state.avgEntryPrice) : totalQty * (state.avgEntryPrice - current)
-    return grossDca - roundTripFee(totalQty, state.avgEntryPrice, current)
-  }
-
-  if (state.kind === 'twap') {
-    if (state.vwap === null) return 0
-    const params = executor.params as { side: ExecutorSide; totalAmountQuote: number }
-    const isBuy = params.side === 'buy'
-    const totalQty = state.fills.reduce((sum, f) => sum + f.amountQuote / f.price, 0)
-    const grossTwap = isBuy ? totalQty * (current - state.vwap) : totalQty * (state.vwap - current)
-    return grossTwap - roundTripFee(totalQty, state.vwap, current)
-  }
-
-  if (state.kind === 'position') {
-    if (state.status === 'closed') return state.realizedPnl ?? 0
-    if (state.status === 'open' && state.entryPrice !== null) {
-      const params = executor.params as PositionExecutorParams
-      const isBuy = state.side === 'buy'
-      // Sized on notional. This figure settles the paper account when the executor stops and is
-      // what a Controller's loss limit is compared against, so an unlevered quantity here would
-      // hand a 10x position back a tenth of its loss and let a breach go unnoticed.
-      const qty = notionalFor(params.amountQuote, state.leverage) / state.entryPrice
-      const grossPos = isBuy ? qty * (current - state.entryPrice) : qty * (state.entryPrice - current)
-      // Funding accrued so far, not only at exit. Charging it only on close would leave an open
-      // position looking better than it is for as long as it stays open -- and then drop by the
-      // whole accumulated amount the moment it closes.
-      const funding =
-        state.leverage === 1 || state.enteredAt === null
-          ? 0
-          : fundingCost({
-              notionalQuote: notionalFor(params.amountQuote, state.leverage),
-              fundingRate: ASSUMED_FUNDING_RATE,
-              periods: fundingPeriodsBetween(state.enteredAt, candles[candles.length - 1].time),
-              side: state.side
-            })
-      // No floor at -amountQuote here, though an isolated-margin position cannot lose more than
-      // its margin. It does not need one: `current` is the close of the last of the very candles
-      // the simulation above just replayed, so a price past the liquidation level was already
-      // seen by it -- a candle's low is never above its close, nor its high below -- and the
-      // position would have come back closed, returning realizedPnl instead of reaching here.
-      // Adding the floor anyway would be an unreachable branch that looks like protection.
-      return grossPos - roundTripFee(qty, state.entryPrice, current) - funding
-    }
-    return 0
-  }
-
-  if (state.kind === 'order') {
-    if (state.status === 'filled' && state.fillPrice !== null) {
-      const params = executor.params as OrderExecutorParams
-      const isBuy = params.side === 'buy'
-      const qty = params.amountQuote / state.fillPrice
-      const grossOrder = isBuy ? qty * (current - state.fillPrice) : qty * (state.fillPrice - current)
-      return grossOrder - roundTripFee(qty, state.fillPrice, current)
-    }
-    return 0
-  }
-
-  // marketmaking: realized P&L from closed round trips, plus unrealized on any net inventory
-  // still held, marked against its average cost basis.
-  const unrealized =
-    state.inventoryBaseQty !== 0 && state.avgCost !== null
-      ? state.inventoryBaseQty * (current - state.avgCost) - roundTripFee(Math.abs(state.inventoryBaseQty), state.avgCost, current)
-      : 0
-  return state.realizedPnl + unrealized
+  // The arithmetic lives in executorPnl.ts so the same rules can value an executor at any moment,
+  // not only at "now" -- which is what backtesting one over a past range needs.
+  return executorPnlFromState(state, executor.params, last.close, last.time)
 }
 
 /** The quote-currency size an executor is configured to commit — used as the capital basis for

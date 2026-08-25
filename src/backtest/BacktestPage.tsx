@@ -13,6 +13,8 @@ import { committedFor } from '../account/accountCommitments'
 import { describeRangeProblem, describeEmptyRange } from './rangeProblem'
 import { describeError } from '../utils/ipcError'
 import { STRATEGIES, DEFAULT_STRATEGY_ID, getStrategy } from './strategies'
+import { replayExecutor, type ExecutorReplayResult } from './executorReplay'
+import { ExecutorBacktestView } from './ExecutorBacktestView'
 import {
   EXCHANGES,
   INTERVALS,
@@ -26,8 +28,24 @@ import {
 
 type Tab = 'configuration' | 'progress' | 'charts' | 'compare'
 
+/** A saved executor selected in the strategy dropdown, encoded so one field can carry either
+ * kind of run. Executors and signal strategies are genuinely different things -- see
+ * executorReplay.ts -- so they produce different result shapes rather than being forced into one. */
+const EXECUTOR_PREFIX = 'executor:'
+
+export function executorIdFromStrategyId(strategyId: string): string | null {
+  return strategyId.startsWith(EXECUTOR_PREFIX) ? strategyId.slice(EXECUTOR_PREFIX.length) : null
+}
+
 type RunState =
   | RunningState
+  | {
+      status: 'executor-done'
+      executor: ExecutorConfig
+      replay: ExecutorReplayResult
+      candles: Candle[]
+      elapsedSec: number
+    }
   | {
       status: 'done'
       result: BacktestResult
@@ -127,6 +145,9 @@ export function BacktestPage(): React.JSX.Element {
   const [capitalTouched, setCapitalTouched] = useState(false)
   const [account, setAccount] = useState<PaperAccount | null>(null)
   const [accountExecutors, setAccountExecutors] = useState<ExecutorConfig[]>([])
+  // Spread executors (XEMM, Arbitrage) price two markets at once and are simulated by a different
+  // engine entirely, so they are not offered here rather than being offered and then failing.
+  const replayableExecutors = accountExecutors.filter((e) => e.type !== 'xemm' && e.type !== 'arbitrage')
   const [compareCandles, setCompareCandles] = useState<Candle[] | null>(null)
   const [compareLoading, setCompareLoading] = useState(false)
   const [compareError, setCompareError] = useState<string | null>(null)
@@ -224,7 +245,11 @@ export function BacktestPage(): React.JSX.Element {
     }
 
     const strategy = getStrategy(route.strategyId)
-    const strategyLabel = strategy.name
+    // getStrategy falls back to the default for an id it does not know, and an executor id is
+    // one of those -- so taking the label from it would head the whole run "EMA Crossover + ATR
+    // Stop" while a grid was actually being replayed.
+    const chosenExecutor = accountExecutors.find((e) => e.id === executorIdFromStrategyId(route.strategyId))
+    const strategyLabel = chosenExecutor ? `${chosenExecutor.name} (${chosenExecutor.type})` : strategy.name
     const symbolInfo = symbols.find((s) => s.symbol === route.symbol)
     const symbolLabel = symbolInfo ? `${symbolInfo.baseAsset}-${symbolInfo.quoteAsset}` : route.symbol
     const intervalLabel = INTERVALS.find((iv) => iv.id === route.interval)?.label ?? route.interval
@@ -277,6 +302,35 @@ export function BacktestPage(): React.JSX.Element {
           setRunState({ status: 'error', message: empty })
           return
         }
+        const executorId = executorIdFromStrategyId(route.strategyId)
+        if (executorId !== null) {
+          const chosen = accountExecutors.find((e) => e.id === executorId)
+          if (!chosen) {
+            const message = 'That executor no longer exists — it may have been deleted since this page loaded.'
+            log(message)
+            setRunState({ status: 'error', message })
+            return
+          }
+          log(`Replaying executor: ${chosen.name} (${chosen.type})`)
+          const replay = replayExecutor(fetchResult.candles, chosen, capitalValue)
+          if (replay === null) {
+            const message = 'No candles in that range, so there was nothing to replay.'
+            log(message)
+            setRunState({ status: 'error', message })
+            return
+          }
+          log(`Replay complete: net ${replay.netProfit.toFixed(2)} (${replay.netProfitPct.toFixed(2)}%)`)
+          setRunState({
+            status: 'executor-done',
+            executor: chosen,
+            replay,
+            candles: fetchResult.candles,
+            elapsedSec: (performance.now() - startedAt) / 1000
+          })
+          setCompareCandles(fetchResult.candles)
+          return
+        }
+
         log(`Running strategy: ${strategy.name} — ${strategy.description}`)
         const result = runBacktest(fetchResult.candles, route.strategyId, { startingBalance: capitalValue, leverage: leverageValue })
         log(
@@ -367,6 +421,12 @@ export function BacktestPage(): React.JSX.Element {
         )}
       </div>
 
+      {tab === 'progress' && runState && runState.status === 'executor-done' && (
+        <Card title="Executor replay">
+          <ExecutorBacktestView executor={runState.executor} result={runState.replay} />
+        </Card>
+      )}
+
       {tab === 'progress' && runState && runState.status === 'done' && (
         <Card title="Backtest results">
           <BacktestResultsView
@@ -398,7 +458,7 @@ export function BacktestPage(): React.JSX.Element {
         </Card>
       )}
 
-      {tab === 'progress' && runState && runState.status !== 'done' && (
+      {tab === 'progress' && runState && runState.status !== 'done' && runState.status !== 'executor-done' && (
         <Card title="Backtest progress">
           <BacktestRunningView runState={runState} onCancel={handleCancel} />
         </Card>
@@ -484,6 +544,15 @@ export function BacktestPage(): React.JSX.Element {
                       {s.name}
                     </option>
                   ))}
+                  {replayableExecutors.length > 0 && (
+                    <optgroup label="Your executors">
+                      {replayableExecutors.map((e) => (
+                        <option key={e.id} value={`${EXECUTOR_PREFIX}${e.id}`}>
+                          {e.name} ({e.type})
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
               </div>
 
