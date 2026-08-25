@@ -4,10 +4,19 @@ import type { AccountLedgerEntry, PaperAccount } from '../../shared/ipc'
 // and returns a new one, so the rules can be tested without a running app and a caller can never
 // half-apply a movement.
 //
-// The model is deliberately the one a person already has in their head. `balances` holds FREE
-// money. Funding an executor moves money out of it, the same way handing cash to a strategy
-// leaves your wallet. Stopping that executor brings it back, plus or minus what it made. There is
-// no separate "committed" column to drift out of sync with anything.
+// `balances` is TOTAL holdings, not spending money. What a strategy has committed is DERIVED from
+// the running executors themselves (see accountCommitments.ts), and available = total - committed.
+//
+// That choice is the important one here. The obvious design deducts from the balance when a
+// strategy opens and adds back when it closes -- but then every path that creates or destroys an
+// executor has to move money in step: the New Executor form, the starter presets (which write
+// settings directly), a Controller stopping its group on a risk breach, and plain deletion. Miss
+// any one and the account silently invents or destroys money, which is the worst failure this
+// file could have. Deriving what is committed from the executors that actually exist cannot drift,
+// and it works for executors that were created before the account was.
+//
+// So the balance only ever moves for two reasons: the user adds funds, or a strategy finishes and
+// its realised result is settled.
 
 /** Ledger entries kept per account. The balances are authoritative, so trimming the oldest
  * entries loses explanation, never money -- but an unbounded array in settings.json would grow
@@ -18,14 +27,24 @@ export function emptyAccount(now: number): PaperAccount {
   return { balances: {}, initialBalances: {}, createdAt: now, ledger: [] }
 }
 
-/** Free balance of one asset. An asset that was never funded is 0, not undefined -- callers do
- * arithmetic on this and undefined would silently produce NaN. */
-export function freeBalance(account: PaperAccount, asset: string): number {
+/** Total holding of one asset, committed money included. An asset that was never funded is 0,
+ * not undefined -- callers do arithmetic on this and undefined would silently produce NaN. */
+export function totalBalance(account: PaperAccount, asset: string): number {
   const value = account.balances[asset]
   return Number.isFinite(value) ? value : 0
 }
 
-/** Assets with a non-zero free balance, largest first. */
+/** What is left to start something new with.
+ *
+ * Can go negative, and is allowed to: it means strategies are committed to more than the account
+ * holds, which is a true statement worth showing rather than a number to clamp away. It happens
+ * honestly when someone funds an account after already running strategies. */
+export function availableBalance(account: PaperAccount, asset: string, committed: number): number {
+  const out = Number.isFinite(committed) ? committed : 0
+  return totalBalance(account, asset) - out
+}
+
+/** Assets with a non-zero total, largest first. */
 export function fundedAssets(account: PaperAccount): { asset: string; amount: number }[] {
   return Object.entries(account.balances)
     .filter(([, amount]) => Number.isFinite(amount) && amount !== 0)
@@ -33,20 +52,22 @@ export function fundedAssets(account: PaperAccount): { asset: string; amount: nu
     .sort((a, b) => b.amount - a.amount)
 }
 
-/** Why an amount cannot be taken out of the account right now, in words a first-time user can
+/** Why a new strategy of this size cannot be started right now, in words a first-time user can
  * act on -- or null when it can.
  *
  * Returning the reason rather than a boolean is the point: "Create" being greyed out with no
- * explanation is the failure mode this whole app keeps running into, and an account is the most
- * confusing place for it to happen. */
+ * explanation is the failure mode this app keeps running into, and money is the most confusing
+ * place for it to happen. */
 export function describeInsufficientFunds({
   account,
   asset,
-  amount
+  amount,
+  committed
 }: {
   account: PaperAccount
   asset: string
   amount: number
+  committed: number
 }): string | null {
   // Not >= 0: a NaN amount passes no comparison at all, so testing the good case explicitly is
   // what keeps it out. JSON cannot store NaN either, so one that reached storage would come back
@@ -54,19 +75,21 @@ export function describeInsufficientFunds({
   if (!Number.isFinite(amount)) return 'Enter a valid amount.'
   if (amount <= 0) return 'Amount must be greater than zero.'
 
-  const free = freeBalance(account, asset)
-  if (free <= 0) {
+  const total = totalBalance(account, asset)
+  if (total <= 0) {
     return `This account holds no ${asset}. Add some on the Account page before starting a strategy that spends it.`
   }
-  if (amount > free) {
-    const short = amount - free
-    return `Not enough ${asset}: this needs ${amount.toLocaleString()} but only ${free.toLocaleString()} is free — ${short.toLocaleString()} short. Stop another strategy to release funds, or lower the amount.`
+  const available = availableBalance(account, asset, committed)
+  if (amount > available) {
+    const short = amount - available
+    const spare = Math.max(0, available)
+    return `Not enough ${asset}: this needs ${amount.toLocaleString()} but only ${spare.toLocaleString()} is free — ${short.toLocaleString()} short. Stop another strategy to release funds, or lower the amount.`
   }
   return null
 }
 
 function withEntry(account: PaperAccount, entry: AccountLedgerEntry): PaperAccount {
-  const current = freeBalance(account, entry.asset)
+  const current = totalBalance(account, entry.asset)
   const ledger = [...account.ledger, entry]
   return {
     ...account,
@@ -101,54 +124,29 @@ export function fund(account: PaperAccount, input: MovementInput): PaperAccount 
   return { ...next, initialBalances: { ...next.initialBalances, [input.asset]: startedWith + input.amount } }
 }
 
-export interface AllocationResult {
-  account: PaperAccount
-  /** Null when the money moved. Otherwise the account is returned untouched and this says why. */
-  error: string | null
-}
-
-/** Takes money out of the free balance to fund a running strategy. Refuses rather than going
- * negative: an account that can be overdrawn is not an account. */
-export function allocate(account: PaperAccount, input: MovementInput): AllocationResult {
-  const error = describeInsufficientFunds({ account, asset: input.asset, amount: input.amount })
-  if (error !== null) return { account, error }
-  return {
-    account: withEntry(account, {
-      id: input.id,
-      at: input.now,
-      asset: input.asset,
-      delta: -input.amount,
-      reason: 'allocate',
-      executorId: input.executorId ?? null,
-      note: input.note ?? 'Funded a strategy'
-    }),
-    error: null
-  }
-}
-
-/** Returns money from a strategy that has stopped. `amount` is what actually came back --
- * principal plus or minus the strategy's result -- so it can legitimately be more or less than
- * was allocated, and can even be zero. It is never negative: a paper strategy cannot lose more
- * than it was given here, and letting it would drain assets it never touched. */
-export function release(account: PaperAccount, input: MovementInput): PaperAccount {
-  if (!Number.isFinite(input.amount) || input.amount < 0) return account
+/** Books what a finished strategy actually made or lost. `amount` is the realised result, so it
+ * is negative for a loss -- unlike funding, which only ever goes up.
+ *
+ * This is the only other thing that moves a balance. While a strategy is running its money is
+ * merely committed, not spent, so nothing needs to happen until it finishes. */
+export function settle(account: PaperAccount, input: MovementInput): PaperAccount {
+  if (!Number.isFinite(input.amount)) return account
   if (input.amount === 0) return account
   return withEntry(account, {
     id: input.id,
     at: input.now,
     asset: input.asset,
     delta: input.amount,
-    reason: 'release',
+    reason: input.amount >= 0 ? 'release' : 'adjust',
     executorId: input.executorId ?? null,
-    note: input.note ?? 'Returned from a strategy'
+    note: input.note ?? (input.amount >= 0 ? 'Profit from a strategy' : 'Loss from a strategy')
   })
 }
 
-/** Total profit or loss so far for one asset: what is free now, plus whatever is still committed
- * to running strategies, against what was funded. `committed` comes from the caller because only
- * it knows which executors are still running. */
-export function accountPnl(account: PaperAccount, asset: string, committed: number): number {
+/** Profit or loss against what was funded. The total already includes money committed to running
+ * strategies, so nothing needs adding back here -- a strategy merely holding money is not a gain,
+ * which is exactly the mistake this replaced. */
+export function accountPnl(account: PaperAccount, asset: string): number {
   const started = Number.isFinite(account.initialBalances[asset]) ? account.initialBalances[asset] : 0
-  const commitedSafe = Number.isFinite(committed) ? committed : 0
-  return freeBalance(account, asset) + commitedSafe - started
+  return totalBalance(account, asset) - started
 }

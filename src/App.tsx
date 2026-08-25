@@ -3,6 +3,7 @@ import { Sidebar } from './components/Sidebar'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Dashboard } from './dashboard/Dashboard'
 import { PortfolioPage } from './portfolio/PortfolioPage'
+import { AccountPage } from './account/AccountPage'
 import { TradePage } from './trade/TradePage'
 import { BotsPage } from './bots/BotsPage'
 import { ExecutorsPage } from './executors/ExecutorsPage'
@@ -22,6 +23,7 @@ import type { Page } from './navigation/pages'
 
 const PAGE_LABEL: Record<Page, string> = {
   portfolio: 'Portfolio',
+  account: 'Account',
   trade: 'Trade',
   bots: 'Bots',
   executors: 'Executors',
@@ -94,6 +96,7 @@ function App(): React.JSX.Element {
                 }}
               />
             )}
+            {page === 'account' && <AccountPage />}
             {page === 'trade' && <TradePage />}
             {page === 'bots' && <BotsPage />}
             {page === 'executors' && (

@@ -1,5 +1,6 @@
 import {
   Wallet,
+  PiggyBank,
   ArrowLeftRight,
   Bot,
   Activity,
@@ -16,6 +17,7 @@ import {
 
 export type Page =
   | 'portfolio'
+  | 'account'
   | 'trade'
   | 'bots'
   | 'executors'
@@ -36,6 +38,7 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { page: 'portfolio', label: 'Portfolio', icon: Wallet },
+  { page: 'account', label: 'Account', icon: PiggyBank },
   { page: 'trade', label: 'Trade', icon: ArrowLeftRight },
   { page: 'bots', label: 'Bots', icon: Bot },
   { page: 'executors', label: 'Executors', icon: Activity },
