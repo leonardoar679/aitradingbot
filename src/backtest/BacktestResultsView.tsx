@@ -8,6 +8,7 @@ import {
   type MonthlyBreakdownRow,
   type SegmentSummary
 } from './engine'
+import { tookNoTrades } from './strategyRanking'
 import { DebugLogsModal } from './DebugLogsModal'
 
 export interface ResultsGeneralInfo {
@@ -389,7 +390,14 @@ export function BacktestResultsView({
       measured: String(s.totalClosedTrades),
       healthyRange: '40 – 150',
       verdict: s.totalClosedTrades < 20 ? 'danger' : s.totalClosedTrades >= 40 && s.totalClosedTrades <= 150 ? 'ok' : 'warning',
-      note: s.totalClosedTrades < 20 ? 'Too few trades to draw a reliable conclusion from.' : undefined
+      // Zero is not "few". Nineteen trades is a weak sample; none at all means every number on
+      // this page is a placeholder, and the flat 0.00% headline above is the absence of a result
+      // rather than a calm one.
+      note: tookNoTrades(s)
+        ? 'This strategy never opened a position on this data, so every figure on this page is a placeholder rather than a measurement.'
+        : s.totalClosedTrades < 20
+          ? 'Too few trades to draw a reliable conclusion from.'
+          : undefined
     },
     {
       label: 'Win Rate',

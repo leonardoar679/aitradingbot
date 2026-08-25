@@ -1,17 +1,9 @@
 import { useMemo, useState } from 'react'
-import { runBacktest, type BacktestStats } from './engine'
+import { runBacktest } from './engine'
 import { STRATEGIES } from './strategies'
 import type { Candle } from '../../shared/ipc'
+import { COMPARISON_COLUMNS as COLUMNS, describeNoTrades, rankStrategyRows, tookNoTrades, type SortKey } from './strategyRanking'
 
-type SortKey = 'totalNetProfitPct' | 'winRatePct' | 'maxDrawdownPct' | 'sharpeRatio' | 'profitFactor'
-
-const COLUMNS: { key: SortKey; label: string; format: (stats: BacktestStats) => string; higherIsBetter: boolean }[] = [
-  { key: 'totalNetProfitPct', label: 'Net %', format: (s) => `${s.totalNetProfitPct >= 0 ? '+' : ''}${s.totalNetProfitPct.toFixed(2)}%`, higherIsBetter: true },
-  { key: 'winRatePct', label: 'Win Rate', format: (s) => `${s.winRatePct.toFixed(1)}%`, higherIsBetter: true },
-  { key: 'maxDrawdownPct', label: 'Max Drawdown', format: (s) => `${s.maxDrawdownPct.toFixed(2)}%`, higherIsBetter: false },
-  { key: 'sharpeRatio', label: 'Sharpe', format: (s) => s.sharpeRatio.toFixed(2), higherIsBetter: true },
-  { key: 'profitFactor', label: 'Profit Factor', format: (s) => (s.profitFactor === Infinity ? '∞' : s.profitFactor.toFixed(2)), higherIsBetter: true }
-]
 
 const headerCellStyle: React.CSSProperties = {
   padding: '0 0.9rem 0.6rem',
@@ -42,14 +34,12 @@ export function StrategyComparisonView({
   const [sortKey, setSortKey] = useState<SortKey>('totalNetProfitPct')
 
   const rows = useMemo(() => {
-    return STRATEGIES.map((strategy) => ({
-      strategy,
-      stats: runBacktest(candles, strategy.id, { startingBalance }).stats
-    })).sort((a, b) => {
-      const column = COLUMNS.find((c) => c.key === sortKey)!
-      const diff = a.stats[sortKey] - b.stats[sortKey]
-      return column.higherIsBetter ? -diff : diff
-    })
+    const column = COLUMNS.find((c) => c.key === sortKey)!
+    return rankStrategyRows(
+      STRATEGIES.map((strategy) => ({ row: strategy, stats: runBacktest(candles, strategy.id, { startingBalance }).stats })),
+      sortKey,
+      column.higherIsBetter
+    ).map(({ row, stats }) => ({ strategy: row, stats }))
   }, [candles, sortKey, startingBalance])
 
   return (
@@ -71,22 +61,33 @@ export function StrategyComparisonView({
           </tr>
         </thead>
         <tbody>
-          {rows.map(({ strategy, stats }) => (
-            <tr key={strategy.id} style={{ borderBottom: '1px solid var(--border)' }}>
-              <td style={{ ...cellStyle, fontWeight: 600, color: 'var(--text-primary)' }}>
-                {strategy.name}
-                <div style={{ fontSize: '0.7rem', fontWeight: 400, color: 'var(--text-muted)', maxWidth: 260 }}>{strategy.description}</div>
-              </td>
-              <td style={{ ...cellStyle, color: pctColor(stats.totalNetProfitPct), fontWeight: 600 }}>
-                {COLUMNS[0].format(stats)}
-              </td>
-              <td style={cellStyle}>{COLUMNS[1].format(stats)}</td>
-              <td style={{ ...cellStyle, color: 'var(--down)' }}>{COLUMNS[2].format(stats)}</td>
-              <td style={cellStyle}>{COLUMNS[3].format(stats)}</td>
-              <td style={cellStyle}>{COLUMNS[4].format(stats)}</td>
-              <td style={cellStyle}>{stats.totalClosedTrades}</td>
-            </tr>
-          ))}
+          {rows.map(({ strategy, stats }) => {
+            // A strategy that never fired has no win rate, no profit factor and no risk figures --
+            // only zeroes standing in for numbers that were never measured. Shown as dashes so the
+            // row cannot be read as "flat and safe", and never tinted green.
+            const flat = tookNoTrades(stats)
+            return (
+              <tr key={strategy.id} style={{ borderBottom: '1px solid var(--border)', opacity: flat ? 0.75 : 1 }}>
+                <td style={{ ...cellStyle, fontWeight: 600, color: 'var(--text-primary)' }}>
+                  {strategy.name}
+                  <div style={{ fontSize: '0.7rem', fontWeight: 400, color: 'var(--text-muted)', maxWidth: 260 }}>{strategy.description}</div>
+                  {flat && (
+                    <div style={{ fontSize: '0.7rem', fontWeight: 400, color: 'var(--gold)', maxWidth: 320, marginTop: '0.3rem' }}>
+                      {describeNoTrades(strategy.name, stats, candles.length)}
+                    </div>
+                  )}
+                </td>
+                <td style={{ ...cellStyle, color: flat ? 'var(--text-muted)' : pctColor(stats.totalNetProfitPct), fontWeight: 600 }}>
+                  {flat ? 'no trades' : COLUMNS[0].format(stats)}
+                </td>
+                <td style={cellStyle}>{flat ? '—' : COLUMNS[1].format(stats)}</td>
+                <td style={{ ...cellStyle, color: flat ? 'var(--text-muted)' : 'var(--down)' }}>{flat ? '—' : COLUMNS[2].format(stats)}</td>
+                <td style={cellStyle}>{flat ? '—' : COLUMNS[3].format(stats)}</td>
+                <td style={cellStyle}>{flat ? '—' : COLUMNS[4].format(stats)}</td>
+                <td style={cellStyle}>{stats.totalClosedTrades}</td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>
