@@ -6,6 +6,7 @@ import { getRealizedPnlToday, getLastObservedFeeRate } from './livePositionsServ
 import { clampLiveLimit, loadedLiveLimit, describeUnusableOrderSize, describeUntrustedLossTally } from '../../shared/liveLimits'
 import { nextDailyUsage, usageForDay } from './dailyUsage'
 import { committedAllocationQuote, describeAllocationBreach } from '../../shared/allocation'
+import { notionalFor, resolveLeverage } from '../../shared/perp'
 import { listOpenLivePositions } from './livePositionsService'
 import { listOpenLiveOrders } from './liveOrdersService'
 
@@ -15,7 +16,13 @@ import { listOpenLiveOrders } from './liveOrdersService'
 // real order — a renderer-side check is a UX nicety, never the actual gate.
 
 /** Absolute ceiling, code-only. No UI path, no settings.json edit, no IPC call can push
- * maxOrderQuote above this — the only way to raise it is to change this constant and rebuild. */
+ * maxOrderQuote above this — the only way to raise it is to change this constant and rebuild.
+ *
+ * Since canPlaceLiveOrder compares this against EXPOSURE rather than against the margin posted,
+ * it bounds a leveraged order to 25 of market however that is paid for: 25 of margin at 1x, or
+ * 2.50 at 10x. That is deliberate and is the point of a hard ceiling -- the worst thing an order
+ * can do is set by what it controls, not by what was put down for it, and a ceiling that let the
+ * second number stand in for the first would be a ceiling of 250 wearing a label reading 25. */
 const HARD_MAX_ORDER_QUOTE = 25
 const DEFAULT_MAX_ORDER_QUOTE = 10
 const DEFAULT_DAILY_CAP_QUOTE = 50
@@ -210,19 +217,37 @@ export interface LiveOrderGateResult {
 /** The one function every real *new/opening* order placement must pass. Called immediately
  * before placeMarketOrder — never earlier, never cached. Deliberately NOT used to gate closing a
  * live position — see canCloseLivePosition below for why. */
-export async function canPlaceLiveOrder(quoteAmount: number): Promise<LiveOrderGateResult> {
+export async function canPlaceLiveOrder(quoteAmount: number, leverage?: number): Promise<LiveOrderGateResult> {
   // Before any threshold comparison: every check below is a `>` test, and those are all false for
   // NaN, so an unusable size passed the entire gate rather than failing it. See
   // describeUnusableOrderSize.
   const unusableSize = describeUnusableOrderSize(quoteAmount)
   if (unusableSize !== null) return { allowed: false, reason: unusableSize }
 
+  // Two different amounts, and conflating them is how a limit becomes weaker than it reads.
+  //
+  // quoteAmount is the MARGIN -- the money committed, and the most that can be lost. The size
+  // limits below are about EXPOSURE, which above 1x is a different and larger number: 25 at 10x
+  // is a 250 order in every way that matters for what it can do to a balance. Comparing the
+  // margin against a "max order size of 25" would leave that gate silently ten times weaker than
+  // the number printed beside it, which is the worst way for a safety limit to be wrong.
+  //
+  // resolveLeverage sends anything unusable -- absent, NaN, out of range -- to 1, so spot is
+  // unchanged and a leverage that cannot be read can never shrink the notional it is multiplying.
+  const effectiveLeverage = resolveLeverage(leverage)
+  const notional = notionalFor(quoteAmount, effectiveLeverage)
+  const exposureLabel = effectiveLeverage === 1 ? '' : ` (${quoteAmount} at ${effectiveLeverage}x)`
+
   const state = await load()
   if (!sessionArmed) return { allowed: false, reason: 'Live trading is not armed for this session' }
   if (state.killSwitchEngaged) return { allowed: false, reason: 'Kill switch is engaged' }
-  if (quoteAmount > state.maxOrderQuote) return { allowed: false, reason: `Order exceeds the configured max order size (${state.maxOrderQuote})` }
+  if (notional > state.maxOrderQuote) {
+    return { allowed: false, reason: `Order exceeds the configured max order size (${state.maxOrderQuote})${exposureLabel}` }
+  }
   const usedToday = usageForToday(state)
-  if (usedToday + quoteAmount > state.dailyCapQuote) return { allowed: false, reason: `Order would exceed today's live trading cap (${state.dailyCapQuote})` }
+  if (usedToday + notional > state.dailyCapQuote) {
+    return { allowed: false, reason: `Order would exceed today's live trading cap (${state.dailyCapQuote})${exposureLabel}` }
+  }
   const realizedPnlToday = await getRealizedPnlToday()
   const untrustedTally = describeUntrustedLossTally(realizedPnlToday)
   if (untrustedTally !== null) return { allowed: false, reason: untrustedTally }
@@ -237,6 +262,10 @@ export async function canPlaceLiveOrder(quoteAmount: number): Promise<LiveOrderG
   const breach = describeAllocationBreach({
     allocationQuote: state.allocationQuote,
     committedQuote: committedAllocationQuote(openPositions, restingOrders),
+    // Margin, not notional -- deliberately the opposite choice from the size limits above. An
+    // allocation is how much of the user's money this app may put at stake; a leveraged position
+    // stakes its margin and borrows the rest, so charging the allocation for the borrowed part
+    // would make it refuse orders the user's money could perfectly well back.
     orderQuote: quoteAmount,
     // Every live path in this app is Binance spot against a USD-family quote; the asset is in the
     // message only so the number reads as money rather than as a bare figure.

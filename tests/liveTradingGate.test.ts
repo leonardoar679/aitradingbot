@@ -222,3 +222,96 @@ describe('closing a position is never blocked by the allocation', () => {
     expect(await service.canCloseLivePosition()).toEqual({ allowed: true, reason: null })
   })
 })
+
+describe('the size limits are about exposure, not about the margin posted', () => {
+  // The gate that has to exist before any leveraged order path does. A limit compared against the
+  // margin is silently weaker than the number printed beside it: 25 at 10x is a 250 order in
+  // every way that matters for what it can do to a balance.
+
+  it('is unchanged for spot, where the two amounts are the same number', async () => {
+    const service = await freshService()
+    await service.setLiveTradingConfig({ maxOrderQuote: 25 })
+
+    expect((await service.canPlaceLiveOrder(20)).allowed).toBe(true)
+    expect((await service.canPlaceLiveOrder(20, 1)).allowed).toBe(true)
+    expect((await service.canPlaceLiveOrder(26, 1)).allowed).toBe(false)
+  })
+
+  it('refuses a margin that fits when the exposure it buys does not', async () => {
+    const service = await freshService()
+    await service.setLiveTradingConfig({ maxOrderQuote: 25 })
+
+    // 20 of margin is inside the limit. 20 at 10x is 200 of market and is not.
+    expect((await service.canPlaceLiveOrder(20, 10)).allowed).toBe(false)
+  })
+
+  it('says what the exposure was, so the refusal is not baffling', async () => {
+    // "Order exceeds the max order size (25)" on an order of 20 reads like a bug unless the
+    // sentence also says what the 20 turned into.
+    const service = await freshService()
+    await service.setLiveTradingConfig({ maxOrderQuote: 25 })
+    const result = await service.canPlaceLiveOrder(20, 10)
+
+    expect(result.reason).toContain('10x')
+  })
+
+  it('allows a leveraged order whose exposure still fits', async () => {
+    const service = await freshService()
+    await service.setLiveTradingConfig({ maxOrderQuote: 25 })
+
+    expect((await service.canPlaceLiveOrder(2, 10)).allowed).toBe(true)
+  })
+
+  it('charges the daily cap the exposure too', async () => {
+    const service = await freshService()
+    await service.setLiveTradingConfig({ maxOrderQuote: 25, dailyCapQuote: 20 })
+
+    // 4 at 5x is 20 of notional: exactly the cap, so it fits and one unit more does not. Both are
+    // inside the per-order limit, so the cap is what decides.
+    expect((await service.canPlaceLiveOrder(4, 5)).allowed).toBe(true)
+    expect((await service.canPlaceLiveOrder(5, 5)).allowed).toBe(false)
+  })
+
+  it('cannot be paid around: the hard ceiling bounds exposure however the margin is posted', async () => {
+    // The ceiling is code-only and cannot be raised from anywhere. Since it now bounds what the
+    // order CONTROLS, leverage buys no more room -- it only means less margin is needed to reach
+    // the same wall.
+    const service = await freshService()
+    await service.setLiveTradingConfig({ maxOrderQuote: 1_000 })
+    const status = await service.getLiveTradingStatus()
+
+    expect(status.maxOrderQuote).toBe(status.hardMaxOrderQuote)
+    expect((await service.canPlaceLiveOrder(3, 10)).allowed).toBe(false)
+    expect((await service.canPlaceLiveOrder(2, 10)).allowed).toBe(true)
+  })
+
+  it('treats an unusable leverage as 1x rather than as no multiplier at all', async () => {
+    // A NaN multiplied into the notional makes every `>` comparison false, which would not weaken
+    // the gate -- it would disable it. Falling back to 1x is the only safe direction.
+    const service = await freshService()
+    await service.setLiveTradingConfig({ maxOrderQuote: 25 })
+
+    expect((await service.canPlaceLiveOrder(20, Number.NaN)).allowed).toBe(true)
+    expect((await service.canPlaceLiveOrder(26, Number.NaN)).allowed).toBe(false)
+    expect((await service.canPlaceLiveOrder(26, 1_000)).allowed).toBe(false)
+  })
+
+  it('charges the allocation the margin, not the exposure', async () => {
+    // The opposite choice from the size limits, on purpose: an allocation is how much of the
+    // user's own money may be at stake, and a leveraged position stakes its margin and borrows
+    // the rest. Charging it for the borrowed part would refuse orders the money could back.
+    const service = await freshService()
+    await service.setLiveTradingConfig({
+      allocationQuote: 1.5,
+      maxOrderQuote: 25,
+      dailyCapQuote: 10_000,
+      dailyLossLimitQuote: 10_000
+    })
+
+    // 2 of margin at 10x is 20 of exposure, inside the per-order ceiling -- but 2 of the user's
+    // own money, which is more than the 1.50 they allocated. Were the allocation charged the
+    // exposure instead, even a 0.20 margin order would be refused against it.
+    expect((await service.canPlaceLiveOrder(2, 10)).allowed).toBe(false)
+    expect((await service.canPlaceLiveOrder(1, 10)).allowed).toBe(true)
+  })
+})

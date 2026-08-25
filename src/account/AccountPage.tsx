@@ -8,6 +8,7 @@ import { accountPnl, availableBalance, fund, totalBalance } from './paperAccount
 import { assetsInPlay, committedByAsset } from './accountCommitments'
 import { updateAccount } from './persistAccount'
 import { LiveBalancesCard } from './LiveBalancesCard'
+import { FuturesPositionsCard } from './FuturesPositionsCard'
 import type { AccountLedgerEntry, CredentialStatus, ExecutorConfig, PaperAccount } from '../../shared/ipc'
 
 /** Amount with its sign in front of the currency symbol, not inside it. */
@@ -265,6 +266,8 @@ export function AccountPage(): React.JSX.Element {
       {connected.map((credential) => (
         <LiveBalancesCard key={credential.exchange} exchange={credential.exchange} />
       ))}
+
+      {connected.some((c) => c.exchange === 'binance') && <FuturesPositionsCard />}
 
       {account !== null && account.ledger.length > 0 && (
         <Card title="Movements">

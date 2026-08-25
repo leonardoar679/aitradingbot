@@ -26,6 +26,7 @@ export const IpcChannel = {
   CredentialsTest: 'credentials:test',
   CredentialsRemove: 'credentials:remove',
   CredentialsBalances: 'credentials:balances',
+  CredentialsFuturesPositions: 'credentials:futuresPositions',
   LiveTradingGetStatus: 'liveTrading:getStatus',
   LiveTradingSetConfig: 'liveTrading:setConfig',
   LiveTradingEngageKillSwitch: 'liveTrading:engageKillSwitch',

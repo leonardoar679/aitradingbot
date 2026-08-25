@@ -4,8 +4,10 @@ import { readFile, mkdir } from 'fs/promises'
 import { writeJsonAtomic } from './atomicWrite'
 import { fetchAccountBalance, type AccountBalance } from './exchanges/binanceTrading'
 import { fetchUpbitBalances } from './exchanges/upbitTrading'
+import { fetchFuturesPositions } from './exchanges/binanceFutures'
 import { freeBalance, readableBalances } from '../../shared/liveBalances'
 import type { CredentialStatus, Exchange, LiveBalanceSnapshot } from '../../shared/ipc'
+import type { FuturesReadout } from '../../shared/futuresPositions'
 
 // Credentials live in their own file, separate from settings.json, so a bug in general settings
 // persistence can never touch secrets. Each key/secret is encrypted at rest via Electron's
@@ -209,4 +211,21 @@ export async function getDecryptedCredential(exchange: Exchange): Promise<{ apiK
   const entry = store[exchange]
   if (!entry) throw new Error(`No credential configured for ${exchange}`)
   return { apiKey: decrypt(entry.apiKeyEnc), apiSecret: decrypt(entry.apiSecretEnc) }
+}
+
+/** Real perpetual-futures positions on an exchange, read over the user's own key.
+ *
+ * Never cached, unlike the spot balance. A balance is a slow-moving fact and a fifteen-second-old
+ * copy spares repeated renders a signed request; a liquidation price is the opposite kind of
+ * number, and showing a stale one to someone whose position is closing is the single worst moment
+ * for this app to be fifteen seconds behind.
+ *
+ * Binance only, and read-only -- see binanceFutures.ts, which contains no order endpoint at all
+ * and therefore no path from here to opening, closing or changing any of these positions. */
+export async function readFuturesPositions(exchange: Exchange): Promise<FuturesReadout> {
+  if (exchange !== 'binance') throw new Error(`Reading futures positions is not supported for ${exchange}`)
+  const store = await load()
+  const entry = store[exchange]
+  if (!entry) throw new Error(`No API key is connected for ${exchange}`)
+  return fetchFuturesPositions(decrypt(entry.apiKeyEnc), decrypt(entry.apiSecretEnc))
 }

@@ -5,6 +5,7 @@ import {
   setCredential,
   testCredential,
   removeCredential,
+  readFuturesPositions,
   readLiveBalances
 } from '../../services/credentialsService'
 
@@ -15,6 +16,7 @@ export function registerCredentialsHandlers(): void {
   )
   ipcMain.handle(IpcChannel.CredentialsTest, (_event, exchange: Exchange) => testCredential(exchange))
   ipcMain.handle(IpcChannel.CredentialsRemove, (_event, exchange: Exchange) => removeCredential(exchange))
+  ipcMain.handle(IpcChannel.CredentialsFuturesPositions, (_event, exchange: Exchange) => readFuturesPositions(exchange))
   ipcMain.handle(IpcChannel.CredentialsBalances, (_event, exchange: Exchange, force: boolean) =>
     readLiveBalances(exchange, force)
   )
