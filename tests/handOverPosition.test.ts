@@ -67,7 +67,8 @@ describe('handOverPositionOnStop', () => {
 
     const handed = await handOverPositionOnStop(EXECUTOR)
 
-    expect(handed).toBe(true)
+    expect(handed).not.toBeNull()
+    expect(handed!.amountQuote).toBe(100)
     expect(stored.heldPositions).toHaveLength(1)
     expect(stored.heldPositions[0]).toMatchObject({
       sourceExecutorId: 'exec-1',
@@ -85,7 +86,7 @@ describe('handOverPositionOnStop', () => {
 
     const handed = await handOverPositionOnStop({ ...EXECUTOR, mode: 'live' })
 
-    expect(handed).toBe(false)
+    expect(handed).toBeNull()
     // Must not even replay candles for a live executor, let alone write a paper Inventory row.
     expect(computeExecutorPosition).not.toHaveBeenCalled()
     expect(setCalls).toBe(0)
@@ -96,7 +97,7 @@ describe('handOverPositionOnStop', () => {
 
     const handed = await handOverPositionOnStop({ ...EXECUTOR, keepPosition: false })
 
-    expect(handed).toBe(false)
+    expect(handed).toBeNull()
     expect(computeExecutorPosition).not.toHaveBeenCalled()
     expect(setCalls).toBe(0)
   })
@@ -106,7 +107,7 @@ describe('handOverPositionOnStop', () => {
 
     const handed = await handOverPositionOnStop(EXECUTOR)
 
-    expect(handed).toBe(false)
+    expect(handed).toBeNull()
     expect(setCalls).toBe(0)
   })
 

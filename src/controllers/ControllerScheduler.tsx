@@ -78,7 +78,7 @@ export async function runControllerSnapshotNow(controller: ControllerConfig): Pr
         const handedOver = await handOverPositionOnStop(executor)
         // A strategy stopped by a risk breach has to reach the account exactly as one stopped by
         // hand does, or the balance depends on who pressed stop.
-        await settleExecutorOnStop({ executor, handedOverToInventory: handedOver, now: Math.floor(Date.now() / 1000) })
+        await settleExecutorOnStop({ executor, handedOver, now: Math.floor(Date.now() / 1000) })
       } catch (error) {
         console.error(`Failed to settle ${executor.name} on controller stop:`, error)
       }

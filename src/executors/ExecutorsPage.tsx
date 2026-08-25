@@ -638,7 +638,7 @@ export function ExecutorsPage({
     // risk-control stop path applies exactly the same ones.
     void handOverPositionOnStop(executor)
       .then((handedOver) =>
-        settleExecutorOnStop({ executor, handedOverToInventory: handedOver, now: Math.floor(Date.now() / 1000) })
+        settleExecutorOnStop({ executor, handedOver, now: Math.floor(Date.now() / 1000) })
       )
       .catch((error) => {
         console.error('Failed to hand over position or settle on stop:', error)

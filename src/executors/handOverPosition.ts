@@ -16,12 +16,16 @@ import { settingsWrites } from '../utils/settingsWrites'
  *
  * Appends to a freshly re-read heldPositions rather than any caller-held copy -- settings.set
  * replaces the whole array, and computing the position above is a network round trip long enough
- * for another writer to land in between. Returns whether a row was actually added. */
-export async function handOverPositionOnStop(executor: ExecutorConfig): Promise<boolean> {
-  if (executor.mode === 'live' || !executor.keepPosition) return false
+ * for another writer to land in between.
+ *
+ * Returns the row that was added, or null. The row itself rather than a boolean because the
+ * account needs its amountQuote: cash that became an Inventory position has to leave the balance,
+ * or Portfolio counts the same money twice -- once as cash and once as the position it bought. */
+export async function handOverPositionOnStop(executor: ExecutorConfig): Promise<HeldPosition | null> {
+  if (executor.mode === 'live' || !executor.keepPosition) return null
 
   const position = await computeExecutorPosition(executor)
-  if (!position) return false
+  if (!position) return null
 
   const held: HeldPosition = {
     id: crypto.randomUUID(),
@@ -42,5 +46,5 @@ export async function handOverPositionOnStop(executor: ExecutorConfig): Promise<
     const settings = await window.api.settings.get()
     await window.api.settings.set({ heldPositions: [...settings.heldPositions, held] })
   })
-  return true
+  return held
 }

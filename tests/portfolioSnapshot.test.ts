@@ -13,7 +13,11 @@ vi.mock('../src/executors/computeSnapshot', () => ({
   computeExecutorPosition: async (executor: ExecutorConfig) => {
     if (throwingExecutors.has(executor.id)) throw new Error('boom')
     return positions.get(executor.id) ?? null
-  }
+  },
+  // Used by committedByAsset, which the account-cash path calls to work out what is already
+  // committed. Mirrors the real helper for the position executors these tests build.
+  executorAllocatedQuote: (executor: ExecutorConfig) =>
+    (executor.params as { amountQuote?: number })?.amountQuote ?? 0
 }))
 
 const botTrades = new Map<string, number[] | null>()
@@ -47,7 +51,7 @@ const executor = (id: string, over: Partial<ExecutorConfig> = {}): ExecutorConfi
     ...over
   }) as ExecutorConfig
 
-let settings: { executors: ExecutorConfig[]; bots: unknown[]; heldPositions: unknown[] }
+let settings: { executors: ExecutorConfig[]; bots: unknown[]; heldPositions: unknown[]; paperAccount: unknown }
 let livePositions: unknown[]
 let prices: Record<string, number>
 
@@ -71,7 +75,7 @@ beforeEach(() => {
   positions.clear()
   throwingExecutors.clear()
   botTrades.clear()
-  settings = { executors: [], bots: [], heldPositions: [] }
+  settings = { executors: [], bots: [], heldPositions: [], paperAccount: null }
   livePositions = []
   prices = {}
   install()
@@ -282,5 +286,66 @@ describe('computePortfolioSnapshot reports an unpriced position from every sourc
 
     expect(snap.unavailable.unpricedPositions).toBe(3)
     expect(snap.totalValue).toBe(0)
+  })
+})
+
+// Phase 1d: the paper account's uncommitted cash is part of the portfolio. The hazard is
+// double-counting -- money a running strategy holds is already represented by that strategy's
+// open position, and money that bought an Inventory row already left the balance.
+describe('computePortfolioSnapshot includes account cash', () => {
+  const account = (balances: Record<string, number>) =>
+    ({ balances, initialBalances: { ...balances }, createdAt: 1_700_000_000, ledger: [] }) as never
+
+  it('adds uncommitted cash to the total', async () => {
+    settings.paperAccount = account({ USDT: 10_000 })
+
+    const snap = await computePortfolioSnapshot()
+
+    expect(snap.totalValue).toBeCloseTo(10_000, 10)
+  })
+
+  it('counts money a running strategy holds ONCE, as the position', async () => {
+    // 10,000 funded, 1,000 committed to a strategy whose position is now worth 1,100.
+    // Right answer: 9,000 cash + 1,100 position = 10,100. Adding the full balance instead would
+    // report 11,100 -- a 1,000 gain that never happened.
+    prices = { 'binance:BTCUSDT': 110 }
+    settings.paperAccount = account({ USDT: 10_000 })
+    // params matters here, not just the position: what counts as committed is read from the
+    // executor's own size, so an executor without params commits nothing and the cash is never
+    // reduced -- which is precisely the double count under test.
+    settings.executors = [executor('running', { params: { side: 'buy', amountQuote: 1_000 } } as never)]
+    positions.set('running', { side: 'buy', entryPrice: 100, amountQuote: 1_000 })
+
+    const snap = await computePortfolioSnapshot()
+
+    expect(snap.totalValue).toBeCloseTo(10_100, 10)
+  })
+
+  it('keeps a KRW balance out of the dollar total', async () => {
+    settings.paperAccount = account({ USDT: 1_000, KRW: 5_000_000 })
+
+    const snap = await computePortfolioSnapshot()
+
+    expect(snap.totalValue).toBeCloseTo(1_000, 10)
+    expect(snap.holdings.some((h) => h.quoteAsset === 'KRW')).toBe(true)
+  })
+
+  it('leaves an emptied balance out of the holdings list', async () => {
+    settings.paperAccount = account({ USDT: 0 })
+
+    const snap = await computePortfolioSnapshot()
+
+    expect(snap.holdings).toHaveLength(0)
+  })
+
+  it('changes nothing for someone who never set up an account', async () => {
+    prices = { 'binance:BTCUSDT': 110 }
+    settings.paperAccount = null
+    settings.executors = [executor('running')]
+    positions.set('running', { side: 'buy', entryPrice: 100, amountQuote: 1_000 })
+
+    const snap = await computePortfolioSnapshot()
+
+    expect(snap.totalValue).toBeCloseTo(1_100, 10)
   })
 })

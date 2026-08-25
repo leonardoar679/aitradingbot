@@ -2,6 +2,8 @@ import type { Exchange, HeldPosition } from '../../shared/ipc'
 import { computeExecutorPosition } from '../executors/computeSnapshot'
 import { fetchBotDryRunResult, summarizePaperTrades } from '../bots/useDryRun'
 import { isUsdLikeQuote } from '../utils/formatCurrency'
+import { availableBalance } from '../account/paperAccount'
+import { committedByAsset } from '../account/accountCommitments'
 
 export interface PortfolioHoldingRow {
   baseAsset: string
@@ -112,6 +114,22 @@ export async function computePortfolioSnapshot(): Promise<PortfolioSnapshotData>
 
   const rows: PortfolioHoldingRow[] = []
   let unpricedPositions = 0
+
+  // Uncommitted cash in the paper account. AVAILABLE, not total: money a running strategy holds
+  // is already represented by that strategy's open position below, and counting both would show
+  // the same funds twice. Money that became an Inventory position left the balance when the
+  // position was handed over, for the same reason.
+  //
+  // Cash is a holding with no base asset, so it is listed under its own currency. Only the
+  // dollar family folds into totalValue, exactly as every other row does.
+  if (settings.paperAccount) {
+    const committed = committedByAsset(settings.executors)
+    for (const asset of Object.keys(settings.paperAccount.balances)) {
+      const cash = availableBalance(settings.paperAccount, asset, committed[asset] ?? 0)
+      if (cash === 0 || !Number.isFinite(cash)) continue
+      rows.push({ baseAsset: asset, quoteAsset: asset, value: cash, isLive: false })
+    }
+  }
 
   for (const p of livePositions) {
     const price = prices.get(priceKey(p.exchange, p.symbol))

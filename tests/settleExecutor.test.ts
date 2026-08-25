@@ -57,7 +57,7 @@ beforeEach(() => {
 describe('settling a stopped strategy', () => {
   it('adds a profit to the balance', async () => {
     pnl = 42
-    const settled = await settleExecutorOnStop({ executor: executor(), handedOverToInventory: false, now: T })
+    const settled = await settleExecutorOnStop({ executor: executor(), handedOver: null, now: T })
 
     expect(settled).toBe(42)
     expect(totalBalance(stored.paperAccount!, 'USDT')).toBe(10_042)
@@ -65,7 +65,7 @@ describe('settling a stopped strategy', () => {
 
   it('subtracts a loss', async () => {
     pnl = -30
-    await settleExecutorOnStop({ executor: executor(), handedOverToInventory: false, now: T })
+    await settleExecutorOnStop({ executor: executor(), handedOver: null, now: T })
 
     expect(totalBalance(stored.paperAccount!, 'USDT')).toBe(9_970)
   })
@@ -74,7 +74,7 @@ describe('settling a stopped strategy', () => {
     pnl = 5_000
     await settleExecutorOnStop({
       executor: executor({ quoteAsset: 'KRW', symbol: 'BTC_KRW' }),
-      handedOverToInventory: false,
+      handedOver: null,
       now: T
     })
 
@@ -84,7 +84,7 @@ describe('settling a stopped strategy', () => {
 
   it('names the strategy in the ledger so the movement can be traced', async () => {
     pnl = 42
-    await settleExecutorOnStop({ executor: executor(), handedOverToInventory: false, now: T })
+    await settleExecutorOnStop({ executor: executor(), handedOver: null, now: T })
 
     const entry = stored.paperAccount!.ledger.at(-1)!
     expect(entry.executorId).toBe('e1')
@@ -95,7 +95,7 @@ describe('settling a stopped strategy', () => {
 describe('what settling deliberately skips', () => {
   it('skips a live executor, which keeps its own real ledger', async () => {
     pnl = 42
-    const settled = await settleExecutorOnStop({ executor: executor({ mode: 'live' }), handedOverToInventory: false, now: T })
+    const settled = await settleExecutorOnStop({ executor: executor({ mode: 'live' }), handedOver: null, now: T })
 
     expect(settled).toBeNull()
     expect(totalBalance(stored.paperAccount!, 'USDT')).toBe(10_000)
@@ -103,19 +103,27 @@ describe('what settling deliberately skips', () => {
     expect(pnlCalls).toEqual([])
   })
 
-  it('skips a position handed over to Inventory, which would otherwise count twice', async () => {
+  it('charges a kept position to the balance instead of booking its P&L', async () => {
+    // The cash bought the position, and the position now lives in Inventory where Portfolio
+    // prices it. Leaving the cash in place too would count the same money twice.
     pnl = 42
-    const settled = await settleExecutorOnStop({ executor: executor(), handedOverToInventory: true, now: T })
+    const settled = await settleExecutorOnStop({
+      executor: executor(),
+      handedOver: { amountQuote: 600 } as never,
+      now: T
+    })
 
-    expect(settled).toBeNull()
-    expect(totalBalance(stored.paperAccount!, 'USDT')).toBe(10_000)
+    expect(settled).toBe(-600)
+    expect(totalBalance(stored.paperAccount!, 'USDT')).toBe(9_400)
+    // Its P&L is never asked for -- the Inventory row carries the value from here on.
+    expect(pnlCalls).toEqual([])
   })
 
   it('does nothing when there is no account', async () => {
     stored.paperAccount = null
     pnl = 42
 
-    expect(await settleExecutorOnStop({ executor: executor(), handedOverToInventory: false, now: T })).toBeNull()
+    expect(await settleExecutorOnStop({ executor: executor(), handedOver: null, now: T })).toBeNull()
     expect(stored.paperAccount).toBeNull()
   })
 
@@ -124,7 +132,7 @@ describe('what settling deliberately skips', () => {
     // stopping earlier means no settings write happens at all -- worth asserting, or the guard
     // here is untestable and looks removable.
     pnl = 0
-    await settleExecutorOnStop({ executor: executor(), handedOverToInventory: false, now: T })
+    await settleExecutorOnStop({ executor: executor(), handedOver: null, now: T })
 
     expect(stored.paperAccount!.ledger).toHaveLength(1)
     expect(setCalls).toBe(0)
@@ -134,7 +142,7 @@ describe('what settling deliberately skips', () => {
     // JSON cannot store NaN, so one that reached settings.json would come back as null and the
     // balance would silently read as zero on the next launch.
     pnl = Number.NaN
-    await settleExecutorOnStop({ executor: executor(), handedOverToInventory: false, now: T })
+    await settleExecutorOnStop({ executor: executor(), handedOver: null, now: T })
 
     expect(totalBalance(stored.paperAccount!, 'USDT')).toBe(10_000)
     // And no write at all: settle() would refuse the NaN anyway, but rewriting the whole account
