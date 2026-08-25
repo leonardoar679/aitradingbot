@@ -8,6 +8,29 @@ import { computeEma, computeAtr } from './emaCrossAtrStop'
 // falling knife in a downtrend — the same "filter gates entries only" shape as the EMA-cross
 // strategy. Exits on RSI recovering back above the overbought line (the mean-reversion move has
 // played out) or an ATR(14)×2 stop, whichever comes first.
+// MEASURED 2026-08-25, and left alone deliberately. On 5,500 candles of BTC/ETH/SOL across 1h, 4h
+// and 1d there was NOT ONE BAR where RSI(14) was at or below 30 while price sat above the
+// EMA(100): 277 bars were oversold, 2,633 were above the regime line, and the two sets never
+// intersected. This strategy opened a single position in twenty-seven backtests.
+//
+// The obvious repairs were measured over the same nine windows before deciding, and none of them
+// produces a strategy worth shipping -- they convert "never trades" into "trades and loses":
+//
+//   oversold 30 -> 40          68 trades, average -1.46%, 2 of 9 windows positive
+//   oversold 30 -> 45         141 trades, average -15.40%
+//   RSI period 14 -> 21         0 trades (fires even less than the shipped version)
+//   regime slack 3% below EMA  65 trades, average +0.43%, median -3.13%
+//   regime slack 8% below EMA 132 trades, average -6.76%
+//   no regime filter at all   184 trades, average -21.21%
+//
+// The regime filter is not the mistake -- removing it is the worst result of the lot. The premise
+// is: an RSI(14) dip to 30 IS the price falling out of its own uptrend, so "oversold while still
+// in an uptrend" is close to a contradiction on these markets. Fixing this means replacing the
+// entry idea, not retuning it, so the thresholds below are left exactly as they were rather than
+// loosened into something that trades and loses.
+//
+// The comparison table no longer lets a no-trade run outrank strategies that traded -- see
+// src/backtest/strategyRanking.ts.
 const RSI_PERIOD = 14
 const RSI_OVERSOLD = 30
 const RSI_OVERBOUGHT = 70
