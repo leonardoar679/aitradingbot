@@ -2,9 +2,13 @@ import { createHmac } from 'crypto'
 import type { Commissions } from '../../../shared/observedFee'
 import { resolveEndpoint } from './binance'
 
-// Live-trading groundwork for Binance only (see live-trading design plan — Phase A is limited to
-// this one authenticated, read-only call, used solely to verify a newly-entered API key/secret
-// before it's ever persisted). No order placement exists yet.
+// Live SPOT trading on Binance: reading the account, and placing, querying and cancelling real
+// orders. Futures is a separate host and a separate pair of modules (binanceFutures.ts, which is
+// read-only, and binanceFuturesTrading.ts, which can only close).
+//
+// Nothing in this file checks a safety gate. Every caller must pass through liveTradingService
+// immediately before the network call -- canPlaceLiveOrder for anything that opens exposure,
+// canCloseLivePosition for anything that reduces it.
 
 export interface AccountBalance {
   asset: string
@@ -155,6 +159,10 @@ interface SymbolFilters {
   minQty: number
   tickSize: string
   minNotional: number
+  /** The step a QUOTE amount has to land on, derived from the symbol's quote-asset precision.
+   * Binance rejects an over-precise quoteOrderQty outright (-1111), and a quote amount is very
+   * often a division -- a 10 USDT TWAP over three slices is 3.3333333333333335. */
+  quoteStep: string
 }
 
 interface BinanceFilter {
@@ -168,6 +176,18 @@ interface BinanceFilter {
 const symbolFiltersCache = new Map<string, { filters: SymbolFilters; fetchedAt: number }>()
 const SYMBOL_FILTERS_TTL_MS = 24 * 60 * 60 * 1000
 
+/** The step a quote amount must land on, from a symbol's quote-asset precision.
+ *
+ * Eight decimals is the fallback and the ceiling: it is what every Binance quote asset uses
+ * today, so an unreadable or absurd precision lands somewhere the exchange accepts rather than
+ * somewhere it rejects. Anything that is not a plain non-negative integer -- absent, NaN, 2.5,
+ * negative -- takes the fallback, because `toFixed` of any of those throws, and a crash inside
+ * an order path is a far worse failure than eight decimals of precision. */
+export function quoteStepFor(precision: number | undefined): string {
+  const usable = Number.isInteger(precision) && (precision as number) >= 0 && (precision as number) <= 8 ? (precision as number) : 8
+  return (1 / 10 ** usable).toFixed(usable)
+}
+
 async function getSymbolFilters(symbol: string): Promise<SymbolFilters> {
   const cached = symbolFiltersCache.get(symbol)
   if (cached && Date.now() - cached.fetchedAt < SYMBOL_FILTERS_TTL_MS) return cached.filters
@@ -175,7 +195,7 @@ async function getSymbolFilters(symbol: string): Promise<SymbolFilters> {
   const endpoint = await resolveEndpoint()
   const response = await fetch(`${endpoint.restRoot}/exchangeInfo?symbol=${symbol.toUpperCase()}`)
   if (!response.ok) throw new Error(`Could not load trading rules for ${symbol}: ${response.status} ${response.statusText}`)
-  const data = (await response.json()) as { symbols?: { filters: BinanceFilter[] }[] }
+  const data = (await response.json()) as { symbols?: { filters: BinanceFilter[]; quoteAssetPrecision?: number; quotePrecision?: number }[] }
   const entry = data.symbols?.[0]
   if (!entry) throw new Error(`Could not load trading rules for ${symbol}: symbol not found on the exchange`)
 
@@ -188,7 +208,8 @@ async function getSymbolFilters(symbol: string): Promise<SymbolFilters> {
     stepSize: lotSize?.stepSize ?? '0.00000001',
     minQty: Number(lotSize?.minQty ?? 0),
     tickSize: priceFilter?.tickSize ?? '0.00000001',
-    minNotional: Number(notional?.minNotional ?? 0)
+    minNotional: Number(notional?.minNotional ?? 0),
+    quoteStep: quoteStepFor(entry.quoteAssetPrecision ?? entry.quotePrecision)
   }
   symbolFiltersCache.set(symbol, { filters, fetchedAt: Date.now() })
   return filters
@@ -237,11 +258,43 @@ export async function placeMarketOrder(
   side: 'BUY' | 'SELL',
   quoteAmount: number
 ): Promise<LiveOrderResult> {
+  if (!(quoteAmount > 0)) {
+    throw new Error(`A quote amount of ${quoteAmount} is not an order this app will send to an exchange.`)
+  }
+
+  // The rules are looked up so the amount can be floored to the precision this quote asset
+  // actually accepts. A quote amount is very often a division -- a 10 USDT TWAP over three
+  // slices is 3.3333333333333335 -- and String() of that is sixteen decimal places, which
+  // Binance rejects outright with -1111 rather than rounding for us.
+  //
+  // A failed lookup does NOT block the order: it falls back to eight decimals, which every
+  // Binance quote asset accepts. This path also carries closing sells, and a rules request that
+  // times out must never be able to trap someone inside a position.
+  let filters: SymbolFilters | null = null
+  try {
+    filters = await getSymbolFilters(symbol)
+  } catch {
+    filters = null
+  }
+
+  const roundedQuote = floorToStep(quoteAmount, filters?.quoteStep ?? '0.00000001')
+  if (!(Number(roundedQuote) > 0)) {
+    throw new Error(`${quoteAmount} is smaller than the smallest amount ${symbol} can be traded in and cannot be sent as an order.`)
+  }
+  // Named here rather than left to come back as "Filter failure: NOTIONAL", which tells someone
+  // nothing about what to change. Skipped when the rules could not be read -- the exchange still
+  // enforces it, this is only the part that explains it.
+  if (filters !== null && filters.minNotional > 0 && Number(roundedQuote) < filters.minNotional) {
+    throw new Error(
+      `Order value too small for ${symbol}: ${roundedQuote} is below the exchange minimum of ${filters.minNotional}. Increase the amount per order.`
+    )
+  }
+
   const data = (await signedRequest(
     apiKey,
     apiSecret,
     '/order',
-    { symbol, side, type: 'MARKET', quoteOrderQty: String(quoteAmount) },
+    { symbol, side, type: 'MARKET', quoteOrderQty: roundedQuote },
     'POST'
   )) as BinanceOrderResponse
   return parseOrderResponse(data)
