@@ -27,6 +27,13 @@ export async function handOverPositionOnStop(executor: ExecutorConfig): Promise<
   const position = await computeExecutorPosition(executor)
   if (!position) return null
 
+  // A leveraged position cannot be handed over, because Inventory is a spot ledger and there is
+  // no honest row to write. Recording the margin would understate the exposure tenfold; recording
+  // the notional would credit an asset the account never bought and could not pay for. Returning
+  // null settles it in cash instead -- the position is closed at market and its P&L, gain or
+  // loss, goes back to the balance, which is what closing a leveraged position actually does.
+  if (position.leverage !== 1) return null
+
   const held: HeldPosition = {
     id: crypto.randomUUID(),
     sourceExecutorId: executor.id,

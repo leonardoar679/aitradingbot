@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { Candle, ExecutorConfig } from '../shared/ipc'
 import { computeExecutorPnl } from '../src/executors/computeSnapshot'
+import { roundTripFee } from '../shared/fees'
+import { ASSUMED_FUNDING_RATE } from '../shared/perp'
 
 // computeExecutorPnl is the number ControllerScheduler checks its risk controls against -- global
 // stop-loss, take-profit and max-drawdown all read it. Nothing tested it. Flipping the sign of
@@ -129,5 +131,69 @@ describe('computeExecutorPnl adds a grid realized and unrealized', () => {
     const total = await computeExecutorPnl(grid('buy'))
     // The unrealized half alone is 6.5454...; returning only that would look plausible.
     expect(total).toBeGreaterThan(7)
+  })
+})
+describe('computeExecutorPnl on a leveraged position', () => {
+  // This number settles the paper account when an executor stops, and is what a Controller's
+  // stop-loss is compared against. Reporting a tenth of a 10x position's loss would let a breach
+  // that should have stopped a whole group of executors go unnoticed.
+  const levered = (side: string, leverage: number, amountQuote = 100) =>
+    exec('position', {
+      side,
+      entryPrice: null,
+      amountQuote,
+      takeProfitPct: null,
+      stopLossPct: null,
+      timeLimitSec: null,
+      trailingStop: null,
+      leverage
+    })
+
+  it('scales a gain by the leverage, fee included', async () => {
+    // Same +10 gross and 0.21 fee as the 1x case, times five.
+    expect(await computeExecutorPnl(levered('buy', 5))).toBeCloseTo(LONG * 5, 10)
+  })
+
+  it('scales a loss by the leverage', async () => {
+    expect(await computeExecutorPnl(levered('sell', 5))).toBeCloseTo(SHORT * 5, 10)
+  })
+
+  it('is unchanged when leverage is absent, as it is on every position saved before it existed', async () => {
+    expect(await computeExecutorPnl(levered('buy', undefined as unknown as number))).toBeCloseTo(LONG, 10)
+  })
+
+  it('reports a liquidation as the whole deposit and no worse', async () => {
+    // A 50x short is liquidated by a 2% rally, and this series is a 10% one. The figure that goes
+    // back to the account has to be exactly the margin: an isolated-margin position cannot lose
+    // past what was put into it, and reporting the raw -510 would take money the account never
+    // staked. No floor is applied here to achieve that -- the replay closes the position itself.
+    const pnl = await computeExecutorPnl(levered('sell', 50))
+
+    expect(pnl).toBe(-100)
+  })
+
+  it('charges funding on a leveraged position that has been open past a funding boundary', async () => {
+    // The 1-minute candles above never reach one. A day of them does.
+    series = [
+      candle(0, 100, 100.5, 99.5, 100),
+      { time: T + 24 * 3600, open: 100, high: 100, low: 100, close: 100, volume: 1 }
+    ]
+    const flatPnl = await computeExecutorPnl(levered('buy', 10, 1_000))
+    // No price move at all, so the entire figure is cost: the round-trip fee plus three funding
+    // periods on 10,000 of notional.
+    const fee = roundTripFee(100, 100, 100)
+    const funding = 10_000 * ASSUMED_FUNDING_RATE * 3
+
+    expect(flatPnl).toBeCloseTo(-fee - funding, 9)
+    expect(funding).toBeGreaterThan(0)
+  })
+
+  it('charges no funding at 1x, where there is none', async () => {
+    series = [
+      candle(0, 100, 100.5, 99.5, 100),
+      { time: T + 24 * 3600, open: 100, high: 100, low: 100, close: 100, volume: 1 }
+    ]
+
+    expect(await computeExecutorPnl(levered('buy', 1, 1_000))).toBeCloseTo(-roundTripFee(10, 100, 100), 9)
   })
 })

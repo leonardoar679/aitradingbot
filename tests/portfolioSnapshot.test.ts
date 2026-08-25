@@ -6,7 +6,7 @@ import type { ExecutorConfig } from '../shared/ipc'
 // type. Thirteen mutations of it, including inverting a short's value and blending real money
 // with paper money into one row, all left the suite green.
 
-const positions = new Map<string, { side: 'buy' | 'sell'; entryPrice: number; amountQuote: number } | null>()
+const positions = new Map<string, { side: 'buy' | 'sell'; entryPrice: number; amountQuote: number; leverage?: number } | null>()
 const throwingExecutors = new Set<string>()
 
 vi.mock('../src/executors/computeSnapshot', () => ({
@@ -102,6 +102,35 @@ describe('computePortfolioSnapshot values a position', () => {
 
     const snap = await computePortfolioSnapshot()
     expect(snap.totalValue).toBeCloseTo(900, 10)
+  })
+  it('marks a leveraged long by the leverage, not by the price move alone', async () => {
+    // 1,000 at 10x in a 10% rally is worth 2,000, not 1,100. Reporting the 1,100 would show a
+    // beginner a tenth of what their position has actually done -- in the direction that makes
+    // leverage look mild.
+    settings.executors = [executor('long')]
+    positions.set('long', { side: 'buy', entryPrice: 100, amountQuote: 1000, leverage: 10 })
+
+    const snap = await computePortfolioSnapshot()
+    expect(snap.totalValue).toBeCloseTo(2000, 10)
+  })
+
+  it('never values a wiped-out leveraged position below zero', async () => {
+    // A 10% move the wrong way on 10x takes the whole deposit and stops there -- isolated margin
+    // cannot go negative. Left unfloored this row is -1,000 and quietly subtracts a thousand
+    // dollars from the portfolio total, as though the loss carried on into the rest of the money.
+    settings.executors = [executor('short', { symbol: 'ETHUSDT', baseAsset: 'ETH' })]
+    positions.set('short', { side: 'sell', entryPrice: 100, amountQuote: 1000, leverage: 20 })
+
+    const snap = await computePortfolioSnapshot()
+    expect(snap.totalValue).toBe(0)
+  })
+
+  it('treats a position with no leverage recorded as 1x', async () => {
+    settings.executors = [executor('long')]
+    positions.set('long', { side: 'buy', entryPrice: 100, amountQuote: 1000, leverage: undefined })
+
+    const snap = await computePortfolioSnapshot()
+    expect(snap.totalValue).toBeCloseTo(1100, 10)
   })
 })
 

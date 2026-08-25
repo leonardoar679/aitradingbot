@@ -1,6 +1,7 @@
 import type { ExecutorConfig, ExecutorSide, GridExecutorParams, DcaExecutorParams, TwapExecutorParams, PositionExecutorParams, OrderExecutorParams, XemmExecutorParams, ArbitrageExecutorParams } from '../../shared/ipc'
 import { runExecutorSimulation } from './engine'
 import { roundTripFee } from '../../shared/fees'
+import { ASSUMED_FUNDING_RATE, fundingCost, fundingPeriodsBetween, notionalFor } from '../../shared/perp'
 import { alignByTime, simulateXemm, simulateArbitrage } from './spreadEngine'
 
 // Imperative counterparts to useExecutorSimulation/useSpreadExecutorSimulation for call sites
@@ -15,7 +16,12 @@ async function fetchSingleMarketCandles(executor: ExecutorConfig) {
 export interface OpenPosition {
   side: ExecutorSide
   entryPrice: number
+  /** The money at stake -- margin, not notional. At 1x they are the same thing; above it they
+   * are not, and this stays the smaller one because it is what the holder can actually lose. */
   amountQuote: number
+  /** 1 for everything that is not a leveraged Position. Callers marking a position to market
+   * must scale the price move by this, or a 10x position reports a tenth of what happened. */
+  leverage: number
 }
 
 /** Extracts "is there currently an open, unrealized position" for an executor about to be
@@ -36,25 +42,25 @@ export async function computeExecutorPosition(executor: ExecutorConfig): Promise
     if (filled.length === 0) return null
     const avgEntry = filled.reduce((sum, l) => sum + (l.entryPrice as number), 0) / filled.length
     const params = executor.params as GridExecutorParams
-    return { side: params.side, entryPrice: avgEntry, amountQuote: filled.length * state.amountPerLevel }
+    return { side: params.side, entryPrice: avgEntry, amountQuote: filled.length * state.amountPerLevel, leverage: 1 }
   }
 
   if (state.kind === 'dca') {
     if (state.status !== 'accumulating' || state.avgEntryPrice === null) return null
     const params = executor.params as DcaExecutorParams
-    return { side: params.side, entryPrice: state.avgEntryPrice, amountQuote: state.totalFilledQuote }
+    return { side: params.side, entryPrice: state.avgEntryPrice, amountQuote: state.totalFilledQuote, leverage: 1 }
   }
 
   if (state.kind === 'position') {
     if (state.status !== 'open' || state.entryPrice === null) return null
     const params = executor.params as PositionExecutorParams
-    return { side: state.side, entryPrice: state.entryPrice, amountQuote: params.amountQuote }
+    return { side: state.side, entryPrice: state.entryPrice, amountQuote: params.amountQuote, leverage: state.leverage }
   }
 
   if (state.kind === 'order') {
     if (state.status !== 'filled' || state.fillPrice === null) return null
     const params = executor.params as OrderExecutorParams
-    return { side: params.side, entryPrice: state.fillPrice, amountQuote: params.amountQuote }
+    return { side: params.side, entryPrice: state.fillPrice, amountQuote: params.amountQuote, leverage: 1 }
   }
 
   // marketmaking — was previously missing entirely, silently discarding any accumulated
@@ -64,7 +70,7 @@ export async function computeExecutorPosition(executor: ExecutorConfig): Promise
   if (state.kind === 'marketmaking') {
     if (state.inventoryBaseQty === 0 || state.avgCost === null) return null
     const side: ExecutorSide = state.inventoryBaseQty > 0 ? 'buy' : 'sell'
-    return { side, entryPrice: state.avgCost, amountQuote: Math.abs(state.inventoryBaseQty) * state.avgCost }
+    return { side, entryPrice: state.avgCost, amountQuote: Math.abs(state.inventoryBaseQty) * state.avgCost, leverage: 1 }
   }
 
   return null
@@ -129,9 +135,30 @@ export async function computeExecutorPnl(executor: ExecutorConfig): Promise<numb
     if (state.status === 'open' && state.entryPrice !== null) {
       const params = executor.params as PositionExecutorParams
       const isBuy = state.side === 'buy'
-      const qty = params.amountQuote / state.entryPrice
+      // Sized on notional. This figure settles the paper account when the executor stops and is
+      // what a Controller's loss limit is compared against, so an unlevered quantity here would
+      // hand a 10x position back a tenth of its loss and let a breach go unnoticed.
+      const qty = notionalFor(params.amountQuote, state.leverage) / state.entryPrice
       const grossPos = isBuy ? qty * (current - state.entryPrice) : qty * (state.entryPrice - current)
-      return grossPos - roundTripFee(qty, state.entryPrice, current)
+      // Funding accrued so far, not only at exit. Charging it only on close would leave an open
+      // position looking better than it is for as long as it stays open -- and then drop by the
+      // whole accumulated amount the moment it closes.
+      const funding =
+        state.leverage === 1 || state.enteredAt === null
+          ? 0
+          : fundingCost({
+              notionalQuote: notionalFor(params.amountQuote, state.leverage),
+              fundingRate: ASSUMED_FUNDING_RATE,
+              periods: fundingPeriodsBetween(state.enteredAt, candles[candles.length - 1].time),
+              side: state.side
+            })
+      // No floor at -amountQuote here, though an isolated-margin position cannot lose more than
+      // its margin. It does not need one: `current` is the close of the last of the very candles
+      // the simulation above just replayed, so a price past the liquidation level was already
+      // seen by it -- a candle's low is never above its close, nor its high below -- and the
+      // position would have come back closed, returning realizedPnl instead of reaching here.
+      // Adding the floor anyway would be an unreachable branch that looks like protection.
+      return grossPos - roundTripFee(qty, state.entryPrice, current) - funding
     }
     return 0
   }

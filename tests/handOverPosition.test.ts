@@ -35,7 +35,7 @@ const EXECUTOR: ExecutorConfig = {
   params: { side: 'buy', levels: [{ priceOffsetPct: 0, amountQuote: 100 }], takeProfitPct: 5, stopLossPct: null, timeLimitSec: null }
 } as ExecutorConfig
 
-const POSITION = { side: 'buy' as const, entryPrice: 71_653.83, amountQuote: 100 }
+const POSITION = { side: 'buy' as const, entryPrice: 71_653.83, amountQuote: 100, leverage: 1 }
 
 let stored: { heldPositions: HeldPosition[] }
 let setCalls: number
@@ -123,6 +123,16 @@ describe('handOverPositionOnStop', () => {
     await handOverPositionOnStop(EXECUTOR)
 
     expect(stored.heldPositions.map((p) => p.id)).toEqual(['landed-meanwhile', expect.any(String)])
+  })
+
+  it('refuses to hand over a leveraged position, because Inventory has no honest row for one', async () => {
+    // Inventory is a spot ledger. Writing the margin would record a tenth of the exposure; writing
+    // the notional would credit an asset the account never bought. Returning null settles it in
+    // cash instead -- see settleExecutor, which pays the P&L back when nothing was handed over.
+    computeExecutorPosition.mockResolvedValue({ ...POSITION, leverage: 10 })
+
+    expect(await handOverPositionOnStop(EXECUTOR)).toBeNull()
+    expect(stored.heldPositions).toHaveLength(0)
   })
 
   it('keeps existing Inventory rows', async () => {

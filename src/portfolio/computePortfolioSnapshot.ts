@@ -46,10 +46,22 @@ function priceKey(exchange: Exchange, symbol: string): string {
  * executor's open position) — same unrealized-%-then-apply-to-amountQuote math already used by
  * HeldPositionRow.tsx and BotCard.tsx, just centralized here so Portfolio computes it exactly
  * the same way those views display it. */
-function paperPositionValue(entryPrice: number, amountQuote: number, side: 'buy' | 'sell', price: number): number {
+function paperPositionValue(
+  entryPrice: number,
+  amountQuote: number,
+  side: 'buy' | 'sell',
+  price: number,
+  leverage = 1
+): number {
   const rawPct = (price - entryPrice) / entryPrice
   const pct = side === 'sell' ? -rawPct : rawPct
-  return amountQuote * (1 + pct)
+  // What the position is worth to its holder: the money they put in, moved by the price change
+  // times the leverage. amountQuote stays the margin -- reporting the notional would tell someone
+  // with 1,000 at 10x that they hold 10,000, which is a figure they have never owned.
+  //
+  // Never below zero. An isolated-margin position stops at "the deposit is gone"; a negative
+  // holding row would subtract from the portfolio total as though the loss kept going.
+  return Math.max(amountQuote * (1 + pct * leverage), 0)
 }
 
 /** Aggregates real portfolio state from every source this app actually tracks -- live
@@ -150,7 +162,7 @@ export async function computePortfolioSnapshot(): Promise<PortfolioSnapshotData>
     rows.push({
       baseAsset: executor.baseAsset,
       quoteAsset: executor.quoteAsset,
-      value: paperPositionValue(position.entryPrice, position.amountQuote, position.side, price),
+      value: paperPositionValue(position.entryPrice, position.amountQuote, position.side, price, position.leverage),
       isLive: false
     })
   }

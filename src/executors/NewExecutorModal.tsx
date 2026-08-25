@@ -198,6 +198,9 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
   const [liveTradingStatus, setLiveTradingStatus] = useState<LiveTradingStatus | null>(null)
 
   const isSpreadType = SPREAD_TYPES.includes(type)
+  // Offering the handover here and then silently not doing it would be the worse of the two --
+  // see handOverPositionOnStop for why a leveraged position has no honest Inventory row.
+  const handoverBlockedByLeverage = type === 'position' && resolveLeverage(positionParams.leverage) !== 1
 
   // The spread % this executor trades on only means anything if both legs are the same asset
   // pair (BTC/USDT vs BTC/USDT on two exchanges, say) — comparing two different instruments
@@ -550,10 +553,34 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
           </div>
 
           {mode !== 'live' && (
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-primary)', cursor: isSpreadType ? 'not-allowed' : 'pointer', opacity: isSpreadType ? 0.5 : 1 }}>
-              <input type="checkbox" checked={keepPosition} disabled={isSpreadType} onChange={(e) => setKeepPosition(e.target.checked)} />
-              Keep position when stopped (hand over to Inventory)
-            </label>
+            <>
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  fontSize: '0.8rem',
+                  color: 'var(--text-primary)',
+                  cursor: isSpreadType || handoverBlockedByLeverage ? 'not-allowed' : 'pointer',
+                  opacity: isSpreadType || handoverBlockedByLeverage ? 0.5 : 1
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={keepPosition && !handoverBlockedByLeverage}
+                  disabled={isSpreadType || handoverBlockedByLeverage}
+                  onChange={(e) => setKeepPosition(e.target.checked)}
+                />
+                Keep position when stopped (hand over to Inventory)
+              </label>
+              {handoverBlockedByLeverage && (
+                <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
+                  Inventory holds spot assets, and a leveraged position isn’t one — it’s a deposit controlling a larger
+                  amount, which no holding row can say. Stopping this closes it at the market price instead and returns
+                  the result, profit or loss, to your balance.
+                </p>
+              )}
+            </>
           )}
           {mode === 'live' && (
             <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
