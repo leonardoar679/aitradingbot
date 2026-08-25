@@ -7,7 +7,8 @@ import { formatQuotePrice } from '../utils/formatCurrency'
 import { accountPnl, availableBalance, fund, totalBalance } from './paperAccount'
 import { assetsInPlay, committedByAsset } from './accountCommitments'
 import { updateAccount } from './persistAccount'
-import type { AccountLedgerEntry, ExecutorConfig, PaperAccount } from '../../shared/ipc'
+import { LiveBalancesCard } from './LiveBalancesCard'
+import type { AccountLedgerEntry, CredentialStatus, ExecutorConfig, PaperAccount } from '../../shared/ipc'
 
 /** Amount with its sign in front of the currency symbol, not inside it. */
 function signed(value: number, asset: string): string {
@@ -49,6 +50,7 @@ export function AccountPage(): React.JSX.Element {
   const [amount, setAmount] = useState('10000')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [connected, setConnected] = useState<CredentialStatus[]>([])
 
   const reload = useCallback(async () => {
     const settings = await window.api.settings.get()
@@ -60,6 +62,15 @@ export function AccountPage(): React.JSX.Element {
   useEffect(() => {
     void reload()
   }, [reload])
+
+  useEffect(() => {
+    // A failure here means the live section simply does not appear. The paper account is the
+    // point of this page and must not be held hostage to whether a credentials file could be read.
+    window.api.credentials
+      .list()
+      .then((list) => setConnected(list.filter((c) => c.configured)))
+      .catch((e: unknown) => console.error('Failed to list connected exchanges:', e))
+  }, [])
 
   const committed = committedByAsset(executors)
   const balances = account?.balances ?? {}
@@ -97,7 +108,14 @@ export function AccountPage(): React.JSX.Element {
 
   return (
     <>
-      <PageHeader title="Account" subtitle="The simulated balance your paper strategies spend" />
+      <PageHeader
+        title="Account"
+        subtitle={
+          connected.length > 0
+            ? 'The simulated balance your paper strategies spend, and what you really hold on your connected exchanges'
+            : 'The simulated balance your paper strategies spend'
+        }
+      />
 
       {loaded && account === null && (
         <Card title="Get started">
@@ -243,6 +261,10 @@ export function AccountPage(): React.JSX.Element {
           </p>
         </Card>
       )}
+
+      {connected.map((credential) => (
+        <LiveBalancesCard key={credential.exchange} exchange={credential.exchange} />
+      ))}
 
       {account !== null && account.ledger.length > 0 && (
         <Card title="Movements">

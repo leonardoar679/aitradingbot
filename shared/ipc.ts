@@ -1,6 +1,10 @@
 // Single source of truth for IPC channel names and payload shapes.
 // Imported by both electron/ (main + preload) and src/ (renderer).
 
+import type { ExchangeBalance } from './liveBalances'
+
+export type { ExchangeBalance }
+
 export const IpcChannel = {
   AppPing: 'app:ping',
   AppGetVersion: 'app:getVersion',
@@ -21,6 +25,7 @@ export const IpcChannel = {
   CredentialsSet: 'credentials:set',
   CredentialsTest: 'credentials:test',
   CredentialsRemove: 'credentials:remove',
+  CredentialsBalances: 'credentials:balances',
   LiveTradingGetStatus: 'liveTrading:getStatus',
   LiveTradingSetConfig: 'liveTrading:setConfig',
   LiveTradingEngageKillSwitch: 'liveTrading:engageKillSwitch',
@@ -102,6 +107,21 @@ export interface CredentialStatus {
   addedAt: number | null
   lastTestedAt: number | null
   lastTestOk: boolean | null
+}
+
+/** What one exchange says the user actually holds, as read over their own API key.
+ *
+ * Read-only in every sense: nothing in the app writes to it, and it is never mixed into the paper
+ * account. They are different money, and a beginner conflating the two is exactly the mistake
+ * this app should not help them make. */
+export interface LiveBalanceSnapshot {
+  exchange: Exchange
+  /** Non-zero balances, largest first -- see shared/liveBalances.ts. */
+  rows: ExchangeBalance[]
+  /** Assets the exchange reported in a form that could not be read as a number. */
+  unreadable: string[]
+  /** When this was read, so the UI can say how old it is rather than implying it is live. */
+  fetchedAt: number
 }
 
 /** Current state of every real-money safety gate — see electron/services/liveTradingService.ts,

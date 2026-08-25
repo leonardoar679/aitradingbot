@@ -73,10 +73,21 @@ async function signedRequest(
   return body
 }
 
-/** The one authenticated call Phase A needs: proves a key/secret pair is valid and can read the
- * account, without placing any order. */
+/** Reads the account: proves a key/secret pair is valid, and is also what the Account page
+ * shows. Places no order.
+ *
+ * Every balance arrives as a decimal string and is converted here without a guard, deliberately:
+ * a value that will not parse becomes NaN and is reported as unreadable by readableBalances,
+ * which is information the user can act on. Silently substituting 0 would tell them they hold
+ * nothing. */
 export async function fetchAccountBalance(apiKey: string, apiSecret: string): Promise<AccountBalance[]> {
   const data = (await signedRequest(apiKey, apiSecret, '/account', {}, 'GET')) as BinanceAccountResponse
+  // A 200 whose body is not the documented shape used to fail as "Cannot read properties of
+  // undefined (reading 'map')", which reaches the user as the reason their API key was rejected
+  // and points them at the wrong thing entirely.
+  if (!Array.isArray(data?.balances)) {
+    throw new Error('Binance returned an account response without a balance list')
+  }
   return data.balances.map((b) => ({ asset: b.asset, free: Number(b.free), locked: Number(b.locked) }))
 }
 

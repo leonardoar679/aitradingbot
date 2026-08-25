@@ -9,6 +9,7 @@ import {
   type HistoricalRangeProgress,
   type HistoricalRangeResult,
   type Interval,
+  type LiveBalanceSnapshot,
   type LiveExitResult,
   type LiveOrderRecord,
   type LivePosition,
@@ -72,7 +73,9 @@ const api = {
       ipcRenderer.invoke(IpcChannel.CredentialsSet, exchange, apiKey, apiSecret),
     test: (exchange: Exchange): Promise<{ ok: boolean; message: string }> =>
       ipcRenderer.invoke(IpcChannel.CredentialsTest, exchange),
-    remove: (exchange: Exchange): Promise<void> => ipcRenderer.invoke(IpcChannel.CredentialsRemove, exchange)
+    remove: (exchange: Exchange): Promise<void> => ipcRenderer.invoke(IpcChannel.CredentialsRemove, exchange),
+    balances: (exchange: Exchange, force = false): Promise<LiveBalanceSnapshot> =>
+      ipcRenderer.invoke(IpcChannel.CredentialsBalances, exchange, force)
   },
   liveTrading: {
     getStatus: (): Promise<LiveTradingStatus> => ipcRenderer.invoke(IpcChannel.LiveTradingGetStatus),
