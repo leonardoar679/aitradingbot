@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { computeExecutorPnl, executorAllocatedQuote } from '../executors/computeSnapshot'
 import { handOverPositionOnStop } from '../executors/handOverPosition'
+import { settleExecutorOnStop } from '../account/settleExecutor'
 import { pushControllerSnapshot, getControllerSnapshots } from './controllerStore'
 import { SNAPSHOT_INTERVAL_MS } from './types'
 import { controllerDrawdownPct } from './riskMath'
@@ -74,9 +75,12 @@ export async function runControllerSnapshotNow(controller: ControllerConfig): Pr
     // rewrites the whole heldPositions array.
     for (const executor of attached) {
       try {
-        await handOverPositionOnStop(executor)
+        const handedOver = await handOverPositionOnStop(executor)
+        // A strategy stopped by a risk breach has to reach the account exactly as one stopped by
+        // hand does, or the balance depends on who pressed stop.
+        await settleExecutorOnStop({ executor, handedOverToInventory: handedOver, now: Math.floor(Date.now() / 1000) })
       } catch (error) {
-        console.error(`Failed to hand over position for ${executor.name} on controller stop:`, error)
+        console.error(`Failed to settle ${executor.name} on controller stop:`, error)
       }
     }
   }

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { insertPreset, insertStarterPack } from '../src/presets/insertStarterPack'
 import { STARTER_PACKS, findPreset } from '../src/presets/starterPresets'
 import { settingsWrites } from '../src/utils/settingsWrites'
+import { emptyAccount, fund } from '../src/account/paperAccount'
 import type { ControllerConfig, ExecutorConfig } from '../shared/ipc'
 
 // Adding a preset writes to the same two settings arrays every other page writes, and
@@ -10,21 +11,22 @@ import type { ControllerConfig, ExecutorConfig } from '../shared/ipc'
 
 const opts = { referencePrice: 50_000, now: 1_700_000_000 }
 
-let stored: { executors: ExecutorConfig[]; controllers: ControllerConfig[] }
+let stored: { executors: ExecutorConfig[]; controllers: ControllerConfig[]; paperAccount: null }
 let setCalls: number
 
 const existingExecutor = { id: 'mine-1', name: 'My Own Grid' } as ExecutorConfig
 const existingController = { id: 'ctrl-1', name: 'My Own Desk', executorIds: ['mine-1'] } as ControllerConfig
 
 beforeEach(() => {
-  stored = { executors: [existingExecutor], controllers: [existingController] }
+  // No paper account: presets must keep working for anyone who never set one up.
+  stored = { executors: [existingExecutor], controllers: [existingController], paperAccount: null }
   setCalls = 0
   ;(globalThis as unknown as { window: unknown }).window = {
     api: {
       settings: {
         get: async () => {
           await Promise.resolve()
-          return { executors: [...stored.executors], controllers: [...stored.controllers] }
+          return { executors: [...stored.executors], controllers: [...stored.controllers], paperAccount: stored.paperAccount }
         },
         set: async (patch: Partial<typeof stored>) => {
           await Promise.resolve()
@@ -104,5 +106,62 @@ describe('insertPreset', () => {
 
     expect(stored.executors.some((e) => e.id === 'mine-1')).toBe(true)
     expect(stored.executors).toHaveLength(2)
+  })
+})
+
+describe('the paper account gates what can be added', () => {
+  const pack = STARTER_PACKS[0]
+
+  it('refuses a pack the account cannot cover, and writes nothing', async () => {
+    stored.paperAccount = fund(emptyAccount(1_700_000_000), {
+      asset: 'USDT',
+      amount: 100,
+      now: 1_700_000_000,
+      id: 'f1'
+    }) as never
+
+    await expect(insertStarterPack(pack, opts)).rejects.toThrow(/short/)
+    // Refusing after a partial write would be worse than not checking at all.
+    expect(stored.executors).toHaveLength(1)
+    expect(stored.controllers).toHaveLength(1)
+    expect(setCalls).toBe(0)
+  })
+
+  it('allows a pack the account can cover', async () => {
+    stored.paperAccount = fund(emptyAccount(1_700_000_000), {
+      asset: 'USDT',
+      amount: 50_000,
+      now: 1_700_000_000,
+      id: 'f1'
+    }) as never
+
+    await expect(insertStarterPack(pack, opts)).resolves.toHaveLength(pack.presetIds.length)
+  })
+
+  it('counts strategies already running against the same balance', async () => {
+    // The pack fits an empty account but not one already holding most of it.
+    stored.paperAccount = fund(emptyAccount(1_700_000_000), {
+      asset: 'USDT',
+      amount: 1_500,
+      now: 1_700_000_000,
+      id: 'f1'
+    }) as never
+    stored.executors = [
+      { id: 'running', quoteAsset: 'USDT', status: 'active', mode: 'paper', type: 'position', params: { amountQuote: 1_400 } } as unknown as ExecutorConfig
+    ]
+
+    await expect(insertStarterPack(pack, opts)).rejects.toThrow(/short/)
+  })
+
+  it('refuses a single preset the same way', async () => {
+    stored.paperAccount = fund(emptyAccount(1_700_000_000), {
+      asset: 'USDT',
+      amount: 10,
+      now: 1_700_000_000,
+      id: 'f1'
+    }) as never
+
+    await expect(insertPreset(findPreset('twap-accumulate')!, opts)).rejects.toThrow(/short/)
+    expect(stored.executors).toHaveLength(1)
   })
 })

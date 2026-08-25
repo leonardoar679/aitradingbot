@@ -4,6 +4,9 @@ import { ExchangeSelect } from '../components/ExchangeSelect'
 import { SymbolSearch } from '../components/SymbolSearch'
 import { GridForm } from './GridForm'
 import { describeGridBoundsProblem } from './gridBounds'
+import type { ExecutorConfig, PaperAccount } from '../../shared/ipc'
+import { describeExecutorFunding } from '../account/executorFunding'
+import { executorAllocatedQuote } from './computeSnapshot'
 import { DcaForm } from './DcaForm'
 import { TwapForm } from './TwapForm'
 import { PositionForm } from './PositionForm'
@@ -42,6 +45,10 @@ type AnyExecutorParams =
   | MarketMakingExecutorParams
 
 interface NewExecutorModalProps {
+  /** Current paper account and executors, so a new strategy can be checked against available
+   * funds before it is created rather than after. Null account = no limit; see executorFunding. */
+  account: PaperAccount | null
+  existingExecutors: ExecutorConfig[]
   onCreate: (input: {
     name: string
     type: ExecutorType
@@ -156,7 +163,7 @@ function defaultMarketMakingParams(): MarketMakingExecutorParams {
 const DEFAULT_SPREAD_BUY_EXCHANGE = EXCHANGES.find((e) => e.id === 'bithumb') ?? EXCHANGES[0]
 const DEFAULT_SPREAD_SELL_EXCHANGE = EXCHANGES.find((e) => e.id === 'upbit') ?? EXCHANGES[1]
 
-export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): React.JSX.Element {
+export function NewExecutorModal({ onCreate, onClose, account, existingExecutors }: NewExecutorModalProps): React.JSX.Element {
   const [name, setName] = useState('')
   const [exchange, setExchange] = useState<Exchange>(EXCHANGES[0].id)
   const [pair, setPair] = useState<SymbolInfo>(EXCHANGES[0].defaultSymbol)
@@ -320,8 +327,37 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
   const liveConfirmOk = liveConfirmText.trim() === LIVE_CONFIRM_PHRASE
   const canSubmitLive = mode !== 'live' || (canGoLive && liveAmountOk && liveConfirmOk)
 
+  const pendingParams: AnyExecutorParams = isSpreadType
+    ? type === 'xemm'
+      ? xemmParams
+      : arbitrageParams
+    : type === 'grid'
+      ? gridParams
+      : type === 'dca'
+        ? dcaParams
+        : type === 'twap'
+          ? twapParams
+          : type === 'position'
+            ? positionParams
+            : type === 'marketmaking'
+              ? marketMakingParams
+              : orderParams
+  const pendingQuoteAsset = isSpreadType
+    ? (type === 'xemm' ? xemmParams : arbitrageParams).buyingMarket.quoteAsset
+    : pair.quoteAsset
+  const fundingProblem = describeExecutorFunding({
+    account,
+    executors: existingExecutors,
+    mode,
+    quoteAsset: pendingQuoteAsset,
+    // Same helper that totals what is already committed, so the two can never disagree about
+    // what a strategy of this type costs.
+    amountQuote: executorAllocatedQuote({ type, params: pendingParams } as unknown as ExecutorConfig)
+  })
+  const underfunded = fundingProblem !== null
+
   function handleCreate(): void {
-    if (!name.trim() || !canSubmitLive || spreadAssetsMismatched) return
+    if (!name.trim() || !canSubmitLive || spreadAssetsMismatched || underfunded) return
 
     if (isSpreadType) {
       const params = type === 'xemm' ? xemmParams : arbitrageParams
@@ -577,6 +613,10 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
           )}
         </div>
 
+        {fundingProblem && (
+          <p style={{ margin: '0 1.1rem 0.6rem', fontSize: '0.76rem', color: 'var(--down)', lineHeight: 1.5 }}>{fundingProblem}</p>
+        )}
+
         <div style={{ display: 'flex', gap: '0.6rem', padding: '0 1.1rem 1.1rem' }}>
           <button
             onClick={onClose}
@@ -586,8 +626,8 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
           </button>
           <button
             onClick={handleCreate}
-            disabled={!name.trim() || !canSubmitLive || spreadAssetsMismatched || gridBlocked}
-            title={gridBlocked ? (gridBounds.blocking ?? undefined) : undefined}
+            disabled={!name.trim() || !canSubmitLive || spreadAssetsMismatched || gridBlocked || underfunded}
+            title={gridBlocked ? (gridBounds.blocking ?? undefined) : (fundingProblem ?? undefined)}
             style={{
               flex: 1,
               background: mode === 'live' ? 'var(--down)' : 'linear-gradient(135deg, #7c86ff, #6366f1)',
@@ -597,7 +637,7 @@ export function NewExecutorModal({ onCreate, onClose }: NewExecutorModalProps): 
               color: '#fff',
               fontSize: '0.85rem',
               fontWeight: 700,
-              cursor: name.trim() && canSubmitLive && !spreadAssetsMismatched && !gridBlocked ? 'pointer' : 'not-allowed',
+              cursor: name.trim() && canSubmitLive && !spreadAssetsMismatched && !gridBlocked && !underfunded ? 'pointer' : 'not-allowed',
               opacity: name.trim() && canSubmitLive && !spreadAssetsMismatched && !gridBlocked ? 1 : 0.6
             }}
           >

@@ -9,6 +9,7 @@ import { ExecutorCard } from './ExecutorCard'
 import { ExecutorDetailView } from './ExecutorDetailView'
 import { SpreadExecutorDetailView } from './SpreadExecutorDetailView'
 import { handOverPositionOnStop } from './handOverPosition'
+import { settleExecutorOnStop } from '../account/settleExecutor'
 import { mergeLocalEdits } from '../utils/mergeLocalEdits'
 import { settingsWrites } from '../utils/settingsWrites'
 import { describeError } from '../utils/ipcError'
@@ -17,6 +18,7 @@ import { dcaLevelPrice, twapNumOrders, buildGridLevels } from './engine'
 import {
   EXCHANGES,
   type ExecutorConfig,
+  type PaperAccount,
   type Exchange,
   type ExecutorType,
   type SymbolInfo,
@@ -43,6 +45,7 @@ export function ExecutorsPage({
   const [executors, setExecutors] = useState<ExecutorConfig[]>([])
   const [showNew, setShowNew] = useState(false)
   const [showPresets, setShowPresets] = useState(false)
+  const [paperAccount, setPaperAccount] = useState<PaperAccount | null>(null)
 
   // Portfolio's first-run card navigates here and asks for the presets straight away, so the
   // person who clicked "Browse Starter Presets" lands on them rather than on another button.
@@ -81,6 +84,7 @@ export function ExecutorsPage({
       if (cancelled) return
       setBots(settings.bots)
       setExecutors(settings.executors)
+      setPaperAccount(settings.paperAccount)
       lastSerializedRef.current = JSON.stringify(settings.executors)
       loadedRef.current = true
     })
@@ -632,15 +636,19 @@ export function ExecutorsPage({
     // flipped above, this only decides whether an open position gets a row in Inventory. The
     // paper-only and keepPosition rules live in handOverPositionOnStop so the controller's
     // risk-control stop path applies exactly the same ones.
-    void handOverPositionOnStop(executor).catch((error) => {
-      console.error('Failed to hand over position on stop:', error)
-      // The executor is already stopped by this point, so a failure here is silent data loss: the
-      // user ticked "keep position", and without this message the position simply never appears
-      // in Inventory and nothing anywhere says why.
-      noteStopError(
-        id,
-        `The executor stopped, but its open position could not be handed over to Positions → Inventory: ${describeError(error)}. That position was not saved anywhere.`
+    void handOverPositionOnStop(executor)
+      .then((handedOver) =>
+        settleExecutorOnStop({ executor, handedOverToInventory: handedOver, now: Math.floor(Date.now() / 1000) })
       )
+      .catch((error) => {
+        console.error('Failed to hand over position or settle on stop:', error)
+        // The executor is already stopped by this point, so a failure here is silent data loss:
+        // the user ticked "keep position", and without this message the position simply never
+        // appears in Inventory and nothing anywhere says why.
+        noteStopError(
+          id,
+          `The executor stopped, but its open position could not be handed over to Positions → Inventory, or its result could not be added to your account: ${describeError(error)}.`
+        )
     })
   }
 
@@ -803,7 +811,14 @@ export function ExecutorsPage({
         </Card>
       )}
 
-      {showNew && <NewExecutorModal onCreate={handleCreate} onClose={() => setShowNew(false)} />}
+      {showNew && (
+        <NewExecutorModal
+          onCreate={handleCreate}
+          onClose={() => setShowNew(false)}
+          account={paperAccount}
+          existingExecutors={executors}
+        />
+      )}
       {showPresets && (
         <StarterPresetsModal
           onClose={() => setShowPresets(false)}

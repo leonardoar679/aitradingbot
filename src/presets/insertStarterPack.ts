@@ -1,6 +1,27 @@
 import { settingsWrites } from '../utils/settingsWrites'
 import { buildPresetExecutor, buildStarterPack, type StarterPack, type StarterPreset } from './starterPresets'
 import type { ExecutorConfig } from '../../shared/ipc'
+import { describeBatchFunding } from '../account/executorFunding'
+import { executorAllocatedQuote } from '../executors/computeSnapshot'
+
+/** Throws when the paper account cannot cover these executors, with the shortfall named.
+ *
+ * Checked inside the queued read so it sees the same settings the write will use. Checking
+ * beforehand against a stale copy is how a pack gets admitted that no longer fits by the time it
+ * lands. Returns silently when there is no account -- it is opt-in. */
+function assertAffordable(
+  settings: { executors: ExecutorConfig[]; paperAccount: Parameters<typeof describeBatchFunding>[0]['account'] },
+  additions: ExecutorConfig[]
+): void {
+  const problem = describeBatchFunding({
+    account: settings.paperAccount,
+    executors: settings.executors,
+    requests: additions
+      .filter((e) => e.mode !== 'live')
+      .map((e) => ({ quoteAsset: e.quoteAsset, amountQuote: executorAllocatedQuote(e) }))
+  })
+  if (problem !== null) throw new Error(problem)
+}
 
 /** Adds a pack's executors AND the controller supervising them in one write.
  *
@@ -17,6 +38,7 @@ export async function insertStarterPack(
   const { executors, controller } = buildStarterPack(pack, opts)
   await settingsWrites(async () => {
     const fresh = await window.api.settings.get()
+    assertAffordable(fresh, executors)
     await window.api.settings.set({
       executors: [...fresh.executors, ...executors],
       controllers: [...fresh.controllers, controller]
@@ -34,6 +56,7 @@ export async function insertPreset(
   const executor = buildPresetExecutor(preset, opts)
   await settingsWrites(async () => {
     const fresh = await window.api.settings.get()
+    assertAffordable(fresh, [executor])
     await window.api.settings.set({ executors: [...fresh.executors, executor] })
   })
   return executor
