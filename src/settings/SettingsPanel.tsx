@@ -305,6 +305,7 @@ function LiveTradingLimitsCard(): React.JSX.Element {
   const [maxOrderQuote, setMaxOrderQuote] = useState('')
   const [dailyCapQuote, setDailyCapQuote] = useState('')
   const [dailyLossLimitQuote, setDailyLossLimitQuote] = useState('')
+  const [allocationQuote, setAllocationQuote] = useState('')
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -315,6 +316,9 @@ function LiveTradingLimitsCard(): React.JSX.Element {
       setMaxOrderQuote(String(s.maxOrderQuote))
       setDailyCapQuote(String(s.dailyCapQuote))
       setDailyLossLimitQuote(String(s.dailyLossLimitQuote))
+      // Blank and 0 are different answers -- "not using an allocation" and "an allocation of
+      // nothing" -- so an unset allocation must come back as an empty field, never as "0".
+      setAllocationQuote(s.allocationQuote === null ? '' : String(s.allocationQuote))
     })
   }
 
@@ -330,7 +334,8 @@ function LiveTradingLimitsCard(): React.JSX.Element {
       await window.api.liveTrading.setConfig({
         maxOrderQuote: Number(maxOrderQuote),
         dailyCapQuote: Number(dailyCapQuote),
-        dailyLossLimitQuote: Number(dailyLossLimitQuote)
+        dailyLossLimitQuote: Number(dailyLossLimitQuote),
+        allocationQuote: allocationQuote.trim() === '' ? null : Number(allocationQuote)
       })
       refresh()
       setSaved(true)
@@ -399,7 +404,23 @@ function LiveTradingLimitsCard(): React.JSX.Element {
             style={textInputStyle()}
           />
         </div>
+        <div style={{ flex: '1 1 160px' }}>
+          <label style={fieldLabelStyle()}>Managed Allocation (quote, blank = none)</label>
+          <input
+            type="number"
+            min="0"
+            placeholder="none"
+            value={allocationQuote}
+            onChange={(e) => setAllocationQuote(e.target.value)}
+            style={textInputStyle()}
+          />
+        </div>
       </div>
+      <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0.7rem 0 0', lineHeight: 1.5 }}>
+        {status.allocationQuote === null
+          ? 'A managed allocation is the only limit here that bounds the total rather than the day. Every cap above resets at midnight UTC, so a 50-a-day cap still permits 1,500 over a month. Set an amount and this app will never have more than that at work at once. Your funds never move — they stay on your exchange, under your keys; this is permission, not a deposit.'
+          : `This app may have ${status.allocationQuote.toFixed(2)} at work at once, and currently has ${status.allocationCommittedQuote.toFixed(2)} — counting what open positions cost and what resting buy orders have reserved. ${Math.max(status.allocationQuote - status.allocationCommittedQuote, 0).toFixed(2)} is free. Your funds have not moved: they are on your exchange, under your keys. Clear the field to trade without an allocation.`}
+      </p>
       <div style={{ marginTop: '0.7rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
         <button onClick={() => void handleSave()} disabled={busy} style={{ ...buttonStyle('primary'), opacity: busy ? 0.6 : 1 }}>
           Save

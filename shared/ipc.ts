@@ -153,6 +153,12 @@ export interface LiveTradingStatus {
    * been seen yet. Reported so Settings can say when FEE_RATE disagrees with reality; it drives
    * nothing on its own. */
   observedFeeRate: number | null
+  /** The managed allocation -- the most of the real balance this app may have at work at once --
+   * or null when none is configured and the gate does not apply. See shared/allocation.ts. */
+  allocationQuote: number | null
+  /** What is at work right now against that allocation, derived from the live positions and
+   * resting orders that exist. Always 0 when allocationQuote is null. */
+  allocationCommittedQuote: number
 }
 
 /** The result of one real order fill. `avgFillPrice` is notional-weighted across a market

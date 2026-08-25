@@ -162,6 +162,12 @@ export function LiveTradingBar(): React.JSX.Element | null {
               {status.realizedPnlToday.toFixed(2)}
             </span>{' '}
             / limit -{status.dailyLossLimitQuote}
+            {status.allocationQuote !== null && (
+              <>
+                {' '}
+                · allocation {status.allocationCommittedQuote.toFixed(2)} / {status.allocationQuote.toFixed(2)} at work
+              </>
+            )}
           </span>
         )}
       </div>

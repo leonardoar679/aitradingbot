@@ -38,7 +38,7 @@ export function registerLiveTradingHandlers(): void {
   ipcMain.handle(IpcChannel.LiveTradingGetStatus, () => getLiveTradingStatus())
   ipcMain.handle(
     IpcChannel.LiveTradingSetConfig,
-    (_event, patch: { maxOrderQuote?: number; dailyCapQuote?: number; dailyLossLimitQuote?: number }) => setLiveTradingConfig(patch)
+    (_event, patch: { maxOrderQuote?: number; dailyCapQuote?: number; dailyLossLimitQuote?: number; allocationQuote?: number | null }) => setLiveTradingConfig(patch)
   )
   ipcMain.handle(IpcChannel.LiveTradingEngageKillSwitch, () => engageKillSwitch())
   ipcMain.handle(IpcChannel.LiveTradingReleaseKillSwitch, () => releaseKillSwitch())

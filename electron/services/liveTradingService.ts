@@ -5,6 +5,9 @@ import { writeJsonAtomic } from './atomicWrite'
 import { getRealizedPnlToday, getLastObservedFeeRate } from './livePositionsService'
 import { clampLiveLimit, loadedLiveLimit, describeUnusableOrderSize, describeUntrustedLossTally } from '../../shared/liveLimits'
 import { nextDailyUsage, usageForDay } from './dailyUsage'
+import { committedAllocationQuote, describeAllocationBreach } from '../../shared/allocation'
+import { listOpenLivePositions } from './livePositionsService'
+import { listOpenLiveOrders } from './liveOrdersService'
 
 // Safety state for real order placement — deliberately its own file, separate from
 // settings.json and credentials.json, so a bug in either of those can never weaken a gate here.
@@ -29,6 +32,11 @@ interface LiveTradingState {
   dailyCapQuote: number
   dailyLossLimitQuote: number
   dailyUsage: DailyUsage | null
+  /** The managed allocation: the most of the user's real balance this app may have at work at
+   * once. Null means no allocation is configured and this gate does not apply -- see
+   * shared/allocation.ts. Unlike every other limit here it is not clamped to a hard ceiling,
+   * because it can only ever refuse orders the other gates would have allowed. */
+  allocationQuote: number | null
 }
 
 const DEFAULT_STATE: LiveTradingState = {
@@ -36,7 +44,8 @@ const DEFAULT_STATE: LiveTradingState = {
   maxOrderQuote: DEFAULT_MAX_ORDER_QUOTE,
   dailyCapQuote: DEFAULT_DAILY_CAP_QUOTE,
   dailyLossLimitQuote: DEFAULT_DAILY_LOSS_LIMIT_QUOTE,
-  dailyUsage: null
+  dailyUsage: null,
+  allocationQuote: null
 }
 
 // Deliberately never persisted and never set true by default — every app launch starts with
@@ -91,6 +100,9 @@ export interface LiveTradingStatus {
   realizedPnlToday: number
   /** Mirrors the shared LiveTradingStatus field -- see shared/ipc.ts. */
   observedFeeRate: number | null
+  /** Mirrors the shared LiveTradingStatus fields -- see shared/ipc.ts and shared/allocation.ts. */
+  allocationQuote: number | null
+  allocationCommittedQuote: number
 }
 
 export async function getLiveTradingStatus(): Promise<LiveTradingStatus> {
@@ -104,14 +116,39 @@ export async function getLiveTradingStatus(): Promise<LiveTradingStatus> {
     dailyUsedQuote: usageForToday(state),
     dailyLossLimitQuote: state.dailyLossLimitQuote,
     realizedPnlToday: await getRealizedPnlToday(),
-    observedFeeRate: await getLastObservedFeeRate()
+    observedFeeRate: await getLastObservedFeeRate(),
+    allocationQuote: state.allocationQuote,
+    allocationCommittedQuote: state.allocationQuote === null ? 0 : await committedNow()
   }
+}
+
+/** What this app currently has at work, derived fresh from the live ledgers. Only computed when
+ * an allocation exists: it costs two file reads, and reporting a committed figure beside no
+ * allocation would invite reading it as a limit. */
+async function committedNow(): Promise<number> {
+  const [positions, orders] = await Promise.all([listOpenLivePositions(), listOpenLiveOrders()])
+  return committedAllocationQuote(positions, orders)
+}
+
+/** An allocation is only ever a restriction, so it needs no hard ceiling -- but it does need to
+ * be a number, because a stored NaN would reach a gate made of `>` comparisons that are all
+ * false against it. Rejected at the door rather than coerced, so the user is told their value
+ * was not accepted instead of silently getting a different one. */
+function allocationOrThrow(value: number): number {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error('Managed allocation has to be a number of 0 or more. Clear it to trade without an allocation.')
+  }
+  return value
 }
 
 export async function setLiveTradingConfig(patch: {
   maxOrderQuote?: number
   dailyCapQuote?: number
   dailyLossLimitQuote?: number
+  /** null clears the allocation, which turns the gate off; a number sets the ceiling. Absent
+   * leaves it alone -- the three shapes have to stay distinguishable, since "clear it" and
+   * "don't touch it" mean opposite things for a gate. */
+  allocationQuote?: number | null
 }): Promise<LiveTradingStatus> {
   const state = await load()
   // Validated before ANY field is assigned, so a bad third value cannot leave the first two
@@ -127,6 +164,14 @@ export async function setLiveTradingConfig(patch: {
       ? clampLiveLimit('Daily loss limit', patch.dailyLossLimitQuote, null)
       : state.dailyLossLimitQuote
 
+  const nextAllocation =
+    patch.allocationQuote === undefined
+      ? state.allocationQuote
+      : patch.allocationQuote === null
+        ? null
+        : allocationOrThrow(patch.allocationQuote)
+
+  state.allocationQuote = nextAllocation
   state.maxOrderQuote = nextMax
   state.dailyCapQuote = nextCap
   state.dailyLossLimitQuote = nextLoss
@@ -184,6 +229,20 @@ export async function canPlaceLiveOrder(quoteAmount: number): Promise<LiveOrderG
   if (realizedPnlToday <= -state.dailyLossLimitQuote) {
     return { allowed: false, reason: `Daily loss limit reached (${state.dailyLossLimitQuote}) — live trading is disarmed for today` }
   }
+  // Last, because it is the only gate that has to read state from two other services and is
+  // therefore the only one that can be slow. Committed capital is derived from the positions and
+  // resting orders that actually exist rather than from a running total kept alongside them: a
+  // second tally drifts the first time anything is missed, and it drifts towards permitting more.
+  const [openPositions, restingOrders] = await Promise.all([listOpenLivePositions(), listOpenLiveOrders()])
+  const breach = describeAllocationBreach({
+    allocationQuote: state.allocationQuote,
+    committedQuote: committedAllocationQuote(openPositions, restingOrders),
+    orderQuote: quoteAmount,
+    // Every live path in this app is Binance spot against a USD-family quote; the asset is in the
+    // message only so the number reads as money rather than as a bare figure.
+    quoteAsset: openPositions[0]?.quoteAsset ?? restingOrders[0]?.quoteAsset ?? 'USDT'
+  })
+  if (breach !== null) return { allowed: false, reason: breach }
   return { allowed: true, reason: null }
 }
 
