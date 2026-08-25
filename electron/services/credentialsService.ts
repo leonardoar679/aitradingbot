@@ -4,12 +4,13 @@ import { readFile, mkdir } from 'fs/promises'
 import { writeJsonAtomic } from './atomicWrite'
 import { fetchAccountBalance, type AccountBalance } from './exchanges/binanceTrading'
 import { fetchUpbitBalances } from './exchanges/upbitTrading'
-import { fetchFuturesPositions } from './exchanges/binanceFutures'
-import { closeFuturesPosition } from './exchanges/binanceFuturesTrading'
+import { fetchFuturesPositions, fetchOpenFuturesOrders } from './exchanges/binanceFutures'
+import { cancelProtectiveStop, closeFuturesPosition, placeProtectiveStop } from './exchanges/binanceFuturesTrading'
 import { canCloseLivePosition } from './liveTradingService'
 import { freeBalance, readableBalances } from '../../shared/liveBalances'
 import type { CredentialStatus, Exchange, LiveBalanceSnapshot } from '../../shared/ipc'
 import type { FuturesCloseResult, FuturesReadout } from '../../shared/futuresPositions'
+import { describeStopPlacementError, readableProtectiveStops, type ProtectiveStop } from '../../shared/futuresStops'
 
 // Credentials live in their own file, separate from settings.json, so a bug in general settings
 // persistence can never touch secrets. Each key/secret is encrypted at rest via Electron's
@@ -260,4 +261,69 @@ export async function closeFuturesPositionFor(exchange: Exchange, symbol: string
     throw new Error(`Binance reports no open ${symbol} futures position — it may already be closed.`)
   }
   return closeFuturesPosition(apiKey, apiSecret, symbol, position.positionAmt)
+}
+
+/** The stop orders resting on a futures account, filtered down to the ones that actually protect
+ * something.
+ *
+ * Read as its own call rather than folded into readFuturesPositions, so that the two can fail
+ * independently. If the order read fails and the position read succeeds, the card has to be able
+ * to say "this app could not tell whether these are protected" -- merging them would collapse
+ * that into an empty list, which reads as "no stop", which is the one wrong answer that matters
+ * here. */
+export async function readFuturesStops(exchange: Exchange): Promise<ProtectiveStop[]> {
+  if (exchange !== 'binance') throw new Error(`Reading futures orders is not supported for ${exchange}`)
+  const store = await load()
+  const entry = store[exchange]
+  if (!entry) throw new Error(`No API key is connected for ${exchange}`)
+  const rows = await fetchOpenFuturesOrders(decrypt(entry.apiKeyEnc), decrypt(entry.apiSecretEnc))
+  return readableProtectiveStops(rows)
+}
+
+/** Places a stop that closes a real position if the price reaches `stopPrice`.
+ *
+ * Gated by canCloseLivePosition, like closing and for the same reason: this order can only ever
+ * reduce a position, so the size, daily-cap and loss-limit gates -- which exist to bound NEW
+ * exposure -- have no business refusing it. The kill switch and the session arm still apply.
+ *
+ * The position is re-read here rather than trusted from the renderer, for two separate reasons:
+ * the size decides the closing side, and the mark and liquidation prices decide whether the stop
+ * is placeable at all. A twenty-second-old mark is enough to accept a stop that has already been
+ * passed, which the exchange would then trigger the instant it was placed. */
+export async function placeFuturesStopFor(exchange: Exchange, symbol: string, stopPrice: number): Promise<ProtectiveStop> {
+  if (exchange !== 'binance') throw new Error(`Placing futures stops is not supported for ${exchange}`)
+  const gate = await canCloseLivePosition()
+  if (!gate.allowed) throw new Error(gate.reason ?? 'Placing a stop is not allowed right now')
+
+  const store = await load()
+  const entry = store[exchange]
+  if (!entry) throw new Error(`No API key is connected for ${exchange}`)
+
+  const apiKey = decrypt(entry.apiKeyEnc)
+  const apiSecret = decrypt(entry.apiSecretEnc)
+  const { positions } = await fetchFuturesPositions(apiKey, apiSecret)
+  const position = positions.find((p) => p.symbol === symbol)
+  if (!position) {
+    throw new Error(`Binance reports no open ${symbol} futures position — there is nothing for a stop to close.`)
+  }
+
+  const problem = describeStopPlacementError(position, stopPrice)
+  if (problem !== null) throw new Error(problem)
+
+  return placeProtectiveStop(apiKey, apiSecret, symbol, position.positionAmt, stopPrice)
+}
+
+/** Cancels a resting stop. The only write in this app that leaves a position more exposed than it
+ * found it, gated identically so that "this app should not be touching the exchange right now"
+ * means the same thing in both directions. */
+export async function cancelFuturesStopFor(exchange: Exchange, symbol: string, orderId: number): Promise<void> {
+  if (exchange !== 'binance') throw new Error(`Cancelling futures stops is not supported for ${exchange}`)
+  const gate = await canCloseLivePosition()
+  if (!gate.allowed) throw new Error(gate.reason ?? 'Cancelling a stop is not allowed right now')
+
+  const store = await load()
+  const entry = store[exchange]
+  if (!entry) throw new Error(`No API key is connected for ${exchange}`)
+
+  await cancelProtectiveStop(decrypt(entry.apiKeyEnc), decrypt(entry.apiSecretEnc), symbol, orderId)
 }

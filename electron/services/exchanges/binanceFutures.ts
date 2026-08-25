@@ -1,14 +1,17 @@
 import { createHmac } from 'crypto'
 import { readableFuturesPositions, type FuturesReadout, type RawFuturesPosition } from '../../../shared/futuresPositions'
+import type { RawFuturesOrder } from '../../../shared/futuresStops'
 
 /** Reading a Binance USDT-M futures account. READ-ONLY, and structurally so.
  *
  * There is no order endpoint in this file and no function here that takes a side or a quantity.
- * That is the safety property, and it is worth more than a comment saying "be careful": this app
- * cannot open, close or modify a futures position because the code to do it does not exist. If
- * that ever changes it has to be a deliberate addition that passes canPlaceLiveOrder -- whose
- * size limits are denominated in exposure precisely so a leveraged order cannot slip under a
- * ceiling written for spot.
+ * That is the safety property, and it is worth more than a comment saying "be careful": nothing
+ * reached from here can change a position.
+ *
+ * Every write this app can make to a futures account lives in binanceFuturesTrading.ts, and there
+ * are exactly three: closing a position, placing a stop that closes one, and cancelling that
+ * stop. None of them can open a position or increase one. Keeping them in a separate file is what
+ * makes that a fact a reader can check in a directory listing rather than a promise in a comment.
  *
  * Why read it at all: someone who has opened a leveraged position on Binance already has a
  * liquidation price whether they have looked at it or not. This app simulates that whole
@@ -126,4 +129,20 @@ export async function fetchFuturesBalances(apiKey: string, apiSecret: string): P
       available: Number(row.availableBalance)
     }))
     .filter((row) => !(row.balance === 0 && row.available === 0))
+}
+
+/** Every order currently resting on the futures account, unfilled.
+ *
+ * Read here so the app can answer one question it otherwise cannot: does this position have a
+ * stop on it? Reported as raw rows -- readableProtectiveStops decides which of them actually
+ * protect anything, and that judgement lives in shared/ where it can be tested without a network.
+ *
+ * Still a GET through the same read-only helper. Placing and cancelling stops live in
+ * binanceFuturesTrading.ts; nothing in this file can write. */
+export async function fetchOpenFuturesOrders(apiKey: string, apiSecret: string): Promise<RawFuturesOrder[]> {
+  const data = await signedGet(apiKey, apiSecret, '/fapi/v1/openOrders')
+  if (!Array.isArray(data)) {
+    throw new Error('Binance futures returned an open-order response that was not a list')
+  }
+  return data as RawFuturesOrder[]
 }
