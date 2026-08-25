@@ -221,38 +221,50 @@ interface OpenPosition {
 // a trade's full PnL is attributed to its exit month (matching how Freqtrade's own
 // --breakdown month works) — rather than mark-to-market equity drift, so the two figures
 // never disagree in sign for a trade that happened to be opened in an earlier month.
+/** What each calendar month did, measured on the equity curve rather than on trade exits.
+ *
+ * Attributing a trade's whole P&L to the month it CLOSED in is what this used to do, and it makes
+ * the table say the opposite of the truth for any position held across a month boundary. Measured
+ * on a run that gained 7-10% every month for five months: January through April each reported
+ * 0.00% and May reported +28.48%, because the single trade closed in May. Worse,
+ * topThreeMonthsProfitSharePct then read 100% -- a statistic whose entire purpose is to warn that
+ * a result leans on a few outlier months -- about the smoothest possible gain.
+ *
+ * So netProfit and returnPct are now mark-to-market: what the account was worth at the end of the
+ * month against what it was worth at the start, which is what every monthly return table means and
+ * what the equity curve above it already shows. `trades` stays a count of positions CLOSED in the
+ * month, because that is a fact about the month and is labelled as one.
+ *
+ * Each month's base is the previous month's closing equity, so no candle's move is counted twice
+ * and none is dropped in the gap between months. The `.sort()` below is redundant today -- a Map
+ * keeps insertion order and the curve arrives chronological -- and is kept because the base
+ * chaining depends on the order being right, not on where it happened to come from. Mutation
+ * testing records it as an equivalent mutant rather than an untested line. */
 function computeMonthlyBreakdown(equityCurve: EquityPoint[], trades: Trade[]): MonthlyBreakdownRow[] {
   if (equityCurve.length === 0) return []
 
   const monthKey = (timeSec: number): string => new Date(timeSec * 1000).toISOString().slice(0, 7)
 
-  const startEquityByMonth = new Map<string, number>()
-  for (const point of equityCurve) {
-    const key = monthKey(point.time)
-    if (!startEquityByMonth.has(key)) startEquityByMonth.set(key, point.value)
-  }
+  const lastEquityByMonth = new Map<string, number>()
+  for (const point of equityCurve) lastEquityByMonth.set(monthKey(point.time), point.value)
 
-  const tradesByMonth = new Map<string, { count: number; netProfit: number }>()
+  const closedByMonth = new Map<string, number>()
   for (const trade of trades) {
     const key = monthKey(trade.exitTime)
-    const entry = tradesByMonth.get(key) ?? { count: 0, netProfit: 0 }
-    entry.count += 1
-    entry.netProfit += trade.pnl
-    tradesByMonth.set(key, entry)
+    closedByMonth.set(key, (closedByMonth.get(key) ?? 0) + 1)
   }
 
-  return Array.from(startEquityByMonth.keys())
+  let base = equityCurve[0].value
+  return Array.from(lastEquityByMonth.keys())
     .sort()
     .map((month) => {
-      const startEquity = startEquityByMonth.get(month) ?? 0
-      const tradeInfo = tradesByMonth.get(month)
-      const netProfit = tradeInfo?.netProfit ?? 0
-      return {
-        month,
-        trades: tradeInfo?.count ?? 0,
-        netProfit,
-        returnPct: startEquity > 0 ? (netProfit / startEquity) * 100 : 0
-      }
+      const end = lastEquityByMonth.get(month) as number
+      const netProfit = end - base
+      // A month that opens with nothing left has no percentage to report -- a liquidated run
+      // would otherwise divide by zero and fill the column with NaN.
+      const returnPct = base > 0 ? (netProfit / base) * 100 : 0
+      base = end
+      return { month, trades: closedByMonth.get(month) ?? 0, netProfit, returnPct }
     })
 }
 
