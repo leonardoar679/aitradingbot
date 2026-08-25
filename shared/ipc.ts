@@ -21,6 +21,7 @@ export const IpcChannel = {
   MarketHistoricalRangeProgress: 'market:historicalRangeProgress',
   MarketCancelHistoricalRange: 'market:cancelHistoricalRange',
   MarketFetchTicker24h: 'market:fetchTicker24h',
+  MarketSymbolRules: 'market:symbolRules',
   CredentialsList: 'credentials:list',
   CredentialsSet: 'credentials:set',
   CredentialsTest: 'credentials:test',

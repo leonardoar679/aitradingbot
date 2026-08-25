@@ -1,6 +1,7 @@
 import { createHmac } from 'crypto'
 import type { Commissions } from '../../../shared/observedFee'
 import { resolveEndpoint } from './binance'
+import type { SymbolTradingRules } from '../../../shared/exchangeMinimums'
 
 // Live SPOT trading on Binance: reading the account, and placing, querying and cancelling real
 // orders. Futures is a separate host and a separate pair of modules (binanceFutures.ts, which is
@@ -382,4 +383,19 @@ export async function queryOrder(apiKey: string, apiSecret: string, symbol: stri
 export async function cancelOrder(apiKey: string, apiSecret: string, symbol: string, orderId: number): Promise<LiveOrderResult> {
   const data = (await signedRequest(apiKey, apiSecret, '/order', { symbol, orderId: String(orderId) }, 'DELETE')) as BinanceOrderResponse
   return parseOrderResponse(data)
+}
+
+/** The trading rules for one symbol, for the UI to check a strategy against BEFORE it is created.
+ *
+ * Same cached lookup the order path uses, so the numbers a form warns about are the numbers the
+ * order will actually be measured against. Reading rules is not trading: this is an unsigned,
+ * public endpoint and needs no key. */
+export async function fetchSymbolRules(symbol: string): Promise<SymbolTradingRules> {
+  const filters = await getSymbolFilters(symbol)
+  return {
+    minNotional: filters.minNotional,
+    minQty: filters.minQty,
+    stepSize: filters.stepSize,
+    tickSize: filters.tickSize
+  }
 }

@@ -22,6 +22,8 @@ import {
   fetchHistoricalRange,
   cancelHistoricalRangeFetch
 } from '../../services/marketService'
+import { fetchSymbolRules } from '../../services/exchanges/binanceTrading'
+import type { SymbolTradingRules } from '../../../shared/exchangeMinimums'
 
 export function registerMarketHandlers(mainWindow: BrowserWindow): void {
   const stopForwardingCandles = onCandleUpdate((candle) => {
@@ -73,6 +75,17 @@ export function registerMarketHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(
     IpcChannel.MarketFetchTicker24h,
     async (_event, exchange: Exchange, symbol: string): Promise<Ticker24h> => fetchTicker24h(exchange, symbol)
+  )
+
+  // Public, unsigned and read-only -- reading what an exchange will accept is not trading, so
+  // this needs no key and no gate. Binance only, because live orders are Binance only; asking
+  // any other exchange would answer with rules nothing in this app can act on.
+  ipcMain.handle(
+    IpcChannel.MarketSymbolRules,
+    async (_event, exchange: Exchange, symbol: string): Promise<SymbolTradingRules> => {
+      if (exchange !== 'binance') throw new Error(`Trading rules are not available for ${exchange}`)
+      return fetchSymbolRules(symbol)
+    }
   )
 
   ipcMain.handle(

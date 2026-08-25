@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import type { FuturesCloseResult, FuturesReadout } from '../shared/futuresPositions'
 import type { ProtectiveStop } from '../shared/futuresStops'
+import type { SymbolTradingRules } from '../shared/exchangeMinimums'
 import {
   IpcChannel,
   type AppSettings,
@@ -67,7 +68,9 @@ const api = {
       return () => ipcRenderer.removeListener(IpcChannel.MarketHistoricalRangeProgress, handler)
     },
     fetchTicker24h: (exchange: Exchange, symbol: string): Promise<Ticker24h> =>
-      ipcRenderer.invoke(IpcChannel.MarketFetchTicker24h, exchange, symbol)
+      ipcRenderer.invoke(IpcChannel.MarketFetchTicker24h, exchange, symbol),
+    symbolRules: (exchange: Exchange, symbol: string): Promise<SymbolTradingRules> =>
+      ipcRenderer.invoke(IpcChannel.MarketSymbolRules, exchange, symbol)
   },
   credentials: {
     list: (): Promise<CredentialStatus[]> => ipcRenderer.invoke(IpcChannel.CredentialsList),

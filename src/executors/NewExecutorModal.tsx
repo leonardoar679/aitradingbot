@@ -8,6 +8,7 @@ import type { ExecutorConfig, PaperAccount } from '../../shared/ipc'
 import { describeExecutorFunding } from '../account/executorFunding'
 import { describeLivePlanShortfall, describeLiveShortfall, freeBalance } from '../../shared/liveBalances'
 import { describeAllocationBreach, describeAllocationPlanShortfall } from '../../shared/allocation'
+import { describeBelowExchangeMinimum, type SymbolTradingRules } from '../../shared/exchangeMinimums'
 import { resolveLeverage } from '../../shared/perp'
 import { executorAllocatedQuote } from './computeSnapshot'
 import { DcaForm } from './DcaForm'
@@ -333,6 +334,27 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
           : type === 'grid'
             ? gridParams.totalAmountQuote / buildGridLevels(gridParams).length
             : orderParams.amountQuote
+  // The SMALLEST order, which is a different question from liveAmountQuote above. The exchange
+  // refuses each order on its own, so a ladder is placeable only if its smallest rung is -- and
+  // for a DCA whose levels differ, the largest passing says nothing about the smallest.
+  const liveSmallestOrderQuote =
+    type === 'position'
+      ? positionParams.amountQuote
+      : type === 'dca'
+        ? Math.min(...dcaParams.levels.map((l) => l.amountQuote))
+        : type === 'twap'
+          ? twapParams.totalAmountQuote / twapNumOrders(twapParams)
+          : type === 'grid'
+            ? gridParams.totalAmountQuote / buildGridLevels(gridParams).length
+            : orderParams.amountQuote
+  const liveOrderCount =
+    type === 'dca'
+      ? dcaParams.levels.length
+      : type === 'twap'
+        ? twapNumOrders(twapParams)
+        : type === 'grid'
+          ? buildGridLevels(gridParams).length
+          : 1
   const liveAmountOk = liveTradingStatus === null || liveAmountQuote <= liveTradingStatus.maxOrderQuote
   const liveConfirmOk = liveConfirmText.trim() === LIVE_CONFIRM_PHRASE
   const canSubmitLive = mode !== 'live' || (canGoLive && liveAmountOk && liveConfirmOk)
@@ -362,6 +384,30 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
       cancelled = true
     }
   }, [mode, exchange, pair.quoteAsset])
+
+  // What this symbol will actually accept. Read for live mode only: it is the one mode where an
+  // exchange gets a say, and paper mode has no minimum at all.
+  const [symbolRules, setSymbolRules] = useState<SymbolTradingRules | null>(null)
+  useEffect(() => {
+    if (mode !== 'live' || exchange !== 'binance') {
+      setSymbolRules(null)
+      return
+    }
+    let cancelled = false
+    window.api.market
+      .symbolRules('binance', pair.symbol)
+      .then((rules) => {
+        if (!cancelled) setSymbolRules(rules)
+      })
+      .catch(() => {
+        // Same rule as the balance above: rules that could not be read are no reason to stop
+        // someone creating a strategy. The exchange still enforces them.
+        if (!cancelled) setSymbolRules(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [mode, exchange, pair.symbol])
 
   const pendingParams: AnyExecutorParams = isSpreadType
     ? type === 'xemm'
@@ -442,7 +488,21 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
           quoteAsset: pair.quoteAsset
         })
       : null
-  const liveUnaffordable = liveOrderShortfall !== null || allocationOrderBreach !== null
+  // Not a shortfall but a refusal: an order under the exchange's minimum is not one that might
+  // fail, it is one that cannot be placed at all. Every rung of a ladder hits it equally, so a
+  // strategy whose smallest order is too small has nothing it can ever do.
+  const belowExchangeMinimum =
+    mode === 'live'
+      ? describeBelowExchangeMinimum({
+          perOrderQuote: liveSmallestOrderQuote,
+          orderCount: liveOrderCount,
+          rules: symbolRules,
+          symbol: pair.symbol,
+          quoteAsset: pair.quoteAsset,
+          exchangeLabel: 'Binance'
+        })
+      : null
+  const liveUnaffordable = liveOrderShortfall !== null || allocationOrderBreach !== null || belowExchangeMinimum !== null
 
   function handleCreate(): void {
     if (!name.trim() || !canSubmitLive || spreadAssetsMismatched || underfunded || liveUnaffordable) return
@@ -729,6 +789,9 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
 
         {fundingProblem && (
           <p style={{ margin: '0 1.1rem 0.6rem', fontSize: '0.76rem', color: 'var(--down)', lineHeight: 1.5 }}>{fundingProblem}</p>
+        )}
+        {belowExchangeMinimum && (
+          <p style={{ margin: '0 1.1rem 0.6rem', fontSize: '0.76rem', color: 'var(--down)', lineHeight: 1.5 }}>{belowExchangeMinimum}</p>
         )}
         {liveOrderShortfall && (
           <p style={{ margin: '0 1.1rem 0.6rem', fontSize: '0.76rem', color: 'var(--down)', lineHeight: 1.5 }}>{liveOrderShortfall}</p>
