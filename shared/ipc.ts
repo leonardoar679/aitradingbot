@@ -109,6 +109,19 @@ export interface CredentialStatus {
   lastTestOk: boolean | null
 }
 
+/** Exchanges this app can place a real order on.
+ *
+ * Deliberately narrower than the set it can read an account from, and deliberately a separate
+ * list rather than a flag on the same one. Reading a balance and spending it are different
+ * permissions with different consequences, and a single list serving both is how an exchange
+ * quietly becomes tradable because someone added a balance reader for it. Anything not named here
+ * is read-only in this app however good the key is. */
+export const TRADING_EXCHANGES: Exchange[] = ['binance']
+
+export function canTradeOn(exchange: Exchange): boolean {
+  return TRADING_EXCHANGES.includes(exchange)
+}
+
 /** What one exchange says the user actually holds, as read over their own API key.
  *
  * Read-only in every sense: nothing in the app writes to it, and it is never mixed into the paper

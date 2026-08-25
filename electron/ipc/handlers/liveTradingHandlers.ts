@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { IpcChannel, type Exchange, type LiveOrderRecord } from '../../../shared/ipc'
+import { IpcChannel, canTradeOn, type Exchange, type LiveOrderRecord } from '../../../shared/ipc'
 import {
   getLiveTradingStatus,
   setLiveTradingConfig,
@@ -69,7 +69,8 @@ export function registerLiveTradingHandlers(): void {
   ipcMain.handle(IpcChannel.LiveTradingClosePosition, async (_event, positionId: string, quantity: number) => {
     const position = await getLivePosition(positionId)
     if (!position || position.closedAt !== null) throw new Error('Position not found or already closed')
-    if (position.exchange !== 'binance') throw new Error('Live trading is only supported on Binance')
+    if (!canTradeOn(position.exchange))
+      throw new Error(`This app cannot place orders on ${position.exchange} — its key is read-only here`)
     return executeLiveClose(position, quantity)
   })
 
@@ -88,7 +89,7 @@ export function registerLiveTradingHandlers(): void {
       amountQuote: number,
       limitPrice: number
     ): Promise<{ resolved: true; liveOrder: LiveOrderRecord } | { resolved: false; pendingLiveOrderId: string }> => {
-      if (exchange !== 'binance') throw new Error('Live trading is only supported on Binance')
+      if (!canTradeOn(exchange)) throw new Error(`This app cannot place orders on ${exchange} — its key is read-only here`)
 
       const gate = await canPlaceLiveOrder(amountQuote)
       if (!gate.allowed) throw new Error(gate.reason ?? 'Live order blocked')
@@ -267,7 +268,7 @@ export function registerLiveTradingHandlers(): void {
       numOrders: number,
       orderIntervalSec: number
     ) => {
-      if (exchange !== 'binance') throw new Error('Live trading is only supported on Binance')
+      if (!canTradeOn(exchange)) throw new Error(`This app cannot place orders on ${exchange} — its key is read-only here`)
       return createTwapRun({ executorId, exchange, symbol, baseAsset, quoteAsset, side, amountPerOrder, numOrders, orderIntervalSec })
     }
   )

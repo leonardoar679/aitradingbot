@@ -1,4 +1,4 @@
-import type { Exchange, LiveOrderRecord, LivePosition } from '../../shared/ipc'
+import { canTradeOn, type Exchange, type LiveOrderRecord, type LivePosition } from '../../shared/ipc'
 import { describeLiveShortfall } from '../../shared/liveBalances'
 import { canCloseLivePosition, canPlaceLiveOrder, recordLiveOrderUsage, checkLossLimitAndAutoDisarm } from './liveTradingService'
 import { recordLiveFill } from './livePositionsService'
@@ -46,7 +46,9 @@ export async function placeLiveMarketOrder(
   side: 'buy' | 'sell',
   quoteAmount: number
 ): Promise<LiveOrderRecord> {
-  if (exchange !== 'binance') throw new Error('Live trading is only supported on Binance')
+  // The trading list, not the credential store: an exchange this app can read an account from
+  // is not thereby an exchange it can place an order on.
+  if (!canTradeOn(exchange)) throw new Error(`This app cannot place orders on ${exchange} — its key is read-only here`)
 
   const gate = await canPlaceLiveOrder(quoteAmount)
   if (!gate.allowed) throw new Error(gate.reason ?? 'Live order blocked')

@@ -3,7 +3,7 @@ import { RefreshCw, ShieldCheck, TriangleAlert } from 'lucide-react'
 import { Card } from '../components/Card'
 import { formatAssetNumber } from '../utils/formatCurrency'
 import { describeError } from '../utils/ipcError'
-import { EXCHANGES, type Exchange, type LiveBalanceSnapshot } from '../../shared/ipc'
+import { EXCHANGES, canTradeOn, type Exchange, type LiveBalanceSnapshot } from '../../shared/ipc'
 
 /** What the user really holds on an exchange, read over their own API key.
  *
@@ -72,7 +72,13 @@ export function LiveBalancesCard({ exchange }: { exchange: Exchange }): React.JS
       <p style={{ margin: '0 0 0.9rem', fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
         <ShieldCheck size={12} style={{ verticalAlign: '-1px', marginRight: '0.35rem', color: 'var(--up)' }} />
         Read-only. This is money on {exchangeName}, not the simulated account above — paper strategies never touch it,
-        and nothing here moves it. Only a live executor you start yourself can, under the limits in Settings.
+        and nothing on this page moves it.{' '}
+        {/* Said per exchange rather than once, because it stopped being true everywhere the moment a
+            second exchange could be connected. An exchange this app can only read must not be
+            described as one an executor could spend from. */}
+        {canTradeOn(exchange)
+          ? 'A live executor you start yourself can, under the limits in Settings.'
+          : `This app cannot place orders on ${exchangeName} at all — it only reads the balance, so a key with lookup permission alone is enough.`}
       </p>
 
       {error !== null && (

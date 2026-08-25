@@ -3,6 +3,7 @@ import { join } from 'path'
 import { readFile, mkdir } from 'fs/promises'
 import { writeJsonAtomic } from './atomicWrite'
 import { fetchAccountBalance, type AccountBalance } from './exchanges/binanceTrading'
+import { fetchUpbitBalances } from './exchanges/upbitTrading'
 import { freeBalance, readableBalances } from '../../shared/liveBalances'
 import type { CredentialStatus, Exchange, LiveBalanceSnapshot } from '../../shared/ipc'
 
@@ -21,15 +22,21 @@ interface StoredCredential {
 
 type StoredCredentialsFile = Partial<Record<Exchange, StoredCredential>>
 
-// Only Binance has an authenticated adapter today (see the live-trading design plan). This is
-// the single point that grows as more exchanges gain real account access — storage itself stays
-// generic per-exchange so that expansion doesn't require a schema change.
+// Exchanges whose account this app can read. The single point that grows as more exchanges gain
+// authenticated adapters — storage itself stays generic per-exchange, so expansion needs no
+// schema change.
 //
 // One call does two jobs on purpose: it verifies a key before that key is ever stored, and it is
 // what the Account page reads. Anything listed here can therefore be connected AND shown, so an
-// exchange can never end up trusted for orders while being unable to say what is in the account.
+// exchange can never end up connected while being unable to say what is in the account.
+//
+// This is NOT the list of exchanges that can be traded on -- that is TRADING_EXCHANGES in
+// shared/ipc.ts, and it is shorter. Being able to see a balance is not permission to spend it,
+// and keeping one list for both is how an exchange becomes tradable as a side effect of someone
+// adding a balance reader.
 const BALANCE_READERS: Partial<Record<Exchange, (apiKey: string, apiSecret: string) => Promise<AccountBalance[]>>> = {
-  binance: fetchAccountBalance
+  binance: fetchAccountBalance,
+  upbit: fetchUpbitBalances
 }
 
 /** How long a balance read is reused before the exchange is asked again.
@@ -92,10 +99,13 @@ export async function listCredentialStatus(): Promise<CredentialStatus[]> {
 }
 
 /** Tests and persists a new key/secret in one step — a key that fails verification is never
- * saved, per the live-trading design plan's "no key, no live mode, ever" principle. */
+ * saved, per the live-trading design plan's "no key, no live mode, ever" principle.
+ *
+ * Storing a key does not make an exchange tradable. It makes its account readable; whether an
+ * order can be placed is TRADING_EXCHANGES, checked separately at the point an order is placed. */
 export async function setCredential(exchange: Exchange, apiKey: string, apiSecret: string): Promise<CredentialStatus> {
   const reader = BALANCE_READERS[exchange]
-  if (!reader) throw new Error(`Live trading is not supported for ${exchange} yet`)
+  if (!reader) throw new Error(`This app cannot connect to ${exchange} yet`)
   await reader(apiKey, apiSecret)
 
   const store = await load()
@@ -115,7 +125,7 @@ export async function setCredential(exchange: Exchange, apiKey: string, apiSecre
 /** Re-tests an already-stored key (e.g. a "Test" action in the UI, independent of adding one). */
 export async function testCredential(exchange: Exchange): Promise<{ ok: boolean; message: string }> {
   const reader = BALANCE_READERS[exchange]
-  if (!reader) return { ok: false, message: `Live trading is not supported for ${exchange} yet` }
+  if (!reader) return { ok: false, message: `This app cannot connect to ${exchange} yet` }
 
   const store = await load()
   const entry = store[exchange]

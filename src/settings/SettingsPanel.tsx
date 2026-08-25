@@ -17,7 +17,26 @@ const THEME_OPTIONS: { id: Theme; label: string; icon: typeof Moon }[] = [
 // Live trading is Binance-only for now (see the live-trading design plan) — this screen only
 // offers credential management for exchanges that actually have a trading adapter, rather than
 // implying live support that doesn't exist yet for the other 7.
-const SUPPORTED_EXCHANGES: { id: Exchange; name: string }[] = [{ id: 'binance', name: 'Binance' }]
+// Exchanges a key can be stored for. Mirrors BALANCE_READERS in credentialsService -- the main
+// process refuses anything not listed there, so the worst a drift here can do is offer a row that
+// then says it cannot connect, never the reverse.
+//
+// The note on each is not decoration. Storing a key here used to mean one thing, because only
+// Binance could be stored; now it means "this app can read your account", which is not the same
+// as "this app can trade it", and the row is where that has to be said.
+const SUPPORTED_EXCHANGES: { id: Exchange; name: string; note: string }[] = [
+  {
+    id: 'binance',
+    name: 'Binance',
+    note: 'Reads your balance, and is the only exchange this app can place a real order on.'
+  },
+  {
+    id: 'upbit',
+    name: 'Upbit',
+    note:
+      'Read-only here: this app shows your Upbit balance and never places an order on it, so a key with lookup permission alone is enough. Upbit also requires this machine\'s IP address to be on the key\'s allowlist.'
+  }
+]
 
 function fieldLabelStyle(): React.CSSProperties {
   return { fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.4rem', display: 'block' }
@@ -261,13 +280,17 @@ export function SettingsPanel(): React.JSX.Element {
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
           {SUPPORTED_EXCHANGES.map((ex) => (
-            <CredentialRow
-              key={ex.id}
-              exchangeId={ex.id}
-              exchangeName={ex.name}
-              status={statuses.find((s) => s.exchange === ex.id)}
-              onChanged={refresh}
-            />
+            <div key={ex.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              <CredentialRow
+                exchangeId={ex.id}
+                exchangeName={ex.name}
+                status={statuses.find((s) => s.exchange === ex.id)}
+                onChanged={refresh}
+              />
+              <p style={{ margin: 0, fontSize: '0.74rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                {ex.note}
+              </p>
+            </div>
           ))}
         </div>
       </Card>
