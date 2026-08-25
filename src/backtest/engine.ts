@@ -1,6 +1,7 @@
 import type { Candle } from '../../shared/ipc'
 import { getStrategy, DEFAULT_STRATEGY_ID } from './strategies'
 import { FEE_RATE } from '../../shared/fees'
+import { computeRiskRatios } from './riskStats'
 import {
   ASSUMED_FUNDING_RATE,
   fundingCost,
@@ -195,12 +196,6 @@ export interface RunBacktestOptions {
 
 function mean(values: number[]): number {
   return values.length === 0 ? 0 : values.reduce((a, b) => a + b, 0) / values.length
-}
-
-function stdDev(values: number[]): number {
-  if (values.length === 0) return 0
-  const m = mean(values)
-  return Math.sqrt(mean(values.map((v) => (v - m) ** 2)))
 }
 
 interface OpenPosition {
@@ -509,27 +504,13 @@ function computeStats(
   const winningAvgHoldingSec = mean(winners.map(holdingSec))
   const losingAvgHoldingSec = mean(losers.map(holdingSec))
 
-  const periodReturns: number[] = []
-  for (let i = 1; i < equityCurve.length; i++) {
-    const prev = equityCurve[i - 1].value
-    if (prev > 0) periodReturns.push(equityCurve[i].value / prev - 1)
-  }
-  const avgIntervalSec =
-    equityCurve.length > 1 ? (equityCurve[equityCurve.length - 1].time - equityCurve[0].time) / (equityCurve.length - 1) : 0
-  const periodsPerYear = avgIntervalSec > 0 ? (365 * 24 * 3600) / avgIntervalSec : 0
-  const returnMean = mean(periodReturns)
-  const returnStd = stdDev(periodReturns)
-  const sharpeRatio = returnStd > 0 ? (returnMean / returnStd) * Math.sqrt(periodsPerYear) : 0
-
-  const downsideDev = Math.sqrt(mean(periodReturns.map((r) => (r < 0 ? r * r : 0))))
-  const sortinoRatio = downsideDev > 0 ? (returnMean / downsideDev) * Math.sqrt(periodsPerYear) : 0
+  // Measured from the first candle the strategy could trade on, not from the first candle fetched
+  // -- the warm-up stretch contributes only structural zeros, and they drag every ratio toward
+  // zero. Same correction the benchmark curve above already gets, for the same reason.
+  const { sharpeRatio, sortinoRatio, omegaRatio } = computeRiskRatios(equityCurve, warmupBars)
 
   const calmarRatio =
     annualReturnPct !== null && maxDrawdownPct !== 0 ? annualReturnPct / Math.abs(maxDrawdownPct) : null
-
-  const gains = periodReturns.filter((r) => r > 0).reduce((a, b) => a + b, 0)
-  const losses = Math.abs(periodReturns.filter((r) => r < 0).reduce((a, b) => a + b, 0))
-  const omegaRatio = losses > 0 ? gains / losses : gains > 0 ? Infinity : 0
 
   let winningStreak = 0
   let losingStreak = 0
