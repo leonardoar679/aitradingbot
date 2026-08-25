@@ -64,10 +64,17 @@ export function computeRiskRatios(equityCurve: readonly EquityPoint[], warmupBar
 
   const returnMean = mean(periodReturns)
   const returnStd = stdDev(periodReturns)
-  const sharpeRatio = returnStd > 0 ? (returnMean / returnStd) * Math.sqrt(periodsPerYear) : 0
+  // A run with no variation at all has no risk to divide by. If it also made money that is
+  // unbounded, not zero -- zero is the answer for a curve that never moved.
+  const sharpeRatio =
+    returnStd > 0 ? (returnMean / returnStd) * Math.sqrt(periodsPerYear) : returnMean > 0 ? Infinity : 0
 
   const downsideDev = Math.sqrt(mean(periodReturns.map((r) => (r < 0 ? r * r : 0))))
-  const sortinoRatio = downsideDev > 0 ? (returnMean / downsideDev) * Math.sqrt(periodsPerYear) : 0
+  // Same rule, and the one that actually bites: a strategy whose equity never had a down period
+  // has no downside deviation, and reporting that as 0.00 put the safest possible run at the
+  // bottom of the column while Omega beside it read as infinite.
+  const sortinoRatio =
+    downsideDev > 0 ? (returnMean / downsideDev) * Math.sqrt(periodsPerYear) : returnMean > 0 ? Infinity : 0
 
   const gains = periodReturns.filter((r) => r > 0).reduce((a, b) => a + b, 0)
   const losses = Math.abs(periodReturns.filter((r) => r < 0).reduce((a, b) => a + b, 0))

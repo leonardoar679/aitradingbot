@@ -482,7 +482,11 @@ function computeStats(
   const losers = trades.filter((t) => t.pnl <= 0)
   const avgWin = mean(winners.map((t) => t.pnl))
   const avgLoss = Math.abs(mean(losers.map((t) => t.pnl)))
-  const avgWinLossRatio = avgLoss > 0 ? avgWin / avgLoss : 0
+  // Unbounded rather than 0 when nothing lost. Reported as 0, a flawless run showed the WORST
+  // possible value in this row while the profit factor immediately below it showed the best --
+  // two adjacent rows contradicting each other about the same fact. Infinity is the convention
+  // already used there, and formatRatio already prints it as an infinity sign.
+  const avgWinLossRatio = avgLoss > 0 ? avgWin / avgLoss : avgWin > 0 ? Infinity : 0
   const winRatePct = totalClosedTrades > 0 ? (winners.length / totalClosedTrades) * 100 : 0
 
   const grossProfit = winners.reduce((a, t) => a + t.pnl, 0)

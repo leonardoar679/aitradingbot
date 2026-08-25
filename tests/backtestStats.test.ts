@@ -28,6 +28,9 @@ const WINNING = series([...FLAT_THEN_BREAKOUT, ...Array(15).fill(130)])
 /** Breakout, then a collapse -- one trade, stopped out well below entry. */
 const LOSING = series([...FLAT_THEN_BREAKOUT, ...Array(15).fill(80)])
 
+/** Never moves, so no band is ever broken and no trade is ever opened. */
+const NEVER_TRADES = series(Array(60).fill(100))
+
 describe('backtest statistics', () => {
   it('reports a profitable run as profitable', () => {
     const { stats, trades } = runBacktest(WINNING, 'bollinger-breakout')
@@ -71,6 +74,27 @@ describe('backtest statistics', () => {
   it('puts average win over average loss in the ratio, not the reverse', () => {
     // With no winners, avgWin is 0 and the ratio is 0; inverted it would divide by zero.
     expect(runBacktest(LOSING, 'bollinger-breakout').stats.avgWinLossRatio).toBe(0)
+  })
+
+  it('does not call a run that never traded flawless', () => {
+    // The same trap the comparison table had: "no losses" and "no trades" are not the same
+    // thing, and only one of them deserves the best value in the column. A run with nothing in
+    // it must not outrank every strategy that actually took a position.
+    const { stats } = runBacktest(NEVER_TRADES, 'bollinger-breakout')
+
+    expect(stats.totalClosedTrades).toBe(0)
+    expect(stats.avgWinLossRatio).toBe(0)
+    expect(stats.profitFactor).toBe(0)
+  })
+
+  it('reports an unbeaten run as unbounded, matching the profit factor beside it', () => {
+    // These two are adjacent rows in the results panel. With no losing trade this one used to
+    // read 0.00 -- the worst value in the column -- while the profit factor immediately below it
+    // read as infinite, about the same run.
+    const { stats } = runBacktest(WINNING, 'bollinger-breakout')
+
+    expect(stats.avgWinLossRatio).toBe(Infinity)
+    expect(stats.profitFactor).toBe(Infinity)
   })
 
   it('measures drawdown from the running peak, and reports it as a fall', () => {

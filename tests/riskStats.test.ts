@@ -81,6 +81,44 @@ describe('holding up when there is nothing to measure', () => {
   })
 })
 
+describe('a run with no downside at all', () => {
+  it('reports Sortino as unbounded rather than as the worst score on the board', () => {
+    // Zero downside deviation is not zero risk-adjusted return, it is a ratio with nothing to
+    // divide by. Reported as 0.00 the safest run in the table sorted last, while the Omega
+    // column beside it read as infinite about the very same curve.
+    const rising = computeRiskRatios(curve([100, 110, 121, 133]), 0)
+
+    expect(rising.sortinoRatio).toBe(Number.POSITIVE_INFINITY)
+    expect(rising.omegaRatio).toBe(Number.POSITIVE_INFINITY)
+  })
+
+  it('reports Sharpe as unbounded when the returns never varied but did compound', () => {
+    // Doubling each period, so every return is exactly 1 and the deviation is exactly 0. Worth
+    // saying why the fixture looks like this: 100/110/121 does NOT work, because 121/110 - 1 is
+    // 0.10000000000000009 rather than 0.1 and the deviation comes out tiny but non-zero. The
+    // Sharpe branch is all but unreachable on real data for that reason; the Sortino one above
+    // is not, which is the one that mattered.
+    const steady = computeRiskRatios(curve([100, 200, 400, 800]), 0)
+
+    expect(steady.sharpeRatio).toBe(Number.POSITIVE_INFINITY)
+  })
+
+  it('still reports a curve that never moved as zero, not as infinite', () => {
+    // The distinction that makes the branch worth having: no movement is not flawless movement.
+    const flat = computeRiskRatios(curve([10_000, 10_000, 10_000]), 0)
+
+    expect(flat.sharpeRatio).toBe(0)
+    expect(flat.sortinoRatio).toBe(0)
+  })
+
+  it('does not call a losing run unbounded', () => {
+    const falling = computeRiskRatios(curve([100, 90, 81]), 0)
+
+    expect(falling.sortinoRatio).toBeLessThan(0)
+    expect(Number.isFinite(falling.sortinoRatio)).toBe(true)
+  })
+})
+
 describe('omega', () => {
   it('is infinite when nothing ever went down, and zero when nothing ever went up', () => {
     expect(computeRiskRatios(curve([100, 110, 120]), 0).omegaRatio).toBe(Number.POSITIVE_INFINITY)
