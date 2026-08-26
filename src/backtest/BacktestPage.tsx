@@ -15,10 +15,13 @@ import { describeError } from '../utils/ipcError'
 import { STRATEGIES, DEFAULT_STRATEGY_ID, getStrategy } from './strategies'
 import { replayExecutor, type ExecutorReplayResult } from './executorReplay'
 import { ExecutorBacktestView } from './ExecutorBacktestView'
+import { replayController, type ControllerReplayResult } from './controllerReplay'
+import { ControllerBacktestView } from './ControllerBacktestView'
 import {
   EXCHANGES,
   INTERVALS,
   type Candle,
+  type ControllerConfig,
   type Exchange,
   type ExecutorConfig,
   type Interval,
@@ -37,6 +40,14 @@ export function executorIdFromStrategyId(strategyId: string): string | null {
   return strategyId.startsWith(EXECUTOR_PREFIX) ? strategyId.slice(EXECUTOR_PREFIX.length) : null
 }
 
+/** A saved controller, encoded the same way. A controller supervises executors that may trade
+ * different markets, so its run takes its symbols from them and ignores the Symbol picker. */
+const CONTROLLER_PREFIX = 'controller:'
+
+export function controllerIdFromStrategyId(strategyId: string): string | null {
+  return strategyId.startsWith(CONTROLLER_PREFIX) ? strategyId.slice(CONTROLLER_PREFIX.length) : null
+}
+
 type RunState =
   | RunningState
   | {
@@ -44,6 +55,12 @@ type RunState =
       executor: ExecutorConfig
       replay: ExecutorReplayResult
       candles: Candle[]
+      elapsedSec: number
+    }
+  | {
+      status: 'controller-done'
+      controller: ControllerConfig
+      replay: ControllerReplayResult
       elapsedSec: number
     }
   | {
@@ -145,6 +162,7 @@ export function BacktestPage(): React.JSX.Element {
   const [capitalTouched, setCapitalTouched] = useState(false)
   const [account, setAccount] = useState<PaperAccount | null>(null)
   const [accountExecutors, setAccountExecutors] = useState<ExecutorConfig[]>([])
+  const [accountControllers, setAccountControllers] = useState<ControllerConfig[]>([])
   // Spread executors (XEMM, Arbitrage) price two markets at once and are simulated by a different
   // engine entirely, so they are not offered here rather than being offered and then failing.
   const replayableExecutors = accountExecutors.filter((e) => e.type !== 'xemm' && e.type !== 'arbitrage')
@@ -160,6 +178,7 @@ export function BacktestPage(): React.JSX.Element {
         if (cancelled) return
         setAccount(settings.paperAccount ?? null)
         setAccountExecutors(settings.executors ?? [])
+        setAccountControllers(settings.controllers ?? [])
       })
       .catch((error: unknown) => {
         // A backtest does not need the account -- it only defaults the capital field from it.
@@ -249,11 +268,16 @@ export function BacktestPage(): React.JSX.Element {
     // one of those -- so taking the label from it would head the whole run "EMA Crossover + ATR
     // Stop" while a grid was actually being replayed.
     const chosenExecutor = accountExecutors.find((e) => e.id === executorIdFromStrategyId(route.strategyId))
+    const chosenController = accountControllers.find((c) => c.id === controllerIdFromStrategyId(route.strategyId))
     const strategyLabel = chosenExecutor ? `${chosenExecutor.name} (${chosenExecutor.type})` : strategy.name
     const symbolInfo = symbols.find((s) => s.symbol === route.symbol)
     const symbolLabel = symbolInfo ? `${symbolInfo.baseAsset}-${symbolInfo.quoteAsset}` : route.symbol
     const intervalLabel = INTERVALS.find((iv) => iv.id === route.interval)?.label ?? route.interval
-    setRunLabel(`${strategyLabel} • ${symbolLabel} • ${intervalLabel}`)
+    // A controller's markets come from its executors, so naming the Symbol picker in the label
+    // would head the run with a market it may never have touched.
+    setRunLabel(
+      chosenController ? `${chosenController.name} (controller) • ${intervalLabel}` : `${strategyLabel} • ${symbolLabel} • ${intervalLabel}`
+    )
     setTab('progress')
     setRunState({ status: 'running', done: 0, total: 1 })
 
@@ -270,6 +294,11 @@ export function BacktestPage(): React.JSX.Element {
     }
     log(`Starting fetch: ${exchange} ${route.symbol} ${route.interval}, range ${startDate} → ${endDate}`)
     log(`Starting capital: ${capitalValue.toLocaleString()} ${quoteAsset}`)
+
+    if (chosenController) {
+      void runControllerReplay(chosenController, { runId, startSec, endSec, interval: route.interval, startedAt, log })
+      return
+    }
 
     let lastLoggedDecile = -1
     // requestId scopes this to *this* fetch -- an unrelated bot poll or routine run fetching
@@ -362,6 +391,79 @@ export function BacktestPage(): React.JSX.Element {
       })
   }
 
+  /** A controller run fetches one candle set per market its executors trade, rather than the one
+   * market the Symbol picker names: a controller can supervise executors on different pairs, and
+   * replaying them all against a single symbol's candles would silently price them wrong. */
+  async function runControllerReplay(
+    controller: ControllerConfig,
+    ctx: { runId: number; startSec: number; endSec: number; interval: Interval; startedAt: number; log: (message: string) => void }
+  ): Promise<void> {
+    const attached = accountExecutors.filter((e) => controller.executorIds.includes(e.id))
+    const marketSymbols = [...new Set(attached.filter((e) => e.type !== 'xemm' && e.type !== 'arbitrage').map((e) => e.symbol))]
+    if (marketSymbols.length === 0) {
+      const message =
+        attached.length === 0
+          ? 'That controller has no executors attached, so there is nothing to replay.'
+          : 'Every executor attached to that controller prices two markets at once (XEMM or Arbitrage), which cannot be replayed here.'
+      ctx.log(message)
+      setRunState({ status: 'error', message })
+      return
+    }
+
+    ctx.log(`Controller "${controller.name}": ${marketSymbols.length} market${marketSymbols.length === 1 ? '' : 's'} to fetch (${marketSymbols.join(', ')})`)
+
+    let fetchedSymbols = 0
+    let activeRequestId = ''
+    const unsubscribe = window.api.market.onHistoricalRangeProgress((progress) => {
+      if (runIdRef.current !== ctx.runId || progress.requestId !== activeRequestId) return
+      setRunState({
+        status: 'running',
+        done: fetchedSymbols * progress.total + progress.done,
+        total: progress.total * marketSymbols.length
+      })
+    })
+
+    try {
+      const candlesBySymbol: Record<string, Candle[]> = {}
+      for (const symbol of marketSymbols) {
+        activeRequestId = crypto.randomUUID()
+        activeFetchRequestIdRef.current = activeRequestId
+        const fetched = await window.api.market.fetchHistoricalRange(exchange, symbol, ctx.interval, ctx.startSec, ctx.endSec, activeRequestId)
+        if (runIdRef.current !== ctx.runId) return
+        if (fetched.cancelled) {
+          ctx.log(`Fetch cancelled after ${fetched.candles.length.toLocaleString()} ${symbol} candles`)
+          setRunState({ status: 'cancelled' })
+          return
+        }
+        candlesBySymbol[symbol] = fetched.candles
+        fetchedSymbols++
+        ctx.log(`${symbol}: ${fetched.candles.length.toLocaleString()} candles`)
+      }
+
+      const replay = replayController(controller, accountExecutors, candlesBySymbol)
+      if (replay === null) {
+        const message = 'None of that controller’s executors could be replayed over this range — no candles came back for their markets.'
+        ctx.log(message)
+        setRunState({ status: 'error', message })
+        return
+      }
+      ctx.log(
+        replay.breach === null
+          ? `Replay complete: no limit crossed, net ${replay.finalPnlQuote.toFixed(2)} (${replay.finalPnlPct.toFixed(2)}%)`
+          : `Replay complete: ${replay.breach.breach.kind} at ${new Date(replay.breach.atTime * 1000).toISOString()}, net ${replay.finalPnlQuote.toFixed(2)} (${replay.finalPnlPct.toFixed(2)}%)`
+      )
+      setRunState({ status: 'controller-done', controller, replay, elapsedSec: (performance.now() - ctx.startedAt) / 1000 })
+    } catch (error: unknown) {
+      if (runIdRef.current !== ctx.runId) return
+      const message = error instanceof Error ? error.message : String(error)
+      ctx.log(`Error: ${message}`)
+      setRunState({ status: 'error', message })
+    } finally {
+      unsubscribe()
+      if (activeFetchRequestIdRef.current === activeRequestId) activeFetchRequestIdRef.current = null
+    }
+  }
+
   function handleCancel(): void {
     runIdRef.current++
     if (runState?.status === 'running' && activeFetchRequestIdRef.current) {
@@ -421,6 +523,12 @@ export function BacktestPage(): React.JSX.Element {
         )}
       </div>
 
+      {tab === 'progress' && runState && runState.status === 'controller-done' && (
+        <Card title="Controller Replay">
+          <ControllerBacktestView controller={runState.controller} result={runState.replay} />
+        </Card>
+      )}
+
       {tab === 'progress' && runState && runState.status === 'executor-done' && (
         <Card title="Executor replay">
           <ExecutorBacktestView executor={runState.executor} result={runState.replay} />
@@ -458,7 +566,7 @@ export function BacktestPage(): React.JSX.Element {
         </Card>
       )}
 
-      {tab === 'progress' && runState && runState.status !== 'done' && runState.status !== 'executor-done' && (
+      {tab === 'progress' && runState && runState.status !== 'done' && runState.status !== 'executor-done' && runState.status !== 'controller-done' && (
         <Card title="Backtest progress">
           <BacktestRunningView runState={runState} onCancel={handleCancel} />
         </Card>
@@ -553,8 +661,25 @@ export function BacktestPage(): React.JSX.Element {
                       ))}
                     </optgroup>
                   )}
+                  {accountControllers.length > 0 && (
+                    <optgroup label="Your controllers">
+                      {accountControllers.map((c) => (
+                        <option key={c.id} value={`${CONTROLLER_PREFIX}${c.id}`}>
+                          {c.name} ({c.executorIds.length} executor{c.executorIds.length === 1 ? '' : 's'})
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
               </div>
+
+              {controllerIdFromStrategyId(tradingRoute.strategyId) !== null && (
+                <p style={{ margin: '0.4rem 0 0', fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  A controller takes its markets from the executors attached to it, so the Symbol above is ignored and
+                  the Starting Capital is not used — its limits are measured against the capital those executors
+                  allocate, exactly as they are in the running app.
+                </p>
+              )}
 
               <SectionHeader label="Duration" />
               <div style={{ display: 'flex', gap: '0.6rem' }}>

@@ -5,6 +5,7 @@ import { settleExecutorOnStop } from '../account/settleExecutor'
 import { pushControllerSnapshot, getControllerSnapshots } from './controllerStore'
 import { SNAPSHOT_INTERVAL_MS } from './types'
 import { controllerDrawdownPct } from './riskMath'
+import { evaluateControllerRisk } from './riskBreach'
 import { settingsWrites } from '../utils/settingsWrites'
 import type { ControllerConfig, ExecutorConfig } from '../../shared/ipc'
 
@@ -42,12 +43,9 @@ export async function runControllerSnapshotNow(controller: ControllerConfig): Pr
   )
   const pnlPct = totalAllocatedQuote > 0 ? (aggregatePnlQuote / totalAllocatedQuote) * 100 : 0
 
-  const { riskControls } = controller
-  const stopLossBreached = riskControls.globalStopLossPct !== null && pnlPct <= -Math.abs(riskControls.globalStopLossPct)
-  const takeProfitBreached = riskControls.globalTakeProfitPct !== null && pnlPct >= Math.abs(riskControls.globalTakeProfitPct)
-  const drawdownBreached = riskControls.maxDrawdownPct !== null && drawdownPct >= Math.abs(riskControls.maxDrawdownPct)
+  const breach = evaluateControllerRisk(controller.riskControls, pnlPct, drawdownPct)
 
-  if (stopLossBreached || takeProfitBreached || drawdownBreached) {
+  if (breach !== null) {
     const attachedIds = new Set(attached.map((e) => e.id))
     const stoppedAt = now
     // Re-read immediately before writing rather than reusing the snapshot taken at the top of
@@ -63,7 +61,10 @@ export async function runControllerSnapshotNow(controller: ControllerConfig): Pr
     await settingsWrites(async () => {
       const fresh = await window.api.settings.get()
       const nextExecutors = fresh.executors.map((e: ExecutorConfig) => (attachedIds.has(e.id) ? { ...e, status: 'stopped' as const, stoppedAt } : e))
-      const nextControllers = fresh.controllers.map((c) => (c.id === controller.id ? { ...c, status: 'stopped' as const } : c))
+      // The reason is recorded with the stop, not just logged: every executor the user had
+      // running goes quiet at once, and "stopped" on its own gives them nothing to act on.
+      const lastBreach = { ...breach, atSec: stoppedAt }
+      const nextControllers = fresh.controllers.map((c) => (c.id === controller.id ? { ...c, status: 'stopped' as const, lastBreach } : c))
       await window.api.settings.set({ executors: nextExecutors, controllers: nextControllers })
     })
 

@@ -652,6 +652,17 @@ export interface ControllerRiskControls {
 /** A named group of executors with shared risk controls and periodic aggregate P&L snapshots —
  * adapts Condor's Controller concept (which supervises multiple executors inside a bot
  * container) onto this app's executor list, since there's no bot-container runtime here. */
+/** Why a controller stopped itself, kept so the page can say more than "stopped".
+ *
+ * Optional because controllers saved before this existed have no such record, and a controller
+ * paused by hand never gets one. */
+export interface ControllerBreachRecord {
+  kind: 'stop-loss' | 'take-profit' | 'max-drawdown'
+  limitPct: number
+  actualPct: number
+  atSec: number
+}
+
 export interface ControllerConfig {
   id: string
   name: string
@@ -659,6 +670,7 @@ export interface ControllerConfig {
   riskControls: ControllerRiskControls
   status: 'active' | 'stopped'
   createdAt: number
+  lastBreach?: ControllerBreachRecord | null
 }
 
 /** A saved recurring backtest, re-run on a client-side timer while the app is open (Condor's

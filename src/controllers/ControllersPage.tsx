@@ -8,6 +8,7 @@ import { useControllerSnapshots } from './controllerStore'
 import { runControllerSnapshotNow } from './ControllerScheduler'
 import { settingsWrites } from '../utils/settingsWrites'
 import { mergeLocalEdits } from '../utils/mergeLocalEdits'
+import { describeControllerBreach, describeRiskLimitProblem } from './riskBreach'
 import type { ControllerConfig, ExecutorConfig } from '../../shared/ipc'
 
 function fieldLabelStyle(): React.CSSProperties {
@@ -41,8 +42,14 @@ function NewControllerForm({ executors, onCreate }: { executors: ExecutorConfig[
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
   }
 
+  const limitProblems = [
+    ['Global Stop Loss', describeRiskLimitProblem(stopLossPct)],
+    ['Global Take Profit', describeRiskLimitProblem(takeProfitPct)],
+    ['Max Drawdown', describeRiskLimitProblem(maxDrawdownPct)]
+  ].filter(([, problem]) => problem !== null) as [string, string][]
+
   function handleCreate(): void {
-    if (!name.trim() || selectedIds.length === 0) return
+    if (!name.trim() || selectedIds.length === 0 || limitProblems.length > 0) return
     onCreate({
       id: crypto.randomUUID(),
       name: name.trim(),
@@ -103,14 +110,21 @@ function NewControllerForm({ executors, onCreate }: { executors: ExecutorConfig[
           </div>
         </div>
 
+        {limitProblems.map(([label, problem]) => (
+          <p key={label} style={{ fontSize: '0.72rem', color: 'var(--down)', margin: 0 }}>
+            {label}: {problem}
+          </p>
+        ))}
+
         <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
           Risk controls are checked every 5 minutes while the app is open (or on "Run Snapshot Now") — a breach
-          stops every attached executor and the controller itself.
+          stops every attached executor and the controller itself. Leave a field blank for no limit. You can try a
+          controller's limits against real history first on the Backtest page.
         </p>
 
         <button
           onClick={handleCreate}
-          disabled={!name.trim() || selectedIds.length === 0}
+          disabled={!name.trim() || selectedIds.length === 0 || limitProblems.length > 0}
           style={{
             alignSelf: 'flex-start',
             background: 'linear-gradient(135deg, #7c86ff, #6366f1)',
@@ -120,8 +134,8 @@ function NewControllerForm({ executors, onCreate }: { executors: ExecutorConfig[
             color: '#fff',
             fontSize: '0.8rem',
             fontWeight: 700,
-            cursor: !name.trim() || selectedIds.length === 0 ? 'not-allowed' : 'pointer',
-            opacity: !name.trim() || selectedIds.length === 0 ? 0.6 : 1
+            cursor: !name.trim() || selectedIds.length === 0 || limitProblems.length > 0 ? 'not-allowed' : 'pointer',
+            opacity: !name.trim() || selectedIds.length === 0 || limitProblems.length > 0 ? 0.6 : 1
           }}
         >
           Create Controller
@@ -242,7 +256,12 @@ export function ControllersPage(): React.JSX.Element {
   }
 
   function handleToggleEnabled(id: string): void {
-    setControllers((prev) => prev.map((c) => (c.id === id ? { ...c, status: c.status === 'active' ? 'stopped' : 'active' } : c)))
+    // The breach record is cleared on any hand toggle. Kept, it would outlive the stop it
+    // explains: reactivate a controller that hit its stop loss, pause it yourself a week later,
+    // and the row would show last week's breach as the reason for a stop the user just made.
+    setControllers((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, status: c.status === 'active' ? 'stopped' : 'active', lastBreach: null } : c))
+    )
   }
 
   async function handleRunNow(controller: ControllerConfig): Promise<void> {
@@ -306,6 +325,14 @@ export function ControllersPage(): React.JSX.Element {
                       {riskParts.length > 0 && ` • ${riskParts.join(' • ')}`}
                       {controller.status === 'stopped' && ' • stopped'}
                     </div>
+                    {/* A risk breach stops every attached executor at once. Saying only "stopped"
+                        left the user to guess whether they had hit their loss limit, their target,
+                        or had paused it themselves last week. */}
+                    {controller.status === 'stopped' && controller.lastBreach != null && (
+                      <div style={{ fontSize: '0.72rem', color: 'var(--down)', marginTop: '0.15rem' }}>
+                        {describeControllerBreach(controller.lastBreach)}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
