@@ -69,6 +69,31 @@ export function stopFillPrice(candleOpen: number, stopPrice: number, isBuy: bool
   return isBuy ? Math.min(candleOpen, stopPrice) : Math.max(candleOpen, stopPrice)
 }
 
+/** What a resting limit order at `price` fills at on this candle, or null if it does not fill.
+ *
+ * A limit order is not "did this candle print exactly at my price". It is a standing bid or offer,
+ * and the straddle test `low <= price && price <= high` gets two cases wrong -- both of which
+ * leave the order pending for good:
+ *
+ *   marketable on arrival   a buy limit above the market is filled at once, at the market
+ *   gapped clean through    a buy at 95 and a candle spanning 88-91 is taken at 95 on the way past
+ *
+ * simulateOrder was fixed for exactly this and says so at length. Grid levels, DCA levels and a
+ * position's entry price all still required the straddle, so the same order filled or sat pending
+ * depending on which executor was holding it -- and a Position whose entry price was above the
+ * market reported "the entry price was never reached" forever.
+ *
+ * The fill is the limit price whenever the candle reaches it from the correct side, and the
+ * candle's open when the order was already marketable as the candle opened: you are filled at the
+ * market, not at a price you were merely willing to pay. That is the opposite of a stop, which
+ * triggers into a market order and takes whatever the gap leaves (see stopFillPrice). */
+export function limitFillPrice(candle: Candle, price: number, isBuy: boolean): number | null {
+  const reached = isBuy ? candle.low <= price : candle.high >= price
+  if (!reached) return null
+  const marketableAtOpen = isBuy ? candle.open <= price : candle.open >= price
+  return marketableAtOpen ? candle.open : price
+}
+
 export function simulateGrid(candles: Candle[], params: GridExecutorParams): GridExecutorState {
   const levelPrices = buildGridLevels(params)
   const amountPerLevel = params.totalAmountQuote / levelPrices.length
@@ -83,6 +108,16 @@ export function simulateGrid(candles: Candle[], params: GridExecutorParams): Gri
   let closedLevels = 0
   let stoppedAt: number | null = null
   const isBuy = params.side === 'buy'
+
+  /** A grid level is a recurring rung, not a one-shot order: it re-arms after every take profit
+   * and buys again each time the price comes back to it. So it is only a resting order once the
+   * market has actually been on the far side of it -- a buy grid does not put bids ABOVE the
+   * market. Without this, treating a level as an ordinary limit order fills every rung above the
+   * price at once and collapses the whole grid into a single bulk buy at the open.
+   *
+   * Armed off the candle's open rather than its high, so a rung is never armed and filled by the
+   * same spike that first reached it: the grid would not have had an order resting there yet. */
+  const armed = levels.map(() => false)
 
   for (const candle of candles) {
     // Stop Price already hit on a prior candle -- the grid is frozen for good, nothing left to do.
@@ -129,13 +164,18 @@ export function simulateGrid(candles: Candle[], params: GridExecutorParams): Gri
       }
     }
 
-    // Fill pending levels the candle's range touched, up to maxOpenOrders concurrently open.
-    for (const level of levels) {
+    for (const [i, level] of levels.entries()) {
+      if (!armed[i]) armed[i] = isBuy ? candle.open >= level.price : candle.open <= level.price
+    }
+
+    // Fill armed levels the candle reached, up to maxOpenOrders concurrently open.
+    for (const [i, level] of levels.entries()) {
       if (openCount >= params.maxOpenOrders) break
-      if (level.status !== 'pending') continue
-      if (candle.low <= level.price && level.price <= candle.high) {
+      if (level.status !== 'pending' || !armed[i]) continue
+      const fill = limitFillPrice(candle, level.price, isBuy)
+      if (fill !== null) {
         level.status = 'filled'
-        level.entryPrice = level.price
+        level.entryPrice = fill
         level.filledAt = candle.time
         openCount++
       }
@@ -184,10 +224,10 @@ export function simulateDca(candles: Candle[], params: DcaExecutorParams, basePr
   outer: for (const candle of candles) {
     for (let i = 0; i < params.levels.length; i++) {
       if (filledFlags[i]) continue
-      const price = levelPrices[i]
-      if (candle.low <= price && price <= candle.high) {
+      const fill = limitFillPrice(candle, levelPrices[i], isBuy)
+      if (fill !== null) {
         filledFlags[i] = true
-        fills.push({ price, amountQuote: params.levels[i].amountQuote, time: candle.time })
+        fills.push({ price: fill, amountQuote: params.levels[i].amountQuote, time: candle.time })
         if (firstFillTime === null) firstFillTime = candle.time
       }
     }
@@ -298,11 +338,14 @@ export function simulatePosition(candles: Candle[], params: PositionExecutorPara
         status = 'open'
         enteredAt = candle.time
         trailingPeakPrice = entryPrice
-      } else if (candle.low <= params.entryPrice && params.entryPrice <= candle.high) {
-        entryPrice = params.entryPrice
-        status = 'open'
-        enteredAt = candle.time
-        trailingPeakPrice = entryPrice
+      } else {
+        const fill = limitFillPrice(candle, params.entryPrice, isBuy)
+        if (fill !== null) {
+          entryPrice = fill
+          status = 'open'
+          enteredAt = candle.time
+          trailingPeakPrice = entryPrice
+        }
       }
       if (status === 'pending') continue
       liqPrice = liquidationPrice({ entryPrice: entryPrice as number, leverage, side: params.side })

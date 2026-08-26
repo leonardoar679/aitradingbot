@@ -107,16 +107,20 @@ describe('computeExecutorPnl adds a grid realized and unrealized', () => {
   const grid = (side: string) =>
     exec('grid', { side, startPrice: 100, endPrice: 110, totalAmountQuote: 300, maxOpenOrders: 10, levelSpreadPct: 5, takeProfitPct: 5, limitPrice: null })
 
-  // Candle 0 fills level 100. Candle 1 runs to 106, which takes that level's +5% profit AND
-  // re-fills 100 and 105 on the way, so the grid ends with realized profit and two open lots.
+  // Candle 0 fills level 100. Candle 1 runs to 106, which takes that level's +5% profit and
+  // re-fills it at the open, so the grid ends with realized profit and one open lot.
   const GRID_SERIES = [candle(0, 100, 100.5, 99.5, 100), candle(1, 100, 106, 100, 106)]
 
-  it('reports the closed profit plus the mark on both open lots', async () => {
+  it('reports the closed profit plus the mark on the open lot', async () => {
     series = GRID_SERIES
     // realized  1 x (105 - 100) - (100 + 105) x 0.001                = 4.795
     // lot @100  1 x (106 - 100) - (100 + 106) x 0.001                = 5.794
-    // lot @105  (100/105) x (106 - 105) - (100/105) x 211 x 0.001    = 0.7514285714...
-    expect(await computeExecutorPnl(grid('buy'))).toBeCloseTo(11.340428571428571, 10)
+    //
+    // The 105 rung does NOT fill. This used to count it -- a buy grid filling a rung on the way
+    // UP through it, which is backwards: the market was at 100 when the candle opened, so the
+    // grid had no bid resting at 105 to be hit. It arms there once the price has been at 105 and
+    // fills when the price comes back down to it.
+    expect(await computeExecutorPnl(grid('buy'))).toBeCloseTo(10.589, 10)
   })
 
   it('marks a short grid the other way', async () => {
