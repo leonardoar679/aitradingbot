@@ -26,6 +26,14 @@ describe('checking a controller against its risk controls', () => {
     expect(evaluateControllerRisk(controls({ globalStopLossPct: 10 }), -9.99, 9.99)).toBeNull()
   })
 
+  it('fires exactly at the limit, not only past it', () => {
+    // A 10% stop loss is a limit of 10%, so 10% down is a breach. Every one of these comparisons
+    // is non-strict live and the boundary is the only place that shows.
+    expect(evaluateControllerRisk(controls({ globalStopLossPct: 10 }), -10, 10)?.kind).toBe('stop-loss')
+    expect(evaluateControllerRisk(controls({ maxDrawdownPct: 15 }), 2, 15)?.kind).toBe('max-drawdown')
+    expect(evaluateControllerRisk(controls({ globalTakeProfitPct: 25 }), 25, 0)?.kind).toBe('take-profit')
+  })
+
   it('stops on a gain that reaches the take profit', () => {
     expect(evaluateControllerRisk(controls({ globalTakeProfitPct: 25 }), 25, 0)?.kind).toBe('take-profit')
   })
