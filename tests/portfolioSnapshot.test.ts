@@ -350,6 +350,52 @@ describe('computePortfolioSnapshot includes account cash', () => {
     expect(snap.totalValue).toBeCloseTo(10_100, 10)
   })
 
+  it('leaves the part of a strategy not yet in the market as cash', async () => {
+    // The hazard in the other direction, and the one that was real. A 1,000 grid with three of
+    // thirteen rungs filled holds about 231; the other 769 is still cash in the account, because
+    // a paper strategy's money only ever moves when it stops. Fencing off the whole 1,000 while
+    // adding back just the open lots reported 770 of the user's own money as simply gone --
+    // measured in the running app as 10,000 in the account and 9,229.64 on the screen.
+    prices = { 'binance:BTCUSDT': 100 }
+    settings.paperAccount = account({ USDT: 10_000 })
+    settings.executors = [executor('grid', { params: { side: 'buy', amountQuote: 1_000 } } as never)]
+    positions.set('grid', { side: 'buy', entryPrice: 100, amountQuote: 231 })
+
+    const snap = await computePortfolioSnapshot()
+
+    // 9,769 cash + 231 of BTC at cost = the 10,000 that never left.
+    expect(snap.totalValue).toBeCloseTo(10_000, 10)
+    expect(snap.holdings.find((h) => h.baseAsset === 'USDT')?.value).toBeCloseTo(9_769, 10)
+    expect(snap.holdings.find((h) => h.baseAsset === 'BTC')?.value).toBeCloseTo(231, 10)
+  })
+
+  it('leaves a strategy that holds nothing yet entirely as cash', async () => {
+    // A Position executor still waiting for its entry price, or a TWAP that has no position at
+    // all: its whole stake is untouched cash, and deducting it made the total drop the moment a
+    // strategy was started.
+    settings.paperAccount = account({ USDT: 10_000 })
+    settings.executors = [executor('waiting', { params: { side: 'buy', amountQuote: 4_000 } } as never)]
+    positions.set('waiting', null)
+
+    const snap = await computePortfolioSnapshot()
+
+    expect(snap.totalValue).toBeCloseTo(10_000, 10)
+  })
+
+  it('does not deduct the cost of a position it could not price', async () => {
+    // No price means no holding row, so taking its cost out of the cash would understate the
+    // total in exactly the way this whole rule exists to prevent. The unpriced count says so.
+    prices = {}
+    settings.paperAccount = account({ USDT: 10_000 })
+    settings.executors = [executor('dark', { params: { side: 'buy', amountQuote: 1_000 } } as never)]
+    positions.set('dark', { side: 'buy', entryPrice: 100, amountQuote: 600 })
+
+    const snap = await computePortfolioSnapshot()
+
+    expect(snap.totalValue).toBeCloseTo(10_000, 10)
+    expect(snap.unavailable.unpricedPositions).toBe(1)
+  })
+
   it('keeps a KRW balance out of the dollar total', async () => {
     settings.paperAccount = account({ USDT: 1_000, KRW: 5_000_000 })
 

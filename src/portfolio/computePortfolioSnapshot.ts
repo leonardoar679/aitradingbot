@@ -3,7 +3,6 @@ import { computeExecutorPosition } from '../executors/computeSnapshot'
 import { fetchBotDryRunResult, summarizePaperTrades } from '../bots/useDryRun'
 import { isUsdLikeQuote } from '../utils/formatCurrency'
 import { availableBalance } from '../account/paperAccount'
-import { committedByAsset } from '../account/accountCommitments'
 
 export interface PortfolioHoldingRow {
   baseAsset: string
@@ -134,10 +133,29 @@ export async function computePortfolioSnapshot(): Promise<PortfolioSnapshotData>
   //
   // Cash is a holding with no base asset, so it is listed under its own currency. Only the
   // dollar family folds into totalValue, exactly as every other row does.
+  // What the running paper strategies actually hold in the market, at what it cost them.
+  //
+  // NOT their full allocation. committedByAsset fences off an executor's whole stake so a second
+  // strategy cannot be funded with the same money -- the right rule for the Account page, and
+  // wrong twice over as a valuation. The cash never left the balance (a paper executor's result
+  // reaches the account only when it stops), and the part not yet in the market is still money the
+  // user has. Subtracting the whole stake while adding back only the open lots is what made
+  // starting a 1,000 grid with three of its thirteen rungs filled read as 770 of the user's own
+  // money missing from Total Value: cash 10,000 in the account, 9,229.64 on the screen.
+  //
+  // Only positions that will actually get a row below are counted. Deducting the cost of a
+  // position that could not be priced would understate the total in exactly the way this fixes.
+  const deployed: Record<string, number> = {}
+  for (const { executor, position } of paperExecutorPositions) {
+    if (!position) continue
+    if (prices.get(priceKey(executor.exchange, executor.symbol)) === undefined) continue
+    if (!Number.isFinite(position.amountQuote) || position.amountQuote <= 0) continue
+    deployed[executor.quoteAsset] = (deployed[executor.quoteAsset] ?? 0) + position.amountQuote
+  }
+
   if (settings.paperAccount) {
-    const committed = committedByAsset(settings.executors)
     for (const asset of Object.keys(settings.paperAccount.balances)) {
-      const cash = availableBalance(settings.paperAccount, asset, committed[asset] ?? 0)
+      const cash = availableBalance(settings.paperAccount, asset, deployed[asset] ?? 0)
       if (cash === 0 || !Number.isFinite(cash)) continue
       rows.push({ baseAsset: asset, quoteAsset: asset, value: cash, isLive: false })
     }
