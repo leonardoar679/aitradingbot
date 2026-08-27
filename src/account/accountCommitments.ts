@@ -1,4 +1,4 @@
-import type { ExecutorConfig } from '../../shared/ipc'
+import type { ExecutorConfig, HeldPosition } from '../../shared/ipc'
 import { executorAllocatedQuote } from '../executors/computeSnapshot'
 
 /** How much of each asset is currently out working, i.e. committed to running paper strategies.
@@ -21,6 +21,28 @@ export function committedByAsset(executors: ExecutorConfig[]): Record<string, nu
     committed[executor.quoteAsset] = (committed[executor.quoteAsset] ?? 0) + amount
   }
   return committed
+}
+
+/** What Inventory positions cost, per quote asset.
+ *
+ * This money really has left the balance: handing a position over books -amountQuote, because
+ * from then on the cash IS the position. So a balance on its own understates the account by
+ * exactly this much, and "since funded" reads as a loss the user has not made -- hand over a
+ * 1,000 position and the Account page called it -1,000.00, in red, while the position sat safely
+ * in Inventory.
+ *
+ * At cost, not marked to market. This page fetches no prices, and cost is the figure that makes
+ * "since funded" read zero the moment a position is handed over, which is the truth: nothing has
+ * been gained or lost by moving it. Portfolio marks the same position to market for its total. */
+export function heldCostByAsset(held: HeldPosition[]): Record<string, number> {
+  const cost: Record<string, number> = {}
+  for (const position of held) {
+    const amount = position.amountQuote
+    // One malformed row must not turn every figure on the page into NaN.
+    if (!Number.isFinite(amount) || amount <= 0) continue
+    cost[position.quoteAsset] = (cost[position.quoteAsset] ?? 0) + amount
+  }
+  return cost
 }
 
 export function committedFor(executors: ExecutorConfig[], asset: string): number {

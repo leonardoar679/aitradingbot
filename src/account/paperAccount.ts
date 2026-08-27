@@ -143,10 +143,19 @@ export function settle(account: PaperAccount, input: MovementInput): PaperAccoun
   })
 }
 
-/** Profit or loss against what was funded. The total already includes money committed to running
- * strategies, so nothing needs adding back here -- a strategy merely holding money is not a gain,
- * which is exactly the mistake this replaced. */
-export function accountPnl(account: PaperAccount, asset: string): number {
+/** Profit or loss against what was funded.
+ *
+ * The balance already includes money committed to running strategies, so nothing needs adding
+ * back for those -- a strategy merely holding money is not a gain, which is the mistake this
+ * replaced. Money that became an Inventory position is the opposite case and has to be added
+ * back: it genuinely left the balance when the position was handed over, so without it the
+ * account reports a loss the size of the position the moment one is kept.
+ *
+ * `inventoryCost` is required rather than defaulting to zero. Every caller has to decide, because
+ * forgetting it is not a rounding error -- it is a red number telling someone they lost money
+ * they still have. */
+export function accountPnl(account: PaperAccount, asset: string, inventoryCost: number): number {
   const started = Number.isFinite(account.initialBalances[asset]) ? account.initialBalances[asset] : 0
-  return totalBalance(account, asset) - started
+  const held = Number.isFinite(inventoryCost) ? inventoryCost : 0
+  return totalBalance(account, asset) + held - started
 }

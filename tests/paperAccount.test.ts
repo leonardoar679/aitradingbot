@@ -56,7 +56,7 @@ describe('funding an account', () => {
     // Raising the balance without raising the starting point would show a 5,000 gain for money
     // the user simply put in.
     const account = fund(funded(), move('USDT', 5_000))
-    expect(accountPnl(account, 'USDT')).toBe(0)
+    expect(accountPnl(account, 'USDT', 0)).toBe(0)
   })
 
   it('ignores a nonsense amount rather than storing it', () => {
@@ -74,7 +74,7 @@ describe('committing money is not earning it', () => {
     // 1,300 of profit.
     const account = funded()
     expect(totalBalance(account, 'USDT')).toBe(10_000)
-    expect(accountPnl(account, 'USDT')).toBe(0)
+    expect(accountPnl(account, 'USDT', 0)).toBe(0)
   })
 
   it('subtracts committed money from what is available to start something new', () => {
@@ -148,7 +148,7 @@ describe('settling a finished strategy', () => {
   it('adds a profit to the total', () => {
     const account = settle(funded(), move('USDT', 12, { executorId: 'e1' }))
     expect(totalBalance(account, 'USDT')).toBe(10_012)
-    expect(accountPnl(account, 'USDT')).toBe(12)
+    expect(accountPnl(account, 'USDT', 0)).toBe(12)
   })
 
   it('subtracts a loss', () => {
@@ -156,7 +156,7 @@ describe('settling a finished strategy', () => {
     // reduce the balance, or the account only ever goes up.
     const account = settle(funded(), move('USDT', -30, { executorId: 'e1' }))
     expect(totalBalance(account, 'USDT')).toBe(9_970)
-    expect(accountPnl(account, 'USDT')).toBe(-30)
+    expect(accountPnl(account, 'USDT', 0)).toBe(-30)
   })
 
   it('files a loss under a different reason than a profit', () => {
@@ -176,7 +176,7 @@ describe('settling a finished strategy', () => {
   it('accumulates across several strategies', () => {
     let account = funded()
     for (const pnl of [12, -30, 45]) account = settle(account, move('USDT', pnl))
-    expect(accountPnl(account, 'USDT')).toBe(27)
+    expect(accountPnl(account, 'USDT', 0)).toBe(27)
   })
 })
 
@@ -220,5 +220,33 @@ describe('listing funded assets', () => {
   it('still lists the assets that hold something', () => {
     const account = settle(fund(funded(), move('BTC', 0.5)), move('USDT', -10_000))
     expect(fundedAssets(account)).toEqual([{ asset: 'BTC', amount: 0.5 }])
+  })
+})
+
+describe('profit against what was funded, with a position kept in Inventory', () => {
+  // Handing a position over books -amountQuote: that cash IS the position from then on. Counting
+  // only the balance reported a loss the size of the position the moment one was kept -- 1,000
+  // handed over showed as "-1,000.00", in red, on the Account page.
+  it('counts money that became an Inventory position back in', () => {
+    const funded = fund(emptyAccount(T), { asset: 'USDT', amount: 10_000, now: T, id: 'f1' })
+    const kept = settle(funded, { asset: 'USDT', amount: -1_000, now: T, id: 's1' })
+
+    expect(accountPnl(kept, 'USDT', 0)).toBe(-1_000)
+    expect(accountPnl(kept, 'USDT', 1_000)).toBe(0)
+  })
+
+  it('still reports a real loss made alongside a kept position', () => {
+    const funded = fund(emptyAccount(T), { asset: 'USDT', amount: 10_000, now: T, id: 'f1' })
+    const lost = settle(funded, { asset: 'USDT', amount: -200, now: T, id: 's1' })
+    const kept = settle(lost, { asset: 'USDT', amount: -1_000, now: T, id: 's2' })
+
+    expect(accountPnl(kept, 'USDT', 1_000)).toBe(-200)
+  })
+
+  it('ignores an unusable inventory figure rather than poisoning the balance', () => {
+    const funded = fund(emptyAccount(T), { asset: 'USDT', amount: 10_000, now: T, id: 'f1' })
+
+    expect(accountPnl(funded, 'USDT', NaN)).toBe(0)
+    expect(accountPnl(funded, 'USDT', Infinity)).toBe(0)
   })
 })

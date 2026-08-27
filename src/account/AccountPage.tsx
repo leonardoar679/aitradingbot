@@ -5,11 +5,11 @@ import { Card } from '../components/Card'
 import { StatCard } from '../components/StatCard'
 import { formatQuotePrice } from '../utils/formatCurrency'
 import { accountPnl, availableBalance, fund, totalBalance } from './paperAccount'
-import { assetsInPlay, committedByAsset } from './accountCommitments'
+import { assetsInPlay, committedByAsset, heldCostByAsset } from './accountCommitments'
 import { updateAccount } from './persistAccount'
 import { LiveBalancesCard } from './LiveBalancesCard'
 import { FuturesPositionsCard } from './FuturesPositionsCard'
-import type { AccountLedgerEntry, CredentialStatus, ExecutorConfig, PaperAccount } from '../../shared/ipc'
+import type { AccountLedgerEntry, CredentialStatus, ExecutorConfig, HeldPosition, PaperAccount } from '../../shared/ipc'
 
 /** Amount with its sign in front of the currency symbol, not inside it. */
 function signed(value: number, asset: string): string {
@@ -46,6 +46,7 @@ function reasonLabel(entry: AccountLedgerEntry): string {
 export function AccountPage(): React.JSX.Element {
   const [account, setAccount] = useState<PaperAccount | null>(null)
   const [executors, setExecutors] = useState<ExecutorConfig[]>([])
+  const [heldPositions, setHeldPositions] = useState<HeldPosition[]>([])
   const [loaded, setLoaded] = useState(false)
   const [asset, setAsset] = useState('USDT')
   const [amount, setAmount] = useState('10000')
@@ -57,6 +58,7 @@ export function AccountPage(): React.JSX.Element {
     const settings = await window.api.settings.get()
     setAccount(settings.paperAccount)
     setExecutors(settings.executors)
+    setHeldPositions(settings.heldPositions ?? [])
     setLoaded(true)
   }, [])
 
@@ -74,6 +76,8 @@ export function AccountPage(): React.JSX.Element {
   }, [])
 
   const committed = committedByAsset(executors)
+  // Inventory is part of the account too: that cash left the balance to buy the position.
+  const heldCost = heldCostByAsset(heldPositions)
   const balances = account?.balances ?? {}
   const rows = assetsInPlay(balances, committed)
 
@@ -141,14 +145,18 @@ export function AccountPage(): React.JSX.Element {
             const total = totalBalance(account!, row)
             const out = committed[row] ?? 0
             const available = availableBalance(account!, row, out)
-            const pnl = accountPnl(account!, row)
+            const pnl = accountPnl(account!, row, heldCost[row] ?? 0)
             return (
               <StatCard
                 key={row}
                 icon={Wallet}
                 label={row}
                 value={formatQuotePrice(total, row)}
-                sub={`${formatQuotePrice(available, row)} available · ${formatQuotePrice(out, row)} in strategies`}
+                sub={
+                  (heldCost[row] ?? 0) > 0
+                    ? `${formatQuotePrice(available, row)} available · ${formatQuotePrice(out, row)} in strategies · ${formatQuotePrice(heldCost[row], row)} in inventory`
+                    : `${formatQuotePrice(available, row)} available · ${formatQuotePrice(out, row)} in strategies`
+                }
                 subColor="var(--text-secondary)"
                 valueColor={pnl > 0 ? 'var(--up)' : pnl < 0 ? 'var(--down)' : undefined}
               />
@@ -213,6 +221,7 @@ export function AccountPage(): React.JSX.Element {
                   <th style={{ padding: '0.45rem 0.6rem' }}>Asset</th>
                   <th style={{ padding: '0.45rem 0.6rem', textAlign: 'right' }}>Total</th>
                   <th style={{ padding: '0.45rem 0.6rem', textAlign: 'right' }}>In strategies</th>
+                  <th style={{ padding: '0.45rem 0.6rem', textAlign: 'right' }}>In inventory</th>
                   <th style={{ padding: '0.45rem 0.6rem', textAlign: 'right' }}>Available</th>
                   <th style={{ padding: '0.45rem 0.6rem', textAlign: 'right' }}>Since funded</th>
                 </tr>
@@ -222,13 +231,16 @@ export function AccountPage(): React.JSX.Element {
                   const total = totalBalance(account!, row)
                   const out = committed[row] ?? 0
                   const available = availableBalance(account!, row, out)
-                  const pnl = accountPnl(account!, row)
+                  const pnl = accountPnl(account!, row, heldCost[row] ?? 0)
                   return (
                     <tr key={row} style={{ borderTop: '1px solid var(--border)', color: 'var(--text-primary)' }}>
                       <td style={{ padding: '0.5rem 0.6rem', fontWeight: 600 }}>{row}</td>
                       <td style={{ padding: '0.5rem 0.6rem', textAlign: 'right' }}>{formatQuotePrice(total, row)}</td>
                       <td style={{ padding: '0.5rem 0.6rem', textAlign: 'right', color: 'var(--text-secondary)' }}>
                         {formatQuotePrice(out, row)}
+                      </td>
+                      <td style={{ padding: '0.5rem 0.6rem', textAlign: 'right', color: 'var(--text-secondary)' }}>
+                        {formatQuotePrice(heldCost[row] ?? 0, row)}
                       </td>
                       <td
                         style={{
@@ -257,8 +269,11 @@ export function AccountPage(): React.JSX.Element {
           <p style={{ margin: '0.8rem 0 0', fontSize: '0.74rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
 &quot;In strategies&quot; is money currently committed to running paper executors, worked out from the executors
             themselves rather than tracked separately, so it cannot drift. It is not spent: the total only changes when you
-            add funds or a strategy finishes and books its result. Available can go negative if strategies were started
-            before the account was funded. Live executors are excluded — they spend real money and keep their own ledger.
+            add funds, a strategy finishes and books its result, or a strategy hands a position over to Inventory.
+            &quot;In inventory&quot; is what those handed-over positions cost — that money really did leave the total to buy
+            them, so &quot;since funded&quot; counts it back in rather than reporting a loss you have not made. It is shown
+            at cost here; Positions and Portfolio price the same holdings at the market. Available can go negative if
+            strategies were started before the account was funded. Live executors are excluded — they spend real money and keep their own ledger.
           </p>
         </Card>
       )}

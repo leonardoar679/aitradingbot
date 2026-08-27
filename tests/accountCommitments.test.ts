@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import type { ExecutorConfig, PaperAccount } from '../shared/ipc'
-import { assetsInPlay, committedByAsset, committedFor } from '../src/account/accountCommitments'
+import type { ExecutorConfig, HeldPosition, PaperAccount } from '../shared/ipc'
+import { assetsInPlay, committedByAsset, committedFor, heldCostByAsset } from '../src/account/accountCommitments'
 import { updateAccount } from '../src/account/persistAccount'
 import { emptyAccount, fund, totalBalance } from '../src/account/paperAccount'
 import { settingsWrites } from '../src/utils/settingsWrites'
@@ -131,5 +131,36 @@ describe('writing the account back', () => {
 
     // 3,000, not 1,000 or 2,000 -- neither write may overwrite the other.
     expect(totalBalance(stored.paperAccount!, 'USDT')).toBe(3_000)
+  })
+})
+
+describe('what Inventory positions cost the account', () => {
+  // Unlike a running strategy's commitment, this money really has left the balance: handing a
+  // position over books -amountQuote. A balance on its own therefore understates the account, and
+  // "since funded" read as a loss the size of the position the moment one was kept.
+  const held = (over: Partial<HeldPosition> = {}): HeldPosition =>
+    ({ id: 'h1', quoteAsset: 'USDT', amountQuote: 1_000, ...over }) as HeldPosition
+
+  it('adds up what each quote asset has tied up', () => {
+    expect(heldCostByAsset([held(), held({ id: 'h2', amountQuote: 250 })])).toEqual({ USDT: 1_250 })
+  })
+
+  it('keeps currencies apart, so a KRW row never lands in the dollar figure', () => {
+    expect(heldCostByAsset([held(), held({ id: 'h2', quoteAsset: 'KRW', amountQuote: 5_000_000 })])).toEqual({
+      USDT: 1_000,
+      KRW: 5_000_000
+    })
+  })
+
+  it('is empty when nothing is held', () => {
+    expect(heldCostByAsset([])).toEqual({})
+  })
+
+  it('skips a malformed row rather than turning the whole figure into NaN', () => {
+    // One bad row must not make every number on the Account page unreadable -- the same rule
+    // committedByAsset already follows.
+    const result = heldCostByAsset([held(), held({ id: 'h2', amountQuote: NaN }), held({ id: 'h3', amountQuote: -5 })])
+
+    expect(result).toEqual({ USDT: 1_000 })
   })
 })
