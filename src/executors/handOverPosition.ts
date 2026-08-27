@@ -1,5 +1,5 @@
 import type { ExecutorConfig, HeldPosition } from '../../shared/ipc'
-import { computeExecutorPosition } from './computeSnapshot'
+import { computeExecutorStopSnapshot } from './computeSnapshot'
 import { settingsWrites } from '../utils/settingsWrites'
 
 /** Moves an executor's still-open paper position into Inventory when it stops, honouring the
@@ -18,21 +18,28 @@ import { settingsWrites } from '../utils/settingsWrites'
  * replaces the whole array, and computing the position above is a network round trip long enough
  * for another writer to land in between.
  *
- * Returns the row that was added, or null. The row itself rather than a boolean because the
- * account needs its amountQuote: cash that became an Inventory position has to leave the balance,
- * or Portfolio counts the same money twice -- once as cash and once as the position it bought. */
-export async function handOverPositionOnStop(executor: ExecutorConfig): Promise<HeldPosition | null> {
-  if (executor.mode === 'live' || !executor.keepPosition) return null
+ * Returns the row that was added (or null) together with the profit the executor had already
+ * banked. The row itself rather than a boolean because the account needs its amountQuote: cash
+ * that became an Inventory position has to leave the balance, or Portfolio counts the same money
+ * twice -- once as cash and once as the position it bought. The banked profit rides along because
+ * it has no Inventory row and no other way to reach the balance; see executorRealizedPnl. */
+export interface PositionHandover {
+  held: HeldPosition | null
+  realizedPnl: number
+}
 
-  const position = await computeExecutorPosition(executor)
-  if (!position) return null
+export async function handOverPositionOnStop(executor: ExecutorConfig): Promise<PositionHandover> {
+  if (executor.mode === 'live' || !executor.keepPosition) return { held: null, realizedPnl: 0 }
+
+  const { position, realizedPnl } = await computeExecutorStopSnapshot(executor)
+  if (!position) return { held: null, realizedPnl: 0 }
 
   // A leveraged position cannot be handed over, because Inventory is a spot ledger and there is
   // no honest row to write. Recording the margin would understate the exposure tenfold; recording
   // the notional would credit an asset the account never bought and could not pay for. Returning
   // null settles it in cash instead -- the position is closed at market and its P&L, gain or
   // loss, goes back to the balance, which is what closing a leveraged position actually does.
-  if (position.leverage !== 1) return null
+  if (position.leverage !== 1) return { held: null, realizedPnl: 0 }
 
   const held: HeldPosition = {
     id: crypto.randomUUID(),
@@ -53,5 +60,5 @@ export async function handOverPositionOnStop(executor: ExecutorConfig): Promise<
     const settings = await window.api.settings.get()
     await window.api.settings.set({ heldPositions: [...settings.heldPositions, held] })
   })
-  return held
+  return { held, realizedPnl }
 }

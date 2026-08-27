@@ -1,5 +1,5 @@
 import type { ExecutorConfig, ExecutorSide, GridExecutorParams, DcaExecutorParams, TwapExecutorParams, PositionExecutorParams, OrderExecutorParams, XemmExecutorParams, ArbitrageExecutorParams } from '../../shared/ipc'
-import { executorPnlFromState } from './executorPnl'
+import { executorPnlFromState, executorRealizedPnl } from './executorPnl'
 import { runExecutorSimulation } from './engine'
 import { alignByTime, simulateXemm, simulateArbitrage } from './spreadEngine'
 
@@ -29,37 +29,57 @@ export interface OpenPosition {
  * inventory, a Position not yet entered, an unfilled Order, or TWAP/XEMM/Arbitrage, which never
  * leave a lingering position at all). */
 export async function computeExecutorPosition(executor: ExecutorConfig): Promise<OpenPosition | null> {
-  if (executor.type === 'twap' || executor.type === 'xemm' || executor.type === 'arbitrage') return null
+  return (await computeExecutorStopSnapshot(executor)).position
+}
+
+/** What a stop needs to know: the position to hand over, and the profit already banked.
+ *
+ * Both come out of one simulation run. They are returned together because settling a stop needs
+ * both and they must describe the same moment -- fetching candles twice could put a closed cycle
+ * on one side of the line and not the other.
+ *
+ * `realizedPnl` is deliberately NOT part of OpenPosition: it is not part of the position, and a
+ * caller marking the position to market must not add it in. */
+export interface ExecutorStopSnapshot {
+  position: OpenPosition | null
+  realizedPnl: number
+}
+
+export async function computeExecutorStopSnapshot(executor: ExecutorConfig): Promise<ExecutorStopSnapshot> {
+  const nothing: ExecutorStopSnapshot = { position: null, realizedPnl: 0 }
+  if (executor.type === 'twap' || executor.type === 'xemm' || executor.type === 'arbitrage') return nothing
 
   const { candles } = await fetchSingleMarketCandles(executor)
-  if (candles.length === 0) return null
+  if (candles.length === 0) return nothing
   const basePrice = candles[0].close
   const state = runExecutorSimulation(candles, executor, basePrice)
+  const realizedPnl = executorRealizedPnl(state)
+  const found = (position: OpenPosition | null): ExecutorStopSnapshot => ({ position, realizedPnl })
 
   if (state.kind === 'grid') {
     const filled = state.levels.filter((l) => l.status === 'filled' && l.entryPrice !== null)
-    if (filled.length === 0) return null
+    if (filled.length === 0) return found(null)
     const avgEntry = filled.reduce((sum, l) => sum + (l.entryPrice as number), 0) / filled.length
     const params = executor.params as GridExecutorParams
-    return { side: params.side, entryPrice: avgEntry, amountQuote: filled.length * state.amountPerLevel, leverage: 1 }
+    return found({ side: params.side, entryPrice: avgEntry, amountQuote: filled.length * state.amountPerLevel, leverage: 1 })
   }
 
   if (state.kind === 'dca') {
-    if (state.status !== 'accumulating' || state.avgEntryPrice === null) return null
+    if (state.status !== 'accumulating' || state.avgEntryPrice === null) return found(null)
     const params = executor.params as DcaExecutorParams
-    return { side: params.side, entryPrice: state.avgEntryPrice, amountQuote: state.totalFilledQuote, leverage: 1 }
+    return found({ side: params.side, entryPrice: state.avgEntryPrice, amountQuote: state.totalFilledQuote, leverage: 1 })
   }
 
   if (state.kind === 'position') {
-    if (state.status !== 'open' || state.entryPrice === null) return null
+    if (state.status !== 'open' || state.entryPrice === null) return found(null)
     const params = executor.params as PositionExecutorParams
-    return { side: state.side, entryPrice: state.entryPrice, amountQuote: params.amountQuote, leverage: state.leverage }
+    return found({ side: state.side, entryPrice: state.entryPrice, amountQuote: params.amountQuote, leverage: state.leverage })
   }
 
   if (state.kind === 'order') {
-    if (state.status !== 'filled' || state.fillPrice === null) return null
+    if (state.status !== 'filled' || state.fillPrice === null) return found(null)
     const params = executor.params as OrderExecutorParams
-    return { side: params.side, entryPrice: state.fillPrice, amountQuote: params.amountQuote, leverage: 1 }
+    return found({ side: params.side, entryPrice: state.fillPrice, amountQuote: params.amountQuote, leverage: 1 })
   }
 
   // marketmaking — was previously missing entirely, silently discarding any accumulated
@@ -67,12 +87,12 @@ export async function computeExecutorPosition(executor: ExecutorConfig): Promise
   // this type, unlike TWAP/XEMM/Arbitrage, so leaving this branch out was a real bug, not an
   // intentional exclusion). Inventory can be net long or net short in the paper simulation.
   if (state.kind === 'marketmaking') {
-    if (state.inventoryBaseQty === 0 || state.avgCost === null) return null
+    if (state.inventoryBaseQty === 0 || state.avgCost === null) return found(null)
     const side: ExecutorSide = state.inventoryBaseQty > 0 ? 'buy' : 'sell'
-    return { side, entryPrice: state.avgCost, amountQuote: Math.abs(state.inventoryBaseQty) * state.avgCost, leverage: 1 }
+    return found({ side, entryPrice: state.avgCost, amountQuote: Math.abs(state.inventoryBaseQty) * state.avgCost, leverage: 1 })
   }
 
-  return null
+  return found(null)
 }
 
 /** Total realized + unrealized P&L for one executor, in its own quote asset — used by

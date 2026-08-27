@@ -1,4 +1,5 @@
-import type { ExecutorConfig, HeldPosition } from '../../shared/ipc'
+import type { PositionHandover } from '../executors/handOverPosition'
+import type { ExecutorConfig } from '../../shared/ipc'
 import { computeExecutorPnl } from '../executors/computeSnapshot'
 import { settle } from './paperAccount'
 import { updateAccount } from './persistAccount'
@@ -19,10 +20,11 @@ import { updateAccount } from './persistAccount'
  * own, so leaving the cash in place as well would count the same money twice: once as cash, once
  * as the thing it bought.
  *
- * A known limit worth stating: a strategy that both closed some cycles at a profit AND handed over
- * a still-open position leaves the closed part attached to the Inventory row rather than the cash
- * balance. Splitting realised from unrealised needs a second pass over the simulation, and getting
- * the total right in the common case matters more than the split in the rare one.
+ * A strategy that both banked a profit AND handed over a still-open position gets both: the cash
+ * that bought the position leaves the balance, and the banked profit arrives in it. Those used to
+ * be collapsed into one figure, which quietly threw the banked half away -- a grid measured on
+ * real BTCUSDT candles turned over 47 round trips for 14.44 and, because it was holding four lots
+ * when it stopped, kept none of it.
  *
  * Returns what was settled, or null when nothing was. */
 export async function settleExecutorOnStop({
@@ -31,8 +33,8 @@ export async function settleExecutorOnStop({
   now
 }: {
   executor: ExecutorConfig
-  /** The Inventory row this stop created, if any. */
-  handedOver: HeldPosition | null
+  /** The Inventory row this stop created, if any, and the profit already banked. */
+  handedOver: PositionHandover
   now: number
 }): Promise<number | null> {
   if (executor.mode === 'live') return null
@@ -40,8 +42,12 @@ export async function settleExecutorOnStop({
   const settings = await window.api.settings.get()
   if (!settings.paperAccount) return null
 
-  // A kept position: the cash bought it and is now represented by the Inventory row.
-  const pnl = !handedOver ? await computeExecutorPnl(executor) : -handedOver.amountQuote
+  // A kept position: the cash bought it and is now represented by the Inventory row, so only its
+  // cost leaves the balance -- but anything the executor had already banked has no row anywhere,
+  // and has to arrive as cash.
+  const pnl = !handedOver.held
+    ? await computeExecutorPnl(executor)
+    : handedOver.realizedPnl - handedOver.held.amountQuote
   // A strategy that broke even, or whose P&L could not be worked out, must not write a movement
   // -- a ledger full of zero entries explains nothing, and NaN would poison the balance.
   if (!Number.isFinite(pnl) || pnl === 0) return null
@@ -52,7 +58,7 @@ export async function settleExecutorOnStop({
         asset: executor.quoteAsset,
         amount: pnl,
         executorId: executor.id,
-        note: !handedOver ? `${executor.name} stopped` : `${executor.name} kept its position`,
+        note: !handedOver.held ? `${executor.name} stopped` : `${executor.name} kept its position`,
         now,
         id: crypto.randomUUID()
       }),

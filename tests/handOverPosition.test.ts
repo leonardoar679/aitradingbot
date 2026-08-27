@@ -7,8 +7,12 @@ import type { ExecutorConfig, HeldPosition } from '../shared/ipc'
 // a still-open position most needs recording — silently discarded it instead.
 
 const computeExecutorPosition = vi.fn()
+let realizedPnl = 0
 vi.mock('../src/executors/computeSnapshot', () => ({
-  computeExecutorPosition: (executor: ExecutorConfig) => computeExecutorPosition(executor)
+  computeExecutorStopSnapshot: async (executor: ExecutorConfig) => ({
+    position: await computeExecutorPosition(executor),
+    realizedPnl
+  })
 }))
 
 const { handOverPositionOnStop } = await import('../src/executors/handOverPosition')
@@ -59,6 +63,7 @@ function installWindowApi(): void {
 describe('handOverPositionOnStop', () => {
   beforeEach(() => {
     computeExecutorPosition.mockReset()
+    realizedPnl = 0
     installWindowApi()
   })
 
@@ -67,8 +72,8 @@ describe('handOverPositionOnStop', () => {
 
     const handed = await handOverPositionOnStop(EXECUTOR)
 
-    expect(handed).not.toBeNull()
-    expect(handed!.amountQuote).toBe(100)
+    expect(handed.held).not.toBeNull()
+    expect(handed.held!.amountQuote).toBe(100)
     expect(stored.heldPositions).toHaveLength(1)
     expect(stored.heldPositions[0]).toMatchObject({
       sourceExecutorId: 'exec-1',
@@ -86,7 +91,7 @@ describe('handOverPositionOnStop', () => {
 
     const handed = await handOverPositionOnStop({ ...EXECUTOR, mode: 'live' })
 
-    expect(handed).toBeNull()
+    expect(handed.held).toBeNull()
     // Must not even replay candles for a live executor, let alone write a paper Inventory row.
     expect(computeExecutorPosition).not.toHaveBeenCalled()
     expect(setCalls).toBe(0)
@@ -97,7 +102,7 @@ describe('handOverPositionOnStop', () => {
 
     const handed = await handOverPositionOnStop({ ...EXECUTOR, keepPosition: false })
 
-    expect(handed).toBeNull()
+    expect(handed.held).toBeNull()
     expect(computeExecutorPosition).not.toHaveBeenCalled()
     expect(setCalls).toBe(0)
   })
@@ -107,7 +112,7 @@ describe('handOverPositionOnStop', () => {
 
     const handed = await handOverPositionOnStop(EXECUTOR)
 
-    expect(handed).toBeNull()
+    expect(handed.held).toBeNull()
     expect(setCalls).toBe(0)
   })
 
@@ -131,7 +136,7 @@ describe('handOverPositionOnStop', () => {
     // cash instead -- see settleExecutor, which pays the P&L back when nothing was handed over.
     computeExecutorPosition.mockResolvedValue({ ...POSITION, leverage: 10 })
 
-    expect(await handOverPositionOnStop(EXECUTOR)).toBeNull()
+    expect((await handOverPositionOnStop(EXECUTOR)).held).toBeNull()
     expect(stored.heldPositions).toHaveLength(0)
   })
 
@@ -143,5 +148,33 @@ describe('handOverPositionOnStop', () => {
 
     expect(stored.heldPositions).toHaveLength(2)
     expect(stored.heldPositions[0].id).toBe('existing')
+  })
+})
+
+describe('the profit the executor had already banked', () => {
+  // It rides along with the row because it has no Inventory row of its own and no other way to
+  // reach the balance. Collapsed into the position's cost, it was simply thrown away.
+  it('comes back with the handed-over row', async () => {
+    computeExecutorPosition.mockResolvedValue(POSITION)
+    realizedPnl = 14.44
+
+    const handed = await handOverPositionOnStop(EXECUTOR)
+
+    expect(handed.held).not.toBeNull()
+    expect(handed.realizedPnl).toBe(14.44)
+  })
+
+  it('is reported as zero when nothing was handed over, because the full P&L is booked instead', async () => {
+    computeExecutorPosition.mockResolvedValue(null)
+    realizedPnl = 14.44
+
+    expect(await handOverPositionOnStop(EXECUTOR)).toEqual({ held: null, realizedPnl: 0 })
+  })
+
+  it('is reported as zero for a leveraged position, which settles in cash for the same reason', async () => {
+    computeExecutorPosition.mockResolvedValue({ ...POSITION, leverage: 10 })
+    realizedPnl = 14.44
+
+    expect(await handOverPositionOnStop(EXECUTOR)).toEqual({ held: null, realizedPnl: 0 })
   })
 })

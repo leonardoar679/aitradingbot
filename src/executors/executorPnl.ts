@@ -20,6 +20,27 @@ import type {
  * `atTime` is the timestamp being valued at, and only leveraged positions read it: funding
  * accrues while a position is open, so charging it only at exit would make an open position look
  * better than it is for as long as it stays open. */
+/** The part of an executor's P&L that is already banked -- profit from cycles it has closed, with
+ * nothing marked to market.
+ *
+ * Needed apart from the total because of how a stop with "keep position" settles. The still-open
+ * part becomes an Inventory row valued on its own, so the account books only the cash that bought
+ * it; the banked part has no row anywhere and has to reach the balance, or a grid that turned
+ * over forty round trips at a profit and happened to be holding a lot when it stopped loses every
+ * penny it earned. Measured on real BTCUSDT candles: 47 round trips, 14.44 banked, all of it
+ * dropped.
+ *
+ * Only Grid and Market Making can reach a stop with both a banked profit and something still
+ * open. A DCA still accumulating has closed nothing, and a Position or Order that is open has by
+ * definition not realised anything. */
+export function executorRealizedPnl(state: SingleMarketExecutorState): number {
+  if (state.kind === 'grid' || state.kind === 'marketmaking') return state.realizedPnl
+  if (state.kind === 'dca') return state.realizedPnl ?? 0
+  if (state.kind === 'position') return state.status === 'closed' ? (state.realizedPnl ?? 0) : 0
+  // order and twap bank nothing until they are closed out, and neither closes itself.
+  return 0
+}
+
 export function executorPnlFromState(
   state: SingleMarketExecutorState,
   params: unknown,
