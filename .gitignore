@@ -11,3 +11,6 @@ backend/dist/
 *.pfx
 build/cert.pass
 package-lock.json
+
+tsconfig.node.tsbuildinfo
+tsconfig.web.tsbuildinfo
