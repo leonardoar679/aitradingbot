@@ -8,6 +8,7 @@ import { settingsWrites } from '../utils/settingsWrites'
 import { LivePositionRow } from './LivePositionRow'
 import { LedgerCheck } from './LedgerCheck'
 import { LiveHistoryRow } from './LiveHistoryRow'
+import { emptyAccount, settle } from '../account/paperAccount'
 import type { Bot } from '../bots/types'
 import type { HeldPosition, LivePosition } from '../../shared/ipc'
 
@@ -87,16 +88,39 @@ export function PositionsPage(): React.JSX.Element {
   // settings.set replaces the entire heldPositions array, so echoing back a copy loaded at mount
   // would silently delete anything handed over since -- and closing one row is a removal of one
   // id, which applies just as correctly to the current array as to the stale one.
-  function handleCloseHeldPosition(id: string): void {
+  //
+  // `closeValue` is what the position is worth at the price the row is showing, and it goes back
+  // into the balance. Removing the row on its own destroyed the money: the cash left the balance
+  // when the position was handed over (settleExecutorOnStop books -amountQuote, because the cash
+  // IS the position from then on), so deleting the row with no credit made the stake and the
+  // profit disappear together.
+  function handleCloseHeldPosition(id: string, closeValue: number): void {
     void (async () => {
       setHeldError(null)
       try {
         // Queued: re-reading before the write narrows the gap but does not close it, and a
         // handover landing inside it would be erased by this removal.
+        //
+        // Both keys go in ONE settings.set, so the credit and the removal cannot come apart. Two
+        // writes would mean a failure between them either pays twice or, exactly as before, pays
+        // nothing at all.
         const next = await settingsWrites(async () => {
           const fresh = await window.api.settings.get()
+          const position = fresh.heldPositions.find((p) => p.id === id)
+          // Already gone -- another window, or a retry, got there first. Removing it again is
+          // harmless; paying for it again is not.
+          if (!position) return fresh.heldPositions
           const remaining = fresh.heldPositions.filter((p) => p.id !== id)
-          await window.api.settings.set({ heldPositions: remaining })
+          const now = Math.floor(Date.now() / 1000)
+          const account = settle(fresh.paperAccount ?? emptyAccount(now), {
+            asset: position.quoteAsset,
+            amount: closeValue,
+            executorId: position.sourceExecutorId,
+            note: `Closed ${position.sourceExecutorName}'s position from Inventory`,
+            now,
+            id: crypto.randomUUID()
+          })
+          await window.api.settings.set({ heldPositions: remaining, paperAccount: account })
           return remaining
         })
         setHeldPositions(next)

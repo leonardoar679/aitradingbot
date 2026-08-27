@@ -3,6 +3,7 @@ import { EXCHANGES, type HeldPosition } from '../../shared/ipc'
 import { useLastPrice } from '../hooks/useLastPrice'
 import { formatQuotePrice } from '../utils/formatCurrency'
 import { netUnrealizedPct } from '../../shared/fees'
+import { describeHeldCloseBlock, describeHeldCloseConfirm, heldPositionCloseValue } from './closeHeldPosition'
 
 function pctColor(pct: number): string {
   return pct >= 0 ? 'var(--up)' : 'var(--down)'
@@ -10,22 +11,36 @@ function pctColor(pct: number): string {
 
 const cellStyle: React.CSSProperties = { padding: '0.65rem 0.9rem', fontSize: '0.82rem' }
 
-export function HeldPositionRow({ position, onClose }: { position: HeldPosition; onClose: (id: string) => void }): React.JSX.Element {
+export function HeldPositionRow({
+  position,
+  onClose
+}: {
+  position: HeldPosition
+  /** Takes the value as well as the id: closing pays this back into the cash balance, and the
+   * price it is worked out from is the one this row is showing the user. */
+  onClose: (id: string, closeValue: number) => void
+}): React.JSX.Element {
   const markPrice = useLastPrice(position.exchange, position.symbol)
   const exchangeName = EXCHANGES.find((e) => e.id === position.exchange)?.name ?? position.exchange
   const pnlPct = markPrice !== null ? netUnrealizedPct(position.entryPrice, markPrice, position.side) : null
 
   const [confirming, setConfirming] = useState(false)
+  const closeValue = heldPositionCloseValue(position, markPrice)
+  const closeBlock = describeHeldCloseBlock(position, markPrice)
 
   function handleCloseClick(): void {
+    // Refused rather than discarded when it cannot be valued. Closing has to pay back what the
+    // position is worth, and with no price there is no honest figure -- the old behaviour deleted
+    // the row anyway, which is how the money went missing.
+    if (closeValue === null) return
     if (!confirming) {
-      // Discarding this record is permanent (no undo, no P&L kept) -- a single misclick
-      // shouldn't be enough. Reverts to a plain "Close" if the second click doesn't come quickly.
+      // Closing is permanent, so a single misclick should not do it. The confirmation names the
+      // amount coming back, and reverts to a plain "Close" if the second click doesn't come.
       setConfirming(true)
       setTimeout(() => setConfirming(false), 4000)
       return
     }
-    onClose(position.id)
+    onClose(position.id, closeValue)
   }
 
   return (
@@ -48,6 +63,8 @@ export function HeldPositionRow({ position, onClose }: { position: HeldPosition;
       <td style={cellStyle}>
         <button
           onClick={handleCloseClick}
+          disabled={closeValue === null}
+          title={closeBlock ?? `Sells this position at ${formatQuotePrice(markPrice ?? 0, position.quoteAsset)} and returns the proceeds to your balance`}
           style={{
             background: confirming ? 'var(--down)' : 'transparent',
             border: '1px solid var(--border)',
@@ -56,11 +73,17 @@ export function HeldPositionRow({ position, onClose }: { position: HeldPosition;
             color: confirming ? '#fff' : 'var(--text-secondary)',
             fontSize: '0.75rem',
             fontWeight: 600,
-            cursor: 'pointer'
+            cursor: closeValue === null ? 'not-allowed' : 'pointer',
+            opacity: closeValue === null ? 0.5 : 1
           }}
         >
-          {confirming ? 'Confirm discard?' : 'Close'}
+          {closeValue === null ? 'Close' : confirming ? describeHeldCloseConfirm(position, markPrice) : 'Close'}
         </button>
+        {closeBlock !== null && (
+          <div style={{ marginTop: '0.3rem', fontSize: '0.68rem', color: 'var(--text-muted)', maxWidth: '18rem', lineHeight: 1.4 }}>
+            {closeBlock}
+          </div>
+        )}
       </td>
     </tr>
   )
