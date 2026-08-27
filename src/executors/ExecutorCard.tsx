@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, Trash2 } from 'lucide-react'
 import {
   EXCHANGES,
   type ExecutorConfig,
@@ -574,20 +574,30 @@ function SingleMarketMetrics({ executor }: { executor: ExecutorConfig }): React.
 export function ExecutorCard({
   executor,
   onStop,
+  onDelete,
   onViewDetail,
-  stopError = null
+  stopError = null,
+  deletionBlock = null,
+  deletionEffects = []
 }: {
   executor: ExecutorConfig
   onStop: (id: string) => void
+  onDelete: (id: string) => void
   onViewDetail: (id: string) => void
   /** Set when the last Stop on this executor did not fully complete. Shown on the card rather
    * than only in console.error, because a half-finished live teardown can leave a real order
    * resting on the exchange and the card alone gives no hint of it. */
   stopError?: string | null
+  /** Why this cannot be deleted yet, or null. Delete is always offered: a button that vanishes
+   * teaches nobody why, and the reason is the useful part. */
+  deletionBlock?: string | null
+  /** What deleting changes besides the card disappearing. Shown before confirming, not after. */
+  deletionEffects?: string[]
 }): React.JSX.Element {
   const meta = executorTypeMeta(executor.type)
   const Icon = meta.icon
   const exchangeName = EXCHANGES.find((e) => e.id === executor.exchange)?.name ?? executor.exchange
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   return (
     <div
@@ -702,6 +712,76 @@ export function ExecutorCard({
         </div>
       )}
 
+      {confirmingDelete && (
+        <div
+          style={{
+            background: 'var(--bg-app)',
+            border: `1px solid ${deletionBlock !== null ? 'var(--down)' : 'var(--border-strong)'}`,
+            borderRadius: 'var(--radius-sm)',
+            padding: '0.7rem 0.75rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.5rem'
+          }}
+        >
+          {deletionBlock !== null ? (
+            <span style={{ fontSize: '0.76rem', lineHeight: 1.45, color: 'var(--down)' }}>
+              <strong>This cannot be deleted yet.</strong> {deletionBlock}
+            </span>
+          ) : (
+            <>
+              <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                Delete &ldquo;{executor.name}&rdquo;?
+              </span>
+              {deletionEffects.map((effect) => (
+                <span key={effect} style={{ fontSize: '0.73rem', lineHeight: 1.45, color: 'var(--text-secondary)' }}>
+                  {effect}
+                </span>
+              ))}
+            </>
+          )}
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              onClick={() => setConfirmingDelete(false)}
+              style={{
+                flex: 1,
+                background: 'transparent',
+                border: '1px solid var(--border)',
+                borderRadius: 999,
+                padding: '0.45rem',
+                color: 'var(--text-secondary)',
+                fontSize: '0.76rem',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              {deletionBlock !== null ? 'Close' : 'Cancel'}
+            </button>
+            {deletionBlock === null && (
+              <button
+                onClick={() => {
+                  setConfirmingDelete(false)
+                  onDelete(executor.id)
+                }}
+                style={{
+                  flex: 1,
+                  background: 'var(--down)',
+                  border: '1px solid var(--down)',
+                  borderRadius: 999,
+                  padding: '0.45rem',
+                  color: '#fff',
+                  fontSize: '0.76rem',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                Delete
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: '0.5rem' }}>
         <button
           onClick={() => onViewDetail(executor.id)}
@@ -737,6 +817,23 @@ export function ExecutorCard({
             Stop
           </button>
         )}
+        <button
+          onClick={() => setConfirmingDelete((open) => !open)}
+          title={`Delete ${executor.name}`}
+          aria-label={`Delete ${executor.name}`}
+          style={{
+            background: 'transparent',
+            border: '1px solid var(--border)',
+            borderRadius: 999,
+            padding: '0.5rem 0.7rem',
+            color: 'var(--text-muted)',
+            display: 'flex',
+            alignItems: 'center',
+            cursor: 'pointer'
+          }}
+        >
+          <Trash2 size={14} />
+        </button>
       </div>
     </div>
   )

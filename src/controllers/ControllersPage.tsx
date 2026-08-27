@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Boxes, Play } from 'lucide-react'
+import { Boxes, Play, Trash2 } from 'lucide-react'
 import { PageHeader } from '../components/PageHeader'
 import { Card } from '../components/Card'
 import { EquityCurveChart } from '../components/EquityCurveChart'
@@ -9,6 +9,7 @@ import { runControllerSnapshotNow } from './ControllerScheduler'
 import { settingsWrites } from '../utils/settingsWrites'
 import { mergeLocalEdits } from '../utils/mergeLocalEdits'
 import { describeControllerBreach, describeRiskLimitProblem } from './riskBreach'
+import { describeControllerDeletionEffects } from './deletion'
 import type { ControllerConfig, ExecutorConfig } from '../../shared/ipc'
 
 function fieldLabelStyle(): React.CSSProperties {
@@ -217,6 +218,7 @@ export function ControllersPage(): React.JSX.Element {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [runningId, setRunningId] = useState<string | null>(null)
   const [runError, setRunError] = useState<{ id: string; message: string } | null>(null)
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null)
   const loadedRef = useRef(false)
   // What this page last knew storage to be. Anything differing from it is an edit made here.
   const previousRef = useRef<ControllerConfig[]>([])
@@ -253,6 +255,16 @@ export function ControllersPage(): React.JSX.Element {
   function handleCreate(controller: ControllerConfig): void {
     setControllers((prev) => [...prev, controller])
     setSelectedId(controller.id)
+  }
+
+  /** Nothing blocks deleting a controller -- it owns no orders and no position. The warning is
+   * the whole point instead: it is the only thing that would have stopped the executors under it,
+   * and removing it stops nothing. */
+  function handleDelete(id: string): void {
+    setConfirmingDeleteId(null)
+    setControllers((prev) => prev.filter((c) => c.id !== id))
+    setSelectedId((current) => (current === id ? null : current))
+    setRunError((current) => (current?.id === id ? null : current))
   }
 
   function handleToggleEnabled(id: string): void {
@@ -383,8 +395,81 @@ export function ControllersPage(): React.JSX.Element {
                       }}
                     />
                   </button>
+                  <button
+                    onClick={() => setConfirmingDeleteId((current) => (current === controller.id ? null : controller.id))}
+                    title={`Delete ${controller.name}`}
+                    aria-label={`Delete ${controller.name}`}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      background: 'transparent',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '0.4rem 0.55rem',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
                 </div>
               </div>
+              {confirmingDeleteId === controller.id && (
+                <div
+                  style={{
+                    marginTop: '0.6rem',
+                    background: 'var(--bg-app)',
+                    border: '1px solid var(--border-strong)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '0.7rem 0.75rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.45rem'
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    Delete &ldquo;{controller.name}&rdquo;?
+                  </span>
+                  {describeControllerDeletionEffects(controller, executors).map((effect) => (
+                    <span key={effect} style={{ fontSize: '0.74rem', lineHeight: 1.45, color: 'var(--text-secondary)' }}>
+                      {effect}
+                    </span>
+                  ))}
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button
+                      onClick={() => setConfirmingDeleteId(null)}
+                      style={{
+                        background: 'transparent',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-sm)',
+                        padding: '0.4rem 0.8rem',
+                        color: 'var(--text-secondary)',
+                        fontSize: '0.76rem',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => handleDelete(controller.id)}
+                      style={{
+                        background: 'var(--down)',
+                        border: '1px solid var(--down)',
+                        borderRadius: 'var(--radius-sm)',
+                        padding: '0.4rem 0.8rem',
+                        color: '#fff',
+                        fontSize: '0.76rem',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Delete Controller
+                    </button>
+                  </div>
+                </div>
+              )}
               {runError?.id === controller.id && (
                 <p style={{ margin: '0.35rem 0 0', fontSize: '0.75rem', color: 'var(--down)' }}>{runError.message}</p>
               )}

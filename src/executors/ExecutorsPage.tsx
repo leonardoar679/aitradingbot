@@ -14,9 +14,11 @@ import { mergeLocalEdits } from '../utils/mergeLocalEdits'
 import { settingsWrites } from '../utils/settingsWrites'
 import { describeError } from '../utils/ipcError'
 import { describeIncompleteStop } from './stopFailureMessage'
+import { describeExecutorDeletionBlock, describeExecutorDeletionEffects, detachExecutorFromControllers } from './deletion'
 import { dcaLevelPrice, twapNumOrders, buildGridLevels } from './engine'
 import {
   EXCHANGES,
+  type ControllerConfig,
   type ExecutorConfig,
   type PaperAccount,
   type Exchange,
@@ -43,6 +45,9 @@ export function ExecutorsPage({
 }: { autoOpenPresets?: boolean; onPresetsOpened?: () => void } = {}): React.JSX.Element {
   const [bots, setBots] = useState<Bot[]>([])
   const [executors, setExecutors] = useState<ExecutorConfig[]>([])
+  // Read only to say what a deletion would change -- an executor detached from a controller here
+  // has to be detached there too, or the controller keeps counting a strategy that is gone.
+  const [controllers, setControllers] = useState<ControllerConfig[]>([])
   const [showNew, setShowNew] = useState(false)
   const [showPresets, setShowPresets] = useState(false)
   const [paperAccount, setPaperAccount] = useState<PaperAccount | null>(null)
@@ -84,6 +89,7 @@ export function ExecutorsPage({
       if (cancelled) return
       setBots(settings.bots)
       setExecutors(settings.executors)
+      setControllers(settings.controllers)
       setPaperAccount(settings.paperAccount)
       lastSerializedRef.current = JSON.stringify(settings.executors)
       loadedRef.current = true
@@ -119,6 +125,7 @@ export function ExecutorsPage({
       window.api.settings
         .get()
         .then((settings) => {
+          setControllers(settings.controllers)
           const serialized = JSON.stringify(settings.executors)
           if (serialized !== lastSerializedRef.current) {
             lastSerializedRef.current = serialized
@@ -652,6 +659,36 @@ export function ExecutorsPage({
     })
   }
 
+  /** Deleting is refused, not merely hidden, while anything live is still attached -- the button
+   * stays and says why. The check is repeated here rather than trusted from the card, because a
+   * live order resting on a real exchange is not something to leave to a disabled prop. */
+  async function handleDelete(id: string): Promise<void> {
+    const executor = executors.find((e) => e.id === id)
+    if (!executor || describeExecutorDeletionBlock(executor) !== null) return
+
+    setExecutors((prev) => prev.filter((e) => e.id !== id))
+    clearStopError(id)
+    setSelectedId((current) => (current === id ? null : current))
+
+    // Detaching runs as its own queued write: this page owns settings.executors and never writes
+    // settings.controllers, so it re-reads the current controllers rather than a copy it has been
+    // holding since mount. Queued alongside the executors write so ControllersPage cannot land a
+    // whole-array save in between and put the id back.
+    try {
+      await settingsWrites(async () => {
+        const current = await window.api.settings.get()
+        const detached = detachExecutorFromControllers(current.controllers, id)
+        if (detached !== current.controllers) await window.api.settings.set({ controllers: detached })
+      })
+    } catch (error) {
+      console.error('Failed to detach the deleted executor from its controllers:', error)
+      noteStopError(
+        id,
+        `The executor was deleted, but a controller may still be counting it: ${describeError(error)}. Open Controllers and check its attached list.`
+      )
+    }
+  }
+
   const activeBots = bots.filter((b) => b.enabled)
   const activeExecutors = executors.filter((e) => e.status === 'active')
   const stoppedExecutors = executors.filter((e) => e.status === 'stopped')
@@ -753,8 +790,11 @@ export function ExecutorsPage({
                 key={executor.id}
                 executor={executor}
                 onStop={handleStop}
+                onDelete={handleDelete}
                 onViewDetail={setSelectedId}
                 stopError={stopErrors[executor.id] ?? null}
+                deletionBlock={describeExecutorDeletionBlock(executor)}
+                deletionEffects={describeExecutorDeletionEffects(executor, controllers)}
               />
           ))}
         </div>
@@ -771,8 +811,11 @@ export function ExecutorsPage({
                 key={executor.id}
                 executor={executor}
                 onStop={handleStop}
+                onDelete={handleDelete}
                 onViewDetail={setSelectedId}
                 stopError={stopErrors[executor.id] ?? null}
+                deletionBlock={describeExecutorDeletionBlock(executor)}
+                deletionEffects={describeExecutorDeletionEffects(executor, controllers)}
               />
             ))}
           </div>
