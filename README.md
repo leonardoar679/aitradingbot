@@ -245,7 +245,7 @@ electron/preload.ts  ── contextBridge ──▶  window.api.*  (renderer)
 regardless of strategy — only entry/exit/stop logic, defined per strategy in
 `src/backtest/strategies/`, changes. `STRATEGIES` in that folder's `index.ts` is the registry;
 adding a new one is a self-contained file implementing `generateSignals(candles) →
-{entries, exits, stopPrices, warmupBars}`. All three ship long-only, spot (no shorting, no
+{entries, exits, stopPrices, warmupBars}`. All four ship long-only, spot (no shorting, no
 leverage):
 
 | Strategy | Entry | Exit |
@@ -253,6 +253,107 @@ leverage):
 | **EMA Crossover + ATR Stop** | EMA(20) crosses above EMA(50) while price is above EMA(200) — a regime filter added after backtesting showed the un-filtered crossover's profit was almost entirely concentrated in the 2023–24 bull run (5 of 6 tested assets were flat-to-negative since). | Stop-loss at `close − ATR(14)×2` (set at entry, checked against every candle's low — a gap-down fills at the worse of open/stop like a real stop order would), or a bearish EMA(20/50) cross. |
 | **RSI Mean-Reversion** | RSI(14) crosses up through 30 (oversold) while price is above EMA(100) — same "regime filter gates entries only" shape as the EMA strategy, so it buys dips in an uptrend rather than a falling knife in a downtrend. | RSI crossing back above 70 (overbought), or the same ATR(14)×2 stop. |
 | **Bollinger Breakout** | Close breaks above the Bollinger Band(20, 2) upper band. | Close back below the middle band (the breakout failed/reverted), or the same ATR(14)×2 stop. |
+| **Trend Regime Ensemble** | Price is above *all four* of the 20/30/50/80-**day** moving averages. The lookbacks are in days and converted using the candles' own spacing, so the strategy means the same thing on 3m as on 4h — written as bar counts, "20 days of 15m" would silently become 4 days of 3m, a scale at which the measured edge is zero. | Price falls below at least three of the four. The gap between a unanimous entry and a near-unanimous exit is deliberate hysteresis; entering and exiting on one line means crossing it repeatedly and paying the fee each time. A `close − ATR(14)×10` stop is set at entry as a disaster stop only — the regime exit is the risk control, and a *tighter* stop measurably reduced returns without improving drawdown. |
+
+The fourth is the only one of these built against intraday candles, and it exists because the
+other three lose money on them. The reason is arithmetic rather than tuning: a round trip costs
+0.2% while the average 15m bar moves 0.16%, so 500 round trips burn 63% of an account and 2,000
+burn 98% — Bollinger Breakout takes 2,059 trades over 3 years of BTCUSDT 15m and pays $12,550 of
+fees on $10,000. Trend Regime Ensemble is built around a trade budget first: ~10 trades a year.
+Measured on 3 years of Binance data (2023-08 → 2026-08), with the final year held out of every
+tuning decision:
+
+| Series | Tuning window | **Held-out year** | Buy & hold, same year | Full 3 years | B&H 3 years |
+|---|---|---|---|---|---|
+| BTCUSDT 15m | +147.6% | **+15.8%** | −29.4% | **+186.7%** | +121.7% |
+| ETHUSDT 15m | +216.0% | **−10.9%** | −45.5% | **+217.2%** | +26.1% |
+| SOLUSDT 15m | +174.8% | **−3.8%** | −48.2% | **+164.5%** | +76.8% |
+| BTCUSDT 3m | +155.8% | **+16.5%** | −29.2% | **+198.1%** | +122.3% |
+| ETHUSDT 3m | +177.4% | **−19.7%** | −45.4% | **+165.7%** | +26.5% |
+
+Month by month over the same three years, which is the shape that matters more than the total:
+
+| 15m series | Up months | Down months | Flat (in cash) | Worst losing streak | Max drawdown |
+|---|---|---|---|---|---|
+| BTCUSDT | 14 | 13 | 10 | 3 months | −26.7% (B&H −53.8%) |
+| ETHUSDT | 10 | 14 | 13 | 2 months | −41.2% (B&H −69.3%) |
+| SOLUSDT | 14 | 14 | 9 | 2 months | −43.8% (B&H −79.4%) |
+
+Roughly as many losing months as winning ones, and it still compounds to +165–217%, because the
+losers are small and the flat months are deliberate. The flat months are where the design pays
+for itself: on BTC it sat in cash through 2025-11 (buy & hold −17.5%), 2026-02 (−15.6%) and
+2026-06 (−20.6%). The same rule that produces those also gives back a few percent in a month that
+chops sideways — that is the trade, and it cannot be had one-sided.
+
+Read the rest honestly. It loses money on three of the five held-out years — it beats buy & hold
+there by sitting in cash, not by being right. Win rate is 20–33%: most trades are small losses
+paid for by a few large winners, which is what trend-following is and is uncomfortable to hold.
+The held-out year contains ~10 trades per series, so its confidence interval is wide. It also
+underperforms buy & hold in a straight bull market, on purpose — the case for it is drawdown and
+what happens when a trend ends, not raw return. Every figure above is net of both the 0.1%-per-side
+fee and the 0.02%-per-side slippage in `shared/fees.ts`; it is not, however, net of the market
+impact of an order large relative to the book, which nothing here models.
+
+It is at least insensitive to fill timing, which is the one thing a backtest can check cheaply and
+the one an intraday strategy most often fails. Delaying every fill by one, two or four whole
+15-minute bars after the signal moves the three-year result by a few points in either direction
+and sometimes improves it — the edge does not depend on trading the close it just saw. A signal
+that needed that precision would be a signal made of noise.
+
+Since that table was written the strategy has been tested far more widely — 8 symbols, 5
+timeframes and up to 9 years, the whole of Binance's history for these pairs. The single most
+useful result is the one below, because **none of this period informed any parameter**: the
+lookbacks and thresholds were chosen on 2023-08 → 2025-08 BTC/ETH/SOL 15m data, and six of these
+eight symbols were never looked at at all while choosing them.
+
+| Pure out-of-sample, 2017-08 → 2023-08, daily | Strategy | Buy & hold | Max DD | B&H DD |
+|---|---|---|---|---|
+| BTCUSDT | **+1,575%** | +254% | −50.6% | −83.2% |
+| ETHUSDT | **+2,216%** | +457% | −57.6% | −94.0% |
+| BNBUSDT | **+5,763%** | +1,541% | −45.5% | −76.1% |
+| ADAUSDT | **+1,909%** | +80% | −63.4% | −91.8% |
+| DOGEUSDT | **+5,195%** | +2,470% | −81.4% | −92.3% |
+| LTCUSDT | **+104%** | −69% | −72.4% | −89.2% |
+| LINKUSDT | +90% | +955% | −82.8% | −90.2% |
+| XRPUSDT | +5% | +18% | −72.4% | −83.2% |
+
+Profitable on 8 of 8, beating buy & hold on 6 of 8, across a window containing the 2018 bear
+(−84% on BTC), the March 2020 crash, the 2021 bull and the 2022 bear. It holds across timeframes
+too — on that same window BTCUSDT returns +1,468% at 1h, +2,247% at 4h and +1,575% at 1d, with
+Sharpe between 1.16 and 1.42. Year by year on BTCUSDT it is profitable in 7 of 10 calendar years,
+and it beat buy & hold in **every** losing one (2018 −20% against −72%, 2022 −41% against −65%).
+
+Where it fails is worth stating as plainly as where it works: XRPUSDT and LINKUSDT. Both chop
+rather than trend, and a trend strategy on a choppy asset pays the fee repeatedly for nothing.
+LTCUSDT is profitable only over this earlier window and loses money across the full 9 years.
+
+### Three negative results, kept because they cost something to learn
+
+**Tuning harder made it worse.** A faster lookback set (10/15/25/40) was tried to fix the late
+re-entry visible in the monthly table. It beat the shipped set on the tuning window, on all three
+symbols, and won 7 of 9 walk-forward sub-windows — then performed **worse** on the held-out year.
+Walk-forward validation *inside* the tuning window did not predict out-of-sample behaviour.
+
+**Leverage is a trap, and looks like the opposite on short samples.** On BTCUSDT daily over the
+last 3 years, 5x returns +804% and survives. Over the full 9 years the same 5x is **liquidated on
+its first trade and ends at −100%**. Even 3x, which technically finishes at +17,343%, does so
+through a −91.9% drawdown that nobody holds through. Leverage does not improve risk-adjusted
+return at all here: CAGR ÷ max drawdown stays flat near 1.5 from 1x to 3x, so all it buys is a
+bigger number attached to a position you cannot keep.
+
+**Diversifying barely helps, because crypto falls together.** The same strategy blended
+equal-weight across BTC+ETH+BNB cuts max drawdown only from −50.6% to −45.6%. That is not enough
+of a reduction to justify leverage on top, which is what a genuinely diversified book would buy.
+
+### The other three strategies are not broken — they are on the wrong timeframe
+
+Run on 15m they lose badly (Bollinger −98%, EMA Crossover −45% over 3 years). Run on **4h over the
+same 2017-2023 window, EMA Crossover returns +923% and Bollinger +637%.** Their indicators are
+defined in bars, so EMA(200) is 33 days on 4h — inside the trend band where the edge lives — and
+2 days on 15m, where it measurably does not exist. That is the same finding the lookback table
+above records, seen from the other side, and it is why Trend Regime Ensemble defines its
+lookbacks in days instead. It still wins on 4h (+2,247% on 36 trades against EMA's +923% on 63),
+but the gap is a fair fight there rather than a rout.
 
 Every trade pays a flat 0.1% fee on both entry and exit notional, defined once in `shared/fees.ts`
 and applied by the backtest engine *and* the executor paper simulations alike — so a Grid or DCA
@@ -260,7 +361,7 @@ card reports what an account would actually keep, not a gross figure. This matte
 margins are thin: at Grid's default 0.5% take-profit per level a round trip costs ~40% of the
 gross, and a spread capture pays two fees, which is why the XEMM/Arbitrage thresholds default
 above their ~0.2% break-even. A **Compare Strategies**
-view on the Backtest page runs all three over the same candle range and ranks them (net %, win
+view on the Backtest page runs all four over the same candle range and ranks them (net %, win
 rate, max drawdown, Sharpe, profit factor), so picking one is evidence-based. The result of any
 single run includes a full stats panel (Sharpe/Sortino/Calmar/Omega ratios, drawdown, profit
 factor, win rate, streaks, a monthly P&L breakdown with losing-month/consecutive-losing-month
