@@ -701,8 +701,11 @@ export interface RoutineConfig {
  * so nothing here can write to an arbitrary location on its own. */
 export interface BacktestExportRequest {
   defaultFileName: string
+  /** Text for `json` and `csv`; base64 PNG bytes, without the `data:` prefix, for `png`. Base64
+   * rather than a Buffer or a typed array because this crosses the structured-clone boundary and
+   * a plain string is the one representation both sides already agree on. */
   content: string
-  format: 'json' | 'csv'
+  format: 'json' | 'csv' | 'png'
 }
 
 export type BacktestExportResult =

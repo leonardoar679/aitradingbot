@@ -572,6 +572,7 @@ export function BacktestPage(): React.JSX.Element {
         <Card title="Backtest results">
           <BacktestResultsView
             result={runState.result}
+            candles={runState.candles}
             elapsedSec={runState.elapsedSec}
             generalInfo={runState.generalInfo}
             logLines={runState.logLines}

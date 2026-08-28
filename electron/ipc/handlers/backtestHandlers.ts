@@ -15,7 +15,8 @@ import { IpcChannel, type BacktestExportRequest, type BacktestExportResult } fro
 
 const FILTERS = {
   json: [{ name: 'JSON', extensions: ['json'] }],
-  csv: [{ name: 'CSV spreadsheet', extensions: ['csv'] }]
+  csv: [{ name: 'CSV spreadsheet', extensions: ['csv'] }],
+  png: [{ name: 'PNG image', extensions: ['png'] }]
 }
 
 export function registerBacktestHandlers(mainWindow: BrowserWindow): void {
@@ -31,6 +32,14 @@ export function registerBacktestHandlers(mainWindow: BrowserWindow): void {
         })
         // Cancelled is an ordinary outcome, not a failure — the caller shows nothing for it.
         if (canceled || !filePath) return { status: 'cancelled' }
+
+        // PNG arrives base64-encoded and is written as bytes. Writing it as text would run the
+        // string through UTF-8 encoding and produce a file that is the right length but not a
+        // PNG -- the failure only shows up when something tries to open it.
+        if (request.format === 'png') {
+          await writeFile(filePath, Buffer.from(request.content, 'base64'))
+          return { status: 'saved', filePath }
+        }
 
         // BOM on CSV so Excel reads it as UTF-8. Without it Excel assumes the local ANSI code
         // page and mangles any non-ASCII symbol name, which is the classic "my export looks like

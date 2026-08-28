@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createChart, LineSeries, type IChartApi, type UTCTimestamp } from 'lightweight-charts'
-import { RotateCw, Undo2, ClipboardList, BarChart3, Download, Check, TriangleAlert } from 'lucide-react'
+import { RotateCw, Undo2, ClipboardList, BarChart3, Download, ImageDown, Check, TriangleAlert } from 'lucide-react'
 import {
   summarizeSegment,
   MIN_ANNUALIZATION_DAYS,
@@ -11,6 +11,8 @@ import {
 import { tookNoTrades } from './strategyRanking'
 import { DebugLogsModal } from './DebugLogsModal'
 import { buildRunExport, exportFileName, serializeRunExport, type ExportFormat } from './exportResults'
+import { renderBacktestImage } from './chartImage'
+import type { Candle } from '../../shared/ipc'
 
 export interface ResultsGeneralInfo {
   periodDays: number
@@ -29,6 +31,9 @@ export interface ResultsGeneralInfo {
 
 interface BacktestResultsViewProps {
   result: BacktestResult
+  /** The same candles the run replayed. Needed only by the image export, which redraws the price
+   * chart itself rather than screenshotting the one on the Charts tab. */
+  candles: Candle[]
   elapsedSec: number
   generalInfo: ResultsGeneralInfo
   logLines: string[]
@@ -324,6 +329,7 @@ function sideButtonStyle(background: string, color: string): React.CSSProperties
 
 export function BacktestResultsView({
   result,
+  candles,
   elapsedSec,
   generalInfo,
   logLines,
@@ -335,7 +341,10 @@ export function BacktestResultsView({
   const chartRef = useRef<IChartApi | null>(null)
   const [showLogs, setShowLogs] = useState(false)
   const [exportState, setExportState] = useState<
-    { status: 'idle' } | { status: 'busy'; format: ExportFormat } | { status: 'saved'; filePath: string } | { status: 'error'; message: string }
+    | { status: 'idle' }
+    | { status: 'busy'; format: ExportFormat | 'png' }
+    | { status: 'saved'; filePath: string }
+    | { status: 'error'; message: string }
   >({ status: 'idle' })
 
   async function handleExport(format: ExportFormat): Promise<void> {
@@ -357,6 +366,26 @@ export function BacktestResultsView({
     }
   }
 
+
+  /** Rendering the sheet takes a second or two on a long run, so this reports its own busy state
+   * rather than appearing to do nothing until the save dialog opens. */
+  async function handleExportImage(): Promise<void> {
+    setExportState({ status: 'busy', format: 'png' })
+    try {
+      const payload = buildRunExport(result, generalInfo, elapsedSec, generalInfo.leverage)
+      const content = await renderBacktestImage(candles, result, generalInfo, result.stats.startingBalance)
+      const outcome = await window.api.backtest.exportSave({
+        defaultFileName: exportFileName(payload, 'png'),
+        content,
+        format: 'png'
+      })
+      if (outcome.status === 'saved') setExportState({ status: 'saved', filePath: outcome.filePath })
+      else if (outcome.status === 'cancelled') setExportState({ status: 'idle' })
+      else setExportState({ status: 'error', message: outcome.message })
+    } catch (error) {
+      setExportState({ status: 'error', message: error instanceof Error ? error.message : String(error) })
+    }
+  }
 
   useEffect(() => {
     const container = containerRef.current
@@ -643,6 +672,20 @@ export function BacktestResultsView({
             <Download size={15} /> Export JSON
           </button>
         </div>
+        <button
+          onClick={() => void handleExportImage()}
+          disabled={exportState.status === 'busy'}
+          title="One PNG: the price chart with every entry and exit marked, and the portfolio curve against buy & hold"
+          style={{
+            ...sideButtonStyle('var(--bg-app)', 'var(--text-primary)'),
+            border: '1px solid var(--border)',
+            fontSize: '0.82rem',
+            cursor: exportState.status === 'busy' ? 'wait' : 'pointer'
+          }}
+        >
+          <ImageDown size={15} />{' '}
+          {exportState.status === 'busy' && exportState.format === 'png' ? 'Drawing chart…' : 'Export chart PNG'}
+        </button>
         {exportState.status === 'saved' && (
           <div
             style={{

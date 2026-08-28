@@ -9,6 +9,11 @@ import type { ResultsGeneralInfo } from './BacktestResultsView'
 
 export type ExportFormat = 'json' | 'csv'
 
+/** What a saved file can be, which is wider than what `serializeRunExport` can produce: the chart
+ * image is bytes rendered elsewhere, but it wants the same name as its text siblings so a run's
+ * three exports sort together in a folder. */
+export type ExportExtension = ExportFormat | 'png'
+
 export interface RunExport {
   exportedAt: string
   app: { schema: number }
@@ -248,7 +253,7 @@ export function serializeRunExport(x: RunExport, format: ExportFormat): string {
 
 /** A filename that says what the run was, so a folder of exports is readable without opening
  * them. Everything a filesystem objects to is collapsed to a hyphen. */
-export function exportFileName(x: RunExport, format: ExportFormat): string {
+export function exportFileName(x: RunExport, format: ExportExtension): string {
   const safe = (s: string): string =>
     s.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'run'
   const parts = [

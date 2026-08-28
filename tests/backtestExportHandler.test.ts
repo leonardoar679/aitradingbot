@@ -168,3 +168,54 @@ describe('backtest export handler', () => {
     expect(text.endsWith('fresh\r\n')).toBe(true)
   })
 })
+
+describe('PNG export', () => {
+  // A 1x1 PNG. Small enough to inline, real enough that a decoder accepts it -- which is the whole
+  // point: the base64 path has to produce bytes, not a UTF-8 rendering of a base64 string.
+  const ONE_PIXEL =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+
+  it('writes decoded bytes, not the base64 text', async () => {
+    const target = join(dir, 'chart.png')
+    state.saveResult = { canceled: false, filePath: target }
+    const outcome = await invoke({ defaultFileName: 'chart.png', content: ONE_PIXEL, format: 'png' })
+
+    expect(outcome).toEqual({ status: 'saved', filePath: target })
+    const bytes = await readFile(target)
+    expect(bytes.equals(Buffer.from(ONE_PIXEL, 'base64'))).toBe(true)
+    expect(bytes.length).toBeLessThan(ONE_PIXEL.length)
+  })
+
+  it('starts with the PNG magic number', async () => {
+    // Writing base64 as text produces a file of plausible size that no image viewer can open, and
+    // nothing upstream would notice. The signature is what separates the two outcomes.
+    const target = join(dir, 'chart.png')
+    state.saveResult = { canceled: false, filePath: target }
+    await invoke({ defaultFileName: 'chart.png', content: ONE_PIXEL, format: 'png' })
+
+    const bytes = await readFile(target)
+    expect([...bytes.subarray(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  })
+
+  it('never prefixes an image with the CSV BOM', async () => {
+    const target = join(dir, 'chart.png')
+    state.saveResult = { canceled: false, filePath: target }
+    await invoke({ defaultFileName: 'chart.png', content: ONE_PIXEL, format: 'png' })
+
+    const bytes = await readFile(target)
+    expect(bytes[0]).not.toBe(0xef)
+  })
+
+  it('offers a PNG filter in the save dialog', async () => {
+    state.saveResult = { canceled: false, filePath: join(dir, 'chart.png') }
+    await invoke({ defaultFileName: 'chart.png', content: ONE_PIXEL, format: 'png' })
+
+    expect(state.saveOptions?.filters).toEqual([{ name: 'PNG image', extensions: ['png'] }])
+  })
+
+  it('reports a cancelled image save like any other', async () => {
+    state.saveResult = { canceled: true, filePath: join(dir, 'chart.png') }
+    const outcome = await invoke({ defaultFileName: 'chart.png', content: ONE_PIXEL, format: 'png' })
+    expect(outcome).toEqual({ status: 'cancelled' })
+  })
+})
