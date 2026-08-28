@@ -18,7 +18,7 @@ import type { Candle } from '../../shared/ipc'
 import type { Trade } from './engine'
 import { formatUtcDate, formatUtcTime, formatUtcShort, formatHoldingDuration } from './formatTradeTime'
 import { PositionBandPrimitive } from './positionBandPrimitive'
-import { positionBand, signalSummary, tradeMarkers, tradePriceLines } from './tradeOverlay'
+import { signalSummary, tradeBands, tradeMarkers, tradePriceLines } from './tradeOverlay'
 
 interface BacktestChartsViewProps {
   candles: Candle[]
@@ -131,7 +131,7 @@ export function BacktestChartsView({ candles, trades }: BacktestChartsViewProps)
 
     if (tradesVisible && trade) {
       markers.setMarkers(tradeMarkers(trade, palette))
-      bandRef.current?.setBand(positionBand(trade, palette))
+      bandRef.current?.setBands(tradeBands([trade], palette))
       priceLinesRef.current = tradePriceLines(trade, palette).map((spec) =>
         series.createPriceLine({
           price: spec.price,
@@ -144,7 +144,7 @@ export function BacktestChartsView({ candles, trades }: BacktestChartsViewProps)
       )
     } else {
       markers.setMarkers([])
-      bandRef.current?.setBand(null)
+      bandRef.current?.setBands([])
     }
 
     if (!trade || candles.length === 0) return

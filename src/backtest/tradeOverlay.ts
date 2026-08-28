@@ -142,6 +142,37 @@ export function positionBand(trade: Trade, palette: ChartPalette): PositionBand 
   }
 }
 
+/** Bands for a whole set of closed trades, for a chart that shows all of them at once rather than
+ * one at a time. Reads as when the strategy was in the market and when it sat out. */
+export function tradeBands(trades: readonly Trade[], palette: ChartPalette): PositionBand[] {
+  const bands: PositionBand[] = []
+  for (const trade of trades) {
+    const band = positionBand(trade, palette)
+    if (band) bands.push(band)
+  }
+  return bands
+}
+
+/** The band for a position that has not closed yet, running from its entry to the newest candle.
+ *
+ * Drawn in accent rather than green or red on purpose: this trade has no result. Tinting it by
+ * unrealised P&L would put the same green on a banked win and on a paper gain the position can
+ * still give back, which is the one distinction someone watching a live bot most needs. */
+export function openPositionBand(
+  entryTime: number,
+  throughTime: number,
+  palette: ChartPalette
+): PositionBand | null {
+  if (!Number.isFinite(entryTime) || !Number.isFinite(throughTime)) return null
+  if (throughTime < entryTime) return null
+  return {
+    from: entryTime,
+    to: throughTime,
+    fill: withAlpha(palette.accent, 0.1),
+    border: withAlpha(palette.accent, 0.5)
+  }
+}
+
 export interface SignalSummary {
   entryAction: 'BUY' | 'SELL'
   entryPrice: string

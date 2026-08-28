@@ -4,8 +4,10 @@ import type { Trade } from '../src/backtest/engine'
 import {
   formatSignalPrice,
   formatSignedPct,
+  openPositionBand,
   outcomeColor,
   positionBand,
+  tradeBands,
   signalSummary,
   tradeMarkers,
   tradePriceLines,
@@ -221,6 +223,62 @@ describe('positionBand', () => {
 
   it('is null for an unusable timestamp instead of a band at the origin', () => {
     expect(positionBand(trade({ exitTime: NaN }), palette)).toBeNull()
+  })
+})
+
+describe('tradeBands', () => {
+  it('bands every trade it is given, in order', () => {
+    const trades = [trade({ entryTime: 100, exitTime: 200 }), trade({ entryTime: 300, exitTime: 400 })]
+    expect(tradeBands(trades, palette).map((b) => [b.from, b.to])).toEqual([
+      [100, 200],
+      [300, 400]
+    ])
+  })
+
+  it('drops a band it cannot place instead of returning a hole in the array', () => {
+    // The bot chart pushes an open-position band onto this result, so a null in the middle would
+    // reach the renderer rather than being skipped at the call site.
+    const bands = tradeBands([trade(), trade({ exitTime: NaN }), trade()], palette)
+    expect(bands).toHaveLength(2)
+    expect(bands.every((b) => b !== null)).toBe(true)
+  })
+
+  it('is empty for no trades', () => {
+    expect(tradeBands([], palette)).toEqual([])
+  })
+
+  it('keeps winners and losers visually apart within one set', () => {
+    const [won, lost] = tradeBands([trade({ returnPct: 2 }), trade({ returnPct: -2 })], palette)
+    expect(won.fill).not.toBe(lost.fill)
+  })
+})
+
+describe('openPositionBand', () => {
+  it('runs from the entry to the newest candle', () => {
+    const band = openPositionBand(100, 900, palette)!
+    expect(band.from).toBe(100)
+    expect(band.to).toBe(900)
+  })
+
+  it('is accent, not green or red', () => {
+    // An open position has no result. Tinting it by unrealised P&L would put the same green on a
+    // banked win and on a paper gain the position can still give back.
+    const band = openPositionBand(100, 900, palette)!
+    expect(band.fill).toBe(withAlpha(palette.accent, 0.1))
+    expect(band.fill).not.toBe(withAlpha(palette.up, 0.1))
+    expect(band.fill).not.toBe(withAlpha(palette.down, 0.1))
+  })
+
+  it('survives an entry on the newest candle', () => {
+    // A bot that just opened has entryTime === the last candle, which must draw, not vanish.
+    expect(openPositionBand(900, 900, palette)).not.toBeNull()
+  })
+
+  it('is null when the newest candle predates the entry', () => {
+    // Happens while a shorter refetch is in flight; a band running backwards is not a drawing bug
+    // worth rendering.
+    expect(openPositionBand(900, 100, palette)).toBeNull()
+    expect(openPositionBand(NaN, 900, palette)).toBeNull()
   })
 })
 

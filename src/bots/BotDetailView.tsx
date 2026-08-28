@@ -17,6 +17,8 @@ import { EXCHANGES } from '../../shared/ipc'
 import { useDryRun, summarizePaperTrades, classifyBotOpenPosition } from './useDryRun'
 import { useTheme } from '../theme/ThemeContext'
 import { CHART_PALETTE } from '../theme/palette'
+import { PositionBandPrimitive } from '../backtest/positionBandPrimitive'
+import { openPositionBand, tradeBands } from '../backtest/tradeOverlay'
 import type { Trade } from '../backtest/engine'
 import type { Bot } from './types'
 import { formatQuotePrice } from '../utils/formatCurrency'
@@ -42,6 +44,8 @@ export function BotDetailView({ bot, onBack }: BotDetailViewProps): React.JSX.El
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
   const stopLineRef = useRef<IPriceLine | null>(null)
+  const entryLineRef = useRef<IPriceLine | null>(null)
+  const bandRef = useRef<PositionBandPrimitive | null>(null)
 
   const dryRun = useDryRun(bot.exchange, bot.symbol, bot.enabled, bot.enabledAt, bot.strategyId)
   const exchangeName = EXCHANGES.find((e) => e.id === bot.exchange)?.name ?? bot.exchange
@@ -84,12 +88,18 @@ export function BotDetailView({ bot, onBack }: BotDetailViewProps): React.JSX.El
     seriesRef.current = candleSeries
     markersRef.current = createSeriesMarkers(candleSeries, [])
 
+    const bands = new PositionBandPrimitive()
+    candleSeries.attachPrimitive(bands)
+    bandRef.current = bands
+
     return () => {
       chart.remove()
       chartRef.current = null
       seriesRef.current = null
       markersRef.current = null
+      bandRef.current = null
       stopLineRef.current = null
+      entryLineRef.current = null
     }
   }, [palette])
 
@@ -137,9 +147,22 @@ export function BotDetailView({ bot, onBack }: BotDetailViewProps): React.JSX.El
     }
     markers.setMarkers(tradeMarkers)
 
-    if (stopLineRef.current) {
-      series.removePriceLine(stopLineRef.current)
-      stopLineRef.current = null
+    // Shading every closed paper trade turns a scatter of arrows into the thing someone checking
+    // on a bot actually wants to read: when it was in the market, and when it sat out.
+    const bands = tradeBands(paperTrades, palette)
+    // The open position runs to the newest candle rather than stopping at its entry arrow -- a bot
+    // holding right now is the state the chart most needs to show, and previously only the text
+    // panel said so.
+    const lastCandleTime = dryRun.candles[dryRun.candles.length - 1].time
+    const running = chartPosition ? openPositionBand(chartPosition.entryTime, lastCandleTime, palette) : null
+    if (running) bands.push(running)
+    bandRef.current?.setBands(bands)
+
+    for (const ref of [stopLineRef, entryLineRef]) {
+      if (ref.current) {
+        series.removePriceLine(ref.current)
+        ref.current = null
+      }
     }
     if (chartPosition) {
       stopLineRef.current = series.createPriceLine({
@@ -149,6 +172,16 @@ export function BotDetailView({ bot, onBack }: BotDetailViewProps): React.JSX.El
         lineStyle: LineStyle.Dashed,
         axisLabelVisible: true,
         title: 'Stop Loss'
+      })
+      // Drawn alongside the stop because the stop alone says how far there is to fall without
+      // saying what it would cost -- the gap between these two lines is the open risk.
+      entryLineRef.current = series.createPriceLine({
+        price: chartPosition.entryPrice,
+        color: palette.accent,
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: 'Entry'
       })
     }
 

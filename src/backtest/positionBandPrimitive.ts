@@ -26,30 +26,35 @@ import type { PositionBand } from './tradeOverlay'
 
 type RenderTarget = Parameters<IPrimitivePaneRenderer['draw']>[0]
 
+interface PlacedBand {
+  band: PositionBand
+  xFrom: number
+  xTo: number
+}
+
 class BandRenderer implements IPrimitivePaneRenderer {
-  constructor(
-    private readonly band: PositionBand,
-    private readonly xFrom: number,
-    private readonly xTo: number
-  ) {}
+  constructor(private readonly placed: readonly PlacedBand[]) {}
 
   draw(target: RenderTarget): void {
     target.useBitmapCoordinateSpace((scope) => {
       const ctx = scope.context
       const ratio = scope.horizontalPixelRatio
-      const left = Math.round(Math.min(this.xFrom, this.xTo) * ratio)
-      const right = Math.round(Math.max(this.xFrom, this.xTo) * ratio)
       const edge = Math.max(1, Math.round(ratio))
-      // A position opened and closed on the same bar still has to be visible, so the band never
-      // collapses below the width of its own two edges.
-      const width = Math.max(right - left, edge * 2)
       const height = scope.bitmapSize.height
 
-      ctx.fillStyle = this.band.fill
-      ctx.fillRect(left, 0, width, height)
-      ctx.fillStyle = this.band.border
-      ctx.fillRect(left, 0, edge, height)
-      ctx.fillRect(left + width - edge, 0, edge, height)
+      for (const { band, xFrom, xTo } of this.placed) {
+        const left = Math.round(Math.min(xFrom, xTo) * ratio)
+        const right = Math.round(Math.max(xFrom, xTo) * ratio)
+        // A position opened and closed on the same bar still has to be visible, so the band never
+        // collapses below the width of its own two edges.
+        const width = Math.max(right - left, edge * 2)
+
+        ctx.fillStyle = band.fill
+        ctx.fillRect(left, 0, width, height)
+        ctx.fillStyle = band.border
+        ctx.fillRect(left, 0, edge, height)
+        ctx.fillRect(left + width - edge, 0, edge, height)
+      }
     })
   }
 }
@@ -57,7 +62,7 @@ class BandRenderer implements IPrimitivePaneRenderer {
 export class PositionBandPrimitive implements ISeriesPrimitive<Time> {
   private chart: IChartApi | null = null
   private requestUpdate: (() => void) | null = null
-  private band: PositionBand | null = null
+  private bands: readonly PositionBand[] = []
 
   // Held as one stable array: the library caches pane views by reference and re-reads them when
   // the reference changes, so handing back a fresh array every frame defeats that cache.
@@ -65,13 +70,18 @@ export class PositionBandPrimitive implements ISeriesPrimitive<Time> {
     {
       zOrder: () => 'bottom',
       renderer: (): IPrimitivePaneRenderer | null => {
-        const { chart, band } = this
-        if (!chart || !band) return null
+        const { chart, bands } = this
+        if (!chart || bands.length === 0) return null
         const timeScale = chart.timeScale()
-        const xFrom = timeScale.timeToCoordinate(band.from as UTCTimestamp)
-        const xTo = timeScale.timeToCoordinate(band.to as UTCTimestamp)
-        if (xFrom === null || xTo === null) return null
-        return new BandRenderer(band, xFrom, xTo)
+        const placed: PlacedBand[] = []
+        for (const band of bands) {
+          const xFrom = timeScale.timeToCoordinate(band.from as UTCTimestamp)
+          const xTo = timeScale.timeToCoordinate(band.to as UTCTimestamp)
+          // One band whose times fall outside the current data must not blank the others.
+          if (xFrom === null || xTo === null) continue
+          placed.push({ band, xFrom, xTo })
+        }
+        return placed.length > 0 ? new BandRenderer(placed) : null
       }
     }
   ]
@@ -90,9 +100,9 @@ export class PositionBandPrimitive implements ISeriesPrimitive<Time> {
     return this.views
   }
 
-  /** `null` clears the band -- what "Hide Trades" and an empty result both need. */
-  setBand(band: PositionBand | null): void {
-    this.band = band
+  /** An empty array clears the bands -- what "Hide Trades" and an empty result both need. */
+  setBands(bands: readonly PositionBand[]): void {
+    this.bands = bands
     this.requestUpdate?.()
   }
 }
