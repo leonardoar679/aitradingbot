@@ -156,6 +156,88 @@ export function runExportToCsv(x: RunExport): string {
   return csvRows(rows)
 }
 
+/** One strategy's row in a Compare Strategies export. */
+export interface ComparisonRow {
+  strategy: string
+  tookNoTrades: boolean
+  netPct: number
+  winRatePct: number
+  maxDrawdownPct: number
+  sharpeRatio: number
+  profitFactor: number
+  trades: number
+  finishingBalance: number
+  totalPaidFees: number
+}
+
+export interface ComparisonExport {
+  exportedAt: string
+  run: {
+    exchange: string
+    symbol: string
+    interval: string
+    startDate: string
+    endDate: string
+    candles: number
+    startingBalance: number
+  }
+  rows: ComparisonRow[]
+}
+
+/** The Compare Strategies table as a spreadsheet.
+ *
+ * A strategy that never fired is written with EMPTY cells rather than zeroes, matching the dashes
+ * the table shows on screen. Zero would be a lie of a specific kind here: it reads as "flat and
+ * safe" -- a 0% drawdown and a 0% loss look like the least risky row in the file -- when the truth
+ * is that nothing was measured at all. The tookNoTrades column says so explicitly so a reader
+ * sorting by drawdown in Excel cannot be misled by blanks either. */
+export function comparisonToCsv(x: ComparisonExport): string {
+  const header = [
+    'strategy', 'took_no_trades', 'net_pct', 'win_rate_pct', 'max_drawdown_pct',
+    'sharpe', 'profit_factor', 'trades', 'finishing_balance', 'fees_paid'
+  ]
+  const rows: Array<Array<string | number>> = [header]
+  for (const r of x.rows) {
+    const measured = <T,>(value: T): T | string => (r.tookNoTrades ? '' : value)
+    rows.push([
+      r.strategy,
+      r.tookNoTrades ? 'yes' : 'no',
+      measured(round(r.netPct, 4)),
+      measured(round(r.winRatePct, 4)),
+      measured(round(r.maxDrawdownPct, 4)),
+      measured(round(r.sharpeRatio, 4)),
+      // Infinity is what the engine reports for a run that never had a losing period. It is not a
+      // number a spreadsheet can hold, and csvField would blank it silently, so it is named.
+      r.tookNoTrades ? '' : Number.isFinite(r.profitFactor) ? round(r.profitFactor, 4) : 'infinite',
+      r.trades,
+      round(r.finishingBalance, 2),
+      round(r.totalPaidFees, 2)
+    ])
+  }
+  return csvRows(rows)
+}
+
+export function comparisonToJson(x: ComparisonExport): string {
+  return JSON.stringify(x, null, 2)
+}
+
+export function serializeComparison(x: ComparisonExport, format: ExportFormat): string {
+  return format === 'csv' ? comparisonToCsv(x) : comparisonToJson(x)
+}
+
+/** Names the file after the window rather than any one strategy, since it holds all of them. */
+export function comparisonFileName(x: ComparisonExport, format: ExportFormat): string {
+  const safe = (v: string): string => v.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'run'
+  return [
+    'compare',
+    safe(x.run.symbol),
+    safe(x.run.interval),
+    safe(x.run.startDate),
+    'to',
+    safe(x.run.endDate)
+  ].join('_') + `.${format}`
+}
+
 export function runExportToJson(x: RunExport): string {
   return JSON.stringify(x, null, 2)
 }

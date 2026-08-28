@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildRunExport,
+  comparisonFileName,
+  comparisonToCsv,
+  comparisonToJson,
   csvField,
   exportFileName,
   runExportToCsv,
   runExportToJson,
-  serializeRunExport
+  serializeComparison,
+  serializeRunExport,
+  type ComparisonExport
 } from '../src/backtest/exportResults'
 import { runBacktest } from '../src/backtest/engine'
 import { shortTermChannel } from '../src/backtest/strategies/shortTermChannel'
@@ -224,5 +229,132 @@ describe('exportFileName', () => {
   it('still produces a usable name when a label is entirely unusable', () => {
     const x = buildRunExport(tradedResult(), { ...INFO, strategyLabel: '///' }, 1, 1)
     expect(exportFileName(x, 'json')).toContain('_run_')
+  })
+})
+
+const COMPARISON: ComparisonExport = {
+  exportedAt: '2026-08-28T00:00:00.000Z',
+  run: {
+    exchange: 'Binance',
+    symbol: 'BTC-USDT',
+    interval: '15m',
+    startDate: '2026-05-30',
+    endDate: '2026-08-28',
+    candles: 9411,
+    startingBalance: 10_000
+  },
+  rows: [
+    {
+      strategy: 'Short-Term Channel Breakout',
+      tookNoTrades: false,
+      netPct: 14.1599,
+      winRatePct: 28.5714,
+      maxDrawdownPct: -12.6337,
+      sharpeRatio: 1.2345,
+      profitFactor: 3.0102,
+      trades: 7,
+      finishingBalance: 11_415.99,
+      totalPaidFees: 137.38
+    },
+    {
+      strategy: 'Trend Regime Ensemble',
+      tookNoTrades: true,
+      netPct: 0,
+      winRatePct: 0,
+      maxDrawdownPct: 0,
+      sharpeRatio: 0,
+      profitFactor: 0,
+      trades: 0,
+      finishingBalance: 10_000,
+      totalPaidFees: 0
+    },
+    {
+      strategy: 'Never Lost',
+      tookNoTrades: false,
+      netPct: 5,
+      winRatePct: 100,
+      maxDrawdownPct: 0,
+      sharpeRatio: 2,
+      profitFactor: Infinity,
+      trades: 3,
+      finishingBalance: 10_500,
+      totalPaidFees: 10
+    }
+  ]
+}
+
+describe('comparisonToCsv', () => {
+  it('writes a header and one row per strategy, in the order given', () => {
+    const lines = comparisonToCsv(COMPARISON).trim().split('\r\n')
+    expect(lines).toHaveLength(4)
+    expect(lines[0]).toBe(
+      'strategy,took_no_trades,net_pct,win_rate_pct,max_drawdown_pct,sharpe,profit_factor,trades,finishing_balance,fees_paid'
+    )
+    // Row order is the sort order on screen, so a saved file matches the table it came from.
+    expect(lines[1].startsWith('Short-Term Channel Breakout,')).toBe(true)
+    expect(lines[2].startsWith('Trend Regime Ensemble,')).toBe(true)
+  })
+
+  it('leaves a no-trade strategy blank rather than writing zeroes', () => {
+    // The failure this prevents: zero reads as "flat and safe" in a spreadsheet. A 0% drawdown
+    // and a 0% loss sort to the top as the least risky row in the file, when in fact nothing was
+    // measured at all. The table on screen shows dashes for exactly this reason.
+    const cells = comparisonToCsv(COMPARISON).trim().split('\r\n')[2].split(',')
+    expect(cells[0]).toBe('Trend Regime Ensemble')
+    expect(cells[1]).toBe('yes')
+    for (const i of [2, 3, 4, 5, 6]) expect(cells[i]).toBe('')
+    // Trade count and balance ARE real measurements even for a strategy that never fired.
+    expect(cells[7]).toBe('0')
+    expect(cells[8]).toBe('10000')
+  })
+
+  it('names an infinite profit factor instead of blanking it', () => {
+    // csvField turns any non-finite number into an empty cell, which would make "never had a
+    // losing period" indistinguishable from "never traded".
+    const cells = comparisonToCsv(COMPARISON).trim().split('\r\n')[3].split(',')
+    expect(cells[0]).toBe('Never Lost')
+    expect(cells[6]).toBe('infinite')
+  })
+
+  it('gives every row the same column count as the header', () => {
+    const lines = comparisonToCsv(COMPARISON).trim().split('\r\n')
+    const width = lines[0].split(',').length
+    for (const line of lines) expect(line.split(',')).toHaveLength(width)
+  })
+
+  it('quotes a strategy name containing a comma', () => {
+    const csv = comparisonToCsv({
+      ...COMPARISON,
+      rows: [{ ...COMPARISON.rows[0], strategy: 'Breakout, fast' }]
+    })
+    expect(csv).toContain('"Breakout, fast"')
+  })
+})
+
+describe('comparisonToJson', () => {
+  it('keeps the run settings so the file says what produced it', () => {
+    const back = JSON.parse(comparisonToJson(COMPARISON))
+    expect(back.run.symbol).toBe('BTC-USDT')
+    expect(back.run.candles).toBe(9411)
+    expect(back.run.startingBalance).toBe(10_000)
+    expect(back.rows).toHaveLength(3)
+  })
+
+  it('serializeComparison picks the format asked for', () => {
+    expect(serializeComparison(COMPARISON, 'csv')).toBe(comparisonToCsv(COMPARISON))
+    expect(serializeComparison(COMPARISON, 'json')).toBe(comparisonToJson(COMPARISON))
+  })
+})
+
+describe('comparisonFileName', () => {
+  it('names the file after the window, not any one strategy', () => {
+    expect(comparisonFileName(COMPARISON, 'csv')).toBe('compare_BTC-USDT_15m_2026-05-30_to_2026-08-28.csv')
+  })
+
+  it('strips characters a filesystem rejects', () => {
+    const name = comparisonFileName({ ...COMPARISON, run: { ...COMPARISON.run, symbol: 'BTC/USDT:x' } }, 'json')
+    for (const bad of ['/', String.fromCharCode(92), ':', '*', '?', '"', '<', '>', '|']) {
+      expect(name.includes(bad)).toBe(false)
+    }
   })
 })

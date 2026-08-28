@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Plus, Zap } from 'lucide-react'
 import { Card } from '../components/Card'
 import { PageHeader } from '../components/PageHeader'
@@ -168,6 +168,21 @@ export function BacktestPage(): React.JSX.Element {
   // engine entirely, so they are not offered here rather than being offered and then failing.
   const replayableExecutors = accountExecutors.filter((e) => e.type !== 'xemm' && e.type !== 'arbitrage')
   const [compareCandles, setCompareCandles] = useState<Candle[] | null>(null)
+
+  // Labels for an exported comparison. Derived at render from the SAME pickers the comparison
+  // fetch reads, rather than from the last single-strategy run's metadata -- those can differ,
+  // because Compare Strategies fetches its own candles and the user may have changed the symbol
+  // since the last Start.
+  const comparisonMeta = useMemo(() => {
+    const info = symbols.find((sym) => sym.symbol === tradingRoute.symbol)
+    return {
+      exchange: EXCHANGES.find((e) => e.id === exchange)?.name ?? exchange,
+      symbol: info ? `${info.baseAsset}-${info.quoteAsset}` : tradingRoute.symbol,
+      interval: INTERVALS.find((iv) => iv.id === tradingRoute.interval)?.label ?? tradingRoute.interval,
+      startDate,
+      endDate
+    }
+  }, [symbols, tradingRoute.symbol, tradingRoute.interval, exchange, startDate, endDate])
   const [compareLoading, setCompareLoading] = useState(false)
   const [compareError, setCompareError] = useState<string | null>(null)
 
@@ -577,7 +592,13 @@ export function BacktestPage(): React.JSX.Element {
         <Card title="Strategy comparison">
           {compareLoading && <p style={{ color: 'var(--text-secondary)', margin: 0 }}>Fetching candles…</p>}
           {!compareLoading && compareError && <p style={{ color: 'var(--down)', margin: 0 }}>Error: {compareError}</p>}
-          {!compareLoading && !compareError && compareCandles && <StrategyComparisonView candles={compareCandles} startingBalance={capitalValue} />}
+          {!compareLoading && !compareError && compareCandles && (
+            <StrategyComparisonView
+              candles={compareCandles}
+              startingBalance={capitalValue}
+              meta={comparisonMeta}
+            />
+          )}
           {!compareLoading && !compareError && !compareCandles && (
             <p style={{ color: 'var(--text-secondary)', margin: 0 }}>No candle data loaded yet.</p>
           )}
