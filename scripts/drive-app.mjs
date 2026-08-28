@@ -316,6 +316,34 @@ const COMMANDS = {
     }
   },
 
+  /** Evaluate in the MAIN process, where `electron` itself lives. `dialog`, `app` and
+   * `BrowserWindow` are in scope.
+   *
+   * This exists because anything ending in a native dialog cannot be tested from the page. Two
+   * approaches fail before this one: Playwright cannot click a native file picker at all, and
+   * stubbing `window.api.backtest.exportSave` from the renderer silently does nothing, because
+   * contextBridge exposes a read-only object -- the assignment appears to succeed, the real
+   * handler runs anyway, and the save dialog opens and blocks the whole session with no error.
+   * Replacing `dialog.showSaveDialog` here is what makes a save verifiable end to end.
+   *
+   *   meval dialog.showSaveDialog = async () => ({ canceled: false, filePath: 'C:/tmp/out.png' })
+   */
+  async meval(expr) {
+    if (!app) return console.log('not launched')
+    try {
+      const out = await app.evaluate(async ({ dialog, app: electronApp, BrowserWindow }, source) => {
+        // eslint-disable-next-line no-eval
+        const value = await eval(source)
+        // Keep the scope references alive for bundlers/linters that would otherwise drop them.
+        void electronApp, BrowserWindow, dialog
+        return value
+      }, expr)
+      console.log(JSON.stringify(out ?? null))
+    } catch (e) {
+      console.log('ERROR:', e.message)
+    }
+  },
+
   async quit() {
     if (app) await app.close().catch(() => {})
     app = null
