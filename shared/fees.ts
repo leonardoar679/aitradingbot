@@ -14,6 +14,47 @@
 // default beats a knob a newcomer would be tempted to set to zero.
 export const FEE_RATE = 0.001
 
+/** The other half of what a fill costs: the gap between the price a signal was computed from and
+ * the price actually paid.
+ *
+ * Separate from FEE_RATE because it is a different thing and behaves differently. A fee is
+ * charged on every fill including a limit order that rested and got exactly its price; slippage
+ * is what a MARKET order gives up for immediacy, and a resting limit fill has none of it. Keeping
+ * them apart is what lets the executor simulations eventually charge slippage on their market and
+ * stop fills without also charging it on Grid and DCA levels, which fill at their own limit price
+ * by definition.
+ *
+ * WHY THIS NUMBER IS SMALL, AND WHY THAT IS THE HONEST ANSWER. On a liquid major at retail size
+ * the real figure is tiny: BTCUSDT's spread on Binance runs about $0.10 on a $78,000 price, so
+ * half the spread is well under a basis point, and a four-figure order moves the book by nothing
+ * measurable. 2bps is therefore already generous for BTC/ETH/SOL -- roughly ten times the true
+ * half-spread, with the rest standing in for adverse selection, since the moments a strategy
+ * wants to trade are disproportionately the moments the book is thin. The temptation is to pick a
+ * frightening number to look conservative; that would misrepresent the cost structure, because
+ * the fee is 0.1% per side and dwarfs this by fifty to one. What actually kills intraday
+ * strategies in this app is the fee, and inflating slippage would blur that.
+ *
+ * WHERE IT IS OPTIMISTIC, stated plainly: an illiquid pair on one of the smaller Korean exchanges
+ * has spreads orders of magnitude wider than this; a stop-market triggering in a fast crash fills
+ * far worse than 2bps; and a position large relative to the book pays market impact this does not
+ * model at all. A strategy whose edge is thinner than a few tenths of a percent per trade should
+ * not be trusted on the strength of a backtest that used this constant. */
+export const SLIPPAGE_RATE = 0.0002
+
+/** What a market buy actually pays: worse than the reference price, never better. */
+export function buyFillPrice(price: number): number {
+  return price * (1 + SLIPPAGE_RATE)
+}
+
+/** What a market sell actually receives: worse than the reference price, never better.
+ *
+ * Both directions move against the trader, which is the only defensible asymmetry here -- a model
+ * where slippage sometimes helps would let a strategy earn money from the noise in its own fill
+ * assumptions. */
+export function sellFillPrice(price: number): number {
+  return price * (1 - SLIPPAGE_RATE)
+}
+
 /** Total fees for one completed round trip of `qty` units -- charged on the way in AND the way
  * out, which is why both prices appear here. Use for any position that opened and then closed. */
 export function roundTripFee(qty: number, entryPrice: number, exitPrice: number): number {

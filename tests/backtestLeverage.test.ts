@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { runBacktest, type BacktestResult } from '../src/backtest/engine'
 import { ASSUMED_FUNDING_RATE, FUNDING_INTERVAL_SEC, liquidationPrice } from '../shared/perp'
-import { FEE_RATE } from '../shared/fees'
+import { FEE_RATE, sellFillPrice } from '../shared/fees'
 import type { Candle } from '../shared/ipc'
 
 // A backtest is where someone finds out what leverage does to a strategy before it does it to
@@ -198,8 +198,12 @@ describe('a stop and a liquidation reached in the same candle', () => {
     const last = r.trades[r.trades.length - 1]
 
     expect(last.exitReason).toBe('stop_loss')
-    expect(last.exitPrice).toBeCloseTo(stop, 9)
+    // The stop's trigger, minus the spread the resulting market sell gives up.
+    expect(last.exitPrice).toBeCloseTo(sellFillPrice(stop), 9)
     expect(last.pnl).toBeGreaterThan(-CAPITAL)
+    // And still above the liquidation level, which is what makes this a stop rather than a
+    // wipeout. Slippage must not push a saved position past the level it was saved from.
+    expect(last.exitPrice).toBeGreaterThan(liquidationPrice({ entryPrice: entry, leverage: 10, side: 'buy' }) as number)
   })
 
   it('is liquidated anyway when the level is nearer than the stop', () => {
@@ -302,13 +306,41 @@ describe('the most a single trade can cost', () => {
       ...climb,
       { time: last.time + H4, open: last.close, high: last.close, low: open.entryPrice * 0.7, close: open.entryPrice * 0.7, volume: 1 }
     ]
-    // Just inside the level, so the stop is reached first and the exit really is a stop.
-    const justInside = leverageWhoseLiquidationIs(open.stopPrice, open.entryPrice) * 0.999
+    // Inside the level by comfortably more than the spread, so the stop is reached first and the
+    // exit really is a stop. The margin has to clear SLIPPAGE_RATE: a stop nearer to the
+    // liquidation level than the spread it gives up does not survive its own fill -- see the test
+    // below, which pins that.
+    const justInside = leverageWhoseLiquidationIs(open.stopPrice, open.entryPrice) * 0.99
     const r = runBacktest(collapse, STRATEGY, { startingBalance: CAPITAL, leverage: justInside })
     const trade = r.trades[r.trades.length - 1]
 
     expect(trade.exitReason).toBe('stop_loss')
     expect(trade.pnl).toBe(-CAPITAL)
     expect(r.stats.finishingBalance).toBe(0)
+  })
+
+  it('does not protect a position when the stop sits nearer the level than the spread', () => {
+    // A fact the engine could not express until fills cost something, and an uncomfortable one
+    // worth keeping: a stop is only protection if it fills ABOVE the liquidation level, and the
+    // fill is worse than the trigger. Set the stop close enough to the level and the market sell
+    // it becomes lands on the far side -- so the honest label is liquidation, not a stop that
+    // worked. Someone reading a stop-loss row here would believe their risk was capped where it
+    // was not.
+    const climb = candles([...wobble(40, 100, 2), ...Array.from({ length: 60 }, (_, i) => 112 + i * 0.5)])
+    const open = runBacktest(climb, STRATEGY, {
+      startingBalance: CAPITAL,
+      leverage: 10,
+      forceCloseAtEnd: false
+    }).openPositionAtEnd as NonNullable<BacktestResult['openPositionAtEnd']>
+    const last = climb[climb.length - 1]
+    const collapse: Candle[] = [
+      ...climb,
+      { time: last.time + H4, open: last.close, high: last.close, low: open.entryPrice * 0.7, close: open.entryPrice * 0.7, volume: 1 }
+    ]
+    // Barely inside the level -- a gap thinner than the spread the stop's market sell gives up.
+    const tooClose = leverageWhoseLiquidationIs(open.stopPrice, open.entryPrice) * 0.9999
+    const r = runBacktest(collapse, STRATEGY, { startingBalance: CAPITAL, leverage: tooClose })
+
+    expect(r.trades[r.trades.length - 1].exitReason).toBe('liquidation')
   })
 })

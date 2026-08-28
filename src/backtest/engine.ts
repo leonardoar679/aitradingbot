@@ -1,6 +1,6 @@
 import type { Candle } from '../../shared/ipc'
 import { getStrategy, DEFAULT_STRATEGY_ID } from './strategies'
-import { FEE_RATE } from '../../shared/fees'
+import { FEE_RATE, buyFillPrice, sellFillPrice } from '../../shared/fees'
 import { computeRiskRatios } from './riskStats'
 import {
   ASSUMED_FUNDING_RATE,
@@ -16,6 +16,18 @@ import {
 // open position is force-closed on the final candle (unless forceCloseAtEnd is off). Fee is a
 // flat rate applied to both entry and exit notional, shared with the executor paper simulations
 // via shared/fees.ts so the two engines can never disagree on what a trade costs.
+//
+// SLIPPAGE IS CHARGED HERE AND NOT YET IN THE EXECUTORS, which is a real asymmetry and is called
+// out rather than left to be discovered. Every fill in this engine is market-like -- an entry at
+// the signal bar's close, a signal exit at a close, a stop that becomes a market order when
+// touched -- so all of them give up the spread. The executor simulations are a mixture: a Grid
+// rung and a DCA level fill at their own limit price and genuinely slip nothing, while an Order
+// executor's market fill, a Position executor's market entry and every stop exit do. Charging
+// SLIPPAGE_RATE across the board there would overstate the cost of exactly the strategies whose
+// margins are thinnest, so it needs the per-fill-type distinction this engine does not need.
+// Until that is done, an executor card is fractionally more optimistic than a backtest of the
+// same idea. The gap is about 2% of the three-year total on the strategies measured so far --
+// small, but not zero, and in the flattering direction.
 /** What a run starts with when the caller does not say. Kept as the fallback rather than
  * removed, because callers that have no capital of their own deliberately still use it --
  * see resolveStartingBalance. */
@@ -323,27 +335,45 @@ export function runBacktest(
     // Nothing left to trade with. Without this a liquidated run keeps opening zero-sized
     // positions for the rest of the history and fills the trade list with empty round trips.
     if (cash <= 0) return
+    // Applied here rather than at the call site, so no future entry path can forget it. `price`
+    // is the reference the signal was computed from; `fill` is what the order actually pays, and
+    // everything downstream -- quantity, liquidation level, the recorded entry -- has to be built
+    // from the second one, because that is the price the position really has.
+    const fill = buyFillPrice(price)
     const notional = notionalFor(cash, leverage)
     const fee = notional * FEE_RATE
     totalFees += fee
     posBox.current = {
-      entryPrice: price,
+      entryPrice: fill,
       entryTime: time,
       // At 1x this is (cash - fee) / price, exactly as before: the fee comes out of the money
       // before it buys anything. Above 1x the fee is paid out of margin instead, because the
       // notional is borrowed and the position size is what the leverage says it is.
-      qty: leverage === 1 ? (cash - fee) / price : notional / price,
+      qty: leverage === 1 ? (cash - fee) / fill : notional / fill,
       cashBefore: cash,
       entryFee: fee,
       stopPrice,
-      liquidationPrice: liquidationPrice({ entryPrice: price, leverage, side: 'buy' })
+      liquidationPrice: liquidationPrice({ entryPrice: fill, leverage, side: 'buy' })
     }
     cash = 0
   }
 
-  function closePosition(time: number, price: number, exitReason: Trade['exitReason']): void {
+  function closePosition(time: number, referencePrice: number, exitReason: Trade['exitReason']): void {
     const position = posBox.current
     if (!position) return
+    // Which exits give up the spread, stated once:
+    //
+    //   liquidation  no. Not a fill this account chose or received -- the exchange closes at the
+    //                liquidation level and the P&L below is pinned to -cashBefore regardless, so
+    //                slipping it would report a price the account never traded at for a loss that
+    //                is already fixed.
+    //   stop_loss    already slipped by the caller, which needs the true fill to decide whether
+    //                the stop beat the liquidation level. Applying it twice would charge the
+    //                spread on both sides of one sell.
+    //   signal /     yes. An ordinary market sell, here.
+    //   end_of_data
+    const price =
+      exitReason === 'liquidation' || exitReason === 'stop_loss' ? referencePrice : sellFillPrice(referencePrice)
     const exitFee = position.qty * price * FEE_RATE
     totalFees += exitFee
     const funding = fundingSoFar(position, time)
@@ -384,7 +414,13 @@ export function runBacktest(
       if (position) {
         const stopHit = low <= position.stopPrice
         // A gap-down can open below the stop price — fill at the worse of open/stop, as a real stop order would.
-        const stopFill = stopHit ? Math.min(open, position.stopPrice) : null
+        // Slippage is applied HERE rather than left to closePosition, because the comparison just
+        // below decides whether the stop beat the liquidation level by looking at the price the
+        // stop actually got. Comparing an idealised fill against the level and then recording a
+        // slipped one would let a trade report a stop_loss exit at a price below its own
+        // liquidation level -- the engine saying the stop saved the position and, in the same
+        // row, that it filled past the point where there was nothing left to save.
+        const stopFill = stopHit ? sellFillPrice(Math.min(open, position.stopPrice)) : null
         const liq = position.liquidationPrice
         const liqHit = liq !== null && low <= liq
         // A stop set inside the liquidation level is exactly what it is for: price reaches it

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { runBacktest, MIN_ANNUALIZATION_DAYS } from '../src/backtest/engine'
-import { FEE_RATE } from '../shared/fees'
+import { FEE_RATE, sellFillPrice } from '../shared/fees'
 import type { Candle } from '../shared/ipc'
 
 // Backtest results are the screen a beginner uses to decide whether a strategy is worth real
@@ -136,7 +136,10 @@ describe('runBacktest — execution model', () => {
 
     // A gap-down cannot fill at the stop price — a real stop order becomes a market order and
     // fills at the open. Reporting the stop price here would invent protection that didn't exist.
-    expect(stopped.exitPrice).toBe(60)
+    // The open, then, minus the spread that market order gives up: a stop is the one exit that
+    // pays slippage twice over, once by gapping and once by being a market order when it does.
+    expect(stopped.exitPrice).toBe(sellFillPrice(60))
+    expect(stopped.exitPrice).toBeLessThan(60)
     expect(stopped.pnl).toBeLessThan(0)
   })
 
