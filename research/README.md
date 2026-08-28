@@ -50,6 +50,10 @@ CANDLE_DIR=<dir with the json> node --max-old-space-size=4096 research/.final.mj
 | `sweep*.ts` | The tuning passes, train-only |
 | `final.ts` | The one holdout scoring — the table in the README |
 | `eth3m.ts` | ETHUSDT 3m, which finished downloading after the design was locked |
+| `diag.ts` | What costs the two strategies money, measured before anything was changed |
+| `conc.ts` | How many entry events the one-position-at-a-time engine never reaches, and what they were worth |
+| `slots.ts` | N concurrent positions under two sizing rules, checked against the engine at N = 1 |
+| `oostop.ts` | The holdout, scored once, for the only candidate that survived training |
 
 ## What the study did not establish
 

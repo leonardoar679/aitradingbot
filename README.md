@@ -363,6 +363,30 @@ the effect on the total was decided by *which* handful. The engine grew two opti
 (`trailing` and `reentryCooldown`) and nothing in the app passes either — they are kept, inert and
 tested, only so the negative results stay reproducible.
 
+**Concurrent positions do not help either, and not for the reason it looks like.** The engine holds
+one all-in position at a time, so it reaches 59 of Trend Regime's 686 distinct entry events on the
+training window and 151 of Short-Term Channel's 2,178 (`research/conc.ts`). Those counts are of
+*rising edges*: the entry condition is a regime state, true on 45% of all bars, so counting every
+true bar reports 95,651 "signals" for a strategy that takes 59 trades — a second position opened on
+the next bar is not a second opportunity, it is leverage on the first. The unreachable entries are
+profitable on average, but less so than the ones taken: **+6.87% against +11.17%**.
+
+`research/slots.ts` simulates N concurrent slots under two sizing rules. It is checked against the
+real engine at N = 1 before anything else it prints is believed, and reproduces it exactly —
+`$0.000000` disagreement on $10,000, all six strategy/symbol runs.
+
+| Sizing rule | Trend Regime, 1 → 8 slots | Short-Term Channel, 1 → 8 slots |
+|---|---|---|
+| Capital reserved per slot | +353% → +211%, monotonically worse | +205% → +127%; only N=2 beats on the mean, and it is worse on 2 of the 3 symbols |
+| Always fully invested, trimming to fund each new slot | +353% → +330%, fees $3,445 → $7,897 | +205% → +158%, fees $6,918 → $15,165 |
+
+Reserving capital cuts the share of the account actually invested from **54% to 38%** — adding
+slots puts *less* money to work, not more. Removing that drag by trimming exposes the other half of
+the answer: on a single symbol, N equal fully-invested positions are economically one position of
+the same size, differing only in that each slot keeps its own stop. That laddered stop buys
+nothing — max drawdown moves from −41.2% to −41.6% — while the trimming pays the fee twice on the
+same coins. Nothing here was scored on the holdout, because only what survives training is.
+
 ### The fast one: Short-Term Channel Breakout
 
 Added after a request for a strategy that trades more often. The first attempt at one failed and
