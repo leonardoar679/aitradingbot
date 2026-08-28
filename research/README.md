@@ -86,6 +86,8 @@ Short-term round (`shortTermChannel.ts`):
 | `stfinal2.ts` | Per-era comparison, month-by-month, rolling 6-month windows, starting-balance invariance |
 | `stbroad.ts` | Nine symbols at full history, year-by-year, and whether running both strategies beats either |
 | `stwhich.ts` | The two shipped trend strategies head to head per symbol, on matched windows |
+| `stmonthly.ts` | Month by month over 3 years on seven series, with buy & hold per month and year totals |
+| `stjson.ts` | The same report as JSON, so a write-up embeds measured numbers instead of re-typed ones |
 
 Two traps caught in this round specifically. **The engine will not open a position without a stop
 price** (`signals.stopPrices[i] !== null`), so the first version of `tscan.ts` — which passed
