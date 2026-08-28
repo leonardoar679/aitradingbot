@@ -70,7 +70,7 @@ export interface Trade {
   qty: number
   pnl: number
   returnPct: number
-  exitReason: 'signal' | 'stop_loss' | 'end_of_data' | 'liquidation'
+  exitReason: 'signal' | 'stop_loss' | 'trailing' | 'end_of_data' | 'liquidation'
 }
 
 export interface EquityPoint {
@@ -204,6 +204,24 @@ export interface BacktestResult {
   openPositionAtEnd: OpenPositionSnapshot | null
 }
 
+export interface TrailingExit {
+  /** How far up the trade must be, in percent of entry, before the give-back rule arms at all.
+   *
+   * Without an arming threshold the rule fires on ordinary noise straight after entry and turns
+   * every trade into a scratch. It exists so the rule only protects a gain already worth
+   * protecting. */
+  armAtPct: number
+  /** Exit once the close falls this far, in percent, below the highest close seen since entry. */
+  giveBackPct: number
+}
+
+export interface ReentryCooldown {
+  /** Bars that must pass after an exit before a new position may open. */
+  bars: number
+  /** Wait only after a LOSING exit, and re-enter immediately after a winning one. */
+  afterLossOnly?: boolean
+}
+
 export interface RunBacktestOptions {
   /** Force-close any open position on the final candle (default true). A live/dry-run caller
    * that wants to know the strategy's actual current position should pass false — otherwise
@@ -212,6 +230,24 @@ export interface RunBacktestOptions {
   /** Capital the run starts with, in the pair's quote asset. Defaults to
    * DEFAULT_STARTING_BALANCE. Anything that is not a positive finite number falls back to it. */
   startingBalance?: number
+  /** Bank more of a move that has already been won, by exiting when it gives too much back.
+   *
+   * Absent means the run is bit-for-bit what it always was. This is deliberately an engine feature
+   * rather than a strategy one: `generateSignals` sees only candles, so it cannot know when the
+   * position opened or how far it is up, and the stop in `stopPrices` is fixed at entry by
+   * construction. A path-dependent exit has to live where the position does.
+   *
+   * WHY IT EXISTS. Measured over the training window on three symbols, both shipped strategies
+   * bank about 40% of the peak gain their winners reach, and roughly half of their losing trades
+   * had been up more than 3% at some point before rolling over. See research/diag.ts. */
+  trailing?: TrailingExit
+  /** Refuse to re-enter for a while after closing, to sit out chop instead of trading it.
+   *
+   * WHY IT EXISTS. On the training window, Trend Regime's trades opened within a day of the
+   * previous exit won 26% of the time against 46% for those opened after ten days or more. See
+   * research/diag.ts. Path-dependent for the same reason the give-back exit is: a strategy's
+   * signals are computed from candles alone and cannot know when the last position closed. */
+  reentryCooldown?: ReentryCooldown
   /** Simulated leverage. Absent, or anything outside the usable range, means 1x -- the run is
    * then bit-for-bit the spot backtest it always was. Above 1x the run can be liquidated, and a
    * liquidated run ends with nothing and takes no further trades, which is the point of offering
@@ -238,6 +274,9 @@ interface OpenPosition {
   stopPrice: number
   /** Null at 1x, where nothing can close the position for you. */
   liquidationPrice: number | null
+  /** Highest CLOSE since entry, not highest high: the give-back rule is evaluated at the close, so
+   * anchoring it to a wick would measure the drop from a price the position was never offered. */
+  peakClose: number
 }
 
 // Groups closed trades by the UTC calendar month they exited in, so a strategy that looks
@@ -301,6 +340,22 @@ export function runBacktest(
   const forceCloseAtEnd = options.forceCloseAtEnd ?? true
   const startingBalance = resolveStartingBalance(options.startingBalance)
   const leverage = resolveLeverage(options.leverage)
+  // Nonsense settings are dropped rather than clamped: a give-back of 0% would exit on any tick
+  // down and one of 100% can never fire, and silently substituting a working value for either
+  // would run a strategy the caller did not ask for.
+  const trailing =
+    options.trailing &&
+    Number.isFinite(options.trailing.armAtPct) &&
+    options.trailing.armAtPct >= 0 &&
+    Number.isFinite(options.trailing.giveBackPct) &&
+    options.trailing.giveBackPct > 0 &&
+    options.trailing.giveBackPct < 100
+      ? options.trailing
+      : undefined
+  const cooldown =
+    options.reentryCooldown && Number.isFinite(options.reentryCooldown.bars) && options.reentryCooldown.bars > 0
+      ? options.reentryCooldown
+      : undefined
   const signals = getStrategy(strategyId).generateSignals(candles)
 
   let cash = startingBalance
@@ -366,9 +421,36 @@ export function runBacktest(
       cashBefore: cash,
       entryFee: fee,
       stopPrice,
-      liquidationPrice: liquidationPrice({ entryPrice: fill, leverage, side: 'buy' })
+      liquidationPrice: liquidationPrice({ entryPrice: fill, leverage, side: 'buy' }),
+      // Seeded with the reference price, not the fill: the fill is already worse by the slippage,
+      // and starting the peak above where the position can ever close arms the rule a fraction
+      // early on the very first bar.
+      peakClose: price
     }
     cash = 0
+  }
+
+  /** True once the trade has been up by `armAtPct` and has since fallen `giveBackPct` from its
+   * best close. Both are measured against the entry FILL, so the figures mean what the trade
+   * actually made rather than what the signal price suggested it would. */
+  function givesBackTooMuch(position: OpenPosition, close: number): boolean {
+    if (!trailing) return false
+    const peakGainPct = ((position.peakClose - position.entryPrice) / position.entryPrice) * 100
+    if (peakGainPct < trailing.armAtPct) return false
+    return close <= position.peakClose * (1 - trailing.giveBackPct / 100)
+  }
+
+  /** Bar index the last position closed on, and whether it closed at a loss. Null until the first
+   * exit, so the opening trade of a run is never held back. */
+  let lastExit: { index: number; lost: boolean } | null = null
+  /** The bar being processed. closePosition is called from several places and from after the loop,
+   * and needs the index to stamp the cooldown without every call site passing it. */
+  let barIndex = 0
+
+  function coolingDown(i: number): boolean {
+    if (!cooldown || lastExit === null) return false
+    if (cooldown.afterLossOnly && !lastExit.lost) return false
+    return i - lastExit.index < cooldown.bars
   }
 
   function closePosition(time: number, referencePrice: number, exitReason: Trade['exitReason']): void {
@@ -416,15 +498,24 @@ export function runBacktest(
     })
     cash = position.cashBefore + pnl
     posBox.current = null
+    lastExit = { index: barIndex, lost: pnl < 0 }
   }
 
   for (let i = 0; i < candles.length; i++) {
+    barIndex = i
     const { time, open, low, close } = candles[i]
     let justStoppedOut = false
 
     if (i >= signals.warmupBars) {
       const position = posBox.current
       if (position) {
+        // Updated before the exit checks read it. Moving it after them is an EQUIVALENT mutant
+        // rather than a bug, and it is worth saying why so nobody "fixes" it in either direction:
+        // on a bar that raises the peak the test becomes close <= close * (1 - giveBack), false
+        // for any positive give-back, and on a bar that does not raise it both orderings see the
+        // same peak. Before is kept because it reads as what the rule means -- the best close so
+        // far, including this one.
+        position.peakClose = Math.max(position.peakClose, close)
         const stopHit = low <= position.stopPrice
         // A gap-down can open below the stop price — fill at the worse of open/stop, as a real stop order would.
         // Slippage is applied HERE rather than left to closePosition, because the comparison just
@@ -458,6 +549,11 @@ export function runBacktest(
           justStoppedOut = true
         } else if (signals.exits[i]) {
           closePosition(time, close, 'signal')
+        } else if (givesBackTooMuch(position, close)) {
+          // After the strategy's own exit, never before it. The strategy's rule is the primary
+          // one; this only catches a position the rule is still holding while the gain that made
+          // it worth holding drains away.
+          closePosition(time, close, 'trailing')
         } else if (equityAt(close, time) <= 0) {
           // Last, and only for a position that survived everything the candle's prices did to it.
           // Ahead of the stop it would override a stop that had already filled higher up, turning
@@ -467,7 +563,13 @@ export function runBacktest(
         }
       }
 
-      if (!posBox.current && !justStoppedOut && signals.entries[i] && signals.stopPrices[i] !== null) {
+      if (
+        !posBox.current &&
+        !justStoppedOut &&
+        signals.entries[i] &&
+        signals.stopPrices[i] !== null &&
+        !coolingDown(i)
+      ) {
         openLong(time, close, signals.stopPrices[i] as number)
       }
     }

@@ -31,6 +31,7 @@ function pctColor(pct: number): string {
 
 function exitReasonLabel(reason: Trade['exitReason']): string {
   if (reason === 'stop_loss') return 'STOP LOSS'
+  if (reason === 'trailing') return 'GIVE-BACK'
   if (reason === 'end_of_data') return 'FORCE CLOSE'
   return 'SIGNAL'
 }

@@ -329,7 +329,7 @@ Where it fails is worth stating as plainly as where it works: XRPUSDT and LINKUS
 rather than trend, and a trend strategy on a choppy asset pays the fee repeatedly for nothing.
 LTCUSDT is profitable only over this earlier window and loses money across the full 9 years.
 
-### Three negative results, kept because they cost something to learn
+### Negative results, kept because they cost something to learn
 
 **Tuning harder made it worse.** A faster lookback set (10/15/25/40) was tried to fix the late
 re-entry visible in the monthly table. It beat the shipped set on the tuning window, on all three
@@ -346,6 +346,22 @@ bigger number attached to a position you cannot keep.
 **Diversifying barely helps, because crypto falls together.** The same strategy blended
 equal-weight across BTC+ETH+BNB cuts max drawdown only from −50.6% to −45.6%. That is not enough
 of a reduction to justify leverage on top, which is what a genuinely diversified book would buy.
+
+**Three attempts to raise profit from the 36-month study, all rejected.** The diagnosis was real
+and the fixes were not (`research/diag.ts`, then `sweeptrail.ts`, `sweepcool.ts`, `sweepstop.ts`,
+`oostop.ts`). Measured on the training window across three symbols:
+
+| Measured problem | Fix tried | What happened |
+|---|---|---|
+| Winners bank only ~40% of the peak gain they reach, and half of all losing trades had been up more than 3% first | Give-back trailing exit, swept over 7 arming thresholds x 9 give-back widths | Worse than baseline nearly everywhere for Trend Regime; the best cells are spikes, not plateaus, and their neighbours sit below baseline. For Short-Term Channel the apparent +50pp came from **one extra trade out of 151** |
+| Trades re-entered within a day of the last exit win 26% of the time against 46% for those entered after ten days | Re-entry cooldown, 6h to 10 days, both after any exit and after losing exits only | Never beat baseline for either strategy at any length, and got steadily worse beyond 5 days. A bucket of trades with a poor win rate is not the same as a bucket worth removing: skipping a re-entry also forfeits whatever followed it |
+| Short-Term Channel's stop had never fired once in 151 trades; its worst trade lost 15.9% | A stop that actually binds, swept 2%–20% below entry | Passed the training window (+205% → +247% mean) but **the gain was one symbol**: BTC +4pp, ETH +4pp, SOL +118pp. On the held-out year it changed **nothing at all** — no trade ever fell 8% from entry, so all three symbols returned exactly what they did before |
+
+The common thread is sample size, and it was measurable in advance: Trend Regime's best 3 trades
+out of 59 are 53% of its gross profit. Every intervention above changed a handful of trades, and
+the effect on the total was decided by *which* handful. The engine grew two options along the way
+(`trailing` and `reentryCooldown`) and nothing in the app passes either — they are kept, inert and
+tested, only so the negative results stay reproducible.
 
 ### The fast one: Short-Term Channel Breakout
 
