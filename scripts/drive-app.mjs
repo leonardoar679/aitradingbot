@@ -21,6 +21,7 @@ import { _electron as electron } from 'playwright-core'
 import * as readline from 'node:readline'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
+import { execFile } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const APP_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -36,6 +37,47 @@ const ELECTRON_BIN =
     : process.platform === 'darwin'
       ? path.join(APP_DIR, 'node_modules/electron/dist/Electron.app/Contents/MacOS/Electron')
       : path.join(APP_DIR, 'node_modules/electron/dist/electron')
+
+/** Kills app processes left running by a previous run of this driver.
+ *
+ * The app is not leaking: main.ts handles `window-all-closed` with app.quit(), and killing the
+ * main process tears its children down cleanly -- both were checked. What strands processes is
+ * THIS DRIVER dying before quit() runs: a `timeout` expiring around a slow command, a Ctrl-C, a
+ * crash. Playwright's electronApp.close() is the only thing that stops the app it launched, so if
+ * the driver never reaches it, all four processes stay up. Measured: SIGKILL the driver after
+ * launch and four remain.
+ *
+ * That matters because they hold the app's single-instance lock, so the NEXT launch exits
+ * immediately with code 0 and no error, and Playwright reports a bare "Process failed to launch!"
+ * naming no cause. The failure reads like a broken build, and it cost two debugging sessions
+ * before it was understood.
+ *
+ * Matching on the repo path is not optional. Claude Code and VS Code are themselves Electron
+ * apps, and a blanket `Stop-Process -Name electron` kills the editor this is running inside.
+ *
+ * Windows-only, since that is where this was measured; a no-op elsewhere. */
+function reapStaleApps() {
+  if (process.platform !== 'win32') return Promise.resolve(0)
+  // -Force so a hung process still goes; SilentlyContinue so a process that exits between the
+  // query and the kill is not an error.
+  // .Contains() rather than -like: -like treats [ ] * ? as wildcards, and a path is a literal.
+  // Single-quoted PowerShell strings take backslashes literally, so the path needs no escaping
+  // beyond doubling any apostrophe in it.
+  const needle = APP_DIR.replace(/'/g, "''")
+  const script = `
+    $procs = Get-CimInstance Win32_Process -Filter "Name='electron.exe'" |
+      Where-Object { $_.CommandLine -and $_.CommandLine.Contains('${needle}') }
+    $procs | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    ($procs | Measure-Object).Count`
+  return new Promise((resolve) => {
+    execFile(
+      'powershell',
+      ['-NoProfile', '-NonInteractive', '-Command', script],
+      { timeout: 15_000 },
+      (err, stdout) => resolve(err ? 0 : Number(String(stdout).trim()) || 0)
+    )
+  })
+}
 
 /** Strips one layer of surrounding quotes. Shells pass them through to argv, and every command
  * here takes the rest of the line as a single string, so a quoted argument arrives quoted. */
@@ -70,6 +112,11 @@ const COMMANDS = {
     if (!fs.existsSync(path.join(APP_DIR, 'out/main/index.js'))) {
       return console.log('ERROR: out/main/index.js missing — run `npm run build` first')
     }
+    // Also swept here, not just in quit(): quit() runs only on a clean exit, and the runs that
+    // strand processes are precisely the ones that crashed or were killed by a timeout. Without
+    // this, one bad run poisons every launch afterwards until someone kills them by hand.
+    const stale = await reapStaleApps()
+    if (stale > 0) console.log(`cleared ${stale} stale Electron process(es) from a previous run`)
     // THE gotcha. Claude Code and VS Code are themselves Electron apps and export
     // ELECTRON_RUN_AS_NODE=1 to their child processes. With it set, electron.exe runs as plain
     // Node: it rejects every Chromium flag with "bad option: --remote-debugging-port" and never
@@ -273,6 +320,10 @@ const COMMANDS = {
     if (app) await app.close().catch(() => {})
     app = null
     page = null
+    // Belt and braces: close() normally does stop everything, but a command that failed earlier
+    // can leave `app` null with the process still up. See reapStaleApps.
+    const reaped = await reapStaleApps()
+    if (reaped > 0) console.log(`cleaned up ${reaped} leftover Electron process(es)`)
   },
 
   help() {
