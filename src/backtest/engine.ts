@@ -17,17 +17,30 @@ import {
 // flat rate applied to both entry and exit notional, shared with the executor paper simulations
 // via shared/fees.ts so the two engines can never disagree on what a trade costs.
 //
-// SLIPPAGE IS CHARGED HERE AND NOT YET IN THE EXECUTORS, which is a real asymmetry and is called
-// out rather than left to be discovered. Every fill in this engine is market-like -- an entry at
-// the signal bar's close, a signal exit at a close, a stop that becomes a market order when
-// touched -- so all of them give up the spread. The executor simulations are a mixture: a Grid
-// rung and a DCA level fill at their own limit price and genuinely slip nothing, while an Order
-// executor's market fill, a Position executor's market entry and every stop exit do. Charging
-// SLIPPAGE_RATE across the board there would overstate the cost of exactly the strategies whose
-// margins are thinnest, so it needs the per-fill-type distinction this engine does not need.
-// Until that is done, an executor card is fractionally more optimistic than a backtest of the
-// same idea. The gap is about 2% of the three-year total on the strategies measured so far --
-// small, but not zero, and in the flattering direction.
+// SLIPPAGE IS CHARGED HERE AND NOT IN THE EXECUTORS, which is a real asymmetry and is called out
+// rather than left to be discovered. Every fill in this engine is market-like -- an entry at the
+// signal bar's close, a signal exit at a close, a stop that becomes a market order when touched --
+// so all of them give up the spread. The executor simulations are a mixture: a Grid rung, a DCA
+// level, a take-profit target and both sides of a Market Making quote all fill at their own
+// resting price and slip nothing, while an Order executor's market fill, a Position executor's
+// market entry, every TWAP slice and every stop exit do. An executor card is therefore
+// fractionally more optimistic than a backtest of the same idea, in the flattering direction.
+//
+// THE FIX WAS BUILT AND DELIBERATELY NOT LANDED, so the next person weighs the same evidence
+// rather than rediscovering it. The distinction is clean and small: slippage inside stopFillPrice
+// (a stop is a market order once triggered), inside limitFillPrice's marketable-at-open branch
+// only (a resting fill keeps its price; one that crossed the spread pays for it), and at the four
+// explicit market fills -- Order's market/limit_chaser, Position's market entry, TWAP's slices,
+// and the two time-limit exits. Note the two helpers take `isBuy` with OPPOSITE meanings: the
+// position's side for a stop, whose fill is the exit, and the fill's own direction for a limit.
+//
+// What stopped it was the cost of being right about it. The change breaks 56 tests, every one of
+// them a hard-coded expected value shifting by exactly 2bps (`expected 100.02 to be 100`) -- no
+// hidden regressions, but 56 assertions that would have to be re-derived from buyFillPrice /
+// sellFillPrice rather than re-pasted, since re-pasting would leave the suite full of magic
+// numbers that no longer say why they are what they are. That is worth doing deliberately. It is
+// not worth doing as a footnote to something else, for a 2bps correction to a paper-trading card,
+// when the same edit made carelessly is how a suite stops catching things.
 /** What a run starts with when the caller does not say. Kept as the fallback rather than
  * removed, because callers that have no capital of their own deliberately still use it --
  * see resolveStartingBalance. */
