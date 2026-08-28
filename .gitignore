@@ -15,5 +15,6 @@ package-lock.json
 tsconfig.node.tsbuildinfo
 tsconfig.web.tsbuildinfo
 research/.*.mjs
+research/.*.out
 
 .shots/
