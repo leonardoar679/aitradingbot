@@ -3,10 +3,17 @@ import { emaCrossAtrStop } from './emaCrossAtrStop'
 import { rsiReversion } from './rsiReversion'
 import { bollingerBreakout } from './bollingerBreakout'
 import { trendRegimeEnsemble } from './trendRegimeEnsemble'
+import { shortTermChannel } from './shortTermChannel'
 
 export type { StrategyDefinition, StrategySignals } from './types'
 
-export const STRATEGIES: StrategyDefinition[] = [emaCrossAtrStop, rsiReversion, bollingerBreakout, trendRegimeEnsemble]
+export const STRATEGIES: StrategyDefinition[] = [
+  emaCrossAtrStop,
+  rsiReversion,
+  bollingerBreakout,
+  trendRegimeEnsemble,
+  shortTermChannel
+]
 
 export const DEFAULT_STRATEGY_ID = emaCrossAtrStop.id
 

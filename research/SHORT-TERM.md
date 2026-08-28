@@ -1,5 +1,31 @@
 # Short-term trading: what was measured, and why nothing shipped
 
+> ## CORRECTION — the conclusion below was wrong, and the reason is the useful part
+>
+> This file originally ended with "short-term trading in this app loses to its own costs". That
+> was overreach. A short-term strategy **was** subsequently found, validated and shipped as
+> `src/backtest/strategies/shortTermChannel.ts`: on 2017-2023 data that no parameter had seen it
+> returns +1,294% on BTCUSDT 1h against buy & hold's +252%, at less than half the drawdown.
+>
+> **The error was in the instrument, not the arithmetic.** Everything below measures *mean forward
+> return at a fixed horizon* after some condition — 1h and 4h after dips, volume spikes,
+> volatility quartiles, each hour of the day. That test cannot detect a trend-following edge even
+> when one is present. A trend follower does not earn a positive mean at a fixed horizon; it earns
+> from an **asymmetric exit over a variable holding period**, being wrong often and small and right
+> occasionally and large. Every strategy in this app wins under half of its trades. Fixed-horizon
+> means can only ever find mean reversion, so "nothing clears the fee at 1h" was a true statement
+> that did not support the conclusion drawn from it.
+>
+> Re-measured as a trend sweep (`research/tscan.ts`), a moving-average trend follower on BTCUSDT
+> 15m goes from −99.98% at a quarter-day lookback to +61% at 20 days — but adding a 1.5%
+> hysteresis band makes the *quarter-day* lookback profitable too (+32.9%), because the band cuts
+> the trade count fivefold. **The binding constraint was never the trend horizon; it is the trade
+> count.** That single correction is what made a short-term strategy possible.
+>
+> What stays true below: the fee wall is real, a stop destroys a holding-period strategy, and the
+> single-position engine still throws away ~94% of a signal that fires 2,585 times. The dip edge
+> itself was never the problem — the way it was harnessed was.
+
 A short-term strategy was researched to the same standard as Trend Regime Ensemble and **was not
 adopted**. This file records the measurements so the next attempt starts from evidence rather than
 from scratch — the same reason `rsiReversion.ts` records why it is left broken instead of retuned.
@@ -115,5 +141,7 @@ Not parameters. Three structural things, in order of how much they matter:
 3. **A shorting leg.** The edge is regime-dependent because the strategy can only be long. The
    2022 column is where a long-only dip buyer catches falling knives.
 
-Until at least the first of those exists, short-term trading in this app loses to its own costs,
-and the honest place to put capital is the multi-week trend strategy that already ships.
+Until at least the first of those exists, *this dip-buying shape* loses to its own costs. That is
+not the same claim as "short-term trading loses to its own costs", which is how this paragraph
+originally read and which the correction at the top of this file retracts — see
+`research/tscan.ts` and `research/stgrid.ts` for the trend-shaped version that works.

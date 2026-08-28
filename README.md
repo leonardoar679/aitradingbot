@@ -245,7 +245,7 @@ electron/preload.ts  ── contextBridge ──▶  window.api.*  (renderer)
 regardless of strategy — only entry/exit/stop logic, defined per strategy in
 `src/backtest/strategies/`, changes. `STRATEGIES` in that folder's `index.ts` is the registry;
 adding a new one is a self-contained file implementing `generateSignals(candles) →
-{entries, exits, stopPrices, warmupBars}`. All four ship long-only, spot (no shorting, no
+{entries, exits, stopPrices, warmupBars}`. All five ship long-only, spot (no shorting, no
 leverage):
 
 | Strategy | Entry | Exit |
@@ -254,8 +254,9 @@ leverage):
 | **RSI Mean-Reversion** | RSI(14) crosses up through 30 (oversold) while price is above EMA(100) — same "regime filter gates entries only" shape as the EMA strategy, so it buys dips in an uptrend rather than a falling knife in a downtrend. | RSI crossing back above 70 (overbought), or the same ATR(14)×2 stop. |
 | **Bollinger Breakout** | Close breaks above the Bollinger Band(20, 2) upper band. | Close back below the middle band (the breakout failed/reverted), or the same ATR(14)×2 stop. |
 | **Trend Regime Ensemble** | Price is above *all four* of the 20/30/50/80-**day** moving averages. The lookbacks are in days and converted using the candles' own spacing, so the strategy means the same thing on 3m as on 4h — written as bar counts, "20 days of 15m" would silently become 4 days of 3m, a scale at which the measured edge is zero. | Price falls below at least three of the four. The gap between a unanimous entry and a near-unanimous exit is deliberate hysteresis; entering and exiting on one line means crossing it repeatedly and paying the fee each time. A `close − ATR(14)×10` stop is set at entry as a disaster stop only — the regime exit is the risk control, and a *tighter* stop measurably reduced returns without improving drawdown. |
+| **Short-Term Channel Breakout** | Price sits at or above 95% of the way up its 2/3/5/8-**day** high-low ranges, averaged across the four. Averaging the *position within* each channel is deliberate: Donchian channels are nested, so voting on whether price breaks k of the four highs is only "breaks the k-th slowest high" and re-picks a single lookback under another name. | Price falls back to the bottom quarter of those same ranges. The wide 0.95/0.25 gap is the hysteresis that keeps the fee bill survivable at this speed, and a `close x 0.5` disaster stop is set at entry because the engine will not open a position without one. |
 
-The fourth is the only one of these built against intraday candles, and it exists because the
+The last two are the only ones built against intraday candles, and they exist because the
 other three lose money on them. The reason is arithmetic rather than tuning: a round trip costs
 0.2% while the average 15m bar moves 0.16%, so 500 round trips burn 63% of an account and 2,000
 burn 98% — Bollinger Breakout takes 2,059 trades over 3 years of BTCUSDT 15m and pays $12,550 of
@@ -344,6 +345,75 @@ bigger number attached to a position you cannot keep.
 **Diversifying barely helps, because crypto falls together.** The same strategy blended
 equal-weight across BTC+ETH+BNB cuts max drawdown only from −50.6% to −45.6%. That is not enough
 of a reduction to justify leverage on top, which is what a genuinely diversified book would buy.
+
+### The fast one: Short-Term Channel Breakout
+
+Added after a request for a strategy that trades more often. The first attempt at one failed and
+is recorded in `research/SHORT-TERM.md`; the reason it failed is the useful part. That study
+measured **mean forward return at a fixed horizon** after a condition (dips, volume spikes,
+volatility quartiles, hour of day) and found nothing clearing the 0.240% round trip. The test was
+structurally blind to what it was looking for: a trend follower does not earn a positive mean at a
+fixed horizon, it earns from an asymmetric exit over a *variable* holding period. Every strategy
+here wins under half its trades. So "nothing works short-term" was a statement about the
+instrument, not the market.
+
+Re-measured as a trend sweep (`research/tscan.ts`), the picture inverts. Net-after-fees by
+lookback, BTCUSDT 15m, two training years, no hysteresis band:
+
+| Lookback | Net | Trades |
+|---|---|---|
+| 0.25 day | **−99.98%** | 3,858 |
+| 1 day | −96.96% | 1,793 |
+| 3 days | −78.54% | 972 |
+| 8 days | −32.45% | 556 |
+| 20 days | +61.00% | 279 |
+
+Add a 1.5% band and the *same* sweep is profitable from a quarter-day lookback (+32.9%, 127
+trades), because the band cuts the trade count fivefold. **The binding constraint was never the
+trend horizon — it is the trade count**, and hysteresis buys most of the horizon back. That is the
+whole reason a short-term strategy is possible here at all.
+
+The shipped configuration is `[2,3,5,8]` days at 0.95/0.25 — Trend Regime Ensemble's own
+`[20,30,50,80]` shape moved one decade down. It is mid-plateau, not a peak: across 36 parameter
+combinations × 8 symbol/timeframe blocks, **all 288 cells were profitable** on the tuning window,
+so there was no sharp optimum to find. On the 2017-2023 window, which no parameter here has seen:
+
+| Pure out-of-sample, 2017-08 → 2023-08 | Strategy | Buy & hold | Max DD | B&H DD | Trades |
+|---|---|---|---|---|---|
+| BTCUSDT 1h | **+1,294%** | +252% | −35.6% | −83.9% | 117 |
+| BTCUSDT 4h | **+945%** | +260% | −40.4% | −83.9% | 107 |
+| ETHUSDT 1h | **+2,448%** | +447% | −50.5% | −94.3% | 125 |
+| ETHUSDT 4h | **+1,931%** | +447% | −46.7% | −94.1% | 116 |
+
+Four to five times buy & hold on roughly half its drawdown, and positive in three of four eras
+including both bears (2017-2019 +46.5% against −50.0%; 2021-2023 +5.1% against −54.8%).
+
+**It does not beat the slow strategy, and is not meant to.** Over those same six years Trend
+Regime Ensemble returns +1,443% against +1,294% on BTCUSDT 1h, and +2,221% against +945% on 4h —
+a slow trend follower holds a bull run for months while this one is shaken out by its own 5-day
+channel and pays to re-enter. What the fast one buys is drawdown and regime coverage: −35.6%
+against the slow strategy's −60.6% on BTCUSDT 1h, a higher Sharpe there (1.28 vs 1.17), and
++46.5% against the slow strategy's −16.4% through the 2017-2019 bear — the one window where the
+slow strategy fails outright. It also warms up in 8 days rather than 80, so it produces real
+trades on the Backtest page's default 90-day range.
+
+**The held-out year was negative**: −12.1% on BTCUSDT 15m, −12.8% on ETH, −19.4% on SOL, against
+buy & hold at −29.3%/−45.4%/−47.8%. It lost about half of what holding lost in a year crypto fell
+hard, which is a long-only trend follower working as designed — but it is a loss, and a year like
+that is a normal outcome rather than a malfunction. Month by month over the full three years on
+BTCUSDT 15m: 18 up, 18 down, 1 flat, +69.5% net, with the top three months producing 56% of all
+gains.
+
+**More trades is strictly worse after costs**, which is the honest answer to "trade more often".
+Worst-case net across the eight symbol/timeframe blocks, by trading frequency:
+
+| Trades/year | Worst-case net |
+|---|---|
+| 56 | +37.5% |
+| 43 | +45.0% |
+| 33 | +57.7% |
+| **24 (shipped)** | **+76.0%** |
+| 15 | +80.8% |
 
 ### The other three strategies are not broken — they are on the wrong timeframe
 

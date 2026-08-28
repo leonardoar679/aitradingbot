@@ -76,6 +76,25 @@ first version's interval table was missing — that bug silently capped every do
 | `trueoos.ts` | 2017-2023, before tuning began: the cleanest test available |
 | `oostf.ts` | The same out-of-sample window across timeframes, and all four strategies compared on it |
 
+Short-term round (`shortTermChannel.ts`):
+
+| File | Question it answers |
+|---|---|
+| `tscan.ts` | **The one that mattered.** Sweeps the trend lookback from a quarter-day to 50 days to find where net-after-fees crosses zero — the test the first short-term study should have run |
+| `stgrid.ts` | Channel-position ensemble across lookback sets and thresholds; 288 cells, all positive |
+| `stfinal.ts` | Held-out year, true out-of-sample 2017-2023, and head-to-head against the shipped slow strategy |
+| `stfinal2.ts` | Per-era comparison, month-by-month, rolling 6-month windows, starting-balance invariance |
+
+Two traps caught in this round specifically. **The engine will not open a position without a stop
+price** (`signals.stopPrices[i] !== null`), so the first version of `tscan.ts` — which passed
+`null` to mean "no stop" — produced a table of clean `0.00%` rows across every lookback and
+timeframe that read exactly like a finding and was a harness bug. A stopless trend follower is not
+expressible here; "no stop" has to be a deliberately unreachable one. And **voting across Donchian
+channels is vacuous**, which is not obvious and looks like the natural way to avoid picking a
+lookback: the channels are nested, so "breaks k of the four highs" is just "breaks the k-th
+slowest high". `stgrid.ts` averages the *position within* each channel instead, which is not
+nested and so is genuinely an ensemble.
+
 The windowing trap caught earlier came back twice in this round and is worth naming again,
 because it is not obvious and it flatters whichever variant has the shorter warmup: comparing
 timeframes by slicing each from the same *date* gives them different *tradeable* starts, since an
