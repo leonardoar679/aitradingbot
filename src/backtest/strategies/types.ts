@@ -48,20 +48,25 @@ export interface StrategyDefinition {
    *
    * On 2021-06 to 2026-08, BTCUSDT, the same strategy at every bar size:
    *
-   *     interval   Trend Regime   fees      Short-Term Channel   fees
-   *       5m          +398.2%    $3,040          +124.5%        $5,096
-   *       15m         +398.0%    $2,614          +129.6%        $4,877
-   *       1h          +408.2%    $2,312          +101.7%        $4,249
-   *       4h          +344.7%    $1,934           +86.1%        $3,582
-   *       1d          +211.5%    $1,117           -15.0%        $1,388
+   *     interval   Trend Regime  sharpe  fees      Short-Term Channel  sharpe  fees
+   *       3m          +417.3%     1.13  $3,294          +120.5%          0.65  $5,067
+   *       5m          +398.2%     1.11  $3,040          +124.5%          0.66  $5,096
+   *       15m         +398.0%     1.12  $2,614          +129.6%          0.68  $4,877
+   *       1h          +408.2%     1.14  $2,312          +101.7%          0.60  $4,249
+   *       4h          +344.7%     1.06  $1,934           +86.1%          0.55  $3,582
+   *       1d          +211.5%     0.82  $1,117           -15.0%          0.05  $1,388
    *
    * WHY FINER IS NOT BETTER, which is the whole answer to "should this run on 3m". Both trend
    * strategies define their lookbacks in DAYS, so shrinking the bar does not change what the
    * strategy means -- a 20-day average is 20 days at every interval. It changes only two things:
    * the rule is checked more often, and it crosses its own hysteresis band more often. The first
-   * is worth something small; the second costs 0.24% every time. From 1h down to 5m Trend Regime
-   * gains nothing at all (+408% to +398%) while its fee bill rises by a third, which is that
-   * trade-off with the return half absent. */
+   * is worth something small; the second costs 0.24% every time.
+   *
+   * 3m holds the highest single cell above and is the one to distrust: Trend Regime's whole 3m-to-1h
+   * range is +398% to +417% across 43-63 trades on one symbol with Sharpe flat at 1.11-1.14, so the
+   * spread is noise, and 3m pays 42% more in fees for it. Short-Term Channel is unambiguous -- 15m
+   * beats 3m and 5m on return AND drawdown while paying less. SOLUSDT agrees independently: Trend
+   * Regime +585.9% at 5m against +603.1% at 15m, Short-Term Channel +1,677.7% against +2,216.2%. */
   preferredInterval: Interval
   generateSignals(candles: Candle[]): StrategySignals
 }

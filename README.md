@@ -472,20 +472,28 @@ which is the trap `research/README.md` already records being fallen into twice.
 
 BTCUSDT, 2021-06 → 2026-08, the same strategy at every bar size:
 
-| interval | Trend Regime | fees | Short-Term Channel | fees |
-|---|---|---|---|---|
-| 5m | +398.2% | $3,040 | +124.5% | $5,096 |
-| 15m | +398.0% | $2,614 | **+129.6%** | $4,877 |
-| 1h | **+408.2%** | $2,312 | +101.7% | $4,249 |
-| 4h | +344.7% | $1,934 | +86.1% | $3,582 |
-| 1d | +211.5% | $1,117 | −15.0% | $1,388 |
+| interval | Trend Regime | Sharpe | fees | Short-Term Channel | Sharpe | fees |
+|---|---|---|---|---|---|---|
+| 3m | **+417.3%** | 1.13 | $3,294 | +120.5% | 0.65 | $5,067 |
+| 5m | +398.2% | 1.11 | $3,040 | +124.5% | 0.66 | $5,096 |
+| 15m | +398.0% | 1.12 | $2,614 | **+129.6%** | **0.68** | $4,877 |
+| 1h | +408.2% | **1.14** | $2,312 | +101.7% | 0.60 | $4,249 |
+| 4h | +344.7% | 1.06 | $1,934 | +86.1% | 0.55 | $3,582 |
+| 1d | +211.5% | 0.82 | $1,117 | −15.0% | 0.05 | $1,388 |
 
 **Finer is not better, and the mechanism says why.** Both strategies define their lookbacks in
 *days*, so shrinking the bar does not change what the strategy means — a 20-day average is 20 days
 at every interval. It changes two things only: the rule is checked more often, and it crosses its own
 hysteresis band more often. The first is worth something small; the second costs 0.24% every time.
-From 1h down to 5m Trend Regime gains nothing at all while its fee bill rises by a third, which is
-that trade-off with the return half missing.
+
+**3m posts the highest single number in that table, and it is the one to distrust.** Trend Regime's
+entire range from 3m to 1h is +398% to +417% — a 19-point spread across 43 to 63 trades on one
+symbol, with Sharpe flat at 1.11–1.14 the whole way down. That is noise, and 3m buys it for 42% more
+in fees than 1h ($3,294 against $2,312). Short-Term Channel is not even ambiguous: 15m beats both 3m
+and 5m on return *and* on drawdown while paying less than either. SOLUSDT, once its 5m history
+finished downloading, says the same thing independently — Trend Regime +585.9% at 5m against +603.1%
+at 15m, Short-Term Channel +1,677.7% against +2,216.2%. Going below 15m has now been measured on two
+symbols and helped on neither.
 
 The two strategies land on **different** intervals, which is the whole reason this is now a
 per-strategy field. Confirmed on a longer window (2018-01 → 2026-08, median and worst of BTC/ETH/SOL):
