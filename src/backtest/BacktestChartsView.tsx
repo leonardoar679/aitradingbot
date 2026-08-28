@@ -14,6 +14,7 @@ import { useTheme } from '../theme/ThemeContext'
 import { CHART_PALETTE, type ChartPalette } from '../theme/palette'
 import type { Candle } from '../../shared/ipc'
 import type { Trade } from './engine'
+import { formatUtcDate, formatUtcTime, formatUtcShort, formatHoldingDuration } from './formatTradeTime'
 
 interface BacktestChartsViewProps {
   candles: Candle[]
@@ -61,6 +62,11 @@ function nearestCandleIndex(candles: Candle[], time: number): number {
 }
 
 const CONTEXT_CANDLES = 40
+
+// Shared so the header row and the body rows can never drift out of alignment, which is the
+// classic way a grid table ends up with its labels one column off its data.
+const ROW_COLUMNS = '1.05fr 0.9fr 0.75fr 0.85fr 26px'
+const DETAIL_COLUMNS = '1.15fr 0.9fr 0.75fr 1fr 0.6fr'
 
 export function BacktestChartsView({ candles, trades }: BacktestChartsViewProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -165,7 +171,7 @@ export function BacktestChartsView({ candles, trades }: BacktestChartsViewProps)
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: '1fr 1fr 1fr 30px',
+            gridTemplateColumns: ROW_COLUMNS,
             padding: '0.6rem 0.9rem',
             fontSize: '0.72rem',
             fontStyle: 'italic',
@@ -173,8 +179,9 @@ export function BacktestChartsView({ candles, trades }: BacktestChartsViewProps)
             borderBottom: '1px solid var(--border)'
           }}
         >
-          <span>ENTRY</span>
-          <span>QTY</span>
+          <span>ENTRY (UTC)</span>
+          <span>PRICE</span>
+          <span>HELD</span>
           <span>PNL</span>
           <span />
         </div>
@@ -188,18 +195,22 @@ export function BacktestChartsView({ candles, trades }: BacktestChartsViewProps)
                   onClick={() => setSelectedIndex(i)}
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '1fr 1fr 1fr 30px',
+                    gridTemplateColumns: ROW_COLUMNS,
                     alignItems: 'center',
                     padding: '0.55rem 0.9rem',
-                    fontSize: '0.82rem',
+                    fontSize: '0.8rem',
                     cursor: 'pointer',
                     background: selected ? 'var(--bg-surface-hover)' : 'transparent',
                     borderBottom: '1px solid var(--border)',
                     borderLeft: selected ? '2px solid var(--accent)' : '2px solid transparent'
                   }}
                 >
+                  <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
+                    <span style={{ color: 'var(--text-primary)' }}>{formatUtcDate(t.entryTime)}</span>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.72rem' }}>{formatUtcTime(t.entryTime)}</span>
+                  </span>
                   <span style={{ color: 'var(--text-primary)' }}>{t.entryPrice.toFixed(2)}</span>
-                  <span style={{ color: 'var(--text-secondary)' }}>{t.qty.toFixed(2)}</span>
+                  <span style={{ color: 'var(--text-secondary)' }}>{formatHoldingDuration(t.exitTime - t.entryTime)}</span>
                   <span style={{ color: pctColor(t.returnPct), fontWeight: 600 }}>{t.returnPct.toFixed(2)}%</span>
                   <span style={{ color: 'var(--text-secondary)' }}>
                     {selected ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
@@ -210,19 +221,21 @@ export function BacktestChartsView({ candles, trades }: BacktestChartsViewProps)
                     <div
                       style={{
                         display: 'grid',
-                        gridTemplateColumns: '1fr 1fr 1fr 1fr',
+                        gridTemplateColumns: DETAIL_COLUMNS,
                         fontSize: '0.68rem',
                         fontStyle: 'italic',
                         color: 'var(--text-secondary)',
                         marginBottom: '0.35rem'
                       }}
                     >
+                      <span>TIME (UTC)</span>
                       <span>PRICE</span>
                       <span>QTY</span>
                       <span>TYPE</span>
                       <span>SIDE</span>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', fontSize: '0.78rem', padding: '0.25rem 0' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: DETAIL_COLUMNS, fontSize: '0.76rem', padding: '0.25rem 0' }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>{formatUtcShort(t.entryTime)}</span>
                       <span>{t.entryPrice.toFixed(2)}</span>
                       <span>{t.qty.toFixed(2)}</span>
                       <span>MARKET</span>
@@ -230,12 +243,36 @@ export function BacktestChartsView({ candles, trades }: BacktestChartsViewProps)
                         {t.side === 'long' ? 'BUY' : 'SELL'}
                       </span>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', fontSize: '0.78rem', padding: '0.25rem 0' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: DETAIL_COLUMNS, fontSize: '0.76rem', padding: '0.25rem 0' }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>{formatUtcShort(t.exitTime)}</span>
                       <span>{t.exitPrice.toFixed(2)}</span>
                       <span>{t.qty.toFixed(2)}</span>
                       <span>{exitReasonLabel(t.exitReason)}</span>
                       <span style={{ color: t.side === 'long' ? 'var(--down)' : 'var(--up)' }}>
                         {t.side === 'long' ? 'SELL' : 'BUY'}
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        gap: '1.1rem',
+                        flexWrap: 'wrap',
+                        marginTop: '0.4rem',
+                        paddingTop: '0.4rem',
+                        borderTop: '1px solid var(--border)',
+                        fontSize: '0.72rem',
+                        color: 'var(--text-secondary)'
+                      }}
+                    >
+                      <span>
+                        Held{' '}
+                        <strong style={{ color: 'var(--text-primary)' }}>
+                          {formatHoldingDuration(t.exitTime - t.entryTime)}
+                        </strong>
+                      </span>
+                      <span>
+                        {formatUtcDate(t.entryTime)} {formatUtcTime(t.entryTime)} &rarr;{' '}
+                        {formatUtcDate(t.exitTime)} {formatUtcTime(t.exitTime)}
                       </span>
                     </div>
                   </div>
