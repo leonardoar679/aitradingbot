@@ -392,7 +392,8 @@ export function BacktestPage(): React.JSX.Element {
           symbolLabel,
           intervalLabel,
           strategyLabel,
-          splitDate: splitDate && splitDate > startDate && splitDate < endDate ? splitDate : null
+          splitDate: splitDate && splitDate > startDate && splitDate < endDate ? splitDate : null,
+          leverage: leverageValue
         }
         setRunState({ status: 'done', result, candles: fetchResult.candles, elapsedSec, generalInfo, logLines: logs })
         setCompareCandles(fetchResult.candles)

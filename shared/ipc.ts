@@ -8,6 +8,7 @@ export type { ExchangeBalance }
 export const IpcChannel = {
   AppPing: 'app:ping',
   AppGetVersion: 'app:getVersion',
+  BacktestExportSave: 'backtest:exportSave',
   SettingsGet: 'settings:get',
   SettingsSet: 'settings:set',
   MarketListSymbols: 'market:listSymbols',
@@ -688,3 +689,23 @@ export interface RoutineConfig {
   createdAt: number
   lastRunAt: number | null
 }
+
+/** Where a finished backtest goes when the user exports it.
+ *
+ * The renderer sends already-formatted text rather than a result object: it owns the backtest
+ * types, and duplicating them in the main process to re-serialize there would create two
+ * definitions of the file format that could drift. The main process shows the save dialog and
+ * writes bytes.
+ *
+ * There is no path in this request on purpose. The user picks it in a native dialog every time,
+ * so nothing here can write to an arbitrary location on its own. */
+export interface BacktestExportRequest {
+  defaultFileName: string
+  content: string
+  format: 'json' | 'csv'
+}
+
+export type BacktestExportResult =
+  | { status: 'saved'; filePath: string }
+  | { status: 'cancelled' }
+  | { status: 'error'; message: string }

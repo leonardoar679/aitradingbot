@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createChart, LineSeries, type IChartApi, type UTCTimestamp } from 'lightweight-charts'
-import { RotateCw, Undo2, ClipboardList, BarChart3 } from 'lucide-react'
+import { RotateCw, Undo2, ClipboardList, BarChart3, Download, Check, TriangleAlert } from 'lucide-react'
 import {
   summarizeSegment,
   MIN_ANNUALIZATION_DAYS,
@@ -10,6 +10,7 @@ import {
 } from './engine'
 import { tookNoTrades } from './strategyRanking'
 import { DebugLogsModal } from './DebugLogsModal'
+import { buildRunExport, exportFileName, serializeRunExport, type ExportFormat } from './exportResults'
 
 export interface ResultsGeneralInfo {
   periodDays: number
@@ -20,6 +21,10 @@ export interface ResultsGeneralInfo {
   intervalLabel: string
   strategyLabel: string
   splitDate: string | null
+  /** Recorded so an exported run says what it was leveraged at. Two runs that differ only in
+   * leverage produce very different numbers, and a file that does not name it cannot be compared
+   * against another one later. */
+  leverage: number
 }
 
 interface BacktestResultsViewProps {
@@ -329,6 +334,29 @@ export function BacktestResultsView({
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const [showLogs, setShowLogs] = useState(false)
+  const [exportState, setExportState] = useState<
+    { status: 'idle' } | { status: 'busy'; format: ExportFormat } | { status: 'saved'; filePath: string } | { status: 'error'; message: string }
+  >({ status: 'idle' })
+
+  async function handleExport(format: ExportFormat): Promise<void> {
+    setExportState({ status: 'busy', format })
+    try {
+      const payload = buildRunExport(result, generalInfo, elapsedSec, generalInfo.leverage)
+      const outcome = await window.api.backtest.exportSave({
+        defaultFileName: exportFileName(payload, format),
+        content: serializeRunExport(payload, format),
+        format
+      })
+      // Cancelling the dialog returns to idle rather than reporting anything -- the user
+      // deciding not to save is not a result worth a message.
+      if (outcome.status === 'saved') setExportState({ status: 'saved', filePath: outcome.filePath })
+      else if (outcome.status === 'cancelled') setExportState({ status: 'idle' })
+      else setExportState({ status: 'error', message: outcome.message })
+    } catch (error) {
+      setExportState({ status: 'error', message: error instanceof Error ? error.message : String(error) })
+    }
+  }
+
 
   useEffect(() => {
     const container = containerRef.current
@@ -584,6 +612,66 @@ export function BacktestResultsView({
         >
           <BarChart3 size={16} /> View charts
         </button>
+
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button
+            onClick={() => void handleExport('csv')}
+            disabled={exportState.status === 'busy'}
+            title="The trade list, one row per closed trade, for a spreadsheet"
+            style={{
+              ...sideButtonStyle('var(--bg-app)', 'var(--text-primary)'),
+              border: '1px solid var(--border)',
+              fontSize: '0.82rem',
+              padding: '0.7rem 0.5rem',
+              cursor: exportState.status === 'busy' ? 'wait' : 'pointer'
+            }}
+          >
+            <Download size={15} /> Export CSV
+          </button>
+          <button
+            onClick={() => void handleExport('json')}
+            disabled={exportState.status === 'busy'}
+            title="Everything: settings, statistics, monthly breakdown, trades and both equity curves"
+            style={{
+              ...sideButtonStyle('var(--bg-app)', 'var(--text-primary)'),
+              border: '1px solid var(--border)',
+              fontSize: '0.82rem',
+              padding: '0.7rem 0.5rem',
+              cursor: exportState.status === 'busy' ? 'wait' : 'pointer'
+            }}
+          >
+            <Download size={15} /> Export JSON
+          </button>
+        </div>
+        {exportState.status === 'saved' && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '0.45rem',
+              fontSize: '0.75rem',
+              color: 'var(--text-secondary)',
+              wordBreak: 'break-all'
+            }}
+          >
+            <Check size={14} style={{ color: '#14b8a6', flexShrink: 0, marginTop: '0.1rem' }} />
+            <span>Saved to {exportState.filePath}</span>
+          </div>
+        )}
+        {exportState.status === 'error' && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '0.45rem',
+              fontSize: '0.75rem',
+              color: 'var(--down)'
+            }}
+          >
+            <TriangleAlert size={14} style={{ flexShrink: 0, marginTop: '0.1rem' }} />
+            <span>Could not save: {exportState.message}</span>
+          </div>
+        )}
 
         <div
           style={{

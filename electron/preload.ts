@@ -20,6 +20,8 @@ import {
   type LiveTwapRunSummary,
   type LiveTwapResolution,
   type LiveWatcherSummary,
+  type BacktestExportRequest,
+  type BacktestExportResult,
   type SymbolInfo,
   type Ticker24h
 } from '../shared/ipc'
@@ -194,6 +196,10 @@ const api = {
         amountQuote,
         limitPrice
       )
+  },
+  backtest: {
+    exportSave: (request: BacktestExportRequest): Promise<BacktestExportResult> =>
+      ipcRenderer.invoke(IpcChannel.BacktestExportSave, request)
   }
 }
 
