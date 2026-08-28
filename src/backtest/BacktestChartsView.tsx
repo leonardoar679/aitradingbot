@@ -3,18 +3,22 @@ import {
   createChart,
   CandlestickSeries,
   createSeriesMarkers,
+  LineStyle,
   type IChartApi,
+  type IPriceLine,
+  type ISeriesApi,
   type ISeriesMarkersPluginApi,
-  type SeriesMarker,
   type Time,
   type UTCTimestamp
 } from 'lightweight-charts'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useTheme } from '../theme/ThemeContext'
-import { CHART_PALETTE, type ChartPalette } from '../theme/palette'
+import { CHART_PALETTE } from '../theme/palette'
 import type { Candle } from '../../shared/ipc'
 import type { Trade } from './engine'
 import { formatUtcDate, formatUtcTime, formatUtcShort, formatHoldingDuration } from './formatTradeTime'
+import { PositionBandPrimitive } from './positionBandPrimitive'
+import { positionBand, signalSummary, tradeMarkers, tradePriceLines } from './tradeOverlay'
 
 interface BacktestChartsViewProps {
   candles: Candle[]
@@ -29,25 +33,6 @@ function exitReasonLabel(reason: Trade['exitReason']): string {
   if (reason === 'stop_loss') return 'STOP LOSS'
   if (reason === 'end_of_data') return 'FORCE CLOSE'
   return 'SIGNAL'
-}
-
-function markersForTrade(t: Trade, palette: ChartPalette): SeriesMarker<Time>[] {
-  return [
-    {
-      time: t.entryTime as UTCTimestamp,
-      position: t.side === 'long' ? 'belowBar' : 'aboveBar',
-      shape: t.side === 'long' ? 'arrowUp' : 'arrowDown',
-      color: t.side === 'long' ? palette.accent : palette.down,
-      text: t.side === 'long' ? 'BUY · LONG' : 'SELL · SHORT'
-    },
-    {
-      time: t.exitTime as UTCTimestamp,
-      position: t.side === 'long' ? 'aboveBar' : 'belowBar',
-      shape: t.side === 'long' ? 'arrowDown' : 'arrowUp',
-      color: t.side === 'long' ? palette.down : palette.accent,
-      text: t.side === 'long' ? 'SELL · LONG' : 'BUY · SHORT'
-    }
-  ]
 }
 
 function nearestCandleIndex(candles: Candle[], time: number): number {
@@ -71,7 +56,10 @@ const DETAIL_COLUMNS = '1.15fr 0.9fr 0.75fr 1fr 0.6fr'
 export function BacktestChartsView({ candles, trades }: BacktestChartsViewProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
+  const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
+  const bandRef = useRef<PositionBandPrimitive | null>(null)
+  const priceLinesRef = useRef<IPriceLine[]>([])
   const [tradesVisible, setTradesVisible] = useState(true)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const { theme } = useTheme()
@@ -111,22 +99,55 @@ export function BacktestChartsView({ candles, trades }: BacktestChartsViewProps)
     )
 
     markersRef.current = createSeriesMarkers(candleSeries, [])
+    seriesRef.current = candleSeries
+
+    const band = new PositionBandPrimitive()
+    candleSeries.attachPrimitive(band)
+    bandRef.current = band
+
     chart.timeScale().fitContent()
 
     return () => {
       chart.remove()
       chartRef.current = null
+      seriesRef.current = null
       markersRef.current = null
+      bandRef.current = null
+      // The chart owns these; `remove()` has already destroyed them, so only the handles need
+      // dropping. Leaving them would let the next effect call removePriceLine on a dead series.
+      priceLinesRef.current = []
     }
   }, [candles, palette])
 
   useEffect(() => {
     const chart = chartRef.current
+    const series = seriesRef.current
     const markers = markersRef.current
-    const trade = trades[selectedIndex]
-    if (!chart || !markers || !trade || candles.length === 0) return
+    const trade: Trade | undefined = trades[selectedIndex]
+    if (!chart || !series || !markers) return
 
-    markers.setMarkers(tradesVisible ? markersForTrade(trade, palette) : [])
+    for (const line of priceLinesRef.current) series.removePriceLine(line)
+    priceLinesRef.current = []
+
+    if (tradesVisible && trade) {
+      markers.setMarkers(tradeMarkers(trade, palette))
+      bandRef.current?.setBand(positionBand(trade, palette))
+      priceLinesRef.current = tradePriceLines(trade, palette).map((spec) =>
+        series.createPriceLine({
+          price: spec.price,
+          color: spec.color,
+          lineWidth: 1,
+          lineStyle: spec.dashed ? LineStyle.Dashed : LineStyle.Solid,
+          axisLabelVisible: true,
+          title: spec.title
+        })
+      )
+    } else {
+      markers.setMarkers([])
+      bandRef.current?.setBand(null)
+    }
+
+    if (!trade || candles.length === 0) return
 
     const entryIdx = nearestCandleIndex(candles, trade.entryTime)
     const exitIdx = nearestCandleIndex(candles, trade.exitTime)
@@ -137,6 +158,11 @@ export function BacktestChartsView({ candles, trades }: BacktestChartsViewProps)
       to: candles[toIdx].time as UTCTimestamp
     })
   }, [selectedIndex, tradesVisible, trades, candles, palette])
+
+  // Recomputed at render rather than kept in state: the selected index can outlive the trades it
+  // points at when a rerun returns fewer of them.
+  const selectedTrade: Trade | undefined = trades[selectedIndex]
+  const summary = selectedTrade ? signalSummary(selectedTrade) : null
 
   return (
     <div style={{ display: 'flex', gap: '1.25rem', height: 560 }}>
@@ -283,7 +309,40 @@ export function BacktestChartsView({ candles, trades }: BacktestChartsViewProps)
         </div>
       </div>
 
-      <div ref={containerRef} style={{ flex: 1 }} />
+      <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+        <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
+        {selectedTrade && summary && tradesVisible && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 10,
+              left: 12,
+              zIndex: 2,
+              pointerEvents: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.35rem 0.6rem',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--border)',
+              background: 'var(--bg-surface)',
+              fontSize: '0.74rem',
+              fontVariantNumeric: 'tabular-nums',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            <span style={{ color: 'var(--accent)', fontWeight: 700 }}>{summary.entryAction}</span>
+            <span style={{ color: 'var(--text-primary)' }}>{summary.entryPrice}</span>
+            <span style={{ color: 'var(--text-muted)' }}>&rarr;</span>
+            <span style={{ color: summary.won ? 'var(--up)' : 'var(--down)', fontWeight: 700 }}>{summary.exitAction}</span>
+            <span style={{ color: 'var(--text-primary)' }}>{summary.exitPrice}</span>
+            <span style={{ color: summary.won ? 'var(--up)' : 'var(--down)', fontWeight: 700 }}>{summary.resultPct}</span>
+            <span style={{ color: 'var(--text-muted)' }}>
+              · held {formatHoldingDuration(selectedTrade.exitTime - selectedTrade.entryTime)}
+            </span>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
