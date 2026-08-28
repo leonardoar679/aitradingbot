@@ -387,6 +387,127 @@ the same size, differing only in that each slot keeps its own stop. That laddere
 nothing — max drawdown moves from −41.2% to −41.6% — while the trimming pays the fee twice on the
 same coins. Nothing here was scored on the holdout, because only what survives training is.
 
+### The bear-market question, and why the premise was half wrong
+
+The complaint was direct: these strategies make money in a bull market and lose it in a bear one.
+The first half of the answer is that this is true, and the second half is that the losses are not
+where the complaint puts them.
+
+**The premise, confirmed.** Median across eight symbols, each calendar year run in isolation on
+daily candles with warmup carried in from before it (`research/bear.ts`):
+
+| | 2018 | 2021 | 2022 | 2024 | 2025 | 2026 |
+|---|---|---|---|---|---|---|
+| Trend Regime | −22.0% | +148.5% | **−32.5%** | +34.2% | −7.1% | +4.6% |
+| Short-Term Channel | −22.7% | +100.9% | **−33.8%** | +43.2% | −16.0% | −7.9% |
+| buy & hold | −77.5% | +326.9% | −66.8% | +57.1% | −24.0% | −17.8% |
+
+2022 loses on **8 of 8 symbols** for both strategies. Every losing year still beats holding, by a
+wide margin, but a smaller loss is still a loss.
+
+**Where the money actually goes, which is not the bear.** Decomposing each strategy's return by
+market regime — bull, chop and deep bear, labelled per symbol from a *running* peak so the label at
+each bar is one a live system could also have computed — gives a different answer than the calendar
+does. Contributions are in **log returns**, stated as the return each regime's bars alone would have
+produced. An earlier cut of this summed dollar changes instead and reported +$6.3M from bull bars
+against −$2.6M from chop; both numbers were real and neither meant anything, because on an account
+compounding from $10,000 to millions a dollar total reports *when* a regime happened, not how the
+strategy behaved in it.
+
+| Trend Regime, median of 8 symbols | bull | chop (10–35% off peak) | deep bear (>35% off) |
+|---|---|---|---|
+| strategy | +5,295.9% | **−56.8%** | +8.5% |
+| symbols losing money there | 0 of 8 | **6 of 8** | 3 of 8 |
+| buy & hold, same bars | +8,443.5% | −63.3% | ≈ −90% |
+
+The deep bear is already handled: the strategy sits in cash and contributes roughly nothing while
+holding the coin loses about 90%. That is a long-only trend follower doing exactly its job. The
+damage is in the **chop band** — the 10–35% zone below the running peak where tops form, where a
+breakout is really a bounce, and where the strategy buys it, pays 0.24%, and does it again.
+
+**Shorting was measured and rejected.** It is the only mechanism that can *profit* rather than
+merely abstain, so it was tested before anything cheaper. `research/shortside.ts` mirrors each
+strategy's own thresholds through the middle and adds **no new constants** — Trend Regime shorts
+when 0 of 4 averages agree and covers at 3 of 4; Short-Term Channel shorts at channel position
+≤ 0.05 and covers at ≥ 0.75 — so there was no parameter that could be fitted and the result can be
+read on all of history. The simulator reproduces the engine exactly with the short leg off
+(`$0.000000` disagreement on $10,000, all sixteen series) before any of it is believed.
+
+| Full history, 8 symbols, daily | long only | long + short |
+|---|---|---|
+| Trend Regime, median | +3,736.1% | +1,136.4% |
+| Trend Regime, worst symbol | −30.2% | −94.7% |
+| Short-Term Channel, median | +615.9% | −23.7% |
+| Short-Term Channel, worst symbol | −37.4% | −91.4% |
+
+Short P&L is negative on **all sixteen** strategy/symbol runs. It improved 1 of 8 symbols for Trend
+Regime and 0 of 8 for Short-Term Channel. The short leg does win the years it was added for — 2018
+goes from −22.0% to +5.3% and 2022 from −32.5% to −23.8% for Trend Regime — and loses far more
+everywhere else, because it occupies the engine's single position slot and spends the rest of the
+decade fighting the drift. Funding is charged as a *cost* on the short side rather than the credit a
+real perp usually pays, so the true figure is slightly better than this and nowhere near enough.
+
+**Four entry filters, all rejected.** If the loss is chop rather than bear, the cheap fix is to
+decline entries inside a drawdown that will not resolve upward. `research/chop.ts` selects on
+2017–2021 and scores once on 2022–2026, at 1h across eight symbols: a confirmation delay, a
+drawdown-from-peak gate at 10/20/35%, a volatility gate swept over seven thresholds, and a
+rising-averages requirement. Nothing survived. The closest miss is worth recording because it nearly
+shipped: the volatility gate improved Short-Term Channel's worst case on the design window at both
+1h and 4h across seven of seven swept thresholds — a plateau, not a peak — and on a **six**-symbol
+holdout it turned the worst symbol from −7.6% to +8.7% with every symbol profitable. It was
+implemented, and then reverted, because the six-symbol set was an artifact of which downloads had
+finished: on all eight it is worse on median at both intervals, and at 4h worse on median, worst case
+*and* losing symbols (5 of 8 against 3 of 8). The lesson is the one this directory keeps re-learning
+— a result that depends on which symbols were in the sample is a result about the sample.
+
+### Which candle interval, measured rather than assumed
+
+This one is a positive result, and it changed the app. The question was whether to run faster than
+15m — 3m or similar. The answer is no, and the reason generalises.
+
+`research/ivfair.ts` pins the window by **tradeable time**: every interval starts trading at the
+same wall-clock instant and each carries its own warmup from before it. Slicing from the same *date*
+instead gives the coarser interval a longer tradeable window and a different buy & hold anchor,
+which is the trap `research/README.md` already records being fallen into twice.
+
+BTCUSDT, 2021-06 → 2026-08, the same strategy at every bar size:
+
+| interval | Trend Regime | fees | Short-Term Channel | fees |
+|---|---|---|---|---|
+| 5m | +398.2% | $3,040 | +124.5% | $5,096 |
+| 15m | +398.0% | $2,614 | **+129.6%** | $4,877 |
+| 1h | **+408.2%** | $2,312 | +101.7% | $4,249 |
+| 4h | +344.7% | $1,934 | +86.1% | $3,582 |
+| 1d | +211.5% | $1,117 | −15.0% | $1,388 |
+
+**Finer is not better, and the mechanism says why.** Both strategies define their lookbacks in
+*days*, so shrinking the bar does not change what the strategy means — a 20-day average is 20 days
+at every interval. It changes two things only: the rule is checked more often, and it crosses its own
+hysteresis band more often. The first is worth something small; the second costs 0.24% every time.
+From 1h down to 5m Trend Regime gains nothing at all while its fee bill rises by a third, which is
+that trade-off with the return half missing.
+
+The two strategies land on **different** intervals, which is the whole reason this is now a
+per-strategy field. Confirmed on a longer window (2018-01 → 2026-08, median and worst of BTC/ETH/SOL):
+
+| interval | Trend Regime median / worst / DD | Short-Term Channel median / worst / DD |
+|---|---|---|
+| 15m | +4,494.6% / +4,470.0% / −53.9% | **+2,584.1% / +1,411.9% / −44.0%** |
+| 1h | **+5,787.1% / +4,302.9% / −51.6%** | +1,725.2% / +1,270.1% / −47.6% |
+| 4h | +4,489.7% / +3,918.1% / −49.4% | +1,356.4% / +937.3% / −46.5% |
+| 1d | +2,258.3% / +1,798.3% / −54.1% | +780.0% / +226.9% / −61.1% |
+
+**What changed in the app.** `StrategyDefinition` gained a `preferredInterval`, because the app had
+three hardcoded and mutually inconsistent answers: the Backtest page opened on 15m, a bot's paper dry
+run polled 4h for every strategy, and Routines used `DEFAULT_INTERVAL`. A bot could therefore be
+created from a backtest at one bar size and then paper-traded at another — the run that justified the
+bot was a run of something else. Choosing a strategy now moves the interval with it, unless the user
+sets the interval themselves.
+
+Existing bots on either trend strategy will show a different paper P&L than before, because the
+figure is recomputed against finer candles. That is the intended correction rather than a regression,
+but it is a visible change to a number people have been watching.
+
 ### The fast one: Short-Term Channel Breakout
 
 Added after a request for a strategy that trades more often. The first attempt at one failed and

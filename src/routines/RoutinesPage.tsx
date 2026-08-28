@@ -9,8 +9,8 @@ import { useRoutineReports } from './routineStore'
 import { runRoutineNow } from './RoutineScheduler'
 import { SCHEDULE_PRESETS } from './types'
 import { persistRoutines } from './persistRoutines'
-import { STRATEGIES, DEFAULT_STRATEGY_ID } from '../backtest/strategies'
-import { EXCHANGES, INTERVALS, DEFAULT_INTERVAL, type Exchange, type SymbolInfo, type Interval, type RoutineConfig } from '../../shared/ipc'
+import { STRATEGIES, DEFAULT_STRATEGY_ID, getStrategy } from '../backtest/strategies'
+import { EXCHANGES, INTERVALS, type Exchange, type SymbolInfo, type Interval, type RoutineConfig } from '../../shared/ipc'
 
 function fieldLabelStyle(): React.CSSProperties {
   return { fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.4rem', display: 'block' }
@@ -40,8 +40,16 @@ function NewRoutineForm({ onCreate }: { onCreate: (routine: RoutineConfig) => vo
   const [name, setName] = useState('')
   const [exchange, setExchange] = useState<Exchange>(EXCHANGES[0].id)
   const [pair, setPair] = useState<SymbolInfo>(EXCHANGES[0].defaultSymbol)
-  const [interval, setInterval] = useState<Interval>(DEFAULT_INTERVAL)
+  const [interval, setInterval] = useState<Interval>(getStrategy(DEFAULT_STRATEGY_ID).preferredInterval)
   const [strategyId, setStrategyId] = useState(DEFAULT_STRATEGY_ID)
+
+  // Choosing a strategy moves the interval to the bar size that strategy was measured on, the
+  // same way the Backtest page does it. The two shipped trend strategies want different bars (1h
+  // and 15m), so a single app-wide DEFAULT_INTERVAL was always wrong for one of them.
+  function handleStrategyChange(next: string): void {
+    setStrategyId(next)
+    setInterval(getStrategy(next).preferredInterval)
+  }
   const [scheduleSec, setScheduleSec] = useState(SCHEDULE_PRESETS[1].seconds)
 
   function handleExchangeChange(next: Exchange): void {
@@ -94,7 +102,7 @@ function NewRoutineForm({ onCreate }: { onCreate: (routine: RoutineConfig) => vo
         </div>
         <div style={{ flex: '0 0 170px' }}>
           <label style={fieldLabelStyle()}>Strategy</label>
-          <select value={strategyId} onChange={(e) => setStrategyId(e.target.value)} style={textInputStyle()}>
+          <select value={strategyId} onChange={(e) => handleStrategyChange(e.target.value)} style={textInputStyle()}>
             {STRATEGIES.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}

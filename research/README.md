@@ -54,6 +54,13 @@ CANDLE_DIR=<dir with the json> node --max-old-space-size=4096 research/.final.mj
 | `conc.ts` | How many entry events the one-position-at-a-time engine never reaches, and what they were worth |
 | `slots.ts` | N concurrent positions under two sizing rules, checked against the engine at N = 1 |
 | `oostop.ts` | The holdout, scored once, for the only candidate that survived training |
+| `fetch.mjs` | **Recreated.** Paginates klines from data-api.binance.vision into `SYMBOL-INTERVAL.json`. The original was never committed and the whole candle set went with it, so every study here was unreproducible until this came back |
+| `bear.ts` | Is the bull/bear premise true? Calendar years, plus return decomposed by market regime in log terms |
+| `shortside.ts` | Would a mirrored short leg pay? Symmetric simulator, checked against the engine with shorts off |
+| `regime.ts` | First cut of the regime attribution, in dollars. Kept because its bug is instructive: dollar attribution on a compounding account reports when a regime happened, not how the strategy did in it |
+| `chop.ts` | Four entry filters against the chop band, selected on 2017-2021 and scored once on 2022-2026 |
+| `stcgate.ts` | Whether the shipped file reproduces what `chop.ts` measured for it. It did not, and the filter was reverted |
+| `ivfair.ts` | Which interval, on a window pinned by tradeable time rather than by slice date |
 
 ## What the study did not establish
 

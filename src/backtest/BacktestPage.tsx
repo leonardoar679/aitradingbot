@@ -84,7 +84,7 @@ function isoDate(date: Date): string {
 }
 
 function defaultTradingRoute(symbol: string): TradingRouteRow {
-  return { symbol, interval: '15m', strategyId: DEFAULT_STRATEGY_ID }
+  return { symbol, interval: getStrategy(DEFAULT_STRATEGY_ID).preferredInterval, strategyId: DEFAULT_STRATEGY_ID }
 }
 
 function fieldStyle(): React.CSSProperties {
@@ -234,7 +234,23 @@ export function BacktestPage(): React.JSX.Element {
   }
 
   function updateTradingRoute(patch: Partial<TradingRouteRow>): void {
-    setTradingRoute((prev) => ({ ...prev, ...patch }))
+    setTradingRoute((prev) => {
+      const next = { ...prev, ...patch }
+      // Picking a strategy also moves the interval to the one that strategy was measured on --
+      // unless this same change set the interval explicitly, in which case the user is the one
+      // choosing and is not overridden.
+      //
+      // The two shipped trend strategies genuinely disagree about the right bar size (1h for
+      // Trend Regime, 15m for Short-Term Channel; see StrategyDefinition.preferredInterval), so a
+      // single page-wide default was always wrong for one of them. Executor and controller
+      // replays are excluded because they are not strategies and getStrategy would fall through
+      // to an unrelated default for them.
+      const isStrategy = STRATEGIES.some((s) => s.id === next.strategyId)
+      if (patch.strategyId !== undefined && patch.interval === undefined && isStrategy) {
+        next.interval = getStrategy(next.strategyId).preferredInterval
+      }
+      return next
+    })
   }
 
   // Empty until the symbol list arrives, which is why the default-capital effect below waits for

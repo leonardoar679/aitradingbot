@@ -18,3 +18,5 @@ research/.*.mjs
 research/.*.out
 
 .shots/
+
+.candles/

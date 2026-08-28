@@ -213,6 +213,15 @@ export const shortTermChannel: StrategyDefinition = {
     'Long-only short-term trend. Buys when price sits near the top of its 2/3/5/8-day ranges at ' +
     'once and sells when it falls back through them. Turns over about twice a month; the wide ' +
     'entry/exit gap is what keeps the fee bill survivable at this speed.',
+  // Measured in research/ivfair.ts on a tradeable-time-pinned window. This strategy peaks FINER
+  // than trendRegimeEnsemble, which is what a 2-8 day channel should do: BTCUSDT 2021-2026 gives
+  // +124.5% at 5m, +129.6% at 15m, +101.7% at 1h, +86.1% at 4h and -15.0% at 1d. 15m is the top,
+  // and going finer than it is a loss on both counts -- 5m returns less AND pays $5,096 of fees
+  // against 15m's $4,877.
+  //
+  // Note this is a DIFFERENT answer from the slow strategy's, which is the reason this field
+  // exists per strategy rather than as one app-wide constant.
+  preferredInterval: '15m',
   warmupBarsFor: (barSeconds) => warmupBarsAt(barSeconds),
   generateSignals(candles: Candle[]): StrategySignals {
     const n = candles.length

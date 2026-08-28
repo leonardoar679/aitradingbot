@@ -80,6 +80,12 @@ export const rsiReversion: StrategyDefinition = {
   id: 'rsi-reversion',
   // Matches the warmupBars generateSignals computes: the regime EMA is the longest of the three
   // indicators, and RSI's own offset is far shorter.
+  // The 4h bar these three were written and validated against, kept as-is. Their lookbacks are in
+  // BARS (EMA200, Bollinger 20) rather than days, so unlike the two trend strategies the interval
+  // is part of what the strategy MEANS -- EMA200 is 33 days at 4h and 2 days at 15m, which is a
+  // different rule, not the same rule sampled faster. Nothing here was re-measured, so this
+  // records the interval they already assumed instead of claiming a new finding.
+  preferredInterval: '4h',
   warmupBarsFor: () => REGIME_EMA_PERIOD,
   name: 'RSI Mean-Reversion',
   description: 'Buys an RSI(14) bounce off oversold (30) while price is above EMA(100), exits on RSI overbought (70) or an ATR(14)×2 stop.',

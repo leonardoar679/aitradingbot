@@ -81,6 +81,12 @@ export const emaCrossAtrStop: StrategyDefinition = {
   // Defined in bars, so the answer does not depend on the bar size -- and that is exactly why
   // this strategy behaves so differently across timeframes. EMA(200) is 33 days of 4h candles
   // and 2 days of 15m ones, and the measured trend edge exists at the first and not the second.
+  // The 4h bar these three were written and validated against, kept as-is. Their lookbacks are in
+  // BARS (EMA200, Bollinger 20) rather than days, so unlike the two trend strategies the interval
+  // is part of what the strategy MEANS -- EMA200 is 33 days at 4h and 2 days at 15m, which is a
+  // different rule, not the same rule sampled faster. Nothing here was re-measured, so this
+  // records the interval they already assumed instead of claiming a new finding.
+  preferredInterval: '4h',
   warmupBarsFor: () => REGIME_EMA_PERIOD,
   name: 'EMA Crossover + ATR Stop',
   description: 'Trend-following: buys an EMA(20/50) bullish cross while price is above EMA(200), stops out at close − ATR(14)×2.',

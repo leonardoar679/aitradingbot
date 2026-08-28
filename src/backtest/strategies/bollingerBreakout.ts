@@ -49,6 +49,12 @@ function generateSignals(candles: Candle[]): StrategySignals {
 export const bollingerBreakout: StrategyDefinition = {
   id: 'bollinger-breakout',
   // BB_PERIOD bars to fill the first band, plus the bar that band is read on.
+  // The 4h bar these three were written and validated against, kept as-is. Their lookbacks are in
+  // BARS (EMA200, Bollinger 20) rather than days, so unlike the two trend strategies the interval
+  // is part of what the strategy MEANS -- EMA200 is 33 days at 4h and 2 days at 15m, which is a
+  // different rule, not the same rule sampled faster. Nothing here was re-measured, so this
+  // records the interval they already assumed instead of claiming a new finding.
+  preferredInterval: '4h',
   warmupBarsFor: () => BB_PERIOD + 1,
   name: 'Bollinger Breakout',
   description: 'Buys a close above the Bollinger Band(20, 2) upper band, exits on a close back below the middle band or an ATR(14)×2 stop.',

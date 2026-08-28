@@ -1,11 +1,25 @@
 import { useEffect, useState } from 'react'
-import type { Candle, Exchange } from '../../shared/ipc'
+import { INTERVAL_SECONDS, type Candle, type Exchange, type Interval } from '../../shared/ipc'
 import { runBacktest, type BacktestResult, type Trade, type OpenPositionSnapshot } from '../backtest/engine'
 import { getStrategy } from '../backtest/strategies'
 
-// The dry-run polls the same 4h interval every backtest strategy is validated on, so its
-// signals always match what was actually backtested for the bot's chosen strategy.
-const DRY_RUN_INTERVAL_SEC = 4 * 60 * 60
+// The dry run polls the interval the bot's OWN strategy was measured on, which is the only way
+// its signals can match what was actually backtested for it.
+//
+// This used to be a hardcoded 4h for every strategy, justified as "the same 4h interval every
+// backtest strategy is validated on". That was not true even when it was written -- the Backtest
+// page opened on 15m -- so a bot created from a 15m backtest was paper-traded on 4h candles, and
+// the run that justified the bot was a run of a different thing. It is measurably the wrong bar
+// for both trend strategies as well: on BTCUSDT 2021-2026, Trend Regime returns +408% at its 1h
+// against +345% at 4h, and Short-Term Channel +130% at its 15m against +86% (research/ivfair.ts).
+//
+// EXISTING BOTS WILL MOVE. A bot on either trend strategy now polls a finer bar than it did, so
+// its displayed paper P&L is recomputed against different candles and will not match what it
+// showed before. That is the point -- the old number described a strategy nobody was running --
+// but it is a visible change to a figure users have been watching, not a silent internal one.
+function dryRunIntervalFor(strategyId: string): Interval {
+  return getStrategy(strategyId).preferredInterval
+}
 const LOOKBACK_CANDLES = 600
 // Extra candles fetched before enabledAt so the strategy's indicators are warmed up by the time
 // the bot's own paper-trading window starts, rather than right at its first visible candle.
@@ -19,7 +33,7 @@ const LOOKBACK_CANDLES = 600
 const WARMUP_SLACK_CANDLES = 20
 
 function warmupCandlesFor(strategyId: string): number {
-  return getStrategy(strategyId).warmupBarsFor(DRY_RUN_INTERVAL_SEC) + WARMUP_SLACK_CANDLES
+  return getStrategy(strategyId).warmupBarsFor(INTERVAL_SECONDS[dryRunIntervalFor(strategyId)]) + WARMUP_SLACK_CANDLES
 }
 const POLL_MS = 60_000
 
@@ -47,15 +61,17 @@ export async function fetchBotDryRunResult(bot: {
   strategyId: string
 }): Promise<{ result: BacktestResult; candles: Candle[] } | null> {
   const endSec = Math.floor(Date.now() / 1000)
+  const interval = dryRunIntervalFor(bot.strategyId)
+  const barSec = INTERVAL_SECONDS[interval]
   const warmup = warmupCandlesFor(bot.strategyId)
   // The default lookback has to clear the warm-up too, or a freshly-enabled bot on a slow
   // strategy fetches a window that is entirely warm-up and can never show a trade.
-  const defaultStartSec = endSec - Math.max(LOOKBACK_CANDLES, warmup + 120) * DRY_RUN_INTERVAL_SEC
+  const defaultStartSec = endSec - Math.max(LOOKBACK_CANDLES, warmup + 120) * barSec
   const startSec =
     bot.enabledAt !== null
-      ? Math.min(defaultStartSec, bot.enabledAt - warmup * DRY_RUN_INTERVAL_SEC)
+      ? Math.min(defaultStartSec, bot.enabledAt - warmup * barSec)
       : defaultStartSec
-  const { candles } = await window.api.market.fetchHistoricalRange(bot.exchange, bot.symbol, '4h', startSec, endSec)
+  const { candles } = await window.api.market.fetchHistoricalRange(bot.exchange, bot.symbol, interval, startSec, endSec)
   if (candles.length === 0) return null
   // Engine default, like RoutineScheduler and for the same reason: a dry run is re-computed on
   // every poll, and a bot's displayed P&L must not move because an unrelated strategy started or

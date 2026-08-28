@@ -211,6 +211,15 @@ export const trendRegimeEnsemble: StrategyDefinition = {
   // arithmetic generateSignals does, so a caller's fetch and the strategy's own warmup can never
   // disagree about how much history is needed.
   warmupBarsFor: (barSeconds) => warmupBarsAt(barSeconds),
+  // Measured, not chosen -- research/ivfair.ts, on a window pinned by tradeable time so every
+  // interval trades the identical days. 1h is the top of a broad plateau: 5m, 15m and 1h are
+  // within ten points of each other (+398%, +398%, +408% on BTCUSDT 2021-2026) and 1h is the
+  // cheapest of the three at $2,312 of fees against 5m's $3,040. Below 1h the return stops
+  // improving and only the fee bill moves, because the lookbacks here are in DAYS -- a finer bar
+  // does not shorten the trend being followed, it just re-asks the same question more often and
+  // charges 0.24% for each extra answer. Above 1h the exit is a whole bar late and it costs
+  // return: 4h gives +345% and 1d +212%.
+  preferredInterval: '1h',
   name: 'Trend Regime Ensemble',
   description:
     'Holds while 20/30/50/80-day moving averages unanimously agree price is in an uptrend, exits once at most one still does. Few trades by design — intraday fees are what beat the other strategies.',

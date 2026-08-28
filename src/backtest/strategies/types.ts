@@ -1,4 +1,4 @@
-import type { Candle } from '../../../shared/ipc'
+import type { Candle, Interval } from '../../../shared/ipc'
 
 export interface StrategySignals {
   /** Same length as candles. true = enter long on this candle. */
@@ -32,5 +32,36 @@ export interface StrategyDefinition {
    * in bars -- EMA(200) -- needs 200 bars whatever they are; one defined in days needs more bars
    * the finer the candles get. A single number could not describe both. */
   warmupBarsFor(barSeconds: number): number
+  /** The candle size this strategy was measured to work best on.
+   *
+   * DECLARED PER STRATEGY because the app had three different hardcoded answers to this question
+   * and none of them agreed: the Backtest page opened on 15m, a bot's paper dry run polled 4h
+   * ("the same 4h interval every backtest strategy is validated on"), and Routines used
+   * DEFAULT_INTERVAL. A bot could therefore be created from a backtest run on one bar size and
+   * then paper-traded on another, which makes the backtest that justified it not a backtest of
+   * the thing that is running.
+   *
+   * These values are measured, not preferred. research/ivfair.ts compares intervals on a window
+   * pinned by TRADEABLE time -- every interval starts trading at the same instant and each
+   * carries its own warmup from before it -- because slicing from the same DATE silently gives
+   * the coarser interval a longer tradeable window and a different buy & hold anchor.
+   *
+   * On 2021-06 to 2026-08, BTCUSDT, the same strategy at every bar size:
+   *
+   *     interval   Trend Regime   fees      Short-Term Channel   fees
+   *       5m          +398.2%    $3,040          +124.5%        $5,096
+   *       15m         +398.0%    $2,614          +129.6%        $4,877
+   *       1h          +408.2%    $2,312          +101.7%        $4,249
+   *       4h          +344.7%    $1,934           +86.1%        $3,582
+   *       1d          +211.5%    $1,117           -15.0%        $1,388
+   *
+   * WHY FINER IS NOT BETTER, which is the whole answer to "should this run on 3m". Both trend
+   * strategies define their lookbacks in DAYS, so shrinking the bar does not change what the
+   * strategy means -- a 20-day average is 20 days at every interval. It changes only two things:
+   * the rule is checked more often, and it crosses its own hysteresis band more often. The first
+   * is worth something small; the second costs 0.24% every time. From 1h down to 5m Trend Regime
+   * gains nothing at all (+408% to +398%) while its fee bill rises by a third, which is that
+   * trade-off with the return half absent. */
+  preferredInterval: Interval
   generateSignals(candles: Candle[]): StrategySignals
 }
