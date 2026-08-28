@@ -78,6 +78,10 @@ function generateSignals(candles: Candle[]): StrategySignals {
 
 export const emaCrossAtrStop: StrategyDefinition = {
   id: 'ema-cross-atr-stop',
+  // Defined in bars, so the answer does not depend on the bar size -- and that is exactly why
+  // this strategy behaves so differently across timeframes. EMA(200) is 33 days of 4h candles
+  // and 2 days of 15m ones, and the measured trend edge exists at the first and not the second.
+  warmupBarsFor: () => REGIME_EMA_PERIOD,
   name: 'EMA Crossover + ATR Stop',
   description: 'Trend-following: buys an EMA(20/50) bullish cross while price is above EMA(200), stops out at close − ATR(14)×2.',
   generateSignals

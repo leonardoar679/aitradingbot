@@ -48,6 +48,8 @@ function generateSignals(candles: Candle[]): StrategySignals {
 
 export const bollingerBreakout: StrategyDefinition = {
   id: 'bollinger-breakout',
+  // BB_PERIOD bars to fill the first band, plus the bar that band is read on.
+  warmupBarsFor: () => BB_PERIOD + 1,
   name: 'Bollinger Breakout',
   description: 'Buys a close above the Bollinger Band(20, 2) upper band, exits on a close back below the middle band or an ATR(14)×2 stop.',
   generateSignals

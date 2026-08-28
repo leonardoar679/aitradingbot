@@ -20,6 +20,7 @@ import { ControllerBacktestView } from './ControllerBacktestView'
 import {
   EXCHANGES,
   INTERVALS,
+  INTERVAL_SECONDS,
   type Candle,
   type ControllerConfig,
   type Exchange,
@@ -281,7 +282,20 @@ export function BacktestPage(): React.JSX.Element {
     setTab('progress')
     setRunState({ status: 'running', done: 0, total: 1 })
 
-    const startSec = Math.floor(new Date(`${startDate}T00:00:00Z`).getTime() / 1000)
+    // Fetched from before the requested start by however much history the strategy needs to warm
+    // up, so the range the user asked for is the range that gets MEASURED rather than the range
+    // that gets partly spent warming indicators.
+    //
+    // Without this the default 90-day range was unusable for any slow strategy: Trend Regime
+    // Ensemble warms up over 80 days, so it had ten days left to trade in and reported "0 trades"
+    // -- indistinguishable, on screen, from a strategy whose rules never fire. A run whose result
+    // is "this does not work" has to actually mean that.
+    //
+    // Only the fetch moves. `startSec` still bounds the reported window, because the engine
+    // anchors both the trade list and the buy & hold benchmark at warmupBars.
+    const requestedStartSec = Math.floor(new Date(`${startDate}T00:00:00Z`).getTime() / 1000)
+    const warmupSec = strategy.warmupBarsFor(INTERVAL_SECONDS[route.interval]) * INTERVAL_SECONDS[route.interval]
+    const startSec = requestedStartSec - warmupSec
     const endSec = Math.floor(new Date(`${endDate}T23:59:59Z`).getTime() / 1000)
     const runId = ++runIdRef.current
     const requestId = crypto.randomUUID()
@@ -368,7 +382,10 @@ export function BacktestPage(): React.JSX.Element {
         const elapsedSec = (performance.now() - startedAt) / 1000
         log(`Total elapsed: ${elapsedSec.toFixed(2)}s`)
         const generalInfo: ResultsGeneralInfo = {
-          periodDays: Math.round((endSec - startSec) / 86400),
+          // The span the user asked to MEASURE, not the span fetched. The fetch reaches further
+          // back so the strategy can warm up before the requested window opens, and reporting
+          // that lead-in here would contradict the Starting Date shown three rows below it.
+          periodDays: Math.round((endSec - requestedStartSec) / 86400),
           startDate,
           endDate,
           exchangeName: EXCHANGES.find((e) => e.id === exchange)?.name ?? exchange,

@@ -1,14 +1,26 @@
 import { useEffect, useState } from 'react'
 import type { Candle, Exchange } from '../../shared/ipc'
 import { runBacktest, type BacktestResult, type Trade, type OpenPositionSnapshot } from '../backtest/engine'
+import { getStrategy } from '../backtest/strategies'
 
 // The dry-run polls the same 4h interval every backtest strategy is validated on, so its
 // signals always match what was actually backtested for the bot's chosen strategy.
 const DRY_RUN_INTERVAL_SEC = 4 * 60 * 60
 const LOOKBACK_CANDLES = 600
-// Extra candles fetched before enabledAt so EMA(200)/ATR(14) are warmed up by the time the
-// bot's own paper-trading window starts, rather than right at its first visible candle.
-const WARMUP_CANDLES = 220
+// Extra candles fetched before enabledAt so the strategy's indicators are warmed up by the time
+// the bot's own paper-trading window starts, rather than right at its first visible candle.
+//
+// Asked of the strategy rather than fixed at 220, which was really a claim that no strategy would
+// ever need more. Trend Regime Ensemble needs 80 days -- 480 bars of 4h -- and under the old
+// constant a bot running longer than about three months fetched from `enabledAt - 220 bars`,
+// spent the first 43 days of its OWN life inside the strategy's warm-up, and silently dropped
+// every trade it made in that period. Padded by a little, because a strategy that can only just
+// warm up has no bars left to trade on.
+const WARMUP_SLACK_CANDLES = 20
+
+function warmupCandlesFor(strategyId: string): number {
+  return getStrategy(strategyId).warmupBarsFor(DRY_RUN_INTERVAL_SEC) + WARMUP_SLACK_CANDLES
+}
 const POLL_MS = 60_000
 
 export type DryRunStatus = 'loading' | 'running' | 'error'
@@ -35,10 +47,13 @@ export async function fetchBotDryRunResult(bot: {
   strategyId: string
 }): Promise<{ result: BacktestResult; candles: Candle[] } | null> {
   const endSec = Math.floor(Date.now() / 1000)
-  const defaultStartSec = endSec - LOOKBACK_CANDLES * DRY_RUN_INTERVAL_SEC
+  const warmup = warmupCandlesFor(bot.strategyId)
+  // The default lookback has to clear the warm-up too, or a freshly-enabled bot on a slow
+  // strategy fetches a window that is entirely warm-up and can never show a trade.
+  const defaultStartSec = endSec - Math.max(LOOKBACK_CANDLES, warmup + 120) * DRY_RUN_INTERVAL_SEC
   const startSec =
     bot.enabledAt !== null
-      ? Math.min(defaultStartSec, bot.enabledAt - WARMUP_CANDLES * DRY_RUN_INTERVAL_SEC)
+      ? Math.min(defaultStartSec, bot.enabledAt - warmup * DRY_RUN_INTERVAL_SEC)
       : defaultStartSec
   const { candles } = await window.api.market.fetchHistoricalRange(bot.exchange, bot.symbol, '4h', startSec, endSec)
   if (candles.length === 0) return null

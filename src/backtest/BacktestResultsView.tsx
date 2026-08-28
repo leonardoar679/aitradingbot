@@ -601,15 +601,24 @@ export function BacktestResultsView({
 
         <SectionHeader label="General Info" />
         <div style={{ marginTop: '-0.6rem' }}>
-          {/* The requested range and the range actually returned can differ a lot — a symbol
-              listed partway through it, or an exchange that capped the response. Reporting only
-              what was asked for would overstate how much data the stats above are built on. */}
+          {/* The requested range and the range actually returned can differ a lot, and now in
+              BOTH directions -- which is why the two cases are worded differently rather than
+              sharing one "days of data" line.
+
+              SHORT of the request is a warning: a symbol listed partway through the range, or an
+              exchange that capped the response, means the stats above rest on less than was asked
+              for. LONGER is not, and reads alarmingly if phrased the same way: the page
+              deliberately fetches extra history ahead of the window so the strategy's indicators
+              are warm when the requested period opens, so the surplus is warm-up that the run is
+              measured AFTER, not extra period folded into the result. */}
           <InfoRow
             label="Period"
             value={
-              Math.abs(generalInfo.periodDays - s.periodDays) > 1
+              s.periodDays < generalInfo.periodDays - 1
                 ? `${Math.round(s.periodDays)} days of data (${generalInfo.periodDays} requested)`
-                : `${generalInfo.periodDays} days (${(generalInfo.periodDays / 30).toFixed(1)} months)`
+                : s.periodDays > generalInfo.periodDays + 1
+                  ? `${generalInfo.periodDays} days (${(generalInfo.periodDays / 30).toFixed(1)} months), after ${Math.round(s.periodDays - generalInfo.periodDays)} days of warm-up`
+                  : `${generalInfo.periodDays} days (${(generalInfo.periodDays / 30).toFixed(1)} months)`
             }
           />
           {/* The equity curve is flat for this stretch and no trade can happen in it, which

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { runBacktest } from '../backtest/engine'
+import { getStrategy } from '../backtest/strategies'
+import { INTERVAL_SECONDS } from '../../shared/ipc'
 import { pushRoutineReport } from './routineStore'
 import { schedulingSignature } from './schedulingSignature'
 import { settingsWrites } from '../utils/settingsWrites'
@@ -7,12 +9,27 @@ import type { RoutineConfig } from '../../shared/ipc'
 
 const LOOKBACK_SEC = 90 * 24 * 3600 // matches BacktestPage's default 90-day window
 
+/** The routine's 90 days of results, PLUS however much history its strategy needs before it can
+ * trade at all.
+ *
+ * The 90 days used to be the whole fetch, which silently meant "90 days minus the warm-up" of
+ * actual measurement. That was invisible while every strategy warmed up in 200 bars, and became
+ * the whole window the moment one needed 80 days: a daily routine on Trend Regime Ensemble had 10
+ * tradeable days left and reported "0 trades" forever, which reads as a broken strategy rather
+ * than a too-short window. A routine is a repeated measurement, so the measured span has to be
+ * the same 90 days for every strategy. */
+function fetchStartSec(nowSec: number, routine: RoutineConfig): number {
+  const barSec = INTERVAL_SECONDS[routine.interval]
+  const warmupSec = getStrategy(routine.strategyId).warmupBarsFor(barSec) * barSec
+  return nowSec - LOOKBACK_SEC - warmupSec
+}
+
 
 /** Fetches the routine's window, runs the backtest engine, pushes a report, and stamps
  * lastRunAt — shared by the scheduled timer below and the RoutinesPage "Run Now" button. */
 export async function runRoutineNow(routine: RoutineConfig): Promise<void> {
   const nowSec = Math.floor(Date.now() / 1000)
-  const startSec = nowSec - LOOKBACK_SEC
+  const startSec = fetchStartSec(nowSec, routine)
   const { candles } = await window.api.market.fetchHistoricalRange(routine.exchange, routine.symbol, routine.interval, startSec, nowSec)
   if (candles.length === 0) throw new Error('No candle data available for this window yet')
 

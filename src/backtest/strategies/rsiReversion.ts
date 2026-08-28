@@ -78,6 +78,9 @@ function generateSignals(candles: Candle[]): StrategySignals {
 
 export const rsiReversion: StrategyDefinition = {
   id: 'rsi-reversion',
+  // Matches the warmupBars generateSignals computes: the regime EMA is the longest of the three
+  // indicators, and RSI's own offset is far shorter.
+  warmupBarsFor: () => REGIME_EMA_PERIOD,
   name: 'RSI Mean-Reversion',
   description: 'Buys an RSI(14) bounce off oversold (30) while price is above EMA(100), exits on RSI overbought (70) or an ATR(14)×2 stop.',
   generateSignals

@@ -158,6 +158,14 @@ export function rollingSma(values: number[], period: number): number[] {
   return out
 }
 
+/** Bars of `barSeconds` needed to fill the slowest lookback. Shared by generateSignals and by
+ * the declared warmupBarsFor, so the two cannot drift. */
+function warmupBarsAt(barSeconds: number): number {
+  if (!(barSeconds > 0)) return 0
+  const barsPerDay = SECONDS_PER_DAY / barSeconds
+  return Math.max(...LOOKBACK_DAYS.map((d) => Math.max(2, Math.round(d * barsPerDay))))
+}
+
 function generateSignals(candles: Candle[]): StrategySignals {
   const n = candles.length
   const entries = new Array<boolean>(n).fill(false)
@@ -172,7 +180,7 @@ function generateSignals(candles: Candle[]): StrategySignals {
 
   const barsPerDay = SECONDS_PER_DAY / barSeconds
   const periods = LOOKBACK_DAYS.map((d) => Math.max(2, Math.round(d * barsPerDay)))
-  const warmupBars = Math.max(...periods)
+  const warmupBars = warmupBarsAt(barSeconds)
 
   const closes = candles.map((c) => c.close)
   const averages = periods.map((p) => rollingSma(closes, p))
@@ -199,6 +207,10 @@ function generateSignals(candles: Candle[]): StrategySignals {
 
 export const trendRegimeEnsemble: StrategyDefinition = {
   id: 'trend-regime-ensemble',
+  // The slowest lookback, in whatever bars the caller is about to fetch. Deliberately the same
+  // arithmetic generateSignals does, so a caller's fetch and the strategy's own warmup can never
+  // disagree about how much history is needed.
+  warmupBarsFor: (barSeconds) => warmupBarsAt(barSeconds),
   name: 'Trend Regime Ensemble',
   description:
     'Holds while 20/30/50/80-day moving averages unanimously agree price is in an uptrend, exits once at most one still does. Few trades by design — intraday fees are what beat the other strategies.',
