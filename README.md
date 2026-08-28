@@ -42,7 +42,7 @@ The sidebar's page order roughly mirrors Condor's own information architecture.
 | **Agents** | An interactive tester for `requestAiSignal()` — currently a stub returning `hold`/confidence 0 for every symbol (see [AI Assistant](#ai-assistant--stub)). Not a real LLM agent; Condor's actual Trading Agents (LLM + MCP tools) are out of scope for this app (no backend to host them). |
 | **Routines** | Recurring backtests on a saved exchange/symbol/interval/schedule, re-run on a client-side timer while the app is open. Each run produces a session-only report (equity curve, stats) — Condor's routines are server-scheduled Python workflows; this is the closest honest adaptation without a backend. |
 | **Market** | The original dashboard: candlestick chart with indicators, symbol search, live ticker. |
-| **Backtest** | Runs a chosen strategy over a historical range and shows full stats, equity curve vs. buy-and-hold benchmark, monthly breakdown, and a trade log — plus a **Compare Strategies** view that ranks every registered strategy against the same candle range. |
+| **Backtest** | Runs a chosen strategy over a historical range and shows full stats, equity curve vs. buy-and-hold benchmark, monthly breakdown, and a trade log. A **Charts** tab replays each trade against the candles — entry and exit arrows labelled with fill price and return, the held position shaded by outcome, and UTC times throughout. A **Compare Strategies** view ranks every registered strategy over the same candles. Both views export: CSV or JSON for the numbers, and a single PNG carrying the price chart with every trade marked above the portfolio curve against buy & hold. |
 | **Explorer** | Placeholder — not yet built. |
 | **Settings** | Appearance (Dark / Light / Colorblind-safe themes) and [Credentials](#credentials--api-keys). |
 
@@ -258,9 +258,10 @@ leverage):
 
 The last two are the only ones built against intraday candles, and they exist because the
 other three lose money on them. The reason is arithmetic rather than tuning: a round trip costs
-0.2% while the average 15m bar moves 0.16%, so 500 round trips burn 63% of an account and 2,000
-burn 98% — Bollinger Breakout takes 2,059 trades over 3 years of BTCUSDT 15m and pays $12,550 of
-fees on $10,000. Trend Regime Ensemble is built around a trade budget first: ~10 trades a year.
+0.24% (0.1% fee per side, plus 2bps of slippage per fill) while the average 15m bar moves 0.16%,
+so 500 round trips burn 70% of an account and 2,000 burn 99% — Bollinger Breakout takes 2,059
+trades over 3 years of BTCUSDT 15m and pays $12,550 of fees on $10,000. Trend Regime Ensemble is
+built around a trade budget first: ~10 trades a year.
 Measured on 3 years of Binance data (2023-08 → 2026-08), with the final year held out of every
 tuning decision:
 
@@ -455,6 +456,31 @@ little genuine diversification: on BTCUSDT 4h the blend's −38.4% drawdown is l
 strategy alone. That is worth something if you do not know which regime is coming, and it is not
 worth much.
 
+**A second window agrees, and answers the question the table above cannot.** The figures above are
+full history at 4h, which is one sample per symbol and ends where the data ends. Re-run on 15m
+candles over the 36 months 2023-09 → 2026-08 (`research/m15.ts`), the useful statistic is the
+*worst* 12-month window out of the 25 in that span — what happens if you start at the wrong moment,
+which is the only starting point nobody can rule out:
+
+| 15m, worst of 25 rolling 12-month windows | Trend Regime | Short-term | Buy & hold |
+|---|---|---|---|
+| BTCUSDT | **−5.9%** | −26.6% | −45.7% |
+| ETHUSDT | **−9.1%** | −23.1% | −50.0% |
+| SOLUSDT | **−24.0%** | −40.6% | −57.7% |
+
+The gap between the two strategies is wider than the gap between the better one and not trading at
+all. Over the whole 36 months Trend Regime beat buy & hold on all three symbols (+261%/+266%/+564%
+against +204%/+52%/+416%); the short-term strategy beat it only on ETH. The window is not the bull
+market it looks like from here either — buy & hold lost money in the final twelve months on every
+symbol (BTC −27%, ETH −43%, SOL −49%), and that is the year Trend Regime finished roughly flat.
+
+**Bar size barely matters to Trend Regime, and 15m costs the most.** It is built on 20/30/50/80-day
+averages, so 15m candles do not make it faster — they make it re-express the same slow view across
+sixteen times as many bars. BTCUSDT over those 36 months: +261.1% at 15m for $1,584 of fees,
++263.8% at 1h for $1,371, +219.1% at 4h for $1,170, +202.5% at 1d for $857. **1h is the cheapest
+way to run it**, and the differences in return are inside the noise of a strategy that takes about
+thirty trades in three years.
+
 ### The other three strategies are not broken — they are on the wrong timeframe
 
 Run on 15m they lose badly (Bollinger −98%, EMA Crossover −45% over 3 years). Run on **4h over the
@@ -546,8 +572,9 @@ src/                          React renderer app
   agents/                     AI-signal tester (stub backend)
   routines/                   Scheduled-backtest store, headless scheduler, page
   dashboard/                  Market page (chart + ticker)
-  backtest/                   Execution engine, results UI, Strategy Comparison view
-    strategies/                Pluggable strategy registry (EMA/RSI/Bollinger) — see Strategies
+  backtest/                   Execution engine, results UI, Charts + Strategy Comparison views,
+                              CSV/JSON/PNG export
+    strategies/                Pluggable strategy registry — see Strategies
   explorer/                   Placeholder page
   settings/                   Appearance + Credentials
 
