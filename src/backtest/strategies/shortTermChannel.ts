@@ -97,13 +97,25 @@ import { inferBarSeconds } from './trendRegimeEnsemble'
 //       2021-12>2023-08       +5.13%   -54.8%   bear
 //
 // WHERE IT IS WORSE THAN WHAT ALREADY SHIPS, stated plainly, because this is the reason it is an
-// additional choice and not a replacement. trendRegimeEnsemble makes more money on every window
-// tested -- over the same six years, +1442.7% against +1293.9% on BTCUSDT 1h and +2220.7%
-// against +944.7% on 4h. A slow trend follower holds a bull run for months while this one is
-// stopped out of it by its own 5-day channel and pays to re-enter. What this one buys instead is
-// drawdown and regime coverage: -35.6% against the slow strategy's -60.6% on BTCUSDT 1h over
-// those six years, a higher Sharpe there (1.28 vs 1.17), and +46.5% against the slow strategy's
-// -16.4% through the 2017-2019 bear, which is the single window where the slow one fails.
+// additional choice and not a replacement. trendRegimeEnsemble is the better performer and should
+// be the default. Run head to head on identical windows across nine symbols of full history, the
+// slow strategy wins 7 of 9 at 4h and 5 of 9 at 1d, and usually by a wide margin (+7,287% against
+// +1,346% on BTCUSDT 4h). A slow trend follower holds a bull run for months while this one is
+// shaken out of it by its own 5-day channel and pays to re-enter.
+//
+// This one wins on a minority: SOLUSDT and XRPUSDT at both timeframes, plus LTCUSDT and LINKUSDT
+// at 1d. Its two systematic advantages are narrower than raw return:
+//
+//   DEEP BEARS. Year by year on BTCUSDT 4h, 2018 returned -1.0% against the slow strategy's
+//   -35.1% and buy & hold's -72.4%; 2022 was a tie (-27% vs -29%). The slow strategy wins each of
+//   the other seven years, so this is a real specialisation rather than a general edge.
+//
+//   WARM-UP. 8 days against 80, so it produces real trades on the Backtest page's default 90-day
+//   range and reaches a verdict on a new symbol in a week instead of a quarter.
+//
+// Running BOTH does not beat picking the better one: two half-capital sleeves land between the
+// two on return in all four series tested, though the blend's drawdown on BTCUSDT 4h (-38.4%) is
+// lower than either alone.
 //
 // THE HELD-OUT YEAR WAS NEGATIVE, and that is not hidden here. 2025-08 to 2026-08:
 //

@@ -415,6 +415,46 @@ Worst-case net across the eight symbol/timeframe blocks, by trading frequency:
 | **24 (shipped)** | **+76.0%** |
 | 15 | +80.8% |
 
+Tested at the same breadth as the slow strategy — nine symbols, full history, six of which were
+never looked at while choosing a parameter — it is **profitable on 8 of 9 and beats buy & hold on
+7 of 9 at 4h** (8 of 9 and 5 of 9 at 1d). LTCUSDT is the single loss, at −66% against buy & hold's
+−77%, and it is the same asset the slow strategy struggles on.
+
+### Which of the two to use
+
+Run head to head on identical windows — both padded to the same 81-day lead, or the faster one
+silently gains 72 extra tradeable days and a different benchmark:
+
+| 4h, full history | Short-term | Slow | Buy & hold | Short DD | Slow DD |
+|---|---|---|---|---|---|
+| BTCUSDT | +1,346% | **+7,287%** | +990% | −43% | −47% |
+| ETHUSDT | +3,066% | **+10,843%** | +727% | −50% | −57% |
+| BNBUSDT | +1,952% | **+12,151%** | +5,581% | −55% | −44% |
+| ADAUSDT | +929% | **+2,473%** | +43% | −70% | −77% |
+| DOGEUSDT | +5,662% | **+10,185%** | +3,907% | −78% | −90% |
+| LTCUSDT | −66% | **+73%** | −77% | −91% | −78% |
+| LINKUSDT | +512% | **+2,198%** | +1,896% | −85% | −80% |
+| XRPUSDT | **+998%** | +527% | +206% | −76% | −70% |
+| SOLUSDT | **+12,664%** | +9,161% | +6,561% | −60% | −84% |
+
+**The slow strategy wins 7 of 9 at 4h and 5 of 9 at 1d.** It is the better performer and should be
+the default. The fast one wins on a minority — SOL and XRP at both timeframes, plus LTC and LINK
+at 1d — and its two systematic advantages are elsewhere:
+
+- **Deep bear markets.** Year by year on BTCUSDT 4h, 2018: −1.0% against the slow strategy's
+  −35.1% and buy & hold's −72.4%. In 2022 they tie (−27% vs −29%). Across the other seven years
+  the slow strategy wins every one, so this is a narrow but real specialisation, not a general
+  edge.
+- **Warm-up.** 8 days against 80, so it produces real trades on the Backtest page's default
+  90-day range and reaches a verdict on a new symbol in a week rather than a quarter.
+
+**Running both does not beat picking the better one.** Two independent sleeves at half capital
+each — exactly what two bots at $5,000 apiece does — lands between the two on return in all four
+tested series, and its return-per-unit-of-drawdown is never the best of the three. It does buy a
+little genuine diversification: on BTCUSDT 4h the blend's −38.4% drawdown is lower than either
+strategy alone. That is worth something if you do not know which regime is coming, and it is not
+worth much.
+
 ### The other three strategies are not broken — they are on the wrong timeframe
 
 Run on 15m they lose badly (Bollinger −98%, EMA Crossover −45% over 3 years). Run on **4h over the

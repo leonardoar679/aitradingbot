@@ -84,6 +84,8 @@ Short-term round (`shortTermChannel.ts`):
 | `stgrid.ts` | Channel-position ensemble across lookback sets and thresholds; 288 cells, all positive |
 | `stfinal.ts` | Held-out year, true out-of-sample 2017-2023, and head-to-head against the shipped slow strategy |
 | `stfinal2.ts` | Per-era comparison, month-by-month, rolling 6-month windows, starting-balance invariance |
+| `stbroad.ts` | Nine symbols at full history, year-by-year, and whether running both strategies beats either |
+| `stwhich.ts` | The two shipped trend strategies head to head per symbol, on matched windows |
 
 Two traps caught in this round specifically. **The engine will not open a position without a stop
 price** (`signals.stopPrices[i] !== null`), so the first version of `tscan.ts` — which passed
