@@ -20,6 +20,16 @@ import { type Candle, type Exchange, type Interval } from '../../shared/ipc'
 // changes. So the incremental fetch starts AT the last cached candle's open time and the incoming
 // copy replaces it.
 //
+// CONCURRENT POLLS ARE SAFE BUT NOT ALWAYS OPTIMAL, and the difference is worth naming. Two bots
+// on the same series poll independently. If both are in flight at once they read the same held
+// array, fetch the same tail and write equivalent results, so nothing is corrupted -- the merge
+// is deterministic in its inputs. The one imperfect case is two bots with DIFFERENT enabled
+// dates: if the one needing older history stores its wider series while the other is mid-flight,
+// the narrower write can land second and drop the extra history. That costs the older bot a full
+// refetch on its next poll and nothing else -- it misses, refetches wide, and the cache is
+// correct again. Left unsynchronised deliberately: a lock here would buy a rare saved refetch at
+// the price of a shared mutable await, and the failure it prevents is slowness, not wrongness.
+//
 // WHY A CANCELLED FETCH IS SAFE TO KEEP. fetchHistoricalRange pages forward from startTime and
 // stops early when cancelled, so a cancelled result is a contiguous PREFIX of what was asked for,
 // never a series with a hole in it. Merging one leaves the cache contiguous and merely shorter than
