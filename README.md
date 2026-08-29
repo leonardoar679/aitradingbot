@@ -815,11 +815,12 @@ Trend Regime is the honest opposite. Same eight symbols, same window:
 | 15m | **−4.0%** | +38.4% | +398.0% | **+325.6%** | −35.5% | **−51.6%** | **+603.1%** | +91.0% |
 | 1h | −29.4% | **+97.6%** | **+408.2%** | +291.4% | **+2.7%** | −54.8% | +489.7% | **+180.6%** |
 
-Four-all, and Sharpe splits four-all too. `1h` still stands, but as an aggregate call rather than a
-sweep: it wins the median on both windows (+139.1% against +64.7% here), the median drawdown (−68.2%
-against −75.0%) and the fee bill, while losing outright on half the symbols taken one at a time. That
-is worth saying plainly, because a per-symbol interval override is a reasonable thing to want on this
-strategy and not on the other one.
+Four-all, and Sharpe splits four-all too. `1h` shipped on that basis — an aggregate call rather than
+a sweep: it wins the median on both windows (+139.1% against +64.7% here), the median drawdown
+(−68.2% against −75.0%) and the fee bill, while losing outright on half the symbols taken one at a
+time. **That is the thinnest evidence any shipped default here rested on, and re-asking it on 780
+independent months moved it to 4h — see the subsection after next.** The eight numbers above are
+eight observations; a four-all split across them is not a decision, it is an absence of one.
 
 **What changed in the app.** `StrategyDefinition` gained a `preferredInterval`, because the app had
 three hardcoded and mutually inconsistent answers: the Backtest page opened on 15m, a bot's paper dry
@@ -831,6 +832,68 @@ sets the interval themselves.
 Existing bots on either trend strategy will show a different paper P&L than before, because the
 figure is recomputed against finer candles. That is the intended correction rather than a regression,
 but it is a visible change to a number people have been watching.
+
+
+**Re-asked a month at a time, and Trend Regime moved to 4h.** Everything above is *continuous
+compounding* — one number per symbol, ending where the data ends, so eight symbols is eight
+observations. `research/INTERVAL.md` re-ran the question as **65 independent $10,000 months**
+(2021-04 → 2026-08, the window 3m data also covers, so every interval scores the **identical**
+months) across the same eight symbols, split four for choosing and four held out. That is 780
+observations per interval per strategy instead of eight, and it moved one of the two answers.
+
+| mean month ÷ sd of months | 3m | 15m | 1h | 4h | 1d |
+|---|---|---|---|---|---|
+| Trend Regime — selection | 0.142 | 0.134 | 0.132 | **0.152** | 0.147 |
+| Trend Regime — held out | 0.053 | 0.063 | 0.093 | **0.100** | 0.071 |
+| Short-Term Channel — selection | **0.203** | 0.191 | 0.168 | 0.154 | 0.121 |
+| Short-Term Channel — held out | **0.079** | 0.074 | 0.060 | 0.055 | 0.054 |
+| Channel + Regime — selection | **0.187** | 0.181 | 0.164 | 0.153 | 0.130 |
+| Channel + Regime — held out | **0.087** | 0.075 | 0.073 | 0.065 | 0.074 |
+
+**Every strategy's best interval is the same in both halves** — roughly a 1-in-125 coincidence if
+none of them had a real preference.
+
+For Trend Regime, 4h wins on profit and on losses at the same time rather than trading one against
+the other:
+
+| Trend Regime | mean | mean/sd | total profit | summed losses | fees | trades/mo | worst |
+|---|---|---|---|---|---|---|---|
+| selection, 1h | +3.28% | 0.132 | $85,396 | −$110,736 | $5,802 | 1.13 | −41.19% |
+| selection, **4h** | **+3.70%** | **0.152** | **$96,277** | **−$100,511** | **$5,073** | 0.98 | **−33.81%** |
+| held out, 1h | +2.20% | 0.093 | $57,161 | −$102,864 | $6,961 | 1.37 | **−26.43%** |
+| held out, **4h** | **+2.38%** | **0.100** | **$61,883** | **−$101,351** | **$6,067** | 1.19 | −27.25% |
+
+Six of six columns on selection, five of six on the held-out four; the single worst month is 0.8
+points worse there and is **not excepted**, because a change accepted on five columns and reverted
+on the sixth is fitted to whichever column disagreed. **1d was run as well and is worse than 4h on
+both halves**, which is what makes this believable — 4h is an *interior peak*, not the leading edge
+of a monotonic drift that would have meant the ladder simply stopped too early.
+
+**The pre-registered criterion said "no change", and it was the wrong criterion.** It pooled the
+three strategies into one ranking, which can only answer "one bar size for everything" — and since
+these three want *opposite* bar sizes, pooling averages the answer into a flat row. `preferredInterval`
+is a per-strategy field; the unit of analysis should have matched it. The per-strategy table was
+written into `research/interval.ts` before anything was scored, so this is a criterion corrected in
+the open rather than a result found by re-cutting.
+
+**3m wins both channel strategies in both halves and still cannot ship.** `Interval` in
+`shared/ipc.ts` is `'1m' | '15m' | '1h' | '4h' | '1d' | '1w'`; 3m is not a member, and adding it
+means changing the type, `INTERVALS`, `INTERVAL_SECONDS` and every exchange adapter, because
+`korbit.ts` and `kraken.ts` declare non-partial `Record<Interval, …>` maps with no aggregation path.
+For 0.074 → 0.079 mean/sd on the held-out four and **18% more in fees**, that is not worth its
+plumbing — recorded as measured-and-declined so nobody re-derives it. This also finally settles the
+"at 3m nothing is settled" paragraph above: on 780 months rather than three symbols, 3m *is* the best
+bar size for the two channel strategies and the *worst* for Trend Regime. The old three-symbol
+result was not noise about 3m, it was two opposite real effects averaged together.
+
+**One thing had to move with it.** The Market Conditions card states what an ADX reading has meant
+for each strategy, and those figures were measured at 15m — quoting them beside a 4h backtest would
+be a mismatch nothing on screen would reveal. `research/expect.ts` re-measures each strategy at its
+own interval on the same six held-out symbols; the ADX result survives almost untouched
+(**+10.70% against a +5.99% baseline at 4h**, versus +10.83/+5.97 at 15m). `MEASURED_EXPECTATIONS`
+now carries its interval and a test pins it to `preferredInterval`. The same script checks the
+shipped Wilder ADX against the research implementation on every month it scores — 1,465 decisions,
+zero difference.
 
 ### The fast one: Short-Term Channel Breakout
 
@@ -959,12 +1022,18 @@ against +204%/+52%/+416%); the short-term strategy beat it only on ETH. The wind
 market it looks like from here either — buy & hold lost money in the final twelve months on every
 symbol (BTC −27%, ETH −43%, SOL −49%), and that is the year Trend Regime finished roughly flat.
 
-**Bar size barely matters to Trend Regime, and 15m costs the most.** It is built on 20/30/50/80-day
-averages, so 15m candles do not make it faster — they make it re-express the same slow view across
-sixteen times as many bars. BTCUSDT over those 36 months: +261.1% at 15m for $1,584 of fees,
-+263.8% at 1h for $1,371, +219.1% at 4h for $1,170, +202.5% at 1d for $857. **1h is the cheapest
-way to run it**, and the differences in return are inside the noise of a strategy that takes about
-thirty trades in three years.
+**Bar size barely matters to Trend Regime on one symbol, which is why one symbol was the wrong way
+to ask.** It is built on 20/30/50/80-day averages, so 15m candles do not make it faster — they make
+it re-express the same slow view across sixteen times as many bars. BTCUSDT over those 36 months:
++261.1% at 15m for $1,584 of fees, +263.8% at 1h for $1,371, +219.1% at 4h for $1,170, +202.5% at
+1d for $857 — a spread well inside the noise of a strategy that takes about thirty trades in three
+years, which is exactly what "barely matters" meant.
+
+It stops looking like noise at 780 observations. Re-asked as 65 independent months across eight
+symbols (`research/INTERVAL.md`), 4h beats 1h on mean, mean/sd, total profit, summed losses *and*
+fees, on the four symbols used to choose and on the four held back. **Trend Regime now ships at
+4h**; the one-symbol continuous run above could not have found that, and the section on candle
+intervals sets out why.
 
 ### The other three strategies are not broken — they are on the wrong timeframe
 
