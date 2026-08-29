@@ -88,8 +88,13 @@ export const shortTermChannelRegime: StrategyDefinition = {
   name: 'Short-Term Channel + Trend Regime',
   description:
     'Short-term channel breakouts, taken only while all four trend lookbacks agree the market is above trend. Fewer trades, smaller worst month.',
-  // Measured at 15m, the interval the underlying channel strategy is measured on. Not re-measured
-  // per interval for the gated variant, so this inherits rather than claims its own result.
+  // 15m, and now measured rather than inherited: research/monthiv.ts ran this at 1m/3m/5m/15m over
+  // 36 independent months on BTC/ETH/SOL. No interval wins consistently -- BTC is best at 15m, ETH
+  // at 1m, SOL at 3m -- and the spread is small enough that picking per symbol would be fitting
+  // noise. What the sweep did show is worth stating: the gate makes the strategy notably LESS
+  // interval-sensitive than either parent. BTC total profit spans $10,038-$10,536 across all four
+  // bar sizes, a 5% spread, against 14% ungated and 24% for Trend Regime. So 15m is kept for
+  // continuity with the strategy it gates, and the choice matters less here than anywhere else.
   preferredInterval: shortTermChannel.preferredInterval,
   warmupBarsFor: warmupBarsAt,
   generateSignals
