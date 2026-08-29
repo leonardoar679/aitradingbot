@@ -43,7 +43,11 @@ const FIRST_MONTH0 = Number(process.env.FIRST_MONTH || 9) - 1
 const COUNT = Number(process.env.MONTHS || 36)
 const DISCOVERY = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'ADAUSDT']
 const CONFIRM = ['BNBUSDT', 'LINKUSDT', 'LTCUSDT', 'XRPUSDT']
-const SYMBOLS = SET === 'confirm' ? CONFIRM : SET === 'all' ? [...DISCOVERY, ...CONFIRM] : DISCOVERY
+/** SYMBOLS overrides the discovery/confirmation split entirely, for scoring a set that predates
+ * neither -- the six symbols added after both halves were spent. */
+const SYMBOLS = process.env.SYMBOLS
+  ? process.env.SYMBOLS.split(',')
+  : SET === 'confirm' ? CONFIRM : SET === 'all' ? [...DISCOVERY, ...CONFIRM] : DISCOVERY
 const STRATS = [
   ['trend-regime-ensemble', 'Trend Regime'],
   ['short-term-channel', 'Short-Term Channel'],
