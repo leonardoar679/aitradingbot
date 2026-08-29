@@ -245,7 +245,7 @@ electron/preload.ts  ── contextBridge ──▶  window.api.*  (renderer)
 regardless of strategy — only entry/exit/stop logic, defined per strategy in
 `src/backtest/strategies/`, changes. `STRATEGIES` in that folder's `index.ts` is the registry;
 adding a new one is a self-contained file implementing `generateSignals(candles) →
-{entries, exits, stopPrices, warmupBars}`. All five ship long-only, spot (no shorting, no
+{entries, exits, stopPrices, warmupBars}`. All six ship long-only, spot (no shorting, no
 leverage):
 
 | Strategy | Entry | Exit |
@@ -255,8 +255,9 @@ leverage):
 | **Bollinger Breakout** | Close breaks above the Bollinger Band(20, 2) upper band. | Close back below the middle band (the breakout failed/reverted), or the same ATR(14)×2 stop. |
 | **Trend Regime Ensemble** | Price is above *all four* of the 20/30/50/80-**day** moving averages. The lookbacks are in days and converted using the candles' own spacing, so the strategy means the same thing on 3m as on 4h — written as bar counts, "20 days of 15m" would silently become 4 days of 3m, a scale at which the measured edge is zero. | Price falls below at least three of the four. The gap between a unanimous entry and a near-unanimous exit is deliberate hysteresis; entering and exiting on one line means crossing it repeatedly and paying the fee each time. A `close − ATR(14)×10` stop is set at entry as a disaster stop only — the regime exit is the risk control, and a *tighter* stop measurably reduced returns without improving drawdown. |
 | **Short-Term Channel Breakout** | Price sits at or above 95% of the way up its 2/3/5/8-**day** high-low ranges, averaged across the four. Averaging the *position within* each channel is deliberate: Donchian channels are nested, so voting on whether price breaks k of the four highs is only "breaks the k-th slowest high" and re-picks a single lookback under another name. | Price falls back to the bottom quarter of those same ranges. The wide 0.95/0.25 gap is the hysteresis that keeps the fee bill survivable at this speed, and a `close x 0.5` disaster stop is set at entry because the engine will not open a position without one. |
+| **Short-Term Channel + Trend Regime** | The same breakout as the row above, except an entry is refused unless all four of Trend Regime Ensemble’s 20/30/50/80-**day** averages agree price is above trend. The vote is read through the *same* exported `regimeAgreement()` the regime strategy itself acts on, so a change to one can never leave the other behind. | Unchanged — exits and the disaster stop pass straight through from the ungated strategy. Gating exits as well was measured and was worse on every symbol but one, because an exit blocked by a falling regime is blocked exactly when it is needed. |
 
-The last two are the only ones built against intraday candles, and they exist because the
+The last three are the only ones built against intraday candles, and they exist because the
 other three lose money on them. The reason is arithmetic rather than tuning: a round trip costs
 0.24% (0.1% fee per side, plus 2bps of slippage per fill) while the average 15m bar moves 0.16%,
 so 500 round trips burn 70% of an account and 2,000 burn 99% — Bollinger Breakout takes 2,059
@@ -459,6 +460,47 @@ implemented, and then reverted, because the six-symbol set was an artifact of wh
 finished: on all eight it is worse on median at both intervals, and at 4h worse on median, worst case
 *and* losing symbols (5 of 8 against 3 of 8). The lesson is the one this directory keeps re-learning
 — a result that depends on which symbols were in the sample is a result about the sample.
+
+**One entry filter did survive, and the protocol is what makes that believable.** The chop band is
+where Short-Term Channel loses — and Trend Regime already has a rule for it, which is that it stops
+trading. Over 36 independent months it takes no position at all in 6 to 14 of them, and Short-Term
+Channel's average return in exactly those idle months is **negative on all eight symbols** (−3.1% to
+−9.3%), against a higher average in the months the regime is active on all eight. That kills the
+obvious idea before it is built — running both strategies so one covers the other's quiet months —
+because the two are *positively* correlated, so pairing them concentrates the bad months rather than
+diversifying them. It also names the cheap fix: let the channel trade, but not while the regime says
+no.
+
+`research/enhance.ts` swept that against sixteen other candidates under a rule fixed before any
+result was seen: selection on BTC/ETH/SOL/ADA, confirmation on BNB/LINK/LTC/XRP, which took no part
+in choosing anything. Sixteen died — every give-back exit width and every re-entry cooldown length,
+both of them features the engine already implements and `research/diag.ts` already justified on
+three symbols. The gate is the one that held. 36 independent months, $10,000 each, 15m, run through
+the shipped strategy rather than a research copy of it:
+
+| 36 months x $10,000 | BTC | ETH | SOL | ADA | BNB | LINK | LTC | XRP |
+|---|---|---|---|---|---|---|---|---|
+| Short-Term Channel | $6,871 | $10,104 | $17,958 | $15,976 | $2,551 | $6,481 | −$5,903 | **$17,053** |
+| + regime gate | **$10,536** | **$11,867** | **$18,518** | **$18,102** | **$2,978** | **$9,129** | **−$3,947** | $15,345 |
+| worst month, ungated | −13.5% | −15.9% | −29.3% | **−13.7%** | −18.2% | −23.3% | −17.0% | −24.1% |
+| worst month, gated | **−8.7%** | **−11.5%** | **−12.6%** | −14.8% | −18.2% | **−18.2%** | **−14.3%** | **−17.5%** |
+| trades/month | 2.3 → 1.5 | 2.2 → 1.3 | 2.3 → 1.4 | 2.1 → 1.0 | 2.6 → 1.9 | 2.4 → 1.4 | 2.5 → 1.5 | 2.2 → 1.3 |
+
+Profit improves on 7 of 8; the worst month improves on 6, ties on 1 and worsens on 1, for about 40%
+fewer trades. **XRP loses profit under the gate and is not excepted**, and neither is ADA's slightly
+worse floor — a per-symbol carve-out fits the rule to the data that produced it, which is exactly
+what the volatility gate above was reverted for. The threshold is not tuned either: 4-of-4 is
+`trendRegimeEnsemble`'s own `ENTER_VOTE_FRACTION`, read through the *same* exported
+`regimeAgreement()` the regime strategy acts on. 2-of-4 and 3-of-4 score better on subsets but rank
+inconsistently across symbols, and choosing one would add a free parameter fitted on the same data
+used to justify it; 4-of-4 adds none.
+
+The cost is warm-up. The gate reads an 80-day average, so this needs the regime's 80 days rather
+than the channel's 8 — on the Backtest page's default 90-day range that leaves ten tradeable days.
+It therefore ships as a **separate** strategy (`short-term-channel-regime`) rather than a change to
+the existing one, so bots already running Short-Term Channel behave exactly as before and the two
+can be compared side by side.
+
 
 ### Which candle interval, measured rather than assumed
 
