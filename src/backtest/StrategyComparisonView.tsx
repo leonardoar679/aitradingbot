@@ -3,6 +3,7 @@ import { Download, Check, TriangleAlert } from 'lucide-react'
 import { runBacktest } from './engine'
 import { STRATEGIES } from './strategies'
 import type { Candle } from '../../shared/ipc'
+import { GPT_INTRADAY_STRATEGY_ID } from '../../shared/aiSignal'
 import { COMPARISON_COLUMNS as COLUMNS, describeNoTrades, rankStrategyRows, tookNoTrades, type SortKey } from './strategyRanking'
 import {
   comparisonFileName,
@@ -50,7 +51,10 @@ export function StrategyComparisonView({
   const rows = useMemo(() => {
     const column = COLUMNS.find((c) => c.key === sortKey)!
     return rankStrategyRows(
-      STRATEGIES.map((strategy) => ({ row: strategy, stats: runBacktest(candles, strategy.id, { startingBalance }).stats })),
+      STRATEGIES.filter((strategy) => strategy.id !== GPT_INTRADAY_STRATEGY_ID).map((strategy) => ({
+        row: strategy,
+        stats: runBacktest(candles, strategy.id, { startingBalance }).stats
+      })),
       sortKey,
       column.higherIsBetter
     ).map(({ row, stats }) => ({ strategy: row, stats }))

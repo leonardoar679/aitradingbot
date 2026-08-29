@@ -4,6 +4,7 @@ import { ExchangeSelect } from '../components/ExchangeSelect'
 import { SymbolSearch } from '../components/SymbolSearch'
 import { STRATEGIES, DEFAULT_STRATEGY_ID } from '../backtest/strategies'
 import { EXCHANGES, type Exchange, type SymbolInfo } from '../../shared/ipc'
+import { GPT_INTRADAY_STRATEGY_ID } from '../../shared/aiSignal'
 
 interface AddBotModalProps {
   onCreate: (input: { name: string; exchange: Exchange; pair: SymbolInfo; strategyId: string }) => void
@@ -112,6 +113,11 @@ export function AddBotModal({ onCreate, onClose }: AddBotModalProps): React.JSX.
             <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '0.4rem 0 0' }}>
               {STRATEGIES.find((s) => s.id === strategyId)?.description}
             </p>
+            {strategyId === GPT_INTRADAY_STRATEGY_ID && (
+              <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '0.35rem 0 0' }}>
+                Paper only. Uses a rolling seven-day cached signal tape and never places real orders.
+              </p>
+            )}
           </div>
         </div>
 

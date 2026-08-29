@@ -68,5 +68,7 @@ export interface StrategyDefinition {
    * beats 3m and 5m on return AND drawdown while paying less. SOLUSDT agrees independently: Trend
    * Regime +585.9% at 5m against +603.1% at 15m, Short-Term Channel +1,677.7% against +2,216.2%. */
   preferredInterval: Interval
+  /** True when signals must be generated asynchronously and supplied to the execution engine. */
+  requiresExternalSignals?: boolean
   generateSignals(candles: Candle[]): StrategySignals
 }

@@ -12,7 +12,12 @@ import { availableBalance } from '../account/paperAccount'
 import { committedFor } from '../account/accountCommitments'
 import { describeRangeProblem, describeEmptyRange } from './rangeProblem'
 import { describeError } from '../utils/ipcError'
-import { STRATEGIES, DEFAULT_STRATEGY_ID, getStrategy } from './strategies'
+import { STRATEGIES, DEFAULT_STRATEGY_ID, getStrategy, type StrategySignals } from './strategies'
+import { generateGptIntradaySignals } from './strategies/gptIntraday'
+import {
+  GPT_INTRADAY_STRATEGY_ID,
+  GPT_MAX_DECISIONS
+} from '../../shared/aiSignal'
 import { replayExecutor, type ExecutorReplayResult } from './executorReplay'
 import { ExecutorBacktestView } from './ExecutorBacktestView'
 import { replayController, type ControllerReplayResult } from './controllerReplay'
@@ -268,6 +273,14 @@ export function BacktestPage(): React.JSX.Element {
     if (accountAvailable > 0) setStartingCapital(String(accountAvailable))
   }, [accountAvailable, capitalTouched])
 
+  useEffect(() => {
+    if (tradingRoute.strategyId !== GPT_INTRADAY_STRATEGY_ID) return
+    const end = new Date(`${endDate}T00:00:00Z`)
+    const start = new Date(end)
+    start.setUTCDate(start.getUTCDate() - 6)
+    setStartDate(isoDate(start))
+  }, [tradingRoute.strategyId, endDate])
+
   // Blank means spot, and blank is the default: someone who came here to test a strategy should
   // not have to opt out of leverage. Anything typed is validated rather than silently coerced --
   // resolveLeverage would quietly turn 500 into 1x and run a spot backtest under a 500x heading.
@@ -293,6 +306,17 @@ export function BacktestPage(): React.JSX.Element {
       setTab('progress')
       setRunState({ status: 'error', message: rangeProblem })
       return
+    }
+    if (route.strategyId === GPT_INTRADAY_STRATEGY_ID) {
+      const spanMs = new Date(`${endDate}T23:59:59Z`).getTime() - new Date(`${startDate}T00:00:00Z`).getTime()
+      if (spanMs > 7 * 86_400_000) {
+        setTab('progress')
+        setRunState({
+          status: 'error',
+          message: `GPT Intraday is limited to seven days (${GPT_MAX_DECISIONS} decisions) per backtest.`
+        })
+        return
+      }
     }
 
     const strategy = getStrategy(route.strategyId)
@@ -362,7 +386,7 @@ export function BacktestPage(): React.JSX.Element {
 
     window.api.market
       .fetchHistoricalRange(exchange, route.symbol, route.interval, startSec, endSec, requestId)
-      .then((fetchResult) => {
+      .then(async (fetchResult) => {
         if (runIdRef.current !== runId) return
         if (fetchResult.cancelled) {
           log(`Fetch cancelled after ${fetchResult.candles.length.toLocaleString()} candles`)
@@ -406,7 +430,45 @@ export function BacktestPage(): React.JSX.Element {
         }
 
         log(`Running strategy: ${strategy.name} — ${strategy.description}`)
-        const result = runBacktest(fetchResult.candles, route.strategyId, { startingBalance: capitalValue, leverage: leverageValue })
+        let suppliedSignals: StrategySignals | undefined
+        if (route.strategyId === GPT_INTRADAY_STRATEGY_ID) {
+          const aiRequest = {
+            requestId,
+            exchange,
+            symbol: route.symbol,
+            interval: route.interval,
+            candles: fetchResult.candles,
+            startIndex: strategy.warmupBarsFor(INTERVAL_SECONDS[route.interval]),
+            maxDecisions: GPT_MAX_DECISIONS
+          }
+          const estimate = await window.api.ai.estimateSignalTape(aiRequest)
+          const confirmed = window.confirm(
+            `GPT Intraday will evaluate ${estimate.total} candles. ` +
+              `${estimate.cached} are confirmed cached; at most ${estimate.maximumApiCalls} OpenAI API calls may be made. Continue?`
+          )
+          if (!confirmed) {
+            setRunState({ status: 'cancelled' })
+            return
+          }
+          log(`Generating ${estimate.total} GPT decisions (${estimate.cached} confirmed cached)`)
+          const stopProgress = window.api.ai.onSignalProgress((progress) => {
+            if (runIdRef.current !== runId || progress.requestId !== requestId) return
+            setRunState({ status: 'running', done: progress.completed, total: progress.total })
+          })
+          try {
+            const tape = await window.api.ai.generateSignalTape(aiRequest)
+            if (runIdRef.current !== runId) return
+            suppliedSignals = generateGptIntradaySignals(fetchResult.candles, tape)
+            log(`GPT tape ready: ${tape.cachedCount} cached, ${tape.generatedCount} generated`)
+          } finally {
+            stopProgress()
+          }
+        }
+        const result = runBacktest(fetchResult.candles, route.strategyId, {
+          startingBalance: capitalValue,
+          leverage: leverageValue,
+          signals: suppliedSignals
+        })
         log(
           `Simulation complete: ${result.trades.length} trades, net P&L ${result.stats.totalNetProfit.toFixed(2)} (${result.stats.totalNetProfitPct.toFixed(2)}%)`
         )
@@ -517,6 +579,7 @@ export function BacktestPage(): React.JSX.Element {
     runIdRef.current++
     if (runState?.status === 'running' && activeFetchRequestIdRef.current) {
       void window.api.market.cancelHistoricalRange(activeFetchRequestIdRef.current)
+      void window.api.ai.cancelSignalTape(activeFetchRequestIdRef.current)
     }
     setTab('configuration')
     setRunLabel(null)
@@ -690,6 +753,7 @@ export function BacktestPage(): React.JSX.Element {
                 <select
                   value={tradingRoute.interval}
                   onChange={(e) => updateTradingRoute({ interval: e.target.value as Interval })}
+                  disabled={tradingRoute.strategyId === GPT_INTRADAY_STRATEGY_ID}
                   style={{ ...fieldStyle(), width: 90 }}
                 >
                   {INTERVALS.map((iv) => (
@@ -754,6 +818,12 @@ export function BacktestPage(): React.JSX.Element {
                   style={{ ...fieldStyle(), flex: 1, colorScheme: 'dark' }}
                 />
               </div>
+              {tradingRoute.strategyId === GPT_INTRADAY_STRATEGY_ID && (
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.76rem', lineHeight: 1.5, marginBottom: 0 }}>
+                  Paper only. Limited to seven days / {GPT_MAX_DECISIONS} decisions. Each uncached candle can use one
+                  OpenAI call; reruns reuse the deterministic signal tape. Short samples do not establish profitability.
+                </p>
+              )}
 
               <SectionHeader label="Out-of-Sample Split (optional)" />
               <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', margin: '0 0 0.6rem' }}>
@@ -855,7 +925,7 @@ export function BacktestPage(): React.JSX.Element {
               </button>
               <button
                 onClick={() => void handleCompare()}
-                disabled={symbolsLoading || !tradingRoute.symbol || compareLoading}
+                disabled={symbolsLoading || !tradingRoute.symbol || compareLoading || tradingRoute.strategyId === GPT_INTRADAY_STRATEGY_ID}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -868,8 +938,8 @@ export function BacktestPage(): React.JSX.Element {
                   color: 'var(--text-primary)',
                   fontSize: '0.9rem',
                   fontWeight: 600,
-                  cursor: symbolsLoading || !tradingRoute.symbol || compareLoading ? 'not-allowed' : 'pointer',
-                  opacity: symbolsLoading || !tradingRoute.symbol || compareLoading ? 0.6 : 1
+                  cursor: symbolsLoading || !tradingRoute.symbol || compareLoading || tradingRoute.strategyId === GPT_INTRADAY_STRATEGY_ID ? 'not-allowed' : 'pointer',
+                  opacity: symbolsLoading || !tradingRoute.symbol || compareLoading || tradingRoute.strategyId === GPT_INTRADAY_STRATEGY_ID ? 0.6 : 1
                 }}
               >
                 <Plus size={16} /> Compare Strategies

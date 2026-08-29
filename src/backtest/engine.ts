@@ -1,5 +1,6 @@
 import type { Candle } from '../../shared/ipc'
 import { getStrategy, DEFAULT_STRATEGY_ID } from './strategies'
+import type { StrategySignals } from './strategies'
 import { FEE_RATE, buyFillPrice, sellFillPrice } from '../../shared/fees'
 import { computeRiskRatios } from './riskStats'
 import {
@@ -253,6 +254,9 @@ export interface RunBacktestOptions {
    * liquidated run ends with nothing and takes no further trades, which is the point of offering
    * it at all. */
   leverage?: number
+  /** Pre-generated deterministic signals, used by asynchronous strategies such as GPT Intraday.
+   * The execution engine remains pure and never performs network requests. */
+  signals?: StrategySignals
 }
 
 function mean(values: number[]): number {
@@ -356,7 +360,14 @@ export function runBacktest(
     options.reentryCooldown && Number.isFinite(options.reentryCooldown.bars) && options.reentryCooldown.bars > 0
       ? options.reentryCooldown
       : undefined
-  const signals = getStrategy(strategyId).generateSignals(candles)
+  const signals = options.signals ?? getStrategy(strategyId).generateSignals(candles)
+  if (
+    signals.entries.length !== candles.length ||
+    signals.exits.length !== candles.length ||
+    signals.stopPrices.length !== candles.length
+  ) {
+    throw new Error('Strategy signal arrays must match the candle count')
+  }
 
   let cash = startingBalance
   const posBox: { current: OpenPosition | null } = { current: null }

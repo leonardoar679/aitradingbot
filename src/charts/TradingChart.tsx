@@ -281,7 +281,10 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
 
     async function markClosedCandle(time: number): Promise<void> {
       try {
-        const signal = await requestAiSignal(symbol)
+        if (interval !== '15m') return
+        const signalCandles = [...candlesRef.current.values()].sort((a, b) => a.time - b.time)
+        const executionIndex = signalCandles.findIndex((candle) => candle.time === time)
+        const signal = await requestAiSignal(symbol, { exchange, candles: signalCandles, executionIndex })
         if (signal.recommendation === 'hold') return
         const isBuy = signal.recommendation === 'buy'
         const newMarker: SeriesMarker<Time> = {

@@ -3,6 +3,13 @@ import { electronAPI } from '@electron-toolkit/preload'
 import type { FuturesCloseResult, FuturesReadout } from '../shared/futuresPositions'
 import type { ProtectiveStop } from '../shared/futuresStops'
 import type { SymbolTradingRules } from '../shared/exchangeMinimums'
+import type {
+  AiCredentialStatus,
+  AiSignalEstimate,
+  AiSignalProgress,
+  AiSignalTape,
+  AiSignalTapeRequest
+} from '../shared/aiSignal'
 import {
   IpcChannel,
   type AppSettings,
@@ -93,6 +100,25 @@ const api = {
       ipcRenderer.invoke(IpcChannel.CredentialsPlaceFuturesStop, exchange, symbol, stopPrice),
     cancelFuturesStop: (exchange: Exchange, symbol: string, orderId: number): Promise<void> =>
       ipcRenderer.invoke(IpcChannel.CredentialsCancelFuturesStop, exchange, symbol, orderId)
+  },
+  ai: {
+    credentialsStatus: (): Promise<AiCredentialStatus> => ipcRenderer.invoke(IpcChannel.AiCredentialsStatus),
+    setCredentials: (apiKey: string, model: string): Promise<AiCredentialStatus> =>
+      ipcRenderer.invoke(IpcChannel.AiCredentialsSet, apiKey, model),
+    testCredentials: (): Promise<{ ok: boolean; message: string }> =>
+      ipcRenderer.invoke(IpcChannel.AiCredentialsTest),
+    removeCredentials: (): Promise<void> => ipcRenderer.invoke(IpcChannel.AiCredentialsRemove),
+    estimateSignalTape: (request: AiSignalTapeRequest): Promise<AiSignalEstimate> =>
+      ipcRenderer.invoke(IpcChannel.AiEstimateSignalTape, request),
+    generateSignalTape: (request: AiSignalTapeRequest): Promise<AiSignalTape> =>
+      ipcRenderer.invoke(IpcChannel.AiGenerateSignalTape, request),
+    cancelSignalTape: (requestId: string): Promise<void> =>
+      ipcRenderer.invoke(IpcChannel.AiCancelSignalTape, requestId),
+    onSignalProgress: (listener: (progress: AiSignalProgress) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, progress: AiSignalProgress): void => listener(progress)
+      ipcRenderer.on(IpcChannel.AiSignalProgress, handler)
+      return () => ipcRenderer.removeListener(IpcChannel.AiSignalProgress, handler)
+    }
   },
   liveTrading: {
     getStatus: (): Promise<LiveTradingStatus> => ipcRenderer.invoke(IpcChannel.LiveTradingGetStatus),

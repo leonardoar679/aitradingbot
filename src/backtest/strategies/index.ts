@@ -4,6 +4,7 @@ import { rsiReversion } from './rsiReversion'
 import { bollingerBreakout } from './bollingerBreakout'
 import { trendRegimeEnsemble } from './trendRegimeEnsemble'
 import { shortTermChannel } from './shortTermChannel'
+import { gptIntraday } from './gptIntraday'
 
 export type { StrategyDefinition, StrategySignals } from './types'
 
@@ -12,7 +13,8 @@ export const STRATEGIES: StrategyDefinition[] = [
   rsiReversion,
   bollingerBreakout,
   trendRegimeEnsemble,
-  shortTermChannel
+  shortTermChannel,
+  gptIntraday
 ]
 
 export const DEFAULT_STRATEGY_ID = emaCrossAtrStop.id

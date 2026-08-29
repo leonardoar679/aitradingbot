@@ -2,6 +2,12 @@ import { useEffect, useState } from 'react'
 import { INTERVAL_SECONDS, type Candle, type Exchange, type Interval } from '../../shared/ipc'
 import { runBacktest, type BacktestResult, type Trade, type OpenPositionSnapshot } from '../backtest/engine'
 import { getStrategy } from '../backtest/strategies'
+import { generateGptIntradaySignals } from '../backtest/strategies/gptIntraday'
+import {
+  GPT_INTRADAY_STRATEGY_ID,
+  GPT_LOOKBACK_BARS,
+  GPT_MAX_DECISIONS
+} from '../../shared/aiSignal'
 
 // The dry run polls the interval the bot's OWN strategy was measured on, which is the only way
 // its signals can match what was actually backtested for it.
@@ -68,7 +74,14 @@ export async function fetchBotDryRunResult(bot: {
   // strategy fetches a window that is entirely warm-up and can never show a trade.
   const defaultStartSec = endSec - Math.max(LOOKBACK_CANDLES, warmup + 120) * barSec
   const startSec =
-    bot.enabledAt !== null
+    bot.strategyId === GPT_INTRADAY_STRATEGY_ID
+      ? (() => {
+          const enabled = bot.enabledAt ?? endSec
+          const segmentSeconds = GPT_MAX_DECISIONS * barSec
+          const segmentStart = enabled + Math.floor(Math.max(0, endSec - enabled) / segmentSeconds) * segmentSeconds
+          return segmentStart - GPT_LOOKBACK_BARS * barSec
+        })()
+      : bot.enabledAt !== null
       ? Math.min(defaultStartSec, bot.enabledAt - warmup * barSec)
       : defaultStartSec
   const { candles } = await window.api.market.fetchHistoricalRange(bot.exchange, bot.symbol, interval, startSec, endSec)
@@ -76,6 +89,19 @@ export async function fetchBotDryRunResult(bot: {
   // Engine default, like RoutineScheduler and for the same reason: a dry run is re-computed on
   // every poll, and a bot's displayed P&L must not move because an unrelated strategy started or
   // stopped somewhere else in the app.
+  if (bot.strategyId === GPT_INTRADAY_STRATEGY_ID) {
+    const tape = await window.api.ai.generateSignalTape({
+      requestId: crypto.randomUUID(),
+      exchange: bot.exchange,
+      symbol: bot.symbol,
+      interval,
+      candles,
+      startIndex: Math.max(GPT_LOOKBACK_BARS, candles.length - GPT_MAX_DECISIONS),
+      maxDecisions: GPT_MAX_DECISIONS
+    })
+    const signals = generateGptIntradaySignals(candles, tape)
+    return { result: runBacktest(candles, bot.strategyId, { forceCloseAtEnd: false, signals }), candles }
+  }
   return { result: runBacktest(candles, bot.strategyId, { forceCloseAtEnd: false }), candles }
 }
 

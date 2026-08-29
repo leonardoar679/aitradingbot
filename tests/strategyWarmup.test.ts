@@ -71,7 +71,7 @@ describe('a window sized by the declaration is enough to actually trade in', () 
   // SOL there was not one bar where RSI(14) sat at or below 30 while price was above the EMA(100),
   // and the repairs were measured and rejected. A test asserting it fires would be asserting a
   // bug were it ever fixed.
-  for (const strategy of STRATEGIES.filter((s) => s.id !== 'rsi-reversion')) {
+  for (const strategy of STRATEGIES.filter((s) => s.id !== 'rsi-reversion' && !s.requiresExternalSignals)) {
     it(`${strategy.name} produces entries after its declared warmup`, () => {
       const declared = strategy.warmupBarsFor(H4)
       const candles = wobblyUptrend(H4, declared + 300)
