@@ -54,6 +54,12 @@ import { inferBarSeconds, regimeAgreement, trendRegimeEnsemble } from './trendRe
 // running both is not diversification -- it is one bet at 1.7x size. Pick on which of the two
 // numbers matters; do not hold both expecting them to offset.
 //
+// That correlation is structural rather than incidental, which is why no re-tuning will remove
+// it: the gate's threshold IS trendRegimeEnsemble's entry condition, so every entry this
+// strategy takes lands on a bar where Trend Regime's own entry rule is also satisfied. The two
+// differ in what they additionally require (a channel breakout) and in when they leave (channel
+// bottom quarter, against the regime's 3-of-4 hysteresis), not in when they are allowed to buy.
+//
 // THE COST IS WARM-UP, AND IT IS REAL. Short-Term Channel needs 8 days of history; this needs the
 // regime's 80. On the Backtest page's default 90-day range that leaves ten tradeable days and
 // roughly one trade where the ungated strategy shows twenty -- which is the exact failure mode
