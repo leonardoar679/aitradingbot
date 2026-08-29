@@ -15,6 +15,11 @@
 // strategy on less warmup than it declares is scoring a different strategy, and at 1m the lead is
 // 80 days, so this is a live risk rather than a theoretical one.
 //
+// BAR SIZE IS READ WITH THE STRATEGY'S OWN inferBarSeconds, not a local copy. It takes the MEDIAN
+// gap, so the ~356 bars Binance is missing per symbol cannot drag it -- and more importantly, a
+// second implementation could disagree with the one generateSignals uses internally, which would
+// size the warmup lead off one bar size while the strategy scaled its lookbacks off another.
+//
 // GPT INTRADAY IS ABSENT AND CANNOT BE ADDED HERE. shared/aiSignal.ts throws
 // 'GPT Intraday only supports 15-minute candles' for any other interval, caps a run at
 // GPT_MAX_DECISIONS = 672 (seven days at 15m, against ~2,976 bars in a month), and reaches the
@@ -26,7 +31,7 @@ import { readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { runBacktest } from '../src/backtest/engine'
 import { shortTermChannel } from '../src/backtest/strategies/shortTermChannel'
-import { trendRegimeEnsemble } from '../src/backtest/strategies/trendRegimeEnsemble'
+import { inferBarSeconds, trendRegimeEnsemble } from '../src/backtest/strategies/trendRegimeEnsemble'
 import type { StrategyDefinition } from '../src/backtest/strategies/types'
 import type { Candle } from '../shared/ipc'
 
@@ -113,24 +118,6 @@ function runMonth(all: Candle[], def: StrategyDefinition, barSeconds: number,
     fees: r.stats.totalPaidFees,
     bhPct: mc.length > 1 ? ((mc[mc.length - 1].close - mc[0].close) / mc[0].close) * 100 : 0
   }
-}
-
-/** Bar size as the MODE of adjacent deltas, not one sampled pair.
- *
- * Binance is missing ~356 bars per symbol over these windows, so a single `all[i].time -
- * all[i-1].time` that happens to straddle an outage reports 2x or 30x the true bar size. That
- * value feeds warmupBarsFor(), so the error would not surface as a crash -- it would quietly hand
- * every month the wrong lead and still print a full, plausible table. */
-function inferBarSeconds(candles: Candle[]): number {
-  const counts = new Map<number, number>()
-  const step = Math.max(1, Math.floor(candles.length / 4000))
-  for (let i = 1; i < candles.length; i += step) {
-    const d = candles[i].time - candles[i - 1].time
-    counts.set(d, (counts.get(d) || 0) + 1)
-  }
-  let best = 0, bestN = 0
-  for (const [d, n] of counts) if (n > bestN) { best = d; bestN = n }
-  return best
 }
 
 const pct = (v: number, d = 1): string => `${v >= 0 ? '+' : ''}${v.toFixed(d)}%`

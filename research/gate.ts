@@ -21,7 +21,7 @@
 // Short-Term Channel's would leave the first 6,900 bars gated by a NaN-poisoned vote, which
 // compares false and would silently read as "regime off" -- a flat start dressed as a signal.
 
-import { readFileSync } from 'fs'
+import { readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { runBacktest } from '../src/backtest/engine'
 import { shortTermChannel } from '../src/backtest/strategies/shortTermChannel'
@@ -37,6 +37,7 @@ const DIR = process.env.CANDLE_DIR || '.candles'
 const CAPITAL = 10_000
 const SYMBOLS = (process.env.SYMBOLS || 'BTCUSDT,ETHUSDT,SOLUSDT').split(',')
 const INTERVAL = process.env.INTERVAL || '15m'
+const GATE_OUT = process.env.GATE_OUT || ''
 const LOOKBACK_DAYS = [20, 30, 50, 80]
 const SECONDS_PER_DAY = 86_400
 
@@ -155,6 +156,7 @@ const median = (v: number[]): number => {
 }
 
 console.log('\n\n=================== 36 INDEPENDENT MONTHS, $10,000 EACH ===================')
+const gateDump: Record<string, { rets: number[]; profit: number; trades: number }> = {}
 for (const symbol of SYMBOLS) {
   const candles = load(symbol)
   if (!candles || candles.length < 1000) continue
@@ -193,6 +195,7 @@ for (const symbol of SYMBOLS) {
       trades += r.trades.length
     }
     if (!rets.length) { console.log(v.label.padEnd(13) + '  no months'); continue }
+    gateDump[`${symbol}|${v.label}`] = { rets, profit, trades }
     console.log(v.label.padEnd(13) +
       `${rets.filter((x) => x > 0).length}/${rets.length}`.padStart(9) +
       pct(median(rets)).padStart(9) +
@@ -201,4 +204,9 @@ for (const symbol of SYMBOLS) {
       ('$' + Math.round(profit).toLocaleString('en-US')).padStart(11) +
       (trades / rets.length).toFixed(1).padStart(11))
   }
+}
+
+if (GATE_OUT) {
+  writeFileSync(GATE_OUT, JSON.stringify(gateDump))
+  console.log(`\nper-variant month detail written to ${GATE_OUT}`)
 }

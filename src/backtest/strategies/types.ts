@@ -84,6 +84,31 @@ export interface StrategyDefinition {
    * more in fees (,991 vs ,594) and still returns 147 points more with better Sharpe AND
    * drawdown. "Finer is worse" holds firmly from 1d to 15m and stops being predictive below 15m.
    *
+   * 1m IS THE DECISIVE TEST OF THAT MECHANISM, and it passes. 1m is fifteen times finer than 15m,
+   * so if the bar size changes a strategy only through how often the rule is checked, the two
+   * shapes must separate here or the story is wrong. Trades per month, 15m to 1m: Trend Regime
+   * +140%, +142%, +107% -- a hysteresis rule catching more marginal crossings. Short-Term Channel
+   * +9%, +5%, +4% -- a breakout firing at a rate price sets, essentially unmoved by sampling
+   * fifteen times more often.
+   *
+   * The returns follow the fee bill. Over 36 independent $10,000 months (research/monthiv.ts),
+   * Trend Regime's total profit is monotonic in favour of COARSER bars on BTC ($10,384 at 1m to
+   * $12,822 at 15m) and ETH ($11,776 to $14,344), and monotonic the other way on SOL ($26,422 to
+   * $24,512). Short-Term Channel takes MORE profitable months at 1m than 15m on all three -- 19,
+   * 18, 21 against 18, 17, 20 -- and more total profit on BTC and ETH.
+   *
+   * AND 1m IS ACTUALLY SELECTABLE, which is what separates it from everything above about 3m and
+   * 5m. Interval in shared/ipc.ts is '1m' | '15m' | '1h' | '4h' | '1d' | '1w'; 3m and 5m are not
+   * members, cannot be assigned to preferredInterval, and korbit.ts and kraken.ts declare
+   * non-partial Record<Interval, ...> maps with no aggregation path, so supporting them is a
+   * change to the type, the INTERVALS list, INTERVAL_SECONDS and every exchange adapter. 1m is
+   * native on all eight exchanges and needs none of that. The 3m and 5m findings are academic;
+   * this one is not.
+   *
+   * NOT YET ACTED ON, because it is three symbols. Changing Short-Term Channel's preferredInterval
+   * to 1m is exactly the kind of move the eight-symbol re-test above exists to gate, and the same
+   * three symbols have already produced two conclusions this file had to retract.
+   *
    * CONFIRMED ON EIGHT SYMBOLS (2021-06 to 2026-08, the window all eight cover), because the three-
    * symbol table above is the same sample size that nearly shipped the volatility gate. Short-Term
    * Channel at 15m beats 1h on seven of eight symbols and on worst case (-64.0% against -85.7%);
