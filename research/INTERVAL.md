@@ -127,9 +127,16 @@ the end of a monotonic drift. That distinction is the reason to believe it.
 assigned to `preferredInterval`, and `korbit.ts` and `kraken.ts` declare non-partial
 `Record<Interval, …>` maps with no aggregation path — so supporting it means changing the type, the
 `INTERVALS` list, `INTERVAL_SECONDS` and every exchange adapter. The gain does not justify that:
-0.191 → 0.203 on selection and 0.074 → 0.079 on the held-out four, for **18% more in fees**
-($54,217 → $64,199 pooled). Recorded as a real result that is not worth its plumbing, so nobody has
-to re-derive it. **Short-Term Channel and Channel + Regime stay at 15m**, which is the best
+0.191 → 0.203 on selection and 0.074 → 0.079 on the held-out four. Recorded as a real result that
+is not worth its plumbing, so nobody has to re-derive it.
+
+**Correction to this section.** It first justified declining 3m with "18% more in fees ($54,217 →
+$64,199 pooled)". That figure pools **all three strategies**, including Trend Regime — which is
+moving to 4h, not 3m, and which is the strategy whose fee bill rises fastest on a finer bar. Scoped
+to the two strategies that would actually move, 3m costs **5.2% more** ($38,618 → $40,623 across all
+eight symbols), which is a much weaker objection than the one stated. The decision does not change,
+but the reason does: what rules 3m out is the type-and-adapter work above, and 0.074 → 0.079 on the
+held-out four is a thin return on it. It is not ruled out by its fee bill. **Short-Term Channel and Channel + Regime stay at 15m**, which is the best
 *shippable* interval for both in both halves.
 
 ### One consequence that had to be fixed with it

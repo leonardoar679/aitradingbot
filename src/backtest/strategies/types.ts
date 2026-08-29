@@ -152,8 +152,12 @@ export interface StrategyDefinition {
    * Short-Term Channel and for the gated version, and is not a member of Interval: adding it means
    * changing this type, INTERVALS, INTERVAL_SECONDS and every exchange adapter, since korbit.ts and
    * kraken.ts declare non-partial Record<Interval, ...> maps with no aggregation path. The gain is
-   * 0.191 -> 0.203 mean/sd on selection and 0.074 -> 0.079 on the held-out four, for 18% more fees.
-   * Recorded as measured-and-declined rather than left for someone to re-derive.
+   * 0.191 -> 0.203 mean/sd on selection and 0.074 -> 0.079 on the held-out four, which is a thin
+   * return on that much plumbing. Recorded as measured-and-declined rather than left for someone to
+   * re-derive. The fee objection first written here, "18% more fees", was WRONG: it pooled all three
+   * strategies, and Trend Regime -- which is moving to 4h, not 3m -- is the one whose fee bill rises
+   * fastest on a finer bar. Across only the two strategies that would move, 3m costs 5.2% more.
+   * The plumbing is the reason to decline; the fees are not.
    *
    * ONE THING MOVES WITH THIS FIELD. src/backtest/marketConditions.ts states what a market posture
    * has historically meant for each strategy, and those figures are measured at a bar size. Changing

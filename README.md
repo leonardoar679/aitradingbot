@@ -880,8 +880,13 @@ the open rather than a result found by re-cutting.
 `shared/ipc.ts` is `'1m' | '15m' | '1h' | '4h' | '1d' | '1w'`; 3m is not a member, and adding it
 means changing the type, `INTERVALS`, `INTERVAL_SECONDS` and every exchange adapter, because
 `korbit.ts` and `kraken.ts` declare non-partial `Record<Interval, …>` maps with no aggregation path.
-For 0.074 → 0.079 mean/sd on the held-out four and **18% more in fees**, that is not worth its
-plumbing — recorded as measured-and-declined so nobody re-derives it. This also finally settles the
+For 0.074 → 0.079 mean/sd on the held-out four that is not worth its plumbing — recorded as
+measured-and-declined so nobody re-derives it. **The fee figure first written here, 18%, was wrong**:
+it pooled all three strategies, including the one moving to 4h rather than 3m, and Trend Regime is
+exactly the strategy whose fee bill explodes on a finer bar. Across only the two strategies that
+would actually move, 3m costs **5.2% more in fees** ($38,618 → $40,623 over eight symbols). So the
+honest reason to decline is the plumbing alone, not the plumbing plus a fee penalty that mostly
+belonged to a strategy going the other way. This also finally settles the
 "at 3m nothing is settled" paragraph above: on 780 months rather than three symbols, 3m *is* the best
 bar size for the two channel strategies and the *worst* for Trend Regime. The old three-symbol
 result was not noise about 3m, it was two opposite real effects averaged together.
