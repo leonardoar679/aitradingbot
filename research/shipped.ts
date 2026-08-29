@@ -171,12 +171,21 @@ for (const { def, r } of ALL) {
   )
 }
 
+/** The geometric mean month: the fixed monthly return that would produce the same compounded
+ *  result. It is the number that reconciles the two tables below -- an arithmetic mean says what an
+ *  independent month earns, a geometric mean says what a sequence of them earns, and the gap
+ *  between them is set by variance, which is why the more volatile line can win the first and lose
+ *  the second. Safe to take logs here only because no month is a total loss; the worst is -43%. */
+const geo = (v: number[]): number => (Math.exp(avg(v.map((x) => Math.log(1 + x / 100)))) - 1) * 100
+
 // The comparison the rest of the repository does not make, and the least flattering one here.
 console.log('\nAGAINST SIMPLY HOLDING THE SAME COIN OVER THE SAME MONTHS')
 console.log(
   'strategy'.padEnd(40) +
     'mean'.padStart(9) +
     'bh mean'.padStart(9) +
+    'geo'.padStart(9) +
+    'bh geo'.padStart(9) +
     'sd'.padStart(8) +
     'bh sd'.padStart(8) +
     'mean/sd'.padStart(9) +
@@ -185,7 +194,7 @@ console.log(
     'bh worst'.padStart(10) +
     'beats bh on'.padStart(13)
 )
-console.log('-'.repeat(124))
+console.log('-'.repeat(142))
 for (const { def, r } of ALL) {
   const s = stats(r)
   const h = hold(r)
@@ -197,6 +206,8 @@ for (const { def, r } of ALL) {
     nm(def).padEnd(40) +
       pc(s.mean).padStart(9) +
       pc(h.mean).padStart(9) +
+      pc(geo(r.map((m) => m.returnPct))).padStart(9) +
+      pc(geo(r.map((m) => m.bhPct))).padStart(9) +
       s.sd.toFixed(1).padStart(8) +
       h.sd.toFixed(1).padStart(8) +
       s.ratio.toFixed(3).padStart(9) +
@@ -260,6 +271,39 @@ for (const { def, r } of ALL) {
       ex.ratio.toFixed(3).padStart(9) +
       dl(all.profit).padStart(12) +
       dl(ex.profit).padStart(12)
+  )
+}
+
+// THE MEAN OF INDEPENDENT MONTHS IS NOT WHAT ONE ACCOUNT ENDS WITH, and on a distribution this
+// skewed the difference is most of the answer rather than a refinement. A +50% month and a -50%
+// month average to zero and compound to -25%, so the more volatile line loses more to the chaining
+// -- which matters here because holding is the more volatile line on every symbol.
+//
+// Chaining the independent months is legitimate for THESE strategies specifically: each takes one
+// all-in position at a time and pays proportional fees, so a month's percentage return does not
+// depend on the balance it started with. It would not be legitimate for a strategy with a fixed
+// position size or a minimum order value.
+const compound = (v: number[]): number => v.reduce((a, b) => a * (1 + b / 100), 10_000)
+const chain = (def: StrategyDefinition, sym: string, pick: (m: MonthResult) => number): number =>
+  compound(
+    [...rows(def, [sym])].sort((a, b) => a.month.localeCompare(b.month)).map(pick)
+  )
+
+console.log('\nWHAT ONE $10,000 ACCOUNT ENDS WITH, NEVER TOPPED UP  (65 months chained, not averaged)')
+console.log(
+  'line'.padEnd(40) + SYMBOLS.map((s) => s.replace('USDT', '').padStart(10)).join('') + 'beats holding'.padStart(15)
+)
+console.log('-'.repeat(135))
+for (const { def } of ALL) {
+  const mine = SYMBOLS.map((s) => chain(def, s, (m) => m.returnPct))
+  const theirs = SYMBOLS.map((s) => chain(def, s, (m) => m.bhPct))
+  console.log(
+    nm(def).padEnd(40) + mine.map((v) => dl(v).padStart(10)).join('') +
+      (mine.filter((v, i) => v > theirs[i]).length + ' of 8').padStart(15)
+  )
+  console.log(
+    ('  holding, over the same ' + def.preferredInterval + ' months').padEnd(40) +
+      theirs.map((v) => dl(v).padStart(10)).join('')
   )
 }
 

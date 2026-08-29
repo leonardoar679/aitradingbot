@@ -696,7 +696,8 @@ smaller on 3 of 3, cut by 66–80%.
   a market that has not already made its move, and those months still fail when the market falls.
 - **Total profit falls**, as stated in advance. The rule deploys in 130 of 453 months — 29%. Sitting
   out the other 71% removes profit. It is a gain only if the capital genuinely sits in cash while it
-  waits and costs nothing there.
+  waits and costs nothing there. **That condition has since been tested and the rule fails it** — see
+  below.
 - **One earlier cut still contradicts it and is not explained away** — four symbols in 2023–26, where
   it inverted. Fourteen symbols across seven years now support it and four symbols in one era do not.
 
@@ -714,6 +715,30 @@ rather than odds, with a test asserting the summary never matches
 (α = 1/n), not an EMA; substituting an EMA is a common silent error that produces a plausible curve
 with every value shifted, which would move readings across the boundary this whole readout turns on,
 so a test pins the *size* of the gap between a trending and a quiet series rather than only its sign.
+
+**Shipping it as a panel rather than a gate turns out to have been the right call for a reason
+nobody had measured.** `research/vshold.ts` scores the rule the way an operator would actually use
+it — deploy when ADX ≤ 20, sit in **cash earning nothing** otherwise, which is the exact condition
+flagged above and the conservative reading of it, since real cash earns a deposit rate. Same six
+held-out symbols, 488 symbol-months, each strategy at its own interval, and the account is chained
+rather than restarted each month:
+
+| $10,000 chained, six held-out symbols | mean month | sd | worst | ends with | median symbol | beats holding |
+|---|---|---|---|---|---|---|
+| simply holding | **+7.04%** | 52.5 | −45.3% | $94,810 | $19,460 | — |
+| Trend Regime, every month | +5.99% | 45.8 | −40.7% | **$165,625** | **$38,430** | **5 of 6** |
+| Trend Regime, ADX ≤ 20 only | +2.98% | 29.6 | **−29.8%** | $44,960 | $29,961 | 4 of 6 |
+
+**Gating costs about two-thirds of the compounded result** — $44,960 against $165,625, and the same
+direction on both channel strategies ($18,312 vs $138,577; $28,784 vs $167,419). The rule really does
+pick better months, exactly as measured; it just cannot pick enough of them. Sitting out 72% of the
+months means sitting out most of the compounding, and the deployed months are not good enough by a
+wide enough margin to make that back. A readout that informs an operator is worth having. The same
+reading wired to a switch would have cost money.
+
+Note also that the *same* table reproduces the compounding finding from the shipped-configuration
+section below on a completely different symbol set and a longer window: holding wins the mean month
+(+7.04% against +5.99%) and loses the compounded account on five of six symbols.
 
 
 ### Which candle interval, measured rather than assumed
@@ -920,19 +945,49 @@ The anchor is the one each run recorded per month — first close to last close 
 the strategy traded — so it is the alternative that was genuinely available inside the run, not a
 calendar-month return borrowed from elsewhere.
 
-| vs holding, identical months | mean | holding | sd | holding | mean/sd | holding | worst | holding | strategy wins on |
+| vs holding, identical months | mean | holding | **geo mean** | **holding** | sd | holding | worst | holding | strategy wins on |
 |---|---|---|---|---|---|---|---|---|---|
-| Trend Regime Ensemble (4h) | +3.04% | **+3.19%** | 24.1 | 30.0 | **0.126** | 0.107 | **−33.8%** | −56.6% | 3 of 8 symbols |
-| Short-Term Channel (15m) | +2.62% | **+3.15%** | 20.1 | 30.3 | **0.130** | 0.104 | **−42.3%** | −56.6% | 3 of 8 symbols |
-| Channel + Regime (15m) | +2.36% | **+3.15%** | 18.7 | 30.3 | **0.126** | 0.104 | **−43.1%** | −56.6% | 3 of 8 symbols |
+| Trend Regime Ensemble (4h) | +3.04% | **+3.19%** | **+1.26%** | +0.02% | 24.1 | 30.0 | **−33.8%** | −56.6% | 3 of 8 symbols |
+| Short-Term Channel (15m) | +2.62% | **+3.15%** | **+1.30%** | −0.07% | 20.1 | 30.3 | **−42.3%** | −56.6% | 3 of 8 symbols |
+| Channel + Regime (15m) | +2.36% | **+3.15%** | **+1.25%** | −0.07% | 18.7 | 30.3 | **−43.1%** | −56.6% | 3 of 8 symbols |
 
-What they win is the **shape**, not the total: spread falls from 30.0 to 18.7–24.1, the worst single
-month improves from **−56.6% to −33.8%**, and mean per unit of spread rises from 0.104–0.107 to
-0.126–0.130. That is the entire product — the same long exposure, most of the return, roughly
-two-thirds of the volatility, and a worst case that is survivable rather than ruinous. It is a
-narrower claim than "more profit", and it is the accurate one. Anyone whose goal is the largest
-number after five years should hold the coin; anyone whose goal is not losing 57% in a single month
-should not. This is the summary-statistic form of what `research/beta.ts` found bar by bar above.
+**And then the mean turns out to be the wrong statistic.** Every result in this repository is an
+average over *independent* months, each starting at $10,000. Nobody deploys that way. Leave the
+money in and you get the **product** of the monthly returns, not their average — and on a
+distribution this skewed the product is far below what the mean implies, because a +50% month and a
+−50% month average to zero and compound to −25%. That drag scales with variance, and **holding is
+the more volatile line on every symbol**, so it loses far more to it. The geometric mean column
+above is the reconciliation: holding's is **+0.02% and −0.07% a month — essentially zero — against
++1.25% to +1.30% for the strategies.** Holding's +3.15% average month is real and no single account
+ever receives it.
+
+Chained out over the 65 months, per symbol, that is not close:
+
+| $10,000, never topped up | BTC | ETH | SOL | ADA | BNB | LINK | LTC | XRP | beats holding |
+|---|---|---|---|---|---|---|---|---|---|
+| Trend Regime Ensemble (4h) | $32,450 | $36,260 | $122,676 | $6,902 | $36,803 | $8,036 | $3,984 | $57,861 | **8 of 8** |
+| *holding, over the 4h months* | $14,846 | $12,560 | $53,365 | $1,761 | $23,388 | $4,309 | $2,145 | $28,775 | |
+| Short-Term Channel (15m) | $24,143 | $37,327 | $233,724 | $22,161 | $19,284 | $8,261 | $4,204 | $26,491 | **7 of 8** |
+| Channel + Regime (15m) | $27,478 | $30,819 | $154,168 | $21,567 | $16,174 | $9,211 | $7,155 | $20,836 | **6 of 8** |
+| *holding, over the 15m months* | $13,193 | $12,466 | $52,190 | $1,643 | $22,335 | $3,787 | $2,335 | $24,577 | |
+
+So both statements are true and they answer different questions. **Deploy a fresh $10,000 every
+month and withdraw the profit, and holding wins.** **Leave one account running, which is what
+anyone actually does, and all three win** — Trend Regime at 4h on all eight symbols. The shape
+advantage is not a consolation prize for giving up return; past the first month it *is* the return.
+
+Three things keep that from being a stronger claim than it is. Chaining independent months assumes
+a month's percentage return does not depend on the balance it started with, which holds for these
+strategies — one all-in position at a time, proportional fees — and would not hold for anything with
+a fixed position size or a minimum order value. The independent-month design also **forces a flat
+position at every month boundary**, so the chained figure models an account that closes out monthly
+and re-enters; a continuously-run account would differ. That asymmetry runs against the strategies —
+holding's chain is genuinely continuous while theirs pays an extra exit and re-entry twelve times a
+year — so their advantage here is understated rather than flattered. And a compounded result over
+five years is one path, not a distribution: it is dominated by whether the strategy was in the
+market for two or three specific months.
+
+This is the summary-statistic form of what `research/beta.ts` found bar by bar above.
 
 **And they lose to holding specifically on the coins that rose the most**, which is what a trend
 follower with a stop does. Mean month by symbol:
