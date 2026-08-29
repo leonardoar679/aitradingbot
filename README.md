@@ -554,6 +554,33 @@ the existing one, so bots already running Short-Term Channel behave exactly as b
 can be compared side by side.
 
 
+**Entry rules and exit rules are not independently swappable, which was worth one experiment to
+establish** (`research/cross.ts`). Trend Regime and Short-Term Channel each pair their own entry
+with their own exit, and the gated strategy pairs the channel's entry with the channel's exit. Two
+cells of that grid had never been run, and the interesting one looked promising on its face: Trend
+Regime's entry earns the most money and the channel's exit appears to cut the most risk, so pairing
+them should keep the money at lower risk.
+
+It does the opposite, by a wide margin. Trades per month, against 1.2–2.3 for Trend Regime:
+
+| cell | trades / month | total profit, 8 symbols |
+|---|---|---|
+| regime entry → channel exit | **29.9 – 72.4** | −$2,860 to −$43,432 |
+| channel entry → regime exit | 6.9 – 14.4 | +$22,639 to −$21,445 |
+
+Both were rejected 0 of 4 at discovery. The cause is the observation `research/conc.ts` already made
+about entry counts: Trend Regime's entry condition is a **state**, true on about 45% of all bars,
+not an event. What turns it into 1.5 trades a month is its own slow exit — it gets in and stays in.
+Give it a fast exit and it leaves on the first dip, finds the state still true on the next bar, and
+buys again; fifty-four round trips a month at 0.24% is roughly 13% of the account per month in costs
+alone. The mirror cell fails the mirror way — a breakout held until the regime breaks sits through
+drawdowns the channel would have exited, and LTC's worst month reaches −57.6%.
+
+A state-based entry needs a slow exit and an event-based entry needs a fast one. This is also why
+`shortTermChannelRegime` gates the channel's *entry* and leaves its exit untouched, a decision its
+header defends on measured grounds and which this grid now explains from the other side.
+
+
 ### Which candle interval, measured rather than assumed
 
 This one is a positive result, and it changed the app. The question was whether to run faster than

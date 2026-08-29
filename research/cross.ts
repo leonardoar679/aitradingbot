@@ -38,6 +38,32 @@
 //   npx esbuild research/cross.ts --bundle --platform=node --format=esm --outfile=research/.cross.mjs
 //   CANDLE_DIR=.candles node --max-old-space-size=6144 research/.cross.mjs
 
+// RESULT: BOTH REJECTED, 0 of 4 at discovery each, and the failure is structural rather than a
+// matter of degree. Trades per month, against 1.2-2.3 for Trend Regime and 2.1-2.6 for the channel:
+//
+//   regime entry -> channel exit    29.9 to 72.4 per month     -$2,860 to -$43,432 total
+//   channel entry -> regime exit     6.9 to 14.4 per month     +$22,639 to -$21,445
+//
+// WHY, AND IT IS THE SAME OBSERVATION research/conc.ts ALREADY MADE ABOUT ENTRY COUNTS. Trend
+// Regime's entries array is a STATE, not an edge: `agreement >= ENTER_VOTE_FRACTION` is true on
+// roughly 45% of all bars. What turns that state into 1.5 trades a month is its own slow exit -- it
+// gets in and stays in. Hand it a fast exit and it leaves on the first dip to the bottom quarter of
+// a 2-8 day range, finds the state still true on the very next bar, and buys again. Fifty-four
+// round trips a month at 0.24% each is about 13% of the account per month in costs alone.
+//
+// The mirror cell fails less spectacularly for the mirror reason: a breakout entry held until the
+// regime breaks stays in through drawdowns the channel would have left, and LTC's worst month goes
+// to -57.6%.
+//
+// SO ENTRY RULES AND EXIT RULES ARE NOT INDEPENDENTLY SWAPPABLE. The pairing IS the strategy: a
+// state-based entry needs a slow exit, an event-based entry needs a fast one, and a strategy is not
+// a bag of parts to be recombined. That is also the reason shortTermChannelRegime gates the
+// channel's ENTRY and leaves its exit alone -- a design its own header defends on measured grounds,
+// and which this grid now explains from the other direction.
+//
+// Nothing ships from this file. It is here so the two empty cells stay measured rather than
+// remaining an obvious idea nobody had tried.
+
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { runBacktest } from '../src/backtest/engine'
@@ -191,6 +217,18 @@ for (const v of VARIANTS) {
   console.log(v.name.padEnd(32) + ALL.map((s) => {
     const c = m.get(s)
     return (c ? usd(c.profit) : '--').padStart(9)
+  }).join(''))
+}
+
+console.log('\ntrades per month -- the number that explains the two failures')
+console.log('variant'.padEnd(32) + ALL.map((s) => s.replace('USDT', '').padStart(9)).join(''))
+console.log('-'.repeat(32 + 9 * ALL.length))
+for (const v of VARIANTS) {
+  const m = results.get(v.id)
+  if (!m) continue
+  console.log(v.name.padEnd(32) + ALL.map((s) => {
+    const c = m.get(s)
+    return (c ? (c.trades / c.months).toFixed(1) : '--').padStart(9)
   }).join(''))
 }
 
