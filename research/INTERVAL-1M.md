@@ -1,8 +1,14 @@
 # Should Short-Term Channel's default interval become 1m?
 
-**Written before the eight-symbol result was visible.** Only BTCUSDT and ETHUSDT had printed, and
-both were already known from the three-symbol run in `strategies/types.ts`. The five symbols that
-decide this — ADA, BNB, LINK, LTC, XRP — had not.
+**Written before the deciding symbols were visible, and this paragraph was corrected to say that
+precisely.** The first version claimed only BTC and ETH had printed. By the time it was committed
+the Short-Term Channel rows visible at 1m were BTC, ETH **and SOL** — all three already recorded
+in `strategies/types.ts` from the earlier three-symbol run, so none of them is new information.
+ADA's *Trend Regime* row had also printed; Trend Regime is not the subject of this decision and
+cannot take a 1m default in any case, for the polling reason below.
+
+No Short-Term Channel row had printed for **ADA, BNB, LINK, LTC or XRP** — the five that decide
+the rule. That is the claim that matters, and it holds.
 
 This file exists because the three-symbol version of this question has already produced two
 conclusions that had to be retracted, and because a rule chosen after seeing eight symbols is not a
@@ -11,9 +17,10 @@ rule, it is a description.
 ## The question
 
 `shortTermChannel.preferredInterval` is `15m`. It sets the default interval on the Backtest page,
-the Add Bot dialog and Routines, and it is what a live bot actually polls. Three symbols say 1m
-earns more (BTC $7,479 → and ETH $10,104 → at 15m, both higher at 1m; SOL prefers 3m). `types.ts`
-records this as **NOT YET ACTED ON, because it is three symbols.**
+the Add Bot dialog and Routines, and it is what a live bot actually polls. On the three symbols
+measured so far, 1m beats 15m on two: BTC $6,871 → $7,479 and ETH $10,104 → $12,694, while SOL
+goes $17,958 → $17,667 and in fact peaks at 3m ($19,710), an interval that cannot be assigned.
+`types.ts` records this as **NOT YET ACTED ON, because it is three symbols.**
 
 1m is the only finer interval that is actionable at all: `Interval` in `shared/ipc.ts` is
 `'1m' | '15m' | '1h' | '4h' | '1d' | '1w'`, so 3m and 5m cannot be assigned to `preferredInterval`
