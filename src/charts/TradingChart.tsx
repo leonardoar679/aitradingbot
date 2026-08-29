@@ -19,6 +19,7 @@ import { TimeframeToolbar } from '../components/TimeframeToolbar'
 import type { TimeAnchorSettings } from '../components/timeTools/TimeToolsModal'
 import type { IndicatorSettings } from '../components/indicators/IndicatorsPopover'
 import { requestAiSignal } from '../ai/aiClient'
+import { GPT_INTRADAY_INTERVAL } from '../../shared/aiSignal'
 import { formatQuotePrice } from '../utils/formatCurrency'
 import { describeError } from '../utils/ipcError'
 import { useTheme } from '../theme/ThemeContext'
@@ -281,7 +282,7 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
 
     async function markClosedCandle(time: number): Promise<void> {
       try {
-        if (interval !== '15m') return
+        if (interval !== GPT_INTRADAY_INTERVAL) return
         const signalCandles = [...candlesRef.current.values()].sort((a, b) => a.time - b.time)
         const executionIndex = signalCandles.findIndex((candle) => candle.time === time)
         const signal = await requestAiSignal(symbol, { exchange, candles: signalCandles, executionIndex })
