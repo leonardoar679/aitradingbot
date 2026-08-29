@@ -55,6 +55,44 @@ a period with, broadly, one large uptrend. Monthly mean reversion is exactly wha
 see in a sample where a strong month is often a local top. If it fails on 2019–2023, that is the
 likely reason, and the result should be recorded as rejected rather than explained.
 
-## Result
+## Result: REJECTED. Criterion 1 fails on two of the three strategies.
 
-Filled in below, once, after the run.
+355 symbol-months, 2019-09 → 2023-08, eight symbols. (Fewer than 384 because SOL's 15m history does
+not reach back far enough for every month's 80-day warm-up, and those months are skipped rather than
+shortened.)
+
+| | baseline mean | rule mean | verdict |
+|---|---|---|---|
+| Trend Regime | +5.0% | **+2.9%** | worse |
+| Short-Term Channel | +4.6% | +5.3% | better |
+| Channel + Regime | +3.7% | **+2.0%** | worse |
+
+Criterion 2 passes everywhere — summed losses fall from −$161,606 to −$74,880, from −$142,022 to
+−$54,392, and from −$110,434 to −$60,127. It does not matter. The rule needed both conditions on all
+three strategies and it has one condition on one strategy.
+
+The honest prior written above turned out to be the right one: monthly mean reversion looked real on
+2023–2026 because that window is broadly one long uptrend, in which a strong month is often a local
+top. Given four years containing a crash, a mania and a bear, it stops working.
+
+## Where this leaves the whole question
+
+**Two rules were pre-registered and both were rejected.** No month-level go/no-go filter has survived
+an out-of-sample test here.
+
+ADX deserves one closing note, because its record is genuinely mixed rather than simply negative:
+
+| ADX ≤ 20, mean month vs baseline | Trend Regime | Short-Term Channel | Channel + Regime |
+|---|---|---|---|
+| 2023–26, discovery symbols | +9.1% vs +4.6% | +8.3% vs +3.5% | +8.0% vs +4.1% |
+| 2023–26, **held-out symbols** | **−1.1% vs +2.1%** | **+0.3% vs +1.4%** | **+0.2% vs +1.6%** |
+| 2019–23, all eight symbols | +12.9% vs +5.0% | +8.3% vs +4.6% | +9.1% vs +3.7% |
+
+Two cuts strongly for, one cut against — and the one against is the only one that was a clean
+pre-registered holdout at the time it was run. **That is not shipped**, and this table is not an
+argument that it should be. A rule that works on two samples and inverts on the third is a rule whose
+behaviour on the next sample is unknown, which is the only sample that pays.
+
+Continuing to slice until something passes is exactly the failure mode this directory exists to
+avoid, so the search stops here rather than at the first agreeable number. What would actually settle
+it is more symbols — eight is too few to spend two on a holdout and still have a holdout left.
