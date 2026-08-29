@@ -601,6 +601,121 @@ The tests pin the only thing that must not change — that cached and uncached p
 candles — and were checked by mutation: reverting the one-bar overlap fails four of the nine.
 
 
+### What one month actually looks like, since one month is the goal
+
+Every other table here reports a total or a mean over 36 or 48 months. Someone deploying $10,000 for
+**one** month does not receive the mean, and on a distribution this skewed the mean is a poor
+description of it. `research/onemonth.ts` prints the distribution instead — 658–660 independent
+symbol-months per strategy, pooled across both eras and all eight symbols at 15m:
+
+| one month, $10,000 | p5 | p25 | median | p75 | p95 | mean | lose >10% | flat | gain >10% |
+|---|---|---|---|---|---|---|---|---|---|
+| Trend Regime | −18.3% | −6.9% | +0.0% | +4.8% | +43.6% | +5.1% | 16% | 26% | 20% |
+| Short-Term Channel | −14.3% | −6.1% | −0.8% | +7.4% | +35.4% | +4.0% | 14% | 10% | 21% |
+| Channel + Regime | −12.9% | −4.5% | +0.0% | +3.9% | +31.2% | +3.7% | 9% | 30% | 16% |
+
+**The median month is roughly zero on all three.** The positive mean comes from the right tail, not
+from most months being good: about a fifth of months gain more than 10%, about a seventh lose more
+than 10%, and the rest do very little. A quarter to a third are flat because the strategy took no
+position at all. A single month is close to a coin flip with a long right tail; the edge only
+appears over many of them.
+
+Pooling is legitimate here only because nothing is being selected — this describes results already
+produced, it does not fit a rule to them.
+
+### When they lose, and why three attempts to predict it failed
+
+The question was direct: these strategies make money sometimes and lose it other times, so read the
+market first and decide whether to run them at all. `research/beta.ts` answers the first half, and in
+doing so explains why most of the second half was never going to work.
+
+Bucket every independent month by what **simply holding the coin** did in that same month, measured
+over the identical bars the strategy traded:
+
+| mean strategy month | bh < −20% | −20..−10 | −10..0 | 0..+10 | +10..+20 | bh > +20% |
+|---|---|---|---|---|---|---|
+| Trend Regime | −6.2% (95) | −5.5% (102) | −6.4% (127) | −2.9% (121) | +3.6% (72) | **+38.6% (141)** |
+| Short-Term Channel | −7.2% (97) | −5.3% (102) | −4.1% (127) | −0.9% (121) | +4.4% (72) | **+29.8% (141)** |
+| Channel + Regime | −2.4% (95) | −3.3% (102) | −3.3% (127) | −1.7% (121) | +1.1% (72) | **+25.2% (141)** |
+
+Two numbers carry the finding. **Trend Regime was profitable in 1 of the 323 months where holding
+lost money** — not a tendency, essentially never. And **all three lose money on average even when the
+market rises 0–10%**: the mean is produced entirely by the 141 months where holding gained more than
+20%. They need a strong up-month, not merely a positive one.
+
+| | correlation with holding | up capture | down capture | ratio | profitable when bh < 0 |
+|---|---|---|---|---|---|
+| Trend Regime | 0.89 | 56% | 41% | 1.38 | 1 of 323 (0%) |
+| Short-Term Channel | 0.85 | 47% | 36% | 1.29 | 60 of 325 (18%) |
+| Channel + Regime | **0.80** | 36% | **21%** | **1.75** | 25 of 323 (8%) |
+
+**What that makes them.** Not all-weather systems, and not market-neutral: long crypto with the shape
+changed — roughly half the upside, roughly a third of the downside. Capture ratio is the honest
+measure of whether that trade is worth making, and it is where the gated strategy is clearly best.
+It is also the correction to a reading the bear-market table above invites. The +8.5% Trend Regime
+contributes across deep-bear *bars* is not profit earned from falling markets: measured a calendar
+month at a time it made money in 1 of 323 of them. It sits out of bear markets rather than shorting
+them — a much smaller claim, and the accurate one.
+
+**And it is why predicting a bad month kept failing.** A monthly result this close to a function of
+the market's direction cannot be forecast without forecasting that direction — which is not a
+strategy-tuning problem. Two rules were pre-registered against the eight discovery symbols and both
+were rejected: `research/GONOGO.md` (ADX plus prior month, which **inverted** out of sample) and
+`research/PRIORMONTH.md` (prior month ≤ 0, which failed on 2019–2023). Both are recorded as failures
+rather than re-cut until something passed.
+
+### The one market reading that survived, and why it ships as a readout
+
+ADX's record was not weakly positive, it was **inconsistent** — two cuts strongly for, one clean
+holdout against — and inconsistency is the one thing more data can resolve where a weak effect
+cannot. So a single rule was fixed in `research/ADX.md`, committed to git while the data was still
+downloading, and scored **once** against six symbols that had taken no part in any result in this
+repository (DOGE, TRX, ETC, XLM, VET, EOS).
+
+**The rule.** Run the strategy in a calendar month only if Wilder's ADX(14), computed on daily bars
+closing strictly before the 1st, is ≤ 20. One condition, and the threshold is Wilder's own published
+boundary for "no meaningful trend" rather than a cut fitted here. `ADX ≤ 25` is the other published
+boundary and was deliberately *not* tested, because testing both doubles the chance of a false pass.
+
+**Result: confirmed on all three pre-registered conditions.** 453 symbol-months, both eras:
+
+| pooled, both eras | months | baseline mean | ADX ≤ 20 months | rule mean | baseline losses | rule losses |
+|---|---|---|---|---|---|---|
+| Trend Regime | 453 | +5.97% | 130 | **+10.83%** | −$207,061 | **−$41,999** |
+| Short-Term Channel | 453 | +4.88% | 130 | **+5.40%** | −$213,352 | **−$72,042** |
+| Channel + Regime | 453 | +5.17% | 130 | **+7.37%** | −$137,170 | **−$34,673** |
+
+Higher mean on 3 of 3 pooled; higher on 3 of 3 within *each* era separately; summed dollar losses
+smaller on 3 of 3, cut by 66–80%.
+
+**Three things have to be said next to it, and the app says all three.**
+
+- **The win rate goes DOWN** — 28% → 25%, 42% → 36%, 30% → 28%. This was not a criterion and it
+  should have been. The rule does not select months that win more often; it selects months whose
+  winners are larger and whose losers are smaller. That is consistent with `beta.ts`: a low ADX marks
+  a market that has not already made its move, and those months still fail when the market falls.
+- **Total profit falls**, as stated in advance. The rule deploys in 130 of 453 months — 29%. Sitting
+  out the other 71% removes profit. It is a gain only if the capital genuinely sits in cash while it
+  waits and costs nothing there.
+- **One earlier cut still contradicts it and is not explained away** — four symbols in 2023–26, where
+  it inverted. Fourteen symbols across seven years now support it and four symbols in one era do not.
+
+**So it ships as a panel, not a gate.** `src/backtest/marketConditions.ts` computes the reading and
+`MarketConditionsCard` renders it under the Backtest configuration: the ADX number, the posture, and
+what that posture has historically meant *for the selected strategy*, with both caveats in the card.
+The expectations quoted are from the six held-out symbols rather than the fuller fourteen, because
+the fuller set includes the data the rule was found on and would flatter it. Strategies with no
+measured expectation get no panel rather than a panel with an empty half.
+
+Nothing in the engine or in any strategy consults it. A result with a live exception belongs in front
+of an operator, not wired silently into a position size — and the copy is constrained to payoff
+rather than odds, with a test asserting the summary never matches
+`/safer|more likely|will rise|win rate|probability/i`. The ADX itself uses Wilder's smoothing
+(α = 1/n), not an EMA; substituting an EMA is a common silent error that produces a plausible curve
+with every value shifted, which would move readings across the boundary this whole readout turns on,
+so a test pins the *size* of the gap between a trending and a quiet series rather than only its sign.
+
+
 ### Which candle interval, measured rather than assumed
 
 This one is a positive result, and it changed the app. The question was whether to run faster than
