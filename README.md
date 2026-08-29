@@ -900,6 +900,87 @@ now carries its interval and a test pins it to `preferredInterval`. The same scr
 shipped Wilder ADX against the research implementation on every month it scores — 1,465 decisions,
 zero difference.
 
+### What the shipped configuration actually does, against simply holding the coin
+
+The decision above leaves the three strategies on **different** bar sizes, which means every table
+before it — all of which hold the interval fixed so the strategies can be compared to each other —
+describes a configuration that no longer ships. `research/shipped.ts` scores the three as they ship.
+It reads each interval from the strategy definition rather than from a constant of its own, so the
+script cannot outlive an edit to the strategy. 520 independent $10,000 months each: 65 months
+(2021-04 → 2026-08) × 8 symbols.
+
+| as shipped | months | mean | median | sd | mean/sd | worst | best | profit | losses | flat |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Trend Regime Ensemble (**4h**) | 520 | **+3.04%** | +0.00% | 24.1 | 0.126 | −33.8% | +247.9% | **$158,160** | −$201,861 | 27% |
+| Short-Term Channel (**15m**) | 520 | +2.62% | −1.00% | 20.1 | **0.130** | −42.3% | +210.3% | $136,016 | −$194,112 | 1% |
+| Channel + Regime (**15m**) | 520 | +2.36% | +0.00% | **18.7** | 0.126 | −43.1% | +189.7% | $122,694 | **−$141,629** | 28% |
+
+**Holding beats all three on the mean month, and nothing in this repository had said so plainly.**
+The anchor is the one each run recorded per month — first close to last close over the *same bars*
+the strategy traded — so it is the alternative that was genuinely available inside the run, not a
+calendar-month return borrowed from elsewhere.
+
+| vs holding, identical months | mean | holding | sd | holding | mean/sd | holding | worst | holding | strategy wins on |
+|---|---|---|---|---|---|---|---|---|---|
+| Trend Regime Ensemble (4h) | +3.04% | **+3.19%** | 24.1 | 30.0 | **0.126** | 0.107 | **−33.8%** | −56.6% | 3 of 8 symbols |
+| Short-Term Channel (15m) | +2.62% | **+3.15%** | 20.1 | 30.3 | **0.130** | 0.104 | **−42.3%** | −56.6% | 3 of 8 symbols |
+| Channel + Regime (15m) | +2.36% | **+3.15%** | 18.7 | 30.3 | **0.126** | 0.104 | **−43.1%** | −56.6% | 3 of 8 symbols |
+
+What they win is the **shape**, not the total: spread falls from 30.0 to 18.7–24.1, the worst single
+month improves from **−56.6% to −33.8%**, and mean per unit of spread rises from 0.104–0.107 to
+0.126–0.130. That is the entire product — the same long exposure, most of the return, roughly
+two-thirds of the volatility, and a worst case that is survivable rather than ruinous. It is a
+narrower claim than "more profit", and it is the accurate one. Anyone whose goal is the largest
+number after five years should hold the coin; anyone whose goal is not losing 57% in a single month
+should not. This is the summary-statistic form of what `research/beta.ts` found bar by bar above.
+
+**And they lose to holding specifically on the coins that rose the most**, which is what a trend
+follower with a stop does. Mean month by symbol:
+
+| mean month | BTC | ETH | SOL | ADA | BNB | LINK | LTC | XRP |
+|---|---|---|---|---|---|---|---|---|
+| Trend Regime Ensemble (4h) | **+2.3%** | **+2.9%** | +7.7% | **+1.9%** | +3.2% | +0.6% | −0.9% | +6.6% |
+| *holding, over the 4h months* | +1.9% | +2.6% | +8.9% | +1.4% | +3.3% | +1.1% | −0.8% | +7.1% |
+| Short-Term Channel (15m) | **+1.9%** | **+2.7%** | +7.6% | **+2.7%** | +1.5% | +0.4% | −0.9% | +5.1% |
+| Channel + Regime (15m) | **+1.9%** | +2.2% | +6.5% | **+2.4%** | +1.1% | +0.4% | **−0.1%** | +4.4% |
+| *holding, over the 15m months* | +1.8% | +2.6% | +9.0% | +1.4% | +3.3% | +0.9% | −0.6% | +7.0% |
+
+Holding gets a row per interval rather than one row for the table, because the two bar sizes do not
+cover quite the same bars and so do not hand the strategy quite the same coin to beat — BTC returns
++1.94% a month over the 4h months and +1.75% over the 15m ones. Bold marks where the strategy beat
+its own anchor: **BTC, ETH and ADA** for the two that trade the trend, **BTC, ADA and LTC** for the
+gated one. The gap is largest on the three biggest risers — SOL, XRP and BNB — which is the shape of
+a stop working as designed: it takes the strategy out of a move that then keeps going. LINK and LTC
+are the counter-examples that keep this from being a tidy rule; on those they simply did worse, with
+no large move to be stopped out of.
+
+**Two of the eight symbols carry about half the mean.** SOL and XRP are visibly the top pair above,
+so removing them is a crude but honest test of whether the edge is broad. It does not fully survive:
+
+| SOL and XRP removed | mean, 8 | mean, 6 | change | mean/sd | profit, 8 | profit, 6 |
+|---|---|---|---|---|---|---|
+| Trend Regime Ensemble (4h) | +3.04% | +1.67% | **−45%** | 0.096 | $158,160 | $65,142 |
+| Short-Term Channel (15m) | +2.62% | +1.38% | **−47%** | 0.104 | $136,016 | $53,784 |
+| Channel + Regime (15m) | +2.36% | +1.33% | **−44%** | 0.111 | $122,694 | $51,762 |
+
+The remaining six still return a positive mean and still make money, so the edge is not *only* those
+two coins — but anyone planning on +3.0% a month should plan on **+1.7%** if the next few years do
+not hand them two more like them.
+
+**Which of the three, decided on the four symbols that took no part in choosing anything.** The
+pooled mean/sd column makes them look tied (0.126 / 0.130 / 0.126) and is partly in-sample, since
+four of those eight symbols chose the bar size. On BNB/LINK/LTC/XRP the tie breaks:
+
+| held-out four | mean | mean/sd | worst | profit | losses |
+|---|---|---|---|---|---|
+| Trend Regime Ensemble (4h) | **+2.38%** | **0.100** | **−27.3%** | **$61,883** | −$101,351 |
+| Channel + Regime (15m) | +1.45% | 0.075 | −43.1% | $37,823 | **−$83,485** |
+| Short-Term Channel (15m) | +1.52% | 0.074 | −42.3% | $39,625 | −$106,777 |
+
+**Most money, Trend Regime at 4h; smallest losses, the gated channel at 15m. Nothing wins both** —
+`shipped.ts` prints that verdict from the numbers rather than leaving it as a sentence that can drift
+away from them.
+
 ### The fast one: Short-Term Channel Breakout
 
 Added after a request for a strategy that trades more often. The first attempt at one failed and
