@@ -32,6 +32,16 @@ import { inferBarSeconds, regimeAgreement, trendRegimeEnsemble } from './trendRe
 // single month improves on 6, ties on 1, and worsens only on ADA. It was the only survivor of
 // seventeen variants -- give-back exits and re-entry cooldowns were rejected at discovery.
 //
+// WHAT IT IS ACTUALLY BUYING, WHICH IS NOT PROFIT (research/shape.ts). The total-profit result
+// above is the weaker half of the evidence and should not be read as "this earns more". Net across
+// 288 symbol-months the gate is worth $11,436, and the best FIVE months carry 86% of that; by count
+// it is 108 helped against 104 hurt with a median effect of exactly $0. What does hold is a rule
+// about the distribution: sorting every month by what the ungated strategy did and cutting into
+// fifths, the gate's effect falls monotonically from +5.8% in the worst fifth to -3.6% in the best,
+// helping 80 against 18 in the bottom two fifths and 11 against 61 in the top two. It TRADES UPSIDE
+// FOR DOWNSIDE at a predictable rate. Expect the smaller drawdown to repeat; do not count on the
+// extra dollars, which depended on 2023-2026 having a fatter bad tail than good.
+//
 // THE COST IS WARM-UP, AND IT IS REAL. Short-Term Channel needs 8 days of history; this needs the
 // regime's 80. On the Backtest page's default 90-day range that leaves ten tradeable days and
 // roughly one trade where the ungated strategy shows twenty -- which is the exact failure mode

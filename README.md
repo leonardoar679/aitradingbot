@@ -495,6 +495,33 @@ what the volatility gate above was reverted for. The threshold is not tuned eith
 inconsistently across symbols, and choosing one would add a free parameter fitted on the same data
 used to justify it; 4-of-4 adds none.
 
+**Total profit is the weaker claim, and it should not be the headline.** Net across all 288
+symbol-months the gate is worth $11,436 — and the best **five** months carry 86% of that. By count
+it is a coin flip: 108 months helped, 104 hurt, 76 unchanged, median effect exactly $0. A dollar
+total over strategies whose mean is carried by a handful of enormous months is decided by what
+happens in about five of them, which is the same five-observation problem this directory has
+retracted results for twice already. Applying that standard to a result I found is the point.
+
+**What survives is a rule about the distribution, not the total** (`research/shape.ts`). Sort all
+288 months by what the *ungated* strategy did and cut into fifths:
+
+| months, sorted by ungated result | ungated | gated | effect | helped / hurt |
+|---|---|---|---|---|
+| worst fifth | −12.3% | **−6.5%** | **+5.8%** | 39 / 10 |
+| 2nd | −4.8% | **−2.3%** | **+2.4%** | 40 / 8 |
+| middle | −1.2% | −1.9% | −0.7% | 18 / 22 |
+| 4th | +3.3% | +1.5% | −1.8% | 7 / 32 |
+| best fifth | +26.1% | +22.5% | −3.6% | 4 / 31 |
+
+The effect falls monotonically across every bucket, and the votes are lopsided in *opposite*
+directions at the two ends — 80 helped against 18 hurt in the bottom two fifths, 11 against 61 in
+the top two. That is 288 months agreeing, not five. So the gate is a **risk trade, not a profit
+engine**: it gives up about 3.6 points in the best fifth of months to save about 5.8 in the worst
+fifth. Total profit improved here because over 2023–2026 the bad tail was fatter than the good tail
+was thin — a fact about this window, where the risk transfer is a fact about the rule. Expect the
+smaller drawdown to repeat; do not count on the extra dollars.
+
+
 The cost is warm-up. The gate reads an 80-day average, so this needs the regime's 80 days rather
 than the channel's 8 — on the Backtest page's default 90-day range that leaves ten tradeable days.
 It therefore ships as a **separate** strategy (`short-term-channel-regime`) rather than a change to
