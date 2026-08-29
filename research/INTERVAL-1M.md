@@ -41,7 +41,7 @@ If profit passes and risk fails, or the reverse, the default **stays at 15m** an
 is recorded. There is no tie-break, deliberately: an interval change that needs one is not
 supported by the evidence.
 
-## A constraint the backtest cannot see, and it binds harder
+## A constraint the backtest cannot see (since removed, and it did not decide this)
 
 `src/bots/useDryRun.ts` re-fetches the **entire warm-up window on every poll**, and `POLL_MS` is
 60 seconds. The window is `max(LOOKBACK_CANDLES, warmupBarsFor(interval) + 120)` bars, paged from
@@ -57,10 +57,14 @@ So this decision is only ever available to Short-Term Channel. Twelve paged requ
 minute is tolerable; **116 is not** — several bots would exhaust Binance's per-minute weight budget
 and start failing, which presents to the user as a broken bot rather than a rate limit.
 
-That is a property of how the app polls, not of the strategies, and it is worth stating plainly:
-**no strategy carrying an 80-day look-back can have a 1m default until the dry run fetches
-incrementally instead of re-fetching its whole window every minute.** Changing `preferredInterval`
-on either regime strategy today would ship a bot that hammers the exchange and stalls.
+That was a property of how the app polled, not of the strategies. **It has since been fixed** --
+`src/bots/candleCache.ts` now fetches only the tail after the first poll, so a bot's steady-state
+request cost no longer scales with its look-back at all.
+
+It is left recorded because it was true when the question was asked, and because it is the
+reason a backtest number is not on its own a licence to change a default: the app has to be able
+to run the thing. **It did not decide the outcome below** -- 1m was rejected on returns, and
+would still be rejected if fetching were free.
 
 ## Result: rejected. The default stays at 15m.
 

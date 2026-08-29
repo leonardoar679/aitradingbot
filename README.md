@@ -581,6 +581,24 @@ A state-based entry needs a slow exit and an event-based entry needs a fast one.
 header defends on measured grounds and which this grid now explains from the other side.
 
 
+**A bot re-downloaded its whole warm-up window every minute, and now does not.** `useDryRun` polls
+every 60 seconds, and each poll re-fetched the full range the strategy needs to be warm. Trend
+Regime looks back 80 days — 7,800 bars at 15m — so one bot pulled 7,800 candles a minute, paged
+1,000 at a time, to learn about at most one new bar. Eight REST calls a minute, per bot, forever,
+for four candles an hour of actual news.
+
+`src/bots/candleCache.ts` keeps the series and fetches only the tail, and several bots on the same
+symbol and interval now share one copy. The refetch deliberately **overlaps by one bar**: the newest
+candle an exchange returns is still forming, and appending strictly after it would freeze a partial
+bar forever — a strategy reading a close that never moves again, which looks like nothing at all
+going wrong. A cancelled fetch is kept rather than discarded, because `fetchHistoricalRange` pages
+forward and stops early, so a cancelled result is a contiguous prefix and never a series with a hole
+in it.
+
+The tests pin the only thing that must not change — that cached and uncached polls return identical
+candles — and were checked by mutation: reverting the one-bar overlap fails four of the nine.
+
+
 ### Which candle interval, measured rather than assumed
 
 This one is a positive result, and it changed the app. The question was whether to run faster than

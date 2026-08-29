@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { INTERVAL_SECONDS, type Candle, type Exchange, type Interval } from '../../shared/ipc'
 import { runBacktest, type BacktestResult, type Trade, type OpenPositionSnapshot } from '../backtest/engine'
 import { getStrategy } from '../backtest/strategies'
+import { fetchRangeCached } from './candleCache'
 import { generateGptIntradaySignals } from '../backtest/strategies/gptIntraday'
 import {
   GPT_INTRADAY_STRATEGY_ID,
@@ -84,7 +85,17 @@ export async function fetchBotDryRunResult(bot: {
       : bot.enabledAt !== null
       ? Math.min(defaultStartSec, bot.enabledAt - warmup * barSec)
       : defaultStartSec
-  const { candles } = await window.api.market.fetchHistoricalRange(bot.exchange, bot.symbol, interval, startSec, endSec)
+  // Cached: a poll re-fetches only the tail, not the whole 80-day warm-up window every minute.
+  // See candleCache.ts -- the saving is roughly a hundredfold per bot, and several bots on the
+  // same symbol and interval share one series.
+  const candles = await fetchRangeCached(
+    (ex, sym, iv, from, to) => window.api.market.fetchHistoricalRange(ex, sym, iv, from, to),
+    bot.exchange,
+    bot.symbol,
+    interval,
+    startSec,
+    endSec
+  )
   if (candles.length === 0) return null
   // Engine default, like RoutineScheduler and for the same reason: a dry run is re-computed on
   // every poll, and a bot's displayed P&L must not move because an unrelated strategy started or

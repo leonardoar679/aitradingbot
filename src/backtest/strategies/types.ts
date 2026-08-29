@@ -120,11 +120,16 @@ export interface StrategyDefinition {
    * Trend Regime's trades per month roughly double (1.2-2.6 at 15m, 3.6-5.1 at 1m), which is the
    * hysteresis mechanism above confirmed on eight symbols rather than predicted from three.
    *
-   * AND A CONSTRAINT THAT WOULD HAVE BOUND ANYWAY. src/bots/useDryRun.ts re-fetches the whole
-   * warm-up window on every 60-second poll. At 1m that is 12 paged requests per bot per minute
-   * for Short-Term Channel's 8 days, and 116 for either 80-day strategy -- so no strategy with a
-   * regime look-back can take a 1m default until that fetch becomes incremental, whatever a
-   * backtest says about it.
+   * A SECOND CONSTRAINT EXISTED AND HAS SINCE BEEN REMOVED, but it did not decide this. When the
+   * question was asked, src/bots/useDryRun.ts re-fetched the whole warm-up window on every
+   * 60-second poll -- 12 paged requests per bot per minute at 1m for Short-Term Channel's 8
+   * days, and 116 for either 80-day strategy. src/bots/candleCache.ts now fetches only the tail
+   * after the first poll, so steady-state cost no longer scales with the look-back.
+   *
+   * That changes nothing above. 1m was rejected on RETURNS -- 5 of 8 against a bar of 6 -- and
+   * would still be rejected if the fetch were free. The constraint is recorded because it was
+   * real at the time and because it is the reason a backtest result is not on its own a licence
+   * to change a default: the app has to be able to run the thing.
    *
    * CONFIRMED ON EIGHT SYMBOLS (2021-06 to 2026-08, the window all eight cover), because the three-
    * symbol table above is the same sample size that nearly shipped the volatility gate. Short-Term
