@@ -505,6 +505,33 @@ per-strategy field. Confirmed on a longer window (2018-01 → 2026-08, median an
 | 4h | +4,489.7% / +3,918.1% / −49.4% | +1,356.4% / +937.3% / −46.5% |
 | 1d | +2,258.3% / +1,798.3% / −54.1% | +780.0% / +226.9% / −61.1% |
 
+That table is three symbols, and three symbols is how the volatility gate nearly got itself shipped.
+Re-asked on **eight** (2021-06 → 2026-08, the window every symbol covers), the median disagrees with
+the head-to-head, and the head-to-head is the one telling the truth:
+
+| Short-Term Channel | ADA | BNB | BTC | ETH | LINK | LTC | SOL | XRP |
+|---|---|---|---|---|---|---|---|---|
+| 15m | **+49.8%** | **+26.3%** | **+129.6%** | **+164.5%** | **−29.7%** | **−64.0%** | **+2,216.2%** | +38.7% |
+| 1h | +47.1% | +2.9% | +101.7% | +70.2% | −30.4% | −85.7% | +1,681.3% | **+120.6%** |
+
+15m wins **seven of eight**, and its worst case is 22 points better (−64.0% against −85.7%). Yet the
+eight-symbol *median* prefers 1h, +58.7% to +44.3% — decided entirely by XRP, the single symbol 1h
+wins, landing where it moves the middle of the sort. A median across eight symbols can still be a
+statistic about one of them. `15m` stands, on better evidence than it shipped with.
+
+Trend Regime is the honest opposite. Same eight symbols, same window:
+
+| Trend Regime | ADA | BNB | BTC | ETH | LINK | LTC | SOL | XRP |
+|---|---|---|---|---|---|---|---|---|
+| 15m | **−4.0%** | +38.4% | +398.0% | **+325.6%** | −35.5% | **−51.6%** | **+603.1%** | +91.0% |
+| 1h | −29.4% | **+97.6%** | **+408.2%** | +291.4% | **+2.7%** | −54.8% | +489.7% | **+180.6%** |
+
+Four-all, and Sharpe splits four-all too. `1h` still stands, but as an aggregate call rather than a
+sweep: it wins the median on both windows (+139.1% against +64.7% here), the median drawdown (−68.2%
+against −75.0%) and the fee bill, while losing outright on half the symbols taken one at a time. That
+is worth saying plainly, because a per-symbol interval override is a reasonable thing to want on this
+strategy and not on the other one.
+
 **What changed in the app.** `StrategyDefinition` gained a `preferredInterval`, because the app had
 three hardcoded and mutually inconsistent answers: the Backtest page opened on 15m, a bot's paper dry
 run polled 4h for every strategy, and Routines used `DEFAULT_INTERVAL`. A bot could therefore be

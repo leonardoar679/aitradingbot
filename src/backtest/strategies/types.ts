@@ -66,7 +66,16 @@ export interface StrategyDefinition {
    * range is +398% to +417% across 43-63 trades on one symbol with Sharpe flat at 1.11-1.14, so the
    * spread is noise, and 3m pays 42% more in fees for it. Short-Term Channel is unambiguous -- 15m
    * beats 3m and 5m on return AND drawdown while paying less. SOLUSDT agrees independently: Trend
-   * Regime +585.9% at 5m against +603.1% at 15m, Short-Term Channel +1,677.7% against +2,216.2%. */
+   * Regime +585.9% at 5m against +603.1% at 15m, Short-Term Channel +1,677.7% against +2,216.2%.
+   *
+   * CONFIRMED ON EIGHT SYMBOLS (2021-06 to 2026-08, the window all eight cover), because the three-
+   * symbol table above is the same sample size that nearly shipped the volatility gate. Short-Term
+   * Channel at 15m beats 1h on seven of eight symbols and on worst case (-64.0% against -85.7%);
+   * the eight-symbol MEDIAN prefers 1h only because XRP, the single symbol 1h wins, sits where it
+   * moves the middle of the sort. Trend Regime is genuinely closer -- 15m and 1h split four-all
+   * head to head and four-all on Sharpe, so 1h is an aggregate call (better median on two windows,
+   * better median drawdown, lower fees) rather than a sweep, and a per-symbol override is more
+   * defensible here than on Short-Term Channel. */
   preferredInterval: Interval
   /** True when signals must be generated asynchronously and supplied to the execution engine. */
   requiresExternalSignals?: boolean
