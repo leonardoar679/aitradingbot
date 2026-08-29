@@ -548,7 +548,9 @@ this is.
 
 
 The cost is warm-up. The gate reads an 80-day average, so this needs the regime's 80 days rather
-than the channel's 8 — on the Backtest page's default 90-day range that leaves ten tradeable days.
+than the channel's 8. Driven in the running app, the Backtest page's default 90-day range reports
+79 days of warm-up and 7,680 candles of it, leaving about **twelve** tradeable days against the
+ungated strategy's eighty-four — 2 closed trades on BTC-USDT against the ungated strategy's 7.
 It therefore ships as a **separate** strategy (`short-term-channel-regime`) rather than a change to
 the existing one, so bots already running Short-Term Channel behave exactly as before and the two
 can be compared side by side.

@@ -61,10 +61,16 @@ import { inferBarSeconds, regimeAgreement, trendRegimeEnsemble } from './trendRe
 // bottom quarter, against the regime's 3-of-4 hysteresis), not in when they are allowed to buy.
 //
 // THE COST IS WARM-UP, AND IT IS REAL. Short-Term Channel needs 8 days of history; this needs the
-// regime's 80. On the Backtest page's default 90-day range that leaves ten tradeable days and
-// roughly one trade where the ungated strategy shows twenty -- which is the exact failure mode
-// types.ts warns about, a strategy that reads as broken when it is only still warming up. It fits
-// inside the default range, but barely, exactly as Trend Regime does.
+// regime's 80. Measured in the running app rather than estimated, because the estimate that used
+// to sit here was wrong: on the Backtest page's default 90-day range the app reports 79 days of
+// warm-up and 7,680 candles of it, leaving about TWELVE tradeable days against the ungated
+// strategy's eighty-four. On BTC-USDT that is 2 closed trades against the ungated strategy's 7 --
+// not the 'one against twenty' this comment previously claimed, which compared a number from one
+// window against a number from another.
+//
+// The point survives the correction: a handful of trades is the exact failure mode types.ts warns
+// about, a strategy that reads as broken when it is only still warming up. It fits inside the
+// default range, but barely, exactly as Trend Regime does.
 
 /** The slower of the two warm-ups, always. The gate reads an 80-day average, and rollingSma is NaN
  * until its window fills; `close > NaN` is false, so every unwarmed lookback votes NO and a
