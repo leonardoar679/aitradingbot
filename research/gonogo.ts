@@ -36,6 +36,11 @@ const DUMP = process.env.IN || 'research/.eight.json'
 const INTERVAL = process.env.INTERVAL || '15m'
 const SET = process.env.SET || 'discovery'
 const CAPITAL = 10_000
+/** The month window. Defaults to the 36 months every existing result in this repo uses;
+ * an earlier window is how a rule gets tested on data no earlier run has touched. */
+const FIRST_YEAR = Number(process.env.FIRST_YEAR || 2023)
+const FIRST_MONTH0 = Number(process.env.FIRST_MONTH || 9) - 1
+const COUNT = Number(process.env.MONTHS || 36)
 const DISCOVERY = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'ADAUSDT']
 const CONFIRM = ['BNBUSDT', 'LINKUSDT', 'LTCUSDT', 'XRPUSDT']
 const SYMBOLS = SET === 'confirm' ? CONFIRM : SET === 'all' ? [...DISCOVERY, ...CONFIRM] : DISCOVERY
@@ -53,9 +58,9 @@ const load = (s: string): Candle[] =>
 
 function months(): Array<[string, number]> {
   const out: Array<[string, number]> = []
-  for (let i = 0; i < 36; i++) {
-    const y = 2023 + Math.floor((8 + i) / 12)
-    const m = (8 + i) % 12
+  for (let i = 0; i < COUNT; i++) {
+    const y = FIRST_YEAR + Math.floor((FIRST_MONTH0 + i) / 12)
+    const m = (FIRST_MONTH0 + i) % 12
     out.push([`${y}-${String(m + 1).padStart(2, '0')}`, Date.UTC(y, m, 1) / 1000])
   }
   return out
