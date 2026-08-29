@@ -70,11 +70,19 @@ export interface StrategyDefinition {
    * Trend Regime +398.2% vs +398.0% (BTC, a dead heat), +585.9% vs +603.1% (SOL), +251.0% vs
    * +325.6% (ETH), with Short-Term Channel behind at 5m on all three.
    *
-   * At 3m it is NOT settled for Short-Term Channel, and an earlier version of this comment wrongly
-   * said it was. ETH splits the verdict: Trend Regime at 3m is clearly bad there (+171.5% vs
-   * +325.6% at 15m, Sharpe 0.68 vs 0.90) but Short-Term Channel at 3m is the best cell ETH
-   * produces (+189.2% vs +164.5%, Sharpe 0.73 vs 0.68, drawdown -37.1% vs -40.9%). One-all on two
-   * symbols. 15m stands on the eight-symbol evidence below, not on this pair.
+   * At 3m NOTHING is settled on either strategy, and two attempts to say otherwise here were both
+   * wrong. 3m exists for three symbols only and does not converge. Trend Regime at 3m vs 15m:
+   * +417.3% vs +398.0% (BTC), +171.5% vs +325.6% (ETH), +749.9% vs +603.1% (SOL) -- 3m wins two of
+   * three, and the losses run 154 points one way and 147 the other. Short-Term Channel splits one
+   * of three. A sign that flips per symbol at that size is variance.
+   *
+   * THE FEE MECHANISM IS REAL BUT DOES NOT DECIDE IT. Going 15m to 3m, Short-Term Channel's trade
+   * count moves +6%, +6%, +4% -- it enters on channel breaks, which happen at a rate set by price
+   * rather than by how often the rule runs. Trend Regime's moves +29%, +78%, +45%, being a
+   * hysteresis strategy that catches more marginal crossings when sampled finer, at 0.24% each.
+   * The inference that 3m must therefore hurt Trend Regime is refuted by SOL, where 3m pays 96%
+   * more in fees (,991 vs ,594) and still returns 147 points more with better Sharpe AND
+   * drawdown. "Finer is worse" holds firmly from 1d to 15m and stops being predictive below 15m.
    *
    * CONFIRMED ON EIGHT SYMBOLS (2021-06 to 2026-08, the window all eight cover), because the three-
    * symbol table above is the same sample size that nearly shipped the volatility gate. Short-Term

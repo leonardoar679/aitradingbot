@@ -481,31 +481,52 @@ BTCUSDT, 2021-06 → 2026-08, the same strategy at every bar size:
 | 4h | +344.7% | 1.06 | $1,934 | +86.1% | 0.55 | $3,582 |
 | 1d | +211.5% | 0.82 | $1,117 | −15.0% | 0.05 | $1,388 |
 
-**Finer is not better, and the mechanism says why.** Both strategies define their lookbacks in
-*days*, so shrinking the bar does not change what the strategy means — a 20-day average is 20 days
-at every interval. It changes two things only: the rule is checked more often, and it crosses its own
-hysteresis band more often. The first is worth something small; the second costs 0.24% every time.
+**Finer is not better between 1d and 15m, and the mechanism says why.** Both strategies define their
+lookbacks in *days*, so shrinking the bar does not change what the strategy means — a 20-day average
+is 20 days at every interval. It changes two things only: the rule is checked more often, and it
+crosses its own hysteresis band more often. The first is worth something small; the second costs
+0.24% every time.
 
-**3m posts the highest single number in that table, and it is the one to distrust.** Trend Regime's
-entire range from 3m to 1h is +398% to +417% — a 19-point spread across 43 to 63 trades on one
-symbol, with Sharpe flat at 1.11–1.14 the whole way down. That is noise, and 3m buys it for 42% more
-in fees than 1h ($3,294 against $2,312).
+**3m posts the highest single number in that table.** On BTCUSDT alone that looked like noise safe to
+dismiss: Trend Regime's entire range from 3m to 1h is +398% to +417% — a 19-point spread across 43 to
+63 trades, with Sharpe flat at 1.11–1.14 the whole way down — bought for 42% more in fees than 1h
+($3,294 against $2,312). Two more symbols made that picture worse rather than clearer.
 
-**At 5m the answer is settled: finer never wins.** Three symbols, six head-to-head comparisons
-against 15m, and 5m takes none of them — Trend Regime +398.2% against +398.0% on BTC (a dead heat),
-+585.9% against +603.1% on SOL, +251.0% against +325.6% on ETH; Short-Term Channel behind on all
-three, +1,677.7% against +2,216.2% on SOL being the widest.
+**At 3m nothing is settled, on either strategy, and two successive attempts to say otherwise here
+were both wrong.** 3m history exists for three symbols only, so this is a three-symbol result against
+the eight-symbol one below — and it does not converge.
 
-**At 3m it is not settled, and an earlier version of this section said it was.** ETHUSDT — whose 3m
-history had to be re-downloaded, the first attempt having truncated at 2022 and been excluded rather
-than trusted — splits the verdict. Trend Regime at 3m is decisively bad there, +171.5% against
-+325.6% at 15m with Sharpe 0.68 against 0.90, which is the fee mechanism above behaving exactly as
-predicted. But Short-Term Channel at 3m is the best cell ETH produces: +189.2% against +164.5%, with
-better Sharpe (0.73 against 0.68) *and* better drawdown (−37.1% against −40.9%). This section
-previously called 15m-over-3m "not even ambiguous" for that strategy; that was written from BTCUSDT
-alone, and it was an overclaim. On two symbols it is one-all. The shipped `15m` stands on the
-eight-symbol evidence below rather than on this pair, and 3m costs materially more in fees on both —
-but the fine end of the range is genuinely open for Short-Term Channel, and this says so.
+| 3m against 15m | BTCUSDT | ETHUSDT | SOLUSDT |
+|---|---|---|---|
+| Trend Regime at 3m | **+417.3%** (S 1.13) | +171.5% (S 0.68) | **+749.9%** (S 0.94) |
+| Trend Regime at 15m | +398.0% (S 1.12) | **+325.6%** (S 0.90) | +603.1% (S 0.89) |
+| Short-Term Channel at 3m | +120.5% (S 0.65) | **+189.2%** (S 0.73) | +2,062.8% (S 1.25) |
+| Short-Term Channel at 15m | **+129.6%** (S 0.68) | +164.5% (S 0.68) | **+2,216.2%** (S 1.27) |
+
+3m wins two of three for Trend Regime and one of three for Short-Term Channel, with the losing cases
+enormous in both directions — Trend Regime is 154 points worse at 3m on ETH and 147 points better on
+SOL. A sign that flips per symbol at that magnitude is variance, not signal.
+
+**The fee mechanism is real but does not decide it, and an earlier version of this section claimed it
+did.** The two strategies genuinely differ in interval sensitivity, and the measurement is clean:
+going 15m to 3m, Short-Term Channel's trade count moves +6%, +6% and +4% across the three symbols —
+it enters when price breaks a channel, and breakouts happen at a rate set by the price, not by how
+often the rule is evaluated. Trend Regime's moves +29%, +78% and +45%, because it is a hysteresis
+strategy and finer sampling catches more marginal threshold crossings, each costing 0.24%.
+
+The prediction drawn from that — therefore 3m must hurt Trend Regime — is refuted by SOLUSDT, where
+3m carries **96% higher fees** ($8,991 against $4,594) and still returns 147 points more with better
+Sharpe and better drawdown. Fee drag at 3m is real and is swamped by where the extra bars happen to
+put the entries. That is worth stating as a limit on the whole "finer is worse" argument above: it
+holds firmly from 1d up to 15m, and it stops being predictive below 15m.
+
+**5m, unlike 3m, is settled.** Three symbols, six head-to-head comparisons against 15m, and finer
+takes none of them — Trend Regime +398.2% against +398.0% on BTC (a dead heat), +585.9% against
++603.1% on SOL, +251.0% against +325.6% on ETH, with Short-Term Channel behind on all three.
+
+`preferredInterval` stays at the measured values regardless. They rest on the eight-symbol comparison
+below, which is a far stronger base than three symbols, and nothing above displaces it. But the fine
+end of the range is open, and it is open on both strategies rather than one.
 
 The two strategies land on **different** intervals, which is the whole reason this is now a
 per-strategy field. Confirmed on a longer window (2018-01 → 2026-08, median and worst of BTC/ETH/SOL):
