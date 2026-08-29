@@ -138,7 +138,29 @@ export interface StrategyDefinition {
    * moves the middle of the sort. Trend Regime is genuinely closer -- 15m and 1h split four-all
    * head to head and four-all on Sharpe, so 1h is an aggregate call (better median on two windows,
    * better median drawdown, lower fees) rather than a sweep, and a per-symbol override is more
-   * defensible here than on Short-Term Channel. */
+   * defensible here than on Short-Term Channel.
+   *
+   * TREND REGIME HAS SINCE MOVED 1h -> 4h, and the sentence directly above is why it needed to be
+   * re-asked: "an aggregate call rather than a sweep" is an honest way of saying the evidence was
+   * thin. research/INTERVAL.md re-ran it as 65 independent months over 2021-04 to 2026-08 -- the
+   * window 3m data also covers, so every interval scores the IDENTICAL months -- across eight
+   * symbols split four/four. 4h wins BOTH halves on mean, mean/sd, total profit, summed losses and
+   * fees, losing only the single worst month on the held-out four by 0.8 points. 1d is worse than
+   * 4h on both halves, so 4h is an interior peak rather than a monotonic drift toward slower bars.
+   *
+   * THE OTHER TWO STAY AT 15m, and 3m would beat them if it existed here. 3m wins both halves for
+   * Short-Term Channel and for the gated version, and is not a member of Interval: adding it means
+   * changing this type, INTERVALS, INTERVAL_SECONDS and every exchange adapter, since korbit.ts and
+   * kraken.ts declare non-partial Record<Interval, ...> maps with no aggregation path. The gain is
+   * 0.191 -> 0.203 mean/sd on selection and 0.074 -> 0.079 on the held-out four, for 18% more fees.
+   * Recorded as measured-and-declined rather than left for someone to re-derive.
+   *
+   * ONE THING MOVES WITH THIS FIELD. src/backtest/marketConditions.ts states what a market posture
+   * has historically meant for each strategy, and those figures are measured at a bar size. Changing
+   * preferredInterval without re-measuring leaves the Market Conditions card quoting one interval's
+   * result beside another interval's backtest, which nothing on screen would reveal.
+   * tests/marketConditions.test.ts pins MEASURED_EXPECTATIONS[].interval to this field so that
+   * cannot happen quietly; research/expect.ts is what re-measures it. */
   preferredInterval: Interval
   /** True when signals must be generated asynchronously and supplied to the execution engine. */
   requiresExternalSignals?: boolean

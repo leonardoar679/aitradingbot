@@ -229,15 +229,36 @@ export const trendRegimeEnsemble: StrategyDefinition = {
   // arithmetic generateSignals does, so a caller's fetch and the strategy's own warmup can never
   // disagree about how much history is needed.
   warmupBarsFor: (barSeconds) => warmupBarsAt(barSeconds),
-  // Measured, not chosen -- research/ivfair.ts, on a window pinned by tradeable time so every
-  // interval trades the identical days. 1h is the top of a broad plateau: 5m, 15m and 1h are
-  // within ten points of each other (+398%, +398%, +408% on BTCUSDT 2021-2026) and 1h is the
-  // cheapest of the three at $2,312 of fees against 5m's $3,040. Below 1h the return stops
-  // improving and only the fee bill moves, because the lookbacks here are in DAYS -- a finer bar
-  // does not shorten the trend being followed, it just re-asks the same question more often and
-  // charges 0.24% for each extra answer. Above 1h the exit is a whole bar late and it costs
-  // return: 4h gives +345% and 1d +212%.
-  preferredInterval: '1h',
+  // MOVED FROM 1h TO 4h ON MEASUREMENT (research/INTERVAL.md, research/interval.ts). The old 1h
+  // came from research/ivfair.ts: one symbol, BTCUSDT, compounding continuously, where 5m/15m/1h
+  // sat on a plateau and 1h was the cheapest point on it. That is a thinner basis than any other
+  // rule in this repository gets, and re-asking it properly moved the answer.
+  //
+  // The re-ask: 65 independent $10,000 months, 2021-04 to 2026-08 (the window 3m data also covers,
+  // so every interval scores the IDENTICAL months), eight symbols, split into four the choice was
+  // made on and four held out. 4h wins BOTH halves, and wins on profit and on losses at once:
+  //
+  //                      mean     mean/sd    total profit   summed losses   fees   trades/mo
+  //   selection   1h    +3.28%     0.132        $85,396       -$110,736    $5,802     1.13
+  //               4h    +3.70%     0.152        $96,277       -$100,511    $5,073     0.98
+  //   held out    1h    +2.20%     0.093        $57,161       -$102,864    $6,961     1.37
+  //               4h    +2.38%     0.100        $61,883       -$101,351    $6,067     1.19
+  //
+  // WHY THIS IS NOT JUST "SLOWER IS BETTER", which is the version of this claim that would be
+  // untrustworthy. 1d was run too, and it is WORSE than 4h on both halves (mean/sd 0.147 and
+  // 0.071). 4h is an interior peak with 15m and 1h below it on one side and 1d below it on the
+  // other, which is what a real bar-size preference looks like rather than a monotonic drift that
+  // would mean the ladder simply had not been extended far enough.
+  //
+  // The mechanism is the one this file's lookbacks imply. Every average here is measured in DAYS,
+  // so a finer bar does not shorten the trend being followed -- it re-asks the same question more
+  // often, crosses the hysteresis band on noise, and charges 0.24% for each extra answer. Trades
+  // per month fall 1.37 -> 1.19 on the held-out symbols and the fee bill falls 13%.
+  //
+  // The one column that gets worse is the single worst month on the held-out four, -26.4% -> -27.3%.
+  // It is not excepted: a change accepted on five columns and reverted on the sixth would be fitted
+  // to whichever column happened to disagree.
+  preferredInterval: '4h',
   name: 'Trend Regime Ensemble',
   description:
     'Holds while 20/30/50/80-day moving averages unanimously agree price is in an uptrend, exits once at most one still does. Few trades by design — intraday fees are what beat the other strategies.',

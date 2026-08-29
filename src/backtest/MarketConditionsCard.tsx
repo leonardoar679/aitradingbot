@@ -122,8 +122,8 @@ export function MarketConditionsCard({
 
           {state.conditions.expectation !== null && Number.isFinite(state.conditions.adx) && (
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', lineHeight: 1.5, margin: '0.6rem 0 0' }}>
-              Measured on six symbols this rule was never fitted to, 2019–2026: a month opening below{' '}
-              {ADX_QUIET} averaged{' '}
+              Measured on six symbols this rule was never fitted to, 2019–2026, at{' '}
+              {state.conditions.expectation.interval} candles: a month opening below {ADX_QUIET} averaged{' '}
               <strong style={{ color: 'var(--text-primary)' }}>
                 {state.conditions.expectation.quietMeanPct.toFixed(1)}%
               </strong>{' '}
@@ -137,10 +137,9 @@ export function MarketConditionsCard({
 
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', lineHeight: 1.5, margin: '0.6rem 0 0', opacity: 0.85 }}>
             Two things this does not say. It is not a direction forecast — these strategies lose money
-            in nearly every falling month whatever the ADX, and the <em>win rate</em> under this rule is
-            slightly lower, not higher; what improves is the size of the outcome. And one earlier test,
-            on four symbols in 2023–26, contradicted the finding outright. Read it as one input, not a
-            verdict.
+            in nearly every falling month whatever the ADX, and the <em>win rate</em> under this rule does
+            not improve; what improves is the size of the outcome. And one earlier test, on four symbols
+            in 2023–26, contradicted the finding outright. Read it as one input, not a verdict.
           </p>
         </>
       )}

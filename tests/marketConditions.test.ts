@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { ADX_QUIET, readMarketConditions } from '../src/backtest/marketConditions'
+import { ADX_QUIET, MEASURED_EXPECTATIONS, readMarketConditions } from '../src/backtest/marketConditions'
+import { getStrategy } from '../src/backtest/strategies'
 import type { Candle } from '../shared/ipc'
 
 // The whole readout turns on which side of 20 a number lands, so the tests that matter are the ones
@@ -102,6 +103,26 @@ describe('marketConditions', () => {
       expect(e && e.quietMeanPct).toBeGreaterThan((e && e.baselineMeanPct) ?? Infinity)
     }
     expect(readMarketConditions(straightLine(40), 'ema-cross-atr-stop').expectation).toBeNull()
+  })
+
+  it('quotes each expectation at the interval that strategy actually runs on', () => {
+    // The defect this exists to prevent, which nearly shipped: Trend Regime's preferredInterval
+    // moved from 1h to 4h on measurement (research/INTERVAL.md), while MEASURED_EXPECTATIONS still
+    // held figures taken at 15m. The card would then have printed "a quiet month averaged 10.8%
+    // for this strategy" beside a backtest run at a different bar size, with nothing on screen to
+    // show the two did not match and no test failing. Re-measure, or this fails.
+    for (const e of MEASURED_EXPECTATIONS) {
+      expect(e.interval, `${e.strategyId} expectation measured at ${e.interval}`)
+        .toBe(getStrategy(e.strategyId).preferredInterval)
+    }
+  })
+
+  it('only carries expectations for strategies that exist', () => {
+    // getStrategy falls back to a default for an unknown id rather than throwing, so a typo in a
+    // strategyId here would silently attach one strategy's measured numbers to another's card.
+    for (const e of MEASURED_EXPECTATIONS) {
+      expect(getStrategy(e.strategyId).id, `no strategy with id ${e.strategyId}`).toBe(e.strategyId)
+    }
   })
 
   it('never phrases the reading as a claim about direction or win rate', () => {
