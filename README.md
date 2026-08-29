@@ -489,11 +489,23 @@ hysteresis band more often. The first is worth something small; the second costs
 **3m posts the highest single number in that table, and it is the one to distrust.** Trend Regime's
 entire range from 3m to 1h is +398% to +417% — a 19-point spread across 43 to 63 trades on one
 symbol, with Sharpe flat at 1.11–1.14 the whole way down. That is noise, and 3m buys it for 42% more
-in fees than 1h ($3,294 against $2,312). Short-Term Channel is not even ambiguous: 15m beats both 3m
-and 5m on return *and* on drawdown while paying less than either. SOLUSDT, once its 5m history
-finished downloading, says the same thing independently — Trend Regime +585.9% at 5m against +603.1%
-at 15m, Short-Term Channel +1,677.7% against +2,216.2%. Going below 15m has now been measured on two
-symbols and helped on neither.
+in fees than 1h ($3,294 against $2,312).
+
+**At 5m the answer is settled: finer never wins.** Three symbols, six head-to-head comparisons
+against 15m, and 5m takes none of them — Trend Regime +398.2% against +398.0% on BTC (a dead heat),
++585.9% against +603.1% on SOL, +251.0% against +325.6% on ETH; Short-Term Channel behind on all
+three, +1,677.7% against +2,216.2% on SOL being the widest.
+
+**At 3m it is not settled, and an earlier version of this section said it was.** ETHUSDT — whose 3m
+history had to be re-downloaded, the first attempt having truncated at 2022 and been excluded rather
+than trusted — splits the verdict. Trend Regime at 3m is decisively bad there, +171.5% against
++325.6% at 15m with Sharpe 0.68 against 0.90, which is the fee mechanism above behaving exactly as
+predicted. But Short-Term Channel at 3m is the best cell ETH produces: +189.2% against +164.5%, with
+better Sharpe (0.73 against 0.68) *and* better drawdown (−37.1% against −40.9%). This section
+previously called 15m-over-3m "not even ambiguous" for that strategy; that was written from BTCUSDT
+alone, and it was an overclaim. On two symbols it is one-all. The shipped `15m` stands on the
+eight-symbol evidence below rather than on this pair, and 3m costs materially more in fees on both —
+but the fine end of the range is genuinely open for Short-Term Channel, and this says so.
 
 The two strategies land on **different** intervals, which is the whole reason this is now a
 per-strategy field. Confirmed on a longer window (2018-01 → 2026-08, median and worst of BTC/ETH/SOL):
