@@ -42,6 +42,18 @@ import { inferBarSeconds, regimeAgreement, trendRegimeEnsemble } from './trendRe
 // FOR DOWNSIDE at a predictable rate. Expect the smaller drawdown to repeat; do not count on the
 // extra dollars, which depended on 2023-2026 having a fatter bad tail than good.
 //
+// WHICH STRATEGY TO ACTUALLY RUN, WHICH IS NOT THE COMPARISON THIS FILE IS NAMED AFTER. Against
+// shortTermChannel the gate simply wins: better mean month, lower spread, smaller worst month and
+// drawdown, and more total profit, on 8 symbols over 36 independent months. The ungated strategy is
+// kept for bots already on it, not because there is a case for choosing it.
+//
+// Against trendRegimeEnsemble it LOSES on money and wins on risk. Trend Regime earns $14,916 more
+// across those eight symbols and beats this on 6 of 8 individually; this has the smaller worst month
+// on 8 of 8 (median -14.6% against -19.2%), a median in-month drawdown of -6.8% against -9.1%, and
+// the best mean/sd of the three (0.164 against 0.143). Monthly returns correlate 0.70 to 0.97, so
+// running both is not diversification -- it is one bet at 1.7x size. Pick on which of the two
+// numbers matters; do not hold both expecting them to offset.
+//
 // THE COST IS WARM-UP, AND IT IS REAL. Short-Term Channel needs 8 days of history; this needs the
 // regime's 80. On the Backtest page's default 90-day range that leaves ten tradeable days and
 // roughly one trade where the ungated strategy shows twenty -- which is the exact failure mode

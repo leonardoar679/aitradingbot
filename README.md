@@ -522,6 +522,31 @@ was thin — a fact about this window, where the risk transfer is a fact about t
 smaller drawdown to repeat; do not count on the extra dollars.
 
 
+**The comparison that decides whether to use it is against Trend Regime, not against the strategy it
+gates** — and that one is not a win. Same 36 independent months, 8 symbols, 15m:
+
+| | mean month | sd | mean/sd | median worst month | median in-month drawdown | total profit |
+|---|---|---|---|---|---|---|
+| Trend Regime Ensemble | 3.38% | 23.6% | 0.143 | −19.2% | −9.1% | **$97,443** |
+| Short-Term Channel | 2.47% | 19.4% | 0.127 | −17.6% | −10.1% | $71,092 |
+| Short-Term Channel + Regime | 2.87% | **17.5%** | **0.164** | **−14.6%** | **−6.8%** | $82,527 |
+
+Two things follow, and they point in different directions.
+
+*Against its own parent the gate simply wins.* It is better on all six columns, better on total profit
+on 7 of 8 symbols individually, and better on the worst month on 6 with 1 tie. There is no case for
+running Short-Term Channel in preference to the gated version — which is why the ungated strategy is
+kept only for continuity with bots already using it.
+
+*Against Trend Regime it is a different product, not a better one.* Trend Regime earns **$14,916
+more** across the eight symbols and wins on 6 of 8 individually. What the gated strategy buys is
+risk: a smaller worst month on **8 of 8**, a quarter off the median in-month drawdown, and the best
+risk-adjusted return of the three. Their monthly returns also correlate **0.70 to 0.97**, so this is
+not a diversifier to run alongside Trend Regime — it is an alternative to it. If the goal is the
+largest number at the end, Trend Regime is still the answer; if it is surviving the bad months,
+this is.
+
+
 The cost is warm-up. The gate reads an 80-day average, so this needs the regime's 80 days rather
 than the channel's 8 — on the Backtest page's default 90-day range that leaves ten tradeable days.
 It therefore ships as a **separate** strategy (`short-term-channel-regime`) rather than a change to
