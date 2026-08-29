@@ -105,9 +105,26 @@ export interface StrategyDefinition {
    * native on all eight exchanges and needs none of that. The 3m and 5m findings are academic;
    * this one is not.
    *
-   * NOT YET ACTED ON, because it is three symbols. Changing Short-Term Channel's preferredInterval
-   * to 1m is exactly the kind of move the eight-symbol re-test above exists to gate, and the same
-   * three symbols have already produced two conclusions this file had to retract.
+   * ASKED ON EIGHT SYMBOLS AND REJECTED, under a rule fixed before the deciding five were visible
+   * (research/INTERVAL-1M.md). 1m had to win total profit on 6 of 8 and not worsen the median
+   * worst month. It won on 5 -- BTC, ETH, BNB, LTC, XRP -- and lost on SOL, ADA and LINK, with
+   * ADA $15,976 -> $13,273 and LINK $6,481 -> $5,092. Median worst month was marginally better at
+   * 1m (-17.01% against -17.60%), so risk passed and profit missed by one symbol. A split result
+   * leaves the default alone, which was fixed in advance precisely so that '5 of 8 and better
+   * risk' could not be accepted after the fact. preferredInterval stays 15m.
+   *
+   * THE THREE-SYMBOL VERSION DID NOT REPLICATE, which is the third time this file has recorded
+   * that outcome for a three-symbol result. The two strategies carrying the 80-day regime are
+   * worse still at 1m: the gated channel wins on 4 of 8 with a WORSE median worst month
+   * (-16.82% against -14.55%), and Trend Regime wins on only 2 of 8, also with worse median risk.
+   * Trend Regime's trades per month roughly double (1.2-2.6 at 15m, 3.6-5.1 at 1m), which is the
+   * hysteresis mechanism above confirmed on eight symbols rather than predicted from three.
+   *
+   * AND A CONSTRAINT THAT WOULD HAVE BOUND ANYWAY. src/bots/useDryRun.ts re-fetches the whole
+   * warm-up window on every 60-second poll. At 1m that is 12 paged requests per bot per minute
+   * for Short-Term Channel's 8 days, and 116 for either 80-day strategy -- so no strategy with a
+   * regime look-back can take a 1m default until that fetch becomes incremental, whatever a
+   * backtest says about it.
    *
    * CONFIRMED ON EIGHT SYMBOLS (2021-06 to 2026-08, the window all eight cover), because the three-
    * symbol table above is the same sample size that nearly shipped the volatility gate. Short-Term

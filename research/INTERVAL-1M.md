@@ -62,7 +62,44 @@ That is a property of how the app polls, not of the strategies, and it is worth 
 incrementally instead of re-fetching its whole window every minute.** Changing `preferredInterval`
 on either regime strategy today would ship a bot that hammers the exchange and stalls.
 
-## Result
+## Result: rejected. The default stays at 15m.
 
-Recorded in `strategies/types.ts` once the run completes, against the rule above and not against a
-rule chosen afterwards.
+Short-Term Channel, 36 independent $10,000 months, eight symbols:
+
+| | 1m | 15m | | worst month, 1m | 15m |
+|---|---|---|---|---|---|
+| BTC | **$7,479** | $6,871 | 1m | −12.3% | −13.5% |
+| ETH | **$12,694** | $10,104 | 1m | −18.8% | −15.9% |
+| SOL | $17,667 | **$17,958** | 15m | −24.9% | −29.3% |
+| ADA | $13,273 | **$15,976** | 15m | −13.5% | −13.7% |
+| BNB | **$4,253** | $2,551 | 1m | −16.1% | −18.2% |
+| LINK | $5,092 | **$6,481** | 15m | −28.1% | −23.3% |
+| LTC | **−$4,167** | −$5,903 | 1m | −15.4% | −17.0% |
+| XRP | **$17,883** | $17,053 | 1m | −18.0% | −24.1% |
+
+**Condition 1 fails: 1m wins on 5 of 8, and the rule required 6.** Condition 2 passes — the median
+worst month is −17.01% at 1m against −17.60% at 15m, marginally better. A split result leaves the
+default alone, as fixed in advance, so `preferredInterval` stays `15m`.
+
+The three-symbol result did not replicate. It looked like 2 of 3 for 1m; the five symbols that had
+no part in raising the question split 3–2 the other way on the two that mattered most (ADA and LINK
+both prefer 15m by wide margins), and the aggregate lands one symbol short of the bar. Had the rule
+been written after seeing this, "5 of 8 and better median risk" would have been easy to accept.
+
+## The same question for the other two strategies, since the run answered it anyway
+
+| strategy | 1m wins profit on | median worst month, 1m vs 15m | verdict |
+|---|---|---|---|
+| Short-Term Channel | 5 of 8 | −17.01% vs −17.60% | stays 15m (fails 6-of-8) |
+| Short-Term Channel + Regime | 4 of 8 | −16.82% vs **−14.55%** | stays 15m, fails both |
+| Trend Regime Ensemble | **2 of 8** | −20.31% vs **−19.17%** | stays 15m, fails both, decisively |
+
+Trend Regime's result is the mechanism prediction confirmed on eight symbols rather than three:
+finer sampling makes a hysteresis rule cross its own band more often, its trades per month roughly
+double (1.2–2.6 at 15m against 3.6–5.1 at 1m), and each extra crossing costs 0.24%. It loses money
+at 1m on six of eight symbols *and* has a worse median worst month, which is the clearest single
+result in this file.
+
+**So 15m is correct for all three strategies, and nothing needs to change.** That is the answer to
+"which candle interval", and it is worth more than a change would have been: the interval question
+has now been asked at 1m, 3m, 5m, 15m, 1h, 4h and 1d, on eight symbols, and 15m survives all of it.
