@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Plus, Zap } from 'lucide-react'
 import { Card } from '../components/Card'
+import { MarketConditionsCard } from './MarketConditionsCard'
 import { PageHeader } from '../components/PageHeader'
 import { BacktestRunningView, type RunningState } from './BacktestRunningView'
 import { BacktestResultsView, type ResultsGeneralInfo } from './BacktestResultsView'
@@ -947,6 +948,13 @@ export function BacktestPage(): React.JSX.Element {
             </div>
           </div>
         </Card>
+      )}
+
+      {/* Sits below the form rather than inside it: it describes the MARKET, not the run
+          being configured, and it renders nothing at all for strategies whose expectation
+          under this rule was never measured. */}
+      {tab === 'configuration' && tradingRoute.symbol !== '' && (
+        <MarketConditionsCard exchange={exchange} symbol={tradingRoute.symbol} strategyId={tradingRoute.strategyId} />
       )}
     </>
   )
