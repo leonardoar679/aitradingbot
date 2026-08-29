@@ -4,6 +4,7 @@ import { rsiReversion } from './rsiReversion'
 import { bollingerBreakout } from './bollingerBreakout'
 import { trendRegimeEnsemble } from './trendRegimeEnsemble'
 import { shortTermChannel } from './shortTermChannel'
+import { shortTermChannelRegime } from './shortTermChannelRegime'
 import { gptIntraday } from './gptIntraday'
 
 export type { StrategyDefinition, StrategySignals } from './types'
@@ -14,6 +15,7 @@ export const STRATEGIES: StrategyDefinition[] = [
   bollingerBreakout,
   trendRegimeEnsemble,
   shortTermChannel,
+  shortTermChannelRegime,
   gptIntraday
 ]
 

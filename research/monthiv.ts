@@ -31,6 +31,7 @@ import { readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { runBacktest } from '../src/backtest/engine'
 import { shortTermChannel } from '../src/backtest/strategies/shortTermChannel'
+import { shortTermChannelRegime } from '../src/backtest/strategies/shortTermChannelRegime'
 import { inferBarSeconds, trendRegimeEnsemble } from '../src/backtest/strategies/trendRegimeEnsemble'
 import type { StrategyDefinition } from '../src/backtest/strategies/types'
 import type { Candle } from '../shared/ipc'
@@ -43,7 +44,8 @@ const OUT = process.env.OUT || 'research/.monthiv.json'
 
 const STRATS: Array<{ def: StrategyDefinition; name: string }> = [
   { def: trendRegimeEnsemble, name: 'Trend Regime' },
-  { def: shortTermChannel, name: 'Short-Term Channel' }
+  { def: shortTermChannel, name: 'Short-Term Channel' },
+  { def: shortTermChannelRegime, name: 'Short-Term Channel + Regime' }
 ]
 
 const cache = new Map<string, Candle[]>()

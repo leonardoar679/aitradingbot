@@ -166,6 +166,29 @@ function warmupBarsAt(barSeconds: number): number {
   return Math.max(...LOOKBACK_DAYS.map((d) => Math.max(2, Math.round(d * barsPerDay))))
 }
 
+/** Fraction of the four trend lookbacks that agree price is above trend, one entry per candle.
+ *
+ * EXPORTED so a strategy that wants to trade only in this regime reads the SAME vote this one
+ * acts on, rather than a second copy of the rule. Two implementations of 'is the trend up' would
+ * be free to drift apart silently, and the gated strategy's whole claim is that it defers to this
+ * one's judgement.
+ *
+ * Entries are NaN-derived while a lookback is still filling: rollingSma yields NaN there and
+ * `close > NaN` is false, so an unwarmed average votes NO. That is the safe direction for a gate
+ * and the wrong direction for a signal, so callers must not read this before warmupBarsFor()
+ * bars have passed -- a 4-of-4 reading is impossible until the slowest lookback is full. */
+export function regimeAgreement(candles: Candle[], barSeconds: number): number[] {
+  const barsPerDay = SECONDS_PER_DAY / barSeconds
+  const periods = LOOKBACK_DAYS.map((d) => Math.max(2, Math.round(d * barsPerDay)))
+  const closes = candles.map((c) => c.close)
+  const averages = periods.map((p) => rollingSma(closes, p))
+  return closes.map((close, i) => {
+    let votes = 0
+    for (const ma of averages) if (close > ma[i]) votes++
+    return votes / periods.length
+  })
+}
+
 function generateSignals(candles: Candle[]): StrategySignals {
   const n = candles.length
   const entries = new Array<boolean>(n).fill(false)
@@ -178,18 +201,13 @@ function generateSignals(candles: Candle[]): StrategySignals {
   // holding cash, which is the honest answer to "we cannot read this data".
   if (barSeconds <= 0) return { entries, exits, stopPrices, warmupBars: n }
 
-  const barsPerDay = SECONDS_PER_DAY / barSeconds
-  const periods = LOOKBACK_DAYS.map((d) => Math.max(2, Math.round(d * barsPerDay)))
   const warmupBars = warmupBarsAt(barSeconds)
-
+  const agreementByBar = regimeAgreement(candles, barSeconds)
   const closes = candles.map((c) => c.close)
-  const averages = periods.map((p) => rollingSma(closes, p))
   const atr = computeAtr(candles, ATR_PERIOD)
 
   for (let i = warmupBars; i < n; i++) {
-    let votes = 0
-    for (const ma of averages) if (closes[i] > ma[i]) votes++
-    const agreement = votes / periods.length
+    const agreement = agreementByBar[i]
 
     if (agreement >= ENTER_VOTE_FRACTION) {
       entries[i] = true
