@@ -157,7 +157,9 @@ the same way as the magnitude on the eight: carried disproportionately by one co
 
 A round trip costs **0.24%**: 0.1% fee per side ([`FEE_RATE`](shared/fees.ts)) plus 2bps of
 slippage per fill ([`SLIPPAGE_RATE`](shared/fees.ts)). The average 15-minute candle on BTCUSDT
-moves 0.16%. **The cost of trading is 1.5× a typical bar.**
+moves 0.16% — mean `|close − open| / open` over 2023-08 → 2026-08; it is 0.22% over the full
+history since 2017, so the ratio below is the conservative reading. **The cost of trading is 1.5×
+a typical bar.**
 
 That single ratio is why three of the six strategies in this repo lose money and three do not.
 The cost is per trade, so the annual drag is `N × 0.24%`:
@@ -167,12 +169,12 @@ The cost is per trade, so the annual drag is `N × 0.24%`:
 | Trend Regime Ensemble | 8.8 | ~2.1% |
 | Channel + Regime | 15.6 | ~3.7% |
 | Short-Term Channel | 25.4 | ~6.1% |
-| *Bollinger Breakout (rejected)* | *686* | ***~165%*** |
+| *Bollinger Breakout (rejected)* | *~670* | ***~161%*** |
 
-Bollinger Breakout took 2,059 trades over three years of BTCUSDT 15m and paid **$12,550 of fees on
-a $10,000 account**, finishing at −98%. That is not a tuning failure that better parameters would
-fix. It is arithmetic: no signal has an edge large enough to survive being asked 686 times a year
-at 0.24% each.
+Bollinger Breakout takes **6,059 trades** over the full BTCUSDT 15m history and finishes at
+**−100%** (`research/baseline.ts`) — about 670 round trips a year against an annual cost of roughly
+1.6× the account. That is not a tuning failure that better parameters would fix. It is arithmetic:
+no signal has an edge large enough to survive being asked that often at 0.24% each.
 
 So the first constraint, written before any indicator, is **a trade budget**. Notice in the table
 above that `E[trade]` is *unaffected* by how often you trade — but the fee is charged every time.
@@ -181,19 +183,20 @@ Trading the same edge twice as often earns the same expectancy per trade and pay
 ### Hysteresis is how you buy the trade budget
 
 The naive way to cut `N` is to slow the indicator down. That works, but it costs you the whole
-short-term timescale. Measured on BTCUSDT 15m over two training years, a plain moving-average
-trend follower with **one threshold**:
+short-term timescale. Measured on BTCUSDT 15m over the two training years 2023-08 → 2025-08, a
+plain moving-average trend follower with **one threshold** (`research/tscan.ts`):
 
 | lookback | net | trades |
 |---|---|---|
-| 0.25 day | −99.98% | 3,858 |
-| 1 day | −96.96% | 1,793 |
-| 3 days | −78.54% | 972 |
-| 8 days | −32.45% | 556 |
-| 20 days | **+61.00%** | 279 |
+| 0.25 day | −99.99% | 4,152 |
+| 1 day | −97.92% | 1,945 |
+| 3 days | −82.12% | 1,056 |
+| 8 days | −38.31% | 593 |
+| 20 days | **+41.79%** | 314 |
+| 50 days | **+61.32%** | 219 |
 
 Now add a 1.5% band between the entry line and the exit line, and the *quarter-day* lookback turns
-positive: **+32.9% on 127 trades**. Same signal, same timescale, 30× fewer trades.
+positive: **+37.45% on 130 trades**. Same signal, same timescale, 32× fewer trades.
 
 The mechanism is that a single threshold `θ` is crossed by *noise*: price wobbling around `θ`
 generates a crossing pair — and a 0.24% charge — for every wobble, however small. Two thresholds
@@ -205,9 +208,23 @@ decision, so every excursion smaller than the band is free. All three strategies
 | Trend Regime Ensemble | 4 of 4 lookbacks agree | ≤ 1 of 4 still agrees | 3 votes wide |
 | Short-Term Channel | 95% up its channels | ≤ 25% up them | 70% of the range |
 
-Closing Trend Regime's gap — entering *and* exiting at half the votes — drops it from +150% to
-+24% and multiplies the fee bill by five. The band is not a tuning parameter; it is the thing that
-makes the strategy affordable.
+Closing Trend Regime's gap — entering *and* exiting at half the votes, so the band is zero wide —
+is measured in `research/gap.ts`, on full history at 4h:
+
+| BTCUSDT 4h | net | trades |
+|---|---|---|
+| shipped band, enter 4 of 4 / exit ≤ 1 of 4 | **+9,129%** | 60 |
+| closed band, enter and exit both at half | **−65%** | 2,269 |
+
+Same lookbacks, same data, same engine, same stop — the only difference is that price no longer has
+to cross the whole band to reverse the decision, so **every wobble becomes a round trip**: 60 trades
+become 2,269. ETH and SOL behave the same way (+10,393% → +18%, +7,250% → +789%). The band is not a
+tuning parameter; it is the thing that makes the strategy affordable.
+
+> Read the *trade count*, not the fee bill, as the measure of this. Fees are charged on the balance
+> at the time, so a strategy that collapses early pays less in absolute dollars than one that
+> compounds — BTC's closed-band fees are slightly *lower* than the shipped band's despite 38× the
+> trades, purely because the account was gone. SOL, which survives, pays 12× more.
 
 ---
 
@@ -640,7 +657,7 @@ is most of what there is to watch.
 ## Reproduce every number in this document
 
 ```bash
-for s in edge shipped vshold fair stfinal stfinal2 shape trueoos; do
+for s in edge shipped vshold tscan gap baseline fair stfinal stfinal2 shape trueoos; do
   npx esbuild research/$s.ts --bundle --platform=node --format=esm --outfile=research/.$s.mjs
   CANDLE_DIR=.candles node --max-old-space-size=4096 research/.$s.mjs
 done
@@ -648,7 +665,10 @@ done
 
 | script | what it establishes |
 |---|---|
-| `edge.ts` | sections 1 and 2, and the concentration/time-in-market figures in section 8 |
+| `edge.ts` | section 1, the trades-per-year column in section 2, and the concentration/time-in-market figures in section 8 |
+| `tscan.ts` | the one-threshold lookback sweep and the 1.5%-band result in section 2 |
+| `gap.ts` | what closing Trend Regime's vote band costs, in section 2 |
+| `baseline.ts` | the Bollinger Breakout trade count and outcome in section 2 |
 | `shipped.ts` | section 7, and the held-out ranking in section 8 |
 | `vshold.ts` | the six-symbol confirmation in section 7, and the ADX gate result in section 9 |
 | `fair.ts` | the leverage sweep in section 8 |
@@ -657,16 +677,23 @@ done
 | `shape.ts` | the 0.70–0.97 correlation in section 8 |
 | `trueoos.ts` | the LINKUSDT 2017-08 → 2023-08 pair in section 9 |
 
-The first three default their candle directory; the rest need `CANDLE_DIR` set, and `fair.ts` exits
-with an unhelpful `path` TypeError without it. All eight read the candle dumps in `.candles/` and the
-month dumps in `research/.*.json`; if those are missing, `research/monthiv.ts` regenerates them.
+Only `edge.ts`, `shipped.ts` and `vshold.ts` default their candle directory; the other eight need
+`CANDLE_DIR` set, and `fair.ts` exits with an unhelpful `path` TypeError without it — which is why
+the loop above sets it for all eleven. They read the candle dumps in `.candles/` and the month dumps
+in `research/.*.json`; if those are missing, `research/monthiv.ts` regenerates them.
 
 **Two kinds of number live in this document, and only one of them is stable.** Figures from a
-window pinned at both ends — everything in sections 1, 2 and 7, the held-out year, the
-2017-08 → 2023-08 pair — reproduce byte for byte and will keep doing so. Figures from a window that
-*ends wherever the candles end* move every time the candle set is extended; the leverage returns and
-the month counts are the only two, and both are marked where they appear. All figures here were
-re-run against candles through **2026-08-28**.
+window pinned at both ends — sections 1 and 7, the held-out year, the 2017-08 → 2023-08 pair —
+reproduce byte for byte and will keep doing so. Figures from a window that *ends wherever the
+candles end* move every time the candle set is extended: the leverage returns, the month counts,
+and everything in section 2 measured over full history. All figures here were re-run against
+candles through **2026-08-28**, which is the date to compare against before treating any
+disagreement as a bug.
+
+Section 2 is worth a specific warning. Its numbers were the *least* reproducible in this document —
+the lookback sweep disagreed in every row, and the vote-band claim had no script behind it at all
+until `gap.ts` was written to check it. That claim turned out to be understated by two orders of
+magnitude. If you are re-deriving anything here, start there.
 
 Further detail: [README.md](README.md) for the full research narrative,
 [research/README.md](research/README.md) for the study index,
