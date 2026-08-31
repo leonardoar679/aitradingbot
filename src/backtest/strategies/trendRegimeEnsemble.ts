@@ -119,6 +119,16 @@ const ENTER_VOTE_FRACTION = 1
 /** At most one may still agree, or the position closes. */
 const EXIT_VOTE_FRACTION = 0.25
 
+/** The same two numbers, published so a live readout can say how far the market is from acting
+ * without hardcoding "0.95" or "4 of 4" next to a copy of the rule. A UI that states a threshold
+ * it does not read from here is a second implementation of the rule, free to drift the moment
+ * either number changes -- the same failure regimeAgreement() is exported to prevent. */
+export const REGIME_VOTE = {
+  lookbackDays: LOOKBACK_DAYS,
+  enterAt: ENTER_VOTE_FRACTION,
+  exitAt: EXIT_VOTE_FRACTION
+} as const
+
 const ATR_PERIOD = 14
 /** A disaster stop, not a working one -- see the header. */
 const ATR_STOP_MULTIPLIER = 10

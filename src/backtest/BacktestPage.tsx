@@ -7,6 +7,8 @@ import { BacktestRunningView, type RunningState } from './BacktestRunningView'
 import { BacktestResultsView, type ResultsGeneralInfo } from './BacktestResultsView'
 import { BacktestChartsView } from './BacktestChartsView'
 import { StrategyComparisonView } from './StrategyComparisonView'
+import { LiveBacktestView } from './LiveBacktestView'
+import { useLiveBacktest } from './useLiveBacktest'
 import { runBacktest, DEFAULT_STARTING_BALANCE, type BacktestResult } from './engine'
 import { MAX_LEVERAGE, MIN_LEVERAGE, isUsableLeverage, liquidationDistancePct } from '../../shared/perp'
 import { availableBalance } from '../account/paperAccount'
@@ -36,7 +38,7 @@ import {
   type SymbolInfo
 } from '../../shared/ipc'
 
-type Tab = 'configuration' | 'progress' | 'charts' | 'compare'
+type Tab = 'configuration' | 'progress' | 'charts' | 'compare' | 'live'
 
 /** A saved executor selected in the strategy dropdown, encoded so one field can carry either
  * kind of run. Executors and signal strategies are genuinely different things -- see
@@ -154,6 +156,10 @@ export function BacktestPage(): React.JSX.Element {
   const [tradingRoute, setTradingRoute] = useState<TradingRouteRow>(() =>
     defaultTradingRoute(EXCHANGES[0].defaultSymbol.symbol)
   )
+  // Polls only while the Live tab is the one on screen -- see useLiveBacktest for why a monitor
+  // that keeps fetching behind a hidden tab is a background job nobody asked for.
+  const live = useLiveBacktest(exchange, tradingRoute.symbol, tradingRoute.interval, tradingRoute.strategyId, tab === 'live')
+
   const [startDate, setStartDate] = useState(() => {
     const d = new Date()
     d.setDate(d.getDate() - 90)
@@ -619,6 +625,9 @@ export function BacktestPage(): React.JSX.Element {
         <button style={tabButtonStyle(tab === 'configuration')} onClick={() => setTab('configuration')}>
           Configuration
         </button>
+        <button style={tabButtonStyle(tab === 'live')} onClick={() => setTab('live')}>
+          Live
+        </button>
         {runLabel !== null && (
           <button style={tabButtonStyle(tab === 'progress')} onClick={() => setTab('progress')}>
             {runLabel}
@@ -659,6 +668,17 @@ export function BacktestPage(): React.JSX.Element {
             onRerun={handleStart}
             onNewSession={handleCancel}
             onViewCharts={() => setTab('charts')}
+          />
+        </Card>
+      )}
+
+      {tab === 'live' && (
+        <Card title="Live strategy monitor">
+          <LiveBacktestView
+            state={live}
+            strategyId={tradingRoute.strategyId}
+            symbol={tradingRoute.symbol}
+            interval={tradingRoute.interval}
           />
         </Card>
       )}

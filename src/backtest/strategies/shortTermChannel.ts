@@ -156,6 +156,27 @@ function warmupBarsAt(barSeconds: number): number {
   return Math.max(...periodsAt(barSeconds)) + 1
 }
 
+/** The thresholds, published for a live readout. See REGIME_VOTE for why this is exported rather
+ * than retyped at the call site. */
+export const CHANNEL_BAND = {
+  lookbackDays: LOOKBACK_DAYS,
+  enterAt: ENTER_AT,
+  exitAt: EXIT_AT
+} as const
+
+/** Channel position per bar using this strategy's OWN lookbacks and its own bar-size inference.
+ *
+ * channelPosition() takes explicit periods because the backtest path already knows them; a caller
+ * outside this file does not, and making it convert days to bars itself would put the conversion
+ * -- the exact step that makes a lookback mean the same thing on every timeframe -- in a second
+ * place. NaN entries mean "not warm yet", which is what callers must render as unknown rather
+ * than as zero. */
+export function channelPositionSeries(candles: Candle[]): number[] {
+  const barSeconds = inferBarSeconds(candles)
+  if (barSeconds <= 0) return new Array<number>(candles.length).fill(NaN)
+  return channelPosition(candles, periodsAt(barSeconds))
+}
+
 /** Highest high over the trailing `period` bars, ending at each index. */
 export function rollingHighest(values: number[], period: number): number[] {
   const out = new Array<number>(values.length).fill(NaN)
