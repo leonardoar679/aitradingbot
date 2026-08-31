@@ -587,6 +587,13 @@ they can trade at all. On the Backtest page's default 90-day range that leaves a
 tradeable days, and a run that reports "0 trades" on a short window is a warm-up problem, not a
 broken strategy.
 
+**Watch the readings rather than the price.** The app's **Backtest → Live** tab shows the same
+quantities this document is about, updated every minute against live candles: the regime vote out
+of four, the channel position against its 0.95/0.25 band, and one sentence on what has to change
+for the strategy to act. It is the only view that distinguishes "flat and nowhere near a signal"
+from "flat and one vote away" — which, given that these strategies act about nine times a year,
+is most of what there is to watch.
+
 ---
 
 ## 9. What is not established, stated plainly

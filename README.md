@@ -43,9 +43,48 @@ The sidebar's page order roughly mirrors Condor's own information architecture.
 | **Agents** | An interactive tester for `requestAiSignal()` — currently a stub returning `hold`/confidence 0 for every symbol (see [AI Assistant](#ai-assistant--stub)). Not a real LLM agent; Condor's actual Trading Agents (LLM + MCP tools) are out of scope for this app (no backend to host them). |
 | **Routines** | Recurring backtests on a saved exchange/symbol/interval/schedule, re-run on a client-side timer while the app is open. Each run produces a session-only report (equity curve, stats) — Condor's routines are server-scheduled Python workflows; this is the closest honest adaptation without a backend. |
 | **Market** | The original dashboard: candlestick chart with indicators, symbol search, live ticker. |
-| **Backtest** | Runs a chosen strategy over a historical range and shows full stats, equity curve vs. buy-and-hold benchmark, monthly breakdown, and a trade log. A **Charts** tab replays each trade against the candles — entry and exit arrows labelled with fill price and return, the held position shaded by outcome, and UTC times throughout. A **Compare Strategies** view ranks every registered strategy over the same candles. Both views export: CSV or JSON for the numbers, and a single PNG carrying the price chart with every trade marked above the portfolio curve against buy & hold. |
+| **Backtest** | Runs a chosen strategy over a historical range and shows full stats, equity curve vs. buy-and-hold benchmark, monthly breakdown, and a trade log. A **Live** tab monitors the same route continuously — see [Live strategy monitor](#live-strategy-monitor) below. A **Charts** tab replays each trade against the candles — entry and exit arrows labelled with fill price and return, the held position shaded by outcome, and UTC times throughout. A **Compare Strategies** view ranks every registered strategy over the same candles. Both views export: CSV or JSON for the numbers, and a single PNG carrying the price chart with every trade marked above the portfolio curve against buy & hold. |
 | **Explorer** | Placeholder — not yet built. |
 | **Settings** | Appearance (Dark / Light / Colorblind-safe themes) and [Credentials](#credentials--api-keys). |
+
+### Live strategy monitor
+
+**Backtest → Live** answers the question a historical backtest structurally cannot: *is anything
+about to happen?* It re-runs the **same engine** over candles fetched up to the present minute,
+every 60 seconds, on whichever exchange/symbol/interval/strategy is already set on Configuration —
+no bot to create, nothing extra to configure.
+
+It shows the current position with unrealized P&L, the window's closed trades, and the part that
+exists nowhere else in the app: **how far the market is from making the strategy act.**
+
+> Holding. Exits when trend agreement falls to 1 of 4 or below — it is 4 of 4 now.
+
+Each governing quantity gets a gauge marked with both thresholds, so the gap between them — the
+hysteresis band that is the whole reason these strategies are affordable to run — is visible
+rather than described.
+
+Four things it deliberately does:
+
+- **Re-runs the whole engine** instead of stepping one bar forward. Stepping would be faster and
+  would be a second implementation of execution — fees, stops, position tracking — free to
+  disagree with the backtest that justified the strategy.
+- **Reads every threshold from the strategy**, via the exported `regimeAgreement()`,
+  `channelPositionSeries()`, `REGIME_VOTE` and `CHANNEL_BAND`. A panel with `0.95` typed into it
+  beside a copy of the rule drifts the moment the rule changes.
+- **Distinguishes what gates an entry from what gates an exit.** Short-Term Channel + Trend Regime
+  needs both readings to *open* but exits on the channel alone, so the regime gauge is labelled
+  "gates entries only". Without that, a falling regime beside a long position would imply an exit
+  the rule will never produce.
+- **Refuses to poll GPT Intraday.** It costs a paid API call per decision, so a screen
+  re-requesting it every minute would spend real money for as long as the tab stayed open.
+
+Polling stops when the tab is not on screen, and a failed poll keeps the last good reading with
+the failure named rather than blanking what you are watching. It places no orders and holds no
+money.
+
+If the interval differs from the strategy's own `preferredInterval` the panel says so, because the
+difference is real: on the same day, BTCUSDT Trend Regime read **long since 08-17, +21.92%** at its
+measured 4h and **long since 08-25, −0.81%** at 1h.
 
 ### Executors
 
