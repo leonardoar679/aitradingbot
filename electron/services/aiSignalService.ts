@@ -3,9 +3,13 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile } from 'fs/promises'
 import { join } from 'path'
 import {
+  GPT_FLAT,
   GPT_MAX_DECISIONS,
-  GPT_MIN_CONFIDENCE,
   GPT_PROMPT_VERSION,
+  gptActionFor,
+  gptApplyStop,
+  gptAtrSeries,
+  gptStopFor,
   decisionRange,
   parseAiSignalResponse,
   promptWindow,
@@ -18,7 +22,6 @@ import {
   type ParsedAiSignal
 } from '../../shared/aiSignal'
 import type { Candle } from '../../shared/ipc'
-import { computeAtr } from '../../shared/atr'
 import { writeJsonAtomic } from './atomicWrite'
 import { getDecryptedAiCredential } from './aiCredentialsService'
 
@@ -87,15 +90,6 @@ function compactCandles(candles: Candle[]): number[][] {
   return candles.map(stableCandle)
 }
 
-// The stop simulated here must be the stop the ENGINE will place, because the position it implies
-// goes into the prompt and into the cache key. This used to be a local mean of the last 14 true
-// ranges while the engine used Wilder smoothing; on BTCUSDT 15m the two differ by 11.6% on average
-// and 61% at worst, so the two sides could disagree about whether a position was still open.
-function atrAt(candles: Candle[], index: number, period = 14): number | null {
-  if (index < period - 1) return null
-  const value = computeAtr(candles.slice(0, index + 1), period)[index]
-  return Number.isFinite(value) ? value : null
-}
 
 async function requestOpenAi(
   apiKey: string,
@@ -208,14 +202,11 @@ export function cancelAiSignalTape(requestId: string): void {
 export async function estimateAiSignalTape(request: AiSignalTapeRequest): Promise<AiSignalEstimate> {
   const { model } = await getDecryptedAiCredential()
   const { start, end, total } = decisionRange(request)
-  let position: AiPositionState = 'flat'
-  let activeStop: number | null = null
+  const atrSeries = gptAtrSeries(request.candles)
+  let position = GPT_FLAT
   let cached = 0
   for (let index = start; index < end; index++) {
-    if (position === 'long' && activeStop !== null && request.candles[index].low <= activeStop) {
-      position = 'flat'
-      activeStop = null
-    }
+    position = gptApplyStop(position, request.candles[index])
     const window = promptWindow(request.candles, index)
     const decision = await readCached(
       aiSignalCacheKey({
@@ -224,7 +215,7 @@ export async function estimateAiSignalTape(request: AiSignalTapeRequest): Promis
         symbol: request.symbol,
         interval: request.interval,
         candleTime: request.candles[index].time,
-        position,
+        position: position.long ? 'long' : 'flat',
         candles: window
       })
     )
@@ -232,14 +223,9 @@ export async function estimateAiSignalTape(request: AiSignalTapeRequest): Promis
     // predicted safely, so the remainder is reported as a conservative maximum API-call count.
     if (!decision) break
     cached++
-    if (decision.recommendation === 'buy' && decision.confidence >= GPT_MIN_CONFIDENCE && position === 'flat') {
-      position = 'long'
-      const atr = atrAt(request.candles, index - 1)
-      activeStop = request.candles[index].close - (atr ?? request.candles[index].close * 0.02) * 1.5
-    } else if (decision.recommendation === 'sell' && decision.confidence >= GPT_MIN_CONFIDENCE && position === 'long') {
-      position = 'flat'
-      activeStop = null
-    }
+    const action = gptActionFor(decision, position)
+    if (action === 'enter') position = { long: true, stop: gptStopFor(request.candles, atrSeries, index) }
+    else if (action === 'exit') position = GPT_FLAT
   }
   return { total, cached, maximumApiCalls: total - cached }
 }
@@ -255,8 +241,8 @@ export async function generateAiSignalTape(
   const { apiKey, model } = await getDecryptedAiCredential()
   const { start, end, total } = decisionRange(request)
   const decisions: AiSignalDecision[] = []
-  let position: AiPositionState = 'flat'
-  let activeStop: number | null = null
+  const atrSeries = gptAtrSeries(request.candles)
+  let position = GPT_FLAT
   let cachedCount = 0
   let errorCount = 0
   cancelledRequests.delete(request.requestId)
@@ -264,10 +250,7 @@ export async function generateAiSignalTape(
   try {
     for (let index = start; index < end; index++) {
       if (cancelledRequests.has(request.requestId)) throw new Error('GPT signal generation cancelled')
-      if (position === 'long' && activeStop !== null && request.candles[index].low <= activeStop) {
-        position = 'flat'
-        activeStop = null
-      }
+      position = gptApplyStop(position, request.candles[index])
       const window = promptWindow(request.candles, index)
       const candleTime = request.candles[index].time
       const key = aiSignalCacheKey({
@@ -276,7 +259,7 @@ export async function generateAiSignalTape(
         symbol: request.symbol,
         interval: request.interval,
         candleTime,
-        position,
+        position: position.long ? 'long' : 'flat',
         candles: window
       })
       const cached = await readCached(key)
@@ -289,7 +272,9 @@ export async function generateAiSignalTape(
         const timeout = setTimeout(() => controller.abort(), 30_000)
         activeControllers.set(request.requestId, controller)
         try {
-          const parsed = await requestOpenAiWithRetry(apiKey, model, request.symbol, position, window, controller.signal)
+          const parsed = await requestOpenAiWithRetry(
+            apiKey, model, request.symbol, position.long ? 'long' : 'flat', window, controller.signal
+          )
           decision = { candleTime, ...parsed, model, cached: false, error: null }
         } catch (error) {
           if (cancelledRequests.has(request.requestId)) throw new Error('GPT signal generation cancelled')
@@ -313,15 +298,9 @@ export async function generateAiSignalTape(
       }
 
       decisions.push(decision)
-      if (decision.recommendation === 'buy' && decision.confidence >= GPT_MIN_CONFIDENCE && position === 'flat') {
-        position = 'long'
-        const atr = atrAt(request.candles, index - 1)
-        activeStop = request.candles[index].close - (atr ?? request.candles[index].close * 0.02) * 1.5
-      }
-      if (decision.recommendation === 'sell' && decision.confidence >= GPT_MIN_CONFIDENCE && position === 'long') {
-        position = 'flat'
-        activeStop = null
-      }
+      const action = gptActionFor(decision, position)
+      if (action === 'enter') position = { long: true, stop: gptStopFor(request.candles, atrSeries, index) }
+      else if (action === 'exit') position = GPT_FLAT
       onProgress?.({ requestId: request.requestId, completed: decisions.length, total, cached: cachedCount })
     }
   } finally {

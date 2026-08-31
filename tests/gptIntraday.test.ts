@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
+  GPT_ATR_PERIOD,
+  GPT_FALLBACK_STOP_FRACTION,
+  GPT_FLAT,
   GPT_INTRADAY_INTERVAL,
   GPT_LOOKBACK_BARS,
   GPT_MAX_DECISIONS,
   decisionRange,
+  gptActionFor,
+  gptApplyStop,
+  gptAtrSeries,
+  gptStopFor,
   parseAiSignalResponse,
   promptWindow,
   type AiSignalTape
@@ -162,6 +169,63 @@ describe('GPT Intraday deterministic replay', () => {
 // back to safeHold, each was written to the signal cache, and the rerun then reported "96
 // confirmed cached, at most 0 API calls" and drew a clean 0-trade backtest. Adding credits would
 // not have fixed it -- the cache would have kept answering.
+// The three call sites now share one machine. These pin the rules that were spelled differently
+// in each of them before, and would have failed against the old service arithmetic.
+describe('the GPT position machine, shared by all three call sites', () => {
+  /** A perfectly flat series: every true range is zero, so ATR is zero -- finite, so arithmetic on
+   * it succeeds silently. This is the case the service got wrong. */
+  function flat(count: number): Candle[] {
+    return Array.from({ length: count }, (_, index) => ({
+      time: 1_700_000_000 + index * 900,
+      open: 100,
+      high: 100,
+      low: 100,
+      close: 100,
+      volume: 1
+    }))
+  }
+
+  it('never places the stop AT the entry price when ATR is zero', () => {
+    const data = flat(GPT_ATR_PERIOD + 5)
+    const atr = gptAtrSeries(data)
+    const index = data.length - 1
+    expect(atr[index - 1]).toBe(0)
+
+    const stop = gptStopFor(data, atr, index)
+    // The old service computed `close - (atr ?? close*0.02) * 1.5`. With atr === 0 that is
+    // `close - 0`, i.e. the close itself -- and gptApplyStop fires on `low <= stop`, so the
+    // position was stopped out on its own entry candle, every time, on any flat stretch.
+    expect(stop).toBeLessThan(data[index].close)
+    expect(stop).toBeCloseTo(data[index].close * (1 - GPT_FALLBACK_STOP_FRACTION), 8)
+    expect(gptApplyStop({ long: true, stop }, data[index]).long).toBe(true)
+  })
+
+  it('treats an errored decision as no decision even though it validates', () => {
+    const errored = {
+      candleTime: 1,
+      recommendation: 'buy' as const,
+      confidence: 0.99,
+      rationale: 'x',
+      model: 'm',
+      cached: false,
+      error: 'OpenAI request failed (429)'
+    }
+    // Confident, well formed, and a buy -- rejected purely because it never reached the model.
+    expect(parseAiSignalResponse(errored)).not.toBeNull()
+    expect(gptActionFor(errored, GPT_FLAT)).toBe('none')
+    expect(gptActionFor({ ...errored, error: null }, GPT_FLAT)).toBe('enter')
+  })
+
+  it('will not enter twice or exit flat', () => {
+    const buy = { candleTime: 1, recommendation: 'buy' as const, confidence: 0.9, rationale: '', model: 'm', cached: false, error: null }
+    const sell = { ...buy, recommendation: 'sell' as const }
+    expect(gptActionFor(buy, GPT_FLAT)).toBe('enter')
+    expect(gptActionFor(buy, { long: true, stop: 1 })).toBe('none')
+    expect(gptActionFor(sell, GPT_FLAT)).toBe('none')
+    expect(gptActionFor(sell, { long: true, stop: 1 })).toBe('exit')
+  })
+})
+
 describe('a failed GPT decision is not a decision', () => {
   const safeHoldShape = {
     candleTime: 1_700_000_000,

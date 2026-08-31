@@ -1,48 +1,36 @@
 import type { Candle } from '../../../shared/ipc'
 import {
+  GPT_FLAT,
   GPT_INTRADAY_INTERVAL,
   GPT_INTRADAY_STRATEGY_ID,
   GPT_LOOKBACK_BARS,
-  GPT_MIN_CONFIDENCE,
+  gptActionFor,
+  gptApplyStop,
+  gptAtrSeries,
+  gptStopFor,
   type AiSignalTape
 } from '../../../shared/aiSignal'
-import { computeAtr } from './emaCrossAtrStop'
 import type { StrategyDefinition, StrategySignals } from './types'
-
-const ATR_PERIOD = 14
-const ATR_STOP_MULTIPLE = 1.5
-const FALLBACK_STOP_FRACTION = 0.03
 
 export function generateGptIntradaySignals(candles: Candle[], tape: AiSignalTape): StrategySignals {
   const entries = new Array<boolean>(candles.length).fill(false)
   const exits = new Array<boolean>(candles.length).fill(false)
   const stopPrices = new Array<number | null>(candles.length).fill(null)
-  const atr = computeAtr(candles, ATR_PERIOD)
+  const atr = gptAtrSeries(candles)
   const byTime = new Map(tape.decisions.map((decision) => [decision.candleTime, decision]))
-  let inPosition = false
-  let activeStop: number | null = null
+  let position = GPT_FLAT
 
   for (let index = GPT_LOOKBACK_BARS; index < candles.length; index++) {
-    if (inPosition && activeStop !== null && candles[index].low <= activeStop) {
-      inPosition = false
-      activeStop = null
-    }
-    const decision = byTime.get(candles[index].time)
-    if (!decision || decision.error || decision.confidence < GPT_MIN_CONFIDENCE) continue
-    if (decision.recommendation === 'buy' && !inPosition) {
-      const referenceAtr = atr[index - 1]
-      const distance =
-        Number.isFinite(referenceAtr) && referenceAtr > 0
-          ? referenceAtr * ATR_STOP_MULTIPLE
-          : candles[index].close * FALLBACK_STOP_FRACTION
+    position = gptApplyStop(position, candles[index])
+    const action = gptActionFor(byTime.get(candles[index].time), position)
+    if (action === 'enter') {
+      const stop = gptStopFor(candles, atr, index)
       entries[index] = true
-      stopPrices[index] = Math.max(0, candles[index].close - distance)
-      inPosition = true
-      activeStop = stopPrices[index]
-    } else if (decision.recommendation === 'sell' && inPosition) {
+      stopPrices[index] = stop
+      position = { long: true, stop }
+    } else if (action === 'exit') {
       exits[index] = true
-      inPosition = false
-      activeStop = null
+      position = GPT_FLAT
     }
   }
 
