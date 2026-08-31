@@ -16,7 +16,6 @@ import { join } from 'path'
 import { runBacktest } from '../src/backtest/engine'
 import { STRATEGIES } from '../src/backtest/strategies'
 import { shortTermChannel } from '../src/backtest/strategies/shortTermChannel'
-import { trendRegimeEnsemble } from '../src/backtest/strategies/trendRegimeEnsemble'
 import type { StrategyDefinition } from '../src/backtest/strategies/types'
 import type { Candle } from '../shared/ipc'
 

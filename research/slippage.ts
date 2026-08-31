@@ -1,4 +1,4 @@
-import { load, register, padWarmup, segment, SPLIT_AT } from './harness'
+import { load, register, padWarmup } from './harness'
 import { runBacktest } from '../src/backtest/engine'
 import { ensembleDays } from './families'
 

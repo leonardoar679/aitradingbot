@@ -16,7 +16,7 @@ export async function requestAiSignal(
   symbol: string,
   context?: { exchange: Exchange; candles: Candle[]; executionIndex: number }
 ): Promise<AiSignal> {
-  let exchange: Exchange = context?.exchange ?? 'binance'
+  const exchange: Exchange = context?.exchange ?? 'binance'
   let candles = context?.candles
   let executionIndex = context?.executionIndex
 

@@ -194,7 +194,7 @@ export function useLiveBacktest(
     setState((prev) => ({ ...prev, status: prev.result ? prev.status : 'loading', error: null }))
     void poll()
 
-    return () => {
+    return (): void => {
       cancelled = true
       if (timer) clearTimeout(timer)
     }

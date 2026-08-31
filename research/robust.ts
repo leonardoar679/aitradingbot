@@ -1,7 +1,7 @@
 import type { Candle } from '../shared/ipc'
 import type { StrategyDefinition, StrategySignals } from '../src/backtest/strategies/types'
 import { runBacktest } from '../src/backtest/engine'
-import { load, segment, run, table, padWarmup, register, SPLIT_AT, type Row } from './harness'
+import { load, segment, run, table, padWarmup, register, type Row } from './harness'
 import { shortTermChannel } from '../src/backtest/strategies/shortTermChannel'
 import { trendRegimeEnsemble } from '../src/backtest/strategies/trendRegimeEnsemble'
 import { ensembleDays, channelEnsemble } from './families'

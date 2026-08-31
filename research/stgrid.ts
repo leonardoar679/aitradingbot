@@ -1,5 +1,4 @@
 import type { Candle } from '../shared/ipc'
-import type { StrategyDefinition, StrategySignals } from '../src/backtest/strategies/types'
 import { load, segment, register, run, table, SPLIT_AT, padWarmup } from './harness'
 import { channelEnsemble } from './families'
 

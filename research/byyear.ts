@@ -26,7 +26,8 @@ function yearly(sym: string, iv: string): { year: string; strat: number; bh: num
 
 console.log('===== BTCUSDT daily, year by year, 2017-2026 =====')
 console.log('year   strategy       b&h    verdict')
-let wins = 0, total = 0, lossYears: string[] = []
+let wins = 0, total = 0
+const lossYears: string[] = []
 for (const row of yearly('BTCUSDT', '1d')) {
   const better = row.strat > row.bh
   if (row.strat > 0) wins++

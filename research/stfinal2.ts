@@ -1,6 +1,6 @@
 import { runBacktest } from '../src/backtest/engine'
 import type { Candle } from '../shared/ipc'
-import { load, segment, run, table, SPLIT_AT, padWarmup, register, type Row } from './harness'
+import { load, segment, run, table, padWarmup, register, type Row } from './harness'
 import { shortTermChannel } from '../src/backtest/strategies/shortTermChannel'
 import { trendRegimeEnsemble } from '../src/backtest/strategies/trendRegimeEnsemble'
 

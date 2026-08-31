@@ -21,7 +21,7 @@ function useTick(everyMs: number): void {
   const [, setN] = useState(0)
   useEffect(() => {
     const t = setInterval(() => setN((n) => n + 1), everyMs)
-    return () => clearInterval(t)
+    return (): void => clearInterval(t)
   }, [everyMs])
 }
 
