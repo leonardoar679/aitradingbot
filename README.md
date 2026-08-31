@@ -133,6 +133,15 @@ trusted from the renderer:
 | **Kill switch** | Persisted, stays engaged until manually released, blocks arming outright while engaged. |
 | **Session-arm** | In-memory only, never persisted — resets to *off* on every app launch. Separate from the kill switch: this is the ordinary daily on/off, the kill switch is the emergency stop. |
 
+One gate is not user-facing and sits below all of these: **a signed request can only ever be sent
+to a host that implements the trading routes.** Market data resolves from a wider list that
+includes `data-api.binance.vision`, Binance's public data mirror — it is not geo-blocked, so it is
+often the only host that answers, but it has no signed routes at all (`/account` returns 404, and
+so would `/order`). Data and trading therefore resolve from separate lists with separate memos. In
+a region where only the mirror is reachable, `resolveTradingEndpoint()` refuses outright rather
+than handing back a host that would 404 a real, signed order in a way that reads like a bad API
+key. `binanceFutures.ts` has always kept its own host for the same reason; spot now matches it.
+
 **Closing or cancelling is never blocked by any of the above** (only by session-arm/kill-switch for
 closes, and by *nothing at all* for cancels) — those gates exist to bound how much *new* risk a
 single action can create, and closing/cancelling only ever reduces risk. Blocking either would risk

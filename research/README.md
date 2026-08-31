@@ -124,3 +124,18 @@ Everything here is spot, long-only, one position at a time, on USDT pairs from a
 filled at a bar close with 2bps of slippage and no market impact. The strategy has never placed an
 order. The next real evidence is a paper Bot running forward in the app, where fills, latency and
 data gaps are whatever they actually are rather than whatever this engine models.
+
+That bot could not run at all until 2026-08-30, and the reason is worth recording because nothing
+in this folder would have surfaced it. Every script here reads candle files from `.candles/`, which
+were fetched from `data-api.binance.vision`; the app fetched from `api.binance.com` and
+`api.binance.us`, both unreachable from this region. So the research was healthy and the app was
+dead on the same data, and the gap was invisible from inside either one. Measured in the app's main
+process, attempting `api.binance.us` also breaks every *subsequent* HTTPS request in that process --
+`api.binance.com` went from answering 451 in 1.2s to failing outright in 10.6s once it had been
+tried -- so the two-host list could never fail over. Fixed in `electron/services/exchanges/binance.ts`.
+
+Set expectations for how fast forward evidence can accumulate. Trend Regime takes about **9 trades
+per symbol per year** at 4h. A dry run only advances while the app is open, and a position the
+strategy opened *before* a bot was enabled is deliberately not counted as that bot's. The first
+paper round trip is weeks away, not days, and a month of silence is the expected reading rather
+than a fault to debug.

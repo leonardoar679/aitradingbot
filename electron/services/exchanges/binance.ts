@@ -32,6 +32,11 @@ const TRADING_ENDPOINTS: RestEndpoint[] = [
 // be signed, sent to a host with no /order route, and fail as a 404 that reads like a bad API key.
 // Live trading must never reach a host that cannot trade.
 //
+// binanceFutures.ts already reached this conclusion and states it in almost these words -- futures
+// is deliberately not routed through this resolver, because "a shared resolver would silently send
+// these requests somewhere that answers 404 and report it as a bad API key". Spot trading was the
+// path that had not been given the same treatment; this makes the two consistent.
+//
 // ORDER MATTERS HERE, AND NOT FOR SPEED. Measured in the running app's main process, one fetch
 // after another, on a connection where binance.com is geo-blocked:
 //

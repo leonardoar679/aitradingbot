@@ -593,7 +593,12 @@ broken strategy.
 
 - **These are backtests.** No forward paper-traded evidence exists yet. The next real evidence is
   a paper Bot running forward in the app, where fills, latency and data gaps are whatever they
-  actually are rather than whatever this engine models.
+  actually are rather than whatever this engine models. That bot can now run — until 2026-08-30 it
+  could not, because no Binance market data host was reachable from this region and every backtest
+  and every bot dry run failed on it. Expect the evidence to arrive slowly even so, and for
+  structural reasons rather than faults: Trend Regime takes about **9 trades per symbol per year**,
+  a position opened before a bot was enabled is correctly not counted as that bot's, and dry runs
+  only advance while the app is open. Weeks per round trip, not days.
 - **Market impact is not modelled at all.** 2bps of slippage is generous for a four-figure order
   in BTCUSDT and meaningless for an order large relative to the book.
 - **Held-out years have been negative.** 2025-08 → 2026-08: Short-Term Channel returned −12.1%,
