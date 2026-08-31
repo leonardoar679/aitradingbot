@@ -86,6 +86,71 @@ trend the rule would have held, then pays the round trip again to get back in. T
 ATR×3 returns +123% over 40 trades; at ATR×8–25 it returns +142–153% over 21, with the same −26%
 drawdown.
 
+### Is the edge broad, or is it two coins?
+
+The table above is **pooled** across eight symbols, and this repository already knows that half the
+mean month comes from SOL and XRP alone. A pooled win rate above a pooled break-even is compatible
+with two completely different claims: a rule that clears its bar almost everywhere, or a rule that
+fails on six symbols and is rescued by two. The pooled row cannot tell them apart, so the terms are
+computed **per symbol** and the question is asked in the form that can fail — *on how many symbols
+does `p` exceed that symbol's own `p*`?*
+
+`p*` moves with the symbol. It is not a fixed bar: a symbol whose losers run further raises its own
+break-even. So this is not "which symbols won", it is "on which symbols did the payoff ratio earned
+there justify the win rate earned there".
+
+| Trend Regime Ensemble (4h) | N | p | p\* | margin | W/L | E[trade] |
+|---|---|---|---|---|---|---|
+| BTC | 40 | 30.0% | 15.5% | **+14.5pt** | 5.44 | +3.70% |
+| ETH | 35 | 28.6% | 14.8% | **+13.8pt** | 5.75 | +4.75% |
+| SOL | 48 | 27.1% | 9.5% | **+17.6pt** | 9.54 | +14.65% |
+| ADA | 40 | 25.0% | 21.3% | +3.7pt | 3.70 | +1.45% |
+| BNB | 48 | 31.3% | 14.6% | **+16.7pt** | 5.86 | +3.63% |
+| LINK | 61 | 19.7% | 17.4% | +2.3pt | 4.76 | +0.65% |
+| LTC | 53 | 17.0% | 19.9% | **−2.9pt** | 4.03 | −0.68% |
+| XRP | 51 | 21.6% | 8.1% | **+13.5pt** | 11.38 | +8.17% |
+
+**Seven of eight.** The two channel strategies clear six of eight each — Short-Term Channel fails
+LINK by 0.2 points and LTC by 2.9; the gated version fails both by 0.2. LTC is the one symbol that
+fails for all three, which is consistent with everything else here: it chops.
+
+### Removing the two strongest symbols
+
+The direct test. SOL and XRP are named as a fixed pair rather than computed as "whichever two are
+best", which would guarantee a drop on any set of numbers at all:
+
+| | N | p | p\* | margin | E[trade], six | E[trade], all eight |
+|---|---|---|---|---|---|---|
+| Trend Regime Ensemble (4h) | 277 | 24.5% | 17.5% | **+7.0pt** | +1.99% | +4.44% |
+| Short-Term Channel (15m) | 826 | 35.1% | 31.2% | **+3.9pt** | +0.51% | +1.11% |
+| Channel + Regime (15m) | 501 | 36.1% | 29.8% | **+6.3pt** | +0.91% | +1.68% |
+
+**The pair inflates the size of the edge and does not create it.** Expectancy per trade roughly
+halves without them — the same story the monthly figures tell — but the margin stays positive on
+all three. That is the distinction the pooled row could not make, and it is the reason the equation
+is worth trusting as a description rather than as a summary of two coins that ran.
+
+### The same terms on six symbols that chose nothing
+
+DOGE, TRX, ETC, XLM, VET and EOS took no part in finding any rule here. Same window, same
+intervals:
+
+| | N | p | W | L | W/L | p\* | E[trade] | clears p\* on |
+|---|---|---|---|---|---|---|---|---|
+| Trend Regime Ensemble (4h) | 256 | 22.3% | +39.0% | −5.6% | 6.98 | 12.5% | **+4.34%** | 5 of 6 |
+| Short-Term Channel (15m) | 795 | 31.1% | +14.8% | −4.3% | 3.47 | 22.4% | **+1.66%** | **6 of 6** |
+| Channel + Regime (15m) | 437 | 32.5% | +19.8% | −4.6% | 4.26 | 19.0% | **+3.29%** | **6 of 6** |
+
+Trend Regime earns +4.34% per trade on symbols that informed nothing, against +4.44% on the eight
+it was built and confirmed on. The two channel strategies do **better** out of sample than in it.
+
+**That is a suspiciously good result and it has its own concentration**, which is worth stating
+before anyone quotes it. DOGE alone returns +12.92% per trade at a 9.52 payoff — its 2021 was
+extraordinary and it is doing to this set what SOL does to the other. Strip it out and Trend Regime
+still clears break-even on four of the remaining five (ETC +11.9pt, TRX +12.8pt, VET +5.6pt, XLM
++5.2pt, EOS −1.7pt), so the conclusion survives, but the *magnitude* on these six should be read
+the same way as the magnitude on the eight: carried disproportionately by one coin that ran.
+
 ---
 
 ## 2. Why the cost floor decides the design before any signal does
@@ -539,8 +604,9 @@ broken strategy.
   +955%.
 - **Half the mean comes from two symbols.** Remove SOL and XRP and the mean month falls from
   +3.04% to +1.67% for Trend Regime (−45%), +2.62% to +1.38% for the Channel (−47%) and +2.36% to
-  +1.33% for the gated version (−44%). This is a strategy family whose measured result leans
-  heavily on two coins that ran.
+  +1.33% for the gated version (−44%). The per-trade margin does survive their removal (section 1),
+  so the pair inflates the edge rather than constituting it — but any figure quoted from this
+  family leans heavily on two coins that ran.
 - **The ADX readout is not a gate.** Deploying only in months opening with ADX(14) ≤ 20 picks
   better months exactly as measured, but deploys in only 28% of them — and sitting out the rest
   costs far more compounding than the better months return ($44,960 against $165,625 for Trend
