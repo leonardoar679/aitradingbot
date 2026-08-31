@@ -21,6 +21,7 @@ exchange.
 - [Live Trading (Real Money)](#live-trading--real-money)
 - [Architecture](#architecture)
 - [Core Strategy & Simulation Logic](#core-strategy--simulation-logic)
+- [How the strategies make money (the math)](STRATEGIES.md)
 - [Tech Stack](#tech-stack)
 - [Supported Exchanges](#supported-exchanges)
 - [Project Structure](#project-structure)
@@ -239,6 +240,12 @@ electron/preload.ts  ── contextBridge ──▶  window.api.*  (renderer)
 ## Core Strategy & Simulation Logic
 
 ### Strategies
+
+> **[STRATEGIES.md](STRATEGIES.md) explains the three shipped strategies as mathematics** — the
+> expectancy equation they are built around, why a 24% win rate is profitable, why the fee sets
+> the trade budget before any indicator is chosen, the formulas for each rule, and why compounding
+> reverses the comparison against buy-and-hold. Start there if you want to know *why* they work
+> rather than *whether* they did.
 
 `src/backtest/engine.ts`'s `runBacktest(candles, strategyId, options)` is pluggable: execution
 (position tracking, fees, the equity curve, and the full stats panel) is shared and untouched
