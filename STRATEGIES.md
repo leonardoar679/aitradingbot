@@ -231,18 +231,24 @@ tuning parameter; it is the thing that makes the strategy affordable.
 ## 3. Trend Regime Ensemble — the math
 
 **The claim it trades on**, measured on BTCUSDT 15m as forward 24h return split by whether price
-is above or below a moving average:
+is above or below a moving average (`research/probe.ts`, full history):
 
 | lookback | above | below | spread |
 |---|---|---|---|
-| 1 day | +0.128% | +0.132% | −0.004% |
-| 20 days | +0.201% | +0.041% | +0.159% |
-| **50 days** | **+0.222%** | **+0.003%** | **+0.219%** |
-| 200 days | +0.035% | +0.043% | −0.008% |
+| 1 day | +0.162% | +0.142% | +0.020% |
+| 20 days | +0.268% | +0.020% | +0.248% |
+| **50 days** | **+0.313%** | **−0.026%** | **+0.340%** |
+| 200 days | +0.193% | +0.040% | +0.153% |
 
-Trend persistence exists, but only in the **20–50 day band**, and it is zero at both ends. This is
-why a fast EMA(20/50) cross on 15m bars finds nothing, and why a 200-*bar* filter does nothing on
-15m candles — 200 bars of 15m is two days, the row where the spread is −0.004%.
+Trend persistence exists and **peaks at 50 days**, which is what picks the band the lookbacks sit
+in. It is weak but not absent at the fast end — the one-day spread is +0.020%, a seventeenth of the
+peak and far below the 0.24% a round trip costs, which is why a fast EMA(20/50) cross on 15m bars
+finds nothing and why a 200-*bar* filter does nothing (200 bars of 15m is about two days).
+
+It does **not** fall back to zero at the slow end: 200 days still spreads +0.153%. An earlier
+version of this table had −0.008% there and concluded persistence was "zero at both ends". That is
+not what the data says. The signal decays past 50 days rather than vanishing, so the case for
+these lookbacks is that they sit at the peak — not that everything slower is worthless.
 
 ### The algorithm
 
@@ -366,8 +372,8 @@ components, and it degrades gracefully instead of flipping on one tick through o
 
 ### Why these lookbacks are not fitted
 
-Across 36 parameter combinations × 8 symbol/timeframe blocks, **all 288 cells were profitable** on
-the training window. There was no sharp optimum to find. The best worst-case cell was `[2,4,8]` at
+Across 36 parameter combinations × 9 symbol/timeframe blocks, **all 324 cells were profitable** on
+the training window (`research/stgrid.ts`; the worst is +13.9%). There was no sharp optimum to find. The best worst-case cell was `[2,4,8]` at
 `0.98/0.15` and was **deliberately not taken** — that is a tight corner of the grid, and the argmax
 of a sweep is the point with the least statistical support. `[2,3,5,8]` is Trend Regime's
 `[20,30,50,80]` shape moved one decade down, and it lands mid-plateau.
@@ -452,10 +458,18 @@ A model where slippage sometimes helps would let a strategy earn money from the 
 fill assumptions, so it never does.
 
 **The edge does not depend on trading the close it just saw.** Delaying every fill by one, two or
-four whole 15-minute bars after the signal moves the three-year result by a few points in either
-direction and sometimes *improves* it. A signal that needed that precision would be a signal made
-of noise — this is the cheapest check a backtest can run and the one intraday strategies most
-often fail.
+four whole 15-minute bars after the signal — up to a full hour late — moves the three-year result
+by roughly −12% to +63% *of itself*, in both directions, and at four bars it **improves** two of
+the three symbols (`research/latency.ts`):
+
+| 15m, 3 years | fill now | +1 bar | +2 bars | +4 bars |
+|---|---|---|---|---|
+| BTCUSDT | +6,163% | +5,814% | +6,110% | +5,892% |
+| ETHUSDT | +10,164% | +8,941% | +9,967% | **+11,034%** |
+| SOLUSDT | +6,292% | +5,856% | +8,177% | **+10,239%** |
+
+A signal that needed that precision would be a signal made of noise — this is the cheapest check a
+backtest can run and the one intraday strategies most often fail.
 
 ---
 
@@ -657,7 +671,7 @@ is most of what there is to watch.
 ## Reproduce every number in this document
 
 ```bash
-for s in edge shipped vshold tscan gap baseline fair stfinal stfinal2 shape trueoos; do
+for s in edge probe shipped vshold tscan gap baseline stgrid gate latency fair stfinal stfinal2 shape trueoos; do
   npx esbuild research/$s.ts --bundle --platform=node --format=esm --outfile=research/.$s.mjs
   CANDLE_DIR=.candles node --max-old-space-size=4096 research/.$s.mjs
 done
@@ -669,17 +683,21 @@ done
 | `tscan.ts` | the one-threshold lookback sweep and the 1.5%-band result in section 2 |
 | `gap.ts` | what closing Trend Regime's vote band costs, in section 2 |
 | `baseline.ts` | the Bollinger Breakout trade count and outcome in section 2 |
+| `probe.ts` | the forward-return-by-trend-state table in section 3 |
+| `stgrid.ts` | the 324 all-positive parameter cells in section 4 |
+| `gate.ts` | that gating exits as well as entries is worse, in section 5 |
+| `shape.ts` | the gate's distributional effect in section 5, and the 0.70–0.97 correlation in section 8 |
+| `latency.ts` | the fill-delay check in section 6 |
 | `shipped.ts` | section 7, and the held-out ranking in section 8 |
 | `vshold.ts` | the six-symbol confirmation in section 7, and the ADX gate result in section 9 |
 | `fair.ts` | the leverage sweep in section 8 |
 | `stfinal.ts` | the held-out-year returns in section 9 |
 | `stfinal2.ts` | the month counts and the top-three-months share in section 8 |
-| `shape.ts` | the 0.70–0.97 correlation in section 8 |
 | `trueoos.ts` | the LINKUSDT 2017-08 → 2023-08 pair in section 9 |
 
-Only `edge.ts`, `shipped.ts` and `vshold.ts` default their candle directory; the other eight need
+Only `edge.ts`, `shipped.ts` and `vshold.ts` default their candle directory; the rest need
 `CANDLE_DIR` set, and `fair.ts` exits with an unhelpful `path` TypeError without it — which is why
-the loop above sets it for all eleven. They read the candle dumps in `.candles/` and the month dumps
+the loop above sets it for all fifteen. They read the candle dumps in `.candles/` and the month dumps
 in `research/.*.json`; if those are missing, `research/monthiv.ts` regenerates them.
 
 **Two kinds of number live in this document, and only one of them is stable.** Figures from a
@@ -690,10 +708,19 @@ and everything in section 2 measured over full history. All figures here were re
 candles through **2026-08-28**, which is the date to compare against before treating any
 disagreement as a bug.
 
-Section 2 is worth a specific warning. Its numbers were the *least* reproducible in this document —
-the lookback sweep disagreed in every row, and the vote-band claim had no script behind it at all
-until `gap.ts` was written to check it. That claim turned out to be understated by two orders of
-magnitude. If you are re-deriving anything here, start there.
+Sections 2 and 3 are worth a specific warning. Their numbers were the *least* reproducible in this
+document — the lookback sweep disagreed in every row, the forward-return table disagreed in every
+row and its "zero at both ends" reading did not survive, and the vote-band claim had no script
+behind it at all until `gap.ts` was written to check it. That one turned out to be understated by
+two orders of magnitude. Section 5, by contrast, is exact to the dollar. If you are re-deriving
+anything here, start with 2 and 3.
+
+**Two claims are recorded but not printed by any run.** Section 5's −4.7% / −3.1% / −9.3% against
++3.8% / +5.4% / +8.4%, and section 3's single-lookback sweep (50d +171%, 60d +99%, 80d +154%) with
+its leave-one-out range of 115–162% against 132%, exist as comments in `gate.ts` and in the study
+notes rather than as output. They are the only figures here that cannot be checked by running
+something, which is exactly the category the vote-band claim was in before it was found to be
+wrong. Treat them accordingly.
 
 Further detail: [README.md](README.md) for the full research narrative,
 [research/README.md](research/README.md) for the study index,
