@@ -8,6 +8,7 @@ import { BacktestResultsView, type ResultsGeneralInfo } from './BacktestResultsV
 import { BacktestChartsView } from './BacktestChartsView'
 import { StrategyComparisonView } from './StrategyComparisonView'
 import { LiveBacktestView } from './LiveBacktestView'
+import { LiveStrategyComparison } from './LiveStrategyComparison'
 import { useLiveBacktest } from './useLiveBacktest'
 import { runBacktest, DEFAULT_STARTING_BALANCE, type BacktestResult } from './engine'
 import { MAX_LEVERAGE, MIN_LEVERAGE, isUsableLeverage, liquidationDistancePct } from '../../shared/perp'
@@ -674,6 +675,14 @@ export function BacktestPage(): React.JSX.Element {
 
       {tab === 'live' && (
         <Card title="Live strategy monitor">
+          {tradingRoute.symbol !== '' && (
+            <LiveStrategyComparison
+              exchange={exchange}
+              symbol={tradingRoute.symbol}
+              active={tab === 'live'}
+              selectedStrategyId={tradingRoute.strategyId}
+            />
+          )}
           <LiveBacktestView
             state={live}
             strategyId={tradingRoute.strategyId}

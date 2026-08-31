@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { INTERVAL_SECONDS, type Candle, type Exchange, type Interval } from '../../shared/ipc'
 import { runBacktest, type BacktestResult } from './engine'
-import { getStrategy } from './strategies'
+import { STRATEGIES, getStrategy } from './strategies'
 import { fetchRangeCached } from '../bots/candleCache'
 import { GPT_INTRADAY_STRATEGY_ID } from '../../shared/aiSignal'
 
@@ -79,13 +79,21 @@ export function useLiveBacktest(
       return
     }
 
-    let strategy: ReturnType<typeof getStrategy>
-    try {
-      strategy = getStrategy(strategyId)
-    } catch {
-      setState({ ...IDLE, status: 'unsupported', error: 'This route has no live-monitorable strategy.' })
+    // Membership, NOT a try/catch around getStrategy(). getStrategy falls back to the default
+    // strategy for an unknown id rather than throwing -- deliberately, so old saved bots and
+    // routines survive a renamed id. That fallback is wrong here and was silently wrong: the
+    // Backtest page's strategy list also carries "executor:<uuid>" routes, and monitoring one
+    // showed a live EMA Crossover + ATR Stop run under a heading naming it, for a strategy the
+    // user had not selected. Verified in the running app before this check existed.
+    if (!STRATEGIES.some((s) => s.id === strategyId)) {
+      setState({
+        ...IDLE,
+        status: 'unsupported',
+        error: 'Executor replays are not live-monitorable. Pick a strategy on Configuration to monitor one.'
+      })
       return
     }
+    const strategy = getStrategy(strategyId)
 
     const barSec = INTERVAL_SECONDS[interval]
     const warmupBars = strategy.warmupBarsFor(barSec) + WARMUP_SLACK_CANDLES

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { describeNextAction, readLiveSignals } from '../src/backtest/liveSignal'
+import { STRATEGIES, getStrategy } from '../src/backtest/strategies'
 import type { Candle } from '../shared/ipc'
 
 // The live monitor's readings. These matter because the panel makes a claim about what the
@@ -159,5 +160,33 @@ describe('what has to change for the strategy to act', () => {
     const short = series(30, 100, 0.5)
     const action = describeNextAction(readLiveSignals(short, 'short-term-channel'), false)
     expect(action.kind).toBe('unknown')
+  })
+})
+
+describe('the registry trap the live monitor has to guard against', () => {
+  // getStrategy() FALLS BACK to the default strategy for an unknown id instead of throwing. That
+  // is deliberate and right for its own callers -- a saved bot or routine on a renamed id keeps
+  // working. It is wrong for the live monitor, whose strategy id comes from a dropdown that also
+  // contains "executor:<uuid>" replay routes.
+  //
+  // Guarding it with try/catch therefore does nothing at all, which is what the first version of
+  // useLiveBacktest did. Verified in the running app: selecting an executor route and opening Live
+  // showed a live EMA Crossover + ATR Stop run under a heading naming it, for a strategy the user
+  // had never chosen. The guard must be a membership test, and this pins the reason.
+  const EXECUTOR_ROUTE = 'executor:97f38e30-7fcb-4c7d-a430-aed163a63a40'
+
+  it('does not throw for an unknown id, so try/catch cannot detect one', () => {
+    expect(() => getStrategy(EXECUTOR_ROUTE)).not.toThrow()
+  })
+
+  it('hands back a real, unrelated strategy for an executor route', () => {
+    const fallback = getStrategy(EXECUTOR_ROUTE)
+    expect(fallback.id).not.toBe(EXECUTOR_ROUTE)
+    expect(STRATEGIES).toContain(fallback)
+  })
+
+  it('is detectable by membership, which is what the monitor uses', () => {
+    expect(STRATEGIES.some((s) => s.id === EXECUTOR_ROUTE)).toBe(false)
+    expect(STRATEGIES.some((s) => s.id === 'trend-regime-ensemble')).toBe(true)
   })
 })

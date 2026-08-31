@@ -54,8 +54,24 @@ about to happen?* It re-runs the **same engine** over candles fetched up to the 
 every 60 seconds, on whichever exchange/symbol/interval/strategy is already set on Configuration —
 no bot to create, nothing extra to configure.
 
-It shows the current position with unrealized P&L, the window's closed trades, and the part that
-exists nowhere else in the app: **how far the market is from making the strategy act.**
+It opens with all three shipped strategies on the current symbol at once, **each at its own
+measured bar size** — Trend Regime at 4h, the two channel strategies at 15m — because forcing them
+onto one interval would compare three strategies at a bar size two of them were never validated
+on. The cost is two fetches rather than three: the candle cache keys on exchange/symbol/interval,
+so the two 15m strategies share a series.
+
+| Strategy | Bar | Position | Unrealized | Window P&L | Trades | Waiting on |
+|---|---|---|---|---|---|---|
+| Trend Regime Ensemble | 4h | Long | +22.42% | +20.27% | 1 | holding |
+| Short-Term Channel Breakout | 15m | Flat | — | +0.00% | 0 | channel position 55%→95% |
+| Short-Term Channel + Trend Regime | 15m | Flat | — | +0.00% | 0 | channel position 55%→95% |
+
+That table is for **choosing** between them, not for running several: their monthly returns
+correlate 0.70 to 0.97, so holding two is one bet at 1.7× size rather than diversification.
+
+Below it, the selected strategy in full — the current position with unrealized P&L, the window's
+closed trades, and the part that exists nowhere else in the app: **how far the market is from
+making the strategy act.**
 
 > Holding. Exits when trend agreement falls to 1 of 4 or below — it is 4 of 4 now.
 
