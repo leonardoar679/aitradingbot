@@ -63,7 +63,7 @@ export function LedgerCheck({ positions }: { positions: LivePosition[] }): React
     // noticing. Slower than the page's own poll, and the main process caches a balance read for
     // fifteen seconds, so this settles at about two signed requests a minute.
     const timer = setInterval(() => void check(), RECHECK_MS)
-    return () => clearInterval(timer)
+    return (): void => clearInterval(timer)
   }, [check, signature])
 
   if (exchange === null) return null

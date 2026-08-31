@@ -16,7 +16,7 @@ export function ThemeProvider({ children }: PropsWithChildren): React.JSX.Elemen
     window.api.settings.get().then((settings) => {
       if (!cancelled) setThemeState(settings.theme)
     })
-    return () => {
+    return (): void => {
       cancelled = true
     }
   }, [])

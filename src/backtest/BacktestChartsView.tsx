@@ -108,7 +108,7 @@ export function BacktestChartsView({ candles, trades }: BacktestChartsViewProps)
 
     chart.timeScale().fitContent()
 
-    return () => {
+    return (): void => {
       chart.remove()
       chartRef.current = null
       seriesRef.current = null

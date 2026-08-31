@@ -213,7 +213,7 @@ export function LiveOrderScheduler(): null {
 
     tick()
     const timer = setInterval(tick, POLL_MS)
-    return () => {
+    return (): void => {
       cancelled = true
       clearInterval(timer)
     }

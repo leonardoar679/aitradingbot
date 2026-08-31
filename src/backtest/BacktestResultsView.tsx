@@ -421,7 +421,7 @@ export function BacktestResultsView({
 
     chart.timeScale().fitContent()
 
-    return () => {
+    return (): void => {
       chart.remove()
       chartRef.current = null
     }

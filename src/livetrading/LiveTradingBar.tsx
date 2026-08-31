@@ -41,7 +41,7 @@ export function LiveTradingBar(): React.JSX.Element | null {
   useEffect(() => {
     if (pendingConfirm === null) return
     const timer = setTimeout(() => setPendingConfirm(null), CONFIRM_WINDOW_MS)
-    return () => clearTimeout(timer)
+    return (): void => clearTimeout(timer)
   }, [pendingConfirm])
 
   function refresh(): void {
@@ -59,7 +59,7 @@ export function LiveTradingBar(): React.JSX.Element | null {
   useEffect(() => {
     refresh()
     const timer = setInterval(refresh, POLL_MS)
-    return () => clearInterval(timer)
+    return (): void => clearInterval(timer)
   }, [])
 
   async function handleArmToggle(): Promise<void> {

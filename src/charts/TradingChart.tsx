@@ -388,7 +388,7 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
 
     void start()
 
-    return () => {
+    return (): void => {
       cancelled = true
       if (retryTimer) clearTimeout(retryTimer)
       unsubscribeUpdates?.()
@@ -402,6 +402,11 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
       macdLineSeriesRef.current = null
       macdSignalSeriesRef.current = null
       macdHistSeriesRef.current = null
+      // candlesRef holds a Map created once at mount (line 45) and never reassigned -- a data
+      // store, not the DOM node ref this rule is written for. Its identity is stable for the
+      // component's lifetime, so the cleanup clears exactly the Map the effect filled, and the
+      // copy-to-a-local the rule suggests would change nothing.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       candlesRef.current.clear()
     }
   }, [exchange, symbol, interval, palette, reloadNonce])

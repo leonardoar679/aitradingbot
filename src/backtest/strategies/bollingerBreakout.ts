@@ -19,7 +19,7 @@ function generateSignals(candles: Candle[]): StrategySignals {
   // Same offset-alignment convention as rsiReversion.ts / TradingChart.tsx's chart-side RSI use.
   const bands = BollingerBands.calculate({ period: BB_PERIOD, stdDev: BB_STD_DEV, values: closes })
   const bbOffset = candles.length - bands.length
-  const bandAt = (i: number) => {
+  const bandAt = (i: number): (typeof bands)[number] | null => {
     const idx = i - bbOffset
     return idx >= 0 && idx < bands.length ? bands[idx] : null
   }

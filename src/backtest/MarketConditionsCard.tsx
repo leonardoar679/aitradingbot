@@ -38,7 +38,7 @@ export function MarketConditionsCard({
     let cancelled = false
     setState({ conditions: null, error: null, loading: true })
 
-    void (async () => {
+    void (async (): Promise<void> => {
       try {
         const endSec = Math.floor(Date.now() / 1000)
         const candles = await fetchRangeCached(
@@ -57,7 +57,7 @@ export function MarketConditionsCard({
       }
     })()
 
-    return () => {
+    return (): void => {
       cancelled = true
     }
   }, [exchange, symbol, strategyId])

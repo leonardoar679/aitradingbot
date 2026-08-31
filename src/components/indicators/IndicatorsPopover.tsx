@@ -25,7 +25,7 @@ export function IndicatorsPopover({ settings, onToggle }: IndicatorsPopoverProps
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    return (): void => document.removeEventListener('mousedown', handleClickOutside)
   }, [open])
 
   return (

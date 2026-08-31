@@ -231,7 +231,7 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
         if (!cancelled) setLiveTradingStatus(status)
       })
       .catch((error) => console.error('Failed to load live trading status:', error))
-    return () => {
+    return (): void => {
       cancelled = true
     }
   }, [])
@@ -303,7 +303,7 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
       .finally(() => {
         void window.api.market.unsubscribeTicker()
       })
-    return () => {
+    return (): void => {
       cancelled = true
     }
   }, [exchange, pair.symbol, isSpreadType])
@@ -380,7 +380,7 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
         // could not be read here is no reason to stop someone creating a strategy.
         if (!cancelled) setLiveFree(null)
       })
-    return () => {
+    return (): void => {
       cancelled = true
     }
   }, [mode, exchange, pair.quoteAsset])
@@ -404,7 +404,7 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
         // someone creating a strategy. The exchange still enforces them.
         if (!cancelled) setSymbolRules(null)
       })
-    return () => {
+    return (): void => {
       cancelled = true
     }
   }, [mode, exchange, pair.symbol])
@@ -757,7 +757,7 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
                         : type === 'twap'
                           ? `This will place ${twapNumOrders(twapParams)} real BUY market order${twapNumOrders(twapParams) === 1 ? '' : 's'} for ${pair.symbol} on Binance, ${(twapParams.totalAmountQuote / twapNumOrders(twapParams)).toFixed(2)} ${pair.quoteAsset} each, spread over ${Math.round(twapParams.totalDurationSec / 60)} minutes — the first fires immediately, the rest on a timer that keeps running even if this app is only in the background. It never closes a position on its own. Stop halts any orders not yet placed but never undoes ones already placed.`
                           : type === 'grid'
-                            ? (() => {
+                            ? ((): string => {
                                 const allLevels = buildGridLevels(gridParams)
                                 const placedCount = Math.min(gridParams.maxOpenOrders, allLevels.length)
                                 const perLevel = gridParams.totalAmountQuote / allLevels.length

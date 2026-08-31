@@ -29,7 +29,7 @@ export function PortfolioScheduler(): null {
 
     void poll()
 
-    return () => {
+    return (): void => {
       cancelled = true
       if (timer) clearTimeout(timer)
     }

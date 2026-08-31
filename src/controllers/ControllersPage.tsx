@@ -163,7 +163,7 @@ function ExecutorBreakdown({ executors }: { executors: ExecutorConfig[] }): Reac
     ).then((entries) => {
       if (!cancelled) setPnls(Object.fromEntries(entries))
     })
-    return () => {
+    return (): void => {
       cancelled = true
     }
   }, [executors])
@@ -232,7 +232,7 @@ export function ControllersPage(): React.JSX.Element {
       previousRef.current = settings.controllers
       loadedRef.current = true
     })
-    return () => {
+    return (): void => {
       cancelled = true
     }
   }, [])

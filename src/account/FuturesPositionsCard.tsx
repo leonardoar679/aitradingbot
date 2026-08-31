@@ -107,7 +107,7 @@ export function FuturesPositionsCard(): React.JSX.Element | null {
     }
     void poll()
     const timer = setInterval(poll, REFRESH_MS)
-    return () => {
+    return (): void => {
       cancelled = true
       clearInterval(timer)
     }

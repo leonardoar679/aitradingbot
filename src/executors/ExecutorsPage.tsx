@@ -94,7 +94,7 @@ export function ExecutorsPage({
       lastSerializedRef.current = JSON.stringify(settings.executors)
       loadedRef.current = true
     })
-    return () => {
+    return (): void => {
       cancelled = true
     }
   }, [])
@@ -134,7 +134,7 @@ export function ExecutorsPage({
         })
         .catch((error) => console.error('Failed to poll executors:', error))
     }, EXECUTORS_POLL_MS)
-    return () => clearInterval(timer)
+    return (): void => clearInterval(timer)
   }, [])
 
   async function handleCreate(input: {

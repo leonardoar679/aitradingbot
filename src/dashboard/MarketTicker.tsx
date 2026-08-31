@@ -86,7 +86,7 @@ export function MarketTicker({
     void start()
     const timer = setInterval(() => void refreshFromRest(), REST_REFRESH_MS)
 
-    return () => {
+    return (): void => {
       cancelled = true
       clearInterval(timer)
       unsubscribeUpdates?.()

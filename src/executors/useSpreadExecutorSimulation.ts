@@ -78,7 +78,7 @@ export function useSpreadExecutorSimulation(config: ExecutorConfig): SpreadSimRe
 
     void poll()
 
-    return () => {
+    return (): void => {
       cancelled = true
       if (timer) clearTimeout(timer)
     }

@@ -76,7 +76,7 @@ export async function fetchBotDryRunResult(bot: {
   const defaultStartSec = endSec - Math.max(LOOKBACK_CANDLES, warmup + 120) * barSec
   const startSec =
     bot.strategyId === GPT_INTRADAY_STRATEGY_ID
-      ? (() => {
+      ? ((): number => {
           const enabled = bot.enabledAt ?? endSec
           const segmentSeconds = GPT_MAX_DECISIONS * barSec
           const segmentStart = enabled + Math.floor(Math.max(0, endSec - enabled) / segmentSeconds) * segmentSeconds
@@ -210,7 +210,7 @@ export function useDryRun(
 
     void poll()
 
-    return () => {
+    return (): void => {
       cancelled = true
       if (timer) clearTimeout(timer)
     }

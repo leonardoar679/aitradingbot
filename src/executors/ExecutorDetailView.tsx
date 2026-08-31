@@ -54,7 +54,7 @@ function useLiveLadderAvgEntry(executor: ExecutorConfig): number | null {
     }
     void poll()
     const timer = setInterval(poll, WATCHER_POLL_MS)
-    return () => {
+    return (): void => {
       cancelled = true
       clearInterval(timer)
     }
@@ -123,7 +123,7 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
     })
     seriesRef.current = series
 
-    return () => {
+    return (): void => {
       chart.remove()
       chartRef.current = null
       seriesRef.current = null

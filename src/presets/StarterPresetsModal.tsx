@@ -154,7 +154,7 @@ export function StarterPresetsModal({ onClose, onInserted }: StarterPresetsModal
       }
     })
 
-    return () => {
+    return (): void => {
       cancelled = true
     }
   }, [])

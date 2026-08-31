@@ -60,7 +60,7 @@ export function PositionsPage(): React.JSX.Element {
   useEffect(() => {
     refreshLivePositions()
     const timer = setInterval(refreshLivePositions, LIVE_POLL_MS)
-    return () => clearInterval(timer)
+    return (): void => clearInterval(timer)
   }, [])
 
   // Inventory is re-read on the same tick as live positions, not just once at mount: a
@@ -81,7 +81,7 @@ export function PositionsPage(): React.JSX.Element {
   useEffect(() => {
     refreshSettingsBacked()
     const timer = setInterval(refreshSettingsBacked, LIVE_POLL_MS)
-    return () => clearInterval(timer)
+    return (): void => clearInterval(timer)
   }, [])
 
   // Writes against a freshly re-read array rather than persisting local state wholesale.
@@ -95,7 +95,7 @@ export function PositionsPage(): React.JSX.Element {
   // IS the position from then on), so deleting the row with no credit made the stake and the
   // profit disappear together.
   function handleCloseHeldPosition(id: string, closeValue: number): void {
-    void (async () => {
+    void (async (): Promise<void> => {
       setHeldError(null)
       try {
         // Queued: re-reading before the write narrows the gap but does not close it, and a

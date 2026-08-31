@@ -113,7 +113,7 @@ export function ControllerScheduler(): null {
     }
     void poll()
     const timer = setInterval(poll, CONFIG_POLL_MS)
-    return () => {
+    return (): void => {
       cancelled = true
       clearInterval(timer)
     }
@@ -134,7 +134,7 @@ export function ControllerScheduler(): null {
         }, SNAPSHOT_INTERVAL_MS)
       )
 
-    return () => {
+    return (): void => {
       for (const timer of timers) clearInterval(timer)
     }
   }, [controllers])

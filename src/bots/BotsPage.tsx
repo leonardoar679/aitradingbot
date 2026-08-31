@@ -91,7 +91,7 @@ export function BotsPage(): React.JSX.Element {
       setBotRuns(settings.botRuns)
       loadedRef.current = true
     })
-    return () => {
+    return (): void => {
       cancelled = true
     }
   }, [])

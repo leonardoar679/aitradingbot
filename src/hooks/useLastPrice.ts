@@ -64,7 +64,7 @@ export function useLastPrice(exchange: Exchange, symbol: string): number | null 
     void start()
     timer = setInterval(() => void refreshFromRest(), REST_REFRESH_MS)
 
-    return () => {
+    return (): void => {
       cancelled = true
       if (timer) clearInterval(timer)
       unsubscribe?.()

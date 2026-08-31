@@ -26,7 +26,7 @@ export function PortfolioPage({ onGetStarted }: { onGetStarted?: () => void }): 
       setBots(settings.bots)
       setExecutorCount(settings.executors.length)
     })
-    return () => {
+    return (): void => {
       cancelled = true
     }
   }, [])

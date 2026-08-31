@@ -33,7 +33,7 @@ export function EquityCurveChart({ equityCurve }: { equityCurve: EquityPoint[] }
     series.setData(equityCurve.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })))
     chart.timeScale().fitContent()
 
-    return () => {
+    return (): void => {
       chart.remove()
     }
   }, [equityCurve, palette])

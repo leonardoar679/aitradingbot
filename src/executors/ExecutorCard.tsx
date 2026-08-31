@@ -81,7 +81,7 @@ function useLiveWatcherInfo(executor: ExecutorConfig): LiveWatcherInfo {
     }
     void poll()
     const timer = setInterval(poll, WATCHER_POLL_MS)
-    return () => {
+    return (): void => {
       cancelled = true
       clearInterval(timer)
     }
@@ -116,7 +116,7 @@ export function useLiveTwapInfo(executor: ExecutorConfig): LiveTwapRunSummary | 
     }
     void poll()
     const timer = setInterval(poll, WATCHER_POLL_MS)
-    return () => {
+    return (): void => {
       cancelled = true
       clearInterval(timer)
     }

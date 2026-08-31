@@ -1,4 +1,4 @@
-import type { ExecutorConfig, ExecutorSide, GridExecutorParams, DcaExecutorParams, TwapExecutorParams, PositionExecutorParams, OrderExecutorParams, XemmExecutorParams, ArbitrageExecutorParams } from '../../shared/ipc'
+import type { ExecutorConfig, ExecutorSide, HistoricalRangeResult, GridExecutorParams, DcaExecutorParams, TwapExecutorParams, PositionExecutorParams, OrderExecutorParams, XemmExecutorParams, ArbitrageExecutorParams } from '../../shared/ipc'
 import { executorPnlFromState, executorRealizedPnl } from './executorPnl'
 import { runExecutorSimulation } from './engine'
 import { alignByTime, simulateXemm, simulateArbitrage } from './spreadEngine'
@@ -7,7 +7,7 @@ import { alignByTime, simulateXemm, simulateArbitrage } from './spreadEngine'
 // outside a component's render lifecycle (stopping an executor, a Controller's periodic
 // snapshot) — same one-shot fetch + dispatch, just not tied to a hook's poll/subscribe cycle.
 
-async function fetchSingleMarketCandles(executor: ExecutorConfig) {
+async function fetchSingleMarketCandles(executor: ExecutorConfig): Promise<HistoricalRangeResult> {
   const endSec = Math.floor(Date.now() / 1000)
   return window.api.market.fetchHistoricalRange(executor.exchange, executor.symbol, '1m', executor.createdAt, endSec)
 }

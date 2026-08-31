@@ -237,7 +237,7 @@ export function RoutinesPage(): React.JSX.Element {
       setRoutines(settings.routines)
       loadedRef.current = true
     })
-    return () => {
+    return (): void => {
       cancelled = true
     }
   }, [])

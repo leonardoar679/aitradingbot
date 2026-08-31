@@ -214,7 +214,7 @@ export function BacktestPage(): React.JSX.Element {
         // Falling back to DEFAULT_STARTING_BALANCE beats blocking the page over bookkeeping.
         console.error('Failed to read the paper account for the starting capital default:', error)
       })
-    return () => {
+    return (): void => {
       cancelled = true
     }
   }, [])
@@ -235,7 +235,7 @@ export function BacktestPage(): React.JSX.Element {
       .finally(() => {
         if (!cancelled) setSymbolsLoading(false)
       })
-    return () => {
+    return (): void => {
       cancelled = true
     }
   }, [exchange, symbolsReloadKey])

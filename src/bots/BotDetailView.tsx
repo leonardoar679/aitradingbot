@@ -93,7 +93,7 @@ export function BotDetailView({ bot, onBack }: BotDetailViewProps): React.JSX.El
     candleSeries.attachPrimitive(bands)
     bandRef.current = bands
 
-    return () => {
+    return (): void => {
       chart.remove()
       chartRef.current = null
       seriesRef.current = null

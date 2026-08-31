@@ -134,7 +134,7 @@ export function PortfolioEvolutionChart(): React.JSX.Element {
 
     chart.timeScale().fitContent()
 
-    return () => {
+    return (): void => {
       chart.remove()
       chartRef.current = null
     }

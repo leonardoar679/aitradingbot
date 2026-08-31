@@ -86,7 +86,7 @@ export function RoutineScheduler(): null {
     }
     void poll()
     const timer = setInterval(poll, CONFIG_POLL_MS)
-    return () => {
+    return (): void => {
       cancelled = true
       clearInterval(timer)
     }
@@ -107,7 +107,7 @@ export function RoutineScheduler(): null {
         }, routine.scheduleSec * 1000)
       )
 
-    return () => {
+    return (): void => {
       for (const timer of timers) clearInterval(timer)
     }
   }, [routines])

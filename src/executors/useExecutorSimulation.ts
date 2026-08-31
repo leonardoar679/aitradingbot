@@ -110,7 +110,7 @@ export function useExecutorSimulation(config: ExecutorConfig): ExecutorSimResult
 
     void poll()
 
-    return () => {
+    return (): void => {
       cancelled = true
       if (timer) clearTimeout(timer)
     }

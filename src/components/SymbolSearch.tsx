@@ -49,7 +49,7 @@ export function SymbolSearch({ exchange, symbol, onSelect }: SymbolSearchProps):
         if (!cancelled) setLoading(false)
       })
 
-    return () => {
+    return (): void => {
       cancelled = true
     }
   }, [open, exchange, symbols.length])
@@ -61,7 +61,7 @@ export function SymbolSearch({ exchange, symbol, onSelect }: SymbolSearchProps):
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    return (): void => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
   const results = useMemo(() => {
