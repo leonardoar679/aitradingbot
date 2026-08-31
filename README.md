@@ -409,9 +409,11 @@ symbols, and won 7 of 9 walk-forward sub-windows — then performed **worse** on
 Walk-forward validation *inside* the tuning window did not predict out-of-sample behaviour.
 
 **Leverage is a trap, and looks like the opposite on short samples.** On BTCUSDT daily over the
-last 3 years, 5x returns +804% and survives. Over the full 9 years the same 5x is **liquidated on
-its first trade and ends at −100%**. Even 3x, which technically finishes at +17,343%, does so
-through a −91.9% drawdown that nobody holds through. Leverage does not improve risk-adjusted
+last 3 years, 5x returns +774% and survives. Over the full 9 years the same 5x is **liquidated on
+its first trade and ends at −100%**. Even 3x, which technically finishes at +16,901%, does so
+through a −91.9% drawdown that nobody holds through. (Both windows in `fair.ts` end wherever the
+candles end, so those two return figures move as the candle set is extended — they are quoted
+against candles through 2026-08-28. The liquidation and the drawdown do not move.) Leverage does not improve risk-adjusted
 return at all here: CAGR ÷ max drawdown stays flat near 1.5 from 1x to 3x, so all it buys is a
 bigger number attached to a position you cannot keep.
 

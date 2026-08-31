@@ -566,21 +566,29 @@ real choice and the repository declines to make it for you.
 entry the gated strategy takes lands on a bar where Trend Regime's rule is also satisfied. Running
 both is one bet at 1.7× size.
 
-**Do not add leverage.** On BTCUSDT daily over the last 3 years, 5× returns +804% and survives.
+**Do not add leverage.** On BTCUSDT daily over the last 3 years, 5× returns +774% and survives.
 Over the full 9 years the *same* 5× is liquidated on its **first trade** and ends at −100%. CAGR
 divided by max drawdown is flat near 1.5 from 1× to 3× — leverage buys no risk-adjusted return at
 all, only a bigger number attached to a position nobody holds through a −92% drawdown.
 
+> Both leverage windows in `fair.ts` are pinned at the start and end wherever the candles end, so
+> the two return figures move every time the candle set is extended. They are quoted here against
+> candles through **2026-08-28**. The liquidation, the flat CAGR/drawdown ratio and the −92% are
+> what the point rests on, and none of them moves.
+
 **Expect the return to be concentrated and lumpy.** The **top five winning trades supply 42% of
 all gross gains** for Trend Regime (17% and 22% for the two channel strategies). Month by month
-over three years on BTCUSDT 15m, Short-Term Channel is up in 18 months, down in 18, flat in 1 —
-and the best single month contributes 56% of all gains across the top three. A year that misses
-those months is a losing year, and that is a normal outcome rather than a malfunction.
+over three years on BTCUSDT 15m, Short-Term Channel is up in 18 months and down in 19, never
+spending a whole month in cash — and the **top three months supply 56% of all gains**, the best of
+them 2024-11 at +26.7%. A year that misses those months is a losing year, and that is a normal
+outcome rather than a malfunction.
 
 **Expect long flat stretches, and understand they are the product.** Trend Regime is in cash 27%
-of all months and only in the market 40% of the time. On BTC it sat out 2025-11 (holding −17.5%),
-2026-02 (−15.6%) and 2026-06 (−20.6%). The same rule that produces those also gives back a few
-percent in a month that chops sideways. **That is the trade, and it cannot be had one-sided.**
+of all months and in the market only 40% of the time. For the faster strategy the same instinct
+shows up as damage avoided rather than as whole months skipped: Short-Term Channel on BTCUSDT 15m
+returned −0.5%, −4.8% and +0.0% in 2025-11, 2026-02 and 2026-06, months in which simply holding
+returned −17.5%, −15.6% and −20.6%. The rule that produces that also gives back a few percent in a
+month that chops sideways. **That is the trade, and it cannot be had one-sided.**
 
 **Give it enough history to warm up.** Trend Regime and the gated channel need 80 days *before*
 they can trade at all. On the Backtest page's default 90-day range that leaves about twelve
@@ -611,9 +619,11 @@ is most of what there is to watch.
 - **Held-out years have been negative.** 2025-08 → 2026-08: Short-Term Channel returned −12.1%,
   −12.8% and −19.4% on BTC/ETH/SOL, against holding's −29.3%, −45.4% and −47.8%. Losing half of
   what holding lost is a trend follower doing its job — but it is a loss, not a profit.
-- **Choppy assets are where it fails**, and no filter here detects that in advance. Over the full
-  history, LTCUSDT loses money for all three strategies; LINKUSDT returned +90% against holding's
-  +955%.
+- **Choppy assets are where it fails**, and no filter here detects that in advance. LTCUSDT loses
+  money over the full history for all three strategies. LINKUSDT returned +90% against holding's
+  +955% — that pair is `trueoos.ts`'s pinned 2017-08 → 2023-08 window, not full history; measured
+  to 2026-08 the same symbol is +512% against +1,930% (`stbroad.ts`, 4h). It underperforms holding
+  badly on every window measured here, which is the claim; the margin depends on which one.
 - **Half the mean comes from two symbols.** Remove SOL and XRP and the mean month falls from
   +3.04% to +1.67% for Trend Regime (−45%), +2.62% to +1.38% for the Channel (−47%) and +2.36% to
   +1.33% for the gated version (−44%). The per-trade margin does survive their removal (section 1),
@@ -630,18 +640,33 @@ is most of what there is to watch.
 ## Reproduce every number in this document
 
 ```bash
-for s in edge shipped vshold; do
+for s in edge shipped vshold fair stfinal stfinal2 shape trueoos; do
   npx esbuild research/$s.ts --bundle --platform=node --format=esm --outfile=research/.$s.mjs
-  node research/.$s.mjs
+  CANDLE_DIR=.candles node --max-old-space-size=4096 research/.$s.mjs
 done
 ```
 
-- `edge.ts` → sections 1, 2 and the concentration/time-in-market figures in section 8
-- `shipped.ts` → section 7 and the held-out ranking in section 8
-- `vshold.ts` → the six-symbol confirmation in section 7 and the ADX gate result in section 9
+| script | what it establishes |
+|---|---|
+| `edge.ts` | sections 1 and 2, and the concentration/time-in-market figures in section 8 |
+| `shipped.ts` | section 7, and the held-out ranking in section 8 |
+| `vshold.ts` | the six-symbol confirmation in section 7, and the ADX gate result in section 9 |
+| `fair.ts` | the leverage sweep in section 8 |
+| `stfinal.ts` | the held-out-year returns in section 9 |
+| `stfinal2.ts` | the month counts and the top-three-months share in section 8 |
+| `shape.ts` | the 0.70–0.97 correlation in section 8 |
+| `trueoos.ts` | the LINKUSDT 2017-08 → 2023-08 pair in section 9 |
 
-All three read the candle dumps in `.candles/` and the month dumps in `research/.*.json`; if those
-are missing, `research/monthiv.ts` regenerates them.
+The first three default their candle directory; the rest need `CANDLE_DIR` set, and `fair.ts` exits
+with an unhelpful `path` TypeError without it. All eight read the candle dumps in `.candles/` and the
+month dumps in `research/.*.json`; if those are missing, `research/monthiv.ts` regenerates them.
+
+**Two kinds of number live in this document, and only one of them is stable.** Figures from a
+window pinned at both ends — everything in sections 1, 2 and 7, the held-out year, the
+2017-08 → 2023-08 pair — reproduce byte for byte and will keep doing so. Figures from a window that
+*ends wherever the candles end* move every time the candle set is extended; the leverage returns and
+the month counts are the only two, and both are marked where they appear. All figures here were
+re-run against candles through **2026-08-28**.
 
 Further detail: [README.md](README.md) for the full research narrative,
 [research/README.md](research/README.md) for the study index,
