@@ -28,27 +28,11 @@ export function computeEma(values: number[], period: number): number[] {
 
 // Wilder's smoothed ATR (the same formula talib.ATR uses): seeded by a simple average of the
 // first `period` true ranges, then smoothed forward. Entries before the seed index are NaN.
-export function computeAtr(candles: Candle[], period: number): number[] {
-  const out = new Array<number>(candles.length).fill(NaN)
-  if (candles.length === 0) return out
-
-  const trueRange = new Array<number>(candles.length)
-  trueRange[0] = candles[0].high - candles[0].low
-  for (let i = 1; i < candles.length; i++) {
-    const { high, low } = candles[i]
-    const prevClose = candles[i - 1].close
-    trueRange[i] = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose))
-  }
-
-  if (candles.length < period) return out
-  let seedSum = 0
-  for (let i = 0; i < period; i++) seedSum += trueRange[i]
-  out[period - 1] = seedSum / period
-  for (let i = period; i < candles.length; i++) {
-    out[i] = (out[i - 1] * (period - 1) + trueRange[i]) / period
-  }
-  return out
-}
+// Re-exported, not defined here. The canonical implementation lives in shared/atr.ts so that
+// main-process services can use the identical estimator -- aiSignalService.ts previously had its
+// own, and the two disagreed by up to 61%. Every existing importer of computeAtr keeps working.
+import { computeAtr } from '../../../shared/atr'
+export { computeAtr }
 
 function generateSignals(candles: Candle[]): StrategySignals {
   const closes = candles.map((c) => c.close)

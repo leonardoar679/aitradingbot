@@ -466,6 +466,23 @@ export function BacktestPage(): React.JSX.Element {
           try {
             const tape = await window.api.ai.generateSignalTape(aiRequest)
             if (runIdRef.current !== runId) return
+            // A tape that is entirely safety-holds is not a result, and downstream it is
+            // indistinguishable from one: no entries, 0 trades, 0.00%, and a health check that
+            // blames the strategy for never opening a position. An account with no credits
+            // produced exactly that -- 96 failed calls rendered as a clean backtest with nothing
+            // on the page mentioning OpenAI. Refuse rather than draw the placeholder.
+            if (tape.errorCount > 0) {
+              const sample = tape.decisions.find((d) => d.error)?.error ?? 'unknown error'
+              log(`GPT tape FAILED: ${tape.errorCount} of ${tape.decisions.length} decisions never reached the model`)
+              setTab('progress')
+              setRunState({
+                status: 'error',
+                message:
+                  `${tape.errorCount} of ${tape.decisions.length} GPT decisions failed, so this would not be a backtest of the ` +
+                  `strategy — every failed candle falls back to a safety hold and can never open a trade. First error: ${sample}`
+              })
+              return
+            }
             suppliedSignals = generateGptIntradaySignals(fetchResult.candles, tape)
             log(`GPT tape ready: ${tape.cachedCount} cached, ${tape.generatedCount} generated`)
           } finally {

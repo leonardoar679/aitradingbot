@@ -32,7 +32,8 @@ function tape(data: Candle[], decisions: AiSignalTape['decisions']): AiSignalTap
     interval: GPT_INTRADAY_INTERVAL,
     decisions,
     cachedCount: 0,
-    generatedCount: decisions.length
+    generatedCount: decisions.length,
+    errorCount: decisions.filter((d) => d.error !== null).length
   }
 }
 
@@ -152,5 +153,49 @@ describe('GPT Intraday deterministic replay', () => {
     ]
     const signals = generateGptIntradaySignals(data, tape(data, decisions))
     expect(signals.entries.every((entry) => !entry)).toBe(true)
+  })
+})
+
+// Why a failed decision must never be cached, and why the check is on `error` specifically.
+//
+// A live run against an OpenAI account with no credits returned 429 on all 96 calls. Each fell
+// back to safeHold, each was written to the signal cache, and the rerun then reported "96
+// confirmed cached, at most 0 API calls" and drew a clean 0-trade backtest. Adding credits would
+// not have fixed it -- the cache would have kept answering.
+describe('a failed GPT decision is not a decision', () => {
+  const safeHoldShape = {
+    candleTime: 1_700_000_000,
+    recommendation: 'hold' as const,
+    confidence: 0,
+    rationale: 'Signal unavailable; held by safety fallback.',
+    model: 'gpt-5-mini',
+    cached: false,
+    error: 'OpenAI request failed (429): You have no credits remaining.'
+  }
+
+  it('parses as a perfectly valid signal, which is exactly why it poisoned the cache', () => {
+    // This is the trap. The cache guard cannot be "is it well formed" -- it is, completely.
+    expect(parseAiSignalResponse(safeHoldShape)).not.toBeNull()
+    expect(parseAiSignalResponse(safeHoldShape)?.recommendation).toBe('hold')
+  })
+
+  it('is distinguishable ONLY by its error field, so that is what the cache must gate on', () => {
+    const genuine = { ...safeHoldShape, error: null }
+    expect(parseAiSignalResponse(genuine)).not.toBeNull()
+    // Identical under validation; opposite under the rule that now gates read and write.
+    expect(safeHoldShape.error === null).toBe(false)
+    expect(genuine.error === null).toBe(true)
+  })
+
+  it('can never open a trade, so a tape of them is 0 trades rather than a strategy result', () => {
+    const data = candles(GPT_LOOKBACK_BARS + 12)
+    const failed = tape(
+      data,
+      data.slice(GPT_LOOKBACK_BARS).map((c) => ({ ...safeHoldShape, candleTime: c.time }))
+    )
+    const signals = generateGptIntradaySignals(data, failed)
+    expect(signals.entries.some(Boolean)).toBe(false)
+    // The count is what lets a caller tell this apart from a genuine run of holds.
+    expect(failed.errorCount).toBe(data.length - GPT_LOOKBACK_BARS)
   })
 })

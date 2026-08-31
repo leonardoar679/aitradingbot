@@ -4,6 +4,7 @@ import { mkdir, readFile } from 'fs/promises'
 import { join } from 'path'
 import {
   GPT_MAX_DECISIONS,
+  GPT_MIN_CONFIDENCE,
   GPT_PROMPT_VERSION,
   decisionRange,
   parseAiSignalResponse,
@@ -17,6 +18,7 @@ import {
   type ParsedAiSignal
 } from '../../shared/aiSignal'
 import type { Candle } from '../../shared/ipc'
+import { computeAtr } from '../../shared/atr'
 import { writeJsonAtomic } from './atomicWrite'
 import { getDecryptedAiCredential } from './aiCredentialsService'
 
@@ -65,6 +67,11 @@ async function readCached(key: string): Promise<CachedDecision | null> {
     const parsed = JSON.parse(await readFile(join(cacheDirectory(), `${key}.json`), 'utf-8')) as CachedDecision
     if (parsed.promptVersion !== GPT_PROMPT_VERSION) return null
     if (!parseAiSignalResponse(parsed)) return null
+    // A previously-cached failure is a miss, not a hit. Writes are gated on this too, so nothing
+    // new can land here -- but caches written before that gate existed are still on disk, and a
+    // machine holding them would otherwise never call OpenAI again for those candles no matter
+    // how many credits were added. Refusing them here retires the poisoned entries on read.
+    if (parsed.error !== null) return null
     return parsed
   } catch {
     return null
@@ -80,15 +87,14 @@ function compactCandles(candles: Candle[]): number[][] {
   return candles.map(stableCandle)
 }
 
+// The stop simulated here must be the stop the ENGINE will place, because the position it implies
+// goes into the prompt and into the cache key. This used to be a local mean of the last 14 true
+// ranges while the engine used Wilder smoothing; on BTCUSDT 15m the two differ by 11.6% on average
+// and 61% at worst, so the two sides could disagree about whether a position was still open.
 function atrAt(candles: Candle[], index: number, period = 14): number | null {
   if (index < period - 1) return null
-  const ranges: number[] = []
-  for (let i = index - period + 1; i <= index; i++) {
-    const candle = candles[i]
-    const previousClose = i > 0 ? candles[i - 1].close : candle.close
-    ranges.push(Math.max(candle.high - candle.low, Math.abs(candle.high - previousClose), Math.abs(candle.low - previousClose)))
-  }
-  return ranges.reduce((sum, value) => sum + value, 0) / ranges.length
+  const value = computeAtr(candles.slice(0, index + 1), period)[index]
+  return Number.isFinite(value) ? value : null
 }
 
 async function requestOpenAi(
@@ -226,11 +232,11 @@ export async function estimateAiSignalTape(request: AiSignalTapeRequest): Promis
     // predicted safely, so the remainder is reported as a conservative maximum API-call count.
     if (!decision) break
     cached++
-    if (decision.recommendation === 'buy' && decision.confidence >= 0.65 && position === 'flat') {
+    if (decision.recommendation === 'buy' && decision.confidence >= GPT_MIN_CONFIDENCE && position === 'flat') {
       position = 'long'
       const atr = atrAt(request.candles, index - 1)
       activeStop = request.candles[index].close - (atr ?? request.candles[index].close * 0.02) * 1.5
-    } else if (decision.recommendation === 'sell' && decision.confidence >= 0.65 && position === 'long') {
+    } else if (decision.recommendation === 'sell' && decision.confidence >= GPT_MIN_CONFIDENCE && position === 'long') {
       position = 'flat'
       activeStop = null
     }
@@ -252,6 +258,7 @@ export async function generateAiSignalTape(
   let position: AiPositionState = 'flat'
   let activeStop: number | null = null
   let cachedCount = 0
+  let errorCount = 0
   cancelledRequests.delete(request.requestId)
 
   try {
@@ -291,16 +298,27 @@ export async function generateAiSignalTape(
           clearTimeout(timeout)
           activeControllers.delete(request.requestId)
         }
-        await writeCached(key, { ...decision, promptVersion: GPT_PROMPT_VERSION })
+        // ONLY a real answer is cached. A safeHold is the ABSENCE of a decision, not a decision to
+        // hold, and it parses as a perfectly valid one -- recommendation 'hold', confidence 0, a
+        // rationale string -- so readCached would serve it back forever. Caching it turns a
+        // transient failure into a permanent one: an account that was simply out of credits
+        // produced 96 cached holds, and the rerun then reported "96 confirmed cached, at most 0
+        // API calls" and 0 trades, with nothing anywhere saying the run had never reached OpenAI.
+        // Adding credits would not have fixed it; only deleting the cache would.
+        if (decision.error === null) {
+          await writeCached(key, { ...decision, promptVersion: GPT_PROMPT_VERSION })
+        } else {
+          errorCount++
+        }
       }
 
       decisions.push(decision)
-      if (decision.recommendation === 'buy' && decision.confidence >= 0.65 && position === 'flat') {
+      if (decision.recommendation === 'buy' && decision.confidence >= GPT_MIN_CONFIDENCE && position === 'flat') {
         position = 'long'
         const atr = atrAt(request.candles, index - 1)
         activeStop = request.candles[index].close - (atr ?? request.candles[index].close * 0.02) * 1.5
       }
-      if (decision.recommendation === 'sell' && decision.confidence >= 0.65 && position === 'long') {
+      if (decision.recommendation === 'sell' && decision.confidence >= GPT_MIN_CONFIDENCE && position === 'long') {
         position = 'flat'
         activeStop = null
       }
@@ -318,6 +336,7 @@ export async function generateAiSignalTape(
     interval: request.interval,
     decisions,
     cachedCount,
-    generatedCount: decisions.length - cachedCount
+    generatedCount: decisions.length - cachedCount,
+    errorCount
   }
 }

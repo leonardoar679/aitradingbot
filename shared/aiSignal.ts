@@ -47,6 +47,13 @@ export interface AiSignalTape {
   decisions: AiSignalDecision[]
   cachedCount: number
   generatedCount: number
+  /** Decisions that never reached a model answer and fell back to a safety hold.
+   *
+   * Exposed because a tape of nothing but failures is indistinguishable, downstream, from a tape
+   * of genuine holds: both produce zero entries and a backtest that reports 0 trades, 0.00% and a
+   * health check blaming the strategy. An account with no credits returned 96 of these and the
+   * results page called it a clean run. Callers must say so rather than render the placeholder. */
+  errorCount: number
 }
 
 export interface AiSignalProgress {
