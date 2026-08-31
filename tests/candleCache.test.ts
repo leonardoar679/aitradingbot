@@ -167,3 +167,79 @@ describe('candleCache', () => {
     expect(after).toEqual(bars)
   })
 })
+
+// What the Live tab actually costs.
+//
+// LiveStrategyComparison mounts all three shipped strategies at once, each at its own measured
+// bar. Two of them are 15m, so they share a cache key -- and the tempting conclusion is that the
+// pair costs one fetch between them. These pin what sharing does and does not buy, because the
+// answer differs entirely by whether the cache is cold, and the cold case is the one a user meets
+// every time they open the tab.
+//
+// The three window sizes come from liveFetchCandles() against the real registry: 620 bars at 4h
+// for Trend Regime, 909 and 7,820 at 15m for the two channel strategies.
+describe('candleCache under the Live tab s three concurrent rows', () => {
+  beforeEach(() => clearCandleCache())
+
+  const NARROW = 909
+  const WIDE = 7_820
+
+  /** Start times as the hook computes them: endSec - fetchCandles * barSeconds. */
+  const startOf = (bars: number, end: number): number => end - bars * BAR
+
+  /** Bars that arithmetic actually yields. Both ends are inclusive, so asking for n bars back
+   * from `end` returns n + 1 of them -- a fencepost worth naming rather than papering over. It
+   * errs by one bar in the safe direction (more history than the warm-up needs), which is why it
+   * has never mattered, but a test asserting `n` here would be asserting the wrong number. */
+  const spanned = (bars: number): number => bars + 1
+
+  it('costs THREE full fetches on a cold cache, not two -- concurrent rows cannot share', async () => {
+    const bars = world(WIDE)
+    const end = T0 + (WIDE - 1) * BAR
+    const ex = exchangeOf(() => bars)
+
+    // Mounted together, so both are in flight before either has stored anything.
+    const [narrow, wide] = await Promise.all([
+      fetchRangeCached(ex.fetch, ...args, startOf(NARROW, end), end),
+      fetchRangeCached(ex.fetch, ...args, startOf(WIDE, end), end)
+    ])
+
+    // Both missed. Sharing a key does not serialise them, and nothing here pretends it does.
+    expect(ex.calls()).toBe(2)
+    // Each still got exactly the window it asked for -- the race costs requests, never answers.
+    expect(narrow).toHaveLength(spanned(NARROW))
+    // Capped by the world, which is exactly WIDE bars long -- the request reaches past its start.
+    expect(wide).toHaveLength(WIDE)
+  })
+
+  it('leaves the cache correct whichever write lands last', async () => {
+    const bars = world(WIDE)
+    const end = T0 + (WIDE - 1) * BAR
+    const ex = exchangeOf(() => bars)
+
+    // Narrow resolving second is the bad ordering named in this module's header: its write drops
+    // the wider history. That is a lost refetch, not a wrong answer, and the next poll repairs it.
+    await fetchRangeCached(ex.fetch, ...args, startOf(WIDE, end), end)
+    await fetchRangeCached(ex.fetch, ...args, startOf(NARROW, end), end)
+
+    // The wide row asks again and gets its full window back regardless.
+    const again = await fetchRangeCached(ex.fetch, ...args, startOf(WIDE, end), end)
+    expect(again).toHaveLength(WIDE)
+  })
+
+  it('does share once warm: the narrow row then costs a tail, not a window', async () => {
+    const bars = world(WIDE)
+    const end = T0 + (WIDE - 1) * BAR
+    const ex = exchangeOf(() => bars)
+
+    await fetchRangeCached(ex.fetch, ...args, startOf(WIDE, end), end)
+    const before = ex.calls()
+    const narrow = await fetchRangeCached(ex.fetch, ...args, startOf(NARROW, end), end)
+
+    expect(ex.calls()).toBe(before + 1)
+    // A tail, not a window: it asked from the last held bar, not from its own start.
+    const lastCall = (ex.fetch as unknown as { mock: { calls: number[][] } }).mock.calls[before]
+    expect(lastCall[3]).toBe(end)
+    expect(narrow).toHaveLength(spanned(NARROW))
+  })
+})

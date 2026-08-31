@@ -15,8 +15,19 @@ import { useLiveBacktest } from './useLiveBacktest'
 // minute, BTCUSDT Trend Regime: long since 08-17 and +21.92% at 4h, long since 08-25 and -0.81% at
 // 1h. Each row therefore uses its own preferredInterval and says so.
 //
-// THE COST IS TWO FETCHES, NOT THREE. candleCache keys on exchange/symbol/interval, so the two 15m
-// strategies share one series and only the 4h one adds a second.
+// WHAT THIS COSTS, MEASURED. An earlier version of this comment claimed the two 15m rows share a
+// candleCache key and so cost one fetch between them. Sharing a key is true; costing one fetch is
+// not, and the case it gets wrong is the one a user meets every time they open this tab.
+//
+// The rows mount together, so on a cold cache all three are in flight before any has stored
+// anything, and all three miss. Opening the tab is three full fetches -- 620 bars at 4h, then 909
+// and 7,820 at 15m, roughly ten paged requests. Sharing pays off only once warm, where the 15m
+// pair does read one stored series and each poll is a one-bar tail.
+//
+// Left alone rather than serialised. Priming the wide window first would save those requests once
+// per tab open, at the price of coordination between sibling rows -- the shared mutable await
+// candleCache.ts declines for the same reason. Its header already records that the loser of this
+// race pays a refetch and never a wrong answer; tests/candleCache.test.ts pins both halves.
 //
 // This exists because the honest advice about these strategies is to run exactly ONE of them --
 // their monthly returns correlate 0.70 to 0.97, so holding two is one bet at 1.7x size, not
