@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { INTERVAL_SECONDS, type Candle, type Exchange, type Interval } from '../../shared/ipc'
 import { runBacktest, type BacktestResult } from './engine'
 import { STRATEGIES, getStrategy } from './strategies'
+import type { StrategyDefinition } from './strategies'
 import { fetchRangeCached } from '../bots/candleCache'
 import { GPT_INTRADAY_STRATEGY_ID } from '../../shared/aiSignal'
 
@@ -20,6 +21,38 @@ import { GPT_INTRADAY_STRATEGY_ID } from '../../shared/aiSignal'
 const POLL_MS = 60_000
 const LOOKBACK_CANDLES = 600
 const WARMUP_SLACK_CANDLES = 20
+
+/** Above this the monitor declines the route instead of fetching it.
+ *
+ * The lookbacks are in DAYS, so the candle count needed to warm one up explodes as the bar gets
+ * finer. Measured across the registry, this is the whole range of what a live route can ask for:
+ *
+ *     strategy                    1m        15m      1h     4h
+ *     trend-regime-ensemble    115,340    7,820   2,060    620
+ *     short-term-channel-regime 115,340    7,820   2,060    620
+ *     short-term-channel        11,661      909     600    600
+ *
+ * 7,820 loads fine and is observed working; 115,340 is about 116 paginated requests, kicked off
+ * automatically the moment the tab is opened rather than on a Start button the user pressed. The
+ * historical Backtest page does the same arithmetic, but there it is one deliberate run.
+ *
+ * 20,000 sits above every case that works today (the largest is 11,661) and well under the one
+ * that does not, so it declines the impractical pairing without second-guessing a working one. */
+const MAX_LIVE_FETCH_CANDLES = 20_000
+
+/** Candles the monitor would fetch for this pairing, warm-up included.
+ *
+ * Pure and exported so the cap can be tested against the real registry rather than asserted from a
+ * comment. The hook uses this exact function, so a test of it is a test of what runs. */
+export function liveFetchCandles(strategy: StrategyDefinition, interval: Interval): number {
+  const warmup = strategy.warmupBarsFor(INTERVAL_SECONDS[interval]) + WARMUP_SLACK_CANDLES
+  return Math.max(LOOKBACK_CANDLES, warmup + 120)
+}
+
+/** False when the pairing would fetch more than the monitor is willing to pull automatically. */
+export function isLiveMonitorable(strategy: StrategyDefinition, interval: Interval): boolean {
+  return liveFetchCandles(strategy, interval) <= MAX_LIVE_FETCH_CANDLES
+}
 
 export type LiveStatus = 'idle' | 'loading' | 'running' | 'error' | 'unsupported'
 
@@ -96,7 +129,22 @@ export function useLiveBacktest(
     const strategy = getStrategy(strategyId)
 
     const barSec = INTERVAL_SECONDS[interval]
-    const warmupBars = strategy.warmupBarsFor(barSec) + WARMUP_SLACK_CANDLES
+    const fetchCandles = liveFetchCandles(strategy, interval)
+
+    // Declined rather than attempted. Naming the strategy's own measured bar makes this a
+    // redirection instead of a dead end -- that interval is both cheap and the one the published
+    // results describe.
+    if (!isLiveMonitorable(strategy, interval)) {
+      setState({
+        ...IDLE,
+        status: 'unsupported',
+        error:
+          `${strategy.name} needs ${strategy.warmupBarsFor(barSec).toLocaleString()} candles of warm-up at ${interval} ` +
+          `— roughly ${Math.ceil(fetchCandles / 1000)} paged requests every time this route changes, fetched automatically. ` +
+          `Monitor it at ${strategy.preferredInterval}, the bar it was measured on, or any coarser interval.`
+      })
+      return
+    }
 
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | null = null
@@ -107,7 +155,7 @@ export function useLiveBacktest(
         // The window must clear the warm-up with room to spare, or a slow strategy fetches a range
         // that is entirely warm-up and can never show a trade -- the failure mode that makes a
         // working strategy read as broken.
-        const startSec = endSec - Math.max(LOOKBACK_CANDLES, warmupBars + 120) * barSec
+        const startSec = endSec - fetchCandles * barSec
         const candles = await fetchRangeCached(
           (ex, sym, iv, from, to) => window.api.market.fetchHistoricalRange(ex, sym, iv, from, to),
           exchange,

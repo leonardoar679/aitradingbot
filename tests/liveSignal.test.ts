@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { describeNextAction, readLiveSignals } from '../src/backtest/liveSignal'
 import { STRATEGIES, getStrategy } from '../src/backtest/strategies'
+import { isLiveMonitorable, liveFetchCandles } from '../src/backtest/useLiveBacktest'
 import type { Candle } from '../shared/ipc'
 
 // The live monitor's readings. These matter because the panel makes a claim about what the
@@ -188,5 +189,40 @@ describe('the registry trap the live monitor has to guard against', () => {
   it('is detectable by membership, which is what the monitor uses', () => {
     expect(STRATEGIES.some((s) => s.id === EXECUTOR_ROUTE)).toBe(false)
     expect(STRATEGIES.some((s) => s.id === 'trend-regime-ensemble')).toBe(true)
+  })
+})
+
+describe('what the live monitor is willing to fetch automatically', () => {
+  // The lookbacks are in DAYS, so the candles needed to warm one up explode as the bar gets finer.
+  // The Live tab opens a route the moment the tab is clicked -- unlike the historical Backtest
+  // page, where the same arithmetic runs behind a Start button the user pressed. So a pairing that
+  // would pull six figures of candles has to be declined rather than attempted.
+  it('accepts every strategy at its own measured bar size', () => {
+    // If this ever fails, the monitor is refusing the exact configuration the published results
+    // describe, which would be the cap set wrong rather than the route being unreasonable.
+    for (const s of STRATEGIES) {
+      expect(isLiveMonitorable(s, s.preferredInterval)).toBe(true)
+    }
+  })
+
+  it('accepts the largest pairing that is observed to work', () => {
+    // 7,820 candles: the gated strategy at 15m, loading fine in the running app.
+    const gated = getStrategy('short-term-channel-regime')
+    expect(liveFetchCandles(gated, '15m')).toBe(7_820)
+    expect(isLiveMonitorable(gated, '15m')).toBe(true)
+  })
+
+  it('declines an 80-day strategy on 1-minute candles', () => {
+    const gated = getStrategy('short-term-channel-regime')
+    expect(liveFetchCandles(gated, '1m')).toBe(115_340)
+    expect(isLiveMonitorable(gated, '1m')).toBe(false)
+    expect(isLiveMonitorable(getStrategy('trend-regime-ensemble'), '1m')).toBe(false)
+  })
+
+  it('still allows the 8-day channel strategy at 1m, which is only 11,661', () => {
+    // The cap is about the fetch, not about disapproving of fine bars. This pairing is expensive
+    // and legitimate, and the monitor should not refuse it.
+    expect(liveFetchCandles(getStrategy('short-term-channel'), '1m')).toBe(11_661)
+    expect(isLiveMonitorable(getStrategy('short-term-channel'), '1m')).toBe(true)
   })
 })
