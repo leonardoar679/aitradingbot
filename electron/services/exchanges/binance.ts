@@ -11,12 +11,52 @@ export interface RestEndpoint {
 // Binance's global site geo-blocks some regions (mainly the US). Binance.US mirrors the
 // same REST/WS API shape, so it's a drop-in fallback for whichever endpoint is actually
 // reachable from wherever this app runs.
-const ENDPOINTS: RestEndpoint[] = [
+//
+// TRADING AND MARKET DATA RESOLVE SEPARATELY, and the split is a safety property rather than a
+// tidiness one. Both lists below start with the same two hosts; only the data list may grow.
+const TRADING_ENDPOINTS: RestEndpoint[] = [
   { name: 'binance.com', restRoot: 'https://api.binance.com/api/v3', wsBase: 'wss://stream.binance.com:9443/ws' },
   { name: 'binance.us', restRoot: 'https://api.binance.us/api/v3', wsBase: 'wss://stream.binance.us:9443/ws' }
 ]
 
-let resolvedEndpoint: RestEndpoint | null = null
+// data-api.binance.vision is Binance's PUBLIC MARKET DATA mirror. It serves klines, exchangeInfo
+// and ticker for the full 1,358-symbol TRADING universe, it is not geo-blocked, and it is the host
+// every candle file in .candles/ was fetched from -- so all of this repository's research already
+// runs against it.
+//
+// It has NO SIGNED ROUTES AT ALL: /api/v3/account returns 404, and so would /order. That is exactly
+// why it is listed here and deliberately absent from TRADING_ENDPOINTS. Appending it to a single
+// shared list would have been the obvious one-line version of this fix and would have been a real
+// hazard: in a region where binance.com is geo-blocked (451) and binance.us is unreachable, a
+// shared resolver memoises the data host, and the next REAL order placed by liveOrderService would
+// be signed, sent to a host with no /order route, and fail as a 404 that reads like a bad API key.
+// Live trading must never reach a host that cannot trade.
+//
+// ORDER MATTERS HERE, AND NOT FOR SPEED. Measured in the running app's main process, one fetch
+// after another, on a connection where binance.com is geo-blocked:
+//
+//     api.binance.com            1,222ms   451        (geo-blocked, answers immediately)
+//     api.binance.us            10,451ms   fetch failed
+//     api.binance.com          10,645ms   fetch failed   <- was 451 a moment earlier
+//     data-api.binance.vision  10,655ms   fetch failed   <- returns 200 in ~2s if probed FIRST
+//
+// Attempting api.binance.us does not merely time out: every subsequent HTTPS request from that
+// process fails too, including hosts that answered a second earlier. So a list that probes
+// binance.us before the host it actually needs can never fail over -- the act of trying the second
+// host destroys the connection the third would have used. That is why the mirror is placed BEFORE
+// binance.us rather than appended, which was the obvious placement and is the broken one.
+const DATA_ENDPOINTS: RestEndpoint[] = [
+  TRADING_ENDPOINTS[0],
+  {
+    name: 'data-api.binance.vision',
+    restRoot: 'https://data-api.binance.vision/api/v3',
+    wsBase: 'wss://data-stream.binance.vision/ws'
+  },
+  TRADING_ENDPOINTS[1]
+]
+
+let resolvedDataEndpoint: RestEndpoint | null = null
+let resolvedTradingEndpoint: RestEndpoint | null = null
 
 interface BinanceSymbolInfo {
   symbol: string
@@ -59,16 +99,21 @@ interface BinanceTicker24hMessage {
   q: string
 }
 
-export async function resolveEndpoint(): Promise<RestEndpoint> {
-  if (resolvedEndpoint) return resolvedEndpoint
+const PROBE_TIMEOUT_MS = 6_000
 
-  for (const endpoint of ENDPOINTS) {
+async function probe(endpoints: RestEndpoint[], purpose: string): Promise<RestEndpoint> {
+  for (const endpoint of endpoints) {
     try {
-      const response = await fetch(`${endpoint.restRoot}/klines?symbol=BTCUSDT&interval=1m&limit=1`)
+      // Bounded, because an unreachable host here is black-holed rather than refused: it hangs
+      // for ten seconds before the OS gives up, and every probe after it in the same process
+      // inherits that failure. The timeout does not prevent that -- ordering does -- but it stops
+      // one dead host from costing ten seconds of the user's first paint.
+      const response = await fetch(`${endpoint.restRoot}/klines?symbol=BTCUSDT&interval=1m&limit=1`, {
+        signal: AbortSignal.timeout(PROBE_TIMEOUT_MS)
+      })
       const data: unknown = await response.json().catch(() => null)
       if (response.ok && Array.isArray(data)) {
-        console.log(`Using Binance endpoint: ${endpoint.name}`)
-        resolvedEndpoint = endpoint
+        console.log(`Using Binance ${purpose} endpoint: ${endpoint.name}`)
         return endpoint
       }
       console.warn(`Binance endpoint ${endpoint.name} unavailable:`, data)
@@ -76,8 +121,35 @@ export async function resolveEndpoint(): Promise<RestEndpoint> {
       console.warn(`Binance endpoint ${endpoint.name} unreachable:`, error)
     }
   }
-  throw new Error(`No reachable Binance endpoint (tried: ${ENDPOINTS.map((e) => e.name).join(', ')})`)
+  throw new Error(
+    `No reachable Binance ${purpose} endpoint (tried: ${endpoints.map((e) => e.name).join(', ')})`
+  )
 }
+
+/** Host for candles, symbols and tickers. May be the public data mirror. */
+export async function resolveEndpoint(): Promise<RestEndpoint> {
+  if (resolvedDataEndpoint) return resolvedDataEndpoint
+  resolvedDataEndpoint = await probe(DATA_ENDPOINTS, 'market data')
+  return resolvedDataEndpoint
+}
+
+/** Host for SIGNED requests -- balances, orders, cancels. Restricted to hosts that actually
+ * implement the trading routes, so a region where only the data mirror is reachable fails loudly
+ * here instead of signing a real order and sending it somewhere it cannot execute. */
+export async function resolveTradingEndpoint(): Promise<RestEndpoint> {
+  if (resolvedTradingEndpoint) return resolvedTradingEndpoint
+  resolvedTradingEndpoint = await probe(TRADING_ENDPOINTS, 'trading')
+  return resolvedTradingEndpoint
+}
+
+/** Test seam. The two memos are module-level, so a suite that exercises failover would otherwise
+ * see whatever the previous test resolved. */
+export function resetResolvedEndpoints(): void {
+  resolvedDataEndpoint = null
+  resolvedTradingEndpoint = null
+}
+
+export const ENDPOINTS_FOR_TEST = { DATA_ENDPOINTS, TRADING_ENDPOINTS }
 
 async function listSymbols(): Promise<SymbolInfo[]> {
   const endpoint = await resolveEndpoint()

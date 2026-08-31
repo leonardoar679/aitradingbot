@@ -1,6 +1,6 @@
 import { createHmac } from 'crypto'
 import type { Commissions } from '../../../shared/observedFee'
-import { resolveEndpoint } from './binance'
+import { resolveEndpoint, resolveTradingEndpoint } from './binance'
 import type { SymbolTradingRules } from '../../../shared/exchangeMinimums'
 
 // Live SPOT trading on Binance: reading the account, and placing, querying and cancelling real
@@ -57,7 +57,10 @@ async function signedRequest(
   params: Record<string, string>,
   method: 'GET' | 'POST' | 'DELETE'
 ): Promise<unknown> {
-  const endpoint = await resolveEndpoint()
+  // Trading resolver, not the data one: the data list includes a market-data-only mirror with no
+  // signed routes, and sending a real signed order there would 404 in a way that reads like a bad
+  // API key rather than like a wrong host.
+  const endpoint = await resolveTradingEndpoint()
   const offset = await getServerTimeOffset(endpoint.restRoot)
   const timestamp = Date.now() + offset
 
