@@ -4,7 +4,7 @@ import { PageHeader } from '../components/PageHeader'
 import { Card } from '../components/Card'
 import { StatCard } from '../components/StatCard'
 import { formatQuotePrice } from '../utils/formatCurrency'
-import { accountPnl, availableBalance, fund, totalBalance } from './paperAccount'
+import { accountPnl, availableBalance, emptyAccount, fund, totalBalance } from './paperAccount'
 import { assetsInPlay, committedByAsset, heldCostByAsset } from './accountCommitments'
 import { updateAccount } from './persistAccount'
 import { LiveBalancesCard } from './LiveBalancesCard'
@@ -43,6 +43,10 @@ function reasonLabel(entry: AccountLedgerEntry): string {
   return 'Adjustment'
 }
 
+/** Stand-in for a null account, so the page can render "nothing funded yet" instead of throwing.
+ * Never mutated: every helper that receives it only reads. */
+const EMPTY_ACCOUNT = emptyAccount(0)
+
 export function AccountPage(): React.JSX.Element {
   const [account, setAccount] = useState<PaperAccount | null>(null)
   const [executors, setExecutors] = useState<ExecutorConfig[]>([])
@@ -78,7 +82,18 @@ export function AccountPage(): React.JSX.Element {
   const committed = committedByAsset(executors)
   // Inventory is part of the account too: that cash left the balance to buy the position.
   const heldCost = heldCostByAsset(heldPositions)
-  const balances = account?.balances ?? {}
+  // "No account yet" is a state to render, not an error. The row list is built from balances AND
+  // from what executors have committed, so it is non-empty whenever a strategy is running even if
+  // the account is null -- which is exactly the case that used to reach `totalBalance(account!)`
+  // and throw "Cannot read properties of null (reading 'balances')", replacing the whole page with
+  // the error boundary. Five paper executors and no funded account is enough to trigger it.
+  //
+  // Reading through an empty account is the honest rendering rather than a patch: totalBalance
+  // reports 0 for an asset that was never funded, and availableBalance deliberately goes negative
+  // when strategies are committed to more than the account holds -- see its comment. That negative
+  // IS this situation, and showing it beats hiding the cards.
+  const view = account ?? EMPTY_ACCOUNT
+  const balances = view.balances
   const rows = assetsInPlay(balances, committed)
 
   async function handleFund(): Promise<void> {
@@ -142,10 +157,10 @@ export function AccountPage(): React.JSX.Element {
       {rows.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
           {rows.slice(0, 4).map((row) => {
-            const total = totalBalance(account!, row)
+            const total = totalBalance(view, row)
             const out = committed[row] ?? 0
-            const available = availableBalance(account!, row, out)
-            const pnl = accountPnl(account!, row, heldCost[row] ?? 0)
+            const available = availableBalance(view, row, out)
+            const pnl = accountPnl(view, row, heldCost[row] ?? 0)
             return (
               <StatCard
                 key={row}
@@ -228,10 +243,10 @@ export function AccountPage(): React.JSX.Element {
               </thead>
               <tbody>
                 {rows.map((row) => {
-                  const total = totalBalance(account!, row)
+                  const total = totalBalance(view, row)
                   const out = committed[row] ?? 0
-                  const available = availableBalance(account!, row, out)
-                  const pnl = accountPnl(account!, row, heldCost[row] ?? 0)
+                  const available = availableBalance(view, row, out)
+                  const pnl = accountPnl(view, row, heldCost[row] ?? 0)
                   return (
                     <tr key={row} style={{ borderTop: '1px solid var(--border)', color: 'var(--text-primary)' }}>
                       <td style={{ padding: '0.5rem 0.6rem', fontWeight: 600 }}>{row}</td>

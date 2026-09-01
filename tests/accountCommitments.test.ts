@@ -164,3 +164,38 @@ describe('what Inventory positions cost the account', () => {
     expect(result).toEqual({ USDT: 1_000 })
   })
 })
+
+// The Account page crashed with a real profile: paperAccount null, five active paper executors.
+//
+// The page renders its balance cards behind `rows.length > 0`, and then read the account through a
+// non-null assertion inside that branch. But rows are built from balances AND from what executors
+// have committed, so the guard says nothing about whether an account exists -- and with no account
+// the assertion dereferenced null and the error boundary replaced the whole page with
+// "Cannot read properties of null (reading 'balances')".
+//
+// These pin the two facts that made the assertion wrong, so the shape of the bug cannot come back
+// even if the rendering is rewritten.
+describe('a null paper account with running executors', () => {
+  const committedOnly = { USDT: 500 }
+
+  it('still produces rows, so rows.length is no evidence that an account exists', () => {
+    const rows = assetsInPlay({}, committedOnly)
+    expect(rows).toContain('USDT')
+    expect(rows.length).toBeGreaterThan(0)
+  })
+
+  it('is fully renderable through an empty account rather than needing one', () => {
+    const view: PaperAccount = emptyAccount(0)
+    for (const asset of assetsInPlay({}, committedOnly)) {
+      const total = totalBalance(view, asset)
+      const available = total - (committedOnly[asset as keyof typeof committedOnly] ?? 0)
+      expect(Number.isFinite(total)).toBe(true)
+      expect(Number.isFinite(available)).toBe(true)
+      expect(total).toBe(0)
+      // Negative on purpose: strategies are committed to more than the account holds. That is the
+      // true statement the page should show, and the reason an empty account is the right stand-in
+      // rather than hiding the cards.
+      expect(available).toBeLessThan(0)
+    }
+  })
+})
