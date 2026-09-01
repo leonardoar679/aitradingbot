@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { archiveBot, costsMoneyToRun, createBot, resolvedStrategy, type Bot } from '../src/bots/types'
+import { archiveBot, costsMoneyToRun, createBot, describeAiCalls, resolvedStrategy, type Bot } from '../src/bots/types'
 import { STRATEGIES, getStrategy } from '../src/backtest/strategies'
 import { GPT_INTRADAY_STRATEGY_ID } from '../shared/aiSignal'
 
@@ -79,5 +79,30 @@ describe('costsMoneyToRun', () => {
   it('is false for a missing or unknown id, which falls back to a free strategy', () => {
     expect(costsMoneyToRun('')).toBe(false)
     expect(costsMoneyToRun('no-such-strategy')).toBe(false)
+  })
+})
+
+describe('describeAiCalls', () => {
+  it('leads with failures, because an all-failed tape replays as a strategy that simply never trades', () => {
+    const described = describeAiCalls({ total: 672, cached: 0, generated: 672, errors: 672 })
+    expect(described.bad).toBe(true)
+    expect(described.text).toBe('672 of 672 OpenAI calls failed')
+  })
+
+  it('reports a single failure as failure, not as a healthy refresh', () => {
+    expect(describeAiCalls({ total: 672, cached: 671, generated: 1, errors: 1 }).bad).toBe(true)
+  })
+
+  // The steady state: one new candle every 15 minutes, everything else served from cache. This is
+  // the number that tells someone what leaving the bot on actually costs them per refresh.
+  it('names cached and fresh calls separately when nothing failed', () => {
+    const described = describeAiCalls({ total: 672, cached: 671, generated: 1, errors: 0 })
+    expect(described.bad).toBe(false)
+    expect(described.text).toBe('672 decisions · 671 cached · 1 new call last refresh')
+  })
+
+  it('pluralises fresh calls', () => {
+    expect(describeAiCalls({ total: 672, cached: 0, generated: 672, errors: 0 }).text).toContain('672 new calls')
+    expect(describeAiCalls({ total: 672, cached: 672, generated: 0, errors: 0 }).text).toContain('0 new calls')
   })
 })

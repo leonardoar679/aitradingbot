@@ -20,7 +20,7 @@ import { CHART_PALETTE } from '../theme/palette'
 import { PositionBandPrimitive } from '../backtest/positionBandPrimitive'
 import { openPositionBand, tradeBands } from '../backtest/tradeOverlay'
 import type { Trade } from '../backtest/engine'
-import { resolvedStrategy, type Bot } from './types'
+import { describeAiCalls, resolvedStrategy, type Bot } from './types'
 import { formatQuotePrice } from '../utils/formatCurrency'
 
 interface BotDetailViewProps {
@@ -324,6 +324,19 @@ export function BotDetailView({ bot, onBack, onToggle }: BotDetailViewProps): Re
               </div>
             </div>
           </div>
+
+          {dryRun.aiCalls && (
+            <div
+              style={{
+                padding: '0.5rem 0.9rem',
+                fontSize: '0.72rem',
+                borderBottom: '1px solid var(--border)',
+                color: describeAiCalls(dryRun.aiCalls).bad ? 'var(--down)' : 'var(--text-muted)'
+              }}
+            >
+              {describeAiCalls(dryRun.aiCalls).text}
+            </div>
+          )}
 
           <div style={{ padding: '0.5rem 0.9rem', fontSize: '0.72rem', fontStyle: 'italic', color: 'var(--text-secondary)' }}>
             {bot.enabledAt === null

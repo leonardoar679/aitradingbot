@@ -3,7 +3,7 @@ import { INTERVAL_SECONDS, type Candle, type Exchange, type Interval } from '../
 import { runBacktest, type BacktestResult, type Trade, type OpenPositionSnapshot } from '../backtest/engine'
 import { getStrategy } from '../backtest/strategies'
 import { fetchRangeCached } from './candleCache'
-import { costsMoneyToRun } from './types'
+import { costsMoneyToRun, type AiCallCount } from './types'
 import { generateGptIntradaySignals } from '../backtest/strategies/gptIntraday'
 import {
   GPT_INTRADAY_STRATEGY_ID,
@@ -53,11 +53,13 @@ export interface DryRunState {
   result: BacktestResult | null
   candles: Candle[]
   latestCandle: Candle | null
+  /** What the last refresh cost in OpenAI calls, or null for a strategy that never calls it. */
+  aiCalls: AiCallCount | null
 }
 
-const LOADING_STATE: DryRunState = { status: 'loading', error: null, result: null, candles: [], latestCandle: null }
+const LOADING_STATE: DryRunState = { status: 'loading', error: null, result: null, candles: [], latestCandle: null, aiCalls: null }
 /** Fetched nothing, and nothing is coming -- distinct from 'loading', which promises a result. */
-const IDLE_STATE: DryRunState = { status: 'idle', error: null, result: null, candles: [], latestCandle: null }
+const IDLE_STATE: DryRunState = { status: 'idle', error: null, result: null, candles: [], latestCandle: null, aiCalls: null }
 
 /** Imperative counterpart to the hook below, for call sites outside a component's render
  * lifecycle (e.g. the Portfolio page aggregating every enabled bot at once) — same fetch window
@@ -69,7 +71,7 @@ export async function fetchBotDryRunResult(bot: {
   symbol: string
   enabledAt: number | null
   strategyId: string
-}): Promise<{ result: BacktestResult; candles: Candle[] } | null> {
+}): Promise<{ result: BacktestResult; candles: Candle[]; aiCalls: AiCallCount | null } | null> {
   const endSec = Math.floor(Date.now() / 1000)
   const interval = dryRunIntervalFor(bot.strategyId)
   const barSec = INTERVAL_SECONDS[interval]
@@ -114,9 +116,19 @@ export async function fetchBotDryRunResult(bot: {
       maxDecisions: GPT_MAX_DECISIONS
     })
     const signals = generateGptIntradaySignals(candles, tape)
-    return { result: runBacktest(candles, bot.strategyId, { forceCloseAtEnd: false, signals }), candles }
+    return {
+      result: runBacktest(candles, bot.strategyId, { forceCloseAtEnd: false, signals }),
+      candles,
+      // The tape has always counted these and this function always dropped them on the floor.
+      aiCalls: {
+        total: tape.decisions.length,
+        cached: tape.cachedCount,
+        generated: tape.generatedCount,
+        errors: tape.errorCount
+      }
+    }
   }
-  return { result: runBacktest(candles, bot.strategyId, { forceCloseAtEnd: false }), candles }
+  return { result: runBacktest(candles, bot.strategyId, { forceCloseAtEnd: false }), candles, aiCalls: null }
 }
 
 /** Bots have no dollar allocation anywhere in this app — this is the only real per-bot
@@ -204,10 +216,10 @@ export function useDryRun(
         const fetched = await fetchBotDryRunResult({ exchange, symbol, enabledAt, strategyId })
         if (cancelled) return
         if (fetched === null) {
-          setState({ status: 'error', error: 'No candle data returned', result: null, candles: [], latestCandle: null })
+          setState({ ...IDLE_STATE, status: 'error', error: 'No candle data returned' })
         } else {
-          const { result, candles } = fetched
-          setState({ status: 'running', error: null, result, candles, latestCandle: candles[candles.length - 1] })
+          const { result, candles, aiCalls } = fetched
+          setState({ status: 'running', error: null, result, candles, latestCandle: candles[candles.length - 1], aiCalls })
         }
       } catch (error) {
         if (!cancelled) {

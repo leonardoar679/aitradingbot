@@ -63,6 +63,31 @@ export function archiveBot(bot: Bot): Bot {
   return { ...bot, archived: true, enabled: false, enabledAt: null }
 }
 
+/** What the last dry-run refresh asked of OpenAI. Null for every strategy that never calls it.
+ *
+ * The tape has always counted this and useDryRun always threw it away, so a running GPT bot billed
+ * an external account every 60 seconds with nothing anywhere on screen saying so. The confirmation
+ * before enabling makes the first click honest; this makes the ongoing state honest. */
+export interface AiCallCount {
+  total: number
+  cached: number
+  generated: number
+  errors: number
+}
+
+/** One line describing a refresh's OpenAI usage, and whether it is bad news.
+ *
+ * Failures lead, because a tape that is entirely failures is the case that already bit someone:
+ * an account out of credits produced 672 safety-holds, which replay as a perfectly valid strategy
+ * that simply never trades. "0 trades" and "672 calls failed" look identical on a chart. */
+export function describeAiCalls(calls: AiCallCount): { text: string; bad: boolean } {
+  if (calls.errors > 0) {
+    return { text: `${calls.errors} of ${calls.total} OpenAI calls failed`, bad: true }
+  }
+  const fresh = calls.generated === 1 ? '1 new call' : `${calls.generated} new calls`
+  return { text: `${calls.total} decisions · ${calls.cached} cached · ${fresh} last refresh`, bad: false }
+}
+
 /** Whether running this strategy spends the user's money.
  *
  * GPT Intraday calls OpenAI with the user's own key, once per candle, for as long as the bot is

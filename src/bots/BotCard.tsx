@@ -1,7 +1,7 @@
 import { Bot as BotIcon, Archive } from 'lucide-react'
 import { EXCHANGES } from '../../shared/ipc'
 import { useDryRun, summarizePaperTrades, classifyBotOpenPosition } from './useDryRun'
-import { resolvedStrategy, type Bot } from './types'
+import { describeAiCalls, resolvedStrategy, type Bot } from './types'
 import { formatQuotePrice } from '../utils/formatCurrency'
 import { netUnrealizedPct } from '../../shared/fees'
 
@@ -25,7 +25,13 @@ function formatShortDate(unixSec: number): string {
 // only counts trades entered after this bot was actually turned on. Conflating the two would
 // present the lookback's historical trades as if they were the user's own dry-run activity.
 function DryRunPanel({ bot }: { bot: Bot }): React.JSX.Element {
-  const { status, error, result, latestCandle } = useDryRun(bot.exchange, bot.symbol, bot.enabled, bot.enabledAt, bot.strategyId)
+  const { status, error, result, latestCandle, aiCalls } = useDryRun(
+    bot.exchange,
+    bot.symbol,
+    bot.enabled,
+    bot.enabledAt,
+    bot.strategyId
+  )
 
   if (status === 'loading') {
     return <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', padding: '0.5rem 0' }}>Loading market data…</div>
@@ -83,6 +89,11 @@ function DryRunPanel({ bot }: { bot: Bot }): React.JSX.Element {
           ? 'No paper trades yet'
           : `${paperTrades.length} paper trade${paperTrades.length === 1 ? '' : 's'} (${paperWins}W) · ${paperNetPct >= 0 ? '+' : ''}${paperNetPct.toFixed(2)}%`}
       </div>
+      {aiCalls && (
+        <div style={{ fontSize: '0.68rem', color: describeAiCalls(aiCalls).bad ? 'var(--down)' : 'var(--text-muted)' }}>
+          {describeAiCalls(aiCalls).text}
+        </div>
+      )}
     </div>
   )
 }
