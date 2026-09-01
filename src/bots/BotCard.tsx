@@ -1,7 +1,7 @@
 import { Bot as BotIcon, Archive } from 'lucide-react'
 import { EXCHANGES } from '../../shared/ipc'
 import { useDryRun, summarizePaperTrades, classifyBotOpenPosition } from './useDryRun'
-import type { Bot } from './types'
+import { resolvedStrategy, type Bot } from './types'
 import { formatQuotePrice } from '../utils/formatCurrency'
 import { netUnrealizedPct } from '../../shared/fees'
 
@@ -88,6 +88,7 @@ function DryRunPanel({ bot }: { bot: Bot }): React.JSX.Element {
 }
 
 export function BotCard({ bot, onToggle, onArchive, onViewDetail }: BotCardProps): React.JSX.Element {
+  const strategy = resolvedStrategy(bot)
   const exchangeName = EXCHANGES.find((e) => e.id === bot.exchange)?.name ?? bot.exchange
 
   return (
@@ -177,8 +178,21 @@ export function BotCard({ bot, onToggle, onArchive, onViewDetail }: BotCardProps
           whiteSpace: 'nowrap'
         }}
       >
-        {bot.strategy}
+        {strategy.name}
       </div>
+      {strategy.mismatched && (
+        <div
+          title={`Stored as "${strategy.label}", but no strategy id is set, so the dry run falls back to ${strategy.name}. Recreate the bot to pick one deliberately.`}
+          style={{
+            fontSize: '0.68rem',
+            color: 'var(--down)',
+            textAlign: 'center',
+            marginTop: '0.15rem'
+          }}
+        >
+          labelled &ldquo;{strategy.label}&rdquo; &middot; running {strategy.name}
+        </div>
+      )}
 
       {bot.enabled && <DryRunPanel bot={bot} />}
 
