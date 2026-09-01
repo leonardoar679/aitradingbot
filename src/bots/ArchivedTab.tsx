@@ -1,6 +1,6 @@
 import { Bot as BotIcon, RotateCcw, Trash2 } from 'lucide-react'
 import { EXCHANGES } from '../../shared/ipc'
-import type { Bot } from './types'
+import { resolvedStrategy, type Bot } from './types'
 
 export function ArchivedTab({
   bots,
@@ -55,7 +55,7 @@ export function ArchivedTab({
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.88rem' }}>{bot.name}</div>
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                  {exchangeName} • {bot.baseAsset}-{bot.quoteAsset} • {bot.strategy}
+                  {exchangeName} • {bot.baseAsset}-{bot.quoteAsset} • {resolvedStrategy(bot).name}
                 </div>
               </div>
             </div>

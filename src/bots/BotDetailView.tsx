@@ -20,12 +20,13 @@ import { CHART_PALETTE } from '../theme/palette'
 import { PositionBandPrimitive } from '../backtest/positionBandPrimitive'
 import { openPositionBand, tradeBands } from '../backtest/tradeOverlay'
 import type { Trade } from '../backtest/engine'
-import type { Bot } from './types'
+import { resolvedStrategy, type Bot } from './types'
 import { formatQuotePrice } from '../utils/formatCurrency'
 
 interface BotDetailViewProps {
   bot: Bot
   onBack: () => void
+  onToggle: (id: string) => void
 }
 
 function pctColor(pct: number): string {
@@ -39,7 +40,7 @@ function exitReasonLabel(reason: Trade['exitReason']): string {
   return 'Signal'
 }
 
-export function BotDetailView({ bot, onBack }: BotDetailViewProps): React.JSX.Element {
+export function BotDetailView({ bot, onBack, onToggle }: BotDetailViewProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -50,6 +51,11 @@ export function BotDetailView({ bot, onBack }: BotDetailViewProps): React.JSX.El
 
   const dryRun = useDryRun(bot.exchange, bot.symbol, bot.enabled, bot.enabledAt, bot.strategyId)
   const exchangeName = EXCHANGES.find((e) => e.id === bot.exchange)?.name ?? bot.exchange
+  const strategy = resolvedStrategy(bot)
+  // GPT Intraday is not fetched while stopped, because fetching it spends the user's OpenAI
+  // balance. There is nothing to chart until it is enabled, so say that instead of drawing an
+  // empty chart and letting it read as a load that never finished.
+  const showChart = dryRun.status !== 'idle'
   const { theme } = useTheme()
   const palette = CHART_PALETTE[theme]
 
@@ -102,7 +108,7 @@ export function BotDetailView({ bot, onBack }: BotDetailViewProps): React.JSX.El
       stopLineRef.current = null
       entryLineRef.current = null
     }
-  }, [palette])
+  }, [palette, showChart])
 
   useEffect(() => {
     const chart = chartRef.current
@@ -212,12 +218,46 @@ export function BotDetailView({ bot, onBack }: BotDetailViewProps): React.JSX.El
         >
           <ArrowLeft size={14} /> Back to Bots
         </button>
-        <div>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)' }}>{bot.name}</div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-            {exchangeName} • {bot.baseAsset}-{bot.quoteAsset} • {bot.strategy}
+            {exchangeName} • {bot.baseAsset}-{bot.quoteAsset} • {strategy.name}
           </div>
+          {strategy.mismatched && (
+            <div style={{ fontSize: '0.72rem', color: 'var(--down)' }}>
+              labelled &ldquo;{strategy.label}&rdquo; &middot; running {strategy.name}
+            </div>
+          )}
         </div>
+        <span
+          style={{
+            fontSize: '0.72rem',
+            fontWeight: 700,
+            padding: '0.25rem 0.6rem',
+            borderRadius: 999,
+            color: bot.enabled ? 'var(--up)' : 'var(--text-muted)',
+            border: `1px solid ${bot.enabled ? 'var(--up)' : 'var(--border)'}`,
+            flexShrink: 0
+          }}
+        >
+          {bot.enabled ? 'Running' : 'Stopped'}
+        </span>
+        <button
+          onClick={() => onToggle(bot.id)}
+          style={{
+            flexShrink: 0,
+            border: bot.enabled ? '1px solid var(--border)' : 'none',
+            background: bot.enabled ? 'var(--bg-app)' : 'linear-gradient(135deg, #7c86ff, #6366f1)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '0.5rem 0.9rem',
+            color: bot.enabled ? 'var(--text-primary)' : '#fff',
+            fontSize: '0.8rem',
+            fontWeight: 700,
+            cursor: 'pointer'
+          }}
+        >
+          {bot.enabled ? 'Disable Bot' : 'Enable Bot'}
+        </button>
       </div>
 
       {dryRun.status === 'error' && (
@@ -253,7 +293,13 @@ export function BotDetailView({ bot, onBack }: BotDetailViewProps): React.JSX.El
               {openClassified.kind === 'bot' && (
                 <span style={{ color: 'var(--text-primary)' }}>Long @ {formatQuotePrice(openClassified.position.entryPrice, bot.quoteAsset)}</span>
               )}
-              {openClassified.kind === 'preexisting' && (
+              {openClassified.kind === 'preexisting' && bot.enabledAt === null && (
+                <span style={{ color: 'var(--text-secondary)' }}>
+                  Flat — the strategy is holding a position right now (shown on the chart), but this bot has never been
+                  enabled, so none of it is yours
+                </span>
+              )}
+              {openClassified.kind === 'preexisting' && bot.enabledAt !== null && (
                 <span style={{ color: 'var(--text-secondary)' }}>
                   Flat — the strategy entered before you enabled this bot (shown on the chart), so it is not counted as
                   yours
@@ -280,13 +326,21 @@ export function BotDetailView({ bot, onBack }: BotDetailViewProps): React.JSX.El
           </div>
 
           <div style={{ padding: '0.5rem 0.9rem', fontSize: '0.72rem', fontStyle: 'italic', color: 'var(--text-secondary)' }}>
-            {paperTrades.length === 0 ? 'No paper trades yet' : `Since ${bot.enabledAt ? new Date(bot.enabledAt * 1000).toLocaleString() : ''}`}
+            {bot.enabledAt === null
+              ? 'Not running — enable this bot to start paper trading'
+              : paperTrades.length === 0
+              ? 'No paper trades yet'
+              : `Since ${new Date(bot.enabledAt * 1000).toLocaleString()}`}
           </div>
 
           <div style={{ overflowY: 'auto', flex: 1 }}>
             {paperTrades.length === 0 && (
               <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', padding: '0 0.9rem' }}>
-                Trades will appear here once the strategy enters a position after this bot was enabled.
+                {bot.enabled
+                  ? 'Trades will appear here once the strategy enters a position after this bot was enabled.'
+                  : showChart
+                  ? 'The chart shows what this strategy is doing on this pair. Nothing is recorded as a paper trade until you enable the bot.'
+                  : 'Nothing is fetched, computed or recorded while this bot is stopped.'}
               </p>
             )}
             {[...paperTrades].reverse().map((t, i) => (
@@ -313,7 +367,26 @@ export function BotDetailView({ bot, onBack }: BotDetailViewProps): React.JSX.El
           </div>
         </div>
 
-        <div ref={containerRef} style={{ flex: 1 }} />
+        {showChart ? (
+          <div ref={containerRef} style={{ flex: 1 }} />
+        ) : (
+          <div
+            style={{
+              flex: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '2rem',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)'
+            }}
+          >
+            <p style={{ maxWidth: 380, textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.82rem', lineHeight: 1.6 }}>
+              GPT Intraday has no chart until it runs. Every candle on it is a paid OpenAI call, so a stopped bot asks
+              for nothing. Enable it to generate signals.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   )

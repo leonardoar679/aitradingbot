@@ -3,6 +3,7 @@ import { INTERVAL_SECONDS, type Candle, type Exchange, type Interval } from '../
 import { runBacktest, type BacktestResult, type Trade, type OpenPositionSnapshot } from '../backtest/engine'
 import { getStrategy } from '../backtest/strategies'
 import { fetchRangeCached } from './candleCache'
+import { costsMoneyToRun } from './types'
 import { generateGptIntradaySignals } from '../backtest/strategies/gptIntraday'
 import {
   GPT_INTRADAY_STRATEGY_ID,
@@ -44,7 +45,7 @@ function warmupCandlesFor(strategyId: string): number {
 }
 const POLL_MS = 60_000
 
-export type DryRunStatus = 'loading' | 'running' | 'error'
+export type DryRunStatus = 'loading' | 'running' | 'error' | 'idle'
 
 export interface DryRunState {
   status: DryRunStatus
@@ -54,7 +55,9 @@ export interface DryRunState {
   latestCandle: Candle | null
 }
 
-const IDLE_STATE: DryRunState = { status: 'loading', error: null, result: null, candles: [], latestCandle: null }
+const LOADING_STATE: DryRunState = { status: 'loading', error: null, result: null, candles: [], latestCandle: null }
+/** Fetched nothing, and nothing is coming -- distinct from 'loading', which promises a result. */
+const IDLE_STATE: DryRunState = { status: 'idle', error: null, result: null, candles: [], latestCandle: null }
 
 /** Imperative counterpart to the hook below, for call sites outside a component's render
  * lifecycle (e.g. the Portfolio page aggregating every enabled bot at once) — same fetch window
@@ -160,11 +163,11 @@ export function classifyBotOpenPosition(
     : { kind: 'preexisting', position: openPosition }
 }
 
-// Polls the exchange every minute for the newest closed 4h candles (only while this component
-// stays mounted — i.e. only while the app is open) and replays the full backtest engine over
-// the fetched window each time. Re-running the whole engine rather than hand-rolling a
-// stateful "step" keeps this 1:1 consistent with the validated backtest — no separate live
-// logic to drift out of sync. forceCloseAtEnd is off so an open position is reported as-is
+// Fetches the newest closed candles on the strategy's own interval and replays the full backtest
+// engine over the fetched window. A running bot repeats that every minute for as long as this
+// component stays mounted — i.e. only while the app is open; a stopped one does it once.
+// Re-running the whole engine rather than hand-rolling a stateful "step" keeps this 1:1 consistent
+// with the validated backtest — no separate live logic to drift out of sync. forceCloseAtEnd is off so an open position is reported as-is
 // instead of showing up as a synthetic closed trade.
 //
 // The fetch window always reaches back to enabledAt (plus warmup padding), not just a fixed
@@ -173,14 +176,22 @@ export function classifyBotOpenPosition(
 export function useDryRun(
   exchange: Exchange,
   symbol: string,
-  enabled: boolean,
+  running: boolean,
   enabledAt: number | null,
   strategyId: string
 ): DryRunState {
-  const [state, setState] = useState<DryRunState>(IDLE_STATE)
+  const [state, setState] = useState<DryRunState>(LOADING_STATE)
 
   useEffect(() => {
-    if (!enabled) {
+    // A STOPPED BOT STILL HAS A CHART. What the strategy is doing on that symbol is a fact about
+    // the symbol and the strategy, not about the switch. Refusing to fetch until the bot was
+    // enabled is what made a bot you had just created impossible to look at: it is created
+    // stopped, so it had no data, so the only way in was hidden, so you could not open it.
+    //
+    // Unless looking costs money. GPT Intraday bills the user's OpenAI account per decision, so a
+    // stopped one fetches nothing at all -- opening a bot must never spend, and only enabling it
+    // (which now asks first) may.
+    if (!running && costsMoneyToRun(strategyId)) {
       setState(IDLE_STATE)
       return
     }
@@ -204,7 +215,9 @@ export function useDryRun(
           setState((prev) => ({ ...prev, status: 'error', error: message }))
         }
       } finally {
-        if (!cancelled) timer = setTimeout(poll, POLL_MS)
+        // Polling is what "running" buys. A stopped bot is fetched once so it can be looked at,
+        // then left alone instead of hitting the exchange every minute for a bot nobody started.
+        if (!cancelled && running) timer = setTimeout(poll, POLL_MS)
       }
     }
 
@@ -214,7 +227,7 @@ export function useDryRun(
       cancelled = true
       if (timer) clearTimeout(timer)
     }
-  }, [exchange, symbol, enabled, enabledAt, strategyId])
+  }, [exchange, symbol, running, enabledAt, strategyId])
 
   return state
 }

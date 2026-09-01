@@ -7,8 +7,8 @@ import { BotDetailView } from './BotDetailView'
 import { RunsTab } from './RunsTab'
 import { ArchivedTab } from './ArchivedTab'
 import { fetchBotDryRunResult, summarizePaperTrades } from './useDryRun'
-import { getStrategy } from '../backtest/strategies'
-import type { Bot } from './types'
+import { GPT_MAX_DECISIONS } from '../../shared/aiSignal'
+import { archiveBot, costsMoneyToRun, createBot, type Bot } from './types'
 import type { BotRun, Exchange, SymbolInfo } from '../../shared/ipc'
 
 type Tab = 'active' | 'runs' | 'archived'
@@ -102,23 +102,33 @@ export function BotsPage(): React.JSX.Element {
   }, [bots])
 
   function handleCreate(input: { name: string; exchange: Exchange; pair: SymbolInfo; strategyId: string }): void {
-    setBots((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        name: input.name,
-        exchange: input.exchange,
-        symbol: input.pair.symbol,
-        baseAsset: input.pair.baseAsset,
-        quoteAsset: input.pair.quoteAsset,
-        strategy: getStrategy(input.strategyId).name,
-        strategyId: input.strategyId,
-        enabled: false,
-        enabledAt: null,
-        archived: false
-      }
-    ])
+    const created = createBot({ id: crypto.randomUUID(), ...input })
+    setBots((prev) => [...prev, created])
     setShowAdd(false)
+    // OPEN WHAT WAS JUST MADE. The new card is appended to the end of the grid, so on a profile
+    // with a few bots it lands below the fold: the modal closed, the visible page did not change,
+    // and creating a bot looked like it had failed. It had not -- the record was written every
+    // time -- but nothing on screen said so.
+    setSelectedBotId(created.id)
+  }
+
+  /** Writes the permanent BotRun for a bot that has just stopped. Shared by disable and archive,
+   * which are both stops and must both record one. */
+  function recordRun(bot: Bot, endedAt: number): void {
+    setRunRecordError(null)
+    void buildRunRecord(bot, endedAt)
+      .then((run) => {
+        if (!run) return
+        setBotRuns((prev) => {
+          const next = [...prev, run]
+          void window.api.settings.set({ botRuns: next })
+          return next
+        })
+      })
+      .catch((error) => {
+        console.error('Failed to build bot run record:', error)
+        setRunRecordError(`Couldn't save run history for "${bot.name}": ${error instanceof Error ? error.message : String(error)}`)
+      })
   }
 
   function handleToggle(id: string): void {
@@ -126,30 +136,38 @@ export function BotsPage(): React.JSX.Element {
     if (!bot) return
 
     const turningOff = bot.enabled
+    // Every other strategy is free to run. GPT Intraday is not: it calls OpenAI with the user's
+    // own key, once per candle, for as long as the bot is on. The Backtest page has always asked
+    // before spending; enabling a bot spent the same money on one click and said nothing. Asking
+    // here is the same rule applied to the same cost.
+    if (!turningOff && costsMoneyToRun(bot.strategyId)) {
+      const proceed = window.confirm(
+        `Enable "${bot.name}"?\n\n` +
+          'GPT Intraday calls the OpenAI API with your key and bills your account. Turning it on ' +
+          `generates up to ${GPT_MAX_DECISIONS} decisions for the last seven days straight away ` +
+          '(anything already cached is free), then roughly one more every 15 minutes for as long as ' +
+          'this app stays open.\n\nNo other strategy costs anything to run.'
+      )
+      if (!proceed) return
+    }
     const nowSec = Math.floor(Date.now() / 1000)
     setBots((prev) => prev.map((b) => (b.id === id ? { ...b, enabled: !b.enabled, enabledAt: turningOff ? null : nowSec } : b)))
 
-    if (turningOff) {
-      setRunRecordError(null)
-      void buildRunRecord(bot, nowSec)
-        .then((run) => {
-          if (!run) return
-          setBotRuns((prev) => {
-            const next = [...prev, run]
-            void window.api.settings.set({ botRuns: next })
-            return next
-          })
-        })
-        .catch((error) => {
-          console.error('Failed to build bot run record:', error)
-          setRunRecordError(`Couldn't save run history for "${bot.name}": ${error instanceof Error ? error.message : String(error)}`)
-        })
-    }
+    if (turningOff) recordRun(bot, nowSec)
   }
 
   function handleArchive(id: string): void {
-    setBots((prev) => prev.map((b) => (b.id === id ? { ...b, archived: true, enabled: false } : b)))
+    const bot = bots.find((b) => b.id === id)
+    if (!bot) return
+    // ARCHIVING A RUNNING BOT IS A STOP TOO. This wrote enabled:false and nothing else: no run
+    // record, so the Archived tab's own promise -- "Archiving a bot from the Active tab keeps its
+    // Runs history" -- was false for precisely the bots that had history worth keeping, and the
+    // dry-run record vanished exactly as it would have before buildRunRecord existed. It also
+    // left enabledAt set on a stopped bot, a state no other path in this page can produce.
+    const nowSec = Math.floor(Date.now() / 1000)
+    setBots((prev) => prev.map((b) => (b.id === id ? archiveBot(b) : b)))
     setSelectedBotId((prev) => (prev === id ? null : prev))
+    if (bot.enabled) recordRun(bot, nowSec)
   }
 
   function handleRestore(id: string): void {
@@ -157,6 +175,14 @@ export function BotsPage(): React.JSX.Element {
   }
 
   function handleDeletePermanently(id: string): void {
+    const bot = bots.find((b) => b.id === id)
+    if (!bot) return
+    // The only irreversible action on this page, and it fired on a single click of a button
+    // sitting directly beside Restore.
+    const confirmed = window.confirm(
+      `Delete "${bot.name}" permanently?\n\nIts recorded runs stay in the Runs tab, but the bot itself cannot be restored.`
+    )
+    if (!confirmed) return
     setBots((prev) => prev.filter((b) => b.id !== id))
   }
 
@@ -194,7 +220,7 @@ export function BotsPage(): React.JSX.Element {
 
           {selectedBot && (
             <div style={{ marginTop: '0.9rem' }}>
-              <BotDetailView bot={selectedBot} onBack={() => setSelectedBotId(null)} />
+              <BotDetailView bot={selectedBot} onBack={() => setSelectedBotId(null)} onToggle={handleToggle} />
             </div>
           )}
 

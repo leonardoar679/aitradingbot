@@ -120,13 +120,28 @@ export function BotCard({ bot, onToggle, onArchive, onViewDetail }: BotCardProps
         <button
           onClick={() => onArchive(bot.id)}
           title="Archive bot"
+          aria-label={`Archive ${bot.name}`}
           style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '0.2rem' }}
         >
           <Archive size={14} />
         </button>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', textAlign: 'center' }}>
+      <button
+        onClick={() => onViewDetail(bot.id)}
+        title={`Open ${bot.name}`}
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '0.5rem',
+          textAlign: 'center',
+          background: 'transparent',
+          border: 'none',
+          padding: 0,
+          cursor: 'pointer'
+        }}
+      >
         <div
           style={{
             width: 60,
@@ -153,7 +168,7 @@ export function BotCard({ bot, onToggle, onArchive, onViewDetail }: BotCardProps
         >
           {bot.name}
         </span>
-      </div>
+      </button>
 
       <div style={{ display: 'flex', justifyContent: 'center', gap: '1.6rem' }}>
         <div style={statColumnStyle()}>
@@ -196,23 +211,21 @@ export function BotCard({ bot, onToggle, onArchive, onViewDetail }: BotCardProps
 
       {bot.enabled && <DryRunPanel bot={bot} />}
 
-      {bot.enabled && (
-        <button
-          onClick={() => onViewDetail(bot.id)}
-          style={{
-            background: 'transparent',
-            border: '1px solid var(--border)',
-            borderRadius: 999,
-            padding: '0.5rem',
-            color: 'var(--text-secondary)',
-            fontSize: '0.78rem',
-            fontWeight: 600,
-            cursor: 'pointer'
-          }}
-        >
-          View Chart
-        </button>
-      )}
+      <button
+        onClick={() => onViewDetail(bot.id)}
+        style={{
+          background: 'transparent',
+          border: '1px solid var(--border)',
+          borderRadius: 999,
+          padding: '0.5rem',
+          color: 'var(--text-secondary)',
+          fontSize: '0.78rem',
+          fontWeight: 600,
+          cursor: 'pointer'
+        }}
+      >
+        View Chart
+      </button>
 
       <button
         onClick={() => onToggle(bot.id)}

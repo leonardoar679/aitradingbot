@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { ExchangeSelect } from '../components/ExchangeSelect'
 import { SymbolSearch } from '../components/SymbolSearch'
@@ -32,6 +32,16 @@ export function AddBotModal({ onCreate, onClose }: AddBotModalProps): React.JSX.
   const [exchange, setExchange] = useState<Exchange>(EXCHANGES[0].id)
   const [pair, setPair] = useState<SymbolInfo>(EXCHANGES[0].defaultSymbol)
   const [strategyId, setStrategyId] = useState(DEFAULT_STRATEGY_ID)
+  const canCreate = name.trim().length > 0
+
+  // Escape closes, like the backdrop and the X already do.
+  useEffect(() => {
+    function onKey(event: KeyboardEvent): void {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return (): void => window.removeEventListener('keydown', onKey)
+  }, [onClose])
 
   function handleExchangeChange(next: Exchange): void {
     setExchange(next)
@@ -40,7 +50,7 @@ export function AddBotModal({ onCreate, onClose }: AddBotModalProps): React.JSX.
   }
 
   function handleCreate(): void {
-    if (!name.trim()) return
+    if (!canCreate) return
     onCreate({ name: name.trim(), exchange, pair, strategyId })
   }
 
@@ -90,8 +100,16 @@ export function AddBotModal({ onCreate, onClose }: AddBotModalProps): React.JSX.
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. CloudScalper"
               autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleCreate()
+              }}
               style={textInputStyle()}
             />
+            {!canCreate && (
+              <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '0.35rem 0 0' }}>
+                Required — this is how the bot is listed.
+              </p>
+            )}
           </div>
           <div>
             <label style={fieldLabelStyle()}>Exchange</label>
@@ -115,7 +133,8 @@ export function AddBotModal({ onCreate, onClose }: AddBotModalProps): React.JSX.
             </p>
             {strategyId === GPT_INTRADAY_STRATEGY_ID && (
               <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '0.35rem 0 0' }}>
-                Paper only. Uses a rolling seven-day cached signal tape and never places real orders.
+                Paper only — it never places real orders. It does call the OpenAI API with your key while the bot
+                runs, which bills your OpenAI account; every other strategy is free to run.
               </p>
             )}
           </div>
@@ -140,18 +159,17 @@ export function AddBotModal({ onCreate, onClose }: AddBotModalProps): React.JSX.
           </button>
           <button
             onClick={handleCreate}
-            disabled={!name.trim()}
+            disabled={!canCreate}
             style={{
               flex: 1,
-              background: 'linear-gradient(135deg, #7c86ff, #6366f1)',
-              border: 'none',
+              background: canCreate ? 'linear-gradient(135deg, #7c86ff, #6366f1)' : 'var(--bg-app)',
+              border: canCreate ? 'none' : '1px solid var(--border)',
               borderRadius: 'var(--radius-sm)',
               padding: '0.7rem',
-              color: '#fff',
+              color: canCreate ? '#fff' : 'var(--text-muted)',
               fontSize: '0.85rem',
               fontWeight: 700,
-              cursor: name.trim() ? 'pointer' : 'not-allowed',
-              opacity: name.trim() ? 1 : 0.6
+              cursor: canCreate ? 'pointer' : 'not-allowed'
             }}
           >
             Add Bot
