@@ -91,6 +91,7 @@ Short-term round (`shortTermChannel.ts`):
 
 | File | Question it answers |
 |---|---|
+| `gptneed.ts` | What accuracy and selectivity ANY 15-minute signal source would need before GPT Intraday makes money. Synthetic tape, real strategy, real engine, real fees. Break-even lands near 72-75% directional accuracy; a coin flip loses 89-100% of the account; and a seven-day run yields 8-9 closed trades, which is why the paid backtest cannot settle the question it looks like it is asking |
 | `gap.ts` | What the vote band in the shipped Trend Regime is worth. Written because STRATEGIES.md section 2 asserted a figure for it that no script here produced -- the claim was believed rather than measured, and it was understated by two orders of magnitude |
 | `tscan.ts` | **The one that mattered.** Sweeps the trend lookback from a quarter-day to 50 days to find where net-after-fees crosses zero — the test the first short-term study should have run |
 | `stgrid.ts` | Channel-position ensemble across lookback sets and thresholds; 288 cells, all positive |
