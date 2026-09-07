@@ -62,8 +62,9 @@ export function AgentsPage(): React.JSX.Element {
         </div>
 
         <p style={{ margin: '0 0 1rem', fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-          This is the same paper-only GPT classifier that marks buy/sell arrows on the 15-minute Market chart.
-          Configure its encrypted OpenAI key and model in Settings. Its output can never place a live order.
+          This is the same paper-only GPT classifier the Market chart can draw buy/sell arrows with. Configure its
+          encrypted OpenAI key and model in Settings. Its output can never place a live order — but each run is one
+          OpenAI call billed to your account.
         </p>
 
         <div style={{ display: 'flex', gap: '0.6rem', marginBottom: '1rem' }}>

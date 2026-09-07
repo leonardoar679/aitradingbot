@@ -6,6 +6,9 @@ export interface IndicatorSettings {
   ema: boolean
   rsi: boolean
   macd: boolean
+  /** GPT buy/sell arrows on the chart. The only overlay here that spends money, and the only
+   * one that must therefore default to off -- see the note rendered beside it. */
+  aiSignals: boolean
 }
 
 interface IndicatorsPopoverProps {
@@ -79,6 +82,13 @@ export function IndicatorsPopover({ settings, onToggle }: IndicatorsPopoverProps
           <Row label="EMA (20)" on={settings.ema} onToggle={() => onToggle('ema')} />
           <Row label="RSI (14)" on={settings.rsi} onToggle={() => onToggle('rsi')} />
           <Row label="MACD (12, 26, 9)" on={settings.macd} onToggle={() => onToggle('macd')} />
+
+          <div style={{ borderTop: '1px solid var(--border)', margin: '0.5rem 0 0.4rem' }} />
+          <Row label="AI signals" on={settings.aiSignals} onToggle={() => onToggle('aiSignals')} />
+          <p style={{ margin: '0.2rem 0 0', fontSize: '0.68rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+            One OpenAI call per closed 15m candle, billed to your account. The other three are computed here and
+            cost nothing.
+          </p>
         </div>
       )}
     </div>

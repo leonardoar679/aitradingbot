@@ -63,11 +63,19 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
     anchorSettingsRef.current = anchorSettings
   }, [anchorSettings])
 
+  // AI SIGNALS DEFAULT OFF, AND DO NOT PERSIST. Marking closed candles used to be unconditional:
+  // opening the Market page on its default 15m interval sent one billed OpenAI call every 15
+  // minutes, for as long as the page stayed open, with nothing on screen saying so and no way to
+  // stop it short of switching interval. Measured on a 1m build: one request per close, exactly on
+  // the boundary. None of the other overlays here cost anything, so none of them needed asking.
   const [indicatorSettings, setIndicatorSettings] = useState<IndicatorSettings>({
     ema: false,
     rsi: false,
-    macd: false
+    macd: false,
+    aiSignals: false
   })
+  const [aiSignalError, setAiSignalError] = useState<string | null>(null)
+  const clearAiMarkersRef = useRef<(() => void) | null>(null)
   const indicatorSettingsRef = useRef(indicatorSettings)
   const emaSeriesRef = useRef<ISeriesApi<'Line'> | null>(null)
   const rsiPaneRef = useRef<IPaneApi<Time> | null>(null)
@@ -90,6 +98,12 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
   useEffect(() => {
     indicatorSettingsRef.current = indicatorSettings
     applyIndicatorVisibility(indicatorSettings)
+    // Turning the overlay off takes its arrows with it, rather than leaving the last batch on
+    // screen looking like a live reading of a thing that is no longer running.
+    if (!indicatorSettings.aiSignals) {
+      clearAiMarkersRef.current?.()
+      setAiSignalError(null)
+    }
   }, [indicatorSettings])
 
   function handleIndicatorToggle(key: keyof IndicatorSettings): void {
@@ -212,6 +226,10 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
     function updateMarkers(): void {
       markers.setMarkers(anchorMarker ? [...markerList, anchorMarker] : markerList)
     }
+    clearAiMarkersRef.current = (): void => {
+      markerList = []
+      updateMarkers()
+    }
 
     function recompute(): void {
       const candles = Array.from(candlesRef.current.values()).sort((a, b) => a.time - b.time)
@@ -282,6 +300,7 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
 
     async function markClosedCandle(time: number): Promise<void> {
       try {
+        if (!indicatorSettingsRef.current.aiSignals) return
         if (interval !== GPT_INTRADAY_INTERVAL) return
         const signalCandles = [...candlesRef.current.values()].sort((a, b) => a.time - b.time)
         const executionIndex = signalCandles.findIndex((candle) => candle.time === time)
@@ -297,8 +316,13 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
         }
         markerList = [...markerList, newMarker].slice(-MAX_MARKERS)
         updateMarkers()
+        setAiSignalError(null)
       } catch (error) {
+        // Swallowing this to the console meant a key with no credits produced a chart with no
+        // arrows -- indistinguishable from a model that kept saying hold. Same confusion the
+        // Backtest page and the bot cards both had to be taught to name.
         console.error('AI signal request failed:', error)
+        setAiSignalError(describeError(error))
       }
     }
 
@@ -390,6 +414,7 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
 
     return (): void => {
       cancelled = true
+      clearAiMarkersRef.current = null
       if (retryTimer) clearTimeout(retryTimer)
       unsubscribeUpdates?.()
       void window.api.market.unsubscribeCandles()
@@ -458,6 +483,15 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
         indicatorSettings={indicatorSettings}
         onIndicatorToggle={handleIndicatorToggle}
       />
+      {indicatorSettings.aiSignals && (
+        <p style={{ margin: '0 0 0.6rem', fontSize: '0.72rem', color: aiSignalError ? 'var(--down)' : 'var(--text-muted)' }}>
+          {aiSignalError
+            ? `AI signal request failed: ${aiSignalError}`
+            : interval === GPT_INTRADAY_INTERVAL
+            ? 'AI signals on — one OpenAI call per closed candle, billed to your account.'
+            : `AI signals only run on the ${GPT_INTRADAY_INTERVAL} chart. Nothing is being requested at this interval.`}
+        </p>
+      )}
       <p
         style={{
           margin: '0 0 0.75rem',
