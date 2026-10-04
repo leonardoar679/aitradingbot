@@ -10,6 +10,11 @@
 //
 //   node fetch.mjs '[["BTCUSDT","15m"],["ETHUSDT","1h"]]'
 //   START=2017-08-01 OUT=../.candles node fetch.mjs '[["BTCUSDT","1d"]]'
+//
+// COLS=flow adds a seventh column, the taker-buy share of the bar's volume in base units: what
+// was bought by someone lifting the offer rather than by a resting bid. Everything that reads
+// these files takes the first six columns and ignores the rest, so a file with the seventh is
+// still a candle file. research/events.ts is what reads it.
 
 import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'fs'
 import { join } from 'path'
@@ -19,6 +24,7 @@ const OUT = process.env.OUT || '.candles'
 const START = Date.parse((process.env.START || '2017-01-01') + 'T00:00:00Z')
 const END = process.env.END ? Date.parse(process.env.END + 'T00:00:00Z') : Date.now()
 const PAGE = 1000
+const FLOW = process.env.COLS === 'flow'
 
 const MS = {
   '1m': 60e3, '3m': 180e3, '5m': 300e3, '15m': 900e3, '30m': 1800e3,
@@ -83,7 +89,9 @@ async function download(symbol, interval) {
       const t = Math.floor(k[0] / 1000)
       if (seen.has(t)) continue
       seen.add(t)
-      rows.push([t, Number(k[1]), Number(k[2]), Number(k[3]), Number(k[4]), Number(k[5])])
+      const row = [t, Number(k[1]), Number(k[2]), Number(k[3]), Number(k[4]), Number(k[5])]
+      if (FLOW) row.push(Number(k[9]))
+      rows.push(row)
     }
     const last = batch[batch.length - 1][0]
     if (last + step <= cursor) break // no forward progress: listing began after START
