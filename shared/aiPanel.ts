@@ -3,11 +3,11 @@ import {
   AI_MAX_REASON_CODES,
   AI_REASON_CODES,
   AI_RISK_LEVELS,
-  isAiModelSlug,
   type AiMarketRegime,
   type AiReasonCode,
   type AiRiskLevel
 } from './aiSignal'
+import { describeAiModelId, isAiModelId } from './aiEffort'
 
 // A panel of agents for one decision.
 //
@@ -102,7 +102,7 @@ export function panelIdFor(model: string): string {
 export function panelModelOf(id: string): string | null {
   if (!id.startsWith(AI_PANEL_PREFIX)) return null
   const model = id.slice(AI_PANEL_PREFIX.length)
-  return isAiModelSlug(model) && !model.startsWith(AI_PANEL_PREFIX) ? model : null
+  return isAiModelId(model) && !model.startsWith(AI_PANEL_PREFIX) ? model : null
 }
 
 /** True for anything written as a panel, well formed or not: the test for "this must not be
@@ -124,7 +124,7 @@ export function deciderCalls(id: string): number {
 /** A decider as it is named to a person: a model by its id, a panel as what it is. */
 export function describeDecider(id: string): string {
   const model = panelModelOf(id)
-  return model === null ? id : `the agent panel on ${model}`
+  return model === null ? describeAiModelId(id) : `the agent panel on ${describeAiModelId(model)}`
 }
 
 export type AiAgentVerdictOf<R extends AiAgentRole> = { ok: true; report: AiAgentReports[R] } | { ok: false; reason: string }

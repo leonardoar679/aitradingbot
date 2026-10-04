@@ -65,13 +65,16 @@ export function isAiCallStale(candleTime: number, interval: Interval, nowSec: nu
  * app acts on -- and one more that only matters to a person: the candle the call was made for is
  * still open. A proposal for a market the model would not be acted on in a backtest would make
  * the form more permissive than the record it is judged by. */
-export function aiProposalProblem(decision: AiSignalDecision, interval: Interval, nowSec: number): string | null {
+export function aiProposalProblem(decision: AiSignalDecision, interval: Interval, nowSec: number, opensPosition = true): string | null {
   if (decision.error !== null) return 'The model was not reached, so there is no call to act on.'
   if (decision.rejected) return 'The answer was refused, so there is no call to act on.'
   if (decision.recommendation !== 'buy') return 'Only a call to buy opens a position.'
   if (gptActionFor(decision, GPT_FLAT) !== 'enter') {
     return `This app acts on a buy at ${Math.round(GPT_MIN_CONFIDENCE * 100)}% confidence or more, so no order form is offered for this one.`
   }
+  // A bot that was already long was asked whether to keep holding, and a buy from it opens
+  // nothing. Analyze always asks with nothing held, so this only ever applies to a bot's call.
+  if (!opensPosition) return 'A position was already held when this call was made, so there is nothing for it to open.'
   if (isAiCallStale(decision.candleTime, interval, nowSec)) {
     return 'The candle this call was made for has closed, so no order form is offered for it. Ask again for the current one.'
   }
@@ -92,9 +95,11 @@ export function buildAiProposal(input: {
   /** The close the model was shown. Its levels are prices; the form takes distances. */
   referencePrice: number
   nowSec: number
+  /** False when whoever asked was already holding a position: a running bot that is long. */
+  opensPosition?: boolean
 }): AiOrderProposal | null {
   const { decision, referencePrice } = input
-  if (aiProposalProblem(decision, input.interval, input.nowSec) !== null) return null
+  if (aiProposalProblem(decision, input.interval, input.nowSec, input.opensPosition ?? true) !== null) return null
   const detail = decision.detail ?? null
   // No detail means an answer from before decisions carried a horizon, and no price means the
   // levels cannot be turned into distances. Neither is a call a form can be honestly built from.
@@ -169,6 +174,23 @@ export function describeAiProposal(proposal: AiOrderProposal): string[] {
     `${levels} The time limit is the ${durationLabel(proposal.timeLimitSec)} it said the call plays out over.`,
     'The amount is yours to set: a model is never asked for one. Nothing is placed until you submit this form, and real money still needs Live Trading ticked below and its phrase typed.'
   ]
+}
+
+/** What the desktop is told when a running bot makes a call an order form is on offer for.
+ *
+ * The offer lasts as long as the call's candle, fifteen minutes, and a bot makes its call when
+ * nobody is looking. So the notice says what was called, until when, and what to do -- and that
+ * nothing has been placed, because a notification about a BUY reads otherwise. `key` is the same
+ * for every sighting of one call, so it is raised once however many pollers see it. */
+export function aiCallNotice(botName: string, proposal: AiOrderProposal): { key: string; title: string; body: string } {
+  const until = utcClock(proposal.candleTime + INTERVAL_SECONDS[proposal.interval])
+  return {
+    key: `${proposal.exchange}:${proposal.pair.symbol}:${proposal.model}:${proposal.candleTime}`,
+    title: `${botName}: BUY ${proposal.pair.symbol}`,
+    body:
+      `${describeDecider(proposal.model)} at ${Math.round(proposal.confidence * 100)}% confidence. Nothing has been placed. ` +
+      `An order form is on offer until ${until} UTC: open Bots and press Prepare an order from this call.`
+  }
 }
 
 /** What an executor's card says about a call its form was filled in from. */

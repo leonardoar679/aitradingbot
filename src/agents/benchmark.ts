@@ -20,6 +20,11 @@ export const BENCHMARK_CONCURRENCY = 4
 /** A model that fails this many calls running is not asked again in this run. The others carry
  * on: one provider being down should not cost the answers the rest would have given. */
 export const BENCHMARK_MAX_CONSECUTIVE_FAILURES = 3
+/** A model whose answers are refused this many times running is not asked again either. A
+ * refused answer is not a failure: the model was reached, answered and was BILLED, and the answer
+ * is kept. So a model that cannot fill the schema would otherwise be paid for every question of
+ * the run before anyone saw a table of refusals. */
+export const BENCHMARK_MAX_CONSECUTIVE_REFUSALS = 5
 
 export interface BenchmarkMarket {
   exchange: Exchange
@@ -94,8 +99,9 @@ export interface BenchmarkRunResult {
   /** Of the calls made, the ones a model answered -- usably or not. */
   answered: number
   costUsd: number
-  /** Models this run gave up asking, with the error that kept coming back. */
-  dropped: { model: string; error: string }[]
+  /** Models this run gave up asking, with the error that kept coming back. `refused` marks one
+   * that was reached and answered every time, in a shape the validator would not take. */
+  dropped: { model: string; error: string; refused?: boolean }[]
   /** Why the run ended before everything was asked, or null when it did not. */
   stopped: BenchmarkStop | null
 }
@@ -120,7 +126,8 @@ export async function runBenchmark(input: BenchmarkRunInput): Promise<BenchmarkR
   })
 
   const failures = new Map<string, number>()
-  const dropped = new Map<string, string>()
+  const refusals = new Map<string, number>()
+  const dropped = new Map<string, { error: string; refused: boolean }>()
   const run = { next: 0, asked: 0, answered: 0, costUsd: 0, stopped: null as BenchmarkStop | null }
 
   const worker = async (): Promise<void> => {
@@ -148,11 +155,20 @@ export async function runBenchmark(input: BenchmarkRunInput): Promise<BenchmarkR
       if (decision.error !== null) {
         const count = (failures.get(job.model) ?? 0) + 1
         failures.set(job.model, count)
-        if (count >= BENCHMARK_MAX_CONSECUTIVE_FAILURES) dropped.set(job.model, decision.error)
+        if (count >= BENCHMARK_MAX_CONSECUTIVE_FAILURES) dropped.set(job.model, { error: decision.error, refused: false })
       } else {
         failures.set(job.model, 0)
         answers[job.model][job.index] = decision
         run.answered++
+        // A refused answer is still an answer -- kept, shown and paid for -- but a run of them
+        // is a model that cannot be asked this question, and asking on only buys more of them.
+        if (decision.rejected) {
+          const count = (refusals.get(job.model) ?? 0) + 1
+          refusals.set(job.model, count)
+          if (count >= BENCHMARK_MAX_CONSECUTIVE_REFUSALS) dropped.set(job.model, { error: decision.rejected, refused: true })
+        } else {
+          refusals.set(job.model, 0)
+        }
         // An answer joined from another caller's request in the air was not this run's spend.
         if (!decision.cached) run.costUsd += decision.usage?.costUsd ?? 0
       }
@@ -168,7 +184,7 @@ export async function runBenchmark(input: BenchmarkRunInput): Promise<BenchmarkR
     asked: run.asked,
     answered: run.answered,
     costUsd: run.costUsd,
-    dropped: [...dropped].map(([model, error]) => ({ model, error })),
+    dropped: [...dropped].map(([model, why]) => ({ model, error: why.error, ...(why.refused ? { refused: true } : {}) })),
     stopped: run.stopped
   }
 }

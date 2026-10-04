@@ -8,6 +8,7 @@ import { RunsTab } from './RunsTab'
 import { ArchivedTab } from './ArchivedTab'
 import { estimateConfirmBot, estimatePaidBot, fetchBotDryRunResult, summarizePaperTrades } from './useDryRun'
 import type { AiSignalEstimate } from '../../shared/aiSignal'
+import type { AiOrderProposal } from '../../shared/aiProposal'
 import {
   archiveBot,
   confirmsEntries,
@@ -89,7 +90,13 @@ async function buildRunRecord(bot: Bot, endedAt: number): Promise<BotRun | null>
   }
 }
 
-export function BotsPage(): React.JSX.Element {
+export function BotsPage({
+  onPrepareOrder
+}: {
+  /** Opens an executor form filled in from a running bot's call to buy (shared/aiProposal.ts).
+   * The form is on the Executors page, so this page only hands the proposal up. */
+  onPrepareOrder?: (proposal: AiOrderProposal) => void
+} = {}): React.JSX.Element {
   const [tab, setTab] = useState<Tab>('active')
   const [bots, setBots] = useState<Bot[]>([])
   const [botRuns, setBotRuns] = useState<BotRun[]>([])
@@ -300,7 +307,12 @@ export function BotsPage(): React.JSX.Element {
 
           {selectedBot && (
             <div style={{ marginTop: '0.9rem' }}>
-              <BotDetailView bot={selectedBot} onBack={() => setSelectedBotId(null)} onToggle={handleToggle} />
+              <BotDetailView
+                bot={selectedBot}
+                onBack={() => setSelectedBotId(null)}
+                onToggle={handleToggle}
+                onPrepareOrder={onPrepareOrder}
+              />
             </div>
           )}
 
@@ -313,7 +325,14 @@ export function BotsPage(): React.JSX.Element {
             }}
           >
             {activeBots.map((bot) => (
-              <BotCard key={bot.id} bot={bot} onToggle={handleToggle} onArchive={handleArchive} onViewDetail={setSelectedBotId} />
+              <BotCard
+                key={bot.id}
+                bot={bot}
+                onToggle={handleToggle}
+                onArchive={handleArchive}
+                onViewDetail={setSelectedBotId}
+                onPrepareOrder={onPrepareOrder}
+              />
             ))}
             <button
               onClick={() => setShowAdd(true)}

@@ -46,6 +46,11 @@ function App(): React.JSX.Element {
   // Executors has opened that form. What crosses between the two pages is a filled-in form, never
   // an order: see shared/aiProposal.ts.
   const [orderProposal, setOrderProposal] = useState<AiOrderProposal | null>(null)
+  // The same hand-over from both places a call is shown: the Analyze tab, and a running bot.
+  function prepareOrder(proposal: AiOrderProposal): void {
+    setOrderProposal(proposal)
+    setPage('executors')
+  }
   const [collapsed, setCollapsed] = useState(false)
 
   return (
@@ -103,7 +108,7 @@ function App(): React.JSX.Element {
             )}
             {page === 'account' && <AccountPage />}
             {page === 'trade' && <TradePage />}
-            {page === 'bots' && <BotsPage />}
+            {page === 'bots' && <BotsPage onPrepareOrder={prepareOrder} />}
             {page === 'executors' && (
               <ExecutorsPage
                 autoOpenPresets={presetsRequested}
@@ -114,14 +119,7 @@ function App(): React.JSX.Element {
             )}
             {page === 'controllers' && <ControllersPage />}
             {page === 'positions' && <PositionsPage />}
-            {page === 'agents' && (
-              <AgentsPage
-                onPrepareOrder={(proposal) => {
-                  setOrderProposal(proposal)
-                  setPage('executors')
-                }}
-              />
-            )}
+            {page === 'agents' && <AgentsPage onPrepareOrder={prepareOrder} />}
             {page === 'routines' && <RoutinesPage />}
             {page === 'market' && <Dashboard />}
             {page === 'backtest' && <BacktestPage />}

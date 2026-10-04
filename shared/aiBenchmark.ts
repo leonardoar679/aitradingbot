@@ -103,6 +103,8 @@ export interface AiBenchmarkModelPeek {
   /** One CALL's expected cost. */
   perCallCostUsd: number | null
   costBasis: AiSignalEstimate['costBasis']
+  /** One call's measured time here, in milliseconds. Null when it has not been called here. */
+  perCallLatencyMs?: number | null
   /** Calls one missing answer takes: one for a model, four for a panel of agents. */
   callsPerAnswer: number
 }

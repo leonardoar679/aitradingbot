@@ -33,7 +33,14 @@ import {
 import { fetchRangeCached } from '../bots/candleCache'
 import { formatUtcDate, formatUtcTime } from '../backtest/formatTradeTime'
 import { describeError } from '../utils/ipcError'
-import { BENCHMARK_MAX_CONSECUTIVE_FAILURES, benchmarkAskRequest, benchmarkPeekCandles, runBenchmark } from './benchmark'
+import {
+  BENCHMARK_CONCURRENCY,
+  BENCHMARK_MAX_CONSECUTIVE_FAILURES,
+  BENCHMARK_MAX_CONSECUTIVE_REFUSALS,
+  benchmarkAskRequest,
+  benchmarkPeekCandles,
+  runBenchmark
+} from './benchmark'
 import { buttonStyle, cellStyle, headCellStyle, horizonLabel, inputStyle, noteStyle, recommendationColor, signedPct } from './agentStyles'
 
 const INTERVAL = GPT_INTRADAY_INTERVAL
@@ -596,6 +603,7 @@ export function BenchmarkTab(): React.JSX.Element {
           cached,
           toAsk: times.length - cached,
           perCallCostUsd: entry.perCallCostUsd,
+          perCallLatencyMs: entry.perCallLatencyMs ?? null,
           costBasis: entry.costBasis,
           callsPerAnswer: entry.callsPerAnswer
         }
@@ -615,7 +623,13 @@ export function BenchmarkTab(): React.JSX.Element {
           notes.push({ text: `Nothing was asked. ${problem} ${onlyCached}`, bad: true })
         } else if (
           !window.confirm(
-            describeAiBenchmarkCost({ symbol: pair.symbol, decisions: times.length, models: costModels, budgetRemainingUsd: peek.budgetRemainingUsd })
+            describeAiBenchmarkCost({
+              symbol: pair.symbol,
+              decisions: times.length,
+              models: costModels,
+              budgetRemainingUsd: peek.budgetRemainingUsd,
+              concurrency: BENCHMARK_CONCURRENCY
+            })
           )
         ) {
           notes.push({ text: `Nothing was asked. ${onlyCached}`, bad: false })
@@ -662,7 +676,9 @@ export function BenchmarkTab(): React.JSX.Element {
           })
           for (const drop of result.dropped) {
             notes.push({
-              text: `Stopped asking ${describeDecider(drop.model)} after ${BENCHMARK_MAX_CONSECUTIVE_FAILURES} answers in a row failed. Last error: ${drop.error}`,
+              text: drop.refused
+                ? `Stopped asking ${describeDecider(drop.model)} after ${BENCHMARK_MAX_CONSECUTIVE_REFUSALS} of its answers in a row were refused, each of them billed. It answers, but not in the shape asked for: ${drop.error}`
+                : `Stopped asking ${describeDecider(drop.model)} after ${BENCHMARK_MAX_CONSECUTIVE_FAILURES} answers in a row failed. Last error: ${drop.error}`,
               bad: true
             })
           }

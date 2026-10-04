@@ -3,6 +3,7 @@ import { Card } from '../components/Card'
 import { Toggle } from '../components/Toggle'
 import { AI_PROVIDER_LABEL } from '../../shared/aiSignal'
 import { formatUsd, type AiConfig, type AiConfigPatch, type AiModelCatalogue, type AiModelInfo } from '../../shared/aiCost'
+import { AI_EFFORTS, aiEffortOf, aiModelSlugOf, effortIdFor, type AiEffort } from '../../shared/aiEffort'
 import { AI_PANEL_CALLS, describeDecider, panelIdFor } from '../../shared/aiPanel'
 import { AI_ESCALATE_WHEN, describeEscalation, isAiEscalateWhen } from '../../shared/aiRoute'
 import { describeError } from '../utils/ipcError'
@@ -67,17 +68,22 @@ export function ModelsTab(): React.JSX.Element {
     const known = new Map(models.map((model) => [model.id, model]))
     // An enabled model is always listed, even one the catalogue no longer carries: it must stay
     // visible to be switched off, and a bot may still be pinned to it.
-    const enabledRows = (config?.enabledModels ?? []).map(
-      (id): AiModelInfo =>
-        known.get(id) ?? {
-          id,
-          name: id,
-          contextLength: null,
-          promptPricePerToken: null,
-          completionPricePerToken: null,
-          structuredOutputs: false
-        }
-    )
+    const enabledRows = (config?.enabledModels ?? []).map((id): AiModelInfo => {
+      // A model enabled at a lower reasoning effort is a row of its own, under its own id, read
+      // off the one price-list entry the model has.
+      const listed = known.get(aiModelSlugOf(id))
+      return listed
+        ? { ...listed, id }
+        : {
+            id,
+            name: id,
+            contextLength: null,
+            promptPricePerToken: null,
+            completionPricePerToken: null,
+            structuredOutputs: false,
+            reasoning: false
+          }
+    })
     const found = models.filter((model) => !enabled.has(model.id) && matches(model, query)).slice(0, MAX_SEARCH_ROWS)
     return [...enabledRows, ...found]
   }, [catalogue, config, enabled, query])
@@ -85,6 +91,12 @@ export function ModelsTab(): React.JSX.Element {
   function toggle(model: AiModelInfo, on: boolean): void {
     if (!config) return
     void save({ enabledModels: on ? [...config.enabledModels, model.id] : config.enabledModels.filter((id) => id !== model.id) })
+  }
+
+  /** Enables the same model a second time, asked to think less (shared/aiEffort.ts). */
+  function enableAtEffort(model: AiModelInfo, effort: AiEffort): void {
+    if (!config) return
+    void save({ enabledModels: [...config.enabledModels, effortIdFor(model.id, effort)] })
   }
 
   // Any enabled model but the default can be the second: the default is the first by definition.
@@ -108,6 +120,13 @@ export function ModelsTab(): React.JSX.Element {
           default is what a backtest, the chart and a newly enabled bot ask. Only models that can be held to a strict JSON
           schema can be enabled, since an answer that is not in the agreed shape is refused. A running bot keeps the model
           it was switched on with until it is switched off and on again.
+        </p>
+        <p style={{ ...noteStyle, marginBottom: '0.9rem' }}>
+          A model that reasons before it answers can also be enabled at a lower reasoning effort. Most of what a call
+          costs, and most of the wait, is that reasoning, so the same model told to think less is cheaper and faster. It
+          is listed as a second model, with the effort after an @, and can be made the default, benchmarked and routed to
+          like any other. Whether it answers as well is not assumed: tick both on the Benchmark tab and it puts the same
+          questions to each.
         </p>
         {error !== null && <p style={{ ...noteStyle, color: 'var(--down)', marginBottom: '0.7rem' }}>{error}</p>}
 
@@ -135,11 +154,32 @@ export function ModelsTab(): React.JSX.Element {
               {rows.map((model) => {
                 const isEnabled = enabled.has(model.id)
                 const isDefault = config?.defaultModel === model.id
+                const effort = aiEffortOf(model.id)
+                // Offered on an enabled model that takes an effort, for each effort not yet enabled.
+                const offered =
+                  isEnabled && effort === null && model.reasoning ? AI_EFFORTS.filter((entry) => !enabled.has(effortIdFor(model.id, entry))) : []
                 return (
                   <tr key={model.id}>
                     <td style={cellStyle}>
                       <div style={{ fontWeight: 600 }}>{model.name}</div>
                       <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{model.id}</div>
+                      {effort !== null && (
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>asked at {effort} reasoning effort</div>
+                      )}
+                      {offered.length > 0 && (
+                        <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginTop: '0.3rem' }}>
+                          {offered.map((entry) => (
+                            <button
+                              key={entry}
+                              onClick={() => enableAtEffort(model, entry)}
+                              disabled={busy}
+                              style={{ ...buttonStyle('secondary', busy), padding: '0.15rem 0.5rem', fontSize: '0.7rem' }}
+                            >
+                              Also enable at {entry} effort
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </td>
                     <td style={cellStyle}>{model.contextLength !== null ? model.contextLength.toLocaleString() : '—'}</td>
                     <td style={cellStyle}>{perMillion(model.promptPricePerToken)}</td>

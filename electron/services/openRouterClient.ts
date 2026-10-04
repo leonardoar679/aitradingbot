@@ -109,6 +109,10 @@ export interface ChatCompletionRequest {
   jsonSchema: { name: string; schema: Record<string, unknown> }
   maxTokens: number
   signal: AbortSignal
+  /** How hard the model is asked to think (shared/aiEffort.ts). Absent for a model asked at its
+   * provider's default, and then the request carries no reasoning parameter at all -- which is the
+   * request every answer cached before this existed was made with. */
+  reasoningEffort?: string
 }
 
 export interface ChatCompletionResult {
@@ -148,7 +152,11 @@ export async function chatCompletion(request: ChatCompletionRequest): Promise<Ch
         json_schema: { name: request.jsonSchema.name, strict: true, schema: request.jsonSchema.schema }
       },
       provider: { require_parameters: true },
-      max_tokens: request.maxTokens
+      max_tokens: request.maxTokens,
+      // With require_parameters above, a model that takes no reasoning effort has no provider to
+      // go to and the call is refused before it is billed, rather than answered at full effort
+      // under a name that says otherwise.
+      ...(request.reasoningEffort !== undefined ? { reasoning: { effort: request.reasoningEffort } } : {})
     })
   })) as CompletionBody
   const latencyMs = Math.round(performance.now() - startedAt)
@@ -233,7 +241,8 @@ export async function fetchModelCatalogue(apiKey: string): Promise<AiModelInfo[]
       contextLength: amount(entry.context_length),
       promptPricePerToken: price(entry.pricing?.prompt),
       completionPricePerToken: price(entry.pricing?.completion),
-      structuredOutputs: supported.includes('structured_outputs')
+      structuredOutputs: supported.includes('structured_outputs'),
+      reasoning: supported.includes('reasoning')
     })
   }
   return models.sort((a, b) => a.id.localeCompare(b.id))

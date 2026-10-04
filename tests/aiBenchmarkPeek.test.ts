@@ -97,7 +97,15 @@ describe('looking at what a benchmark holds', () => {
 
     const peek = await peekAiBenchmark(peekRequest())
     expect(peek.models).toEqual([
-      { model: DEFAULT_AI_MODEL, decisions: [null, null, null, null], perCallCostUsd: null, costBasis: 'unknown', callsPerAnswer: 1 }
+      {
+        model: DEFAULT_AI_MODEL,
+        decisions: [null, null, null, null],
+        perCallCostUsd: null,
+        costBasis: 'unknown',
+        // No call has been made here, so there is no pace to state either.
+        perCallLatencyMs: null,
+        callsPerAnswer: 1
+      }
     ])
     expect(peek.budgetRemainingUsd).toBe(1)
     expect(bodies).toHaveLength(0)

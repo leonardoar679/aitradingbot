@@ -1,6 +1,7 @@
 import type { Exchange, HeldPosition } from '../../shared/ipc'
 import { computeExecutorPosition } from '../executors/computeSnapshot'
 import { fetchBotDryRunResult, summarizePaperTrades } from '../bots/useDryRun'
+import { announceBotAiCall } from '../bots/aiCallNotifier'
 import { isUsdLikeQuote } from '../utils/formatCurrency'
 import { availableBalance } from '../account/paperAccount'
 
@@ -94,7 +95,16 @@ export async function computePortfolioSnapshot(): Promise<PortfolioSnapshotData>
     Promise.all(
       enabledBots.map(async (bot) => {
         try {
-          return { bot, dryRun: await fetchBotDryRunResult(bot), failed: false }
+          const dryRun = await fetchBotDryRunResult(bot)
+          // This is the one poller that runs whatever page is open, so it is where a bot's call
+          // to buy is announced: the order form for it is on offer only until its candle closes.
+          // A notice that cannot be raised must not cost the bot its place in the snapshot.
+          try {
+            if (dryRun !== null) announceBotAiCall(bot, dryRun.aiCall ?? null)
+          } catch (error) {
+            console.error('Failed to announce a bot call:', error)
+          }
+          return { bot, dryRun, failed: false }
         } catch {
           return { bot, dryRun: null, failed: true }
         }

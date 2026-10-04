@@ -31,6 +31,9 @@ export interface AiModelInfo {
    * validator still checks every answer, but a model that cannot be constrained at all would
    * spend most of its calls producing text the validator then refuses. */
   structuredOutputs: boolean
+  /** Whether the model takes a reasoning effort. Only these can be enabled at a lower one
+   * (shared/aiEffort.ts): asked of a model that does not, the request has no provider to go to. */
+  reasoning: boolean
 }
 
 export interface AiModelCatalogue {
@@ -114,6 +117,66 @@ export function averageCallCostUsd(rows: AiCallRecord[]): number | null {
   return priced.reduce((sum, row) => sum + (row.usage.costUsd ?? 0), 0) / priced.length
 }
 
+/** How long this model's answered calls have taken, averaged. Null without one. A failed call's
+ * time is the time it took to fail, which says nothing about how long an answer takes. */
+export function averageCallLatencyMs(rows: AiCallRecord[]): number | null {
+  const timed = rows.filter((row) => row.status !== 'failed' && row.usage.latencyMs > 0)
+  if (timed.length === 0) return null
+  return timed.reduce((sum, row) => sum + row.usage.latencyMs, 0) / timed.length
+}
+
+/** `about 40 seconds`, `about 12 minutes`, `about 2 hours 25 minutes`. Rounded as coarsely as the
+ * figure deserves: it is a pace multiplied by a count, not a schedule. */
+export function describeDuration(ms: number): string {
+  const seconds = ms / 1000
+  if (seconds < 90) {
+    const whole = Math.max(1, Math.round(seconds))
+    return `about ${whole} ${whole === 1 ? 'second' : 'seconds'}`
+  }
+  const minutes = seconds / 60
+  if (minutes < 90) return `about ${Math.round(minutes)} minutes`
+  let hours = Math.floor(minutes / 60)
+  let rest = Math.round((minutes - hours * 60) / 5) * 5
+  if (rest === 60) {
+    hours++
+    rest = 0
+  }
+  const whole = `${hours} ${hours === 1 ? 'hour' : 'hours'}`
+  return rest === 0 ? `about ${whole}` : `about ${whole} ${rest} minutes`
+}
+
+/** How long a tape's calls will take, as a sentence for its confirmation, or null when the run
+ * makes none.
+ *
+ * A TAPE ASKS ONE QUESTION AT A TIME, so its calls add up: 672 of them at thirteen seconds is two
+ * and a half hours, and the price alone -- two dollars -- says nothing of that. The first real run
+ * is what showed it; against a faked transport every call took twenty milliseconds. */
+function describeRunTime(estimate: AiSignalEstimate): string | null {
+  if (estimate.maximumApiCalls === 0) return null
+  const route = estimate.route
+  const secondCalls = route?.maximumApiCalls ?? 0
+  const firstCalls = estimate.maximumApiCalls - secondCalls
+  const first = estimate.perCallLatencyMs ?? null
+  const second = route ? (route.perCallLatencyMs ?? null) : null
+  if ((firstCalls > 0 && first === null) || (secondCalls > 0 && second === null)) {
+    return route
+      ? 'How long that takes is not known: one of the two has not been called here yet. Calls are made one after another.'
+      : 'How long that takes is not known: this model has not been called here yet. Calls are made one after another.'
+  }
+  const total = firstCalls * (first ?? 0) + secondCalls * (second ?? 0)
+  const kept = 'It can be cancelled, and what has been answered stays cached.'
+  if (route) return `One call after another, that is up to ${describeDuration(total)} at the pace the two have answered here. ${kept}`
+  return `One call after another, that is ${describeDuration(total)}: it has been taking ${describePace(first ?? 0)} here. ${kept}`
+}
+
+/** `13 seconds a call`. A pace is said in whole seconds, and one too short for that is said so
+ * rather than printed as zero. */
+function describePace(ms: number): string {
+  const seconds = Math.round(ms / 1000)
+  if (seconds < 1) return 'under a second a call'
+  return `${seconds} ${seconds === 1 ? 'second' : 'seconds'} a call`
+}
+
 /** One model's share of a routed run, as a line of the confirmation. A panel's line says why its
  * count is what it is: four calls for each decision it is handed. */
 function routedCallsLine(
@@ -176,10 +239,12 @@ export function describeAiRunCost(estimate: AiSignalEstimate): string {
   const second = route
     ? ` When it ${describeEscalation(route.when)}, ${describeDecider(route.model)} is asked the same question and its answer is the one that counts.`
     : ''
+  const time = describeRunTime(estimate)
   return [
     `GPT Intraday will evaluate ${candles}${spaced} with ${describeDecider(estimate.model)} through ${AI_PROVIDER_LABEL}.${second} ${estimate.cached} are confirmed cached.`,
     '',
     price,
+    ...(time !== null ? [time] : []),
     `${formatUsd(estimate.budgetRemainingUsd)} of today's AI budget is left. If it runs out the run stops, and everything generated up to then stays cached.`,
     '',
     'Continue?'
@@ -237,6 +302,8 @@ export interface AiBenchmarkCostModel {
   /** One CALL's expected cost. */
   perCallCostUsd: number | null
   costBasis: AiSignalEstimate['costBasis']
+  /** One call's measured time here, in milliseconds. Null or absent when it has not been called. */
+  perCallLatencyMs?: number | null
   /** Calls one answer takes: absent or 1 for a model, four for a panel of agents. */
   callsPerAnswer?: number
 }
@@ -247,6 +314,9 @@ export interface AiBenchmarkCostInput {
   decisions: number
   models: AiBenchmarkCostModel[]
   budgetRemainingUsd: number
+  /** How many questions the run keeps in the air at once. Absent, no time is stated: how long a
+   * benchmark takes is its calls divided by this, and a figure that guessed it would be wrong. */
+  concurrency?: number
 }
 
 /** What is still to ask across a benchmark's models, and what that is expected to cost over the
@@ -314,6 +384,17 @@ export function describeAiBenchmarkCost(input: AiBenchmarkCostInput): string {
       : plain === 0
         ? count(panels, 'agent panel', 'agent panels')
         : `${count(plain, 'model', 'models')} and ${count(panels, 'agent panel', 'agent panels')}`
+  // The time, where every model that would be asked has been timed here. Unlike a tape a
+  // benchmark asks several questions at once, so its calls do not simply add up.
+  const asking = input.models.filter((model) => model.toAsk > 0)
+  let time: string | null = null
+  if (asking.length > 0 && input.concurrency !== undefined && input.concurrency >= 1) {
+    time = asking.every((model) => model.perCallLatencyMs != null)
+      ? `Asking ${input.concurrency} at a time, that is ${describeDuration(
+          asking.reduce((sum, model) => sum + model.toAsk * (model.callsPerAnswer ?? 1) * (model.perCallLatencyMs ?? 0), 0) / input.concurrency
+        )} at the pace ${asking.length === 1 ? 'it has' : 'they have'} answered here.`
+      : 'How long that takes is not known: a model that has not been called here has no pace to go by.'
+  }
   return [
     `Benchmark ${count(input.decisions, 'decision', 'decisions')} on ${input.symbol} with ${who} through ${AI_PROVIDER_LABEL}. ` +
       `${panels === 0 ? 'Every model' : 'Each'} is asked the same questions. ${cached.toLocaleString()} of the ${total.toLocaleString()} answers ${cached === 1 ? 'is' : 'are'} already cached.`,
@@ -321,6 +402,7 @@ export function describeAiBenchmarkCost(input: AiBenchmarkCostInput): string {
     `At most ${count(calls, 'model call', 'model calls')} may be made:`,
     ...lines,
     sum,
+    ...(time !== null ? [time] : []),
     '',
     `${budget} Everything answered up to then stays cached, and running the benchmark again asks only for what is missing.`,
     '',

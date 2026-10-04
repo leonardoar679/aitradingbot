@@ -455,7 +455,14 @@ describe('estimating a routed run', () => {
 
     const before = await estimateAiSignalTape(request(3, { route: ACTING }))
     expect(before).toMatchObject({ total: 3, cached: 0, maximumApiCalls: 6, model: FIRST })
-    expect(before.route).toEqual({ model: SECOND, when: 'acting', maximumApiCalls: 3, perCallCostUsd: null, costBasis: 'unknown' })
+    expect(before.route).toEqual({
+      model: SECOND,
+      when: 'acting',
+      maximumApiCalls: 3,
+      perCallCostUsd: null,
+      costBasis: 'unknown',
+      perCallLatencyMs: null
+    })
     expect(before.estimatedCostUsd).toBeNull()
 
     await generateAiSignalTape(request(3, { route: ACTING }))

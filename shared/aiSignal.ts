@@ -294,6 +294,10 @@ export interface AiRouteEstimate {
   /** One CALL's expected cost. A panel makes four of them a decision; see `callsPerDecision`. */
   perCallCostUsd: number | null
   costBasis: 'history' | 'pricing' | 'unknown'
+  /** How long one call to it has been taking here, in milliseconds: an average of its own answered
+   * calls under the same prompt. Null or absent when it has not been called here -- there is no
+   * price list for time. */
+  perCallLatencyMs?: number | null
   /** Present when one decision takes more than one call: the second step is a panel. */
   callsPerDecision?: number
 }
@@ -319,6 +323,10 @@ export interface AiSignalEstimate {
   /** Where the per-call figure came from: this model's own recent calls, its published price
    * list, or nowhere. Shown beside the number so a guess is not read as a measurement. */
   costBasis: 'history' | 'pricing' | 'unknown'
+  /** How long one call to it has been taking here, in milliseconds: an average of its own answered
+   * calls under the same prompt. Null or absent when it has not been called here -- there is no
+   * price list for time. */
+  perCallLatencyMs?: number | null
   /** What is left of today's AI budget. A run stops when it reaches zero. */
   budgetRemainingUsd: number
   /** The cadence the run was estimated at, when it is not every candle. */

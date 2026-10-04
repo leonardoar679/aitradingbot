@@ -20,7 +20,19 @@ import { CHART_PALETTE } from '../theme/palette'
 import { PositionBandPrimitive } from '../backtest/positionBandPrimitive'
 import { openPositionBand, tradeBands } from '../backtest/tradeOverlay'
 import type { Trade } from '../backtest/engine'
-import { confirmsEntries, describeAiCalls, describeBotRoute, gptCadenceOf, gptRouteOf, resolvedStrategy, type Bot } from './types'
+import {
+  botAiProposal,
+  confirmsEntries,
+  describeAiCalls,
+  describeBotRoute,
+  gptCadenceOf,
+  gptRouteOf,
+  resolvedStrategy,
+  type Bot
+} from './types'
+import type { AiOrderProposal } from '../../shared/aiProposal'
+import { formatUtcTime } from '../backtest/formatTradeTime'
+import { useNowSec } from '../utils/useNowSec'
 import { describeGptCadence } from '../../shared/aiSignal'
 import { formatQuotePrice } from '../utils/formatCurrency'
 
@@ -28,6 +40,8 @@ interface BotDetailViewProps {
   bot: Bot
   onBack: () => void
   onToggle: (id: string) => void
+  /** Opens an executor form filled in from the bot's latest call to buy. See BotCard. */
+  onPrepareOrder?: (proposal: AiOrderProposal) => void
 }
 
 function pctColor(pct: number): string {
@@ -41,7 +55,7 @@ function exitReasonLabel(reason: Trade['exitReason']): string {
   return 'Signal'
 }
 
-export function BotDetailView({ bot, onBack, onToggle }: BotDetailViewProps): React.JSX.Element {
+export function BotDetailView({ bot, onBack, onToggle, onPrepareOrder }: BotDetailViewProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -61,6 +75,8 @@ export function BotDetailView({ bot, onBack, onToggle }: BotDetailViewProps): Re
     bot.aiEveryBars,
     gptRouteOf(bot) ?? undefined
   )
+  const nowSec = useNowSec(dryRun.aiCall !== null && dryRun.aiCall.entered)
+  const proposal = botAiProposal(bot, dryRun.aiCall, nowSec)
   const exchangeName = EXCHANGES.find((e) => e.id === bot.exchange)?.name ?? bot.exchange
   const strategy = resolvedStrategy(bot)
   // GPT Intraday is not fetched while stopped, because fetching it spends the user's AI
@@ -349,6 +365,42 @@ export function BotDetailView({ bot, onBack, onToggle }: BotDetailViewProps): Re
               }}
             >
               {describeAiCalls(dryRun.aiCalls).text}
+            </div>
+          )}
+
+          {proposal !== null && onPrepareOrder && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.7rem',
+                flexWrap: 'wrap',
+                padding: '0.6rem 0.9rem',
+                borderBottom: '1px solid var(--border)'
+              }}
+            >
+              <span style={{ fontSize: '0.76rem', fontWeight: 600, color: 'var(--up)' }}>
+                The model said BUY at {Math.round(proposal.confidence * 100)}% for the {formatUtcTime(proposal.candleTime)} UTC candle
+              </span>
+              <button
+                onClick={() => onPrepareOrder(proposal)}
+                style={{
+                  padding: '0.35rem 0.7rem',
+                  fontSize: '0.74rem',
+                  fontWeight: 600,
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-app)',
+                  color: 'var(--text-primary)',
+                  cursor: 'pointer'
+                }}
+              >
+                Prepare an order from this call
+              </button>
+              <span style={{ flex: '1 1 220px', fontSize: '0.7rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                Opens a Position executor form filled in from it. You set the amount and submit it yourself; the offer ends
+                when that candle closes.
+              </span>
             </div>
           )}
 

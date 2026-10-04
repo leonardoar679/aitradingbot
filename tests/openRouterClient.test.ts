@@ -86,6 +86,20 @@ describe('chatCompletion', () => {
     expect(body.max_tokens).toBe(3000)
   })
 
+  it('sends no reasoning parameter unless an effort is named, and the effort when one is', async () => {
+    const calls = stubFetch(() => ({ body: completion() }))
+    await chatCompletion(REQUEST)
+    // The request every answer cached before efforts existed was made with: unchanged, key for key.
+    expect(Object.keys(JSON.parse(calls[0].init.body as string)).sort()).toEqual(['max_tokens', 'messages', 'model', 'provider', 'response_format'])
+
+    await chatCompletion({ ...REQUEST, reasoningEffort: 'low' })
+    const body = JSON.parse(calls[1].init.body as string)
+    expect(body.reasoning).toEqual({ effort: 'low' })
+    // The model is still asked for by the id OpenRouter knows it by.
+    expect(body.model).toBe('openai/gpt-5-mini')
+    expect(body.provider).toEqual({ require_parameters: true })
+  })
+
   it('reports what the call consumed, including what it was charged', async () => {
     stubFetch(() => ({ body: completion() }))
     const result = await chatCompletion(REQUEST)
@@ -217,5 +231,23 @@ describe('fetchModelCatalogue', () => {
     const auto = models.find((model) => model.id === 'openrouter/auto')!
     expect(auto.promptPricePerToken).toBeNull()
     expect(auto.structuredOutputs).toBe(false)
+  })
+
+  it('marks which models take a reasoning effort', async () => {
+    stubFetch(() => ({
+      body: {
+        data: [
+          { id: 'a/thinks', supported_parameters: ['structured_outputs', 'reasoning'] },
+          { id: 'b/plain', supported_parameters: ['structured_outputs'] },
+          { id: 'c/unlisted' }
+        ]
+      }
+    }))
+    const models = await fetchModelCatalogue('sk-or-test')
+    expect(models.map((model) => [model.id, model.reasoning])).toEqual([
+      ['a/thinks', true],
+      ['b/plain', false],
+      ['c/unlisted', false]
+    ])
   })
 })

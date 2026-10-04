@@ -42,6 +42,7 @@ import {
   AI_PANEL_CALLS,
   AI_PANEL_PROMPT_VERSION,
   deciderCalls,
+  describeDecider,
   isPanelId,
   panelModelOf,
   validateAgentReport,
@@ -62,8 +63,9 @@ import {
   type AiBenchmarkPeek,
   type AiBenchmarkPeekRequest
 } from '../../shared/aiBenchmark'
-import { averageCallCostUsd, estimateCallCostUsd } from '../../shared/aiCost'
+import { averageCallCostUsd, averageCallLatencyMs, estimateCallCostUsd } from '../../shared/aiCost'
 import { escalates, routedDecision } from '../../shared/aiRoute'
+import { splitAiModelId } from '../../shared/aiEffort'
 import type { AiCallRecord } from '../../shared/aiLedger'
 import { INTERVAL_SECONDS, type Candle } from '../../shared/ipc'
 import { writeJsonAtomic } from './atomicWrite'
@@ -99,6 +101,13 @@ const CALL_TIMEOUT_MS = 60_000
 const MAX_ATTEMPTS = 3
 /** A run that has failed this many decisions running is not going to succeed on the next one. */
 const MAX_CONSECUTIVE_FAILURES = 5
+/** Nor is a model whose answers have been refused this many times running going to start
+ * answering in the shape asked for. The difference is that every one of those was BILLED: a
+ * failed call costs nothing and is asked again, a refused answer is paid for and kept. The first
+ * real call to a second vendor's model came back as four tokens the validator refused -- a model
+ * listed as taking a strict schema that did not fill this one -- and nothing would have stopped
+ * a 672-decision run paying for 672 of those. */
+const MAX_CONSECUTIVE_REFUSALS = 5
 /** How many of a model's own recent calls an estimate is averaged over. */
 const COST_HISTORY_ROWS = 50
 /** The pause before a retry, doubled each attempt. An object so tests can shorten it: a test of
@@ -169,12 +178,16 @@ async function requestWithRetry(
   messages: { role: 'system' | 'user'; content: string }[],
   jsonSchema: { name: string; schema: Record<string, unknown> }
 ): Promise<ChatCompletionResult> {
+  // The id an answer is filed under is not always the id OpenRouter knows: a model asked at a
+  // lower reasoning effort is the same model there, with the effort as a parameter.
+  const { slug, effort } = splitAiModelId(model)
   let lastError: unknown
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     try {
       return await chatCompletion({
         apiKey,
-        model,
+        model: slug,
+        ...(effort !== null ? { reasoningEffort: effort } : {}),
         messages,
         jsonSchema,
         maxTokens: AI_MAX_OUTPUT_TOKENS,
@@ -694,10 +707,15 @@ async function peekDecider(decider: string, context: AiMarketContext): Promise<{
  * calls are four different prompts; this is their average, so that calls times this is the bill.
  * Each prompt is priced from its own history where it has one and from the price list where it
  * does not, and the basis reported is the weakest of the four. */
-async function deciderCallCost(
-  decider: string,
-  sample: AiMarketContext | null
-): Promise<{ costUsd: number | null; basis: AiSignalEstimate['costBasis'] }> {
+interface CallEstimate {
+  costUsd: number | null
+  basis: AiSignalEstimate['costBasis']
+  /** How long one call has been taking, from this model's own answered calls under the same
+   * prompt. Null without any: unlike a price, a pace has no published list to fall back on. */
+  latencyMs: number | null
+}
+
+async function deciderCallCost(decider: string, sample: AiMarketContext | null): Promise<CallEstimate> {
   const model = panelModelOf(decider)
   if (model === null) return perCallCost(decider, sample)
   const info = await findAiModel(model)
@@ -707,26 +725,28 @@ async function deciderCallCost(
   ]
   let total = 0
   let basis: AiSignalEstimate['costBasis'] = 'history'
+  // The four calls' time, as long as every one of them has been timed. There is no price list to
+  // fall back on for time, so one untimed prompt leaves the whole figure unknown.
+  let time: number | null = 0
   for (const prompt of prompts) {
     const history = await listAiCalls({ model, promptVersion: prompt.version, limit: COST_HISTORY_ROWS })
+    const taken = averageCallLatencyMs(history.rows)
+    time = time === null || taken === null ? null : time + taken
     const measured = averageCallCostUsd(history.rows)
     if (measured !== null) {
       total += measured
       continue
     }
     const priced = info && prompt.chars !== null ? estimateCallCostUsd(info, prompt.chars) : null
-    if (priced === null) return { costUsd: null, basis: 'unknown' }
+    if (priced === null) return { costUsd: null, basis: 'unknown', latencyMs: null }
     total += priced
     basis = 'pricing'
   }
-  return { costUsd: total / AI_PANEL_CALLS, basis }
+  return { costUsd: total / AI_PANEL_CALLS, basis, latencyMs: time === null ? null : time / AI_PANEL_CALLS }
 }
 
 /** What one call to `model` is expected to cost, and how that is known. */
-async function perCallCost(
-  model: string,
-  sample: AiMarketContext | null
-): Promise<{ costUsd: number | null; basis: AiSignalEstimate['costBasis'] }> {
+async function perCallCost(model: string, sample: AiMarketContext | null): Promise<CallEstimate> {
   // Priced from calls made under the SAME prompt: an entry review carries a strategy block and a
   // different instruction, so a standalone signal's average is not what one of these costs.
   const promptVersion = sample ? aiPromptVersion(sample) : GPT_PROMPT_VERSION
@@ -734,14 +754,15 @@ async function perCallCost(
   // run a panel are all analysts' reports, and filtering those leaves no history at all for a
   // prompt that has plenty of it further back.
   const history = await listAiCalls({ model, promptVersion, limit: COST_HISTORY_ROWS })
+  const latencyMs = averageCallLatencyMs(history.rows)
   const measured = averageCallCostUsd(history.rows)
-  if (measured !== null) return { costUsd: measured, basis: 'history' }
+  if (measured !== null) return { costUsd: measured, basis: 'history', latencyMs }
   const info = await findAiModel(model)
   if (info && sample) {
     const priced = estimateCallCostUsd(info, aiPromptChars(sample))
-    if (priced !== null) return { costUsd: priced, basis: 'pricing' }
+    if (priced !== null) return { costUsd: priced, basis: 'pricing', latencyMs }
   }
-  return { costUsd: null, basis: 'unknown' }
+  return { costUsd: null, basis: 'unknown', latencyMs }
 }
 
 export async function estimateAiSignalTape(request: AiSignalTapeRequest): Promise<AiSignalEstimate> {
@@ -819,6 +840,7 @@ export async function estimateAiSignalTape(request: AiSignalTapeRequest): Promis
             maximumApiCalls: secondCalls,
             perCallCostUsd: secondCost.costUsd,
             costBasis: secondCost.basis,
+            perCallLatencyMs: secondCost.latencyMs,
             ...(deciderCalls(route.model) > 1 ? { callsPerDecision: deciderCalls(route.model) } : {})
           }
         }
@@ -827,6 +849,7 @@ export async function estimateAiSignalTape(request: AiSignalTapeRequest): Promis
     ...(deciderCalls(model) > 1 ? { callsPerDecision: deciderCalls(model) } : {}),
     estimatedCostUsd: firstUsd === null || secondUsd === null ? null : firstUsd + secondUsd,
     costBasis: cost.basis,
+    perCallLatencyMs: cost.latencyMs,
     budgetRemainingUsd: await budgetRemainingUsd(),
     ...(every > 1 ? { decideEveryBars: every } : {})
   }
@@ -855,6 +878,9 @@ export async function generateAiSignalTape(
   let rejectedCount = 0
   let costUsd = 0
   let consecutiveFailures = 0
+  // Refused answers in a row, held or new, and what the last of them was refused for.
+  let consecutiveRefusals = 0
+  let lastRefusal: { by: string; reason: string } | null = null
   cancelledRequests.delete(request.requestId)
   const { whenCancelled, dispose } = cancellation(request.requestId)
 
@@ -897,6 +923,15 @@ export async function generateAiSignalTape(
       if (!isDecisionCandle(request.candles[index].time, every, request.interval)) continue
       const context = contextAt(request, index, position.long ? 'long' : 'flat')
       const candleTime = request.candles[index].time
+      // Checked BEFORE asking, and only an answer that would have to be bought stops the run:
+      // decisions already held are free to replay, refused or not. So a rerun after this has
+      // stopped a run stops again at the same place without spending anything.
+      if (consecutiveRefusals >= MAX_CONSECUTIVE_REFUSALS && lastRefusal !== null && (await peekDecider(model, context)).decision === null) {
+        throw new Error(
+          `Stopped before asking again: the last ${MAX_CONSECUTIVE_REFUSALS} answers from ${describeDecider(lastRefusal.by)} were refused, and each was billed. ` +
+            `It is answering, but not in the shape asked for (${lastRefusal.reason}). Everything answered so far is cached. Choose another model under Agents → Models.`
+        )
+      }
       const first = await answerFrom(model, context, candleTime)
       let decision = first.decision
       callCount += first.calls
@@ -912,7 +947,15 @@ export async function generateAiSignalTape(
       }
 
       if (decision.cached) cachedCount++
-      if (decision.rejected) rejectedCount++
+      if (decision.rejected) {
+        rejectedCount++
+        consecutiveRefusals++
+        lastRefusal = { by: decision.model, reason: decision.rejected }
+      } else if (decision.error === null) {
+        // Only an answer that was accepted ends the streak. A call that failed says nothing
+        // about whether the model can answer in shape.
+        consecutiveRefusals = 0
+      }
       if (decision.error !== null) {
         errorCount++
         consecutiveFailures++
@@ -1146,6 +1189,7 @@ export async function peekAiBenchmark(request: AiBenchmarkPeekRequest): Promise<
       decisions: held[position],
       perCallCostUsd: cost.costUsd,
       costBasis: cost.basis,
+      perCallLatencyMs: cost.latencyMs,
       callsPerAnswer: deciderCalls(model)
     })
   }

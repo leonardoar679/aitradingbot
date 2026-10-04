@@ -1,7 +1,19 @@
 import { Bot as BotIcon, Archive } from 'lucide-react'
 import { EXCHANGES } from '../../shared/ipc'
 import { useDryRun, summarizePaperTrades, classifyBotOpenPosition } from './useDryRun'
-import { confirmsEntries, describeAiCalls, describeBotRouteKind, gptCadenceOf, gptRouteOf, resolvedStrategy, type Bot } from './types'
+import {
+  botAiProposal,
+  confirmsEntries,
+  describeAiCalls,
+  describeBotRouteKind,
+  gptCadenceOf,
+  gptRouteOf,
+  resolvedStrategy,
+  type Bot
+} from './types'
+import type { AiOrderProposal } from '../../shared/aiProposal'
+import { formatUtcTime } from '../backtest/formatTradeTime'
+import { useNowSec } from '../utils/useNowSec'
 import { describeGptCadence } from '../../shared/aiSignal'
 import { formatQuotePrice } from '../utils/formatCurrency'
 import { netUnrealizedPct } from '../../shared/fees'
@@ -11,6 +23,9 @@ interface BotCardProps {
   onToggle: (id: string) => void
   onArchive: (id: string) => void
   onViewDetail: (id: string) => void
+  /** Opens an executor form filled in from the bot's latest call to buy (shared/aiProposal.ts).
+   * The form is the person's to submit; the card can only ask for it to be opened. */
+  onPrepareOrder?: (proposal: AiOrderProposal) => void
 }
 
 function statColumnStyle(): React.CSSProperties {
@@ -25,8 +40,8 @@ function formatShortDate(unixSec: number): string {
 // EMA/ATR need history to compute correctly) separately from the paper-trade record, which
 // only counts trades entered after this bot was actually turned on. Conflating the two would
 // present the lookback's historical trades as if they were the user's own dry-run activity.
-function DryRunPanel({ bot }: { bot: Bot }): React.JSX.Element {
-  const { status, error, result, latestCandle, aiCalls } = useDryRun(
+function DryRunPanel({ bot, onPrepareOrder }: { bot: Bot; onPrepareOrder?: (proposal: AiOrderProposal) => void }): React.JSX.Element {
+  const { status, error, result, latestCandle, aiCalls, aiCall } = useDryRun(
     bot.exchange,
     bot.symbol,
     bot.enabled,
@@ -37,6 +52,10 @@ function DryRunPanel({ bot }: { bot: Bot }): React.JSX.Element {
     bot.aiEveryBars,
     gptRouteOf(bot) ?? undefined
   )
+  // The offer ends when the call's candle closes, which is a moment on the clock and not a new
+  // poll, so the card keeps time while there is a call to offer.
+  const nowSec = useNowSec(aiCall !== null && aiCall.entered)
+  const proposal = botAiProposal(bot, aiCall, nowSec)
 
   if (status === 'loading') {
     return <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', padding: '0.5rem 0' }}>Loading market data…</div>
@@ -99,11 +118,34 @@ function DryRunPanel({ bot }: { bot: Bot }): React.JSX.Element {
           {describeAiCalls(aiCalls).text}
         </div>
       )}
+      {proposal !== null && onPrepareOrder && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginTop: '0.15rem' }}>
+          <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--up)' }}>
+            The model said BUY at {Math.round(proposal.confidence * 100)}% for the {formatUtcTime(proposal.candleTime)} UTC candle
+          </span>
+          <button
+            onClick={() => onPrepareOrder(proposal)}
+            style={{
+              alignSelf: 'flex-start',
+              padding: '0.3rem 0.6rem',
+              fontSize: '0.72rem',
+              fontWeight: 600,
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--border)',
+              background: 'var(--bg-app)',
+              color: 'var(--text-primary)',
+              cursor: 'pointer'
+            }}
+          >
+            Prepare an order from this call
+          </button>
+        </div>
+      )}
     </div>
   )
 }
 
-export function BotCard({ bot, onToggle, onArchive, onViewDetail }: BotCardProps): React.JSX.Element {
+export function BotCard({ bot, onToggle, onArchive, onViewDetail, onPrepareOrder }: BotCardProps): React.JSX.Element {
   const strategy = resolvedStrategy(bot)
   const exchangeName = EXCHANGES.find((e) => e.id === bot.exchange)?.name ?? bot.exchange
 
@@ -230,7 +272,7 @@ export function BotCard({ bot, onToggle, onArchive, onViewDetail }: BotCardProps
         </div>
       )}
 
-      {bot.enabled && <DryRunPanel bot={bot} />}
+      {bot.enabled && <DryRunPanel bot={bot} onPrepareOrder={onPrepareOrder} />}
 
       <button
         onClick={() => onViewDetail(bot.id)}

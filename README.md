@@ -203,7 +203,7 @@ entries, described next; an **AI signals** overlay on the Market chart, off by d
 | **Analyze** | One market, one model, one click, one call — or four, when what is picked is a panel of agents on a model. The button states the cost of the whole click before it is pressed, and reads "cached, free" when the answer is already held. Answers from different models for the same candle stack into a comparison. A call to buy can be turned into an order form — see *From a call to an order, by hand*. |
 | **Signals** | Every answered call, scored against the candles that followed: the move after 1h, 4h and 1d, which of the model's own levels was touched first, and whether the call was right. Per model: act rate, hit rate, and hit rate by confidence. |
 | **Benchmark** | The same questions put to every model you tick, and to a panel of agents beside its own model, with the answers scored side by side and what a route between two of them would have done — described below. |
-| **Models** | OpenRouter's catalogue with prices. Only models that can be held to a strict JSON schema can be enabled. Also where a route to a second model, or to a panel, is set — described below. |
+| **Models** | OpenRouter's catalogue with prices. Only models that can be held to a strict JSON schema can be enabled, and one that reasons can be enabled again at a lower reasoning effort. Also where a route to a second model, or to a panel, is set — described below. |
 | **Usage** | Calls, tokens, dollars and latency per model, and the daily budget. |
 
 **The key.** An OpenRouter key — made at openrouter.ai/keys, and starting `sk-or-` — is entered on
@@ -229,6 +229,23 @@ it was shown, and its horizon as the time limit. That is all it does:
 The executor's card records which call its form was filled in from. `shared/aiProposal.ts` holds
 the rules; `tests/aiProposal.test.ts` pins them, including that the form's mode is set by its own
 checkbox and by nothing else.
+
+The same button is on a running GPT Intraday bot's card and detail view, for the call the paper
+bot itself just opened a position on — not for one made while it was already long, which is a call
+about holding and opens nothing. The offer lasts as long as the call's candle, fifteen minutes,
+and a bot makes its call when nobody is looking, so the desktop is told once: what was called,
+until when, and that nothing has been placed.
+
+**Reasoning effort.** Most of what a call costs, and most of its wait, is the model's reasoning. A
+model that takes a reasoning effort can be enabled a second time at a lower one, on the Models tab
+— `openai/gpt-5-mini@low`, `@minimal` — and is then a model of its own everywhere: cached, priced
+from its own history, benchmarked, routed to and pinned on a bot under that id. Only the request
+takes it apart, asking OpenRouter for the model and passing the effort as a parameter; an id with
+no effort is sent exactly as it always was, with no reasoning parameter at all. First real calls on
+`gpt-5-mini`: about $0.0033 and 14 seconds at its default, $0.0019 and 9 seconds at low, $0.0010
+and 4 seconds at minimal. Whether the cheaper ones answer as well is not assumed: the Benchmark tab
+puts the same questions to each, and the first such run is reported under *What this does not
+show* below.
 
 **AI confirmation of a strategy's entries.** GPT Intraday asks a model what to do on a schedule.
 This is the other way round: the strategy decides exactly as it always has — its rules, its stop,
@@ -393,6 +410,12 @@ signal has. Four calls to one model instead of one.
   answer the validator refused *is*, because the model was paid for it either way.
 - A refused key, an empty balance or an unknown model stops a run on its first call instead of
   being retried for every candle, and five failed decisions in a row stop it too.
+- So do five *refused* answers in a row, and those matter more: a refused answer was reached,
+  answered and billed. A model listed as taking a strict schema can still fail to fill this one —
+  `google/gemini-2.5-flash` sent back four tokens the validator refused on its first real call —
+  and nothing else would stop a run paying for every one of them. A tape stops before buying the
+  sixth, and stops in the same place for nothing when it is run again; a benchmark stops asking
+  that model and carries on with the others.
 - A decision is asked for once however many parts of the app want it at the same moment. One
   running bot is polled by its card, its detail view, the Positions page and the portfolio
   scheduler.
@@ -404,6 +427,9 @@ to 13 seconds and about $0.003 each: some 2,900 tokens in and 800 to 1,100 out, 
 output being the model's reasoning, which is billed as output. A tape asks one question at a time,
 so 672 decisions on that model is about $2 and two and a half hours, and it reaches the default
 daily budget about half-way: the run stops there, and resumes from the cache once the budget allows.
+Against a faked transport every call had taken milliseconds, so nothing had ever shown it. A
+backtest's and a benchmark's confirmation now state how long the run will take beside what it
+will cost, from the pace that model has answered at here, and say so when it has no pace yet.
 
 Every call is one line in `aiLedger/calls-YYYY-MM.jsonl`: the model, the versions of the prompt,
 context and schema, what it cost, and what it said. A panel's decision is four lines, each marked
@@ -426,17 +452,56 @@ A benchmark answers a narrower question than it may look: which model's calls we
 market over one stretch, each call judged alone at four hours. It is not a backtest of the bot,
 whose results also depend on its stop and on when the model later says sell.
 
-One real benchmark has been run, and it is a data point rather than a finding: `openai/gpt-5-mini`
-on BTCUSDT, 180 decisions four hours apart over the 30 days to 3 October 2026, for $0.59. It said
-buy 40 times and was right at four hours on 16 of them — 40% ± 15, against 28% ± 7 for buying on
-every one of those candles. That is better than the market's own rate on that month and a long way
-short of the 67–75% a bot needs. Its 16 buys at 65% confidence or more, each held four hours, made
-+4.9% after costs, against +4.2% for simply holding throughout: sixteen trades, on one market, in
-one month.
+Two real benchmarks have been run, and the second took back what the first seemed to say. Both
+are on BTCUSDT, one decision every four hours, ending 3 October 2026.
 
-A route is still unmeasured. Whether a second opinion improves a cheap model's calls, or
-only removes its good entries along with its bad ones, is what the Benchmark tab's route table is
-for — and that table has nothing to work from until two models have been benchmarked for real.
+The first was `openai/gpt-5-mini` alone over 30 days: 180 decisions, $0.59. It said buy 40 times
+and was right at four hours on 16 of them — 40% ± 15, against 28% ± 7 for buying on every one of
+those candles. Its 16 buys at 65% confidence or more, each held four hours, made +4.9% after
+costs, against +4.2% for simply holding throughout.
+
+The second ran 90 days, 540 decisions, with two cheaper competitors beside it. Scored on the 537
+decisions all three answered:
+
+| | Buys | Right at 4h | 65%+ buys, each held 4h | Median wait | Per answer |
+|---|---|---|---|---|---|
+| `openai/gpt-5-mini` | 139 | 32% ± 8 | −4.2% (47 trades, 17 won) | 13 s | $0.0033 |
+| `openai/gpt-5-mini@minimal` | 156 | 28% ± 7 | −10.2% (106 trades, 36 won) | 2.2 s | $0.0010 |
+| `mistralai/mistral-small-2603` | 9 | too few | −0.8% (9 trades, 1 won) | 1.7 s | $0.0007 |
+| Buy every candle, no model | 537 | 30% ± 4 | −63.5% | | |
+
+Buying once and holding made +33.1%. Over three times the sample, the model's buys were right as
+often as the market's own candles were, and trading on them lost money in a quarter where holding
+made a third. The good month is the last third of those ninety days; in the sixty days before it
+the same model was right on 28% ± 9 of its buys against the market's 31% ± 5. Nothing here has
+shown an edge, and the first result is a caution about reading one month of forty calls.
+
+What the cheaper ways of asking did:
+
+- **Minimal effort** is a third of the price and six times faster, and its hit rate is not told
+  apart from the default's. What differs is how often it is confident: it took 106 entries where
+  the default took 47, and lost more than twice as much.
+- **Low effort** was asked the last 30 days only (178 decisions compared, $0.32): 33% ± 15 on 40
+  buys, where the default made 40% ± 15 on its 40, and −5.6% on 19 entries. One month does not
+  tell them apart either.
+- **Mistral Small** fills the schema every time and almost never says buy: nine times in 537
+  decisions. A model that abstains costs little and tells nothing.
+
+OpenRouter began refusing Mistral Small for rate (429) part-way through the 90-day run. The run
+dropped it after three failures in a row and carried on with the others, as it is built to, and a
+second run bought the answers it had missed: the two together cost $2.48. Until that second run
+the Benchmark tab could compare only the 394 decisions all three had answered — the oldest
+sixty-six days, which is a different stretch of market from the ninety the run was asked for, and
+one in which the default model's entries lost 9.7%. The table's header says how many decisions
+are compared and of how many. That is the number to read first.
+
+A route has now been measured once, from those answers and for nothing. `gpt-5-mini` passing each
+entry it wants to itself at minimal effort took 37 of its 47 entries and came out at 0.0% instead
+of −4.2%: of the ten entries the second opinion removed, eight were losers. That is what a second
+opinion is for. It is also one quarter, on one market, between two settings of the same model —
+the pair whose mistakes are least likely to differ (`research/gptroute.ts`) — and breaking even
+is not a result to trade on. Passing on the decisions it was unsure of did the opposite: 114
+entries and −13.7%.
 
 A panel is four times the price of the model it runs on, and nothing here says it is any better.
 It is the same model reading the same snapshot, asked three narrower questions and then a fourth,
@@ -1655,6 +1720,7 @@ shared/                       Code both processes run, so they cannot disagree a
   aiRoute.ts                  Two models for one decision: when the second is asked, and what it decides
   aiPanel.ts                  A panel of agents for one decision: its name, its reports, their validator
   aiProposal.ts               A call to buy as an order FORM a person submits: what it may carry, and what it may not
+  aiEffort.ts                 A model asked at a lower reasoning effort, as a model of its own: its id, and where it is taken apart
   aiCost.ts, aiLedger.ts      Budget and estimate arithmetic; the call record and its parser
   indicators.ts, atr.ts, …    Indicator and fee arithmetic shared with the strategies
 

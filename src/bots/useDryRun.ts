@@ -3,7 +3,15 @@ import { INTERVAL_SECONDS, type Candle, type Exchange, type Interval } from '../
 import { runBacktest, type BacktestResult, type Trade, type OpenPositionSnapshot } from '../backtest/engine'
 import { getStrategy } from '../backtest/strategies'
 import { fetchRangeCached } from './candleCache'
-import { confirmsEntries, costsMoneyToRun, gptCadenceOf, type AiCallCount, type ConfirmBotEstimate } from './types'
+import {
+  confirmsEntries,
+  costsMoneyToRun,
+  gptCadenceOf,
+  latestBotAiCall,
+  type AiCallCount,
+  type BotAiCall,
+  type ConfirmBotEstimate
+} from './types'
 import { describeError } from '../utils/ipcError'
 import { generateGptIntradaySignals } from '../backtest/strategies/gptIntraday'
 import {
@@ -70,11 +78,14 @@ export interface DryRunState {
   latestCandle: Candle | null
   /** What the last refresh cost in AI calls, or null for a strategy that never makes one. */
   aiCalls: AiCallCount | null
+  /** A GPT Intraday bot's newest decision, or null for every other strategy and before it has
+   * made one. Kept so a call to buy can be turned into an order form while its candle is open. */
+  aiCall: BotAiCall | null
 }
 
-const LOADING_STATE: DryRunState = { status: 'loading', error: null, result: null, candles: [], latestCandle: null, aiCalls: null }
+const LOADING_STATE: DryRunState = { status: 'loading', error: null, result: null, candles: [], latestCandle: null, aiCalls: null, aiCall: null }
 /** Fetched nothing, and nothing is coming -- distinct from 'loading', which promises a result. */
-const IDLE_STATE: DryRunState = { status: 'idle', error: null, result: null, candles: [], latestCandle: null, aiCalls: null }
+const IDLE_STATE: DryRunState = { status: 'idle', error: null, result: null, candles: [], latestCandle: null, aiCalls: null, aiCall: null }
 
 interface DryRunBot {
   exchange: Exchange
@@ -197,7 +208,7 @@ export async function estimateConfirmBot(bot: Omit<DryRunBot, 'enabledAt'>): Pro
  * yet" isn't really an error. */
 export async function fetchBotDryRunResult(
   bot: DryRunBot
-): Promise<{ result: BacktestResult; candles: Candle[]; aiCalls: AiCallCount | null } | null> {
+): Promise<{ result: BacktestResult; candles: Candle[]; aiCalls: AiCallCount | null; aiCall: BotAiCall | null } | null> {
   const { candles, interval } = await fetchBotCandles(bot)
   if (candles.length === 0) return null
   // Engine default, like RoutineScheduler and for the same reason: a dry run is re-computed on
@@ -217,7 +228,8 @@ export async function fetchBotDryRunResult(
         generated: tape.callCount,
         errors: tape.errorCount,
         ...(tape.route ? { escalated: tape.route.escalated } : {})
-      }
+      },
+      aiCall: latestBotAiCall(candles, tape.decisions, signals.entries, interval)
     }
   }
   // Only once the bot has been switched on. Before that there is no entry of the bot's own to
@@ -249,10 +261,11 @@ export async function fetchBotDryRunResult(
         // be reached is a failure.
         errors: run.unsettled?.reason === 'unanswered' ? 1 : 0,
         vetoed: counts.vetoed
-      }
+      },
+      aiCall: null
     }
   }
-  return { result: runBacktest(candles, bot.strategyId, { forceCloseAtEnd: false }), candles, aiCalls: null }
+  return { result: runBacktest(candles, bot.strategyId, { forceCloseAtEnd: false }), candles, aiCalls: null, aiCall: null }
 }
 
 /** Bots have no dollar allocation anywhere in this app — this is the only real per-bot
@@ -360,8 +373,8 @@ export function useDryRun(
         if (fetched === null) {
           setState({ ...IDLE_STATE, status: 'error', error: 'No candle data returned' })
         } else {
-          const { result, candles, aiCalls } = fetched
-          setState({ status: 'running', error: null, result, candles, latestCandle: candles[candles.length - 1], aiCalls })
+          const { result, candles, aiCalls, aiCall } = fetched
+          setState({ status: 'running', error: null, result, candles, latestCandle: candles[candles.length - 1], aiCalls, aiCall })
         }
       } catch (error) {
         if (!cancelled) {

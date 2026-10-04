@@ -2,7 +2,8 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { GPT_INTRADAY_INTERVAL, GPT_LOOKBACK_BARS, type AiSignalTapeRequest } from '../shared/aiSignal'
+import { GPT_INTRADAY_INTERVAL, GPT_LOOKBACK_BARS, GPT_PROMPT_VERSION, type AiSignalTapeRequest } from '../shared/aiSignal'
+import type { AiCallRecord } from '../shared/aiLedger'
 import type { Candle } from '../shared/ipc'
 
 // The paid path, end to end, with the network faked and everything else real: the context, the
@@ -434,5 +435,152 @@ describe('a tape asked less often than every candle', () => {
     await expect(generateAiSignalTape(spaced(16, { decideEveryBars: 3 }))).rejects.toThrow(/every 15 minutes, every hour or every four hours/)
     await expect(estimateAiSignalTape(spaced(16, { decideEveryBars: 0 }))).rejects.toThrow(/every 15 minutes, every hour or every four hours/)
     expect(bodies).toHaveLength(0)
+  })
+})
+
+describe('a model asked at a lower reasoning effort', () => {
+  const LOW = 'openai/gpt-5-mini@low'
+
+  it('is the same model on the wire with the effort as a parameter, and its own answer everywhere else', async () => {
+    const { bodies } = stubOpenRouter(() => ({}))
+    const { generateAiSignalTape, setAiConfig, listAiCalls } = await services()
+    await setAiConfig({ enabledModels: ['openai/gpt-5-mini', LOW] })
+
+    const low = await generateAiSignalTape({ ...request(1), model: LOW })
+    expect(low.model).toBe(LOW)
+    expect(low.decisions[0].model).toBe(LOW)
+    expect(bodies[0]).toMatchObject({ model: 'openai/gpt-5-mini', reasoning: { effort: 'low' } })
+
+    // The same candle put to the model at its own default is another question's answer: it is
+    // asked, not served from the low-effort one, and goes out with no reasoning parameter at all.
+    const plain = await generateAiSignalTape(request(1, 'plain'))
+    expect(plain.generatedCount).toBe(1)
+    expect(bodies).toHaveLength(2)
+    expect(bodies[1].model).toBe('openai/gpt-5-mini')
+    expect(bodies[1]).not.toHaveProperty('reasoning')
+    // What is asked is identical. Only how hard the model is told to think about it differs.
+    expect(bodies[1].messages).toEqual(bodies[0].messages)
+
+    // Each is cached under its own id.
+    expect((await generateAiSignalTape({ ...request(1, 'low again'), model: LOW })).cachedCount).toBe(1)
+    expect((await generateAiSignalTape(request(1, 'plain again'))).cachedCount).toBe(1)
+    expect(bodies).toHaveLength(2)
+
+    // And recorded under it, so what each effort costs is added up separately.
+    const { rows } = await listAiCalls({})
+    expect(rows.map((row) => row.model).sort()).toEqual(['openai/gpt-5-mini', LOW])
+    expect((await listAiCalls({ model: LOW })).rows).toHaveLength(1)
+  })
+
+  it('is refused until it has been enabled, like any model', async () => {
+    const { bodies } = stubOpenRouter(() => ({}))
+    const { generateAiSignalTape } = await services()
+    await expect(generateAiSignalTape({ ...request(1), model: LOW })).rejects.toThrow(/is not enabled/)
+    expect(bodies).toHaveLength(0)
+  })
+})
+
+describe('how long a run will take', () => {
+  it('is read from what this model has taken to answer under the same prompt', async () => {
+    stubOpenRouter(() => ({}))
+    const { estimateAiSignalTape, appendAiCall } = await services()
+    // Nothing has been asked here, so there is nothing to go by. Unlike a price, a pace has no list.
+    expect((await estimateAiSignalTape(request(3))).perCallLatencyMs).toBeNull()
+
+    const now = Math.floor(Date.now() / 1000)
+    const row = (id: string, latencyMs: number, overrides: Partial<AiCallRecord> = {}): AiCallRecord => ({
+      id,
+      at: now,
+      source: 'backtest',
+      status: 'ok',
+      model: 'openai/gpt-5-mini',
+      provider: 'Test',
+      promptVersion: GPT_PROMPT_VERSION,
+      contextVersion: 'context-v1',
+      schemaVersion: 'signal-v2',
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      interval: '15m',
+      candleTime: now,
+      position: 'flat',
+      referencePrice: 100,
+      usage: { promptTokens: 2900, completionTokens: 1100, costUsd: 0.003, latencyMs },
+      error: null,
+      recommendation: 'hold',
+      confidence: 0.4,
+      rationale: 'nothing decisive',
+      detail: null,
+      ...overrides
+    })
+    await appendAiCall(row('a', 12_000))
+    await appendAiCall(row('b', 14_000))
+    // None of these is this model answering this prompt.
+    await appendAiCall(row('c', 60_000, { status: 'failed' }))
+    await appendAiCall(row('d', 2_000, { promptVersion: 'panel-trend-v1' }))
+    await appendAiCall(row('e', 1_000, { model: 'acme/other' }))
+    await appendAiCall(row('f', 3_000, { model: 'openai/gpt-5-mini@low' }))
+
+    const estimate = await estimateAiSignalTape(request(3))
+    expect(estimate.perCallLatencyMs).toBe(13_000)
+    expect(estimate.costBasis).toBe('history')
+  })
+})
+
+describe('a model whose answers keep being refused', () => {
+  // An answer that parses and is not in shape: what a model listed as taking a strict schema sent
+  // back for this one on its first real call. It was billed, and it is kept.
+  const outOfShape = { content: '{}' }
+
+  it('stops being asked after five in a row, and a rerun stops in the same place for nothing', async () => {
+    const { bodies } = stubOpenRouter(() => outOfShape)
+    const { generateAiSignalTape, getAiConfig } = await services()
+
+    await expect(generateAiSignalTape(request(12))).rejects.toThrow(
+      /the last 5 answers from openai\/gpt-5-mini were refused, and each was billed.*Choose another model/
+    )
+    // Five paid for, not twelve.
+    expect(bodies).toHaveLength(5)
+    expect((await getAiConfig()).spentTodayUsd).toBeCloseTo(5 * COST, 10)
+
+    // The five are answers: held, and not bought again. The sixth is still not asked for.
+    await expect(generateAiSignalTape(request(12, 'again'))).rejects.toThrow(/were refused/)
+    expect(bodies).toHaveLength(5)
+  })
+
+  it('carries on through a refusal here and there', async () => {
+    const { bodies } = stubOpenRouter((call) => (call % 3 === 0 ? {} : outOfShape))
+    const { generateAiSignalTape } = await services()
+    const tape = await generateAiSignalTape(request(9))
+    expect(tape.decisions).toHaveLength(9)
+    expect(tape.rejectedCount).toBe(6)
+    expect(bodies).toHaveLength(9)
+  })
+
+  it('is stopped only by an answer it would have to buy, never by one it holds', async () => {
+    const { bodies } = stubOpenRouter((call) => (call <= 5 ? outOfShape : {}))
+    const { generateAiSignalTape } = await services()
+    await expect(generateAiSignalTape(request(6))).rejects.toThrow(/were refused/)
+    expect(bodies).toHaveLength(5)
+
+    // The sixth decision is then answered some other way: the same question, asked on its own.
+    const sixth = await generateAiSignalTape({ ...request(6, 'sixth'), startIndex: GPT_LOOKBACK_BARS + 5, maxDecisions: 1 })
+    expect(sixth.generatedCount).toBe(1)
+    expect(bodies).toHaveLength(6)
+
+    // Now the whole run is held. Five refusals in a row are in it, and it replays all the same:
+    // there is nothing left to pay for, so there is nothing for the stop to protect.
+    const whole = await generateAiSignalTape(request(6, 'whole'))
+    expect(whole).toMatchObject({ cachedCount: 6, rejectedCount: 5, callCount: 0 })
+    expect(bodies).toHaveLength(6)
+  })
+
+  it('replays refusals it already holds when nothing more has to be bought', async () => {
+    const { bodies } = stubOpenRouter(() => outOfShape)
+    const { generateAiSignalTape } = await services()
+    expect((await generateAiSignalTape(request(5))).rejectedCount).toBe(5)
+    // A run that ends on its fifth refusal has nothing left to ask, so there is nothing to stop.
+    const again = await generateAiSignalTape(request(5, 'again'))
+    expect(again.cachedCount).toBe(5)
+    expect(bodies).toHaveLength(5)
   })
 })

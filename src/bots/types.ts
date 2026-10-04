@@ -7,13 +7,15 @@ import {
   gptDecisionsPerDay,
   gptMaxSpanDays,
   isGptDecisionEvery,
+  type AiSignalDecision,
   type AiSignalEstimate
 } from '../../shared/aiSignal'
 import type { AiEntryPeek } from '../../shared/aiConfirm'
 import { formatUsd } from '../../shared/aiCost'
 import { describeDecider } from '../../shared/aiPanel'
 import { describeAiRoute, describeEscalation, describeRouteKind, parseAiRoute, type AiRoute } from '../../shared/aiRoute'
-import type { Bot, Exchange, SymbolInfo } from '../../shared/ipc'
+import type { Bot, Candle, Exchange, Interval, SymbolInfo } from '../../shared/ipc'
+import { buildAiProposal, type AiOrderProposal } from '../../shared/aiProposal'
 
 export type { Bot }
 
@@ -337,4 +339,47 @@ export function describeConfirmBotCost(
   )
   lines.push('', 'Paper only: nothing here places a real order.')
   return lines.join('\n')
+}
+
+/** The newest decision of a GPT Intraday bot's tape, with what turning it into an order form needs. */
+export interface BotAiCall {
+  decision: AiSignalDecision
+  interval: Interval
+  /** The close the model was shown: the bar before the one the decision is for. */
+  referencePrice: number
+  /** Whether the paper bot opened a position on it. False for a call made while it was already
+   * long, which is a call about holding and opens nothing. */
+  entered: boolean
+}
+
+/** The call a running GPT bot made last, read off its tape and the signals built from it.
+ *
+ * `entries` is generateGptIntradaySignals' own answer to "did this decision open a position", so
+ * the order form is offered for exactly the calls the paper bot acted on -- one rule, not a copy. */
+export function latestBotAiCall(candles: Candle[], decisions: AiSignalDecision[], entries: boolean[], interval: Interval): BotAiCall | null {
+  const decision = decisions[decisions.length - 1]
+  if (decision === undefined) return null
+  let index = candles.length - 1
+  while (index >= 0 && candles[index].time !== decision.candleTime) index--
+  // Without the bar before it there is no price the model's levels can be measured from.
+  if (index < 1) return null
+  return { decision, interval, referencePrice: candles[index - 1].close, entered: entries[index] === true }
+}
+
+/** The order form a bot's latest call is on offer as, or null: see shared/aiProposal.ts. */
+export function botAiProposal(
+  bot: Pick<Bot, 'exchange' | 'symbol' | 'baseAsset' | 'quoteAsset'>,
+  call: BotAiCall | null,
+  nowSec: number
+): AiOrderProposal | null {
+  if (call === null) return null
+  return buildAiProposal({
+    decision: call.decision,
+    exchange: bot.exchange,
+    pair: { symbol: bot.symbol, baseAsset: bot.baseAsset, quoteAsset: bot.quoteAsset },
+    interval: call.interval,
+    referencePrice: call.referencePrice,
+    nowSec,
+    opensPosition: call.entered
+  })
 }

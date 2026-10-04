@@ -5,6 +5,7 @@ import type { Candle } from '../shared/ipc'
 import {
   BENCHMARK_CONCURRENCY,
   BENCHMARK_MAX_CONSECUTIVE_FAILURES,
+  BENCHMARK_MAX_CONSECUTIVE_REFUSALS,
   benchmarkAskRequest,
   benchmarkPeekCandles,
   runBenchmark,
@@ -269,5 +270,31 @@ describe('the question a benchmark sends', () => {
     expect(benchmarkPeekCandles(series, [])).toEqual([])
     expect(benchmarkPeekCandles(series, [series[GPT_LOOKBACK_BARS - 1].time])).toEqual([])
     expect(benchmarkPeekCandles(series, [START - BAR])).toEqual([])
+  })
+})
+
+describe('a model whose answers keep being refused', () => {
+  // What the first real call to a second vendor's model came back as: reached, answered, billed,
+  // and not in the shape asked for.
+  const REFUSED = answer({ rejected: 'recommendation, confidence or rationale is missing or out of range', confidence: 0 })
+
+  it('is not asked again after five in a row, and the others carry on', async () => {
+    const times = Array.from({ length: 12 }, (_, i) => i)
+    const { result, asked } = await run({ times, concurrency: 1, reply: (model) => (model === 'b' ? REFUSED : answer()) })
+    expect(asked.filter((entry) => entry.startsWith('b@'))).toHaveLength(BENCHMARK_MAX_CONSECUTIVE_REFUSALS)
+    expect(asked.filter((entry) => entry.startsWith('a@'))).toHaveLength(12)
+    expect(result.dropped).toEqual([{ model: 'b', error: REFUSED.rejected, refused: true }])
+    // Unlike a call that failed, each refusal was an answer: it is kept, and it was paid for.
+    expect(result.answers.b.filter((entry) => entry !== null)).toHaveLength(BENCHMARK_MAX_CONSECUTIVE_REFUSALS)
+    expect(result.costUsd).toBeCloseTo((12 + BENCHMARK_MAX_CONSECUTIVE_REFUSALS) * 0.002, 10)
+    expect(result.stopped).toBeNull()
+  })
+
+  it('is given the benefit of a refusal here and there', async () => {
+    const times = Array.from({ length: 12 }, (_, i) => i)
+    // Four refusals, an answer, four refusals, an answer...
+    const { result } = await run({ times, models: ['a'], concurrency: 1, reply: (_model, index) => (index % 5 === 4 ? answer() : REFUSED) })
+    expect(result.dropped).toEqual([])
+    expect(result.asked).toBe(12)
   })
 })

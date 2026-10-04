@@ -1,7 +1,8 @@
 import { app } from 'electron'
 import { mkdir, readFile } from 'fs/promises'
 import { join } from 'path'
-import { DEFAULT_AI_DAILY_CAP_USD, DEFAULT_AI_MODEL, isAiModelSlug } from '../../shared/aiSignal'
+import { DEFAULT_AI_DAILY_CAP_USD, DEFAULT_AI_MODEL } from '../../shared/aiSignal'
+import { aiModelSlugOf, isAiModelId, splitAiModelId } from '../../shared/aiEffort'
 import { deciderModel, isPanelId, panelModelOf } from '../../shared/aiPanel'
 import { parseAiRoute, type AiRoute } from '../../shared/aiRoute'
 import { budgetProblem, type AiConfig, type AiConfigPatch, type AiModelCatalogue, type AiModelInfo } from '../../shared/aiCost'
@@ -64,7 +65,7 @@ function today(): string {
  * is the permission it needs (shared/aiPanel.ts). */
 function cleanModels(value: unknown): string[] {
   if (!Array.isArray(value)) return []
-  return [...new Set(value.filter((entry): entry is string => typeof entry === 'string' && isAiModelSlug(entry) && !isPanelId(entry)))]
+  return [...new Set(value.filter((entry): entry is string => typeof entry === 'string' && isAiModelId(entry) && !isPanelId(entry)))]
 }
 
 /** Why a route could not run under these settings, or null when it could. Its second step is a
@@ -88,7 +89,7 @@ async function load(): Promise<AiConfigState> {
   // nothing.
   // Never a panel: "the default" is asked by things that were promised one call a question.
   const defaultModel =
-    typeof raw.defaultModel === 'string' && isAiModelSlug(raw.defaultModel) && !isPanelId(raw.defaultModel) ? raw.defaultModel : DEFAULT_AI_MODEL
+    typeof raw.defaultModel === 'string' && isAiModelId(raw.defaultModel) && !isPanelId(raw.defaultModel) ? raw.defaultModel : DEFAULT_AI_MODEL
   const enabledModels = cleanModels(raw.enabledModels)
   if (!enabledModels.includes(defaultModel)) enabledModels.unshift(defaultModel)
   // A route that could not run -- unreadable, pointing at a model that is not enabled, or at the
@@ -125,7 +126,18 @@ async function loadCatalogue(): Promise<StoredCatalogue | null> {
   if (catalogue !== undefined) return catalogue
   try {
     const raw = JSON.parse(await readFile(cataloguePath(), 'utf-8')) as Partial<StoredCatalogue> | null
-    catalogue = raw !== null && typeof raw.fetchedAt === 'number' && Array.isArray(raw.models) ? { fetchedAt: raw.fetchedAt, models: raw.models } : null
+    if (raw !== null && typeof raw.fetchedAt === 'number' && Array.isArray(raw.models)) {
+      // A list stored before models carried `reasoning` cannot say which of them take an effort.
+      // Its prices are still good, so it is kept, but dated to the epoch so the next free listing
+      // replaces it instead of waiting out the day.
+      const dated = raw.models.every((model) => typeof model.reasoning === 'boolean')
+      catalogue = {
+        fetchedAt: dated ? raw.fetchedAt : 0,
+        models: raw.models.map((model) => ({ ...model, reasoning: model.reasoning === true }))
+      }
+    } else {
+      catalogue = null
+    }
   } catch {
     catalogue = null
   }
@@ -150,17 +162,22 @@ export async function getAiConfig(): Promise<AiConfig> {
  * never online) only the id's shape can be checked, which is why the request itself still goes
  * out with `require_parameters`: OpenRouter refuses what this could not rule out. */
 function assertUsableModel(id: string, known: StoredCatalogue | null): void {
-  if (!isAiModelSlug(id)) throw new Error(`"${id}" is not a valid model id`)
+  if (!isAiModelId(id)) throw new Error(`"${id}" is not a valid model id`)
   if (isPanelId(id)) {
     throw new Error(
       'A panel of agents cannot be enabled or made the default. It runs on a model that is enabled, and is chosen where it is used: Analyze, a benchmark, or the second step of a route.'
     )
   }
   if (!known) return
-  const model = known.models.find((entry) => entry.id === id)
-  if (!model) throw new Error(`${id} is not in the model catalogue. Refresh the list under Agents → Models.`)
+  // The catalogue lists the model; the effort it is asked at is this app's own (shared/aiEffort.ts).
+  const { slug, effort } = splitAiModelId(id)
+  const model = known.models.find((entry) => entry.id === slug)
+  if (!model) throw new Error(`${slug} is not in the model catalogue. Refresh the list under Agents → Models.`)
   if (!model.structuredOutputs) {
-    throw new Error(`${id} cannot be held to a strict JSON schema, so it cannot be enabled for signals.`)
+    throw new Error(`${slug} cannot be held to a strict JSON schema, so it cannot be enabled for signals.`)
+  }
+  if (effort !== null && !model.reasoning) {
+    throw new Error(`${slug} does not take a reasoning effort, so it cannot be asked at ${effort} effort.`)
   }
 }
 
@@ -315,5 +332,8 @@ export async function listAiModels(refresh: boolean): Promise<AiModelCatalogue> 
 /** A model's catalogue entry from what is already held. Never touches the network: it is called
  * on the way to and from a paid request, which must not wait on a second one. */
 export async function findAiModel(id: string): Promise<AiModelInfo | null> {
-  return (await loadCatalogue())?.models.find((model) => model.id === id) ?? null
+  // One entry prices a model at every effort: what changes with the effort is how many tokens it
+  // spends, which only its own call history can say.
+  const slug = aiModelSlugOf(id)
+  return (await loadCatalogue())?.models.find((model) => model.id === slug) ?? null
 }

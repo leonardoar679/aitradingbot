@@ -9,6 +9,7 @@ export type { ExchangeBalance }
 export const IpcChannel = {
   AppPing: 'app:ping',
   AppGetVersion: 'app:getVersion',
+  AppNotify: 'app:notify',
   BacktestExportSave: 'backtest:exportSave',
   SettingsGet: 'settings:get',
   SettingsSet: 'settings:set',

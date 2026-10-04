@@ -41,6 +41,8 @@ import {
 const api = {
   ping: (): Promise<string> => ipcRenderer.invoke(IpcChannel.AppPing),
   getVersion: (): Promise<string> => ipcRenderer.invoke(IpcChannel.AppGetVersion),
+  /** A desktop notice. Resolves false where the system cannot show one. */
+  notify: (title: string, body: string): Promise<boolean> => ipcRenderer.invoke(IpcChannel.AppNotify, title, body),
   settings: {
     get: (): Promise<AppSettings> => ipcRenderer.invoke(IpcChannel.SettingsGet),
     set: (patch: Partial<AppSettings>): Promise<AppSettings> =>

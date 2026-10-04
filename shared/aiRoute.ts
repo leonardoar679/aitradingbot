@@ -1,8 +1,8 @@
+import { isAiModelId } from './aiEffort'
 import { describeDecider, isPanelId } from './aiPanel'
 import {
   GPT_MIN_CONFIDENCE,
   gptActionFor,
-  isAiModelSlug,
   type AiRecommendation,
   type AiSignalDecision,
   type GptPosition
@@ -82,7 +82,7 @@ export function parseAiRoute(value: unknown): AiRoute | null {
     throw new Error('A route names a second model and when it is asked')
   }
   const record = value as Record<string, unknown>
-  if (typeof record.model !== 'string' || !isAiModelSlug(record.model)) {
+  if (typeof record.model !== 'string' || !isAiModelId(record.model)) {
     throw new Error("A route's second model is not a valid model id")
   }
   if (!isAiEscalateWhen(record.when)) {
