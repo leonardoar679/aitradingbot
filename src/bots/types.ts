@@ -199,7 +199,9 @@ export function describeAiCalls(calls: AiCallCount): { text: string; bad: boolea
     return { text: `${calls.errors} of ${calls.total} AI calls failed`, bad: true }
   }
   const passedOn = calls.escalated !== undefined ? ` · ${calls.escalated} passed on to the second model` : ''
-  return { text: `${calls.total} decisions · ${calls.cached} cached · ${fresh} last refresh${passedOn}`, bad: false }
+  // A bot in its first hour has made exactly one, and "1 decisions" is what it showed for it.
+  const decisions = calls.total === 1 ? '1 decision' : `${calls.total} decisions`
+  return { text: `${decisions} · ${calls.cached} cached · ${fresh} last refresh${passedOn}`, bad: false }
 }
 
 /** Whether running this strategy spends the user's money by itself, for as long as it is on.

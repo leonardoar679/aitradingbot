@@ -36,19 +36,33 @@ import {
   type LiveExitResult
 } from '../../shared/ipc'
 import type { Bot } from '../bots/types'
+import type { AiOrderProposal, AiProposalOrigin } from '../../shared/aiProposal'
 
 const EXECUTORS_POLL_MS = 10_000
 
 export function ExecutorsPage({
   autoOpenPresets = false,
-  onPresetsOpened
-}: { autoOpenPresets?: boolean; onPresetsOpened?: () => void } = {}): React.JSX.Element {
+  onPresetsOpened,
+  proposal = null,
+  onProposalTaken
+}: {
+  autoOpenPresets?: boolean
+  onPresetsOpened?: () => void
+  /** A model's call to open the New Executor form from (shared/aiProposal.ts). Taken once, the
+   * way the presets request is: this page opens the form and tells the app to let go of it. */
+  proposal?: AiOrderProposal | null
+  onProposalTaken?: () => void
+} = {}): React.JSX.Element {
   const [bots, setBots] = useState<Bot[]>([])
   const [executors, setExecutors] = useState<ExecutorConfig[]>([])
   // Read only to say what a deletion would change -- an executor detached from a controller here
   // has to be detached there too, or the controller keeps counting a strategy that is gone.
   const [controllers, setControllers] = useState<ControllerConfig[]>([])
   const [showNew, setShowNew] = useState(false)
+  /** The call the open form was filled in from, if any. Opening a form is ALL a proposal does
+   * here: nothing below creates an executor from one, and handleCreate runs only when the form's
+   * own button is pressed. */
+  const [formProposal, setFormProposal] = useState<AiOrderProposal | null>(null)
   const [showPresets, setShowPresets] = useState(false)
   const [paperAccount, setPaperAccount] = useState<PaperAccount | null>(null)
 
@@ -59,6 +73,18 @@ export function ExecutorsPage({
     setShowPresets(true)
     onPresetsOpened?.()
   }, [autoOpenPresets, onPresetsOpened])
+
+  useEffect(() => {
+    if (proposal === null) return
+    setFormProposal(proposal)
+    setShowNew(true)
+    onProposalTaken?.()
+  }, [proposal, onProposalTaken])
+
+  function closeNew(): void {
+    setShowNew(false)
+    setFormProposal(null)
+  }
   const [selectedId, setSelectedId] = useState<string | null>(null)
   /** Every failure below used to be a console.error and nothing else. In a packaged app with no
    * devtools open that is indistinguishable from success: the user clicks Stop, the card does not
@@ -145,6 +171,7 @@ export function ExecutorsPage({
     keepPosition: boolean
     mode: 'paper' | 'live'
     params: GridExecutorParams | DcaExecutorParams | TwapExecutorParams | PositionExecutorParams | OrderExecutorParams | XemmExecutorParams | ArbitrageExecutorParams | MarketMakingExecutorParams
+    proposedBy?: AiProposalOrigin
   }): Promise<void> {
     // Defense in depth — the UI only ever offers 'live' for type 'order', 'position', 'dca',
     // 'twap', or 'grid', but this is the last line of defense before anything real could happen.
@@ -175,9 +202,10 @@ export function ExecutorsPage({
       liveDcaBasePrice: null,
       liveTwapRunId: null,
       liveTwapResult: null,
-      params: input.params
+      params: input.params,
+      ...(input.proposedBy !== undefined ? { proposedBy: input.proposedBy } : {})
     }
-    setShowNew(false)
+    closeNew()
 
     if (mode === 'paper') {
       setExecutors((prev) => [...prev, base])
@@ -755,7 +783,10 @@ export function ExecutorsPage({
           <Sparkles size={14} /> Starter Presets
         </button>
         <button
-          onClick={() => setShowNew(true)}
+          onClick={() => {
+            setFormProposal(null)
+            setShowNew(true)
+          }}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -857,7 +888,8 @@ export function ExecutorsPage({
       {showNew && (
         <NewExecutorModal
           onCreate={handleCreate}
-          onClose={() => setShowNew(false)}
+          onClose={closeNew}
+          proposal={formProposal}
           account={paperAccount}
           existingExecutors={executors}
         />

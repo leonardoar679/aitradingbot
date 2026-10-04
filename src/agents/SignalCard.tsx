@@ -5,7 +5,8 @@ import { formatUsd } from '../../shared/aiCost'
 import { AI_AGENT_ROLES, AI_PANEL_CALLS, describeAgentFinding, describeDecider } from '../../shared/aiPanel'
 import { formatUtcTime } from '../backtest/formatTradeTime'
 import { formatQuotePrice } from '../utils/formatCurrency'
-import { horizonLabel, reasonLabel, recommendationColor } from './agentStyles'
+import { aiProposalProblem, type AiOrderProposal } from '../../shared/aiProposal'
+import { buttonStyle, horizonLabel, reasonLabel, recommendationColor } from './agentStyles'
 
 interface SignalCardProps {
   decision: AiSignalDecision
@@ -14,6 +15,11 @@ interface SignalCardProps {
   /** Unix seconds. Passed in rather than read here so the card says the same thing as whatever
    * rendered it, and so "stale" can be shown without the card owning a timer. */
   nowSec: number
+  /** The order form this call could be turned into, when it is a call this app would act on and
+   * its candle is still open (shared/aiProposal.ts). Null otherwise. */
+  proposal?: AiOrderProposal | null
+  /** Opens that form. Absent where a card is shown as history: nothing is offered there. */
+  onPrepareOrder?: (proposal: AiOrderProposal) => void
 }
 
 function Field({ label, value }: { label: string; value: string }): React.JSX.Element {
@@ -47,7 +53,7 @@ function Badge({ text, color }: { text: string; color: string }): React.JSX.Elem
 }
 
 /** One decision, in full: what the model said, why, and what saying it cost. */
-export function SignalCard({ decision, interval, quoteAsset, nowSec }: SignalCardProps): React.JSX.Element {
+export function SignalCard({ decision, interval, quoteAsset, nowSec, proposal = null, onPrepareOrder }: SignalCardProps): React.JSX.Element {
   const color = recommendationColor(decision.recommendation)
   const detail = decision.detail ?? null
   const unusable = decision.error ?? decision.rejected ?? null
@@ -151,6 +157,38 @@ export function SignalCard({ decision, interval, quoteAsset, nowSec }: SignalCar
         </div>
       )}
 
+      {/* A call to buy can be turned into an order FORM, and that is all: the button opens a
+          Position executor form on another page, which a person fills in the amount of and submits.
+          A buy this app would not act on gets the reason instead of the button. */}
+      {onPrepareOrder && decision.recommendation === 'buy' && unusable === null && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.7rem',
+            flexWrap: 'wrap',
+            borderTop: '1px solid var(--border)',
+            paddingTop: '0.7rem'
+          }}
+        >
+          {proposal !== null ? (
+            <>
+              <button onClick={() => onPrepareOrder(proposal)} style={buttonStyle('secondary')}>
+                Prepare an order from this call
+              </button>
+              <span style={{ flex: '1 1 260px', fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                Opens a Position executor form with this call&apos;s market, stop, target and horizon filled in. You set
+                the amount and submit it yourself, on paper or live; the model places nothing.
+              </span>
+            </>
+          ) : (
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+              {aiProposalProblem(decision, interval, nowSec) ?? 'No order form can be built from this call.'}
+            </span>
+          )}
+        </div>
+      )}
+
       <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
         {describeDecider(decision.model)} · for the candle opening {formatUtcTime(decision.candleTime)} UTC
         {usage && (
@@ -166,7 +204,8 @@ export function SignalCard({ decision, interval, quoteAsset, nowSec }: SignalCar
                 : formatUsd(usage.costUsd)}
           </>
         )}
-        . The stop and target are the model&apos;s own; nothing in this app trades on them.
+        . The stop and target are the model&apos;s own; nothing in this app trades on them unless you place the order
+        yourself.
       </div>
     </div>
   )

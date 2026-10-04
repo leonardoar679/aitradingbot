@@ -10,6 +10,15 @@ import { describeLivePlanShortfall, describeLiveShortfall, freeBalance } from '.
 import { describeAllocationBreach, describeAllocationPlanShortfall } from '../../shared/allocation'
 import { describeBelowExchangeMinimum, type SymbolTradingRules } from '../../shared/exchangeMinimums'
 import { resolveLeverage } from '../../shared/perp'
+import {
+  aiProposalName,
+  aiProposalOrigin,
+  aiProposalPositionParams,
+  describeAiProposal,
+  isAiCallStale,
+  type AiOrderProposal,
+  type AiProposalOrigin
+} from '../../shared/aiProposal'
 import { executorAllocatedQuote } from './computeSnapshot'
 import { DcaForm } from './DcaForm'
 import { TwapForm } from './TwapForm'
@@ -53,6 +62,10 @@ interface NewExecutorModalProps {
    * funds before it is created rather than after. Null account = no limit; see executorFunding. */
   account: PaperAccount | null
   existingExecutors: ExecutorConfig[]
+  /** A model's call to open the form from (shared/aiProposal.ts): a Position on its market with
+   * its stop, target and horizon filled in. It never sets the amount and never sets the mode --
+   * the form opens on paper exactly as an empty one does. Null for a form opened by hand. */
+  proposal?: AiOrderProposal | null
   onCreate: (input: {
     name: string
     type: ExecutorType
@@ -61,6 +74,8 @@ interface NewExecutorModalProps {
     keepPosition: boolean
     mode: 'paper' | 'live'
     params: AnyExecutorParams
+    /** Present when the form was filled in from a call and is still the trade that call named. */
+    proposedBy?: AiProposalOrigin
   }) => void
   onClose: () => void
 }
@@ -167,19 +182,23 @@ function defaultMarketMakingParams(): MarketMakingExecutorParams {
 const DEFAULT_SPREAD_BUY_EXCHANGE = EXCHANGES.find((e) => e.id === 'bithumb') ?? EXCHANGES[0]
 const DEFAULT_SPREAD_SELL_EXCHANGE = EXCHANGES.find((e) => e.id === 'upbit') ?? EXCHANGES[1]
 
-export function NewExecutorModal({ onCreate, onClose, account, existingExecutors }: NewExecutorModalProps): React.JSX.Element {
-  const [name, setName] = useState('')
-  const [exchange, setExchange] = useState<Exchange>(EXCHANGES[0].id)
-  const [pair, setPair] = useState<SymbolInfo>(EXCHANGES[0].defaultSymbol)
-  const [type, setType] = useState<ExecutorType>('grid')
+export function NewExecutorModal({ onCreate, onClose, account, existingExecutors, proposal = null }: NewExecutorModalProps): React.JSX.Element {
+  // A proposal chooses what the form OPENS on. Every field stays editable, and the two things
+  // that decide what an order risks -- the amount and paper-or-live -- are not among them.
+  const [name, setName] = useState(proposal ? aiProposalName(proposal) : '')
+  const [exchange, setExchange] = useState<Exchange>(proposal?.exchange ?? EXCHANGES[0].id)
+  const [pair, setPair] = useState<SymbolInfo>(proposal?.pair ?? EXCHANGES[0].defaultSymbol)
+  const [type, setType] = useState<ExecutorType>(proposal ? 'position' : 'grid')
   const [lastPrice, setLastPrice] = useState<number | null>(null)
-  const [keepPosition, setKeepPosition] = useState(DEFAULT_KEEP_POSITION.grid)
+  const [keepPosition, setKeepPosition] = useState(proposal ? DEFAULT_KEEP_POSITION.position : DEFAULT_KEEP_POSITION.grid)
   const [gridParams, setGridParams] = useState<GridExecutorParams>(defaultGridParams(null))
   const gridBounds = describeGridBoundsProblem({ startPrice: gridParams.startPrice, endPrice: gridParams.endPrice, lastPrice })
   const gridBlocked = type === 'grid' && gridBounds.blocking !== null
   const [dcaParams, setDcaParams] = useState<DcaExecutorParams>(defaultDcaParams())
   const [twapParams, setTwapParams] = useState<TwapExecutorParams>(defaultTwapParams())
-  const [positionParams, setPositionParams] = useState<PositionExecutorParams>(defaultPositionParams())
+  const [positionParams, setPositionParams] = useState<PositionExecutorParams>(
+    proposal ? aiProposalPositionParams(proposal, defaultPositionParams()) : defaultPositionParams()
+  )
   const [orderParams, setOrderParams] = useState<OrderExecutorParams>(defaultOrderParams())
   const [xemmParams, setXemmParams] = useState<XemmExecutorParams>(
     defaultXemmParams(
@@ -198,6 +217,23 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
   const [liveConfirmText, setLiveConfirmText] = useState('')
   const [binanceCredentialConfigured, setBinanceCredentialConfigured] = useState(false)
   const [liveTradingStatus, setLiveTradingStatus] = useState<LiveTradingStatus | null>(null)
+  // A call belongs to one candle. The form can be left open past it, so the banner is told the
+  // time rather than trusting the moment it was opened.
+  const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000))
+  useEffect(() => {
+    if (proposal === null) return
+    const timer = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 15_000)
+    return (): void => clearInterval(timer)
+  }, [proposal])
+  // Still the trade the call named: a spot long on its market. Changed into anything else, the
+  // form is the user's own and the executor is not recorded as having come from a call.
+  const followsProposal =
+    proposal !== null &&
+    type === 'position' &&
+    exchange === proposal.exchange &&
+    pair.symbol === proposal.pair.symbol &&
+    positionParams.side === 'buy'
+  const proposalStale = proposal !== null && isAiCallStale(proposal.candleTime, proposal.interval, nowSec)
 
   const isSpreadType = SPREAD_TYPES.includes(type)
   // Offering the handover here and then silently not doing it would be the worse of the two --
@@ -534,7 +570,16 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
               : type === 'order'
                 ? orderParams
                 : marketMakingParams
-    onCreate({ name: name.trim(), type, exchange, pair, keepPosition, mode, params })
+    onCreate({
+      name: name.trim(),
+      type,
+      exchange,
+      pair,
+      keepPosition,
+      mode,
+      params,
+      ...(proposal !== null && followsProposal ? { proposedBy: aiProposalOrigin(proposal) } : {})
+    })
   }
 
   return (
@@ -584,6 +629,31 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
         </div>
 
         <div style={{ padding: '1.1rem', display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+          {proposal !== null && followsProposal && (
+            <div
+              style={{
+                border: `1px solid ${proposalStale ? 'var(--gold)' : 'var(--border)'}`,
+                borderRadius: 'var(--radius-sm)',
+                padding: '0.7rem 0.8rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.4rem',
+                fontSize: '0.74rem',
+                lineHeight: 1.5,
+                color: 'var(--text-secondary)'
+              }}
+            >
+              {describeAiProposal(proposal).map((line) => (
+                <span key={line}>{line}</span>
+              ))}
+              {proposalStale && (
+                <span style={{ color: 'var(--gold)', fontWeight: 600 }}>
+                  The candle this call was made for has closed, so it is no longer the model’s current view. Ask again on
+                  the Agents page before acting on it.
+                </span>
+              )}
+            </div>
+          )}
           <div>
             <label style={fieldLabelStyle()}>Name</label>
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. BTC Grid" autoFocus style={textInputStyle()} />

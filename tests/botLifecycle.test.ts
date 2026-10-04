@@ -117,6 +117,12 @@ describe('describeAiCalls', () => {
     expect(described.text).toBe('672 decisions · 671 cached · 1 new call last refresh')
   })
 
+  it('says "1 decision" for a bot in its first hour', () => {
+    // Seen on the first real bot: its card read "1 decisions" until the second one arrived.
+    expect(describeAiCalls({ total: 1, cached: 0, generated: 1, errors: 0 }).text).toBe('1 decision · 0 cached · 1 new call last refresh')
+    expect(describeAiCalls({ total: 0, cached: 0, generated: 0, errors: 0 }).text).toBe('0 decisions · 0 cached · 0 new calls last refresh')
+  })
+
   it('pluralises fresh calls', () => {
     expect(describeAiCalls({ total: 672, cached: 0, generated: 672, errors: 0 }).text).toContain('672 new calls')
     expect(describeAiCalls({ total: 672, cached: 672, generated: 0, errors: 0 }).text).toContain('0 new calls')

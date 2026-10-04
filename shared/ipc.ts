@@ -604,6 +604,11 @@ export interface ExecutorConfig {
    * for the gates a live order must pass, ExecutorPlaceLiveOrder/ExecutorPlaceLiveLimitOrder for
    * where it's actually placed. */
   mode: 'paper' | 'live'
+  /** Set when the form this executor was created from was filled in from a model's call
+   * (shared/aiProposal.ts). It records where the idea came from and nothing reads it in order to
+   * act: the executor was submitted by a person, like every other one. Absent on every executor
+   * set up from an empty form. */
+  proposedBy?: { model: string; candleTime: number; confidence: number }
   /** Set once a live executor's order actually fills (market: immediately; limit: whenever
    * LiveOrderScheduler detects the resting order resolved). Null for every paper executor and
    * while any live limit order is still resting. For a live DCA executor with more than one

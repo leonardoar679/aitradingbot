@@ -2,16 +2,23 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-// AI SIGNALS ARE PAPER-ONLY, AND THAT IS A PROPERTY OF THE IMPORT GRAPH.
+// NO MODEL PLACES AN ORDER, AND THAT IS A PROPERTY OF THE IMPORT GRAPH.
 //
 // A model's answer becomes a decision on a tape, and a tape is replayed through the paper engine.
-// Nothing reads it on the way to a real order. That is easy to say and easy to undo by accident:
+// No code reads it on the way to a real order. That is easy to say and easy to undo by accident:
 // one import of the live-order service from an AI module, or one import of an AI module from a
 // live-trading one, and a signal has a route to real money that no gate was designed around.
 //
 // So the rule is checked structurally rather than trusted. If AI-driven live trading is ever
 // built it will be a deliberate change with its own gates -- and it will have to change this test
 // to do it, which is the point.
+//
+// It was changed once, deliberately, on 2026-10-03: the user chose "AI proposes, you place" over
+// leaving AI on paper and over a bot that trades by itself. A call to buy can now FILL IN an
+// executor form (shared/aiProposal.ts). A person sets the amount, ticks live, types the phrase and
+// submits it, through the same gates as any executor made by hand. So everything below still
+// holds as written -- no AI module reaches an order path -- and one test was added for the new
+// surface. tests/aiProposal.test.ts pins what a proposal may carry and who submits the form.
 
 const ROOT = join(__dirname, '..')
 const SERVICES = join(ROOT, 'electron', 'services')
@@ -130,6 +137,27 @@ describe('AI code has no route to a real order', () => {
       const source = readFileSync(path, 'utf-8')
       expect(source, path).not.toMatch(/liveTrading|LiveTrading|liveOrders|placeLive/)
     }
+  })
+
+  it('a call that fills in an order form goes no further than the form', () => {
+    // The proposal rules, the card that offers one and the pages that hand it on. None of them
+    // may mention the bridge an order travels over: the form is on the Executors page, and the
+    // only thing these files can do is ask for it to be opened.
+    const proposing = [
+      join(ROOT, 'shared', 'aiProposal.ts'),
+      join(ROOT, 'src', 'agents', 'SignalCard.tsx'),
+      join(ROOT, 'src', 'agents', 'AnalyzeTab.tsx'),
+      join(ROOT, 'src', 'agents', 'AgentsPage.tsx')
+    ]
+    for (const path of proposing) {
+      const source = readFileSync(path, 'utf-8')
+      expect(source, path).not.toMatch(/liveTrading|LiveTrading|liveOrders|placeLive|window\.api\.executors/)
+    }
+    // And the rules themselves are arithmetic on a decision: they import types and two helpers,
+    // and nothing from the renderer or the main process.
+    const rules = readFileSync(join(ROOT, 'shared', 'aiProposal.ts'), 'utf-8')
+    expect(importsOf(join(ROOT, 'shared', 'aiProposal.ts')).sort()).toEqual(['aiPanel', 'aiSignal', 'ipc'])
+    expect(rules).not.toMatch(/window\.|ipcRenderer|electron/)
   })
 
   it('the model is offered no tools', () => {

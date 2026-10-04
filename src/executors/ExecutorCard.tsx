@@ -12,6 +12,7 @@ import {
 import { buildGridLevels } from './engine'
 import { executorTypeMeta } from './executorTypeMeta'
 import { netUnrealizedPct } from '../../shared/fees'
+import { describeAiProposalOrigin } from '../../shared/aiProposal'
 import { useExecutorSimulation } from './useExecutorSimulation'
 import { useSpreadExecutorSimulation } from './useSpreadExecutorSimulation'
 import { formatQuotePrice } from '../utils/formatCurrency'
@@ -661,6 +662,11 @@ export function ExecutorCard({
         <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
           {exchangeName} • {executor.symbol}
         </div>
+        {executor.proposedBy !== undefined && (
+          <div style={{ marginTop: '0.25rem', fontSize: '0.7rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
+            {describeAiProposalOrigin(executor.proposedBy)}
+          </div>
+        )}
       </div>
 
       <div style={{ borderTop: '1px solid var(--border)', paddingTop: '0.6rem' }}>

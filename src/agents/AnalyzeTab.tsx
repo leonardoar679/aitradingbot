@@ -13,6 +13,7 @@ import {
 import { buildAiContext, type AiMarketContext } from '../../shared/aiContext'
 import { formatUsd, type AiConfig } from '../../shared/aiCost'
 import { AI_PANEL_CALLS, describeDecider, isPanelId, panelIdFor } from '../../shared/aiPanel'
+import { buildAiProposal, type AiOrderProposal } from '../../shared/aiProposal'
 import { prepareAiSignalRequest } from '../ai/aiClient'
 import { describeError } from '../utils/ipcError'
 import { SignalCard } from './SignalCard'
@@ -28,6 +29,11 @@ interface Result {
   decision: AiSignalDecision
   symbol: string
   quoteAsset: string
+  /** The market and the close the model was shown, kept so a call to buy can be turned into an
+   * order form: its levels are prices, and the form takes distances from one. */
+  exchange: Exchange
+  pair: SymbolInfo
+  referencePrice: number | null
 }
 
 function buttonLabel(pricing: Pricing, running: boolean): string {
@@ -47,7 +53,12 @@ function buttonLabel(pricing: Pricing, running: boolean): string {
  * NOTHING HERE SPENDS UNTIL THE BUTTON IS PRESSED. Choosing a market or a model prices the next
  * call -- which reads the cache and a price list -- and the button carries that price, so the cost
  * of pressing it is on the thing being pressed. */
-export function AnalyzeTab(): React.JSX.Element {
+export function AnalyzeTab({
+  onPrepareOrder
+}: {
+  /** Opens an executor form filled in from a call to buy. Absent, the card offers no such form. */
+  onPrepareOrder?: (proposal: AiOrderProposal) => void
+} = {}): React.JSX.Element {
   const [exchange, setExchange] = useState<Exchange>('binance')
   const [pair, setPair] = useState<SymbolInfo>(EXCHANGES[0].defaultSymbol)
   const [config, setConfig] = useState<AiConfig | null>(null)
@@ -139,7 +150,17 @@ export function AnalyzeTab(): React.JSX.Element {
         const sameQuestion = previous.filter(
           (entry) => entry.symbol === pair.symbol && entry.decision.candleTime === decision.candleTime && entry.decision.model !== decision.model
         )
-        return [{ decision, symbol: pair.symbol, quoteAsset: pair.quoteAsset }, ...sameQuestion]
+        return [
+          {
+            decision,
+            symbol: pair.symbol,
+            quoteAsset: pair.quoteAsset,
+            exchange,
+            pair,
+            referencePrice: fresh.context?.lastClose ?? null
+          },
+          ...sameQuestion
+        ]
       })
       void price()
     } catch (failure) {
@@ -150,6 +171,19 @@ export function AnalyzeTab(): React.JSX.Element {
   }
 
   const latest = results[0] ?? null
+  // Built on every render from the clock the card is given, so the offer is withdrawn the moment
+  // the call's candle closes rather than whenever the card is next asked.
+  const proposal =
+    latest !== null && latest.referencePrice !== null
+      ? buildAiProposal({
+          decision: latest.decision,
+          exchange: latest.exchange,
+          pair: latest.pair,
+          interval: GPT_INTRADAY_INTERVAL,
+          referencePrice: latest.referencePrice,
+          nowSec
+        })
+      : null
   const ready = pricing.status === 'ready'
   const disabled = running || !ready
 
@@ -206,7 +240,16 @@ export function AnalyzeTab(): React.JSX.Element {
       {pricing.status === 'unavailable' && <p style={{ ...noteStyle, color: 'var(--down)', marginBottom: '0.9rem' }}>{pricing.reason}</p>}
       {error !== null && <p style={{ ...noteStyle, color: 'var(--down)', marginBottom: '0.9rem' }}>{error}</p>}
 
-      {latest && <SignalCard decision={latest.decision} interval={GPT_INTRADAY_INTERVAL} quoteAsset={latest.quoteAsset} nowSec={nowSec} />}
+      {latest && (
+        <SignalCard
+          decision={latest.decision}
+          interval={GPT_INTRADAY_INTERVAL}
+          quoteAsset={latest.quoteAsset}
+          nowSec={nowSec}
+          proposal={proposal}
+          onPrepareOrder={onPrepareOrder}
+        />
+      )}
 
       {results.length > 1 && (
         <div style={{ marginTop: '1rem', overflowX: 'auto' }}>

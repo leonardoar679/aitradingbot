@@ -147,6 +147,8 @@ A model can be asked for a buy / sell / hold decision on a market. It is asked t
 setting rather than a rewrite. **A model's answer never places an order**: it becomes a decision
 on a tape, and the tape is replayed through the same paper engine as every other strategy.
 `tests/aiNoLivePath.test.ts` fails if an AI module ever imports a live-trading one, or the reverse.
+The furthest a call can go is to fill in an order form that a person then submits — see
+*From a call to an order, by hand* below.
 
 **What is asked.** `shared/aiContext.ts` builds the question from exactly the 672 completed
 15-minute candles before the candle being decided — seven days — and from nothing at or after it:
@@ -198,7 +200,7 @@ entries, described next; an **AI signals** overlay on the Market chart, off by d
 
 | Tab | What it does |
 |---|---|
-| **Analyze** | One market, one model, one click, one call — or four, when what is picked is a panel of agents on a model. The button states the cost of the whole click before it is pressed, and reads "cached, free" when the answer is already held. Answers from different models for the same candle stack into a comparison. |
+| **Analyze** | One market, one model, one click, one call — or four, when what is picked is a panel of agents on a model. The button states the cost of the whole click before it is pressed, and reads "cached, free" when the answer is already held. Answers from different models for the same candle stack into a comparison. A call to buy can be turned into an order form — see *From a call to an order, by hand*. |
 | **Signals** | Every answered call, scored against the candles that followed: the move after 1h, 4h and 1d, which of the model's own levels was touched first, and whether the call was right. Per model: act rate, hit rate, and hit rate by confidence. |
 | **Benchmark** | The same questions put to every model you tick, and to a panel of agents beside its own model, with the answers scored side by side and what a route between two of them would have done — described below. |
 | **Models** | OpenRouter's catalogue with prices. Only models that can be held to a strict JSON schema can be enabled. Also where a route to a second model, or to a panel, is set — described below. |
@@ -209,6 +211,24 @@ the Agents page. Until one is stored a card asking for it sits above every tab; 
 **API key** on the tab row opens the same card to replace, test or remove it, and Settings carries
 it too. Saving a key asks OpenRouter a free question about the key itself and spends nothing, and
 a value that is plainly some other secret is refused before it is sent anywhere to be checked.
+
+**From a call to an order, by hand.** A call to buy that this app would act on — answered,
+accepted, at 65% confidence or more — carries a **Prepare an order from this call** button on the
+Analyze tab for as long as its candle is open. The button opens the New Executor form as a
+Position on that market, with the model's own stop and target turned into distances from the price
+it was shown, and its horizon as the time limit. That is all it does:
+
+- **The amount is never filled in from a call.** A model is not asked for one, and what a call is
+  worth risking is the user's decision and the risk limits'.
+- **The form opens on paper**, as every new executor does. Real money still means ticking Live
+  Trading for that order, typing the confirmation phrase, and passing every gate in
+  [Live Trading](#live-trading--real-money) — the same path as an executor made by hand.
+- **Nothing is created until the form is submitted.** A buy below 65%, a hold, a sell, a refused
+  answer and a call whose candle has closed get no button, and the card says why.
+
+The executor's card records which call its form was filled in from. `shared/aiProposal.ts` holds
+the rules; `tests/aiProposal.test.ts` pins them, including that the form's mode is set by its own
+checkbox and by nothing else.
 
 **AI confirmation of a strategy's entries.** GPT Intraday asks a model what to do on a schedule.
 This is the other way round: the strategy decides exactly as it always has — its rules, its stop,
@@ -404,11 +424,17 @@ answerable at a price worth paying, and it withholds a hit rate below thirty sco
 
 A benchmark answers a narrower question than it may look: which model's calls were better on one
 market over one stretch, each call judged alone at four hours. It is not a backtest of the bot,
-whose results also depend on its stop and on when the model later says sell. And it has only been
-run here against a faked transport — no real model has been benchmarked yet, so there is no
-result to report, only the instrument.
+whose results also depend on its stop and on when the model later says sell.
 
-A route is unmeasured in the same way. Whether a second opinion improves a cheap model's calls, or
+One real benchmark has been run, and it is a data point rather than a finding: `openai/gpt-5-mini`
+on BTCUSDT, 180 decisions four hours apart over the 30 days to 3 October 2026, for $0.59. It said
+buy 40 times and was right at four hours on 16 of them — 40% ± 15, against 28% ± 7 for buying on
+every one of those candles. That is better than the market's own rate on that month and a long way
+short of the 67–75% a bot needs. Its 16 buys at 65% confidence or more, each held four hours, made
++4.9% after costs, against +4.2% for simply holding throughout: sixteen trades, on one market, in
+one month.
+
+A route is still unmeasured. Whether a second opinion improves a cheap model's calls, or
 only removes its good entries along with its bad ones, is what the Benchmark tab's route table is
 for — and that table has nothing to work from until two models have been benchmarked for real.
 
@@ -1628,6 +1654,7 @@ shared/                       Code both processes run, so they cannot disagree a
   aiBenchmark.ts              Several models on the same questions: the sample, and the comparison
   aiRoute.ts                  Two models for one decision: when the second is asked, and what it decides
   aiPanel.ts                  A panel of agents for one decision: its name, its reports, their validator
+  aiProposal.ts               A call to buy as an order FORM a person submits: what it may carry, and what it may not
   aiCost.ts, aiLedger.ts      Budget and estimate arithmetic; the call record and its parser
   indicators.ts, atr.ts, …    Indicator and fee arithmetic shared with the strategies
 

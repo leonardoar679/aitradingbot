@@ -354,8 +354,8 @@ const COMMANDS = {
     }
   },
 
-  /** Evaluate in the MAIN process, where `electron` itself lives. `dialog`, `app` and
-   * `BrowserWindow` are in scope.
+  /** Evaluate in the MAIN process, where `electron` itself lives. `dialog`, `app`,
+   * `BrowserWindow` and `ipcMain` are in scope.
    *
    * This exists because anything ending in a native dialog cannot be tested from the page. Two
    * approaches fail before this one: Playwright cannot click a native file picker at all, and
@@ -373,11 +373,11 @@ const COMMANDS = {
       // function is serialised and run in the main process, where the evaluated source refers to
       // Electron's `app` by that name. It was destructured as `electronApp`, so `meval app.getPath(...)`
       // -- exactly what the comment above and the skill both promise -- threw "app is not defined".
-      const out = await app.evaluate(async ({ dialog, app, BrowserWindow }, source) => {
+      const out = await app.evaluate(async ({ dialog, app, BrowserWindow, ipcMain }, source) => {
         // eslint-disable-next-line no-eval
         const value = await eval(source)
         // Keep the scope references alive for bundlers/linters that would otherwise drop them.
-        void app, BrowserWindow, dialog
+        void app, BrowserWindow, dialog, ipcMain
         return value
       }, expr)
       console.log(JSON.stringify(out ?? null))

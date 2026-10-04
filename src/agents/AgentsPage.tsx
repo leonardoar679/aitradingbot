@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Activity, Atom, Boxes, History, KeyRound, Scale, type LucideIcon } from 'lucide-react'
 import { PageHeader } from '../components/PageHeader'
 import type { AiCredentialStatus } from '../../shared/aiSignal'
+import type { AiOrderProposal } from '../../shared/aiProposal'
 import { AiKeyCard } from '../ai/AiKeyCard'
 import { AnalyzeTab } from './AnalyzeTab'
 import { BenchmarkTab } from './BenchmarkTab'
@@ -31,7 +32,13 @@ const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
  * THE KEY IS ASKED FOR HERE, because this is the page that cannot do anything without it. With
  * none stored the card is above every tab and cannot be closed; once one is stored it folds away
  * behind "API key" on the tab row, where it can be replaced, tested or removed. */
-export function AgentsPage(): React.JSX.Element {
+export function AgentsPage({
+  onPrepareOrder
+}: {
+  /** Opens an executor form filled in from a call (shared/aiProposal.ts). The form is on another
+   * page, so this page only hands the proposal up; it has no way to submit one. */
+  onPrepareOrder?: (proposal: AiOrderProposal) => void
+} = {}): React.JSX.Element {
   const [tab, setTab] = useState<Tab>('analyze')
   const [keyStatus, setKeyStatus] = useState<AiCredentialStatus | null>(null)
   const [keyOpen, setKeyOpen] = useState(false)
@@ -83,7 +90,7 @@ export function AgentsPage(): React.JSX.Element {
 
       {(keyMissing || keyOpen) && <AiKeyCard where="agents" onChanged={handleKeyChanged} />}
 
-      {tab === 'analyze' && <AnalyzeTab key={keyVersion} />}
+      {tab === 'analyze' && <AnalyzeTab key={keyVersion} onPrepareOrder={onPrepareOrder} />}
       {tab === 'signals' && <SignalsTab key={keyVersion} />}
       {tab === 'benchmark' && <BenchmarkTab key={keyVersion} />}
       {tab === 'models' && <ModelsTab key={keyVersion} />}

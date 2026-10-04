@@ -20,6 +20,7 @@ import { LiveTradingBar } from './livetrading/LiveTradingBar'
 import { LiveOrderScheduler } from './livetrading/LiveOrderScheduler'
 import { PortfolioScheduler } from './portfolio/PortfolioScheduler'
 import type { Page } from './navigation/pages'
+import type { AiOrderProposal } from '../shared/aiProposal'
 
 const PAGE_LABEL: Record<Page, string> = {
   portfolio: 'Portfolio',
@@ -41,6 +42,10 @@ function App(): React.JSX.Element {
   const [page, setPage] = useState<Page>('portfolio')
   // Set when Portfolio's first-run card is clicked, cleared as soon as Executors has acted on it.
   const [presetsRequested, setPresetsRequested] = useState(false)
+  // Set when a model's call is turned into an order form on the Agents page, cleared as soon as
+  // Executors has opened that form. What crosses between the two pages is a filled-in form, never
+  // an order: see shared/aiProposal.ts.
+  const [orderProposal, setOrderProposal] = useState<AiOrderProposal | null>(null)
   const [collapsed, setCollapsed] = useState(false)
 
   return (
@@ -100,11 +105,23 @@ function App(): React.JSX.Element {
             {page === 'trade' && <TradePage />}
             {page === 'bots' && <BotsPage />}
             {page === 'executors' && (
-              <ExecutorsPage autoOpenPresets={presetsRequested} onPresetsOpened={() => setPresetsRequested(false)} />
+              <ExecutorsPage
+                autoOpenPresets={presetsRequested}
+                onPresetsOpened={() => setPresetsRequested(false)}
+                proposal={orderProposal}
+                onProposalTaken={() => setOrderProposal(null)}
+              />
             )}
             {page === 'controllers' && <ControllersPage />}
             {page === 'positions' && <PositionsPage />}
-            {page === 'agents' && <AgentsPage />}
+            {page === 'agents' && (
+              <AgentsPage
+                onPrepareOrder={(proposal) => {
+                  setOrderProposal(proposal)
+                  setPage('executors')
+                }}
+              />
+            )}
             {page === 'routines' && <RoutinesPage />}
             {page === 'market' && <Dashboard />}
             {page === 'backtest' && <BacktestPage />}
