@@ -13,8 +13,18 @@ import type {
 } from '../shared/aiSignal'
 import type { AiBenchmarkPeek, AiBenchmarkPeekRequest } from '../shared/aiBenchmark'
 import type { AiEntryConfirmRequest, AiEntryPeek } from '../shared/aiConfirm'
+import type { AiOpportunityAskRequest, AiOpportunityPeek, AiOpportunityPeekRequest } from '../shared/aiOpportunity'
 import type { AiConfig, AiConfigPatch, AiKeyInfo, AiModelCatalogue, AiUsageSummary } from '../shared/aiCost'
 import type { AiCallFilter, AiCallPage } from '../shared/aiLedger'
+import type {
+  MarketEventFilter,
+  MarketEventPage,
+  ScanHistoryProgress,
+  ScanHistoryRequest,
+  ScanHistoryResult,
+  ScannerConfigPatch,
+  ScannerState
+} from '../shared/marketScanner'
 import {
   IpcChannel,
   type AppSettings,
@@ -88,6 +98,29 @@ const api = {
     symbolRules: (exchange: Exchange, symbol: string): Promise<SymbolTradingRules> =>
       ipcRenderer.invoke(IpcChannel.MarketSymbolRules, exchange, symbol)
   },
+  // The market scanner. Everything here reads public market data or a file the scanner wrote:
+  // none of it reaches a model, a key or an order.
+  scanner: {
+    getState: (): Promise<ScannerState> => ipcRenderer.invoke(IpcChannel.ScannerGetState),
+    setConfig: (patch: ScannerConfigPatch): Promise<ScannerState> => ipcRenderer.invoke(IpcChannel.ScannerSetConfig, patch),
+    listEvents: (filter: MarketEventFilter = {}): Promise<MarketEventPage> =>
+      ipcRenderer.invoke(IpcChannel.ScannerListEvents, filter),
+    scanHistory: (request: ScanHistoryRequest): Promise<ScanHistoryResult> =>
+      ipcRenderer.invoke(IpcChannel.ScannerScanHistory, request),
+    cancelHistory: (requestId: string): Promise<void> => ipcRenderer.invoke(IpcChannel.ScannerCancelHistory, requestId),
+    pickUniverse: (size: number): Promise<(SymbolInfo & { quoteVolume24h: number })[]> =>
+      ipcRenderer.invoke(IpcChannel.ScannerPickUniverse, size),
+    onUpdate: (listener: (state: ScannerState) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, state: ScannerState): void => listener(state)
+      ipcRenderer.on(IpcChannel.ScannerUpdate, handler)
+      return () => ipcRenderer.removeListener(IpcChannel.ScannerUpdate, handler)
+    },
+    onHistoryProgress: (listener: (progress: ScanHistoryProgress) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, progress: ScanHistoryProgress): void => listener(progress)
+      ipcRenderer.on(IpcChannel.ScannerHistoryProgress, handler)
+      return () => ipcRenderer.removeListener(IpcChannel.ScannerHistoryProgress, handler)
+    }
+  },
   credentials: {
     list: (): Promise<CredentialStatus[]> => ipcRenderer.invoke(IpcChannel.CredentialsList),
     set: (exchange: Exchange, apiKey: string, apiSecret: string): Promise<CredentialStatus> =>
@@ -137,9 +170,14 @@ const api = {
       ipcRenderer.invoke(IpcChannel.AiPeekEntryConfirmation, request),
     peekBenchmark: (request: AiBenchmarkPeekRequest): Promise<AiBenchmarkPeek> =>
       ipcRenderer.invoke(IpcChannel.AiPeekBenchmark, request),
-    // The one call below the "free" line that is not free: billed unless the answer is cached.
+    peekOpportunity: (request: AiOpportunityPeekRequest): Promise<AiOpportunityPeek> =>
+      ipcRenderer.invoke(IpcChannel.AiPeekOpportunity, request),
+    // The two calls below the "free" line that are not free: each is billed unless its answer is
+    // already cached.
     confirmEntry: (request: AiEntryConfirmRequest): Promise<AiSignalDecision> =>
-      ipcRenderer.invoke(IpcChannel.AiConfirmEntry, request)
+      ipcRenderer.invoke(IpcChannel.AiConfirmEntry, request),
+    askOpportunity: (request: AiOpportunityAskRequest): Promise<AiSignalDecision> =>
+      ipcRenderer.invoke(IpcChannel.AiAskOpportunity, request)
   },
   liveTrading: {
     getStatus: (): Promise<LiveTradingStatus> => ipcRenderer.invoke(IpcChannel.LiveTradingGetStatus),

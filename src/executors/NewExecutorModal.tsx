@@ -16,6 +16,7 @@ import {
   aiProposalPositionParams,
   describeAiProposal,
   isAiCallStale,
+  isAiProposalExpired,
   type AiOrderProposal,
   type AiProposalOrigin
 } from '../../shared/aiProposal'
@@ -225,15 +226,20 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
     const timer = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 15_000)
     return (): void => clearInterval(timer)
   }, [proposal])
-  // Still the trade the call named: a spot long on its market. Changed into anything else, the
+  // Still the trade the call named: its side, on its market. Changed into anything else, the
   // form is the user's own and the executor is not recorded as having come from a call.
   const followsProposal =
     proposal !== null &&
     type === 'position' &&
     exchange === proposal.exchange &&
     pair.symbol === proposal.pair.symbol &&
-    positionParams.side === 'buy'
-  const proposalStale = proposal !== null && isAiCallStale(proposal.candleTime, proposal.interval, nowSec)
+    positionParams.side === (proposal.side ?? 'buy')
+  // A recommendation on an event carries its own expiry; a signal's call lasts as long as its candle.
+  const proposalExpired = proposal !== null && isAiProposalExpired(proposal, nowSec)
+  const proposalStale = proposal !== null && (proposal.expiresAt !== undefined ? proposalExpired : isAiCallStale(proposal.candleTime, proposal.interval, nowSec))
+  // An expired recommendation is not submitted as it stands. Changed into the user's own order,
+  // the form is theirs again and submits like any other.
+  const blockedByExpiry = followsProposal && proposalExpired
 
   const isSpreadType = SPREAD_TYPES.includes(type)
   // Offering the handover here and then silently not doing it would be the worse of the two --
@@ -542,6 +548,11 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
 
   function handleCreate(): void {
     if (!name.trim() || !canSubmitLive || spreadAssetsMismatched || underfunded || liveUnaffordable) return
+    // Asked of the clock at the moment of the click, not of a timer that ticks every fifteen seconds.
+    if (proposal !== null && followsProposal && isAiProposalExpired(proposal, Math.floor(Date.now() / 1000))) {
+      setNowSec(Math.floor(Date.now() / 1000))
+      return
+    }
 
     if (isSpreadType) {
       const params = type === 'xemm' ? xemmParams : arbitrageParams
@@ -646,10 +657,16 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
               {describeAiProposal(proposal).map((line) => (
                 <span key={line}>{line}</span>
               ))}
-              {proposalStale && (
+              {proposalStale && !proposalExpired && (
                 <span style={{ color: 'var(--gold)', fontWeight: 600 }}>
                   The candle this call was made for has closed, so it is no longer the model’s current view. Ask again on
                   the Agents page before acting on it.
+                </span>
+              )}
+              {proposalExpired && (
+                <span style={{ color: 'var(--gold)', fontWeight: 600 }}>
+                  This recommendation’s entry has expired, so this form will not submit it as it stands. Ask again on the
+                  Agents page, or change the form into an order of your own.
                 </span>
               )}
             </div>
@@ -885,7 +902,7 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
           </button>
           <button
             onClick={handleCreate}
-            disabled={!name.trim() || !canSubmitLive || spreadAssetsMismatched || gridBlocked || underfunded || liveUnaffordable}
+            disabled={!name.trim() || !canSubmitLive || spreadAssetsMismatched || gridBlocked || underfunded || liveUnaffordable || blockedByExpiry}
             title={gridBlocked ? (gridBounds.blocking ?? undefined) : (fundingProblem ?? liveOrderShortfall ?? allocationOrderBreach ?? undefined)}
             style={{
               flex: 1,
@@ -897,10 +914,10 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
               fontSize: '0.85rem',
               fontWeight: 700,
               cursor:
-                name.trim() && canSubmitLive && !spreadAssetsMismatched && !gridBlocked && !underfunded && !liveUnaffordable
+                name.trim() && canSubmitLive && !spreadAssetsMismatched && !gridBlocked && !underfunded && !liveUnaffordable && !blockedByExpiry
                   ? 'pointer'
                   : 'not-allowed',
-              opacity: name.trim() && canSubmitLive && !spreadAssetsMismatched && !gridBlocked ? 1 : 0.6
+              opacity: name.trim() && canSubmitLive && !spreadAssetsMismatched && !gridBlocked && !blockedByExpiry ? 1 : 0.6
             }}
           >
             {mode === 'live' ? (type === 'position' ? 'Enter Real Position' : 'Place Real Order') : 'Create Executor'}

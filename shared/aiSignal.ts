@@ -108,7 +108,7 @@ export function describeUnusableAiKey(value: string): string | null {
 export type AiRecommendation = 'buy' | 'sell' | 'hold'
 export type AiPositionState = 'flat' | 'long'
 /** Where a call came from, so the ledger can say what the money was spent on. */
-export type AiCallSource = 'agent' | 'backtest' | 'bot' | 'chart' | 'benchmark'
+export type AiCallSource = 'agent' | 'backtest' | 'bot' | 'chart' | 'benchmark' | 'opportunity' | 'watch'
 
 export const AI_MARKET_REGIMES = ['strong_bull', 'bull', 'neutral', 'bear', 'strong_bear'] as const
 export type AiMarketRegime = (typeof AI_MARKET_REGIMES)[number]
@@ -167,6 +167,14 @@ export interface AiCallUsage {
   latencyMs: number
 }
 
+/** Where a recommendation says to enter, and for how many minutes that holds. Only an answer to
+ * an opportunity question carries one (shared/aiOpportunity.ts). */
+export interface AiEntryWindow {
+  min: number
+  max: number
+  validMinutes: number
+}
+
 /** Everything a usable answer carries beyond the three fields the position machine acts on.
  *
  * Nothing here is executed. The stop and target in particular are the MODEL'S levels, recorded so
@@ -180,6 +188,10 @@ export interface AiSignalDetail {
   reasonCodes: AiReasonCode[]
   /** Set when the model proposed levels that were thrown away, saying why. Null otherwise. */
   levelsNote: string | null
+  /** Present on an answer to an opportunity question: null for a call not to trade, the entry
+   * range for a call to. ABSENT on every other answer, so a signal cached before opportunities
+   * existed still reads as the signal it was. */
+  entry?: AiEntryWindow | null
 }
 
 export interface AiSignalDecision {

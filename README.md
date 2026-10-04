@@ -40,11 +40,11 @@ The sidebar's page order roughly mirrors Condor's own information architecture.
 | **Executors** | Eight paper-trading strategy types, each running independently against live candles — see [Executors](#executors) below. |
 | **Controllers** | Groups executors under shared risk controls (global stop-loss / take-profit / max drawdown) with an automatic P&L snapshot every 5 minutes; a breach auto-stops every attached executor. Adapts Condor's Controller concept, which normally supervises executors inside a Hummingbot bot container. |
 | **Positions** | Live paper positions for active bots; a **Live Positions** table of real Binance holdings from live-mode Order Executor fills, closable (fully or partially) for real; a **Live Trade History** table of realized P&L from closed live positions; an **Inventory** table of positions handed over from stopped paper executors (see [Position Handover](#position-handover--inventory)). |
-| **Agents** | The AI workspace: ask a model about a market, see how each model's past calls turned out, put the same questions to several models and score them side by side, choose which models may be asked, and see what asking has cost — see [AI signals](#ai-signals--paper-only). Paper only. Not Condor's Trading Agents (an LLM driving MCP tools): a model here is handed a market snapshot and returns one JSON decision, and is given no tools at all. |
+| **Agents** | The AI workspace: ask a model about a market, put the events the scanner raises to several models and see what each recommends and what it did, see how each model's past calls turned out, put the same questions to several models and score them side by side, choose which models may be asked, and see what asking has cost — see [AI signals](#ai-signals--paper-only). Paper only. Not Condor's Trading Agents (an LLM driving MCP tools): a model here is handed a market snapshot and returns one JSON decision, and is given no tools at all. |
 | **Routines** | Recurring backtests on a saved exchange/symbol/interval/schedule, re-run on a client-side timer while the app is open. Each run produces a session-only report (equity curve, stats) — Condor's routines are server-scheduled Python workflows; this is the closest honest adaptation without a backend. |
 | **Market** | The original dashboard: candlestick chart with indicators, symbol search, live ticker. |
 | **Backtest** | Runs a chosen strategy over a historical range and shows full stats, equity curve vs. buy-and-hold benchmark, monthly breakdown, and a trade log. A **Live** tab monitors the same route continuously — see [Live strategy monitor](#live-strategy-monitor) below. A **Charts** tab replays each trade against the candles — entry and exit arrows labelled with fill price and return, the held position shaded by outcome, and UTC times throughout. A **Compare Strategies** view ranks every registered strategy over the same candles. An optional tick box has a model [confirm each entry](#ai-signals--paper-only) and sets the strategy beside itself with the vetoed trades removed. Both views export: CSV or JSON for the numbers, and a single PNG carrying the price chart with every trade marked above the portfolio curve against buy & hold. |
-| **Explorer** | Placeholder — not yet built. |
+| **Explorer** | A market scanner: once a minute it reads the most traded USDT pairs on Binance and says what is moving, scores each the same way, and records the moves that qualify as events — see [Explorer](#explorer--a-market-scanner). Public market data only: no key, no model, no order. |
 | **Settings** | Appearance (Dark / Light / Colorblind-safe themes) and [Credentials](#credentials--api-keys). |
 
 ### Live strategy monitor
@@ -140,6 +140,82 @@ silently discarded. A "Close" button there removes it (locking in P&L locally �
 order). Defaults to on for Position and Order executors, off for Grid/DCA/TWAP, and doesn't apply
 to XEMM/Arbitrage (they never leave a lingering position by design).
 
+### Explorer — a market scanner
+
+**Explorer** answers "is anything happening?" for many pairs at once, by arithmetic, so that the
+slower and dearer question — "is it a trade?" — is only ever asked about a pair that has already
+been singled out. Switched on, the main process reads each of the 20, 40, 60 or 100 most traded
+USDT pairs on Binance once a minute, a few seconds after the minute closes, from that pair's last
+twelve hours of completed 1-minute candles (`shared/marketEvent.ts`,
+`electron/services/marketScannerService.ts`). Stablecoins and pegged tokens are left out.
+
+Each pair gets a score from 0 to 100, the plain mean of five readings:
+
+| Reading | Scores 100 at |
+|---|---|
+| The last fifteen minutes' move, against that pair's own usual one | five times it |
+| The last five minutes' traded value, against the hours before the move began | eight times it |
+| How wide the bars are, against the same | five times |
+| Where the bars closed inside their own ranges, in the direction of the move | the far end |
+| How far the close has cleared the high or low of the four hours before the move | two usual moves beyond |
+
+60 is worth watching, 75 is a candidate and 85 is urgent. A rise that clears the prior four hours
+is a *breakout* and one that does not is a *pump*; *breakdown* and *dump* mirror them. Nothing is
+fitted: every scale is a number chosen to be read, and their mean is unweighted.
+
+A pair that reaches the candidate band is recorded as an **event**, and again only if it climbs to
+urgent within half an hour: one move is one event. Events are appended to
+`marketEvents/events-YYYY-MM.jsonl` and never rewritten, with what the scanner knew that a candle
+does not hold — the spread at that moment and the pair's 24-hour volume — and where it ranked
+among the events of its minute. When the whole market moves at once only the three strongest are
+put forward; the rest are recorded and marked. What the price did 15 minutes, an hour and four
+hours after each event is read from candles when the page is opened, like every other outcome in
+this app.
+
+Three properties, each pinned by a test, and the same three `shared/aiContext.ts` keeps: a reading
+uses nothing at or after the bar a call on it would execute on; it does not depend on how much
+history was fetched, so the live scanner, a scan of history and a research script give the same
+reading for the same minute; and a move does not set its own yardstick — the volatility, volume
+and range it is measured against are all taken from before it began, or a pump would score lower
+the larger it was.
+
+It is public market data and nothing else: no key, no model, no order, and
+`tests/aiNoLivePath.test.ts` fails if the scanner ever imports something that trades or asks a
+model. It is off until switched on, stays on across restarts, reads the market at once when
+switched on, and costs one request a pair a minute — sixty pairs take about seven seconds of each
+minute and about 130 of the 6,000 request-weight a minute Binance allows.
+
+**What an event is worth**, measured before any model was asked about one
+(`research/EVENTS.md`). Every event at candidate or above over three years on four large pairs was
+scored by one fixed trade — entered a minute after the last price the scanner saw, a stop and a
+target set from the pair's own volatility, an hour at most, fees and slippage paid — against the
+same trade at arbitrary minutes on the same pair. The rule was then fixed and committed, and
+scored once on four more large pairs and on eight smaller ones chosen by rule:
+
+| At candidate or above | 4 pairs it was found on | 4 large pairs held out | 8 smaller pairs held out |
+|---|---|---|---|
+| Buy a breakout: net a trade | −0.28% | −0.27% | −0.38% |
+| …against an arbitrary buy | −0.04% (t −2.4) | −0.02% (t −1.2) | −0.08% (t −2.5) |
+| Buy a breakdown: net a trade | −0.15% | −0.13% | −0.23% |
+| …against an arbitrary buy | +0.09% (t +5.0) | +0.11% (t +4.9) | +0.07% (t +2.3) |
+
+- **Rises do not continue.** Buying a breakout a minute later does slightly worse than buying at
+  an arbitrary minute, on the smaller pairs most of all. The premise a pump scanner is usually
+  built on is false on every pair measured.
+- **Falls come back a little.** Buying a breakdown beats an arbitrary buy by about a tenth of a
+  percent, confirmed on both held-out sets. It is real, and it is between a quarter and a half of
+  what a round trip costs.
+- **Nothing pays for its own fees.** Every row is negative after costs. An event is something
+  unusual, not a signal, and the page says so.
+- Two things did not survive. A recovery lasting a full day showed on the large pairs and not on
+  the smaller ones, so it is recorded as a failure. And Binance's taker-buy volume predicted
+  nothing the candle-only pressure reading did not, so that column is not carried into the app.
+- One thing changed because of it: a volume spike with no direction is shown in the table and no
+  longer raised as an event. Nothing followed one at any horizon from five minutes to a day, and
+  on thinly traded pairs they were two thirds of everything that fired.
+
+With that, a watched pair raises about one event a day, large or small.
+
 ### AI signals — paper only
 
 A model can be asked for a buy / sell / hold decision on a market. It is asked through
@@ -201,8 +277,9 @@ entries, described next; an **AI signals** overlay on the Market chart, off by d
 | Tab | What it does |
 |---|---|
 | **Analyze** | One market, one model, one click, one call — or four, when what is picked is a panel of agents on a model. The button states the cost of the whole click before it is pressed, and reads "cached, free" when the answer is already held. Answers from different models for the same candle stack into a comparison. A call to buy can be turned into an order form — see *From a call to an order, by hand*. |
+| **Opportunities** | The events the scanner raised, each with what the ticked models recommended for it — BUY, SELL or NO TRADE, with an entry range, a stop, a target and an expiry — and what each recommendation has done since. A watch can put events to models as they are raised, within its own daily limit, and a leaderboard scores what it asked. Described below. |
 | **Signals** | Every answered call, scored against the candles that followed: the move after 1h, 4h and 1d, which of the model's own levels was touched first, and whether the call was right. Per model: act rate, hit rate, and hit rate by confidence. |
-| **Benchmark** | The same questions put to every model you tick, and to a panel of agents beside its own model, with the answers scored side by side and what a route between two of them would have done — described below. |
+| **Benchmark** | The same questions put to every model you tick, with the answers scored side by side. Two kinds: one market asked on a clock, with a panel of agents beside its own model and what a route between two of them would have done; and events across the market, where each recommendation is followed through its own entry, stop and target — both described below. |
 | **Models** | OpenRouter's catalogue with prices. Only models that can be held to a strict JSON schema can be enabled, and one that reasons can be enabled again at a lower reasoning effort. Also where a route to a second model, or to a panel, is set — described below. |
 | **Usage** | Calls, tokens, dollars and latency per model, and the daily budget. |
 
@@ -211,6 +288,103 @@ the Agents page. Until one is stored a card asking for it sits above every tab; 
 **API key** on the tab row opens the same card to replace, test or remove it, and Settings carries
 it too. Saving a key asks OpenRouter a free question about the key itself and spends nothing, and
 a value that is plainly some other secret is refused before it is sent anywhere to be checked.
+
+**Opportunities: an event, put to several models.** The Opportunities tab lists the events the
+[scanner](#explorer--a-market-scanner) has raised and lets each one be put to the models you tick.
+The question is not "would you buy this market?" but "the scanner just raised this — is it a
+trade, and if so where, and until when?":
+
+- **What is asked.** The seven-day snapshot every other question carries, and on top of it an
+  `event` block: its type and direction, the score and its five components, the returns behind it,
+  the last thirty 1-minute bars and the two hours before those in 5-minute bars
+  (`buildEventContext` in `shared/aiContext.ts`). The event is worked out in the main process from
+  the candles the request carries, by the same detector the scanner runs, so a model cannot be
+  asked — and billed — about a minute on someone's say-so that it was interesting. The prompt says
+  what an event is and deliberately not what usually follows one: the figures in
+  `research/EVENTS.md` were measured over the months a benchmark replays, and putting them in the
+  prompt would hand the model a summary of the answers.
+- **What comes back.** The signal's answer with three fields added: `entryMin`, `entryMax` and
+  `validMinutes` (5, 15, 30 or 60); the horizon is the holding time. BUY opens a long, SELL opens
+  a short, and NO TRADE is a first-class answer. The app, not the model, stamps when the
+  recommendation was made and when it expires. Here the levels are the product, so an answer whose
+  entry range is upside down, far from the price, or not bracketed by its stop and target is
+  refused whole (`validateOpportunityAnswer` in `shared/aiOpportunity.ts`) — billed, kept, and
+  counted as no trade.
+- **Every model answers alone.** Ticked models are asked together, each with the same snapshot,
+  and none is shown another's answer. The card counts them — "2 BUY · 1 SELL · 1 NO TRADE" — and
+  says so when two take opposite sides. That count is shown to be read, and nothing acts on it.
+- **What a recommendation did** is worked out from 1-minute candles whenever the tab is looked at
+  (`shared/aiOpportunityOutcome.ts`), and never stored. An answer can only be acted on from the
+  first minute that opens after it arrived, so a slower model enters later: latency is charged in
+  whole minutes. The entry fills the first time the price trades in its range while it is valid,
+  at the open if that is inside the range and otherwise at the nearer edge; if it never does, the
+  recommendation expired and was never a trade. Then the stop, the target or the holding time
+  ends it. Where a candle cannot say which came first, the answer is the worse one: a bar touching
+  both levels is a stop, a position entered part-way through a bar is not credited with a target
+  that bar reached, a bar that opens beyond the stop fills at its open. Fees are paid on both
+  fills and slippage on every market fill: more of it on a thinner pair, and never less than half
+  the spread the scanner saw on the book when it raised the event.
+- **Paper trade** opens the same New Executor form as *From a call to an order, by hand* below,
+  with the side, the entry (at market while the price is inside the model's range, otherwise
+  waiting for its nearer edge), the stop, the target, the time limit and the expiry. Once the
+  entry has expired the form will not submit it as it stands. **A short is paper only**: the form
+  refuses Live for any position that is not a buy, because on a spot account a live "sell" would
+  sell coins you hold, which is not what a short call means.
+
+Nothing is asked until **Ask** is pressed on an event, and the price of exactly those calls is
+stated first — unless the watch below has been switched on. `tests/aiNoLivePath.test.ts` and
+`tests/aiProposal.test.ts` pin that none of this reaches an order path, and that a short's form
+cannot be made live.
+
+**The watch: events asked about as they are raised.** A recommendation with a fifteen-minute
+entry is worth nothing an hour later, so the Opportunities tab carries a switch for the one thing
+in this app that asks a model with nobody pressing anything. It is off until it is switched on.
+
+- **Switching it on is the confirmation it gets**, so that confirmation states each model's price
+  a call, the most a day of it can cost — every model, for every event its limit allows, and the
+  least as well when the first model is asked alone — and how that sits against the daily AI
+  budget. What it asks cannot be changed while it is on: a different list of models or a higher
+  limit is a different price, agreed to by switching it off and on again. A model it asks cannot
+  be disabled from under it.
+- **What it takes up**: an event raised live in the last three minutes, among the strongest three
+  of its minute, at urgent (or at candidate and urgent), and never one that was on file when the
+  app started. At most 5, 10, 20 or 40 events a UTC day, counted from the call ledger rather than
+  kept in memory, so a restart does not start the count again. A call that never reached a model
+  still uses its event's place, so a provider that is down is not tried all day.
+- **The first model can be asked alone.** Most events are no trade. With that option the first
+  model answers every event and the others are asked only about the ones it would act on.
+- **The limits are held twice.** A headless scheduler in the renderer (`OpportunityScheduler`,
+  `src/agents/opportunityWatch.ts`) decides which events to take up each time the scanner reports
+  a pass. The main process makes the same decision again immediately before every call made in
+  the watch's name (`electron/services/aiWatchService.ts`), from the two things only it owns —
+  the setting and the ledger — one check at a time, so that two events arriving together cannot
+  both take the day's last place. The daily AI budget is checked after that, as for every call.
+- **It recommends and notifies.** An answer lands on its event's card exactly as one bought with
+  Ask does, and the first call to trade on an event raises one desktop notice, which says that
+  nothing has been placed. **It places nothing**: it opens no order form, creates no executor and
+  touches no account, paper or real. `tests/aiNoLivePath.test.ts` pins that its files mention no
+  bridge an order, an executor or a settings write travels over. A paper trade is still a button
+  a person presses on the card.
+- **It runs while the app is open**, whichever page is showing, and stays on across restarts
+  until it is switched off. With the watch and the scanner both on, starting the app can
+  therefore spend money without a click, inside those limits.
+
+**What the watch's recommendations earned** is the leaderboard under the feed: the watch's own
+answers of the last thirty days, in the tables of the benchmark on events described below — the
+same scoring, the same two rows that are not models, the same rules for combining models, and
+only the events every model answered. It differs from a benchmark in what a benchmark has to
+assume. A replayed answer is taken to have arrived ten seconds after its event plus the model's
+latency; here each answer is scored from the second its call finished. A replayed event is
+charged a slippage rate for its liquidity; here half the spread the scanner recorded is charged
+instead, when that is more.
+The Benchmark tab shows the same card for the models it compares, so a model's replayed results
+and its live ones sit on one page, and the difference between them is what those assumptions
+were worth. An answer bought later by pressing Ask is left out: it arrived when a person got
+round to it, which says nothing about the model. Scoring is free and waits for a click, since it
+reads a request of public candles an event.
+
+The watch has asked nothing of a real model yet. It is checked in the app with the models faked
+and a made-up move on one pair for the real scanner to find.
 
 **From a call to an order, by hand.** A call to buy that this app would act on — answered,
 accepted, at 65% confidence or more — carries a **Prepare an order from this call** button on the
@@ -305,6 +479,55 @@ different candles for every model: a better hit rate there can mean an easier we
   it says, per model, how many calls remain and what they are expected to cost, and whether that
   is more than the budget has left. Declining shows what is already held. Leaving the tab stops
   the run; a model that fails three calls running is dropped and the others carry on.
+
+**Benchmark on events.** The clock benchmark asks about one market at fixed times, and the 90-day
+run below found nothing there. The Benchmark tab's second view, **Events across the market**, asks
+the Opportunities question instead — about the minutes the scanner would have raised — and scores
+each recommendation by following it.
+
+- **Two buttons, and only the second can spend.** *Find events* is free: it reads 7, 14 or 30 days
+  of 1-minute candles for the 10, 20 or 40 most traded pairs, runs the detector the live scanner
+  runs, and takes a sample of at most 50 to 300 events. *Run benchmark* asks each ticked model
+  about each sampled event it has not answered, after stating the price and the time.
+- **The period ends a day back**, at the last UTC midnight at least 25 hours ago, so every
+  recommendation has had its hour to enter and its day to run before it is scored. It is anchored
+  to the day, so tomorrow's run covers the same days and one more.
+- **The sample is chosen by a hash of each event's own id**, each type in proportion to how many
+  of it there are (`sampleEvents` in `shared/aiEventBenchmark.ts`). Whether an event is in it does
+  not depend on which others were found, so a longer period keeps the events a shorter one had and
+  their answers come from the cache; and a hash cannot prefer the events that turned out well,
+  which choosing "the strongest" quietly would.
+- **The answers are the Opportunities tab's**, through the same cache, in both directions: an
+  event a benchmark paid for shows its answers on that event's card, and the reverse.
+- **Only events every model answered are compared.** A recommendation is acted on when it takes a
+  side at 65% confidence or more, and is then followed to the letter on 1-minute candles —
+  `shared/aiOpportunityOutcome.ts`, the same scoring as a card. A replayed answer is taken to have
+  arrived ten seconds after the event plus however long that model took to give it, so a slow
+  model enters a minute or two later here exactly as it would live.
+- **What it reports**, per model: buys, sells and no-trades; how many were acted on, how many
+  expired unfilled; the win rate with a 95% margin; every closed trade's net return added up, and
+  the mean; gains over losses; the deepest fall of the running total; the average hold; median
+  wait; what the answers cost; the result at $1,000 a trade before and after that cost, and per
+  dollar of it; the best and worst price inside a trade; and the period cut into three consecutive
+  parts, because a result that holds in one part only is a stretch of market and not a model. A
+  rate is withheld under 30 closed trades, and a slice (by event type, side, holding time or
+  confidence) under 10. There is no overall score: its weights would be invented.
+- **Two rows are not models.** *Follow every event* and *fade every event* take the same events
+  with one fixed bracket — a stop 1.5 usual fifteen-minute moves away, a target 3, one hour — and
+  no judgement. They are on screen as soon as the events are found, before anything is asked, and
+  a model is worth its price by as much as it beats them. On the one sample looked at so far (50
+  events on the ten most traded pairs, 26 September to 3 October 2026) following lost 4.3% of a
+  stake over 50 trades and fading lost 23.3%: what `research/EVENTS.md` found over years, that
+  neither is a trade.
+- **Three more rows are the models combined**, worked out from the answers held and costing
+  nothing: a side taken when more than half the models take it and none takes the other, when all
+  do, or when its confidence outweighs the other side's and the abstainers' together. A rule has
+  no levels of its own, so it trades those of the model surest of that side, and it cannot act
+  until the slowest model has answered.
+
+No benchmark on events has been run against a real model yet: it is checked in the app with the
+models faked and the candles real. Whether any model beats the two rows that are not models is
+not known.
 
 **Model routing.** A cheap model can be asked every fifteen minutes for a few dollars a month. A
 frontier model asked the same way costs several times that, and nearly all of it buys the answer
@@ -626,6 +849,8 @@ electron/preload.ts  ── contextBridge ──▶  window.api.*  (renderer)
       ├── credentials.list() / set() / test()       → electron/services/credentialsService.ts
       ├── market.*  (symbols, candles, tickers)      → electron/services/marketService.ts
       │                                                   + electron/services/exchanges/*
+      ├── scanner.*  (what is moving, events)         → electron/services/marketScannerService.ts
+      │                                                   (public market data; no key, model or order)
       ├── ai.*  (key, models, budget, signals, ledger) → electron/services/aiSignalService.ts
       │                                                   + openRouterClient.ts + aiConfigService.ts
       │                                                   + aiLedgerService.ts  (no route to an order)
@@ -659,7 +884,9 @@ electron/preload.ts  ── contextBridge ──▶  window.api.*  (renderer)
   the app closes, the same tradeoff the Trade page's session order history makes.
 - **Headless schedulers**: `RoutineScheduler`, `ControllerScheduler`, and `LiveOrderScheduler` are
   `return null` components mounted once in `App.tsx`, so their `setInterval`s keep firing
-  regardless of which page is active. `RoutineScheduler`/`ControllerScheduler` poll their own
+  regardless of which page is active. `OpportunityScheduler` is the same kind of component with no
+  timer of its own: it runs the [watch](#ai-signals--paper-only) each time the scanner reports a
+  pass. `RoutineScheduler`/`ControllerScheduler` poll their own
   settings slice every 10s to notice config changes made on the page component (there's no
   cross-component push channel); `LiveOrderScheduler` polls every open live limit order via the
   main process every 5s and patches the matching executor's status directly.
@@ -1695,16 +1922,20 @@ every other exchange stays paper-only.
 electron/                    Electron main process
   main.ts                    App entry point
   preload.ts                 contextBridge → window.api
-  ipc/handlers/               One handler module per IPC surface (app, settings, market,
+  ipc/handlers/               One handler module per IPC surface (app, settings, market, scanner,
                                credentials, ai, liveTrading, backtest)
   services/                  settingsService, credentialsService, marketService,
                                liveTradingService (safety gates), livePositionsService (ledger),
                                liveOrdersService (resting limit orders)
+                             marketScannerService (the once-a-minute read of every watched pair,
+                               its events file, and scans of history), jsonlStore (append-only
+                               month files, shared with the AI call ledger)
                              AI, with no import path to any of the live services above:
                                openRouterClient (the only file that knows OpenRouter's wire format),
                                aiSignalService (the paid path, cache, retries), aiPrompt,
-                               aiConfigService (models, daily budget), aiLedgerService (call
-                               history), aiCredentialsService (the key)
+                               aiConfigService (models, daily budget, the watch's setting),
+                               aiLedgerService (call history), aiCredentialsService (the key),
+                               aiWatchService (the watch's limits, checked before each of its calls)
     exchanges/                Per-exchange REST/WS connectors + aggregate.ts; binanceTrading.ts
                                (the only real order-placement/query/cancel adapter)
 
@@ -1720,8 +1951,14 @@ shared/                       Code both processes run, so they cannot disagree a
   aiRoute.ts                  Two models for one decision: when the second is asked, and what it decides
   aiPanel.ts                  A panel of agents for one decision: its name, its reports, their validator
   aiProposal.ts               A call to buy as an order FORM a person submits: what it may carry, and what it may not
+  aiOpportunity.ts            A recommendation on an event: entry range, stop, target and two clocks; its validator; what several answers add up to
+  aiOpportunityOutcome.ts     What a recommendation would have earned: the entry, the exit, fees, slippage and latency
+  aiEventBenchmark.ts         Several models on the same events: the sample, the comparison, the rows that are not models
+  aiWatch.ts                  Events put to models without a click: the setting, what it takes up, its daily limit, what it costs, its notice
   aiEffort.ts                 A model asked at a lower reasoning effort, as a model of its own: its id, and where it is taken apart
   aiCost.ts, aiLedger.ts      Budget and estimate arithmetic; the call record and its parser
+  marketEvent.ts              The event detector: a pair's reading from twelve hours of 1-minute candles, and what raises an event
+  marketScanner.ts            The scanner's settings, what a pass reports, and which pairs are watched
   indicators.ts, atr.ts, …    Indicator and fee arithmetic shared with the strategies
 
 src/                          React renderer app
@@ -1737,15 +1974,21 @@ src/                          React renderer app
                                poller for resting limit orders) — see Live Trading
   positions/                  Open paper positions; Live Positions + Live Trade History (real
                                money); Inventory (handed-over paper positions)
-  agents/                     The AI workspace: Analyze, Signals, Benchmark, Models and Usage tabs;
-                              benchmark.ts (the loop that asks for a benchmark's missing answers)
+  agents/                     The AI workspace: Analyze, Opportunities, Signals, Benchmark, Models and Usage tabs;
+                              opportunities.ts (an event's candles, the feed, and what each answer did);
+                              benchmark.ts (the loop that asks for a benchmark's missing answers);
+                              eventBenchmark.ts (the free half of a benchmark on events: the sample,
+                              what is held, and the candles that score it);
+                              opportunityWatch.ts + OpportunityScheduler (the watch at work, headless);
+                              liveBoard.ts (the watch's answers joined to their events, for the leaderboard)
   routines/                   Scheduled-backtest store, headless scheduler, page
   dashboard/                  Market page (chart + ticker)
   backtest/                   Execution engine, results UI, Charts + Strategy Comparison views,
                               CSV/JSON/PNG export; aiConfirmation.ts (a strategy replayed with a
                               model allowed to veto each trade)
     strategies/                Pluggable strategy registry — see Strategies
-  explorer/                   Placeholder page
+  explorer/                   The market scanner's page: what is moving now, the events raised, and
+                              what the price did after each (eventOutcomes.ts)
   settings/                   Appearance + Credentials
 
   charts/                     Shared chart component

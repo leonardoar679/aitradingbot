@@ -4,6 +4,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc'
 import { startLivePositionWatcherLoop } from './services/livePositionWatchersService'
 import { startLiveTwapLoop } from './services/liveTwapService'
+import { startMarketScanner } from './services/marketScannerService'
 import icon from '../build/icon.png?asset'
 
 function createWindow(): BrowserWindow {
@@ -74,6 +75,11 @@ if (!gotSingleInstanceLock) {
     // Places the remaining slices of every live TWAP run on their configured interval, same
     // main-process-resident reasoning as the watcher loop above. See liveTwapService.ts.
     startLiveTwapLoop()
+    // Reads every watched pair once a minute and says what is moving. Public market data only:
+    // no key, no model, no order. It starts here only if it was left switched on, and it is
+    // main-process-resident for the same reason as the two loops above. See
+    // marketScannerService.ts.
+    void startMarketScanner().catch((error) => console.error('Market scanner failed to start:', error))
 
     app.on('activate', function () {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()

@@ -7,7 +7,7 @@ import { upbitAdapter } from './exchanges/upbit'
 import { coinoneAdapter } from './exchanges/coinone'
 import { korbitAdapter } from './exchanges/korbit'
 import { gopaxAdapter } from './exchanges/gopax'
-import type { ExchangeAdapter } from './exchanges/types'
+import type { ExchangeAdapter, MarketScanSource } from './exchanges/types'
 import { createStreamSlot } from './streamSlot'
 
 const ADAPTERS: Record<Exchange, ExchangeAdapter> = {
@@ -60,6 +60,14 @@ export function fetchHistoricalCandles(
 
 export function fetchTicker24h(exchange: Exchange, symbol: string): Promise<Ticker24h> {
   return getAdapter(exchange).fetchTicker24h(symbol)
+}
+
+/** The whole-market reads a scanner needs, or a refusal that names the exchange: most adapters
+ * here can only be asked about one pair at a time. */
+export function scanSourceFor(exchange: Exchange): MarketScanSource {
+  const source = getAdapter(exchange).scan
+  if (!source) throw new Error(`${exchange} cannot be scanned as a whole market`)
+  return source
 }
 
 // Keyed by requestId, not a single shared flag -- several independent fetches (a background bot

@@ -133,7 +133,9 @@ describe('the budget in the main process', () => {
       // One model decides alone until a route is set, and setting one is always somebody's choice.
       route: null,
       dailyCapUsd: DEFAULT_AI_DAILY_CAP_USD,
-      spentTodayUsd: 0
+      spentTodayUsd: 0,
+      // Nothing asks a model without a click until the watch is switched on.
+      watch: { enabled: false, models: [], maxEventsPerDay: 10, minBand: 'urgent', firstModelGates: false }
     })
   })
 

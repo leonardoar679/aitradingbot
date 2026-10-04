@@ -3,7 +3,6 @@ import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, readFile } from 'fs/promises'
 import { join } from 'path'
 import {
-  AI_SCHEMA_VERSION,
   GPT_FLAT,
   GPT_INTRADAY_INTERVAL,
   GPT_LOOKBACK_BARS,
@@ -31,10 +30,22 @@ import {
   AI_CONTEXT_VERSION,
   aiContextJson,
   aiPromptVersion,
+  aiSchemaVersion,
   buildAiContext,
+  buildEventContext,
   withAgentReports,
   type AiMarketContext
 } from '../../shared/aiContext'
+import {
+  AI_OPPORTUNITY_MAX_MODELS,
+  validateOpportunityAnswer,
+  type AiOpportunityAskRequest,
+  type AiOpportunityModelPeek,
+  type AiOpportunityPeek,
+  type AiOpportunityPeekRequest,
+  type AiOpportunityQuestion
+} from '../../shared/aiOpportunity'
+import { marketEventId } from '../../shared/marketEvent'
 import {
   AI_AGENT_PROMPT_VERSIONS,
   AI_AGENT_ROLES,
@@ -80,15 +91,16 @@ import {
   resolveAiPipeline
 } from './aiConfigService'
 import { appendAiCall, listAiCalls } from './aiLedgerService'
+import { withinWatchLimits } from './aiWatchService'
 import {
   AI_AGENT_SCHEMAS,
   AI_MAX_OUTPUT_TOKENS,
-  AI_RESPONSE_SCHEMA,
   aiAgentPromptChars,
   aiPanelDecisionPromptChars,
   aiPromptChars,
   buildAgentMessages,
-  buildAiMessages
+  buildAiMessages,
+  responseSchemaFor
 } from './aiPrompt'
 import { chatCompletion, OpenRouterError, type ChatCompletionResult } from './openRouterClient'
 
@@ -134,7 +146,7 @@ function cacheDirectory(): string {
  * standalone signal does not), so a key can never be built for one prompt and asked under another. */
 export function aiSignalCacheKey(input: { model: string; context: AiMarketContext }): string {
   return createHash('sha256')
-    .update(JSON.stringify([aiPromptVersion(input.context), AI_SCHEMA_VERSION, input.model, aiContextJson(input.context)]))
+    .update(JSON.stringify([aiPromptVersion(input.context), aiSchemaVersion(input.context), input.model, aiContextJson(input.context)]))
     .digest('hex')
 }
 
@@ -216,7 +228,13 @@ function safeHold(candleTime: number, model: string, error: unknown): AiSignalDe
   }
 }
 
-function interpret(result: ChatCompletionResult, referencePrice: number): AiAnswerVerdict {
+/** The price a context's levels were placed against: the event's own on an opportunity, the
+ * last close on everything else. */
+function referencePriceOf(context: AiMarketContext): number {
+  return context.event?.price ?? context.lastClose
+}
+
+function interpret(result: ChatCompletionResult, context: AiMarketContext): AiAnswerVerdict {
   if (result.finishReason === 'length') {
     return { ok: false, reason: 'The answer was cut off at the output limit before it finished.' }
   }
@@ -226,7 +244,8 @@ function interpret(result: ChatCompletionResult, referencePrice: number): AiAnsw
   } catch {
     return { ok: false, reason: 'The answer was not valid JSON.' }
   }
-  return validateAiAnswer(parsed, referencePrice)
+  // An opportunity's answer is judged by its own rules: there the levels are the answer.
+  return context.event !== undefined ? validateOpportunityAnswer(parsed, referencePriceOf(context)) : validateAiAnswer(parsed, referencePriceOf(context))
 }
 
 /** Fills in a cost when the response carried none, from the model's price list and the tokens the
@@ -275,14 +294,20 @@ async function askModel(input: AskInput): Promise<AiSignalDecision> {
     model: input.model,
     promptVersion,
     contextVersion: AI_CONTEXT_VERSION,
-    schemaVersion: AI_SCHEMA_VERSION,
+    schemaVersion: aiSchemaVersion(input.context),
     exchange: input.context.exchange,
     symbol: input.context.symbol,
     interval: input.context.interval,
     candleTime: input.candleTime,
     position: input.context.position,
-    referencePrice: input.context.lastClose,
+    referencePrice: referencePriceOf(input.context),
     ...(input.context.strategy !== undefined ? { strategyId: input.context.strategy.id } : {}),
+    ...(input.context.event !== undefined
+      ? {
+          eventId: marketEventId(input.context.exchange, input.context.symbol, input.context.event.time),
+          eventType: input.context.event.type
+        }
+      : {}),
     ...(input.escalatedFrom !== undefined ? { escalatedFrom: input.escalatedFrom } : {}),
     ...(input.agent !== undefined ? { agent: input.agent } : {})
   }
@@ -290,7 +315,7 @@ async function askModel(input: AskInput): Promise<AiSignalDecision> {
 
   let result: ChatCompletionResult
   try {
-    result = await requestWithRetry(input.apiKey, input.model, buildAiMessages(input.context), AI_RESPONSE_SCHEMA)
+    result = await requestWithRetry(input.apiKey, input.model, buildAiMessages(input.context), responseSchemaFor(input.context))
   } catch (error) {
     const failed: AiCallRecord = {
       ...row,
@@ -316,7 +341,7 @@ async function askModel(input: AskInput): Promise<AiSignalDecision> {
   const usage = await withCost(result.usage, input.model)
   await record('spend record', recordAiSpend(usage.costUsd ?? 0))
 
-  const verdict = interpret(result, input.context.lastClose)
+  const verdict = interpret(result, input.context)
   const decision: AiSignalDecision = verdict.ok
     ? {
         candleTime: input.candleTime,
@@ -1194,4 +1219,110 @@ export async function peekAiBenchmark(request: AiBenchmarkPeekRequest): Promise<
     })
   }
   return { models: peeked, budgetRemainingUsd: await budgetRemainingUsd() }
+}
+
+// ---------------------------------------------------------------------------------------------
+// OPPORTUNITIES (shared/aiOpportunity.ts). An event the scanner raised, put to a model as "is
+// this a trade, and if so where, and until when?".
+//
+// ONE DECISION AT A TIME, like an entry review: the renderer asks about one event and one model,
+// and each call is guarded exactly as every other one is -- the cache, the in-flight join, the
+// validator, the ledger, the daily budget. Asking several models about one event, and asking
+// about hundreds of events in a benchmark, are loops in the renderer over this one call.
+
+/** The question for an event, from a request that has been checked rather than trusted.
+ *
+ * THE EVENT IS WORKED OUT HERE, FROM THE CANDLES. The request names a market and sends candles;
+ * whether those candles end in an event is decided by the same detector the scanner runs, so a
+ * caller cannot have a model asked -- and billed -- about a minute by saying it was interesting. */
+function opportunityQuestion(request: AiOpportunityQuestion): AiMarketContext {
+  if (typeof request?.symbol !== 'string' || request.symbol.trim() === '') throw new Error('An opportunity needs a symbol')
+  for (const [name, candles] of [
+    ['15-minute', request.candles15m],
+    ['1-minute', request.candles1m]
+  ] as const) {
+    if (!Array.isArray(candles) || !candles.every(isCandle)) throw new Error(`An opportunity needs completed ${name} candles`)
+    for (let index = 1; index < candles.length; index++) {
+      if (candles[index].time <= candles[index - 1].time) throw new Error(`The ${name} candles of an opportunity are out of order`)
+    }
+  }
+  const context = buildEventContext(request.candles15m, request.candles1m, { exchange: request.exchange, symbol: request.symbol })
+  if (!context?.event) {
+    throw new Error(
+      'These candles do not end in an event. A model is asked only about a minute the scanner would raise, with twelve hours of 1-minute candles before it and seven days of 15-minute candles.'
+    )
+  }
+  return context
+}
+
+/** Which models already hold an answer for this event, and what one more call to each of the
+ * others is expected to cost. Spends nothing: it reads the cache, the ledger and a price list. */
+export async function peekAiOpportunity(request: AiOpportunityPeekRequest): Promise<AiOpportunityPeek> {
+  const requested: unknown = request?.models
+  if (!Array.isArray(requested) || requested.length === 0 || requested.length > AI_OPPORTUNITY_MAX_MODELS) {
+    throw new Error(`An event is put to between 1 and ${AI_OPPORTUNITY_MAX_MODELS} models`)
+  }
+  if (new Set(requested).size !== requested.length) throw new Error('An event was given the same model twice')
+  const models: string[] = []
+  for (const model of requested) {
+    if (typeof model !== 'string') throw new Error('An event was given a model that is not a model id')
+    models.push(await resolveAiModel(model))
+  }
+  const context = opportunityQuestion(request)
+  const event = context.event as NonNullable<AiMarketContext['event']>
+
+  const held = await Promise.all(models.map((model) => readCached(aiSignalCacheKey({ model, context }), aiPromptVersion(context))))
+  // A missing key is reported here, before anyone is asked to agree to a call that could not be
+  // made -- and only when a call would be needed.
+  if (held.includes(null)) await getDecryptedAiCredential()
+
+  const peeked: AiOpportunityModelPeek[] = []
+  for (const [position, model] of models.entries()) {
+    const cost = await perCallCost(model, context)
+    const cached = held[position]
+    peeked.push({
+      model,
+      decision: cached ? { ...cached, candleTime: event.time, cached: true } : null,
+      perCallCostUsd: cost.costUsd,
+      costBasis: cost.basis,
+      perCallLatencyMs: cost.latencyMs
+    })
+  }
+  return {
+    eventId: marketEventId(context.exchange, context.symbol, event.time),
+    eventTime: event.time,
+    models: peeked,
+    budgetRemainingUsd: await budgetRemainingUsd()
+  }
+}
+
+/** One model's answer to one event. Billed unless it is already cached.
+ *
+ * Returns the decision whatever it says. A call that never reached a model comes back as a safety
+ * hold carrying `error`, is not cached, and is asked again next time; an answer the validator
+ * refused is billed, cached and kept, and reads as no trade. A refusal that will not change (the
+ * key, the balance, the budget) is thrown, so that a loop over many events stops. */
+export async function askAiOpportunity(request: AiOpportunityAskRequest): Promise<AiSignalDecision> {
+  const model = await resolveAiModel(request.model)
+  const context = opportunityQuestion(request)
+  const event = context.event as NonNullable<AiMarketContext['event']>
+  const key = aiSignalCacheKey({ model, context })
+  const cached = await readCached(key, aiPromptVersion(context))
+  if (cached) return { ...cached, candleTime: event.time, cached: true }
+
+  // Checked on the paid path only, as an entry review's is: a minute still forming has a close
+  // that moves, so its question would differ on every look and every look would pay again.
+  if (event.time > Math.floor(Date.now() / 1000)) {
+    throw new Error('The minute this event was read at has not closed yet, so there is nothing settled to ask about.')
+  }
+  // Where a call came from is a label on its row, with one exception: a call the watch asks for
+  // was agreed to by nobody at the moment it is made, so it is held to the watch's own limits.
+  const source: AiCallSource = request.source === 'watch' || request.source === 'benchmark' ? request.source : 'opportunity'
+  const ask = async (): Promise<AiSignalDecision> => {
+    const { apiKey } = await getDecryptedAiCredential()
+    const asked = await decideOnce(key, () => askModel({ key, apiKey, model, context, candleTime: event.time, source }))
+    return asked.joined ? { ...asked.decision, candleTime: event.time, cached: true } : asked.decision
+  }
+  if (source !== 'watch') return ask()
+  return withinWatchLimits({ model, eventId: marketEventId(context.exchange, context.symbol, event.time), eventTime: event.time }, ask)
 }

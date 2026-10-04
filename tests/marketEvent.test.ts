@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Candle } from '../shared/ipc'
+import { quiet, thenFlat, withMove } from './eventCandles'
 import {
   EVENT_CANDIDATE_SCORE,
   EVENT_COOLDOWN_SECONDS,
@@ -17,61 +18,6 @@ import {
   toMarketEvent,
   type EventReading
 } from '../shared/marketEvent'
-
-const T0 = Date.parse('2026-09-01T00:00:00Z') / 1000
-
-/** A quiet market: a small deterministic wobble around 100, the same volume every minute. */
-function quiet(bars: number, seed = 7): Candle[] {
-  let state = seed
-  const next = (): number => {
-    state = (state * 1103515245 + 12345) % 2147483648
-    return state / 2147483648 - 0.5
-  }
-  const out: Candle[] = []
-  let price = 100
-  for (let i = 0; i < bars; i++) {
-    const open = price
-    const close = open * (1 + next() * 0.0006)
-    out.push({ time: T0 + i * 60, open, high: Math.max(open, close) * 1.0001, low: Math.min(open, close) * 0.9999, close, volume: 1000 })
-    price = close
-  }
-  return out
-}
-
-interface Move {
-  /** Percent over the last fifteen bars. Negative for a fall. */
-  pct: number
-  /** Volume of each of the last five bars, as a multiple of the usual. */
-  volume?: number
-  /** Where each moving bar closes inside its own range: 1 at the favourable end, 0 at the other. */
-  closeAt?: number
-}
-
-/** A quiet market that ends in a fifteen-minute move. */
-function withMove(move: Move, lead = EVENT_LOOKBACK_BARS + 20, seed = 7): Candle[] {
-  const bars = quiet(lead, seed)
-  const step = move.pct / 15 / 100
-  const closeAt = move.closeAt ?? 1
-  let price = bars[bars.length - 1].close
-  for (let i = 0; i < 15; i++) {
-    const open = price
-    const close = open * (1 + step)
-    const body = Math.abs(close - open)
-    // The bar's range is its body plus a wick on the side the close is held away from.
-    const wick = closeAt >= 1 ? 0 : (body * (1 - closeAt)) / Math.max(closeAt, 0.05)
-    const up = close >= open
-    bars.push({
-      time: T0 + (lead + i) * 60,
-      open,
-      high: up ? close + wick : open,
-      low: up ? open : close - wick,
-      close,
-      volume: i >= 10 ? 1000 * (move.volume ?? 1) : 1000
-    })
-    price = close
-  }
-  return bars
-}
 
 function reading(bars: Candle[], index = bars.length - 1): EventReading {
   const result = readEventAt(bars, index)
@@ -214,6 +160,23 @@ describe('readEventAt', () => {
     expect(reading(churn(3)).type).toBeNull()
   })
 
+  it('counts no break for a market with no direction, however new its high', () => {
+    // A slow, steady climb: every minute a little higher than the last, so the close is always
+    // above everything before it -- and the last fifteen minutes are an ordinary fifteen minutes.
+    const bars: Candle[] = []
+    let price = 100
+    for (let i = 0; i < EVENT_LOOKBACK_BARS + 5; i++) {
+      const open = price
+      price = open * 1.00002
+      bars.push({ time: 1_790_000_000 + i * 60, open, high: price, low: open, close: price, volume: 1000 })
+    }
+    const drift = reading(bars)
+    expect(drift.direction).toBe('none')
+    expect(drift.breakPct).toBeGreaterThan(0)
+    expect(drift.components.breakout).toBe(0)
+    expect(drift.type).toBeNull()
+  })
+
   it('does not name a move too small to be watched', () => {
     const small = reading(withMove({ pct: 0.1 }))
     expect(small.direction).toBe('up')
@@ -253,6 +216,12 @@ describe('raisesEvent', () => {
     expect(raisesEvent(at(1000 + EVENT_COOLDOWN_SECONDS, 'candidate'), earlier)).toBe(true)
   })
 
+  it('never raises a volume spike, which has no direction to act on', () => {
+    const spike = { ...at(1000, 'urgent', 'volume_spike'), direction: 'none' } as EventReading
+    expect(raisesEvent(spike, [])).toBe(false)
+    expect(raisesEvent(spike, [], 'watch')).toBe(false)
+  })
+
   it('raises nothing below the floor, and nothing that is not an event', () => {
     expect(raisesEvent(at(1000, 'watch'), [])).toBe(false)
     expect(raisesEvent(at(1000, 'watch'), [], 'watch')).toBe(true)
@@ -262,10 +231,8 @@ describe('raisesEvent', () => {
 
 describe('detectEvents', () => {
   it('finds one event in a pump, at the minute it first qualifies', () => {
-    const bars = [...withMove({ pct: 3, volume: 8 }), ...[]]
     // Twenty quiet minutes after the move, at its last price.
-    const last = bars[bars.length - 1]
-    for (let i = 1; i <= 20; i++) bars.push({ time: last.time + i * 60, open: last.close, high: last.close * 1.0001, low: last.close * 0.9999, close: last.close, volume: 1000 })
+    const bars = thenFlat(withMove({ pct: 3, volume: 8 }), 20)
     const events = detectEvents(bars)
     expect(events.length).toBeGreaterThanOrEqual(1)
     expect(events.length).toBeLessThanOrEqual(2) // candidate, then perhaps urgent
@@ -334,6 +301,12 @@ describe('candidateScore', () => {
     const unknown = candidateScore(80, null, null)
     expect(unknown).toBeGreaterThan(candidateScore(80, 800_000, 0.3))
     expect(unknown).toBeLessThan(candidateScore(80, 500_000_000, 0.01))
+    // Each on its own: an unknown spread sits between a tight one and a wide one...
+    expect(candidateScore(80, 500_000_000, null)).toBeLessThan(candidateScore(80, 500_000_000, 0.01))
+    expect(candidateScore(80, 500_000_000, null)).toBeGreaterThan(candidateScore(80, 500_000_000, 0.3))
+    // ...and an unknown volume between a deep market and a thin one.
+    expect(candidateScore(80, null, 0.01)).toBeLessThan(candidateScore(80, 500_000_000, 0.01))
+    expect(candidateScore(80, null, 0.01)).toBeGreaterThan(candidateScore(80, 800_000, 0.01))
   })
 })
 

@@ -1,4 +1,5 @@
 import { aiContextJson, type AiMarketContext } from '../../shared/aiContext'
+import { AI_VALID_MINUTES } from '../../shared/aiOpportunity'
 import {
   AI_AGENT_MAX_NOTE_CHARS,
   AI_AGENT_MOMENTUM,
@@ -9,7 +10,8 @@ import { AI_HORIZON_BARS, AI_MARKET_REGIMES, AI_MAX_REASON_CODES, AI_REASON_CODE
 
 // What the model is told, and the shape it must answer in. Versioned by GPT_PROMPT_VERSION and
 // AI_SCHEMA_VERSION in shared/aiSignal.ts, by AI_CONFIRM_PROMPT_VERSION in shared/aiConfirm.ts
-// for the entry-review prompt, and by the four panel versions in shared/aiPanel.ts: all are part
+// for the entry-review prompt, by the four panel versions in shared/aiPanel.ts, and by the two
+// opportunity versions in shared/aiOpportunity.ts: all are part
 // of a cache key and are written on every ledger row, so ANY edit to a text or a schema below
 // must bump the matching constant. An edit without a bump serves answers to the old question from
 // the cache under the new one, and leaves a ledger in which two different prompts are
@@ -125,12 +127,44 @@ export const AI_PANEL_SYSTEM_PROMPT = [
   ...SIGNAL_ANSWER_LINES
 ].join('\n')
 
+// ---------------------------------------------------------------------------------------------
+// AN OPPORTUNITY (shared/aiOpportunity.ts). The scanner has raised an event; the question is
+// whether it is a trade, and if so where to enter, where it is wrong, where it is done and for how
+// long each of those holds.
+//
+// IT IS TOLD WHAT AN EVENT IS, AND NOT WHAT USUALLY FOLLOWS ONE. research/EVENTS.md measured that
+// rises like these do not continue and falls come back a little. Those figures were measured over
+// the very months a benchmark replays, so putting them in the prompt would be handing the model a
+// summary of the answers. It is told the one thing that is true of any event by definition: that
+// being unusual is not the same as being a signal.
+//
+// IT IS NOT TOLD WHERE THE CONFIDENCE GATE SITS, for the reason the entry review is not.
+
+export const AI_OPPORTUNITY_SYSTEM_PROMPT = [
+  'You assess a market event for a crypto account that holds nothing. Return only the requested JSON.',
+  'The user message is a market snapshot built only from completed candles. "event" is what was just detected on 1-minute candles: its type and direction, a 0-100 score and the five components behind it, the returns over the last minute to four hours, usualMove15mPct (the usual size of a fifteen-minute move in this market), the last thirty 1-minute bars, and the two hours before those in 5-minute bars. The rest is seven days of context: recent bars and indicators on 15-minute, 1-hour and 4-hour intervals, and roundTripCostPct, what a trade costs in fees and slippage.',
+  'Bars are [unixTime, open, high, low, close, volume], oldest first.',
+  'Decide whether this event is a trade worth taking now. An event is something unusual, not a signal: a sharp move is not, by itself, evidence that it will continue. Recommend a trade only when the snapshot gives a specific reason to expect a move that clearly exceeds roundTripCostPct within your holding time; otherwise answer "hold".',
+  'recommendation: "buy" recommends opening a long; "sell" recommends opening a short; "hold" recommends no trade.',
+  'entryMin and entryMax: the price range to enter in, as absolute prices, with entryMin not above entryMax. Place it at or near event.price: the entry is looked for from about a minute after the event, and a range the price never trades in is never filled. Use null for both on "hold".',
+  `validMinutes: how long after the event the entry range stays valid, one of ${AI_VALID_MINUTES.join(', ')}. An entry not filled by then is abandoned.`,
+  'stopLoss and takeProfit: absolute prices. For "buy" the stop is below entryMin and the target above entryMax; for "sell" the stop is above entryMax and the target below entryMin. Use null for both on "hold".',
+  `horizonBars: how long the position is held if neither level is reached, in 15-minute bars, one of ${AI_HORIZON_BARS.join(', ')}.`,
+  'confidence: 0 to 1. How consistent the evidence is with your recommendation. It is not a probability of profit; never claim certainty.',
+  'marketRegime: the prevailing regime on the coarsest interval shown.',
+  'riskLevel: how exposed the position would be to volatility and whipsaw right now.',
+  `reasonCodes: up to ${AI_MAX_REASON_CODES} codes from the allowed list that drove the decision, most important first.`,
+  'rationale: at most 500 characters, plain text.',
+  'Never provide position sizing.'
+].join('\n')
+
 /** The system text a context is sent under: the panel's decision when it carries analysts'
- * reports, the review prompt when it names a strategy, the standalone one otherwise. The same
- * tests shared/aiContext.ts's aiPromptVersion makes, so the text sent and the version recorded
- * for it are chosen by one fact. */
+ * reports, the opportunity prompt when it carries an event, the review prompt when it names a
+ * strategy, the standalone one otherwise. The same tests shared/aiContext.ts's aiPromptVersion
+ * makes, so the text sent and the version recorded for it are chosen by one fact. */
 function systemPromptFor(context: AiMarketContext): string {
   if (context.agents !== undefined) return AI_PANEL_SYSTEM_PROMPT
+  if (context.event !== undefined) return AI_OPPORTUNITY_SYSTEM_PROMPT
   return context.strategy === undefined ? AI_SYSTEM_PROMPT : AI_CONFIRM_SYSTEM_PROMPT
 }
 
@@ -168,6 +202,50 @@ export const AI_RESPONSE_SCHEMA: { name: string; schema: Record<string, unknown>
       'rationale'
     ]
   }
+}
+
+/** The signal's shape with an entry range and its validity added, and nothing taken away: types
+ * and enums only, by the same rule, with every range checked by validateOpportunityAnswer. */
+export const AI_OPPORTUNITY_SCHEMA: { name: string; schema: Record<string, unknown> } = {
+  name: 'market_opportunity',
+  schema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      recommendation: { type: 'string', enum: ['buy', 'sell', 'hold'] },
+      confidence: { type: 'number' },
+      entryMin: { type: ['number', 'null'] },
+      entryMax: { type: ['number', 'null'] },
+      validMinutes: { type: 'integer', enum: [...AI_VALID_MINUTES] },
+      stopLoss: { type: ['number', 'null'] },
+      takeProfit: { type: ['number', 'null'] },
+      horizonBars: { type: 'integer', enum: [...AI_HORIZON_BARS] },
+      marketRegime: { type: 'string', enum: [...AI_MARKET_REGIMES] },
+      riskLevel: { type: 'string', enum: [...AI_RISK_LEVELS] },
+      reasonCodes: { type: 'array', items: { type: 'string', enum: [...AI_REASON_CODES] } },
+      rationale: { type: 'string' }
+    },
+    required: [
+      'recommendation',
+      'confidence',
+      'entryMin',
+      'entryMax',
+      'validMinutes',
+      'stopLoss',
+      'takeProfit',
+      'horizonBars',
+      'marketRegime',
+      'riskLevel',
+      'reasonCodes',
+      'rationale'
+    ]
+  }
+}
+
+/** The answer shape a context is asked for in: an opportunity's when it carries an event, the
+ * signal's otherwise. Chosen by the same fact aiSchemaVersion reads. */
+export function responseSchemaFor(context: AiMarketContext): { name: string; schema: Record<string, unknown> } {
+  return context.event === undefined ? AI_RESPONSE_SCHEMA : AI_OPPORTUNITY_SCHEMA
 }
 
 function analystSchema(name: string, own: Record<string, unknown>): { name: string; schema: Record<string, unknown> } {
@@ -209,7 +287,7 @@ export function buildAiMessages(context: AiMarketContext): { role: 'system' | 'u
  * Refuses a context that is not a plain snapshot, because an analyst handed a strategy block or
  * another panel's reports would be answering a question that has no version and no cache key. */
 export function buildAgentMessages(role: AiAgentRole, context: AiMarketContext): { role: 'system' | 'user'; content: string }[] {
-  if (context.strategy !== undefined || context.agents !== undefined) {
+  if (context.strategy !== undefined || context.agents !== undefined || context.event !== undefined) {
     throw new Error('An analyst is shown the market snapshot and nothing else')
   }
   return [
@@ -220,7 +298,7 @@ export function buildAgentMessages(role: AiAgentRole, context: AiMarketContext):
 
 /** Characters in one request, for estimating what a call will cost before any has been made. */
 export function aiPromptChars(context: AiMarketContext): number {
-  return systemPromptFor(context).length + aiContextJson(context).length + JSON.stringify(AI_RESPONSE_SCHEMA).length
+  return systemPromptFor(context).length + aiContextJson(context).length + JSON.stringify(responseSchemaFor(context)).length
 }
 
 export function aiAgentPromptChars(role: AiAgentRole, context: AiMarketContext): number {

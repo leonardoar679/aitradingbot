@@ -2,6 +2,7 @@ import { ipcMain, type BrowserWindow } from 'electron'
 import { IpcChannel } from '../../../shared/ipc'
 import type { AiBenchmarkPeekRequest } from '../../../shared/aiBenchmark'
 import type { AiEntryConfirmRequest } from '../../../shared/aiConfirm'
+import type { AiOpportunityAskRequest, AiOpportunityPeekRequest } from '../../../shared/aiOpportunity'
 import type { AiSignalTapeRequest } from '../../../shared/aiSignal'
 import type { AiConfigPatch } from '../../../shared/aiCost'
 import type { AiCallFilter } from '../../../shared/aiLedger'
@@ -15,20 +16,25 @@ import {
 import { getAiConfig, listAiModels, setAiConfig } from '../../services/aiConfigService'
 import { getAiUsageSummary, listAiCalls } from '../../services/aiLedgerService'
 import {
+  askAiOpportunity,
   cancelAiSignalTape,
   confirmAiEntry,
   estimateAiSignalTape,
   generateAiSignalTape,
   peekAiBenchmark,
-  peekAiEntryConfirmation
+  peekAiEntryConfirmation,
+  peekAiOpportunity
 } from '../../services/aiSignalService'
 
-// TWO channels here can spend money: AiGenerateSignalTape and AiConfirmEntry. Everything else
+// THREE channels here can spend money: AiGenerateSignalTape, AiConfirmEntry and AiAskOpportunity,
+// each one decision at a time and each behind the same budget. Everything else
 // reads a file, asks OpenRouter a free question about the key or its catalogue, or changes a
 // setting. Keeping that true is what lets the AI pages be opened and browsed without a
 // confirmation on every tab. A benchmark adds no third: its paid calls are one-decision tapes,
 // and AiPeekBenchmark only reads what is already held. Neither does a route or a panel of agents:
 // a second model's call and a panel's four are made inside a tape, through the first of the two.
+// Nor does the watch (shared/aiWatch.ts): what it asks arrives over AiAskOpportunity labelled as
+// the watch's, and is held to the watch's own limits before the budget is looked at.
 export function registerAiHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(IpcChannel.AiCredentialsStatus, () => getAiCredentialStatus())
   ipcMain.handle(IpcChannel.AiCredentialsSet, (_event, apiKey: string) => setAiCredential(apiKey))
@@ -54,4 +60,6 @@ export function registerAiHandlers(mainWindow: BrowserWindow): void {
   )
   ipcMain.handle(IpcChannel.AiConfirmEntry, (_event, request: AiEntryConfirmRequest) => confirmAiEntry(request))
   ipcMain.handle(IpcChannel.AiPeekBenchmark, (_event, request: AiBenchmarkPeekRequest) => peekAiBenchmark(request))
+  ipcMain.handle(IpcChannel.AiPeekOpportunity, (_event, request: AiOpportunityPeekRequest) => peekAiOpportunity(request))
+  ipcMain.handle(IpcChannel.AiAskOpportunity, (_event, request: AiOpportunityAskRequest) => askAiOpportunity(request))
 }

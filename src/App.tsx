@@ -11,6 +11,7 @@ import { ControllersPage } from './controllers/ControllersPage'
 import { ControllerScheduler } from './controllers/ControllerScheduler'
 import { PositionsPage } from './positions/PositionsPage'
 import { AgentsPage } from './agents/AgentsPage'
+import { OpportunityScheduler } from './agents/OpportunityScheduler'
 import { RoutinesPage } from './routines/RoutinesPage'
 import { RoutineScheduler } from './routines/RoutineScheduler'
 import { ExplorerPage } from './explorer/ExplorerPage'
@@ -71,6 +72,11 @@ function App(): React.JSX.Element {
       </ErrorBoundary>
       <ErrorBoundary label="The portfolio scheduler">
         <PortfolioScheduler />
+      </ErrorBoundary>
+      {/* The watch: off unless switched on from Agents, Opportunities. It asks models; it has no
+          way to place anything. */}
+      <ErrorBoundary label="The opportunity watch">
+        <OpportunityScheduler />
       </ErrorBoundary>
       <ErrorBoundary label="The live trading bar">
         <LiveTradingBar />

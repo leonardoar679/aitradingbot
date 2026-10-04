@@ -1,6 +1,8 @@
-import { INTERVAL_SECONDS, type Exchange, type Interval, type PositionExecutorParams, type SymbolInfo } from './ipc'
+import { INTERVAL_SECONDS, type Exchange, type ExecutorSide, type Interval, type PositionExecutorParams, type SymbolInfo } from './ipc'
 import { GPT_FLAT, GPT_MIN_CONFIDENCE, gptActionFor, type AiSignalDecision } from './aiSignal'
+import { isActionableOpportunity, opportunitySide, opportunityWindow } from './aiOpportunity'
 import { describeDecider } from './aiPanel'
+import { describeEventType, type MarketEvent, type MarketEventType } from './marketEvent'
 
 // FROM A CALL TO AN ORDER, BY HAND.
 //
@@ -18,7 +20,14 @@ import { describeDecider } from './aiPanel'
 //   A MODE. The form opens on paper, as it does for any new executor. Real money stays a box the
 //   person ticks and a phrase they type, for this order, every time.
 //
-//   LEVERAGE, OR A SIDE OTHER THAN BUY. A proposal is a spot long, the only thing a call can open.
+//   LEVERAGE. A proposal is unlevered, always.
+//
+// A SIDE OTHER THAN BUY IS PAPER ONLY. A signal's proposal is a spot long, the only thing a signal
+// can open. A recommendation on an event (shared/aiOpportunity.ts) may be a short -- the user
+// chose, on 2026-10-03, to let a model call one -- and its form opens with the side set to sell.
+// That form can be submitted on paper and cannot be switched to Live: the order form refuses Live
+// for any Position that is not a buy, because on a spot account a live "sell" would sell coins
+// the user holds, which is not what a short call means. tests/aiProposal.test.ts pins it.
 //
 // Nothing here imports an order path or is imported by one. It is arithmetic on a decision.
 
@@ -45,6 +54,15 @@ export interface AiOrderProposal {
   takeProfitPct: number | null
   /** The horizon the model said its call plays out over. */
   timeLimitSec: number
+  /** `sell` on a recommendation to short, which is paper only. Absent means buy. */
+  side?: ExecutorSide
+  /** The price the entry waits for. Null or absent means enter at market. */
+  entryPrice?: number | null
+  /** Set on a proposal made from a recommendation on an event: when its entry stops being good,
+   * in Unix seconds. A signal's proposal has none; it lasts as long as its candle. */
+  expiresAt?: number
+  /** Set with it: the kind of event the recommendation was about. */
+  eventType?: MarketEventType
 }
 
 /** What a created executor keeps of the call its form was filled in from. A record of where the
@@ -118,6 +136,80 @@ export function buildAiProposal(input: {
   }
 }
 
+/** Whether a proposal made from a recommendation can no longer be submitted as it stands. A
+ * signal's proposal never expires this way: an old one is warned about, not refused. */
+export function isAiProposalExpired(proposal: AiOrderProposal, nowSec: number): boolean {
+  return proposal.expiresAt !== undefined && nowSec >= proposal.expiresAt
+}
+
+/** Why no order form is offered for a recommendation on an event, or null when one is.
+ *
+ * The rule a benchmark's trades follow -- a side, at the confidence this app acts on -- and two
+ * that only matter to a person: its entry is still good, and the price has not already gone
+ * through its stop or reached its target. `lastPrice` is the price now, when the caller has one. */
+export function opportunityProposalProblem(eventTime: number, decision: AiSignalDecision, nowSec: number, lastPrice: number | null = null): string | null {
+  if (decision.error !== null) return 'The model was not reached, so there is no call to act on.'
+  if (decision.rejected) return 'The answer was refused, so there is no call to act on.'
+  const side = opportunitySide(decision)
+  const validity = opportunityWindow(eventTime, decision.detail)
+  if (side === null || validity === null || !decision.detail) return 'A call not to trade opens nothing.'
+  if (!isActionableOpportunity(decision)) {
+    return `This app acts on a call at ${Math.round(GPT_MIN_CONFIDENCE * 100)}% confidence or more, so no order form is offered for this one.`
+  }
+  if (nowSec >= validity.expiresAt) return `Its entry expired at ${utcClock(validity.expiresAt)} UTC, so no order form is offered for it. Ask again for a current one.`
+  const { stopLoss, takeProfit } = decision.detail
+  if (lastPrice !== null && stopLoss !== null && takeProfit !== null) {
+    const long = side === 'long'
+    if (long ? lastPrice <= stopLoss : lastPrice >= stopLoss) return 'The price has already gone through its stop, so no order form is offered for it.'
+    if (long ? lastPrice >= takeProfit : lastPrice <= takeProfit) return 'The price has already reached its target, so no order form is offered for it.'
+  }
+  return null
+}
+
+/** The order form a recommendation on an event opens, or null when none is offered.
+ *
+ * WHERE IT ENTERS. With the price inside the range the model named, at market. With the price
+ * outside it, the form waits for the nearer edge of the range -- the same rule the recommendation
+ * is scored by (shared/aiOpportunityOutcome.ts). The stop and target are the model's own prices,
+ * turned into distances from that entry, because that is what the form takes. */
+export function buildOpportunityProposal(input: {
+  event: Pick<MarketEvent, 'exchange' | 'symbol' | 'baseAsset' | 'quoteAsset' | 'time' | 'type' | 'price'>
+  decision: AiSignalDecision
+  nowSec: number
+  /** The price now. Absent means the event's own price, which is the last one the model saw. */
+  lastPrice?: number | null
+}): AiOrderProposal | null {
+  const { event, decision } = input
+  const current = input.lastPrice ?? event.price
+  if (opportunityProposalProblem(event.time, decision, input.nowSec, current) !== null) return null
+  const side = opportunitySide(decision)
+  const detail = decision.detail
+  const validity = opportunityWindow(event.time, detail)
+  if (side === null || !detail?.entry || validity === null || detail.stopLoss === null || detail.takeProfit === null) return null
+  if (!Number.isFinite(current) || !(current > 0)) return null
+
+  const inside = current >= detail.entry.min && current <= detail.entry.max
+  const entryPrice = inside ? null : current > detail.entry.max ? detail.entry.max : detail.entry.min
+  const reference = entryPrice ?? current
+  const long = side === 'long'
+  return {
+    exchange: event.exchange,
+    pair: { symbol: event.symbol, baseAsset: event.baseAsset, quoteAsset: event.quoteAsset },
+    model: decision.model,
+    candleTime: event.time,
+    interval: '1m',
+    confidence: decision.confidence,
+    referencePrice: reference,
+    stopLossPct: levelPct(reference, long ? reference - detail.stopLoss : detail.stopLoss - reference),
+    takeProfitPct: levelPct(reference, long ? detail.takeProfit - reference : reference - detail.takeProfit),
+    timeLimitSec: validity.holdSeconds,
+    side: long ? 'buy' : 'sell',
+    entryPrice,
+    expiresAt: validity.expiresAt,
+    eventType: event.type
+  }
+}
+
 /** The Position form a proposal opens with: the form's own defaults, with the call laid over them.
  *
  * The amount is the form's, untouched. Where the model named no usable stop or target the form's
@@ -125,8 +217,8 @@ export function buildAiProposal(input: {
  * did not choose -- and describeAiProposal says which is which. */
 export function aiProposalPositionParams(proposal: AiOrderProposal, defaults: PositionExecutorParams): PositionExecutorParams {
   return {
-    side: 'buy',
-    entryPrice: null,
+    side: proposal.side ?? 'buy',
+    entryPrice: proposal.entryPrice ?? null,
     amountQuote: defaults.amountQuote,
     takeProfitPct: proposal.takeProfitPct ?? defaults.takeProfitPct,
     stopLossPct: proposal.stopLossPct ?? defaults.stopLossPct,
@@ -158,8 +250,33 @@ function durationLabel(sec: number): string {
   return `${Math.round(sec / 60)} minutes`
 }
 
+/** The same, for a form filled in from a recommendation on an event. */
+function describeOpportunityProposal(proposal: AiOrderProposal): string[] {
+  const who = describeDecider(proposal.model)
+  const short = proposal.side === 'sell'
+  const [against, toward] = short ? ['above', 'below'] : ['below', 'above']
+  const event = proposal.eventType !== undefined ? describeEventType(proposal.eventType).toLowerCase() : 'event'
+  const entry =
+    proposal.entryPrice === null || proposal.entryPrice === undefined
+      ? `It enters at market: the price is inside the range the model named.`
+      : `It waits for a price of ${plainNumber(proposal.entryPrice)}, the nearer edge of the range the model named.`
+  const levels =
+    proposal.stopLossPct !== null && proposal.takeProfitPct !== null
+      ? `The model's stop is ${proposal.stopLossPct}% ${against} that entry and its target ${proposal.takeProfitPct}% ${toward} it.`
+      : "One of the model's levels is not a usable distance from that entry, so the form's usual one is shown in its place."
+  return [
+    `Filled in from an AI recommendation: ${who} said ${short ? 'SELL' : 'BUY'} ${proposal.pair.symbol} at ${Math.round(proposal.confidence * 100)}% confidence, on the ${event} raised at ${utcClock(proposal.candleTime)} UTC.`,
+    `${entry} ${levels} The time limit is the ${durationLabel(proposal.timeLimitSec)} it said to hold for.`,
+    `Its entry is good until ${utcClock(proposal.expiresAt ?? proposal.candleTime)} UTC. After that this form will not submit it as it stands.`,
+    short
+      ? 'A short is paper only: this app places no short or leveraged order, so Live Trading cannot be ticked for it. The amount is yours to set, and nothing is placed until you submit this form.'
+      : 'The amount is yours to set: a model is never asked for one. Nothing is placed until you submit this form, and real money still needs Live Trading ticked below and its phrase typed.'
+  ]
+}
+
 /** What the form says about where its values came from, above the fields themselves. */
 export function describeAiProposal(proposal: AiOrderProposal): string[] {
+  if (proposal.expiresAt !== undefined) return describeOpportunityProposal(proposal)
   const who = describeDecider(proposal.model)
   const levels =
     proposal.stopLossPct !== null && proposal.takeProfitPct !== null

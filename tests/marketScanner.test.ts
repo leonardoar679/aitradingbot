@@ -1,0 +1,497 @@
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Candle, SymbolInfo, Ticker24h } from '../shared/ipc'
+import { EVENT_LOOKBACK_BARS } from '../shared/marketEvent'
+import {
+  SCAN_HISTORY_MAX_DAYS,
+  eventMonthKey,
+  matchesMarketEventFilter,
+  nextPassDelayMs,
+  parseMarketEventLines,
+  pickUniverse,
+  scanHistoryRequests,
+  spreadPct
+} from '../shared/marketScanner'
+import { T0, quiet, thenFlat, withMove } from './eventCandles'
+
+vi.mock('electron', () => ({ app: { getPath: () => process.env.SCANNER_TEST_USER_DATA } }))
+
+// The exchange, faked at the one seam the scanner reaches it through.
+const market = vi.hoisted(() => ({
+  symbols: [] as { symbol: string; baseAsset: string; quoteAsset: string }[],
+  tickers: [] as { symbol: string; quoteVolume: number }[],
+  books: [] as { symbol: string; bidPrice: number; askPrice: number }[],
+  booksDown: false,
+  candles: new Map<string, unknown[]>(),
+  /** Completed bars only: what an exchange's history holds for a stretch that has ended. */
+  history: new Map<string, unknown[]>(),
+  failing: new Set<string>(),
+  recentCalls: [] as string[],
+  tickerCalls: 0,
+  /** When set, every candle request waits on it. */
+  gate: null as Promise<void> | null,
+  rangeCalls: [] as { symbol: string; startSec: number; endSec: number; requestId: string }[],
+  rangeGate: null as Promise<void> | null,
+  cancelled: [] as string[]
+}))
+
+vi.mock('../electron/services/marketService', () => ({
+  listSymbols: async () => market.symbols,
+  scanSourceFor: () => ({
+    fetchAllTickers24h: async () => {
+      market.tickerCalls++
+      return market.tickers
+    },
+    fetchBookTickers: async () => {
+      if (market.booksDown) throw new Error('book ticker down')
+      return market.books
+    },
+    fetchRecentCandles: async (symbol: string, _interval: string, limit: number) => {
+      market.recentCalls.push(symbol)
+      if (market.gate) await market.gate
+      if (market.failing.has(symbol)) throw new Error(`${symbol} is down`)
+      return (market.candles.get(symbol) ?? []).slice(-limit)
+    }
+  }),
+  fetchHistoricalRange: async (
+    _exchange: string,
+    symbol: string,
+    _interval: string,
+    startSec: number,
+    endSec: number,
+    requestId: string,
+    onProgress: (done: number, total: number) => void
+  ) => {
+    market.rangeCalls.push({ symbol, startSec, endSec, requestId })
+    if (market.rangeGate) await market.rangeGate
+    if (market.failing.has(symbol)) throw new Error(`${symbol} is down`)
+    const all = (market.history.get(symbol) ?? []) as Candle[]
+    const candles = all.filter((candle) => candle.time >= startSec && candle.time < endSec)
+    onProgress(candles.length, candles.length)
+    return { candles, cancelled: market.cancelled.includes(requestId) }
+  },
+  cancelHistoricalRangeFetch: (requestId: string) => {
+    market.cancelled.push(requestId)
+  }
+}))
+
+const pair = (base: string, quote = 'USDT'): SymbolInfo => ({ symbol: `${base}${quote}`, baseAsset: base, quoteAsset: quote })
+const ticker = (symbol: string, quoteVolume: number): Ticker24h => ({
+  symbol,
+  lastPrice: 100,
+  priceChange: 0,
+  priceChangePercent: 0,
+  highPrice: 101,
+  lowPrice: 99,
+  volume: quoteVolume / 100,
+  quoteVolume
+})
+
+const LEAD = EVENT_LOOKBACK_BARS + 20
+/** Open time of the last completed bar every series ends on, and the moment a pass reads it:
+ * five seconds into the minute after. */
+const LAST = T0 + (LEAD + 14) * 60
+const NOW_MS = (LAST + 60) * 1000 + 5_000
+
+/** A series as an exchange returns it: the completed bars, then the one still forming. */
+function served(completed: Candle[]): Candle[] {
+  const last = completed[completed.length - 1]
+  return [...completed, { time: last.time + 60, open: last.close, high: last.close * 5, low: last.close / 5, close: last.close * 3, volume: 9e9 }]
+}
+
+async function scanner() {
+  return import('../electron/services/marketScannerService')
+}
+
+let dir: string
+
+beforeEach(() => {
+  vi.resetModules()
+  dir = mkdtempSync(join(tmpdir(), 'scanner-'))
+  process.env.SCANNER_TEST_USER_DATA = dir
+  market.symbols = [pair('PUMP'), pair('AAA'), pair('BBB'), pair('USDC'), pair('AAA', 'BTC')]
+  market.tickers = [ticker('PUMPUSDT', 40_000_000), ticker('AAAUSDT', 90_000_000), ticker('BBBUSDT', 5_000_000), ticker('USDCUSDT', 900_000_000), ticker('AAABTC', 800_000_000)]
+  market.books = [
+    { symbol: 'PUMPUSDT', bidPrice: 99.99, askPrice: 100.01 },
+    { symbol: 'AAAUSDT', bidPrice: 99.995, askPrice: 100.005 },
+    { symbol: 'BBBUSDT', bidPrice: 99.9, askPrice: 100.1 }
+  ]
+  market.booksDown = false
+  market.candles = new Map<string, unknown[]>([
+    ['PUMPUSDT', served(withMove({ pct: 3, volume: 8 }, LEAD, 7))],
+    ['AAAUSDT', served(quiet(LEAD + 15, 11))],
+    ['BBBUSDT', served(quiet(LEAD + 15, 13))]
+  ])
+  market.history = new Map<string, unknown[]>([
+    ['PUMPUSDT', withMove({ pct: 3, volume: 8 }, LEAD, 7)],
+    ['AAAUSDT', quiet(LEAD + 15, 11)],
+    ['BBBUSDT', quiet(LEAD + 15, 13)]
+  ])
+  market.failing = new Set()
+  market.recentCalls = []
+  market.tickerCalls = 0
+  market.gate = null
+  market.rangeCalls = []
+  market.rangeGate = null
+  market.cancelled = []
+})
+
+afterEach(() => {
+  vi.useRealTimers()
+})
+
+function eventsOnFile(): string[] {
+  try {
+    return readFileSync(join(dir, 'marketEvents', `events-${eventMonthKey(LAST)}.jsonl`), 'utf-8').split('\n').filter((line) => line !== '')
+  } catch {
+    return []
+  }
+}
+
+describe('pickUniverse', () => {
+  it('takes the most traded USDT pairs that are not pegged to anything', () => {
+    const picked = pickUniverse(market.symbols, market.tickers as Ticker24h[], 2)
+    // Not USDCUSDT, the most traded of all, and not a pair quoted in BTC.
+    expect(picked.map((entry) => entry.symbol)).toEqual(['AAAUSDT', 'PUMPUSDT'])
+    expect(picked[0].quoteVolume24h).toBe(90_000_000)
+  })
+
+  it('leaves out a pair with no volume to rank it by, and breaks a tie by name', () => {
+    const symbols = [pair('ZZZ'), pair('AAA'), pair('NEW')]
+    const tickers = [ticker('ZZZUSDT', 10), ticker('AAAUSDT', 10)]
+    expect(pickUniverse(symbols, tickers, 10).map((entry) => entry.symbol)).toEqual(['AAAUSDT', 'ZZZUSDT'])
+  })
+})
+
+describe('the small arithmetic', () => {
+  it('measures a spread against the mid, and refuses a book that says nothing', () => {
+    expect(spreadPct(99.9, 100.1)).toBeCloseTo(0.2, 6)
+    expect(spreadPct(0, 100)).toBeNull()
+    expect(spreadPct(100.1, 99.9)).toBeNull()
+  })
+
+  it('schedules a pass for five seconds after the next minute closes', () => {
+    const minute = Date.parse('2026-10-03T12:00:00Z')
+    expect(nextPassDelayMs(minute)).toBe(65_000)
+    expect(nextPassDelayMs(minute + 5_000)).toBe(60_000)
+    // A pass that ends just before a boundary does not read that minute a second later.
+    expect(nextPassDelayMs(minute + 59_000)).toBe(6_000)
+  })
+
+  it('counts the requests a history scan will make', () => {
+    // Thirty days of one pair: 43,200 bars and the lookback, a thousand to a request.
+    expect(scanHistoryRequests(1, 0, 30 * 86_400, EVENT_LOOKBACK_BARS)).toBe(44)
+    expect(scanHistoryRequests(20, 0, 30 * 86_400, EVENT_LOOKBACK_BARS)).toBe(880)
+  })
+
+  it('reads an events file past a torn line, and says that it did', () => {
+    const good = { id: 'binance:AAAUSDT:1', symbol: 'AAAUSDT', time: 1, type: 'pump', band: 'candidate', score: 80, price: 1, components: {} }
+    const parsed = parseMarketEventLines(`${JSON.stringify(good)}\n{"hello":"world"}\n{"id":"torn","ti`)
+    expect(parsed.rows).toHaveLength(1)
+    expect(parsed.skipped).toBe(2)
+  })
+})
+
+describe('one pass', () => {
+  it('reads every watched pair, shows them strongest first, and raises what qualifies', async () => {
+    const { scanOnce } = await scanner()
+    const state = await scanOnce(NOW_MS)
+
+    expect(market.recentCalls.sort()).toEqual(['AAAUSDT', 'BBBUSDT', 'PUMPUSDT'])
+    expect(state.error).toBeNull()
+    expect(state.failed).toBe(0)
+    expect(state.pairs.map((entry) => entry.symbol)[0]).toBe('PUMPUSDT')
+    expect(state.pairs).toHaveLength(3)
+    expect(state.pairs[0]).toMatchObject({ barTime: LAST, band: 'urgent', type: 'breakout', direction: 'up', quoteVolume24h: 40_000_000 })
+    expect(state.pairs[0].spreadPct).toBeCloseTo(0.02, 3)
+
+    expect(state.recentEvents).toHaveLength(1)
+    const event = state.recentEvents[0]
+    expect(event).toMatchObject({ id: `binance:PUMPUSDT:${LAST + 60}`, symbol: 'PUMPUSDT', baseAsset: 'PUMP', time: LAST + 60, type: 'breakout' })
+    expect(event.live).toMatchObject({ quoteVolume24h: 40_000_000, rank: 1 })
+    expect(event.live?.spreadPct).toBeCloseTo(0.02, 3)
+
+    // And it is on file, as written.
+    const lines = eventsOnFile()
+    expect(lines).toHaveLength(1)
+    expect(JSON.parse(lines[0])).toEqual(event)
+  })
+
+  it('never reads the bar that is still forming', async () => {
+    // The forming bar in every served series is a 200% candle on absurd volume. Had it been
+    // read, the quiet pairs would be the strongest events on the page.
+    const { scanOnce } = await scanner()
+    const state = await scanOnce(NOW_MS)
+    for (const entry of state.pairs.filter((candidate) => candidate.symbol !== 'PUMPUSDT')) {
+      expect(entry.band).toBe('quiet')
+      expect(entry.barTime).toBe(LAST)
+    }
+  })
+
+  it('raises one event for one pump, however many passes see it', async () => {
+    const { scanOnce } = await scanner()
+    await scanOnce(NOW_MS)
+    const again = await scanOnce(NOW_MS)
+    expect(again.recentEvents).toHaveLength(1)
+    expect(eventsOnFile()).toHaveLength(1)
+  })
+
+  it('does not raise it again because the app was restarted', async () => {
+    await (await scanner()).scanOnce(NOW_MS)
+    vi.resetModules()
+    // A minute later: the pump is over, the price is holding, the reading is still high.
+    market.candles.set('PUMPUSDT', served(thenFlat(withMove({ pct: 3, volume: 8 }, LEAD, 7), 1)))
+    market.candles.set('AAAUSDT', served(quiet(LEAD + 16, 11)))
+    market.candles.set('BBBUSDT', served(quiet(LEAD + 16, 13)))
+    const restarted = await scanner()
+    const state = await restarted.scanOnce(NOW_MS + 60_000)
+    expect(state.recentEvents).toHaveLength(1)
+    expect(eventsOnFile()).toHaveLength(1)
+  })
+
+  it('shows a pair whose candles are stale, and raises nothing on them', async () => {
+    // Three minutes later, and the exchange has served nothing new: not even a forming bar.
+    for (const [symbol, bars] of market.history) market.candles.set(symbol, bars)
+    const { scanOnce } = await scanner()
+    const state = await scanOnce(NOW_MS + 180_000)
+    expect(state.pairs[0]).toMatchObject({ symbol: 'PUMPUSDT', band: 'urgent', barTime: LAST })
+    expect(state.recentEvents).toEqual([])
+    expect(eventsOnFile()).toEqual([])
+  })
+
+  it('carries on past a pair it cannot read', async () => {
+    market.failing.add('AAAUSDT')
+    const { scanOnce } = await scanner()
+    const state = await scanOnce(NOW_MS)
+    expect(state.failed).toBe(1)
+    expect(state.error).toBeNull()
+    expect(state.pairs.map((entry) => entry.symbol).sort()).toEqual(['BBBUSDT', 'PUMPUSDT'])
+    expect(state.recentEvents).toHaveLength(1)
+  })
+
+  it('says so when it could read nothing', async () => {
+    market.failing = new Set(['AAAUSDT', 'BBBUSDT', 'PUMPUSDT'])
+    const { scanOnce } = await scanner()
+    const state = await scanOnce(NOW_MS)
+    expect(state.failed).toBe(3)
+    expect(state.error).toMatch(/No pair could be read/)
+  })
+
+  it('still reads and ranks when the book cannot be fetched', async () => {
+    market.booksDown = true
+    const { scanOnce } = await scanner()
+    const state = await scanOnce(NOW_MS)
+    expect(state.error).toBeNull()
+    expect(state.pairs[0].spreadPct).toBeNull()
+    expect(state.recentEvents[0].live?.spreadPct).toBeNull()
+  })
+
+  it('does not start a second pass while one is running', async () => {
+    let release = (): void => undefined
+    market.gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const { scanOnce } = await scanner()
+    const first = scanOnce(NOW_MS)
+    // Let the first pass reach its candle requests.
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    const second = await scanOnce(NOW_MS)
+    expect(second.pairs).toEqual([])
+    release()
+    await first
+    expect(market.recentCalls).toHaveLength(3)
+  })
+
+  it('picks the watched set once an hour, not once a pass', async () => {
+    const { scanOnce } = await scanner()
+    await scanOnce(NOW_MS)
+    await scanOnce(NOW_MS + 60_000)
+    expect(market.tickerCalls).toBe(1)
+    await scanOnce(NOW_MS + 3_600_000)
+    expect(market.tickerCalls).toBe(2)
+  })
+
+  it('tells its listeners after each pass', async () => {
+    const { scanOnce, onScannerUpdate } = await scanner()
+    const seen: number[] = []
+    const stop = onScannerUpdate((state) => seen.push(state.pairs.length))
+    await scanOnce(NOW_MS)
+    stop()
+    await scanOnce(NOW_MS + 60_000)
+    expect(seen).toEqual([3])
+  })
+})
+
+describe('the setting', () => {
+  it('is off until switched on, and starts nothing at launch while off', async () => {
+    vi.useFakeTimers()
+    const { startMarketScanner, getScannerState } = await scanner()
+    await startMarketScanner()
+    expect(vi.getTimerCount()).toBe(0)
+    const state = await getScannerState()
+    expect(state.config).toEqual({ enabled: false, universeSize: 60 })
+    expect(state.nextPassAt).toBeNull()
+    expect(market.recentCalls).toEqual([])
+  })
+
+  it('schedules a pass when switched on, cancels it when switched off, and remembers', async () => {
+    vi.useFakeTimers()
+    const { setScannerConfig, whenScannerSettled } = await scanner()
+    const on = await setScannerConfig({ enabled: true, universeSize: 20 })
+    await whenScannerSettled()
+    expect(on.config).toEqual({ enabled: true, universeSize: 20 })
+    expect(on.nextPassAt).not.toBeNull()
+    expect(vi.getTimerCount()).toBe(1)
+    expect(JSON.parse(readFileSync(join(dir, 'scanner.json'), 'utf-8'))).toEqual({ enabled: true, universeSize: 20 })
+
+    // Left on: the next launch starts it.
+    vi.resetModules()
+    const relaunched = await scanner()
+    await relaunched.startMarketScanner()
+    expect(vi.getTimerCount()).toBe(2)
+
+    const off = await relaunched.setScannerConfig({ enabled: false })
+    expect(off.nextPassAt).toBeNull()
+    expect(off.config.universeSize).toBe(20)
+  })
+
+  it('reads the market at once when switched on, rather than waiting out the minute', async () => {
+    vi.useFakeTimers()
+    const { setScannerConfig, whenScannerSettled, getScannerState } = await scanner()
+    await setScannerConfig({ enabled: true })
+    await whenScannerSettled()
+    expect(market.recentCalls.sort()).toEqual(['AAAUSDT', 'BBBUSDT', 'PUMPUSDT'])
+    expect((await getScannerState()).pairs).toHaveLength(3)
+    // Saying "on" again while it is on starts nothing more.
+    await setScannerConfig({ enabled: true })
+    await whenScannerSettled()
+    expect(market.recentCalls).toHaveLength(3)
+  })
+
+  it('refuses a size it does not offer', async () => {
+    const { setScannerConfig } = await scanner()
+    await expect(setScannerConfig({ universeSize: 500 })).rejects.toThrow(/20, 40, 60 or 100/)
+  })
+
+  it('heals a settings file holding something unusable, to off', async () => {
+    writeFileSync(join(dir, 'scanner.json'), JSON.stringify({ enabled: 'yes', universeSize: 9999 }))
+    const { getScannerState } = await scanner()
+    expect((await getScannerState()).config).toEqual({ enabled: false, universeSize: 60 })
+  })
+})
+
+describe('events on file', () => {
+  it('lists them newest first, filtered, and counts lines it could not read', async () => {
+    mkdirSync(join(dir, 'marketEvents'), { recursive: true })
+    const event = (symbol: string, time: number, band: string): object => ({
+      id: `binance:${symbol}:${time}`,
+      exchange: 'binance',
+      symbol,
+      baseAsset: symbol.replace('USDT', ''),
+      quoteAsset: 'USDT',
+      time,
+      type: 'breakout',
+      direction: 'up',
+      band,
+      score: 80,
+      components: { price: 80, volume: 80, volatility: 80, pressure: 80, breakout: 80 },
+      price: 100,
+      returnsPct: { m1: 0, m5: 0, m15: 1, h1: 1, h4: 1 },
+      moveSigmas: 5,
+      volumeRatio: 8,
+      rangeRatio: 4,
+      live: null
+    })
+    const sep = Date.parse('2026-09-20T12:00:00Z') / 1000
+    const oct = Date.parse('2026-10-02T12:00:00Z') / 1000
+    writeFileSync(join(dir, 'marketEvents', `events-${eventMonthKey(sep)}.jsonl`), `${JSON.stringify(event('AAAUSDT', sep, 'candidate'))}\n`)
+    writeFileSync(
+      join(dir, 'marketEvents', `events-${eventMonthKey(oct)}.jsonl`),
+      `${JSON.stringify(event('AAAUSDT', oct, 'urgent'))}\n${JSON.stringify(event('BBBUSDT', oct + 60, 'candidate'))}\n{"torn`
+    )
+    const { listMarketEvents } = await scanner()
+    const all = await listMarketEvents({})
+    expect(all.rows.map((row) => row.id)).toEqual([`binance:BBBUSDT:${oct + 60}`, `binance:AAAUSDT:${oct}`, `binance:AAAUSDT:${sep}`])
+    expect(all.skippedLines).toBe(1)
+    expect((await listMarketEvents({ symbol: 'aaausdt' })).rows).toHaveLength(2)
+    expect((await listMarketEvents({ minBand: 'urgent' })).rows.map((row) => row.time)).toEqual([oct])
+    expect((await listMarketEvents({ sinceSec: oct })).rows).toHaveLength(2)
+    expect((await listMarketEvents({ limit: 1 })).rows).toHaveLength(1)
+    expect(matchesMarketEventFilter(all.rows[0], { minBand: 'urgent' })).toBe(false)
+  })
+})
+
+describe('a scan of history', () => {
+  const request = (overrides: object = {}) => ({
+    requestId: 'scan-1',
+    pairs: [pair('PUMP'), pair('AAA')],
+    startSec: T0 + EVENT_LOOKBACK_BARS * 60,
+    endSec: LAST + 120,
+    ...overrides
+  })
+
+  it('finds the events a running scanner would have raised, and keeps only those', async () => {
+    const { scanHistory } = await scanner()
+    const progress: number[] = []
+    const result = await scanHistory(request(), (update) => progress.push(update.pairsDone))
+    expect(result.cancelled).toBe(false)
+    expect(result.failed).toEqual([])
+    expect(result.events.length).toBeGreaterThanOrEqual(1)
+    expect(new Set(result.events.map((event) => event.symbol))).toEqual(new Set(['PUMPUSDT']))
+    expect(result.events.every((event) => event.live === null)).toBe(true)
+    expect(progress[progress.length - 1]).toBe(2)
+    // It asked for the lookback and the cooldown before the window, and for nothing after it.
+    const call = market.rangeCalls.find((entry) => entry.symbol === 'PUMPUSDT')
+    expect(call?.startSec).toBe(request().startSec - (EVENT_LOOKBACK_BARS + 30) * 60)
+    expect(call?.endSec).toBe(request().endSec)
+  })
+
+  it('raises the event a live scanner raises on the same candles at the same minute', async () => {
+    const { scanHistory, scanOnce } = await scanner()
+    const first = (await scanHistory(request({ pairs: [pair('PUMP')] }), () => undefined)).events[0]
+    // A live pass at the minute history says the pump first qualified, shown the candles an
+    // exchange would have had then.
+    const pump = market.history.get('PUMPUSDT') as Candle[]
+    market.candles.set('PUMPUSDT', served(pump.filter((bar) => bar.time < first.time)))
+    const live = (await scanOnce(first.time * 1000 + 5_000)).recentEvents[0]
+    expect(live.time).toBe(first.time)
+    expect({ ...live, live: null }).toEqual(first)
+  })
+
+  it('reports a pair it could not read and scans the rest', async () => {
+    market.failing.add('AAAUSDT')
+    const { scanHistory } = await scanner()
+    const result = await scanHistory(request(), () => undefined)
+    expect(result.failed).toEqual([{ symbol: 'AAAUSDT', error: 'AAAUSDT is down' }])
+    expect(result.events.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('stops when told to, and does not report half a window as the whole', async () => {
+    let release = (): void => undefined
+    market.rangeGate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const { scanHistory, cancelScanHistory } = await scanner()
+    const running = scanHistory(request(), () => undefined)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    cancelScanHistory('scan-1')
+    release()
+    const result = await running
+    expect(result.cancelled).toBe(true)
+    expect(result.events).toEqual([])
+    expect(market.cancelled.sort()).toEqual(['scan-1:AAAUSDT', 'scan-1:PUMPUSDT'])
+  })
+
+  it('is bounded: a start before its end, ninety days, not the future, at least one pair', async () => {
+    const { scanHistory } = await scanner()
+    const noop = (): void => undefined
+    await expect(scanHistory(request({ pairs: [] }), noop)).rejects.toThrow(/at least one pair/)
+    await expect(scanHistory(request({ startSec: LAST, endSec: LAST }), noop)).rejects.toThrow(/start before its end/)
+    await expect(scanHistory(request({ startSec: T0 - (SCAN_HISTORY_MAX_DAYS + 1) * 86_400, endSec: T0 }), noop)).rejects.toThrow(/at most 90 days/)
+    await expect(scanHistory(request({ endSec: Math.floor(Date.now() / 1000) + 3600 }), noop)).rejects.toThrow(/future/)
+    await expect(scanHistory(request({ floor: 'quiet' }), noop)).rejects.toThrow(/watch, candidate or urgent/)
+    expect(market.rangeCalls).toEqual([])
+  })
+})

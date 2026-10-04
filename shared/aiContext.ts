@@ -1,12 +1,22 @@
 import { BollingerBands, RSI } from 'technicalindicators'
 import { aggregateCandles, bucketTimeFor } from './aggregateCandles'
 import { AI_CONFIRM_PROMPT_VERSION, type AiStrategyBlock } from './aiConfirm'
+import { AI_OPPORTUNITY_PROMPT_VERSION, AI_OPPORTUNITY_SCHEMA_VERSION } from './aiOpportunity'
 import { AI_PANEL_PROMPT_VERSION, canonicalAgentReports, type AiAgentReports } from './aiPanel'
-import { GPT_LOOKBACK_BARS, GPT_PROMPT_VERSION, type AiPositionState } from './aiSignal'
+import { AI_SCHEMA_VERSION, GPT_LOOKBACK_BARS, GPT_PROMPT_VERSION, type AiPositionState } from './aiSignal'
 import { computeAtr } from './atr'
 import { FEE_RATE, SLIPPAGE_RATE } from './fees'
 import { computeEma, wilderAdx } from './indicators'
 import { INTERVAL_SECONDS, type Candle, type Exchange, type Interval } from './ipc'
+import {
+  EVENT_BAR_SECONDS,
+  EVENT_LOOKBACK_BARS,
+  isAtLeast,
+  readEventAt,
+  type EventComponents,
+  type EventReading,
+  type MarketEventType
+} from './marketEvent'
 
 // What a model is shown before it decides.
 //
@@ -73,6 +83,30 @@ export interface AiTimeframeView {
   adx14: number | null
 }
 
+/** What the scanner raised, as a model is shown it (shared/marketEvent.ts). Rebuilt from the
+ * 1-minute candles by buildEventContext; nobody hands one in. */
+export interface AiEventBlock {
+  type: MarketEventType
+  direction: 'up' | 'down'
+  /** Open time of the 1-minute bar a call on this event executes on. */
+  time: number
+  /** The close of the last completed 1-minute bar: the price any levels are placed against. */
+  price: number
+  /** 0 to 100: the plain mean of the five components. */
+  score: number
+  components: EventComponents
+  returnsPct: { m1: number; m5: number; m15: number; h1: number; h4: number }
+  /** The usual size of a fifteen-minute move in this market, in percent, over the hours before
+   * this one. What "large" means here. */
+  usualMove15mPct: number
+  /** The last five minutes' traded value against the usual five minutes before the move began. */
+  volumeRatio: number | null
+  /** [unixTime, open, high, low, close, volume], oldest first: the last thirty 1-minute bars, and
+   * the two hours before the event in 5-minute bars counted back from it. */
+  bars1m: number[][]
+  bars5m: number[][]
+}
+
 export interface AiMarketContext {
   version: string
   exchange: Exchange
@@ -101,22 +135,34 @@ export interface AiMarketContext {
    * analysts made of this same snapshot. ABSENT on every other question, the analysts' own
    * included, for the reason `strategy` is. */
   agents?: AiAgentReports
+  /** Present only on an opportunity question (shared/aiOpportunity.ts): the event the scanner
+   * raised, on 1-minute candles, over the seven-day snapshot above. ABSENT on every other
+   * question, for the reason `strategy` is. */
+  event?: AiEventBlock
 }
 
 /** Which prompt a context is put to a model under. Derived from the context rather than passed
  * beside it, so the question asked, the version it is cached under and the version written to the
  * ledger cannot disagree: a context that carries analysts' reports is a panel's decision, one that
  * names a strategy is an entry review, and nothing else is either. */
-export function aiPromptVersion(context: Pick<AiMarketContext, 'strategy' | 'agents'>): string {
+export function aiPromptVersion(context: Pick<AiMarketContext, 'strategy' | 'agents' | 'event'>): string {
   if (context.agents !== undefined) return AI_PANEL_PROMPT_VERSION
+  if (context.event !== undefined) return AI_OPPORTUNITY_PROMPT_VERSION
   return context.strategy === undefined ? GPT_PROMPT_VERSION : AI_CONFIRM_PROMPT_VERSION
+}
+
+/** Which answer shape a context is asked for in, derived from the context for the same reason
+ * the prompt version is: an opportunity's answer carries an entry range, every other one is the
+ * signal's. */
+export function aiSchemaVersion(context: Pick<AiMarketContext, 'event'>): string {
+  return context.event === undefined ? AI_SCHEMA_VERSION : AI_OPPORTUNITY_SCHEMA_VERSION
 }
 
 /** The question a panel's decision is asked: the snapshot its analysts were shown, and what they
  * made of it. The reports are rebuilt on the way in, so the bytes -- and the cache key -- depend
  * on what the analysts said and on nothing about how it was handed over. */
 export function withAgentReports(context: AiMarketContext, reports: AiAgentReports): AiMarketContext {
-  if (context.strategy !== undefined || context.agents !== undefined) {
+  if (context.strategy !== undefined || context.agents !== undefined || context.event !== undefined) {
     throw new Error('A panel decides a standalone signal, and is shown its reports once')
   }
   return { ...context, agents: canonicalAgentReports(reports) }
@@ -239,6 +285,99 @@ export function buildAiContext(
     // Last, and only when there is one: see AiMarketContext.strategy.
     ...(meta.strategy !== undefined ? { strategy: meta.strategy } : {})
   }
+}
+
+// ---------------------------------------------------------------------------------------------
+// AN EVENT'S QUESTION (shared/aiOpportunity.ts): the seven-day snapshot, and on top of it what the
+// scanner saw on 1-minute candles.
+
+/** 1-minute bars spelled out in an event's question, and 5-minute bars made from the ones before. */
+const EVENT_BARS_1M = 30
+const EVENT_BARS_5M = 24
+const FIVE = 5
+
+/** Five-minute bars counted BACK FROM THE EVENT, not aligned to the clock: the last one ends at
+ * the last completed minute, so none of them is a partial bucket and the newest five minutes are
+ * always one whole bar. */
+function fiveMinuteBars(bars: Candle[], count: number): number[][] {
+  const out: number[][] = []
+  for (let end = bars.length; end - FIVE >= 0 && out.length < count; end -= FIVE) {
+    const slice = bars.slice(end - FIVE, end)
+    let high = -Infinity
+    let low = Infinity
+    let volume = 0
+    for (const bar of slice) {
+      if (bar.high > high) high = bar.high
+      if (bar.low < low) low = bar.low
+      volume += bar.volume
+    }
+    out.push([slice[0].time, slice[0].open, high, low, slice[FIVE - 1].close, sig(volume) ?? 0])
+  }
+  return out.reverse()
+}
+
+function eventBlock(reading: EventReading & { type: MarketEventType; direction: 'up' | 'down' }, bars1m: Candle[]): AiEventBlock {
+  return {
+    type: reading.type,
+    direction: reading.direction,
+    time: reading.time,
+    price: reading.price,
+    score: sig(reading.score) ?? 0,
+    components: {
+      price: sig(reading.components.price) ?? 0,
+      volume: sig(reading.components.volume) ?? 0,
+      volatility: sig(reading.components.volatility) ?? 0,
+      pressure: sig(reading.components.pressure) ?? 0,
+      breakout: sig(reading.components.breakout) ?? 0
+    },
+    returnsPct: {
+      m1: sig(reading.returnsPct.m1) ?? 0,
+      m5: sig(reading.returnsPct.m5) ?? 0,
+      m15: sig(reading.returnsPct.m15) ?? 0,
+      h1: sig(reading.returnsPct.h1) ?? 0,
+      h4: sig(reading.returnsPct.h4) ?? 0
+    },
+    usualMove15mPct: sig(reading.sigma15Pct) ?? 0,
+    volumeRatio: sig(reading.volumeRatio),
+    bars1m: bars1m.slice(-EVENT_BARS_1M).map(compactBar),
+    bars5m: fiveMinuteBars(bars1m.slice(0, -EVENT_BARS_1M), EVENT_BARS_5M)
+  }
+}
+
+/** The question an event is put to a model as, or null when these candles do not make one.
+ *
+ * `candles1m` and `candles15m` are COMPLETED bars, oldest first. The event is read from the last
+ * EVENT_LOOKBACK_BARS one-minute bars -- its time is the minute after the last of them -- and the
+ * seven-day snapshot from the last GPT_LOOKBACK_BARS fifteen-minute bars that had closed by then.
+ * Bars after either window are not read, and bars before them change nothing.
+ *
+ * NULL UNLESS THE DETECTOR CALLS IT AN EVENT WORTH RAISING: at candidate or above, with a
+ * direction. The event is worked out here from the candles, never passed in, so a model cannot be
+ * asked -- and billed -- about a minute on someone's say-so that it was interesting. */
+export function buildEventContext(candles15m: Candle[], candles1m: Candle[], meta: { exchange: Exchange; symbol: string }): AiMarketContext | null {
+  if (candles1m.length < EVENT_LOOKBACK_BARS) return null
+  const bars1m = candles1m.slice(-EVENT_LOOKBACK_BARS)
+  const reading = readEventAt(bars1m, bars1m.length - 1)
+  if (reading === null || reading.type === null || reading.direction === 'none' || !isAtLeast(reading.band, 'candidate')) return null
+
+  // The fifteen-minute bars that had closed when the event was read, and nothing later -- and
+  // the newest of them has to be the one that had JUST closed, or the snapshot is of some earlier
+  // market than the event's.
+  const barSeconds = INTERVAL_SECONDS['15m']
+  const closed = candles15m.filter((bar) => bar.time + barSeconds <= reading.time)
+  if (closed.length < GPT_LOOKBACK_BARS) return null
+  const window = closed.slice(-GPT_LOOKBACK_BARS)
+  if (reading.time - (window[window.length - 1].time + barSeconds) >= barSeconds) return null
+
+  const base = buildAiContext(window, window.length, { exchange: meta.exchange, symbol: meta.symbol, interval: '15m', position: 'flat' })
+  if (!base) return null
+  // Last, and only here: see AiMarketContext.event.
+  return { ...base, event: eventBlock({ ...reading, type: reading.type, direction: reading.direction }, bars1m) }
+}
+
+/** The 1-minute bar an event's question was read at, from the question itself. */
+export function eventBarTime(event: AiEventBlock): number {
+  return event.time - EVENT_BAR_SECONDS
 }
 
 /** The exact bytes that are sent to the model and hashed into the cache key. One function, so the

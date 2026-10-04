@@ -4,6 +4,8 @@ import {
   AI_AGENT_SCHEMAS,
   AI_AGENT_SYSTEM_PROMPTS,
   AI_CONFIRM_SYSTEM_PROMPT,
+  AI_OPPORTUNITY_SCHEMA,
+  AI_OPPORTUNITY_SYSTEM_PROMPT,
   AI_PANEL_SYSTEM_PROMPT,
   AI_RESPONSE_SCHEMA,
   AI_SYSTEM_PROMPT,
@@ -12,6 +14,7 @@ import {
 } from '../electron/services/aiPrompt'
 import { AI_CONFIRM_PROMPT_VERSION } from '../shared/aiConfirm'
 import { buildAiContext, withAgentReports } from '../shared/aiContext'
+import { AI_OPPORTUNITY_PROMPT_VERSION, AI_OPPORTUNITY_SCHEMA_VERSION } from '../shared/aiOpportunity'
 import { AI_AGENT_PROMPT_VERSIONS, AI_AGENT_ROLES, AI_AGENT_SCHEMA_VERSION, AI_PANEL_PROMPT_VERSION } from '../shared/aiPanel'
 import { AI_SCHEMA_VERSION, GPT_LOOKBACK_BARS, GPT_PROMPT_VERSION } from '../shared/aiSignal'
 import type { Candle } from '../shared/ipc'
@@ -81,6 +84,20 @@ const PINNED: { what: string; version: string; text: string; expectVersion: stri
     expectHash: '3631d05c7416af02e0ebbf022c24a81dd991e4a693845fd22b82cd3a438a548b'
   },
   {
+    what: 'the opportunity prompt',
+    version: AI_OPPORTUNITY_PROMPT_VERSION,
+    text: AI_OPPORTUNITY_SYSTEM_PROMPT,
+    expectVersion: 'opportunity-v1',
+    expectHash: '63fd8b9f41cd4397a3ea8121f352ba90a3ceedb94bc50ea25714e8686e8d46c5'
+  },
+  {
+    what: 'the opportunity schema',
+    version: AI_OPPORTUNITY_SCHEMA_VERSION,
+    text: JSON.stringify(AI_OPPORTUNITY_SCHEMA),
+    expectVersion: 'opportunity-schema-v1',
+    expectHash: 'dd2287b76857737488db969122d92b383fa77111a64dd5c3d058530a60ed9cbc'
+  },
+  {
     what: "the analysts' report schemas",
     version: AI_AGENT_SCHEMA_VERSION,
     text: JSON.stringify(AI_AGENT_ROLES.map((role) => AI_AGENT_SCHEMAS[role])),
@@ -96,7 +113,13 @@ describe('a prompt and the version it is cached under', () => {
 
   it('gives every prompt a version of its own', () => {
     // Two prompts under one version would share cache keys for the same snapshot.
-    const prompts = [GPT_PROMPT_VERSION, AI_CONFIRM_PROMPT_VERSION, AI_PANEL_PROMPT_VERSION, ...AI_AGENT_ROLES.map((role) => AI_AGENT_PROMPT_VERSIONS[role])]
+    const prompts = [
+      GPT_PROMPT_VERSION,
+      AI_CONFIRM_PROMPT_VERSION,
+      AI_OPPORTUNITY_PROMPT_VERSION,
+      AI_PANEL_PROMPT_VERSION,
+      ...AI_AGENT_ROLES.map((role) => AI_AGENT_PROMPT_VERSIONS[role])
+    ]
     expect(new Set(prompts).size).toBe(prompts.length)
   })
 

@@ -41,6 +41,7 @@ import {
   benchmarkPeekCandles,
   runBenchmark
 } from './benchmark'
+import { EventBenchmarkView } from './EventBenchmarkView'
 import { buttonStyle, cellStyle, headCellStyle, horizonLabel, inputStyle, noteStyle, recommendationColor, signedPct } from './agentStyles'
 
 const INTERVAL = GPT_INTRADAY_INTERVAL
@@ -487,12 +488,33 @@ function BenchmarkResult({ shown, preferredRoute }: { shown: Shown; preferredRou
   )
 }
 
+/** Two benchmarks share this tab. They ask different questions and are scored differently, so
+ * each is its own screen: one market on a clock, scored by where the price was four hours later;
+ * and the events the scanner raises across the market, scored by following each recommendation
+ * (EventBenchmarkView.tsx). Neither is mounted while the other is shown. */
+export function BenchmarkTab(): React.JSX.Element {
+  const [mode, setMode] = useState<'clock' | 'events'>('clock')
+  return (
+    <>
+      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <button onClick={() => setMode('clock')} style={buttonStyle(mode === 'clock' ? 'primary' : 'secondary')} aria-pressed={mode === 'clock'}>
+          One market on a clock
+        </button>
+        <button onClick={() => setMode('events')} style={buttonStyle(mode === 'events' ? 'primary' : 'secondary')} aria-pressed={mode === 'events'}>
+          Events across the market
+        </button>
+      </div>
+      {mode === 'clock' ? <ClockBenchmark /> : <EventBenchmarkView />}
+    </>
+  )
+}
+
 /** The same questions put to several models, and the answers scored side by side.
  *
  * PRESSING RUN SPENDS NOTHING BY ITSELF. It fetches candles and reads the decision cache, and only
  * then -- if any answer is missing -- says what the rest would cost, per model, and asks. A
  * benchmark that is already paid for is simply shown. */
-export function BenchmarkTab(): React.JSX.Element {
+function ClockBenchmark(): React.JSX.Element {
   const [exchange, setExchange] = useState<Exchange>('binance')
   const [pair, setPair] = useState<SymbolInfo>(EXCHANGES[0].defaultSymbol)
   const [days, setDays] = useState<number>(AI_BENCHMARK_DEFAULT_DAYS)

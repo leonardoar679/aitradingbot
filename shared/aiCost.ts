@@ -2,6 +2,7 @@ import type { AiCallRecord } from './aiLedger'
 import { describeDecider, isPanelId } from './aiPanel'
 import { describeEscalation, type AiRoute } from './aiRoute'
 import { AI_PROVIDER_LABEL, GPT_MAX_DECISIONS, describeGptCadence, type AiSignalEstimate } from './aiSignal'
+import type { AiWatchConfig } from './aiWatch'
 
 // What AI calls cost, and what bounds them.
 //
@@ -51,6 +52,9 @@ export interface AiConfig {
   /** Zero switches AI calls off. */
   dailyCapUsd: number
   spentTodayUsd: number
+  /** Events put to models without a click, and its limits (shared/aiWatch.ts). Off unless
+   * switched on. */
+  watch: AiWatchConfig
 }
 
 export interface AiConfigPatch {
@@ -59,6 +63,8 @@ export interface AiConfigPatch {
   /** Null switches routing off. */
   route?: AiRoute | null
   dailyCapUsd?: number
+  /** Only the fields given are changed. */
+  watch?: Partial<AiWatchConfig>
 }
 
 /** `$0.0021`, `$0.0113`, `$1.40`. Up to four decimals under ten cents, because that is where a
@@ -317,6 +323,8 @@ export interface AiBenchmarkCostInput {
   /** How many questions the run keeps in the air at once. Absent, no time is stated: how long a
    * benchmark takes is its calls divided by this, and a figure that guessed it would be wrong. */
   concurrency?: number
+  /** What one question is called. Absent, a decision: a benchmark of events says "event". */
+  unit?: { one: string; many: string }
 }
 
 /** What is still to ask across a benchmark's models, and what that is expected to cost over the
@@ -396,7 +404,7 @@ export function describeAiBenchmarkCost(input: AiBenchmarkCostInput): string {
       : 'How long that takes is not known: a model that has not been called here has no pace to go by.'
   }
   return [
-    `Benchmark ${count(input.decisions, 'decision', 'decisions')} on ${input.symbol} with ${who} through ${AI_PROVIDER_LABEL}. ` +
+    `Benchmark ${count(input.decisions, input.unit?.one ?? 'decision', input.unit?.many ?? 'decisions')} on ${input.symbol} with ${who} through ${AI_PROVIDER_LABEL}. ` +
       `${panels === 0 ? 'Every model' : 'Each'} is asked the same questions. ${cached.toLocaleString()} of the ${total.toLocaleString()} answers ${cached === 1 ? 'is' : 'are'} already cached.`,
     '',
     `At most ${count(calls, 'model call', 'model calls')} may be made:`,
@@ -405,6 +413,71 @@ export function describeAiBenchmarkCost(input: AiBenchmarkCostInput): string {
     ...(time !== null ? [time] : []),
     '',
     `${budget} Everything answered up to then stays cached, and running the benchmark again asks only for what is missing.`,
+    '',
+    'Continue?'
+  ].join('\n')
+}
+
+export interface AiOpportunityCostModel {
+  model: string
+  /** True when this model's answer is already held, so it is not asked again. */
+  held: boolean
+  perCallCostUsd: number | null
+  costBasis: AiSignalEstimate['costBasis']
+  perCallLatencyMs?: number | null
+}
+
+export interface AiOpportunityCostInput {
+  symbol: string
+  /** The event, in a word or two: "breakout", "breakdown". */
+  event: string
+  models: AiOpportunityCostModel[]
+  budgetRemainingUsd: number
+}
+
+/** The same question describeAiRunCost asks, for one event put to several models
+ * (shared/aiOpportunity.ts). One call a model, each priced on its own line, and the time is the
+ * slowest of them rather than their sum: they are asked together and none waits on another. */
+export function describeAiOpportunityCost(input: AiOpportunityCostInput): string {
+  const count = (n: number, one: string, many: string): string => `${n.toLocaleString()} ${n === 1 ? one : many}`
+  const asking = input.models.filter((model) => !model.held)
+  const held = input.models.length - asking.length
+  const priced = asking.filter((model) => model.perCallCostUsd !== null)
+  const knownUsd = priced.reduce((sum, model) => sum + (model.perCallCostUsd ?? 0), 0)
+
+  const lines = asking.map((model) => {
+    if (model.perCallCostUsd === null) return `  ${describeDecider(model.model)}: cost not known (no call history here and no published price)`
+    const basis = model.costBasis === 'history' ? 'going by its recent calls here' : 'going by its price list, an estimate'
+    return `  ${describeDecider(model.model)}: about ${formatUsd(model.perCallCostUsd)} ${basis}`
+  })
+  const sum =
+    priced.length === 0
+      ? 'What that will cost in all is not known.'
+      : priced.length === asking.length
+        ? `About ${formatUsd(knownUsd)} in all.`
+        : `About ${formatUsd(knownUsd)} for the ${priced.length === 1 ? 'one model' : `${priced.length} models`} with a known price; the rest is not known.`
+  const slowest = Math.max(0, ...asking.map((model) => model.perCallLatencyMs ?? 0))
+  const time = !asking.every((model) => model.perCallLatencyMs != null)
+    ? 'How long that takes is not known: a model that has not been called here has no pace to go by.'
+    : asking.length === 1
+      ? `That takes ${describeDuration(slowest)} at the pace it has answered here.`
+      : `They are asked together, so that takes ${describeDuration(slowest)}: as long as the slowest of them has been taking here.`
+  const budget =
+    priced.length > 0 && knownUsd > input.budgetRemainingUsd
+      ? `${formatUsd(input.budgetRemainingUsd)} of today's AI budget is left, which is less than that: the calls stop when it runs out.`
+      : `${formatUsd(input.budgetRemainingUsd)} of today's AI budget is left.`
+
+  return [
+    `Ask ${count(input.models.length, 'model', 'models')} about the ${input.event} on ${input.symbol} through ${AI_PROVIDER_LABEL}. ` +
+      `Each is shown the same snapshot and answers on its own.` +
+      (held > 0 ? ` ${held === 1 ? '1 has' : `${held} have`} already answered and ${held === 1 ? 'is' : 'are'} not asked again.` : ''),
+    '',
+    `${count(asking.length, 'call', 'calls')} will be made:`,
+    ...lines,
+    sum,
+    ...(asking.length > 0 ? [time] : []),
+    '',
+    `${budget} An answer is cached once it is bought, and is never asked for twice.`,
     '',
     'Continue?'
   ].join('\n')

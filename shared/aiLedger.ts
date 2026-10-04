@@ -51,6 +51,12 @@ export interface AiCallRecord {
    * else vetoed it, and `candleTime` is the bar the strategy signalled on -- the bar whose close
    * the entry fills at. */
   strategyId?: string
+  /** Set when the call answered an opportunity question (shared/aiOpportunity.ts): the event it
+   * was asked about, as the scanner names it, and that event's type. `candleTime` is then the
+   * event's time -- the 1-minute bar the call executes on -- and `referencePrice` the event's
+   * price, which is what the levels were placed against. */
+  eventId?: string
+  eventType?: string
   /** Set when the call was a route's second opinion (shared/aiRoute.ts): the model whose answer
    * sent the decision on. Absent on every other call -- including this same answer when a
    * benchmark or a backtest bought it first, since a decision is only ever one row. */

@@ -263,9 +263,15 @@ export interface RaisedEvent {
  *
  * At or above `floor`, and higher than anything raised for the pair inside the cooldown. So a
  * pump that reaches "candidate" and five minutes later "urgent" is raised twice, once at each,
- * and a pump that stays at "candidate" for ten minutes is raised once. */
+ * and a pump that stays at "candidate" for ten minutes is raised once.
+ *
+ * AND IT HAS A DIRECTION. A volume spike with none is read, scored and shown, and never raised:
+ * research/EVENTS.md measured what followed one on twenty pairs, at every horizon from five
+ * minutes to a day, and found nothing -- while on thinly traded pairs spikes are most of what
+ * fires. Raising them would spend a model's attention on the one kind of event known to say
+ * nothing. */
 export function raisesEvent(reading: EventReading, earlier: RaisedEvent[], floor: EventBand = 'candidate'): boolean {
-  if (reading.type === null || !isAtLeast(reading.band, floor)) return false
+  if (reading.type === null || reading.direction === 'none' || !isAtLeast(reading.band, floor)) return false
   for (const event of earlier) {
     if (reading.time - event.time < EVENT_COOLDOWN_SECONDS && BAND_RANK[event.band] >= BAND_RANK[reading.band]) return false
   }
@@ -379,6 +385,30 @@ export function toMarketEvent(
     rangeRatio: reading.rangeRatio === null ? null : sig(reading.rangeRatio),
     live
   }
+}
+
+/** How long after an event its page says what the price did: fifteen minutes, an hour, four hours. */
+export const EVENT_FOLLOW_MINUTES = [15, 60, 240] as const
+
+/** The plain price change, in percent, from an event's price to the close `minutes` after the bar
+ * its call executes on opened. Not signed by the event's direction: after a dump, a negative
+ * number means it kept falling.
+ *
+ * Null until that minute has closed, and null when the candle for it is not among `bars`. Like
+ * every outcome in this app it is worked out from candles when it is looked at, never stored. */
+export function moveAfterEvent(event: { time: number; price: number }, bars: Candle[], minutes: number, nowSec: number): number | null {
+  const lastBarTime = event.time + (minutes - 1) * EVENT_BAR_SECONDS
+  if (lastBarTime + EVENT_BAR_SECONDS > nowSec || !(event.price > 0)) return null
+  // Bars are oldest first; a binary search, because a page of events asks this many times.
+  let low = 0
+  let high = bars.length - 1
+  while (low <= high) {
+    const middle = (low + high) >> 1
+    if (bars[middle].time === lastBarTime) return (bars[middle].close / event.price - 1) * 100
+    if (bars[middle].time < lastBarTime) low = middle + 1
+    else high = middle - 1
+  }
+  return null
 }
 
 /** A day of trading under this is not put forward however hard it is moving: one million of the

@@ -5,6 +5,7 @@ import { DEFAULT_AI_DAILY_CAP_USD, DEFAULT_AI_MODEL } from '../../shared/aiSigna
 import { aiModelSlugOf, isAiModelId, splitAiModelId } from '../../shared/aiEffort'
 import { deciderModel, isPanelId, panelModelOf } from '../../shared/aiPanel'
 import { parseAiRoute, type AiRoute } from '../../shared/aiRoute'
+import { aiWatchProblem, healAiWatch, sameWatchTerms, type AiWatchConfig } from '../../shared/aiWatch'
 import { budgetProblem, type AiConfig, type AiConfigPatch, type AiModelCatalogue, type AiModelInfo } from '../../shared/aiCost'
 import { writeJsonAtomic } from './atomicWrite'
 import { getDecryptedAiCredential } from './aiCredentialsService'
@@ -27,6 +28,10 @@ interface AiConfigState {
   /** Reuses the live-trading cap's bucket (dailyUsage.ts), so `usedQuote` here is US dollars
    * spent on AI calls today. Same arithmetic, same UTC day boundary, one tested implementation. */
   dailyUsage: DailyUsageBucket | null
+  /** See AiConfig.watch. It is here, in the file the renderer cannot write wholesale, for the
+   * reason the budget is: it is the one setting that lets a model be asked with nobody pressing
+   * anything, and it changes only through setAiConfig. */
+  watch: AiWatchConfig
 }
 
 interface StoredCatalogue {
@@ -112,7 +117,11 @@ async function load(): Promise<AiConfigState> {
     dailyUsage:
       usage && typeof usage.date === 'string' && typeof usage.usedQuote === 'number' && Number.isFinite(usage.usedQuote)
         ? { date: usage.date, usedQuote: usage.usedQuote }
-        : null
+        : null,
+    // Healed like the rest, and strictly: a stored watch that is not exactly one that could have
+    // been switched on -- a model no longer enabled, a limit that is not one of the choices -- is
+    // off, not running in some repaired shape nobody agreed to the price of.
+    watch: healAiWatch(raw.watch, enabledModels)
   }
   return cache
 }
@@ -150,7 +159,8 @@ function statusFor(state: AiConfigState): AiConfig {
     enabledModels: [...state.enabledModels],
     route: state.route ? { ...state.route } : null,
     dailyCapUsd: state.dailyCapUsd,
-    spentTodayUsd: usageForDay(state.dailyUsage, today())
+    spentTodayUsd: usageForDay(state.dailyUsage, today()),
+    watch: { ...state.watch, models: [...state.watch.models] }
   }
 }
 
@@ -239,7 +249,37 @@ export async function setAiConfig(patch: AiConfigPatch): Promise<AiConfig> {
     dailyCapUsd = patch.dailyCapUsd
   }
 
-  cache = { ...state, defaultModel, enabledModels, route, dailyCapUsd }
+  // The watch asks only models that are enabled, and what it asks is what was agreed to when it
+  // was switched on.
+  let watch = state.watch
+  if (patch.watch !== undefined) {
+    const asked = patch.watch ?? {}
+    const candidate: AiWatchConfig = {
+      enabled: asked.enabled ?? state.watch.enabled,
+      models: asked.models ?? state.watch.models,
+      maxEventsPerDay: asked.maxEventsPerDay ?? state.watch.maxEventsPerDay,
+      minBand: asked.minBand ?? state.watch.minBand,
+      firstModelGates: asked.firstModelGates ?? state.watch.firstModelGates
+    }
+    const problem = aiWatchProblem(candidate, enabledModels)
+    if (problem !== null) throw new Error(problem)
+    // Its price was stated when it was switched on, for those models and that limit. Changing
+    // either under a running watch would change what it can spend with nothing having said so.
+    if (state.watch.enabled && candidate.enabled && !sameWatchTerms(state.watch, candidate)) {
+      throw new Error('Switch the watch off before changing what it asks. Switching it on again states the new price first.')
+    }
+    watch = { ...candidate, models: [...candidate.models] }
+  } else {
+    // Like a route: a change that would strand a running watch is refused rather than quietly
+    // repaired. Taking a model off its list could leave a dearer one asked about every event.
+    const stranded = state.watch.models.find((model) => !enabledModels.includes(model))
+    if (stranded !== undefined && state.watch.enabled) {
+      throw new Error(`${stranded} is one of the models the watch asks. Switch the watch off before disabling it.`)
+    }
+    if (stranded !== undefined) watch = { ...state.watch, models: state.watch.models.filter((model) => enabledModels.includes(model)) }
+  }
+
+  cache = { ...state, defaultModel, enabledModels, route, dailyCapUsd, watch }
   await persist()
   return statusFor(cache)
 }

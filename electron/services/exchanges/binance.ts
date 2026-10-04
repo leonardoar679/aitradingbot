@@ -1,5 +1,5 @@
 import { createReconnectingSocket } from './reconnectingSocket'
-import type { ExchangeAdapter } from './types'
+import type { BookTicker, ExchangeAdapter } from './types'
 import { INTERVAL_SECONDS, type Candle, type Interval, type SymbolInfo, type Ticker24h } from '../../../shared/ipc'
 
 export interface RestEndpoint {
@@ -301,11 +301,71 @@ async function subscribeTicker(symbol: string, onUpdate: (ticker: Ticker24h) => 
   })
 }
 
+// ---------------------------------------------------------------------------------------------
+// Whole-market reads, for the scanner (marketScannerService.ts). All three go to the DATA host:
+// they are public market data, and the mirror serves every one of them.
+
+/** A scanner's request that has not answered in this long is given up on. The pass it belongs to
+ * runs once a minute; a request still open when the next one starts is worth nothing. */
+const SCAN_TIMEOUT_MS = 8_000
+
+interface BinanceBookTickerRest {
+  symbol: string
+  bidPrice: string
+  askPrice: string
+}
+
+/** Every pair's 24-hour statistics in one request (weight 80). */
+async function fetchAllTickers24h(): Promise<Ticker24h[]> {
+  const endpoint = await resolveEndpoint()
+  const response = await fetch(`${endpoint.restRoot}/ticker/24hr`, { signal: AbortSignal.timeout(SCAN_TIMEOUT_MS * 2) })
+  if (!response.ok) throw new Error(`${endpoint.name} ticker request failed: ${response.status} ${response.statusText}`)
+  const rows = (await response.json()) as (BinanceTicker24hRest & { symbol: string })[]
+  return rows.map((raw) => ({
+    symbol: raw.symbol,
+    lastPrice: Number(raw.lastPrice),
+    priceChange: Number(raw.priceChange),
+    priceChangePercent: Number(raw.priceChangePercent),
+    highPrice: Number(raw.highPrice),
+    lowPrice: Number(raw.lowPrice),
+    volume: Number(raw.volume),
+    quoteVolume: Number(raw.quoteVolume)
+  }))
+}
+
+/** Every pair's best bid and ask in one request (weight 4). */
+async function fetchBookTickers(): Promise<BookTicker[]> {
+  const endpoint = await resolveEndpoint()
+  const response = await fetch(`${endpoint.restRoot}/ticker/bookTicker`, { signal: AbortSignal.timeout(SCAN_TIMEOUT_MS) })
+  if (!response.ok) throw new Error(`${endpoint.name} book ticker request failed: ${response.status} ${response.statusText}`)
+  const rows = (await response.json()) as BinanceBookTickerRest[]
+  return rows.map((raw) => ({ symbol: raw.symbol, bidPrice: Number(raw.bidPrice), askPrice: Number(raw.askPrice) }))
+}
+
+/** fetchHistoricalCandles with a deadline, and a symbol that is safe to put in a URL: Binance
+ * lists pairs whose names are not ASCII. */
+async function fetchRecentCandles(symbol: string, interval: Interval, limit: number): Promise<Candle[]> {
+  const endpoint = await resolveEndpoint()
+  const url = `${endpoint.restRoot}/klines?symbol=${encodeURIComponent(symbol)}&interval=${interval}&limit=${limit}`
+  const response = await fetch(url, { signal: AbortSignal.timeout(SCAN_TIMEOUT_MS) })
+  if (!response.ok) throw new Error(`${endpoint.name} klines request failed: ${response.status} ${response.statusText}`)
+  const rows = (await response.json()) as BinanceKlineRow[]
+  return rows.map((row) => ({
+    time: Math.floor(Number(row[0]) / 1000),
+    open: Number(row[1]),
+    high: Number(row[2]),
+    low: Number(row[3]),
+    close: Number(row[4]),
+    volume: Number(row[5])
+  }))
+}
+
 export const binanceAdapter: ExchangeAdapter = {
   listSymbols,
   fetchHistoricalCandles,
   fetchHistoricalRange,
   fetchTicker24h,
   subscribeCandles,
-  subscribeTicker
+  subscribeTicker,
+  scan: { fetchAllTickers24h, fetchBookTickers, fetchRecentCandles }
 }

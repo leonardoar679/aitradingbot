@@ -120,7 +120,10 @@ describe('AI code has no route to a real order', () => {
     const benchmark = [
       join(ROOT, 'src', 'agents', 'benchmark.ts'),
       join(ROOT, 'src', 'agents', 'BenchmarkTab.tsx'),
-      join(ROOT, 'shared', 'aiBenchmark.ts')
+      join(ROOT, 'src', 'agents', 'eventBenchmark.ts'),
+      join(ROOT, 'src', 'agents', 'EventBenchmarkView.tsx'),
+      join(ROOT, 'shared', 'aiBenchmark.ts'),
+      join(ROOT, 'shared', 'aiEventBenchmark.ts')
     ]
     for (const path of benchmark) {
       const source = readFileSync(path, 'utf-8')
@@ -145,19 +148,77 @@ describe('AI code has no route to a real order', () => {
     // only thing these files can do is ask for it to be opened.
     const proposing = [
       join(ROOT, 'shared', 'aiProposal.ts'),
+      join(ROOT, 'shared', 'aiOpportunity.ts'),
+      join(ROOT, 'shared', 'aiOpportunityOutcome.ts'),
       join(ROOT, 'src', 'agents', 'SignalCard.tsx'),
       join(ROOT, 'src', 'agents', 'AnalyzeTab.tsx'),
+      join(ROOT, 'src', 'agents', 'OpportunitiesTab.tsx'),
+      join(ROOT, 'src', 'agents', 'OpportunityCard.tsx'),
+      join(ROOT, 'src', 'agents', 'opportunities.ts'),
       join(ROOT, 'src', 'agents', 'AgentsPage.tsx')
     ]
     for (const path of proposing) {
       const source = readFileSync(path, 'utf-8')
       expect(source, path).not.toMatch(/liveTrading|LiveTrading|liveOrders|placeLive|window\.api\.executors/)
     }
-    // And the rules themselves are arithmetic on a decision: they import types and two helpers,
-    // and nothing from the renderer or the main process.
+    // And the rules themselves are arithmetic on a decision: they import types and a few helpers,
+    // and nothing from the renderer or the main process. A recommendation on an event added two
+    // of those imports on 2026-10-04: what a recommendation is, and the name of an event's type.
     const rules = readFileSync(join(ROOT, 'shared', 'aiProposal.ts'), 'utf-8')
-    expect(importsOf(join(ROOT, 'shared', 'aiProposal.ts')).sort()).toEqual(['aiPanel', 'aiSignal', 'ipc'])
+    expect(importsOf(join(ROOT, 'shared', 'aiProposal.ts')).sort()).toEqual(['aiOpportunity', 'aiPanel', 'aiSignal', 'ipc', 'marketEvent'])
     expect(rules).not.toMatch(/window\.|ipcRenderer|electron/)
+  })
+
+  it('the market scanner reads the market and reaches nothing else', () => {
+    // It is not an AI module, and it is the first thing in this app that decides, by itself and
+    // with no window open, that something is worth acting on. What it singles out is later put to
+    // a model. So it is held to the same rule from the start: it imports nothing that trades or
+    // holds a key, nothing that asks a model, and its page mentions no bridge an order travels over.
+    const main = [join(SERVICES, 'marketScannerService.ts'), join(SERVICES, 'jsonlStore.ts'), join(ROOT, 'electron', 'ipc', 'handlers', 'scannerHandlers.ts')]
+    for (const path of main) {
+      expect(importsOf(path).filter((name) => LIVE_MODULES.has(name)), path).toEqual([])
+      expect(importsOf(path).filter((name) => aiModuleNames.has(name)), path).toEqual([])
+    }
+    const renderer = [
+      join(ROOT, 'shared', 'marketEvent.ts'),
+      join(ROOT, 'shared', 'marketScanner.ts'),
+      join(ROOT, 'src', 'explorer', 'ExplorerPage.tsx'),
+      join(ROOT, 'src', 'explorer', 'eventOutcomes.ts')
+    ]
+    for (const path of renderer) {
+      const source = readFileSync(path, 'utf-8')
+      expect(source, path).not.toMatch(/liveTrading|LiveTrading|liveOrders|placeLive|window\.api\.executors|window\.api\.ai\b/)
+    }
+    // The detector is arithmetic on candles: it imports types and nothing else.
+    expect(importsOf(join(ROOT, 'shared', 'marketEvent.ts'))).toEqual(['ipc'])
+  })
+
+  it('the watch asks and notifies, and has nothing to trade with', () => {
+    // The watch is the one thing that asks a model with nobody pressing anything. What it may do
+    // with the answer is show it and say so on the desktop. So its files are held to more than
+    // the rest: no bridge an order travels over, no executor, no settings write -- which is where
+    // the paper account lives -- and no order form, which stays a button a person presses on a card.
+    const watching = [
+      join(ROOT, 'shared', 'aiWatch.ts'),
+      join(ROOT, 'src', 'agents', 'opportunityWatch.ts'),
+      join(ROOT, 'src', 'agents', 'OpportunityScheduler.tsx'),
+      join(ROOT, 'src', 'agents', 'WatchCard.tsx'),
+      join(ROOT, 'src', 'agents', 'liveBoard.ts'),
+      join(ROOT, 'src', 'agents', 'LiveBoardCard.tsx'),
+      join(ROOT, 'src', 'agents', 'EventTables.tsx'),
+      join(SERVICES, 'aiWatchService.ts')
+    ]
+    for (const path of watching) {
+      const source = readFileSync(path, 'utf-8')
+      expect(source, path).not.toMatch(/liveTrading|LiveTrading|liveOrders|placeLive|window\.api\.(executors|settings|trade|paper)/)
+      expect(source, path).not.toMatch(/onPrepareOrder|buildOpportunityProposal|buildAiProposal/)
+      expect(importsOf(path), path).not.toContain('aiProposal')
+    }
+    // The scheduler is given six things to work with, and none of them is an order or a form.
+    const scheduler = readFileSync(join(ROOT, 'src', 'agents', 'OpportunityScheduler.tsx'), 'utf-8')
+    expect([...scheduler.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]).sort()).toEqual(['ai', 'ai', 'ai', 'market', 'notify', 'scanner', 'scanner'])
+    // The main-process half reads the setting and the ledger, and nothing else.
+    expect(importsOf(join(SERVICES, 'aiWatchService.ts')).sort()).toEqual(['aiConfigService', 'aiLedgerService', 'aiWatch'])
   })
 
   it('the model is offered no tools', () => {
