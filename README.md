@@ -343,9 +343,12 @@ in this app that asks a model with nobody pressing anything. It is off until it 
 - **Switching it on is the confirmation it gets**, so that confirmation states each model's price
   a call, the most a day of it can cost — every model, for every event its limit allows, and the
   least as well when the first model is asked alone — and how that sits against the daily AI
-  budget. What it asks cannot be changed while it is on: a different list of models or a higher
-  limit is a different price, agreed to by switching it off and on again. A model it asks cannot
-  be disabled from under it.
+  budget. A call is priced on the question of an event the scanner has raised, so the watch
+  cannot be switched on before the scanner has raised its first; on a flat market that is a wait
+  (sixty pairs raised nothing for over two hours on Sunday 4 October 2026, against an average of
+  about two an hour). What it asks cannot be changed while it is on: a different list of models
+  or a higher limit is a different price, agreed to by switching it off and on again. A model it
+  asks cannot be disabled from under it.
 - **What it takes up**: an event raised live in the last three minutes, among the strongest three
   of its minute, at urgent (or at candidate and urgent), and never one that was on file when the
   app started. At most 5, 10, 20 or 40 events a UTC day, counted from the call ledger rather than
@@ -515,19 +518,48 @@ each recommendation by following it.
 - **Two rows are not models.** *Follow every event* and *fade every event* take the same events
   with one fixed bracket — a stop 1.5 usual fifteen-minute moves away, a target 3, one hour — and
   no judgement. They are on screen as soon as the events are found, before anything is asked, and
-  a model is worth its price by as much as it beats them. On the one sample looked at so far (50
+  a model is worth its price by as much as it beats them. On the first sample looked at (50
   events on the ten most traded pairs, 26 September to 3 October 2026) following lost 4.3% of a
-  stake over 50 trades and fading lost 23.3%: what `research/EVENTS.md` found over years, that
-  neither is a trade.
+  stake over 50 trades and fading lost 23.3%, and the run below lost more on a second: what
+  `research/EVENTS.md` found over years, that neither is a trade.
 - **Three more rows are the models combined**, worked out from the answers held and costing
   nothing: a side taken when more than half the models take it and none takes the other, when all
   do, or when its confidence outweighs the other side's and the abstainers' together. A rule has
   no levels of its own, so it trades those of the model surest of that side, and it cannot act
   until the slowest model has answered.
 
-No benchmark on events has been run against a real model yet: it is checked in the app with the
-models faked and the candles real. Whether any model beats the two rows that are not models is
-not known.
+One real benchmark on events has been run, on 4 October 2026: 100 events sampled from the 214
+the detector finds on the twenty most traded pairs between 19 September and 3 October, put to
+three models. It made 300 calls in eight minutes and cost $0.69. Scored on the 95 events all
+three answered (OpenRouter refused Mistral Small for rate on the other five):
+
+| | Took a side | At 65%+ | Closed | Won | Net, added up | A trade | Median wait | Per answer |
+|---|---|---|---|---|---|---|---|---|
+| `openai/gpt-5-mini` | 94 | 68 | 63 | 30% ± 11 | −9.70% | −0.15% | 14.5 s | $0.0043 |
+| `openai/gpt-5-mini@minimal` | 32 | 32 | 30 | 30% ± 16 | −0.75% | −0.02% | 2.2 s | $0.0015 |
+| `mistralai/mistral-small-2603` | 94 | 94 | 73 | 34% ± 11 | −25.37% | −0.35% | 2.0 s | $0.0011 |
+| Follow every event, no model | 95 | 95 | 95 | 31% ± 9 | −17.87% | −0.19% | | |
+| Fade every event, no model | 95 | 95 | 95 | 32% ± 9 | −33.86% | −0.36% | | |
+| More than half agree | 71 | 71 | 58 | 38% ± 12 | −10.07% | −0.17% | | |
+| Weighed by confidence | 77 | 77 | 63 | 41% ± 12 | −10.15% | −0.16% | | |
+| All agree | 29 | 29 | 26 | too few | +0.79% | | | |
+
+No model made money, and none is told apart from following every event with no model at all: the
+win rates sit inside one another's margins, and all three models lost in the second and the last
+third of the fortnight. The sides they took say why. Of the 100 sampled events 59 were breakouts
+and 41 breakdowns, and not one accepted answer went against the move: `gpt-5-mini` took the
+move's side 99 times in 100, Mistral Small every time it answered, and minimal effort either
+took it (34) or declined (66). Each model here is "follow every event" with its own levels and
+its own willingness to act, and following is the row `research/EVENTS.md` found does not pay.
+
+What separated them is how often they acted and what they asked for. Minimal effort lost least
+by declining two events in three. Mistral Small lost most: it acted on every one at a median
+confidence of 82%, set its target nearer than its stop (a median 1.3% away against 1.6%, where
+both settings of `gpt-5-mini` asked for 2.9% against 1.5%), and named an entry range half as wide
+as theirs, which the price had left before a fifth of its entries (21 of 94) could fill. The
+three agreeing left 26 closed trades at +0.79%, which is too few to read. This is one fortnight
+and one sample of it; what it does say is that these models, asked this question, add a filter
+to a trade that loses, not a view of their own.
 
 **Model routing.** A cheap model can be asked every fifteen minutes for a few dollars a month. A
 frontier model asked the same way costs several times that, and nearly all of it buys the answer
@@ -675,8 +707,8 @@ A benchmark answers a narrower question than it may look: which model's calls we
 market over one stretch, each call judged alone at four hours. It is not a backtest of the bot,
 whose results also depend on its stop and on when the model later says sell.
 
-Two real benchmarks have been run, and the second took back what the first seemed to say. Both
-are on BTCUSDT, one decision every four hours, ending 3 October 2026.
+Two real benchmarks on a clock have been run, and the second took back what the first seemed to
+say. Both are on BTCUSDT, one decision every four hours, ending 3 October 2026.
 
 The first was `openai/gpt-5-mini` alone over 30 days: 180 decisions, $0.59. It said buy 40 times
 and was right at four hours on 16 of them — 40% ± 15, against 28% ± 7 for buying on every one of
