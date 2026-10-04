@@ -1,3 +1,4 @@
+import type { AiStrategyReading } from '../../../shared/aiConfirm'
 import type { Candle, Interval } from '../../../shared/ipc'
 
 export interface StrategySignals {
@@ -169,4 +170,15 @@ export interface StrategyDefinition {
   /** True when signals must be generated asynchronously and supplied to the execution engine. */
   requiresExternalSignals?: boolean
   generateSignals(candles: Candle[]): StrategySignals
+  /** What this strategy itself measured on `candles[index]`, a bar it signalled an entry on, for a
+   * model asked to review that entry (shared/aiConfirm.ts). Optional: a strategy without it is
+   * reviewed on its name and rule alone, beside the market snapshot every review carries.
+   *
+   * EVERY VALUE MUST BE A FUNCTION OF A FIXED SPAN ENDING AT THE BAR, and rounded. The readings
+   * are hashed into the review's cache key, so a value that depends on how much history the caller
+   * fetched -- an EMA, a Wilder ATR, anything that carries memory of its own start -- would give
+   * the same entry a different key from a backtest than from a bot, and the same review would be
+   * paid for once per caller. A simple average over the last N days, or a highest high over them,
+   * is the same number whatever came before; those are the readings to offer. */
+  entryReadings?(candles: Candle[], index: number): AiStrategyReading[]
 }

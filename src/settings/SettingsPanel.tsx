@@ -6,7 +6,7 @@ import { PageHeader } from '../components/PageHeader'
 import { useTheme } from '../theme/ThemeContext'
 import type { Theme } from '../theme/palette'
 import type { CredentialStatus, Exchange, LiveTradingStatus } from '../../shared/ipc'
-import type { AiCredentialStatus } from '../../shared/aiSignal'
+import { AiKeyCard } from '../ai/AiKeyCard'
 import { cleanIpcErrorMessage } from '../utils/ipcError'
 
 const THEME_OPTIONS: { id: Theme; label: string; icon: typeof Moon }[] = [
@@ -265,7 +265,7 @@ export function SettingsPanel(): React.JSX.Element {
         </div>
       </Card>
 
-      <AiCredentialsCard />
+      <AiKeyCard where="settings" />
 
       <Card title="Live Trading — API Credentials">
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.9rem' }}>
@@ -300,109 +300,6 @@ export function SettingsPanel(): React.JSX.Element {
 
       <LiveTradingLimitsCard />
     </>
-  )
-}
-
-function AiCredentialsCard(): React.JSX.Element {
-  const [status, setStatus] = useState<AiCredentialStatus | null>(null)
-  const [editing, setEditing] = useState(false)
-  const [apiKey, setApiKey] = useState('')
-  const [model, setModel] = useState('gpt-5-mini')
-  const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
-
-  function refresh(): void {
-    void window.api.ai.credentialsStatus().then((next) => {
-      setStatus(next)
-      setModel(next.model)
-    })
-  }
-
-  useEffect(() => refresh(), [])
-
-  async function save(): Promise<void> {
-    setBusy(true)
-    setMessage(null)
-    try {
-      await window.api.ai.setCredentials(apiKey.trim(), model.trim())
-      setApiKey('')
-      setEditing(false)
-      refresh()
-      setMessage({ ok: true, text: 'OpenAI key verified and saved.' })
-    } catch (error) {
-      setMessage({ ok: false, text: cleanIpcErrorMessage(error instanceof Error ? error.message : String(error)) })
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function test(): Promise<void> {
-    setBusy(true)
-    try {
-      const result = await window.api.ai.testCredentials()
-      setMessage({ ok: result.ok, text: result.message })
-      refresh()
-    } catch (error) {
-      setMessage({ ok: false, text: cleanIpcErrorMessage(error instanceof Error ? error.message : String(error)) })
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function remove(): Promise<void> {
-    setBusy(true)
-    try {
-      await window.api.ai.removeCredentials()
-      setMessage({ ok: true, text: 'OpenAI key removed.' })
-      refresh()
-    } catch (error) {
-      setMessage({ ok: false, text: cleanIpcErrorMessage(error instanceof Error ? error.message : String(error)) })
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <Card title="GPT Intraday — OpenAI">
-      <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0 0 0.9rem', lineHeight: 1.5 }}>
-        Used only for chart signals, backtests, and paper bots. GPT signals have no live-order route. The key is
-        encrypted by Windows and never enters the renderer.
-      </p>
-      {editing ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-          <div>
-            <label style={fieldLabelStyle()}>OpenAI API Key</label>
-            <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} autoComplete="off" style={textInputStyle()} />
-          </div>
-          <div>
-            <label style={fieldLabelStyle()}>Model</label>
-            <input value={model} onChange={(e) => setModel(e.target.value)} style={textInputStyle()} />
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button onClick={() => void save()} disabled={busy || !apiKey.trim() || !model.trim()} style={buttonStyle('primary')}>
-              {busy ? 'Testing…' : 'Test & Save'}
-            </button>
-            <button onClick={() => setEditing(false)} disabled={busy} style={buttonStyle('secondary')}>Cancel</button>
-          </div>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
-          <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
-            {status?.configured ? `Configured model: ${status.model}` : 'No OpenAI key configured'}
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button onClick={() => setEditing(true)} disabled={busy} style={buttonStyle('secondary')}>
-              {status?.configured ? 'Replace key' : 'Add key'}
-            </button>
-            {status?.configured && <>
-              <button onClick={() => void test()} disabled={busy} style={buttonStyle('secondary')}>Test</button>
-              <button onClick={() => void remove()} disabled={busy} style={buttonStyle('danger')}>Remove</button>
-            </>}
-          </div>
-        </div>
-      )}
-      {message && <p style={{ color: message.ok ? 'var(--up)' : 'var(--down)', fontSize: '0.78rem', marginBottom: 0 }}>{message.text}</p>}
-    </Card>
   )
 }
 

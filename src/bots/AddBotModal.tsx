@@ -3,11 +3,25 @@ import { X } from 'lucide-react'
 import { ExchangeSelect } from '../components/ExchangeSelect'
 import { SymbolSearch } from '../components/SymbolSearch'
 import { STRATEGIES, DEFAULT_STRATEGY_ID } from '../backtest/strategies'
+import { canConfirmEntries } from '../backtest/aiConfirmation'
 import { EXCHANGES, type Exchange, type SymbolInfo } from '../../shared/ipc'
-import { GPT_INTRADAY_STRATEGY_ID } from '../../shared/aiSignal'
+import {
+  AI_PROVIDER_LABEL,
+  GPT_DECISION_EVERY_BARS,
+  GPT_INTRADAY_STRATEGY_ID,
+  describeGptCadence,
+  gptDecisionsPerDay
+} from '../../shared/aiSignal'
 
 interface AddBotModalProps {
-  onCreate: (input: { name: string; exchange: Exchange; pair: SymbolInfo; strategyId: string }) => void
+  onCreate: (input: {
+    name: string
+    exchange: Exchange
+    pair: SymbolInfo
+    strategyId: string
+    aiConfirm: boolean
+    aiEveryBars: number
+  }) => void
   onClose: () => void
 }
 
@@ -32,6 +46,8 @@ export function AddBotModal({ onCreate, onClose }: AddBotModalProps): React.JSX.
   const [exchange, setExchange] = useState<Exchange>(EXCHANGES[0].id)
   const [pair, setPair] = useState<SymbolInfo>(EXCHANGES[0].defaultSymbol)
   const [strategyId, setStrategyId] = useState(DEFAULT_STRATEGY_ID)
+  const [aiConfirm, setAiConfirm] = useState(false)
+  const [aiEveryBars, setAiEveryBars] = useState<number>(GPT_DECISION_EVERY_BARS[0])
   const canCreate = name.trim().length > 0
 
   // Escape closes, like the backdrop and the X already do.
@@ -51,7 +67,11 @@ export function AddBotModal({ onCreate, onClose }: AddBotModalProps): React.JSX.
 
   function handleCreate(): void {
     if (!canCreate) return
-    onCreate({ name: name.trim(), exchange, pair, strategyId })
+    // Re-checked against the strategy rather than read off the box: the box is hidden when GPT
+    // Intraday is selected, and a tick left over from another strategy must not follow it there.
+    // createBot keeps the cadence only on GPT Intraday, for the same reason: the picker is hidden
+    // on every other strategy, and a choice made before switching away must not follow it.
+    onCreate({ name: name.trim(), exchange, pair, strategyId, aiConfirm: aiConfirm && canConfirmEntries(strategyId), aiEveryBars })
   }
 
   return (
@@ -133,9 +153,57 @@ export function AddBotModal({ onCreate, onClose }: AddBotModalProps): React.JSX.
             </p>
             {strategyId === GPT_INTRADAY_STRATEGY_ID && (
               <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '0.35rem 0 0' }}>
-                Paper only — it never places real orders. It does call the OpenAI API with your key while the bot
-                runs, which bills your OpenAI account; every other strategy is free to run.
+                Paper only — it never places real orders. It does ask a model through {AI_PROVIDER_LABEL} with your
+                key while the bot runs, which bills your {AI_PROVIDER_LABEL} credits; every other strategy is free to
+                run unless you have a model confirm its entries.
               </p>
+            )}
+            {strategyId === GPT_INTRADAY_STRATEGY_ID && (
+              <div style={{ marginTop: '0.6rem' }}>
+                <label style={fieldLabelStyle()}>Ask the model</label>
+                <select
+                  value={aiEveryBars}
+                  onChange={(e) => setAiEveryBars(Number(e.target.value))}
+                  style={textInputStyle()}
+                  aria-label="How often the model is asked"
+                >
+                  {GPT_DECISION_EVERY_BARS.map((bars) => (
+                    <option key={bars} value={bars}>
+                      every {describeGptCadence(bars)} · {gptDecisionsPerDay(bars)} calls a day
+                    </option>
+                  ))}
+                </select>
+                <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '0.35rem 0 0' }}>
+                  Fixed once the bot is created. Between two questions the position is held, and its stop is still
+                  checked on every candle.
+                </p>
+              </div>
+            )}
+            {canConfirmEntries(strategyId) && (
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '0.5rem',
+                  fontSize: '0.72rem',
+                  color: 'var(--text-muted)',
+                  margin: '0.6rem 0 0',
+                  lineHeight: 1.45,
+                  cursor: 'pointer'
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={aiConfirm}
+                  onChange={(e) => setAiConfirm(e.target.checked)}
+                  style={{ marginTop: '0.15rem', flexShrink: 0 }}
+                />
+                <span>
+                  <strong style={{ color: 'var(--text-primary)' }}>Have an AI model confirm each entry.</strong> The strategy decides;
+                  a model can veto an entry it signals. One {AI_PROVIDER_LABEL} call per signalled entry, with your key. You are shown
+                  the model and the price before the bot is switched on, and nothing is asked while it is stopped. Paper only.
+                </span>
+              </label>
             )}
           </div>
         </div>

@@ -22,8 +22,8 @@
 //
 // GPT INTRADAY IS ABSENT AND CANNOT BE ADDED HERE. shared/aiSignal.ts throws
 // 'GPT Intraday only supports 15-minute candles' for any other interval, caps a run at
-// GPT_MAX_DECISIONS = 672 (seven days at 15m, against ~2,976 bars in a month), and reaches the
-// live OpenAI endpoint once per decision. Its generateSignals returns hold by construction, so a
+// GPT_MAX_DECISIONS = 672 (seven days at 15m, against ~2,976 bars in a month), and reaches a
+// paid model endpoint once per decision. Its generateSignals returns hold by construction, so a
 // direct engine call here would silently produce a strategy that never trades -- 36 rows of zero
 // that look like a measurement. It is left out rather than misrepresented.
 

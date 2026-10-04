@@ -1,6 +1,7 @@
 // Single source of truth for IPC channel names and payload shapes.
 // Imported by both electron/ (main + preload) and src/ (renderer).
 
+import type { AiRoute } from './aiRoute'
 import type { ExchangeBalance } from './liveBalances'
 
 export type { ExchangeBalance }
@@ -41,6 +42,15 @@ export const IpcChannel = {
   AiGenerateSignalTape: 'ai:generateSignalTape',
   AiCancelSignalTape: 'ai:cancelSignalTape',
   AiSignalProgress: 'ai:signalProgress',
+  AiKeyInfo: 'ai:keyInfo',
+  AiListModels: 'ai:listModels',
+  AiGetConfig: 'ai:getConfig',
+  AiSetConfig: 'ai:setConfig',
+  AiListCalls: 'ai:listCalls',
+  AiUsageSummary: 'ai:usageSummary',
+  AiPeekEntryConfirmation: 'ai:peekEntryConfirmation',
+  AiConfirmEntry: 'ai:confirmEntry',
+  AiPeekBenchmark: 'ai:peekBenchmark',
   LiveTradingGetStatus: 'liveTrading:getStatus',
   LiveTradingSetConfig: 'liveTrading:setConfig',
   LiveTradingEngageKillSwitch: 'liveTrading:engageKillSwitch',
@@ -430,6 +440,37 @@ export interface Bot {
   /** Archived bots are hidden from the Active tab and can no longer be enabled, but are kept
    * (not deleted) so their Runs history stays attributable. */
   archived: boolean
+  /** The model a paid bot asks, fixed at the moment it was switched on. Absent on every free
+   * strategy and on bots saved before this existed, which fall back to the configured default.
+   *
+   * Pinned rather than read from the default each poll, because the model is part of what the bot
+   * IS. With the default read live, choosing a different one on the Models tab would re-ask a
+   * running bot's whole history of that model's replacement -- paid for, unannounced -- and turn
+   * its paper record into another model's from that candle on. */
+  aiModel?: string
+  /** True when a model is asked to confirm each entry this bot's strategy signals, and can veto
+   * it (shared/aiConfirm.ts). Absent on every bot saved before this existed, and meaningless on
+   * GPT Intraday, where the model already makes every decision.
+   *
+   * Part of what the bot IS, like the strategy: it is chosen when the bot is created and is not a
+   * switch on a running one, because a paper record that was confirmed for its first month and
+   * unconfirmed for its second is a record of neither. */
+  aiConfirm?: boolean
+  /** How often a GPT Intraday bot asks its model, in 15-minute bars: 4 is hourly, 16 is every four
+   * hours (shared/aiSignal.ts, GPT_DECISION_EVERY_BARS). Absent means every candle, which is what
+   * every bot saved before this existed does. Meaningless on any other strategy.
+   *
+   * Chosen when the bot is created, for the reason aiConfirm is: it decides which candles the
+   * model is asked about, so changing it part-way would splice two different strategies into one
+   * paper record. */
+  aiEveryBars?: number
+  /** The second model a GPT Intraday bot passes decisions on to, and when (shared/aiRoute.ts).
+   * Absent means one model decides alone, which is what every bot saved before this existed does.
+   *
+   * Pinned at the moment the bot is switched on, with aiModel and for the same reason: a route is
+   * part of which model made each decision. It is also written ONLY there, after the confirmation
+   * that states it, so a bot never starts asking a second model because a setting changed. */
+  aiRoute?: AiRoute
 }
 
 /** A completed dry-run session, recorded when a bot is disabled — one row per enable/disable

@@ -1,140 +1,93 @@
-import { useState } from 'react'
-import { Atom, ArrowUp, ArrowDown, Minus } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Activity, Atom, Boxes, History, KeyRound, Scale, type LucideIcon } from 'lucide-react'
 import { PageHeader } from '../components/PageHeader'
-import { Card } from '../components/Card'
-import { requestAiSignal, type AiSignal } from '../ai/aiClient'
+import type { AiCredentialStatus } from '../../shared/aiSignal'
+import { AiKeyCard } from '../ai/AiKeyCard'
+import { AnalyzeTab } from './AnalyzeTab'
+import { BenchmarkTab } from './BenchmarkTab'
+import { SignalsTab } from './SignalsTab'
+import { ModelsTab } from './ModelsTab'
+import { UsageTab } from './UsageTab'
+import { tabButtonStyle } from './agentStyles'
 
-function recommendationColor(rec: AiSignal['recommendation']): string {
-  if (rec === 'buy') return 'var(--up)'
-  if (rec === 'sell') return 'var(--down)'
-  return 'var(--text-secondary)'
-}
+type Tab = 'analyze' | 'signals' | 'benchmark' | 'models' | 'usage'
 
-function RecommendationIcon({ rec }: { rec: AiSignal['recommendation'] }): React.JSX.Element {
-  if (rec === 'buy') return <ArrowUp size={14} />
-  if (rec === 'sell') return <ArrowDown size={14} />
-  return <Minus size={14} />
-}
+const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
+  { id: 'analyze', label: 'Analyze', icon: Atom },
+  { id: 'signals', label: 'Signals', icon: History },
+  { id: 'benchmark', label: 'Benchmark', icon: Scale },
+  { id: 'models', label: 'Models', icon: Boxes },
+  { id: 'usage', label: 'Usage', icon: Activity }
+]
 
+/** The AI workspace: ask a model, see how its calls turned out, set several models against the
+ * same questions, choose which models may be asked, and see what asking has cost.
+ *
+ * Each tab is mounted only while it is selected, so opening this page loads one tab's data and
+ * nothing else. None of that loading reaches a model. Two things here spend: the Analyze button,
+ * which carries its price, and a benchmark run, which reads the cache first and says what the
+ * rest will cost before anything is asked.
+ *
+ * THE KEY IS ASKED FOR HERE, because this is the page that cannot do anything without it. With
+ * none stored the card is above every tab and cannot be closed; once one is stored it folds away
+ * behind "API key" on the tab row, where it can be replaced, tested or removed. */
 export function AgentsPage(): React.JSX.Element {
-  const [symbol, setSymbol] = useState('BTCUSDT')
-  const [running, setRunning] = useState(false)
-  const [signal, setSignal] = useState<AiSignal | null>(null)
+  const [tab, setTab] = useState<Tab>('analyze')
+  const [keyStatus, setKeyStatus] = useState<AiCredentialStatus | null>(null)
+  const [keyOpen, setKeyOpen] = useState(false)
+  const [keyVersion, setKeyVersion] = useState(0)
 
-  async function handleRun(): Promise<void> {
-    if (!symbol.trim() || running) return
-    setRunning(true)
-    try {
-      const result = await requestAiSignal(symbol.trim().toUpperCase())
-      setSignal(result)
-    } finally {
-      setRunning(false)
+  useEffect(() => {
+    let cancelled = false
+    void window.api.ai.credentialsStatus().then((status) => {
+      if (!cancelled) setKeyStatus(status)
+    })
+    return (): void => {
+      cancelled = true
     }
+  }, [])
+
+  const keyMissing = keyStatus !== null && !keyStatus.configured
+
+  function handleKeyChanged(next: AiCredentialStatus): void {
+    setKeyStatus(next)
+    // Left open after a save, so the line saying the key was accepted does not vanish with the form.
+    setKeyOpen(true)
+    // Every tab priced, listed or refused by the key it found when it mounted. Mounting the one
+    // on screen again is how it finds the new one.
+    setKeyVersion((version) => version + 1)
   }
 
   return (
     <>
-      <PageHeader title="Agents" subtitle="AI assistants that analyze the market on your behalf" />
+      <PageHeader title="Agents" subtitle="Ask a model about a market, and measure whether its calls were right" />
 
-      <Card title="Market Signal Agent">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.9rem' }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 34,
-              height: 34,
-              borderRadius: '50%',
-              background: 'var(--accent-soft)',
-              color: 'var(--accent)',
-              flexShrink: 0
-            }}
-          >
-            <Atom size={16} />
-          </div>
-          <div>
-            <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Market Signal Agent</div>
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-              Watches candle closes and returns a buy / sell / hold call with a confidence score.
-            </div>
-          </div>
-        </div>
-
-        <p style={{ margin: '0 0 1rem', fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-          This is the same paper-only GPT classifier the Market chart can draw buy/sell arrows with. Configure its
-          encrypted OpenAI key and model in Settings. Its output can never place a live order — but each run is one
-          OpenAI call billed to your account.
-        </p>
-
-        <div style={{ display: 'flex', gap: '0.6rem', marginBottom: '1rem' }}>
-          <input
-            value={symbol}
-            onChange={(e) => setSymbol(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleRun()}
-            placeholder="Symbol, e.g. BTCUSDT"
-            style={{
-              flex: 1,
-              maxWidth: 220,
-              background: 'var(--bg-app)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              padding: '0.5rem 0.7rem',
-              color: 'var(--text-primary)',
-              fontSize: '0.85rem'
-            }}
-          />
-          <button
-            onClick={handleRun}
-            disabled={running || !symbol.trim()}
-            style={{
-              padding: '0.5rem 1rem',
-              background: 'var(--accent)',
-              border: 'none',
-              borderRadius: 'var(--radius-sm)',
-              color: '#fff',
-              fontSize: '0.82rem',
-              fontWeight: 600,
-              cursor: running ? 'default' : 'pointer',
-              opacity: running || !symbol.trim() ? 0.6 : 1
-            }}
-          >
-            {running ? 'Running…' : 'Run Agent'}
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
+        {TABS.map(({ id, label, icon: Icon }) => (
+          <button key={id} style={tabButtonStyle(tab === id)} onClick={() => setTab(id)}>
+            <Icon size={15} />
+            {label}
           </button>
-        </div>
-
-        {signal && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.9rem',
-              padding: '0.8rem 1rem',
-              background: 'var(--bg-app)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)'
-            }}
+        ))}
+        {keyStatus?.configured === true && (
+          <button
+            style={{ ...tabButtonStyle(keyOpen), marginLeft: 'auto' }}
+            onClick={() => setKeyOpen((open) => !open)}
+            aria-expanded={keyOpen}
           >
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-                color: recommendationColor(signal.recommendation),
-                fontWeight: 700,
-                fontSize: '0.9rem',
-                textTransform: 'uppercase'
-              }}
-            >
-              <RecommendationIcon rec={signal.recommendation} />
-              {signal.recommendation}
-            </div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-              {signal.symbol} • {(signal.confidence * 100).toFixed(0)}% confidence
-            </div>
-          </div>
+            <KeyRound size={15} />
+            API key
+          </button>
         )}
-      </Card>
+      </div>
+
+      {(keyMissing || keyOpen) && <AiKeyCard where="agents" onChanged={handleKeyChanged} />}
+
+      {tab === 'analyze' && <AnalyzeTab key={keyVersion} />}
+      {tab === 'signals' && <SignalsTab key={keyVersion} />}
+      {tab === 'benchmark' && <BenchmarkTab key={keyVersion} />}
+      {tab === 'models' && <ModelsTab key={keyVersion} />}
+      {tab === 'usage' && <UsageTab key={keyVersion} />}
     </>
   )
 }

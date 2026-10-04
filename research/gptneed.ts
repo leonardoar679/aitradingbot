@@ -74,10 +74,14 @@ function syntheticTape(candles: Candle[], accuracy: number, actRate: number, see
     exchange: 'binance',
     symbol: 'BTCUSDT',
     interval: '15m',
+    model: 'synthetic',
     decisions,
     cachedCount: 0,
     generatedCount: decisions.length,
-    errorCount: 0
+    callCount: decisions.length,
+    errorCount: 0,
+    rejectedCount: 0,
+    costUsd: 0
   }
 }
 

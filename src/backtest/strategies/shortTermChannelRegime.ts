@@ -1,7 +1,7 @@
 import type { Candle } from '../../../shared/ipc'
 import type { StrategyDefinition, StrategySignals } from './types'
-import { shortTermChannel } from './shortTermChannel'
-import { inferBarSeconds, regimeAgreement, trendRegimeEnsemble } from './trendRegimeEnsemble'
+import { channelReadings, shortTermChannel } from './shortTermChannel'
+import { inferBarSeconds, regimeAgreement, regimeReadings, trendRegimeEnsemble } from './trendRegimeEnsemble'
 
 // Short-Term Channel Breakout, but only allowed to open a position while the slow trend agrees.
 //
@@ -121,5 +121,7 @@ export const shortTermChannelRegime: StrategyDefinition = {
   // continuity with the strategy it gates, and the choice matters less here than anywhere else.
   preferredInterval: shortTermChannel.preferredInterval,
   warmupBarsFor: warmupBarsAt,
-  generateSignals
+  generateSignals,
+  // Both halves of the rule, each from the strategy that owns it: the breakout, then the gate.
+  entryReadings: (candles, index) => [...channelReadings(candles, index), ...regimeReadings(candles, index)]
 }

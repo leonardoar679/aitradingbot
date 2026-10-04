@@ -20,7 +20,8 @@ import { CHART_PALETTE } from '../theme/palette'
 import { PositionBandPrimitive } from '../backtest/positionBandPrimitive'
 import { openPositionBand, tradeBands } from '../backtest/tradeOverlay'
 import type { Trade } from '../backtest/engine'
-import { describeAiCalls, resolvedStrategy, type Bot } from './types'
+import { confirmsEntries, describeAiCalls, describeBotRoute, gptCadenceOf, gptRouteOf, resolvedStrategy, type Bot } from './types'
+import { describeGptCadence } from '../../shared/aiSignal'
 import { formatQuotePrice } from '../utils/formatCurrency'
 
 interface BotDetailViewProps {
@@ -49,11 +50,21 @@ export function BotDetailView({ bot, onBack, onToggle }: BotDetailViewProps): Re
   const entryLineRef = useRef<IPriceLine | null>(null)
   const bandRef = useRef<PositionBandPrimitive | null>(null)
 
-  const dryRun = useDryRun(bot.exchange, bot.symbol, bot.enabled, bot.enabledAt, bot.strategyId)
+  const dryRun = useDryRun(
+    bot.exchange,
+    bot.symbol,
+    bot.enabled,
+    bot.enabledAt,
+    bot.strategyId,
+    bot.aiModel,
+    bot.aiConfirm,
+    bot.aiEveryBars,
+    gptRouteOf(bot) ?? undefined
+  )
   const exchangeName = EXCHANGES.find((e) => e.id === bot.exchange)?.name ?? bot.exchange
   const strategy = resolvedStrategy(bot)
-  // GPT Intraday is not fetched while stopped, because fetching it spends the user's OpenAI
-  // balance. There is nothing to chart until it is enabled, so say that instead of drawing an
+  // GPT Intraday is not fetched while stopped, because fetching it spends the user's AI
+  // credits. There is nothing to chart until it is enabled, so say that instead of drawing an
   // empty chart and letting it read as a load that never finished.
   const showChart = dryRun.status !== 'idle'
   const { theme } = useTheme()
@@ -222,6 +233,9 @@ export function BotDetailView({ bot, onBack, onToggle }: BotDetailViewProps): Re
           <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)' }}>{bot.name}</div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
             {exchangeName} • {bot.baseAsset}-{bot.quoteAsset} • {strategy.name}
+            {confirmsEntries(bot) && ` + AI confirmation${bot.aiModel ? ` (${bot.aiModel})` : ''}`}
+            {gptCadenceOf(bot) > 1 && ` · asked every ${describeGptCadence(gptCadenceOf(bot))}`}
+            {bot.enabled && describeBotRoute(bot) !== null && ` · ${describeBotRoute(bot)}`}
           </div>
           {strategy.mismatched && (
             <div style={{ fontSize: '0.72rem', color: 'var(--down)' }}>
@@ -395,7 +409,7 @@ export function BotDetailView({ bot, onBack, onToggle }: BotDetailViewProps): Re
             }}
           >
             <p style={{ maxWidth: 380, textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.82rem', lineHeight: 1.6 }}>
-              GPT Intraday has no chart until it runs. Every candle on it is a paid OpenAI call, so a stopped bot asks
+              GPT Intraday has no chart until it runs. Every candle on it is a paid model call, so a stopped bot asks
               for nothing. Enable it to generate signals.
             </p>
           </div>

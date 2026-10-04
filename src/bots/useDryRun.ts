@@ -3,12 +3,24 @@ import { INTERVAL_SECONDS, type Candle, type Exchange, type Interval } from '../
 import { runBacktest, type BacktestResult, type Trade, type OpenPositionSnapshot } from '../backtest/engine'
 import { getStrategy } from '../backtest/strategies'
 import { fetchRangeCached } from './candleCache'
-import { costsMoneyToRun, type AiCallCount } from './types'
+import { confirmsEntries, costsMoneyToRun, gptCadenceOf, type AiCallCount, type ConfirmBotEstimate } from './types'
+import { describeError } from '../utils/ipcError'
 import { generateGptIntradaySignals } from '../backtest/strategies/gptIntraday'
+import {
+  confirmableSignals,
+  confirmationCounts,
+  entryConfirmRequest,
+  openedAt,
+  resolveConfirmedRun
+} from '../backtest/aiConfirmation'
+import { isBarSettled } from '../../shared/aiConfirm'
+import type { AiRoute } from '../../shared/aiRoute'
 import {
   GPT_INTRADAY_STRATEGY_ID,
   GPT_LOOKBACK_BARS,
-  GPT_MAX_DECISIONS
+  GPT_MAX_DECISIONS,
+  type AiSignalEstimate,
+  type AiSignalTapeRequest
 } from '../../shared/aiSignal'
 
 // The dry run polls the interval the bot's OWN strategy was measured on, which is the only way
@@ -40,8 +52,11 @@ const LOOKBACK_CANDLES = 600
 // warm up has no bars left to trade on.
 const WARMUP_SLACK_CANDLES = 20
 
-function warmupCandlesFor(strategyId: string): number {
-  return getStrategy(strategyId).warmupBarsFor(INTERVAL_SECONDS[dryRunIntervalFor(strategyId)]) + WARMUP_SLACK_CANDLES
+function warmupCandlesFor(bot: Pick<DryRunBot, 'strategyId' | 'aiConfirm'>): number {
+  const own = getStrategy(bot.strategyId).warmupBarsFor(INTERVAL_SECONDS[dryRunIntervalFor(bot.strategyId)])
+  // A reviewed entry needs the review's lookback behind it as well as the strategy's own (see
+  // confirmableSignals), so a bot whose entries are reviewed reaches back by the longer of the two.
+  return (confirmsEntries(bot) ? Math.max(own, GPT_LOOKBACK_BARS) : own) + WARMUP_SLACK_CANDLES
 }
 const POLL_MS = 60_000
 
@@ -53,7 +68,7 @@ export interface DryRunState {
   result: BacktestResult | null
   candles: Candle[]
   latestCandle: Candle | null
-  /** What the last refresh cost in OpenAI calls, or null for a strategy that never calls it. */
+  /** What the last refresh cost in AI calls, or null for a strategy that never makes one. */
   aiCalls: AiCallCount | null
 }
 
@@ -61,21 +76,37 @@ const LOADING_STATE: DryRunState = { status: 'loading', error: null, result: nul
 /** Fetched nothing, and nothing is coming -- distinct from 'loading', which promises a result. */
 const IDLE_STATE: DryRunState = { status: 'idle', error: null, result: null, candles: [], latestCandle: null, aiCalls: null }
 
-/** Imperative counterpart to the hook below, for call sites outside a component's render
- * lifecycle (e.g. the Portfolio page aggregating every enabled bot at once) — same fetch window
- * and warmup padding, just a one-shot call instead of a poll/subscribe cycle. Returns null if no
- * candles were returned (a brand-new symbol/range) rather than throwing, since "nothing to show
- * yet" isn't really an error. */
-export async function fetchBotDryRunResult(bot: {
+interface DryRunBot {
   exchange: Exchange
   symbol: string
   enabledAt: number | null
   strategyId: string
-}): Promise<{ result: BacktestResult; candles: Candle[]; aiCalls: AiCallCount | null } | null> {
+  /** The model a paid bot was enabled with. See Bot.aiModel. */
+  aiModel?: string
+  /** Whether a model reviews this bot's entries. See Bot.aiConfirm. */
+  aiConfirm?: boolean
+  /** How often a GPT Intraday bot asks its model. See Bot.aiEveryBars. */
+  aiEveryBars?: number
+  /** The second model a GPT Intraday bot was switched on with. See Bot.aiRoute. */
+  aiRoute?: AiRoute
+}
+
+/** The stretch a GPT Intraday bot replays at once, in bars: the decision ceiling at its cadence.
+ * Seven days when it is asked on every candle, 112 when it is asked every four hours. */
+function gptSegmentBars(bot: Pick<DryRunBot, 'strategyId' | 'aiEveryBars'>): number {
+  return GPT_MAX_DECISIONS * Math.max(1, gptCadenceOf(bot))
+}
+
+/** The candles a bot's dry run replays, and the bar size they are on.
+ *
+ * One function, because two callers must fetch the identical window: the dry run itself, and the
+ * cost estimate shown before a paid bot is switched on. An estimate computed over a different
+ * window would be an estimate of a different run. */
+async function fetchBotCandles(bot: DryRunBot): Promise<{ candles: Candle[]; interval: Interval }> {
   const endSec = Math.floor(Date.now() / 1000)
   const interval = dryRunIntervalFor(bot.strategyId)
   const barSec = INTERVAL_SECONDS[interval]
-  const warmup = warmupCandlesFor(bot.strategyId)
+  const warmup = warmupCandlesFor(bot)
   // The default lookback has to clear the warm-up too, or a freshly-enabled bot on a slow
   // strategy fetches a window that is entirely warm-up and can never show a trade.
   const defaultStartSec = endSec - Math.max(LOOKBACK_CANDLES, warmup + 120) * barSec
@@ -83,7 +114,7 @@ export async function fetchBotDryRunResult(bot: {
     bot.strategyId === GPT_INTRADAY_STRATEGY_ID
       ? ((): number => {
           const enabled = bot.enabledAt ?? endSec
-          const segmentSeconds = GPT_MAX_DECISIONS * barSec
+          const segmentSeconds = gptSegmentBars(bot) * barSec
           const segmentStart = enabled + Math.floor(Math.max(0, endSec - enabled) / segmentSeconds) * segmentSeconds
           return segmentStart - GPT_LOOKBACK_BARS * barSec
         })()
@@ -101,20 +132,79 @@ export async function fetchBotDryRunResult(bot: {
     startSec,
     endSec
   )
+  return { candles, interval }
+}
+
+function botTapeRequest(bot: DryRunBot, candles: Candle[], interval: Interval): AiSignalTapeRequest {
+  return {
+    requestId: crypto.randomUUID(),
+    exchange: bot.exchange,
+    symbol: bot.symbol,
+    interval,
+    candles,
+    startIndex: Math.max(GPT_LOOKBACK_BARS, candles.length - gptSegmentBars(bot)),
+    maxDecisions: GPT_MAX_DECISIONS,
+    decideEveryBars: gptCadenceOf(bot),
+    model: bot.aiModel,
+    // The bot's own pin or nothing. Never the setting on the Models tab: that one is copied onto a
+    // bot when it is switched on, after the confirmation has said so.
+    route: bot.aiRoute ?? null,
+    source: 'bot'
+  }
+}
+
+/** What switching a paid bot on would ask of a model, and roughly what that costs. Spends
+ * nothing: it fetches candles and reads the cache and a price list. Scored as though the bot were
+ * enabled this instant, which is the run the confirmation is about. */
+export async function estimatePaidBot(bot: Omit<DryRunBot, 'enabledAt'>): Promise<AiSignalEstimate | null> {
+  const enabledNow = { ...bot, enabledAt: Math.floor(Date.now() / 1000) }
+  const { candles, interval } = await fetchBotCandles(enabledNow)
+  if (candles.length === 0) return null
+  return window.api.ai.estimateSignalTape(botTapeRequest(enabledNow, candles, interval))
+}
+
+/** What switching on a bot with AI-confirmed entries would ask of a model. Spends nothing: it
+ * fetches candles and reads the cache, the ledger and a price list.
+ *
+ * Priced from the newest closed candle, whether or not the strategy signalled on it. One review is
+ * the same size as another, and a bot being switched on has no entry of its own to price yet. */
+export async function estimateConfirmBot(bot: Omit<DryRunBot, 'enabledAt'>): Promise<ConfirmBotEstimate | null> {
+  const nowSec = Math.floor(Date.now() / 1000)
+  const { candles, interval } = await fetchBotCandles({ ...bot, enabledAt: nowSec })
+  let newest = candles.length - 1
+  while (newest >= 0 && !isBarSettled(candles[newest].time, interval, nowSec)) newest--
+  if (newest < GPT_LOOKBACK_BARS - 1) return null
+
+  const strategy = getStrategy(bot.strategyId)
+  const signals = confirmableSignals(strategy, candles)
+  const market = { exchange: bot.exchange, symbol: bot.symbol, interval, source: 'bot' as const }
+  // Unpinned, like the GPT estimate: switching on re-pins to whatever the default is now.
+  const quote = await window.api.ai.peekEntryConfirmation(entryConfirmRequest(market, strategy, candles, signals, newest))
+  const replay = runBacktest(candles, bot.strategyId, { forceCloseAtEnd: false, signals })
+  const indexByTime = new Map(candles.map((candle, index) => [candle.time, index]))
+  const tradableBars = Math.max(0, candles.length - signals.warmupBars)
+  return {
+    quote,
+    recentEntries: openedAt(replay, indexByTime).length,
+    recentDays: Math.round((tradableBars * INTERVAL_SECONDS[interval]) / 86_400)
+  }
+}
+
+/** Imperative counterpart to the hook below, for call sites outside a component's render
+ * lifecycle (e.g. the Portfolio page aggregating every enabled bot at once) — same fetch window
+ * and warmup padding, just a one-shot call instead of a poll/subscribe cycle. Returns null if no
+ * candles were returned (a brand-new symbol/range) rather than throwing, since "nothing to show
+ * yet" isn't really an error. */
+export async function fetchBotDryRunResult(
+  bot: DryRunBot
+): Promise<{ result: BacktestResult; candles: Candle[]; aiCalls: AiCallCount | null } | null> {
+  const { candles, interval } = await fetchBotCandles(bot)
   if (candles.length === 0) return null
   // Engine default, like RoutineScheduler and for the same reason: a dry run is re-computed on
   // every poll, and a bot's displayed P&L must not move because an unrelated strategy started or
   // stopped somewhere else in the app.
   if (bot.strategyId === GPT_INTRADAY_STRATEGY_ID) {
-    const tape = await window.api.ai.generateSignalTape({
-      requestId: crypto.randomUUID(),
-      exchange: bot.exchange,
-      symbol: bot.symbol,
-      interval,
-      candles,
-      startIndex: Math.max(GPT_LOOKBACK_BARS, candles.length - GPT_MAX_DECISIONS),
-      maxDecisions: GPT_MAX_DECISIONS
-    })
+    const tape = await window.api.ai.generateSignalTape(botTapeRequest(bot, candles, interval))
     const signals = generateGptIntradaySignals(candles, tape)
     return {
       result: runBacktest(candles, bot.strategyId, { forceCloseAtEnd: false, signals }),
@@ -123,8 +213,42 @@ export async function fetchBotDryRunResult(bot: {
       aiCalls: {
         total: tape.decisions.length,
         cached: tape.cachedCount,
-        generated: tape.generatedCount,
-        errors: tape.errorCount
+        // Calls, not decisions: under a route one decision can be two of them.
+        generated: tape.callCount,
+        errors: tape.errorCount,
+        ...(tape.route ? { escalated: tape.route.escalated } : {})
+      }
+    }
+  }
+  // Only once the bot has been switched on. Before that there is no entry of the bot's own to
+  // review -- every entry on the chart is the strategy's history -- so a stopped bot replays the
+  // plain strategy and asks nothing. That is what keeps its chart free to open.
+  if (confirmsEntries(bot) && bot.enabledAt !== null) {
+    const run = await resolveConfirmedRun({
+      candles,
+      strategyId: bot.strategyId,
+      exchange: bot.exchange,
+      symbol: bot.symbol,
+      interval,
+      engine: { forceCloseAtEnd: false },
+      confirmFromSec: bot.enabledAt,
+      nowSec: Math.floor(Date.now() / 1000),
+      model: bot.aiModel,
+      source: 'bot',
+      ask: (request) => window.api.ai.confirmEntry(request)
+    })
+    const counts = confirmationCounts(run.decisions.values())
+    return {
+      result: run.result,
+      candles,
+      aiCalls: {
+        total: counts.reviewed,
+        cached: counts.cached,
+        generated: counts.generated,
+        // An entry on a bar that has not closed yet is simply not due; only a model that could not
+        // be reached is a failure.
+        errors: run.unsettled?.reason === 'unanswered' ? 1 : 0,
+        vetoed: counts.vetoed
       }
     }
   }
@@ -190,9 +314,17 @@ export function useDryRun(
   symbol: string,
   running: boolean,
   enabledAt: number | null,
-  strategyId: string
+  strategyId: string,
+  aiModel?: string,
+  aiConfirm?: boolean,
+  aiEveryBars?: number,
+  aiRoute?: AiRoute
 ): DryRunState {
   const [state, setState] = useState<DryRunState>(LOADING_STATE)
+  // Read as two plain values so the effect below re-runs when the route CHANGES, not every time a
+  // caller hands over a new object describing the same one.
+  const routeModel = aiRoute?.model
+  const routeWhen = aiRoute?.when
 
   useEffect(() => {
     // A STOPPED BOT STILL HAS A CHART. What the strategy is doing on that symbol is a fact about
@@ -200,7 +332,7 @@ export function useDryRun(
     // enabled is what made a bot you had just created impossible to look at: it is created
     // stopped, so it had no data, so the only way in was hidden, so you could not open it.
     //
-    // Unless looking costs money. GPT Intraday bills the user's OpenAI account per decision, so a
+    // Unless looking costs money. GPT Intraday bills the user's own credits per decision, so a
     // stopped one fetches nothing at all -- opening a bot must never spend, and only enabling it
     // (which now asks first) may.
     if (!running && costsMoneyToRun(strategyId)) {
@@ -210,10 +342,20 @@ export function useDryRun(
 
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | null = null
+    const route = routeModel !== undefined && routeWhen !== undefined ? { model: routeModel, when: routeWhen } : undefined
 
     async function poll(): Promise<void> {
       try {
-        const fetched = await fetchBotDryRunResult({ exchange, symbol, enabledAt, strategyId })
+        const fetched = await fetchBotDryRunResult({
+          exchange,
+          symbol,
+          enabledAt,
+          strategyId,
+          aiModel,
+          aiConfirm,
+          aiEveryBars,
+          aiRoute: route
+        })
         if (cancelled) return
         if (fetched === null) {
           setState({ ...IDLE_STATE, status: 'error', error: 'No candle data returned' })
@@ -223,8 +365,10 @@ export function useDryRun(
         }
       } catch (error) {
         if (!cancelled) {
-          const message = error instanceof Error ? error.message : String(error)
-          setState((prev) => ({ ...prev, status: 'error', error: message }))
+          // A paid bot that cannot ask -- budget spent, key refused, model disabled -- now stops
+          // with the reason rather than replaying safety holds, so this is where that reason is
+          // shown. Unwrapped, it would lead with an IPC channel name.
+          setState((prev) => ({ ...prev, status: 'error', error: describeError(error) }))
         }
       } finally {
         // Polling is what "running" buys. A stopped bot is fetched once so it can be looked at,
@@ -239,7 +383,7 @@ export function useDryRun(
       cancelled = true
       if (timer) clearTimeout(timer)
     }
-  }, [exchange, symbol, running, enabledAt, strategyId])
+  }, [exchange, symbol, running, enabledAt, strategyId, aiModel, aiConfirm, aiEveryBars, routeModel, routeWhen])
 
   return state
 }

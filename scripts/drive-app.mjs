@@ -28,6 +28,27 @@ const APP_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const SHOT_DIR = process.env.SCREENSHOT_DIR || path.join(APP_DIR, '.shots')
 fs.mkdirSync(SHOT_DIR, { recursive: true })
 
+// TWO OPTIONAL SWITCHES FOR DRIVING THE APP WITHOUT TOUCHING A REAL SESSION. Both are off unless
+// set, and with both off this driver behaves exactly as it always has.
+//
+//   APP_USER_DATA_DIR  a scratch profile folder. The app is launched with --user-data-dir, so its
+//                      settings, credentials, ledgers and single-instance lock all live there
+//                      instead of in %APPDATA%/newtradingbot.
+//   APP_ENTRY          a built main script to launch instead of this checkout's out/ -- e.g.
+//                      dist/verify/main/index.js from `electron-vite build --outDir dist/verify`.
+//
+// They exist because of one measured hazard: someone can be RUNNING this app, from this checkout,
+// while a change to it is being verified. The stale-process sweep below matches on the repo path,
+// so a plain `launch` kills that running app -- along with any live-position watcher protecting
+// real money in it -- and `npm run build` rewrites the out/ it was started from. With a scratch
+// profile the sweep is narrowed to processes carrying that profile's path, and with APP_ENTRY the
+// build under test never overwrites the one in use.
+const USER_DATA_DIR = process.env.APP_USER_DATA_DIR ? path.resolve(process.env.APP_USER_DATA_DIR) : null
+const APP_ENTRY = process.env.APP_ENTRY ? path.resolve(APP_DIR, process.env.APP_ENTRY) : APP_DIR
+
+const samePath = (a, b) =>
+  process.platform === 'win32' ? path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase() : path.resolve(a) === path.resolve(b)
+
 let app = null
 let page = null
 
@@ -55,6 +76,10 @@ const ELECTRON_BIN =
  * Matching on the repo path is not optional. Claude Code and VS Code are themselves Electron
  * apps, and a blanket `Stop-Process -Name electron` kills the editor this is running inside.
  *
+ * With a scratch profile the match narrows to that profile's path, which every process of the
+ * instance this driver launched carries on its command line and no other instance does. The repo
+ * path alone also matches an app the user started themselves from this checkout.
+ *
  * Windows-only, since that is where this was measured; a no-op elsewhere. */
 function reapStaleApps() {
   if (process.platform !== 'win32') return Promise.resolve(0)
@@ -63,7 +88,7 @@ function reapStaleApps() {
   // .Contains() rather than -like: -like treats [ ] * ? as wildcards, and a path is a literal.
   // Single-quoted PowerShell strings take backslashes literally, so the path needs no escaping
   // beyond doubling any apostrophe in it.
-  const needle = APP_DIR.replace(/'/g, "''")
+  const needle = (USER_DATA_DIR ?? APP_DIR).replace(/'/g, "''")
   const script = `
     $procs = Get-CimInstance Win32_Process -Filter "Name='electron.exe'" |
       Where-Object { $_.CommandLine -and $_.CommandLine.Contains('${needle}') }
@@ -109,8 +134,9 @@ const NATIVE_SET = `(el, value) => {
 const COMMANDS = {
   async launch() {
     if (app) return console.log('already launched')
-    if (!fs.existsSync(path.join(APP_DIR, 'out/main/index.js'))) {
-      return console.log('ERROR: out/main/index.js missing — run `npm run build` first')
+    const mainScript = APP_ENTRY === APP_DIR ? path.join(APP_DIR, 'out/main/index.js') : APP_ENTRY
+    if (!fs.existsSync(mainScript)) {
+      return console.log(`ERROR: ${path.relative(APP_DIR, mainScript)} missing — run \`npm run build\` first`)
     }
     // Also swept here, not just in quit(): quit() runs only on a clean exit, and the runs that
     // strand processes are precisely the ones that crashed or were killed by a timeout. Without
@@ -125,7 +151,19 @@ const COMMANDS = {
     const env = { ...process.env }
     delete env.ELECTRON_RUN_AS_NODE
 
-    app = await electron.launch({ executablePath: ELECTRON_BIN, args: [APP_DIR], cwd: APP_DIR, env, timeout: 60_000 })
+    const args = USER_DATA_DIR ? [APP_ENTRY, `--user-data-dir=${USER_DATA_DIR}`] : [APP_ENTRY]
+    app = await electron.launch({ executablePath: ELECTRON_BIN, args, cwd: APP_DIR, env, timeout: 60_000 })
+    if (USER_DATA_DIR) {
+      // Checked before anything else is done with the app. If the switch were ever not honoured,
+      // every command after this would be driving -- and writing to -- a profile nobody chose.
+      const actual = await app.evaluate(({ app: electronApp }) => electronApp.getPath('userData'))
+      if (!samePath(actual, USER_DATA_DIR)) {
+        await app.close().catch(() => {})
+        app = null
+        return console.log(`ERROR: asked for profile ${USER_DATA_DIR} but the app opened ${actual} — closed it without touching anything`)
+      }
+      console.log('scratch profile:', actual)
+    }
     page = await app.firstWindow()
     await page.waitForLoadState('domcontentloaded')
     // The renderer mounts React, then fetches settings and candles over IPC. There is no ready
@@ -331,11 +369,15 @@ const COMMANDS = {
   async meval(expr) {
     if (!app) return console.log('not launched')
     try {
-      const out = await app.evaluate(async ({ dialog, app: electronApp, BrowserWindow }, source) => {
+      // The parameter really is named `app`, shadowing this file's own `app` on purpose: the
+      // function is serialised and run in the main process, where the evaluated source refers to
+      // Electron's `app` by that name. It was destructured as `electronApp`, so `meval app.getPath(...)`
+      // -- exactly what the comment above and the skill both promise -- threw "app is not defined".
+      const out = await app.evaluate(async ({ dialog, app, BrowserWindow }, source) => {
         // eslint-disable-next-line no-eval
         const value = await eval(source)
         // Keep the scope references alive for bundlers/linters that would otherwise drop them.
-        void electronApp, BrowserWindow, dialog
+        void app, BrowserWindow, dialog
         return value
       }, expr)
       console.log(JSON.stringify(out ?? null))

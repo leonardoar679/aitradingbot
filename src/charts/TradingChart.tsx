@@ -19,7 +19,7 @@ import { TimeframeToolbar } from '../components/TimeframeToolbar'
 import type { TimeAnchorSettings } from '../components/timeTools/TimeToolsModal'
 import type { IndicatorSettings } from '../components/indicators/IndicatorsPopover'
 import { requestAiSignal } from '../ai/aiClient'
-import { GPT_INTRADAY_INTERVAL } from '../../shared/aiSignal'
+import { AI_PROVIDER_LABEL, GPT_INTRADAY_INTERVAL } from '../../shared/aiSignal'
 import { formatQuotePrice } from '../utils/formatCurrency'
 import { describeError } from '../utils/ipcError'
 import { useTheme } from '../theme/ThemeContext'
@@ -64,7 +64,7 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
   }, [anchorSettings])
 
   // AI SIGNALS DEFAULT OFF, AND DO NOT PERSIST. Marking closed candles used to be unconditional:
-  // opening the Market page on its default 15m interval sent one billed OpenAI call every 15
+  // opening the Market page on its default 15m interval sent one billed AI call every 15
   // minutes, for as long as the page stayed open, with nothing on screen saying so and no way to
   // stop it short of switching interval. Measured on a 1m build: one request per close, exactly on
   // the boundary. None of the other overlays here cost anything, so none of them needed asking.
@@ -302,9 +302,14 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
       try {
         if (!indicatorSettingsRef.current.aiSignals) return
         if (interval !== GPT_INTRADAY_INTERVAL) return
-        const signalCandles = [...candlesRef.current.values()].sort((a, b) => a.time - b.time)
-        const executionIndex = signalCandles.findIndex((candle) => candle.time === time)
-        const signal = await requestAiSignal(symbol, { exchange, candles: signalCandles, executionIndex })
+        // The decision for the candle that just closed, from the history before it -- the same
+        // question a backtest or a bot asks for that candle, so all three share one cached answer.
+        const signal = await requestAiSignal(symbol, { exchange, executionTime: time, source: 'chart' })
+        // An answer that never arrived is not a hold. requestAiSignal reports a failed call as a
+        // safety hold so nothing can trade on it, and returning here would draw the same empty
+        // chart for "the call failed" as for "the model said wait".
+        if (signal.decision?.error) throw new Error(signal.decision.error)
+        setAiSignalError(null)
         if (signal.recommendation === 'hold') return
         const isBuy = signal.recommendation === 'buy'
         const newMarker: SeriesMarker<Time> = {
@@ -316,7 +321,6 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
         }
         markerList = [...markerList, newMarker].slice(-MAX_MARKERS)
         updateMarkers()
-        setAiSignalError(null)
       } catch (error) {
         // Swallowing this to the console meant a key with no credits produced a chart with no
         // arrows -- indistinguishable from a model that kept saying hold. Same confusion the
@@ -488,7 +492,7 @@ export function TradingChart({ exchange, symbol, quoteAsset }: TradingChartProps
           {aiSignalError
             ? `AI signal request failed: ${aiSignalError}`
             : interval === GPT_INTRADAY_INTERVAL
-            ? 'AI signals on — one OpenAI call per closed candle, billed to your account.'
+            ? `AI signals on — one model call per closed candle, billed to your ${AI_PROVIDER_LABEL} credits.`
             : `AI signals only run on the ${GPT_INTRADAY_INTERVAL} chart. Nothing is being requested at this interval.`}
         </p>
       )}

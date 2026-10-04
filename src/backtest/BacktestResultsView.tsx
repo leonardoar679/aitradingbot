@@ -779,7 +779,7 @@ export function BacktestResultsView({
         </div>
 
         <p style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginTop: '0.75rem', lineHeight: 1.5 }}>
-          Long-only: entries, exits, and the stop-loss set at entry all come from the {generalInfo.strategyLabel}
+          Long-only: entries, exits, and the stop-loss set at entry all come from the {generalInfo.strategyLabel}{' '}
           strategy selected above (see the debug log for its exact rules). Cash-settled with no leverage, 0.1% taker
           fee per fill.
         </p>

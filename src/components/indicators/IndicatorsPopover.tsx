@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { LineChart } from 'lucide-react'
 import { Toggle } from '../Toggle'
+import { AI_PROVIDER_LABEL } from '../../../shared/aiSignal'
 
 export interface IndicatorSettings {
   ema: boolean
@@ -86,8 +87,8 @@ export function IndicatorsPopover({ settings, onToggle }: IndicatorsPopoverProps
           <div style={{ borderTop: '1px solid var(--border)', margin: '0.5rem 0 0.4rem' }} />
           <Row label="AI signals" on={settings.aiSignals} onToggle={() => onToggle('aiSignals')} />
           <p style={{ margin: '0.2rem 0 0', fontSize: '0.68rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
-            One OpenAI call per closed 15m candle, billed to your account. The other three are computed here and
-            cost nothing.
+            One model call per closed 15m candle, billed to your {AI_PROVIDER_LABEL} credits. The other three are
+            computed here and cost nothing.
           </p>
         </div>
       )}

@@ -6,10 +6,25 @@ import { AddBotModal } from './AddBotModal'
 import { BotDetailView } from './BotDetailView'
 import { RunsTab } from './RunsTab'
 import { ArchivedTab } from './ArchivedTab'
-import { fetchBotDryRunResult, summarizePaperTrades } from './useDryRun'
-import { GPT_MAX_DECISIONS } from '../../shared/aiSignal'
-import { archiveBot, costsMoneyToRun, createBot, type Bot } from './types'
+import { estimateConfirmBot, estimatePaidBot, fetchBotDryRunResult, summarizePaperTrades } from './useDryRun'
+import type { AiSignalEstimate } from '../../shared/aiSignal'
+import {
+  archiveBot,
+  confirmsEntries,
+  costsMoneyToRun,
+  createBot,
+  describeConfirmBotCost,
+  describePaidBotCost,
+  gptCadenceOf,
+  gptPinsFrom,
+  resolvedStrategy,
+  withAiPins,
+  type AiPins,
+  type Bot,
+  type ConfirmBotEstimate
+} from './types'
 import type { BotRun, Exchange, SymbolInfo } from '../../shared/ipc'
+import { describeError } from '../utils/ipcError'
 
 type Tab = 'active' | 'runs' | 'archived'
 
@@ -82,6 +97,7 @@ export function BotsPage(): React.JSX.Element {
   const [selectedBotId, setSelectedBotId] = useState<string | null>(null)
   const [runRecordError, setRunRecordError] = useState<string | null>(null)
   const loadedRef = useRef(false)
+  const enablingRef = useRef(new Set<string>())
 
   useEffect(() => {
     let cancelled = false
@@ -101,7 +117,14 @@ export function BotsPage(): React.JSX.Element {
     void window.api.settings.set({ bots })
   }, [bots])
 
-  function handleCreate(input: { name: string; exchange: Exchange; pair: SymbolInfo; strategyId: string }): void {
+  function handleCreate(input: {
+    name: string
+    exchange: Exchange
+    pair: SymbolInfo
+    strategyId: string
+    aiConfirm: boolean
+    aiEveryBars: number
+  }): void {
     const created = createBot({ id: crypto.randomUUID(), ...input })
     setBots((prev) => [...prev, created])
     setShowAdd(false)
@@ -131,29 +154,86 @@ export function BotsPage(): React.JSX.Element {
       })
   }
 
+  /** Flips a bot. `pin` is given only when a paid bot is being switched on, and fixes what it will
+   * ask for as long as it stays on -- see Bot.aiModel and Bot.aiRoute. */
+  function applyToggle(bot: Bot, pin?: AiPins): void {
+    const turningOff = bot.enabled
+    const nowSec = Math.floor(Date.now() / 1000)
+    setBots((prev) =>
+      prev.map((b) => (b.id === bot.id ? withAiPins({ ...b, enabled: !b.enabled, enabledAt: turningOff ? null : nowSec }, pin) : b))
+    )
+    if (turningOff) recordRun(bot, nowSec)
+  }
+
+  /** Every other strategy is free to run. GPT Intraday is not: it asks a model with the user's own
+   * key, once per candle, for as long as the bot is on. The Backtest page has always asked before
+   * spending; enabling a bot spent the same money on one click and said nothing. Asking here is
+   * the same rule applied to the same cost -- and the question now carries the model and a
+   * figure, read from the same estimate the run itself would be planned from. */
+  async function enablePaidBot(bot: Bot): Promise<void> {
+    // The estimate takes a moment (it fetches candles), and a second click in that gap would
+    // otherwise raise a second confirmation for the same bot.
+    if (enablingRef.current.has(bot.id)) return
+    enablingRef.current.add(bot.id)
+    try {
+      let estimate: AiSignalEstimate | null = null
+      let problem: string | null = null
+      try {
+        // Estimated without the old pins: switching on re-pins to the current default model, and
+        // to the route set under Agents → Models if there is one.
+        const config = await window.api.ai.getConfig()
+        estimate = await estimatePaidBot({
+          exchange: bot.exchange,
+          symbol: bot.symbol,
+          strategyId: bot.strategyId,
+          aiEveryBars: bot.aiEveryBars,
+          aiRoute: config.route ?? undefined
+        })
+      } catch (error) {
+        problem = describeError(error)
+      }
+      if (!window.confirm(describePaidBotCost(bot.name, estimate, problem, gptCadenceOf(bot)))) return
+      // Pinned from the estimate the confirmation was written from: what the bot runs is what was
+      // just agreed to, never an older pin.
+      applyToggle(bot, gptPinsFrom(estimate))
+    } finally {
+      enablingRef.current.delete(bot.id)
+    }
+  }
+
+  /** The same rule for the other way a bot can spend: a model reviewing its strategy's entries.
+   * Cheaper by orders of magnitude -- a call per signalled entry rather than per candle -- and
+   * still the user's money, so it still asks, with the model and a price. */
+  async function enableConfirmBot(bot: Bot): Promise<void> {
+    if (enablingRef.current.has(bot.id)) return
+    enablingRef.current.add(bot.id)
+    try {
+      let estimate: ConfirmBotEstimate | null = null
+      let problem: string | null = null
+      try {
+        estimate = await estimateConfirmBot({ exchange: bot.exchange, symbol: bot.symbol, strategyId: bot.strategyId, aiConfirm: true })
+      } catch (error) {
+        problem = describeError(error)
+      }
+      if (!window.confirm(describeConfirmBotCost(bot.name, resolvedStrategy(bot).name, estimate, problem))) return
+      applyToggle(bot, { model: estimate?.quote.model })
+    } finally {
+      enablingRef.current.delete(bot.id)
+    }
+  }
+
   function handleToggle(id: string): void {
     const bot = bots.find((b) => b.id === id)
     if (!bot) return
-
-    const turningOff = bot.enabled
-    // Every other strategy is free to run. GPT Intraday is not: it calls OpenAI with the user's
-    // own key, once per candle, for as long as the bot is on. The Backtest page has always asked
-    // before spending; enabling a bot spent the same money on one click and said nothing. Asking
-    // here is the same rule applied to the same cost.
-    if (!turningOff && costsMoneyToRun(bot.strategyId)) {
-      const proceed = window.confirm(
-        `Enable "${bot.name}"?\n\n` +
-          'GPT Intraday calls the OpenAI API with your key and bills your account. Turning it on ' +
-          `generates up to ${GPT_MAX_DECISIONS} decisions for the last seven days straight away ` +
-          '(anything already cached is free), then roughly one more every 15 minutes for as long as ' +
-          'this app stays open.\n\nNo other strategy costs anything to run.'
-      )
-      if (!proceed) return
+    if (!bot.enabled && costsMoneyToRun(bot.strategyId)) {
+      void enablePaidBot(bot)
+      return
     }
-    const nowSec = Math.floor(Date.now() / 1000)
-    setBots((prev) => prev.map((b) => (b.id === id ? { ...b, enabled: !b.enabled, enabledAt: turningOff ? null : nowSec } : b)))
-
-    if (turningOff) recordRun(bot, nowSec)
+    if (!bot.enabled && confirmsEntries(bot)) {
+      void enableConfirmBot(bot)
+      return
+    }
+    applyToggle(bot)
   }
 
   function handleArchive(id: string): void {

@@ -1,0 +1,319 @@
+import { app } from 'electron'
+import { mkdir, readFile } from 'fs/promises'
+import { join } from 'path'
+import { DEFAULT_AI_DAILY_CAP_USD, DEFAULT_AI_MODEL, isAiModelSlug } from '../../shared/aiSignal'
+import { deciderModel, isPanelId, panelModelOf } from '../../shared/aiPanel'
+import { parseAiRoute, type AiRoute } from '../../shared/aiRoute'
+import { budgetProblem, type AiConfig, type AiConfigPatch, type AiModelCatalogue, type AiModelInfo } from '../../shared/aiCost'
+import { writeJsonAtomic } from './atomicWrite'
+import { getDecryptedAiCredential } from './aiCredentialsService'
+import { nextDailyUsage, usageForDay, utcDayKey, type DailyUsageBucket } from './dailyUsage'
+import { fetchModelCatalogue } from './openRouterClient'
+
+// Which model is asked, and how much may be spent asking.
+//
+// Its own file, owned by the main process, for the reason liveTrading.json is: the daily budget is
+// a limit on real money, and a limit the renderer could rewrite through a general settings patch
+// is a limit in name only. Everything here is changed through setAiConfig, which validates, and is
+// enforced in assertAiBudget, which runs immediately before every paid request.
+
+interface AiConfigState {
+  defaultModel: string
+  enabledModels: string[]
+  /** See AiConfig.route. Its second model is always an enabled one, and never the default. */
+  route: AiRoute | null
+  dailyCapUsd: number
+  /** Reuses the live-trading cap's bucket (dailyUsage.ts), so `usedQuote` here is US dollars
+   * spent on AI calls today. Same arithmetic, same UTC day boundary, one tested implementation. */
+  dailyUsage: DailyUsageBucket | null
+}
+
+interface StoredCatalogue {
+  fetchedAt: number
+  models: AiModelInfo[]
+}
+
+/** A price list a day old is still a price list. Refreshed on demand from the Models tab. */
+const CATALOGUE_MAX_AGE_SEC = 24 * 60 * 60
+
+let cache: AiConfigState | null = null
+let catalogue: StoredCatalogue | null | undefined
+
+/** Thrown when the daily budget stops a call. A distinct class so a run can tell "stop, and say
+ * why" from a failed request that is worth carrying on past.
+ *
+ * `name` is deliberately left as 'Error'. Electron serialises a rejected IPC call as
+ * "<name>: <message>", and the renderer strips only the standard "Error: " prefix, so a custom
+ * name was printed to the user: "AiBudgetError: AI calls are switched off". The class is told
+ * apart with instanceof, which never needed the name. */
+export class AiBudgetError extends Error {}
+
+function configPath(): string {
+  return join(app.getPath('userData'), 'aiConfig.json')
+}
+
+function cataloguePath(): string {
+  return join(app.getPath('userData'), 'aiModels.json')
+}
+
+function today(): string {
+  return utcDayKey(Math.floor(Date.now() / 1000))
+}
+
+/** A panel of agents is never in this list: it is not a model, and enabling the model it runs on
+ * is the permission it needs (shared/aiPanel.ts). */
+function cleanModels(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return [...new Set(value.filter((entry): entry is string => typeof entry === 'string' && isAiModelSlug(entry) && !isPanelId(entry)))]
+}
+
+/** Why a route could not run under these settings, or null when it could. Its second step is a
+ * model that is enabled, or a panel on one, and is never the default itself. */
+function routeProblem(route: AiRoute, defaultModel: string, enabledModels: string[]): 'same' | 'malformed' | 'disabled' | null {
+  if (route.model === defaultModel) return 'same'
+  if (isPanelId(route.model) && panelModelOf(route.model) === null) return 'malformed'
+  return enabledModels.includes(deciderModel(route.model)) ? null : 'disabled'
+}
+
+async function load(): Promise<AiConfigState> {
+  if (cache) return cache
+  let raw: Partial<AiConfigState> = {}
+  try {
+    raw = (JSON.parse(await readFile(configPath(), 'utf-8')) as Partial<AiConfigState> | null) ?? {}
+  } catch {
+    raw = {}
+  }
+  // Heals a file holding something unusable rather than letting it through to the gate, the same
+  // way liveTradingService does: a cap of NaN compares false against everything and would stop
+  // nothing.
+  // Never a panel: "the default" is asked by things that were promised one call a question.
+  const defaultModel =
+    typeof raw.defaultModel === 'string' && isAiModelSlug(raw.defaultModel) && !isPanelId(raw.defaultModel) ? raw.defaultModel : DEFAULT_AI_MODEL
+  const enabledModels = cleanModels(raw.enabledModels)
+  if (!enabledModels.includes(defaultModel)) enabledModels.unshift(defaultModel)
+  // A route that could not run -- unreadable, pointing at a model that is not enabled, or at the
+  // default itself -- is dropped rather than carried. A setting that cannot run must not read as
+  // switched on, and dropping it only ever makes a run cheaper.
+  let route: AiRoute | null = null
+  try {
+    route = parseAiRoute(raw.route)
+  } catch {
+    route = null
+  }
+  if (route && routeProblem(route, defaultModel, enabledModels) !== null) route = null
+  const cap = raw.dailyCapUsd
+  const usage = raw.dailyUsage
+  cache = {
+    defaultModel,
+    enabledModels,
+    route,
+    dailyCapUsd: typeof cap === 'number' && Number.isFinite(cap) && cap >= 0 ? cap : DEFAULT_AI_DAILY_CAP_USD,
+    dailyUsage:
+      usage && typeof usage.date === 'string' && typeof usage.usedQuote === 'number' && Number.isFinite(usage.usedQuote)
+        ? { date: usage.date, usedQuote: usage.usedQuote }
+        : null
+  }
+  return cache
+}
+
+async function persist(): Promise<void> {
+  await mkdir(app.getPath('userData'), { recursive: true })
+  await writeJsonAtomic(configPath(), cache)
+}
+
+async function loadCatalogue(): Promise<StoredCatalogue | null> {
+  if (catalogue !== undefined) return catalogue
+  try {
+    const raw = JSON.parse(await readFile(cataloguePath(), 'utf-8')) as Partial<StoredCatalogue> | null
+    catalogue = raw !== null && typeof raw.fetchedAt === 'number' && Array.isArray(raw.models) ? { fetchedAt: raw.fetchedAt, models: raw.models } : null
+  } catch {
+    catalogue = null
+  }
+  return catalogue
+}
+
+function statusFor(state: AiConfigState): AiConfig {
+  return {
+    defaultModel: state.defaultModel,
+    enabledModels: [...state.enabledModels],
+    route: state.route ? { ...state.route } : null,
+    dailyCapUsd: state.dailyCapUsd,
+    spentTodayUsd: usageForDay(state.dailyUsage, today())
+  }
+}
+
+export async function getAiConfig(): Promise<AiConfig> {
+  return statusFor(await load())
+}
+
+/** Checks a model against the catalogue when one is held. Without a catalogue (no key yet, or
+ * never online) only the id's shape can be checked, which is why the request itself still goes
+ * out with `require_parameters`: OpenRouter refuses what this could not rule out. */
+function assertUsableModel(id: string, known: StoredCatalogue | null): void {
+  if (!isAiModelSlug(id)) throw new Error(`"${id}" is not a valid model id`)
+  if (isPanelId(id)) {
+    throw new Error(
+      'A panel of agents cannot be enabled or made the default. It runs on a model that is enabled, and is chosen where it is used: Analyze, a benchmark, or the second step of a route.'
+    )
+  }
+  if (!known) return
+  const model = known.models.find((entry) => entry.id === id)
+  if (!model) throw new Error(`${id} is not in the model catalogue. Refresh the list under Agents → Models.`)
+  if (!model.structuredOutputs) {
+    throw new Error(`${id} cannot be held to a strict JSON schema, so it cannot be enabled for signals.`)
+  }
+}
+
+export async function setAiConfig(patch: AiConfigPatch): Promise<AiConfig> {
+  const state = await load()
+  const known = await loadCatalogue()
+
+  let enabledModels = state.enabledModels
+  if (patch.enabledModels !== undefined) {
+    enabledModels = [...new Set(patch.enabledModels)]
+    // Only what is being ADDED is checked. A model enabled yesterday and dropped from the
+    // catalogue today must still be removable, and re-validating it would block every save.
+    for (const id of enabledModels) if (!state.enabledModels.includes(id)) assertUsableModel(id, known)
+  }
+
+  let defaultModel = state.defaultModel
+  if (patch.defaultModel !== undefined) {
+    assertUsableModel(patch.defaultModel, known)
+    defaultModel = patch.defaultModel
+  }
+  // The default is always enabled. Otherwise disabling it would leave every run that names no
+  // model pointing at one the user had just switched off.
+  if (!enabledModels.includes(defaultModel)) enabledModels = [defaultModel, ...enabledModels]
+
+  let route = state.route
+  if (patch.route !== undefined) {
+    route = parseAiRoute(patch.route)
+    const problem = route ? routeProblem(route, defaultModel, enabledModels) : null
+    if (route && problem === 'same') {
+      throw new Error(`A route needs two different models, and ${route.model} is already the default.`)
+    }
+    if (route && problem === 'malformed') {
+      throw new Error(`"${route.model}" does not name a panel of agents on a model.`)
+    }
+    if (route && problem === 'disabled') {
+      throw new Error(`${deciderModel(route.model)} is not enabled. Enable it under Agents → Models before routing to it.`)
+    }
+  } else if (route) {
+    // A change that would strand the route is refused rather than quietly repaired. Dropping the
+    // route to make the save go through would change what the next run asks, and costs, without
+    // anyone having said so.
+    const problem = routeProblem(route, defaultModel, enabledModels)
+    if (problem === 'same') {
+      throw new Error(`${route.model} is the second model of the current route. Switch routing off before making it the default.`)
+    }
+    if (problem !== null) {
+      const used = isPanelId(route.model)
+        ? `${deciderModel(route.model)} is the model the current route's panel runs on`
+        : `${route.model} is the second model of the current route`
+      throw new Error(`${used}. Switch routing off before disabling it.`)
+    }
+  }
+
+  let dailyCapUsd = state.dailyCapUsd
+  if (patch.dailyCapUsd !== undefined) {
+    if (!Number.isFinite(patch.dailyCapUsd) || patch.dailyCapUsd < 0) {
+      throw new Error('The daily AI budget has to be a number of dollars, 0 or more. 0 switches AI calls off.')
+    }
+    dailyCapUsd = patch.dailyCapUsd
+  }
+
+  cache = { ...state, defaultModel, enabledModels, route, dailyCapUsd }
+  await persist()
+  return statusFor(cache)
+}
+
+/** The model a request will be asked of. A named model has to be one the user enabled: the
+ * renderer chooses it, and "only models held to a schema" is a rule that means nothing if any id
+ * arriving over IPC is simply used. */
+export async function resolveAiModel(requested: string | undefined): Promise<string> {
+  const state = await load()
+  if (requested === undefined) return state.defaultModel
+  if (!state.enabledModels.includes(requested)) {
+    throw new Error(`${requested} is not enabled. Enable it under Agents → Models, or switch the bot off and on to move it to the current settings.`)
+  }
+  return requested
+}
+
+/** The same, for a request that may name a panel of agents instead of a model (shared/aiPanel.ts).
+ * A panel needs no enabling of its own, but the model it runs on does: every one of its four calls
+ * is a call to that model. Only a tape resolves through here. An entry review asks one model one
+ * question, and goes on resolving through resolveAiModel, where a panel is not a model. */
+export async function resolveAiDecider(requested: string | undefined): Promise<string> {
+  if (requested === undefined || !isPanelId(requested)) return resolveAiModel(requested)
+  const model = panelModelOf(requested)
+  if (model === null) throw new Error(`"${requested}" does not name a panel of agents on a model`)
+  const state = await load()
+  if (!state.enabledModels.includes(model)) {
+    throw new Error(`${model} is not enabled, so a panel cannot be run on it. Enable it under Agents → Models.`)
+  }
+  return requested
+}
+
+/** The models a tape will ask: the first, and the second when the request names a route.
+ *
+ * THE ROUTE IS THE REQUEST'S, NEVER THE CONFIGURED ONE. The setting above is what a backtest and a
+ * bot being switched on copy into their request, after saying so in their confirmation. Read here
+ * instead, it would reach every caller that names no model -- a bot switched on before routes
+ * existed, the chart -- and double what they can spend without any of them having been asked.
+ *
+ * The second step is held to the rule the first is: a model the user enabled, or a panel on one. */
+export async function resolveAiPipeline(requested: { model?: string; route?: unknown }): Promise<{ model: string; route: AiRoute | null }> {
+  const model = await resolveAiDecider(requested.model)
+  const route = parseAiRoute(requested.route)
+  if (!route) return { model, route: null }
+  if (route.model === model) throw new Error(`A route needs two different models, and ${model} is named as both.`)
+  await resolveAiDecider(route.model)
+  return { model, route }
+}
+
+/** Runs immediately before every paid request. Throws rather than returning a flag so that no
+ * caller can forget to look at the answer. */
+export async function assertAiBudget(): Promise<void> {
+  const state = await load()
+  const problem = budgetProblem(state.dailyCapUsd, usageForDay(state.dailyUsage, today()))
+  if (problem !== null) throw new AiBudgetError(problem)
+}
+
+export async function budgetRemainingUsd(): Promise<number> {
+  const state = await load()
+  return Math.max(0, state.dailyCapUsd - usageForDay(state.dailyUsage, today()))
+}
+
+/** Records what a call cost against today's bucket. */
+export async function recordAiSpend(costUsd: number): Promise<void> {
+  if (!(costUsd > 0)) return
+  const state = await load()
+  const next = nextDailyUsage(state.dailyUsage, today(), costUsd)
+  if (next === null) return
+  state.dailyUsage = next
+  await persist()
+}
+
+/** The catalogue, from disk unless it is stale or a refresh was asked for. A failed refresh falls
+ * back to whatever is held, since an old price list is more use than an error. */
+export async function listAiModels(refresh: boolean): Promise<AiModelCatalogue> {
+  const held = await loadCatalogue()
+  const nowSec = Math.floor(Date.now() / 1000)
+  if (held && !refresh && nowSec - held.fetchedAt < CATALOGUE_MAX_AGE_SEC) return held
+  try {
+    const { apiKey } = await getDecryptedAiCredential()
+    catalogue = { fetchedAt: nowSec, models: await fetchModelCatalogue(apiKey) }
+    await mkdir(app.getPath('userData'), { recursive: true })
+    await writeJsonAtomic(cataloguePath(), catalogue)
+    return catalogue
+  } catch (error) {
+    if (held && !refresh) return held
+    throw error
+  }
+}
+
+/** A model's catalogue entry from what is already held. Never touches the network: it is called
+ * on the way to and from a paid request, which must not wait on a second one. */
+export async function findAiModel(id: string): Promise<AiModelInfo | null> {
+  return (await loadCatalogue())?.models.find((model) => model.id === id) ?? null
+}

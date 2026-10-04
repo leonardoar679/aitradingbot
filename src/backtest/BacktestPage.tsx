@@ -19,9 +19,22 @@ import { describeError } from '../utils/ipcError'
 import { STRATEGIES, DEFAULT_STRATEGY_ID, getStrategy, type StrategySignals } from './strategies'
 import { generateGptIntradaySignals } from './strategies/gptIntraday'
 import {
+  AI_PROVIDER_LABEL,
+  GPT_DECISION_EVERY_BARS,
   GPT_INTRADAY_STRATEGY_ID,
-  GPT_MAX_DECISIONS
+  GPT_LOOKBACK_BARS,
+  GPT_MAX_DECISIONS,
+  describeGptCadence,
+  gptMaxSpanDays,
+  type AiSignalTapeRequest
 } from '../../shared/aiSignal'
+import type { AiEntryPeek } from '../../shared/aiConfirm'
+import { describeAiConfirmCost, describeAiRunCost, formatUsd } from '../../shared/aiCost'
+import { deciderCalls, describeDecider } from '../../shared/aiPanel'
+import { describeEscalation, describeRouteKind, type AiRoute } from '../../shared/aiRoute'
+import { canConfirmEntries, confirmationCounts, resolveConfirmedRun, reviewEntries } from './aiConfirmation'
+import { AiConfirmationCard, type ConfirmationReport } from './AiConfirmationCard'
+import { formatUtcDate, formatUtcTime } from './formatTradeTime'
 import { replayExecutor, type ExecutorReplayResult } from './executorReplay'
 import { ExecutorBacktestView } from './ExecutorBacktestView'
 import { replayController, type ControllerReplayResult } from './controllerReplay'
@@ -80,6 +93,9 @@ type RunState =
       elapsedSec: number
       generalInfo: ResultsGeneralInfo
       logLines: string[]
+      /** Present when a model was asked to confirm the strategy's entries. `result` is then the
+       * run with its vetoes applied, and this carries the unconfirmed run to set beside it. */
+      confirmation?: ConfirmationReport
     }
 
 interface TradingRouteRow {
@@ -90,6 +106,15 @@ interface TradingRouteRow {
 
 function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10)
+}
+
+/** `GPT Intraday (Paper Only, every 4 hours, two models)`: what a run was asked goes inside the
+ * name's own brackets, because the label is dropped into sentences ("... strategy selected above")
+ * where a trailing clause would read as part of the sentence instead of part of the name. */
+function withRunNotes(name: string, everyBars: number, route: AiRoute | null): string {
+  const notes = [...(everyBars > 1 ? [`every ${describeGptCadence(everyBars)}`] : []), ...(route ? [describeRouteKind(route)] : [])]
+  if (notes.length === 0) return name
+  return name.endsWith(')') ? `${name.slice(0, -1)}, ${notes.join(', ')})` : `${name} (${notes.join(', ')})`
 }
 
 function defaultTradingRoute(symbol: string): TradingRouteRow {
@@ -169,6 +194,15 @@ export function BacktestPage(): React.JSX.Element {
   const [endDate, setEndDate] = useState(() => isoDate(new Date()))
   const [splitDate, setSplitDate] = useState('')
   const [startingCapital, setStartingCapital] = useState(String(DEFAULT_STARTING_BALANCE))
+  /** Off unless ticked: it is the one option on this page that can spend money. */
+  const [aiConfirm, setAiConfirm] = useState(false)
+  /** How often GPT Intraday is asked, in 15-minute bars. It sets how far back a run can reach:
+   * the ceiling is on decisions, so a slower cadence spreads the same number over more days. */
+  const [gptEveryBars, setGptEveryBars] = useState<number>(GPT_DECISION_EVERY_BARS[0])
+  /** The route set under Agents → Models, and the default model it starts from. Read when this
+   * page opens, which is every time it is navigated to: a GPT Intraday run here is one of the two
+   * places a route applies, and the page says so before Start rather than only in the dialog. */
+  const [aiRouting, setAiRouting] = useState<{ model: string; route: AiRoute | null } | null>(null)
   const [leverageInput, setLeverageInput] = useState('')
   /** Once the user types their own number, the account must stop overwriting it -- otherwise
    * switching to a different pair to compare silently replaces the amount they chose. State
@@ -282,12 +316,27 @@ export function BacktestPage(): React.JSX.Element {
   }, [accountAvailable, capitalTouched])
 
   useEffect(() => {
+    let cancelled = false
+    window.api.ai
+      .getConfig()
+      .then((config) => {
+        if (!cancelled) setAiRouting({ model: config.defaultModel, route: config.route })
+      })
+      // Nothing to say without it: the run itself reports a setting it cannot read.
+      .catch(() => undefined)
+    return (): void => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
     if (tradingRoute.strategyId !== GPT_INTRADAY_STRATEGY_ID) return
     const end = new Date(`${endDate}T00:00:00Z`)
     const start = new Date(end)
-    start.setUTCDate(start.getUTCDate() - 6)
+    // The longest range this cadence allows, both dates included. It can be shortened by hand.
+    start.setUTCDate(start.getUTCDate() - (gptMaxSpanDays(gptEveryBars) - 1))
     setStartDate(isoDate(start))
-  }, [tradingRoute.strategyId, endDate])
+  }, [tradingRoute.strategyId, endDate, gptEveryBars])
 
   // Blank means spot, and blank is the default: someone who came here to test a strategy should
   // not have to opt out of leverage. Anything typed is validated rather than silently coerced --
@@ -315,13 +364,21 @@ export function BacktestPage(): React.JSX.Element {
       setRunState({ status: 'error', message: rangeProblem })
       return
     }
+    // Read once, like `confirming` below: the range check, the label, the request and the log must
+    // all be about the same cadence, whatever the picker is changed to while the run is going.
+    const everyBars = route.strategyId === GPT_INTRADAY_STRATEGY_ID ? gptEveryBars : 1
+    // The same rule for the route: one read, used by the label, the request and the log.
+    const gptRoute = route.strategyId === GPT_INTRADAY_STRATEGY_ID ? (aiRouting?.route ?? null) : null
     if (route.strategyId === GPT_INTRADAY_STRATEGY_ID) {
       const spanMs = new Date(`${endDate}T23:59:59Z`).getTime() - new Date(`${startDate}T00:00:00Z`).getTime()
-      if (spanMs > 7 * 86_400_000) {
+      const maxDays = gptMaxSpanDays(everyBars)
+      if (spanMs > maxDays * 86_400_000) {
         setTab('progress')
         setRunState({
           status: 'error',
-          message: `GPT Intraday is limited to seven days (${GPT_MAX_DECISIONS} decisions) per backtest.`
+          message:
+            `GPT Intraday is limited to ${GPT_MAX_DECISIONS} decisions per backtest, which is ${maxDays} days when the model is ` +
+            `asked every ${describeGptCadence(everyBars)}. Shorten the range, or ask less often.`
         })
         return
       }
@@ -333,7 +390,14 @@ export function BacktestPage(): React.JSX.Element {
     // Stop" while a grid was actually being replayed.
     const chosenExecutor = accountExecutors.find((e) => e.id === executorIdFromStrategyId(route.strategyId))
     const chosenController = accountControllers.find((c) => c.id === controllerIdFromStrategyId(route.strategyId))
-    const strategyLabel = chosenExecutor ? `${chosenExecutor.name} (${chosenExecutor.type})` : strategy.name
+    // Read once, here, so the label, the fetch and the run cannot disagree about whether this is
+    // a confirmed run. False for an executor or a controller, which are not strategies.
+    const confirming = aiConfirm && canConfirmEntries(route.strategyId)
+    const strategyLabel = chosenExecutor
+      ? `${chosenExecutor.name} (${chosenExecutor.type})`
+      : confirming
+        ? `${strategy.name} + AI confirmation`
+        : withRunNotes(strategy.name, everyBars, gptRoute)
     const symbolInfo = symbols.find((s) => s.symbol === route.symbol)
     const symbolLabel = symbolInfo ? `${symbolInfo.baseAsset}-${symbolInfo.quoteAsset}` : route.symbol
     const intervalLabel = INTERVALS.find((iv) => iv.id === route.interval)?.label ?? route.interval
@@ -357,7 +421,12 @@ export function BacktestPage(): React.JSX.Element {
     // Only the fetch moves. `startSec` still bounds the reported window, because the engine
     // anchors both the trade list and the buy & hold benchmark at warmupBars.
     const requestedStartSec = Math.floor(new Date(`${startDate}T00:00:00Z`).getTime() / 1000)
-    const warmupSec = strategy.warmupBarsFor(INTERVAL_SECONDS[route.interval]) * INTERVAL_SECONDS[route.interval]
+    const strategyWarmupBars = strategy.warmupBarsFor(INTERVAL_SECONDS[route.interval])
+    // A reviewed entry needs the review's own lookback behind it as well as the strategy's, so a
+    // confirmed run reaches back by whichever is longer. Without it a fast strategy's first days
+    // would be untradeable for a reason that has nothing to do with the strategy.
+    const warmupBars = confirming ? Math.max(strategyWarmupBars, GPT_LOOKBACK_BARS) : strategyWarmupBars
+    const warmupSec = warmupBars * INTERVAL_SECONDS[route.interval]
     const startSec = requestedStartSec - warmupSec
     const endSec = Math.floor(new Date(`${endDate}T23:59:59Z`).getTime() / 1000)
     const runId = ++runIdRef.current
@@ -440,25 +509,33 @@ export function BacktestPage(): React.JSX.Element {
         log(`Running strategy: ${strategy.name} — ${strategy.description}`)
         let suppliedSignals: StrategySignals | undefined
         if (route.strategyId === GPT_INTRADAY_STRATEGY_ID) {
-          const aiRequest = {
+          const aiRequest: AiSignalTapeRequest = {
             requestId,
             exchange,
             symbol: route.symbol,
             interval: route.interval,
             candles: fetchResult.candles,
             startIndex: strategy.warmupBarsFor(INTERVAL_SECONDS[route.interval]),
-            maxDecisions: GPT_MAX_DECISIONS
+            maxDecisions: GPT_MAX_DECISIONS,
+            decideEveryBars: everyBars,
+            ...(gptRoute ? { route: gptRoute } : {}),
+            source: 'backtest'
           }
           const estimate = await window.api.ai.estimateSignalTape(aiRequest)
-          const confirmed = window.confirm(
-            `GPT Intraday will evaluate ${estimate.total} candles. ` +
-              `${estimate.cached} are confirmed cached; at most ${estimate.maximumApiCalls} OpenAI API calls may be made. Continue?`
-          )
+          // The count was always stated; the price never was, and the count alone does not say
+          // whether "672 calls" is thirty cents or thirty dollars -- that depends entirely on
+          // which model is selected, which is now a choice.
+          const confirmed = window.confirm(describeAiRunCost(estimate))
           if (!confirmed) {
             setRunState({ status: 'cancelled' })
             return
           }
-          log(`Generating ${estimate.total} GPT decisions (${estimate.cached} confirmed cached)`)
+          log(
+            `Generating ${estimate.total} decisions from ${estimate.model}` +
+              `${everyBars > 1 ? `, one every ${describeGptCadence(everyBars)}` : ''}` +
+              `${estimate.route ? `, passed on to ${describeDecider(estimate.route.model)} when it ${describeEscalation(estimate.route.when)}` : ''}` +
+              ` (${estimate.cached} confirmed cached)`
+          )
           const stopProgress = window.api.ai.onSignalProgress((progress) => {
             if (runIdRef.current !== runId || progress.requestId !== requestId) return
             setRunState({ status: 'running', done: progress.completed, total: progress.total })
@@ -484,16 +561,134 @@ export function BacktestPage(): React.JSX.Element {
               return
             }
             suppliedSignals = generateGptIntradaySignals(fetchResult.candles, tape)
-            log(`GPT tape ready: ${tape.cachedCount} cached, ${tape.generatedCount} generated`)
+            log(
+              `GPT tape ready: ${tape.cachedCount} cached, ${tape.generatedCount} generated with ${tape.callCount} model ` +
+                `call${tape.callCount === 1 ? '' : 's'}, ${formatUsd(tape.costUsd)} spent`
+            )
+            if (tape.route) {
+              const passedOn = tape.decisions.filter((d) => d.first != null)
+              // Counted on what each model SAID, not on what the account then did: it is a line
+              // about the two models, and a hold answered twice is the same call.
+              const same = passedOn.filter((d) => !d.rejected && !d.first?.rejected && d.first?.recommendation === d.recommendation)
+              log(
+                `${tape.route.escalated} of ${tape.decisions.length} decisions were passed on to ${describeDecider(tape.route.model)}; ` +
+                  `it made the same call as ${tape.model} on ${same.length}`
+              )
+            }
+            // Not a reason to refuse the run: the model was reached and answered, and an unusable
+            // answer acting as a hold is what the strategy does with it live too. It is logged
+            // because a run where most answers were refused is a result about the model.
+            if (tape.rejectedCount > 0) {
+              log(`${tape.rejectedCount} of ${tape.decisions.length} answers were refused by the validator and treated as hold`)
+            }
           } finally {
             stopProgress()
           }
         }
-        const result = runBacktest(fetchResult.candles, route.strategyId, {
-          startingBalance: capitalValue,
-          leverage: leverageValue,
-          signals: suppliedSignals
-        })
+        let result: BacktestResult
+        let confirmation: ConfirmationReport | undefined
+        if (confirming) {
+          const engine = { startingBalance: capitalValue, leverage: leverageValue }
+          const reviewed = {
+            candles: fetchResult.candles,
+            strategyId: route.strategyId,
+            exchange,
+            symbol: route.symbol,
+            interval: route.interval,
+            engine,
+            confirmFromSec: 0,
+            nowSec: Math.floor(Date.now() / 1000),
+            source: 'backtest' as const
+          }
+          // FREE FIRST. This pass only reads the cache, and stops at the first entry that would
+          // cost something -- which is the earliest point at which what the run needs is known
+          // well enough to put a figure on it. A rerun of something already paid for never
+          // reaches the confirmation at all.
+          const quote: { last: AiEntryPeek | null } = { last: null }
+          let run = await resolveConfirmedRun({
+            ...reviewed,
+            ask: async (request) => {
+              quote.last = await window.api.ai.peekEntryConfirmation(request)
+              return quote.last.decision
+            }
+          })
+          if (runIdRef.current !== runId) return
+          if (run.unsettled?.reason === 'uncached' && quote.last !== null) {
+            const confirmed = window.confirm(
+              describeAiConfirmCost({
+                strategyName: strategy.name,
+                model: quote.last.model,
+                cached: run.decisions.size,
+                openQuestions: run.openQuestions,
+                perCallCostUsd: quote.last.perCallCostUsd,
+                costBasis: quote.last.costBasis,
+                budgetRemainingUsd: quote.last.budgetRemainingUsd
+              })
+            )
+            if (!confirmed) {
+              setRunState({ status: 'cancelled' })
+              return
+            }
+            log(`Asking ${quote.last.model} to review entries (${run.decisions.size} already cached, about ${run.openQuestions} to ask)`)
+            run = await resolveConfirmedRun({
+              ...reviewed,
+              known: run.decisions,
+              ask: (request) => window.api.ai.confirmEntry(request),
+              shouldStop: () => runIdRef.current !== runId,
+              onProgress: (decided, expected) => {
+                if (runIdRef.current === runId) setRunState({ status: 'running', done: decided, total: expected })
+              }
+            })
+            if (runIdRef.current !== runId) return
+          }
+          // An entry nobody ruled on is not taken, and nothing after it can be decided either, so
+          // what is left is the first part of a run rather than a run. Refused for the same reason
+          // a GPT tape with failed decisions is: it would draw as a result and is not one.
+          if (run.unsettled?.reason === 'unanswered') {
+            const when = `${formatUtcDate(run.unsettled.time)} ${formatUtcTime(run.unsettled.time)} UTC`
+            const answered = run.decisions.size
+            const kept =
+              answered === 0
+                ? 'No review had been answered before it.'
+                : answered === 1
+                  ? 'The one review answered before it is cached.'
+                  : `The ${answered} reviews answered before it are cached.`
+            log(`AI confirmation FAILED at the entry signalled ${when}: ${run.unsettled.detail}`)
+            setTab('progress')
+            setRunState({
+              status: 'error',
+              message:
+                `The model could not be reached to review the entry signalled at ${when}, so nothing after it can be decided and ` +
+                `this would not be a result. ${kept} Error: ${run.unsettled.detail}`
+            })
+            return
+          }
+          const counts = confirmationCounts(run.decisions.values())
+          const reviews = reviewEntries(fetchResult.candles, run)
+          log(
+            `AI confirmation: ${counts.reviewed} entries reviewed, ${counts.confirmed} confirmed, ${counts.vetoed} vetoed; ` +
+              `${counts.generated} new calls, ${formatUsd(counts.costUsd)} spent, ${counts.cached} cached`
+          )
+          if (counts.refused > 0) log(`${counts.refused} answers were refused by the validator and counted as vetoes`)
+          const forming = run.unsettled?.reason === 'forming' ? run.unsettled.time : null
+          if (forming !== null) log('The last candle is still forming, so the entry signalled on it was neither reviewed nor taken')
+          result = run.result
+          confirmation = {
+            strategyName: strategy.name,
+            model: reviews[0]?.decision.model ?? null,
+            quantOnly: run.quantOnly.stats,
+            confirmed: run.result.stats,
+            reviews,
+            counts,
+            formingEntryTime: forming
+          }
+        } else {
+          result = runBacktest(fetchResult.candles, route.strategyId, {
+            startingBalance: capitalValue,
+            leverage: leverageValue,
+            signals: suppliedSignals
+          })
+        }
         log(
           `Simulation complete: ${result.trades.length} trades, net P&L ${result.stats.totalNetProfit.toFixed(2)} (${result.stats.totalNetProfitPct.toFixed(2)}%)`
         )
@@ -513,13 +708,16 @@ export function BacktestPage(): React.JSX.Element {
           splitDate: splitDate && splitDate > startDate && splitDate < endDate ? splitDate : null,
           leverage: leverageValue
         }
-        setRunState({ status: 'done', result, candles: fetchResult.candles, elapsedSec, generalInfo, logLines: logs })
+        setRunState({ status: 'done', result, candles: fetchResult.candles, elapsedSec, generalInfo, logLines: logs, confirmation })
         setCompareCandles(fetchResult.candles)
       })
       .catch((error: unknown) => {
         if (runIdRef.current !== runId) return
-        log(`Error: ${error instanceof Error ? error.message : String(error)}`)
-        setRunState({ status: 'error', message: error instanceof Error ? error.message : String(error) })
+        // describeError, not error.message: a run the main process stops on purpose -- the AI
+        // budget reached, a key refused -- arrives wrapped as "Error invoking remote method
+        // 'ai:generateSignalTape': Error: ...", and the reason someone needs is the part after it.
+        log(`Error: ${describeError(error)}`)
+        setRunState({ status: 'error', message: describeError(error) })
       })
       .finally(() => {
         unsubscribe()
@@ -672,6 +870,12 @@ export function BacktestPage(): React.JSX.Element {
       {tab === 'progress' && runState && runState.status === 'executor-done' && (
         <Card title="Executor replay">
           <ExecutorBacktestView executor={runState.executor} result={runState.replay} />
+        </Card>
+      )}
+
+      {tab === 'progress' && runState && runState.status === 'done' && runState.confirmation && (
+        <Card title="AI confirmation">
+          <AiConfirmationCard report={runState.confirmation} />
         </Card>
       )}
 
@@ -840,6 +1044,58 @@ export function BacktestPage(): React.JSX.Element {
                 </select>
               </div>
 
+              {tradingRoute.strategyId === GPT_INTRADAY_STRATEGY_ID && (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Ask the model</span>
+                    <select
+                      value={gptEveryBars}
+                      onChange={(e) => setGptEveryBars(Number(e.target.value))}
+                      style={{ ...fieldStyle(), flex: 1 }}
+                      aria-label="How often the model is asked"
+                    >
+                      {GPT_DECISION_EVERY_BARS.map((bars) => (
+                        <option key={bars} value={bars}>
+                          every {describeGptCadence(bars)} · up to {gptMaxSpanDays(bars)} days
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <p style={{ margin: '0.4rem 0 0', fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                    The model is asked on the clock: every candle, or the ones that open on the hour, or on every fourth hour
+                    UTC. Between two questions the position is held and its stop is still checked on every candle. The
+                    question itself is the same at every cadence, so answers are shared between them through the cache.
+                  </p>
+                </>
+              )}
+
+              {canConfirmEntries(tradingRoute.strategyId) && (
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '0.55rem',
+                    fontSize: '0.76rem',
+                    color: 'var(--text-muted)',
+                    lineHeight: 1.5,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={aiConfirm}
+                    onChange={(e) => setAiConfirm(e.target.checked)}
+                    style={{ marginTop: '0.2rem', flexShrink: 0 }}
+                  />
+                  <span>
+                    <strong style={{ color: 'var(--text-primary)' }}>Ask an AI model to confirm each entry.</strong> Paper only. The
+                    strategy decides as it always does; at each entry it signals, a model is shown the market and the strategy&apos;s own
+                    readings and can veto that trade. One call per trade through {AI_PROVIDER_LABEL}, priced before anything is spent,
+                    and the results set the strategy beside itself with the vetoed trades removed.
+                  </span>
+                </label>
+              )}
+
               {controllerIdFromStrategyId(tradingRoute.strategyId) !== null && (
                 <p style={{ margin: '0.4rem 0 0', fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
                   A controller takes its markets from the executors attached to it, so the Symbol above is ignored and
@@ -867,8 +1123,13 @@ export function BacktestPage(): React.JSX.Element {
               </div>
               {tradingRoute.strategyId === GPT_INTRADAY_STRATEGY_ID && (
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.76rem', lineHeight: 1.5, marginBottom: 0 }}>
-                  Paper only. Limited to seven days / {GPT_MAX_DECISIONS} decisions. Each uncached candle can use one
-                  OpenAI call; reruns reuse the deterministic signal tape. Short samples do not establish profitability.
+                  Paper only. Limited to {GPT_MAX_DECISIONS} decisions, which is {gptMaxSpanDays(gptEveryBars)} days when the
+                  model is asked every {describeGptCadence(gptEveryBars)}. Each uncached decision can use one model call
+                  through {AI_PROVIDER_LABEL}
+                  {aiRouting?.route
+                    ? `, or ${deciderCalls(aiRouting.route.model) > 1 ? `up to ${1 + deciderCalls(aiRouting.route.model)}` : 'two'}: the route set under Agents → Models passes a decision on to ${describeDecider(aiRouting.route.model)} when ${aiRouting.model} ${describeEscalation(aiRouting.route.when)}`
+                    : ''}
+                  ; reruns reuse the deterministic signal tape. Short samples do not establish profitability.
                 </p>
               )}
 

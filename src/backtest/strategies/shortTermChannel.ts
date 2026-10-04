@@ -1,3 +1,4 @@
+import type { AiStrategyReading } from '../../../shared/aiConfirm'
 import type { Candle } from '../../../shared/ipc'
 import type { StrategyDefinition, StrategySignals } from './types'
 import { inferBarSeconds } from './trendRegimeEnsemble'
@@ -227,6 +228,48 @@ export function channelPosition(candles: Candle[], periods: number[]): number[] 
   return out
 }
 
+/** channelPosition() for ONE bar, without building the whole series.
+ *
+ * A review asks about a handful of bars, and the series is a rolling scan of every bar each time
+ * it is built. tests/aiConfirmation.test.ts pins this to channelPosition() index by index, so it
+ * is the same rule read at one point rather than a second rule free to drift from the first. */
+export function channelPositionAt(candles: Candle[], periods: number[], index: number): number {
+  if (index < 1 || index >= candles.length) return NaN
+  let sum = 0
+  for (const period of periods) {
+    if (index < period) return NaN
+    let hi = -Infinity
+    let lo = Infinity
+    for (let j = index - period; j < index; j++) {
+      if (candles[j].high > hi) hi = candles[j].high
+      if (candles[j].low < lo) lo = candles[j].low
+    }
+    const span = hi - lo
+    sum += span > 0 ? Math.min(1, Math.max(0, (candles[index].close - lo) / span)) : 0.5
+  }
+  return sum / periods.length
+}
+
+/** Where the close sits in the strategy's channels on the bar at `index`, beside the two lines it
+ * acts on. EXPORTED for the gated version, which enters on this same reading.
+ *
+ * A highest high and a lowest low over a fixed span are the same numbers however much history
+ * precedes them, which is what StrategyDefinition.entryReadings requires. */
+export function channelReadings(candles: Candle[], index: number): AiStrategyReading[] {
+  const barSeconds = inferBarSeconds(candles)
+  if (barSeconds <= 0) return []
+  const position = channelPositionAt(candles, periodsAt(barSeconds), index)
+  if (!Number.isFinite(position)) return []
+  return [
+    {
+      label: `mean position in the ${LOOKBACK_DAYS.join('/')}-day ranges (0 = lows, 1 = highs)`,
+      value: Number(position.toFixed(3))
+    },
+    { label: 'enters at or above', value: ENTER_AT },
+    { label: 'exits at or below', value: EXIT_AT }
+  ]
+}
+
 export const shortTermChannel: StrategyDefinition = {
   id: 'short-term-channel',
   name: 'Short-Term Channel Breakout',
@@ -244,6 +287,7 @@ export const shortTermChannel: StrategyDefinition = {
   // exists per strategy rather than as one app-wide constant.
   preferredInterval: '15m',
   warmupBarsFor: (barSeconds) => warmupBarsAt(barSeconds),
+  entryReadings: channelReadings,
   generateSignals(candles: Candle[]): StrategySignals {
     const n = candles.length
     const entries = new Array<boolean>(n).fill(false)

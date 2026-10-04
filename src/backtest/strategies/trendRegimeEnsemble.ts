@@ -1,3 +1,4 @@
+import type { AiStrategyReading } from '../../../shared/aiConfirm'
 import type { Candle } from '../../../shared/ipc'
 import type { StrategyDefinition, StrategySignals } from './types'
 import { computeAtr } from './emaCrossAtrStop'
@@ -233,6 +234,33 @@ function generateSignals(candles: Candle[]): StrategySignals {
   return { entries, exits, stopPrices, warmupBars }
 }
 
+/** The vote, and how far above each of its averages the close sits, on the bar at `index`.
+ *
+ * EXPORTED for the gated channel strategy, whose entries are allowed by this same vote. The vote
+ * is read from regimeAgreement() -- the number the strategy acted on -- rather than recounted from
+ * the averages below, so a review can never be told "3 of 4" about an entry that fired on 4.
+ *
+ * Each average is summed directly over its own span rather than taken from rollingSma's running
+ * sum: a running sum carries the rounding of every bar since the series began, and these readings
+ * must not depend on where the series began (see StrategyDefinition.entryReadings). */
+export function regimeReadings(candles: Candle[], index: number): AiStrategyReading[] {
+  const barSeconds = inferBarSeconds(candles)
+  if (barSeconds <= 0 || index < 0 || index >= candles.length) return []
+  const barsPerDay = SECONDS_PER_DAY / barSeconds
+  const close = candles[index].close
+  const votes = Math.round(regimeAgreement(candles, barSeconds)[index] * LOOKBACK_DAYS.length)
+  const readings: AiStrategyReading[] = [{ label: 'lookbacks with the close above its average', value: `${votes} of ${LOOKBACK_DAYS.length}` }]
+  for (const days of LOOKBACK_DAYS) {
+    const period = Math.max(2, Math.round(days * barsPerDay))
+    if (index + 1 < period) continue
+    let sum = 0
+    for (let i = index - period + 1; i <= index; i++) sum += candles[i].close
+    const average = sum / period
+    if (average > 0) readings.push({ label: `close above its ${days}-day average, %`, value: Number(((close / average - 1) * 100).toFixed(2)) })
+  }
+  return readings
+}
+
 export const trendRegimeEnsemble: StrategyDefinition = {
   id: 'trend-regime-ensemble',
   // The slowest lookback, in whatever bars the caller is about to fetch. Deliberately the same
@@ -272,5 +300,6 @@ export const trendRegimeEnsemble: StrategyDefinition = {
   name: 'Trend Regime Ensemble',
   description:
     'Holds while 20/30/50/80-day moving averages unanimously agree price is in an uptrend, exits once at most one still does. Few trades by design — intraday fees are what beat the other strategies.',
-  generateSignals
+  generateSignals,
+  entryReadings: regimeReadings
 }

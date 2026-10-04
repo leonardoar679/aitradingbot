@@ -15,16 +15,11 @@ const REGIME_EMA_PERIOD = 200
 const ATR_PERIOD = 14
 const ATR_STOP_MULTIPLIER = 2
 
-export function computeEma(values: number[], period: number): number[] {
-  const k = 2 / (period + 1)
-  const out: number[] = new Array(values.length)
-  let prev = values[0]
-  for (let i = 0; i < values.length; i++) {
-    prev = i === 0 ? values[0] : values[i] * k + prev * (1 - k)
-    out[i] = prev
-  }
-  return out
-}
+// Re-exported, not defined here, for the same reason as computeAtr below: the AI context builder
+// in shared/aiContext.ts tells a model what EMA(20) and EMA(50) read, and it must be the EMA this
+// strategy acts on. The implementation lives in shared/indicators.ts.
+import { computeEma } from '../../../shared/indicators'
+export { computeEma }
 
 // Wilder's smoothed ATR (the same formula talib.ATR uses): seeded by a simple average of the
 // first `period` true ranges, then smoothed forward. Entries before the seed index are NaN.

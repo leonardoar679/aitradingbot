@@ -1,7 +1,8 @@
 import { Bot as BotIcon, Archive } from 'lucide-react'
 import { EXCHANGES } from '../../shared/ipc'
 import { useDryRun, summarizePaperTrades, classifyBotOpenPosition } from './useDryRun'
-import { describeAiCalls, resolvedStrategy, type Bot } from './types'
+import { confirmsEntries, describeAiCalls, describeBotRouteKind, gptCadenceOf, gptRouteOf, resolvedStrategy, type Bot } from './types'
+import { describeGptCadence } from '../../shared/aiSignal'
 import { formatQuotePrice } from '../utils/formatCurrency'
 import { netUnrealizedPct } from '../../shared/fees'
 
@@ -30,7 +31,11 @@ function DryRunPanel({ bot }: { bot: Bot }): React.JSX.Element {
     bot.symbol,
     bot.enabled,
     bot.enabledAt,
-    bot.strategyId
+    bot.strategyId,
+    bot.aiModel,
+    bot.aiConfirm,
+    bot.aiEveryBars,
+    gptRouteOf(bot) ?? undefined
   )
 
   if (status === 'loading') {
@@ -205,6 +210,11 @@ export function BotCard({ bot, onToggle, onArchive, onViewDetail }: BotCardProps
         }}
       >
         {strategy.name}
+        {confirmsEntries(bot) && ' + AI confirmation'}
+        {gptCadenceOf(bot) > 1 && ` · asked every ${describeGptCadence(gptCadenceOf(bot))}`}
+        {/* Only while it is running: the route is a pin taken when a bot is switched on, and the
+            next time this one is switched on it takes whatever is set then. */}
+        {bot.enabled && describeBotRouteKind(bot) !== null && ` · ${describeBotRouteKind(bot)}`}
       </div>
       {strategy.mismatched && (
         <div

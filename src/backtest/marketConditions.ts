@@ -1,4 +1,5 @@
 import type { Candle } from '../../shared/ipc'
+import { wilderAdx } from '../../shared/indicators'
 
 // A pre-flight reading of the market, for the question "should I run this strategy this month?"
 //
@@ -26,43 +27,8 @@ import type { Candle } from '../../shared/ipc'
 // implies "safer" or "more likely to win" would be a misreading, so the copy below says payoff and
 // never odds -- and a test asserts it stays that way.
 
-/** Wilder's own smoothing, alpha = 1/period rather than an EMA's 2/(n+1). Substituting an EMA is a
- * common and silent error: it produces a plausible curve with every value shifted, which would move
- * readings across the 20 boundary this whole readout turns on. */
-function wilderAdx(candles: Candle[], period: number): number {
-  const need = 2 * period + 1
-  if (candles.length < need + 1) return NaN
-
-  let smoothedTr = 0
-  let smoothedPlus = 0
-  let smoothedMinus = 0
-  const dxValues: number[] = []
-
-  for (let i = candles.length - need; i < candles.length; i++) {
-    const prev = candles[i - 1]
-    const cur = candles[i]
-    const upMove = cur.high - prev.high
-    const downMove = prev.low - cur.low
-    const plusDm = upMove > downMove && upMove > 0 ? upMove : 0
-    const minusDm = downMove > upMove && downMove > 0 ? downMove : 0
-    const trueRange = Math.max(cur.high - cur.low, Math.abs(cur.high - prev.close), Math.abs(cur.low - prev.close))
-
-    smoothedTr = smoothedTr - smoothedTr / period + trueRange
-    smoothedPlus = smoothedPlus - smoothedPlus / period + plusDm
-    smoothedMinus = smoothedMinus - smoothedMinus / period + minusDm
-
-    if (smoothedTr > 0) {
-      const plusDi = (100 * smoothedPlus) / smoothedTr
-      const minusDi = (100 * smoothedMinus) / smoothedTr
-      const sum = plusDi + minusDi
-      if (sum > 0) dxValues.push((100 * Math.abs(plusDi - minusDi)) / sum)
-    }
-  }
-
-  if (dxValues.length < period) return NaN
-  const last = dxValues.slice(-period)
-  return last.reduce((a, b) => a + b, 0) / last.length
-}
+// wilderAdx itself lives in shared/indicators.ts. It moved there unchanged so that the AI context
+// builder reports the same ADX this readout turns on, rather than a second implementation of it.
 
 export const ADX_PERIOD = 14
 /** Wilder's own boundary for "no trend worth following". Not fitted here -- see research/ADX.md for

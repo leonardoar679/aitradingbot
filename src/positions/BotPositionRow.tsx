@@ -1,7 +1,7 @@
 import { EXCHANGES } from '../../shared/ipc'
 import { useDryRun, classifyBotOpenPosition } from '../bots/useDryRun'
 import { formatQuotePrice } from '../utils/formatCurrency'
-import type { Bot } from '../bots/types'
+import { gptRouteOf, type Bot } from '../bots/types'
 import { netUnrealizedPct } from '../../shared/fees'
 
 function pctColor(pct: number): string {
@@ -11,7 +11,17 @@ function pctColor(pct: number): string {
 const cellStyle: React.CSSProperties = { padding: '0.65rem 0.9rem', fontSize: '0.82rem' }
 
 export function BotPositionRow({ bot }: { bot: Bot }): React.JSX.Element {
-  const dryRun = useDryRun(bot.exchange, bot.symbol, true, bot.enabledAt, bot.strategyId)
+  const dryRun = useDryRun(
+    bot.exchange,
+    bot.symbol,
+    true,
+    bot.enabledAt,
+    bot.strategyId,
+    bot.aiModel,
+    bot.aiConfirm,
+    bot.aiEveryBars,
+    gptRouteOf(bot) ?? undefined
+  )
   const exchangeName = EXCHANGES.find((e) => e.id === bot.exchange)?.name ?? bot.exchange
   // Only a position this bot actually entered is shown as the bot's -- see
   // classifyBotOpenPosition. A position the replay was already holding when the bot was switched

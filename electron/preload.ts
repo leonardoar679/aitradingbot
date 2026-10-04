@@ -5,11 +5,16 @@ import type { ProtectiveStop } from '../shared/futuresStops'
 import type { SymbolTradingRules } from '../shared/exchangeMinimums'
 import type {
   AiCredentialStatus,
+  AiSignalDecision,
   AiSignalEstimate,
   AiSignalProgress,
   AiSignalTape,
   AiSignalTapeRequest
 } from '../shared/aiSignal'
+import type { AiBenchmarkPeek, AiBenchmarkPeekRequest } from '../shared/aiBenchmark'
+import type { AiEntryConfirmRequest, AiEntryPeek } from '../shared/aiConfirm'
+import type { AiConfig, AiConfigPatch, AiKeyInfo, AiModelCatalogue, AiUsageSummary } from '../shared/aiCost'
+import type { AiCallFilter, AiCallPage } from '../shared/aiLedger'
 import {
   IpcChannel,
   type AppSettings,
@@ -103,8 +108,8 @@ const api = {
   },
   ai: {
     credentialsStatus: (): Promise<AiCredentialStatus> => ipcRenderer.invoke(IpcChannel.AiCredentialsStatus),
-    setCredentials: (apiKey: string, model: string): Promise<AiCredentialStatus> =>
-      ipcRenderer.invoke(IpcChannel.AiCredentialsSet, apiKey, model),
+    setCredentials: (apiKey: string): Promise<AiCredentialStatus> =>
+      ipcRenderer.invoke(IpcChannel.AiCredentialsSet, apiKey),
     testCredentials: (): Promise<{ ok: boolean; message: string }> =>
       ipcRenderer.invoke(IpcChannel.AiCredentialsTest),
     removeCredentials: (): Promise<void> => ipcRenderer.invoke(IpcChannel.AiCredentialsRemove),
@@ -118,7 +123,21 @@ const api = {
       const handler = (_event: IpcRendererEvent, progress: AiSignalProgress): void => listener(progress)
       ipcRenderer.on(IpcChannel.AiSignalProgress, handler)
       return () => ipcRenderer.removeListener(IpcChannel.AiSignalProgress, handler)
-    }
+    },
+    // Everything below is free to call: none of it reaches a model.
+    keyInfo: (): Promise<AiKeyInfo> => ipcRenderer.invoke(IpcChannel.AiKeyInfo),
+    listModels: (refresh = false): Promise<AiModelCatalogue> => ipcRenderer.invoke(IpcChannel.AiListModels, refresh),
+    getConfig: (): Promise<AiConfig> => ipcRenderer.invoke(IpcChannel.AiGetConfig),
+    setConfig: (patch: AiConfigPatch): Promise<AiConfig> => ipcRenderer.invoke(IpcChannel.AiSetConfig, patch),
+    listCalls: (filter: AiCallFilter = {}): Promise<AiCallPage> => ipcRenderer.invoke(IpcChannel.AiListCalls, filter),
+    usageSummary: (): Promise<AiUsageSummary> => ipcRenderer.invoke(IpcChannel.AiUsageSummary),
+    peekEntryConfirmation: (request: AiEntryConfirmRequest): Promise<AiEntryPeek> =>
+      ipcRenderer.invoke(IpcChannel.AiPeekEntryConfirmation, request),
+    peekBenchmark: (request: AiBenchmarkPeekRequest): Promise<AiBenchmarkPeek> =>
+      ipcRenderer.invoke(IpcChannel.AiPeekBenchmark, request),
+    // The one call below the "free" line that is not free: billed unless the answer is cached.
+    confirmEntry: (request: AiEntryConfirmRequest): Promise<AiSignalDecision> =>
+      ipcRenderer.invoke(IpcChannel.AiConfirmEntry, request)
   },
   liveTrading: {
     getStatus: (): Promise<LiveTradingStatus> => ipcRenderer.invoke(IpcChannel.LiveTradingGetStatus),
