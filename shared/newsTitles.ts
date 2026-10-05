@@ -1,4 +1,4 @@
-// How a Binance announcement is read: which of the three kinds of news its title is, and which
+// How a Binance announcement is read: which of the four kinds of news its title is, and which
 // coins it names. By fixed patterns on the title alone -- never by a model (the V3 document's
 // section 14), and never from the article's body. A title that fits none of them reads as null.
 //
@@ -15,11 +15,16 @@
 //                   pre-market or TradFi contract, and not "Multiple", whose title names no coin.
 //   SPOT_LISTING    "Binance Will List Hyperliquid (HYPE) with Seed Tag Applied": the tickers in
 //                   brackets. Not leveraged tokens, not a community vote's winner.
+//   MONITORING_TAG  "Binance Will Extend the Monitoring Tag to Include AVA, GNS, SCR & TOWNS on
+//                   2026-09-04": the coins added to Binance's mark on the coins it may delist.
+//                   Measured after the other three (written as research/monitoringTitles.ts, and
+//                   moved here unchanged once the app read it). Not the coins the same title takes
+//                   the tag, or a Seed Tag, off.
 //
 // Coins held to a price -- a currency, gold, or another coin -- are dropped from every list: news
 // cannot move what is pegged.
 
-export type NewsCategory = 'DELISTING' | 'FUTURES_LAUNCH' | 'SPOT_LISTING'
+export type NewsCategory = 'DELISTING' | 'FUTURES_LAUNCH' | 'SPOT_LISTING' | 'MONITORING_TAG'
 
 export interface NewsTitle {
   category: NewsCategory
@@ -98,12 +103,22 @@ const MARGIN_WORDS = /USDⓈ-Margined|USDⓈ-M\b|USDT-Margined/g
 const LIST = /^Binance Will List\b/
 const NOT_A_COIN_LISTING = /Leveraged Tokens|Community Coin Vote/i
 
+const EXTEND_TAG = /^Binance Will\b.*?\bExtend the Monitoring Tag to (?:Include )?(.+)$/
+/** Where the list of coins being added to the tag ends: the next clause, or the date. */
+const TAG_LIST_END = /(?:,\s*(?:and\s+)?|\s+and\s+)Remove\b|\s+on\s+\d{4}-\d{2}-\d{2}\b/
+
 export function classifyTitle(title: string): NewsTitle | null {
   const text = title.replace(/\s+/g, ' ').trim()
 
   if (/^Binance\b/.test(text) && !NOT_SPOT_DELISTING.test(text)) {
     const delist = DELIST.exec(text)
     if (delist !== null) return result('DELISTING', listed(delist[1]))
+  }
+
+  const tag = EXTEND_TAG.exec(text)
+  if (tag !== null) {
+    const end = tag[1].search(TAG_LIST_END)
+    return result('MONITORING_TAG', listed(end < 0 ? tag[1] : tag[1].slice(0, end)))
   }
 
   const launch = LAUNCH.exec(text)

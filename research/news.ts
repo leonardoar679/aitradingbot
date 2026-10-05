@@ -4,7 +4,6 @@ import { FEE_RATE } from '../shared/fees'
 import type { Candle } from '../shared/ipc'
 import { readEventAt } from '../shared/marketEvent'
 import { classifyTitle, type NewsCategory } from '../shared/newsTitles'
-import { monitoringTagTickers } from './monitoringTitles'
 
 // Do Binance's own announcements move prices, by enough to trade after them? See research/NEWS.md
 // for the question, the rule and the result.
@@ -30,9 +29,9 @@ const HELD_OUT_TO = Date.parse('2026-10-01T00:00:00Z') / 1000
 type Side = 1 | -1
 type Market = 'spot' | 'um'
 
-/** The kinds measured: the three the app's patterns read (shared/newsTitles.ts), and the Monitoring
- * Tag (./monitoringTitles.ts), measured after them under the same rule. NEWS.md says why. */
-type Category = NewsCategory | 'MONITORING_TAG'
+/** The kinds measured, by the app's own patterns (shared/newsTitles.ts). The Monitoring Tag was
+ * measured after the other three, under the same rule; NEWS.md says why. */
+type Category = NewsCategory
 
 /** Each kind of news, the side it is traded on, where its price is read, and what one side of a
  * trade in it is charged in slippage. A coin being delisted, or marked as one that may be, has a
@@ -125,11 +124,12 @@ function plan(): NewsPair[] {
   }
   for (const row of readAnnouncements(FIRST_THREE_LISTS)) {
     const news = classifyTitle(row.title)
-    if (news !== null) add(row, news.category, news.tickers)
+    // The tag is read from its own lists, below: one of its titles is in the delisting list too.
+    if (news !== null && news.category !== 'MONITORING_TAG') add(row, news.category, news.tickers)
   }
   for (const row of readAnnouncements(MONITORING_TAG_LISTS)) {
-    const tickers = monitoringTagTickers(row.title)
-    if (tickers !== null) add(row, 'MONITORING_TAG', tickers)
+    const news = classifyTitle(row.title)
+    if (news?.category === 'MONITORING_TAG') add(row, news.category, news.tickers)
   }
   return pairs
 }

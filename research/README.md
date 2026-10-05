@@ -67,8 +67,7 @@ CANDLE_DIR=<dir with the json> node --max-old-space-size=4096 research/.final.mj
 | `positioning-live.mjs` | Sets that archive against the live endpoints value by value, and measures when each series is published |
 | `positioning.ts` | How the futures market is positioned at events, and in crowded markets (`POSITIONING.md`) |
 | `fetch-announcements.mjs` | Binance's listing, delisting and news announcement lists: titles and release minutes |
-| `../shared/newsTitles.ts` | Which kind of news a title is, and which coins it names, by fixed patterns (`tests/newsTitles.test.ts`). Moved to `shared/` once the app read news with it; the patterns are the ones the study ran on |
-| `monitoringTitles.ts` | Which coins a title adds to Binance's Monitoring Tag, by a fixed pattern (`tests/monitoringTitles.test.ts`). For the study only |
+| `../shared/newsTitles.ts` | Which kind of news a title is, and which coins it names, by fixed patterns (`tests/newsTitles.test.ts`). Moved to `shared/` once the app read news with it, and the Monitoring Tag's pattern after it; the patterns are the ones the study ran on |
 | `fetch-news-candles.mjs` | The 1-minute candles around each announcement from data.binance.vision's archives, delisted coins included, each zip checked against its SHA-256 |
 | `news.ts` | Whether delistings, futures launches, listings and the Monitoring Tag move prices by enough to trade after them. A delisting held short four hours does, on paper, and the tag's bracket does, narrowly (`NEWS.md`) |
 

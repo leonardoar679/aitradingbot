@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_NEWS_CONFIG, matchesNewsFilter, newsListUrl, nextNewsReadDelayMs, parseArticleList, parseNewsLines, toNewsItem, type NewsItem } from '../shared/news'
 
-// The news reader (electron/services/newsService.ts): Binance's two announcement lists, read once
+// The news reader (electron/services/newsService.ts): Binance's three announcement lists, read once
 // a minute while it is on, each article kept once and sorted by shared/newsTitles.ts. Binance is
 // faked at the one seam the reader reaches it through, fetch; the files are real, in a scratch
 // folder.
@@ -26,7 +26,7 @@ const T = Date.parse('2026-10-05T06:00:00Z')
 const lists = vi.hoisted(() => ({
   articles: new Map<number, { id: number; code: string; title: string; type: number; releaseDate: number }[]>(),
   failing: new Set<number>(),
-  /** When set, both lists answer this instead. */
+  /** When set, every list answers this instead. */
   answer: null as unknown,
   calls: [] as string[]
 }))
@@ -156,7 +156,7 @@ describe('the reader', () => {
     expect(state.error).toBeNull()
     expect(state.recent.map((item) => item.id)).toEqual([301, 201, 300, 200])
     expect(state.recent[0]).toMatchObject({ category: 'DELISTING', tickers: ['ICX', 'SCRT', 'STORJ'], seenAt: T / 1000 + 5 })
-    expect(lists.calls.map((url) => /catalogId=(\d+)/.exec(url)?.[1])).toEqual(['161', '48'])
+    expect(lists.calls.map((url) => /catalogId=(\d+)/.exec(url)?.[1])).toEqual(['161', '48', '49'])
     // Oldest first in each file, as Binance released them.
     const october = readFileSync(join(dir, 'news', 'news-2026-10.jsonl'), 'utf-8').trim().split('\n').map((line) => JSON.parse(line).id)
     expect(october).toEqual([300, 201, 301])
@@ -178,20 +178,33 @@ describe('the reader', () => {
     expect(readFileSync(join(dir, 'news', 'news-2026-10.jsonl'), 'utf-8').trim().split('\n')).toHaveLength(3)
   })
 
-  it('keeps an article that is in both lists once', async () => {
+  it('keeps an article that is in two lists once', async () => {
     lists.articles.get(48)?.push(article(301, 'Binance Will Delist ICX, SCRT, STORJ on 2026-09-03', T - 60_000))
     const state = await (await reader()).readNewsOnce(T)
     expect(state.recent.filter((item) => item.id === 301)).toEqual([expect.objectContaining({ catalog: 161 })])
   })
 
-  it('says when a list cannot be read, and keeps what the other gave', async () => {
+  it("reads Binance's news, where coins are added to the Monitoring Tag", async () => {
+    lists.articles.set(49, [
+      article(401, 'Binance Will Extend the Monitoring Tag to Include AVA, GNS, SCR & TOWNS on 2026-10-05', T - 30_000),
+      article(400, 'Binance Will Support the Ethereum Network Upgrade', T - 7_200_000)
+    ])
+    const state = await (await reader()).readNewsOnce(T)
+    expect(state.recent.map((item) => item.id)).toEqual([401, 301, 201, 400, 300, 200])
+    expect(state.recent[0]).toMatchObject({ catalog: 49, category: 'MONITORING_TAG', tickers: ['AVA', 'GNS', 'SCR', 'TOWNS'] })
+    expect(state.recent.find((item) => item.id === 400)).toMatchObject({ catalog: 49, category: null, tickers: [] })
+  })
+
+  it('says when a list cannot be read, and keeps what the others gave', async () => {
     lists.failing.add(48)
     const { readNewsOnce } = await reader()
     const one = await readNewsOnce(T)
-    expect(one.error).toBe("One of Binance's two announcement lists could not be read: Binance's announcement list answered 503")
+    expect(one.error).toBe("1 of Binance's 3 announcement lists could not be read: Binance's announcement list answered 503")
     expect(one.recent.map((item) => item.id)).toEqual([301, 300])
 
     lists.failing.add(161)
+    expect((await readNewsOnce(T + 30_000)).error).toMatch(/^2 of Binance's 3 announcement lists could not be read/)
+    lists.failing.add(49)
     expect((await readNewsOnce(T + 60_000)).error).toMatch(/^Binance's announcement lists could not be read/)
 
     lists.failing.clear()
@@ -291,13 +304,13 @@ describe('its setting', () => {
     await whenNewsSettled()
     expect(on.nextReadAt).not.toBeNull()
     expect(vi.getTimerCount()).toBe(1)
-    expect(lists.calls).toHaveLength(2)
+    expect(lists.calls).toHaveLength(3)
     expect((await getNewsState()).recent).toHaveLength(4)
     expect(JSON.parse(readFileSync(join(dir, 'news.json'), 'utf-8'))).toEqual({ ...DEFAULT_NEWS_CONFIG, enabled: true })
     // Saying "on" again while it is on starts nothing more.
     await setNewsConfig({ enabled: true })
     await whenNewsSettled()
-    expect(lists.calls).toHaveLength(2)
+    expect(lists.calls).toHaveLength(3)
 
     vi.resetModules()
     const relaunched = await reader()

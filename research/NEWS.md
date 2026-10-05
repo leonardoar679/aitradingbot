@@ -315,8 +315,9 @@ that reads once a minute to trade after it?
 
 **The announcements.** They are in Binance's news list (catalog 49): 4,439 articles back to July
 2017, read on 5 October 2026, titles and release times only. 26 of them name the tag, and one more
-is in the delisting list. A fixed pattern reads them (`research/monitoringTitles.ts`, pinned on all
-27 titles by `tests/monitoringTitles.test.ts`):
+is in the delisting list. A fixed pattern reads them (written as `research/monitoringTitles.ts`, and
+moved unchanged to `shared/newsTitles.ts` once the app read the tag; pinned on all 27 titles by
+`tests/newsTitles.test.ts`):
 - Only the coins being added are named. Coins the same title takes the tag, or a Seed Tag, off are
   left out.
 - Pegged coins (AEUR, VAI) are left out, as for every kind.
@@ -434,3 +435,12 @@ should do. The app's reader does not read Binance's news list yet, so any use of
 What passed is the bracket, with a stop and a target, out within the hour. It is the trade the
 delisting failed, and closer to the watch's own paper trades, which follow a model's entry, stop and
 target. It passes by a small margin, and a paper short is the only way it can be traded here.
+
+On 5 October the user chose the same three for a tag as for a delisting, and not "only show it":
+- **a notice** to someone holding the coin;
+- **the paper short by the rule**: the bracket above, entered at the second bar after the
+  announcement's minute, as it was measured;
+- **the models**, alongside the rule.
+
+The app's reader now reads Binance's news, and sorts the tag by these same patterns, moved to
+`shared/newsTitles.ts`.

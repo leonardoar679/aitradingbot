@@ -28,8 +28,8 @@ import { raiseNewsEvent } from './marketScannerService'
 // Binance's own announcements, read once a minute while the reader is on (research/NEWS.md says
 // what they did to prices, and why they are read).
 //
-// IT READS ONE PUBLIC LIST AND NOTHING ELSE. Two requests a minute -- Binance's delisting list and
-// its listing list -- with no key, no model and no order. A delisting released minutes ago is
+// IT READS ONE PUBLIC LIST AND NOTHING ELSE. Three requests a minute -- Binance's delisting list,
+// its listing list and its news -- with no key, no model and no order. A delisting released minutes ago is
 // raised as an event through the scanner (raiseNewsEvent), which reads the coin's public candles,
 // when the user has that switched on; the watch, if it is on, then puts it to its models. Each article is kept once, by its id, in
 // news/news-YYYY-MM.jsonl, sorted by the patterns the study measured with (shared/newsTitles.ts).
@@ -130,7 +130,7 @@ async function fetchList(url: string): Promise<unknown> {
   return response.json()
 }
 
-/** One read of both lists: every article not seen before is sorted and kept.
+/** One read of every list: every article not seen before is sorted and kept.
  *
  * Returns without reading while another read is running. `nowMs` is the clock an article is
  * stamped as seen by; it is a parameter so that a test can say what time it is. */
@@ -146,7 +146,7 @@ export async function readNewsOnce(nowMs: number = Date.now()): Promise<NewsStat
     for (const catalog of NEWS_CATALOGS) {
       try {
         for (const article of parseArticleList(await fetchList(newsListUrl(catalog)))) {
-          // An article in both lists is kept once, under the first.
+          // An article in two lists is kept once, under the first.
           if (known.has(article.id)) continue
           known.add(article.id)
           fresh.push(toNewsItem(article, catalog, seenAt))
@@ -179,7 +179,7 @@ export async function readNewsOnce(nowMs: number = Date.now()): Promise<NewsStat
         ? null
         : failures.length === NEWS_CATALOGS.length
           ? `Binance's announcement lists could not be read: ${failures[0]}`
-          : `One of Binance's two announcement lists could not be read: ${failures[0]}`
+          : `${failures.length} of Binance's ${NEWS_CATALOGS.length} announcement lists could not be read: ${failures[0]}`
   } catch (failure) {
     error = failure instanceof Error ? failure.message : String(failure)
   } finally {

@@ -1,8 +1,8 @@
 import { classifyTitle, type NewsCategory } from './newsTitles'
 
-// Binance's own announcements, as the app reads them: its two public lists, once a minute while the
-// reader is on, sorted by the patterns research/news.ts measured with (shared/newsTitles.ts). The
-// types and the pure half of the reader (electron/services/newsService.ts): what an answer from
+// Binance's own announcements, as the app reads them: its three public lists, once a minute while
+// the reader is on, sorted by the patterns research/news.ts measured with (shared/newsTitles.ts).
+// The types and the pure half of the reader (electron/services/newsService.ts): what an answer from
 // the list holds, what is kept of each article, and what the page says about each kind.
 //
 // THE READER ONLY READS. research/NEWS.md found that a delisting, held short for four hours, paid on
@@ -12,8 +12,9 @@ import { classifyTitle, type NewsCategory } from './newsTitles'
 
 export type { NewsCategory }
 
-/** Binance's two lists: delistings, and new listings (which is where futures launches go too). */
-export const NEWS_CATALOGS = [161, 48] as const
+/** Binance's three lists: delistings, new listings (which is where futures launches go too), and
+ * its news, where coins are added to the Monitoring Tag. */
+export const NEWS_CATALOGS = [161, 48, 49] as const
 export type NewsCatalog = (typeof NEWS_CATALOGS)[number]
 
 /** Articles asked for from each list a read: more than are ever released in a minute, and enough
@@ -45,7 +46,7 @@ export interface NewsItem {
   /** When this app first read it. Articles read the first time the reader is switched on can be
    * weeks old; one read after that is a minute or so old at most. */
   seenAt: number
-  /** Null for a title that is none of the three kinds. */
+  /** Null for a title that is none of the four kinds. */
   category: NewsCategory | null
   tickers: string[]
 }
@@ -191,14 +192,14 @@ export function newsMonthKey(unixSeconds: number): string {
   return new Date(unixSeconds * 1000).toISOString().slice(0, 7)
 }
 
-const CATEGORIES: readonly (string | null)[] = ['DELISTING', 'FUTURES_LAUNCH', 'SPOT_LISTING', null]
+const CATEGORIES: readonly (string | null)[] = ['DELISTING', 'FUTURES_LAUNCH', 'SPOT_LISTING', 'MONITORING_TAG', null]
 
 export function isNewsItem(value: unknown): value is NewsItem {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
   const row = value as Record<string, unknown>
   return (
     typeof row.id === 'number' &&
-    (row.catalog === 161 || row.catalog === 48) &&
+    (NEWS_CATALOGS as readonly unknown[]).includes(row.catalog) &&
     typeof row.title === 'string' &&
     typeof row.releaseSec === 'number' &&
     typeof row.seenAt === 'number' &&
@@ -240,7 +241,8 @@ export function byNewestRelease(a: NewsItem, b: NewsItem): number {
 const CATEGORY_LABEL: Record<NewsCategory, string> = {
   DELISTING: 'Delisting',
   FUTURES_LAUNCH: 'Futures launch',
-  SPOT_LISTING: 'Spot listing'
+  SPOT_LISTING: 'Spot listing',
+  MONITORING_TAG: 'Monitoring Tag'
 }
 
 export function describeNewsCategory(category: NewsCategory): string {
@@ -255,5 +257,7 @@ export const NEWS_FINDINGS: Record<NewsCategory, string> = {
     'Four hours after the first minute an app like this could act, the coin was on average 13% lower: 75 of 87 coins were lower, and two rose 73% and 84% instead.',
   FUTURES_LAUNCH: "The coin's spot price jumped 12% on average, nearly all of it before an app reading once a minute could act. After that, it did nothing that paid.",
   SPOT_LISTING:
-    'A coin that already had a perpetual jumped 16.5% on average, nearly all of it before an app reading once a minute could act. After that, it did nothing that paid.'
+    'A coin that already had a perpetual jumped 16.5% on average, nearly all of it before an app reading once a minute could act. After that, it did nothing that paid.',
+  MONITORING_TAG:
+    'The coin fell about 5% before an app like this could act, and 12% within the day. From the first minute it could act, a short with a stop and a target made 0.35% a trade after costs: a small edge. 84 of 97 tagged coins were later delisted.'
 }

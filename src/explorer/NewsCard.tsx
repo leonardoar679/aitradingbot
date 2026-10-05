@@ -7,7 +7,9 @@ import { cellStyle, headCellStyle, noteStyle } from '../agents/agentStyles'
 import { describeError } from '../utils/ipcError'
 
 const SHOWN = 30
-const KINDS: NewsCategory[] = ['DELISTING', 'FUTURES_LAUNCH', 'SPOT_LISTING']
+const KINDS: NewsCategory[] = ['DELISTING', 'MONITORING_TAG', 'FUTURES_LAUNCH', 'SPOT_LISTING']
+/** The kinds a coin falls on: shown in the colour of a fall. */
+const FALLS: (NewsCategory | null)[] = ['DELISTING', 'MONITORING_TAG']
 
 function utcMinute(sec: number): string {
   return new Date(sec * 1000).toISOString().slice(0, 16).replace('T', ' ')
@@ -95,7 +97,7 @@ export function NewsCard({ onNavigate }: { onNavigate: (page: Page) => void }): 
                         ...cellStyle,
                         fontWeight: 600,
                         whiteSpace: 'nowrap',
-                        color: item.category === null ? 'var(--text-muted)' : item.category === 'DELISTING' ? 'var(--down)' : 'var(--up)'
+                        color: item.category === null ? 'var(--text-muted)' : FALLS.includes(item.category) ? 'var(--down)' : 'var(--up)'
                       }}
                     >
                       {item.category === null ? '—' : describeNewsCategory(item.category)}
@@ -109,7 +111,7 @@ export function NewsCard({ onNavigate }: { onNavigate: (page: Page) => void }): 
           </div>
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.6rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
             <input type="checkbox" checked={everything} onChange={(event) => setEverything(event.target.checked)} />
-            Every announcement read, not only the three kinds ({recent.length - sorted.length} others)
+            Every announcement read, not only the four kinds ({recent.length - sorted.length} others)
           </label>
         </>
       )}
