@@ -70,6 +70,7 @@ CANDLE_DIR=<dir with the json> node --max-old-space-size=4096 research/.final.mj
 | `../shared/newsTitles.ts` | Which kind of news a title is, and which coins it names, by fixed patterns (`tests/newsTitles.test.ts`). Moved to `shared/` once the app read news with it, and the Monitoring Tag's pattern after it; the patterns are the ones the study ran on |
 | `fetch-news-candles.mjs` | The 1-minute candles around each announcement from data.binance.vision's archives, delisted coins included, each zip checked against its SHA-256 |
 | `news.ts` | Whether delistings, futures launches, listings and the Monitoring Tag move prices by enough to trade after them. A delisting held short four hours does, on paper, and the tag's bracket does, narrowly (`NEWS.md`) |
+| `../shared/newsRules.ts` | The bracket and the four-hour hold `news.ts` scores with, moved to `shared/` (its output unchanged to the byte) so that the app's record of the two rules since the study scores each announcement after it by the same arithmetic |
 
 ## What the study did not establish
 

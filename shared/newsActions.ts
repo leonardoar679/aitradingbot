@@ -2,6 +2,7 @@ import type { Candle, ExecutorConfig, HeldPosition, PaperAccount, PositionExecut
 import type { ExchangeBalance } from './liveBalances'
 import { EVENT_LOOKBACK_BARS, readEventAt, type EventReading } from './marketEvent'
 import { isActedNewsCategory, type NewsItem } from './news'
+import { BRACKET_HOLD_BARS, BRACKET_STOP_SIGMAS, BRACKET_TARGET_SIGMAS, HOLD_EXIT_BARS } from './newsRules'
 
 // What an announcement does, as the user chose on 2026-10-05 after research/NEWS.md, for the two
 // kinds that passed -- a delisting, and a coin added to Binance's Monitoring Tag: a desktop notice
@@ -15,7 +16,7 @@ import { isActedNewsCategory, type NewsItem } from './news'
 
 /** A delisting's rule, as research/NEWS.md measured it on its held-out half: sell short at once,
  * and buy back at the open four hours after the announcement's minute, with no stop and no target. */
-export const DELISTING_RULE_EXIT_MINUTES = 240
+export const DELISTING_RULE_EXIT_MINUTES = HOLD_EXIT_BARS
 
 /** A delisting's paper short is opened only this soon after the announcement. Later, it is not the
  * trade that was measured: the study entered in the second minute after it. */
@@ -25,9 +26,9 @@ export const DELISTING_SHORT_LATEST_SECONDS = 5 * 60
  * short at the open of the second minute after the announcement's, with a stop 1.5 and a target 3
  * of the coin's usual fifteen-minute moves, read from the twelve hours before the announcement; out
  * at the close of its sixtieth minute otherwise. */
-export const TAG_RULE_STOP_SIGMAS = 1.5
-export const TAG_RULE_TARGET_SIGMAS = 3
-export const TAG_RULE_HOLD_MINUTES = 60
+export const TAG_RULE_STOP_SIGMAS = BRACKET_STOP_SIGMAS
+export const TAG_RULE_TARGET_SIGMAS = BRACKET_TARGET_SIGMAS
+export const TAG_RULE_HOLD_MINUTES = BRACKET_HOLD_BARS
 
 /** A holder is told up to this long after an announcement: the fall went on for a day, after a
  * delisting and after a tag. */

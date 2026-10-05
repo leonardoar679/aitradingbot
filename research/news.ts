@@ -1,8 +1,18 @@
 import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import { FEE_RATE } from '../shared/fees'
 import type { Candle } from '../shared/ipc'
 import { readEventAt } from '../shared/marketEvent'
+import {
+  BRACKET_HOLD_BARS,
+  ENTRY_DELAY_BARS,
+  HOLD_EXIT_BARS,
+  ORDINARY_SLIPPAGE,
+  THIN_BOOK_SLIPPAGE,
+  bracketNet,
+  fillMinutes,
+  holdNet,
+  spotSymbolCandidates
+} from '../shared/newsRules'
 import { classifyTitle, type NewsCategory } from '../shared/newsTitles'
 
 // Do Binance's own announcements move prices, by enough to trade after them? See research/NEWS.md
@@ -37,10 +47,10 @@ type Category = NewsCategory
  * trade in it is charged in slippage. A coin being delisted, or marked as one that may be, has a
  * thin book; the others are ordinary small coins. */
 const KINDS: Record<Category, { side: Side; market: Market; slippage: number; label: string }> = {
-  DELISTING: { side: -1, market: 'spot', slippage: 0.001, label: 'Delisting, short (paper only), on its spot USDT pair' },
-  FUTURES_LAUNCH: { side: 1, market: 'spot', slippage: 0.0005, label: 'Futures launch, long, on its spot USDT pair' },
-  SPOT_LISTING: { side: 1, market: 'um', slippage: 0.0005, label: 'Spot listing, long, on its USDT perpetual' },
-  MONITORING_TAG: { side: -1, market: 'spot', slippage: 0.001, label: 'Monitoring Tag, short (paper only), on its spot USDT pair' }
+  DELISTING: { side: -1, market: 'spot', slippage: THIN_BOOK_SLIPPAGE, label: 'Delisting, short (paper only), on its spot USDT pair' },
+  FUTURES_LAUNCH: { side: 1, market: 'spot', slippage: ORDINARY_SLIPPAGE, label: 'Futures launch, long, on its spot USDT pair' },
+  SPOT_LISTING: { side: 1, market: 'um', slippage: ORDINARY_SLIPPAGE, label: 'Spot listing, long, on its USDT perpetual' },
+  MONITORING_TAG: { side: -1, market: 'spot', slippage: THIN_BOOK_SLIPPAGE, label: 'Monitoring Tag, short (paper only), on its spot USDT pair' }
 }
 const CATEGORIES: Category[] = ['DELISTING', 'FUTURES_LAUNCH', 'SPOT_LISTING', 'MONITORING_TAG']
 
@@ -75,10 +85,8 @@ function daysAround(sec: number): string[] {
 }
 
 function candidatesFor(category: Category, ticker: string): string[] {
-  const own = `${ticker}USDT`
-  if (category === 'SPOT_LISTING') return [own, `1000${ticker}USDT`]
-  const bare = ticker.replace(/^(1000000|1000|1M)(?=[A-Z])/, '')
-  return bare !== ticker ? [own, `${bare}USDT`] : [own]
+  if (category === 'SPOT_LISTING') return [`${ticker}USDT`, `1000${ticker}USDT`]
+  return spotSymbolCandidates(ticker)
 }
 
 function splitOf(sec: number): 'discovery' | 'heldout' | null {
@@ -141,11 +149,8 @@ interface Manifest {
   [key: string]: { status: 'ok'; symbol: string } | { status: 'none'; tried: string[] }
 }
 
-/** A minute with no row had no trade in it; it is carried at the last close with no volume, so
- * "n bars ago" keeps meaning n minutes. A hole longer than half an hour -- maintenance, a halt --
- * is not filled: the series is cut there, and only the part holding the announcement is kept. */
-const LONGEST_FILLED_SECONDS = 30 * 60
-
+/** The days' candles as one series with no holes (shared/newsRules.ts fillMinutes): a minute with
+ * no row is carried at the last close, and a hole longer than half an hour cuts the series. */
 function loadBars(market: Market, symbol: string, days: string[], aroundSec: number): { bars: Candle[]; filled: number } | null {
   const raw: number[][] = []
   for (const day of days) {
@@ -153,76 +158,23 @@ function loadBars(market: Market, symbol: string, days: string[], aroundSec: num
     if (existsSync(file)) raw.push(...(JSON.parse(readFileSync(file, 'utf-8')) as number[][]))
   }
   if (raw.length === 0) return null
-  raw.sort((a, b) => a[0] - b[0])
-  let bars: Candle[] = []
-  let filled = 0
-  for (const row of raw) {
-    const time = row[0]
-    const previous = bars[bars.length - 1]
-    if (previous !== undefined) {
-      if (time <= previous.time) continue
-      if (time - previous.time > LONGEST_FILLED_SECONDS) {
-        if (previous.time >= aroundSec) break
-        bars = []
-      } else {
-        for (let t = previous.time + 60; t < time; t += 60) {
-          bars.push({ time: t, open: previous.close, high: previous.close, low: previous.close, close: previous.close, volume: 0 })
-          filled++
-        }
-      }
-    }
-    bars.push({ time, open: row[1], high: row[2], low: row[3], close: row[4], volume: row[5] })
-  }
-  return { bars, filled }
+  return fillMinutes(
+    raw.map((row) => ({ time: row[0], open: row[1], high: row[2], low: row[3], close: row[4], volume: row[5] })),
+    aroundSec
+  )
 }
 
 // ---------------------------------------------------------------------------------------------
-// The trade: the bracket every study here has used (research/EVENTS.md), unchanged.
+// The trades: the bracket every study here has used (research/EVENTS.md), unchanged, and the
+// four-hour hold -- written down after the discovery half had been seen and before the held-out
+// half was (NEWS.md says why, and holds it to a stricter bar). Both are shared/newsRules.ts, which
+// the app's record of the rules since the study scores with too.
 
-/** An app that reads the list once a minute sees an announcement within the minute after it, and
- * can act at the next bar's open at the earliest: the second bar after the announcement's own. */
-const ENTRY_DELAY_BARS = 2
-const STOP_SIGMAS = 1.5
-const TARGET_SIGMAS = 3
-const HOLD_BARS = 60
-const ROUND_TRIP_FEE_PCT = FEE_RATE * 2 * 100
 /** The plain move after the announcement, in minutes. */
 const HORIZONS = [1, 5, 15, 60, 240, 1440]
 /** "The usual": the same measure at every fifteenth minute of the same pair before the news. */
 const USUAL_EVERY_BARS = 15
 const LEAST_USUAL_SAMPLES = 96
-
-function bracket(bars: Candle[], entryIndex: number, side: Side, sigma15Pct: number, slippage: number): number | null {
-  if (entryIndex + HOLD_BARS > bars.length) return null
-  const open = bars[entryIndex].open
-  const entry = open * (1 + side * slippage)
-  const stop = open * (1 - (side * STOP_SIGMAS * sigma15Pct) / 100)
-  const target = open * (1 + (side * TARGET_SIGMAS * sigma15Pct) / 100)
-  const net = (exit: number): number => side * (exit / entry - 1) * 100 - ROUND_TRIP_FEE_PCT
-  for (let i = entryIndex; i < entryIndex + HOLD_BARS; i++) {
-    const bar = bars[i]
-    const stopped = side > 0 ? bar.low <= stop : bar.high >= stop
-    if (stopped) {
-      const level = side > 0 ? Math.min(stop, bar.open) : Math.max(stop, bar.open)
-      return net(level * (1 - side * slippage))
-    }
-    const reached = side > 0 ? bar.high >= target : bar.low <= target
-    if (reached) return net(target)
-  }
-  return net(bars[entryIndex + HOLD_BARS - 1].close * (1 - side * slippage))
-}
-
-/** The second trade, written down after the discovery half had been seen and before the held-out
- * half was (NEWS.md says why, and holds it to a stricter bar): in at the same second bar, out at
- * the open four hours after the announcement's minute, with no stop and no target. */
-const HOLD_EXIT_BARS = 240
-
-function hold(bars: Candle[], entryIndex: number, exitIndex: number, side: Side, slippage: number): number | null {
-  if (exitIndex >= bars.length || !(bars[entryIndex].open > 0)) return null
-  const entry = bars[entryIndex].open * (1 + side * slippage)
-  const exit = bars[exitIndex].open * (1 - side * slippage)
-  return side * (exit / entry - 1) * 100 - ROUND_TRIP_FEE_PCT
-}
 
 /** The move from bar `from`'s open to bar `to`'s open, in percent, in the news's direction. */
 function move(bars: Candle[], from: number, to: number, side: Side): number | null {
@@ -295,7 +247,7 @@ function score(pair: NewsPair, symbol: string, bars: Candle[]): Scored | { skipp
   if (reading === null) return { skipped: 'under twelve hours of candles before it' }
   const { side, slippage } = KINDS[pair.category]
   const entryIndex = i + ENTRY_DELAY_BARS
-  const net = bracket(bars, entryIndex, side, reading.sigma15Pct, slippage)
+  const net = bracketNet(bars, entryIndex, side, reading.sigma15Pct, slippage)
   if (net === null) return { skipped: 'under an hour of candles after it' }
 
   // The usual: the same bracket and the same moves at every fifteenth minute before the news, each
@@ -306,12 +258,12 @@ function score(pair: NewsPair, symbol: string, bars: Candle[]): Scored | { skipp
   for (let k = i - 1; k >= 720; k -= USUAL_EVERY_BARS) {
     const usualReading = readEventAt(bars, k - 1)
     if (usualReading === null) continue
-    if (k + ENTRY_DELAY_BARS + HOLD_BARS <= i) {
-      const value = bracket(bars, k + ENTRY_DELAY_BARS, side, usualReading.sigma15Pct, slippage)
+    if (k + ENTRY_DELAY_BARS + BRACKET_HOLD_BARS <= i) {
+      const value = bracketNet(bars, k + ENTRY_DELAY_BARS, side, usualReading.sigma15Pct, slippage)
       if (value !== null) usualNet.push(value)
     }
     if (k + HOLD_EXIT_BARS <= i) {
-      const value = hold(bars, k + ENTRY_DELAY_BARS, k + HOLD_EXIT_BARS, side, slippage)
+      const value = holdNet(bars, k + ENTRY_DELAY_BARS, k + HOLD_EXIT_BARS, side, slippage)
       if (value !== null) usualHold.push(value)
     }
     HORIZONS.forEach((minutes, h) => {
@@ -324,10 +276,10 @@ function score(pair: NewsPair, symbol: string, bars: Candle[]): Scored | { skipp
   if (usualNet.length < LEAST_USUAL_SAMPLES) return { skipped: 'under a day of candles before it to say what is usual' }
 
   const moves = HORIZONS.map((minutes) => move(bars, i, i + minutes, side))
-  const holdNet = hold(bars, entryIndex, i + HOLD_EXIT_BARS, side, slippage)
+  const heldNet = holdNet(bars, entryIndex, i + HOLD_EXIT_BARS, side, slippage)
   return {
-    holdNet,
-    holdExcess: holdNet === null || usualHold.length < LEAST_USUAL_SAMPLES / 2 ? null : holdNet - mean(usualHold),
+    holdNet: heldNet,
+    holdExcess: heldNet === null || usualHold.length < LEAST_USUAL_SAMPLES / 2 ? null : heldNet - mean(usualHold),
     pair,
     symbol,
     time: pair.releaseSec,

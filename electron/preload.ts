@@ -27,6 +27,7 @@ import type {
   ScannerState
 } from '../shared/marketScanner'
 import type { NewsConfigPatch, NewsFilter, NewsPage, NewsState } from '../shared/news'
+import type { NewsRecord } from '../shared/newsRecord'
 import {
   IpcChannel,
   type AppSettings,
@@ -129,6 +130,7 @@ const api = {
     getState: (): Promise<NewsState> => ipcRenderer.invoke(IpcChannel.NewsGetState),
     setConfig: (patch: NewsConfigPatch): Promise<NewsState> => ipcRenderer.invoke(IpcChannel.NewsSetConfig, patch),
     list: (filter: NewsFilter = {}): Promise<NewsPage> => ipcRenderer.invoke(IpcChannel.NewsList, filter),
+    record: (): Promise<NewsRecord> => ipcRenderer.invoke(IpcChannel.NewsRecord),
     onUpdate: (listener: (state: NewsState) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, state: NewsState): void => listener(state)
       ipcRenderer.on(IpcChannel.NewsUpdate, handler)

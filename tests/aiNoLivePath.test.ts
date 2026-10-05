@@ -236,7 +236,7 @@ describe('AI code has no route to a real order', () => {
     // files that read the news at all are exactly these. What a delisting does (shared/newsActions.ts)
     // is done by two files of src/news/, held below. Making anything else read the news is a
     // deliberate change, and it has to change this list to do it.
-    const main = [join(SERVICES, 'newsService.ts'), join(ROOT, 'electron', 'ipc', 'handlers', 'newsHandlers.ts')]
+    const main = [join(SERVICES, 'newsService.ts'), join(SERVICES, 'newsRecordService.ts'), join(ROOT, 'electron', 'ipc', 'handlers', 'newsHandlers.ts')]
     for (const path of main) {
       expect(importsOf(path).filter((name) => LIVE_MODULES.has(name)), path).toEqual([])
       expect(importsOf(path).filter((name) => aiModuleNames.has(name)), path).toEqual([])
@@ -244,9 +244,14 @@ describe('AI code has no route to a real order', () => {
     // It raises a delisting as an event through the scanner, which reads public candles; that is
     // the whole of what it reaches beyond its own files.
     expect(importsOf(join(SERVICES, 'newsService.ts')).sort()).toEqual(['atomicWrite', 'electron', 'jsonlStore', 'marketScannerService', 'news', 'newsActions', 'path', 'promises'])
+    // The record of the rules since the study reads the same lists, and the coins' candles through
+    // the market service that charts read: public data, kept in a file of its own.
+    expect(importsOf(join(SERVICES, 'newsRecordService.ts')).sort()).toEqual(['atomicWrite', 'electron', 'marketEvent', 'marketService', 'news', 'newsRecord', 'newsRules', 'path', 'promises'])
+    // The rules' arithmetic is arithmetic: the fee, the candle type and the detector's reading.
+    expect(importsOf(join(ROOT, 'shared', 'newsRules.ts')).sort()).toEqual(['fees', 'ipc', 'marketEvent'])
     expect(importsOf(join(ROOT, 'shared', 'news.ts'))).toEqual(['newsTitles'])
     expect(importsOf(join(ROOT, 'shared', 'newsTitles.ts'))).toEqual([])
-    for (const path of [join(ROOT, 'src', 'explorer', 'NewsCard.tsx'), join(ROOT, 'src', 'settings', 'NewsSettingsCard.tsx')]) {
+    for (const path of [join(ROOT, 'src', 'explorer', 'NewsCard.tsx'), join(ROOT, 'src', 'explorer', 'NewsRecordCard.tsx'), join(ROOT, 'src', 'settings', 'NewsSettingsCard.tsx')]) {
       const source = readFileSync(path, 'utf-8')
       expect([...new Set([...source.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))], path).toEqual(['news'])
     }
@@ -271,13 +276,17 @@ describe('AI code has no route to a real order', () => {
       'electron/services/aiSignalService.ts',
       // ...and the event is raised through the scanner, from the coin's own candles.
       'electron/services/marketScannerService.ts',
+      // The record of the two rules since the study: Binance's lists and the coins' candles, scored.
+      'electron/services/newsRecordService.ts',
       'electron/services/newsService.ts',
       'shared/news.ts',
       'shared/newsActions.ts',
+      'shared/newsRecord.ts',
       'src/App.tsx',
       // Shows where one of the rule's shorts came from, from the mark on it.
       'src/executors/ExecutorCard.tsx',
       'src/explorer/NewsCard.tsx',
+      'src/explorer/NewsRecordCard.tsx',
       'src/news/NewsScheduler.tsx',
       'src/news/newsPaperShort.ts',
       'src/settings/NewsSettingsCard.tsx'
@@ -300,7 +309,7 @@ describe('AI code has no route to a real order', () => {
     }
     expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron/)
     // The rules read a coin's usual move with the detector's arithmetic, which imports types alone.
-    expect(importsOf(rules).sort()).toEqual(['ipc', 'liveBalances', 'marketEvent', 'news'])
+    expect(importsOf(rules).sort()).toEqual(['ipc', 'liveBalances', 'marketEvent', 'news', 'newsRules'])
     // Paper is written where the executor is made, and the function that makes it takes no mode.
     const source = readFileSync(writer, 'utf-8')
     expect(source.match(/mode: 'paper'/g)).toHaveLength(2)

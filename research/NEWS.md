@@ -445,3 +445,16 @@ On 5 October the user chose the same three for a tag as for a delisting, and not
 The app's reader now reads Binance's news, and sorts the tag by these same patterns, moved to
 `shared/newsTitles.ts`. Each of the three is switched on its own, beside a delisting's, under
 Settings › Market; the README describes what was built ("What a Monitoring Tag does").
+
+## After the study: the record
+
+The study's held-out half ended on 30 September 2026. From 1 October, each rule that passed is kept
+to account in the app, on Discovery ("The news rules since the study"):
+- every delisting and every coin Binance adds to the Monitoring Tag is scored as its rule trades it,
+  whether or not anything was traded;
+- the scoring is this study's own arithmetic, moved to `shared/newsRules.ts`, which `news.ts` now
+  imports. Its output is unchanged to the byte: the plan, the minute checks and both halves' scores;
+- each rule's mean per coin sits beside the held-out half's: a delisting held short made 15.5% a
+  coin there, and the tag's bracket 0.6%.
+
+On 5 October 2026, when the record began, Binance had announced neither since the study ended.

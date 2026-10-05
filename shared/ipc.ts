@@ -37,6 +37,7 @@ export const IpcChannel = {
   NewsSetConfig: 'news:setConfig',
   NewsList: 'news:list',
   NewsUpdate: 'news:update',
+  NewsRecord: 'news:record',
   CredentialsList: 'credentials:list',
   CredentialsSet: 'credentials:set',
   CredentialsTest: 'credentials:test',

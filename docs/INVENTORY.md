@@ -120,7 +120,7 @@ The main process also runs loops that need no window at all:
 ## IPC channels
 
 79 channels when this was written, each found by searching `src/` for the `window.api` call that
-reaches it. A call may span lines. The four `news` channels were added after, in V3 Stage 7.
+reaches it. A call may span lines. The `news` channels were added after: four in V3 Stage 7, and the record of the news rules on 5 October 2026.
 
 | Namespace | Channels | Called from |
 |---|---|---|
@@ -129,7 +129,7 @@ reaches it. A call may span lines. The four `news` channels were added after, in
 | `market` | 12: symbols, symbol rules, candles and ticker subscriptions, 24-hour ticker, historical ranges | Charts, Market, Backtest, executors, the watch, benchmarks, Explorer |
 | `backtest` | `exportSave` | Backtest results, strategy comparison, Journal |
 | `scanner` | 8: state, config, events, history scan, universe, updates | Explorer, Opportunities, the watch, the event benchmark, the live board, Journal |
-| `news` | 4: state, config, list, updates | Discovery's announcements card, Settings › Market, and `NewsScheduler` (what a delisting does). Nothing else reads it (`tests/aiNoLivePath.test.ts`) |
+| `news` | 5: state, config, list, updates, the rules' record | Discovery's announcements card and its record of the news rules, Settings › Market, and `NewsScheduler` (what a delisting or a tag does). Nothing else reads it (`tests/aiNoLivePath.test.ts`) |
 | `credentials` | 10: list, set, test, remove, balances, futures positions, close, stops | Settings, Account, the live trading bar, New Executor, the ledger check |
 | `ai` | 22: key, signal tapes, config, calls, usage, entry confirmation, benchmark, opportunities, experiments | Agents' tabs, Backtest, Bots, the watch |
 | `liveTrading` | 19: status, limits, kill switch, arm, positions, orders, watchers, TWAP | The live trading bar, Settings, Executors, Positions, `LiveOrderScheduler`, Portfolio |

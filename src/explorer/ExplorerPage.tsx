@@ -21,6 +21,7 @@ import { describeError } from '../utils/ipcError'
 import { useNowSec } from '../utils/useNowSec'
 import { loadEventMoves, type EventMoves } from './eventOutcomes'
 import { NewsCard } from './NewsCard'
+import { NewsRecordCard } from './NewsRecordCard'
 
 const PAIRS_SHOWN = 15
 const EVENTS_SHOWN = 25
@@ -308,6 +309,7 @@ export function ExplorerPage({ onNavigate }: { onNavigate: (page: Page) => void 
       </Card>
 
       <NewsCard onNavigate={onNavigate} />
+      <NewsRecordCard />
     </>
   )
 }
