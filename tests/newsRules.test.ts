@@ -107,11 +107,15 @@ describe('the rules, on one coin', () => {
 })
 
 describe('one module for the study and the app', () => {
-  it('is what research/news.ts scores with: it keeps no copy of its own', () => {
-    const study = readFileSync(join(__dirname, '..', 'research', 'news.ts'), 'utf-8')
-    expect(study).toContain("from '../shared/newsRules'")
-    for (const copy of [/function bracket\(/, /function hold\(/, /LONGEST_FILLED_SECONDS\s*=/, /STOP_SIGMAS\s*=/, /ROUND_TRIP_FEE_PCT\s*=/, /slippage: 0\.\d/]) {
-      expect(study, String(copy)).not.toMatch(copy)
+  // research/announcementStudy.ts scores every announcement study; research/news.ts (Binance's) and
+  // research/upbit.ts (Upbit's) bring their own kinds and costs.
+  it('is what the studies score with: none of them keeps a copy of its own', () => {
+    for (const file of ['news.ts', 'announcementStudy.ts', 'upbit.ts']) {
+      const study = readFileSync(join(__dirname, '..', 'research', file), 'utf-8')
+      expect(study, file).toContain("from '../shared/newsRules'")
+      for (const copy of [/function bracket\(/, /function hold\(/, /LONGEST_FILLED_SECONDS\s*=/, /STOP_SIGMAS\s*=/, /ROUND_TRIP_FEE_PCT\s*=/, /slippage: 0\.\d/]) {
+        expect(study, `${file} ${String(copy)}`).not.toMatch(copy)
+      }
     }
   })
 })
