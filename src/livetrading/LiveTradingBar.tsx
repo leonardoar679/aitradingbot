@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle, Power, ShieldOff } from 'lucide-react'
-import type { LiveTradingStatus, LiveWatcherSummary } from '../../shared/ipc'
+import type { CredentialStatus, LiveTradingStatus, LiveWatcherSummary } from '../../shared/ipc'
+import { AiStatusChip } from '../ai/AiStatusChip'
+import { StatusChip } from '../status/StatusChip'
+import { connectionStateOf, describeConnection, describeTradingMode, tradingModeOf } from '../status/statusModes'
 import { describeBlockedExits } from './blockedExits'
 
 const POLL_MS = 15_000
@@ -27,7 +30,8 @@ function buttonStyle(kind: 'arm' | 'disarm' | 'kill' | 'release'): React.CSSProp
 
 export function LiveTradingBar(): React.JSX.Element | null {
   const [status, setStatus] = useState<LiveTradingStatus | null>(null)
-  const [credentialConfigured, setCredentialConfigured] = useState(false)
+  const [binance, setBinance] = useState<CredentialStatus | undefined>(undefined)
+  const credentialConfigured = binance?.configured === true
   const [watchers, setWatchers] = useState<LiveWatcherSummary[]>([])
   const [busy, setBusy] = useState(false)
   // Two risk-increasing controls live on this bar, and both used to fire on a single click:
@@ -48,7 +52,7 @@ export function LiveTradingBar(): React.JSX.Element | null {
     window.api.liveTrading.getStatus().then(setStatus).catch((error) => console.error('Failed to load live trading status:', error))
     window.api.credentials
       .list()
-      .then((list) => setCredentialConfigured(list.some((c) => c.exchange === 'binance' && c.configured)))
+      .then((list) => setBinance(list.find((c) => c.exchange === 'binance')))
       .catch((error) => console.error('Failed to load credential status:', error))
     window.api.liveTrading
       .listActiveWatchers()
@@ -106,10 +110,34 @@ export function LiveTradingBar(): React.JSX.Element | null {
 
   if (!status) return null
 
+  // The state of things at a glance, on every page: whether a real order can be placed at all,
+  // whether the exchange key is good, and what the AI does by itself. Read from the gates and the
+  // settings themselves (src/status/statusModes.ts); hovering one says what it means.
+  const chips = (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+      <StatusChip mode={describeTradingMode(tradingModeOf({ binanceKey: credentialConfigured, status }))} />
+      <StatusChip mode={describeConnection('Binance', connectionStateOf(binance))} />
+      <AiStatusChip />
+    </span>
+  )
+
   if (!credentialConfigured) {
     return (
-      <div style={{ padding: '0.4rem 1rem', fontSize: '0.72rem', color: 'var(--text-muted)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-        Live trading: not available — add a verified Binance API key on Connections to enable it.
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.7rem',
+          flexWrap: 'wrap',
+          padding: '0.35rem 1rem',
+          fontSize: '0.72rem',
+          color: 'var(--text-muted)',
+          borderBottom: '1px solid var(--border)',
+          flexShrink: 0
+        }}
+      >
+        {chips}
+        <span>Live trading: not available — add a verified Binance API key on Connections to enable it.</span>
       </div>
     )
   }
@@ -145,7 +173,8 @@ export function LiveTradingBar(): React.JSX.Element | null {
         color: engaged ? '#fff' : 'var(--text-primary)'
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.78rem', fontWeight: 700 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.78rem', fontWeight: 700, flexWrap: 'wrap' }}>
+        {chips}
         <AlertTriangle size={14} />
         {engaged
           ? 'KILL SWITCH ENGAGED — live trading blocked'

@@ -7,8 +7,10 @@ import {
   slippageRateForEvent,
   type OpportunityOutcome
 } from '../../shared/aiOpportunityOutcome'
-import { isActionableOpportunity, opportunitySide, opportunityWindow, type OpportunitySide } from '../../shared/aiOpportunity'
-import { GPT_LOOKBACK_BARS, type AiSignalDecision } from '../../shared/aiSignal'
+import { describeOpportunitySide, isActionableOpportunity, opportunitySide, opportunityWindow, type OpportunitySide } from '../../shared/aiOpportunity'
+import { describeDecider } from '../../shared/aiPanel'
+import { buildOpportunityProposal, opportunityProposalProblem, type AiOrderProposal } from '../../shared/aiProposal'
+import { GPT_LOOKBACK_BARS, GPT_MIN_CONFIDENCE, type AiSignalDecision } from '../../shared/aiSignal'
 import type { Candle, Exchange } from '../../shared/ipc'
 import { EVENT_BAR_SECONDS, EVENT_LOOKBACK_BARS, type MarketEvent } from '../../shared/marketEvent'
 
@@ -307,4 +309,70 @@ export function rightNowRows(feed: EventFeedItem[], bars: ReadonlyMap<string, Ca
   }
   const strength = (row: RightNowRow): number => row.item.event.live?.candidateScore ?? row.item.event.score
   return rows.sort((a, b) => strength(b) - strength(a) || b.item.event.time - a.item.event.time || a.item.event.id.localeCompare(b.item.event.id))
+}
+
+/** How far back Overview looks for the event it names when nothing can be acted on. */
+export const OVERVIEW_CANDIDATE_SECONDS = 3600
+
+export type OverviewOpportunity =
+  | { kind: 'valid'; row: RightNowRow; answer: EventAnswer }
+  | { kind: 'none'; candidate: { item: EventFeedItem; status: FeedItemStatus | null; lacks: string } | null }
+
+/** What one event lacks to be acted on now, in a sentence, from its status. */
+export function describeWhatItLacks(item: EventFeedItem, status: FeedItemStatus | null): string {
+  if (status === 'waiting') return 'No model has been asked about it.'
+  if (status === 'asked') {
+    const answered = item.answers.filter((answer) => !answer.decision.rejected)
+    if (answered.length === 0) return 'Every answer to it was refused.'
+    const surest = answered.reduce((best, answer) => (answer.decision.confidence > best.decision.confidence ? answer : best))
+    const side = opportunitySide(surest.decision)
+    return `No model would act on it: the surest answer was ${describeDecider(surest.model)}'s ${side === null ? 'NO TRADE' : describeOpportunitySide(side)} at ${Math.round(surest.decision.confidence * 100)}%, and this app acts at ${Math.round(GPT_MIN_CONFIDENCE * 100)}% or more.`
+  }
+  if (status === 'expired') return 'Its entry ran out without filling.'
+  if (status === 'open') return 'Its entry has filled: it is a position now, not an offer.'
+  if (status === 'closed') return 'Its trades are over.'
+  if (status === 'valid') return 'Its entry is still on offer.'
+  return 'The candles that would say where it stands have not been read yet.'
+}
+
+/** What Overview leads with: the strongest recommendation that can still be acted on, or -- the
+ * usual case -- that there is none, with the strongest event of the last hour and what it lacks.
+ * Saying so is the point: a page that always has a trade to offer is not a better one. */
+export function overviewOpportunity(feed: EventFeedItem[], bars: ReadonlyMap<string, Candle[]>, nowSec: number): OverviewOpportunity {
+  const rows = rightNowRows(feed, bars, nowSec)
+  if (rows.length > 0) {
+    const row = rows[0]
+    const answer = row.item.answers.find((entry) => entry.model === row.model)
+    if (answer !== undefined) return { kind: 'valid', row, answer }
+  }
+  const recent = feed.filter((item) => item.event.time <= nowSec && nowSec - item.event.time <= OVERVIEW_CANDIDATE_SECONDS)
+  if (recent.length === 0) return { kind: 'none', candidate: null }
+  const strength = (item: EventFeedItem): number => item.event.live?.candidateScore ?? item.event.score
+  const item = [...recent].sort((a, b) => strength(b) - strength(a) || b.event.time - a.event.time)[0]
+  const status = feedItemStatus(item, bars.get(item.event.id), nowSec)
+  return { kind: 'none', candidate: { item, status, lacks: describeWhatItLacks(item, status) } }
+}
+
+/** The order form a recommendation fills in, or why none can be. The price now decides whether it
+ * enters at market or waits, and whether the price has already left its range; without one, the
+ * event's own price stands in, which is the last the model saw. It fills in a FORM: a person sets
+ * the amount and submits it, through every gate an order made by hand passes. */
+export async function proposalForAnswer(
+  item: EventFeedItem,
+  answer: EventAnswer,
+  lastPrice: () => Promise<number | null>,
+  now: () => number = () => Math.floor(Date.now() / 1000)
+): Promise<{ proposal: AiOrderProposal } | { problem: string }> {
+  let price: number | null = null
+  try {
+    price = await lastPrice()
+  } catch {
+    price = null
+  }
+  const nowSec = now()
+  const proposal = buildOpportunityProposal({ event: item.event, decision: answer.decision, nowSec, lastPrice: price })
+  if (proposal === null) {
+    return { problem: opportunityProposalProblem(item.event.time, answer.decision, nowSec, price) ?? 'No order form can be made from this recommendation.' }
+  }
+  return { proposal }
 }

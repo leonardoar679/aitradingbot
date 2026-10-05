@@ -38,7 +38,7 @@ other.
 
 | Group | Page | What it does |
 |---|---|---|
-| AI Trader | **Overview** | The landing page: what you hold, and the starter presets for someone with nothing running yet. |
+| AI Trader | **Overview** | The landing page, answering five questions from what the app already reads. **The market**: Bitcoin and ether over the hour and four hours, whether Bitcoin is rising, falling or flat, and what is moving most, from the scanner's last pass. **What can be acted on**: the strongest recommendation still on offer, with its entry, stop, target, time left and a Paper trade button — or, usually, "No high-quality opportunity right now. Wait." with the strongest event of the last hour and what it lacks. **What the models said** about it. **What you hold**: value, paper strategies running, real positions open. **Safety**: whether a real order can be placed, the day's loss, the AI's spend and what the watch does. The starter presets lead it for someone with nothing running. |
 | | **Opportunities** | What can be traded right now: the [watch](#ai-signals--paper-only) that puts events to models with no click, the recommendations still valid ("No high-quality opportunity right now. Wait." when there are none), and every event the scanner raised with each model's call, Ask and Paper trade. A call fills in an order form at most; a person places it. |
 | | **Markets** | One pair on any supported exchange: candlestick chart with indicators, symbol search, live ticker. |
 | | **AI Decisions** | **Analyze** asks a model about one market; **Signals** lists every call any model has made and how it turned out. A model is handed a market snapshot and returns one JSON decision, and is given no tools at all. |
@@ -53,6 +53,18 @@ other.
 | System | **Risk & Safety** | The live trading limits every real order is checked against (largest order, the day's notional, the day's loss, the managed allocation), and the controller groups: executors under a shared stop-loss, take-profit and maximum drawdown with a P&L snapshot every 5 minutes, all stopped on a breach. Arming and the kill switch stay on the bar at the top of every page. |
 | | **Connections** | Every key the app holds: Binance and Upbit ([Credentials](#credentials--api-keys)), and the OpenRouter key for the AI models. Each is tested before it is stored, stored encrypted, and never read back into the window. |
 | | **Settings** | Appearance (Dark / Light / Colorblind-safe), and the AI models: which may be asked, the default and the route, the daily budget, the pace, and what asking has cost. |
+
+**The status bar** at the top of every page carries three chips beside the arm and kill controls,
+each read from the thing it describes (`src/status/statusModes.ts`); hovering one says what it
+means:
+- **PAPER, LIVE ARMED or KILL SWITCH**, from the live session's own gates.
+- **The Binance key**: none, stored, or its last test failed.
+- **What the AI does by itself**: the watch off, **SHADOW** (it asks models about events and scores
+  their calls, and opens nothing) or **PAPER TRADES**, with today's AI spend against its budget.
+
+Those are the V3 document's modes as this app has them. Its "confirm" mode is how any call reaches
+a real order: it fills in a form a person submits. Its fourth mode, a model placing real orders,
+does not exist and is not shown.
 
 ### Live strategy monitor
 
@@ -2327,7 +2339,8 @@ src/                          React renderer app
   navigation/pages.ts          The sidebar's four groups, the Page union, and the views of the pages that have them
 
   The pages, one folder each, put together from the components below where they are:
-  overview/                   Overview (the landing page)
+  overview/                   Overview: the market, what can be acted on, what you hold, safety
+  status/                     What the status bar and Overview say: the trading mode, the watch's mode, a key's state
   opportunities/              Opportunities
   ai-decisions/               AI Decisions (Analyze, Signals)
   performance/                Performance

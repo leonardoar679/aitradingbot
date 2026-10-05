@@ -174,7 +174,13 @@ describe('AI code has no route to a real order', () => {
       join(ROOT, 'src', 'agents', 'OpportunityCard.tsx'),
       join(ROOT, 'src', 'agents', 'opportunities.ts'),
       join(ROOT, 'src', 'opportunities', 'OpportunitiesPage.tsx'),
-      join(ROOT, 'src', 'ai-decisions', 'AiDecisionsPage.tsx')
+      join(ROOT, 'src', 'ai-decisions', 'AiDecisionsPage.tsx'),
+      // Overview leads with the strongest call still on offer and can hand it on too. What it
+      // shows of the live session is read in files of its own (SafetySummary, HoldingsSummary),
+      // which offer no call -- so the card that does, and the page, are held to this rule.
+      join(ROOT, 'src', 'overview', 'OverviewPage.tsx'),
+      join(ROOT, 'src', 'overview', 'TopOpportunityCard.tsx'),
+      join(ROOT, 'src', 'agents', 'useEventFeed.ts')
     ]
     for (const path of proposing) {
       const source = readFileSync(path, 'utf-8')
@@ -295,6 +301,19 @@ describe('AI code has no route to a real order', () => {
     // It only ever looks at its own: a paper Position carrying the watch's mark.
     expect(writer).toContain('watchPaperExecutors(executors).filter((entry) => entry.status === \'active\')')
     expect(readFileSync(join(ROOT, 'shared', 'aiWatchPaper.ts'), 'utf-8')).toContain("executor.watch !== undefined && executor.mode === 'paper' && executor.type === 'position'")
+  })
+
+  it('the AI\'s part of the status bar reads two settings and offers nothing', () => {
+    // It sits on the live-trading bar, beside the arm and kill controls, so it is held to the
+    // narrowest rule of all: it reads whether a key is stored and what the AI setting is, and
+    // nothing that carries a call -- no proposal, no feed, no answer -- is anywhere near it.
+    const chip = join(ROOT, 'src', 'ai', 'AiStatusChip.tsx')
+    const source = readFileSync(chip, 'utf-8')
+    expect([...source.matchAll(/window\.api\.(\w+)\.(\w+)/g)].map((match) => `${match[1]}.${match[2]}`).sort()).toEqual(['ai.credentialsStatus', 'ai.getConfig'])
+    expect(importsOf(chip).sort()).toEqual(['StatusChip', 'aiCost', 'react', 'statusModes'])
+    const modes = readFileSync(join(ROOT, 'src', 'status', 'statusModes.ts'), 'utf-8')
+    expect(modes).not.toMatch(/window\.|ipcRenderer|electron/)
+    expect(importsOf(join(ROOT, 'src', 'status', 'statusModes.ts')).sort()).toEqual(['aiCost', 'ipc'])
   })
 
   it('the model is offered no tools', () => {

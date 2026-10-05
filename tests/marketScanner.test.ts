@@ -251,6 +251,17 @@ describe('one pass', () => {
     expect(eventsOnFile()).toHaveLength(1)
   })
 
+  it('hands what is on file to everyone who asks at once, not only to the first', async () => {
+    // Overview reads the scanner's state from two cards in the same moment as it opens. A flag set
+    // before the read finished gave the second the empty list, and with the scanner off nothing
+    // ever put the events back.
+    await (await scanner()).scanOnce(NOW_MS)
+    vi.resetModules()
+    const restarted = await scanner()
+    const [first, second, third] = await Promise.all([restarted.getScannerState(), restarted.getScannerState(), restarted.getScannerState()])
+    expect([first.recentEvents.length, second.recentEvents.length, third.recentEvents.length]).toEqual([1, 1, 1])
+  })
+
   it('shows a pair whose candles are stale, and raises nothing on them', async () => {
     // Three minutes later, and the exchange has served nothing new: not even a forming bar.
     for (const [symbol, bars] of market.history) market.candles.set(symbol, bars)

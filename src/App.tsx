@@ -32,8 +32,8 @@ function App(): React.JSX.Element {
   const [tabs, setTabs] = useState<PageTabs>(DEFAULT_TABS)
   // Set when Overview's first-run card is clicked, cleared as soon as Execution has acted on it.
   const [presetsRequested, setPresetsRequested] = useState(false)
-  // Set when a model's call is turned into an order form on Opportunities, AI Decisions or a
-  // running bot, cleared as soon as Execution has opened that form. What crosses between pages is
+  // Set when a model's call is turned into an order form on Overview, Opportunities, AI Decisions
+  // or a running bot, cleared as soon as Execution has opened that form. What crosses between pages is
   // a filled-in form, never an order: see shared/aiProposal.ts.
   const [orderProposal, setOrderProposal] = useState<AiOrderProposal | null>(null)
   const [collapsed, setCollapsed] = useState(false)
@@ -56,8 +56,8 @@ function App(): React.JSX.Element {
     }
   }
 
-  // The same hand-over from every place a call is shown: Opportunities, AI Decisions, a running
-  // bot. The form is on Strategies › Execution.
+  // The same hand-over from every place a call is shown: Overview, Opportunities, AI Decisions, a
+  // running bot. The form is on Strategies › Execution.
   function prepareOrder(proposal: AiOrderProposal): void {
     setOrderProposal(proposal)
     navigate({ page: 'strategies', tab: 'execution' })
@@ -113,7 +113,7 @@ function App(): React.JSX.Element {
           {/* Keyed by page so navigating away from a broken page and back retries it, rather than
               the boundary latching its error for the rest of the session. */}
           <ErrorBoundary key={page} label={`The ${pageLabel(page)} page`}>
-            {page === 'overview' && <OverviewPage onGetStarted={openPresets} />}
+            {page === 'overview' && <OverviewPage onGetStarted={openPresets} onPrepareOrder={prepareOrder} onNavigate={navigate} />}
             {page === 'opportunities' && <OpportunitiesPage onPrepareOrder={prepareOrder} />}
             {page === 'markets' && <Dashboard />}
             {page === 'ai-decisions' && (

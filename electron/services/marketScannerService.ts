@@ -88,7 +88,8 @@ let universeSize = 0
 const pairs = new Map<string, ScannerPair>()
 /** Newest first. */
 let recentEvents: MarketEvent[] = []
-let recentLoaded = false
+/** The read of what is on file, shared by everyone who asks while it is under way. */
+let recentLoading: Promise<void> | null = null
 const raised = new Map<string, RaisedEvent[]>()
 let lastPassAt: number | null = null
 let lastPassMs: number | null = null
@@ -167,13 +168,27 @@ function remember(event: MarketEvent): void {
 
 /** What is on file from before this session: the newest events for the page, and the last half
  * hour's for the cooldown, so that restarting the app in the middle of a pump does not raise it
- * a second time. */
+ * a second time.
+ *
+ * EVERY CALLER WAITS FOR THE SAME READ. A flag set before the read had finished handed anyone who
+ * asked in the meantime the empty list -- and Overview asks from two cards in the same moment as
+ * it opens, so one of them showed no events, and with the scanner off nothing ever corrected it.
+ * A read that fails is logged and tried again by the next caller, rather than leaving the page
+ * without its history for the rest of the session. */
 async function loadRecent(): Promise<void> {
-  if (recentLoaded) return
-  recentLoaded = true
-  const page = await listMarketEvents({ limit: RECENT_EVENTS_KEPT })
-  recentEvents = page.rows
-  for (const event of [...page.rows].reverse()) remember(event)
+  if (recentLoading === null) {
+    recentLoading = listMarketEvents({ limit: RECENT_EVENTS_KEPT }).then(
+      (page) => {
+        recentEvents = page.rows
+        for (const event of [...page.rows].reverse()) remember(event)
+      },
+      (failure: unknown) => {
+        recentLoading = null
+        console.error('The market events on file could not be read:', failure)
+      }
+    )
+  }
+  return recentLoading
 }
 
 async function inBatches<T>(items: T[], concurrency: number, work: (item: T) => Promise<void>): Promise<void> {

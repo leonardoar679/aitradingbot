@@ -1,20 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Card } from '../components/Card'
 import { PageHeader } from '../components/PageHeader'
+import { SummaryLine } from '../components/SummaryLine'
+import { TextLink } from '../components/TextLink'
 import { LiveAccountSection } from '../account/LiveAccountSection'
 import type { LiveTradingStatus, LiveWatcherSummary } from '../../shared/ipc'
 import type { Page } from '../navigation/pages'
 
 const POLL_MS = 15_000
-
-function line(label: string, value: string, tone?: 'up' | 'down' | 'gold'): React.JSX.Element {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', padding: '0.35rem 0', borderBottom: '1px solid var(--border)', fontSize: '0.82rem' }}>
-      <span style={{ color: 'var(--text-secondary)' }}>{label}</span>
-      <span style={{ fontWeight: 600, color: tone === undefined ? 'var(--text-primary)' : tone === 'gold' ? 'var(--gold)' : `var(--${tone})` }}>{value}</span>
-    </div>
-  )
-}
 
 /** The session's gates as they stand, read only. Arming and the kill switch are on the bar at the
  * top of every page and stay there; the limits are set on Risk & Safety. */
@@ -52,15 +45,6 @@ function LiveSessionCard({ onNavigate }: { onNavigate: (page: Page) => void }): 
     }
   }, [])
 
-  const link = (label: string, page: Page): React.JSX.Element => (
-    <button
-      onClick={() => onNavigate(page)}
-      style={{ background: 'none', border: 'none', padding: 0, color: 'var(--accent)', cursor: 'pointer', font: 'inherit', textDecoration: 'underline' }}
-    >
-      {label}
-    </button>
-  )
-
   return (
     <Card title="This session">
       {problem !== null ? (
@@ -69,22 +53,27 @@ function LiveSessionCard({ onNavigate }: { onNavigate: (page: Page) => void }): 
         <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)' }}>Loading…</p>
       ) : (
         <>
-          {line('Real orders', status.killSwitchEngaged ? 'Blocked by the kill switch' : status.sessionArmed ? 'Armed: can be placed' : 'Disarmed: none can be placed', status.killSwitchEngaged ? 'down' : status.sessionArmed ? 'down' : 'up')}
-          {line('Placed today', `${status.dailyUsedQuote.toFixed(2)} of ${status.dailyCapQuote} a day`)}
-          {line(
-            'Realized today',
-            `${status.realizedPnlToday >= 0 ? '+' : ''}${status.realizedPnlToday.toFixed(2)}, against a loss limit of ${status.dailyLossLimitQuote} a day`,
-            status.realizedPnlToday < 0 ? 'down' : undefined
-          )}
-          {line(
-            'Managed allocation',
-            status.allocationQuote === null ? 'None set' : `${status.allocationCommittedQuote.toFixed(2)} of ${status.allocationQuote.toFixed(2)} at work`
-          )}
-          {line('Exits being watched', watchers.length === 0 ? 'None' : `${watchers.length}: ${watchers.map((watcher) => watcher.symbol).join(', ')}`)}
+          <SummaryLine
+            label="Real orders"
+            value={status.killSwitchEngaged ? 'Blocked by the kill switch' : status.sessionArmed ? 'Armed: can be placed' : 'Disarmed: none can be placed'}
+            tone={status.killSwitchEngaged || status.sessionArmed ? 'down' : 'up'}
+          />
+          <SummaryLine label="Placed today" value={`${status.dailyUsedQuote.toFixed(2)} of ${status.dailyCapQuote} a day`} />
+          <SummaryLine
+            label="Realized today"
+            value={`${status.realizedPnlToday >= 0 ? '+' : ''}${status.realizedPnlToday.toFixed(2)}, against a loss limit of ${status.dailyLossLimitQuote} a day`}
+            tone={status.realizedPnlToday < 0 ? 'down' : undefined}
+          />
+          <SummaryLine
+            label="Managed allocation"
+            value={status.allocationQuote === null ? 'None set' : `${status.allocationCommittedQuote.toFixed(2)} of ${status.allocationQuote.toFixed(2)} at work`}
+          />
+          <SummaryLine label="Exits being watched" value={watchers.length === 0 ? 'None' : `${watchers.length}: ${watchers.map((watcher) => watcher.symbol).join(', ')}`} />
           <p style={{ margin: '0.75rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.55 }}>
-            Arming and the kill switch are on the bar at the top of every page. The limits are set on {link('Risk & Safety', 'risk')}, real
-            positions and their history are on {link('Positions', 'positions')}, and live executors are made and stopped on{' '}
-            {link('Strategies', 'strategies')}.
+            Arming and the kill switch are on the bar at the top of every page. The limits are set on{' '}
+            <TextLink onClick={() => onNavigate('risk')}>Risk &amp; Safety</TextLink>, real positions and their history are on{' '}
+            <TextLink onClick={() => onNavigate('positions')}>Positions</TextLink>, and live executors are made and stopped on{' '}
+            <TextLink onClick={() => onNavigate('strategies')}>Strategies</TextLink>.
           </p>
         </>
       )}

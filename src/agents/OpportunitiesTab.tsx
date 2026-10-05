@@ -1,28 +1,23 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Card } from '../components/Card'
 import { describeAiOpportunityCost, type AiConfig } from '../../shared/aiCost'
-import type { AiCallRecord } from '../../shared/aiLedger'
-import { AI_OPPORTUNITY_MAX_MODELS, AI_OPPORTUNITY_PROMPT_VERSION } from '../../shared/aiOpportunity'
+import { AI_OPPORTUNITY_MAX_MODELS } from '../../shared/aiOpportunity'
 import { describeDecider } from '../../shared/aiPanel'
-import { buildOpportunityProposal, opportunityProposalProblem, type AiOrderProposal } from '../../shared/aiProposal'
+import type { AiOrderProposal } from '../../shared/aiProposal'
 import { watchEventIdsToday, watchPausedModels } from '../../shared/aiWatch'
 import { describeWatchPaperTally, watchPaperExecutors, watchPaperTally } from '../../shared/aiWatchPaper'
-import type { Candle, ExecutorConfig } from '../../shared/ipc'
-import { describeEventType, type MarketEvent } from '../../shared/marketEvent'
+import type { ExecutorConfig } from '../../shared/ipc'
+import { describeEventType } from '../../shared/marketEvent'
 import { describeError } from '../utils/ipcError'
 import { useNowSec } from '../utils/useNowSec'
 import { buttonStyle, noteStyle } from './agentStyles'
 import { OpportunityCard } from './OpportunityCard'
-import { askModels, assembleFeed, fetchEventQuestion, loadFeedBars, rightNowRows, type CandleFetch, type EventAnswer, type EventFeedItem } from './opportunities'
-import { getWatchActivity, subscribeWatchActivity } from './opportunityWatch'
+import { askModels, fetchEventQuestion, proposalForAnswer, rightNowRows, type CandleFetch, type EventAnswer, type EventFeedItem } from './opportunities'
 import { RightNowCard } from './RightNowCard'
+import { useEventFeed } from './useEventFeed'
 import { WatchCard } from './WatchCard'
 
 const EVENTS_SHOWN = 20
-/** How many answers are read back from the ledger. One row an answer, newest first. */
-const CALLS_READ = 5000
-/** A recommendation changes at most once a minute: when a minute closes. */
-const OUTCOME_REFRESH_SEC = 60
 /** How often the executors on file are read again, for the watch's own paper trades. */
 const PAPER_REFRESH_MS = 30_000
 
@@ -51,57 +46,35 @@ export function OpportunitiesTab({
    * tab only hands the proposal up; it has no way to submit one. */
   onPrepareOrder?: (proposal: AiOrderProposal) => void
 } = {}): React.JSX.Element {
-  const [events, setEvents] = useState<MarketEvent[] | null>(null)
-  const [scannerOn, setScannerOn] = useState<boolean | null>(null)
-  const [calls, setCalls] = useState<AiCallRecord[]>([])
   const [config, setConfig] = useState<AiConfig | null>(null)
   const [ticked, setTicked] = useState<string[]>([])
-  const [bars, setBars] = useState<Map<string, Candle[]>>(new Map())
   const [busyEvent, setBusyEvent] = useState<string | null>(null)
   const [problems, setProblems] = useState<Record<string, string>>({})
-  const [loadProblem, setLoadProblem] = useState<string | null>(null)
+  const [configProblem, setConfigProblem] = useState<string | null>(null)
   const [shown, setShown] = useState(EVENTS_SHOWN)
-  const [watchAnswered, setWatchAnswered] = useState(getWatchActivity().answered)
   const [paperAccount, setPaperAccount] = useState<boolean | null>(null)
   const [watchTrades, setWatchTrades] = useState<ExecutorConfig[]>([])
   const nowSec = useNowSec(true, 15_000)
-  const barsAt = useRef(0)
-
-  const loadCalls = useCallback(async (): Promise<void> => {
-    // By prompt, not by where the call came from: an answer a benchmark bought for an event is
-    // the same answer, and belongs on that event's card.
-    const page = await window.api.ai.listCalls({ promptVersion: AI_OPPORTUNITY_PROMPT_VERSION, limit: CALLS_READ })
-    setCalls(page.rows)
-  }, [])
+  // The scanner's events, the answers held for them and the candles since: shared with Overview.
+  const { events, scannerOn, calls, feed, bars, loadCalls, problem: feedProblem, watchAnswered } = useEventFeed(shown)
+  const loadProblem = configProblem ?? feedProblem
 
   useEffect(() => {
     let cancelled = false
-    void (async (): Promise<void> => {
-      try {
-        const [state, nextConfig] = await Promise.all([window.api.scanner.getState(), window.api.ai.getConfig()])
+    window.api.ai.getConfig().then(
+      (nextConfig) => {
         if (cancelled) return
-        setEvents(state.recentEvents)
-        setScannerOn(state.config.enabled)
         setConfig(nextConfig)
         setTicked([nextConfig.defaultModel])
-        await loadCalls()
-      } catch (failure) {
-        if (!cancelled) setLoadProblem(describeError(failure))
+      },
+      (failure: unknown) => {
+        if (!cancelled) setConfigProblem(describeError(failure))
       }
-    })()
-    const stop = window.api.scanner.onUpdate((state) => {
-      if (cancelled) return
-      setEvents(state.recentEvents)
-      setScannerOn(state.config.enabled)
-    })
+    )
     return (): void => {
       cancelled = true
-      stop()
     }
-  }, [loadCalls])
-
-  // The watch's answers arrive with nobody pressing anything here, so the tab is told.
-  useEffect(() => subscribeWatchActivity((activity) => setWatchAnswered(activity.answered)), [])
+  }, [])
 
   // The watch's own paper trades, read from the executors on file. Read only: this tab writes
   // none of it.
@@ -124,27 +97,6 @@ export function OpportunitiesTab({
       clearInterval(timer)
     }
   }, [watchAnswered])
-  useEffect(() => {
-    if (watchAnswered > 0) void loadCalls().catch(() => undefined)
-  }, [watchAnswered, loadCalls])
-
-  const feed = useMemo(() => assembleFeed((events ?? []).slice(0, shown), calls), [events, calls, shown])
-  // Which events have a trade on them, and for which models: what the outcome fetch depends on.
-  const tradeKey = feed.map((item) => `${item.event.id}:${item.answers.map((answer) => answer.model).join(',')}`).join('|')
-
-  const refreshBars = useCallback(async (items: EventFeedItem[]): Promise<void> => {
-    barsAt.current = Math.floor(Date.now() / 1000)
-    setBars(await loadFeedBars(items, barsAt.current, fetchCandles))
-  }, [])
-
-  useEffect(() => {
-    void refreshBars(feed)
-    const timer = setInterval(() => {
-      if (Math.floor(Date.now() / 1000) - barsAt.current >= OUTCOME_REFRESH_SEC) void refreshBars(feed)
-    }, 15_000)
-    return (): void => clearInterval(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on what is on the cards, not the array's identity
-  }, [tradeKey, refreshBars])
 
   function setProblem(eventId: string, text: string | null): void {
     setProblems((current) => {
@@ -200,21 +152,13 @@ export function OpportunitiesTab({
     if (!onPrepareOrder) return
     const { event } = item
     setProblem(event.id, null)
-    // The price now, so the form can say whether it enters at market or waits. Without one the
-    // event's own price stands in, which is the last the model saw.
-    let lastPrice: number | null = null
-    try {
-      lastPrice = (await window.api.market.fetchTicker24h(event.exchange, event.symbol)).lastPrice
-    } catch {
-      lastPrice = null
-    }
-    const now = Math.floor(Date.now() / 1000)
-    const proposal = buildOpportunityProposal({ event, decision: answer.decision, nowSec: now, lastPrice })
-    if (proposal === null) {
-      setProblem(event.id, opportunityProposalProblem(event.time, answer.decision, now, lastPrice) ?? 'No order form can be made from this recommendation.')
+    // The price now, so the form can say whether it enters at market or waits.
+    const result = await proposalForAnswer(item, answer, async () => (await window.api.market.fetchTicker24h(event.exchange, event.symbol)).lastPrice)
+    if ('problem' in result) {
+      setProblem(event.id, result.problem)
       return
     }
-    onPrepareOrder(proposal)
+    onPrepareOrder(result.proposal)
   }
 
   function toggle(model: string): void {
