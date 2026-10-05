@@ -1,10 +1,13 @@
 import { Moon, Sun, Eye } from 'lucide-react'
 import { Card } from '../components/Card'
 import { PageHeader } from '../components/PageHeader'
+import { TextLink } from '../components/TextLink'
 import { useTheme } from '../theme/ThemeContext'
 import type { Theme } from '../theme/palette'
 import { ModelsTab } from '../agents/ModelsTab'
 import { UsageTab } from '../agents/UsageTab'
+import type { Page } from '../navigation/pages'
+import { ScannerSettingsCard } from './ScannerSettingsCard'
 
 const THEME_OPTIONS: { id: Theme; label: string; icon: typeof Moon }[] = [
   { id: 'dark', label: 'Dark', icon: Moon },
@@ -21,14 +24,17 @@ function SectionHeading({ title, note }: { title: string; note: string }): React
   )
 }
 
-/** The settings that are not a key and not a risk limit: those are on Connections and on Risk &
- * Safety. Every value here is still validated by the process that stores it. */
-export function SettingsPanel(): React.JSX.Element {
+/** The Configuration Center: every setting that is not a key or a risk limit, in sections, and
+ * only settings that exist -- no control with nothing behind it (docs/INVENTORY.md lists what the
+ * V3 document asked for that does not). Keys are on Connections and limits on Risk & Safety, each
+ * in the one place, linked from the foot of this page. Every value here is still validated by the
+ * process that stores it. */
+export function SettingsPanel({ onNavigate }: { onNavigate: (page: Page) => void }): React.JSX.Element {
   const { theme, setTheme } = useTheme()
 
   return (
     <>
-      <PageHeader title="Settings" subtitle="Appearance, and the AI models this app may ask. Keys are on Connections, limits on Risk & Safety." />
+      <PageHeader title="Settings" subtitle="How the app looks, what the scanner watches, and which AI models may be asked" />
 
       <SectionHeading title="General" note="How the app looks." />
       <Card title="Appearance">
@@ -61,12 +67,22 @@ export function SettingsPanel(): React.JSX.Element {
         </div>
       </Card>
 
+      <SectionHeading title="Market" note="What the scanner watches. Its readings and events are on Discovery." />
+      <ScannerSettingsCard />
+
       <SectionHeading
         title="AI"
-        note="Which models may be asked, the default and the route, the daily budget, the pace, and what asking has cost."
+        note="Which models may be asked, the default and the route, the daily budget, the pace, and what asking has cost. The watch is switched on and off on Opportunities, beside what it has asked."
       />
       <ModelsTab />
       <UsageTab />
+
+      <SectionHeading title="Elsewhere" note="Two kinds of setting each have a page of their own." />
+      <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+        Exchange keys and the OpenRouter key are on <TextLink onClick={() => onNavigate('connections')}>Connections</TextLink>. The limits
+        every real order is checked against, and the controller groups, are on{' '}
+        <TextLink onClick={() => onNavigate('risk')}>Risk &amp; Safety</TextLink>.
+      </p>
     </>
   )
 }

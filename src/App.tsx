@@ -140,10 +140,10 @@ function App(): React.JSX.Element {
             )}
             {page === 'research' && <ResearchPage tab={tabs.research} onTab={(tab) => setTabs((current) => ({ ...current, research: tab }))} />}
             {page === 'ai-benchmark' && <AiBenchmarkPage />}
-            {page === 'discovery' && <ExplorerPage />}
+            {page === 'discovery' && <ExplorerPage onNavigate={navigate} />}
             {page === 'risk' && <RiskSafetyPage />}
             {page === 'connections' && <ConnectionsPage />}
-            {page === 'settings' && <SettingsPanel />}
+            {page === 'settings' && <SettingsPanel onNavigate={navigate} />}
           </ErrorBoundary>
         </main>
       </div>

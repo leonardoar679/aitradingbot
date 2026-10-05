@@ -61,7 +61,7 @@ export function MarketSummaryCard({ onNavigate }: { onNavigate: (page: Page) => 
     body = note(
       <>
         The scanner is off, so there is no reading of the market here. Switch it on under{' '}
-        <TextLink onClick={() => onNavigate('discovery')}>Discovery</TextLink>.
+        <TextLink onClick={() => onNavigate('settings')}>Settings › Market</TextLink>.
       </>
     )
   } else if (state.pairs.length === 0) body = note('The scanner has not finished its first pass yet.')

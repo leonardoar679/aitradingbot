@@ -259,7 +259,7 @@ export function describeAiWatchCost(input: {
     sum,
     '',
     budget,
-    ...(input.scannerOn ? [] : ['The scanner is off, so the watch has nothing to ask about until it is switched on under Discovery.']),
+    ...(input.scannerOn ? [] : ['The scanner is off, so the watch has nothing to ask about until it is switched on under Settings › Market.']),
     'It recommends and notifies. It places nothing real, and it stays on across restarts until you switch it off.',
     '',
     'Switch it on?'

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Card } from '../components/Card'
 import { PageHeader } from '../components/PageHeader'
-import { Toggle } from '../components/Toggle'
+import { TextLink } from '../components/TextLink'
+import type { Page } from '../navigation/pages'
 import {
   EVENT_CANDIDATE_SCORE,
   EVENT_FOLLOW_MINUTES,
@@ -14,8 +15,8 @@ import {
   type MarketEvent,
   type MarketEventType
 } from '../../shared/marketEvent'
-import { SCANNER_UNIVERSE_SIZES, type ScannerPair, type ScannerState } from '../../shared/marketScanner'
-import { cellStyle, headCellStyle, inputStyle, noteStyle, signedPct, buttonStyle } from '../agents/agentStyles'
+import type { ScannerPair, ScannerState } from '../../shared/marketScanner'
+import { cellStyle, headCellStyle, noteStyle, signedPct, buttonStyle } from '../agents/agentStyles'
 import { describeError } from '../utils/ipcError'
 import { useNowSec } from '../utils/useNowSec'
 import { loadEventMoves, type EventMoves } from './eventOutcomes'
@@ -187,9 +188,8 @@ function EventsTable({ events, moves }: { events: MarketEvent[]; moves: Map<stri
  *
  * Everything on this page is public market data read by the main process, or worked out from it.
  * Opening it asks no model and costs nothing, and nothing here can place an order. */
-export function ExplorerPage(): React.JSX.Element {
+export function ExplorerPage({ onNavigate }: { onNavigate: (page: Page) => void }): React.JSX.Element {
   const [state, setState] = useState<ScannerState | null>(null)
-  const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const [moves, setMoves] = useState<Map<string, EventMoves>>(new Map())
   const nowSec = useNowSec(state?.config.enabled === true, 1000)
@@ -238,18 +238,6 @@ export function ExplorerPage(): React.JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the ids shown, not the array's identity
   }, [eventKey, refreshMoves])
 
-  async function change(patch: { enabled?: boolean; universeSize?: number }): Promise<void> {
-    setBusy(true)
-    setProblem(null)
-    try {
-      setState(await window.api.scanner.setConfig(patch))
-    } catch (failure) {
-      setProblem(describeError(failure))
-    } finally {
-      setBusy(false)
-    }
-  }
-
   const enabled = state?.config.enabled === true
   const pairs = state?.pairs ?? []
 
@@ -258,24 +246,12 @@ export function ExplorerPage(): React.JSX.Element {
       <PageHeader title="Discovery" subtitle="What is moving right now, measured the same way for every pair" />
 
       <Card title="Scanner">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flexWrap: 'wrap' }}>
-          <Toggle on={enabled} onChange={(next) => !busy && void change({ enabled: next })} />
-          <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)', fontWeight: 600 }}>{enabled ? 'On' : 'Off'}</span>
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Watch the</span>
-          <select
-            aria-label="Pairs watched"
-            value={state?.config.universeSize ?? ''}
-            disabled={busy || state === null}
-            onChange={(event) => void change({ universeSize: Number(event.target.value) })}
-            style={inputStyle()}
-          >
-            {SCANNER_UNIVERSE_SIZES.map((size) => (
-              <option key={size} value={size}>
-                {size}
-              </option>
-            ))}
-          </select>
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>most traded USDT pairs on Binance</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>
+          <span style={{ color: enabled ? 'var(--up)' : 'var(--text-secondary)', fontWeight: 700 }}>{enabled ? 'On' : 'Off'}</span>
+          <span style={{ color: 'var(--text-secondary)' }}>
+            {state === null ? '' : `watching the ${state.config.universeSize} most traded USDT pairs on Binance.`} It is switched on and off, and its
+            pairs chosen, under <TextLink onClick={() => onNavigate('settings')}>Settings › Market</TextLink>.
+          </span>
         </div>
 
         {state !== null && enabled && (
@@ -291,13 +267,13 @@ export function ExplorerPage(): React.JSX.Element {
         <p style={{ ...noteStyle, marginTop: '0.8rem' }}>
           Once a minute, a few seconds after the minute closes, every watched pair is read from its last twelve hours of
           1-minute candles. This is public market data only: no key is used, no model is asked and nothing is placed.
-          It costs one request a pair a minute, and it stays on across restarts until you switch it off.
+          It costs one request a pair a minute, and it stays on across restarts until it is switched off.
         </p>
       </Card>
 
       <Card title="Now">
         {pairs.length === 0 ? (
-          <p style={noteStyle}>{enabled ? 'Waiting for the first pass.' : 'Switch the scanner on to see what is moving.'}</p>
+          <p style={noteStyle}>{enabled ? 'Waiting for the first pass.' : 'Switch the scanner on under Settings › Market to see what is moving.'}</p>
         ) : (
           <NowTable pairs={pairs} />
         )}

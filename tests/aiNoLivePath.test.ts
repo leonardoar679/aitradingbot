@@ -208,7 +208,9 @@ describe('AI code has no route to a real order', () => {
       join(ROOT, 'shared', 'marketEvent.ts'),
       join(ROOT, 'shared', 'marketScanner.ts'),
       join(ROOT, 'src', 'explorer', 'ExplorerPage.tsx'),
-      join(ROOT, 'src', 'explorer', 'eventOutcomes.ts')
+      join(ROOT, 'src', 'explorer', 'eventOutcomes.ts'),
+      // Where it is switched on and its pairs chosen, since Settings became the one place for that.
+      join(ROOT, 'src', 'settings', 'ScannerSettingsCard.tsx')
     ]
     for (const path of renderer) {
       const source = readFileSync(path, 'utf-8')

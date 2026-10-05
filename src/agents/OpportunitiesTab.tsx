@@ -215,7 +215,7 @@ export function OpportunitiesTab({
 
       {scannerOn === false && (
         <p style={{ ...noteStyle, color: 'var(--gold)' }}>
-          The scanner is off, so no new events are being raised. Switch it on under Discovery. Events it raised earlier are
+          The scanner is off, so no new events are being raised. Switch it on under Settings › Market. Events it raised earlier are
           still listed here.
         </p>
       )}

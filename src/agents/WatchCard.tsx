@@ -110,7 +110,7 @@ export function WatchCard({
       // Free: what one call to each model is expected to cost, on a recent event's question.
       const priced = await priceWatchCall(events, chosen, { fetchCandles, peek: (request) => window.api.ai.peekOpportunity(request) })
       if (priced === null) {
-        setProblem('The scanner has not raised an event yet, so there is no question to price a call on. Switch the scanner on under Discovery, and switch the watch on once it has raised one.')
+        setProblem('The scanner has not raised an event yet, so there is no question to price a call on. Switch the scanner on under Settings › Market, and switch the watch on once it has raised one.')
         return
       }
       const next: AiWatchConfig = { enabled: true, models: chosen, maxEventsPerDay: limit, minBand: band, firstModelGates: gates && chosen.length > 1 }
@@ -205,7 +205,7 @@ export function WatchCard({
             </p>
           ))}
           {scannerOn === false && (
-            <p style={{ ...noteStyle, color: 'var(--gold)', marginTop: '0.5rem' }}>The scanner is off, so the watch has nothing to ask about. Switch it on under Discovery.</p>
+            <p style={{ ...noteStyle, color: 'var(--gold)', marginTop: '0.5rem' }}>The scanner is off, so the watch has nothing to ask about. Switch it on under Settings › Market.</p>
           )}
           <div style={{ marginTop: '0.8rem' }}>
             <button onClick={() => void switchOff()} disabled={busy} style={buttonStyle('secondary', busy)}>
