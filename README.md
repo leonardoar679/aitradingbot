@@ -49,10 +49,10 @@ other.
 | | **Strategies** | **Active Runs**: a bot is a single continuous dry-run of a [chosen strategy](#strategies) against one exchange/symbol, optionally with a model asked to [confirm each entry](#ai-signals--paper-only); disabling one records a run, removing one archives it. **Execution**: the eight executor types, each running independently against live candles, the starter presets, and the New Executor form a call's filled-in form opens on — see [Executors](#executors) below. |
 | Research | **Backtest & Research** | **Backtest** runs a chosen strategy over a historical range and shows full stats, equity curve vs. buy-and-hold, monthly breakdown and a trade log; its **Live** view monitors the same route continuously ([Live strategy monitor](#live-strategy-monitor)), **Charts** replays each trade against the candles, and **Compare Strategies** ranks every registered strategy over the same candles. An optional tick box has a model [confirm each entry](#ai-signals--paper-only). Both views export CSV, JSON and a PNG. **Automation** re-runs saved backtests on a schedule while the app is open, each run keeping a session-only report. |
 | | **AI Benchmark** | Several models on the same questions, scored side by side: on candles, and on the events the scanner raised, with the no-model rows beside them and every run kept as an experiment that can be reopened for nothing. |
-| | **Discovery** | The market scanner: once a minute it reads the most traded USDT pairs on Binance and says what is moving, scores each the same way, and records the moves that qualify as events — see [Discovery](#discovery--a-market-scanner). Public market data only: no key, no model, no order. It is switched on, and its pairs chosen, under Settings › Market. Below it, [Binance's own announcements](#binances-announcements-on-discovery) — delistings, futures launches, listings — as they are released, with what each kind did to prices; read only, and switched on under Settings › Market too. |
+| | **Discovery** | The market scanner: once a minute it reads the most traded USDT pairs on Binance and says what is moving, scores each the same way, and records the moves that qualify as events — see [Discovery](#discovery--a-market-scanner). Public market data only: no key, no model, no order. It is switched on, and its pairs chosen, under Settings › Market. Below it, [Binance's own announcements](#binances-announcements-on-discovery) — delistings, futures launches, listings — as they are released, with what each kind did to prices. The reader is switched on under Settings › Market too, with what a delisting does: a notice if you hold the coin, a paper short by the rule, a question to the watch's models. |
 | System | **Risk & Safety** | The live trading limits every real order is checked against (largest order, the day's notional, the day's loss, the managed allocation), and the controller groups: executors under a shared stop-loss, take-profit and maximum drawdown with a P&L snapshot every 5 minutes, all stopped on a breach. Arming and the kill switch stay on the bar at the top of every page. |
 | | **Connections** | Every key the app holds: Binance and Upbit ([Credentials](#credentials--api-keys)), and the OpenRouter key for the AI models. Each is tested before it is stored, stored encrypted, and never read back into the window. |
-| | **Settings** | The Configuration Center, in sections, built only from settings that exist. **General**: appearance (Dark / Light / Colorblind-safe). **Market**: the scanner on or off, and how many pairs it watches. **AI**: which models may be asked, the default and the route, the daily budget, the pace, and what asking has cost. Keys stay on Connections and limits on Risk & Safety, each in the one place, linked from here. What the V3 document asked for that has no behaviour behind it (language, timezone, default order type, allowed pairs, news sources…) is listed in `docs/INVENTORY.md` rather than added as a control. |
+| | **Settings** | The Configuration Center, in sections, built only from settings that exist. **General**: appearance (Dark / Light / Colorblind-safe). **Market**: the scanner on or off, and how many pairs it watches; the reader of Binance's announcements, and what a delisting does. **AI**: which models may be asked, the default and the route, the daily budget, the pace, and what asking has cost. Keys stay on Connections and limits on Risk & Safety, each in the one place, linked from here. What the V3 document asked for that has no behaviour behind it (language, timezone, default order type, allowed pairs, other news sources…) is listed in `docs/INVENTORY.md` rather than added as a control. |
 
 **The status bar** at the top of every page carries three chips beside the arm and kill controls,
 each read from the thing it describes (`src/status/statusModes.ts`); hovering one says what it
@@ -1390,7 +1390,7 @@ electron/preload.ts  ── contextBridge ──▶  window.api.*  (renderer)
       ├── scanner.*  (what is moving, events)         → electron/services/marketScannerService.ts
       │                                                   (public market data; no key, model or order)
       ├── news.*  (Binance's announcements)           → electron/services/newsService.ts
-      │                                                   (one public list; no key, model or order)
+      │                                                   (two public lists; no key, model or order)
       ├── ai.*  (key, models, budget, signals, ledger) → electron/services/aiSignalService.ts
       │                                                   + openRouterClient.ts + aiConfigService.ts
       │                                                   + aiLedgerService.ts  (no route to an order)
@@ -1426,7 +1426,9 @@ electron/preload.ts  ── contextBridge ──▶  window.api.*  (renderer)
   `return null` components mounted once in `App.tsx`, so their `setInterval`s keep firing
   regardless of which page is active. `OpportunityScheduler` is the same kind of component with no
   timer of its own: it runs the [watch](#ai-signals--paper-only) each time the scanner reports a
-  pass. `RoutineScheduler`/`ControllerScheduler` poll their own
+  pass. `NewsScheduler` acts on a delisting each time the news reader reports one ([the notice and
+  the rule's paper short](#binances-announcements-on-discovery)), and looks at those shorts once a
+  minute to settle one that has closed. `RoutineScheduler`/`ControllerScheduler` poll their own
   settings slice every 10s to notice config changes made on the page component (there's no
   cross-component push channel); `LiveOrderScheduler` polls every open live limit order via the
   main process every 5s and patches the matching executor's status directly.
@@ -2463,7 +2465,7 @@ electron/                    Electron main process
   main.ts                    App entry point
   preload.ts                 contextBridge → window.api
   ipc/handlers/               One handler module per IPC surface (app, settings, market, scanner,
-                               credentials, ai, liveTrading, backtest)
+                               news, credentials, ai, liveTrading, backtest)
   services/                  settingsService, credentialsService, marketService,
                                liveTradingService (safety gates), livePositionsService (ledger),
                                liveOrdersService (resting limit orders)
@@ -2558,7 +2560,11 @@ src/                          React renderer app
   explorer/                   The market scanner's page (Discovery): what is moving now, the events
                               raised, and what the price did after each (eventOutcomes.ts);
                               NewsCard (Binance's announcements as the reader has read them)
-  settings/                   Settings, the Configuration Center: General, Market and AI
+  news/                       What a delisting does, headless: NewsScheduler (the notice and the
+                              rule's paper short) and newsPaperShort.ts (the one file that writes
+                              those shorts, paper by a literal)
+  settings/                   Settings, the Configuration Center: General, Market (the scanner, and
+                              NewsSettingsCard: the news reader and what a delisting does) and AI
 
   charts/                     Shared chart component
   components/                 Card, StatCard, EquityCurveChart, exchange/symbol pickers, etc.
