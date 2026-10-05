@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ExecutorConfig, PositionExecutorParams } from '../shared/ipc'
-import { DEFAULT_PAPER_DIGEST, healPaperDigest, paperDigest, paperDigestNotice, planPaperDigest, riskedAtStop, utcDay } from '../shared/paperDigest'
+import { DEFAULT_PAPER_DIGEST, healPaperDigest, paperDigest, paperDigestNotice, planPaperDigest, utcDay } from '../shared/paperDigest'
+import { riskedAtStop } from '../shared/paperRisk'
 
 // shared/paperDigest.ts: the one notice a day of what the app's own paper trades did the UTC day
 // before. src/risk/PaperDigestScheduler.tsx raises it, and tests/aiNoLivePath.test.ts holds that to

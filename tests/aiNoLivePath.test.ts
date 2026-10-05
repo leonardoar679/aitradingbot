@@ -454,7 +454,8 @@ describe('AI code has no route to a real order', () => {
     // the executors on file: the rules are arithmetic, and the scheduler reaches settings -- to read
     // them and to mark the day told -- and the notice, and nothing that opens, closes or asks.
     const rules = join(ROOT, 'shared', 'paperDigest.ts')
-    expect(importsOf(rules).sort()).toEqual(['fees', 'ipc'])
+    // R is paperRisk's arithmetic: what a trade made over what its stop would have lost.
+    expect(importsOf(rules).sort()).toEqual(['ipc', 'paperRisk'])
     expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron|liveTrading|placeLive/)
     const scheduler = join(ROOT, 'src', 'risk', 'PaperDigestScheduler.tsx')
     const source = readFileSync(scheduler, 'utf-8')

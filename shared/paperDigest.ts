@@ -1,5 +1,5 @@
-import { FEE_RATE } from './fees'
 import type { ExecutorConfig, PaperDigestSettings, PositionExecutorParams } from './ipc'
+import { describeR, rMultiple } from './paperRisk'
 
 // ONE DESKTOP NOTICE A DAY: WHAT THE APP'S OWN PAPER TRADES DID THE DAY BEFORE.
 //
@@ -30,14 +30,6 @@ export function healPaperDigest(value: unknown): PaperDigestSettings {
 /** `2026-10-05`, the UTC day a moment falls in. */
 export function utcDay(sec: number): string {
   return new Date(sec * 1000).toISOString().slice(0, 10)
-}
-
-/** What being stopped out would have lost, in the trade's quote: its stake times the distance to its
- * stop and a round trip's fees. Null for a trade with no stop -- a delisting's short -- which has
- * nothing to measure against. */
-export function riskedAtStop(params: Pick<PositionExecutorParams, 'amountQuote' | 'stopLossPct'>): number | null {
-  if (params.stopLossPct === null || !(params.stopLossPct > 0) || !(params.amountQuote > 0)) return null
-  return params.amountQuote * (params.stopLossPct / 100 + 2 * FEE_RATE)
 }
 
 export interface PaperDigestGroup {
@@ -90,10 +82,11 @@ export function paperDigest(executors: ExecutorConfig[], day: string): PaperDige
     const held = group.pnl.find((entry) => entry.asset === executor.quoteAsset)
     if (held === undefined) group.pnl.push({ asset: executor.quoteAsset, amount: result.pnlQuote })
     else held.amount += result.pnlQuote
-    const risked = riskedAtStop(executor.params as PositionExecutorParams)
-    if (risked === null) group.unmeasured++
+    // R, from shared/paperRisk.ts: what it made over what its stop would have lost.
+    const r = rMultiple(result.pnlQuote, executor.params as PositionExecutorParams)
+    if (r === null) group.unmeasured++
     else {
-      group.r += result.pnlQuote / risked
+      group.r += r
       group.rTrades++
     }
   }
@@ -117,8 +110,8 @@ function groupSentence(name: string, noun: [string, string], group: PaperDigestG
       group.rTrades === 0
         ? ', with no stop to measure R against'
         : group.rTrades === entered
-          ? `, or ${signed(group.r)} R against what each risked at its stop`
-          : `, or ${signed(group.r)} R for the ${group.rTrades} with a stop`
+          ? `, or ${describeR(group.r)} against what each risked at its stop`
+          : `, or ${describeR(group.r)} for the ${group.rTrades} with a stop`
     sentence += ` and closed ${entered}, ${group.ahead} of them ahead: ${sums} after fees${r}`
   }
   if (group.neverEntered > 0) sentence += entered > 0 ? `; ${group.neverEntered} more never entered` : `, and ${group.neverEntered} never entered`

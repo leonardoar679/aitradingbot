@@ -778,9 +778,17 @@ it is paper.
   frees its place under the limit. How it ended is written on it in the same write — the exit,
   the minute, and what it made or lost after the simulation's fees — because a stopped executor
   is not simulated again and nobody was there to see: its card on Strategies › Execution shows it
-  ("Target reached: +3.786 USDT after fees", "Never entered"), beside where the trade came from,
-  and the Watch card adds up the ones that have ended. One stopped by hand carries no result and
-  is not counted.
+  ("Target reached: +1.7 USDT after fees, +1.00 R", "Never entered"), beside where the trade came
+  from, and the Watch card adds up the ones that have ended ("2 have ended: 1 entered, 1 of them
+  ahead, +1.7 USDT in all after fees, or +1.00 R"). One stopped by hand carries no result and is
+  not counted.
+- **Each result is in R as well** (since 5 October 2026): what the trade made over what its stop
+  would have lost, its stake times the distance to the stop and a round trip's fees
+  (`shared/paperRisk.ts`). +1 R is a win as large as the loss its stop allowed. Sized by risk, a
+  trade's R and its result in USDT tell the same story; at a stake, R is what makes trades with
+  near and far stops comparable, and it adds across quote assets. The card, the Watch card's tally,
+  the trade's timeline and the daily digest all say it. A news rule's short is told the same way on
+  its card; a delisting's has no stop and gives no R.
 - **With a paper account, the result is settled into it** by the settlement a press of Stop
   runs, and a trade the account cannot fund is not opened. **With none, a result is added to no
   balance** and nothing limits what the positions add up to; the confirmation and the card both

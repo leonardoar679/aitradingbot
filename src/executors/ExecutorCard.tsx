@@ -423,7 +423,7 @@ function SingleMarketMetrics({ executor }: { executor: ExecutorConfig }): React.
           Closed {new Date(ended.closedAt * 1000).toLocaleString()} · stopped by {executor.newsRule !== undefined ? 'the news reader' : 'the watch'}
         </span>
         <span style={{ color: !watchPaperEntered(ended) ? 'var(--text-secondary)' : pctColor(ended.pnlQuote), fontWeight: 600 }}>
-          {describeWatchPaperResult(ended, executor.quoteAsset)}
+          {describeWatchPaperResult(ended, executor.quoteAsset, executor.params as PositionExecutorParams)}
         </span>
       </div>
     )

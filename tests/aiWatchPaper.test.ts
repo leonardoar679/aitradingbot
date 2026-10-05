@@ -621,6 +621,16 @@ describe('how the watch\'s paper trades ended', () => {
     expect(describeWatchPaperResult(never, 'USDT')).toBe('Never entered: the price did not trade in its entry range before it expired.')
   })
 
+  it('says it in R too, given the trade: what it made over what its stop would have lost', () => {
+    // 100 staked 1.5% from its stop, and a round trip's fees of 0.2%: 1.70 risked.
+    const staked = { amountQuote: 100, stopLossPct: 1.5 }
+    expect(describeWatchPaperResult(won, 'USDT', staked)).toBe('Target reached: +3.786 USDT after fees, +2.23 R.')
+    expect(describeWatchPaperResult(lost, 'USDT', staked)).toBe('Stopped out: -1.7 USDT after fees, -1.00 R.')
+    // A delisting's short has no stop: no R, and no word of one.
+    expect(describeWatchPaperResult({ exit: 'time_limit', pnlQuote: 12.4, closedAt: T }, 'USDT', { amountQuote: 100, stopLossPct: null })).toBe('Time ran out: +12.4 USDT after fees.')
+    expect(describeWatchPaperResult(never, 'USDT', staked)).toBe('Never entered: the price did not trade in its entry range before it expired.')
+  })
+
   it('says on a card where the trade came from, and that it is paper', () => {
     expect(describeWatchPaperOrigin(executor().watch!)).toBe('Opened by the watch, with nobody pressing anything, on a call by openai/gpt-5-mini (80% confidence, 09:07 UTC event). Paper.')
   })
@@ -638,7 +648,10 @@ describe('how the watch\'s paper trades ended', () => {
     expect(tally.pnl).toHaveLength(1)
     expect(tally.pnl[0].asset).toBe('USDT')
     expect(tally.pnl[0].amount).toBeCloseTo(2.08601, 8)
-    expect(describeWatchPaperTally(tally)).toBe('3 have ended: 2 entered, 1 of them ahead, +2.086 USDT in all after fees.')
+    // Each staked 100 1.5% from its stop: +3.786 is +2.23 R, and -1.70 is -1 R.
+    expect(tally.r).toBeCloseTo(3.78601 / 1.7 - 1, 9)
+    expect(tally.rTrades).toBe(2)
+    expect(describeWatchPaperTally(tally)).toBe('3 have ended: 2 entered, 1 of them ahead, +2.086 USDT in all after fees, or +1.23 R.')
   })
 
   it('counts nothing that is not a paper trade of the watch\'s, whatever is written on it', () => {
@@ -646,20 +659,24 @@ describe('how the watch\'s paper trades ended', () => {
     const grid = ended('ETHUSDT', won, { type: 'grid' })
     // Nor one that is still running: a result on it is not one the watch wrote when it stopped it.
     const running = ended('SOLUSDT', won, { status: 'active', stoppedAt: null })
-    expect(watchPaperTally([live, grid, running])).toEqual({ ended: 0, entered: 0, ahead: 0, pnl: [] })
+    expect(watchPaperTally([live, grid, running])).toEqual({ ended: 0, entered: 0, ahead: 0, pnl: [], r: 0, rTrades: 0 })
   })
 
   it('keeps each quote asset\'s sum apart', () => {
     const tally = watchPaperTally([ended('BTCUSDT', won), ended('ETHBTC', { exit: 'stop_loss', pnlQuote: -0.002, closedAt: T }, { quoteAsset: 'BTC' }), ended('SOLUSDT', lost)])
     expect(tally.pnl.map((entry) => entry.asset)).toEqual(['USDT', 'BTC'])
-    expect(describeWatchPaperTally(tally)).toBe('3 have ended: 3 entered, 1 of them ahead, +2.086 USDT and -0.002 BTC in all after fees.')
+    // R has no asset: it adds across them.
+    expect(describeWatchPaperTally(tally)).toBe('3 have ended: 3 entered, 1 of them ahead, +2.086 USDT and -0.002 BTC in all after fees, or +1.23 R.')
   })
 
   it('says so plainly when none entered, and nothing when none has ended', () => {
     expect(describeWatchPaperTally(watchPaperTally([ended('BTCUSDT', never)]))).toBe('1 has ended, and it never entered.')
     expect(describeWatchPaperTally(watchPaperTally([ended('BTCUSDT', never), ended('ETHUSDT', never)]))).toBe('2 have ended, and none entered.')
     expect(describeWatchPaperTally(watchPaperTally([executor()]))).toBe('')
-    expect(describeWatchPaperTally(watchPaperTally([ended('BTCUSDT', won)]))).toBe('1 has ended: 1 entered, 1 of them ahead, +3.786 USDT in all after fees.')
+    expect(describeWatchPaperTally(watchPaperTally([ended('BTCUSDT', won)]))).toBe('1 has ended: 1 entered, 1 of them ahead, +3.786 USDT in all after fees, or +2.23 R.')
+    // One with no stop to measure against is in the sum and not in the R.
+    const stopless = ended('ETHUSDT', won, { params: { ...(executor().params as PositionExecutorParams), stopLossPct: null } })
+    expect(describeWatchPaperTally(watchPaperTally([ended('BTCUSDT', won), stopless]))).toBe('2 have ended: 2 entered, 2 of them ahead, +7.572 USDT in all after fees, or +2.23 R for the 1 with a stop.')
   })
 })
 
@@ -784,7 +801,7 @@ describe('the safeguards', () => {
       ])
       expect(describeWatchPaperResult(dropped.watch!.result!, 'USDT')).toBe('Dropped before it entered: Bitcoin fell 1.17% after the call.')
       // It never entered: not counted as entered in the tally, nor as a loss.
-      expect(watchPaperTally([dropped])).toEqual({ ended: 1, entered: 0, ahead: 0, pnl: [] })
+      expect(watchPaperTally([dropped])).toEqual({ ended: 1, entered: 0, ahead: 0, pnl: [], r: 0, rTrades: 0 })
     })
 
     it('leaves it waiting when Bitcoin has not moved that far, or moved its way, or the safeguard is off', async () => {

@@ -132,7 +132,8 @@ describe("one trade's timeline", () => {
       "BUY 100 USDT on acme/follower's call at 80%, entering between 99.8 and 100.2 until 12:23:00 UTC, stop 1.5% and target 3% from the fill, held at most 1 hour. Paper: nothing real was placed."
     )
     expect(trace.steps[4].detail).toBe('Filled at 100.1.')
-    expect(trace.steps[5].detail).toContain('after fees.')
+    // In R too: what it made over what its stop 1.5% away would have lost on 100, with fees.
+    expect(trace.steps[5].detail).toMatch(/ after fees, [+-]\d+\.\d\d R\.$/)
   })
 
   it('sets the three prices side by side, and keeps the ids that joined them', () => {

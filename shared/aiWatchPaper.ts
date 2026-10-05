@@ -4,7 +4,7 @@ import { buildOpportunityProposal, opportunityObstacle } from './aiProposal'
 import { GPT_MIN_CONFIDENCE, type AiSignalDecision } from './aiSignal'
 import type { Candle, ExecutorConfig, ExecutorSide, PaperRiskSettings, PositionExecutorParams } from './ipc'
 import { describeEventType, type MarketEvent } from './marketEvent'
-import { describePaperRisk, sizePaperTrade } from './paperRisk'
+import { describePaperRisk, describeR, rMultiple, sizePaperTrade } from './paperRisk'
 
 // PAPER TRADES FROM THE WATCH.
 //
@@ -243,14 +243,17 @@ const EXIT_WORDS: Record<Exclude<WatchPaperOutcome['exit'], 'entry_expired' | 'b
   liquidation: 'Liquidated'
 }
 
-/** How a paper trade of the watch's ended, for its card: the exit, and what it made or lost. */
-export function describeWatchPaperResult(result: WatchPaperOutcome, quoteAsset: string): string {
+/** How a paper trade ended, for its card and its timeline: the exit, what it made or lost, and --
+ * given its parameters, where it had a stop -- that in R, against what its stop would have lost
+ * (shared/paperRisk.ts). A news rule's short ends the same ways, and is told the same way. */
+export function describeWatchPaperResult(result: WatchPaperOutcome, quoteAsset: string, params?: Pick<PositionExecutorParams, 'amountQuote' | 'stopLossPct'>): string {
   if (result.exit === 'entry_expired') return 'Never entered: the price did not trade in its entry range before it expired.'
   if (result.exit === 'btc_moved') {
     const move = result.btcMovePct ?? 0
     return `Dropped before it entered: Bitcoin ${move < 0 ? 'fell' : 'rose'} ${Math.abs(move).toFixed(2)}% after the call.`
   }
-  return `${EXIT_WORDS[result.exit]}: ${signedQuote(result.pnlQuote, quoteAsset)} after fees.`
+  const r = params === undefined ? null : rMultiple(result.pnlQuote, params)
+  return `${EXIT_WORDS[result.exit]}: ${signedQuote(result.pnlQuote, quoteAsset)} after fees${r === null ? '' : `, ${describeR(r)}`}.`
 }
 
 export interface WatchPaperTally {
@@ -262,12 +265,16 @@ export interface WatchPaperTally {
   ahead: number
   /** What the entered ones made or lost, by quote asset, in the order first seen. */
   pnl: { asset: string; amount: number }[]
+  /** What the entered ones with a stop made in what each risked there, added up -- R has no asset,
+   * so it adds across them -- and how many there were. */
+  r: number
+  rTrades: number
 }
 
 /** What the watch's ended paper trades add up to, from the results on file. One stopped by hand
  * carries no result and is not counted: nobody simulated it to its end. */
 export function watchPaperTally(executors: ExecutorConfig[]): WatchPaperTally {
-  const tally: WatchPaperTally = { ended: 0, entered: 0, ahead: 0, pnl: [] }
+  const tally: WatchPaperTally = { ended: 0, entered: 0, ahead: 0, pnl: [], r: 0, rTrades: 0 }
   for (const executor of watchPaperExecutors(executors)) {
     const result = executor.watch?.result
     if (executor.status !== 'stopped' || result === undefined) continue
@@ -278,6 +285,11 @@ export function watchPaperTally(executors: ExecutorConfig[]): WatchPaperTally {
     const held = tally.pnl.find((entry) => entry.asset === executor.quoteAsset)
     if (held === undefined) tally.pnl.push({ asset: executor.quoteAsset, amount: result.pnlQuote })
     else held.amount += result.pnlQuote
+    const r = rMultiple(result.pnlQuote, executor.params as PositionExecutorParams)
+    if (r !== null) {
+      tally.r += r
+      tally.rTrades++
+    }
   }
   return tally
 }
@@ -289,7 +301,8 @@ export function describeWatchPaperTally(tally: WatchPaperTally): string {
   if (tally.entered === 0) return `${ended}, and ${tally.ended === 1 ? 'it never' : 'none'} entered.`
   const sums = tally.pnl.map((entry) => signedQuote(entry.amount, entry.asset))
   const total = sums.length === 1 ? sums[0] : `${sums.slice(0, -1).join(', ')} and ${sums[sums.length - 1]}`
-  return `${ended}: ${tally.entered} entered, ${tally.ahead} of them ahead, ${total} in all after fees.`
+  const r = tally.rTrades === 0 ? '' : `, or ${describeR(tally.r)}${tally.rTrades < tally.entered ? ` for the ${tally.rTrades} with a stop` : ''}`
+  return `${ended}: ${tally.entered} entered, ${tally.ahead} of them ahead, ${total} in all after fees${r}.`
 }
 
 /** Why the watch opens no paper trade on this answer whatever the price is doing, or null when its

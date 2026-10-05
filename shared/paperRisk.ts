@@ -91,6 +91,26 @@ export function sizePaperTrade(input: { risk: PaperRiskSettings; stakeQuote: num
   }
 }
 
+/** What being stopped out would have lost, in the trade's quote: its stake times the distance to its
+ * stop and a round trip's fees. What a trade sized by risk stakes is this, solved for the stake. Null
+ * for a trade with no stop -- a delisting's short -- which has nothing to measure against. */
+export function riskedAtStop(params: Pick<PositionExecutorParams, 'amountQuote' | 'stopLossPct'>): number | null {
+  if (params.stopLossPct === null || !(params.stopLossPct > 0) || !(params.amountQuote > 0)) return null
+  return params.amountQuote * (params.stopLossPct / 100 + 2 * FEE_RATE)
+}
+
+/** What a closed trade made in what it risked at its stop: its R. +1 is a win as large as the loss
+ * its stop allowed; -1 is that loss. Null for a trade with no stop. */
+export function rMultiple(pnlQuote: number, params: Pick<PositionExecutorParams, 'amountQuote' | 'stopLossPct'>): number | null {
+  const risked = riskedAtStop(params)
+  return risked === null ? null : pnlQuote / risked
+}
+
+/** "+1.00 R", "-0.50 R". */
+export function describeR(r: number): string {
+  return `${r > 0 ? '+' : ''}${r.toFixed(2)} R`
+}
+
 /** The app's own open paper trades: the watch's and the news rules', each a paper Position carrying
  * its mark. An executor that is not paper is never one of them, whatever it carries. */
 function ownOpen(executors: ExecutorConfig[]): ExecutorConfig[] {

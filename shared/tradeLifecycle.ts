@@ -153,7 +153,7 @@ export function traceWatchTrade(records: WatchTradeRecords): WatchTradeTrace {
       steps.push({
         at: outcome.closedAt,
         label: outcome.exit === 'entry_expired' ? 'Never entered' : outcome.exit === 'btc_moved' ? 'Dropped' : 'Closed',
-        detail: describeWatchPaperResult(outcome, executor.quoteAsset),
+        detail: describeWatchPaperResult(outcome, executor.quoteAsset, executor.params as PositionExecutorParams),
         tone: !watchPaperEntered(outcome) ? 'muted' : outcome.pnlQuote >= 0 ? 'up' : 'down'
       })
     } else if (fill !== null && fill.status === 'closed' && fill.exitReason !== null) {
@@ -161,7 +161,7 @@ export function traceWatchTrade(records: WatchTradeRecords): WatchTradeTrace {
       steps.push({
         at: fill.closedAt,
         label: fill.exitReason === 'entry_expired' ? 'Never entered' : 'Closed',
-        detail: `${describeWatchPaperResult(result, executor.quoteAsset)} The watch has not stopped it yet.`,
+        detail: `${describeWatchPaperResult(result, executor.quoteAsset, executor.params as PositionExecutorParams)} The watch has not stopped it yet.`,
         tone: fill.exitReason === 'entry_expired' ? 'muted' : (fill.realizedPnl ?? 0) >= 0 ? 'up' : 'down'
       })
     } else if (executor.status === 'stopped') {
