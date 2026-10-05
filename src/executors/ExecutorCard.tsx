@@ -14,6 +14,7 @@ import { executorTypeMeta } from './executorTypeMeta'
 import { netUnrealizedPct } from '../../shared/fees'
 import { describeAiProposalOrigin } from '../../shared/aiProposal'
 import { describeWatchPaperOrigin, describeWatchPaperResult } from '../../shared/aiWatchPaper'
+import { describeNewsShortOrigin } from '../../shared/newsActions'
 import { TradeTimeline } from '../agents/TradeTimeline'
 import { useExecutorSimulation } from './useExecutorSimulation'
 import { useSpreadExecutorSimulation } from './useSpreadExecutorSimulation'
@@ -411,14 +412,16 @@ function SingleMarketMetrics({ executor }: { executor: ExecutorConfig }): React.
   const sim = useExecutorSimulation(executor)
 
   if (executor.status === 'stopped') {
-    // A paper trade the watch opened and then stopped because it had closed: nobody was there to
-    // see how, and a stopped executor is not simulated again, so its card says what was written
-    // on it when it ended.
-    const ended = executor.mode === 'paper' ? executor.watch?.result : undefined
+    // A paper trade the watch, or the news rule, opened and then stopped because it had closed:
+    // nobody was there to see how, and a stopped executor is not simulated again, so its card says
+    // what was written on it when it ended.
+    const ended = executor.mode === 'paper' ? (executor.watch?.result ?? executor.newsRule?.result) : undefined
     if (ended === undefined) return <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Stopped</div>
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.75rem' }}>
-        <span style={{ color: 'var(--text-muted)' }}>Closed {new Date(ended.closedAt * 1000).toLocaleString()} · stopped by the watch</span>
+        <span style={{ color: 'var(--text-muted)' }}>
+          Closed {new Date(ended.closedAt * 1000).toLocaleString()} · stopped by {executor.newsRule !== undefined ? 'the news reader' : 'the watch'}
+        </span>
         <span style={{ color: ended.exit === 'entry_expired' ? 'var(--text-secondary)' : pctColor(ended.pnlQuote), fontWeight: 600 }}>
           {describeWatchPaperResult(ended, executor.quoteAsset)}
         </span>
@@ -697,6 +700,11 @@ export function ExecutorCard({
         {executor.proposedBy !== undefined && (
           <div style={{ marginTop: '0.25rem', fontSize: '0.7rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
             {describeAiProposalOrigin(executor.proposedBy)}
+          </div>
+        )}
+        {executor.newsRule !== undefined && executor.mode === 'paper' && (
+          <div style={{ marginTop: '0.25rem', fontSize: '0.7rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
+            {describeNewsShortOrigin(executor.newsRule)}
           </div>
         )}
         {executor.watch !== undefined && executor.mode === 'paper' && (

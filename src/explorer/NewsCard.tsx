@@ -27,7 +27,7 @@ function readAfter(item: NewsItem): string {
 
 /** Binance's own announcements as the reader has read them (electron/services/newsService.ts),
  * sorted by their titles into the kinds research/NEWS.md measured, with what each kind did to
- * prices. Read and shown only: nothing here asks a model, and nothing is placed or opened. */
+ * prices. Read and shown only: this card asks no model and opens nothing. */
 export function NewsCard({ onNavigate }: { onNavigate: (page: Page) => void }): React.JSX.Element {
   const [state, setState] = useState<NewsState | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
@@ -123,8 +123,9 @@ export function NewsCard({ onNavigate }: { onNavigate: (page: Page) => void }): 
       </div>
       <p style={{ ...noteStyle, marginTop: '0.6rem' }}>
         What each kind did is from 2025 to September 2026, measured from the first minute an app reading the list once a minute could
-        act (research/NEWS.md). It is what prices did, not advice. Nothing in the app acts on an announcement: no model is asked about
-        one, and nothing is placed or opened because of one. A short can never be placed for real here.
+        act (research/NEWS.md). It is what prices did, not advice. What a delisting does is set under Settings › Market: a notice if
+        you hold the coin, and a paper short by the rule. Nothing real is placed or sold because of an announcement, and a short can
+        never be placed for real here.
       </p>
     </Card>
   )

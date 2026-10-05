@@ -276,10 +276,15 @@ stop and target, which is a bracket by another name, and the bracket is what fai
 second bar rather than four hours later kept about 13% of the coin's value, on average. That is a
 reason to sell, not a trade. A notice of it is not in the approved plan.
 
-So the parts every use of it needs are built:
+So the parts every use of it needs were built first:
 - the reader of Binance's list;
 - the patterns, moved to `shared/`;
 - the news on Discovery.
 
-How a delisting should act is the user's to choose: a paper short by the rule, the models, a notice
-to someone holding the coin, or nothing.
+How a delisting should act was left to the user. On 5 October they chose three of the four
+choices offered, and not "leave it":
+- **a notice** to someone holding the coin;
+- **the paper short by the rule**, the trade above;
+- **the models**, as the plan first said, alongside the rule.
+
+The README describes what was built (Discovery, "Binance's announcements on Discovery").

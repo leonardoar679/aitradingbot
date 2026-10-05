@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { matchesNewsFilter, newsListUrl, nextNewsReadDelayMs, parseArticleList, parseNewsLines, toNewsItem, type NewsItem } from '../shared/news'
+import { DEFAULT_NEWS_CONFIG, matchesNewsFilter, newsListUrl, nextNewsReadDelayMs, parseArticleList, parseNewsLines, toNewsItem, type NewsItem } from '../shared/news'
 
 // The news reader (electron/services/newsService.ts): Binance's two announcement lists, read once
 // a minute while it is on, each article kept once and sorted by shared/newsTitles.ts. Binance is
@@ -210,7 +210,7 @@ describe('its setting', () => {
     await startNewsReader()
     expect(vi.getTimerCount()).toBe(0)
     const state = await getNewsState()
-    expect(state.config).toEqual({ enabled: false })
+    expect(state.config).toEqual(DEFAULT_NEWS_CONFIG)
     expect(state.nextReadAt).toBeNull()
     expect(lists.calls).toEqual([])
   })
@@ -224,7 +224,7 @@ describe('its setting', () => {
     expect(vi.getTimerCount()).toBe(1)
     expect(lists.calls).toHaveLength(2)
     expect((await getNewsState()).recent).toHaveLength(4)
-    expect(JSON.parse(readFileSync(join(dir, 'news.json'), 'utf-8'))).toEqual({ enabled: true })
+    expect(JSON.parse(readFileSync(join(dir, 'news.json'), 'utf-8'))).toEqual({ ...DEFAULT_NEWS_CONFIG, enabled: true })
     // Saying "on" again while it is on starts nothing more.
     await setNewsConfig({ enabled: true })
     await whenNewsSettled()
@@ -236,14 +236,15 @@ describe('its setting', () => {
     expect(vi.getTimerCount()).toBe(2)
     const off = await relaunched.setNewsConfig({ enabled: false })
     expect(off.nextReadAt).toBeNull()
-    expect(JSON.parse(readFileSync(join(dir, 'news.json'), 'utf-8'))).toEqual({ enabled: false })
+    expect(JSON.parse(readFileSync(join(dir, 'news.json'), 'utf-8'))).toEqual(DEFAULT_NEWS_CONFIG)
   })
 
   it('refuses anything but on or off, and heals a file holding something else', async () => {
     const { setNewsConfig } = await reader()
     await expect(setNewsConfig({ enabled: 'yes' as never })).rejects.toThrow('The news reader is either on or off')
-    writeFileSync(join(dir, 'news.json'), JSON.stringify({ enabled: 'true' }))
+    await expect(setNewsConfig({ paperShort: { stakeQuote: 7 } })).rejects.toThrow('A paper short stakes 25, 50, 100, 250, 500, 1000')
+    writeFileSync(join(dir, 'news.json'), JSON.stringify({ enabled: 'true', paperShort: { enabled: 'yes' } }))
     vi.resetModules()
-    expect((await (await reader()).getNewsState()).config).toEqual({ enabled: false })
+    expect((await (await reader()).getNewsState()).config).toEqual(DEFAULT_NEWS_CONFIG)
   })
 })

@@ -663,6 +663,18 @@ export interface ExecutorConfig {
      * one a person stopped first. */
     result?: { exit: PositionExitReason; pnlQuote: number; closedAt: number }
   }
+  /** Set on a PAPER Position short opened by the rule research/NEWS.md measured, on Binance's
+   * announcement that it will delist a coin (shared/newsActions.ts): which announcement and which
+   * coin. Out four hours after the announcement's minute, with no stop and no target. Never
+   * present on a live executor: src/news/newsPaperShort.ts, the one file that makes one, spells
+   * paper as a literal. How it ended is written on it when it is stopped, as on the watch's. */
+  newsRule?: {
+    articleId: number
+    ticker: string
+    releaseSec: number
+    title: string
+    result?: { exit: PositionExitReason; pnlQuote: number; closedAt: number }
+  }
   /** Set once a live executor's order actually fills (market: immediately; limit: whenever
    * LiveOrderScheduler detects the resting order resolved). Null for every paper executor and
    * while any live limit order is still resting. For a live DCA executor with more than one

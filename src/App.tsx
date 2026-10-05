@@ -18,6 +18,7 @@ import { ConnectionsPage } from './connections/ConnectionsPage'
 import { SettingsPanel } from './settings/SettingsPanel'
 import { ControllerScheduler } from './controllers/ControllerScheduler'
 import { OpportunityScheduler } from './agents/OpportunityScheduler'
+import { NewsScheduler } from './news/NewsScheduler'
 import { RoutineScheduler } from './routines/RoutineScheduler'
 import { LiveTradingBar } from './livetrading/LiveTradingBar'
 import { LiveOrderScheduler } from './livetrading/LiveOrderScheduler'
@@ -91,6 +92,11 @@ function App(): React.JSX.Element {
           place anything, and what it opens by itself is paper. */}
       <ErrorBoundary label="The opportunity watch">
         <OpportunityScheduler />
+      </ErrorBoundary>
+      {/* What a delisting does: a notice to someone holding the coin, and the rule's paper short.
+          Off unless the news reader is on; nothing it does is real. */}
+      <ErrorBoundary label="The news reader's actions">
+        <NewsScheduler />
       </ErrorBoundary>
       <ErrorBoundary label="The live trading bar">
         <LiveTradingBar />

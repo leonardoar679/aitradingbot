@@ -26,7 +26,7 @@ import type {
   ScannerConfigPatch,
   ScannerState
 } from '../shared/marketScanner'
-import type { NewsConfig, NewsFilter, NewsPage, NewsState } from '../shared/news'
+import type { NewsConfigPatch, NewsFilter, NewsPage, NewsState } from '../shared/news'
 import {
   IpcChannel,
   type AppSettings,
@@ -127,7 +127,7 @@ const api = {
   // none of it reaches a model, a key or an order.
   news: {
     getState: (): Promise<NewsState> => ipcRenderer.invoke(IpcChannel.NewsGetState),
-    setConfig: (patch: Partial<NewsConfig>): Promise<NewsState> => ipcRenderer.invoke(IpcChannel.NewsSetConfig, patch),
+    setConfig: (patch: NewsConfigPatch): Promise<NewsState> => ipcRenderer.invoke(IpcChannel.NewsSetConfig, patch),
     list: (filter: NewsFilter = {}): Promise<NewsPage> => ipcRenderer.invoke(IpcChannel.NewsList, filter),
     onUpdate: (listener: (state: NewsState) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, state: NewsState): void => listener(state)

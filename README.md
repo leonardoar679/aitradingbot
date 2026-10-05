@@ -311,19 +311,27 @@ can be switched on. It is off until then, and stays as it was left across restar
 A tick box shows every other announcement too. Under the list, each kind carries what it did to
 prices on the held-out half.
 
-**It reads and shows, and nothing else.** No model is asked about an announcement, and nothing is
-placed or opened because of one.
+**What a delisting does** is what the user chose on 5 October 2026, once the study was in. Each part
+is switched under the same card on Settings › Market, and acts only on a delisting read while the app
+is open:
+- **A notice, if you hold the coin** (on by default once the reader is on). It reads where the coin
+  is held:
+  - your Binance balances, where a key is stored;
+  - the paper account, Inventory, and any executor running on the coin.
 
-That is deliberate. What passed is a rule: short at once, hold four hours, no stop. The plan's way
-in, raising it for the watch, would trade the model's own stop and target, the bracket that failed.
-So what a delisting should do has not been decided:
-- a paper short by the rule;
-- the models;
-- a notice to someone holding the coin;
-- or nothing.
+  It says where you hold it, what such coins did, and that nothing has been sold. It sells nothing.
+- **A paper short by the rule** (off until switched on, with a stake of 25 to 1,000 USDT). It is the
+  trade the study measured. On each coin the announcement names that has a USDT pair, a paper
+  Position short is opened within five minutes of the announcement. It is out at the open four hours
+  after the announcement's minute, with no stop and no target. The news reader then stops it and
+  settles it into the paper account, as the watch does with its trades. Its card says where it came
+  from. A coin squeezed upward can cost it a great deal, as two of 87 did.
+- **The models**: a delisting raised as an event the watch puts to its models, below.
 
-`tests/aiNoLivePath.test.ts` names every file that reads the news. No model, watch, executor or
-order path is among them.
+**Nothing real is placed or sold because of an announcement.** A short can never be placed for real
+here. `src/news/newsPaperShort.ts`, the one file that writes these shorts, spells paper as a
+literal. `tests/aiNoLivePath.test.ts` names every file that reads the news and holds that one to
+the rule the watch's writer is held to.
 
 **Checked in the app** (5 October 2026, UTC), on a separate build with an empty scratch profile:
 - Off, it read nothing, and Discovery said where to switch it on.
@@ -332,6 +340,17 @@ order path is among them.
 - The next read came at three seconds past the next minute, with no duplicates.
 - Switched off, it stopped.
 - No write went to an exchange, no model was reached, and no executor was made.
+
+**And what a delisting does**, checked the same day on another scratch profile. Binance's list was
+faked in the main process to hold one delisting, of DOGE and XRP, released two seconds earlier;
+desktop notices were captured.
+- **Read:** two seconds after its release.
+- **The holder's notice:** "You hold 500 DOGE in the paper account. Nothing has been sold."
+- **The shorts:** one paper short each on DOGEUSDT and XRPUSDT, 100 USDT, no stop, no target,
+  timed to end four hours after the announcement. Each raised its own notice, and its card said
+  where it came from.
+- **Read again a minute later:** nothing more was opened.
+- **Writes:** none went to an exchange, and no model was reached.
 
 ### AI signals — paper only
 

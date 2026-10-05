@@ -5,10 +5,10 @@ import { classifyTitle, type NewsCategory } from './newsTitles'
 // types and the pure half of the reader (electron/services/newsService.ts): what an answer from
 // the list holds, what is kept of each article, and what the page says about each kind.
 //
-// READ AND SHOWN, NOTHING ELSE. No model is asked about an announcement, and nothing is placed or
-// opened because of one. research/NEWS.md found that a delisting, held short for four hours, paid
-// on the held-out half; what a delisting should do in this app -- a paper short, a question to the
-// models, a notice to someone holding the coin, or nothing -- has not been decided.
+// THE READER ONLY READS. research/NEWS.md found that a delisting, held short for four hours, paid on
+// the held-out half, and on 2026-10-05 the user chose what one does: a notice to someone holding the
+// coin, and a PAPER short by the rule (shared/newsActions.ts, done in src/news/), each switched on
+// here. Nothing real is placed or sold because of an announcement.
 
 export type { NewsCategory }
 
@@ -50,11 +50,67 @@ export interface NewsItem {
   tickers: string[]
 }
 
-export interface NewsConfig {
-  enabled: boolean
+/** What one of the rule's paper shorts stakes: the same choices as the watch's paper trades. */
+export const NEWS_SHORT_STAKES = [25, 50, 100, 250, 500, 1000] as const
+export const NEWS_SHORT_DEFAULT_STAKE = 100
+
+export function isNewsShortStake(value: unknown): value is number {
+  return (NEWS_SHORT_STAKES as readonly unknown[]).includes(value)
 }
 
-export const DEFAULT_NEWS_CONFIG: NewsConfig = { enabled: false }
+export interface NewsConfig {
+  /** The reader itself. Nothing below happens while it is off. */
+  enabled: boolean
+  /** A desktop notice when Binance will delist a coin held, on Binance or on paper. */
+  notifyHeld: boolean
+  /** A paper short on each coin Binance will delist, by the rule research/NEWS.md measured. */
+  paperShort: { enabled: boolean; stakeQuote: number }
+}
+
+export interface NewsConfigPatch {
+  enabled?: boolean
+  notifyHeld?: boolean
+  paperShort?: { enabled?: boolean; stakeQuote?: number }
+}
+
+export const DEFAULT_NEWS_CONFIG: NewsConfig = { enabled: false, notifyHeld: true, paperShort: { enabled: false, stakeQuote: NEWS_SHORT_DEFAULT_STAKE } }
+
+/** A config read from a file, healed rather than obeyed: only `true` switches anything on, and only
+ * a stake it offers is a stake. */
+export function healNewsConfig(raw: unknown): NewsConfig {
+  const value = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
+  const short = (typeof value.paperShort === 'object' && value.paperShort !== null ? value.paperShort : {}) as Record<string, unknown>
+  return {
+    enabled: value.enabled === true,
+    notifyHeld: value.notifyHeld !== false,
+    paperShort: { enabled: short.enabled === true, stakeQuote: isNewsShortStake(short.stakeQuote) ? short.stakeQuote : NEWS_SHORT_DEFAULT_STAKE }
+  }
+}
+
+/** A patch applied to a config, or why it cannot be. */
+export function applyNewsConfigPatch(current: NewsConfig, patch: NewsConfigPatch): NewsConfig | string {
+  const next: NewsConfig = { ...current, paperShort: { ...current.paperShort } }
+  if (patch.enabled !== undefined) {
+    if (typeof patch.enabled !== 'boolean') return 'The news reader is either on or off'
+    next.enabled = patch.enabled
+  }
+  if (patch.notifyHeld !== undefined) {
+    if (typeof patch.notifyHeld !== 'boolean') return 'The notice to holders is either on or off'
+    next.notifyHeld = patch.notifyHeld
+  }
+  if (patch.paperShort !== undefined) {
+    if (typeof patch.paperShort !== 'object' || patch.paperShort === null) return 'Not a setting for the paper short'
+    if (patch.paperShort.enabled !== undefined) {
+      if (typeof patch.paperShort.enabled !== 'boolean') return 'The paper short is either on or off'
+      next.paperShort.enabled = patch.paperShort.enabled
+    }
+    if (patch.paperShort.stakeQuote !== undefined) {
+      if (!isNewsShortStake(patch.paperShort.stakeQuote)) return `A paper short stakes ${NEWS_SHORT_STAKES.join(', ')}`
+      next.paperShort.stakeQuote = patch.paperShort.stakeQuote
+    }
+  }
+  return next
+}
 
 export interface NewsState {
   config: NewsConfig

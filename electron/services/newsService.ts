@@ -3,7 +3,9 @@ import { mkdir, readFile } from 'fs/promises'
 import { join } from 'path'
 import {
   NEWS_CATALOGS,
+  applyNewsConfigPatch,
   byNewestRelease,
+  healNewsConfig,
   matchesNewsFilter,
   newsListUrl,
   newsMonthKey,
@@ -12,6 +14,7 @@ import {
   parseNewsLines,
   toNewsItem,
   type NewsConfig,
+  type NewsConfigPatch,
   type NewsFilter,
   type NewsItem,
   type NewsPage,
@@ -26,7 +29,9 @@ import { appendJsonLine, listMonthFiles } from './jsonlStore'
 // IT READS ONE PUBLIC LIST AND NOTHING ELSE. Two requests a minute -- Binance's delisting list and
 // its listing list -- with no key, no model and no order. Each article is kept once, by its id, in
 // news/news-YYYY-MM.jsonl, sorted by the patterns the study measured with (shared/newsTitles.ts).
-// Nothing is decided or done because of one: they are shown on Discovery, and that is all.
+// It decides nothing about one. They are shown on Discovery, and what a delisting does -- a notice
+// to someone holding the coin, the rule's paper short -- is done in the window
+// (src/news/NewsScheduler.tsx), each part as it is switched on in this setting.
 //
 // It is off until it is switched on under Settings › Market, and stays as it was left across
 // restarts. One read at a time, as the scanner: the next is scheduled when this one ends.
@@ -63,14 +68,14 @@ function newsDir(): string {
 
 async function loadConfig(): Promise<NewsConfig> {
   if (config) return config
-  let raw: Partial<NewsConfig> = {}
+  let raw: unknown = {}
   try {
-    raw = (JSON.parse(await readFile(configPath(), 'utf-8')) as Partial<NewsConfig> | null) ?? {}
+    raw = JSON.parse(await readFile(configPath(), 'utf-8'))
   } catch {
     raw = {}
   }
-  // Only `true` switches it on: a file holding anything else is healed, not obeyed.
-  config = { enabled: raw.enabled === true }
+  // Only `true` switches anything on: a file holding anything else is healed, not obeyed.
+  config = healNewsConfig(raw)
   return config
 }
 
@@ -80,7 +85,7 @@ async function persistConfig(): Promise<void> {
 }
 
 function snapshot(current: NewsConfig): NewsState {
-  return { config: { ...current }, lastReadAt, nextReadAt, error, recent: [...recent] }
+  return { config: { ...current, paperShort: { ...current.paperShort } }, lastReadAt, nextReadAt, error, recent: [...recent] }
 }
 
 function notify(current: NewsConfig): void {
@@ -162,8 +167,10 @@ export async function readNewsOnce(nowMs: number = Date.now()): Promise<NewsStat
     readInFlight = false
     lastReadAt = Math.floor(Date.now() / 1000)
   }
-  notify(current)
-  return snapshot(current)
+  // The setting as it is now: it may have been changed while the lists were being read.
+  const latest = config ?? current
+  notify(latest)
+  return snapshot(latest)
 }
 
 function schedule(): void {
@@ -201,12 +208,11 @@ export async function getNewsState(): Promise<NewsState> {
   return snapshot(current)
 }
 
-export async function setNewsConfig(patch: Partial<NewsConfig>): Promise<NewsState> {
-  const current = await loadConfig()
-  if (patch.enabled !== undefined) {
-    if (typeof patch.enabled !== 'boolean') throw new Error('The news reader is either on or off')
-    current.enabled = patch.enabled
-  }
+export async function setNewsConfig(patch: NewsConfigPatch): Promise<NewsState> {
+  const next = applyNewsConfigPatch(await loadConfig(), patch ?? {})
+  if (typeof next === 'string') throw new Error(next)
+  config = next
+  const current = next
   const switchedOn = current.enabled && timer === null
   await persistConfig()
   if (current.enabled) schedule()

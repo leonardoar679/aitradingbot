@@ -30,6 +30,12 @@ import { describe, expect, it } from 'vitest'
 // was split up: its Opportunities tab became the Opportunities page, Analyze and Signals became AI
 // Decisions, and Benchmark became AI Benchmark. Nothing about what a call can do changed. The
 // lists below name the new pages where they named the old one, held to exactly the same rule.
+//
+// And the same day, news: the app reads Binance's announcements (research/NEWS.md), and the user
+// chose what a delisting does -- a notice to someone holding the coin, and a PAPER short by the
+// rule the study measured. That short is the second thing in this app that opens a paper position
+// with nobody pressing anything, and it is held to what the watch's is: one file writes it, paper
+// is a literal there, and nothing that reads the news mentions the bridge a real order travels over.
 
 const ROOT = join(__dirname, '..')
 const SERVICES = join(ROOT, 'electron', 'services')
@@ -224,9 +230,9 @@ describe('AI code has no route to a real order', () => {
     // It reads Binance's announcements once a minute with no window open: the first news in this
     // app. It is held to the scanner's rule and to more. Its main-process files import nothing that
     // trades, holds a key or asks a model; its pages call the news bridge and nothing else; and the
-    // files that read the news at all are exactly these. No model, watch, executor or order path
-    // reads it, because what a delisting should do has not been decided (research/NEWS.md). Making
-    // one read it is a deliberate change, and it has to change this list to do it.
+    // files that read the news at all are exactly these. What a delisting does (shared/newsActions.ts)
+    // is done by two files of src/news/, held below. Making anything else read the news is a
+    // deliberate change, and it has to change this list to do it.
     const main = [join(SERVICES, 'newsService.ts'), join(ROOT, 'electron', 'ipc', 'handlers', 'newsHandlers.ts')]
     for (const path of main) {
       expect(importsOf(path).filter((name) => LIVE_MODULES.has(name)), path).toEqual([])
@@ -244,7 +250,7 @@ describe('AI code has no route to a real order', () => {
       readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
         entry.isDirectory() ? walk(join(dir, entry.name)) : /\.tsx?$/.test(entry.name) ? [join(dir, entry.name)] : []
       )
-    const readsNews = /window\.api\.news\b|from '[^']*\/(news|newsTitles|newsService|newsHandlers)'/
+    const readsNews = /window\.api\.news\b|from '[^']*\/(news|newsTitles|newsActions|newsService|newsHandlers|newsPaperShort|NewsScheduler)'/
     const readers = ['src', 'electron', 'shared']
       .flatMap((dir) => walk(join(ROOT, dir)))
       .filter((path) => readsNews.test(readFileSync(path, 'utf-8')))
@@ -257,9 +263,57 @@ describe('AI code has no route to a real order', () => {
       'electron/preload.ts',
       'electron/services/newsService.ts',
       'shared/news.ts',
+      'shared/newsActions.ts',
+      'src/App.tsx',
+      // Shows where one of the rule's shorts came from, from the mark on it.
+      'src/executors/ExecutorCard.tsx',
       'src/explorer/NewsCard.tsx',
+      'src/news/NewsScheduler.tsx',
+      'src/news/newsPaperShort.ts',
       'src/settings/NewsSettingsCard.tsx'
     ])
+    // The news's own files offer no model a question and no form a call.
+    for (const file of readers.filter((name) => /\/news|News/.test(name))) {
+      expect(readFileSync(join(ROOT, file), 'utf-8'), file).not.toMatch(/window\.api\.ai\b|aiProposal|onPrepareOrder/)
+    }
+  })
+
+  it('what a delisting does is a notice and a paper short, by a literal it cannot be handed', () => {
+    const rules = join(ROOT, 'shared', 'newsActions.ts')
+    const writer = join(ROOT, 'src', 'news', 'newsPaperShort.ts')
+    const scheduler = join(ROOT, 'src', 'news', 'NewsScheduler.tsx')
+    for (const path of [rules, writer, scheduler]) {
+      const source = readFileSync(path, 'utf-8')
+      expect(source, path).not.toMatch(/liveTrading|LiveTrading|liveOrders|placeLive|window\.api\.(executors|trade|paper|ai)\b/)
+      expect(source, path).not.toMatch(/['"`]live['"`]/)
+      expect(source, path).not.toMatch(/\bleverage\s*:/)
+    }
+    expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron/)
+    expect(importsOf(rules).sort()).toEqual(['ipc', 'liveBalances', 'news'])
+    // Paper is written where the executor is made, and the function that makes it takes no mode.
+    const source = readFileSync(writer, 'utf-8')
+    expect(source.match(/mode: 'paper'/g)).toHaveLength(2)
+    expect(source).not.toMatch(/mode:(?!\s*'paper')/)
+    const signature = /export function newsShortExecutor\(input: \{([^}]*)\}\)/.exec(source)?.[1] ?? ''
+    expect(signature).toContain('stakeQuote: number')
+    expect(signature).not.toMatch(/mode/)
+    // The writer reaches settings, the market and a notice, and closes with paper bookkeeping.
+    expect([...new Set([...source.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))].sort()).toEqual(['market', 'notify', 'settings'])
+    expect(source).not.toMatch(/window\.api\.credentials/)
+    expect(importsOf(writer).sort()).toEqual(['engine', 'executorFunding', 'ipc', 'news', 'newsActions', 'settingsWrites', 'settleExecutor'])
+    expect(readFileSync(rules, 'utf-8')).toContain("executor.newsRule !== undefined && executor.mode === 'paper' && executor.type === 'position'")
+    // The scheduler reads -- the news, the settings, the balances a key can read -- and notifies.
+    // Every write goes through the writer above.
+    const watching = readFileSync(scheduler, 'utf-8')
+    expect([...new Set([...watching.matchAll(/window\.api\.(\w+)(?:\s*\.\s*(\w+))?/g)].map((match) => (match[2] === undefined ? match[1] : `${match[1]}.${match[2]}`)))].sort()).toEqual([
+      'credentials.balances',
+      'credentials.list',
+      'news.getState',
+      'news.onUpdate',
+      'notify',
+      'settings.get'
+    ])
+    expect(importsOf(scheduler).sort()).toEqual(['news', 'newsActions', 'newsPaperShort', 'react'])
   })
 
   it('the watch asks and notifies, and all but one of its files has nothing to write with', () => {
