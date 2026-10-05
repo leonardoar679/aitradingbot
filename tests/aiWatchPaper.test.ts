@@ -2,19 +2,25 @@ import { describe, expect, it } from 'vitest'
 import { aiProposalEntryExpiry, aiProposalEntryRange, aiProposalPositionParams, buildOpportunityProposal } from '../shared/aiProposal'
 import type { AiSignalDecision, AiSignalDetail } from '../shared/aiSignal'
 import {
+  AI_WATCH_PAPER_BTC_MOVES,
+  AI_WATCH_PAPER_LOSING_RUNS,
   AI_WATCH_PAPER_OPEN_LIMITS,
+  AI_WATCH_PAPER_SAME_SIDE_LIMITS,
   AI_WATCH_PAPER_STAKES,
   DEFAULT_AI_WATCH_PAPER,
   aiWatchPaperProblem,
+  btcMoveAgainst,
   describeAiWatchPaper,
   describeWatchPaperOrigin,
   describeWatchPaperResult,
+  describeWatchPaperSafeguards,
   describeWatchPaperTally,
   healAiWatchPaper,
   planWatchPaperTrade,
   watchPaperBlock,
   watchPaperExecutors,
   watchPaperNotice,
+  watchPaperPause,
   watchPaperTally,
   type AiWatchPaperConfig,
   type WatchPaperOutcome,
@@ -35,7 +41,7 @@ const T = Date.parse('2026-10-05T09:07:00Z') / 1000
 const SOON = T + 20
 
 function config(overrides: Partial<AiWatchPaperConfig> = {}): AiWatchPaperConfig {
-  return { enabled: true, model: A, stakeQuote: 100, maxOpen: 3, ...overrides }
+  return { enabled: true, model: A, stakeQuote: 100, maxOpen: 3, maxSameSide: 2, pauseAfterLosses: 3, dropOnBtcMovePct: 1, ...overrides }
 }
 
 function event(symbol = 'SOLUSDT', time = T): MarketEvent {
@@ -117,7 +123,7 @@ function executor(overrides: Partial<ExecutorConfig> & { symbol?: string; eventI
 
 describe('the setting', () => {
   it('is off until switched on', () => {
-    expect(DEFAULT_AI_WATCH_PAPER).toEqual({ enabled: false, model: null, stakeQuote: 100, maxOpen: 3 })
+    expect(DEFAULT_AI_WATCH_PAPER).toEqual({ enabled: false, model: null, stakeQuote: 100, maxOpen: 3, maxSameSide: 2, pauseAfterLosses: 3, dropOnBtcMovePct: 1 })
     expect(healAiWatchPaper(undefined, [A])).toEqual(DEFAULT_AI_WATCH_PAPER)
     expect(healAiWatchPaper('nonsense', [A])).toEqual(DEFAULT_AI_WATCH_PAPER)
   })
@@ -128,10 +134,10 @@ describe('the setting', () => {
 
   it('is off when it is not exactly something that could have been switched on', () => {
     // The watch no longer asks the model it followed.
-    expect(healAiWatchPaper(config(), [B])).toEqual({ enabled: false, model: null, stakeQuote: 100, maxOpen: 3 })
+    expect(healAiWatchPaper(config(), [B])).toEqual({ enabled: false, model: null, stakeQuote: 100, maxOpen: 3, maxSameSide: 2, pauseAfterLosses: 3, dropOnBtcMovePct: 1 })
     // A stake and a limit that are not among the choices: the default, and off.
-    expect(healAiWatchPaper(config({ stakeQuote: 123 }), [A])).toEqual({ enabled: false, model: A, stakeQuote: 100, maxOpen: 3 })
-    expect(healAiWatchPaper(config({ maxOpen: 99 }), [A])).toEqual({ enabled: false, model: A, stakeQuote: 100, maxOpen: 3 })
+    expect(healAiWatchPaper(config({ stakeQuote: 123 }), [A])).toEqual({ enabled: false, model: A, stakeQuote: 100, maxOpen: 3, maxSameSide: 2, pauseAfterLosses: 3, dropOnBtcMovePct: 1 })
+    expect(healAiWatchPaper(config({ maxOpen: 99 }), [A])).toEqual({ enabled: false, model: A, stakeQuote: 100, maxOpen: 3, maxSameSide: 2, pauseAfterLosses: 3, dropOnBtcMovePct: 1 })
     expect(healAiWatchPaper({ ...config(), enabled: 'yes' }, [A]).enabled).toBe(false)
   })
 
@@ -260,7 +266,7 @@ describe('planWatchPaperTrade', () => {
 
 describe('watchPaperBlock', () => {
   const check = (executors: ExecutorConfig[], overrides: { config?: AiWatchPaperConfig; symbol?: string; model?: string } = {}): string | null =>
-    watchPaperBlock({ config: overrides.config ?? config(), event: event(overrides.symbol), decision: { model: overrides.model ?? A }, executors })
+    watchPaperBlock({ config: overrides.config ?? config(), event: event(overrides.symbol), decision: { model: overrides.model ?? A, recommendation: 'buy' }, executors, nowSec: SOON })
 
   it('allows a trade with nothing in the way', () => {
     expect(check([])).toBeNull()
@@ -289,8 +295,9 @@ describe('watchPaperBlock', () => {
   it('keeps so many open at once and no more', () => {
     const open = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT'].map((symbol) => executor({ symbol, watch: { eventId: `binance:${symbol}:1`, eventTime: 1, model: A, confidence: 0.8 } }))
     expect(check(open)).toMatch(/3 paper trades open, and 3 is the most/)
-    expect(check(open, { config: config({ maxOpen: 5 }) })).toBeNull()
-    expect(check([open[0], open[1], { ...open[2], status: 'stopped', stoppedAt: T }])).toBeNull()
+    expect(check(open, { config: config({ maxOpen: 5, maxSameSide: 5 }) })).toBeNull()
+    // (Room in one direction, so that the count this is about is the one in the way.)
+    expect(check([open[0], open[1], { ...open[2], status: 'stopped', stoppedAt: T }], { config: config({ maxSameSide: 5 }) })).toBeNull()
   })
 
   it('counts only its own paper trades: not one made by hand, and never one that is not paper', () => {
@@ -652,5 +659,148 @@ describe('watchPaperNotice', () => {
     expect(notice.key).toBe(`${event().id}:paper`)
     expect(notice.body).toContain('openai/gpt-5-mini at 80% confidence, on the breakout at 09:07 UTC.')
     expect(notice.body).toContain('It is on Strategies › Execution.')
+  })
+})
+
+// ---------------------------------------------------------------------------------------------
+// The safeguards (2026-10-05): so many open in one direction, a pause after a losing run today,
+// and a trade still waiting to enter dropped when Bitcoin has moved against it.
+
+describe('the safeguards', () => {
+  const opened = (symbol: string, side: 'buy' | 'sell', result?: WatchPaperOutcome): ExecutorConfig => {
+    const base = executor({ symbol, watch: { eventId: `binance:${symbol}:1`, eventTime: 1, model: A, confidence: 0.8 } })
+    const params = { ...(base.params as PositionExecutorParams), side }
+    return result === undefined ? { ...base, params } : { ...base, params, status: 'stopped', stoppedAt: result.closedAt, watch: { ...base.watch!, result } }
+  }
+  const block = (executors: ExecutorConfig[], recommendation: 'buy' | 'sell', overrides: Partial<AiWatchPaperConfig> = {}, nowSec = SOON): string | null =>
+    watchPaperBlock({ config: config({ maxOpen: 10, ...overrides }), event: event('SOLUSDT'), decision: { model: A, recommendation }, executors, nowSec })
+
+  it('are read from a file written before them as their defaults, and leave it on', () => {
+    const before = { enabled: true, model: A, stakeQuote: 100, maxOpen: 3 }
+    expect(healAiWatchPaper(before, [A])).toEqual(config())
+    // One a file holds that is not a choice leaves it off, as a stake or a limit would.
+    expect(healAiWatchPaper({ ...before, maxSameSide: 4 }, [A]).enabled).toBe(false)
+    expect(healAiWatchPaper({ ...before, pauseAfterLosses: 1 }, [A]).enabled).toBe(false)
+    expect(healAiWatchPaper({ ...before, dropOnBtcMovePct: 0.7 }, [A])).toEqual(config({ enabled: false }))
+    expect(healAiWatchPaper(config({ maxSameSide: 10, pauseAfterLosses: 0, dropOnBtcMovePct: 0 }), [A])).toEqual(config({ maxSameSide: 10, pauseAfterLosses: 0, dropOnBtcMovePct: 0 }))
+  })
+
+  it('can only be saved as one of their choices, and are said before paper trades are switched on', () => {
+    expect(aiWatchPaperProblem(config({ maxSameSide: 4 }), [A])).toMatch(/in one direction/)
+    expect(aiWatchPaperProblem(config({ pauseAfterLosses: 1 }), [A])).toMatch(/pause after 2, 3 or 5 losses in a row, or never/)
+    expect(aiWatchPaperProblem(config({ dropOnBtcMovePct: 3 }), [A])).toMatch(/Bitcoin moves 0.5%, 1% or 2% against it, or never/)
+    for (const side of AI_WATCH_PAPER_SAME_SIDE_LIMITS)
+      for (const run of AI_WATCH_PAPER_LOSING_RUNS)
+        for (const move of AI_WATCH_PAPER_BTC_MOVES) expect(aiWatchPaperProblem(config({ maxSameSide: side, pauseAfterLosses: run, dropOnBtcMovePct: move }), [A])).toBeNull()
+    const text = describeAiWatchPaper({ config: config(), watchOn: true, hasPaperAccount: true })
+    expect(text).toContain('At most 2 open in one direction. After 3 in a row close at a loss in one day, none is opened until midnight UTC. One still waiting to enter is dropped if Bitcoin moves 1% against it after the event.')
+    expect(describeWatchPaperSafeguards(config({ pauseAfterLosses: 0, dropOnBtcMovePct: 0 }))).toBe('At most 2 open in one direction. No pause after losses. Bitcoin moving does not drop one.')
+  })
+
+  it('keeps so many open in one direction, and lets the other direction in', () => {
+    const two = [opened('BTCUSDT', 'buy'), opened('ETHUSDT', 'buy')]
+    expect(block(two, 'buy')).toBe('The watch has 2 paper BUYs open, and 2 in one direction is the most it keeps: coins move together, so more would be one bet on the market.')
+    expect(block(two, 'sell')).toBeNull()
+    expect(block(two, 'buy', { maxSameSide: 3 })).toBeNull()
+    expect(block([opened('BTCUSDT', 'sell')], 'sell', { maxSameSide: 1 })).toMatch(/1 paper SELL open/)
+    // One that has stopped is not open.
+    expect(block([two[0], { ...two[1], status: 'stopped', stoppedAt: T }], 'buy')).toBeNull()
+  })
+
+  it('pauses for the rest of the day after a run of losses closed today, and only then', () => {
+    const day = Math.floor(SOON / 86_400) * 86_400
+    const loss = (k: number): WatchPaperOutcome => ({ exit: 'stop_loss', pnlQuote: -1.5, closedAt: day + 600 + k * 60 })
+    const win = (k: number): WatchPaperOutcome => ({ exit: 'take_profit', pnlQuote: 2.9, closedAt: day + 600 + k * 60 })
+    const run = [opened('AAAUSDT', 'buy', loss(1)), opened('BBBUSDT', 'buy', loss(2)), opened('CCCUSDT', 'sell', loss(3))]
+    expect(block(run, 'buy')).toBe("The last 3 paper trades of the watch's to close today all lost, so it opens none until 00:00 UTC.")
+    expect(watchPaperPause(run, config(), SOON)).toMatch(/until 00:00 UTC/)
+    // A win anywhere in the last three, or fewer than three today: no pause.
+    expect(block([...run.slice(0, 2), opened('CCCUSDT', 'sell', win(3))], 'buy')).toBeNull()
+    expect(block([opened('DDDUSDT', 'buy', win(0)), ...run], 'buy')).not.toBeNull()
+    expect(block([...run, opened('DDDUSDT', 'buy', win(4))], 'buy')).toBeNull()
+    expect(block(run.slice(0, 2), 'buy')).toBeNull()
+    // Never entered, or dropped before entering: neither a loss nor a win.
+    const never: WatchPaperOutcome = { exit: 'entry_expired', pnlQuote: 0, closedAt: day + 900 }
+    const dropped: WatchPaperOutcome = { exit: 'btc_moved', pnlQuote: 0, closedAt: day + 960, btcMovePct: -1.2 }
+    expect(block([...run, opened('EEEUSDT', 'buy', never), opened('FFFUSDT', 'buy', dropped)], 'buy')).not.toBeNull()
+    // A new UTC day starts the count again, and a run of 0 never pauses.
+    expect(block(run, 'buy', {}, day + 86_400 + 30)).toBeNull()
+    expect(block(run, 'buy', { pauseAfterLosses: 0 })).toBeNull()
+    expect(block(run, 'buy', { pauseAfterLosses: 2 })).not.toBeNull()
+    expect(block(run, 'buy', { pauseAfterLosses: 5 })).toBeNull()
+  })
+
+  it("measures Bitcoin's move from the minute the event was read, against the trade's side", () => {
+    const btc = (closes: number[]): Candle[] => closes.map((close, k) => bar(T - 60 + k * 60, close, close, close, close))
+    expect(btcMoveAgainst({ side: 'buy', eventTime: T, btc: btc([100, 99.5, 98.8]), limitPct: 1 })).toBeCloseTo(-1.2, 9)
+    expect(btcMoveAgainst({ side: 'buy', eventTime: T, btc: btc([100, 99.5, 99.1]), limitPct: 1 })).toBeNull()
+    expect(btcMoveAgainst({ side: 'buy', eventTime: T, btc: btc([100, 101.5]), limitPct: 1 })).toBeNull()
+    expect(btcMoveAgainst({ side: 'sell', eventTime: T, btc: btc([100, 101.5]), limitPct: 1 })).toBeCloseTo(1.5, 9)
+    expect(btcMoveAgainst({ side: 'sell', eventTime: T, btc: btc([100, 100.4]), limitPct: 0.5 })).toBeNull()
+    expect(btcMoveAgainst({ side: 'sell', eventTime: T, btc: btc([100, 100.6]), limitPct: 0.5 })).toBeCloseTo(0.6, 9)
+    // Minutes read from before the event -- as they are when two trades are waiting, from the
+    // earlier one's -- are measured from the minute this one's event was read at, not the first.
+    const earlier = [bar(T - 180, 103, 103, 103, 103), bar(T - 120, 102, 102, 102, 102), ...btc([100, 99.5, 98.8])]
+    expect(btcMoveAgainst({ side: 'buy', eventTime: T, btc: earlier, limitPct: 1 })).toBeCloseTo(-1.2, 9)
+    expect(btcMoveAgainst({ side: 'buy', eventTime: T, btc: earlier.slice(0, 3).concat(btc([100, 99.5])), limitPct: 1 })).toBeNull()
+    // Off, or no minute to measure from, or none since: nothing is dropped.
+    expect(btcMoveAgainst({ side: 'buy', eventTime: T, btc: btc([100, 90]), limitPct: 0 })).toBeNull()
+    expect(btcMoveAgainst({ side: 'buy', eventTime: T, btc: btc([100, 90]).slice(1), limitPct: 1 })).toBeNull()
+    expect(btcMoveAgainst({ side: 'buy', eventTime: T, btc: btc([100]), limitPct: 1 })).toBeNull()
+  })
+
+  describe('in the settle loop', () => {
+    const start = Math.ceil(SOON / 60) * 60
+    /** Waiting to enter: asked at 100.9, its range 99.8 to 100.2, and the price stays above it. */
+    const waiting = (): ExecutorConfig => watchPaperExecutor({ id: 'w1', event: event(), plan: okPlan({ lastPrice: 100.9 }), nowSec: SOON })
+    const pair = [bar(start, 100.9, 101.2, 100.6, 101), bar(start + 60, 101, 101.3, 100.7, 101.1)]
+    const withBitcoin = (r: Rig, closes: number[], own: Candle[] = pair): void => {
+      r.deps.fetchCandles = async (_exchange, symbol) => (symbol === 'BTCUSDT' ? closes.map((close, k) => bar(T - 60 + k * 60, close, close, close, close)) : own)
+    }
+
+    it('drops a trade still waiting to enter once Bitcoin has moved against it, says so, and books nothing', async () => {
+      const r = rig({ executors: [waiting()], now: start + 180 })
+      withBitcoin(r, [60000, 59800, 59300])
+      expect(await settleWatchPaperTrades(r.deps)).toEqual(['Watch: BUY SOLUSDT'])
+      const [dropped] = r.state.executors
+      expect(dropped.status).toBe('stopped')
+      expect(dropped.watch?.result).toEqual({ exit: 'btc_moved', pnlQuote: 0, closedAt: start + 180, btcMovePct: expect.closeTo(-1.1667, 3) })
+      expect(r.settled).toEqual(['w1'])
+      expect(r.notices).toEqual([
+        {
+          title: 'SOLUSDT: paper BUY dropped',
+          body: 'Bitcoin fell 1.17% after the call on the 09:07 UTC event, before this trade entered, so the watch dropped it. Nothing real was placed or held.'
+        }
+      ])
+      expect(describeWatchPaperResult(dropped.watch!.result!, 'USDT')).toBe('Dropped before it entered: Bitcoin fell 1.17% after the call.')
+      // It never entered: not counted as entered in the tally, nor as a loss.
+      expect(watchPaperTally([dropped])).toEqual({ ended: 1, entered: 0, ahead: 0, pnl: [] })
+    })
+
+    it('leaves it waiting when Bitcoin has not moved that far, or moved its way, or the safeguard is off', async () => {
+      for (const [closes, overrides] of [
+        [[60000, 59800, 59500], {}],
+        [[60000, 60800], {}],
+        [[60000, 59000], { dropOnBtcMovePct: 0 }],
+        [[60000, 59500], { dropOnBtcMovePct: 2 }]
+      ] as [number[], Partial<AiWatchPaperConfig>][]) {
+        const r = rig({ executors: [waiting()], now: start + 180, config: config(overrides) })
+        withBitcoin(r, closes)
+        expect(await settleWatchPaperTrades(r.deps)).toEqual([])
+        expect(r.state.executors[0].status).toBe('active')
+      }
+    })
+
+    it('never drops one that has entered: its own stop and target look after it', async () => {
+      const entered = trade0()
+      const r = rig({ executors: [entered], now: start + 180 })
+      withBitcoin(r, [60000, 59000, 58000], [bar(start, 100, 100.4, 99.9, 100.2), bar(start + 60, 100.2, 100.6, 100, 100.4)])
+      expect(await settleWatchPaperTrades(r.deps)).toEqual([])
+      expect(r.state.executors[0].status).toBe('active')
+    })
+
+    function trade0(): ExecutorConfig {
+      return watchPaperExecutor({ id: 'w2', event: event(), plan: okPlan(), nowSec: SOON })
+    }
   })
 })

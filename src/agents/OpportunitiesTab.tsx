@@ -5,7 +5,7 @@ import { AI_OPPORTUNITY_MAX_MODELS } from '../../shared/aiOpportunity'
 import { describeDecider } from '../../shared/aiPanel'
 import type { AiOrderProposal } from '../../shared/aiProposal'
 import { watchEventIdsToday, watchPausedModels } from '../../shared/aiWatch'
-import { describeWatchPaperTally, watchPaperExecutors, watchPaperTally } from '../../shared/aiWatchPaper'
+import { describeWatchPaperTally, watchPaperExecutors, watchPaperPause, watchPaperTally } from '../../shared/aiWatchPaper'
 import type { ExecutorConfig } from '../../shared/ipc'
 import { describeEventType } from '../../shared/marketEvent'
 import { describeError } from '../utils/ipcError'
@@ -175,7 +175,8 @@ export function OpportunitiesTab({
     hasAccount: paperAccount,
     open: watchTrades.filter((executor) => executor.status === 'active').map((executor) => executor.symbol),
     total: watchTrades.length,
-    ended: describeWatchPaperTally(watchPaperTally(watchTrades))
+    ended: describeWatchPaperTally(watchPaperTally(watchTrades)),
+    pause: config === null ? null : watchPaperPause(watchTrades, config.watchPaper, nowSec)
   }
 
   return (

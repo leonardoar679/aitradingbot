@@ -80,7 +80,7 @@ All files are in the user's profile folder.
 | `aiConfig.json` | `defaultModel`, `enabledModels`, `route` | Agents › Models | Settings › AI |
 | | `dailyCapUsd`, `callsPerMinute` | Agents › Usage | Settings › AI |
 | | `watch` (on, models, events a day, lowest band, first model gates) | Agents › Opportunities › Watch | Opportunities (stays with its results) |
-| | `watchPaper` (on, model, stake, most open) | Agents › Opportunities › Watch | Opportunities |
+| | `watchPaper` (on, model, stake, most open; and, added on 5 October 2026, most open in one direction, the losing run that pauses it, the Bitcoin move that drops a waiting trade) | Agents › Opportunities › Watch | Opportunities |
 | `scanner.json` | `enabled`, `universeSize` (20, 40, 60 or 100) | Explorer › Scanner | Settings › Market |
 | `news.json` | `enabled`; for `delisting` and for `monitoringTag`, each: `notifyHeld`, `paperShort` (on, stake), `askModels` (added with the news reader, V3 Stage 7) | — | Settings › Market |
 | `credentials.json` (encrypted) | Binance and Upbit keys; when added, last tested, result | Settings | Connections |
@@ -164,7 +164,8 @@ no behaviour behind them, so they are not added as controls:
   - allowed and excluded pairs.
 - **Risk:**
   - maximum position or trade risk as a share of the account;
-  - maximum correlated exposure;
+  - maximum correlated exposure, beyond the watch's own paper trades (which have, since 5 October
+    2026, a limit on how many are open in one direction);
   - maximum slippage or spread.
 - **News:** one source is read, Binance's own announcements. It is switched on under Settings ›
   Market, with what a delisting does (V3 Stage 7, after the study in `research/NEWS.md`). A choice

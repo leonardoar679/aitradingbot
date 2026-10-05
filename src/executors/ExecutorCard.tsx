@@ -13,7 +13,7 @@ import { buildGridLevels } from './engine'
 import { executorTypeMeta } from './executorTypeMeta'
 import { netUnrealizedPct } from '../../shared/fees'
 import { describeAiProposalOrigin } from '../../shared/aiProposal'
-import { describeWatchPaperOrigin, describeWatchPaperResult } from '../../shared/aiWatchPaper'
+import { describeWatchPaperOrigin, describeWatchPaperResult, watchPaperEntered } from '../../shared/aiWatchPaper'
 import { describeNewsShortOrigin } from '../../shared/newsActions'
 import { TradeTimeline } from '../agents/TradeTimeline'
 import { useExecutorSimulation } from './useExecutorSimulation'
@@ -422,7 +422,7 @@ function SingleMarketMetrics({ executor }: { executor: ExecutorConfig }): React.
         <span style={{ color: 'var(--text-muted)' }}>
           Closed {new Date(ended.closedAt * 1000).toLocaleString()} · stopped by {executor.newsRule !== undefined ? 'the news reader' : 'the watch'}
         </span>
-        <span style={{ color: ended.exit === 'entry_expired' ? 'var(--text-secondary)' : pctColor(ended.pnlQuote), fontWeight: 600 }}>
+        <span style={{ color: !watchPaperEntered(ended) ? 'var(--text-secondary)' : pctColor(ended.pnlQuote), fontWeight: 600 }}>
           {describeWatchPaperResult(ended, executor.quoteAsset)}
         </span>
       </div>

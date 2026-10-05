@@ -4,7 +4,16 @@ import type { AiConfig } from '../../shared/aiCost'
 import { AI_OPPORTUNITY_MAX_MODELS } from '../../shared/aiOpportunity'
 import { describeDecider } from '../../shared/aiPanel'
 import { AI_WATCH_EVENT_LIMITS, AI_WATCH_FRESH_SECONDS, describeAiWatchCost, describeWatchPause, type AiWatchBand, type AiWatchConfig } from '../../shared/aiWatch'
-import { AI_WATCH_PAPER_OPEN_LIMITS, AI_WATCH_PAPER_STAKES, describeAiWatchPaper, type AiWatchPaperConfig } from '../../shared/aiWatchPaper'
+import {
+  AI_WATCH_PAPER_BTC_MOVES,
+  AI_WATCH_PAPER_LOSING_RUNS,
+  AI_WATCH_PAPER_OPEN_LIMITS,
+  AI_WATCH_PAPER_SAME_SIDE_LIMITS,
+  AI_WATCH_PAPER_STAKES,
+  describeAiWatchPaper,
+  describeWatchPaperSafeguards,
+  type AiWatchPaperConfig
+} from '../../shared/aiWatchPaper'
 import { EVENT_MAX_RANKED, type MarketEvent } from '../../shared/marketEvent'
 import { describeError } from '../utils/ipcError'
 import { buttonStyle, inputStyle, noteStyle } from './agentStyles'
@@ -43,6 +52,8 @@ export interface WatchPaperStanding {
   total: number
   /** What the ones that have ended add up to, in a sentence. Empty when none has. */
   ended: string
+  /** Why none is being opened until midnight UTC (shared/aiWatchPaper.ts watchPaperPause), or null. */
+  pause?: string | null
 }
 
 /** The watch's switch (shared/aiWatch.ts), and the switch for its paper trades
@@ -80,6 +91,9 @@ export function WatchCard({
   const [paperModel, setPaperModel] = useState<string>(watchPaper.model ?? '')
   const [paperStake, setPaperStake] = useState<number>(watchPaper.stakeQuote)
   const [paperOpen, setPaperOpen] = useState<number>(watchPaper.maxOpen)
+  const [paperSameSide, setPaperSameSide] = useState<number>(watchPaper.maxSameSide)
+  const [paperLosses, setPaperLosses] = useState<number>(watchPaper.pauseAfterLosses)
+  const [paperBtc, setPaperBtc] = useState<number>(watchPaper.dropOnBtcMovePct)
   const [models, setModels] = useState<string[]>(watch.models)
   const [limit, setLimit] = useState<number>(watch.maxEventsPerDay)
   const [band, setBand] = useState<AiWatchBand>(watch.minBand)
@@ -154,7 +168,15 @@ export function WatchCard({
       setProblem('Paper trades follow one of the models the watch asks, and it asks none yet.')
       return
     }
-    const next: AiWatchPaperConfig = { enabled: true, model: followed, stakeQuote: paperStake, maxOpen: paperOpen }
+    const next: AiWatchPaperConfig = {
+      enabled: true,
+      model: followed,
+      stakeQuote: paperStake,
+      maxOpen: paperOpen,
+      maxSameSide: paperSameSide,
+      pauseAfterLosses: paperLosses,
+      dropOnBtcMovePct: paperBtc
+    }
     if (!window.confirm(describeAiWatchPaper({ config: next, watchOn: watch.enabled, hasPaperAccount: paper.hasAccount === true }))) return
     setBusy(true)
     setProblem(null)
@@ -271,8 +293,13 @@ export function WatchCard({
             <p style={{ ...noteStyle, color: 'var(--text-primary)' }}>
               <strong style={{ color: 'var(--up)' }}>On.</strong> Each call by {describeDecider(watchPaper.model ?? '')} at 65% confidence or more opens a paper position of{' '}
               {watchPaper.stakeQuote} in the pair&apos;s quote currency by itself, with its own stop, target and time limit. At most {watchPaper.maxOpen} open at once, one an event, one on
-              a pair. Nothing real is placed.
+              a pair. {describeWatchPaperSafeguards(watchPaper)} Nothing real is placed.
             </p>
+            {paper.pause != null && (
+              <p style={{ ...noteStyle, color: 'var(--down)', marginTop: '0.4rem' }}>
+                <strong>Paused.</strong> {paper.pause}
+              </p>
+            )}
             <p style={{ ...noteStyle, color: 'var(--text-secondary)', marginTop: '0.4rem' }}>
               {paper.total === 0
                 ? 'None opened yet.'
@@ -328,6 +355,38 @@ export function WatchCard({
                   {AI_WATCH_PAPER_OPEN_LIMITS.map((value) => (
                     <option key={value} value={value}>
                       {value}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap', alignItems: 'center', marginTop: '0.6rem' }}>
+              <label style={selectLabelStyle}>
+                In one direction, at most{' '}
+                <select aria-label="Paper trades open in one direction" value={paperSameSide} disabled={busy} onChange={(event) => setPaperSameSide(Number(event.target.value))} style={inputStyle()}>
+                  {AI_WATCH_PAPER_SAME_SIDE_LIMITS.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label style={selectLabelStyle}>
+                Pause for the day after{' '}
+                <select aria-label="Losses in a row that pause paper trades" value={paperLosses} disabled={busy} onChange={(event) => setPaperLosses(Number(event.target.value))} style={inputStyle()}>
+                  {AI_WATCH_PAPER_LOSING_RUNS.map((value) => (
+                    <option key={value} value={value}>
+                      {value === 0 ? 'never' : `${value} losses in a row`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label style={selectLabelStyle}>
+                Drop one not yet entered if Bitcoin moves against it{' '}
+                <select aria-label="Bitcoin move that drops a paper trade" value={paperBtc} disabled={busy} onChange={(event) => setPaperBtc(Number(event.target.value))} style={inputStyle()}>
+                  {AI_WATCH_PAPER_BTC_MOVES.map((value) => (
+                    <option key={value} value={value}>
+                      {value === 0 ? 'never' : `${value}%`}
                     </option>
                   ))}
                 </select>

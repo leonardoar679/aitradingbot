@@ -660,8 +660,9 @@ export interface ExecutorConfig {
      * what it made or lost in the quote asset after the simulation's fees, and the minute. A
      * stopped executor is not simulated again, so this is what its card has to show, and it is
      * all there is with no paper account for the result to go to. Absent while it is open, and on
-     * one a person stopped first. */
-    result?: { exit: PositionExitReason; pnlQuote: number; closedAt: number }
+     * one a person stopped first. `btc_moved` is one the watch dropped before it entered, because
+     * Bitcoin had moved against it by more than its safeguard allows; `btcMovePct` is that move. */
+    result?: { exit: PositionExitReason | 'btc_moved'; pnlQuote: number; closedAt: number; btcMovePct?: number }
   }
   /** Set on a PAPER Position short opened by a rule research/NEWS.md measured, on Binance's
    * announcement (shared/newsActions.ts): which announcement and which coin. A delisting's is out

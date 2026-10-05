@@ -133,11 +133,11 @@ describe('the watch setting', () => {
 })
 
 describe('the paper-trade setting', () => {
-  const PAPER = { enabled: true, model: A, stakeQuote: 100, maxOpen: 3 }
+  const PAPER = { enabled: true, model: A, stakeQuote: 100, maxOpen: 3, maxSameSide: 2, pauseAfterLosses: 3, dropOnBtcMovePct: 1 }
 
   it('is off until it is switched on, and stays on across a restart', async () => {
     const { getAiConfig, setAiConfig } = await services()
-    expect((await getAiConfig()).watchPaper).toEqual({ enabled: false, model: null, stakeQuote: 100, maxOpen: 3 })
+    expect((await getAiConfig()).watchPaper).toEqual({ enabled: false, model: null, stakeQuote: 100, maxOpen: 3, maxSameSide: 2, pauseAfterLosses: 3, dropOnBtcMovePct: 1 })
     await setAiConfig({ watch: ON })
     expect((await setAiConfig({ watchPaper: PAPER })).watchPaper).toEqual(PAPER)
     vi.resetModules()
@@ -163,6 +163,11 @@ describe('the paper-trade setting', () => {
     await setAiConfig({ watchPaper: PAPER })
     await expect(setAiConfig({ watchPaper: { stakeQuote: 1000 } })).rejects.toThrow(/Switch paper trades off before changing them/)
     await expect(setAiConfig({ watchPaper: { maxOpen: 10 } })).rejects.toThrow(/Switch paper trades off/)
+    // The safeguards are terms too: loosening one while on is a change like any other.
+    await expect(setAiConfig({ watchPaper: { maxSameSide: 10 } })).rejects.toThrow(/Switch paper trades off/)
+    await expect(setAiConfig({ watchPaper: { pauseAfterLosses: 0 } })).rejects.toThrow(/Switch paper trades off/)
+    await expect(setAiConfig({ watchPaper: { dropOnBtcMovePct: 0 } })).rejects.toThrow(/Switch paper trades off/)
+    await expect(setAiConfig({ watchPaper: { ...PAPER, dropOnBtcMovePct: 3 } })).rejects.toThrow(/Bitcoin moves/)
     expect((await getAiConfig()).watchPaper).toEqual(PAPER)
     // Saying again what is already so is not a change, and off-and-change in one step is allowed.
     await setAiConfig({ watchPaper: { ...PAPER } })
@@ -191,13 +196,19 @@ describe('the paper-trade setting', () => {
     expect((await setAiConfig({ watch: { models: [B] } })).watchPaper).toEqual({ ...PAPER, enabled: false, model: null })
   })
 
+  it('reads a setting stored before the safeguards as on, with their defaults', async () => {
+    const dir = process.env.AI_TEST_USER_DATA as string
+    writeFileSync(join(dir, 'aiConfig.json'), JSON.stringify({ defaultModel: A, enabledModels: [A], watch: ON, watchPaper: { enabled: true, model: A, stakeQuote: 250, maxOpen: 5 } }))
+    expect((await (await services()).getAiConfig()).watchPaper).toEqual({ ...PAPER, stakeQuote: 250, maxOpen: 5 })
+  })
+
   it('reads a stored setting that could not have been switched on as off', async () => {
     const dir = process.env.AI_TEST_USER_DATA as string
     writeFileSync(join(dir, 'aiConfig.json'), JSON.stringify({ defaultModel: A, enabledModels: [A], watch: ON, watchPaper: { ...PAPER, model: B } }))
-    expect((await (await services()).getAiConfig()).watchPaper).toEqual({ enabled: false, model: null, stakeQuote: 100, maxOpen: 3 })
+    expect((await (await services()).getAiConfig()).watchPaper).toEqual({ enabled: false, model: null, stakeQuote: 100, maxOpen: 3, maxSameSide: 2, pauseAfterLosses: 3, dropOnBtcMovePct: 1 })
     vi.resetModules()
     writeFileSync(join(dir, 'aiConfig.json'), JSON.stringify({ defaultModel: A, enabledModels: [A], watch: ON, watchPaper: { ...PAPER, stakeQuote: 7 } }))
-    expect((await (await services()).getAiConfig()).watchPaper).toEqual({ enabled: false, model: A, stakeQuote: 100, maxOpen: 3 })
+    expect((await (await services()).getAiConfig()).watchPaper).toEqual({ enabled: false, model: A, stakeQuote: 100, maxOpen: 3, maxSameSide: 2, pauseAfterLosses: 3, dropOnBtcMovePct: 1 })
   })
 })
 

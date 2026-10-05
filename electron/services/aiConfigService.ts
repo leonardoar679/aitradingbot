@@ -302,11 +302,21 @@ export async function setAiConfig(patch: AiConfigPatch): Promise<AiConfig> {
       enabled: asked.enabled ?? state.watchPaper.enabled,
       model: asked.model !== undefined ? asked.model : state.watchPaper.model,
       stakeQuote: asked.stakeQuote ?? state.watchPaper.stakeQuote,
-      maxOpen: asked.maxOpen ?? state.watchPaper.maxOpen
+      maxOpen: asked.maxOpen ?? state.watchPaper.maxOpen,
+      maxSameSide: asked.maxSameSide ?? state.watchPaper.maxSameSide,
+      pauseAfterLosses: asked.pauseAfterLosses ?? state.watchPaper.pauseAfterLosses,
+      dropOnBtcMovePct: asked.dropOnBtcMovePct ?? state.watchPaper.dropOnBtcMovePct
     }
     const problem = aiWatchPaperProblem(candidate, watch.models)
     if (problem !== null) throw new Error(problem)
-    const sameTerms = candidate.model === state.watchPaper.model && candidate.stakeQuote === state.watchPaper.stakeQuote && candidate.maxOpen === state.watchPaper.maxOpen
+    // The safeguards are terms like the stake: what switching them on said is what runs.
+    const sameTerms =
+      candidate.model === state.watchPaper.model &&
+      candidate.stakeQuote === state.watchPaper.stakeQuote &&
+      candidate.maxOpen === state.watchPaper.maxOpen &&
+      candidate.maxSameSide === state.watchPaper.maxSameSide &&
+      candidate.pauseAfterLosses === state.watchPaper.pauseAfterLosses &&
+      candidate.dropOnBtcMovePct === state.watchPaper.dropOnBtcMovePct
     if (state.watchPaper.enabled && candidate.enabled && !sameTerms) {
       throw new Error('Switch paper trades off before changing them. Switching them on again says what they will do first.')
     }

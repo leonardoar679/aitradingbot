@@ -647,6 +647,37 @@ it is paper.
   trade it cannot fund is not opened, by the check the order form makes. Each is looked at again
   inside the one queue every settings write goes through, so two answers arriving together
   cannot both pass.
+- **Three safeguards** (chosen on 5 October 2026, from the V3 document's later items). Each only
+  ever opens less, is counted from what is on file, and is set beside the stake:
+  - **So many in one direction:** at most 1, 2, 3, 5 or 10 open BUYs, and as many SELLs (2 by
+    default). Altcoins move together, so several open the same way are one bet on the market.
+  - **A pause after a losing run:** once the last 2, 3 or 5 of its trades to close today all lost (3
+    by default), it opens none until midnight UTC. One that never entered is neither a loss nor a
+    win. The Watch card says when it is paused.
+  - **Bitcoin moving against a call:** a trade still waiting for its entry is dropped when Bitcoin
+    has moved 0.5%, 1% or 2% against it (1% by default) since the minute the event was read.
+    Bitcoin's closed minutes are read once a minute with the trade's own. A dropped trade is
+    stopped, books nothing, raises a notice, and its card and timeline say "Dropped before it
+    entered: Bitcoin fell 1.17% after the call". One that has entered is left to its own stop and
+    target.
+
+  Each can be set to never. None is shown to make the trades pay: no measurement here found an
+  edge in the models' calls. They bound what following them can do. A setting saved before they
+  existed reads them at their defaults and stays on; changing one, like the stake, means switching
+  paper trades off first.
+
+  Checked in the app on 5 October 2026, on a scratch profile with a separate build. A faked tag
+  of DOGE, XRP and ADA raised three events, and a canned model answered BUY on each with a range
+  below the price. Bitcoin's minutes were synthetic, falling 1.67% a minute after the event:
+  - the first two BUYs opened, and the third was refused: "2 in one direction is the most it
+    keeps";
+  - once the fall had a closed minute, both waiting BUYs were dropped, each with a notice, and
+    their cards said "Dropped before it entered: Bitcoin fell 1.67% after the call";
+  - with three losses closed that day seeded, the Watch card said it was paused until 00:00 UTC;
+  - nothing went to an exchange.
+
+  The recommendations themselves stay on Opportunities' Right Now until they expire: only the
+  watch's paper trades are dropped.
 - **It follows one model.** Comparing models is the leaderboard's job, and three models trading
   one event would be three positions on one view of the market. The model has to be one the
   watch asks, and neither the model, the stake nor the limit can be changed while it is on.

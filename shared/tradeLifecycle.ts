@@ -1,7 +1,7 @@
 import type { AiCallRecord } from './aiLedger'
 import { describeDecider } from './aiPanel'
 import { GPT_MIN_CONFIDENCE } from './aiSignal'
-import { describeWatchPaperResult, type WatchPaperOutcome } from './aiWatchPaper'
+import { describeWatchPaperResult, watchPaperEntered, type WatchPaperOutcome } from './aiWatchPaper'
 import type { ExecutorConfig, PositionExecutorParams, PositionExitReason } from './ipc'
 import { describeEventType, type MarketEvent } from './marketEvent'
 
@@ -152,9 +152,9 @@ export function traceWatchTrade(records: WatchTradeRecords): WatchTradeTrace {
     if (outcome !== null) {
       steps.push({
         at: outcome.closedAt,
-        label: outcome.exit === 'entry_expired' ? 'Never entered' : 'Closed',
+        label: outcome.exit === 'entry_expired' ? 'Never entered' : outcome.exit === 'btc_moved' ? 'Dropped' : 'Closed',
         detail: describeWatchPaperResult(outcome, executor.quoteAsset),
-        tone: outcome.exit === 'entry_expired' ? 'muted' : outcome.pnlQuote >= 0 ? 'up' : 'down'
+        tone: !watchPaperEntered(outcome) ? 'muted' : outcome.pnlQuote >= 0 ? 'up' : 'down'
       })
     } else if (fill !== null && fill.status === 'closed' && fill.exitReason !== null) {
       const result: WatchPaperOutcome = { exit: fill.exitReason, pnlQuote: fill.realizedPnl ?? 0, closedAt: fill.closedAt ?? 0 }
@@ -210,12 +210,14 @@ export function describeTracePrices(trace: WatchTradeTrace): string {
       ? plainNumber(prices.fill)
       : intent === null
         ? 'none, as no paper position was opened'
-        : expired
-          ? 'none, as it never entered'
-          : execution === null
-            ? 'not worked out, as its candles could not be read'
-            : intent.status === 'stopped'
-              ? 'none, as it was stopped before it entered'
-              : 'none yet'
+        : outcome?.exit === 'btc_moved'
+          ? 'none, as it was dropped before it entered'
+          : expired
+            ? 'none, as it never entered'
+            : execution === null
+              ? 'not worked out, as its candles could not be read'
+              : intent.status === 'stopped'
+                ? 'none, as it was stopped before it entered'
+                : 'none yet'
   return `Price the model saw: ${seen} · range it named: ${range} · fill: ${fill}.`
 }

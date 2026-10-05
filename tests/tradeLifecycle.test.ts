@@ -148,6 +148,13 @@ describe("one trade's timeline", () => {
     expect(trace.prices.fill).toBeNull()
   })
 
+  it('says one the watch dropped before it entered, because Bitcoin moved against it, was dropped', () => {
+    const dropped: WatchPaperOutcome = { exit: 'btc_moved', pnlQuote: 0, closedAt: T + 240, btcMovePct: -1.24 }
+    const trace = traceWatchTrade(records({ executor: watchTrade({}, dropped), fill: { ...FILL, status: 'pending', enteredAt: null, entryPrice: null, exitReason: null, closedAt: null, realizedPnl: null } }))
+    expect(trace.steps.at(-1)).toMatchObject({ at: T + 240, label: 'Dropped', tone: 'muted', detail: 'Dropped before it entered: Bitcoin fell 1.24% after the call.' })
+    expect(describeTracePrices(trace)).toContain('fill: none, as it was dropped before it entered.')
+  })
+
   it('names the version a provider served when it is not the one asked for', () => {
     const trace = traceWatchTrade(records({ calls: [call({ servedModel: 'acme/follower-2026-09' })] }))
     expect(trace.steps[1].detail).toBe('BUY at 80%, served as acme/follower-2026-09 in 9.4s, asked by the watch.')

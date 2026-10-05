@@ -1,15 +1,18 @@
 import type { AiConfig } from '../../shared/aiCost'
 import type { AiSignalDecision } from '../../shared/aiSignal'
+import { MARKET_REFERENCE_SYMBOLS } from '../../shared/aiEventMarket'
 import {
+  btcMoveAgainst,
   describeWatchPaperEntry,
   planWatchPaperTrade,
   watchPaperBlock,
+  watchPaperDropNotice,
   watchPaperExecutors,
   watchPaperNotice,
   type WatchPaperOutcome,
   type WatchPaperPlan
 } from '../../shared/aiWatchPaper'
-import type { AppSettings, Candle, Exchange, ExecutorConfig } from '../../shared/ipc'
+import type { AppSettings, Candle, Exchange, ExecutorConfig, PositionExecutorParams } from '../../shared/ipc'
 import type { MarketEvent } from '../../shared/marketEvent'
 import { describeExecutorFunding } from '../account/executorFunding'
 import { settleExecutorOnStop } from '../account/settleExecutor'
@@ -22,7 +25,8 @@ import { settingsWrites } from '../utils/settingsWrites'
 // PAPER Position executor, appended to the executors on file. And a paper position of the watch's
 // that has closed -- its stop, its target or its clock ended it, or its entry expired unfilled --
 // is stopped and its result settled into the paper account, the way pressing Stop on its card
-// would, so that the money comes back and the count of open trades goes down.
+// would, so that the money comes back and the count of open trades goes down. So is one still
+// waiting for its entry when Bitcoin has moved against it by more than its safeguard allows.
 //
 // PAPER IS WRITTEN HERE AS A LITERAL. watchPaperExecutor takes no mode and has no way to be given
 // one. Nothing in this file mentions the bridge a real order travels over, and
@@ -103,7 +107,7 @@ export async function openWatchPaperTrade(
   if (!watchPaper.enabled || decision.model !== watchPaper.model) return null
 
   const before = await deps.getSettings()
-  const blocked = watchPaperBlock({ config: watchPaper, event, decision, executors: before.executors })
+  const blocked = watchPaperBlock({ config: watchPaper, event, decision, executors: before.executors, nowSec: deps.nowSec() })
   if (blocked !== null) return { opened: false, text: `No paper trade: ${blocked}` }
 
   let lastPrice: number | null = null
@@ -120,7 +124,7 @@ export async function openWatchPaperTrade(
   const refused = await deps.queue(async (): Promise<string | null> => {
     const fresh = await deps.getSettings()
     const problem =
-      watchPaperBlock({ config: watchPaper, event, decision, executors: fresh.executors }) ??
+      watchPaperBlock({ config: watchPaper, event, decision, executors: fresh.executors, nowSec: deps.nowSec() }) ??
       describeExecutorFunding({
         account: fresh.paperAccount ?? null,
         executors: fresh.executors,
@@ -159,16 +163,45 @@ export async function openWatchPaperTrade(
 export async function settleWatchPaperTrades(deps: WatchPaperDeps): Promise<string[]> {
   const settled: string[] = []
   const { executors } = await deps.getSettings()
-  for (const executor of watchPaperExecutors(executors).filter((entry) => entry.status === 'active')) {
+  const active = watchPaperExecutors(executors).filter((entry) => entry.status === 'active')
+  if (active.length === 0) return settled
+  // The safeguard as it is set now, and Bitcoin's minutes read once a pass for every trade that
+  // needs them, from the earliest of their events.
+  const { watchPaper } = await deps.getConfig()
+  const btcMinutes = new Map<Exchange, Promise<Candle[]>>()
+  const bitcoin = (exchange: Exchange, nowSec: number): Promise<Candle[]> => {
+    let read = btcMinutes.get(exchange)
+    if (read === undefined) {
+      const fromSec = Math.min(...active.map((entry) => entry.watch?.eventTime ?? nowSec)) - 60
+      read = deps.fetchCandles(exchange, MARKET_REFERENCE_SYMBOLS.btc, fromSec, nowSec).then((bars) => bars.filter((bar) => bar.time + 60 <= nowSec))
+      btcMinutes.set(exchange, read)
+    }
+    return read
+  }
+  for (const executor of active) {
     try {
       const nowSec = deps.nowSec()
       const candles = (await deps.fetchCandles(executor.exchange, executor.symbol, executor.createdAt, nowSec)).filter((bar) => bar.time + 60 <= nowSec)
       if (candles.length === 0) continue
       const state = runExecutorSimulation(candles, executor, candles[0].close)
-      if (state.kind !== 'position' || state.status !== 'closed' || state.exitReason === null) continue
-      // How it ended goes on its mark: a stopped executor is not simulated again, so this is what
-      // its card and the Watch card have to show, with or without a paper account.
-      const result: WatchPaperOutcome = { exit: state.exitReason, pnlQuote: state.realizedPnl ?? 0, closedAt: state.closedAt ?? nowSec }
+      if (state.kind !== 'position') continue
+      let found: WatchPaperOutcome | null = null
+      if (state.status === 'closed' && state.exitReason !== null) {
+        // How it ended goes on its mark: a stopped executor is not simulated again, so this is what
+        // its card and the Watch card have to show, with or without a paper account.
+        found = { exit: state.exitReason, pnlQuote: state.realizedPnl ?? 0, closedAt: state.closedAt ?? nowSec }
+      } else if (state.status === 'pending' && executor.watch !== undefined && watchPaper.dropOnBtcMovePct > 0) {
+        // Still waiting for its entry: dropped when Bitcoin has moved against it since the event.
+        const movePct = btcMoveAgainst({
+          side: (executor.params as PositionExecutorParams).side,
+          eventTime: executor.watch.eventTime,
+          btc: await bitcoin(executor.exchange, nowSec),
+          limitPct: watchPaper.dropOnBtcMovePct
+        })
+        if (movePct !== null) found = { exit: 'btc_moved', pnlQuote: 0, closedAt: nowSec, btcMovePct: movePct }
+      }
+      if (found === null) continue
+      const result: WatchPaperOutcome = found
       const stopped = await deps.queue(async (): Promise<boolean> => {
         const fresh = await deps.getSettings()
         const current = fresh.executors.find((entry) => entry.id === executor.id)
@@ -180,6 +213,14 @@ export async function settleWatchPaperTrades(deps: WatchPaperDeps): Promise<stri
       if (!stopped) continue
       await deps.settle(executor, nowSec)
       settled.push(executor.name)
+      if (result.exit === 'btc_moved' && executor.watch !== undefined) {
+        const notice = watchPaperDropNotice(executor, executor.watch.eventTime, result.btcMovePct ?? 0)
+        try {
+          deps.notify(notice.title, notice.body)
+        } catch {
+          // A desktop that cannot show it is not a reason to report a trade that was dropped as not.
+        }
+      }
     } catch (failure) {
       // One trade whose candles could not be read is tried again next minute; the others go on.
       console.error(`The watch could not settle its paper trade "${executor.name}":`, failure)
