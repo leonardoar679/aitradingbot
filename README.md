@@ -43,7 +43,7 @@ other.
 | | **Markets** | One pair on any supported exchange: candlestick chart with indicators, symbol search, live ticker. |
 | | **AI Decisions** | **Analyze** asks a model about one market; **Signals** lists every call any model has made and how it turned out. A model is handed a market snapshot and returns one JSON decision, and is given no tools at all. |
 | | **Positions** | Live paper positions for active bots; a **Live Positions** table of real Binance holdings from live-mode Order Executor fills, closable (fully or partially) for real; a **Live Trade History** table of realized P&L from closed live positions; an **Inventory** table of positions handed over from stopped paper executors (see [Position Handover](#position-handover--inventory)). |
-| | **Performance** | Total value, active-bot count, bot P&L and system cards; the portfolio's value over time (value/composition, 1D/1W/1M/3M) and its largest holdings; what the watch's recommendations earned over the last 10/50/100 trades and 7/30 days; the journal of every recommendation with its outcome, exportable as CSV, where any line opens [its whole story](#one-trades-whole-story) on one timeline. |
+| | **Performance** | Total value, active-bot count, bot P&L and system cards; the portfolio's value over time (value/composition, 1D/1W/1M/3M) and its largest holdings; what the watch's recommendations earned over the last 10/50/100 trades and 7/30 days; the app's own paper trades, the watch's and the news rules', as a running total in R; the journal of every recommendation with its outcome, exportable as CSV, where any line opens [its whole story](#one-trades-whole-story) on one timeline. |
 | Trading | **Paper Trading** | The paper account paper strategies spend and hand back (fund it, balances, movements), and a manual paper order ticket — market/limit, live last price, session-only order history. Nothing here reaches an exchange. |
 | | **Live Trading** | Real money: the session's gates as they stand (armed, kill switch, the day's notional and loss, the managed allocation, exits being watched), and what you hold on each connected exchange, with Binance futures positions closable for real. |
 | | **Strategies** | **Active Runs**: a bot is a single continuous dry-run of a [chosen strategy](#strategies) against one exchange/symbol, optionally with a model asked to [confirm each entry](#ai-signals--paper-only); disabling one records a run, removing one archives it. **Execution**: the eight executor types, each running independently against live candles, the starter presets, and the New Executor form a call's filled-in form opens on — see [Executors](#executors) below. |
@@ -566,7 +566,7 @@ AI pages:
 |---|---|
 | **AI Decisions › Analyze** | One market, one model, one click, one call — or four, when what is picked is a panel of agents on a model. The button states the cost of the whole click before it is pressed, and reads "cached, free" when the answer is already held. Answers from different models for the same candle stack into a comparison. A call to buy can be turned into an order form — see *From a call to an order, by hand*. |
 | **Opportunities** | The events the scanner raised, each with what the ticked models recommended for it — BUY, SELL or NO TRADE, with an entry range, a stop, a target and an expiry — and what each recommendation has done since. A watch can put events to models as they are raised, within its own daily limit, and open a paper position on a call it would act on; a list says what can still be acted on right now. Described below. |
-| **Performance** | A leaderboard of what the watch's recommendations earned, and a journal that lists every recommendation, saves as a spreadsheet, and opens any line's whole story on one timeline. |
+| **Performance** | A leaderboard of what the watch's recommendations earned; the watch's and the news rules' paper trades as a running total in R, one line each; and a journal that lists every recommendation, saves as a spreadsheet, and opens any line's whole story on one timeline. |
 | **AI Decisions › Signals** | Every answered call, scored against the candles that followed: the move after 1h, 4h and 1d, which of the model's own levels was touched first, and whether the call was right. Per model: act rate, hit rate, and hit rate by confidence. |
 | **AI Benchmark** | The same questions put to every model you tick, with the answers scored side by side. Two kinds: one market asked on a clock, with a panel of agents beside its own model and what a route between two of them would have done; and events across the market, where each recommendation is followed through its own entry, stop and target — both described below. |
 | **Settings › AI** | OpenRouter's catalogue with prices. Only models that can be held to a strict JSON schema can be enabled, and one that reasons can be enabled again at a lower reasoning effort. Also where a route to a second model, or to a panel, is set — described below. Below it: calls, tokens, dollars and latency per model, the daily budget, and the pace, the most calls a minute to one model. |
@@ -787,7 +787,9 @@ it is paper.
   (`shared/paperRisk.ts`). +1 R is a win as large as the loss its stop allowed. Sized by risk, a
   trade's R and its result in USDT tell the same story; at a stake, R is what makes trades with
   near and far stops comparable, and it adds across quote assets. The card, the Watch card's tally,
-  the trade's timeline and the daily digest all say it. A news rule's short is told the same way on
+  the trade's timeline and the daily digest all say it, and Performance draws the running total,
+  one line for the watch and one for the news rules (`shared/paperRCurve.ts`), stepping at each
+  close. A news rule's short is told the same way on
   its card; a delisting's has no stop and gives no R.
 - **With a paper account, the result is settled into it** by the settlement a press of Stop
   runs, and a trade the account cannot fund is not opened. **With none, a result is added to no
@@ -2690,6 +2692,7 @@ shared/                       Code both processes run, so they cannot disagree a
   aiWatchPaper.ts             Paper positions the watch opens by itself: the setting, what a call becomes, and its limits
   paperRisk.ts                The paper trades the app opens by itself, the watch's and the news rules': sized by what their stop would lose, and capped in what they stake together
   paperDigest.ts              The daily notice of what those trades did the day before, each closed one in what it risked at its stop
+  paperRCurve.ts              Those trades as a running total in R, one line for the watch and one for the news rules, for Performance
   aiEventMarket.ts            The market around an event: Bitcoin's and ether's returns to its minute, the pair's less theirs, two labels
   aiPace.ts                   How fast one model is asked: the most calls a minute, and how long the next one waits
   aiEffort.ts                 A model asked at a lower reasoning effort, as a model of its own: its id, and where it is taken apart
@@ -2712,7 +2715,7 @@ src/                          React renderer app
   status/                     What the status bar and Overview say: the trading mode, the watch's mode, a key's state
   opportunities/              Opportunities
   ai-decisions/               AI Decisions (Analyze, Signals)
-  performance/                Performance
+  performance/                Performance, and PaperRCurveCard (the app's own paper trades in R)
   trading/                    Paper Trading, Live Trading
   strategies/                 Strategies (Active Runs, Execution)
   research/                   Backtest & Research (Backtest, Automation)

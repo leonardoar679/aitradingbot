@@ -470,6 +470,17 @@ describe('AI code has no route to a real order', () => {
     expect(source).toContain('window.api.settings.set({ paperDigest: { ...setting, lastDay: plan.day } })')
   })
 
+  it('the running total in R of the app\'s own paper trades is drawn from what it is handed', () => {
+    // Performance draws the watch's and the news rules' paper trades as a running total in R. The
+    // arithmetic is a reading of results on file; the card is handed the executors by the page and
+    // reaches nothing through the bridge itself.
+    const rules = join(ROOT, 'shared', 'paperRCurve.ts')
+    expect(importsOf(rules).sort()).toEqual(['ipc', 'paperRisk'])
+    expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron|liveTrading|placeLive/)
+    const card = readFileSync(join(ROOT, 'src', 'performance', 'PaperRCurveCard.tsx'), 'utf-8')
+    expect(card).not.toMatch(/window\.api|liveTrading|placeLive|onPrepareOrder/)
+  })
+
   it('the AI\'s part of the status bar reads two settings and offers nothing', () => {
     // It sits on the live-trading bar, beside the arm and kill controls, so it is held to the
     // narrowest rule of all: it reads whether a key is stored and what the AI setting is, and
