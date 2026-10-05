@@ -14,6 +14,7 @@ import { executorTypeMeta } from './executorTypeMeta'
 import { netUnrealizedPct } from '../../shared/fees'
 import { describeAiProposalOrigin } from '../../shared/aiProposal'
 import { describeWatchPaperOrigin, describeWatchPaperResult } from '../../shared/aiWatchPaper'
+import { TradeTimeline } from '../agents/TradeTimeline'
 import { useExecutorSimulation } from './useExecutorSimulation'
 import { useSpreadExecutorSimulation } from './useSpreadExecutorSimulation'
 import { formatQuotePrice } from '../utils/formatCurrency'
@@ -628,6 +629,8 @@ export function ExecutorCard({
   const Icon = meta.icon
   const exchangeName = EXCHANGES.find((e) => e.id === executor.exchange)?.name ?? executor.exchange
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  // A paper trade the watch opened can show its whole story: read when asked for, not on every poll.
+  const [showTimeline, setShowTimeline] = useState(false)
 
   return (
     <div
@@ -697,13 +700,28 @@ export function ExecutorCard({
           </div>
         )}
         {executor.watch !== undefined && executor.mode === 'paper' && (
-          <div style={{ marginTop: '0.25rem', fontSize: '0.7rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>{describeWatchPaperOrigin(executor.watch)}</div>
+          <div style={{ marginTop: '0.25rem', fontSize: '0.7rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
+            {describeWatchPaperOrigin(executor.watch)}{' '}
+            <button
+              onClick={() => setShowTimeline((shown) => !shown)}
+              aria-expanded={showTimeline}
+              style={{ background: 'none', border: 'none', padding: 0, color: 'var(--accent)', cursor: 'pointer', font: 'inherit', textDecoration: 'underline' }}
+            >
+              {showTimeline ? 'Hide the timeline' : 'Timeline'}
+            </button>
+          </div>
         )}
       </div>
 
       <div style={{ borderTop: '1px solid var(--border)', paddingTop: '0.6rem' }}>
         <MetricsPanel executor={executor} />
       </div>
+
+      {showTimeline && executor.watch !== undefined && (
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: '0.6rem' }}>
+          <TradeTimeline eventId={executor.watch.eventId} model={executor.watch.model} executor={executor} />
+        </div>
+      )}
 
       {(executor.liveWatcherError ?? null) !== null && (
         <div

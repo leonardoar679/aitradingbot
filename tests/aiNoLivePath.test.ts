@@ -318,6 +318,31 @@ describe('AI code has no route to a real order', () => {
     expect(importsOf(join(ROOT, 'src', 'status', 'statusModes.ts')).sort()).toEqual(['aiCost', 'ipc'])
   })
 
+  it("a trade's timeline reads what is on file and writes nothing", () => {
+    // It opens on a watch paper trade's card and on a journal row, and joins records that already
+    // exist: the event, the answers about it, the paper executor and its candles. It offers no call
+    // to an order form, writes no setting, and mentions no bridge a real order travels over.
+    const component = join(ROOT, 'src', 'agents', 'TradeTimeline.tsx')
+    const loader = join(ROOT, 'src', 'agents', 'watchTradeRecords.ts')
+    const rules = join(ROOT, 'shared', 'tradeLifecycle.ts')
+    for (const path of [component, loader, rules]) {
+      const source = readFileSync(path, 'utf-8')
+      expect(source, path).not.toMatch(/liveTrading|LiveTrading|liveOrders|placeLive|window\.api\.(executors|trade|paper|credentials)/)
+      expect(source, path).not.toMatch(/onPrepareOrder|buildOpportunityProposal|buildAiProposal|settings\.set|settingsWrites/)
+      expect(importsOf(path), path).not.toContain('aiProposal')
+    }
+    const source = readFileSync(component, 'utf-8')
+    expect([...source.matchAll(/window\.api\.(\w+)\.(\w+)/g)].map((match) => `${match[1]}.${match[2]}`).sort()).toEqual([
+      'ai.listCalls',
+      'market.fetchHistoricalRange',
+      'scanner.listEvents',
+      'settings.get'
+    ])
+    expect(readFileSync(loader, 'utf-8')).not.toMatch(/window\.|ipcRenderer/)
+    expect(importsOf(loader).sort()).toEqual(['aiLedger', 'aiWatchPaper', 'engine', 'ipc', 'marketScanner', 'tradeLifecycle'])
+    expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron/)
+  })
+
   it('the model is offered no tools', () => {
     // It is handed a snapshot and returns one JSON object. A request that carried tool or function
     // definitions would be the first step toward a model that can ask this app to act.

@@ -10,6 +10,7 @@ import { describeError } from '../utils/ipcError'
 import { buttonStyle, cellStyle, headCellStyle, inputStyle, noteStyle, signedPct } from './agentStyles'
 import { answerSources, filterJournal, journalCsv, journalRows, journalTotals, type JournalCall, type JournalRow } from './journal'
 import { assembleFeed, loadFeedBars, type CandleFetch, type EventFeedItem } from './opportunities'
+import { TradeTimeline } from './TradeTimeline'
 
 const JOURNAL_DAYS = 30
 /** Rows read from each file, newest first. */
@@ -64,6 +65,8 @@ export function JournalCard({ paper }: { paper: ReadonlySet<string> }): React.JS
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [shown, setShown] = useState(ROWS_SHOWN)
+  // The line whose whole story is open under the table, by event and model.
+  const [opened, setOpened] = useState<{ eventId: string; model: string; title: string } | null>(null)
   const loadedAt = useRef(0)
 
   async function load(): Promise<void> {
@@ -227,6 +230,7 @@ export function JournalCard({ paper }: { paper: ReadonlySet<string> }): React.JS
                   <th style={headCellStyle}>What it did</th>
                   <th style={headCellStyle}>Net</th>
                   <th style={headCellStyle}>Paper</th>
+                  <th style={headCellStyle}>Story</th>
                 </tr>
               </thead>
               <tbody>
@@ -253,12 +257,32 @@ export function JournalCard({ paper }: { paper: ReadonlySet<string> }): React.JS
                       </td>
                       <td style={{ ...cellStyle, color: net.color, fontWeight: 600 }}>{row.netPct === null ? '—' : net.text}</td>
                       <td style={{ ...cellStyle, color: 'var(--text-secondary)' }}>{row.paperTrade ? 'opened' : '—'}</td>
+                      <td style={cellStyle}>
+                        <button
+                          onClick={() =>
+                            setOpened((current) =>
+                              current?.eventId === row.eventId && current.model === row.model
+                                ? null
+                                : { eventId: row.eventId, model: row.model, title: `${row.symbol}, ${describeDecider(row.model)}, ${utcMinute(row.time)} UTC` }
+                            )
+                          }
+                          style={{ background: 'none', border: 'none', padding: 0, color: 'var(--accent)', cursor: 'pointer', font: 'inherit', textDecoration: 'underline' }}
+                        >
+                          {opened?.eventId === row.eventId && opened.model === row.model ? 'Hide' : 'Timeline'}
+                        </button>
+                      </td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
           </div>
+          {opened !== null && (
+            <div style={{ marginTop: '0.8rem', borderTop: '1px solid var(--border)', paddingTop: '0.7rem' }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.45rem' }}>The story of {opened.title}</div>
+              <TradeTimeline key={`${opened.eventId}:${opened.model}`} eventId={opened.eventId} model={opened.model} />
+            </div>
+          )}
           {rows.length > shown && (
             <button onClick={() => setShown((count) => count + ROWS_SHOWN)} style={{ ...buttonStyle('secondary'), marginTop: '0.7rem' }}>
               Show {Math.min(ROWS_SHOWN, rows.length - shown)} more
