@@ -488,10 +488,10 @@ run below found nothing there. The Benchmark tab's second view, **Events across 
 the Opportunities question instead — about the minutes the scanner would have raised — and scores
 each recommendation by following it.
 
-- **Two buttons, and only the second can spend.** *Find events* is free: it reads 7, 14 or 30 days
-  of 1-minute candles for the 10, 20 or 40 most traded pairs, runs the detector the live scanner
-  runs, and takes a sample of at most 50 to 300 events. *Run benchmark* asks each ticked model
-  about each sampled event it has not answered, after stating the price and the time.
+- **Only *Run benchmark* can spend.** *Find events* is free: it reads 7, 14 or 30 days of 1-minute
+  candles for the 10, 20 or 40 most traded pairs, runs the detector the live scanner runs, and
+  takes a sample of at most 50 to 300 events. *Run benchmark* asks each ticked model about each
+  sampled event it has not answered, after stating the price and the time.
 - **The period ends a day back**, at the last UTC midnight at least 25 hours ago, so every
   recommendation has had its hour to enter and its day to run before it is scored. It is anchored
   to the day, so tomorrow's run covers the same days and one more.
@@ -500,6 +500,20 @@ each recommendation by following it.
   not depend on which others were found, so a longer period keeps the events a shorter one had and
   their answers come from the cache; and a hash cannot prefer the events that turned out well,
   which choosing "the strongest" quietly would.
+- **A run that asks a model is recorded, with its events** (`shared/aiExperiment.ts`, kept in
+  `userData/aiExperiments/experiments.jsonl`). The hash keeps a sample steady only while the same
+  events are found, and they are not: the most traded pairs are ranked by the last 24 hours. A
+  day after the run below, the same settings found 220 events where it had found 214, and
+  brought back 80 of its 100. So each run is written down under an id (`EXP-2026-1004-001`): the
+  period, the pairs, every sampled event as it was found, the models asked, the versions of the
+  prompt, the context, the schema and the detector, the fees, slippage and fixed bracket it is
+  scored with, and its calls and dollars, counted by the main process from the ledger rows those
+  calls wrote. The **Experiments** list opens one: its own events are read again, with the
+  answers held for them, for nothing. Tick another model there and *Run benchmark* asks it about
+  exactly those events, and that run is recorded beside the first. Results are still never
+  stored, and an experiment opened under a changed detector or changed scoring says so above its
+  tables. The detector's version is pinned the way the prompts are: a hash of what it makes of
+  one fixed market sits beside the version in `tests/marketEvent.test.ts`.
 - **The answers are the Opportunities tab's**, through the same cache, in both directions: an
   event a benchmark paid for shows its answers on that event's card, and the reverse.
 - **Only events every model answered are compared.** A recommendation is acted on when it takes a
@@ -527,6 +541,18 @@ each recommendation by following it.
   do, or when its confidence outweighs the other side's and the abstainers' together. A rule has
   no levels of its own, so it trades those of the model surest of that side, and it cannot act
   until the slowest model has answered.
+- **What each model changed.** A model's row runs two things together: which events it chose, and
+  the levels it traded them with. This table pulls them apart with the one thing that is the same
+  for every event, the fixed bracket. Beside a model's own trades it puts the bracket on the same
+  calls, on the side the model took — what "follow every event" would have traded had it waited
+  for the model to confirm it — and the bracket on the events the model let go. Three figures in
+  net a trade follow: how far the model came out from following everything, how much of that was
+  its choice of events, and how much its levels. The last two add up to the first. The page also
+  says what a coin tossed for the side is expected to return: the average of the follow and fade
+  rows.
+- **How the trades ended**, for every row: at the target, at the stop, when the holding time ran
+  out, and how many entries never filled. A stop that is hit nearly every time and a target that
+  is never reached are two different ways to lose, and a net figure shows neither.
 
 One real benchmark on events has been run, on 4 October 2026: 100 events sampled from the 214
 the detector finds on the twenty most traded pairs between 19 September and 3 October, put to
@@ -560,6 +586,49 @@ as theirs, which the price had left before a fifth of its entries (21 of 94) cou
 three agreeing left 26 closed trades at +0.79%, which is too few to read. This is one fortnight
 and one sample of it; what it does say is that these models, asked this question, add a filter
 to a trade that loses, not a view of their own.
+
+A day later the run was reopened from its record, for nothing, and read through the two tables
+that pull a model's result apart. Net added up, with the closed trades in brackets; the last
+three columns are net a trade:
+
+| | With / against the move | Its calls, its levels | Same calls, fixed bracket | Events it left, followed | Against following | From its choice | From its levels |
+|---|---|---|---|---|---|---|---|
+| `openai/gpt-5-mini` | 68 / 0 | −9.70% (63) | −10.18% (68) | −7.69% (27) | +0.03% | +0.04% | −0.00% |
+| `openai/gpt-5-mini@minimal` | 32 / 0 | −0.75% (30) | −0.93% (32) | −16.95% (63) | +0.16% | +0.16% | +0.00% |
+| `mistralai/mistral-small-2603` | 94 / 0 | −25.37% (73) | −23.92% (94) | +6.05% (1) | −0.16% | −0.07% | −0.09% |
+
+`gpt-5-mini` changed nothing. On the 68 events it acted on, its own entries, stops and targets
+returned −9.70% and the fixed bracket −10.18%; the 27 it passed over lost the rule 0.28% a trade
+against 0.15% on the ones it took, a gap 27 trades cannot show to be more than chance. Minimal
+effort lost least, and all of that was which events it acted on: the bracket on its 32 calls lost
+0.93%, as its own levels did, while following the 63 it declined lost 16.95%. That is +0.16% a
+trade over 32 trades, which a fortnight cannot tell from luck either — and it is the one figure
+here worth asking again on more events. Mistral Small did worse than the rule on both counts. Its
+levels cost 0.09% a trade against the bracket on the same calls, and the whole of its −0.07% from
+choice is one event: the one answer the validator refused was on an event the rule made 6.05% on.
+
+How the trades ended says what the events themselves are:
+
+| | Closed | At the target | At the stop | Time ran out | Never filled |
+|---|---|---|---|---|---|
+| Follow every event, no model | 95 | 26 (27%) | 56 (59%) | 13 (14%) | 0 |
+| Fade every event, no model | 95 | 19 (20%) | 57 (60%) | 19 (20%) | 0 |
+| `openai/gpt-5-mini` | 63 | 7 (11%) | 15 (24%) | 41 (65%) | 5 of 68 |
+| `openai/gpt-5-mini@minimal` | 30 | 4 (13%) | 10 (33%) | 16 (53%) | 2 of 32 |
+| `mistralai/mistral-small-2603` | 73 | 20 (27%) | 19 (26%) | 34 (47%) | 21 of 94 |
+
+The fixed bracket was stopped six times in ten **whichever side it took**. Its target is twice as
+far as its stop, so a price with no direction at all reaches the target first one time in three;
+following did so 26 times in 82 and fading 19 in 76. What follows an event is movement, both
+ways, with a lean toward continuing that is smaller than a round trip's cost. A coin tossed for
+the side is expected to return −25.86% on these 95 events, between the two rows. And two trades
+in three of `gpt-5-mini`'s ended on the clock: it asked for a target 2.9% away, held 67 minutes
+on average, and the price seldom travels that far in that time.
+
+So the two things worth paying to find out are whether a stronger model **chooses** events better
+than these did, and whether any model does when it is shown what the rest of the market was
+doing at that minute, which none of them was. Their levels, on this evidence, are not where a
+model earns anything.
 
 **Model routing.** A cheap model can be asked every fifteen minutes for a few dollars a month. A
 frontier model asked the same way costs several times that, and nearly all of it buys the answer
@@ -1986,6 +2055,7 @@ shared/                       Code both processes run, so they cannot disagree a
   aiOpportunity.ts            A recommendation on an event: entry range, stop, target and two clocks; its validator; what several answers add up to
   aiOpportunityOutcome.ts     What a recommendation would have earned: the entry, the exit, fees, slippage and latency
   aiEventBenchmark.ts         Several models on the same events: the sample, the comparison, the rows that are not models
+  aiExperiment.ts             A benchmark run kept as a run: its events, its models, its versions, and what the ledger says it cost
   aiWatch.ts                  Events put to models without a click: the setting, what it takes up, its daily limit, what it costs, its notice
   aiEffort.ts                 A model asked at a lower reasoning effort, as a model of its own: its id, and where it is taken apart
   aiCost.ts, aiLedger.ts      Budget and estimate arithmetic; the call record and its parser

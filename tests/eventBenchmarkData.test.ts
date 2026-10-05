@@ -6,7 +6,7 @@ import type { AiSignalDecision } from '../shared/aiSignal'
 import type { Candle, SymbolInfo } from '../shared/ipc'
 import type { MarketEvent } from '../shared/marketEvent'
 import type { ScanHistoryRequest } from '../shared/marketScanner'
-import { buildEventDataset, loadOutcomeBars, peekEventBenchmark, type DatasetProgress, type EventBenchmarkDeps } from '../src/agents/eventBenchmark'
+import { buildEventDataset, datasetOfExperiment, loadOutcomeBars, peekEventBenchmark, type DatasetProgress, type EventBenchmarkDeps } from '../src/agents/eventBenchmark'
 import type { CandleFetch } from '../src/agents/opportunities'
 import { eventQuestionCandles } from './eventCandles'
 
@@ -91,6 +91,9 @@ describe('buildEventDataset', () => {
     const window = eventBenchmarkWindow(NOW, 14)
     expect(scans).toEqual([{ requestId: 'scan-1', pairs: [pair('GOOD'), pair('QUIET'), pair('DOWN')], startSec: window.startSec, endSec: window.endSec }])
     expect(dataset).toMatchObject({ startSec: window.startSec, endSec: window.endSec, pairs: 3, found: 3, unaskable: 2, failedPairs: [{ symbol: 'DOWNUSDT', error: 'exchange down' }] })
+    // The pairs by name, for the record a run leaves, and no record yet: this sample was drawn.
+    expect(dataset.symbols).toEqual(['GOODUSDT', 'QUIETUSDT', 'DOWNUSDT'])
+    expect(dataset.experimentId).toBeNull()
     // One event survives: the one a model could actually be asked about.
     expect(dataset.events.map((entry) => entry.symbol)).toEqual(['GOODUSDT'])
     expect(dataset.questions).toHaveLength(1)
@@ -134,6 +137,74 @@ describe('buildEventDataset', () => {
       }
     }
     const dataset = await buildEventDataset({ nowSec: NOW, days: 7, pairCount: 1, maxEvents: 10, requestId: 'scan-5', shouldStop: () => true }, counting)
+    expect(calls).toBe(0)
+    expect(dataset.events).toEqual([])
+  })
+})
+
+describe('datasetOfExperiment', () => {
+  const recorded = {
+    id: 'EXP-2026-1004-001',
+    startSec: QUESTION.eventTime - 10 * 86_400,
+    endSec: QUESTION.eventTime + 4 * 86_400,
+    pairs: ['DOWNUSDT', 'GOODUSDT', 'QUIETUSDT', 'ZEROUSDT'],
+    found: 214,
+    events: [event('GOODUSDT'), event('QUIETUSDT'), event('DOWNUSDT')]
+  }
+
+  it('reads the recorded events and draws nothing', async () => {
+    const { deps, scans } = fakes([event('OTHERUSDT')])
+    const steps: DatasetProgress[] = []
+    let ranked = 0
+    const watching: EventBenchmarkDeps = {
+      ...deps,
+      pickUniverse: async (size) => {
+        ranked++
+        return deps.pickUniverse(size)
+      }
+    }
+    const dataset = await datasetOfExperiment(recorded, watching, { onProgress: (progress) => steps.push(progress) })
+
+    // Neither the most traded pairs nor their history is looked at: the sample is the record's.
+    expect(ranked).toBe(0)
+    expect(scans).toEqual([])
+    expect(dataset).toMatchObject({
+      startSec: recorded.startSec,
+      endSec: recorded.endSec,
+      pairs: 4,
+      symbols: recorded.pairs,
+      found: 214,
+      unaskable: 2,
+      failedPairs: [],
+      experimentId: 'EXP-2026-1004-001'
+    })
+    expect(dataset.events).toEqual([recorded.events[0]])
+    expect(dataset.questions).toHaveLength(1)
+    expect(dataset.questions[0].candles1m[dataset.questions[0].candles1m.length - 1].time).toBe(QUESTION.eventTime - 60)
+    expect(dataset.dailyVolume[recorded.events[0].id]).toBeCloseTo(dailyQuoteVolumeOf(dataset.questions[0].candles1m) ?? NaN, 6)
+    expect(steps[steps.length - 1]).toEqual({ step: 'questions', done: 3, total: 3 })
+  })
+
+  it('keeps every recorded event whose candles still make its question, however many there are', async () => {
+    const { deps } = fakes([])
+    // More than a benchmark's sample could be told to hold: a record is not sampled again.
+    const many = Array.from({ length: 12 }, (_, i) => ({ ...event('GOODUSDT'), id: `binance:GOODUSDT:${QUESTION.eventTime}:${i}` }))
+    const dataset = await datasetOfExperiment({ ...recorded, events: many }, deps)
+    expect(dataset.events).toEqual(many)
+    expect(dataset.unaskable).toBe(0)
+  })
+
+  it('stops fetching when told to', async () => {
+    const { deps } = fakes([])
+    let calls = 0
+    const counting: EventBenchmarkDeps = {
+      ...deps,
+      fetchCandles: async (...args) => {
+        calls++
+        return fetchCandles(...args)
+      }
+    }
+    const dataset = await datasetOfExperiment(recorded, counting, { shouldStop: () => true })
     expect(calls).toBe(0)
     expect(dataset.events).toEqual([])
   })

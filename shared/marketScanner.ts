@@ -163,7 +163,7 @@ export function eventMonthKey(unixSeconds: number): string {
 
 const BANDS: readonly string[] = ['quiet', 'watch', 'candidate', 'urgent']
 
-function isMarketEvent(value: unknown): value is MarketEvent {
+export function isMarketEvent(value: unknown): value is MarketEvent {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
   const row = value as Record<string, unknown>
   return (

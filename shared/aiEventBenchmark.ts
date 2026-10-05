@@ -5,12 +5,13 @@ import {
   opportunityCallOf,
   replayAnsweredAt,
   scoreOpportunity,
+  slippageRateFor,
   slippageRateForEvent,
   type OpportunityCall,
   type OpportunityOutcome
 } from './aiOpportunityOutcome'
 import { MIN_SCORED_CALLS } from './aiOutcome'
-import type { AiSignalDecision } from './aiSignal'
+import { GPT_MIN_CONFIDENCE, type AiSignalDecision } from './aiSignal'
 import type { Candle } from './ipc'
 import type { MarketEvent, MarketEventType } from './marketEvent'
 
@@ -59,6 +60,32 @@ const BASELINE_HOLD_SECONDS = 60 * 60
 const MIN_SLICE_TRADES = 10
 const CONFIDENCE_BANDS = [0.65, 0.7, 0.8, 0.9, 1]
 const SEGMENTS = 3
+
+/** Everything a result here rests on besides the answers and the candles. */
+export interface EventScoring {
+  feeRate: number
+  /** What a market fill gives up, by how much the pair trades a day: deep, middling, thin. */
+  slippageRates: [number, number, number]
+  /** How long after an event's minute closes a replayed question is taken to have been put. */
+  askDelaySec: number
+  /** The confidence a recommendation is acted on from. */
+  minConfidence: number
+  /** The bracket the no-model rows trade, in usual fifteen-minute moves and seconds. */
+  baseline: { stopSigmas: number; targetSigmas: number; holdSeconds: number }
+}
+
+/** The assumptions in force now. Written on each recorded experiment (shared/aiExperiment.ts):
+ * results are never stored, so an experiment opened later is scored by today's rules, and this is
+ * how it can say when those are not the rules it was run under. */
+export function eventScoring(): EventScoring {
+  return {
+    feeRate: DEFAULT_OPPORTUNITY_COSTS.feeRate,
+    slippageRates: [slippageRateFor(Number.MAX_VALUE), slippageRateFor(null), slippageRateFor(0)],
+    askDelaySec: REPLAY_ASK_DELAY_SEC,
+    minConfidence: GPT_MIN_CONFIDENCE,
+    baseline: { stopSigmas: BASELINE_STOP_SIGMAS, targetSigmas: BASELINE_TARGET_SIGMAS, holdSeconds: BASELINE_HOLD_SECONDS }
+  }
+}
 
 /** The stretch of history a benchmark covers: `days` ending at the last UTC midnight early enough
  * for every recommendation in it to have run its course. Anchored to the day, so running again
@@ -194,16 +221,47 @@ export interface EventBenchmarkRow {
   netAfterAiCostUsd: number | null
   /** That net total, before AI cost, for each dollar the answers cost. */
   perAiDollarUsd: number | null
+  /** How the closed trades ended: at the target, at the stop, or when the holding time ran out. */
+  exits: { target: number; stop: number; time: number }
   /** The period in three consecutive parts: a result that holds in only one shows here. */
   segments: { trades: number; wins: number; netSumPct: number }[]
   slices: EventBenchmarkSlice[]
   trades: EventTrade[]
 }
 
+/** What a model changed about the rule that follows every event, on the compared events.
+ *
+ * A MODEL'S OWN ROW RUNS TWO THINGS TOGETHER: which events it chose to act on, and the levels it
+ * traded them with. These pull them apart with the one thing that is the same for every event,
+ * the fixed bracket the no-model rows trade. `bracket` is that bracket on the model's own calls --
+ * the events it acted on, on the side it took -- which is also what the rule would have traded
+ * had it waited for the model to confirm it. `left` is the rule on the events the model let go.
+ *
+ * The three differences are in net a trade, and add up: against the rule = choice + levels. Each
+ * is null where a mean it is made of is withheld for too few trades. An entry of the model's that
+ * never filled is in none of its own figures, while the fixed bracket always enters, so this
+ * splits two averages and not one set of trades. */
+export interface EventContribution {
+  model: string
+  /** Of the events it acted on: how many on the event's own side, and how many against it. */
+  withTheMove: number
+  againstTheMove: number
+  bracket: EventBenchmarkRow
+  left: EventBenchmarkRow
+  /** The model's net a trade less the rule's over every compared event. */
+  againstRulePct: number | null
+  /** Of that, what choosing these events was worth: the fixed bracket on its calls less the rule. */
+  choicePct: number | null
+  /** And what its levels were worth: its own trades less the fixed bracket on the same calls. */
+  levelsPct: number | null
+}
+
 export interface EventBenchmarkSummary {
   sampled: number
   compared: number
   models: EventBenchmarkRow[]
+  /** One for each model, in the same order. Empty while nothing is compared. */
+  contributions: EventContribution[]
   /** The same events traded with no judgement: follow every one, fade every one. */
   baselines: EventBenchmarkRow[]
   /** Which events those two rows cover: the compared ones, so that they sit beside the models
@@ -409,6 +467,11 @@ function rowOf(source: RowSource, segmentEnds: number[]): EventBenchmarkRow {
     costUsd,
     netAfterAiCostUsd: costUsd === null ? null : netUsd - costUsd,
     perAiDollarUsd: costUsd === null || !(costUsd > 0) ? null : netUsd / costUsd,
+    exits: {
+      target: closed.filter((trade) => trade.outcome.exit === 'take_profit').length,
+      stop: closed.filter((trade) => trade.outcome.exit === 'stop_loss').length,
+      time: closed.filter((trade) => trade.outcome.exit === 'time').length
+    },
     segments: segmentEnds.map((end, segment) => {
       const start = segment === 0 ? -Infinity : segmentEnds[segment - 1]
       const inside = closed.filter((trade) => trade.time > start && trade.time <= end)
@@ -554,5 +617,48 @@ export function summarizeEventBenchmark(input: EventBenchmarkInput): EventBenchm
           return rowOf({ name, compared: comparedIndices.length, answered: null, decisions: null, trades, withConfidence: false }, segmentEnds)
         })
 
-  return { sampled: input.events.length, compared: comparedIndices.length, models, baselines, baselinesOver, rules, segmentEnds }
+  // What each model changed about the rule. Only over compared events: with nothing compared the
+  // rule's rows cover every sampled event, and there is no model's choice to set against them.
+  const less = (a: number | null, b: number | null): number | null => (a === null || b === null ? null : a - b)
+  const contributions: EventContribution[] =
+    baselinesOver !== 'compared'
+      ? []
+      : models.map((row) => {
+          const sideAt = new Map(row.trades.map((trade) => [trade.index, trade.side]))
+          const onItsCalls: EventTrade[] = []
+          const onTheRest: EventTrade[] = []
+          let withTheMove = 0
+          let againstTheMove = 0
+          for (const index of comparedIndices) {
+            const direction = input.events[index].direction
+            if (direction === 'none') continue
+            const side = sideAt.get(index)
+            if (side === undefined) {
+              const trade = baselineTrade(input, index, true)
+              if (trade !== null) onTheRest.push(trade)
+              continue
+            }
+            const follows = (direction === 'up') === (side === 'long')
+            if (follows) withTheMove++
+            else againstTheMove++
+            const trade = baselineTrade(input, index, follows)
+            if (trade !== null) onItsCalls.push(trade)
+          }
+          const fixed = (trades: EventTrade[]): EventBenchmarkRow =>
+            rowOf({ name: row.name, compared: comparedIndices.length, answered: null, decisions: null, trades, withConfidence: false }, segmentEnds)
+          const bracket = fixed(onItsCalls)
+          const rule = baselines[0]
+          return {
+            model: row.name,
+            withTheMove,
+            againstTheMove,
+            bracket,
+            left: fixed(onTheRest),
+            againstRulePct: less(row.meanNetPct, rule.meanNetPct),
+            choicePct: less(bracket.meanNetPct, rule.meanNetPct),
+            levelsPct: less(row.meanNetPct, bracket.meanNetPct)
+          }
+        })
+
+  return { sampled: input.events.length, compared: comparedIndices.length, models, contributions, baselines, baselinesOver, rules, segmentEnds }
 }

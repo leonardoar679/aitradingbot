@@ -435,7 +435,9 @@ describe('an entry that cannot be ruled on', () => {
     )
     expect(outcome).toMatch(new RegExp(`at most ${AI_CONFIRM_MAX_DECISIONS} entries`))
     expect(asked).toBe(AI_CONFIRM_MAX_DECISIONS)
-  })
+    // The one test here that runs a whole ceiling's worth of reviews: two seconds alone, and
+    // three times that when every other file is running beside it, which is past the default.
+  }, 30_000)
 })
 
 describe('the question that is sent', () => {

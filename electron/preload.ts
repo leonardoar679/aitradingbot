@@ -13,6 +13,7 @@ import type {
 } from '../shared/aiSignal'
 import type { AiBenchmarkPeek, AiBenchmarkPeekRequest } from '../shared/aiBenchmark'
 import type { AiEntryConfirmRequest, AiEntryPeek } from '../shared/aiConfirm'
+import type { AiExperiment, AiExperimentInput, AiExperimentPage } from '../shared/aiExperiment'
 import type { AiOpportunityAskRequest, AiOpportunityPeek, AiOpportunityPeekRequest } from '../shared/aiOpportunity'
 import type { AiConfig, AiConfigPatch, AiKeyInfo, AiModelCatalogue, AiUsageSummary } from '../shared/aiCost'
 import type { AiCallFilter, AiCallPage } from '../shared/aiLedger'
@@ -172,6 +173,12 @@ const api = {
       ipcRenderer.invoke(IpcChannel.AiPeekBenchmark, request),
     peekOpportunity: (request: AiOpportunityPeekRequest): Promise<AiOpportunityPeek> =>
       ipcRenderer.invoke(IpcChannel.AiPeekOpportunity, request),
+    // Benchmark runs kept as runs (shared/aiExperiment.ts). Recording one writes down what a run
+    // that has already ended asked; it asks nothing itself.
+    listExperiments: (): Promise<AiExperimentPage> => ipcRenderer.invoke(IpcChannel.AiListExperiments),
+    getExperiment: (id: string): Promise<AiExperiment | null> => ipcRenderer.invoke(IpcChannel.AiGetExperiment, id),
+    recordExperiment: (input: AiExperimentInput): Promise<AiExperiment> =>
+      ipcRenderer.invoke(IpcChannel.AiRecordExperiment, input),
     // The two calls below the "free" line that are not free: each is billed unless its answer is
     // already cached.
     confirmEntry: (request: AiEntryConfirmRequest): Promise<AiSignalDecision> =>

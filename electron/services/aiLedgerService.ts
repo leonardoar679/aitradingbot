@@ -55,6 +55,12 @@ export async function listAiCalls(filter: AiCallFilter): Promise<AiCallPage> {
   return scan(filter, Math.min(MAX_LIMIT, Math.max(1, Number.isFinite(requested) ? requested : DEFAULT_LIMIT)))
 }
 
+/** Every row finished at or after `sinceSec`, newest first, however many there are. For counting
+ * what a run made (aiExperimentService.ts): a count that stops at a page limit is not a count. */
+export async function readAiCallsSince(sinceSec: number): Promise<AiCallPage> {
+  return scan({ sinceSec }, Number.POSITIVE_INFINITY)
+}
+
 /** Calls, tokens and dollars per model, for today and for the last thirty days. Unbounded by the
  * page limit on purpose: a total that silently stops counting at 5,000 rows is not a total. */
 export async function getAiUsageSummary(): Promise<AiUsageSummary> {

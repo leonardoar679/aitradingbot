@@ -1,9 +1,11 @@
+import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import type { Candle } from '../shared/ipc'
-import { quiet, thenFlat, withMove } from './eventCandles'
+import { T0, quiet, thenFlat, withMove } from './eventCandles'
 import {
   EVENT_CANDIDATE_SCORE,
   EVENT_COOLDOWN_SECONDS,
+  EVENT_DETECTOR_VERSION,
   EVENT_LOOKBACK_BARS,
   EVENT_URGENT_SCORE,
   EVENT_WATCH_SCORE,
@@ -329,5 +331,134 @@ describe('isScannablePair', () => {
     expect(isScannablePair({ baseAsset: 'WBTC', quoteAsset: 'USDT' })).toBe(false)
     // Ends in "UP" and is not a leveraged token.
     expect(isScannablePair({ baseAsset: 'JUP', quoteAsset: 'USDT' })).toBe(true)
+  })
+})
+
+// THE DETECTOR AND ITS VERSION MOVE TOGETHER, OR NOT AT ALL, for the reason a prompt and its
+// version do (tests/aiPromptVersions.test.ts). The version is written on every recorded experiment.
+// Change a window, a scale, a band or the rule for raising an event and leave the version alone,
+// and a sample drawn before the change sits beside one drawn after it as though one detector had
+// found both.
+//
+// What the detector makes of one fixed market is held here as a hash beside the version it was
+// made under. When this fails: if the change was meant, bump EVENT_DETECTOR_VERSION and put the
+// new version and hash here. If it was not, the hash has just caught it.
+describe('the detector and the version its events are recorded under', () => {
+  /** A move of `pct` over fifteen minutes beginning at minute `at`, the last five of them on
+   * `volume` times the usual. `wide` stretches those five bars: range, and no direction. */
+  const MOVES: { at: number; pct: number; volume: number; wide?: number }[] = [
+    { at: 900, pct: 2.4, volume: 9 },
+    { at: 1500, pct: -3.1, volume: 6 },
+    // A rise that stays under where the fall began, and later a fall that stays over where the
+    // rise began: a pump and a dump, not a breakout and a breakdown.
+    { at: 1540, pct: 2.2, volume: 8 },
+    // A large move and, inside its cooldown, a smaller one that is still an event when the
+    // cooldown ends: the minute it is raised at is the minute the cooldown says.
+    { at: 2100, pct: 2.8, volume: 14 },
+    { at: 2126, pct: 1.6, volume: 12 },
+    { at: 2700, pct: -0.9, volume: 3 },
+    { at: 3300, pct: 4, volume: 2 },
+    { at: 3340, pct: -2.5, volume: 9 },
+    { at: 3900, pct: -1.6, volume: 10 },
+    // Heavy volume and wide bars going nowhere: a volume spike, read and never raised.
+    { at: 4100, pct: 0.02, volume: 20, wide: 8 },
+    // In the still stretch, where a move is measured against the floor on volatility.
+    { at: 5700, pct: 0.6, volume: 7 }
+  ]
+  /** One minute with a high far above its close, 245 minutes before the first move begins: inside
+   * the four hours a break is measured against for that move's first readings, outside them for
+   * its last. */
+  const SPIKE_AT = 655
+  /** From here on the market barely moves: its usual fifteen-minute move is under the floor. */
+  const STILL_FROM = 4320
+  /** A minute that never traded: every window that spans it is no window at all. */
+  const MISSING = 4500
+  const MINUTES = 7200
+
+  /** Five days of minutes: a seeded wander with the moves above laid over it. Nothing here is
+   * random: the same bars every time. */
+  function fixedMarket(): Candle[] {
+    let state = 20261004
+    const next = (): number => {
+      state = (state * 1103515245 + 12345) % 2147483648
+      return state / 2147483648 - 0.5
+    }
+    const bars: Candle[] = []
+    let price = 250
+    for (let i = 0; i < MINUTES; i++) {
+      const move = MOVES.find((entry) => i >= entry.at && i < entry.at + 15)
+      const heavy = move !== undefined && i >= move.at + 10
+      const open = price
+      const close = open * (1 + next() * (i >= STILL_FROM ? 0.0002 : 0.0008) + (move ? move.pct / 15 / 100 : 0))
+      const wick = Math.abs(next()) * 0.0004 * (heavy ? (move.wide ?? 1) : 1)
+      const volume = 800 * (heavy ? move.volume : 1) * (1 + Math.abs(next()))
+      if (i !== MISSING) {
+        bars.push({ time: T0 + i * 60, open, high: Math.max(open, close) * (1 + wick + (i === SPIKE_AT ? 0.015 : 0)), low: Math.min(open, close) * (1 - wick), close, volume })
+      }
+      price = close
+    }
+    return bars
+  }
+
+  const market = { exchange: 'binance' as const, symbol: 'FIXEDUSDT', baseAsset: 'FIXED', quoteAsset: 'USDT' }
+  const bars = fixedMarket()
+  const round = (value: number | null): number | null => (value === null ? null : Number(value.toPrecision(6)))
+  const minute = (time: number): number => (time - T0) / 60
+  // Readings that raised nothing are part of what the detector is: one every seven minutes, and
+  // every minute while a move builds and fades.
+  const readAt = [
+    ...Array.from({ length: Math.floor((MINUTES - 720) / 7) }, (_, i) => 720 + i * 7),
+    ...MOVES.flatMap((move) => Array.from({ length: 24 }, (_, i) => move.at + 4 + i))
+  ]
+  const found = {
+    candidates: detectEvents(bars).map((entry) => toMarketEvent(entry, market)),
+    watched: detectEvents(bars, { floor: 'watch' }).map((entry) => toMarketEvent(entry, market)),
+    readings: readAt
+      .map((index) => readEventAt(bars, index))
+      .map((entry) =>
+        entry === null
+          ? null
+          : [entry.time, entry.band, entry.type, entry.direction, round(entry.score), round(entry.sigma15Pct), round(entry.volumeRatio), round(entry.rangeRatio), round(entry.pressure), round(entry.breakPct)]
+      )
+  }
+
+  it('holds each thing the detector decides, so that a hash of it can tell when one has moved', () => {
+    expect(new Set(found.watched.map((entry) => entry.type))).toEqual(new Set(['pump', 'dump', 'breakout', 'breakdown']))
+    expect(new Set(found.candidates.map((entry) => entry.direction))).toEqual(new Set(['up', 'down']))
+    expect(found.watched.length).toBeGreaterThan(found.candidates.length)
+    expect(new Set(found.watched.map((entry) => entry.band)).size).toBe(3)
+
+    // The cooldown: the smaller move is raised exactly thirty minutes after the larger one was
+    // last raised, though it qualified before that.
+    const large = found.watched.filter((entry) => minute(entry.time) >= 2100 && minute(entry.time) < 2126)
+    const small = found.watched.filter((entry) => minute(entry.time) >= 2126 && minute(entry.time) < 2160)
+    expect(large.length).toBeGreaterThan(0)
+    expect(small.map((entry) => entry.time - large[large.length - 1].time)).toEqual([EVENT_COOLDOWN_SECONDS])
+    expect(readEventAt(bars, bars.findIndex((bar) => bar.time === small[0].time - 120))?.band).not.toBe('quiet')
+
+    // The four hours a break is measured against: the first move is under the high set 245
+    // minutes before it began for as long as that high is inside them, and is raised as a
+    // breakout at the first reading it is not.
+    const first = found.watched.filter((entry) => minute(entry.time) >= 900 && minute(entry.time) < 930)
+    expect(readEventAt(bars, SPIKE_AT + 254)).toMatchObject({ direction: 'up', breakPct: 0 })
+    expect(readEventAt(bars, SPIKE_AT + 255)?.breakPct).toBeGreaterThan(0)
+    expect(first[0]).toMatchObject({ type: 'breakout', time: T0 + (SPIKE_AT + 256) * 60 })
+
+    // A volume spike with no direction is read, and raised by neither scan.
+    const spike = found.readings.filter((entry) => entry !== null && entry[2] === 'volume_spike')
+    expect(spike.length).toBeGreaterThan(0)
+    expect(found.watched.some((entry) => entry.type === 'volume_spike')).toBe(false)
+
+    // The floor on volatility is what the still stretch is measured against, and an event is found there.
+    expect(found.readings.filter((entry) => entry !== null && entry[5] === 0.05).length).toBeGreaterThan(5)
+    expect(found.watched.some((entry) => minute(entry.time) >= 5700)).toBe(true)
+
+    // And a window with a minute missing gives no reading at all.
+    expect(found.readings.filter((entry) => entry === null).length).toBeGreaterThan(3)
+  })
+
+  it('has not changed what it finds without its version being bumped', () => {
+    const hash = createHash('sha256').update(JSON.stringify(found)).digest('hex')
+    expect({ version: EVENT_DETECTOR_VERSION, hash }).toEqual({ version: 'events-v1', hash: '01967d01c49cb4c7ff0891174d65a6679a5951d9f64b0a75c668e3e7a8f6149d' })
   })
 })

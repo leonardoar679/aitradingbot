@@ -14,6 +14,7 @@ import {
   testAiCredential
 } from '../../services/aiCredentialsService'
 import { getAiConfig, listAiModels, setAiConfig } from '../../services/aiConfigService'
+import { getAiExperiment, listAiExperiments, recordAiExperiment } from '../../services/aiExperimentService'
 import { getAiUsageSummary, listAiCalls } from '../../services/aiLedgerService'
 import {
   askAiOpportunity,
@@ -34,7 +35,9 @@ import {
 // and AiPeekBenchmark only reads what is already held. Neither does a route or a panel of agents:
 // a second model's call and a panel's four are made inside a tape, through the first of the two.
 // Nor does the watch (shared/aiWatch.ts): what it asks arrives over AiAskOpportunity labelled as
-// the watch's, and is held to the watch's own limits before the budget is looked at.
+// the watch's, and is held to the watch's own limits before the budget is looked at. Nor does
+// recording an experiment (shared/aiExperiment.ts): it writes down what a run that has already
+// ended asked, and counts its cost from the ledger.
 export function registerAiHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(IpcChannel.AiCredentialsStatus, () => getAiCredentialStatus())
   ipcMain.handle(IpcChannel.AiCredentialsSet, (_event, apiKey: string) => setAiCredential(apiKey))
@@ -62,4 +65,7 @@ export function registerAiHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(IpcChannel.AiPeekBenchmark, (_event, request: AiBenchmarkPeekRequest) => peekAiBenchmark(request))
   ipcMain.handle(IpcChannel.AiPeekOpportunity, (_event, request: AiOpportunityPeekRequest) => peekAiOpportunity(request))
   ipcMain.handle(IpcChannel.AiAskOpportunity, (_event, request: AiOpportunityAskRequest) => askAiOpportunity(request))
+  ipcMain.handle(IpcChannel.AiListExperiments, () => listAiExperiments())
+  ipcMain.handle(IpcChannel.AiGetExperiment, (_event, id: string) => getAiExperiment(String(id)))
+  ipcMain.handle(IpcChannel.AiRecordExperiment, (_event, input: unknown) => recordAiExperiment(input))
 }

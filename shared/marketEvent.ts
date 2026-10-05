@@ -26,6 +26,13 @@ import type { Candle, Exchange } from './ipc'
 //    against a window that included it, a pump would raise the average it is being compared to
 //    and score lower the larger it was.
 
+/** The version of everything in this file that decides what an event is: the windows, the scales,
+ * the bands, the cooldown and the rule for raising one. It is written on every recorded experiment
+ * (shared/aiExperiment.ts), so that a sample drawn under one detector is not mistaken for a sample
+ * drawn under another. tests/marketEvent.test.ts holds a hash of what the detector makes of a fixed
+ * market beside this version: change what it finds, and this has to move with it. */
+export const EVENT_DETECTOR_VERSION = 'events-v1'
+
 export const EVENT_BAR_SECONDS = 60
 /** Completed 1-minute bars a reading is taken from: twelve hours. One request to an exchange. */
 export const EVENT_LOOKBACK_BARS = 720

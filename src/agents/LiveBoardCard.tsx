@@ -5,7 +5,7 @@ import { describeDecider } from '../../shared/aiPanel'
 import type { Candle } from '../../shared/ipc'
 import { describeError } from '../utils/ipcError'
 import { buttonStyle, noteStyle } from './agentStyles'
-import { CostTable, ResultsTable } from './EventTables'
+import { ContributionTable, CostTable, ExitsTable, ResultsTable } from './EventTables'
 import { LIVE_BOARD_DAYS, loadLiveBars, readLiveAnswers, type LiveAnswers, type LiveBoardDeps } from './liveBoard'
 
 const deps: LiveBoardDeps = {
@@ -125,6 +125,8 @@ export function LiveBoardCard({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.9rem' }}>
               <ResultsTable title="Model" rows={summary.models} models />
               <ResultsTable title="Rule" rows={[...summary.baselines, ...summary.rules]} models={false} />
+              {summary.contributions.length > 0 && <ContributionTable contributions={summary.contributions} models={summary.models} />}
+              <ExitsTable rows={[...summary.models, ...summary.baselines, ...summary.rules]} />
               <CostTable rows={summary.models} />
             </div>
           )}

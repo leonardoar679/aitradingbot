@@ -10,20 +10,30 @@ import {
   EVENT_BENCHMARK_PERIOD_DAYS,
   EVENT_BENCHMARK_STAKE_USD,
   eventBenchmarkWindow,
+  eventScoring,
   summarizeEventBenchmark,
   type EventBenchmarkAnswers,
   type EventBenchmarkSummary
 } from '../../shared/aiEventBenchmark'
+import { experimentDrift, type AiExperimentSummary } from '../../shared/aiExperiment'
 import { AI_OPPORTUNITY_MAX_MODELS, describeOpportunitySide, opportunitySide } from '../../shared/aiOpportunity'
 import { describeDecider } from '../../shared/aiPanel'
 import type { Candle } from '../../shared/ipc'
-import { EVENT_COOLDOWN_SECONDS, EVENT_LOOKBACK_BARS, describeEventType } from '../../shared/marketEvent'
+import { EVENT_COOLDOWN_SECONDS, EVENT_DETECTOR_VERSION, EVENT_LOOKBACK_BARS, describeEventType } from '../../shared/marketEvent'
 import { scanHistoryRequests } from '../../shared/marketScanner'
 import { describeError } from '../utils/ipcError'
 import { buttonStyle, cellStyle, headCellStyle, inputStyle, noteStyle } from './agentStyles'
 import { BENCHMARK_CONCURRENCY, runBenchmark } from './benchmark'
-import { buildEventDataset, loadOutcomeBars, peekEventBenchmark, type EventBenchmarkDeps, type EventDataset, type EventPeek } from './eventBenchmark'
-import { CostTable, ResultsTable, SlicesTable, pct } from './EventTables'
+import {
+  buildEventDataset,
+  datasetOfExperiment,
+  loadOutcomeBars,
+  peekEventBenchmark,
+  type EventBenchmarkDeps,
+  type EventDataset,
+  type EventPeek
+} from './eventBenchmark'
+import { ContributionTable, CostTable, ExitsTable, ResultsTable, SlicesTable, pct } from './EventTables'
 import { LiveBoardCard } from './LiveBoardCard'
 import type { CandleFetch } from './opportunities'
 
@@ -126,12 +136,70 @@ function EventsTable({ dataset, summary, answers }: { dataset: EventDataset; sum
   )
 }
 
+function day(sec: number): string {
+  return new Date(sec * 1000).toISOString().slice(0, 10)
+}
+
+/** The runs on record (shared/aiExperiment.ts), newest first. */
+function ExperimentsTable({ rows, busy, onOpen }: { rows: AiExperimentSummary[]; busy: boolean; onOpen: (id: string) => void }): React.JSX.Element {
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr>
+            <th style={headCellStyle} />
+            <th style={headCellStyle}>Experiment</th>
+            <th style={headCellStyle}>Run (UTC)</th>
+            <th style={headCellStyle}>Events</th>
+            <th style={headCellStyle}>Found on</th>
+            <th style={headCellStyle}>Models asked</th>
+            <th style={headCellStyle}>Calls</th>
+            <th style={headCellStyle}>Cost</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id}>
+              {/* First, so that it is on screen however wide the rest of the row runs. */}
+              <td style={cellStyle}>
+                <button onClick={() => onOpen(row.id)} disabled={busy} style={buttonStyle('secondary', busy)}>
+                  Open
+                </button>
+              </td>
+              <td style={{ ...cellStyle, fontWeight: 600 }}>{row.id}</td>
+              <td style={cellStyle}>{stamp(row.startedAt)}</td>
+              <td style={{ ...cellStyle, whiteSpace: 'normal' }}>
+                {row.eventCount}
+                {row.eventsOf !== null && <span style={{ color: 'var(--text-muted)' }}>, those of {row.eventsOf}</span>}
+              </td>
+              <td style={{ ...cellStyle, whiteSpace: 'normal' }}>
+                {row.pairs.length} pairs, {day(row.startSec)} to {day(row.endSec)}
+              </td>
+              <td style={{ ...cellStyle, whiteSpace: 'normal' }}>{row.models.map((model) => describeDecider(model)).join(', ')}</td>
+              <td style={cellStyle}>
+                {row.calls.toLocaleString()}
+                {row.failed > 0 && <span style={{ color: 'var(--text-muted)' }}> +{row.failed} unanswered</span>}
+              </td>
+              <td style={cellStyle}>{formatUsd(row.costUsd)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 /** The same events, put to several models, and scored by what their recommendations earned
  * (shared/aiEventBenchmark.ts).
  *
- * TWO BUTTONS, AND ONLY THE SECOND CAN SPEND. "Find events" reads public candles and the answers
- * already held, and shows what they add up to. "Run benchmark" states what the missing answers
+ * ONLY "RUN BENCHMARK" CAN SPEND. "Find events" draws a sample: it reads public candles and the
+ * answers already held, and shows what they add up to. "Open", on a recorded run, reads that run's
+ * own events again instead of drawing new ones. "Run benchmark" states what the missing answers
  * will cost and how long they take, and asks them only after that is agreed to.
+ *
+ * A RUN THAT ASKED A MODEL IS RECORDED (shared/aiExperiment.ts). "The 20 most traded pairs" is a
+ * different twenty tomorrow, so the only way to put a later model beside an earlier one on the
+ * same events is to have kept the events.
  *
  * NOTHING HERE TRADES. It asks, scores and shows. */
 export function EventBenchmarkView(): React.JSX.Element {
@@ -146,8 +214,17 @@ export function EventBenchmarkView(): React.JSX.Element {
   const [answers, setAnswers] = useState<EventBenchmarkAnswers>({})
   const [bars, setBars] = useState<Record<string, Candle[]>>({})
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null)
+  const [experiments, setExperiments] = useState<AiExperimentSummary[]>([])
   const stop = useRef(false)
   const scanId = useRef<string | null>(null)
+
+  async function reloadExperiments(): Promise<void> {
+    try {
+      setExperiments((await window.api.ai.listExperiments()).rows)
+    } catch {
+      // A list that cannot be read is shown as it last was; the runs themselves are untouched.
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -156,6 +233,12 @@ export function EventBenchmarkView(): React.JSX.Element {
       setConfig(next)
       setChosen([next.defaultModel])
     })
+    void window.api.ai.listExperiments().then(
+      (page) => {
+        if (!cancelled) setExperiments(page.rows)
+      },
+      () => undefined
+    )
     return (): void => {
       cancelled = true
       // Leaving the tab stops whatever was being asked; what was answered is in the cache.
@@ -217,28 +300,97 @@ export function EventBenchmarkView(): React.JSX.Element {
         deps
       )
       if (stop.current) return
-      setDataset(built)
-      if (built.events.length === 0) {
-        setNote({ ok: false, text: built.found === 0 ? 'No event was raised on these pairs in this period.' : 'None of the sampled events could be put to a model.' })
-        return
-      }
-      const held = await peekEventBenchmark(built, chosen, deps, {
-        shouldStop: () => stop.current,
-        onProgress: (done, total) => setPhase({ status: 'working', text: `Reading what is already answered: ${done} of ${total}` })
-      })
-      if (stop.current) return
-      setPeek(held)
-      setAnswers(held.known)
-      const fetched = await loadOutcomeBars(built.events, Math.floor(Date.now() / 1000), fetchCandles, {
-        shouldStop: () => stop.current,
-        onProgress: (done, total) => setPhase({ status: 'working', text: `Fetching what followed each event: ${done} of ${total}` })
-      })
-      if (!stop.current) setBars(fetched)
+      await load(built, chosen)
     } catch (failure) {
       setNote({ ok: false, text: describeError(failure) })
     } finally {
       stopProgress()
       scanId.current = null
+      setPhase({ status: 'idle' })
+    }
+  }
+
+  /** What a sample holds for these models, and what followed each of its events. Free. `followed`
+   * is the candles already fetched for this same sample, when there are any. */
+  async function load(built: EventDataset, readFor: string[], followed?: Record<string, Candle[]>): Promise<void> {
+    setDataset(built)
+    if (built.events.length === 0) {
+      setNote({ ok: false, text: built.found === 0 ? 'No event was raised on these pairs in this period.' : 'None of the sampled events could be put to a model.' })
+      return
+    }
+    const held = await peekEventBenchmark(built, readFor, deps, {
+      shouldStop: () => stop.current,
+      onProgress: (done, total) => setPhase({ status: 'working', text: `Reading what is already answered: ${done} of ${total}` })
+    })
+    if (stop.current) return
+    setPeek(held)
+    setAnswers(held.known)
+    if (followed !== undefined) return
+    const fetched = await loadOutcomeBars(built.events, Math.floor(Date.now() / 1000), fetchCandles, {
+      shouldStop: () => stop.current,
+      onProgress: (done, total) => setPhase({ status: 'working', text: `Fetching what followed each event: ${done} of ${total}` })
+    })
+    if (!stop.current) setBars(fetched)
+  }
+
+  /** Reads a recorded run's own events again, and what is held for them. Free. */
+  async function open(id: string): Promise<void> {
+    stop.current = false
+    setNote(null)
+    setDataset(null)
+    setPeek(null)
+    setAnswers({})
+    setBars({})
+    try {
+      setPhase({ status: 'working', text: `Opening ${id}…` })
+      const experiment = await window.api.ai.getExperiment(id)
+      if (experiment === null) {
+        setNote({ ok: false, text: `${id} is no longer on file.` })
+        return
+      }
+      // Every model that has been asked about this sample, by this run or by another on the same
+      // events, as far as it can still be ticked. With none of them enabled, whatever is ticked.
+      const sample = experiment.eventsOf ?? experiment.id
+      const enabled = config?.enabledModels ?? []
+      const asked = experiments
+        .filter((row) => (row.eventsOf ?? row.id) === sample)
+        .sort((a, b) => a.startedAt - b.startedAt)
+        .flatMap((row) => row.models)
+      const theirs = [...new Set([...asked, ...experiment.models])].filter((model) => enabled.includes(model)).slice(0, AI_OPPORTUNITY_MAX_MODELS)
+      const readFor = theirs.length > 0 ? theirs : chosen
+      if (readFor.length === 0) {
+        setNote({ ok: false, text: 'Tick at least one model.' })
+        return
+      }
+      setChosen(readFor)
+      const built = await datasetOfExperiment(experiment, deps, {
+        shouldStop: () => stop.current,
+        onProgress: (progress) => setPhase({ status: 'working', text: `Fetching each event's candles: ${progress.done} of ${progress.total}` })
+      })
+      if (stop.current) return
+      await load(built, readFor)
+    } catch (failure) {
+      setNote({ ok: false, text: describeError(failure) })
+    } finally {
+      setPhase({ status: 'idle' })
+    }
+  }
+
+  /** The sample on screen, read again for the models now ticked. Free. */
+  async function reread(): Promise<void> {
+    if (dataset === null) return
+    if (chosen.length === 0) {
+      setNote({ ok: false, text: 'Tick at least one model.' })
+      return
+    }
+    stop.current = false
+    setNote(null)
+    try {
+      setPhase({ status: 'working', text: 'Reading what is already answered…' })
+      await load(dataset, chosen, Object.keys(bars).length >= dataset.events.length ? bars : undefined)
+    } catch (failure) {
+      setNote({ ok: false, text: describeError(failure) })
+    } finally {
       setPhase({ status: 'idle' })
     }
   }
@@ -265,6 +417,8 @@ export function EventBenchmarkView(): React.JSX.Element {
     setNote(null)
     setPhase({ status: 'running', asked: 0, toAsk, costUsd: 0 })
     let drawn = 0
+    const startedAt = Math.floor(Date.now() / 1000)
+    const asking = peek.models.filter((entry) => entry.toAsk > 0).map((entry) => entry.model)
     try {
       const result = await runBenchmark({
         times: dataset.events.map((event) => event.time),
@@ -291,8 +445,30 @@ export function EventBenchmarkView(): React.JSX.Element {
           return { ...entry, cached, toAsk: dataset.events.length - cached }
         })
       })
+      // A run that asked anything is written down with its events, so that it can be opened
+      // again when the most traded pairs are no longer these.
+      let recorded = ''
+      if (result.asked > 0) {
+        try {
+          const experiment = await window.api.ai.recordExperiment({
+            startedAt,
+            endedAt: Math.floor(Date.now() / 1000),
+            startSec: dataset.startSec,
+            endSec: dataset.endSec,
+            pairs: dataset.symbols,
+            found: dataset.found,
+            events: dataset.events,
+            models: asking
+          })
+          recorded = ` Recorded as ${experiment.id}.`
+          setDataset({ ...dataset, experimentId: experiment.eventsOf ?? experiment.id })
+          void reloadExperiments()
+        } catch (failure) {
+          recorded = ` The run could not be recorded: ${describeError(failure)}`
+        }
+      }
       const dropped = result.dropped.map((entry) => `Stopped asking ${describeDecider(entry.model)}: ${entry.error}`).join(' ')
-      const made = `This run made ${result.asked.toLocaleString()} model calls and spent ${formatUsd(result.costUsd)}.`
+      const made = `This run made ${result.asked.toLocaleString()} model calls and spent ${formatUsd(result.costUsd)}.${recorded}`
       if (result.stopped !== null) {
         setNote({ ok: false, text: `${made} The run stopped early${result.stopped.message ? `: ${result.stopped.message}` : '.'} ${dropped}`.trim() })
       } else {
@@ -311,7 +487,14 @@ export function EventBenchmarkView(): React.JSX.Element {
   }
 
   const toAsk = peek?.models.reduce((sum, model) => sum + model.toAsk, 0) ?? 0
+  const opened = dataset?.experimentId == null ? null : (experiments.find((row) => row.id === dataset.experimentId) ?? null)
+  const drift = opened === null ? [] : experimentDrift(opened, { detector: EVENT_DETECTOR_VERSION, scoring: eventScoring() })
   const everyRow = summary === null ? [] : [...summary.models, ...summary.baselines, ...summary.rules]
+  // A side chosen by a coin is the follow row half the time and the fade row the other half.
+  const coinToss =
+    summary !== null && summary.baselines.length === 2 && summary.baselines.every((row) => row.closed > 0)
+      ? (summary.baselines[0].netSumPct + summary.baselines[1].netSumPct) / 2
+      : null
 
   return (
     <>
@@ -386,14 +569,44 @@ export function EventBenchmarkView(): React.JSX.Element {
         </p>
       </Card>
 
+      {experiments.length > 0 && (
+        <Card title="Experiments">
+          <ExperimentsTable rows={experiments} busy={busy} onOpen={(id) => void open(id)} />
+          <p style={{ ...noteStyle, marginTop: '0.8rem' }}>
+            A run that asked a model is kept here with the events it asked about. The most traded pairs are ranked by the last 24
+            hours, so <strong>Find events</strong> draws a different sample tomorrow; <strong>Open</strong> reads a run&apos;s own
+            events again, and the answers held for them, and is free. To ask another model about the same events, open the run, tick
+            the model, read its answers and run the benchmark: only what is missing is asked, and that run is recorded beside this
+            one. Results are not stored: they are worked out again from the answers and the candles each time.
+          </p>
+        </Card>
+      )}
+
       {dataset !== null && (
         <Card title="The sample">
           <p style={{ ...noteStyle, color: 'var(--text-secondary)' }}>
+            {dataset.experimentId !== null && `The events of ${dataset.experimentId}. `}
             {dataset.found.toLocaleString()} events on {dataset.pairs} pairs from {stamp(dataset.startSec)} to {stamp(dataset.endSec)} UTC;{' '}
             {dataset.events.length.toLocaleString()} sampled
             {dataset.unaskable > 0 && `, ${dataset.unaskable} more left out because their candles do not make a question`}.
             {summary !== null && ` Compared on ${summary.compared.toLocaleString()} of ${summary.sampled.toLocaleString()}: the events every model has answered.`}
           </p>
+          {drift.length > 0 && (
+            <p style={{ ...noteStyle, color: 'var(--down)', marginTop: '0.5rem' }}>
+              Not the rules this run was recorded under: {drift.join('; ')}. The answers are what they were; the figures below are
+              today&apos;s reading of them.
+            </p>
+          )}
+          {peek === null && !busy && dataset.events.length > 0 && (
+            <div style={{ display: 'flex', gap: '0.7rem', alignItems: 'center', flexWrap: 'wrap', marginTop: '0.7rem' }}>
+              <button onClick={() => void reread()} style={buttonStyle('primary')}>
+                Read their answers
+              </button>
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                The ticked models have changed. Reading what they have answered for these events is free.
+              </span>
+            </div>
+          )}
           {dataset.failedPairs.length > 0 && (
             <p style={{ ...noteStyle, color: 'var(--down)', marginTop: '0.5rem' }}>
               Could not read: {dataset.failedPairs.map((entry) => `${entry.symbol} (${entry.error})`).join(', ')}
@@ -425,7 +638,33 @@ export function EventBenchmarkView(): React.JSX.Element {
               price by as much as it beats them here. The rest are worked out from the answers above and cost nothing: what would
               have been traded had a side needed more than half the models, all of them, or the weight of their confidence, using
               the levels of the model surest of that side and waiting for the slowest answer.
+              {coinToss !== null && (
+                <>
+                  {' '}
+                  Tossing a coin for the side is expected to return the average of the first two rows: {pct(coinToss)} added up.
+                </>
+              )}
             </p>
+          </Card>
+
+          {summary.contributions.length > 0 && (
+            <Card title="What each model changed">
+              <ContributionTable contributions={summary.contributions} models={summary.models} />
+              <p style={{ ...noteStyle, marginTop: '0.8rem' }}>
+                A model&apos;s own row runs two things together: which events it chose, and the levels it traded them with. This sets
+                both against the one thing that is the same for every event, the fixed bracket of &quot;follow every event&quot;. The
+                third column is the model&apos;s own trades; the fourth is the fixed bracket on those same calls, on the side the model
+                took — what the rule would have traded had it waited for the model to confirm it; the fifth is the rule on the
+                events the model let go. Each is net added up, with its closed trades in brackets. The last three columns are in net a
+                trade and add up: how far the model came out from following everything, how much of that was its choice of events,
+                and how much its levels. An entry of the model&apos;s that never filled is in none of its own figures, while the fixed
+                bracket always enters.
+              </p>
+            </Card>
+          )}
+
+          <Card title="How the trades ended">
+            <ExitsTable rows={everyRow} />
           </Card>
 
           <Card title="Speed, cost, and the period in three parts">

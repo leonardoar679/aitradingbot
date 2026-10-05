@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { formatUsd } from '../../shared/aiCost'
-import { EVENT_BENCHMARK_STAKE_USD, type EventBenchmarkRow } from '../../shared/aiEventBenchmark'
+import { EVENT_BENCHMARK_STAKE_USD, type EventBenchmarkRow, type EventContribution } from '../../shared/aiEventBenchmark'
 import { describeDecider } from '../../shared/aiPanel'
 import { cellStyle, headCellStyle, inputStyle, noteStyle, signedPct } from './agentStyles'
 
@@ -111,6 +111,102 @@ export function CostTable({ rows }: { rows: EventBenchmarkRow[] }): React.JSX.El
                   {segment.trades > 0 && <span style={{ color: 'var(--text-muted)' }}> ({segment.trades})</span>}
                 </td>
               ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+const muted = (text: string): React.JSX.Element => <span style={{ color: 'var(--text-muted)' }}>{text}</span>
+
+/** A heading that may run to two lines, for a table with more columns than a row of one-line
+ * headings leaves room for. */
+const wrappedHeadStyle: React.CSSProperties = { ...headCellStyle, whiteSpace: 'normal', verticalAlign: 'bottom', minWidth: '5rem' }
+
+/** What each model changed about following every event (EventContribution): its own trades, the
+ * fixed bracket on the same calls, and the rule on the events it let go. `models` are the models'
+ * own rows, in the same order. */
+export function ContributionTable({ contributions, models }: { contributions: EventContribution[]; models: EventBenchmarkRow[] }): React.JSX.Element {
+  const added = (row: EventBenchmarkRow | undefined): React.JSX.Element =>
+    row === undefined || row.closed === 0 ? (
+      muted('—')
+    ) : (
+      <>
+        {pct(row.netSumPct)} {muted(`(${row.closed})`)}
+      </>
+    )
+  const aTrade = (value: number | null): React.JSX.Element => (value === null ? muted('too few') : pct(value))
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr>
+            <th style={wrappedHeadStyle}>Model</th>
+            <th style={wrappedHeadStyle}>With / against the move</th>
+            <th style={wrappedHeadStyle}>Its calls, its levels</th>
+            <th style={wrappedHeadStyle}>Same calls, fixed bracket</th>
+            <th style={wrappedHeadStyle}>Events it left, followed</th>
+            <th style={wrappedHeadStyle}>A trade, against the rule</th>
+            <th style={wrappedHeadStyle}>From its choice of events</th>
+            <th style={wrappedHeadStyle}>From its levels</th>
+          </tr>
+        </thead>
+        <tbody>
+          {contributions.map((entry, index) => (
+            <tr key={entry.model}>
+              <td style={{ ...cellStyle, fontWeight: 600 }}>{describeDecider(entry.model)}</td>
+              <td style={cellStyle}>
+                {entry.withTheMove} / {entry.againstTheMove}
+              </td>
+              <td style={cellStyle}>{added(models[index])}</td>
+              <td style={cellStyle}>{added(entry.bracket)}</td>
+              <td style={cellStyle}>{added(entry.left)}</td>
+              <td style={cellStyle}>{aTrade(entry.againstRulePct)}</td>
+              <td style={cellStyle}>{aTrade(entry.choicePct)}</td>
+              <td style={cellStyle}>{aTrade(entry.levelsPct)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/** How each row's trades ended. A stop that is hit nearly every time and a target that is never
+ * reached are two different ways to lose, and a net figure shows neither. */
+export function ExitsTable({ rows }: { rows: EventBenchmarkRow[] }): React.JSX.Element {
+  const share = (count: number, of: number): React.JSX.Element =>
+    of === 0 ? (
+      muted('—')
+    ) : (
+      <>
+        {count} {muted(`(${Math.round((count / of) * 100)}%)`)}
+      </>
+    )
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr>
+            <th style={headCellStyle}>Row</th>
+            <th style={headCellStyle}>Closed</th>
+            <th style={headCellStyle}>At the target</th>
+            <th style={headCellStyle}>At the stop</th>
+            <th style={headCellStyle}>Time ran out</th>
+            <th style={headCellStyle}>Never filled</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.name}>
+              <td style={{ ...cellStyle, fontWeight: 600 }}>{describeDecider(row.name)}</td>
+              <td style={cellStyle}>{row.closed}</td>
+              <td style={cellStyle}>{share(row.exits.target, row.closed)}</td>
+              <td style={cellStyle}>{share(row.exits.stop, row.closed)}</td>
+              <td style={cellStyle}>{share(row.exits.time, row.closed)}</td>
+              <td style={cellStyle}>{share(row.expired, row.actionable)}</td>
             </tr>
           ))}
         </tbody>

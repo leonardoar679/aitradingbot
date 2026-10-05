@@ -8,6 +8,7 @@ import {
   EVENT_RULE_UNANIMOUS,
   EVENT_RULE_WEIGHTED,
   eventBenchmarkWindow,
+  eventScoring,
   sampleEvents,
   summarizeEventBenchmark,
   type EventBenchmarkInput
@@ -398,5 +399,102 @@ describe('summarizeEventBenchmark: the rows that are not models', () => {
     }
     const prompt = summarizeEventBenchmark(benchmark([RISE], { a: [LONG], b: [tight] }))
     expect(prompt.rules[0].trades[0].outcome).toMatchObject({ exit: 'take_profit', exitPrice: 101 })
+  })
+})
+
+describe('summarizeEventBenchmark: what a model changed about the rule', () => {
+  // Sixty rises raised as events. The price goes on up after the even ones and comes back after
+  // the odd ones, and the model buys exactly the even ones: its choice of events is perfect.
+  const ends = Array.from({ length: 60 }, (_, i) => (i % 2 === 0 ? RISE : FALL))
+  const summary = summarizeEventBenchmark(benchmark(ends, { a: ends.map((_, i) => (i % 2 === 0 ? LONG : NONE)) }))
+  const [own] = summary.models
+  const [follow] = summary.baselines
+  const [changed] = summary.contributions
+  const meanOf = (indices: (index: number) => boolean): number => {
+    const nets = follow.trades.filter((trade) => indices(trade.index)).map((trade) => trade.outcome.netPct ?? NaN)
+    return nets.reduce((sum, net) => sum + net, 0) / nets.length
+  }
+
+  it('trades the fixed bracket on the calls the model made, and the rule on the events it left', () => {
+    expect(changed).toMatchObject({ model: 'a', withTheMove: 30, againstTheMove: 0 })
+    expect(changed.bracket).toMatchObject({ actionable: 30, closed: 30, wins: 30, costUsd: null })
+    expect(changed.left).toMatchObject({ actionable: 30, closed: 30, wins: 0 })
+    // The same trades the rule's own row holds for those events, not ones scored some other way.
+    expect(changed.bracket.trades.map((trade) => trade.outcome.netPct)).toEqual(follow.trades.filter((trade) => trade.index % 2 === 0).map((trade) => trade.outcome.netPct))
+    expect(changed.left.meanNetPct).toBeCloseTo(meanOf((index) => index % 2 === 1), 10)
+  })
+
+  it('splits the model against the rule into its choice of events and its levels', () => {
+    const rule = follow.meanNetPct ?? NaN
+    const bracket = meanOf((index) => index % 2 === 0)
+    expect(changed.choicePct).toBeCloseTo(bracket - rule, 10)
+    expect(changed.levelsPct).toBeCloseTo((own.meanNetPct ?? NaN) - bracket, 10)
+    expect(changed.againstRulePct).toBeCloseTo((own.meanNetPct ?? NaN) - rule, 10)
+    expect((changed.choicePct ?? NaN) + (changed.levelsPct ?? NaN)).toBeCloseTo(changed.againstRulePct ?? NaN, 10)
+    // It chose only the events that went on, and that is where its advantage came from: the
+    // bracket's target of 1.5% against its stop of 0.75%, half of each over all sixty.
+    expect(changed.choicePct).toBeCloseTo((1.5 + 0.75) / 2, 1)
+    // Its own target was further away than the bracket's, and the price reached it.
+    expect(changed.levelsPct).toBeGreaterThan(0.3)
+  })
+
+  it('puts the fixed bracket on the side the model took, when that is against the move', () => {
+    const against = summarizeEventBenchmark(benchmark([FALL, RISE], { a: [SHORT, LONG] }))
+    const [entry] = against.contributions
+    expect(entry).toMatchObject({ withTheMove: 1, againstTheMove: 1 })
+    expect(entry.bracket.trades.map((trade) => trade.side)).toEqual(['short', 'long'])
+    // The short is the fade row's trade on that event, and the long the follow row's on the other.
+    expect(entry.bracket.trades[0].outcome).toEqual(against.baselines[1].trades[0].outcome)
+    expect(entry.bracket.trades[1].outcome).toEqual(against.baselines[0].trades[1].outcome)
+    expect(entry.left.actionable).toBe(0)
+  })
+
+  it('counts a call it would not act on, and an answer that was refused, as events it left', () => {
+    const [entry] = summarizeEventBenchmark(benchmark([RISE, RISE, RISE], { a: [TIMID, REFUSED, LONG] })).contributions
+    expect(entry.bracket.actionable).toBe(1)
+    expect(entry.left.actionable).toBe(2)
+    expect(entry.left.trades.map((trade) => trade.index)).toEqual([0, 1])
+  })
+
+  it('leaves an event with no direction out of both, since the rule has no side to take on it', () => {
+    const input = benchmark([RISE, RISE], { a: [LONG, LONG] })
+    input.events[0] = { ...input.events[0], direction: 'none' }
+    const [entry] = summarizeEventBenchmark(input).contributions
+    expect(entry).toMatchObject({ withTheMove: 1, againstTheMove: 0 })
+    expect(entry.bracket.actionable).toBe(1)
+    expect(entry.left.actionable).toBe(0)
+  })
+
+  it('withholds the split under thirty closed trades, and has none while nothing is compared', () => {
+    const [few] = summarizeEventBenchmark(benchmark([RISE, FALL], { a: [LONG, LONG] })).contributions
+    expect(few).toMatchObject({ againstRulePct: null, choicePct: null, levelsPct: null })
+    expect(few.bracket.netSumPct).not.toBe(0)
+    expect(summarizeEventBenchmark(benchmark([RISE], { a: [null] })).contributions).toEqual([])
+  })
+
+  it('says how the trades ended', () => {
+    expect(own.exits).toEqual({ target: 30, stop: 0, time: 0 })
+    expect(follow.exits).toEqual({ target: 30, stop: 30, time: 0 })
+    // A price that goes nowhere reaches neither level, and the holding time ends the trade.
+    const flat = summarizeEventBenchmark(benchmark([100.5], { a: [LONG] }))
+    expect(flat.models[0].exits).toEqual({ target: 0, stop: 0, time: 1 })
+  })
+})
+
+describe('eventScoring', () => {
+  it('states what a result rests on besides the answers and the candles', () => {
+    // Written on every recorded experiment. A change to any of these is a change to how a run
+    // already made is read, and this is where it has to be made on purpose.
+    expect(eventScoring()).toEqual({
+      feeRate: 0.001,
+      slippageRates: [0.0002, 0.0005, 0.001],
+      askDelaySec: 10,
+      minConfidence: 0.65,
+      baseline: { stopSigmas: 1.5, targetSigmas: 3, holdSeconds: 3600 }
+    })
+  })
+
+  it('is the same after a trip through a file', () => {
+    expect(JSON.parse(JSON.stringify(eventScoring()))).toEqual(eventScoring())
   })
 })
