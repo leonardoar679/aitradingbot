@@ -5,6 +5,7 @@ import {
   NEWS_CATALOGS,
   applyNewsConfigPatch,
   byNewestRelease,
+  copyNewsConfig,
   healNewsConfig,
   matchesNewsFilter,
   newsListUrl,
@@ -89,7 +90,7 @@ async function persistConfig(): Promise<void> {
 }
 
 function snapshot(current: NewsConfig): NewsState {
-  return { config: { ...current, paperShort: { ...current.paperShort } }, lastReadAt, nextReadAt, error, recent: [...recent] }
+  return { config: copyNewsConfig(current), lastReadAt, nextReadAt, error, recent: [...recent] }
 }
 
 function notify(current: NewsConfig): void {
@@ -163,7 +164,7 @@ export async function readNewsOnce(nowMs: number = Date.now()): Promise<NewsStat
     // to put to its models -- when that is switched on (shared/newsActions.ts). The watch's own
     // switch, limits and the day's budget still decide whether anything is asked.
     const setting = config ?? current
-    if (setting.enabled && setting.askModels) {
+    if (setting.enabled && setting.delisting.askModels) {
       for (const item of fresh.filter((entry) => shouldRaiseDelisting(entry, seenAt))) {
         for (const ticker of item.tickers) {
           try {

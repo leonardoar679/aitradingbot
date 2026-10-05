@@ -663,16 +663,20 @@ export interface ExecutorConfig {
      * one a person stopped first. */
     result?: { exit: PositionExitReason; pnlQuote: number; closedAt: number }
   }
-  /** Set on a PAPER Position short opened by the rule research/NEWS.md measured, on Binance's
-   * announcement that it will delist a coin (shared/newsActions.ts): which announcement and which
-   * coin. Out four hours after the announcement's minute, with no stop and no target. Never
-   * present on a live executor: src/news/newsPaperShort.ts, the one file that makes one, spells
-   * paper as a literal. How it ended is written on it when it is stopped, as on the watch's. */
+  /** Set on a PAPER Position short opened by a rule research/NEWS.md measured, on Binance's
+   * announcement (shared/newsActions.ts): which announcement and which coin. A delisting's is out
+   * four hours after the announcement's minute, with no stop and no target; a Monitoring Tag's has
+   * a stop and a target and is out within the hour. Never present on a live executor:
+   * src/news/newsPaperShort.ts, the one file that makes one, spells paper as a literal. How it
+   * ended is written on it when it is stopped, as on the watch's. */
   newsRule?: {
     articleId: number
     ticker: string
     releaseSec: number
     title: string
+    /** Which kind of announcement it was opened on. ABSENT on a short opened before the Monitoring
+     * Tag was read (5 October 2026): every one of those was a delisting's. */
+    category?: 'DELISTING' | 'MONITORING_TAG'
     result?: { exit: PositionExitReason; pnlQuote: number; closedAt: number }
   }
   /** Set once a live executor's order actually fills (market: immediately; limit: whenever

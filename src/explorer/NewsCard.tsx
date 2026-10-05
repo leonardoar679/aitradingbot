@@ -125,9 +125,9 @@ export function NewsCard({ onNavigate }: { onNavigate: (page: Page) => void }): 
       </div>
       <p style={{ ...noteStyle, marginTop: '0.6rem' }}>
         What each kind did is from 2025 to September 2026, measured from the first minute an app reading the list once a minute could
-        act (research/NEWS.md). It is what prices did, not advice. What a delisting does is set under Settings › Market: a notice if
-        you hold the coin, and a paper short by the rule. Nothing real is placed or sold because of an announcement, and a short can
-        never be placed for real here.
+        act (research/NEWS.md). It is what prices did, not advice. What a delisting or a Monitoring Tag does is set under Settings ›
+        Market, kind by kind: a notice if you hold the coin, a paper short by the kind&apos;s rule, and a question to the watch&apos;s
+        models. Nothing real is placed or sold because of an announcement, and a short can never be placed for real here.
       </p>
     </Card>
   )

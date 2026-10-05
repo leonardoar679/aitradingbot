@@ -3,25 +3,30 @@ import { matchesAiCallFilter } from '../shared/aiLedger'
 import { AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS, describeQuestionKind, questionKindOfPromptVersion } from '../shared/aiOpportunity'
 import { DEFAULT_AI_WATCH, watchSkipReason } from '../shared/aiWatch'
 import type { Candle, ExecutorConfig, PaperAccount, PositionExecutorParams, SymbolInfo } from '../shared/ipc'
-import { DEFAULT_NEWS_CONFIG, applyNewsConfigPatch, healNewsConfig, type NewsConfig, type NewsItem } from '../shared/news'
+import { DEFAULT_NEWS_CONFIG, applyNewsConfigPatch, healNewsConfig, newsActionsFor, type NewsConfig, type NewsItem } from '../shared/news'
 import {
-  delistingHolderNotice,
-  delistingShortBlock,
   delistingShortParams,
   describeNewsShortOrigin,
   heldPlaces,
-  isFreshDelisting,
+  isFreshNews,
+  newsHolderNotice,
   newsQuestionProblem,
+  newsShortBlock,
   newsShortExecutors,
   shouldRaiseDelisting,
+  tagReading,
+  tagReadingWindow,
+  tagShortParams,
+  tagShortWindow,
   type Holdings
 } from '../shared/newsActions'
 import { simulatePosition } from '../src/executors/engine'
-import { newsShortExecutor, openDelistingShorts, settleNewsShorts, type NewsShortDeps } from '../src/news/newsPaperShort'
+import { newsShortExecutor, openNewsShorts, settleNewsShorts, type NewsShortDeps } from '../src/news/newsPaperShort'
 
-// What a delisting announcement does, as the user chose on 2026-10-05 (shared/newsActions.ts,
-// src/news/): a notice to someone holding the coin, and a PAPER short by the rule research/NEWS.md
-// measured -- out at the open four hours after the announcement's minute, no stop, no target.
+// What a delisting announcement does, and a coin added to the Monitoring Tag, as the user chose on
+// 2026-10-05 (shared/newsActions.ts, src/news/): a notice to someone holding the coin, and a PAPER
+// short by the kind's rule research/NEWS.md measured. A delisting's is out at the open four hours
+// after the announcement's minute, no stop, no target; a tag's is below, at the end.
 
 /** ICX, SCRT and STORJ: Binance's announcement of 20 August 2026, 06:00 UTC. */
 const A = Date.parse('2026-08-20T06:00:00Z') / 1000
@@ -37,6 +42,10 @@ const item: NewsItem = {
 }
 
 const pair = (base: string): SymbolInfo => ({ symbol: `${base}USDT`, baseAsset: base, quoteAsset: 'USDT' })
+
+/** The executor a delisting's short is, made the way the writer makes it. */
+const delistingShort = (id: string, ticker: string, stakeQuote: number, nowSec: number): ExecutorConfig =>
+  newsShortExecutor({ id, item, ticker, pair: pair(ticker), nowSec, params: delistingShortParams({ releaseSec: item.releaseSec, createdAt: nowSec, stakeQuote }) })
 
 describe("the rule's short", () => {
   it('is out at the open four hours after the announcement, whenever in the minute it is opened', () => {
@@ -71,20 +80,20 @@ describe("the rule's short", () => {
 
   it('opens only on a delisting of that coin, within five minutes, once', () => {
     const base = { item, ticker: 'ICX', nowSec: A + 63, executors: [] as ExecutorConfig[] }
-    expect(delistingShortBlock(base)).toBeNull()
-    expect(delistingShortBlock({ ...base, ticker: 'BTC' })).toMatch(/not a delisting of this coin/)
-    expect(delistingShortBlock({ ...base, item: { ...item, category: 'FUTURES_LAUNCH' } })).toMatch(/not a delisting/)
-    expect(delistingShortBlock({ ...base, nowSec: A + 5 * 60 })).toBeNull()
-    expect(delistingShortBlock({ ...base, nowSec: A + 5 * 60 + 1 })).toMatch(/more than five minutes ago/)
-    const opened = newsShortExecutor({ id: 'x', item, ticker: 'ICX', pair: pair('ICX'), stakeQuote: 100, nowSec: A + 63 })
-    expect(delistingShortBlock({ ...base, executors: [opened] })).toMatch(/already opened its short on this coin/)
-    expect(delistingShortBlock({ ...base, ticker: 'SCRT', executors: [opened] })).toBeNull()
+    expect(newsShortBlock(base)).toBeNull()
+    expect(newsShortBlock({ ...base, ticker: 'BTC' })).toMatch(/not a delisting or a Monitoring Tag of this coin/)
+    expect(newsShortBlock({ ...base, item: { ...item, category: 'FUTURES_LAUNCH' } })).toMatch(/not a delisting/)
+    expect(newsShortBlock({ ...base, nowSec: A + 5 * 60 })).toBeNull()
+    expect(newsShortBlock({ ...base, nowSec: A + 5 * 60 + 1 })).toMatch(/more than five minutes ago/)
+    const opened = delistingShort('x', 'ICX', 100, A + 63)
+    expect(newsShortBlock({ ...base, executors: [opened] })).toMatch(/already opened its short on this coin/)
+    expect(newsShortBlock({ ...base, ticker: 'SCRT', executors: [opened] })).toBeNull()
   })
 
   it('is paper, unlevered and kept nowhere when it stops, and its card says where it came from', () => {
-    const made = newsShortExecutor({ id: 'x', item, ticker: 'ICX', pair: pair('ICX'), stakeQuote: 250, nowSec: A + 63 })
+    const made = delistingShort('x', 'ICX', 250, A + 63)
     expect(made).toMatchObject({ type: 'position', mode: 'paper', exchange: 'binance', symbol: 'ICXUSDT', status: 'active', keepPosition: false, createdAt: A + 63 })
-    expect(made.newsRule).toEqual({ articleId: 301, ticker: 'ICX', releaseSec: A, title: item.title })
+    expect(made.newsRule).toEqual({ articleId: 301, ticker: 'ICX', releaseSec: A, title: item.title, category: 'DELISTING' })
     expect((made.params as PositionExecutorParams).leverage).toBeUndefined()
     expect(made.watch).toBeUndefined()
     expect(describeNewsShortOrigin(made.newsRule as NonNullable<ExecutorConfig['newsRule']>)).toBe(
@@ -99,14 +108,14 @@ describe('the notice to someone holding the coin', () => {
   const nothing: Holdings = { live: null, paperAccount: null, heldPositions: [], executors: [] }
 
   it('says nothing to someone who holds none of the coins', () => {
-    expect(delistingHolderNotice(item, nothing)).toBeNull()
-    expect(delistingHolderNotice(item, { ...nothing, live: [{ asset: 'BTC', free: 1, locked: 0 }] })).toBeNull()
-    expect(delistingHolderNotice({ ...item, category: 'SPOT_LISTING' }, { ...nothing, live: [{ asset: 'ICX', free: 1, locked: 0 }] })).toBeNull()
+    expect(newsHolderNotice(item, nothing)).toBeNull()
+    expect(newsHolderNotice(item, { ...nothing, live: [{ asset: 'BTC', free: 1, locked: 0 }] })).toBeNull()
+    expect(newsHolderNotice({ ...item, category: 'SPOT_LISTING' }, { ...nothing, live: [{ asset: 'ICX', free: 1, locked: 0 }] })).toBeNull()
   })
 
   it('names each place a coin is held, and says nothing was sold', () => {
     const account: PaperAccount = { balances: { USDT: 500, SCRT: 12.5 }, initialBalances: { USDT: 1000 }, createdAt: A - 86_400, ledger: [] }
-    const running = newsShortExecutor({ id: 'r', item, ticker: 'ICX', pair: pair('ICX'), stakeQuote: 100, nowSec: A })
+    const running = delistingShort('r', 'ICX', 100, A)
     const holdings: Holdings = {
       live: [{ asset: 'ICX', free: 100, locked: 20.5 }],
       paperAccount: account,
@@ -116,23 +125,23 @@ describe('the notice to someone holding the coin', () => {
     expect(heldPlaces('ICX', holdings)).toEqual(['120.5 ICX on Binance', 'an executor running on ICX'])
     expect(heldPlaces('SCRT', holdings)).toEqual(['12.5 SCRT in the paper account'])
     expect(heldPlaces('STORJ', holdings)).toEqual([])
-    expect(delistingHolderNotice(item, holdings)).toEqual({
+    expect(newsHolderNotice(item, holdings)).toEqual({
       title: 'Binance will delist ICX, SCRT, which you hold',
       body:
         'You hold 120.5 ICX on Binance and an executor running on ICX; 12.5 SCRT in the paper account. Nothing has been sold. ' +
         'Coins Binance announced it would delist were on average 13% lower four hours later (research/NEWS.md). Announced 06:00 UTC: "Binance Will Delist ICX, SCRT, STORJ on 2026-09-03"'
     })
     // What must survive a notice cut at 400 characters comes first.
-    const long = delistingHolderNotice({ ...item, title: 'x'.repeat(600) }, holdings)
+    const long = newsHolderNotice({ ...item, title: 'x'.repeat(600) }, holdings)
     expect(long?.body.slice(0, 400)).toContain('Nothing has been sold.')
   })
 
   it('is given only for a delisting read in this session, and not a day after it', () => {
     const at = { sessionStartSec: A - 60, nowSec: A + 60, latestSeconds: 24 * 3600 }
-    expect(isFreshDelisting(item, at)).toBe(true)
-    expect(isFreshDelisting({ ...item, seenAt: A - 61 }, at)).toBe(false)
-    expect(isFreshDelisting(item, { ...at, nowSec: A + 24 * 3600 + 1 })).toBe(false)
-    expect(isFreshDelisting({ ...item, category: null }, at)).toBe(false)
+    expect(isFreshNews(item, at)).toBe(true)
+    expect(isFreshNews({ ...item, seenAt: A - 61 }, at)).toBe(false)
+    expect(isFreshNews(item, { ...at, nowSec: A + 24 * 3600 + 1 })).toBe(false)
+    expect(isFreshNews({ ...item, category: null }, at)).toBe(false)
   })
 })
 
@@ -201,35 +210,51 @@ describe('a delisting put to the models', () => {
 })
 
 describe('its setting', () => {
-  it('reads a file it cannot use as off, and keeps the notice on unless told otherwise', () => {
+  const kind = { notifyHeld: true, paperShort: { enabled: false, stakeQuote: 100 }, askModels: true }
+
+  it('reads a file it cannot use as off, and keeps the notice on unless told otherwise, kind by kind', () => {
     expect(healNewsConfig(null)).toEqual(DEFAULT_NEWS_CONFIG)
-    expect(DEFAULT_NEWS_CONFIG).toEqual({ enabled: false, notifyHeld: true, paperShort: { enabled: false, stakeQuote: 100 }, askModels: true })
-    expect(healNewsConfig({ enabled: 'true', notifyHeld: false, paperShort: { enabled: 1, stakeQuote: 333 }, askModels: false })).toEqual({
+    expect(DEFAULT_NEWS_CONFIG).toEqual({ enabled: false, delisting: kind, monitoringTag: kind })
+    expect(
+      healNewsConfig({
+        enabled: 'true',
+        delisting: { notifyHeld: false, paperShort: { enabled: 1, stakeQuote: 333 }, askModels: false },
+        monitoringTag: { paperShort: { enabled: true, stakeQuote: 250 } }
+      })
+    ).toEqual({
       enabled: false,
-      notifyHeld: false,
-      paperShort: { enabled: false, stakeQuote: 100 },
-      askModels: false
+      delisting: { notifyHeld: false, paperShort: { enabled: false, stakeQuote: 100 }, askModels: false },
+      monitoringTag: { ...kind, paperShort: { enabled: true, stakeQuote: 250 } }
     })
-    expect(healNewsConfig({ enabled: true, paperShort: { enabled: true, stakeQuote: 250 } })).toEqual({
+  })
+
+  it('reads a file written before the tag was read as what a delisting does', () => {
+    expect(healNewsConfig({ enabled: true, notifyHeld: false, paperShort: { enabled: true, stakeQuote: 250 }, askModels: false })).toEqual({
       enabled: true,
-      notifyHeld: true,
-      paperShort: { enabled: true, stakeQuote: 250 },
-      askModels: true
+      delisting: { notifyHeld: false, paperShort: { enabled: true, stakeQuote: 250 }, askModels: false },
+      monitoringTag: kind
     })
   })
 
   it('takes a change it can use, and says why it refuses one it cannot', () => {
-    const on = applyNewsConfigPatch(DEFAULT_NEWS_CONFIG, { enabled: true, paperShort: { enabled: true } }) as NewsConfig
-    expect(on).toEqual({ enabled: true, notifyHeld: true, paperShort: { enabled: true, stakeQuote: 100 }, askModels: true })
-    expect(applyNewsConfigPatch(on, { paperShort: { stakeQuote: 500 } })).toEqual({ ...on, paperShort: { enabled: true, stakeQuote: 500 } })
-    expect(applyNewsConfigPatch(on, { askModels: false })).toEqual({ ...on, askModels: false })
+    const on = applyNewsConfigPatch(DEFAULT_NEWS_CONFIG, { enabled: true, monitoringTag: { paperShort: { enabled: true } } }) as NewsConfig
+    expect(on).toEqual({ enabled: true, delisting: kind, monitoringTag: { ...kind, paperShort: { enabled: true, stakeQuote: 100 } } })
+    expect(applyNewsConfigPatch(on, { monitoringTag: { paperShort: { stakeQuote: 500 } } })).toEqual({ ...on, monitoringTag: { ...kind, paperShort: { enabled: true, stakeQuote: 500 } } })
+    expect(applyNewsConfigPatch(on, { delisting: { askModels: false, notifyHeld: false } })).toEqual({ ...on, delisting: { ...kind, askModels: false, notifyHeld: false } })
     expect(applyNewsConfigPatch(on, { enabled: 'yes' as never })).toBe('The news reader is either on or off')
-    expect(applyNewsConfigPatch(on, { notifyHeld: 1 as never })).toBe('The notice to holders is either on or off')
-    expect(applyNewsConfigPatch(on, { askModels: 'no' as never })).toBe('Putting delistings to the models is either on or off')
-    expect(applyNewsConfigPatch(on, { paperShort: { stakeQuote: 7 } })).toBe('A paper short stakes 25, 50, 100, 250, 500, 1000')
-    expect(applyNewsConfigPatch(on, { paperShort: null as never })).toBe('Not a setting for the paper short')
-    // The config it was given is not changed.
-    expect(DEFAULT_NEWS_CONFIG.paperShort.enabled).toBe(false)
+    expect(applyNewsConfigPatch(on, { delisting: { notifyHeld: 1 as never } })).toBe('The notice to holders is either on or off')
+    expect(applyNewsConfigPatch(on, { monitoringTag: { askModels: 'no' as never } })).toBe('Putting it to the models is either on or off')
+    expect(applyNewsConfigPatch(on, { delisting: { paperShort: { stakeQuote: 7 } } })).toBe('A paper short stakes 25, 50, 100, 250, 500, 1000')
+    expect(applyNewsConfigPatch(on, { delisting: { paperShort: { enabled: 'on' as never } } })).toBe('The paper short is either on or off')
+    expect(applyNewsConfigPatch(on, { monitoringTag: { paperShort: null as never } })).toBe('Not a setting for the paper short')
+    expect(applyNewsConfigPatch(on, { monitoringTag: 5 as never })).toBe('Not a setting for what an announcement does')
+    // The config it was given is not changed, nor the default.
+    expect(on.monitoringTag.paperShort.stakeQuote).toBe(100)
+    expect(DEFAULT_NEWS_CONFIG.monitoringTag.paperShort.enabled).toBe(false)
+    expect(newsActionsFor(on, 'MONITORING_TAG')).toBe(on.monitoringTag)
+    expect(newsActionsFor(on, 'DELISTING')).toBe(on.delisting)
+    expect(newsActionsFor(on, 'FUTURES_LAUNCH')).toBeNull()
+    expect(newsActionsFor(on, null)).toBeNull()
   })
 })
 
@@ -274,13 +299,13 @@ const ON = { paperShort: { enabled: true, stakeQuote: 100 } }
 describe('opening the shorts', () => {
   it('opens nothing while it is switched off', async () => {
     const r = rig()
-    expect(await openDelistingShorts(item, { paperShort: { enabled: false, stakeQuote: 100 } }, r.deps)).toEqual([])
+    expect(await openNewsShorts(item, { paperShort: { enabled: false, stakeQuote: 100 } }, r.deps)).toEqual([])
     expect(r.state.executors).toEqual([])
   })
 
   it('opens one paper short on each coin with a USDT pair, and says why not on the others', async () => {
     const r = rig()
-    expect(await openDelistingShorts(item, ON, r.deps)).toEqual([
+    expect(await openNewsShorts(item, ON, r.deps)).toEqual([
       'ICX: a paper short of 100 USDT was opened.',
       'SCRT: a paper short of 100 USDT was opened.',
       'STORJ: no paper short, as it has no USDT pair on Binance.'
@@ -293,7 +318,7 @@ describe('opening the shorts', () => {
     expect(r.notices[0].body).toContain('Paper: nothing real was placed.')
 
     // Read again -- the same announcement opens nothing more.
-    expect(await openDelistingShorts(item, ON, r.deps)).toEqual([
+    expect(await openNewsShorts(item, ON, r.deps)).toEqual([
       'ICX: no paper short. The rule has already opened its short on this coin for this announcement.',
       'SCRT: no paper short. The rule has already opened its short on this coin for this announcement.',
       'STORJ: no paper short, as it has no USDT pair on Binance.'
@@ -303,11 +328,11 @@ describe('opening the shorts', () => {
 
   it('opens none it is too late for, and none the paper account cannot fund', async () => {
     const late = rig({ now: A + 6 * 60 })
-    expect((await openDelistingShorts(item, ON, late.deps))[0]).toMatch(/^ICX: no paper short. It was announced more than five minutes ago/)
+    expect((await openNewsShorts(item, ON, late.deps))[0]).toMatch(/^ICX: no paper short. It was announced more than five minutes ago/)
     expect(late.state.executors).toEqual([])
 
     const poor = rig({ account: { balances: { USDT: 150 }, initialBalances: { USDT: 150 }, createdAt: A - 86_400, ledger: [] } })
-    const lines = await openDelistingShorts(item, ON, poor.deps)
+    const lines = await openNewsShorts(item, ON, poor.deps)
     expect(lines[0]).toBe('ICX: a paper short of 100 USDT was opened.')
     expect(lines[1]).toMatch(/^SCRT: no paper short. /)
     expect(poor.state.executors).toHaveLength(1)
@@ -317,7 +342,7 @@ describe('opening the shorts', () => {
 describe('settling the shorts', () => {
   it('stops and settles a short once its four hours are up, once, with how it ended written on it', async () => {
     const r = rig()
-    await openDelistingShorts(item, ON, r.deps)
+    await openNewsShorts(item, ON, r.deps)
     const bars: Candle[] = []
     for (let t = A + 120; t <= A + 245 * 60; t += 60) bars.push({ time: t, open: 10, high: 10, low: 9, close: t < A + 100 * 60 ? 10 : 9, volume: 1 })
     r.state.candles = bars
@@ -341,7 +366,7 @@ describe('settling the shorts', () => {
 
   it('is settled once by two passes that overlap, and not at all once someone stopped it first', async () => {
     const r = rig()
-    await openDelistingShorts({ ...item, tickers: ['ICX'] }, ON, r.deps)
+    await openNewsShorts({ ...item, tickers: ['ICX'] }, ON, r.deps)
     r.state.candles = Array.from({ length: 126 * 4 }, (_, i) => ({ time: A + 120 + i * 60, open: 10, high: 10, low: 10, close: 10, volume: 1 }))
     r.state.now = A + 241 * 60
     const [first, second] = await Promise.all([settleNewsShorts(r.deps), settleNewsShorts(r.deps)])
@@ -350,7 +375,7 @@ describe('settling the shorts', () => {
 
     // Stopped by hand while its candles were being read: whoever stopped it booked it.
     const byHand = rig()
-    await openDelistingShorts({ ...item, tickers: ['ICX'] }, ON, byHand.deps)
+    await openNewsShorts({ ...item, tickers: ['ICX'] }, ON, byHand.deps)
     byHand.state.candles = r.state.candles
     byHand.state.now = A + 241 * 60
     const read = byHand.deps.fetchCandles
@@ -365,10 +390,160 @@ describe('settling the shorts', () => {
 
   it("leaves alone every executor that is not one of the rule's shorts", async () => {
     const r = rig()
-    await openDelistingShorts(item, ON, r.deps)
+    await openNewsShorts(item, ON, r.deps)
     r.state.executors = r.state.executors.map((executor) => ({ ...executor, newsRule: undefined }))
     r.state.candles = [{ time: A + 120, open: 10, high: 10, low: 10, close: 10, volume: 1 }]
     r.state.now = A + 300 * 60
     expect(await settleNewsShorts(r.deps)).toEqual([])
+  })
+})
+
+// ---------------------------------------------------------------------------------------------
+// A coin added to the Monitoring Tag: the bracket research/NEWS.md measured -- short at the second
+// minute after the announcement's, a stop 1.5 and a target 3 of the coin's usual fifteen-minute
+// moves read from the twelve hours before it, out at the close of the sixtieth minute otherwise.
+
+/** AVA, GNS, SCR and TOWNS: Binance's news of 4 September 2026, 08:00 UTC. */
+const G = Date.parse('2026-09-04T08:00:00Z') / 1000
+
+const tag: NewsItem = {
+  id: 401,
+  catalog: 49,
+  title: 'Binance Will Extend the Monitoring Tag to Include AVA, GNS, SCR & TOWNS on 2026-09-04',
+  releaseSec: G,
+  seenAt: G + 3,
+  category: 'MONITORING_TAG',
+  tickers: ['AVA', 'GNS', 'SCR', 'TOWNS']
+}
+
+/** Twelve hours of minutes ending with the one before the announcement's, gently moving. */
+function hoursBefore(releaseSec: number): Candle[] {
+  const last = Math.floor(releaseSec / 60) * 60 - 60
+  const bars: Candle[] = []
+  for (let k = 719; k >= 0; k--) {
+    const time = last - k * 60
+    const price = 10 * (1 + 0.004 * Math.sin(time / 420))
+    bars.push({ time, open: price, high: price * 1.001, low: price * 0.999, close: price, volume: 5 })
+  }
+  return bars
+}
+
+/** Seventy minutes from `from`, at `price` until `turnAt`, and at `after` from then on. */
+function hourFrom(from: number, price: number, turnAt: number, after: number): Candle[] {
+  return Array.from({ length: 70 }, (_, k) => {
+    const time = from + k * 60
+    const p = time < turnAt ? price : after
+    return { time, open: p, high: p, low: p, close: p, volume: 1 }
+  })
+}
+
+describe("a Monitoring Tag's short", () => {
+  it('is made in the minute after the announcement, so that it enters at the second', () => {
+    expect(tagShortWindow(G)).toEqual({ fromSec: G + 61, toSec: G + 120 })
+    // Released partway into its minute: the minute is still the one it was released in.
+    expect(tagShortWindow(G + 30)).toEqual({ fromSec: G + 61, toSec: G + 120 })
+    const base = { item: tag, ticker: 'AVA', executors: [] as ExecutorConfig[] }
+    expect(newsShortBlock({ ...base, nowSec: G + 60 })).toMatch(/too soon/)
+    expect(newsShortBlock({ ...base, nowSec: G + 61 })).toBeNull()
+    expect(newsShortBlock({ ...base, nowSec: G + 120 })).toBeNull()
+    expect(newsShortBlock({ ...base, nowSec: G + 121 })).toMatch(/too late to enter at the second minute/)
+    expect(newsShortBlock({ ...base, ticker: 'ICX', nowSec: G + 61 })).toMatch(/not a delisting or a Monitoring Tag of this coin/)
+  })
+
+  it("reads the coin's usual move from the twelve unbroken hours before the announcement", () => {
+    expect(tagReadingWindow(G)).toEqual({ startSec: G - 60 - 719 * 60, endSec: G - 1 })
+    const bars = hoursBefore(G)
+    expect(bars[0].time).toBe(tagReadingWindow(G).startSec)
+    const reading = tagReading(bars, G)
+    expect(reading?.sigma15Pct).toBeGreaterThan(0)
+    expect(reading?.barTime).toBe(G - 60)
+    // A minute missing, or the one before the announcement not there: no reading, no short.
+    expect(tagReading([...bars.slice(0, 300), ...bars.slice(301)], G)).toBeNull()
+    expect(tagReading(bars.slice(0, -1), G)).toBeNull()
+    // Candles that run on past it are read only up to it.
+    expect(tagReading([...bars, ...hourFrom(G, 10, G, 10)], G)?.sigma15Pct).toBe(reading?.sigma15Pct)
+  })
+
+  it('sets its stop and target from that move, and is out at the close of its sixtieth minute', () => {
+    const params = tagShortParams({ sigma15Pct: 2, stakeQuote: 100 })
+    expect(params).toEqual({ side: 'sell', entryPrice: null, amountQuote: 100, takeProfitPct: 6, stopLossPct: 3, timeLimitSec: 59 * 60, trailingStop: null })
+    // The engine reads candles from the second minute after the announcement: in at 10.
+    const entry = G + 120
+    expect(simulatePosition(hourFrom(entry, 10, entry + 20 * 60, 9.3), params)).toMatchObject({ exitReason: 'take_profit', enteredAt: entry })
+    expect(simulatePosition(hourFrom(entry, 10, entry + 20 * 60, 9.3), params).exitPrice).toBeCloseTo(9.4, 9)
+    expect(simulatePosition(hourFrom(entry, 10, entry + 20 * 60, 10.4), params)).toMatchObject({ exitReason: 'stop_loss', exitPrice: 10.4 })
+    expect(simulatePosition(hourFrom(entry, 10, entry + 20 * 60, 10.1), params)).toMatchObject({ exitReason: 'time_limit', closedAt: entry + 59 * 60 })
+  })
+
+  it('opens one paper short on each coin with a USDT pair, from its own reading', async () => {
+    const r = rig({ now: G + 61, candles: hoursBefore(G), pairs: [pair('AVA'), pair('GNS')] })
+    expect(await openNewsShorts(tag, ON, r.deps)).toEqual([
+      'AVA: a paper short of 100 USDT was opened.',
+      'GNS: a paper short of 100 USDT was opened.',
+      'SCR: no paper short, as it has no USDT pair on Binance.',
+      'TOWNS: no paper short, as it has no USDT pair on Binance.'
+    ])
+    const sigma = tagReading(hoursBefore(G), G)?.sigma15Pct as number
+    const [ava] = r.state.executors
+    expect(ava).toMatchObject({ name: 'Monitoring Tag short · AVAUSDT', type: 'position', mode: 'paper', createdAt: G + 61, keepPosition: false })
+    expect(ava.params).toEqual(tagShortParams({ sigma15Pct: sigma, stakeQuote: 100 }))
+    expect(ava.newsRule).toEqual({ articleId: 401, ticker: 'AVA', releaseSec: G, title: tag.title, category: 'MONITORING_TAG' })
+    expect(r.notices[0].title).toBe('Paper short: AVAUSDT')
+    expect(r.notices[0].body).toMatch(
+      /^Binance added AVA to its Monitoring Tag \(announced 08:00 UTC\)\. A paper short of 100 USDT was opened by the rule: a stop \d+\.\d\d% above, a target \d+\.\d\d% below, out within the hour\. Paper: nothing real was placed\.$/
+    )
+    expect(describeNewsShortOrigin(ava.newsRule as NonNullable<ExecutorConfig['newsRule']>)).toBe(
+      "Opened by the news reader, with nobody pressing anything, on Binance's announcement at 08:00 UTC that it adds AVA to its Monitoring Tag: a short with a stop and a target, out within the hour, by the rule research/NEWS.md measured. Paper."
+    )
+    // Read again -- the same announcement opens nothing more.
+    expect((await openNewsShorts(tag, ON, r.deps))[0]).toBe('AVA: no paper short. The rule has already opened its short on this coin for this announcement.')
+  })
+
+  it('opens none too soon, too late, or on a coin whose usual move cannot be read', async () => {
+    const soon = rig({ now: G + 59, candles: hoursBefore(G), pairs: [pair('AVA')] })
+    expect((await openNewsShorts(tag, ON, soon.deps))[0]).toMatch(/^AVA: no paper short. It is too soon/)
+    const late = rig({ now: G + 125, candles: hoursBefore(G), pairs: [pair('AVA')] })
+    expect((await openNewsShorts(tag, ON, late.deps))[0]).toMatch(/^AVA: no paper short. It is too late/)
+    const holed = rig({ now: G + 61, candles: hoursBefore(G).slice(1, -1), pairs: [pair('AVA')] })
+    expect((await openNewsShorts(tag, ON, holed.deps))[0]).toBe('AVA: no paper short, as its usual moves could not be read from its candles before the announcement.')
+    const unread = rig({ now: G + 61, pairs: [pair('AVA')] })
+    unread.deps.fetchCandles = async () => {
+      throw new Error('klines request failed: 503')
+    }
+    expect((await openNewsShorts(tag, ON, unread.deps))[0]).toMatch(/usual moves could not be read/)
+    for (const rigged of [soon, late, holed, unread]) expect(rigged.state.executors).toEqual([])
+  })
+
+  it('is settled when its target is reached, with how it ended written on it', async () => {
+    const r = rig({ now: G + 61, candles: hoursBefore(G), pairs: [pair('AVA')] })
+    await openNewsShorts({ ...tag, tickers: ['AVA'] }, ON, r.deps)
+    const target = 10 * (1 - ((r.state.executors[0].params as PositionExecutorParams).takeProfitPct as number) / 100)
+    r.state.candles = hourFrom(G + 120, 10, G + 120 + 10 * 60, target * 0.99)
+    r.state.now = G + 120 + 12 * 60
+    expect(await settleNewsShorts(r.deps)).toEqual(['Monitoring Tag short · AVAUSDT'])
+    expect(r.state.executors[0].newsRule?.result).toMatchObject({ exit: 'take_profit', closedAt: G + 120 + 10 * 60 })
+    expect(r.state.executors[0].newsRule?.result?.pnlQuote).toBeGreaterThan(0)
+  })
+
+  it('tells someone holding a tagged coin, and says nothing was sold', () => {
+    const holdings: Holdings = {
+      live: null,
+      paperAccount: { balances: { USDT: 500, AVA: 40 }, initialBalances: { USDT: 1000 }, createdAt: G - 86_400, ledger: [] },
+      heldPositions: [],
+      executors: []
+    }
+    expect(newsHolderNotice(tag, holdings)).toEqual({
+      title: "Binance's Monitoring Tag now includes AVA, which you hold",
+      body:
+        'You hold 40 AVA in the paper account. Nothing has been sold. Coins Binance added to the tag were on average 12% lower a day later, and 84 of 97 were later delisted (research/NEWS.md). ' +
+        `Announced 08:00 UTC: "${tag.title}"`
+    })
+    expect(newsHolderNotice(tag, { ...holdings, paperAccount: null })).toBeNull()
+    expect(isFreshNews(tag, { sessionStartSec: G - 60, nowSec: G + 60, latestSeconds: 24 * 3600 })).toBe(true)
+  })
+
+  it('reads a mark with no kind on it, made before the tag was read, as a delisting', () => {
+    const mark = { articleId: 301, ticker: 'ICX', releaseSec: A, title: item.title }
+    expect(describeNewsShortOrigin(mark)).toMatch(/that it will delist ICX: a short held four hours/)
   })
 })

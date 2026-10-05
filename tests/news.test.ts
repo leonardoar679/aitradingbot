@@ -253,7 +253,7 @@ describe('a delisting put to the models', () => {
     vi.setSystemTime(LATER + 3_000)
     lists.articles.get(161)?.unshift(fresh)
     const { setNewsConfig, whenNewsSettled } = await reader()
-    await setNewsConfig({ enabled: true, askModels: false })
+    await setNewsConfig({ enabled: true, delisting: { askModels: false } })
     await whenNewsSettled()
     expect(raised.calls).toEqual([])
 
@@ -261,7 +261,7 @@ describe('a delisting put to the models', () => {
     const later = await reader()
     lists.articles.get(161)?.unshift(article(311, 'Binance Will Delist COS on 2026-10-20', LATER - 6 * 60_000))
     // Switched back on, it reads at once -- and keeps 311, which is six minutes old: history.
-    await later.setNewsConfig({ askModels: true })
+    await later.setNewsConfig({ delisting: { askModels: true } })
     await later.whenNewsSettled()
     expect((await later.getNewsState()).recent.map((item) => item.id)).toContain(311)
     expect(raised.calls).toEqual([])
@@ -324,7 +324,7 @@ describe('its setting', () => {
   it('refuses anything but on or off, and heals a file holding something else', async () => {
     const { setNewsConfig } = await reader()
     await expect(setNewsConfig({ enabled: 'yes' as never })).rejects.toThrow('The news reader is either on or off')
-    await expect(setNewsConfig({ paperShort: { stakeQuote: 7 } })).rejects.toThrow('A paper short stakes 25, 50, 100, 250, 500, 1000')
+    await expect(setNewsConfig({ monitoringTag: { paperShort: { stakeQuote: 7 } } })).rejects.toThrow('A paper short stakes 25, 50, 100, 250, 500, 1000')
     writeFileSync(join(dir, 'news.json'), JSON.stringify({ enabled: 'true', paperShort: { enabled: 'yes' } }))
     vi.resetModules()
     expect((await (await reader()).getNewsState()).config).toEqual(DEFAULT_NEWS_CONFIG)

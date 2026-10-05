@@ -5,10 +5,12 @@ import { classifyTitle, type NewsCategory } from './newsTitles'
 // The types and the pure half of the reader (electron/services/newsService.ts): what an answer from
 // the list holds, what is kept of each article, and what the page says about each kind.
 //
-// THE READER ONLY READS. research/NEWS.md found that a delisting, held short for four hours, paid on
-// the held-out half, and on 2026-10-05 the user chose what one does: a notice to someone holding the
-// coin, and a PAPER short by the rule (shared/newsActions.ts, done in src/news/), each switched on
-// here. Nothing real is placed or sold because of an announcement.
+// THE READER ONLY READS. research/NEWS.md found that two kinds paid on the held-out half -- a
+// delisting held short four hours, and a short with a stop and a target after Binance adds a coin
+// to its Monitoring Tag -- and on 2026-10-05 the user chose what each does: a notice to someone
+// holding the coin, a PAPER short by the kind's rule (shared/newsActions.ts, done in src/news/),
+// and a question to the watch's models, each switched on here, kind by kind. Nothing real is placed
+// or sold because of an announcement.
 
 export type { NewsCategory }
 
@@ -59,70 +61,122 @@ export function isNewsShortStake(value: unknown): value is number {
   return (NEWS_SHORT_STAKES as readonly unknown[]).includes(value)
 }
 
-export interface NewsConfig {
-  /** The reader itself. Nothing below happens while it is off. */
-  enabled: boolean
-  /** A desktop notice when Binance will delist a coin held, on Binance or on paper. */
+/** What one kind of news does, each part as it is switched on. */
+export interface NewsKindActions {
+  /** A desktop notice when Binance announces it of a coin held, on Binance or on paper. */
   notifyHeld: boolean
-  /** A paper short on each coin Binance will delist, by the rule research/NEWS.md measured. */
+  /** A paper short on each coin it names, by the kind's rule research/NEWS.md measured. */
   paperShort: { enabled: boolean; stakeQuote: number }
-  /** Each coin Binance will delist raised as an event, which the watch puts to its models when the
-   * watch is on -- within the watch's own limits and the day's AI budget. */
+  /** Each coin it names raised as an event, which the watch puts to its models when the watch is
+   * on -- within the watch's own limits and the day's AI budget. */
   askModels: boolean
 }
 
-export interface NewsConfigPatch {
-  enabled?: boolean
+/** The kinds that do anything: the two that passed on the held-out half (research/NEWS.md). */
+export type ActedNewsCategory = 'DELISTING' | 'MONITORING_TAG'
+
+export function isActedNewsCategory(category: NewsCategory | null): category is ActedNewsCategory {
+  return category === 'DELISTING' || category === 'MONITORING_TAG'
+}
+
+export interface NewsConfig {
+  /** The reader itself. Nothing below happens while it is off. */
+  enabled: boolean
+  /** What a delisting does. */
+  delisting: NewsKindActions
+  /** What Binance adding a coin to its Monitoring Tag does. */
+  monitoringTag: NewsKindActions
+}
+
+export interface NewsKindActionsPatch {
   notifyHeld?: boolean
   paperShort?: { enabled?: boolean; stakeQuote?: number }
   askModels?: boolean
 }
 
-export const DEFAULT_NEWS_CONFIG: NewsConfig = {
-  enabled: false,
-  notifyHeld: true,
-  paperShort: { enabled: false, stakeQuote: NEWS_SHORT_DEFAULT_STAKE },
-  askModels: true
+export interface NewsConfigPatch {
+  enabled?: boolean
+  delisting?: NewsKindActionsPatch
+  monitoringTag?: NewsKindActionsPatch
 }
 
-/** A config read from a file, healed rather than obeyed: only `true` switches anything on, and only
- * a stake it offers is a stake. */
-export function healNewsConfig(raw: unknown): NewsConfig {
+/** What a kind does by default once the reader is on: the notice and the models, not the short. */
+const DEFAULT_KIND_ACTIONS: NewsKindActions = { notifyHeld: true, paperShort: { enabled: false, stakeQuote: NEWS_SHORT_DEFAULT_STAKE }, askModels: true }
+
+export const DEFAULT_NEWS_CONFIG: NewsConfig = {
+  enabled: false,
+  delisting: { ...DEFAULT_KIND_ACTIONS, paperShort: { ...DEFAULT_KIND_ACTIONS.paperShort } },
+  monitoringTag: { ...DEFAULT_KIND_ACTIONS, paperShort: { ...DEFAULT_KIND_ACTIONS.paperShort } }
+}
+
+/** What one kind does, as the config says; null for a kind that does nothing. */
+export function newsActionsFor(config: NewsConfig, category: NewsCategory | null): NewsKindActions | null {
+  return category === 'DELISTING' ? config.delisting : category === 'MONITORING_TAG' ? config.monitoringTag : null
+}
+
+/** A copy that shares nothing with the one it was made from. */
+export function copyNewsConfig(config: NewsConfig): NewsConfig {
+  const kind = (actions: NewsKindActions): NewsKindActions => ({ ...actions, paperShort: { ...actions.paperShort } })
+  return { enabled: config.enabled, delisting: kind(config.delisting), monitoringTag: kind(config.monitoringTag) }
+}
+
+function healKindActions(raw: unknown): NewsKindActions {
   const value = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
   const short = (typeof value.paperShort === 'object' && value.paperShort !== null ? value.paperShort : {}) as Record<string, unknown>
   return {
-    enabled: value.enabled === true,
     notifyHeld: value.notifyHeld !== false,
     paperShort: { enabled: short.enabled === true, stakeQuote: isNewsShortStake(short.stakeQuote) ? short.stakeQuote : NEWS_SHORT_DEFAULT_STAKE },
     askModels: value.askModels !== false
   }
 }
 
-/** A patch applied to a config, or why it cannot be. */
-export function applyNewsConfigPatch(current: NewsConfig, patch: NewsConfigPatch): NewsConfig | string {
-  const next: NewsConfig = { ...current, paperShort: { ...current.paperShort } }
-  if (patch.enabled !== undefined) {
-    if (typeof patch.enabled !== 'boolean') return 'The news reader is either on or off'
-    next.enabled = patch.enabled
-  }
+/** A config read from a file, healed rather than obeyed: only `true` switches anything on, and only
+ * a stake it offers is a stake. A file written before the Monitoring Tag was read held a
+ * delisting's switches at its top level; they are read as the delisting's. */
+export function healNewsConfig(raw: unknown): NewsConfig {
+  const value = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
+  const delisting = typeof value.delisting === 'object' && value.delisting !== null ? value.delisting : { notifyHeld: value.notifyHeld, paperShort: value.paperShort, askModels: value.askModels }
+  return { enabled: value.enabled === true, delisting: healKindActions(delisting), monitoringTag: healKindActions(value.monitoringTag) }
+}
+
+function applyKindPatch(actions: NewsKindActions, patch: NewsKindActionsPatch): string | null {
+  if (typeof patch !== 'object' || patch === null) return 'Not a setting for what an announcement does'
   if (patch.notifyHeld !== undefined) {
     if (typeof patch.notifyHeld !== 'boolean') return 'The notice to holders is either on or off'
-    next.notifyHeld = patch.notifyHeld
+    actions.notifyHeld = patch.notifyHeld
   }
   if (patch.askModels !== undefined) {
-    if (typeof patch.askModels !== 'boolean') return 'Putting delistings to the models is either on or off'
-    next.askModels = patch.askModels
+    if (typeof patch.askModels !== 'boolean') return 'Putting it to the models is either on or off'
+    actions.askModels = patch.askModels
   }
   if (patch.paperShort !== undefined) {
     if (typeof patch.paperShort !== 'object' || patch.paperShort === null) return 'Not a setting for the paper short'
     if (patch.paperShort.enabled !== undefined) {
       if (typeof patch.paperShort.enabled !== 'boolean') return 'The paper short is either on or off'
-      next.paperShort.enabled = patch.paperShort.enabled
+      actions.paperShort.enabled = patch.paperShort.enabled
     }
     if (patch.paperShort.stakeQuote !== undefined) {
       if (!isNewsShortStake(patch.paperShort.stakeQuote)) return `A paper short stakes ${NEWS_SHORT_STAKES.join(', ')}`
-      next.paperShort.stakeQuote = patch.paperShort.stakeQuote
+      actions.paperShort.stakeQuote = patch.paperShort.stakeQuote
     }
+  }
+  return null
+}
+
+/** A patch applied to a config, or why it cannot be. */
+export function applyNewsConfigPatch(current: NewsConfig, patch: NewsConfigPatch): NewsConfig | string {
+  const next = copyNewsConfig(current)
+  if (patch.enabled !== undefined) {
+    if (typeof patch.enabled !== 'boolean') return 'The news reader is either on or off'
+    next.enabled = patch.enabled
+  }
+  if (patch.delisting !== undefined) {
+    const problem = applyKindPatch(next.delisting, patch.delisting)
+    if (problem !== null) return problem
+  }
+  if (patch.monitoringTag !== undefined) {
+    const problem = applyKindPatch(next.monitoringTag, patch.monitoringTag)
+    if (problem !== null) return problem
   }
   return next
 }

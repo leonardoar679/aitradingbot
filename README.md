@@ -359,6 +359,19 @@ is open:
     scanner's. A benchmark leaves these events out, since it compares models on the scanner's
     question.
 
+**What a Monitoring Tag does** is what the user chose the same day, once its own study was in: the
+same three things, switched separately, in a group of their own on the same card.
+- **A notice, if you hold the coin** (on by default once the reader is on), read the same way. It
+  says what tagged coins did, and that 84 of 97 were later delisted. It sells nothing.
+- **A paper short by the rule** (off until switched on, with a stake of its own). It is the bracket
+  the study measured:
+  - It is made in the minute after the announcement's, so that it enters at the open of the second
+    minute after it, where the study entered. A tag read later than that gets no short.
+  - Its stop is 1.5, and its target 3, of the coin's usual fifteen-minute move, read from the twelve
+    hours of minutes before the announcement. A coin whose minutes cannot all be read gets none.
+  - It is out at the close of its sixtieth minute otherwise. The news reader then stops and settles
+    it, as it does a delisting's.
+
 **Nothing real is placed or sold because of an announcement.** A short can never be placed for real
 here. `src/news/newsPaperShort.ts`, the one file that writes these shorts, spells paper as a
 literal. `tests/aiNoLivePath.test.ts` names every file that reads the news and holds that one to

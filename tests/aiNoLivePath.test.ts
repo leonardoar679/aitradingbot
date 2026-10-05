@@ -288,7 +288,7 @@ describe('AI code has no route to a real order', () => {
     }
   })
 
-  it('what a delisting does is a notice and a paper short, by a literal it cannot be handed', () => {
+  it('what a delisting or a tag does is a notice and a paper short, by a literal it cannot be handed', () => {
     const rules = join(ROOT, 'shared', 'newsActions.ts')
     const writer = join(ROOT, 'src', 'news', 'newsPaperShort.ts')
     const scheduler = join(ROOT, 'src', 'news', 'NewsScheduler.tsx')
@@ -299,13 +299,14 @@ describe('AI code has no route to a real order', () => {
       expect(source, path).not.toMatch(/\bleverage\s*:/)
     }
     expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron/)
-    expect(importsOf(rules).sort()).toEqual(['ipc', 'liveBalances', 'news'])
+    // The rules read a coin's usual move with the detector's arithmetic, which imports types alone.
+    expect(importsOf(rules).sort()).toEqual(['ipc', 'liveBalances', 'marketEvent', 'news'])
     // Paper is written where the executor is made, and the function that makes it takes no mode.
     const source = readFileSync(writer, 'utf-8')
     expect(source.match(/mode: 'paper'/g)).toHaveLength(2)
     expect(source).not.toMatch(/mode:(?!\s*'paper')/)
     const signature = /export function newsShortExecutor\(input: \{([^}]*)\}\)/.exec(source)?.[1] ?? ''
-    expect(signature).toContain('stakeQuote: number')
+    expect(signature).toContain('params: PositionExecutorParams')
     expect(signature).not.toMatch(/mode/)
     // The writer reaches settings, the market and a notice, and closes with paper bookkeeping.
     expect([...new Set([...source.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))].sort()).toEqual(['market', 'notify', 'settings'])

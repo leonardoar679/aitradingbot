@@ -82,7 +82,7 @@ All files are in the user's profile folder.
 | | `watch` (on, models, events a day, lowest band, first model gates) | Agents › Opportunities › Watch | Opportunities (stays with its results) |
 | | `watchPaper` (on, model, stake, most open) | Agents › Opportunities › Watch | Opportunities |
 | `scanner.json` | `enabled`, `universeSize` (20, 40, 60 or 100) | Explorer › Scanner | Settings › Market |
-| `news.json` | `enabled`, `notifyHeld`, `paperShort` (on, stake), `askModels` (added with the news reader, V3 Stage 7) | — | Settings › Market |
+| `news.json` | `enabled`; for `delisting` and for `monitoringTag`, each: `notifyHeld`, `paperShort` (on, stake), `askModels` (added with the news reader, V3 Stage 7) | — | Settings › Market |
 | `credentials.json` (encrypted) | Binance and Upbit keys; when added, last tested, result | Settings | Connections |
 | `aiCredentials.json` (encrypted) | The OpenRouter key | Agents | Connections |
 | `liveTrading.json` | Session armed, kill switch | Live trading bar | The bar (stays); detail on Live Trading |
@@ -106,8 +106,9 @@ boundary. They are unchanged by the reorganization:
   trades when those are switched on.
 
 A sixth was added after, in V3 Stage 7:
-- **`NewsScheduler`** acts on a delisting the news reader has read. It tells someone who holds the
-  coin, and opens the rule's paper short, each when switched on, and it settles those shorts.
+- **`NewsScheduler`** acts on a delisting, or a coin added to the Monitoring Tag, that the news
+  reader has read. It tells someone who holds the coin, and opens the kind's paper short, each when
+  switched on, and it settles those shorts.
 
 The main process also runs loops that need no window at all:
 - `marketScannerService` reads the market once a minute while it is on.
