@@ -50,14 +50,18 @@ export const AI_OPPORTUNITY_MARKET_PROMPT_VERSION = 'opportunity-v2'
  * delisting raised, put to the watch's models because the user chose that on 2026-10-05. A question
  * of its own, with its own prompt and cache keys; the answer's shape is the same. */
 export const AI_OPPORTUNITY_NEWS_PROMPT_VERSION = 'opportunity-news-v1'
+/** The same, for the event Binance's Monitoring Tag raised: chosen by the user the same day, once the
+ * tag had passed its own study. Its own prompt and cache keys; the delisting's are unchanged. */
+export const AI_OPPORTUNITY_TAG_PROMPT_VERSION = 'opportunity-tag-v1'
 
 /** The questions the app puts to events as they happen -- the scanner's, and an announcement's --
  * whose answers its feed, its journal and its live board read. The market question is a
  * benchmark's, and is read by the benchmark. */
-export const AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS: readonly string[] = [AI_OPPORTUNITY_PROMPT_VERSION, AI_OPPORTUNITY_NEWS_PROMPT_VERSION]
+export const AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS: readonly string[] = [AI_OPPORTUNITY_PROMPT_VERSION, AI_OPPORTUNITY_NEWS_PROMPT_VERSION, AI_OPPORTUNITY_TAG_PROMPT_VERSION]
 
 /** Which question an event is put as: the pair alone (opportunity-v1), the pair with the market
- * around it (opportunity-v2), or the pair with the announcement that raised it (opportunity-news-v1). */
+ * around it (opportunity-v2), or the pair with the announcement that raised it (opportunity-news-v1
+ * for a delisting, opportunity-tag-v1 for the Monitoring Tag). */
 export type AiOpportunityQuestionKind = 'pair' | 'market' | 'news'
 
 export function describeQuestionKind(kind: AiOpportunityQuestionKind): string {
@@ -67,7 +71,7 @@ export function describeQuestionKind(kind: AiOpportunityQuestionKind): string {
 /** The question a prompt version is, or null for one that is not an event's question. */
 export function questionKindOfPromptVersion(version: string): AiOpportunityQuestionKind | null {
   if (version === AI_OPPORTUNITY_PROMPT_VERSION) return 'pair'
-  if (version === AI_OPPORTUNITY_NEWS_PROMPT_VERSION) return 'news'
+  if (version === AI_OPPORTUNITY_NEWS_PROMPT_VERSION || version === AI_OPPORTUNITY_TAG_PROMPT_VERSION) return 'news'
   return version === AI_OPPORTUNITY_MARKET_PROMPT_VERSION ? 'market' : null
 }
 
@@ -320,8 +324,9 @@ export interface AiOpportunityQuestion {
   reference?: EventReference | null
   /** Present when the event was raised by an announcement (MarketEvent.news): the article's id in
    * the main process's own record of what it read. The main process looks it up there and puts the
-   * question with the announcement in it (opportunity-news-v1) only when that record says the
-   * article is a delisting naming this pair, from around this minute; otherwise nothing is asked.
+   * question with the announcement in it (opportunity-news-v1, or opportunity-tag-v1 for the
+   * Monitoring Tag) only when that record says the article is a delisting or a tag naming this
+   * pair, from around this minute; otherwise nothing is asked.
    * Never sent with `reference`. */
   newsId?: number
 }

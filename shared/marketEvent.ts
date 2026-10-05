@@ -83,9 +83,10 @@ export const EVENT_COOLDOWN_SECONDS = 30 * 60
  * exists to avoid. The rest are still recorded. */
 export const EVENT_MAX_RANKED = 3
 
-/** What the detector names a move -- and 'delisting', which it never does: that is an event raised
- * by Binance's announcement that it will delist the coin (toNewsEvent), not by the candles. */
-export const MARKET_EVENT_TYPES = ['pump', 'dump', 'breakout', 'breakdown', 'volume_spike', 'delisting'] as const
+/** What the detector names a move -- and 'delisting' and 'monitoring_tag', which it never does:
+ * those are events raised by Binance's announcement that it will delist the coin, or has added it to
+ * its Monitoring Tag (toNewsEvent), not by the candles. */
+export const MARKET_EVENT_TYPES = ['pump', 'dump', 'breakout', 'breakdown', 'volume_spike', 'delisting', 'monitoring_tag'] as const
 export type MarketEventType = (typeof MARKET_EVENT_TYPES)[number]
 export type EventDirection = 'up' | 'down' | 'none'
 export type EventBand = 'quiet' | 'watch' | 'candidate' | 'urgent'
@@ -400,17 +401,19 @@ export function toMarketEvent(
   }
 }
 
-/** The event a delisting announcement raises for one coin it names: the market as read at the
- * minute the announcement was read -- whatever the detector would have called it, or nothing --
- * named 'delisting', and pointing down, because of the announcement and not the candles. Raised by
- * the main process from an announcement it read itself (electron/services/newsService.ts). */
+/** The event an announcement raises for one coin it names: the market as read at the minute the
+ * announcement was read -- whatever the detector would have called it, or nothing -- named for the
+ * announcement's kind ('delisting', 'monitoring_tag'), and pointing down, because of the announcement
+ * and not the candles. Raised by the main process from an announcement it read itself
+ * (electron/services/newsService.ts). */
 export function toNewsEvent(
   reading: EventReading,
   market: { exchange: Exchange; symbol: string; baseAsset: string; quoteAsset: string },
   live: EventLiveContext,
-  news: NonNullable<MarketEvent['news']>
+  news: NonNullable<MarketEvent['news']>,
+  type: 'delisting' | 'monitoring_tag'
 ): MarketEvent {
-  return { ...toMarketEvent({ ...reading, type: 'delisting', direction: 'down' }, market, live), news: { ...news } }
+  return { ...toMarketEvent({ ...reading, type, direction: 'down' }, market, live), news: { ...news } }
 }
 
 /** How long after an event its page says what the price did: fifteen minutes, an hour, four hours. */
@@ -504,7 +507,8 @@ const TYPE_LABEL: Record<MarketEventType, string> = {
   breakout: 'Breakout',
   breakdown: 'Breakdown',
   volume_spike: 'Volume spike',
-  delisting: 'Delisting'
+  delisting: 'Delisting',
+  monitoring_tag: 'Monitoring Tag'
 }
 
 export function describeEventType(type: MarketEventType): string {

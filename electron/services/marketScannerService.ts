@@ -41,6 +41,7 @@ import {
   type ScannerState
 } from '../../shared/marketScanner'
 import type { NewsItem } from '../../shared/news'
+import { newsEventKind } from '../../shared/newsActions'
 import { writeJsonAtomic } from './atomicWrite'
 import { appendJsonLine, listMonthFiles } from './jsonlStore'
 import { cancelHistoricalRangeFetch, fetchHistoricalRange, listSymbols, scanSourceFor } from './marketService'
@@ -354,6 +355,8 @@ function unschedule(): void {
  * has no USDT pair, its candles do not make a reading, or an event of that coin at that minute has
  * already been raised. It counts toward the coin's cooldown like any event: one move, one event. */
 export async function raiseNewsEvent(item: NewsItem, ticker: string, nowMs: number = Date.now()): Promise<MarketEvent | null> {
+  const type = newsEventKind(item)
+  if (type === null) return null
   const current = await loadConfig()
   await loadRecent()
   const symbol = `${ticker}USDT`
@@ -369,7 +372,8 @@ export async function raiseNewsEvent(item: NewsItem, ticker: string, nowMs: numb
     reading,
     { exchange: SCANNER_EXCHANGE, symbol, baseAsset: pair.baseAsset, quoteAsset: pair.quoteAsset },
     { detectedAt: nowSec, quoteVolume24h: null, spreadPct: null, candidateScore: sig(reading.score), rank: 1 },
-    { articleId: item.id, title: item.title, releaseSec: item.releaseSec }
+    { articleId: item.id, title: item.title, releaseSec: item.releaseSec },
+    type
   )
   if (recentEvents.some((existing) => existing.id === event.id)) return null
   remember(event)

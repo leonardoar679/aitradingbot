@@ -198,22 +198,27 @@ export function isFreshNews(item: NewsItem, input: { sessionStartSec: number; no
 }
 
 // ---------------------------------------------------------------------------------------------
-// The models: a delisting raised as an event the watch puts to them (shared/aiContext.ts,
-// buildNewsEventContext). The main process raises it from an announcement it read itself, and puts
-// the question only about an announcement it read itself.
+// The models: a delisting, or a coin added to the Monitoring Tag, raised as an event the watch puts
+// to them (shared/aiContext.ts, buildNewsEventContext). The main process raises it from an
+// announcement it read itself, and puts the question only about an announcement it read itself.
 
-/** A delisting is raised as an event only this soon after its release: the event is the market at
- * the minute it was read, and an announcement read later is history, not news. */
-export const DELISTING_EVENT_LATEST_SECONDS = 5 * 60
+/** An announcement is raised as an event only this soon after its release: the event is the market
+ * at the minute it was read, and an announcement read later is history, not news. */
+export const NEWS_EVENT_LATEST_SECONDS = 5 * 60
 
 /** A question about an announcement's event may be about a minute from just before its release to
  * this long after it, and no other. */
 export const NEWS_QUESTION_LATEST_SECONDS = 30 * 60
 
-/** Whether a delisting the reader has just kept is raised as an event: released, and read, only
- * minutes ago. One kept the first time the reader is switched on is history. */
-export function shouldRaiseDelisting(item: NewsItem, nowSec: number): boolean {
-  return item.category === 'DELISTING' && nowSec - item.releaseSec <= DELISTING_EVENT_LATEST_SECONDS && item.seenAt - item.releaseSec <= DELISTING_EVENT_LATEST_SECONDS
+/** Whether a delisting or a tag the reader has just kept is raised as an event: released, and read,
+ * only minutes ago. One kept the first time the reader is switched on is history. */
+export function shouldRaiseNewsEvent(item: NewsItem, nowSec: number): boolean {
+  return isActedNewsCategory(item.category) && nowSec - item.releaseSec <= NEWS_EVENT_LATEST_SECONDS && item.seenAt - item.releaseSec <= NEWS_EVENT_LATEST_SECONDS
+}
+
+/** The event type, and the kind a model is shown, of an announcement that raises one. */
+export function newsEventKind(item: NewsItem): 'delisting' | 'monitoring_tag' | null {
+  return item.category === 'DELISTING' ? 'delisting' : item.category === 'MONITORING_TAG' ? 'monitoring_tag' : null
 }
 
 /** Why a question about `symbol` at the minute `eventTime` may not be put with this announcement in
@@ -221,7 +226,7 @@ export function shouldRaiseDelisting(item: NewsItem, nowSec: number): boolean {
  * has none: a question cannot bring its own announcement. */
 export function newsQuestionProblem(item: NewsItem | null, symbol: string, eventTime: number): string | null {
   if (item === null) return 'This app has read no such announcement.'
-  if (item.category !== 'DELISTING') return 'Only a delisting is put to the models.'
+  if (!isActedNewsCategory(item.category)) return 'Only a delisting or a Monitoring Tag is put to the models.'
   if (!item.tickers.some((ticker) => `${ticker}USDT` === symbol)) return `The announcement does not name ${symbol}.`
   if (eventTime < item.releaseSec - 120 || eventTime > item.releaseSec + NEWS_QUESTION_LATEST_SECONDS) return 'The question is not about the minutes after the announcement.'
   return null

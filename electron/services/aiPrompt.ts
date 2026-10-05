@@ -187,15 +187,28 @@ export const AI_OPPORTUNITY_NEWS_SYSTEM_PROMPT = [
   ...OPPORTUNITY_LINES.slice(2)
 ].join('\n')
 
+/** The same question about the event Binance's Monitoring Tag raised (opportunity-tag-v1). Its own
+ * paragraph in the place of the delisting's, and not a word of the rest changed: the delisting's
+ * question is left exactly as it was asked.
+ *
+ * IT SAYS WHAT THE TAG IS, IN BINANCE'S OWN TERMS, AND NOT WHAT FOLLOWED ONE. research/NEWS.md
+ * measured what a tagged coin did, and how many were delisted later; neither is here, for the
+ * reason the delisting's prompt does not say what a delisted coin did. */
+export const AI_OPPORTUNITY_TAG_SYSTEM_PROMPT = [
+  ...OPPORTUNITY_LINES.slice(0, 2),
+  '"news" is why this event was raised: an announcement Binance itself published about this coin, with its title as published and releasedAt, when it was released (unix seconds). kind "monitoring_tag" means Binance has added this coin to its Monitoring Tag, which Binance says marks tokens with notably higher volatility and risk than other listed tokens that are at risk of no longer meeting its listing criteria. The event block is the market at the minute the announcement was read, whether or not the price had moved yet: its type is "monitoring_tag" and its direction "down" because of the announcement, not because of the candles, and its score and components are what the candles alone show.',
+  ...OPPORTUNITY_LINES.slice(2)
+].join('\n')
+
 /** The system text a context is sent under: the panel's decision when it carries analysts'
- * reports, an opportunity prompt when it carries an event -- the one with the announcement or the
- * one with the market when it carries either -- the review prompt when it names a strategy, the
- * standalone one otherwise. The same tests shared/aiContext.ts's aiPromptVersion makes, so the text
- * sent and the version recorded for it are chosen by one fact. */
+ * reports, an opportunity prompt when it carries an event -- the one with the announcement of its
+ * kind, or the one with the market, when it carries either -- the review prompt when it names a
+ * strategy, the standalone one otherwise. The same tests shared/aiContext.ts's aiPromptVersion
+ * makes, so the text sent and the version recorded for it are chosen by one fact. */
 function systemPromptFor(context: AiMarketContext): string {
   if (context.agents !== undefined) return AI_PANEL_SYSTEM_PROMPT
   if (context.event !== undefined) {
-    if (context.news !== undefined) return AI_OPPORTUNITY_NEWS_SYSTEM_PROMPT
+    if (context.news !== undefined) return context.news.kind === 'monitoring_tag' ? AI_OPPORTUNITY_TAG_SYSTEM_PROMPT : AI_OPPORTUNITY_NEWS_SYSTEM_PROMPT
     return context.market === undefined ? AI_OPPORTUNITY_SYSTEM_PROMPT : AI_OPPORTUNITY_MARKET_SYSTEM_PROMPT
   }
   return context.strategy === undefined ? AI_SYSTEM_PROMPT : AI_CONFIRM_SYSTEM_PROMPT

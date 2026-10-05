@@ -387,6 +387,14 @@ describe("an announcement's event", () => {
     const state = await scanOnce(NOW_MS)
     expect(state.recentEvents.filter((event) => event.symbol === 'PUMPUSDT').map((event) => event.type)).toEqual(['delisting'])
   })
+
+  it('raises a coin added to the Monitoring Tag as an event of its own kind, and nothing for any other kind of news', async () => {
+    const { raiseNewsEvent } = await scanner()
+    const tag: NewsItem = { ...item, id: 990002, catalog: 49, category: 'MONITORING_TAG', title: 'Binance Will Extend the Monitoring Tag to Include AAA on 2026-10-05', tickers: ['AAA'] }
+    expect(await raiseNewsEvent(tag, 'AAA', NOW_MS)).toMatchObject({ type: 'monitoring_tag', direction: 'down', news: { articleId: 990002 } })
+    expect(await raiseNewsEvent({ ...item, category: 'FUTURES_LAUNCH' }, 'BBB', NOW_MS)).toBeNull()
+    expect(market.recentCalls).toEqual(['AAAUSDT'])
+  })
 })
 
 describe('the setting', () => {

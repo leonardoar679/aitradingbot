@@ -5,15 +5,12 @@ import { NEWS_SHORT_STAKES, type NewsConfig, type NewsConfigPatch, type NewsKind
 import { inputStyle, noteStyle } from '../agents/agentStyles'
 import { describeError } from '../utils/ipcError'
 
-/** One kind's switches: the notice, the models where that kind is put to them, and the paper short
- * of its rule with its stake. */
+/** One kind's switches: the notice, the models, and the paper short of its rule with its stake. */
 function KindRows(props: {
   heading: string
   actions: NewsKindActions | null
   enabled: boolean
   busy: boolean
-  /** Whether this kind is put to the models yet. */
-  models: boolean
   /** How the rule's short is held, after "USDT on each coin". */
   held: string
   onChange: (patch: NewsKindActionsPatch) => void
@@ -28,12 +25,10 @@ function KindRows(props: {
         <Toggle on={actions?.notifyHeld === true} onChange={(next) => !busy && onChange({ notifyHeld: next })} />
         <span style={labelStyle}>Tell me if I hold the coin, on Binance or on paper</span>
       </div>
-      {props.models && (
-        <div style={rowStyle}>
-          <Toggle on={actions?.askModels === true} onChange={(next) => !busy && onChange({ askModels: next })} />
-          <span style={labelStyle}>Put it to the watch&apos;s models, when the watch is on</span>
-        </div>
-      )}
+      <div style={rowStyle}>
+        <Toggle on={actions?.askModels === true} onChange={(next) => !busy && onChange({ askModels: next })} />
+        <span style={labelStyle}>Put it to the watch&apos;s models, when the watch is on</span>
+      </div>
       <div style={rowStyle}>
         <Toggle on={actions?.paperShort.enabled === true} onChange={(next) => !busy && onChange({ paperShort: { enabled: next } })} />
         <span style={labelStyle}>Open a paper short of</span>
@@ -118,7 +113,6 @@ export function NewsSettingsCard(): React.JSX.Element {
         actions={config?.delisting ?? null}
         enabled={enabled}
         busy={busy}
-        models
         held="held four hours"
         onChange={(patch) => void change({ delisting: patch })}
       />
@@ -127,14 +121,13 @@ export function NewsSettingsCard(): React.JSX.Element {
         actions={config?.monitoringTag ?? null}
         enabled={enabled}
         busy={busy}
-        models={false}
         held="with a stop and a target, out within the hour"
         onChange={(patch) => void change({ monitoringTag: patch })}
       />
 
       <p style={{ ...noteStyle, marginTop: '0.8rem' }}>
         Each acts only on an announcement read while the app is open. The notice reads your Binance balances where a key is stored, and
-        your paper account and positions; it sells nothing. Put to the models, each coin a delisting names is raised as an event, and
+        your paper account and positions; it sells nothing. Put to the models, each coin a delisting or a tag names is raised as an event, and
         the watch on Opportunities asks its models about it within its own limits and the day&apos;s budget, as it does any event; a
         call to short can only ever be a paper trade.
       </p>

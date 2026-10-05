@@ -9,6 +9,7 @@ import {
   healNewsConfig,
   matchesNewsFilter,
   newsListUrl,
+  newsActionsFor,
   newsMonthKey,
   nextNewsReadDelayMs,
   parseArticleList,
@@ -21,7 +22,7 @@ import {
   type NewsPage,
   type NewsState
 } from '../../shared/news'
-import { shouldRaiseDelisting } from '../../shared/newsActions'
+import { shouldRaiseNewsEvent } from '../../shared/newsActions'
 import { writeJsonAtomic } from './atomicWrite'
 import { appendJsonLine, listMonthFiles } from './jsonlStore'
 import { raiseNewsEvent } from './marketScannerService'
@@ -160,17 +161,18 @@ export async function readNewsOnce(nowMs: number = Date.now()): Promise<NewsStat
     fresh.sort((a, b) => byNewestRelease(b, a))
     for (const item of fresh) await appendJsonLine(join(newsDir(), `news-${newsMonthKey(item.releaseSec)}.jsonl`), item)
     if (fresh.length > 0) recent = [...fresh, ...recent].sort(byNewestRelease).slice(0, RECENT_KEPT)
-    // A delisting released minutes ago is raised as an event for each coin it names, for the watch
-    // to put to its models -- when that is switched on (shared/newsActions.ts). The watch's own
-    // switch, limits and the day's budget still decide whether anything is asked.
+    // A delisting or a tag released minutes ago is raised as an event for each coin it names, for
+    // the watch to put to its models -- when that is switched on for its kind
+    // (shared/newsActions.ts). The watch's own switch, limits and the day's budget still decide
+    // whether anything is asked.
     const setting = config ?? current
-    if (setting.enabled && setting.delisting.askModels) {
-      for (const item of fresh.filter((entry) => shouldRaiseDelisting(entry, seenAt))) {
+    if (setting.enabled) {
+      for (const item of fresh.filter((entry) => shouldRaiseNewsEvent(entry, seenAt) && newsActionsFor(setting, entry.category)?.askModels === true)) {
         for (const ticker of item.tickers) {
           try {
             await raiseNewsEvent(item, ticker, nowMs)
           } catch (failure) {
-            console.error(`The delisting of ${ticker} could not be raised as an event:`, failure)
+            console.error(`The announcement about ${ticker} could not be raised as an event:`, failure)
           }
         }
       }

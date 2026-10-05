@@ -2,13 +2,14 @@ import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } f
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AI_OPPORTUNITY_MARKET_SYSTEM_PROMPT, AI_OPPORTUNITY_NEWS_SYSTEM_PROMPT, AI_OPPORTUNITY_SYSTEM_PROMPT } from '../electron/services/aiPrompt'
+import { AI_OPPORTUNITY_MARKET_SYSTEM_PROMPT, AI_OPPORTUNITY_NEWS_SYSTEM_PROMPT, AI_OPPORTUNITY_SYSTEM_PROMPT, AI_OPPORTUNITY_TAG_SYSTEM_PROMPT } from '../electron/services/aiPrompt'
 import { referenceReturns, type EventReference } from '../shared/aiEventMarket'
 import {
   AI_OPPORTUNITY_MARKET_PROMPT_VERSION,
   AI_OPPORTUNITY_NEWS_PROMPT_VERSION,
   AI_OPPORTUNITY_PROMPT_VERSION,
   AI_OPPORTUNITY_SCHEMA_VERSION,
+  AI_OPPORTUNITY_TAG_PROMPT_VERSION,
   type AiOpportunityAskRequest
 } from '../shared/aiOpportunity'
 import { eventQuestionCandles, referenceCandles } from './eventCandles'
@@ -304,7 +305,7 @@ describe('an event an announcement raised', () => {
     await expect(askAiOpportunity(request({ newsId: 990001 }))).rejects.toThrow('This app has read no such announcement. Nothing was asked.')
     await expect(askAiOpportunity(request({ newsId: 1 }))).rejects.toThrow('The announcement does not name SOLUSDT.')
     await expect(askAiOpportunity(request({ newsId: 2 }))).rejects.toThrow('The question is not about the minutes after the announcement.')
-    await expect(askAiOpportunity(request({ newsId: 3 }))).rejects.toThrow('Only a delisting is put to the models.')
+    await expect(askAiOpportunity(request({ newsId: 3 }))).rejects.toThrow('Only a delisting or a Monitoring Tag is put to the models.')
     const market: EventReference = { btc: referenceCandles(QUESTION.eventTime, 11), eth: referenceCandles(QUESTION.eventTime, 23) }
     await expect(askAiOpportunity(request({ newsId: 4, reference: market }))).rejects.toThrow(/not asked with the market around it/)
     await expect(askAiOpportunity(request({ newsId: 4, candles1m: [] }))).rejects.toThrow(/needs completed 1-minute candles/)
@@ -313,6 +314,27 @@ describe('an event an announcement raised', () => {
     // And the one it did read is asked.
     await askAiOpportunity(request({ newsId: 4 }))
     expect(bodies).toHaveLength(1)
+  })
+
+  it("is asked about a Monitoring Tag under the tag's own prompt, the delisting's left as it was", async () => {
+    keep(
+      article({ id: 5, catalog: 49, category: 'MONITORING_TAG', title: 'Binance Will Extend the Monitoring Tag to Include SOL & ATA on 2026-09-15', tickers: ['SOL', 'ATA'] }),
+      article({ id: 6 })
+    )
+    const { bodies } = stubOpenRouter(() => ({}))
+    const { askAiOpportunity, listAiCalls } = await services()
+    await askAiOpportunity(request({ newsId: 5 }))
+    const body = bodies[0] as { messages: { role: string; content: string }[] }
+    expect(body.messages[0].content).toBe(AI_OPPORTUNITY_TAG_SYSTEM_PROMPT)
+    const sent = JSON.parse(body.messages[1].content) as Record<string, unknown> & { event: { type: string; direction: string } }
+    expect(Object.keys(sent).slice(-2)).toEqual(['event', 'news'])
+    expect(sent.news).toEqual({ source: 'Binance', kind: 'monitoring_tag', title: 'Binance Will Extend the Monitoring Tag to Include SOL & ATA on 2026-09-15', releasedAt: QUESTION.eventTime - 30 })
+    expect(sent.event).toMatchObject({ type: 'monitoring_tag', direction: 'down' })
+    expect((await listAiCalls({})).rows[0]).toMatchObject({ promptVersion: AI_OPPORTUNITY_TAG_PROMPT_VERSION, eventType: 'monitoring_tag' })
+    // A delisting of the same minute is still the delisting's question, word for word.
+    await askAiOpportunity(request({ newsId: 6 }))
+    expect((bodies[1] as { messages: { content: string }[] }).messages[0].content).toBe(AI_OPPORTUNITY_NEWS_SYSTEM_PROMPT)
+    expect((await listAiCalls({})).rows.map((row) => row.promptVersion).sort()).toEqual([AI_OPPORTUNITY_NEWS_PROMPT_VERSION, AI_OPPORTUNITY_TAG_PROMPT_VERSION])
   })
 })
 

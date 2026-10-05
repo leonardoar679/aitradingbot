@@ -13,7 +13,8 @@ import {
   newsQuestionProblem,
   newsShortBlock,
   newsShortExecutors,
-  shouldRaiseDelisting,
+  newsEventKind,
+  shouldRaiseNewsEvent,
   tagReading,
   tagReadingWindow,
   tagShortParams,
@@ -147,20 +148,26 @@ describe('the notice to someone holding the coin', () => {
 
 describe('a delisting put to the models', () => {
   it('is raised only when it was released, and read, minutes ago', () => {
-    expect(shouldRaiseDelisting(item, A + 63)).toBe(true)
-    expect(shouldRaiseDelisting(item, A + 5 * 60)).toBe(true)
-    expect(shouldRaiseDelisting(item, A + 5 * 60 + 1)).toBe(false)
+    expect(shouldRaiseNewsEvent(item, A + 63)).toBe(true)
+    expect(shouldRaiseNewsEvent(item, A + 5 * 60)).toBe(true)
+    expect(shouldRaiseNewsEvent(item, A + 5 * 60 + 1)).toBe(false)
     // Kept the first time the reader was switched on, a day after its release: history.
-    expect(shouldRaiseDelisting({ ...item, seenAt: A + 86_400 }, A + 63)).toBe(false)
-    expect(shouldRaiseDelisting({ ...item, category: 'FUTURES_LAUNCH' }, A + 63)).toBe(false)
+    expect(shouldRaiseNewsEvent({ ...item, seenAt: A + 86_400 }, A + 63)).toBe(false)
+    expect(shouldRaiseNewsEvent({ ...item, category: 'FUTURES_LAUNCH' }, A + 63)).toBe(false)
+    // A coin added to the Monitoring Tag is raised the same way, as an event of its own kind.
+    expect(shouldRaiseNewsEvent({ ...item, category: 'MONITORING_TAG' }, A + 63)).toBe(true)
+    expect(newsEventKind(item)).toBe('delisting')
+    expect(newsEventKind({ ...item, category: 'MONITORING_TAG' })).toBe('monitoring_tag')
+    expect(newsEventKind({ ...item, category: 'SPOT_LISTING' })).toBeNull()
   })
 
   it('is asked about only as a delisting, naming the pair, around its minute', () => {
     expect(newsQuestionProblem(item, 'ICXUSDT', A + 60)).toBeNull()
+    expect(newsQuestionProblem({ ...item, category: 'MONITORING_TAG' }, 'ICXUSDT', A + 60)).toBeNull()
     expect(newsQuestionProblem(item, 'ICXUSDT', A - 120)).toBeNull()
     expect(newsQuestionProblem(item, 'ICXUSDT', A + 30 * 60)).toBeNull()
     expect(newsQuestionProblem(null, 'ICXUSDT', A + 60)).toBe('This app has read no such announcement.')
-    expect(newsQuestionProblem({ ...item, category: 'SPOT_LISTING' }, 'ICXUSDT', A + 60)).toBe('Only a delisting is put to the models.')
+    expect(newsQuestionProblem({ ...item, category: 'SPOT_LISTING' }, 'ICXUSDT', A + 60)).toBe('Only a delisting or a Monitoring Tag is put to the models.')
     expect(newsQuestionProblem(item, 'ICXBTC', A + 60)).toBe('The announcement does not name ICXBTC.')
     expect(newsQuestionProblem(item, 'ICXUSDT', A - 121)).toBe('The question is not about the minutes after the announcement.')
     expect(newsQuestionProblem(item, 'ICXUSDT', A + 30 * 60 + 1)).toBe('The question is not about the minutes after the announcement.')
@@ -198,8 +205,9 @@ describe('a delisting put to the models', () => {
   })
 
   it("is read back with the scanner's question by the pages that show what the watch asked", () => {
-    expect(AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS).toEqual(['opportunity-v1', 'opportunity-news-v1'])
+    expect(AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS).toEqual(['opportunity-v1', 'opportunity-news-v1', 'opportunity-tag-v1'])
     expect(questionKindOfPromptVersion('opportunity-news-v1')).toBe('news')
+    expect(questionKindOfPromptVersion('opportunity-tag-v1')).toBe('news')
     expect(describeQuestionKind('news')).toBe('with the announcement')
     const row = { promptVersion: 'opportunity-news-v1' } as Parameters<typeof matchesAiCallFilter>[0]
     expect(matchesAiCallFilter({ ...row, symbol: 'ICXUSDT' }, { promptVersions: AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS })).toBe(true)

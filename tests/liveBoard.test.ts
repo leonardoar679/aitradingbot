@@ -121,7 +121,7 @@ describe('readLiveAnswers', () => {
     const rig = deps([], [])
     await readLiveAnswers([A], NOW, rig.deps)
     // The scanner's question and an announcement's: both are put to events as they happen.
-    expect(rig.callFilters).toEqual([{ source: 'watch', promptVersions: ['opportunity-v1', 'opportunity-news-v1'], sinceSec: NOW - LIVE_BOARD_DAYS * DAY, limit: 5000 }])
+    expect(rig.callFilters).toEqual([{ source: 'watch', promptVersions: ['opportunity-v1', 'opportunity-news-v1', 'opportunity-tag-v1'], sinceSec: NOW - LIVE_BOARD_DAYS * DAY, limit: 5000 }])
     expect(rig.eventFilters[0].sinceSec).toBeLessThan(NOW - LIVE_BOARD_DAYS * DAY)
   })
 

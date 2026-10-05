@@ -8,6 +8,7 @@ import {
   AI_OPPORTUNITY_NEWS_SYSTEM_PROMPT,
   AI_OPPORTUNITY_SCHEMA,
   AI_OPPORTUNITY_SYSTEM_PROMPT,
+  AI_OPPORTUNITY_TAG_SYSTEM_PROMPT,
   AI_PANEL_SYSTEM_PROMPT,
   AI_RESPONSE_SCHEMA,
   AI_SYSTEM_PROMPT,
@@ -16,7 +17,13 @@ import {
 } from '../electron/services/aiPrompt'
 import { AI_CONFIRM_PROMPT_VERSION } from '../shared/aiConfirm'
 import { buildAiContext, withAgentReports } from '../shared/aiContext'
-import { AI_OPPORTUNITY_MARKET_PROMPT_VERSION, AI_OPPORTUNITY_NEWS_PROMPT_VERSION, AI_OPPORTUNITY_PROMPT_VERSION, AI_OPPORTUNITY_SCHEMA_VERSION } from '../shared/aiOpportunity'
+import {
+  AI_OPPORTUNITY_MARKET_PROMPT_VERSION,
+  AI_OPPORTUNITY_NEWS_PROMPT_VERSION,
+  AI_OPPORTUNITY_PROMPT_VERSION,
+  AI_OPPORTUNITY_SCHEMA_VERSION,
+  AI_OPPORTUNITY_TAG_PROMPT_VERSION
+} from '../shared/aiOpportunity'
 import { AI_AGENT_PROMPT_VERSIONS, AI_AGENT_ROLES, AI_AGENT_SCHEMA_VERSION, AI_PANEL_PROMPT_VERSION } from '../shared/aiPanel'
 import { AI_SCHEMA_VERSION, GPT_LOOKBACK_BARS, GPT_PROMPT_VERSION } from '../shared/aiSignal'
 import type { Candle } from '../shared/ipc'
@@ -107,6 +114,13 @@ const PINNED: { what: string; version: string; text: string; expectVersion: stri
     expectHash: '3ef3f8df094de1f09e84f7c73d3de993fef44bd3cccf69b1a86bb087fdac3856'
   },
   {
+    what: 'the opportunity prompt with the Monitoring Tag that raised the event',
+    version: AI_OPPORTUNITY_TAG_PROMPT_VERSION,
+    text: AI_OPPORTUNITY_TAG_SYSTEM_PROMPT,
+    expectVersion: 'opportunity-tag-v1',
+    expectHash: 'e9a48c362e150f89cdcfd29788573da50cdcce3cf4b4844941cfd73474b4fff8'
+  },
+  {
     what: 'the opportunity schema',
     version: AI_OPPORTUNITY_SCHEMA_VERSION,
     text: JSON.stringify(AI_OPPORTUNITY_SCHEMA),
@@ -135,6 +149,7 @@ describe('a prompt and the version it is cached under', () => {
       AI_OPPORTUNITY_PROMPT_VERSION,
       AI_OPPORTUNITY_MARKET_PROMPT_VERSION,
       AI_OPPORTUNITY_NEWS_PROMPT_VERSION,
+      AI_OPPORTUNITY_TAG_PROMPT_VERSION,
       AI_PANEL_PROMPT_VERSION,
       ...AI_AGENT_ROLES.map((role) => AI_AGENT_PROMPT_VERSIONS[role])
     ]

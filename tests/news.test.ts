@@ -11,7 +11,7 @@ import { DEFAULT_NEWS_CONFIG, matchesNewsFilter, newsListUrl, nextNewsReadDelayM
 
 vi.mock('electron', () => ({ app: { getPath: () => process.env.NEWS_TEST_USER_DATA } }))
 
-// The scanner, at the one function the reader reaches it through: raising a delisting as an event.
+// The scanner, at the one function the reader reaches it through: raising an announcement as an event.
 const raised = vi.hoisted(() => ({ calls: [] as { id: number; ticker: string }[], fail: false }))
 vi.mock('../electron/services/marketScannerService', () => ({
   raiseNewsEvent: async (item: { id: number }, ticker: string) => {
@@ -228,7 +228,7 @@ describe('the reader', () => {
   })
 })
 
-describe('a delisting put to the models', () => {
+describe('a delisting, or a tag, put to the models', () => {
   // An hour after the articles above, so that none of them is news.
   const LATER = T + 3_600_000
   const fresh = article(310, 'Binance Will Delist FIO, FUN on 2026-10-20', LATER - 2_000)
@@ -281,6 +281,21 @@ describe('a delisting put to the models', () => {
     const state = await getNewsState()
     expect(state.error).toBeNull()
     expect(state.recent[0].id).toBe(310)
+    await setNewsConfig({ enabled: false })
+  })
+  it('raises a coin added to the Monitoring Tag when that is switched on for the tag, and only then', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(LATER + 3_000)
+    lists.articles.get(161)?.unshift(fresh)
+    lists.articles.set(49, [article(410, 'Binance Will Extend the Monitoring Tag to Include ACX & LSK on 2026-10-05', LATER - 2_000)])
+    const { setNewsConfig, whenNewsSettled } = await reader()
+    // The delisting's models off, the tag's on: only the tag is raised.
+    await setNewsConfig({ enabled: true, delisting: { askModels: false } })
+    await whenNewsSettled()
+    expect(raised.calls).toEqual([
+      { id: 410, ticker: 'ACX' },
+      { id: 410, ticker: 'LSK' }
+    ])
     await setNewsConfig({ enabled: false })
   })
 })

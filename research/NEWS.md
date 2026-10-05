@@ -443,4 +443,5 @@ On 5 October the user chose the same three for a tag as for a delisting, and not
 - **the models**, alongside the rule.
 
 The app's reader now reads Binance's news, and sorts the tag by these same patterns, moved to
-`shared/newsTitles.ts`.
+`shared/newsTitles.ts`. Each of the three is switched on its own, beside a delisting's, under
+Settings › Market; the README describes what was built ("What a Monitoring Tag does").

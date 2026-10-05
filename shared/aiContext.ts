@@ -2,7 +2,13 @@ import { BollingerBands, RSI } from 'technicalindicators'
 import { aggregateCandles, bucketTimeFor } from './aggregateCandles'
 import { AI_CONFIRM_PROMPT_VERSION, type AiStrategyBlock } from './aiConfirm'
 import { buildMarketBlock, type AiMarketBlock, type EventReference } from './aiEventMarket'
-import { AI_OPPORTUNITY_MARKET_PROMPT_VERSION, AI_OPPORTUNITY_NEWS_PROMPT_VERSION, AI_OPPORTUNITY_PROMPT_VERSION, AI_OPPORTUNITY_SCHEMA_VERSION } from './aiOpportunity'
+import {
+  AI_OPPORTUNITY_MARKET_PROMPT_VERSION,
+  AI_OPPORTUNITY_NEWS_PROMPT_VERSION,
+  AI_OPPORTUNITY_PROMPT_VERSION,
+  AI_OPPORTUNITY_SCHEMA_VERSION,
+  AI_OPPORTUNITY_TAG_PROMPT_VERSION
+} from './aiOpportunity'
 import { AI_PANEL_PROMPT_VERSION, canonicalAgentReports, type AiAgentReports } from './aiPanel'
 import { AI_SCHEMA_VERSION, GPT_LOOKBACK_BARS, GPT_PROMPT_VERSION, type AiPositionState } from './aiSignal'
 import { computeAtr } from './atr'
@@ -156,7 +162,9 @@ export interface AiMarketContext {
 /** An announcement as a model is shown it: whose, what kind, its title as published, and when. */
 export interface AiNewsBlock {
   source: 'Binance'
-  kind: 'delisting'
+  /** A delisting, or a coin added to the Monitoring Tag: the two kinds research/NEWS.md found paid,
+   * named as the event they raise is. */
+  kind: 'delisting' | 'monitoring_tag'
   title: string
   /** Unix seconds. */
   releasedAt: number
@@ -170,7 +178,7 @@ export interface AiNewsBlock {
 export function aiPromptVersion(context: Pick<AiMarketContext, 'strategy' | 'agents' | 'event' | 'market' | 'news'>): string {
   if (context.agents !== undefined) return AI_PANEL_PROMPT_VERSION
   if (context.event !== undefined) {
-    if (context.news !== undefined) return AI_OPPORTUNITY_NEWS_PROMPT_VERSION
+    if (context.news !== undefined) return context.news.kind === 'monitoring_tag' ? AI_OPPORTUNITY_TAG_PROMPT_VERSION : AI_OPPORTUNITY_NEWS_PROMPT_VERSION
     return context.market === undefined ? AI_OPPORTUNITY_PROMPT_VERSION : AI_OPPORTUNITY_MARKET_PROMPT_VERSION
   }
   return context.strategy === undefined ? GPT_PROMPT_VERSION : AI_CONFIRM_PROMPT_VERSION
@@ -416,7 +424,8 @@ function eventSnapshot(candles15m: Candle[], eventTime: number, meta: { exchange
  *
  * The candles are read as an event's are, and the minute is the one after the last of them. UNLIKE
  * AN EVENT'S QUESTION, THE DETECTOR NEED NOT CALL THAT MINUTE ANYTHING: what raised it is the
- * announcement, so the event is named 'delisting' and points down, and `news` says what was
+ * announcement, so the event is named for its kind ('delisting', 'monitoring_tag') and points down,
+ * and `news` says what was
  * announced. The caller does not get to say that -- the main process builds `news` from its own
  * record of an article it read (electron/services/aiSignalService.ts checks the article first). */
 export function buildNewsEventContext(
@@ -432,7 +441,7 @@ export function buildNewsEventContext(
   const base = eventSnapshot(candles15m, reading.time, meta)
   if (!base) return null
   // `event`, then `news`, last: see AiMarketContext.news.
-  return { ...base, event: eventBlock({ ...reading, type: 'delisting', direction: 'down' }, bars1m), news: { ...news } }
+  return { ...base, event: eventBlock({ ...reading, type: news.kind, direction: 'down' }, bars1m), news: { ...news } }
 }
 
 /** An event's question with the market around it, or null when Bitcoin's or ether's candles do

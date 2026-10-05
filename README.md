@@ -49,7 +49,7 @@ other.
 | | **Strategies** | **Active Runs**: a bot is a single continuous dry-run of a [chosen strategy](#strategies) against one exchange/symbol, optionally with a model asked to [confirm each entry](#ai-signals--paper-only); disabling one records a run, removing one archives it. **Execution**: the eight executor types, each running independently against live candles, the starter presets, and the New Executor form a call's filled-in form opens on — see [Executors](#executors) below. |
 | Research | **Backtest & Research** | **Backtest** runs a chosen strategy over a historical range and shows full stats, equity curve vs. buy-and-hold, monthly breakdown and a trade log; its **Live** view monitors the same route continuously ([Live strategy monitor](#live-strategy-monitor)), **Charts** replays each trade against the candles, and **Compare Strategies** ranks every registered strategy over the same candles. An optional tick box has a model [confirm each entry](#ai-signals--paper-only). Both views export CSV, JSON and a PNG. **Automation** re-runs saved backtests on a schedule while the app is open, each run keeping a session-only report. |
 | | **AI Benchmark** | Several models on the same questions, scored side by side: on candles, and on the events the scanner raised, with the no-model rows beside them and every run kept as an experiment that can be reopened for nothing. |
-| | **Discovery** | The market scanner: once a minute it reads the most traded USDT pairs on Binance and says what is moving, scores each the same way, and records the moves that qualify as events — see [Discovery](#discovery--a-market-scanner). Public market data only: no key, no model, no order. It is switched on, and its pairs chosen, under Settings › Market. Below it, [Binance's own announcements](#binances-announcements-on-discovery) — delistings, Monitoring Tags, futures launches, listings — as they are released, with what each kind did to prices. The reader is switched on under Settings › Market too, with what a delisting does: a notice if you hold the coin, a paper short by the rule, a question to the watch's models. |
+| | **Discovery** | The market scanner: once a minute it reads the most traded USDT pairs on Binance and says what is moving, scores each the same way, and records the moves that qualify as events — see [Discovery](#discovery--a-market-scanner). Public market data only: no key, no model, no order. It is switched on, and its pairs chosen, under Settings › Market. Below it, [Binance's own announcements](#binances-announcements-on-discovery) — delistings, Monitoring Tags, futures launches, listings — as they are released, with what each kind did to prices. The reader is switched on under Settings › Market too, with what a delisting or a tag does: a notice if you hold the coin, a paper short by the kind's rule, a question to the watch's models. |
 | System | **Risk & Safety** | The live trading limits every real order is checked against (largest order, the day's notional, the day's loss, the managed allocation), and the controller groups: executors under a shared stop-loss, take-profit and maximum drawdown with a P&L snapshot every 5 minutes, all stopped on a breach. Arming and the kill switch stay on the bar at the top of every page. |
 | | **Connections** | Every key the app holds: Binance and Upbit ([Credentials](#credentials--api-keys)), and the OpenRouter key for the AI models. Each is tested before it is stored, stored encrypted, and never read back into the window. |
 | | **Settings** | The Configuration Center, in sections, built only from settings that exist. **General**: appearance (Dark / Light / Colorblind-safe). **Market**: the scanner on or off, and how many pairs it watches; the reader of Binance's announcements, and what a delisting does. **AI**: which models may be asked, the default and the route, the daily budget, the pace, and what asking has cost. Keys stay on Connections and limits on Risk & Safety, each in the one place, linked from here. What the V3 document asked for that has no behaviour behind it (language, timezone, default order type, allowed pairs, other news sources…) is listed in `docs/INVENTORY.md` rather than added as a control. |
@@ -299,8 +299,8 @@ same rule, committed before any of its candles were read:
   a bar of 2. Held short four hours, a coin made 4.5% a trade but missed its stricter bar. One
   squeeze cost the hold 39%.
 - The user chose what a tag does, the same three things as for a delisting: a notice if you hold
-  the coin, a paper short by the rule that passed, and a question to the watch's models. The reader
-  reads the tag; what it does is being built.
+  the coin, a paper short by the rule that passed, and a question to the watch's models (below,
+  under [Binance's announcements on Discovery](#binances-announcements-on-discovery)).
 
 #### Binance's announcements on Discovery
 
@@ -371,6 +371,14 @@ same three things, switched separately, in a group of their own on the same card
     hours of minutes before the announcement. A coin whose minutes cannot all be read gets none.
   - It is out at the close of its sixtieth minute otherwise. The news reader then stops and settles
     it, as it does a delisting's.
+- **The models** (on by default once the reader is on; nothing is asked unless the watch is on too),
+  as for a delisting, with three differences:
+  - the event is named `monitoring_tag`;
+  - its question has a prompt of its own (`opportunity-tag-v1`, pinned by its hash). Its one
+    paragraph more says what the tag is, in Binance's own terms, and not what tagged coins did or
+    how many were delisted. The delisting's question is left word for word as it was;
+  - the main process asks only about a tag it read itself, naming that pair, from around that
+    minute.
 
 **Nothing real is placed or sold because of an announcement.** A short can never be placed for real
 here. `src/news/newsPaperShort.ts`, the one file that writes these shorts, spells paper as a
@@ -2534,7 +2542,7 @@ shared/                       Code both processes run, so they cannot disagree a
   marketEvent.ts              The event detector: a pair's reading from twelve hours of 1-minute candles, and what raises an event
   marketScanner.ts            The scanner's settings, what a pass reports, and which pairs are watched
   newsTitles.ts, news.ts      Which kind of news a Binance title is, and which coins it names (the study's patterns); what the reader keeps of each article, and what each kind did
-  newsActions.ts              What a delisting does: the notice to a holder, the rule's paper short, and when it is raised for the models and may be asked about
+  newsActions.ts              What a delisting or a Monitoring Tag does: the notice to a holder, the kind's paper short, and when it is raised for the models and may be asked about
   indicators.ts, atr.ts, …    Indicator and fee arithmetic shared with the strategies
 
 src/                          React renderer app

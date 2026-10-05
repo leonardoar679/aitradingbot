@@ -39,7 +39,7 @@ import {
   type AiMarketContext
 } from '../../shared/aiContext'
 import { MARKET_REFERENCE_SYMBOLS } from '../../shared/aiEventMarket'
-import { newsQuestionProblem } from '../../shared/newsActions'
+import { newsEventKind, newsQuestionProblem } from '../../shared/newsActions'
 import { paceDelayMs } from '../../shared/aiPace'
 import {
   AI_OPPORTUNITY_MAX_MODELS,
@@ -1346,10 +1346,11 @@ async function newsOpportunityQuestion(request: AiOpportunityQuestion): Promise<
   const item = await findNewsItem(Number(request.newsId))
   const last = request.candles1m[request.candles1m.length - 1]
   const problem = newsQuestionProblem(item, request.symbol, last.time + 60)
-  if (problem !== null || item === null) throw new Error(`${problem ?? 'This app has read no such announcement.'} Nothing was asked.`)
+  const kind = item === null ? null : newsEventKind(item)
+  if (problem !== null || item === null || kind === null) throw new Error(`${problem ?? 'This app has read no such announcement.'} Nothing was asked.`)
   const context = buildNewsEventContext(request.candles15m, request.candles1m, { exchange: request.exchange, symbol: request.symbol }, {
     source: 'Binance',
-    kind: 'delisting',
+    kind,
     title: item.title,
     releasedAt: item.releaseSec
   })
