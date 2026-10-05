@@ -13,6 +13,7 @@ import {
   type AiSignalEstimate,
   type ParsedAiSignal
 } from './aiSignal'
+import type { EventReference } from './aiEventMarket'
 import { INTERVAL_SECONDS, type Candle, type Exchange } from './ipc'
 
 // A RECOMMENDATION WITH A PRICE AND A CLOCK ON IT.
@@ -40,6 +41,25 @@ import { INTERVAL_SECONDS, type Candle, type Exchange } from './ipc'
 
 export const AI_OPPORTUNITY_PROMPT_VERSION = 'opportunity-v1'
 export const AI_OPPORTUNITY_SCHEMA_VERSION = 'opportunity-schema-v1'
+/** The same question with the market around the event in it (shared/aiEventMarket.ts): what
+ * Bitcoin and ether did over the same stretches. A question of its own, with its own prompt and
+ * its own cache keys, so that no answer bought under the first one moves. The answer's shape is
+ * the same, and so is its schema. */
+export const AI_OPPORTUNITY_MARKET_PROMPT_VERSION = 'opportunity-v2'
+
+/** Which of the two questions an event is put as: the pair alone (opportunity-v1), or the pair
+ * with the market around it (opportunity-v2). */
+export type AiOpportunityQuestionKind = 'pair' | 'market'
+
+export function describeQuestionKind(kind: AiOpportunityQuestionKind): string {
+  return kind === 'market' ? 'with the market' : 'the pair alone'
+}
+
+/** The question a prompt version is, or null for one that is not an event's question. */
+export function questionKindOfPromptVersion(version: string): AiOpportunityQuestionKind | null {
+  if (version === AI_OPPORTUNITY_PROMPT_VERSION) return 'pair'
+  return version === AI_OPPORTUNITY_MARKET_PROMPT_VERSION ? 'market' : null
+}
 
 /** How long an entry range may stay valid, in minutes. A closed set, so that expiry can be scored
  * and counted. */
@@ -282,6 +302,12 @@ export interface AiOpportunityQuestion {
   /** COMPLETED 1-minute candles, oldest first, at least twelve hours of them. The last one is the
    * minute the event was read at; the call executes on the minute after it. */
   candles1m: Candle[]
+  /** Present when the event is put WITH THE MARKET AROUND IT (opportunity-v2): COMPLETED candles of
+   * BTCUSDT and ETHUSDT on the same exchange -- four hours and a minute of 1-minute bars ending at
+   * the minute the event was read, and a day and a quarter hour of 15-minute bars that had closed
+   * by then. What they did is worked out from them in the main process, as the event is. Absent,
+   * the question is the pair alone (opportunity-v1), byte for byte as it always was. */
+  reference?: EventReference | null
 }
 
 export interface AiOpportunityAskRequest extends AiOpportunityQuestion {

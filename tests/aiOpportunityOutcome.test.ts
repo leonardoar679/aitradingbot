@@ -3,6 +3,8 @@ import { validateOpportunityAnswer } from '../shared/aiOpportunity'
 import {
   REPLAY_ASK_DELAY_SEC,
   dailyQuoteVolumeOf,
+  describeLiquidityTier,
+  liquidityTierOf,
   opportunityCallOf,
   replayAnsweredAt,
   scoreOpportunity,
@@ -224,6 +226,19 @@ describe('the pieces around it', () => {
     expect(slippageRateFor(20_000_000)).toBe(SLIPPAGE_RATE * 2.5)
     expect(slippageRateFor(1_000_000)).toBe(SLIPPAGE_RATE * 5)
     expect(slippageRateFor(null)).toBe(SLIPPAGE_RATE * 2.5)
+  })
+
+  it('names how much a pair trades by the same two lines', () => {
+    expect([200_000_000, 50_000_000, 49_999_999, 5_000_000, 4_999_999, 0].map(liquidityTierOf)).toEqual(['deep', 'deep', 'middle', 'middle', 'thin', 'thin'])
+    expect([null, undefined, NaN, Infinity].map(liquidityTierOf)).toEqual(['unknown', 'unknown', 'unknown', 'unknown'])
+    // The line between two rates of slippage is the line between two tiers.
+    for (const volume of [50_000_000, 49_999_999, 5_000_000, 4_999_999]) {
+      const sameRate = (other: number): boolean => slippageRateFor(other) === slippageRateFor(volume)
+      const sameTier = (other: number): boolean => liquidityTierOf(other) === liquidityTierOf(volume)
+      for (const other of [200_000_000, 20_000_000, 1_000_000]) expect(sameTier(other)).toBe(sameRate(other))
+    }
+    expect(describeLiquidityTier('deep')).toBe('$50M a day or more')
+    expect(describeLiquidityTier('unknown')).toBe('not known')
   })
 
   it('charges a live event half the spread the scanner saw, when that is more than the rate for its liquidity', () => {

@@ -1,3 +1,4 @@
+import { MARKET_BARS_15M, MARKET_BARS_1M, MARKET_REFERENCE_SYMBOLS, type EventReference, type ReferenceCandles } from '../../shared/aiEventMarket'
 import type { AiCallRecord } from '../../shared/aiLedger'
 import {
   DEFAULT_OPPORTUNITY_COSTS,
@@ -27,24 +28,53 @@ export type CandleFetch = (exchange: Exchange, symbol: string, interval: '1m' | 
 export interface EventQuestionCandles {
   candles15m: Candle[]
   candles1m: Candle[]
+  /** Bitcoin's and ether's candles up to the same minute, for the question with the market around
+   * the event (opportunity-v2). Absent on the question about the pair alone. */
+  reference?: EventReference
 }
 
-/** The candles an event's question is built from: the twelve hours of minutes that end at the
- * minute it was read, and the seven days of quarter hours that had closed by then.
+/** One market's candles up to an event: `minutes` 1-minute bars ending at the minute the event
+ * was read, and `quarters` 15-minute bars that had closed by then.
  *
  * AN EXCHANGE'S RANGE CAN INCLUDE THE BAR THAT OPENS EXACTLY AT ITS END, which here would be the
  * bar the call executes on -- the first candle of the future. So both series are cut after they
  * arrive rather than trusted to stop where they were asked to. */
-export async function fetchEventQuestion(event: Pick<MarketEvent, 'exchange' | 'symbol' | 'time'>, fetchCandles: CandleFetch): Promise<EventQuestionCandles> {
+async function candlesUpTo(
+  event: Pick<MarketEvent, 'exchange' | 'time'>,
+  symbol: string,
+  minutes: number,
+  quarters: number,
+  fetchCandles: CandleFetch
+): Promise<ReferenceCandles> {
   const boundary = Math.floor(event.time / QUARTER_HOUR) * QUARTER_HOUR
-  const [minutes, quarters] = await Promise.all([
-    fetchCandles(event.exchange, event.symbol, '1m', event.time - EVENT_LOOKBACK_BARS * EVENT_BAR_SECONDS, event.time),
-    fetchCandles(event.exchange, event.symbol, '15m', boundary - GPT_LOOKBACK_BARS * QUARTER_HOUR, boundary)
+  const [oneMinute, fifteenMinute] = await Promise.all([
+    fetchCandles(event.exchange, symbol, '1m', event.time - minutes * EVENT_BAR_SECONDS, event.time),
+    fetchCandles(event.exchange, symbol, '15m', boundary - quarters * QUARTER_HOUR, boundary)
   ])
   return {
-    candles1m: minutes.filter((candle) => candle.time < event.time),
-    candles15m: quarters.filter((candle) => candle.time + QUARTER_HOUR <= event.time)
+    candles1m: oneMinute.filter((candle) => candle.time < event.time),
+    candles15m: fifteenMinute.filter((candle) => candle.time + QUARTER_HOUR <= event.time)
   }
+}
+
+/** The candles an event's question is built from: the twelve hours of minutes that end at the
+ * minute it was read, and the seven days of quarter hours that had closed by then -- and, with
+ * `market`, Bitcoin's and ether's four hours of minutes and day of quarter hours up to the same
+ * minute, which the question with the market around the event is built from as well. Public
+ * candles: four requests more an event, and nothing that costs. */
+export async function fetchEventQuestion(
+  event: Pick<MarketEvent, 'exchange' | 'symbol' | 'time'>,
+  fetchCandles: CandleFetch,
+  options: { market?: boolean } = {}
+): Promise<EventQuestionCandles> {
+  const own = candlesUpTo(event, event.symbol, EVENT_LOOKBACK_BARS, GPT_LOOKBACK_BARS, fetchCandles)
+  if (options.market !== true) return own
+  const [pair, btc, eth] = await Promise.all([
+    own,
+    candlesUpTo(event, MARKET_REFERENCE_SYMBOLS.btc, MARKET_BARS_1M, MARKET_BARS_15M, fetchCandles),
+    candlesUpTo(event, MARKET_REFERENCE_SYMBOLS.eth, MARKET_BARS_1M, MARKET_BARS_15M, fetchCandles)
+  ])
+  return { ...pair, reference: { btc, eth } }
 }
 
 export interface EventAnswer {

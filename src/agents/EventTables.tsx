@@ -24,7 +24,18 @@ function usd(value: number | null): React.JSX.Element {
   return <span style={{ color: value >= 0 ? 'var(--up)' : 'var(--down)' }}>{`${value >= 0 ? '+' : '−'}${formatUsd(Math.abs(value))}`}</span>
 }
 
-export function ResultsTable({ title, rows, models }: { title: string; rows: EventBenchmarkRow[]; models: boolean }): React.JSX.Element {
+export function ResultsTable({
+  title,
+  rows,
+  models,
+  label
+}: {
+  title: string
+  rows: EventBenchmarkRow[]
+  models: boolean
+  /** How a row's name is shown, where it is not a model's id or a rule's name. */
+  label?: (name: string) => string
+}): React.JSX.Element {
   return (
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -48,7 +59,10 @@ export function ResultsTable({ title, rows, models }: { title: string; rows: Eve
         <tbody>
           {rows.map((row) => (
             <tr key={row.name}>
-              <td style={{ ...cellStyle, fontWeight: 600 }}>{models ? describeDecider(row.name) : row.name}</td>
+              {/* A label is longer than a model's id, and wraps rather than pushing the last columns off the card. */}
+              <td style={{ ...cellStyle, fontWeight: 600, ...(label !== undefined ? { whiteSpace: 'normal', minWidth: '9rem' } : {}) }}>
+                {label !== undefined ? label(row.name) : models ? describeDecider(row.name) : row.name}
+              </td>
               {models && <td style={cellStyle}>{row.answered}</td>}
               <td style={cellStyle}>{row.longs}</td>
               <td style={cellStyle}>{row.shorts}</td>
@@ -269,7 +283,15 @@ export function SlicesTable({ rows }: { rows: EventBenchmarkRow[] }): React.JSX.
   const [picked, setPicked] = useState(rows[0]?.name ?? '')
   const row = rows.find((entry) => entry.name === picked) ?? rows[0]
   if (!row) return <p style={noteStyle}>Nothing to break down yet.</p>
-  const label: Record<string, string> = { type: 'By event', side: 'By side', hold: 'By holding time', confidence: 'By confidence' }
+  const label: Record<string, string> = {
+    type: 'By event',
+    side: 'By side',
+    hold: 'By holding time',
+    confidence: 'By confidence',
+    size: "By the pair's trading",
+    btc: "By Bitcoin's four hours",
+    company: 'By the move'
+  }
   return (
     <>
       <select aria-label="Row to break down" value={row.name} onChange={(event) => setPicked(event.target.value)} style={{ ...inputStyle(), marginBottom: '0.7rem' }}>

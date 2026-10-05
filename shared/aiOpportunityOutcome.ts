@@ -96,6 +96,22 @@ export function slippageRateFor(dailyQuoteVolume: number | null): number {
   return dailyQuoteVolume >= THIN_DAILY_VOLUME ? SLIPPAGE_RATE * 2.5 : SLIPPAGE_RATE * 5
 }
 
+export type LiquidityTier = 'deep' | 'middle' | 'thin' | 'unknown'
+
+/** How much a pair trades, by the lines its slippage is charged by: fifty million a day and five
+ * million a day. For cutting results by, as fixed as the slippage it decides. */
+export function liquidityTierOf(dailyQuoteVolume: number | null | undefined): LiquidityTier {
+  if (dailyQuoteVolume === null || dailyQuoteVolume === undefined || !Number.isFinite(dailyQuoteVolume)) return 'unknown'
+  if (dailyQuoteVolume >= DEEP_DAILY_VOLUME) return 'deep'
+  return dailyQuoteVolume >= THIN_DAILY_VOLUME ? 'middle' : 'thin'
+}
+
+export function describeLiquidityTier(tier: LiquidityTier): string {
+  if (tier === 'deep') return '$50M a day or more'
+  if (tier === 'middle') return '$5M to $50M a day'
+  return tier === 'thin' ? 'under $5M a day' : 'not known'
+}
+
 /** What a market fill gives up on an event's pair: the rate its traded value puts it at -- and,
  * for an event raised live, half the spread the scanner saw on its book at that moment, when that
  * is more. Crossing a spread costs half of it each way, and a measurement outranks an assumption.

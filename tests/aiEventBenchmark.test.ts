@@ -235,6 +235,55 @@ describe('summarizeEventBenchmark: a model row', () => {
     expect(few.slices.every((slice) => slice.meanNetPct === null)).toBe(true)
   })
 
+  it("cuts by how much the pair trades, by the lines its slippage is charged by", () => {
+    const four = benchmark([RISE, RISE, FALL, RISE], { a: [LONG, LONG, LONG, LONG] })
+    const [deep, middle, thin, unknown] = four.events.map((event) => event.id)
+    const cut = summarizeEventBenchmark({ ...four, dailyVolume: { [deep]: 50_000_000, [middle]: 49_999_999, [thin]: 4_999_999, [unknown]: null } }).models[0]
+    const sizes = cut.slices.filter((slice) => slice.by === 'size')
+    expect(Object.fromEntries(sizes.map((slice) => [slice.key, slice.trades]))).toEqual({
+      '$50M a day or more': 1,
+      '$5M to $50M a day': 1,
+      'under $5M a day': 1,
+      'not known': 1
+    })
+    // The thin pair's trade is the one that fell.
+    expect(sizes.find((slice) => slice.key === 'under $5M a day')?.wins).toBe(0)
+    // An event raised live, with no candles' figure, goes by what the scanner read of the pair.
+    const live = benchmark([RISE], { a: [LONG] })
+    live.events[0] = { ...live.events[0], live: { detectedAt: live.events[0].time + 8, quoteVolume24h: 80_000_000, spreadPct: 0.01, candidateScore: 90, rank: 1 } }
+    const liveSizes = summarizeEventBenchmark(live).models[0].slices.filter((slice) => slice.by === 'size')
+    expect(liveSizes.map((slice) => slice.key)).toEqual(['$50M a day or more'])
+    // With no market around the events, nothing is cut by it.
+    expect(cut.slices.some((slice) => slice.by === 'btc' || slice.by === 'company')).toBe(false)
+  })
+
+  it("cuts by Bitcoin's four hours and by the move's company where they are known, and says where they are not", () => {
+    const four = benchmark([RISE, RISE, FALL, RISE], { a: [LONG, LONG, LONG, LONG] })
+    const [first, second, third] = four.events.map((event) => event.id)
+    const summary = summarizeEventBenchmark({
+      ...four,
+      labels: {
+        [first]: { btcRegime: 'rising', company: 'with the market' },
+        [second]: { btcRegime: 'rising', company: 'on its own' },
+        [third]: { btcRegime: 'falling', company: 'on its own' }
+      }
+    })
+    const slices = (by: string): [string, number, number][] =>
+      summary.models[0].slices.filter((slice) => slice.by === by).map((slice) => [slice.key, slice.trades, slice.wins])
+    expect(slices('btc')).toEqual([
+      ['Bitcoin falling', 1, 0],
+      ['Bitcoin rising', 2, 2],
+      ['not known', 1, 1]
+    ])
+    expect(slices('company')).toEqual([
+      ['not known', 1, 1],
+      ['on its own', 2, 1],
+      ['with the market', 1, 1]
+    ])
+    // The rows that are not models are cut the same way, over the same events.
+    expect(summary.baselines[0].slices.filter((slice) => slice.by === 'btc').reduce((sum, slice) => sum + slice.trades, 0)).toBe(summary.baselines[0].closed)
+  })
+
   it('withholds every rate under thirty closed trades', () => {
     const few = summarizeEventBenchmark(benchmark(ends.slice(0, 29), { a: ends.slice(0, 29).map(() => LONG) })).models[0]
     expect(few).toMatchObject({ closed: 29, winRatePct: null, winRateMarginPct: null, meanNetPct: null, profitFactor: null, meanWinPct: null })

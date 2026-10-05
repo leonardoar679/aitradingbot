@@ -6,9 +6,19 @@ import type { AiSignalDecision } from '../shared/aiSignal'
 import type { Candle, SymbolInfo } from '../shared/ipc'
 import type { MarketEvent } from '../shared/marketEvent'
 import type { ScanHistoryRequest } from '../shared/marketScanner'
-import { buildEventDataset, datasetOfExperiment, loadOutcomeBars, peekEventBenchmark, type DatasetProgress, type EventBenchmarkDeps } from '../src/agents/eventBenchmark'
+import {
+  buildEventDataset,
+  datasetForQuestion,
+  datasetOfExperiment,
+  eventLabelsOf,
+  loadOutcomeBars,
+  peekEventBenchmark,
+  questionOf,
+  type DatasetProgress,
+  type EventBenchmarkDeps
+} from '../src/agents/eventBenchmark'
 import type { CandleFetch } from '../src/agents/opportunities'
-import { eventQuestionCandles } from './eventCandles'
+import { eventQuestionCandles, referenceCandles, withMove } from './eventCandles'
 
 // The free half of a benchmark on events, with the exchange and the main process faked at the
 // seams this module reaches them through.
@@ -227,6 +237,81 @@ describe('peekEventBenchmark', () => {
     ])
     expect(peek.budgetRemainingUsd).toBe(0.75)
     expect(progress).toEqual([1])
+  })
+})
+
+describe('a sample put with the market around each event', () => {
+  // Bitcoin is quiet. Ether ends in a 3% move of its own, so that a label read from the wrong
+  // market would say so. A broken ether stops a minute short of the event.
+  const BTC = referenceCandles(QUESTION.eventTime, 11)
+  const ETH = { ...referenceCandles(QUESTION.eventTime, 23), candles1m: withMove({ pct: 3 }, 285, 23, QUESTION.eventTime - 300 * 60) }
+  const marketCandles = (broken: boolean): CandleFetch => async (exchange, symbol, interval, startSec, endSec) => {
+    if (symbol === 'BTCUSDT') return interval === '1m' ? BTC.candles1m : BTC.candles15m
+    if (symbol === 'ETHUSDT') return interval === '1m' ? (broken ? ETH.candles1m.slice(0, -1) : ETH.candles1m) : ETH.candles15m
+    return fetchCandles(exchange, symbol, interval, startSec, endSec)
+  }
+  const withMarket = (broken = false): EventBenchmarkDeps => ({ ...fakes([event('GOODUSDT')]).deps, fetchCandles: marketCandles(broken) })
+
+  it('fetches Bitcoin and ether beside each event, and labels each event by them', async () => {
+    const dataset = await buildEventDataset({ nowSec: NOW, days: 7, pairCount: 1, maxEvents: 10, requestId: 'scan-m1', question: 'market' }, withMarket())
+    expect(dataset.question).toBe('market')
+    expect(dataset.events.map((entry) => entry.symbol)).toEqual(['GOODUSDT'])
+    expect(dataset.questions[0].reference?.btc.candles1m).toEqual(BTC.candles1m)
+    expect(dataset.questions[0].reference?.eth.candles15m).toEqual(ETH.candles15m)
+    // A quiet Bitcoin: flat over four hours, and the pair's three percent made on its own.
+    expect(dataset.labels).toEqual({ [dataset.events[0].id]: { btcRegime: 'flat', company: 'on its own' } })
+    expect(eventLabelsOf(dataset.events[0], dataset.questions[0])).toEqual({ btcRegime: 'flat', company: 'on its own' })
+  })
+
+  it('fetches no market, and labels nothing, for the question about the pair alone', async () => {
+    const dataset = await buildEventDataset({ nowSec: NOW, days: 7, pairCount: 1, maxEvents: 10, requestId: 'scan-m2' }, withMarket())
+    expect(dataset.question).toBe('pair')
+    expect(dataset.questions[0].reference).toBeUndefined()
+    expect(dataset.labels).toEqual({})
+  })
+
+  it('leaves out an event whose market stops short of it, which the pair alone can still be asked about', async () => {
+    const market = await buildEventDataset({ nowSec: NOW, days: 7, pairCount: 1, maxEvents: 10, requestId: 'scan-m3', question: 'market' }, withMarket(true))
+    expect(market.events).toEqual([])
+    expect(market.unaskable).toBe(1)
+    const alone = await buildEventDataset({ nowSec: NOW, days: 7, pairCount: 1, maxEvents: 10, requestId: 'scan-m4' }, withMarket(true))
+    expect(alone.events).toHaveLength(1)
+  })
+
+  it('asks either question of a sample fetched with the market, and the market only of one fetched with it', async () => {
+    const dataset = await buildEventDataset({ nowSec: NOW, days: 7, pairCount: 1, maxEvents: 10, requestId: 'scan-m5', question: 'market' }, withMarket())
+    const asMarket = questionOf(dataset, 0, 'market')
+    expect(asMarket).toMatchObject({ exchange: 'binance', symbol: 'GOODUSDT' })
+    expect(asMarket.reference).toBe(dataset.questions[0].reference)
+    const asPair = questionOf(dataset, 0, 'pair')
+    expect('reference' in asPair).toBe(false)
+    expect(asPair.candles1m).toBe(dataset.questions[0].candles1m)
+    const alone = await buildEventDataset({ nowSec: NOW, days: 7, pairCount: 1, maxEvents: 10, requestId: 'scan-m6' }, withMarket())
+    expect(() => questionOf(alone, 0, 'market')).toThrow(/without the market/)
+  })
+
+  it('reads the answers held under the question asked for', async () => {
+    const { deps, peeks } = fakes([event('GOODUSDT')])
+    const dataset = await buildEventDataset({ nowSec: NOW, days: 7, pairCount: 1, maxEvents: 10, requestId: 'scan-m7', question: 'market' }, { ...deps, fetchCandles: marketCandles(false) })
+    await peekEventBenchmark(dataset, ['a/held'], deps)
+    await peekEventBenchmark(dataset, ['a/held'], deps, { question: 'pair' })
+    expect(peeks[0].reference).toBe(dataset.questions[0].reference)
+    expect('reference' in peeks[1]).toBe(false)
+  })
+
+  it('fetches the same sample again for the other question, keeping its events and what it was', async () => {
+    const recorded = { id: 'EXP-2026-1004-001', startSec: 1, endSec: 2, pairs: ['GOODUSDT'], found: 214, events: [event('GOODUSDT'), event('QUIETUSDT')] }
+    const alone = await datasetOfExperiment(recorded, withMarket())
+    expect(alone).toMatchObject({ question: 'pair', unaskable: 1, labels: {} })
+    const both = await datasetForQuestion(alone, withMarket(), { question: 'market' })
+    expect(both).toMatchObject({ question: 'market', experimentId: 'EXP-2026-1004-001', found: 214, startSec: 1, endSec: 2 })
+    expect(both.events).toEqual(alone.events)
+    expect(both.questions[0].reference).toBeDefined()
+    // The event already left out stays counted once; the one the market cannot be shown for joins it.
+    expect(both.unaskable).toBe(1)
+    const broken = await datasetForQuestion(alone, withMarket(true), { question: 'market' })
+    expect(broken.events).toEqual([])
+    expect(broken.unaskable).toBe(2)
   })
 })
 

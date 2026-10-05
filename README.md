@@ -737,6 +737,65 @@ than these did, and whether any model does when it is shown what the rest of the
 doing at that minute, which none of them was. Their levels, on this evidence, are not where a
 model earns anything.
 
+**The market around an event.** Every model above was shown one pair: its event and seven days of
+its own candles. Whether it rose because everything rose, or rose alone, was not in the question,
+and it is the first thing a person looking at a pump asks. An event can now be put as a second
+question that has it (`shared/aiEventMarket.ts`):
+
+- **A `market` block**: what BTCUSDT and ETHUSDT did over the same fifteen minutes, hour, four
+  hours and day, up to the minute the event was read, and the pair's own return over each less
+  theirs (`vsBtc`, `vsEth`). It is rebuilt in the main process from the candles sent with the
+  question, as the event is, and nothing at or after the event's minute is read. Where either
+  market's candles do not run unbroken to that minute the question is refused, not asked with
+  half a market.
+- **It is a separate question, `opportunity-v2`.** Its prompt is the first one with one paragraph
+  more, saying what the block is and not what it means; both texts are pinned by a hash beside
+  their version. The question about the pair alone is byte for byte what it was — a test holds
+  the hash of its bytes from before the second existed — so no answer already bought moves, and
+  the two questions are cached and billed apart.
+- **The benchmark asks either.** *Question* on Events across the market chooses one. A sample
+  fetched with the market holds both, because the pair-alone question is the same candles
+  without Bitcoin's and ether's, so a card can set each model's answers to the two side by side,
+  over the events it answered both ways. Bitcoin's and ether's candles are four public requests
+  more an event. The Experiments list says which question each run asked.
+- **Two labels, drawn by fixed lines and never by a model**, cut the results: whether Bitcoin's
+  last four hours were rising, falling or flat (1% either way), and whether the event's move was
+  made with the market — Bitcoin went the same way over the same fifteen minutes by at least half
+  as much — or on its own. Results are also cut by how much the pair trades, by the two lines its
+  slippage is charged by ($50M and $5M a day).
+- **Ask and the watch still put the pair alone.** The second question replaces the first only if
+  it is shown to do better on the same events, by a rule written down before the first run's
+  results were read: for `openai/gpt-5-mini`, the model the watch asks, the question with the
+  market has to return more a trade than the pair alone in each of the three parts of the period,
+  and its win rate has to beat the other's by more than the 95% margin around it. Anything less is
+  two questions that cannot be told apart, and the first one stays.
+
+The first run of the second question, on 5 October 2026, put the 100 events of
+`EXP-2026-1004-001` again, each with the market around it, to the same three models. The app
+stated $0.84; it made 208 calls and cost $0.60 (`EXP-2026-1005-001`). OpenRouter rate-limited
+Mistral Small after four answers, and again when its missing ones were asked a quarter of an hour
+later, so it is left out: both settings of `gpt-5-mini` answered all 100 events both ways, and
+these are the same events, the same candles and the same scoring, with only the question changed.
+
+| | Question | Acted on | Closed | Won | Net, added up | A trade | First / second / last third |
+|---|---|---|---|---|---|---|---|
+| `openai/gpt-5-mini` | the pair alone | 73 | 68 | 28% ± 11 | −13.77% | −0.20% | −1.25% / −5.50% / −7.02% |
+| `openai/gpt-5-mini` | with the market | 57 | 56 | 29% ± 12 | −19.71% | −0.35% | +4.69% / −8.94% / −15.46% |
+| `openai/gpt-5-mini@minimal` | the pair alone | 34 | 32 | 28% ± 16 | −1.25% | −0.04% | +3.58% / −1.85% / −2.98% |
+| `openai/gpt-5-mini@minimal` | with the market | 36 | 33 | 27% ± 15 | −6.14% | −0.19% | +3.02% / −5.78% / −3.39% |
+| Follow every event, no model | | 100 | 100 | 31% ± 9 | −18.92% | −0.19% | |
+| Fade every event, no model | | 100 | 100 | 31% ± 9 | −34.25% | −0.34% | |
+
+Shown the market, `gpt-5-mini` acted on 57 events instead of 73 and lost more on them, and it
+still took the move's side every time (57 with it, none against); minimal effort acted on about as
+many as before and lost more too. By the rule above, the second question does not replace the
+first — it did better in one third of the period of three, and the win rates sit inside each
+other's margins — so Ask and the watch keep asking about the pair alone. The cuts by the market
+around each event find no stretch where following paid either: a move made on its own lost 0.19%
+a trade over 71 events and one made with the market 0.18% over 29; with Bitcoin flat over four
+hours following lost 0.25% a trade (62), rising 0.11% (23), falling 0.06% (15). What these models
+were shown changed how often they acted, not which side they took or how well they chose.
+
 **Model routing.** A cheap model can be asked every fifteen minutes for a few dollars a month. A
 frontier model asked the same way costs several times that, and nearly all of it buys the answer
 "hold". A route asks the default model at every decision and passes the decision on to a second
@@ -2165,6 +2224,7 @@ shared/                       Code both processes run, so they cannot disagree a
   aiExperiment.ts             A benchmark run kept as a run: its events, its models, its versions, and what the ledger says it cost
   aiWatch.ts                  Events put to models without a click: the setting, what it takes up, its daily limit, the breaker, what it costs, its notice
   aiWatchPaper.ts             Paper positions the watch opens by itself: the setting, what a call becomes, and its limits
+  aiEventMarket.ts            The market around an event: Bitcoin's and ether's returns to its minute, the pair's less theirs, two labels
   aiEffort.ts                 A model asked at a lower reasoning effort, as a model of its own: its id, and where it is taken apart
   aiCost.ts, aiLedger.ts      Budget and estimate arithmetic; the call record and its parser
   marketEvent.ts              The event detector: a pair's reading from twelve hours of 1-minute candles, and what raises an event

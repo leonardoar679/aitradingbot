@@ -87,6 +87,14 @@ export function fifteenMinuteBars(count: number, endTime: number, seed = 5): Can
   return out
 }
 
+/** A reference market's candles up to an event (shared/aiEventMarket.ts): five hours of quiet
+ * 1-minute bars ending at the minute before `eventTime`, and a day and a little more of 15-minute
+ * bars, the last of them the one that had just closed. */
+export function referenceCandles(eventTime: number, seed = 11): { candles1m: Candle[]; candles15m: Candle[] } {
+  const boundary = Math.floor(eventTime / 900) * 900
+  return { candles1m: quiet(300, seed, eventTime - 300 * 60), candles15m: fifteenMinuteBars(100, boundary, seed) }
+}
+
 /** The candles an event's question is built from: twelve hours and a little more of 1-minute bars
  * ending in `move`, and seven days and a little more of 15-minute bars that had closed by then. */
 export function eventQuestionCandles(move: Move = { pct: 3, volume: 8 }, seed = 7): { candles1m: Candle[]; candles15m: Candle[]; eventTime: number } {

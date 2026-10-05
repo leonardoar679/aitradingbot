@@ -2,8 +2,10 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AI_OPPORTUNITY_PROMPT_VERSION, AI_OPPORTUNITY_SCHEMA_VERSION, type AiOpportunityAskRequest } from '../shared/aiOpportunity'
-import { eventQuestionCandles } from './eventCandles'
+import { AI_OPPORTUNITY_MARKET_SYSTEM_PROMPT } from '../electron/services/aiPrompt'
+import { referenceReturns, type EventReference } from '../shared/aiEventMarket'
+import { AI_OPPORTUNITY_MARKET_PROMPT_VERSION, AI_OPPORTUNITY_PROMPT_VERSION, AI_OPPORTUNITY_SCHEMA_VERSION, type AiOpportunityAskRequest } from '../shared/aiOpportunity'
+import { eventQuestionCandles, referenceCandles } from './eventCandles'
 
 // An event put to a model, end to end, with the network faked and everything else real: the
 // detector, the context, the request, the validator, the cache, the ledger and the daily budget.
@@ -250,5 +252,62 @@ describe('peeking at an event', () => {
     const { peekAiOpportunity } = await services()
     const calm = eventQuestionCandles({ pct: 0.02 })
     await expect(peekAiOpportunity({ ...request({ candles1m: calm.candles1m, candles15m: calm.candles15m }), models: ['openai/gpt-5-mini'] })).rejects.toThrow(/do not end in an event/)
+  })
+})
+
+describe('an event put with the market around it', () => {
+  const reference = (): EventReference => ({ btc: referenceCandles(QUESTION.eventTime, 11), eth: referenceCandles(QUESTION.eventTime, 23) })
+
+  it('is asked under its own prompt and version, and shows the model the market', async () => {
+    const { bodies } = stubOpenRouter(() => ({}))
+    const { askAiOpportunity, listAiCalls } = await services()
+    const decision = await askAiOpportunity(request({ reference: reference() }))
+    expect(decision).toMatchObject({ recommendation: 'buy', cached: false, error: null, rejected: null })
+    const body = bodies[0] as { messages: { content: string }[]; response_format: { json_schema: { name: string } } }
+    expect(body.messages[0].content).toBe(AI_OPPORTUNITY_MARKET_SYSTEM_PROMPT)
+    // The same answer shape as the question about the pair alone.
+    expect(body.response_format.json_schema.name).toBe('market_opportunity')
+    const sent = JSON.parse(body.messages[1].content) as { market: { btc: object; eth: object; vsBtc: object; vsEth: object } }
+    expect(Object.keys(sent.market)).toEqual(['btc', 'eth', 'vsBtc', 'vsEth'])
+    expect(sent.market.btc).toEqual(referenceReturns(reference().btc, QUESTION.eventTime))
+    const { rows } = await listAiCalls({})
+    expect(rows[0]).toMatchObject({ promptVersion: AI_OPPORTUNITY_MARKET_PROMPT_VERSION, schemaVersion: AI_OPPORTUNITY_SCHEMA_VERSION, eventId: `binance:SOLUSDT:${QUESTION.eventTime}` })
+  })
+
+  it('is a separate question from the pair alone: each is bought once, and neither is served the other\'s answer', async () => {
+    const { bodies } = stubOpenRouter(() => ({}))
+    const { askAiOpportunity, peekAiOpportunity, listAiCalls } = await services()
+    await askAiOpportunity(request())
+    expect((await peekAiOpportunity({ ...request({ reference: reference() }), models: ['openai/gpt-5-mini'] })).models[0].decision).toBeNull()
+    expect((await askAiOpportunity(request({ reference: reference() }))).cached).toBe(false)
+    expect((await askAiOpportunity(request())).cached).toBe(true)
+    expect((await askAiOpportunity(request({ reference: reference() }))).cached).toBe(true)
+    expect((await peekAiOpportunity({ ...request({ reference: reference() }), models: ['openai/gpt-5-mini'] })).models[0].decision).toMatchObject({ cached: true })
+    expect(bodies).toHaveLength(2)
+    expect((await listAiCalls({})).rows.map((row) => row.promptVersion).sort()).toEqual([AI_OPPORTUNITY_PROMPT_VERSION, AI_OPPORTUNITY_MARKET_PROMPT_VERSION])
+  })
+
+  it('is the question about the pair alone when the reference is sent as nothing', async () => {
+    const { bodies } = stubOpenRouter(() => ({}))
+    const { askAiOpportunity } = await services()
+    await askAiOpportunity(request())
+    expect((await askAiOpportunity(request({ reference: null }))).cached).toBe(true)
+    expect(bodies).toHaveLength(1)
+  })
+
+  it('is refused before anything is asked when the market\'s candles stop short of the event, or are not candles', async () => {
+    const { bodies } = stubOpenRouter(() => ({}))
+    const { askAiOpportunity, peekAiOpportunity, listAiCalls } = await services()
+    const short: EventReference = { ...reference(), eth: { ...reference().eth, candles1m: reference().eth.candles1m.slice(0, -1) } }
+    await expect(askAiOpportunity(request({ reference: short }))).rejects.toThrow(/do not run unbroken to the minute it was read at/)
+    await expect(peekAiOpportunity({ ...request({ reference: short }), models: ['openai/gpt-5-mini'] })).rejects.toThrow(/do not run unbroken/)
+    const reversed: EventReference = { ...reference(), btc: { ...reference().btc, candles1m: [...reference().btc.candles1m].reverse() } }
+    await expect(askAiOpportunity(request({ reference: reversed }))).rejects.toThrow(/BTCUSDT 1-minute candles of an opportunity are out of order/)
+    const broken = { btc: reference().btc, eth: { candles1m: 'none', candles15m: [] } } as unknown as EventReference
+    await expect(askAiOpportunity(request({ reference: broken }))).rejects.toThrow(/needs completed ETHUSDT 1-minute candles/)
+    const noQuarters = { btc: reference().btc, eth: { candles1m: reference().eth.candles1m, candles15m: 'none' } } as unknown as EventReference
+    await expect(askAiOpportunity(request({ reference: noQuarters }))).rejects.toThrow(/needs completed ETHUSDT 15-minute candles/)
+    expect(bodies).toEqual([])
+    expect((await listAiCalls({})).rows).toEqual([])
   })
 })

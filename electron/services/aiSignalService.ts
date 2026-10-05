@@ -34,8 +34,10 @@ import {
   buildAiContext,
   buildEventContext,
   withAgentReports,
+  withMarketBlock,
   type AiMarketContext
 } from '../../shared/aiContext'
+import { MARKET_REFERENCE_SYMBOLS } from '../../shared/aiEventMarket'
 import {
   AI_OPPORTUNITY_MAX_MODELS,
   validateOpportunityAnswer,
@@ -1230,29 +1232,48 @@ export async function peekAiBenchmark(request: AiBenchmarkPeekRequest): Promise<
 // validator, the ledger, the daily budget. Asking several models about one event, and asking
 // about hundreds of events in a benchmark, are loops in the renderer over this one call.
 
+/** Completed candles, oldest first, or the reason they are not. */
+function checkCandles(candles: unknown, what: string): void {
+  if (!Array.isArray(candles) || !candles.every(isCandle)) throw new Error(`An opportunity needs completed ${what} candles`)
+  for (let index = 1; index < candles.length; index++) {
+    if (candles[index].time <= candles[index - 1].time) throw new Error(`The ${what} candles of an opportunity are out of order`)
+  }
+}
+
 /** The question for an event, from a request that has been checked rather than trusted.
  *
  * THE EVENT IS WORKED OUT HERE, FROM THE CANDLES. The request names a market and sends candles;
  * whether those candles end in an event is decided by the same detector the scanner runs, so a
- * caller cannot have a model asked -- and billed -- about a minute by saying it was interesting. */
+ * caller cannot have a model asked -- and billed -- about a minute by saying it was interesting.
+ *
+ * SO IS THE MARKET AROUND IT, when the request asks for it by sending Bitcoin's and ether's
+ * candles (shared/aiEventMarket.ts): what they did is worked out from them, up to the event's own
+ * minute, and a question whose reference candles do not reach that minute is refused rather than
+ * asked as some third question with half a market in it. */
 function opportunityQuestion(request: AiOpportunityQuestion): AiMarketContext {
   if (typeof request?.symbol !== 'string' || request.symbol.trim() === '') throw new Error('An opportunity needs a symbol')
-  for (const [name, candles] of [
-    ['15-minute', request.candles15m],
-    ['1-minute', request.candles1m]
-  ] as const) {
-    if (!Array.isArray(candles) || !candles.every(isCandle)) throw new Error(`An opportunity needs completed ${name} candles`)
-    for (let index = 1; index < candles.length; index++) {
-      if (candles[index].time <= candles[index - 1].time) throw new Error(`The ${name} candles of an opportunity are out of order`)
-    }
-  }
+  checkCandles(request.candles15m, '15-minute')
+  checkCandles(request.candles1m, '1-minute')
   const context = buildEventContext(request.candles15m, request.candles1m, { exchange: request.exchange, symbol: request.symbol })
   if (!context?.event) {
     throw new Error(
       'These candles do not end in an event. A model is asked only about a minute the scanner would raise, with twelve hours of 1-minute candles before it and seven days of 15-minute candles.'
     )
   }
-  return context
+  const reference = request.reference
+  if (reference === undefined || reference === null) return context
+  for (const market of ['btc', 'eth'] as const) {
+    const symbol = MARKET_REFERENCE_SYMBOLS[market]
+    checkCandles(reference?.[market]?.candles1m, `${symbol} 1-minute`)
+    checkCandles(reference?.[market]?.candles15m, `${symbol} 15-minute`)
+  }
+  const withMarket = withMarketBlock(context, reference)
+  if (withMarket === null) {
+    throw new Error(
+      `The ${MARKET_REFERENCE_SYMBOLS.btc} and ${MARKET_REFERENCE_SYMBOLS.eth} candles sent with this event do not run unbroken to the minute it was read at, so the market around it cannot be shown. Nothing was asked.`
+    )
+  }
+  return withMarket
 }
 
 /** Which models already hold an answer for this event, and what one more call to each of the

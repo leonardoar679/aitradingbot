@@ -16,7 +16,14 @@ import {
   type EventBenchmarkSummary
 } from '../../shared/aiEventBenchmark'
 import { experimentDrift, type AiExperimentSummary } from '../../shared/aiExperiment'
-import { AI_OPPORTUNITY_MAX_MODELS, describeOpportunitySide, opportunitySide } from '../../shared/aiOpportunity'
+import {
+  AI_OPPORTUNITY_MAX_MODELS,
+  describeOpportunitySide,
+  describeQuestionKind,
+  opportunitySide,
+  questionKindOfPromptVersion,
+  type AiOpportunityQuestionKind
+} from '../../shared/aiOpportunity'
 import { describeDecider } from '../../shared/aiPanel'
 import type { Candle } from '../../shared/ipc'
 import { EVENT_COOLDOWN_SECONDS, EVENT_DETECTOR_VERSION, EVENT_LOOKBACK_BARS, describeEventType } from '../../shared/marketEvent'
@@ -26,9 +33,11 @@ import { buttonStyle, cellStyle, headCellStyle, inputStyle, noteStyle } from './
 import { BENCHMARK_CONCURRENCY, runBenchmark } from './benchmark'
 import {
   buildEventDataset,
+  datasetForQuestion,
   datasetOfExperiment,
   loadOutcomeBars,
   peekEventBenchmark,
+  questionOf,
   type EventBenchmarkDeps,
   type EventDataset,
   type EventPeek
@@ -140,6 +149,24 @@ function day(sec: number): string {
   return new Date(sec * 1000).toISOString().slice(0, 10)
 }
 
+/** A model under one of the two questions, as one row of the table that sets them side by side. */
+function versusKey(model: string, kind: AiOpportunityQuestionKind): string {
+  return `${kind}:${model}`
+}
+
+function describeVersusKey(name: string): string {
+  const cut = name.indexOf(':')
+  const kind = name.slice(0, cut)
+  if (cut < 0 || (kind !== 'pair' && kind !== 'market')) return name
+  return `${describeDecider(name.slice(cut + 1))}, ${describeQuestionKind(kind)}`
+}
+
+/** Which of the two questions a run asked, from the prompt versions its calls were made under. */
+function questionsOf(row: Pick<AiExperimentSummary, 'versions'>): string {
+  const kinds = [...new Set(row.versions.prompt.map(questionKindOfPromptVersion).filter((kind): kind is AiOpportunityQuestionKind => kind !== null))]
+  return kinds.length === 0 ? '—' : kinds.map(describeQuestionKind).join(', ')
+}
+
 /** The runs on record (shared/aiExperiment.ts), newest first. */
 function ExperimentsTable({ rows, busy, onOpen }: { rows: AiExperimentSummary[]; busy: boolean; onOpen: (id: string) => void }): React.JSX.Element {
   return (
@@ -153,6 +180,7 @@ function ExperimentsTable({ rows, busy, onOpen }: { rows: AiExperimentSummary[];
             <th style={headCellStyle}>Events</th>
             <th style={headCellStyle}>Found on</th>
             <th style={headCellStyle}>Models asked</th>
+            <th style={headCellStyle}>Question</th>
             <th style={headCellStyle}>Calls</th>
             <th style={headCellStyle}>Cost</th>
           </tr>
@@ -176,6 +204,7 @@ function ExperimentsTable({ rows, busy, onOpen }: { rows: AiExperimentSummary[];
                 {row.pairs.length} pairs, {day(row.startSec)} to {day(row.endSec)}
               </td>
               <td style={{ ...cellStyle, whiteSpace: 'normal' }}>{row.models.map((model) => describeDecider(model)).join(', ')}</td>
+              <td style={{ ...cellStyle, whiteSpace: 'normal' }}>{questionsOf(row)}</td>
               <td style={cellStyle}>
                 {row.calls.toLocaleString()}
                 {row.failed > 0 && <span style={{ color: 'var(--text-muted)' }}> +{row.failed} unanswered</span>}
@@ -215,6 +244,10 @@ export function EventBenchmarkView(): React.JSX.Element {
   const [bars, setBars] = useState<Record<string, Candle[]>>({})
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null)
   const [experiments, setExperiments] = useState<AiExperimentSummary[]>([])
+  const [question, setQuestion] = useState<AiOpportunityQuestionKind>('pair')
+  /** With the market chosen: the same models' answers to the question about the pair alone, on
+   * the same events, for setting the two side by side. */
+  const [pairAnswers, setPairAnswers] = useState<EventBenchmarkAnswers | null>(null)
   const stop = useRef(false)
   const scanId = useRef<string | null>(null)
 
@@ -253,13 +286,39 @@ export function EventBenchmarkView(): React.JSX.Element {
     () =>
       dataset === null || models.length === 0
         ? null
-        : summarizeEventBenchmark({ events: dataset.events, models, answers, bars, dailyVolume: dataset.dailyVolume, nowSec: Math.floor(Date.now() / 1000) }),
+        : summarizeEventBenchmark({
+            events: dataset.events,
+            models,
+            answers,
+            bars,
+            dailyVolume: dataset.dailyVolume,
+            labels: dataset.question === 'market' ? dataset.labels : undefined,
+            nowSec: Math.floor(Date.now() / 1000)
+          }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `models` is derived from `peek`
     [dataset, peek, answers, bars]
   )
+  // Each model under each question, on the events every one of them answered both ways.
+  const versus = useMemo(
+    () =>
+      dataset === null || pairAnswers === null || question !== 'market' || models.length === 0
+        ? null
+        : summarizeEventBenchmark({
+            events: dataset.events,
+            models: models.flatMap((model) => [versusKey(model, 'pair'), versusKey(model, 'market')]),
+            answers: Object.fromEntries(models.flatMap((model) => [[versusKey(model, 'pair'), pairAnswers[model] ?? []], [versusKey(model, 'market'), answers[model] ?? []]])),
+            bars,
+            dailyVolume: dataset.dailyVolume,
+            labels: dataset.labels,
+            nowSec: Math.floor(Date.now() / 1000)
+          }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `models` is derived from `peek`
+    [dataset, peek, answers, pairAnswers, bars, question]
+  )
 
   const window_ = eventBenchmarkWindow(Math.floor(Date.now() / 1000), days)
-  const freeRequests = scanHistoryRequests(pairCount, window_.startSec, window_.endSec, EVENT_LOOKBACK_BARS + EVENT_COOLDOWN_SECONDS / 60) + maxEvents * 4
+  // Each event's own question is four requests; with the market, Bitcoin's and ether's are four more.
+  const freeRequests = scanHistoryRequests(pairCount, window_.startSec, window_.endSec, EVENT_LOOKBACK_BARS + EVENT_COOLDOWN_SECONDS / 60) + maxEvents * (question === 'market' ? 8 : 4)
 
   function toggle(model: string): void {
     setChosen((current) => (current.includes(model) ? current.filter((entry) => entry !== model) : [...current, model].slice(0, AI_OPPORTUNITY_MAX_MODELS)))
@@ -277,6 +336,7 @@ export function EventBenchmarkView(): React.JSX.Element {
     setDataset(null)
     setPeek(null)
     setAnswers({})
+    setPairAnswers(null)
     setBars({})
     const requestId = crypto.randomUUID()
     scanId.current = requestId
@@ -292,6 +352,7 @@ export function EventBenchmarkView(): React.JSX.Element {
           pairCount,
           maxEvents,
           requestId,
+          question,
           shouldStop: () => stop.current,
           onProgress: (progress) => {
             if (progress.step === 'questions') setPhase({ status: 'working', text: `Fetching each event's candles: ${progress.done} of ${progress.total}` })
@@ -300,7 +361,7 @@ export function EventBenchmarkView(): React.JSX.Element {
         deps
       )
       if (stop.current) return
-      await load(built, chosen)
+      await load(built, chosen, question)
     } catch (failure) {
       setNote({ ok: false, text: describeError(failure) })
     } finally {
@@ -310,21 +371,34 @@ export function EventBenchmarkView(): React.JSX.Element {
     }
   }
 
-  /** What a sample holds for these models, and what followed each of its events. Free. `followed`
-   * is the candles already fetched for this same sample, when there are any. */
-  async function load(built: EventDataset, readFor: string[], followed?: Record<string, Candle[]>): Promise<void> {
+  /** What a sample holds for these models under `kind`, and what followed each of its events.
+   * Free. With the market, the answers to the question about the pair alone are read as well, to
+   * set beside them. `followed` is the candles already fetched for this same sample, when there
+   * are any. */
+  async function load(built: EventDataset, readFor: string[], kind: AiOpportunityQuestionKind, followed?: Record<string, Candle[]>): Promise<void> {
     setDataset(built)
+    setPairAnswers(null)
     if (built.events.length === 0) {
       setNote({ ok: false, text: built.found === 0 ? 'No event was raised on these pairs in this period.' : 'None of the sampled events could be put to a model.' })
       return
     }
     const held = await peekEventBenchmark(built, readFor, deps, {
+      question: kind,
       shouldStop: () => stop.current,
       onProgress: (done, total) => setPhase({ status: 'working', text: `Reading what is already answered: ${done} of ${total}` })
     })
     if (stop.current) return
     setPeek(held)
     setAnswers(held.known)
+    if (kind === 'market') {
+      const alone = await peekEventBenchmark(built, readFor, deps, {
+        question: 'pair',
+        shouldStop: () => stop.current,
+        onProgress: (done, total) => setPhase({ status: 'working', text: `Reading the answers about the pair alone: ${done} of ${total}` })
+      })
+      if (stop.current) return
+      setPairAnswers(alone.known)
+    }
     if (followed !== undefined) return
     const fetched = await loadOutcomeBars(built.events, Math.floor(Date.now() / 1000), fetchCandles, {
       shouldStop: () => stop.current,
@@ -340,6 +414,7 @@ export function EventBenchmarkView(): React.JSX.Element {
     setDataset(null)
     setPeek(null)
     setAnswers({})
+    setPairAnswers(null)
     setBars({})
     try {
       setPhase({ status: 'working', text: `Opening ${id}…` })
@@ -364,11 +439,12 @@ export function EventBenchmarkView(): React.JSX.Element {
       }
       setChosen(readFor)
       const built = await datasetOfExperiment(experiment, deps, {
+        question,
         shouldStop: () => stop.current,
         onProgress: (progress) => setPhase({ status: 'working', text: `Fetching each event's candles: ${progress.done} of ${progress.total}` })
       })
       if (stop.current) return
-      await load(built, readFor)
+      await load(built, readFor, question)
     } catch (failure) {
       setNote({ ok: false, text: describeError(failure) })
     } finally {
@@ -387,7 +463,38 @@ export function EventBenchmarkView(): React.JSX.Element {
     setNote(null)
     try {
       setPhase({ status: 'working', text: 'Reading what is already answered…' })
-      await load(dataset, chosen, Object.keys(bars).length >= dataset.events.length ? bars : undefined)
+      await load(dataset, chosen, question, Object.keys(bars).length >= dataset.events.length ? bars : undefined)
+    } catch (failure) {
+      setNote({ ok: false, text: describeError(failure) })
+    } finally {
+      setPhase({ status: 'idle' })
+    }
+  }
+
+  /** Puts the same sample as the other question. Free: with the market, Bitcoin's and ether's
+   * candles are fetched for each event if they are not held yet, and every answer is read again. */
+  async function changeQuestion(kind: AiOpportunityQuestionKind): Promise<void> {
+    setQuestion(kind)
+    if (dataset === null) return
+    if (chosen.length === 0) {
+      setPeek(null)
+      return
+    }
+    stop.current = false
+    setNote(null)
+    try {
+      let built = dataset
+      if (kind === 'market' && dataset.question !== 'market') {
+        built = await datasetForQuestion(dataset, deps, {
+          question: 'market',
+          shouldStop: () => stop.current,
+          onProgress: (progress) => setPhase({ status: 'working', text: `Fetching Bitcoin's and ether's candles for each event: ${progress.done} of ${progress.total}` })
+        })
+        if (stop.current) return
+      }
+      // A sample that lost events to the other question has to fetch what followed the rest again.
+      const same = built.events.length === dataset.events.length
+      await load(built, chosen, kind, same && Object.keys(bars).length >= dataset.events.length ? bars : undefined)
     } catch (failure) {
       setNote({ ok: false, text: describeError(failure) })
     } finally {
@@ -404,7 +511,7 @@ export function EventBenchmarkView(): React.JSX.Element {
     }
     const agreed = window.confirm(
       describeAiBenchmarkCost({
-        symbol: `${dataset.pairs} pairs`,
+        symbol: `${dataset.pairs} pairs (each event asked ${question === 'market' ? 'with the market around it' : 'about the pair alone'})`,
         decisions: dataset.events.length,
         models: peek.models,
         budgetRemainingUsd: peek.budgetRemainingUsd,
@@ -424,8 +531,7 @@ export function EventBenchmarkView(): React.JSX.Element {
         times: dataset.events.map((event) => event.time),
         models: peek.models.map((entry) => entry.model),
         known: answers,
-        ask: (model, index) =>
-          window.api.ai.askOpportunity({ exchange: dataset.events[index].exchange, symbol: dataset.events[index].symbol, ...dataset.questions[index], model, source: 'benchmark' }),
+        ask: (model, index) => window.api.ai.askOpportunity({ ...questionOf(dataset, index, question), model, source: 'benchmark' }),
         shouldStop: () => stop.current,
         onProgress: (progress, held) => {
           setPhase({ status: 'running', ...progress })
@@ -530,6 +636,19 @@ export function EventBenchmarkView(): React.JSX.Element {
               ))}
             </select>
           </label>
+          <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+            Question{' '}
+            <select
+              aria-label="Question"
+              value={question}
+              disabled={busy}
+              onChange={(event) => void changeQuestion(event.target.value === 'market' ? 'market' : 'pair')}
+              style={inputStyle()}
+            >
+              <option value="pair">the pair alone</option>
+              <option value="market">with the market around it</option>
+            </select>
+          </label>
         </div>
 
         <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '0.8rem' }}>
@@ -565,7 +684,10 @@ export function EventBenchmarkView(): React.JSX.Element {
           event&apos;s own id, and reads what is already answered. That is about {freeRequests.toLocaleString()} requests of public
           candles, {describeDuration((freeRequests / REQUESTS_PER_SECOND) * 1000)}. <strong>Run benchmark</strong> asks each ticked model
           about each sampled event it has not answered, and states the price and the time first. A day-old cut-off leaves every
-          recommendation time to run its course before it is scored.
+          recommendation time to run its course before it is scored. <strong>Question</strong> is what a model is shown: the
+          pair&apos;s own event and seven days of its candles, or that and what Bitcoin and ether did over the same fifteen minutes,
+          hour, four hours and day, with the pair&apos;s return less theirs. The two are separate questions with separate answers; a
+          model asked one has not been asked the other.
         </p>
       </Card>
 
@@ -646,6 +768,30 @@ export function EventBenchmarkView(): React.JSX.Element {
               )}
             </p>
           </Card>
+
+          {versus !== null && (
+            <Card title="The pair alone, and with the market">
+              {versus.compared === 0 ? (
+                <p style={noteStyle}>
+                  No event has been answered both ways by every ticked model yet, so there is nothing to set side by side. Run the
+                  benchmark under each question on this sample: what is held for one is not asked again.
+                </p>
+              ) : (
+                <ResultsTable
+                  title="Model, question"
+                  rows={[...versus.models, ...versus.baselines]}
+                  models
+                  label={(name) => describeVersusKey(name)}
+                />
+              )}
+              <p style={{ ...noteStyle, marginTop: '0.8rem' }}>
+                Each ticked model twice: answering the question about the pair alone, and the same event with the market around it,
+                over the {versus.compared.toLocaleString()} events every one of them answered both ways — so the two rows of a model
+                differ only in what it was shown. The last two rows are the same events with no model. A difference here is worth
+                trusting only when it holds in the three parts of the period below and is larger than the margin on the win rate.
+              </p>
+            </Card>
+          )}
 
           {summary.contributions.length > 0 && (
             <Card title="What each model changed">

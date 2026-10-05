@@ -1,7 +1,10 @@
+import type { BtcRegime, EventCompany } from './aiEventMarket'
 import { isActionableOpportunity, opportunitySide, type OpportunitySide } from './aiOpportunity'
 import {
   DEFAULT_OPPORTUNITY_COSTS,
   REPLAY_ASK_DELAY_SEC,
+  describeLiquidityTier,
+  liquidityTierOf,
   opportunityCallOf,
   replayAnsweredAt,
   scoreOpportunity,
@@ -154,7 +157,17 @@ export interface EventBenchmarkInput {
    * An answer the watch bought live is scored from the moment it came. Absent or null, the answer
    * is a replayed one, taken to have arrived after the ask delay and the model's own latency. */
   answeredAt?: Record<string, (number | null)[]>
+  /** What Bitcoin's last four hours were doing at each event, and whether the event's move was
+   * made with it, by event id (shared/aiEventMarket.ts): worked out by fixed rules from Bitcoin's
+   * candles, never by a model. Where it is given, results are cut by both; where it is not, they
+   * are not. */
+  labels?: Record<string, EventLabels>
   nowSec: number
+}
+
+export interface EventLabels {
+  btcRegime: BtcRegime
+  company: EventCompany
 }
 
 export interface EventTrade {
@@ -169,7 +182,10 @@ export interface EventTrade {
 }
 
 export interface EventBenchmarkSlice {
-  by: 'type' | 'side' | 'hold' | 'confidence'
+  /** `size` is how much the pair trades, by the lines its slippage is charged by; `btc` is what
+   * Bitcoin's four hours were doing at the event, and `company` whether the move was made with it.
+   * The last two only where the market around the events is known. */
+  by: 'type' | 'side' | 'hold' | 'confidence' | 'size' | 'btc' | 'company'
   key: string
   trades: number
   wins: number
@@ -370,13 +386,46 @@ function confidenceBand(confidence: number): string {
   return `under ${Math.round(CONFIDENCE_BANDS[0] * 100)}%`
 }
 
-function slicesOf(closed: EventTrade[], withConfidence: boolean): EventBenchmarkSlice[] {
+/** The cuts that need more than a trade: its pair's size, and the market around its event. */
+interface Cuts {
+  size: (trade: EventTrade) => string
+  /** Null where the market around the events is not known. */
+  btc: ((trade: EventTrade) => string) | null
+  company: ((trade: EventTrade) => string) | null
+}
+
+function cutsOf(input: EventBenchmarkInput): Cuts {
+  const eventOf = (trade: EventTrade): MarketEvent => input.events[trade.index]
+  const labels = input.labels
+  const labelOf = (trade: EventTrade): EventLabels | undefined => labels?.[eventOf(trade).id]
+  return {
+    // The day's traded value the slippage was charged by: the pair's own candles' for an event
+    // found in history, the scanner's reading for one raised live.
+    size: (trade): string => {
+      const event = eventOf(trade)
+      return describeLiquidityTier(liquidityTierOf(input.dailyVolume?.[event.id] ?? event.live?.quoteVolume24h ?? null))
+    },
+    btc:
+      labels === undefined
+        ? null
+        : (trade): string => {
+            const regime = labelOf(trade)?.btcRegime
+            return regime === undefined ? 'not known' : `Bitcoin ${regime}`
+          },
+    company: labels === undefined ? null : (trade): string => labelOf(trade)?.company ?? 'not known'
+  }
+}
+
+function slicesOf(closed: EventTrade[], withConfidence: boolean, cuts: Cuts): EventBenchmarkSlice[] {
   const groups: { by: EventBenchmarkSlice['by']; key: (trade: EventTrade) => string }[] = [
     { by: 'type', key: (trade) => trade.type },
     { by: 'side', key: (trade) => trade.side },
     { by: 'hold', key: (trade) => holdLabel(trade.holdSeconds) }
   ]
   if (withConfidence) groups.push({ by: 'confidence', key: (trade) => confidenceBand(trade.confidence) })
+  groups.push({ by: 'size', key: cuts.size })
+  if (cuts.btc !== null) groups.push({ by: 'btc', key: cuts.btc })
+  if (cuts.company !== null) groups.push({ by: 'company', key: cuts.company })
   const slices: EventBenchmarkSlice[] = []
   for (const group of groups) {
     const byKey = new Map<string, EventTrade[]>()
@@ -412,7 +461,7 @@ interface RowSource {
   withConfidence: boolean
 }
 
-function rowOf(source: RowSource, segmentEnds: number[]): EventBenchmarkRow {
+function rowOf(source: RowSource, segmentEnds: number[], cuts: Cuts): EventBenchmarkRow {
   const decisions = source.decisions ?? []
   const usable = decisions.filter((decision): decision is AiSignalDecision => isAnswer(decision) && !decision.rejected)
   const closed = source.trades.filter((trade) => trade.outcome.status === 'closed')
@@ -481,7 +530,7 @@ function rowOf(source: RowSource, segmentEnds: number[]): EventBenchmarkRow {
         netSumPct: inside.reduce((sum, trade) => sum + (trade.outcome.netPct ?? 0), 0)
       }
     }),
-    slices: slicesOf(closed, source.withConfidence),
+    slices: slicesOf(closed, source.withConfidence, cuts),
     trades: source.trades
   }
 }
@@ -555,6 +604,7 @@ export function summarizeEventBenchmark(input: EventBenchmarkInput): EventBenchm
   // Three consecutive parts of those events' own span, by time.
   const times = baselineIndices.map((index) => input.events[index].time)
   const segmentEnds: number[] = []
+  const cuts = cutsOf(input)
   if (times.length > 0) {
     const first = times[0]
     const last = times[times.length - 1]
@@ -571,7 +621,8 @@ export function summarizeEventBenchmark(input: EventBenchmarkInput): EventBenchm
       .filter((trade): trade is EventTrade => trade !== null)
     return rowOf(
       { name: model, compared: comparedIndices.length, answered: input.events.filter((_, index) => answerAt(model, index) !== null).length, decisions, trades, withConfidence: true },
-      segmentEnds
+      segmentEnds,
+      cuts
     )
   })
 
@@ -588,7 +639,8 @@ export function summarizeEventBenchmark(input: EventBenchmarkInput): EventBenchm
         trades: baselineIndices.map((index) => baselineTrade(input, index, follow)).filter((trade): trade is EventTrade => trade !== null),
         withConfidence: false
       },
-      segmentEnds
+      segmentEnds,
+      cuts
     )
   )
 
@@ -614,7 +666,7 @@ export function summarizeEventBenchmark(input: EventBenchmarkInput): EventBenchm
             const trade = source === null ? null : modelTrade(input, index, source, Math.max(...arrivals))
             if (trade !== null) trades.push(trade)
           }
-          return rowOf({ name, compared: comparedIndices.length, answered: null, decisions: null, trades, withConfidence: false }, segmentEnds)
+          return rowOf({ name, compared: comparedIndices.length, answered: null, decisions: null, trades, withConfidence: false }, segmentEnds, cuts)
         })
 
   // What each model changed about the rule. Only over compared events: with nothing compared the
@@ -645,7 +697,7 @@ export function summarizeEventBenchmark(input: EventBenchmarkInput): EventBenchm
             if (trade !== null) onItsCalls.push(trade)
           }
           const fixed = (trades: EventTrade[]): EventBenchmarkRow =>
-            rowOf({ name: row.name, compared: comparedIndices.length, answered: null, decisions: null, trades, withConfidence: false }, segmentEnds)
+            rowOf({ name: row.name, compared: comparedIndices.length, answered: null, decisions: null, trades, withConfidence: false }, segmentEnds, cuts)
           const bracket = fixed(onItsCalls)
           const rule = baselines[0]
           return {

@@ -10,7 +10,7 @@ import { AI_HORIZON_BARS, AI_MARKET_REGIMES, AI_MAX_REASON_CODES, AI_REASON_CODE
 
 // What the model is told, and the shape it must answer in. Versioned by GPT_PROMPT_VERSION and
 // AI_SCHEMA_VERSION in shared/aiSignal.ts, by AI_CONFIRM_PROMPT_VERSION in shared/aiConfirm.ts
-// for the entry-review prompt, by the four panel versions in shared/aiPanel.ts, and by the two
+// for the entry-review prompt, by the four panel versions in shared/aiPanel.ts, and by the
 // opportunity versions in shared/aiOpportunity.ts: all are part
 // of a cache key and are written on every ledger row, so ANY edit to a text or a schema below
 // must bump the matching constant. An edit without a bump serves answers to the old question from
@@ -140,7 +140,7 @@ export const AI_PANEL_SYSTEM_PROMPT = [
 //
 // IT IS NOT TOLD WHERE THE CONFIDENCE GATE SITS, for the reason the entry review is not.
 
-export const AI_OPPORTUNITY_SYSTEM_PROMPT = [
+const OPPORTUNITY_LINES = [
   'You assess a market event for a crypto account that holds nothing. Return only the requested JSON.',
   'The user message is a market snapshot built only from completed candles. "event" is what was just detected on 1-minute candles: its type and direction, a 0-100 score and the five components behind it, the returns over the last minute to four hours, usualMove15mPct (the usual size of a fifteen-minute move in this market), the last thirty 1-minute bars, and the two hours before those in 5-minute bars. The rest is seven days of context: recent bars and indicators on 15-minute, 1-hour and 4-hour intervals, and roundTripCostPct, what a trade costs in fees and slippage.',
   'Bars are [unixTime, open, high, low, close, volume], oldest first.',
@@ -156,15 +156,32 @@ export const AI_OPPORTUNITY_SYSTEM_PROMPT = [
   `reasonCodes: up to ${AI_MAX_REASON_CODES} codes from the allowed list that drove the decision, most important first.`,
   'rationale: at most 500 characters, plain text.',
   'Never provide position sizing.'
+]
+
+export const AI_OPPORTUNITY_SYSTEM_PROMPT = OPPORTUNITY_LINES.join('\n')
+
+/** The same question with the market around the event in it (opportunity-v2,
+ * shared/aiEventMarket.ts). One paragraph more, after the one that says what the user message
+ * holds, and not a word of the rest changed: what an answer under it does differently is the
+ * market, and not a rewording.
+ *
+ * IT SAYS WHAT THE BLOCK IS, AND NOT WHAT IT MEANS. Whether a pair that rose with Bitcoin goes on
+ * rising, or one that rose alone does, is what the benchmark measures; the prompt does not answer
+ * it, for the reason the first one does not say what usually follows an event. */
+export const AI_OPPORTUNITY_MARKET_SYSTEM_PROMPT = [
+  ...OPPORTUNITY_LINES.slice(0, 2),
+  '"market" sets the event against Bitcoin and ether on the same exchange, over the same stretches and up to the same minute: btc and eth are the returns of BTCUSDT and ETHUSDT over the last 15 minutes (m15), hour (h1), four hours (h4) and day (h24), in percent, and vsBtc and vsEth are this pair\'s return over each stretch less theirs, positive where it rose more or fell less. A value is null where the candles could not measure it.',
+  ...OPPORTUNITY_LINES.slice(2)
 ].join('\n')
 
 /** The system text a context is sent under: the panel's decision when it carries analysts'
- * reports, the opportunity prompt when it carries an event, the review prompt when it names a
- * strategy, the standalone one otherwise. The same tests shared/aiContext.ts's aiPromptVersion
- * makes, so the text sent and the version recorded for it are chosen by one fact. */
+ * reports, an opportunity prompt when it carries an event -- the one with the market when it
+ * carries that too -- the review prompt when it names a strategy, the standalone one otherwise.
+ * The same tests shared/aiContext.ts's aiPromptVersion makes, so the text sent and the version
+ * recorded for it are chosen by one fact. */
 function systemPromptFor(context: AiMarketContext): string {
   if (context.agents !== undefined) return AI_PANEL_SYSTEM_PROMPT
-  if (context.event !== undefined) return AI_OPPORTUNITY_SYSTEM_PROMPT
+  if (context.event !== undefined) return context.market === undefined ? AI_OPPORTUNITY_SYSTEM_PROMPT : AI_OPPORTUNITY_MARKET_SYSTEM_PROMPT
   return context.strategy === undefined ? AI_SYSTEM_PROMPT : AI_CONFIRM_SYSTEM_PROMPT
 }
 

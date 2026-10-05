@@ -4,6 +4,7 @@ import {
   AI_AGENT_SCHEMAS,
   AI_AGENT_SYSTEM_PROMPTS,
   AI_CONFIRM_SYSTEM_PROMPT,
+  AI_OPPORTUNITY_MARKET_SYSTEM_PROMPT,
   AI_OPPORTUNITY_SCHEMA,
   AI_OPPORTUNITY_SYSTEM_PROMPT,
   AI_PANEL_SYSTEM_PROMPT,
@@ -14,7 +15,7 @@ import {
 } from '../electron/services/aiPrompt'
 import { AI_CONFIRM_PROMPT_VERSION } from '../shared/aiConfirm'
 import { buildAiContext, withAgentReports } from '../shared/aiContext'
-import { AI_OPPORTUNITY_PROMPT_VERSION, AI_OPPORTUNITY_SCHEMA_VERSION } from '../shared/aiOpportunity'
+import { AI_OPPORTUNITY_MARKET_PROMPT_VERSION, AI_OPPORTUNITY_PROMPT_VERSION, AI_OPPORTUNITY_SCHEMA_VERSION } from '../shared/aiOpportunity'
 import { AI_AGENT_PROMPT_VERSIONS, AI_AGENT_ROLES, AI_AGENT_SCHEMA_VERSION, AI_PANEL_PROMPT_VERSION } from '../shared/aiPanel'
 import { AI_SCHEMA_VERSION, GPT_LOOKBACK_BARS, GPT_PROMPT_VERSION } from '../shared/aiSignal'
 import type { Candle } from '../shared/ipc'
@@ -91,6 +92,13 @@ const PINNED: { what: string; version: string; text: string; expectVersion: stri
     expectHash: '63fd8b9f41cd4397a3ea8121f352ba90a3ceedb94bc50ea25714e8686e8d46c5'
   },
   {
+    what: 'the opportunity prompt with the market around the event',
+    version: AI_OPPORTUNITY_MARKET_PROMPT_VERSION,
+    text: AI_OPPORTUNITY_MARKET_SYSTEM_PROMPT,
+    expectVersion: 'opportunity-v2',
+    expectHash: 'cffe135b6ef7a3245b3915a93b3fdf3ee265931bb9770049c8c6b3bf6fbef223'
+  },
+  {
     what: 'the opportunity schema',
     version: AI_OPPORTUNITY_SCHEMA_VERSION,
     text: JSON.stringify(AI_OPPORTUNITY_SCHEMA),
@@ -117,6 +125,7 @@ describe('a prompt and the version it is cached under', () => {
       GPT_PROMPT_VERSION,
       AI_CONFIRM_PROMPT_VERSION,
       AI_OPPORTUNITY_PROMPT_VERSION,
+      AI_OPPORTUNITY_MARKET_PROMPT_VERSION,
       AI_PANEL_PROMPT_VERSION,
       ...AI_AGENT_ROLES.map((role) => AI_AGENT_PROMPT_VERSIONS[role])
     ]

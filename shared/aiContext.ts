@@ -1,7 +1,8 @@
 import { BollingerBands, RSI } from 'technicalindicators'
 import { aggregateCandles, bucketTimeFor } from './aggregateCandles'
 import { AI_CONFIRM_PROMPT_VERSION, type AiStrategyBlock } from './aiConfirm'
-import { AI_OPPORTUNITY_PROMPT_VERSION, AI_OPPORTUNITY_SCHEMA_VERSION } from './aiOpportunity'
+import { buildMarketBlock, type AiMarketBlock, type EventReference } from './aiEventMarket'
+import { AI_OPPORTUNITY_MARKET_PROMPT_VERSION, AI_OPPORTUNITY_PROMPT_VERSION, AI_OPPORTUNITY_SCHEMA_VERSION } from './aiOpportunity'
 import { AI_PANEL_PROMPT_VERSION, canonicalAgentReports, type AiAgentReports } from './aiPanel'
 import { AI_SCHEMA_VERSION, GPT_LOOKBACK_BARS, GPT_PROMPT_VERSION, type AiPositionState } from './aiSignal'
 import { computeAtr } from './atr'
@@ -139,15 +140,22 @@ export interface AiMarketContext {
    * raised, on 1-minute candles, over the seven-day snapshot above. ABSENT on every other
    * question, for the reason `strategy` is. */
   event?: AiEventBlock
+  /** Present only on an event's question asked WITH THE MARKET AROUND IT (shared/aiEventMarket.ts):
+   * what Bitcoin and ether did over the same stretches, and this pair's return less theirs.
+   * Rebuilt from their candles by withMarketBlock; nobody hands one in. ABSENT on every other
+   * question -- the pair-alone one included, so that its bytes, and the answers already bought for
+   * it, do not move -- and always after `event`. */
+  market?: AiMarketBlock
 }
 
 /** Which prompt a context is put to a model under. Derived from the context rather than passed
  * beside it, so the question asked, the version it is cached under and the version written to the
  * ledger cannot disagree: a context that carries analysts' reports is a panel's decision, one that
- * names a strategy is an entry review, and nothing else is either. */
-export function aiPromptVersion(context: Pick<AiMarketContext, 'strategy' | 'agents' | 'event'>): string {
+ * names a strategy is an entry review, one with an event is an opportunity -- with the market
+ * around it or without -- and nothing else is any of those. */
+export function aiPromptVersion(context: Pick<AiMarketContext, 'strategy' | 'agents' | 'event' | 'market'>): string {
   if (context.agents !== undefined) return AI_PANEL_PROMPT_VERSION
-  if (context.event !== undefined) return AI_OPPORTUNITY_PROMPT_VERSION
+  if (context.event !== undefined) return context.market === undefined ? AI_OPPORTUNITY_PROMPT_VERSION : AI_OPPORTUNITY_MARKET_PROMPT_VERSION
   return context.strategy === undefined ? GPT_PROMPT_VERSION : AI_CONFIRM_PROMPT_VERSION
 }
 
@@ -353,8 +361,16 @@ function eventBlock(reading: EventReading & { type: MarketEventType; direction: 
  *
  * NULL UNLESS THE DETECTOR CALLS IT AN EVENT WORTH RAISING: at candidate or above, with a
  * direction. The event is worked out here from the candles, never passed in, so a model cannot be
- * asked -- and billed -- about a minute on someone's say-so that it was interesting. */
-export function buildEventContext(candles15m: Candle[], candles1m: Candle[], meta: { exchange: Exchange; symbol: string }): AiMarketContext | null {
+ * asked -- and billed -- about a minute on someone's say-so that it was interesting.
+ *
+ * With `reference`, the question with the market around the event (withMarketBlock), or null when
+ * those candles do not reach the event's minute. */
+export function buildEventContext(
+  candles15m: Candle[],
+  candles1m: Candle[],
+  meta: { exchange: Exchange; symbol: string },
+  reference?: EventReference | null
+): AiMarketContext | null {
   if (candles1m.length < EVENT_LOOKBACK_BARS) return null
   const bars1m = candles1m.slice(-EVENT_LOOKBACK_BARS)
   const reading = readEventAt(bars1m, bars1m.length - 1)
@@ -372,7 +388,25 @@ export function buildEventContext(candles15m: Candle[], candles1m: Candle[], met
   const base = buildAiContext(window, window.length, { exchange: meta.exchange, symbol: meta.symbol, interval: '15m', position: 'flat' })
   if (!base) return null
   // Last, and only here: see AiMarketContext.event.
-  return { ...base, event: eventBlock({ ...reading, type: reading.type, direction: reading.direction }, bars1m) }
+  const question: AiMarketContext = { ...base, event: eventBlock({ ...reading, type: reading.type, direction: reading.direction }, bars1m) }
+  return reference === undefined || reference === null ? question : withMarketBlock(question, reference)
+}
+
+/** An event's question with the market around it, or null when Bitcoin's or ether's candles do
+ * not run to the event's minute: it is not asked with half a market (buildMarketBlock says why).
+ *
+ * THE PAIR'S SIDE OF EACH DIFFERENCE IS THE QUESTION'S OWN FIGURES: the event's returns over
+ * fifteen minutes, an hour and four hours, and the snapshot's day -- measured as the references'
+ * are, from the same closes, up to the same minute. `market` goes on last, after `event`. */
+export function withMarketBlock(context: AiMarketContext, reference: EventReference): AiMarketContext | null {
+  const event = context.event
+  if (event === undefined || context.market !== undefined) return null
+  const market = buildMarketBlock(
+    { m15: event.returnsPct.m15, h1: event.returnsPct.h1, h4: event.returnsPct.h4, h24: context.changePct.h24 },
+    reference,
+    event.time
+  )
+  return market === null ? null : { ...context, market }
 }
 
 /** The 1-minute bar an event's question was read at, from the question itself. */

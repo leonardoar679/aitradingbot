@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { describeAiOpportunityCost } from '../shared/aiCost'
+import { MARKET_BARS_15M, MARKET_BARS_1M } from '../shared/aiEventMarket'
 import type { AiCallRecord } from '../shared/aiLedger'
 import { AI_OPPORTUNITY_PROMPT_VERSION, AI_OPPORTUNITY_SCHEMA_VERSION } from '../shared/aiOpportunity'
 import type { AiSignalDecision, AiSignalDetail } from '../shared/aiSignal'
@@ -112,6 +113,36 @@ describe('fetchEventQuestion', () => {
     expect(question.candles1m[question.candles1m.length - 1].time).toBe(T - 60)
     expect(question.candles15m).toHaveLength(672)
     expect(question.candles15m[question.candles15m.length - 1].time + 900).toBeLessThanOrEqual(T)
+    // The question about the pair alone carries no market.
+    expect('reference' in question).toBe(false)
+  })
+
+  it("with the market, also reads Bitcoin's and ether's four hours of minutes and day of quarter hours, cut at the same minute", async () => {
+    const asked: { symbol: string; interval: string; startSec: number; endSec: number }[] = []
+    const bar = (time: number): Candle => ({ time, open: 1, high: 1, low: 1, close: 1, volume: 1 })
+    const fetch: CandleFetch = async (_exchange, symbol, interval, startSec, endSec) => {
+      asked.push({ symbol, interval, startSec, endSec })
+      const step = interval === '1m' ? 60 : 900
+      const out: Candle[] = []
+      for (let time = startSec; time <= endSec; time += step) out.push(bar(time))
+      return out
+    }
+    const question = await fetchEventQuestion(event(), fetch, { market: true })
+    const boundary = Date.parse('2026-09-10T12:00:00Z') / 1000
+    expect(asked.filter((entry) => entry.symbol !== 'SOLUSDT').sort((a, b) => (a.symbol + a.interval).localeCompare(b.symbol + b.interval))).toEqual([
+      { symbol: 'BTCUSDT', interval: '15m', startSec: boundary - MARKET_BARS_15M * 900, endSec: boundary },
+      { symbol: 'BTCUSDT', interval: '1m', startSec: T - MARKET_BARS_1M * 60, endSec: T },
+      { symbol: 'ETHUSDT', interval: '15m', startSec: boundary - MARKET_BARS_15M * 900, endSec: boundary },
+      { symbol: 'ETHUSDT', interval: '1m', startSec: T - MARKET_BARS_1M * 60, endSec: T }
+    ])
+    for (const market of [question.reference?.btc, question.reference?.eth]) {
+      expect(market?.candles1m).toHaveLength(MARKET_BARS_1M)
+      expect(market?.candles1m[MARKET_BARS_1M - 1].time).toBe(T - 60)
+      expect(market?.candles15m).toHaveLength(MARKET_BARS_15M)
+      expect((market?.candles15m[MARKET_BARS_15M - 1].time ?? Infinity) + 900).toBeLessThanOrEqual(T)
+    }
+    // And the pair's own candles are what they are without the market.
+    expect(question.candles1m).toEqual((await fetchEventQuestion(event(), fetch)).candles1m)
   })
 })
 
