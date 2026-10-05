@@ -417,6 +417,26 @@ one delisting of DOGE.
   Discovery's events listed it.
 - **Writes:** none went to an exchange; one model call was made, to the fake.
 
+**And a Monitoring Tag**, checked the same day on a fourth scratch profile, the same way. Binance's
+news list held one tag, of DOGE and XRP; the paper account held DOGE; the tag's paper short was on.
+- **Read:** two seconds after its release, from the news list, as a Monitoring Tag.
+- **The holder's notice:** "Binance's Monitoring Tag now includes DOGE, which you hold … Nothing has
+  been sold."
+- **Raised:** a `monitoring_tag` event on each of DOGEUSDT and XRPUSDT, quiet by their candles,
+  pointing down.
+- **Asked:** under `opportunity-tag-v1`, with the tag's block last and kind `monitoring_tag`. The
+  canned SELL opened the watch's paper trade on DOGE.
+- **The rule's shorts:** one on each coin, made 79 and 81 seconds into the minute after the
+  announcement's, so each entered at the second; stops of 0.45% and 0.36% and targets of 0.89% and
+  0.73%, from each coin's own usual move; out within 59 minutes. Each card says where it came from.
+- **Shown:** Discovery listed the tag and both events; Settings › Market showed the tag's own
+  switches.
+- **Writes:** none went to an exchange.
+
+In that run the watch asked about DOGE and not XRP. Run again, it asked about both. An event whose
+candles cannot be read is left for the watch's next pass, and with the scanner off -- as it was
+there -- no pass follows to take it up again.
+
 ### AI signals — paper only
 
 A model can be asked for a buy / sell / hold decision on a market. It is asked through
