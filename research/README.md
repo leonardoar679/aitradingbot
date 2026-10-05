@@ -61,6 +61,11 @@ CANDLE_DIR=<dir with the json> node --max-old-space-size=4096 research/.final.mj
 | `chop.ts` | Four entry filters against the chop band, selected on 2017-2021 and scored once on 2022-2026 |
 | `stcgate.ts` | Whether the shipped file reproduces what `chop.ts` measured for it. It did not, and the filter was reverted |
 | `ivfair.ts` | Which interval, on a window pinned by tradeable time rather than by slice date |
+| `events.ts` | What follows the scanner's events, on 1-minute candles. The rule and the result are in `EVENTS.md` |
+| `setups.ts` | Whether a coil or an early move comes before an event (`SETUPS.md`) |
+| `fetch-positioning.mjs` | Downloads Binance's futures positioning archives (five-minute metrics, premium index, funding), each zip checked against its published SHA-256 |
+| `positioning-live.mjs` | Sets that archive against the live endpoints value by value, and measures when each series is published |
+| `positioning.ts` | How the futures market is positioned at events, and in crowded markets (`POSITIONING.md`) |
 
 ## What the study did not establish
 

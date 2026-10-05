@@ -231,6 +231,28 @@ before the held-out pairs were scored.
   rows of eight significantly. Being early to a move that does not continue is losing sooner.
 - So **nothing was built**: no setup is recorded, listed or put to a model.
 
+**How the futures market is positioned**, measured the same way (`research/POSITIONING.md`), to
+see whether anything beyond a pair's own candles says which events to take.
+- **Five readings** from Binance's free archive: positions added over the hour, ordinary accounts
+  and top traders leaning against their own day, perp takers buying, and the perpetual's premium
+  over the index. Each is read only once it would have been published live.
+- **The archive was checked** value by value against the live endpoints over a month.
+- **The rule was committed** before the held-out pairs were scored.
+
+The result:
+- **Positioning does not say which events to take.** Split at fixed points, no reading separates
+  better events from worse on any set, and no half of any split nets positive. The best loses
+  0.09% a trade.
+- **A crowded market is not a trade either.** In a crowded market, accounts lean hard one way and
+  the premium is stretched the same way. Taking either side within the hour loses 0.16% to 0.33% a
+  trade.
+- **One thing looked larger than costs on the discovery pairs, and it did not survive.** Over the
+  next day the price moved against the crowd by 0.3% to 0.4%. On the held-out pairs that held only
+  for crowds long on the large pairs. It did not hold for crowds short there. On the smaller pairs,
+  where the perpetual trades at a discount most of the time, a crowd short marked a market that
+  kept falling.
+- So **nothing was built**: positioning is not read, shown or put to a model.
+
 ### AI signals — paper only
 
 A model can be asked for a buy / sell / hold decision on a market. It is asked through

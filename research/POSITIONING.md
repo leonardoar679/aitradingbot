@@ -241,3 +241,57 @@ looked at to write these.
 - **`small`**: STRKUSDT, FETUSDT, SUPERUSDT, AXSUSDT, DOTUSDT, ICPUSDT, ARKUSDT, from 1 September
   2025 to 1 October 2026. These are `research/EVENTS.md`'s eight smaller pairs without RAYUSDT,
   which has no perpetual.
+
+## Result
+
+Each held-out set was scored once, on 5 October 2026.
+- **Coverage:** all five readings were there for 3,492 of 3,499 events on `confirm`, and 2,864 of
+  2,881 on `small`.
+- **Left out:** pumps and dumps that reached candidate (3 and 21), since on discovery none did.
+
+| | Discovery | `confirm` (4 large pairs) | `small` (7 smaller pairs) |
+|---|---|---|---|
+| Breakouts and breakdowns scored | 2,290 and 2,319 | 1,643 and 1,856 | 1,482 and 1,398 |
+| Best half of any split: net a trade | −0.115% | −0.088% | −0.177% |
+| Largest difference between halves, t | −2.5 | −2.1 | −1.5 |
+| Crowds seen, long and short | 3,113 and 1,855 | 1,825 and 1,329 | 20 and 2,859 |
+| Best side of any crowd: net a trade | −0.158% | −0.218% | −0.268% |
+| After a crowd long: the move against it over 24h, less drift | +0.307% (t +2.6) | **+0.466% (t +3.7)** | 20 seen, too few |
+| After a crowd short: the move against it over 24h, less drift | +0.413% (t +3.4) | −0.014% (t −0.1) | **−0.712% (t −4.3)** |
+| Buying a breakdown, against an arbitrary buy, unsplit | +0.092% (t +4.9) | +0.108% (t +4.8) | +0.100% (t +3.2) |
+
+**1. Positioning makes an event a trade: absent, as on discovery.**
+- No half of any split nets positive on either held-out set, so there is nothing to report even as
+  seen once.
+- The splits move a trade's result by a few hundredths of a percent either way, and no |t| goes
+  above 2.1.
+- The steadiest split is the one discovery showed. Buying a breakdown does a little better where
+  accounts have turned towards shorts: +0.065%, +0.074% and +0.050% on the three sets. It never
+  reaches t = 2 and never comes close to paying for itself.
+
+**2. A crowd is a trade: absent.** Every side of every crowd loses 0.22% a trade or more on both
+held-out sets.
+
+**3. A crowd is wrong over the next day: not confirmed.** It needed four rows to hold, and one did:
+- **Crowd long, large pairs: holds.** The price fell 0.47% more than usual over the day (t = 3.7),
+  as on discovery.
+- **Crowd short, large pairs: nothing** (−0.014%).
+- **Smaller pairs: the thresholds fire almost only one way.** Their perpetuals trade at a discount
+  most of the time, so a premium at or below −0.057% is an ordinary day there. 2,859 crowds short
+  were seen against 20 crowds long.
+- **Crowd short, smaller pairs: reversed.** Those 2,859 marked markets that kept falling, 0.71%
+  further than usual over the next day (t = −4.3), so the crowd was right.
+- **Crowd long, smaller pairs: too few to score** (20).
+
+So a premium threshold set on one kind of pair does not mean the same thing on another. The one
+effect that held twice, a crowd long being wrong over the next day on the large pairs, rests on t
+values that the overlapping 24-hour windows make optimistic.
+
+**4. Nothing is built.** No reading made an event or a crowd a trade, so positioning is not read
+live, not shown on the event card and not put to a model. The archive, the fetcher and the live
+comparison stay, so the question can be asked again in another form without starting over. For
+example, it could set thresholds per pair rather than pooled, or use the order-book depth Binance
+also archives (`futures/um/daily/bookDepth`).
+
+Breakdowns came back on all three sets again, by a third of a round trip's cost each time, on the
+detector as it is now. That is `research/EVENTS.md`'s finding, and nothing here changes it.
