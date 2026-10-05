@@ -210,7 +210,7 @@ export function JournalCard({ paper }: { paper: ReadonlySet<string> }): React.JS
           <p style={{ ...noteStyle, color: 'var(--text-secondary)', marginTop: '0.7rem' }}>
             {totals.acted.toLocaleString()} at 65% confidence or more.{' '}
             {scored
-              ? `${totals.closed.toLocaleString()} closed, ${totals.wins.toLocaleString()} of them ahead, ${signedPct(totals.netSumPct).text} added up after fees and slippage.`
+              ? `${totals.closed.toLocaleString()} closed, ${totals.wins.toLocaleString()} of them ahead, ${signedPct(totals.netSumPct).text} added up after fees and slippage, or ${totals.rSum > 0 ? '+' : ''}${totals.rSum.toFixed(2)} R against what each call's own stop would have lost.`
               : 'What they did is not worked out until Score them is pressed.'}{' '}
             These answers cost {formatUsd(totals.costUsd)}.
           </p>
@@ -255,7 +255,10 @@ export function JournalCard({ paper }: { paper: ReadonlySet<string> }): React.JS
                         {describeStatus(row)}
                         {row.heldMinutes !== null && <span style={{ color: 'var(--text-muted)' }}> · {row.heldMinutes} min</span>}
                       </td>
-                      <td style={{ ...cellStyle, color: net.color, fontWeight: 600 }}>{row.netPct === null ? '—' : net.text}</td>
+                      <td style={{ ...cellStyle, color: net.color, fontWeight: 600 }}>
+                        {row.netPct === null ? '—' : net.text}
+                        {row.r !== null && <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> {`${row.r > 0 ? '+' : ''}${row.r.toFixed(2)} R`}</span>}
+                      </td>
                       <td style={{ ...cellStyle, color: 'var(--text-secondary)' }}>{row.paperTrade ? 'opened' : '—'}</td>
                       <td style={cellStyle}>
                         <button

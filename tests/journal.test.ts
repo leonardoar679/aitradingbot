@@ -232,6 +232,9 @@ describe('the journal', () => {
       latencyMs: 14_000
     })
     expect(line?.netPct).toBeGreaterThan(2.5)
+    // In R as well: the target's net over what the call's own stop would have lost.
+    expect(line?.r).toBeGreaterThan(1)
+    expect(rows.find((row) => row.status === 'not acted on')?.r).toBeNull()
     // The short was asked for by a click, minutes later: it arrived after the rise, entered on a
     // flat market, and its hour ran out. Scored from when it arrived, not from the event.
     expect(rows.find((row) => row.symbol === 'SOLUSDT' && row.model === B)).toMatchObject({
@@ -272,6 +275,8 @@ describe('the journal', () => {
     const buy = rows.find((row) => row.symbol === 'SOLUSDT' && row.model === A)?.netPct ?? 0
     const short = rows.find((row) => row.symbol === 'SOLUSDT' && row.model === B)?.netPct ?? 0
     expect(totals.netSumPct).toBeCloseTo(buy + short, 10)
+    const rOf = (model: string): number => rows.find((row) => row.symbol === 'SOLUSDT' && row.model === model)?.r ?? Number.NaN
+    expect(totals.rSum).toBeCloseTo(rOf(A) + rOf(B), 10)
     expect(totals.costUsd).toBeCloseTo(0.015, 10)
     expect('winRatePct' in totals).toBe(false)
   })
@@ -282,7 +287,7 @@ describe('the journal', () => {
     expect(lines).toHaveLength(6)
     expect(lines[0]).toBe(
       'event_time_utc,pair,event,band,event_score,model,asked_by,answered_utc,call,confidence,entry_min,entry_max,stop,target,entry_valid_until_utc,hold_minutes,status,' +
-        'entered_minute_utc,entry_price,exit,exited_minute_utc,net_pct,best_pct,worst_pct,held_minutes,answer_cost_usd,answer_seconds,paper_trade_by_watch'
+        'entered_minute_utc,entry_price,exit,exited_minute_utc,net_pct,r,best_pct,worst_pct,held_minutes,answer_cost_usd,answer_seconds,paper_trade_by_watch'
     )
     const sol = lines.find((line) => line.includes('SOLUSDT') && line.includes(A) && line.includes(',BUY,'))
     expect(sol).toContain('2026-10-05T09:07:00Z,SOLUSDT,breakout,urgent,91,openai/gpt-5-mini,watch,2026-10-05T09:07:25Z,BUY,0.8,99.8,100.2,98.5,103,2026-10-05T09:22:00Z,60,closed,2026-10-05T09:08:00Z')

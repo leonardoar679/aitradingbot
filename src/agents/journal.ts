@@ -51,6 +51,8 @@ export interface JournalRow {
   exit: OpportunityExit | null
   exitTime: number | null
   netPct: number | null
+  /** The same in R: over what its own stop would have lost (shared/aiOpportunityOutcome.ts). */
+  r: number | null
   bestPct: number | null
   worstPct: number | null
   heldMinutes: number | null
@@ -105,6 +107,7 @@ export function journalRows(
         exit: outcome?.exit ?? null,
         exitTime: outcome?.exitTime ?? null,
         netPct: outcome?.netPct ?? null,
+        r: outcome?.r ?? null,
         bestPct: outcome?.bestPct ?? null,
         worstPct: outcome?.worstPct ?? null,
         heldMinutes: outcome?.heldMinutes ?? null,
@@ -157,6 +160,7 @@ export interface JournalTotals {
   closed: number
   wins: number
   netSumPct: number
+  rSum: number
   costUsd: number
 }
 
@@ -169,6 +173,7 @@ export function journalTotals(rows: JournalRow[]): JournalTotals {
     closed: closed.length,
     wins: closed.filter((row) => (row.netPct ?? 0) > 0).length,
     netSumPct: closed.reduce((sum, row) => sum + (row.netPct ?? 0), 0),
+    rSum: closed.reduce((sum, row) => sum + (row.r ?? 0), 0),
     costUsd: rows.reduce((sum, row) => sum + (row.costUsd ?? 0), 0)
   }
 }
@@ -206,6 +211,7 @@ const CSV_COLUMNS: { head: string; cell: (row: JournalRow) => string | number }[
   { head: 'exit', cell: (row) => row.exit ?? '' },
   { head: 'exited_minute_utc', cell: (row) => iso(row.exitTime) },
   { head: 'net_pct', cell: (row) => num(row.netPct, 6) },
+  { head: 'r', cell: (row) => num(row.r, 6) },
   { head: 'best_pct', cell: (row) => num(row.bestPct, 6) },
   { head: 'worst_pct', cell: (row) => num(row.worstPct, 6) },
   { head: 'held_minutes', cell: (row) => (row.heldMinutes === null ? '' : row.heldMinutes) },
@@ -215,7 +221,8 @@ const CSV_COLUMNS: { head: string; cell: (row: JournalRow) => string | number }[
 ]
 
 /** The lines as a spreadsheet: one row an answer, a header first. Times are UTC, percentages are
- * net of fees and slippage, and an empty cell is a thing that did not happen or is not known. */
+ * net of fees and slippage, R is the net over what the call's own stop would have lost, and an empty
+ * cell is a thing that did not happen or is not known. */
 export function journalCsv(rows: JournalRow[]): string {
   const lines = [CSV_COLUMNS.map((column) => csvField(column.head)).join(',')]
   for (const row of rows) lines.push(CSV_COLUMNS.map((column) => csvField(column.cell(row))).join(','))

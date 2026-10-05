@@ -43,7 +43,7 @@ other.
 | | **Markets** | One pair on any supported exchange: candlestick chart with indicators, symbol search, live ticker. |
 | | **AI Decisions** | **Analyze** asks a model about one market; **Signals** lists every call any model has made and how it turned out. A model is handed a market snapshot and returns one JSON decision, and is given no tools at all. |
 | | **Positions** | Live paper positions for active bots; a **Live Positions** table of real Binance holdings from live-mode Order Executor fills, closable (fully or partially) for real; a **Live Trade History** table of realized P&L from closed live positions; an **Inventory** table of positions handed over from stopped paper executors (see [Position Handover](#position-handover--inventory)). |
-| | **Performance** | Total value, active-bot count, bot P&L and system cards; the portfolio's value over time (value/composition, 1D/1W/1M/3M) and its largest holdings; what the watch's recommendations earned over the last 10/50/100 trades and 7/30 days; the app's own paper trades, the watch's and the news rules', as a running total in R; the journal of every recommendation with its outcome, exportable as CSV, where any line opens [its whole story](#one-trades-whole-story) on one timeline. |
+| | **Performance** | Total value, active-bot count, bot P&L and system cards; the portfolio's value over time (value/composition, 1D/1W/1M/3M) and its largest holdings; what the watch's recommendations earned, in percent and in R, over the last 10/50/100 trades and 7/30 days; the app's own paper trades, the watch's and the news rules', as a running total in R; the journal of every recommendation with its outcome, exportable as CSV, where any line opens [its whole story](#one-trades-whole-story) on one timeline. |
 | Trading | **Paper Trading** | The paper account paper strategies spend and hand back (fund it, balances, movements), and a manual paper order ticket — market/limit, live last price, session-only order history. Nothing here reaches an exchange. |
 | | **Live Trading** | Real money: the session's gates as they stand (armed, kill switch, the day's notional and loss, the managed allocation, exits being watched), and what you hold on each connected exchange, with Binance futures positions closable for real. |
 | | **Strategies** | **Active Runs**: a bot is a single continuous dry-run of a [chosen strategy](#strategies) against one exchange/symbol, optionally with a model asked to [confirm each entry](#ai-signals--paper-only); disabling one records a run, removing one archives it. **Execution**: the eight executor types, each running independently against live candles, the starter presets, and the New Executor form a call's filled-in form opens on — see [Executors](#executors) below. |
@@ -790,7 +790,8 @@ it is paper.
   the trade's timeline and the daily digest all say it, and Performance draws the running total,
   one line for the watch and one for the news rules (`shared/paperRCurve.ts`), stepping at each
   close. A news rule's short is told the same way on
-  its card; a delisting's has no stop and gives no R.
+  its card; a delisting's has no stop and gives no R. The leaderboard and the journal below say
+  the same of every recommendation they score, against the call's own stop.
 - **With a paper account, the result is settled into it** by the settlement a press of Stop
   runs, and a trade the account cannot fund is not opened. **With none, a result is added to no
   balance** and nothing limits what the positions add up to; the confirmation and the card both
@@ -817,18 +818,21 @@ and its live ones sit on one page, and the difference between them is what those
 were worth. An answer bought later by pressing Ask is left out: it arrived when a person got
 round to it, which says nothing about the model. Scoring is free and waits for a click, since it
 reads a request of public candles an event. A table headed **Lately** sits under each model's
-row: its last 10, 50 and 100 closed trades and those of the last 7 and 30 days, added up, beside
-the same events followed with no model. They are sums and counts, never a rate: ten trades do
-not make one.
+row: its last 10, 50 and 100 closed trades and those of the last 7 and 30 days, added up in
+percent and in R, beside the same events followed with no model. They are sums and counts, never
+a rate: ten trades do not make one.
 
 **The journal** is the card at the foot of Performance: one line for every answer a model has given
 about an event the scanner raised, whoever asked — the watch, a click on Ask, or a benchmark that
 happened to cover a live event — with the call, the confidence, the levels, how it ended, what it
-returned and whether the watch paper traded it. It filters by model, pair, call and day, and
-**Save as a spreadsheet** writes the lines on screen to a CSV through the save dialog the
-Backtest page uses; its times are UTC, and an entry or an exit is given as the minute it
-happened in, named as its candle is, by when it opened. Loading it reads two files, scoring
-reads public candles, and nothing is stored (`src/agents/journal.ts`).
+returned and whether the watch paper traded it. What it returned is given in R as well, beside the
+percentage and in the totals over the lines: the net over what the call's own stop would have
+lost after the same fees and slippage, so a clean stop-out is −1 R wherever the model put its
+stop, and models whose stops sit near and far can be compared. It filters by model, pair, call
+and day, and **Save as a spreadsheet** writes the lines on screen to a CSV through the save
+dialog the Backtest page uses, R in its `r` column; its times are UTC, and an entry or an exit is
+given as the minute it happened in, named as its candle is, by when it opened. Loading it reads
+two files, scoring reads public candles, and nothing is stored (`src/agents/journal.ts`).
 
 #### One trade's whole story
 
@@ -1041,7 +1045,9 @@ each recommendation by following it.
   model enters a minute or two later here exactly as it would live.
 - **What it reports**, per model: buys, sells and no-trades; how many were acted on, how many
   expired unfilled; the win rate with a 95% margin; every closed trade's net return added up, and
-  the mean; gains over losses; the deepest fall of the running total; the average hold; median
+  the mean; the same added up in R, each trade's net over what its call's own stop would have
+  lost (since 5 October 2026), which is what compares a model that sets near stops with one that
+  sets far ones; gains over losses; the deepest fall of the running total; the average hold; median
   wait; what the answers cost; the result at $1,000 a trade before and after that cost, and per
   dollar of it; the best and worst price inside a trade; and the period cut into three consecutive
   parts, because a result that holds in one part only is a stretch of market and not a model. A

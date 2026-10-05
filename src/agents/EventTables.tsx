@@ -19,6 +19,12 @@ export function pct(value: number | null): React.JSX.Element {
   return <span style={{ color }}>{text}</span>
 }
 
+/** An amount in R, signed and coloured: what trades made over what their own stops would have
+ * lost (shared/aiOpportunityOutcome.ts). */
+export function inR(value: number): React.JSX.Element {
+  return <span style={{ color: value > 0 ? 'var(--up)' : value < 0 ? 'var(--down)' : undefined }}>{`${value > 0 ? '+' : ''}${value.toFixed(2)} R`}</span>
+}
+
 function usd(value: number | null): React.JSX.Element {
   if (value === null) return <span style={{ color: 'var(--text-muted)' }}>—</span>
   return <span style={{ color: value >= 0 ? 'var(--up)' : 'var(--down)' }}>{`${value >= 0 ? '+' : '−'}${formatUsd(Math.abs(value))}`}</span>
@@ -50,6 +56,7 @@ export function ResultsTable({
             <th style={headCellStyle}>Expired</th>
             <th style={headCellStyle}>Won</th>
             <th style={headCellStyle}>Net, added up</th>
+            <th style={headCellStyle}>In R, added up</th>
             <th style={headCellStyle}>A trade</th>
             <th style={headCellStyle}>Gains ÷ losses</th>
             <th style={headCellStyle}>Deepest fall</th>
@@ -77,6 +84,7 @@ export function ResultsTable({
               <td style={cellStyle}>{row.expired}</td>
               <td style={cellStyle}>{rate(row)}</td>
               <td style={cellStyle}>{row.closed === 0 ? '—' : pct(row.netSumPct)}</td>
+              <td style={cellStyle}>{row.closed === 0 ? '—' : inR(row.rSum)}</td>
               <td style={cellStyle}>{pct(row.meanNetPct)}</td>
               <td style={cellStyle}>{row.profitFactor === null ? '—' : row.profitFactor.toFixed(2)}</td>
               <td style={cellStyle}>{row.closed === 0 ? '—' : `${row.maxDrawdownPct.toFixed(2)}%`}</td>
@@ -238,7 +246,7 @@ export function RollingTable({ rows, nowSec }: { rows: EventBenchmarkRow[]; nowS
       muted('—')
     ) : (
       <>
-        {pct(window.netSumPct)} {muted(`(${window.wins} of ${window.trades} won)`)}
+        {pct(window.netSumPct)}, {inR(window.rSum)} {muted(`(${window.wins} of ${window.trades} won)`)}
       </>
     )
   return (

@@ -193,6 +193,10 @@ describe('summarizeEventBenchmark: a model row', () => {
   it('follows every recommendation through its own entry, levels and clocks', () => {
     expect(row).toMatchObject({ actionable: 40, closed: 40, expired: 0, unsettled: 0, wins: 30 })
     expect(row.netSumPct).toBeCloseTo(30 * net(RISE) + 10 * net(FALL), 8)
+    // In R as well: each trade's own, added up.
+    expect(row.rSum).toBeCloseTo(row.trades.reduce((sum, trade) => sum + (trade.outcome.r ?? 0), 0), 8)
+    expect(row.trades.every((trade) => trade.outcome.r !== null)).toBe(true)
+    expect(row.rSum).not.toBe(0)
     expect(row.meanNetPct).toBeCloseTo((30 * net(RISE) + 10 * net(FALL)) / 40, 8)
     expect(net(RISE)).toBeGreaterThan(1.5)
     expect(net(FALL)).toBeLessThan(-1.5)
@@ -560,7 +564,8 @@ describe('rollingResults', () => {
     side: 'long',
     confidence: 0.8,
     holdSeconds: 3600,
-    outcome: { status: 'closed', entryTime: 1, entryPrice: 100, exit: 'time', exitTime: 2, exitPrice: 100, netPct, bestPct: 0, worstPct: 0, heldMinutes: 60 }
+    // Each as if its stop had been 2% away: its R is half its net.
+    outcome: { status: 'closed', entryTime: 1, entryPrice: 100, exit: 'time', exitTime: 2, exitPrice: 100, netPct, r: netPct / 2, bestPct: 0, worstPct: 0, heldMinutes: 60 }
   })
   const pending = (index: number, status: 'waiting' | 'expired' | 'open'): EventTrade => ({
     ...closed(index, 0.1, 99),
@@ -591,8 +596,8 @@ describe('rollingResults', () => {
     const trades = [closed(0, 1, 2), closed(1, 6.9, -1), closed(2, 7.1, 5), closed(3, 29, 0.5), closed(4, 31, 100)]
     const { lastDays } = rollingResults(trades, NOW_SEC)
     expect(lastDays.map((window) => window.days)).toEqual([7, 30])
-    expect(lastDays[0]).toEqual({ days: 7, trades: 2, wins: 1, netSumPct: 1 })
-    expect(lastDays[1]).toEqual({ days: 30, trades: 4, wins: 3, netSumPct: 6.5 })
+    expect(lastDays[0]).toEqual({ days: 7, trades: 2, wins: 1, netSumPct: 1, rSum: 0.5 })
+    expect(lastDays[1]).toEqual({ days: 30, trades: 4, wins: 3, netSumPct: 6.5, rSum: 3.25 })
   })
 
   it('counts only trades that have closed, and a trade that broke even as not won', () => {

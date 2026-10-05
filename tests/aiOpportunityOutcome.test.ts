@@ -310,3 +310,38 @@ describe('the pieces around it', () => {
     expect(opportunityCallOf(T, null, T + 12)).toBeNull()
   })
 })
+
+describe('scoreOpportunity: in R', () => {
+  const COSTS: OpportunityCosts = { feeRate: FEE_RATE, slippageRate: SLIPPAGE_RATE }
+
+  it('is -1 at the call\'s own stop, on either side, whatever the costs', () => {
+    for (const costs of [FREE, COSTS, { feeRate: 0.002, slippageRate: 0.003 }]) {
+      const stopped = scoreOpportunity(long(), minutes({ 1: [100, 100.1, 99.9, 100], 3: [99.5, 99.6, 98.4, 98.6] }), LATER, costs)
+      expect(stopped).toMatchObject({ status: 'closed', exit: 'stop_loss' })
+      expect(stopped.r).toBeCloseTo(-1, 10)
+      const covered = scoreOpportunity(short(), minutes({ 1: [100, 100.1, 99.9, 100], 3: [100.5, 101.6, 100.4, 101.4] }), LATER, costs)
+      expect(covered).toMatchObject({ status: 'closed', exit: 'stop_loss' })
+      expect(covered.r).toBeCloseTo(-1, 10)
+    }
+  })
+
+  it('is worse than -1 when the stop is gapped through, and the net over the stop\'s loss at the target', () => {
+    const gapped = scoreOpportunity(long(), minutes({ 1: [100, 100.1, 99.9, 100], 3: [97, 97.5, 96.8, 97.2] }), LATER, FREE)
+    expect(gapped).toMatchObject({ exit: 'stop_loss', exitPrice: 97 })
+    // In at 100, stopped at 97 where the stop was 98.5: 3% lost against 1.5% allowed.
+    expect(gapped.r).toBeCloseTo(-2, 10)
+    const won = scoreOpportunity(long(), minutes({ 1: [100, 100.1, 99.9, 100], 4: [100.5, 103.2, 100.4, 103.1] }), LATER, FREE)
+    expect(won).toMatchObject({ exit: 'take_profit', exitPrice: 103 })
+    // +3% against the 1.5% its stop allowed.
+    expect(won.r).toBeCloseTo(2, 10)
+    // With costs, the target's net shrinks and the stop's loss grows: R falls on both counts.
+    const costly = scoreOpportunity(long(), minutes({ 1: [100, 100.1, 99.9, 100], 4: [100.5, 103.2, 100.4, 103.1] }), LATER, COSTS)
+    expect(costly.r).toBeLessThan(2)
+    expect(costly.r).toBeCloseTo((costly.netPct as number) / -(((98.5 * (1 - SLIPPAGE_RATE)) / (costly.entryPrice as number) - 1) * 100 - FEE_RATE * (1 + (98.5 * (1 - SLIPPAGE_RATE)) / (costly.entryPrice as number)) * 100), 10)
+  })
+
+  it('is nothing until the call has closed', () => {
+    expect(scoreOpportunity(long(), minutes({}, 80, 103.5), LATER, FREE)).toMatchObject({ status: 'expired', r: null })
+    expect(scoreOpportunity(long(), minutes({ 1: [100, 100.1, 99.9, 100] }, 3), T + 3 * 60, FREE)).toMatchObject({ status: 'open', r: null })
+  })
+})

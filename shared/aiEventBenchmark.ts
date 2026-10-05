@@ -219,6 +219,9 @@ export interface EventBenchmarkRow {
   winRateMarginPct: number | null
   /** The closed trades' net returns added up: what equal stakes returned, in percent of one. */
   netSumPct: number
+  /** The same in R (shared/aiOpportunityOutcome.ts): what each made over what its own stop would
+   * have lost, added up, so that rows whose stops are near and rows whose stops are far count alike. */
+  rSum: number
   /** Net return a trade. Null under MIN_SCORED_CALLS. */
   meanNetPct: number | null
   /** Gains over losses. Null with no losing trade to divide by, or too few trades. */
@@ -504,6 +507,7 @@ function rowOf(source: RowSource, segmentEnds: number[], cuts: Cuts): EventBench
     winRatePct: enough ? rate * 100 : null,
     winRateMarginPct: enough ? 1.96 * Math.sqrt((rate * (1 - rate)) / closed.length) * 100 : null,
     netSumPct,
+    rSum: closed.reduce((sum, trade) => sum + (trade.outcome.r ?? 0), 0),
     meanNetPct: meanOf(nets),
     profitFactor: enough && grossLoss > 0 ? wins.reduce((sum, net) => sum + net, 0) / grossLoss : null,
     meanWinPct: enough && wins.length > 0 ? wins.reduce((sum, net) => sum + net, 0) / wins.length : null,
@@ -723,6 +727,8 @@ export interface RollingWindow {
   trades: number
   wins: number
   netSumPct: number
+  /** The same trades in R, added up. */
+  rSum: number
 }
 
 export interface RollingResults {
@@ -741,7 +747,8 @@ export function rollingResults(trades: EventTrade[], nowSec: number): RollingRes
   const sum = (list: EventTrade[]): RollingWindow => ({
     trades: list.length,
     wins: list.filter((trade) => (trade.outcome.netPct ?? 0) > 0).length,
-    netSumPct: list.reduce((total, trade) => total + (trade.outcome.netPct ?? 0), 0)
+    netSumPct: list.reduce((total, trade) => total + (trade.outcome.netPct ?? 0), 0),
+    rSum: list.reduce((total, trade) => total + (trade.outcome.r ?? 0), 0)
   })
   return {
     lastTrades: ROLLING_TRADE_COUNTS.map((count) => ({ count, ...sum(closed.slice(0, count)) })),

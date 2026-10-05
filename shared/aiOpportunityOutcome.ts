@@ -69,6 +69,11 @@ export interface OpportunityOutcome {
   exitPrice: number | null
   /** After fees on both fills and slippage on every market fill. Null until closed. */
   netPct: number | null
+  /** The same in R: the net over what being stopped out at the call's own stop would have lost, from
+   * the price it entered at, with the same fees and slippage. -1 R is that loss, and a stop gapped
+   * through loses more. It is what makes calls with near and far stops comparable. Null until
+   * closed. */
+  r: number | null
   /** How far the price went for the position and against it while it was held, in percent of the
    * entry, before costs. Null until there is an entry. */
   bestPct: number | null
@@ -158,7 +163,7 @@ export function replayAnsweredAt(eventTime: number, latencyMs: number | null | u
   return eventTime + REPLAY_ASK_DELAY_SEC + Math.max(0, latencyMs ?? 0) / 1000
 }
 
-const NO_ENTRY = { entryTime: null, entryPrice: null, exit: null, exitTime: null, exitPrice: null, netPct: null, bestPct: null, worstPct: null, heldMinutes: null }
+const NO_ENTRY = { entryTime: null, entryPrice: null, exit: null, exitTime: null, exitPrice: null, netPct: null, r: null, bestPct: null, worstPct: null, heldMinutes: null }
 
 /** Scores one call. `bars` are 1-minute candles, oldest first; bars before the event and bars
  * still forming at `nowSec` are ignored. */
@@ -207,9 +212,16 @@ export function scoreOpportunity(call: OpportunityCall, bars: Candle[], nowSec: 
   let best = 0
   let worst = 0
   const excursion = (price: number): number => sign * (price / entryPrice - 1) * 100
-  const closed = (exit: OpportunityExit, exitTime: number, exitPrice: number): OpportunityOutcome => {
-    // Fees on both fills, each on its own notional, as shared/fees.ts charges a round trip.
+  /** The net of an exit at `exitPrice`. Fees on both fills, each on its own notional, as
+   * shared/fees.ts charges a round trip. */
+  const netAt = (exitPrice: number): number => {
     const feePct = costs.feeRate * (1 + exitPrice / entryPrice) * 100
+    return sign * (exitPrice / entryPrice - 1) * 100 - feePct
+  }
+  // What its own stop would have lost from this entry: a market fill at the stop, like any stop-out.
+  const atStop = netAt(marketFill(call.stopLoss, !long))
+  const closed = (exit: OpportunityExit, exitTime: number, exitPrice: number): OpportunityOutcome => {
+    const netPct = netAt(exitPrice)
     return {
       status: 'closed',
       entryTime,
@@ -217,7 +229,8 @@ export function scoreOpportunity(call: OpportunityCall, bars: Candle[], nowSec: 
       exit,
       exitTime,
       exitPrice,
-      netPct: sign * (exitPrice / entryPrice - 1) * 100 - feePct,
+      netPct,
+      r: atStop < 0 ? netPct / -atStop : null,
       bestPct: best,
       worstPct: worst,
       heldMinutes: Math.round((exitTime + BAR_SECONDS - entryTime) / BAR_SECONDS)
@@ -251,7 +264,7 @@ export function scoreOpportunity(call: OpportunityCall, bars: Candle[], nowSec: 
     if (bar.time + BAR_SECONDS >= holdEnd) return closed('time', bar.time, marketFill(bar.close, !long))
   }
 
-  return { status: 'open', entryTime, entryPrice, exit: null, exitTime: null, exitPrice: null, netPct: null, bestPct: best, worstPct: worst, heldMinutes: null }
+  return { status: 'open', entryTime, entryPrice, exit: null, exitTime: null, exitPrice: null, netPct: null, r: null, bestPct: best, worstPct: worst, heldMinutes: null }
 }
 
 export function describeOpportunityExit(exit: OpportunityExit): string {
