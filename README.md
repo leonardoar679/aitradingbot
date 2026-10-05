@@ -796,6 +796,36 @@ a trade over 71 events and one made with the market 0.18% over 29; with Bitcoin 
 hours following lost 0.25% a trade (62), rising 0.11% (23), falling 0.06% (15). What these models
 were shown changed how often they acted, not which side they took or how well they chose.
 
+**Three frontier models on the same events** (5 October 2026, `EXP-2026-1005-003`): Claude
+Sonnet 5.5, GPT-5.6 Sol and Gemini 3.1 Pro Preview, put the question about the pair alone — the
+one that stays. The app stated $6.31; the run made 206 calls and cost $3.72, with the daily
+budget raised for it so that no more than $8.85 could be spent, and put back to $5 afterwards.
+Gemini 3.1 Pro's first six answers were all refused by the validator (a recommendation, a
+confidence or a rationale missing or out of range), and the run stopped asking it, as a run does
+after five refusals in a row; those six cost $0.23. A refused answer now keeps the start of what
+the model sent on its ledger row (`answerExcerpt`), so the next one can be read without being
+bought again. On the 95 events every other model answered:
+
+| | Took a side | At 65%+ | Closed | Won | Net, added up | A trade | Per answer |
+|---|---|---|---|---|---|---|---|
+| `anthropic/claude-sonnet-5.5` | 9 | 0 | 0 | — | — | — | $0.018 |
+| `openai/gpt-5.6-sol` | 40 | 35 | 30 | 17% ± 13 | −19.20% | −0.64% | $0.017 |
+| `openai/gpt-5-mini` | 94 | 68 | 63 | 30% ± 11 | −9.70% | −0.15% | $0.0043 |
+| `openai/gpt-5-mini@minimal` | 32 | 32 | 30 | 30% ± 16 | −0.75% | −0.02% | $0.0015 |
+| `mistralai/mistral-small-2603` | 94 | 94 | 73 | 34% ± 11 | −25.37% | −0.35% | $0.0012 |
+| Follow every event, no model | 95 | 95 | 95 | 31% ± 9 | −17.87% | −0.19% | |
+| The five weighed by confidence | 49 | 49 | 40 | 33% ± 15 | −9.06% | −0.23% | |
+
+Claude Sonnet 5.5 traded nothing. It named a side on ten of the hundred events, every time at 50%
+confidence, and called no trade on the rest at a median of 60% — under the 65% this app acts on,
+every time. GPT-5.6 Sol acted on 37, every one of them on the move's side like the others, and
+lost the most a trade of any model here: its choice of events cost 0.22% a trade against
+following everything, and its levels another 0.22%; it was stopped out in 14 of its 30 closed
+trades, `gpt-5-mini` in 15 of 63. Neither is told apart from following every event, let alone
+from a model a quarter of the price, so no frontier model goes on the watch: it keeps asking
+`gpt-5-mini`. On this question a frontier model adds caution, or a costlier version of the same
+bet.
+
 **Model routing.** A cheap model can be asked every fifteen minutes for a few dollars a month. A
 frontier model asked the same way costs several times that, and nearly all of it buys the answer
 "hold". A route asks the default model at every decision and passes the decision on to a second

@@ -151,6 +151,23 @@ describe('asking a model about an event', () => {
     expect((await listAiCalls({})).rows[0]).toMatchObject({ status: 'rejected', recommendation: null })
   })
 
+  it('keeps the start of a refused answer, so the reason can be read without buying it again', async () => {
+    // A confidence given in percent, as a model might.
+    const sent = answer({ confidence: 72, rationale: 'x'.repeat(900) })
+    stubOpenRouter(() => ({ content: sent }))
+    const { askAiOpportunity, listAiCalls } = await services()
+    expect((await askAiOpportunity(request())).rejected).toMatch(/confidence/)
+    const row = (await listAiCalls({})).rows[0]
+    expect(row.answerExcerpt).toBe(sent.slice(0, 400))
+    expect(row.answerExcerpt).toContain('"confidence":72')
+    // A usable answer keeps nothing of the kind: its fields are on the row.
+    stubOpenRouter(() => ({}))
+    const other = eventQuestionCandles(undefined, 3)
+    await askAiOpportunity(request({ candles1m: other.candles1m, candles15m: other.candles15m }))
+    const ok = (await listAiCalls({})).rows.find((entry) => entry.status === 'ok')
+    expect(ok && 'answerExcerpt' in ok).toBe(false)
+  })
+
   it('does not cache a call that never reached a model, and asks again next time', async () => {
     const { bodies } = stubOpenRouter((call) => (call <= 3 ? { status: 503, error: 'overloaded' } : {}))
     const { askAiOpportunity } = await services()

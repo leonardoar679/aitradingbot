@@ -47,6 +47,10 @@ export interface AiCallRecord {
   usage: AiCallUsage
   /** The transport failure or the validator's reason; null for a usable answer. */
   error: string | null
+  /** On a refused answer only: the start of what the model actually sent. The reason says which
+   * rule it broke, and this says how -- a confidence of 72 where 0.72 was asked for, a field in
+   * capitals -- without paying for the answer again to find out. Absent on every other row. */
+  answerExcerpt?: string
   recommendation: AiRecommendation | null
   confidence: number | null
   rationale: string | null

@@ -126,6 +126,8 @@ const MAX_CONSECUTIVE_FAILURES = 5
 const MAX_CONSECUTIVE_REFUSALS = 5
 /** How many of a model's own recent calls an estimate is averaged over. */
 const COST_HISTORY_ROWS = 50
+/** How much of a refused answer its ledger row keeps (AiCallRecord.answerExcerpt). */
+const ANSWER_EXCERPT_CHARS = 400
 /** The pause before a retry, doubled each attempt, and the longest wait a server's Retry-After is
  * honoured for: one that asks for more is not retried at once, and its call is asked again when
  * the run is. An object so tests can shorten it: a test of the retry RULE should not have to sit
@@ -431,6 +433,7 @@ async function askModel(input: AskInput): Promise<AiSignalDecision> {
       ...(result.servedModel !== null ? { servedModel: result.servedModel } : {}),
       usage,
       error: verdict.ok ? null : verdict.reason,
+      ...(verdict.ok ? {} : { answerExcerpt: result.content.slice(0, ANSWER_EXCERPT_CHARS) }),
       recommendation: verdict.ok ? verdict.signal.recommendation : null,
       confidence: verdict.ok ? verdict.signal.confidence : null,
       rationale: verdict.ok ? verdict.signal.rationale : null,
@@ -632,6 +635,7 @@ async function askAgent(input: AskAgentInput): Promise<AgentAnswer> {
       ...(result.servedModel !== null ? { servedModel: result.servedModel } : {}),
       usage,
       error: verdict.ok ? null : verdict.reason,
+      ...(verdict.ok ? {} : { answerExcerpt: result.content.slice(0, ANSWER_EXCERPT_CHARS) }),
       confidence: verdict.ok ? verdict.report.confidence : null,
       rationale: verdict.ok ? verdict.report.note : null,
       ...(verdict.ok ? { report: verdict.report } : {})
