@@ -10,7 +10,7 @@ import { scoreAnswer, type EventFeedItem } from './opportunities'
 // THE JOURNAL: every recommendation a model has made on an event the scanner raised, one line
 // each, with what it did.
 //
-// The cards on the Opportunities tab show the last few events. This is the whole record of them,
+// The cards on the Opportunities page show the last few events. This is the whole record of them,
 // in one table that can be filtered and saved as a spreadsheet: what was called, at what
 // confidence, with what levels, and how it ended.
 //

@@ -6,7 +6,7 @@
 //   npm run build
 //   node scripts/drive-app.mjs
 //   driver> launch
-//   driver> nav Backtest
+//   driver> nav Backtest & Research
 //   driver> ss backtest
 //
 // Requires playwright-core, which is deliberately NOT a dependency of this app -- it exists only
@@ -167,9 +167,10 @@ const COMMANDS = {
     page = await app.firstWindow()
     await page.waitForLoadState('domcontentloaded')
     // The renderer mounts React, then fetches settings and candles over IPC. There is no ready
-    // signal to wait on, so wait for the sidebar the app always renders.
+    // signal to wait on, so wait for the sidebar the app always renders. Overview is its first
+    // entry and the page the app opens on.
     await page.waitForFunction(
-      () => [...document.querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Portfolio'),
+      () => [...document.querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Overview'),
       { timeout: 30_000 }
     )
     console.log('launched:', app.windows().map((w) => w.url()).join(', '))
@@ -316,7 +317,7 @@ const COMMANDS = {
       console.log('symbols loaded')
     } catch {
       // Two different situations, and the message must not assert the alarming one: the page may
-      // have no symbol picker at all (Bots, Portfolio), in which case waiting here is simply the
+      // have no symbol picker at all (Strategies, Overview), in which case waiting here is simply the
       // wrong command rather than a sign of anything broken.
       console.log('no symbol dropdown filled after 30s — either this page has none, or the exchange is unreachable')
     }
@@ -398,7 +399,7 @@ const COMMANDS = {
 
   help() {
     console.log('commands:', Object.keys(COMMANDS).join(', '))
-    console.log('e.g.  launch | nav Backtest | form | set-select 4 trend-regime-ensemble |')
+    console.log('e.g.  launch | nav Backtest & Research | form | set-select 4 trend-regime-ensemble |')
     console.log('      click-text Start | wait-text "Total Net Profit" | ss result |')
     console.log('      click-in-card Trend Regime BTC :: Enable Bot')
   }

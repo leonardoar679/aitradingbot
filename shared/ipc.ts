@@ -458,7 +458,7 @@ export interface Bot {
    * strategy and on bots saved before this existed, which fall back to the configured default.
    *
    * Pinned rather than read from the default each poll, because the model is part of what the bot
-   * IS. With the default read live, choosing a different one on the Models tab would re-ask a
+   * IS. With the default read live, choosing a different one under Settings › AI would re-ask a
    * running bot's whole history of that model's replacement -- paid for, unannounced -- and turn
    * its paper record into another model's from that candle on. */
   aiModel?: string

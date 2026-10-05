@@ -7,10 +7,11 @@ import { describeError } from '../utils/ipcError'
 
 /** Where the OpenRouter key is added, replaced, tested and removed.
  *
- * ONE CARD, SHOWN IN TWO PLACES: on the Agents page and in Settings. It used to be in Settings
- * alone, between the theme and the exchange keys, while everything that needs the key -- and every
- * message saying it is missing -- is on the Agents page. A key asked for on a page that does not
- * use it is a key the user is sent to look for.
+ * ONE CARD, SHOWN IN TWO PLACES: on Connections, beside the exchange keys, and above the AI pages
+ * (Opportunities, AI Decisions, AI Benchmark) for as long as no key is stored -- src/ai/AiKeyGate.tsx.
+ * It once lived in Settings alone, while everything that needs the key, and every message saying it
+ * is missing, was on another page. A key asked for on a page that does not use it is a key the user
+ * is sent to look for.
  *
  * With no key stored the field is simply there. There is nothing else the card could be for, so
  * it does not make anyone press "Add key" to be shown it.
@@ -21,8 +22,8 @@ export function AiKeyCard({
   where,
   onChanged
 }: {
-  /** Settings names the section it sits in; the Agents page names the thing itself. */
-  where: 'agents' | 'settings'
+  /** Connections lists it beside the exchange keys; an AI page asks for the thing itself. */
+  where: 'ai-page' | 'connections'
   /** Told what is stored now, after a key is saved, replaced or removed. */
   onChanged?: (status: AiCredentialStatus) => void
 }): React.JSX.Element {
@@ -63,9 +64,9 @@ export function AiKeyCard({
     run(async () => {
       await window.api.ai.setCredentials(apiKey.trim())
       // The price list is what a call is priced from before any has been made, and it is free to
-      // fetch -- but until now it was fetched only by opening the Models tab, so the first button
-      // a new key was used on read "cost unknown". A failure here is not a failure to save the
-      // key: the Models tab asks again.
+      // fetch -- but it was once fetched only by opening the models list, so the first button a new
+      // key was used on read "cost unknown". A failure here is not a failure to save the key: the
+      // models list under Settings › AI asks again.
       await window.api.ai.listModels(false).catch(() => undefined)
       setApiKey('')
       setReplacing(false)
@@ -93,8 +94,8 @@ export function AiKeyCard({
   const cannotSave = busy || typed === '' || problem !== null
 
   const title =
-    where === 'settings'
-      ? `AI — ${AI_PROVIDER_LABEL}`
+    where === 'connections'
+      ? `AI models — ${AI_PROVIDER_LABEL}`
       : configured
         ? `${AI_PROVIDER_LABEL} API key`
         : `Add your ${AI_PROVIDER_LABEL} API key`
@@ -102,10 +103,10 @@ export function AiKeyCard({
   return (
     <Card title={title}>
       <p style={{ ...noteStyle, marginBottom: '0.9rem' }}>
-        One {AI_PROVIDER_LABEL} key reaches every model on the Agents page. It is used only for chart signals,
-        backtests, paper bots and the Agents page: AI signals have no live-order route. The key is stored encrypted by
-        the operating system and is never read back into this window. Saving one asks {AI_PROVIDER_LABEL} a free
-        question about the key itself and spends nothing.
+        One {AI_PROVIDER_LABEL} key reaches every model this app asks. It is used only for chart signals, backtests,
+        paper bots, Opportunities, AI Decisions and AI Benchmark: AI signals have no live-order route. The key is stored
+        encrypted by the operating system and is never read back into this window. Saving one asks {AI_PROVIDER_LABEL} a
+        free question about the key itself and spends nothing.
       </p>
       {status?.legacyOpenAiKey && (
         <p
@@ -186,7 +187,7 @@ export function AiKeyCard({
               <>
                 {' '}Default model {config.defaultModel}. {formatUsd(config.spentTodayUsd)} of today&apos;s{' '}
                 {formatUsd(config.dailyCapUsd)} AI budget spent.
-                {where === 'settings' && ' Models, the budget and the call history are on the Agents page.'}
+                {where === 'connections' && ' Models, the budget and the pace are under Settings › AI, and every call is under AI Decisions › Signals.'}
               </>
             )}
           </div>

@@ -7,7 +7,7 @@
 // benchmark, the watch, a bot, a click -- held in the main process where every call is made.
 //
 // A call that would go over waits for its place; nothing is refused. The setting is one of a few
-// round numbers, changed on Agents -> Usage.
+// round numbers, changed under Settings › AI.
 
 export const AI_CALLS_PER_MINUTE_CHOICES = [10, 20, 30, 60] as const
 export const DEFAULT_AI_CALLS_PER_MINUTE = 30

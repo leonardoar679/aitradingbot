@@ -32,7 +32,7 @@ type StoredCredentialsFile = Partial<Record<Exchange, StoredCredential>>
 // schema change.
 //
 // One call does two jobs on purpose: it verifies a key before that key is ever stored, and it is
-// what the Account page reads. Anything listed here can therefore be connected AND shown, so an
+// what Live Trading reads. Anything listed here can therefore be connected AND shown, so an
 // exchange can never end up connected while being unable to say what is in the account.
 //
 // This is NOT the list of exchanges that can be traded on -- that is TRADING_EXCHANGES in
@@ -47,7 +47,7 @@ const BALANCE_READERS: Partial<Record<Exchange, (apiKey: string, apiSecret: stri
 /** How long a balance read is reused before the exchange is asked again.
  *
  * Short, because this exists for two specific reasons rather than to keep data fresh: React
- * StrictMode mounts every effect twice in development, and the Account page is easy to leave and
+ * StrictMode mounts every effect twice in development, and Live Trading is easy to leave and
  * come back to. Both would otherwise spend a signed, weighted request to learn a number that has
  * not moved. Anything the user does that changes their balance goes through an explicit action,
  * and Refresh bypasses this entirely. */

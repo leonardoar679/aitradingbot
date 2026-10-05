@@ -223,7 +223,8 @@ function RoutineReports({ routine }: { routine: RoutineConfig }): React.JSX.Elem
   )
 }
 
-export function RoutinesPage(): React.JSX.Element {
+/** `embedded` leaves the title to the page this sits on (Backtest & Research, as Automation). */
+export function RoutinesPage({ embedded = false }: { embedded?: boolean } = {}): React.JSX.Element {
   const [routines, setRoutines] = useState<RoutineConfig[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [runningId, setRunningId] = useState<string | null>(null)
@@ -276,7 +277,7 @@ export function RoutinesPage(): React.JSX.Element {
 
   return (
     <>
-      <PageHeader title="Routines" subtitle="Recurring backtests that re-run on a schedule while this app is open" />
+      {!embedded && <PageHeader title="Routines" subtitle="Recurring backtests that re-run on a schedule while this app is open" />}
 
       <NewRoutineForm onCreate={handleCreate} />
 

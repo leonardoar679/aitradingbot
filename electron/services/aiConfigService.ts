@@ -47,7 +47,7 @@ interface StoredCatalogue {
   models: AiModelInfo[]
 }
 
-/** A price list a day old is still a price list. Refreshed on demand from the Models tab. */
+/** A price list a day old is still a price list. Refreshed on demand from the models list under Settings › AI. */
 const CATALOGUE_MAX_AGE_SEC = 24 * 60 * 60
 
 let cache: AiConfigState | null = null
@@ -196,7 +196,7 @@ function assertUsableModel(id: string, known: StoredCatalogue | null): void {
   // The catalogue lists the model; the effort it is asked at is this app's own (shared/aiEffort.ts).
   const { slug, effort } = splitAiModelId(id)
   const model = known.models.find((entry) => entry.id === slug)
-  if (!model) throw new Error(`${slug} is not in the model catalogue. Refresh the list under Agents → Models.`)
+  if (!model) throw new Error(`${slug} is not in the model catalogue. Refresh the list under Settings › AI.`)
   if (!model.structuredOutputs) {
     throw new Error(`${slug} cannot be held to a strict JSON schema, so it cannot be enabled for signals.`)
   }
@@ -237,7 +237,7 @@ export async function setAiConfig(patch: AiConfigPatch): Promise<AiConfig> {
       throw new Error(`"${route.model}" does not name a panel of agents on a model.`)
     }
     if (route && problem === 'disabled') {
-      throw new Error(`${deciderModel(route.model)} is not enabled. Enable it under Agents → Models before routing to it.`)
+      throw new Error(`${deciderModel(route.model)} is not enabled. Enable it under Settings › AI before routing to it.`)
     }
   } else if (route) {
     // A change that would strand the route is refused rather than quietly repaired. Dropping the
@@ -339,7 +339,7 @@ export async function resolveAiModel(requested: string | undefined): Promise<str
   const state = await load()
   if (requested === undefined) return state.defaultModel
   if (!state.enabledModels.includes(requested)) {
-    throw new Error(`${requested} is not enabled. Enable it under Agents → Models, or switch the bot off and on to move it to the current settings.`)
+    throw new Error(`${requested} is not enabled. Enable it under Settings › AI, or switch the bot off and on to move it to the current settings.`)
   }
   return requested
 }
@@ -354,7 +354,7 @@ export async function resolveAiDecider(requested: string | undefined): Promise<s
   if (model === null) throw new Error(`"${requested}" does not name a panel of agents on a model`)
   const state = await load()
   if (!state.enabledModels.includes(model)) {
-    throw new Error(`${model} is not enabled, so a panel cannot be run on it. Enable it under Agents → Models.`)
+    throw new Error(`${model} is not enabled, so a panel cannot be run on it. Enable it under Settings › AI.`)
   }
   return requested
 }

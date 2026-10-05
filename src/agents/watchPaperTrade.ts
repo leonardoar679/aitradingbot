@@ -29,7 +29,7 @@ import { settingsWrites } from '../utils/settingsWrites'
 // tests/aiNoLivePath.test.ts reads this file to make sure of both.
 //
 // EVERY WRITE GOES THROUGH THE ONE QUEUE (src/utils/settingsWrites.ts), on executors read inside
-// it: the Executors page, a controller and this file all replace the same array.
+// it: Strategies › Execution, a controller and this file all replace the same array.
 
 type OkPlan = Extract<WatchPaperPlan, { ok: true }>
 

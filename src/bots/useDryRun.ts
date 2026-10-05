@@ -157,7 +157,7 @@ function botTapeRequest(bot: DryRunBot, candles: Candle[], interval: Interval): 
     maxDecisions: GPT_MAX_DECISIONS,
     decideEveryBars: gptCadenceOf(bot),
     model: bot.aiModel,
-    // The bot's own pin or nothing. Never the setting on the Models tab: that one is copied onto a
+    // The bot's own pin or nothing. Never the setting under Settings › AI: that one is copied onto a
     // bot when it is switched on, after the confirmation has said so.
     route: bot.aiRoute ?? null,
     source: 'bot'
@@ -202,7 +202,7 @@ export async function estimateConfirmBot(bot: Omit<DryRunBot, 'enabledAt'>): Pro
 }
 
 /** Imperative counterpart to the hook below, for call sites outside a component's render
- * lifecycle (e.g. the Portfolio page aggregating every enabled bot at once) — same fetch window
+ * lifecycle (e.g. the portfolio snapshot aggregating every enabled bot at once) — same fetch window
  * and warmup padding, just a one-shot call instead of a poll/subscribe cycle. Returns null if no
  * candles were returned (a brand-new symbol/range) rather than throwing, since "nothing to show
  * yet" isn't really an error. */
@@ -271,7 +271,7 @@ export async function fetchBotDryRunResult(
 /** Bots have no dollar allocation anywhere in this app — this is the only real per-bot
  * performance figure that exists, a compounded % across only the trades entered after the bot
  * was actually turned on (see the comment on DryRunPanel in BotCard.tsx for why the lookback's
- * own historical trades are excluded). Shared by BotCard's display and the Portfolio aggregator
+ * own historical trades are excluded). Shared by BotCard's display and the portfolio aggregator
  * so the two can never drift apart. */
 export function summarizePaperTrades(
   trades: Trade[],

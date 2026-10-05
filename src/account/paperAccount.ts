@@ -77,7 +77,7 @@ export function describeInsufficientFunds({
 
   const total = totalBalance(account, asset)
   if (total <= 0) {
-    return `This account holds no ${asset}. Add some on the Account page before starting a strategy that spends it.`
+    return `This account holds no ${asset}. Add some under Paper Trading before starting a strategy that spends it.`
   }
   const available = availableBalance(account, asset, committed)
   if (amount > available) {

@@ -17,7 +17,7 @@ const credential = vi.hoisted(() => ({ missing: false }))
 vi.mock('electron', () => ({ app: { getPath: () => process.env.AI_TEST_USER_DATA } }))
 vi.mock('../electron/services/aiCredentialsService', () => ({
   getDecryptedAiCredential: async () => {
-    if (credential.missing) throw new Error('No OpenRouter API key configured. Add one on the Agents page.')
+    if (credential.missing) throw new Error('No OpenRouter API key configured. Add one on Connections.')
     return { apiKey: 'sk-or-test' }
   }
 }))

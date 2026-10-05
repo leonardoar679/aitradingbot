@@ -7,7 +7,7 @@ import { pushPortfolioSnapshot, setPortfolioError } from './portfolioStore'
 const POLL_MS = 120_000
 
 /** Headless — mounted once in App.tsx, same pattern as ControllerScheduler/RoutineScheduler.
- * Keeps recording portfolio snapshots regardless of which page is open; otherwise the Portfolio
+ * Keeps recording portfolio snapshots regardless of which page is open; otherwise Performance
  * Evolution chart would have large gaps whenever the user wasn't looking at Portfolio, which
  * would misleadingly look like "nothing changed" rather than "nobody was watching." */
 export function PortfolioScheduler(): null {

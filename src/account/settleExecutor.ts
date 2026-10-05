@@ -6,7 +6,7 @@ import { updateAccount } from './persistAccount'
 
 /** Books a stopped paper strategy's result into the account.
  *
- * Central on purpose. A strategy can be stopped from the Executors page, by a Controller hitting
+ * Central on purpose. A strategy can be stopped from Strategies › Execution, by a Controller hitting
  * a risk limit, or by a live run finishing, and the account has to end up the same either way --
  * the same "whoever pressed stop" problem that once decided whether a kept position survived.
  *

@@ -125,7 +125,7 @@ export function ModelsTab(): React.JSX.Element {
           A model that reasons before it answers can also be enabled at a lower reasoning effort. Most of what a call
           costs, and most of the wait, is that reasoning, so the same model told to think less is cheaper and faster. It
           is listed as a second model, with the effort after an @, and can be made the default, benchmarked and routed to
-          like any other. Whether it answers as well is not assumed: tick both on the Benchmark tab and it puts the same
+          like any other. Whether it answers as well is not assumed: tick both on AI Benchmark and it puts the same
           questions to each.
         </p>
         {error !== null && <p style={{ ...noteStyle, color: 'var(--down)', marginBottom: '0.7rem' }}>{error}</p>}
@@ -217,7 +217,7 @@ export function ModelsTab(): React.JSX.Element {
           {catalogue?.fetchedAt
             ? `${catalogue.models.length.toLocaleString()} models, price list read ${new Date(catalogue.fetchedAt * 1000).toLocaleString()}.`
             : 'The catalogue has not been loaded yet.'}{' '}
-          Prices are {AI_PROVIDER_LABEL}&apos;s published rates; what a call actually cost is on the Usage tab.
+          Prices are {AI_PROVIDER_LABEL}&apos;s published rates; what a call actually cost is in the tables below.
         </p>
       </Card>
 
@@ -227,7 +227,7 @@ export function ModelsTab(): React.JSX.Element {
           only when the rule below says so. The second model is asked the same question and its answer is the one that
           counts, so a decision costs one call, or two when it is passed on. A route applies to a GPT Intraday backtest and
           to a bot switched on from now on, and both state it and its price before anything is asked. A bot that is already
-          running keeps what it was switched on with. The chart, the Analyze tab and entry confirmations always ask one
+          running keeps what it was switched on with. The chart, AI Decisions › Analyze and entry confirmations always ask one
           model.
         </p>
         <p style={{ ...noteStyle, marginBottom: '0.9rem' }}>
@@ -235,7 +235,7 @@ export function ModelsTab(): React.JSX.Element {
           each answer one narrow question about the same snapshot, and a fourth call makes the decision from the snapshot
           and their three reports. That is {AI_PANEL_CALLS} calls for each decision passed on instead of one. A panel cannot
           be the default model, so nothing starts costing {AI_PANEL_CALLS} calls a question because of a setting; it can be
-          tried on one candle in Analyze and set beside its own model in the Benchmark tab, which is where to find out
+          tried on one candle in Analyze and set beside its own model on AI Benchmark, which is where to find out
           whether it is worth four times the price.
         </p>
 

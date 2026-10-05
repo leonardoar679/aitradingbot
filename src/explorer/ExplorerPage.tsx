@@ -255,7 +255,7 @@ export function ExplorerPage(): React.JSX.Element {
 
   return (
     <>
-      <PageHeader title="Explorer" subtitle="What is moving right now, measured the same way for every pair" />
+      <PageHeader title="Discovery" subtitle="What is moving right now, measured the same way for every pair" />
 
       <Card title="Scanner">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flexWrap: 'wrap' }}>

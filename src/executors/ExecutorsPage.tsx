@@ -44,7 +44,8 @@ export function ExecutorsPage({
   autoOpenPresets = false,
   onPresetsOpened,
   proposal = null,
-  onProposalTaken
+  onProposalTaken,
+  embedded = false
 }: {
   autoOpenPresets?: boolean
   onPresetsOpened?: () => void
@@ -52,6 +53,8 @@ export function ExecutorsPage({
    * way the presets request is: this page opens the form and tells the app to let go of it. */
   proposal?: AiOrderProposal | null
   onProposalTaken?: () => void
+  /** Leaves the title to the page this sits on (Strategies, as its Execution view). */
+  embedded?: boolean
 } = {}): React.JSX.Element {
   const [bots, setBots] = useState<Bot[]>([])
   const [executors, setExecutors] = useState<ExecutorConfig[]>([])
@@ -712,7 +715,7 @@ export function ExecutorsPage({
       console.error('Failed to detach the deleted executor from its controllers:', error)
       noteStopError(
         id,
-        `The executor was deleted, but a controller may still be counting it: ${describeError(error)}. Open Controllers and check its attached list.`
+        `The executor was deleted, but a controller may still be counting it: ${describeError(error)}. Open Risk & Safety and check the controller groups' attached lists.`
       )
     }
   }
@@ -731,7 +734,7 @@ export function ExecutorsPage({
 
   return (
     <>
-      <PageHeader title="Executors" subtitle="Where your bots and paper strategies actually run" />
+      {!embedded && <PageHeader title="Executors" subtitle="Where your bots and paper strategies actually run" />}
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
         {/* Was a hardcoded "1 / 1" that never reflected anything -- the Local Executor card below

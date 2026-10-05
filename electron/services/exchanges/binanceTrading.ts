@@ -81,8 +81,8 @@ async function signedRequest(
   return body
 }
 
-/** Reads the account: proves a key/secret pair is valid, and is also what the Account page
- * shows. Places no order.
+/** Reads the account: proves a key/secret pair is valid, and is also what Live Trading shows.
+ * Places no order.
  *
  * Every balance arrives as a decimal string and is converted here without a guard, deliberately:
  * a value that will not parse becomes NaN and is reported as unreadable by readableBalances,

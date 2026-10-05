@@ -84,7 +84,7 @@ export function describeAllocationBreach({
   // that has bitten this app before. An allocation that cannot be read is treated as blocking,
   // because the alternative is treating it as permission.
   if (!Number.isFinite(allocationQuote) || allocationQuote < 0) {
-    return 'The managed allocation could not be read, so no real order can be placed against it. Set it again in Settings.'
+    return 'The managed allocation could not be read, so no real order can be placed against it. Set it again on Risk & Safety.'
   }
   if (!Number.isFinite(committedQuote) || committedQuote < 0) {
     return 'What this app already has committed could not be worked out, so it cannot tell whether this order fits inside your allocation.'
@@ -95,7 +95,7 @@ export function describeAllocationBreach({
 
   const remaining = allocationRemainingQuote(allocationQuote, committedQuote)
   if (orderQuote > remaining) {
-    return `This order would put ${(committedQuote + orderQuote).toFixed(2)} ${quoteAsset} to work, past the ${allocationQuote.toFixed(2)} ${quoteAsset} you allocated. ${committedQuote.toFixed(2)} is already committed, leaving ${remaining.toFixed(2)}. Raise the allocation in Settings, or close something first.`
+    return `This order would put ${(committedQuote + orderQuote).toFixed(2)} ${quoteAsset} to work, past the ${allocationQuote.toFixed(2)} ${quoteAsset} you allocated. ${committedQuote.toFixed(2)} is already committed, leaving ${remaining.toFixed(2)}. Raise the allocation on Risk & Safety, or close something first.`
   }
   return null
 }

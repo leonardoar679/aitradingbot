@@ -1,7 +1,8 @@
 import { INTERVAL_SECONDS, type Interval } from '../../shared/ipc'
 import { formatHoldingDuration } from '../backtest/formatTradeTime'
 
-// Small shared pieces for the four Agents tabs, so a table on one looks like a table on another.
+// Small shared pieces for the AI pages (Opportunities, AI Decisions, AI Benchmark and the AI part
+// of Settings), so a table on one looks like a table on another.
 
 export function tabButtonStyle(active: boolean): React.CSSProperties {
   return {

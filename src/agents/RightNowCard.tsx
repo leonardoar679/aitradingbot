@@ -20,10 +20,15 @@ export function RightNowCard({ rows, nowSec }: { rows: RightNowRow[]; nowSec: nu
   return (
     <Card title="Right now">
       {rows.length === 0 ? (
-        <p style={noteStyle}>
-          No recommendation can be acted on at the moment. A call to trade is listed here from the minute it arrives until its entry is filled or runs out, which is at most an hour and
-          usually fifteen minutes.
-        </p>
+        <>
+          {/* Saying so is the point, not a gap in the page: a system that always has a trade to
+              offer is not a better one. */}
+          <p style={{ margin: '0 0 0.4rem', fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)' }}>No high-quality opportunity right now. Wait.</p>
+          <p style={noteStyle}>
+            No recommendation can be acted on at the moment. A call to trade is listed here from the minute it arrives until its entry is filled or runs out, which is at most an
+            hour and usually fifteen minutes.
+          </p>
+        </>
       ) : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>

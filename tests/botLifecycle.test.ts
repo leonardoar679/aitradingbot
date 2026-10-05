@@ -161,7 +161,7 @@ describe('describePaidBotCost', () => {
   })
 
   it('says why when the cost could not be estimated at all', () => {
-    const text = describePaidBotCost('Trend BTC', null, 'No OpenRouter API key configured. Add one on the Agents page.')
+    const text = describePaidBotCost('Trend BTC', null, 'No OpenRouter API key configured. Add one on Connections.')
     expect(text).toContain('could not be estimated: No OpenRouter API key configured')
   })
 })
@@ -275,7 +275,7 @@ describe('describeConfirmBotCost', () => {
   })
 
   it('says why when the cost could not be estimated at all', () => {
-    const text = describeConfirmBotCost('Trend BTC', 'Trend Regime Ensemble', null, 'No OpenRouter API key configured. Add one on the Agents page.')
+    const text = describeConfirmBotCost('Trend BTC', 'Trend Regime Ensemble', null, 'No OpenRouter API key configured. Add one on Connections.')
     expect(text).toContain('the default model')
     expect(text).toContain('could not be estimated: No OpenRouter API key configured')
   })
@@ -337,7 +337,7 @@ describe('a GPT Intraday bot with a cadence', () => {
   })
 
   it('still says how often it will ask when nothing else could be estimated', () => {
-    const text = describePaidBotCost('GPT BTC', null, 'No OpenRouter API key configured. Add one on the Agents page.', 16)
+    const text = describePaidBotCost('GPT BTC', null, 'No OpenRouter API key configured. Add one on Connections.', 16)
     expect(text).toContain('one call every 4 hours')
     expect(text).toContain('6 a day')
     expect(text).toContain('could not be estimated: No OpenRouter API key configured')

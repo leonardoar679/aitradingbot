@@ -517,7 +517,7 @@ export function EventBenchmarkView(): React.JSX.Element {
       setNote({ ok: true, text: 'Every answer is already cached. Nothing was asked.' })
       return
     }
-    // The pace as it is now, not as it was when the tab was opened: it can be changed on Usage.
+    // The pace as it is now, not as it was when the tab was opened: it can be changed under Settings › AI.
     let callsPerMinute: number | undefined
     try {
       callsPerMinute = (await window.api.ai.getConfig()).callsPerMinute

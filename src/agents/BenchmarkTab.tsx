@@ -226,7 +226,7 @@ function RoutesCard({ shown, preferred }: { shown: Shown; preferred: ModelPair |
   const usable = (pair: ModelPair | null): pair is ModelPair =>
     pair !== null && pair.first !== pair.second && models.includes(pair.first) && models.includes(pair.second)
   // What was picked while it still names two models of THIS benchmark, else the route that is set
-  // under Models, else the first two listed.
+  // under Settings › AI, else the first two listed.
   const pair = usable(picked) ? picked : usable(preferred) ? preferred : { first: models[0], second: models[1] }
   const routes = useMemo(
     () => summarizeBenchmarkRoutes({ candles: shown.candles, times: shown.times, models: shown.models, answers: shown.answers }, pair.first, pair.second),
@@ -319,7 +319,7 @@ function RoutesCard({ shown, preferred }: { shown: Shown; preferred: ModelPair |
         Every question in a benchmark is asked with the account holding nothing, so here “wants to open or close a
         position” can only mean an entry: this shows how a route would have chosen entries, not exits. What a second
         opinion adds depends on how differently the two models err (research/gptroute.ts); the table below says how
-        often they made the same call. A route is set under Models.
+        often they made the same call. A route is set under Settings › AI.
       </p>
     </Card>
   )
@@ -843,7 +843,7 @@ function ClockBenchmark(): React.JSX.Element {
         {config !== null && config.enabledModels.length < 2 && (
           <p style={{ ...noteStyle, marginTop: '0.7rem' }}>
             Only one model is enabled, so it can be set beside the market and beside its own agent panel, but not beside
-            another model. Enable more under Models.
+            another model. Enable more under Settings › AI.
           </p>
         )}
         {chosen.length === 0 && config !== null && <p style={{ ...noteStyle, marginTop: '0.7rem' }}>Tick at least one model or panel.</p>}

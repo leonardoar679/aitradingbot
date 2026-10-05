@@ -669,14 +669,14 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
               ))}
               {proposalStale && !proposalExpired && (
                 <span style={{ color: 'var(--gold)', fontWeight: 600 }}>
-                  The candle this call was made for has closed, so it is no longer the model’s current view. Ask again on
-                  the Agents page before acting on it.
+                  The candle this call was made for has closed, so it is no longer the model’s current view. Ask again
+                  under AI Decisions before acting on it.
                 </span>
               )}
               {proposalExpired && (
                 <span style={{ color: 'var(--gold)', fontWeight: 600 }}>
-                  This recommendation’s entry has expired, so this form will not submit it as it stands. Ask again on the
-                  Agents page, or change the form into an order of your own.
+                  This recommendation’s entry has expired, so this form will not submit it as it stands. Ask again under
+                  Opportunities or AI Decisions, or change the form into an order of your own.
                 </span>
               )}
             </div>
@@ -837,7 +837,7 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
                             : type === 'grid' && !canGoLiveGrid
                               ? 'Live Grid is buy-only — spot trading can’t open a short.'
                               : !binanceCredentialConfigured
-                                ? 'Add a verified Binance API key in Settings first.'
+                                ? 'Add a verified Binance API key on Connections first.'
                                 : liveTradingStatus?.killSwitchEngaged
                                   ? 'The kill switch is engaged — release it from the live trading bar first.'
                                   : 'Arm live trading for this session from the live trading bar first.'}
@@ -848,7 +848,7 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
                 <>
                   <p style={{ fontSize: '0.75rem', color: 'var(--down)', margin: 0, fontWeight: 600 }}>
                     {type === 'position'
-                      ? `This will immediately place a real BUY market order for ${positionParams.amountQuote} ${pair.quoteAsset} of ${pair.symbol} on Binance, then watch it for take-profit/stop-loss/trailing-stop/time-limit and exit automatically with a real sell — no per-exit confirmation. Stop on the Executors page force-exits it manually at any time.`
+                      ? `This will immediately place a real BUY market order for ${positionParams.amountQuote} ${pair.quoteAsset} of ${pair.symbol} on Binance, then watch it for take-profit/stop-loss/trailing-stop/time-limit and exit automatically with a real sell — no per-exit confirmation. Stop on Strategies › Execution force-exits it manually at any time.`
                       : type === 'dca'
                         ? `This will place ${dcaParams.levels.length} real resting BUY limit order${dcaParams.levels.length === 1 ? '' : 's'} for ${pair.symbol} on Binance, one per level (may fill immediately if a level is already at or above the current price). Once any level fills, the resulting position is watched for take-profit/stop-loss/time-limit and exits automatically with a real sell — no per-exit confirmation. Stop cancels every remaining resting level and force-exits any filled position, all at once.`
                         : type === 'twap'
@@ -861,7 +861,7 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
                                 return `This is NOT full Grid — it's a bounded ladder that shares ONE exit, not the perpetual per-level cycling paper Grid does. It will place ${placedCount} real resting BUY limit order${placedCount === 1 ? '' : 's'} for ${pair.symbol} on Binance (the ${placedCount} of ${allLevels.length} configured levels closest to the current price — "Max Open Orders" bounds how many real orders get placed, not how many can be open during cycling), ${perLevel.toFixed(2)} ${pair.quoteAsset} each. Once any level fills, the resulting position takes profit at +${gridParams.takeProfitPct}% from the SHARED average fill (not per-level) and exits automatically with a real sell — no per-exit confirmation. Stop Price is not enforced live (unlike paper mode, where it now closes the position and freezes the grid). Once the shared position exits, this executor stops for good — it does not re-place the level and keep cycling. Stop cancels every remaining resting level and force-exits any filled position, all at once.`
                               })()
                             : orderParams.executionStrategy === 'limit'
-                              ? `This will place a real resting LIMIT ${orderParams.side.toUpperCase()} order for ${orderParams.amountQuote} ${pair.quoteAsset} of ${pair.symbol} at ${orderParams.limitPrice} on Binance — it may not fill immediately, and can be cancelled from the Executors page (Stop) while open.`
+                              ? `This will place a real resting LIMIT ${orderParams.side.toUpperCase()} order for ${orderParams.amountQuote} ${pair.quoteAsset} of ${pair.symbol} at ${orderParams.limitPrice} on Binance — it may not fill immediately, and can be cancelled from Strategies › Execution (Stop) while open.`
                               : `This will immediately place a real ${orderParams.side.toUpperCase()} market order for ${orderParams.amountQuote} ${pair.quoteAsset} of ${pair.symbol} on Binance.`}
                   </p>
                   {!liveAmountOk && liveTradingStatus && (

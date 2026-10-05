@@ -134,8 +134,8 @@ export async function getDecryptedAiCredential(): Promise<{ apiKey: string }> {
   if (!credential) {
     throw new Error(
       legacyOpenAiKey
-        ? `The stored key is an OpenAI key from before this app used ${AI_PROVIDER_LABEL}, and is no longer used. Add an ${AI_PROVIDER_LABEL} key on the Agents page.`
-        : `No ${AI_PROVIDER_LABEL} API key configured. Add one on the Agents page.`
+        ? `The stored key is an OpenAI key from before this app used ${AI_PROVIDER_LABEL}, and is no longer used. Add an ${AI_PROVIDER_LABEL} key on Connections.`
+        : `No ${AI_PROVIDER_LABEL} API key configured. Add one on Connections.`
     )
   }
   return { apiKey: decrypt(credential.apiKeyEnc) }

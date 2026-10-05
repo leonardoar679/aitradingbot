@@ -1006,7 +1006,7 @@ export async function generateAiSignalTape(
       if (consecutiveRefusals >= MAX_CONSECUTIVE_REFUSALS && lastRefusal !== null && (await peekDecider(model, context)).decision === null) {
         throw new Error(
           `Stopped before asking again: the last ${MAX_CONSECUTIVE_REFUSALS} answers from ${describeDecider(lastRefusal.by)} were refused, and each was billed. ` +
-            `It is answering, but not in the shape asked for (${lastRefusal.reason}). Everything answered so far is cached. Choose another model under Agents → Models.`
+            `It is answering, but not in the shape asked for (${lastRefusal.reason}). Everything answered so far is cached. Choose another model under Settings › AI.`
         )
       }
       const first = await answerFrom(model, context, candleTime)

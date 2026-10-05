@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { NAV_ITEMS, type Page } from '../navigation/pages'
+import { NAV_GROUPS, type Page } from '../navigation/pages'
 import appIcon from '../../build/icon.png'
 
 interface SidebarProps {
@@ -18,7 +18,8 @@ export function Sidebar({
   return (
     <nav
       style={{
-        width: collapsed ? 64 : 176,
+        // Wide enough for the longest label, "Backtest & Research", beside its icon.
+        width: collapsed ? 64 : 200,
         flexShrink: 0,
         display: 'flex',
         flexDirection: 'column',
@@ -83,38 +84,62 @@ export function Sidebar({
           flexDirection: 'column',
           gap: '0.2rem',
           padding: '0.6rem',
-          flex: 1
+          flex: 1,
+          overflowY: 'auto'
         }}
       >
-        {NAV_ITEMS.map(({ page, label, icon: Icon }) => {
-          const active = currentPage === page
-          return (
-            <button
-              key={page}
-              onClick={() => onNavigate(page)}
-              title={label}
-              className={`nav-item${active ? ' nav-item-active' : ''}`}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: collapsed ? 'center' : 'flex-start',
-                gap: '0.55rem',
-                padding: '0.5rem 0.6rem',
-                borderRadius: 'var(--radius-sm)',
-                border: 'none',
-                background: 'transparent',
-                color: active ? 'var(--accent)' : 'var(--text-secondary)',
-                cursor: 'pointer',
-                fontSize: '0.85rem',
-                fontWeight: active ? 600 : 500,
-                whiteSpace: 'nowrap'
-              }}
-            >
-              <Icon size={18} />
-              {!collapsed && <span>{label}</span>}
-            </button>
-          )
-        })}
+        {NAV_GROUPS.map((group, index) => (
+          <div key={group.title} style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
+            {collapsed ? (
+              // Collapsed, a group is a rule between icons: the four still read as four.
+              index > 0 && <div style={{ borderTop: '1px solid var(--border)', margin: '0.35rem 0.4rem' }} />
+            ) : (
+              <div
+                style={{
+                  padding: index === 0 ? '0.15rem 0.6rem 0.2rem' : '0.6rem 0.6rem 0.2rem',
+                  fontSize: '0.66rem',
+                  fontWeight: 700,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  color: 'var(--text-muted)',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                {group.title}
+              </div>
+            )}
+            {group.items.map(({ page, label, icon: Icon }) => {
+              const active = currentPage === page
+              return (
+                <button
+                  key={page}
+                  onClick={() => onNavigate(page)}
+                  title={label}
+                  className={`nav-item${active ? ' nav-item-active' : ''}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: collapsed ? 'center' : 'flex-start',
+                    gap: '0.55rem',
+                    // Tight enough for all fifteen to fit a 760-pixel-high window without scrolling.
+                    padding: '0.38rem 0.6rem',
+                    borderRadius: 'var(--radius-sm)',
+                    border: 'none',
+                    background: 'transparent',
+                    color: active ? 'var(--accent)' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    fontSize: '0.85rem',
+                    fontWeight: active ? 600 : 500,
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  <Icon size={18} />
+                  {!collapsed && <span>{label}</span>}
+                </button>
+              )
+            })}
+          </div>
+        ))}
       </div>
 
       <button

@@ -255,7 +255,7 @@ export function AnalyzeTab({
         <div style={{ marginTop: '1rem', overflowX: 'auto' }}>
           <p style={{ ...noteStyle, marginBottom: '0.4rem' }}>
             The same candle, as each model asked so far read it. Agreement between models is not evidence that they are
-            right; the Benchmark tab asks them all the same history and scores it.
+            right; AI Benchmark asks them all the same history and scores it.
           </p>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>

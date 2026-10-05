@@ -77,7 +77,7 @@ export function LiveBalancesCard({ exchange }: { exchange: Exchange }): React.JS
             second exchange could be connected. An exchange this app can only read must not be
             described as one an executor could spend from. */}
         {canTradeOn(exchange)
-          ? 'A live executor you start yourself can, under the limits in Settings.'
+          ? 'A live executor you start yourself can, under the limits on Risk & Safety.'
           : `This app cannot place orders on ${exchangeName} at all — it only reads the balance, so a key with lookup permission alone is enough.`}
       </p>
 

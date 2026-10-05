@@ -103,7 +103,7 @@ export function aiWatchProblem(watch: AiWatchConfig, enabledModels: string[]): s
   if (new Set(watch.models).size !== watch.models.length) return 'The watch was given the same model twice'
   for (const model of watch.models) {
     if (isPanelId(model)) return 'A panel of agents has no question to put to an event, so the watch cannot ask one'
-    if (!enabledModels.includes(model)) return `${model} is not enabled. Enable it under Agents → Models before the watch asks it.`
+    if (!enabledModels.includes(model)) return `${model} is not enabled. Enable it under Settings › AI before the watch asks it.`
   }
   if (!isAiWatchEventLimit(watch.maxEventsPerDay)) return `The watch asks about ${AI_WATCH_EVENT_LIMITS.join(', ')} events a day`
   if (watch.minBand !== 'candidate' && watch.minBand !== 'urgent') return 'The watch asks about events at candidate or at urgent'
@@ -259,7 +259,7 @@ export function describeAiWatchCost(input: {
     sum,
     '',
     budget,
-    ...(input.scannerOn ? [] : ['The scanner is off, so the watch has nothing to ask about until it is switched on under Explorer.']),
+    ...(input.scannerOn ? [] : ['The scanner is off, so the watch has nothing to ask about until it is switched on under Discovery.']),
     'It recommends and notifies. It places nothing real, and it stays on across restarts until you switch it off.',
     '',
     'Switch it on?'
@@ -285,6 +285,6 @@ export function watchNotice(event: MarketEvent, decision: AiSignalDecision): { k
     body:
       `${describeDecider(decision.model)} at ${Math.round(decision.confidence * 100)}% confidence, on the ${describeEventType(event.type).toLowerCase()} at ${utcClock(event.time)} UTC. Nothing has been placed` +
       `${side === 'short' ? ', and a short can only be paper traded' : ''}. ` +
-      `Its entry is good until ${utcClock(validity.expiresAt)} UTC: open Agents, then Opportunities.`
+      `Its entry is good until ${utcClock(validity.expiresAt)} UTC: open Opportunities.`
   }
 }

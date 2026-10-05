@@ -110,7 +110,7 @@ export function WatchCard({
       // Free: what one call to each model is expected to cost, on a recent event's question.
       const priced = await priceWatchCall(events, chosen, { fetchCandles, peek: (request) => window.api.ai.peekOpportunity(request) })
       if (priced === null) {
-        setProblem('The scanner has not raised an event yet, so there is no question to price a call on. Switch the scanner on under Explorer, and switch the watch on once it has raised one.')
+        setProblem('The scanner has not raised an event yet, so there is no question to price a call on. Switch the scanner on under Discovery, and switch the watch on once it has raised one.')
         return
       }
       const next: AiWatchConfig = { enabled: true, models: chosen, maxEventsPerDay: limit, minBand: band, firstModelGates: gates && chosen.length > 1 }
@@ -205,7 +205,7 @@ export function WatchCard({
             </p>
           ))}
           {scannerOn === false && (
-            <p style={{ ...noteStyle, color: 'var(--gold)', marginTop: '0.5rem' }}>The scanner is off, so the watch has nothing to ask about. Switch it on under Explorer.</p>
+            <p style={{ ...noteStyle, color: 'var(--gold)', marginTop: '0.5rem' }}>The scanner is off, so the watch has nothing to ask about. Switch it on under Discovery.</p>
           )}
           <div style={{ marginTop: '0.8rem' }}>
             <button onClick={() => void switchOff()} disabled={busy} style={buttonStyle('secondary', busy)}>
@@ -273,13 +273,13 @@ export function WatchCard({
             <p style={{ ...noteStyle, color: 'var(--text-secondary)', marginTop: '0.4rem' }}>
               {paper.total === 0
                 ? 'None opened yet.'
-                : `${paper.open.length === 0 ? 'None open now.' : `${paper.open.length} open now: ${listOf(paper.open)}.`} ${paper.total} on the Executors page in all.`}
+                : `${paper.open.length === 0 ? 'None open now.' : `${paper.open.length} open now: ${listOf(paper.open)}.`} ${paper.total} on Strategies › Execution in all.`}
               {paper.ended !== '' && ` ${paper.ended}`}
               {!watch.enabled && ' The watch is off, so none will be opened until it is switched on.'}
             </p>
             {paper.hasAccount === false && (
               <p style={{ ...noteStyle, marginTop: '0.3rem' }}>
-                No paper account is set up, so their results are added to no balance. Each card on the Executors page says how its trade ended.
+                No paper account is set up, so their results are added to no balance. Each card on Strategies › Execution says how its trade ended.
               </p>
             )}
             <div style={{ marginTop: '0.7rem' }}>
@@ -335,7 +335,7 @@ export function WatchCard({
             </div>
             {paper.total > 0 && (
               <p style={{ ...noteStyle, marginTop: '0.5rem' }}>
-                {paper.total} opened earlier {paper.total === 1 ? 'is' : 'are'} on the Executors page.{paper.ended !== '' && ` ${paper.ended}`}
+                {paper.total} opened earlier {paper.total === 1 ? 'is' : 'are'} on Strategies › Execution.{paper.ended !== '' && ` ${paper.ended}`}
               </p>
             )}
           </>

@@ -91,11 +91,14 @@ async function buildRunRecord(bot: Bot, endedAt: number): Promise<BotRun | null>
 }
 
 export function BotsPage({
-  onPrepareOrder
+  onPrepareOrder,
+  embedded = false
 }: {
   /** Opens an executor form filled in from a running bot's call to buy (shared/aiProposal.ts).
-   * The form is on the Executors page, so this page only hands the proposal up. */
+   * The form is on Strategies › Execution, so this page only hands the proposal up. */
   onPrepareOrder?: (proposal: AiOrderProposal) => void
+  /** Leaves the title to the page this sits on (Strategies). */
+  embedded?: boolean
 } = {}): React.JSX.Element {
   const [tab, setTab] = useState<Tab>('active')
   const [bots, setBots] = useState<Bot[]>([])
@@ -187,7 +190,7 @@ export function BotsPage({
       let problem: string | null = null
       try {
         // Estimated without the old pins: switching on re-pins to the current default model, and
-        // to the route set under Agents → Models if there is one.
+        // to the route set under Settings › AI if there is one.
         const config = await window.api.ai.getConfig()
         estimate = await estimatePaidBot({
           exchange: bot.exchange,
@@ -279,7 +282,7 @@ export function BotsPage({
 
   return (
     <>
-      <PageHeader title="Bots" subtitle="Configure and manage your AI trading bots" />
+      {!embedded && <PageHeader title="Bots" subtitle="Configure and manage your AI trading bots" />}
 
       {runRecordError && (
         <p style={{ color: 'var(--down)', fontSize: '0.78rem', margin: '0 0 0.9rem' }}>{runRecordError}</p>

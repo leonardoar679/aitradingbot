@@ -72,7 +72,8 @@ const labelStyle: React.CSSProperties = {
 }
 
 
-export function TradePage(): React.JSX.Element {
+/** `embedded` leaves the title to the page this sits on (Paper Trading). */
+export function TradePage({ embedded = false }: { embedded?: boolean } = {}): React.JSX.Element {
   const [exchange, setExchange] = useState<Exchange>(EXCHANGES[0].id)
   const [pair, setPair] = useState<SymbolInfo>(EXCHANGES[0].defaultSymbol)
   const [side, setSide] = useState<Side>('buy')
@@ -120,7 +121,7 @@ export function TradePage(): React.JSX.Element {
 
   return (
     <>
-      <PageHeader title="Trade" subtitle="Manual paper trading — orders are simulated, not sent to any exchange" />
+      {!embedded && <PageHeader title="Trade" subtitle="Manual paper trading — orders are simulated, not sent to any exchange" />}
 
       <MarketTicker exchange={exchange} pair={pair} onExchangeChange={handleExchangeChange} onPairChange={setPair} />
 

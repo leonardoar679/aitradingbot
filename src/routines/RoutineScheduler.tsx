@@ -63,8 +63,8 @@ export function RoutineScheduler(): null {
   const routinesRef = useRef<RoutineConfig[]>([])
   const lastSerializedRef = useRef<string>('')
 
-  // RoutinesPage manages its own local copy of settings.routines (same pattern as
-  // Bots/Executors pages) with no cross-component push channel, so this instance — mounted
+  // RoutinesPage manages its own local copy of settings.routines (same pattern as the bots and
+  // executors views) with no cross-component push channel, so this instance — mounted
   // once, for the app's whole lifetime — has to poll to notice config changes made there.
   useEffect(() => {
     let cancelled = false

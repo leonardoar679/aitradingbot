@@ -9,7 +9,7 @@ import { describeEventType, type MarketEvent } from './marketEvent'
 //
 // The watch (shared/aiWatch.ts) asks and notifies. Since 2026-10-04, when the user chose it, it
 // may also open a PAPER position on a call it would act on, so that what following its
-// recommendations does is on the Executors page, and in the paper account where there is one,
+// recommendations does is on Strategies › Execution, and in the paper account where there is one,
 // without anyone having to be at the screen in the fifteen minutes an entry is good for.
 //
 // IT IS PAPER, AND CANNOT BE ANYTHING ELSE. The one file that turns a plan made here into an
@@ -117,7 +117,7 @@ export function describeAiWatchPaper(input: { config: AiWatchPaperConfig; watchO
     `While this is on, each time ${who} answers an event the watch put to it with BUY or SELL at ${confidence}% confidence or more, a PAPER position of ${config.stakeQuote} in the pair's quote currency is opened at once, with nobody pressing anything.`,
     '',
     'It is the position the Paper trade button would have filled in: it enters in the first minute the price trades inside the range the model named, and is abandoned if that has not happened when its entry expires; with the model\'s own stop and target, and its holding time as the time limit.',
-    `At most ${config.maxOpen} open at once, one an event, and one on a pair at a time. When a position has closed, it is stopped, and its card on the Executors page says how it ended.`,
+    `At most ${config.maxOpen} open at once, one an event, and one on a pair at a time. When a position has closed, it is stopped, and its card on Strategies › Execution says how it ended.`,
     input.hasPaperAccount
       ? 'Its result goes to the paper account, and a trade the paper account cannot fund is not opened.'
       : 'No paper account is set up, so their results are added to no balance, and nothing limits what these positions add up to. Set one up under Account to hold them to a balance.',
@@ -319,6 +319,6 @@ export function watchPaperNotice(
     body:
       `${describeDecider(plan.mark.model)} at ${Math.round(plan.mark.confidence * 100)}% confidence, on the ${describeEventType(event.type).toLowerCase()} at ${utcClock(event.time)} UTC. ` +
       `A paper position of ${plan.params.amountQuote} ${event.quoteAsset} was opened ${describeWatchPaperEntry(plan.params)}, with its stop ${plan.params.stopLossPct}% away and its target ${plan.params.takeProfitPct}%. ` +
-      'Nothing real has been placed. It is on the Executors page.'
+      'Nothing real has been placed. It is on Strategies › Execution.'
   }
 }

@@ -24,7 +24,7 @@ interface LivePositionsState {
   // only tells you when it was fully exited, not every date a partial realize happened on it).
   realizedEvents: RealizedEvent[]
   /** The fee rate the exchange really charged on the most recent fill it could be derived from.
-   * Recorded, never acted on: it feeds a note in Settings telling the user what FEE_RATE ought to
+   * Recorded, never acted on: it feeds a note on Risk & Safety telling the user what FEE_RATE ought to
    * be, and deliberately changes no P&L figure and no gate by itself. Null until a live fill has
    * reported a commission this app can value -- a BNB-denominated one cannot be valued without a
    * rate table, so it leaves this alone rather than writing a wrong number. */

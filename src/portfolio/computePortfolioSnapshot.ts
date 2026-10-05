@@ -146,7 +146,7 @@ export async function computePortfolioSnapshot(): Promise<PortfolioSnapshotData>
   // What the running paper strategies actually hold in the market, at what it cost them.
   //
   // NOT their full allocation. committedByAsset fences off an executor's whole stake so a second
-  // strategy cannot be funded with the same money -- the right rule for the Account page, and
+  // strategy cannot be funded with the same money -- the right rule for the paper account, and
   // wrong twice over as a valuation. The cash never left the balance (a paper executor's result
   // reaches the account only when it stops), and the part not yet in the market is still money the
   // user has. Subtracting the whole stake while adding back only the open lots is what made

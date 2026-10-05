@@ -109,7 +109,7 @@ export function LiveTradingBar(): React.JSX.Element | null {
   if (!credentialConfigured) {
     return (
       <div style={{ padding: '0.4rem 1rem', fontSize: '0.72rem', color: 'var(--text-muted)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-        Live trading: not available — add a verified Binance API key in Settings to enable it.
+        Live trading: not available — add a verified Binance API key on Connections to enable it.
       </div>
     )
   }

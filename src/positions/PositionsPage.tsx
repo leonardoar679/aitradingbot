@@ -142,7 +142,7 @@ export function PositionsPage(): React.JSX.Element {
       <Card title="Open Positions">
         {loaded && activeBots.length === 0 && (
           <p style={{ color: 'var(--text-secondary)', margin: 0 }}>
-            No active bots. Enable a bot from the Bots page to see its paper position here.
+            No active bots. Enable a bot under Strategies › Active Runs to see its paper position here.
           </p>
         )}
         {activeBots.length > 0 && (

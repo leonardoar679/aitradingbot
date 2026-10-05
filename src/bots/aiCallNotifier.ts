@@ -4,7 +4,7 @@ import { botAiProposal, type Bot, type BotAiCall } from './types'
 // A running bot makes its call when nobody is looking, and the order form that call can be turned
 // into is on offer only until its candle closes. This is what says so on the desktop.
 //
-// It raises a notice and nothing else. The form is still opened by a person, on the Bots page, and
+// It raises a notice and nothing else. The form is still opened by a person, under Strategies › Active Runs, and
 // still submitted by a person; a notification that a model said BUY is not an order and the text
 // says as much.
 

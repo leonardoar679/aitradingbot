@@ -25,6 +25,11 @@ import { describe, expect, it } from 'vitest'
 // held to this: exactly one of its files writes settings, what that file makes is paper by a
 // literal it cannot be handed, and no watch file -- that one included -- mentions the bridge a
 // real order travels over. A bot that trades real money by itself was offered and not chosen.
+//
+// And on 2026-10-05 the pages were rearranged around a trade (docs/INVENTORY.md). The Agents page
+// was split up: its Opportunities tab became the Opportunities page, Analyze and Signals became AI
+// Decisions, and Benchmark became AI Benchmark. Nothing about what a call can do changed. The
+// lists below name the new pages where they named the old one, held to exactly the same rule.
 
 const ROOT = join(__dirname, '..')
 const SERVICES = join(ROOT, 'electron', 'services')
@@ -128,6 +133,7 @@ describe('AI code has no route to a real order', () => {
       join(ROOT, 'src', 'agents', 'BenchmarkTab.tsx'),
       join(ROOT, 'src', 'agents', 'eventBenchmark.ts'),
       join(ROOT, 'src', 'agents', 'EventBenchmarkView.tsx'),
+      join(ROOT, 'src', 'ai-benchmark', 'AiBenchmarkPage.tsx'),
       join(ROOT, 'shared', 'aiBenchmark.ts'),
       join(ROOT, 'shared', 'aiEventBenchmark.ts')
     ]
@@ -141,7 +147,13 @@ describe('AI code has no route to a real order', () => {
     // Routing is the first place where a setting chooses WHOSE answer the account acts on, and a
     // panel is the first decider that is more than one call. The rules and the page they are set
     // on are checked like the rest: no mention of the bridge an order would travel over.
-    const routing = [join(ROOT, 'shared', 'aiRoute.ts'), join(ROOT, 'shared', 'aiPanel.ts'), join(ROOT, 'src', 'agents', 'ModelsTab.tsx')]
+    const routing = [
+      join(ROOT, 'shared', 'aiRoute.ts'),
+      join(ROOT, 'shared', 'aiPanel.ts'),
+      join(ROOT, 'src', 'agents', 'ModelsTab.tsx'),
+      // The page the route is now set on.
+      join(ROOT, 'src', 'settings', 'SettingsPanel.tsx')
+    ]
     for (const path of routing) {
       const source = readFileSync(path, 'utf-8')
       expect(source, path).not.toMatch(/liveTrading|LiveTrading|liveOrders|placeLive/)
@@ -150,8 +162,8 @@ describe('AI code has no route to a real order', () => {
 
   it('a call that fills in an order form goes no further than the form', () => {
     // The proposal rules, the card that offers one and the pages that hand it on. None of them
-    // may mention the bridge an order travels over: the form is on the Executors page, and the
-    // only thing these files can do is ask for it to be opened.
+    // may mention the bridge an order travels over: the form is on Strategies › Execution, and
+    // the only thing these files can do is ask for it to be opened.
     const proposing = [
       join(ROOT, 'shared', 'aiProposal.ts'),
       join(ROOT, 'shared', 'aiOpportunity.ts'),
@@ -161,7 +173,8 @@ describe('AI code has no route to a real order', () => {
       join(ROOT, 'src', 'agents', 'OpportunitiesTab.tsx'),
       join(ROOT, 'src', 'agents', 'OpportunityCard.tsx'),
       join(ROOT, 'src', 'agents', 'opportunities.ts'),
-      join(ROOT, 'src', 'agents', 'AgentsPage.tsx')
+      join(ROOT, 'src', 'opportunities', 'OpportunitiesPage.tsx'),
+      join(ROOT, 'src', 'ai-decisions', 'AiDecisionsPage.tsx')
     ]
     for (const path of proposing) {
       const source = readFileSync(path, 'utf-8')

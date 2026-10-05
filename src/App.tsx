@@ -1,58 +1,72 @@
 import { useState } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { OverviewPage } from './overview/OverviewPage'
+import { OpportunitiesPage } from './opportunities/OpportunitiesPage'
 import { Dashboard } from './dashboard/Dashboard'
-import { PortfolioPage } from './portfolio/PortfolioPage'
-import { AccountPage } from './account/AccountPage'
-import { TradePage } from './trade/TradePage'
-import { BotsPage } from './bots/BotsPage'
-import { ExecutorsPage } from './executors/ExecutorsPage'
-import { ControllersPage } from './controllers/ControllersPage'
-import { ControllerScheduler } from './controllers/ControllerScheduler'
+import { AiDecisionsPage } from './ai-decisions/AiDecisionsPage'
 import { PositionsPage } from './positions/PositionsPage'
-import { AgentsPage } from './agents/AgentsPage'
-import { OpportunityScheduler } from './agents/OpportunityScheduler'
-import { RoutinesPage } from './routines/RoutinesPage'
-import { RoutineScheduler } from './routines/RoutineScheduler'
+import { PerformancePage } from './performance/PerformancePage'
+import { PaperTradingPage } from './trading/PaperTradingPage'
+import { LiveTradingPage } from './trading/LiveTradingPage'
+import { StrategiesPage } from './strategies/StrategiesPage'
+import { ResearchPage } from './research/ResearchPage'
+import { AiBenchmarkPage } from './ai-benchmark/AiBenchmarkPage'
 import { ExplorerPage } from './explorer/ExplorerPage'
-import { BacktestPage } from './backtest/BacktestPage'
+import { RiskSafetyPage } from './risk/RiskSafetyPage'
+import { ConnectionsPage } from './connections/ConnectionsPage'
 import { SettingsPanel } from './settings/SettingsPanel'
+import { ControllerScheduler } from './controllers/ControllerScheduler'
+import { OpportunityScheduler } from './agents/OpportunityScheduler'
+import { RoutineScheduler } from './routines/RoutineScheduler'
 import { LiveTradingBar } from './livetrading/LiveTradingBar'
 import { LiveOrderScheduler } from './livetrading/LiveOrderScheduler'
 import { PortfolioScheduler } from './portfolio/PortfolioScheduler'
-import type { Page } from './navigation/pages'
+import { DEFAULT_TABS, pageLabel, type NavTarget, type Page, type PageTabs } from './navigation/pages'
 import type { AiOrderProposal } from '../shared/aiProposal'
 
-const PAGE_LABEL: Record<Page, string> = {
-  portfolio: 'Portfolio',
-  account: 'Account',
-  trade: 'Trade',
-  bots: 'Bots',
-  executors: 'Executors',
-  controllers: 'Controllers',
-  positions: 'Positions',
-  agents: 'Agents',
-  routines: 'Routines',
-  market: 'Market',
-  backtest: 'Backtest',
-  explorer: 'Explorer',
-  settings: 'Settings'
-}
-
 function App(): React.JSX.Element {
-  const [page, setPage] = useState<Page>('portfolio')
-  // Set when Portfolio's first-run card is clicked, cleared as soon as Executors has acted on it.
+  const [page, setPage] = useState<Page>('overview')
+  // The view each page with more than one is showing. Held here rather than in the page, so a
+  // hand-off from another page can open it on the view it needs.
+  const [tabs, setTabs] = useState<PageTabs>(DEFAULT_TABS)
+  // Set when Overview's first-run card is clicked, cleared as soon as Execution has acted on it.
   const [presetsRequested, setPresetsRequested] = useState(false)
-  // Set when a model's call is turned into an order form on the Agents page, cleared as soon as
-  // Executors has opened that form. What crosses between the two pages is a filled-in form, never
-  // an order: see shared/aiProposal.ts.
+  // Set when a model's call is turned into an order form on Opportunities, AI Decisions or a
+  // running bot, cleared as soon as Execution has opened that form. What crosses between pages is
+  // a filled-in form, never an order: see shared/aiProposal.ts.
   const [orderProposal, setOrderProposal] = useState<AiOrderProposal | null>(null)
-  // The same hand-over from both places a call is shown: the Analyze tab, and a running bot.
+  const [collapsed, setCollapsed] = useState(false)
+
+  function navigate(target: NavTarget | Page): void {
+    if (typeof target === 'string') {
+      setPage(target)
+      return
+    }
+    setPage(target.page)
+    if (target.page === 'strategies' && target.tab !== undefined) {
+      const tab = target.tab
+      setTabs((current) => ({ ...current, strategies: tab }))
+    } else if (target.page === 'research' && target.tab !== undefined) {
+      const tab = target.tab
+      setTabs((current) => ({ ...current, research: tab }))
+    } else if (target.page === 'ai-decisions' && target.tab !== undefined) {
+      const tab = target.tab
+      setTabs((current) => ({ ...current, 'ai-decisions': tab }))
+    }
+  }
+
+  // The same hand-over from every place a call is shown: Opportunities, AI Decisions, a running
+  // bot. The form is on Strategies › Execution.
   function prepareOrder(proposal: AiOrderProposal): void {
     setOrderProposal(proposal)
-    setPage('executors')
+    navigate({ page: 'strategies', tab: 'execution' })
   }
-  const [collapsed, setCollapsed] = useState(false)
+
+  function openPresets(): void {
+    setPresetsRequested(true)
+    navigate({ page: 'strategies', tab: 'execution' })
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
@@ -73,8 +87,8 @@ function App(): React.JSX.Element {
       <ErrorBoundary label="The portfolio scheduler">
         <PortfolioScheduler />
       </ErrorBoundary>
-      {/* The watch: off unless switched on from Agents, Opportunities. It asks models; it has no
-          way to place anything. */}
+      {/* The watch: off unless switched on from Opportunities. It asks models; it has no way to
+          place anything, and what it opens by itself is paper. */}
       <ErrorBoundary label="The opportunity watch">
         <OpportunityScheduler />
       </ErrorBoundary>
@@ -83,12 +97,7 @@ function App(): React.JSX.Element {
       </ErrorBoundary>
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <ErrorBoundary label="The sidebar">
-          <Sidebar
-            currentPage={page}
-            onNavigate={setPage}
-            collapsed={collapsed}
-            onToggleCollapsed={() => setCollapsed((c) => !c)}
-          />
+          <Sidebar currentPage={page} onNavigate={navigate} collapsed={collapsed} onToggleCollapsed={() => setCollapsed((c) => !c)} />
         </ErrorBoundary>
         <main
           style={{
@@ -103,33 +112,37 @@ function App(): React.JSX.Element {
         >
           {/* Keyed by page so navigating away from a broken page and back retries it, rather than
               the boundary latching its error for the rest of the session. */}
-          <ErrorBoundary key={page} label={`The ${PAGE_LABEL[page]} page`}>
-            {page === 'portfolio' && (
-              <PortfolioPage
-                onGetStarted={() => {
-                  setPresetsRequested(true)
-                  setPage('executors')
-                }}
+          <ErrorBoundary key={page} label={`The ${pageLabel(page)} page`}>
+            {page === 'overview' && <OverviewPage onGetStarted={openPresets} />}
+            {page === 'opportunities' && <OpportunitiesPage onPrepareOrder={prepareOrder} />}
+            {page === 'markets' && <Dashboard />}
+            {page === 'ai-decisions' && (
+              <AiDecisionsPage
+                tab={tabs['ai-decisions']}
+                onTab={(tab) => setTabs((current) => ({ ...current, 'ai-decisions': tab }))}
+                onPrepareOrder={prepareOrder}
               />
             )}
-            {page === 'account' && <AccountPage />}
-            {page === 'trade' && <TradePage />}
-            {page === 'bots' && <BotsPage onPrepareOrder={prepareOrder} />}
-            {page === 'executors' && (
-              <ExecutorsPage
+            {page === 'positions' && <PositionsPage />}
+            {page === 'performance' && <PerformancePage />}
+            {page === 'paper-trading' && <PaperTradingPage />}
+            {page === 'live-trading' && <LiveTradingPage onNavigate={navigate} />}
+            {page === 'strategies' && (
+              <StrategiesPage
+                tab={tabs.strategies}
+                onTab={(tab) => setTabs((current) => ({ ...current, strategies: tab }))}
+                onPrepareOrder={prepareOrder}
                 autoOpenPresets={presetsRequested}
                 onPresetsOpened={() => setPresetsRequested(false)}
                 proposal={orderProposal}
                 onProposalTaken={() => setOrderProposal(null)}
               />
             )}
-            {page === 'controllers' && <ControllersPage />}
-            {page === 'positions' && <PositionsPage />}
-            {page === 'agents' && <AgentsPage onPrepareOrder={prepareOrder} />}
-            {page === 'routines' && <RoutinesPage />}
-            {page === 'market' && <Dashboard />}
-            {page === 'backtest' && <BacktestPage />}
-            {page === 'explorer' && <ExplorerPage />}
+            {page === 'research' && <ResearchPage tab={tabs.research} onTab={(tab) => setTabs((current) => ({ ...current, research: tab }))} />}
+            {page === 'ai-benchmark' && <AiBenchmarkPage />}
+            {page === 'discovery' && <ExplorerPage />}
+            {page === 'risk' && <RiskSafetyPage />}
+            {page === 'connections' && <ConnectionsPage />}
             {page === 'settings' && <SettingsPanel />}
           </ErrorBoundary>
         </main>

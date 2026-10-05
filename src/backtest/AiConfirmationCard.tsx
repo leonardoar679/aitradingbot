@@ -151,7 +151,7 @@ export function AiConfirmationCard({ report }: { report: ConfirmationReport }): 
           </div>
           <p style={{ ...noteStyle, marginTop: '0.7rem' }}>
             A buy the model was less than {(GPT_MIN_CONFIDENCE * 100).toFixed(0)}% confident in counts as a veto, the same gate GPT
-            Intraday enters on. Hover a row for the model&apos;s reasoning. Every review is also in Agents → Signals.
+            Intraday enters on. Hover a row for the model&apos;s reasoning. Every review is also in AI Decisions › Signals.
           </p>
         </>
       )}

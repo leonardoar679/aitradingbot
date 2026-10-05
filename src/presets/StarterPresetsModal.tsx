@@ -276,7 +276,7 @@ export function StarterPresetsModal({ onClose, onInserted }: StarterPresetsModal
 
           {added && !error && (
             <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--up)' }}>
-              Added {added}. It is running in paper mode on the Executors page.
+              Added {added}. It is running in paper mode on Strategies › Execution.
             </p>
           )}
           {error && <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--down)' }}>Could not add: {error}</p>}

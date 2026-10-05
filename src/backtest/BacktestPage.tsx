@@ -163,7 +163,8 @@ function SectionHeader({
   )
 }
 
-export function BacktestPage(): React.JSX.Element {
+/** `embedded` leaves the title to the page this sits on (Backtest & Research). */
+export function BacktestPage({ embedded = false }: { embedded?: boolean } = {}): React.JSX.Element {
   const [tab, setTab] = useState<Tab>('configuration')
   const [runLabel, setRunLabel] = useState<string | null>(null)
   const [runState, setRunState] = useState<RunState | null>(null)
@@ -199,7 +200,7 @@ export function BacktestPage(): React.JSX.Element {
   /** How often GPT Intraday is asked, in 15-minute bars. It sets how far back a run can reach:
    * the ceiling is on decisions, so a slower cadence spreads the same number over more days. */
   const [gptEveryBars, setGptEveryBars] = useState<number>(GPT_DECISION_EVERY_BARS[0])
-  /** The route set under Agents → Models, and the default model it starts from. Read when this
+  /** The route set under Settings › AI, and the default model it starts from. Read when this
    * page opens, which is every time it is navigated to: a GPT Intraday run here is one of the two
    * places a route applies, and the page says so before Start rather than only in the dialog. */
   const [aiRouting, setAiRouting] = useState<{ model: string; route: AiRoute | null } | null>(null)
@@ -304,7 +305,7 @@ export function BacktestPage(): React.JSX.Element {
   // it: defaulting against '' would charge the run to an asset the account has never held.
   const quoteAsset = symbols.find((sym) => sym.symbol === tradingRoute.symbol)?.quoteAsset ?? ''
   // AVAILABLE, not total. Money a running paper strategy is already holding cannot also be the
-  // money this backtest starts with -- the Account page draws the same line.
+  // money this backtest starts with -- the paper account on Paper Trading draws the same line.
   const accountAvailable =
     account !== null && quoteAsset !== ''
       ? availableBalance(account, quoteAsset, committedFor(accountExecutors, quoteAsset))
@@ -835,7 +836,7 @@ export function BacktestPage(): React.JSX.Element {
 
   return (
     <>
-      <PageHeader title="Backtest" subtitle="Configure a strategy backtest against historical exchange data" />
+      {!embedded && <PageHeader title="Backtest" subtitle="Configure a strategy backtest against historical exchange data" />}
 
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
         <button style={tabButtonStyle(tab === 'configuration')} onClick={() => setTab('configuration')}>
@@ -1127,7 +1128,7 @@ export function BacktestPage(): React.JSX.Element {
                   model is asked every {describeGptCadence(gptEveryBars)}. Each uncached decision can use one model call
                   through {AI_PROVIDER_LABEL}
                   {aiRouting?.route
-                    ? `, or ${deciderCalls(aiRouting.route.model) > 1 ? `up to ${1 + deciderCalls(aiRouting.route.model)}` : 'two'}: the route set under Agents → Models passes a decision on to ${describeDecider(aiRouting.route.model)} when ${aiRouting.model} ${describeEscalation(aiRouting.route.when)}`
+                    ? `, or ${deciderCalls(aiRouting.route.model) > 1 ? `up to ${1 + deciderCalls(aiRouting.route.model)}` : 'two'}: the route set under Settings › AI passes a decision on to ${describeDecider(aiRouting.route.model)} when ${aiRouting.model} ${describeEscalation(aiRouting.route.when)}`
                     : ''}
                   ; reruns reuse the deterministic signal tape. Short samples do not establish profitability.
                 </p>

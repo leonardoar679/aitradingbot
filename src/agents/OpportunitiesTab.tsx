@@ -12,8 +12,6 @@ import { describeEventType, type MarketEvent } from '../../shared/marketEvent'
 import { describeError } from '../utils/ipcError'
 import { useNowSec } from '../utils/useNowSec'
 import { buttonStyle, noteStyle } from './agentStyles'
-import { JournalCard } from './JournalCard'
-import { LiveBoardCard } from './LiveBoardCard'
 import { OpportunityCard } from './OpportunityCard'
 import { askModels, assembleFeed, fetchEventQuestion, loadFeedBars, rightNowRows, type CandleFetch, type EventAnswer, type EventFeedItem } from './opportunities'
 import { getWatchActivity, subscribeWatchActivity } from './opportunityWatch'
@@ -31,7 +29,9 @@ const PAPER_REFRESH_MS = 30_000
 const fetchCandles: CandleFetch = async (exchange, symbol, interval, startSec, endSec) =>
   (await window.api.market.fetchHistoricalRange(exchange, symbol, interval, startSec, endSec)).candles
 
-/** Events the scanner raised, and what the models asked about each one recommended.
+/** Events the scanner raised, and what the models asked about each one recommended: the body of
+ * the Opportunities page. What those recommendations went on to earn, and the journal of them,
+ * are on Performance.
  *
  * OPENING THIS TAB ASKS NO MODEL. It reads the scanner's events, the answers already in the
  * ledger, and candles. A model is asked when Ask is pressed on a card, after a confirmation that
@@ -40,7 +40,7 @@ const fetchCandles: CandleFetch = async (exchange, symbol, interval, startSec, e
  * The watch itself runs in OpportunityScheduler, whichever page is open; this tab shows what it
  * has asked.
  *
- * NOTHING HERE TRADES. "Paper trade" hands a filled-in order form to the Executors page
+ * NOTHING HERE TRADES. "Paper trade" hands a filled-in order form to Strategies › Execution
  * (shared/aiProposal.ts); a person sets the amount and submits it there. The watch's own paper
  * trades (shared/aiWatchPaper.ts) are opened by OpportunityScheduler, not by this tab: here they
  * are switched on and off, and counted from the executors on file, which this tab only reads. */
@@ -225,7 +225,6 @@ export function OpportunitiesTab({
   const right = useMemo(() => rightNowRows(feed, bars, nowSec), [feed, bars, nowSec])
   // Models the watch has stopped asking today, read from the same rows that count its day.
   const paused = useMemo(() => watchPausedModels(calls, nowSec), [calls, nowSec])
-  const paperKeys = useMemo(() => new Set(watchTrades.map((executor) => `${executor.watch?.eventId}:${executor.watch?.model}`)), [watchTrades])
   const paperStanding = {
     hasAccount: paperAccount,
     open: watchTrades.filter((executor) => executor.status === 'active').map((executor) => executor.symbol),
@@ -266,13 +265,13 @@ export function OpportunitiesTab({
           Each ticked model is shown the same snapshot of an event and answers on its own; none sees another&apos;s answer.
           An answer is BUY, SELL or NO TRADE, and a call to trade names an entry range, a stop, a target, how long the entry
           stays valid and how long to hold. SELL is a short, which this app can only paper trade. Nothing is asked until
-          you press Ask on an event, and the price of those calls is stated first. Models are enabled under Models.
+          you press Ask on an event, and the price of those calls is stated first. Models are enabled under Settings › AI.
         </p>
       </Card>
 
       {scannerOn === false && (
         <p style={{ ...noteStyle, color: 'var(--gold)' }}>
-          The scanner is off, so no new events are being raised. Switch it on under Explorer. Events it raised earlier are
+          The scanner is off, so no new events are being raised. Switch it on under Discovery. Events it raised earlier are
           still listed here.
         </p>
       )}
@@ -312,9 +311,10 @@ export function OpportunitiesTab({
         </button>
       )}
 
-      {config !== null && <LiveBoardCard title="What the watch's recommendations earned" models={config.watch.models} refreshKey={watchAnswered} />}
-
-      <JournalCard paper={paperKeys} />
+      <p style={noteStyle}>
+        What the watch&apos;s recommendations went on to earn, over its last trades and days, and the journal of every one,
+        are on Performance.
+      </p>
 
       <p style={noteStyle}>
         What a recommendation has done is worked out from 1-minute candles each time this tab is looked at, never stored.

@@ -1,15 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Wallet, Plus, ArrowDownLeft, ArrowUpRight } from 'lucide-react'
-import { PageHeader } from '../components/PageHeader'
 import { Card } from '../components/Card'
 import { StatCard } from '../components/StatCard'
 import { formatQuotePrice } from '../utils/formatCurrency'
 import { accountPnl, availableBalance, emptyAccount, fund, totalBalance } from './paperAccount'
 import { assetsInPlay, committedByAsset, heldCostByAsset } from './accountCommitments'
 import { updateAccount } from './persistAccount'
-import { LiveBalancesCard } from './LiveBalancesCard'
-import { FuturesPositionsCard } from './FuturesPositionsCard'
-import type { AccountLedgerEntry, CredentialStatus, ExecutorConfig, HeldPosition, PaperAccount } from '../../shared/ipc'
+import type { AccountLedgerEntry, ExecutorConfig, HeldPosition, PaperAccount } from '../../shared/ipc'
 
 /** Amount with its sign in front of the currency symbol, not inside it. */
 function signed(value: number, asset: string): string {
@@ -47,7 +44,9 @@ function reasonLabel(entry: AccountLedgerEntry): string {
  * Never mutated: every helper that receives it only reads. */
 const EMPTY_ACCOUNT = emptyAccount(0)
 
-export function AccountPage(): React.JSX.Element {
+/** The paper account: the simulated balance paper strategies spend and hand back. It is the paper
+ * half of what was the Account page; the real balances are on Live Trading (LiveAccountSection). */
+export function PaperAccountSection(): React.JSX.Element {
   const [account, setAccount] = useState<PaperAccount | null>(null)
   const [executors, setExecutors] = useState<ExecutorConfig[]>([])
   const [heldPositions, setHeldPositions] = useState<HeldPosition[]>([])
@@ -56,7 +55,6 @@ export function AccountPage(): React.JSX.Element {
   const [amount, setAmount] = useState('10000')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [connected, setConnected] = useState<CredentialStatus[]>([])
 
   const reload = useCallback(async () => {
     const settings = await window.api.settings.get()
@@ -69,15 +67,6 @@ export function AccountPage(): React.JSX.Element {
   useEffect(() => {
     void reload()
   }, [reload])
-
-  useEffect(() => {
-    // A failure here means the live section simply does not appear. The paper account is the
-    // point of this page and must not be held hostage to whether a credentials file could be read.
-    window.api.credentials
-      .list()
-      .then((list) => setConnected(list.filter((c) => c.configured)))
-      .catch((e: unknown) => console.error('Failed to list connected exchanges:', e))
-  }, [])
 
   const committed = committedByAsset(executors)
   // Inventory is part of the account too: that cash left the balance to buy the position.
@@ -128,15 +117,6 @@ export function AccountPage(): React.JSX.Element {
 
   return (
     <>
-      <PageHeader
-        title="Account"
-        subtitle={
-          connected.length > 0
-            ? 'The simulated balance your paper strategies spend, and what you really hold on your connected exchanges'
-            : 'The simulated balance your paper strategies spend'
-        }
-      />
-
       {loaded && account === null && (
         <Card title="Get started">
           <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'flex-start' }}>
@@ -287,17 +267,11 @@ export function AccountPage(): React.JSX.Element {
             add funds, a strategy finishes and books its result, or a strategy hands a position over to Inventory.
             &quot;In inventory&quot; is what those handed-over positions cost — that money really did leave the total to buy
             them, so &quot;since funded&quot; counts it back in rather than reporting a loss you have not made. It is shown
-            at cost here; Positions and Portfolio price the same holdings at the market. Available can go negative if
+            at cost here; Positions and Performance price the same holdings at the market. Available can go negative if
             strategies were started before the account was funded. Live executors are excluded — they spend real money and keep their own ledger.
           </p>
         </Card>
       )}
-
-      {connected.map((credential) => (
-        <LiveBalancesCard key={credential.exchange} exchange={credential.exchange} />
-      ))}
-
-      {connected.some((c) => c.exchange === 'binance') && <FuturesPositionsCard />}
 
       {account !== null && account.ledger.length > 0 && (
         <Card title="Movements">

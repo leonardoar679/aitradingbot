@@ -82,7 +82,7 @@ function NewControllerForm({ executors, onCreate }: { executors: ExecutorConfig[
           <label style={fieldLabelStyle()}>Attached Executors</label>
           {executors.length === 0 ? (
             <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0 }}>
-              No executors yet — create one on the Executors page first.
+              No executors yet — create one on Strategies › Execution first.
             </p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', maxHeight: 160, overflowY: 'auto' }}>
@@ -212,7 +212,8 @@ function ControllerSnapshots({ controller, executors }: { controller: Controller
   )
 }
 
-export function ControllersPage(): React.JSX.Element {
+/** `embedded` leaves the title to the page this sits on (Risk & Safety). */
+export function ControllersPage({ embedded = false }: { embedded?: boolean } = {}): React.JSX.Element {
   const [controllers, setControllers] = useState<ControllerConfig[]>([])
   const [executors, setExecutors] = useState<ExecutorConfig[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -297,7 +298,7 @@ export function ControllersPage(): React.JSX.Element {
 
   return (
     <>
-      <PageHeader title="Controllers" subtitle="Group executors under shared risk controls and periodic P&L snapshots" />
+      {!embedded && <PageHeader title="Controllers" subtitle="Group executors under shared risk controls and periodic P&L snapshots" />}
 
       <NewControllerForm executors={executors} onCreate={handleCreate} />
 

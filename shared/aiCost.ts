@@ -98,12 +98,12 @@ export function formatUsd(value: number): string {
  * first thing someone stopped mid-run needs to know. */
 export function budgetProblem(capUsd: number, spentUsd: number): string | null {
   if (!(capUsd > 0)) {
-    return 'AI calls are switched off: the daily AI budget is $0. Raise it under Agents → Usage.'
+    return 'AI calls are switched off: the daily AI budget is $0. Raise it under Settings › AI.'
   }
   if (spentUsd >= capUsd) {
     return (
       `Today's AI budget is used up (${formatUsd(spentUsd)} of ${formatUsd(capUsd)}). Everything generated so far is ` +
-      'cached, so nothing is lost: raise the budget under Agents → Usage, or run again after midnight UTC.'
+      'cached, so nothing is lost: raise the budget under Settings › AI, or run again after midnight UTC.'
     )
   }
   return null

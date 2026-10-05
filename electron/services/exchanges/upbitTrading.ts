@@ -71,7 +71,7 @@ function describeUpbitError(status: number, body: unknown): string {
 }
 
 /** Reads the account. The only authenticated call this app makes to Upbit, and it places no
- * order and changes nothing -- a read-only key is enough, and is what the Settings page tells
+ * order and changes nothing -- a read-only key is enough, and is what Connections tells
  * the user to create. */
 export async function fetchUpbitBalances(accessKey: string, secretKey: string): Promise<AccountBalance[]> {
   const response = await fetch(`${REST_ROOT}/accounts`, {

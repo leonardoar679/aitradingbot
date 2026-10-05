@@ -24,7 +24,7 @@ const deps: WatchDeps = {
  * the ones the watch should ask about are put to its models.
  *
  * While the watch is off this reads one setting a scanner pass and asks nothing. It places nothing
- * real: what it produces is answers on the Opportunities tab, a desktop notice and, when the user
+ * real: what it produces is answers on the Opportunities page, a desktop notice and, when the user
  * has switched that on, a paper position -- which it also stops and settles once it has closed. */
 export function OpportunityScheduler(): null {
   useEffect(() => {
