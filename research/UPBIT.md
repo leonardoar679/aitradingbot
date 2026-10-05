@@ -1,8 +1,17 @@
 # Do Upbit's notices move a coin on Binance? — the rule, fixed before the held-out half was scored
 
-**The rule below was committed before `SET=heldout` was run with `MODE=check` or `MODE=study`.**
-Until then, every result here came from notices posted before 2025. The held-out half (January 2025
-to September 2026) had only been counted: which coins had a Binance market the day before.
+**The rule below was committed (9fe433f) before `SET=heldout` was run with `MODE=check` or
+`MODE=study`.** Until then, every result here came from notices posted before 2025. The held-out
+half (January 2025 to September 2026) had only been counted: which coins had a Binance market the
+day before. Its result is at the end, under [The held-out half](#the-held-out-half-january-2025-to-september-2026).
+
+**The answer: nothing passes, so nothing is built.**
+- **A KRW listing moves the coin on Binance at once:** 38% within the notice's minute in 2025 and
+  2026. All of it is gone before an app reading once a minute could buy. From there, the coin fades.
+- **A caution starts a slow fall, within an app's reach.** Held short four hours, it made 3.9% a
+  coin, and 18 of 24 coins were lower. That misses its bar (t 2.3 against 3), as Binance's
+  Monitoring Tag held four hours missed it (`research/NEWS.md`).
+- **A delisting's fall is immediate,** 6% in the minute, and nothing is left to trade.
 
 Reproduce with `research/fetch-upbit-notices.mjs`, `research/fetch-news-candles.mjs` and
 `research/upbit.ts`; the commands are at the top of `upbit.ts`.
@@ -176,3 +185,84 @@ for Binance's delisting and tag. A short stays paper only. Nothing real is ever 
 because of news.
 
 **If nothing passes, nothing is built,** and this file says so.
+
+## The held-out half: January 2025 to September 2026
+
+Scored once, after the rule above was committed (9fe433f).
+
+**The minutes are right here too.** The largest one-minute move fell in the notice's minute or the
+two after it for most coins, and for none before it:
+
+| | Coins | 0 to 2 minutes after |
+|---|---|---|
+| KRW listing | 64 | 64 (100%; 62 in the minute itself) |
+| Caution | 24 | 16 (67%) |
+| Delisting | 12 | 11 (92%) |
+
+**The results.** Means in percent, in the direction the notice is traded, with t on hourly means.
+Six KRW listings are left out: Binance had listed those coins too shortly before Upbit did to say
+what is usual for them.
+
+| | KRW listing (long) | Caution (short) | Delisting (short) |
+|---|---|---|---|
+| Coins (notice hours) | 58 (58) | 24 (24) | 12 (11) |
+| The hour before the notice | +1.21 (t +2.5) | −0.03 (t −0.1) | −1.48 (t −0.7) |
+| Move over 1 minute | +38.30 (t +7.2) | −0.06 (t −0.1) | +6.29 (t +5.4) |
+| 5 minutes | +41.22 (t +6.6) | +1.46 (t +2.1) | +7.25 (t +6.4) |
+| 15 minutes | +39.97 (t +6.3) | +2.47 (t +3.3) | +7.05 (t +5.2) |
+| 1 hour | +38.69 (t +6.4) | +3.98 (t +3.8) | +7.71 (t +3.4) |
+| 4 hours | +33.53 (t +6.7) | +5.02 (t +3.2) | +6.00 (t +1.7) |
+| 1 day | +27.86 (t +3.7) | +6.32 (t +3.5) | +7.30 (t +1.8) |
+| 1 day, vs the usual | +26.75 (t +3.5) | +3.00 (t +1.4) | +10.56 (t +6.2) |
+| **Missed before the entry** | **+40.30 (t +7.4)** | **+0.68 (t +1.5)** | +6.23 (t +6.0) |
+| The bracket, net | −0.38 (t −1.0), 21% ahead | +0.12 (t +0.4), 54% ahead | −0.87 (t −1.5), 25% ahead |
+| The bracket, vs the usual | −0.11 (t −0.3) | +0.49 (t +1.5) | −0.43 (t −0.7) |
+| **Held four hours, net** | −3.87 (t −2.0), 22 of 58 ahead, worst −32.8 | **+3.93 (t +2.4)**, 18 of 24 ahead, worst −8.6 | −0.62 (t −0.2), 6 of 12 ahead, worst −33.8 |
+| **Held four hours, vs the usual** | −3.89 (t −2.0) | **+3.87 (t +2.3)** | +0.12 (t +0.0) |
+
+**Against the rule:**
+
+| | The bracket (t ≥ 2) | Held four hours (t ≥ 3) | |
+|---|---|---|---|
+| KRW listing | −0.38 net: fails | −3.87 net: fails | fails |
+| Caution | +0.12 net, vs the usual t 1.5: fails | +3.93 net, vs the usual t 2.3: fails | fails |
+| Delisting | −0.87 net: fails | −0.62 net: fails | fails |
+
+### What it says
+
+**A KRW listing is a bigger jump than it was, and it is over in the minute.**
+- In 2025 and 2026 the Binance price jumped 38% in the notice's own minute, against 22% before
+  2025.
+- An app reading once a minute would have bought 40% above the price at the notice.
+- From there the coin faded. Four hours on, the long was behind on 36 of 58 coins, and lost 3.9% a
+  coin. COMP, CYBER, ALT, OPG and YGG each lost more than 23%.
+- That fade is the other side of the trade written down, and it is not claimed. The discovery half
+  did not show it (the long made 1.1% there). A trade chosen after seeing it would be held to t ≥ 3,
+  and it has t 2.0.
+
+**A caution starts a slow fall.**
+- Nothing happened in the notice's minute. The fall came over the hours after: 2.5% at fifteen
+  minutes, 4.0% at an hour, 5.0% at four.
+- So an app reading once a minute missed only 0.7% of it, unlike every other kind measured here or
+  in `research/NEWS.md`.
+- Held short four hours, it made 3.9% a coin after costs, and 18 of 24 coins were lower. Two coins
+  carried half of that: ZKC (October 2025) and SXP (January 2026), each down over 20%. Without them
+  it made 2.1%.
+- Its t of 2.3 falls short of the 3 the hold is held to. The bracket, whose stop the bounces reach,
+  kept little of the fall.
+- **Binance's Monitoring Tag looked the same** (`research/NEWS.md`): held short four hours, 4.5% a
+  coin, t 2.1, short of the same bar. Two exchanges' warnings show the same slow fall, and neither
+  passes on its own.
+
+**A delisting falls at once, and stops.**
+- 6.3% in the notice's minute and 7.7% after an hour, nearly all of it before an app could act.
+- Held short from the entry, it lost. DENT, in February 2026, rose after its notice and cost the
+  short 34%.
+
+### What it means for the app
+
+Nothing passed, so nothing is built, as the rule said. The app reads no Upbit notice.
+
+For someone holding a coin Upbit warns about, the warning came before a fall on Binance of 5% over
+four hours, slowly enough to sell into. It is the same reason a notice was built for Binance's tag.
+It is not built for Upbit's: the caution did not pass its bar.

@@ -74,7 +74,7 @@ CANDLE_DIR=<dir with the json> node --max-old-space-size=4096 research/.final.mj
 | `announcementStudy.ts` | The moves after an announcement, what an app reading once a minute misses, and the two trades, each against the coin's usual minutes. Moved out of `news.ts` unchanged (its output the same to the byte), so that `upbit.ts` is scored by the same code |
 | `fetch-upbit-notices.mjs` | Upbit's trading notices: titles and the second each was first posted, from 2017 |
 | `upbitTitles.ts` | Which of three kinds an Upbit notice is (a KRW listing, its caution designation, a delisting), and the coins it names, by fixed patterns (`tests/upbitTitles.test.ts`) |
-| `upbit.ts` | Whether Upbit's notices move a coin's price on Binance by enough to trade after them (`UPBIT.md`) |
+| `upbit.ts` | Whether Upbit's notices move a coin's price on Binance by enough to trade after them. None does: a KRW listing is over within its minute, a delisting nearly so, and a caution's slow fall, held short four hours, misses its bar (`UPBIT.md`) |
 
 ## What the study did not establish
 

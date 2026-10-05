@@ -302,6 +302,18 @@ same rule, committed before any of its candles were read:
   the coin, a paper short by the rule that passed, and a question to the watch's models (below,
   under [Binance's announcements on Discovery](#binances-announcements-on-discovery)).
 
+**What Upbit's notices do to a coin on Binance**, measured the same way and by the same code
+(`research/UPBIT.md`). Upbit is Korea's largest exchange. Three kinds of its notices were sorted by
+fixed patterns on the title, across the ways Upbit has worded them since 2017: a KRW listing, its
+caution designation, and a delisting. The rule was committed before the held-out half, 2025 to
+September 2026, was scored. **Nothing passed, so nothing was built:**
+- **A KRW listing** lifted the coin's Binance price 38% within the notice's minute. All of it was
+  gone before an app reading once a minute could buy, and from there the coin faded.
+- **A caution** started a slow fall that an app could reach. Held short four hours it made 3.9% a
+  coin, and 18 of 24 coins were lower, but it missed its bar (t 2.3 against 3), as Binance's
+  Monitoring Tag held four hours did.
+- **A delisting** fell 6% in the minute and stopped.
+
 #### Binance's announcements on Discovery
 
 Because a delisting passed, the app reads the news (V3 Stage 7). Under Settings › Market, a reader
