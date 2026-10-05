@@ -288,7 +288,17 @@ The result:
 - **Held short four hours, that is the first trade in these event studies to pass on held-out
   data.** It is paper only: a short can never be placed for real here, and Binance spot cannot be
   sold short. Two coins were squeezed upward, and a held short lost 44% and 80% on them.
-- **The usual bracket**, with a stop and a target, does not pass for any kind.
+- **The usual bracket**, with a stop and a target, does not pass for any of those three kinds.
+
+**Binance's Monitoring Tag**, its warning that a coin may be delisted, was measured after, under the
+same rule, committed before any of its candles were read:
+- 81 of the 87 coins delisted in the held-out half had carried the tag first.
+- The tag's announcement starts a fall: a coin was 4% lower within the minute and 10% four hours
+  on, half of it before an app reading once a minute could act.
+- **The bracket passes, narrowly:** 0.35% a trade after costs, beating the usual with t 2.3 against
+  a bar of 2. Held short four hours, a coin made 4.5% a trade but missed its stricter bar. One
+  squeeze cost the hold 39%.
+- The app does not read the tag yet. What it should do with it is the user's to decide.
 
 #### Binance's announcements on Discovery
 

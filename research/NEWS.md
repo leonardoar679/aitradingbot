@@ -8,12 +8,13 @@ day before. Its result is at the end, under [The held-out half](#the-held-out-ha
 **The answer:**
 - **A delisting passes, held for four hours as a paper short.** The coin is 13.2% lower four hours
   on, after costs. 75 of 87 coins were lower, and two squeezes cost 44% and 80%.
-- **The bracket does not pass for any kind.**
+- **The bracket does not pass for any of the first three kinds.**
 - **A futures launch or a listing moves the price at once.** It is over before an app reading once a
   minute could act.
-
-**A fourth kind, Binance's Monitoring Tag, was added after.** Its rule is under
-[A fourth kind](#a-fourth-kind-the-monitoring-tag), committed before any of its candles were read.
+- **Binance's Monitoring Tag passes, narrowly, on the bracket.** It was added after, under
+  [A fourth kind](#a-fourth-kind-the-monitoring-tag), its rule committed before any of its candles
+  were read. The bracket made 0.35% a trade after costs and beat the usual with t 2.3, against a bar
+  of 2. Held four hours, a short made 4.5% a trade but missed its bar.
 
 Reproduce with `research/fetch-announcements.mjs`, `research/fetch-news-candles.mjs` and
 `research/news.ts`; the commands are at the top of `news.ts`.
@@ -356,3 +357,80 @@ The tag passes if either trade passes **on the held-out half**: 20 announcements
 for a delisting. A short stays paper only.
 
 **If it fails, nothing is built,** and this section says so.
+
+### The result
+
+Scored once, after the rule above was committed (c1faf2a). Every one of the 137 coins had a USDT
+spot pair trading the day before, and none had under a day of candles before it.
+
+**The minutes are right.** The largest one-minute move within ten minutes of the announcement fell
+in its own minute or the two after it:
+
+| | Coins | 0 to 2 minutes after | By chance | Before the announcement |
+|---|---|---|---|---|
+| Before 2025 | 34 | 14 (41%) | 14% | 3 |
+| Held out | 103 | 75 (73%) | 14% | none |
+
+**What the tag did.** Means in percent, short (a fall is positive), with t on hourly means.
+
+| | Before 2025 | Held out |
+|---|---|---|
+| Coins (announcement hours) | 34 (5) | 103 (20) |
+| The hour before the announcement | +0.25 (t +0.9) | +0.67 (t +1.6) |
+| Move over 1 minute | +0.91 (t +1.5) | +4.15 (t +5.4) |
+| 5 minutes | +2.54 (t +1.3) | +7.51 (t +5.3) |
+| 15 minutes | +3.33 (t +1.5) | +6.92 (t +7.0) |
+| 1 hour | +5.58 (t +2.6) | +7.65 (t +4.2) |
+| 4 hours | +8.93 (t +4.2) | +9.68 (t +5.5) |
+| 1 day | +12.14 (t +6.1) | +11.92 (t +7.7) |
+| 1 day, vs the usual | +8.89 (t +4.1) | +11.26 (t +5.4) |
+| Missed before the entry | +1.43 (t +1.4) | +4.76 (t +5.9) |
+| **The bracket, net** | +0.56 (t +2.9), 71% ahead | **+0.35 (t +1.2)**, 57% ahead |
+| **The bracket, vs the usual** | +0.91 (t +4.5) | **+0.71 (t +2.3)** |
+| Held four hours, net | +7.19 (t +4.9), 28 of 34 ahead, worst −9.7 | +4.48 (t +2.0), 82 of 103 ahead, worst −39.2 |
+| Held four hours, vs the usual | +7.25 (t +4.8) | +4.73 (t +2.1) |
+
+**Against the rule:**
+
+| | The bracket (t ≥ 2) | Held four hours (t ≥ 3) | |
+|---|---|---|---|
+| Monitoring Tag | **+0.35 net, vs the usual t 2.3: passes** | +4.48 net, vs the usual t 2.1: fails | **passes** |
+
+#### What it says
+
+**The tag starts a fall, and half of the first four hours of it comes at once.**
+- In the held-out half, a tagged coin was 4.1% lower within its minute, 9.7% four hours on and
+  11.9% a day on.
+- 4.8% of that had gone before an app reading once a minute could act.
+
+**The bracket passes, narrowly.**
+- It made 0.35% a trade after costs, and beat the usual with t 2.3 against a bar of 2.
+- Its net alone has t 1.2: on its own it cannot be told from nothing.
+- It was ahead after 13 of the 20 announcements, and on 57% of the coins.
+
+**Held four hours, the short made more, and missed its bar.**
+- It made 4.5% a trade, and was ahead after 17 of the 20 announcements and on 80% of the coins.
+- Its t of 2.1 falls short of the 3 it was held to: the hold was written down after the delisting's
+  discovery half had been seen.
+- One announcement carried much of its mean. On 3 April 2025, ten coins each fell 17% to 40% in
+  four hours; without that hour, the hold's mean is 3.2%.
+- **A tagged coin can be squeezed, as a delisted one can.** LEVER, tagged in May 2025, rose and the
+  short lost 39%; GPS, tagged alone that March, lost the short 18%.
+
+**Before 2025, both trades looked stronger,** on five announcements. The first minute's fall was
+smaller then (0.9%), and more of the fall came within an app's reach.
+
+**For someone holding the coin,** the tag is a warning twice over:
+- A holder who sold at the second bar, rather than a day later, kept about 7% more of the coin's
+  value, on average.
+- 84 of the 97 coins tagged before April 2026 were delisted by 5 October 2026, and a delisting is a
+  further fall (above).
+
+#### What it means for the app
+
+By the rule, the tag passes. As promised above, nothing is built until the user says what it
+should do. The app's reader does not read Binance's news list yet, so any use of it starts there.
+
+What passed is the bracket, with a stop and a target, out within the hour. It is the trade the
+delisting failed, and closer to the watch's own paper trades, which follow a model's entry, stop and
+target. It passes by a small margin, and a paper short is the only way it can be traded here.

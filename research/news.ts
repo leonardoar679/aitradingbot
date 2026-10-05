@@ -462,6 +462,20 @@ if (MODE === 'check' || MODE === 'study') {
       const heldWins = held.filter((row) => (row.holdNet as number) > 0).length
       const worst = held.length > 0 ? Math.min(...held.map((row) => row.holdNet as number)) : NaN
       console.log(`  ${'held four hours, ahead'.padEnd(38)} ${heldWins} of ${held.length} (${((heldWins / held.length) * 100).toFixed(0)}%), worst ${f(worst, 2)}%`)
+      // BY_HOUR=<kind>: which announcements carry the result -- each hour's coins and its means.
+      if (process.env.BY_HOUR === category) {
+        const hours = new Map<number, Scored[]>()
+        for (const row of rows) {
+          const hour = Math.floor(row.time / 3600)
+          hours.set(hour, [...(hours.get(hour) ?? []), row])
+        }
+        for (const [hour, list] of [...hours.entries()].sort((a, b) => a[0] - b[0])) {
+          const bracketMean = mean(list.filter((row) => row.net !== null).map((row) => row.net as number))
+          const heldMean = mean(list.filter((row) => row.holdNet !== null).map((row) => row.holdNet as number))
+          const coins = list.map((row) => `${row.pair.ticker} ${f(row.holdNet ?? NaN, 1)}`).join(', ')
+          console.log(`  ${new Date(hour * 3_600_000).toISOString().slice(0, 13)}h ${String(list.length).padStart(3)} coins  bracket ${f(bracketMean, 2)}  held ${f(heldMean, 2)}  ${coins}`)
+        }
+      }
     }
   }
 }
