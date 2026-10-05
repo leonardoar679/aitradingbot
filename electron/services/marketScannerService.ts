@@ -12,6 +12,7 @@ import {
   rankCandidates,
   readEventAt,
   toMarketEvent,
+  toNewsEvent,
   type EventBand,
   type EventReading,
   type MarketEvent,
@@ -39,6 +40,7 @@ import {
   type ScannerPair,
   type ScannerState
 } from '../../shared/marketScanner'
+import type { NewsItem } from '../../shared/news'
 import { writeJsonAtomic } from './atomicWrite'
 import { appendJsonLine, listMonthFiles } from './jsonlStore'
 import { cancelHistoricalRangeFetch, fetchHistoricalRange, listSymbols, scanSourceFor } from './marketService'
@@ -340,6 +342,41 @@ function unschedule(): void {
   if (timer !== null) clearTimeout(timer)
   timer = null
   nextPassAt = null
+}
+
+/** Raises the event a delisting announcement makes for one coin it names (shared/marketEvent.ts,
+ * toNewsEvent), the way a pass raises its own: kept in the events file, put first among the recent
+ * ones, and passed to everyone listening -- which is how the watch hears of it. Its reading is the
+ * coin's market at the minute the announcement was read, read from the coin's own candles here.
+ *
+ * Called by the news reader only (electron/services/newsService.ts), from an announcement it read
+ * itself, and whatever the scanner's own switch says. Null when there is nothing to raise: the coin
+ * has no USDT pair, its candles do not make a reading, or an event of that coin at that minute has
+ * already been raised. It counts toward the coin's cooldown like any event: one move, one event. */
+export async function raiseNewsEvent(item: NewsItem, ticker: string, nowMs: number = Date.now()): Promise<MarketEvent | null> {
+  const current = await loadConfig()
+  await loadRecent()
+  const symbol = `${ticker}USDT`
+  const pair = (await listSymbols(SCANNER_EXCHANGE)).find((entry) => entry.symbol === symbol)
+  if (pair === undefined) return null
+  const nowSec = Math.floor(nowMs / 1000)
+  const candles = await scanSourceFor(SCANNER_EXCHANGE).fetchRecentCandles(symbol, '1m', CANDLES_PER_READ)
+  // The newest bar an exchange returns is still forming, as in a pass.
+  const completed = candles.filter((candle) => candle.time + EVENT_BAR_SECONDS <= nowSec)
+  const reading = readEventAt(completed, completed.length - 1)
+  if (reading === null) return null
+  const event = toNewsEvent(
+    reading,
+    { exchange: SCANNER_EXCHANGE, symbol, baseAsset: pair.baseAsset, quoteAsset: pair.quoteAsset },
+    { detectedAt: nowSec, quoteVolume24h: null, spreadPct: null, candidateScore: sig(reading.score), rank: 1 },
+    { articleId: item.id, title: item.title, releaseSec: item.releaseSec }
+  )
+  if (recentEvents.some((existing) => existing.id === event.id)) return null
+  remember(event)
+  recentEvents = [event, ...recentEvents].slice(0, RECENT_EVENTS_KEPT)
+  await appendJsonLine(join(eventsDir(), `events-${eventMonthKey(event.time)}.jsonl`), event)
+  notify(current)
+  return event
 }
 
 /** Called once at startup. Starts the loop only if it was left switched on. */

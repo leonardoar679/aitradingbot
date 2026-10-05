@@ -123,6 +123,9 @@ async function askable(
   let done = 0
   await inBatches(sample, FETCH_CONCURRENCY, options.shouldStop, async (event, index) => {
     try {
+      // An event an announcement raised has a question of its own, with the announcement in it; a
+      // benchmark compares models on the scanner's question, so it is left out like any unaskable one.
+      if (event.news !== undefined) throw new Error('An announcement is not benchmarked')
       const question = await fetchEventQuestion(event, fetchCandles, { market: kind === 'market' })
       // The same test the main process applies before it will ask: an event, at this minute, and
       // for the question with the market, the market around it (no question is built without it).

@@ -1,6 +1,6 @@
 import { EVENT_BENCHMARK_SETTLE_SEC, type EventBenchmarkAnswers } from '../../shared/aiEventBenchmark'
 import type { AiCallFilter, AiCallPage } from '../../shared/aiLedger'
-import { AI_OPPORTUNITY_PROMPT_VERSION } from '../../shared/aiOpportunity'
+import { AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS } from '../../shared/aiOpportunity'
 import type { Candle } from '../../shared/ipc'
 import type { MarketEvent } from '../../shared/marketEvent'
 import type { MarketEventFilter, MarketEventPage } from '../../shared/marketScanner'
@@ -51,7 +51,7 @@ export interface LiveAnswers {
 export async function readLiveAnswers(models: string[], nowSec: number, deps: Pick<LiveBoardDeps, 'listCalls' | 'listEvents'>): Promise<LiveAnswers> {
   const sinceSec = nowSec - LIVE_BOARD_DAYS * 86_400
   const [calls, onFile] = await Promise.all([
-    deps.listCalls({ source: 'watch', promptVersion: AI_OPPORTUNITY_PROMPT_VERSION, sinceSec, limit: ROWS_READ }),
+    deps.listCalls({ source: 'watch', promptVersions: AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS, sinceSec, limit: ROWS_READ }),
     // An answer inside the period can be about an event raised a few minutes before it began.
     deps.listEvents({ sinceSec: sinceSec - 3600, limit: ROWS_READ })
   ])

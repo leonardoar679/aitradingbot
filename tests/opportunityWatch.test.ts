@@ -124,6 +124,21 @@ describe('watchPass', () => {
     expect(r.asked).toHaveLength(2)
   })
 
+  it("puts an announcement's event with the announcement's id, and any other event with none", async () => {
+    const r = rig()
+    const requests: AiOpportunityAskRequest[] = []
+    const ask = r.deps.ask
+    r.deps.ask = async (request) => {
+      requests.push(request)
+      return ask(request)
+    }
+    // Quiet, as the minute a delisting is read often is: it is the announcement that raised it.
+    const delisting = event('ICXUSDT', { type: 'delisting', direction: 'down', band: 'quiet', news: { articleId: 990001, title: 'Binance Will Delist ICX on 2026-10-20', releaseSec: T - 30 } })
+    expect((await watchPass([delisting, event()], r.deps)).asked.sort()).toEqual([delisting.id, event().id].sort())
+    expect(requests.filter((request) => request.symbol === 'ICXUSDT').map((request) => request.newsId)).toEqual([990001, 990001])
+    expect(requests.filter((request) => request.symbol === 'SOLUSDT').map((request) => request.newsId)).toEqual([undefined, undefined])
+  })
+
   it('puts a fresh event to every model of the watch, once, in the watch\'s name', async () => {
     const r = rig()
     const result = await watchPass([event()], r.deps)

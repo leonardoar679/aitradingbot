@@ -65,15 +65,24 @@ export interface NewsConfig {
   notifyHeld: boolean
   /** A paper short on each coin Binance will delist, by the rule research/NEWS.md measured. */
   paperShort: { enabled: boolean; stakeQuote: number }
+  /** Each coin Binance will delist raised as an event, which the watch puts to its models when the
+   * watch is on -- within the watch's own limits and the day's AI budget. */
+  askModels: boolean
 }
 
 export interface NewsConfigPatch {
   enabled?: boolean
   notifyHeld?: boolean
   paperShort?: { enabled?: boolean; stakeQuote?: number }
+  askModels?: boolean
 }
 
-export const DEFAULT_NEWS_CONFIG: NewsConfig = { enabled: false, notifyHeld: true, paperShort: { enabled: false, stakeQuote: NEWS_SHORT_DEFAULT_STAKE } }
+export const DEFAULT_NEWS_CONFIG: NewsConfig = {
+  enabled: false,
+  notifyHeld: true,
+  paperShort: { enabled: false, stakeQuote: NEWS_SHORT_DEFAULT_STAKE },
+  askModels: true
+}
 
 /** A config read from a file, healed rather than obeyed: only `true` switches anything on, and only
  * a stake it offers is a stake. */
@@ -83,7 +92,8 @@ export function healNewsConfig(raw: unknown): NewsConfig {
   return {
     enabled: value.enabled === true,
     notifyHeld: value.notifyHeld !== false,
-    paperShort: { enabled: short.enabled === true, stakeQuote: isNewsShortStake(short.stakeQuote) ? short.stakeQuote : NEWS_SHORT_DEFAULT_STAKE }
+    paperShort: { enabled: short.enabled === true, stakeQuote: isNewsShortStake(short.stakeQuote) ? short.stakeQuote : NEWS_SHORT_DEFAULT_STAKE },
+    askModels: value.askModels !== false
   }
 }
 
@@ -97,6 +107,10 @@ export function applyNewsConfigPatch(current: NewsConfig, patch: NewsConfigPatch
   if (patch.notifyHeld !== undefined) {
     if (typeof patch.notifyHeld !== 'boolean') return 'The notice to holders is either on or off'
     next.notifyHeld = patch.notifyHeld
+  }
+  if (patch.askModels !== undefined) {
+    if (typeof patch.askModels !== 'boolean') return 'Putting delistings to the models is either on or off'
+    next.askModels = patch.askModels
   }
   if (patch.paperShort !== undefined) {
     if (typeof patch.paperShort !== 'object' || patch.paperShort === null) return 'Not a setting for the paper short'

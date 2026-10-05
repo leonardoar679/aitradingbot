@@ -2,7 +2,7 @@ import { BollingerBands, RSI } from 'technicalindicators'
 import { aggregateCandles, bucketTimeFor } from './aggregateCandles'
 import { AI_CONFIRM_PROMPT_VERSION, type AiStrategyBlock } from './aiConfirm'
 import { buildMarketBlock, type AiMarketBlock, type EventReference } from './aiEventMarket'
-import { AI_OPPORTUNITY_MARKET_PROMPT_VERSION, AI_OPPORTUNITY_PROMPT_VERSION, AI_OPPORTUNITY_SCHEMA_VERSION } from './aiOpportunity'
+import { AI_OPPORTUNITY_MARKET_PROMPT_VERSION, AI_OPPORTUNITY_NEWS_PROMPT_VERSION, AI_OPPORTUNITY_PROMPT_VERSION, AI_OPPORTUNITY_SCHEMA_VERSION } from './aiOpportunity'
 import { AI_PANEL_PROMPT_VERSION, canonicalAgentReports, type AiAgentReports } from './aiPanel'
 import { AI_SCHEMA_VERSION, GPT_LOOKBACK_BARS, GPT_PROMPT_VERSION, type AiPositionState } from './aiSignal'
 import { computeAtr } from './atr'
@@ -146,6 +146,20 @@ export interface AiMarketContext {
    * question -- the pair-alone one included, so that its bytes, and the answers already bought for
    * it, do not move -- and always after `event`. */
   market?: AiMarketBlock
+  /** Present only on an event's question asked BECAUSE OF AN ANNOUNCEMENT (shared/newsActions.ts):
+   * the announcement Binance published, as the main process read it from Binance's own list and
+   * kept it. Rebuilt in the main process from its own record of the article; nobody hands one in.
+   * ABSENT on every other question, for the reason `market` is, and always after `event`. */
+  news?: AiNewsBlock
+}
+
+/** An announcement as a model is shown it: whose, what kind, its title as published, and when. */
+export interface AiNewsBlock {
+  source: 'Binance'
+  kind: 'delisting'
+  title: string
+  /** Unix seconds. */
+  releasedAt: number
 }
 
 /** Which prompt a context is put to a model under. Derived from the context rather than passed
@@ -153,9 +167,12 @@ export interface AiMarketContext {
  * ledger cannot disagree: a context that carries analysts' reports is a panel's decision, one that
  * names a strategy is an entry review, one with an event is an opportunity -- with the market
  * around it or without -- and nothing else is any of those. */
-export function aiPromptVersion(context: Pick<AiMarketContext, 'strategy' | 'agents' | 'event' | 'market'>): string {
+export function aiPromptVersion(context: Pick<AiMarketContext, 'strategy' | 'agents' | 'event' | 'market' | 'news'>): string {
   if (context.agents !== undefined) return AI_PANEL_PROMPT_VERSION
-  if (context.event !== undefined) return context.market === undefined ? AI_OPPORTUNITY_PROMPT_VERSION : AI_OPPORTUNITY_MARKET_PROMPT_VERSION
+  if (context.event !== undefined) {
+    if (context.news !== undefined) return AI_OPPORTUNITY_NEWS_PROMPT_VERSION
+    return context.market === undefined ? AI_OPPORTUNITY_PROMPT_VERSION : AI_OPPORTUNITY_MARKET_PROMPT_VERSION
+  }
   return context.strategy === undefined ? GPT_PROMPT_VERSION : AI_CONFIRM_PROMPT_VERSION
 }
 
@@ -376,20 +393,46 @@ export function buildEventContext(
   const reading = readEventAt(bars1m, bars1m.length - 1)
   if (reading === null || reading.type === null || reading.direction === 'none' || !isAtLeast(reading.band, 'candidate')) return null
 
-  // The fifteen-minute bars that had closed when the event was read, and nothing later -- and
-  // the newest of them has to be the one that had JUST closed, or the snapshot is of some earlier
-  // market than the event's.
-  const barSeconds = INTERVAL_SECONDS['15m']
-  const closed = candles15m.filter((bar) => bar.time + barSeconds <= reading.time)
-  if (closed.length < GPT_LOOKBACK_BARS) return null
-  const window = closed.slice(-GPT_LOOKBACK_BARS)
-  if (reading.time - (window[window.length - 1].time + barSeconds) >= barSeconds) return null
-
-  const base = buildAiContext(window, window.length, { exchange: meta.exchange, symbol: meta.symbol, interval: '15m', position: 'flat' })
+  const base = eventSnapshot(candles15m, reading.time, meta)
   if (!base) return null
   // Last, and only here: see AiMarketContext.event.
   const question: AiMarketContext = { ...base, event: eventBlock({ ...reading, type: reading.type, direction: reading.direction }, bars1m) }
   return reference === undefined || reference === null ? question : withMarketBlock(question, reference)
+}
+
+/** The seven-day snapshot an event's question sits on: the fifteen-minute bars that had closed when
+ * the event was read, and nothing later -- and the newest of them has to be the one that had JUST
+ * closed, or the snapshot is of some earlier market than the event's. */
+function eventSnapshot(candles15m: Candle[], eventTime: number, meta: { exchange: Exchange; symbol: string }): AiMarketContext | null {
+  const barSeconds = INTERVAL_SECONDS['15m']
+  const closed = candles15m.filter((bar) => bar.time + barSeconds <= eventTime)
+  if (closed.length < GPT_LOOKBACK_BARS) return null
+  const window = closed.slice(-GPT_LOOKBACK_BARS)
+  if (eventTime - (window[window.length - 1].time + barSeconds) >= barSeconds) return null
+  return buildAiContext(window, window.length, { exchange: meta.exchange, symbol: meta.symbol, interval: '15m', position: 'flat' })
+}
+
+/** The question an announcement is put to a model as, or null when these candles do not make one.
+ *
+ * The candles are read as an event's are, and the minute is the one after the last of them. UNLIKE
+ * AN EVENT'S QUESTION, THE DETECTOR NEED NOT CALL THAT MINUTE ANYTHING: what raised it is the
+ * announcement, so the event is named 'delisting' and points down, and `news` says what was
+ * announced. The caller does not get to say that -- the main process builds `news` from its own
+ * record of an article it read (electron/services/aiSignalService.ts checks the article first). */
+export function buildNewsEventContext(
+  candles15m: Candle[],
+  candles1m: Candle[],
+  meta: { exchange: Exchange; symbol: string },
+  news: AiNewsBlock
+): AiMarketContext | null {
+  if (candles1m.length < EVENT_LOOKBACK_BARS) return null
+  const bars1m = candles1m.slice(-EVENT_LOOKBACK_BARS)
+  const reading = readEventAt(bars1m, bars1m.length - 1)
+  if (reading === null) return null
+  const base = eventSnapshot(candles15m, reading.time, meta)
+  if (!base) return null
+  // `event`, then `news`, last: see AiMarketContext.news.
+  return { ...base, event: eventBlock({ ...reading, type: 'delisting', direction: 'down' }, bars1m), news: { ...news } }
 }
 
 /** An event's question with the market around it, or null when Bitcoin's or ether's candles do

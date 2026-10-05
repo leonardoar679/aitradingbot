@@ -1,10 +1,16 @@
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AI_OPPORTUNITY_MARKET_SYSTEM_PROMPT } from '../electron/services/aiPrompt'
+import { AI_OPPORTUNITY_MARKET_SYSTEM_PROMPT, AI_OPPORTUNITY_NEWS_SYSTEM_PROMPT, AI_OPPORTUNITY_SYSTEM_PROMPT } from '../electron/services/aiPrompt'
 import { referenceReturns, type EventReference } from '../shared/aiEventMarket'
-import { AI_OPPORTUNITY_MARKET_PROMPT_VERSION, AI_OPPORTUNITY_PROMPT_VERSION, AI_OPPORTUNITY_SCHEMA_VERSION, type AiOpportunityAskRequest } from '../shared/aiOpportunity'
+import {
+  AI_OPPORTUNITY_MARKET_PROMPT_VERSION,
+  AI_OPPORTUNITY_NEWS_PROMPT_VERSION,
+  AI_OPPORTUNITY_PROMPT_VERSION,
+  AI_OPPORTUNITY_SCHEMA_VERSION,
+  type AiOpportunityAskRequest
+} from '../shared/aiOpportunity'
 import { eventQuestionCandles, referenceCandles } from './eventCandles'
 
 // An event put to a model, end to end, with the network faked and everything else real: the
@@ -232,6 +238,81 @@ describe('asking a model about an event', () => {
     const [a, b] = await Promise.all([askAiOpportunity(request()), askAiOpportunity(request())])
     expect(bodies).toHaveLength(1)
     expect([a.cached, b.cached].sort()).toEqual([false, true])
+  })
+})
+
+describe('an event an announcement raised', () => {
+  // The reader's own record of what it read (electron/services/newsService.ts), in its files.
+  const article = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
+    id: 990001,
+    catalog: 161,
+    title: 'Binance Will Delist SOL on 2026-09-15',
+    releaseSec: QUESTION.eventTime - 30,
+    seenAt: QUESTION.eventTime - 27,
+    category: 'DELISTING',
+    tickers: ['SOL'],
+    ...overrides
+  })
+  function keep(...items: Record<string, unknown>[]): void {
+    const dir = join(process.env.AI_TEST_USER_DATA as string, 'news')
+    mkdirSync(dir, { recursive: true })
+    for (const item of items) appendFileSync(join(dir, `news-${new Date((item.releaseSec as number) * 1000).toISOString().slice(0, 7)}.jsonl`), JSON.stringify(item) + '\n')
+  }
+  const hold = answer({ recommendation: 'hold', entryMin: null, entryMax: null, stopLoss: null, takeProfit: null, confidence: 0.5 })
+
+  it('is asked under its own prompt, with the announcement last, and kept as a delisting', async () => {
+    keep(article())
+    const { bodies } = stubOpenRouter(() => ({}))
+    const { askAiOpportunity, listAiCalls } = await services()
+    await askAiOpportunity(request({ newsId: 990001 }))
+    const body = bodies[0] as { messages: { role: string; content: string }[] }
+    expect(body.messages[0].content).toBe(AI_OPPORTUNITY_NEWS_SYSTEM_PROMPT)
+    const sent = JSON.parse(body.messages[1].content) as Record<string, unknown> & { event: { type: string; direction: string; time: number } }
+    expect(Object.keys(sent).slice(-2)).toEqual(['event', 'news'])
+    expect(sent.news).toEqual({ source: 'Binance', kind: 'delisting', title: 'Binance Will Delist SOL on 2026-09-15', releasedAt: QUESTION.eventTime - 30 })
+    expect(sent.event).toMatchObject({ type: 'delisting', direction: 'down', time: QUESTION.eventTime })
+    expect((await listAiCalls({})).rows[0]).toMatchObject({
+      promptVersion: AI_OPPORTUNITY_NEWS_PROMPT_VERSION,
+      eventType: 'delisting',
+      eventId: `binance:SOLUSDT:${QUESTION.eventTime}`
+    })
+    // The same minute asked as the scanner's question is another question, bought on its own.
+    await askAiOpportunity(request())
+    expect(bodies).toHaveLength(2)
+    expect((bodies[1] as { messages: { content: string }[] }).messages[0].content).toBe(AI_OPPORTUNITY_SYSTEM_PROMPT)
+  })
+
+  it('is asked about a minute the detector would not raise, because the announcement raised it', async () => {
+    const calm = eventQuestionCandles({ pct: 0.02 })
+    keep(article({ releaseSec: calm.eventTime - 30, seenAt: calm.eventTime - 27 }))
+    const { bodies } = stubOpenRouter(() => ({ content: hold }))
+    const { askAiOpportunity } = await services()
+    await expect(askAiOpportunity(request({ candles1m: calm.candles1m, candles15m: calm.candles15m }))).rejects.toThrow(/do not end in an event/)
+    expect(await askAiOpportunity(request({ candles1m: calm.candles1m, candles15m: calm.candles15m, newsId: 990001 }))).toMatchObject({ recommendation: 'hold', error: null })
+    expect(bodies).toHaveLength(1)
+  })
+
+  it('is asked only about an announcement this app read: a delisting, naming this pair, from around this minute', async () => {
+    keep(
+      article({ id: 1, tickers: ['XRP'] }),
+      article({ id: 2, releaseSec: QUESTION.eventTime - 3 * 3600 }),
+      article({ id: 3, category: 'FUTURES_LAUNCH', title: 'Binance Futures Will Launch USDⓈ-Margined SOLUSDT Perpetual Contract' }),
+      article({ id: 4 })
+    )
+    const { bodies } = stubOpenRouter(() => ({}))
+    const { askAiOpportunity, peekAiOpportunity } = await services()
+    await expect(askAiOpportunity(request({ newsId: 990001 }))).rejects.toThrow('This app has read no such announcement. Nothing was asked.')
+    await expect(askAiOpportunity(request({ newsId: 1 }))).rejects.toThrow('The announcement does not name SOLUSDT.')
+    await expect(askAiOpportunity(request({ newsId: 2 }))).rejects.toThrow('The question is not about the minutes after the announcement.')
+    await expect(askAiOpportunity(request({ newsId: 3 }))).rejects.toThrow('Only a delisting is put to the models.')
+    const market: EventReference = { btc: referenceCandles(QUESTION.eventTime, 11), eth: referenceCandles(QUESTION.eventTime, 23) }
+    await expect(askAiOpportunity(request({ newsId: 4, reference: market }))).rejects.toThrow(/not asked with the market around it/)
+    await expect(askAiOpportunity(request({ newsId: 4, candles1m: [] }))).rejects.toThrow(/needs completed 1-minute candles/)
+    await expect(peekAiOpportunity({ ...request({ newsId: 1 }), models: ['openai/gpt-5-mini'] })).rejects.toThrow('The announcement does not name SOLUSDT.')
+    expect(bodies).toEqual([])
+    // And the one it did read is asked.
+    await askAiOpportunity(request({ newsId: 4 }))
+    expect(bodies).toHaveLength(1)
   })
 })
 

@@ -326,7 +326,25 @@ is open:
   after the announcement's minute, with no stop and no target. The news reader then stops it and
   settles it into the paper account, as the watch does with its trades. Its card says where it came
   from. A coin squeezed upward can cost it a great deal, as two of 87 did.
-- **The models**: a delisting raised as an event the watch puts to its models, below.
+- **The models** (on by default once the reader is on; nothing is asked unless the watch is on too).
+  Each coin the delisting names that has a USDT pair is raised as an event. The main process raises
+  it, from the coin's own candles at the minute it read the announcement. The event is named
+  `delisting`, points down, and carries which announcement raised it. It shows on Discovery and
+  Opportunities like any event.
+  - **The watch** takes it up as it takes up any fresh event. It is not held to the band floor,
+    because the announcement raised it, not the move. It counts toward the watch's daily limit and
+    the day's AI budget.
+  - **The question** has a prompt of its own (`opportunity-news-v1`, pinned by its hash), with the
+    announcement's title and release time in a `news` block after the event. The prompt says what
+    the block is, not what such coins did.
+  - **The main process checks** the article against the reader's own record before asking: it must
+    be a delisting the app read, naming that pair, from around that minute. A request cannot bring
+    its own news.
+  - **What comes back** is an answer like any other. A call to sell can open the watch's paper trade
+    when that is switched on, and can never be placed for real.
+  - **Where answers show:** the feed, the journal and the live board read these answers beside the
+    scanner's. A benchmark leaves these events out, since it compares models on the scanner's
+    question.
 
 **Nothing real is placed or sold because of an announcement.** A short can never be placed for real
 here. `src/news/newsPaperShort.ts`, the one file that writes these shorts, spells paper as a
@@ -351,6 +369,19 @@ desktop notices were captured.
   where it came from.
 - **Read again a minute later:** nothing more was opened.
 - **Writes:** none went to an exchange, and no model was reached.
+
+**And the models**, checked the same day on a third scratch profile. OpenRouter was a canned
+transport in the main process, with a fake key and one fake model; nothing was billed. The list held
+one delisting of DOGE.
+- **Raised:** a DOGEUSDT `delisting` event, quiet by its candles, pointing down, carrying the
+  announcement.
+- **Asked:** the watch put it to the model once, under the news prompt. The `news` block came last,
+  and the event read `delisting`, down.
+- **Recorded:** the ledger row was `opportunity-news-v1`, a delisting.
+- **Paper trade:** the canned SELL at 80% opened the watch's paper SELL.
+- **Shown:** Right Now on Opportunities showed the delisting with the call and its entry, and
+  Discovery's events listed it.
+- **Writes:** none went to an exchange; one model call was made, to the fake.
 
 ### AI signals — paper only
 
@@ -2475,6 +2506,7 @@ shared/                       Code both processes run, so they cannot disagree a
   marketEvent.ts              The event detector: a pair's reading from twelve hours of 1-minute candles, and what raises an event
   marketScanner.ts            The scanner's settings, what a pass reports, and which pairs are watched
   newsTitles.ts, news.ts      Which kind of news a Binance title is, and which coins it names (the study's patterns); what the reader keeps of each article, and what each kind did
+  newsActions.ts              What a delisting does: the notice to a holder, the rule's paper short, and when it is raised for the models and may be asked about
   indicators.ts, atr.ts, …    Indicator and fee arithmetic shared with the strategies
 
 src/                          React renderer app

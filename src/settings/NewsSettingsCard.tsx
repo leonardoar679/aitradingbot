@@ -68,6 +68,10 @@ export function NewsSettingsCard(): React.JSX.Element {
         <span style={labelStyle}>Tell me if I hold the coin, on Binance or on paper</span>
       </div>
       <div style={rowStyle}>
+        <Toggle on={config?.askModels === true} onChange={(next) => !busy && void change({ askModels: next })} />
+        <span style={labelStyle}>Put it to the watch&apos;s models, when the watch is on</span>
+      </div>
+      <div style={rowStyle}>
         <Toggle on={config?.paperShort.enabled === true} onChange={(next) => !busy && void change({ paperShort: { enabled: next } })} />
         <span style={labelStyle}>Open a paper short of</span>
         <select
@@ -86,8 +90,10 @@ export function NewsSettingsCard(): React.JSX.Element {
         <span style={labelStyle}>USDT on each coin, held four hours</span>
       </div>
       <p style={{ ...noteStyle, marginTop: '0.8rem' }}>
-        Both act only on a delisting read while the app is open. The notice reads your Binance balances where a key is stored, and
-        your paper account and positions; it sells nothing. The paper short is the rule research/NEWS.md measured: opened within five
+        Each acts only on a delisting read while the app is open. The notice reads your Binance balances where a key is stored, and
+        your paper account and positions; it sells nothing. Put to the models, each coin it names is raised as an event, and the watch
+        on Opportunities asks its models about it within its own limits and the day&apos;s budget, as it does any event; a call to
+        short can only ever be a paper trade. The paper short is the rule research/NEWS.md measured: opened within five
         minutes of the announcement, out four hours after it, with no stop and no target. It is paper and can never be anything else,
         and a coin squeezed upward can cost it a great deal: two of 87 lost 44% and 80%. With a paper account it is funded and
         settled like any paper trade.

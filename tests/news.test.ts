@@ -11,6 +11,16 @@ import { DEFAULT_NEWS_CONFIG, matchesNewsFilter, newsListUrl, nextNewsReadDelayM
 
 vi.mock('electron', () => ({ app: { getPath: () => process.env.NEWS_TEST_USER_DATA } }))
 
+// The scanner, at the one function the reader reaches it through: raising a delisting as an event.
+const raised = vi.hoisted(() => ({ calls: [] as { id: number; ticker: string }[], fail: false }))
+vi.mock('../electron/services/marketScannerService', () => ({
+  raiseNewsEvent: async (item: { id: number }, ticker: string) => {
+    raised.calls.push({ id: item.id, ticker })
+    if (raised.fail) throw new Error('its candles could not be read')
+    return null
+  }
+}))
+
 const T = Date.parse('2026-10-05T06:00:00Z')
 
 const lists = vi.hoisted(() => ({
@@ -62,6 +72,8 @@ beforeEach(() => {
   lists.failing = new Set()
   lists.answer = null
   lists.calls = []
+  raised.calls = []
+  raised.fail = false
   vi.stubGlobal('fetch', vi.fn(fakeFetch))
 })
 
@@ -200,6 +212,63 @@ describe('the reader', () => {
     expect((await listNews({ sinceSec: (T - 2 * 3_600_000) / 1000 })).rows.map((item) => item.id)).toEqual([301, 201])
     expect((await listNews({ limit: 3 })).rows.map((item) => item.id)).toEqual([301, 201, 300])
     expect((await listNews({})).rows.map((item) => item.id)).toEqual([301, 201, 300, 200])
+  })
+})
+
+describe('a delisting put to the models', () => {
+  // An hour after the articles above, so that none of them is news.
+  const LATER = T + 3_600_000
+  const fresh = article(310, 'Binance Will Delist FIO, FUN on 2026-10-20', LATER - 2_000)
+
+  it('raises each coin of a delisting released minutes ago, once the reader is on', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(LATER + 3_000)
+    lists.articles.get(161)?.unshift(fresh)
+    const { setNewsConfig, whenNewsSettled } = await reader()
+    await setNewsConfig({ enabled: true })
+    await whenNewsSettled()
+    // Only the fresh one: the rest were released an hour or more ago.
+    expect(raised.calls).toEqual([
+      { id: 310, ticker: 'FIO' },
+      { id: 310, ticker: 'FUN' }
+    ])
+    await setNewsConfig({ enabled: false })
+  })
+
+  it('raises nothing when that is switched off, or for a delisting read too long after its release', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(LATER + 3_000)
+    lists.articles.get(161)?.unshift(fresh)
+    const { setNewsConfig, whenNewsSettled } = await reader()
+    await setNewsConfig({ enabled: true, askModels: false })
+    await whenNewsSettled()
+    expect(raised.calls).toEqual([])
+
+    vi.resetModules()
+    const later = await reader()
+    lists.articles.get(161)?.unshift(article(311, 'Binance Will Delist COS on 2026-10-20', LATER - 6 * 60_000))
+    // Switched back on, it reads at once -- and keeps 311, which is six minutes old: history.
+    await later.setNewsConfig({ askModels: true })
+    await later.whenNewsSettled()
+    expect((await later.getNewsState()).recent.map((item) => item.id)).toContain(311)
+    expect(raised.calls).toEqual([])
+    await setNewsConfig({ enabled: false })
+    await later.setNewsConfig({ enabled: false })
+  })
+
+  it('goes on reading when a coin cannot be raised', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(LATER + 3_000)
+    raised.fail = true
+    lists.articles.get(161)?.unshift(fresh)
+    const { setNewsConfig, whenNewsSettled, getNewsState } = await reader()
+    await setNewsConfig({ enabled: true })
+    await whenNewsSettled()
+    expect(raised.calls).toHaveLength(2)
+    const state = await getNewsState()
+    expect(state.error).toBeNull()
+    expect(state.recent[0].id).toBe(310)
+    await setNewsConfig({ enabled: false })
   })
 })
 

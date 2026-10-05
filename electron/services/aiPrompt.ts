@@ -174,14 +174,30 @@ export const AI_OPPORTUNITY_MARKET_SYSTEM_PROMPT = [
   ...OPPORTUNITY_LINES.slice(2)
 ].join('\n')
 
+/** The same question about the event an announcement raised (opportunity-news-v1,
+ * shared/aiContext.ts buildNewsEventContext). One paragraph more, after the one that says what the
+ * user message holds, and not a word of the rest changed.
+ *
+ * IT SAYS WHAT THE BLOCK IS, AND NOT WHAT IT MEANS. research/NEWS.md measured what a delisting's coin
+ * did in the hours after it; putting that here would be handing the model the answer it is being
+ * measured on, for the reason the first prompt does not say what usually follows an event. */
+export const AI_OPPORTUNITY_NEWS_SYSTEM_PROMPT = [
+  ...OPPORTUNITY_LINES.slice(0, 2),
+  '"news" is why this event was raised: an announcement Binance itself published about this coin, with its title as published and releasedAt, when it was released (unix seconds). kind "delisting" means Binance has announced that it will remove this coin from its spot market. The event block is the market at the minute the announcement was read, whether or not the price had moved yet: its type is "delisting" and its direction "down" because of the announcement, not because of the candles, and its score and components are what the candles alone show.',
+  ...OPPORTUNITY_LINES.slice(2)
+].join('\n')
+
 /** The system text a context is sent under: the panel's decision when it carries analysts'
- * reports, an opportunity prompt when it carries an event -- the one with the market when it
- * carries that too -- the review prompt when it names a strategy, the standalone one otherwise.
- * The same tests shared/aiContext.ts's aiPromptVersion makes, so the text sent and the version
- * recorded for it are chosen by one fact. */
+ * reports, an opportunity prompt when it carries an event -- the one with the announcement or the
+ * one with the market when it carries either -- the review prompt when it names a strategy, the
+ * standalone one otherwise. The same tests shared/aiContext.ts's aiPromptVersion makes, so the text
+ * sent and the version recorded for it are chosen by one fact. */
 function systemPromptFor(context: AiMarketContext): string {
   if (context.agents !== undefined) return AI_PANEL_SYSTEM_PROMPT
-  if (context.event !== undefined) return context.market === undefined ? AI_OPPORTUNITY_SYSTEM_PROMPT : AI_OPPORTUNITY_MARKET_SYSTEM_PROMPT
+  if (context.event !== undefined) {
+    if (context.news !== undefined) return AI_OPPORTUNITY_NEWS_SYSTEM_PROMPT
+    return context.market === undefined ? AI_OPPORTUNITY_SYSTEM_PROMPT : AI_OPPORTUNITY_MARKET_SYSTEM_PROMPT
+  }
   return context.strategy === undefined ? AI_SYSTEM_PROMPT : AI_CONFIRM_SYSTEM_PROMPT
 }
 

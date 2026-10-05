@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { matchesAiCallFilter } from '../shared/aiLedger'
+import { AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS, describeQuestionKind, questionKindOfPromptVersion } from '../shared/aiOpportunity'
+import { DEFAULT_AI_WATCH, watchSkipReason } from '../shared/aiWatch'
 import type { Candle, ExecutorConfig, PaperAccount, PositionExecutorParams, SymbolInfo } from '../shared/ipc'
 import { DEFAULT_NEWS_CONFIG, applyNewsConfigPatch, healNewsConfig, type NewsConfig, type NewsItem } from '../shared/news'
 import {
@@ -8,7 +11,9 @@ import {
   describeNewsShortOrigin,
   heldPlaces,
   isFreshDelisting,
+  newsQuestionProblem,
   newsShortExecutors,
+  shouldRaiseDelisting,
   type Holdings
 } from '../shared/newsActions'
 import { simulatePosition } from '../src/executors/engine'
@@ -131,24 +136,96 @@ describe('the notice to someone holding the coin', () => {
   })
 })
 
+describe('a delisting put to the models', () => {
+  it('is raised only when it was released, and read, minutes ago', () => {
+    expect(shouldRaiseDelisting(item, A + 63)).toBe(true)
+    expect(shouldRaiseDelisting(item, A + 5 * 60)).toBe(true)
+    expect(shouldRaiseDelisting(item, A + 5 * 60 + 1)).toBe(false)
+    // Kept the first time the reader was switched on, a day after its release: history.
+    expect(shouldRaiseDelisting({ ...item, seenAt: A + 86_400 }, A + 63)).toBe(false)
+    expect(shouldRaiseDelisting({ ...item, category: 'FUTURES_LAUNCH' }, A + 63)).toBe(false)
+  })
+
+  it('is asked about only as a delisting, naming the pair, around its minute', () => {
+    expect(newsQuestionProblem(item, 'ICXUSDT', A + 60)).toBeNull()
+    expect(newsQuestionProblem(item, 'ICXUSDT', A - 120)).toBeNull()
+    expect(newsQuestionProblem(item, 'ICXUSDT', A + 30 * 60)).toBeNull()
+    expect(newsQuestionProblem(null, 'ICXUSDT', A + 60)).toBe('This app has read no such announcement.')
+    expect(newsQuestionProblem({ ...item, category: 'SPOT_LISTING' }, 'ICXUSDT', A + 60)).toBe('Only a delisting is put to the models.')
+    expect(newsQuestionProblem(item, 'ICXBTC', A + 60)).toBe('The announcement does not name ICXBTC.')
+    expect(newsQuestionProblem(item, 'ICXUSDT', A - 121)).toBe('The question is not about the minutes after the announcement.')
+    expect(newsQuestionProblem(item, 'ICXUSDT', A + 30 * 60 + 1)).toBe('The question is not about the minutes after the announcement.')
+  })
+
+  it('is taken up by the watch whatever band its candles read, and is otherwise held to the watch rules', () => {
+    const watch = { ...DEFAULT_AI_WATCH, enabled: true, models: ['acme/a'], minBand: 'urgent' as const }
+    const quiet = {
+      id: `binance:ICXUSDT:${A + 60}`,
+      exchange: 'binance' as const,
+      symbol: 'ICXUSDT',
+      baseAsset: 'ICX',
+      quoteAsset: 'USDT',
+      time: A + 60,
+      type: 'delisting' as const,
+      direction: 'down' as const,
+      band: 'quiet' as const,
+      score: 12,
+      components: { price: 10, volume: 10, volatility: 10, pressure: 10, breakout: 10 },
+      price: 0.1,
+      returnsPct: { m1: 0, m5: 0, m15: 0, h1: 0, h4: 0 },
+      moveSigmas: 0.2,
+      volumeRatio: 1,
+      rangeRatio: 1,
+      live: { detectedAt: A + 63, quoteVolume24h: null, spreadPct: null, candidateScore: 12, rank: 1 },
+      news: { articleId: item.id, title: item.title, releaseSec: A }
+    }
+    const state = { nowSec: A + 70, takenToday: new Set<string>() }
+    expect(watchSkipReason(quiet, watch, state)).toBeNull()
+    // The same reading with no announcement behind it is below the band.
+    expect(watchSkipReason({ ...quiet, news: undefined }, watch, state)).toBe('It is below the urgent band the watch asks about.')
+    // And it is still the watch's: fresh, within the day's limit, with the watch on.
+    expect(watchSkipReason(quiet, watch, { ...state, nowSec: A + 60 + 181 })).toMatch(/more than 3 minutes old/)
+    expect(watchSkipReason(quiet, { ...watch, enabled: false }, state)).toBe('The watch is off.')
+  })
+
+  it("is read back with the scanner's question by the pages that show what the watch asked", () => {
+    expect(AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS).toEqual(['opportunity-v1', 'opportunity-news-v1'])
+    expect(questionKindOfPromptVersion('opportunity-news-v1')).toBe('news')
+    expect(describeQuestionKind('news')).toBe('with the announcement')
+    const row = { promptVersion: 'opportunity-news-v1' } as Parameters<typeof matchesAiCallFilter>[0]
+    expect(matchesAiCallFilter({ ...row, symbol: 'ICXUSDT' }, { promptVersions: AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS })).toBe(true)
+    expect(matchesAiCallFilter({ ...row, symbol: 'ICXUSDT', promptVersion: 'opportunity-v2' }, { promptVersions: AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS })).toBe(false)
+    // Over the bridge, a filter that is not a list matches nothing rather than matching by substring.
+    expect(matchesAiCallFilter({ ...row, symbol: 'ICXUSDT' }, { promptVersions: 'opportunity-news-v1-and-more' as never })).toBe(false)
+  })
+})
+
 describe('its setting', () => {
   it('reads a file it cannot use as off, and keeps the notice on unless told otherwise', () => {
     expect(healNewsConfig(null)).toEqual(DEFAULT_NEWS_CONFIG)
-    expect(DEFAULT_NEWS_CONFIG).toEqual({ enabled: false, notifyHeld: true, paperShort: { enabled: false, stakeQuote: 100 } })
-    expect(healNewsConfig({ enabled: 'true', notifyHeld: false, paperShort: { enabled: 1, stakeQuote: 333 } })).toEqual({
+    expect(DEFAULT_NEWS_CONFIG).toEqual({ enabled: false, notifyHeld: true, paperShort: { enabled: false, stakeQuote: 100 }, askModels: true })
+    expect(healNewsConfig({ enabled: 'true', notifyHeld: false, paperShort: { enabled: 1, stakeQuote: 333 }, askModels: false })).toEqual({
       enabled: false,
       notifyHeld: false,
-      paperShort: { enabled: false, stakeQuote: 100 }
+      paperShort: { enabled: false, stakeQuote: 100 },
+      askModels: false
     })
-    expect(healNewsConfig({ enabled: true, paperShort: { enabled: true, stakeQuote: 250 } })).toEqual({ enabled: true, notifyHeld: true, paperShort: { enabled: true, stakeQuote: 250 } })
+    expect(healNewsConfig({ enabled: true, paperShort: { enabled: true, stakeQuote: 250 } })).toEqual({
+      enabled: true,
+      notifyHeld: true,
+      paperShort: { enabled: true, stakeQuote: 250 },
+      askModels: true
+    })
   })
 
   it('takes a change it can use, and says why it refuses one it cannot', () => {
     const on = applyNewsConfigPatch(DEFAULT_NEWS_CONFIG, { enabled: true, paperShort: { enabled: true } }) as NewsConfig
-    expect(on).toEqual({ enabled: true, notifyHeld: true, paperShort: { enabled: true, stakeQuote: 100 } })
+    expect(on).toEqual({ enabled: true, notifyHeld: true, paperShort: { enabled: true, stakeQuote: 100 }, askModels: true })
     expect(applyNewsConfigPatch(on, { paperShort: { stakeQuote: 500 } })).toEqual({ ...on, paperShort: { enabled: true, stakeQuote: 500 } })
+    expect(applyNewsConfigPatch(on, { askModels: false })).toEqual({ ...on, askModels: false })
     expect(applyNewsConfigPatch(on, { enabled: 'yes' as never })).toBe('The news reader is either on or off')
     expect(applyNewsConfigPatch(on, { notifyHeld: 1 as never })).toBe('The notice to holders is either on or off')
+    expect(applyNewsConfigPatch(on, { askModels: 'no' as never })).toBe('Putting delistings to the models is either on or off')
     expect(applyNewsConfigPatch(on, { paperShort: { stakeQuote: 7 } })).toBe('A paper short stakes 25, 50, 100, 250, 500, 1000')
     expect(applyNewsConfigPatch(on, { paperShort: null as never })).toBe('Not a setting for the paper short')
     // The config it was given is not changed.

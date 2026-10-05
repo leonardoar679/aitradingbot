@@ -46,18 +46,28 @@ export const AI_OPPORTUNITY_SCHEMA_VERSION = 'opportunity-schema-v1'
  * its own cache keys, so that no answer bought under the first one moves. The answer's shape is
  * the same, and so is its schema. */
 export const AI_OPPORTUNITY_MARKET_PROMPT_VERSION = 'opportunity-v2'
+/** The pair's question with an announcement in it (shared/aiContext.ts, `news`): the event a
+ * delisting raised, put to the watch's models because the user chose that on 2026-10-05. A question
+ * of its own, with its own prompt and cache keys; the answer's shape is the same. */
+export const AI_OPPORTUNITY_NEWS_PROMPT_VERSION = 'opportunity-news-v1'
 
-/** Which of the two questions an event is put as: the pair alone (opportunity-v1), or the pair
- * with the market around it (opportunity-v2). */
-export type AiOpportunityQuestionKind = 'pair' | 'market'
+/** The questions the app puts to events as they happen -- the scanner's, and an announcement's --
+ * whose answers its feed, its journal and its live board read. The market question is a
+ * benchmark's, and is read by the benchmark. */
+export const AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS: readonly string[] = [AI_OPPORTUNITY_PROMPT_VERSION, AI_OPPORTUNITY_NEWS_PROMPT_VERSION]
+
+/** Which question an event is put as: the pair alone (opportunity-v1), the pair with the market
+ * around it (opportunity-v2), or the pair with the announcement that raised it (opportunity-news-v1). */
+export type AiOpportunityQuestionKind = 'pair' | 'market' | 'news'
 
 export function describeQuestionKind(kind: AiOpportunityQuestionKind): string {
-  return kind === 'market' ? 'with the market' : 'the pair alone'
+  return kind === 'market' ? 'with the market' : kind === 'news' ? 'with the announcement' : 'the pair alone'
 }
 
 /** The question a prompt version is, or null for one that is not an event's question. */
 export function questionKindOfPromptVersion(version: string): AiOpportunityQuestionKind | null {
   if (version === AI_OPPORTUNITY_PROMPT_VERSION) return 'pair'
+  if (version === AI_OPPORTUNITY_NEWS_PROMPT_VERSION) return 'news'
   return version === AI_OPPORTUNITY_MARKET_PROMPT_VERSION ? 'market' : null
 }
 
@@ -308,6 +318,12 @@ export interface AiOpportunityQuestion {
    * by then. What they did is worked out from them in the main process, as the event is. Absent,
    * the question is the pair alone (opportunity-v1), byte for byte as it always was. */
   reference?: EventReference | null
+  /** Present when the event was raised by an announcement (MarketEvent.news): the article's id in
+   * the main process's own record of what it read. The main process looks it up there and puts the
+   * question with the announcement in it (opportunity-news-v1) only when that record says the
+   * article is a delisting naming this pair, from around this minute; otherwise nothing is asked.
+   * Never sent with `reference`. */
+  newsId?: number
 }
 
 export interface AiOpportunityAskRequest extends AiOpportunityQuestion {

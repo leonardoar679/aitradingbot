@@ -176,7 +176,9 @@ export function watchSkipReason(
   }
   if (event.live === null) return 'It was found by scanning history, not raised live.'
   if (event.direction === 'none') return 'It has no direction to act on.'
-  if (!isAtLeast(event.band, watch.minBand)) return `It is below the ${watch.minBand} band the watch asks about.`
+  // An announcement's event is raised by the news, not the move: the band is what the candles
+  // alone showed at that minute, and is not what the watch asks about it for.
+  if (event.news === undefined && !isAtLeast(event.band, watch.minBand)) return `It is below the ${watch.minBand} band the watch asks about.`
   if (event.live.rank > EVENT_MAX_RANKED) return `It was not among the strongest ${EVENT_MAX_RANKED} of its minute.`
   if (state.nowSec - event.time > AI_WATCH_FRESH_SECONDS) return `It is more than ${AI_WATCH_FRESH_SECONDS / 60} minutes old.`
   if (!state.takenToday.has(event.id) && state.takenToday.size >= watch.maxEventsPerDay) return `The watch has asked about its ${watch.maxEventsPerDay} events for today.`

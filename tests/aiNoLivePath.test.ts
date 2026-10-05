@@ -32,10 +32,13 @@ import { describe, expect, it } from 'vitest'
 // lists below name the new pages where they named the old one, held to exactly the same rule.
 //
 // And the same day, news: the app reads Binance's announcements (research/NEWS.md), and the user
-// chose what a delisting does -- a notice to someone holding the coin, and a PAPER short by the
-// rule the study measured. That short is the second thing in this app that opens a paper position
-// with nobody pressing anything, and it is held to what the watch's is: one file writes it, paper
-// is a literal there, and nothing that reads the news mentions the bridge a real order travels over.
+// chose what a delisting does -- a notice to someone holding the coin, a PAPER short by the rule
+// the study measured, and the watch's models asked about it. That short is the second thing in this
+// app that opens a paper position with nobody pressing anything, and it is held to what the
+// watch's is: one file writes it, paper is a literal there, and nothing that reads the news
+// mentions the bridge a real order travels over. The models are asked the way they are asked about
+// any event -- the event raised by the main process, the question checked there against its own
+// record of the article -- and what they say can do no more than any answer the watch gets.
 
 const ROOT = join(__dirname, '..')
 const SERVICES = join(ROOT, 'electron', 'services')
@@ -238,7 +241,9 @@ describe('AI code has no route to a real order', () => {
       expect(importsOf(path).filter((name) => LIVE_MODULES.has(name)), path).toEqual([])
       expect(importsOf(path).filter((name) => aiModuleNames.has(name)), path).toEqual([])
     }
-    expect(importsOf(join(SERVICES, 'newsService.ts')).sort()).toEqual(['atomicWrite', 'electron', 'jsonlStore', 'news', 'path', 'promises'])
+    // It raises a delisting as an event through the scanner, which reads public candles; that is
+    // the whole of what it reaches beyond its own files.
+    expect(importsOf(join(SERVICES, 'newsService.ts')).sort()).toEqual(['atomicWrite', 'electron', 'jsonlStore', 'marketScannerService', 'news', 'newsActions', 'path', 'promises'])
     expect(importsOf(join(ROOT, 'shared', 'news.ts'))).toEqual(['newsTitles'])
     expect(importsOf(join(ROOT, 'shared', 'newsTitles.ts'))).toEqual([])
     for (const path of [join(ROOT, 'src', 'explorer', 'NewsCard.tsx'), join(ROOT, 'src', 'settings', 'NewsSettingsCard.tsx')]) {
@@ -261,6 +266,11 @@ describe('AI code has no route to a real order', () => {
       'electron/ipc/index.ts',
       'electron/main.ts',
       'electron/preload.ts',
+      // The models (the user's third choice): a question about an announcement's event is checked
+      // against the reader's own record of the article before anything is asked.
+      'electron/services/aiSignalService.ts',
+      // ...and the event is raised through the scanner, from the coin's own candles.
+      'electron/services/marketScannerService.ts',
       'electron/services/newsService.ts',
       'shared/news.ts',
       'shared/newsActions.ts',

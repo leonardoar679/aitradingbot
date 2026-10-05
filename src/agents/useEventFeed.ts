@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AiCallRecord } from '../../shared/aiLedger'
-import { AI_OPPORTUNITY_PROMPT_VERSION } from '../../shared/aiOpportunity'
+import { AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS } from '../../shared/aiOpportunity'
 import type { Candle } from '../../shared/ipc'
 import type { MarketEvent } from '../../shared/marketEvent'
 import { describeError } from '../utils/ipcError'
@@ -48,7 +48,7 @@ export function useEventFeed(shown: number): EventFeed {
   const loadCalls = useCallback(async (): Promise<void> => {
     // By prompt, not by where the call came from: an answer a benchmark bought for an event is
     // the same answer, and belongs on that event's card.
-    const page = await window.api.ai.listCalls({ promptVersion: AI_OPPORTUNITY_PROMPT_VERSION, limit: CALLS_READ })
+    const page = await window.api.ai.listCalls({ promptVersions: AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS, limit: CALLS_READ })
     setCalls(page.rows)
   }, [])
 

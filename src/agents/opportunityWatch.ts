@@ -103,6 +103,9 @@ async function askAbout(event: MarketEvent, watch: AiWatchConfig, deps: WatchDep
   let market: Omit<AiOpportunityAskRequest, 'model' | 'source'>
   try {
     market = { exchange: event.exchange, symbol: event.symbol, ...(await fetchEventQuestion(event, deps.fetchCandles)) }
+    // An event an announcement raised is asked about with the announcement in it. The id is all
+    // that is sent: the main process looks the article up in what it read itself.
+    if (event.news !== undefined) market = { ...market, newsId: event.news.articleId }
   } catch (failure) {
     // Nothing was asked, so nothing was spent and the event is not used up: the next pass may
     // take it again while it is still fresh.

@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Candle, SymbolInfo, Ticker24h } from '../shared/ipc'
+import type { NewsItem } from '../shared/news'
 import { EVENT_LOOKBACK_BARS } from '../shared/marketEvent'
 import {
   SCAN_HISTORY_MAX_DAYS,
@@ -332,6 +333,59 @@ describe('one pass', () => {
     stop()
     await scanOnce(NOW_MS + 60_000)
     expect(seen).toEqual([3])
+  })
+})
+
+describe("an announcement's event", () => {
+  // Raised by the news reader (electron/services/newsService.ts) from a delisting it read itself.
+  const item: NewsItem = {
+    id: 990001,
+    catalog: 161,
+    title: 'Binance Will Delist AAA, BBB, ZZZ on 2026-10-20',
+    releaseSec: LAST + 50,
+    seenAt: LAST + 63,
+    category: 'DELISTING',
+    tickers: ['AAA', 'BBB', 'ZZZ']
+  }
+
+  it('raises a delisting from the coin\'s own candles, however quiet they are, and tells everyone listening', async () => {
+    const { raiseNewsEvent, getScannerState, onScannerUpdate } = await scanner()
+    const heard: string[] = []
+    onScannerUpdate((state) => heard.push(state.recentEvents[0]?.id ?? 'none'))
+    const event = await raiseNewsEvent(item, 'AAA', NOW_MS)
+    expect(event).toMatchObject({
+      id: `binance:AAAUSDT:${LAST + 60}`,
+      symbol: 'AAAUSDT',
+      type: 'delisting',
+      direction: 'down',
+      band: 'quiet',
+      time: LAST + 60,
+      news: { articleId: 990001, title: item.title, releaseSec: LAST + 50 },
+      live: { detectedAt: LAST + 65, rank: 1, quoteVolume24h: null, spreadPct: null }
+    })
+    expect(market.recentCalls).toEqual(['AAAUSDT'])
+    expect((await getScannerState()).recentEvents[0]).toEqual(event)
+    expect(heard).toEqual([event?.id])
+    const kept = readFileSync(join(dir, 'marketEvents', `events-${eventMonthKey(LAST + 60)}.jsonl`), 'utf-8').trim().split('\n')
+    expect(parseMarketEventLines(kept.join('\n')).rows).toEqual([event])
+  })
+
+  it('raises nothing for a coin with no USDT pair, nor twice for one coin at one minute', async () => {
+    const { raiseNewsEvent } = await scanner()
+    // ZZZ trades -- there are candles under its name -- but Binance lists no USDT pair for it.
+    market.candles.set('ZZZUSDT', served(quiet(LEAD + 15, 17)))
+    expect(await raiseNewsEvent(item, 'ZZZ', NOW_MS)).toBeNull()
+    expect(market.recentCalls).toEqual([])
+    expect(await raiseNewsEvent(item, 'AAA', NOW_MS)).not.toBeNull()
+    expect(await raiseNewsEvent(item, 'AAA', NOW_MS)).toBeNull()
+  })
+
+  it('holds the coin to its cooldown, as any event does: one move, one event', async () => {
+    const { raiseNewsEvent, scanOnce } = await scanner()
+    await raiseNewsEvent({ ...item, tickers: ['PUMP'] }, 'PUMP', NOW_MS)
+    // PUMP's candles end in a move a pass would raise; the delisting raised it already.
+    const state = await scanOnce(NOW_MS)
+    expect(state.recentEvents.filter((event) => event.symbol === 'PUMPUSDT').map((event) => event.type)).toEqual(['delisting'])
   })
 })
 

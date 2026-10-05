@@ -88,6 +88,9 @@ export interface AiCallFilter {
   /** Only calls made under this prompt. A model's history is several prompts' worth -- a signal,
    * an entry review, a panel's four -- and "its last fifty calls" is not "its last fifty of these". */
   promptVersion?: string
+  /** Only calls made under one of these prompts: the questions put to events as they happen are
+   * two (AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS), and the pages that show them read both. */
+  promptVersions?: readonly string[]
   source?: AiCallSource
   status?: AiCallStatus
   /** Only rows finished at or after this time. */
@@ -151,6 +154,8 @@ export function matchesAiCallFilter(row: AiCallRecord, filter: AiCallFilter): bo
   if (filter.symbol !== undefined && row.symbol.toUpperCase() !== filter.symbol.toUpperCase()) return false
   if (filter.model !== undefined && row.model !== filter.model) return false
   if (filter.promptVersion !== undefined && row.promptVersion !== filter.promptVersion) return false
+  // Arrived over the bridge: anything but a list matches nothing (a string has includes() too).
+  if (filter.promptVersions !== undefined && !(Array.isArray(filter.promptVersions) && filter.promptVersions.includes(row.promptVersion))) return false
   if (filter.source !== undefined && row.source !== filter.source) return false
   if (filter.status !== undefined && row.status !== filter.status) return false
   if (filter.sinceSec !== undefined && row.at < filter.sinceSec) return false

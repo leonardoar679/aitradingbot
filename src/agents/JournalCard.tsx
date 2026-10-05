@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { Card } from '../components/Card'
 import { formatUsd } from '../../shared/aiCost'
-import { AI_OPPORTUNITY_PROMPT_VERSION } from '../../shared/aiOpportunity'
+import { AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS } from '../../shared/aiOpportunity'
 import { describeOpportunityExit } from '../../shared/aiOpportunityOutcome'
 import { describeDecider } from '../../shared/aiPanel'
 import type { Candle } from '../../shared/ipc'
@@ -77,7 +77,7 @@ export function JournalCard({ paper }: { paper: ReadonlySet<string> }): React.JS
       const nowSec = Math.floor(Date.now() / 1000)
       const sinceSec = nowSec - JOURNAL_DAYS * 86_400
       const [calls, events] = await Promise.all([
-        window.api.ai.listCalls({ promptVersion: AI_OPPORTUNITY_PROMPT_VERSION, sinceSec, limit: ROWS_READ }),
+        window.api.ai.listCalls({ promptVersions: AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS, sinceSec, limit: ROWS_READ }),
         // An answer inside the period can be about an event raised a little before it began.
         window.api.scanner.listEvents({ sinceSec: sinceSec - 3600, limit: ROWS_READ })
       ])

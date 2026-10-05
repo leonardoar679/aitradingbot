@@ -5,6 +5,7 @@ import {
   AI_AGENT_SYSTEM_PROMPTS,
   AI_CONFIRM_SYSTEM_PROMPT,
   AI_OPPORTUNITY_MARKET_SYSTEM_PROMPT,
+  AI_OPPORTUNITY_NEWS_SYSTEM_PROMPT,
   AI_OPPORTUNITY_SCHEMA,
   AI_OPPORTUNITY_SYSTEM_PROMPT,
   AI_PANEL_SYSTEM_PROMPT,
@@ -15,7 +16,7 @@ import {
 } from '../electron/services/aiPrompt'
 import { AI_CONFIRM_PROMPT_VERSION } from '../shared/aiConfirm'
 import { buildAiContext, withAgentReports } from '../shared/aiContext'
-import { AI_OPPORTUNITY_MARKET_PROMPT_VERSION, AI_OPPORTUNITY_PROMPT_VERSION, AI_OPPORTUNITY_SCHEMA_VERSION } from '../shared/aiOpportunity'
+import { AI_OPPORTUNITY_MARKET_PROMPT_VERSION, AI_OPPORTUNITY_NEWS_PROMPT_VERSION, AI_OPPORTUNITY_PROMPT_VERSION, AI_OPPORTUNITY_SCHEMA_VERSION } from '../shared/aiOpportunity'
 import { AI_AGENT_PROMPT_VERSIONS, AI_AGENT_ROLES, AI_AGENT_SCHEMA_VERSION, AI_PANEL_PROMPT_VERSION } from '../shared/aiPanel'
 import { AI_SCHEMA_VERSION, GPT_LOOKBACK_BARS, GPT_PROMPT_VERSION } from '../shared/aiSignal'
 import type { Candle } from '../shared/ipc'
@@ -99,6 +100,13 @@ const PINNED: { what: string; version: string; text: string; expectVersion: stri
     expectHash: 'cffe135b6ef7a3245b3915a93b3fdf3ee265931bb9770049c8c6b3bf6fbef223'
   },
   {
+    what: 'the opportunity prompt with the announcement that raised the event',
+    version: AI_OPPORTUNITY_NEWS_PROMPT_VERSION,
+    text: AI_OPPORTUNITY_NEWS_SYSTEM_PROMPT,
+    expectVersion: 'opportunity-news-v1',
+    expectHash: '3ef3f8df094de1f09e84f7c73d3de993fef44bd3cccf69b1a86bb087fdac3856'
+  },
+  {
     what: 'the opportunity schema',
     version: AI_OPPORTUNITY_SCHEMA_VERSION,
     text: JSON.stringify(AI_OPPORTUNITY_SCHEMA),
@@ -126,6 +134,7 @@ describe('a prompt and the version it is cached under', () => {
       AI_CONFIRM_PROMPT_VERSION,
       AI_OPPORTUNITY_PROMPT_VERSION,
       AI_OPPORTUNITY_MARKET_PROMPT_VERSION,
+      AI_OPPORTUNITY_NEWS_PROMPT_VERSION,
       AI_PANEL_PROMPT_VERSION,
       ...AI_AGENT_ROLES.map((role) => AI_AGENT_PROMPT_VERSIONS[role])
     ]

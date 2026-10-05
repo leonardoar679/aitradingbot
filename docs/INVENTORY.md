@@ -82,7 +82,7 @@ All files are in the user's profile folder.
 | | `watch` (on, models, events a day, lowest band, first model gates) | Agents › Opportunities › Watch | Opportunities (stays with its results) |
 | | `watchPaper` (on, model, stake, most open) | Agents › Opportunities › Watch | Opportunities |
 | `scanner.json` | `enabled`, `universeSize` (20, 40, 60 or 100) | Explorer › Scanner | Settings › Market |
-| `news.json` | `enabled`, `notifyHeld`, `paperShort` (on, stake) (added with the news reader, V3 Stage 7) | — | Settings › Market |
+| `news.json` | `enabled`, `notifyHeld`, `paperShort` (on, stake), `askModels` (added with the news reader, V3 Stage 7) | — | Settings › Market |
 | `credentials.json` (encrypted) | Binance and Upbit keys; when added, last tested, result | Settings | Connections |
 | `aiCredentials.json` (encrypted) | The OpenRouter key | Agents | Connections |
 | `liveTrading.json` | Session armed, kill switch | Live trading bar | The bar (stays); detail on Live Trading |

@@ -20,14 +20,18 @@ import {
   type NewsPage,
   type NewsState
 } from '../../shared/news'
+import { shouldRaiseDelisting } from '../../shared/newsActions'
 import { writeJsonAtomic } from './atomicWrite'
 import { appendJsonLine, listMonthFiles } from './jsonlStore'
+import { raiseNewsEvent } from './marketScannerService'
 
 // Binance's own announcements, read once a minute while the reader is on (research/NEWS.md says
 // what they did to prices, and why they are read).
 //
 // IT READS ONE PUBLIC LIST AND NOTHING ELSE. Two requests a minute -- Binance's delisting list and
-// its listing list -- with no key, no model and no order. Each article is kept once, by its id, in
+// its listing list -- with no key, no model and no order. A delisting released minutes ago is
+// raised as an event through the scanner (raiseNewsEvent), which reads the coin's public candles,
+// when the user has that switched on; the watch, if it is on, then puts it to its models. Each article is kept once, by its id, in
 // news/news-YYYY-MM.jsonl, sorted by the patterns the study measured with (shared/newsTitles.ts).
 // It decides nothing about one. They are shown on Discovery, and what a delisting does -- a notice
 // to someone holding the coin, the rule's paper short -- is done in the window
@@ -155,6 +159,21 @@ export async function readNewsOnce(nowMs: number = Date.now()): Promise<NewsStat
     fresh.sort((a, b) => byNewestRelease(b, a))
     for (const item of fresh) await appendJsonLine(join(newsDir(), `news-${newsMonthKey(item.releaseSec)}.jsonl`), item)
     if (fresh.length > 0) recent = [...fresh, ...recent].sort(byNewestRelease).slice(0, RECENT_KEPT)
+    // A delisting released minutes ago is raised as an event for each coin it names, for the watch
+    // to put to its models -- when that is switched on (shared/newsActions.ts). The watch's own
+    // switch, limits and the day's budget still decide whether anything is asked.
+    const setting = config ?? current
+    if (setting.enabled && setting.askModels) {
+      for (const item of fresh.filter((entry) => shouldRaiseDelisting(entry, seenAt))) {
+        for (const ticker of item.tickers) {
+          try {
+            await raiseNewsEvent(item, ticker, nowMs)
+          } catch (failure) {
+            console.error(`The delisting of ${ticker} could not be raised as an event:`, failure)
+          }
+        }
+      }
+    }
     error =
       failures.length === 0
         ? null
@@ -227,6 +246,20 @@ export async function setNewsConfig(patch: NewsConfigPatch): Promise<NewsState> 
 /** Test seam: resolves once the read that switching on started has finished. */
 export async function whenNewsSettled(): Promise<void> {
   await background
+}
+
+/** This app's own record of one article, or null when it has read no such article. What a question
+ * about an announcement's event is checked against (electron/services/aiSignalService.ts). */
+export async function findNewsItem(id: number): Promise<NewsItem | null> {
+  if (!Number.isSafeInteger(id)) return null
+  await loadKnown()
+  const kept = recent.find((item) => item.id === id)
+  if (kept !== undefined) return kept
+  for (const { name } of await listMonthFiles(newsDir(), FILE_PATTERN)) {
+    const found = parseNewsLines(await readFile(join(newsDir(), name), 'utf-8')).rows.find((item) => item.id === id)
+    if (found !== undefined) return found
+  }
+  return null
 }
 
 /** Articles on file, newest release first, reading month files backwards and stopping when enough

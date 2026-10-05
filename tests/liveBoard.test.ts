@@ -117,10 +117,11 @@ function deps(calls: AiCallRecord[], events: MarketEvent[]): { deps: LiveBoardDe
 beforeEach(() => clearLiveBars())
 
 describe('readLiveAnswers', () => {
-  it('reads the watch\'s answers, under the opportunity prompt, for the last thirty days', async () => {
+  it('reads the watch\'s answers, under the opportunity prompts it asks live, for the last thirty days', async () => {
     const rig = deps([], [])
     await readLiveAnswers([A], NOW, rig.deps)
-    expect(rig.callFilters).toEqual([{ source: 'watch', promptVersion: AI_OPPORTUNITY_PROMPT_VERSION, sinceSec: NOW - LIVE_BOARD_DAYS * DAY, limit: 5000 }])
+    // The scanner's question and an announcement's: both are put to events as they happen.
+    expect(rig.callFilters).toEqual([{ source: 'watch', promptVersions: ['opportunity-v1', 'opportunity-news-v1'], sinceSec: NOW - LIVE_BOARD_DAYS * DAY, limit: 5000 }])
     expect(rig.eventFilters[0].sinceSec).toBeLessThan(NOW - LIVE_BOARD_DAYS * DAY)
   })
 

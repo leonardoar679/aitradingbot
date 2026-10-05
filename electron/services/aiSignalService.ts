@@ -33,11 +33,13 @@ import {
   aiSchemaVersion,
   buildAiContext,
   buildEventContext,
+  buildNewsEventContext,
   withAgentReports,
   withMarketBlock,
   type AiMarketContext
 } from '../../shared/aiContext'
 import { MARKET_REFERENCE_SYMBOLS } from '../../shared/aiEventMarket'
+import { newsQuestionProblem } from '../../shared/newsActions'
 import { paceDelayMs } from '../../shared/aiPace'
 import {
   AI_OPPORTUNITY_MAX_MODELS,
@@ -96,6 +98,7 @@ import {
 } from './aiConfigService'
 import { appendAiCall, listAiCalls } from './aiLedgerService'
 import { withinWatchLimits } from './aiWatchService'
+import { findNewsItem } from './newsService'
 import {
   AI_AGENT_SCHEMAS,
   AI_MAX_OUTPUT_TOKENS,
@@ -1326,6 +1329,41 @@ function opportunityQuestion(request: AiOpportunityQuestion): AiMarketContext {
   return withMarket
 }
 
+/** The question about the event an announcement raised (opportunity-news-v1), from a request that
+ * has been checked rather than trusted.
+ *
+ * THE ANNOUNCEMENT IS LOOKED UP HERE, in this app's own record of what it read from Binance's list
+ * (newsService.ts). The request names an article by its id and sends candles; the question is put
+ * only when that record says the article is a delisting naming this pair, from around the minute
+ * the candles end at -- so a caller cannot have a model asked, and billed, about news by saying
+ * there was some. The event is worked out from the candles, as every event's is. */
+async function newsOpportunityQuestion(request: AiOpportunityQuestion): Promise<AiMarketContext> {
+  if (typeof request?.symbol !== 'string' || request.symbol.trim() === '') throw new Error('An opportunity needs a symbol')
+  if (request.reference !== undefined && request.reference !== null) throw new Error('A question about an announcement is not asked with the market around it')
+  checkCandles(request.candles15m, '15-minute')
+  checkCandles(request.candles1m, '1-minute')
+  if (request.candles1m.length === 0) throw new Error('An opportunity needs completed 1-minute candles')
+  const item = await findNewsItem(Number(request.newsId))
+  const last = request.candles1m[request.candles1m.length - 1]
+  const problem = newsQuestionProblem(item, request.symbol, last.time + 60)
+  if (problem !== null || item === null) throw new Error(`${problem ?? 'This app has read no such announcement.'} Nothing was asked.`)
+  const context = buildNewsEventContext(request.candles15m, request.candles1m, { exchange: request.exchange, symbol: request.symbol }, {
+    source: 'Binance',
+    kind: 'delisting',
+    title: item.title,
+    releasedAt: item.releaseSec
+  })
+  if (!context?.event) {
+    throw new Error('These candles do not make a question: it needs twelve unbroken hours of 1-minute candles before the minute and seven days of 15-minute candles.')
+  }
+  return context
+}
+
+/** An event's question, of whichever kind the request is. */
+async function eventQuestion(request: AiOpportunityQuestion): Promise<AiMarketContext> {
+  return request?.newsId !== undefined && request.newsId !== null ? newsOpportunityQuestion(request) : opportunityQuestion(request)
+}
+
 /** Which models already hold an answer for this event, and what one more call to each of the
  * others is expected to cost. Spends nothing: it reads the cache, the ledger and a price list. */
 export async function peekAiOpportunity(request: AiOpportunityPeekRequest): Promise<AiOpportunityPeek> {
@@ -1339,7 +1377,7 @@ export async function peekAiOpportunity(request: AiOpportunityPeekRequest): Prom
     if (typeof model !== 'string') throw new Error('An event was given a model that is not a model id')
     models.push(await resolveAiModel(model))
   }
-  const context = opportunityQuestion(request)
+  const context = await eventQuestion(request)
   const event = context.event as NonNullable<AiMarketContext['event']>
 
   const held = await Promise.all(models.map((model) => readCached(aiSignalCacheKey({ model, context }), aiPromptVersion(context))))
@@ -1375,7 +1413,7 @@ export async function peekAiOpportunity(request: AiOpportunityPeekRequest): Prom
  * key, the balance, the budget) is thrown, so that a loop over many events stops. */
 export async function askAiOpportunity(request: AiOpportunityAskRequest): Promise<AiSignalDecision> {
   const model = await resolveAiModel(request.model)
-  const context = opportunityQuestion(request)
+  const context = await eventQuestion(request)
   const event = context.event as NonNullable<AiMarketContext['event']>
   const key = aiSignalCacheKey({ model, context })
   const cached = await readCached(key, aiPromptVersion(context))

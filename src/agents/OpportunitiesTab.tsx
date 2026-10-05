@@ -114,7 +114,9 @@ export function OpportunitiesTab({
     setProblem(event.id, null)
     try {
       const question = await fetchEventQuestion(event, fetchCandles)
-      const market = { exchange: event.exchange, symbol: event.symbol, ...question }
+      // An event an announcement raised is asked about with the announcement in it, as the watch
+      // asks about it; the main process looks the article up in what it read itself.
+      const market = { exchange: event.exchange, symbol: event.symbol, ...question, ...(event.news !== undefined ? { newsId: event.news.articleId } : {}) }
       // Free: what is already held, and what each of the others is expected to cost.
       const peek = await window.api.ai.peekOpportunity({ ...market, models })
       const toAsk = peek.models.filter((model) => model.decision === null).map((model) => model.model)

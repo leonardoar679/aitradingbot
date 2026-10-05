@@ -30,7 +30,7 @@ function describeWatch(watch: AiWatchConfig): string {
     watch.firstModelGates && watch.models.length > 1
       ? ` ${describeDecider(watch.models[0])} is asked first, and the ${watch.models.length === 2 ? 'other' : 'others'} only when it calls a trade.`
       : ''
-  return `Each ${which} the scanner puts forward is put to ${listOf(watch.models.map(describeDecider))} as it is raised, at most ${watch.maxEventsPerDay} events a day.${gate}`
+  return `Each ${which} the scanner puts forward -- and each delisting Binance announces, when its announcements are put to the models under Settings › Market -- is put to ${listOf(watch.models.map(describeDecider))} as it is raised, at most ${watch.maxEventsPerDay} events a day.${gate}`
 }
 
 /** What the tab knows of the watch's own paper trades, read from the executors on file. */
@@ -205,7 +205,10 @@ export function WatchCard({
             </p>
           ))}
           {scannerOn === false && (
-            <p style={{ ...noteStyle, color: 'var(--gold)', marginTop: '0.5rem' }}>The scanner is off, so the watch has nothing to ask about. Switch it on under Settings › Market.</p>
+            <p style={{ ...noteStyle, color: 'var(--gold)', marginTop: '0.5rem' }}>
+              The scanner is off, so the watch asks only about delistings, when Binance&apos;s announcements are read and put to the models.
+              Both are switched under Settings › Market.
+            </p>
           )}
           <div style={{ marginTop: '0.8rem' }}>
             <button onClick={() => void switchOff()} disabled={busy} style={buttonStyle('secondary', busy)}>
