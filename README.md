@@ -435,7 +435,10 @@ news list held one tag, of DOGE and XRP; the paper account held DOGE; the tag's 
 
 In that run the watch asked about DOGE and not XRP. Run again, it asked about both. An event whose
 candles cannot be read is left for the watch's next pass, and with the scanner off -- as it was
-there -- no pass follows to take it up again.
+there -- no pass followed to take it up again. So the watch now looks again by itself, 20 seconds
+later, at an event it could not ask about for that reason, while the event is still fresh; it never
+asks twice about one event. Checked the same way with the first read of XRP's candles made to fail:
+the Watch card said its candles could not be read, and 21 seconds later XRP was asked about.
 
 ### AI signals — paper only
 

@@ -7,6 +7,11 @@ import { openWatchPaperTrade, settleWatchPaperTrades, watchPaperBrowserDeps } fr
  * position is judged on minutes that have closed. */
 const PAPER_SETTLE_MS = 60_000
 
+/** How soon the watch looks again at an event whose candles could not be read. A pass the scanner
+ * finishes would bring it back within the minute, but an announcement's event raised with the
+ * scanner off has no pass after it: without this, one failed read would leave it unasked. */
+const RETRY_MS = 20_000
+
 const deps: WatchDeps = {
   getConfig: () => window.api.ai.getConfig(),
   listCalls: (filter) => window.api.ai.listCalls(filter),
@@ -29,10 +34,24 @@ const deps: WatchDeps = {
 export function OpportunityScheduler(): null {
   useEffect(() => {
     let cancelled = false
+    let again: ReturnType<typeof setTimeout> | null = null
     const look = (events: MarketEvent[]): void => {
       if (cancelled) return
       // A pass that could not read the setting or the ledger asked nothing; the next one tries again.
-      void watchPass(events, deps).catch((error: unknown) => console.error('The watch could not look at the events raised:', error))
+      void watchPass(events, deps)
+        .then((result) => {
+          // An event whose candles could not be read is looked at again, once the scanner's events
+          // are read afresh, while it is still fresh: the pass will not take up a stale one.
+          if (result.retry.length === 0 || again !== null || cancelled) return
+          again = setTimeout(() => {
+            again = null
+            void window.api.scanner
+              .getState()
+              .then((state) => look(state.recentEvents))
+              .catch(() => undefined)
+          }, RETRY_MS)
+        })
+        .catch((error: unknown) => console.error('The watch could not look at the events raised:', error))
     }
     void window.api.scanner
       .getState()
@@ -51,6 +70,7 @@ export function OpportunityScheduler(): null {
       cancelled = true
       stop()
       clearInterval(timer)
+      if (again !== null) clearTimeout(again)
     }
   }, [])
 

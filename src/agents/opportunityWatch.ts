@@ -55,6 +55,9 @@ export interface WatchPassResult {
   asked: string[]
   /** Events it looked at and left, each with why. */
   skipped: { id: string; reason: string }[]
+  /** Events it took up and could not ask about, because their candles could not be read: nothing
+   * was asked or spent, and each may be taken up again while it is fresh. */
+  retry: string[]
 }
 
 /** How many of today's rows are read to count the day's events. */
@@ -171,7 +174,7 @@ async function askAbout(event: MarketEvent, watch: AiWatchConfig, deps: WatchDep
  * Safe to call again before it resolves -- a pass a minute is the scanner's pace, and a slow
  * model takes longer than that: an event is taken up by exactly one pass. */
 export async function watchPass(events: MarketEvent[], deps: WatchDeps): Promise<WatchPassResult> {
-  const result: WatchPassResult = { asked: [], skipped: [] }
+  const result: WatchPassResult = { asked: [], skipped: [], retry: [] }
   if (!events.some((event) => !handled.has(event.id))) return result
 
   const { watch } = await deps.getConfig()
@@ -213,7 +216,10 @@ export async function watchPass(events: MarketEvent[], deps: WatchDeps): Promise
         .catch((failure: unknown) => ({ text: `${event.symbol}: ${failure instanceof Error ? failure.message : String(failure)}`, ok: false, retry: false }))
         .then((outcome) => {
           inFlight.delete(event.id)
-          if (outcome.retry) handled.delete(event.id)
+          if (outcome.retry) {
+            handled.delete(event.id)
+            result.retry.push(event.id)
+          }
           publish({ last: { at: deps.nowSec(), symbol: event.symbol, text: outcome.text, ok: outcome.ok }, answered: activity.answered + 1 })
         })
     )

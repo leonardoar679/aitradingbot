@@ -115,7 +115,7 @@ beforeEach(() => resetWatch())
 describe('watchPass', () => {
   it('asks nothing while the watch is off, and keeps the event for when it is switched on', async () => {
     const r = rig({ watch: watch({ enabled: false }) })
-    expect(await watchPass([event()], r.deps)).toEqual({ asked: [], skipped: [] })
+    expect(await watchPass([event()], r.deps)).toEqual({ asked: [], skipped: [], retry: [] })
     expect(r.asked).toEqual([])
     expect(r.fetches).toBe(0)
     // Switched on while the event is still fresh: it is taken up like any other.
@@ -142,7 +142,7 @@ describe('watchPass', () => {
   it('puts a fresh event to every model of the watch, once, in the watch\'s name', async () => {
     const r = rig()
     const result = await watchPass([event()], r.deps)
-    expect(result).toEqual({ asked: [event().id], skipped: [] })
+    expect(result).toEqual({ asked: [event().id], skipped: [], retry: [] })
     expect(r.asked).toEqual([
       { model: A, symbol: 'SOLUSDT', source: 'watch' },
       { model: B, symbol: 'SOLUSDT', source: 'watch' }
@@ -182,7 +182,7 @@ describe('watchPass', () => {
     expect(r.asked).toEqual([])
     expect(r.fetches).toBe(0)
     // Decided once: the next pass does not look at them again.
-    expect(await watchPass([stale, history, weak, candidate, spike], r.deps)).toEqual({ asked: [], skipped: [] })
+    expect(await watchPass([stale, history, weak, candidate, spike], r.deps)).toEqual({ asked: [], skipped: [], retry: [] })
   })
 
   it('stops at its events for the day, counted from the ledger', async () => {
@@ -449,7 +449,9 @@ describe('watchPass: when something fails', () => {
 
   it('asks nothing when the candles cannot be read, and takes the event up again while it is fresh', async () => {
     const r = rig({ candlesFail: true })
-    expect((await watchPass([event()], r.deps)).asked).toEqual([event().id])
+    // Taken up, nothing asked, and said to be worth another try: with the scanner off, nothing
+    // else would bring the watch back to it (OpportunityScheduler looks again).
+    expect(await watchPass([event()], r.deps)).toEqual({ asked: [event().id], skipped: [], retry: [event().id] })
     expect(r.asked).toEqual([])
     expect(getWatchActivity().last).toMatchObject({ ok: false, symbol: 'SOLUSDT' })
     expect(getWatchActivity().last?.text).toContain('could not be read')
