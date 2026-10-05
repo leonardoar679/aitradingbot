@@ -26,7 +26,7 @@ import {
   type WatchPaperOutcome,
   type WatchPaperPlan
 } from '../shared/aiWatchPaper'
-import type { Candle, ExecutorConfig, PaperAccount, PositionExecutorParams } from '../shared/ipc'
+import type { Candle, ExecutorConfig, PaperAccount, PaperRiskSettings, PositionExecutorParams } from '../shared/ipc'
 import type { MarketEvent } from '../shared/marketEvent'
 import { simulatePosition } from '../src/executors/engine'
 import { openWatchPaperTrade, settleWatchPaperTrades, watchPaperExecutor, type WatchPaperDeps } from '../src/agents/watchPaperTrade'
@@ -39,6 +39,11 @@ const A = 'openai/gpt-5-mini'
 const B = 'mistralai/mistral-small-2603'
 const T = Date.parse('2026-10-05T09:07:00Z') / 1000
 const SOON = T + 20
+
+/** Each trade at its own stake, with no cap: how the watch's own rules are held here. Sizing by
+ * risk and the cap on what the app's own paper trades have out (shared/paperRisk.ts) are held below,
+ * under their own heading. */
+const STAKE: PaperRiskSettings = { sizing: 'stake', riskQuote: 1, maxOutQuote: null }
 
 function config(overrides: Partial<AiWatchPaperConfig> = {}): AiWatchPaperConfig {
   return { enabled: true, model: A, stakeQuote: 100, maxOpen: 3, maxSameSide: 2, pauseAfterLosses: 3, dropOnBtcMovePct: 1, ...overrides }
@@ -95,9 +100,10 @@ function decision(model = A, overrides: Partial<AiSignalDecision> = {}): AiSigna
 }
 const sell = (model = A): AiSignalDecision => decision(model, { recommendation: 'sell', detail: SHORT })
 
-function okPlan(input: { decision?: AiSignalDecision; lastPrice?: number | null; nowSec?: number; config?: AiWatchPaperConfig; symbol?: string } = {}): Extract<WatchPaperPlan, { ok: true }> {
+function okPlan(input: { decision?: AiSignalDecision; lastPrice?: number | null; nowSec?: number; config?: AiWatchPaperConfig; symbol?: string; risk?: PaperRiskSettings } = {}): Extract<WatchPaperPlan, { ok: true }> {
   const plan = planWatchPaperTrade({
     config: input.config ?? config(),
+    risk: input.risk ?? STAKE,
     event: event(input.symbol),
     decision: input.decision ?? decision(),
     nowSec: input.nowSec ?? SOON,
@@ -153,8 +159,10 @@ describe('the setting', () => {
   })
 
   it('says what switching it on does, that it is paper, and that it costs nothing', () => {
-    const text = describeAiWatchPaper({ config: config({ stakeQuote: 250, maxOpen: 5 }), watchOn: true, hasPaperAccount: true })
-    expect(text).toContain('each time openai/gpt-5-mini answers an event the watch put to it with BUY or SELL at 65% confidence or more, a PAPER position of 250')
+    const text = describeAiWatchPaper({ config: config({ stakeQuote: 250, maxOpen: 5 }), risk: STAKE, watchOn: true, hasPaperAccount: true })
+    expect(text).toContain(
+      "each time openai/gpt-5-mini answers an event the watch put to it with BUY or SELL at 65% confidence or more, a PAPER position is opened at once, with nobody pressing anything, staking 250 of the pair's quote currency."
+    )
     expect(text).toContain('with nobody pressing anything')
     expect(text).toContain('it enters in the first minute the price trades inside the range the model named, and is abandoned if that has not happened when its entry expires')
     expect(text).toContain('At most 5 open at once, one an event, and one on a pair at a time.')
@@ -167,7 +175,7 @@ describe('the setting', () => {
   })
 
   it('says so when nothing holds them to a balance, and when the watch is off', () => {
-    const text = describeAiWatchPaper({ config: config(), watchOn: false, hasPaperAccount: false })
+    const text = describeAiWatchPaper({ config: config(), risk: STAKE, watchOn: false, hasPaperAccount: false })
     expect(text).toContain('No paper account is set up, so their results are added to no balance, and nothing limits what these positions add up to.')
     // With no account there is nowhere for a result to go, and it does not say there is.
     expect(text).not.toContain('goes to the paper account')
@@ -251,7 +259,7 @@ describe('planWatchPaperTrade', () => {
     ['a price at the target', decision(), 103.1, SOON, /reached its target/],
     ['a short with the price through its stop', sell(), 101.6, SOON, /through its stop/]
   ])('opens nothing on %s', (_what, answer, price, nowSec, reason) => {
-    const plan = planWatchPaperTrade({ config: config(), event: event(), decision: answer, nowSec, lastPrice: price })
+    const plan = planWatchPaperTrade({ config: config(), risk: STAKE, event: event(), decision: answer, nowSec, lastPrice: price })
     expect(plan.ok).toBe(false)
     if (!plan.ok) expect(plan.reason).toMatch(reason)
   })
@@ -259,7 +267,7 @@ describe('planWatchPaperTrade', () => {
   it('opens nothing when one of the model\'s levels cannot be used, where the form would have shown its own', () => {
     // A stop sixty percent away is not carried into a form; nobody is looking at this one.
     const wild = decision(A, { detail: { ...LONG, stopLoss: 40 } })
-    const plan = planWatchPaperTrade({ config: config(), event: event(), decision: wild, nowSec: SOON, lastPrice: 100 })
+    const plan = planWatchPaperTrade({ config: config(), risk: STAKE, event: event(), decision: wild, nowSec: SOON, lastPrice: 100 })
     expect(plan).toEqual({ ok: false, reason: 'Its stop or its target is not a usable distance from the entry.' })
   })
 })
@@ -347,6 +355,8 @@ interface Rig {
     config: AiWatchPaperConfig
     executors: ExecutorConfig[]
     account: PaperAccount | null
+    /** settings.json's paperRisk, as stored. */
+    risk: unknown
     price: number | null | Error
     now: number
     candles: Candle[] | Error
@@ -357,13 +367,13 @@ interface Rig {
 }
 
 function rig(initial: Partial<Rig['state']> = {}): Rig {
-  const state: Rig['state'] = { config: config(), executors: [], account: null, price: 100, now: SOON, candles: [], ...initial }
+  const state: Rig['state'] = { config: config(), executors: [], account: null, risk: STAKE, price: 100, now: SOON, candles: [], ...initial }
   const made: Rig = { deps: undefined as unknown as WatchPaperDeps, state, notices: [], settled: [], writes: 0 }
   let tail: Promise<unknown> = Promise.resolve()
   let ids = 0
   made.deps = {
     getConfig: async () => ({ watchPaper: state.config }),
-    getSettings: async () => ({ executors: [...state.executors], paperAccount: state.account }),
+    getSettings: async () => ({ executors: [...state.executors], paperAccount: state.account, paperRisk: state.risk as PaperRiskSettings | undefined }),
     setExecutors: async (executors) => {
       made.writes++
       state.executors = executors
@@ -692,7 +702,7 @@ describe('the safeguards', () => {
     for (const side of AI_WATCH_PAPER_SAME_SIDE_LIMITS)
       for (const run of AI_WATCH_PAPER_LOSING_RUNS)
         for (const move of AI_WATCH_PAPER_BTC_MOVES) expect(aiWatchPaperProblem(config({ maxSameSide: side, pauseAfterLosses: run, dropOnBtcMovePct: move }), [A])).toBeNull()
-    const text = describeAiWatchPaper({ config: config(), watchOn: true, hasPaperAccount: true })
+    const text = describeAiWatchPaper({ config: config(), risk: STAKE, watchOn: true, hasPaperAccount: true })
     expect(text).toContain('At most 2 open in one direction. After 3 in a row close at a loss in one day, none is opened until midnight UTC. One still waiting to enter is dropped if Bitcoin moves 1% against it after the event.')
     expect(describeWatchPaperSafeguards(config({ pauseAfterLosses: 0, dropOnBtcMovePct: 0 }))).toBe('At most 2 open in one direction. No pause after losses. Bitcoin moving does not drop one.')
   })
@@ -802,5 +812,72 @@ describe('the safeguards', () => {
     function trade0(): ExecutorConfig {
       return watchPaperExecutor({ id: 'w2', event: event(), plan: okPlan(), nowSec: SOON })
     }
+  })
+})
+
+describe('sized by risk, and held to what the app has out (shared/paperRisk.ts)', () => {
+  const RISK: PaperRiskSettings = { sizing: 'risk', riskQuote: 1, maxOutQuote: null }
+  const amountOf = (made: ExecutorConfig): number => (made.params as PositionExecutorParams).amountQuote
+
+  it('stakes what its stop would lose about the risk at, after fees, and never more than its stake', () => {
+    // The model's stop is 1.5% from the entry, and a round trip's fees are 0.2%: 1 / 1.7% is 58.82.
+    expect(okPlan({ risk: RISK }).params.amountQuote).toBe(58.82)
+    // Risking 5 there would stake 294.11: held to the stake of 100, and let through where it is larger.
+    expect(okPlan({ risk: { ...RISK, riskQuote: 5 } }).params.amountQuote).toBe(100)
+    expect(okPlan({ risk: { ...RISK, riskQuote: 5 }, config: config({ stakeQuote: 1000 }) }).params.amountQuote).toBe(294.11)
+  })
+
+  it('opens nothing it would size under what the smallest order on Binance is worth, and says why', () => {
+    const wide = decision(A, { detail: { ...LONG, stopLoss: 75 } })
+    expect(planWatchPaperTrade({ config: config(), risk: RISK, event: event(), decision: wide, nowSec: SOON, lastPrice: 100 })).toEqual({
+      ok: false,
+      reason: 'Its stop is 25% away, so risking 1 USDT there stakes 3.96 USDT: under the 5 the smallest order on Binance is worth.'
+    })
+    // At its stake, the same answer is a trade.
+    expect(planWatchPaperTrade({ config: config(), risk: STAKE, event: event(), decision: wide, nowSec: SOON, lastPrice: 100 }).ok).toBe(true)
+  })
+
+  it('says how it is sized, and what the app may have out, before it is switched on', () => {
+    const text = describeAiWatchPaper({ config: config({ stakeQuote: 250 }), risk: { sizing: 'risk', riskQuote: 2, maxOutQuote: 1000 }, watchOn: true, hasPaperAccount: false })
+    expect(text).toContain("a PAPER position is opened at once, with nobody pressing anything, staking at most 250 of the pair's quote currency, sized so that being stopped out loses about 2.")
+    expect(text).toContain(
+      'On Risk & Safety, for every paper trade the app opens by itself: Each with a stop stakes what would lose about 2 there, after fees, and never more than its own stake. Together they stake at most 1,000.'
+    )
+  })
+
+  it('opens it at that size with nothing stored, by the defaults, and says so', async () => {
+    const r = rig({ risk: undefined })
+    expect(await openWatchPaperTrade(event(), decision(), r.deps)).toEqual({ opened: true, text: 'A paper BUY of 58.82 USDT was opened, to enter between 99.8 and 100.2.' })
+    expect(amountOf(r.state.executors[0])).toBe(58.82)
+    expect(r.notices[0].body).toContain('A paper position of 58.82 USDT was opened')
+  })
+
+  it("opens nothing past what the app's own paper trades may have out together, and counts only theirs", async () => {
+    const capped: PaperRiskSettings = { ...RISK, maxOutQuote: 1000 }
+    const roomy = config({ maxOpen: 5, maxSameSide: 5 })
+    const watched = { ...executor({ symbol: 'BTCUSDT', watch: { eventId: 'binance:BTCUSDT:1', eventTime: 1, model: A, confidence: 0.8 } }) }
+    const own: ExecutorConfig = { ...watched, params: { ...(watched.params as PositionExecutorParams), amountQuote: 500 } }
+    const shorted: ExecutorConfig = {
+      ...watched,
+      id: 'news-1',
+      symbol: 'XRPUSDT',
+      watch: undefined,
+      newsRule: { articleId: 7, ticker: 'XRP', releaseSec: T, title: 'Binance Will Extend the Monitoring Tag to Include XRP on 2026-10-08', category: 'MONITORING_TAG' },
+      params: { ...(watched.params as PositionExecutorParams), side: 'sell', amountQuote: 450 }
+    }
+    // 950 out in the watch's and the news rules' trades: 58.82 more would pass 1,000.
+    const near = rig({ risk: capped, config: roomy, executors: [own, shorted] })
+    expect(await openWatchPaperTrade(event(), decision(), near.deps)).toEqual({
+      opened: false,
+      text: "No paper trade: The watch's and the news rules' open paper trades stake 950 USDT together, and 58.82 more would take them past the 1,000 set on Risk & Safety."
+    })
+    expect(near.state.executors).toHaveLength(2)
+    // One of them stopped, there is room again.
+    const after = rig({ risk: capped, config: roomy, executors: [own, { ...shorted, status: 'stopped' }] })
+    expect((await openWatchPaperTrade(event(), decision(), after.deps))?.opened).toBe(true)
+    // A paper position made by hand, however large, is a person's own and is not counted.
+    const byHand: ExecutorConfig = { ...watched, id: 'hand-1', symbol: 'ETHUSDT', watch: undefined, params: { ...(watched.params as PositionExecutorParams), amountQuote: 5000 } }
+    const mine = rig({ risk: capped, config: roomy, executors: [byHand] })
+    expect((await openWatchPaperTrade(event(), decision(), mine.deps))?.opened).toBe(true)
   })
 })

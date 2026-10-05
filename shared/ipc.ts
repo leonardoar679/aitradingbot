@@ -141,6 +141,22 @@ export interface AppSettings {
    * means "never configured", which is what lets the UI offer setup instead of reporting a
    * balance of zero as though it were a fact. */
   paperAccount: PaperAccount | null
+  /** How the paper trades the app opens by itself are sized, and how much they may have out
+   * together (shared/paperRisk.ts). Absent on a file written before it existed, and healed on
+   * every read: its defaults apply. */
+  paperRisk?: PaperRiskSettings
+}
+
+/** The paper trades the app opens by itself -- the watch's and the news rules' -- sized by what
+ * their stop would lose, and capped in what they stake together. Both only ever open less. */
+export interface PaperRiskSettings {
+  /** 'risk': a trade with a stop stakes what would lose about `riskQuote` there, after fees, and
+   * never more than its own stake. 'stake': each stakes its own stake. */
+  sizing: 'risk' | 'stake'
+  /** In the trade's quote asset. */
+  riskQuote: number
+  /** The most their open paper trades may stake together, per quote asset. Null: no cap. */
+  maxOutQuote: number | null
 }
 
 /** Status of a stored exchange API credential. Crosses IPC — never the raw key/secret, which

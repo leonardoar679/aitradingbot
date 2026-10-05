@@ -53,6 +53,7 @@ export function OpportunitiesTab({
   const [configProblem, setConfigProblem] = useState<string | null>(null)
   const [shown, setShown] = useState(EVENTS_SHOWN)
   const [paperAccount, setPaperAccount] = useState<boolean | null>(null)
+  const [paperRisk, setPaperRisk] = useState<unknown>(undefined)
   const [watchTrades, setWatchTrades] = useState<ExecutorConfig[]>([])
   const nowSec = useNowSec(true, 15_000)
   // The scanner's events, the answers held for them and the candles since: shared with Overview.
@@ -85,6 +86,7 @@ export function OpportunitiesTab({
         (settings) => {
           if (cancelled) return
           setPaperAccount(Boolean(settings.paperAccount))
+          setPaperRisk(settings.paperRisk)
           setWatchTrades(watchPaperExecutors(settings.executors))
         },
         () => undefined
@@ -176,7 +178,8 @@ export function OpportunitiesTab({
     open: watchTrades.filter((executor) => executor.status === 'active').map((executor) => executor.symbol),
     total: watchTrades.length,
     ended: describeWatchPaperTally(watchPaperTally(watchTrades)),
-    pause: config === null ? null : watchPaperPause(watchTrades, config.watchPaper, nowSec)
+    pause: config === null ? null : watchPaperPause(watchTrades, config.watchPaper, nowSec),
+    risk: paperRisk
   }
 
   return (

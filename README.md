@@ -50,7 +50,7 @@ other.
 | Research | **Backtest & Research** | **Backtest** runs a chosen strategy over a historical range and shows full stats, equity curve vs. buy-and-hold, monthly breakdown and a trade log; its **Live** view monitors the same route continuously ([Live strategy monitor](#live-strategy-monitor)), **Charts** replays each trade against the candles, and **Compare Strategies** ranks every registered strategy over the same candles. An optional tick box has a model [confirm each entry](#ai-signals--paper-only). Both views export CSV, JSON and a PNG. **Automation** re-runs saved backtests on a schedule while the app is open, each run keeping a session-only report. |
 | | **AI Benchmark** | Several models on the same questions, scored side by side: on candles, and on the events the scanner raised, with the no-model rows beside them and every run kept as an experiment that can be reopened for nothing. |
 | | **Discovery** | The market scanner: once a minute it reads the most traded USDT pairs on Binance and says what is moving, scores each the same way, and records the moves that qualify as events — see [Discovery](#discovery--a-market-scanner). Public market data only: no key, no model, no order. It is switched on, and its pairs chosen, under Settings › Market. Below it, [Binance's own announcements](#binances-announcements-on-discovery) — delistings, Monitoring Tags, futures launches, listings — as they are released, with what each kind did to prices. The reader is switched on under Settings › Market too, with what a delisting or a tag does: a notice if you hold the coin, a paper short by the kind's rule, a question to the watch's models. |
-| System | **Risk & Safety** | The live trading limits every real order is checked against (largest order, the day's notional, the day's loss, the managed allocation), and the controller groups: executors under a shared stop-loss, take-profit and maximum drawdown with a P&L snapshot every 5 minutes, all stopped on a breach. Arming and the kill switch stay on the bar at the top of every page. |
+| System | **Risk & Safety** | The live trading limits every real order is checked against (largest order, the day's notional, the day's loss, the managed allocation); the size of the paper trades the app opens by itself, the watch's and the news rules' (sized by what their stop would lose, and capped in what they stake together); and the controller groups: executors under a shared stop-loss, take-profit and maximum drawdown with a P&L snapshot every 5 minutes, all stopped on a breach. Arming and the kill switch stay on the bar at the top of every page. |
 | | **Connections** | Every key the app holds: Binance and Upbit ([Credentials](#credentials--api-keys)), and the OpenRouter key for the AI models. Each is tested before it is stored, stored encrypted, and never read back into the window. |
 | | **Settings** | The Configuration Center, in sections, built only from settings that exist. **General**: appearance (Dark / Light / Colorblind-safe). **Market**: the scanner on or off, and how many pairs it watches; the reader of Binance's announcements, and what a delisting does. **AI**: which models may be asked, the default and the route, the daily budget, the pace, and what asking has cost. Keys stay on Connections and limits on Risk & Safety, each in the one place, linked from here. What the V3 document asked for that has no behaviour behind it (language, timezone, default order type, allowed pairs, other news sources…) is listed in `docs/INVENTORY.md` rather than added as a control. |
 
@@ -397,7 +397,9 @@ is open:
   Position short is opened within five minutes of the announcement. It is out at the open four hours
   after the announcement's minute, with no stop and no target. The news reader then stops it and
   settles it into the paper account, as the watch does with its trades. Its card says where it came
-  from. A coin squeezed upward can cost it a great deal, as two of 87 did.
+  from. A coin squeezed upward can cost it a great deal, as two of 87 did. Having no stop, it stakes
+  its stake however Risk & Safety sizes the app's own paper trades, and is held with them to what
+  they may have out together.
 - **The models** (on by default once the reader is on; nothing is asked unless the watch is on too).
   Each coin the delisting names that has a USDT pair is raised as an event. The main process raises
   it, from the coin's own candles at the minute it read the announcement. The event is named
@@ -430,6 +432,9 @@ same three things, switched separately, in a group of their own on the same card
     hours of minutes before the announcement. A coin whose minutes cannot all be read gets none.
   - It is out at the close of its sixtieth minute otherwise. The news reader then stops and settles
     it, as it does a delisting's.
+  - It stakes what its stop would lose the risk per trade at, where Risk & Safety sizes the app's
+    own paper trades so, and never more than its stake; and none is opened past what they may have
+    out together.
 - **The models** (on by default once the reader is on; nothing is asked unless the watch is on too),
   as for a delisting, with three differences:
   - the event is named `monitoring_tag`;
@@ -701,9 +706,10 @@ it is paper.
   that answer at that moment: the model's own stop and target; its hold as the time limit; and
   its entry abandoned when its validity ends. It enters by the model's range, as above: in the
   first minute the price trades inside it, and never by chasing a price that has left it. The
-  one thing a person would have typed is the amount, which is the stake in the setting (25 to
-  1,000). One thing is stricter than the form: a stop or target that is not a usable distance
-  from the entry is a reason not to trade, where the form would have shown its own in its place.
+  one thing a person would have typed is the amount: the stake in the setting (25 to 1,000), or,
+  sized by its stop, less (below). One thing is stricter than the form: a stop or target that is
+  not a usable distance from the entry is a reason not to trade, where the form would have shown
+  its own in its place.
 - **Its limits are counted from the executors on file**: one paper trade an event, one open on a
   pair at a time, and at most 1, 2, 3, 5 or 10 open at once. Where a paper account is set up, a
   trade it cannot fund is not opened, by the check the order form makes. Each is looked at again
@@ -740,6 +746,21 @@ it is paper.
 
   The recommendations themselves stay on Opportunities' Right Now until they expire: only the
   watch's paper trades are dropped.
+- **Sized by its stop, and capped with the news rules'** (chosen on 5 October 2026, and set on
+  Risk & Safety for every paper trade the app opens by itself; `shared/paperRisk.ts`):
+  - **Sized by risk:** a trade stakes what its stop would lose about 1, 2, 5, 10, 25 or 50 at,
+    after a round trip's fees (1 by default), and never more than its stake, which becomes the most
+    it stakes. Against the stops the models have given, a median of 1% from the entry, a stake of
+    100 is held to 100 only for a stop nearer than about 0.8%, so nearly every trade risks the
+    same. One that would stake under 5 USDT, the smallest order on Binance, is not opened.
+  - **Out together:** the watch and the news rules open nothing that would take what their open
+    paper trades stake together past 250 to 10,000 (1,000 by default), or there is no cap. A
+    trade made by hand on Strategies › Execution is not counted, and the bots hold no paper money:
+    a bot's run is a replay, measured in percent.
+
+  Both only ever open less, so either may be changed while paper trades are on, and neither is
+  asked again by the watch's confirmation, which names them. A settings file written before them
+  reads them at their defaults.
 - **It follows one model.** Comparing models is the leaderboard's job, and three models trading
   one event would be three positions on one view of the market. The model has to be one the
   watch asks, and neither the model, the stake nor the limit can be changed while it is on.
@@ -2649,6 +2670,7 @@ shared/                       Code both processes run, so they cannot disagree a
   aiExperiment.ts             A benchmark run kept as a run: its events, its models, its versions, and what the ledger says it cost
   aiWatch.ts                  Events put to models without a click: the setting, what it takes up, its daily limit, the breaker, what it costs, its notice
   aiWatchPaper.ts             Paper positions the watch opens by itself: the setting, what a call becomes, and its limits
+  paperRisk.ts                The paper trades the app opens by itself, the watch's and the news rules': sized by what their stop would lose, and capped in what they stake together
   aiEventMarket.ts            The market around an event: Bitcoin's and ether's returns to its minute, the pair's less theirs, two labels
   aiPace.ts                   How fast one model is asked: the most calls a minute, and how long the next one waits
   aiEffort.ts                 A model asked at a lower reasoning effort, as a model of its own: its id, and where it is taken apart
@@ -2676,7 +2698,8 @@ src/                          React renderer app
   strategies/                 Strategies (Active Runs, Execution)
   research/                   Backtest & Research (Backtest, Automation)
   ai-benchmark/               AI Benchmark
-  risk/                       Risk & Safety, and the live trading limits card
+  risk/                       Risk & Safety: the live trading limits card, and the size of the paper
+                              trades the app opens by itself (PaperRiskCard)
   connections/                Connections, and the exchange keys card
 
   portfolio/                  The portfolio's summary, chart and holdings, for Overview and Performance

@@ -326,7 +326,9 @@ describe('AI code has no route to a real order', () => {
     // The writer reaches settings, the market and a notice, and closes with paper bookkeeping.
     expect([...new Set([...source.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))].sort()).toEqual(['market', 'notify', 'settings'])
     expect(source).not.toMatch(/window\.api\.credentials/)
-    expect(importsOf(writer).sort()).toEqual(['engine', 'executorFunding', 'ipc', 'news', 'newsActions', 'settingsWrites', 'settleExecutor'])
+    // paperRisk sizes a tag's short by its stop and holds the app's own paper trades to their cap:
+    // arithmetic, which only ever opens less (held below).
+    expect(importsOf(writer).sort()).toEqual(['engine', 'executorFunding', 'ipc', 'news', 'newsActions', 'paperRisk', 'settingsWrites', 'settleExecutor'])
     expect(readFileSync(rules, 'utf-8')).toContain("executor.newsRule !== undefined && executor.mode === 'paper' && executor.type === 'position'")
     // The scheduler reads -- the news, the settings, the balances a key can read -- and notifies.
     // Every write goes through the writer above.
@@ -396,8 +398,9 @@ describe('AI code has no route to a real order', () => {
     const signature = /export function watchPaperExecutor\(input: \{([^}]*)\}\)/.exec(source)?.[1] ?? ''
     expect(signature).toContain('plan: OkPlan')
     expect(signature).not.toMatch(/mode/)
-    // The rules import the proposal's arithmetic, a few names and types, and nothing that acts.
-    expect(importsOf(rules).sort()).toEqual(['aiOpportunity', 'aiPanel', 'aiProposal', 'aiSignal', 'ipc', 'marketEvent'])
+    // The rules import the proposal's arithmetic, the sizing's (paperRisk), a few names and types,
+    // and nothing that acts.
+    expect(importsOf(rules).sort()).toEqual(['aiOpportunity', 'aiPanel', 'aiProposal', 'aiSignal', 'ipc', 'marketEvent', 'paperRisk'])
     expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron/)
     // The writer reaches settings, the price, candles, a notice and the setting. Nothing else.
     expect([...new Set([...source.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))].sort()).toEqual(['ai', 'market', 'notify', 'settings'])
@@ -421,6 +424,7 @@ describe('AI code has no route to a real order', () => {
       'executorFunding',
       'ipc',
       'marketEvent',
+      'paperRisk',
       'settingsWrites',
       'settleExecutor'
     ])
@@ -428,6 +432,21 @@ describe('AI code has no route to a real order', () => {
     // It only ever looks at its own: a paper Position carrying the watch's mark.
     expect(writer).toContain('watchPaperExecutors(executors).filter((entry) => entry.status === \'active\')')
     expect(readFileSync(join(ROOT, 'shared', 'aiWatchPaper.ts'), 'utf-8')).toContain("executor.watch !== undefined && executor.mode === 'paper' && executor.type === 'position'")
+  })
+
+  it('the size of the paper trades the app opens by itself is arithmetic, set on a card that only saves it', () => {
+    // shared/paperRisk.ts sizes the watch's and the news rules' paper trades by their stop and caps
+    // what they have out together. Both only ever open less: a sized trade is at most its own stake,
+    // and the cap only refuses. It is arithmetic on a setting and the executors on file.
+    const rules = join(ROOT, 'shared', 'paperRisk.ts')
+    expect(importsOf(rules).sort()).toEqual(['fees', 'ipc'])
+    const source = readFileSync(rules, 'utf-8')
+    expect(source).not.toMatch(/window\.|ipcRenderer|electron|liveTrading|placeLive/)
+    expect(source).toContain('return Math.min(stakeQuote, ')
+    // The card on Risk & Safety reads and saves the setting, and reaches nothing else.
+    const card = readFileSync(join(ROOT, 'src', 'risk', 'PaperRiskCard.tsx'), 'utf-8')
+    expect([...new Set([...card.matchAll(/window\.api\.(\w+)(?:\s*\.\s*(\w+))?/g)].map((match) => `${match[1]}.${match[2]}`))].sort()).toEqual(['settings.get', 'settings.set'])
+    expect(card).not.toMatch(/liveTrading|placeLive|window\.api\.(executors|ai|credentials)/)
   })
 
   it('the AI\'s part of the status bar reads two settings and offers nothing', () => {

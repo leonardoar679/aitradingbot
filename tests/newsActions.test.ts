@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { matchesAiCallFilter } from '../shared/aiLedger'
 import { AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS, describeQuestionKind, questionKindOfPromptVersion } from '../shared/aiOpportunity'
 import { DEFAULT_AI_WATCH, watchSkipReason } from '../shared/aiWatch'
-import type { Candle, ExecutorConfig, PaperAccount, PositionExecutorParams, SymbolInfo } from '../shared/ipc'
+import type { Candle, ExecutorConfig, PaperAccount, PaperRiskSettings, PositionExecutorParams, SymbolInfo } from '../shared/ipc'
 import { DEFAULT_NEWS_CONFIG, applyNewsConfigPatch, healNewsConfig, newsActionsFor, type NewsConfig, type NewsItem } from '../shared/news'
+import { paperStake } from '../shared/paperRisk'
 import {
   delistingShortParams,
   describeNewsShortOrigin,
@@ -266,20 +267,26 @@ describe('its setting', () => {
   })
 })
 
+/** Each short at its kind's stake, with no cap: how the rules are held here. Sizing by risk and the
+ * cap on what the app's own paper trades have out (shared/paperRisk.ts) are held under their own
+ * heading. */
+const STAKE: PaperRiskSettings = { sizing: 'stake', riskQuote: 1, maxOutQuote: null }
+
 interface Rig {
   deps: NewsShortDeps
-  state: { executors: ExecutorConfig[]; account: PaperAccount | null; now: number; candles: Candle[]; pairs: SymbolInfo[] }
+  /** `risk` is settings.json's paperRisk, as stored. */
+  state: { executors: ExecutorConfig[]; account: PaperAccount | null; risk: unknown; now: number; candles: Candle[]; pairs: SymbolInfo[] }
   notices: { title: string; body: string }[]
   settled: string[]
 }
 
 function rig(initial: Partial<Rig['state']> = {}): Rig {
-  const state: Rig['state'] = { executors: [], account: null, now: A + 63, candles: [], pairs: [pair('ICX'), pair('SCRT'), { symbol: 'STORJBTC', baseAsset: 'STORJ', quoteAsset: 'BTC' }], ...initial }
+  const state: Rig['state'] = { executors: [], account: null, risk: STAKE, now: A + 63, candles: [], pairs: [pair('ICX'), pair('SCRT'), { symbol: 'STORJBTC', baseAsset: 'STORJ', quoteAsset: 'BTC' }], ...initial }
   const made: Rig = { deps: undefined as unknown as NewsShortDeps, state, notices: [], settled: [] }
   let tail: Promise<unknown> = Promise.resolve()
   let ids = 0
   made.deps = {
-    getSettings: async () => ({ executors: [...state.executors], paperAccount: state.account }),
+    getSettings: async () => ({ executors: [...state.executors], paperAccount: state.account, paperRisk: state.risk as PaperRiskSettings | undefined }),
     setExecutors: async (executors) => {
       state.executors = executors
     },
@@ -553,5 +560,45 @@ describe("a Monitoring Tag's short", () => {
   it('reads a mark with no kind on it, made before the tag was read, as a delisting', () => {
     const mark = { articleId: 301, ticker: 'ICX', releaseSec: A, title: item.title }
     expect(describeNewsShortOrigin(mark)).toMatch(/that it will delist ICX: a short held four hours/)
+  })
+})
+
+describe('sized by risk, and held to what the app has out (shared/paperRisk.ts)', () => {
+  const RISK: PaperRiskSettings = { sizing: 'risk', riskQuote: 1, maxOutQuote: null }
+  const amountOf = (made: ExecutorConfig): number => (made.params as PositionExecutorParams).amountQuote
+
+  it("sizes a tag's short by what its stop would lose, and leaves a delisting's, which has none, at its stake", async () => {
+    const big = { paperShort: { enabled: true, stakeQuote: 1000 } }
+    const tagged = rig({ now: G + 61, candles: hoursBefore(G), pairs: [pair('AVA')], risk: RISK })
+    const lines = await openNewsShorts({ ...tag, tickers: ['AVA'] }, big, tagged.deps)
+    const sigma = tagReading(hoursBefore(G), G)?.sigma15Pct as number
+    const sized = paperStake({ risk: RISK, stakeQuote: 1000, stopPct: tagShortParams({ sigma15Pct: sigma, stakeQuote: 1000 }).stopLossPct })
+    // The coin's usual move puts the stop near, so risking 1 there stakes a few hundred: under 1,000.
+    expect(sized).toBeGreaterThan(5)
+    expect(sized).toBeLessThan(1000)
+    expect(lines).toEqual([`AVA: a paper short of ${sized} USDT was opened.`])
+    expect(tagged.state.executors[0].params).toEqual({ ...tagShortParams({ sigma15Pct: sigma, stakeQuote: 1000 }), amountQuote: sized })
+    expect(tagged.notices[0].body).toContain(`A paper short of ${sized} USDT was opened by the rule`)
+
+    const delisted = rig({ risk: RISK })
+    expect(await openNewsShorts({ ...item, tickers: ['ICX'] }, big, delisted.deps)).toEqual(['ICX: a paper short of 1000 USDT was opened.'])
+    expect(amountOf(delisted.state.executors[0])).toBe(1000)
+  })
+
+  it("opens no short past what the app's own paper trades may have out together", async () => {
+    const watched: ExecutorConfig = {
+      ...newsShortExecutor({ id: 'w-1', item, ticker: 'ICX', pair: pair('ICX'), nowSec: A, params: tagShortParams({ sigma15Pct: 1, stakeQuote: 100 }) }),
+      symbol: 'BTCUSDT',
+      newsRule: undefined,
+      watch: { eventId: 'binance:BTCUSDT:1', eventTime: 1, model: 'openai/gpt-5-mini', confidence: 0.8 }
+    }
+    const r = rig({ risk: { ...RISK, maxOutQuote: 1000 }, executors: [watched] })
+    // 100 out in a trade of the watch's: the first short of 500 fits, the second would make 1,100.
+    expect(await openNewsShorts(item, { paperShort: { enabled: true, stakeQuote: 500 } }, r.deps)).toEqual([
+      'ICX: a paper short of 500 USDT was opened.',
+      "SCRT: no paper short. The watch's and the news rules' open paper trades stake 600 USDT together, and 500 more would take them past the 1,000 set on Risk & Safety.",
+      'STORJ: no paper short, as it has no USDT pair on Binance.'
+    ])
+    expect(r.state.executors.map((executor) => executor.symbol)).toEqual(['BTCUSDT', 'ICXUSDT'])
   })
 })

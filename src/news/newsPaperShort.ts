@@ -10,6 +10,7 @@ import {
   type NewsShortMark
 } from '../../shared/newsActions'
 import type { AppSettings, Candle, Exchange, ExecutorConfig, PositionExecutorParams, SymbolInfo } from '../../shared/ipc'
+import { healPaperRisk, paperOutBlock, sizePaperTrade } from '../../shared/paperRisk'
 import { describeExecutorFunding } from '../account/executorFunding'
 import { settleExecutorOnStop } from '../account/settleExecutor'
 import { runExecutorSimulation } from '../executors/engine'
@@ -21,8 +22,11 @@ import { settingsWrites } from '../utils/settingsWrites'
 // announcement of one of the two kinds that passed becomes a PAPER Position short on each coin it
 // names, by the kind's rule research/NEWS.md measured: a delisting's is out four hours after the
 // announcement with no stop and no target; a Monitoring Tag's has a stop and a target from the
-// coin's usual moves and is out within the hour. And a short of a rule's that has closed is
-// stopped and its result settled into the paper account, the way pressing Stop on its card would.
+// coin's usual moves and is out within the hour. Each stakes its kind's stake; a tag's, which has a
+// stop, is sized by what it would lose there where the app's own paper trades are sized by risk,
+// and none is opened past what they may have out together (shared/paperRisk.ts). And a short of a
+// rule's that has closed is stopped and its result settled into the paper account, the way
+// pressing Stop on its card would.
 //
 // PAPER IS WRITTEN HERE AS A LITERAL. newsShortExecutor takes no mode and has no way to be given
 // one. Nothing in this file mentions the bridge a real order travels over, and
@@ -62,7 +66,7 @@ export function newsShortExecutor(input: { id: string; item: NewsItem; ticker: s
 }
 
 export interface NewsShortDeps {
-  getSettings: () => Promise<Pick<AppSettings, 'executors' | 'paperAccount'>>
+  getSettings: () => Promise<Pick<AppSettings, 'executors' | 'paperAccount' | 'paperRisk'>>
   setExecutors: (executors: ExecutorConfig[]) => Promise<void>
   /** Binance's spot pairs: a coin with no USDT pair has nothing to short. */
   listPairs: () => Promise<SymbolInfo[]>
@@ -105,23 +109,30 @@ export async function openNewsShorts(item: NewsItem, actions: Pick<NewsKindActio
         continue
       }
     }
-    const refused = await deps.queue(async (): Promise<string | null> => {
+    const outcome = await deps.queue(async (): Promise<{ opened: number } | { refused: string }> => {
       const fresh = await deps.getSettings()
       const nowSec = deps.nowSec()
+      const blocked = newsShortBlock({ item, ticker, nowSec, executors: fresh.executors })
+      if (blocked !== null) return { refused: blocked }
+      const drafted =
+        sigma15Pct === null
+          ? delistingShortParams({ releaseSec: item.releaseSec, createdAt: nowSec, stakeQuote: stake })
+          : tagShortParams({ sigma15Pct, stakeQuote: stake })
+      // A tag's short has a stop, and is sized by what it would lose there where that is how the
+      // app's own paper trades are sized; a delisting's has none, and stakes its stake.
+      const risk = healPaperRisk(fresh.paperRisk)
+      const size = sizePaperTrade({ risk, stakeQuote: stake, stopPct: drafted.stopLossPct, quoteAsset: pair.quoteAsset })
+      if (!size.ok) return { refused: size.reason }
+      const params: PositionExecutorParams = { ...drafted, amountQuote: size.amountQuote }
       const problem =
-        newsShortBlock({ item, ticker, nowSec, executors: fresh.executors }) ??
         describeExecutorFunding({
           account: fresh.paperAccount ?? null,
           executors: fresh.executors,
           mode: 'paper',
           quoteAsset: pair.quoteAsset,
-          amountQuote: stake
-        })
-      if (problem !== null) return problem
-      const params =
-        sigma15Pct === null
-          ? delistingShortParams({ releaseSec: item.releaseSec, createdAt: nowSec, stakeQuote: stake })
-          : tagShortParams({ sigma15Pct, stakeQuote: stake })
+          amountQuote: params.amountQuote
+        }) ?? paperOutBlock({ risk, executors: fresh.executors, quoteAsset: pair.quoteAsset, amountQuote: params.amountQuote })
+      if (problem !== null) return { refused: problem }
       const executor = newsShortExecutor({ id: deps.newId(), item, ticker, pair, nowSec, params })
       await deps.setExecutors([...fresh.executors, executor])
       const notice = newsShortNotice(item, ticker, params, pair.quoteAsset)
@@ -130,9 +141,9 @@ export async function openNewsShorts(item: NewsItem, actions: Pick<NewsKindActio
       } catch {
         // A desktop that cannot show it is not a reason to report a short that was opened as not.
       }
-      return null
+      return { opened: params.amountQuote }
     })
-    lines.push(refused === null ? `${ticker}: a paper short of ${stake} USDT was opened.` : `${ticker}: no paper short. ${refused}`)
+    lines.push('opened' in outcome ? `${ticker}: a paper short of ${outcome.opened} ${pair.quoteAsset} was opened.` : `${ticker}: no paper short. ${outcome.refused}`)
   }
   return lines
 }

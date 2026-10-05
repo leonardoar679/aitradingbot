@@ -77,6 +77,7 @@ All files are in the user's profile folder.
 | | `heldPositions` | Positions | Positions |
 | | `controllers` | Controllers | Risk & Safety |
 | | `paperAccount` | Account | Paper Trading |
+| | `paperRisk` (added 5 October 2026): how the paper trades the app opens by itself are sized, by what their stop would lose or at their stake, and what they may stake together | — | Risk & Safety |
 | `aiConfig.json` | `defaultModel`, `enabledModels`, `route` | Agents › Models | Settings › AI |
 | | `dailyCapUsd`, `callsPerMinute` | Agents › Usage | Settings › AI |
 | | `watch` (on, models, events a day, lowest band, first model gates) | Agents › Opportunities › Watch | Opportunities (stays with its results) |
@@ -163,7 +164,9 @@ no behaviour behind them, so they are not added as controls:
   - default holding horizon;
   - allowed and excluded pairs.
 - **Risk:**
-  - maximum position or trade risk as a share of the account;
+  - maximum position or trade risk as a share of an account. The paper trades the app opens by
+    itself are sized by a fixed amount at their stop, and capped in what they stake together, since
+    5 October 2026 (Risk & Safety); nothing sizes a person's own trades;
   - maximum correlated exposure, beyond the watch's own paper trades (which have, since 5 October
     2026, a limit on how many are open in one direction);
   - maximum slippage or spread.

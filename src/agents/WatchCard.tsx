@@ -12,8 +12,10 @@ import {
   AI_WATCH_PAPER_STAKES,
   describeAiWatchPaper,
   describeWatchPaperSafeguards,
+  describeWatchPaperSize,
   type AiWatchPaperConfig
 } from '../../shared/aiWatchPaper'
+import { healPaperRisk } from '../../shared/paperRisk'
 import { EVENT_MAX_RANKED, type MarketEvent } from '../../shared/marketEvent'
 import { describeError } from '../utils/ipcError'
 import { buttonStyle, inputStyle, noteStyle } from './agentStyles'
@@ -54,6 +56,9 @@ export interface WatchPaperStanding {
   ended: string
   /** Why none is being opened until midnight UTC (shared/aiWatchPaper.ts watchPaperPause), or null. */
   pause?: string | null
+  /** How the app's own paper trades are sized and capped, as settings.json holds it (healed here;
+   * shared/paperRisk.ts). */
+  risk?: unknown
 }
 
 /** The watch's switch (shared/aiWatch.ts), and the switch for its paper trades
@@ -88,6 +93,7 @@ export function WatchCard({
   paper?: WatchPaperStanding
 }): React.JSX.Element {
   const { watch, watchPaper } = config
+  const risk = healPaperRisk(paper.risk)
   const [paperModel, setPaperModel] = useState<string>(watchPaper.model ?? '')
   const [paperStake, setPaperStake] = useState<number>(watchPaper.stakeQuote)
   const [paperOpen, setPaperOpen] = useState<number>(watchPaper.maxOpen)
@@ -177,7 +183,7 @@ export function WatchCard({
       pauseAfterLosses: paperLosses,
       dropOnBtcMovePct: paperBtc
     }
-    if (!window.confirm(describeAiWatchPaper({ config: next, watchOn: watch.enabled, hasPaperAccount: paper.hasAccount === true }))) return
+    if (!window.confirm(describeAiWatchPaper({ config: next, risk, watchOn: watch.enabled, hasPaperAccount: paper.hasAccount === true }))) return
     setBusy(true)
     setProblem(null)
     try {
@@ -291,9 +297,10 @@ export function WatchCard({
         {watchPaper.enabled ? (
           <>
             <p style={{ ...noteStyle, color: 'var(--text-primary)' }}>
-              <strong style={{ color: 'var(--up)' }}>On.</strong> Each call by {describeDecider(watchPaper.model ?? '')} at 65% confidence or more opens a paper position of{' '}
-              {watchPaper.stakeQuote} in the pair&apos;s quote currency by itself, with its own stop, target and time limit. At most {watchPaper.maxOpen} open at once, one an event, one on
-              a pair. {describeWatchPaperSafeguards(watchPaper)} Nothing real is placed.
+              <strong style={{ color: 'var(--up)' }}>On.</strong> Each call by {describeDecider(watchPaper.model ?? '')} at 65% confidence or more opens a paper position by itself,
+              staking {describeWatchPaperSize(watchPaper, risk)}, with its own stop, target and time limit. At most {watchPaper.maxOpen} open at once, one an event, one on
+              a pair. {describeWatchPaperSafeguards(watchPaper)}
+              {risk.maxOutQuote !== null && ` With the news rules' paper shorts, they stake at most ${risk.maxOutQuote.toLocaleString('en-US')} together.`} Nothing real is placed.
             </p>
             {paper.pause != null && (
               <p style={{ ...noteStyle, color: 'var(--down)', marginTop: '0.4rem' }}>
@@ -326,7 +333,7 @@ export function WatchCard({
           <>
             <p style={noteStyle}>
               <strong style={{ color: 'var(--text-secondary)' }}>Off.</strong> Switched on, a call the watch would act on opens a paper position by itself: the one the Paper trade
-              button would fill in, at the stake set here. It is paper only and cannot be pointed at real money.
+              button would fill in, at the stake set here, or less where Risk &amp; Safety sizes paper trades by what their stop would lose. It is paper only and cannot be pointed at real money.
             </p>
             <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap', alignItems: 'center', marginTop: '0.7rem' }}>
               <label style={selectLabelStyle}>

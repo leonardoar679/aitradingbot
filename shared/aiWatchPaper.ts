@@ -2,8 +2,9 @@ import { describeOpportunitySide, opportunitySide } from './aiOpportunity'
 import { describeDecider } from './aiPanel'
 import { buildOpportunityProposal, opportunityObstacle } from './aiProposal'
 import { GPT_MIN_CONFIDENCE, type AiSignalDecision } from './aiSignal'
-import type { Candle, ExecutorConfig, ExecutorSide, PositionExecutorParams } from './ipc'
+import type { Candle, ExecutorConfig, ExecutorSide, PaperRiskSettings, PositionExecutorParams } from './ipc'
 import { describeEventType, type MarketEvent } from './marketEvent'
+import { describePaperRisk, sizePaperTrade } from './paperRisk'
 
 // PAPER TRADES FROM THE WATCH.
 //
@@ -21,8 +22,9 @@ import { describeEventType, type MarketEvent } from './marketEvent'
 // WHAT IT OPENS IS THE RECOMMENDATION, AS THE "Paper trade" BUTTON WOULD HAVE FILLED IT IN for
 // the same answer at the same moment (shared/aiProposal.ts): the model's own stop and target as
 // distances from the entry, its hold as the time limit, and the entry abandoned when its validity
-// ends. The one thing a person would have typed is the amount, and that is the stake in the
-// setting.
+// ends. The one thing a person would have typed is the amount: the stake in the setting, or, sized
+// by risk (shared/paperRisk.ts, since 2026-10-05), what the model's stop would lose about the risk
+// per trade at, never more than the stake.
 //
 // IT ENTERS WHERE THE RECOMMENDATION SAYS, AND NOWHERE ELSE: in the first minute the price trades
 // inside the range the model named, at that minute's open when the open is inside it and otherwise
@@ -160,19 +162,28 @@ export function aiWatchPaperProblem(config: AiWatchPaperConfig, watchModels: str
   return null
 }
 
+/** What a paper trade of the watch's stakes, in the words that follow "staking": "100 of the pair's
+ * quote currency", or "at most 100 of the pair's quote currency, sized so that being stopped out
+ * loses about 1". */
+export function describeWatchPaperSize(config: Pick<AiWatchPaperConfig, 'stakeQuote'>, risk: PaperRiskSettings): string {
+  const stake = `${config.stakeQuote} of the pair's quote currency`
+  return risk.sizing === 'risk' ? `at most ${stake}, sized so that being stopped out loses about ${risk.riskQuote}` : stake
+}
+
 /** What switching it on does, said before it is switched on. */
-export function describeAiWatchPaper(input: { config: AiWatchPaperConfig; watchOn: boolean; hasPaperAccount: boolean }): string {
+export function describeAiWatchPaper(input: { config: AiWatchPaperConfig; risk: PaperRiskSettings; watchOn: boolean; hasPaperAccount: boolean }): string {
   const { config } = input
   const who = config.model === null ? 'the chosen model' : describeDecider(config.model)
   const confidence = Math.round(GPT_MIN_CONFIDENCE * 100)
   return [
     'Let the watch open paper trades by itself?',
     '',
-    `While this is on, each time ${who} answers an event the watch put to it with BUY or SELL at ${confidence}% confidence or more, a PAPER position of ${config.stakeQuote} in the pair's quote currency is opened at once, with nobody pressing anything.`,
+    `While this is on, each time ${who} answers an event the watch put to it with BUY or SELL at ${confidence}% confidence or more, a PAPER position is opened at once, with nobody pressing anything, staking ${describeWatchPaperSize(config, input.risk)}.`,
     '',
     'It is the position the Paper trade button would have filled in: it enters in the first minute the price trades inside the range the model named, and is abandoned if that has not happened when its entry expires; with the model\'s own stop and target, and its holding time as the time limit.',
     `At most ${config.maxOpen} open at once, one an event, and one on a pair at a time. When a position has closed, it is stopped, and its card on Strategies › Execution says how it ended.`,
     describeWatchPaperSafeguards(config),
+    `On Risk & Safety, for every paper trade the app opens by itself: ${describePaperRisk(input.risk)}`,
     input.hasPaperAccount
       ? 'Its result goes to the paper account, and a trade the paper account cannot fund is not opened.'
       : 'No paper account is set up, so their results are added to no balance, and nothing limits what these positions add up to. Set one up under Account to hold them to a balance.',
@@ -366,6 +377,8 @@ export type WatchPaperPlan =
  * and can decide; nobody is looking at this. */
 export function planWatchPaperTrade(input: {
   config: AiWatchPaperConfig
+  /** How the app's own paper trades are sized (shared/paperRisk.ts). */
+  risk: PaperRiskSettings
   event: Pick<MarketEvent, 'id' | 'exchange' | 'symbol' | 'baseAsset' | 'quoteAsset' | 'time' | 'type' | 'price'>
   decision: AiSignalDecision
   nowSec: number
@@ -398,6 +411,8 @@ export function planWatchPaperTrade(input: {
   if (proposal.stopLossPct === null || proposal.takeProfitPct === null) {
     return { ok: false, reason: 'Its stop or its target is not a usable distance from the entry.' }
   }
+  const size = sizePaperTrade({ risk: input.risk, stakeQuote: config.stakeQuote, stopPct: proposal.stopLossPct, quoteAsset: event.quoteAsset })
+  if (!size.ok) return { ok: false, reason: size.reason }
   const side: ExecutorSide = proposal.side ?? 'buy'
   return {
     ok: true,
@@ -411,7 +426,7 @@ export function planWatchPaperTrade(input: {
       // the price this position waits for.
       entryPrice: null,
       entryRange: proposal.entryRange,
-      amountQuote: config.stakeQuote,
+      amountQuote: size.amountQuote,
       takeProfitPct: proposal.takeProfitPct,
       stopLossPct: proposal.stopLossPct,
       timeLimitSec: proposal.timeLimitSec,

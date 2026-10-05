@@ -139,6 +139,11 @@ export function NewsSettingsCard(): React.JSX.Element {
         passed by a small margin, 0.35% a trade after costs. Both are paper and can never be anything else; with a paper account they
         are funded and settled like any paper trade.
       </p>
+      <p style={{ ...noteStyle, marginTop: '0.5rem' }}>
+        The stake is the most a short stakes. Where Risk &amp; Safety sizes the app&apos;s own paper trades by what their stop would lose,
+        a tag&apos;s short stakes that, never more than its stake; a delisting&apos;s has no stop and stakes its stake. With the
+        watch&apos;s paper trades, they open none past what Risk &amp; Safety lets them have out together.
+      </p>
     </Card>
   )
 }

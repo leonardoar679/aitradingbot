@@ -14,6 +14,7 @@ import {
 } from '../../shared/aiWatchPaper'
 import type { AppSettings, Candle, Exchange, ExecutorConfig, PositionExecutorParams } from '../../shared/ipc'
 import type { MarketEvent } from '../../shared/marketEvent'
+import { healPaperRisk, paperOutBlock } from '../../shared/paperRisk'
 import { describeExecutorFunding } from '../account/executorFunding'
 import { settleExecutorOnStop } from '../account/settleExecutor'
 import { runExecutorSimulation } from '../executors/engine'
@@ -74,7 +75,7 @@ export function watchPaperExecutor(input: {
 
 export interface WatchPaperDeps {
   getConfig: () => Promise<Pick<AiConfig, 'watchPaper'>>
-  getSettings: () => Promise<Pick<AppSettings, 'executors' | 'paperAccount'>>
+  getSettings: () => Promise<Pick<AppSettings, 'executors' | 'paperAccount' | 'paperRisk'>>
   setExecutors: (executors: ExecutorConfig[]) => Promise<void>
   /** The price now, or null when it cannot be had: the event's own price then stands in. */
   lastPrice: (exchange: Exchange, symbol: string) => Promise<number | null>
@@ -116,11 +117,12 @@ export async function openWatchPaperTrade(
   } catch {
     lastPrice = null
   }
-  const plan = planWatchPaperTrade({ config: watchPaper, event, decision, nowSec: deps.nowSec(), lastPrice })
+  const plan = planWatchPaperTrade({ config: watchPaper, risk: healPaperRisk(before.paperRisk), event, decision, nowSec: deps.nowSec(), lastPrice })
   if (!plan.ok) return { opened: false, text: `No paper trade: ${plan.reason}` }
 
-  // Checked again on the executors read inside the queue, with the funds: two answers arriving
-  // together both passed the look above, and only one of them may be the pair's open trade.
+  // Checked again on the executors read inside the queue, with the funds and with what the app's
+  // own paper trades have out together: two answers arriving together both passed the look above,
+  // and only one of them may be the pair's open trade.
   const refused = await deps.queue(async (): Promise<string | null> => {
     const fresh = await deps.getSettings()
     const problem =
@@ -131,7 +133,8 @@ export async function openWatchPaperTrade(
         mode: 'paper',
         quoteAsset: event.quoteAsset,
         amountQuote: plan.params.amountQuote
-      })
+      }) ??
+      paperOutBlock({ risk: healPaperRisk(fresh.paperRisk), executors: fresh.executors, quoteAsset: event.quoteAsset, amountQuote: plan.params.amountQuote })
     if (problem !== null) return problem
     await deps.setExecutors([...fresh.executors, watchPaperExecutor({ id: deps.newId(), event, plan, nowSec: deps.nowSec() })])
     return null
