@@ -5,10 +5,11 @@ import { readEventAt } from './marketEvent'
 // The trades research/NEWS.md measured after Binance's announcements, as arithmetic on 1-minute
 // candles: the bracket every study here has used, and the four-hour hold.
 //
-// ONE MODULE FOR THE STUDY AND THE APP. research/news.ts scored both halves of the study with
-// these functions, and the app's record of what the two rules that passed would have made since
+// ONE MODULE FOR THE STUDIES AND THE APP. research/announcementStudy.ts scored both halves of the
+// news study and of the Upbit study with these functions, and the app's record of what the two
+// rules that passed, and the two trades that came nearest, would have made since
 // (electron/services/newsRecordService.ts) scores each announcement after it with the same ones, so
-// that the record and the study can be set side by side. A change here is a change to both.
+// that the record and the studies can be set side by side. A change here is a change to all of them.
 
 /** An app that reads the list once a minute sees an announcement within the minute after it, and
  * can act at the next bar's open at the earliest: the second bar after the announcement's own. */
@@ -105,19 +106,21 @@ function announcementIndex(bars: Candle[], releaseSec: number): number {
   return bars.findIndex((bar) => bar.time === minute)
 }
 
-/** A delisting's rule on one coin, as research/NEWS.md measured it: short at the second bar after
- * the announcement's minute, out at the open four hours after it, thin-book slippage. */
-export function scoreDelistingRule(bars: Candle[], releaseSec: number): RuleScore {
+/** The four-hour hold, short, on one coin, as research/NEWS.md and research/UPBIT.md measured it:
+ * short at the second bar after the announcement's minute, out at the open four hours after it,
+ * thin-book slippage. It is a delisting's rule, and the trade Binance's Monitoring Tag and Upbit's
+ * caution designation missed their bar with. */
+export function scoreHeldShort(bars: Candle[], releaseSec: number): RuleScore {
   const i = announcementIndex(bars, releaseSec)
   if (i < 0) return { skipped: 'no candle at the announcement minute' }
   const net = holdNet(bars, i + ENTRY_DELAY_BARS, i + HOLD_EXIT_BARS, -1, THIN_BOOK_SLIPPAGE)
   return net === null ? { skipped: 'under four hours of candles after it' } : { netPct: net }
 }
 
-/** A Monitoring Tag's rule on one coin, as research/NEWS.md measured it: the bracket, short, at the
- * second bar, its stop and target from the coin's usual move read at the minute before the
- * announcement's, thin-book slippage. */
-export function scoreTagRule(bars: Candle[], releaseSec: number): RuleScore {
+/** The bracket, short, on one coin, as research/NEWS.md measured it: at the second bar, its stop
+ * and target from the coin's usual move read at the minute before the announcement's, thin-book
+ * slippage. It is a Monitoring Tag's rule. */
+export function scoreBracketShort(bars: Candle[], releaseSec: number): RuleScore {
   const i = announcementIndex(bars, releaseSec)
   if (i < 0) return { skipped: 'no candle at the announcement minute' }
   const reading = readEventAt(bars, i - 1)
@@ -126,10 +129,12 @@ export function scoreTagRule(bars: Candle[], releaseSec: number): RuleScore {
   return net === null ? { skipped: 'under an hour of candles after it' } : { netPct: net }
 }
 
-/** When a rule's trade on an announcement is over, so that it can be scored: once the last minute
- * it reads has closed. */
-export function ruleReadyAt(category: 'DELISTING' | 'MONITORING_TAG', releaseSec: number): number {
+export type RuleTrade = 'hold' | 'bracket'
+
+/** When a trade on an announcement is over, so that it can be scored: once the last minute it reads
+ * has closed. */
+export function tradeReadyAt(trade: RuleTrade, releaseSec: number): number {
   const minute = Math.floor(releaseSec / 60) * 60
-  const lastBar = category === 'DELISTING' ? HOLD_EXIT_BARS : ENTRY_DELAY_BARS + BRACKET_HOLD_BARS - 1
+  const lastBar = trade === 'hold' ? HOLD_EXIT_BARS : ENTRY_DELAY_BARS + BRACKET_HOLD_BARS - 1
   return minute + (lastBar + 1) * 60
 }

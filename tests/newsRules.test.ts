@@ -8,14 +8,14 @@ import {
   bracketNet,
   fillMinutes,
   holdNet,
-  ruleReadyAt,
-  scoreDelistingRule,
-  scoreTagRule,
-  spotSymbolCandidates
+  scoreBracketShort,
+  scoreHeldShort,
+  spotSymbolCandidates,
+  tradeReadyAt
 } from '../shared/newsRules'
 
-// shared/newsRules.ts: the trades research/NEWS.md measured after Binance's announcements, which
-// the study and the app's record of the rules since both score with.
+// shared/newsRules.ts: the trades research/NEWS.md and research/UPBIT.md measured after
+// announcements, which the studies and the app's record since both score with.
 
 const bar = (time: number, open: number, high = open, low = open, close = open): Candle => ({ time, open, high, low, close, volume: 1 })
 const flat = (from: number, count: number, price: number): Candle[] => Array.from({ length: count }, (_, k) => bar(from + k * 60, price))
@@ -73,31 +73,31 @@ describe('a series of minutes', () => {
   })
 })
 
-describe('the rules, on one coin', () => {
+describe('the trades, on one coin', () => {
   const MINUTE = Date.parse('2026-10-20T08:00:00Z') / 1000
 
-  it("scores a delisting's: short at the second bar after its minute, out at the open four hours after it", () => {
+  it("scores the hold, a delisting's rule: short at the second bar after its minute, out at the open four hours after it", () => {
     const bars = flat(MINUTE - 600, 300, 10).map((entry, k) => ({ ...entry, open: 10 - k * 0.01 }))
-    expect(scoreDelistingRule(bars, MINUTE + 2)).toEqual({ netPct: holdNet(bars, 12, 250, -1, 0.001) })
-    expect(scoreDelistingRule(bars.slice(0, 250), MINUTE)).toEqual({ skipped: 'under four hours of candles after it' })
-    expect(scoreDelistingRule(bars, MINUTE + 86_400)).toEqual({ skipped: 'no candle at the announcement minute' })
+    expect(scoreHeldShort(bars, MINUTE + 2)).toEqual({ netPct: holdNet(bars, 12, 250, -1, 0.001) })
+    expect(scoreHeldShort(bars.slice(0, 250), MINUTE)).toEqual({ skipped: 'under four hours of candles after it' })
+    expect(scoreHeldShort(bars, MINUTE + 86_400)).toEqual({ skipped: 'no candle at the announcement minute' })
   })
 
-  it("scores a tag's: the bracket at the second bar, its usual move read at the minute before", () => {
+  it("scores the bracket, a tag's rule: short at the second bar, its usual move read at the minute before", () => {
     const bars = flat(MINUTE - 740 * 60, 820, 10).map((entry, k) => {
       const price = 10 * (1 + 0.003 * Math.sin(k / 7))
       return { ...entry, open: price, high: price * 1.001, low: price * 0.999, close: price }
     })
     const reading = readEventAt(bars, 739)
     expect(reading).not.toBeNull()
-    expect(scoreTagRule(bars, MINUTE)).toEqual({ netPct: bracketNet(bars, 742, -1, reading!.sigma15Pct, 0.001) })
-    expect(scoreTagRule(bars.slice(30), MINUTE)).toEqual({ skipped: 'under twelve hours of candles before it' })
-    expect(scoreTagRule(bars.slice(0, 790), MINUTE)).toEqual({ skipped: 'under an hour of candles after it' })
+    expect(scoreBracketShort(bars, MINUTE)).toEqual({ netPct: bracketNet(bars, 742, -1, reading!.sigma15Pct, 0.001) })
+    expect(scoreBracketShort(bars.slice(30), MINUTE)).toEqual({ skipped: 'under twelve hours of candles before it' })
+    expect(scoreBracketShort(bars.slice(0, 790), MINUTE)).toEqual({ skipped: 'under an hour of candles after it' })
   })
 
   it('is ready to score once the last minute it reads has closed', () => {
-    expect(ruleReadyAt('DELISTING', MINUTE + 30)).toBe(MINUTE + 241 * 60)
-    expect(ruleReadyAt('MONITORING_TAG', MINUTE + 30)).toBe(MINUTE + 62 * 60)
+    expect(tradeReadyAt('hold', MINUTE + 30)).toBe(MINUTE + 241 * 60)
+    expect(tradeReadyAt('bracket', MINUTE + 30)).toBe(MINUTE + 62 * 60)
   })
 
   it('tries a prefixed ticker bare as well', () => {

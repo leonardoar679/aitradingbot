@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { ORDINARY_SLIPPAGE, THIN_BOOK_SLIPPAGE, spotSymbolCandidates } from '../shared/newsRules'
 import { checkOrStudy, daysAround, splitOf, type Kind, type StudyPair } from './announcementStudy'
-import { classifyUpbitTitle, type UpbitCategory } from './upbitTitles'
+import { classifyUpbitTitle, type UpbitCategory } from '../shared/upbitTitles'
 
 // Do Upbit's trading notices move a coin's price on Binance, by enough to trade after them? See
 // research/UPBIT.md for the question, the rule and the result. The moves and the trades are scored
@@ -33,7 +33,7 @@ const KINDS: Record<UpbitCategory, Kind> = {
 const CATEGORIES: UpbitCategory[] = ['KRW_LISTING', 'CAUTION', 'DELISTING']
 
 /** Which coins a listing gave a won market, where its title gives several coins one list of markets
- * (research/upbitTitles.ts `shared`): read by hand from each of these twelve notices on 5 October
+ * (shared/upbitTitles.ts `shared`): read by hand from each of these twelve notices on 5 October
  * 2026, before any price was. Each of the coins left out had a won market added by a notice of its
  * own later (GAL, IMX, ALT, POKT, YGG, OMNI, BIGTIME, MASK). */
 const WON_BY_NOTICE: Record<number, string[]> = {

@@ -1,9 +1,14 @@
-import { PEGGED } from '../shared/newsTitles'
+import { PEGGED } from './newsTitles'
 
 // How an Upbit trading notice is read: which of the three kinds research/UPBIT.md measures its title
 // is, and which coins it names. By fixed patterns on the title alone, as shared/newsTitles.ts reads
 // Binance's -- never by a model, and never from the notice's body. A title that fits none of them
 // reads as null. Pinned by tests/upbitTitles.test.ts on titles copied from Upbit's list.
+//
+// ONE MODULE FOR THE STUDY AND THE APP. research/upbit.ts measured each kind with these patterns
+// (written as research/upbitTitles.ts, and moved here unchanged), and the app's record of the near
+// misses (shared/newsRecord.ts) sorts Upbit's notices with the same ones, so that the caution it
+// keeps on record is the caution that was measured. A change here is a change to both.
 //
 //   KRW_LISTING  A coin gets a market in Korean won, new to Upbit or added beside its BTC or USDT
 //                market: "돌핀(POD) 신규 거래지원 안내 (KRW, BTC, USDT 마켓)", "KRW 마켓 디지털 자산

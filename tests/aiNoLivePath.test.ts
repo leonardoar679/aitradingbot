@@ -244,13 +244,16 @@ describe('AI code has no route to a real order', () => {
     // It raises a delisting as an event through the scanner, which reads public candles; that is
     // the whole of what it reaches beyond its own files.
     expect(importsOf(join(SERVICES, 'newsService.ts')).sort()).toEqual(['atomicWrite', 'electron', 'jsonlStore', 'marketScannerService', 'news', 'newsActions', 'path', 'promises'])
-    // The record of the rules since the study reads the same lists, and the coins' candles through
-    // the market service that charts read: public data, kept in a file of its own.
+    // The record of the rules since the study reads the same lists, and Upbit's public list of
+    // trading notices for the near miss it keeps beside them, when it is asked; and the coins'
+    // candles through the market service that charts read: public data, kept in a file of its own.
     expect(importsOf(join(SERVICES, 'newsRecordService.ts')).sort()).toEqual(['atomicWrite', 'electron', 'marketEvent', 'marketService', 'news', 'newsRecord', 'newsRules', 'path', 'promises'])
+    expect(importsOf(join(ROOT, 'shared', 'newsRecord.ts')).sort()).toEqual(['news', 'newsRules', 'newsTitles', 'upbitTitles'])
     // The rules' arithmetic is arithmetic: the fee, the candle type and the detector's reading.
     expect(importsOf(join(ROOT, 'shared', 'newsRules.ts')).sort()).toEqual(['fees', 'ipc', 'marketEvent'])
     expect(importsOf(join(ROOT, 'shared', 'news.ts'))).toEqual(['newsTitles'])
     expect(importsOf(join(ROOT, 'shared', 'newsTitles.ts'))).toEqual([])
+    expect(importsOf(join(ROOT, 'shared', 'upbitTitles.ts'))).toEqual(['newsTitles'])
     for (const path of [join(ROOT, 'src', 'explorer', 'NewsCard.tsx'), join(ROOT, 'src', 'explorer', 'NewsRecordCard.tsx'), join(ROOT, 'src', 'settings', 'NewsSettingsCard.tsx')]) {
       const source = readFileSync(path, 'utf-8')
       expect([...new Set([...source.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))], path).toEqual(['news'])
@@ -260,7 +263,7 @@ describe('AI code has no route to a real order', () => {
       readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
         entry.isDirectory() ? walk(join(dir, entry.name)) : /\.tsx?$/.test(entry.name) ? [join(dir, entry.name)] : []
       )
-    const readsNews = /window\.api\.news\b|from '[^']*\/(news|newsTitles|newsActions|newsService|newsHandlers|newsPaperShort|NewsScheduler)'/
+    const readsNews = /window\.api\.news\b|from '[^']*\/(news|newsTitles|upbitTitles|newsActions|newsService|newsHandlers|newsPaperShort|NewsScheduler)'/
     const readers = ['src', 'electron', 'shared']
       .flatMap((dir) => walk(join(ROOT, dir)))
       .filter((path) => readsNews.test(readFileSync(path, 'utf-8')))
@@ -276,12 +279,15 @@ describe('AI code has no route to a real order', () => {
       'electron/services/aiSignalService.ts',
       // ...and the event is raised through the scanner, from the coin's own candles.
       'electron/services/marketScannerService.ts',
-      // The record of the two rules since the study: Binance's lists and the coins' candles, scored.
+      // The record of the two rules since the study, and of the two near misses: Binance's and
+      // Upbit's lists and the coins' candles, scored.
       'electron/services/newsRecordService.ts',
       'electron/services/newsService.ts',
       'shared/news.ts',
       'shared/newsActions.ts',
       'shared/newsRecord.ts',
+      // Upbit's patterns, for the near miss on record: they drop the pegged coins Binance's do.
+      'shared/upbitTitles.ts',
       'src/App.tsx',
       // Shows where one of the rule's shorts came from, from the mark on it.
       'src/executors/ExecutorCard.tsx',

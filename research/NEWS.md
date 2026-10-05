@@ -458,3 +458,12 @@ to account in the app, on Discovery ("The news rules since the study"):
   coin there, and the tag's bracket 0.6%.
 
 On 5 October 2026, when the record began, Binance had announced neither since the study ended.
+
+The same day, after `research/UPBIT.md` was scored, the user chose to keep two near misses on
+record beside the rules, the same way:
+- **the Monitoring Tag held short four hours** (above: 4.5% a trade, t 2.1 against a bar of 3);
+- **Upbit's caution designation held short four hours** on the coin's Binance pair (3.9% a coin,
+  t 2.3 against 3).
+
+Both are a slow fall after an exchange's warning, short of its bar on its own. The record shows
+whether that goes on. Nothing in the app acts on either.

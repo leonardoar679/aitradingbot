@@ -42,8 +42,9 @@ notices from 27 October 2017 to 2 October 2026. Titles and the time each was fir
 second; a notice's body was read only where its title could not say which coin got which market
 (below).
 
-**Sorting them** is `research/upbitTitles.ts`, pinned by `tests/upbitTitles.test.ts` on titles
-copied from the list. Fixed patterns, no model. Upbit has worded each kind several ways since 2017,
+**Sorting them** is `shared/upbitTitles.ts` (written as `research/upbitTitles.ts`, and moved
+unchanged once the app's record read Upbit's cautions with it), pinned by `tests/upbitTitles.test.ts`
+on titles copied from the list. Fixed patterns, no model. Upbit has worded each kind several ways since 2017,
 and each wording is a pattern:
 
 | Kind | Example titles |
@@ -261,8 +262,18 @@ what is usual for them.
 
 ### What it means for the app
 
-Nothing passed, so nothing is built, as the rule said. The app reads no Upbit notice.
+Nothing passed, so nothing is built, as the rule said: nothing in the app acts on an Upbit notice.
 
 For someone holding a coin Upbit warns about, the warning came before a fall on Binance of 5% over
 four hours, slowly enough to sell into. It is the same reason a notice was built for Binance's tag.
 It is not built for Upbit's: the caution did not pass its bar.
+
+**Kept on record instead.** On 5 October 2026 the user chose to keep the caution's four-hour short
+on record from 1 October, beside Binance's tag held four hours, the other near miss. It is on
+Discovery, under the two news rules that passed ("The news rules since the study"):
+- The app reads Upbit's list of trading notices for it, only while that card is shown.
+- It sorts the notices by this study's patterns, moved unchanged to `shared/upbitTitles.ts` (the
+  plan and both halves' scores the same to the byte).
+- It scores each caution on the coin's Binance pair, by this study's arithmetic.
+
+It is a record, not a signal: it shows whether the slow fall goes on.

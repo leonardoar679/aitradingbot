@@ -342,24 +342,46 @@ day after the study's held-out half ended.
 - **Each coin is scored as its rule trades it:** a delisting's short held four hours, and a tag's
   stop-and-target short. It is scored on the coin's own 1-minute candles, after the study's fees and
   slippage, by the very functions the study scored with (`shared/newsRules.ts`, which
-  `research/news.ts` now imports, its output unchanged to the byte).
+  `research/announcementStudy.ts` now imports for both studies, their output unchanged to the byte).
 - **It does not depend on the app.** It counts whether or not the paper short was on, the reader was
   on, or the app was open: the main process reads Binance's delisting and news lists back to that
-  day (`electron/services/newsRecordService.ts`).
+  day, and Upbit's list of trading notices (`electron/services/newsRecordService.ts`).
 - **Beside each rule, the study's own figure:** a delisting held short made 15.5% a coin, 75 of 87
   ahead; a tag's bracket 0.6% a coin, 59 of 103 ahead.
-- **A rule whose trade is not over yet** says so, and is scored on a later look.
+- **Two near misses are on record the same way**, below the rules, since 5 October 2026, when the
+  user chose to keep them:
+  - a tagged coin held short four hours (in the study, 6.7% a coin, 82 of 103 ahead);
+  - a coin Upbit designates for caution, held short four hours on its Binance pair (3.9% a coin, 18
+    of 24 ahead; `research/UPBIT.md`).
+
+  Both started a slow fall in their studies and missed the bar they were held to; the record shows
+  whether the fall goes on. Nothing in the app acts on either. Upbit's notices are sorted by the
+  study's own patterns (`shared/upbitTitles.ts`), and a coin is scored on the Binance pair of the
+  same ticker; one Binance does not list says so.
+- **A trade that is not over yet** says so, and is scored on a later look: a tag's bracket an hour
+  after the announcement, a hold four hours after.
 - **A score is kept once made**, in `news/record.json`, because a delisted coin's candles are soon
   gone from Binance. A coin that could not be scored is tried again on the next look.
-- **It reads only when the card is shown**, or asked to look again, and reads the lists at most once
-  in ten minutes. It is public data: no key, no model and no order, and nothing is opened because
-  of it.
+- **It reads only when the card is shown**, or asked to look again, and reads each list at most once
+  in ten minutes, Upbit's a page a second. It is public data: no key, no model and no order, and
+  nothing is opened because of it.
 
 Checked in the app on 5 October 2026, on a scratch profile with the lists faked. A delisting of DOGE
 and a tag of XRP were released five hours before, and a tag of ADA ten minutes before. On real
 candles, DOGE scored +0.20% held four hours, and XRP +0.17% by the bracket. ADA was not over yet. The
 lists were read once, a second look within ten minutes read nothing again, and the news reader was
 never switched on.
+
+Checked again with the near misses, later that day, on a separate build and a scratch profile:
+- **With the lists faked:**
+  - XRP's tag scored by both trades from one read of its candles: −0.79% by the bracket and
+    −0.45% held four hours.
+  - A tag of ADA seventy minutes old had its bracket scored and its hold not over yet.
+  - Upbit's caution of SAND scored +0.93% on SANDUSDT. One of BLAST ten minutes old waited.
+  - A KRW listing in the same list was not on record.
+  - Each list was read once, and a second look read none again.
+- **With nothing faked,** the app read Upbit's real list. It found the caution of BLAST of 2 October,
+  and said Binance has no spot pair for it.
 
 **What a delisting does** is what the user chose on 5 October 2026, once the study was in. Each part
 is switched under the same card on Settings › Market, and acts only on a delisting read while the app
@@ -2597,7 +2619,8 @@ electron/                    Electron main process
                              marketScannerService (the once-a-minute read of every watched pair,
                                its events file, and scans of history), newsService (Binance's
                                announcement lists, once a minute while on, each article kept once),
-                               newsRecordService (the news rules scored since the study, kept once),
+                               newsRecordService (the news rules and two near misses scored since
+                               the studies, from Binance's lists and Upbit's, kept once),
                                jsonlStore (append-only month files, shared with the AI call ledger)
                              AI, with no import path to any of the live services above:
                                openRouterClient (the only file that knows OpenRouter's wire format),
@@ -2635,7 +2658,8 @@ shared/                       Code both processes run, so they cannot disagree a
   marketScanner.ts            The scanner's settings, what a pass reports, and which pairs are watched
   newsTitles.ts, news.ts      Which kind of news a Binance title is, and which coins it names (the study's patterns); what the reader keeps of each article, and what each kind did
   newsActions.ts              What a delisting or a Monitoring Tag does: the notice to a holder, the kind's paper short, and when it is raised for the models and may be asked about
-  newsRules.ts, newsRecord.ts The study's bracket and four-hour hold as arithmetic, shared with research/news.ts; the record of the two rules since the study
+  newsRules.ts, newsRecord.ts The studies' bracket and four-hour hold as arithmetic, shared with research/announcementStudy.ts; the record of the two rules and the two near misses since the studies
+  upbitTitles.ts              Which kind of notice an Upbit title is, and which coins it names (the Upbit study's patterns), for the near miss on record
   indicators.ts, atr.ts, …    Indicator and fee arithmetic shared with the strategies
 
 src/                          React renderer app
@@ -2687,7 +2711,8 @@ src/                          React renderer app
   explorer/                   The market scanner's page (Discovery): what is moving now, the events
                               raised, and what the price did after each (eventOutcomes.ts);
                               NewsCard (Binance's announcements as the reader has read them);
-                              NewsRecordCard (the news rules since the study, scored)
+                              NewsRecordCard (the news rules and two near misses since the
+                              studies, scored)
   news/                       What a delisting does, headless: NewsScheduler (the notice and the
                               rule's paper short) and newsPaperShort.ts (the one file that writes
                               those shorts, paper by a literal)

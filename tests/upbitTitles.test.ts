@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { classifyUpbitTitle } from '../research/upbitTitles'
+import { classifyUpbitTitle } from '../shared/upbitTitles'
 
-// research/upbitTitles.ts reads Upbit's trading notices for the Upbit study (research/UPBIT.md).
-// Every title below is one Upbit published, copied as its list gives it.
+// shared/upbitTitles.ts reads Upbit's trading notices, for the Upbit study (research/UPBIT.md) and
+// for the app's record of its caution alike. Every title below is one Upbit published, copied as its
+// list gives it.
 
 const tickers = (title: string): string[] | undefined => classifyUpbitTitle(title)?.tickers
 
