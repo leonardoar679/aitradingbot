@@ -82,6 +82,7 @@ All files are in the user's profile folder.
 | | `watch` (on, models, events a day, lowest band, first model gates) | Agents › Opportunities › Watch | Opportunities (stays with its results) |
 | | `watchPaper` (on, model, stake, most open) | Agents › Opportunities › Watch | Opportunities |
 | `scanner.json` | `enabled`, `universeSize` (20, 40, 60 or 100) | Explorer › Scanner | Settings › Market |
+| `news.json` | `enabled` (added with the news reader, V3 Stage 7) | — | Settings › Market |
 | `credentials.json` (encrypted) | Binance and Upbit keys; when added, last tested, result | Settings | Connections |
 | `aiCredentials.json` (encrypted) | The OpenRouter key | Agents | Connections |
 | `liveTrading.json` | Session armed, kill switch | Live trading bar | The bar (stays); detail on Live Trading |
@@ -89,7 +90,7 @@ All files are in the user's profile folder.
 
 These files are records, not settings, and stay where they are: `livePositions.json`,
 `liveOrders.json`, `livePositionWatchers.json`, `liveTwapRuns.json`, `aiLedger/`, `aiSignalCache/`,
-`aiExperiments/`, `marketEvents/` and `aiModels.json`.
+`aiExperiments/`, `marketEvents/`, `news/` and `aiModels.json`.
 
 ## What runs without a page open
 
@@ -106,13 +107,15 @@ boundary. They are unchanged by the reorganization:
 
 The main process also runs loops that need no window at all:
 - `marketScannerService` reads the market once a minute while it is on.
+- `newsService` reads Binance's two announcement lists once a minute while it is on (added in V3
+  Stage 7).
 - `livePositionWatchersService` evaluates live exits every 5 seconds.
 - `liveTwapService` places TWAP slices.
 
 ## IPC channels
 
-79 channels, each found by searching `src/` for the `window.api` call that reaches it. A call may
-span lines.
+79 channels when this was written, each found by searching `src/` for the `window.api` call that
+reaches it. A call may span lines. The four `news` channels were added after, in V3 Stage 7.
 
 | Namespace | Channels | Called from |
 |---|---|---|
@@ -121,6 +124,7 @@ span lines.
 | `market` | 12: symbols, symbol rules, candles and ticker subscriptions, 24-hour ticker, historical ranges | Charts, Market, Backtest, executors, the watch, benchmarks, Explorer |
 | `backtest` | `exportSave` | Backtest results, strategy comparison, Journal |
 | `scanner` | 8: state, config, events, history scan, universe, updates | Explorer, Opportunities, the watch, the event benchmark, the live board, Journal |
+| `news` | 4: state, config, list, updates | Discovery's announcements card, Settings › Market. Nothing else reads it (`tests/aiNoLivePath.test.ts`) |
 | `credentials` | 10: list, set, test, remove, balances, futures positions, close, stops | Settings, Account, the live trading bar, New Executor, the ledger check |
 | `ai` | 22: key, signal tapes, config, calls, usage, entry confirmation, benchmark, opportunities, experiments | Agents' tabs, Backtest, Bots, the watch |
 | `liveTrading` | 19: status, limits, kill switch, arm, positions, orders, watchers, TWAP | The live trading bar, Settings, Executors, Positions, `LiveOrderScheduler`, Portfolio |

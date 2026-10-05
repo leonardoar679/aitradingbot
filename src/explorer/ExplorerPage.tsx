@@ -20,6 +20,7 @@ import { cellStyle, headCellStyle, noteStyle, signedPct, buttonStyle } from '../
 import { describeError } from '../utils/ipcError'
 import { useNowSec } from '../utils/useNowSec'
 import { loadEventMoves, type EventMoves } from './eventOutcomes'
+import { NewsCard } from './NewsCard'
 
 const PAIRS_SHOWN = 15
 const EVENTS_SHOWN = 25
@@ -305,6 +306,8 @@ export function ExplorerPage({ onNavigate }: { onNavigate: (page: Page) => void 
           followed by nothing at all, which is why one is shown in the table above and not listed here.
         </p>
       </Card>
+
+      <NewsCard onNavigate={onNavigate} />
     </>
   )
 }

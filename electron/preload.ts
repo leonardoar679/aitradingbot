@@ -26,6 +26,7 @@ import type {
   ScannerConfigPatch,
   ScannerState
 } from '../shared/marketScanner'
+import type { NewsConfig, NewsFilter, NewsPage, NewsState } from '../shared/news'
 import {
   IpcChannel,
   type AppSettings,
@@ -120,6 +121,18 @@ const api = {
       const handler = (_event: IpcRendererEvent, progress: ScanHistoryProgress): void => listener(progress)
       ipcRenderer.on(IpcChannel.ScannerHistoryProgress, handler)
       return () => ipcRenderer.removeListener(IpcChannel.ScannerHistoryProgress, handler)
+    }
+  },
+  // Binance's announcements. Everything here reads its public list or the file the reader wrote:
+  // none of it reaches a model, a key or an order.
+  news: {
+    getState: (): Promise<NewsState> => ipcRenderer.invoke(IpcChannel.NewsGetState),
+    setConfig: (patch: Partial<NewsConfig>): Promise<NewsState> => ipcRenderer.invoke(IpcChannel.NewsSetConfig, patch),
+    list: (filter: NewsFilter = {}): Promise<NewsPage> => ipcRenderer.invoke(IpcChannel.NewsList, filter),
+    onUpdate: (listener: (state: NewsState) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, state: NewsState): void => listener(state)
+      ipcRenderer.on(IpcChannel.NewsUpdate, handler)
+      return () => ipcRenderer.removeListener(IpcChannel.NewsUpdate, handler)
     }
   },
   credentials: {

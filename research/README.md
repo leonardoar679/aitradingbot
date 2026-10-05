@@ -67,7 +67,7 @@ CANDLE_DIR=<dir with the json> node --max-old-space-size=4096 research/.final.mj
 | `positioning-live.mjs` | Sets that archive against the live endpoints value by value, and measures when each series is published |
 | `positioning.ts` | How the futures market is positioned at events, and in crowded markets (`POSITIONING.md`) |
 | `fetch-announcements.mjs` | Binance's listing and delisting announcement lists: titles and release minutes |
-| `newsTitles.ts` | Which kind of news a title is, and which coins it names, by fixed patterns (`tests/newsTitles.test.ts`) |
+| `../shared/newsTitles.ts` | Which kind of news a title is, and which coins it names, by fixed patterns (`tests/newsTitles.test.ts`). Moved to `shared/` once the app read news with it; the patterns are the ones the study ran on |
 | `fetch-news-candles.mjs` | The 1-minute candles around each announcement from data.binance.vision's archives, delisted coins included, each zip checked against its SHA-256 |
 | `news.ts` | Whether delistings, futures launches and listings move prices by enough to trade after them. A delisting held short four hours does, on paper (`NEWS.md`) |
 

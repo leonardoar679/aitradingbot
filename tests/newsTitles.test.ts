@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { classifyTitle } from '../research/newsTitles'
+import { classifyTitle } from '../shared/newsTitles'
 
-// research/newsTitles.ts reads Binance's announcement titles for the news study (research/NEWS.md).
-// Every title below is one Binance published, copied as its list gives it.
+// shared/newsTitles.ts reads Binance's announcement titles, for the news study (research/NEWS.md)
+// and for the app's reader alike. Every title below is one Binance published, copied as its list
+// gives it.
 
 describe('a delisting', () => {
   it('names the coins leaving the spot market', () => {

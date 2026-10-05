@@ -1,7 +1,11 @@
-// How research/news.ts reads a Binance announcement: which of the three kinds of news its title is,
-// and which coins it names. By fixed patterns on the title alone -- never by a model (the V3
-// document's section 14), and never from the article's body. A title that fits none of them is
-// not news this study measures, and reads as null.
+// How a Binance announcement is read: which of the three kinds of news its title is, and which
+// coins it names. By fixed patterns on the title alone -- never by a model (the V3 document's
+// section 14), and never from the article's body. A title that fits none of them reads as null.
+//
+// ONE MODULE FOR THE STUDY AND THE APP. research/news.ts measured what each kind did with these
+// patterns (research/NEWS.md), and the app's reader (electron/services/newsService.ts) sorts what
+// it reads with the same ones, so the news the app shows is the news that was measured. A change
+// here is a change to both.
 //
 //   DELISTING       "Binance Will Delist ACX, HFT, PIVX on 2026-08-17": the coins leave Binance's
 //                   spot market. Not a margin, futures, options, earn or loans delisting, and not

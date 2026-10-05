@@ -220,6 +220,48 @@ describe('AI code has no route to a real order', () => {
     expect(importsOf(join(ROOT, 'shared', 'marketEvent.ts'))).toEqual(['ipc'])
   })
 
+  it('the news reader reads one public list and reaches nothing else', () => {
+    // It reads Binance's announcements once a minute with no window open: the first news in this
+    // app. It is held to the scanner's rule and to more. Its main-process files import nothing that
+    // trades, holds a key or asks a model; its pages call the news bridge and nothing else; and the
+    // files that read the news at all are exactly these. No model, watch, executor or order path
+    // reads it, because what a delisting should do has not been decided (research/NEWS.md). Making
+    // one read it is a deliberate change, and it has to change this list to do it.
+    const main = [join(SERVICES, 'newsService.ts'), join(ROOT, 'electron', 'ipc', 'handlers', 'newsHandlers.ts')]
+    for (const path of main) {
+      expect(importsOf(path).filter((name) => LIVE_MODULES.has(name)), path).toEqual([])
+      expect(importsOf(path).filter((name) => aiModuleNames.has(name)), path).toEqual([])
+    }
+    expect(importsOf(join(SERVICES, 'newsService.ts')).sort()).toEqual(['atomicWrite', 'electron', 'jsonlStore', 'news', 'path', 'promises'])
+    expect(importsOf(join(ROOT, 'shared', 'news.ts'))).toEqual(['newsTitles'])
+    expect(importsOf(join(ROOT, 'shared', 'newsTitles.ts'))).toEqual([])
+    for (const path of [join(ROOT, 'src', 'explorer', 'NewsCard.tsx'), join(ROOT, 'src', 'settings', 'NewsSettingsCard.tsx')]) {
+      const source = readFileSync(path, 'utf-8')
+      expect([...new Set([...source.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))], path).toEqual(['news'])
+    }
+
+    const walk = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+        entry.isDirectory() ? walk(join(dir, entry.name)) : /\.tsx?$/.test(entry.name) ? [join(dir, entry.name)] : []
+      )
+    const readsNews = /window\.api\.news\b|from '[^']*\/(news|newsTitles|newsService|newsHandlers)'/
+    const readers = ['src', 'electron', 'shared']
+      .flatMap((dir) => walk(join(ROOT, dir)))
+      .filter((path) => readsNews.test(readFileSync(path, 'utf-8')))
+      .map((path) => path.slice(ROOT.length + 1).replace(/\\/g, '/'))
+      .sort()
+    expect(readers).toEqual([
+      'electron/ipc/handlers/newsHandlers.ts',
+      'electron/ipc/index.ts',
+      'electron/main.ts',
+      'electron/preload.ts',
+      'electron/services/newsService.ts',
+      'shared/news.ts',
+      'src/explorer/NewsCard.tsx',
+      'src/settings/NewsSettingsCard.tsx'
+    ])
+  })
+
   it('the watch asks and notifies, and all but one of its files has nothing to write with', () => {
     // The watch is the one thing that asks a model with nobody pressing anything. What it may do
     // with the answer is show it, say so on the desktop and -- since 2026-10-04, when it is

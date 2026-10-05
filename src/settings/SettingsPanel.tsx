@@ -7,6 +7,7 @@ import type { Theme } from '../theme/palette'
 import { ModelsTab } from '../agents/ModelsTab'
 import { UsageTab } from '../agents/UsageTab'
 import type { Page } from '../navigation/pages'
+import { NewsSettingsCard } from './NewsSettingsCard'
 import { ScannerSettingsCard } from './ScannerSettingsCard'
 
 const THEME_OPTIONS: { id: Theme; label: string; icon: typeof Moon }[] = [
@@ -34,7 +35,7 @@ export function SettingsPanel({ onNavigate }: { onNavigate: (page: Page) => void
 
   return (
     <>
-      <PageHeader title="Settings" subtitle="How the app looks, what the scanner watches, and which AI models may be asked" />
+      <PageHeader title="Settings" subtitle="How the app looks, what the app reads of the market, and which AI models may be asked" />
 
       <SectionHeading title="General" note="How the app looks." />
       <Card title="Appearance">
@@ -67,8 +68,9 @@ export function SettingsPanel({ onNavigate }: { onNavigate: (page: Page) => void
         </div>
       </Card>
 
-      <SectionHeading title="Market" note="What the scanner watches. Its readings and events are on Discovery." />
+      <SectionHeading title="Market" note="What the scanner watches, and whether Binance's announcements are read. Both are shown on Discovery." />
       <ScannerSettingsCard />
+      <NewsSettingsCard />
 
       <SectionHeading
         title="AI"

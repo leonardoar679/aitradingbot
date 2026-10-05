@@ -3,7 +3,7 @@ import { join } from 'path'
 import { FEE_RATE } from '../shared/fees'
 import type { Candle } from '../shared/ipc'
 import { readEventAt } from '../shared/marketEvent'
-import { classifyTitle, type NewsCategory } from './newsTitles'
+import { classifyTitle, type NewsCategory } from '../shared/newsTitles'
 
 // Do Binance's own announcements move prices, by enough to trade after them? See research/NEWS.md
 // for the question, the rule and the result.

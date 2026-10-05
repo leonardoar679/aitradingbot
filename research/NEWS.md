@@ -45,7 +45,8 @@ times only, never an article's body.
 | New Cryptocurrency Listing (48) | 2,276 | July 2017 |
 | Delisting (161) | 439 | February 2022 |
 
-**Sorting them** is `research/newsTitles.ts`, pinned by `tests/newsTitles.test.ts` on titles copied
+**Sorting them** is `shared/newsTitles.ts` (written as `research/newsTitles.ts`, and moved unchanged
+once the app read news with it), pinned by `tests/newsTitles.test.ts` on titles copied
 from both lists. Fixed patterns, no model:
 - **Delisting:** "Binance Will Delist …" and the vote batch's "… and Will Delist …". Not a margin,
   futures, options, earn, loans or pair delisting.
