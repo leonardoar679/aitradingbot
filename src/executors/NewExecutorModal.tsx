@@ -13,6 +13,8 @@ import { resolveLeverage } from '../../shared/perp'
 import {
   aiProposalName,
   aiProposalOrigin,
+  aiProposalEntryExpiry,
+  aiProposalEntryRange,
   aiProposalPositionParams,
   describeAiProposal,
   isAiCallStale,
@@ -581,6 +583,14 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
               : type === 'order'
                 ? orderParams
                 : marketMakingParams
+    // A paper position that still follows a recommendation gives up waiting when the
+    // recommendation's entry does. Stamped here, at the click, because it belongs to the
+    // recommendation and not to anything the form's fields hold.
+    const entryExpiresAt = type === 'position' && proposal !== null && followsProposal ? aiProposalEntryExpiry(proposal, mode) : null
+    // And it enters by the recommendation's own range, while the entry is still the one the
+    // recommendation filled in: a price typed over it is the user's order, and waits as a limit.
+    const entryRange = type === 'position' && proposal !== null && followsProposal ? aiProposalEntryRange(proposal, mode, positionParams.entryPrice) : null
+    const fromRecommendation = { ...(entryExpiresAt !== null ? { entryExpiresAt } : {}), ...(entryRange !== null ? { entryRange } : {}) }
     onCreate({
       name: name.trim(),
       type,
@@ -588,7 +598,7 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
       pair,
       keepPosition,
       mode,
-      params,
+      params: entryExpiresAt !== null || entryRange !== null ? { ...positionParams, ...fromRecommendation } : params,
       ...(proposal !== null && followsProposal ? { proposedBy: aiProposalOrigin(proposal) } : {})
     })
   }

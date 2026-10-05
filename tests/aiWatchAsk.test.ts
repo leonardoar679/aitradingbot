@@ -42,14 +42,19 @@ function answer(): string {
   })
 }
 
-function stubOpenRouter(reply: (call: number) => { status?: number } | Promise<{ status?: number }> = () => ({})): { bodies: { model: string }[] } {
+type StubReply = { status?: number; content?: string }
+
+/** `reply` is told which HTTP request this is and which pair it is about. A call that fails is
+ * tried three times, so a test of who was asked decides by the pair, not by the count. */
+function stubOpenRouter(reply: (call: number, symbol: string) => StubReply | Promise<StubReply> = () => ({})): { bodies: { model: string }[] } {
   const bodies: { model: string }[] = []
   vi.stubGlobal('fetch', async (_url: string, init: { body?: string }) => {
     bodies.push(JSON.parse(init.body ?? '{}'))
-    const { status = 200 } = await reply(bodies.length)
+    const symbol = /"symbol":\s*"([A-Z0-9]+)"/.exec(String(init.body).replace(/\\"/g, '"'))?.[1] ?? ''
+    const { status = 200, content = answer() } = await reply(bodies.length, symbol)
     const body =
       status === 200
-        ? { provider: 'Test', choices: [{ finish_reason: 'stop', message: { content: answer() } }], usage: { prompt_tokens: 2400, completion_tokens: 500, cost: 0.003 } }
+        ? { provider: 'Test', choices: [{ finish_reason: 'stop', message: { content } }], usage: { prompt_tokens: 2400, completion_tokens: 500, cost: 0.003 } }
         : { error: { code: status, message: 'overloaded' } }
     return { ok: status === 200, status, text: async () => JSON.stringify(body) }
   })
@@ -127,6 +132,75 @@ describe('the watch setting', () => {
   })
 })
 
+describe('the paper-trade setting', () => {
+  const PAPER = { enabled: true, model: A, stakeQuote: 100, maxOpen: 3 }
+
+  it('is off until it is switched on, and stays on across a restart', async () => {
+    const { getAiConfig, setAiConfig } = await services()
+    expect((await getAiConfig()).watchPaper).toEqual({ enabled: false, model: null, stakeQuote: 100, maxOpen: 3 })
+    await setAiConfig({ watch: ON })
+    expect((await setAiConfig({ watchPaper: PAPER })).watchPaper).toEqual(PAPER)
+    vi.resetModules()
+    expect((await (await services()).getAiConfig()).watchPaper).toEqual(PAPER)
+  })
+
+  it('follows only a model the watch asks, at a stake and a limit that are among the choices', async () => {
+    const { getAiConfig, setAiConfig } = await services()
+    // The watch asks nobody yet.
+    await expect(setAiConfig({ watchPaper: PAPER })).rejects.toThrow(/not one of the models the watch asks/)
+    await setAiConfig({ enabledModels: [A, B] })
+    await setAiConfig({ watch: ON })
+    await expect(setAiConfig({ watchPaper: { ...PAPER, model: B } })).rejects.toThrow(/not one of the models the watch asks/)
+    await expect(setAiConfig({ watchPaper: { enabled: true } })).rejects.toThrow(/Choose the model/)
+    await expect(setAiConfig({ watchPaper: { ...PAPER, stakeQuote: 123 } })).rejects.toThrow(/stakes/)
+    await expect(setAiConfig({ watchPaper: { ...PAPER, maxOpen: 4 } })).rejects.toThrow(/at most/)
+    expect((await getAiConfig()).watchPaper.enabled).toBe(false)
+  })
+
+  it('cannot be changed while it is on: what it does is what was read when it was switched on', async () => {
+    const { getAiConfig, setAiConfig } = await services()
+    await setAiConfig({ watch: ON })
+    await setAiConfig({ watchPaper: PAPER })
+    await expect(setAiConfig({ watchPaper: { stakeQuote: 1000 } })).rejects.toThrow(/Switch paper trades off before changing them/)
+    await expect(setAiConfig({ watchPaper: { maxOpen: 10 } })).rejects.toThrow(/Switch paper trades off/)
+    expect((await getAiConfig()).watchPaper).toEqual(PAPER)
+    // Saying again what is already so is not a change, and off-and-change in one step is allowed.
+    await setAiConfig({ watchPaper: { ...PAPER } })
+    expect((await setAiConfig({ watchPaper: { enabled: false, stakeQuote: 1000 } })).watchPaper).toEqual({ ...PAPER, enabled: false, stakeQuote: 1000 })
+  })
+
+  it('does not change what the watch asks or may spend', async () => {
+    const { setAiConfig } = await services()
+    const before = await setAiConfig({ watch: ON })
+    const after = await setAiConfig({ watchPaper: PAPER })
+    expect(after.watch).toEqual(before.watch)
+    expect(after.dailyCapUsd).toBe(before.dailyCapUsd)
+    // And switching the watch off leaves it as it is: it only has nothing to follow meanwhile.
+    expect((await setAiConfig({ watch: { enabled: false } })).watchPaper).toEqual(PAPER)
+  })
+
+  it('refuses to have its model taken off the watch\'s list while on, and forgets it while off', async () => {
+    const { getAiConfig, setAiConfig } = await services()
+    await setAiConfig({ enabledModels: [A, B] })
+    await setAiConfig({ watch: ON })
+    await setAiConfig({ watchPaper: PAPER })
+    await setAiConfig({ watch: { enabled: false } })
+    await expect(setAiConfig({ watch: { models: [B] } })).rejects.toThrow(/is the model the watch's paper trades follow/)
+    expect((await getAiConfig()).watch.models).toEqual([A])
+    await setAiConfig({ watchPaper: { enabled: false } })
+    expect((await setAiConfig({ watch: { models: [B] } })).watchPaper).toEqual({ ...PAPER, enabled: false, model: null })
+  })
+
+  it('reads a stored setting that could not have been switched on as off', async () => {
+    const dir = process.env.AI_TEST_USER_DATA as string
+    writeFileSync(join(dir, 'aiConfig.json'), JSON.stringify({ defaultModel: A, enabledModels: [A], watch: ON, watchPaper: { ...PAPER, model: B } }))
+    expect((await (await services()).getAiConfig()).watchPaper).toEqual({ enabled: false, model: null, stakeQuote: 100, maxOpen: 3 })
+    vi.resetModules()
+    writeFileSync(join(dir, 'aiConfig.json'), JSON.stringify({ defaultModel: A, enabledModels: [A], watch: ON, watchPaper: { ...PAPER, stakeQuote: 7 } }))
+    expect((await (await services()).getAiConfig()).watchPaper).toEqual({ enabled: false, model: A, stakeQuote: 100, maxOpen: 3 })
+  })
+})
+
 describe('a call made in the watch\'s name', () => {
   it('is refused, and nothing is asked, while the watch is off', async () => {
     const { bodies } = stubOpenRouter()
@@ -183,14 +257,67 @@ describe('a call made in the watch\'s name', () => {
   })
 
   it('counts an event whose call never reached a model, so a provider that is down is not tried all day', async () => {
-    const { bodies } = stubOpenRouter(() => ({ status: 503 }))
+    // The third pair's call gets through, so the breaker below never trips: this is the day's count.
+    const { bodies } = stubOpenRouter((_call, symbol) => (symbol === 'CUSDT' ? {} : { status: 503 }))
     const { askAiOpportunity, setAiConfig, listAiCalls } = await services()
     await setAiConfig({ watch: ON })
-    for (const symbol of ['AUSDT', 'BUSDT', 'CUSDT', 'DUSDT', 'EUSDT']) expect((await askAiOpportunity(request(symbol))).error).not.toBeNull()
+    const errors: (string | null)[] = []
+    for (const symbol of ['AUSDT', 'BUSDT', 'CUSDT', 'DUSDT', 'EUSDT']) errors.push((await askAiOpportunity(request(symbol))).error)
+    expect(errors.map((error) => error === null)).toEqual([false, false, true, false, false])
     const made = bodies.length
     await expect(askAiOpportunity(request('FUSDT'))).rejects.toThrow(/its 5 events for today/)
     expect(bodies).toHaveLength(made)
-    expect((await listAiCalls({ source: 'watch', status: 'failed' })).rows).toHaveLength(5)
+    expect((await listAiCalls({ source: 'watch', status: 'failed' })).rows).toHaveLength(4)
+  })
+
+  it('stops asking a model that fails three calls running, until the next UTC day', async () => {
+    const { bodies } = stubOpenRouter(() => ({ status: 503 }))
+    const { askAiOpportunity, setAiConfig, listAiCalls } = await services()
+    await setAiConfig({ watch: ON })
+    for (const symbol of ['AUSDT', 'BUSDT', 'CUSDT']) expect((await askAiOpportunity(request(symbol))).error).not.toBeNull()
+    const made = bodies.length
+    await expect(askAiOpportunity(request('DUSDT'))).rejects.toThrow(/failed or was refused on its last 3 calls for the watch today.*until midnight UTC/)
+    // Nothing was asked, and nothing was written: the fourth event was not taken up.
+    expect(bodies).toHaveLength(made)
+    expect((await listAiCalls({ source: 'watch' })).rows).toHaveLength(3)
+    // A click is not the watch, and is still answered or failed on its own account.
+    expect((await askAiOpportunity(request('DUSDT', { source: 'opportunity' }))).error).not.toBeNull()
+    // The same market a day on is asked again.
+    const later = (candles: typeof QUESTION.candles1m): typeof QUESTION.candles1m => candles.map((candle) => ({ ...candle, time: candle.time + DAY }))
+    vi.setSystemTime(new Date((QUESTION.eventTime + DAY + 20) * 1000))
+    const before = bodies.length
+    expect((await askAiOpportunity(request('EUSDT', { candles1m: later(QUESTION.candles1m), candles15m: later(QUESTION.candles15m) }))).error).not.toBeNull()
+    expect(bodies.length).toBeGreaterThan(before)
+  })
+
+  it('stops asking a model whose answers are refused three times running, each of which was paid for', async () => {
+    // A stop above a long's entry: the model answered, was billed, and the answer is refused.
+    const bad = JSON.stringify({ ...JSON.parse(answer()), stopLoss: PRICE * 1.01 })
+    const { bodies } = stubOpenRouter(() => ({ content: bad }))
+    const { askAiOpportunity, setAiConfig, listAiCalls } = await services()
+    await setAiConfig({ watch: ON })
+    for (const symbol of ['AUSDT', 'BUSDT', 'CUSDT']) expect((await askAiOpportunity(request(symbol))).rejected).not.toBeNull()
+    expect((await listAiCalls({ source: 'watch', status: 'rejected' })).rows).toHaveLength(3)
+    await expect(askAiOpportunity(request('DUSDT'))).rejects.toThrow(/until midnight UTC/)
+    expect(bodies).toHaveLength(3)
+  })
+
+  it('goes on asking a model that answered one of its last three', async () => {
+    const { bodies } = stubOpenRouter((_call, symbol) => (symbol === 'BUSDT' ? {} : { status: 503 }))
+    const { askAiOpportunity, setAiConfig } = await services()
+    await setAiConfig({ watch: { ...ON, maxEventsPerDay: 10 } })
+    for (const symbol of ['AUSDT', 'BUSDT', 'CUSDT']) await askAiOpportunity(request(symbol))
+    // Failed, answered, failed: asked again. And again, with the answer still among its last three.
+    let before = bodies.length
+    expect((await askAiOpportunity(request('DUSDT'))).error).not.toBeNull()
+    expect(bodies.length).toBeGreaterThan(before)
+    before = bodies.length
+    expect((await askAiOpportunity(request('EUSDT'))).error).not.toBeNull()
+    expect(bodies.length).toBeGreaterThan(before)
+    // Now its last three are all failures: the answer is out of them.
+    before = bodies.length
+    await expect(askAiOpportunity(request('FUSDT'))).rejects.toThrow(/until midnight UTC/)
+    expect(bodies).toHaveLength(before)
   })
 
   it('gives the last place of the day to one of two events that ask for it at the same moment', async () => {

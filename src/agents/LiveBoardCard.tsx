@@ -5,7 +5,7 @@ import { describeDecider } from '../../shared/aiPanel'
 import type { Candle } from '../../shared/ipc'
 import { describeError } from '../utils/ipcError'
 import { buttonStyle, noteStyle } from './agentStyles'
-import { ContributionTable, CostTable, ExitsTable, ResultsTable } from './EventTables'
+import { ContributionTable, CostTable, ExitsTable, ResultsTable, RollingTable } from './EventTables'
 import { LIVE_BOARD_DAYS, loadLiveBars, readLiveAnswers, type LiveAnswers, type LiveBoardDeps } from './liveBoard'
 
 const deps: LiveBoardDeps = {
@@ -124,6 +124,7 @@ export function LiveBoardCard({
           {summary !== null && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.9rem' }}>
               <ResultsTable title="Model" rows={summary.models} models />
+              <RollingTable rows={[...summary.models, ...summary.baselines]} nowSec={Math.floor(Date.now() / 1000)} />
               <ResultsTable title="Rule" rows={[...summary.baselines, ...summary.rules]} models={false} />
               {summary.contributions.length > 0 && <ContributionTable contributions={summary.contributions} models={summary.models} />}
               <ExitsTable rows={[...summary.models, ...summary.baselines, ...summary.rules]} />
@@ -135,7 +136,8 @@ export function LiveBoardCard({
             the events the watch asked about as they happened, and they differ from a benchmark in what a benchmark has to assume. Each answer is scored from the second its call
             finished, not from an assumed delay; and slippage is the larger of the rate for the pair&apos;s liquidity and half the spread the scanner saw on its book. Only the
             watch&apos;s own answers count: one bought later by pressing Ask arrived when a person got round to it. Only events every model answered are compared — with the first
-            model asked alone, that is only the events it passed on. A recommendation still open, or with no candles yet, is unsettled and not a loss.
+            model asked alone, that is only the events it passed on. A recommendation still open, or with no candles yet, is unsettled and not a loss. <strong>Lately</strong>{' '}
+            is the same closed trades, newest first: the last 10, 50 and 100 of them, and those of the last 7 and 30 days, beside the same events followed with no model.
           </p>
         </>
       )}

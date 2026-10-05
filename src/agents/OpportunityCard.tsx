@@ -11,10 +11,10 @@ import { describeOpportunityExit, type OpportunityOutcome } from '../../shared/a
 import { describeDecider } from '../../shared/aiPanel'
 import { opportunityProposalProblem } from '../../shared/aiProposal'
 import type { Candle } from '../../shared/ipc'
-import { EVENT_MAX_RANKED, describeEventType } from '../../shared/marketEvent'
+import { EVENT_MAX_RANKED, describeEventType, eventReasons } from '../../shared/marketEvent'
 import { formatHoldingDuration } from '../backtest/formatTradeTime'
 import { buttonStyle, noteStyle, reasonLabel, signedPct } from './agentStyles'
-import { scoreAnswer, type EventAnswer, type EventFeedItem } from './opportunities'
+import { describeFeedItemStatus, feedItemStatus, scoreAnswer, type EventAnswer, type EventFeedItem, type FeedItemStatus } from './opportunities'
 
 interface OpportunityCardProps {
   item: EventFeedItem
@@ -173,6 +173,47 @@ function AnswerRow({
   )
 }
 
+const STATUS_COLOR: Record<FeedItemStatus, string> = {
+  waiting: 'var(--text-muted)',
+  asked: 'var(--text-secondary)',
+  valid: 'var(--up)',
+  open: 'var(--accent)',
+  expired: 'var(--text-muted)',
+  closed: 'var(--text-secondary)'
+}
+
+function compactUsd(value: number): string {
+  if (value >= 1e9) return `$${(value / 1e9).toFixed(1)}B`
+  if (value >= 1e6) return `$${(value / 1e6).toFixed(0)}M`
+  return `$${Math.round(value).toLocaleString('en-US')}`
+}
+
+/** Why the scanner singled this pair out: the five components of its score, each beside the
+ * reading it was made from, and what the scanner knew of the pair's market when it raised it. */
+function WhyThisPair({ item }: { item: EventFeedItem }): React.JSX.Element {
+  const { event } = item
+  const live = event.live
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', borderTop: '1px solid var(--border)', paddingTop: '0.6rem' }}>
+      {eventReasons(event).map((reason) => (
+        <div key={reason.component} style={{ display: 'flex', alignItems: 'baseline', gap: '0.7rem', fontSize: '0.78rem' }}>
+          <span style={{ width: 62, color: 'var(--text-secondary)', fontWeight: 600 }}>{reason.label}</span>
+          <span style={{ width: 30, textAlign: 'right', color: 'var(--text-primary)', fontWeight: 700 }}>{reason.score.toFixed(0)}</span>
+          <span style={{ flex: 1, color: 'var(--text-secondary)' }}>{reason.fact}</span>
+        </div>
+      ))}
+      <p style={noteStyle}>
+        The score, {event.score.toFixed(0)}, is the plain mean of the five. Each is a fixed formula on twelve hours of 1-minute candles, measured against the hours before the move began.
+        {live !== null &&
+          ` Among the events of its minute it ranked ${live.rank}, on a candidate score of ${live.candidateScore.toFixed(0)}: six parts the event, two and a half how much the pair trades${
+            live.quoteVolume24h === null ? '' : ` (${compactUsd(live.quoteVolume24h)} a day)`
+          }, one and a half how tight its spread is${live.spreadPct === null ? '' : ` (${live.spreadPct.toFixed(3)}%)`}.`}
+        {live === null && ' It was found by scanning history, so it has no rank: a rank is a fact about the minute it was raised in.'}
+      </p>
+    </div>
+  )
+}
+
 /** One event the scanner raised, and what each model asked about it recommended.
  *
  * A recommendation is shown with its clock: where to enter, until when, and what it has done
@@ -180,6 +221,8 @@ function AnswerRow({
  * in; a person sets the amount and submits it there. */
 export function OpportunityCard({ item, bars, nowSec, toAsk, busy, problem, onAsk, onPaperTrade }: OpportunityCardProps): React.JSX.Element {
   const { event, answers } = item
+  const [why, setWhy] = useState(false)
+  const status = feedItemStatus(item, bars, nowSec)
   const consensus = opportunityConsensus(answers.map((answer) => answer.decision))
   const move = signedPct(event.returnsPct.m15)
   const directionColor = event.direction === 'up' ? 'var(--up)' : event.direction === 'down' ? 'var(--down)' : 'var(--text-secondary)'
@@ -198,6 +241,14 @@ export function OpportunityCard({ item, bars, nowSec, toAsk, busy, problem, onAs
         <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
           {event.band} · score {event.score.toFixed(0)}
         </span>
+        {status !== null && (
+          <span
+            title="Where this event stands: not asked, no trade, an entry still on offer, in a trade, expired, or closed."
+            style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: STATUS_COLOR[status], border: `1px solid ${STATUS_COLOR[status]}`, borderRadius: 999, padding: '0.1rem 0.5rem' }}
+          >
+            {describeFeedItemStatus(status)}
+          </span>
+        )}
         <span style={{ marginLeft: 'auto', fontSize: '0.76rem', color: 'var(--text-muted)' }}>{utcMinute(event.time)} UTC</span>
       </div>
 
@@ -230,8 +281,12 @@ export function OpportunityCard({ item, bars, nowSec, toAsk, busy, problem, onAs
         <button onClick={onAsk} disabled={busy || toAsk.length === 0} style={buttonStyle(answers.length === 0 ? 'primary' : 'secondary', busy || toAsk.length === 0)}>
           {busy ? 'Asking…' : toAsk.length === 0 ? (answers.length === 0 ? 'Tick a model above to ask' : 'Every ticked model has answered') : `Ask ${toAsk.length === 1 ? describeDecider(toAsk[0]) : `${toAsk.length} models`}`}
         </button>
+        <button onClick={() => setWhy((shown) => !shown)} style={buttonStyle('secondary')} aria-expanded={why}>
+          {why ? 'Hide why this pair' : 'Why this pair'}
+        </button>
         {toAsk.length > 0 && !busy && <span style={noteStyle}>The price is stated before anything is asked.</span>}
       </div>
+      {why && <WhyThisPair item={item} />}
       {problem !== null && <p style={{ ...noteStyle, color: 'var(--down)' }}>{problem}</p>}
     </section>
   )

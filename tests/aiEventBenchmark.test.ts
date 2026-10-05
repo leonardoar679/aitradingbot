@@ -9,9 +9,11 @@ import {
   EVENT_RULE_WEIGHTED,
   eventBenchmarkWindow,
   eventScoring,
+  rollingResults,
   sampleEvents,
   summarizeEventBenchmark,
-  type EventBenchmarkInput
+  type EventBenchmarkInput,
+  type EventTrade
 } from '../shared/aiEventBenchmark'
 import { validateOpportunityAnswer } from '../shared/aiOpportunity'
 import { opportunityCallOf, replayAnsweredAt, scoreOpportunity, slippageRateFor } from '../shared/aiOpportunityOutcome'
@@ -496,5 +498,64 @@ describe('eventScoring', () => {
 
   it('is the same after a trip through a file', () => {
     expect(JSON.parse(JSON.stringify(eventScoring()))).toEqual(eventScoring())
+  })
+})
+
+describe('rollingResults', () => {
+  const NOW_SEC = T0 + 40 * DAY
+  /** A closed trade on an event `daysAgo` days back, returning `netPct`. */
+  const closed = (index: number, daysAgo: number, netPct: number): EventTrade => ({
+    index,
+    time: NOW_SEC - daysAgo * DAY,
+    type: 'breakout',
+    side: 'long',
+    confidence: 0.8,
+    holdSeconds: 3600,
+    outcome: { status: 'closed', entryTime: 1, entryPrice: 100, exit: 'time', exitTime: 2, exitPrice: 100, netPct, bestPct: 0, worstPct: 0, heldMinutes: 60 }
+  })
+  const pending = (index: number, status: 'waiting' | 'expired' | 'open'): EventTrade => ({
+    ...closed(index, 0.1, 99),
+    outcome: { status, entryTime: null, entryPrice: null, exit: null, exitTime: null, exitPrice: null, netPct: null, bestPct: null, worstPct: null, heldMinutes: null }
+  })
+
+  it('adds up the last ten, fifty and hundred closed trades, newest first', () => {
+    // Sixty trades, one a half day: the newest is +1, and each older one is 0.1 less.
+    const trades = Array.from({ length: 60 }, (_, i) => closed(i, i / 2, 1 - i * 0.1))
+    const { lastTrades } = rollingResults(trades, NOW_SEC)
+    expect(lastTrades.map((window) => window.count)).toEqual([10, 50, 100])
+    expect(lastTrades[0]).toMatchObject({ trades: 10, wins: 10 })
+    expect(lastTrades[0].netSumPct).toBeCloseTo(10 * 1 - 0.1 * 45, 9)
+    expect(lastTrades[1].trades).toBe(50)
+    // There are only sixty: the last hundred is all of them, and says so by its count.
+    expect(lastTrades[2].trades).toBe(60)
+    expect(lastTrades[2].netSumPct).toBeCloseTo(60 - 0.1 * ((59 * 60) / 2), 9)
+  })
+
+  it('does not depend on the order it is handed the trades in', () => {
+    const trades = Array.from({ length: 30 }, (_, i) => closed(i, i, i < 10 ? 1 : -1))
+    const shuffled = [...trades].sort((a, b) => ((a.index * 7) % 11) - ((b.index * 7) % 11))
+    expect(rollingResults(shuffled, NOW_SEC)).toEqual(rollingResults(trades, NOW_SEC))
+    expect(rollingResults(shuffled, NOW_SEC).lastTrades[0]).toMatchObject({ trades: 10, wins: 10, netSumPct: 10 })
+  })
+
+  it('adds up the last seven and thirty days by the event\'s own time', () => {
+    const trades = [closed(0, 1, 2), closed(1, 6.9, -1), closed(2, 7.1, 5), closed(3, 29, 0.5), closed(4, 31, 100)]
+    const { lastDays } = rollingResults(trades, NOW_SEC)
+    expect(lastDays.map((window) => window.days)).toEqual([7, 30])
+    expect(lastDays[0]).toEqual({ days: 7, trades: 2, wins: 1, netSumPct: 1 })
+    expect(lastDays[1]).toEqual({ days: 30, trades: 4, wins: 3, netSumPct: 6.5 })
+  })
+
+  it('counts only trades that have closed, and a trade that broke even as not won', () => {
+    const trades = [closed(0, 1, 0), closed(1, 2, 0.4), pending(2, 'waiting'), pending(3, 'expired'), pending(4, 'open')]
+    const rolling = rollingResults(trades, NOW_SEC)
+    expect(rolling.lastTrades[0]).toMatchObject({ trades: 2, wins: 1, netSumPct: 0.4 })
+    expect(rolling.lastDays[0]).toMatchObject({ trades: 2, wins: 1 })
+  })
+
+  it('is empty, not a row of zeros dressed as results, with nothing closed', () => {
+    const rolling = rollingResults([pending(0, 'open')], NOW_SEC)
+    expect(rolling.lastTrades.every((window) => window.trades === 0 && window.netSumPct === 0)).toBe(true)
+    expect(rolling.lastDays.every((window) => window.trades === 0)).toBe(true)
   })
 })

@@ -58,8 +58,11 @@ export interface AiOrderProposal {
   side?: ExecutorSide
   /** The price the entry waits for. Null or absent means enter at market. */
   entryPrice?: number | null
-  /** Set on a proposal made from a recommendation on an event: when its entry stops being good,
-   * in Unix seconds. A signal's proposal has none; it lasts as long as its candle. */
+  /** Set on a proposal made from a recommendation on an event: the range the model said to enter
+   * in. A paper position that still follows the recommendation enters by it. */
+  entryRange?: { min: number; max: number }
+  /** Set with it: when its entry stops being good, in Unix seconds. A signal's proposal has
+   * none; it lasts as long as its candle. */
   expiresAt?: number
   /** Set with it: the kind of event the recommendation was about. */
   eventType?: MarketEventType
@@ -142,36 +145,75 @@ export function isAiProposalExpired(proposal: AiOrderProposal, nowSec: number): 
   return proposal.expiresAt !== undefined && nowSec >= proposal.expiresAt
 }
 
-/** Why no order form is offered for a recommendation on an event, or null when one is.
+/** What stands between a recommendation on an event and a position made from it.
+ *
+ * ONE RULE, SAID TWICE. The order form a person opens and the paper trade the watch opens by
+ * itself (shared/aiWatchPaper.ts) refuse the same recommendations for the same reasons; each then
+ * says so in its own words. */
+export type OpportunityObstacle =
+  | { code: 'unreached' | 'refused' | 'no_trade' | 'low_confidence' | 'through_stop' | 'at_target' }
+  | { code: 'expired'; expiresAt: number }
+
+/** Why a recommendation cannot be traded as it stands, or null when it can.
  *
  * The rule a benchmark's trades follow -- a side, at the confidence this app acts on -- and two
- * that only matter to a person: its entry is still good, and the price has not already gone
- * through its stop or reached its target. `lastPrice` is the price now, when the caller has one. */
-export function opportunityProposalProblem(eventTime: number, decision: AiSignalDecision, nowSec: number, lastPrice: number | null = null): string | null {
-  if (decision.error !== null) return 'The model was not reached, so there is no call to act on.'
-  if (decision.rejected) return 'The answer was refused, so there is no call to act on.'
+ * that only matter at the moment of trading: its entry is still good, and the price has not
+ * already gone through its stop or reached its target. `lastPrice` is the price now, when the
+ * caller has one. */
+export function opportunityObstacle(eventTime: number, decision: AiSignalDecision, nowSec: number, lastPrice: number | null = null): OpportunityObstacle | null {
+  if (decision.error !== null) return { code: 'unreached' }
+  if (decision.rejected) return { code: 'refused' }
   const side = opportunitySide(decision)
   const validity = opportunityWindow(eventTime, decision.detail)
-  if (side === null || validity === null || !decision.detail) return 'A call not to trade opens nothing.'
-  if (!isActionableOpportunity(decision)) {
-    return `This app acts on a call at ${Math.round(GPT_MIN_CONFIDENCE * 100)}% confidence or more, so no order form is offered for this one.`
-  }
-  if (nowSec >= validity.expiresAt) return `Its entry expired at ${utcClock(validity.expiresAt)} UTC, so no order form is offered for it. Ask again for a current one.`
+  if (side === null || validity === null || !decision.detail) return { code: 'no_trade' }
+  if (!isActionableOpportunity(decision)) return { code: 'low_confidence' }
+  if (nowSec >= validity.expiresAt) return { code: 'expired', expiresAt: validity.expiresAt }
   const { stopLoss, takeProfit } = decision.detail
   if (lastPrice !== null && stopLoss !== null && takeProfit !== null) {
     const long = side === 'long'
-    if (long ? lastPrice <= stopLoss : lastPrice >= stopLoss) return 'The price has already gone through its stop, so no order form is offered for it.'
-    if (long ? lastPrice >= takeProfit : lastPrice <= takeProfit) return 'The price has already reached its target, so no order form is offered for it.'
+    if (long ? lastPrice <= stopLoss : lastPrice >= stopLoss) return { code: 'through_stop' }
+    if (long ? lastPrice >= takeProfit : lastPrice <= takeProfit) return { code: 'at_target' }
   }
   return null
 }
 
+/** Why no order form is offered for a recommendation on an event, or null when one is. */
+export function opportunityProposalProblem(eventTime: number, decision: AiSignalDecision, nowSec: number, lastPrice: number | null = null): string | null {
+  const obstacle = opportunityObstacle(eventTime, decision, nowSec, lastPrice)
+  if (obstacle === null) return null
+  switch (obstacle.code) {
+    case 'unreached':
+      return 'The model was not reached, so there is no call to act on.'
+    case 'refused':
+      return 'The answer was refused, so there is no call to act on.'
+    case 'no_trade':
+      return 'A call not to trade opens nothing.'
+    case 'low_confidence':
+      return `This app acts on a call at ${Math.round(GPT_MIN_CONFIDENCE * 100)}% confidence or more, so no order form is offered for this one.`
+    case 'expired':
+      return `Its entry expired at ${utcClock(obstacle.expiresAt)} UTC, so no order form is offered for it. Ask again for a current one.`
+    case 'through_stop':
+      return 'The price has already gone through its stop, so no order form is offered for it.'
+    case 'at_target':
+      return 'The price has already reached its target, so no order form is offered for it.'
+  }
+}
+
 /** The order form a recommendation on an event opens, or null when none is offered.
  *
- * WHERE IT ENTERS. With the price inside the range the model named, at market. With the price
- * outside it, the form waits for the nearer edge of the range -- the same rule the recommendation
- * is scored by (shared/aiOpportunityOutcome.ts). The stop and target are the model's own prices,
- * turned into distances from that entry, because that is what the form takes. */
+ * WHERE IT ENTERS. With the price inside the range the model named, the form's entry is left at
+ * market. With the price outside it, the form shows the nearer edge of the range. The stop and
+ * target are the model's own prices, turned into distances from that entry, because that is what
+ * the form takes.
+ *
+ * THE FORM'S TWO KINDS OF ENTRY ARE NOT QUITE THE RECOMMENDATION'S, which is "enter when the price
+ * trades in this range". A market entry takes the next minute's open wherever the price has gone
+ * by then, and an entry price is a limit, which is filled at once when the market is already on
+ * its far side: a buy "waiting" at the bottom of a range the price has fallen out of. So the
+ * proposal also carries the range itself, and a PAPER position that still follows the
+ * recommendation enters by it (PositionExecutorParams.entryRange) -- the rule the recommendation
+ * is scored by (shared/aiOpportunityOutcome.ts). A live position cannot, and is the form's own:
+ * it is only ever entered at market. */
 export function buildOpportunityProposal(input: {
   event: Pick<MarketEvent, 'exchange' | 'symbol' | 'baseAsset' | 'quoteAsset' | 'time' | 'type' | 'price'>
   decision: AiSignalDecision
@@ -188,8 +230,9 @@ export function buildOpportunityProposal(input: {
   if (side === null || !detail?.entry || validity === null || detail.stopLoss === null || detail.takeProfit === null) return null
   if (!Number.isFinite(current) || !(current > 0)) return null
 
-  const inside = current >= detail.entry.min && current <= detail.entry.max
-  const entryPrice = inside ? null : current > detail.entry.max ? detail.entry.max : detail.entry.min
+  const above = current > detail.entry.max
+  const below = current < detail.entry.min
+  const entryPrice = above ? detail.entry.max : below ? detail.entry.min : null
   const reference = entryPrice ?? current
   const long = side === 'long'
   return {
@@ -205,6 +248,7 @@ export function buildOpportunityProposal(input: {
     timeLimitSec: validity.holdSeconds,
     side: long ? 'buy' : 'sell',
     entryPrice,
+    entryRange: { min: detail.entry.min, max: detail.entry.max },
     expiresAt: validity.expiresAt,
     eventType: event.type
   }
@@ -225,6 +269,30 @@ export function aiProposalPositionParams(proposal: AiOrderProposal, defaults: Po
     timeLimitSec: proposal.timeLimitSec,
     trailingStop: null
   }
+}
+
+/** When a position made from a proposal gives up waiting to enter, in Unix seconds, or null when
+ * it never does.
+ *
+ * A recommendation's entry is good for so many minutes, and a position that filled an hour after
+ * them would be trading a call nobody made. So a PAPER position created from a form that still
+ * follows the recommendation carries that expiry (PositionExecutorParams.entryExpiresAt). A
+ * signal's proposal has none. And never for a live one: nothing in this app cancels a resting
+ * real order on a clock, and a field saying otherwise would be a promise it does not keep. */
+export function aiProposalEntryExpiry(proposal: AiOrderProposal, mode: 'paper' | 'live'): number | null {
+  return mode === 'paper' && proposal.expiresAt !== undefined ? proposal.expiresAt : null
+}
+
+/** The range a position made from a proposal enters by, or null when it enters as its form says.
+ *
+ * A PAPER position, from a form whose entry is still the one the recommendation filled in:
+ * `formEntryPrice` is what the form holds when it is submitted. An entry price the user typed is
+ * their own order, and waits as a limit like any other. Never for a live one: an exchange has no
+ * order that means "when the price trades in this range", so a live order is what the form shows
+ * and nothing else. */
+export function aiProposalEntryRange(proposal: AiOrderProposal, mode: 'paper' | 'live', formEntryPrice: number | null): { min: number; max: number } | null {
+  if (mode !== 'paper' || proposal.entryRange === undefined) return null
+  return formEntryPrice === (proposal.entryPrice ?? null) ? proposal.entryRange : null
 }
 
 export function aiProposalName(proposal: AiOrderProposal): string {
@@ -256,10 +324,16 @@ function describeOpportunityProposal(proposal: AiOrderProposal): string[] {
   const short = proposal.side === 'sell'
   const [against, toward] = short ? ['above', 'below'] : ['below', 'above']
   const event = proposal.eventType !== undefined ? describeEventType(proposal.eventType).toLowerCase() : 'event'
+  const range = proposal.entryRange !== undefined ? `, ${plainNumber(proposal.entryRange.min)} to ${plainNumber(proposal.entryRange.max)}` : ''
   const entry =
     proposal.entryPrice === null || proposal.entryPrice === undefined
-      ? `It enters at market: the price is inside the range the model named.`
-      : `It waits for a price of ${plainNumber(proposal.entryPrice)}, the nearer edge of the range the model named.`
+      ? `It enters at market: the price is inside the range the model named${range}.`
+      : `It waits for a price of ${plainNumber(proposal.entryPrice)}, the nearer edge of the range the model named${range}.`
+  // What the entry above does on paper, which is not quite what either kind of entry is.
+  const paper =
+    proposal.entryRange === undefined
+      ? null
+      : 'On paper, with the entry left as it is, the position enters in the first minute the price trades inside that range, from whichever side: a price that has left it is not chased, and is not bought at once from its far side.'
   const levels =
     proposal.stopLossPct !== null && proposal.takeProfitPct !== null
       ? `The model's stop is ${proposal.stopLossPct}% ${against} that entry and its target ${proposal.takeProfitPct}% ${toward} it.`
@@ -267,7 +341,8 @@ function describeOpportunityProposal(proposal: AiOrderProposal): string[] {
   return [
     `Filled in from an AI recommendation: ${who} said ${short ? 'SELL' : 'BUY'} ${proposal.pair.symbol} at ${Math.round(proposal.confidence * 100)}% confidence, on the ${event} raised at ${utcClock(proposal.candleTime)} UTC.`,
     `${entry} ${levels} The time limit is the ${durationLabel(proposal.timeLimitSec)} it said to hold for.`,
-    `Its entry is good until ${utcClock(proposal.expiresAt ?? proposal.candleTime)} UTC. After that this form will not submit it as it stands.`,
+    ...(paper === null ? [] : [paper]),
+    `Its entry is good until ${utcClock(proposal.expiresAt ?? proposal.candleTime)} UTC. After that this form will not submit it as it stands, and a paper position still waiting to enter then is abandoned.`,
     short
       ? 'A short is paper only: this app places no short or leveraged order, so Live Trading cannot be ticked for it. The amount is yours to set, and nothing is placed until you submit this form.'
       : 'The amount is yours to set: a model is never asked for one. Nothing is placed until you submit this form, and real money still needs Live Trading ticked below and its phrase typed.'

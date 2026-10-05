@@ -3,6 +3,7 @@ import { describeDecider, isPanelId } from './aiPanel'
 import { describeEscalation, type AiRoute } from './aiRoute'
 import { AI_PROVIDER_LABEL, GPT_MAX_DECISIONS, describeGptCadence, type AiSignalEstimate } from './aiSignal'
 import type { AiWatchConfig } from './aiWatch'
+import type { AiWatchPaperConfig } from './aiWatchPaper'
 
 // What AI calls cost, and what bounds them.
 //
@@ -55,6 +56,9 @@ export interface AiConfig {
   /** Events put to models without a click, and its limits (shared/aiWatch.ts). Off unless
    * switched on. */
   watch: AiWatchConfig
+  /** Paper positions the watch opens by itself on one model's calls (shared/aiWatchPaper.ts). Off
+   * unless switched on, and never anything but paper. */
+  watchPaper: AiWatchPaperConfig
 }
 
 export interface AiConfigPatch {
@@ -65,6 +69,8 @@ export interface AiConfigPatch {
   dailyCapUsd?: number
   /** Only the fields given are changed. */
   watch?: Partial<AiWatchConfig>
+  /** Only the fields given are changed. */
+  watchPaper?: Partial<AiWatchPaperConfig>
 }
 
 /** `$0.0021`, `$0.0113`, `$1.40`. Up to four decimals under ten cents, because that is where a

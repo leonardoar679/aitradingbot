@@ -6,7 +6,7 @@ import {
   slippageRateForEvent,
   type OpportunityOutcome
 } from '../../shared/aiOpportunityOutcome'
-import { opportunityWindow } from '../../shared/aiOpportunity'
+import { isActionableOpportunity, opportunitySide, opportunityWindow, type OpportunitySide } from '../../shared/aiOpportunity'
 import { GPT_LOOKBACK_BARS, type AiSignalDecision } from '../../shared/aiSignal'
 import type { Candle, Exchange } from '../../shared/ipc'
 import { EVENT_BAR_SECONDS, EVENT_LOOKBACK_BARS, type MarketEvent } from '../../shared/marketEvent'
@@ -184,4 +184,97 @@ export async function askModels(models: string[], ask: (model: string) => Promis
     return { model, decision, problem: null }
   })
   return { results, costUsd }
+}
+
+/** Where an event stands.
+ *
+ * `waiting`: no model has answered it. `asked`: answered, with no call this app would act on.
+ * `valid`: a call to act on whose entry can still be taken. `open`: one has entered and is held.
+ * `expired`: every call to act on ran out its entry unfilled. `closed`: its trades are done. */
+export type FeedItemStatus = 'waiting' | 'asked' | 'valid' | 'open' | 'expired' | 'closed'
+
+/** An event's status, from its answers and the candles since. Null where the candles that would
+ * say have not been read: a guess is not a status.
+ *
+ * The most alive thing on the card names it: a position held outranks an entry still on offer,
+ * which outranks trades that are over, which outrank entries that never filled. */
+export function feedItemStatus(item: EventFeedItem, bars: Candle[] | undefined, nowSec: number): FeedItemStatus | null {
+  if (item.answers.length === 0) return 'waiting'
+  const acted = item.answers.filter((answer) => isActionableOpportunity(answer.decision))
+  if (acted.length === 0) return 'asked'
+  if (bars === undefined) return null
+  const scored = acted.map((answer) => ({
+    validity: opportunityWindow(item.event.time, answer.decision.detail),
+    outcome: scoreAnswer(item, answer, bars, nowSec)
+  }))
+  if (scored.some((entry) => entry.outcome?.status === 'open')) return 'open'
+  if (scored.some((entry) => entry.outcome?.status === 'waiting' && entry.validity !== null && nowSec < entry.validity.expiresAt)) return 'valid'
+  if (scored.some((entry) => entry.outcome?.status === 'closed')) return 'closed'
+  if (scored.some((entry) => entry.outcome?.status === 'expired')) return 'expired'
+  // Past its expiry with candles that stop short of it: nothing can be said yet.
+  return null
+}
+
+export function describeFeedItemStatus(status: FeedItemStatus): string {
+  const label: Record<FeedItemStatus, string> = {
+    waiting: 'Not asked',
+    asked: 'No trade',
+    valid: 'Entry on offer',
+    open: 'In a trade',
+    expired: 'Expired',
+    closed: 'Closed'
+  }
+  return label[status]
+}
+
+export interface RightNowRow {
+  item: EventFeedItem
+  /** Every model's call on the event, in the order they answered. */
+  calls: { model: string; side: OpportunitySide | null; confidence: number; refused: boolean; acted: boolean }[]
+  /** The entry still on offer: that of the surest call to act on whose entry has not run out. */
+  model: string
+  side: OpportunitySide
+  entryMin: number
+  entryMax: number
+  expiresAt: number
+}
+
+/** What can still be acted on right now: each event with a call this app would act on whose entry
+ * is still valid and has not filled, the strongest candidate first.
+ *
+ * An entry that has already filled is not here -- it is a position, on its card -- and neither
+ * is one whose candles say it expired. Without candles for an event the clock alone decides. */
+export function rightNowRows(feed: EventFeedItem[], bars: ReadonlyMap<string, Candle[]>, nowSec: number): RightNowRow[] {
+  const rows: RightNowRow[] = []
+  for (const item of feed) {
+    const held = bars.get(item.event.id)
+    let best: { answer: EventAnswer; expiresAt: number } | null = null
+    for (const answer of item.answers) {
+      if (!isActionableOpportunity(answer.decision)) continue
+      const validity = opportunityWindow(item.event.time, answer.decision.detail)
+      if (validity === null || nowSec >= validity.expiresAt) continue
+      if (held !== undefined && scoreAnswer(item, answer, held, nowSec)?.status !== 'waiting') continue
+      if (best === null || answer.decision.confidence > best.answer.decision.confidence) best = { answer, expiresAt: validity.expiresAt }
+    }
+    const side = best === null ? null : opportunitySide(best.answer.decision)
+    const entry = best?.answer.decision.detail?.entry
+    if (best === null || side === null || !entry) continue
+    rows.push({
+      item,
+      calls: item.answers.map((answer) => ({
+        model: answer.model,
+        side: opportunitySide(answer.decision),
+        confidence: answer.decision.confidence,
+        refused: Boolean(answer.decision.rejected),
+        acted: isActionableOpportunity(answer.decision)
+      })),
+      model: best.answer.model,
+      side,
+      entryMin: entry.min,
+      entryMax: entry.max,
+      expiresAt: best.expiresAt
+    })
+  }
+  const strength = (row: RightNowRow): number => row.item.event.live?.candidateScore ?? row.item.event.score
+  return rows.sort((a, b) => strength(b) - strength(a) || b.item.event.time - a.item.event.time || a.item.event.id.localeCompare(b.item.event.id))
 }

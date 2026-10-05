@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { AiCallRecord } from '../shared/aiLedger'
 import type { AiSignalDecision, AiSignalDetail } from '../shared/aiSignal'
 import {
+  AI_WATCH_BREAKER_CALLS,
   AI_WATCH_FRESH_SECONDS,
   DEFAULT_AI_WATCH,
   aiWatchProblem,
@@ -11,6 +12,7 @@ import {
   watchCallProblem,
   watchEventIdsToday,
   watchNotice,
+  watchPausedModels,
   watchSkipReason,
   type AiWatchConfig
 } from '../shared/aiWatch'
@@ -272,6 +274,64 @@ describe('watchCallProblem', () => {
   })
 })
 
+describe('the breaker: a model that keeps failing is not asked again that day', () => {
+  type Row = Pick<AiCallRecord, 'at' | 'source' | 'model' | 'status'>
+  const row = (model: string, status: Row['status'], at: number, source: Row['source'] = 'watch'): Row => ({ at, source, model, status })
+
+  it('pauses a model whose last three calls for the watch today all failed or were refused', () => {
+    expect(AI_WATCH_BREAKER_CALLS).toBe(3)
+    const rows = [row(A, 'failed', T - 300), row(A, 'rejected', T - 200), row(A, 'failed', T - 100)]
+    expect([...watchPausedModels(rows, T)]).toEqual([A])
+    // Whatever order the ledger hands them over in.
+    expect([...watchPausedModels([...rows].reverse(), T)]).toEqual([A])
+  })
+
+  it('does not pause on two, or when any of the last three was answered', () => {
+    expect(watchPausedModels([row(A, 'failed', T - 200), row(A, 'failed', T - 100)], T).size).toBe(0)
+    expect(watchPausedModels([row(A, 'failed', T - 300), row(A, 'ok', T - 200), row(A, 'failed', T - 100)], T).size).toBe(0)
+    // Three failures, then an answer: the last three are no longer all bad.
+    expect(watchPausedModels([row(A, 'failed', T - 400), row(A, 'failed', T - 300), row(A, 'failed', T - 200), row(A, 'ok', T - 100)], T).size).toBe(0)
+    // An answer, then three failures: they are.
+    expect(watchPausedModels([row(A, 'ok', T - 400), row(A, 'failed', T - 300), row(A, 'failed', T - 200), row(A, 'failed', T - 100)], T).has(A)).toBe(true)
+  })
+
+  it('judges each model on its own calls', () => {
+    const rows = [row(A, 'failed', T - 300), row(B, 'ok', T - 250), row(A, 'failed', T - 200), row(B, 'ok', T - 150), row(A, 'failed', T - 100)]
+    expect([...watchPausedModels(rows, T)]).toEqual([A])
+  })
+
+  it('counts only the watch\'s calls, and only since the last UTC midnight', () => {
+    const byClick = [row(A, 'failed', T - 300, 'opportunity'), row(A, 'failed', T - 200, 'benchmark'), row(A, 'failed', T - 100, 'opportunity')]
+    expect(watchPausedModels(byClick, T).size).toBe(0)
+    const yesterday = [row(A, 'failed', MIDNIGHT - 300), row(A, 'failed', MIDNIGHT - 200), row(A, 'failed', MIDNIGHT - 1)]
+    expect(watchPausedModels(yesterday, T).size).toBe(0)
+    // And a day that began with failures is clear again once the next one has.
+    const today = [row(A, 'failed', MIDNIGHT), row(A, 'failed', MIDNIGHT + 60), row(A, 'failed', MIDNIGHT + 120)]
+    expect(watchPausedModels(today, T).has(A)).toBe(true)
+    expect(watchPausedModels(today, MIDNIGHT + 86_400).size).toBe(0)
+  })
+
+  it('refuses a call to a paused model where the money is spent, and says until when', () => {
+    const call = { watch: watch(), eventId: event().id, eventTime: T, nowSec: T + 10, takenToday: new Set<string>() }
+    expect(watchCallProblem({ ...call, model: A, paused: new Set([A]) })).toBe(
+      'openai/gpt-5-mini failed or was refused on its last 3 calls for the watch today, so the watch is not asking it again until midnight UTC.'
+    )
+    // The other model of the same watch is still asked, about the same event.
+    expect(watchCallProblem({ ...call, model: B, paused: new Set([A]) })).toBeNull()
+    // Even an event already taken up is not put to a paused model.
+    expect(watchCallProblem({ ...call, model: A, takenToday: new Set([event().id]), paused: new Set([A]) })).toMatch(/until midnight UTC/)
+    expect(watchCallProblem({ ...call, model: A })).toBeNull()
+  })
+
+  it('takes up no event when every model it asks is paused, and still takes one up when one is left', () => {
+    const state = { nowSec: T + 10, takenToday: new Set<string>() }
+    expect(watchSkipReason(event(), watch(), { ...state, paused: new Set([A]) })).toBeNull()
+    expect(watchSkipReason(event(), watch(), { ...state, paused: new Set([A, B]) })).toMatch(/Every model the watch asks/)
+    expect(watchSkipReason(event(), watch({ models: [A] }), { ...state, paused: new Set([A]) })).toMatch(/openai\/gpt-5-mini failed or was refused/)
+    expect(watchSkipReason(event(), watch(), state)).toBeNull()
+  })
+})
+
 describe('describeAiWatchCost', () => {
   const models = [
     { model: A, perCallCostUsd: 0.002, costBasis: 'history' as const },
@@ -295,7 +355,7 @@ describe('describeAiWatchCost', () => {
     // (0.002 + 0.01) x 10.
     expect(text).toContain('At most about $0.12 a day.')
     expect(text).toContain("The daily AI budget of $1.00 still applies, and $0.80 of today's is left.")
-    expect(text).toContain('It places nothing')
+    expect(text).toContain('It places nothing real')
     expect(text.trimEnd().endsWith('Switch it on?')).toBe(true)
   })
 

@@ -19,6 +19,12 @@ import { describe, expect, it } from 'vitest'
 // submits it, through the same gates as any executor made by hand. So everything below still
 // holds as written -- no AI module reaches an order path -- and one test was added for the new
 // surface. tests/aiProposal.test.ts pins what a proposal may carry and who submits the form.
+//
+// And once more on 2026-10-04: the user chose to let the watch open PAPER positions by itself
+// ("Yes, paper only"). The watch used to be held to "no executor, no settings write". It is now
+// held to this: exactly one of its files writes settings, what that file makes is paper by a
+// literal it cannot be handed, and no watch file -- that one included -- mentions the bridge a
+// real order travels over. A bot that trades real money by itself was offered and not chosen.
 
 const ROOT = join(__dirname, '..')
 const SERVICES = join(ROOT, 'electron', 'services')
@@ -193,11 +199,12 @@ describe('AI code has no route to a real order', () => {
     expect(importsOf(join(ROOT, 'shared', 'marketEvent.ts'))).toEqual(['ipc'])
   })
 
-  it('the watch asks and notifies, and has nothing to trade with', () => {
+  it('the watch asks and notifies, and all but one of its files has nothing to write with', () => {
     // The watch is the one thing that asks a model with nobody pressing anything. What it may do
-    // with the answer is show it and say so on the desktop. So its files are held to more than
-    // the rest: no bridge an order travels over, no executor, no settings write -- which is where
-    // the paper account lives -- and no order form, which stays a button a person presses on a card.
+    // with the answer is show it, say so on the desktop and -- since 2026-10-04, when it is
+    // switched on -- open a PAPER position. Everything that asks, schedules and shows is still
+    // held to what it always was: no bridge an order travels over, no executor, no settings write
+    // (which is where the paper account lives) and no order form. The writing is one file, below.
     const watching = [
       join(ROOT, 'shared', 'aiWatch.ts'),
       join(ROOT, 'src', 'agents', 'opportunityWatch.ts'),
@@ -206,6 +213,7 @@ describe('AI code has no route to a real order', () => {
       join(ROOT, 'src', 'agents', 'liveBoard.ts'),
       join(ROOT, 'src', 'agents', 'LiveBoardCard.tsx'),
       join(ROOT, 'src', 'agents', 'EventTables.tsx'),
+      join(ROOT, 'src', 'agents', 'RightNowCard.tsx'),
       join(SERVICES, 'aiWatchService.ts')
     ]
     for (const path of watching) {
@@ -214,11 +222,66 @@ describe('AI code has no route to a real order', () => {
       expect(source, path).not.toMatch(/onPrepareOrder|buildOpportunityProposal|buildAiProposal/)
       expect(importsOf(path), path).not.toContain('aiProposal')
     }
-    // The scheduler is given six things to work with, and none of them is an order or a form.
+    // The scheduler reaches the same six things through the bridge as before. The paper trader is
+    // handed to it whole, from the one file that writes.
     const scheduler = readFileSync(join(ROOT, 'src', 'agents', 'OpportunityScheduler.tsx'), 'utf-8')
     expect([...scheduler.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]).sort()).toEqual(['ai', 'ai', 'ai', 'market', 'notify', 'scanner', 'scanner'])
+    expect(importsOf(join(ROOT, 'src', 'agents', 'OpportunityScheduler.tsx')).sort()).toEqual(['marketEvent', 'opportunityWatch', 'react', 'watchPaperTrade'])
     // The main-process half reads the setting and the ledger, and nothing else.
     expect(importsOf(join(SERVICES, 'aiWatchService.ts')).sort()).toEqual(['aiConfigService', 'aiLedgerService', 'aiWatch'])
+  })
+
+  it('what the watch opens by itself is paper, by a literal it cannot be handed', () => {
+    // The rules (shared) and the one file that writes (renderer).
+    const rules = join(ROOT, 'shared', 'aiWatchPaper.ts')
+    const writer = join(ROOT, 'src', 'agents', 'watchPaperTrade.ts')
+    for (const path of [rules, writer]) {
+      const source = readFileSync(path, 'utf-8')
+      // No bridge a real order travels over, and no executor bridge either: a paper executor is a
+      // row in settings, and a real one is made somewhere this file never mentions.
+      expect(source, path).not.toMatch(/liveTrading|LiveTrading|liveOrders|placeLive|window\.api\.(executors|trade|paper|credentials)/)
+      // The word for the other mode does not appear as a value anywhere in either file.
+      expect(source, path).not.toMatch(/['"`]live['"`]/)
+      expect(source, path).not.toMatch(/\bleverage\s*:/)
+    }
+    const source = readFileSync(writer, 'utf-8')
+    // Paper is written where the executor is made, and where its funds are checked, and the
+    // function that makes it takes no mode.
+    expect(source.match(/mode: 'paper'/g)).toHaveLength(2)
+    expect(source).not.toMatch(/mode:(?!\s*'paper')/)
+    const signature = /export function watchPaperExecutor\(input: \{([^}]*)\}\)/.exec(source)?.[1] ?? ''
+    expect(signature).toContain('plan: OkPlan')
+    expect(signature).not.toMatch(/mode/)
+    // The rules import the proposal's arithmetic, a few names and types, and nothing that acts.
+    expect(importsOf(rules).sort()).toEqual(['aiOpportunity', 'aiPanel', 'aiProposal', 'aiSignal', 'ipc', 'marketEvent'])
+    expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron/)
+    // The writer reaches settings, the price, candles, a notice and the setting. Nothing else.
+    expect([...new Set([...source.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))].sort()).toEqual(['ai', 'market', 'notify', 'settings'])
+    // And it is the only file of the watch's that reaches settings at all.
+    const others = ['opportunityWatch.ts', 'OpportunityScheduler.tsx', 'WatchCard.tsx', 'liveBoard.ts', 'LiveBoardCard.tsx', 'RightNowCard.tsx']
+    for (const file of others) expect(readFileSync(join(ROOT, 'src', 'agents', file), 'utf-8'), file).not.toMatch(/window\.api\.settings/)
+  })
+
+  it('a paper trade of the watch\'s is closed with paper bookkeeping and nothing else', () => {
+    // Stopping one and booking its result is what pressing Stop on its card does. The two things
+    // the writer calls to do it are the paper account's own, and each refuses a real executor
+    // before it does anything.
+    const writer = readFileSync(join(ROOT, 'src', 'agents', 'watchPaperTrade.ts'), 'utf-8')
+    expect(importsOf(join(ROOT, 'src', 'agents', 'watchPaperTrade.ts')).sort()).toEqual([
+      'aiCost',
+      'aiSignal',
+      'aiWatchPaper',
+      'engine',
+      'executorFunding',
+      'ipc',
+      'marketEvent',
+      'settingsWrites',
+      'settleExecutor'
+    ])
+    expect(readFileSync(join(ROOT, 'src', 'account', 'settleExecutor.ts'), 'utf-8')).toContain("if (executor.mode === 'live') return null")
+    // It only ever looks at its own: a paper Position carrying the watch's mark.
+    expect(writer).toContain('watchPaperExecutors(executors).filter((entry) => entry.status === \'active\')')
+    expect(readFileSync(join(ROOT, 'shared', 'aiWatchPaper.ts'), 'utf-8')).toContain("executor.watch !== undefined && executor.mode === 'paper' && executor.type === 'position'")
   })
 
   it('the model is offered no tools', () => {

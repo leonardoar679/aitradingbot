@@ -1,4 +1,4 @@
-import { utcMidnight, watchCallProblem, watchEventIdsToday } from '../../shared/aiWatch'
+import { utcMidnight, watchCallProblem, watchEventIdsToday, watchPausedModels } from '../../shared/aiWatch'
 import { getAiConfig } from './aiConfigService'
 import { listAiCalls } from './aiLedgerService'
 
@@ -37,7 +37,9 @@ export async function withinWatchLimits<T>(call: { model: string; eventId: strin
     const [config, page] = await Promise.all([getAiConfig(), listAiCalls({ source: 'watch', sinceSec: utcMidnight(nowSec), limit: LEDGER_ROWS_READ })])
     const takenToday = watchEventIdsToday(page.rows, nowSec)
     for (const eventId of inFlight.keys()) takenToday.add(eventId)
-    const problem = watchCallProblem({ watch: config.watch, ...call, nowSec, takenToday })
+    // A model that keeps failing, or keeps being refused, is not asked again today: the same
+    // rows that count the day's events say so.
+    const problem = watchCallProblem({ watch: config.watch, ...call, nowSec, takenToday, paused: watchPausedModels(page.rows, nowSec) })
     if (problem !== null) throw new Error(problem)
     inFlight.set(call.eventId, (inFlight.get(call.eventId) ?? 0) + 1)
   })

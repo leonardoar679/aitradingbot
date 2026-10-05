@@ -316,7 +316,17 @@ export function simulateTwap(candles: Candle[], params: TwapExecutorParams, crea
 
 /** Triple Barrier Method: enters at `entryPrice` when touched (or the first candle's open when
  * `entryPrice` is null, i.e. a market entry), then each candle checks stop-loss, take-profit,
- * trailing-stop, and time-limit in that priority — the first barrier crossed closes the position. */
+ * trailing-stop, and time-limit in that priority — the first barrier crossed closes the position.
+ *
+ * An entry with an expiry (`entryExpiresAt`) is abandoned at the first candle that opens at or
+ * after it with nothing filled: the position closes with no entry, no exit and no P&L. A candle
+ * that opens before the expiry can still fill it, whenever inside that candle the price got there.
+ *
+ * An entry with a range (`entryRange`) is a recommendation's: it is taken in the first candle that
+ * trades inside the range, at the open when that is inside it and otherwise at the edge the price
+ * came in by. Neither of the two rules above it is the same thing. A market entry takes the next
+ * open wherever the price has gone, and a limit above the market is filled at once: both would
+ * enter a position the recommendation never asked for. */
 export function simulatePosition(candles: Candle[], params: PositionExecutorParams): PositionExecutorState {
   const isBuy = params.side === 'buy'
   const leverage = resolveLeverage(params.leverage)
@@ -333,7 +343,25 @@ export function simulatePosition(candles: Candle[], params: PositionExecutorPara
 
   for (const candle of candles) {
     if (status === 'pending') {
-      if (params.entryPrice === null) {
+      if (params.entryExpiresAt != null && candle.time >= params.entryExpiresAt) {
+        status = 'closed'
+        exitReason = 'entry_expired'
+        closedAt = candle.time
+        realizedPnl = 0
+        break
+      }
+      if (params.entryRange != null) {
+        // A recommendation's entry: the first candle that trades inside the range, from either
+        // side. The rule it is scored by, so that the position and its score agree on whether and
+        // where it entered.
+        const { min, max } = params.entryRange
+        if (candle.low <= max && candle.high >= min) {
+          entryPrice = candle.open >= min && candle.open <= max ? candle.open : candle.open > max ? max : min
+          status = 'open'
+          enteredAt = candle.time
+          trailingPeakPrice = entryPrice
+        }
+      } else if (params.entryPrice === null) {
         entryPrice = candle.open
         status = 'open'
         enteredAt = candle.time

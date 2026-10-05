@@ -10,7 +10,7 @@ import {
 } from '../../shared/aiOpportunity'
 import { describeDecider } from '../../shared/aiPanel'
 import type { AiSignalDecision } from '../../shared/aiSignal'
-import { utcMidnight, watchEventIdsToday, watchNotice, watchSkipReason, type AiWatchConfig } from '../../shared/aiWatch'
+import { utcMidnight, watchEventIdsToday, watchNotice, watchPausedModels, watchSkipReason, type AiWatchConfig } from '../../shared/aiWatch'
 import { describeEventType, type MarketEvent } from '../../shared/marketEvent'
 import { askModels, fetchEventQuestion, type AskModelsResult, type CandleFetch } from './opportunities'
 
@@ -23,8 +23,11 @@ import { askModels, fetchEventQuestion, type AskModelsResult, type CandleFetch }
 // from the main process on every pass, and the main process checks each call against the same
 // setting again before it is made (electron/services/aiWatchService.ts).
 //
-// IT ASKS AND NOTIFIES. It opens no form, creates no executor and touches no account. Everything
-// it has to work with is injected, and none of it can do those things.
+// IT ASKS AND NOTIFIES. It opens no form and touches no account. Everything it has to work with
+// is injected. One of those things, when the user has switched it on, opens a PAPER position on a
+// call the watch would act on (`paperTrade`; ./watchPaperTrade.ts is the file that writes it). This
+// file hands it the event and the answer and is told what came of it; it cannot make an executor
+// itself, and nothing it is given can make a real one.
 
 export interface WatchDeps {
   getConfig: () => Promise<Pick<AiConfig, 'watch'>>
@@ -33,6 +36,9 @@ export interface WatchDeps {
   ask: (request: AiOpportunityAskRequest) => Promise<AiSignalDecision>
   notify: (title: string, body: string) => void
   nowSec: () => number
+  /** Opens a paper trade on an answer, when that is switched on. Resolves to what came of it, or
+   * to null when there is nothing to say. Absent, the watch only asks and notifies. */
+  paperTrade?: (event: MarketEvent, decision: AiSignalDecision) => Promise<{ opened: boolean; text: string } | null>
 }
 
 export interface WatchActivity {
@@ -91,8 +97,9 @@ function summarize(event: MarketEvent, results: AskModelsResult['results'], held
   }
 }
 
-/** Puts one event to the watch's models. Never throws: what went wrong is the result. */
-async function askAbout(event: MarketEvent, watch: AiWatchConfig, deps: WatchDeps): Promise<{ text: string; ok: boolean; retry: boolean }> {
+/** Puts one event to the watch's models. Never throws: what went wrong is the result. `resting`
+ * is the models left out because they keep failing today. */
+async function askAbout(event: MarketEvent, watch: AiWatchConfig, deps: WatchDeps, resting: string[] = []): Promise<{ text: string; ok: boolean; retry: boolean }> {
   let market: Omit<AiOpportunityAskRequest, 'model' | 'source'>
   try {
     market = { exchange: event.exchange, symbol: event.symbol, ...(await fetchEventQuestion(event, deps.fetchCandles)) }
@@ -104,10 +111,29 @@ async function askAbout(event: MarketEvent, watch: AiWatchConfig, deps: WatchDep
   }
 
   let noticed = false
+  const paper: string[] = []
   const ask = async (model: string): Promise<AiSignalDecision> => {
     const decision = await deps.ask({ ...market, model, source: 'watch' })
-    // One notice an event, raised by the first call to trade that arrives.
-    const notice = noticed ? null : watchNotice(event, decision)
+    // A call the watch would act on may open a paper trade, when that is switched on. Whatever
+    // comes of it, the answer was paid for and is returned.
+    let opened = false
+    if (deps.paperTrade !== undefined && isActionableOpportunity(decision)) {
+      try {
+        const outcome = await deps.paperTrade(event, decision)
+        if (outcome !== null) {
+          paper.push(outcome.text)
+          opened = outcome.opened
+        }
+      } catch (failure) {
+        paper.push(`No paper trade: ${failure instanceof Error ? failure.message : String(failure)}`)
+      }
+    }
+    // One plain notice an event, raised by the first call to trade that arrives. An answer that
+    // opened a paper trade has raised a notice of its own, which says more, so it raises no plain
+    // one and none follows it. A paper trade opened on a later answer is still told: that is
+    // something done, not one more opinion.
+    const notice = noticed || opened ? null : watchNotice(event, decision)
+    if (opened) noticed = true
     if (notice !== null) {
       noticed = true
       try {
@@ -119,16 +145,22 @@ async function askAbout(event: MarketEvent, watch: AiWatchConfig, deps: WatchDep
     return decision
   }
 
+  /** What the models said, then what was done about it, then who was not asked. */
+  const told = (results: AskModelsResult['results'], heldBack: number): { text: string; ok: boolean; retry: boolean } => {
+    const said = summarize(event, results, heldBack)
+    // Who was left out, in a few words: the card says why on a line of its own.
+    const rested = resting.length === 0 ? '' : ` Not asked: ${resting.map((model) => describeDecider(model)).join(', ')}, rested until midnight UTC.`
+    return { text: `${said.text}${paper.map((line) => ` ${line}`).join('')}${rested}`, ok: said.ok, retry: false }
+  }
+
   const gated = watch.firstModelGates && watch.models.length > 1
   const first = await askModels(gated ? watch.models.slice(0, 1) : watch.models, ask)
-  if (!gated) return { ...summarize(event, first.results, 0), retry: false }
+  if (!gated) return told(first.results, 0)
   // Most events are no trade. The first model says so alone, and the others are asked only about
   // what it would act on.
-  if (!isActionableOpportunity(first.results[0].decision)) {
-    return { ...summarize(event, first.results, watch.models.length - 1), retry: false }
-  }
+  if (!isActionableOpportunity(first.results[0].decision)) return told(first.results, watch.models.length - 1)
   const rest = await askModels(watch.models.slice(1), ask)
-  return { ...summarize(event, [...first.results, ...rest.results], 0), retry: false }
+  return told([...first.results, ...rest.results], 0)
 }
 
 /** One look at the scanner's events. Resolves when every event it took up has been answered.
@@ -148,6 +180,11 @@ export async function watchPass(events: MarketEvent[], deps: WatchDeps): Promise
   const page = await deps.listCalls({ source: 'watch', sinceSec: utcMidnight(nowSec), limit: LEDGER_ROWS_READ })
   const takenToday = watchEventIdsToday(page.rows, nowSec)
   for (const eventId of inFlight.keys()) takenToday.add(eventId)
+  // A model that keeps failing or being refused today is left out, and the others are still
+  // asked. The main process holds the same line where the call is made.
+  const paused = watchPausedModels(page.rows, nowSec)
+  const resting = watch.models.filter((model) => paused.has(model))
+  const asked: AiWatchConfig = resting.length === 0 ? watch : { ...watch, models: watch.models.filter((model) => !paused.has(model)) }
 
   // The strongest of a minute first, so that it is the one that gets the day's last place.
   const candidates = events
@@ -159,7 +196,7 @@ export async function watchPass(events: MarketEvent[], deps: WatchDeps): Promise
     // Another pass may have taken it while this one was reading the setting and the ledger.
     if (handled.has(event.id)) continue
     handled.add(event.id)
-    const reason = watchSkipReason(event, watch, { nowSec, takenToday })
+    const reason = watchSkipReason(event, watch, { nowSec, takenToday, paused })
     if (reason !== null) {
       result.skipped.push({ id: event.id, reason })
       continue
@@ -168,7 +205,7 @@ export async function watchPass(events: MarketEvent[], deps: WatchDeps): Promise
     inFlight.set(event.id, event.symbol)
     result.asked.push(event.id)
     asking.push(
-      askAbout(event, watch, deps)
+      askAbout(event, asked, deps, resting)
         // Whatever went wrong, the event stops counting as one being asked about.
         .catch((failure: unknown) => ({ text: `${event.symbol}: ${failure instanceof Error ? failure.message : String(failure)}`, ok: false, retry: false }))
         .then((outcome) => {

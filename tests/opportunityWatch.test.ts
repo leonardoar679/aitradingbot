@@ -77,7 +77,7 @@ interface Rig {
   asked: { model: string; symbol: string; source: string | undefined }[]
   notices: { title: string; body: string }[]
   /** The ledger the watch counts its day from. A call that answers adds a row. */
-  rows: Pick<AiCallRecord, 'at' | 'source' | 'eventId'>[]
+  rows: (Pick<AiCallRecord, 'at' | 'source' | 'eventId'> & Partial<Pick<AiCallRecord, 'model' | 'status'>>)[]
   /** Candle fetches made. */
   fetches: number
   state: { watch: AiWatchConfig; now: number; answer: (model: string, symbol: string) => Partial<AiSignalDecision> | Error; candlesFail: boolean }
@@ -99,7 +99,7 @@ function rig(initial: Partial<Rig['state']> = {}): Rig {
       made.asked.push({ model, symbol: request.symbol, source: request.source })
       const reply = state.answer(model, request.symbol)
       if (reply instanceof Error) throw reply
-      made.rows.push({ at: state.now, source: 'watch', eventId: `binance:${request.symbol}:${T}` })
+      made.rows.push({ at: state.now, source: 'watch', eventId: `binance:${request.symbol}:${T}`, model, status: reply.error ? 'failed' : reply.rejected ? 'rejected' : 'ok' })
       return decision(model, reply)
     },
     notify: (title, body) => {
@@ -295,6 +295,129 @@ describe('watchPass: the notice', () => {
     const r = rig({ answer: (model) => (model === A ? NO_TRADE : { confidence: 0.6 }) })
     await watchPass([event()], r.deps)
     expect(r.notices).toEqual([])
+  })
+})
+
+describe('watchPass: paper trades', () => {
+  const OPENED = { opened: true, text: 'A paper BUY of 100 USDT was opened, at market.' }
+
+  it('hands each call the watch would act on to the paper trader, with its event', async () => {
+    const r = rig({ answer: (model) => (model === B ? NO_TRADE : {}) })
+    const handed: { symbol: string; model: string; side: string }[] = []
+    r.deps.paperTrade = async (about, answer) => {
+      handed.push({ symbol: about.symbol, model: answer.model, side: answer.recommendation })
+      return null
+    }
+    await watchPass([event(), event('ETHUSDT')], r.deps)
+    expect(handed.sort((a, b) => a.symbol.localeCompare(b.symbol))).toEqual([
+      { symbol: 'ETHUSDT', model: A, side: 'buy' },
+      { symbol: 'SOLUSDT', model: A, side: 'buy' }
+    ])
+  })
+
+  it('hands over nothing this app would not act on: no trade, a side under 65%, a refused answer, a call that failed', async () => {
+    const replies: Record<string, Partial<AiSignalDecision>> = {
+      AUSDT: NO_TRADE,
+      BUSDT: { confidence: 0.6 },
+      CUSDT: { rejected: 'The stop is not below the entry range' },
+      DUSDT: { error: 'overloaded', recommendation: 'hold', confidence: 0, detail: null }
+    }
+    const r = rig({ watch: watch({ models: [A] }), answer: (_model, symbol) => replies[symbol] })
+    let handed = 0
+    r.deps.paperTrade = async () => {
+      handed++
+      return OPENED
+    }
+    await watchPass(Object.keys(replies).map((symbol) => event(symbol)), r.deps)
+    expect(r.asked).toHaveLength(4)
+    expect(handed).toBe(0)
+  })
+
+  it('says what came of it on the Watch card, and leaves the plain notice out when a trade was opened', async () => {
+    const r = rig()
+    r.deps.paperTrade = async (_about, answer) => (answer.model === A ? OPENED : null)
+    await watchPass([event()], r.deps)
+    // The paper trader raises its own notice, which says more; the watch raises none beside it,
+    // for this answer or for the other model's.
+    expect(r.notices).toEqual([])
+    expect(getWatchActivity().last?.text).toBe(
+      'SOLUSDT breakout: openai/gpt-5-mini BUY at 80%; mistralai/mistral-small-2603 BUY at 80%. A paper BUY of 100 USDT was opened, at market.'
+    )
+  })
+
+  it('still raises the plain notice when no paper trade was opened, and says why none was', async () => {
+    const r = rig({ watch: watch({ models: [A] }) })
+    r.deps.paperTrade = async () => ({ opened: false, text: "No paper trade: A paper trade of the watch's is still open on SOLUSDT." })
+    await watchPass([event()], r.deps)
+    expect(r.notices).toHaveLength(1)
+    expect(r.notices[0].body).toContain('Nothing has been placed')
+    expect(getWatchActivity().last?.text).toContain("No paper trade: A paper trade of the watch's is still open on SOLUSDT.")
+  })
+
+  it('keeps an answer that was paid for when the paper trader fails, and says so', async () => {
+    const r = rig({ watch: watch({ models: [A] }) })
+    r.deps.paperTrade = async () => {
+      throw new Error('settings could not be written')
+    }
+    const result = await watchPass([event()], r.deps)
+    expect(result.asked).toEqual([event().id])
+    expect(getWatchActivity().last).toMatchObject({ ok: true })
+    expect(getWatchActivity().last?.text).toContain('No paper trade: settings could not be written')
+    expect(r.notices).toHaveLength(1)
+  })
+
+  it('asks and notifies exactly as before with no paper trader given', async () => {
+    const r = rig()
+    expect(r.deps.paperTrade).toBeUndefined()
+    await watchPass([event()], r.deps)
+    expect(r.notices).toHaveLength(1)
+    expect(getWatchActivity().last?.text).toBe('SOLUSDT breakout: openai/gpt-5-mini BUY at 80%; mistralai/mistral-small-2603 BUY at 80%.')
+  })
+})
+
+describe('watchPass: a model that keeps failing', () => {
+  const failing = (model: string, r: Rig): void => {
+    for (let index = 0; index < 3; index++) r.rows.push({ at: T - 100 - index, source: 'watch', eventId: `binance:X${index}USDT:1`, model, status: 'failed' })
+  }
+
+  it('leaves out a model whose last three calls today failed, still asks the others, and says so', async () => {
+    const r = rig()
+    failing(B, r)
+    const result = await watchPass([event()], r.deps)
+    expect(result.asked).toEqual([event().id])
+    expect(r.asked).toEqual([{ model: A, symbol: 'SOLUSDT', source: 'watch' }])
+    expect(getWatchActivity().last?.text).toBe('SOLUSDT breakout: openai/gpt-5-mini BUY at 80%. Not asked: mistralai/mistral-small-2603, rested until midnight UTC.')
+  })
+
+  it('counts a refused answer like a failure, and an answer among the last three as a reason to go on', async () => {
+    const refused = rig({ watch: watch({ models: [A] }) })
+    for (let index = 0; index < 3; index++) refused.rows.push({ at: T - 100 - index, source: 'watch', eventId: `binance:X${index}USDT:1`, model: A, status: 'rejected' })
+    expect((await watchPass([event()], refused.deps)).skipped[0].reason).toMatch(/failed or was refused on its last 3 calls/)
+    resetWatch()
+    const mixed = rig({ watch: watch({ models: [A] }) })
+    mixed.rows.push({ at: T - 300, source: 'watch', eventId: 'binance:X0USDT:1', model: A, status: 'failed' })
+    mixed.rows.push({ at: T - 200, source: 'watch', eventId: 'binance:X1USDT:1', model: A, status: 'ok' })
+    mixed.rows.push({ at: T - 100, source: 'watch', eventId: 'binance:X2USDT:1', model: A, status: 'failed' })
+    expect((await watchPass([event()], mixed.deps)).asked).toEqual([event().id])
+  })
+
+  it('takes up no event when every model it asks is left out, and asks nothing', async () => {
+    const r = rig()
+    failing(A, r)
+    failing(B, r)
+    const result = await watchPass([event()], r.deps)
+    expect(result.asked).toEqual([])
+    expect(result.skipped).toEqual([{ id: event().id, reason: 'Every model the watch asks has failed or been refused three times running today.' }])
+    expect(r.asked).toEqual([])
+    expect(r.fetches).toBe(0)
+  })
+
+  it('makes the next model the one asked alone when the first is left out', async () => {
+    const r = rig({ watch: watch({ models: [A, B, C], firstModelGates: true }), answer: (model) => (model === B ? NO_TRADE : {}) })
+    failing(A, r)
+    await watchPass([event()], r.deps)
+    // B is asked alone, calls no trade, and C is never asked.
+    expect(r.asked.map((entry) => entry.model)).toEqual([B])
   })
 })
 

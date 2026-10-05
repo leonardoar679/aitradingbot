@@ -12,6 +12,7 @@ import {
   candidateScore,
   detectEvents,
   eventBand,
+  eventReasons,
   isScannablePair,
   marketEventId,
   raisesEvent,
@@ -460,5 +461,61 @@ describe('the detector and the version its events are recorded under', () => {
   it('has not changed what it finds without its version being bumped', () => {
     const hash = createHash('sha256').update(JSON.stringify(found)).digest('hex')
     expect({ version: EVENT_DETECTOR_VERSION, hash }).toEqual({ version: 'events-v1', hash: '01967d01c49cb4c7ff0891174d65a6679a5951d9f64b0a75c668e3e7a8f6149d' })
+  })
+})
+
+describe('eventReasons', () => {
+  const market = { exchange: 'binance' as const, symbol: 'SOLUSDT', baseAsset: 'SOL', quoteAsset: 'USDT' }
+
+  it('gives each of the five components beside the reading it was made from', () => {
+    const event = toMarketEvent(reading(withMove({ pct: 3, volume: 8 })), market)
+    const reasons = eventReasons(event)
+    expect(reasons.map((reason) => reason.component)).toEqual(['price', 'volume', 'volatility', 'pressure', 'breakout'])
+    expect(reasons.map((reason) => reason.label)).toEqual(['Move', 'Volume', 'Bar size', 'Pressure', 'Break'])
+    // The scores are the event's own, and their mean is its score.
+    expect(reasons.map((reason) => reason.score)).toEqual([event.components.price, event.components.volume, event.components.volatility, event.components.pressure, event.components.breakout])
+    expect(reasons.reduce((sum, reason) => sum + reason.score, 0) / 5).toBeCloseTo(event.score, 3)
+    expect(reasons[0].fact).toBe(`+${event.returnsPct.m15.toFixed(2)}% in fifteen minutes, ${Math.abs(event.moveSigmas).toFixed(1)} times its usual size (full at 5)`)
+    expect(reasons[1].fact).toBe(`the last five minutes traded ${(event.volumeRatio ?? 0).toFixed(1)} times the usual (full at 8)`)
+    expect(reasons[2].fact).toBe(`bars ${(event.rangeRatio ?? 0).toFixed(1)} times their usual range (full at 5)`)
+    expect(reasons[3].fact).toBe('the last five minutes closed 100% of the way up their bars, by volume')
+    expect(reasons[4].fact).toBe('above the high of the four hours before the move, by 2 usual moves or more')
+  })
+
+  it('says a fall the other way up, and a move inside the range as inside it', () => {
+    const down = eventReasons(toMarketEvent(reading(withMove({ pct: -3, volume: 8 })), market))
+    // Fifteen falls of a fifth of a percent compound to a little under three.
+    expect(down[0].fact).toMatch(/^-2\.9\d% in fifteen minutes, \d+\.\d times its usual size/)
+    expect(down[3].fact).toBe('the last five minutes closed 100% of the way down their bars, by volume')
+    expect(down[4].fact).toBe('below the low of the four hours before the move, by 2 usual moves or more')
+
+    const inside = eventReasons({
+      components: { price: 80, volume: 60, volatility: 40, pressure: 0, breakout: 0 },
+      returnsPct: { m1: 0, m5: 0.5, m15: 1.2, h1: -2, h4: -3 },
+      moveSigmas: 4,
+      volumeRatio: null,
+      rangeRatio: null,
+      direction: 'up'
+    })
+    // Each score sits beside its own name, not its neighbour's.
+    expect(inside.map((reason) => `${reason.label} ${reason.score}`)).toEqual(['Move 80', 'Volume 60', 'Bar size 40', 'Pressure 0', 'Break 0'])
+    expect(inside[1].fact).toBe('nothing traded in the hours before to compare the last five minutes with')
+    expect(inside[2].fact).toBe('no usual bar size to compare with')
+    expect(inside[3].fact).toBe('the last five minutes did not close on the upper side of their bars')
+    expect(inside[4].fact).toBe('inside the range of the four hours before the move')
+  })
+
+  it('says where the closes sat from the score, which is that reading on a fixed scale', () => {
+    const half = eventReasons({
+      components: { price: 80, volume: 60, volatility: 40, pressure: 50, breakout: 40 },
+      returnsPct: { m1: 0, m5: 0.5, m15: -1.2, h1: -2, h4: -3 },
+      moveSigmas: -4,
+      volumeRatio: 3,
+      rangeRatio: 2,
+      direction: 'down'
+    })
+    expect(half[3].fact).toBe('the last five minutes closed 75% of the way down their bars, by volume')
+    // A break short of the full two usual moves is a break, and is not called more.
+    expect(half[4].fact).toBe('below the low of the four hours before the move')
   })
 })

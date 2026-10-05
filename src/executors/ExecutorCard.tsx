@@ -13,6 +13,7 @@ import { buildGridLevels } from './engine'
 import { executorTypeMeta } from './executorTypeMeta'
 import { netUnrealizedPct } from '../../shared/fees'
 import { describeAiProposalOrigin } from '../../shared/aiProposal'
+import { describeWatchPaperOrigin, describeWatchPaperResult } from '../../shared/aiWatchPaper'
 import { useExecutorSimulation } from './useExecutorSimulation'
 import { useSpreadExecutorSimulation } from './useSpreadExecutorSimulation'
 import { formatQuotePrice } from '../utils/formatCurrency'
@@ -132,6 +133,7 @@ const EXIT_REASON_LABEL: Record<string, string> = {
   time_limit: 'Time Limit',
   trailing_stop: 'Trailing Stop',
   liquidation: 'LIQUIDATED',
+  entry_expired: 'Entry expired',
   manual: 'Manual Stop'
 }
 
@@ -408,7 +410,19 @@ function SingleMarketMetrics({ executor }: { executor: ExecutorConfig }): React.
   const sim = useExecutorSimulation(executor)
 
   if (executor.status === 'stopped') {
-    return <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Stopped</div>
+    // A paper trade the watch opened and then stopped because it had closed: nobody was there to
+    // see how, and a stopped executor is not simulated again, so its card says what was written
+    // on it when it ended.
+    const ended = executor.mode === 'paper' ? executor.watch?.result : undefined
+    if (ended === undefined) return <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Stopped</div>
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.75rem' }}>
+        <span style={{ color: 'var(--text-muted)' }}>Closed {new Date(ended.closedAt * 1000).toLocaleString()} · stopped by the watch</span>
+        <span style={{ color: ended.exit === 'entry_expired' ? 'var(--text-secondary)' : pctColor(ended.pnlQuote), fontWeight: 600 }}>
+          {describeWatchPaperResult(ended, executor.quoteAsset)}
+        </span>
+      </div>
+    )
   }
   if (sim.status === 'loading') {
     // Distinguish the normal first-minute wait from a generic fetch -- a brand-new executor has
@@ -496,6 +510,7 @@ function SingleMarketMetrics({ executor }: { executor: ExecutorConfig }): React.
 
   if (sim.state.kind === 'position') {
     const current = sim.latestCandle?.close ?? null
+    const entryRange = (executor.params as PositionExecutorParams).entryRange
     // Scaled by leverage, because netUnrealizedPct returns a move in the PRICE and the figure on
     // the card is read as a move in the money. At 10x a 3% dip is 30% of the deposit, and showing
     // the 3% would be quietly reporting a tenth of what has actually happened to it.
@@ -506,11 +521,22 @@ function SingleMarketMetrics({ executor }: { executor: ExecutorConfig }): React.
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
         <span style={{ color: 'var(--text-primary)' }}>
-          {sim.state.status === 'pending' ? 'Waiting for entry' : sim.state.status === 'open' ? 'Open' : 'Closed'}
+          {sim.state.status === 'pending'
+            ? 'Waiting for entry'
+            : sim.state.status === 'open'
+              ? 'Open'
+              : sim.state.exitReason === 'entry_expired'
+                ? 'Never entered'
+                : 'Closed'}
           {sim.state.leverage > 1 && <span style={{ color: 'var(--down)', fontWeight: 600 }}> · {sim.state.leverage}x</span>}
         </span>
         {sim.state.entryPrice !== null && (
           <span style={{ color: 'var(--text-secondary)' }}>Entry {formatQuotePrice(sim.state.entryPrice, executor.quoteAsset)}</span>
+        )}
+        {sim.state.status === 'pending' && entryRange != null && (
+          <span style={{ color: 'var(--text-secondary)' }}>
+            Enters when the price trades between {formatQuotePrice(entryRange.min, executor.quoteAsset)} and {formatQuotePrice(entryRange.max, executor.quoteAsset)}
+          </span>
         )}
         {sim.state.status === 'open' && sim.state.liquidationPrice !== null && (
           <span style={{ color: 'var(--down)' }}>
@@ -523,7 +549,10 @@ function SingleMarketMetrics({ executor }: { executor: ExecutorConfig }): React.
             {formatQuotePrice(Math.abs(sim.state.fundingPaid), executor.quoteAsset)}
           </span>
         )}
-        {sim.state.status === 'closed' && sim.state.realizedPnl !== null && (
+        {sim.state.exitReason === 'entry_expired' && (
+          <span style={{ color: 'var(--text-secondary)' }}>The price did not reach the entry before it expired. Nothing was bought.</span>
+        )}
+        {sim.state.status === 'closed' && sim.state.exitReason !== 'entry_expired' && sim.state.realizedPnl !== null && (
           <span style={{ color: pctColor(sim.state.realizedPnl), fontWeight: 600 }}>
             {sim.state.realizedPnl >= 0 ? '+' : ''}
             {formatQuotePrice(sim.state.realizedPnl, executor.quoteAsset)} ({sim.state.exitReason ? EXIT_REASON_LABEL[sim.state.exitReason] : ''})
@@ -666,6 +695,9 @@ export function ExecutorCard({
           <div style={{ marginTop: '0.25rem', fontSize: '0.7rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
             {describeAiProposalOrigin(executor.proposedBy)}
           </div>
+        )}
+        {executor.watch !== undefined && executor.mode === 'paper' && (
+          <div style={{ marginTop: '0.25rem', fontSize: '0.7rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>{describeWatchPaperOrigin(executor.watch)}</div>
         )}
       </div>
 

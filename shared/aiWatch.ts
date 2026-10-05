@@ -20,20 +20,27 @@ import { EVENT_MAX_RANKED, describeEventType, isAtLeast, type MarketEvent } from
 //     in a variable a restart would forget;
 //   - it takes up only events raised live, in the last few minutes, among the strongest of their
 //     minute -- never what was on file when the app started;
+//   - a model that fails or is refused three times running is not asked again that day;
 //   - the daily AI budget is checked in the main process before every call, as for any other.
 // The renderer's scheduler applies these (watchSkipReason), and the main process applies them
 // again where the money is spent (watchCallProblem), so a scheduler gone wrong cannot ask for
 // more than was agreed to.
 //
-// IT RECOMMENDS. IT DOES NOT TRADE. What the watch produces is the same card a click produces,
-// and a desktop notice that says nothing has been placed. A paper trade, and anything real, is
-// still a form a person opens and submits (shared/aiProposal.ts).
+// IT RECOMMENDS. IT PLACES NOTHING REAL. What the watch produces is the same card a click
+// produces, and a desktop notice that says nothing has been placed. Anything real is still a form
+// a person opens and submits (shared/aiProposal.ts). Since 2026-10-04 it may also open a PAPER
+// position on a call it would act on, when that is switched on: shared/aiWatchPaper.ts.
 
 export const AI_WATCH_EVENT_LIMITS = [5, 10, 20, 40] as const
 export const AI_WATCH_DEFAULT_EVENT_LIMIT = 10
 /** An event older than this is not taken up: the entry it would recommend has largely gone, and
  * an app started in the afternoon must not buy opinions on the morning's events. */
 export const AI_WATCH_FRESH_SECONDS = 180
+
+/** A model whose last this-many calls for the watch today all failed or were refused is not asked
+ * again until the next UTC day. A refused answer was billed, and a provider that is down fails
+ * every call it is sent: either way, asking on only buys more of the same. */
+export const AI_WATCH_BREAKER_CALLS = 3
 
 export type AiWatchBand = 'candidate' | 'urgent'
 
@@ -132,11 +139,41 @@ export function watchEventIdsToday(calls: Pick<AiCallRecord, 'at' | 'source' | '
   return taken
 }
 
+/** The models the watch has stopped asking for the rest of the UTC day: each one's last
+ * AI_WATCH_BREAKER_CALLS calls for the watch today all failed or were refused. Counted from the
+ * ledger, like the day's events, so a restart does not forget it and midnight UTC clears it. */
+export function watchPausedModels(calls: Pick<AiCallRecord, 'at' | 'source' | 'model' | 'status'>[], nowSec: number): Set<string> {
+  const midnight = utcMidnight(nowSec)
+  const latest = new Map<string, AiCallRecord['status'][]>()
+  for (const call of calls.filter((row) => row.source === 'watch' && row.at >= midnight).sort((a, b) => b.at - a.at)) {
+    const statuses = latest.get(call.model) ?? []
+    if (statuses.length < AI_WATCH_BREAKER_CALLS) statuses.push(call.status)
+    latest.set(call.model, statuses)
+  }
+  const paused = new Set<string>()
+  for (const [model, statuses] of latest) {
+    if (statuses.length >= AI_WATCH_BREAKER_CALLS && statuses.every((status) => status !== 'ok')) paused.add(model)
+  }
+  return paused
+}
+
+export function describeWatchPause(model: string): string {
+  return `${describeDecider(model)} failed or was refused on its last ${AI_WATCH_BREAKER_CALLS} calls for the watch today, so the watch is not asking it again until midnight UTC.`
+}
+
 /** Why the watch does not take up an event, or null when it does. `takenToday` is the events it
- * has already taken up today, the ones with a call in the air included. */
-export function watchSkipReason(event: MarketEvent, watch: AiWatchConfig, state: { nowSec: number; takenToday: ReadonlySet<string> }): string | null {
+ * has already taken up today, the ones with a call in the air included; `paused` is the models it
+ * has stopped asking today. */
+export function watchSkipReason(
+  event: MarketEvent,
+  watch: AiWatchConfig,
+  state: { nowSec: number; takenToday: ReadonlySet<string>; paused?: ReadonlySet<string> }
+): string | null {
   if (!watch.enabled) return 'The watch is off.'
   if (watch.models.length === 0) return 'The watch has no model to ask.'
+  if (state.paused !== undefined && watch.models.every((model) => state.paused?.has(model))) {
+    return watch.models.length === 1 ? describeWatchPause(watch.models[0]) : 'Every model the watch asks has failed or been refused three times running today.'
+  }
   if (event.live === null) return 'It was found by scanning history, not raised live.'
   if (event.direction === 'none') return 'It has no direction to act on.'
   if (!isAtLeast(event.band, watch.minBand)) return `It is below the ${watch.minBand} band the watch asks about.`
@@ -160,10 +197,13 @@ export function watchCallProblem(input: {
   nowSec: number
   /** Events the watch has taken up today: in the ledger, or with a call in the air. */
   takenToday: ReadonlySet<string>
+  /** Models the watch has stopped asking today (watchPausedModels). */
+  paused?: ReadonlySet<string>
 }): string | null {
   const { watch } = input
   if (!watch.enabled) return 'The watch is off, so nothing is asked on its behalf.'
   if (!watch.models.includes(input.model)) return `${input.model} is not one of the models the watch asks.`
+  if (input.paused?.has(input.model)) return describeWatchPause(input.model)
   if (input.takenToday.has(input.eventId)) return null
   if (input.nowSec - input.eventTime > AI_WATCH_FRESH_SECONDS) return `The watch takes up only an event raised in the last ${AI_WATCH_FRESH_SECONDS / 60} minutes.`
   if (input.takenToday.size >= watch.maxEventsPerDay) return `The watch has asked about its ${watch.maxEventsPerDay} events for today.`
@@ -220,7 +260,7 @@ export function describeAiWatchCost(input: {
     '',
     budget,
     ...(input.scannerOn ? [] : ['The scanner is off, so the watch has nothing to ask about until it is switched on under Explorer.']),
-    'It recommends and notifies. It places nothing, and it stays on across restarts until you switch it off.',
+    'It recommends and notifies. It places nothing real, and it stays on across restarts until you switch it off.',
     '',
     'Switch it on?'
   ].join('\n')

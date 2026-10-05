@@ -277,7 +277,7 @@ entries, described next; an **AI signals** overlay on the Market chart, off by d
 | Tab | What it does |
 |---|---|
 | **Analyze** | One market, one model, one click, one call — or four, when what is picked is a panel of agents on a model. The button states the cost of the whole click before it is pressed, and reads "cached, free" when the answer is already held. Answers from different models for the same candle stack into a comparison. A call to buy can be turned into an order form — see *From a call to an order, by hand*. |
-| **Opportunities** | The events the scanner raised, each with what the ticked models recommended for it — BUY, SELL or NO TRADE, with an entry range, a stop, a target and an expiry — and what each recommendation has done since. A watch can put events to models as they are raised, within its own daily limit, and a leaderboard scores what it asked. Described below. |
+| **Opportunities** | The events the scanner raised, each with what the ticked models recommended for it — BUY, SELL or NO TRADE, with an entry range, a stop, a target and an expiry — and what each recommendation has done since. A watch can put events to models as they are raised, within its own daily limit, and open a paper position on a call it would act on; a list says what can still be acted on right now, a leaderboard scores what the watch asked, and a journal lists every recommendation and saves as a spreadsheet. Described below. |
 | **Signals** | Every answered call, scored against the candles that followed: the move after 1h, 4h and 1d, which of the model's own levels was touched first, and whether the call was right. Per model: act rate, hit rate, and hit rate by confidence. |
 | **Benchmark** | The same questions put to every model you tick, with the answers scored side by side. Two kinds: one market asked on a clock, with a panel of agents beside its own model and what a route between two of them would have done; and events across the market, where each recommendation is followed through its own entry, stop and target — both described below. |
 | **Models** | OpenRouter's catalogue with prices. Only models that can be held to a strict JSON schema can be enabled, and one that reasons can be enabled again at a lower reasoning effort. Also where a route to a second model, or to a panel, is set — described below. |
@@ -326,10 +326,40 @@ trade, and if so where, and until when?":
   the spread the scanner saw on the book when it raised the event.
 - **Paper trade** opens the same New Executor form as *From a call to an order, by hand* below,
   with the side, the entry (at market while the price is inside the model's range, otherwise
-  waiting for its nearer edge), the stop, the target, the time limit and the expiry. Once the
-  entry has expired the form will not submit it as it stands. **A short is paper only**: the form
-  refuses Live for any position that is not a buy, because on a spot account a live "sell" would
-  sell coins you hold, which is not what a short call means.
+  its nearer edge), the stop, the target, the time limit and the expiry. Once the
+  entry has expired the form will not submit it as it stands, and a paper position made from it
+  that is still waiting to enter when the expiry comes is abandoned: it closes having bought
+  nothing (`entryExpiresAt` on a Position, in `simulatePosition`). Before this a waiting entry
+  waited for as long as its executor ran, which is not what a recommendation says. **A short is
+  paper only**: the form refuses Live for any position that is not a buy, because on a spot
+  account a live "sell" would sell coins you hold, which is not what a short call means.
+- **A paper position made from a recommendation enters where the recommendation says**: in the
+  first minute the price trades inside the model's range, at that minute's open when the open is
+  inside it and otherwise at the edge the price came in by (`entryRange` on a Position). It is
+  the rule the recommendation is scored by, and the form's two kinds of entry are not it. A
+  market entry takes the next minute's open wherever the price has gone, which chases a price
+  that has run from the range. An entry price is a limit, and a limit on the far side of the
+  market is filled at once: with the price already under a buy's range, "waiting at its bottom
+  edge" buys at the next open, below the range, a position the recommendation never entered. A
+  check in the app opened a trade "waiting for" the bottom of a range the price was already
+  under, which is how this was found. So the range itself goes with the proposal, and the engine
+  enters by it while the form's entry is still the one the recommendation filled in; a price
+  typed over it is the user's own limit. `tests/engineExecutors.test.ts` runs the engine and the scoring over the same
+  candles and holds them to the same minute and the same price. A live position is entered at
+  market only, as before, and never carries a range.
+- **Right now** is a table at the top of the tab: each event with a call this app would act on
+  whose entry has not run out or filled, the strongest candidate first, with every model's call,
+  the entry on offer and the time left. A line leaves when its entry does.
+- **Each card says where its event stands**: not asked, no trade, an entry on offer, in a trade,
+  expired, or closed (`feedItemStatus` in `src/agents/opportunities.ts`). It is worked out from
+  the answers and the candles, like everything else here, and where the candles that would say
+  have not been read the card shows no status rather than a guess.
+- **Why this pair** opens on a card: the five components the event's score is the mean of, each
+  beside the reading it was made from — the fifteen-minute move in units of its usual size, the
+  volume and the bar size against the hours before, where the last minutes closed in their bars,
+  and whether the price cleared the prior four hours — and, for an event raised live, its rank in
+  its minute with the volume and spread the scanner saw (`eventReasons` in
+  `shared/marketEvent.ts`).
 
 Nothing is asked until **Ask** is pressed on an event, and the price of exactly those calls is
 stated first — unless the watch below has been switched on. `tests/aiNoLivePath.test.ts` and
@@ -362,15 +392,64 @@ in this app that asks a model with nobody pressing anything. It is off until it 
   the watch's name (`electron/services/aiWatchService.ts`), from the two things only it owns —
   the setting and the ledger — one check at a time, so that two events arriving together cannot
   both take the day's last place. The daily AI budget is checked after that, as for every call.
+- **A model that keeps failing is rested.** One whose last three calls for the watch today all
+  failed or were refused is not asked again until the next UTC day; the others still are, and
+  the card says who was left out. A refused answer was paid for, and a provider that is down
+  fails every call it is sent, so asking on only buys more of the same. Counted from the ledger,
+  and held in the main process as well, like the day's events.
 - **It recommends and notifies.** An answer lands on its event's card exactly as one bought with
   Ask does, and the first call to trade on an event raises one desktop notice, which says that
-  nothing has been placed. **It places nothing**: it opens no order form, creates no executor and
-  touches no account, paper or real. `tests/aiNoLivePath.test.ts` pins that its files mention no
-  bridge an order, an executor or a settings write travels over. A paper trade is still a button
-  a person presses on the card.
+  nothing has been placed. **It places nothing real**: it opens no order form and no real order.
+  What it may do beyond that is the next paragraph, and only when that is switched on.
 - **It runs while the app is open**, whichever page is showing, and stays on across restarts
   until it is switched off. With the watch and the scanner both on, starting the app can
   therefore spend money without a click, inside those limits.
+
+**Paper trades from the watch.** On 4 October 2026 the user chose to let the watch open *paper*
+positions by itself, so that what following its recommendations does is on the Executors page,
+and in the paper account where there is one, without anyone being at the screen inside a
+fifteen-minute entry. It is a second switch on the Watch card, off until it is switched on, with
+a confirmation of its own that says what will be opened with nobody pressing anything, and that
+it is paper.
+
+- **What it opens is the recommendation, as the form would have filled it in.** When the model it
+  follows answers an event the watch put to it with BUY or SELL at 65% confidence or more, a
+  paper Position is created at once with what the *Paper trade* button would have filled in for
+  that answer at that moment: the model's own stop and target; its hold as the time limit; and
+  its entry abandoned when its validity ends. It enters by the model's range, as above: in the
+  first minute the price trades inside it, and never by chasing a price that has left it. The
+  one thing a person would have typed is the amount, which is the stake in the setting (25 to
+  1,000). One thing is stricter than the form: a stop or target that is not a usable distance
+  from the entry is a reason not to trade, where the form would have shown its own in its place.
+- **Its limits are counted from the executors on file**: one paper trade an event, one open on a
+  pair at a time, and at most 1, 2, 3, 5 or 10 open at once. Where a paper account is set up, a
+  trade it cannot fund is not opened, by the check the order form makes. Each is looked at again
+  inside the one queue every settings write goes through, so two answers arriving together
+  cannot both pass.
+- **It follows one model.** Comparing models is the leaderboard's job, and three models trading
+  one event would be three positions on one view of the market. The model has to be one the
+  watch asks, and neither the model, the stake nor the limit can be changed while it is on.
+- **A trade it opened closes itself, and says how.** Once a minute its open paper trades are
+  replayed on closed 1-minute candles; one whose stop, target or time limit has ended it, or
+  whose entry expired unfilled, is stopped, as pressing Stop on its card would do. That is what
+  frees its place under the limit. How it ended is written on it in the same write — the exit,
+  the minute, and what it made or lost after the simulation's fees — because a stopped executor
+  is not simulated again and nobody was there to see: its card on the Executors page shows it
+  ("Target reached: +3.786 USDT after fees", "Never entered"), beside where the trade came from,
+  and the Watch card adds up the ones that have ended. One stopped by hand carries no result and
+  is not counted.
+- **With a paper account, the result is settled into it** by the settlement a press of Stop
+  runs, and a trade the account cannot fund is not opened. **With none, a result is added to no
+  balance** and nothing limits what the positions add up to; the confirmation and the card both
+  say so, and the cards are then the only place a result is kept.
+- **It is paper, and cannot be anything else.** The one file that writes
+  (`src/agents/watchPaperTrade.ts`) spells the mode as a literal and takes none;
+  `shared/aiWatchPaper.ts` holds the rules. `tests/aiNoLivePath.test.ts` reads both: neither
+  mentions the bridge a real order travels over, the word for the other mode appears in neither
+  as a value, no leverage is ever named, and of the watch's files only that one reaches settings.
+  A bot that trades real money by itself was offered twice and not chosen, and is not built.
+- **It asks nothing and costs nothing.** A paper trade is made from an answer the watch already
+  bought. The desktop notice for one says it is paper and that nothing real was placed.
 
 **What the watch's recommendations earned** is the leaderboard under the feed: the watch's own
 answers of the last thirty days, in the tables of the benchmark on events described below — the
@@ -384,10 +463,38 @@ The Benchmark tab shows the same card for the models it compares, so a model's r
 and its live ones sit on one page, and the difference between them is what those assumptions
 were worth. An answer bought later by pressing Ask is left out: it arrived when a person got
 round to it, which says nothing about the model. Scoring is free and waits for a click, since it
-reads a request of public candles an event.
+reads a request of public candles an event. A table headed **Lately** sits under each model's
+row: its last 10, 50 and 100 closed trades and those of the last 7 and 30 days, added up, beside
+the same events followed with no model. They are sums and counts, never a rate: ten trades do
+not make one.
 
-The watch has asked nothing of a real model yet. It is checked in the app with the models faked
-and a made-up move on one pair for the real scanner to find.
+**The journal** is the card at the foot of the tab: one line for every answer a model has given
+about an event the scanner raised, whoever asked — the watch, a click on Ask, or a benchmark that
+happened to cover a live event — with the call, the confidence, the levels, how it ended, what it
+returned and whether the watch paper traded it. It filters by model, pair, call and day, and
+**Save as a spreadsheet** writes the lines on screen to a CSV through the save dialog the
+Backtest page uses; its times are UTC, and an entry or an exit is given as the minute it
+happened in, named as its candle is, by when it opened. Loading it reads two files, scoring
+reads public candles, and nothing is stored (`src/agents/journal.ts`).
+
+**Checked in the app, at no cost** (5 October 2026, UTC): a separate build on a scratch profile,
+the models faked in the main process, and made-up markets on a few pairs so that the real
+scanner raised real events on them. With paper trades off, the watch asked and opened nothing.
+Switched on, the followed model's call opened one paper position, a second waited for its entry,
+and a third call was refused by a cap of two, with the reason on the Watch card. Positions ended
+by their target, by their stop and by an entry that expired were each stopped by the watch within
+a minute; each card said how it ended, the Watch card added them up, and a paper account moved by
+exactly the figures on the cards and not at all for the trade that never entered. Two trades
+whose price had already left the model's range when the answer came — one under it and falling,
+one over it and rising — never entered, and the journal scored both recommendations "never
+filled". A model that failed three calls running was not asked a fourth, by the scheduler or,
+asked directly, by the main process. Right now, the status on each card, Why this pair, the
+journal (loaded, scored, filtered and saved as a spreadsheet), Lately, and a benchmark run
+recorded as an experiment and opened again without asking a model all showed as described. No
+order or other write was sent to an exchange, no tool was offered to a model, and every executor
+on file was paper. A card's figure is the executor engine's, after its fees; the journal's is the
+recommendation's score, which charges slippage as well, so one stop-out read −1.998 USDT on a
+stake of 100 on its card and −2.24% in the journal.
 
 **From a call to an order, by hand.** A call to buy that this app would act on — answered,
 accepted, at 65% confidence or more — carries a **Prepare an order from this call** button on the
@@ -2056,7 +2163,8 @@ shared/                       Code both processes run, so they cannot disagree a
   aiOpportunityOutcome.ts     What a recommendation would have earned: the entry, the exit, fees, slippage and latency
   aiEventBenchmark.ts         Several models on the same events: the sample, the comparison, the rows that are not models
   aiExperiment.ts             A benchmark run kept as a run: its events, its models, its versions, and what the ledger says it cost
-  aiWatch.ts                  Events put to models without a click: the setting, what it takes up, its daily limit, what it costs, its notice
+  aiWatch.ts                  Events put to models without a click: the setting, what it takes up, its daily limit, the breaker, what it costs, its notice
+  aiWatchPaper.ts             Paper positions the watch opens by itself: the setting, what a call becomes, and its limits
   aiEffort.ts                 A model asked at a lower reasoning effort, as a model of its own: its id, and where it is taken apart
   aiCost.ts, aiLedger.ts      Budget and estimate arithmetic; the call record and its parser
   marketEvent.ts              The event detector: a pair's reading from twelve hours of 1-minute candles, and what raises an event
@@ -2082,7 +2190,10 @@ src/                          React renderer app
                               eventBenchmark.ts (the free half of a benchmark on events: the sample,
                               what is held, and the candles that score it);
                               opportunityWatch.ts + OpportunityScheduler (the watch at work, headless);
-                              liveBoard.ts (the watch's answers joined to their events, for the leaderboard)
+                              watchPaperTrade.ts (the one file of the watch's that writes: its paper
+                              trades, opened and settled);
+                              liveBoard.ts (the watch's answers joined to their events, for the leaderboard);
+                              journal.ts (every recommendation as a line, its filters and its spreadsheet)
   routines/                   Scheduled-backtest store, headless scheduler, page
   dashboard/                  Market page (chart + ticker)
   backtest/                   Execution engine, results UI, Charts + Strategy Comparison views,

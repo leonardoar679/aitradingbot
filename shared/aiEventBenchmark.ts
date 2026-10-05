@@ -662,3 +662,37 @@ export function summarizeEventBenchmark(input: EventBenchmarkInput): EventBenchm
 
   return { sampled: input.events.length, compared: comparedIndices.length, models, contributions, baselines, baselinesOver, rules, segmentEnds }
 }
+
+export const ROLLING_TRADE_COUNTS = [10, 50, 100] as const
+export const ROLLING_DAYS = [7, 30] as const
+
+export interface RollingWindow {
+  /** Closed trades in the window. Fewer than asked for when there are not that many yet. */
+  trades: number
+  wins: number
+  netSumPct: number
+}
+
+export interface RollingResults {
+  /** The last 10, 50 and 100 closed trades, newest counted first. */
+  lastTrades: (RollingWindow & { count: number })[]
+  /** Closed trades on events of the last 7 and 30 days. */
+  lastDays: (RollingWindow & { days: number })[]
+}
+
+/** How a row has done lately: its last few closed trades, and its last few days.
+ *
+ * A total over a month says what a model was; this says what it is. Both are sums of the same
+ * closed trades, by the event's own time, and nothing here is a rate: ten trades do not make one. */
+export function rollingResults(trades: EventTrade[], nowSec: number): RollingResults {
+  const closed = trades.filter((trade) => trade.outcome.status === 'closed').sort((a, b) => b.time - a.time || b.index - a.index)
+  const sum = (list: EventTrade[]): RollingWindow => ({
+    trades: list.length,
+    wins: list.filter((trade) => (trade.outcome.netPct ?? 0) > 0).length,
+    netSumPct: list.reduce((total, trade) => total + (trade.outcome.netPct ?? 0), 0)
+  })
+  return {
+    lastTrades: ROLLING_TRADE_COUNTS.map((count) => ({ count, ...sum(closed.slice(0, count)) })),
+    lastDays: ROLLING_DAYS.map((days) => ({ days, ...sum(closed.filter((trade) => trade.time >= nowSec - days * 86_400)) }))
+  }
+}

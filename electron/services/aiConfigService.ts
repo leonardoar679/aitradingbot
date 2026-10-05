@@ -6,6 +6,7 @@ import { aiModelSlugOf, isAiModelId, splitAiModelId } from '../../shared/aiEffor
 import { deciderModel, isPanelId, panelModelOf } from '../../shared/aiPanel'
 import { parseAiRoute, type AiRoute } from '../../shared/aiRoute'
 import { aiWatchProblem, healAiWatch, sameWatchTerms, type AiWatchConfig } from '../../shared/aiWatch'
+import { DEFAULT_AI_WATCH_PAPER, aiWatchPaperProblem, healAiWatchPaper, type AiWatchPaperConfig } from '../../shared/aiWatchPaper'
 import { budgetProblem, type AiConfig, type AiConfigPatch, type AiModelCatalogue, type AiModelInfo } from '../../shared/aiCost'
 import { writeJsonAtomic } from './atomicWrite'
 import { getDecryptedAiCredential } from './aiCredentialsService'
@@ -32,6 +33,10 @@ interface AiConfigState {
    * reason the budget is: it is the one setting that lets a model be asked with nobody pressing
    * anything, and it changes only through setAiConfig. */
   watch: AiWatchConfig
+  /** See AiConfig.watchPaper. Here for the same reason: it is the one setting that lets a position
+   * be opened with nobody pressing anything, and though the position is paper, what switches it
+   * on should not be a general settings patch. */
+  watchPaper: AiWatchPaperConfig
 }
 
 interface StoredCatalogue {
@@ -121,8 +126,11 @@ async function load(): Promise<AiConfigState> {
     // Healed like the rest, and strictly: a stored watch that is not exactly one that could have
     // been switched on -- a model no longer enabled, a limit that is not one of the choices -- is
     // off, not running in some repaired shape nobody agreed to the price of.
-    watch: healAiWatch(raw.watch, enabledModels)
+    watch: healAiWatch(raw.watch, enabledModels),
+    watchPaper: DEFAULT_AI_WATCH_PAPER
   }
+  // Healed against the watch as it was just healed: paper trades follow one of ITS models.
+  cache.watchPaper = healAiWatchPaper(raw.watchPaper, cache.watch.models)
   return cache
 }
 
@@ -160,7 +168,8 @@ function statusFor(state: AiConfigState): AiConfig {
     route: state.route ? { ...state.route } : null,
     dailyCapUsd: state.dailyCapUsd,
     spentTodayUsd: usageForDay(state.dailyUsage, today()),
-    watch: { ...state.watch, models: [...state.watch.models] }
+    watch: { ...state.watch, models: [...state.watch.models] },
+    watchPaper: { ...state.watchPaper }
   }
 }
 
@@ -279,7 +288,33 @@ export async function setAiConfig(patch: AiConfigPatch): Promise<AiConfig> {
     if (stranded !== undefined) watch = { ...state.watch, models: state.watch.models.filter((model) => enabledModels.includes(model)) }
   }
 
-  cache = { ...state, defaultModel, enabledModels, route, dailyCapUsd, watch }
+  // Paper trades follow one of the watch's models, and what they do is what was read when they
+  // were switched on.
+  let watchPaper = state.watchPaper
+  if (patch.watchPaper !== undefined) {
+    const asked = patch.watchPaper ?? {}
+    const candidate: AiWatchPaperConfig = {
+      enabled: asked.enabled ?? state.watchPaper.enabled,
+      model: asked.model !== undefined ? asked.model : state.watchPaper.model,
+      stakeQuote: asked.stakeQuote ?? state.watchPaper.stakeQuote,
+      maxOpen: asked.maxOpen ?? state.watchPaper.maxOpen
+    }
+    const problem = aiWatchPaperProblem(candidate, watch.models)
+    if (problem !== null) throw new Error(problem)
+    const sameTerms = candidate.model === state.watchPaper.model && candidate.stakeQuote === state.watchPaper.stakeQuote && candidate.maxOpen === state.watchPaper.maxOpen
+    if (state.watchPaper.enabled && candidate.enabled && !sameTerms) {
+      throw new Error('Switch paper trades off before changing them. Switching them on again says what they will do first.')
+    }
+    watchPaper = candidate
+  } else if (watchPaper.model !== null && !watch.models.includes(watchPaper.model)) {
+    // Like a route: a change that would strand them is refused rather than quietly repaired.
+    if (watchPaper.enabled) {
+      throw new Error(`${watchPaper.model} is the model the watch's paper trades follow. Switch paper trades off before taking it off the watch's list.`)
+    }
+    watchPaper = { ...watchPaper, model: null }
+  }
+
+  cache = { ...state, defaultModel, enabledModels, route, dailyCapUsd, watch, watchPaper }
   await persist()
   return statusFor(cache)
 }

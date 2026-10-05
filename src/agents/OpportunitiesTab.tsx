@@ -5,16 +5,19 @@ import type { AiCallRecord } from '../../shared/aiLedger'
 import { AI_OPPORTUNITY_MAX_MODELS, AI_OPPORTUNITY_PROMPT_VERSION } from '../../shared/aiOpportunity'
 import { describeDecider } from '../../shared/aiPanel'
 import { buildOpportunityProposal, opportunityProposalProblem, type AiOrderProposal } from '../../shared/aiProposal'
-import { watchEventIdsToday } from '../../shared/aiWatch'
-import type { Candle } from '../../shared/ipc'
+import { watchEventIdsToday, watchPausedModels } from '../../shared/aiWatch'
+import { describeWatchPaperTally, watchPaperExecutors, watchPaperTally } from '../../shared/aiWatchPaper'
+import type { Candle, ExecutorConfig } from '../../shared/ipc'
 import { describeEventType, type MarketEvent } from '../../shared/marketEvent'
 import { describeError } from '../utils/ipcError'
 import { useNowSec } from '../utils/useNowSec'
 import { buttonStyle, noteStyle } from './agentStyles'
+import { JournalCard } from './JournalCard'
 import { LiveBoardCard } from './LiveBoardCard'
 import { OpportunityCard } from './OpportunityCard'
-import { askModels, assembleFeed, fetchEventQuestion, loadFeedBars, type CandleFetch, type EventAnswer, type EventFeedItem } from './opportunities'
+import { askModels, assembleFeed, fetchEventQuestion, loadFeedBars, rightNowRows, type CandleFetch, type EventAnswer, type EventFeedItem } from './opportunities'
 import { getWatchActivity, subscribeWatchActivity } from './opportunityWatch'
+import { RightNowCard } from './RightNowCard'
 import { WatchCard } from './WatchCard'
 
 const EVENTS_SHOWN = 20
@@ -22,6 +25,8 @@ const EVENTS_SHOWN = 20
 const CALLS_READ = 5000
 /** A recommendation changes at most once a minute: when a minute closes. */
 const OUTCOME_REFRESH_SEC = 60
+/** How often the executors on file are read again, for the watch's own paper trades. */
+const PAPER_REFRESH_MS = 30_000
 
 const fetchCandles: CandleFetch = async (exchange, symbol, interval, startSec, endSec) =>
   (await window.api.market.fetchHistoricalRange(exchange, symbol, interval, startSec, endSec)).candles
@@ -36,7 +41,9 @@ const fetchCandles: CandleFetch = async (exchange, symbol, interval, startSec, e
  * has asked.
  *
  * NOTHING HERE TRADES. "Paper trade" hands a filled-in order form to the Executors page
- * (shared/aiProposal.ts); a person sets the amount and submits it there. */
+ * (shared/aiProposal.ts); a person sets the amount and submits it there. The watch's own paper
+ * trades (shared/aiWatchPaper.ts) are opened by OpportunityScheduler, not by this tab: here they
+ * are switched on and off, and counted from the executors on file, which this tab only reads. */
 export function OpportunitiesTab({
   onPrepareOrder
 }: {
@@ -55,6 +62,8 @@ export function OpportunitiesTab({
   const [loadProblem, setLoadProblem] = useState<string | null>(null)
   const [shown, setShown] = useState(EVENTS_SHOWN)
   const [watchAnswered, setWatchAnswered] = useState(getWatchActivity().answered)
+  const [paperAccount, setPaperAccount] = useState<boolean | null>(null)
+  const [watchTrades, setWatchTrades] = useState<ExecutorConfig[]>([])
   const nowSec = useNowSec(true, 15_000)
   const barsAt = useRef(0)
 
@@ -93,6 +102,28 @@ export function OpportunitiesTab({
 
   // The watch's answers arrive with nobody pressing anything here, so the tab is told.
   useEffect(() => subscribeWatchActivity((activity) => setWatchAnswered(activity.answered)), [])
+
+  // The watch's own paper trades, read from the executors on file. Read only: this tab writes
+  // none of it.
+  useEffect(() => {
+    let cancelled = false
+    const read = (): void => {
+      void window.api.settings.get().then(
+        (settings) => {
+          if (cancelled) return
+          setPaperAccount(Boolean(settings.paperAccount))
+          setWatchTrades(watchPaperExecutors(settings.executors))
+        },
+        () => undefined
+      )
+    }
+    read()
+    const timer = setInterval(read, PAPER_REFRESH_MS)
+    return (): void => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [watchAnswered])
   useEffect(() => {
     if (watchAnswered > 0) void loadCalls().catch(() => undefined)
   }, [watchAnswered, loadCalls])
@@ -191,12 +222,32 @@ export function OpportunitiesTab({
   }
 
   const enabled = config?.enabledModels ?? []
+  const right = useMemo(() => rightNowRows(feed, bars, nowSec), [feed, bars, nowSec])
+  // Models the watch has stopped asking today, read from the same rows that count its day.
+  const paused = useMemo(() => watchPausedModels(calls, nowSec), [calls, nowSec])
+  const paperKeys = useMemo(() => new Set(watchTrades.map((executor) => `${executor.watch?.eventId}:${executor.watch?.model}`)), [watchTrades])
+  const paperStanding = {
+    hasAccount: paperAccount,
+    open: watchTrades.filter((executor) => executor.status === 'active').map((executor) => executor.symbol),
+    total: watchTrades.length,
+    ended: describeWatchPaperTally(watchPaperTally(watchTrades))
+  }
 
   return (
     <>
       {config !== null && (
-        <WatchCard config={config} onConfig={setConfig} scannerOn={scannerOn} events={events ?? []} takenToday={watchEventIdsToday(calls, nowSec).size} />
+        <WatchCard
+          config={config}
+          onConfig={setConfig}
+          scannerOn={scannerOn}
+          events={events ?? []}
+          takenToday={watchEventIdsToday(calls, nowSec).size}
+          paused={config.watch.models.filter((model) => paused.has(model))}
+          paper={paperStanding}
+        />
       )}
+
+      {events !== null && <RightNowCard rows={right} nowSec={nowSec} />}
 
       <Card title="Models to ask">
         {config === null ? (
@@ -262,6 +313,8 @@ export function OpportunitiesTab({
       )}
 
       {config !== null && <LiveBoardCard title="What the watch's recommendations earned" models={config.watch.models} refreshKey={watchAnswered} />}
+
+      <JournalCard paper={paperKeys} />
 
       <p style={noteStyle}>
         What a recommendation has done is worked out from 1-minute candles each time this tab is looked at, never stored.

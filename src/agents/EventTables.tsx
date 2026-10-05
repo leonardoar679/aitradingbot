@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { formatUsd } from '../../shared/aiCost'
-import { EVENT_BENCHMARK_STAKE_USD, type EventBenchmarkRow, type EventContribution } from '../../shared/aiEventBenchmark'
+import { EVENT_BENCHMARK_STAKE_USD, rollingResults, type EventBenchmarkRow, type EventContribution, type RollingWindow } from '../../shared/aiEventBenchmark'
 import { describeDecider } from '../../shared/aiPanel'
 import { cellStyle, headCellStyle, inputStyle, noteStyle, signedPct } from './agentStyles'
 
@@ -209,6 +209,56 @@ export function ExitsTable({ rows }: { rows: EventBenchmarkRow[] }): React.JSX.E
               <td style={cellStyle}>{share(row.expired, row.actionable)}</td>
             </tr>
           ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/** How each row has done lately: its last 10, 50 and 100 closed trades, and the last 7 and 30
+ * days. Net added up, with the closed trades behind it in brackets; a window with fewer trades
+ * than its name says holds all there are. */
+export function RollingTable({ rows, nowSec }: { rows: EventBenchmarkRow[]; nowSec: number }): React.JSX.Element {
+  const cell = (window: RollingWindow): React.JSX.Element =>
+    window.trades === 0 ? (
+      muted('—')
+    ) : (
+      <>
+        {pct(window.netSumPct)} {muted(`(${window.wins} of ${window.trades} won)`)}
+      </>
+    )
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr>
+            <th style={wrappedHeadStyle}>Lately</th>
+            <th style={wrappedHeadStyle}>Last 10 trades</th>
+            <th style={wrappedHeadStyle}>Last 50</th>
+            <th style={wrappedHeadStyle}>Last 100</th>
+            <th style={wrappedHeadStyle}>Last 7 days</th>
+            <th style={wrappedHeadStyle}>Last 30 days</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const rolling = rollingResults(row.trades, nowSec)
+            return (
+              <tr key={row.name}>
+                <td style={{ ...cellStyle, fontWeight: 600 }}>{describeDecider(row.name)}</td>
+                {rolling.lastTrades.map((window) => (
+                  <td key={`t${window.count}`} style={cellStyle}>
+                    {cell(window)}
+                  </td>
+                ))}
+                {rolling.lastDays.map((window) => (
+                  <td key={`d${window.days}`} style={cellStyle}>
+                    {cell(window)}
+                  </td>
+                ))}
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>

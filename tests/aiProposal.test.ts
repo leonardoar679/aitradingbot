@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  aiProposalEntryExpiry,
+  aiProposalEntryRange,
   aiProposalName,
   aiProposalOrigin,
   aiProposalPositionParams,
@@ -292,6 +294,8 @@ describe('a recommendation on an event, as an order form', () => {
       timeLimitSec: 3600,
       side: 'buy',
       entryPrice: null,
+      // The range itself goes with it, for a paper position to enter by.
+      entryRange: { min: 99.8, max: 100.2 },
       expiresAt: EVENT_TIME + 900,
       eventType: 'breakout'
     })
@@ -376,15 +380,16 @@ describe('a recommendation on an event, as an order form', () => {
   it('says where each value came from, when it expires, and that a short is paper only', () => {
     const long = describeAiProposal(offer(recommendation(), 100.9)!).join(' ')
     expect(long).toContain('openai/gpt-5-mini said BUY SOLUSDT at 80% confidence, on the breakout raised at 05:12 UTC')
-    expect(long).toContain('It waits for a price of 100.2, the nearer edge of the range the model named.')
+    expect(long).toContain('It waits for a price of 100.2, the nearer edge of the range the model named, 99.8 to 100.2.')
+    expect(long).toContain('On paper, with the entry left as it is, the position enters in the first minute the price trades inside that range, from whichever side: a price that has left it is not chased, and is not bought at once from its far side.')
     expect(long).toContain("The model's stop is 1.7% below that entry and its target 2.79% above it.")
     expect(long).toContain('The time limit is the 1 hour it said to hold for.')
-    expect(long).toContain('Its entry is good until 05:27 UTC. After that this form will not submit it as it stands.')
+    expect(long).toContain('Its entry is good until 05:27 UTC. After that this form will not submit it as it stands, and a paper position still waiting to enter then is abandoned.')
     expect(long).toContain('real money still needs Live Trading ticked below and its phrase typed')
 
     const short = describeAiProposal(offer(recommendation(SHORT), 100)!).join(' ')
     expect(short).toContain('said SELL SOLUSDT')
-    expect(short).toContain('It enters at market')
+    expect(short).toContain('It enters at market: the price is inside the range the model named, 99.8 to 100.2.')
     expect(short).toContain("The model's stop is 1.5% above that entry and its target 3% below it.")
     expect(short).toContain('A short is paper only: this app places no short or leveraged order, so Live Trading cannot be ticked for it.')
     expect(short).not.toContain('real money still needs')
@@ -396,6 +401,39 @@ describe('a recommendation on an event, as an order form', () => {
     expect(isAiProposalExpired(proposal, EVENT_TIME + 900)).toBe(true)
     // A signal's proposal has no expiry: an old one is warned about, not refused.
     expect(isAiProposalExpired(proposalFor(buy())!, CANDLE + 10 * 86_400)).toBe(false)
+  })
+
+  it('gives a paper position made from one the same expiry, and a live one none', () => {
+    const proposal = offer(recommendation())!
+    expect(aiProposalEntryExpiry(proposal, 'paper')).toBe(EVENT_TIME + 900)
+    // Nothing in this app cancels a resting real order on a clock.
+    expect(aiProposalEntryExpiry(proposal, 'live')).toBeNull()
+    // A signal's proposal has no entry window to run out.
+    expect(aiProposalEntryExpiry(proposalFor(buy())!, 'paper')).toBeNull()
+  })
+
+  it('gives a paper position made from one the model\'s range to enter by, while its entry is still the recommendation\'s', () => {
+    const inside = offer(recommendation(), 100.1)!
+    expect(aiProposalEntryRange(inside, 'paper', null)).toEqual({ min: 99.8, max: 100.2 })
+    const above = offer(recommendation(), 100.9)!
+    expect(aiProposalEntryRange(above, 'paper', 100.2)).toEqual({ min: 99.8, max: 100.2 })
+    // A price typed over the entry, or the entry cleared to market, is the user's own order.
+    expect(aiProposalEntryRange(inside, 'paper', 100.05)).toBeNull()
+    expect(aiProposalEntryRange(above, 'paper', null)).toBeNull()
+    expect(aiProposalEntryRange(above, 'paper', 100.3)).toBeNull()
+    // An exchange has no order that means "when the price trades in this range".
+    expect(aiProposalEntryRange(inside, 'live', null)).toBeNull()
+    expect(aiProposalEntryRange(above, 'live', 100.2)).toBeNull()
+    // A signal's proposal names no range.
+    expect(proposalFor(buy())!.entryRange).toBeUndefined()
+    expect(aiProposalEntryRange(proposalFor(buy())!, 'paper', null)).toBeNull()
+  })
+
+  it('stamps the expiry and the range where the form is submitted, and only on a position that still follows the recommendation', () => {
+    const modal = readFileSync(join(__dirname, '..', 'src', 'executors', 'NewExecutorModal.tsx'), 'utf-8')
+    expect(modal).toContain("const entryExpiresAt = type === 'position' && proposal !== null && followsProposal ? aiProposalEntryExpiry(proposal, mode) : null")
+    expect(modal).toContain("const entryRange = type === 'position' && proposal !== null && followsProposal ? aiProposalEntryRange(proposal, mode, positionParams.entryPrice) : null")
+    expect(modal).toContain('params: entryExpiresAt !== null || entryRange !== null ? { ...positionParams, ...fromRecommendation } : params,')
   })
 })
 

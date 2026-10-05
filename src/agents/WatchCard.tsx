@@ -3,7 +3,8 @@ import { Card } from '../components/Card'
 import type { AiConfig } from '../../shared/aiCost'
 import { AI_OPPORTUNITY_MAX_MODELS } from '../../shared/aiOpportunity'
 import { describeDecider } from '../../shared/aiPanel'
-import { AI_WATCH_EVENT_LIMITS, AI_WATCH_FRESH_SECONDS, describeAiWatchCost, type AiWatchBand, type AiWatchConfig } from '../../shared/aiWatch'
+import { AI_WATCH_EVENT_LIMITS, AI_WATCH_FRESH_SECONDS, describeAiWatchCost, describeWatchPause, type AiWatchBand, type AiWatchConfig } from '../../shared/aiWatch'
+import { AI_WATCH_PAPER_OPEN_LIMITS, AI_WATCH_PAPER_STAKES, describeAiWatchPaper, type AiWatchPaperConfig } from '../../shared/aiWatchPaper'
 import { EVENT_MAX_RANKED, type MarketEvent } from '../../shared/marketEvent'
 import { describeError } from '../utils/ipcError'
 import { buttonStyle, inputStyle, noteStyle } from './agentStyles'
@@ -32,19 +33,37 @@ function describeWatch(watch: AiWatchConfig): string {
   return `Each ${which} the scanner puts forward is put to ${listOf(watch.models.map(describeDecider))} as it is raised, at most ${watch.maxEventsPerDay} events a day.${gate}`
 }
 
-/** The watch's switch (shared/aiWatch.ts).
+/** What the tab knows of the watch's own paper trades, read from the executors on file. */
+export interface WatchPaperStanding {
+  /** Whether a paper account is set up to hold them to a balance. Null until it has been read. */
+  hasAccount: boolean | null
+  /** The pairs of the ones open now. */
+  open: string[]
+  /** How many the watch has opened that are still on file, open or stopped. */
+  total: number
+  /** What the ones that have ended add up to, in a sentence. Empty when none has. */
+  ended: string
+}
+
+/** The watch's switch (shared/aiWatch.ts), and the switch for its paper trades
+ * (shared/aiWatchPaper.ts).
  *
- * SWITCHING IT ON IS THE ONE CONFIRMATION IT GETS, so that confirmation states the most a day of
- * it can cost, and what it asks cannot be changed while it is on: the choices below are only
- * there while it is off. Switching it off asks nothing; it only ever makes things cheaper.
+ * SWITCHING THE WATCH ON IS THE ONE CONFIRMATION IT GETS, so that confirmation states the most a
+ * day of it can cost, and what it asks cannot be changed while it is on: the choices below are
+ * only there while it is off. Switching it off asks nothing; it only ever makes things cheaper.
  *
- * The card changes one setting through the bridge. It asks no model itself. */
+ * PAPER TRADES ARE A SECOND SWITCH WITH A CONFIRMATION OF THEIR OWN, which says what will be
+ * opened with nobody pressing anything, and that it is paper. They cost nothing and ask nothing.
+ *
+ * The card changes two settings through the bridge. It asks no model and opens nothing itself. */
 export function WatchCard({
   config,
   onConfig,
   scannerOn,
   events,
-  takenToday
+  takenToday,
+  paused = [],
+  paper = { hasAccount: null, open: [], total: 0, ended: '' }
 }: {
   config: AiConfig
   onConfig: (next: AiConfig) => void
@@ -53,8 +72,14 @@ export function WatchCard({
   events: MarketEvent[]
   /** Events the watch has taken up since the last UTC midnight. */
   takenToday: number
+  /** Models the watch has stopped asking today, because they keep failing or being refused. */
+  paused?: string[]
+  paper?: WatchPaperStanding
 }): React.JSX.Element {
-  const { watch } = config
+  const { watch, watchPaper } = config
+  const [paperModel, setPaperModel] = useState<string>(watchPaper.model ?? '')
+  const [paperStake, setPaperStake] = useState<number>(watchPaper.stakeQuote)
+  const [paperOpen, setPaperOpen] = useState<number>(watchPaper.maxOpen)
   const [models, setModels] = useState<string[]>(watch.models)
   const [limit, setLimit] = useState<number>(watch.maxEventsPerDay)
   const [band, setBand] = useState<AiWatchBand>(watch.minBand)
@@ -120,7 +145,43 @@ export function WatchCard({
     }
   }
 
+  // The model paper trades would follow: the one picked, while the watch still asks it.
+  const followed = watch.models.includes(paperModel) ? paperModel : (watch.models[0] ?? '')
+
+  async function paperOn(): Promise<void> {
+    if (busy) return
+    if (followed === '') {
+      setProblem('Paper trades follow one of the models the watch asks, and it asks none yet.')
+      return
+    }
+    const next: AiWatchPaperConfig = { enabled: true, model: followed, stakeQuote: paperStake, maxOpen: paperOpen }
+    if (!window.confirm(describeAiWatchPaper({ config: next, watchOn: watch.enabled, hasPaperAccount: paper.hasAccount === true }))) return
+    setBusy(true)
+    setProblem(null)
+    try {
+      onConfig(await window.api.ai.setConfig({ watchPaper: next }))
+    } catch (failure) {
+      setProblem(describeError(failure))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function paperOff(): Promise<void> {
+    if (busy) return
+    setBusy(true)
+    setProblem(null)
+    try {
+      onConfig(await window.api.ai.setConfig({ watchPaper: { enabled: false } }))
+    } catch (failure) {
+      setProblem(describeError(failure))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const labelStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', color: 'var(--text-primary)', cursor: busy ? 'default' : 'pointer' }
+  const selectLabelStyle: React.CSSProperties = { fontSize: '0.8rem', color: 'var(--text-secondary)' }
 
   return (
     <Card title="Watch">
@@ -138,6 +199,11 @@ export function WatchCard({
               Last, at {utcClock(activity.last.at)} UTC: {activity.last.text}
             </p>
           )}
+          {paused.map((model) => (
+            <p key={model} style={{ ...noteStyle, color: 'var(--gold)', marginTop: '0.3rem' }}>
+              {describeWatchPause(model)}
+            </p>
+          ))}
           {scannerOn === false && (
             <p style={{ ...noteStyle, color: 'var(--gold)', marginTop: '0.5rem' }}>The scanner is off, so the watch has nothing to ask about. Switch it on under Explorer.</p>
           )}
@@ -151,7 +217,7 @@ export function WatchCard({
         <>
           <p style={noteStyle}>
             <strong style={{ color: 'var(--text-secondary)' }}>Off.</strong> Nothing below is asked until Ask is pressed on an event. Switched on, the watch puts each event to
-            the models ticked here as the scanner raises it, with no click, and a call to trade raises a desktop notice. It places nothing.
+            the models ticked here as the scanner raises it, with no click, and a call to trade raises a desktop notice. It places nothing real.
           </p>
           <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '0.8rem' }}>
             {offered.map((model) => (
@@ -195,6 +261,86 @@ export function WatchCard({
           </div>
         </>
       )}
+      <div style={{ marginTop: '1rem', borderTop: '1px solid var(--border)', paddingTop: '0.8rem' }}>
+        <div style={{ fontSize: '0.66rem', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Paper trades from the watch</div>
+        {watchPaper.enabled ? (
+          <>
+            <p style={{ ...noteStyle, color: 'var(--text-primary)' }}>
+              <strong style={{ color: 'var(--up)' }}>On.</strong> Each call by {describeDecider(watchPaper.model ?? '')} at 65% confidence or more opens a paper position of{' '}
+              {watchPaper.stakeQuote} in the pair&apos;s quote currency by itself, with its own stop, target and time limit. At most {watchPaper.maxOpen} open at once, one an event, one on
+              a pair. Nothing real is placed.
+            </p>
+            <p style={{ ...noteStyle, color: 'var(--text-secondary)', marginTop: '0.4rem' }}>
+              {paper.total === 0
+                ? 'None opened yet.'
+                : `${paper.open.length === 0 ? 'None open now.' : `${paper.open.length} open now: ${listOf(paper.open)}.`} ${paper.total} on the Executors page in all.`}
+              {paper.ended !== '' && ` ${paper.ended}`}
+              {!watch.enabled && ' The watch is off, so none will be opened until it is switched on.'}
+            </p>
+            {paper.hasAccount === false && (
+              <p style={{ ...noteStyle, marginTop: '0.3rem' }}>
+                No paper account is set up, so their results are added to no balance. Each card on the Executors page says how its trade ended.
+              </p>
+            )}
+            <div style={{ marginTop: '0.7rem' }}>
+              <button onClick={() => void paperOff()} disabled={busy} style={buttonStyle('secondary', busy)}>
+                Switch paper trades off
+              </button>
+            </div>
+          </>
+        ) : watch.models.length === 0 ? (
+          <p style={noteStyle}>
+            <strong style={{ color: 'var(--text-secondary)' }}>Off.</strong> They follow one of the models the watch asks, so they can be switched on once the watch has been.
+          </p>
+        ) : (
+          <>
+            <p style={noteStyle}>
+              <strong style={{ color: 'var(--text-secondary)' }}>Off.</strong> Switched on, a call the watch would act on opens a paper position by itself: the one the Paper trade
+              button would fill in, at the stake set here. It is paper only and cannot be pointed at real money.
+            </p>
+            <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap', alignItems: 'center', marginTop: '0.7rem' }}>
+              <label style={selectLabelStyle}>
+                Follow{' '}
+                <select aria-label="Paper trades follow" value={followed} disabled={busy} onChange={(event) => setPaperModel(event.target.value)} style={inputStyle()}>
+                  {watch.models.map((model) => (
+                    <option key={model} value={model}>
+                      {describeDecider(model)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label style={selectLabelStyle}>
+                Stake a trade{' '}
+                <select aria-label="Paper trade stake" value={paperStake} disabled={busy} onChange={(event) => setPaperStake(Number(event.target.value))} style={inputStyle()}>
+                  {AI_WATCH_PAPER_STAKES.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label style={selectLabelStyle}>
+                Open at once, at most{' '}
+                <select aria-label="Paper trades open at once" value={paperOpen} disabled={busy} onChange={(event) => setPaperOpen(Number(event.target.value))} style={inputStyle()}>
+                  {AI_WATCH_PAPER_OPEN_LIMITS.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button onClick={() => void paperOn()} disabled={busy} style={buttonStyle('primary', busy)}>
+                Switch paper trades on
+              </button>
+            </div>
+            {paper.total > 0 && (
+              <p style={{ ...noteStyle, marginTop: '0.5rem' }}>
+                {paper.total} opened earlier {paper.total === 1 ? 'is' : 'are'} on the Executors page.{paper.ended !== '' && ` ${paper.ended}`}
+              </p>
+            )}
+          </>
+        )}
+      </div>
       {problem !== null && <p style={{ ...noteStyle, color: 'var(--down)', marginTop: '0.6rem' }}>{problem}</p>}
       <p style={{ ...noteStyle, marginTop: '0.8rem' }}>
         The watch takes up an event only while it is fresh — raised live in the last {AI_WATCH_FRESH_SECONDS / 60} minutes, among the strongest {EVENT_MAX_RANKED} of its minute

@@ -113,6 +113,7 @@ export function describeExecutorOutcome(state: SingleMarketExecutorState): strin
     return `${state.fills.length} of ${state.numOrders} slices executed.`
   }
   if (state.kind === 'position') {
+    if (state.exitReason === 'entry_expired') return 'The entry price was not reached before the entry expired — nothing was bought.'
     if (state.status === 'closed') return `Entered and closed — ${state.exitReason ?? 'exit'}.`
     if (state.status === 'open') return 'Entered and still open at the end of the range.'
     return 'The entry price was never reached — nothing was bought.'

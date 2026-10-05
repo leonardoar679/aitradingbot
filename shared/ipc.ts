@@ -551,7 +551,27 @@ export interface PositionExecutorParams {
   stopLossPct: number | null
   timeLimitSec: number | null
   trailingStop: { activationPct: number; trailPct: number } | null
+  /** Simulation only. Unix seconds after which an entry that has not filled is abandoned: the
+   * position closes having bought nothing. Set on a paper position made from a recommendation
+   * (shared/aiProposal.ts, shared/aiWatchPaper.ts), whose entry is only good for so many minutes.
+   * Absent or null, an entry waits for as long as the executor runs, as every one stored before
+   * this existed still does. A live position never carries it: a resting live order is cancelled
+   * by a person, not by a clock in this app. */
+  entryExpiresAt?: number | null
+  /** Simulation only. The range of prices a recommendation said to enter in. With it the position
+   * enters in the first candle that trades inside the range -- at that candle's open when the
+   * open is inside it, otherwise at the edge the price came in by -- whichever side the price
+   * comes from, and `entryPrice` is not consulted. That is the rule a recommendation is scored by
+   * (shared/aiOpportunityOutcome.ts), so a paper position made from one enters where its score
+   * says it did, and a price that has left the range is neither chased nor bought at once from
+   * its far side. Absent or null on every other position, and never on a live one: an exchange
+   * has no order that means this. */
+  entryRange?: { min: number; max: number } | null
 }
+
+/** How a simulated position ended. `entry_expired` is one that never began: its entry was not
+ * reached before `entryExpiresAt`, and it bought nothing. */
+export type PositionExitReason = 'take_profit' | 'stop_loss' | 'time_limit' | 'trailing_stop' | 'liquidation' | 'entry_expired'
 
 export type OrderExecutionStrategy = 'limit' | 'limit_maker' | 'market' | 'limit_chaser'
 
@@ -623,6 +643,22 @@ export interface ExecutorConfig {
    * act: the executor was submitted by a person, like every other one. Absent on every executor
    * set up from an empty form. */
   proposedBy?: { model: string; candleTime: number; confidence: number }
+  /** Set on a PAPER Position the watch opened by itself (shared/aiWatchPaper.ts): the event it was
+   * about and the answer it followed. The watch finds its own trades by this, to hold itself to
+   * one an event and so many open at once, and to stop and settle one when its position has
+   * closed. Never present on a live executor: the watch has no way to make one. */
+  watch?: {
+    eventId: string
+    eventTime: number
+    model: string
+    confidence: number
+    /** How it ended, written when the watch stops it because its position has closed: the exit,
+     * what it made or lost in the quote asset after the simulation's fees, and the minute. A
+     * stopped executor is not simulated again, so this is what its card has to show, and it is
+     * all there is with no paper account for the result to go to. Absent while it is open, and on
+     * one a person stopped first. */
+    result?: { exit: PositionExitReason; pnlQuote: number; closedAt: number }
+  }
   /** Set once a live executor's order actually fills (market: immediately; limit: whenever
    * LiveOrderScheduler detects the resting order resolved). Null for every paper executor and
    * while any live limit order is still resting. For a live DCA executor with more than one

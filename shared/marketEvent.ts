@@ -490,3 +490,69 @@ const TYPE_LABEL: Record<MarketEventType, string> = {
 export function describeEventType(type: MarketEventType): string {
   return TYPE_LABEL[type]
 }
+
+/** One of the five things an event's score is the mean of, with the fact behind it. */
+export interface EventReason {
+  component: keyof EventComponents
+  label: string
+  /** 0 to 100. */
+  score: number
+  /** The reading the score was made from, in words. */
+  fact: string
+}
+
+function times(value: number): string {
+  return `${value.toFixed(1)} times`
+}
+
+/** Why this pair was singled out: each component of its score beside the reading behind it.
+ *
+ * Only what the event's own record holds. A component whose reading was not kept -- where the
+ * closes sat, how far past the range the price went -- is said from the score, which is that
+ * reading on a fixed scale. */
+export function eventReasons(event: Pick<MarketEvent, 'components' | 'returnsPct' | 'moveSigmas' | 'volumeRatio' | 'rangeRatio' | 'direction'>): EventReason[] {
+  const { components } = event
+  const up = event.direction !== 'down'
+  const move = `${event.returnsPct.m15 >= 0 ? '+' : ''}${event.returnsPct.m15.toFixed(2)}%`
+  return [
+    {
+      component: 'price',
+      label: 'Move',
+      score: components.price,
+      fact: `${move} in fifteen minutes, ${times(Math.abs(event.moveSigmas))} its usual size (full at ${FULL_MOVE_SIGMAS})`
+    },
+    {
+      component: 'volume',
+      label: 'Volume',
+      score: components.volume,
+      fact:
+        event.volumeRatio === null
+          ? 'nothing traded in the hours before to compare the last five minutes with'
+          : `the last five minutes traded ${times(event.volumeRatio)} the usual (full at ${FULL_VOLUME_RATIO})`
+    },
+    {
+      component: 'volatility',
+      label: 'Bar size',
+      score: components.volatility,
+      fact: event.rangeRatio === null ? 'no usual bar size to compare with' : `bars ${times(event.rangeRatio)} their usual range (full at ${FULL_RANGE_RATIO})`
+    },
+    {
+      component: 'pressure',
+      label: 'Pressure',
+      score: components.pressure,
+      fact:
+        components.pressure > 0
+          ? `the last five minutes closed ${Math.round(50 + components.pressure / 2)}% of the way ${up ? 'up' : 'down'} their bars, by volume`
+          : `the last five minutes did not close on the ${up ? 'upper' : 'lower'} side of their bars`
+    },
+    {
+      component: 'breakout',
+      label: 'Break',
+      score: components.breakout,
+      fact:
+        components.breakout > 0
+          ? `${up ? 'above the high' : 'below the low'} of the four hours before the move${components.breakout >= 100 ? `, by ${FULL_BREAK_SIGMAS} usual moves or more` : ''}`
+          : 'inside the range of the four hours before the move'
+    }
+  ]
+}

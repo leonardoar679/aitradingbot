@@ -13,8 +13,10 @@ export type {
   XemmExecutorParams,
   ArbitrageExecutorParams,
   SpreadMarket,
-  MarketMakingExecutorParams
+  MarketMakingExecutorParams,
+  PositionExitReason
 } from '../../shared/ipc'
+import type { PositionExitReason } from '../../shared/ipc'
 
 export interface GridLevelState {
   price: number
@@ -69,8 +71,6 @@ export interface TwapExecutorState {
   done: boolean
 }
 
-export type PositionExitReason = 'take_profit' | 'stop_loss' | 'time_limit' | 'trailing_stop' | 'liquidation'
-
 export interface PositionExecutorState {
   kind: 'position'
   side: 'buy' | 'sell'
@@ -79,6 +79,8 @@ export interface PositionExecutorState {
   enteredAt: number | null
   /** High-water (buy) / low-water (sell) price since entry — drives the trailing-stop exit. */
   trailingPeakPrice: number | null
+  /** `entry_expired` is the one that is not an exit: the entry was never filled before its expiry
+   * (PositionExecutorParams.entryExpiresAt), so the position closed having bought nothing. */
   exitReason: PositionExitReason | null
   exitPrice: number | null
   closedAt: number | null
