@@ -4,6 +4,7 @@ import { FEE_RATE } from '../shared/fees'
 import type { Candle } from '../shared/ipc'
 import { readEventAt } from '../shared/marketEvent'
 import { classifyTitle, type NewsCategory } from '../shared/newsTitles'
+import { monitoringTagTickers } from './monitoringTitles'
 
 // Do Binance's own announcements move prices, by enough to trade after them? See research/NEWS.md
 // for the question, the rule and the result.
@@ -29,21 +30,32 @@ const HELD_OUT_TO = Date.parse('2026-10-01T00:00:00Z') / 1000
 type Side = 1 | -1
 type Market = 'spot' | 'um'
 
+/** The kinds measured: the three the app's patterns read (shared/newsTitles.ts), and the Monitoring
+ * Tag (./monitoringTitles.ts), measured after them under the same rule. NEWS.md says why. */
+type Category = NewsCategory | 'MONITORING_TAG'
+
 /** Each kind of news, the side it is traded on, where its price is read, and what one side of a
- * trade in it is charged in slippage. A delisted coin's book thins as it goes; the others are
- * ordinary small coins. */
-const KINDS: Record<NewsCategory, { side: Side; market: Market; slippage: number; label: string }> = {
+ * trade in it is charged in slippage. A coin being delisted, or marked as one that may be, has a
+ * thin book; the others are ordinary small coins. */
+const KINDS: Record<Category, { side: Side; market: Market; slippage: number; label: string }> = {
   DELISTING: { side: -1, market: 'spot', slippage: 0.001, label: 'Delisting, short (paper only), on its spot USDT pair' },
   FUTURES_LAUNCH: { side: 1, market: 'spot', slippage: 0.0005, label: 'Futures launch, long, on its spot USDT pair' },
-  SPOT_LISTING: { side: 1, market: 'um', slippage: 0.0005, label: 'Spot listing, long, on its USDT perpetual' }
+  SPOT_LISTING: { side: 1, market: 'um', slippage: 0.0005, label: 'Spot listing, long, on its USDT perpetual' },
+  MONITORING_TAG: { side: -1, market: 'spot', slippage: 0.001, label: 'Monitoring Tag, short (paper only), on its spot USDT pair' }
 }
-const CATEGORIES: NewsCategory[] = ['DELISTING', 'FUTURES_LAUNCH', 'SPOT_LISTING']
+const CATEGORIES: Category[] = ['DELISTING', 'FUTURES_LAUNCH', 'SPOT_LISTING', 'MONITORING_TAG']
+
+/** The lists each kind is read from. The first three keep the two they were scored on: reading the
+ * news list (49) for them as well would change a study already scored. The Monitoring Tag is
+ * announced in the news list, and once in the delisting list. */
+const FIRST_THREE_LISTS = [48, 161]
+const MONITORING_TAG_LISTS = [49, 161, 48]
 
 /** One coin named by one announcement. */
 interface NewsPair {
   key: string
   articleId: number
-  category: NewsCategory
+  category: Category
   releaseSec: number
   title: string
   ticker: string
@@ -63,7 +75,7 @@ function daysAround(sec: number): string[] {
   return [-3, -2, -1, 0, 1].map((offset) => dayOf(sec + offset * 86_400))
 }
 
-function candidatesFor(category: NewsCategory, ticker: string): string[] {
+function candidatesFor(category: Category, ticker: string): string[] {
   const own = `${ticker}USDT`
   if (category === 'SPOT_LISTING') return [own, `1000${ticker}USDT`]
   const bare = ticker.replace(/^(1000000|1000|1M)(?=[A-Z])/, '')
@@ -75,11 +87,17 @@ function splitOf(sec: number): 'discovery' | 'heldout' | null {
   return sec < HELD_OUT_TO ? 'heldout' : null
 }
 
-function readAnnouncements(): { id: number; title: string; releaseSec: number }[] {
-  const rows: { id: number; title: string; releaseSec: number }[] = []
+interface Announcement {
+  id: number
+  title: string
+  releaseSec: number
+}
+
+function readAnnouncements(catalogs: number[]): Announcement[] {
+  const rows: Announcement[] = []
   const seen = new Set<number>()
-  for (const catalog of [48, 161]) {
-    for (const row of JSON.parse(readFileSync(join(DIR, `announcements-${catalog}.json`), 'utf-8')) as { id: number; title: string; releaseSec: number }[]) {
+  for (const catalog of catalogs) {
+    for (const row of JSON.parse(readFileSync(join(DIR, `announcements-${catalog}.json`), 'utf-8')) as Announcement[]) {
       if (seen.has(row.id)) continue
       seen.add(row.id)
       rows.push(row)
@@ -90,22 +108,28 @@ function readAnnouncements(): { id: number; title: string; releaseSec: number }[
 
 function plan(): NewsPair[] {
   const pairs: NewsPair[] = []
-  for (const row of readAnnouncements()) {
-    const news = classifyTitle(row.title)
-    if (news === null) continue
-    for (const ticker of news.tickers) {
+  const add = (row: Announcement, category: Category, tickers: string[]): void => {
+    for (const ticker of tickers) {
       pairs.push({
         key: `${row.id}:${ticker}`,
         articleId: row.id,
-        category: news.category,
+        category,
         releaseSec: row.releaseSec,
         title: row.title,
         ticker,
-        market: KINDS[news.category].market,
-        candidates: candidatesFor(news.category, ticker),
+        market: KINDS[category].market,
+        candidates: candidatesFor(category, ticker),
         days: daysAround(row.releaseSec)
       })
     }
+  }
+  for (const row of readAnnouncements(FIRST_THREE_LISTS)) {
+    const news = classifyTitle(row.title)
+    if (news !== null) add(row, news.category, news.tickers)
+  }
+  for (const row of readAnnouncements(MONITORING_TAG_LISTS)) {
+    const tickers = monitoringTagTickers(row.title)
+    if (tickers !== null) add(row, 'MONITORING_TAG', tickers)
   }
   return pairs
 }
@@ -337,9 +361,9 @@ if (MODE === 'check' || MODE === 'study') {
   const manifest = JSON.parse(readFileSync(join(DIR, 'manifest.json'), 'utf-8')) as Manifest
   const scored: Scored[] = []
   const skipped = new Map<string, number>()
-  const skip = (category: NewsCategory, reason: string) => skipped.set(`${category}: ${reason}`, (skipped.get(`${category}: ${reason}`) ?? 0) + 1)
+  const skip = (category: Category, reason: string) => skipped.set(`${category}: ${reason}`, (skipped.get(`${category}: ${reason}`) ?? 0) + 1)
   /** For MODE=check: where the largest one-minute move near each announcement fell. */
-  const peakOffsets = new Map<NewsCategory, number[]>()
+  const peakOffsets = new Map<Category, number[]>()
   let filledMinutes = 0
   let minutesRead = 0
 

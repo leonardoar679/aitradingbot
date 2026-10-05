@@ -1,19 +1,23 @@
-// Downloads Binance's own announcement lists (free, no key): new listings (catalog 48) and
-// delistings (catalog 161), every page, as the public announcement pages read them.
-// research/NEWS.md says what for.
+// Downloads Binance's own announcement lists (free, no key): new listings (catalog 48), delistings
+// (catalog 161) and Binance's news (catalog 49), every page, as the public announcement pages read
+// them. research/NEWS.md says what for.
 //
 //   node research/fetch-announcements.mjs
+//   CATALOGS=49 node research/fetch-announcements.mjs     only the lists named
 //
-// Writes .candles/news/announcements-48.json and announcements-161.json: [{ id, code, title,
-// releaseSec }], newest first, as Binance lists them. Only the list is read -- the title and the
-// minute it was released -- never an article's body. A re-run replaces both files.
+// Writes .candles/news/announcements-{48,161,49}.json: [{ id, code, title, releaseSec }], newest
+// first, as Binance lists them. Only the list is read -- the title and the minute it was released
+// -- never an article's body. A re-run replaces the files it reads. The news list was added for the
+// Monitoring Tag, after the other two had been read and scored, and was read on its own.
 
 import { mkdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
 
 const OUT = process.env.OUT || '.candles/news'
 const PAGE_SIZE = 50
-const CATALOGS = { 48: 'New Cryptocurrency Listing', 161: 'Delisting' }
+const ALL_CATALOGS = { 48: 'New Cryptocurrency Listing', 161: 'Delisting', 49: 'Latest Binance News' }
+const ONLY = process.env.CATALOGS ? process.env.CATALOGS.split(',').map((id) => id.trim()) : null
+const CATALOGS = Object.fromEntries(Object.entries(ALL_CATALOGS).filter(([id]) => ONLY === null || ONLY.includes(id)))
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 

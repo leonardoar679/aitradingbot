@@ -12,6 +12,9 @@ day before. Its result is at the end, under [The held-out half](#the-held-out-ha
 - **A futures launch or a listing moves the price at once.** It is over before an app reading once a
   minute could act.
 
+**A fourth kind, Binance's Monitoring Tag, was added after.** Its rule is under
+[A fourth kind](#a-fourth-kind-the-monitoring-tag), committed before any of its candles were read.
+
 Reproduce with `research/fetch-announcements.mjs`, `research/fetch-news-candles.mjs` and
 `research/news.ts`; the commands are at the top of `news.ts`.
 
@@ -288,3 +291,68 @@ choices offered, and not "leave it":
 - **the models**, as the plan first said, alongside the rule.
 
 The README describes what was built (Discovery, "Binance's announcements on Discovery").
+
+## A fourth kind: the Monitoring Tag
+
+**This section was committed before a single candle of a tagged coin was fetched.** Its result is
+added below it, once.
+
+**What it is.** Since July 2023, Binance has marked the coins it may delist with a Monitoring Tag
+("Introducing Seed Tags & Monitoring Tags for Tokens with High Volatility and Risks"). Coins are
+added to it in announcements like "Binance Will Extend the Monitoring Tag to Include AVA, GNS, SCR &
+TOWNS on 2026-09-04".
+
+**Why it is next.** The tag is the warning before the delisting that passed above. From the titles
+alone, before any price was read:
+- 81 of the 87 coins delisted in the held-out half had been tagged first, a median of 57 days
+  before.
+- 84 of the 97 coins tagged before April 2026 had been delisted by 5 October 2026.
+
+If a delisting is a slow fall, the tag may be where it starts. The question is the one asked of the
+other kinds: does the tag's announcement move the price by enough, and for long enough, for an app
+that reads once a minute to trade after it?
+
+**The announcements.** They are in Binance's news list (catalog 49): 4,439 articles back to July
+2017, read on 5 October 2026, titles and release times only. 26 of them name the tag, and one more
+is in the delisting list. A fixed pattern reads them (`research/monitoringTitles.ts`, pinned on all
+27 titles by `tests/monitoringTitles.test.ts`):
+- Only the coins being added are named. Coins the same title takes the tag, or a Seed Tag, off are
+  left out.
+- Pegged coins (AEUR, VAI) are left out, as for every kind.
+- Two of the 27 add no coin: the one introducing the tag, and one that only takes tags off.
+
+| | Announcements | Coins named |
+|---|---|---|
+| Before 2025 | 5 | 34 |
+| Held out, January 2025 to September 2026 | 20 | 103 |
+
+**The three kinds already scored are untouched.** They are still read from the two lists they were
+scored on. With the news list added, the coins they name are byte for byte what they were.
+
+### The rule
+
+Everything is as for the other kinds, unchanged:
+- the candles and the symbols;
+- the entry, at the second bar after the announcement's minute;
+- the bracket, and the four-hour hold;
+- the usual, fees, and t on hourly means.
+
+The tag is traded short (paper only), on the coin's USDT spot pair. Slippage is 0.1% a side, as for
+a delisting, because a tagged coin's book is thin.
+
+The same two trades are held to the same bars:
+1. **The bracket** passes if its mean net is above zero, and its excess over the usual has
+   **t ≥ 2**.
+2. **Held four hours** passes if its mean net is above zero, and its excess over the usual has
+   **t ≥ 3**.
+
+The tag passes if either trade passes **on the held-out half**: 20 announcements, 103 coins.
+- Before 2025 is scored and shown beside it, and decides nothing.
+- Five announcements are too few to choose a rule from, and none was chosen from them. These are
+  the delisting's trades, carried over before any tagged coin's price was read.
+- The minutes are checked first, on both halves, as they were above.
+
+**A pass builds nothing by itself.** The user is asked what the app should do with it, as they were
+for a delisting. A short stays paper only.
+
+**If it fails, nothing is built,** and this section says so.
