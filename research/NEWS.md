@@ -1,9 +1,16 @@
 # Do Binance's own announcements move prices? — the rule, fixed before the held-out half was scored
 
-**Written and committed before `SET=heldout` was run with `MODE=check` or `MODE=study`.** Every
-result in this file so far comes from announcements made before 2025. The held-out half (January
-2025 to September 2026) has been fetched, and only counted: which coins had a market the day
-before. None of its prices have been looked at.
+**The rule below was committed (4c9028f) before `SET=heldout` was run with `MODE=check` or
+`MODE=study`.** Until then, every result here came from announcements made before 2025, and the
+held-out half (January 2025 to September 2026) had only been counted: which coins had a market the
+day before. Its result is at the end, under [The held-out half](#the-held-out-half-january-2025-to-september-2026).
+
+**The answer:**
+- **A delisting passes, held for four hours as a paper short.** The coin is 13.2% lower four hours
+  on, after costs. 75 of 87 coins were lower, and two squeezes cost 44% and 80%.
+- **The bracket does not pass for any kind.**
+- **A futures launch or a listing moves the price at once.** It is over before an app reading once a
+  minute could act.
 
 Reproduce with `research/fetch-announcements.mjs`, `research/fetch-news-candles.mjs` and
 `research/news.ts`; the commands are at the top of `news.ts`.
@@ -179,3 +186,99 @@ sell, not a trade, and a notice of that kind is not in the approved plan: it wou
 built.
 
 **If nothing passes, nothing is built,** and this file says so.
+
+## The held-out half: January 2025 to September 2026
+
+Scored once, after the rule above was committed.
+
+**The minutes are right here too.** The largest one-minute move fell in the announcement's minute
+or the two after it for most coins, and for none before it:
+
+| | Coins | 0 to 2 minutes after |
+|---|---|---|
+| Delisting | 87 | 49 (56%) |
+| Futures launch | 15 | 14 (93%) |
+| Spot listing | 29 | 26 (90%) |
+
+**The results.** Means in percent, in the direction the news is traded, with t on hourly means. One
+spot listing had under a day of candles before it and is left out.
+
+| | Delisting (short) | Futures launch (long) | Spot listing (long) |
+|---|---|---|---|
+| Coins (announcement hours) | 87 (18) | 15 (11) | 28 (23) |
+| The hour before the announcement | +0.30 (t +0.8) | −0.63 (t −1.2) | −0.15 (t −0.3) |
+| Move over 1 minute | +3.57 (t +1.2) | +9.90 (t +3.6) | +13.18 (t +4.6) |
+| 5 minutes | +5.85 (t +1.0) | +12.99 (t +3.1) | +15.41 (t +4.2) |
+| 15 minutes | +3.24 (t +0.5) | +12.33 (t +2.9) | +16.31 (t +3.9) |
+| 1 hour | +2.59 (t +0.2) | +11.45 (t +3.6) | +19.53 (t +3.5) |
+| 4 hours | +14.57 (t +3.1) | +11.35 (t +2.9) | +19.00 (t +3.5) |
+| 1 day | +18.51 (t +4.9) | +4.50 (t +0.8) | +16.59 (t +1.9) |
+| 1 day, vs the usual | +16.77 (t +4.5) | −13.79 (t −1.2) | +10.61 (t +1.3) |
+| Missed before the entry | +0.11 (t +0.0); +5.37 a coin | +12.22 (t +3.2) | +16.53 (t +4.0) |
+| The bracket, net | +0.29 (t +0.7), 47% ahead | −0.40 (t −0.3), 33% ahead | −0.56 (t −0.7), 18% ahead |
+| The bracket, vs the usual | +0.69 (t +1.7) | −0.22 (t −0.2) | −0.37 (t −0.5) |
+| **Held four hours, net** | **+13.17 (t +4.8)**, 75 of 87 ahead, worst −80.3 | −0.94 (t −0.7), worst −21.9 | +2.39 (t +0.6), worst −45.1 |
+| **Held four hours, vs the usual** | **+13.37 (t +4.9)** | −3.25 (t −1.7) | +1.91 (t +0.5) |
+
+**Against the rule:**
+
+| | The bracket (t ≥ 2) | Held four hours (t ≥ 3) | |
+|---|---|---|---|
+| Delisting | +0.29 net, vs the usual t 1.7: fails | **+13.17 net, vs the usual t 4.9: passes** | **passes** |
+| Futures launch | −0.40 net: fails | −0.94 net: fails | fails |
+| Spot listing | −0.56 net: fails | +2.39 net, t 0.5: fails | fails |
+
+### What it says
+
+**A delisting is still a slow fall, held for four hours.**
+- From the second bar to four hours on, the short made 13.2% a coin on hourly means and 15.5% a
+  coin over all coins. That is half what it made before 2025, and far beyond its costs.
+- The bracket still keeps too little of it to pass.
+
+**One announcement was not a plain delisting.** UTK's, on 14 April 2026, came with a rebrand and an
+airdrop, and the coin doubled at once.
+- The patterns read it as a delisting, as was written down before this half was scored, so it
+  stays in.
+- It is its own hour, and it pulls the hourly means at 1 to 60 minutes to nearly nothing. Per coin,
+  the fall at an hour was 14%.
+- Shorted from the second bar, when it had already doubled, it still made about 23% by four hours.
+
+**The tail is part of the trade.** Two coins were squeezed upward after their announcements. Held
+short with no stop:
+
+| Coin | Announced | Rose | Lost |
+|---|---|---|---|
+| ALPACA | April 2025 | 84% within the hour | 44% |
+| BSW | June 2025 | 73% within four hours | 80% |
+
+A coin about to be delisted is a crowded short. The mean is what is left after those.
+
+**A futures launch and a listing move the price at once, and are done.**
+- 15 futures launches added 12% before an app reading once a minute could buy.
+- 28 listings of coins that already had a perpetual added 16.5%.
+- From the entry on, neither trade pays for either kind.
+
+### What it means for the app
+
+By the rule, delisting passes, so Stage 7 goes ahead for it alone. But what passed is not quite
+what the plan proposed to build.
+
+**Raising it for the watch would not capture it.** The plan raises a passing kind "as an event, so
+the watch takes it up like a scanner event". The watch's paper trade follows the model's own entry,
+stop and target, which is a bracket by another name, and the bracket is what failed.
+
+**What paid is a rule.** Sell short at once and hold four hours, with no stop.
+- A short is paper only here.
+- Binance spot cannot be sold short in any case.
+
+**For real money, the same finding points the other way: to holders.** A holder who sold at the
+second bar rather than four hours later kept about 13% of the coin's value, on average. That is a
+reason to sell, not a trade. A notice of it is not in the approved plan.
+
+So the parts every use of it needs are built:
+- the reader of Binance's list;
+- the patterns, moved to `shared/`;
+- the news on Discovery.
+
+How a delisting should act is the user's to choose: a paper short by the rule, the models, a notice
+to someone holding the coin, or nothing.

@@ -272,6 +272,24 @@ The result:
   kept falling.
 - So **nothing was built**: positioning is not read, shown or put to a model.
 
+**What Binance's own announcements do**, measured the same way (`research/NEWS.md`), before any
+news was read in the app.
+- **Three kinds, sorted by fixed patterns on the title, never by a model:** delistings, launches of
+  a USDT perpetual, and spot listings of a coin that already had a perpetual.
+- **Data:** each announcement's minute is from Binance's own lists. The coins' 1-minute candles
+  come from Binance's archive, which keeps delisted coins.
+- **The rule was committed** before the held-out half, 2025 to September 2026, was scored.
+
+The result:
+- **A futures launch or a listing moves the price at once:** 7% to 16%, nearly all of it before an
+  app that reads the list once a minute could buy. From there, no trade pays.
+- **A delisting is a slow fall.** On the held-out half, a coin was 13% lower four hours after an
+  app could first act, after costs; before 2025 it was 25%. 75 of 87 coins were lower.
+- **Held short four hours, that is the first trade in these event studies to pass on held-out
+  data.** It is paper only: a short can never be placed for real here, and Binance spot cannot be
+  sold short. Two coins were squeezed upward, and a held short lost 44% and 80% on them.
+- **The usual bracket**, with a stop and a target, does not pass for any kind.
+
 ### AI signals — paper only
 
 A model can be asked for a buy / sell / hold decision on a market. It is asked through
