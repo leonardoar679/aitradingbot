@@ -216,6 +216,21 @@ scored once on four more large pairs and on eight smaller ones chosen by rule:
 
 With that, a watched pair raises about one event a day, large or small.
 
+**What comes before an event**, measured the same way (`research/SETUPS.md`), to see whether a
+model could be asked about a market about to move instead of one that already has. Two setups,
+fixed formulas on the detector's own reading with scales set by how often they fire: a coil (an
+hour's range at most 1.5 usual moves) pressed against the four-hour high or low, and an early move
+on three times the usual volume while the score is still under candidate. The rule was committed
+before the held-out pairs were scored.
+
+- **An early move predicts an event**: one follows it within the hour six to eight times as often
+  as an arbitrary minute, on both held-out sets. It is the start of the move the detector later
+  names. A coil predicts one at most 1.6 times as often.
+- **Neither is a trade.** Taken in its direction with the same bracket, every setup loses 0.25% to
+  0.38% a trade after costs, and does worse than the same trade at an arbitrary minute — seven
+  rows of eight significantly. Being early to a move that does not continue is losing sooner.
+- So **nothing was built**: no setup is recorded, listed or put to a model.
+
 ### AI signals — paper only
 
 A model can be asked for a buy / sell / hold decision on a market. It is asked through

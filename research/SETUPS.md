@@ -110,4 +110,31 @@ The two `research/EVENTS.md` used, unchanged:
 
 ## Result
 
-*To be written after the held-out sets are scored, once.*
+Scored once on each held-out set, on 5 October 2026. Event within 60 minutes, and the bracket:
+
+| | Discovery | `confirm` (4 large pairs) | `small` (8 smaller pairs) |
+|---|---|---|---|
+| Coil up: event follows, ratio (t) | 1.6 (+5.9) | 1.3 (+3.9) | 1.6 (+5.7) |
+| Coil down: event follows, ratio (t) | 1.4 (+4.2) | 1.05 (+1.5) | 1.45 (+3.8) |
+| Early move up: event follows, ratio (t) | 7.9 (+26.9) | **8.4 (+25.2)** | **5.9 (+22.5)** |
+| Early move down: event follows, ratio (t) | 7.5 (+23.6) | **7.7 (+21.1)** | **6.3 (+14.2)** |
+| Coil up: bracket net, against the usual | −0.263%, −0.024% (t −3.3) | −0.275%, −0.032% (t −5.0) | −0.366%, −0.064% (t −5.3) |
+| Coil down: bracket net, against the usual | −0.247%, −0.012% (t −1.5) | −0.252%, −0.018% (t −2.2) | −0.335%, −0.046% (t −3.8) |
+| Early move up: bracket net, against the usual | −0.277%, −0.037% (t −5.4) | −0.273%, −0.030% (t −4.3) | −0.351%, −0.049% (t −3.6) |
+| Early move down: bracket net, against the usual | −0.301%, −0.067% (t −10.5) | −0.289%, −0.055% (t −8.8) | −0.383%, −0.094% (t −8.3) |
+| Setups scored (coil up, coil down, early up, early down) | 8,770, 5,820, 12,584, 13,950 | 9,645, 5,870, 11,410, 13,397 | 6,559, 8,424, 9,883, 9,568 |
+
+**1. A setup predicts an event: confirmed for the early move, not for the coil.** An early move is
+followed within the hour by an event in its direction six to eight times as often as an
+arbitrary minute on both held-out sets, with t above 14 everywhere. A coil is followed by one at
+most 1.6 times as often, and on the large pairs the downward coil not at all (1.05, t = 1.5).
+
+**2. A setup is a trade by itself: not confirmed, for any of the four.** Every row on both held-out
+sets loses between 0.25% and 0.38% a trade after costs, and every one does *worse* than the same
+bracket at an arbitrary minute — significantly so in seven of the eight. Taking a market in the
+direction it has just started moving, or of the edge it is pressed against, is a worse trade
+than taking it at random, which is `research/EVENTS.md`'s finding again, a few minutes sooner.
+
+**3. Nothing is built.** No setup confirmed statement 2, so none goes into the app: no record of
+its own, no listing on the scanner, no second benchmark dataset. What a model would be asked
+about is a move that has started, and the move, early or late, is not where an edge is.
