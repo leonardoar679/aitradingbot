@@ -10,6 +10,7 @@ import {
   paperRiskProblem,
   paperStake
 } from '../../shared/paperRisk'
+import { healPaperDigest } from '../../shared/paperDigest'
 import { describeError } from '../utils/ipcError'
 import { settingsWrites } from '../utils/settingsWrites'
 import { fieldLabelStyle, formButtonStyle, textInputStyle } from '../settings/formStyles'
@@ -21,11 +22,14 @@ const EXAMPLE_STOPS = [0.5, 1, 3]
 const amount = (value: number): string => value.toLocaleString('en-US', { maximumFractionDigits: 2 })
 
 /** How the paper trades the app opens by itself -- the watch's and the news rules' -- are sized,
- * and how much they may stake together (shared/paperRisk.ts). Kept in settings.json, where those
- * two read it each time they open one. Both settings only ever open less. */
+ * and how much they may stake together (shared/paperRisk.ts), and whether a notice tells each day
+ * what they did the day before (shared/paperDigest.ts). Kept in settings.json, where those two read
+ * it each time they open one. Both sizing settings only ever open less. */
 export function PaperRiskCard(): React.JSX.Element {
   const [saved, setSaved] = useState<PaperRiskSettings | null>(null)
   const [draft, setDraft] = useState<PaperRiskSettings | null>(null)
+  const [digestSaved, setDigestSaved] = useState<boolean | null>(null)
+  const [digest, setDigest] = useState(true)
   const [out, setOut] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(false)
@@ -37,6 +41,9 @@ export function PaperRiskCard(): React.JSX.Element {
         const risk = healPaperRisk(settings.paperRisk)
         setSaved(risk)
         setDraft(risk)
+        const told = healPaperDigest(settings.paperDigest)
+        setDigestSaved(told.enabled)
+        setDigest(told.enabled)
         setOut(paperOut(settings.executors, 'USDT'))
       },
       (failure: unknown) => setProblem(describeError(failure))
@@ -58,7 +65,11 @@ export function PaperRiskCard(): React.JSX.Element {
     setDone(false)
     setProblem(null)
     try {
-      await settingsWrites(() => window.api.settings.set({ paperRisk: draft }))
+      // The digest's last day told is kept as it is on file: only its switch is the card's.
+      await settingsWrites(async () => {
+        const fresh = await window.api.settings.get()
+        await window.api.settings.set({ paperRisk: draft, paperDigest: { ...healPaperDigest(fresh.paperDigest), enabled: digest } })
+      })
       read()
       setDone(true)
     } catch (failure) {
@@ -71,7 +82,7 @@ export function PaperRiskCard(): React.JSX.Element {
   if (draft === null || saved === null) return <Card title="Paper trades the app opens by itself">{problem ?? 'Loading…'}</Card>
 
   const examples = EXAMPLE_STOPS.map((stopPct) => `${amount(paperStake({ risk: draft, stakeQuote: Number.POSITIVE_INFINITY, stopPct }))} at a stop ${stopPct}% away`)
-  const changed = draft.sizing !== saved.sizing || draft.riskQuote !== saved.riskQuote || draft.maxOutQuote !== saved.maxOutQuote
+  const changed = draft.sizing !== saved.sizing || draft.riskQuote !== saved.riskQuote || draft.maxOutQuote !== saved.maxOutQuote || digest !== digestSaved
 
   return (
     <Card title="Paper trades the app opens by itself">
@@ -138,6 +149,14 @@ export function PaperRiskCard(): React.JSX.Element {
           : `The watch and the news rules open nothing that would take what their open paper trades stake together past ${amount(draft.maxOutQuote)}, in a quote asset.`}{' '}
         {out !== null && `Out now: ${amount(out)} USDT in their open paper trades.`}
       </p>
+      <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', marginTop: '0.8rem', fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+        <input type="checkbox" aria-label="A daily paper digest" checked={digest} disabled={busy} onChange={(event) => setDigest(event.target.checked)} style={{ marginTop: '0.2rem' }} />
+        <span>
+          A desktop notice each day, the first time the app is open after 00:00 UTC: what they opened and closed the day before, and what each
+          closed one made against what it risked at its stop (R). None on a day with nothing to tell, and none caught up on for days the app
+          was closed.
+        </span>
+      </label>
       <div style={{ marginTop: '0.7rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
         <button onClick={() => void save()} disabled={busy || !changed} style={{ ...formButtonStyle('primary'), opacity: busy || !changed ? 0.6 : 1 }}>
           Save

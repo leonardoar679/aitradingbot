@@ -50,7 +50,7 @@ other.
 | Research | **Backtest & Research** | **Backtest** runs a chosen strategy over a historical range and shows full stats, equity curve vs. buy-and-hold, monthly breakdown and a trade log; its **Live** view monitors the same route continuously ([Live strategy monitor](#live-strategy-monitor)), **Charts** replays each trade against the candles, and **Compare Strategies** ranks every registered strategy over the same candles. An optional tick box has a model [confirm each entry](#ai-signals--paper-only). Both views export CSV, JSON and a PNG. **Automation** re-runs saved backtests on a schedule while the app is open, each run keeping a session-only report. |
 | | **AI Benchmark** | Several models on the same questions, scored side by side: on candles, and on the events the scanner raised, with the no-model rows beside them and every run kept as an experiment that can be reopened for nothing. |
 | | **Discovery** | The market scanner: once a minute it reads the most traded USDT pairs on Binance and says what is moving, scores each the same way, and records the moves that qualify as events — see [Discovery](#discovery--a-market-scanner). Public market data only: no key, no model, no order. It is switched on, and its pairs chosen, under Settings › Market. Below it, [Binance's own announcements](#binances-announcements-on-discovery) — delistings, Monitoring Tags, futures launches, listings — as they are released, with what each kind did to prices. The reader is switched on under Settings › Market too, with what a delisting or a tag does: a notice if you hold the coin, a paper short by the kind's rule, a question to the watch's models. |
-| System | **Risk & Safety** | The live trading limits every real order is checked against (largest order, the day's notional, the day's loss, the managed allocation); the size of the paper trades the app opens by itself, the watch's and the news rules' (sized by what their stop would lose, and capped in what they stake together); and the controller groups: executors under a shared stop-loss, take-profit and maximum drawdown with a P&L snapshot every 5 minutes, all stopped on a breach. Arming and the kill switch stay on the bar at the top of every page. |
+| System | **Risk & Safety** | The live trading limits every real order is checked against (largest order, the day's notional, the day's loss, the managed allocation); the size of the paper trades the app opens by itself, the watch's and the news rules' (sized by what their stop would lose, and capped in what they stake together), and a daily notice of what they did; and the controller groups: executors under a shared stop-loss, take-profit and maximum drawdown with a P&L snapshot every 5 minutes, all stopped on a breach. Arming and the kill switch stay on the bar at the top of every page. |
 | | **Connections** | Every key the app holds: Binance and Upbit ([Credentials](#credentials--api-keys)), and the OpenRouter key for the AI models. Each is tested before it is stored, stored encrypted, and never read back into the window. |
 | | **Settings** | The Configuration Center, in sections, built only from settings that exist. **General**: appearance (Dark / Light / Colorblind-safe). **Market**: the scanner on or off, and how many pairs it watches; the reader of Binance's announcements, and what a delisting does. **AI**: which models may be asked, the default and the route, the daily budget, the pace, and what asking has cost. Keys stay on Connections and limits on Risk & Safety, each in the one place, linked from here. What the V3 document asked for that has no behaviour behind it (language, timezone, default order type, allowed pairs, other news sources…) is listed in `docs/INVENTORY.md` rather than added as a control. |
 
@@ -761,6 +761,14 @@ it is paper.
   Both only ever open less, so either may be changed while paper trades are on, and neither is
   asked again by the watch's confirmation, which names them. A settings file written before them
   reads them at their defaults.
+- **A daily digest** (chosen the same day; `shared/paperDigest.ts`). One desktop notice a day, the
+  first time the app is open after 00:00 UTC, says what the watch and the news rules opened and
+  closed on paper the day before, and what each closed trade made against what it risked at its
+  stop (R): "The watch opened 4 paper trades and closed 2, 1 of them ahead: +0.85 USDT after fees,
+  or +0.50 R against what each risked at its stop; 1 more never entered." A delisting's short has
+  no stop, and says so. A day with nothing to tell raises none, and days the app was closed are not
+  caught up on. The day told is kept in `settings.json`, so a restart does not tell it twice. It is
+  on until switched off, on the same card on Risk & Safety.
 - **It follows one model.** Comparing models is the leaderboard's job, and three models trading
   one event would be three positions on one view of the market. The model has to be one the
   watch asks, and neither the model, the stake nor the limit can be changed while it is on.
@@ -1596,7 +1604,9 @@ electron/preload.ts  ── contextBridge ──▶  window.api.*  (renderer)
   timer of its own: it runs the [watch](#ai-signals--paper-only) each time the scanner reports a
   pass. `NewsScheduler` acts on a delisting each time the news reader reports one ([the notice and
   the rule's paper short](#binances-announcements-on-discovery)), and looks at those shorts once a
-  minute to settle one that has closed. `RoutineScheduler`/`ControllerScheduler` poll their own
+  minute to settle one that has closed. `PaperDigestScheduler` looks every five minutes whether a
+  UTC day has ended, and tells it once ([the daily digest](#ai-signals--paper-only)).
+  `RoutineScheduler`/`ControllerScheduler` poll their own
   settings slice every 10s to notice config changes made on the page component (there's no
   cross-component push channel); `LiveOrderScheduler` polls every open live limit order via the
   main process every 5s and patches the matching executor's status directly.
@@ -2671,6 +2681,7 @@ shared/                       Code both processes run, so they cannot disagree a
   aiWatch.ts                  Events put to models without a click: the setting, what it takes up, its daily limit, the breaker, what it costs, its notice
   aiWatchPaper.ts             Paper positions the watch opens by itself: the setting, what a call becomes, and its limits
   paperRisk.ts                The paper trades the app opens by itself, the watch's and the news rules': sized by what their stop would lose, and capped in what they stake together
+  paperDigest.ts              The daily notice of what those trades did the day before, each closed one in what it risked at its stop
   aiEventMarket.ts            The market around an event: Bitcoin's and ether's returns to its minute, the pair's less theirs, two labels
   aiPace.ts                   How fast one model is asked: the most calls a minute, and how long the next one waits
   aiEffort.ts                 A model asked at a lower reasoning effort, as a model of its own: its id, and where it is taken apart
@@ -2699,7 +2710,8 @@ src/                          React renderer app
   research/                   Backtest & Research (Backtest, Automation)
   ai-benchmark/               AI Benchmark
   risk/                       Risk & Safety: the live trading limits card, and the size of the paper
-                              trades the app opens by itself (PaperRiskCard)
+                              trades the app opens by itself (PaperRiskCard); PaperDigestScheduler
+                              (the daily notice of what they did, headless)
   connections/                Connections, and the exchange keys card
 
   portfolio/                  The portfolio's summary, chart and holdings, for Overview and Performance

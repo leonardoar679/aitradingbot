@@ -449,6 +449,26 @@ describe('AI code has no route to a real order', () => {
     expect(card).not.toMatch(/liveTrading|placeLive|window\.api\.(executors|ai|credentials)/)
   })
 
+  it('the daily paper digest reads settings and says so, and nothing else', () => {
+    // Once a day a notice says what the app's own paper trades did the day before. It is a reading of
+    // the executors on file: the rules are arithmetic, and the scheduler reaches settings -- to read
+    // them and to mark the day told -- and the notice, and nothing that opens, closes or asks.
+    const rules = join(ROOT, 'shared', 'paperDigest.ts')
+    expect(importsOf(rules).sort()).toEqual(['fees', 'ipc'])
+    expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron|liveTrading|placeLive/)
+    const scheduler = join(ROOT, 'src', 'risk', 'PaperDigestScheduler.tsx')
+    const source = readFileSync(scheduler, 'utf-8')
+    expect([...new Set([...source.matchAll(/window\.api\.(\w+)(?:\s*\.\s*(\w+))?/g)].map((match) => (match[2] === undefined ? match[1] : `${match[1]}.${match[2]}`)))].sort()).toEqual([
+      'notify',
+      'settings.get',
+      'settings.set'
+    ])
+    expect(importsOf(scheduler).sort()).toEqual(['paperDigest', 'react', 'settingsWrites'])
+    // What it writes is the day it told, beside the switch, and nothing else: never the executors.
+    expect(source.match(/window\.api\.settings\.set\(/g)).toHaveLength(1)
+    expect(source).toContain('window.api.settings.set({ paperDigest: { ...setting, lastDay: plan.day } })')
+  })
+
   it('the AI\'s part of the status bar reads two settings and offers nothing', () => {
     // It sits on the live-trading bar, beside the arm and kill controls, so it is held to the
     // narrowest rule of all: it reads whether a key is stored and what the AI setting is, and

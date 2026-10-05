@@ -145,6 +145,16 @@ export interface AppSettings {
    * together (shared/paperRisk.ts). Absent on a file written before it existed, and healed on
    * every read: its defaults apply. */
   paperRisk?: PaperRiskSettings
+  /** The daily notice of what those trades did the day before (shared/paperDigest.ts), and the
+   * last day it told. Absent until first written, and healed on every read. */
+  paperDigest?: PaperDigestSettings
+}
+
+/** One desktop notice a day of what the app's own paper trades did the UTC day before. */
+export interface PaperDigestSettings {
+  enabled: boolean
+  /** `2026-10-05`: the last day told, so that a restart does not tell it twice. */
+  lastDay: string | null
 }
 
 /** The paper trades the app opens by itself -- the watch's and the news rules' -- sized by what

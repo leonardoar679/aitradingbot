@@ -19,6 +19,7 @@ import { SettingsPanel } from './settings/SettingsPanel'
 import { ControllerScheduler } from './controllers/ControllerScheduler'
 import { OpportunityScheduler } from './agents/OpportunityScheduler'
 import { NewsScheduler } from './news/NewsScheduler'
+import { PaperDigestScheduler } from './risk/PaperDigestScheduler'
 import { RoutineScheduler } from './routines/RoutineScheduler'
 import { LiveTradingBar } from './livetrading/LiveTradingBar'
 import { LiveOrderScheduler } from './livetrading/LiveOrderScheduler'
@@ -97,6 +98,11 @@ function App(): React.JSX.Element {
           Off unless the news reader is on; nothing it does is real. */}
       <ErrorBoundary label="The news reader's actions">
         <NewsScheduler />
+      </ErrorBoundary>
+      {/* Once a day, a notice of what the watch's and the news rules' paper trades did the day
+          before. It reads settings and says so; it opens and closes nothing. */}
+      <ErrorBoundary label="The daily paper digest">
+        <PaperDigestScheduler />
       </ErrorBoundary>
       <ErrorBoundary label="The live trading bar">
         <LiveTradingBar />
