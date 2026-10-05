@@ -650,7 +650,8 @@ function ClockBenchmark(): React.JSX.Element {
               decisions: times.length,
               models: costModels,
               budgetRemainingUsd: peek.budgetRemainingUsd,
-              concurrency: BENCHMARK_CONCURRENCY
+              concurrency: BENCHMARK_CONCURRENCY,
+              callsPerMinute: fresh.callsPerMinute
             })
           )
         ) {

@@ -4,7 +4,8 @@ import {
   OpenRouterError,
   chatCompletion,
   fetchKeyInfo,
-  fetchModelCatalogue
+  fetchModelCatalogue,
+  parseRetryAfter
 } from '../electron/services/openRouterClient'
 
 // The transport, against a stubbed fetch. Nothing here reaches OpenRouter: the shapes below are
@@ -166,6 +167,53 @@ describe('chatCompletion', () => {
     expect((await failure(chatCompletion(REQUEST))).kind).toBe('transient')
     stubFetch(() => ({ body: completion({ choices: [{ finish_reason: 'error', message: { content: 'partial' } }] }) }))
     expect((await failure(chatCompletion(REQUEST))).kind).toBe('transient')
+  })
+
+  it('says which version of the model answered, as OpenRouter names it, when it says', async () => {
+    stubFetch(() => ({ body: completion({ model: 'openai/gpt-5-mini-2025-08-07' }) }))
+    expect((await chatCompletion(REQUEST)).servedModel).toBe('openai/gpt-5-mini-2025-08-07')
+    // Not said, or not a name: not invented.
+    stubFetch(() => ({ body: completion() }))
+    expect((await chatCompletion(REQUEST)).servedModel).toBeNull()
+    stubFetch(() => ({ body: completion({ model: 42 }) }))
+    expect((await chatCompletion(REQUEST)).servedModel).toBeNull()
+    stubFetch(() => ({ body: completion({ model: '  ' }) }))
+    expect((await chatCompletion(REQUEST)).servedModel).toBeNull()
+  })
+
+  it("carries a refusal's Retry-After, in milliseconds", async () => {
+    const withHeaders = (status: number, retryAfter: string | null): void => {
+      vi.stubGlobal('fetch', async () => ({
+        ok: false,
+        status,
+        headers: { get: (name: string) => (name.toLowerCase() === 'retry-after' ? retryAfter : null) },
+        text: async () => JSON.stringify({ error: { code: status, message: 'slow down' } })
+      }))
+    }
+    withHeaders(429, '7')
+    expect(await failure(chatCompletion(REQUEST))).toMatchObject({ kind: 'transient', status: 429, retryAfterMs: 7000 })
+    withHeaders(503, null)
+    expect((await failure(chatCompletion(REQUEST))).retryAfterMs).toBeNull()
+    // A response with no headers at all is read as one that said nothing.
+    stubFetch(() => ({ status: 429, body: { error: { code: 429, message: 'slow down' } } }))
+    expect((await failure(chatCompletion(REQUEST))).retryAfterMs).toBeNull()
+  })
+})
+
+describe('parseRetryAfter', () => {
+  const NOW = Date.parse('2026-10-05T03:00:00Z')
+
+  it('reads whole seconds, and a date to wait until', () => {
+    expect(parseRetryAfter('0', NOW)).toBe(0)
+    expect(parseRetryAfter('12', NOW)).toBe(12_000)
+    expect(parseRetryAfter(' 3 ', NOW)).toBe(3000)
+    expect(parseRetryAfter('Mon, 05 Oct 2026 03:00:30 GMT', NOW)).toBe(30_000)
+    // A date already past is no wait, never a negative one.
+    expect(parseRetryAfter('Mon, 05 Oct 2026 02:59:00 GMT', NOW)).toBe(0)
+  })
+
+  it('is nothing for nothing, and for what it cannot read', () => {
+    for (const value of [null, undefined, '', '   ', 'soon', '-5', '1.5']) expect(parseRetryAfter(value, NOW)).toBeNull()
   })
 })
 

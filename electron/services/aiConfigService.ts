@@ -7,6 +7,7 @@ import { deciderModel, isPanelId, panelModelOf } from '../../shared/aiPanel'
 import { parseAiRoute, type AiRoute } from '../../shared/aiRoute'
 import { aiWatchProblem, healAiWatch, sameWatchTerms, type AiWatchConfig } from '../../shared/aiWatch'
 import { DEFAULT_AI_WATCH_PAPER, aiWatchPaperProblem, healAiWatchPaper, type AiWatchPaperConfig } from '../../shared/aiWatchPaper'
+import { AI_CALLS_PER_MINUTE_CHOICES, DEFAULT_AI_CALLS_PER_MINUTE, isCallsPerMinute } from '../../shared/aiPace'
 import { budgetProblem, type AiConfig, type AiConfigPatch, type AiModelCatalogue, type AiModelInfo } from '../../shared/aiCost'
 import { writeJsonAtomic } from './atomicWrite'
 import { getDecryptedAiCredential } from './aiCredentialsService'
@@ -37,6 +38,8 @@ interface AiConfigState {
    * be opened with nobody pressing anything, and though the position is paper, what switches it
    * on should not be a general settings patch. */
   watchPaper: AiWatchPaperConfig
+  /** See AiConfig.callsPerMinute. */
+  callsPerMinute: number
 }
 
 interface StoredCatalogue {
@@ -127,7 +130,8 @@ async function load(): Promise<AiConfigState> {
     // been switched on -- a model no longer enabled, a limit that is not one of the choices -- is
     // off, not running in some repaired shape nobody agreed to the price of.
     watch: healAiWatch(raw.watch, enabledModels),
-    watchPaper: DEFAULT_AI_WATCH_PAPER
+    watchPaper: DEFAULT_AI_WATCH_PAPER,
+    callsPerMinute: isCallsPerMinute(raw.callsPerMinute) ? raw.callsPerMinute : DEFAULT_AI_CALLS_PER_MINUTE
   }
   // Healed against the watch as it was just healed: paper trades follow one of ITS models.
   cache.watchPaper = healAiWatchPaper(raw.watchPaper, cache.watch.models)
@@ -169,7 +173,8 @@ function statusFor(state: AiConfigState): AiConfig {
     dailyCapUsd: state.dailyCapUsd,
     spentTodayUsd: usageForDay(state.dailyUsage, today()),
     watch: { ...state.watch, models: [...state.watch.models] },
-    watchPaper: { ...state.watchPaper }
+    watchPaper: { ...state.watchPaper },
+    callsPerMinute: state.callsPerMinute
   }
 }
 
@@ -314,7 +319,15 @@ export async function setAiConfig(patch: AiConfigPatch): Promise<AiConfig> {
     watchPaper = { ...watchPaper, model: null }
   }
 
-  cache = { ...state, defaultModel, enabledModels, route, dailyCapUsd, watch, watchPaper }
+  // A pace only spreads calls out; it never makes one more of them, so it is changed with no
+  // confirmation and takes effect from the next call.
+  let callsPerMinute = state.callsPerMinute
+  if (patch.callsPerMinute !== undefined) {
+    if (!isCallsPerMinute(patch.callsPerMinute)) throw new Error(`One model is asked at most ${AI_CALLS_PER_MINUTE_CHOICES.join(', ')} times a minute`)
+    callsPerMinute = patch.callsPerMinute
+  }
+
+  cache = { ...state, defaultModel, enabledModels, route, dailyCapUsd, watch, watchPaper, callsPerMinute }
   await persist()
   return statusFor(cache)
 }

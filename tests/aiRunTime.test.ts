@@ -144,4 +144,26 @@ describe('what a benchmark is agreed to', () => {
     const text = describeAiBenchmarkCost(input([model(), model({ model: 'acme/cached', cached: 180, toAsk: 0, perCallLatencyMs: null })]))
     expect(text).toContain('Asking 4 at a time, that is about 11 minutes at the pace it has answered here.')
   })
+
+  it('never says a run takes less than the most calls a minute to one model allows', () => {
+    // A fast model: 180 calls of 2 seconds, four at a time, is a minute and a half -- but at
+    // thirty a minute the last of them cannot start until five minutes in.
+    const fast = model({ perCallLatencyMs: 2000 })
+    expect(describeAiBenchmarkCost(input([fast]))).toContain('Asking 4 at a time, that is about 2 minutes')
+    expect(describeAiBenchmarkCost({ ...input([fast]), callsPerMinute: 30 })).toContain(
+      'Asking 4 at a time and no model more than 30 times a minute, that is about 5 minutes at the pace it has answered here.'
+    )
+    // Where the calls themselves take longer than the pace, the pace changes nothing but the words.
+    expect(describeAiBenchmarkCost({ ...input([model()]), callsPerMinute: 60 })).toContain('no model more than 60 times a minute, that is about 11 minutes')
+    // And a model never called here still has the pace's floor stated.
+    expect(describeAiBenchmarkCost({ ...input([model({ perCallLatencyMs: null })]), callsPerMinute: 30 })).toContain(
+      'At no more than 30 calls a minute to one model it takes about 5 minutes at the least.'
+    )
+  })
+
+  it('counts the pace per model: two models are asked at the same time', () => {
+    // 100 calls each to two fast models at thirty a minute: each takes three minutes, side by side.
+    const two = [model({ toAsk: 100, perCallLatencyMs: 1000 }), model({ model: 'acme/other', toAsk: 100, perCallLatencyMs: 1000 })]
+    expect(describeAiBenchmarkCost({ ...input(two), callsPerMinute: 30 })).toContain('that is about 3 minutes')
+  })
 })

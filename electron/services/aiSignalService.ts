@@ -38,6 +38,7 @@ import {
   type AiMarketContext
 } from '../../shared/aiContext'
 import { MARKET_REFERENCE_SYMBOLS } from '../../shared/aiEventMarket'
+import { paceDelayMs } from '../../shared/aiPace'
 import {
   AI_OPPORTUNITY_MAX_MODELS,
   validateOpportunityAnswer,
@@ -87,6 +88,7 @@ import {
   assertAiBudget,
   budgetRemainingUsd,
   findAiModel,
+  getAiConfig,
   recordAiSpend,
   resolveAiDecider,
   resolveAiModel,
@@ -124,9 +126,42 @@ const MAX_CONSECUTIVE_FAILURES = 5
 const MAX_CONSECUTIVE_REFUSALS = 5
 /** How many of a model's own recent calls an estimate is averaged over. */
 const COST_HISTORY_ROWS = 50
-/** The pause before a retry, doubled each attempt. An object so tests can shorten it: a test of
- * the retry RULE should not have to sit through the back-off. */
-export const aiRetry = { baseDelayMs: 500 }
+/** The pause before a retry, doubled each attempt, and the longest wait a server's Retry-After is
+ * honoured for: one that asks for more is not retried at once, and its call is asked again when
+ * the run is. An object so tests can shorten it: a test of the retry RULE should not have to sit
+ * through the back-off. */
+export const aiRetry = { baseDelayMs: 500, maxWaitMs: 30_000 }
+/** The clock and the pause a call is paced and retried by. A test seam: the rule, not the wall
+ * clock, is what is under test. */
+export const aiPace = {
+  now: (): number => Date.now(),
+  sleep: (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+}
+/** When each model's recent calls started, by the id OpenRouter knows it by. */
+const callStarts = new Map<string, number[]>()
+
+/** Waits, if it has to, until one more call to `slug` keeps that model within the calls-a-minute
+ * setting (shared/aiPace.ts). Here, where every call is made, so nothing asks faster by asking from
+ * two places at once. Each attempt is a call: a retry takes a place like any other. */
+async function paceCall(slug: string): Promise<void> {
+  const { callsPerMinute } = await getAiConfig()
+  for (;;) {
+    const now = aiPace.now()
+    const starts = (callStarts.get(slug) ?? []).filter((at) => now - at < 60_000)
+    const wait = paceDelayMs(starts, now, callsPerMinute)
+    if (wait <= 0) {
+      starts.push(now)
+      callStarts.set(slug, starts)
+      return
+    }
+    await aiPace.sleep(wait)
+  }
+}
+
+/** Test seam: forgets every model's recent calls. */
+export function resetAiPace(): void {
+  callStarts.clear()
+}
 
 const cancelledRequests = new Set<string>()
 const cancelWaiters = new Map<string, () => void>()
@@ -198,6 +233,7 @@ async function requestWithRetry(
   let lastError: unknown
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     try {
+      await paceCall(slug)
       return await chatCompletion({
         apiKey,
         model: slug,
@@ -212,7 +248,15 @@ async function requestWithRetry(
       // A refusal that will be the same next time is not worth a second attempt, let alone a third.
       if (error instanceof OpenRouterError && error.kind === 'fatal') break
       if (attempt === MAX_ATTEMPTS - 1) break
-      await new Promise((resolve) => setTimeout(resolve, aiRetry.baseDelayMs * 2 ** attempt))
+      // A server that said how long to wait is waited for -- unless it asked for longer than a
+      // question is worth holding up a run for. Then the call fails now, unbilled, and is asked
+      // again the next time the run is.
+      const asked = error instanceof OpenRouterError ? error.retryAfterMs : null
+      if (error instanceof OpenRouterError && asked !== null && asked > aiRetry.maxWaitMs) {
+        lastError = new OpenRouterError(`${error.message} It asked for ${Math.ceil(asked / 1000)} seconds before another try, longer than a call is held for.`, error.kind, error.status, asked)
+        break
+      }
+      await aiPace.sleep(Math.max(aiRetry.baseDelayMs * 2 ** attempt, asked ?? 0))
     }
   }
   throw lastError
@@ -384,6 +428,7 @@ async function askModel(input: AskInput): Promise<AiSignalDecision> {
       at: finishedAt(),
       status: verdict.ok ? 'ok' : 'rejected',
       provider: result.provider,
+      ...(result.servedModel !== null ? { servedModel: result.servedModel } : {}),
       usage,
       error: verdict.ok ? null : verdict.reason,
       recommendation: verdict.ok ? verdict.signal.recommendation : null,
@@ -584,6 +629,7 @@ async function askAgent(input: AskAgentInput): Promise<AgentAnswer> {
       at: finishedAt(),
       status: verdict.ok ? 'ok' : 'rejected',
       provider: result.provider,
+      ...(result.servedModel !== null ? { servedModel: result.servedModel } : {}),
       usage,
       error: verdict.ok ? null : verdict.reason,
       confidence: verdict.ok ? verdict.report.confidence : null,

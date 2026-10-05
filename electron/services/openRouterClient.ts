@@ -31,10 +31,26 @@ export class OpenRouterError extends Error {
   constructor(
     message: string,
     readonly kind: OpenRouterFailure,
-    readonly status: number | null
+    readonly status: number | null,
+    /** How long the server asked to be left alone before the next try, when it said (a 429's or a
+     * 503's Retry-After), in milliseconds. */
+    readonly retryAfterMs: number | null = null
   ) {
     super(message)
   }
+}
+
+/** A Retry-After header's wait in milliseconds: whole seconds, or an HTTP date to wait until. Null
+ * when there is none or it cannot be read; never negative. */
+export function parseRetryAfter(value: string | null | undefined, nowMs: number): number | null {
+  if (value === null || value === undefined || value.trim() === '') return null
+  const text = value.trim()
+  if (/^\d+$/.test(text)) return Number(text) * 1000
+  // The one date form a server is required to send ("Mon, 05 Oct 2026 03:00:30 GMT"). Date.parse
+  // alone reads "-5" and "1.5" as dates too.
+  if (!/^[A-Za-z]{3}, \d{2} [A-Za-z]{3} \d{4} \d{2}:\d{2}:\d{2} GMT$/.test(text)) return null
+  const at = Date.parse(text)
+  return Number.isFinite(at) ? Math.max(0, at - nowMs) : null
 }
 
 function failureKind(status: number): OpenRouterFailure {
@@ -64,8 +80,8 @@ function bodyMessage(body: unknown): string | null {
   return typeof message === 'string' && message.trim() !== '' ? message.slice(0, 300) : null
 }
 
-function errorFor(status: number, detail: string | null): OpenRouterError {
-  return new OpenRouterError(`${describeStatus(status)} (${status})${detail ? `: ${detail}` : ''}`, failureKind(status), status)
+function errorFor(status: number, detail: string | null, retryAfterMs: number | null = null): OpenRouterError {
+  return new OpenRouterError(`${describeStatus(status)} (${status})${detail ? `: ${detail}` : ''}`, failureKind(status), status, retryAfterMs)
 }
 
 async function send(path: string, apiKey: string, init: RequestInit): Promise<unknown> {
@@ -88,7 +104,11 @@ async function send(path: string, apiKey: string, init: RequestInit): Promise<un
   } catch {
     body = null
   }
-  if (!response.ok) throw errorFor(response.status, bodyMessage(body) ?? (text.slice(0, 300) || null))
+  if (!response.ok) {
+    // Read defensively: what a test stubs, or a proxy returns, may have no headers at all.
+    const asked = typeof response.headers?.get === 'function' ? response.headers.get('retry-after') : null
+    throw errorFor(response.status, bodyMessage(body) ?? (text.slice(0, 300) || null), parseRetryAfter(asked, Date.now()))
+  }
   if (body === null) throw new OpenRouterError('OpenRouter returned a response that was not JSON', 'transient', response.status)
 
   // A provider that fails after OpenRouter has accepted the request comes back as HTTP 200 whose
@@ -120,10 +140,15 @@ export interface ChatCompletionResult {
   content: string
   finishReason: string | null
   provider: string | null
+  /** The model OpenRouter says answered, as it names it -- a dated version where the provider has
+   * one. A name like `openai/gpt-5-mini` can be pointed at a newer model on any day; this is what
+   * a result was actually got from. Null when the response does not say. */
+  servedModel: string | null
   usage: AiCallUsage
 }
 
 interface CompletionBody {
+  model?: unknown
   provider?: unknown
   choices?: { finish_reason?: unknown; message?: { content?: unknown } }[]
   usage?: { prompt_tokens?: unknown; completion_tokens?: unknown; cost?: unknown }
@@ -177,6 +202,7 @@ export async function chatCompletion(request: ChatCompletionRequest): Promise<Ch
     content,
     finishReason,
     provider: typeof body.provider === 'string' ? body.provider : null,
+    servedModel: typeof body.model === 'string' && body.model.trim() !== '' ? body.model.slice(0, 200) : null,
     usage: {
       promptTokens: count(body.usage?.prompt_tokens),
       completionTokens: count(body.usage?.completion_tokens),

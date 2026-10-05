@@ -4,6 +4,7 @@ import { Card } from '../components/Card'
 import { StatCard } from '../components/StatCard'
 import { AI_PROVIDER_LABEL } from '../../shared/aiSignal'
 import { formatUsd, type AiConfig, type AiKeyInfo, type AiUsageByModel, type AiUsageSummary } from '../../shared/aiCost'
+import { AI_CALLS_PER_MINUTE_CHOICES, DEFAULT_AI_CALLS_PER_MINUTE } from '../../shared/aiPace'
 import { describeError } from '../utils/ipcError'
 import { buttonStyle, cellStyle, headCellStyle, inputStyle, noteStyle } from './agentStyles'
 
@@ -87,6 +88,20 @@ export function UsageTab(): React.JSX.Element {
     void load()
   }, [load])
 
+  async function savePace(perMinute: number): Promise<void> {
+    setBusy(true)
+    setMessage(null)
+    try {
+      const next = await window.api.ai.setConfig({ callsPerMinute: perMinute })
+      setConfig(next)
+      setMessage({ ok: true, text: `No model is asked more than ${next.callsPerMinute} times a minute.` })
+    } catch (failure) {
+      setMessage({ ok: false, text: describeError(failure) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function saveCap(): Promise<void> {
     setBusy(true)
     setMessage(null)
@@ -156,6 +171,32 @@ export function UsageTab(): React.JSX.Element {
           </button>
           {message && <span style={{ fontSize: '0.78rem', color: message.ok ? 'var(--up)' : 'var(--down)' }}>{message.text}</span>}
         </div>
+      </Card>
+
+      <Card title="Pace">
+        <p style={{ ...noteStyle, marginBottom: '0.8rem' }}>
+          The most calls that start to any one model in a minute, whoever asks: a benchmark, the watch, a bot or a click. A call that would
+          go over waits for its place, and nothing is refused. Providers answer a burst with a refusal to serve, and a refused call is
+          asked again later; a benchmark asks four questions at once, and a fast model answers each in two seconds. A pace only spreads
+          calls out, never adds one, so it changes with no confirmation.
+        </p>
+        <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+          At most{' '}
+          <select
+            aria-label="Calls a minute to one model"
+            value={config?.callsPerMinute ?? DEFAULT_AI_CALLS_PER_MINUTE}
+            disabled={busy || config === null}
+            onChange={(event) => void savePace(Number(event.target.value))}
+            style={inputStyle()}
+          >
+            {AI_CALLS_PER_MINUTE_CHOICES.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>{' '}
+          calls a minute to one model
+        </label>
       </Card>
 
       <Card

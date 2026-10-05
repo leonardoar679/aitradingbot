@@ -1,4 +1,4 @@
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -252,6 +252,112 @@ describe('peeking at an event', () => {
     const { peekAiOpportunity } = await services()
     const calm = eventQuestionCandles({ pct: 0.02 })
     await expect(peekAiOpportunity({ ...request({ candles1m: calm.candles1m, candles15m: calm.candles15m }), models: ['openai/gpt-5-mini'] })).rejects.toThrow(/do not end in an event/)
+  })
+})
+
+describe('pinned, paced, and patient with a provider that says to wait', () => {
+  /** A stub that can answer with headers, and a clock the service's waits move on. */
+  function rig(reply: (call: number) => { status?: number; retryAfter?: string; body?: Record<string, unknown> }): { bodies: unknown[] } {
+    const bodies: unknown[] = []
+    vi.stubGlobal('fetch', async (_url: string, init: { body?: string }) => {
+      bodies.push(JSON.parse(init.body ?? '{}'))
+      const { status = 200, retryAfter, body } = reply(bodies.length)
+      const payload =
+        status === 200
+          ? { provider: 'Test', choices: [{ finish_reason: 'stop', message: { content: answer() } }], usage: { prompt_tokens: 2400, completion_tokens: 500, cost: COST }, ...body }
+          : { error: { code: status, message: 'slow down' } }
+      return {
+        ok: status === 200,
+        status,
+        headers: { get: (name: string) => (name.toLowerCase() === 'retry-after' ? (retryAfter ?? null) : null) },
+        text: async () => JSON.stringify(payload)
+      }
+    })
+    return { bodies }
+  }
+  async function paced() {
+    const all = await services()
+    const waits: number[] = []
+    let virtual = Date.now()
+    all.aiPace.now = () => virtual
+    all.aiPace.sleep = async (ms) => {
+      waits.push(ms)
+      virtual += ms
+    }
+    return { ...all, waits }
+  }
+
+  it('writes down which version of the model answered', async () => {
+    rig(() => ({ body: { model: 'openai/gpt-5-mini-2025-08-07' } }))
+    const { askAiOpportunity, listAiCalls } = await paced()
+    await askAiOpportunity(request())
+    expect((await listAiCalls({})).rows[0].servedModel).toBe('openai/gpt-5-mini-2025-08-07')
+  })
+
+  it('writes down nothing for a version a response does not name', async () => {
+    rig(() => ({}))
+    const { askAiOpportunity, listAiCalls } = await paced()
+    await askAiOpportunity(request())
+    expect('servedModel' in (await listAiCalls({})).rows[0]).toBe(false)
+  })
+
+  it('waits as long as a refusal asks before trying again, and is answered', async () => {
+    const { bodies } = rig((call) => (call === 1 ? { status: 429, retryAfter: '7' } : {}))
+    const { askAiOpportunity, listAiCalls, waits } = await paced()
+    const decision = await askAiOpportunity(request())
+    expect(decision.error).toBeNull()
+    expect(bodies).toHaveLength(2)
+    expect(waits).toContain(7000)
+    // One row: the answer. A try that was refused and then answered is one call, billed once.
+    expect((await listAiCalls({})).rows.map((row) => row.status)).toEqual(['ok'])
+  })
+
+  it('does not hold a call up for longer than it is worth, and says what it was asked to wait', async () => {
+    const { bodies } = rig(() => ({ status: 429, retryAfter: '120' }))
+    const { askAiOpportunity, listAiCalls, waits } = await paced()
+    const decision = await askAiOpportunity(request())
+    expect(decision.error).toMatch(/asked for 120 seconds before another try/)
+    expect(bodies).toHaveLength(1)
+    expect(waits).toEqual([])
+    const rows = (await listAiCalls({})).rows
+    expect(rows.map((row) => row.status)).toEqual(['failed'])
+    // Not cached: asked again, it is asked.
+    rig(() => ({}))
+    expect((await askAiOpportunity(request())).cached).toBe(false)
+  })
+
+  it('starts no more calls to one model in a minute than the setting allows', async () => {
+    rig(() => ({}))
+    const { askAiOpportunity, setAiConfig, waits } = await paced()
+    await setAiConfig({ callsPerMinute: 10 })
+    // Eleven different events: the eleventh waits for the first to be a minute old.
+    for (let seed = 1; seed <= 10; seed++) {
+      const candles = eventQuestionCandles(undefined, seed)
+      await askAiOpportunity(request({ candles1m: candles.candles1m, candles15m: candles.candles15m }))
+    }
+    expect(waits).toEqual([])
+    const eleventh = eventQuestionCandles(undefined, 11)
+    await askAiOpportunity(request({ candles1m: eleventh.candles1m, candles15m: eleventh.candles15m }))
+    expect(waits).toHaveLength(1)
+    expect(waits[0]).toBeGreaterThan(59_000)
+    expect(waits[0]).toBeLessThanOrEqual(60_000)
+  })
+
+  it('keeps the pace to one of its choices, and remembers it', async () => {
+    rig(() => ({}))
+    const { setAiConfig, getAiConfig } = await paced()
+    expect((await getAiConfig()).callsPerMinute).toBe(30)
+    await expect(setAiConfig({ callsPerMinute: 25 })).rejects.toThrow(/at most 10, 20, 30, 60 times a minute/)
+    expect((await setAiConfig({ callsPerMinute: 60 })).callsPerMinute).toBe(60)
+    vi.resetModules()
+    const again = await import('../electron/services/aiConfigService')
+    expect((await again.getAiConfig()).callsPerMinute).toBe(60)
+    // A file holding a pace that is not one of the choices reads as the default, not as itself.
+    const path = join(process.env.AI_TEST_USER_DATA ?? '', 'aiConfig.json')
+    writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, 'utf-8')), callsPerMinute: 7 }))
+    vi.resetModules()
+    const healed = await import('../electron/services/aiConfigService')
+    expect((await healed.getAiConfig()).callsPerMinute).toBe(30)
   })
 })
 

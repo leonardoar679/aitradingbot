@@ -37,6 +37,10 @@ export interface AiExperimentVersions {
   schema: string[]
   /** The detector the events were found by (shared/marketEvent.ts). */
   detector: string
+  /** For each model asked, the versions its provider said answered (AiCallRecord.servedModel):
+   * what a name like `openai/gpt-5-mini` meant on the day. A model whose rows do not say is left
+   * out, and a record written before this was kept has none. */
+  served?: Record<string, string[]>
 }
 
 export interface AiExperiment {
@@ -218,6 +222,7 @@ export function experimentRunTotals(rows: AiCallRecord[], input: Pick<AiExperime
   const prompt = new Set<string>()
   const context = new Set<string>()
   const schema = new Set<string>()
+  const served = new Map<string, Set<string>>()
   let calls = 0
   let failed = 0
   let costUsd = 0
@@ -233,8 +238,19 @@ export function experimentRunTotals(rows: AiCallRecord[], input: Pick<AiExperime
     }
     calls++
     costUsd += row.usage.costUsd ?? 0
+    if (typeof row.servedModel === 'string') served.set(row.model, (served.get(row.model) ?? new Set<string>()).add(row.servedModel))
   }
-  return { versions: { prompt: [...prompt].sort(), context: [...context].sort(), schema: [...schema].sort() }, calls, failed, costUsd }
+  return {
+    versions: {
+      prompt: [...prompt].sort(),
+      context: [...context].sort(),
+      schema: [...schema].sort(),
+      served: Object.fromEntries([...served.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([model, names]) => [model, [...names].sort()]))
+    },
+    calls,
+    failed,
+    costUsd
+  }
 }
 
 export function summarizeExperiment(record: AiExperiment): AiExperimentSummary {
@@ -266,6 +282,7 @@ function isAiExperiment(value: unknown): value is AiExperiment {
     Array.isArray(versions.context) &&
     Array.isArray(versions.schema) &&
     typeof versions.detector === 'string' &&
+    (versions.served === undefined || (typeof versions.served === 'object' && versions.served !== null && !Array.isArray(versions.served))) &&
     typeof row.scoring === 'object' &&
     row.scoring !== null &&
     typeof row.calls === 'number' &&

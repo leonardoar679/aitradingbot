@@ -28,6 +28,11 @@ export interface AiCallRecord {
   model: string
   /** Which upstream provider OpenRouter routed to, when it says. */
   provider: string | null
+  /** The model OpenRouter says answered, as it names it: a dated version of `model` where the
+   * provider has one. `model` is what was asked for, and a name can be pointed at a newer model
+   * on any day; this is what the answer came from. Absent on a call that was not answered, and on
+   * every row written before it was recorded. */
+  servedModel?: string
   promptVersion: string
   contextVersion: string
   schemaVersion: string

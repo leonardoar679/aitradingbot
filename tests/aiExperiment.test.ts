@@ -200,7 +200,20 @@ describe('experimentRunTotals', () => {
     expect(totals.calls).toBe(6)
     expect(totals.failed).toBe(0)
     expect(totals.costUsd).toBeCloseTo(0.009, 10)
-    expect(totals.versions).toEqual({ prompt: ['opportunity-v1'], context: ['context-v1'], schema: ['opportunity-schema-v1'] })
+    expect(totals.versions).toEqual({ prompt: ['opportunity-v1'], context: ['context-v1'], schema: ['opportunity-schema-v1'], served: {} })
+  })
+
+  it('keeps, for each model, the versions its provider said answered', () => {
+    const rows = [
+      call(A, EVENTS[0].id, { servedModel: 'openai/gpt-5-mini-2025-08-07' }),
+      call(A, EVENTS[1].id, { servedModel: 'openai/gpt-5-mini-2025-08-07' }),
+      // A model re-pointed part-way through a run shows as two.
+      call(A, EVENTS[2].id, { servedModel: 'openai/gpt-5-mini-2026-01-15' }),
+      call(B, EVENTS[0].id),
+      // An unanswered call answered as nothing.
+      call(B, EVENTS[1].id, { status: 'failed', servedModel: 'should-not-count' })
+    ]
+    expect(experimentRunTotals(rows, run).versions.served).toEqual({ [A]: ['openai/gpt-5-mini-2025-08-07', 'openai/gpt-5-mini-2026-01-15'] })
   })
 
   it('counts a refused answer as a call that was paid for, and an unanswered one apart', () => {

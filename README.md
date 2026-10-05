@@ -281,7 +281,7 @@ entries, described next; an **AI signals** overlay on the Market chart, off by d
 | **Signals** | Every answered call, scored against the candles that followed: the move after 1h, 4h and 1d, which of the model's own levels was touched first, and whether the call was right. Per model: act rate, hit rate, and hit rate by confidence. |
 | **Benchmark** | The same questions put to every model you tick, with the answers scored side by side. Two kinds: one market asked on a clock, with a panel of agents beside its own model and what a route between two of them would have done; and events across the market, where each recommendation is followed through its own entry, stop and target — both described below. |
 | **Models** | OpenRouter's catalogue with prices. Only models that can be held to a strict JSON schema can be enabled, and one that reasons can be enabled again at a lower reasoning effort. Also where a route to a second model, or to a panel, is set — described below. |
-| **Usage** | Calls, tokens, dollars and latency per model, and the daily budget. |
+| **Usage** | Calls, tokens, dollars and latency per model, the daily budget, and the pace: the most calls a minute to one model. |
 
 **The key.** An OpenRouter key — made at openrouter.ai/keys, and starting `sk-or-` — is entered on
 the Agents page. Until one is stored a card asking for it sits above every tab; afterwards
@@ -900,6 +900,22 @@ signal has. Four calls to one model instead of one.
   answer the validator refused *is*, because the model was paid for it either way.
 - A refused key, an empty balance or an unknown model stops a run on its first call instead of
   being retried for every candle, and five failed decisions in a row stop it too.
+- **A provider that says to wait is waited for.** A call refused for rate (429), for time (408) or
+  by a provider that is down (5xx) is tried twice more, after a pause that doubles — and when the
+  refusal says how long to wait (Retry-After) it is waited for, up to 30 seconds. One that asks for
+  longer fails at once rather than holding a run up, and its question is asked again the next time
+  the run is. None of these was billed: a call that was never answered costs nothing.
+- **No model is asked more than so many times a minute** (Agents → Usage → Pace: 10, 20, 30 or
+  60; 30 unless changed), whoever asks — a benchmark, the watch, a bot or a click — held in the
+  main process where every call is made. A call over the pace waits for its place; nothing is
+  refused. A benchmark asks four questions at once and a fast model answers each in two seconds,
+  which is a hundred and twenty calls a minute, and on 5 October 2026 OpenRouter rate-limited
+  Mistral Small after four answers, twice (`shared/aiPace.ts`). A benchmark's confirmation never
+  states a time shorter than the pace allows.
+- **Every answer says which model gave it.** A name like `openai/gpt-5-mini` can be pointed at a
+  newer model on any day, so each call's ledger row keeps the version OpenRouter says answered
+  (`servedModel`), and a recorded experiment keeps, for each model it asked, the versions that
+  answered it; the Experiments list shows them where they say more than the name.
 - So do five *refused* answers in a row, and those matter more: a refused answer was reached,
   answered and billed. A model listed as taking a strict schema can still fail to fill this one —
   `google/gemini-2.5-flash` sent back four tokens the validator refused on its first real call —
@@ -2225,6 +2241,7 @@ shared/                       Code both processes run, so they cannot disagree a
   aiWatch.ts                  Events put to models without a click: the setting, what it takes up, its daily limit, the breaker, what it costs, its notice
   aiWatchPaper.ts             Paper positions the watch opens by itself: the setting, what a call becomes, and its limits
   aiEventMarket.ts            The market around an event: Bitcoin's and ether's returns to its minute, the pair's less theirs, two labels
+  aiPace.ts                   How fast one model is asked: the most calls a minute, and how long the next one waits
   aiEffort.ts                 A model asked at a lower reasoning effort, as a model of its own: its id, and where it is taken apart
   aiCost.ts, aiLedger.ts      Budget and estimate arithmetic; the call record and its parser
   marketEvent.ts              The event detector: a pair's reading from twelve hours of 1-minute candles, and what raises an event

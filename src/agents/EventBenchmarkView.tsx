@@ -15,6 +15,7 @@ import {
   type EventBenchmarkAnswers,
   type EventBenchmarkSummary
 } from '../../shared/aiEventBenchmark'
+import { splitAiModelId } from '../../shared/aiEffort'
 import { experimentDrift, type AiExperimentSummary } from '../../shared/aiExperiment'
 import {
   AI_OPPORTUNITY_MAX_MODELS,
@@ -161,6 +162,13 @@ function describeVersusKey(name: string): string {
   return `${describeDecider(name.slice(cut + 1))}, ${describeQuestionKind(kind)}`
 }
 
+/** The versions a model's provider said answered in a run, where that is more than its name. */
+function servedAs(row: Pick<AiExperimentSummary, 'versions'>, model: string): string {
+  const { slug } = splitAiModelId(model)
+  const served = (row.versions.served?.[model] ?? []).filter((name) => name !== slug)
+  return served.length === 0 ? '' : ` (answered as ${served.join(', ')})`
+}
+
 /** Which of the two questions a run asked, from the prompt versions its calls were made under. */
 function questionsOf(row: Pick<AiExperimentSummary, 'versions'>): string {
   const kinds = [...new Set(row.versions.prompt.map(questionKindOfPromptVersion).filter((kind): kind is AiOpportunityQuestionKind => kind !== null))]
@@ -203,7 +211,7 @@ function ExperimentsTable({ rows, busy, onOpen }: { rows: AiExperimentSummary[];
               <td style={{ ...cellStyle, whiteSpace: 'normal' }}>
                 {row.pairs.length} pairs, {day(row.startSec)} to {day(row.endSec)}
               </td>
-              <td style={{ ...cellStyle, whiteSpace: 'normal' }}>{row.models.map((model) => describeDecider(model)).join(', ')}</td>
+              <td style={{ ...cellStyle, whiteSpace: 'normal' }}>{row.models.map((model) => describeDecider(model) + servedAs(row, model)).join(', ')}</td>
               <td style={{ ...cellStyle, whiteSpace: 'normal' }}>{questionsOf(row)}</td>
               <td style={cellStyle}>
                 {row.calls.toLocaleString()}
@@ -509,6 +517,13 @@ export function EventBenchmarkView(): React.JSX.Element {
       setNote({ ok: true, text: 'Every answer is already cached. Nothing was asked.' })
       return
     }
+    // The pace as it is now, not as it was when the tab was opened: it can be changed on Usage.
+    let callsPerMinute: number | undefined
+    try {
+      callsPerMinute = (await window.api.ai.getConfig()).callsPerMinute
+    } catch {
+      callsPerMinute = config?.callsPerMinute
+    }
     const agreed = window.confirm(
       describeAiBenchmarkCost({
         symbol: `${dataset.pairs} pairs (each event asked ${question === 'market' ? 'with the market around it' : 'about the pair alone'})`,
@@ -516,7 +531,8 @@ export function EventBenchmarkView(): React.JSX.Element {
         models: peek.models,
         budgetRemainingUsd: peek.budgetRemainingUsd,
         concurrency: BENCHMARK_CONCURRENCY,
-        unit: { one: 'event', many: 'events' }
+        unit: { one: 'event', many: 'events' },
+        callsPerMinute
       })
     )
     if (!agreed) return

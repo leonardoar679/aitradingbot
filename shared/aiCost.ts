@@ -1,4 +1,5 @@
 import type { AiCallRecord } from './aiLedger'
+import { pacedMinimumMs } from './aiPace'
 import { describeDecider, isPanelId } from './aiPanel'
 import { describeEscalation, type AiRoute } from './aiRoute'
 import { AI_PROVIDER_LABEL, GPT_MAX_DECISIONS, describeGptCadence, type AiSignalEstimate } from './aiSignal'
@@ -59,6 +60,8 @@ export interface AiConfig {
   /** Paper positions the watch opens by itself on one model's calls (shared/aiWatchPaper.ts). Off
    * unless switched on, and never anything but paper. */
   watchPaper: AiWatchPaperConfig
+  /** The most calls that start to any one model in a minute, whoever asks (shared/aiPace.ts). */
+  callsPerMinute: number
 }
 
 export interface AiConfigPatch {
@@ -71,6 +74,8 @@ export interface AiConfigPatch {
   watch?: Partial<AiWatchConfig>
   /** Only the fields given are changed. */
   watchPaper?: Partial<AiWatchPaperConfig>
+  /** One of AI_CALLS_PER_MINUTE_CHOICES. */
+  callsPerMinute?: number
 }
 
 /** `$0.0021`, `$0.0113`, `$1.40`. Up to four decimals under ten cents, because that is where a
@@ -331,6 +336,9 @@ export interface AiBenchmarkCostInput {
   concurrency?: number
   /** What one question is called. Absent, a decision: a benchmark of events says "event". */
   unit?: { one: string; many: string }
+  /** The most calls that start to one model in a minute (shared/aiPace.ts). Given, a run is never
+   * said to take less than that pace allows; absent, the time is the calls' own. */
+  callsPerMinute?: number
 }
 
 /** What is still to ask across a benchmark's models, and what that is expected to cost over the
@@ -403,11 +411,18 @@ export function describeAiBenchmarkCost(input: AiBenchmarkCostInput): string {
   const asking = input.models.filter((model) => model.toAsk > 0)
   let time: string | null = null
   if (asking.length > 0 && input.concurrency !== undefined && input.concurrency >= 1) {
+    // The calls take what they take, a few at once -- and no less than the slowest model's share
+    // of them takes at the most calls a minute any one model is asked.
+    const perMinute = input.callsPerMinute
+    const paced = perMinute === undefined ? 0 : Math.max(...asking.map((model) => pacedMinimumMs(model.toAsk * (model.callsPerAnswer ?? 1), perMinute)))
+    const how = perMinute === undefined ? `Asking ${input.concurrency} at a time` : `Asking ${input.concurrency} at a time and no model more than ${perMinute} times a minute`
     time = asking.every((model) => model.perCallLatencyMs != null)
-      ? `Asking ${input.concurrency} at a time, that is ${describeDuration(
-          asking.reduce((sum, model) => sum + model.toAsk * (model.callsPerAnswer ?? 1) * (model.perCallLatencyMs ?? 0), 0) / input.concurrency
+      ? `${how}, that is ${describeDuration(
+          Math.max(paced, asking.reduce((sum, model) => sum + model.toAsk * (model.callsPerAnswer ?? 1) * (model.perCallLatencyMs ?? 0), 0) / input.concurrency)
         )} at the pace ${asking.length === 1 ? 'it has' : 'they have'} answered here.`
-      : 'How long that takes is not known: a model that has not been called here has no pace to go by.'
+      : paced > 0
+        ? `How long that takes is not known: a model that has not been called here has no pace to go by. At no more than ${perMinute} calls a minute to one model it takes ${describeDuration(paced)} at the least.`
+        : 'How long that takes is not known: a model that has not been called here has no pace to go by.'
   }
   return [
     `Benchmark ${count(input.decisions, input.unit?.one ?? 'decision', input.unit?.many ?? 'decisions')} on ${input.symbol} with ${who} through ${AI_PROVIDER_LABEL}. ` +

@@ -148,6 +148,13 @@ async function services() {
   const config = await import('../electron/services/aiConfigService')
   const ledger = await import('../electron/services/aiLedgerService')
   tape.aiRetry.baseDelayMs = 0
+  // A panel is four calls a decision, so a few decisions go past a minute's pace. Its waits are
+  // counted on a clock of their own, which a wait moves on, rather than sat through.
+  let virtual = Date.now()
+  tape.aiPace.now = () => virtual
+  tape.aiPace.sleep = async (ms) => {
+    virtual += ms
+  }
   return { ...tape, ...config, ...ledger }
 }
 
