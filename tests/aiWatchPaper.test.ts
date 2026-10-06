@@ -1147,6 +1147,29 @@ describe("held to the reviewer's REJECT (shared/aiAdditions.ts)", () => {
     expect(await openWatchPaperTrade(event(), decision(), r.deps)).toBeNull()
     expect(r.reviewed).toEqual([])
   })
+
+  it('asks no review for a trade the live market refuses: a spread over the line, or no fresh price', async () => {
+    // The case a one-hour run turned up: an urgent event on a pair quoted 0.17% wide was reviewed,
+    // and then refused for its spread.
+    for (const book of [{ ...tightBook('SOLUSDT', 100, SOON), bid: 99.8, ask: 100.2 }, null]) {
+      const r = rig({ book, review: verdict('APPROVE') })
+      expect((await openWatchPaperTrade(event(), decision(), r.deps))?.opened).toBe(false)
+      expect(r.reviewed).toEqual([])
+    }
+  })
+
+  it('is judged again on the market as it is after the review, which can take a while', async () => {
+    const r = rig({ review: verdict('APPROVE') })
+    const review = r.deps.review
+    r.deps.review = async (asked, answer) => {
+      // The book widens while the reviewer thinks.
+      r.state.book = { ...tightBook('SOLUSDT', 100, SOON), bid: 99.8, ask: 100.2 }
+      return review(asked, answer)
+    }
+    expect(await openWatchPaperTrade(event(), decision(), r.deps)).toEqual({ opened: false, text: 'No paper trade: The spread is 0.400%, over the 0.1% a trade is entered at.' })
+    expect(r.reviewed).toHaveLength(1)
+    expect(r.writes).toBe(0)
+  })
 })
 
 describe('paused after a losing run of its own (shared/paperPause.ts)', () => {

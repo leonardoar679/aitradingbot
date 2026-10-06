@@ -157,6 +157,19 @@ export async function openWatchPaperTrade(
   const plan = planWatchPaperTrade({ config: watchPaper, risk: healPaperRisk(before.paperRisk), event, decision, nowSec: deps.nowSec(), lastPrice })
   if (!plan.ok) return { opened: false, text: `No paper trade: ${plan.reason}` }
 
+  // The market it would enter, live (shared/liveMarket.ts): with no fresh price, or a spread wider
+  // than a trade is entered at, none is opened. Looked at before a second look is asked for, so that
+  // the reviewer is not asked about a trade that could not be opened.
+  const readBook = async (): Promise<LiveBook | null> => {
+    try {
+      return await deps.liveBook(event.exchange, event.symbol)
+    } catch {
+      return null
+    }
+  }
+  const unfit = livePaperBlock(await readBook(), deps.nowSec() * 1000)
+  if (unfit !== null) return { opened: false, text: `No paper trade: ${unfit}` }
+
   // A second look, where something about this trade stands out: its REJECT means no trade. A review
   // that was not asked, refused or could not be had leaves the trade as it was: it only opens less.
   let review: TradeReview | null = null
@@ -168,14 +181,8 @@ export async function openWatchPaperTrade(
   const rejected = reviewRefusal(review)
   if (rejected !== null) return { opened: false, text: `No paper trade: ${rejected}` }
 
-  // The market it would enter, live (shared/liveMarket.ts): with no fresh price, or a spread wider
-  // than a trade is entered at, none is opened.
-  let book: LiveBook | null = null
-  try {
-    book = await deps.liveBook(event.exchange, event.symbol)
-  } catch {
-    book = null
-  }
+  // Read again, as a review can take seconds: the trade is judged on the market as it is now.
+  const book = await readBook()
   // Whether the pair moves with Bitcoin, for what the app's trades have out on one side of it.
   let btcCorrelation: number | null = null
   try {

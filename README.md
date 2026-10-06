@@ -549,7 +549,9 @@ which works out why itself:
   an announcement raised the event.
 - **The pair is thin:** under $5M a day, or quoted wider than 0.05%.
 
-With none of these, nothing is asked. The reviewer is shown the event, the call (its side,
+With none of these, nothing is asked. Nor is it asked about a trade the live market would refuse:
+the book is looked at first, and a spread over 0.1% or no fresh price ends it there. The book is
+read again after the review, which can take seconds. The reviewer is shown the event, the call (its side,
 confidence, entry, stop, target and reasoning), the other calls on file, the major news and the
 reasons it was asked. It answers APPROVE or REJECT, with a reason.
 - **REJECT means no paper trade.** The watch says why: "The reviewer rejected it (the move is
