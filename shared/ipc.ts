@@ -84,6 +84,7 @@ export const IpcChannel = {
   AiAdditionsStatus: 'ai:additionsStatus',
   AiConcludeMove: 'ai:concludeMove',
   AiReviewTrade: 'ai:reviewTrade',
+  AiExitCheck: 'ai:exitCheck',
   LiveTradingGetStatus: 'liveTrading:getStatus',
   LiveTradingSetConfig: 'liveTrading:setConfig',
   LiveTradingEngageKillSwitch: 'liveTrading:engageKillSwitch',
@@ -697,6 +698,30 @@ export interface MarketMakingExecutorParams {
 
 export type ExecutorStatus = 'active' | 'stopped'
 
+/** Written on one of the app's own PAPER trades when the exit check (shared/aiAdditions.ts) answered
+ * EXIT while it was open, and its time limit was brought forward so that the engine closes it in the
+ * next minute (shared/aiExit.ts). Nothing else about it changed: its stop, its target, its entry and
+ * its stake are as they were. Never present on a live executor: neither file that writes one can
+ * make or find a live one. */
+export interface AiExitMark {
+  /** When its time limit was brought forward, and the minute it closes in. */
+  at: number
+  closeAt: number
+  /** Where the engine says it entered, and the time limit it had: with its parameters, the plan as
+   * it was, which is what it is measured against. */
+  enteredAt: number
+  planTimeLimitSec: number
+  /** Who answered, why it was asked (shared/aiAdditions.ts EXIT_TRIGGERS), and what it said. */
+  model: string
+  triggers: string[]
+  confidence: number
+  reason: string
+  /** What the plan would have made, worked out once its own time limit had passed: its exit, its
+   * result after fees, and the minute. Null when its minutes could not be read to the end; absent
+   * until then. */
+  plan?: { exit: PositionExitReason; pnlQuote: number; closedAt: number } | null
+}
+
 export interface ExecutorConfig {
   id: string
   name: string
@@ -735,8 +760,11 @@ export interface ExecutorConfig {
      * stopped executor is not simulated again, so this is what its card has to show, and it is
      * all there is with no paper account for the result to go to. Absent while it is open, and on
      * one a person stopped first. `btc_moved` is one the watch dropped before it entered, because
-     * Bitcoin had moved against it by more than its safeguard allows; `btcMovePct` is that move. */
-    result?: { exit: PositionExitReason | 'btc_moved'; pnlQuote: number; closedAt: number; btcMovePct?: number }
+     * Bitcoin had moved against it by more than its safeguard allows; `btcMovePct` is that move.
+     * `ai_exit` is one the exit check closed: its time limit, brought forward, ended it. */
+    result?: { exit: PositionExitReason | 'btc_moved' | 'ai_exit'; pnlQuote: number; closedAt: number; btcMovePct?: number }
+    /** Set when the exit check answered EXIT while it was open (AiExitMark). */
+    aiExit?: AiExitMark
     /** The live book it was opened against (shared/liveMarket.ts): its best bid and ask, the
      * spread, how old the price was, and where it came from. Absent on one opened before
      * 6 October 2026, when the live price was first checked. */
@@ -760,7 +788,9 @@ export interface ExecutorConfig {
     /** Which kind of announcement it was opened on. ABSENT on a short opened before the Monitoring
      * Tag was read (5 October 2026): every one of those was a delisting's. */
     category?: 'DELISTING' | 'MONITORING_TAG'
-    result?: { exit: PositionExitReason; pnlQuote: number; closedAt: number }
+    result?: { exit: PositionExitReason | 'ai_exit'; pnlQuote: number; closedAt: number }
+    /** As on the watch's: set when the exit check answered EXIT while it was open. */
+    aiExit?: AiExitMark
     /** As on the watch's: its pair's correlation with Bitcoin when it was opened. */
     btcCorrelation?: number | null
   }

@@ -39,6 +39,11 @@ import { describe, expect, it } from 'vitest'
 // mentions the bridge a real order travels over. The models are asked the way they are asked about
 // any event -- the event raised by the main process, the question checked there against its own
 // record of the article -- and what they say can do no more than any answer the watch gets.
+//
+// And on 2026-10-06 the exit check, one of the four AI additions the user switched on within the $5
+// day: a model's EXIT on one of the app's own open PAPER trades closes it at the next minute. It is
+// held to bringing that trade's time limit forward, through the two files that already write those
+// trades, and to nothing else: no stop moves, nothing opens, and no live position can be found.
 
 const ROOT = join(__dirname, '..')
 const SERVICES = join(ROOT, 'electron', 'services')
@@ -346,6 +351,9 @@ describe('AI code has no route to a real order', () => {
       // Upbit's patterns, for the near miss on record: they drop the pegged coins Binance's do.
       'shared/upbitTitles.ts',
       'src/App.tsx',
+      // The exit check (6 October 2026) hands an EXIT for one of the rules' shorts to the file that
+      // writes them; it reads no news itself (held below).
+      'src/agents/exitCheck.ts',
       // Shows where one of the rule's shorts came from, from the mark on it.
       'src/executors/ExecutorCard.tsx',
       'src/explorer/NewsCard.tsx',
@@ -433,8 +441,9 @@ describe('AI code has no route to a real order', () => {
     expect(source).not.toMatch(/window\.api\.credentials/)
     // paperRisk sizes a tag's short by its stop and holds the app's own paper trades to their cap,
     // paperExposure to their cap on one side on coins that move with Bitcoin, and paperPause refuses
-    // one after a losing run: arithmetic, which only ever opens less (held below).
-    expect(importsOf(writer).sort()).toEqual(['engine', 'executorFunding', 'ipc', 'news', 'newsActions', 'paperExposure', 'paperPause', 'paperRisk', 'settingsWrites', 'settleExecutor'])
+    // one after a losing run: arithmetic, which only ever opens less (held below). aiExit is what the
+    // exit check's EXIT writes: a time limit brought forward, and nothing else (held below).
+    expect(importsOf(writer).sort()).toEqual(['aiExit', 'engine', 'executorFunding', 'ipc', 'news', 'newsActions', 'paperExposure', 'paperPause', 'paperRisk', 'settingsWrites', 'settleExecutor'])
     expect(readFileSync(rules, 'utf-8')).toContain("executor.newsRule !== undefined && executor.mode === 'paper' && executor.type === 'position'")
     // The scheduler reads -- the news, the settings, the balances a key can read -- and notifies.
     // Every write goes through the writer above.
@@ -522,11 +531,13 @@ describe('AI code has no route to a real order', () => {
     // before it does anything.
     const writer = readFileSync(join(ROOT, 'src', 'agents', 'watchPaperTrade.ts'), 'utf-8')
     // aiEventMarket names Bitcoin's pair, whose minutes the Bitcoin safeguard reads; it is arithmetic.
-    // aiAdditions: the reviewer's REJECT, one more refusal before the trade is written.
+    // aiAdditions: the reviewer's REJECT, one more refusal before the trade is written. aiExit: what
+    // the exit check's EXIT writes, a time limit brought forward and nothing else (held below).
     expect(importsOf(join(ROOT, 'src', 'agents', 'watchPaperTrade.ts')).sort()).toEqual([
       'aiAdditions',
       'aiCost',
       'aiEventMarket',
+      'aiExit',
       'aiSignal',
       'aiWatchPaper',
       'engine',
@@ -588,10 +599,14 @@ describe('AI code has no route to a real order', () => {
       'newsFeedService',
       'node:crypto',
       'path',
-      'promises'
+      'promises',
+      // The exit check reads the executors on file, to find the trade it is asked about among the
+      // app's own open paper trades. It reads them, and writes nothing there (held below).
+      'settingsService'
     ])
     const source = readFileSync(service, 'utf-8')
     expect(source).toContain('await assertAiBudget()')
+    expect(source).toContain("import { getSettings } from './settingsService'")
     expect(source).not.toMatch(/liveTrading|placeLive|setExecutors|settings\.set|setSettings|credentialsService'/)
     expect(importsOf(join(SERVICES, 'aiAdditionPrompts.ts'))).toEqual(['aiAdditions'])
     expect(readFileSync(join(ROOT, 'shared', 'aiAdditions.ts'), 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron\//)
@@ -607,6 +622,61 @@ describe('AI code has no route to a real order', () => {
     for (const path of [join(ROOT, 'src', 'agents', 'AiAdditionsCard.tsx'), join(ROOT, 'src', 'news', 'useNewsReadings.ts'), join(ROOT, 'src', 'agents', 'WhyConclusion.tsx')]) {
       expect(readFileSync(path, 'utf-8'), path).not.toMatch(/liveTrading|LiveTrading|placeLive|onPrepareOrder|aiProposal|settings\.set/)
     }
+  })
+
+  it("the exit check closes the app's own paper trades early, and does nothing else", () => {
+    // Since 6 October 2026 (the V3 plan's Stage 7, switched on by the user within the $5 day): the
+    // first answer a model gives that changes a trade already open, held to the narrowest form that
+    // can. The main process reads the trade from the executors on file and refuses all but the app's
+    // own open paper positions. The look in the renderer reads, asks and notifies, and writes
+    // nothing. An EXIT is handed to the two files that write those trades, which find it among their
+    // own paper positions and bring its time limit forward: the one field changed, and only ever made
+    // shorter. No stop moves, nothing is opened, and nothing live is within reach.
+    const rules = readFileSync(join(ROOT, 'shared', 'aiAdditions.ts'), 'utf-8')
+    expect(rules).toContain("if (executor.mode !== 'paper' || executor.type !== 'position') return { ok: false, reason: 'it is not a paper position.' }")
+    expect(readFileSync(join(SERVICES, 'aiAdditionsService.ts'), 'utf-8')).toContain(': exitTradeOf(executor)')
+
+    // What an EXIT writes is arithmetic on one field.
+    const exit = join(ROOT, 'shared', 'aiExit.ts')
+    const exitSource = readFileSync(exit, 'utf-8')
+    expect(importsOf(exit).sort()).toEqual(['aiAdditions', 'ipc', 'paperRisk'])
+    // It sets no executor's status or mode: it stops nothing and makes nothing.
+    expect(exitSource).not.toMatch(/window\.|ipcRenderer|electron|liveTrading|placeLive|setExecutors|status: '(active|stopped)'|mode: '/)
+    expect(exitSource).toContain('if (plan <= limit) return null')
+    expect(exitSource).toContain('params: { ...params, timeLimitSec: limit },')
+    // The time limit brought forward, and the plan as it was: nothing else is set.
+    expect(exitSource.match(/timeLimitSec:/g)).toHaveLength(2)
+
+    // The two writers find the trade among their own paper positions, inside the queue, and write
+    // the parameters it gives them.
+    for (const [file, finder, mark] of [
+      [join(ROOT, 'src', 'agents', 'watchPaperTrade.ts'), 'watchPaperExecutors(fresh.executors).find((entry) => entry.id === order.executorId)', 'watch'],
+      [join(ROOT, 'src', 'news', 'newsPaperShort.ts'), 'newsShortExecutors(fresh.executors).find((entry) => entry.id === order.executorId)', 'newsRule']
+    ] as const) {
+      const source = readFileSync(file, 'utf-8')
+      expect(source, file).toContain(finder)
+      expect(source, file).toContain(`params: written.params, ${mark}: { ...current.${mark}, aiExit: written.mark }`)
+    }
+
+    // The look reads, asks and notifies. It writes nothing itself and fills in no form.
+    const look = join(ROOT, 'src', 'agents', 'exitCheck.ts')
+    const lookSource = readFileSync(look, 'utf-8')
+    expect([...new Set([...lookSource.matchAll(/window\.api\.(\w+)(?:\s*\.\s*(\w+))?/g)].map((match) => (match[2] === undefined ? match[1] : `${match[1]}.${match[2]}`)))].sort()).toEqual([
+      'ai.exitCheck',
+      'ai.getConfig',
+      'market.fetchHistoricalRange',
+      'notify',
+      'settings.get'
+    ])
+    expect(lookSource).not.toMatch(/liveTrading|LiveTrading|liveOrders|placeLive|settings\.set|setExecutors|onPrepareOrder|aiProposal|mode:/)
+    expect(importsOf(look).sort()).toEqual(['aiAdditions', 'aiCost', 'aiEventMarket', 'aiExit', 'engine', 'ipc', 'marketResearch', 'newsPaperShort', 'paperRisk', 'watchPaperTrade'])
+    expect(lookSource).toContain('ownOpenPaperTrades(executors)')
+    const scheduler = join(ROOT, 'src', 'agents', 'ExitCheckScheduler.tsx')
+    expect(readFileSync(scheduler, 'utf-8')).not.toMatch(/window\.api/)
+    expect(importsOf(scheduler).sort()).toEqual(['exitCheck', 'react'])
+    // What Performance shows of it reads the ledger, and the executors the page hands it.
+    const card = join(ROOT, 'src', 'performance', 'ExitCheckCard.tsx')
+    expect([...readFileSync(card, 'utf-8').matchAll(/window\.api\.(\w+)\.(\w+)/g)].map((match) => `${match[1]}.${match[2]}`)).toEqual(['ai.listCalls'])
   })
 
   it('"Does AI help?" counts trades already scored, with the strategies read from their own exports', () => {

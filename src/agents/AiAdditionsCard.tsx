@@ -38,7 +38,7 @@ export function AiAdditionsCard(): React.JSX.Element {
         Small questions put to a model beside the watch&apos;s, each inside the daily budget above and with a daily limit of its own, so that none can starve the
         watch. They ask {status === null ? 'the model the watch follows' : describeDecider(status.model)}, the model the watch&apos;s paper trades follow. One that asks
         by itself does so only while the watch is on{status !== null && !status.watchOn ? ', and the watch is off now' : ''}. None of them places, sizes or arms
-        anything.
+        anything; the exit check can only close one of the app&apos;s own paper trades sooner than its plan would, never a live one.
       </p>
       {status === null ? (
         <p style={noteStyle}>{problem ?? 'Loading…'}</p>

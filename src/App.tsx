@@ -18,6 +18,7 @@ import { ConnectionsPage } from './connections/ConnectionsPage'
 import { SettingsPanel } from './settings/SettingsPanel'
 import { ControllerScheduler } from './controllers/ControllerScheduler'
 import { OpportunityScheduler } from './agents/OpportunityScheduler'
+import { ExitCheckScheduler } from './agents/ExitCheckScheduler'
 import { NewsScheduler } from './news/NewsScheduler'
 import { NewsAlertScheduler } from './news/NewsAlertScheduler'
 import { AlertBanner } from './news/AlertBanner'
@@ -105,6 +106,11 @@ function App(): React.JSX.Element {
           place anything, and what it opens by itself is paper. */}
       <ErrorBoundary label="The opportunity watch">
         <OpportunityScheduler />
+      </ErrorBoundary>
+      {/* The exit check: only while the watch is on, and only the app's own paper trades. Its EXIT
+          closes one at the next minute, on paper; it never moves a stop or touches a live one. */}
+      <ErrorBoundary label="The exit check">
+        <ExitCheckScheduler />
       </ErrorBoundary>
       {/* What a delisting does: a notice to someone holding the coin, and the rule's paper short.
           Off unless the news reader is on; nothing it does is real. */}

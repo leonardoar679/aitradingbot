@@ -6,12 +6,27 @@ import {
   AI_ADDITION_PROMPT_VERSIONS,
   AI_ADDITION_SCHEMA_VERSIONS,
   DEFAULT_AI_ADDITIONS,
+  EXIT_LINES,
+  EXIT_THESIS_CHARS,
   NEWS_QUESTION_SUMMARY_CHARS,
   additionCallsToday,
   additionProblem,
   additionsModelOf,
   describeNewsReading,
+  exitOrderOf,
+  exitQuestionOf,
+  exitSubjectId,
+  exitTradeOf,
+  exitTriggers,
+  exitTriggersAsked,
+  exitVerdictsOf,
   healAiAdditions,
+  parseExitCheckRequest,
+  validateExitVerdict,
+  type ExitCheck,
+  type ExitCheckRequest,
+  type ExitTrade,
+  type ExitTrigger,
   latestWhyOf,
   newsQuestionOf,
   newsReadingsOf,
@@ -27,6 +42,7 @@ import {
   type ReviewCall,
   type NewsReading
 } from '../shared/aiAdditions'
+import type { ExecutorConfig, PositionExecutorParams } from '../shared/ipc'
 import type { MarketEvent } from '../shared/marketEvent'
 import type { MoveExplanation } from '../shared/moveExplanation'
 import type { ReadStory } from '../shared/newsFeed'
@@ -42,11 +58,14 @@ const READING: NewsReading = { ticker: 'SOL', relationship: 'DIRECT', direction:
 
 describe('the setting', () => {
   it('is on unless switched off, each, and only false switches one off', () => {
-    expect(DEFAULT_AI_ADDITIONS).toEqual({ news: true, why: true, review: true })
-    expect(healAiAdditions(undefined)).toEqual({ news: true, why: true, review: true })
-    expect(healAiAdditions({ news: false })).toEqual({ news: false, why: true, review: true })
-    expect(healAiAdditions({ news: 'no', why: false, review: false })).toEqual({ news: true, why: false, review: false })
-    expect(healAiAdditions([false])).toEqual({ news: true, why: true, review: true })
+    expect(DEFAULT_AI_ADDITIONS).toEqual({ news: true, why: true, exit: true, review: true })
+    expect(healAiAdditions(undefined)).toEqual({ news: true, why: true, exit: true, review: true })
+    expect(healAiAdditions({ news: false })).toEqual({ news: false, why: true, exit: true, review: true })
+    expect(healAiAdditions({ news: 'no', why: false, exit: false, review: false })).toEqual({ news: true, why: false, exit: false, review: false })
+    expect(healAiAdditions([false])).toEqual({ news: true, why: true, exit: true, review: true })
+    // A setting saved before the exit check existed reads with it on: the user chose all four on.
+    expect(healAiAdditions({ news: true, why: false, review: true })).toEqual({ news: true, why: false, exit: true, review: true })
+    expect(AI_ADDITION_DAILY_LIMITS).toEqual({ news: 40, why: 20, exit: 30, review: 20 })
   })
 
   it("asks the watch's own model: the one its paper trades follow, else the first it asks, else the default", () => {
@@ -69,9 +88,13 @@ describe('the setting', () => {
 
   it('refuses a call when switched off, when it would ask by itself with the watch off, or at its daily limit', () => {
     const ask = (over: Partial<Parameters<typeof additionProblem>[0]> = {}): string | null =>
-      additionProblem({ kind: 'news', additions: { news: true, why: true, review: true }, watchOn: true, automatic: true, callsToday: 0, ...over })
+      additionProblem({ kind: 'news', additions: { news: true, why: true, exit: true, review: true }, watchOn: true, automatic: true, callsToday: 0, ...over })
     expect(ask()).toBeNull()
-    expect(ask({ additions: { news: false, why: true, review: true } })).toBe('The news analyst is switched off under Settings › AI.')
+    expect(ask({ additions: { news: false, why: true, exit: true, review: true } })).toBe('The news analyst is switched off under Settings › AI.')
+    expect(ask({ kind: 'exit', additions: { news: true, why: true, exit: false, review: true } })).toBe('The exit check is switched off under Settings › AI.')
+    expect(ask({ kind: 'exit', callsToday: 29 })).toBeNull()
+    expect(ask({ kind: 'exit', callsToday: 30 })).toBe('The exit check has made its 30 calls today.')
+    expect(ask({ kind: 'exit', watchOn: false })).toBe('The exit check asks by itself only while the watch is on.')
     expect(ask({ kind: 'review', callsToday: 20 })).toBe('The reviewer has made its 20 calls today.')
     expect(ask({ kind: 'why', callsToday: 20 })).toBe('The "why did it move?" conclusion has made its 20 calls today.')
     expect(ask({ kind: 'why', callsToday: 19 })).toBeNull()
@@ -328,6 +351,237 @@ describe('the reviewer', () => {
   })
 })
 
+describe('the exit check', () => {
+  const OPENED = T - 3600
+  const ENTERED = OPENED + 60 - (OPENED % 60)
+  const base: ExecutorConfig = {
+    id: 'w1',
+    name: 'Watch: BUY SOLUSDT',
+    type: 'position',
+    exchange: 'binance',
+    symbol: 'SOLUSDT',
+    baseAsset: 'SOL',
+    quoteAsset: 'USDT',
+    createdAt: OPENED,
+    status: 'active',
+    stoppedAt: null,
+    keepPosition: false,
+    mode: 'paper',
+    watch: { eventId: 'binance:SOLUSDT:1', eventTime: OPENED - 20, model: 'openai/gpt-5-mini', confidence: 0.8 },
+    liveOrder: null,
+    pendingLiveOrderIds: [],
+    liveWatcherId: null,
+    liveWatcherError: null,
+    liveExitResult: null,
+    liveDcaBasePrice: null,
+    liveTwapRunId: null,
+    liveTwapResult: null,
+    params: { side: 'buy', entryPrice: null, amountQuote: 100, takeProfitPct: 4, stopLossPct: 2, timeLimitSec: 7200, trailingStop: null } satisfies PositionExecutorParams
+  }
+  const executor = (over: Partial<ExecutorConfig> = {}, params: Partial<PositionExecutorParams> = {}): ExecutorConfig => ({
+    ...base,
+    ...over,
+    params: { ...(base.params as PositionExecutorParams), ...params }
+  })
+  const short: ExecutorConfig = executor(
+    { id: 'n1', name: 'Delisting short · ABCUSDT', symbol: 'ABCUSDT', baseAsset: 'ABC', watch: undefined, newsRule: { articleId: 7, ticker: 'ABC', releaseSec: OPENED - 30, title: 'Binance Will Delist ABC', category: 'DELISTING' } },
+    { side: 'sell', takeProfitPct: null, stopLossPct: null, timeLimitSec: 14_400 }
+  )
+  const request = (over: Partial<ExitCheckRequest> = {}): ExitCheckRequest => ({
+    executorId: 'w1',
+    entryPrice: 100,
+    enteredAt: ENTERED,
+    priceTime: T - 60,
+    price: 100,
+    move15mPct: 0.2,
+    regimeAtEntry: 'bull',
+    regimeNow: 'bull',
+    ...over
+  })
+  const read = (value: ExecutorConfig): ExitTrade => {
+    const found = exitTradeOf(value)
+    if (!found.ok) throw new Error(found.reason)
+    return found.trade
+  }
+  const story = (over: Partial<ReadStory> = {}): ReadStory =>
+    ({ id: 's', sourceName: 'CoinDesk', title: 'Solana bridge hacked', eventType: 'HACK', impact: 80, publishedAt: T - 600, stale: false, assets: [{ ticker: 'SOL', relationship: 'DIRECT' }], ...over }) as ReadStory
+
+  it("looks only at the app's own open paper positions with a time limit it has not closed already", () => {
+    expect(read(executor())).toEqual({
+      id: 'w1',
+      symbol: 'SOLUSDT',
+      baseAsset: 'SOL',
+      side: 'buy',
+      createdAt: OPENED,
+      stopLossPct: 2,
+      takeProfitPct: 4,
+      timeLimitSec: 7200,
+      origin: { kind: 'watch', eventId: 'binance:SOLUSDT:1', eventTime: OPENED - 20, model: 'openai/gpt-5-mini' }
+    })
+    expect(read(short)).toMatchObject({ side: 'sell', stopLossPct: null, takeProfitPct: null, origin: { kind: 'news', category: 'DELISTING', title: 'Binance Will Delist ABC' } })
+    const refused = (value: ExecutorConfig): string => {
+      const found = exitTradeOf(value)
+      return found.ok ? 'taken' : found.reason
+    }
+    // Whatever it carries, a live executor is never one.
+    expect(refused(executor({ mode: 'live' }))).toBe('it is not a paper position.')
+    expect(refused(executor({ type: 'order' }))).toBe('it is not a paper position.')
+    expect(refused(executor({ watch: undefined }))).toBe('it was not opened by the watch or a news rule.')
+    expect(refused(executor({ status: 'stopped' }))).toBe('it has been stopped.')
+    const closing = { at: T, closeAt: T + 60, enteredAt: ENTERED, planTimeLimitSec: 7200, model: 'm', triggers: ['near_stop'], confidence: 0.6, reason: 'r' }
+    expect(refused(executor({ watch: { ...(base.watch as NonNullable<ExecutorConfig['watch']>), aiExit: closing } }))).toBe('the exit check has closed it already.')
+    expect(refused({ ...short, newsRule: { ...(short.newsRule as NonNullable<ExecutorConfig['newsRule']>), aiExit: closing } })).toBe('the exit check has closed it already.')
+    expect(refused(executor({}, { timeLimitSec: null }))).toBe('it has no time limit for an EXIT to bring forward.')
+  })
+
+  it('reads a request over the bridge only in its shape', () => {
+    expect(parseExitCheckRequest(request())).toEqual(request())
+    expect(parseExitCheckRequest(request({ move15mPct: null, regimeAtEntry: null, regimeNow: 'panic' }))).toEqual(request({ move15mPct: null, regimeAtEntry: null, regimeNow: 'panic' }))
+    for (const bad of [
+      null,
+      'w1',
+      [],
+      request({ executorId: 'w1:near_stop' }),
+      request({ executorId: '' }),
+      request({ entryPrice: 0 }),
+      request({ price: -1 }),
+      request({ price: Number.NaN }),
+      request({ enteredAt: ENTERED + 30 }),
+      request({ priceTime: T - 59 }),
+      request({ enteredAt: T, priceTime: T - 60 }),
+      request({ move15mPct: undefined as unknown as number }),
+      request({ regimeNow: 'calm' as never })
+    ]) {
+      expect(parseExitCheckRequest(bad), JSON.stringify(bad)).toBeNull()
+    }
+  })
+
+  it('is asked near the target or the stop, three quarters of the way there, either side', () => {
+    const triggers = (trade: ExitTrade, price: number): ExitTrigger[] => exitTriggers({ trade, request: request({ price, move15mPct: null }), stories: [], nowSec: T })
+    const long = read(executor())
+    expect(triggers(long, 103)).toEqual(['near_target'])
+    expect(triggers(long, 102.9)).toEqual([])
+    expect(triggers(long, 98.4)).toEqual(['near_stop'])
+    expect(triggers(long, 98.6)).toEqual([])
+    const sold = read(executor({}, { side: 'sell' }))
+    expect(triggers(sold, 96.9)).toEqual(['near_target'])
+    expect(triggers(sold, 97.1)).toEqual([])
+    expect(triggers(sold, 101.6)).toEqual(['near_stop'])
+    expect(triggers(sold, 101.4)).toEqual([])
+    // With no target and no stop, neither is near.
+    expect(triggers(read(short), 50)).toEqual([])
+    expect(EXIT_LINES.nearShare).toBe(0.75)
+  })
+
+  it('is asked on a story of high impact naming the coin since the trade was opened', () => {
+    const news = (stories: ReadStory[]): ExitTrigger[] => exitTriggers({ trade: read(executor()), request: request(), stories, nowSec: T })
+    expect(news([story()])).toEqual(['news'])
+    expect(news([story({ impact: 70 })])).toEqual(['news'])
+    expect(news([story({ impact: 69 })])).toEqual([])
+    expect(news([story({ publishedAt: OPENED })])).toEqual([])
+    expect(news([story({ publishedAt: T + 60 })])).toEqual([])
+    expect(news([story({ stale: true })])).toEqual([])
+    expect(news([story({ assets: [{ ticker: 'SOLV', relationship: 'DIRECT' }] })])).toEqual([])
+    expect(news([story({ assets: [{ ticker: 'SOL', relationship: 'INDIRECT' }] })])).toEqual(['news'])
+  })
+
+  it("is asked when the market's regime has changed since the entry, and on a sharp move against the trade", () => {
+    const trade = read(executor())
+    const asked = (over: Partial<ExitCheckRequest>, side: ExitTrade = trade): ExitTrigger[] => exitTriggers({ trade: side, request: request(over), stories: [], nowSec: T })
+    expect(asked({ regimeAtEntry: 'bull', regimeNow: 'sideways' })).toEqual(['regime_change'])
+    expect(asked({ regimeAtEntry: null, regimeNow: 'panic' })).toEqual([])
+    expect(asked({ regimeAtEntry: 'bear', regimeNow: null })).toEqual([])
+    expect(asked({ move15mPct: -2 })).toEqual(['opposite_move'])
+    expect(asked({ move15mPct: -1.9 })).toEqual([])
+    expect(asked({ move15mPct: 3 })).toEqual([])
+    const sold = read(executor({}, { side: 'sell' }))
+    expect(asked({ move15mPct: 2 }, sold)).toEqual(['opposite_move'])
+    expect(asked({ move15mPct: -3 }, sold)).toEqual([])
+    // All that apply, in a fixed order.
+    expect(exitTriggers({ trade, request: request({ price: 98.4, move15mPct: -2.5, regimeNow: 'bear' }), stories: [story()], nowSec: T })).toEqual(['near_stop', 'news', 'regime_change', 'opposite_move'])
+  })
+
+  it('is asked once a trade and a reason, whatever came of it, read from what the ledger holds', () => {
+    expect(exitSubjectId('w1', ['near_stop', 'news'])).toBe('w1:near_stop+news')
+    const rows = [
+      { promptVersion: AI_ADDITION_PROMPT_VERSIONS.exit, subjectId: 'w1:near_stop+news' },
+      { promptVersion: AI_ADDITION_PROMPT_VERSIONS.exit, subjectId: 'w1:regime_change' },
+      // Another trade whose id begins with this one's.
+      { promptVersion: AI_ADDITION_PROMPT_VERSIONS.exit, subjectId: 'w10:near_target+opposite_move' },
+      { promptVersion: AI_ADDITION_PROMPT_VERSIONS.exit, subjectId: 'w1:nonsense' },
+      { promptVersion: AI_ADDITION_PROMPT_VERSIONS.review, subjectId: 'w1:opposite_move' },
+      { promptVersion: AI_ADDITION_PROMPT_VERSIONS.exit }
+    ]
+    expect([...exitTriggersAsked(rows, 'w1')].sort()).toEqual(['near_stop', 'news', 'regime_change'])
+    expect([...exitTriggersAsked(rows, 'w10')]).toEqual(['near_target', 'opposite_move'])
+  })
+
+  it('is asked the trade, where it stands, the news since it was opened, and why', () => {
+    const question = exitQuestionOf({
+      trade: read(executor()),
+      request: request({ price: 98.4, move15mPct: -1.23456789, regimeNow: 'sideways' }),
+      thesis: 't'.repeat(400),
+      stories: [story(), story({ id: 'old', publishedAt: OPENED - 60 }), ...Array.from({ length: 6 }, (_, k) => story({ id: `more${k}`, title: `More ${k}` }))],
+      triggers: ['near_stop', 'news'],
+      nowSec: T
+    })
+    expect(question).toEqual({
+      trade: {
+        pair: 'SOLUSDT',
+        side: 'long',
+        openedBy: "the watch, following openai/gpt-5-mini's call on a market event",
+        thesis: 't'.repeat(EXIT_THESIS_CHARS),
+        entryPrice: 100,
+        minutesOpen: Math.round((T - ENTERED) / 60),
+        stopPct: 2,
+        targetPct: 4,
+        minutesLeft: Math.round((ENTERED + 7200 - T) / 60)
+      },
+      now: { price: 98.4, gainPct: -1.6, move15mPct: -1.23457, regimeAtEntry: 'bull', regimeNow: 'sideways' },
+      news: [
+        { title: 'Solana bridge hacked', source: 'CoinDesk', kind: 'HACK', impact: 80, minutesAgo: 10 },
+        ...Array.from({ length: 4 }, (_, k) => ({ title: `More ${k}`, source: 'CoinDesk', kind: 'HACK', impact: 80, minutesAgo: 10 }))
+      ],
+      triggers: ['near_stop', 'news']
+    })
+    const shorted = exitQuestionOf({ trade: read(short), request: request({ executorId: 'n1', price: 90 }), thesis: 'Delisted.', stories: [], triggers: ['news'], nowSec: T })
+    expect(shorted.trade).toMatchObject({ side: 'short', openedBy: "the delisting rule, on Binance's announcement", stopPct: null, targetPct: null })
+    expect(shorted.now.gainPct).toBe(10)
+    // A trade past its time does not have minutes left below none.
+    expect(exitQuestionOf({ trade: read(executor({}, { timeLimitSec: 60 })), request: request(), thesis: '', stories: [], triggers: [], nowSec: T }).trade.minutesLeft).toBe(0)
+  })
+
+  it('is taken as KEEP, REDUCE or EXIT with a reason, and only an EXIT given is acted on', () => {
+    expect(validateExitVerdict({ verdict: 'EXIT', confidence: 0.7, reason: ' Hacked. ' })).toEqual({ ok: true, verdict: { verdict: 'EXIT', confidence: 0.7, reason: 'Hacked.' } })
+    expect(validateExitVerdict({ verdict: 'REDUCE', confidence: 0, reason: 'x' }).ok).toBe(true)
+    expect(validateExitVerdict({ verdict: 'SELL', confidence: 0.7, reason: 'x' })).toEqual({ ok: false, reason: 'verdict is not one of KEEP, REDUCE, EXIT.' })
+    expect(validateExitVerdict({ verdict: 'KEEP', confidence: -0.1, reason: 'x' })).toEqual({ ok: false, reason: 'confidence is not from 0 to 1.' })
+    expect(validateExitVerdict({ verdict: 'KEEP', confidence: 0.5, reason: ' ' })).toEqual({ ok: false, reason: 'reason is not text of 1 to 300 characters.' })
+    expect(validateExitVerdict({ verdict: 'KEEP', confidence: 0.5, reason: 'x'.repeat(301) })).toEqual({ ok: false, reason: 'reason is not text of 1 to 300 characters.' })
+    expect(validateExitVerdict(['EXIT'])).toEqual({ ok: false, reason: 'The answer was not an object.' })
+    const answered = (verdict: 'KEEP' | 'REDUCE' | 'EXIT'): ExitCheck => ({ asked: true, triggers: ['near_stop'], outcome: { status: 'answered', answer: { verdict, confidence: 0.6, reason: 'Broke its level.' }, cached: false, model: 'm' } })
+    expect(exitOrderOf(answered('EXIT'))).toEqual({ model: 'm', triggers: ['near_stop'], confidence: 0.6, reason: 'Broke its level.' })
+    expect(exitOrderOf(answered('KEEP'))).toBeNull()
+    expect(exitOrderOf(answered('REDUCE'))).toBeNull()
+    expect(exitOrderOf({ asked: true, triggers: ['near_stop'], outcome: { status: 'refused', reason: 'r', cached: false, model: 'm' } })).toBeNull()
+    expect(exitOrderOf({ asked: true, triggers: ['near_stop'], outcome: { status: 'failed', reason: 'down' } })).toBeNull()
+    expect(exitOrderOf({ asked: true, triggers: ['near_stop'], outcome: { status: 'skipped', reason: 'limit' } })).toBeNull()
+    expect(exitOrderOf({ asked: false, triggers: [], outcome: null })).toBeNull()
+    expect(exitOrderOf(null)).toBeNull()
+  })
+
+  it("reads the check's answers back from the ledger, with the trade each was about", () => {
+    const answer = { verdict: 'REDUCE', confidence: 0.5, reason: 'r' }
+    const rows = [
+      { at: T, promptVersion: AI_ADDITION_PROMPT_VERSIONS.exit, status: 'ok' as const, subjectId: 'w1:near_stop+news', additionAnswer: answer },
+      { at: T, promptVersion: AI_ADDITION_PROMPT_VERSIONS.exit, status: 'rejected' as const, subjectId: 'w2:news', additionAnswer: answer },
+      { at: T, promptVersion: AI_ADDITION_PROMPT_VERSIONS.exit, status: 'ok' as const, subjectId: 'w3:news', additionAnswer: { ...answer, verdict: 'HOLD' } },
+      { at: T, promptVersion: AI_ADDITION_PROMPT_VERSIONS.review, status: 'ok' as const, subjectId: 'w4:news', additionAnswer: answer }
+    ]
+    expect(exitVerdictsOf(rows)).toEqual([{ executorId: 'w1', at: T, verdict: answer }])
+  })
+})
+
 describe('a prompt and its version move together', () => {
   // As tests/aiPromptVersions.test.ts holds every other prompt: edit a text and bump its version, or
   // this fails.
@@ -340,6 +594,11 @@ describe('a prompt and its version move together', () => {
   it("pins the conclusion's prompt and schema", () => {
     expect([AI_ADDITION_PROMPT_VERSIONS.why, sha(AI_ADDITION_SYSTEM_PROMPTS.why)]).toEqual(['why-conclusion-v1', '59f48f9f330a3be495e77589229d471a3b1ea028c2c4f609a6928c48d2eccaed'])
     expect([AI_ADDITION_SCHEMA_VERSIONS.why, sha(JSON.stringify(AI_ADDITION_SCHEMAS.why))]).toEqual(['why-conclusion-v1', '6e757e1aed2f7e2028861b6e123096b3c848b5c4182b38a283bed0a342bed54b'])
+  })
+
+  it("pins the exit check's prompt and schema", () => {
+    expect([AI_ADDITION_PROMPT_VERSIONS.exit, sha(AI_ADDITION_SYSTEM_PROMPTS.exit)]).toEqual(['exit-check-v1', '6daec4807f8503492beea3a8f0d1824a9e6bb98bf1cf6ba868e4f1a352b1b6ed'])
+    expect([AI_ADDITION_SCHEMA_VERSIONS.exit, sha(JSON.stringify(AI_ADDITION_SCHEMAS.exit))]).toEqual(['exit-verdict-v1', '3a3e4041fb04e7049b040d66138c49a29ef3ff84e1280a9d75d7120b8b56b57d'])
   })
 
   it("pins the reviewer's prompt and schema", () => {

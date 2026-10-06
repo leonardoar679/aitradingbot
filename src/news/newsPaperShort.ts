@@ -1,3 +1,4 @@
+import { aiExitOutcome, aiExitPlanEnd, aiExitPlanParams, aiExitPlanResult, aiExitWrite, type AiExitOrder } from '../../shared/aiExit'
 import type { NewsItem, NewsKindActions } from '../../shared/news'
 import {
   delistingShortParams,
@@ -31,6 +32,12 @@ import { settingsWrites } from '../utils/settingsWrites'
 // has them paused (shared/paperPause.ts). And a short of a
 // rule's that has closed is stopped and its result settled into the paper account, the way
 // pressing Stop on its card would.
+//
+// And since 6 October 2026, the exit check's EXIT (shared/aiExit.ts), as on the watch's: an open
+// short of a rule's has its time limit brought forward, so that it closes at the next minute by the
+// engine's own rule and is stopped and settled here like any other. Nothing else about it changes.
+// Once the plan's own time has passed, what the plan would have made is written beside how it did
+// end.
 //
 // PAPER IS WRITTEN HERE AS A LITERAL. newsShortExecutor takes no mode and has no way to be given
 // one. Nothing in this file mentions the bridge a real order travels over, and
@@ -193,6 +200,7 @@ export async function openNewsShorts(item: NewsItem, actions: Pick<NewsKindActio
 export async function settleNewsShorts(deps: NewsShortDeps): Promise<string[]> {
   const settled: string[] = []
   const { executors } = await deps.getSettings()
+  await measureNewsExitPlans(executors, deps)
   for (const executor of newsShortExecutors(executors).filter((entry) => entry.status === 'active')) {
     try {
       const nowSec = deps.nowSec()
@@ -200,7 +208,8 @@ export async function settleNewsShorts(deps: NewsShortDeps): Promise<string[]> {
       if (candles.length === 0) continue
       const state = runExecutorSimulation(candles, executor, candles[0].close)
       if (state.kind !== 'position' || state.status !== 'closed' || state.exitReason === null) continue
-      const result = { exit: state.exitReason, pnlQuote: state.realizedPnl ?? 0, closedAt: state.closedAt ?? nowSec }
+      // One the exit check's time limit ended is the check's exit.
+      const result = { exit: aiExitOutcome(state.exitReason, executor.newsRule?.aiExit), pnlQuote: state.realizedPnl ?? 0, closedAt: state.closedAt ?? nowSec }
       const stopped = await deps.queue(async (): Promise<boolean> => {
         const fresh = await deps.getSettings()
         const current = fresh.executors.find((entry) => entry.id === executor.id)
@@ -218,6 +227,61 @@ export async function settleNewsShorts(deps: NewsShortDeps): Promise<string[]> {
     }
   }
   return settled
+}
+
+/** What the plan of each short the exit check closed would have made, once the plan's own time limit
+ * has passed, written on its mark beside how it did end: as on the watch's
+ * (src/agents/watchPaperTrade.ts). */
+async function measureNewsExitPlans(executors: ExecutorConfig[], deps: NewsShortDeps): Promise<void> {
+  for (const executor of newsShortExecutors(executors)) {
+    const mark = executor.newsRule?.aiExit
+    if (executor.status !== 'stopped' || mark === undefined || mark.plan !== undefined || executor.newsRule?.result === undefined) continue
+    try {
+      const nowSec = deps.nowSec()
+      const end = aiExitPlanEnd(mark)
+      if (nowSec < end + 60) continue
+      const candles = (await deps.fetchCandles(executor.exchange, executor.symbol, executor.createdAt, end + 60)).filter((bar) => bar.time + 60 <= nowSec)
+      const plan = { ...executor, params: aiExitPlanParams(executor.params as PositionExecutorParams, mark) }
+      const state = candles.length === 0 ? null : runExecutorSimulation(candles, plan, candles[0].close)
+      const result = aiExitPlanResult(state?.kind === 'position' ? state : null, mark, nowSec)
+      if (result === undefined) continue
+      await deps.queue(async (): Promise<void> => {
+        const fresh = await deps.getSettings()
+        const current = newsShortExecutors(fresh.executors).find((entry) => entry.id === executor.id)
+        if (current?.newsRule?.aiExit === undefined || current.newsRule.aiExit.plan !== undefined) return
+        const measured: ExecutorConfig = { ...current, newsRule: { ...current.newsRule, aiExit: { ...current.newsRule.aiExit, plan: result } } }
+        await deps.setExecutors(fresh.executors.map((entry) => (entry.id === executor.id ? measured : entry)))
+      })
+    } catch (failure) {
+      // Its minutes are read again next minute.
+      console.error(`The news reader could not measure the plan of "${executor.name}":`, failure)
+    }
+  }
+}
+
+/** Closes one of the rules' open paper shorts at the next minute, on the exit check's EXIT, as on the
+ * watch's (src/agents/watchPaperTrade.ts): its time limit is brought forward (shared/aiExit.ts) and
+ * nothing else is touched, and its time is never made longer. Only one of the rules' own paper
+ * shorts still open, read inside the queue. Returns whether it was brought forward. */
+export async function exitNewsShort(order: AiExitOrder, deps: Pick<NewsShortDeps, 'getSettings' | 'setExecutors' | 'nowSec' | 'queue'>): Promise<boolean> {
+  return deps.queue(async (): Promise<boolean> => {
+    const fresh = await deps.getSettings()
+    const current = newsShortExecutors(fresh.executors).find((entry) => entry.id === order.executorId)
+    if (current?.status !== 'active' || current.newsRule === undefined || current.newsRule.aiExit !== undefined) return false
+    const written = aiExitWrite({
+      params: current.params as PositionExecutorParams,
+      enteredAt: order.enteredAt,
+      nowSec: deps.nowSec(),
+      model: order.model,
+      triggers: order.triggers,
+      confidence: order.confidence,
+      reason: order.reason
+    })
+    if (written === null) return false
+    const closing: ExecutorConfig = { ...current, params: written.params, newsRule: { ...current.newsRule, aiExit: written.mark } }
+    await deps.setExecutors(fresh.executors.map((entry) => (entry.id === current.id ? closing : entry)))
+    return true
+  })
 }
 
 /** The same, against the running app. */

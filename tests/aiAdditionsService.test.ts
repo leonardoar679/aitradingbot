@@ -2,10 +2,10 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { NewsReading, ReviewVerdict, WhyConclusion } from '../shared/aiAdditions'
+import type { ExitCheckRequest, ExitVerdict, NewsReading, ReviewVerdict, WhyConclusion } from '../shared/aiAdditions'
 import type { MarketEvent } from '../shared/marketEvent'
 import type { AiWatchConfig } from '../shared/aiWatch'
-import type { Candle } from '../shared/ipc'
+import type { Candle, ExecutorConfig } from '../shared/ipc'
 import type { NewsFeedState, ReadStory } from '../shared/newsFeed'
 
 // electron/services/aiAdditionsService.ts: the AI additions' calls where the money is spent, with the
@@ -22,6 +22,10 @@ vi.mock('../electron/services/newsFeedService', () => ({
     return () => undefined
   },
   getNewsFeedState: () => ({ stories: feed.stories, reactions: {} })
+}))
+const settings = vi.hoisted(() => ({ executors: [] as ExecutorConfig[] }))
+vi.mock('../electron/services/settingsService', () => ({
+  getSettings: async () => ({ executors: settings.executors })
 }))
 const market = vi.hoisted(() => ({ bars: {} as Record<string, Candle[]>, asked: [] as string[] }))
 vi.mock('../electron/services/marketService', () => ({
@@ -41,6 +45,7 @@ const ON: AiWatchConfig = { enabled: true, models: [A], maxEventsPerDay: 5, minB
 const READING: NewsReading = { ticker: 'SOL', relationship: 'DIRECT', direction: 'up', impact: 72, horizon: '4h', confidence: 0.7, pricedIn: false, reasons: 'A large listing.' }
 const CONCLUSION: WhyConclusion = { conclusion: 'The futures listing drew buyers, on three times the usual volume.', cites: ['story:a'], confidence: 0.6 }
 const VERDICT: ReviewVerdict = { verdict: 'REJECT', confidence: 0.7, reason: 'Another model sells it, and the move is overextended.' }
+const EXIT_VERDICT: ExitVerdict = { verdict: 'EXIT', confidence: 0.65, reason: 'It broke the level it was bought on.' }
 
 /** Four hours of closed minutes ending before NOW: flat at 100, and over the last hour to `end`. */
 function minutes(end: number): Candle[] {
@@ -82,7 +87,8 @@ function stubOpenRouter(reply: (call: number) => Reply | Promise<Reply> = () => 
   vi.stubGlobal('fetch', async (_url: string, init: { body?: string }) => {
     bodies.push(JSON.parse(init.body ?? '{}'))
     const asked = bodies[bodies.length - 1].response_format?.json_schema?.name
-    const { status = 200, content = JSON.stringify(asked === 'why_conclusion' ? CONCLUSION : asked === 'review_verdict' ? VERDICT : READING) } = await reply(bodies.length)
+    const answer = asked === 'why_conclusion' ? CONCLUSION : asked === 'review_verdict' ? VERDICT : asked === 'exit_verdict' ? EXIT_VERDICT : READING
+    const { status = 200, content = JSON.stringify(answer) } = await reply(bodies.length)
     const body =
       status === 200
         ? { provider: 'Test', choices: [{ finish_reason: 'stop', message: { content } }], usage: { prompt_tokens: 600, completion_tokens: 120, cost: 0.001 } }
@@ -106,6 +112,7 @@ beforeEach(() => {
   vi.resetModules()
   feed.listener = null
   feed.stories = []
+  settings.executors = []
   market.bars = {}
   market.asked = []
   process.env.AI_TEST_USER_DATA = mkdtempSync(join(tmpdir(), 'ai-additions-'))
@@ -495,6 +502,185 @@ describe('the reviewer', () => {
   })
 })
 
+describe('the exit check', () => {
+  const OPENED = NOW - 3600
+  const ENTERED = OPENED + 60
+  const EVENT_ID = `binance:SOLUSDT:${OPENED - 60}`
+  const TRADE: ExecutorConfig = {
+    id: 'w1',
+    name: 'Watch: BUY SOLUSDT',
+    type: 'position',
+    exchange: 'binance',
+    symbol: 'SOLUSDT',
+    baseAsset: 'SOL',
+    quoteAsset: 'USDT',
+    createdAt: OPENED,
+    status: 'active',
+    stoppedAt: null,
+    keepPosition: false,
+    mode: 'paper',
+    watch: { eventId: EVENT_ID, eventTime: OPENED - 60, model: A, confidence: 0.8 },
+    liveOrder: null,
+    pendingLiveOrderIds: [],
+    liveWatcherId: null,
+    liveWatcherError: null,
+    liveExitResult: null,
+    liveDcaBasePrice: null,
+    liveTwapRunId: null,
+    liveTwapResult: null,
+    params: { side: 'buy', entryPrice: null, amountQuote: 100, takeProfitPct: 4, stopLossPct: 2, timeLimitSec: 7200, trailingStop: null }
+  }
+  /** Near its stop: 98.4 is 80% of the way from 100 to a 2% stop. */
+  const NEAR_STOP: ExitCheckRequest = { executorId: 'w1', entryPrice: 100, enteredAt: ENTERED, priceTime: NOW - 60, price: 98.4, move15mPct: -0.5, regimeAtEntry: 'bull', regimeNow: 'bull' }
+
+  /** The call the watch followed, on file as the watch wrote it. */
+  async function callOnFile(appendAiCall: (row: never) => Promise<void>): Promise<void> {
+    await appendAiCall({
+      id: 'the-call',
+      at: OPENED - 30,
+      source: 'watch',
+      status: 'ok',
+      model: A,
+      provider: 'Test',
+      promptVersion: 'opportunity-v1',
+      contextVersion: 'context-v1',
+      schemaVersion: 'opportunity-schema-v1',
+      exchange: 'binance',
+      symbol: 'SOLUSDT',
+      interval: '15m',
+      candleTime: OPENED - 60,
+      position: 'flat',
+      referencePrice: 100,
+      usage: { promptTokens: 1, completionTokens: 1, costUsd: 0.001, latencyMs: 1000 },
+      error: null,
+      recommendation: 'buy',
+      confidence: 0.8,
+      rationale: 'Cleared the range on volume.',
+      detail: null,
+      eventId: EVENT_ID,
+      eventType: 'breakout'
+    } as never)
+  }
+
+  it('asks nothing when nothing about the trade has changed', async () => {
+    const { bodies } = stubOpenRouter()
+    const { exitCheck, setAiConfig } = await services()
+    await setAiConfig({ watch: ON })
+    settings.executors = [TRADE]
+    expect(await exitCheck({ ...NEAR_STOP, price: 99 })).toEqual({ asked: false, triggers: [], outcome: null })
+    expect(bodies).toHaveLength(0)
+  })
+
+  it('asks near the stop, telling it the trade as the executors on file have it and the call it was opened on', async () => {
+    const { bodies } = stubOpenRouter()
+    const { exitCheck, setAiConfig, appendAiCall, listAiCalls, AI_ADDITION_SYSTEM_PROMPTS } = await services()
+    await setAiConfig({ watch: ON })
+    await callOnFile(appendAiCall as never)
+    settings.executors = [TRADE]
+    expect(await exitCheck(NEAR_STOP)).toEqual({ asked: true, triggers: ['near_stop'], outcome: { status: 'answered', answer: EXIT_VERDICT, cached: false, model: A } })
+    expect(bodies).toHaveLength(1)
+    expect(bodies[0].messages[0].content).toBe(AI_ADDITION_SYSTEM_PROMPTS.exit)
+    expect(bodies[0].response_format.json_schema.name).toBe('exit_verdict')
+    expect(JSON.parse(bodies[0].messages[1].content)).toEqual({
+      trade: {
+        pair: 'SOLUSDT',
+        side: 'long',
+        openedBy: `the watch, following ${A}'s call on a market event`,
+        thesis: 'Cleared the range on volume.',
+        entryPrice: 100,
+        minutesOpen: 59,
+        stopPct: 2,
+        targetPct: 4,
+        minutesLeft: 61
+      },
+      now: { price: 98.4, gainPct: -1.6, move15mPct: -0.5, regimeAtEntry: 'bull', regimeNow: 'bull' },
+      news: [],
+      triggers: ['near_stop']
+    })
+    const [row] = (await listAiCalls({ source: 'addition' })).rows
+    expect(row).toMatchObject({ addition: 'exit', subjectId: 'w1:near_stop', symbol: 'SOLUSDT', candleTime: NOW - 60, referencePrice: 98.4, rationale: EXIT_VERDICT.reason, additionAnswer: EXIT_VERDICT })
+    expect(row.eventId).toBeUndefined()
+  })
+
+  it('asks once a trade and a reason: not again for the same one, and again for a new one', async () => {
+    const { bodies } = stubOpenRouter()
+    const { exitCheck, setAiConfig } = await services()
+    await setAiConfig({ watch: ON })
+    settings.executors = [TRADE]
+    expect((await exitCheck(NEAR_STOP)).asked).toBe(true)
+    expect(await exitCheck({ ...NEAR_STOP, price: 98.3 })).toEqual({ asked: false, triggers: ['near_stop'], outcome: null })
+    expect(bodies).toHaveLength(1)
+    // News on the coin since it was opened is a reason it has not been asked for.
+    feed.stories = [story('hack', { title: 'Solana bridge hacked', eventType: 'HACK', impact: 85, publishedAt: NOW - 300 })]
+    expect(await exitCheck(NEAR_STOP)).toMatchObject({ asked: true, triggers: ['near_stop', 'news'], outcome: { status: 'answered' } })
+    expect(JSON.parse(bodies[1].messages[1].content).news).toEqual([{ title: 'Solana bridge hacked', source: 'CoinDesk', kind: 'HACK', impact: 85, minutesAgo: 5 }])
+    expect((await exitCheck(NEAR_STOP)).asked).toBe(false)
+    expect(bodies).toHaveLength(2)
+    // A call that got no answer is counted as asked too: one ask a trade and a reason.
+    const { bodies: failing } = stubOpenRouter(() => ({ status: 400 }))
+    expect(await exitCheck({ ...NEAR_STOP, regimeNow: 'bear' })).toMatchObject({ asked: true, triggers: ['near_stop', 'news', 'regime_change'], outcome: { status: 'failed' } })
+    expect(await exitCheck({ ...NEAR_STOP, regimeNow: 'bear' })).toMatchObject({ asked: false })
+    expect(failing).toHaveLength(1)
+  })
+
+  it('is held to the watch: with it off, nothing is asked', async () => {
+    const { bodies } = stubOpenRouter()
+    const { exitCheck } = await services()
+    settings.executors = [TRADE]
+    expect(await exitCheck(NEAR_STOP)).toEqual({ asked: true, triggers: ['near_stop'], outcome: { status: 'skipped', reason: 'The exit check asks by itself only while the watch is on.' } })
+    expect(bodies).toHaveLength(0)
+  })
+
+  it("looks only at the app's own open paper trades, and refuses everything else", async () => {
+    const { bodies } = stubOpenRouter()
+    const { exitCheck, setAiConfig } = await services()
+    await setAiConfig({ watch: ON })
+    const refused = async (executors: ExecutorConfig[], request: unknown = NEAR_STOP): Promise<string> => {
+      settings.executors = executors
+      return exitCheck(request).then(
+        () => 'asked',
+        (failure: Error) => failure.message
+      )
+    }
+    expect(await refused([{ ...TRADE, mode: 'live' }])).toBe("The exit check looks only at the app's own open paper trades, and it is not a paper position.")
+    expect(await refused([{ ...TRADE, watch: undefined }])).toBe("The exit check looks only at the app's own open paper trades, and it was not opened by the watch or a news rule.")
+    expect(await refused([{ ...TRADE, status: 'stopped' }])).toBe("The exit check looks only at the app's own open paper trades, and it has been stopped.")
+    expect(await refused([])).toBe("The exit check looks only at the app's own open paper trades, and there is no such trade on file.")
+    expect(await refused([TRADE], { ...NEAR_STOP, executorId: undefined })).toBe("An exit check is asked about one of the app's own open paper trades, as it stands.")
+    expect(await refused([TRADE], { ...NEAR_STOP, priceTime: NOW - 600 })).toBe('The price the exit check would be shown is not of the last few minutes.')
+    expect(await refused([TRADE], { ...NEAR_STOP, priceTime: NOW + 60 })).toBe('The price the exit check would be shown is not of the last few minutes.')
+    expect(await refused([TRADE], { ...NEAR_STOP, enteredAt: OPENED - 120 })).toBe('The entry the exit check would be shown is before the trade was opened.')
+    expect(bodies).toHaveLength(0)
+  })
+
+  it("tells it a news rule's short by its announcement", async () => {
+    const { bodies } = stubOpenRouter()
+    const { exitCheck, setAiConfig } = await services()
+    await setAiConfig({ watch: ON })
+    settings.executors = [
+      {
+        ...TRADE,
+        id: 'n1',
+        symbol: 'ABCUSDT',
+        baseAsset: 'ABC',
+        watch: undefined,
+        newsRule: { articleId: 7, ticker: 'ABC', releaseSec: OPENED - 30, title: 'Binance Will Delist ABC', category: 'DELISTING' },
+        params: { side: 'sell', entryPrice: null, amountQuote: 100, takeProfitPct: null, stopLossPct: null, timeLimitSec: 14_400, trailingStop: null }
+      }
+    ]
+    // A sharp bounce against the short.
+    expect(await exitCheck({ ...NEAR_STOP, executorId: 'n1', price: 103, move15mPct: 2.5 })).toMatchObject({ asked: true, triggers: ['opposite_move'] })
+    expect(JSON.parse(bodies[0].messages[1].content).trade).toMatchObject({
+      pair: 'ABCUSDT',
+      side: 'short',
+      openedBy: "the delisting rule, on Binance's announcement",
+      thesis: `Binance announced the coin's delisting: "Binance Will Delist ABC".`,
+      stopPct: null,
+      targetPct: null
+    })
+  })
+})
+
 describe('what Settings › AI shows', () => {
   it("says each addition's switch, what it asked today, and what a call costs", async () => {
     stubOpenRouter()
@@ -503,12 +689,12 @@ describe('what Settings › AI shows', () => {
     expect(await getAiAdditionsStatus()).toEqual({
       model: A,
       watchOn: true,
-      additions: { news: true, why: true, review: true },
-      limits: { news: 40, why: 20, review: 20 },
-      today: { news: 0, why: 0, review: 0 },
-      perCall: { news: { usd: null, basis: 'unknown' }, why: { usd: null, basis: 'unknown' }, review: { usd: null, basis: 'unknown' } }
+      additions: { news: true, why: true, exit: true, review: true },
+      limits: { news: 40, why: 20, exit: 30, review: 20 },
+      today: { news: 0, why: 0, exit: 0, review: 0 },
+      perCall: { news: { usd: null, basis: 'unknown' }, why: { usd: null, basis: 'unknown' }, exit: { usd: null, basis: 'unknown' }, review: { usd: null, basis: 'unknown' } }
     })
     await analyseStory(story('a'), true)
-    expect(await getAiAdditionsStatus()).toMatchObject({ today: { news: 1, why: 0, review: 0 }, perCall: { news: { usd: 0.001, basis: 'history' } } })
+    expect(await getAiAdditionsStatus()).toMatchObject({ today: { news: 1, why: 0, exit: 0, review: 0 }, perCall: { news: { usd: 0.001, basis: 'history' } } })
   })
 })

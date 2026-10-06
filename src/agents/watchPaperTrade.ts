@@ -1,5 +1,6 @@
 import { reviewRefusal, type TradeReview } from '../../shared/aiAdditions'
 import type { AiConfig } from '../../shared/aiCost'
+import { aiExitOutcome, aiExitPlanEnd, aiExitPlanParams, aiExitPlanResult, aiExitWrite, type AiExitOrder } from '../../shared/aiExit'
 import type { AiSignalDecision } from '../../shared/aiSignal'
 import { MARKET_REFERENCE_SYMBOLS } from '../../shared/aiEventMarket'
 import {
@@ -37,6 +38,11 @@ import { settingsWrites } from '../utils/settingsWrites'
 // way pressing Stop on its card would, so that the money comes back and the count of open trades
 // goes down. So is one still waiting for its entry when Bitcoin has moved against it by more than
 // its safeguard allows.
+//
+// And since 6 October 2026, the exit check's EXIT (shared/aiExit.ts): an open paper trade of the
+// watch's has its time limit brought forward, so that it closes at the next minute by the engine's
+// own rule and is stopped and settled above like any other. Nothing else about it changes. Once the
+// plan's own time has passed, what the plan would have made is written beside how it did end.
 //
 // PAPER IS WRITTEN HERE AS A LITERAL. watchPaperExecutor takes no mode and has no way to be given
 // one. Nothing in this file mentions the bridge a real order travels over, and
@@ -237,6 +243,7 @@ export async function openWatchPaperTrade(
 export async function settleWatchPaperTrades(deps: WatchPaperDeps): Promise<string[]> {
   const settled: string[] = []
   const { executors } = await deps.getSettings()
+  await measureWatchExitPlans(executors, deps)
   const active = watchPaperExecutors(executors).filter((entry) => entry.status === 'active')
   if (active.length === 0) return settled
   // The safeguard as it is set now, and Bitcoin's minutes read once a pass for every trade that
@@ -262,8 +269,9 @@ export async function settleWatchPaperTrades(deps: WatchPaperDeps): Promise<stri
       let found: WatchPaperOutcome | null = null
       if (state.status === 'closed' && state.exitReason !== null) {
         // How it ended goes on its mark: a stopped executor is not simulated again, so this is what
-        // its card and the Watch card have to show, with or without a paper account.
-        found = { exit: state.exitReason, pnlQuote: state.realizedPnl ?? 0, closedAt: state.closedAt ?? nowSec }
+        // its card and the Watch card have to show, with or without a paper account. One the exit
+        // check's time limit ended is the check's exit.
+        found = { exit: aiExitOutcome(state.exitReason, executor.watch?.aiExit), pnlQuote: state.realizedPnl ?? 0, closedAt: state.closedAt ?? nowSec }
       } else if (state.status === 'pending' && executor.watch !== undefined && watchPaper.dropOnBtcMovePct > 0) {
         // Still waiting for its entry: dropped when Bitcoin has moved against it since the event.
         const movePct = btcMoveAgainst({
@@ -301,6 +309,64 @@ export async function settleWatchPaperTrades(deps: WatchPaperDeps): Promise<stri
     }
   }
   return settled
+}
+
+/** What the plan of each trade the exit check closed would have made, once the plan's own time limit
+ * has passed: the same minutes from when the trade was opened, simulated with the time limit it had,
+ * and written on its mark beside how it did end. Judged on minutes that have closed, and written
+ * once, inside the queue, on the executors read there. */
+async function measureWatchExitPlans(executors: ExecutorConfig[], deps: WatchPaperDeps): Promise<void> {
+  for (const executor of watchPaperExecutors(executors)) {
+    const mark = executor.watch?.aiExit
+    if (executor.status !== 'stopped' || mark === undefined || mark.plan !== undefined || executor.watch?.result === undefined) continue
+    try {
+      const nowSec = deps.nowSec()
+      const end = aiExitPlanEnd(mark)
+      if (nowSec < end + 60) continue
+      const candles = (await deps.fetchCandles(executor.exchange, executor.symbol, executor.createdAt, end + 60)).filter((bar) => bar.time + 60 <= nowSec)
+      const plan = { ...executor, params: aiExitPlanParams(executor.params as PositionExecutorParams, mark) }
+      const state = candles.length === 0 ? null : runExecutorSimulation(candles, plan, candles[0].close)
+      const result = aiExitPlanResult(state?.kind === 'position' ? state : null, mark, nowSec)
+      if (result === undefined) continue
+      await deps.queue(async (): Promise<void> => {
+        const fresh = await deps.getSettings()
+        const current = watchPaperExecutors(fresh.executors).find((entry) => entry.id === executor.id)
+        if (current?.watch?.aiExit === undefined || current.watch.aiExit.plan !== undefined) return
+        const measured: ExecutorConfig = { ...current, watch: { ...current.watch, aiExit: { ...current.watch.aiExit, plan: result } } }
+        await deps.setExecutors(fresh.executors.map((entry) => (entry.id === executor.id ? measured : entry)))
+      })
+    } catch (failure) {
+      // Its minutes are read again next minute.
+      console.error(`The watch could not measure the plan of "${executor.name}":`, failure)
+    }
+  }
+}
+
+/** Closes one of the watch's open paper trades at the next minute, on the exit check's EXIT: its time
+ * limit is brought forward (shared/aiExit.ts), so that the engine ends it by its own rule and the
+ * settle loop above stops and books it, and the plan as it was and what was said are written on its
+ * mark. Its stop and its target are not touched, and its time is never made longer. Only one of the
+ * watch's own paper trades still open, read inside the queue. Returns whether it was brought
+ * forward. */
+export async function exitWatchPaperTrade(order: AiExitOrder, deps: Pick<WatchPaperDeps, 'getSettings' | 'setExecutors' | 'nowSec' | 'queue'>): Promise<boolean> {
+  return deps.queue(async (): Promise<boolean> => {
+    const fresh = await deps.getSettings()
+    const current = watchPaperExecutors(fresh.executors).find((entry) => entry.id === order.executorId)
+    if (current?.status !== 'active' || current.watch === undefined || current.watch.aiExit !== undefined) return false
+    const written = aiExitWrite({
+      params: current.params as PositionExecutorParams,
+      enteredAt: order.enteredAt,
+      nowSec: deps.nowSec(),
+      model: order.model,
+      triggers: order.triggers,
+      confidence: order.confidence,
+      reason: order.reason
+    })
+    if (written === null) return false
+    const closing: ExecutorConfig = { ...current, params: written.params, watch: { ...current.watch, aiExit: written.mark } }
+    await deps.setExecutors(fresh.executors.map((entry) => (entry.id === current.id ? closing : entry)))
+    return true
+  })
 }
 
 /** The same, against the running app. */

@@ -24,7 +24,8 @@ import {
   type Holdings
 } from '../shared/newsActions'
 import { simulatePosition } from '../src/executors/engine'
-import { newsShortExecutor, openNewsShorts, settleNewsShorts, type NewsShortDeps } from '../src/news/newsPaperShort'
+import { exitNewsShort, newsShortExecutor, openNewsShorts, settleNewsShorts, type NewsShortDeps } from '../src/news/newsPaperShort'
+import type { AiExitOrder } from '../shared/aiExit'
 
 // What a delisting announcement does, and a coin added to the Monitoring Tag, as the user chose on
 // 2026-10-05 (shared/newsActions.ts, src/news/): a notice to someone holding the coin, and a PAPER
@@ -441,6 +442,96 @@ describe('settling the shorts', () => {
     r.state.candles = [{ time: A + 120, open: 10, high: 10, low: 10, close: 10, volume: 1 }]
     r.state.now = A + 300 * 60
     expect(await settleNewsShorts(r.deps)).toEqual([])
+  })
+})
+
+describe("the exit check's EXIT on a rule's short (shared/aiExit.ts)", () => {
+  const order = (over: Partial<AiExitOrder> = {}): AiExitOrder => ({
+    executorId: 'short-1',
+    enteredAt: A + 120,
+    model: 'openai/gpt-5-mini',
+    triggers: ['opposite_move'],
+    confidence: 0.7,
+    reason: 'It bounced hard against the short.',
+    ...over
+  })
+  /** Shorted at 10 in the minute after it was opened; at 10.4 from the thirty-first minute on. */
+  const minutes = (): Candle[] =>
+    Array.from({ length: 245 }, (_, i) => {
+      const time = A + 120 + i * 60
+      const price = time < A + 31 * 60 ? 10 : 10.4
+      return { time, open: price, high: price, low: price, close: price, volume: 1 }
+    })
+
+  it("brings forward an open short's time limit and nothing else, once, and only on the rules' own", async () => {
+    const r = rig()
+    await openNewsShorts({ ...item, tickers: ['ICX'] }, ON, r.deps)
+    const opened = r.state.executors[0]
+    const plan = (opened.params as PositionExecutorParams).timeLimitSec
+    expect(plan).toBe(239 * 60 - 120)
+    r.state.now = A + 30 * 60 + 25
+    expect(await exitNewsShort(order(), r.deps)).toBe(true)
+    const written = r.state.executors[0]
+    expect(written.params).toEqual({ ...opened.params, timeLimitSec: 31 * 60 - 120 })
+    expect(written.newsRule).toEqual({
+      ...opened.newsRule,
+      aiExit: { at: A + 30 * 60 + 25, closeAt: A + 31 * 60, enteredAt: A + 120, planTimeLimitSec: plan, model: 'openai/gpt-5-mini', triggers: ['opposite_move'], confidence: 0.7, reason: 'It bounced hard against the short.' }
+    })
+    expect(written.status).toBe('active')
+    expect(await exitNewsShort(order({ reason: 'Again.' }), r.deps)).toBe(false)
+    // Even with the clock gone back a minute, the plan it was closed against is not written over.
+    r.state.now = A + 29 * 60 + 25
+    expect(await exitNewsShort(order({ reason: 'Again.' }), r.deps)).toBe(false)
+    expect(r.state.executors[0].newsRule?.aiExit).toMatchObject({ reason: 'It bounced hard against the short.', planTimeLimitSec: plan })
+    for (const other of [{ ...opened, mode: 'live' as const }, { ...opened, newsRule: undefined }, { ...opened, status: 'stopped' as const, stoppedAt: A + 600 }]) {
+      const s = rig({ executors: [other], now: A + 30 * 60 + 25 })
+      expect(await exitNewsShort(order(), s.deps)).toBe(false)
+      expect(s.state.executors).toEqual([other])
+    }
+  })
+
+  it("is stopped at the next minute as the check's exit, and set against its plan once the four hours are up", async () => {
+    const r = rig()
+    await openNewsShorts({ ...item, tickers: ['ICX'] }, ON, r.deps)
+    r.state.candles = minutes()
+    r.state.now = A + 30 * 60 + 25
+    await exitNewsShort(order(), r.deps)
+    r.state.now = A + 32 * 60 + 1
+    expect(await settleNewsShorts(r.deps)).toEqual(['Delisting short · ICXUSDT'])
+    const ended = r.state.executors[0]
+    expect(ended.newsRule?.result).toMatchObject({ exit: 'ai_exit', closedAt: A + 31 * 60 })
+    // Shorted at 10, out at 10.4.
+    expect(ended.newsRule?.result?.pnlQuote).toBeLessThan(-3.5)
+    expect(ended.newsRule?.aiExit?.plan).toBeUndefined()
+    r.state.now = A + 241 * 60
+    await settleNewsShorts(r.deps)
+    expect(r.state.executors[0].newsRule?.aiExit?.plan).toEqual({
+      exit: 'time_limit',
+      // The short as it was opened, on the same minutes.
+      pnlQuote: simulatePosition(minutes(), { ...(ended.params as PositionExecutorParams), timeLimitSec: 239 * 60 - 120 }).realizedPnl,
+      closedAt: A + 239 * 60
+    })
+    expect(r.settled).toEqual(['short-1'])
+  })
+
+  it('writes the plan once when two passes overlap', async () => {
+    const r = rig()
+    await openNewsShorts({ ...item, tickers: ['ICX'] }, ON, r.deps)
+    r.state.candles = minutes()
+    r.state.now = A + 30 * 60 + 25
+    await exitNewsShort(order(), r.deps)
+    r.state.now = A + 32 * 60 + 1
+    await settleNewsShorts(r.deps)
+    let writes = 0
+    const write = r.deps.setExecutors
+    r.deps.setExecutors = async (executors) => {
+      writes++
+      await write(executors)
+    }
+    r.state.now = A + 241 * 60
+    await Promise.all([settleNewsShorts(r.deps), settleNewsShorts(r.deps)])
+    expect(writes).toBe(1)
+    expect(r.state.executors[0].newsRule?.aiExit?.plan).toMatchObject({ exit: 'time_limit' })
   })
 })
 

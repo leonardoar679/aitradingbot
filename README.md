@@ -475,7 +475,8 @@ The user chose "On, within the $5 day".
   (`shared/aiAdditions.ts`, `electron/services/aiAdditionsService.ts`).
 - **The model:** they ask the one the watch's paper trades follow.
 - **Asking by itself:** an addition does so only while the watch is on.
-- **Nothing placed:** none of them places, sizes or arms anything.
+- **Nothing placed:** none of them places, sizes or arms anything. The exit check can close one of
+  the app's own paper trades sooner than its plan would, never a live one.
 
 **The news analyst** makes at most 40 calls a day. It reads each story of high impact the feed
 reads (70 or more, or one the price confirmed), once, within the hour it was published. It returns:
@@ -508,6 +509,35 @@ How it works:
   cites nothing, or anything not listed, is dropped.
 - **Shown:** the conclusion appears under the rules' explanation, with what it cites. The newest
   one on file for the pair, if it is less than an hour old, shows when the window opens.
+
+**The exit check** makes at most 30 calls a day. Every two minutes it looks again at the app's own
+open paper trades, the watch's and the news rules' shorts. It asks only when something about one has
+changed:
+- **Near its target or its stop:** the price has come three quarters of the way from the entry to
+  either.
+- **News on the coin:** a story of impact 70 or more has named it since the trade was opened.
+- **The market's regime changed:** Bitcoin's regime when the trade entered differs from now, by the
+  rule the market status uses.
+- **A sharp move against it:** 2% against the trade over the pair's last fifteen minutes.
+
+It asks once a trade for each reason, whatever came of it.
+- **What it reads, and where:** the trade itself (its side, levels, time limit and what opened it)
+  is read in the main process from the executors on file. Only the app's own paper positions still
+  open are looked at. Where it entered and what the market has done since are measured in the
+  renderer, where the engine runs.
+- **What it is shown:** the trade, what it was opened on (the call's reasoning, or the
+  announcement), where it stands, the news since, and why it is asked.
+- **Its answer:** KEEP, REDUCE or EXIT, with a reason.
+
+What an answer does:
+- **EXIT closes the paper trade at the next minute.** Its time limit is brought forward, so the
+  engine ends it at that minute's close by its own rule. It is then stopped and settled like any
+  other, and its card says "Closed by the exit check". Nothing else changes: the stop and the target
+  stay where they were, and a time limit is never made longer.
+- **KEEP and REDUCE change nothing.** REDUCE is recorded only.
+- **Measured against the plan:** once the plan's own time limit has passed, the plan is simulated on
+  the same minutes and its result is written beside the exit's. Performance's "Does the exit check
+  help?" adds them up: better or worse than the plan, in R where the trade had a stop, and in money.
 
 **The reviewer** makes at most 20 calls a day. It takes a second look before one of the watch's
 paper trades, and only when something about the trade stands out. It is asked in the main process,
@@ -565,6 +595,24 @@ profile.
 - **A quiet one:** a 1.2% move on the same pair asked nothing.
 - **A malformed request** was refused.
 - **Settings › AI** read "1 of 20" for the reviewer, about $0.014 a day at its limit.
+
+The exit check was checked through the real bridge, with a fake key and the watch on in a scratch
+profile. One pair's minutes were faked: a paper buy of the watch's entered at 100, then the price
+slid to 98.4 over fifteen minutes, past three quarters of the way to its 2% stop.
+- **Asked at the next look,** about two minutes after the trade was written, for two reasons: it
+  was near its stop, and the market's regime, read from Bitcoin's real minutes, had gone from
+  sideways to bull since it entered.
+- **The faked answer, at $0.0006, was EXIT:** "It has given back most of the way to its stop in
+  fifteen minutes; the breakout it was bought on has failed."
+- **The trade's time limit** went from 7,200 to 1,980 seconds, which ends it in the next minute. Its
+  stop and target stayed at 2% and 4%, and a notice said it was closing.
+- **The settle loop** stopped it a minute later: "Closed by the exit check: −1.798 USDT after fees,
+  −0.82 R".
+- **Refused requests:** asking again about it once it was stopped was refused, and so was a
+  malformed request. Neither wrote a row.
+- **Performance** read: "It has closed 1 of the app's paper trades early. 1 is still waiting for
+  its plan's time to pass."
+- **Settings › AI** read "1 of 30" for the exit check, about $0.018 a day at its limit.
 
 ### Discovery — a market scanner
 
@@ -3119,8 +3167,9 @@ electron/                    Electron main process
                                aiAdditionsService (the AI additions' calls, within their limits
                                and the budget; the news analyst and the conclusion to "Why did it
                                move?" asking by themselves; the conclusion's evidence rebuilt from
-                               public candles; the reviewer's triggers worked out from the ledger
-                               and the news)
+                               public candles; the exit check, on the app's own open paper trades
+                               read from the executors on file; the reviewer's triggers worked out
+                               from the ledger and the news)
                              AI, with no import path to any of the live services above:
                                openRouterClient (the only file that knows OpenRouter's wire format),
                                aiSignalService (the paid path, cache, retries), aiPrompt,
@@ -3168,7 +3217,8 @@ shared/                       Code both processes run, so they cannot disagree a
   paperExposure.ts            A pair's hourly correlation with Bitcoin, and the cap on what the app's own paper trades stake on one side on pairs that track it
   newsTitles.ts, news.ts      Which kind of news a Binance title is, and which coins it names (the study's patterns); what the reader keeps of each article, and what each kind did
   newsFeed.ts                 The news feeds read: RSS, a story's coins, kind, credibility and impact, the same story from several sources, what the price did after, and what each kind has done
-  aiAdditions.ts              The AI additions: each one's switch, daily limit and prompt version; the news analyst's question and answer; the conclusion to "Why did it move?" with its evidence and citations; and the reviewer's triggers, question and verdict, checked
+  aiAdditions.ts              The AI additions: each one's switch, daily limit and prompt version; the news analyst's question and answer; the conclusion to "Why did it move?" with its evidence and citations; the exit check's triggers, question and verdict; and the reviewer's, checked
+  aiExit.ts                   What the exit check's EXIT writes on one of the app's own paper trades (its time limit brought forward, nothing else), and what those trades came to against their plans
   moveExplanation.ts          "Why did it move?": a pair's move against Bitcoin's, its volume and the news that names it, labelled KNOWN, PROBABLE, POSSIBLE or UNKNOWN by fixed rules
   newsActions.ts              What a delisting or a Monitoring Tag does: the notice to a holder, the kind's paper short, and when it is raised for the models and may be asked about
   newsRules.ts, newsRecord.ts The studies' bracket and four-hour hold as arithmetic, shared with research/announcementStudy.ts; the record of the two rules and the two near misses since the studies
@@ -3184,7 +3234,8 @@ src/                          React renderer app
   status/                     What the status bar and Overview say: the trading mode, the watch's mode, a key's state
   opportunities/              Opportunities
   ai-decisions/               AI Decisions (Analyze, Signals)
-  performance/                Performance, and PaperRCurveCard (the app's own paper trades in R)
+  performance/                Performance; PaperRCurveCard (the app's own paper trades in R) and
+                              ExitCheckCard (the exit check's exits against the plans they cut short)
   trading/                    Paper Trading, Live Trading
   strategies/                 Strategies (Active Runs, Execution)
   research/                   Backtest & Research (Backtest, Automation)
@@ -3213,7 +3264,9 @@ src/                          React renderer app
                               what is held, and the candles that score it);
                               opportunityWatch.ts + OpportunityScheduler (the watch at work, headless);
                               watchPaperTrade.ts (the one file of the watch's that writes: its paper
-                              trades, opened and settled);
+                              trades, opened, closed sooner on the exit check's EXIT, and settled);
+                              exitCheck.ts + ExitCheckScheduler (the exit check at work, headless:
+                              reads, asks and hands an EXIT to the writer);
                               opportunityTable.ts + OpportunityTableCard (the Opportunities table: what
                               is on offer and the last hour's other events, with their scores);
                               quantState.ts + AiHelpCard (the two strategies' state at each event, read
@@ -3236,7 +3289,8 @@ src/                          React renderer app
                               near misses since the studies, scored)
   news/                       What a delisting does, headless: NewsScheduler (the notice and the
                               rule's paper short) and newsPaperShort.ts (the one file that writes
-                              those shorts, paper by a literal). The alerts: NewsAlertScheduler
+                              those shorts, paper by a literal, and closes one sooner on the exit
+                              check's EXIT). The alerts: NewsAlertScheduler
                               (headless), alertStore.ts (this session's, for the count and the
                               banner) and AlertBanner. "Why did it move?": WhyItMoved, and
                               WhyItMovedHost with its WhyButton; useNewsFeed

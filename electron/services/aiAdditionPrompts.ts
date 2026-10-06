@@ -1,4 +1,6 @@
 import {
+  EXIT_MAX_REASON,
+  EXIT_VERDICTS,
   NEWS_READING_DIRECTIONS,
   NEWS_READING_HORIZONS,
   NEWS_READING_MAX_REASONS,
@@ -42,6 +44,16 @@ export const AI_ADDITION_SYSTEM_PROMPTS: Record<AiAdditionKind, string> = {
     'confidence: 0 to 1. How well the evidence supports your conclusion. It is not a probability; never claim certainty.',
     'You do not decide whether to trade.'
   ].join('\n'),
+  exit: [
+    'You check an open paper trade for a trading app that measures whether its models help. Return only the requested JSON.',
+    "The user message is: the trade (its pair, its side, what opened it and what it was opened on, its entry price, how many minutes it has been open, its stop and its target as distances from the entry in percent, and the minutes left before its time limit closes it); where it stands now (the price, its gain in the trade's favour in percent, the pair's move over the last fifteen minutes, and the market's regime by Bitcoin's moves when it entered and now: panic, high-vol, recovery, bull, bear or sideways); the stories of high impact on the coin since it was opened; and why you are asked: it is near its target, near its stop, there is news on the coin, the regime changed, or the price moved sharply against it.",
+    'KEEP leaves the trade to its own stop, target and time limit. EXIT closes it at the next minute, at the market. REDUCE says you would take part of it off; it is recorded, and the trade is left as it is.',
+    'Exit when the evidence says what it was opened on no longer holds: news against it, a market turned against it, or a move that broke its case. Keep it when its case still holds: its stop and its target are there to end it.',
+    `verdict: ${EXIT_VERDICTS.join(', ')}.`,
+    'confidence: 0 to 1. How clearly the evidence supports your verdict. It is not a probability; never claim certainty.',
+    `reason: at most ${EXIT_MAX_REASON} characters, plain text: what your verdict rests on.`,
+    'You cannot move its stop or its target, make it longer, or add to it.'
+  ].join('\n'),
   review: [
     'You review a paper trade before it is opened, for a trading app that measures whether its models help. Return only the requested JSON.',
     "The user message is: the market event a model was asked about (the pair, its kind and direction, the scanner's score, its 15-minute move in percent and in the pair's usual moves, its volume against its usual, what the pair trades a day and its spread, and the announcement that raised it, if one did); the model's call to trade it (its side, confidence, entry range, stop, target and reasoning); the other models' calls on the same event so far; the stories of high impact on the coin in the hours before; and why you are asked: the models disagree, the move is unusually large, major news hit the coin, or the pair is thin.",
@@ -83,6 +95,19 @@ export const AI_ADDITION_SCHEMAS: Record<AiAdditionKind, { name: string; schema:
         confidence: { type: 'number' }
       },
       required: ['conclusion', 'cites', 'confidence']
+    }
+  },
+  exit: {
+    name: 'exit_verdict',
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        verdict: { type: 'string', enum: [...EXIT_VERDICTS] },
+        confidence: { type: 'number' },
+        reason: { type: 'string' }
+      },
+      required: ['verdict', 'confidence', 'reason']
     }
   },
   review: {

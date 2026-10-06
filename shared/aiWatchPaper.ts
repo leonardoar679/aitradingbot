@@ -250,7 +250,8 @@ const EXIT_WORDS: Record<Exclude<WatchPaperOutcome['exit'], 'entry_expired' | 'b
   stop_loss: 'Stopped out',
   time_limit: 'Time ran out',
   trailing_stop: 'Trailing stop',
-  liquidation: 'Liquidated'
+  liquidation: 'Liquidated',
+  ai_exit: 'Closed by the exit check'
 }
 
 /** How a paper trade ended, for its card and its timeline: the exit, what it made or lost, and --

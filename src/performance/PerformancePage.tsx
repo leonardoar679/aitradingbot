@@ -7,6 +7,7 @@ import { getWatchActivity, subscribeWatchActivity } from '../agents/opportunityW
 import { watchPaperExecutors } from '../../shared/aiWatchPaper'
 import type { ExecutorConfig } from '../../shared/ipc'
 import { PaperRCurveCard } from './PaperRCurveCard'
+import { ExitCheckCard } from './ExitCheckCard'
 
 /** How often the executors on file are read again: for which journal rows the watch paper traded,
  * and for the running total in R of the app's own paper trades. */
@@ -71,6 +72,7 @@ export function PerformancePage(): React.JSX.Element {
       <PortfolioHistory />
       {models !== null && <LiveBoardCard title="What the watch's recommendations earned" models={models} refreshKey={answered} />}
       <PaperRCurveCard executors={executors} />
+      <ExitCheckCard executors={executors} />
       <JournalCard paper={paperKeys} />
     </>
   )

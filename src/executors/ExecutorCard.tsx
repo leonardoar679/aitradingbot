@@ -14,6 +14,7 @@ import { executorTypeMeta } from './executorTypeMeta'
 import { netUnrealizedPct } from '../../shared/fees'
 import { describeAiProposalOrigin } from '../../shared/aiProposal'
 import { describeWatchPaperOrigin, describeWatchPaperResult, watchPaperEntered } from '../../shared/aiWatchPaper'
+import { describeAiExit } from '../../shared/aiExit'
 import { describeNewsShortOrigin } from '../../shared/newsActions'
 import { TradeTimeline } from '../agents/TradeTimeline'
 import { useExecutorSimulation } from './useExecutorSimulation'
@@ -408,6 +409,18 @@ function SpreadMetrics({ executor }: { executor: ExecutorConfig }): React.JSX.El
   )
 }
 
+/** What the exit check did to one of the app's own paper trades, where it closed one
+ * (shared/aiExit.ts): when and why, what was said, and what the plan would have made. */
+function AiExitLine({ executor }: { executor: ExecutorConfig }): React.JSX.Element | null {
+  const mark = executor.mode === 'paper' ? (executor.watch?.aiExit ?? executor.newsRule?.aiExit) : undefined
+  if (mark === undefined) return null
+  return (
+    <div style={{ marginTop: '0.25rem', fontSize: '0.7rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
+      {describeAiExit(mark, executor.quoteAsset, executor.params as PositionExecutorParams)}
+    </div>
+  )
+}
+
 function SingleMarketMetrics({ executor }: { executor: ExecutorConfig }): React.JSX.Element {
   const sim = useExecutorSimulation(executor)
 
@@ -719,6 +732,7 @@ export function ExecutorCard({
             </button>
           </div>
         )}
+        <AiExitLine executor={executor} />
       </div>
 
       <div style={{ borderTop: '1px solid var(--border)', paddingTop: '0.6rem' }}>

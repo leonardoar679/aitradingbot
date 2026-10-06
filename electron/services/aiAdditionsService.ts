@@ -7,13 +7,21 @@ import {
   AI_ADDITION_KINDS,
   AI_ADDITION_PROMPT_VERSIONS,
   AI_ADDITION_SCHEMA_VERSIONS,
+  EXIT_LINES,
   additionCallsToday,
   additionProblem,
   additionsModelOf,
+  exitQuestionOf,
+  exitSubjectId,
+  exitTradeOf,
+  exitTriggers,
+  exitTriggersAsked,
   newsQuestionOf,
+  parseExitCheckRequest,
   parseReviewRequest,
   reviewQuestionOf,
   reviewTriggers,
+  validateExitVerdict,
   validateNewsReading,
   validateReviewVerdict,
   validateWhyConclusion,
@@ -21,6 +29,8 @@ import {
   type AiAdditionKind,
   type AiAdditionOutcome,
   type AiAdditionsStatus,
+  type ExitCheck,
+  type ExitTrade,
   type MoveConclusion,
   type NewsReading,
   type ReviewOther,
@@ -39,6 +49,7 @@ import { appendAiCall, listAiCalls } from './aiLedgerService'
 import { requestWithRetry, withCost } from './aiSignalService'
 import { scanSourceFor } from './marketService'
 import { getNewsFeedState, onNewsFeedUpdate } from './newsFeedService'
+import { getSettings } from './settingsService'
 
 // THE AI ADDITIONS' CALLS, WHERE THE MONEY IS SPENT (shared/aiAdditions.ts).
 //
@@ -53,7 +64,9 @@ import { getNewsFeedState, onNewsFeedUpdate } from './newsFeedService'
 // was published, and only while the watch is on.
 //
 // NOTHING HERE TRADES. It imports nothing that places, sizes or arms an order, and what it writes is
-// its cache and the ledger's rows (tests/aiNoLivePath.test.ts).
+// its cache and the ledger's rows (tests/aiNoLivePath.test.ts). The exit check reads the executors
+// on file, to find the trade it is asked about among the app's own open paper trades; what its EXIT
+// does is written in the renderer, on paper, by the two files that write those trades.
 
 const CONTEXT_VERSION = 'addition-v1'
 const LEDGER_ROWS_READ = 5000
@@ -350,6 +363,70 @@ export async function reviewTrade(request: unknown): Promise<TradeReview> {
   return { asked: true, triggers, outcome }
 }
 
+// ---------------------------------------------------------------------------------------------
+// The exit check.
+
+/** Trades a check is being asked about now: one at a time each, so that two looks cannot both ask
+ * for the same reason before either is on file. */
+const checking = new Set<string>()
+
+/** What a trade was opened on: the call the watch followed, read from the ledger, or the
+ * announcement a news rule shorted. */
+async function exitThesisOf(trade: ExitTrade): Promise<string> {
+  const { origin } = trade
+  if (origin.kind === 'news') {
+    return `${origin.category === 'MONITORING_TAG' ? 'Binance put the coin under its Monitoring Tag' : "Binance announced the coin's delisting"}: "${origin.title}".`
+  }
+  const page = await listAiCalls({ symbol: trade.symbol, model: origin.model, sinceSec: origin.eventTime, promptVersions: AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS, limit: 200 })
+  const call = page.rows.find((row) => row.eventId === origin.eventId && row.status === 'ok')
+  return call?.rationale ?? 'The call it was opened on is not on file.'
+}
+
+/** One of the app's own open paper trades, looked at again. The trade -- its side, its levels, its
+ * time limit, what opened it -- is read here from the executors on file, and only the app's own open
+ * paper positions are looked at; where it entered and what the market has done since are the
+ * renderer's to measure, as the engine runs there; the news comes from the feed, and the reasons are
+ * the fixed lines'. The check is asked only for a reason it has not been asked about on this trade
+ * before, and it is held to the watch: it asks by itself. What an EXIT does is written in the
+ * renderer, on paper (src/agents/exitCheck.ts). */
+export async function exitCheck(request: unknown): Promise<ExitCheck> {
+  const parsed = parseExitCheckRequest(request)
+  if (parsed === null) throw new Error("An exit check is asked about one of the app's own open paper trades, as it stands.")
+  const executor = (await getSettings()).executors.find((entry) => entry.id === parsed.executorId)
+  const read = executor === undefined ? { ok: false as const, reason: 'there is no such trade on file.' } : exitTradeOf(executor)
+  if (!read.ok) throw new Error(`The exit check looks only at the app's own open paper trades, and ${read.reason}`)
+  const { trade } = read
+  const nowSec = Math.floor(Date.now() / 1000)
+  if (parsed.priceTime > nowSec || nowSec - (parsed.priceTime + 60) > EXIT_LINES.priceMaxAgeSeconds) throw new Error('The price the exit check would be shown is not of the last few minutes.')
+  if (parsed.enteredAt < trade.createdAt - 60) throw new Error('The entry the exit check would be shown is before the trade was opened.')
+  const stories = getNewsFeedState().stories
+  const triggers = exitTriggers({ trade, request: parsed, stories, nowSec })
+  if (triggers.length === 0 || checking.has(trade.id)) return { asked: false, triggers, outcome: null }
+  checking.add(trade.id)
+  try {
+    const page = await listAiCalls({ source: 'addition', promptVersion: AI_ADDITION_PROMPT_VERSIONS.exit, symbol: trade.symbol, sinceSec: trade.createdAt, limit: LEDGER_ROWS_READ })
+    const asked = exitTriggersAsked(page.rows, trade.id)
+    if (triggers.every((trigger) => asked.has(trigger))) return { asked: false, triggers, outcome: null }
+    const thesis = await exitThesisOf(trade)
+    const outcome = await askAddition({
+      kind: 'exit',
+      subjectId: exitSubjectId(trade.id, triggers),
+      symbol: trade.symbol,
+      candleTime: parsed.priceTime,
+      referencePrice: parsed.price,
+      payload: exitQuestionOf({ trade, request: parsed, thesis, stories, triggers, nowSec }),
+      automatic: true,
+      validate: (value) => {
+        const checked = validateExitVerdict(value)
+        return checked.ok ? { ok: true, answer: checked.verdict } : checked
+      }
+    })
+    return { asked: true, triggers, outcome }
+  } finally {
+    checking.delete(trade.id)
+  }
+}
+
 const handled = new Set<string>()
 const queue: ReadStory[] = []
 let draining = false
@@ -431,6 +508,22 @@ const SAMPLE_PAYLOAD: Record<AiAdditionKind, unknown> = {
       { id: 'story:sample', kind: 'news', text: 'A headline of the usual length about a coin and what happened to it (CoinDesk, 11:10 UTC)' },
       { id: 'volume', kind: 'volume', text: 'Volume 3.1 times its usual over those minutes.' }
     ]
+  },
+  exit: {
+    trade: {
+      pair: 'SOLUSDT',
+      side: 'long',
+      openedBy: "the watch, following sample's call on a market event",
+      thesis: 'x'.repeat(300),
+      entryPrice: 100,
+      minutesOpen: 42,
+      stopPct: 1.5,
+      targetPct: 3,
+      minutesLeft: 18
+    },
+    now: { price: 98.8, gainPct: -1.2, move15mPct: -1.4, regimeAtEntry: 'bull', regimeNow: 'sideways' },
+    news: [{ title: 'A headline of the usual length about a coin and what happened to it', source: 'CoinDesk', kind: 'HACK', impact: 80, minutesAgo: 12 }],
+    triggers: ['near_stop', 'news']
   },
   review: {
     event: { pair: 'SOLUSDT', kind: 'breakout', direction: 'up', score: 88, movePct15m: 3.2, moveSigmas: 6.1, volumeRatio: 4.2, quoteVolume24h: 4e8, spreadPct: 0.01, announcement: null },

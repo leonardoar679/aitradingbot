@@ -29,7 +29,7 @@ import type {
 import type { ResearchState } from '../shared/marketResearch'
 import type { LiveBook, LiveState } from '../shared/liveMarket'
 import type { NewsFeedState, StoryMark } from '../shared/newsFeed'
-import type { AiAdditionsStatus, MoveConclusion, TradeReview } from '../shared/aiAdditions'
+import type { AiAdditionsStatus, ExitCheck, ExitCheckRequest, MoveConclusion, TradeReview } from '../shared/aiAdditions'
 import type { MarketEvent } from '../shared/marketEvent'
 import type { NewsConfigPatch, NewsFilter, NewsPage, NewsState } from '../shared/news'
 import type { NewsRecord } from '../shared/newsRecord'
@@ -241,6 +241,10 @@ const api = {
     // Billed unless held, and only when something about the trade stands out: the reviewer's second
     // look before one of the watch's paper trades. REJECT means no trade.
     reviewTrade: (request: { event: MarketEvent; decision: AiSignalDecision }): Promise<TradeReview> => ipcRenderer.invoke(IpcChannel.AiReviewTrade, request),
+    // Billed unless held, and only when something about one of the app's own open paper trades has
+    // changed that it has not been asked about: the exit check. Its EXIT is written by the renderer,
+    // on paper; this only asks.
+    exitCheck: (request: ExitCheckRequest): Promise<ExitCheck> => ipcRenderer.invoke(IpcChannel.AiExitCheck, request),
     // The two calls below the "free" line that are not free: each is billed unless its answer is
     // already cached.
     confirmEntry: (request: AiEntryConfirmRequest): Promise<AiSignalDecision> =>

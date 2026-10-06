@@ -33,7 +33,8 @@ import type { LiveBook } from '../shared/liveMarket'
 import { DEFAULT_PAPER_PAUSE, resumePaperPause } from '../shared/paperPause'
 import { riskedAtStop } from '../shared/paperRisk'
 import { simulatePosition } from '../src/executors/engine'
-import { openWatchPaperTrade, settleWatchPaperTrades, watchPaperExecutor, type WatchPaperDeps, type WatchPaperResult } from '../src/agents/watchPaperTrade'
+import { exitWatchPaperTrade, openWatchPaperTrade, settleWatchPaperTrades, watchPaperExecutor, type WatchPaperDeps, type WatchPaperResult } from '../src/agents/watchPaperTrade'
+import type { AiExitOrder } from '../shared/aiExit'
 
 // Paper trades from the watch: what it may open, its limits, and the one file that writes them.
 // Everything that file touches is injected: the setting, the executors on file, the price, the
@@ -646,6 +647,120 @@ describe('settleWatchPaperTrades', () => {
     expect([first.length, second.length].sort()).toEqual([0, 1])
     expect(r.settled).toEqual(['w1'])
     expect(r.writes).toBe(1)
+  })
+})
+
+describe("the exit check's EXIT (shared/aiExit.ts)", () => {
+  const start = Math.ceil(SOON / 60) * 60
+  const trade = (overrides: Partial<ExecutorConfig> = {}): ExecutorConfig => ({ ...watchPaperExecutor({ id: 'w1', event: event(), plan: okPlan(), nowSec: SOON }), ...overrides })
+  const order = (over: Partial<AiExitOrder> = {}): AiExitOrder => ({ executorId: 'w1', enteredAt: start, model: A, triggers: ['near_stop'], confidence: 0.6, reason: 'Broke its level.', ...over })
+  /** Entered at 100 in the first minute, flat for ten, down to 99.6 in the eleventh, and at the
+   * target in the twelfth. */
+  const minutes: Candle[] = [
+    bar(start, 100, 100.2, 99.9, 100.1),
+    ...Array.from({ length: 10 }, (_, k) => bar(start + 60 * (k + 1), 100.1, 100.3, 99.9, 100)),
+    bar(start + 660, 100, 100.1, 99.5, 99.6),
+    bar(start + 720, 99.6, 103.5, 99.6, 103.2)
+  ]
+
+  it('brings forward the time limit of one of its open paper trades, and writes why on its mark', async () => {
+    const r = rig({ executors: [trade()], now: start + 625 })
+    expect(await exitWatchPaperTrade(order(), r.deps)).toBe(true)
+    const [written] = r.state.executors
+    expect((trade().params as PositionExecutorParams).timeLimitSec).toBe(3600)
+    expect(written.params).toEqual({ ...trade().params, timeLimitSec: 660 })
+    expect(written.watch).toEqual({
+      ...trade().watch,
+      aiExit: { at: start + 625, closeAt: start + 660, enteredAt: start, planTimeLimitSec: 3600, model: A, triggers: ['near_stop'], confidence: 0.6, reason: 'Broke its level.' }
+    })
+    // It is closed by the engine at the next minute, and settled as every other is.
+    expect(written.status).toBe('active')
+    expect(r.writes).toBe(1)
+    expect(r.settled).toEqual([])
+  })
+
+  it('touches nothing but its own paper trades still open, and each once', async () => {
+    for (const other of [trade({ mode: 'live' }), { ...trade(), watch: undefined }, trade({ status: 'stopped', stoppedAt: start })]) {
+      const r = rig({ executors: [other], now: start + 625 })
+      expect(await exitWatchPaperTrade(order(), r.deps)).toBe(false)
+      expect(r.writes).toBe(0)
+      expect(r.state.executors).toEqual([other])
+    }
+    const r = rig({ executors: [trade()], now: start + 625 })
+    expect(await exitWatchPaperTrade(order(), r.deps)).toBe(true)
+    r.state.now = start + 1225
+    expect(await exitWatchPaperTrade(order({ reason: 'Again.' }), r.deps)).toBe(false)
+    // Even with the clock gone back a minute, the plan it was closed against is not written over.
+    r.state.now = start + 565
+    expect(await exitWatchPaperTrade(order({ reason: 'Again.' }), r.deps)).toBe(false)
+    expect(r.writes).toBe(1)
+    expect(r.state.executors[0].watch?.aiExit).toMatchObject({ reason: 'Broke its level.', planTimeLimitSec: 3600 })
+    // One whose own clock ends it as soon is left as it is: a time limit is never made longer.
+    const late = rig({ executors: [trade()], now: start + 3600 - 30 })
+    expect(await exitWatchPaperTrade(order(), late.deps)).toBe(false)
+    expect(late.writes).toBe(0)
+  })
+
+  it("is stopped and settled at the next minute as the check's exit, and set against its plan once the plan's time has passed", async () => {
+    const r = rig({ executors: [trade()], now: start + 625, candles: minutes })
+    await exitWatchPaperTrade(order(), r.deps)
+    // The minute it closes in has not closed yet.
+    r.state.now = start + 700
+    expect(await settleWatchPaperTrades(r.deps)).toEqual([])
+    r.state.now = start + 721
+    expect(await settleWatchPaperTrades(r.deps)).toEqual(['Watch: BUY SOLUSDT'])
+    const ended = r.state.executors[0]
+    expect(ended.status).toBe('stopped')
+    expect(ended.watch?.result).toMatchObject({ exit: 'ai_exit', closedAt: start + 660 })
+    // Out at that minute's close, after fees, by the engine.
+    expect(ended.watch?.result?.pnlQuote).toBe(simulatePosition(minutes.slice(0, 12), ended.params as PositionExecutorParams).realizedPnl)
+    expect(ended.watch?.result?.pnlQuote).toBeLessThan(-0.5)
+    expect(describeWatchPaperResult(ended.watch!.result!, 'USDT')).toMatch(/^Closed by the exit check: -0\.\d+ USDT after fees\.$/)
+    // Its plan has not run its course: nothing is set against it yet.
+    r.state.now = start + 3000
+    await settleWatchPaperTrades(r.deps)
+    expect(r.state.executors[0].watch?.aiExit?.plan).toBeUndefined()
+    // Once it has, the plan on the same minutes: it would have reached its target.
+    r.state.now = start + 3661
+    await settleWatchPaperTrades(r.deps)
+    const plan = simulatePosition(minutes, trade().params as PositionExecutorParams)
+    expect(plan).toMatchObject({ status: 'closed', exitReason: 'take_profit', closedAt: start + 720 })
+    expect(r.state.executors[0].watch?.aiExit?.plan).toEqual({ exit: 'take_profit', pnlQuote: plan.realizedPnl, closedAt: start + 720 })
+    // Settled once, and the plan written once.
+    const writes = r.writes
+    await settleWatchPaperTrades(r.deps)
+    expect(r.writes).toBe(writes)
+    expect(r.settled).toEqual(['w1'])
+  })
+
+  it('writes the plan once when two passes overlap', async () => {
+    const r = rig({ executors: [trade()], now: start + 625, candles: minutes })
+    await exitWatchPaperTrade(order(), r.deps)
+    r.state.now = start + 721
+    await settleWatchPaperTrades(r.deps)
+    const writes = r.writes
+    r.state.now = start + 3661
+    await Promise.all([settleWatchPaperTrades(r.deps), settleWatchPaperTrades(r.deps)])
+    expect(r.writes).toBe(writes + 1)
+    expect(r.state.executors[0].watch?.aiExit?.plan).toMatchObject({ exit: 'take_profit' })
+  })
+
+  it("leaves a plan whose minutes cannot be read to be read again, and gives it up a day after the plan's end", async () => {
+    const r = rig({ executors: [trade()], now: start + 625, candles: minutes })
+    await exitWatchPaperTrade(order(), r.deps)
+    r.state.now = start + 721
+    await settleWatchPaperTrades(r.deps)
+    r.state.candles = new Error('down')
+    r.state.now = start + 3661
+    await settleWatchPaperTrades(r.deps)
+    expect(r.state.executors[0].watch?.aiExit?.plan).toBeUndefined()
+    // Minutes that stop short of the plan's end, read for a day.
+    r.state.candles = minutes.slice(0, 5)
+    await settleWatchPaperTrades(r.deps)
+    expect(r.state.executors[0].watch?.aiExit?.plan).toBeUndefined()
+    r.state.now = start + 3600 + 86_401
+    await settleWatchPaperTrades(r.deps)
+    expect(r.state.executors[0].watch?.aiExit?.plan).toBeNull()
   })
 })
 

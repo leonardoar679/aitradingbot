@@ -1,15 +1,18 @@
 import type { AiConfig } from './aiCost'
 import type { AiCallRecord } from './aiLedger'
 import type { AiSignalDecision } from './aiSignal'
+import type { ExecutorConfig, PositionExecutorParams } from './ipc'
 import type { MarketEvent } from './marketEvent'
+import type { MarketRegime } from './marketResearch'
 import type { CauseLabel, MoveExplanation } from './moveExplanation'
 import type { NewsEventType, ReadStory } from './newsFeed'
 
 // THE AI ADDITIONS (the V3 engine plan's Stage 7): small questions put to a model beside the watch's.
 // The news analyst reads each story of high impact once; the conclusion to "Why did it move?" weighs
-// the evidence the fixed rules found, and must cite what it rests on; the reviewer takes a second
-// look before one of the watch's paper trades, when something about it stands out, and REJECT means
-// no trade.
+// the evidence the fixed rules found, and must cite what it rests on; the exit check looks again at
+// one of the app's own open paper trades when something has changed, and its EXIT closes that paper
+// trade at the next minute; the reviewer takes a second look before one of the watch's paper trades,
+// when something about it stands out, and REJECT means no trade.
 //
 // SWITCHED ON BY THE USER, INSIDE THE BUDGET ALREADY THERE. On 6 October 2026 the user chose "On,
 // within the $5 day": each addition is on unless switched off under Settings › AI, and each has a
@@ -22,18 +25,30 @@ import type { NewsEventType, ReadStory } from './newsFeed'
 //
 // NONE OF THEM PLACES, SIZES OR ARMS ANYTHING. A reading is shown, and weighs in the news part of the
 // signal score; an answer the validator refuses is kept, as every refused answer is, and is used
-// nowhere.
+// nowhere. Two can only ever do less: the reviewer's REJECT opens no paper trade, and the exit
+// check's EXIT closes one of the app's own paper trades sooner than its plan would have -- never a
+// live one, and it never moves a stop or makes a trade longer (shared/aiExit.ts).
 
-export const AI_ADDITION_KINDS = ['news', 'why', 'review'] as const
+export const AI_ADDITION_KINDS = ['news', 'why', 'exit', 'review'] as const
 export type AiAdditionKind = (typeof AI_ADDITION_KINDS)[number]
 
 /** Calls a day each may make, at most: the plan's limits, chosen with the user's $5 day. */
-export const AI_ADDITION_DAILY_LIMITS: Record<AiAdditionKind, number> = { news: 40, why: 20, review: 20 }
+export const AI_ADDITION_DAILY_LIMITS: Record<AiAdditionKind, number> = { news: 40, why: 20, exit: 30, review: 20 }
 
 /** Each addition's question and answer, versioned as every prompt here is: part of the cache key and
  * of every ledger row, and pinned by a hash (tests/aiAdditions.test.ts). */
-export const AI_ADDITION_PROMPT_VERSIONS: Record<AiAdditionKind, string> = { news: 'news-analyst-v1', why: 'why-conclusion-v1', review: 'reviewer-v1' }
-export const AI_ADDITION_SCHEMA_VERSIONS: Record<AiAdditionKind, string> = { news: 'news-reading-v1', why: 'why-conclusion-v1', review: 'review-verdict-v1' }
+export const AI_ADDITION_PROMPT_VERSIONS: Record<AiAdditionKind, string> = {
+  news: 'news-analyst-v1',
+  why: 'why-conclusion-v1',
+  exit: 'exit-check-v1',
+  review: 'reviewer-v1'
+}
+export const AI_ADDITION_SCHEMA_VERSIONS: Record<AiAdditionKind, string> = {
+  news: 'news-reading-v1',
+  why: 'why-conclusion-v1',
+  exit: 'exit-verdict-v1',
+  review: 'review-verdict-v1'
+}
 
 export const AI_ADDITION_INFO: Record<AiAdditionKind, { name: string; what: string; automatic: boolean }> = {
   news: {
@@ -46,6 +61,11 @@ export const AI_ADDITION_INFO: Record<AiAdditionKind, { name: string; what: stri
     what: 'Weighs the evidence the fixed rules found for a move (the stories that name the coin, Bitcoin, the volume) and concludes, citing each item it rests on, or it is dropped. On a click in the Why window, at the price shown; and by itself for a coin a story of high impact names.',
     automatic: true
   },
+  exit: {
+    name: 'Exit check',
+    what: "Looks again at one of the app's own open paper trades when something has changed: it is near its target or its stop, there is news on the coin, the market's regime has changed, or the price moved sharply against it; once a trade for each. EXIT closes the paper trade at the next minute; REDUCE is recorded only. It never moves a stop, never makes a trade longer, and never touches a live position.",
+    automatic: true
+  },
   review: {
     name: 'Reviewer',
     what: "A second look before one of the watch's paper trades, only when the models disagree, the move is unusually large, major news hit the coin or the pair is thin. REJECT means no trade; a review that cannot be had leaves the trade as it was.",
@@ -55,7 +75,7 @@ export const AI_ADDITION_INFO: Record<AiAdditionKind, { name: string; what: stri
 
 /** On or off, each. Only `false` switches one off: on 6 October 2026 the user chose them on. */
 export type AiAdditionsConfig = Record<AiAdditionKind, boolean>
-export const DEFAULT_AI_ADDITIONS: AiAdditionsConfig = { news: true, why: true, review: true }
+export const DEFAULT_AI_ADDITIONS: AiAdditionsConfig = { news: true, why: true, exit: true, review: true }
 
 /** What came of asking an addition: an answer, from the cache or paid for; an answer refused and
  * kept; nothing asked, and why; or a call that got no answer. */
@@ -550,6 +570,286 @@ export function reviewsOf(rows: readonly Pick<AiCallRecord, 'promptVersion' | 's
     if (row.promptVersion !== AI_ADDITION_PROMPT_VERSIONS.review || row.status !== 'ok' || row.subjectId === undefined) continue
     const verdict = validateReviewVerdict(row.additionAnswer)
     if (verdict.ok) out[row.subjectId] = verdict.verdict
+  }
+  return out
+}
+
+// ---------------------------------------------------------------------------------------------
+// The exit check.
+
+/** When one of the app's own open paper trades is looked at again. Fixed lines, written down before
+ * any result. */
+export const EXIT_LINES = {
+  /** Of the way from its entry to its target, or to its stop, this much covered is near it. */
+  nearShare: 0.75,
+  /** A move against the trade this large over the pair's last fifteen closed minutes, in percent, is
+   * sharp. */
+  oppositeMovePct: 2,
+  /** A story of this impact or more naming the coin, published since the trade was opened, is news on
+   * it: the reviewer's line for major news. */
+  newsImpact: REVIEW_LINES.majorNewsImpact,
+  /** A price older than this is not shown to it: the trade is not where it would say. */
+  priceMaxAgeSeconds: 300
+} as const
+
+export const EXIT_TRIGGERS = ['near_target', 'near_stop', 'news', 'regime_change', 'opposite_move'] as const
+export type ExitTrigger = (typeof EXIT_TRIGGERS)[number]
+export const EXIT_VERDICTS = ['KEEP', 'REDUCE', 'EXIT'] as const
+export const EXIT_MAX_REASON = 300
+/** Of the call or the announcement a trade was opened on, at most this much is shown. */
+export const EXIT_THESIS_CHARS = 300
+
+export function describeExitTrigger(trigger: ExitTrigger): string {
+  const words: Record<ExitTrigger, string> = {
+    near_target: 'it is near its target',
+    near_stop: 'it is near its stop',
+    news: 'news on the coin',
+    regime_change: "the market's regime changed",
+    opposite_move: 'a sharp move against it'
+  }
+  return words[trigger]
+}
+
+/** One of the app's own open paper trades, as the exit check reads it from the executors on file. */
+export interface ExitTrade {
+  id: string
+  symbol: string
+  baseAsset: string
+  side: 'buy' | 'sell'
+  createdAt: number
+  stopLossPct: number | null
+  takeProfitPct: number | null
+  timeLimitSec: number
+  /** What opened it: the watch on a model's call, or a news rule on Binance's announcement. */
+  origin: { kind: 'watch'; eventId: string; eventTime: number; model: string } | { kind: 'news'; category: 'DELISTING' | 'MONITORING_TAG'; title: string }
+}
+
+/** The trade an exit check may be asked about, read from the executor on file; or why not. Only the
+ * app's own paper positions that are still open, have a time limit for an EXIT to bring forward,
+ * and have not been closed by one already. A live executor is never one, whatever it carries. */
+export function exitTradeOf(executor: ExecutorConfig): { ok: true; trade: ExitTrade } | { ok: false; reason: string } {
+  if (executor.mode !== 'paper' || executor.type !== 'position') return { ok: false, reason: 'it is not a paper position.' }
+  const mark = executor.watch ?? executor.newsRule
+  if (mark === undefined) return { ok: false, reason: 'it was not opened by the watch or a news rule.' }
+  if (executor.status !== 'active') return { ok: false, reason: 'it has been stopped.' }
+  if (mark.aiExit !== undefined) return { ok: false, reason: 'the exit check has closed it already.' }
+  const params = executor.params as PositionExecutorParams
+  if (params.timeLimitSec === null || !(params.timeLimitSec > 0)) return { ok: false, reason: 'it has no time limit for an EXIT to bring forward.' }
+  return {
+    ok: true,
+    trade: {
+      id: executor.id,
+      symbol: executor.symbol,
+      baseAsset: executor.baseAsset,
+      side: params.side,
+      createdAt: executor.createdAt,
+      stopLossPct: params.stopLossPct,
+      takeProfitPct: params.takeProfitPct,
+      timeLimitSec: params.timeLimitSec,
+      origin:
+        executor.watch !== undefined
+          ? { kind: 'watch', eventId: executor.watch.eventId, eventTime: executor.watch.eventTime, model: executor.watch.model }
+          : { kind: 'news', category: executor.newsRule?.category ?? 'DELISTING', title: executor.newsRule?.title ?? '' }
+    }
+  }
+}
+
+/** What the renderer measures of a trade that the main process cannot: where the engine says it
+ * entered (src/executors/engine.ts runs there), the last closed minute, the pair's last fifteen
+ * minutes, and the market's regime by Bitcoin's minutes (shared/marketResearch.ts) when it entered
+ * and now. The trade itself -- its side, its levels, its time limit, what opened it -- is read in
+ * the main process from the executors on file, never taken from here. */
+export interface ExitCheckRequest {
+  executorId: string
+  entryPrice: number
+  enteredAt: number
+  /** The last closed minute: its time, and its close. */
+  priceTime: number
+  price: number
+  /** The pair's move over its last fifteen closed minutes, in percent; null when they are not all there. */
+  move15mPct: number | null
+  regimeAtEntry: MarketRegime | null
+  regimeNow: MarketRegime | null
+}
+
+const MARKET_REGIMES: readonly MarketRegime[] = ['panic', 'high-vol', 'recovery', 'bull', 'bear', 'sideways']
+
+/** A request as it arrives over the bridge, read as one: each field in its shape, or null. */
+export function parseExitCheckRequest(value: unknown): ExitCheckRequest | null {
+  const raw = (typeof value === 'object' && value !== null && !Array.isArray(value) ? value : null) as Record<string, unknown> | null
+  if (raw === null) return null
+  const { executorId, entryPrice, enteredAt, priceTime, price, move15mPct, regimeAtEntry, regimeNow } = raw
+  // The id is the first part of what a check is filed under, before a colon.
+  if (typeof executorId !== 'string' || !/^[\w-]{1,100}$/.test(executorId)) return null
+  if (!finite(entryPrice) || entryPrice <= 0 || !finite(price) || price <= 0) return null
+  if (!finite(enteredAt) || !finite(priceTime) || enteredAt % 60 !== 0 || priceTime % 60 !== 0 || enteredAt > priceTime) return null
+  if (move15mPct !== null && !finite(move15mPct)) return null
+  const regime = (x: unknown): x is MarketRegime | null => x === null || MARKET_REGIMES.includes(x as MarketRegime)
+  if (!regime(regimeAtEntry) || !regime(regimeNow)) return null
+  return { executorId, entryPrice, enteredAt, priceTime, price, move15mPct, regimeAtEntry, regimeNow }
+}
+
+/** A trade's gain so far in its own favour, in percent of its entry: positive when it is ahead. */
+export function exitGainPct(side: 'buy' | 'sell', entryPrice: number, price: number): number {
+  return side === 'buy' ? (price / entryPrice - 1) * 100 : (1 - price / entryPrice) * 100
+}
+
+/** The stories that are news on a trade's coin: of high impact, naming it, published since the trade
+ * was opened. */
+export function exitNewsOf<S extends Pick<ReadStory, 'assets' | 'impact' | 'publishedAt' | 'stale'>>(stories: readonly S[], baseAsset: string, sinceSec: number, nowSec: number): S[] {
+  return stories.filter(
+    (story) =>
+      !story.stale &&
+      story.impact >= EXIT_LINES.newsImpact &&
+      story.publishedAt > sinceSec &&
+      story.publishedAt <= nowSec &&
+      story.assets.some((asset) => asset.ticker === baseAsset)
+  )
+}
+
+/** Why a trade is looked at again now, if it is: none, and nothing is asked. */
+export function exitTriggers(input: {
+  trade: Pick<ExitTrade, 'side' | 'stopLossPct' | 'takeProfitPct' | 'baseAsset' | 'createdAt'>
+  request: Pick<ExitCheckRequest, 'entryPrice' | 'price' | 'move15mPct' | 'regimeAtEntry' | 'regimeNow'>
+  stories: readonly Pick<ReadStory, 'assets' | 'impact' | 'publishedAt' | 'stale'>[]
+  nowSec: number
+}): ExitTrigger[] {
+  const { trade, request } = input
+  const gain = exitGainPct(trade.side, request.entryPrice, request.price)
+  const out: ExitTrigger[] = []
+  if (trade.takeProfitPct !== null && trade.takeProfitPct > 0 && gain >= EXIT_LINES.nearShare * trade.takeProfitPct) out.push('near_target')
+  if (trade.stopLossPct !== null && trade.stopLossPct > 0 && -gain >= EXIT_LINES.nearShare * trade.stopLossPct) out.push('near_stop')
+  if (exitNewsOf(input.stories, trade.baseAsset, trade.createdAt, input.nowSec).length > 0) out.push('news')
+  if (request.regimeAtEntry !== null && request.regimeNow !== null && request.regimeAtEntry !== request.regimeNow) out.push('regime_change')
+  const against = request.move15mPct === null ? null : trade.side === 'buy' ? -request.move15mPct : request.move15mPct
+  if (against !== null && against >= EXIT_LINES.oppositeMovePct) out.push('opposite_move')
+  return out
+}
+
+/** What a check is filed under in the ledger: the trade, and the reasons it was asked for. */
+export function exitSubjectId(executorId: string, triggers: readonly ExitTrigger[]): string {
+  return `${executorId}:${triggers.join('+')}`
+}
+
+/** The reasons the exit check has been asked about a trade for already, from the ledger's rows of its
+ * prompt: one ask a trade and a reason, whatever came of it -- answered, refused or failed. */
+export function exitTriggersAsked(rows: readonly Pick<AiCallRecord, 'promptVersion' | 'subjectId'>[], executorId: string): Set<ExitTrigger> {
+  const asked = new Set<ExitTrigger>()
+  for (const row of rows) {
+    if (row.promptVersion !== AI_ADDITION_PROMPT_VERSIONS.exit || row.subjectId === undefined || !row.subjectId.startsWith(`${executorId}:`)) continue
+    for (const part of row.subjectId.slice(executorId.length + 1).split('+')) if (isOneOf(EXIT_TRIGGERS, part)) asked.add(part)
+  }
+  return asked
+}
+
+/** What the exit check is asked: the trade and its plan, where it stands, the news since it was
+ * opened, and why it is asked. */
+export interface ExitQuestion {
+  trade: {
+    pair: string
+    side: 'long' | 'short'
+    openedBy: string
+    /** What it was opened on: the call's reasoning, or the announcement. */
+    thesis: string
+    entryPrice: number
+    minutesOpen: number
+    /** Its stop and its target, as distances from the entry in percent; null for none. */
+    stopPct: number | null
+    targetPct: number | null
+    /** Until its time limit closes it. */
+    minutesLeft: number
+  }
+  now: {
+    price: number
+    /** In the trade's favour, in percent of its entry. */
+    gainPct: number
+    move15mPct: number | null
+    regimeAtEntry: MarketRegime | null
+    regimeNow: MarketRegime | null
+  }
+  news: { title: string; source: string; kind: NewsEventType; impact: number; minutesAgo: number }[]
+  triggers: ExitTrigger[]
+}
+
+/** The exit check's question. */
+export function exitQuestionOf(input: {
+  trade: ExitTrade
+  request: ExitCheckRequest
+  thesis: string
+  stories: readonly Pick<ReadStory, 'title' | 'sourceName' | 'eventType' | 'impact' | 'assets' | 'publishedAt' | 'stale'>[]
+  triggers: ExitTrigger[]
+  nowSec: number
+}): ExitQuestion {
+  const { trade, request, nowSec } = input
+  const { origin } = trade
+  return {
+    trade: {
+      pair: trade.symbol,
+      side: trade.side === 'buy' ? 'long' : 'short',
+      openedBy:
+        origin.kind === 'watch'
+          ? `the watch, following ${origin.model}'s call on a market event`
+          : `the ${origin.category === 'MONITORING_TAG' ? 'Monitoring Tag' : 'delisting'} rule, on Binance's announcement`,
+      thesis: input.thesis.slice(0, EXIT_THESIS_CHARS),
+      entryPrice: round(request.entryPrice, 6) as number,
+      minutesOpen: Math.max(0, Math.round((nowSec - request.enteredAt) / 60)),
+      stopPct: round(trade.stopLossPct),
+      targetPct: round(trade.takeProfitPct),
+      minutesLeft: Math.max(0, Math.round((request.enteredAt + trade.timeLimitSec - nowSec) / 60))
+    },
+    now: {
+      price: round(request.price, 6) as number,
+      gainPct: round(exitGainPct(trade.side, request.entryPrice, request.price)) as number,
+      move15mPct: round(request.move15mPct),
+      regimeAtEntry: request.regimeAtEntry,
+      regimeNow: request.regimeNow
+    },
+    news: exitNewsOf(input.stories, trade.baseAsset, trade.createdAt, nowSec)
+      .slice(0, 5)
+      .map((story) => ({ title: story.title, source: story.sourceName, kind: story.eventType, impact: story.impact, minutesAgo: Math.round((nowSec - story.publishedAt) / 60) })),
+    triggers: input.triggers
+  }
+}
+
+export interface ExitVerdict {
+  verdict: (typeof EXIT_VERDICTS)[number]
+  confidence: number
+  reason: string
+}
+
+/** An exit check's answer, checked. */
+export function validateExitVerdict(value: unknown): { ok: true; verdict: ExitVerdict } | { ok: false; reason: string } {
+  const raw = (typeof value === 'object' && value !== null && !Array.isArray(value) ? value : null) as Record<string, unknown> | null
+  if (raw === null) return { ok: false, reason: 'The answer was not an object.' }
+  if (!isOneOf(EXIT_VERDICTS, raw.verdict)) return { ok: false, reason: `verdict is not one of ${EXIT_VERDICTS.join(', ')}.` }
+  if (typeof raw.confidence !== 'number' || !(raw.confidence >= 0 && raw.confidence <= 1)) return { ok: false, reason: 'confidence is not from 0 to 1.' }
+  if (typeof raw.reason !== 'string' || raw.reason.trim() === '' || raw.reason.length > EXIT_MAX_REASON) return { ok: false, reason: `reason is not text of 1 to ${EXIT_MAX_REASON} characters.` }
+  return { ok: true, verdict: { verdict: raw.verdict, confidence: raw.confidence, reason: raw.reason.trim() } }
+}
+
+/** What looking at a trade again came to: whether the check was asked, why, and what came of it. */
+export interface ExitCheck {
+  asked: boolean
+  triggers: ExitTrigger[]
+  outcome: AiAdditionOutcome<ExitVerdict> | null
+}
+
+/** The EXIT to act on, or null: only an answered EXIT closes a trade. KEEP, REDUCE, and a check that
+ * was not asked, was refused or failed leave the trade to its own plan. */
+export function exitOrderOf(check: ExitCheck | null): { model: string; triggers: ExitTrigger[]; confidence: number; reason: string } | null {
+  if (check === null || check.outcome === null || check.outcome.status !== 'answered' || check.outcome.answer.verdict !== 'EXIT') return null
+  return { model: check.outcome.model, triggers: [...check.triggers], confidence: check.outcome.answer.confidence, reason: check.outcome.answer.reason }
+}
+
+/** The exit check's answers on file, as they are listed: the answered rows of its prompt, each
+ * checked again, with the trade each was about. */
+export function exitVerdictsOf(rows: readonly Pick<AiCallRecord, 'promptVersion' | 'status' | 'subjectId' | 'additionAnswer' | 'at'>[]): { executorId: string; at: number; verdict: ExitVerdict }[] {
+  const out: { executorId: string; at: number; verdict: ExitVerdict }[] = []
+  for (const row of rows) {
+    if (row.promptVersion !== AI_ADDITION_PROMPT_VERSIONS.exit || row.status !== 'ok' || row.subjectId === undefined) continue
+    const checked = validateExitVerdict(row.additionAnswer)
+    const cut = row.subjectId.lastIndexOf(':')
+    if (checked.ok && cut > 0) out.push({ executorId: row.subjectId.slice(0, cut), at: row.at, verdict: checked.verdict })
   }
   return out
 }
