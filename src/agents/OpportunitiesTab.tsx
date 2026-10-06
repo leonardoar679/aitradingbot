@@ -11,6 +11,7 @@ import { describeEventType } from '../../shared/marketEvent'
 import { healPaperPause, paperPauseBlock } from '../../shared/paperPause'
 import { describeError } from '../utils/ipcError'
 import { useNowSec } from '../utils/useNowSec'
+import { useLiveMarket } from '../hooks/useLiveMarket'
 import { buttonStyle, noteStyle } from './agentStyles'
 import { OpportunityCard } from './OpportunityCard'
 import { askModels, fetchEventQuestion, proposalForAnswer, rightNowRows, type CandleFetch, type EventAnswer, type EventFeedItem } from './opportunities'
@@ -174,6 +175,8 @@ export function OpportunitiesTab({
 
   const enabled = config?.enabledModels ?? []
   const right = useMemo(() => rightNowRows(feed, bars, nowSec), [feed, bars, nowSec])
+  // The live prices of the pairs on offer: each line is checked against them.
+  const live = useLiveMarket(right.map((row) => row.item.event.symbol))
   // Models the watch has stopped asking today, read from the same rows that count its day.
   const paused = useMemo(() => watchPausedModels(calls, nowSec), [calls, nowSec])
   const paperStanding = {
@@ -203,7 +206,9 @@ export function OpportunitiesTab({
         />
       )}
 
-      {events !== null && <RightNowCard rows={right} nowSec={nowSec} />}
+      {events !== null && (
+        <RightNowCard rows={right} nowSec={nowSec} live={live} btcLimitPct={config?.watchPaper.dropOnBtcMovePct} stakeQuote={config?.watchPaper.stakeQuote} />
+      )}
 
       <Card title="Models to ask">
         {config === null ? (

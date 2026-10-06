@@ -6,6 +6,7 @@ import { startLivePositionWatcherLoop } from './services/livePositionWatchersSer
 import { startLiveTwapLoop } from './services/liveTwapService'
 import { startMarketScanner } from './services/marketScannerService'
 import { startMarketResearch } from './services/marketResearchService'
+import { startLiveMarket } from './services/liveMarketService'
 import { startNewsReader } from './services/newsService'
 import icon from '../build/icon.png?asset'
 
@@ -86,6 +87,10 @@ if (!gotSingleInstanceLock) {
     // moved over a day and a week, what is trending, and the market's state. Public data only, and
     // always on, as the second V3 document asks. See marketResearchService.ts.
     startMarketResearch()
+    // Holds one public socket to the market-data host: the best bid and ask and the minute forming
+    // for the pairs shown and the app's own paper trades, and Bitcoin's and ether's minutes always.
+    // No key, no model, no order. See liveMarketService.ts.
+    startLiveMarket()
     // Reads Binance's announcement lists once a minute and keeps each article once. One public
     // list, no key, no model, no order; started here only if it was left switched on. See
     // newsService.ts.

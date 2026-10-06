@@ -27,6 +27,7 @@ import type {
   ScannerState
 } from '../shared/marketScanner'
 import type { ResearchState } from '../shared/marketResearch'
+import type { LiveBook, LiveState } from '../shared/liveMarket'
 import type { NewsConfigPatch, NewsFilter, NewsPage, NewsState } from '../shared/news'
 import type { NewsRecord } from '../shared/newsRecord'
 import {
@@ -80,6 +81,16 @@ const api = {
       const handler = (_event: IpcRendererEvent, ticker: Ticker24h): void => listener(ticker)
       ipcRenderer.on(IpcChannel.MarketTickerUpdate, handler)
       return () => ipcRenderer.removeListener(IpcChannel.MarketTickerUpdate, handler)
+    },
+    // Live prices (the second V3 document, §7): the best bid and ask and the minute forming, for the
+    // pairs shown and the app's own paper trades. Public market data from the data host only.
+    setLiveInterest: (symbols: string[]): Promise<void> => ipcRenderer.invoke(IpcChannel.MarketLiveInterest, symbols),
+    liveState: (): Promise<LiveState> => ipcRenderer.invoke(IpcChannel.MarketLiveState),
+    liveBook: (symbol: string): Promise<LiveBook | null> => ipcRenderer.invoke(IpcChannel.MarketLiveBook, symbol),
+    onLiveUpdate: (listener: (state: LiveState) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, state: LiveState): void => listener(state)
+      ipcRenderer.on(IpcChannel.MarketLiveUpdate, handler)
+      return () => ipcRenderer.removeListener(IpcChannel.MarketLiveUpdate, handler)
     },
     fetchHistoricalRange: (
       exchange: Exchange,

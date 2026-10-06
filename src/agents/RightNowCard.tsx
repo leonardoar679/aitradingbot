@@ -1,8 +1,11 @@
 import { Card } from '../components/Card'
 import { describeOpportunitySide } from '../../shared/aiOpportunity'
 import { describeDecider } from '../../shared/aiPanel'
+import type { LiveState } from '../../shared/liveMarket'
 import { describeEventType } from '../../shared/marketEvent'
 import { cellStyle, headCellStyle, noteStyle } from './agentStyles'
+import { liveReadingOf } from './liveVerdict'
+import { LiveVerdictView } from './LiveVerdictView'
 import type { RightNowRow } from './opportunities'
 
 function plainNumber(value: number): string {
@@ -15,8 +18,25 @@ function utcClock(sec: number): string {
 
 /** What can still be acted on right now (./opportunities.ts, rightNowRows): one line for each
  * event with a call this app would act on whose entry has not run out or filled, the strongest
- * candidate first. A line leaves when its entry does. It shows; it asks nothing and opens nothing. */
-export function RightNowCard({ rows, nowSec }: { rows: RightNowRow[]; nowSec: number }): React.JSX.Element {
+ * candidate first. A line leaves when its entry does. Each is checked against the live price
+ * (./liveVerdict.ts): enterable now, waiting for its range, or no longer standing. It shows; it
+ * asks nothing and opens nothing. */
+export function RightNowCard({
+  rows,
+  nowSec,
+  live = null,
+  btcLimitPct,
+  stakeQuote
+}: {
+  rows: RightNowRow[]
+  nowSec: number
+  /** The live prices of these pairs (src/hooks/useLiveMarket.ts); null before they are read. */
+  live?: LiveState | null
+  /** The watch's Bitcoin safeguard and stake, where known: what the live check holds a row to. */
+  btcLimitPct?: number
+  stakeQuote?: number
+}): React.JSX.Element {
+  const nowMs = Date.now()
   return (
     <Card title="Right now">
       {rows.length === 0 ? (
@@ -42,6 +62,7 @@ export function RightNowCard({ rows, nowSec }: { rows: RightNowRow[]; nowSec: nu
                 <th style={headCellStyle}>Entry on offer</th>
                 <th style={headCellStyle}>Until (UTC)</th>
                 <th style={headCellStyle}>Time left</th>
+                <th style={headCellStyle}>Now (live)</th>
               </tr>
             </thead>
             <tbody>
@@ -76,6 +97,9 @@ export function RightNowCard({ rows, nowSec }: { rows: RightNowRow[]; nowSec: nu
                     </td>
                     <td style={cellStyle}>{utcClock(row.expiresAt)}</td>
                     <td style={{ ...cellStyle, fontWeight: 600, color: left <= 120 ? 'var(--gold)' : 'var(--text-primary)' }}>{left < 60 ? `${left}s` : `${Math.ceil(left / 60)} min`}</td>
+                    <td style={{ ...cellStyle, whiteSpace: 'normal', minWidth: 190 }}>
+                      <LiveVerdictView reading={liveReadingOf(row, live, { btcLimitPct, stakeQuote, nowMs })} compact />
+                    </td>
                   </tr>
                 )
               })}
@@ -86,7 +110,9 @@ export function RightNowCard({ rows, nowSec }: { rows: RightNowRow[]; nowSec: nu
       {rows.length > 0 && (
         <p style={{ ...noteStyle, marginTop: '0.7rem' }}>
           Strongest candidate first. The entry shown is that of the surest call at 65% confidence or more; a call under that is listed and not acted on. Each event&apos;s card is
-          below, with the stop, the target and the Paper trade button.
+          below, with the stop, the target and the Paper trade button. &quot;Now&quot; is the live price: enterable when what a fill would pay is inside the range, the
+          spread within 0.1% and the price under ten seconds old; waiting while it is outside the range; invalidated once the entry has expired, Bitcoin has moved against
+          it by the watch&apos;s safeguard, the spread is wider or no fresh price is had.
         </p>
       )}
     </Card>

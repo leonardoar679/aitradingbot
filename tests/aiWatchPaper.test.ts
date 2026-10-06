@@ -28,10 +28,11 @@ import {
 } from '../shared/aiWatchPaper'
 import type { Candle, ExecutorConfig, PaperAccount, PaperPauseSettings, PaperRiskSettings, PositionExecutorParams } from '../shared/ipc'
 import type { MarketEvent } from '../shared/marketEvent'
+import type { LiveBook } from '../shared/liveMarket'
 import { DEFAULT_PAPER_PAUSE, resumePaperPause } from '../shared/paperPause'
 import { riskedAtStop } from '../shared/paperRisk'
 import { simulatePosition } from '../src/executors/engine'
-import { openWatchPaperTrade, settleWatchPaperTrades, watchPaperExecutor, type WatchPaperDeps } from '../src/agents/watchPaperTrade'
+import { openWatchPaperTrade, settleWatchPaperTrades, watchPaperExecutor, type WatchPaperDeps, type WatchPaperResult } from '../src/agents/watchPaperTrade'
 
 // Paper trades from the watch: what it may open, its limits, and the one file that writes them.
 // Everything that file touches is injected: the setting, the executors on file, the price, the
@@ -361,6 +362,9 @@ interface Rig {
     risk: unknown
     pause?: unknown
     price: number | null | Error
+    /** The live book (shared/liveMarket.ts). Absent: a tight one around the price, received just
+     * now; null: none can be had. */
+    book?: LiveBook | null | Error
     now: number
     candles: Candle[] | Error
   }
@@ -368,6 +372,17 @@ interface Rig {
   settled: string[]
   writes: number
 }
+
+/** A book a hundredth of a percent either side of `mid`, received at `nowSec`. */
+const tightBook = (symbol: string, mid: number, nowSec: number): LiveBook => ({
+  symbol,
+  bid: mid * 0.9999,
+  bidQty: 1000,
+  ask: mid * 1.0001,
+  askQty: 1000,
+  updatedAt: nowSec * 1000,
+  source: 'stream'
+})
 
 function rig(initial: Partial<Rig['state']> = {}): Rig {
   const state: Rig['state'] = { config: config(), executors: [], account: null, risk: STAKE, price: 100, now: SOON, candles: [], ...initial }
@@ -389,6 +404,11 @@ function rig(initial: Partial<Rig['state']> = {}): Rig {
     lastPrice: async () => {
       if (state.price instanceof Error) throw state.price
       return state.price
+    },
+    liveBook: async (_exchange, symbol) => {
+      if (state.book instanceof Error) throw state.book
+      if (state.book !== undefined) return state.book
+      return tightBook(symbol, typeof state.price === 'number' ? state.price : 100, state.now)
     },
     fetchCandles: async () => {
       if (state.candles instanceof Error) throw state.candles
@@ -977,5 +997,31 @@ describe('paused after a losing run of its own (shared/paperPause.ts)', () => {
     expect(text).toContain(
       'Each stakes its own stake. There is no cap on what they stake together. Once the last 20 of them to close have lost 5 R together, none is opened until they are resumed on Risk & Safety.'
     )
+  })
+})
+
+describe('checked against the live price before it opens (shared/liveMarket.ts)', () => {
+  it('opens with a fresh, tight book, and writes the book on its mark', async () => {
+    const r = rig()
+    expect((await openWatchPaperTrade(event(), decision(), r.deps))?.opened).toBe(true)
+    const mark = r.state.executors[0].watch
+    expect(mark?.book).toMatchObject({ bid: 100 * 0.9999, ask: 100 * 1.0001, ageMs: 0, source: 'stream' })
+    expect(mark?.book?.spreadPct).toBeCloseTo(0.02, 6)
+  })
+
+  it('opens nothing with no live price, an old one, or a spread over the line, and says why', async () => {
+    const refused = async (book: LiveBook | null | Error): Promise<WatchPaperResult | null> => {
+      const r = rig({ book })
+      const result = await openWatchPaperTrade(event(), decision(), r.deps)
+      expect(r.writes).toBe(0)
+      return result
+    }
+    expect(await refused(null)).toEqual({ opened: false, text: 'No paper trade: The live price could not be read, so the market it would enter is not known.' })
+    expect(await refused(new Error('socket closed'))).toEqual({ opened: false, text: 'No paper trade: The live price could not be read, so the market it would enter is not known.' })
+    expect(await refused({ ...tightBook('SOLUSDT', 100, SOON), updatedAt: (SOON - 15) * 1000 })).toEqual({
+      opened: false,
+      text: 'No paper trade: The live price is 15 seconds old, so the market it would enter is not known.'
+    })
+    expect(await refused({ ...tightBook('SOLUSDT', 100, SOON), bid: 99.8, ask: 100.2 })).toEqual({ opened: false, text: 'No paper trade: The spread is 0.400%, over the 0.1% a trade is entered at.' })
   })
 })

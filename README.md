@@ -39,7 +39,7 @@ other.
 | Group | Page | What it does |
 |---|---|---|
 | AI Trader | **Overview** | The landing page, answering five questions from what the app already reads. **Market status** first, from the [research the app does as it opens](#market-research-when-the-app-opens): Bitcoin and ether rising, falling or flat, the other pairs against Bitcoin, and a risk state (NORMAL, ELEVATED or PANIC), with a "Researching…" line while it reads. **The market**: Bitcoin and ether over the hour and four hours, whether Bitcoin is rising, falling or flat, and what is moving most, from the scanner's last pass. **What can be acted on**: the strongest recommendation still on offer, with its entry, stop, target, time left and a Paper trade button — or, usually, "No high-quality opportunity right now. Wait." with the strongest event of the last hour and what it lacks. **What the models said** about it. **What you hold**: value, paper strategies running, real positions open. **Safety**: whether a real order can be placed, the day's loss, the AI's spend and what the watch does. The starter presets lead it for someone with nothing running. |
-| | **Opportunities** | What can be traded right now: the [watch](#ai-signals--paper-only) that puts events to models with no click, the recommendations still valid ("No high-quality opportunity right now. Wait." when there are none), and every event the scanner raised with each model's call, Ask and Paper trade. A call fills in an order form at most; a person places it. |
+| | **Opportunities** | What can be traded right now: the [watch](#ai-signals--paper-only) that puts events to models with no click, the recommendations still valid ("No high-quality opportunity right now. Wait." when there are none), each checked against the [live price](#live-prices) — enterable now, waiting for its range, or invalidated, with an execution score — and every event the scanner raised with each model's call, Ask and Paper trade. A call fills in an order form at most; a person places it. |
 | | **Markets** | One pair on any supported exchange: candlestick chart with indicators, symbol search, live ticker. Below it, **Movers**: the liquid USDT pairs that moved most over the day and over the week, by volume against their week, and CoinGecko's trending list, from the [market research](#market-research-when-the-app-opens); a row opens its chart. |
 | | **AI Decisions** | **Analyze** asks a model about one market; **Signals** lists every call any model has made and how it turned out. A model is handed a market snapshot and returns one JSON decision, and is given no tools at all. |
 | | **Positions** | Live paper positions for active bots; a **Live Positions** table of real Binance holdings from live-mode Order Executor fills, closable (fully or partially) for real; a **Live Trade History** table of realized P&L from closed live positions; an **Inventory** table of positions handed over from stopped paper executors (see [Position Handover](#position-handover--inventory)). |
@@ -184,6 +184,42 @@ trades, and CoinGecko's free list; it holds no key, asks no model and writes not
 `tests/aiNoLivePath.test.ts` holds it to that. Checked on 6 October 2026 against the live market:
 it finished eleven seconds after launch with 36 pairs over the floor, both regimes flat, risk
 normal, and 15 trending coins, 8 of them on Binance.
+
+### Live prices
+
+Candles are context; the stream is the price now (the second V3 document's §7, §8, §25 and §42).
+Since 6 October 2026 the main process holds one public socket to Binance's market-data host —
+never the host that trades — and streams, for the pairs that matter at the moment, the best bid
+and ask and the minute forming: the pairs a recommendation is shown on (Right Now, Overview) and
+the pairs the app's own paper trades are open on. Bitcoin's and ether's minutes stream always, so
+how far Bitcoin has moved since an event is known at any moment; the five best levels are read for
+the first five pairs shown. Not every pair's book: a liquid pair's best bid and ask changes many
+times a second — Bitcoin's more than a hundred — and only what is being looked at needs it. A minute
+with no message is written down as a gap and a closed socket as a drop, for the session report
+(`electron/services/liveMarketService.ts`; the arithmetic is `shared/liveMarket.ts`).
+
+- **Each recommendation on offer is checked against it.** ENTERABLE when what a fill would pay —
+  the ask for a buy, the bid for a sell — is inside the entry range, the spread is within 0.1% and
+  the price is under ten seconds old; WAITING while the price is outside the range, since the entry
+  waits for its range until it expires; INVALIDATED once the entry has expired, Bitcoin has moved
+  against it by the watch's safeguard, the spread is wider than 0.1% or no fresh price is had.
+- **An execution score** from 0 to 100 sits beside it: half for the spread (full at 0.02% or
+  tighter, nothing at 0.1%), three tenths for what the side a fill would take holds against ten
+  stakes, a fifth for the price's age; what held it down is said.
+- **The watch's paper trades are refused on it.** Before one opens, the live book of its pair is
+  read — the stream's while fresh, otherwise once over REST — and with no fresh price, or a spread
+  over 0.1%, none is opened; the book it opened against is written on its mark. It only ever opens
+  less. The news rules' shorts are their measured rules, and are not changed by it.
+- **The models' question is not changed by it.** That question is built from completed candles
+  only, so that a benchmark replaying an old event asks exactly what the watch asked live; a live
+  bid and ask cannot be had for a replay. The plan had the question gain them; that was dropped for
+  this reason, and the live price is used after the answer instead.
+
+Checked on 6 October 2026 on a separate build and a scratch profile, against the live market, with
+two faked watch answers on real prices: SOLUSDT's, with its entry around the price, read
+"ENTERABLE at 120.62 · Execution 100/100"; XRPUSDT's, five percent above it, "WAITING … the ask
+1.504 is under the range"; Overview's top card said the same of SOLUSDT; the stream held both books
+and their five best levels, fifteen milliseconds old.
 
 ### Discovery — a market scanner
 
@@ -817,6 +853,9 @@ it is paper.
   Checked in the app on a separate build and a scratch profile with four of the watch's trades
   lost at 1 R each: a fifth closed while it ran, and within the minute the watch was paused with
   one notice; Resume lifted it, and a reload told nothing again.
+- **Checked against the live price before it opens** (since 6 October 2026; see
+  [Live prices](#live-prices)): with no fresh price for its pair, or a spread over 0.1%, none is
+  opened, and the book it opened against is written on its mark.
 - **It follows one model.** Comparing models is the leaderboard's job, and three models trading
   one event would be three positions on one view of the market. The model has to be one the
   watch asks, and neither the model, the stake nor the limit can be changed while it is on.
@@ -1627,6 +1666,7 @@ electron/preload.ts  ── contextBridge ──▶  window.api.*  (renderer)
       ├── credentials.list() / set() / test()       → electron/services/credentialsService.ts
       ├── market.*  (symbols, candles, tickers)      → electron/services/marketService.ts
       │                                                   + electron/services/exchanges/*
+      │             (live prices: liveInterest, liveState, liveBook) → electron/services/liveMarketService.ts
       ├── scanner.*  (what is moving, events)         → electron/services/marketScannerService.ts
       │                                                   (public market data; no key, model or order)
       ├── research.*  (the market studied at launch)   → electron/services/marketResearchService.ts
@@ -2720,7 +2760,10 @@ electron/                    Electron main process
                                announcement lists, once a minute while on, each article kept once),
                                newsRecordService (the news rules and two near misses scored since
                                the studies, from Binance's lists and Upbit's, kept once),
-                               jsonlStore (append-only month files, shared with the AI call ledger)
+                               jsonlStore (append-only month files, shared with the AI call ledger),
+                               marketResearchService (the market studied at launch and every ten
+                               minutes), liveMarketService (one public socket: the live book and
+                               minute of the pairs shown and the app's own paper trades)
                              AI, with no import path to any of the live services above:
                                openRouterClient (the only file that knows OpenRouter's wire format),
                                aiSignalService (the paid path, cache, retries), aiPrompt,
@@ -2762,6 +2805,7 @@ shared/                       Code both processes run, so they cannot disagree a
   marketEvent.ts              The event detector: a pair's reading from twelve hours of 1-minute candles, and what raises an event
   marketScanner.ts            The scanner's settings, what a pass reports, and which pairs are watched
   marketResearch.ts           What the app studies as it opens: the liquid pairs, a day's and a week's movers, trending, the market's status
+  liveMarket.ts               The live price against a recommendation: spread, age, an execution score, and enterable, waiting or invalidated
   newsTitles.ts, news.ts      Which kind of news a Binance title is, and which coins it names (the study's patterns); what the reader keeps of each article, and what each kind did
   newsActions.ts              What a delisting or a Monitoring Tag does: the notice to a holder, the kind's paper short, and when it is raised for the models and may be asked about
   newsRules.ts, newsRecord.ts The studies' bracket and four-hour hold as arithmetic, shared with research/announcementStudy.ts; the record of the two rules and the two near misses since the studies

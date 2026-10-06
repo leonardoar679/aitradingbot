@@ -25,6 +25,10 @@ export const IpcChannel = {
   MarketCancelHistoricalRange: 'market:cancelHistoricalRange',
   MarketFetchTicker24h: 'market:fetchTicker24h',
   MarketSymbolRules: 'market:symbolRules',
+  MarketLiveInterest: 'market:liveInterest',
+  MarketLiveState: 'market:liveState',
+  MarketLiveBook: 'market:liveBook',
+  MarketLiveUpdate: 'market:liveUpdate',
   ScannerGetState: 'scanner:getState',
   ScannerSetConfig: 'scanner:setConfig',
   ScannerListEvents: 'scanner:listEvents',
@@ -726,6 +730,10 @@ export interface ExecutorConfig {
      * one a person stopped first. `btc_moved` is one the watch dropped before it entered, because
      * Bitcoin had moved against it by more than its safeguard allows; `btcMovePct` is that move. */
     result?: { exit: PositionExitReason | 'btc_moved'; pnlQuote: number; closedAt: number; btcMovePct?: number }
+    /** The live book it was opened against (shared/liveMarket.ts): its best bid and ask, the
+     * spread, how old the price was, and where it came from. Absent on one opened before
+     * 6 October 2026, when the live price was first checked. */
+    book?: { bid: number; ask: number; spreadPct: number; ageMs: number; source: 'stream' | 'rest' }
   }
   /** Set on a PAPER Position short opened by a rule research/NEWS.md measured, on Binance's
    * announcement (shared/newsActions.ts): which announcement and which coin. A delisting's is out

@@ -4,6 +4,7 @@ import { registerSettingsHandlers } from './handlers/settingsHandlers'
 import { registerMarketHandlers } from './handlers/marketHandlers'
 import { registerScannerHandlers } from './handlers/scannerHandlers'
 import { registerResearchHandlers } from './handlers/researchHandlers'
+import { registerLiveMarketHandlers } from './handlers/liveMarketHandlers'
 import { registerNewsHandlers } from './handlers/newsHandlers'
 import { registerCredentialsHandlers } from './handlers/credentialsHandlers'
 import { registerLiveTradingHandlers } from './handlers/liveTradingHandlers'
@@ -16,6 +17,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerMarketHandlers(mainWindow)
   registerScannerHandlers(mainWindow)
   registerResearchHandlers(mainWindow)
+  registerLiveMarketHandlers(mainWindow)
   registerNewsHandlers(mainWindow)
   registerCredentialsHandlers()
   registerAiHandlers(mainWindow)

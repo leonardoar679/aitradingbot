@@ -127,6 +127,9 @@ The main process also runs loops that need no window at all:
 - `marketResearchService` (added 6 October 2026) studies the market as the app opens and every ten
   minutes after, always: the liquid pairs, a day's and a week's moves, CoinGecko's trending list
   every fifteen minutes, and the market's status. Public data only.
+- `liveMarketService` (added 6 October 2026) holds one public socket to the market-data host: the
+  live book and minute of the pairs shown and of the app's own paper trades, Bitcoin's and ether's
+  minutes always, and a log of drops and quiet gaps. Public data only.
 - `newsService` reads Binance's two announcement lists once a minute while it is on (added in V3
   Stage 7).
 - `livePositionWatchersService` evaluates live exits every 5 seconds.
@@ -141,7 +144,7 @@ reaches it. A call may span lines. The `news` channels were added after: four in
 |---|---|---|
 | `app` | `ping`, `getVersion`, `notify` | `notify`: the watch, its paper trader, the bots' call notifier |
 | `settings` | `get`, `set` | Almost every page and scheduler; writes go through `utils/settingsWrites.ts` and `utils/serialQueue.ts` |
-| `market` | 12: symbols, symbol rules, candles and ticker subscriptions, 24-hour ticker, historical ranges | Charts, Market, Backtest, executors, the watch, benchmarks, Explorer |
+| `market` | 12: symbols, symbol rules, candles and ticker subscriptions, 24-hour ticker, historical ranges; and since 6 October 2026, 4 more for live prices: interest, state, a pair's book, updates | Charts, Market, Backtest, executors, the watch, benchmarks, Explorer; live prices: Right Now, Overview's top card, and the watch's paper writer |
 | `backtest` | `exportSave` | Backtest results, strategy comparison, Journal |
 | `scanner` | 8: state, config, events, history scan, universe, updates | Explorer, Opportunities, the watch, the event benchmark, the live board, Journal |
 | `research` | 3 (added 6 October 2026): state, read again, updates | Overview's market status and Markets' movers, through `useMarketResearch`. Nothing else reads it (`tests/aiNoLivePath.test.ts`) |

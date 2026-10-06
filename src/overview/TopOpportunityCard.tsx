@@ -8,7 +8,10 @@ import { describeEventType } from '../../shared/marketEvent'
 import { useNowSec } from '../utils/useNowSec'
 import { buttonStyle, noteStyle } from '../agents/agentStyles'
 import { overviewOpportunity, proposalForAnswer, type EventAnswer, type EventFeedItem } from '../agents/opportunities'
+import { liveReadingOf } from '../agents/liveVerdict'
+import { LiveVerdictView } from '../agents/LiveVerdictView'
 import { useEventFeed } from '../agents/useEventFeed'
+import { useLiveMarket } from '../hooks/useLiveMarket'
 import type { Page } from '../navigation/pages'
 
 /** Events read for this card: the newest, as many as Opportunities shows at first. */
@@ -69,6 +72,8 @@ export function TopOpportunityCard({
   const nowSec = useNowSec(true, 15_000)
   const [problem, setProblem] = useState<string | null>(null)
   const pick = useMemo(() => overviewOpportunity(feed, bars, nowSec), [feed, bars, nowSec])
+  // The live price of the pair on offer, to say whether it can be entered now.
+  const live = useLiveMarket(pick.kind === 'valid' ? [pick.row.item.event.symbol] : [])
 
   async function paperTrade(item: EventFeedItem, answer: EventAnswer): Promise<void> {
     setProblem(null)
@@ -108,6 +113,10 @@ export function TopOpportunityCard({
               · stop {plainNumber(detail.stopLoss)} · target {plainNumber(detail.takeProfit)}
             </span>
           )}
+        </div>
+        <div style={{ marginTop: '0.35rem' }}>
+          <span style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>Now: </span>
+          <LiveVerdictView reading={liveReadingOf(row, live, { nowMs: Date.now() })} />
         </div>
         <p style={{ ...noteStyle, marginTop: '0.4rem' }}>
           The surest call to act on: {describeDecider(row.model)} at {Math.round(answer.decision.confidence * 100)}%. A model&apos;s confidence is not a

@@ -13,6 +13,7 @@ import {
   type WatchPaperPlan
 } from '../../shared/aiWatchPaper'
 import type { AppSettings, Candle, Exchange, ExecutorConfig, PositionExecutorParams } from '../../shared/ipc'
+import { bookSpreadPct, livePaperBlock, priceAgeMs, type LiveBook } from '../../shared/liveMarket'
 import type { MarketEvent } from '../../shared/marketEvent'
 import { healPaperPause, paperPauseBlock } from '../../shared/paperPause'
 import { healPaperRisk, paperOutBlock } from '../../shared/paperRisk'
@@ -25,7 +26,8 @@ import { settingsWrites } from '../utils/settingsWrites'
 //
 // Two things happen here, and both are paper bookkeeping. A call the watch would act on becomes a
 // PAPER Position executor, appended to the executors on file, unless its limits, the paper money
-// the app's own trades have out, or a losing run of its own (shared/paperPause.ts) refuse it. And
+// the app's own trades have out, a losing run of its own (shared/paperPause.ts), or the live price
+// -- none fresh, or a spread over 0.1% (shared/liveMarket.ts) -- refuse it. And
 // a paper position of the watch's that has closed -- its stop, its target or its clock ended it,
 // or its entry expired unfilled -- is stopped and its result settled into the paper account, the
 // way pressing Stop on its card would, so that the money comes back and the count of open trades
@@ -42,14 +44,21 @@ import { settingsWrites } from '../utils/settingsWrites'
 type OkPlan = Extract<WatchPaperPlan, { ok: true }>
 
 /** The executor a plan becomes. Paper, unlevered, and its position is not kept when it stops:
- * a paper trade the watch opened is closed by its own levels, not handed to Inventory. */
+ * a paper trade the watch opened is closed by its own levels, not handed to Inventory. The live
+ * book it was opened against, where there was one, is written on its mark. */
 export function watchPaperExecutor(input: {
   id: string
   event: Pick<MarketEvent, 'exchange' | 'symbol' | 'baseAsset' | 'quoteAsset'>
   plan: OkPlan
   nowSec: number
+  book?: LiveBook | null
 }): ExecutorConfig {
-  const { event, plan } = input
+  const { event, plan, book } = input
+  const spread = book === undefined || book === null ? null : bookSpreadPct(book)
+  const mark =
+    book === undefined || book === null || spread === null
+      ? plan.mark
+      : { ...plan.mark, book: { bid: book.bid, ask: book.ask, spreadPct: spread, ageMs: priceAgeMs(book, input.nowSec * 1000), source: book.source } }
   return {
     id: input.id,
     name: plan.name,
@@ -63,7 +72,7 @@ export function watchPaperExecutor(input: {
     stoppedAt: null,
     keepPosition: false,
     mode: 'paper',
-    watch: plan.mark,
+    watch: mark,
     liveOrder: null,
     pendingLiveOrderIds: [],
     liveWatcherId: null,
@@ -82,6 +91,9 @@ export interface WatchPaperDeps {
   setExecutors: (executors: ExecutorConfig[]) => Promise<void>
   /** The price now, or null when it cannot be had: the event's own price then stands in. */
   lastPrice: (exchange: Exchange, symbol: string) => Promise<number | null>
+  /** The live book now (shared/liveMarket.ts): the stream's, or one read just now. Null when none
+   * can be had, and then no paper trade is opened. */
+  liveBook: (exchange: Exchange, symbol: string) => Promise<LiveBook | null>
   /** 1-minute candles of [startSec, endSec]. */
   fetchCandles: (exchange: Exchange, symbol: string, startSec: number, endSec: number) => Promise<Candle[]>
   /** Books a stopped paper executor's result into the paper account. */
@@ -126,15 +138,25 @@ export async function openWatchPaperTrade(
   const plan = planWatchPaperTrade({ config: watchPaper, risk: healPaperRisk(before.paperRisk), event, decision, nowSec: deps.nowSec(), lastPrice })
   if (!plan.ok) return { opened: false, text: `No paper trade: ${plan.reason}` }
 
+  // The market it would enter, live (shared/liveMarket.ts): with no fresh price, or a spread wider
+  // than a trade is entered at, none is opened.
+  let book: LiveBook | null = null
+  try {
+    book = await deps.liveBook(event.exchange, event.symbol)
+  } catch {
+    book = null
+  }
+
   // Checked again on the executors read inside the queue, with the funds and with what the app's
   // own paper trades have out together: two answers arriving together both passed the look above,
   // and only one of them may be the pair's open trade. A trade that closed in between may have
-  // ended a losing run, and that is read again too.
+  // ended a losing run, and that is read again too; and the live price is judged as of now.
   const refused = await deps.queue(async (): Promise<string | null> => {
     const fresh = await deps.getSettings()
     const problem =
       watchPaperBlock({ config: watchPaper, event, decision, executors: fresh.executors, nowSec: deps.nowSec() }) ??
       paperPauseBlock({ setting: healPaperPause(fresh.paperPause), executors: fresh.executors, source: 'watch' }) ??
+      livePaperBlock(book, deps.nowSec() * 1000) ??
       describeExecutorFunding({
         account: fresh.paperAccount ?? null,
         executors: fresh.executors,
@@ -144,7 +166,7 @@ export async function openWatchPaperTrade(
       }) ??
       paperOutBlock({ risk: healPaperRisk(fresh.paperRisk), executors: fresh.executors, quoteAsset: event.quoteAsset, amountQuote: plan.params.amountQuote })
     if (problem !== null) return problem
-    await deps.setExecutors([...fresh.executors, watchPaperExecutor({ id: deps.newId(), event, plan, nowSec: deps.nowSec() })])
+    await deps.setExecutors([...fresh.executors, watchPaperExecutor({ id: deps.newId(), event, plan, nowSec: deps.nowSec(), book })])
     return null
   })
   if (refused !== null) return { opened: false, text: `No paper trade: ${refused}` }
@@ -248,6 +270,8 @@ export const watchPaperBrowserDeps: WatchPaperDeps = {
     await window.api.settings.set({ executors })
   },
   lastPrice: async (exchange, symbol) => (await window.api.market.fetchTicker24h(exchange, symbol)).lastPrice,
+  // The live stream is Binance's: an event on another exchange has no live book here.
+  liveBook: (exchange, symbol) => (exchange === 'binance' ? window.api.market.liveBook(symbol) : Promise.resolve(null)),
   fetchCandles: async (exchange, symbol, startSec, endSec) => (await window.api.market.fetchHistoricalRange(exchange, symbol, '1m', startSec, endSec)).candles,
   // Not kept in Inventory (keepPosition is false), so nothing was handed over and the whole
   // result is cash.

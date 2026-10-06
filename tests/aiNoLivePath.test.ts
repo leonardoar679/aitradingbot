@@ -254,6 +254,35 @@ describe('AI code has no route to a real order', () => {
     }
   })
 
+  it('the live prices read the public stream and refuse, never place', () => {
+    // Since 6 October 2026 one public socket streams the best bid and ask and the minute forming
+    // for the pairs shown and the app's own paper trades (the second V3 document, §7). It is held to
+    // the scanner's rule -- nothing that trades, holds a key or asks a model -- and resolves the data
+    // host only. What uses it can say a recommendation is not enterable, and the watch's writer can
+    // refuse a paper trade on it; nothing can place anything with it.
+    const main = [join(SERVICES, 'liveMarketService.ts'), join(ROOT, 'electron', 'ipc', 'handlers', 'liveMarketHandlers.ts')]
+    for (const path of main) {
+      expect(importsOf(path).filter((name) => LIVE_MODULES.has(name)), path).toEqual([])
+      expect(importsOf(path).filter((name) => aiModuleNames.has(name)), path).toEqual([])
+    }
+    const service = readFileSync(join(SERVICES, 'liveMarketService.ts'), 'utf-8')
+    expect(importsOf(join(SERVICES, 'liveMarketService.ts')).sort()).toEqual(['binance', 'ipc', 'liveMarket', 'marketService', 'reconnectingSocket', 'settingsService', 'ws'])
+    expect(service).toContain('const endpoint = await resolveEndpoint()')
+    expect(service).not.toMatch(/resolveTradingEndpoint|credentials|apiKey|setSettings|settings\.set/)
+    // The rules are arithmetic: the scanner's spread, the watch's Bitcoin rule, and types.
+    const rules = join(ROOT, 'shared', 'liveMarket.ts')
+    expect(importsOf(rules).sort()).toEqual(['aiWatchPaper', 'ipc', 'marketScanner'])
+    expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron/)
+    // What shows it reads the market bridge alone, and offers no call to an order.
+    for (const path of [join(ROOT, 'src', 'hooks', 'useLiveMarket.ts'), join(ROOT, 'src', 'agents', 'liveVerdict.ts'), join(ROOT, 'src', 'agents', 'LiveVerdictView.tsx')]) {
+      const source = readFileSync(path, 'utf-8')
+      expect([...new Set([...source.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))], path).toEqual(path.endsWith('useLiveMarket.ts') ? ['market'] : [])
+      expect(source, path).not.toMatch(/liveTrading|LiveTrading|placeLive|onPrepareOrder|aiProposal|settings\.set/)
+    }
+    // The watch's writer refuses on it inside the queue, among its other refusals.
+    expect(readFileSync(join(ROOT, 'src', 'agents', 'watchPaperTrade.ts'), 'utf-8')).toContain('livePaperBlock(book, deps.nowSec() * 1000) ??')
+  })
+
   it('the news reader reads one public list and reaches nothing else', () => {
     // It reads Binance's announcements once a minute with no window open: the first news in this
     // app. It is held to the scanner's rule and to more. Its main-process files import nothing that
@@ -449,6 +478,7 @@ describe('AI code has no route to a real order', () => {
       'engine',
       'executorFunding',
       'ipc',
+      'liveMarket',
       'marketEvent',
       'paperPause',
       'paperRisk',
