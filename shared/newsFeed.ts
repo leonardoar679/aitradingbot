@@ -289,7 +289,9 @@ export const WORD_TICKERS: ReadonlySet<string> = new Set([
   'DOGS', 'PUMP', 'BANK', 'BOME', 'HOOK', 'CYBER', 'HIGH', 'ALT', 'TRU', 'SCR', 'NEIRO', 'ORDI', 'SAGA', 'VIRTUAL', 'MAGIC', 'FORM', 'NIL', 'TST',
   'SHELL', 'LAYER', 'KAITO', 'RED', 'BABY', 'GPS', 'PROM', 'POWER', 'LUMIA', 'CHESS', 'ARK', 'MBOX', 'FIS', 'ACE', 'ANIME', 'USD', 'CEO', 'SEC',
   // "OP-ED", an IP address: Optimism and Story are matched by name, or as $OP and $IP.
-  'OP', 'IP', 'OK', 'NEW', 'ALL', 'ANY', 'HOME', 'JOE', 'TURBO'
+  'OP', 'IP', 'OK', 'NEW', 'ALL', 'ANY', 'HOME', 'JOE', 'TURBO',
+  // Los Angeles: "off-duty LA deputies" named Lagrange's LA in a one-hour run of the app.
+  'LA'
 ])
 
 export interface AssetDictionary {

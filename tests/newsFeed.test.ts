@@ -26,7 +26,7 @@ import {
 const NOW = Date.parse('2026-10-06T12:00:00Z') / 1000
 const COINDESK = FEED_SOURCES.find((source) => source.id === 'coindesk')!
 const DECRYPT = FEED_SOURCES.find((source) => source.id === 'decrypt')!
-const DICTIONARY = assetDictionary(['BTC', 'ETH', 'SOL', 'BCH', 'XRP', 'ONE', 'AI', 'OP', 'PEPE', 'S'])
+const DICTIONARY = assetDictionary(['BTC', 'ETH', 'SOL', 'BCH', 'XRP', 'ONE', 'AI', 'OP', 'PEPE', 'S', 'LA'])
 
 const RSS = `<?xml version="1.0"?><rss version="2.0"><channel><title>Feed</title>
 <item><title><![CDATA[Solana's SOL jumps 8% as ETF filing advances]]></title><link>https://www.coindesk.com/markets/2026/10/06/sol-etf</link><guid isPermaLink="false">abc-123</guid><pubDate>Tue, 06 Oct 2026 10:00:00 +0000</pubDate><description><![CDATA[<p>The <b>SOL</b> token rose &amp; traders cheered. Bitcoin was flat.</p>]]></description></item>
@@ -90,6 +90,9 @@ describe('which coins a story names', () => {
   it('takes a ticker that is also a word only with its dollar sign or its name', () => {
     expect(namedTickers('ONE more AI agent wrote an OP-ED', DICTIONARY)).toEqual([])
     expect(namedTickers('$ONE and $AI rise; Optimism too', DICTIONARY)).toEqual(['ONE', 'AI', 'OP'])
+    // A city's two letters: a story read in a one-hour run named Lagrange's LA for Los Angeles.
+    expect(namedTickers('Adam Iza used off-duty LA deputies to pull warrants', DICTIONARY)).toEqual([])
+    expect(namedTickers('$LA jumps after its listing', DICTIONARY)).toEqual(['LA'])
     // A coin not traded on Binance is not matched, nor a one-letter ticker.
     expect(namedTickers('DOGE and S rally', DICTIONARY)).toEqual([])
   })
