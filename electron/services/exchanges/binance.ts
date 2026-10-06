@@ -68,6 +68,18 @@ interface BinanceSymbolInfo {
   baseAsset: string
   quoteAsset: string
   status: string
+  /** The groups of accounts allowed to trade it. */
+  permissionSets?: string[][]
+}
+
+/** The trading group Binance keeps its stock tokens in -- the tokens that track a US stock or fund,
+ * NVDAB, SPYB, CRCLB and the rest -- and nothing else. Nothing else in a pair's listing tells one
+ * apart: they all end in "B", and so do BNB, SHIB and ARB. Read from the listing on 6 October 2026:
+ * all 87 stock tokens are in this group, and none of the 415 other USDT pairs. */
+const STOCK_TOKEN_GROUP = 'TRD_GRP_261'
+
+function isStockToken(pair: BinanceSymbolInfo): boolean {
+  return (pair.permissionSets ?? []).some((set) => Array.isArray(set) && set.includes(STOCK_TOKEN_GROUP))
 }
 
 interface BinanceKlineRow {
@@ -224,7 +236,7 @@ async function listSymbols(): Promise<SymbolInfo[]> {
   const data = (await response.json()) as { symbols: BinanceSymbolInfo[] }
   return data.symbols
     .filter((s) => s.status === 'TRADING')
-    .map((s) => ({ symbol: s.symbol, baseAsset: s.baseAsset, quoteAsset: s.quoteAsset }))
+    .map((s) => ({ symbol: s.symbol, baseAsset: s.baseAsset, quoteAsset: s.quoteAsset, ...(isStockToken(s) ? { stockToken: true } : {}) }))
 }
 
 async function fetchHistoricalCandles(symbol: string, interval: Interval, limit = 500): Promise<Candle[]> {

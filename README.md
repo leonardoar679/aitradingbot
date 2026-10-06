@@ -164,8 +164,8 @@ to XEMM/Arbitrage (they never leave a lingering position by design).
 Since 6 October 2026 (the second V3 document's §4 and §9) the app studies the market by itself as
 it opens, and every ten minutes after, whatever else is switched on
 (`electron/services/marketResearchService.ts`; the arithmetic is `shared/marketResearch.ts`):
-- **The pairs:** the scanner's own choice of USDT pairs (no stablecoins or pegged tokens), the 50
-  most traded that each trade at least $20M a day.
+- **The pairs:** the scanner's own choice of USDT pairs (no stablecoins, pegged tokens or stock
+  tokens), the 50 most traded that each trade at least $20M a day.
 - **A day and a week:** each pair's 24-hour move from the one all-pairs ticker request; its week
   from nine daily bars — the move from the close eight days back, the day's volume against the
   week's daily mean, how many of the seven days closed up, and how far it is from the week's high.
@@ -693,7 +693,20 @@ slower and dearer question — "is it a trade?" — is only ever asked about a p
 been singled out. Switched on, the main process reads each of the 20, 40, 60 or 100 most traded
 USDT pairs on Binance once a minute, a few seconds after the minute closes, from that pair's last
 twelve hours of completed 1-minute candles (`shared/marketEvent.ts`,
-`electron/services/marketScannerService.ts`). Stablecoins and pegged tokens are left out.
+`electron/services/marketScannerService.ts`). Stablecoins and pegged tokens are left out, and so
+are the tokens that track a US stock or fund (NVDAB, SPYB, CRCLB and the rest, 87 of them in
+October 2026). Binance keeps those in a trading group of their own, and that group is how they are
+told apart (`electron/services/exchanges/binance.ts`): their names all end in "B", but so do BNB's
+and SHIB's. A stock token moves with its stock. When the US market opens it catches up on the night
+in a few minutes, on many times its usual volume, and the scanner read that as an urgent breakout.
+In a twelve-hour run on 6 October 2026 the first five events were three stock tokens, between 13:32
+and 13:38 UTC, and three of the watch's first four questions went to them. Over the week before,
+the detector run on the same 60 pairs found those three tokens making 16 of the 112 urgent events.
+Ten came within 13 minutes of the open and the other six before it or on Sunday evening, New York
+time, with at least one on every trading day. At its 10 a day, the watch would have spent about one
+question in seven on them. Nothing the watch is shown, such as Bitcoin's regime, the crypto news or
+its own safeguard on Bitcoin's move, says anything about a stock. They can still be charted on
+Markets.
 
 Each pair gets a score from 0 to 100, the plain mean of five readings:
 

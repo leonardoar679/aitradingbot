@@ -333,6 +333,13 @@ describe('isScannablePair', () => {
     // Ends in "UP" and is not a leveraged token.
     expect(isScannablePair({ baseAsset: 'JUP', quoteAsset: 'USDT' })).toBe(true)
   })
+
+  it('does not watch a token that tracks a stock, by what its exchange says and not by its name', () => {
+    expect(isScannablePair({ baseAsset: 'SNDKB', quoteAsset: 'USDT', stockToken: true })).toBe(false)
+    expect(isScannablePair({ baseAsset: 'SNDKB', quoteAsset: 'USDT' })).toBe(true)
+    // Ends in "B" as every stock token does, and is a coin.
+    expect(isScannablePair({ baseAsset: 'SHIB', quoteAsset: 'USDT', stockToken: false })).toBe(true)
+  })
 })
 
 // THE DETECTOR AND ITS VERSION MOVE TOGETHER, OR NOT AT ALL, for the reason a prompt and its

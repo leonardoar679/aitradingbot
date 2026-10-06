@@ -502,9 +502,20 @@ export const SCAN_EXCLUDED_BASES: ReadonlySet<string> = new Set([
 ])
 
 /** Whether a pair belongs in the watched set at all: quoted in the one asset every watched pair
- * shares, so that their volumes can be ranked against each other, and not pegged to anything. */
-export function isScannablePair(pair: { baseAsset: string; quoteAsset: string }, quoteAsset = 'USDT'): boolean {
-  return pair.quoteAsset === quoteAsset && !SCAN_EXCLUDED_BASES.has(pair.baseAsset)
+ * shares, so that their volumes can be ranked against each other, not pegged to anything, and not
+ * a token that tracks a stock.
+ *
+ * A STOCK TOKEN'S MOVES ARE ITS STOCK'S. When the US market opens it catches up on the night in a
+ * few minutes, on many times its usual volume, and the detector reads that as an urgent breakout.
+ * In a twelve-hour run of the app on 6 October 2026 the first five events were three stock tokens
+ * between 13:32 and 13:38 UTC, two minutes after the open, and three of the watch's first four
+ * questions went to them. Over the week before it, the detector run on the same 60 pairs found
+ * those three, 3 pairs in 60, making 16 of the 112 urgent events: ten within 13 minutes of the open,
+ * the other six before it or on Sunday evening, New York time, and at least one on every trading day.
+ * Nothing the app reads beside a move -- Bitcoin's regime, the crypto news, the safeguard on
+ * Bitcoin's move -- says anything about a stock. */
+export function isScannablePair(pair: { baseAsset: string; quoteAsset: string; stockToken?: boolean }, quoteAsset = 'USDT'): boolean {
+  return pair.quoteAsset === quoteAsset && !SCAN_EXCLUDED_BASES.has(pair.baseAsset) && pair.stockToken !== true
 }
 
 const TYPE_LABEL: Record<MarketEventType, string> = {

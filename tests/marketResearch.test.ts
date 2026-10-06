@@ -88,6 +88,12 @@ describe('the pairs researched', () => {
     const thin = researchUniverse(symbols, [ticker('BTCUSDT', { quoteVolume: RESEARCH_MIN_QUOTE_VOLUME }), ticker('C0USDT', { quoteVolume: RESEARCH_MIN_QUOTE_VOLUME - 1 })])
     expect(thin.map((pair) => pair.symbol)).toEqual(['BTCUSDT'])
   })
+
+  it('leave out a stock token, whose moves are its stock market\'s and not the altcoins\'', () => {
+    const symbols = [info('BTC'), { ...info('SPCXB'), stockToken: true }, info('SOL')]
+    const tickers = [ticker('BTCUSDT', { quoteVolume: 9e9 }), ticker('SPCXBUSDT', { quoteVolume: 5e9 }), ticker('SOLUSDT', { quoteVolume: 1e9 })]
+    expect(researchUniverse(symbols, tickers).map((pair) => pair.symbol)).toEqual(['BTCUSDT', 'SOLUSDT'])
+  })
 })
 
 describe('a pair over a day and a week', () => {

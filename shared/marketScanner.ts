@@ -129,8 +129,9 @@ export function scanHistoryRequests(pairs: number, startSec: number, endSec: num
   return pairs * Math.ceil(bars / 1000)
 }
 
-/** The watched set: the `size` most traded pairs quoted in USDT that are not pegged to anything.
- * Ties are broken by name, so the same tickers always give the same set. */
+/** The watched set: the `size` most traded pairs quoted in USDT that are not pegged to anything and
+ * do not track a stock (isScannablePair). Ties are broken by name, so the same tickers always give
+ * the same set. */
 export function pickUniverse(symbols: SymbolInfo[], tickers: Ticker24h[], size: number): (SymbolInfo & { quoteVolume24h: number })[] {
   const volumeBySymbol = new Map(tickers.map((ticker) => [ticker.symbol, ticker.quoteVolume]))
   return symbols

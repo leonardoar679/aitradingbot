@@ -464,6 +464,10 @@ export interface SymbolInfo {
   symbol: string
   baseAsset: string
   quoteAsset: string
+  /** True for a token that tracks a listed stock or fund -- on Binance, NVDAB, SPYB and the rest --
+   * where the exchange's own listing says so. Its price is made by the stock's market, on that
+   * market's hours. Absent on every other pair. */
+  stockToken?: boolean
 }
 
 export interface ExchangeInfo {

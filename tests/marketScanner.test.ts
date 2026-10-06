@@ -164,6 +164,12 @@ describe('pickUniverse', () => {
     const tickers = [ticker('ZZZUSDT', 10), ticker('AAAUSDT', 10)]
     expect(pickUniverse(symbols, tickers, 10).map((entry) => entry.symbol)).toEqual(['AAAUSDT', 'ZZZUSDT'])
   })
+
+  it('leaves out a stock token, however much it trades, and takes the next pair in its place', () => {
+    const symbols = [{ ...pair('SPCXB'), stockToken: true }, ...market.symbols]
+    const tickers = [ticker('SPCXBUSDT', 950_000_000), ...(market.tickers as Ticker24h[])]
+    expect(pickUniverse(symbols, tickers, 2).map((entry) => entry.symbol)).toEqual(['AAAUSDT', 'PUMPUSDT'])
+  })
 })
 
 describe('the small arithmetic', () => {

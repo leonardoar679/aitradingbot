@@ -193,7 +193,8 @@ settings from the document have no behaviour behind them, so they are not added 
   - refresh rate: once a minute, fixed;
   - timeframes;
   - minimum volume, liquidity and maximum spread: the scanner takes the most traded pairs and
-    leaves out stablecoins and pegged tokens by a fixed list (`SCAN_EXCLUDED_BASES`).
+    leaves out stablecoins and pegged tokens by a fixed list (`SCAN_EXCLUDED_BASES`), and stock
+    tokens by Binance's own listing (`stockToken`).
 - **AI:**
   - fast, reasoning and reviewer roles: routing to a second model is what exists;
   - prompt version: pinned by tests, not chosen;

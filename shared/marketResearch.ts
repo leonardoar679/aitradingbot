@@ -189,9 +189,10 @@ export function withStep(state: ResearchState, id: ResearchStepId, status: Resea
   return { ...state, steps: state.steps.map((step) => (step.id === id ? { ...step, status, detail } : step)) }
 }
 
-/** The pairs researched: the scanner's own choice of scannable USDT pairs -- no stablecoins or
- * pegged tokens -- by the day's quote volume, the first RESEARCH_UNIVERSE_SIZE of them that trade
- * at least RESEARCH_MIN_QUOTE_VOLUME. */
+/** The pairs researched: the scanner's own choice of scannable USDT pairs -- no stablecoins, pegged
+ * tokens or stock tokens -- by the day's quote volume, the first RESEARCH_UNIVERSE_SIZE of them that
+ * trade at least RESEARCH_MIN_QUOTE_VOLUME. A stock token would count a rally on Wall Street into
+ * the altcoins' strength and breadth. */
 export function researchUniverse(symbols: SymbolInfo[], tickers: Ticker24h[]): (SymbolInfo & { quoteVolume24h: number })[] {
   return pickUniverse(symbols, tickers, RESEARCH_UNIVERSE_SIZE).filter((pair) => pair.quoteVolume24h >= RESEARCH_MIN_QUOTE_VOLUME)
 }
