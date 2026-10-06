@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Candle } from '../../shared/ipc'
 import { explainMove, type CauseLabel, type MoveExplanation } from '../../shared/moveExplanation'
+import { WhyConclusion } from '../agents/WhyConclusion'
 import { useNewsFeed } from './useNewsFeed'
 
 /** The minutes read for a pair and for Bitcoin: the hour explained and the three before it. */
@@ -12,7 +13,8 @@ const signed = (value: number | null): string => (value === null ? '—' : `${va
 
 /** "Why did it move?" for one pair (shared/moveExplanation.ts): its last hour against Bitcoin's and
  * its usual volume, and the stories that name it, with how sure that is. It reads public candles
- * and the news feed; it asks no model and never names a cause it did not find. */
+ * and the news feed, and never names a cause it did not find. Below it, the AI's conclusion
+ * (../agents/WhyConclusion.tsx), asked only on a click at the price shown. */
 export function WhyItMoved({ symbol }: { symbol: string }): React.JSX.Element {
   const feed = useNewsFeed()
   const [bars, setBars] = useState<{ pair: Candle[]; btc: Candle[]; at: number } | null>(null)
@@ -88,6 +90,7 @@ export function WhyItMoved({ symbol }: { symbol: string }): React.JSX.Element {
         it, the whole market moving with Bitcoin, or a surge in volume with no story found; UNKNOWN none of these. A cause named is a story found or a
         figure measured, never a guess.
       </p>
+      <WhyConclusion symbol={symbol} />
     </div>
   )
 }

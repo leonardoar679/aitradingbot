@@ -13,7 +13,7 @@ import {
   setAiCredential,
   testAiCredential
 } from '../../services/aiCredentialsService'
-import { getAiAdditionsStatus } from '../../services/aiAdditionsService'
+import { concludeMove, getAiAdditionsStatus } from '../../services/aiAdditionsService'
 import { getAiConfig, listAiModels, setAiConfig } from '../../services/aiConfigService'
 import { getAiExperiment, listAiExperiments, recordAiExperiment } from '../../services/aiExperimentService'
 import { getAiUsageSummary, listAiCalls } from '../../services/aiLedgerService'
@@ -28,8 +28,10 @@ import {
   peekAiOpportunity
 } from '../../services/aiSignalService'
 
-// THREE channels here can spend money: AiGenerateSignalTape, AiConfirmEntry and AiAskOpportunity,
-// each one decision at a time and each behind the same budget. Everything else
+// FOUR channels here can spend money: AiGenerateSignalTape, AiConfirmEntry, AiAskOpportunity and,
+// since 6 October 2026, AiConcludeMove (one call, from a click in the Why window at the price shown,
+// within the conclusion's own daily limit), each one decision at a time and each behind the same
+// budget. Everything else
 // reads a file, asks OpenRouter a free question about the key or its catalogue, or changes a
 // setting. Keeping that true is what lets the AI pages be opened and browsed without a
 // confirmation on every tab. A benchmark adds no third: its paid calls are one-decision tapes,
@@ -72,4 +74,5 @@ export function registerAiHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(IpcChannel.AiGetExperiment, (_event, id: string) => getAiExperiment(String(id)))
   ipcMain.handle(IpcChannel.AiRecordExperiment, (_event, input: unknown) => recordAiExperiment(input))
   ipcMain.handle(IpcChannel.AiAdditionsStatus, () => getAiAdditionsStatus())
+  ipcMain.handle(IpcChannel.AiConcludeMove, (_event, symbol: unknown) => concludeMove(symbol, false))
 }

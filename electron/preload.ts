@@ -29,7 +29,7 @@ import type {
 import type { ResearchState } from '../shared/marketResearch'
 import type { LiveBook, LiveState } from '../shared/liveMarket'
 import type { NewsFeedState, StoryMark } from '../shared/newsFeed'
-import type { AiAdditionsStatus } from '../shared/aiAdditions'
+import type { AiAdditionsStatus, MoveConclusion } from '../shared/aiAdditions'
 import type { NewsConfigPatch, NewsFilter, NewsPage, NewsState } from '../shared/news'
 import type { NewsRecord } from '../shared/newsRecord'
 import {
@@ -235,6 +235,8 @@ const api = {
       ipcRenderer.invoke(IpcChannel.AiRecordExperiment, input),
     // Free: the additions' switches, what they have asked today and what a call costs.
     additionsStatus: (): Promise<AiAdditionsStatus> => ipcRenderer.invoke(IpcChannel.AiAdditionsStatus),
+    // Billed unless held: one conclusion to "Why did it move?", asked from a click at the price shown.
+    concludeMove: (symbol: string): Promise<MoveConclusion> => ipcRenderer.invoke(IpcChannel.AiConcludeMove, symbol),
     // The two calls below the "free" line that are not free: each is billed unless its answer is
     // already cached.
     confirmEntry: (request: AiEntryConfirmRequest): Promise<AiSignalDecision> =>

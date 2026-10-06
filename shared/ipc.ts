@@ -82,6 +82,7 @@ export const IpcChannel = {
   AiGetExperiment: 'ai:getExperiment',
   AiRecordExperiment: 'ai:recordExperiment',
   AiAdditionsStatus: 'ai:additionsStatus',
+  AiConcludeMove: 'ai:concludeMove',
   LiveTradingGetStatus: 'liveTrading:getStatus',
   LiveTradingSetConfig: 'liveTrading:setConfig',
   LiveTradingEngageKillSwitch: 'liveTrading:engageKillSwitch',

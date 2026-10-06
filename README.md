@@ -491,6 +491,24 @@ What a reading does:
 - **Refused answers:** an answer the validator refuses is kept, as every refused answer is, and is
   used nowhere.
 
+**The conclusion to "Why did it move?"** makes at most 20 calls a day. It is asked in two ways:
+- **On a click** in the Why window, "Ask for a conclusion", at the price shown. A click is consent,
+  so it is asked with the watch off too.
+- **By itself**, while the watch is on, for the coin a story of high impact names, after the
+  analyst has read the story.
+
+How it works:
+- **The evidence is rebuilt in the main process,** never handed in. It reads the pair's last four
+  hours of minutes and Bitcoin's from the market-data host, and the stories the feed holds, and
+  works out the fixed rules' explanation (`shared/moveExplanation.ts`).
+- **It is asked only with something to weigh:** a move of half a percent or more, and at least one
+  item of evidence (a story that names the coin, Bitcoin's share of the move, or a volume surge),
+  each with an id.
+- **It must cite what it rests on:** at least one item, each exactly as listed. A conclusion that
+  cites nothing, or anything not listed, is dropped.
+- **Shown:** the conclusion appears under the rules' explanation, with what it cites. The newest
+  one on file for the pair, if it is less than an hour old, shows when the window opens.
+
 **On Settings › AI**, a card lists each addition:
 - its switch, and what it asks and when;
 - what it has asked today, against its limit;
@@ -506,6 +524,15 @@ main process. A fake key and the watch were switched on in that profile only.
   4h, 75%".
 - **Settings › AI** read "1 of 40, about $0.036 at its limit", and its switch turned it off.
 - **Cleared afterwards:** the key, the watch and the profile were removed.
+
+The conclusion was checked the same way, with a fake key and the watch off. One feed returned a
+story naming Solana, and SOLUSDT's minutes were faked to rise 2.5% in the last hour on three times
+its usual volume.
+- **The Why window** on the story read PROBABLE, with the volume and the story as evidence.
+- **"Ask for a conclusion"** made one call, at a faked $0.0008. It answered "The developer story
+  arrived as volume tripled, and Bitcoin did not move: the rise is the coin's own", citing both
+  items.
+- **The ledger row** kept both citations.
 
 ### Discovery — a market scanner
 
@@ -3058,7 +3085,9 @@ electron/                    Electron main process
                                newsFeedService (four free news feeds every three minutes, each
                                story kept once, and what the price did after it),
                                aiAdditionsService (the AI additions' calls, within their limits
-                               and the budget, and the news analyst asking by itself)
+                               and the budget; the news analyst and the conclusion to "Why did it
+                               move?" asking by themselves; the conclusion's evidence rebuilt from
+                               public candles)
                              AI, with no import path to any of the live services above:
                                openRouterClient (the only file that knows OpenRouter's wire format),
                                aiSignalService (the paid path, cache, retries), aiPrompt,
@@ -3106,7 +3135,7 @@ shared/                       Code both processes run, so they cannot disagree a
   paperExposure.ts            A pair's hourly correlation with Bitcoin, and the cap on what the app's own paper trades stake on one side on pairs that track it
   newsTitles.ts, news.ts      Which kind of news a Binance title is, and which coins it names (the study's patterns); what the reader keeps of each article, and what each kind did
   newsFeed.ts                 The news feeds read: RSS, a story's coins, kind, credibility and impact, the same story from several sources, what the price did after, and what each kind has done
-  aiAdditions.ts              The AI additions: each one's switch, daily limit and prompt version, and the news analyst's question and answer, checked
+  aiAdditions.ts              The AI additions: each one's switch, daily limit and prompt version; the news analyst's question and answer, and the conclusion to "Why did it move?" with its evidence and citations, checked
   moveExplanation.ts          "Why did it move?": a pair's move against Bitcoin's, its volume and the news that names it, labelled KNOWN, PROBABLE, POSSIBLE or UNKNOWN by fixed rules
   newsActions.ts              What a delisting or a Monitoring Tag does: the notice to a holder, the kind's paper short, and when it is raised for the models and may be asked about
   newsRules.ts, newsRecord.ts The studies' bracket and four-hour hold as arithmetic, shared with research/announcementStudy.ts; the record of the two rules and the two near misses since the studies

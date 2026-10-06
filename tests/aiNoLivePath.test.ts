@@ -576,6 +576,10 @@ describe('AI code has no route to a real order', () => {
       'alerts',
       'atomicWrite',
       'electron',
+      // The conclusion to "Why did it move?" rebuilds its evidence from public candles (the
+      // scanner's own source, the data host) and the fixed rules' explanation.
+      'marketService',
+      'moveExplanation',
       'newsFeed',
       'newsFeedService',
       'node:crypto',
@@ -593,7 +597,10 @@ describe('AI code has no route to a real order', () => {
     }
     expect(calls(join(ROOT, 'src', 'agents', 'AiAdditionsCard.tsx'))).toEqual(['ai.additionsStatus', 'ai.setConfig'])
     expect(calls(join(ROOT, 'src', 'news', 'useNewsReadings.ts'))).toEqual(['ai.listCalls'])
-    for (const path of [join(ROOT, 'src', 'agents', 'AiAdditionsCard.tsx'), join(ROOT, 'src', 'news', 'useNewsReadings.ts')]) {
+    // The conclusion is asked from a click at the price shown; the Why window itself asks nothing.
+    expect(calls(join(ROOT, 'src', 'agents', 'WhyConclusion.tsx'))).toEqual(['ai.additionsStatus', 'ai.concludeMove', 'ai.listCalls'])
+    expect(readFileSync(join(SERVICES, 'aiAdditionsService.ts'), 'utf-8')).toContain("scanSourceFor('binance')")
+    for (const path of [join(ROOT, 'src', 'agents', 'AiAdditionsCard.tsx'), join(ROOT, 'src', 'news', 'useNewsReadings.ts'), join(ROOT, 'src', 'agents', 'WhyConclusion.tsx')]) {
       expect(readFileSync(path, 'utf-8'), path).not.toMatch(/liveTrading|LiveTrading|placeLive|onPrepareOrder|aiProposal|settings\.set/)
     }
   })

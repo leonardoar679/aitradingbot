@@ -12,11 +12,15 @@ import {
   additionsModelOf,
   describeNewsReading,
   healAiAdditions,
+  latestWhyOf,
   newsQuestionOf,
   newsReadingsOf,
   validateNewsReading,
+  validateWhyConclusion,
+  whyQuestionOf,
   type NewsReading
 } from '../shared/aiAdditions'
+import type { MoveExplanation } from '../shared/moveExplanation'
 import type { ReadStory } from '../shared/newsFeed'
 
 // shared/aiAdditions.ts: the AI additions -- on unless switched off, each held to a daily limit, the
@@ -30,11 +34,11 @@ const READING: NewsReading = { ticker: 'SOL', relationship: 'DIRECT', direction:
 
 describe('the setting', () => {
   it('is on unless switched off, each, and only false switches one off', () => {
-    expect(DEFAULT_AI_ADDITIONS).toEqual({ news: true })
-    expect(healAiAdditions(undefined)).toEqual({ news: true })
-    expect(healAiAdditions({ news: false })).toEqual({ news: false })
-    expect(healAiAdditions({ news: 'no' })).toEqual({ news: true })
-    expect(healAiAdditions([false])).toEqual({ news: true })
+    expect(DEFAULT_AI_ADDITIONS).toEqual({ news: true, why: true })
+    expect(healAiAdditions(undefined)).toEqual({ news: true, why: true })
+    expect(healAiAdditions({ news: false })).toEqual({ news: false, why: true })
+    expect(healAiAdditions({ news: 'no', why: false })).toEqual({ news: true, why: false })
+    expect(healAiAdditions([false])).toEqual({ news: true, why: true })
   })
 
   it("asks the watch's own model: the one its paper trades follow, else the first it asks, else the default", () => {
@@ -57,9 +61,11 @@ describe('the setting', () => {
 
   it('refuses a call when switched off, when it would ask by itself with the watch off, or at its daily limit', () => {
     const ask = (over: Partial<Parameters<typeof additionProblem>[0]> = {}): string | null =>
-      additionProblem({ kind: 'news', additions: { news: true }, watchOn: true, automatic: true, callsToday: 0, ...over })
+      additionProblem({ kind: 'news', additions: { news: true, why: true }, watchOn: true, automatic: true, callsToday: 0, ...over })
     expect(ask()).toBeNull()
-    expect(ask({ additions: { news: false } })).toBe('The news analyst is switched off under Settings › AI.')
+    expect(ask({ additions: { news: false, why: true } })).toBe('The news analyst is switched off under Settings › AI.')
+    expect(ask({ kind: 'why', callsToday: 20 })).toBe('The "why did it move?" conclusion has made its 20 calls today.')
+    expect(ask({ kind: 'why', callsToday: 19 })).toBeNull()
     expect(ask({ watchOn: false })).toBe('The news analyst asks by itself only while the watch is on.')
     // Asked for by a person, the watch does not matter.
     expect(ask({ watchOn: false, automatic: false })).toBeNull()
@@ -125,6 +131,85 @@ describe("the news analyst's answer", () => {
   })
 })
 
+describe('the conclusion to "Why did it move?"', () => {
+  const explanation = (over: Partial<MoveExplanation> = {}): MoveExplanation => ({
+    symbol: 'SOLUSDT',
+    windowMinutes: 60,
+    movePct: 2.456,
+    volumeRatio: 3.14159,
+    btcMovePct: 0.4049,
+    marketShare: 0.16,
+    label: 'PROBABLE',
+    causes: [
+      { kind: 'news', text: 'Binance lists SOL futures (CoinDesk, 11:10 UTC)', relevance: 60, storyId: 'coindesk:1', url: 'https://www.coindesk.com/x' },
+      { kind: 'volume', text: 'Volume 3.1 times its usual over those minutes.', relevance: 60 }
+    ],
+    summary: '',
+    ...over
+  })
+  const question = whyQuestionOf(explanation(), 0.5)
+
+  it('is asked the move as measured, rounded, and the evidence the rules found, each by an id', () => {
+    expect(question).toEqual({
+      pair: 'SOLUSDT',
+      windowMinutes: 60,
+      movePct: 2.46,
+      volumeRatio: 3.14,
+      btcMovePct: 0.4,
+      label: 'PROBABLE',
+      evidence: [
+        { id: 'story:coindesk:1', kind: 'news', text: 'Binance lists SOL futures (CoinDesk, 11:10 UTC)' },
+        { id: 'volume', kind: 'volume', text: 'Volume 3.1 times its usual over those minutes.' }
+      ]
+    })
+  })
+
+  it('is not asked with nothing to conclude: a move not read, under half a percent, or with no evidence', () => {
+    expect(whyQuestionOf(explanation({ movePct: null }), 0.5)).toBeNull()
+    expect(whyQuestionOf(explanation({ movePct: -0.49 }), 0.5)).toBeNull()
+    expect(whyQuestionOf(explanation({ movePct: -0.5 }), 0.5)).not.toBeNull()
+    expect(whyQuestionOf(explanation({ causes: [] }), 0.5)).toBeNull()
+  })
+
+  it('is taken only citing the evidence listed, at least one item, in a sensible length', () => {
+    const evidence = question?.evidence ?? []
+    const check = (value: Record<string, unknown>): string => {
+      const verdict = validateWhyConclusion({ conclusion: 'The listing moved it.', cites: ['story:coindesk:1'], confidence: 0.6, ...value }, { evidence })
+      return verdict.ok ? 'taken' : verdict.reason
+    }
+    expect(validateWhyConclusion({ conclusion: '  The listing moved it, on volume.  ', cites: ['story:coindesk:1', 'volume', 'volume'], confidence: 0.6 }, { evidence })).toEqual({
+      ok: true,
+      conclusion: { conclusion: 'The listing moved it, on volume.', cites: ['story:coindesk:1', 'volume'], confidence: 0.6 }
+    })
+    expect(check({ cites: ['market'] })).toBe('It cites "market", which is not one of the evidence listed.')
+    expect(check({ cites: [] })).toBe('cites does not list 1 to 6 items.')
+    expect(check({ cites: 'volume' })).toBe('cites does not list 1 to 6 items.')
+    expect(check({ cites: [1] })).toBe('It cites 1, which is not one of the evidence listed.')
+    expect(check({ conclusion: '   ' })).toBe('conclusion is not text of 1 to 400 characters.')
+    expect(check({ conclusion: 'x'.repeat(401) })).toBe('conclusion is not text of 1 to 400 characters.')
+    expect(check({ confidence: -0.1 })).toBe('confidence is not from 0 to 1.')
+    expect(validateWhyConclusion(null, { evidence })).toEqual({ ok: false, reason: 'The answer was not an object.' })
+  })
+
+  it('reads back the newest conclusion on file for a pair, answered rows only', () => {
+    const row = (at: number, over: Record<string, unknown> = {}): Parameters<typeof latestWhyOf>[0][number] => ({
+      promptVersion: AI_ADDITION_PROMPT_VERSIONS.why,
+      status: 'ok',
+      symbol: 'SOLUSDT',
+      at,
+      model: 'm',
+      additionAnswer: { conclusion: `said at ${at}`, cites: ['volume'], confidence: 0.5 },
+      ...over
+    })
+    expect(latestWhyOf([row(T - 60), row(T), row(T + 60, { status: 'rejected' }), row(T + 120, { symbol: 'XRPUSDT' }), row(T + 180, { promptVersion: 'news-analyst-v1' })], 'SOLUSDT')).toEqual({
+      at: T,
+      model: 'm',
+      conclusion: { conclusion: `said at ${T}`, cites: ['volume'], confidence: 0.5 }
+    })
+    expect(latestWhyOf([], 'SOLUSDT')).toBeNull()
+  })
+})
+
 describe('a prompt and its version move together', () => {
   // As tests/aiPromptVersions.test.ts holds every other prompt: edit a text and bump its version, or
   // this fails.
@@ -132,5 +217,10 @@ describe('a prompt and its version move together', () => {
   it("pins the news analyst's prompt and schema", () => {
     expect([AI_ADDITION_PROMPT_VERSIONS.news, sha(AI_ADDITION_SYSTEM_PROMPTS.news)]).toEqual(['news-analyst-v1', '430f9a33959df3c5a2e2c27477208b40d5a2efefaa64919a354a4a99014d5fff'])
     expect([AI_ADDITION_SCHEMA_VERSIONS.news, sha(JSON.stringify(AI_ADDITION_SCHEMAS.news))]).toEqual(['news-reading-v1', '0da05131a9b31f550188361608f4befe585526bc79032e870c1baddc94072f68'])
+  })
+
+  it("pins the conclusion's prompt and schema", () => {
+    expect([AI_ADDITION_PROMPT_VERSIONS.why, sha(AI_ADDITION_SYSTEM_PROMPTS.why)]).toEqual(['why-conclusion-v1', '59f48f9f330a3be495e77589229d471a3b1ea028c2c4f609a6928c48d2eccaed'])
+    expect([AI_ADDITION_SCHEMA_VERSIONS.why, sha(JSON.stringify(AI_ADDITION_SCHEMAS.why))]).toEqual(['why-conclusion-v1', '6e757e1aed2f7e2028861b6e123096b3c848b5c4182b38a283bed0a342bed54b'])
   })
 })

@@ -2,8 +2,9 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { NewsReading } from '../shared/aiAdditions'
+import type { NewsReading, WhyConclusion } from '../shared/aiAdditions'
 import type { AiWatchConfig } from '../shared/aiWatch'
+import type { Candle } from '../shared/ipc'
 import type { NewsFeedState, ReadStory } from '../shared/newsFeed'
 
 // electron/services/aiAdditionsService.ts: the AI additions' calls where the money is spent, with the
@@ -13,18 +14,42 @@ vi.mock('electron', () => ({ app: { getPath: () => process.env.AI_TEST_USER_DATA
 vi.mock('../electron/services/aiCredentialsService', () => ({
   getDecryptedAiCredential: async () => ({ apiKey: 'sk-or-test' })
 }))
-const feed = vi.hoisted(() => ({ listener: null as ((state: NewsFeedState) => void) | null }))
+const feed = vi.hoisted(() => ({ listener: null as ((state: NewsFeedState) => void) | null, stories: [] as ReadStory[] }))
 vi.mock('../electron/services/newsFeedService', () => ({
   onNewsFeedUpdate: (listener: (state: NewsFeedState) => void) => {
     feed.listener = listener
     return () => undefined
-  }
+  },
+  getNewsFeedState: () => ({ stories: feed.stories, reactions: {} })
+}))
+const market = vi.hoisted(() => ({ bars: {} as Record<string, Candle[]>, asked: [] as string[] }))
+vi.mock('../electron/services/marketService', () => ({
+  scanSourceFor: () => ({
+    fetchRecentCandles: async (symbol: string) => {
+      market.asked.push(symbol)
+      const bars = market.bars[symbol]
+      if (bars === undefined) throw new Error(`${symbol} is not traded`)
+      return bars
+    }
+  })
 }))
 
 const A = 'openai/gpt-5-mini'
 const NOW = Date.parse('2026-10-06T12:00:00Z') / 1000
 const ON: AiWatchConfig = { enabled: true, models: [A], maxEventsPerDay: 5, minBand: 'urgent', firstModelGates: false }
 const READING: NewsReading = { ticker: 'SOL', relationship: 'DIRECT', direction: 'up', impact: 72, horizon: '4h', confidence: 0.7, pricedIn: false, reasons: 'A large listing.' }
+const CONCLUSION: WhyConclusion = { conclusion: 'The futures listing drew buyers, on three times the usual volume.', cites: ['story:a'], confidence: 0.6 }
+
+/** Four hours of closed minutes ending before NOW: flat at 100, and over the last hour to `end`. */
+function minutes(end: number): Candle[] {
+  const last = Math.floor(NOW / 60) * 60 - 60
+  const out: Candle[] = []
+  for (let k = 239; k >= 0; k--) {
+    const close = k >= 60 ? 100 : 100 + ((end - 100) * (60 - k)) / 60
+    out.push({ time: last - k * 60, open: close, high: close, low: close, close, volume: 10 })
+  }
+  return out
+}
 
 function story(id: string, over: Partial<ReadStory> = {}): ReadStory {
   return {
@@ -54,7 +79,8 @@ function stubOpenRouter(reply: (call: number) => Reply | Promise<Reply> = () => 
   const bodies: { model: string; messages: { role: string; content: string }[]; response_format: { json_schema: { name: string } } }[] = []
   vi.stubGlobal('fetch', async (_url: string, init: { body?: string }) => {
     bodies.push(JSON.parse(init.body ?? '{}'))
-    const { status = 200, content = JSON.stringify(READING) } = await reply(bodies.length)
+    const asked = bodies[bodies.length - 1].response_format?.json_schema?.name
+    const { status = 200, content = JSON.stringify(asked === 'why_conclusion' ? CONCLUSION : READING) } = await reply(bodies.length)
     const body =
       status === 200
         ? { provider: 'Test', choices: [{ finish_reason: 'stop', message: { content } }], usage: { prompt_tokens: 600, completion_tokens: 120, cost: 0.001 } }
@@ -77,6 +103,9 @@ async function services() {
 beforeEach(() => {
   vi.resetModules()
   feed.listener = null
+  feed.stories = []
+  market.bars = {}
+  market.asked = []
   process.env.AI_TEST_USER_DATA = mkdtempSync(join(tmpdir(), 'ai-additions-'))
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(new Date(NOW * 1000))
@@ -277,6 +306,77 @@ describe('the news analyst', () => {
   })
 })
 
+describe('the conclusion to "Why did it move?"', () => {
+  it('is asked on a click with the watch off, about evidence rebuilt here, and cites only what was listed', async () => {
+    const { bodies } = stubOpenRouter()
+    const { concludeMove, listAiCalls, AI_ADDITION_SYSTEM_PROMPTS } = await services()
+    market.bars = { SOLUSDT: minutes(102.5), BTCUSDT: minutes(100) }
+    feed.stories = [story('a')]
+    const result = await concludeMove('SOLUSDT', false)
+    expect(result.explanation).toMatchObject({ label: 'PROBABLE', movePct: expect.closeTo(2.5, 6) })
+    expect(result.question?.evidence.map((item) => item.id)).toEqual(['story:a'])
+    expect(result.outcome).toEqual({ status: 'answered', answer: CONCLUSION, cached: false, model: A })
+    expect(market.asked).toEqual(['SOLUSDT', 'BTCUSDT'])
+    expect(bodies).toHaveLength(1)
+    expect(bodies[0].messages[0].content).toBe(AI_ADDITION_SYSTEM_PROMPTS.why)
+    expect(JSON.parse(bodies[0].messages[1].content)).toEqual(result.question)
+    expect(bodies[0].response_format.json_schema.name).toBe('why_conclusion')
+    const minute = Math.floor(NOW / 60) * 60
+    expect((await listAiCalls({ source: 'addition' })).rows[0]).toMatchObject({
+      addition: 'why',
+      subjectId: `SOLUSDT:${minute}`,
+      symbol: 'SOLUSDT',
+      candleTime: minute,
+      promptVersion: 'why-conclusion-v1',
+      status: 'ok',
+      rationale: CONCLUSION.conclusion,
+      additionAnswer: CONCLUSION
+    })
+  })
+
+  it('asks nothing when there is nothing to conclude: a quiet pair, or no evidence', async () => {
+    const { bodies } = stubOpenRouter()
+    const { concludeMove } = await services()
+    market.bars = { SOLUSDT: minutes(100.2), BTCUSDT: minutes(100) }
+    feed.stories = [story('a')]
+    expect((await concludeMove('SOLUSDT', false)).outcome).toBeNull()
+    market.bars = { SOLUSDT: minutes(102.5), BTCUSDT: minutes(100) }
+    feed.stories = [story('a', { assets: [{ ticker: 'XRP', relationship: 'DIRECT' }] })]
+    const quiet = await concludeMove('SOLUSDT', false)
+    expect(quiet.question).toBeNull()
+    expect(quiet.outcome).toBeNull()
+    expect(bodies).toHaveLength(0)
+  })
+
+  it('drops a conclusion that cites what was not listed', async () => {
+    stubOpenRouter(() => ({ content: JSON.stringify({ ...CONCLUSION, cites: ['market'] }) }))
+    const { concludeMove } = await services()
+    market.bars = { SOLUSDT: minutes(102.5), BTCUSDT: minutes(100) }
+    feed.stories = [story('a')]
+    expect((await concludeMove('SOLUSDT', false)).outcome).toEqual({ status: 'refused', reason: 'It cites "market", which is not one of the evidence listed.', cached: false, model: A })
+  })
+
+  it('reads a pair only as Binance names one against USDT', async () => {
+    stubOpenRouter()
+    const { concludeMove } = await services()
+    await expect(concludeMove('sol', false)).rejects.toThrow('A pair is named as Binance names it, against USDT.')
+    await expect(concludeMove('SOLBTC', false)).rejects.toThrow('A pair is named as Binance names it, against USDT.')
+    await expect(concludeMove('XYZUSDT', false)).rejects.toThrow('XYZUSDT is not traded')
+  })
+
+  it('is asked by itself for the coin a story of high impact names, after the analyst', async () => {
+    const { bodies } = stubOpenRouter()
+    const { startAiAdditions, setAiConfig, listAiCalls } = await services()
+    await setAiConfig({ watch: ON })
+    market.bars = { SOLUSDT: minutes(102.5), BTCUSDT: minutes(100) }
+    feed.stories = [story('a')]
+    startAiAdditions()
+    feed.listener?.({ stories: feed.stories, reactions: {} } as unknown as NewsFeedState)
+    await vi.waitFor(async () => expect((await listAiCalls({ source: 'addition' })).rows.map((row) => row.addition).sort()).toEqual(['news', 'why']))
+    expect(bodies.map((body) => body.response_format.json_schema.name)).toEqual(['news_reading', 'why_conclusion'])
+  })
+})
+
 describe('what Settings › AI shows', () => {
   it("says each addition's switch, what it asked today, and what a call costs", async () => {
     stubOpenRouter()
@@ -285,12 +385,12 @@ describe('what Settings › AI shows', () => {
     expect(await getAiAdditionsStatus()).toEqual({
       model: A,
       watchOn: true,
-      additions: { news: true },
-      limits: { news: 40 },
-      today: { news: 0 },
-      perCall: { news: { usd: null, basis: 'unknown' } }
+      additions: { news: true, why: true },
+      limits: { news: 40, why: 20 },
+      today: { news: 0, why: 0 },
+      perCall: { news: { usd: null, basis: 'unknown' }, why: { usd: null, basis: 'unknown' } }
     })
     await analyseStory(story('a'), true)
-    expect(await getAiAdditionsStatus()).toMatchObject({ today: { news: 1 }, perCall: { news: { usd: 0.001, basis: 'history' } } })
+    expect(await getAiAdditionsStatus()).toMatchObject({ today: { news: 1, why: 0 }, perCall: { news: { usd: 0.001, basis: 'history' } } })
   })
 })

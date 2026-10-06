@@ -12,12 +12,17 @@ import {
   additionsModelOf,
   newsQuestionOf,
   validateNewsReading,
+  validateWhyConclusion,
+  whyQuestionOf,
   type AiAdditionKind,
+  type AiAdditionOutcome,
   type AiAdditionsStatus,
+  type MoveConclusion,
   type NewsReading
 } from '../../shared/aiAdditions'
 import { averageCallCostUsd, estimateCallCostUsd } from '../../shared/aiCost'
 import { HIGH_IMPACT } from '../../shared/alerts'
+import { NOTABLE_MOVE_PCT, explainMove } from '../../shared/moveExplanation'
 import type { NewsFeedState, ReadStory } from '../../shared/newsFeed'
 import { writeJsonAtomic } from './atomicWrite'
 import { additionPromptChars, AI_ADDITION_SCHEMAS, buildAdditionMessages } from './aiAdditionPrompts'
@@ -25,7 +30,8 @@ import { assertAiBudget, findAiModel, getAiConfig, recordAiSpend } from './aiCon
 import { getDecryptedAiCredential } from './aiCredentialsService'
 import { appendAiCall, listAiCalls } from './aiLedgerService'
 import { requestWithRetry, withCost } from './aiSignalService'
-import { onNewsFeedUpdate } from './newsFeedService'
+import { scanSourceFor } from './marketService'
+import { getNewsFeedState, onNewsFeedUpdate } from './newsFeedService'
 
 // THE AI ADDITIONS' CALLS, WHERE THE MONEY IS SPENT (shared/aiAdditions.ts).
 //
@@ -50,13 +56,7 @@ const ANSWER_EXCERPT_CHARS = 400
 const NEWS_FRESH_SECONDS = 3600
 const DAY = 86_400
 
-export type AdditionOutcome<T> =
-  | { status: 'answered'; answer: T; cached: boolean; model: string }
-  | { status: 'refused'; reason: string; cached: boolean; model: string }
-  /** Not asked: switched off, the watch off, the limit or the budget reached, or no key. */
-  | { status: 'skipped'; reason: string }
-  /** Asked, and no answer came: counted, and not cached. */
-  | { status: 'failed'; reason: string }
+export type AdditionOutcome<T> = AiAdditionOutcome<T>
 
 type Verdict<T> = { ok: true; answer: T } | { ok: false; reason: string }
 
@@ -243,7 +243,7 @@ async function paid<T>(input: Parameters<typeof askAddition<T>>[0], model: strin
       error: verdict.ok ? null : verdict.reason,
       ...(verdict.ok ? {} : { answerExcerpt: result.content.slice(0, ANSWER_EXCERPT_CHARS) }),
       confidence: answer !== null && typeof answer.confidence === 'number' ? answer.confidence : null,
-      rationale: answer !== null && typeof answer.reasons === 'string' ? answer.reasons : null,
+      rationale: answer === null ? null : typeof answer.reasons === 'string' ? answer.reasons : typeof answer.conclusion === 'string' ? answer.conclusion : typeof answer.reason === 'string' ? answer.reason : null,
       ...(verdict.ok ? { additionAnswer: verdict.answer } : {})
     })
   )
@@ -270,6 +270,41 @@ export async function analyseStory(story: ReadStory, automatic: boolean): Promis
   })
 }
 
+// ---------------------------------------------------------------------------------------------
+// The conclusion to "Why did it move?".
+
+/** Minutes read of a pair and of Bitcoin: the four hours explainMove sets a move against, and some. */
+const WHY_MINUTES = 260
+
+/** Why a pair moved: the fixed rules' explanation, rebuilt here from its minutes and Bitcoin's -- public
+ * candles from the market-data host -- and the stories the feed holds, never handed in; and the
+ * conclusion, asked only where there is evidence to weigh. A person asks it from the Why window
+ * (`automatic` false); the news analyst asks it by itself for a coin a story of high impact names. */
+export async function concludeMove(symbol: unknown, automatic: boolean): Promise<MoveConclusion> {
+  if (typeof symbol !== 'string' || !/^[A-Z0-9]{2,20}USDT$/.test(symbol)) throw new Error('A pair is named as Binance names it, against USDT.')
+  const nowSec = Math.floor(Date.now() / 1000)
+  const source = scanSourceFor('binance')
+  const bars = await source.fetchRecentCandles(symbol, '1m', WHY_MINUTES)
+  const btcBars = symbol === 'BTCUSDT' ? bars : await source.fetchRecentCandles('BTCUSDT', '1m', WHY_MINUTES)
+  const explanation = explainMove({ symbol, ticker: symbol.slice(0, -4), bars, btcBars, stories: getNewsFeedState().stories, nowSec })
+  const question = whyQuestionOf(explanation, NOTABLE_MOVE_PCT)
+  if (question === null) return { explanation, question, outcome: null }
+  const minute = Math.floor(nowSec / 60) * 60
+  const outcome = await askAddition({
+    kind: 'why',
+    subjectId: `${symbol}:${minute}`,
+    symbol,
+    candleTime: minute,
+    payload: question,
+    automatic,
+    validate: (value) => {
+      const checked = validateWhyConclusion(value, question)
+      return checked.ok ? { ok: true, answer: checked.conclusion } : checked
+    }
+  })
+  return { explanation, question, outcome }
+}
+
 const handled = new Set<string>()
 const queue: ReadStory[] = []
 let draining = false
@@ -294,6 +329,14 @@ async function drain(): Promise<void> {
     for (let story = queue.shift(); story !== undefined; story = queue.shift()) {
       const outcome = await analyseStory(story, true)
       if (outcome.status === 'failed') console.warn(`The news analyst could not read "${story.title}":`, outcome.reason)
+      // And why the coin it names has moved, where there is a move and evidence to weigh.
+      const coin = story.assets.find((asset) => asset.relationship === 'DIRECT')
+      if (coin === undefined) continue
+      try {
+        await concludeMove(`${coin.ticker}USDT`, true)
+      } catch (error) {
+        console.warn(`No conclusion for ${coin.ticker}USDT:`, error instanceof Error ? error.message : String(error))
+      }
     }
   } finally {
     draining = false
@@ -331,7 +374,19 @@ const SAMPLE_PAYLOAD: Record<AiAdditionKind, unknown> = {
     publishedAt: 0,
     eventType: 'LISTING',
     assets: [{ ticker: 'SOL', relationship: 'DIRECT' }]
-  })
+  }),
+  why: {
+    pair: 'SOLUSDT',
+    windowMinutes: 60,
+    movePct: 2.4,
+    volumeRatio: 3.1,
+    btcMovePct: 0.4,
+    label: 'PROBABLE',
+    evidence: [
+      { id: 'story:sample', kind: 'news', text: 'A headline of the usual length about a coin and what happened to it (CoinDesk, 11:10 UTC)' },
+      { id: 'volume', kind: 'volume', text: 'Volume 3.1 times its usual over those minutes.' }
+    ]
+  }
 }
 
 /** Each addition's switch, what it has asked today and what one more call is expected to cost. Free:

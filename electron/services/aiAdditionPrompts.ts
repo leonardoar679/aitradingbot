@@ -3,6 +3,8 @@ import {
   NEWS_READING_HORIZONS,
   NEWS_READING_MAX_REASONS,
   NEWS_READING_RELATIONSHIPS,
+  WHY_MAX_CITES,
+  WHY_MAX_CONCLUSION,
   type AiAdditionKind
 } from '../../shared/aiAdditions'
 
@@ -28,6 +30,15 @@ export const AI_ADDITION_SYSTEM_PROMPTS: Record<AiAdditionKind, string> = {
     'confidence: 0 to 1. How clearly the story supports your reading. It is not a probability; never claim certainty.',
     'pricedIn: true when the story reports something markets already knew, or a move that has already happened.',
     `reasons: at most ${NEWS_READING_MAX_REASONS} characters, plain text: what your reading rests on.`
+  ].join('\n'),
+  why: [
+    'You explain price moves for a crypto trading app. Return only the requested JSON.',
+    "The user message is one pair's move over the last minutes, as measured: the move in percent, its volume against its usual, Bitcoin's move over the same minutes, the label fixed rules gave it (KNOWN, PROBABLE, POSSIBLE or UNKNOWN), and the evidence the rules found, each item with an id: stories that name the coin, Bitcoin's share of the move, a volume surge.",
+    'Weigh the evidence and say, in plain words, what most likely moved the pair. Use ONLY the evidence listed: never name a cause, an event or a figure that is not in it. If the evidence does not explain the move, say so plainly.',
+    `conclusion: at most ${WHY_MAX_CONCLUSION} characters, plain text.`,
+    `cites: the ids of the evidence items your conclusion rests on, 1 to ${WHY_MAX_CITES} of them, exactly as listed. Cite what you weighed even when you conclude the evidence does not explain the move.`,
+    'confidence: 0 to 1. How well the evidence supports your conclusion. It is not a probability; never claim certainty.',
+    'You do not decide whether to trade.'
   ].join('\n')
 }
 
@@ -48,6 +59,19 @@ export const AI_ADDITION_SCHEMAS: Record<AiAdditionKind, { name: string; schema:
         reasons: { type: 'string' }
       },
       required: ['ticker', 'relationship', 'direction', 'impact', 'horizon', 'confidence', 'pricedIn', 'reasons']
+    }
+  },
+  why: {
+    name: 'why_conclusion',
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        conclusion: { type: 'string' },
+        cites: { type: 'array', items: { type: 'string' } },
+        confidence: { type: 'number' }
+      },
+      required: ['conclusion', 'cites', 'confidence']
     }
   }
 }
