@@ -2074,6 +2074,23 @@ a region where only the mirror is reachable, `resolveTradingEndpoint()` refuses 
 than handing back a host that would 404 a real, signed order in a way that reads like a bad API
 key. `binanceFutures.ts` has always kept its own host for the same reason; spot now matches it.
 
+Since 6 October 2026 market data also survives its host going quiet mid-session
+(`fetchMarketData` in `binance.ts`). In a one-hour run of the app `api.binance.com` stopped
+accepting connections for six minutes, and every candle request in them failed, because the data host
+is chosen once and kept. Now:
+- **A request that gets no answer, or a server error,** is asked once more of the other host serving
+  binance.com's market: the exchange's own host and its public mirror stand in for each other.
+- **The other host is kept** for the rest of the session once it answers with data. A 4xx is the
+  host's answer and is not asked elsewhere; a rate limit is not a reason to ask another host.
+- **binance.us is never tried** once a session has begun. It is a different market, and a host whose
+  silence can take the process's other requests down with it.
+- **When both are down,** the other host is asked at most once a minute, so each request fails in the
+  time one host takes, not two.
+
+Signed requests are untouched: they resolve their own host. Checked in the app with `api.binance.com`
+cut off: the next candle request came from the mirror, and so did the following 65 requests, with the
+scanner's pass finishing as usual.
+
 **Closing or cancelling is never blocked by any of the above** (only by session-arm/kill-switch for
 closes, and by *nothing at all* for cancels) — those gates exist to bound how much *new* risk a
 single action can create, and closing/cancelling only ever reduces risk. Blocking either would risk

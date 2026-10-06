@@ -152,13 +152,74 @@ export async function resolveTradingEndpoint(): Promise<RestEndpoint> {
 export function resetResolvedEndpoints(): void {
   resolvedDataEndpoint = null
   resolvedTradingEndpoint = null
+  partnerFailedAt = -Infinity
+}
+
+// ---------------------------------------------------------------------------------------------
+// WHEN THE DATA HOST STOPS ANSWERING MID-SESSION. The data host is chosen once, at the first request,
+// and kept. In a one-hour run of the app on 6 October 2026 api.binance.com stopped accepting
+// connections for six minutes, while its stream and the mirror were fine, and every candle request in
+// those minutes failed: paper trades went unsettled and the exit check could not look.
+
+/** binance.com's two hosts for public market data, its REST host and its public mirror, serve the
+ * same market, so each can stand in for the other. binance.us is a different market, with its own
+ * symbols and history, and a host whose silence can take the process's other requests down with it
+ * (above): it is never tried once a session has begun. */
+function dataPartnerOf(endpoint: RestEndpoint): RestEndpoint | null {
+  if (endpoint.name === DATA_ENDPOINTS[0].name) return DATA_ENDPOINTS[1]
+  if (endpoint.name === DATA_ENDPOINTS[1].name) return DATA_ENDPOINTS[0]
+  return null
+}
+
+/** How long the partner is given, when the request named no deadline of its own. */
+const PARTNER_TIMEOUT_MS = 15_000
+/** Once the partner has failed too, it is not asked again for this long: through an outage of both,
+ * a request fails in the time one host takes, not two. */
+const PARTNER_COOL_DOWN_MS = 60_000
+let partnerFailedAt = -Infinity
+
+/** A public market-data request, `path` from the REST root on ("/klines?symbol=..."): to the data
+ * host, and, when that host does not answer at all or answers with a server error, once to its
+ * partner. A partner that answers with data is the data host from then on.
+ *
+ * ONLY DATA, AND ONLY A HOST THAT WORKS. Signed requests resolve their own host and never come here.
+ * The partner is moved to only when it answers with data: the mirror's partner is binance.com, which
+ * some regions refuse with a 451, and that is not a host to move to. A 4xx from the data host itself
+ * is its answer and is not asked again elsewhere: a rate limit is not a reason to ask another host. */
+export async function fetchMarketData(path: string, timeoutMs: number | null = null): Promise<{ response: Response; endpoint: RestEndpoint }> {
+  const endpoint = await resolveEndpoint()
+  let answered: Response | null = null
+  let failure: unknown = null
+  try {
+    answered = await fetch(`${endpoint.restRoot}${path}`, timeoutMs === null ? undefined : { signal: AbortSignal.timeout(timeoutMs) })
+    if (answered.status < 500) return { response: answered, endpoint }
+  } catch (error) {
+    failure = error
+  }
+  const partner = dataPartnerOf(endpoint)
+  if (partner !== null && Date.now() - partnerFailedAt >= PARTNER_COOL_DOWN_MS) {
+    try {
+      const response = await fetch(`${partner.restRoot}${path}`, { signal: AbortSignal.timeout(timeoutMs ?? PARTNER_TIMEOUT_MS) })
+      if (response.ok) {
+        if (resolvedDataEndpoint === endpoint) {
+          resolvedDataEndpoint = partner
+          console.warn(`Binance market data: ${endpoint.name} ${answered === null ? 'did not answer' : `answered ${answered.status}`}, so ${partner.name} is used from now on.`)
+        }
+        return { response, endpoint: partner }
+      }
+    } catch {
+      // The partner did not answer either.
+    }
+    partnerFailedAt = Date.now()
+  }
+  if (answered !== null) return { response: answered, endpoint }
+  throw failure
 }
 
 export const ENDPOINTS_FOR_TEST = { DATA_ENDPOINTS, TRADING_ENDPOINTS }
 
 async function listSymbols(): Promise<SymbolInfo[]> {
-  const endpoint = await resolveEndpoint()
-  const response = await fetch(`${endpoint.restRoot}/exchangeInfo`)
+  const { response, endpoint } = await fetchMarketData('/exchangeInfo')
   if (!response.ok) throw new Error(`${endpoint.name} exchangeInfo request failed: ${response.status}`)
   const data = (await response.json()) as { symbols: BinanceSymbolInfo[] }
   return data.symbols
@@ -167,9 +228,7 @@ async function listSymbols(): Promise<SymbolInfo[]> {
 }
 
 async function fetchHistoricalCandles(symbol: string, interval: Interval, limit = 500): Promise<Candle[]> {
-  const endpoint = await resolveEndpoint()
-  const url = `${endpoint.restRoot}/klines?symbol=${symbol.toUpperCase()}&interval=${interval}&limit=${limit}`
-  const response = await fetch(url)
+  const { response, endpoint } = await fetchMarketData(`/klines?symbol=${symbol.toUpperCase()}&interval=${interval}&limit=${limit}`)
   if (!response.ok) {
     throw new Error(`${endpoint.name} klines request failed: ${response.status} ${response.statusText}`)
   }
@@ -192,7 +251,6 @@ async function fetchHistoricalRange(
   onProgress: (done: number, total: number) => void,
   isCancelled: () => boolean
 ): Promise<Candle[]> {
-  const endpoint = await resolveEndpoint()
   const intervalMs = INTERVAL_SECONDS[interval] * 1000
   const total = Math.max(1, Math.ceil(((endSec - startSec) * 1000) / intervalMs))
   const endMs = endSec * 1000
@@ -201,8 +259,7 @@ async function fetchHistoricalRange(
 
   while (cursorMs < endMs) {
     if (isCancelled()) break
-    const url = `${endpoint.restRoot}/klines?symbol=${symbol.toUpperCase()}&interval=${interval}&startTime=${cursorMs}&endTime=${endMs}&limit=1000`
-    const response = await fetch(url)
+    const { response, endpoint } = await fetchMarketData(`/klines?symbol=${symbol.toUpperCase()}&interval=${interval}&startTime=${cursorMs}&endTime=${endMs}&limit=1000`)
     if (!response.ok) {
       throw new Error(`${endpoint.name} klines request failed: ${response.status} ${response.statusText}`)
     }
@@ -227,9 +284,7 @@ async function fetchHistoricalRange(
 }
 
 async function fetchTicker24h(symbol: string): Promise<Ticker24h> {
-  const endpoint = await resolveEndpoint()
-  const url = `${endpoint.restRoot}/ticker/24hr?symbol=${symbol.toUpperCase()}`
-  const response = await fetch(url)
+  const { response, endpoint } = await fetchMarketData(`/ticker/24hr?symbol=${symbol.toUpperCase()}`)
   if (!response.ok) {
     throw new Error(`${endpoint.name} ticker request failed: ${response.status} ${response.statusText}`)
   }
@@ -317,8 +372,7 @@ interface BinanceBookTickerRest {
 
 /** Every pair's 24-hour statistics in one request (weight 80). */
 async function fetchAllTickers24h(): Promise<Ticker24h[]> {
-  const endpoint = await resolveEndpoint()
-  const response = await fetch(`${endpoint.restRoot}/ticker/24hr`, { signal: AbortSignal.timeout(SCAN_TIMEOUT_MS * 2) })
+  const { response, endpoint } = await fetchMarketData('/ticker/24hr', SCAN_TIMEOUT_MS * 2)
   if (!response.ok) throw new Error(`${endpoint.name} ticker request failed: ${response.status} ${response.statusText}`)
   const rows = (await response.json()) as (BinanceTicker24hRest & { symbol: string })[]
   return rows.map((raw) => ({
@@ -335,8 +389,7 @@ async function fetchAllTickers24h(): Promise<Ticker24h[]> {
 
 /** Every pair's best bid and ask in one request (weight 4). */
 async function fetchBookTickers(): Promise<BookTicker[]> {
-  const endpoint = await resolveEndpoint()
-  const response = await fetch(`${endpoint.restRoot}/ticker/bookTicker`, { signal: AbortSignal.timeout(SCAN_TIMEOUT_MS) })
+  const { response, endpoint } = await fetchMarketData('/ticker/bookTicker', SCAN_TIMEOUT_MS)
   if (!response.ok) throw new Error(`${endpoint.name} book ticker request failed: ${response.status} ${response.statusText}`)
   const rows = (await response.json()) as BinanceBookTickerRest[]
   return rows.map((raw) => ({ symbol: raw.symbol, bidPrice: Number(raw.bidPrice), askPrice: Number(raw.askPrice) }))
@@ -345,9 +398,7 @@ async function fetchBookTickers(): Promise<BookTicker[]> {
 /** fetchHistoricalCandles with a deadline, and a symbol that is safe to put in a URL: Binance
  * lists pairs whose names are not ASCII. */
 async function fetchRecentCandles(symbol: string, interval: Interval, limit: number): Promise<Candle[]> {
-  const endpoint = await resolveEndpoint()
-  const url = `${endpoint.restRoot}/klines?symbol=${encodeURIComponent(symbol)}&interval=${interval}&limit=${limit}`
-  const response = await fetch(url, { signal: AbortSignal.timeout(SCAN_TIMEOUT_MS) })
+  const { response, endpoint } = await fetchMarketData(`/klines?symbol=${encodeURIComponent(symbol)}&interval=${interval}&limit=${limit}`, SCAN_TIMEOUT_MS)
   if (!response.ok) throw new Error(`${endpoint.name} klines request failed: ${response.status} ${response.statusText}`)
   const rows = (await response.json()) as BinanceKlineRow[]
   return rows.map((row) => ({

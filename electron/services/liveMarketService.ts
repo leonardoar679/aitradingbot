@@ -11,7 +11,7 @@ import {
   type LiveMinute,
   type LiveState
 } from '../../shared/liveMarket'
-import { resolveEndpoint } from './exchanges/binance'
+import { fetchMarketData, resolveEndpoint } from './exchanges/binance'
 import { createReconnectingSocket } from './exchanges/reconnectingSocket'
 import { scanSourceFor } from './marketService'
 import { getSettings } from './settingsService'
@@ -237,8 +237,7 @@ export async function liveBook(symbol: unknown): Promise<LiveBook | null> {
   const streamed = state.books[symbol]
   if (streamed !== undefined && !isStale(streamed, Date.now())) return streamed
   try {
-    const endpoint = await resolveEndpoint()
-    const response = await fetch(`${endpoint.restRoot}/ticker/bookTicker?symbol=${encodeURIComponent(symbol)}`, { signal: AbortSignal.timeout(REST_TIMEOUT_MS) })
+    const { response } = await fetchMarketData(`/ticker/bookTicker?symbol=${encodeURIComponent(symbol)}`, REST_TIMEOUT_MS)
     if (!response.ok) return null
     const row = (await response.json()) as Record<string, unknown>
     const book: LiveBook = { symbol, bid: asNumber(row.bidPrice), bidQty: asNumber(row.bidQty), ask: asNumber(row.askPrice), askQty: asNumber(row.askQty), updatedAt: Date.now(), source: 'rest' }

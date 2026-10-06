@@ -22,9 +22,13 @@ vi.mock('../electron/services/exchanges/reconnectingSocket', () => ({
     return () => undefined
   }
 }))
-vi.mock('../electron/services/exchanges/binance', () => ({
-  resolveEndpoint: async () => ({ name: 'data-api.binance.vision', restRoot: 'https://data-api.binance.vision/api/v3', wsBase: 'wss://data-stream.binance.vision/ws' })
-}))
+vi.mock('../electron/services/exchanges/binance', () => {
+  const endpoint = { name: 'data-api.binance.vision', restRoot: 'https://data-api.binance.vision/api/v3', wsBase: 'wss://data-stream.binance.vision/ws' }
+  return {
+    resolveEndpoint: async () => endpoint,
+    fetchMarketData: async (path: string) => ({ response: await fetch(`${endpoint.restRoot}${path}`), endpoint })
+  }
+})
 vi.mock('../electron/services/marketService', () => ({ scanSourceFor: () => ({ fetchRecentCandles: async () => [] }) }))
 vi.mock('../electron/services/settingsService', () => ({ getSettings: async () => rig.settings }))
 

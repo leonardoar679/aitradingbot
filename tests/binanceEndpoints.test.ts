@@ -15,7 +15,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 //
 // So the lists are split, and these tests pin the split rather than the wiring that implements it.
 
-const { ENDPOINTS_FOR_TEST, resolveEndpoint, resolveTradingEndpoint, resetResolvedEndpoints } = await import(
+const { ENDPOINTS_FOR_TEST, fetchMarketData, resolveEndpoint, resolveTradingEndpoint, resetResolvedEndpoints } = await import(
   '../electron/services/exchanges/binance'
 )
 
@@ -47,7 +47,26 @@ function stubHosts(reachable: string[]): string[] {
 beforeEach(() => {
   resetResolvedEndpoints()
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
+
+/** What a host does, and can be changed mid-test: answers with data, does not answer at all, or
+ * answers with a status. */
+type Behaviour = 'answers' | 'silent' | number
+
+function stubBehaviour(hosts: Record<string, Behaviour>): string[] {
+  const tried: string[] = []
+  vi.stubGlobal('fetch', (url: string) => {
+    const u = String(url)
+    tried.push(u)
+    const host = Object.keys(hosts).find((name) => u.includes(name))
+    const what = host === undefined ? 'silent' : hosts[host]
+    if (what === 'answers') return Promise.resolve({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve(KLINE) })
+    if (what === 'silent') return Promise.reject(new TypeError('fetch failed'))
+    return Promise.resolve({ ok: false, status: what, statusText: 'Refused', json: () => Promise.resolve({ code: what }) })
+  })
+  return tried
+}
 
 describe('the endpoint lists', () => {
   it('offers the data mirror for market data and never for trading', () => {
@@ -126,6 +145,115 @@ describe('the two resolvers do not contaminate each other', () => {
   it('resolves them independently when both are available', async () => {
     stubHosts(['api.binance.com', 'data-api.binance.vision'])
     expect((await resolveEndpoint()).name).toBe('binance.com')
+    expect((await resolveTradingEndpoint()).name).toBe('binance.com')
+  })
+})
+
+// In a one-hour run of the app on 6 October 2026 api.binance.com stopped accepting connections for six
+// minutes, and every candle request in them failed: the data host is chosen once and kept.
+describe('when the data host stops answering mid-session', () => {
+  const PATH = '/klines?symbol=SOLUSDT&interval=1m&limit=2'
+  const COM = `https://api.binance.com/api/v3${PATH}`
+  const MIRROR = `https://data-api.binance.vision/api/v3${PATH}`
+
+  it('asks the mirror the same, and uses it from then on', async () => {
+    const hosts: Record<string, Behaviour> = { 'api.binance.com': 'answers', 'data-api.binance.vision': 'answers' }
+    const tried = stubBehaviour(hosts)
+    expect((await resolveEndpoint()).name).toBe('binance.com')
+    hosts['api.binance.com'] = 'silent'
+    tried.length = 0
+    const { response, endpoint } = await fetchMarketData(PATH)
+    expect(response.ok).toBe(true)
+    expect(endpoint.name).toBe('data-api.binance.vision')
+    expect(tried).toEqual([COM, MIRROR])
+    expect((await resolveEndpoint()).name).toBe('data-api.binance.vision')
+    tried.length = 0
+    await fetchMarketData(PATH)
+    expect(tried).toEqual([MIRROR])
+  })
+
+  it("does the same on a server error, and not on the host's own refusal", async () => {
+    const hosts: Record<string, Behaviour> = { 'api.binance.com': 'answers', 'data-api.binance.vision': 'answers' }
+    const tried = stubBehaviour(hosts)
+    await resolveEndpoint()
+    hosts['api.binance.com'] = 503
+    expect((await fetchMarketData(PATH)).endpoint.name).toBe('data-api.binance.vision')
+
+    // A rate limit is the host's answer: it is not asked again elsewhere.
+    resetResolvedEndpoints()
+    hosts['api.binance.com'] = 'answers'
+    await resolveEndpoint()
+    hosts['api.binance.com'] = 429
+    tried.length = 0
+    const { response, endpoint } = await fetchMarketData(PATH)
+    expect(response.status).toBe(429)
+    expect(endpoint.name).toBe('binance.com')
+    expect(tried).toEqual([COM])
+    expect((await resolveEndpoint()).name).toBe('binance.com')
+  })
+
+  it('moves only to a host that answers with data: never to a binance.com that refuses the region', async () => {
+    // binance.com refuses the region, so the session began on the mirror; the mirror then goes silent.
+    const hosts: Record<string, Behaviour> = { 'api.binance.com': 451, 'data-api.binance.vision': 'answers' }
+    stubBehaviour(hosts)
+    expect((await resolveEndpoint()).name).toBe('data-api.binance.vision')
+    hosts['data-api.binance.vision'] = 'silent'
+    await expect(fetchMarketData(PATH)).rejects.toThrow('fetch failed')
+    expect((await resolveEndpoint()).name).toBe('data-api.binance.vision')
+    // And a server error the partner could not cover is handed back as it came.
+    hosts['data-api.binance.vision'] = 502
+    expect((await fetchMarketData(PATH)).response.status).toBe(502)
+  })
+
+  it('never tries binance.us once a session has begun, nor anything else for it', async () => {
+    const hosts: Record<string, Behaviour> = { 'api.binance.us': 'answers' }
+    const tried = stubBehaviour(hosts)
+    expect((await resolveEndpoint()).name).toBe('binance.us')
+    hosts['api.binance.us'] = 'silent'
+    tried.length = 0
+    await expect(fetchMarketData(PATH)).rejects.toThrow('fetch failed')
+    expect(tried).toEqual([`https://api.binance.us/api/v3${PATH}`])
+    // And a session on binance.com never moves to binance.us, whatever fails.
+    resetResolvedEndpoints()
+    const com: Record<string, Behaviour> = { 'api.binance.com': 'answers', 'api.binance.us': 'answers' }
+    const comTried = stubBehaviour(com)
+    await resolveEndpoint()
+    com['api.binance.com'] = 'silent'
+    comTried.length = 0
+    await expect(fetchMarketData(PATH)).rejects.toThrow('fetch failed')
+    expect(comTried.some((url) => url.includes('binance.us'))).toBe(false)
+  })
+
+  it('asks the partner once a minute while both are down, and hands back the first failure', async () => {
+    const hosts: Record<string, Behaviour> = { 'api.binance.com': 'answers', 'data-api.binance.vision': 'answers' }
+    const tried = stubBehaviour(hosts)
+    await resolveEndpoint()
+    hosts['api.binance.com'] = 'silent'
+    hosts['data-api.binance.vision'] = 'silent'
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000)
+    tried.length = 0
+    await expect(fetchMarketData(PATH)).rejects.toThrow('fetch failed')
+    expect(tried).toEqual([COM, MIRROR])
+    // Within the minute: the data host alone.
+    now.mockReturnValue(1_000_000 + 59_999)
+    tried.length = 0
+    await expect(fetchMarketData(PATH)).rejects.toThrow('fetch failed')
+    expect(tried).toEqual([COM])
+    // A minute on, and the mirror back: it is asked, and used.
+    now.mockReturnValue(1_000_000 + 60_000)
+    hosts['data-api.binance.vision'] = 'answers'
+    tried.length = 0
+    expect((await fetchMarketData(PATH)).endpoint.name).toBe('data-api.binance.vision')
+    expect(tried).toEqual([COM, MIRROR])
+  })
+
+  it('leaves the trading host where it was: data moving to the mirror moves nothing signed', async () => {
+    const hosts: Record<string, Behaviour> = { 'api.binance.com': 'answers', 'data-api.binance.vision': 'answers' }
+    stubBehaviour(hosts)
+    await resolveEndpoint()
+    hosts['api.binance.com'] = 'silent'
+    expect((await fetchMarketData(PATH)).endpoint.name).toBe('data-api.binance.vision')
+    hosts['api.binance.com'] = 'answers'
     expect((await resolveTradingEndpoint()).name).toBe('binance.com')
   })
 })

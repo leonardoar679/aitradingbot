@@ -1,6 +1,6 @@
 import { createHmac } from 'crypto'
 import type { Commissions } from '../../../shared/observedFee'
-import { resolveEndpoint, resolveTradingEndpoint } from './binance'
+import { fetchMarketData, resolveTradingEndpoint } from './binance'
 import type { SymbolTradingRules } from '../../../shared/exchangeMinimums'
 
 // Live SPOT trading on Binance: reading the account, and placing, querying and cancelling real
@@ -196,8 +196,8 @@ async function getSymbolFilters(symbol: string): Promise<SymbolFilters> {
   const cached = symbolFiltersCache.get(symbol)
   if (cached && Date.now() - cached.fetchedAt < SYMBOL_FILTERS_TTL_MS) return cached.filters
 
-  const endpoint = await resolveEndpoint()
-  const response = await fetch(`${endpoint.restRoot}/exchangeInfo?symbol=${symbol.toUpperCase()}`)
+  // Public data, from the data host or its partner: a pair's rules are the same on both.
+  const { response } = await fetchMarketData(`/exchangeInfo?symbol=${symbol.toUpperCase()}`)
   if (!response.ok) throw new Error(`Could not load trading rules for ${symbol}: ${response.status} ${response.statusText}`)
   const data = (await response.json()) as { symbols?: { filters: BinanceFilter[]; quoteAssetPrecision?: number; quotePrecision?: number }[] }
   const entry = data.symbols?.[0]
