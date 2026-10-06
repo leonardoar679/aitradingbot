@@ -46,6 +46,8 @@ Taken on 5 October 2026, at commit `aef376d`.
 | | Models | Which models may be asked, the default, routing to a second model | Settings › AI |
 | | Usage | Daily budget, pace, spend by model today and over 30 days | Settings › AI |
 | | AI additions (added 6 October 2026, not an old card) | Each addition on or off, its daily limit, what it asked today and what a day of it can cost | Settings › AI |
+| | Does the exit check help? (added 6 October 2026, not an old card) | Each trade the exit check closed set against its plan, in R and in money, and its answers | Performance |
+| | Session report (added 6 October 2026, not an old card) | What the app did over the last hour, twelve hours or a session, and the V3 document's gates; saved as JSON or CSV | Performance |
 | **Routines** | New Routine, list, Reports | Backtests re-run on a schedule while the app is open | Backtest & Research › Automation |
 | **Market** | Chart, indicators, symbol search, ticker | The original dashboard | Markets |
 | **Backtest** | Configuration, Progress, Charts, Compare, Live | A strategy over history, trade charts, strategy comparison, the live strategy monitor | Backtest & Research |

@@ -456,7 +456,9 @@ describe('AI code has no route to a real order', () => {
       'notify',
       'settings.get'
     ])
-    expect(importsOf(scheduler).sort()).toEqual(['news', 'newsActions', 'newsPaperShort', 'react'])
+    // paperRefusals keeps this session's refused shorts, for the session report: a record, read by
+    // nothing that decides anything (held below).
+    expect(importsOf(scheduler).sort()).toEqual(['news', 'newsActions', 'newsPaperShort', 'paperRefusals', 'react'])
   })
 
   it('the watch asks and notifies, and all but one of its files has nothing to write with', () => {
@@ -677,6 +679,30 @@ describe('AI code has no route to a real order', () => {
     // What Performance shows of it reads the ledger, and the executors the page hands it.
     const card = join(ROOT, 'src', 'performance', 'ExitCheckCard.tsx')
     expect([...readFileSync(card, 'utf-8').matchAll(/window\.api\.(\w+)\.(\w+)/g)].map((match) => `${match[1]}.${match[2]}`)).toEqual(['ai.listCalls'])
+  })
+
+  it('the session report reads what the app did and changes none of it', () => {
+    // Since 6 October 2026 (the V3 plan's Stage 8). It reads the records on file, the stream's log,
+    // the alerts and the refusals, and the minute candles; it asks no model, writes no setting and
+    // opens or closes nothing. Saving it writes a file a person names, through the export dialog.
+    const rules = join(ROOT, 'shared', 'shadowReport.ts')
+    expect(importsOf(rules).sort()).toEqual(['aiLedger', 'aiSignal', 'alerts', 'fees', 'ipc', 'liveMarket', 'marketEvent', 'paperRisk'])
+    expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron|liveTrading|placeLive|setExecutors/)
+    const calls = (path: string): string[] => {
+      const text = readFileSync(path, 'utf-8')
+      return [...new Set([...text.matchAll(/window\.api\.(\w+)(?:\s*\.\s*(\w+))?/g)].map((match) => (match[2] === undefined ? match[1] : `${match[1]}.${match[2]}`)))].sort()
+    }
+    const reader = join(ROOT, 'src', 'performance', 'sessionReport.ts')
+    expect(calls(reader)).toEqual(['ai.getConfig', 'ai.listCalls', 'feed.getState', 'market.fetchHistoricalRange', 'market.liveState', 'scanner.listEvents', 'settings.get'])
+    const card = join(ROOT, 'src', 'performance', 'SessionReportCard.tsx')
+    expect(calls(card)).toEqual(['backtest.exportSave'])
+    for (const path of [reader, card]) {
+      expect(readFileSync(path, 'utf-8'), path).not.toMatch(/liveTrading|LiveTrading|placeLive|settings\.set|setExecutors|settingsWrites|onPrepareOrder|aiProposal|askOpportunity|exitCheck|reviewTrade/)
+    }
+    // The refusals are a record kept in memory, which nothing reads to decide anything.
+    const refusals = join(ROOT, 'src', 'agents', 'paperRefusals.ts')
+    expect(importsOf(refusals)).toEqual([])
+    expect(readFileSync(refusals, 'utf-8')).not.toMatch(/window\./)
   })
 
   it('"Does AI help?" counts trades already scored, with the strategies read from their own exports', () => {

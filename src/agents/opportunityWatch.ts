@@ -13,6 +13,7 @@ import type { AiSignalDecision } from '../../shared/aiSignal'
 import { utcMidnight, watchEventIdsToday, watchNotice, watchPausedModels, watchSkipReason, type AiWatchConfig } from '../../shared/aiWatch'
 import { describeEventType, type MarketEvent } from '../../shared/marketEvent'
 import { askModels, fetchEventQuestion, type AskModelsResult, type CandleFetch } from './opportunities'
+import { recordPaperRefusal } from './paperRefusals'
 
 // The watch at work (shared/aiWatch.ts has its rules): given the events the scanner holds, take
 // up the ones the watch should ask about, put each to its models, and say so on the desktop when
@@ -129,9 +130,13 @@ async function askAbout(event: MarketEvent, watch: AiWatchConfig, deps: WatchDep
         if (outcome !== null) {
           paper.push(outcome.text)
           opened = outcome.opened
+          // For the session report: what was refused, and why.
+          if (!outcome.opened) recordPaperRefusal({ at: Math.floor(Date.now() / 1000), source: 'watch', symbol: event.symbol, text: outcome.text })
         }
       } catch (failure) {
-        paper.push(`No paper trade: ${failure instanceof Error ? failure.message : String(failure)}`)
+        const text = `No paper trade: ${failure instanceof Error ? failure.message : String(failure)}`
+        paper.push(text)
+        recordPaperRefusal({ at: Math.floor(Date.now() / 1000), source: 'watch', symbol: event.symbol, text })
       }
     }
     // One plain notice an event, raised by the first call to trade that arrives. An answer that

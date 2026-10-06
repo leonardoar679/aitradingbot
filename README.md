@@ -614,6 +614,67 @@ slid to 98.4 over fifteen minutes, past three quarters of the way to its 2% stop
   its plan's time to pass."
 - **Settings › AI** read "1 of 30" for the exit check, about $0.018 a day at its limit.
 
+### The session report
+
+Since 6 October 2026 (the V3 plan's Stage 8) Performance has a **Session report** card
+(`shared/shadowReport.ts`). It covers the last hour, the last twelve hours, or the time since
+**Start a session**. It reports what the app did and whether it held to the gates the V3 document
+sets for its 1-hour and 12-hour test runs. It reads what is on file and asks nothing. **Save as
+JSON** and **Save as CSV** write it to a file you name.
+
+What it reports:
+- **Events:** how many were raised, how many of them urgent, and how many the watch put to its
+  models.
+- **AI calls:** made, answered, valid and failed; latency at the median and the 95th percentile;
+  and what they cost.
+- **The watch's answers:** BUY and SELL it would act on; HOLD; and NO TRADE, a side it would not
+  act on.
+- **Paper trades:**
+  - opened, ended and open now, and those refused, by reason;
+  - the net in money and in R, and the fees;
+  - how far each went for and against it while held;
+  - how long from the event to the trade.
+
+  Profit is reported, not gated.
+- **Alerts** by severity, and the stream's connects, drops and gaps.
+
+The gates:
+- **Must be zero:**
+  - **Stale prices:** an entry on a price older than 10 seconds, or with none recorded.
+  - **Invalid answers:** a trade that followed an answer the validator refused.
+  - **Duplicates:** two trades for one event.
+  - **Stream gaps:** a gap left open past two minutes, or a trade opened on the stream's price
+    inside one.
+  - **Limits:** a trade past a limit as set now: one a pair, so many open, so many on a side, and
+    the money out.
+  - **Bad prices:** a price that is not one, or a spread over 0.1%.
+  - **Malformed decisions:** no entry range, stop, target, time limit or stake, or an answer the
+    app would not act on.
+- **Rates:** more than 98% of calls answered, and more than 99% of answers valid.
+- **Twelve hours or more adds five more:**
+  - every recommendation whose life is over has an outcome;
+  - every trade traces to its event and its answer, or to its announcement;
+  - fees are charged;
+  - slippage is charged;
+  - every story has its https link.
+
+Two things to know:
+- **The slippage gate fails by design.** The paper engine charges fees on both fills but no
+  slippage; only the recommendations' scores charge it. So in a twelve-hour run in which a paper
+  trade closed, that gate fails, and says what 2 bp a side would have cost.
+- **Kept only while the app runs:** the stream's log, the alerts and the refused trades. The report
+  says when the app started, and reaches back no further for those.
+
+Checked on a separate build and a scratch profile. It was seeded with an hour of records: one
+event, a watch answer and a failed call, a news analyst's call, and a paper trade of the watch's
+that reached its target. SOLUSDT's minutes were faked to match.
+- **"Last hour"** read the trade as +2.797 USDT after 0.203 in fees (+1.65 R). Its best move was
+  +3.4% and its worst −0.1%, and it opened 25 seconds after the event.
+- **"AI calls answered" failed:** 2 of 3 calls got an answer back (66.7%). Every other gate that
+  applies passed, and the twelve-hour gates read "not applied".
+- **Saving:** Save as JSON and Save as CSV wrote both files.
+- **Sessions:** Start a session made "This session" report from then.
+
 ### Discovery — a market scanner
 
 **Discovery** answers "is anything happening?" for many pairs at once, by arithmetic, so that the
@@ -3219,6 +3280,7 @@ shared/                       Code both processes run, so they cannot disagree a
   newsFeed.ts                 The news feeds read: RSS, a story's coins, kind, credibility and impact, the same story from several sources, what the price did after, and what each kind has done
   aiAdditions.ts              The AI additions: each one's switch, daily limit and prompt version; the news analyst's question and answer; the conclusion to "Why did it move?" with its evidence and citations; the exit check's triggers, question and verdict; and the reviewer's, checked
   aiExit.ts                   What the exit check's EXIT writes on one of the app's own paper trades (its time limit brought forward, nothing else), and what those trades came to against their plans
+  shadowReport.ts             The session report: what the app did over a span, and the V3 document's gates for its 1-hour and 12-hour test runs
   moveExplanation.ts          "Why did it move?": a pair's move against Bitcoin's, its volume and the news that names it, labelled KNOWN, PROBABLE, POSSIBLE or UNKNOWN by fixed rules
   newsActions.ts              What a delisting or a Monitoring Tag does: the notice to a holder, the kind's paper short, and when it is raised for the models and may be asked about
   newsRules.ts, newsRecord.ts The studies' bracket and four-hour hold as arithmetic, shared with research/announcementStudy.ts; the record of the two rules and the two near misses since the studies
@@ -3234,8 +3296,10 @@ src/                          React renderer app
   status/                     What the status bar and Overview say: the trading mode, the watch's mode, a key's state
   opportunities/              Opportunities
   ai-decisions/               AI Decisions (Analyze, Signals)
-  performance/                Performance; PaperRCurveCard (the app's own paper trades in R) and
-                              ExitCheckCard (the exit check's exits against the plans they cut short)
+  performance/                Performance; PaperRCurveCard (the app's own paper trades in R),
+                              ExitCheckCard (the exit check's exits against the plans they cut short),
+                              and sessionReport.ts + SessionReportCard (the session report, read
+                              from the records and the minutes, saved as JSON or CSV)
   trading/                    Paper Trading, Live Trading
   strategies/                 Strategies (Active Runs, Execution)
   research/                   Backtest & Research (Backtest, Automation)
@@ -3267,6 +3331,8 @@ src/                          React renderer app
                               trades, opened, closed sooner on the exit check's EXIT, and settled);
                               exitCheck.ts + ExitCheckScheduler (the exit check at work, headless:
                               reads, asks and hands an EXIT to the writer);
+                              paperRefusals.ts (this session's refused paper trades, for the
+                              session report);
                               opportunityTable.ts + OpportunityTableCard (the Opportunities table: what
                               is on offer and the last hour's other events, with their scores);
                               quantState.ts + AiHelpCard (the two strategies' state at each event, read

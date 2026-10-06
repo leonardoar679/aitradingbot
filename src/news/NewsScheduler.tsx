@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { newsActionsFor, type NewsItem, type NewsState } from '../../shared/news'
 import { DELISTING_SHORT_LATEST_SECONDS, NEWS_NOTICE_LATEST_SECONDS, isFreshNews, newsHolderNotice, tagShortWindow, type Holdings } from '../../shared/newsActions'
 import { newsShortBrowserDeps, openNewsShorts, settleNewsShorts } from './newsPaperShort'
+import { recordPaperRefusal } from '../agents/paperRefusals'
 
 /** How often the rules' paper shorts are looked at for one that has closed. */
 const SETTLE_MS = 60_000
@@ -24,7 +25,11 @@ async function openShorts(item: NewsItem, config: NewsState['config']): Promise<
   const actions = newsActionsFor(config, item.category)
   if (actions === null) return
   try {
-    for (const line of await openNewsShorts(item, actions, newsShortBrowserDeps)) console.info(`Announcement ${item.id}: ${line}`)
+    for (const line of await openNewsShorts(item, actions, newsShortBrowserDeps)) {
+      console.info(`Announcement ${item.id}: ${line}`)
+      // For the session report: a short refused, and why.
+      if (!line.endsWith('was opened.')) recordPaperRefusal({ at: Math.floor(Date.now() / 1000), source: 'news', symbol: `${line.split(':')[0]}USDT`, text: line })
+    }
   } catch (failure) {
     console.error('The news reader could not open its paper short:', failure)
   }
