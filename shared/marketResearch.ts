@@ -1,4 +1,4 @@
-import { btcRegimeOf, type AiMarketReturns, type BtcRegime } from './aiEventMarket'
+import { BTC_REGIME_PCT, btcRegimeOf, type AiMarketReturns, type BtcRegime } from './aiEventMarket'
 import type { Candle, SymbolInfo, Ticker24h } from './ipc'
 import { pickUniverse } from './marketScanner'
 
@@ -9,13 +9,14 @@ import { pickUniverse } from './marketScanner'
 // before anyone configures anything (its §4, §9, §51). The main process's marketResearchService.ts
 // does the reading -- at launch, then every ten minutes -- and this file is everything that is
 // arithmetic on what it read: which pairs, the 24-hour and 7-day figures, CoinGecko's trending list
-// matched to Binance pairs, and the market's status in four words (BTC, ETH, ALT, RISK).
+// matched to Binance pairs, and the market's status in five words (REGIME, BTC, ETH, ALT, RISK).
 //
 // IT READS PUBLIC DATA AND NOTHING ELSE. No key, no model, no order. Its figures are versioned
-// below, because a status shown on Overview and later given to a model must be the same rule each
-// time it is read.
+// below, because a status shown on Overview and used to rank what is on offer must be the same rule
+// each time it is read.
 
-export const MARKET_RESEARCH_VERSION = 'research-v1'
+/** research-v2 (6 October 2026): the status gained the market's regime in a word. */
+export const MARKET_RESEARCH_VERSION = 'research-v2'
 
 /** The most traded USDT pairs, at most this many... */
 export const RESEARCH_UNIVERSE_SIZE = 50
@@ -48,6 +49,44 @@ export const RISK_LINES = {
 /** Alts against Bitcoin, in percentage points of the median 24-hour move: past this either way,
  * they are strong or weak. */
 export const ALT_LINE_PCT = 2
+
+/** The market's regime in a word (the second V3 document, §20), from Bitcoin's own moves alone, so
+ * that the same rule reads any minute from its candles. The first that applies, in this order:
+ * - PANIC: past the panic lines above;
+ * - HIGH-VOL: its last hour past the elevated line, either way;
+ * - RECOVERY: rising over four hours (the benchmark's 1%) after a day down past the elevated line;
+ * - BULL: rising over four hours, and the day not down;
+ * - BEAR: falling over four hours, and the day not up;
+ * - SIDEWAYS: the rest -- flat over four hours, or the four hours and the day pulling apart.
+ * Drawn at lines already written down here and in the benchmark, before any result was looked at. */
+export type MarketRegime = 'panic' | 'high-vol' | 'recovery' | 'bull' | 'bear' | 'sideways'
+
+/** The regime from Bitcoin's returns, or null without them. */
+export function marketRegimeOf(btc: Pick<AiMarketReturns, 'h1' | 'h4' | 'h24'> | null): MarketRegime | null {
+  if (btc === null) return null
+  const { h1, h4, h24 } = btc
+  if (h1 <= RISK_LINES.panicH1Pct || (h24 !== null && h24 <= RISK_LINES.panicH24Pct)) return 'panic'
+  if (Math.abs(h1) >= RISK_LINES.elevatedH1Pct) return 'high-vol'
+  const rising = h4 >= BTC_REGIME_PCT
+  const falling = h4 <= -BTC_REGIME_PCT
+  if (rising && h24 !== null && h24 <= -RISK_LINES.elevatedH24Pct) return 'recovery'
+  if (rising && (h24 === null || h24 >= 0)) return 'bull'
+  if (falling && (h24 === null || h24 <= 0)) return 'bear'
+  return 'sideways'
+}
+
+/** The regime as it is shown: its word, and the tone it is shown in. */
+export function describeMarketRegime(regime: MarketRegime): { word: string; tone: 'up' | 'down' | 'muted' | 'gold' } {
+  const shown: Record<MarketRegime, { word: string; tone: 'up' | 'down' | 'muted' | 'gold' }> = {
+    panic: { word: 'PANIC', tone: 'down' },
+    'high-vol': { word: 'HIGH-VOL', tone: 'gold' },
+    recovery: { word: 'RECOVERY', tone: 'up' },
+    bull: { word: 'BULL', tone: 'up' },
+    bear: { word: 'BEAR', tone: 'down' },
+    sideways: { word: 'SIDEWAYS', tone: 'muted' }
+  }
+  return shown[regime]
+}
 
 export interface ResearchPair {
   symbol: string
@@ -94,6 +133,8 @@ export interface MarketStatus {
   alt: AltStrength | null
   /** The share of the pairs that rose over the day, 0 to 1. */
   breadth: number | null
+  /** Null when Bitcoin could not be read. */
+  regime: MarketRegime | null
   risk: RiskState
   /** Why the risk state is what it is, in words; empty when it is normal. */
   riskReasons: string[]
@@ -279,13 +320,31 @@ export function marketStatusOf(input: { btc15m: Candle[]; eth15m: Candle[]; pair
   }
   if (breadth !== null && breadth < RISK_LINES.elevatedBreadth) reasons.push({ level: 'elevated', text: `only ${Math.round(breadth * 100)}% of the pairs rose over the day` })
   const risk: RiskState = reasons.some((reason) => reason.level === 'panic') ? 'panic' : reasons.length > 0 ? 'elevated' : 'normal'
-  return { btc, eth, altVsBtcPct, alt, breadth, risk, riskReasons: reasons.map((reason) => reason.text) }
+  // The day from the ticker where the bars do not reach it, as the risk state reads it.
+  const regime = btc === null || h1 === null ? null : marketRegimeOf({ h1, h4: btc.returns.h4, h24 })
+  return { btc, eth, altVsBtcPct, alt, breadth, regime, risk, riskReasons: reasons.map((reason) => reason.text) }
 }
 
 const signed = (value: number): string => `${value > 0 ? '+' : ''}${value.toFixed(2)}%`
 
-/** The status in four words with a line each, for the strip at the top of Overview. */
-export function describeMarketStatus(status: MarketStatus): { id: 'btc' | 'eth' | 'alt' | 'risk'; label: string; value: string; detail: string; tone: 'up' | 'down' | 'muted' | 'gold' }[] {
+/** Why the regime is what it is, in a sentence, from Bitcoin's returns. */
+function regimeDetail(regime: MarketRegime, btc: AiMarketReturns): string {
+  const day = btc.h24 === null ? '' : `, ${signed(btc.h24)} over the day`
+  if (regime === 'panic') return `Bitcoin ${signed(btc.h1)} in the last hour${day}: past the panic lines (${RISK_LINES.panicH1Pct}% in an hour, ${RISK_LINES.panicH24Pct}% in a day).`
+  if (regime === 'high-vol') return `Bitcoin ${signed(btc.h1)} in the last hour, past the ${RISK_LINES.elevatedH1Pct}% line either way.`
+  if (regime === 'recovery') return `Bitcoin ${signed(btc.h4)} over four hours, after a day down${btc.h24 === null ? '' : ` ${signed(btc.h24)}`}.`
+  if (regime === 'sideways') return `Bitcoin ${signed(btc.h4)} over four hours${day}: no direction.`
+  return `Bitcoin ${signed(btc.h4)} over four hours${day}.`
+}
+
+/** The status in five words with a line each, for the strip at the top of Overview. */
+export function describeMarketStatus(status: MarketStatus): {
+  id: 'regime' | 'btc' | 'eth' | 'alt' | 'risk'
+  label: string
+  value: string
+  detail: string
+  tone: 'up' | 'down' | 'muted' | 'gold'
+}[] {
   const regimeWord = (regime: BtcRegime): string => (regime === 'rising' ? 'RISING' : regime === 'falling' ? 'FALLING' : 'FLAT')
   const regimeTone = (regime: BtcRegime): 'up' | 'down' | 'muted' => (regime === 'rising' ? 'up' : regime === 'falling' ? 'down' : 'muted')
   const sideLine = (name: string, side: MarketSide | null): { value: string; detail: string; tone: 'up' | 'down' | 'muted' } =>
@@ -311,7 +370,16 @@ export function describeMarketStatus(status: MarketStatus): { id: 'btc' | 'eth' 
     detail: status.risk === 'normal' ? 'Nothing past the lines it is drawn at.' : `${status.riskReasons.join('; ')}.`.replace(/^./, (first) => first.toUpperCase()),
     tone: status.risk === 'normal' ? ('up' as const) : status.risk === 'panic' ? ('down' as const) : ('gold' as const)
   }
+  const regime =
+    status.regime === null || status.btc === null
+      ? { value: '—', detail: 'Bitcoin could not be read.', tone: 'muted' as const }
+      : {
+          value: describeMarketRegime(status.regime).word,
+          detail: regimeDetail(status.regime, status.btc.returns),
+          tone: describeMarketRegime(status.regime).tone
+        }
   return [
+    { id: 'regime', label: 'REGIME', ...regime },
     { id: 'btc', label: 'BTC', ...btc },
     { id: 'eth', label: 'ETH', ...eth },
     { id: 'alt', label: 'ALT', ...alt },

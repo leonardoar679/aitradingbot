@@ -6,16 +6,19 @@ import { describeDecider } from '../../shared/aiPanel'
 import type { AiOrderProposal } from '../../shared/aiProposal'
 import { watchEventIdsToday, watchPausedModels } from '../../shared/aiWatch'
 import { describeWatchPaperTally, watchPaperExecutors, watchPaperPause, watchPaperTally } from '../../shared/aiWatchPaper'
-import type { ExecutorConfig } from '../../shared/ipc'
+import type { ExecutorConfig, PaperAccount } from '../../shared/ipc'
 import { describeEventType } from '../../shared/marketEvent'
 import { healPaperPause, paperPauseBlock } from '../../shared/paperPause'
 import { describeError } from '../utils/ipcError'
 import { useNowSec } from '../utils/useNowSec'
 import { useLiveMarket } from '../hooks/useLiveMarket'
+import { useMarketResearch } from '../hooks/useMarketResearch'
+import { useNewsFeed } from '../news/useNewsFeed'
 import { buttonStyle, noteStyle } from './agentStyles'
 import { OpportunityCard } from './OpportunityCard'
-import { askModels, fetchEventQuestion, proposalForAnswer, rightNowRows, type CandleFetch, type EventAnswer, type EventFeedItem } from './opportunities'
-import { RightNowCard } from './RightNowCard'
+import { askModels, fetchEventQuestion, proposalForAnswer, type CandleFetch, type EventAnswer, type EventFeedItem } from './opportunities'
+import { opportunityTableRows, tableSymbols } from './opportunityTable'
+import { OpportunityTableCard } from './OpportunityTableCard'
 import { useEventFeed } from './useEventFeed'
 import { WatchCard } from './WatchCard'
 
@@ -54,14 +57,17 @@ export function OpportunitiesTab({
   const [problems, setProblems] = useState<Record<string, string>>({})
   const [configProblem, setConfigProblem] = useState<string | null>(null)
   const [shown, setShown] = useState(EVENTS_SHOWN)
-  const [paperAccount, setPaperAccount] = useState<boolean | null>(null)
+  const [paperAccount, setPaperAccount] = useState<PaperAccount | null | undefined>(undefined)
   const [paperRisk, setPaperRisk] = useState<unknown>(undefined)
   const [paperPause, setPaperPause] = useState<unknown>(undefined)
-  const [watchTrades, setWatchTrades] = useState<ExecutorConfig[]>([])
+  const [executors, setExecutors] = useState<ExecutorConfig[]>([])
   const nowSec = useNowSec(true, 15_000)
   // The scanner's events, the answers held for them and the candles since: shared with Overview.
   const { events, scannerOn, calls, feed, bars, loadCalls, problem: feedProblem, watchAnswered } = useEventFeed(shown)
   const loadProblem = configProblem ?? feedProblem
+  // The market's regime and each pair's day and week, and the news on the coins: for the table.
+  const { state: research } = useMarketResearch()
+  const news = useNewsFeed()
 
   useEffect(() => {
     let cancelled = false
@@ -88,10 +94,10 @@ export function OpportunitiesTab({
       void window.api.settings.get().then(
         (settings) => {
           if (cancelled) return
-          setPaperAccount(Boolean(settings.paperAccount))
+          setPaperAccount(settings.paperAccount ?? null)
           setPaperRisk(settings.paperRisk)
           setPaperPause(settings.paperPause)
-          setWatchTrades(watchPaperExecutors(settings.executors))
+          setExecutors(settings.executors)
         },
         () => undefined
       )
@@ -174,13 +180,25 @@ export function OpportunitiesTab({
   }
 
   const enabled = config?.enabledModels ?? []
-  const right = useMemo(() => rightNowRows(feed, bars, nowSec), [feed, bars, nowSec])
-  // The live prices of the pairs on offer: each line is checked against them.
-  const live = useLiveMarket(right.map((row) => row.item.event.symbol))
+  // The live prices of the pairs in the table, those on offer first: each entry is checked against them.
+  const live = useLiveMarket(useMemo(() => tableSymbols(feed, bars, nowSec), [feed, bars, nowSec]))
+  const table = opportunityTableRows({
+    feed,
+    bars,
+    live,
+    pairs: research?.pairs ?? [],
+    regime: research?.market?.regime ?? null,
+    news,
+    nowSec,
+    nowMs: Date.now(),
+    btcLimitPct: config?.watchPaper.dropOnBtcMovePct,
+    stakeQuote: config?.watchPaper.stakeQuote
+  })
   // Models the watch has stopped asking today, read from the same rows that count its day.
   const paused = useMemo(() => watchPausedModels(calls, nowSec), [calls, nowSec])
+  const watchTrades = useMemo(() => watchPaperExecutors(executors), [executors])
   const paperStanding = {
-    hasAccount: paperAccount,
+    hasAccount: paperAccount === undefined ? null : paperAccount !== null,
     open: watchTrades.filter((executor) => executor.status === 'active').map((executor) => executor.symbol),
     total: watchTrades.length,
     ended: describeWatchPaperTally(watchPaperTally(watchTrades)),
@@ -207,7 +225,24 @@ export function OpportunitiesTab({
       )}
 
       {events !== null && (
-        <RightNowCard rows={right} nowSec={nowSec} live={live} btcLimitPct={config?.watchPaper.dropOnBtcMovePct} stakeQuote={config?.watchPaper.stakeQuote} />
+        <OpportunityTableCard
+          onOffer={table.onOffer}
+          recent={table.recent}
+          nowSec={nowSec}
+          news={news}
+          risk={
+            config === null || paperAccount === undefined
+              ? null
+              : { paperRisk, account: paperAccount, executors, stakeQuote: config.watchPaper.stakeQuote, btcLimitPct: config.watchPaper.dropOnBtcMovePct }
+          }
+          onPaperTrade={
+            onPrepareOrder
+              ? (item: EventFeedItem, answer: EventAnswer): void => {
+                  void paperTrade(item, answer)
+                }
+              : undefined
+          }
+        />
       )}
 
       <Card title="Models to ask">

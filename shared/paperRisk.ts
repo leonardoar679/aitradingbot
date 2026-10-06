@@ -113,7 +113,7 @@ export function describeR(r: number): string {
 
 /** The app's own open paper trades: the watch's and the news rules', each a paper Position carrying
  * its mark. An executor that is not paper is never one of them, whatever it carries. */
-function ownOpen(executors: ExecutorConfig[]): ExecutorConfig[] {
+export function ownOpenPaperTrades(executors: ExecutorConfig[]): ExecutorConfig[] {
   return executors.filter(
     (executor) =>
       executor.status === 'active' && executor.mode === 'paper' && executor.type === 'position' && (executor.watch !== undefined || executor.newsRule !== undefined)
@@ -123,7 +123,7 @@ function ownOpen(executors: ExecutorConfig[]): ExecutorConfig[] {
 /** What the app's own open paper trades stake together, in `quoteAsset`. */
 export function paperOut(executors: ExecutorConfig[], quoteAsset: string): number {
   let out = 0
-  for (const executor of ownOpen(executors)) {
+  for (const executor of ownOpenPaperTrades(executors)) {
     if (executor.quoteAsset !== quoteAsset) continue
     const amount = (executor.params as PositionExecutorParams).amountQuote
     // One malformed row must not turn the total into NaN, and with it let everything through.

@@ -15,6 +15,7 @@ import {
 import type { AppSettings, Candle, Exchange, ExecutorConfig, PositionExecutorParams } from '../../shared/ipc'
 import { bookSpreadPct, livePaperBlock, priceAgeMs, type LiveBook } from '../../shared/liveMarket'
 import type { MarketEvent } from '../../shared/marketEvent'
+import { correlatedExposureBlock, readBtcCorrelation } from '../../shared/paperExposure'
 import { healPaperPause, paperPauseBlock } from '../../shared/paperPause'
 import { healPaperRisk, paperOutBlock } from '../../shared/paperRisk'
 import { describeExecutorFunding } from '../account/executorFunding'
@@ -26,7 +27,8 @@ import { settingsWrites } from '../utils/settingsWrites'
 //
 // Two things happen here, and both are paper bookkeeping. A call the watch would act on becomes a
 // PAPER Position executor, appended to the executors on file, unless its limits, the paper money
-// the app's own trades have out, a losing run of its own (shared/paperPause.ts), or the live price
+// the app's own trades have out, what they have out on one side on coins that move with Bitcoin
+// (shared/paperExposure.ts), a losing run of its own (shared/paperPause.ts), or the live price
 // -- none fresh, or a spread over 0.1% (shared/liveMarket.ts) -- refuse it. And
 // a paper position of the watch's that has closed -- its stop, its target or its clock ended it,
 // or its entry expired unfilled -- is stopped and its result settled into the paper account, the
@@ -45,20 +47,23 @@ type OkPlan = Extract<WatchPaperPlan, { ok: true }>
 
 /** The executor a plan becomes. Paper, unlevered, and its position is not kept when it stops:
  * a paper trade the watch opened is closed by its own levels, not handed to Inventory. The live
- * book it was opened against, where there was one, is written on its mark. */
+ * book it was opened against, where there was one, and its pair's correlation with Bitcoin, where
+ * it was read for it, are written on its mark. */
 export function watchPaperExecutor(input: {
   id: string
   event: Pick<MarketEvent, 'exchange' | 'symbol' | 'baseAsset' | 'quoteAsset'>
   plan: OkPlan
   nowSec: number
   book?: LiveBook | null
+  btcCorrelation?: number | null
 }): ExecutorConfig {
   const { event, plan, book } = input
   const spread = book === undefined || book === null ? null : bookSpreadPct(book)
-  const mark =
+  const withBook =
     book === undefined || book === null || spread === null
       ? plan.mark
       : { ...plan.mark, book: { bid: book.bid, ask: book.ask, spreadPct: spread, ageMs: priceAgeMs(book, input.nowSec * 1000), source: book.source } }
+  const mark = input.btcCorrelation === undefined ? withBook : { ...withBook, btcCorrelation: input.btcCorrelation }
   return {
     id: input.id,
     name: plan.name,
@@ -96,6 +101,9 @@ export interface WatchPaperDeps {
   liveBook: (exchange: Exchange, symbol: string) => Promise<LiveBook | null>
   /** 1-minute candles of [startSec, endSec]. */
   fetchCandles: (exchange: Exchange, symbol: string, startSec: number, endSec: number) => Promise<Candle[]>
+  /** The pair's hourly moves over the last week against Bitcoin's (shared/paperExposure.ts), or
+   * null when they cannot be read: it then counts as a pair that tracks Bitcoin. */
+  btcCorrelation: (exchange: Exchange, symbol: string) => Promise<number | null>
   /** Books a stopped paper executor's result into the paper account. */
   settle: (executor: ExecutorConfig, nowSec: number) => Promise<unknown>
   notify: (title: string, body: string) => void
@@ -146,11 +154,19 @@ export async function openWatchPaperTrade(
   } catch {
     book = null
   }
+  // Whether the pair moves with Bitcoin, for what the app's trades have out on one side of it.
+  let btcCorrelation: number | null = null
+  try {
+    btcCorrelation = await deps.btcCorrelation(event.exchange, event.symbol)
+  } catch {
+    btcCorrelation = null
+  }
 
   // Checked again on the executors read inside the queue, with the funds and with what the app's
-  // own paper trades have out together: two answers arriving together both passed the look above,
-  // and only one of them may be the pair's open trade. A trade that closed in between may have
-  // ended a losing run, and that is read again too; and the live price is judged as of now.
+  // own paper trades have out together, and on one side on coins that move with Bitcoin: two
+  // answers arriving together both passed the look above, and only one of them may be the pair's
+  // open trade. A trade that closed in between may have ended a losing run, and that is read again
+  // too; and the live price is judged as of now.
   const refused = await deps.queue(async (): Promise<string | null> => {
     const fresh = await deps.getSettings()
     const problem =
@@ -164,9 +180,18 @@ export async function openWatchPaperTrade(
         quoteAsset: event.quoteAsset,
         amountQuote: plan.params.amountQuote
       }) ??
-      paperOutBlock({ risk: healPaperRisk(fresh.paperRisk), executors: fresh.executors, quoteAsset: event.quoteAsset, amountQuote: plan.params.amountQuote })
+      paperOutBlock({ risk: healPaperRisk(fresh.paperRisk), executors: fresh.executors, quoteAsset: event.quoteAsset, amountQuote: plan.params.amountQuote }) ??
+      correlatedExposureBlock({
+        account: fresh.paperAccount ?? null,
+        risk: healPaperRisk(fresh.paperRisk),
+        executors: fresh.executors,
+        quoteAsset: event.quoteAsset,
+        side: plan.side,
+        amountQuote: plan.params.amountQuote,
+        correlation: btcCorrelation
+      })
     if (problem !== null) return problem
-    await deps.setExecutors([...fresh.executors, watchPaperExecutor({ id: deps.newId(), event, plan, nowSec: deps.nowSec(), book })])
+    await deps.setExecutors([...fresh.executors, watchPaperExecutor({ id: deps.newId(), event, plan, nowSec: deps.nowSec(), book, btcCorrelation })])
     return null
   })
   if (refused !== null) return { opened: false, text: `No paper trade: ${refused}` }
@@ -273,6 +298,13 @@ export const watchPaperBrowserDeps: WatchPaperDeps = {
   // The live stream is Binance's: an event on another exchange has no live book here.
   liveBook: (exchange, symbol) => (exchange === 'binance' ? window.api.market.liveBook(symbol) : Promise.resolve(null)),
   fetchCandles: async (exchange, symbol, startSec, endSec) => (await window.api.market.fetchHistoricalRange(exchange, symbol, '1m', startSec, endSec)).candles,
+  btcCorrelation: (exchange, symbol) =>
+    readBtcCorrelation(
+      async (from, pair, startSec, endSec) => (await window.api.market.fetchHistoricalRange(from, pair, '1h', startSec, endSec)).candles,
+      exchange,
+      symbol,
+      Math.floor(Date.now() / 1000)
+    ),
   // Not kept in Inventory (keepPosition is false), so nothing was handed over and the whole
   // result is cash.
   settle: (executor, nowSec) => settleExecutorOnStop({ executor, handedOver: { held: null, realizedPnl: 0 }, now: nowSec }),

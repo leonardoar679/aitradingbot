@@ -38,8 +38,8 @@ other.
 
 | Group | Page | What it does |
 |---|---|---|
-| AI Trader | **Overview** | The landing page, answering five questions from what the app already reads. **Market status** first, from the [research the app does as it opens](#market-research-when-the-app-opens): Bitcoin and ether rising, falling or flat, the other pairs against Bitcoin, and a risk state (NORMAL, ELEVATED or PANIC), with a "Researching…" line while it reads. **The market**: Bitcoin and ether over the hour and four hours, whether Bitcoin is rising, falling or flat, and what is moving most, from the scanner's last pass. **What can be acted on**: the strongest recommendation still on offer, with its entry, stop, target, time left and a Paper trade button — or, usually, "No high-quality opportunity right now. Wait." with the strongest event of the last hour and what it lacks. **What the models said** about it. **What you hold**: value, paper strategies running, real positions open. **Safety**: whether a real order can be placed, the day's loss, the AI's spend and what the watch does. The starter presets lead it for someone with nothing running. |
-| | **Opportunities** | What can be traded right now: the [watch](#ai-signals--paper-only) that puts events to models with no click, the recommendations still valid ("No high-quality opportunity right now. Wait." when there are none), each checked against the [live price](#live-prices) — enterable now, waiting for its range, or invalidated, with an execution score — and every event the scanner raised with each model's call, Ask and Paper trade. **Why?** beside a pair says what moved it, from the [news and Bitcoin](#news--market-events). A call fills in an order form at most; a person places it. |
+| AI Trader | **Overview** | The landing page, answering five questions from what the app already reads. **Market status** first, from the [research the app does as it opens](#market-research-when-the-app-opens): the market's [regime](#the-opportunity-table-and-the-markets-regime) in a word (BULL, BEAR, SIDEWAYS, HIGH-VOL, PANIC or RECOVERY), Bitcoin and ether rising, falling or flat, the other pairs against Bitcoin, and a risk state (NORMAL, ELEVATED or PANIC), with a "Researching…" line while it reads. **The market**: Bitcoin and ether over the hour and four hours, whether Bitcoin is rising, falling or flat, and what is moving most, from the scanner's last pass. **What can be acted on**: the recommendation still on offer with the strongest signal, with its entry, stop, target, time left, signal score and a Paper trade button — or, usually, "No high-quality opportunity right now. Wait." with the strongest event of the last hour and what it lacks. **What the models said** about it. **What you hold**: value, paper strategies running, real positions open. **Safety**: whether a real order can be placed, the day's loss, the AI's spend and what the watch does. The starter presets lead it for someone with nothing running. |
+| | **Opportunities** | What can be traded right now: the [watch](#ai-signals--paper-only) that puts events to models with no click, and [the table](#the-opportunity-table-and-the-markets-regime) of the recommendations still valid and the last hour's other events, ranked by a signal score with fixed weights ("No high-quality opportunity right now. Wait." when nothing is on offer), each entry checked against the [live price](#live-prices) — enterable now, waiting for its range, or invalidated, with an execution score — and a row opening the score, the plan and what ends it, the risk, the news and each model's reasoning. Below it, every event the scanner raised with each model's call, Ask and Paper trade. **Why?** beside a pair says what moved it, from the [news and Bitcoin](#news--market-events). A call fills in an order form at most; a person places it. |
 | | **Markets** | One pair on any supported exchange: candlestick chart with indicators, symbol search, live ticker. Below it, **Movers**: the liquid USDT pairs that moved most over the day and over the week, by volume against their week, and CoinGecko's trending list, from the [market research](#market-research-when-the-app-opens); a row opens its chart. **Why did it move?** for the chart's pair, by [fixed rules](#news--market-events). |
 | | **AI Decisions** | **Analyze** asks a model about one market; **Signals** lists every call any model has made and how it turned out. A model is handed a market snapshot and returns one JSON decision, and is given no tools at all. |
 | | **Positions** | Live paper positions for active bots; a **Live Positions** table of real Binance holdings from live-mode Order Executor fills, closable (fully or partially) for real; a **Live Trade History** table of realized P&L from closed live positions; an **Inventory** table of positions handed over from stopped paper executors (see [Position Handover](#position-handover--inventory)). |
@@ -50,7 +50,7 @@ other.
 | Research | **Backtest & Research** | **Backtest** runs a chosen strategy over a historical range and shows full stats, equity curve vs. buy-and-hold, monthly breakdown and a trade log; its **Live** view monitors the same route continuously ([Live strategy monitor](#live-strategy-monitor)), **Charts** replays each trade against the candles, and **Compare Strategies** ranks every registered strategy over the same candles. An optional tick box has a model [confirm each entry](#ai-signals--paper-only). Both views export CSV, JSON and a PNG. **Automation** re-runs saved backtests on a schedule while the app is open, each run keeping a session-only report. |
 | | **AI Benchmark** | Several models on the same questions, scored side by side: on candles, and on the events the scanner raised, with the no-model rows beside them and every run kept as an experiment that can be reopened for nothing. |
 | | **Discovery** | Two tabs. **Market scanner**: once a minute it reads the most traded USDT pairs on Binance and says what is moving, scores each the same way, and records the moves that qualify as events — see [Discovery](#discovery--a-market-scanner). Public market data only: no key, no model, no order. It is switched on, and its pairs chosen, under Settings › Market. **News & Market Events**: four free news feeds and Binance's announcements, each story with its coins, kind, impact and what the price did after, filtered by coin or by Major alerts, and what each kind of story has done once 30 are in — see [News & market events](#news--market-events); a count on Discovery in the sidebar says how many new alerts it holds. Below the stories, [Binance's own announcements](#binances-announcements-on-discovery) — delistings, Monitoring Tags, futures launches, listings — as they are released, with what each kind did to prices. The reader is switched on under Settings › Market too, with what a delisting or a tag does: a notice if you hold the coin, a paper short by the kind's rule, a question to the watch's models. |
-| System | **Risk & Safety** | The live trading limits every real order is checked against (largest order, the day's notional, the day's loss, the managed allocation); the size of the paper trades the app opens by itself, the watch's and the news rules' (sized by what their stop would lose, and capped in what they stake together), the losing run in R that pauses them until resumed, and a daily notice of what they did; and the controller groups: executors under a shared stop-loss, take-profit and maximum drawdown with a P&L snapshot every 5 minutes, all stopped on a breach. Arming and the kill switch stay on the bar at the top of every page. |
+| System | **Risk & Safety** | The live trading limits every real order is checked against (largest order, the day's notional, the day's loss, the managed allocation); the size of the paper trades the app opens by itself, the watch's and the news rules' (sized by what their stop would lose, and capped in what they stake together), the losing run in R that pauses them until resumed, the cap on what they stake on one side on coins that move with Bitcoin, and a daily notice of what they did; and the controller groups: executors under a shared stop-loss, take-profit and maximum drawdown with a P&L snapshot every 5 minutes, all stopped on a breach. Arming and the kill switch stay on the bar at the top of every page. |
 | | **Connections** | Every key the app holds: Binance and Upbit ([Credentials](#credentials--api-keys)), and the OpenRouter key for the AI models. Each is tested before it is stored, stored encrypted, and never read back into the window. |
 | | **Settings** | Since 6 October 2026, **Essentials** first: the six settings that decide what the app does by itself — trading mode (PAPER, LIVE READY with a verified key and the session disarmed, or LIVE ACTIVE when armed; read, never changed here), risk level (Conservative at the shipped paper defaults, or Custom, with a reset that only ever opens less), the market the scanner watches, the AI's mode (changed only on Opportunities, behind its priced confirmation), desktop notices with or without sound, and the exchange. Everything else is under **Advanced**, closed until opened: the Configuration Center, in sections, built only from settings that exist. **General**: appearance (Dark / Light / Colorblind-safe). **Market**: the scanner on or off, and how many pairs it watches; the reader of Binance's announcements, and what a delisting does. **AI**: which models may be asked, the default and the route, the daily budget, the pace, and what asking has cost. Keys stay on Connections and limits on Risk & Safety, each in the one place, linked from here. What the V3 document asked for that has no behaviour behind it (language, timezone, default order type, allowed pairs, other news sources…) is listed in `docs/INVENTORY.md` rather than added as a control. |
 
@@ -313,6 +313,100 @@ Checked on 6 October 2026 on a separate build and a scratch profile, against the
   paper account". Discovery then opened on the news and the count cleared; Dismiss took the banner
   away.
 - **Why? on ETH** at a quiet moment read UNKNOWN: "not a move to explain".
+
+### The opportunity table, and the market's regime
+
+Since 6 October 2026 (the second V3 document's §20, §24 and §42–44) what is on offer is ranked by
+two scores, the market has a regime in a word, and the app's own paper trades have one more cap.
+
+**The market's regime** leads Overview's status strip: one of six words, from Bitcoin's moves alone,
+so that the same rule reads any minute from its candles (`shared/marketResearch.ts`). The first that
+applies, in this order:
+- **PANIC:** past the panic lines, −3% in an hour or −8% in a day.
+- **HIGH-VOL:** the last hour past 1.5%, either way.
+- **RECOVERY:** up 1% or more over four hours, after a day down 4% or more.
+- **BULL and BEAR:** four hours past 1% one way, and the day not the other way.
+- **SIDEWAYS:** the rest.
+
+These are lines already drawn for the risk state and the benchmark, not new ones.
+
+**The regime is not put to the models.** The plan had it added to the question the watch asks, but
+that would make a new question:
+- The question with Bitcoin's and ether's moves in it, which the regime is worked out from, was
+  measured against the pair-alone question on 5 October, and did worse.
+- By the rule written down before that run, the watch's question changes only when a new one beats
+  it on the same events.
+- A label made from the same numbers is a new question too, and would have to be measured the same
+  way, at a price.
+
+So it is shown and ranked by, and the watch asks what it asked.
+
+**Two scores for each opportunity.** The **signal** (`shared/opportunityScore.ts`) is 0 to 100, by
+fixed weights:
+
+| Part | Weight | What it reads |
+|---|---|---|
+| Event | 25% | The scanner's score for the event |
+| Volume | 10% | The event's volume reading |
+| Break | 10% | How far past the four hours before the move it closed |
+| Liquidity | 10% | How much the pair trades a day, $1M to $100M on a log scale |
+| News | 15% | The strongest story naming the coin in the three hours before the event or since: its impact, in full when its kind points the side's way, half with no way of its own, nothing against |
+| Regime | 15% | How well the regime suits the side: BULL 100 for a buy and 0 for a sell, BEAR the other way round, SIDEWAYS 50, HIGH-VOL 25 |
+| Models | 15% | Of the models that answered, the share that would take the side at 65% or more |
+
+Penalties come off the signal:
+- **Wild bars:** up to 10, for bars far wider than usual.
+- **Old news:** 10, when only stale stories name the coin, or the strongest was already priced in.
+- **Models split:** 15, when the models take opposite sides.
+
+The **execution** score is the live price's ([Live prices](#live-prices)).
+
+A model counts only as a side it would take. Its confidence, its own reading of the market and its
+reasons are shown beside the score, not in it. The weights were written down before any result was
+looked at. The score ranks; it is not a probability, and nothing is opened or refused by it.
+
+**The table** is Opportunities' "Right now". It lists each entry on offer and the last hour's other
+events, strongest signal first. Its columns:
+- the pair, with Why?;
+- the live price;
+- its 24 hours and 7 days, from the research;
+- the event, and the strongest story about the coin;
+- how many of the models would take the side;
+- the action: BUY or SELL with ENTERABLE, WAITING or INVALIDATED, or where the event stands;
+- the signal, the execution, and when the entry runs out.
+
+A row opens what is behind it:
+- the score, part by part, and the live check;
+- the plan, and what ends it: the entry unfilled by its expiry, Bitcoin moving against it by the
+  watch's safeguard, a spread over 0.1%, or no price fresher than ten seconds;
+- what it would risk, sized as the app sizes its own paper trades, and what the app has out on that
+  side;
+- the news on the coin, and each model's answer with its reasoning.
+
+Paper trade fills in a form, as before. Overview's top card leads with the same entry, and shows its
+signal.
+
+**One more cap on the app's own paper trades** (`shared/paperExposure.ts`). On pairs whose hourly
+moves over seven days correlate with Bitcoin's at 0.7 or more, the watch's and the news rules' open
+paper trades on one side stake at most 15% together. That is 15% of what the paper account was
+funded with, or, with no account, of the money-out cap: 150 USDT at the default 1,000.
+- **Unknown counts as tracking.** A pair whose correlation could not be read counts as one that
+  tracks Bitcoin, and so does a trade opened before 6 October 2026, which carries none.
+- **It is written down.** Each new trade has its correlation written on it.
+- **It only ever opens less.** The watch's own limit on how many it keeps open in one direction
+  stays as it was.
+
+Checked on 6 October 2026 on a separate build and a scratch profile, against the live market and
+feeds, with four faked events and answers on real prices:
+- **The regime** read SIDEWAYS: Bitcoin −0.35% over four hours and −0.88% over the day.
+- **The table** held XRPUSDT's entry (WAITING, signal 69) and SOLUSDT's (ENTERABLE, signal 65, with
+  a CoinDesk story on Solana in it). Under them were DOGEUSDT (no trade, 52) and ADAUSDT (not
+  asked, 51).
+- **SOLUSDT's row** opened its score part by part, the plan and what ends it, a stake of 58.99 USDT
+  losing about 1.00 at its stop, 0 of the 150 USDT out on that side, the story, and both answers.
+- **Overview** led with XRPUSDT, and its signal.
+- **The correlations with Bitcoin** read that day, over seven days of hours: SOL 0.87, DOGE 0.78,
+  XRP 0.77, and PAX Gold 0.45.
 
 ### Discovery — a market scanner
 
@@ -2904,8 +2998,10 @@ shared/                       Code both processes run, so they cannot disagree a
   tradeLifecycle.ts           One trade's whole story: the event, the answers, the paper position, its fill and its end, joined by their ids
   marketEvent.ts              The event detector: a pair's reading from twelve hours of 1-minute candles, and what raises an event
   marketScanner.ts            The scanner's settings, what a pass reports, and which pairs are watched
-  marketResearch.ts           What the app studies as it opens: the liquid pairs, a day's and a week's movers, trending, the market's status
+  marketResearch.ts           What the app studies as it opens: the liquid pairs, a day's and a week's movers, trending, the market's status and its regime
   liveMarket.ts               The live price against a recommendation: spread, age, an execution score, and enterable, waiting or invalidated
+  opportunityScore.ts         The signal score of an opportunity: seven parts by fixed weights and three penalties, shown part by part
+  paperExposure.ts            A pair's hourly correlation with Bitcoin, and the cap on what the app's own paper trades stake on one side on pairs that track it
   newsTitles.ts, news.ts      Which kind of news a Binance title is, and which coins it names (the study's patterns); what the reader keeps of each article, and what each kind did
   newsFeed.ts                 The news feeds read: RSS, a story's coins, kind, credibility and impact, the same story from several sources, what the price did after, and what each kind has done
   moveExplanation.ts          "Why did it move?": a pair's move against Bitcoin's, its volume and the news that names it, labelled KNOWN, PROBABLE, POSSIBLE or UNKNOWN by fixed rules
@@ -2953,6 +3049,8 @@ src/                          React renderer app
                               opportunityWatch.ts + OpportunityScheduler (the watch at work, headless);
                               watchPaperTrade.ts (the one file of the watch's that writes: its paper
                               trades, opened and settled);
+                              opportunityTable.ts + OpportunityTableCard (the Opportunities table: what
+                              is on offer and the last hour's other events, with their scores);
                               liveBoard.ts (the watch's answers joined to their events, for the leaderboard);
                               journal.ts (every recommendation as a line, its filters and its spreadsheet);
                               watchTradeRecords.ts + TradeTimeline (one trade's records, read by

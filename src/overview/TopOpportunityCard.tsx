@@ -10,8 +10,11 @@ import { buttonStyle, noteStyle } from '../agents/agentStyles'
 import { overviewOpportunity, proposalForAnswer, type EventAnswer, type EventFeedItem } from '../agents/opportunities'
 import { liveReadingOf } from '../agents/liveVerdict'
 import { LiveVerdictView } from '../agents/LiveVerdictView'
+import { opportunityTableRows } from '../agents/opportunityTable'
 import { useEventFeed } from '../agents/useEventFeed'
 import { useLiveMarket } from '../hooks/useLiveMarket'
+import { useMarketResearch } from '../hooks/useMarketResearch'
+import { useNewsFeed } from '../news/useNewsFeed'
 import type { Page } from '../navigation/pages'
 
 /** Events read for this card: the newest, as many as Opportunities shows at first. */
@@ -55,9 +58,10 @@ function Answers({ answers }: { answers: EventAnswer[] }): React.JSX.Element {
   )
 }
 
-/** What can be acted on right now, and what the models make of it: the strongest recommendation
- * still on offer -- or, as is usual, that there is none, the strongest event of the last hour and
- * what it lacks.
+/** What can be acted on right now, and what the models make of it: the recommendation still on
+ * offer with the strongest signal (shared/opportunityScore.ts), the one the Opportunities table
+ * leads with -- or, as is usual, that there is none, the strongest event of the last hour and what
+ * it lacks.
  *
  * NOTHING HERE TRADES. "Paper trade" hands a filled-in order form up to the app, which opens it on
  * Strategies › Execution; a person sets the amount and submits it there. */
@@ -71,9 +75,18 @@ export function TopOpportunityCard({
   const { events, scannerOn, feed, bars, problem: feedProblem } = useEventFeed(EVENTS_READ)
   const nowSec = useNowSec(true, 15_000)
   const [problem, setProblem] = useState<string | null>(null)
+  const { state: research } = useMarketResearch()
+  const news = useNewsFeed()
   const pick = useMemo(() => overviewOpportunity(feed, bars, nowSec), [feed, bars, nowSec])
+  // The entries on offer by their signal, as the table ranks them; the signal reads no live price.
+  const top = useMemo(
+    () =>
+      opportunityTableRows({ feed, bars, live: null, pairs: research?.pairs ?? [], regime: research?.market?.regime ?? null, news, nowSec, nowMs: nowSec * 1000 }).onOffer[0] ?? null,
+    [feed, bars, research, news, nowSec]
+  )
+  const answerOf = top?.item.answers.find((entry) => entry.model === top.offer?.model) ?? null
   // The live price of the pair on offer, to say whether it can be entered now.
-  const live = useLiveMarket(pick.kind === 'valid' ? [pick.row.item.event.symbol] : [])
+  const live = useLiveMarket(top !== null ? [top.item.event.symbol] : [])
 
   async function paperTrade(item: EventFeedItem, answer: EventAnswer): Promise<void> {
     setProblem(null)
@@ -97,8 +110,9 @@ export function TopOpportunityCard({
     )
   }
 
-  if (pick.kind === 'valid') {
-    const { row, answer } = pick
+  if (top !== null && top.offer !== null && answerOf !== null) {
+    const row = top.offer
+    const answer = answerOf
     const detail = answer.decision.detail
     const left = Math.max(0, row.expiresAt - nowSec)
     return (
@@ -115,7 +129,9 @@ export function TopOpportunityCard({
           )}
         </div>
         <div style={{ marginTop: '0.35rem' }}>
-          <span style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>Now: </span>
+          <span style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>Signal </span>
+          <strong style={{ fontSize: '0.84rem', color: 'var(--text-primary)' }}>{top.signal.score}/100</strong>
+          <span style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}> · Now: </span>
           <LiveVerdictView reading={liveReadingOf(row, live, { nowMs: Date.now() })} />
         </div>
         <p style={{ ...noteStyle, marginTop: '0.4rem' }}>
@@ -134,7 +150,8 @@ export function TopOpportunityCard({
     )
   }
 
-  const { candidate } = pick
+  // Nothing on offer, so the pick is the strongest event of the last hour, where there is one.
+  const candidate = pick.kind === 'none' ? pick.candidate : null
   return (
     <Card title="What can be acted on">
       <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>No high-quality opportunity right now. Wait.</div>

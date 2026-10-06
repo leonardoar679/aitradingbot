@@ -5,9 +5,11 @@ import {
   RESEARCH_MIN_QUOTE_VOLUME,
   RESEARCH_UNIVERSE_SIZE,
   RISK_LINES,
+  describeMarketRegime,
   describeMarketStatus,
   emptyResearchState,
   markTrending,
+  marketRegimeOf,
   marketStatusOf,
   parseTrending,
   rankMovers,
@@ -198,6 +200,8 @@ describe('the market', () => {
     ]
     const status = marketStatusOf({ btc15m: bars15({ 0: up }), eth15m: bars15({ 0: down }), pairs, nowSec: NOW })
     expect(status.btc?.regime).toBe('rising')
+    // Up past the line over four hours and the day, the hour quiet: a bull market.
+    expect(status.regime).toBe('bull')
     expect(status.eth?.regime).toBe('falling')
     // The others' median day (3.5) less Bitcoin's (1): 2.5 points, past the line.
     expect(status.altVsBtcPct).toBeCloseTo(2.5, 10)
@@ -226,12 +230,51 @@ describe('the market', () => {
     expect(thin.riskReasons).toEqual(['only 10% of the pairs rose over the day'])
   })
 
-  it('says itself in four words', () => {
+  it('names the regime from Bitcoin alone, by the first of six rules that applies', () => {
+    const at = (h1: number, h4: number, h24: number | null): string | null => marketRegimeOf({ h1, h4, h24 })
+    expect(marketRegimeOf(null)).toBeNull()
+    // PANIC at the panic lines, before anything else.
+    expect(at(RISK_LINES.panicH1Pct, -5, -1)).toBe('panic')
+    expect(at(0, 0, RISK_LINES.panicH24Pct)).toBe('panic')
+    expect(at(-2.99, 0, -7.99)).toBe('high-vol')
+    // HIGH-VOL at the elevated hour, either way, before a direction.
+    expect(at(RISK_LINES.elevatedH1Pct, 3, 5)).toBe('high-vol')
+    expect(at(-RISK_LINES.elevatedH1Pct, -3, -5)).toBe('high-vol')
+    expect(at(1.49, 3, 5)).toBe('bull')
+    // RECOVERY: rising over four hours after a day down past the elevated line.
+    expect(at(0.5, BTC_REGIME_PCT, -RISK_LINES.elevatedH24Pct)).toBe('recovery')
+    expect(at(0.5, BTC_REGIME_PCT, -3.99)).toBe('sideways')
+    // BULL and BEAR when the four hours and the day agree, or the day is not known.
+    expect(at(0, BTC_REGIME_PCT, 0)).toBe('bull')
+    expect(at(0, BTC_REGIME_PCT, null)).toBe('bull')
+    expect(at(0, -BTC_REGIME_PCT, 0)).toBe('bear')
+    expect(at(0, -BTC_REGIME_PCT, null)).toBe('bear')
+    expect(at(0, -BTC_REGIME_PCT, 0.01)).toBe('sideways')
+    // SIDEWAYS: flat over four hours, whatever the day did.
+    expect(at(0, 0.99, 6)).toBe('sideways')
+    expect(at(0, -0.99, -6)).toBe('sideways')
+    expect(describeMarketRegime('high-vol')).toEqual({ word: 'HIGH-VOL', tone: 'gold' })
+    expect(describeMarketRegime('recovery')).toEqual({ word: 'RECOVERY', tone: 'up' })
+  })
+
+  it('reads the day from the ticker where the bars do not reach it, as the risk state does', () => {
+    // Twenty bars: four hours of them, no day. Bitcoin's ticker says it fell 9% over the day.
+    const short = bars15({}, 20)
+    const status = marketStatusOf({ btc15m: short, eth15m: short, pairs: [researched('BTCUSDT', { change24hPct: -9 })], nowSec: NOW })
+    expect(status.btc?.returns.h24).toBeNull()
+    expect(status.regime).toBe('panic')
+    expect(marketStatusOf({ btc15m: bars15({}, 10), eth15m: short, pairs: [], nowSec: NOW }).regime).toBeNull()
+  })
+
+  it('says itself in five words', () => {
     const status = marketStatusOf({ btc15m: bars15({ 0: 96.5 }), eth15m: bars15(), pairs: [researched('BTCUSDT', { change24hPct: -2 }), researched('AUSDT', { change24hPct: -1 })], nowSec: NOW })
     const chips = describeMarketStatus(status)
-    expect(chips.map((chip) => `${chip.label} ${chip.value}`)).toEqual(['BTC FALLING', 'ETH FLAT', 'ALT IN LINE', 'RISK PANIC'])
-    expect(chips[3]).toMatchObject({ tone: 'down', detail: 'Bitcoin fell 3.50% in the last hour; only 0% of the pairs rose over the day.' })
-    expect(chips[0].detail).toBe('-3.50% over four hours, -3.50% over the day.')
+    expect(chips.map((chip) => `${chip.label} ${chip.value}`)).toEqual(['REGIME PANIC', 'BTC FALLING', 'ETH FLAT', 'ALT IN LINE', 'RISK PANIC'])
+    expect(chips[0]).toMatchObject({ tone: 'down', detail: 'Bitcoin -3.50% in the last hour, -3.50% over the day: past the panic lines (-3% in an hour, -8% in a day).' })
+    expect(chips[4]).toMatchObject({ tone: 'down', detail: 'Bitcoin fell 3.50% in the last hour; only 0% of the pairs rose over the day.' })
+    expect(chips[1].detail).toBe('-3.50% over four hours, -3.50% over the day.')
+    // Unread, it says so.
+    expect(describeMarketStatus({ ...status, btc: null, regime: null })[0]).toMatchObject({ value: '—', detail: 'Bitcoin could not be read.', tone: 'muted' })
   })
 })
 

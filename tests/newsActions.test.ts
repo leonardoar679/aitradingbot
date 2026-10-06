@@ -276,7 +276,18 @@ const STAKE: PaperRiskSettings = { sizing: 'stake', riskQuote: 1, maxOutQuote: n
 interface Rig {
   deps: NewsShortDeps
   /** `risk` is settings.json's paperRisk, and `pause` its paperPause, as stored. */
-  state: { executors: ExecutorConfig[]; account: PaperAccount | null; risk: unknown; pause: unknown; now: number; candles: Candle[]; pairs: SymbolInfo[] }
+  /** `correlation` is the pair's with Bitcoin (shared/paperExposure.ts): 0.3 unless said, a pair
+   * that does not track it, so that only the tests of that cap meet it. */
+  state: {
+    executors: ExecutorConfig[]
+    account: PaperAccount | null
+    risk: unknown
+    pause: unknown
+    now: number
+    candles: Candle[]
+    pairs: SymbolInfo[]
+    correlation: number | null | Error
+  }
   notices: { title: string; body: string }[]
   settled: string[]
 }
@@ -290,6 +301,7 @@ function rig(initial: Partial<Rig['state']> = {}): Rig {
     now: A + 63,
     candles: [],
     pairs: [pair('ICX'), pair('SCRT'), { symbol: 'STORJBTC', baseAsset: 'STORJ', quoteAsset: 'BTC' }],
+    correlation: 0.3,
     ...initial
   }
   const made: Rig = { deps: undefined as unknown as NewsShortDeps, state, notices: [], settled: [] }
@@ -307,6 +319,10 @@ function rig(initial: Partial<Rig['state']> = {}): Rig {
     },
     listPairs: async () => state.pairs,
     fetchCandles: async () => state.candles,
+    btcCorrelation: async () => {
+      if (state.correlation instanceof Error) throw state.correlation
+      return state.correlation
+    },
     settle: async (target) => {
       made.settled.push(target.id)
     },
@@ -517,7 +533,8 @@ describe("a Monitoring Tag's short", () => {
     const [ava] = r.state.executors
     expect(ava).toMatchObject({ name: 'Monitoring Tag short · AVAUSDT', type: 'position', mode: 'paper', createdAt: G + 61, keepPosition: false })
     expect(ava.params).toEqual(tagShortParams({ sigma15Pct: sigma, stakeQuote: 100 }))
-    expect(ava.newsRule).toEqual({ articleId: 401, ticker: 'AVA', releaseSec: G, title: tag.title, category: 'MONITORING_TAG' })
+    // The pair's correlation with Bitcoin, read for the cap on one side, is written on it.
+    expect(ava.newsRule).toEqual({ articleId: 401, ticker: 'AVA', releaseSec: G, title: tag.title, category: 'MONITORING_TAG', btcCorrelation: 0.3 })
     expect(r.notices[0].title).toBe('Paper short: AVAUSDT')
     expect(r.notices[0].body).toMatch(
       /^Binance added AVA to its Monitoring Tag \(announced 08:00 UTC\)\. A paper short of 100 USDT was opened by the rule: a stop \d+\.\d\d% above, a target \d+\.\d\d% below, out within the hour\. Paper: nothing real was placed\.$/
@@ -615,6 +632,22 @@ describe('sized by risk, and held to what the app has out (shared/paperRisk.ts)'
       'STORJ: no paper short, as it has no USDT pair on Binance.'
     ])
     expect(r.state.executors.map((executor) => executor.symbol)).toEqual(['BTCUSDT', 'ICXUSDT'])
+  })
+})
+
+describe('held to what the app has out on one side on coins that move with Bitcoin (shared/paperExposure.ts)', () => {
+  it('opens no short on a coin that tracks Bitcoin past the cap, and opens one that does not', async () => {
+    const CAPPED: PaperRiskSettings = { sizing: 'stake', riskQuote: 1, maxOutQuote: 1000 }
+    // A short of the rules' own already open, of 100, opened before correlations were written down.
+    const open = delistingShort('n-1', 'AAA', 100, A - 60)
+    const tracking = rig({ risk: CAPPED, executors: [open], correlation: 0.8 })
+    expect(await openNewsShorts({ ...item, tickers: ['ICX'] }, ON, tracking.deps)).toEqual([
+      "ICX: no paper short. Its pair moves with Bitcoin (its hourly moves over 7 days correlate at 0.80), and the app's open paper SELLs on such pairs stake 100 USDT together: 100 more would take them past 150, 15% of the money-out cap."
+    ])
+    expect(tracking.state.executors).toEqual([open])
+    const own = rig({ risk: CAPPED, executors: [open], correlation: 0.2 })
+    expect(await openNewsShorts({ ...item, tickers: ['ICX'] }, ON, own.deps)).toEqual(['ICX: a paper short of 100 USDT was opened.'])
+    expect(own.state.executors[1].newsRule?.btcCorrelation).toBe(0.2)
   })
 })
 

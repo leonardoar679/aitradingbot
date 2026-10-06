@@ -37,7 +37,7 @@ Taken on 5 October 2026, at commit `aef376d`.
 | **Agents** | API key | The OpenRouter key: set, test, remove | Connections; also above the AI pages while none is stored |
 | | Analyze | Ask a model about one market | AI Decisions |
 | | Opportunities › Watch | Puts events to models with no click; its paper trades | Opportunities |
-| | Opportunities › Right now | Recommendations still valid, ranked | Opportunities, and the top one on Overview |
+| | Opportunities › Right now | Recommendations still valid, ranked; since 6 October 2026 a table with the last hour's other events, a signal and an execution score, and a row that opens the plan, the risk, the news and each model's reasoning | Opportunities, and the top one on Overview |
 | | Opportunities › Models to ask, Events | Each event with its answers, Ask and Paper trade | Opportunities |
 | | Opportunities › What the watch's recommendations earned | The live board over the last 10/50/100 trades and 7/30 days | Performance |
 | | Opportunities › Journal | Every recommendation with its outcome, CSV export | Performance |
@@ -202,8 +202,10 @@ settings from the document have no behaviour behind them, so they are not added 
   - maximum position or trade risk as a share of an account. The paper trades the app opens by
     itself are sized by a fixed amount at their stop, and capped in what they stake together, since
     5 October 2026 (Risk & Safety); nothing sizes a person's own trades;
-  - maximum correlated exposure, beyond the watch's own paper trades (which have, since 5 October
-    2026, a limit on how many are open in one direction);
+  - maximum correlated exposure for a person's own trades. The app's own paper trades have had, since
+    5 October 2026, the watch's limit on how many are open in one direction, and, since 6 October
+    2026, a cap on what they stake on one side on coins that move with Bitcoin (15% of the paper
+    account, or of the money-out cap; `shared/paperExposure.ts`), shown on Risk & Safety;
   - maximum slippage or spread.
 - **News:** Binance's own announcements are read when switched on under Settings › Market, with
   what a delisting does (V3 Stage 7, after the study in `research/NEWS.md`). Since 6 October 2026,

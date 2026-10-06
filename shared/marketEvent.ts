@@ -455,12 +455,15 @@ const WIDE_SPREAD_PCT = 0.2
  * An unknown volume or spread scores as the middle of its range rather than as zero or full: the
  * scanner not having a number is not evidence about the pair either way. */
 export function candidateScore(eventScore: number, quoteVolume24h: number | null, spreadPct: number | null): number {
-  const liquidity =
-    quoteVolume24h === null
-      ? 50
-      : 100 * clamp01(Math.log10(Math.max(quoteVolume24h, 1) / THIN_QUOTE_VOLUME) / Math.log10(DEEP_QUOTE_VOLUME / THIN_QUOTE_VOLUME))
   const tightness = spreadPct === null ? 50 : 100 * clamp01(1 - spreadPct / WIDE_SPREAD_PCT)
-  return 0.6 * eventScore + 0.25 * liquidity + 0.15 * tightness
+  return 0.6 * eventScore + 0.25 * liquidityScore(quoteVolume24h) + 0.15 * tightness
+}
+
+/** How much a pair trades, 0 to 100: nothing at a million of the quote a day, full at a hundred
+ * million, on a log scale between; the middle when it is not known. */
+export function liquidityScore(quoteVolume24h: number | null): number {
+  if (quoteVolume24h === null) return 50
+  return 100 * clamp01(Math.log10(Math.max(quoteVolume24h, 1) / THIN_QUOTE_VOLUME) / Math.log10(DEEP_QUOTE_VOLUME / THIN_QUOTE_VOLUME))
 }
 
 /** The events of one pass in the order they are put forward, each with its rank. Ties go to the

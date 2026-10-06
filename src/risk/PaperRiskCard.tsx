@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Card } from '../components/Card'
-import type { ExecutorConfig, PaperPauseSettings, PaperRiskSettings } from '../../shared/ipc'
+import type { ExecutorConfig, PaperAccount, PaperPauseSettings, PaperRiskSettings } from '../../shared/ipc'
+import { describeCorrelatedExposure } from '../../shared/paperExposure'
 import {
   PAPER_MAX_OUT_CHOICES,
   PAPER_MIN_STAKE,
@@ -48,6 +49,7 @@ export function PaperRiskCard(): React.JSX.Element {
   const [pause, setPause] = useState<PaperPauseSettings | null>(null)
   const [pauseDraft, setPauseDraft] = useState<Pick<PaperPauseSettings, 'lossR' | 'trades'> | null>(null)
   const [executors, setExecutors] = useState<ExecutorConfig[]>([])
+  const [account, setAccount] = useState<PaperAccount | null>(null)
   const [out, setOut] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(false)
@@ -60,6 +62,7 @@ export function PaperRiskCard(): React.JSX.Element {
         const paused = healPaperPause(settings.paperPause)
         setPause(paused)
         setExecutors(settings.executors)
+        setAccount(settings.paperAccount ?? null)
         setOut(paperOut(settings.executors, 'USDT'))
         if (keepDrafts) return
         setPauseDraft({ lossR: paused.lossR, trades: paused.trades })
@@ -203,7 +206,9 @@ export function PaperRiskCard(): React.JSX.Element {
         {draft.maxOutQuote === null
           ? 'Nothing caps what they stake together.'
           : `The watch and the news rules open nothing that would take what their open paper trades stake together past ${amount(draft.maxOutQuote)}, in a quote asset.`}{' '}
-        {out !== null && `Out now: ${amount(out)} USDT in their open paper trades.`}
+        {out !== null && `Out now: ${amount(out)} USDT in their open paper trades.`}{' '}
+        {/* Since 6 October 2026: one side, on coins that move with Bitcoin (shared/paperExposure.ts). */}
+        {describeCorrelatedExposure({ account, risk: draft, quoteAsset: 'USDT' })}
       </p>
 
       <div style={{ display: 'flex', gap: '0.7rem', flexWrap: 'wrap', marginTop: '1rem' }}>

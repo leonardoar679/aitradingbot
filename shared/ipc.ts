@@ -737,6 +737,10 @@ export interface ExecutorConfig {
      * spread, how old the price was, and where it came from. Absent on one opened before
      * 6 October 2026, when the live price was first checked. */
     book?: { bid: number; ask: number; spreadPct: number; ageMs: number; source: 'stream' | 'rest' }
+    /** How its pair's hourly moves over the seven days before it was opened correlated with
+     * Bitcoin's (shared/paperExposure.ts); null when they could not be read. Absent on one opened
+     * before 6 October 2026, which counts as tracking Bitcoin. */
+    btcCorrelation?: number | null
   }
   /** Set on a PAPER Position short opened by a rule research/NEWS.md measured, on Binance's
    * announcement (shared/newsActions.ts): which announcement and which coin. A delisting's is out
@@ -753,6 +757,8 @@ export interface ExecutorConfig {
      * Tag was read (5 October 2026): every one of those was a delisting's. */
     category?: 'DELISTING' | 'MONITORING_TAG'
     result?: { exit: PositionExitReason; pnlQuote: number; closedAt: number }
+    /** As on the watch's: its pair's correlation with Bitcoin when it was opened. */
+    btcCorrelation?: number | null
   }
   /** Set once a live executor's order actually fills (market: immediately; limit: whenever
    * LiveOrderScheduler detects the resting order resolved). Null for every paper executor and

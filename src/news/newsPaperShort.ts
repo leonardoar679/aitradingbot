@@ -10,6 +10,7 @@ import {
   type NewsShortMark
 } from '../../shared/newsActions'
 import type { AppSettings, Candle, Exchange, ExecutorConfig, PositionExecutorParams, SymbolInfo } from '../../shared/ipc'
+import { correlatedExposureBlock, readBtcCorrelation } from '../../shared/paperExposure'
 import { healPaperPause, paperPauseBlock } from '../../shared/paperPause'
 import { healPaperRisk, paperOutBlock, sizePaperTrade } from '../../shared/paperRisk'
 import { describeExecutorFunding } from '../account/executorFunding'
@@ -25,8 +26,9 @@ import { settingsWrites } from '../utils/settingsWrites'
 // announcement with no stop and no target; a Monitoring Tag's has a stop and a target from the
 // coin's usual moves and is out within the hour. Each stakes its kind's stake; a tag's, which has a
 // stop, is sized by what it would lose there where the app's own paper trades are sized by risk,
-// and none is opened past what they may have out together (shared/paperRisk.ts), or while a
-// losing run of the rules' own has them paused (shared/paperPause.ts). And a short of a
+// and none is opened past what they may have out together (shared/paperRisk.ts) or on one side on
+// coins that move with Bitcoin (shared/paperExposure.ts), or while a losing run of the rules' own
+// has them paused (shared/paperPause.ts). And a short of a
 // rule's that has closed is stopped and its result settled into the paper account, the way
 // pressing Stop on its card would.
 //
@@ -36,11 +38,21 @@ import { settingsWrites } from '../utils/settingsWrites'
 //
 // EVERY WRITE GOES THROUGH THE ONE QUEUE (src/utils/settingsWrites.ts), on executors read inside it.
 
-/** The executor a rule's short is. Paper, unlevered, and its position is not kept when it stops. */
-export function newsShortExecutor(input: { id: string; item: NewsItem; ticker: string; pair: SymbolInfo; nowSec: number; params: PositionExecutorParams }): ExecutorConfig {
+/** The executor a rule's short is. Paper, unlevered, and its position is not kept when it stops.
+ * Its pair's correlation with Bitcoin, where it was read for it, is written on its mark. */
+export function newsShortExecutor(input: {
+  id: string
+  item: NewsItem
+  ticker: string
+  pair: SymbolInfo
+  nowSec: number
+  params: PositionExecutorParams
+  btcCorrelation?: number | null
+}): ExecutorConfig {
   const { item, ticker, pair } = input
   const tagged = item.category === 'MONITORING_TAG'
-  const mark: NewsShortMark = { articleId: item.id, ticker, releaseSec: item.releaseSec, title: item.title, category: tagged ? 'MONITORING_TAG' : 'DELISTING' }
+  const marked: NewsShortMark = { articleId: item.id, ticker, releaseSec: item.releaseSec, title: item.title, category: tagged ? 'MONITORING_TAG' : 'DELISTING' }
+  const mark: NewsShortMark = input.btcCorrelation === undefined ? marked : { ...marked, btcCorrelation: input.btcCorrelation }
   return {
     id: input.id,
     name: `${tagged ? 'Monitoring Tag' : 'Delisting'} short · ${pair.symbol}`,
@@ -74,6 +86,9 @@ export interface NewsShortDeps {
   listPairs: () => Promise<SymbolInfo[]>
   /** 1-minute candles of [startSec, endSec]. */
   fetchCandles: (exchange: Exchange, symbol: string, startSec: number, endSec: number) => Promise<Candle[]>
+  /** The pair's hourly moves over the last week against Bitcoin's (shared/paperExposure.ts), or
+   * null when they cannot be read: it then counts as a pair that tracks Bitcoin. */
+  btcCorrelation: (exchange: Exchange, symbol: string) => Promise<number | null>
   /** Books a stopped paper executor's result into the paper account. */
   settle: (executor: ExecutorConfig, nowSec: number) => Promise<unknown>
   notify: (title: string, body: string) => void
@@ -111,6 +126,13 @@ export async function openNewsShorts(item: NewsItem, actions: Pick<NewsKindActio
         continue
       }
     }
+    // Whether the pair moves with Bitcoin, for what the app's trades have out on one side of it.
+    let btcCorrelation: number | null = null
+    try {
+      btcCorrelation = await deps.btcCorrelation('binance', pair.symbol)
+    } catch {
+      btcCorrelation = null
+    }
     const outcome = await deps.queue(async (): Promise<{ opened: number } | { refused: string }> => {
       const fresh = await deps.getSettings()
       const nowSec = deps.nowSec()
@@ -137,9 +159,19 @@ export async function openNewsShorts(item: NewsItem, actions: Pick<NewsKindActio
           mode: 'paper',
           quoteAsset: pair.quoteAsset,
           amountQuote: params.amountQuote
-        }) ?? paperOutBlock({ risk, executors: fresh.executors, quoteAsset: pair.quoteAsset, amountQuote: params.amountQuote })
+        }) ??
+        paperOutBlock({ risk, executors: fresh.executors, quoteAsset: pair.quoteAsset, amountQuote: params.amountQuote }) ??
+        correlatedExposureBlock({
+          account: fresh.paperAccount ?? null,
+          risk,
+          executors: fresh.executors,
+          quoteAsset: pair.quoteAsset,
+          side: params.side,
+          amountQuote: params.amountQuote,
+          correlation: btcCorrelation
+        })
       if (problem !== null) return { refused: problem }
-      const executor = newsShortExecutor({ id: deps.newId(), item, ticker, pair, nowSec, params })
+      const executor = newsShortExecutor({ id: deps.newId(), item, ticker, pair, nowSec, params, btcCorrelation })
       await deps.setExecutors([...fresh.executors, executor])
       const notice = newsShortNotice(item, ticker, params, pair.quoteAsset)
       try {
@@ -196,6 +228,13 @@ export const newsShortBrowserDeps: NewsShortDeps = {
   },
   listPairs: () => window.api.market.listSymbols('binance'),
   fetchCandles: async (exchange, symbol, startSec, endSec) => (await window.api.market.fetchHistoricalRange(exchange, symbol, '1m', startSec, endSec)).candles,
+  btcCorrelation: (exchange, symbol) =>
+    readBtcCorrelation(
+      async (from, pair, startSec, endSec) => (await window.api.market.fetchHistoricalRange(from, pair, '1h', startSec, endSec)).candles,
+      exchange,
+      symbol,
+      Math.floor(Date.now() / 1000)
+    ),
   // Not kept in Inventory (keepPosition is false), so nothing was handed over and the whole
   // result is cash.
   settle: (executor, nowSec) => settleExecutorOnStop({ executor, handedOver: { held: null, realizedPnl: 0 }, now: nowSec }),

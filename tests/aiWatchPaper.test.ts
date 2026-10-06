@@ -365,6 +365,9 @@ interface Rig {
     /** The live book (shared/liveMarket.ts). Absent: a tight one around the price, received just
      * now; null: none can be had. */
     book?: LiveBook | null | Error
+    /** The pair's correlation with Bitcoin (shared/paperExposure.ts). Absent: 0.3, a pair that does
+     * not track it, so that only the tests of that cap meet it. */
+    correlation?: number | null | Error
     now: number
     candles: Candle[] | Error
   }
@@ -413,6 +416,10 @@ function rig(initial: Partial<Rig['state']> = {}): Rig {
     fetchCandles: async () => {
       if (state.candles instanceof Error) throw state.candles
       return state.candles
+    },
+    btcCorrelation: async () => {
+      if (state.correlation instanceof Error) throw state.correlation
+      return state.correlation === undefined ? 0.3 : state.correlation
     },
     settle: async (target) => {
       made.settled.push(target.id)
@@ -924,6 +931,46 @@ describe('sized by risk, and held to what the app has out (shared/paperRisk.ts)'
     const byHand: ExecutorConfig = { ...watched, id: 'hand-1', symbol: 'ETHUSDT', watch: undefined, params: { ...(watched.params as PositionExecutorParams), amountQuote: 5000 } }
     const mine = rig({ risk: capped, config: roomy, executors: [byHand] })
     expect((await openWatchPaperTrade(event(), decision(), mine.deps))?.opened).toBe(true)
+  })
+})
+
+describe('held to what the app has out on one side on coins that move with Bitcoin (shared/paperExposure.ts)', () => {
+  const CAPPED: PaperRiskSettings = { sizing: 'stake', riskQuote: 1, maxOutQuote: 1000 }
+  const roomy = config({ maxOpen: 5, maxSameSide: 5 })
+  /** The watch's open paper BUY of 100 on ETHUSDT, opened before correlations were written down. */
+  const ethBuy = executor({ symbol: 'ETHUSDT', eventId: 'eth' })
+  const REFUSED =
+    "No paper trade: Its pair moves with Bitcoin (its hourly moves over 7 days correlate at 0.85), and the app's open paper BUYs on such pairs stake 100 USDT together: 100 more would take them past 150, 15% of the money-out cap."
+
+  it('opens nothing on a pair that tracks Bitcoin past 15% of the money-out cap, with no paper account, and says why', async () => {
+    const r = rig({ risk: CAPPED, config: roomy, executors: [ethBuy], correlation: 0.85 })
+    expect(await openWatchPaperTrade(event(), decision(), r.deps)).toEqual({ opened: false, text: REFUSED })
+    expect(r.state.executors).toHaveLength(1)
+  })
+
+  it('opens a pair that does not track Bitcoin, and writes its correlation on it', async () => {
+    const r = rig({ risk: CAPPED, config: roomy, executors: [ethBuy], correlation: 0.42 })
+    expect((await openWatchPaperTrade(event(), decision(), r.deps))?.opened).toBe(true)
+    expect(r.state.executors[1].watch?.btcCorrelation).toBe(0.42)
+    // A trade on the other side is not counted against it.
+    const short = rig({ risk: CAPPED, config: roomy, executors: [ethBuy], correlation: 0.85 })
+    expect((await openWatchPaperTrade(event(), sell(), short.deps))?.opened).toBe(true)
+    expect(short.state.executors[1].watch?.btcCorrelation).toBe(0.85)
+  })
+
+  it('counts a pair whose correlation could not be read as one that tracks Bitcoin', async () => {
+    const failed = rig({ risk: CAPPED, config: roomy, executors: [ethBuy], correlation: new Error('down') })
+    expect((await openWatchPaperTrade(event(), decision(), failed.deps))?.text).toMatch(/^No paper trade: Its pair's correlation with Bitcoin could not be read/)
+    // Alone, it opens, and says on it that it was not read.
+    const alone = rig({ risk: CAPPED, config: roomy, correlation: null })
+    expect((await openWatchPaperTrade(event(), decision(), alone.deps))?.opened).toBe(true)
+    expect(alone.state.executors[0].watch).toHaveProperty('btcCorrelation', null)
+  })
+
+  it('takes its share of what the paper account was funded with, where there is one', async () => {
+    const account: PaperAccount = { balances: { USDT: 10_000 }, initialBalances: { USDT: 10_000 }, createdAt: T - 86_400, ledger: [] }
+    const r = rig({ risk: CAPPED, config: roomy, executors: [ethBuy], correlation: 0.85, account })
+    expect((await openWatchPaperTrade(event(), decision(), r.deps))?.opened).toBe(true)
   })
 })
 

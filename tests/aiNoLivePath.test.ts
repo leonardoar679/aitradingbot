@@ -393,6 +393,8 @@ describe('AI code has no route to a real order', () => {
       [join(ROOT, 'src', 'news', 'WhyItMoved.tsx'), ['feed.openLink', 'market.fetchHistoricalRange']],
       [join(ROOT, 'src', 'news', 'WhyItMovedHost.tsx'), []],
       [join(ROOT, 'src', 'news', 'AlertBanner.tsx'), ['feed.openLink']],
+      // The opportunities table opens a story on the coin, as the news tab does.
+      [join(ROOT, 'src', 'agents', 'OpportunityTableCard.tsx'), ['feed.openLink']],
       // It reads what is held -- the settings and the balances a key can read -- and the live
       // stream's Bitcoin, and tells.
       [
@@ -430,9 +432,9 @@ describe('AI code has no route to a real order', () => {
     expect([...new Set([...source.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))].sort()).toEqual(['market', 'notify', 'settings'])
     expect(source).not.toMatch(/window\.api\.credentials/)
     // paperRisk sizes a tag's short by its stop and holds the app's own paper trades to their cap,
-    // and paperPause refuses one after a losing run: arithmetic, which only ever opens less (held
-    // below).
-    expect(importsOf(writer).sort()).toEqual(['engine', 'executorFunding', 'ipc', 'news', 'newsActions', 'paperPause', 'paperRisk', 'settingsWrites', 'settleExecutor'])
+    // paperExposure to their cap on one side on coins that move with Bitcoin, and paperPause refuses
+    // one after a losing run: arithmetic, which only ever opens less (held below).
+    expect(importsOf(writer).sort()).toEqual(['engine', 'executorFunding', 'ipc', 'news', 'newsActions', 'paperExposure', 'paperPause', 'paperRisk', 'settingsWrites', 'settleExecutor'])
     expect(readFileSync(rules, 'utf-8')).toContain("executor.newsRule !== undefined && executor.mode === 'paper' && executor.type === 'position'")
     // The scheduler reads -- the news, the settings, the balances a key can read -- and notifies.
     // Every write goes through the writer above.
@@ -462,7 +464,8 @@ describe('AI code has no route to a real order', () => {
       join(ROOT, 'src', 'agents', 'liveBoard.ts'),
       join(ROOT, 'src', 'agents', 'LiveBoardCard.tsx'),
       join(ROOT, 'src', 'agents', 'EventTables.tsx'),
-      join(ROOT, 'src', 'agents', 'RightNowCard.tsx'),
+      // The opportunities table's rows: worked out from what the page holds, and nothing more.
+      join(ROOT, 'src', 'agents', 'opportunityTable.ts'),
       join(SERVICES, 'aiWatchService.ts')
     ]
     for (const path of watching) {
@@ -509,7 +512,7 @@ describe('AI code has no route to a real order', () => {
     // The writer reaches settings, the price, candles, a notice and the setting. Nothing else.
     expect([...new Set([...source.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))].sort()).toEqual(['ai', 'market', 'notify', 'settings'])
     // And it is the only file of the watch's that reaches settings at all.
-    const others = ['opportunityWatch.ts', 'OpportunityScheduler.tsx', 'WatchCard.tsx', 'liveBoard.ts', 'LiveBoardCard.tsx', 'RightNowCard.tsx']
+    const others = ['opportunityWatch.ts', 'OpportunityScheduler.tsx', 'WatchCard.tsx', 'liveBoard.ts', 'LiveBoardCard.tsx', 'opportunityTable.ts', 'OpportunityTableCard.tsx']
     for (const file of others) expect(readFileSync(join(ROOT, 'src', 'agents', file), 'utf-8'), file).not.toMatch(/window\.api\.settings/)
   })
 
@@ -529,6 +532,7 @@ describe('AI code has no route to a real order', () => {
       'ipc',
       'liveMarket',
       'marketEvent',
+      'paperExposure',
       'paperPause',
       'paperRisk',
       'settingsWrites',
@@ -553,6 +557,34 @@ describe('AI code has no route to a real order', () => {
     const card = readFileSync(join(ROOT, 'src', 'risk', 'PaperRiskCard.tsx'), 'utf-8')
     expect([...new Set([...card.matchAll(/window\.api\.(\w+)(?:\s*\.\s*(\w+))?/g)].map((match) => `${match[1]}.${match[2]}`))].sort()).toEqual(['settings.get', 'settings.set'])
     expect(card).not.toMatch(/liveTrading|placeLive|window\.api\.(executors|ai|credentials)/)
+  })
+
+  it('the opportunity score ranks and the cap on one side refuses; both are arithmetic', () => {
+    // Since 6 October 2026 (the second V3 document, §20-24): shared/opportunityScore.ts ranks what is
+    // on offer by fixed weights, and nothing is opened or refused by it; shared/paperExposure.ts
+    // refuses one more of the app's own paper trades on one side, on coins that move with Bitcoin,
+    // past its cap, and so only ever opens less. Neither makes, stops or places anything.
+    const score = join(ROOT, 'shared', 'opportunityScore.ts')
+    const exposure = join(ROOT, 'shared', 'paperExposure.ts')
+    expect(importsOf(score).sort()).toEqual(['aiOpportunity', 'marketEvent', 'marketResearch', 'newsFeed'])
+    expect(importsOf(exposure).sort()).toEqual(['aiEventMarket', 'ipc', 'paperRisk'])
+    for (const path of [score, exposure]) {
+      expect(readFileSync(path, 'utf-8'), path).not.toMatch(/window\.|ipcRenderer|electron\/|liveTrading|placeLive|setExecutors|status: '|mode: /)
+    }
+    // Both writers refuse by the cap inside the queue, after the cap on what they have out together.
+    for (const writer of [join(ROOT, 'src', 'agents', 'watchPaperTrade.ts'), join(ROOT, 'src', 'news', 'newsPaperShort.ts')]) {
+      const source = readFileSync(writer, 'utf-8')
+      const at = source.indexOf('paperOutBlock({')
+      const next = source.indexOf('correlatedExposureBlock({', at)
+      expect(at, writer).toBeGreaterThan(-1)
+      expect(next, writer).toBeGreaterThan(at)
+      expect(source.slice(at, next), writer).toMatch(/\}\) \?\?\s+$/)
+    }
+    // The score is shown and ranks by: nothing that asks a model or writes reads it.
+    for (const file of ['watchPaperTrade.ts', 'opportunityWatch.ts', 'OpportunityScheduler.tsx']) {
+      expect(importsOf(join(ROOT, 'src', 'agents', file)), file).not.toContain('opportunityScore')
+    }
+    expect(importsOf(join(ROOT, 'src', 'news', 'newsPaperShort.ts'))).not.toContain('opportunityScore')
   })
 
   it('the daily paper digest reads settings and says so, and nothing else', () => {
