@@ -17,6 +17,7 @@ import {
 } from '../../shared/aiEventBenchmark'
 import { splitAiModelId } from '../../shared/aiEffort'
 import { experimentDrift, type AiExperimentSummary } from '../../shared/aiExperiment'
+import { AI_HELP_NEWS_SECONDS, eventNewsOf } from '../../shared/aiHelp'
 import {
   AI_OPPORTUNITY_MAX_MODELS,
   describeOpportunitySide,
@@ -29,6 +30,7 @@ import { describeDecider } from '../../shared/aiPanel'
 import type { Candle } from '../../shared/ipc'
 import { EVENT_COOLDOWN_SECONDS, EVENT_DETECTOR_VERSION, EVENT_LOOKBACK_BARS, describeEventType } from '../../shared/marketEvent'
 import { scanHistoryRequests } from '../../shared/marketScanner'
+import type { StoryMark } from '../../shared/newsFeed'
 import { describeError } from '../utils/ipcError'
 import { buttonStyle, cellStyle, headCellStyle, inputStyle, noteStyle } from './agentStyles'
 import { BENCHMARK_CONCURRENCY, runBenchmark } from './benchmark'
@@ -43,9 +45,11 @@ import {
   type EventDataset,
   type EventPeek
 } from './eventBenchmark'
+import { AiHelpCard } from './AiHelpCard'
 import { ContributionTable, CostTable, ExitsTable, ResultsTable, SlicesTable, pct } from './EventTables'
 import { LiveBoardCard } from './LiveBoardCard'
 import type { CandleFetch } from './opportunities'
+import { loadQuantData, quantBacktests, type QuantData, type QuantFetch } from './quantState'
 
 /** Candles are fetched at about this pace, a few at once. Only for saying how long a free step
  * takes before it starts. */
@@ -54,6 +58,9 @@ const REDRAW_MS = 1000
 const EVENTS_LISTED = 60
 
 const fetchCandles: CandleFetch = async (exchange, symbol, interval, startSec, endSec) =>
+  (await window.api.market.fetchHistoricalRange(exchange, symbol, interval, startSec, endSec)).candles
+
+const quantFetch: QuantFetch = async (exchange, symbol, interval, startSec, endSec) =>
   (await window.api.market.fetchHistoricalRange(exchange, symbol, interval, startSec, endSec)).candles
 
 const deps: EventBenchmarkDeps = {
@@ -250,6 +257,10 @@ export function EventBenchmarkView(): React.JSX.Element {
   const [peek, setPeek] = useState<EventPeek | null>(null)
   const [answers, setAnswers] = useState<EventBenchmarkAnswers>({})
   const [bars, setBars] = useState<Record<string, Candle[]>>({})
+  // The two quant strategies at each event and on their own, and the stories on file: "Does AI help?".
+  const [quant, setQuant] = useState<{ data: QuantData; window: { startSec: number; endSec: number } } | null>(null)
+  const [marks, setMarks] = useState<StoryMark[] | null>(null)
+  const quantFor = useRef<string | null>(null)
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null)
   const [experiments, setExperiments] = useState<AiExperimentSummary[]>([])
   const [question, setQuestion] = useState<AiOpportunityQuestionKind>('pair')
@@ -301,11 +312,14 @@ export function EventBenchmarkView(): React.JSX.Element {
             bars,
             dailyVolume: dataset.dailyVolume,
             labels: dataset.question === 'market' ? dataset.labels : undefined,
+            quant: quant?.data.states,
             nowSec: Math.floor(Date.now() / 1000)
           }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `models` is derived from `peek`
-    [dataset, peek, answers, bars]
+    [dataset, peek, answers, bars, quant]
   )
+  const news = useMemo(() => (dataset === null || marks === null ? null : eventNewsOf(dataset.events, marks)), [dataset, marks])
+  const backtests = useMemo(() => (quant === null ? null : quantBacktests(quant.data, quant.window, Math.floor(Date.now() / 1000))), [quant])
   // Each model under each question, on the events every one of them answered both ways.
   const versus = useMemo(
     () =>
@@ -346,6 +360,9 @@ export function EventBenchmarkView(): React.JSX.Element {
     setAnswers({})
     setPairAnswers(null)
     setBars({})
+    setQuant(null)
+    setMarks(null)
+    quantFor.current = null
     const requestId = crypto.randomUUID()
     scanId.current = requestId
     const stopProgress = window.api.scanner.onHistoryProgress((progress) => {
@@ -407,12 +424,37 @@ export function EventBenchmarkView(): React.JSX.Element {
       if (stop.current) return
       setPairAnswers(alone.known)
     }
-    if (followed !== undefined) return
-    const fetched = await loadOutcomeBars(built.events, Math.floor(Date.now() / 1000), fetchCandles, {
+    if (followed === undefined) {
+      const fetched = await loadOutcomeBars(built.events, Math.floor(Date.now() / 1000), fetchCandles, {
+        shouldStop: () => stop.current,
+        onProgress: (done, total) => setPhase({ status: 'working', text: `Fetching what followed each event: ${done} of ${total}` })
+      })
+      if (stop.current) return
+      setBars(fetched)
+    }
+    await loadQuant(built)
+  }
+
+  /** The two quant strategies' states at each event of a sample, and the stories on file over its
+   * period: public candles, each pair's once, and the news history. Read once a sample. Free. */
+  async function loadQuant(built: EventDataset): Promise<void> {
+    const key = `${built.startSec}:${built.endSec}:${built.events.map((event) => event.id).join(',')}`
+    if (quantFor.current === key) return
+    const span = { startSec: built.startSec, endSec: built.endSec }
+    const data = await loadQuantData(built.events, span, quantFetch, {
       shouldStop: () => stop.current,
-      onProgress: (done, total) => setPhase({ status: 'working', text: `Fetching what followed each event: ${done} of ${total}` })
+      onProgress: (done, total) => setPhase({ status: 'working', text: `Reading the two strategies at each event: ${done} of ${total} pairs` })
     })
-    if (!stop.current) setBars(fetched)
+    if (stop.current) return
+    let read: StoryMark[] | null = null
+    try {
+      read = await window.api.feed.history(span.startSec - AI_HELP_NEWS_SECONDS, span.endSec)
+    } catch {
+      read = null
+    }
+    quantFor.current = key
+    setQuant({ data, window: span })
+    setMarks(read)
   }
 
   /** Reads a recorded run's own events again, and what is held for them. Free. */
@@ -424,6 +466,9 @@ export function EventBenchmarkView(): React.JSX.Element {
     setAnswers({})
     setPairAnswers(null)
     setBars({})
+    setQuant(null)
+    setMarks(null)
+    quantFor.current = null
     try {
       setPhase({ status: 'working', text: `Opening ${id}…` })
       const experiment = await window.api.ai.getExperiment(id)
@@ -766,14 +811,18 @@ export function EventBenchmarkView(): React.JSX.Element {
             </p>
           </Card>
 
+          {quant !== null && <AiHelpCard summary={summary} events={dataset.events} news={news} backtests={backtests} failedPairs={quant.data.failed.length} />}
+
           <Card title="The same events with no model, and with the models combined">
-            <ResultsTable title="Rule" rows={[...summary.baselines, ...summary.rules]} models={false} />
+            <ResultsTable title="Rule" rows={[...summary.baselines, summary.buyAndHold, ...summary.quant, ...summary.rules]} models={false} />
             <p style={{ ...noteStyle, marginTop: '0.8rem' }}>
               The first two rows take every {summary.baselinesOver === 'compared' ? 'compared' : 'sampled'} event with one fixed
               bracket and no judgement: with the move, and against it
               {summary.baselinesOver === 'sampled' && ' (no model has answered yet, so there is nothing to compare them on: this is what the events did on their own)'}
               . research/EVENTS.md scored both over years and found each loses about a round trip&apos;s cost; a model is worth its
-              price by as much as it beats them here. The rest are worked out from the answers above and cost nothing: what would
+              price by as much as it beats them here. Buying and holding each event&apos;s pair an hour from the same entry is what the
+              market did in those hours, and the two quant rows follow the move only where the strategy, read at the event from its own
+              rule, is on its side. The rest are worked out from the answers above and cost nothing: what would
               have been traded had a side needed more than half the models, all of them, or the weight of their confidence, using
               the levels of the model surest of that side and waiting for the slowest answer.
               {coinToss !== null && (

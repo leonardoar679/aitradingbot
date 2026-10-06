@@ -3,17 +3,22 @@ import {
   EVENT_BASELINE_FADE,
   EVENT_BASELINE_FOLLOW,
   EVENT_BENCHMARK_SETTLE_SEC,
+  EVENT_BUY_AND_HOLD,
   EVENT_BENCHMARK_STAKE_USD,
   EVENT_RULE_MAJORITY,
   EVENT_RULE_UNANIMOUS,
   EVENT_RULE_WEIGHTED,
   eventBenchmarkWindow,
   eventScoring,
+  hybridName,
+  quantRuleName,
   rollingResults,
   sampleEvents,
   summarizeEventBenchmark,
   type EventBenchmarkInput,
-  type EventTrade
+  type EventQuantStates,
+  type EventTrade,
+  type QuantSide
 } from '../shared/aiEventBenchmark'
 import { validateOpportunityAnswer } from '../shared/aiOpportunity'
 import { opportunityCallOf, replayAnsweredAt, scoreOpportunity, slippageRateFor } from '../shared/aiOpportunityOutcome'
@@ -533,6 +538,97 @@ describe('summarizeEventBenchmark: what a model changed about the rule', () => {
     // A price that goes nowhere reaches neither level, and the holding time ends the trade.
     const flat = summarizeEventBenchmark(benchmark([100.5], { a: [LONG] }))
     expect(flat.models[0].exits).toEqual({ target: 0, stop: 0, time: 1 })
+  })
+})
+
+describe('the quant rows, the hybrids, and holding the same hours', () => {
+  /** Each event's two states, in order: [Trend Regime 4h, Short-Term Channel 15m]. */
+  function withStates(input: EventBenchmarkInput, states: [QuantSide | null, QuantSide | null][]): EventBenchmarkInput {
+    const quant: Record<string, EventQuantStates> = {}
+    input.events.forEach((entry, i) => {
+      quant[entry.id] = { trend4h: states[i][0], channel15m: states[i][1] }
+    })
+    return { ...input, quant }
+  }
+  const STATES: [QuantSide | null, QuantSide | null][] = [
+    ['long', 'none'],
+    ['short', 'long'],
+    ['none', 'long'],
+    [null, 'short']
+  ]
+
+  it('follows the move only where the strategy is on its side', () => {
+    const summary = summarizeEventBenchmark(withStates(benchmark([RISE, RISE, RISE, RISE], { a: [LONG, SHORT, LONG, NONE] }), STATES))
+    const [trend, channel] = summary.quant
+    expect(trend.name).toBe(quantRuleName('trend4h'))
+    expect(channel.name).toBe('Follow when Short-Term Channel 15m agrees (no model)')
+    // Every event rose, so the rule goes long: with Trend Regime long only at the first; with the
+    // channel at the second and third. Neither, unread or against, is no trade.
+    expect(trend.trades.map((trade) => [trade.index, trade.side])).toEqual([[0, 'long']])
+    expect(channel.trades.map((trade) => [trade.index, trade.side])).toEqual([
+      [1, 'long'],
+      [2, 'long']
+    ])
+    expect(trend.noTrades).toBe(3)
+  })
+
+  it("keeps a model's own trades only where the strategy agrees with its side", () => {
+    const summary = summarizeEventBenchmark(withStates(benchmark([RISE, FALL, RISE, RISE], { a: [LONG, SHORT, LONG, NONE] }), STATES))
+    const row = (quant: 'trend4h' | 'channel15m'): EventTrade[] => summary.hybrids.find((entry) => entry.model === 'a' && entry.quant === quant)?.row.trades ?? []
+    // The model's long at 0 and short at 1 sit with Trend Regime; its long at 2 does not.
+    expect(row('trend4h').map((trade) => [trade.index, trade.side])).toEqual([
+      [0, 'long'],
+      [1, 'short']
+    ])
+    expect(row('channel15m').map((trade) => [trade.index, trade.side])).toEqual([[2, 'long']])
+    expect(summary.hybrids.map((entry) => entry.row.name)).toEqual([hybridName('a', 'trend4h'), hybridName('a', 'channel15m')])
+    // The model's own trades as they are, by its own levels.
+    expect(row('trend4h')[0].outcome).toEqual(summary.models[0].trades[0].outcome)
+  })
+
+  it('works out neither without the states', () => {
+    const summary = summarizeEventBenchmark(benchmark([RISE], { a: [LONG] }))
+    expect(summary.quant).toEqual([])
+    expect(summary.hybrids).toEqual([])
+  })
+
+  it("buys every event's pair at the follow rule's entry and holds it an hour, whatever the move, with no R", () => {
+    const input = benchmark([RISE, FALL, FALL], { a: [LONG, LONG, LONG] })
+    input.events[1] = { ...input.events[1], direction: 'none' }
+    input.events[2] = { ...input.events[2], direction: 'down' }
+    input.bars = { [input.events[0].id]: path(input.events[0].time, RISE), [input.events[1].id]: path(input.events[1].time, FALL), [input.events[2].id]: path(input.events[2].time, FALL) }
+    const hold = summarizeEventBenchmark(input).buyAndHold
+    expect(hold.name).toBe(EVENT_BUY_AND_HOLD)
+    // Bought whatever the move: up, none, and down alike.
+    expect(hold.trades.map((trade) => [trade.side, trade.outcome.status, trade.outcome.exit, trade.outcome.r])).toEqual([
+      ['long', 'closed', 'time', null],
+      ['long', 'closed', 'time', null],
+      ['long', 'closed', 'time', null]
+    ])
+    // In at the open of the first minute after the question, 100, and out an hour on at the close.
+    const costs = { feeRate: FEE_RATE, slippageRate: slippageRateFor(null) }
+    const net = (end: number): number => ((end * (1 - costs.slippageRate) * (1 - costs.feeRate)) / (100 * (1 + costs.slippageRate) * (1 + costs.feeRate)) - 1) * 100
+    expect(hold.trades[0].outcome.netPct).toBeCloseTo(net(RISE), 1)
+    expect(hold.trades[1].outcome.netPct).toBeCloseTo(net(FALL), 1)
+    expect(hold.meanR).toBeNull()
+  })
+
+  it("gives a trade's Sharpe, Sortino and R from thirty closed trades, and none before", () => {
+    const ends = Array.from({ length: 40 }, (_, i) => (i % 4 === 0 ? FALL : RISE))
+    const row = summarizeEventBenchmark(benchmark(ends, { a: ends.map(() => LONG) })).models[0]
+    const nets = row.trades.filter((trade) => trade.outcome.status === 'closed').map((trade) => trade.outcome.netPct as number)
+    expect(nets).toHaveLength(40)
+    const mean = nets.reduce((sum, net) => sum + net, 0) / nets.length
+    const spread = Math.sqrt(nets.reduce((sum, net) => sum + (net - mean) ** 2, 0) / (nets.length - 1))
+    const downside = Math.sqrt(nets.reduce((sum, net) => sum + Math.min(net, 0) ** 2, 0) / nets.length)
+    expect(row.sharpe).toBeCloseTo(mean / spread, 10)
+    expect(row.sortino).toBeCloseTo(mean / downside, 10)
+    expect(row.meanR).toBeCloseTo(row.rSum / 40, 10)
+    const few = summarizeEventBenchmark(benchmark(ends.slice(0, 29), { a: ends.slice(0, 29).map(() => LONG) })).models[0]
+    expect([few.sharpe, few.sortino, few.meanR]).toEqual([null, null, null])
+    // With nothing lost there is no downside to divide by.
+    const allWon = summarizeEventBenchmark(benchmark(ends.map(() => RISE), { a: ends.map(() => LONG) })).models[0]
+    expect(allWon.sortino).toBeNull()
   })
 })
 

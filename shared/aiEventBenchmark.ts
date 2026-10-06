@@ -37,6 +37,13 @@ import type { MarketEvent, MarketEventType } from './marketEvent'
 // models would have traded is a function of answers already held, so it costs nothing to see --
 // and it is shown so the question "does agreement help?" is answered by counting.
 //
+// SO ARE THE QUANT ROWS (the second V3 document, §21 and §61): the app's two strategies, read at
+// each event's moment from their own exports (src/agents/quantState.ts), stand beside the models.
+// "Follow when Trend Regime 4h agrees" takes the follow rule's trade only where the strategy's state
+// is on the move's side; "<model> when Trend Regime 4h agrees" takes the model's own trade only where
+// the strategy agrees with its side -- the hybrid; and "buy and hold an hour" buys every event's
+// pair at the follow rule's entry and holds it an hour, whatever happened: what the market did.
+//
 // NOTHING HERE IS STORED. The answers are in the decision cache and the call ledger; this is
 // recomputed from them and from candles whenever it is looked at.
 
@@ -162,12 +169,31 @@ export interface EventBenchmarkInput {
    * candles, never by a model. Where it is given, results are cut by both; where it is not, they
    * are not. */
   labels?: Record<string, EventLabels>
+  /** What the app's two quant strategies' states were at each event's moment, by event id. Where it
+   * is given, the quant and hybrid rows are worked out; where it is not, they are empty. */
+  quant?: Record<string, EventQuantStates>
   nowSec: number
 }
 
 export interface EventLabels {
   btcRegime: BtcRegime
   company: EventCompany
+}
+
+/** What a quant strategy's state said at an event's moment: the side it is on, 'none' between its
+ * lines, and null where it could not be read (src/agents/quantState.ts). */
+export type QuantSide = OpportunitySide | 'none'
+export const QUANT_IDS = ['trend4h', 'channel15m'] as const
+export type QuantId = (typeof QUANT_IDS)[number]
+export type EventQuantStates = Record<QuantId, QuantSide | null>
+export const QUANT_NAMES: Record<QuantId, string> = { trend4h: 'Trend Regime 4h', channel15m: 'Short-Term Channel 15m' }
+
+export const EVENT_BUY_AND_HOLD = 'Buy and hold an hour (no model)'
+export function quantRuleName(id: QuantId): string {
+  return `Follow when ${QUANT_NAMES[id]} agrees (no model)`
+}
+export function hybridName(model: string, id: QuantId): string {
+  return `${model} when ${QUANT_NAMES[id]} agrees`
 }
 
 export interface EventTrade {
@@ -226,6 +252,12 @@ export interface EventBenchmarkRow {
   meanNetPct: number | null
   /** Gains over losses. Null with no losing trade to divide by, or too few trades. */
   profitFactor: number | null
+  /** R a closed trade. Null under MIN_SCORED_CALLS trades with a stop to measure R by. */
+  meanR: number | null
+  /** A trade's mean net return over their spread, and over the spread of the losing side alone:
+   * per trade, not a year. Null under MIN_SCORED_CALLS, or with nothing to divide by. */
+  sharpe: number | null
+  sortino: number | null
   meanWinPct: number | null
   meanLossPct: number | null
   /** Deepest fall of the running total, in percent of one stake, trades taken in time order. */
@@ -289,6 +321,15 @@ export interface EventBenchmarkSummary {
   baselinesOver: 'compared' | 'sampled'
   /** What combining the models' answers would have traded. Empty with fewer than two models. */
   rules: EventBenchmarkRow[]
+  /** The follow rule taken only where each quant strategy agrees, over the baselines' events.
+   * Empty without the strategies' states. */
+  quant: EventBenchmarkRow[]
+  /** Each model's own trades taken only where each quant strategy agrees with its side, over the
+   * compared events: a model and a strategy a row. Empty without the states. */
+  hybrids: { model: string; quant: QuantId; row: EventBenchmarkRow }[]
+  /** Every event's pair bought at the follow rule's entry and held an hour, over the baselines'
+   * events: what those hours did with no judgement at all. */
+  buyAndHold: EventBenchmarkRow
   /** The time each of the three segments ends, the last being the newest event's. */
   segmentEnds: number[]
 }
@@ -374,6 +415,29 @@ function baselineTrade(input: EventBenchmarkInput, index: number, follow: boolea
     },
     1
   )
+}
+
+/** The pair bought at the follow rule's entry and held an hour: no stop, no target, no side but
+ * up. Its R is null, as it has no stop to measure one by. */
+function holdTrade(input: EventBenchmarkInput, index: number): EventTrade | null {
+  const event = input.events[index]
+  const answeredAt = event.time + REPLAY_ASK_DELAY_SEC
+  const first = (input.bars[event.id] ?? []).find((bar) => bar.time >= answeredAt)
+  if (!first) return null
+  // A stop at nothing and a target at the most a number holds: neither can be reached, so it is out
+  // when its hour is up.
+  const trade = tradeOf(
+    input,
+    index,
+    { time: event.time, side: 'long', entryMin: first.open, entryMax: first.open, stopLoss: 0, takeProfit: Number.MAX_VALUE, expiresAt: first.time + 60, holdSeconds: BASELINE_HOLD_SECONDS, answeredAt },
+    1
+  )
+  return { ...trade, outcome: { ...trade.outcome, r: null } }
+}
+
+/** Whether a quant strategy's state at an event was on `side`. Unread is not agreement. */
+function quantAgrees(input: EventBenchmarkInput, index: number, id: QuantId, side: OpportunitySide): boolean {
+  return input.quant?.[input.events[index].id]?.[id] === side
 }
 
 function holdLabel(seconds: number): string {
@@ -485,6 +549,10 @@ function rowOf(source: RowSource, segmentEnds: number[], cuts: Cuts): EventBench
 
   const rate = closed.length > 0 ? wins.length / closed.length : 0
   const grossLoss = -losses.reduce((sum, net) => sum + net, 0)
+  const rs = closed.map((trade) => trade.outcome.r).filter((r): r is number => r !== null)
+  const mean = enough ? netSumPct / closed.length : null
+  const spread = enough ? Math.sqrt(nets.reduce((sum, net) => sum + (net - netSumPct / closed.length) ** 2, 0) / (closed.length - 1)) : 0
+  const downside = enough ? Math.sqrt(nets.reduce((sum, net) => sum + Math.min(net, 0) ** 2, 0) / closed.length) : 0
   const costs = decisions.filter(isAnswer).map((decision) => decision.usage?.costUsd ?? null)
   const priced = costs.filter((cost): cost is number => cost !== null)
   const costUsd = source.decisions === null || priced.length === 0 ? null : priced.reduce((sum, cost) => sum + cost, 0)
@@ -510,6 +578,9 @@ function rowOf(source: RowSource, segmentEnds: number[], cuts: Cuts): EventBench
     rSum: closed.reduce((sum, trade) => sum + (trade.outcome.r ?? 0), 0),
     meanNetPct: meanOf(nets),
     profitFactor: enough && grossLoss > 0 ? wins.reduce((sum, net) => sum + net, 0) / grossLoss : null,
+    meanR: meanOf(rs),
+    sharpe: mean !== null && spread > 0 ? mean / spread : null,
+    sortino: mean !== null && downside > 0 ? mean / downside : null,
     meanWinPct: enough && wins.length > 0 ? wins.reduce((sum, net) => sum + net, 0) / wins.length : null,
     meanLossPct: enough && losses.length > 0 ? losses.reduce((sum, net) => sum + net, 0) / losses.length : null,
     maxDrawdownPct,
@@ -673,6 +744,61 @@ export function summarizeEventBenchmark(input: EventBenchmarkInput): EventBenchm
           return rowOf({ name, compared: comparedIndices.length, answered: null, decisions: null, trades, withConfidence: false }, segmentEnds, cuts)
         })
 
+  // The quant rows: the follow rule where a strategy agrees with the move, and each model where a
+  // strategy agrees with it. Only with the strategies' states.
+  const quant =
+    input.quant === undefined
+      ? []
+      : QUANT_IDS.map((id) =>
+          rowOf(
+            {
+              name: quantRuleName(id),
+              compared: baselineIndices.length,
+              answered: null,
+              decisions: null,
+              trades: baselineIndices
+                .map((index) => baselineTrade(input, index, true))
+                .filter((trade): trade is EventTrade => trade !== null && quantAgrees(input, trade.index, id, trade.side)),
+              withConfidence: false
+            },
+            segmentEnds,
+            cuts
+          )
+        )
+  const hybrids =
+    input.quant === undefined
+      ? []
+      : models.flatMap((row) =>
+          QUANT_IDS.map((id) => ({
+            model: row.name,
+            quant: id,
+            row: rowOf(
+              {
+                name: hybridName(row.name, id),
+                compared: comparedIndices.length,
+                answered: null,
+                decisions: null,
+                trades: row.trades.filter((trade) => quantAgrees(input, trade.index, id, trade.side)),
+                withConfidence: true
+              },
+              segmentEnds,
+              cuts
+            )
+          }))
+        )
+  const buyAndHold = rowOf(
+    {
+      name: EVENT_BUY_AND_HOLD,
+      compared: baselineIndices.length,
+      answered: null,
+      decisions: null,
+      trades: baselineIndices.map((index) => holdTrade(input, index)).filter((trade): trade is EventTrade => trade !== null),
+      withConfidence: false
+    },
+    segmentEnds,
+    cuts
+  )
+
   // What each model changed about the rule. Only over compared events: with nothing compared the
   // rule's rows cover every sampled event, and there is no model's choice to set against them.
   const less = (a: number | null, b: number | null): number | null => (a === null || b === null ? null : a - b)
@@ -716,7 +842,7 @@ export function summarizeEventBenchmark(input: EventBenchmarkInput): EventBenchm
           }
         })
 
-  return { sampled: input.events.length, compared: comparedIndices.length, models, contributions, baselines, baselinesOver, rules, segmentEnds }
+  return { sampled: input.events.length, compared: comparedIndices.length, models, contributions, baselines, baselinesOver, rules, quant, hybrids, buyAndHold, segmentEnds }
 }
 
 export const ROLLING_TRADE_COUNTS = [10, 50, 100] as const

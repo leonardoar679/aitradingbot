@@ -1,6 +1,6 @@
 import { ipcMain, type BrowserWindow } from 'electron'
 import { IpcChannel } from '../../../shared/ipc'
-import { getNewsFeedState, onNewsFeedUpdate, openStoryLink } from '../../services/newsFeedService'
+import { getNewsFeedState, newsHistory, onNewsFeedUpdate, openStoryLink } from '../../services/newsFeedService'
 
 // The news feed (the second V3 document, §11-14). Nothing here can spend money or place an order:
 // the stories are public feeds and Binance's announcements, these channels show them, and a story's
@@ -13,4 +13,5 @@ export function registerNewsFeedHandlers(mainWindow: BrowserWindow): void {
 
   ipcMain.handle(IpcChannel.FeedGetState, () => getNewsFeedState())
   ipcMain.handle(IpcChannel.FeedOpenLink, (_event, url: unknown) => openStoryLink(url))
+  ipcMain.handle(IpcChannel.FeedHistory, (_event, fromSec: unknown, toSec: unknown) => newsHistory(fromSec, toSec))
 }

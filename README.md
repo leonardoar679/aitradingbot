@@ -43,12 +43,12 @@ other.
 | | **Markets** | One pair on any supported exchange: candlestick chart with indicators, symbol search, live ticker. Below it, **Movers**: the liquid USDT pairs that moved most over the day and over the week, by volume against their week, and CoinGecko's trending list, from the [market research](#market-research-when-the-app-opens); a row opens its chart. **Why did it move?** for the chart's pair, by [fixed rules](#news--market-events). |
 | | **AI Decisions** | **Analyze** asks a model about one market; **Signals** lists every call any model has made and how it turned out. A model is handed a market snapshot and returns one JSON decision, and is given no tools at all. |
 | | **Positions** | Live paper positions for active bots; a **Live Positions** table of real Binance holdings from live-mode Order Executor fills, closable (fully or partially) for real; a **Live Trade History** table of realized P&L from closed live positions; an **Inventory** table of positions handed over from stopped paper executors (see [Position Handover](#position-handover--inventory)). |
-| | **Performance** | Total value, active-bot count, bot P&L and system cards; the portfolio's value over time (value/composition, 1D/1W/1M/3M) and its largest holdings; what the watch's recommendations earned, in percent and in R, over the last 10/50/100 trades and 7/30 days; the app's own paper trades, the watch's and the news rules', as a running total in R; the journal of every recommendation with its outcome, exportable as CSV, where any line opens [its whole story](#one-trades-whole-story) on one timeline. |
+| | **Performance** | Total value, active-bot count, bot P&L and system cards; the portfolio's value over time (value/composition, 1D/1W/1M/3M) and its largest holdings; what the watch's recommendations earned, in percent and in R, over the last 10/50/100 trades and 7/30 days, and whether they beat the [quant strategies](#does-ai-help-the-models-against-the-quant-strategies) on the same events; the app's own paper trades, the watch's and the news rules', as a running total in R; the journal of every recommendation with its outcome, exportable as CSV, where any line opens [its whole story](#one-trades-whole-story) on one timeline. |
 | Trading | **Paper Trading** | The paper account paper strategies spend and hand back (fund it, balances, movements), and a manual paper order ticket — market/limit, live last price, session-only order history. Nothing here reaches an exchange. |
 | | **Live Trading** | Real money: the session's gates as they stand (armed, kill switch, the day's notional and loss, the managed allocation, exits being watched), and what you hold on each connected exchange, with Binance futures positions closable for real. |
 | | **Strategies** | **Active Runs**: a bot is a single continuous dry-run of a [chosen strategy](#strategies) against one exchange/symbol, optionally with a model asked to [confirm each entry](#ai-signals--paper-only); disabling one records a run, removing one archives it. **Execution**: the eight executor types, each running independently against live candles, the starter presets, and the New Executor form a call's filled-in form opens on — see [Executors](#executors) below. |
 | Research | **Backtest & Research** | **Backtest** runs a chosen strategy over a historical range and shows full stats, equity curve vs. buy-and-hold, monthly breakdown and a trade log; its **Live** view monitors the same route continuously ([Live strategy monitor](#live-strategy-monitor)), **Charts** replays each trade against the candles, and **Compare Strategies** ranks every registered strategy over the same candles. An optional tick box has a model [confirm each entry](#ai-signals--paper-only). Both views export CSV, JSON and a PNG. **Automation** re-runs saved backtests on a schedule while the app is open, each run keeping a session-only report. |
-| | **AI Benchmark** | Several models on the same questions, scored side by side: on candles, and on the events the scanner raised, with the no-model rows beside them and every run kept as an experiment that can be reopened for nothing. |
+| | **AI Benchmark** | Several models on the same questions, scored side by side: on candles, and on the events the scanner raised, with the no-model rows beside them — following, fading and holding every event, and the [quant strategies](#does-ai-help-the-models-against-the-quant-strategies) where they agree — and **Does AI help?**, the models against the quant strategies with three verdicts. Every run is kept as an experiment that can be reopened for nothing. |
 | | **Discovery** | Two tabs. **Market scanner**: once a minute it reads the most traded USDT pairs on Binance and says what is moving, scores each the same way, and records the moves that qualify as events — see [Discovery](#discovery--a-market-scanner). Public market data only: no key, no model, no order. It is switched on, and its pairs chosen, under Settings › Market. **News & Market Events**: four free news feeds and Binance's announcements, each story with its coins, kind, impact and what the price did after, filtered by coin or by Major alerts, and what each kind of story has done once 30 are in — see [News & market events](#news--market-events); a count on Discovery in the sidebar says how many new alerts it holds. Below the stories, [Binance's own announcements](#binances-announcements-on-discovery) — delistings, Monitoring Tags, futures launches, listings — as they are released, with what each kind did to prices. The reader is switched on under Settings › Market too, with what a delisting or a tag does: a notice if you hold the coin, a paper short by the kind's rule, a question to the watch's models. |
 | System | **Risk & Safety** | The live trading limits every real order is checked against (largest order, the day's notional, the day's loss, the managed allocation); the size of the paper trades the app opens by itself, the watch's and the news rules' (sized by what their stop would lose, and capped in what they stake together), the losing run in R that pauses them until resumed, the cap on what they stake on one side on coins that move with Bitcoin, and a daily notice of what they did; and the controller groups: executors under a shared stop-loss, take-profit and maximum drawdown with a P&L snapshot every 5 minutes, all stopped on a breach. Arming and the kill switch stay on the bar at the top of every page. |
 | | **Connections** | Every key the app holds: Binance and Upbit ([Credentials](#credentials--api-keys)), and the OpenRouter key for the AI models. Each is tested before it is stored, stored encrypted, and never read back into the window. |
@@ -407,6 +407,62 @@ feeds, with four faked events and answers on real prices:
 - **Overview** led with XRPUSDT, and its signal.
 - **The correlations with Bitcoin** read that day, over seven days of hours: SOL 0.87, DOGE 0.78,
   XRP 0.77, and PAX Gold 0.45.
+
+### Does AI help? The models against the quant strategies
+
+Since 6 October 2026 (the second V3 document's §21, §33 and §61, its central question), the event
+benchmark on AI Benchmark and the live leaderboard on Performance set the models against the app's
+two quant strategies, on the same events. It is worked out from answers already held, and nothing
+more is asked of a model.
+
+**The strategies' state at each event** is read from their own exports, as the live strategy
+monitor reads it (`src/agents/quantState.ts`):
+- **Trend Regime, on 4-hour bars:** on the long side where all four of its averages agree, and on
+  the short side where one or none does.
+- **Short-Term Channel, on 15-minute bars:** long at the top of its channels (95%), short at the
+  bottom (25%).
+- **Only what had closed:** only bars closed before the event are read, and none before the
+  strategy's own warm-up has passed.
+- **Each pair's bars are read once:** one request of 4-hour bars and a few of 15-minute bars.
+
+**New rows** sit beside "follow" and "fade":
+- **Quant:** the follow rule's trade, only where the strategy is on the move's side.
+- **Hybrid:** each model's own trades, only where the strategy is on its side.
+- **Buy and hold an hour:** every event's pair, bought at the follow rule's entry and held an hour,
+  whatever the move did.
+
+Every row now carries R a trade, and a trade's Sharpe and Sortino.
+
+**Does AI help?** is a card on both pages. For one model it sets Quant, Buy and hold, AI and Hybrid
+side by side. Each row has its closed trades, won, gains ÷ losses, net and R a trade, deepest fall,
+Sharpe and Sortino. Three verdicts follow (`shared/aiHelp.ts`):
+- **Did the model improve each strategy?** The hybrid, against the quant rule it is built on.
+- **Did news help?** The model's trades on events where a fresh story named the coin in the three
+  hours before and pointed the trade's way, against its trades on events no story named. The
+  stories are the feed's files (`feed:history`), kept since the app began reading the feeds on
+  6 October 2026. An event from before them is left out.
+- **Did the live price help?** The model's trades on events whose spread, as the scanner saw it,
+  was within the 0.1% the live check enters at, against those on a wider spread, which the check
+  refuses.
+
+Each verdict compares net return a trade. It says:
+- **yes** only when the difference is larger than the 95% margin around it;
+- **no** when it is smaller, or inside the noise;
+- **not enough trades** until each side has 30 closed trades.
+
+The lines were written down before any result was looked at.
+
+**The strategies on their own:** beside the verdicts, each strategy is run through the backtest
+engine over the same pairs and window, warmed up first, next to holding the pairs.
+
+Checked on 6 October 2026 on a separate build and a scratch profile, with twelve faked watch
+answers on real past events (2–4 October; SOL, XRP, ETH, DOGE):
+- **Score them** read each event's minutes, both strategies' bars for the four pairs, and the 112
+  stories on file.
+- **The card** showed the six rows, and every verdict at "not enough trades": 8 trades a side with
+  Trend Regime, 1 with the channel, 0 against 12 for news, and 9 against 3 for the live price.
+- **On their own over the 30 days**, Trend Regime 4h made +7.15% on the four pairs (4 trades)
+  against +8.01% for holding them. Short-Term Channel 15m made −0.84% (8 trades) against +7.62%.
 
 ### Discovery — a market scanner
 
@@ -1860,7 +1916,7 @@ electron/preload.ts  ── contextBridge ──▶  window.api.*  (renderer)
       │                                                   (public market data and CoinGecko's free list)
       ├── news.*  (Binance's announcements)           → electron/services/newsService.ts
       │                                                   (two public lists; no key, model or order)
-      ├── feed.*  (four news feeds, reactions, Open)  → electron/services/newsFeedService.ts
+      ├── feed.*  (four news feeds, reactions, Open, history) → electron/services/newsFeedService.ts
       │                                                   (free RSS and Binance's list; no key, model or order)
       ├── ai.*  (key, models, budget, signals, ledger) → electron/services/aiSignalService.ts
       │                                                   + openRouterClient.ts + aiConfigService.ts
@@ -3001,6 +3057,7 @@ shared/                       Code both processes run, so they cannot disagree a
   marketResearch.ts           What the app studies as it opens: the liquid pairs, a day's and a week's movers, trending, the market's status and its regime
   liveMarket.ts               The live price against a recommendation: spread, age, an execution score, and enterable, waiting or invalidated
   opportunityScore.ts         The signal score of an opportunity: seven parts by fixed weights and three penalties, shown part by part
+  aiHelp.ts                   "Does AI help?": quant, AI, hybrid and holding side by side, and three verdicts by a 95% margin and a 30-trade floor
   paperExposure.ts            A pair's hourly correlation with Bitcoin, and the cap on what the app's own paper trades stake on one side on pairs that track it
   newsTitles.ts, news.ts      Which kind of news a Binance title is, and which coins it names (the study's patterns); what the reader keeps of each article, and what each kind did
   newsFeed.ts                 The news feeds read: RSS, a story's coins, kind, credibility and impact, the same story from several sources, what the price did after, and what each kind has done
@@ -3051,6 +3108,8 @@ src/                          React renderer app
                               trades, opened and settled);
                               opportunityTable.ts + OpportunityTableCard (the Opportunities table: what
                               is on offer and the last hour's other events, with their scores);
+                              quantState.ts + AiHelpCard (the two strategies' state at each event, read
+                              from their own exports, and "Does AI help?");
                               liveBoard.ts (the watch's answers joined to their events, for the leaderboard);
                               journal.ts (every recommendation as a line, its filters and its spreadsheet);
                               watchTradeRecords.ts + TradeTimeline (one trade's records, read by

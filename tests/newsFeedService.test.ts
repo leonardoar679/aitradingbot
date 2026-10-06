@@ -48,7 +48,7 @@ vi.mock('../electron/services/newsService', () => ({
   onNewsUpdate: () => () => undefined
 }))
 
-import { getNewsFeedState, openStoryLink, startNewsFeed } from '../electron/services/newsFeedService'
+import { getNewsFeedState, newsHistory, openStoryLink, startNewsFeed } from '../electron/services/newsFeedService'
 
 const rss = (items: { title: string; link: string; guid?: string; at: number; description?: string }[]): string =>
   `<?xml version="1.0"?><rss version="2.0"><channel>${items
@@ -165,6 +165,36 @@ describe('the news feed', () => {
     expect(state.impact).toEqual([{ eventType: 'ETF', stories: 1, enough: false, medianPct: null, shareUp1h: null }])
     // The delisting is measured too; the older story names no coin.
     expect(rig.requests.some((request) => request.startsWith('PEPEUSDT 1m'))).toBe(true)
+  })
+
+  it('reads the stories on file over a span, as marks, from the months it covers and no further back than 35 days', async () => {
+    const SEPT_AT = Date.parse('2026-09-20T00:00:00Z') / 1000
+    const AUG_AT = Date.parse('2026-08-25T00:00:00Z') / 1000
+    const at = (title: string, when: number, month: string): FeedStory => {
+      const story = toStory({ title, link: `https://www.coindesk.com/${when}`, guid: `g-${when}`, pubDate: new Date(when * 1000).toUTCString(), description: '' }, FEED_SOURCES[0], when) as FeedStory
+      writeFileSync(join(rig.dir, 'news', `feed-${month}.jsonl`), `${JSON.stringify(story)}
+`)
+      return story
+    }
+    const sept = at('Hackers drain a SOL bridge', SEPT_AT, '2026-09')
+    const aug = at('Bitcoin ETF approved', AUG_AT, '2026-08')
+    const marks = await newsHistory(NOW - 3 * 86_400, NOW)
+    expect(marks.map((mark) => [mark.publishedAt, mark.tickers, mark.eventType])).toEqual([
+      [OLD_AT, [], 'OTHER'],
+      [BTC_AT, ['BTC'], 'ETF'],
+      [SOL_AT, ['SOL'], 'LISTING'],
+      [SOL_AT + 300, ['SOL'], 'LISTING']
+    ])
+    // Back into September: that month's file is read too, and nothing older than 35 days.
+    const longer = await newsHistory(AUG_AT - 60, NOW)
+    expect(longer.map((mark) => mark.id)).toContain(sept.id)
+    expect(longer.find((mark) => mark.id === sept.id)).toMatchObject({ tickers: ['SOL'], eventType: 'HACK', stale: false })
+    expect(longer.map((mark) => mark.id)).not.toContain(aug.id)
+    expect((await newsHistory(AUG_AT - 60, AUG_AT + 60)).map((mark) => mark.id)).toEqual([aug.id])
+    // Anything that is not two times in order reads as nothing.
+    expect(await newsHistory(NOW, NOW - 1)).toEqual([])
+    expect(await newsHistory('then', NOW)).toEqual([])
+    expect(await newsHistory(Number.NaN, NOW)).toEqual([])
   })
 
   it("opens a story's link only on https and on a feed's own host", async () => {

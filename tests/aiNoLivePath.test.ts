@@ -559,6 +559,33 @@ describe('AI code has no route to a real order', () => {
     expect(card).not.toMatch(/liveTrading|placeLive|window\.api\.(executors|ai|credentials)/)
   })
 
+  it('"Does AI help?" counts trades already scored, with the strategies read from their own exports', () => {
+    // Since 6 October 2026 (the second V3 document, §21 and §61): the quant and hybrid rows and the
+    // three verdicts are worked out from answers already held, public candles and the stories on
+    // file. Nothing here asks a model, and nothing here trades.
+    const help = join(ROOT, 'shared', 'aiHelp.ts')
+    expect(importsOf(help).sort()).toEqual(['aiEventBenchmark', 'aiOutcome', 'liveMarket', 'marketEvent', 'newsFeed'])
+    expect(readFileSync(help, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron\//)
+    // The strategies' state is read from their exports, as the live strategy monitor reads it; and the
+    // file that reads it reaches nothing through the bridge.
+    const quant = join(ROOT, 'src', 'agents', 'quantState.ts')
+    expect(importsOf(quant).sort()).toEqual(['aiEventBenchmark', 'engine', 'ipc', 'marketEvent', 'shortTermChannel', 'trendRegimeEnsemble'])
+    const quantSource = readFileSync(quant, 'utf-8')
+    expect(quantSource).not.toMatch(/window\.api|liveTrading|placeLive|onPrepareOrder/)
+    expect(quantSource).toContain('regimeAgreement(bars, QUANTS.trend4h.barSeconds) : channelPositionSeries(bars)')
+    expect(readFileSync(join(ROOT, 'src', 'agents', 'AiHelpCard.tsx'), 'utf-8')).not.toMatch(/window\.api|onPrepareOrder|aiProposal/)
+    // The stories on file are read for it by the two pages that score, and by nothing else.
+    const walk = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+        entry.isDirectory() ? walk(join(dir, entry.name)) : /\.tsx?$/.test(entry.name) ? [join(dir, entry.name)] : []
+      )
+    const historyReaders = walk(join(ROOT, 'src'))
+      .filter((path) => /window\.api\.feed\.history\(/.test(readFileSync(path, 'utf-8')))
+      .map((path) => path.slice(ROOT.length + 1).replace(/\\/g, '/'))
+      .sort()
+    expect(historyReaders).toEqual(['src/agents/EventBenchmarkView.tsx', 'src/agents/LiveBoardCard.tsx'])
+  })
+
   it('the opportunity score ranks and the cap on one side refuses; both are arithmetic', () => {
     // Since 6 October 2026 (the second V3 document, §20-24): shared/opportunityScore.ts ranks what is
     // on offer by fixed weights, and nothing is opened or refused by it; shared/paperExposure.ts

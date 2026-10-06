@@ -39,10 +39,10 @@ Taken on 5 October 2026, at commit `aef376d`.
 | | Opportunities › Watch | Puts events to models with no click; its paper trades | Opportunities |
 | | Opportunities › Right now | Recommendations still valid, ranked; since 6 October 2026 a table with the last hour's other events, a signal and an execution score, and a row that opens the plan, the risk, the news and each model's reasoning | Opportunities, and the top one on Overview |
 | | Opportunities › Models to ask, Events | Each event with its answers, Ask and Paper trade | Opportunities |
-| | Opportunities › What the watch's recommendations earned | The live board over the last 10/50/100 trades and 7/30 days | Performance |
+| | Opportunities › What the watch's recommendations earned | The live board over the last 10/50/100 trades and 7/30 days; since 6 October 2026 with "Does AI help?" | Performance |
 | | Opportunities › Journal | Every recommendation with its outcome, CSV export | Performance |
 | | Signals › Call history | Every call and how it turned out | AI Decisions |
-| | Benchmark | Models on the same questions, routes, the event benchmark, experiments | AI Benchmark |
+| | Benchmark | Models on the same questions, routes, the event benchmark, experiments; since 6 October 2026 the quant, hybrid and buy-and-hold rows and "Does AI help?" | AI Benchmark |
 | | Models | Which models may be asked, the default, routing to a second model | Settings › AI |
 | | Usage | Daily budget, pace, spend by model today and over 30 days | Settings › AI |
 | **Routines** | New Routine, list, Reports | Backtests re-run on a schedule while the app is open | Backtest & Research › Automation |
@@ -161,7 +161,7 @@ reaches it. A call may span lines. The `news` channels were added after: four in
 | `scanner` | 8: state, config, events, history scan, universe, updates | Explorer, Opportunities, the watch, the event benchmark, the live board, Journal |
 | `research` | 3 (added 6 October 2026): state, read again, updates | Overview's market status and Markets' movers, through `useMarketResearch`. Nothing else reads it (`tests/aiNoLivePath.test.ts`) |
 | `news` | 5: state, config, list, updates, the rules' record (with the two near misses, from Binance's lists and Upbit's) | Discovery's announcements card and its record of the news rules, Settings › Market, and `NewsScheduler` (what a delisting or a tag does). Nothing else reads it (`tests/aiNoLivePath.test.ts`) |
-| `feed` | 3 (added 6 October 2026): state, updates, open a story's link (https on a feed's own host only) | Discovery's News & Market Events tab, "Why did it move?", and `NewsAlertScheduler`, through `useNewsFeed`. Nothing else reads it (`tests/aiNoLivePath.test.ts`) |
+| `feed` | 4 (added 6 October 2026): state, updates, open a story's link (https on a feed's own host only), and the stories on file over a span | Discovery's News & Market Events tab, "Why did it move?", and `NewsAlertScheduler`, through `useNewsFeed`; the history by the event benchmark and the live leaderboard, for "Does AI help?". Nothing else reads it (`tests/aiNoLivePath.test.ts`) |
 | `credentials` | 10: list, set, test, remove, balances, futures positions, close, stops | Settings, Account, the live trading bar, New Executor, the ledger check |
 | `ai` | 22: key, signal tapes, config, calls, usage, entry confirmation, benchmark, opportunities, experiments | Agents' tabs, Backtest, Bots, the watch |
 | `liveTrading` | 19: status, limits, kill switch, arm, positions, orders, watchers, TWAP | The live trading bar, Settings, Executors, Positions, `LiveOrderScheduler`, Portfolio |

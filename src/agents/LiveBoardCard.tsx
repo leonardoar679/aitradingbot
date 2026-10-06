@@ -1,18 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Card } from '../components/Card'
 import { summarizeEventBenchmark } from '../../shared/aiEventBenchmark'
+import { AI_HELP_NEWS_SECONDS, eventNewsOf } from '../../shared/aiHelp'
 import { describeDecider } from '../../shared/aiPanel'
 import type { Candle } from '../../shared/ipc'
+import type { StoryMark } from '../../shared/newsFeed'
 import { describeError } from '../utils/ipcError'
 import { buttonStyle, noteStyle } from './agentStyles'
+import { AiHelpCard } from './AiHelpCard'
 import { ContributionTable, CostTable, ExitsTable, ResultsTable, RollingTable } from './EventTables'
 import { LIVE_BOARD_DAYS, loadLiveBars, readLiveAnswers, type LiveAnswers, type LiveBoardDeps } from './liveBoard'
+import { loadQuantData, quantBacktests, type QuantData, type QuantFetch } from './quantState'
 
 const deps: LiveBoardDeps = {
   listCalls: (filter) => window.api.ai.listCalls(filter),
   listEvents: (filter) => window.api.scanner.listEvents(filter),
   fetchCandles: async (exchange, symbol, interval, startSec, endSec) => (await window.api.market.fetchHistoricalRange(exchange, symbol, interval, startSec, endSec)).candles
 }
+
+const quantFetch: QuantFetch = async (exchange, symbol, interval, startSec, endSec) => (await window.api.market.fetchHistoricalRange(exchange, symbol, interval, startSec, endSec)).candles
 
 /** What the watch's recommendations earned, per model: the benchmark's tables over the events
  * the watch asked about live (./liveBoard.ts).
@@ -32,6 +38,10 @@ export function LiveBoardCard({
 }): React.JSX.Element | null {
   const [live, setLive] = useState<LiveAnswers | null>(null)
   const [bars, setBars] = useState<Record<string, Candle[]> | null>(null)
+  // The two quant strategies' states at each event and their own runs, and the stories on file:
+  // read with the candles, for "Does AI help?".
+  const [quant, setQuant] = useState<{ data: QuantData; window: { startSec: number; endSec: number } } | null>(null)
+  const [marks, setMarks] = useState<StoryMark[] | null>(null)
   const [progress, setProgress] = useState<string | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
   const stop = useRef(false)
@@ -66,10 +76,20 @@ export function LiveBoardCard({
     () =>
       live === null || bars === null
         ? null
-        : summarizeEventBenchmark({ events: live.events, models, answers: live.answers, answeredAt: live.answeredAt, bars, nowSec: Math.floor(Date.now() / 1000) }),
+        : summarizeEventBenchmark({
+            events: live.events,
+            models,
+            answers: live.answers,
+            answeredAt: live.answeredAt,
+            bars,
+            quant: quant?.data.states,
+            nowSec: Math.floor(Date.now() / 1000)
+          }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `models` is what `live` was read for
-    [live, bars]
+    [live, bars, quant]
   )
+  const news = useMemo(() => (live === null || marks === null ? null : eventNewsOf(live.events, marks)), [live, marks])
+  const backtests = useMemo(() => (quant === null ? null : quantBacktests(quant.data, quant.window, Math.floor(Date.now() / 1000))), [quant])
 
   async function score(): Promise<void> {
     if (live === null || progress !== null) return
@@ -77,11 +97,25 @@ export function LiveBoardCard({
     setProblem(null)
     setProgress('Reading what followed each event…')
     try {
-      const fetched = await loadLiveBars(live.events, Math.floor(Date.now() / 1000), deps.fetchCandles, {
+      const nowSec = Math.floor(Date.now() / 1000)
+      const fetched = await loadLiveBars(live.events, nowSec, deps.fetchCandles, {
         shouldStop: () => stop.current,
         onProgress: (done, total) => setProgress(`Reading what followed each event: ${done} of ${total}`)
       })
-      if (!stop.current) setBars(fetched)
+      if (stop.current) return
+      setBars(fetched)
+      const span = { startSec: nowSec - LIVE_BOARD_DAYS * 86_400, endSec: nowSec }
+      const data = await loadQuantData(live.events, span, quantFetch, {
+        shouldStop: () => stop.current,
+        onProgress: (done, total) => setProgress(`Reading the two strategies at each event: ${done} of ${total} pairs`)
+      })
+      if (stop.current) return
+      setQuant({ data, window: span })
+      try {
+        setMarks(await window.api.feed.history(span.startSec - AI_HELP_NEWS_SECONDS, nowSec))
+      } catch {
+        setMarks(null)
+      }
     } catch (failure) {
       setProblem(describeError(failure))
     } finally {
@@ -124,8 +158,9 @@ export function LiveBoardCard({
           {summary !== null && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.9rem' }}>
               <ResultsTable title="Model" rows={summary.models} models />
+              {quant !== null && <AiHelpCard summary={summary} events={live.events} news={news} backtests={backtests} failedPairs={quant.data.failed.length} />}
               <RollingTable rows={[...summary.models, ...summary.baselines]} nowSec={Math.floor(Date.now() / 1000)} />
-              <ResultsTable title="Rule" rows={[...summary.baselines, ...summary.rules]} models={false} />
+              <ResultsTable title="Rule" rows={[...summary.baselines, summary.buyAndHold, ...summary.quant, ...summary.rules]} models={false} />
               {summary.contributions.length > 0 && <ContributionTable contributions={summary.contributions} models={summary.models} />}
               <ExitsTable rows={[...summary.models, ...summary.baselines, ...summary.rules]} />
               <CostTable rows={summary.models} />

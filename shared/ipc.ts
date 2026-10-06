@@ -43,6 +43,7 @@ export const IpcChannel = {
   FeedGetState: 'feed:getState',
   FeedUpdate: 'feed:update',
   FeedOpenLink: 'feed:openLink',
+  FeedHistory: 'feed:history',
   NewsGetState: 'news:getState',
   NewsSetConfig: 'news:setConfig',
   NewsList: 'news:list',

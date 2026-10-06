@@ -28,7 +28,7 @@ import type {
 } from '../shared/marketScanner'
 import type { ResearchState } from '../shared/marketResearch'
 import type { LiveBook, LiveState } from '../shared/liveMarket'
-import type { NewsFeedState } from '../shared/newsFeed'
+import type { NewsFeedState, StoryMark } from '../shared/newsFeed'
 import type { NewsConfigPatch, NewsFilter, NewsPage, NewsState } from '../shared/news'
 import type { NewsRecord } from '../shared/newsRecord'
 import {
@@ -138,13 +138,13 @@ const api = {
       return () => ipcRenderer.removeListener(IpcChannel.ScannerHistoryProgress, handler)
     }
   },
-  // Binance's announcements. Everything here reads its public list or the file the reader wrote:
-  // none of it reaches a model, a key or an order.
   // The news feed: four free media feeds and Binance's announcements, as stories, with what the price
-  // did around each. Public data; a link opens only on the feeds' own hosts.
+  // did around each. Public data; a link opens only on the feeds' own hosts. `history` reads the
+  // stories on file over a span, for measuring what news did.
   feed: {
     getState: (): Promise<NewsFeedState> => ipcRenderer.invoke(IpcChannel.FeedGetState),
     openLink: (url: string): Promise<boolean> => ipcRenderer.invoke(IpcChannel.FeedOpenLink, url),
+    history: (fromSec: number, toSec: number): Promise<StoryMark[]> => ipcRenderer.invoke(IpcChannel.FeedHistory, fromSec, toSec),
     onUpdate: (listener: (state: NewsFeedState) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, state: NewsFeedState): void => listener(state)
       ipcRenderer.on(IpcChannel.FeedUpdate, handler)
@@ -162,6 +162,8 @@ const api = {
       return () => ipcRenderer.removeListener(IpcChannel.ResearchUpdate, handler)
     }
   },
+  // Binance's announcements. Everything here reads its public list or the file the reader wrote:
+  // none of it reaches a model, a key or an order.
   news: {
     getState: (): Promise<NewsState> => ipcRenderer.invoke(IpcChannel.NewsGetState),
     setConfig: (patch: NewsConfigPatch): Promise<NewsState> => ipcRenderer.invoke(IpcChannel.NewsSetConfig, patch),

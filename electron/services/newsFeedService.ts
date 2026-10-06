@@ -10,11 +10,13 @@ import {
   FEED_SOURCES,
   NEWS_FEED_VERSION,
   REACTION_FINAL_SECONDS,
+  STORY_HISTORY_MAX_SECONDS,
   assetDictionary,
   foldSameStories,
   impactByType,
   parseRss,
   readStory,
+  storyMark,
   storyReaction,
   toStory,
   type AssetDictionary,
@@ -22,6 +24,7 @@ import {
   type FeedStory,
   type NewsFeedState,
   type ReadStory,
+  type StoryMark,
   type StoryReaction
 } from '../../shared/newsFeed'
 import { appendJsonLine, listMonthFiles } from './jsonlStore'
@@ -249,6 +252,33 @@ const readFeeds = singleFlight(async (): Promise<void> => {
   await rebuild()
   await measureReactions()
 }, () => undefined)
+
+/** The media feeds' stories published between `fromSec` and `toSec` (at most
+ * STORY_HISTORY_MAX_SECONDS, the newest kept), read from the files on disk with the coin dictionary,
+ * as marks: for measuring what news did (shared/aiHelp.ts). Anything that is not two times in order
+ * reads as nothing. It reads; nothing acts on it. */
+export async function newsHistory(fromSec: unknown, toSec: unknown): Promise<StoryMark[]> {
+  if (typeof fromSec !== 'number' || typeof toSec !== 'number' || !Number.isFinite(fromSec) || !Number.isFinite(toSec) || toSec < fromSec) return []
+  const from = Math.max(fromSec, toSec - STORY_HISTORY_MAX_SECONDS)
+  try {
+    await ensureDictionary()
+  } catch {
+    return []
+  }
+  const credibility = new Map<string, number>(FEED_SOURCES.map((source) => [source.id, source.credibility]))
+  const marks: StoryMark[] = []
+  const kept = new Set<string>()
+  for (const { name, month } of await listMonthFiles(newsDir(), FEED_FILE)) {
+    if (month < monthKey(from) || month > monthKey(toSec)) continue
+    for (const row of await readLines(name)) {
+      if (!isStory(row) || kept.has(row.id) || row.publishedAt < from || row.publishedAt > toSec) continue
+      kept.add(row.id)
+      const seenAt = typeof row.seenAt === 'number' && Number.isFinite(row.seenAt) ? row.seenAt : row.publishedAt
+      marks.push(storyMark(readStory({ ...row, seenAt }, dictionary as AssetDictionary, credibility.get(row.source) ?? 0.5, seenAt)))
+    }
+  }
+  return marks.sort((a, b) => a.publishedAt - b.publishedAt || a.id.localeCompare(b.id))
+}
 
 /** Opens a story's link in the browser: https, on a feed's own host, and nothing else. */
 export async function openStoryLink(url: unknown): Promise<boolean> {

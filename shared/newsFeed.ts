@@ -61,6 +61,24 @@ export const BINANCE_SOURCE: Omit<FeedSource, 'url'> = { id: 'binance', name: 'B
 export const FEED_HOSTS: readonly string[] = ['www.coindesk.com', 'coindesk.com', 'www.theblock.co', 'theblock.co', 'cointelegraph.com', 'decrypt.co', 'www.binance.com']
 
 export type NewsEventType = 'HACK' | 'DELISTING' | 'LISTING' | 'ETF' | 'REGULATION' | 'TOKEN_UNLOCK' | 'MACRO' | 'UPGRADE' | 'PARTNERSHIP' | 'OTHER'
+
+/** A story as the history keeps it for measuring what news did (shared/aiHelp.ts): the coins it
+ * named, when, its kind, and whether it was old news when read. */
+export interface StoryMark {
+  id: string
+  publishedAt: number
+  tickers: string[]
+  eventType: NewsEventType
+  stale: boolean
+}
+
+/** The longest span the history is read over at once: a little more than the live board's month. */
+export const STORY_HISTORY_MAX_SECONDS = 35 * 86_400
+
+/** A story read, as a mark. */
+export function storyMark(story: Pick<ReadStory, 'id' | 'publishedAt' | 'assets' | 'eventType' | 'stale'>): StoryMark {
+  return { id: story.id, publishedAt: story.publishedAt, tickers: story.assets.map((asset) => asset.ticker), eventType: story.eventType, stale: story.stale }
+}
 export type Relationship = 'DIRECT' | 'INDIRECT'
 
 export interface RawFeedItem {
