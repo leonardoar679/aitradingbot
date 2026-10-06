@@ -424,3 +424,58 @@ describe('computePortfolioSnapshot includes account cash', () => {
     expect(snap.totalValue).toBeCloseTo(1_100, 10)
   })
 })
+
+// What the positions in the total cost from outside it: with no paper account a paper position's
+// stake enters the total when it opens, as a real position's always does. Overview reads what the
+// positions made as the total less this (src/overview/portfolioValueLine.ts).
+describe('computePortfolioSnapshot says what came from outside the total', () => {
+  it("counts a paper position's stake with no paper account, and says there is none", async () => {
+    prices = { 'binance:BTCUSDT': 110 }
+    settings.executors = [executor('running')]
+    positions.set('running', { side: 'buy', entryPrice: 100, amountQuote: 1_000 })
+    settings.heldPositions = [{ exchange: 'binance', symbol: 'BTCUSDT', baseAsset: 'BTC', quoteAsset: 'USDT', side: 'buy', entryPrice: 100, amountQuote: 300 }]
+
+    const snap = await computePortfolioSnapshot()
+
+    expect(snap).toMatchObject({ hasPaperAccount: false, costOutsideQuote: 1_300 })
+    expect(snap.totalValue - snap.costOutsideQuote).toBeCloseTo(130, 10)
+  })
+
+  it('counts none of it with a paper account, whose cash the stake was held back from', async () => {
+    prices = { 'binance:BTCUSDT': 110 }
+    settings.paperAccount = { balances: { USDT: 10_000 }, initialBalances: { USDT: 10_000 }, createdAt: 1_700_000_000, ledger: [] }
+    settings.executors = [executor('running', { params: { side: 'buy', amountQuote: 1_000 } } as never)]
+    positions.set('running', { side: 'buy', entryPrice: 100, amountQuote: 1_000 })
+
+    const snap = await computePortfolioSnapshot()
+
+    expect(snap).toMatchObject({ hasPaperAccount: true, costOutsideQuote: 0 })
+    expect(snap.totalValue).toBeCloseTo(10_100, 10)
+  })
+
+  it("counts a real position at its cost, or, its cost unknown, at its worth, so it moves nothing", async () => {
+    prices = { 'binance:BTCUSDT': 110, 'binance:ETHUSDT': 50 }
+    livePositions = [
+      { exchange: 'binance', symbol: 'BTCUSDT', qty: 2, avgCost: 100, baseAsset: 'BTC', quoteAsset: 'USDT' },
+      { exchange: 'binance', symbol: 'ETHUSDT', qty: 3, baseAsset: 'ETH', quoteAsset: 'USDT' }
+    ]
+    settings.paperAccount = { balances: { USDT: 1_000 }, initialBalances: { USDT: 1_000 }, createdAt: 1_700_000_000, ledger: [] }
+
+    const snap = await computePortfolioSnapshot()
+
+    expect(snap.costOutsideQuote).toBeCloseTo(200 + 150, 10)
+    expect(snap.totalValue - snap.costOutsideQuote).toBeCloseTo(1_000 + 20, 10)
+  })
+
+  it('leaves out what the total leaves out: a position it could not price, and one in another currency', async () => {
+    prices = { 'bithumb:BTC_KRW': 110 }
+    settings.executors = [executor('dark'), executor('krw', { exchange: 'bithumb', symbol: 'BTC_KRW', quoteAsset: 'KRW' })]
+    positions.set('dark', { side: 'buy', entryPrice: 100, amountQuote: 1_000 })
+    positions.set('krw', { side: 'buy', entryPrice: 100, amountQuote: 50_000 })
+
+    const snap = await computePortfolioSnapshot()
+
+    expect(snap.costOutsideQuote).toBe(0)
+    expect(snap.totalValue).toBe(0)
+  })
+})

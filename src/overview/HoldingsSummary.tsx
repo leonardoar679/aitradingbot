@@ -6,13 +6,9 @@ import { watchPaperExecutors } from '../../shared/aiWatchPaper'
 import type { ExecutorConfig, LivePosition } from '../../shared/ipc'
 import { usePortfolioSnapshots, usePortfolioStatus } from '../portfolio/portfolioStore'
 import type { Page } from '../navigation/pages'
+import { portfolioValueLine } from './portfolioValueLine'
 
 const POLL_MS = 30_000
-
-function formatUsd(value: number): string {
-  const sign = value < 0 ? '-' : ''
-  return `${sign}$${Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
 
 /** What you hold: the portfolio's value, the paper strategies running (and how many of them the
  * watch opened), and the real positions open. It reads; it changes nothing. */
@@ -49,7 +45,6 @@ export function HoldingsSummary({ onNavigate }: { onNavigate: (page: Page) => vo
   }, [])
 
   const latest = snapshots.length > 0 ? snapshots[snapshots.length - 1] : null
-  const sessionChange = snapshots.length >= 2 && latest !== null ? latest.totalValue - snapshots[0].totalValue : null
   const running = executors === null ? null : executors.filter((executor) => executor.mode === 'paper' && executor.status === 'active')
   const watchOpen = executors === null ? 0 : watchPaperExecutors(executors).filter((executor) => executor.status === 'active').length
 
@@ -62,7 +57,7 @@ export function HoldingsSummary({ onNavigate }: { onNavigate: (page: Page) => vo
             ? status === 'error'
               ? 'Unavailable'
               : 'Loading…'
-            : `${formatUsd(latest.totalValue)}${sessionChange === null ? '' : `, ${sessionChange >= 0 ? '+' : ''}${formatUsd(sessionChange)} this session`}`
+            : portfolioValueLine(snapshots[0], latest)
         }
       />
       <SummaryLine

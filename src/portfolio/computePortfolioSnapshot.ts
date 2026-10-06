@@ -14,6 +14,16 @@ export interface PortfolioHoldingRow {
 
 export interface PortfolioSnapshotData {
   totalValue: number
+  /** What the dollar-quoted positions in totalValue cost, where that money is not itself in the
+   * total: every real position, at its quantity times its average cost, and, with no paper account,
+   * every paper position, at its stake. Such a position's value enters the total from outside it
+   * when it opens and leaves it when it closes, so a change in the total that counts it is money
+   * moved, not money made. With a paper account a paper position's stake is held back from the cash
+   * in the total, and is not counted here. */
+  costOutsideQuote: number
+  /** Whether a paper account backs the paper positions. Without one, totalValue is only what the
+   * open positions are worth. */
+  hasPaperAccount: boolean
   holdings: PortfolioHoldingRow[]
   activeExecutorCount: number
   /** Simple mean of paperNetPct across enabled bots that have at least one paper trade so far.
@@ -135,6 +145,11 @@ export async function computePortfolioSnapshot(): Promise<PortfolioSnapshotData>
 
   const rows: PortfolioHoldingRow[] = []
   let unpricedPositions = 0
+  let costOutsideQuote = 0
+  /** A position whose money is not in the total: what it cost, where it counts toward the total. */
+  const fromOutside = (quoteAsset: string, cost: number): void => {
+    if (isUsdLikeQuote(quoteAsset) && Number.isFinite(cost)) costOutsideQuote += cost
+  }
 
   // Uncommitted cash in the paper account. AVAILABLE, not total: money a running strategy holds
   // is already represented by that strategy's open position below, and counting both would show
@@ -178,6 +193,9 @@ export async function computePortfolioSnapshot(): Promise<PortfolioSnapshotData>
       continue
     }
     rows.push({ baseAsset: p.baseAsset, quoteAsset: p.quoteAsset, value: p.qty * price, isLive: true })
+    // Real money: the cash it came from is on the exchange, not here. A cost that cannot be read is
+    // taken as what it is worth now, so that it moves nothing either way.
+    fromOutside(p.quoteAsset, Number.isFinite(p.avgCost) ? p.qty * p.avgCost : p.qty * price)
   }
 
   for (const { executor, position } of paperExecutorPositions) {
@@ -193,6 +211,7 @@ export async function computePortfolioSnapshot(): Promise<PortfolioSnapshotData>
       value: paperPositionValue(position.entryPrice, position.amountQuote, position.side, price, position.leverage),
       isLive: false
     })
+    if (!settings.paperAccount) fromOutside(executor.quoteAsset, position.amountQuote)
   }
 
   for (const h of settings.heldPositions as HeldPosition[]) {
@@ -207,6 +226,7 @@ export async function computePortfolioSnapshot(): Promise<PortfolioSnapshotData>
       value: paperPositionValue(h.entryPrice, h.amountQuote, h.side, price),
       isLive: false
     })
+    if (!settings.paperAccount) fromOutside(h.quoteAsset, h.amountQuote)
   }
 
   // Group by (baseAsset, quoteAsset, isLive) -- quoteAsset stays part of the key so e.g. a paper
@@ -241,6 +261,8 @@ export async function computePortfolioSnapshot(): Promise<PortfolioSnapshotData>
 
   return {
     totalValue,
+    costOutsideQuote,
+    hasPaperAccount: Boolean(settings.paperAccount),
     holdings,
     activeExecutorCount: activeExecutors.length,
     botsAggregatePct,
