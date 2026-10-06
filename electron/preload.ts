@@ -29,7 +29,8 @@ import type {
 import type { ResearchState } from '../shared/marketResearch'
 import type { LiveBook, LiveState } from '../shared/liveMarket'
 import type { NewsFeedState, StoryMark } from '../shared/newsFeed'
-import type { AiAdditionsStatus, MoveConclusion } from '../shared/aiAdditions'
+import type { AiAdditionsStatus, MoveConclusion, TradeReview } from '../shared/aiAdditions'
+import type { MarketEvent } from '../shared/marketEvent'
 import type { NewsConfigPatch, NewsFilter, NewsPage, NewsState } from '../shared/news'
 import type { NewsRecord } from '../shared/newsRecord'
 import {
@@ -237,6 +238,9 @@ const api = {
     additionsStatus: (): Promise<AiAdditionsStatus> => ipcRenderer.invoke(IpcChannel.AiAdditionsStatus),
     // Billed unless held: one conclusion to "Why did it move?", asked from a click at the price shown.
     concludeMove: (symbol: string): Promise<MoveConclusion> => ipcRenderer.invoke(IpcChannel.AiConcludeMove, symbol),
+    // Billed unless held, and only when something about the trade stands out: the reviewer's second
+    // look before one of the watch's paper trades. REJECT means no trade.
+    reviewTrade: (request: { event: MarketEvent; decision: AiSignalDecision }): Promise<TradeReview> => ipcRenderer.invoke(IpcChannel.AiReviewTrade, request),
     // The two calls below the "free" line that are not free: each is billed unless its answer is
     // already cached.
     confirmEntry: (request: AiEntryConfirmRequest): Promise<AiSignalDecision> =>

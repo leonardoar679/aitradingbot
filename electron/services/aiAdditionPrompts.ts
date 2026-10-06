@@ -3,6 +3,8 @@ import {
   NEWS_READING_HORIZONS,
   NEWS_READING_MAX_REASONS,
   NEWS_READING_RELATIONSHIPS,
+  REVIEW_MAX_REASON,
+  REVIEW_VERDICTS,
   WHY_MAX_CITES,
   WHY_MAX_CONCLUSION,
   type AiAdditionKind
@@ -39,6 +41,15 @@ export const AI_ADDITION_SYSTEM_PROMPTS: Record<AiAdditionKind, string> = {
     `cites: the ids of the evidence items your conclusion rests on, 1 to ${WHY_MAX_CITES} of them, exactly as listed. Cite what you weighed even when you conclude the evidence does not explain the move.`,
     'confidence: 0 to 1. How well the evidence supports your conclusion. It is not a probability; never claim certainty.',
     'You do not decide whether to trade.'
+  ].join('\n'),
+  review: [
+    'You review a paper trade before it is opened, for a trading app that measures whether its models help. Return only the requested JSON.',
+    "The user message is: the market event a model was asked about (the pair, its kind and direction, the scanner's score, its 15-minute move in percent and in the pair's usual moves, its volume against its usual, what the pair trades a day and its spread, and the announcement that raised it, if one did); the model's call to trade it (its side, confidence, entry range, stop, target and reasoning); the other models' calls on the same event so far; the stories of high impact on the coin in the hours before; and why you are asked: the models disagree, the move is unusually large, major news hit the coin, or the pair is thin.",
+    'Approve a call that holds up against all of that. Reject one that ignores the news or the other calls, chases a move already overextended, or trades a pair too thin to fill near its levels.',
+    `verdict: ${REVIEW_VERDICTS.join(' or ')}. REJECT means the trade is not opened.`,
+    'confidence: 0 to 1. How clearly the evidence supports your verdict. It is not a probability; never claim certainty.',
+    `reason: at most ${REVIEW_MAX_REASON} characters, plain text: what your verdict rests on.`,
+    'You do not size the trade, move its levels or open anything.'
   ].join('\n')
 }
 
@@ -72,6 +83,19 @@ export const AI_ADDITION_SCHEMAS: Record<AiAdditionKind, { name: string; schema:
         confidence: { type: 'number' }
       },
       required: ['conclusion', 'cites', 'confidence']
+    }
+  },
+  review: {
+    name: 'review_verdict',
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        verdict: { type: 'string', enum: [...REVIEW_VERDICTS] },
+        confidence: { type: 'number' },
+        reason: { type: 'string' }
+      },
+      required: ['verdict', 'confidence', 'reason']
     }
   }
 }

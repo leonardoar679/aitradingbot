@@ -26,6 +26,7 @@ import {
   type WatchPaperOutcome,
   type WatchPaperPlan
 } from '../shared/aiWatchPaper'
+import type { TradeReview } from '../shared/aiAdditions'
 import type { Candle, ExecutorConfig, PaperAccount, PaperPauseSettings, PaperRiskSettings, PositionExecutorParams } from '../shared/ipc'
 import type { MarketEvent } from '../shared/marketEvent'
 import type { LiveBook } from '../shared/liveMarket'
@@ -368,12 +369,16 @@ interface Rig {
     /** The pair's correlation with Bitcoin (shared/paperExposure.ts). Absent: 0.3, a pair that does
      * not track it, so that only the tests of that cap meet it. */
     correlation?: number | null | Error
+    /** The reviewer's second look (shared/aiAdditions.ts). Absent: none asked. */
+    review?: TradeReview | Error
     now: number
     candles: Candle[] | Error
   }
   notices: { title: string; body: string }[]
   settled: string[]
   writes: number
+  /** Each review asked for, as event id and model. */
+  reviewed: string[]
 }
 
 /** A book a hundredth of a percent either side of `mid`, received at `nowSec`. */
@@ -389,7 +394,7 @@ const tightBook = (symbol: string, mid: number, nowSec: number): LiveBook => ({
 
 function rig(initial: Partial<Rig['state']> = {}): Rig {
   const state: Rig['state'] = { config: config(), executors: [], account: null, risk: STAKE, price: 100, now: SOON, candles: [], ...initial }
-  const made: Rig = { deps: undefined as unknown as WatchPaperDeps, state, notices: [], settled: [], writes: 0 }
+  const made: Rig = { deps: undefined as unknown as WatchPaperDeps, state, notices: [], settled: [], writes: 0, reviewed: [] }
   let tail: Promise<unknown> = Promise.resolve()
   let ids = 0
   made.deps = {
@@ -420,6 +425,11 @@ function rig(initial: Partial<Rig['state']> = {}): Rig {
     btcCorrelation: async () => {
       if (state.correlation instanceof Error) throw state.correlation
       return state.correlation === undefined ? 0.3 : state.correlation
+    },
+    review: async (asked, answer) => {
+      made.reviewed.push(`${asked.id}:${answer.model}`)
+      if (state.review instanceof Error) throw state.review
+      return state.review ?? { asked: false, triggers: [], outcome: null }
     },
     settle: async (target) => {
       made.settled.push(target.id)
@@ -971,6 +981,38 @@ describe('held to what the app has out on one side on coins that move with Bitco
     const account: PaperAccount = { balances: { USDT: 10_000 }, initialBalances: { USDT: 10_000 }, createdAt: T - 86_400, ledger: [] }
     const r = rig({ risk: CAPPED, config: roomy, executors: [ethBuy], correlation: 0.85, account })
     expect((await openWatchPaperTrade(event(), decision(), r.deps))?.opened).toBe(true)
+  })
+})
+
+describe("held to the reviewer's REJECT (shared/aiAdditions.ts)", () => {
+  const verdict = (answer: 'APPROVE' | 'REJECT'): TradeReview => ({
+    asked: true,
+    triggers: ['models_disagree', 'thin_pair'],
+    outcome: { status: 'answered', answer: { verdict: answer, confidence: 0.7, reason: 'Two models sell it, and it trades thin.' }, cached: false, model: A }
+  })
+
+  it('opens nothing the reviewer rejected, and says why', async () => {
+    const r = rig({ review: verdict('REJECT') })
+    expect(await openWatchPaperTrade(event(), decision(), r.deps)).toEqual({
+      opened: false,
+      text: 'No paper trade: The reviewer rejected it (the models disagree, the pair is thin): Two models sell it, and it trades thin.'
+    })
+    expect(r.reviewed).toEqual([`${event().id}:${A}`])
+    expect(r.state.executors).toEqual([])
+  })
+
+  it('opens what it approved, and what it was not asked about, refused or could not review', async () => {
+    expect((await openWatchPaperTrade(event(), decision(), rig({ review: verdict('APPROVE') }).deps))?.opened).toBe(true)
+    expect((await openWatchPaperTrade(event(), decision(), rig().deps))?.opened).toBe(true)
+    const refused: TradeReview = { asked: true, triggers: ['large_move'], outcome: { status: 'refused', reason: 'bad shape', cached: false, model: A } }
+    expect((await openWatchPaperTrade(event(), decision(), rig({ review: refused }).deps))?.opened).toBe(true)
+    expect((await openWatchPaperTrade(event(), decision(), rig({ review: new Error('down') }).deps))?.opened).toBe(true)
+  })
+
+  it('asks no review for a trade its own limits refuse first', async () => {
+    const r = rig({ config: config({ enabled: false }), review: verdict('REJECT') })
+    expect(await openWatchPaperTrade(event(), decision(), r.deps)).toBeNull()
+    expect(r.reviewed).toEqual([])
   })
 })
 

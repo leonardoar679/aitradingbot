@@ -1,6 +1,8 @@
+import { AI_ADDITION_PROMPT_VERSIONS, reviewsOf, type ReviewVerdict } from '../../shared/aiAdditions'
 import { EVENT_BENCHMARK_SETTLE_SEC, type EventBenchmarkAnswers } from '../../shared/aiEventBenchmark'
 import type { AiCallFilter, AiCallPage } from '../../shared/aiLedger'
-import { AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS } from '../../shared/aiOpportunity'
+import { AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS, isActionableOpportunity } from '../../shared/aiOpportunity'
+import type { AiSignalDecision } from '../../shared/aiSignal'
 import type { Candle } from '../../shared/ipc'
 import type { MarketEvent } from '../../shared/marketEvent'
 import type { MarketEventFilter, MarketEventPage } from '../../shared/marketScanner'
@@ -44,16 +46,19 @@ export interface LiveAnswers {
   answeredAt: Record<string, (number | null)[]>
   /** Events the watch asked about whose record is no longer on file. They cannot be scored. */
   missing: number
+  /** The reviewer's verdicts on those events (shared/aiAdditions.ts), by event id. */
+  reviews: Record<string, ReviewVerdict>
 }
 
 /** The watch's answers from `models` over the last LIVE_BOARD_DAYS, joined to the events they
  * were about. Free: it reads two files. */
 export async function readLiveAnswers(models: string[], nowSec: number, deps: Pick<LiveBoardDeps, 'listCalls' | 'listEvents'>): Promise<LiveAnswers> {
   const sinceSec = nowSec - LIVE_BOARD_DAYS * 86_400
-  const [calls, onFile] = await Promise.all([
+  const [calls, onFile, reviewed] = await Promise.all([
     deps.listCalls({ source: 'watch', promptVersions: AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS, sinceSec, limit: ROWS_READ }),
     // An answer inside the period can be about an event raised a few minutes before it began.
-    deps.listEvents({ sinceSec: sinceSec - 3600, limit: ROWS_READ })
+    deps.listEvents({ sinceSec: sinceSec - 3600, limit: ROWS_READ }),
+    deps.listCalls({ source: 'addition', promptVersion: AI_ADDITION_PROMPT_VERSIONS.review, sinceSec, limit: ROWS_READ })
   ])
   const eventById = new Map(onFile.rows.map((event) => [event.id, event]))
 
@@ -77,7 +82,34 @@ export async function readLiveAnswers(models: string[], nowSec: number, deps: Pi
     answers[model] = events.map((event) => kept.get(event.id)?.get(model)?.decision ?? null)
     answeredAt[model] = events.map((event) => kept.get(event.id)?.get(model)?.at ?? null)
   }
-  return { events, answers, answeredAt, missing: kept.size - events.length }
+  return { events, answers, answeredAt, missing: kept.size - events.length, reviews: reviewsOf(reviewed.rows) }
+}
+
+/** How a model's row is named with the reviewer's verdicts applied to it. */
+export const WITH_REVIEWER = ' · with the reviewer'
+
+/** An answer the reviewer rejected, as it was traded: not at all. */
+function rejectedAnswer(decision: AiSignalDecision): AiSignalDecision {
+  return { ...decision, recommendation: 'hold', detail: decision.detail ? { ...decision.detail, entry: null, stopLoss: null, takeProfit: null } : decision.detail }
+}
+
+/** The watch with and without the reviewer: beside each model whose call to trade the reviewer
+ * rejected at least once, a row of the same answers with those calls taken as no trade. The event
+ * stays answered, so the rows are compared on the same events. */
+export function withReviewer(live: Pick<LiveAnswers, 'events' | 'answers' | 'answeredAt' | 'reviews'>, models: string[]): { models: string[]; answers: EventBenchmarkAnswers; answeredAt: Record<string, (number | null)[]> } {
+  const rejected = new Set(Object.entries(live.reviews).filter(([, review]) => review.verdict === 'REJECT').map(([id]) => id))
+  const answers: EventBenchmarkAnswers = { ...live.answers }
+  const answeredAt = { ...live.answeredAt }
+  const extra: string[] = []
+  for (const model of models) {
+    const own = live.answers[model] ?? []
+    if (!live.events.some((event, index) => rejected.has(event.id) && isActionableOpportunity(own[index]))) continue
+    const name = `${model}${WITH_REVIEWER}`
+    answers[name] = own.map((decision, index) => (decision !== null && rejected.has(live.events[index].id) ? rejectedAnswer(decision) : decision))
+    answeredAt[name] = live.answeredAt[model] ?? []
+    extra.push(name)
+  }
+  return { models: [...models, ...extra], answers, answeredAt }
 }
 
 /** Candles already fetched for an event whose recommendations can no longer change. A month of

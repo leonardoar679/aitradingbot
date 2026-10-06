@@ -15,11 +15,19 @@ import {
   latestWhyOf,
   newsQuestionOf,
   newsReadingsOf,
+  parseReviewRequest,
+  reviewQuestionOf,
+  reviewRefusal,
+  reviewTriggers,
+  reviewsOf,
   validateNewsReading,
+  validateReviewVerdict,
   validateWhyConclusion,
   whyQuestionOf,
+  type ReviewCall,
   type NewsReading
 } from '../shared/aiAdditions'
+import type { MarketEvent } from '../shared/marketEvent'
 import type { MoveExplanation } from '../shared/moveExplanation'
 import type { ReadStory } from '../shared/newsFeed'
 
@@ -34,11 +42,11 @@ const READING: NewsReading = { ticker: 'SOL', relationship: 'DIRECT', direction:
 
 describe('the setting', () => {
   it('is on unless switched off, each, and only false switches one off', () => {
-    expect(DEFAULT_AI_ADDITIONS).toEqual({ news: true, why: true })
-    expect(healAiAdditions(undefined)).toEqual({ news: true, why: true })
-    expect(healAiAdditions({ news: false })).toEqual({ news: false, why: true })
-    expect(healAiAdditions({ news: 'no', why: false })).toEqual({ news: true, why: false })
-    expect(healAiAdditions([false])).toEqual({ news: true, why: true })
+    expect(DEFAULT_AI_ADDITIONS).toEqual({ news: true, why: true, review: true })
+    expect(healAiAdditions(undefined)).toEqual({ news: true, why: true, review: true })
+    expect(healAiAdditions({ news: false })).toEqual({ news: false, why: true, review: true })
+    expect(healAiAdditions({ news: 'no', why: false, review: false })).toEqual({ news: true, why: false, review: false })
+    expect(healAiAdditions([false])).toEqual({ news: true, why: true, review: true })
   })
 
   it("asks the watch's own model: the one its paper trades follow, else the first it asks, else the default", () => {
@@ -61,9 +69,10 @@ describe('the setting', () => {
 
   it('refuses a call when switched off, when it would ask by itself with the watch off, or at its daily limit', () => {
     const ask = (over: Partial<Parameters<typeof additionProblem>[0]> = {}): string | null =>
-      additionProblem({ kind: 'news', additions: { news: true, why: true }, watchOn: true, automatic: true, callsToday: 0, ...over })
+      additionProblem({ kind: 'news', additions: { news: true, why: true, review: true }, watchOn: true, automatic: true, callsToday: 0, ...over })
     expect(ask()).toBeNull()
-    expect(ask({ additions: { news: false, why: true } })).toBe('The news analyst is switched off under Settings › AI.')
+    expect(ask({ additions: { news: false, why: true, review: true } })).toBe('The news analyst is switched off under Settings › AI.')
+    expect(ask({ kind: 'review', callsToday: 20 })).toBe('The reviewer has made its 20 calls today.')
     expect(ask({ kind: 'why', callsToday: 20 })).toBe('The "why did it move?" conclusion has made its 20 calls today.')
     expect(ask({ kind: 'why', callsToday: 19 })).toBeNull()
     expect(ask({ watchOn: false })).toBe('The news analyst asks by itself only while the watch is on.')
@@ -210,6 +219,115 @@ describe('the conclusion to "Why did it move?"', () => {
   })
 })
 
+describe('the reviewer', () => {
+  const EVENT: MarketEvent = {
+    id: `binance:SOLUSDT:${T}`,
+    exchange: 'binance',
+    symbol: 'SOLUSDT',
+    baseAsset: 'SOL',
+    quoteAsset: 'USDT',
+    time: T,
+    type: 'breakout',
+    direction: 'up',
+    band: 'urgent',
+    score: 91,
+    components: { price: 90, volume: 95, volatility: 85, pressure: 90, breakout: 95 },
+    price: 100,
+    returnsPct: { m1: 0.4, m5: 1.5, m15: 3, h1: 3.2, h4: 2.5 },
+    moveSigmas: 6,
+    volumeRatio: 4.7,
+    rangeRatio: 3,
+    live: { detectedAt: T + 8, quoteVolume24h: 80_000_000, spreadPct: 0.01, candidateScore: 93, rank: 1 }
+  }
+  const story = (over: Partial<ReadStory> = {}): ReadStory =>
+    ({ id: 's', title: 'Solana bridge hacked', sourceName: 'CoinDesk', eventType: 'HACK', impact: 77, assets: [{ ticker: 'SOL', relationship: 'DIRECT' }], publishedAt: T - 600, stale: false, ...over }) as ReadStory
+  const triggers = (over: { event?: Partial<MarketEvent>; side?: 'long' | 'short'; others?: { side: 'long' | 'short' | null }[]; stories?: ReadStory[] } = {}): string[] =>
+    reviewTriggers({ event: { ...EVENT, ...over.event }, side: over.side ?? 'long', others: over.others ?? [], stories: over.stories ?? [], nowSec: T + 30 })
+
+  it('takes a second look only when something about the trade stands out', () => {
+    expect(triggers()).toEqual([])
+    // Another model on the other side; one that would not trade is no disagreement.
+    expect(triggers({ others: [{ side: 'short' }] })).toEqual(['models_disagree'])
+    expect(triggers({ others: [{ side: null }, { side: 'long' }] })).toEqual([])
+    // A move of 5% in fifteen minutes, or of eight of its usual moves, either way.
+    expect(triggers({ event: { returnsPct: { ...EVENT.returnsPct, m15: -5 } } })).toEqual(['large_move'])
+    expect(triggers({ event: { returnsPct: { ...EVENT.returnsPct, m15: 4.99 } } })).toEqual([])
+    expect(triggers({ event: { moveSigmas: -8 } })).toEqual(['large_move'])
+    // A story of impact 70 or more on the coin in the three hours before, or an announcement.
+    expect(triggers({ stories: [story()] })).toEqual(['major_news'])
+    expect(triggers({ stories: [story({ impact: 69 }), story({ stale: true }), story({ publishedAt: T - 3 * 3600 - 1 }), story({ assets: [{ ticker: 'XRP', relationship: 'DIRECT' }] })] })).toEqual([])
+    expect(triggers({ event: { news: { articleId: 1, title: 'Binance Will Delist SOL', releaseSec: T } } })).toEqual(['major_news'])
+    // Under $5M a day, or quoted wider than 0.05%.
+    expect(triggers({ event: { live: { ...(EVENT.live as NonNullable<MarketEvent['live']>), quoteVolume24h: 4_999_999 } } })).toEqual(['thin_pair'])
+    expect(triggers({ event: { live: { ...(EVENT.live as NonNullable<MarketEvent['live']>), spreadPct: 0.051 } } })).toEqual(['thin_pair'])
+    expect(triggers({ event: { live: null } })).toEqual([])
+  })
+
+  const DECISION = { model: 'm', recommendation: 'sell', confidence: 0.8, rationale: 'Fading the spike.', detail: { entry: { min: 99.8, max: 100.2, validMinutes: 15 }, stopLoss: 101.5, takeProfit: 97 } }
+
+  it('reads a request over the bridge as an event and a call, or not at all', () => {
+    const parsed = parseReviewRequest({ event: EVENT, decision: DECISION })
+    expect(parsed?.call).toEqual({ model: 'm', side: 'short', confidence: 0.8, entryMin: 99.8, entryMax: 100.2, stopLoss: 101.5, takeProfit: 97, rationale: 'Fading the spike.' })
+    expect(parsed?.event).toMatchObject({ id: EVENT.id, symbol: 'SOLUSDT', moveSigmas: 6, live: EVENT.live })
+    expect(parseReviewRequest(null)).toBeNull()
+    expect(parseReviewRequest({ event: EVENT })).toBeNull()
+    expect(parseReviewRequest({ event: { ...EVENT, symbol: 'sol/usdt' }, decision: DECISION })).toBeNull()
+    expect(parseReviewRequest({ event: { ...EVENT, moveSigmas: 'big' }, decision: DECISION })).toBeNull()
+    expect(parseReviewRequest({ event: EVENT, decision: { ...DECISION, recommendation: 'hold' } })).toBeNull()
+    expect(parseReviewRequest({ event: EVENT, decision: { ...DECISION, detail: { ...DECISION.detail, entry: null } } })).toBeNull()
+    expect(parseReviewRequest({ event: EVENT, decision: { ...DECISION, detail: { ...DECISION.detail, stopLoss: 'x' } } })).toBeNull()
+  })
+
+  it('is asked the event, the call, the other calls, the major news and why', () => {
+    const call = parseReviewRequest({ event: EVENT, decision: DECISION })?.call as ReviewCall
+    const question = reviewQuestionOf({
+      event: EVENT,
+      call,
+      others: [
+        { model: 'a', side: 'long', confidence: 0.7, refused: false },
+        { model: 'b', side: null, confidence: 0.5, refused: false },
+        { model: 'c', side: null, confidence: 0, refused: true }
+      ],
+      stories: [story(), story({ id: 'quiet', impact: 20 })],
+      triggers: ['models_disagree', 'major_news'],
+      nowSec: T + 30
+    })
+    expect(question).toEqual({
+      event: { pair: 'SOLUSDT', kind: 'breakout', direction: 'up', score: 91, movePct15m: 3, moveSigmas: 6, volumeRatio: 4.7, quoteVolume24h: 80_000_000, spreadPct: 0.01, announcement: null },
+      call,
+      others: [
+        { model: 'a', call: 'BUY', confidence: 0.7 },
+        { model: 'b', call: 'NO TRADE', confidence: 0.5 },
+        { model: 'c', call: 'REFUSED', confidence: 0 }
+      ],
+      news: [{ title: 'Solana bridge hacked', source: 'CoinDesk', kind: 'HACK', impact: 77 }],
+      triggers: ['models_disagree', 'major_news']
+    })
+  })
+
+  it('is taken as APPROVE or REJECT with a reason, and only a REJECT given refuses the trade', () => {
+    expect(validateReviewVerdict({ verdict: 'REJECT', confidence: 0.7, reason: ' Chasing a spike. ' })).toEqual({ ok: true, verdict: { verdict: 'REJECT', confidence: 0.7, reason: 'Chasing a spike.' } })
+    expect(validateReviewVerdict({ verdict: 'MAYBE', confidence: 0.7, reason: 'x' })).toEqual({ ok: false, reason: 'verdict is not one of APPROVE, REJECT.' })
+    expect(validateReviewVerdict({ verdict: 'APPROVE', confidence: 2, reason: 'x' })).toEqual({ ok: false, reason: 'confidence is not from 0 to 1.' })
+    expect(validateReviewVerdict({ verdict: 'APPROVE', confidence: 0.5, reason: '' })).toEqual({ ok: false, reason: 'reason is not text of 1 to 300 characters.' })
+    const answered = (verdict: 'APPROVE' | 'REJECT') => ({ asked: true, triggers: ['large_move' as const], outcome: { status: 'answered' as const, answer: { verdict, confidence: 0.6, reason: 'Overextended.' }, cached: false, model: 'm' } })
+    expect(reviewRefusal(answered('REJECT'))).toBe('The reviewer rejected it (the move is unusually large): Overextended.')
+    expect(reviewRefusal(answered('APPROVE'))).toBeNull()
+    expect(reviewRefusal({ asked: false, triggers: [], outcome: null })).toBeNull()
+    expect(reviewRefusal({ asked: true, triggers: ['large_move'], outcome: { status: 'failed', reason: 'down' } })).toBeNull()
+    expect(reviewRefusal(null)).toBeNull()
+  })
+
+  it("reads the reviewer's verdicts back from the ledger, by event", () => {
+    const rows = [
+      { promptVersion: AI_ADDITION_PROMPT_VERSIONS.review, status: 'ok' as const, subjectId: 'e1', additionAnswer: { verdict: 'REJECT', confidence: 0.6, reason: 'r' } },
+      { promptVersion: AI_ADDITION_PROMPT_VERSIONS.review, status: 'rejected' as const, subjectId: 'e2', additionAnswer: { verdict: 'REJECT', confidence: 0.6, reason: 'r' } },
+      { promptVersion: AI_ADDITION_PROMPT_VERSIONS.news, status: 'ok' as const, subjectId: 'e3', additionAnswer: { verdict: 'REJECT', confidence: 0.6, reason: 'r' } }
+    ]
+    expect(reviewsOf(rows)).toEqual({ e1: { verdict: 'REJECT', confidence: 0.6, reason: 'r' } })
+  })
+})
+
 describe('a prompt and its version move together', () => {
   // As tests/aiPromptVersions.test.ts holds every other prompt: edit a text and bump its version, or
   // this fails.
@@ -222,5 +340,10 @@ describe('a prompt and its version move together', () => {
   it("pins the conclusion's prompt and schema", () => {
     expect([AI_ADDITION_PROMPT_VERSIONS.why, sha(AI_ADDITION_SYSTEM_PROMPTS.why)]).toEqual(['why-conclusion-v1', '59f48f9f330a3be495e77589229d471a3b1ea028c2c4f609a6928c48d2eccaed'])
     expect([AI_ADDITION_SCHEMA_VERSIONS.why, sha(JSON.stringify(AI_ADDITION_SCHEMAS.why))]).toEqual(['why-conclusion-v1', '6e757e1aed2f7e2028861b6e123096b3c848b5c4182b38a283bed0a342bed54b'])
+  })
+
+  it("pins the reviewer's prompt and schema", () => {
+    expect([AI_ADDITION_PROMPT_VERSIONS.review, sha(AI_ADDITION_SYSTEM_PROMPTS.review)]).toEqual(['reviewer-v1', '7eb73834d0258e57f927de802d2a85dd28704dc7645e4ae4e3726f7e328efd47'])
+    expect([AI_ADDITION_SCHEMA_VERSIONS.review, sha(JSON.stringify(AI_ADDITION_SCHEMAS.review))]).toEqual(['review-verdict-v1', '528ba216008a938b4b7bfae4942e6c0ce786e57f841b0fd34b6942418dca0e10'])
   })
 })

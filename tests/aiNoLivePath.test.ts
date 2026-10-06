@@ -522,7 +522,9 @@ describe('AI code has no route to a real order', () => {
     // before it does anything.
     const writer = readFileSync(join(ROOT, 'src', 'agents', 'watchPaperTrade.ts'), 'utf-8')
     // aiEventMarket names Bitcoin's pair, whose minutes the Bitcoin safeguard reads; it is arithmetic.
+    // aiAdditions: the reviewer's REJECT, one more refusal before the trade is written.
     expect(importsOf(join(ROOT, 'src', 'agents', 'watchPaperTrade.ts')).sort()).toEqual([
+      'aiAdditions',
       'aiCost',
       'aiEventMarket',
       'aiSignal',
@@ -572,6 +574,8 @@ describe('AI code has no route to a real order', () => {
       'aiCost',
       'aiCredentialsService',
       'aiLedgerService',
+      // The reviewer reads the other models' calls on the event under the live prompts.
+      'aiOpportunity',
       'aiSignalService',
       'alerts',
       'atomicWrite',

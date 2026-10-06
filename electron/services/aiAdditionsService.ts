@@ -11,15 +11,22 @@ import {
   additionProblem,
   additionsModelOf,
   newsQuestionOf,
+  parseReviewRequest,
+  reviewQuestionOf,
+  reviewTriggers,
   validateNewsReading,
+  validateReviewVerdict,
   validateWhyConclusion,
   whyQuestionOf,
   type AiAdditionKind,
   type AiAdditionOutcome,
   type AiAdditionsStatus,
   type MoveConclusion,
-  type NewsReading
+  type NewsReading,
+  type ReviewOther,
+  type TradeReview
 } from '../../shared/aiAdditions'
+import { AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS } from '../../shared/aiOpportunity'
 import { averageCallCostUsd, estimateCallCostUsd } from '../../shared/aiCost'
 import { HIGH_IMPACT } from '../../shared/alerts'
 import { NOTABLE_MOVE_PCT, explainMove } from '../../shared/moveExplanation'
@@ -305,6 +312,44 @@ export async function concludeMove(symbol: unknown, automatic: boolean): Promise
   return { explanation, question, outcome }
 }
 
+// ---------------------------------------------------------------------------------------------
+// The reviewer.
+
+/** A second look before one of the watch's paper trades, when something about it stands out. The
+ * request is the event and the call, read as such; the other models' calls are read here from the
+ * ledger, as they stand when the trade would open, and the news from the feed. With nothing that
+ * stands out, nothing is asked. It is held to the watch: the watch opens these trades by itself. */
+export async function reviewTrade(request: unknown): Promise<TradeReview> {
+  const parsed = parseReviewRequest(request)
+  if (parsed === null) throw new Error('A review is asked about an event and a call to trade it.')
+  const { event, call } = parsed
+  const nowSec = Math.floor(Date.now() / 1000)
+  const page = await listAiCalls({ symbol: event.symbol, sinceSec: event.time, promptVersions: AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS, limit: 500 })
+  const others: ReviewOther[] = []
+  for (const row of page.rows) {
+    if (row.eventId !== event.id || row.model === call.model || row.status === 'failed' || others.some((other) => other.model === row.model)) continue
+    const side = row.status === 'rejected' || row.detail?.entry == null ? null : row.recommendation === 'buy' ? 'long' : row.recommendation === 'sell' ? 'short' : null
+    others.push({ model: row.model, side, confidence: row.confidence ?? 0, refused: row.status === 'rejected' })
+  }
+  const stories = getNewsFeedState().stories
+  const triggers = reviewTriggers({ event, side: call.side, others, stories, nowSec })
+  if (triggers.length === 0) return { asked: false, triggers, outcome: null }
+  const outcome = await askAddition({
+    kind: 'review',
+    subjectId: event.id,
+    symbol: event.symbol,
+    candleTime: event.time,
+    referencePrice: event.price,
+    payload: reviewQuestionOf({ event, call, others, stories, triggers, nowSec }),
+    automatic: true,
+    validate: (value) => {
+      const checked = validateReviewVerdict(value)
+      return checked.ok ? { ok: true, answer: checked.verdict } : checked
+    }
+  })
+  return { asked: true, triggers, outcome }
+}
+
 const handled = new Set<string>()
 const queue: ReadStory[] = []
 let draining = false
@@ -386,6 +431,13 @@ const SAMPLE_PAYLOAD: Record<AiAdditionKind, unknown> = {
       { id: 'story:sample', kind: 'news', text: 'A headline of the usual length about a coin and what happened to it (CoinDesk, 11:10 UTC)' },
       { id: 'volume', kind: 'volume', text: 'Volume 3.1 times its usual over those minutes.' }
     ]
+  },
+  review: {
+    event: { pair: 'SOLUSDT', kind: 'breakout', direction: 'up', score: 88, movePct15m: 3.2, moveSigmas: 6.1, volumeRatio: 4.2, quoteVolume24h: 4e8, spreadPct: 0.01, announcement: null },
+    call: { model: 'sample', side: 'long', confidence: 0.75, entryMin: 99.8, entryMax: 100.2, stopLoss: 98.5, takeProfit: 103, rationale: 'x'.repeat(300) },
+    others: [{ model: 'other', call: 'SELL', confidence: 0.7 }],
+    news: [{ title: 'A headline of the usual length about a coin and what happened to it', source: 'CoinDesk', kind: 'LISTING', impact: 72 }],
+    triggers: ['models_disagree', 'major_news']
   }
 }
 

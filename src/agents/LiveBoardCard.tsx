@@ -9,7 +9,7 @@ import { describeError } from '../utils/ipcError'
 import { buttonStyle, noteStyle } from './agentStyles'
 import { AiHelpCard } from './AiHelpCard'
 import { ContributionTable, CostTable, ExitsTable, ResultsTable, RollingTable } from './EventTables'
-import { LIVE_BOARD_DAYS, loadLiveBars, readLiveAnswers, type LiveAnswers, type LiveBoardDeps } from './liveBoard'
+import { LIVE_BOARD_DAYS, loadLiveBars, readLiveAnswers, withReviewer, type LiveAnswers, type LiveBoardDeps } from './liveBoard'
 import { loadQuantData, quantBacktests, type QuantData, type QuantFetch } from './quantState'
 
 const deps: LiveBoardDeps = {
@@ -78,9 +78,8 @@ export function LiveBoardCard({
         ? null
         : summarizeEventBenchmark({
             events: live.events,
-            models,
-            answers: live.answers,
-            answeredAt: live.answeredAt,
+            // The watch with and without the reviewer, where it rejected a call.
+            ...withReviewer(live, models),
             bars,
             quant: quant?.data.states,
             nowSec: Math.floor(Date.now() / 1000)

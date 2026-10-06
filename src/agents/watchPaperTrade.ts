@@ -1,3 +1,4 @@
+import { reviewRefusal, type TradeReview } from '../../shared/aiAdditions'
 import type { AiConfig } from '../../shared/aiCost'
 import type { AiSignalDecision } from '../../shared/aiSignal'
 import { MARKET_REFERENCE_SYMBOLS } from '../../shared/aiEventMarket'
@@ -28,8 +29,9 @@ import { settingsWrites } from '../utils/settingsWrites'
 // Two things happen here, and both are paper bookkeeping. A call the watch would act on becomes a
 // PAPER Position executor, appended to the executors on file, unless its limits, the paper money
 // the app's own trades have out, what they have out on one side on coins that move with Bitcoin
-// (shared/paperExposure.ts), a losing run of its own (shared/paperPause.ts), or the live price
-// -- none fresh, or a spread over 0.1% (shared/liveMarket.ts) -- refuse it. And
+// (shared/paperExposure.ts), a losing run of its own (shared/paperPause.ts), the reviewer's REJECT
+// where something about the trade stood out (shared/aiAdditions.ts), or the live price -- none
+// fresh, or a spread over 0.1% (shared/liveMarket.ts) -- refuse it. And
 // a paper position of the watch's that has closed -- its stop, its target or its clock ended it,
 // or its entry expired unfilled -- is stopped and its result settled into the paper account, the
 // way pressing Stop on its card would, so that the money comes back and the count of open trades
@@ -104,6 +106,9 @@ export interface WatchPaperDeps {
   /** The pair's hourly moves over the last week against Bitcoin's (shared/paperExposure.ts), or
    * null when they cannot be read: it then counts as a pair that tracks Bitcoin. */
   btcCorrelation: (exchange: Exchange, symbol: string) => Promise<number | null>
+  /** The reviewer's second look (shared/aiAdditions.ts), asked in the main process only when
+   * something about the trade stands out. Its REJECT refuses the trade; anything else leaves it. */
+  review: (event: MarketEvent, decision: AiSignalDecision) => Promise<TradeReview>
   /** Books a stopped paper executor's result into the paper account. */
   settle: (executor: ExecutorConfig, nowSec: number) => Promise<unknown>
   notify: (title: string, body: string) => void
@@ -123,7 +128,7 @@ export interface WatchPaperResult {
  * Null when there is nothing to say: paper trades are off, or the answer is another model's.
  * Never throws for a trade it decides not to make; that is a result. */
 export async function openWatchPaperTrade(
-  event: Pick<MarketEvent, 'id' | 'exchange' | 'symbol' | 'baseAsset' | 'quoteAsset' | 'time' | 'type' | 'price'>,
+  event: MarketEvent,
   decision: AiSignalDecision,
   deps: WatchPaperDeps
 ): Promise<WatchPaperResult | null> {
@@ -145,6 +150,17 @@ export async function openWatchPaperTrade(
   }
   const plan = planWatchPaperTrade({ config: watchPaper, risk: healPaperRisk(before.paperRisk), event, decision, nowSec: deps.nowSec(), lastPrice })
   if (!plan.ok) return { opened: false, text: `No paper trade: ${plan.reason}` }
+
+  // A second look, where something about this trade stands out: its REJECT means no trade. A review
+  // that was not asked, refused or could not be had leaves the trade as it was: it only opens less.
+  let review: TradeReview | null = null
+  try {
+    review = await deps.review(event, decision)
+  } catch {
+    review = null
+  }
+  const rejected = reviewRefusal(review)
+  if (rejected !== null) return { opened: false, text: `No paper trade: ${rejected}` }
 
   // The market it would enter, live (shared/liveMarket.ts): with no fresh price, or a spread wider
   // than a trade is entered at, none is opened.
@@ -305,6 +321,7 @@ export const watchPaperBrowserDeps: WatchPaperDeps = {
       symbol,
       Math.floor(Date.now() / 1000)
     ),
+  review: (event, decision) => window.api.ai.reviewTrade({ event, decision }),
   // Not kept in Inventory (keepPosition is false), so nothing was handed over and the whole
   // result is cash.
   settle: (executor, nowSec) => settleExecutorOnStop({ executor, handedOver: { held: null, realizedPnl: 0 }, now: nowSec }),

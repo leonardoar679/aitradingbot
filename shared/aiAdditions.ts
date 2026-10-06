@@ -1,11 +1,15 @@
 import type { AiConfig } from './aiCost'
 import type { AiCallRecord } from './aiLedger'
+import type { AiSignalDecision } from './aiSignal'
+import type { MarketEvent } from './marketEvent'
 import type { CauseLabel, MoveExplanation } from './moveExplanation'
 import type { NewsEventType, ReadStory } from './newsFeed'
 
 // THE AI ADDITIONS (the V3 engine plan's Stage 7): small questions put to a model beside the watch's.
 // The news analyst reads each story of high impact once; the conclusion to "Why did it move?" weighs
-// the evidence the fixed rules found, and must cite what it rests on.
+// the evidence the fixed rules found, and must cite what it rests on; the reviewer takes a second
+// look before one of the watch's paper trades, when something about it stands out, and REJECT means
+// no trade.
 //
 // SWITCHED ON BY THE USER, INSIDE THE BUDGET ALREADY THERE. On 6 October 2026 the user chose "On,
 // within the $5 day": each addition is on unless switched off under Settings › AI, and each has a
@@ -20,16 +24,16 @@ import type { NewsEventType, ReadStory } from './newsFeed'
 // signal score; an answer the validator refuses is kept, as every refused answer is, and is used
 // nowhere.
 
-export const AI_ADDITION_KINDS = ['news', 'why'] as const
+export const AI_ADDITION_KINDS = ['news', 'why', 'review'] as const
 export type AiAdditionKind = (typeof AI_ADDITION_KINDS)[number]
 
 /** Calls a day each may make, at most: the plan's limits, chosen with the user's $5 day. */
-export const AI_ADDITION_DAILY_LIMITS: Record<AiAdditionKind, number> = { news: 40, why: 20 }
+export const AI_ADDITION_DAILY_LIMITS: Record<AiAdditionKind, number> = { news: 40, why: 20, review: 20 }
 
 /** Each addition's question and answer, versioned as every prompt here is: part of the cache key and
  * of every ledger row, and pinned by a hash (tests/aiAdditions.test.ts). */
-export const AI_ADDITION_PROMPT_VERSIONS: Record<AiAdditionKind, string> = { news: 'news-analyst-v1', why: 'why-conclusion-v1' }
-export const AI_ADDITION_SCHEMA_VERSIONS: Record<AiAdditionKind, string> = { news: 'news-reading-v1', why: 'why-conclusion-v1' }
+export const AI_ADDITION_PROMPT_VERSIONS: Record<AiAdditionKind, string> = { news: 'news-analyst-v1', why: 'why-conclusion-v1', review: 'reviewer-v1' }
+export const AI_ADDITION_SCHEMA_VERSIONS: Record<AiAdditionKind, string> = { news: 'news-reading-v1', why: 'why-conclusion-v1', review: 'review-verdict-v1' }
 
 export const AI_ADDITION_INFO: Record<AiAdditionKind, { name: string; what: string; automatic: boolean }> = {
   news: {
@@ -39,14 +43,19 @@ export const AI_ADDITION_INFO: Record<AiAdditionKind, { name: string; what: stri
   },
   why: {
     name: '"Why did it move?" conclusion',
-    what: 'Weighs the evidence the fixed rules found for a move -- the stories that name the coin, Bitcoin, the volume -- and concludes, citing each item it rests on, or it is dropped. On a click in the Why window, at the price shown; and by itself for a coin a story of high impact names.',
+    what: 'Weighs the evidence the fixed rules found for a move (the stories that name the coin, Bitcoin, the volume) and concludes, citing each item it rests on, or it is dropped. On a click in the Why window, at the price shown; and by itself for a coin a story of high impact names.',
+    automatic: true
+  },
+  review: {
+    name: 'Reviewer',
+    what: "A second look before one of the watch's paper trades, only when the models disagree, the move is unusually large, major news hit the coin or the pair is thin. REJECT means no trade; a review that cannot be had leaves the trade as it was.",
     automatic: true
   }
 }
 
 /** On or off, each. Only `false` switches one off: on 6 October 2026 the user chose them on. */
 export type AiAdditionsConfig = Record<AiAdditionKind, boolean>
-export const DEFAULT_AI_ADDITIONS: AiAdditionsConfig = { news: true, why: true }
+export const DEFAULT_AI_ADDITIONS: AiAdditionsConfig = { news: true, why: true, review: true }
 
 /** What came of asking an addition: an answer, from the cache or paid for; an answer refused and
  * kept; nothing asked, and why; or a call that got no answer. */
@@ -304,4 +313,243 @@ export interface MoveConclusion {
   question: WhyQuestion | null
   /** Null when nothing was asked. */
   outcome: AiAdditionOutcome<WhyConclusion> | null
+}
+
+// ---------------------------------------------------------------------------------------------
+// The reviewer.
+
+/** When a trade stands out enough for a second look. Fixed lines, written down before any result. */
+export const REVIEW_LINES = {
+  /** A fifteen-minute move this large, either way... */
+  largeMovePct: 5,
+  /** ...or this many of the pair's usual moves, is unusually large. */
+  largeMoveSigmas: 8,
+  /** A story of this impact or more on the coin, in the hours before, is major news. */
+  majorNewsImpact: 70,
+  majorNewsSeconds: 3 * 3600,
+  /** A pair trading less than this a day, or quoted wider than this, is thin. */
+  thinQuoteVolume: 5_000_000,
+  wideSpreadPct: 0.05
+} as const
+
+export const REVIEW_TRIGGERS = ['models_disagree', 'large_move', 'major_news', 'thin_pair'] as const
+export type ReviewTrigger = (typeof REVIEW_TRIGGERS)[number]
+export const REVIEW_VERDICTS = ['APPROVE', 'REJECT'] as const
+export const REVIEW_MAX_REASON = 300
+
+export function describeReviewTrigger(trigger: ReviewTrigger): string {
+  const words: Record<ReviewTrigger, string> = {
+    models_disagree: 'the models disagree',
+    large_move: 'the move is unusually large',
+    major_news: 'major news hit the coin',
+    thin_pair: 'the pair is thin'
+  }
+  return words[trigger]
+}
+
+type ReviewEvent = Pick<MarketEvent, 'id' | 'symbol' | 'baseAsset' | 'time' | 'type' | 'direction' | 'score' | 'returnsPct' | 'moveSigmas' | 'volumeRatio' | 'price' | 'live' | 'news'>
+
+/** Another model's call on the same event, as the reviewer is told it. */
+export interface ReviewOther {
+  model: string
+  side: 'long' | 'short' | null
+  confidence: number
+  refused: boolean
+}
+
+/** Why a trade stands out, if it does: none, and no second look is asked. Only answers on file when
+ * the trade would open can disagree with it. */
+export function reviewTriggers(input: {
+  event: Pick<ReviewEvent, 'returnsPct' | 'moveSigmas' | 'live' | 'baseAsset' | 'time' | 'news'>
+  side: 'long' | 'short'
+  others: readonly Pick<ReviewOther, 'side'>[]
+  stories: readonly Pick<ReadStory, 'assets' | 'impact' | 'publishedAt' | 'stale'>[]
+  nowSec: number
+}): ReviewTrigger[] {
+  const { event } = input
+  const out: ReviewTrigger[] = []
+  if (input.others.some((other) => other.side !== null && other.side !== input.side)) out.push('models_disagree')
+  if (Math.abs(event.returnsPct.m15) >= REVIEW_LINES.largeMovePct || Math.abs(event.moveSigmas) >= REVIEW_LINES.largeMoveSigmas) out.push('large_move')
+  const major = input.stories.some(
+    (story) =>
+      !story.stale &&
+      story.impact >= REVIEW_LINES.majorNewsImpact &&
+      story.publishedAt >= event.time - REVIEW_LINES.majorNewsSeconds &&
+      story.publishedAt <= input.nowSec &&
+      story.assets.some((asset) => asset.ticker === event.baseAsset)
+  )
+  if (event.news !== undefined || major) out.push('major_news')
+  const volume = event.live?.quoteVolume24h ?? null
+  const spread = event.live?.spreadPct ?? null
+  if ((volume !== null && volume < REVIEW_LINES.thinQuoteVolume) || (spread !== null && spread > REVIEW_LINES.wideSpreadPct)) out.push('thin_pair')
+  return out
+}
+
+/** The call under review, from the answer the watch's paper trades follow. */
+export interface ReviewCall {
+  model: string
+  side: 'long' | 'short'
+  confidence: number
+  entryMin: number
+  entryMax: number
+  stopLoss: number | null
+  takeProfit: number | null
+  rationale: string
+}
+
+/** What the reviewer is asked: the event, the call, the other calls on file, the major news, and why. */
+export interface ReviewQuestion {
+  event: {
+    pair: string
+    kind: string
+    direction: string
+    score: number
+    movePct15m: number
+    moveSigmas: number
+    volumeRatio: number | null
+    quoteVolume24h: number | null
+    spreadPct: number | null
+    announcement: string | null
+  }
+  call: ReviewCall
+  others: { model: string; call: 'BUY' | 'SELL' | 'NO TRADE' | 'REFUSED'; confidence: number }[]
+  news: { title: string; source: string; kind: NewsEventType; impact: number }[]
+  triggers: ReviewTrigger[]
+}
+
+export interface ReviewVerdict {
+  verdict: (typeof REVIEW_VERDICTS)[number]
+  confidence: number
+  reason: string
+}
+
+/** What a second look came to: whether one was asked, why, and what came of it. */
+export interface TradeReview {
+  asked: boolean
+  triggers: ReviewTrigger[]
+  outcome: AiAdditionOutcome<ReviewVerdict> | null
+}
+
+const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
+
+/** A review request as it arrives over the bridge, read as one: the event and the call, each field in
+ * its shape, or null. */
+export function parseReviewRequest(value: unknown): { event: ReviewEvent; call: ReviewCall } | null {
+  const raw = (typeof value === 'object' && value !== null ? value : {}) as { event?: Partial<ReviewEvent>; decision?: Partial<AiSignalDecision> }
+  const event = raw.event
+  const decision = raw.decision
+  if (event === undefined || decision === undefined || event === null || decision === null) return null
+  if (typeof event.id !== 'string' || typeof event.symbol !== 'string' || !/^[A-Z0-9]{2,20}$/.test(event.symbol) || typeof event.baseAsset !== 'string') return null
+  if (!finite(event.time) || typeof event.type !== 'string' || typeof event.direction !== 'string' || !finite(event.score) || !finite(event.moveSigmas) || !finite(event.price)) return null
+  if (event.returnsPct === undefined || event.returnsPct === null || !finite(event.returnsPct.m15)) return null
+  if (event.volumeRatio !== null && !finite(event.volumeRatio)) return null
+  const live = event.live ?? null
+  if (live !== null && ((live.quoteVolume24h !== null && !finite(live.quoteVolume24h)) || (live.spreadPct !== null && !finite(live.spreadPct)))) return null
+  const entry = decision.detail?.entry
+  if (typeof decision.model !== 'string' || (decision.recommendation !== 'buy' && decision.recommendation !== 'sell') || !finite(decision.confidence)) return null
+  if (entry === undefined || entry === null || !finite(entry.min) || !finite(entry.max)) return null
+  const stop = decision.detail?.stopLoss ?? null
+  const target = decision.detail?.takeProfit ?? null
+  if ((stop !== null && !finite(stop)) || (target !== null && !finite(target))) return null
+  return {
+    event: {
+      id: event.id,
+      symbol: event.symbol,
+      baseAsset: event.baseAsset,
+      time: event.time,
+      type: event.type,
+      direction: event.direction,
+      score: event.score,
+      returnsPct: event.returnsPct,
+      moveSigmas: event.moveSigmas,
+      volumeRatio: event.volumeRatio ?? null,
+      price: event.price,
+      live,
+      ...(event.news !== undefined && event.news !== null ? { news: event.news } : {})
+    } as ReviewEvent,
+    call: {
+      model: decision.model,
+      side: decision.recommendation === 'buy' ? 'long' : 'short',
+      confidence: decision.confidence,
+      entryMin: entry.min,
+      entryMax: entry.max,
+      stopLoss: stop,
+      takeProfit: target,
+      rationale: typeof decision.rationale === 'string' ? decision.rationale.slice(0, 500) : ''
+    }
+  }
+}
+
+const round = (value: number | null, places = 4): number | null => (value === null ? null : Number(value.toPrecision(places + 2)))
+
+/** The reviewer's question. */
+export function reviewQuestionOf(input: {
+  event: ReviewEvent
+  call: ReviewCall
+  others: readonly ReviewOther[]
+  stories: readonly Pick<ReadStory, 'title' | 'sourceName' | 'eventType' | 'impact' | 'assets' | 'publishedAt' | 'stale'>[]
+  triggers: ReviewTrigger[]
+  nowSec: number
+}): ReviewQuestion {
+  const { event } = input
+  return {
+    event: {
+      pair: event.symbol,
+      kind: event.type,
+      direction: event.direction,
+      score: Math.round(event.score),
+      movePct15m: round(event.returnsPct.m15) as number,
+      moveSigmas: round(event.moveSigmas) as number,
+      volumeRatio: round(event.volumeRatio),
+      quoteVolume24h: event.live?.quoteVolume24h ?? null,
+      spreadPct: round(event.live?.spreadPct ?? null),
+      announcement: event.news?.title ?? null
+    },
+    call: input.call,
+    others: input.others.map((other) => ({
+      model: other.model,
+      call: other.refused ? 'REFUSED' : other.side === 'long' ? 'BUY' : other.side === 'short' ? 'SELL' : 'NO TRADE',
+      confidence: other.confidence
+    })),
+    news: input.stories
+      .filter(
+        (story) =>
+          !story.stale &&
+          story.impact >= REVIEW_LINES.majorNewsImpact &&
+          story.publishedAt >= event.time - REVIEW_LINES.majorNewsSeconds &&
+          story.publishedAt <= input.nowSec &&
+          story.assets.some((asset) => asset.ticker === event.baseAsset)
+      )
+      .slice(0, 5)
+      .map((story) => ({ title: story.title, source: story.sourceName, kind: story.eventType, impact: story.impact })),
+    triggers: input.triggers
+  }
+}
+
+/** A reviewer's answer, checked. */
+export function validateReviewVerdict(value: unknown): { ok: true; verdict: ReviewVerdict } | { ok: false; reason: string } {
+  const raw = (typeof value === 'object' && value !== null && !Array.isArray(value) ? value : null) as Record<string, unknown> | null
+  if (raw === null) return { ok: false, reason: 'The answer was not an object.' }
+  if (!isOneOf(REVIEW_VERDICTS, raw.verdict)) return { ok: false, reason: `verdict is not one of ${REVIEW_VERDICTS.join(', ')}.` }
+  if (typeof raw.confidence !== 'number' || !(raw.confidence >= 0 && raw.confidence <= 1)) return { ok: false, reason: 'confidence is not from 0 to 1.' }
+  if (typeof raw.reason !== 'string' || raw.reason.trim() === '' || raw.reason.length > REVIEW_MAX_REASON) return { ok: false, reason: `reason is not text of 1 to ${REVIEW_MAX_REASON} characters.` }
+  return { ok: true, verdict: { verdict: raw.verdict, confidence: raw.confidence, reason: raw.reason.trim() } }
+}
+
+/** Why a reviewed trade is not opened, or null: only a REJECT the reviewer gave stops one. A review
+ * that was not asked, was refused, or failed leaves the trade as it was. */
+export function reviewRefusal(review: TradeReview | null): string | null {
+  if (review === null || review.outcome === null || review.outcome.status !== 'answered' || review.outcome.answer.verdict !== 'REJECT') return null
+  return `The reviewer rejected it (${review.triggers.map(describeReviewTrigger).join(', ')}): ${review.outcome.answer.reason}`
+}
+
+/** The reviewer's verdicts on file, by event id: answered rows of its prompt, checked again. */
+export function reviewsOf(rows: readonly Pick<AiCallRecord, 'promptVersion' | 'status' | 'subjectId' | 'additionAnswer'>[]): Record<string, ReviewVerdict> {
+  const out: Record<string, ReviewVerdict> = {}
+  for (const row of rows) {
+    if (row.promptVersion !== AI_ADDITION_PROMPT_VERSIONS.review || row.status !== 'ok' || row.subjectId === undefined) continue
+    const verdict = validateReviewVerdict(row.additionAnswer)
+    if (verdict.ok) out[row.subjectId] = verdict.verdict
+  }
+  return out
 }

@@ -2,7 +2,8 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { NewsReading, WhyConclusion } from '../shared/aiAdditions'
+import type { NewsReading, ReviewVerdict, WhyConclusion } from '../shared/aiAdditions'
+import type { MarketEvent } from '../shared/marketEvent'
 import type { AiWatchConfig } from '../shared/aiWatch'
 import type { Candle } from '../shared/ipc'
 import type { NewsFeedState, ReadStory } from '../shared/newsFeed'
@@ -39,6 +40,7 @@ const NOW = Date.parse('2026-10-06T12:00:00Z') / 1000
 const ON: AiWatchConfig = { enabled: true, models: [A], maxEventsPerDay: 5, minBand: 'urgent', firstModelGates: false }
 const READING: NewsReading = { ticker: 'SOL', relationship: 'DIRECT', direction: 'up', impact: 72, horizon: '4h', confidence: 0.7, pricedIn: false, reasons: 'A large listing.' }
 const CONCLUSION: WhyConclusion = { conclusion: 'The futures listing drew buyers, on three times the usual volume.', cites: ['story:a'], confidence: 0.6 }
+const VERDICT: ReviewVerdict = { verdict: 'REJECT', confidence: 0.7, reason: 'Another model sells it, and the move is overextended.' }
 
 /** Four hours of closed minutes ending before NOW: flat at 100, and over the last hour to `end`. */
 function minutes(end: number): Candle[] {
@@ -80,7 +82,7 @@ function stubOpenRouter(reply: (call: number) => Reply | Promise<Reply> = () => 
   vi.stubGlobal('fetch', async (_url: string, init: { body?: string }) => {
     bodies.push(JSON.parse(init.body ?? '{}'))
     const asked = bodies[bodies.length - 1].response_format?.json_schema?.name
-    const { status = 200, content = JSON.stringify(asked === 'why_conclusion' ? CONCLUSION : READING) } = await reply(bodies.length)
+    const { status = 200, content = JSON.stringify(asked === 'why_conclusion' ? CONCLUSION : asked === 'review_verdict' ? VERDICT : READING) } = await reply(bodies.length)
     const body =
       status === 200
         ? { provider: 'Test', choices: [{ finish_reason: 'stop', message: { content } }], usage: { prompt_tokens: 600, completion_tokens: 120, cost: 0.001 } }
@@ -377,6 +379,122 @@ describe('the conclusion to "Why did it move?"', () => {
   })
 })
 
+describe('the reviewer', () => {
+  const B = 'mistralai/mistral-small-2603'
+  const EVENT: MarketEvent = {
+    id: `binance:SOLUSDT:${NOW - 60}`,
+    exchange: 'binance',
+    symbol: 'SOLUSDT',
+    baseAsset: 'SOL',
+    quoteAsset: 'USDT',
+    time: NOW - 60,
+    type: 'breakout',
+    direction: 'up',
+    band: 'urgent',
+    score: 91,
+    components: { price: 90, volume: 95, volatility: 85, pressure: 90, breakout: 95 },
+    price: 100,
+    returnsPct: { m1: 0.4, m5: 1.5, m15: 3, h1: 3.2, h4: 2.5 },
+    moveSigmas: 6,
+    volumeRatio: 4.7,
+    rangeRatio: 3,
+    live: { detectedAt: NOW - 52, quoteVolume24h: 80_000_000, spreadPct: 0.01, candidateScore: 93, rank: 1 }
+  }
+  const DECISION = {
+    candleTime: EVENT.time,
+    recommendation: 'buy',
+    confidence: 0.8,
+    rationale: 'Cleared the range on volume.',
+    model: A,
+    cached: false,
+    error: null,
+    rejected: null,
+    detail: { marketRegime: 'bull', riskLevel: 'medium', horizonBars: 4, stopLoss: 98.5, takeProfit: 103, reasonCodes: [], levelsNote: null, entry: { min: 99.8, max: 100.2, validMinutes: 15 } }
+  }
+  /** A model's answer to the same event, on file: another model's unless said. */
+  async function answerOnFile(appendAiCall: (row: never) => Promise<void>, recommendation: 'buy' | 'sell', model = B): Promise<void> {
+    await appendAiCall({
+      id: `answer-${model}`,
+      at: NOW - 30,
+      source: 'watch',
+      status: 'ok',
+      model,
+      provider: 'Test',
+      promptVersion: 'opportunity-v1',
+      contextVersion: 'context-v1',
+      schemaVersion: 'opportunity-schema-v1',
+      exchange: 'binance',
+      symbol: 'SOLUSDT',
+      interval: '15m',
+      candleTime: EVENT.time,
+      position: 'flat',
+      referencePrice: 100,
+      usage: { promptTokens: 1, completionTokens: 1, costUsd: 0.001, latencyMs: 1000 },
+      error: null,
+      recommendation,
+      confidence: 0.7,
+      rationale: 'other',
+      detail: { ...DECISION.detail, stopLoss: recommendation === 'sell' ? 101.5 : 98.5, takeProfit: recommendation === 'sell' ? 97 : 103 },
+      eventId: EVENT.id,
+      eventType: 'breakout'
+    } as never)
+  }
+
+  it('asks nothing when nothing about the trade stands out', async () => {
+    const { bodies } = stubOpenRouter()
+    const { reviewTrade, setAiConfig, appendAiCall } = await services()
+    await setAiConfig({ watch: ON })
+    await answerOnFile(appendAiCall as never, 'buy')
+    expect(await reviewTrade({ event: EVENT, decision: DECISION })).toEqual({ asked: false, triggers: [], outcome: null })
+    expect(bodies).toHaveLength(0)
+  })
+
+  it('asks when another model on file takes the other side, telling it so, and returns its verdict', async () => {
+    const { bodies } = stubOpenRouter()
+    const { reviewTrade, setAiConfig, appendAiCall, listAiCalls, AI_ADDITION_SYSTEM_PROMPTS } = await services()
+    await setAiConfig({ watch: ON })
+    // The reviewed model's own answer is on file too, as it is when its trade would open: it is the
+    // call under review, not another one.
+    await answerOnFile(appendAiCall as never, 'buy', A)
+    await answerOnFile(appendAiCall as never, 'sell')
+    expect(await reviewTrade({ event: EVENT, decision: DECISION })).toEqual({
+      asked: true,
+      triggers: ['models_disagree'],
+      outcome: { status: 'answered', answer: VERDICT, cached: false, model: A }
+    })
+    expect(bodies[0].messages[0].content).toBe(AI_ADDITION_SYSTEM_PROMPTS.review)
+    expect(bodies[0].response_format.json_schema.name).toBe('review_verdict')
+    expect(JSON.parse(bodies[0].messages[1].content)).toMatchObject({
+      event: { pair: 'SOLUSDT', movePct15m: 3, quoteVolume24h: 80_000_000 },
+      call: { model: A, side: 'long', entryMin: 99.8, entryMax: 100.2, stopLoss: 98.5, takeProfit: 103 },
+      others: [{ model: B, call: 'SELL', confidence: 0.7 }],
+      news: [],
+      triggers: ['models_disagree']
+    })
+    const [row] = (await listAiCalls({ source: 'addition' })).rows
+    expect(row).toMatchObject({ addition: 'review', subjectId: EVENT.id, symbol: 'SOLUSDT', candleTime: EVENT.time, referencePrice: 100, rationale: VERDICT.reason, additionAnswer: VERDICT })
+    expect(row.eventId).toBeUndefined()
+  })
+
+  it('is held to the watch: with it off, nothing is asked', async () => {
+    const { bodies } = stubOpenRouter()
+    const { reviewTrade, appendAiCall } = await services()
+    await answerOnFile(appendAiCall as never, 'sell')
+    expect(await reviewTrade({ event: EVENT, decision: DECISION })).toEqual({
+      asked: true,
+      triggers: ['models_disagree'],
+      outcome: { status: 'skipped', reason: 'The reviewer asks by itself only while the watch is on.' }
+    })
+    expect(bodies).toHaveLength(0)
+  })
+
+  it('refuses a request that is not an event and a call', async () => {
+    stubOpenRouter()
+    const { reviewTrade } = await services()
+    await expect(reviewTrade({ event: EVENT })).rejects.toThrow('A review is asked about an event and a call to trade it.')
+  })
+})
+
 describe('what Settings › AI shows', () => {
   it("says each addition's switch, what it asked today, and what a call costs", async () => {
     stubOpenRouter()
@@ -385,12 +503,12 @@ describe('what Settings › AI shows', () => {
     expect(await getAiAdditionsStatus()).toEqual({
       model: A,
       watchOn: true,
-      additions: { news: true, why: true },
-      limits: { news: 40, why: 20 },
-      today: { news: 0, why: 0 },
-      perCall: { news: { usd: null, basis: 'unknown' }, why: { usd: null, basis: 'unknown' } }
+      additions: { news: true, why: true, review: true },
+      limits: { news: 40, why: 20, review: 20 },
+      today: { news: 0, why: 0, review: 0 },
+      perCall: { news: { usd: null, basis: 'unknown' }, why: { usd: null, basis: 'unknown' }, review: { usd: null, basis: 'unknown' } }
     })
     await analyseStory(story('a'), true)
-    expect(await getAiAdditionsStatus()).toMatchObject({ today: { news: 1, why: 0 }, perCall: { news: { usd: 0.001, basis: 'history' } } })
+    expect(await getAiAdditionsStatus()).toMatchObject({ today: { news: 1, why: 0, review: 0 }, perCall: { news: { usd: 0.001, basis: 'history' } } })
   })
 })

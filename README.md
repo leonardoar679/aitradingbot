@@ -43,7 +43,7 @@ other.
 | | **Markets** | One pair on any supported exchange: candlestick chart with indicators, symbol search, live ticker. Below it, **Movers**: the liquid USDT pairs that moved most over the day and over the week, by volume against their week, and CoinGecko's trending list, from the [market research](#market-research-when-the-app-opens); a row opens its chart. **Why did it move?** for the chart's pair, by [fixed rules](#news--market-events). |
 | | **AI Decisions** | **Analyze** asks a model about one market; **Signals** lists every call any model has made and how it turned out. A model is handed a market snapshot and returns one JSON decision, and is given no tools at all. |
 | | **Positions** | Live paper positions for active bots; a **Live Positions** table of real Binance holdings from live-mode Order Executor fills, closable (fully or partially) for real; a **Live Trade History** table of realized P&L from closed live positions; an **Inventory** table of positions handed over from stopped paper executors (see [Position Handover](#position-handover--inventory)). |
-| | **Performance** | Total value, active-bot count, bot P&L and system cards; the portfolio's value over time (value/composition, 1D/1W/1M/3M) and its largest holdings; what the watch's recommendations earned, in percent and in R, over the last 10/50/100 trades and 7/30 days, and whether they beat the [quant strategies](#does-ai-help-the-models-against-the-quant-strategies) on the same events; the app's own paper trades, the watch's and the news rules', as a running total in R; the journal of every recommendation with its outcome, exportable as CSV, where any line opens [its whole story](#one-trades-whole-story) on one timeline. |
+| | **Performance** | Total value, active-bot count, bot P&L and system cards; the portfolio's value over time (value/composition, 1D/1W/1M/3M) and its largest holdings; what the watch's recommendations earned, in percent and in R, over the last 10/50/100 trades and 7/30 days, with and without the [reviewer](#the-ai-additions), and whether they beat the [quant strategies](#does-ai-help-the-models-against-the-quant-strategies) on the same events; the app's own paper trades, the watch's and the news rules', as a running total in R; the journal of every recommendation with its outcome, exportable as CSV, where any line opens [its whole story](#one-trades-whole-story) on one timeline. |
 | Trading | **Paper Trading** | The paper account paper strategies spend and hand back (fund it, balances, movements), and a manual paper order ticket — market/limit, live last price, session-only order history. Nothing here reaches an exchange. |
 | | **Live Trading** | Real money: the session's gates as they stand (armed, kill switch, the day's notional and loss, the managed allocation, exits being watched), and what you hold on each connected exchange, with Binance futures positions closable for real. |
 | | **Strategies** | **Active Runs**: a bot is a single continuous dry-run of a [chosen strategy](#strategies) against one exchange/symbol, optionally with a model asked to [confirm each entry](#ai-signals--paper-only); disabling one records a run, removing one archives it. **Execution**: the eight executor types, each running independently against live candles, the starter presets, and the New Executor form a call's filled-in form opens on — see [Executors](#executors) below. |
@@ -509,6 +509,29 @@ How it works:
 - **Shown:** the conclusion appears under the rules' explanation, with what it cites. The newest
   one on file for the pair, if it is less than an hour old, shows when the window opens.
 
+**The reviewer** makes at most 20 calls a day. It takes a second look before one of the watch's
+paper trades, and only when something about the trade stands out. It is asked in the main process,
+which works out why itself:
+- **The models disagree:** another model's call on the same event, on file when the trade would
+  open, takes the other side.
+- **The move is unusually large:** 5% in fifteen minutes, or eight of the pair's usual moves.
+- **Major news hit the coin:** a story of impact 70 or more named it in the three hours before, or
+  an announcement raised the event.
+- **The pair is thin:** under $5M a day, or quoted wider than 0.05%.
+
+With none of these, nothing is asked. The reviewer is shown the event, the call (its side,
+confidence, entry, stop, target and reasoning), the other calls on file, the major news and the
+reasons it was asked. It answers APPROVE or REJECT, with a reason.
+- **REJECT means no paper trade.** The watch says why: "The reviewer rejected it (the move is
+  unusually large): …".
+- **Anything else leaves the trade as it was:** a review not asked, refused or that could not be
+  had. So the reviewer only ever opens less.
+- **Performance's leaderboard** shows the watch with and without it. Beside each model whose call
+  it rejected at least once is a row of the same answers with those calls taken as no trade,
+  compared on the same events.
+- **Not yet measured:** the watch opens a paper trade as soon as its model answers, so only the
+  answers already on file can disagree with it.
+
 **On Settings › AI**, a card lists each addition:
 - its switch, and what it asks and when;
 - what it has asked today, against its limit;
@@ -533,6 +556,15 @@ its usual volume.
   arrived as volume tripled, and Bitcoin did not move: the rise is the coin's own", citing both
   items.
 - **The ledger row** kept both citations.
+
+The reviewer was checked through the real bridge, with a fake key and the watch on in a scratch
+profile.
+- **A large move:** a call to buy a 6% fifteen-minute move was asked about for that reason alone.
+  The faked answer, at $0.0007, was REJECT: "A 6% move in fifteen minutes is already extended;
+  buying the top of it risks the stop at once."
+- **A quiet one:** a 1.2% move on the same pair asked nothing.
+- **A malformed request** was refused.
+- **Settings › AI** read "1 of 20" for the reviewer, about $0.014 a day at its limit.
 
 ### Discovery — a market scanner
 
@@ -3087,7 +3119,8 @@ electron/                    Electron main process
                                aiAdditionsService (the AI additions' calls, within their limits
                                and the budget; the news analyst and the conclusion to "Why did it
                                move?" asking by themselves; the conclusion's evidence rebuilt from
-                               public candles)
+                               public candles; the reviewer's triggers worked out from the ledger
+                               and the news)
                              AI, with no import path to any of the live services above:
                                openRouterClient (the only file that knows OpenRouter's wire format),
                                aiSignalService (the paid path, cache, retries), aiPrompt,
@@ -3135,7 +3168,7 @@ shared/                       Code both processes run, so they cannot disagree a
   paperExposure.ts            A pair's hourly correlation with Bitcoin, and the cap on what the app's own paper trades stake on one side on pairs that track it
   newsTitles.ts, news.ts      Which kind of news a Binance title is, and which coins it names (the study's patterns); what the reader keeps of each article, and what each kind did
   newsFeed.ts                 The news feeds read: RSS, a story's coins, kind, credibility and impact, the same story from several sources, what the price did after, and what each kind has done
-  aiAdditions.ts              The AI additions: each one's switch, daily limit and prompt version; the news analyst's question and answer, and the conclusion to "Why did it move?" with its evidence and citations, checked
+  aiAdditions.ts              The AI additions: each one's switch, daily limit and prompt version; the news analyst's question and answer; the conclusion to "Why did it move?" with its evidence and citations; and the reviewer's triggers, question and verdict, checked
   moveExplanation.ts          "Why did it move?": a pair's move against Bitcoin's, its volume and the news that names it, labelled KNOWN, PROBABLE, POSSIBLE or UNKNOWN by fixed rules
   newsActions.ts              What a delisting or a Monitoring Tag does: the notice to a holder, the kind's paper short, and when it is raised for the models and may be asked about
   newsRules.ts, newsRecord.ts The studies' bracket and four-hour hold as arithmetic, shared with research/announcementStudy.ts; the record of the two rules and the two near misses since the studies
