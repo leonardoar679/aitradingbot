@@ -15,6 +15,7 @@ import { useEventFeed } from '../agents/useEventFeed'
 import { useLiveMarket } from '../hooks/useLiveMarket'
 import { useMarketResearch } from '../hooks/useMarketResearch'
 import { useNewsFeed } from '../news/useNewsFeed'
+import { useNewsReadings } from '../news/useNewsReadings'
 import type { Page } from '../navigation/pages'
 
 /** Events read for this card: the newest, as many as Opportunities shows at first. */
@@ -77,12 +78,13 @@ export function TopOpportunityCard({
   const [problem, setProblem] = useState<string | null>(null)
   const { state: research } = useMarketResearch()
   const news = useNewsFeed()
+  const readings = useNewsReadings(news)
   const pick = useMemo(() => overviewOpportunity(feed, bars, nowSec), [feed, bars, nowSec])
   // The entries on offer by their signal, as the table ranks them; the signal reads no live price.
   const top = useMemo(
     () =>
-      opportunityTableRows({ feed, bars, live: null, pairs: research?.pairs ?? [], regime: research?.market?.regime ?? null, news, nowSec, nowMs: nowSec * 1000 }).onOffer[0] ?? null,
-    [feed, bars, research, news, nowSec]
+      opportunityTableRows({ feed, bars, live: null, pairs: research?.pairs ?? [], regime: research?.market?.regime ?? null, news, readings, nowSec, nowMs: nowSec * 1000 }).onOffer[0] ?? null,
+    [feed, bars, research, news, readings, nowSec]
   )
   const answerOf = top?.item.answers.find((entry) => entry.model === top.offer?.model) ?? null
   // The live price of the pair on offer, to say whether it can be entered now.

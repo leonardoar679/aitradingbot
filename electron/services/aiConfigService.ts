@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import { mkdir, readFile } from 'fs/promises'
 import { join } from 'path'
+import { DEFAULT_AI_ADDITIONS, healAiAdditions, type AiAdditionsConfig } from '../../shared/aiAdditions'
 import { DEFAULT_AI_DAILY_CAP_USD, DEFAULT_AI_MODEL } from '../../shared/aiSignal'
 import { aiModelSlugOf, isAiModelId, splitAiModelId } from '../../shared/aiEffort'
 import { deciderModel, isPanelId, panelModelOf } from '../../shared/aiPanel'
@@ -40,6 +41,9 @@ interface AiConfigState {
   watchPaper: AiWatchPaperConfig
   /** See AiConfig.callsPerMinute. */
   callsPerMinute: number
+  /** See AiConfig.additions. Here, not in settings.json, for the reason the watch is: each lets a
+   * model be asked, and is changed only through setAiConfig. */
+  additions: AiAdditionsConfig
 }
 
 interface StoredCatalogue {
@@ -131,7 +135,9 @@ async function load(): Promise<AiConfigState> {
     // off, not running in some repaired shape nobody agreed to the price of.
     watch: healAiWatch(raw.watch, enabledModels),
     watchPaper: DEFAULT_AI_WATCH_PAPER,
-    callsPerMinute: isCallsPerMinute(raw.callsPerMinute) ? raw.callsPerMinute : DEFAULT_AI_CALLS_PER_MINUTE
+    callsPerMinute: isCallsPerMinute(raw.callsPerMinute) ? raw.callsPerMinute : DEFAULT_AI_CALLS_PER_MINUTE,
+    // On unless switched off: the user chose them on (6 October 2026), within the daily budget.
+    additions: raw.additions === undefined ? { ...DEFAULT_AI_ADDITIONS } : healAiAdditions(raw.additions)
   }
   // Healed against the watch as it was just healed: paper trades follow one of ITS models.
   cache.watchPaper = healAiWatchPaper(raw.watchPaper, cache.watch.models)
@@ -174,7 +180,8 @@ function statusFor(state: AiConfigState): AiConfig {
     spentTodayUsd: usageForDay(state.dailyUsage, today()),
     watch: { ...state.watch, models: [...state.watch.models] },
     watchPaper: { ...state.watchPaper },
-    callsPerMinute: state.callsPerMinute
+    callsPerMinute: state.callsPerMinute,
+    additions: { ...state.additions }
   }
 }
 
@@ -337,7 +344,15 @@ export async function setAiConfig(patch: AiConfigPatch): Promise<AiConfig> {
     callsPerMinute = patch.callsPerMinute
   }
 
-  cache = { ...state, defaultModel, enabledModels, route, dailyCapUsd, watch, watchPaper, callsPerMinute }
+  // An addition switched on or off only changes whether it asks, within its own limit and the
+  // budget; switching one off only ever spends less.
+  let additions = state.additions
+  if (patch.additions !== undefined) {
+    const asked = (typeof patch.additions === 'object' && patch.additions !== null ? patch.additions : {}) as Record<string, unknown>
+    additions = healAiAdditions({ ...state.additions, ...Object.fromEntries(Object.entries(asked).filter(([, value]) => typeof value === 'boolean')) })
+  }
+
+  cache = { ...state, defaultModel, enabledModels, route, dailyCapUsd, watch, watchPaper, callsPerMinute, additions }
   await persist()
   return statusFor(cache)
 }

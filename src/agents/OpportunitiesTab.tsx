@@ -14,6 +14,7 @@ import { useNowSec } from '../utils/useNowSec'
 import { useLiveMarket } from '../hooks/useLiveMarket'
 import { useMarketResearch } from '../hooks/useMarketResearch'
 import { useNewsFeed } from '../news/useNewsFeed'
+import { useNewsReadings } from '../news/useNewsReadings'
 import { buttonStyle, noteStyle } from './agentStyles'
 import { OpportunityCard } from './OpportunityCard'
 import { askModels, fetchEventQuestion, proposalForAnswer, type CandleFetch, type EventAnswer, type EventFeedItem } from './opportunities'
@@ -68,6 +69,7 @@ export function OpportunitiesTab({
   // The market's regime and each pair's day and week, and the news on the coins: for the table.
   const { state: research } = useMarketResearch()
   const news = useNewsFeed()
+  const readings = useNewsReadings(news)
 
   useEffect(() => {
     let cancelled = false
@@ -189,6 +191,7 @@ export function OpportunitiesTab({
     pairs: research?.pairs ?? [],
     regime: research?.market?.regime ?? null,
     news,
+    readings,
     nowSec,
     nowMs: Date.now(),
     btcLimitPct: config?.watchPaper.dropOnBtcMovePct,

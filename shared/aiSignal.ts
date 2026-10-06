@@ -108,7 +108,7 @@ export function describeUnusableAiKey(value: string): string | null {
 export type AiRecommendation = 'buy' | 'sell' | 'hold'
 export type AiPositionState = 'flat' | 'long'
 /** Where a call came from, so the ledger can say what the money was spent on. */
-export type AiCallSource = 'agent' | 'backtest' | 'bot' | 'chart' | 'benchmark' | 'opportunity' | 'watch'
+export type AiCallSource = 'agent' | 'backtest' | 'bot' | 'chart' | 'benchmark' | 'opportunity' | 'watch' | 'addition'
 
 export const AI_MARKET_REGIMES = ['strong_bull', 'bull', 'neutral', 'bear', 'strong_bear'] as const
 export type AiMarketRegime = (typeof AI_MARKET_REGIMES)[number]

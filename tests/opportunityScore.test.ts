@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { NewsReading } from '../shared/aiAdditions'
 import type { MarketEvent } from '../shared/marketEvent'
 import type { MarketRegime } from '../shared/marketResearch'
 import type { ReadStory, StoryReaction } from '../shared/newsFeed'
@@ -116,6 +117,21 @@ describe('the signal score', () => {
     expect(part(score({ side: null, stories: [story()] }), 'news').value).toBe(30)
     // The strongest counts, not the first.
     expect(part(score({ stories: [story({ id: 'a', impact: 40 }), story({ id: 'b', impact: 70 }), story({ id: 'c', eventType: 'HACK', impact: 90 })] }), 'news').value).toBe(70)
+  })
+
+  it("takes which way a story points from the news analyst's reading of it about this coin, and keeps the rule's impact", () => {
+    const reading = (direction: 'up' | 'down' | 'none', ticker = 'SOL'): NewsReading => ({ ticker, relationship: 'DIRECT', direction, impact: 90, horizon: '4h', confidence: 0.7, pricedIn: false, reasons: '' })
+    const withReading = (read: NewsReading): ReturnType<typeof part> =>
+      part(
+        signalScore({ event: event(), side: 'long', calls: [long()], stories: [story()], reactions: {}, readings: { 'coindesk:1': read }, regime: null, nowSec: NOW }),
+        'news'
+      )
+    // The rule reads a listing as up; the analyst reads this one down: for a BUY it now counts nothing.
+    expect(withReading(reading('down'))).toMatchObject({ value: 0, fact: 'Listing, impact 60: Binance lists a Solana product (CoinDesk), which points the other way, read by the news analyst as pointing down' })
+    expect(withReading(reading('up'))).toMatchObject({ value: 60, fact: 'Listing, impact 60: Binance lists a Solana product (CoinDesk), read by the news analyst as pointing up' })
+    expect(withReading(reading('none')).value).toBe(30)
+    // A reading about another coin is not this coin's: the rule stands.
+    expect(withReading(reading('down', 'BTC'))).toMatchObject({ value: 60, fact: 'Listing, impact 60: Binance lists a Solana product (CoinDesk)' })
   })
 
   it('counts only stories about the coin, from three hours before the event to now', () => {

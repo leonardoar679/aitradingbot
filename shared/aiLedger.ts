@@ -1,3 +1,4 @@
+import type { AiAdditionKind } from './aiAdditions'
 import type { AiAgentReport, AiAgentRole } from './aiPanel'
 import type { AiCallSource, AiCallUsage, AiPositionState, AiRecommendation, AiSignalDetail } from './aiSignal'
 import type { Exchange, Interval } from './ipc'
@@ -77,6 +78,13 @@ export interface AiCallRecord {
   agent?: AiAgentRole | 'decision'
   /** An analyst's report, on its row. Absent when it could not be used. */
   report?: AiAgentReport
+  /** Set on a call one of the AI additions made (shared/aiAdditions.ts): which, what it was about --
+   * a story's id, an event's, a trade's -- and its answer, checked, when it gave one. Such a row
+   * carries no eventId and no recommendation: it is not an answer to an event, and nothing that
+   * joins answers to events reads it. */
+  addition?: AiAdditionKind
+  subjectId?: string
+  additionAnswer?: unknown
 }
 
 export interface AiCallFilter {

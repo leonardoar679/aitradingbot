@@ -52,7 +52,7 @@ other.
 | | **Discovery** | Two tabs. **Market scanner**: once a minute it reads the most traded USDT pairs on Binance and says what is moving, scores each the same way, and records the moves that qualify as events — see [Discovery](#discovery--a-market-scanner). Public market data only: no key, no model, no order. It is switched on, and its pairs chosen, under Settings › Market. **News & Market Events**: four free news feeds and Binance's announcements, each story with its coins, kind, impact and what the price did after, filtered by coin or by Major alerts, and what each kind of story has done once 30 are in — see [News & market events](#news--market-events); a count on Discovery in the sidebar says how many new alerts it holds. Below the stories, [Binance's own announcements](#binances-announcements-on-discovery) — delistings, Monitoring Tags, futures launches, listings — as they are released, with what each kind did to prices. The reader is switched on under Settings › Market too, with what a delisting or a tag does: a notice if you hold the coin, a paper short by the kind's rule, a question to the watch's models. |
 | System | **Risk & Safety** | The live trading limits every real order is checked against (largest order, the day's notional, the day's loss, the managed allocation); the size of the paper trades the app opens by itself, the watch's and the news rules' (sized by what their stop would lose, and capped in what they stake together), the losing run in R that pauses them until resumed, the cap on what they stake on one side on coins that move with Bitcoin, and a daily notice of what they did; and the controller groups: executors under a shared stop-loss, take-profit and maximum drawdown with a P&L snapshot every 5 minutes, all stopped on a breach. Arming and the kill switch stay on the bar at the top of every page. |
 | | **Connections** | Every key the app holds: Binance and Upbit ([Credentials](#credentials--api-keys)), and the OpenRouter key for the AI models. Each is tested before it is stored, stored encrypted, and never read back into the window. |
-| | **Settings** | Since 6 October 2026, **Essentials** first: the six settings that decide what the app does by itself — trading mode (PAPER, LIVE READY with a verified key and the session disarmed, or LIVE ACTIVE when armed; read, never changed here), risk level (Conservative at the shipped paper defaults, or Custom, with a reset that only ever opens less), the market the scanner watches, the AI's mode (changed only on Opportunities, behind its priced confirmation), desktop notices with or without sound, and the exchange. Everything else is under **Advanced**, closed until opened: the Configuration Center, in sections, built only from settings that exist. **General**: appearance (Dark / Light / Colorblind-safe). **Market**: the scanner on or off, and how many pairs it watches; the reader of Binance's announcements, and what a delisting does. **AI**: which models may be asked, the default and the route, the daily budget, the pace, and what asking has cost. Keys stay on Connections and limits on Risk & Safety, each in the one place, linked from here. What the V3 document asked for that has no behaviour behind it (language, timezone, default order type, allowed pairs, other news sources…) is listed in `docs/INVENTORY.md` rather than added as a control. |
+| | **Settings** | Since 6 October 2026, **Essentials** first: the six settings that decide what the app does by itself — trading mode (PAPER, LIVE READY with a verified key and the session disarmed, or LIVE ACTIVE when armed; read, never changed here), risk level (Conservative at the shipped paper defaults, or Custom, with a reset that only ever opens less), the market the scanner watches, the AI's mode (changed only on Opportunities, behind its priced confirmation), desktop notices with or without sound, and the exchange. Everything else is under **Advanced**, closed until opened: the Configuration Center, in sections, built only from settings that exist. **General**: appearance (Dark / Light / Colorblind-safe). **Market**: the scanner on or off, and how many pairs it watches; the reader of Binance's announcements, and what a delisting does. **AI**: which models may be asked, the default and the route, the daily budget, the pace, the [AI additions](#the-ai-additions) (each on or off, with its daily limit and what a day of it can cost), and what asking has cost. Keys stay on Connections and limits on Risk & Safety, each in the one place, linked from here. What the V3 document asked for that has no behaviour behind it (language, timezone, default order type, allowed pairs, other news sources…) is listed in `docs/INVENTORY.md` rather than added as a control. |
 
 **The status bar** at the top of every page carries three chips beside the arm and kill controls,
 each read from the thing it describes (`src/status/statusModes.ts`); hovering one says what it
@@ -463,6 +463,49 @@ answers on real past events (2–4 October; SOL, XRP, ETH, DOGE):
   Trend Regime, 1 with the channel, 0 against 12 for news, and 9 against 3 for the live price.
 - **On their own over the 30 days**, Trend Regime 4h made +7.15% on the four pairs (4 trades)
   against +8.01% for holding them. Short-Term Channel 15m made −0.84% (8 trades) against +7.62%.
+
+### The AI additions
+
+Since 6 October 2026 (the V3 plan's Stage 7) small questions are put to a model beside the watch's.
+The user chose "On, within the $5 day".
+- **Switches and limits:** each addition is on unless switched off under Settings › AI, and each
+  has a daily limit of its own, so that none can starve the watch.
+- **The same gates as every other call:** the daily budget immediately before it, the pace, the
+  validator after it, a ledger row either way, and the cache, so that nothing is paid for twice
+  (`shared/aiAdditions.ts`, `electron/services/aiAdditionsService.ts`).
+- **The model:** they ask the one the watch's paper trades follow.
+- **Asking by itself:** an addition does so only while the watch is on.
+- **Nothing placed:** none of them places, sizes or arms anything.
+
+**The news analyst** makes at most 40 calls a day. It reads each story of high impact the feed
+reads (70 or more, or one the price confirmed), once, within the hour it was published. It returns:
+- the coin the story concerns most, and whether that coin is its subject or only touched by it;
+- which way it points, its impact from 0 to 100, and over what horizon;
+- how confident it is, whether the story was already in the price, and why.
+
+What a reading does:
+- **Shown:** it appears under its story on Discovery's news.
+- **Scored:** the signal score's news part takes the analyst's direction for a story it read about
+  the coin, in place of the fixed rule's guess from the story's kind. The impact and the weight
+  stay the fixed rules'.
+- **Refused answers:** an answer the validator refuses is kept, as every refused answer is, and is
+  used nowhere.
+
+**On Settings › AI**, a card lists each addition:
+- its switch, and what it asks and when;
+- what it has asked today, against its limit;
+- what a day of it can cost at that limit: from its own calls once it has made some, else from the
+  price list.
+
+Checked on 6 October 2026 on a separate build and a scratch profile, with the network faked in its
+main process. A fake key and the watch were switched on in that profile only.
+- **The analyst asked once:** one feed returned a fresh story, "Hackers drain $50 million from a
+  Solana bridge" (impact 77). The analyst asked about it within fifteen seconds, the faked answer
+  cost $0.0009, and its row was written to the ledger.
+- **Discovery's news** showed under the story: "AI reading: SOL (the subject), down, impact 85 over
+  4h, 75%".
+- **Settings › AI** read "1 of 40, about $0.036 at its limit", and its switch turned it off.
+- **Cleared afterwards:** the key, the watch and the profile were removed.
 
 ### Discovery — a market scanner
 
@@ -3013,7 +3056,9 @@ electron/                    Electron main process
                                minutes), liveMarketService (one public socket: the live book and
                                minute of the pairs shown and the app's own paper trades),
                                newsFeedService (four free news feeds every three minutes, each
-                               story kept once, and what the price did after it)
+                               story kept once, and what the price did after it),
+                               aiAdditionsService (the AI additions' calls, within their limits
+                               and the budget, and the news analyst asking by itself)
                              AI, with no import path to any of the live services above:
                                openRouterClient (the only file that knows OpenRouter's wire format),
                                aiSignalService (the paid path, cache, retries), aiPrompt,
@@ -3061,6 +3106,7 @@ shared/                       Code both processes run, so they cannot disagree a
   paperExposure.ts            A pair's hourly correlation with Bitcoin, and the cap on what the app's own paper trades stake on one side on pairs that track it
   newsTitles.ts, news.ts      Which kind of news a Binance title is, and which coins it names (the study's patterns); what the reader keeps of each article, and what each kind did
   newsFeed.ts                 The news feeds read: RSS, a story's coins, kind, credibility and impact, the same story from several sources, what the price did after, and what each kind has done
+  aiAdditions.ts              The AI additions: each one's switch, daily limit and prompt version, and the news analyst's question and answer, checked
   moveExplanation.ts          "Why did it move?": a pair's move against Bitcoin's, its volume and the news that names it, labelled KNOWN, PROBABLE, POSSIBLE or UNKNOWN by fixed rules
   newsActions.ts              What a delisting or a Monitoring Tag does: the notice to a holder, the kind's paper short, and when it is raised for the models and may be asked about
   newsRules.ts, newsRecord.ts The studies' bracket and four-hour hold as arithmetic, shared with research/announcementStudy.ts; the record of the two rules and the two near misses since the studies

@@ -13,6 +13,7 @@ import {
   setAiCredential,
   testAiCredential
 } from '../../services/aiCredentialsService'
+import { getAiAdditionsStatus } from '../../services/aiAdditionsService'
 import { getAiConfig, listAiModels, setAiConfig } from '../../services/aiConfigService'
 import { getAiExperiment, listAiExperiments, recordAiExperiment } from '../../services/aiExperimentService'
 import { getAiUsageSummary, listAiCalls } from '../../services/aiLedgerService'
@@ -37,7 +38,9 @@ import {
 // Nor does the watch (shared/aiWatch.ts): what it asks arrives over AiAskOpportunity labelled as
 // the watch's, and is held to the watch's own limits before the budget is looked at. Nor does
 // recording an experiment (shared/aiExperiment.ts): it writes down what a run that has already
-// ended asked, and counts its cost from the ledger.
+// ended asked, and counts its cost from the ledger. Nor do the AI additions (shared/aiAdditions.ts):
+// the news analyst asks by itself in the main process, within its own limit and the budget, and
+// AiAdditionsStatus only reads its switch, the ledger and the price list.
 export function registerAiHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(IpcChannel.AiCredentialsStatus, () => getAiCredentialStatus())
   ipcMain.handle(IpcChannel.AiCredentialsSet, (_event, apiKey: string) => setAiCredential(apiKey))
@@ -68,4 +71,5 @@ export function registerAiHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(IpcChannel.AiListExperiments, () => listAiExperiments())
   ipcMain.handle(IpcChannel.AiGetExperiment, (_event, id: string) => getAiExperiment(String(id)))
   ipcMain.handle(IpcChannel.AiRecordExperiment, (_event, input: unknown) => recordAiExperiment(input))
+  ipcMain.handle(IpcChannel.AiAdditionsStatus, () => getAiAdditionsStatus())
 }

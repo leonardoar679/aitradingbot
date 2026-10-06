@@ -2,6 +2,7 @@ import { isActionableOpportunity, opportunitySide, type OpportunitySide } from '
 import type { Candle } from '../../shared/ipc'
 import { LIVE_MAX_INTEREST, type LiveState } from '../../shared/liveMarket'
 import type { MarketRegime, ResearchPair } from '../../shared/marketResearch'
+import type { NewsReading } from '../../shared/aiAdditions'
 import type { NewsFeedState } from '../../shared/newsFeed'
 import { scoredSide, signalScore, type SignalCall, type SignalScore } from '../../shared/opportunityScore'
 import { liveReadingOf, type LiveReading } from './liveVerdict'
@@ -64,6 +65,8 @@ export function opportunityTableRows(input: {
   pairs: readonly ResearchPair[]
   regime: MarketRegime | null
   news: NewsFeedState | null
+  /** The news analyst's readings, by story id. */
+  readings?: Readonly<Record<string, NewsReading>>
   nowSec: number
   nowMs: number
   /** The watch's Bitcoin safeguard and stake, where known: what the live check holds an entry to. */
@@ -84,7 +87,7 @@ export function opportunityTableRows(input: {
       offer,
       status: offer !== null ? 'valid' : feedItemStatus(item, input.bars.get(event.id), input.nowSec),
       side,
-      signal: signalScore({ event, side, calls, stories, reactions, regime: input.regime, nowSec: input.nowSec }),
+      signal: signalScore({ event, side, calls, stories, reactions, readings: input.readings, regime: input.regime, nowSec: input.nowSec }),
       live: offer === null ? null : liveReadingOf(offer, input.live, { btcLimitPct: input.btcLimitPct, stakeQuote: input.stakeQuote, nowMs: input.nowMs }),
       price: book === null ? null : (book.bid + book.ask) / 2,
       research: researched === null ? null : { change24hPct: researched.change24hPct, change7dPct: researched.change7dPct },

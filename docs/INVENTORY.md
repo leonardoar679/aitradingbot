@@ -45,6 +45,7 @@ Taken on 5 October 2026, at commit `aef376d`.
 | | Benchmark | Models on the same questions, routes, the event benchmark, experiments; since 6 October 2026 the quant, hybrid and buy-and-hold rows and "Does AI help?" | AI Benchmark |
 | | Models | Which models may be asked, the default, routing to a second model | Settings › AI |
 | | Usage | Daily budget, pace, spend by model today and over 30 days | Settings › AI |
+| | AI additions (added 6 October 2026, not an old card) | Each addition on or off, its daily limit, what it asked today and what a day of it can cost | Settings › AI |
 | **Routines** | New Routine, list, Reports | Backtests re-run on a schedule while the app is open | Backtest & Research › Automation |
 | **Market** | Chart, indicators, symbol search, ticker | The original dashboard | Markets |
 | **Backtest** | Configuration, Progress, Charts, Compare, Live | A strategy over history, trade charts, strategy comparison, the live strategy monitor | Backtest & Research |
@@ -141,6 +142,8 @@ The main process also runs loops that need no window at all:
   minutes always, and a log of drops and quiet gaps. Public data only.
 - `newsService` reads Binance's two announcement lists once a minute while it is on (added in V3
   Stage 7).
+- `aiAdditionsService` (added 6 October 2026) puts each story of high impact the news feed reads to
+  the news analyst, once, while the watch is on, within its daily limit and the AI budget.
 - `newsFeedService` (added 6 October 2026) reads four free news feeds every three minutes, always:
   CoinDesk, The Block, Cointelegraph and Decrypt. It keeps each story once, and reads the 1-minute
   candles of the coins they name to say what the price did after. Public data only.
@@ -163,7 +166,7 @@ reaches it. A call may span lines. The `news` channels were added after: four in
 | `news` | 5: state, config, list, updates, the rules' record (with the two near misses, from Binance's lists and Upbit's) | Discovery's announcements card and its record of the news rules, Settings › Market, and `NewsScheduler` (what a delisting or a tag does). Nothing else reads it (`tests/aiNoLivePath.test.ts`) |
 | `feed` | 4 (added 6 October 2026): state, updates, open a story's link (https on a feed's own host only), and the stories on file over a span | Discovery's News & Market Events tab, "Why did it move?", and `NewsAlertScheduler`, through `useNewsFeed`; the history by the event benchmark and the live leaderboard, for "Does AI help?". Nothing else reads it (`tests/aiNoLivePath.test.ts`) |
 | `credentials` | 10: list, set, test, remove, balances, futures positions, close, stops | Settings, Account, the live trading bar, New Executor, the ledger check |
-| `ai` | 22: key, signal tapes, config, calls, usage, entry confirmation, benchmark, opportunities, experiments | Agents' tabs, Backtest, Bots, the watch |
+| `ai` | 23: key, signal tapes, config, calls, usage, entry confirmation, benchmark, opportunities, experiments; and since 6 October 2026 the AI additions' status | Agents' tabs, Backtest, Bots, the watch; the additions' card under Settings › AI, and the news analyst's readings read from the ledger |
 | `liveTrading` | 19: status, limits, kill switch, arm, positions, orders, watchers, TWAP | The live trading bar, Settings, Executors, Positions, `LiveOrderScheduler`, Portfolio |
 | `executors` | `placeLiveOrder`, `placeLiveLimitOrder` | Executors only |
 

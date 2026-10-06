@@ -559,6 +559,45 @@ describe('AI code has no route to a real order', () => {
     expect(card).not.toMatch(/liveTrading|placeLive|window\.api\.(executors|ai|credentials)/)
   })
 
+  it('the AI additions ask within their own limits and the budget, and place nothing', () => {
+    // Since 6 October 2026 (the V3 plan's Stage 7, switched on by the user within the $5 day). The
+    // main-process half asks through aiSignalService's own path -- the budget immediately before the
+    // request, the pace, the retries -- and writes its cache and the ledger, and nothing else; what
+    // shows the additions reads their switch, their status and the ledger.
+    const service = join(SERVICES, 'aiAdditionsService.ts')
+    expect(importsOf(service).sort()).toEqual([
+      'aiAdditionPrompts',
+      'aiAdditions',
+      'aiConfigService',
+      'aiCost',
+      'aiCredentialsService',
+      'aiLedgerService',
+      'aiSignalService',
+      'alerts',
+      'atomicWrite',
+      'electron',
+      'newsFeed',
+      'newsFeedService',
+      'node:crypto',
+      'path',
+      'promises'
+    ])
+    const source = readFileSync(service, 'utf-8')
+    expect(source).toContain('await assertAiBudget()')
+    expect(source).not.toMatch(/liveTrading|placeLive|setExecutors|settings\.set|setSettings|credentialsService'/)
+    expect(importsOf(join(SERVICES, 'aiAdditionPrompts.ts'))).toEqual(['aiAdditions'])
+    expect(readFileSync(join(ROOT, 'shared', 'aiAdditions.ts'), 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron\//)
+    const calls = (path: string): string[] => {
+      const text = readFileSync(path, 'utf-8')
+      return [...new Set([...text.matchAll(/window\.api\.(\w+)(?:\s*\.\s*(\w+))?/g)].map((match) => (match[2] === undefined ? match[1] : `${match[1]}.${match[2]}`)))].sort()
+    }
+    expect(calls(join(ROOT, 'src', 'agents', 'AiAdditionsCard.tsx'))).toEqual(['ai.additionsStatus', 'ai.setConfig'])
+    expect(calls(join(ROOT, 'src', 'news', 'useNewsReadings.ts'))).toEqual(['ai.listCalls'])
+    for (const path of [join(ROOT, 'src', 'agents', 'AiAdditionsCard.tsx'), join(ROOT, 'src', 'news', 'useNewsReadings.ts')]) {
+      expect(readFileSync(path, 'utf-8'), path).not.toMatch(/liveTrading|LiveTrading|placeLive|onPrepareOrder|aiProposal|settings\.set/)
+    }
+  })
+
   it('"Does AI help?" counts trades already scored, with the strategies read from their own exports', () => {
     // Since 6 October 2026 (the second V3 document, §21 and §61): the quant and hybrid rows and the
     // three verdicts are worked out from answers already held, public candles and the stories on
@@ -593,7 +632,8 @@ describe('AI code has no route to a real order', () => {
     // past its cap, and so only ever opens less. Neither makes, stops or places anything.
     const score = join(ROOT, 'shared', 'opportunityScore.ts')
     const exposure = join(ROOT, 'shared', 'paperExposure.ts')
-    expect(importsOf(score).sort()).toEqual(['aiOpportunity', 'marketEvent', 'marketResearch', 'newsFeed'])
+    // The news analyst's reading of a story is one more observation the news part takes (a type).
+    expect(importsOf(score).sort()).toEqual(['aiAdditions', 'aiOpportunity', 'marketEvent', 'marketResearch', 'newsFeed'])
     expect(importsOf(exposure).sort()).toEqual(['aiEventMarket', 'ipc', 'paperRisk'])
     for (const path of [score, exposure]) {
       expect(readFileSync(path, 'utf-8'), path).not.toMatch(/window\.|ipcRenderer|electron\/|liveTrading|placeLive|setExecutors|status: '|mode: /)

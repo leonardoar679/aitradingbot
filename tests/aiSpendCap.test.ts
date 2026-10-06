@@ -138,7 +138,10 @@ describe('the budget in the main process', () => {
       watch: { enabled: false, models: [], maxEventsPerDay: 10, minBand: 'urgent', firstModelGates: false },
       // And nothing opens a position without one, paper or otherwise, until that is switched on too.
       watchPaper: { enabled: false, model: null, stakeQuote: 100, maxOpen: 3, maxSameSide: 2, pauseAfterLosses: 3, dropOnBtcMovePct: 1 },
-      callsPerMinute: 30
+      callsPerMinute: 30,
+      // The AI additions are on, as the user chose on 6 October 2026; the ones that ask by themselves
+      // still wait for the watch, which is off.
+      additions: { news: true }
     })
   })
 

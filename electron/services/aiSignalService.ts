@@ -226,7 +226,9 @@ function contextAt(request: AiSignalTapeRequest, index: number, position: AiPosi
   return context
 }
 
-async function requestWithRetry(
+/** One request, paced, retried by the rule above, and timed out. Exported for the AI additions
+ * (aiAdditionsService.ts), which ask through exactly this path. */
+export async function requestWithRetry(
   apiKey: string,
   model: string,
   messages: { role: 'system' | 'user'; content: string }[],
@@ -301,7 +303,7 @@ function interpret(result: ChatCompletionResult, context: AiMarketContext): AiAn
 
 /** Fills in a cost when the response carried none, from the model's price list and the tokens the
  * response DID report. Left null when neither is known: an invented zero would read as "free". */
-async function withCost(usage: AiCallUsage, model: string): Promise<AiCallUsage> {
+export async function withCost(usage: AiCallUsage, model: string): Promise<AiCallUsage> {
   if (usage.costUsd !== null) return usage
   const info = await findAiModel(model)
   if (!info || info.promptPricePerToken === null || info.completionPricePerToken === null) return usage

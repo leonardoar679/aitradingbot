@@ -1,3 +1,4 @@
+import type { AiAdditionsConfig } from './aiAdditions'
 import type { AiCallRecord } from './aiLedger'
 import { pacedMinimumMs } from './aiPace'
 import { describeDecider, isPanelId } from './aiPanel'
@@ -62,6 +63,8 @@ export interface AiConfig {
   watchPaper: AiWatchPaperConfig
   /** The most calls that start to any one model in a minute, whoever asks (shared/aiPace.ts). */
   callsPerMinute: number
+  /** The AI additions, on or off each (shared/aiAdditions.ts). On unless switched off. */
+  additions: AiAdditionsConfig
 }
 
 export interface AiConfigPatch {
@@ -76,6 +79,8 @@ export interface AiConfigPatch {
   watchPaper?: Partial<AiWatchPaperConfig>
   /** One of AI_CALLS_PER_MINUTE_CHOICES. */
   callsPerMinute?: number
+  /** Only the additions given are switched. */
+  additions?: Partial<AiAdditionsConfig>
 }
 
 /** `$0.0021`, `$0.0113`, `$1.40`. Up to four decimals under ten cents, because that is where a

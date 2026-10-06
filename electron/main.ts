@@ -9,6 +9,7 @@ import { startMarketResearch } from './services/marketResearchService'
 import { startLiveMarket } from './services/liveMarketService'
 import { startNewsReader } from './services/newsService'
 import { startNewsFeed } from './services/newsFeedService'
+import { startAiAdditions } from './services/aiAdditionsService'
 import icon from '../build/icon.png?asset'
 
 function createWindow(): BrowserWindow {
@@ -100,6 +101,10 @@ if (!gotSingleInstanceLock) {
     // measures what the price did around each story. Public data; no key, model or order. See
     // newsFeedService.ts.
     void startNewsFeed().catch((error) => console.error('News feed failed to start:', error))
+    // The AI additions that ask by themselves (shared/aiAdditions.ts): the news analyst, on each
+    // story of high impact the feed reads -- only while the watch is on, within its own daily limit
+    // and the budget. It places nothing. See aiAdditionsService.ts.
+    startAiAdditions()
 
     app.on('activate', function () {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()

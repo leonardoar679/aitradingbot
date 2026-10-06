@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { Card } from '../components/Card'
 import { HIGH_IMPACT, WATCH_IMPACT } from '../../shared/alerts'
 import { IMPACT_MIN_STORIES, describeEventType, type ReadStory, type StoryReaction } from '../../shared/newsFeed'
+import { describeNewsReading } from '../../shared/aiAdditions'
 import { markAlertsSeen } from '../news/alertStore'
 import { useNewsFeed } from '../news/useNewsFeed'
+import { useNewsReadings } from '../news/useNewsReadings'
 import { WhyButton } from '../news/WhyItMovedHost'
 
 type Filter = 'all' | 'btc' | 'eth' | 'alts' | 'market' | 'major'
@@ -58,10 +60,12 @@ const head: React.CSSProperties = { ...cell, fontSize: '0.7rem', fontWeight: 700
 
 /** News & Market Events (the second V3 document, §53): the stories of four free feeds and Binance's
  * announcements, the coins each names, its kind and impact, and what the price did around it
- * (shared/newsFeed.ts). Opening it marks the alerts seen. It reads; nothing here asks a model,
- * places or sells anything. */
+ * (shared/newsFeed.ts) -- and, under a story of high impact, the news analyst's reading of it, where
+ * it has read one (shared/aiAdditions.ts). Opening it marks the alerts seen. It reads; nothing here
+ * asks a model, places or sells anything. */
 export function NewsFeedCard(): React.JSX.Element {
   const feed = useNewsFeed()
+  const readings = useNewsReadings(feed)
   const [filter, setFilter] = useState<Filter>('all')
   useEffect(() => markAlertsSeen(), [feed])
 
@@ -136,6 +140,11 @@ export function NewsFeedCard(): React.JSX.Element {
                             {story.alsoIn.length > 0 && ` · also ${story.alsoIn.join(', ')}`}
                             {story.stale && ' · old news'}
                           </div>
+                          {readings[story.id] !== undefined && (
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '0.2rem', lineHeight: 1.45 }} title={readings[story.id].reasons}>
+                              <strong style={{ color: 'var(--accent)' }}>AI reading:</strong> {describeNewsReading(readings[story.id])}
+                            </div>
+                          )}
                         </td>
                         <td style={{ ...cell, whiteSpace: 'nowrap' }}>
                           {story.assets.length === 0 ? (

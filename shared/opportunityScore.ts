@@ -1,3 +1,4 @@
+import type { NewsReading } from './aiAdditions'
 import type { OpportunitySide } from './aiOpportunity'
 import { eventReasons, liquidityScore, type MarketEvent } from './marketEvent'
 import { describeMarketRegime, type MarketRegime } from './marketResearch'
@@ -14,7 +15,10 @@ import { describeEventType, expectedDirection, type ReadStory, type StoryReactio
 //
 // A MODEL CONTRIBUTES OBSERVATIONS, NEVER THE SCORE. An answer counts here only as a side taken at
 // the confidence this app acts on. Its confidence, its own reading of the market and its reasons
-// are shown beside the score, and are not in it.
+// are shown beside the score, and are not in it. The one other observation it takes is the news
+// analyst's (shared/aiAdditions.ts): which way a story points, where the analyst has read it about
+// this coin, in place of the fixed rule's guess from the story's kind. The weight and the impact stay
+// the fixed rules'.
 //
 // IT RANKS; IT IS NOT A PROBABILITY. The weights are engineering defaults, written down here before
 // any result was looked at. Whether a higher score earns more is for the record to say, and nothing
@@ -96,10 +100,17 @@ export interface SignalCall {
 const clamp = (value: number, low: number, high: number): number => Math.min(high, Math.max(low, value))
 const sideWord = (side: OpportunitySide): string => (side === 'long' ? 'BUY' : 'SELL')
 
-/** How far a story's kind points the side's way: all the way, not at all, or halfway for a kind
- * with no way of its own. */
-function storyAgreement(story: Pick<ReadStory, 'eventType'>, side: OpportunitySide | null): number {
-  const way = expectedDirection(story.eventType)
+/** Which way a story points for `coin`: the news analyst's reading where it read the story about
+ * this coin, else the fixed rule's by the story's kind; null for neither way. */
+function storyWay(story: Pick<ReadStory, 'id' | 'eventType'>, coin: string, readings: Readonly<Record<string, NewsReading>> | undefined): 'up' | 'down' | null {
+  const reading = readings?.[story.id]
+  if (reading !== undefined && reading.ticker === coin) return reading.direction === 'none' ? null : reading.direction
+  return expectedDirection(story.eventType)
+}
+
+/** How far a story points the side's way: all the way, not at all, or halfway with no way of its
+ * own, or no side to read it by. */
+function storyAgreement(way: 'up' | 'down' | null, side: OpportunitySide | null): number {
   if (way === null || side === null) return 0.5
   return (way === 'up') === (side === 'long') ? 1 : 0
 }
@@ -120,6 +131,8 @@ export function signalScore(input: {
   calls: readonly SignalCall[]
   stories: readonly ReadStory[]
   reactions: Readonly<Record<string, StoryReaction>>
+  /** The news analyst's readings, by story id, where it has read any. */
+  readings?: Readonly<Record<string, NewsReading>>
   regime: MarketRegime | null
   nowSec: number
 }): SignalScore {
@@ -131,19 +144,22 @@ export function signalScore(input: {
   // points the side's way.
   const about = storiesAbout(event.baseAsset, event.time, input.stories, input.nowSec)
   const fresh = about.filter((story) => !story.stale)
-  let best: { story: ReadStory; value: number } | null = null
+  let best: { story: ReadStory; value: number; agreement: number } | null = null
   for (const story of fresh) {
-    const value = story.impact * storyAgreement(story, side)
-    if (best === null || value > best.value) best = { story, value }
+    const agreement = storyAgreement(storyWay(story, event.baseAsset, input.readings), side)
+    const value = story.impact * agreement
+    if (best === null || value > best.value) best = { story, value, agreement }
   }
+  const read = best === null ? undefined : input.readings?.[best.story.id]
+  const byAnalyst = read !== undefined && read.ticker === event.baseAsset
   const newsFact =
     best === null
       ? about.length > 0
         ? 'only old news names the coin'
         : `no story names ${event.baseAsset} in the ${SIGNAL_NEWS_SECONDS / 3600} hours before the event or since`
       : `${describeEventType(best.story.eventType)}, impact ${best.story.impact}: ${best.story.title} (${best.story.sourceName})${
-          storyAgreement(best.story, side) === 0 ? ', which points the other way' : ''
-        }`
+          best.agreement === 0 ? ', which points the other way' : ''
+        }${byAnalyst ? `, read by the news analyst as ${read.direction === 'none' ? 'pointing neither way' : `pointing ${read.direction}`}` : ''}`
 
   // The models: how many of those that answered would take this side, at the confidence acted on.
   const answered = input.calls.filter((call) => !call.refused)
