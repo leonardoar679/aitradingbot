@@ -26,6 +26,7 @@ import type {
   ScannerConfigPatch,
   ScannerState
 } from '../shared/marketScanner'
+import type { ResearchState } from '../shared/marketResearch'
 import type { NewsConfigPatch, NewsFilter, NewsPage, NewsState } from '../shared/news'
 import type { NewsRecord } from '../shared/newsRecord'
 import {
@@ -126,6 +127,17 @@ const api = {
   },
   // Binance's announcements. Everything here reads its public list or the file the reader wrote:
   // none of it reaches a model, a key or an order.
+  // The market research done at launch and every ten minutes: public market data and CoinGecko's
+  // free trending list. It reaches no model, key or order.
+  research: {
+    getState: (): Promise<ResearchState> => ipcRenderer.invoke(IpcChannel.ResearchGetState),
+    refresh: (): Promise<ResearchState> => ipcRenderer.invoke(IpcChannel.ResearchRefresh),
+    onUpdate: (listener: (state: ResearchState) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, state: ResearchState): void => listener(state)
+      ipcRenderer.on(IpcChannel.ResearchUpdate, handler)
+      return () => ipcRenderer.removeListener(IpcChannel.ResearchUpdate, handler)
+    }
+  },
   news: {
     getState: (): Promise<NewsState> => ipcRenderer.invoke(IpcChannel.NewsGetState),
     setConfig: (patch: NewsConfigPatch): Promise<NewsState> => ipcRenderer.invoke(IpcChannel.NewsSetConfig, patch),

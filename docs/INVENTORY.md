@@ -124,6 +124,9 @@ And a seventh and an eighth on 5 October 2026:
 
 The main process also runs loops that need no window at all:
 - `marketScannerService` reads the market once a minute while it is on.
+- `marketResearchService` (added 6 October 2026) studies the market as the app opens and every ten
+  minutes after, always: the liquid pairs, a day's and a week's moves, CoinGecko's trending list
+  every fifteen minutes, and the market's status. Public data only.
 - `newsService` reads Binance's two announcement lists once a minute while it is on (added in V3
   Stage 7).
 - `livePositionWatchersService` evaluates live exits every 5 seconds.
@@ -141,6 +144,7 @@ reaches it. A call may span lines. The `news` channels were added after: four in
 | `market` | 12: symbols, symbol rules, candles and ticker subscriptions, 24-hour ticker, historical ranges | Charts, Market, Backtest, executors, the watch, benchmarks, Explorer |
 | `backtest` | `exportSave` | Backtest results, strategy comparison, Journal |
 | `scanner` | 8: state, config, events, history scan, universe, updates | Explorer, Opportunities, the watch, the event benchmark, the live board, Journal |
+| `research` | 3 (added 6 October 2026): state, read again, updates | Overview's market status and Markets' movers, through `useMarketResearch`. Nothing else reads it (`tests/aiNoLivePath.test.ts`) |
 | `news` | 5: state, config, list, updates, the rules' record (with the two near misses, from Binance's lists and Upbit's) | Discovery's announcements card and its record of the news rules, Settings › Market, and `NewsScheduler` (what a delisting or a tag does). Nothing else reads it (`tests/aiNoLivePath.test.ts`) |
 | `credentials` | 10: list, set, test, remove, balances, futures positions, close, stops | Settings, Account, the live trading bar, New Executor, the ledger check |
 | `ai` | 22: key, signal tapes, config, calls, usage, entry confirmation, benchmark, opportunities, experiments | Agents' tabs, Backtest, Bots, the watch |

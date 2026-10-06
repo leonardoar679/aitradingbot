@@ -492,7 +492,10 @@ export const SCAN_EXCLUDED_BASES: ReadonlySet<string> = new Set([
   'WBTC',
   'WBETH',
   'BNSOL',
-  'PAXG'
+  'PAXG',
+  // Tether's gold, pegged to an ounce as PAXG is; on Binance's USDT list by October 2026, and seen
+  // among the market research's movers before it was left out here.
+  'XAUT'
 ])
 
 /** Whether a pair belongs in the watched set at all: quoted in the one asset every watched pair

@@ -3,6 +3,7 @@ import { FirstRunCard } from '../portfolio/PortfolioSections'
 import type { AiOrderProposal } from '../../shared/aiProposal'
 import type { Page } from '../navigation/pages'
 import { HoldingsSummary } from './HoldingsSummary'
+import { MarketStatusStrip } from './MarketStatusStrip'
 import { MarketSummaryCard } from './MarketSummaryCard'
 import { SafetySummary } from './SafetySummary'
 import { TopOpportunityCard } from './TopOpportunityCard'
@@ -23,6 +24,7 @@ export function OverviewPage({
     <>
       <PageHeader title="Overview" subtitle="What the market is doing, what can be acted on, what you hold, and whether real money is at risk" />
       <FirstRunCard onGetStarted={onGetStarted} />
+      <MarketStatusStrip />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.25rem', alignItems: 'start' }}>
         <MarketSummaryCard onNavigate={onNavigate} />
         <SafetySummary onNavigate={onNavigate} />

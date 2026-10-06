@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
 import { MarketTicker } from './MarketTicker'
+import { MoversCard } from './MoversCard'
 import { TradingChart } from '../charts/TradingChart'
 import { EXCHANGES, type Exchange, type SymbolInfo } from '../../shared/ipc'
 
@@ -24,6 +25,13 @@ export function Dashboard(): React.JSX.Element {
         onPairChange={setPair}
       />
       <TradingChart exchange={exchange} symbol={pair.symbol} quoteAsset={pair.quoteAsset} />
+      {/* What moved most among Binance's liquid USDT pairs; a row opens its chart above. */}
+      <MoversCard
+        onPick={(next) => {
+          setExchange('binance')
+          setPair(next)
+        }}
+      />
     </>
   )
 }

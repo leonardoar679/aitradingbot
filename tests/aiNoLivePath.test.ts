@@ -229,6 +229,31 @@ describe('AI code has no route to a real order', () => {
     expect(importsOf(join(ROOT, 'shared', 'marketEvent.ts'))).toEqual(['ipc'])
   })
 
+  it('the market research reads public data and reaches nothing else', () => {
+    // Since 6 October 2026 the app studies the market as it opens (the second V3 document): the
+    // liquid pairs, a day's and a week's moves, CoinGecko's free trending list, the market's state.
+    // It is held to the scanner's rule: its main-process files import nothing that trades or holds
+    // a key and nothing that asks a model, the rules are arithmetic, and what shows it calls the
+    // research bridge alone.
+    const main = [join(SERVICES, 'marketResearchService.ts'), join(ROOT, 'electron', 'ipc', 'handlers', 'researchHandlers.ts')]
+    for (const path of main) {
+      expect(importsOf(path).filter((name) => LIVE_MODULES.has(name)), path).toEqual([])
+      expect(importsOf(path).filter((name) => aiModuleNames.has(name)), path).toEqual([])
+    }
+    // The data host's reads, through the scanner's own source; never the resolver that trades.
+    expect(importsOf(join(SERVICES, 'marketResearchService.ts')).sort()).toEqual(['ipc', 'marketResearch', 'marketService', 'singleFlight'])
+    expect(readFileSync(join(SERVICES, 'marketResearchService.ts'), 'utf-8')).not.toMatch(/resolveTradingEndpoint|credentials|apiKey/)
+    const rules = join(ROOT, 'shared', 'marketResearch.ts')
+    expect(importsOf(rules).sort()).toEqual(['aiEventMarket', 'ipc', 'marketScanner'])
+    expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron/)
+    const views = [join(ROOT, 'src', 'hooks', 'useMarketResearch.ts'), join(ROOT, 'src', 'overview', 'MarketStatusStrip.tsx'), join(ROOT, 'src', 'dashboard', 'MoversCard.tsx')]
+    for (const path of views) {
+      const source = readFileSync(path, 'utf-8')
+      expect([...new Set([...source.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))], path).toEqual(path.endsWith('useMarketResearch.ts') ? ['research'] : [])
+      expect(source, path).not.toMatch(/liveTrading|LiveTrading|placeLive|onPrepareOrder|aiProposal/)
+    }
+  })
+
   it('the news reader reads one public list and reaches nothing else', () => {
     // It reads Binance's announcements once a minute with no window open: the first news in this
     // app. It is held to the scanner's rule and to more. Its main-process files import nothing that

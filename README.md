@@ -38,9 +38,9 @@ other.
 
 | Group | Page | What it does |
 |---|---|---|
-| AI Trader | **Overview** | The landing page, answering five questions from what the app already reads. **The market**: Bitcoin and ether over the hour and four hours, whether Bitcoin is rising, falling or flat, and what is moving most, from the scanner's last pass. **What can be acted on**: the strongest recommendation still on offer, with its entry, stop, target, time left and a Paper trade button — or, usually, "No high-quality opportunity right now. Wait." with the strongest event of the last hour and what it lacks. **What the models said** about it. **What you hold**: value, paper strategies running, real positions open. **Safety**: whether a real order can be placed, the day's loss, the AI's spend and what the watch does. The starter presets lead it for someone with nothing running. |
+| AI Trader | **Overview** | The landing page, answering five questions from what the app already reads. **Market status** first, from the [research the app does as it opens](#market-research-when-the-app-opens): Bitcoin and ether rising, falling or flat, the other pairs against Bitcoin, and a risk state (NORMAL, ELEVATED or PANIC), with a "Researching…" line while it reads. **The market**: Bitcoin and ether over the hour and four hours, whether Bitcoin is rising, falling or flat, and what is moving most, from the scanner's last pass. **What can be acted on**: the strongest recommendation still on offer, with its entry, stop, target, time left and a Paper trade button — or, usually, "No high-quality opportunity right now. Wait." with the strongest event of the last hour and what it lacks. **What the models said** about it. **What you hold**: value, paper strategies running, real positions open. **Safety**: whether a real order can be placed, the day's loss, the AI's spend and what the watch does. The starter presets lead it for someone with nothing running. |
 | | **Opportunities** | What can be traded right now: the [watch](#ai-signals--paper-only) that puts events to models with no click, the recommendations still valid ("No high-quality opportunity right now. Wait." when there are none), and every event the scanner raised with each model's call, Ask and Paper trade. A call fills in an order form at most; a person places it. |
-| | **Markets** | One pair on any supported exchange: candlestick chart with indicators, symbol search, live ticker. |
+| | **Markets** | One pair on any supported exchange: candlestick chart with indicators, symbol search, live ticker. Below it, **Movers**: the liquid USDT pairs that moved most over the day and over the week, by volume against their week, and CoinGecko's trending list, from the [market research](#market-research-when-the-app-opens); a row opens its chart. |
 | | **AI Decisions** | **Analyze** asks a model about one market; **Signals** lists every call any model has made and how it turned out. A model is handed a market snapshot and returns one JSON decision, and is given no tools at all. |
 | | **Positions** | Live paper positions for active bots; a **Live Positions** table of real Binance holdings from live-mode Order Executor fills, closable (fully or partially) for real; a **Live Trade History** table of realized P&L from closed live positions; an **Inventory** table of positions handed over from stopped paper executors (see [Position Handover](#position-handover--inventory)). |
 | | **Performance** | Total value, active-bot count, bot P&L and system cards; the portfolio's value over time (value/composition, 1D/1W/1M/3M) and its largest holdings; what the watch's recommendations earned, in percent and in R, over the last 10/50/100 trades and 7/30 days; the app's own paper trades, the watch's and the news rules', as a running total in R; the journal of every recommendation with its outcome, exportable as CSV, where any line opens [its whole story](#one-trades-whole-story) on one timeline. |
@@ -158,6 +158,32 @@ is stopped while it holds an open, unrealized position, that position is copied 
 silently discarded. A "Close" button there removes it (locking in P&L locally — still no real
 order). Defaults to on for Position and Order executors, off for Grid/DCA/TWAP, and doesn't apply
 to XEMM/Arbitrage (they never leave a lingering position by design).
+
+### Market research when the app opens
+
+Since 6 October 2026 (the second V3 document's §4 and §9) the app studies the market by itself as
+it opens, and every ten minutes after, whatever else is switched on
+(`electron/services/marketResearchService.ts`; the arithmetic is `shared/marketResearch.ts`):
+- **The pairs:** the scanner's own choice of USDT pairs (no stablecoins or pegged tokens), the 50
+  most traded that each trade at least $20M a day.
+- **A day and a week:** each pair's 24-hour move from the one all-pairs ticker request; its week
+  from nine daily bars — the move from the close eight days back, the day's volume against the
+  week's daily mean, how many of the seven days closed up, and how far it is from the week's high.
+- **Trending:** CoinGecko's free list of the most searched coins, matched to Binance's USDT pairs,
+  read every fifteen minutes. When it cannot be read, that is said, and the last list is kept.
+- **The market's status:** Bitcoin and ether rising, falling or flat by the four-hour rule the event
+  benchmark slices by (`btcRegimeOf`), from a day of 15-minute bars each; the other pairs' median
+  day against Bitcoin's (STRONG, IN LINE or WEAK, 2 points either way); the share that rose; and
+  a risk state — PANIC when Bitcoin falls 3% in an hour or 8% in a day, ELEVATED when it moves 1.5%
+  in an hour or 4% in a day either way or fewer than one pair in five rose, NORMAL otherwise. These
+  lines are engineering defaults, written down before any result was looked at.
+
+It is shown at the top of Overview, with a "Researching…" line while it reads, and as Movers under
+the chart on Markets. It reads public market data from the data host only, never the one that
+trades, and CoinGecko's free list; it holds no key, asks no model and writes nothing.
+`tests/aiNoLivePath.test.ts` holds it to that. Checked on 6 October 2026 against the live market:
+it finished eleven seconds after launch with 36 pairs over the floor, both regimes flat, risk
+normal, and 15 trending coins, 8 of them on Binance.
 
 ### Discovery — a market scanner
 
@@ -1603,6 +1629,8 @@ electron/preload.ts  ── contextBridge ──▶  window.api.*  (renderer)
       │                                                   + electron/services/exchanges/*
       ├── scanner.*  (what is moving, events)         → electron/services/marketScannerService.ts
       │                                                   (public market data; no key, model or order)
+      ├── research.*  (the market studied at launch)   → electron/services/marketResearchService.ts
+      │                                                   (public market data and CoinGecko's free list)
       ├── news.*  (Binance's announcements)           → electron/services/newsService.ts
       │                                                   (two public lists; no key, model or order)
       ├── ai.*  (key, models, budget, signals, ledger) → electron/services/aiSignalService.ts
@@ -2733,6 +2761,7 @@ shared/                       Code both processes run, so they cannot disagree a
   tradeLifecycle.ts           One trade's whole story: the event, the answers, the paper position, its fill and its end, joined by their ids
   marketEvent.ts              The event detector: a pair's reading from twelve hours of 1-minute candles, and what raises an event
   marketScanner.ts            The scanner's settings, what a pass reports, and which pairs are watched
+  marketResearch.ts           What the app studies as it opens: the liquid pairs, a day's and a week's movers, trending, the market's status
   newsTitles.ts, news.ts      Which kind of news a Binance title is, and which coins it names (the study's patterns); what the reader keeps of each article, and what each kind did
   newsActions.ts              What a delisting or a Monitoring Tag does: the notice to a holder, the kind's paper short, and when it is raised for the models and may be asked about
   newsRules.ts, newsRecord.ts The studies' bracket and four-hour hold as arithmetic, shared with research/announcementStudy.ts; the record of the two rules and the two near misses since the studies
@@ -2744,7 +2773,7 @@ src/                          React renderer app
   navigation/pages.ts          The sidebar's four groups, the Page union, and the views of the pages that have them
 
   The pages, one folder each, put together from the components below where they are:
-  overview/                   Overview: the market, what can be acted on, what you hold, safety
+  overview/                   Overview: the market's status (MarketStatusStrip), the market, what can be acted on, what you hold, safety
   status/                     What the status bar and Overview say: the trading mode, the watch's mode, a key's state
   opportunities/              Opportunities
   ai-decisions/               AI Decisions (Analyze, Signals)
@@ -2783,7 +2812,7 @@ src/                          React renderer app
                               watchTradeRecords.ts + TradeTimeline (one trade's records, read by
                               their ids, and its timeline)
   routines/                   Scheduled-backtest store, headless scheduler, page
-  dashboard/                  Markets page (chart + ticker)
+  dashboard/                  Markets page (chart + ticker), and MoversCard
   backtest/                   Execution engine, results UI, Charts + Strategy Comparison views,
                               CSV/JSON/PNG export; aiConfirmation.ts (a strategy replayed with a
                               model allowed to veto each trade)
@@ -2803,7 +2832,7 @@ src/                          React renderer app
   charts/                     Shared chart component
   components/                 Card, StatCard, EquityCurveChart, exchange/symbol pickers, etc.
   theme/                      ThemeContext + CHART_PALETTE (canvas-side theme tokens)
-  hooks/                      Small shared hooks (e.g. useLastPrice)
+  hooks/                      Small shared hooks (e.g. useLastPrice, useMarketResearch)
   ai/                         Renderer side of one AI decision: fetch its window, price it, ask
   utils/                      Formatting helpers
 

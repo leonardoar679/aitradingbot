@@ -5,6 +5,7 @@ import { registerIpcHandlers } from './ipc'
 import { startLivePositionWatcherLoop } from './services/livePositionWatchersService'
 import { startLiveTwapLoop } from './services/liveTwapService'
 import { startMarketScanner } from './services/marketScannerService'
+import { startMarketResearch } from './services/marketResearchService'
 import { startNewsReader } from './services/newsService'
 import icon from '../build/icon.png?asset'
 
@@ -81,6 +82,10 @@ if (!gotSingleInstanceLock) {
     // main-process-resident for the same reason as the two loops above. See
     // marketScannerService.ts.
     void startMarketScanner().catch((error) => console.error('Market scanner failed to start:', error))
+    // Studies the market as the app opens, and every ten minutes after: the liquid pairs, what
+    // moved over a day and a week, what is trending, and the market's state. Public data only, and
+    // always on, as the second V3 document asks. See marketResearchService.ts.
+    startMarketResearch()
     // Reads Binance's announcement lists once a minute and keeps each article once. One public
     // list, no key, no model, no order; started here only if it was left switched on. See
     // newsService.ts.
