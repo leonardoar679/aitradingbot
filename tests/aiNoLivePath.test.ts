@@ -515,6 +515,36 @@ describe('AI code has no route to a real order', () => {
     expect(card).not.toMatch(/window\.api|liveTrading|placeLive|onPrepareOrder/)
   })
 
+  it('the essentials on Settings read the gates and change only what is safe in one click', () => {
+    // The six settings at the top of Settings (the second V3 document, 6 October 2026). The card
+    // reads the live session's gates to say whether live trading is ready or active, and never
+    // changes them: arming and the kill switch stay on the bar, the limits on Risk & Safety, and the
+    // watch on Opportunities behind its priced confirmation. It writes three things: the scanner's
+    // switch and pairs, the desktop notices, and the paper settings put back to Conservative, which
+    // only ever open less.
+    const card = join(ROOT, 'src', 'settings', 'EssentialsCard.tsx')
+    const source = readFileSync(card, 'utf-8')
+    expect([...new Set([...source.matchAll(/window\.api\.(\w+)\.(\w+)/g)].map((match) => `${match[1]}.${match[2]}`))].sort()).toEqual([
+      'ai.credentialsStatus',
+      'ai.getConfig',
+      'credentials.list',
+      'liveTrading.getStatus',
+      'scanner.getState',
+      'scanner.setConfig',
+      'settings.get',
+      'settings.set'
+    ])
+    expect(source).not.toMatch(/onPrepareOrder|aiProposal|placeLive|setSessionArmed|KillSwitch|liveTrading\.setConfig|ai\.setConfig|window\.api\.executors/)
+    expect(source.match(/window\.api\.settings\.set\(/g)).toHaveLength(2)
+    expect(source).toContain('window.api.settings.set({ alerts: { ...healAlerts(fresh.alerts), ...patch } })')
+    expect(source).toContain('window.api.settings.set(conservativePaper(healPaperPause(fresh.paperPause)))')
+    // The page it sits on still mentions no bridge an order travels over (held above, for routes).
+    expect(readFileSync(join(ROOT, 'src', 'settings', 'SettingsPanel.tsx'), 'utf-8')).not.toMatch(/liveTrading|LiveTrading|placeLive/)
+    // Every desktop notice obeys the notifications setting, read where the notice is raised.
+    expect(importsOf(join(ROOT, 'electron', 'ipc', 'handlers', 'appHandlers.ts')).sort()).toEqual(['alerts', 'electron', 'ipc', 'pingService', 'settingsService'])
+    expect(importsOf(join(ROOT, 'shared', 'appDefaults.ts')).sort()).toEqual(['ipc', 'paperPause', 'paperRisk'])
+  })
+
   it('the AI\'s part of the status bar reads two settings and offers nothing', () => {
     // It sits on the live-trading bar, beside the arm and kill controls, so it is held to the
     // narrowest rule of all: it reads whether a key is stored and what the AI setting is, and

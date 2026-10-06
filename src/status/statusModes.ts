@@ -50,6 +50,42 @@ export function describeTradingMode(mode: TradingMode): ModeLabel {
   }
 }
 
+/** The V3 document's "LIVE TRADING: READY" is not "ACTIVE": ready is a stored Binance key whose
+ * last test passed, with the session disarmed, so that nothing real can happen until it is armed;
+ * active is the session armed. A key that failed its last test is not ready. */
+export type LiveReadiness = 'paper-only' | 'not-verified' | 'ready' | 'active' | 'blocked'
+
+export function liveReadinessOf(input: { mode: TradingMode; connection: ConnectionState }): LiveReadiness {
+  // The kill switch first, as in tradingModeOf: it blocks everything, whatever else is true.
+  if (input.mode === 'kill-switch') return 'blocked'
+  if (input.mode === 'live-armed') return 'active'
+  if (input.mode === 'paper-only' || input.connection === 'none') return 'paper-only'
+  return input.connection === 'ok' ? 'ready' : 'not-verified'
+}
+
+export function describeLiveReadiness(readiness: LiveReadiness): ModeLabel {
+  switch (readiness) {
+    case 'paper-only':
+      return { label: 'PAPER', detail: 'No Binance key is stored, so no real order can be placed. A verified key on Connections makes live trading ready.', tone: 'safe' }
+    case 'not-verified':
+      return { label: 'PAPER · KEY NOT VERIFIED', detail: 'A Binance key is stored but its last test failed, so live trading is not ready. Test it again on Connections.', tone: 'warn' }
+    case 'ready':
+      return {
+        label: 'PAPER · LIVE READY',
+        detail: 'A verified Binance key is stored and the live session is disarmed: no real order can be placed until it is armed on the bar, for this session only.',
+        tone: 'safe'
+      }
+    case 'active':
+      return {
+        label: 'LIVE ACTIVE',
+        detail: 'The live session is armed: the live executors you made can place real orders, within the limits on Risk & Safety. No model can place one.',
+        tone: 'live'
+      }
+    case 'blocked':
+      return { label: 'KILL SWITCH', detail: 'Every new real order is blocked until the kill switch is released.', tone: 'blocked' }
+  }
+}
+
 export type WatchMode = 'no-key' | 'off' | 'shadow' | 'paper-trades'
 
 export function watchModeOf(input: { keyConfigured: boolean; config: Pick<AiConfig, 'watch' | 'watchPaper'> | null }): WatchMode {

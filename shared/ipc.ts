@@ -152,6 +152,15 @@ export interface AppSettings {
    * the two that open them is paused (shared/paperPause.ts). Absent until first written, and healed
    * on every read: its defaults apply. */
   paperPause?: PaperPauseSettings
+  /** Whether the app raises desktop notices at all, and with sound (shared/alerts.ts). Absent until
+   * first written, and healed on every read: on, with sound. */
+  alerts?: AlertSettings
+}
+
+/** The app's desktop notices: on or off, and with sound or silent. */
+export interface AlertSettings {
+  enabled: boolean
+  sound: boolean
 }
 
 /** A losing run pauses the paper trades the app opens by itself, the watch's and the news rules'

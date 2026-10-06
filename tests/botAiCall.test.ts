@@ -149,8 +149,13 @@ describe('the notice is words on the desktop and nothing more', () => {
   it('the handler shows text and focuses the window: it is handed nothing to act on', () => {
     const handler = readFileSync(join(ROOT, 'electron', 'ipc', 'handlers', 'appHandlers.ts'), 'utf-8')
     // Its only inputs are a title and a body, and the only thing a click does is show the window.
-    expect(handler).toContain('ipcMain.handle(IpcChannel.AppNotify, (event, title: unknown, body: unknown): boolean => {')
-    expect(handler).not.toMatch(/placeLive|liveTrading|executor|settings/i)
+    expect(handler).toContain('ipcMain.handle(IpcChannel.AppNotify, async (event, title: unknown, body: unknown): Promise<boolean> => {')
+    // Since 6 October 2026 it reads one thing more, the Notifications control (shared/alerts.ts):
+    // whether to show the notice at all, and with sound. Those two lines are the only mention of
+    // settings it may have -- it writes none, and reads no executor.
+    const reads = ["import { getSettings } from '../../services/settingsService'", 'healAlerts((await getSettings()).alerts)']
+    for (const line of reads) expect(handler).toContain(line)
+    expect(reads.reduce((rest, line) => rest.replace(line, ''), handler)).not.toMatch(/placeLive|liveTrading|executor|settings/i)
   })
 
   it('the notifier and the bot views reach for no order path', () => {

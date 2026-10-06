@@ -80,6 +80,7 @@ All files are in the user's profile folder.
 | | `paperRisk` (added 5 October 2026): how the paper trades the app opens by itself are sized, by what their stop would lose or at their stake, and what they may stake together | — | Risk & Safety |
 | | `paperDigest` (added 5 October 2026): the daily notice of what those trades did, on or off, and the last day it told | — | Risk & Safety |
 | | `paperPause` (added 5 October 2026): the losing run in R that pauses those trades, or never; and for the watch and for the news rules, each, whether a run has paused it and when it was last resumed | — | Risk & Safety |
+| | `alerts` (added 6 October 2026): desktop notices on or off, and with sound or silent; obeyed where every notice is raised (`appHandlers.ts`) | — | Settings › Essentials |
 | `aiConfig.json` | `defaultModel`, `enabledModels`, `route` | Agents › Models | Settings › AI |
 | | `dailyCapUsd`, `callsPerMinute` | Agents › Usage | Settings › AI |
 | | `watch` (on, models, events a day, lowest band, first model gates) | Agents › Opportunities › Watch | Opportunities (stays with its results) |
@@ -152,10 +153,14 @@ use them.
 
 ## What the document asks for that does not exist
 
-The Configuration Center is built from the settings above. These settings from the document have
-no behaviour behind them, so they are not added as controls:
-- **General:** language, currency, timezone, startup page, a notifications switch. Desktop notices
-  from the watch are always on; the daily paper digest has a switch of its own, on Risk & Safety.
+The Configuration Center is built from the settings above. Since 6 October 2026 (the second V3
+document) Settings opens on **Essentials**, the six settings that decide what the app does by
+itself: trading mode (read from the live gates: PAPER, LIVE READY or LIVE ACTIVE), risk level
+(Conservative or Custom, from `shared/appDefaults.ts`), the scanner's market, the AI's mode (changed
+only on Opportunities), notifications, and the exchange. The rest is under **Advanced**. These
+settings from the document have no behaviour behind them, so they are not added as controls:
+- **General:** language, currency, timezone, startup page. Desktop notices have had a switch, with
+  sound, since 6 October 2026; the daily paper digest has one of its own, on Risk & Safety.
 - **Market:**
   - default exchange: the scanner reads Binance;
   - quote currency: USDT;
@@ -169,7 +174,7 @@ no behaviour behind them, so they are not added as controls:
   - structured output: always required;
   - temperature.
 - **Trading:**
-  - a global trading mode: the status bar shows the real gates instead;
+  - a global trading mode to set: the status bar and Essentials show the real gates instead;
   - default order type;
   - default holding horizon;
   - allowed and excluded pairs.

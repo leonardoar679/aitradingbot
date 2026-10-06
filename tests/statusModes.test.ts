@@ -5,10 +5,14 @@ import {
   connectionStateOf,
   describeAiSpend,
   describeConnection,
+  describeLiveReadiness,
   describeTradingMode,
   describeWatchMode,
+  liveReadinessOf,
   tradingModeOf,
   watchModeOf,
+  type ConnectionState,
+  type LiveReadiness,
   type TradingMode,
   type WatchMode
 } from '../src/status/statusModes'
@@ -99,5 +103,34 @@ describe('a connection', () => {
     expect(describeConnection('Binance', 'none')).toEqual({ label: 'BINANCE: NO KEY', detail: 'No Binance key is stored. Add one on Connections.', tone: 'muted' })
     expect(describeConnection('Binance', 'ok').tone).toBe('safe')
     expect(describeConnection('Binance', 'failed').label).toBe('BINANCE: TEST FAILED')
+  })
+})
+
+describe('live readiness, for Settings', () => {
+  // The V3 document: live trading can be READY without being ACTIVE. Ready is a stored key whose
+  // last test passed, with the session disarmed; active is the session armed.
+  it('is ready only with a verified key and a disarmed session, and active only when armed', () => {
+    const cases: [TradingMode, ConnectionState, LiveReadiness][] = [
+      ['paper-only', 'none', 'paper-only'],
+      ['paper-only', 'ok', 'paper-only'],
+      ['paper', 'none', 'paper-only'],
+      ['paper', 'failed', 'not-verified'],
+      ['paper', 'ok', 'ready'],
+      ['live-armed', 'ok', 'active'],
+      ['live-armed', 'failed', 'active'],
+      ['kill-switch', 'ok', 'blocked'],
+      ['kill-switch', 'none', 'blocked']
+    ]
+    for (const [mode, connection, readiness] of cases) expect(liveReadinessOf({ mode, connection }), `${mode} ${connection}`).toBe(readiness)
+  })
+
+  it('says ready is not active, and that no model can place an order either way', () => {
+    expect(describeLiveReadiness('ready').label).toBe('PAPER · LIVE READY')
+    expect(describeLiveReadiness('ready').detail).toMatch(/no real order can be placed until it is armed/)
+    expect(describeLiveReadiness('active')).toMatchObject({ label: 'LIVE ACTIVE', tone: 'live' })
+    expect(describeLiveReadiness('active').detail).toMatch(/No model can place one\.$/)
+    expect(describeLiveReadiness('not-verified').tone).toBe('warn')
+    expect(describeLiveReadiness('blocked').label).toBe('KILL SWITCH')
+    expect(describeLiveReadiness('paper-only').label).toBe('PAPER')
   })
 })
