@@ -10,6 +10,7 @@ import {
   type NewsShortMark
 } from '../../shared/newsActions'
 import type { AppSettings, Candle, Exchange, ExecutorConfig, PositionExecutorParams, SymbolInfo } from '../../shared/ipc'
+import { healPaperPause, paperPauseBlock } from '../../shared/paperPause'
 import { healPaperRisk, paperOutBlock, sizePaperTrade } from '../../shared/paperRisk'
 import { describeExecutorFunding } from '../account/executorFunding'
 import { settleExecutorOnStop } from '../account/settleExecutor'
@@ -24,7 +25,8 @@ import { settingsWrites } from '../utils/settingsWrites'
 // announcement with no stop and no target; a Monitoring Tag's has a stop and a target from the
 // coin's usual moves and is out within the hour. Each stakes its kind's stake; a tag's, which has a
 // stop, is sized by what it would lose there where the app's own paper trades are sized by risk,
-// and none is opened past what they may have out together (shared/paperRisk.ts). And a short of a
+// and none is opened past what they may have out together (shared/paperRisk.ts), or while a
+// losing run of the rules' own has them paused (shared/paperPause.ts). And a short of a
 // rule's that has closed is stopped and its result settled into the paper account, the way
 // pressing Stop on its card would.
 //
@@ -66,7 +68,7 @@ export function newsShortExecutor(input: { id: string; item: NewsItem; ticker: s
 }
 
 export interface NewsShortDeps {
-  getSettings: () => Promise<Pick<AppSettings, 'executors' | 'paperAccount' | 'paperRisk'>>
+  getSettings: () => Promise<Pick<AppSettings, 'executors' | 'paperAccount' | 'paperRisk' | 'paperPause'>>
   setExecutors: (executors: ExecutorConfig[]) => Promise<void>
   /** Binance's spot pairs: a coin with no USDT pair has nothing to short. */
   listPairs: () => Promise<SymbolInfo[]>
@@ -112,7 +114,11 @@ export async function openNewsShorts(item: NewsItem, actions: Pick<NewsKindActio
     const outcome = await deps.queue(async (): Promise<{ opened: number } | { refused: string }> => {
       const fresh = await deps.getSettings()
       const nowSec = deps.nowSec()
-      const blocked = newsShortBlock({ item, ticker, nowSec, executors: fresh.executors })
+      // The rule's own limits, then the losing run that pauses the app's own paper trades
+      // (shared/paperPause.ts): the news rules' shorts are judged on their own record.
+      const blocked =
+        newsShortBlock({ item, ticker, nowSec, executors: fresh.executors }) ??
+        paperPauseBlock({ setting: healPaperPause(fresh.paperPause), executors: fresh.executors, source: 'news' })
       if (blocked !== null) return { refused: blocked }
       const drafted =
         sigma15Pct === null

@@ -20,6 +20,7 @@ import { ControllerScheduler } from './controllers/ControllerScheduler'
 import { OpportunityScheduler } from './agents/OpportunityScheduler'
 import { NewsScheduler } from './news/NewsScheduler'
 import { PaperDigestScheduler } from './risk/PaperDigestScheduler'
+import { PaperPauseScheduler } from './risk/PaperPauseScheduler'
 import { RoutineScheduler } from './routines/RoutineScheduler'
 import { LiveTradingBar } from './livetrading/LiveTradingBar'
 import { LiveOrderScheduler } from './livetrading/LiveOrderScheduler'
@@ -103,6 +104,11 @@ function App(): React.JSX.Element {
           before. It reads settings and says so; it opens and closes nothing. */}
       <ErrorBoundary label="The daily paper digest">
         <PaperDigestScheduler />
+      </ErrorBoundary>
+      {/* After a losing run, the watch's or the news rules' paper trades are paused until resumed
+          on Risk & Safety. It writes the pause and says so; it opens and closes nothing. */}
+      <ErrorBoundary label="The losing-run pause">
+        <PaperPauseScheduler />
       </ErrorBoundary>
       <ErrorBoundary label="The live trading bar">
         <LiveTradingBar />

@@ -326,9 +326,10 @@ describe('AI code has no route to a real order', () => {
     // The writer reaches settings, the market and a notice, and closes with paper bookkeeping.
     expect([...new Set([...source.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))].sort()).toEqual(['market', 'notify', 'settings'])
     expect(source).not.toMatch(/window\.api\.credentials/)
-    // paperRisk sizes a tag's short by its stop and holds the app's own paper trades to their cap:
-    // arithmetic, which only ever opens less (held below).
-    expect(importsOf(writer).sort()).toEqual(['engine', 'executorFunding', 'ipc', 'news', 'newsActions', 'paperRisk', 'settingsWrites', 'settleExecutor'])
+    // paperRisk sizes a tag's short by its stop and holds the app's own paper trades to their cap,
+    // and paperPause refuses one after a losing run: arithmetic, which only ever opens less (held
+    // below).
+    expect(importsOf(writer).sort()).toEqual(['engine', 'executorFunding', 'ipc', 'news', 'newsActions', 'paperPause', 'paperRisk', 'settingsWrites', 'settleExecutor'])
     expect(readFileSync(rules, 'utf-8')).toContain("executor.newsRule !== undefined && executor.mode === 'paper' && executor.type === 'position'")
     // The scheduler reads -- the news, the settings, the balances a key can read -- and notifies.
     // Every write goes through the writer above.
@@ -398,9 +399,9 @@ describe('AI code has no route to a real order', () => {
     const signature = /export function watchPaperExecutor\(input: \{([^}]*)\}\)/.exec(source)?.[1] ?? ''
     expect(signature).toContain('plan: OkPlan')
     expect(signature).not.toMatch(/mode/)
-    // The rules import the proposal's arithmetic, the sizing's (paperRisk), a few names and types,
-    // and nothing that acts.
-    expect(importsOf(rules).sort()).toEqual(['aiOpportunity', 'aiPanel', 'aiProposal', 'aiSignal', 'ipc', 'marketEvent', 'paperRisk'])
+    // The rules import the proposal's arithmetic, the sizing's (paperRisk), the losing run's words
+    // for the confirmation (paperPause), a few names and types, and nothing that acts.
+    expect(importsOf(rules).sort()).toEqual(['aiOpportunity', 'aiPanel', 'aiProposal', 'aiSignal', 'ipc', 'marketEvent', 'paperPause', 'paperRisk'])
     expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron/)
     // The writer reaches settings, the price, candles, a notice and the setting. Nothing else.
     expect([...new Set([...source.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))].sort()).toEqual(['ai', 'market', 'notify', 'settings'])
@@ -424,6 +425,7 @@ describe('AI code has no route to a real order', () => {
       'executorFunding',
       'ipc',
       'marketEvent',
+      'paperPause',
       'paperRisk',
       'settingsWrites',
       'settleExecutor'
@@ -468,6 +470,38 @@ describe('AI code has no route to a real order', () => {
     // What it writes is the day it told, beside the switch, and nothing else: never the executors.
     expect(source.match(/window\.api\.settings\.set\(/g)).toHaveLength(1)
     expect(source).toContain('window.api.settings.set({ paperDigest: { ...setting, lastDay: plan.day } })')
+  })
+
+  it("a losing run pauses the app's own paper trades: arithmetic the two that open them refuse by, written down by a scheduler that writes nothing else", () => {
+    // Since 5 October 2026 a losing run in R pauses the watch's paper trades, or the news rules',
+    // until they are resumed on Risk & Safety. It only ever opens less. The rules are arithmetic on
+    // the results on file; each writer refuses by them inside the queue, where the trade would be
+    // written; and the scheduler writes the pause down and says so -- never the executors, and it
+    // closes nothing.
+    const rules = join(ROOT, 'shared', 'paperPause.ts')
+    // R is paperRisk's arithmetic: what a trade made over what its stop would have lost.
+    expect(importsOf(rules).sort()).toEqual(['ipc', 'paperRisk'])
+    const source = readFileSync(rules, 'utf-8')
+    expect(source).not.toMatch(/window\.|ipcRenderer|electron|liveTrading|placeLive/)
+    // It makes no executor and stops none.
+    expect(source).not.toMatch(/status: '|setExecutors|mode: /)
+    const writers = [
+      [join(ROOT, 'src', 'agents', 'watchPaperTrade.ts'), 'watch'],
+      [join(ROOT, 'src', 'news', 'newsPaperShort.ts'), 'news']
+    ] as const
+    for (const [writer, side] of writers) {
+      expect(readFileSync(writer, 'utf-8'), writer).toContain(`paperPauseBlock({ setting: healPaperPause(fresh.paperPause), executors: fresh.executors, source: '${side}' })`)
+    }
+    const scheduler = join(ROOT, 'src', 'risk', 'PaperPauseScheduler.tsx')
+    const watching = readFileSync(scheduler, 'utf-8')
+    expect([...new Set([...watching.matchAll(/window\.api\.(\w+)(?:\s*\.\s*(\w+))?/g)].map((match) => (match[2] === undefined ? match[1] : `${match[1]}.${match[2]}`)))].sort()).toEqual([
+      'notify',
+      'settings.get',
+      'settings.set'
+    ])
+    expect(importsOf(scheduler).sort()).toEqual(['paperPause', 'react', 'settingsWrites'])
+    expect(watching.match(/window\.api\.settings\.set\(/g)).toHaveLength(1)
+    expect(watching).toContain('window.api.settings.set({ paperPause: plan.setting })')
   })
 
   it('the running total in R of the app\'s own paper trades is drawn from what it is handed', () => {

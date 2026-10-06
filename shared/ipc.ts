@@ -148,6 +148,30 @@ export interface AppSettings {
   /** The daily notice of what those trades did the day before (shared/paperDigest.ts), and the
    * last day it told. Absent until first written, and healed on every read. */
   paperDigest?: PaperDigestSettings
+  /** The losing run in R that pauses those trades until someone resumes them, and whether each of
+   * the two that open them is paused (shared/paperPause.ts). Absent until first written, and healed
+   * on every read: its defaults apply. */
+  paperPause?: PaperPauseSettings
+}
+
+/** A losing run pauses the paper trades the app opens by itself, the watch's and the news rules'
+ * each on its own record, until someone resumes them. It only ever opens less. */
+export interface PaperPauseSettings {
+  /** What the run lost together, in R, that pauses one. Null: no run does. */
+  lossR: number | null
+  /** How many of its last closed trades with a stop the run is. */
+  trades: number
+  watch: PaperPauseState
+  news: PaperPauseState
+}
+
+export interface PaperPauseState {
+  /** When it was last resumed, in seconds: trades closed then or before are not counted. Null: all
+   * are. */
+  countFrom: number | null
+  /** When a run paused it, and that run: how many trades, and what they made in R together. Null
+   * while it is not paused. */
+  paused: { at: number; r: number; trades: number } | null
 }
 
 /** One desktop notice a day of what the app's own paper trades did the UTC day before. */

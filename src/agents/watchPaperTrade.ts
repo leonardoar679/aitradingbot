@@ -14,6 +14,7 @@ import {
 } from '../../shared/aiWatchPaper'
 import type { AppSettings, Candle, Exchange, ExecutorConfig, PositionExecutorParams } from '../../shared/ipc'
 import type { MarketEvent } from '../../shared/marketEvent'
+import { healPaperPause, paperPauseBlock } from '../../shared/paperPause'
 import { healPaperRisk, paperOutBlock } from '../../shared/paperRisk'
 import { describeExecutorFunding } from '../account/executorFunding'
 import { settleExecutorOnStop } from '../account/settleExecutor'
@@ -23,11 +24,13 @@ import { settingsWrites } from '../utils/settingsWrites'
 // THE ONE FILE OF THE WATCH'S THAT WRITES ANYTHING (shared/aiWatchPaper.ts has the rules).
 //
 // Two things happen here, and both are paper bookkeeping. A call the watch would act on becomes a
-// PAPER Position executor, appended to the executors on file. And a paper position of the watch's
-// that has closed -- its stop, its target or its clock ended it, or its entry expired unfilled --
-// is stopped and its result settled into the paper account, the way pressing Stop on its card
-// would, so that the money comes back and the count of open trades goes down. So is one still
-// waiting for its entry when Bitcoin has moved against it by more than its safeguard allows.
+// PAPER Position executor, appended to the executors on file, unless its limits, the paper money
+// the app's own trades have out, or a losing run of its own (shared/paperPause.ts) refuse it. And
+// a paper position of the watch's that has closed -- its stop, its target or its clock ended it,
+// or its entry expired unfilled -- is stopped and its result settled into the paper account, the
+// way pressing Stop on its card would, so that the money comes back and the count of open trades
+// goes down. So is one still waiting for its entry when Bitcoin has moved against it by more than
+// its safeguard allows.
 //
 // PAPER IS WRITTEN HERE AS A LITERAL. watchPaperExecutor takes no mode and has no way to be given
 // one. Nothing in this file mentions the bridge a real order travels over, and
@@ -75,7 +78,7 @@ export function watchPaperExecutor(input: {
 
 export interface WatchPaperDeps {
   getConfig: () => Promise<Pick<AiConfig, 'watchPaper'>>
-  getSettings: () => Promise<Pick<AppSettings, 'executors' | 'paperAccount' | 'paperRisk'>>
+  getSettings: () => Promise<Pick<AppSettings, 'executors' | 'paperAccount' | 'paperRisk' | 'paperPause'>>
   setExecutors: (executors: ExecutorConfig[]) => Promise<void>
   /** The price now, or null when it cannot be had: the event's own price then stands in. */
   lastPrice: (exchange: Exchange, symbol: string) => Promise<number | null>
@@ -108,7 +111,10 @@ export async function openWatchPaperTrade(
   if (!watchPaper.enabled || decision.model !== watchPaper.model) return null
 
   const before = await deps.getSettings()
-  const blocked = watchPaperBlock({ config: watchPaper, event, decision, executors: before.executors, nowSec: deps.nowSec() })
+  // Its own limits, then the losing run that pauses the app's own paper trades (shared/paperPause.ts).
+  const blocked =
+    watchPaperBlock({ config: watchPaper, event, decision, executors: before.executors, nowSec: deps.nowSec() }) ??
+    paperPauseBlock({ setting: healPaperPause(before.paperPause), executors: before.executors, source: 'watch' })
   if (blocked !== null) return { opened: false, text: `No paper trade: ${blocked}` }
 
   let lastPrice: number | null = null
@@ -122,11 +128,13 @@ export async function openWatchPaperTrade(
 
   // Checked again on the executors read inside the queue, with the funds and with what the app's
   // own paper trades have out together: two answers arriving together both passed the look above,
-  // and only one of them may be the pair's open trade.
+  // and only one of them may be the pair's open trade. A trade that closed in between may have
+  // ended a losing run, and that is read again too.
   const refused = await deps.queue(async (): Promise<string | null> => {
     const fresh = await deps.getSettings()
     const problem =
       watchPaperBlock({ config: watchPaper, event, decision, executors: fresh.executors, nowSec: deps.nowSec() }) ??
+      paperPauseBlock({ setting: healPaperPause(fresh.paperPause), executors: fresh.executors, source: 'watch' }) ??
       describeExecutorFunding({
         account: fresh.paperAccount ?? null,
         executors: fresh.executors,

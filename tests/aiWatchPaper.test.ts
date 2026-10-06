@@ -26,8 +26,10 @@ import {
   type WatchPaperOutcome,
   type WatchPaperPlan
 } from '../shared/aiWatchPaper'
-import type { Candle, ExecutorConfig, PaperAccount, PaperRiskSettings, PositionExecutorParams } from '../shared/ipc'
+import type { Candle, ExecutorConfig, PaperAccount, PaperPauseSettings, PaperRiskSettings, PositionExecutorParams } from '../shared/ipc'
 import type { MarketEvent } from '../shared/marketEvent'
+import { DEFAULT_PAPER_PAUSE, resumePaperPause } from '../shared/paperPause'
+import { riskedAtStop } from '../shared/paperRisk'
 import { simulatePosition } from '../src/executors/engine'
 import { openWatchPaperTrade, settleWatchPaperTrades, watchPaperExecutor, type WatchPaperDeps } from '../src/agents/watchPaperTrade'
 
@@ -355,8 +357,9 @@ interface Rig {
     config: AiWatchPaperConfig
     executors: ExecutorConfig[]
     account: PaperAccount | null
-    /** settings.json's paperRisk, as stored. */
+    /** settings.json's paperRisk, and its paperPause, as stored. */
     risk: unknown
+    pause?: unknown
     price: number | null | Error
     now: number
     candles: Candle[] | Error
@@ -373,7 +376,12 @@ function rig(initial: Partial<Rig['state']> = {}): Rig {
   let ids = 0
   made.deps = {
     getConfig: async () => ({ watchPaper: state.config }),
-    getSettings: async () => ({ executors: [...state.executors], paperAccount: state.account, paperRisk: state.risk as PaperRiskSettings | undefined }),
+    getSettings: async () => ({
+      executors: [...state.executors],
+      paperAccount: state.account,
+      paperRisk: state.risk as PaperRiskSettings | undefined,
+      paperPause: state.pause as PaperPauseSettings | undefined
+    }),
     setExecutors: async (executors) => {
       made.writes++
       state.executors = executors
@@ -896,5 +904,78 @@ describe('sized by risk, and held to what the app has out (shared/paperRisk.ts)'
     const byHand: ExecutorConfig = { ...watched, id: 'hand-1', symbol: 'ETHUSDT', watch: undefined, params: { ...(watched.params as PositionExecutorParams), amountQuote: 5000 } }
     const mine = rig({ risk: capped, config: roomy, executors: [byHand] })
     expect((await openWatchPaperTrade(event(), decision(), mine.deps))?.opened).toBe(true)
+  })
+})
+
+describe('paused after a losing run of its own (shared/paperPause.ts)', () => {
+  /** One of the watch's, on another pair, stopped out at `closedAt` having made `r` R. */
+  function closedTrade(symbol: string, closedAt: number, r: number): ExecutorConfig {
+    const made = executor({ symbol })
+    const mark = made.watch as NonNullable<ExecutorConfig['watch']>
+    const pnlQuote = r * (riskedAtStop(made.params as PositionExecutorParams) as number)
+    return { ...made, status: 'stopped', stoppedAt: closedAt, watch: { ...mark, result: { exit: r < 0 ? 'stop_loss' : 'take_profit', pnlQuote, closedAt } } }
+  }
+  // Closed the day before, so that the pause for the day after losses in a row does not apply.
+  const DAY_BEFORE = T - 86_400
+  const lost = ['AAAUSDT', 'BBBUSDT', 'CCCUSDT', 'DDDUSDT', 'EEEUSDT'].map((symbol, k) => closedTrade(symbol, DAY_BEFORE + k * 600, -1))
+  const PAUSED = "No paper trade: The watch's last 5 closed paper trades lost 5.00 R together, so it opens none until they are resumed on Risk & Safety."
+
+  it('opens nothing once its last trades have lost the run, by the defaults with nothing stored, and says why', async () => {
+    const r = rig({ executors: lost })
+    let priceReads = 0
+    const price = r.deps.lastPrice
+    r.deps.lastPrice = async (exchange, symbol) => {
+      priceReads++
+      return price(exchange, symbol)
+    }
+    expect(await openWatchPaperTrade(event(), decision(), r.deps)).toEqual({ opened: false, text: PAUSED })
+    // Refused at the first look, before the price is even read.
+    expect(priceReads).toBe(0)
+    expect(r.writes).toBe(0)
+    expect(r.notices).toEqual([])
+    // Four lost are short of it.
+    expect((await openWatchPaperTrade(event(), decision(), rig({ executors: lost.slice(1) }).deps))?.opened).toBe(true)
+  })
+
+  it('reads the run again inside the queue, where a trade that closed meanwhile may have ended it', async () => {
+    const r = rig({ executors: lost.slice(1) })
+    const price = r.deps.lastPrice
+    // The first look passes with four lost; the fifth closes while the price is being read.
+    r.deps.lastPrice = async (exchange, symbol) => {
+      r.state.executors = [...r.state.executors, lost[0]]
+      return price(exchange, symbol)
+    }
+    expect(await openWatchPaperTrade(event(), decision(), r.deps)).toEqual({ opened: false, text: PAUSED })
+    expect(r.writes).toBe(0)
+  })
+
+  it('holds while it is written down, whatever has closed since, and opens again once resumed', async () => {
+    const paused: PaperPauseSettings = { ...DEFAULT_PAPER_PAUSE, watch: { countFrom: null, paused: { at: T - 3600, r: -5, trades: 5 } } }
+    const since = [...lost, closedTrade('FFFUSDT', T - 1800, 3), closedTrade('GGGUSDT', T - 1200, 3)]
+    expect(await openWatchPaperTrade(event(), decision(), rig({ executors: since, pause: paused }).deps)).toEqual({
+      opened: false,
+      text: "No paper trade: The watch's last 5 closed paper trades had lost 5.00 R together by 08:07 UTC on 5 Oct, so it opens none until they are resumed on Risk & Safety."
+    })
+    const resumed = rig({ executors: lost, pause: resumePaperPause(paused, 'watch', T - 60) })
+    expect((await openWatchPaperTrade(event(), decision(), resumed.deps))?.opened).toBe(true)
+    expect((await openWatchPaperTrade(event(), decision(), rig({ executors: lost, pause: { ...paused, lossR: null } }).deps))?.opened).toBe(true)
+  })
+
+  it("is not paused by the news rules' losing run", async () => {
+    const shorts = lost.map(
+      (trade, k): ExecutorConfig => ({
+        ...trade,
+        watch: undefined,
+        newsRule: { articleId: 9, ticker: `T${k}`, releaseSec: DAY_BEFORE, title: 't', category: 'MONITORING_TAG', result: trade.watch?.result as NonNullable<ExecutorConfig['newsRule']>['result'] }
+      })
+    )
+    expect((await openWatchPaperTrade(event(), decision(), rig({ executors: shorts }).deps))?.opened).toBe(true)
+  })
+
+  it('says the pause beside how the trades are sized, before it is switched on', () => {
+    const text = describeAiWatchPaper({ config: config(), risk: STAKE, pause: DEFAULT_PAPER_PAUSE, watchOn: true, hasPaperAccount: false })
+    expect(text).toContain(
+      'Each stakes its own stake. There is no cap on what they stake together. Once the last 20 of them to close have lost 5 R together, none is opened until they are resumed on Risk & Safety.'
+    )
   })
 })

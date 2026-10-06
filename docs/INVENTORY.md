@@ -79,6 +79,7 @@ All files are in the user's profile folder.
 | | `paperAccount` | Account | Paper Trading |
 | | `paperRisk` (added 5 October 2026): how the paper trades the app opens by itself are sized, by what their stop would lose or at their stake, and what they may stake together | — | Risk & Safety |
 | | `paperDigest` (added 5 October 2026): the daily notice of what those trades did, on or off, and the last day it told | — | Risk & Safety |
+| | `paperPause` (added 5 October 2026): the losing run in R that pauses those trades, or never; and for the watch and for the news rules, each, whether a run has paused it and when it was last resumed | — | Risk & Safety |
 | `aiConfig.json` | `defaultModel`, `enabledModels`, `route` | Agents › Models | Settings › AI |
 | | `dailyCapUsd`, `callsPerMinute` | Agents › Usage | Settings › AI |
 | | `watch` (on, models, events a day, lowest band, first model gates) | Agents › Opportunities › Watch | Opportunities (stays with its results) |
@@ -112,10 +113,13 @@ A sixth was added after, in V3 Stage 7:
   reader has read. It tells someone who holds the coin, and opens the kind's paper short, each when
   switched on, and it settles those shorts.
 
-And a seventh on 5 October 2026:
+And a seventh and an eighth on 5 October 2026:
 - **`PaperDigestScheduler`** tells once a day, in a desktop notice, what the watch's and the news
   rules' paper trades did the UTC day before. It reads settings and marks the day told; it opens
   and closes nothing.
+- **`PaperPauseScheduler`** reads those trades once a minute, and when the watch's run, or the news
+  rules', has lost what pauses it, writes the pause down and says so once. It writes the pause and
+  nothing else; it opens and closes nothing.
 
 The main process also runs loops that need no window at all:
 - `marketScannerService` reads the market once a minute while it is on.

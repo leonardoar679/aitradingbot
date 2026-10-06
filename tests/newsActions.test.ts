@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { matchesAiCallFilter } from '../shared/aiLedger'
 import { AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS, describeQuestionKind, questionKindOfPromptVersion } from '../shared/aiOpportunity'
 import { DEFAULT_AI_WATCH, watchSkipReason } from '../shared/aiWatch'
-import type { Candle, ExecutorConfig, PaperAccount, PaperRiskSettings, PositionExecutorParams, SymbolInfo } from '../shared/ipc'
+import type { Candle, ExecutorConfig, PaperAccount, PaperPauseSettings, PaperRiskSettings, PositionExecutorParams, SymbolInfo } from '../shared/ipc'
 import { DEFAULT_NEWS_CONFIG, applyNewsConfigPatch, healNewsConfig, newsActionsFor, type NewsConfig, type NewsItem } from '../shared/news'
-import { paperStake } from '../shared/paperRisk'
+import { DEFAULT_PAPER_PAUSE, resumePaperPause } from '../shared/paperPause'
+import { paperStake, riskedAtStop } from '../shared/paperRisk'
 import {
   delistingShortParams,
   describeNewsShortOrigin,
@@ -274,19 +275,33 @@ const STAKE: PaperRiskSettings = { sizing: 'stake', riskQuote: 1, maxOutQuote: n
 
 interface Rig {
   deps: NewsShortDeps
-  /** `risk` is settings.json's paperRisk, as stored. */
-  state: { executors: ExecutorConfig[]; account: PaperAccount | null; risk: unknown; now: number; candles: Candle[]; pairs: SymbolInfo[] }
+  /** `risk` is settings.json's paperRisk, and `pause` its paperPause, as stored. */
+  state: { executors: ExecutorConfig[]; account: PaperAccount | null; risk: unknown; pause: unknown; now: number; candles: Candle[]; pairs: SymbolInfo[] }
   notices: { title: string; body: string }[]
   settled: string[]
 }
 
 function rig(initial: Partial<Rig['state']> = {}): Rig {
-  const state: Rig['state'] = { executors: [], account: null, risk: STAKE, now: A + 63, candles: [], pairs: [pair('ICX'), pair('SCRT'), { symbol: 'STORJBTC', baseAsset: 'STORJ', quoteAsset: 'BTC' }], ...initial }
+  const state: Rig['state'] = {
+    executors: [],
+    account: null,
+    risk: STAKE,
+    pause: undefined,
+    now: A + 63,
+    candles: [],
+    pairs: [pair('ICX'), pair('SCRT'), { symbol: 'STORJBTC', baseAsset: 'STORJ', quoteAsset: 'BTC' }],
+    ...initial
+  }
   const made: Rig = { deps: undefined as unknown as NewsShortDeps, state, notices: [], settled: [] }
   let tail: Promise<unknown> = Promise.resolve()
   let ids = 0
   made.deps = {
-    getSettings: async () => ({ executors: [...state.executors], paperAccount: state.account, paperRisk: state.risk as PaperRiskSettings | undefined }),
+    getSettings: async () => ({
+      executors: [...state.executors],
+      paperAccount: state.account,
+      paperRisk: state.risk as PaperRiskSettings | undefined,
+      paperPause: state.pause as PaperPauseSettings | undefined
+    }),
     setExecutors: async (executors) => {
       state.executors = executors
     },
@@ -600,5 +615,55 @@ describe('sized by risk, and held to what the app has out (shared/paperRisk.ts)'
       'STORJ: no paper short, as it has no USDT pair on Binance.'
     ])
     expect(r.state.executors.map((executor) => executor.symbol)).toEqual(['BTCUSDT', 'ICXUSDT'])
+  })
+})
+
+describe("paused after a losing run of the rules' own (shared/paperPause.ts)", () => {
+  /** A tag's short on another announcement, stopped out at `closedAt` having made `r` R. */
+  function closedTag(id: string, ticker: string, closedAt: number, r: number): ExecutorConfig {
+    const params = tagShortParams({ sigma15Pct: 1, stakeQuote: 100 })
+    const made = newsShortExecutor({ id, item: { ...item, id: 200, category: 'MONITORING_TAG', tickers: [ticker] }, ticker, pair: pair(ticker), nowSec: closedAt - 3600, params })
+    const mark = made.newsRule as NonNullable<ExecutorConfig['newsRule']>
+    return { ...made, status: 'stopped', stoppedAt: closedAt, newsRule: { ...mark, result: { exit: 'stop_loss', pnlQuote: r * (riskedAtStop(params) as number), closedAt } } }
+  }
+  const lost = [closedTag('t-1', 'AAA', A - 3 * 3600, -2), closedTag('t-2', 'BBB', A - 2 * 3600, -2), closedTag('t-3', 'CCC', A - 3600, -2)]
+  const PAUSED = "The news rules' last 3 closed paper shorts with a stop lost 6.00 R together, so they open none until they are resumed on Risk & Safety."
+
+  it('opens no short once their shorts have lost the run, by the defaults with nothing stored, and says why', async () => {
+    const r = rig({ executors: lost })
+    expect(await openNewsShorts(item, ON, r.deps)).toEqual([`ICX: no paper short. ${PAUSED}`, `SCRT: no paper short. ${PAUSED}`, 'STORJ: no paper short, as it has no USDT pair on Binance.'])
+    expect(r.state.executors).toEqual(lost)
+    expect(r.notices).toEqual([])
+  })
+
+  it('holds while it is written down, and opens again once resumed or switched off', async () => {
+    const paused: PaperPauseSettings = { ...DEFAULT_PAPER_PAUSE, news: { countFrom: null, paused: { at: A - 1800, r: -6, trades: 3 } } }
+    // Written down, it holds with nothing lost on file.
+    const held = rig({ pause: paused })
+    expect((await openNewsShorts(item, ON, held.deps))[0]).toBe(
+      "ICX: no paper short. The news rules' last 3 closed paper shorts with a stop had lost 6.00 R together by 05:30 UTC on 20 Aug, so they open none until they are resumed on Risk & Safety."
+    )
+    expect(held.state.executors).toEqual([])
+    const resumed = rig({ executors: lost, pause: resumePaperPause(paused, 'news', A - 60) })
+    expect(await openNewsShorts(item, ON, resumed.deps)).toEqual([
+      'ICX: a paper short of 100 USDT was opened.',
+      'SCRT: a paper short of 100 USDT was opened.',
+      'STORJ: no paper short, as it has no USDT pair on Binance.'
+    ])
+    const off = rig({ executors: lost, pause: { ...paused, lossR: null } })
+    expect((await openNewsShorts(item, ON, off.deps))[0]).toBe('ICX: a paper short of 100 USDT was opened.')
+  })
+
+  it("is not paused by the watch's losing run", async () => {
+    const watched = lost.map(
+      (executor, k): ExecutorConfig => ({
+        ...executor,
+        id: `w-${k}`,
+        newsRule: undefined,
+        watch: { eventId: `binance:X:${k}`, eventTime: A - 7200, model: 'openai/gpt-5-mini', confidence: 0.8, result: executor.newsRule?.result }
+      })
+    )
+    const r = rig({ executors: watched })
+    expect((await openNewsShorts(item, ON, r.deps))[0]).toBe('ICX: a paper short of 100 USDT was opened.')
   })
 })

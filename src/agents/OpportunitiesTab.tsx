@@ -8,6 +8,7 @@ import { watchEventIdsToday, watchPausedModels } from '../../shared/aiWatch'
 import { describeWatchPaperTally, watchPaperExecutors, watchPaperPause, watchPaperTally } from '../../shared/aiWatchPaper'
 import type { ExecutorConfig } from '../../shared/ipc'
 import { describeEventType } from '../../shared/marketEvent'
+import { healPaperPause, paperPauseBlock } from '../../shared/paperPause'
 import { describeError } from '../utils/ipcError'
 import { useNowSec } from '../utils/useNowSec'
 import { buttonStyle, noteStyle } from './agentStyles'
@@ -54,6 +55,7 @@ export function OpportunitiesTab({
   const [shown, setShown] = useState(EVENTS_SHOWN)
   const [paperAccount, setPaperAccount] = useState<boolean | null>(null)
   const [paperRisk, setPaperRisk] = useState<unknown>(undefined)
+  const [paperPause, setPaperPause] = useState<unknown>(undefined)
   const [watchTrades, setWatchTrades] = useState<ExecutorConfig[]>([])
   const nowSec = useNowSec(true, 15_000)
   // The scanner's events, the answers held for them and the candles since: shared with Overview.
@@ -87,6 +89,7 @@ export function OpportunitiesTab({
           if (cancelled) return
           setPaperAccount(Boolean(settings.paperAccount))
           setPaperRisk(settings.paperRisk)
+          setPaperPause(settings.paperPause)
           setWatchTrades(watchPaperExecutors(settings.executors))
         },
         () => undefined
@@ -178,8 +181,12 @@ export function OpportunitiesTab({
     open: watchTrades.filter((executor) => executor.status === 'active').map((executor) => executor.symbol),
     total: watchTrades.length,
     ended: describeWatchPaperTally(watchPaperTally(watchTrades)),
-    pause: config === null ? null : watchPaperPause(watchTrades, config.watchPaper, nowSec),
-    risk: paperRisk
+    // A losing run, which waits for Resume on Risk & Safety, before the pause that ends at midnight.
+    pause:
+      paperPauseBlock({ setting: healPaperPause(paperPause), executors: watchTrades, source: 'watch' }) ??
+      (config === null ? null : watchPaperPause(watchTrades, config.watchPaper, nowSec)),
+    risk: paperRisk,
+    pauseSetting: paperPause
   }
 
   return (

@@ -2,8 +2,9 @@ import { describeOpportunitySide, opportunitySide } from './aiOpportunity'
 import { describeDecider } from './aiPanel'
 import { buildOpportunityProposal, opportunityObstacle } from './aiProposal'
 import { GPT_MIN_CONFIDENCE, type AiSignalDecision } from './aiSignal'
-import type { Candle, ExecutorConfig, ExecutorSide, PaperRiskSettings, PositionExecutorParams } from './ipc'
+import type { Candle, ExecutorConfig, ExecutorSide, PaperPauseSettings, PaperRiskSettings, PositionExecutorParams } from './ipc'
 import { describeEventType, type MarketEvent } from './marketEvent'
+import { describePaperPause } from './paperPause'
 import { describePaperRisk, describeR, rMultiple, sizePaperTrade } from './paperRisk'
 
 // PAPER TRADES FROM THE WATCH.
@@ -54,7 +55,9 @@ import { describePaperRisk, describeR, rMultiple, sizePaperTrade } from './paper
 // - a trade still waiting for its entry is dropped when Bitcoin has moved against it by so much
 //   since the event: the market the call was made in is gone.
 // They are not shown to make the trades pay. Every measurement here found no edge in the models'
-// calls to protect; these bound what following them can do.
+// calls to protect; these bound what following them can do. Apart from them, and from the same
+// day, a losing run measured in R pauses the watch's paper trades until they are resumed on Risk &
+// Safety (shared/paperPause.ts); writer and card read it, and this file only says it.
 
 export const AI_WATCH_PAPER_STAKES = [25, 50, 100, 250, 500, 1000] as const
 export const AI_WATCH_PAPER_OPEN_LIMITS = [1, 2, 3, 5, 10] as const
@@ -170,8 +173,15 @@ export function describeWatchPaperSize(config: Pick<AiWatchPaperConfig, 'stakeQu
   return risk.sizing === 'risk' ? `at most ${stake}, sized so that being stopped out loses about ${risk.riskQuote}` : stake
 }
 
-/** What switching it on does, said before it is switched on. */
-export function describeAiWatchPaper(input: { config: AiWatchPaperConfig; risk: PaperRiskSettings; watchOn: boolean; hasPaperAccount: boolean }): string {
+/** What switching it on does, said before it is switched on. `pause` is the losing run that
+ * pauses the app's own paper trades (shared/paperPause.ts), said beside how they are sized. */
+export function describeAiWatchPaper(input: {
+  config: AiWatchPaperConfig
+  risk: PaperRiskSettings
+  pause?: Pick<PaperPauseSettings, 'lossR' | 'trades'>
+  watchOn: boolean
+  hasPaperAccount: boolean
+}): string {
   const { config } = input
   const who = config.model === null ? 'the chosen model' : describeDecider(config.model)
   const confidence = Math.round(GPT_MIN_CONFIDENCE * 100)
@@ -183,7 +193,7 @@ export function describeAiWatchPaper(input: { config: AiWatchPaperConfig; risk: 
     'It is the position the Paper trade button would have filled in: it enters in the first minute the price trades inside the range the model named, and is abandoned if that has not happened when its entry expires; with the model\'s own stop and target, and its holding time as the time limit.',
     `At most ${config.maxOpen} open at once, one an event, and one on a pair at a time. When a position has closed, it is stopped, and its card on Strategies › Execution says how it ended.`,
     describeWatchPaperSafeguards(config),
-    `On Risk & Safety, for every paper trade the app opens by itself: ${describePaperRisk(input.risk)}`,
+    `On Risk & Safety, for every paper trade the app opens by itself: ${describePaperRisk(input.risk)}${input.pause === undefined ? '' : ` ${describePaperPause(input.pause)}`}`,
     input.hasPaperAccount
       ? 'Its result goes to the paper account, and a trade the paper account cannot fund is not opened.'
       : 'No paper account is set up, so their results are added to no balance, and nothing limits what these positions add up to. Set one up under Account to hold them to a balance.',

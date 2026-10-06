@@ -142,7 +142,8 @@ export function NewsSettingsCard(): React.JSX.Element {
       <p style={{ ...noteStyle, marginTop: '0.5rem' }}>
         The stake is the most a short stakes. Where Risk &amp; Safety sizes the app&apos;s own paper trades by what their stop would lose,
         a tag&apos;s short stakes that, never more than its stake; a delisting&apos;s has no stop and stakes its stake. With the
-        watch&apos;s paper trades, they open none past what Risk &amp; Safety lets them have out together.
+        watch&apos;s paper trades, they open none past what Risk &amp; Safety lets them have out together; and after a losing run of
+        their own, measured in R on the tags&apos; shorts, they open none until they are resumed there.
       </p>
     </Card>
   )
