@@ -1,4 +1,5 @@
 import { describeOpportunitySide, opportunitySide } from './aiOpportunity'
+import { slippageRateForEvent, type EventLiquidity } from './aiOpportunityOutcome'
 import { describeDecider } from './aiPanel'
 import { buildOpportunityProposal, opportunityObstacle } from './aiProposal'
 import { GPT_MIN_CONFIDENCE, type AiSignalDecision } from './aiSignal'
@@ -403,7 +404,8 @@ export function planWatchPaperTrade(input: {
   config: AiWatchPaperConfig
   /** How the app's own paper trades are sized (shared/paperRisk.ts). */
   risk: PaperRiskSettings
-  event: Pick<MarketEvent, 'id' | 'exchange' | 'symbol' | 'baseAsset' | 'quoteAsset' | 'time' | 'type' | 'price'>
+  /** With its book and traded value when it was raised live: what its market fills are charged. */
+  event: Pick<MarketEvent, 'id' | 'exchange' | 'symbol' | 'baseAsset' | 'quoteAsset' | 'time' | 'type' | 'price'> & Partial<EventLiquidity>
   decision: AiSignalDecision
   nowSec: number
   /** The price now. Null means the event's own price, the last the model saw. */
@@ -435,7 +437,10 @@ export function planWatchPaperTrade(input: {
   if (proposal.stopLossPct === null || proposal.takeProfitPct === null) {
     return { ok: false, reason: 'Its stop or its target is not a usable distance from the entry.' }
   }
-  const size = sizePaperTrade({ risk: input.risk, stakeQuote: config.stakeQuote, stopPct: proposal.stopLossPct, quoteAsset: event.quoteAsset })
+  // Its market fills give up what its score charges them (shared/aiOpportunityOutcome.ts), and it is
+  // sized with that in what it risks.
+  const slippageRate = slippageRateForEvent({ live: event.live ?? null })
+  const size = sizePaperTrade({ risk: input.risk, stakeQuote: config.stakeQuote, stopPct: proposal.stopLossPct, quoteAsset: event.quoteAsset, slippageRate })
   if (!size.ok) return { ok: false, reason: size.reason }
   const side: ExecutorSide = proposal.side ?? 'buy'
   return {
@@ -455,7 +460,8 @@ export function planWatchPaperTrade(input: {
       stopLossPct: proposal.stopLossPct,
       timeLimitSec: proposal.timeLimitSec,
       trailingStop: null,
-      entryExpiresAt: proposal.expiresAt ?? null
+      entryExpiresAt: proposal.expiresAt ?? null,
+      slippageRate
     },
     mark: { eventId: event.id, eventTime: event.time, model: decision.model, confidence: decision.confidence }
   }

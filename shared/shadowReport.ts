@@ -1,7 +1,7 @@
 import type { AiCallRecord } from './aiLedger'
 import { GPT_MIN_CONFIDENCE } from './aiSignal'
 import type { AlertSeverity } from './alerts'
-import { SLIPPAGE_RATE } from './fees'
+import { positionSlippageRate } from './fees'
 import type { ExecutorConfig, PositionExecutorParams } from './ipc'
 import { MAX_SPREAD_PCT, STALE_PRICE_MS, type LiveConnection } from './liveMarket'
 import type { MarketEvent } from './marketEvent'
@@ -548,7 +548,8 @@ export function sessionReportOf(input: SessionReportInput): SessionReport {
       : gate('traced', 'Every trade traces to its event', true, untraced, opened.length, 'paper trades opened', 'Each traces to its event and the answer it followed, or to its announcement.')
   )
 
-  // Twelve hours: costs. Fees are checked against the engine's own figures; slippage is not charged.
+  // Twelve hours: costs. Fees are checked against the engine's own figures, and slippage by the rate
+  // each trade carries.
   const feeFailures: string[] = []
   for (const executor of enteredEnded) {
     const reading = readings.get(executor.id)
@@ -563,18 +564,32 @@ export function sessionReportOf(input: SessionReportInput): SessionReport {
       ? { id: 'fees', label: 'Fees are applied', twelveHour: true, status: 'not measured', detail: 'No paper trade that entered ended in this span.' }
       : gate('fees', 'Fees are applied', true, feeFailures, enteredEnded.length, 'paper trades that ended', `${eachOf(enteredEnded.length, 'trade', 'trades')} is net of a fee on both fills, as the engine charges.`)
   )
+  // A trade made since the paper engine charges slippage carries its rate, and the engine charges it
+  // on every market fill; one made before carries none, and filled at its prices.
   const slippage: { asset: string; amount: number }[] = []
-  for (const executor of enteredEnded) addTo(slippage, executor.quoteAsset, (executor.params as PositionExecutorParams).amountQuote * 2 * SLIPPAGE_RATE)
+  const unslipped: string[] = []
+  for (const executor of enteredEnded) {
+    const params = executor.params as PositionExecutorParams
+    const rate = positionSlippageRate(params)
+    if (!(rate > 0)) {
+      unslipped.push(`${executor.symbol} at ${clock(executor.createdAt)} carries no slippage rate, so it filled at its prices`)
+      continue
+    }
+    // Its entry, and its exit unless a target ended it: a target is a resting limit, paid exactly.
+    addTo(slippage, executor.quoteAsset, params.amountQuote * rate * ((resultOf(executor) as { exit: string }).exit === 'take_profit' ? 1 : 2))
+  }
   gates.push(
     enteredEnded.length === 0
       ? { id: 'slippage', label: 'Slippage is applied', twelveHour: true, status: 'not measured', detail: 'No paper trade that entered ended in this span.' }
-      : {
-          id: 'slippage',
-          label: 'Slippage is applied',
-          twelveHour: true,
-          status: 'fail',
-          detail: `The paper engine fills at the level, or at the open of a minute that gapped through it, and charges no slippage; only the recommendations' scores do. At ${SLIPPAGE_RATE * 10_000} bp a side ${enteredEnded.length === 1 ? 'the trade' : `the ${enteredEnded.length} trades`} would have given up about ${slippage.map((entry) => `${Number(entry.amount.toPrecision(3))} ${entry.asset}`).join(' and ')} more.`
-        }
+      : gate(
+          'slippage',
+          'Slippage is applied',
+          true,
+          unslipped,
+          enteredEnded.length,
+          'paper trades that ended',
+          `${eachOf(enteredEnded.length, 'trade', 'trades')} was charged slippage on its market fills, at its pair's rate: about ${slippage.map((entry) => `${Number(entry.amount.toPrecision(3))} ${entry.asset}`).join(' and ')} in all.`
+        )
   )
 
   // Twelve hours: every story read has its link.

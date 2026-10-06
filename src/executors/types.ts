@@ -75,7 +75,12 @@ export interface PositionExecutorState {
   kind: 'position'
   side: 'buy' | 'sell'
   status: 'pending' | 'open' | 'closed'
+  /** What the entry filled at (for a short, what it sold at), slippage included when the position
+   * carries a rate (PositionExecutorParams.slippageRate). `exitPrice` likewise. */
   entryPrice: number | null
+  /** What its stop, its target and its trailing stop are measured from: the price the entry filled at
+   * before slippage. The same as `entryPrice` for a position that carries no rate. */
+  levelPrice: number | null
   enteredAt: number | null
   /** High-water (buy) / low-water (sell) price since entry — drives the trailing-stop exit. */
   trailingPeakPrice: number | null

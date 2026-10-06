@@ -1,3 +1,4 @@
+import { dailyQuoteVolumeOf, slippageRateFor } from './aiOpportunityOutcome'
 import type { Candle, ExecutorConfig, HeldPosition, PaperAccount, PositionExecutorParams } from './ipc'
 import type { ExchangeBalance } from './liveBalances'
 import { EVENT_LOOKBACK_BARS, readEventAt, type EventReading } from './marketEvent'
@@ -45,7 +46,7 @@ export function newsShortExecutors(executors: ExecutorConfig[]): ExecutorConfig[
 /** A delisting's short. Entered at the open of the first minute after it is opened (a paper
  * executor reads its candles from when it was made); its time limit is set so that it is out at
  * the open four hours after the announcement's minute, which is the close of the minute before. */
-export function delistingShortParams(input: { releaseSec: number; createdAt: number; stakeQuote: number }): PositionExecutorParams {
+export function delistingShortParams(input: { releaseSec: number; createdAt: number; stakeQuote: number; slippageRate: number }): PositionExecutorParams {
   const announcementMinute = Math.floor(input.releaseSec / 60) * 60
   const entryMinute = Math.ceil(input.createdAt / 60) * 60
   return {
@@ -55,8 +56,17 @@ export function delistingShortParams(input: { releaseSec: number; createdAt: num
     takeProfitPct: null,
     stopLossPct: null,
     timeLimitSec: Math.max(60, announcementMinute + (DELISTING_RULE_EXIT_MINUTES - 1) * 60 - entryMinute),
-    trailingStop: null
+    trailingStop: null,
+    slippageRate: input.slippageRate
   }
+}
+
+/** What a short's market fills give up on this coin (PositionExecutorParams.slippageRate): the rate
+ * its traded value puts it at (shared/aiOpportunityOutcome.ts), read from the twelve hours of
+ * 1-minute candles before the announcement (tagReadingWindow); the middle rate when those could not
+ * be read. A coin being delisted or tagged is often thin, and is charged as thin when it is. */
+export function newsShortSlippageRate(bars: Candle[] | null): number {
+  return slippageRateFor(bars === null || bars.length === 0 ? null : dailyQuoteVolumeOf(bars))
 }
 
 /** The seconds a Monitoring Tag's short may be opened in. A paper executor enters at the open of
@@ -85,7 +95,7 @@ export function tagReading(bars: Candle[], releaseSec: number): EventReading | n
 
 /** A Monitoring Tag's short: its stop and target from the coin's usual fifteen-minute move, out at
  * the close of its sixtieth minute. */
-export function tagShortParams(input: { sigma15Pct: number; stakeQuote: number }): PositionExecutorParams {
+export function tagShortParams(input: { sigma15Pct: number; stakeQuote: number; slippageRate: number }): PositionExecutorParams {
   return {
     side: 'sell',
     entryPrice: null,
@@ -93,7 +103,8 @@ export function tagShortParams(input: { sigma15Pct: number; stakeQuote: number }
     takeProfitPct: TAG_RULE_TARGET_SIGMAS * input.sigma15Pct,
     stopLossPct: TAG_RULE_STOP_SIGMAS * input.sigma15Pct,
     timeLimitSec: (TAG_RULE_HOLD_MINUTES - 1) * 60,
-    trailingStop: null
+    trailingStop: null,
+    slippageRate: input.slippageRate
   }
 }
 

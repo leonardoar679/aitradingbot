@@ -19,7 +19,7 @@ import type {
   SingleMarketExecutorState,
   GridLevelState
 } from './types'
-import { roundTripFee } from '../../shared/fees'
+import { positionSlippageRate, roundTripFee } from '../../shared/fees'
 import {
   ASSUMED_FUNDING_RATE,
   fundingCost,
@@ -326,12 +326,25 @@ export function simulateTwap(candles: Candle[], params: TwapExecutorParams, crea
  * trades inside the range, at the open when that is inside it and otherwise at the edge the price
  * came in by. Neither of the two rules above it is the same thing. A market entry takes the next
  * open wherever the price has gone, and a limit above the market is filled at once: both would
- * enter a position the recommendation never asked for. */
+ * enter a position the recommendation never asked for.
+ *
+ * A position that carries a slippage rate (`slippageRate`) pays it on every market fill: its entry,
+ * a stop, a trailing stop and the time limit each fill that much worse than their price, whichever
+ * way the order goes; a take-profit is a resting limit and is paid exactly. Its levels stay where
+ * the market price put them (`levelPrice`, the fill before slippage), so what the entry gave up is
+ * lost whichever level ends it, as it would be against a recommendation's own levels. That is how a
+ * recommendation is scored (shared/aiOpportunityOutcome.ts), every entry included, so a paper trade
+ * made from one costs what its score says. Without a rate a position fills at its prices, and its
+ * levels are measured from its entry, as they always were. */
 export function simulatePosition(candles: Candle[], params: PositionExecutorParams): PositionExecutorState {
   const isBuy = params.side === 'buy'
   const leverage = resolveLeverage(params.leverage)
+  const slippage = positionSlippageRate(params)
+  /** `buying` is true for a long's entry and a short's exit. */
+  const marketFill = (price: number, buying: boolean): number => price * (buying ? 1 + slippage : 1 - slippage)
   let status: PositionExecutorState['status'] = 'pending'
   let entryPrice: number | null = null
+  let levelPrice: number | null = null
   let enteredAt: number | null = null
   let trailingPeakPrice: number | null = null
   let exitReason: PositionExecutorState['exitReason'] = null
@@ -356,46 +369,38 @@ export function simulatePosition(candles: Candle[], params: PositionExecutorPara
         // where it entered.
         const { min, max } = params.entryRange
         if (candle.low <= max && candle.high >= min) {
-          entryPrice = candle.open >= min && candle.open <= max ? candle.open : candle.open > max ? max : min
-          status = 'open'
-          enteredAt = candle.time
-          trailingPeakPrice = entryPrice
+          levelPrice = candle.open >= min && candle.open <= max ? candle.open : candle.open > max ? max : min
         }
       } else if (params.entryPrice === null) {
-        entryPrice = candle.open
-        status = 'open'
-        enteredAt = candle.time
-        trailingPeakPrice = entryPrice
+        levelPrice = candle.open
       } else {
-        const fill = limitFillPrice(candle, params.entryPrice, isBuy)
-        if (fill !== null) {
-          entryPrice = fill
-          status = 'open'
-          enteredAt = candle.time
-          trailingPeakPrice = entryPrice
-        }
+        levelPrice = limitFillPrice(candle, params.entryPrice, isBuy)
       }
-      if (status === 'pending') continue
+      if (levelPrice === null) continue
+      entryPrice = marketFill(levelPrice, isBuy)
+      status = 'open'
+      enteredAt = candle.time
+      trailingPeakPrice = levelPrice
       liqPrice = liquidationPrice({ entryPrice: entryPrice as number, leverage, side: params.side })
     }
 
-    if (status !== 'open' || entryPrice === null || enteredAt === null) continue
+    if (status !== 'open' || entryPrice === null || levelPrice === null || enteredAt === null) continue
 
-    if (trailingPeakPrice === null) trailingPeakPrice = entryPrice
+    if (trailingPeakPrice === null) trailingPeakPrice = levelPrice
     trailingPeakPrice = isBuy ? Math.max(trailingPeakPrice, candle.high) : Math.min(trailingPeakPrice, candle.low)
 
-    const slTarget = params.stopLossPct !== null ? (isBuy ? entryPrice * (1 - params.stopLossPct / 100) : entryPrice * (1 + params.stopLossPct / 100)) : null
+    const slTarget = params.stopLossPct !== null ? (isBuy ? levelPrice * (1 - params.stopLossPct / 100) : levelPrice * (1 + params.stopLossPct / 100)) : null
     const slHit = slTarget !== null && (isBuy ? candle.low <= slTarget : candle.high >= slTarget)
 
-    const tpTarget = params.takeProfitPct !== null ? (isBuy ? entryPrice * (1 + params.takeProfitPct / 100) : entryPrice * (1 - params.takeProfitPct / 100)) : null
+    const tpTarget = params.takeProfitPct !== null ? (isBuy ? levelPrice * (1 + params.takeProfitPct / 100) : levelPrice * (1 - params.takeProfitPct / 100)) : null
     const tpHit = tpTarget !== null && (isBuy ? candle.high >= tpTarget : candle.low <= tpTarget)
 
     let trailHit = false
     let trailTarget: number | null = null
     if (params.trailingStop !== null) {
       const activationTarget = isBuy
-        ? entryPrice * (1 + params.trailingStop.activationPct / 100)
-        : entryPrice * (1 - params.trailingStop.activationPct / 100)
+        ? levelPrice * (1 + params.trailingStop.activationPct / 100)
+        : levelPrice * (1 - params.trailingStop.activationPct / 100)
       const activated = isBuy ? trailingPeakPrice >= activationTarget : trailingPeakPrice <= activationTarget
       if (activated) {
         trailTarget = isBuy
@@ -445,12 +450,12 @@ export function simulatePosition(candles: Candle[], params: PositionExecutorPara
 
       exitReason = slHit ? 'stop_loss' : tpHit ? 'take_profit' : trailHit ? 'trailing_stop' : 'time_limit'
       exitPrice = slHit
-        ? (protectiveFill as number)
+        ? marketFill(protectiveFill as number, !isBuy)
         : tpHit
           ? (tpTarget as number)
           : trailHit
-            ? (protectiveFill as number)
-            : candle.close
+            ? marketFill(protectiveFill as number, !isBuy)
+            : marketFill(candle.close, !isBuy)
       // Sized on the NOTIONAL, so both the profit and the fee scale with leverage. The fee part
       // is the half nobody expects: 10x leverage is 10x the trading cost on the same deposit.
       const posQty = notionalFor(params.amountQuote, leverage) / entryPrice
@@ -476,6 +481,7 @@ export function simulatePosition(candles: Candle[], params: PositionExecutorPara
     side: params.side,
     status,
     entryPrice,
+    levelPrice,
     enteredAt,
     trailingPeakPrice,
     exitReason,

@@ -427,8 +427,9 @@ describe('AI code has no route to a real order', () => {
       expect(source, path).not.toMatch(/\bleverage\s*:/)
     }
     expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron/)
-    // The rules read a coin's usual move with the detector's arithmetic, which imports types alone.
-    expect(importsOf(rules).sort()).toEqual(['ipc', 'liveBalances', 'marketEvent', 'news', 'newsRules'])
+    // The rules read a coin's usual move with the detector's arithmetic, which imports types alone,
+    // and what its fills give up with the scorer's (aiOpportunityOutcome): arithmetic.
+    expect(importsOf(rules).sort()).toEqual(['aiOpportunityOutcome', 'ipc', 'liveBalances', 'marketEvent', 'news', 'newsRules'])
     // Paper is written where the executor is made, and the function that makes it takes no mode.
     const source = readFileSync(writer, 'utf-8')
     expect(source.match(/mode: 'paper'/g)).toHaveLength(2)
@@ -516,9 +517,10 @@ describe('AI code has no route to a real order', () => {
     const signature = /export function watchPaperExecutor\(input: \{([^}]*)\}\)/.exec(source)?.[1] ?? ''
     expect(signature).toContain('plan: OkPlan')
     expect(signature).not.toMatch(/mode/)
-    // The rules import the proposal's arithmetic, the sizing's (paperRisk), the losing run's words
-    // for the confirmation (paperPause), a few names and types, and nothing that acts.
-    expect(importsOf(rules).sort()).toEqual(['aiOpportunity', 'aiPanel', 'aiProposal', 'aiSignal', 'ipc', 'marketEvent', 'paperPause', 'paperRisk'])
+    // The rules import the proposal's arithmetic, the sizing's (paperRisk), the slippage the score
+    // charges (aiOpportunityOutcome), the losing run's words for the confirmation (paperPause), a few
+    // names and types, and nothing that acts.
+    expect(importsOf(rules).sort()).toEqual(['aiOpportunity', 'aiOpportunityOutcome', 'aiPanel', 'aiProposal', 'aiSignal', 'ipc', 'marketEvent', 'paperPause', 'paperRisk'])
     expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron/)
     // The writer reaches settings, the price, candles, a notice and the setting. Nothing else.
     expect([...new Set([...source.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))].sort()).toEqual(['ai', 'market', 'notify', 'settings'])

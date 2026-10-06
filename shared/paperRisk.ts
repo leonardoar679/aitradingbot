@@ -1,4 +1,4 @@
-import { FEE_RATE } from './fees'
+import { FEE_RATE, positionSlippageRate } from './fees'
 import type { ExecutorConfig, PaperRiskSettings, PositionExecutorParams } from './ipc'
 
 // THE PAPER TRADES THE APP OPENS BY ITSELF: HOW BIG EACH IS, AND HOW MUCH THEY HAVE OUT TOGETHER.
@@ -69,12 +69,13 @@ export function paperRiskProblem(settings: PaperRiskSettings): string | null {
 const shown = (amount: number): string => Number(amount.toFixed(2)).toLocaleString('en-US')
 
 /** What a trade stakes: its own stake, or, sized by risk, what loses about the risk per trade at a
- * stop `stopPct` away after the round trip's fees, rounded down to a hundredth -- never more than its
- * own stake. A trade with no stop stakes its stake. */
-export function paperStake(input: { risk: PaperRiskSettings; stakeQuote: number; stopPct: number | null }): number {
+ * stop `stopPct` away after the round trip's fees and its slippage (`slippageRate`, on both fills),
+ * rounded down to a hundredth -- never more than its own stake. A trade with no stop stakes its
+ * stake. */
+export function paperStake(input: { risk: PaperRiskSettings; stakeQuote: number; stopPct: number | null; slippageRate?: number | null }): number {
   const { risk, stakeQuote, stopPct } = input
   if (risk.sizing !== 'risk' || stopPct === null || !(stopPct > 0)) return stakeQuote
-  const lostPerQuote = stopPct / 100 + 2 * FEE_RATE
+  const lostPerQuote = stopPct / 100 + 2 * FEE_RATE + 2 * positionSlippageRate(input)
   return Math.min(stakeQuote, Math.floor((risk.riskQuote / lostPerQuote) * 100) / 100)
 }
 
@@ -82,7 +83,7 @@ export type PaperSize = { ok: true; amountQuote: number } | { ok: false; reason:
 
 /** What a trade stakes, or why it is not opened: sized under what an order on Binance must be
  * worth. */
-export function sizePaperTrade(input: { risk: PaperRiskSettings; stakeQuote: number; stopPct: number | null; quoteAsset: string }): PaperSize {
+export function sizePaperTrade(input: { risk: PaperRiskSettings; stakeQuote: number; stopPct: number | null; quoteAsset: string; slippageRate?: number | null }): PaperSize {
   const amountQuote = paperStake(input)
   if (amountQuote >= PAPER_MIN_STAKE) return { ok: true, amountQuote }
   return {
@@ -92,16 +93,17 @@ export function sizePaperTrade(input: { risk: PaperRiskSettings; stakeQuote: num
 }
 
 /** What being stopped out would have lost, in the trade's quote: its stake times the distance to its
- * stop and a round trip's fees. What a trade sized by risk stakes is this, solved for the stake. Null
- * for a trade with no stop -- a delisting's short -- which has nothing to measure against. */
-export function riskedAtStop(params: Pick<PositionExecutorParams, 'amountQuote' | 'stopLossPct'>): number | null {
+ * stop, a round trip's fees and, for a trade that carries a slippage rate, that on both fills. What a
+ * trade sized by risk stakes is this, solved for the stake. Null for a trade with no stop -- a
+ * delisting's short -- which has nothing to measure against. */
+export function riskedAtStop(params: Pick<PositionExecutorParams, 'amountQuote' | 'stopLossPct' | 'slippageRate'>): number | null {
   if (params.stopLossPct === null || !(params.stopLossPct > 0) || !(params.amountQuote > 0)) return null
-  return params.amountQuote * (params.stopLossPct / 100 + 2 * FEE_RATE)
+  return params.amountQuote * (params.stopLossPct / 100 + 2 * FEE_RATE + 2 * positionSlippageRate(params))
 }
 
 /** What a closed trade made in what it risked at its stop: its R. +1 is a win as large as the loss
  * its stop allowed; -1 is that loss. Null for a trade with no stop. */
-export function rMultiple(pnlQuote: number, params: Pick<PositionExecutorParams, 'amountQuote' | 'stopLossPct'>): number | null {
+export function rMultiple(pnlQuote: number, params: Pick<PositionExecutorParams, 'amountQuote' | 'stopLossPct' | 'slippageRate'>): number | null {
   const risked = riskedAtStop(params)
   return risked === null ? null : pnlQuote / risked
 }

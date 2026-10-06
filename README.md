@@ -135,7 +135,7 @@ state can never drift from what the market actually did.
 | **Grid** | Divides a price range into levels spaced by a %; a level fills when price touches it, and closes (booking P&L) when it reaches its own take-profit target, freeing it to refill. An optional **Stop Price** closes every filled level at that price and freezes the grid for good — it will not fill another level even if price re-enters the range. |
 | **DCA** | A configurable ladder of buy/sell levels at % offsets from a base price; tracks a running volume-weighted average entry and exits the whole position on take-profit / stop-loss / a time limit. |
 | **TWAP** | Slices a total order into equal pieces over a duration, executing one slice per interval at that candle's close; tracks cumulative VWAP and progress. |
-| **Position** | The Triple Barrier Method: one entry (at a set price or at market), then exits on whichever comes first — take-profit, stop-loss, a trailing stop (with its own activation/trail %), or a time limit. |
+| **Position** | The Triple Barrier Method: one entry (at a set price or at market), then exits on whichever comes first — take-profit, stop-loss, a trailing stop (with its own activation/trail %), or a time limit. A position that carries a slippage rate (`slippageRate`; the app's own paper trades do) fills its entry, a stop, a trailing stop and the time limit that much worse than their price; a take-profit is a resting limit and is paid exactly. Its levels stay where the market price put them, so what the entry gave up is lost whichever ends it. |
 | **Order** | A single order with one of four fill strategies: `market`/`limit_chaser` fill immediately at the next candle's open (chasing the best price isn't modelable without a real order book, so it's approximated as an immediate market fill); `limit`/`limit_maker` fill the first time price touches the limit. |
 | **XEMM** | Cross-exchange market making: monitors a *buying market* and a *selling market* simultaneously; when the spread crosses a minimum-profitability threshold in that direction, books a capture. Edge-triggered (re-arms only once the spread retreats) so a spread that stays wide doesn't produce unrealistic repeated captures. |
 | **Arbitrage** | Like XEMM but bidirectional — captures the spread whichever way it's skewed, since arbitrage isn't tied to a fixed maker/taker leg. |
@@ -659,9 +659,18 @@ The gates:
   - every story has its https link.
 
 Two things to know:
-- **The slippage gate fails by design.** The paper engine charges fees on both fills but no
-  slippage; only the recommendations' scores charge it. So in a twelve-hour run in which a paper
-  trade closed, that gate fails, and says what 2 bp a side would have cost.
+- **Slippage is charged on the app's own paper trades**, since 6 October 2026. Each one carries the
+  rate its recommendation is scored at (`shared/aiOpportunityOutcome.ts`):
+  - **The watch's:** 2 bp a side on a pair trading $50M a day or more, 2.5 times that down to $5M,
+    five times below; or half the spread the scanner saw, when that is more.
+  - **The news rules' shorts:** the rate the coin's last twelve hours of trading put it at, or the
+    middle rate when those could not be read.
+
+  The paper engine charges it on the entry, a stop, a trailing stop and the time limit, and not on a
+  target, which is a resting limit. The stop and the target stay where the market price put them, so
+  what the entry gave up is lost whichever of them ends the trade, as it is in the score. Sizing by
+  risk, and R, count it on both fills. A trade opened before then carries no rate, filled at its
+  prices, and the slippage gate names it. A position a person makes carries none either.
 - **Kept only while the app runs:** the stream's log, the alerts and the refused trades. The report
   says when the app started, and reaches back no further for those.
 

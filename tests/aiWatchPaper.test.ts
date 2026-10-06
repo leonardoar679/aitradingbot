@@ -27,6 +27,7 @@ import {
   type WatchPaperPlan
 } from '../shared/aiWatchPaper'
 import type { TradeReview } from '../shared/aiAdditions'
+import { SLIPPAGE_RATE } from '../shared/fees'
 import type { Candle, ExecutorConfig, PaperAccount, PaperPauseSettings, PaperRiskSettings, PositionExecutorParams } from '../shared/ipc'
 import type { MarketEvent } from '../shared/marketEvent'
 import type { LiveBook } from '../shared/liveMarket'
@@ -206,9 +207,10 @@ describe('planWatchPaperTrade', () => {
       const form: PositionExecutorParams = aiProposalPositionParams(proposal, { side: 'buy', entryPrice: null, amountQuote: 100, takeProfitPct: 9, stopLossPct: 9, timeLimitSec: 9, trailingStop: null })
       const submitted: PositionExecutorParams = { ...form, entryExpiresAt: aiProposalEntryExpiry(proposal, 'paper'), entryRange: aiProposalEntryRange(proposal, 'paper', form.entryPrice) }
       expect(submitted.entryRange).toEqual({ min: 99.8, max: 100.2 })
-      // The one difference is a field nothing reads while a range is there.
-      expect(plan.params).toEqual({ ...submitted, entryPrice: null })
-      for (const bars of PATHS) expect(simulatePosition(bars, plan.params)).toEqual(simulatePosition(bars, submitted))
+      // Two differences: a field nothing reads while a range is there, and the slippage the app
+      // charges its own paper trades, at its score's rate (the pair trades $80M a day: 2 bp a side).
+      expect(plan.params).toEqual({ ...submitted, entryPrice: null, slippageRate: SLIPPAGE_RATE })
+      for (const bars of PATHS) expect(simulatePosition(bars, plan.params)).toEqual(simulatePosition(bars, { ...submitted, slippageRate: SLIPPAGE_RATE }))
     }
   })
 
@@ -230,9 +232,22 @@ describe('planWatchPaperTrade', () => {
     // And the other way: inside the range when the answer came, gone by the next minute.
     const ran: Candle[] = [bar(SOON + 40, 100.9, 101.6, 100.8, 101.5), bar(SOON + 100, 101.5, 102.4, 101.4, 102.3)]
     expect(simulatePosition(ran, okPlan({ lastPrice: 100.1 }).params)).toMatchObject({ status: 'pending', entryPrice: null })
-    // It enters when the price comes back into the range, at the edge it comes in by.
+    // It enters when the price comes back into the range, at the edge it comes in by, and pays its
+    // slippage there.
     const back: Candle[] = [...fell, bar(SOON + 160, 98.8, 99.9, 98.75, 99.85)]
-    expect(simulatePosition(back, okPlan({ lastPrice: 99.5 }).params)).toMatchObject({ status: 'open', entryPrice: 99.8, enteredAt: SOON + 160 })
+    expect(simulatePosition(back, okPlan({ lastPrice: 99.5 }).params)).toMatchObject({ status: 'open', entryPrice: 99.8 * (1 + SLIPPAGE_RATE), enteredAt: SOON + 160 })
+  })
+
+  it("charges its fills at the rate its score does: from what the pair trades, or half its spread when that is more", () => {
+    const plan = (live: MarketEvent['live']): WatchPaperPlan => planWatchPaperTrade({ config: config(), risk: STAKE, event: { ...event(), live }, decision: decision(), nowSec: SOON, lastPrice: 100 })
+    const live = event().live as NonNullable<MarketEvent['live']>
+    expect(okPlan().params.slippageRate).toBe(SLIPPAGE_RATE)
+    expect(plan({ ...live, quoteVolume24h: 2_000_000 })).toMatchObject({ ok: true, params: { slippageRate: SLIPPAGE_RATE * 5 } })
+    // A 0.2% spread costs half of it each way: 10 bp, more than the deep pair's 2.
+    const wide = plan({ ...live, spreadPct: 0.2 })
+    expect(wide.ok && wide.params.slippageRate).toBeCloseTo(0.001, 12)
+    // No book on file: the middle rate.
+    expect(plan(null)).toMatchObject({ ok: true, params: { slippageRate: SLIPPAGE_RATE * 2.5 } })
   })
 
   it('carries the model\'s stop, target and hold, and the expiry of its entry', () => {
@@ -348,9 +363,10 @@ describe('watchPaperExecutor', () => {
     expect((made.params as PositionExecutorParams).leverage).toBeUndefined()
     expect((made.params as PositionExecutorParams).side).toBe(answer.recommendation === 'buy' ? 'buy' : 'sell')
     expect(made.proposedBy).toBeUndefined()
-    // And the engine runs it as it runs any paper position.
+    // And the engine runs it as it runs any paper position, with its slippage on the fill.
     const bars: Candle[] = [{ time: SOON + 40, open: 100, high: 100.3, low: 99.9, close: 100.1, volume: 1 }]
-    expect(simulatePosition(bars, made.params as PositionExecutorParams)).toMatchObject({ status: 'open', entryPrice: 100, leverage: 1, liquidationPrice: null })
+    const paid = answer.recommendation === 'buy' ? 100 * (1 + SLIPPAGE_RATE) : 100 * (1 - SLIPPAGE_RATE)
+    expect(simulatePosition(bars, made.params as PositionExecutorParams)).toMatchObject({ status: 'open', entryPrice: paid, leverage: 1, liquidationPrice: null })
   })
 })
 
@@ -808,10 +824,11 @@ describe('how the watch\'s paper trades ended', () => {
     expect(tally.pnl).toHaveLength(1)
     expect(tally.pnl[0].asset).toBe('USDT')
     expect(tally.pnl[0].amount).toBeCloseTo(2.08601, 8)
-    // Each staked 100 1.5% from its stop: +3.786 is +2.23 R, and -1.70 is -1 R.
-    expect(tally.r).toBeCloseTo(3.78601 / 1.7 - 1, 9)
+    // Each staked 100 1.5% from its stop, with a round trip's fees of 0.2% and its slippage of 0.04%:
+    // 1.74 risked. +3.786 is +2.18 R, and -1.70 is -0.98 R.
+    expect(tally.r).toBeCloseTo((3.78601 - 1.7) / 1.74, 9)
     expect(tally.rTrades).toBe(2)
-    expect(describeWatchPaperTally(tally)).toBe('3 have ended: 2 entered, 1 of them ahead, +2.086 USDT in all after fees, or +1.23 R.')
+    expect(describeWatchPaperTally(tally)).toBe('3 have ended: 2 entered, 1 of them ahead, +2.086 USDT in all after fees, or +1.20 R.')
   })
 
   it('counts nothing that is not a paper trade of the watch\'s, whatever is written on it', () => {
@@ -826,17 +843,17 @@ describe('how the watch\'s paper trades ended', () => {
     const tally = watchPaperTally([ended('BTCUSDT', won), ended('ETHBTC', { exit: 'stop_loss', pnlQuote: -0.002, closedAt: T }, { quoteAsset: 'BTC' }), ended('SOLUSDT', lost)])
     expect(tally.pnl.map((entry) => entry.asset)).toEqual(['USDT', 'BTC'])
     // R has no asset: it adds across them.
-    expect(describeWatchPaperTally(tally)).toBe('3 have ended: 3 entered, 1 of them ahead, +2.086 USDT and -0.002 BTC in all after fees, or +1.23 R.')
+    expect(describeWatchPaperTally(tally)).toBe('3 have ended: 3 entered, 1 of them ahead, +2.086 USDT and -0.002 BTC in all after fees, or +1.20 R.')
   })
 
   it('says so plainly when none entered, and nothing when none has ended', () => {
     expect(describeWatchPaperTally(watchPaperTally([ended('BTCUSDT', never)]))).toBe('1 has ended, and it never entered.')
     expect(describeWatchPaperTally(watchPaperTally([ended('BTCUSDT', never), ended('ETHUSDT', never)]))).toBe('2 have ended, and none entered.')
     expect(describeWatchPaperTally(watchPaperTally([executor()]))).toBe('')
-    expect(describeWatchPaperTally(watchPaperTally([ended('BTCUSDT', won)]))).toBe('1 has ended: 1 entered, 1 of them ahead, +3.786 USDT in all after fees, or +2.23 R.')
+    expect(describeWatchPaperTally(watchPaperTally([ended('BTCUSDT', won)]))).toBe('1 has ended: 1 entered, 1 of them ahead, +3.786 USDT in all after fees, or +2.18 R.')
     // One with no stop to measure against is in the sum and not in the R.
     const stopless = ended('ETHUSDT', won, { params: { ...(executor().params as PositionExecutorParams), stopLossPct: null } })
-    expect(describeWatchPaperTally(watchPaperTally([ended('BTCUSDT', won), stopless]))).toBe('2 have ended: 2 entered, 2 of them ahead, +7.572 USDT in all after fees, or +2.23 R for the 1 with a stop.')
+    expect(describeWatchPaperTally(watchPaperTally([ended('BTCUSDT', won), stopless]))).toBe('2 have ended: 2 entered, 2 of them ahead, +7.572 USDT in all after fees, or +2.18 R for the 1 with a stop.')
   })
 })
 
@@ -997,11 +1014,12 @@ describe('sized by risk, and held to what the app has out (shared/paperRisk.ts)'
   const amountOf = (made: ExecutorConfig): number => (made.params as PositionExecutorParams).amountQuote
 
   it('stakes what its stop would lose about the risk at, after fees, and never more than its stake', () => {
-    // The model's stop is 1.5% from the entry, and a round trip's fees are 0.2%: 1 / 1.7% is 58.82.
-    expect(okPlan({ risk: RISK }).params.amountQuote).toBe(58.82)
-    // Risking 5 there would stake 294.11: held to the stake of 100, and let through where it is larger.
+    // The model's stop is 1.5% from the entry, a round trip's fees are 0.2%, and its slippage 0.04%
+    // (2 bp a side, on a pair trading $80M a day): 1 / 1.74% is 57.47.
+    expect(okPlan({ risk: RISK }).params.amountQuote).toBe(57.47)
+    // Risking 5 there would stake 287.35: held to the stake of 100, and let through where it is larger.
     expect(okPlan({ risk: { ...RISK, riskQuote: 5 } }).params.amountQuote).toBe(100)
-    expect(okPlan({ risk: { ...RISK, riskQuote: 5 }, config: config({ stakeQuote: 1000 }) }).params.amountQuote).toBe(294.11)
+    expect(okPlan({ risk: { ...RISK, riskQuote: 5 }, config: config({ stakeQuote: 1000 }) }).params.amountQuote).toBe(287.35)
   })
 
   it('opens nothing it would size under what the smallest order on Binance is worth, and says why', () => {
@@ -1024,9 +1042,9 @@ describe('sized by risk, and held to what the app has out (shared/paperRisk.ts)'
 
   it('opens it at that size with nothing stored, by the defaults, and says so', async () => {
     const r = rig({ risk: undefined })
-    expect(await openWatchPaperTrade(event(), decision(), r.deps)).toEqual({ opened: true, text: 'A paper BUY of 58.82 USDT was opened, to enter between 99.8 and 100.2.' })
-    expect(amountOf(r.state.executors[0])).toBe(58.82)
-    expect(r.notices[0].body).toContain('A paper position of 58.82 USDT was opened')
+    expect(await openWatchPaperTrade(event(), decision(), r.deps)).toEqual({ opened: true, text: 'A paper BUY of 57.47 USDT was opened, to enter between 99.8 and 100.2.' })
+    expect(amountOf(r.state.executors[0])).toBe(57.47)
+    expect(r.notices[0].body).toContain('A paper position of 57.47 USDT was opened')
   })
 
   it("opens nothing past what the app's own paper trades may have out together, and counts only theirs", async () => {
@@ -1042,11 +1060,11 @@ describe('sized by risk, and held to what the app has out (shared/paperRisk.ts)'
       newsRule: { articleId: 7, ticker: 'XRP', releaseSec: T, title: 'Binance Will Extend the Monitoring Tag to Include XRP on 2026-10-08', category: 'MONITORING_TAG' },
       params: { ...(watched.params as PositionExecutorParams), side: 'sell', amountQuote: 450 }
     }
-    // 950 out in the watch's and the news rules' trades: 58.82 more would pass 1,000.
+    // 950 out in the watch's and the news rules' trades: 57.47 more would pass 1,000.
     const near = rig({ risk: capped, config: roomy, executors: [own, shorted] })
     expect(await openWatchPaperTrade(event(), decision(), near.deps)).toEqual({
       opened: false,
-      text: "No paper trade: The watch's and the news rules' open paper trades stake 950 USDT together, and 58.82 more would take them past the 1,000 set on Risk & Safety."
+      text: "No paper trade: The watch's and the news rules' open paper trades stake 950 USDT together, and 57.47 more would take them past the 1,000 set on Risk & Safety."
     })
     expect(near.state.executors).toHaveLength(2)
     // One of them stopped, there is room again.

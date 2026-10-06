@@ -117,12 +117,16 @@ export function describeLiquidityTier(tier: LiquidityTier): string {
   return tier === 'thin' ? 'under $5M a day' : 'not known'
 }
 
+/** What an event's slippage is read from: the book and the day's traded value the scanner saw, for
+ * an event raised live. */
+export type EventLiquidity = Pick<MarketEvent, 'live'>
+
 /** What a market fill gives up on an event's pair: the rate its traded value puts it at -- and,
  * for an event raised live, half the spread the scanner saw on its book at that moment, when that
  * is more. Crossing a spread costs half of it each way, and a measurement outranks an assumption.
  * `dailyQuoteVolume` is for an event found in history, which has no book: what its own candles
  * say the pair traded. */
-export function slippageRateForEvent(event: Pick<MarketEvent, 'live'>, dailyQuoteVolume?: number | null): number {
+export function slippageRateForEvent(event: EventLiquidity, dailyQuoteVolume?: number | null): number {
   const assumed = slippageRateFor(dailyQuoteVolume ?? event.live?.quoteVolume24h ?? null)
   const spreadPct = event.live?.spreadPct ?? null
   const measured = spreadPct !== null && Number.isFinite(spreadPct) && spreadPct > 0 ? spreadPct / 100 / 2 : 0

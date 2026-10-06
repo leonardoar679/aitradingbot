@@ -11,6 +11,7 @@ import {
   paperOutBlock,
   paperRiskProblem,
   paperStake,
+  riskedAtStop,
   sizePaperTrade
 } from '../shared/paperRisk'
 
@@ -115,6 +116,19 @@ describe('a stake sized by risk', () => {
       reason: 'Its stop is 25% away, so risking 1 USDT there stakes 3.96 USDT: under the 5 the smallest order on Binance is worth.'
     })
     expect(sizePaperTrade({ risk: RISK, stakeQuote: 100, stopPct: 1.5, quoteAsset: 'USDT' })).toEqual({ ok: true, amountQuote: 58.82 })
+  })
+
+  it("counts a trade's slippage on both fills, in what it stakes and in what it risks", () => {
+    // 1.5% to the stop, 0.2% of fees and 2 bp a side: 1 / 1.74% is 57.47.
+    expect(paperStake({ risk: RISK, stakeQuote: 100, stopPct: 1.5, slippageRate: 0.0002 })).toBe(57.47)
+    expect(sizePaperTrade({ risk: RISK, stakeQuote: 100, stopPct: 1.5, quoteAsset: 'USDT', slippageRate: 0.0002 })).toEqual({ ok: true, amountQuote: 57.47 })
+    expect(riskedAtStop({ amountQuote: 100, stopLossPct: 1.5, slippageRate: 0.0002 })).toBeCloseTo(1.74, 12)
+    // None carried, none counted; and a rate that is not one is none.
+    expect(riskedAtStop({ amountQuote: 100, stopLossPct: 1.5 })).toBeCloseTo(1.7, 12)
+    for (const slippageRate of [null, Number.NaN, -0.001, 1]) {
+      expect(riskedAtStop({ amountQuote: 100, stopLossPct: 1.5, slippageRate })).toBeCloseTo(1.7, 12)
+      expect(paperStake({ risk: RISK, stakeQuote: 100, stopPct: 1.5, slippageRate })).toBe(58.82)
+    }
   })
 })
 

@@ -236,14 +236,16 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
             title: 'Entry'
           })
         )
+        // The levels are measured from the fill before slippage (PositionExecutorState.levelPrice).
+        const levelPrice = sim.state.levelPrice ?? sim.state.entryPrice
         if (params.takeProfitPct !== null) {
-          const tp = isBuy ? sim.state.entryPrice * (1 + params.takeProfitPct / 100) : sim.state.entryPrice * (1 - params.takeProfitPct / 100)
+          const tp = isBuy ? levelPrice * (1 + params.takeProfitPct / 100) : levelPrice * (1 - params.takeProfitPct / 100)
           newLines.push(
             series.createPriceLine({ price: tp, color: palette.up, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: 'TP' })
           )
         }
         if (params.stopLossPct !== null) {
-          const sl = isBuy ? sim.state.entryPrice * (1 - params.stopLossPct / 100) : sim.state.entryPrice * (1 + params.stopLossPct / 100)
+          const sl = isBuy ? levelPrice * (1 - params.stopLossPct / 100) : levelPrice * (1 + params.stopLossPct / 100)
           newLines.push(
             series.createPriceLine({ price: sl, color: palette.down, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: 'SL' })
           )

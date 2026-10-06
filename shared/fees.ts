@@ -41,6 +41,16 @@ export const FEE_RATE = 0.001
  * not be trusted on the strength of a backtest that used this constant. */
 export const SLIPPAGE_RATE = 0.0002
 
+/** What a paper position gives up on each market fill, as a fraction: its own `slippageRate`
+ * (PositionExecutorParams) when it carries a usable one, and nothing otherwise. The app's own paper
+ * trades carry the rate their recommendation is scored at; a position a person makes, and every
+ * one stored before a rate was set on any, carries none and fills as it always did. A rate that is
+ * not a fraction from 0 to under 1 is no rate. */
+export function positionSlippageRate(params: { slippageRate?: number | null }): number {
+  const rate = params.slippageRate
+  return typeof rate === 'number' && rate >= 0 && rate < 1 ? rate : 0
+}
+
 /** What a market buy actually pays: worse than the reference price, never better. */
 export function buyFillPrice(price: number): number {
   return price * (1 + SLIPPAGE_RATE)

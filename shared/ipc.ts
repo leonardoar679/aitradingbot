@@ -646,6 +646,13 @@ export interface PositionExecutorParams {
    * its far side. Absent or null on every other position, and never on a live one: an exchange
    * has no order that means this. */
   entryRange?: { min: number; max: number } | null
+  /** Simulation only. What each market fill gives up, as a fraction (shared/fees.ts
+   * positionSlippageRate): the entry, a stop, a trailing stop and the time limit fill that much worse
+   * than their price; a take-profit is a resting limit and is paid exactly. Set on the app's own
+   * paper trades to the rate their recommendation is scored at (shared/aiOpportunityOutcome.ts), so
+   * a paper trade and its score agree on what it cost. Absent or null, a position fills at its
+   * prices, as every one a person makes, and every one stored before this existed, still does. */
+  slippageRate?: number | null
 }
 
 /** How a simulated position ended. `entry_expired` is one that never began: its entry was not

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { matchesAiCallFilter } from '../shared/aiLedger'
 import { AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS, describeQuestionKind, questionKindOfPromptVersion } from '../shared/aiOpportunity'
 import { DEFAULT_AI_WATCH, watchSkipReason } from '../shared/aiWatch'
+import { SLIPPAGE_RATE } from '../shared/fees'
 import type { Candle, ExecutorConfig, PaperAccount, PaperPauseSettings, PaperRiskSettings, PositionExecutorParams, SymbolInfo } from '../shared/ipc'
 import { DEFAULT_NEWS_CONFIG, applyNewsConfigPatch, healNewsConfig, newsActionsFor, type NewsConfig, type NewsItem } from '../shared/news'
 import { DEFAULT_PAPER_PAUSE, resumePaperPause } from '../shared/paperPause'
@@ -15,6 +16,7 @@ import {
   newsQuestionProblem,
   newsShortBlock,
   newsShortExecutors,
+  newsShortSlippageRate,
   newsEventKind,
   shouldRaiseNewsEvent,
   tagReading,
@@ -47,29 +49,34 @@ const item: NewsItem = {
 
 const pair = (base: string): SymbolInfo => ({ symbol: `${base}USDT`, baseAsset: base, quoteAsset: 'USDT' })
 
+/** What a short's fills are charged when the coin's candles could not be read: the middle rate. */
+const UNREAD_RATE = SLIPPAGE_RATE * 2.5
+
 /** The executor a delisting's short is, made the way the writer makes it. */
 const delistingShort = (id: string, ticker: string, stakeQuote: number, nowSec: number): ExecutorConfig =>
-  newsShortExecutor({ id, item, ticker, pair: pair(ticker), nowSec, params: delistingShortParams({ releaseSec: item.releaseSec, createdAt: nowSec, stakeQuote }) })
+  newsShortExecutor({ id, item, ticker, pair: pair(ticker), nowSec, params: delistingShortParams({ releaseSec: item.releaseSec, createdAt: nowSec, stakeQuote, slippageRate: UNREAD_RATE }) })
 
 describe("the rule's short", () => {
   it('is out at the open four hours after the announcement, whenever in the minute it is opened', () => {
     // Opened in the minute after the announcement's: in at the next open, two minutes after it.
-    expect(delistingShortParams({ releaseSec: A + 2, createdAt: A + 63, stakeQuote: 100 })).toEqual({
+    expect(delistingShortParams({ releaseSec: A + 2, createdAt: A + 63, stakeQuote: 100, slippageRate: UNREAD_RATE })).toEqual({
       side: 'sell',
       entryPrice: null,
       amountQuote: 100,
       takeProfitPct: null,
       stopLossPct: null,
       timeLimitSec: 237 * 60,
-      trailingStop: null
+      trailingStop: null,
+      slippageRate: UNREAD_RATE
     })
     // Opened in the announcement's own minute: in a minute sooner, held a minute longer.
-    expect(delistingShortParams({ releaseSec: A, createdAt: A + 3, stakeQuote: 100 }).timeLimitSec).toBe(238 * 60)
-    expect(delistingShortParams({ releaseSec: A, createdAt: A + 60, stakeQuote: 100 }).timeLimitSec).toBe(238 * 60)
+    expect(delistingShortParams({ releaseSec: A, createdAt: A + 3, stakeQuote: 100, slippageRate: UNREAD_RATE }).timeLimitSec).toBe(238 * 60)
+    expect(delistingShortParams({ releaseSec: A, createdAt: A + 60, stakeQuote: 100, slippageRate: UNREAD_RATE }).timeLimitSec).toBe(238 * 60)
   })
 
   it('is closed by the engine at the close of the minute before the four hours are up', () => {
-    const params = delistingShortParams({ releaseSec: A, createdAt: A + 63, stakeQuote: 100 })
+    // No slippage here, to read the clock alone: what it costs is below.
+    const params = delistingShortParams({ releaseSec: A, createdAt: A + 63, stakeQuote: 100, slippageRate: 0 })
     // In at 10 at A+2min; the coin rises to 11 at A+200min and stays there.
     const bars: Candle[] = []
     for (let t = A + 120; t <= A + 250 * 60; t += 60) {
@@ -80,6 +87,31 @@ describe("the rule's short", () => {
     expect(state).toMatchObject({ status: 'closed', exitReason: 'time_limit', entryPrice: 10, enteredAt: A + 120, closedAt: A + 239 * 60 })
     // A short of a coin that rose: it lost the rise and the fees.
     expect(state.realizedPnl).toBeCloseTo(-10 - (100 + 110) * 0.001, 6)
+  })
+
+  it("pays its slippage on both fills, at the coin's rate: sold lower, bought back higher", () => {
+    const rate = SLIPPAGE_RATE * 5
+    const params = delistingShortParams({ releaseSec: A, createdAt: A + 63, stakeQuote: 100, slippageRate: rate })
+    const bars: Candle[] = []
+    for (let t = A + 120; t <= A + 250 * 60; t += 60) bars.push({ time: t, open: 10, high: 10, low: 10, close: 10, volume: 1 })
+    const state = simulatePosition(bars, params)
+    expect(state).toMatchObject({ exitReason: 'time_limit', entryPrice: 10 * (1 - rate), exitPrice: 10 * (1 + rate) })
+    // A flat four hours: it lost the slippage both ways and the fees.
+    const qty = 100 / (10 * (1 - rate))
+    expect(state.realizedPnl).toBeCloseTo(qty * (10 * (1 - rate) - 10 * (1 + rate)) - qty * (10 * (1 - rate) + 10 * (1 + rate)) * 0.001, 9)
+    expect(state.realizedPnl as number).toBeLessThan(-0.2 - 0.19)
+  })
+
+  it("is charged the rate the coin's trading puts it at, read from the twelve hours before the announcement", () => {
+    const hours = (quotePerMinute: number): Candle[] =>
+      Array.from({ length: 720 }, (_, k) => ({ time: A - 720 * 60 + k * 60, open: 2, high: 2, low: 2, close: 2, volume: quotePerMinute / 2 }))
+    // $50M a day and more is the usual rate; $5M to $50M two and a half times it; under, five times.
+    expect(newsShortSlippageRate(hours(60_000_000 / 1440))).toBe(SLIPPAGE_RATE)
+    expect(newsShortSlippageRate(hours(10_000_000 / 1440))).toBe(SLIPPAGE_RATE * 2.5)
+    expect(newsShortSlippageRate(hours(1_000_000 / 1440))).toBe(SLIPPAGE_RATE * 5)
+    // Unread, the middle rate.
+    expect(newsShortSlippageRate(null)).toBe(UNREAD_RATE)
+    expect(newsShortSlippageRate([])).toBe(UNREAD_RATE)
   })
 
   it('opens only on a delisting of that coin, within five minutes, once', () => {
@@ -602,8 +634,9 @@ describe("a Monitoring Tag's short", () => {
   })
 
   it('sets its stop and target from that move, and is out at the close of its sixtieth minute', () => {
-    const params = tagShortParams({ sigma15Pct: 2, stakeQuote: 100 })
-    expect(params).toEqual({ side: 'sell', entryPrice: null, amountQuote: 100, takeProfitPct: 6, stopLossPct: 3, timeLimitSec: 59 * 60, trailingStop: null })
+    // No slippage here, to read the levels alone: what it costs is in the rule's short above.
+    const params = tagShortParams({ sigma15Pct: 2, stakeQuote: 100, slippageRate: 0 })
+    expect(params).toEqual({ side: 'sell', entryPrice: null, amountQuote: 100, takeProfitPct: 6, stopLossPct: 3, timeLimitSec: 59 * 60, trailingStop: null, slippageRate: 0 })
     // The engine reads candles from the second minute after the announcement: in at 10.
     const entry = G + 120
     expect(simulatePosition(hourFrom(entry, 10, entry + 20 * 60, 9.3), params)).toMatchObject({ exitReason: 'take_profit', enteredAt: entry })
@@ -623,7 +656,8 @@ describe("a Monitoring Tag's short", () => {
     const sigma = tagReading(hoursBefore(G), G)?.sigma15Pct as number
     const [ava] = r.state.executors
     expect(ava).toMatchObject({ name: 'Monitoring Tag short · AVAUSDT', type: 'position', mode: 'paper', createdAt: G + 61, keepPosition: false })
-    expect(ava.params).toEqual(tagShortParams({ sigma15Pct: sigma, stakeQuote: 100 }))
+    // The coin traded about 72,000 USDT a day in those hours: thin, so five times the usual slippage.
+    expect(ava.params).toEqual(tagShortParams({ sigma15Pct: sigma, stakeQuote: 100, slippageRate: SLIPPAGE_RATE * 5 }))
     // The pair's correlation with Bitcoin, read for the cap on one side, is written on it.
     expect(ava.newsRule).toEqual({ articleId: 401, ticker: 'AVA', releaseSec: G, title: tag.title, category: 'MONITORING_TAG', btcCorrelation: 0.3 })
     expect(r.notices[0].title).toBe('Paper short: AVAUSDT')
@@ -695,22 +729,27 @@ describe('sized by risk, and held to what the app has out (shared/paperRisk.ts)'
     const tagged = rig({ now: G + 61, candles: hoursBefore(G), pairs: [pair('AVA')], risk: RISK })
     const lines = await openNewsShorts({ ...tag, tickers: ['AVA'] }, big, tagged.deps)
     const sigma = tagReading(hoursBefore(G), G)?.sigma15Pct as number
-    const sized = paperStake({ risk: RISK, stakeQuote: 1000, stopPct: tagShortParams({ sigma15Pct: sigma, stakeQuote: 1000 }).stopLossPct })
+    // What it risks at its stop counts its slippage on both fills, at the thin coin's rate.
+    const rate = SLIPPAGE_RATE * 5
+    const sized = paperStake({ risk: RISK, stakeQuote: 1000, stopPct: tagShortParams({ sigma15Pct: sigma, stakeQuote: 1000, slippageRate: rate }).stopLossPct, slippageRate: rate })
+    expect(sized).toBeLessThan(paperStake({ risk: RISK, stakeQuote: 1000, stopPct: tagShortParams({ sigma15Pct: sigma, stakeQuote: 1000, slippageRate: rate }).stopLossPct }))
     // The coin's usual move puts the stop near, so risking 1 there stakes a few hundred: under 1,000.
     expect(sized).toBeGreaterThan(5)
     expect(sized).toBeLessThan(1000)
     expect(lines).toEqual([`AVA: a paper short of ${sized} USDT was opened.`])
-    expect(tagged.state.executors[0].params).toEqual({ ...tagShortParams({ sigma15Pct: sigma, stakeQuote: 1000 }), amountQuote: sized })
+    expect(tagged.state.executors[0].params).toEqual({ ...tagShortParams({ sigma15Pct: sigma, stakeQuote: 1000, slippageRate: rate }), amountQuote: sized })
     expect(tagged.notices[0].body).toContain(`A paper short of ${sized} USDT was opened by the rule`)
 
     const delisted = rig({ risk: RISK })
     expect(await openNewsShorts({ ...item, tickers: ['ICX'] }, big, delisted.deps)).toEqual(['ICX: a paper short of 1000 USDT was opened.'])
     expect(amountOf(delisted.state.executors[0])).toBe(1000)
+    // Its candles were not there to read: the middle rate.
+    expect((delisted.state.executors[0].params as PositionExecutorParams).slippageRate).toBe(UNREAD_RATE)
   })
 
   it("opens no short past what the app's own paper trades may have out together", async () => {
     const watched: ExecutorConfig = {
-      ...newsShortExecutor({ id: 'w-1', item, ticker: 'ICX', pair: pair('ICX'), nowSec: A, params: tagShortParams({ sigma15Pct: 1, stakeQuote: 100 }) }),
+      ...newsShortExecutor({ id: 'w-1', item, ticker: 'ICX', pair: pair('ICX'), nowSec: A, params: tagShortParams({ sigma15Pct: 1, stakeQuote: 100, slippageRate: UNREAD_RATE }) }),
       symbol: 'BTCUSDT',
       newsRule: undefined,
       watch: { eventId: 'binance:BTCUSDT:1', eventTime: 1, model: 'openai/gpt-5-mini', confidence: 0.8 }
@@ -745,7 +784,7 @@ describe('held to what the app has out on one side on coins that move with Bitco
 describe("paused after a losing run of the rules' own (shared/paperPause.ts)", () => {
   /** A tag's short on another announcement, stopped out at `closedAt` having made `r` R. */
   function closedTag(id: string, ticker: string, closedAt: number, r: number): ExecutorConfig {
-    const params = tagShortParams({ sigma15Pct: 1, stakeQuote: 100 })
+    const params = tagShortParams({ sigma15Pct: 1, stakeQuote: 100, slippageRate: UNREAD_RATE })
     const made = newsShortExecutor({ id, item: { ...item, id: 200, category: 'MONITORING_TAG', tickers: [ticker] }, ticker, pair: pair(ticker), nowSec: closedAt - 3600, params })
     const mark = made.newsRule as NonNullable<ExecutorConfig['newsRule']>
     return { ...made, status: 'stopped', stoppedAt: closedAt, newsRule: { ...mark, result: { exit: 'stop_loss', pnlQuote: r * (riskedAtStop(params) as number), closedAt } } }

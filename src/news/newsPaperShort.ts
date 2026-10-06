@@ -5,6 +5,7 @@ import {
   newsShortBlock,
   newsShortExecutors,
   newsShortNotice,
+  newsShortSlippageRate,
   tagReading,
   tagReadingWindow,
   tagShortParams,
@@ -119,15 +120,19 @@ export async function openNewsShorts(item: NewsItem, actions: Pick<NewsKindActio
       lines.push(`${ticker}: no paper short, as it has no USDT pair on Binance.`)
       continue
     }
-    // A tag's stop and target are the coin's own usual move, read before the announcement.
+    // The twelve hours before the announcement: what the coin trades, for what its fills give up,
+    // and, for a tag, its usual move, which its stop and target are made of.
+    const span = tagReadingWindow(item.releaseSec)
+    let before: Candle[] | null = null
+    try {
+      before = await deps.fetchCandles('binance', pair.symbol, span.startSec, span.endSec)
+    } catch {
+      before = null
+    }
+    const slippageRate = newsShortSlippageRate(before)
     let sigma15Pct: number | null = null
     if (item.category === 'MONITORING_TAG') {
-      const span = tagReadingWindow(item.releaseSec)
-      try {
-        sigma15Pct = tagReading(await deps.fetchCandles('binance', pair.symbol, span.startSec, span.endSec), item.releaseSec)?.sigma15Pct ?? null
-      } catch {
-        sigma15Pct = null
-      }
+      sigma15Pct = before === null ? null : (tagReading(before, item.releaseSec)?.sigma15Pct ?? null)
       if (sigma15Pct === null) {
         lines.push(`${ticker}: no paper short, as its usual moves could not be read from its candles before the announcement.`)
         continue
@@ -151,12 +156,12 @@ export async function openNewsShorts(item: NewsItem, actions: Pick<NewsKindActio
       if (blocked !== null) return { refused: blocked }
       const drafted =
         sigma15Pct === null
-          ? delistingShortParams({ releaseSec: item.releaseSec, createdAt: nowSec, stakeQuote: stake })
-          : tagShortParams({ sigma15Pct, stakeQuote: stake })
+          ? delistingShortParams({ releaseSec: item.releaseSec, createdAt: nowSec, stakeQuote: stake, slippageRate })
+          : tagShortParams({ sigma15Pct, stakeQuote: stake, slippageRate })
       // A tag's short has a stop, and is sized by what it would lose there where that is how the
       // app's own paper trades are sized; a delisting's has none, and stakes its stake.
       const risk = healPaperRisk(fresh.paperRisk)
-      const size = sizePaperTrade({ risk, stakeQuote: stake, stopPct: drafted.stopLossPct, quoteAsset: pair.quoteAsset })
+      const size = sizePaperTrade({ risk, stakeQuote: stake, stopPct: drafted.stopLossPct, quoteAsset: pair.quoteAsset, slippageRate })
       if (!size.ok) return { refused: size.reason }
       const params: PositionExecutorParams = { ...drafted, amountQuote: size.amountQuote }
       const problem =

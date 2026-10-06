@@ -30,7 +30,9 @@ const PARAMS: PositionExecutorParams = {
   timeLimitSec: 3600,
   trailingStop: null,
   entryRange: { min: 99.8, max: 100.2 },
-  entryExpiresAt: null
+  entryExpiresAt: null,
+  // What the watch's paper trades carry: the rate their recommendation is scored at.
+  slippageRate: 0.0002
 }
 
 const BOOK = { bid: 99.99, ask: 100.01, spreadPct: 0.02, ageMs: 900, source: 'stream' as const }
@@ -217,9 +219,12 @@ describe('the gates that must be zero', () => {
       ['validation', 'pass']
     ])
     expect(report.twelveHour).toBe(false)
-    // Slippage fails, as it is not charged; over an hour it does not apply, so the hour passes.
-    expect(gateOf(report, 'slippage').status).toBe('fail')
     expect(report.passed).toBe(true)
+    // A twelve-hour gate that fails does not apply over an hour, so the hour passes: here, a trade
+    // made before the paper engine charged slippage.
+    const unslipped = sessionReportOf(input({ executors: [trade('sol'), ended('eth', 2.5, T - 600, { params: { ...PARAMS, slippageRate: undefined } })] }))
+    expect(gateOf(unslipped, 'slippage').status).toBe('fail')
+    expect(unslipped.passed).toBe(true)
     expect(gateOf(report, 'stale_price').detail).toBe('Each of the 2 trades was opened on a live price under 10 seconds old.')
   })
 
@@ -322,14 +327,34 @@ describe('the twelve-hour gates', () => {
       ['outcomes', 'pass'],
       ['traced', 'pass'],
       ['fees', 'pass'],
-      ['slippage', 'fail'],
+      ['slippage', 'pass'],
       ['news_links', 'pass']
     ])
-    // Slippage is not charged by the paper engine, so a twelve-hour run in which a trade closed fails.
-    expect(gateOf(report, 'slippage').detail).toContain('At 2 bp a side the trade would have given up about 0.04 USDT more')
+    // It reached its target: slippage on its entry, 2 bp of 100, and none on the target, a resting limit.
+    expect(gateOf(report, 'slippage').detail).toBe("The trade was charged slippage on its market fills, at its pair's rate: about 0.02 USDT in all.")
     expect(gateOf(report, 'fees').detail).toBe('The trade is net of a fee on both fills, as the engine charges.')
     expect(gateOf(report, 'outcomes').detail).toBe('Each of the 2 recommendations that ended has its outcome: entered and closed, or expired unfilled.')
+    expect(report.passed).toBe(true)
+  })
+
+  it('needs slippage charged on every trade that ended, and names one made before it was', () => {
+    const stopped = ended('eth', -1.74)
+    const out: ExecutorConfig = { ...stopped, watch: { ...(stopped.watch as NonNullable<ExecutorConfig['watch']>), result: { exit: 'stop_loss', pnlQuote: -1.74, closedAt: T - 600 } } }
+    // A stop is a market fill: slippage both ways, 2 bp of 100 each.
+    expect(gateOf(twelve({ executors: [out] }), 'slippage')).toMatchObject({ status: 'pass', detail: "The trade was charged slippage on its market fills, at its pair's rate: about 0.04 USDT in all." })
+    // One made before the paper engine charged it carries no rate, and filled at its prices.
+    const before = ended('ada', 2.5, T - 600, { params: { ...PARAMS, slippageRate: undefined } })
+    const report = twelve({ executors: [ended('eth', 2.5), before] })
+    expect(gateOf(report, 'slippage')).toEqual({
+      id: 'slippage',
+      label: 'Slippage is applied',
+      twelveHour: true,
+      status: 'fail',
+      detail: '1 of 2 paper trades that ended: ADAUSDT at 11:30 UTC carries no slippage rate, so it filled at its prices.'
+    })
     expect(report.passed).toBe(false)
+    // A rate that is not one is none.
+    expect(gateOf(twelve({ executors: [ended('ada', 2.5, T - 600, { params: { ...PARAMS, slippageRate: Number.NaN } })] }), 'slippage').status).toBe('fail')
   })
 
   it('needs an outcome for every recommendation whose life is over', () => {
