@@ -7,13 +7,16 @@ interface SidebarProps {
   onNavigate: (page: Page) => void
   collapsed: boolean
   onToggleCollapsed: () => void
+  /** A count shown beside a page: alerts not yet seen, on Discovery. */
+  badges?: Partial<Record<Page, number>>
 }
 
 export function Sidebar({
   currentPage,
   onNavigate,
   collapsed,
-  onToggleCollapsed
+  onToggleCollapsed,
+  badges = {}
 }: SidebarProps): React.JSX.Element {
   return (
     <nav
@@ -135,6 +138,26 @@ export function Sidebar({
                 >
                   <Icon size={18} />
                   {!collapsed && <span>{label}</span>}
+                  {(badges[page] ?? 0) > 0 && (
+                    <span
+                      aria-label={`${badges[page]} new`}
+                      style={{
+                        marginLeft: collapsed ? 0 : 'auto',
+                        minWidth: collapsed ? 8 : 18,
+                        height: collapsed ? 8 : 18,
+                        padding: collapsed ? 0 : '0 5px',
+                        borderRadius: 999,
+                        background: 'var(--down)',
+                        color: '#fff',
+                        fontSize: '0.66rem',
+                        fontWeight: 700,
+                        lineHeight: '18px',
+                        textAlign: 'center'
+                      }}
+                    >
+                      {collapsed ? '' : badges[page]}
+                    </span>
+                  )}
                 </button>
               )
             })}

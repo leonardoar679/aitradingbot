@@ -42,14 +42,16 @@ export type Page =
 export type StrategiesTab = 'runs' | 'execution'
 export type ResearchTab = 'backtest' | 'automation'
 export type AiDecisionsTab = 'analyze' | 'signals'
+export type DiscoveryTab = 'scanner' | 'news'
 
 export interface PageTabs {
   strategies: StrategiesTab
   research: ResearchTab
   'ai-decisions': AiDecisionsTab
+  discovery: DiscoveryTab
 }
 
-export const DEFAULT_TABS: PageTabs = { strategies: 'runs', research: 'backtest', 'ai-decisions': 'analyze' }
+export const DEFAULT_TABS: PageTabs = { strategies: 'runs', research: 'backtest', 'ai-decisions': 'analyze', discovery: 'scanner' }
 
 /** Where to go: a page, and for a page with views, which one. A hand-off between pages names the
  * view it lands on, so a call's filled-in order form opens where the form is. */
@@ -58,6 +60,7 @@ export type NavTarget =
   | { page: 'strategies'; tab?: StrategiesTab }
   | { page: 'research'; tab?: ResearchTab }
   | { page: 'ai-decisions'; tab?: AiDecisionsTab }
+  | { page: 'discovery'; tab?: DiscoveryTab }
 
 export interface NavItem {
   page: Page

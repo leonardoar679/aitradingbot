@@ -1,12 +1,21 @@
-import type { AlertSettings } from './ipc'
+import type { AlertSettings, Candle } from './ipc'
+import { describeEventType, type ReactionVerdict, type ReadStory } from './newsFeed'
 
-// THE APP'S DESKTOP NOTICES: WHETHER THEY ARE RAISED AT ALL, AND WITH SOUND.
+// THE APP'S DESKTOP NOTICES: WHETHER THEY ARE RAISED AT ALL, WITH SOUND, AND HOW LOUD EACH IS.
 //
 // Everything that tells the desktop something -- a call from the watch, a paper trade opened or
 // paused, the daily digest, an announcement about a coin held -- goes through one main-process
-// handler (electron/ipc/handlers/appHandlers.ts), and that handler reads this setting before it
+// handler (the main process's appHandlers.ts), and that handler reads this setting before it
 // shows anything. Since 6 October 2026 it is one of the six controls at the top of Settings, as the
 // V3 document asks ("Notifications: Enabled"). On, with sound, until it is changed.
+//
+// NEWS AND THE MARKET HAVE A SEVERITY (the document's §28-29), by fixed rules:
+// - CRITICAL: a hack or a delisting of a coin you hold, or Bitcoin down 5% within an hour;
+// - HIGH: a story of impact 70 or more (shared/newsFeed.ts), or one the price has confirmed;
+// - WATCH: impact 45 or more;
+// - INFO: the rest, and anything old.
+// INFO is shown on its page only; WATCH raises a silent notice; HIGH and CRITICAL a notice with
+// sound, where sound is on; CRITICAL also stays as a banner until it is dismissed.
 
 export const DEFAULT_ALERTS: AlertSettings = { enabled: true, sound: true }
 
@@ -15,4 +24,71 @@ export const DEFAULT_ALERTS: AlertSettings = { enabled: true, sound: true }
 export function healAlerts(value: unknown): AlertSettings {
   const raw = (typeof value === 'object' && value !== null && !Array.isArray(value) ? value : {}) as Partial<Record<keyof AlertSettings, unknown>>
   return { enabled: raw.enabled !== false, sound: raw.sound !== false }
+}
+
+export type AlertSeverity = 'info' | 'watch' | 'high' | 'critical'
+
+export const HIGH_IMPACT = 70
+export const WATCH_IMPACT = 45
+/** Bitcoin down this far within the last hour is a crash. */
+export const BTC_CRASH_PCT = -5
+
+/** A story's severity, given the coins held. */
+export function storySeverity(story: Pick<ReadStory, 'impact' | 'eventType' | 'assets' | 'stale'>, held: ReadonlySet<string>, reaction: ReactionVerdict | null = null): AlertSeverity {
+  if (story.stale) return 'info'
+  const heldDirect = story.assets.some((asset) => asset.relationship === 'DIRECT' && held.has(asset.ticker))
+  if (heldDirect && (story.eventType === 'HACK' || story.eventType === 'DELISTING')) return 'critical'
+  if (story.impact >= HIGH_IMPACT || reaction === 'CONFIRMED') return 'high'
+  return story.impact >= WATCH_IMPACT ? 'watch' : 'info'
+}
+
+/** A crash is told once; it is told again only after Bitcoin has come back above this. */
+export const BTC_CRASH_REARM_PCT = -2.5
+
+/** Bitcoin's move over the last hour of its closed minutes, in percent; null when the hour is not
+ * all there. */
+export function btcHourMovePct(btcMinutes: readonly Candle[], nowSec: number): number | null {
+  const closed = btcMinutes.filter((bar) => bar.time + 60 <= nowSec)
+  if (closed.length < 61) return null
+  const last = closed[closed.length - 1]
+  const hourAgo = closed[closed.length - 61]
+  if (last.time - hourAgo.time !== 3600 || !(hourAgo.close > 0)) return null
+  return (last.close / hourAgo.close - 1) * 100
+}
+
+/** Whether to tell a crash now, given whether one is being told already: told when the hour's move
+ * reaches BTC_CRASH_PCT, and not again until it has come back above BTC_CRASH_REARM_PCT. */
+export function crashStep(movePct: number | null, telling: boolean): { tell: boolean; telling: boolean } {
+  if (movePct === null) return { tell: false, telling }
+  if (!telling && movePct <= BTC_CRASH_PCT) return { tell: true, telling: true }
+  if (telling && movePct > BTC_CRASH_REARM_PCT) return { tell: false, telling: false }
+  return { tell: false, telling }
+}
+
+/** What the desktop is told of a crash. */
+export function crashNotice(movePct: number): { title: string; body: string } {
+  return {
+    title: `CRITICAL: Bitcoin ${movePct.toFixed(2)}% in an hour`,
+    body: `Bitcoin has fallen ${Math.abs(movePct).toFixed(2)}% within the last hour. Nothing was placed or sold; what is open is on Positions and Strategies.`
+  }
+}
+
+/** What the desktop is told of a story. */
+export function storyNotice(story: Pick<ReadStory, 'title' | 'sourceName' | 'eventType' | 'assets' | 'impact'>, severity: AlertSeverity, heldPlaces: string[] = []): { title: string; body: string } {
+  const coins = story.assets.filter((asset) => asset.relationship === 'DIRECT').map((asset) => asset.ticker)
+  const head = severity === 'critical' ? 'CRITICAL' : severity === 'high' ? 'HIGH' : 'News'
+  return {
+    title: `${head}: ${coins.length > 0 ? `${coins.slice(0, 3).join(', ')} · ` : ''}${describeEventType(story.eventType)}`,
+    body: `${story.title} (${story.sourceName}; impact ${story.impact}).${heldPlaces.length > 0 ? ` You hold it: ${heldPlaces.join('; ')}.` : ''} Nothing was placed or sold.`
+  }
+}
+
+/** Severity, in the words the handler takes it in: none for INFO, which raises no notice. */
+export function noticeSeverity(severity: AlertSeverity): 'watch' | 'high' | 'critical' | null {
+  return severity === 'info' ? null : severity
+}
+
+/** A severity as sent over the bridge, read as one: anything else is none. */
+export function healNoticeSeverity(value: unknown): 'watch' | 'high' | 'critical' | null {
+  return value === 'watch' || value === 'high' || value === 'critical' ? value : null
 }

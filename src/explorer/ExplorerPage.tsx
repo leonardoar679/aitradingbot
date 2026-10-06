@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Card } from '../components/Card'
 import { PageHeader } from '../components/PageHeader'
+import { PageTabs } from '../components/PageTabs'
 import { TextLink } from '../components/TextLink'
-import type { Page } from '../navigation/pages'
+import type { DiscoveryTab, NavTarget, Page } from '../navigation/pages'
 import {
   EVENT_CANDIDATE_SCORE,
   EVENT_FOLLOW_MINUTES,
@@ -20,7 +21,9 @@ import { cellStyle, headCellStyle, noteStyle, signedPct, buttonStyle } from '../
 import { describeError } from '../utils/ipcError'
 import { useNowSec } from '../utils/useNowSec'
 import { loadEventMoves, type EventMoves } from './eventOutcomes'
+import { WhyButton } from '../news/WhyItMovedHost'
 import { NewsCard } from './NewsCard'
+import { NewsFeedCard } from './NewsFeedCard'
 import { NewsRecordCard } from './NewsRecordCard'
 
 const PAIRS_SHOWN = 15
@@ -146,6 +149,7 @@ function EventsTable({ events, moves }: { events: MarketEvent[]; moves: Map<stri
                 After {horizonLabel(minutes)}
               </th>
             ))}
+            <th style={headCellStyle} />
           </tr>
         </thead>
         <tbody>
@@ -177,6 +181,9 @@ function EventsTable({ events, moves }: { events: MarketEvent[]; moves: Map<stri
                     <Pct value={after?.[index] ?? null} />
                   </td>
                 ))}
+                <td style={cellStyle}>
+                  <WhyButton symbol={event.symbol} compact />
+                </td>
               </tr>
             )
           })}
@@ -190,7 +197,15 @@ function EventsTable({ events, moves }: { events: MarketEvent[]; moves: Map<stri
  *
  * Everything on this page is public market data read by the main process, or worked out from it.
  * Opening it asks no model and costs nothing, and nothing here can place an order. */
-export function ExplorerPage({ onNavigate }: { onNavigate: (page: Page) => void }): React.JSX.Element {
+export function ExplorerPage({
+  tab,
+  onTab,
+  onNavigate
+}: {
+  tab: DiscoveryTab
+  onTab: (tab: DiscoveryTab) => void
+  onNavigate: (page: Page | NavTarget) => void
+}): React.JSX.Element {
   const [state, setState] = useState<ScannerState | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
   const [moves, setMoves] = useState<Map<string, EventMoves>>(new Map())
@@ -245,71 +260,87 @@ export function ExplorerPage({ onNavigate }: { onNavigate: (page: Page) => void 
 
   return (
     <>
-      <PageHeader title="Discovery" subtitle="What is moving right now, measured the same way for every pair" />
+      <PageHeader title="Discovery" subtitle="What is moving right now, measured the same way for every pair, and the news around it" />
+      <PageTabs<DiscoveryTab>
+        tabs={[
+          { id: 'scanner', label: 'Market scanner' },
+          { id: 'news', label: 'News & Market Events' }
+        ]}
+        current={tab}
+        onChange={onTab}
+      />
 
-      <Card title="Scanner">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>
-          <span style={{ color: enabled ? 'var(--up)' : 'var(--text-secondary)', fontWeight: 700 }}>{enabled ? 'On' : 'Off'}</span>
-          <span style={{ color: 'var(--text-secondary)' }}>
-            {state === null ? '' : `watching the ${state.config.universeSize} most traded USDT pairs on Binance.`} It is switched on and off, and its
-            pairs chosen, under <TextLink onClick={() => onNavigate('settings')}>Settings › Market</TextLink>.
-          </span>
-        </div>
+      {tab === 'news' ? (
+        <>
+          <NewsFeedCard />
+          <NewsCard onNavigate={onNavigate} />
+          <NewsRecordCard />
+        </>
+      ) : (
+        <>
+          <Card title="Scanner">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>
+              <span style={{ color: enabled ? 'var(--up)' : 'var(--text-secondary)', fontWeight: 700 }}>{enabled ? 'On' : 'Off'}</span>
+              <span style={{ color: 'var(--text-secondary)' }}>
+                {state === null ? '' : `watching the ${state.config.universeSize} most traded USDT pairs on Binance.`} It is switched on and off, and its
+                pairs chosen, under <TextLink onClick={() => onNavigate('settings')}>Settings › Market</TextLink>.
+              </span>
+            </div>
 
-        {state !== null && enabled && (
-          <p style={{ ...noteStyle, color: 'var(--text-secondary)', marginTop: '0.8rem' }}>
-            {state.lastPassAt === null
-              ? 'First pass not made yet.'
-              : `Last pass ${utcClock(state.lastPassAt)} UTC, ${((state.lastPassMs ?? 0) / 1000).toFixed(1)}s, ${pairs.length} pairs read.`}
-            {state.nextPassAt !== null && ` Next in ${Math.max(0, state.nextPassAt - nowSec)}s.`}
-            {state.failed > 0 && state.error === null && ` ${state.failed} could not be read this time and show their last reading.`}
-          </p>
-        )}
-        {(problem ?? state?.error) && <p style={{ ...noteStyle, color: 'var(--down)', marginTop: '0.6rem' }}>{problem ?? state?.error}</p>}
-        <p style={{ ...noteStyle, marginTop: '0.8rem' }}>
-          Once a minute, a few seconds after the minute closes, every watched pair is read from its last twelve hours of
-          1-minute candles. This is public market data only: no key is used, no model is asked and nothing is placed.
-          It costs one request a pair a minute, and it stays on across restarts until it is switched off.
-        </p>
-      </Card>
+            {state !== null && enabled && (
+              <p style={{ ...noteStyle, color: 'var(--text-secondary)', marginTop: '0.8rem' }}>
+                {state.lastPassAt === null
+                  ? 'First pass not made yet.'
+                  : `Last pass ${utcClock(state.lastPassAt)} UTC, ${((state.lastPassMs ?? 0) / 1000).toFixed(1)}s, ${pairs.length} pairs read.`}
+                {state.nextPassAt !== null && ` Next in ${Math.max(0, state.nextPassAt - nowSec)}s.`}
+                {state.failed > 0 && state.error === null && ` ${state.failed} could not be read this time and show their last reading.`}
+              </p>
+            )}
+            {(problem ?? state?.error) && <p style={{ ...noteStyle, color: 'var(--down)', marginTop: '0.6rem' }}>{problem ?? state?.error}</p>}
+            <p style={{ ...noteStyle, marginTop: '0.8rem' }}>
+              Once a minute, a few seconds after the minute closes, every watched pair is read from its last twelve hours of
+              1-minute candles. This is public market data only: no key is used, no model is asked and nothing is placed.
+              It costs one request a pair a minute, and it stays on across restarts until it is switched off.
+            </p>
+          </Card>
 
-      <Card title="Now">
-        {pairs.length === 0 ? (
-          <p style={noteStyle}>{enabled ? 'Waiting for the first pass.' : 'Switch the scanner on under Settings › Market to see what is moving.'}</p>
-        ) : (
-          <NowTable pairs={pairs} />
-        )}
-        <p style={{ ...noteStyle, marginTop: '0.8rem' }}>
-          The score is the plain mean of five readings, each 0 to 100: the last fifteen minutes&apos; move against that
-          pair&apos;s own usual one; the last five minutes&apos; volume against the hours before the move began; how wide
-          the bars are against the same; whether they closed at the end the move is heading for; and how far the price
-          has cleared the high or low of the four hours before. {EVENT_WATCH_SCORE} is worth watching,{' '}
-          {EVENT_CANDIDATE_SCORE} is a candidate and {EVENT_URGENT_SCORE} is urgent. Volume is the multiple of usual.
-        </p>
-      </Card>
+          <Card title="Now">
+            {pairs.length === 0 ? (
+              <p style={noteStyle}>{enabled ? 'Waiting for the first pass.' : 'Switch the scanner on under Settings › Market to see what is moving.'}</p>
+            ) : (
+              <NowTable pairs={pairs} />
+            )}
+            <p style={{ ...noteStyle, marginTop: '0.8rem' }}>
+              The score is the plain mean of five readings, each 0 to 100: the last fifteen minutes&apos; move against that
+              pair&apos;s own usual one; the last five minutes&apos; volume against the hours before the move began; how wide
+              the bars are against the same; whether they closed at the end the move is heading for; and how far the price
+              has cleared the high or low of the four hours before. {EVENT_WATCH_SCORE} is worth watching,{' '}
+              {EVENT_CANDIDATE_SCORE} is a candidate and {EVENT_URGENT_SCORE} is urgent. Volume is the multiple of usual.
+            </p>
+          </Card>
 
-      <Card title="Events">
-        {events.length === 0 ? (
-          <p style={noteStyle}>Nothing has reached the candidate band yet.</p>
-        ) : (
-          <EventsTable events={events} moves={moves} />
-        )}
-        <p style={{ ...noteStyle, marginTop: '0.8rem' }}>
-          A pair is listed when it reaches the candidate band, and again only if it climbs to urgent within half an
-          hour: one move is one event. The last three columns are the plain price change from the event&apos;s price,
-          read from candles each time this page is opened and never stored; a dash means that much time has not passed.
-          After a fall, a negative number means it kept falling.
-        </p>
-        <p style={{ ...noteStyle, marginTop: '0.5rem' }}>
-          An event is something unusual, not a signal. Measured on twenty pairs, eight large ones over three years and
-          eight smaller ones over one (research/EVENTS.md), rises like these did not carry on, falls came back a
-          little, and neither paid for a round trip&apos;s fees on its own. A volume spike with no direction was
-          followed by nothing at all, which is why one is shown in the table above and not listed here.
-        </p>
-      </Card>
+          <Card title="Events">
+            {events.length === 0 ? (
+              <p style={noteStyle}>Nothing has reached the candidate band yet.</p>
+            ) : (
+              <EventsTable events={events} moves={moves} />
+            )}
+            <p style={{ ...noteStyle, marginTop: '0.8rem' }}>
+              A pair is listed when it reaches the candidate band, and again only if it climbs to urgent within half an
+              hour: one move is one event. The last three columns are the plain price change from the event&apos;s price,
+              read from candles each time this page is opened and never stored; a dash means that much time has not passed.
+              After a fall, a negative number means it kept falling.
+            </p>
+            <p style={{ ...noteStyle, marginTop: '0.5rem' }}>
+              An event is something unusual, not a signal. Measured on twenty pairs, eight large ones over three years and
+              eight smaller ones over one (research/EVENTS.md), rises like these did not carry on, falls came back a
+              little, and neither paid for a round trip&apos;s fees on its own. A volume spike with no direction was
+              followed by nothing at all, which is why one is shown in the table above and not listed here.
+            </p>
+          </Card>
 
-      <NewsCard onNavigate={onNavigate} />
-      <NewsRecordCard />
+        </>
+      )}
     </>
   )
 }

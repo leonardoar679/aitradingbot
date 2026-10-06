@@ -1,5 +1,5 @@
 import { ipcMain, app, BrowserWindow, Notification } from 'electron'
-import { healAlerts } from '../../../shared/alerts'
+import { healAlerts, healNoticeSeverity } from '../../../shared/alerts'
 import { IpcChannel } from '../../../shared/ipc'
 import { pingService } from '../../services/pingService'
 import { getSettings } from '../../services/settingsService'
@@ -17,12 +17,14 @@ export function registerAppHandlers(): void {
   //
   // Every notice the app raises comes through here, so this is where the "Notifications" control
   // is obeyed (shared/alerts.ts): switched off, nothing is shown; without sound, it is shown
-  // silently. False, as for a desktop that cannot show one, when nothing was shown.
-  ipcMain.handle(IpcChannel.AppNotify, async (event, title: unknown, body: unknown): Promise<boolean> => {
+  // silently. A notice of news or the market may say how loud it is: WATCH is shown silently, HIGH
+  // and CRITICAL with sound. False, as for a desktop that cannot show one, when nothing was shown.
+  ipcMain.handle(IpcChannel.AppNotify, async (event, title: unknown, body: unknown, severity?: unknown): Promise<boolean> => {
     if (typeof title !== 'string' || typeof body !== 'string' || !Notification.isSupported()) return false
     const alerts = healAlerts((await getSettings()).alerts)
     if (!alerts.enabled) return false
-    const notification = new Notification({ title: title.slice(0, 120), body: body.slice(0, 400), silent: !alerts.sound })
+    const level = healNoticeSeverity(severity)
+    const notification = new Notification({ title: title.slice(0, 120), body: body.slice(0, 400), silent: !alerts.sound || level === 'watch' })
     shown.add(notification)
     const forget = (): void => void shown.delete(notification)
     notification.on('close', forget)

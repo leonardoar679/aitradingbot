@@ -58,7 +58,7 @@ describe('the sidebar', () => {
 
   it('opens each page that has views on a view it has', () => {
     expect(Object.keys(DEFAULT_TABS).every((page) => (ALL_PAGES as string[]).includes(page))).toBe(true)
-    expect(DEFAULT_TABS).toEqual({ strategies: 'runs', research: 'backtest', 'ai-decisions': 'analyze' })
+    expect(DEFAULT_TABS).toEqual({ strategies: 'runs', research: 'backtest', 'ai-decisions': 'analyze', discovery: 'scanner' })
   })
 })
 

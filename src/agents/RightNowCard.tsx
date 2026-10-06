@@ -6,6 +6,7 @@ import { describeEventType } from '../../shared/marketEvent'
 import { cellStyle, headCellStyle, noteStyle } from './agentStyles'
 import { liveReadingOf } from './liveVerdict'
 import { LiveVerdictView } from './LiveVerdictView'
+import { WhyButton } from '../news/WhyItMovedHost'
 import type { RightNowRow } from './opportunities'
 
 function plainNumber(value: number): string {
@@ -72,7 +73,9 @@ export function RightNowCard({
                 return (
                   <tr key={event.id}>
                     <td style={{ ...cellStyle, color: 'var(--text-muted)' }}>{index + 1}</td>
-                    <td style={{ ...cellStyle, fontWeight: 700 }}>{event.symbol}</td>
+                    <td style={{ ...cellStyle, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                      {event.symbol} <WhyButton symbol={event.symbol} compact />
+                    </td>
                     <td style={{ ...cellStyle, color: event.direction === 'up' ? 'var(--up)' : 'var(--down)' }}>
                       {describeEventType(event.type)} <span style={{ color: 'var(--text-muted)' }}>{utcClock(event.time)}</span>
                     </td>

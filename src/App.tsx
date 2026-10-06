@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { OverviewPage } from './overview/OverviewPage'
@@ -19,6 +19,10 @@ import { SettingsPanel } from './settings/SettingsPanel'
 import { ControllerScheduler } from './controllers/ControllerScheduler'
 import { OpportunityScheduler } from './agents/OpportunityScheduler'
 import { NewsScheduler } from './news/NewsScheduler'
+import { NewsAlertScheduler } from './news/NewsAlertScheduler'
+import { AlertBanner } from './news/AlertBanner'
+import { WhyItMovedHost } from './news/WhyItMovedHost'
+import { subscribeAlerts, unseenCount } from './news/alertStore'
 import { PaperDigestScheduler } from './risk/PaperDigestScheduler'
 import { PaperPauseScheduler } from './risk/PaperPauseScheduler'
 import { RoutineScheduler } from './routines/RoutineScheduler'
@@ -40,6 +44,10 @@ function App(): React.JSX.Element {
   // a filled-in form, never an order: see shared/aiProposal.ts.
   const [orderProposal, setOrderProposal] = useState<AiOrderProposal | null>(null)
   const [collapsed, setCollapsed] = useState(false)
+  // Alerts at WATCH or above not yet seen: the badge on Discovery, which opens on its news while any
+  // is waiting.
+  const [unseenAlerts, setUnseenAlerts] = useState(0)
+  useEffect(() => subscribeAlerts((alerts) => setUnseenAlerts(unseenCount(alerts))), [])
 
   function navigate(target: NavTarget | Page): void {
     if (typeof target === 'string') {
@@ -56,6 +64,9 @@ function App(): React.JSX.Element {
     } else if (target.page === 'ai-decisions' && target.tab !== undefined) {
       const tab = target.tab
       setTabs((current) => ({ ...current, 'ai-decisions': tab }))
+    } else if (target.page === 'discovery' && target.tab !== undefined) {
+      const tab = target.tab
+      setTabs((current) => ({ ...current, discovery: tab }))
     }
   }
 
@@ -110,12 +121,29 @@ function App(): React.JSX.Element {
       <ErrorBoundary label="The losing-run pause">
         <PaperPauseScheduler />
       </ErrorBoundary>
+      {/* The news feed's alerts and Bitcoin's falls, by severity: a notice, a badge, and for the
+          critical ones a banner. It reads and tells; it opens, closes and sells nothing. */}
+      <ErrorBoundary label="The news alerts">
+        <NewsAlertScheduler />
+      </ErrorBoundary>
       <ErrorBoundary label="The live trading bar">
         <LiveTradingBar />
       </ErrorBoundary>
+      <ErrorBoundary label="The alert banner">
+        <AlertBanner />
+      </ErrorBoundary>
+      <ErrorBoundary label="Why did it move">
+        <WhyItMovedHost />
+      </ErrorBoundary>
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <ErrorBoundary label="The sidebar">
-          <Sidebar currentPage={page} onNavigate={navigate} collapsed={collapsed} onToggleCollapsed={() => setCollapsed((c) => !c)} />
+          <Sidebar
+            currentPage={page}
+            onNavigate={(next) => navigate(next === 'discovery' && unseenAlerts > 0 ? { page: 'discovery', tab: 'news' } : next)}
+            collapsed={collapsed}
+            onToggleCollapsed={() => setCollapsed((c) => !c)}
+            badges={{ discovery: unseenAlerts }}
+          />
         </ErrorBoundary>
         <main
           style={{
@@ -158,7 +186,9 @@ function App(): React.JSX.Element {
             )}
             {page === 'research' && <ResearchPage tab={tabs.research} onTab={(tab) => setTabs((current) => ({ ...current, research: tab }))} />}
             {page === 'ai-benchmark' && <AiBenchmarkPage />}
-            {page === 'discovery' && <ExplorerPage onNavigate={navigate} />}
+            {page === 'discovery' && (
+              <ExplorerPage tab={tabs.discovery} onTab={(tab) => setTabs((current) => ({ ...current, discovery: tab }))} onNavigate={navigate} />
+            )}
             {page === 'risk' && <RiskSafetyPage />}
             {page === 'connections' && <ConnectionsPage />}
             {page === 'settings' && <SettingsPanel onNavigate={navigate} />}

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
 import { MarketTicker } from './MarketTicker'
 import { MoversCard } from './MoversCard'
+import { WhyButton } from '../news/WhyItMovedHost'
 import { TradingChart } from '../charts/TradingChart'
 import { EXCHANGES, type Exchange, type SymbolInfo } from '../../shared/ipc'
 
@@ -24,6 +25,11 @@ export function Dashboard(): React.JSX.Element {
         onExchangeChange={handleExchangeChange}
         onPairChange={setPair}
       />
+      {exchange === 'binance' && pair.quoteAsset === 'USDT' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+          Why did {pair.symbol} move over the last hour, and what news named it? <WhyButton symbol={pair.symbol} />
+        </div>
+      )}
       <TradingChart exchange={exchange} symbol={pair.symbol} quoteAsset={pair.quoteAsset} />
       {/* What moved most among Binance's liquid USDT pairs; a row opens its chart above. */}
       <MoversCard

@@ -39,8 +39,8 @@ other.
 | Group | Page | What it does |
 |---|---|---|
 | AI Trader | **Overview** | The landing page, answering five questions from what the app already reads. **Market status** first, from the [research the app does as it opens](#market-research-when-the-app-opens): Bitcoin and ether rising, falling or flat, the other pairs against Bitcoin, and a risk state (NORMAL, ELEVATED or PANIC), with a "Researching…" line while it reads. **The market**: Bitcoin and ether over the hour and four hours, whether Bitcoin is rising, falling or flat, and what is moving most, from the scanner's last pass. **What can be acted on**: the strongest recommendation still on offer, with its entry, stop, target, time left and a Paper trade button — or, usually, "No high-quality opportunity right now. Wait." with the strongest event of the last hour and what it lacks. **What the models said** about it. **What you hold**: value, paper strategies running, real positions open. **Safety**: whether a real order can be placed, the day's loss, the AI's spend and what the watch does. The starter presets lead it for someone with nothing running. |
-| | **Opportunities** | What can be traded right now: the [watch](#ai-signals--paper-only) that puts events to models with no click, the recommendations still valid ("No high-quality opportunity right now. Wait." when there are none), each checked against the [live price](#live-prices) — enterable now, waiting for its range, or invalidated, with an execution score — and every event the scanner raised with each model's call, Ask and Paper trade. A call fills in an order form at most; a person places it. |
-| | **Markets** | One pair on any supported exchange: candlestick chart with indicators, symbol search, live ticker. Below it, **Movers**: the liquid USDT pairs that moved most over the day and over the week, by volume against their week, and CoinGecko's trending list, from the [market research](#market-research-when-the-app-opens); a row opens its chart. |
+| | **Opportunities** | What can be traded right now: the [watch](#ai-signals--paper-only) that puts events to models with no click, the recommendations still valid ("No high-quality opportunity right now. Wait." when there are none), each checked against the [live price](#live-prices) — enterable now, waiting for its range, or invalidated, with an execution score — and every event the scanner raised with each model's call, Ask and Paper trade. **Why?** beside a pair says what moved it, from the [news and Bitcoin](#news--market-events). A call fills in an order form at most; a person places it. |
+| | **Markets** | One pair on any supported exchange: candlestick chart with indicators, symbol search, live ticker. Below it, **Movers**: the liquid USDT pairs that moved most over the day and over the week, by volume against their week, and CoinGecko's trending list, from the [market research](#market-research-when-the-app-opens); a row opens its chart. **Why did it move?** for the chart's pair, by [fixed rules](#news--market-events). |
 | | **AI Decisions** | **Analyze** asks a model about one market; **Signals** lists every call any model has made and how it turned out. A model is handed a market snapshot and returns one JSON decision, and is given no tools at all. |
 | | **Positions** | Live paper positions for active bots; a **Live Positions** table of real Binance holdings from live-mode Order Executor fills, closable (fully or partially) for real; a **Live Trade History** table of realized P&L from closed live positions; an **Inventory** table of positions handed over from stopped paper executors (see [Position Handover](#position-handover--inventory)). |
 | | **Performance** | Total value, active-bot count, bot P&L and system cards; the portfolio's value over time (value/composition, 1D/1W/1M/3M) and its largest holdings; what the watch's recommendations earned, in percent and in R, over the last 10/50/100 trades and 7/30 days; the app's own paper trades, the watch's and the news rules', as a running total in R; the journal of every recommendation with its outcome, exportable as CSV, where any line opens [its whole story](#one-trades-whole-story) on one timeline. |
@@ -49,7 +49,7 @@ other.
 | | **Strategies** | **Active Runs**: a bot is a single continuous dry-run of a [chosen strategy](#strategies) against one exchange/symbol, optionally with a model asked to [confirm each entry](#ai-signals--paper-only); disabling one records a run, removing one archives it. **Execution**: the eight executor types, each running independently against live candles, the starter presets, and the New Executor form a call's filled-in form opens on — see [Executors](#executors) below. |
 | Research | **Backtest & Research** | **Backtest** runs a chosen strategy over a historical range and shows full stats, equity curve vs. buy-and-hold, monthly breakdown and a trade log; its **Live** view monitors the same route continuously ([Live strategy monitor](#live-strategy-monitor)), **Charts** replays each trade against the candles, and **Compare Strategies** ranks every registered strategy over the same candles. An optional tick box has a model [confirm each entry](#ai-signals--paper-only). Both views export CSV, JSON and a PNG. **Automation** re-runs saved backtests on a schedule while the app is open, each run keeping a session-only report. |
 | | **AI Benchmark** | Several models on the same questions, scored side by side: on candles, and on the events the scanner raised, with the no-model rows beside them and every run kept as an experiment that can be reopened for nothing. |
-| | **Discovery** | The market scanner: once a minute it reads the most traded USDT pairs on Binance and says what is moving, scores each the same way, and records the moves that qualify as events — see [Discovery](#discovery--a-market-scanner). Public market data only: no key, no model, no order. It is switched on, and its pairs chosen, under Settings › Market. Below it, [Binance's own announcements](#binances-announcements-on-discovery) — delistings, Monitoring Tags, futures launches, listings — as they are released, with what each kind did to prices. The reader is switched on under Settings › Market too, with what a delisting or a tag does: a notice if you hold the coin, a paper short by the kind's rule, a question to the watch's models. |
+| | **Discovery** | Two tabs. **Market scanner**: once a minute it reads the most traded USDT pairs on Binance and says what is moving, scores each the same way, and records the moves that qualify as events — see [Discovery](#discovery--a-market-scanner). Public market data only: no key, no model, no order. It is switched on, and its pairs chosen, under Settings › Market. **News & Market Events**: four free news feeds and Binance's announcements, each story with its coins, kind, impact and what the price did after, filtered by coin or by Major alerts, and what each kind of story has done once 30 are in — see [News & market events](#news--market-events); a count on Discovery in the sidebar says how many new alerts it holds. Below the stories, [Binance's own announcements](#binances-announcements-on-discovery) — delistings, Monitoring Tags, futures launches, listings — as they are released, with what each kind did to prices. The reader is switched on under Settings › Market too, with what a delisting or a tag does: a notice if you hold the coin, a paper short by the kind's rule, a question to the watch's models. |
 | System | **Risk & Safety** | The live trading limits every real order is checked against (largest order, the day's notional, the day's loss, the managed allocation); the size of the paper trades the app opens by itself, the watch's and the news rules' (sized by what their stop would lose, and capped in what they stake together), the losing run in R that pauses them until resumed, and a daily notice of what they did; and the controller groups: executors under a shared stop-loss, take-profit and maximum drawdown with a P&L snapshot every 5 minutes, all stopped on a breach. Arming and the kill switch stay on the bar at the top of every page. |
 | | **Connections** | Every key the app holds: Binance and Upbit ([Credentials](#credentials--api-keys)), and the OpenRouter key for the AI models. Each is tested before it is stored, stored encrypted, and never read back into the window. |
 | | **Settings** | Since 6 October 2026, **Essentials** first: the six settings that decide what the app does by itself — trading mode (PAPER, LIVE READY with a verified key and the session disarmed, or LIVE ACTIVE when armed; read, never changed here), risk level (Conservative at the shipped paper defaults, or Custom, with a reset that only ever opens less), the market the scanner watches, the AI's mode (changed only on Opportunities, behind its priced confirmation), desktop notices with or without sound, and the exchange. Everything else is under **Advanced**, closed until opened: the Configuration Center, in sections, built only from settings that exist. **General**: appearance (Dark / Light / Colorblind-safe). **Market**: the scanner on or off, and how many pairs it watches; the reader of Binance's announcements, and what a delisting does. **AI**: which models may be asked, the default and the route, the daily budget, the pace, and what asking has cost. Keys stay on Connections and limits on Risk & Safety, each in the one place, linked from here. What the V3 document asked for that has no behaviour behind it (language, timezone, default order type, allowed pairs, other news sources…) is listed in `docs/INVENTORY.md` rather than added as a control. |
@@ -220,6 +220,99 @@ two faked watch answers on real prices: SOLUSDT's, with its entry around the pri
 "ENTERABLE at 120.62 · Execution 100/100"; XRPUSDT's, five percent above it, "WAITING … the ask
 1.504 is under the range"; Overview's top card said the same of SOLUSDT; the stream held both books
 and their five best levels, fifteen milliseconds old.
+
+### News & market events
+
+Since 6 October 2026 (the second V3 document's §11–14 and §28–30) the main process reads four free
+news feeds every three minutes: CoinDesk, The Block, Cointelegraph and Decrypt, by RSS, with no key
+and no new dependency. Binance's own announcements join them where [the
+reader](#binances-announcements-on-discovery) is on (`electron/services/newsFeedService.ts`; the
+arithmetic is `shared/newsFeed.ts`). Each item is kept once, in `news/feed-YYYY-MM.jsonl`, and a week
+of them is shown. CoinGecko's news needs a paid plan and CryptoPanic a key, so neither is read.
+
+**What each story is given, by fixed rules, never by a model:**
+- **Its coins.** Binance's USDT pairs' base assets, and the names of 53 of the largest coins
+  ("Solana", "Optimism"). A ticker counts only in capitals as a whole word, or as `$TICKER`; a
+  ticker that is also a word (OP, ONE, GAS…) counts only by its name or with the `$`. Named in the
+  title, a coin is DIRECT; only in the summary, INDIRECT.
+- **Its kind:** hack, delisting, listing, ETF, regulation, token unlock, macro, upgrade, partnership
+  or other, the first of those patterns its title and summary meet. Binance's announcements keep the
+  kind the study sorted them by.
+- **Its source's credibility:** Binance 1.0, CoinDesk and The Block 0.85, Cointelegraph and Decrypt
+  0.8.
+- **An impact from 0 to 100:** the kind's weight (hack 90, delisting 85, listing 75, ETF 70,
+  regulation 60, unlock and macro 55, upgrade 45, partnership 40, other 20), times how directly it
+  concerns a coin (named 1, mentioned 0.6, market-wide 0.8, neither 0.4), times the credibility,
+  times its freshness (full for an hour, down to four tenths at a day).
+- **Old news:** published more than a day before it was first read, it is marked so and raises
+  nothing.
+- **One story, several sources:** titles from different feeds within six hours that share at least
+  60% of their words are one story, listed with "and N more".
+
+**What the price did.** Five minutes after a story names a coin traded on Binance, the coin's
+1-minute candles are read, and read again at each pass for up to twelve hours:
+- the move at 5 minutes, 15 minutes, 1 hour and 4 hours, from the close of the minute it was
+  published in;
+- CONFIRMED when the price moved 1% its way within 15 minutes, AGAINST when 1% the other way, NONE
+  otherwise. A kind with no way of its own (regulation, macro, unlock, other) is CONFIRMED by 1.5%
+  either way on twice the volume;
+- "priced in" when it had already moved 1% its way in the 15 minutes before.
+
+Once its four hours are in, a reaction is final and kept in `news/reactions-YYYY-MM.jsonl`. **What
+each kind did** (the median move and the share that rose, at each horizon) is shown only from 30
+final stories of a kind. Below that it says "Insufficient historical evidence".
+
+**"Why did it move?"** A Why? button beside a pair reads its last four hours of minutes and
+Bitcoin's, and answers by fixed rules (`shared/moveExplanation.ts`). The button is on Discovery's
+events and news, on Right Now, and on Markets for the chart's pair.
+- **KNOWN:** Binance announced something about the coin within the hour, or the two before it.
+- **PROBABLE:** a story names it in that time, and nothing in the story points the other way.
+- **POSSIBLE:** a story only mentions it, or points the other way; Bitcoin made half or more of
+  the move, the same way; or the volume was twice its usual with no story found.
+- **UNKNOWN:** none of those, or a move under 0.5% either way, which is not a move to explain.
+
+It never invents a cause. A cause named is a story found or a figure measured, and with none it
+says "No cause found".
+
+**Alerts** (`shared/alerts.ts`) are raised for each story first read in this session and published
+within the last half hour:
+- **CRITICAL:** a hack or a delisting of a coin you hold, named in the title. "Held" means on the
+  paper account, in a paper strategy, in the Inventory, or, with a key, on Binance. Bitcoin down 5%
+  within an hour on the live stream is CRITICAL too, told once and not again until it has come back
+  above −2.5%.
+- **HIGH:** impact 70 or more, or a story the price has confirmed.
+- **WATCH:** impact 45 or more.
+- **INFO:** the rest, and old news.
+
+What each raises:
+- **INFO** stays on its page.
+- **WATCH** raises a silent desktop notice.
+- **HIGH and CRITICAL** raise one with sound, where sound is on under Settings' Essentials.
+- **CRITICAL** also stays as a red banner above every page until it is dismissed.
+- **WATCH and above** put a count on Discovery in the sidebar, and Discovery opens on the news until
+  it is seen.
+
+For a coin held, Binance's announcements keep the notice the reader already raises, so none is raised
+twice. The plan had the kill switch engaged as CRITICAL too. Only a person engages it, from the bar
+where it already shows, so it raises none.
+
+**Discovery's News & Market Events tab** lists the stories, newest first:
+- **Filters:** All, Bitcoin, Ethereum, Altcoins, Market-wide and Major alerts (HIGH and above).
+- **Each story shows** its coins, kind, impact, sources and what the price did after.
+- **Open** goes to the browser through the main process, which opens only an https link on one of
+  the feeds' own hosts.
+
+It reads and tells. It places, sells, opens and asks nothing, and `tests/aiNoLivePath.test.ts`
+holds its files to that: they import nothing that trades or asks a model.
+
+Checked on 6 October 2026 on a separate build and a scratch profile, against the live feeds:
+- **The feeds:** all four were read (111 stories, 54 naming a coin), and the first price reactions
+  were in within seconds.
+- **A faked hack of SOL,** with 3 SOL on the paper account, raised one CRITICAL notice, a "1 new"
+  count on Discovery, and the banner "CRITICAL: SOL · Hack or exploit … You hold it: 3 SOL in the
+  paper account". Discovery then opened on the news and the count cleared; Dismiss took the banner
+  away.
+- **Why? on ETH** at a quiet moment read UNKNOWN: "not a move to explain".
 
 ### Discovery — a market scanner
 
@@ -1673,6 +1766,8 @@ electron/preload.ts  ── contextBridge ──▶  window.api.*  (renderer)
       │                                                   (public market data and CoinGecko's free list)
       ├── news.*  (Binance's announcements)           → electron/services/newsService.ts
       │                                                   (two public lists; no key, model or order)
+      ├── feed.*  (four news feeds, reactions, Open)  → electron/services/newsFeedService.ts
+      │                                                   (free RSS and Binance's list; no key, model or order)
       ├── ai.*  (key, models, budget, signals, ledger) → electron/services/aiSignalService.ts
       │                                                   + openRouterClient.ts + aiConfigService.ts
       │                                                   + aiLedgerService.ts  (no route to an order)
@@ -1714,6 +1809,9 @@ electron/preload.ts  ── contextBridge ──▶  window.api.*  (renderer)
   UTC day has ended, and tells it once ([the daily digest](#ai-signals--paper-only)).
   `PaperPauseScheduler` reads the app's own paper trades once a minute and writes down a pause
   when a losing run has reached it, telling it once ([the pause](#ai-signals--paper-only)).
+  `NewsAlertScheduler` gives each fresh story the feed reads a severity, and looks at Bitcoin's
+  last hour once a minute, for the notices, the sidebar count and the banner ([the
+  alerts](#news--market-events)); it writes nothing.
   `RoutineScheduler`/`ControllerScheduler` poll their own
   settings slice every 10s to notice config changes made on the page component (there's no
   cross-component push channel); `LiveOrderScheduler` polls every open live limit order via the
@@ -2763,7 +2861,9 @@ electron/                    Electron main process
                                jsonlStore (append-only month files, shared with the AI call ledger),
                                marketResearchService (the market studied at launch and every ten
                                minutes), liveMarketService (one public socket: the live book and
-                               minute of the pairs shown and the app's own paper trades)
+                               minute of the pairs shown and the app's own paper trades),
+                               newsFeedService (four free news feeds every three minutes, each
+                               story kept once, and what the price did after it)
                              AI, with no import path to any of the live services above:
                                openRouterClient (the only file that knows OpenRouter's wire format),
                                aiSignalService (the paid path, cache, retries), aiPrompt,
@@ -2795,7 +2895,7 @@ shared/                       Code both processes run, so they cannot disagree a
   paperDigest.ts              The daily notice of what those trades did the day before, each closed one in what it risked at its stop
   paperPause.ts               The losing run in R that pauses those trades, the watch's and the news rules' each on its own record, until they are resumed
   appDefaults.ts              What a fresh install starts with (each store's heal function is its resolver), and the risk level in a word
-  alerts.ts                   Whether desktop notices are raised at all, and with sound
+  alerts.ts                   Whether desktop notices are raised at all, and with sound; how loud a story or Bitcoin's hour is (INFO, WATCH, HIGH, CRITICAL)
   paperRCurve.ts              Those trades as a running total in R, one line for the watch and one for the news rules, for Performance
   aiEventMarket.ts            The market around an event: Bitcoin's and ether's returns to its minute, the pair's less theirs, two labels
   aiPace.ts                   How fast one model is asked: the most calls a minute, and how long the next one waits
@@ -2807,6 +2907,8 @@ shared/                       Code both processes run, so they cannot disagree a
   marketResearch.ts           What the app studies as it opens: the liquid pairs, a day's and a week's movers, trending, the market's status
   liveMarket.ts               The live price against a recommendation: spread, age, an execution score, and enterable, waiting or invalidated
   newsTitles.ts, news.ts      Which kind of news a Binance title is, and which coins it names (the study's patterns); what the reader keeps of each article, and what each kind did
+  newsFeed.ts                 The news feeds read: RSS, a story's coins, kind, credibility and impact, the same story from several sources, what the price did after, and what each kind has done
+  moveExplanation.ts          "Why did it move?": a pair's move against Bitcoin's, its volume and the news that names it, labelled KNOWN, PROBABLE, POSSIBLE or UNKNOWN by fixed rules
   newsActions.ts              What a delisting or a Monitoring Tag does: the notice to a holder, the kind's paper short, and when it is raised for the models and may be asked about
   newsRules.ts, newsRecord.ts The studies' bracket and four-hour hold as arithmetic, shared with research/announcementStudy.ts; the record of the two rules and the two near misses since the studies
   upbitTitles.ts              Which kind of notice an Upbit title is, and which coins it names (the Upbit study's patterns), for the near miss on record
@@ -2863,12 +2965,16 @@ src/                          React renderer app
     strategies/                Pluggable strategy registry — see Strategies
   explorer/                   The market scanner's page (Discovery): what is moving now, the events
                               raised, and what the price did after each (eventOutcomes.ts);
-                              NewsCard (Binance's announcements as the reader has read them);
-                              NewsRecordCard (the news rules and two near misses since the
-                              studies, scored)
+                              NewsFeedCard (the News & Market Events tab: the feeds' stories, their
+                              filters, and what each kind did); NewsCard (Binance's announcements
+                              as the reader has read them); NewsRecordCard (the news rules and two
+                              near misses since the studies, scored)
   news/                       What a delisting does, headless: NewsScheduler (the notice and the
                               rule's paper short) and newsPaperShort.ts (the one file that writes
-                              those shorts, paper by a literal)
+                              those shorts, paper by a literal). The alerts: NewsAlertScheduler
+                              (headless), alertStore.ts (this session's, for the count and the
+                              banner) and AlertBanner. "Why did it move?": WhyItMoved, and
+                              WhyItMovedHost with its WhyButton; useNewsFeed
   settings/                   Settings: EssentialsCard (the six settings), then under Advanced the
                               Configuration Center: General, Market (the scanner, and
                               NewsSettingsCard: the news reader and what a delisting does) and AI

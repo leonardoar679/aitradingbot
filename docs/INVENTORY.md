@@ -50,7 +50,8 @@ Taken on 5 October 2026, at commit `aef376d`.
 | **Backtest** | Configuration, Progress, Charts, Compare, Live | A strategy over history, trade charts, strategy comparison, the live strategy monitor | Backtest & Research |
 | | Market conditions, AI confirmation, Controller and Executor replay | Readouts and replays beside a backtest | Backtest & Research |
 | **Explorer** | Scanner | Scanner on or off and how many pairs it watches, with its status | Settings › Market (the switch); Discovery (the status) |
-| | Now, Events | What is moving, scored the same way for every pair; recorded events | Discovery |
+| | Now, Events | What is moving, scored the same way for every pair; recorded events | Discovery › Market scanner |
+| | News & Market Events (added 6 October 2026, not an old card) | Four free news feeds and Binance's announcements, each story's coins, kind, impact and what the price did after; what each kind did | Discovery › News & Market Events, which it opens on while an alert is unseen |
 | **Settings** | Appearance | Theme | Settings › General |
 | | API Credentials | Exchange keys: set, test, remove | Connections |
 | | Risk Limits | Live order size, daily cap, daily loss limit, allocation | Risk & Safety |
@@ -122,6 +123,14 @@ And a seventh and an eighth on 5 October 2026:
   rules', has lost what pauses it, writes the pause down and says so once. It writes the pause and
   nothing else; it opens and closes nothing.
 
+And a ninth on 6 October 2026:
+- **`NewsAlertScheduler`** gives each story the news feed reads in the session, published within
+  the last half hour, a severity (INFO, WATCH, HIGH, CRITICAL), and looks at Bitcoin's last hour on
+  the live stream once a minute. WATCH and above raise a desktop notice and a count on Discovery,
+  and CRITICAL a banner until dismissed. It writes nothing, and opens, closes, sells and asks
+  nothing. Beside it, `AlertBanner` and `WhyItMovedHost` (the "Why did it move?" window) are
+  mounted above every page.
+
 The main process also runs loops that need no window at all:
 - `marketScannerService` reads the market once a minute while it is on.
 - `marketResearchService` (added 6 October 2026) studies the market as the app opens and every ten
@@ -132,23 +141,27 @@ The main process also runs loops that need no window at all:
   minutes always, and a log of drops and quiet gaps. Public data only.
 - `newsService` reads Binance's two announcement lists once a minute while it is on (added in V3
   Stage 7).
+- `newsFeedService` (added 6 October 2026) reads four free news feeds every three minutes, always:
+  CoinDesk, The Block, Cointelegraph and Decrypt. It keeps each story once, and reads the 1-minute
+  candles of the coins they name to say what the price did after. Public data only.
 - `livePositionWatchersService` evaluates live exits every 5 seconds.
 - `liveTwapService` places TWAP slices.
 
 ## IPC channels
 
 79 channels when this was written, each found by searching `src/` for the `window.api` call that
-reaches it. A call may span lines. The `news` channels were added after: four in V3 Stage 7, and the record of the news rules on 5 October 2026.
+reaches it. A call may span lines. The `news` channels were added after: four in V3 Stage 7, and the record of the news rules on 5 October 2026. The `research`, `feed` and four live `market` channels were added on 6 October 2026, and `app:notify` then took a severity.
 
 | Namespace | Channels | Called from |
 |---|---|---|
-| `app` | `ping`, `getVersion`, `notify` | `notify`: the watch, its paper trader, the bots' call notifier |
+| `app` | `ping`, `getVersion`, `notify` | `notify`: the watch, its paper trader, the bots' call notifier, the digest and the pause, and `NewsAlertScheduler` (with a severity: silent at WATCH) |
 | `settings` | `get`, `set` | Almost every page and scheduler; writes go through `utils/settingsWrites.ts` and `utils/serialQueue.ts` |
 | `market` | 12: symbols, symbol rules, candles and ticker subscriptions, 24-hour ticker, historical ranges; and since 6 October 2026, 4 more for live prices: interest, state, a pair's book, updates | Charts, Market, Backtest, executors, the watch, benchmarks, Explorer; live prices: Right Now, Overview's top card, and the watch's paper writer |
 | `backtest` | `exportSave` | Backtest results, strategy comparison, Journal |
 | `scanner` | 8: state, config, events, history scan, universe, updates | Explorer, Opportunities, the watch, the event benchmark, the live board, Journal |
 | `research` | 3 (added 6 October 2026): state, read again, updates | Overview's market status and Markets' movers, through `useMarketResearch`. Nothing else reads it (`tests/aiNoLivePath.test.ts`) |
 | `news` | 5: state, config, list, updates, the rules' record (with the two near misses, from Binance's lists and Upbit's) | Discovery's announcements card and its record of the news rules, Settings › Market, and `NewsScheduler` (what a delisting or a tag does). Nothing else reads it (`tests/aiNoLivePath.test.ts`) |
+| `feed` | 3 (added 6 October 2026): state, updates, open a story's link (https on a feed's own host only) | Discovery's News & Market Events tab, "Why did it move?", and `NewsAlertScheduler`, through `useNewsFeed`. Nothing else reads it (`tests/aiNoLivePath.test.ts`) |
 | `credentials` | 10: list, set, test, remove, balances, futures positions, close, stops | Settings, Account, the live trading bar, New Executor, the ledger check |
 | `ai` | 22: key, signal tapes, config, calls, usage, entry confirmation, benchmark, opportunities, experiments | Agents' tabs, Backtest, Bots, the watch |
 | `liveTrading` | 19: status, limits, kill switch, arm, positions, orders, watchers, TWAP | The live trading bar, Settings, Executors, Positions, `LiveOrderScheduler`, Portfolio |
@@ -192,11 +205,13 @@ settings from the document have no behaviour behind them, so they are not added 
   - maximum correlated exposure, beyond the watch's own paper trades (which have, since 5 October
     2026, a limit on how many are open in one direction);
   - maximum slippage or spread.
-- **News:** one source is read, Binance's own announcements. It is switched on under Settings ›
-  Market, with what a delisting does (V3 Stage 7, after the study in `research/NEWS.md`). Upbit's
-  public list of trading notices is read only for the record on Discovery, while that card is shown,
-  and nothing acts on it. A choice of sources, social or sentiment feeds, and news services that
-  need a key have nothing behind them.
+- **News:** Binance's own announcements are read when switched on under Settings › Market, with
+  what a delisting does (V3 Stage 7, after the study in `research/NEWS.md`). Since 6 October 2026,
+  four free feeds are read too, always (CoinDesk, The Block, Cointelegraph, Decrypt), for Discovery's
+  News & Market Events, the alerts and "Why did it move?"; nothing trades on them. Upbit's public
+  list of trading notices is read only for the record on Discovery, while that card is shown, and
+  nothing acts on it. A choice of sources, social or sentiment feeds, and news services that need a
+  key have nothing behind them: CoinGecko's news needs a paid plan and CryptoPanic a key.
 - **Execution:** order timeout, retry, partial-fill and cancel policies.
 - **Advanced:** event thresholds, polling intervals, cache lifetimes and the number of candidates
   ranked are constants in code. A model's raw text is kept only for a refused answer

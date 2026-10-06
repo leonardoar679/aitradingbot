@@ -8,6 +8,7 @@ import { startMarketScanner } from './services/marketScannerService'
 import { startMarketResearch } from './services/marketResearchService'
 import { startLiveMarket } from './services/liveMarketService'
 import { startNewsReader } from './services/newsService'
+import { startNewsFeed } from './services/newsFeedService'
 import icon from '../build/icon.png?asset'
 
 function createWindow(): BrowserWindow {
@@ -95,6 +96,10 @@ if (!gotSingleInstanceLock) {
     // list, no key, no model, no order; started here only if it was left switched on. See
     // newsService.ts.
     void startNewsReader().catch((error) => console.error('News reader failed to start:', error))
+    // Reads four free media feeds every three minutes, sets Binance's announcements beside them, and
+    // measures what the price did around each story. Public data; no key, model or order. See
+    // newsFeedService.ts.
+    void startNewsFeed().catch((error) => console.error('News feed failed to start:', error))
 
     app.on('activate', function () {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()

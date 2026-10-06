@@ -28,6 +28,7 @@ import type {
 } from '../shared/marketScanner'
 import type { ResearchState } from '../shared/marketResearch'
 import type { LiveBook, LiveState } from '../shared/liveMarket'
+import type { NewsFeedState } from '../shared/newsFeed'
 import type { NewsConfigPatch, NewsFilter, NewsPage, NewsState } from '../shared/news'
 import type { NewsRecord } from '../shared/newsRecord'
 import {
@@ -57,7 +58,8 @@ const api = {
   ping: (): Promise<string> => ipcRenderer.invoke(IpcChannel.AppPing),
   getVersion: (): Promise<string> => ipcRenderer.invoke(IpcChannel.AppGetVersion),
   /** A desktop notice. Resolves false where the system cannot show one. */
-  notify: (title: string, body: string): Promise<boolean> => ipcRenderer.invoke(IpcChannel.AppNotify, title, body),
+  notify: (title: string, body: string, severity?: 'watch' | 'high' | 'critical'): Promise<boolean> =>
+    ipcRenderer.invoke(IpcChannel.AppNotify, title, body, severity),
   settings: {
     get: (): Promise<AppSettings> => ipcRenderer.invoke(IpcChannel.SettingsGet),
     set: (patch: Partial<AppSettings>): Promise<AppSettings> =>
@@ -138,6 +140,17 @@ const api = {
   },
   // Binance's announcements. Everything here reads its public list or the file the reader wrote:
   // none of it reaches a model, a key or an order.
+  // The news feed: four free media feeds and Binance's announcements, as stories, with what the price
+  // did around each. Public data; a link opens only on the feeds' own hosts.
+  feed: {
+    getState: (): Promise<NewsFeedState> => ipcRenderer.invoke(IpcChannel.FeedGetState),
+    openLink: (url: string): Promise<boolean> => ipcRenderer.invoke(IpcChannel.FeedOpenLink, url),
+    onUpdate: (listener: (state: NewsFeedState) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, state: NewsFeedState): void => listener(state)
+      ipcRenderer.on(IpcChannel.FeedUpdate, handler)
+      return () => ipcRenderer.removeListener(IpcChannel.FeedUpdate, handler)
+    }
+  },
   // The market research done at launch and every ten minutes: public market data and CoinGecko's
   // free trending list. It reaches no model, key or order.
   research: {

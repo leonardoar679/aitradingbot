@@ -39,7 +39,8 @@ import { registerAppHandlers } from '../electron/ipc/handlers/appHandlers'
 import { IpcChannel } from '../shared/ipc'
 
 registerAppHandlers()
-const notify = (title: unknown, body: unknown): Promise<unknown> => Promise.resolve(rig.handlers.get(IpcChannel.AppNotify)?.({ sender: {} }, title, body))
+const notify = (title: unknown, body: unknown, severity?: unknown): Promise<unknown> =>
+  Promise.resolve(rig.handlers.get(IpcChannel.AppNotify)?.({ sender: {} }, title, body, severity))
 
 describe('a desktop notice', () => {
   beforeEach(() => {
@@ -59,6 +60,24 @@ describe('a desktop notice', () => {
     rig.stored.alerts = { enabled: false, sound: true }
     expect(await notify('t', 'b')).toBe(false)
     expect(rig.shown).toHaveLength(1)
+  })
+
+  it('is silent at WATCH, and with sound at HIGH and CRITICAL where sound is on', async () => {
+    rig.stored.alerts = undefined
+    await notify('w', 'b', 'watch')
+    await notify('h', 'b', 'high')
+    await notify('c', 'b', 'critical')
+    await notify('x', 'b', 'loud')
+    expect(rig.shown.map((shown) => [shown.title, shown.silent])).toEqual([
+      ['w', true],
+      ['h', false],
+      ['c', false],
+      ['x', false]
+    ])
+    rig.shown.length = 0
+    rig.stored.alerts = { enabled: true, sound: false }
+    await notify('c', 'b', 'critical')
+    expect(rig.shown[0].silent).toBe(true)
   })
 
   it('shows only text, cut to its limits, and nothing that is not text', async () => {

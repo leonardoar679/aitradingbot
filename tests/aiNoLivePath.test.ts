@@ -333,6 +333,9 @@ describe('AI code has no route to a real order', () => {
       'electron/services/aiSignalService.ts',
       // ...and the event is raised through the scanner, from the coin's own candles.
       'electron/services/marketScannerService.ts',
+      // The news feed (the second V3 document, 6 October 2026): Binance's announcements as stories,
+      // beside four free media feeds.
+      'electron/services/newsFeedService.ts',
       // The record of the two rules since the study, and of the two near misses: Binance's and
       // Upbit's lists and the coins' candles, scored.
       'electron/services/newsRecordService.ts',
@@ -347,6 +350,8 @@ describe('AI code has no route to a real order', () => {
       'src/executors/ExecutorCard.tsx',
       'src/explorer/NewsCard.tsx',
       'src/explorer/NewsRecordCard.tsx',
+      // The feed's alerts: whether a coin a story names is held, by the holder notice's own rule.
+      'src/news/NewsAlertScheduler.tsx',
       'src/news/NewsScheduler.tsx',
       'src/news/newsPaperShort.ts',
       'src/settings/NewsSettingsCard.tsx'
@@ -354,6 +359,50 @@ describe('AI code has no route to a real order', () => {
     // The news's own files offer no model a question and no form a call.
     for (const file of readers.filter((name) => /\/news|News/.test(name))) {
       expect(readFileSync(join(ROOT, file), 'utf-8'), file).not.toMatch(/window\.api\.ai\b|aiProposal|onPrepareOrder/)
+    }
+  })
+
+  it('the news feed reads public feeds, opens links only on their hosts, and tells; it trades nothing', () => {
+    // Since 6 October 2026 four free media feeds are read beside Binance's announcements (the second
+    // V3 document, §11-14 and §28-30). The main-process half reads them and the coins' public candles
+    // and writes its own two files; a link opens only on https and on a feed's host. The arithmetic is
+    // arithmetic. What shows it, explains a move or raises an alert reads; none of it places, sells,
+    // asks or offers a call.
+    const main = [join(SERVICES, 'newsFeedService.ts'), join(ROOT, 'electron', 'ipc', 'handlers', 'newsFeedHandlers.ts')]
+    for (const path of main) {
+      expect(importsOf(path).filter((name) => LIVE_MODULES.has(name)), path).toEqual([])
+      expect(importsOf(path).filter((name) => aiModuleNames.has(name)), path).toEqual([])
+    }
+    expect(importsOf(join(SERVICES, 'newsFeedService.ts')).sort()).toEqual(['electron', 'jsonlStore', 'marketService', 'news', 'newsFeed', 'newsService', 'path', 'promises', 'singleFlight'])
+    const service = readFileSync(join(SERVICES, 'newsFeedService.ts'), 'utf-8')
+    expect(service).toContain("if (parsed.protocol !== 'https:' || !FEED_HOSTS.includes(parsed.hostname)) return false")
+    expect(service).not.toMatch(/resolveTradingEndpoint|credentials|apiKey|setSettings/)
+    expect(importsOf(join(ROOT, 'shared', 'newsFeed.ts'))).toEqual(['ipc'])
+    expect(importsOf(join(ROOT, 'shared', 'moveExplanation.ts')).sort()).toEqual(['ipc', 'newsFeed'])
+    expect(importsOf(join(ROOT, 'shared', 'alerts.ts')).sort()).toEqual(['ipc', 'newsFeed'])
+    for (const file of ['newsFeed.ts', 'moveExplanation.ts', 'alerts.ts']) {
+      expect(readFileSync(join(ROOT, 'shared', file), 'utf-8'), file).not.toMatch(/window\.|ipcRenderer|electron\//)
+    }
+    const calls = (path: string): string[] => {
+      const source = readFileSync(path, 'utf-8')
+      return [...new Set([...source.matchAll(/window\.api\.(\w+)(?:\s*\.\s*(\w+))?/g)].map((match) => (match[2] === undefined ? match[1] : `${match[1]}.${match[2]}`)))].sort()
+    }
+    const views: [string, string[]][] = [
+      [join(ROOT, 'src', 'news', 'useNewsFeed.ts'), ['feed.getState', 'feed.onUpdate']],
+      [join(ROOT, 'src', 'explorer', 'NewsFeedCard.tsx'), ['feed.openLink']],
+      [join(ROOT, 'src', 'news', 'WhyItMoved.tsx'), ['feed.openLink', 'market.fetchHistoricalRange']],
+      [join(ROOT, 'src', 'news', 'WhyItMovedHost.tsx'), []],
+      [join(ROOT, 'src', 'news', 'AlertBanner.tsx'), ['feed.openLink']],
+      // It reads what is held -- the settings and the balances a key can read -- and the live
+      // stream's Bitcoin, and tells.
+      [
+        join(ROOT, 'src', 'news', 'NewsAlertScheduler.tsx'),
+        ['credentials.balances', 'credentials.list', 'feed.getState', 'feed.onUpdate', 'market.liveState', 'notify', 'settings.get']
+      ]
+    ]
+    for (const [path, expected] of views) {
+      expect(calls(path), path).toEqual(expected)
+      expect(readFileSync(path, 'utf-8'), path).not.toMatch(/liveTrading|LiveTrading|placeLive|onPrepareOrder|aiProposal|settings\.set|window\.api\.ai\b/)
     }
   })
 
