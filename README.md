@@ -286,8 +286,13 @@ within the last half hour:
 
 What each raises:
 - **INFO** stays on its page.
-- **WATCH** raises a silent desktop notice.
-- **HIGH and CRITICAL** raise one with sound, where sound is on under Settings' Essentials.
+- **WATCH** raises a silent desktop notice, but not a second one for a coin a notice named in the
+  last six hours. Outlets tell the same news in their own words, and stories are merged only when
+  their titles are close. In a twelve-hour run on 6 October 2026, one Zcash ETF filing raised three
+  notices over four hours, from The Block, Decrypt and Cointelegraph. Every story is still kept on
+  its page.
+- **HIGH and CRITICAL** raise one with sound, where sound is on under Settings' Essentials, every
+  time.
 - **CRITICAL** also stays as a red banner above every page until it is dismissed.
 - **WATCH and above** put a count on Discovery in the sidebar, and Discovery opens on the news until
   it is seen.

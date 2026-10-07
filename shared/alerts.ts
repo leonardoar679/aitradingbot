@@ -1,5 +1,5 @@
 import type { AlertSettings, Candle } from './ipc'
-import { describeEventType, type ReactionVerdict, type ReadStory } from './newsFeed'
+import { SAME_STORY_SECONDS, describeEventType, type ReactionVerdict, type ReadStory } from './newsFeed'
 
 // THE APP'S DESKTOP NOTICES: WHETHER THEY ARE RAISED AT ALL, WITH SOUND, AND HOW LOUD EACH IS.
 //
@@ -16,6 +16,13 @@ import { describeEventType, type ReactionVerdict, type ReadStory } from './newsF
 // - INFO: the rest, and anything old.
 // INFO is shown on its page only; WATCH raises a silent notice; HIGH and CRITICAL a notice with
 // sound, where sound is on; CRITICAL also stays as a banner until it is dismissed.
+//
+// A WATCH NOTICE IS NOT TOLD TWICE FOR ONE COIN. Outlets tell the same news in their own words,
+// hours apart, and a story is one story only when its title is close to another's: in a twelve-hour
+// run of the app on 6 October 2026 one Zcash ETF filing raised three notices, from The Block,
+// Decrypt and Cointelegraph, over four hours. So a WATCH notice is held back when every coin it
+// names was named by a notice within the last NOTICE_REPEAT_SECONDS. It is still kept on its page,
+// and HIGH and CRITICAL are always told.
 
 export const DEFAULT_ALERTS: AlertSettings = { enabled: true, sound: true }
 
@@ -73,9 +80,27 @@ export function crashNotice(movePct: number): { title: string; body: string } {
   }
 }
 
+/** The coins a story's notice is about: the ones it names as its subject. */
+export function noticeCoins(story: Pick<ReadStory, 'assets'>): string[] {
+  return story.assets.filter((asset) => asset.relationship === 'DIRECT').map((asset) => asset.ticker)
+}
+
+/** How long a coin a notice named is not named again by a WATCH notice: the six hours inside which
+ * close titles are one story (shared/newsFeed.ts). */
+export const NOTICE_REPEAT_SECONDS = SAME_STORY_SECONDS
+
+/** Whether a story's notice would only repeat what one already told: a WATCH notice whose coins were
+ * every one named by a notice less than NOTICE_REPEAT_SECONDS ago (`toldAt`, by coin). HIGH and
+ * CRITICAL are never held back, nor is a story naming no coin. */
+export function repeatsNotice(story: Pick<ReadStory, 'assets'>, severity: AlertSeverity, toldAt: ReadonlyMap<string, number>, nowSec: number): boolean {
+  if (severity !== 'watch') return false
+  const coins = noticeCoins(story)
+  return coins.length > 0 && coins.every((coin) => nowSec - (toldAt.get(coin) ?? -Infinity) < NOTICE_REPEAT_SECONDS)
+}
+
 /** What the desktop is told of a story. */
 export function storyNotice(story: Pick<ReadStory, 'title' | 'sourceName' | 'eventType' | 'assets' | 'impact'>, severity: AlertSeverity, heldPlaces: string[] = []): { title: string; body: string } {
-  const coins = story.assets.filter((asset) => asset.relationship === 'DIRECT').map((asset) => asset.ticker)
+  const coins = noticeCoins(story)
   const head = severity === 'critical' ? 'CRITICAL' : severity === 'high' ? 'HIGH' : 'News'
   return {
     title: `${head}: ${coins.length > 0 ? `${coins.slice(0, 3).join(', ')} · ` : ''}${describeEventType(story.eventType)}`,

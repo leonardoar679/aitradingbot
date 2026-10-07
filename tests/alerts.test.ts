@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest'
 import {
   BTC_CRASH_PCT,
   BTC_CRASH_REARM_PCT,
+  NOTICE_REPEAT_SECONDS,
   btcHourMovePct,
   crashNotice,
   crashStep,
   healNoticeSeverity,
+  noticeCoins,
   noticeSeverity,
+  repeatsNotice,
   storyNotice,
   storySeverity
 } from '../shared/alerts'
@@ -56,6 +59,34 @@ describe('a story', () => {
   it('raises no notice at info, and sends only the three words the handler takes', () => {
     expect([noticeSeverity('info'), noticeSeverity('watch'), noticeSeverity('high'), noticeSeverity('critical')]).toEqual([null, 'watch', 'high', 'critical'])
     expect([healNoticeSeverity('high'), healNoticeSeverity('info'), healNoticeSeverity(3), healNoticeSeverity(undefined)]).toEqual(['high', null, null, null])
+  })
+})
+
+describe('a notice told again', () => {
+  // One Zcash ETF filing, told by three outlets in their own words over four hours.
+  const zec = { assets: [{ ticker: 'ZEC', relationship: 'DIRECT' as const }] }
+
+  it('is held back at watch while every coin it names was named by a notice in the last six hours', () => {
+    // Cointelegraph's, four hours and ten minutes after The Block's.
+    expect(repeatsNotice(zec, 'watch', new Map([['ZEC', NOW - (4 * 3600 + 10 * 60)]]), NOW)).toBe(true)
+    expect(repeatsNotice(zec, 'watch', new Map([['ZEC', NOW - NOTICE_REPEAT_SECONDS + 1]]), NOW)).toBe(true)
+    expect(repeatsNotice(zec, 'watch', new Map([['ZEC', NOW - NOTICE_REPEAT_SECONDS]]), NOW)).toBe(false)
+    expect(repeatsNotice(zec, 'watch', new Map(), NOW)).toBe(false)
+    expect(repeatsNotice(zec, 'watch', new Map([['XMR', NOW - 60]]), NOW)).toBe(false)
+  })
+
+  it('is told at high and critical, with a coin not yet told, and when it names no coin', () => {
+    const told = new Map([['ZEC', NOW - 60]])
+    expect(repeatsNotice(zec, 'high', told, NOW)).toBe(false)
+    expect(repeatsNotice(zec, 'critical', told, NOW)).toBe(false)
+    expect(repeatsNotice({ assets: [...zec.assets, { ticker: 'XMR', relationship: 'DIRECT' }] }, 'watch', told, NOW)).toBe(false)
+    expect(repeatsNotice({ assets: [] }, 'watch', told, NOW)).toBe(false)
+    // A coin only mentioned in passing is not what a notice is about.
+    expect(repeatsNotice({ assets: [{ ticker: 'ZEC', relationship: 'INDIRECT' }] }, 'watch', told, NOW)).toBe(false)
+  })
+
+  it('is about the coins a story names as its subject', () => {
+    expect(noticeCoins({ assets: [{ ticker: 'ZEC', relationship: 'DIRECT' }, { ticker: 'BTC', relationship: 'INDIRECT' }] })).toEqual(['ZEC'])
   })
 })
 
