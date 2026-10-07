@@ -141,7 +141,9 @@ The main process also runs loops that need no window at all:
   every fifteen minutes, and the market's status. Public data only.
 - `liveMarketService` (added 6 October 2026) holds one public socket to the market-data host: the
   live book and minute of the pairs shown and of the app's own paper trades, Bitcoin's and ether's
-  minutes always, and a log of drops and quiet gaps. Public data only.
+  minutes always, and a log of drops, quiet gaps and host moves. Since 7 October 2026 a socket that
+  cannot connect three times in a row moves to the data host that answers (never binance.us), and a
+  closed one follows a REST move at once. Public data only.
 - `newsService` reads Binance's two announcement lists once a minute while it is on (added in V3
   Stage 7).
 - `aiAdditionsService` (added 6 October 2026) puts each story of high impact the news feed reads to

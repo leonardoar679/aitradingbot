@@ -165,6 +165,8 @@ export function resetResolvedEndpoints(): void {
   resolvedDataEndpoint = null
   resolvedTradingEndpoint = null
   partnerFailedAt = -Infinity
+  dataHostSwitches = 0
+  dataHostListeners.clear()
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -172,6 +174,13 @@ export function resetResolvedEndpoints(): void {
 // and kept. In a one-hour run of the app on 6 October 2026 api.binance.com stopped accepting
 // connections for six minutes, while its stream and the mirror were fine, and every candle request in
 // those minutes failed: paper trades went unsettled and the exit check could not look.
+//
+// AND THE STREAM HAS TO FOLLOW. In a 24-hour run on 7 October 2026 REST moved to the mirror at 15:44
+// UTC while the live-price socket, opened on binance.com at launch, kept dialling stream.binance.com
+// every fifteen seconds for as long as the run lasted: the host's name resolved to addresses that were
+// not Binance's at all. So a move is told to whoever listens (onDataHostChange), and a socket that
+// cannot connect can ask for the partner to be probed (probeDataPartner). Both move only to a host
+// that answers with data, and never to binance.us.
 
 /** binance.com's two hosts for public market data, its REST host and its public mirror, serve the
  * same market, so each can stand in for the other. binance.us is a different market, with its own
@@ -189,6 +198,39 @@ const PARTNER_TIMEOUT_MS = 15_000
  * a request fails in the time one host takes, not two. */
 const PARTNER_COOL_DOWN_MS = 60_000
 let partnerFailedAt = -Infinity
+/** Times the data host has moved this session. */
+let dataHostSwitches = 0
+const dataHostListeners = new Set<(to: RestEndpoint, from: RestEndpoint) => void>()
+
+/** Tells a listener each time the data host moves mid-session: the live-price socket follows it. */
+export function onDataHostChange(listener: (to: RestEndpoint, from: RestEndpoint) => void): () => void {
+  dataHostListeners.add(listener)
+  return () => void dataHostListeners.delete(listener)
+}
+
+/** The data host as it stands, without a probe; null before the first request resolved one. */
+export function currentDataEndpoint(): RestEndpoint | null {
+  return resolvedDataEndpoint
+}
+
+/** How many times the data host has moved this session. */
+export function dataHostSwitchCount(): number {
+  return dataHostSwitches
+}
+
+/** The one place the data host moves mid-session: it is counted, said, and told to the listeners. */
+function moveDataHost(from: RestEndpoint, to: RestEndpoint, why: string): void {
+  resolvedDataEndpoint = to
+  dataHostSwitches += 1
+  console.warn(`Binance market data: ${from.name} ${why}, so ${to.name} is used from now on.`)
+  for (const listener of dataHostListeners) {
+    try {
+      listener(to, from)
+    } catch (error) {
+      console.error('A data-host listener failed:', error)
+    }
+  }
+}
 
 /** A public market-data request, `path` from the REST root on ("/klines?symbol=..."): to the data
  * host, and, when that host does not answer at all or answers with a server error, once to its
@@ -213,10 +255,7 @@ export async function fetchMarketData(path: string, timeoutMs: number | null = n
     try {
       const response = await fetch(`${partner.restRoot}${path}`, { signal: AbortSignal.timeout(timeoutMs ?? PARTNER_TIMEOUT_MS) })
       if (response.ok) {
-        if (resolvedDataEndpoint === endpoint) {
-          resolvedDataEndpoint = partner
-          console.warn(`Binance market data: ${endpoint.name} ${answered === null ? 'did not answer' : `answered ${answered.status}`}, so ${partner.name} is used from now on.`)
-        }
+        if (resolvedDataEndpoint === endpoint) moveDataHost(endpoint, partner, answered === null ? 'did not answer' : `answered ${answered.status}`)
         return { response, endpoint: partner }
       }
     } catch {
@@ -226,6 +265,30 @@ export async function fetchMarketData(path: string, timeoutMs: number | null = n
   }
   if (answered !== null) return { response: answered, endpoint }
   throw failure
+}
+
+/** The data host's partner, probed once with one small request, for a caller whose own connection
+ * to the host is failing: the live-price socket after three connects in a row that never opened. As
+ * for a request, the partner is moved to only when it answers with data, and its silence puts it on
+ * the same cool-down. Null when there is no partner (a session on binance.us), the cool-down has not
+ * passed, or the partner did not answer; the partner itself when it did, whether or not the host had
+ * to move for it (it may have moved already, for a request). */
+export async function probeDataPartner(why: string): Promise<RestEndpoint | null> {
+  const endpoint = await resolveEndpoint()
+  const partner = dataPartnerOf(endpoint)
+  if (partner === null || Date.now() - partnerFailedAt < PARTNER_COOL_DOWN_MS) return null
+  try {
+    const response = await fetch(`${partner.restRoot}/klines?symbol=BTCUSDT&interval=1m&limit=1`, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) })
+    const data: unknown = await response.json().catch(() => null)
+    if (response.ok && Array.isArray(data)) {
+      if (resolvedDataEndpoint === endpoint) moveDataHost(endpoint, partner, why)
+      return partner
+    }
+  } catch {
+    // The partner did not answer either.
+  }
+  partnerFailedAt = Date.now()
+  return null
 }
 
 export const ENDPOINTS_FOR_TEST = { DATA_ENDPOINTS, TRADING_ENDPOINTS }

@@ -198,6 +198,16 @@ times a second — Bitcoin's more than a hundred — and only what is being look
 with no message is written down as a gap and a closed socket as a drop, for the session report
 (`electron/services/liveMarketService.ts`; the arithmetic is `shared/liveMarket.ts`).
 
+**The socket follows the data host** (since 7 October 2026). A healthy socket stays where it is,
+whatever REST does; a socket that cannot connect three times in a row goes to the host that answers:
+first the host REST has moved to, if it has, else binance.com's partner, the public mirror, probed
+once with one small request. Never binance.us. In a 24-hour run on 7 October 2026 REST moved to the
+mirror at 15:44 UTC while the socket, opened on binance.com at launch, kept dialling
+`stream.binance.com` every fifteen seconds for the rest of the run: the name had stopped resolving to
+Binance at all. A closed socket also follows a REST move at once, having nothing to lose by it. A
+move is not a drop, and what is shown is asked for again as the new socket opens. The session report
+says which host the stream is on, and how often it, and the data host, moved; neither is a gate.
+
 - **Each recommendation on offer is checked against it.** ENTERABLE when what a fill would pay —
   the ask for a buy, the bid for a sell — is inside the entry range, the spread is within 0.1% and
   the price is under ten seconds old; WAITING while the price is outside the range, since the entry

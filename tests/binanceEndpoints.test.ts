@@ -15,9 +15,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 //
 // So the lists are split, and these tests pin the split rather than the wiring that implements it.
 
-const { ENDPOINTS_FOR_TEST, fetchMarketData, resolveEndpoint, resolveTradingEndpoint, resetResolvedEndpoints } = await import(
-  '../electron/services/exchanges/binance'
-)
+const { ENDPOINTS_FOR_TEST, fetchMarketData, resolveEndpoint, resolveTradingEndpoint, resetResolvedEndpoints, onDataHostChange, currentDataEndpoint, dataHostSwitchCount, probeDataPartner } =
+  await import('../electron/services/exchanges/binance')
 
 const KLINE = [[1, '1', '1', '1', '1', '1']]
 
@@ -255,5 +254,109 @@ describe('when the data host stops answering mid-session', () => {
     expect((await fetchMarketData(PATH)).endpoint.name).toBe('data-api.binance.vision')
     hosts['api.binance.com'] = 'answers'
     expect((await resolveTradingEndpoint()).name).toBe('binance.com')
+  })
+})
+
+// In a 24-hour run on 7 October 2026 REST moved to the mirror at 15:44 UTC while the live-price
+// socket kept dialling stream.binance.com for the rest of the run. So a move is told to whoever
+// listens, and a socket that cannot connect can ask for the partner to be probed.
+describe('when the data host moves it is told, and a failing socket can ask for the partner', () => {
+  const PATH = '/klines?symbol=SOLUSDT&interval=1m&limit=2'
+  const PROBE = 'https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=1'
+
+  it('tells a listener once per move, with the host moved to and from, and counts the moves', async () => {
+    const hosts: Record<string, Behaviour> = { 'api.binance.com': 'answers', 'data-api.binance.vision': 'answers' }
+    stubBehaviour(hosts)
+    expect(currentDataEndpoint()).toBeNull()
+    await resolveEndpoint()
+    const heard: string[] = []
+    const off = onDataHostChange((to, from) => heard.push(`${from.name} -> ${to.name}`))
+    expect(currentDataEndpoint()?.name).toBe('binance.com')
+    expect(dataHostSwitchCount()).toBe(0)
+    hosts['api.binance.com'] = 'silent'
+    await fetchMarketData(PATH)
+    await fetchMarketData(PATH)
+    expect(heard).toEqual(['binance.com -> data-api.binance.vision'])
+    expect(dataHostSwitchCount()).toBe(1)
+    expect(currentDataEndpoint()?.name).toBe('data-api.binance.vision')
+    // And back, once the mirror goes silent and binance.com answers again.
+    hosts['api.binance.com'] = 'answers'
+    hosts['data-api.binance.vision'] = 'silent'
+    await fetchMarketData(PATH)
+    expect(heard).toEqual(['binance.com -> data-api.binance.vision', 'data-api.binance.vision -> binance.com'])
+    expect(dataHostSwitchCount()).toBe(2)
+    // A listener that left hears nothing more; the count goes on.
+    off()
+    hosts['api.binance.com'] = 'silent'
+    hosts['data-api.binance.vision'] = 'answers'
+    await fetchMarketData(PATH)
+    expect(heard).toHaveLength(2)
+    expect(dataHostSwitchCount()).toBe(3)
+  })
+
+  it('probes the partner once for a socket that cannot connect, moves when it answers, and tells the listener', async () => {
+    const hosts: Record<string, Behaviour> = { 'api.binance.com': 'answers', 'data-api.binance.vision': 'answers' }
+    const tried = stubBehaviour(hosts)
+    await resolveEndpoint()
+    const heard: string[] = []
+    onDataHostChange((to) => heard.push(to.name))
+    tried.length = 0
+    const partner = await probeDataPartner('the live market socket could not connect')
+    expect(partner?.name).toBe('data-api.binance.vision')
+    expect(tried).toEqual([PROBE])
+    expect(currentDataEndpoint()?.name).toBe('data-api.binance.vision')
+    expect(heard).toEqual(['data-api.binance.vision'])
+    expect(dataHostSwitchCount()).toBe(1)
+  })
+
+  it('answers null when the partner is silent, and does not ask it again within the minute', async () => {
+    const hosts: Record<string, Behaviour> = { 'api.binance.com': 'answers', 'data-api.binance.vision': 'silent' }
+    const tried = stubBehaviour(hosts)
+    await resolveEndpoint()
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000)
+    tried.length = 0
+    expect(await probeDataPartner('why')).toBeNull()
+    expect(tried).toEqual([PROBE])
+    expect(currentDataEndpoint()?.name).toBe('binance.com')
+    expect(dataHostSwitchCount()).toBe(0)
+    now.mockReturnValue(1_000_000 + 59_999)
+    tried.length = 0
+    expect(await probeDataPartner('why')).toBeNull()
+    expect(tried).toEqual([])
+    now.mockReturnValue(1_000_000 + 60_000)
+    hosts['data-api.binance.vision'] = 'answers'
+    expect((await probeDataPartner('why'))?.name).toBe('data-api.binance.vision')
+    expect(dataHostSwitchCount()).toBe(1)
+  })
+
+  it('never probes binance.us, nor anything for a session on it', async () => {
+    const hosts: Record<string, Behaviour> = { 'api.binance.us': 'answers' }
+    const tried = stubBehaviour(hosts)
+    expect((await resolveEndpoint()).name).toBe('binance.us')
+    tried.length = 0
+    expect(await probeDataPartner('why')).toBeNull()
+    expect(tried).toEqual([])
+    resetResolvedEndpoints()
+    const com: Record<string, Behaviour> = { 'api.binance.com': 'answers', 'api.binance.us': 'answers' }
+    const comTried = stubBehaviour(com)
+    await resolveEndpoint()
+    comTried.length = 0
+    expect(await probeDataPartner('why')).toBeNull()
+    expect(comTried).toEqual([PROBE])
+  })
+
+  it('forgets the listeners and the count with the memos', async () => {
+    const hosts: Record<string, Behaviour> = { 'api.binance.com': 'answers', 'data-api.binance.vision': 'answers' }
+    stubBehaviour(hosts)
+    await resolveEndpoint()
+    const heard: string[] = []
+    onDataHostChange((to) => heard.push(to.name))
+    resetResolvedEndpoints()
+    expect(dataHostSwitchCount()).toBe(0)
+    await resolveEndpoint()
+    hosts['api.binance.com'] = 'silent'
+    await fetchMarketData(PATH)
+    expect(heard).toEqual([])
+    expect(dataHostSwitchCount()).toBe(1)
   })
 })

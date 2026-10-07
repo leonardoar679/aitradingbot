@@ -14,6 +14,10 @@ interface SocketHandlers {
   onOpen?: (socket: WebSocket) => void
   onMessage: (data: Buffer) => void
   onError?: (error: Error) => void
+  /** A connect that failed: the socket closed without ever opening. `consecutive` counts these
+   * since the last open, so a caller can tell a dead host (1, 2, 3, ...) from a dropped link (an
+   * open, then one). Called before the retry is scheduled; stopping the socket inside it is fine. */
+  onConnectFailed?: (consecutive: number) => void
 }
 
 export interface SocketTimings {
@@ -32,6 +36,7 @@ export function createReconnectingSocket(url: string, handlers: SocketHandlers, 
 
   let socket: WebSocket | null = null
   let attempt = 0
+  let failedConnects = 0
   let stopped = false
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let clearHeartbeat: () => void = () => {}
@@ -40,6 +45,7 @@ export function createReconnectingSocket(url: string, handlers: SocketHandlers, 
     if (stopped) return
     const current = new WebSocket(url)
     socket = current
+    let opened = false
 
     let pingTimer: ReturnType<typeof setInterval> | null = null
     let pongTimer: ReturnType<typeof setTimeout> | null = null
@@ -56,7 +62,9 @@ export function createReconnectingSocket(url: string, handlers: SocketHandlers, 
     clearHeartbeat = stopHeartbeat
 
     current.on('open', () => {
+      opened = true
       attempt = 0
+      failedConnects = 0
       pingTimer = setInterval(() => {
         if (current.readyState !== WebSocket.OPEN) return
         // A probe is already outstanding — let its own timeout decide, rather than stacking
@@ -89,6 +97,12 @@ export function createReconnectingSocket(url: string, handlers: SocketHandlers, 
       // first made 2s the shortest gap this could ever wait and left BASE_DELAY_MS unreachable.
       const delay = Math.min(BASE_DELAY_MS * 2 ** attempt, MAX_DELAY_MS)
       attempt += 1
+      if (!opened) {
+        failedConnects += 1
+        handlers.onConnectFailed?.(failedConnects)
+        // The handler may have stopped this socket for good, to open one elsewhere.
+        if (stopped) return
+      }
       reconnectTimer = setTimeout(connect, delay)
     })
   }

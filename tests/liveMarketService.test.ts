@@ -5,30 +5,57 @@ import type { LiveState } from '../shared/liveMarket'
 // faked: which streams it asks for and when, what it makes of each message, what it keeps of a
 // quiet or closed socket, and where a book comes from when the stream has none fresh.
 
-const rig = vi.hoisted(() => ({
-  urls: [] as string[],
-  handlers: null as null | { onOpen?: (socket: unknown) => void; onMessage: (raw: Buffer) => void },
-  sent: [] as { method: string; params: string[] }[],
-  onClose: null as null | (() => void),
-  settings: { executors: [] as unknown[] },
-  fetched: [] as string[],
-  rest: { ok: true, row: {} as Record<string, unknown> }
-}))
-
-vi.mock('../electron/services/exchanges/reconnectingSocket', () => ({
-  createReconnectingSocket: (url: string, handlers: { onOpen?: (socket: unknown) => void; onMessage: (raw: Buffer) => void }) => {
-    rig.urls.push(url)
-    rig.handlers = handlers
-    return () => undefined
-  }
-}))
-vi.mock('../electron/services/exchanges/binance', () => {
-  const endpoint = { name: 'data-api.binance.vision', restRoot: 'https://data-api.binance.vision/api/v3', wsBase: 'wss://data-stream.binance.vision/ws' }
+const rig = vi.hoisted(() => {
+  const MIRROR = { name: 'data-api.binance.vision', restRoot: 'https://data-api.binance.vision/api/v3', wsBase: 'wss://data-stream.binance.vision/ws' }
+  const COM = { name: 'binance.com', restRoot: 'https://api.binance.com/api/v3', wsBase: 'wss://stream.binance.com:9443/ws' }
+  type Endpoint = typeof MIRROR
   return {
-    resolveEndpoint: async () => endpoint,
-    fetchMarketData: async (path: string) => ({ response: await fetch(`${endpoint.restRoot}${path}`), endpoint })
+    MIRROR,
+    COM,
+    urls: [] as string[],
+    handlers: null as null | { onOpen?: (socket: unknown) => void; onMessage: (raw: Buffer) => void; onConnectFailed?: (consecutive: number) => void },
+    sent: [] as { method: string; params: string[] }[],
+    onClose: null as null | (() => void),
+    settings: { executors: [] as unknown[] },
+    fetched: [] as string[],
+    rest: { ok: true, row: {} as Record<string, unknown> },
+    /** Sockets stopped for good: a move stops the old one. */
+    stops: 0,
+    /** The data host as binance.ts would have it, and what a probe of its partner answers. */
+    hosts: { current: MIRROR as Endpoint, listeners: [] as ((to: Endpoint, from: Endpoint) => void)[], probeAnswer: null as Endpoint | null, probes: 0, switches: 0 }
   }
 })
+
+vi.mock('../electron/services/exchanges/reconnectingSocket', () => ({
+  createReconnectingSocket: (url: string, handlers: NonNullable<typeof rig.handlers>) => {
+    rig.urls.push(url)
+    rig.handlers = handlers
+    return () => {
+      rig.stops += 1
+    }
+  }
+}))
+vi.mock('../electron/services/exchanges/binance', () => ({
+  resolveEndpoint: async () => rig.hosts.current,
+  currentDataEndpoint: () => rig.hosts.current,
+  dataHostSwitchCount: () => rig.hosts.switches,
+  onDataHostChange: (listener: (to: typeof rig.MIRROR, from: typeof rig.MIRROR) => void) => {
+    rig.hosts.listeners.push(listener)
+    return () => undefined
+  },
+  probeDataPartner: async () => {
+    rig.hosts.probes += 1
+    const answer = rig.hosts.probeAnswer
+    if (answer !== null && answer.name !== rig.hosts.current.name) {
+      const from = rig.hosts.current
+      rig.hosts.current = answer
+      rig.hosts.switches += 1
+      for (const listener of rig.hosts.listeners) listener(answer, from)
+    }
+    return answer
+  },
+  fetchMarketData: async (path: string) => ({ response: await fetch(`${rig.hosts.current.restRoot}${path}`), endpoint: rig.hosts.current })
+}))
 vi.mock('../electron/services/marketService', () => ({ scanSourceFor: () => ({ fetchRecentCandles: async () => [] }) }))
 vi.mock('../electron/services/settingsService', () => ({ getSettings: async () => rig.settings }))
 
@@ -66,7 +93,7 @@ describe('the live market', () => {
   it("opens one socket on the data host with Bitcoin's and ether's minutes, and asks for nothing more until a pair is shown", () => {
     expect(rig.urls).toEqual(['wss://data-stream.binance.vision/stream?streams=btcusdt@kline_1m/ethusdt@kline_1m'])
     rig.handlers?.onOpen?.(socket)
-    expect(getLiveState().connection).toMatchObject({ open: true, connects: 1, drops: 0 })
+    expect(getLiveState().connection).toMatchObject({ open: true, connects: 1, drops: 0, host: 'data-api.binance.vision', hostSwitches: 0, dataHostSwitches: 0 })
     expect(rig.sent).toEqual([])
   })
 
@@ -129,5 +156,66 @@ describe('the live market', () => {
     rig.rest.ok = false
     expect(await liveBook('SOLUSDT')).toBeNull()
     expect(await liveBook('not a pair')).toBeNull()
+  })
+
+  // THE HOST RULE: a healthy socket stays where it is, whatever REST does; a socket that cannot
+  // connect three times in a row goes to the host that answers. In a 24-hour run on 7 October 2026
+  // the socket kept dialling binance.com every fifteen seconds after REST had moved to the mirror.
+  it('moves to the host that answers after three connects in a row failed, and asks again for what is shown', async () => {
+    // On the mirror, showing SOLUSDT: the socket closes and then cannot connect; binance.com answers.
+    rig.handlers?.onOpen?.(socket)
+    await setLiveInterest(['SOLUSDT'])
+    rig.onClose?.()
+    const before = rig.urls.length
+    rig.hosts.probeAnswer = rig.COM
+    rig.handlers?.onConnectFailed?.(1)
+    rig.handlers?.onConnectFailed?.(2)
+    expect(rig.hosts.probes).toBe(0)
+    rig.handlers?.onConnectFailed?.(3)
+    await vi.waitFor(() => expect(rig.urls.length).toBe(before + 1))
+    expect(rig.hosts.probes).toBe(1)
+    expect(rig.stops).toBe(1)
+    expect(rig.urls[before]).toBe('wss://stream.binance.com:9443/stream?streams=btcusdt@kline_1m/ethusdt@kline_1m')
+    expect(getLiveState().connection).toMatchObject({ open: false, host: 'binance.com', hostSwitches: 1, dataHostSwitches: 1 })
+    // As the new socket opens, the shown pair's streams are asked for again.
+    rig.sent.length = 0
+    rig.handlers?.onOpen?.(socket)
+    expect(rig.sent).toHaveLength(1)
+    expect(rig.sent[0].method).toBe('SUBSCRIBE')
+    expect(rig.sent[0].params).toEqual(expect.arrayContaining(['solusdt@bookTicker', 'solusdt@kline_1m', 'solusdt@depth5']))
+    expect(getLiveState().connection).toMatchObject({ open: true, host: 'binance.com' })
+  })
+
+  it('stays where it is when the data host moves while it is open, and follows at once while it is closed', () => {
+    const before = rig.urls.length
+    const tell = (to: typeof rig.MIRROR, from: typeof rig.MIRROR): void => {
+      rig.hosts.current = to
+      rig.hosts.switches += 1
+      for (const listener of rig.hosts.listeners) listener(to, from)
+    }
+    // Open on binance.com; REST moves to the mirror: nothing happens to a socket that is receiving.
+    tell(rig.MIRROR, rig.COM)
+    expect(rig.urls.length).toBe(before)
+    expect(rig.stops).toBe(1)
+    expect(getLiveState().connection).toMatchObject({ open: true, host: 'binance.com', hostSwitches: 1, dataHostSwitches: 2 })
+    // Closed, and REST moves to the host it is on: nothing to do. Then away from it: it follows.
+    rig.onClose?.()
+    tell(rig.COM, rig.MIRROR)
+    expect(rig.urls.length).toBe(before)
+    tell(rig.MIRROR, rig.COM)
+    expect(rig.urls.length).toBe(before + 1)
+    expect(rig.urls[before]).toBe('wss://data-stream.binance.vision/stream?streams=btcusdt@kline_1m/ethusdt@kline_1m')
+    expect(rig.stops).toBe(2)
+    expect(getLiveState().connection).toMatchObject({ open: false, host: 'data-api.binance.vision', hostSwitches: 2, dataHostSwitches: 4 })
+  })
+
+  it('stays on a host whose partner does not answer either', async () => {
+    const before = rig.urls.length
+    rig.hosts.probeAnswer = null
+    rig.handlers?.onConnectFailed?.(3)
+    await vi.waitFor(() => expect(rig.hosts.probes).toBe(2))
+    expect(rig.urls.length).toBe(before)
+    expect(rig.stops).toBe(2)
+    expect(getLiveState().connection).toMatchObject({ host: 'data-api.binance.vision', hostSwitches: 2 })
   })
 })

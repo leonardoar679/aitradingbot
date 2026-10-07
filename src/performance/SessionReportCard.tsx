@@ -78,7 +78,7 @@ function figures(report: SessionReport): { title: string; lines: string[] }[] {
         `Alerts this session: ${report.alerts.critical} CRITICAL, ${report.alerts.high} HIGH, ${report.alerts.watch} WATCH, ${report.alerts.info} INFO.`,
         report.stream === null
           ? "The stream's log could not be read."
-          : `The stream: ${report.stream.connects} connects and ${report.stream.drops} drops since the app started; ${report.stream.gaps} gaps in the span, ${report.stream.gapSeconds} s in all, the longest ${report.stream.longestGapSeconds} s.`
+          : `The stream: ${report.stream.connects} connects and ${report.stream.drops} drops since the app started; ${report.stream.gaps} gaps in the span, ${report.stream.gapSeconds} s in all, the longest ${report.stream.longestGapSeconds} s. It is on ${report.stream.host ?? 'no host yet'}; it moved host ${report.stream.hostSwitches} ${report.stream.hostSwitches === 1 ? 'time' : 'times'} since the app started, and the data host moved ${report.stream.dataHostSwitches}.`
       ]
     }
   ]

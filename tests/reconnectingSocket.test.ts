@@ -129,4 +129,37 @@ describe('createReconnectingSocket', () => {
     await wait(1800)
     expect(connections).toBe(seen)
   })
+
+  it(
+    'says each connect that failed, counting them in a row, and counts again from one after an open',
+    async () => {
+      // A port with nothing listening: a server is started for its number and closed again.
+      const { server, url } = await startServer()
+      const port = (server.address() as { port: number }).port
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+      const failed: number[] = []
+      track(createReconnectingSocket(url, { onMessage: () => {}, onConnectFailed: (consecutive) => failed.push(consecutive) }))
+
+      // 1, 2, 3: a dead host, which a caller can tell from a dropped link by the count.
+      expect(await waitFor(() => failed.length >= 3, 9000)).toBe(true)
+      expect(failed.slice(0, 3)).toEqual([1, 2, 3])
+
+      // The host comes back: the socket opens, and the count is forgotten with it. It is then
+      // dropped and the host is gone again, and the next failed connect is the first of a new run.
+      const again = new WebSocketServer({ port })
+      servers.push(again)
+      await new Promise<void>((resolve) => again.once('listening', resolve))
+      let opened = 0
+      again.on('connection', (ws: WsSocket) => {
+        opened += 1
+        ws.close()
+        again.close()
+      })
+      expect(await waitFor(() => opened >= 1, 20000)).toBe(true)
+      const seen = failed.length
+      expect(await waitFor(() => failed.length > seen, 9000)).toBe(true)
+      expect(failed[seen]).toBe(1)
+    },
+    40_000
+  )
 })

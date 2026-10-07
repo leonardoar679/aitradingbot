@@ -70,6 +70,12 @@ export interface LiveConnection {
   /** Stretches with no message for more than a minute while streams were wanted, oldest first:
    * from and to, in seconds. The last may still be open (`to` null). */
   gaps: { from: number; to: number | null }[]
+  /** The data host the socket is on, by name; null before one is opened. */
+  host: string | null
+  /** Times the socket was moved to another host because it could not connect. */
+  hostSwitches: number
+  /** Times the data host for REST requests moved, in the main process, since the app started. */
+  dataHostSwitches: number
 }
 
 export interface LiveState {
@@ -83,7 +89,7 @@ export interface LiveState {
 }
 
 export function emptyLiveState(): LiveState {
-  return { books: {}, depth: {}, minutes: {}, btcMinutes: [], connection: { open: false, connects: 0, drops: 0, lastMessageAt: null, gaps: [] } }
+  return { books: {}, depth: {}, minutes: {}, btcMinutes: [], connection: { open: false, connects: 0, drops: 0, lastMessageAt: null, gaps: [], host: null, hostSwitches: 0, dataHostSwitches: 0 } }
 }
 
 export function bookSpreadPct(book: Pick<LiveBook, 'bid' | 'ask'>): number | null {

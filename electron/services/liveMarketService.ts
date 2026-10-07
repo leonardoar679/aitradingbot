@@ -11,7 +11,7 @@ import {
   type LiveMinute,
   type LiveState
 } from '../../shared/liveMarket'
-import { fetchMarketData, resolveEndpoint } from './exchanges/binance'
+import { currentDataEndpoint, dataHostSwitchCount, fetchMarketData, onDataHostChange, probeDataPartner, resolveEndpoint, type RestEndpoint } from './exchanges/binance'
 import { createReconnectingSocket } from './exchanges/reconnectingSocket'
 import { scanSourceFor } from './marketService'
 import { getSettings } from './settingsService'
@@ -30,6 +30,14 @@ import { getSettings } from './settingsService'
 // IT READS PUBLIC DATA FROM THE DATA HOST, never the one that trades, and holds no key. It asks no
 // model and places nothing. What it holds is in memory, and what the window is sent of it is sent
 // at most four times a second.
+//
+// THE HOST RULE: a healthy socket stays where it is, whatever REST does; a socket that cannot connect
+// three times in a row goes to the host that answers. In a 24-hour run on 7 October 2026 the socket
+// was opened on binance.com at launch and kept dialling it every fifteen seconds after its name had
+// stopped resolving to Binance, while REST had long moved to the mirror. Now the host REST is on is
+// looked at first, then the partner is probed once; a move closes the socket here and opens one
+// there, and what is shown is asked for again as it opens. A closed socket also follows a REST move at
+// once, since it has nothing to lose by it.
 
 const ALWAYS_MINUTES = ['BTCUSDT', 'ETHUSDT']
 const BTC_MINUTES_KEPT = 130
@@ -39,6 +47,9 @@ const GAP_SECONDS = 60
 const GAPS_KEPT = 50
 const OWN_TRADES_REFRESH_MS = 60_000
 const REST_TIMEOUT_MS = 6_000
+/** Connects in a row the socket may fail before its host is looked at again. Each takes the connect
+ * timeout on a dead host, so this is about a minute. */
+const SOCKET_FAILS_BEFORE_RECHECK = 3
 const SYMBOL = /^[A-Z0-9]{2,30}$/
 
 let state: LiveState = emptyLiveState()
@@ -46,6 +57,9 @@ let interest: string[] = []
 let ownTrades: string[] = []
 let socket: WebSocket | null = null
 let stopSocket: (() => void) | null = null
+/** The data host the socket is on, by name. */
+let socketHost: string | null = null
+let rechecking = false
 let subscribed = new Set<string>()
 let requestId = 0
 let dirty = false
@@ -166,7 +180,23 @@ async function ensureSocket(): Promise<void> {
   if (stopSocket !== null) return
   const endpoint = await resolveEndpoint()
   if (stopSocket !== null) return
+  openSocket(endpoint)
+}
+
+/** An error on the socket in a few words: its code where it has one, else its message. A dead host
+ * raises one every connect, and the whole aggregate with its addresses is not news the second time. */
+function describeError(error: Error): string {
+  const code = (error as { code?: unknown }).code
+  return typeof code === 'string' ? `${code} ${error.message}`.trim() : error.message || error.name
+}
+
+/** One reconnecting socket on `endpoint`, for the streams always wanted; the rest are asked for as
+ * it opens. The host rule (above) is kept here and in recheckHost. */
+function openSocket(endpoint: RestEndpoint): void {
   const base = endpoint.wsBase.replace(/\/ws$/, '')
+  socketHost = endpoint.name
+  state = { ...state, connection: { ...state.connection, host: endpoint.name } }
+  dirty = true
   stopSocket = createReconnectingSocket(`${base}/stream?streams=${ALWAYS_MINUTES.map((symbol) => `${lower(symbol)}@kline_1m`).join('/')}`, {
     onOpen: (current) => {
       socket = current
@@ -181,8 +211,43 @@ async function ensureSocket(): Promise<void> {
       syncStreams()
     },
     onMessage: handle,
-    onError: (error) => console.error(`${endpoint.name} live market socket error:`, error)
+    onError: (error) => console.error(`${endpoint.name} live market socket error: ${describeError(error)}`),
+    onConnectFailed: (consecutive) => {
+      if (consecutive >= SOCKET_FAILS_BEFORE_RECHECK) void recheckHost(endpoint)
+    }
   })
+}
+
+/** The socket on `from` cannot connect: is there a host that answers? First the data host as REST
+ * has it now, which may have moved already; else the partner, probed once. One look at a time; the
+ * socket that asked is still the one on `from`, since a socket stopped by a move asks nothing more,
+ * and the listener above does not move it while this look is on. */
+async function recheckHost(from: RestEndpoint): Promise<void> {
+  if (rechecking) return
+  rechecking = true
+  try {
+    const current = currentDataEndpoint()
+    const next = current !== null && current.name !== from.name ? current : await probeDataPartner('the live market socket could not connect')
+    if (next !== null) moveSocket(next, 'its socket could not connect')
+  } catch (error) {
+    console.warn('Live market: the host could not be looked at again:', error)
+  } finally {
+    rechecking = false
+  }
+}
+
+/** Closes the socket where it is and opens one on `to`. A move is not a drop; what is wanted is
+ * asked for again as the new socket opens, so nothing shown is lost. */
+function moveSocket(to: RestEndpoint, why: string): void {
+  const from = socketHost ?? 'nowhere'
+  const stop = stopSocket
+  stopSocket = null
+  socket = null
+  subscribed = new Set()
+  stop?.()
+  state = { ...state, connection: { ...state.connection, open: false, hostSwitches: state.connection.hostSwitches + 1 } }
+  console.warn(`Live market: the socket moves from ${from} to ${to.name}: ${why}.`)
+  openSocket(to)
 }
 
 /** Watches for a stream that has gone quiet: a minute with no message while streams are wanted is
@@ -251,6 +316,13 @@ export async function liveBook(symbol: unknown): Promise<LiveBook | null> {
 export function startLiveMarket(): void {
   if (started) return
   started = true
+  onDataHostChange((to) => {
+    state = { ...state, connection: { ...state.connection, dataHostSwitches: dataHostSwitchCount() } }
+    dirty = true
+    // A closed socket, failing to connect, follows at once; one that is open and receiving stays.
+    // While its host is being looked at (recheckHost), that look makes the move, with its reason.
+    if (!rechecking && socket === null && stopSocket !== null && to.name !== socketHost) moveSocket(to, 'the data host moved while its socket was closed')
+  })
   void ensureSocket().catch((error) => console.error('Live market failed to start:', error))
   void seedMinutes('BTCUSDT')
   void seedMinutes('ETHUSDT')

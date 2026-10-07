@@ -21,9 +21,9 @@ import { rMultiple } from './paperRisk'
 // answered and valid; and over twelve hours, every recommendation with an outcome, every trade traced
 // to its event, its costs charged, and every story with its link.
 //
-// A GATE THE APP CANNOT MEET IS SHOWN FAILING. The paper engine charges fees and no slippage (only the
-// recommendations' scores charge it), so the twelve-hour slippage gate fails whenever a paper trade
-// closed, and says what slippage would have cost.
+// A GATE THE APP CANNOT MEET IS SHOWN FAILING. A paper trade opened before 6 October 2026 carries no
+// slippage rate (the engine charges one only where the trade carries it), so the twelve-hour slippage
+// gate names such a trade and fails on it, and says what slippage would have cost.
 
 export const SESSION_REPORT_VERSION = 'session-report-v1'
 
@@ -154,8 +154,8 @@ export interface SessionReport {
     signalAgeSec: { median: number | null; max: number | null }
   }
   alerts: Record<AlertSeverity, number>
-  /** Connects and drops are since the app started; gaps are those in the span. */
-  stream: { connects: number; drops: number; gaps: number; gapSeconds: number; longestGapSeconds: number } | null
+  /** Connects, drops and host moves are since the app started; gaps are those in the span. */
+  stream: { connects: number; drops: number; gaps: number; gapSeconds: number; longestGapSeconds: number; host: string | null; hostSwitches: number; dataHostSwitches: number } | null
   gates: ReportGate[]
   /** Whether a twelve-hour gate applies: a span of twelve hours or more. */
   twelveHour: boolean
@@ -336,7 +336,10 @@ export function sessionReportOf(input: SessionReportInput): SessionReport {
           drops: input.connection.drops,
           gaps: gapsIn.length,
           gapSeconds: gapLengths.reduce((sum, length) => sum + length, 0),
-          longestGapSeconds: gapLengths.length === 0 ? 0 : Math.max(...gapLengths)
+          longestGapSeconds: gapLengths.length === 0 ? 0 : Math.max(...gapLengths),
+          host: input.connection.host,
+          hostSwitches: input.connection.hostSwitches,
+          dataHostSwitches: input.connection.dataHostSwitches
         }
 
   const gates: ReportGate[] = []
@@ -677,6 +680,9 @@ export function sessionReportCsv(report: SessionReport): string {
     add('stream', 'drops', report.stream.drops, 'since the app started')
     add('stream', 'gaps', report.stream.gaps)
     add('stream', 'gap seconds', report.stream.gapSeconds)
+    add('stream', 'host', report.stream.host, 'the data host the socket is on')
+    add('stream', 'host switches', report.stream.hostSwitches, 'since the app started: the socket moved to a host that answers')
+    add('stream', 'data host switches', report.stream.dataHostSwitches, 'since the app started: REST moved to its partner')
   }
   for (const entry of report.gates) {
     const applies = !entry.twelveHour || report.twelveHour
