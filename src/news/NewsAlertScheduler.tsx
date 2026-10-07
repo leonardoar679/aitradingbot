@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { btcHourMovePct, crashNotice, crashStep, noticeCoins, noticeSeverity, repeatsNotice, storyNotice, storySeverity } from '../../shared/alerts'
+import { NOTICE_REPEAT_SECONDS, btcHourMovePct, crashNotice, crashStep, noticeCoins, noticeSeverity, repeatsNotice, storyNotice, storySeverity, type NoticedStory } from '../../shared/alerts'
 import { heldPlaces, type Holdings } from '../../shared/newsActions'
 import type { NewsFeedState } from '../../shared/newsFeed'
 import { addAlert } from './alertStore'
@@ -26,8 +26,8 @@ async function readHoldings(): Promise<Holdings> {
  * news feed reads in this session, published within the last half hour, is given a severity
  * (shared/alerts.ts) -- CRITICAL for a hack or delisting of a coin you hold -- and kept for the
  * badge and the banner; WATCH and above also raise a desktop notice, silent at WATCH, and a WATCH
- * notice about coins a notice named in the last six hours is not raised again. Once a minute it also
- * looks at Bitcoin's last hour on the live stream, and a fall of 5% is CRITICAL, told once.
+ * notice that only tells again news a notice told in the last six hours is not raised. Once a minute
+ * it also looks at Bitcoin's last hour on the live stream, and a fall of 5% is CRITICAL, told once.
  *
  * Binance's own announcements are kept here too, but their notice is the news reader's own
  * (src/news/NewsScheduler.tsx), so none is raised for them twice. It reads, and tells; it opens,
@@ -37,8 +37,8 @@ export function NewsAlertScheduler(): null {
     let cancelled = false
     const sessionStart = Math.floor(Date.now() / 1000) - 60
     const handled = new Set<string>()
-    /** When a notice last named each coin. */
-    const toldAt = new Map<string, number>()
+    /** The stories a notice was raised or held back for in the last six hours. */
+    let noticed: NoticedStory[] = []
 
     const look = async (state: NewsFeedState): Promise<void> => {
       const nowSec = Math.floor(Date.now() / 1000)
@@ -60,8 +60,12 @@ export function NewsAlertScheduler(): null {
         const notice = storyNotice(story, severity, places)
         addAlert({ id: story.id, severity, title: notice.title, body: notice.body, at: story.publishedAt, url: story.url })
         const level = noticeSeverity(severity)
-        if (level === null || story.source === 'binance' || cancelled || repeatsNotice(story, severity, toldAt, nowSec)) continue
-        for (const coin of noticeCoins(story)) toldAt.set(coin, nowSec)
+        if (level === null || story.source === 'binance' || cancelled) continue
+        noticed = noticed.filter((entry) => nowSec - entry.at < NOTICE_REPEAT_SECONDS)
+        const repeat = repeatsNotice(story, severity, noticed, nowSec)
+        // Held back or told, it is news told: a third telling is held back against either.
+        noticed.push({ coins: noticeCoins(story), title: story.title, at: nowSec })
+        if (repeat) continue
         void window.api.notify(notice.title, notice.body, level).catch(() => undefined)
       }
     }

@@ -63,26 +63,53 @@ describe('a story', () => {
 })
 
 describe('a notice told again', () => {
-  // One Zcash ETF filing, told by three outlets in their own words over four hours.
-  const zec = { assets: [{ ticker: 'ZEC', relationship: 'DIRECT' as const }] }
+  const story = (title: string, coins: string[], relationship: 'DIRECT' | 'INDIRECT' = 'DIRECT') => ({ title, assets: coins.map((ticker) => ({ ticker, relationship })) })
+  const told = (title: string, coins: string[], secondsAgo: number) => ({ title, coins, at: NOW - secondsAgo })
+  // One Zcash ETF filing, told by three outlets in their own words over four hours (6 October 2026).
+  const BLOCK = 'Winklevoss group seeks to launch Zcash ETF with 0.25% fee, proposed WINK ticker'
+  const DECRYPT = "Another Zcash ETF Is Coming: Winklevoss Twins File for 'WINK'"
+  const COINTELEGRAPH = 'Winklevoss-backed Zcash ETF files with SEC for Nasdaq listing'
+  // Bitcoin news of 7 October 2026 that is not the news below it.
+  const MICA = told('Bitcoin.de trading remains halted as German regulator rejects MiCA application', ['BTC'], 3 * 3600)
+  const INFLOWS = told('Bitcoin ETFs rebound with $119M inflow as Ether extends losses', ['BTC', 'ETH'], 3600)
 
-  it('is held back at watch while every coin it names was named by a notice in the last six hours', () => {
-    // Cointelegraph's, four hours and ten minutes after The Block's.
-    expect(repeatsNotice(zec, 'watch', new Map([['ZEC', NOW - (4 * 3600 + 10 * 60)]]), NOW)).toBe(true)
-    expect(repeatsNotice(zec, 'watch', new Map([['ZEC', NOW - NOTICE_REPEAT_SECONDS + 1]]), NOW)).toBe(true)
-    expect(repeatsNotice(zec, 'watch', new Map([['ZEC', NOW - NOTICE_REPEAT_SECONDS]]), NOW)).toBe(false)
-    expect(repeatsNotice(zec, 'watch', new Map(), NOW)).toBe(false)
-    expect(repeatsNotice(zec, 'watch', new Map([['XMR', NOW - 60]]), NOW)).toBe(false)
+  it('is held back at watch when a story told in the last six hours was the same news about a coin it names', () => {
+    expect(repeatsNotice(story(DECRYPT, ['ZEC']), 'watch', [told(BLOCK, ['ZEC'], 2 * 3600)], NOW)).toBe(true)
+    // Less alike to the first telling than to the second, and other news beside them: one is enough.
+    expect(repeatsNotice(story(COINTELEGRAPH, ['ZEC']), 'watch', [MICA, told(BLOCK, ['ZEC'], 4 * 3600 + 600), told(DECRYPT, ['ZEC'], 2 * 3600 + 600)], NOW)).toBe(true)
+    expect(
+      repeatsNotice(story("Prosecutors Cite Bitcoin Fog Ruling Against Roman Storm's Venue Challenge", ['BTC']), 'watch', [told('DOJ invokes Bitcoin Fog ruling in potential blow to Roman Storm acquittal bid', ['BTC'], 3 * 3600)], NOW)
+    ).toBe(true)
   })
 
-  it('is told at high and critical, with a coin not yet told, and when it names no coin', () => {
-    const told = new Map([['ZEC', NOW - 60]])
-    expect(repeatsNotice(zec, 'high', told, NOW)).toBe(false)
-    expect(repeatsNotice(zec, 'critical', told, NOW)).toBe(false)
-    expect(repeatsNotice({ assets: [...zec.assets, { ticker: 'XMR', relationship: 'DIRECT' }] }, 'watch', told, NOW)).toBe(false)
-    expect(repeatsNotice({ assets: [] }, 'watch', told, NOW)).toBe(false)
-    // A coin only mentioned in passing is not what a notice is about.
-    expect(repeatsNotice({ assets: [{ ticker: 'ZEC', relationship: 'INDIRECT' }] }, 'watch', told, NOW)).toBe(false)
+  it('is told when it is other news about the same coin', () => {
+    expect(repeatsNotice(story('Live updates: Bitcoin slides under $84,000 as $550 million in bets get liquidated', ['BTC']), 'watch', [MICA, INFLOWS], NOW)).toBe(false)
+    expect(repeatsNotice(story('Bitcoin’s recovery stalls just short of rescuing its last underwater cohort', ['BTC']), 'watch', [MICA, INFLOWS], NOW)).toBe(false)
+    // The most alike two different pieces of news on the feeds of 7 October 2026: 0.125.
+    expect(repeatsNotice(story('Bitcoin Falls Asleep, But Privacy Coins Zcash and Monero Are Waking Up', ['BTC']), 'watch', [told("The VIX of bonds is rising but bitcoin and stocks aren't hearing it yet", ['BTC'], 3600)], NOW)).toBe(false)
+  })
+
+  it('is the same news from a title this alike, and not below it', () => {
+    const earlier = [told('Zcash fund filed alpha bravo charlie delta echo foxtrot golf', ['ZEC'], 60)]
+    // Three words in common of twenty: 0.15.
+    expect(repeatsNotice(story('Zcash fund filed hotel india juliet kilo lima mike november oscar papa quebec', ['ZEC']), 'watch', earlier, NOW)).toBe(true)
+    // Two of twenty-one.
+    expect(repeatsNotice(story('Zcash fund hotel india juliet kilo lima mike november oscar papa quebec romeo', ['ZEC']), 'watch', earlier, NOW)).toBe(false)
+  })
+
+  it('is held back only within six hours, and only about a coin in common named as its subject', () => {
+    expect(repeatsNotice(story(DECRYPT, ['ZEC']), 'watch', [told(BLOCK, ['ZEC'], NOTICE_REPEAT_SECONDS - 1)], NOW)).toBe(true)
+    expect(repeatsNotice(story(DECRYPT, ['ZEC']), 'watch', [told(BLOCK, ['ZEC'], NOTICE_REPEAT_SECONDS)], NOW)).toBe(false)
+    expect(repeatsNotice(story(DECRYPT, ['ZEC']), 'watch', [told(BLOCK, ['XMR'], 60)], NOW)).toBe(false)
+    expect(repeatsNotice(story(DECRYPT, ['ZEC'], 'INDIRECT'), 'watch', [told(BLOCK, ['ZEC'], 60)], NOW)).toBe(false)
+    expect(repeatsNotice(story(DECRYPT, []), 'watch', [told(BLOCK, ['ZEC'], 60)], NOW)).toBe(false)
+  })
+
+  it('is told at high and critical, however much it repeats', () => {
+    const earlier = [told(BLOCK, ['ZEC'], 60)]
+    expect(repeatsNotice(story(BLOCK, ['ZEC']), 'high', earlier, NOW)).toBe(false)
+    expect(repeatsNotice(story(BLOCK, ['ZEC']), 'critical', earlier, NOW)).toBe(false)
+    expect(repeatsNotice(story(BLOCK, ['ZEC']), 'watch', earlier, NOW)).toBe(true)
   })
 
   it('is about the coins a story names as its subject', () => {

@@ -286,11 +286,19 @@ within the last half hour:
 
 What each raises:
 - **INFO** stays on its page.
-- **WATCH** raises a silent desktop notice, but not a second one for a coin a notice named in the
-  last six hours. Outlets tell the same news in their own words, and stories are merged only when
-  their titles are close. In a twelve-hour run on 6 October 2026, one Zcash ETF filing raised three
-  notices over four hours, from The Block, Decrypt and Cointelegraph. Every story is still kept on
-  its page.
+- **WATCH** raises a silent desktop notice, but not for news already told. Outlets tell the same
+  news in their own words, and stories are merged only when their titles are close. In a twelve-hour
+  run on 6 October 2026, one Zcash ETF filing raised three notices over four hours, from The Block,
+  Decrypt and Cointelegraph. A WATCH notice is held back when a story told in the last six hours named
+  a coin it names and has a title at least 0.15 alike. Other news about the same coin is still told.
+  - **Why 0.15:** on the four feeds of 7 October 2026, 15 pairs of stories naming a coin in common
+    came to that or more. 13 were one piece of news told again, and 2 were Bitcoin falling under
+    $84,000 twice, six hours apart, which the rule takes for one fall.
+  - **Below it:** the most alike pair of different news came to 0.125.
+  - **Over those two days:** the rule held back the second and third Zcash tellings and a second
+    telling of a court ruling, and told 12 notices. One notice per coin per six hours, the rule
+    before it, told 9, and held back three different Bitcoin stories.
+  - Every story is still kept on its page.
 - **HIGH and CRITICAL** raise one with sound, where sound is on under Settings' Essentials, every
   time.
 - **CRITICAL** also stays as a red banner above every page until it is dismissed.

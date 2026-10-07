@@ -1,5 +1,5 @@
 import type { AlertSettings, Candle } from './ipc'
-import { SAME_STORY_SECONDS, describeEventType, type ReactionVerdict, type ReadStory } from './newsFeed'
+import { SAME_STORY_SECONDS, describeEventType, titleSimilarity, type ReactionVerdict, type ReadStory } from './newsFeed'
 
 // THE APP'S DESKTOP NOTICES: WHETHER THEY ARE RAISED AT ALL, WITH SOUND, AND HOW LOUD EACH IS.
 //
@@ -17,12 +17,13 @@ import { SAME_STORY_SECONDS, describeEventType, type ReactionVerdict, type ReadS
 // INFO is shown on its page only; WATCH raises a silent notice; HIGH and CRITICAL a notice with
 // sound, where sound is on; CRITICAL also stays as a banner until it is dismissed.
 //
-// A WATCH NOTICE IS NOT TOLD TWICE FOR ONE COIN. Outlets tell the same news in their own words,
-// hours apart, and a story is one story only when its title is close to another's: in a twelve-hour
-// run of the app on 6 October 2026 one Zcash ETF filing raised three notices, from The Block,
-// Decrypt and Cointelegraph, over four hours. So a WATCH notice is held back when every coin it
-// names was named by a notice within the last NOTICE_REPEAT_SECONDS. It is still kept on its page,
-// and HIGH and CRITICAL are always told.
+// THE SAME NEWS IS NOT TOLD TWICE AT WATCH. Outlets tell the same news in their own words, hours
+// apart, and a story is folded into another only when their titles are close: in a twelve-hour run of
+// the app on 6 October 2026 one Zcash ETF filing raised three notices, from The Block, Decrypt and
+// Cointelegraph, over four hours. So a WATCH notice is held back when a story told or held back in the
+// last NOTICE_REPEAT_SECONDS named a coin it names and has a title at least SAME_NEWS_SIMILARITY
+// alike. Other news about the same coin is told. The story is still kept on its page, and HIGH and
+// CRITICAL are always told.
 
 export const DEFAULT_ALERTS: AlertSettings = { enabled: true, sound: true }
 
@@ -85,17 +86,37 @@ export function noticeCoins(story: Pick<ReadStory, 'assets'>): string[] {
   return story.assets.filter((asset) => asset.relationship === 'DIRECT').map((asset) => asset.ticker)
 }
 
-/** How long a coin a notice named is not named again by a WATCH notice: the six hours inside which
- * close titles are one story (shared/newsFeed.ts). */
+/** How long a story told stays one that the same news is held back against: the six hours inside
+ * which close titles are one story (shared/newsFeed.ts). */
 export const NOTICE_REPEAT_SECONDS = SAME_STORY_SECONDS
 
-/** Whether a story's notice would only repeat what one already told: a WATCH notice whose coins were
- * every one named by a notice less than NOTICE_REPEAT_SECONDS ago (`toldAt`, by coin). HIGH and
- * CRITICAL are never held back, nor is a story naming no coin. */
-export function repeatsNotice(story: Pick<ReadStory, 'assets'>, severity: AlertSeverity, toldAt: ReadonlyMap<string, number>, nowSec: number): boolean {
+/** How alike two titles about a coin in common must be (titleSimilarity) to be the same news: well
+ * under the line a story is folded at, because the coin is already shared. Measured on the four
+ * feeds on 7 October 2026, on the 113 pairs of stories from different outlets that named a coin in
+ * common within six hours. Fifteen came to 0.15 or more. Thirteen of them were one piece of news told
+ * again: a Zcash ETF filing at 0.20 to 0.29, a Bitcoin Fog ruling at 0.31, a layer 2 shutting down at
+ * 0.29 to 0.73. The other two were Bitcoin going under $84,000 twice, six hours apart, under headlines
+ * 0.19 and 0.24 alike, and the rule takes the second fall for the first. Below 0.15, the most alike
+ * two different pieces of news came to 0.125, and one piece of news told by two outlets, Bitmine's,
+ * came to 0.11 and is told twice. */
+export const SAME_NEWS_SIMILARITY = 0.15
+
+/** A story a notice was raised or held back for: its coins, its title, and when. */
+export interface NoticedStory {
+  coins: readonly string[]
+  title: string
+  at: number
+}
+
+/** Whether a story's notice would only repeat news already told: a WATCH notice for which a story in
+ * `noticed` less than NOTICE_REPEAT_SECONDS old names a coin it names and has a title at least
+ * SAME_NEWS_SIMILARITY alike. HIGH and CRITICAL are never held back. */
+export function repeatsNotice(story: Pick<ReadStory, 'assets' | 'title'>, severity: AlertSeverity, noticed: readonly NoticedStory[], nowSec: number): boolean {
   if (severity !== 'watch') return false
   const coins = noticeCoins(story)
-  return coins.length > 0 && coins.every((coin) => nowSec - (toldAt.get(coin) ?? -Infinity) < NOTICE_REPEAT_SECONDS)
+  return noticed.some(
+    (earlier) => nowSec - earlier.at < NOTICE_REPEAT_SECONDS && earlier.coins.some((coin) => coins.includes(coin)) && titleSimilarity(earlier.title, story.title) >= SAME_NEWS_SIMILARITY
+  )
 }
 
 /** What the desktop is told of a story. */
