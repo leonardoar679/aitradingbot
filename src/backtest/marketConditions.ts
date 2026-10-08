@@ -1,5 +1,6 @@
 import type { Candle } from '../../shared/ipc'
 import { wilderAdx } from '../../shared/indicators'
+import type { StrategyTradeExpectation } from '../../shared/strategyHealth'
 
 // A pre-flight reading of the market, for the question "should I run this strategy this month?"
 //
@@ -55,6 +56,10 @@ export interface StrategyExpectation {
   baselineMeanPct: number
   /** Mean month among those opening with ADX(14) <= 20. */
   quietMeanPct: number
+  /** What the strategy made a trade on the same six held-out symbols over the same months, one
+   * continuous run a symbol at this interval, through the shipped engine (research/tradeexpect.ts,
+   * 8 October 2026): what a bot's dry run is set against (shared/strategyHealth.ts). */
+  trades: StrategyTradeExpectation
 }
 
 /** Produced by research/expect.ts, which computes them by calling `readMarketConditions` below --
@@ -67,9 +72,9 @@ export interface StrategyExpectation {
  * is defined. An earlier version took the baseline over a wider set than the quiet subset, which
  * compares two different populations and moves the baseline by whatever the extra months did. */
 export const MEASURED_EXPECTATIONS: StrategyExpectation[] = [
-  { strategyId: 'trend-regime-ensemble', interval: '4h', baselineMeanPct: 5.99, quietMeanPct: 10.7 },
-  { strategyId: 'short-term-channel', interval: '15m', baselineMeanPct: 5.16, quietMeanPct: 5.49 },
-  { strategyId: 'short-term-channel-regime', interval: '15m', baselineMeanPct: 5.2, quietMeanPct: 7.22 }
+  { strategyId: 'trend-regime-ensemble', interval: '4h', baselineMeanPct: 5.99, quietMeanPct: 10.7, trades: { trades: 322, profitFactor: 4.37, winRatePct: 24.5, meanHoldHours: 409 } },
+  { strategyId: 'short-term-channel', interval: '15m', baselineMeanPct: 5.16, quietMeanPct: 5.49, trades: { trades: 1039, profitFactor: 1.8, winRatePct: 33.5, meanHoldHours: 106 } },
+  { strategyId: 'short-term-channel-regime', interval: '15m', baselineMeanPct: 5.2, quietMeanPct: 7.22, trades: { trades: 583, profitFactor: 2.34, winRatePct: 35.2, meanHoldHours: 114 } }
 ]
 
 export interface MarketConditions {

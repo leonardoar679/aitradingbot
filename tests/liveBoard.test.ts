@@ -6,7 +6,7 @@ import type { AiSignalDetail } from '../shared/aiSignal'
 import type { Candle } from '../shared/ipc'
 import type { MarketEvent } from '../shared/marketEvent'
 import { matchesMarketEventFilter, type MarketEventFilter } from '../shared/marketScanner'
-import { LIVE_BOARD_DAYS, WITH_REVIEWER, clearLiveBars, loadLiveBars, readLiveAnswers, withReviewer, type LiveBoardDeps } from '../src/agents/liveBoard'
+import { LABEL_GAP_SEC, LIVE_BOARD_DAYS, WITH_REVIEWER, clearLiveBars, clearLiveLabels, loadLiveBars, loadLiveLabels, mergeMinuteRanges, readLiveAnswers, withReviewer, type LiveBoardDeps } from '../src/agents/liveBoard'
 
 // The leaderboard of what the watch asked live: which answers it reads, how they are joined to
 // their events, and the candles that score them.
@@ -114,7 +114,10 @@ function deps(calls: AiCallRecord[], events: MarketEvent[]): { deps: LiveBoardDe
   }
 }
 
-beforeEach(() => clearLiveBars())
+beforeEach(() => {
+  clearLiveBars()
+  clearLiveLabels()
+})
 
 describe('the watch with and without the reviewer', () => {
   const review = (eventId: string, verdict: 'APPROVE' | 'REJECT'): AiCallRecord =>
@@ -285,5 +288,70 @@ describe('loadLiveBars', () => {
     fail = false
     expect((await loadLiveBars(events, NOW, fetchCandles))[events[0].id]).toHaveLength(120)
     expect(fetches).toHaveLength(2)
+  })
+})
+
+describe("Bitcoin's four hours at each event", () => {
+  it('reads one stretch of minutes for events whose four hours touch, and another for one apart', () => {
+    expect(mergeMinuteRanges([T, T + 3600, T + 12 * 3600])).toEqual([
+      { startSec: T - 241 * 60, endSec: T + 3600 },
+      { startSec: T + 12 * 3600 - 241 * 60, endSec: T + 12 * 3600 }
+    ])
+    expect(mergeMinuteRanges([T + 3600, T, T])).toEqual([{ startSec: T - 241 * 60, endSec: T + 3600 }])
+    // Six hours apart, the second's four hours begin within the gap of the first's end: one stretch. Nine hours apart: two.
+    expect(mergeMinuteRanges([T, T + 6 * 3600])).toHaveLength(1)
+    expect(mergeMinuteRanges([T, T + 9 * 3600])).toHaveLength(2)
+    expect(mergeMinuteRanges([])).toEqual([])
+    expect(LABEL_GAP_SEC).toBe(4 * 3600)
+  })
+
+  it("labels each event by Bitcoin's four hours before it and by the move's company, from Bitcoin's own minutes, kept once read", async () => {
+    // Bitcoin rises two percent over the four hours before T, then holds: rising at T, flat eight hours on.
+    const price = (sec: number): number => 100 * (1 + 0.02 * Math.min(1, Math.max(0, (sec - (T - 4 * 3600)) / (4 * 3600))))
+    const fetches: [string, number, number][] = []
+    const fetchCandles: LiveBoardDeps['fetchCandles'] = async (_exchange, symbol, _interval, startSec, endSec) => {
+      fetches.push([symbol, startSec, endSec])
+      const bars: Candle[] = []
+      for (let time = startSec; time <= endSec; time += 60) bars.push({ time, open: price(time - 60), high: price(time), low: price(time - 60), close: price(time), volume: 1 })
+      return bars
+    }
+    const first = event('SOLUSDT', T)
+    const later = { ...event('ETHUSDT', T + 8 * 3600), returnsPct: { m1: 0, m5: 0, m15: 0.2, h1: 0.2, h4: 0.2 } }
+    const apart = event('ADAUSDT', T + 20 * 3600)
+    const labels = await loadLiveLabels([first, later, apart], fetchCandles)
+    // Two stretches: the first two events' four hours touch, the third's do not.
+    expect(fetches.map(([symbol]) => symbol)).toEqual(['BTCUSDT', 'BTCUSDT'])
+    expect(fetches[0].slice(1)).toEqual([T - 241 * 60, T + 8 * 3600])
+    expect(labels[first.id]).toEqual({ btcRegime: 'rising', company: 'on its own' })
+    expect(labels[later.id]).toEqual({ btcRegime: 'flat', company: 'on its own' })
+    expect(labels[apart.id]).toEqual({ btcRegime: 'flat', company: 'on its own' })
+    // Read again: the labels are kept, and nothing is fetched.
+    expect(await loadLiveLabels([first, later, apart], fetchCandles)).toEqual(labels)
+    expect(fetches).toHaveLength(2)
+  })
+
+  it('leaves an event unlabelled when its minutes cannot be read, and reads it again next time', async () => {
+    let fail = true
+    const fetches: string[] = []
+    const fetchCandles: LiveBoardDeps['fetchCandles'] = async (_exchange, symbol, _interval, startSec, endSec) => {
+      fetches.push(symbol)
+      if (fail) throw new Error('the exchange did not answer')
+      const bars: Candle[] = []
+      for (let time = startSec; time <= endSec; time += 60) bars.push({ time, open: 100, high: 100, low: 100, close: 100, volume: 1 })
+      return bars
+    }
+    const one = event('SOLUSDT', T)
+    expect(await loadLiveLabels([one], fetchCandles)).toEqual({})
+    fail = false
+    expect(await loadLiveLabels([one], fetchCandles)).toEqual({ [one.id]: { btcRegime: 'flat', company: 'on its own' } })
+    expect(fetches).toHaveLength(2)
+    // Minutes with a hole in them say nothing: no label, not a wrong one.
+    const holed: LiveBoardDeps['fetchCandles'] = async (_exchange, _symbol, _interval, startSec, endSec) => {
+      const bars: Candle[] = []
+      for (let time = startSec; time <= endSec; time += 60) if (time !== T - 600) bars.push({ time, open: 100, high: 100, low: 100, close: 100, volume: 1 })
+      return bars
+    }
+    const two = event('ETHUSDT', T)
+    expect(await loadLiveLabels([two], holed)).toEqual({})
   })
 })

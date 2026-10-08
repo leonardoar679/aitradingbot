@@ -1,9 +1,10 @@
 import { AI_ADDITION_PROMPT_VERSIONS, reviewsOf, type ReviewVerdict } from '../../shared/aiAdditions'
-import { EVENT_BENCHMARK_SETTLE_SEC, type EventBenchmarkAnswers } from '../../shared/aiEventBenchmark'
+import { EVENT_BENCHMARK_SETTLE_SEC, type EventBenchmarkAnswers, type EventLabels } from '../../shared/aiEventBenchmark'
+import { MARKET_BARS_1M, MARKET_REFERENCE_SYMBOLS, btcRegimeOf, eventCompanyOf, referenceReturns } from '../../shared/aiEventMarket'
 import type { AiCallFilter, AiCallPage } from '../../shared/aiLedger'
 import { AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS, isActionableOpportunity } from '../../shared/aiOpportunity'
 import type { AiSignalDecision } from '../../shared/aiSignal'
-import type { Candle } from '../../shared/ipc'
+import type { Candle, Exchange } from '../../shared/ipc'
 import type { MarketEvent } from '../../shared/marketEvent'
 import type { MarketEventFilter, MarketEventPage } from '../../shared/marketScanner'
 import { loadOutcomeBars } from './eventBenchmark'
@@ -144,4 +145,83 @@ export async function loadLiveBars(
 /** Test seam. */
 export function clearLiveBars(): void {
   settledBars.clear()
+}
+
+// BITCOIN'S FOUR HOURS AT EACH EVENT, for the cuts by regime and by the move's company
+// (shared/aiEventMarket.ts). The benchmark works these out from the reference candles of each
+// event's question; an event the watch asked about live has no question on file, so they are read
+// here from Bitcoin's minutes before it: the same rules on the same minutes, so a cut on the live
+// board or the registry is the benchmark's cut. One request a stretch of events: the four hours
+// each one needs are merged where they touch, and a label once worked out is kept, as the candles are.
+
+/** How close two events' stretches of minutes have to be to be read in one request. */
+export const LABEL_GAP_SEC = 4 * 3600
+
+const settledLabels = new Map<string, EventLabels>()
+
+/** The stretches of minutes to read for events at `times`: each needs `minutes` before it, and
+ * stretches within `gapSec` of each other are one. Oldest first. */
+export function mergeMinuteRanges(times: readonly number[], minutes = MARKET_BARS_1M, gapSec = LABEL_GAP_SEC): { startSec: number; endSec: number }[] {
+  const out: { startSec: number; endSec: number }[] = []
+  for (const time of [...new Set(times)].sort((a, b) => a - b)) {
+    const startSec = time - minutes * 60
+    const last = out[out.length - 1]
+    if (last !== undefined && startSec <= last.endSec + gapSec) last.endSec = Math.max(last.endSec, time)
+    else out.push({ startSec, endSec: time })
+  }
+  return out
+}
+
+/** Bitcoin's regime and the move's company at each event, by event id, from Bitcoin's minutes on
+ * the event's own exchange. An event whose minutes could not be read, or do not run unbroken to
+ * the minute before it, has no label and is cut as "not known". */
+export async function loadLiveLabels(
+  events: MarketEvent[],
+  fetchCandles: CandleFetch,
+  options: { shouldStop?: () => boolean; onProgress?: (done: number, total: number) => void } = {}
+): Promise<Record<string, EventLabels>> {
+  const labels: Record<string, EventLabels> = {}
+  const toRead = new Map<Exchange, MarketEvent[]>()
+  for (const event of events) {
+    const held = settledLabels.get(event.id)
+    if (held !== undefined) labels[event.id] = held
+    else toRead.set(event.exchange, [...(toRead.get(event.exchange) ?? []), event])
+  }
+  const ranges = [...toRead.entries()].flatMap(([exchange, own]) => mergeMinuteRanges(own.map((event) => event.time)).map((range) => ({ exchange, ...range })))
+  const minutes = new Map<Exchange, Map<number, Candle>>()
+  let done = 0
+  for (const range of ranges) {
+    if (options.shouldStop?.()) return labels
+    try {
+      const bars = await fetchCandles(range.exchange, MARKET_REFERENCE_SYMBOLS.btc, '1m', range.startSec, range.endSec)
+      const held = minutes.get(range.exchange) ?? new Map<number, Candle>()
+      for (const bar of bars) held.set(bar.time, bar)
+      minutes.set(range.exchange, held)
+    } catch {
+      // The events in this stretch stay unlabelled, and the next look reads them again.
+    }
+    options.onProgress?.(++done, ranges.length)
+  }
+  for (const [exchange, own] of toRead) {
+    const held = minutes.get(exchange)
+    if (held === undefined) continue
+    for (const event of own) {
+      const candles1m: Candle[] = []
+      for (let time = event.time - MARKET_BARS_1M * 60; time < event.time; time += 60) {
+        const bar = held.get(time)
+        if (bar !== undefined) candles1m.push(bar)
+      }
+      const btc = referenceReturns({ candles1m, candles15m: [] }, event.time)
+      if (btc === null) continue
+      const label: EventLabels = { btcRegime: btcRegimeOf({ btc }), company: eventCompanyOf(event.returnsPct.m15, { btc }) }
+      labels[event.id] = label
+      settledLabels.set(event.id, label)
+    }
+  }
+  return labels
+}
+
+/** Test seam. */
+export function clearLiveLabels(): void {
+  settledLabels.clear()
 }

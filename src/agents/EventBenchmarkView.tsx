@@ -34,6 +34,7 @@ import type { StoryMark } from '../../shared/newsFeed'
 import { describeError } from '../utils/ipcError'
 import { buttonStyle, cellStyle, headCellStyle, inputStyle, noteStyle } from './agentStyles'
 import { BENCHMARK_CONCURRENCY, runBenchmark } from './benchmark'
+import { rememberBenchmark } from './benchmarkMemory'
 import {
   buildEventDataset,
   datasetForQuestion,
@@ -318,6 +319,10 @@ export function EventBenchmarkView(): React.JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `models` is derived from `peek`
     [dataset, peek, answers, bars, quant]
   )
+  // The registry's promotion checklist sets the live board's sign against the last benchmark scored.
+  useEffect(() => {
+    if (summary !== null) rememberBenchmark(summary.models, Math.floor(Date.now() / 1000))
+  }, [summary])
   const news = useMemo(() => (dataset === null || marks === null ? null : eventNewsOf(dataset.events, marks)), [dataset, marks])
   const backtests = useMemo(() => (quant === null ? null : quantBacktests(quant.data, quant.window, Math.floor(Date.now() / 1000))), [quant])
   // Each model under each question, on the events every one of them answered both ways.

@@ -128,20 +128,25 @@ export function systemFailureNotice(what: 'scanner' | 'stream' | 'feed' | 'ai-ke
   return { title: titles[what], body: `${detail} Nothing was placed; what is open keeps its stops.`, extra: { kind: 'SYSTEM_FAILURE', thread: what, severity: 'high', threadSeconds: 3600 } }
 }
 
-/** A breaker tripped: the AI budget, a model rested, the day's live loss, the exchange's health. */
-export function breakerNotice(what: 'ai-budget' | 'model' | 'live-loss' | 'health' | 'health-ok', detail: string, thread: string = what): Notice {
+/** A breaker tripped: the AI budget, a model rested, the day's live loss, the exchange's health;
+ * and, since 8 October 2026, a model or a strategy whose record has degraded (shared/modelHealth.ts,
+ * shared/strategyHealth.ts), told once a day on its own thread and switching nothing off. */
+export function breakerNotice(what: 'ai-budget' | 'model' | 'live-loss' | 'health' | 'health-ok' | 'degraded' | 'strategy', detail: string, thread: string = what): Notice {
   const titles = {
     'ai-budget': "Today's AI budget is spent",
     model: 'A model is rested for the day',
     'live-loss': 'Live trading disarmed: the daily loss limit',
     health: 'LIVE TRADING PAUSED',
-    'health-ok': 'Live trading resumed'
+    'health-ok': 'Live trading resumed',
+    degraded: 'A model has degraded',
+    strategy: 'A strategy is not doing what was measured'
   }
   const severity: AlertSeverity = what === 'health-ok' ? 'watch' : 'high'
+  const daily = what === 'model' || what === 'ai-budget' || what === 'degraded' || what === 'strategy'
   return {
     title: titles[what],
     body: detail,
-    extra: { kind: 'CIRCUIT_BREAKER', thread, severity: severity === 'watch' ? 'watch' : 'high', threadSeconds: what === 'model' || what === 'ai-budget' ? 86_400 : 1800 }
+    extra: { kind: 'CIRCUIT_BREAKER', thread, severity: severity === 'watch' ? 'watch' : 'high', threadSeconds: daily ? 86_400 : 1800 }
   }
 }
 

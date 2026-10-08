@@ -1,3 +1,4 @@
+import { useEffect, useMemo } from 'react'
 import { Bot as BotIcon, Archive } from 'lucide-react'
 import { EXCHANGES } from '../../shared/ipc'
 import { useDryRun, summarizePaperTrades, classifyBotOpenPosition } from './useDryRun'
@@ -17,6 +18,9 @@ import { useNowSec } from '../utils/useNowSec'
 import { describeGptCadence } from '../../shared/aiSignal'
 import { formatQuotePrice } from '../utils/formatCurrency'
 import { netUnrealizedPct } from '../../shared/fees'
+import { breakerNotice } from '../../shared/notices'
+import { describeStrategyHealth, strategyHealth } from '../../shared/strategyHealth'
+import { MEASURED_EXPECTATIONS } from '../backtest/marketConditions'
 
 interface BotCardProps {
   bot: Bot
@@ -56,6 +60,18 @@ function DryRunPanel({ bot, onPrepareOrder }: { bot: Bot; onPrepareOrder?: (prop
   // poll, so the card keeps time while there is a call to offer.
   const nowSec = useNowSec(aiCall !== null && aiCall.entered)
   const proposal = botAiProposal(bot, aiCall, nowSec)
+  // The strategy's health on this pair (shared/strategyHealth.ts): its last thirty closed paper
+  // trades against what the strategy made a trade where it was measured. Worked out from the dry
+  // run's own trades; a flag here, and one notice a day. The bot keeps running: a person stops it.
+  const expectation = MEASURED_EXPECTATIONS.find((entry) => entry.strategyId === bot.strategyId)?.trades ?? null
+  const health = useMemo(() => strategyHealth(summarizePaperTrades(result?.trades ?? [], bot.enabledAt).paperTrades, expectation), [result, bot.enabledAt, expectation])
+  const degradedText = health.verdict === 'degraded' ? health.reasons.join('; ') : null
+  useEffect(() => {
+    if (degradedText === null) return
+    const notice = breakerNotice('strategy', `${bot.name}: ${degradedText}. It keeps running on paper; stop it under Strategies › Active Runs if that is what you want.`, `strategy:${bot.id}`)
+    // A desktop that cannot show it is not a reason to fail the poll that read the trades.
+    void window.api.notify(notice.title, notice.body, notice.extra.severity, notice.extra).catch(() => undefined)
+  }, [degradedText, bot.id, bot.name])
 
   if (status === 'loading') {
     return <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', padding: '0.5rem 0' }}>Loading market data…</div>
@@ -113,6 +129,7 @@ function DryRunPanel({ bot, onPrepareOrder }: { bot: Bot; onPrepareOrder?: (prop
           ? 'No paper trades yet'
           : `${paperTrades.length} paper trade${paperTrades.length === 1 ? '' : 's'} (${paperWins}W) · ${paperNetPct >= 0 ? '+' : ''}${paperNetPct.toFixed(2)}%`}
       </div>
+      <div style={{ fontSize: '0.7rem', color: health.verdict === 'degraded' ? 'var(--gold)' : 'var(--text-muted)' }}>{describeStrategyHealth(health, expectation)}</div>
       {aiCalls && (
         <div style={{ fontSize: '0.68rem', color: describeAiCalls(aiCalls).bad ? 'var(--down)' : 'var(--text-muted)' }}>
           {describeAiCalls(aiCalls).text}

@@ -490,6 +490,13 @@ describe('AI code has no route to a real order', () => {
       join(ROOT, 'src', 'agents', 'liveBoard.ts'),
       join(ROOT, 'src', 'agents', 'LiveBoardCard.tsx'),
       join(ROOT, 'src', 'agents', 'EventTables.tsx'),
+      // The daily look at each model's health, its scheduler, and the last benchmark remembered for the
+      // promotion checklist (8 October 2026): they read, mark and tell; nothing is unticked or rested by them.
+      join(ROOT, 'src', 'agents', 'modelHealthWatch.ts'),
+      join(ROOT, 'src', 'agents', 'ModelHealthScheduler.tsx'),
+      join(ROOT, 'src', 'agents', 'benchmarkMemory.ts'),
+      join(ROOT, 'shared', 'modelHealth.ts'),
+      join(ROOT, 'shared', 'strategyHealth.ts'),
       // The opportunities table's rows: worked out from what the page holds, and nothing more.
       join(ROOT, 'src', 'agents', 'opportunityTable.ts'),
       join(SERVICES, 'aiWatchService.ts')
@@ -509,6 +516,34 @@ describe('AI code has no route to a real order', () => {
     expect(importsOf(join(ROOT, 'src', 'agents', 'OpportunityScheduler.tsx')).sort()).toEqual(['marketEvent', 'opportunityWatch', 'react', 'watchPaperTrade'])
     // The main-process half reads the setting and the ledger, and nothing else.
     expect(importsOf(join(SERVICES, 'aiWatchService.ts')).sort()).toEqual(['aiConfigService', 'aiLedgerService', 'aiWatch'])
+  })
+
+  it("the models' and the strategies' health are read, marked and told, and nothing is switched off by them (8 October 2026)", () => {
+    // shared/modelHealth.ts and shared/strategyHealth.ts are arithmetic on a row's trades and a bot's;
+    // the daily look (src/agents/modelHealthWatch.ts) reads the setting, the ledger, the events and
+    // public candles, and raises a notice; its scheduler mounts it. None of them writes a setting,
+    // unticks a model, stops a bot, or mentions the bridge an order travels over.
+    for (const path of [join(ROOT, 'shared', 'modelHealth.ts'), join(ROOT, 'shared', 'strategyHealth.ts')]) {
+      expect(readFileSync(path, 'utf-8'), path).not.toMatch(/window\.|ipcRenderer|electron\/|liveTrading|placeLive|setConfig|updateConfig|enabled:|mode: /)
+    }
+    expect(importsOf(join(ROOT, 'shared', 'strategyHealth.ts'))).toEqual([])
+    expect(importsOf(join(ROOT, 'shared', 'modelHealth.ts')).sort()).toEqual(['aiEventBenchmark', 'aiOutcome', 'aiPanel', 'aiWatchPaper', 'ipc', 'strategyHealth'])
+    const look = join(ROOT, 'src', 'agents', 'modelHealthWatch.ts')
+    expect(importsOf(look).sort()).toEqual(['aiCost', 'aiEventBenchmark', 'liveBoard', 'modelHealth', 'notices'])
+    expect(readFileSync(look, 'utf-8')).not.toMatch(/window\.|setConfig|updateConfig|enabled|disable|placeLive|liveTrading/)
+    const scheduler = join(ROOT, 'src', 'agents', 'ModelHealthScheduler.tsx')
+    expect([...readFileSync(scheduler, 'utf-8').matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]).sort()).toEqual(['ai', 'ai', 'market', 'notify', 'scanner'])
+    expect(importsOf(scheduler).sort()).toEqual(['modelHealthWatch', 'react'])
+    // A strategy's health is told from the bot's card, which reaches the desktop and nothing else.
+    const card = readFileSync(join(ROOT, 'src', 'bots', 'BotCard.tsx'), 'utf-8')
+    expect([...new Set([...card.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))]).toEqual(['notify'])
+    // The bug of 8 October 2026: neither card passed Bitcoin's regime to the benchmark's cut, so its
+    // slices by regime were always empty. Both pass the labels now, read from Bitcoin's own minutes.
+    for (const file of ['LiveBoardCard.tsx', 'ModelRegistryCard.tsx']) {
+      const source = readFileSync(join(ROOT, 'src', 'agents', file), 'utf-8')
+      expect(source, file).toMatch(/summarizeEventBenchmark\(\{[^}]*\blabels\b/)
+      expect(source, file).toContain('loadLiveLabels(')
+    }
   })
 
   it('what the watch opens by itself is paper, by a literal it cannot be handed', () => {
@@ -541,7 +576,7 @@ describe('AI code has no route to a real order', () => {
     // Nothing else.
     expect([...new Set([...source.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))].sort()).toEqual(['ai', 'feed', 'market', 'notify', 'settings'])
     // And it is the only file of the watch's that reaches settings at all.
-    const others = ['opportunityWatch.ts', 'OpportunityScheduler.tsx', 'WatchCard.tsx', 'liveBoard.ts', 'LiveBoardCard.tsx', 'opportunityTable.ts', 'OpportunityTableCard.tsx']
+    const others = ['opportunityWatch.ts', 'OpportunityScheduler.tsx', 'WatchCard.tsx', 'liveBoard.ts', 'LiveBoardCard.tsx', 'opportunityTable.ts', 'OpportunityTableCard.tsx', 'modelHealthWatch.ts', 'ModelHealthScheduler.tsx']
     for (const file of others) expect(readFileSync(join(ROOT, 'src', 'agents', file), 'utf-8'), file).not.toMatch(/window\.api\.settings/)
   })
 

@@ -19,6 +19,7 @@ import { SettingsPanel } from './settings/SettingsPanel'
 import { ControllerScheduler } from './controllers/ControllerScheduler'
 import { OpportunityScheduler } from './agents/OpportunityScheduler'
 import { ExitCheckScheduler } from './agents/ExitCheckScheduler'
+import { ModelHealthScheduler } from './agents/ModelHealthScheduler'
 import { NewsScheduler } from './news/NewsScheduler'
 import { NewsAlertScheduler } from './news/NewsAlertScheduler'
 import { AlertBanner } from './news/AlertBanner'
@@ -114,6 +115,11 @@ function App(): React.JSX.Element {
           closes one at the next minute, on paper; it never moves a stop or touches a live one. */}
       <ErrorBoundary label="The exit check">
         <ExitCheckScheduler />
+      </ErrorBoundary>
+      {/* The daily look at each model's health: a DEGRADED mark and one notice a day. It asks
+          nothing and switches nothing off. */}
+      <ErrorBoundary label="The models' health">
+        <ModelHealthScheduler />
       </ErrorBoundary>
       {/* What a delisting does: a notice to someone holding the coin, and the rule's paper short.
           Off unless the news reader is on; nothing it does is real. */}

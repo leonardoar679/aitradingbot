@@ -611,6 +611,37 @@ thirty closed trades, or ten in a slice, is not printed. Nothing is stored and n
 the document's promotion rule is not built, since no model has shown an edge to promote and a rule
 would be fitted to noise. The watch's models are still chosen on Opportunities.
 
+
+### Model and strategy health
+
+Since 8 October 2026 (the V4 document's §107-109; the user's choice: flag and tell, never switch off):
+
+- **DEGRADED, on a model.** Three minutes after the app opens and once a day after that, each model
+  the watch asks is scored on its own answers of the last thirty days as the live board scores them
+  (`src/agents/modelHealthWatch.ts`). Over its last thirty closed trades, a model that loses (an
+  expectancy under zero and a profit factor under one), or whose confidence is more than twenty points
+  from its hit rate, is marked DEGRADED on the model registry and the Watch card, and told once a day as
+  a CIRCUIT_BREAKER notice on its own thread (`shared/modelHealth.ts`). The watch still asks it; the
+  models it asks are unticked by a person on Opportunities.
+- **The promotion checklist.** Under each model's leaderboard row on the registry, once scored: a
+  hundred closed trades, a positive expectancy, a profit factor over one, a drawdown under ten R, the
+  live board's sign agreeing with the last benchmark scored this session, the app's own paper trades on
+  its calls agreeing with the board (a profit factor within 30%), and a positive net after what its
+  answers cost. Ticks only; nothing is promoted by a full list.
+- **Strategy health, on a bot's card.** Once a bot's dry run has thirty closed paper trades, their
+  profit factor, win rate and mean hold are set against what the same strategy made a trade on six
+  held-out symbols over seven years at its own bar size (`MEASURED_EXPECTATIONS` in
+  `src/backtest/marketConditions.ts`, measured by `research/tradeexpect.ts` through the shipped engine:
+  Trend Regime 322 trades, PF 4.37, 24.5% won, 409 h; Short-Term Channel 1,039, 1.80, 33.5%, 106 h;
+  Channel + Regime 583, 2.34, 35.2%, 114 h). DEGRADED when it is losing (a profit factor under one) and
+  behaving unlike what was measured (a win rate more than fifteen points under, or a hold three times
+  the measured one or a third of it); a flag on the card under Strategies › Active Runs and one notice
+  a day. The bot keeps running; a person stops it (`shared/strategyHealth.ts`).
+- **A fixed bug.** The live board and the registry did not pass Bitcoin's regime to the benchmark's
+  cut, so their slices by regime were always empty. Both now read Bitcoin's minutes before each event,
+  one request a stretch of events, and cut by the same rules as the benchmark; the live board shows
+  the slices.
+
 ### The AI additions
 
 Since 6 October 2026 (the V3 plan's Stage 7) small questions are put to a model beside the watch's.

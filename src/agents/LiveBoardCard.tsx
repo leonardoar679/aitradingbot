@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Card } from '../components/Card'
-import { summarizeEventBenchmark } from '../../shared/aiEventBenchmark'
+import { summarizeEventBenchmark, type EventLabels } from '../../shared/aiEventBenchmark'
 import { AI_HELP_NEWS_SECONDS, eventNewsOf } from '../../shared/aiHelp'
 import { describeDecider } from '../../shared/aiPanel'
 import type { Candle } from '../../shared/ipc'
@@ -8,8 +8,8 @@ import type { StoryMark } from '../../shared/newsFeed'
 import { describeError } from '../utils/ipcError'
 import { buttonStyle, noteStyle } from './agentStyles'
 import { AiHelpCard } from './AiHelpCard'
-import { ContributionTable, CostTable, ExitsTable, ResultsTable, RollingTable } from './EventTables'
-import { LIVE_BOARD_DAYS, loadLiveBars, readLiveAnswers, withReviewer, type LiveAnswers, type LiveBoardDeps } from './liveBoard'
+import { ContributionTable, CostTable, ExitsTable, ResultsTable, RollingTable, SlicesTable } from './EventTables'
+import { LIVE_BOARD_DAYS, loadLiveBars, loadLiveLabels, readLiveAnswers, withReviewer, type LiveAnswers, type LiveBoardDeps } from './liveBoard'
 import { loadQuantData, quantBacktests, type QuantData, type QuantFetch } from './quantState'
 
 const deps: LiveBoardDeps = {
@@ -38,6 +38,8 @@ export function LiveBoardCard({
 }): React.JSX.Element | null {
   const [live, setLive] = useState<LiveAnswers | null>(null)
   const [bars, setBars] = useState<Record<string, Candle[]> | null>(null)
+  // Bitcoin's regime and the move's company at each event, from Bitcoin's minutes: the benchmark's cuts.
+  const [labels, setLabels] = useState<Record<string, EventLabels>>({})
   // The two quant strategies' states at each event and their own runs, and the stories on file:
   // read with the candles, for "Does AI help?".
   const [quant, setQuant] = useState<{ data: QuantData; window: { startSec: number; endSec: number } } | null>(null)
@@ -81,11 +83,12 @@ export function LiveBoardCard({
             // The watch with and without the reviewer, where it rejected a call.
             ...withReviewer(live, models),
             bars,
+            labels,
             quant: quant?.data.states,
             nowSec: Math.floor(Date.now() / 1000)
           }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `models` is what `live` was read for
-    [live, bars, quant]
+    [live, bars, labels, quant]
   )
   const news = useMemo(() => (live === null || marks === null ? null : eventNewsOf(live.events, marks)), [live, marks])
   const backtests = useMemo(() => (quant === null ? null : quantBacktests(quant.data, quant.window, Math.floor(Date.now() / 1000))), [quant])
@@ -103,6 +106,10 @@ export function LiveBoardCard({
       })
       if (stop.current) return
       setBars(fetched)
+      setProgress("Reading Bitcoin's minutes around the events…")
+      const cut = await loadLiveLabels(live.events, deps.fetchCandles, { shouldStop: () => stop.current })
+      if (stop.current) return
+      setLabels(cut)
       const span = { startSec: nowSec - LIVE_BOARD_DAYS * 86_400, endSec: nowSec }
       const data = await loadQuantData(live.events, span, quantFetch, {
         shouldStop: () => stop.current,
@@ -162,6 +169,12 @@ export function LiveBoardCard({
               <ResultsTable title="Rule" rows={[...summary.baselines, summary.buyAndHold, ...summary.quant, ...summary.rules]} models={false} />
               {summary.contributions.length > 0 && <ContributionTable contributions={summary.contributions} models={summary.models} />}
               <ExitsTable rows={[...summary.models, ...summary.baselines, ...summary.rules]} />
+              <div>
+                <p style={{ ...noteStyle, marginTop: 0, marginBottom: '0.5rem' }}>
+                  Where a row&apos;s result came from: by event, side, holding time, confidence, the pair&apos;s trading, Bitcoin&apos;s four hours and the move&apos;s company.
+                </p>
+                <SlicesTable rows={[...summary.models, ...summary.baselines]} />
+              </div>
               <CostTable rows={summary.models} />
             </div>
           )}
@@ -170,7 +183,8 @@ export function LiveBoardCard({
             the events the watch asked about as they happened, and they differ from a benchmark in what a benchmark has to assume. Each answer is scored from the second its call
             finished, not from an assumed delay; and slippage is the larger of the rate for the pair&apos;s liquidity and half the spread the scanner saw on its book. Only the
             watch&apos;s own answers count: one bought later by pressing Ask arrived when a person got round to it. Only events every model answered are compared — with the first
-            model asked alone, that is only the events it passed on. A recommendation still open, or with no candles yet, is unsettled and not a loss. <strong>Lately</strong>{' '}
+            model asked alone, that is only the events it passed on. A recommendation still open, or with no candles yet, is unsettled and not a loss. Bitcoin&apos;s four hours at each event are read from its own minutes, one request a stretch of events, so the cuts by regime are the
+            benchmark&apos;s. <strong>Lately</strong>{' '}
             is the same closed trades, newest first: the last 10, 50 and 100 of them, and those of the last 7 and 30 days, beside the same events followed with no model.
           </p>
         </>

@@ -15,12 +15,14 @@ import {
   describeWatchPaperSize,
   type AiWatchPaperConfig
 } from '../../shared/aiWatchPaper'
+import { describeModelHealth } from '../../shared/modelHealth'
 import { healPaperRisk } from '../../shared/paperRisk'
 import { describePaperPause, healPaperPause } from '../../shared/paperPause'
 import { EVENT_MAX_RANKED, type MarketEvent } from '../../shared/marketEvent'
 import { describeError } from '../utils/ipcError'
 import { buttonStyle, inputStyle, noteStyle } from './agentStyles'
 import { getWatchActivity, priceWatchCall, subscribeWatchActivity, type WatchActivity } from './opportunityWatch'
+import { getModelHealthReport, subscribeModelHealth, type ModelHealthReport } from './modelHealthWatch'
 import type { CandleFetch } from './opportunities'
 
 const fetchCandles: CandleFetch = async (exchange, symbol, interval, startSec, endSec) =>
@@ -116,6 +118,9 @@ export function WatchCard({
   const [activity, setActivity] = useState<WatchActivity>(getWatchActivity())
 
   useEffect(() => subscribeWatchActivity(setActivity), [])
+  // The daily look's mark on each model (./modelHealthWatch.ts): shown here, and nothing unticked by it.
+  const [health, setHealth] = useState<ModelHealthReport | null>(getModelHealthReport())
+  useEffect(() => subscribeModelHealth(setHealth), [])
 
   // A model disabled on another tab is no longer one the watch can be given.
   const offered = config.enabledModels
@@ -258,6 +263,14 @@ export function WatchCard({
               {describeWatchPause(model)}
             </p>
           ))}
+          {watch.models.map((model) => {
+            const mark = health?.models[model]
+            return mark === undefined || !mark.degraded ? null : (
+              <p key={`degraded:${model}`} style={{ ...noteStyle, color: 'var(--gold)', marginTop: '0.3rem' }}>
+                <strong>DEGRADED.</strong> {describeModelHealth(model, mark)}
+              </p>
+            )
+          })}
           {scannerOn === false && (
             <p style={{ ...noteStyle, color: 'var(--gold)', marginTop: '0.5rem' }}>
               The scanner is off, so the watch asks only about delistings and Monitoring Tags, when Binance&apos;s announcements are read and put to the models.
@@ -281,6 +294,7 @@ export function WatchCard({
               <label key={model} style={labelStyle}>
                 <input type="checkbox" aria-label={`Watch asks ${model}`} checked={chosen.includes(model)} disabled={busy} onChange={() => toggle(model)} />
                 {describeDecider(model)}
+                {health?.models[model]?.degraded === true && <span style={{ color: 'var(--gold)', fontWeight: 600 }}>DEGRADED</span>}
                 {chosen.length > 1 && chosen.includes(model) && <span style={{ color: 'var(--text-muted)' }}>#{chosen.indexOf(model) + 1}</span>}
               </label>
             ))}

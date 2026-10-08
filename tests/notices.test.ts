@@ -103,12 +103,19 @@ describe('a failure and a breaker', () => {
     expect(systemFailureNotice('ai-key', 'x').title).toBe('The OpenRouter key was rejected')
   })
 
-  it('names the breaker, held for a day for the budget and a rested model, half an hour otherwise', () => {
+  it('names the breaker, held for a day for the budget, a rested model, a degraded model and a strategy, half an hour otherwise', () => {
     expect(breakerNotice('ai-budget', 'The day is spent.')).toEqual({ title: "Today's AI budget is spent", body: 'The day is spent.', extra: { kind: 'CIRCUIT_BREAKER', thread: 'ai-budget', severity: 'high', threadSeconds: 86_400 } })
     expect(breakerNotice('model', 'GPT-5 mini is rested.', 'model:openai/gpt-5-mini').extra).toEqual({ kind: 'CIRCUIT_BREAKER', thread: 'model:openai/gpt-5-mini', severity: 'high', threadSeconds: 86_400 })
     expect(breakerNotice('live-loss', 'x').extra).toEqual({ kind: 'CIRCUIT_BREAKER', thread: 'live-loss', severity: 'high', threadSeconds: 1800 })
     expect(breakerNotice('health', 'Live trading is paused: the clock is off.').title).toBe('LIVE TRADING PAUSED')
     expect(breakerNotice('health-ok', 'Resumed.', 'health-ok').extra).toEqual({ kind: 'CIRCUIT_BREAKER', thread: 'health-ok', severity: 'watch', threadSeconds: 1800 })
+    // 8 October 2026: a model or a strategy whose record has degraded, once a day, with sound, switching nothing off.
+    expect(breakerNotice('degraded', 'GPT-5 mini has degraded.', 'degraded:openai/gpt-5-mini')).toEqual({
+      title: 'A model has degraded',
+      body: 'GPT-5 mini has degraded.',
+      extra: { kind: 'CIRCUIT_BREAKER', thread: 'degraded:openai/gpt-5-mini', severity: 'high', threadSeconds: 86_400 }
+    })
+    expect(breakerNotice('strategy', 'x', 'strategy:bot-1')).toEqual({ title: 'A strategy is not doing what was measured', body: 'x', extra: { kind: 'CIRCUIT_BREAKER', thread: 'strategy:bot-1', severity: 'high', threadSeconds: 86_400 } })
   })
 })
 
