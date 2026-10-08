@@ -1,4 +1,5 @@
 import { mkdtempSync, writeFileSync } from 'node:fs'
+import { DEFAULT_ENABLED_MODELS } from '../shared/aiSignal'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -120,7 +121,8 @@ describe('enabling a model at an effort', () => {
     await expect(setAiConfig({ enabledModels: [MINI, 'openai/gpt-5-mini@turbo'] })).rejects.toThrow(/not a valid model id/)
     await expect(setAiConfig({ enabledModels: [MINI, 'ghost/model@low'] })).rejects.toThrow(/ghost\/model is not in the model catalogue/)
     await expect(setAiConfig({ enabledModels: [MINI, 'acme/prose@low'] })).rejects.toThrow(/strict JSON schema/)
-    expect((await getAiConfig()).enabledModels).toEqual([MINI])
+    // Nothing of that was kept: the list is still the fresh install's default three (8 October 2026).
+    expect((await getAiConfig()).enabledModels).toEqual([...DEFAULT_ENABLED_MODELS])
   })
 
   it('prices it from the one entry the model has', async () => {

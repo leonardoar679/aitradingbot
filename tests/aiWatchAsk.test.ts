@@ -1,4 +1,5 @@
 import { mkdtempSync, writeFileSync } from 'node:fs'
+import { DEFAULT_ENABLED_MODELS } from '../shared/aiSignal'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -87,7 +88,8 @@ afterEach(() => {
 describe('the watch setting', () => {
   it('is off until it is switched on, and stays on across a restart', async () => {
     const { getAiConfig, setAiConfig } = await services()
-    expect((await getAiConfig()).watch).toEqual({ enabled: false, models: [], maxEventsPerDay: 10, minBand: 'urgent', firstModelGates: false, confirmLive: false, askAt: 'detected' })
+    // A fresh install enables the default three and offers them, off, the first gating (8 October 2026).
+    expect((await getAiConfig()).watch).toEqual({ enabled: false, models: [...DEFAULT_ENABLED_MODELS], maxEventsPerDay: 10, minBand: 'urgent', firstModelGates: true, confirmLive: false, askAt: 'detected' })
     expect((await setAiConfig({ watch: ON })).watch).toEqual(ON)
     vi.resetModules()
     expect((await (await services()).getAiConfig()).watch).toEqual(ON)
@@ -95,7 +97,8 @@ describe('the watch setting', () => {
 
   it('cannot be switched on with nobody to ask, a model that is not enabled, or a limit that is not a choice', async () => {
     const { getAiConfig, setAiConfig } = await services()
-    await expect(setAiConfig({ watch: { enabled: true } })).rejects.toThrow(/at least one model/)
+    // Switched on with no list named, it asks the three it was offered; with none, nobody.
+    await expect(setAiConfig({ watch: { enabled: true, models: [] } })).rejects.toThrow(/at least one model/)
     await expect(setAiConfig({ watch: { ...ON, models: [B] } })).rejects.toThrow(/is not enabled/)
     await expect(setAiConfig({ watch: { ...ON, maxEventsPerDay: 1000 } })).rejects.toThrow(/events a day/)
     await expect(setAiConfig({ watch: { ...ON, enabled: 'yes' as unknown as boolean } })).rejects.toThrow(/on or off/)
@@ -146,7 +149,8 @@ describe('the paper-trade setting', () => {
 
   it('follows only a model the watch asks, at a stake and a limit that are among the choices', async () => {
     const { getAiConfig, setAiConfig } = await services()
-    // The watch asks nobody yet.
+    // The watch asks nobody yet (the three it is offered put aside).
+    await setAiConfig({ watch: { enabled: false, models: [] } })
     await expect(setAiConfig({ watchPaper: PAPER })).rejects.toThrow(/not one of the models the watch asks/)
     await setAiConfig({ enabledModels: [A, B] })
     await setAiConfig({ watch: ON })

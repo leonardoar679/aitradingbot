@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AiCallRecord } from '../shared/aiLedger'
-import type { AiSignalDecision, AiSignalDetail } from '../shared/aiSignal'
+import { DEFAULT_ENABLED_MODELS, type AiSignalDecision, type AiSignalDetail } from '../shared/aiSignal'
 import {
   AI_WATCH_BREAKER_CALLS,
   AI_WATCH_FRESH_SECONDS,
@@ -80,8 +80,9 @@ function decision(overrides: Partial<AiSignalDecision> = {}): AiSignalDecision {
 }
 
 describe('healAiWatch', () => {
-  it('reads anything unreadable as the default, which is off', () => {
-    for (const stored of [undefined, null, 'on', 7, []]) expect(healAiWatch(stored, ENABLED)).toEqual(DEFAULT_AI_WATCH)
+  it('reads anything unreadable as the default, which is off: the three offered, those of them enabled', () => {
+    for (const stored of [undefined, null, 'on', 7, []]) expect(healAiWatch(stored, [...DEFAULT_ENABLED_MODELS])).toEqual(DEFAULT_AI_WATCH)
+    for (const stored of [undefined, null, 'on', 7, []]) expect(healAiWatch(stored, ENABLED)).toEqual({ ...DEFAULT_AI_WATCH, models: [A] })
     expect(DEFAULT_AI_WATCH.enabled).toBe(false)
   })
 
@@ -103,20 +104,23 @@ describe('healAiWatch', () => {
     expect(healAiWatch(watch({ models: [A, `panel:${A}`] }), ENABLED)).toMatchObject({ enabled: false, models: [A] })
     expect(healAiWatch({ ...watch(), models: [A, 7] }, ENABLED)).toMatchObject({ enabled: false, models: [A] })
     expect(healAiWatch(watch({ models: [] }), ENABLED)).toMatchObject({ enabled: false, models: [] })
-    expect(healAiWatch({ ...watch(), models: 'all' }, ENABLED)).toMatchObject({ enabled: false, models: [] })
+    // A list that is not one reads as never named: the three offered, those of them enabled, off.
+    expect(healAiWatch({ ...watch(), models: 'all' }, ENABLED)).toMatchObject({ enabled: false, models: [A] })
   })
 
   it('switches off a watch with a limit, a band or a gate that is not one of the choices', () => {
     expect(healAiWatch(watch({ maxEventsPerDay: 500 }), ENABLED)).toMatchObject({ enabled: false, maxEventsPerDay: 10 })
     expect(healAiWatch({ ...watch(), minBand: 'watch' }, ENABLED)).toMatchObject({ enabled: false, minBand: 'urgent' })
-    expect(healAiWatch({ ...watch(), firstModelGates: 'yes' }, ENABLED)).toMatchObject({ enabled: false, firstModelGates: false, confirmLive: false, askAt: 'detected' })
+    // A gate that is not on or off takes the default (on, since 8 October 2026), and the watch is off.
+    expect(healAiWatch({ ...watch(), firstModelGates: 'yes' }, ENABLED)).toMatchObject({ enabled: false, firstModelGates: true, confirmLive: false, askAt: 'detected' })
   })
 })
 
 describe('aiWatchProblem', () => {
   it('accepts a watch that can run, and one that is off with nothing chosen yet', () => {
     expect(aiWatchProblem(watch(), ENABLED)).toBeNull()
-    expect(aiWatchProblem(DEFAULT_AI_WATCH, ENABLED)).toBeNull()
+    expect(aiWatchProblem(DEFAULT_AI_WATCH, [...DEFAULT_ENABLED_MODELS])).toBeNull()
+    expect(aiWatchProblem({ ...DEFAULT_AI_WATCH, models: [] }, ENABLED)).toBeNull()
   })
 
   it('refuses what came over the bridge in the wrong shape', () => {
@@ -468,5 +472,23 @@ describe('Ask at (8 October 2026)', () => {
     expect(watchSkipReason(event(), watch(), { ...state, lives: lives('expired') })).toBeNull()
     // An announcement's event is asked at once: its band is not what it is asked about for.
     expect(watchSkipReason(event({ news: { articleId: 1, title: 'Binance Will Delist SOL', releaseSec: T } }), waiting, state)).toBeNull()
+  })
+})
+
+describe('Three models (8 October 2026)', () => {
+  it('offers the default three, off, to a file that never named models, and keeps exactly the models a file named', () => {
+    const fresh = healAiWatch(undefined, [...DEFAULT_ENABLED_MODELS])
+    expect(fresh.models).toEqual([...DEFAULT_ENABLED_MODELS])
+    expect(fresh.enabled).toBe(false)
+    expect(fresh.firstModelGates).toBe(true)
+    // Only those of the three that are enabled.
+    expect(healAiWatch({}, [DEFAULT_ENABLED_MODELS[0]]).models).toEqual([DEFAULT_ENABLED_MODELS[0]])
+    expect(healAiWatch({}, []).models).toEqual([])
+    // A file that named one model keeps it, and its gate as written: a different list is a different price.
+    expect(healAiWatch({ enabled: true, models: [A], maxEventsPerDay: 10, minBand: 'urgent', firstModelGates: false }, ENABLED)).toMatchObject({ enabled: true, models: [A], firstModelGates: false })
+    // A file with no gate written takes the default, and is not on.
+    expect(healAiWatch({ enabled: true, models: [A], maxEventsPerDay: 10, minBand: 'urgent' }, ENABLED)).toMatchObject({ enabled: false, models: [A], firstModelGates: true })
+    // A file that says on but never named models is offered the three, off: that is not what was switched on.
+    expect(healAiWatch({ enabled: true, maxEventsPerDay: 10, minBand: 'urgent', firstModelGates: true }, [...DEFAULT_ENABLED_MODELS])).toMatchObject({ enabled: false, models: [...DEFAULT_ENABLED_MODELS] })
   })
 })

@@ -2,7 +2,7 @@ import { formatUsd } from './aiCost'
 import type { AiCallRecord } from './aiLedger'
 import { AI_OPPORTUNITY_MAX_MODELS, describeOpportunitySide, isActionableOpportunity, opportunitySide, opportunityWindow } from './aiOpportunity'
 import { describeDecider, isPanelId } from './aiPanel'
-import { AI_PROVIDER_LABEL, type AiSignalDecision, type AiSignalEstimate } from './aiSignal'
+import { AI_PROVIDER_LABEL, DEFAULT_ENABLED_MODELS, type AiSignalDecision, type AiSignalEstimate } from './aiSignal'
 import { EVENT_MAX_RANKED, describeEventType, isAtLeast, type EventLife, type MarketEvent } from './marketEvent'
 
 // THE WATCH: events put to models without a click.
@@ -67,12 +67,16 @@ export interface AiWatchConfig {
   askAt: 'detected' | 'confirmed'
 }
 
+/** Off until switched on, with three models offered (the V5 document, §34-35 and §39; the user's
+ * choice of 8 October 2026): the fast one asked alone, the two others only when it calls a trade,
+ * and the paper trade following the vote of two (shared/opportunityVote.ts). A watch stored with
+ * one model keeps it: a different list is a different price, agreed to by switching on again. */
 export const DEFAULT_AI_WATCH: AiWatchConfig = {
   enabled: false,
-  models: [],
+  models: [...DEFAULT_ENABLED_MODELS],
   maxEventsPerDay: AI_WATCH_DEFAULT_EVENT_LIMIT,
   minBand: 'urgent',
-  firstModelGates: false,
+  firstModelGates: true,
   confirmLive: false,
   askAt: 'detected'
 }
@@ -91,12 +95,14 @@ export function isAiWatchEventLimit(value: unknown): value is (typeof AI_WATCH_E
  * running in a shape nobody agreed to the price of. `enabledModels` is what may be asked at all. */
 export function healAiWatch(value: unknown, enabledModels: string[]): AiWatchConfig {
   const raw = (typeof value === 'object' && value !== null ? value : {}) as Partial<Record<keyof AiWatchConfig, unknown>>
-  const stored = Array.isArray(raw.models) ? raw.models : []
+  // A file that never named models offers the default three, those of them enabled; a file that
+  // named some keeps exactly those. The watch is off either way until switched on.
+  const stored = Array.isArray(raw.models) ? raw.models : DEFAULT_AI_WATCH.models
   const models = [...new Set(stored.filter((model): model is string => typeof model === 'string' && enabledModels.includes(model) && !isPanelId(model)))].slice(
     0,
     AI_OPPORTUNITY_MAX_MODELS
   )
-  const intact = models.length === stored.length && models.length > 0
+  const intact = Array.isArray(raw.models) && models.length === stored.length && models.length > 0
   const limitOk = isAiWatchEventLimit(raw.maxEventsPerDay)
   const bandOk = raw.minBand === 'candidate' || raw.minBand === 'urgent'
   return {
@@ -104,7 +110,7 @@ export function healAiWatch(value: unknown, enabledModels: string[]): AiWatchCon
     models,
     maxEventsPerDay: isAiWatchEventLimit(raw.maxEventsPerDay) ? raw.maxEventsPerDay : AI_WATCH_DEFAULT_EVENT_LIMIT,
     minBand: raw.minBand === 'candidate' ? 'candidate' : 'urgent',
-    firstModelGates: raw.firstModelGates === true,
+    firstModelGates: typeof raw.firstModelGates === 'boolean' ? raw.firstModelGates : DEFAULT_AI_WATCH.firstModelGates,
     // Off unless switched on; a file written before it existed keeps its watch as it was.
     confirmLive: raw.confirmLive === true,
     // At the raise unless told to wait; a file written before it existed keeps its watch as it was.

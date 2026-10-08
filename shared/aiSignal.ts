@@ -80,6 +80,14 @@ export const AI_SCHEMA_VERSION = 'signal-v2'
 export const AI_PROVIDER_LABEL = 'OpenRouter'
 /** The same model the direct OpenAI path defaulted to, by its OpenRouter id. */
 export const DEFAULT_AI_MODEL = 'openai/gpt-5-mini'
+/** What a fresh install may ask (the V5 document, §34; the user's choice of 8 October 2026: three
+ * models, a vote of two). Chosen by the document's own criteria and not by name -- strict-schema
+ * support, price, and the ledger's thirty days of latency, refusals and failures as of 8 October
+ * 2026: the default model as the fast one (782 calls, none refused or failed, $0.004 a call), then
+ * the two frontier models that answered every call (100 each, 6-7 s, about $0.018 a call). The
+ * one that refused every call it was sent, and the small fast one that failed 3%, were left out.
+ * The leaderboard, as it fills, is what would change this. */
+export const DEFAULT_ENABLED_MODELS: readonly string[] = [DEFAULT_AI_MODEL, 'anthropic/claude-sonnet-5.5', 'openai/gpt-5.6-sol']
 export const DEFAULT_AI_DAILY_CAP_USD = 1
 
 /** An OpenRouter model id: `vendor/model`, optionally `:variant`. Checked on both sides of the

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { ENGINE_CONSTANTS, defaultStores, effectiveConfig, flattenConfig, healStores, stableJson, type EffectiveStores } from '../shared/appConfig'
+import { DEFAULT_ENABLED_MODELS } from '../shared/aiSignal'
 import { DEFAULT_AI_WATCH } from '../shared/aiWatch'
 import { EVENT_DETECTOR_VERSION } from '../shared/marketEvent'
 
@@ -52,7 +53,8 @@ describe('the stores, healed', () => {
     const live = { maxOrderQuote: 10, hardMaxOrderQuote: 25, dailyCapQuote: 50, dailyLossLimitQuote: 15, allocationQuote: null, riskPct: 0.25 }
     const healed = healStores({
       settings: {},
-      ai: { defaultModel: 'openai/gpt-5-mini', enabledModels: ['openai/gpt-5-mini'], dailyCapUsd: 1, callsPerMinute: 30, watch: undefined, watchPaper: undefined, additions: undefined },
+      // A fresh install enables the default three (8 October 2026), which the watch is then offered.
+      ai: { defaultModel: 'openai/gpt-5-mini', enabledModels: [...DEFAULT_ENABLED_MODELS], dailyCapUsd: 1, callsPerMinute: 30, watch: undefined, watchPaper: undefined, additions: undefined },
       scanner: { enabled: true, universeSize: 60 },
       news: undefined,
       live

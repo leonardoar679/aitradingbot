@@ -302,10 +302,13 @@ describe('watchPaperBlock', () => {
     expect(check([])).toBeNull()
   })
 
-  it('follows one model, and only while it is switched on', () => {
+  it('follows one model, and only while it is switched on; the vote\'s answer, whichever model gave it (8 October 2026)', () => {
     expect(check([], { model: B })).toMatch(/follow openai\/gpt-5-mini/)
     expect(check([], { config: config({ enabled: false }) })).toMatch(/are off/)
     expect(check([], { config: config({ model: null }) })).toMatch(/are off/)
+    expect(watchPaperBlock({ config: config(), event: event(), decision: { model: B, recommendation: 'buy' }, executors: [], nowSec: SOON, byVote: true })).toBeNull()
+    // Off is off, vote or no vote.
+    expect(watchPaperBlock({ config: config({ enabled: false }), event: event(), decision: { model: B, recommendation: 'buy' }, executors: [], nowSec: SOON, byVote: true })).toMatch(/are off/)
   })
 
   it('opens one paper trade an event, even after the first has been stopped', () => {
@@ -491,6 +494,15 @@ describe('openWatchPaperTrade', () => {
     expect(off.state.executors).toEqual([])
     expect(other.state.executors).toEqual([])
     expect(off.writes + other.writes).toBe(0)
+  })
+
+  it("opens the vote's answer whichever model gave it (8 October 2026), marked with that model", async () => {
+    const r = rig()
+    expect((await openWatchPaperTrade(event(), decision(B), r.deps, { byVote: true }))?.opened).toBe(true)
+    expect(r.state.executors[0]).toMatchObject({ watch: { eventId: event().id, model: B } })
+    // But not while paper trades are off.
+    const off = rig({ config: config({ enabled: false }) })
+    expect(await openWatchPaperTrade(event(), decision(B), off.deps, { byVote: true })).toBeNull()
   })
 
   it('opens one paper position, says so on the desktop, and says nothing real was placed', async () => {

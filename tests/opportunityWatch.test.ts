@@ -316,18 +316,58 @@ describe('watchPass: the notice', () => {
 describe('watchPass: paper trades', () => {
   const OPENED = { opened: true, text: 'A paper BUY of 100 USDT was opened, at market.' }
 
-  it('hands each call the watch would act on to the paper trader, with its event', async () => {
-    const r = rig({ answer: (model) => (model === B ? NO_TRADE : {}) })
-    const handed: { symbol: string; model: string; side: string }[] = []
-    r.deps.paperTrade = async (about, answer) => {
-      handed.push({ symbol: about.symbol, model: answer.model, side: answer.recommendation })
+  it('hands each call the watch would act on to the paper trader, with its event, when it asks one model', async () => {
+    const r = rig({ watch: watch({ models: [A] }) })
+    const handed: { symbol: string; model: string; side: string; byVote: boolean | undefined }[] = []
+    r.deps.paperTrade = async (about, answer, byVote) => {
+      handed.push({ symbol: about.symbol, model: answer.model, side: answer.recommendation, byVote })
       return null
     }
     await watchPass([event(), event('ETHUSDT')], r.deps)
     expect(handed.sort((a, b) => a.symbol.localeCompare(b.symbol))).toEqual([
-      { symbol: 'ETHUSDT', model: A, side: 'buy' },
-      { symbol: 'SOLUSDT', model: A, side: 'buy' }
+      { symbol: 'ETHUSDT', model: A, side: 'buy', byVote: false },
+      { symbol: 'SOLUSDT', model: A, side: 'buy', byVote: false }
     ])
+  })
+
+  it('hands over the vote with two or more models (8 October 2026): the surest of the agreeing, once they have all answered', async () => {
+    const r = rig({ answer: (model) => ({ confidence: model === B ? 0.9 : 0.7 }) })
+    const handed: { symbol: string; model: string; byVote: boolean | undefined }[] = []
+    r.deps.paperTrade = async (about, answer, byVote) => {
+      handed.push({ symbol: about.symbol, model: answer.model, byVote })
+      return OPENED
+    }
+    const result = await watchPass([event()], r.deps)
+    expect(result.asked).toHaveLength(1)
+    expect(handed).toEqual([{ symbol: 'SOLUSDT', model: B, byVote: true }])
+    expect(getWatchActivity().last?.text).toContain('Vote: BUY 2/2.')
+  })
+
+  it('hands over nothing on a split, writes the refusal down and tells the disagreement; nor without a majority', async () => {
+    const split = rig({ answer: (model) => (model === B ? { recommendation: 'sell', detail: { ...LONG, stopLoss: 101.5, takeProfit: 97 } } : {}) })
+    let handed = 0
+    split.deps.paperTrade = async () => {
+      handed++
+      return OPENED
+    }
+    const refusals: string[] = []
+    split.deps.recordRefusal = (refusal) => void refusals.push(refusal.text)
+    await watchPass([event()], split.deps)
+    expect(handed).toBe(0)
+    expect(refusals).toEqual(['No paper trade: Models split: 1 BUY · 1 SELL.'])
+    expect(split.notices.some((notice) => notice.extra?.kind === 'MODEL_DISAGREEMENT')).toBe(true)
+    expect(getWatchActivity().last?.text).toContain('Vote: split 1 BUY · 1 SELL.')
+
+    const half = rig({ answer: (model) => (model === B ? NO_TRADE : {}) })
+    half.deps.paperTrade = async () => {
+      handed++
+      return OPENED
+    }
+    const halfRefusals: string[] = []
+    half.deps.recordRefusal = (refusal) => void halfRefusals.push(refusal.text)
+    await watchPass([event('ETHUSDT')], half.deps)
+    expect(handed).toBe(0)
+    expect(halfRefusals).toEqual(['No paper trade: Models did not agree: 1 BUY · 1 NO TRADE.'])
   })
 
   it('hands over nothing this app would not act on: no trade, a side under 65%, a refused answer, a call that failed', async () => {
@@ -355,8 +395,9 @@ describe('watchPass: paper trades', () => {
     // The paper trader raises its own notice, which says more; the watch raises none beside it,
     // for this answer or for the other model's.
     expect(r.notices).toEqual([])
+    // Two models: the vote is said, and the trade that followed it (8 October 2026).
     expect(getWatchActivity().last?.text).toBe(
-      'SOLUSDT breakout: openai/gpt-5-mini BUY at 80%; mistralai/mistral-small-2603 BUY at 80%. A paper BUY of 100 USDT was opened, at market.'
+      'SOLUSDT breakout: openai/gpt-5-mini BUY at 80%; mistralai/mistral-small-2603 BUY at 80%. Vote: BUY 2/2. A paper BUY of 100 USDT was opened, at market.'
     )
   })
 

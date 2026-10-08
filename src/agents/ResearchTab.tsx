@@ -16,6 +16,8 @@ import { falseOpportunityRows } from '../../shared/research/falseOpportunities'
 import { HOLDS, holdingRows } from '../../shared/research/holdingByType'
 import { NEWS_DELAYS, newsTimingRows } from '../../shared/research/newsTiming'
 import { ablationRows } from '../../shared/research/scoreAblation'
+import { agreementValue } from '../../shared/research/agreementValue'
+import type { AiCallRecord } from '../../shared/aiLedger'
 import { useNewsFeed } from '../news/useNewsFeed'
 import { describeError } from '../utils/ipcError'
 import { buttonStyle, cellStyle, headCellStyle, noteStyle } from './agentStyles'
@@ -93,6 +95,7 @@ export function ResearchTab(): React.JSX.Element {
   const feed = useNewsFeed()
   const [models, setModels] = useState<string[] | null>(null)
   const [executors, keepExecutors] = useState<ExecutorConfig[]>([])
+  const [watchRows, keepWatchRows] = useState<AiCallRecord[]>([])
   const [answered, setAnswered] = useState<{ events: MarketEvent[]; models: string[] } | null>(null)
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [progress, setProgress] = useState<string | null>(null)
@@ -108,10 +111,19 @@ export function ResearchTab(): React.JSX.Element {
     void (async (): Promise<void> => {
       try {
         const nowSec = Math.floor(Date.now() / 1000)
-        const [config, settings] = await Promise.all([window.api.ai.getConfig(), window.api.settings.get()])
+        const [config, settings, ledger] = await Promise.all([
+          window.api.ai.getConfig(),
+          window.api.settings.get(),
+          // The watch's own answers over ninety days, for how many models agreed on each trade's event.
+          window.api.ai.listCalls({ source: 'watch', sinceSec: nowSec - 90 * 86_400, limit: 5000 }).then(
+            (page) => page.rows,
+            () => [] as AiCallRecord[]
+          )
+        ])
         if (cancelled) return
         setModels(config.enabledModels)
         keepExecutors(settings.executors)
+        keepWatchRows(ledger)
         const read = await readLiveAnswers(config.enabledModels, nowSec, deps)
         if (cancelled) return
         live.current = read
@@ -260,6 +272,7 @@ export function ResearchTab(): React.JSX.Element {
 
   const exits = useMemo(() => (loaded === null ? null : exitRuleRows(loaded.input, loaded.lead)), [loaded])
   const checkRow = useMemo(() => exitCheckRow(executors), [executors])
+  const agreement = useMemo(() => agreementValue(executors, watchRows), [executors, watchRows])
   const timings = useMemo(() => (loaded === null ? null : entryTimingRows(loaded.input)), [loaded])
   const holds = useMemo(() => (loaded === null ? null : holdingRows(loaded.input)), [loaded])
   const falses = useMemo(() => (loaded === null ? null : falseOpportunityRows(loaded.input)), [loaded])
@@ -384,6 +397,24 @@ export function ResearchTab(): React.JSX.Element {
           />
         </Card>
       )}
+
+      <Card title="Agreement value">
+        <p style={{ ...noteStyle, marginTop: 0 }} data-testid="agreement-note">
+          The watch&apos;s own closed paper trades by how many of the models asked took their side (the V5 document, §90). LIVE PAPER, as settled; thirty
+          trades a row.
+          {agreement.modelsAsked < 2 ? ' The watch asks one model, so there is nothing for models to agree on until it asks more.' : ''}
+        </p>
+        <Table
+          headers={['Agreed', 'Closed', 'Wins', 'Win rate', 'Profit factor', 'Mean net']}
+          rows={agreement.rows.map((row) => [row.name, row.closed, row.wins, figure(row.winRatePct), figure(row.profitFactor, 'ratio'), figure(row.meanNetPct)])}
+          onExport={() =>
+            void exportCsv(
+              'agreement',
+              csvOf(['Agreed', 'Closed', 'Wins', 'Win rate', 'Profit factor', 'Mean net'], agreement.rows.map((row) => [row.name, row.closed, row.wins, figure(row.winRatePct), figure(row.profitFactor, 'ratio'), figure(row.meanNetPct)]))
+            )
+          }
+        />
+      </Card>
 
       {ablation !== null && (
         <Card title="What each input of the signal score earns">

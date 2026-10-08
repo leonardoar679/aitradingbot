@@ -12,6 +12,7 @@ import { describeDecider } from '../../shared/aiPanel'
 import type { AiSignalDecision } from '../../shared/aiSignal'
 import { AI_WATCH_FRESH_SECONDS, WATCH_NOT_CONFIRMED_REASON, utcMidnight, watchEventIdsToday, watchNotice, watchPausedModels, watchSkipReason, type AiWatchConfig } from '../../shared/aiWatch'
 import { describeEventType, type EventLife, type MarketEvent } from '../../shared/marketEvent'
+import { voteOf } from '../../shared/opportunityVote'
 import { actionableRefusal, breakerNotice, confirmNotice, disagreementNotice, marketEventNotice, tradeBlockedNotice, type NoticeExtra } from '../../shared/notices'
 import { askModels, fetchEventQuestion, type AskModelsResult, type CandleFetch } from './opportunities'
 import { recordPaperRefusal, type PaperRefusal } from './paperRefusals'
@@ -40,8 +41,9 @@ export interface WatchDeps {
   notify: (title: string, body: string, extra?: NoticeExtra) => void
   nowSec: () => number
   /** Opens a paper trade on an answer, when that is switched on. Resolves to what came of it, or
-   * to null when there is nothing to say. Absent, the watch only asks and notifies. */
-  paperTrade?: (event: MarketEvent, decision: AiSignalDecision) => Promise<{ opened: boolean; text: string } | null>
+   * to null when there is nothing to say. Absent, the watch only asks and notifies. `byVote`
+   * (since 8 October 2026): the answer is the one the models' vote chose, whichever model gave it. */
+  paperTrade?: (event: MarketEvent, decision: AiSignalDecision, byVote?: boolean) => Promise<{ opened: boolean; text: string } | null>
   /** Writes a refusal to the records on file (shared/records.ts), beside the session's own list.
    * A record; nothing reads it to decide anything. Absent, the session's list is all there is. */
   recordRefusal?: (refusal: PaperRefusal) => void
@@ -145,43 +147,57 @@ async function askAbout(event: MarketEvent, watch: AiWatchConfig, deps: WatchDep
     return { text: `${event.symbol}: its candles could not be read (${message}).`, ok: false, retry: true }
   }
 
+  /** A notice of the document's kinds, told without failing the pass that raised it. */
+  const told = (notice: { title: string; body: string; extra: NoticeExtra }): void => {
+    try {
+      deps.notify(notice.title, notice.body, notice.extra)
+    } catch {
+      // A desktop that cannot show it is not a reason to lose an answer that was paid for.
+    }
+  }
+
   let noticed = false
   const paper: string[] = []
-  const ask = async (model: string): Promise<AiSignalDecision> => {
-    const decision = await deps.ask({ ...market, model, source: 'watch' })
-    // A call the watch would act on may open a paper trade, when that is switched on. Whatever
-    // comes of it, the answer was paid for and is returned.
-    let opened = false
-    if (deps.paperTrade !== undefined && isActionableOpportunity(decision)) {
-      try {
-        const outcome = await deps.paperTrade(event, decision)
-        if (outcome !== null) {
-          paper.push(outcome.text)
-          opened = outcome.opened
-          // CONFIRM (shared/aiWatch.ts): a paper BUY opened is also told as ready to confirm as a
-          // real order, which a person fills in from Opportunities and places. Nothing here does.
-          if (outcome.opened && watch.confirmLive && opportunitySide(decision) === 'long') {
-            told(confirmNotice(event, { who: describeDecider(decision.model), confidence: decision.confidence }))
-          }
-          // For the session report: what was refused, and why.
-          if (!outcome.opened) refused(deps, event, decision, outcome.text)
-          // A refusal a person can act on -- the paper account, the money-out cap, a pause -- is
-          // told; the market's reasons, which repeat every minute, are the Watch card's.
-          if (!outcome.opened && actionableRefusal(outcome.text)) told(tradeBlockedNotice(event.symbol, outcome.text))
-          // A refusal a person can act on -- the paper account, the money-out cap, a pause -- is
-          // told; the market's reasons, which repeat every minute, are the Watch card's.
-          if (!outcome.opened && actionableRefusal(outcome.text)) told(tradeBlockedNotice(event.symbol, outcome.text))
-        }
-      } catch (failure) {
-        const text = `No paper trade: ${failure instanceof Error ? failure.message : String(failure)}`
-        paper.push(text)
-        refused(deps, event, decision, text)
+  // THE VOTE (shared/opportunityVote.ts; the V5 document, §39): with two or more models asked and
+  // a paper trader to hand the answer to, the paper trade follows what the answers add up to, once
+  // they are all in, and the plain notice waits for that; with one model, or with no paper
+  // trader, each answer is acted on and told as it arrives, as it always was.
+  const byVote = watch.models.length >= 2 && deps.paperTrade !== undefined
+  /** The first answer that would have traded, under a vote: the plain notice is its, after the vote. */
+  let firstActionable: AiSignalDecision | null = null
+
+  /** Hands an answer to the paper trader, when there is one, and says what came of it: true when a
+   * trade was opened. A refusal is written down, and told when a person can act on it. */
+  const tradeOn = async (decision: AiSignalDecision): Promise<boolean> => {
+    if (deps.paperTrade === undefined) return false
+    try {
+      const outcome = await deps.paperTrade(event, decision, byVote)
+      if (outcome === null) return false
+      paper.push(outcome.text)
+      // CONFIRM (shared/aiWatch.ts): a paper BUY opened is also told as ready to confirm as a
+      // real order, which a person fills in from Opportunities and places. Nothing here does.
+      if (outcome.opened && watch.confirmLive && opportunitySide(decision) === 'long') {
+        told(confirmNotice(event, { who: describeDecider(decision.model), confidence: decision.confidence }))
       }
+      // For the session report: what was refused, and why. A refusal a person can act on -- the
+      // paper account, the money-out cap, a pause -- is told; the market's reasons, which repeat
+      // every minute, are the Watch card's.
+      if (!outcome.opened) refused(deps, event, decision, outcome.text)
+      if (!outcome.opened && actionableRefusal(outcome.text)) told(tradeBlockedNotice(event.symbol, outcome.text))
+      return outcome.opened
+    } catch (failure) {
+      const text = `No paper trade: ${failure instanceof Error ? failure.message : String(failure)}`
+      paper.push(text)
+      refused(deps, event, decision, text)
+      return false
     }
-    // One plain notice an event, raised by the first call to trade that arrives. An answer that
-    // opened a paper trade has raised a notice of its own, which says more, so it raises no plain
-    // one and none follows it. A paper trade opened on a later answer is still told: that is
-    // something done, not one more opinion.
+  }
+
+  /** One plain notice an event, raised by the first call to trade that arrives. An answer that
+   * opened a paper trade has raised a notice of its own, which says more, so it raises no plain
+   * one and none follows it. A paper trade opened on a later answer is still told: that is
+   * something done, not one more opinion. */
+  const plainNotice = (decision: AiSignalDecision, opened: boolean): void => {
     const notice = noticed || opened ? null : watchNotice(event, decision)
     if (opened) noticed = true
     if (notice !== null) {
@@ -192,33 +208,57 @@ async function askAbout(event: MarketEvent, watch: AiWatchConfig, deps: WatchDep
         // A desktop that cannot show it is not a reason to lose an answer that was paid for.
       }
     }
+  }
+
+  const ask = async (model: string): Promise<AiSignalDecision> => {
+    const decision = await deps.ask({ ...market, model, source: 'watch' })
+    // A call the watch would act on may open a paper trade, when that is switched on -- at once
+    // with one model, after the vote with more. Whatever comes of it, the answer was paid for and
+    // is returned.
+    if (byVote) {
+      if (isActionableOpportunity(decision) && firstActionable === null) firstActionable = decision
+      return decision
+    }
+    const opened = isActionableOpportunity(decision) ? await tradeOn(decision) : false
+    plainNotice(decision, opened)
     return decision
   }
 
-  /** A notice of the document's kinds, told without failing the pass that raised it. */
-  const told = (notice: { title: string; body: string; extra: NoticeExtra }): void => {
-    try {
-      deps.notify(notice.title, notice.body, notice.extra)
-    } catch {
-      // A desktop that cannot show it is not a reason to lose an answer that was paid for.
+  /** The answers added up (voteOf): the trade the vote opens, or the refusal it is, written down
+   * against the first answer that would have traded. */
+  const voted = async (results: AskModelsResult['results']): Promise<string> => {
+    const decisions = results.map((result) => result.decision)
+    const vote = voteOf(decisions)
+    let opened = false
+    if (vote.chosen !== null) opened = await tradeOn(vote.chosen)
+    else if (vote.refusal !== null) {
+      const first = decisions.find((decision): decision is AiSignalDecision => isActionableOpportunity(decision) && decision !== null)
+      const text = `No paper trade: ${vote.refusal}`
+      paper.push(text)
+      if (first !== undefined) refused(deps, event, first, text)
     }
+    // The plain notice, held back for the vote: the first call to trade's, unless a trade opened.
+    if (firstActionable !== null) plainNotice(firstActionable, opened)
+    return vote.text
   }
 
-  /** What the models said, then what was done about it, then who was not asked. Models on opposite
-   * sides are told (MODEL_DISAGREEMENT); a model rested for the day is told once a day. */
-  const outcome = (results: AskModelsResult['results'], heldBack: number): { text: string; ok: boolean; retry: boolean } => {
+  /** What the models said, the vote where there was one, then what was done about it, then who was
+   * not asked. Models on opposite sides are told (MODEL_DISAGREEMENT); a model rested for the day
+   * is told once a day. */
+  const outcome = async (results: AskModelsResult['results'], heldBack: number): Promise<{ text: string; ok: boolean; retry: boolean }> => {
     const said = summarize(event, results, heldBack)
     const sides = results.flatMap((result) => {
       const side = result.decision === null ? null : opportunitySide(result.decision)
       return side === 'long' || side === 'short' ? [{ model: describeDecider(result.model), side }] : []
     })
     if (sides.some((entry) => entry.side === 'long') && sides.some((entry) => entry.side === 'short')) told(disagreementNotice(event, sides))
+    const vote = byVote && results.length >= 2 ? ` Vote: ${await voted(results)}.` : ''
     for (const model of resting) {
       told(breakerNotice('model', `${describeDecider(model)} failed or was refused three times running today, and the watch does not ask it again until midnight UTC. The other models are still asked.`, `model:${model}`))
     }
     // Who was left out, in a few words: the card says why on a line of its own.
     const rested = resting.length === 0 ? '' : ` Not asked: ${resting.map((model) => describeDecider(model)).join(', ')}, rested until midnight UTC.`
-    return { text: `${said.text}${paper.map((line) => ` ${line}`).join('')}${rested}`, ok: said.ok, retry: false }
+    return { text: `${said.text}${vote}${paper.map((line) => ` ${line}`).join('')}${rested}`, ok: said.ok, retry: false }
   }
 
   const gated = watch.firstModelGates && watch.models.length > 1

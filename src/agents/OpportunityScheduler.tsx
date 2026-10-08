@@ -21,7 +21,7 @@ const deps: WatchDeps = {
   notify: (title, body, extra) => void window.api.notify(title, body, extra?.severity, extra).catch(() => undefined),
   nowSec: () => Math.floor(Date.now() / 1000),
   // Paper only, and only when the user has switched it on (./watchPaperTrade.ts).
-  paperTrade: (event, decision) => openWatchPaperTrade(event, decision, watchPaperBrowserDeps),
+  paperTrade: (event, decision, byVote) => openWatchPaperTrade(event, decision, watchPaperBrowserDeps, { byVote: byVote === true }),
   // A refusal written to the records on file (shared/records.ts), for the session report after a
   // restart and the trade's timeline. A record; nothing reads it to decide anything.
   recordRefusal: (refusal) => void window.api.records.refusal(refusal).catch(() => undefined)

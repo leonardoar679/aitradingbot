@@ -42,6 +42,7 @@ Taken on 5 October 2026, at commit `aef376d`.
 | | The App's Own Paper Trades | The watch's and the news rules' open paper trades, where each stands on the last closed minute, and its THESIS STATUS (a reading, never a control); a watched real position's barriers and status | Positions (new, 8 October 2026) |
 | **Agents** | API key | The OpenRouter key: set, test, remove | Connections; also above the AI pages while none is stored |
 | | Analyze | Ask a model about one market | AI Decisions |
+| | Events (added 8 October 2026, V5 Stage 5) | Each recent event with every model's answer, read-only | AI Decisions |
 | | Opportunities › Watch | Puts events to models with no click; its paper trades | Opportunities |
 | | Opportunities › Right now | Recommendations still valid, ranked; since 6 October 2026 a table with the last hour's other events, a signal and an execution score, and a row that opens the plan, the risk, the news and each model's reasoning | Opportunities, and the top one on Overview |
 | | Opportunities › Models to ask, Events | Each event with its answers, Ask and Paper trade | Opportunities |
@@ -107,7 +108,7 @@ under Settings › Advanced › Effective configuration.
 | | `keepRunningWhenClosed` (added 8 October 2026, V5 Stage 2): closing the window hides it to the tray and everything runs on, or quits the app (off by default; `shared/keepRunning.ts`) | — | Settings › Essentials |
 | `aiConfig.json` | `defaultModel`, `enabledModels`, `route` | Agents › Models | Settings › AI |
 | | `dailyCapUsd`, `callsPerMinute` | Agents › Usage | Settings › AI |
-| | `watch` (on, models, events a day, lowest band, first model gates; and, added 8 October 2026, CONFIRM: a paper BUY it opens is told as ready to confirm as a real order a person places; and, added with V5 Stage 4, `askAt`: at the raise, or once the event is confirmed a pass later) | Agents › Opportunities › Watch | Opportunities (stays with its results) |
+| | `watch` (on, models, events a day, lowest band, first model gates; and, added 8 October 2026, CONFIRM: a paper BUY it opens is told as ready to confirm as a real order a person places; added with V5 Stage 4, `askAt`: at the raise, or once the event is confirmed a pass later; and since V5 Stage 5 three models offered by default with the first gating, and the paper trade following their vote when two or more are asked) | Agents › Opportunities › Watch | Opportunities (stays with its results) |
 | | `watchPaper` (on, model, stake, most open; and, added on 5 October 2026, most open in one direction, the losing run that pauses it, the Bitcoin move that drops a waiting trade) | Agents › Opportunities › Watch | Opportunities |
 | `scanner.json` | `enabled` (on by default since 8 October 2026; only `false` switches it off), `universeSize` (20, 40, 60 or 100) | Explorer › Scanner | Settings › Market |
 | `marketEvents/` | since 8 October 2026 an event may be a market-wide move (`type: 'market_move'`, on BTCUSDT, with `live.members`), and its members carry `live.marketMove`; detector version `events-v2`; since V5 Stage 4 each event carries a `fingerprint` and a `cause`, and `status-YYYY-MM.jsonl` holds each event's life (DETECTED → CONFIRMED → ACTIVE → WEAKENING → EXPIRED), one line a change, read back at start | — | Opportunities, Discovery |

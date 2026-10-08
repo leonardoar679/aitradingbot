@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { mkdir, readFile } from 'fs/promises'
 import { join } from 'path'
 import { DEFAULT_AI_ADDITIONS, healAiAdditions, type AiAdditionsConfig } from '../../shared/aiAdditions'
-import { DEFAULT_AI_DAILY_CAP_USD, DEFAULT_AI_MODEL } from '../../shared/aiSignal'
+import { DEFAULT_AI_DAILY_CAP_USD, DEFAULT_AI_MODEL, DEFAULT_ENABLED_MODELS } from '../../shared/aiSignal'
 import { aiModelSlugOf, isAiModelId, splitAiModelId } from '../../shared/aiEffort'
 import { deciderModel, isPanelId, panelModelOf } from '../../shared/aiPanel'
 import { parseAiRoute, type AiRoute } from '../../shared/aiRoute'
@@ -106,7 +106,9 @@ async function load(): Promise<AiConfigState> {
   // Never a panel: "the default" is asked by things that were promised one call a question.
   const defaultModel =
     typeof raw.defaultModel === 'string' && isAiModelId(raw.defaultModel) && !isPanelId(raw.defaultModel) ? raw.defaultModel : DEFAULT_AI_MODEL
-  const enabledModels = cleanModels(raw.enabledModels)
+  // A fresh install enables the default three (shared/aiSignal.ts DEFAULT_ENABLED_MODELS); a file
+  // that named models keeps exactly those, the default model among them.
+  const enabledModels = raw.enabledModels === undefined ? [...DEFAULT_ENABLED_MODELS] : cleanModels(raw.enabledModels)
   if (!enabledModels.includes(defaultModel)) enabledModels.unshift(defaultModel)
   // A route that could not run -- unreadable, pointing at a model that is not enabled, or at the
   // default itself -- is dropped rather than carried. A setting that cannot run must not read as

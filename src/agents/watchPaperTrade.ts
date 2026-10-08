@@ -182,15 +182,20 @@ async function expectedValueOf(event: MarketEvent, decision: AiSignalDecision, p
 export async function openWatchPaperTrade(
   event: MarketEvent,
   decision: AiSignalDecision,
-  deps: WatchPaperDeps
+  deps: WatchPaperDeps,
+  options: {
+    /** The answer is the one the models' vote chose (shared/opportunityVote.ts, since 8 October
+     * 2026): followed whichever model gave it. Without it, only the named model's answers are. */
+    byVote?: boolean
+  } = {}
 ): Promise<WatchPaperResult | null> {
   const { watchPaper } = await deps.getConfig()
-  if (!watchPaper.enabled || decision.model !== watchPaper.model) return null
+  if (!watchPaper.enabled || (options.byVote !== true && decision.model !== watchPaper.model)) return null
 
   const before = await deps.getSettings()
   // Its own limits, then the losing run that pauses the app's own paper trades (shared/paperPause.ts).
   const blocked =
-    watchPaperBlock({ config: watchPaper, event, decision, executors: before.executors, nowSec: deps.nowSec() }) ??
+    watchPaperBlock({ config: watchPaper, event, decision, executors: before.executors, nowSec: deps.nowSec(), byVote: options.byVote === true }) ??
     paperPauseBlock({ setting: healPaperPause(before.paperPause), executors: before.executors, source: 'watch' })
   if (blocked !== null) return { opened: false, text: `No paper trade: ${blocked}` }
 
@@ -263,7 +268,7 @@ export async function openWatchPaperTrade(
   const refused = await deps.queue(async (): Promise<string | null> => {
     const fresh = await deps.getSettings()
     const problem =
-      watchPaperBlock({ config: watchPaper, event, decision, executors: fresh.executors, nowSec: deps.nowSec() }) ??
+      watchPaperBlock({ config: watchPaper, event, decision, executors: fresh.executors, nowSec: deps.nowSec(), byVote: options.byVote === true }) ??
       paperPauseBlock({ setting: healPaperPause(fresh.paperPause), executors: fresh.executors, source: 'watch' }) ??
       livePaperBlock(book, deps.nowSec() * 1000) ??
       thinBookBlock(book, plan.side, plan.params.amountQuote) ??

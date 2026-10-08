@@ -1,6 +1,6 @@
 import { DEFAULT_AI_ADDITIONS, type AiAdditionsConfig } from './aiAdditions'
 import { DEFAULT_AI_CALLS_PER_MINUTE } from './aiPace'
-import { DEFAULT_AI_DAILY_CAP_USD, DEFAULT_AI_MODEL } from './aiSignal'
+import { DEFAULT_AI_DAILY_CAP_USD, DEFAULT_AI_MODEL, DEFAULT_ENABLED_MODELS } from './aiSignal'
 import { DEFAULT_AI_WATCH, type AiWatchConfig } from './aiWatch'
 import { DEFAULT_AI_WATCH_PAPER, type AiWatchPaperConfig } from './aiWatchPaper'
 import { DEFAULT_ALERTS } from './alerts'
@@ -73,7 +73,8 @@ export const DEFAULT_CONFIG: EffectiveStores = {
   watch: DEFAULT_AI_WATCH,
   watchPaper: DEFAULT_AI_WATCH_PAPER,
   additions: DEFAULT_AI_ADDITIONS,
-  ai: { defaultModel: DEFAULT_AI_MODEL, enabledModels: [DEFAULT_AI_MODEL], dailyCapUsd: DEFAULT_AI_DAILY_CAP_USD, callsPerMinute: DEFAULT_AI_CALLS_PER_MINUTE },
+  // The models sorted, as the effective configuration lists them.
+  ai: { defaultModel: DEFAULT_AI_MODEL, enabledModels: [...DEFAULT_ENABLED_MODELS].sort(), dailyCapUsd: DEFAULT_AI_DAILY_CAP_USD, callsPerMinute: DEFAULT_AI_CALLS_PER_MINUTE },
   scanner: DEFAULT_SCANNER_CONFIG,
   news: DEFAULT_NEWS_CONFIG,
   live: { ...DEFAULT_LIVE_LIMITS, hardMaxOrderQuote: HARD_LIMITS.liveMaxOrderQuote }

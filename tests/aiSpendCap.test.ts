@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { averageCallCostUsd, budgetProblem, describeAiRunCost, estimateCallCostUsd, formatUsd } from '../shared/aiCost'
 import type { AiCallRecord } from '../shared/aiLedger'
-import { DEFAULT_AI_DAILY_CAP_USD, DEFAULT_AI_MODEL } from '../shared/aiSignal'
+import { DEFAULT_AI_DAILY_CAP_USD, DEFAULT_AI_MODEL, DEFAULT_ENABLED_MODELS } from '../shared/aiSignal'
 
 vi.mock('electron', () => ({ app: { getPath: () => process.env.AI_TEST_USER_DATA } }))
 vi.mock('../electron/services/aiCredentialsService', () => ({
@@ -129,13 +129,14 @@ describe('the budget in the main process', () => {
     const { getAiConfig } = await config()
     expect(await getAiConfig()).toEqual({
       defaultModel: DEFAULT_AI_MODEL,
-      enabledModels: [DEFAULT_AI_MODEL],
+      // A fresh install enables the default three (8 October 2026), the default model first.
+      enabledModels: [...DEFAULT_ENABLED_MODELS],
       // One model decides alone until a route is set, and setting one is always somebody's choice.
       route: null,
       dailyCapUsd: DEFAULT_AI_DAILY_CAP_USD,
       spentTodayUsd: 0,
-      // Nothing asks a model without a click until the watch is switched on.
-      watch: { enabled: false, models: [], maxEventsPerDay: 10, minBand: 'urgent', firstModelGates: false, confirmLive: false, askAt: 'detected' },
+      // Nothing asks a model without a click until the watch is switched on: the three are offered, off, the first gating.
+      watch: { enabled: false, models: [...DEFAULT_ENABLED_MODELS], maxEventsPerDay: 10, minBand: 'urgent', firstModelGates: true, confirmLive: false, askAt: 'detected' },
       // And nothing opens a position without one, paper or otherwise, until that is switched on too.
       watchPaper: { enabled: false, model: null, stakeQuote: 100, maxOpen: 3, maxSameSide: 2, pauseAfterLosses: 3, dropOnBtcMovePct: 1 },
       callsPerMinute: 30,

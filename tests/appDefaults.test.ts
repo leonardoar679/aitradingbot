@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_ALERTS, healAlerts } from '../shared/alerts'
 import { CONSERVATIVE_PAPER, DEFAULT_CONFIG, conservativePaper, describeRiskLevel, riskLevelOf } from '../shared/appDefaults'
-import { DEFAULT_AI_DAILY_CAP_USD, DEFAULT_AI_MODEL } from '../shared/aiSignal'
+import { DEFAULT_AI_DAILY_CAP_USD, DEFAULT_AI_MODEL, DEFAULT_ENABLED_MODELS } from '../shared/aiSignal'
 import { DEFAULT_AI_WATCH, healAiWatch } from '../shared/aiWatch'
 import { DEFAULT_AI_WATCH_PAPER, healAiWatchPaper } from '../shared/aiWatchPaper'
 import type { PaperPauseSettings } from '../shared/ipc'
@@ -25,7 +25,8 @@ describe('a store read empty, or holding junk, heals to its default', () => {
     { name: 'paperPause', heal: healPaperPause, fallback: DEFAULT_PAPER_PAUSE },
     { name: 'paperDigest', heal: healPaperDigest, fallback: DEFAULT_PAPER_DIGEST },
     { name: 'alerts', heal: healAlerts, fallback: DEFAULT_ALERTS },
-    { name: 'watch', heal: (value) => healAiWatch(value, [DEFAULT_AI_MODEL]), fallback: DEFAULT_AI_WATCH },
+    // A fresh install enables the default three (8 October 2026), so the watch offers them, off.
+    { name: 'watch', heal: (value) => healAiWatch(value, [...DEFAULT_ENABLED_MODELS]), fallback: DEFAULT_AI_WATCH },
     { name: 'watchPaper', heal: (value) => healAiWatchPaper(value, []), fallback: DEFAULT_AI_WATCH_PAPER },
     { name: 'news', heal: healNewsConfig, fallback: DEFAULT_NEWS_CONFIG },
     { name: 'keepRunningWhenClosed', heal: healKeepRunning, fallback: DEFAULT_KEEP_RUNNING }
@@ -40,6 +41,12 @@ describe('a store read empty, or holding junk, heals to its default', () => {
     // No key: paper only. The watch, its paper trades and the news rules' shorts are off.
     expect(tradingModeOf({ binanceKey: false, status: null })).toBe('paper-only')
     expect(DEFAULT_AI_WATCH.enabled).toBe(false)
+    // Three models offered, the default (the fast one) first and gating; chosen by schema, price and the ledger (8 October 2026).
+    expect(DEFAULT_ENABLED_MODELS).toHaveLength(3)
+    expect(DEFAULT_ENABLED_MODELS[0]).toBe(DEFAULT_AI_MODEL)
+    expect(DEFAULT_AI_WATCH.models).toEqual([...DEFAULT_ENABLED_MODELS])
+    expect(DEFAULT_AI_WATCH.firstModelGates).toBe(true)
+    expect(DEFAULT_CONFIG.ai.enabledModels).toEqual([...DEFAULT_ENABLED_MODELS].sort())
     expect(watchModeOf({ keyConfigured: false, config: null })).toBe('no-key')
     expect(DEFAULT_AI_WATCH_PAPER.enabled).toBe(false)
     expect(DEFAULT_NEWS_CONFIG.delisting.paperShort.enabled).toBe(false)

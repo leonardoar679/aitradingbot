@@ -41,7 +41,7 @@ export type Page =
 /** The pages that hold more than one view, and the views each opens on. */
 export type StrategiesTab = 'runs' | 'execution'
 export type ResearchTab = 'backtest' | 'automation'
-export type AiDecisionsTab = 'analyze' | 'signals'
+export type AiDecisionsTab = 'analyze' | 'signals' | 'events'
 export type DiscoveryTab = 'scanner' | 'news'
 
 export interface PageTabs {

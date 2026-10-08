@@ -326,10 +326,13 @@ export function watchPaperBlock(input: {
   decision: Pick<AiSignalDecision, 'model' | 'recommendation'>
   executors: ExecutorConfig[]
   nowSec: number
+  /** The answer is the one the models' vote chose (shared/opportunityVote.ts, since 8 October
+   * 2026): followed whichever model gave it. Without it, only the named model's answers are. */
+  byVote?: boolean
 }): string | null {
   const { config, event } = input
   if (!config.enabled || config.model === null) return 'Paper trades from the watch are off.'
-  if (input.decision.model !== config.model) return `Paper trades follow ${describeDecider(config.model)}, and this answer is not its.`
+  if (input.byVote !== true && input.decision.model !== config.model) return `Paper trades follow ${describeDecider(config.model)}, and this answer is not its.`
   const own = watchPaperExecutors(input.executors)
   if (own.some((executor) => executor.watch?.eventId === event.id)) return 'A paper trade was already opened for this event.'
   const open = own.filter((executor) => executor.status === 'active')

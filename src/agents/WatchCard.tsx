@@ -23,7 +23,11 @@ import { describeError } from '../utils/ipcError'
 import { buttonStyle, inputStyle, noteStyle } from './agentStyles'
 import { getWatchActivity, priceWatchCall, subscribeWatchActivity, type WatchActivity } from './opportunityWatch'
 import { getModelHealthReport, subscribeModelHealth, type ModelHealthReport } from './modelHealthWatch'
+import { describeModelFacts, loadModelFacts, type ModelFacts } from './modelFacts'
 import type { CandleFetch } from './opportunities'
+
+/** How far back the ledger is read for each model's record on the card. */
+const FACTS_DAYS = 30
 
 const fetchCandles: CandleFetch = async (exchange, symbol, interval, startSec, endSec) =>
   (await window.api.market.fetchHistoricalRange(exchange, symbol, interval, startSec, endSec)).candles
@@ -126,6 +130,18 @@ export function WatchCard({
   // A model disabled on another tab is no longer one the watch can be given.
   const offered = config.enabledModels
   const chosen = models.filter((model) => offered.includes(model))
+  const [facts, setFacts] = useState<Record<string, ModelFacts>>({})
+  const offeredKey = offered.join('|')
+  useEffect(() => {
+    let cancelled = false
+    void loadModelFacts(offered, Math.floor(Date.now() / 1000) - FACTS_DAYS * 86_400).then((next) => {
+      if (!cancelled) setFacts(next)
+    })
+    return (): void => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the models offered, not the array's identity
+  }, [offeredKey])
 
   function toggle(model: string): void {
     setModels((current) => (current.includes(model) ? current.filter((entry) => entry !== model) : [...current.filter((entry) => offered.includes(entry)), model].slice(0, AI_OPPORTUNITY_MAX_MODELS)))
@@ -283,6 +299,12 @@ export function WatchCard({
               <option value="confirmed">once the event is confirmed, a pass later</option>
             </select>
           </label>
+          {watch.models.length > 1 && (
+            <p style={{ ...noteStyle, color: 'var(--text-secondary)', marginTop: '0.3rem' }}>
+              With {watch.models.length} models the paper trade follows their vote: more than half of the usable answers on one side and none on the other, and the
+              plan of the surest among them. A split is refused, written down and told.
+            </p>
+          )}
           {activity.last !== null && (
             <p style={{ ...noteStyle, color: activity.last.ok ? 'var(--text-secondary)' : 'var(--down)', marginTop: '0.3rem' }}>
               Last, at {utcClock(activity.last.at)} UTC: {activity.last.text}
@@ -321,14 +343,29 @@ export function WatchCard({
           </p>
           <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '0.8rem' }}>
             {offered.map((model) => (
-              <label key={model} style={labelStyle}>
-                <input type="checkbox" aria-label={`Watch asks ${model}`} checked={chosen.includes(model)} disabled={busy} onChange={() => toggle(model)} />
-                {describeDecider(model)}
-                {health?.models[model]?.degraded === true && <span style={{ color: 'var(--gold)', fontWeight: 600 }}>DEGRADED</span>}
-                {chosen.length > 1 && chosen.includes(model) && <span style={{ color: 'var(--text-muted)' }}>#{chosen.indexOf(model) + 1}</span>}
+              <label key={model} style={{ ...labelStyle, alignItems: 'flex-start' }}>
+                <input type="checkbox" aria-label={`Watch asks ${model}`} checked={chosen.includes(model)} disabled={busy} onChange={() => toggle(model)} style={{ marginTop: '0.2rem' }} />
+                <span style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
+                  <span>
+                    {describeDecider(model)}
+                    {health?.models[model]?.degraded === true && <span style={{ color: 'var(--gold)', fontWeight: 600 }}> DEGRADED</span>}
+                    {chosen.length > 1 && chosen.includes(model) && <span style={{ color: 'var(--text-muted)' }}> #{chosen.indexOf(model) + 1}</span>}
+                  </span>
+                  {facts[model] !== undefined && (
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }} data-testid="model-facts">
+                      {describeModelFacts(facts[model])}
+                    </span>
+                  )}
+                </span>
               </label>
             ))}
           </div>
+          {chosen.length > 1 && (
+            <p style={{ ...noteStyle, marginTop: '0.5rem' }}>
+              With {chosen.length} models the paper trade follows their vote: more than half of the usable answers on one side and none on the other, and the
+              plan of the surest among them. A split is refused, written down and told.
+            </p>
+          )}
           <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap', alignItems: 'center', marginTop: '0.8rem' }}>
             <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
               Events a day, at most{' '}

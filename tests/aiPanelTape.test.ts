@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AiAgentReports } from '../shared/aiPanel'
 import type { AiRoute } from '../shared/aiRoute'
-import { GPT_INTRADAY_INTERVAL, GPT_LOOKBACK_BARS, type AiSignalTapeRequest } from '../shared/aiSignal'
+import { DEFAULT_ENABLED_MODELS, GPT_INTRADAY_INTERVAL, GPT_LOOKBACK_BARS, type AiSignalTapeRequest } from '../shared/aiSignal'
 import type { Candle } from '../shared/ipc'
 
 // A panel of agents, end to end, with the network faked and everything else real -- the harness
@@ -539,7 +539,8 @@ describe('where a panel may and may not be named', () => {
     const { setAiConfig, getAiConfig } = await services()
     await expect(setAiConfig({ defaultModel: PANEL })).rejects.toThrow(/cannot be enabled or made the default/)
     await expect(setAiConfig({ enabledModels: [MODEL, PANEL] })).rejects.toThrow(/cannot be enabled or made the default/)
-    expect(await getAiConfig()).toMatchObject({ defaultModel: MODEL, enabledModels: [MODEL] })
+    // The list is still the fresh install's default three (8 October 2026), the default model first.
+    expect(await getAiConfig()).toMatchObject({ defaultModel: MODEL, enabledModels: [...DEFAULT_ENABLED_MODELS] })
   })
 
   it('is dropped from a settings file that names one as a model', async () => {

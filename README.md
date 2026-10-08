@@ -1515,6 +1515,20 @@ cannot be made live.
 entry is worth nothing an hour later, so the Opportunities page carries a switch for the one thing
 in this app that asks a model with nobody pressing anything. It is off until it is switched on.
 
+Since 8 October 2026 (the V5 document's §34–35, §39 and §54; V5 Stage 5; your choice of three
+models with a vote of two) it offers **three models by default** — the fast one asked alone, the
+two others only when it calls a trade — chosen by the document's own criteria and not by name:
+strict-schema support and price from the catalogue, and the ledger's thirty days of latency,
+refusals and failures (`shared/aiSignal.ts DEFAULT_ENABLED_MODELS`; the Watch card shows these
+facts under each model). A watch stored with one model keeps it: a different list is a different
+price, agreed to by switching on again. **With two or more models asked, the paper trade follows
+their vote** (`shared/opportunityVote.ts`): more than half of the usable answers on one side and
+none on the other, and the plan of the surest among them; a split is refused, written down and
+told (MODEL_DISAGREEMENT); with one model, as before. **AI Decisions › Events** shows each recent
+event with every model's answer, and the Research tab's **Agreement value** table shows how the
+watch's own trades did by how many models agreed — if that does not back the vote, the vote is not
+a rule worth keeping.
+
 - **Switching it on is the confirmation it gets**, so that confirmation states each model's price
   a call, the most a day of it can cost — every model, for every event its limit allows, and the
   least as well when the first model is asked alone — and how that sits against the daily AI
