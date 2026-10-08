@@ -106,7 +106,11 @@ interface CachedDecision extends AiSignalDecision {
 }
 
 const CANCELLED = 'GPT signal generation cancelled'
-const CALL_TIMEOUT_MS = 60_000
+/** How long one attempt is waited for before it is abandoned: the model has not answered, the
+ * call fails as one that never reached it, and nothing is cached or billed. An object so a test
+ * can shorten it: AbortSignal.timeout runs on the runtime's own clock, which fake timers do not
+ * reach, and a test of the rule should not sit through a minute. */
+export const aiCall = { timeoutMs: 60_000 }
 const MAX_ATTEMPTS = 3
 /** A run that has failed this many decisions running is not going to succeed on the next one. */
 const MAX_CONSECUTIVE_FAILURES = 5
@@ -238,7 +242,7 @@ export async function requestWithRetry(
         messages,
         jsonSchema,
         maxTokens: AI_MAX_OUTPUT_TOKENS,
-        signal: AbortSignal.timeout(CALL_TIMEOUT_MS)
+        signal: AbortSignal.timeout(aiCall.timeoutMs)
       })
     } catch (error) {
       lastError = error

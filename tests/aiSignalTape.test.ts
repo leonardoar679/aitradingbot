@@ -197,6 +197,44 @@ describe('an answer that cannot be used', () => {
     expect((await listAiCalls({})).rows.map((row) => row.status)).toEqual(['failed', 'failed'])
     expect((await getAiConfig()).spentTodayUsd).toBe(0)
   })
+
+  it('is abandoned when the model has not answered in time, counted as failed, and NOT cached', async () => {
+    // The document's 60-second call timeout. A fetch that never answers and ends only when the
+    // call's own signal aborts it, as the real one does. The wait is shortened through its seam:
+    // AbortSignal.timeout runs on the runtime's own clock, which fake timers do not reach. Every
+    // question the app asks goes through the same requestWithRetry, so this pins them all.
+    const aborts: string[] = []
+    let sent = 0
+    vi.stubGlobal(
+      'fetch',
+      (_url: string, init: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          sent += 1
+          init.signal.addEventListener('abort', () => {
+            aborts.push(String((init.signal.reason as { name?: unknown }).name))
+            reject(init.signal.reason)
+          })
+        })
+    )
+    const { generateAiSignalTape, listAiCalls, getAiConfig, aiCall } = await services()
+    expect(aiCall.timeoutMs).toBe(60_000)
+    aiCall.timeoutMs = 40
+
+    const started = performance.now()
+    const tape = await generateAiSignalTape(request(1))
+    expect(performance.now() - started).toBeLessThan(5_000)
+    expect(tape.errorCount).toBe(1)
+    expect(tape.decisions[0].error).toMatch(/timeout/i)
+    // Abandoned, not answered: each of the three attempts was cut off by its own timer.
+    expect(sent).toBe(3)
+    expect(aborts).toEqual(['TimeoutError', 'TimeoutError', 'TimeoutError'])
+
+    // Asked again next time, like any call that never reached the model; nothing was paid.
+    await generateAiSignalTape(request(1, 'rerun'))
+    expect(sent).toBe(6)
+    expect((await listAiCalls({})).rows.map((row) => row.status)).toEqual(['failed', 'failed'])
+    expect((await getAiConfig()).spentTodayUsd).toBe(0)
+  })
 })
 
 describe('a run that should stop', () => {
