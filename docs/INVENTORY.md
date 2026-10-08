@@ -48,6 +48,7 @@ Taken on 5 October 2026, at commit `aef376d`.
 | | Signals › Call history | Every call and how it turned out | AI Decisions |
 | | Benchmark | Models on the same questions, routes, the event benchmark, experiments; since 6 October 2026 the quant, hybrid and buy-and-hold rows and "Does AI help?" | AI Benchmark |
 | | Models | Which models may be asked, the default, routing to a second model | Settings › AI |
+| | Model registry (added 8 October 2026, not an old card) | Each model the app may ask: the catalogue's entry, thirty days of the ledger, and its leaderboard row by event type and regime; shown, never stored or promoted | Settings › AI |
 | | Usage | Daily budget, pace, spend by model today and over 30 days | Settings › AI |
 | | AI additions (added 6 October 2026, not an old card) | Each addition on or off, its daily limit, what it asked today and what a day of it can cost | Settings › AI |
 | | Does the exit check help? (added 6 October 2026, not an old card) | Each trade the exit check closed set against its plan, in R and in money, and its answers | Performance |

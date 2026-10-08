@@ -509,6 +509,19 @@ answers on real past events (2–4 October; SOL, XRP, ETH, DOGE):
 - **On their own over the 30 days**, Trend Regime 4h made +7.15% on the four pairs (4 trades)
   against +8.01% for holding them. Short-Term Channel 15m made −0.84% (8 trades) against +7.62%.
 
+### The model registry
+
+Since 8 October 2026 (the second V3 document's §16 and §35) Settings › AI has a **Model registry**
+card (`shared/modelRegistry.ts`): each model the app may ask, in one place. From the saved catalogue,
+its context, its prices per million tokens and whether it can be held to a schema; from the ledger's
+last thirty days, its calls, how many came back and how many the validator refused, its latency at
+the median and the 95th percentile, what it cost, when it was last asked, and the dated versions
+OpenRouter said answered; and, on a click that reads public candles, its row of the live leaderboard
+with its results by event type and by Bitcoin's regime. The leaderboard's lines hold: a figure under
+thirty closed trades, or ten in a slice, is not printed. Nothing is stored and nothing is promoted;
+the document's promotion rule is not built, since no model has shown an edge to promote and a rule
+would be fitted to noise. The watch's models are still chosen on Opportunities.
+
 ### The AI additions
 
 Since 6 October 2026 (the V3 plan's Stage 7) small questions are put to a model beside the watch's.

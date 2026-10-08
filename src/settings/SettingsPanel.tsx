@@ -6,6 +6,7 @@ import { TextLink } from '../components/TextLink'
 import { useTheme } from '../theme/ThemeContext'
 import type { Theme } from '../theme/palette'
 import { ModelsTab } from '../agents/ModelsTab'
+import { ModelRegistryCard } from '../agents/ModelRegistryCard'
 import { UsageTab } from '../agents/UsageTab'
 import { AiAdditionsCard } from '../agents/AiAdditionsCard'
 import type { Page } from '../navigation/pages'
@@ -142,9 +143,10 @@ function AdvancedSettings({ theme, setTheme, onNavigate }: { theme: Theme; setTh
 
       <SectionHeading
         title="AI"
-        note="Which models may be asked, the default and the route, the daily budget, the pace, the AI additions, and what asking has cost. The watch is switched on and off on Opportunities, beside what it has asked."
+        note="Which models may be asked, the default and the route, what each model is and has done, the daily budget, the pace, the AI additions, and what asking has cost. The watch is switched on and off on Opportunities, beside what it has asked."
       />
       <ModelsTab />
+      <ModelRegistryCard />
       <UsageTab />
       <AiAdditionsCard />
 
