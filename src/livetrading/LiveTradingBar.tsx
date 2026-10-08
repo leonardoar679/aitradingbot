@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react'
 import { AlertTriangle, Power, ShieldOff } from 'lucide-react'
 import type { CredentialStatus, LiveTradingStatus, LiveWatcherSummary } from '../../shared/ipc'
 import { AiStatusChip } from '../ai/AiStatusChip'
+import { describePause, healthVerdict } from '../../shared/exchangeHealth'
+import { useExchangeHealth } from '../hooks/useExchangeHealth'
 import { useLiveConnection } from '../hooks/useLiveMarket'
+import { healthNow } from '../trading/ExchangeHealthCard'
 import { StatusChip } from '../status/StatusChip'
 import { describeLiveMarket, liveMarketStateOf } from '../status/liveMarketChip'
 import { connectionStateOf, describeConnection, describeTradingMode, tradingModeOf } from '../status/statusModes'
@@ -46,6 +49,8 @@ export function LiveTradingBar(): React.JSX.Element | null {
   // The live-price socket's state, with a clock of its own: the age of the last frame is shown,
   // and it has to grow while nothing arrives.
   const connection = useLiveConnection()
+  // And the exchange's health: while it pauses live entries, the bar says so (shared/exchangeHealth.ts).
+  const health = useExchangeHealth()
   const [nowMs, setNowMs] = useState(() => Date.now())
   useEffect(() => {
     const timer = setInterval(() => setNowMs(Date.now()), 500)
@@ -156,6 +161,7 @@ export function LiveTradingBar(): React.JSX.Element | null {
   const engaged = status.killSwitchEngaged
   const armed = status.sessionArmed
   const lossLimitBreached = !engaged && status.realizedPnlToday <= -status.dailyLossLimitQuote
+  const paused = health === null ? null : describePause(healthVerdict(healthNow(health, connection, nowMs)))
   const blockedExits = describeBlockedExits({
     watchedPositions: watchers.length,
     symbols: [...new Set(watchers.map((w) => w.symbol))],
@@ -234,6 +240,26 @@ export function LiveTradingBar(): React.JSX.Element | null {
         )}
       </div>
     </div>
+    {paused !== null && !engaged && (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: '0.5rem',
+          padding: '0.55rem 1rem',
+          flexShrink: 0,
+          background: 'color-mix(in srgb, orange 25%, var(--bg-app))',
+          borderBottom: '1px solid orange',
+          color: 'var(--text-primary)',
+          fontSize: '0.75rem',
+          fontWeight: 600,
+          lineHeight: 1.45
+        }}
+      >
+        <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: '0.12rem' }} />
+        <span>LIVE TRADING PAUSED — {paused}</span>
+      </div>
+    )}
     {blockedExits !== null && (
       <div
         style={{

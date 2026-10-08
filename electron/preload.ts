@@ -56,6 +56,7 @@ import {
   type Ticker24h
 } from '../shared/ipc'
 import type { EffectiveConfig } from '../shared/appConfig'
+import type { HealthState } from '../shared/exchangeHealth'
 import type { AlertRecordOnFile, PaperRefusalRecord, RecordFilter } from '../shared/records'
 
 const api = {
@@ -362,6 +363,16 @@ const api = {
   backtest: {
     exportSave: (request: BacktestExportRequest): Promise<BacktestExportResult> =>
       ipcRenderer.invoke(IpcChannel.BacktestExportSave, request)
+  },
+  /** Exchange health (shared/exchangeHealth.ts): the data host's latency and the clock, the stream
+   * and the key, measured once a minute in the main process; read, and pushed as measured. */
+  health: {
+    state: (): Promise<HealthState> => ipcRenderer.invoke(IpcChannel.HealthState),
+    onUpdate: (listener: (state: HealthState) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, state: HealthState): void => listener(state)
+      ipcRenderer.on(IpcChannel.HealthUpdate, handler)
+      return () => ipcRenderer.removeListener(IpcChannel.HealthUpdate, handler)
+    }
   },
   /** The records on file (shared/records.ts): the app's own paper trades refused, and the alerts
    * told, each written as it happens and read back by span. Records; nothing acts on them. */

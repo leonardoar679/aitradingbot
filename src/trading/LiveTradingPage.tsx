@@ -4,6 +4,7 @@ import { PageHeader } from '../components/PageHeader'
 import { SummaryLine } from '../components/SummaryLine'
 import { TextLink } from '../components/TextLink'
 import { LiveAccountSection } from '../account/LiveAccountSection'
+import { ExchangeHealthCard } from './ExchangeHealthCard'
 import { LivePathCard } from './LivePathCard'
 import type { LiveTradingStatus, LiveWatcherSummary } from '../../shared/ipc'
 import type { Page } from '../navigation/pages'
@@ -89,6 +90,7 @@ export function LiveTradingPage({ onNavigate }: { onNavigate: (page: Page) => vo
     <>
       <PageHeader title="Live Trading" subtitle="Real money: the session's gates, the path to live, and what you hold on your connected exchanges" />
       <LiveSessionCard onNavigate={onNavigate} />
+      <ExchangeHealthCard />
       <LivePathCard onNavigate={onNavigate} />
       <LiveAccountSection />
     </>

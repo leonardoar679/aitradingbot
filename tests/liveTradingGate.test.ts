@@ -10,7 +10,9 @@ import type { LiveOrder, LivePosition } from '../shared/ipc'
 const state = {
   openPositions: [] as LivePosition[],
   restingOrders: [] as LiveOrder[],
-  realizedPnlToday: 0
+  realizedPnlToday: 0,
+  /** Why the exchange's health pauses live entries now (shared/exchangeHealth.ts); none when it does not. */
+  unhealthy: [] as string[]
 }
 
 vi.mock('electron', () => ({ app: { getPath: () => '/nonexistent-test-userdata' } }))
@@ -22,6 +24,9 @@ vi.mock('../electron/services/livePositionsService', () => ({
 }))
 vi.mock('../electron/services/liveOrdersService', () => ({
   listOpenLiveOrders: async () => state.restingOrders
+}))
+vi.mock('../electron/services/exchangeHealthService', () => ({
+  liveHealthReasons: () => state.unhealthy
 }))
 
 type Service = typeof import('../electron/services/liveTradingService')
@@ -87,6 +92,7 @@ beforeEach(() => {
   state.openPositions = []
   state.restingOrders = []
   state.realizedPnlToday = 0
+  state.unhealthy = []
 })
 
 describe('the gate with no allocation configured', () => {
@@ -313,5 +319,34 @@ describe('the size limits are about exposure, not about the margin posted', () =
     // exposure instead, even a 0.20 margin order would be refused against it.
     expect((await service.canPlaceLiveOrder(2, 10)).allowed).toBe(false)
     expect((await service.canPlaceLiveOrder(1, 10)).allowed).toBe(true)
+  })
+})
+
+// THE EXCHANGE'S HEALTH (the V4 document, §92-93): while the data is stale with REST failing, the
+// clock is off, REST is slow or the key's last test failed, no NEW real position is opened. A
+// closing order is never refused by it: an open position keeps its protection.
+describe('the gate while the exchange is degraded', () => {
+  it('refuses a new order and says why, after the arming and the kill switch', async () => {
+    const service = await freshService()
+    state.unhealthy = ["the clock is 7.4 s ahead of Binance's", "the Binance key's last test failed"]
+    expect(await service.canPlaceLiveOrder(5)).toEqual({ allowed: false, reason: "Live trading is paused: the clock is 7.4 s ahead of Binance's; the Binance key's last test failed" })
+    // Disarmed, the arming is what refuses: health is read only for an order that could otherwise go.
+    await service.setSessionArmed(false)
+    expect((await service.canPlaceLiveOrder(5)).reason).toBe('Live trading is not armed for this session')
+  })
+
+  it('never refuses a close for it', async () => {
+    const service = await freshService()
+    state.unhealthy = ['market data stale 95 s and REST has failed 3 reads running']
+    expect(await service.canCloseLivePosition()).toEqual({ allowed: true, reason: null })
+    expect((await service.canPlaceLiveOrder(5)).allowed).toBe(false)
+  })
+
+  it('lets an order through again once the exchange is healthy', async () => {
+    const service = await freshService()
+    state.unhealthy = ['REST has taken over 5 s 3 reads running']
+    expect((await service.canPlaceLiveOrder(5)).allowed).toBe(false)
+    state.unhealthy = []
+    expect(await service.canPlaceLiveOrder(5)).toEqual({ allowed: true, reason: null })
   })
 })

@@ -15,6 +15,8 @@ export const IpcChannel = {
   RecordsRefusals: 'records:refusals',
   RecordsAlert: 'records:alert',
   RecordsAlerts: 'records:alerts',
+  HealthState: 'health:state',
+  HealthUpdate: 'health:update',
   BacktestExportSave: 'backtest:exportSave',
   SettingsGet: 'settings:get',
   SettingsSet: 'settings:set',

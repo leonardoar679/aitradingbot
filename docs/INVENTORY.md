@@ -167,6 +167,11 @@ The main process also runs loops that need no window at all:
 - `newsFeedService` (added 6 October 2026) reads four free news feeds every three minutes, always:
   CoinDesk, The Block, Cointelegraph and Decrypt. It keeps each story once, and reads the 1-minute
   candles of the coins they name to say what the price did after. Public data only.
+- `exchangeHealthService` (added 8 October 2026) measures the data host once a minute, one public
+  request for the time, and keeps the live-price socket's state and the key's last test beside it;
+  the live order gate refuses a NEW real position while the exchange is degraded (stale data with
+  REST failing, a clock over five seconds off, REST slow three reads running, a key whose last test
+  failed), and never a closing order. The bar and Live Trading show it (`shared/exchangeHealth.ts`).
 - `livePositionWatchersService` evaluates live exits every 5 seconds.
 - `liveTwapService` places TWAP slices.
 

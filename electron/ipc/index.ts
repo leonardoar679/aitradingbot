@@ -12,6 +12,7 @@ import { registerLiveTradingHandlers } from './handlers/liveTradingHandlers'
 import { registerBacktestHandlers } from './handlers/backtestHandlers'
 import { registerAiHandlers } from './handlers/aiHandlers'
 import { registerRecordHandlers } from './handlers/recordHandlers'
+import { registerHealthHandlers } from './handlers/healthHandlers'
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerAppHandlers()
@@ -21,6 +22,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerScannerHandlers(mainWindow)
   registerResearchHandlers(mainWindow)
   registerLiveMarketHandlers(mainWindow)
+  registerHealthHandlers(mainWindow)
   registerNewsFeedHandlers(mainWindow)
   registerNewsHandlers(mainWindow)
   registerCredentialsHandlers()

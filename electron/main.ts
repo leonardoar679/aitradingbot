@@ -7,6 +7,7 @@ import { startLiveTwapLoop } from './services/liveTwapService'
 import { startMarketScanner } from './services/marketScannerService'
 import { startMarketResearch } from './services/marketResearchService'
 import { startLiveMarket } from './services/liveMarketService'
+import { startExchangeHealth } from './services/exchangeHealthService'
 import { startNewsReader } from './services/newsService'
 import { startNewsFeed } from './services/newsFeedService'
 import { startAiAdditions } from './services/aiAdditionsService'
@@ -93,6 +94,11 @@ if (!gotSingleInstanceLock) {
     // for the pairs shown and the app's own paper trades, and Bitcoin's and ether's minutes always.
     // No key, no model, no order. See liveMarketService.ts.
     startLiveMarket()
+    // Measures the data host once a minute -- one public request for the time -- and keeps the
+    // stream's state and the key's last test beside it. The live order gate reads its verdict before
+    // a real position is opened; a closing order never. No key, no model, no order. See
+    // exchangeHealthService.ts.
+    startExchangeHealth()
     // Reads Binance's announcement lists once a minute and keeps each article once. One public
     // list, no key, no model, no order; started here only if it was left switched on. See
     // newsService.ts.

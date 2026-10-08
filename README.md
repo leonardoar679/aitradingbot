@@ -2214,6 +2214,7 @@ trusted from the renderer:
 | **Daily loss limit** | A true realized-P&L limit, backed by the live position ledger below — breaching it **auto-disarms** the session the instant the breaching fill is recorded, not on the next order attempt. |
 | **Kill switch** | Persisted, stays engaged until manually released, blocks arming outright while engaged. |
 | **Session-arm** | In-memory only, never persisted — resets to *off* on every app launch. Separate from the kill switch: this is the ordinary daily on/off, the kill switch is the emergency stop. |
+| **Exchange health** (since 8 October 2026; the V4 document's §92-93) | The main process measures the data host once a minute with one public request for the time, and keeps the live-price socket's state and the key's last test beside it (`shared/exchangeHealth.ts`, `electron/services/exchangeHealthService.ts`). A **new** real position is refused while the stream has delivered nothing for a minute and REST has failed three reads running, the clock is over five seconds off Binance's, REST has taken over five seconds three reads running, or the key's last test failed; the bar says LIVE TRADING PAUSED and why, and Live Trading has the figures. A closing order is never refused by it: an open position keeps its protection. |
 
 One gate is not user-facing and sits below all of these: **a signed request can only ever be sent
 to a host that implements the trading routes.** Market data resolves from a wider list that

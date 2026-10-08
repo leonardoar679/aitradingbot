@@ -9,6 +9,7 @@ import { committedAllocationQuote, describeAllocationBreach } from '../../shared
 import { notionalFor, resolveLeverage } from '../../shared/perp'
 import { listOpenLivePositions } from './livePositionsService'
 import { listOpenLiveOrders } from './liveOrdersService'
+import { liveHealthReasons } from './exchangeHealthService'
 
 // Safety state for real order placement — deliberately its own file, separate from
 // settings.json and credentials.json, so a bug in either of those can never weaken a gate here.
@@ -241,6 +242,11 @@ export async function canPlaceLiveOrder(quoteAmount: number, leverage?: number):
   const state = await load()
   if (!sessionArmed) return { allowed: false, reason: 'Live trading is not armed for this session' }
   if (state.killSwitchEngaged) return { allowed: false, reason: 'Kill switch is engaged' }
+  // The exchange's health (shared/exchangeHealth.ts): stale data with REST failing, a clock off
+  // Binance's, REST slow three reads running, or a key whose last test failed, and no new real
+  // position is opened. An exit is never refused by it: canCloseLivePosition reads none of this.
+  const unhealthy = liveHealthReasons()
+  if (unhealthy.length > 0) return { allowed: false, reason: `Live trading is paused: ${unhealthy.join('; ')}` }
   if (notional > state.maxOrderQuote) {
     return { allowed: false, reason: `Order exceeds the configured max order size (${state.maxOrderQuote})${exposureLabel}` }
   }
