@@ -21,88 +21,36 @@ import { _electron as electron } from 'playwright-core'
 import * as readline from 'node:readline'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { execFile } from 'node:child_process'
-import { fileURLToPath } from 'node:url'
 
-const APP_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const SHOT_DIR = process.env.SCREENSHOT_DIR || path.join(APP_DIR, '.shots')
-fs.mkdirSync(SHOT_DIR, { recursive: true })
+import { APP_DIR, ELECTRON_BIN, reapStaleApps as reapAppsByPath, samePath } from './lib/electron.mjs'
 
-// TWO OPTIONAL SWITCHES FOR DRIVING THE APP WITHOUT TOUCHING A REAL SESSION. Both are off unless
-// set, and with both off this driver behaves exactly as it always has.
-//
-//   APP_USER_DATA_DIR  a scratch profile folder. The app is launched with --user-data-dir, so its
-//                      settings, credentials, ledgers and single-instance lock all live there
-//                      instead of in %APPDATA%/newtradingbot.
-//   APP_ENTRY          a built main script to launch instead of this checkout's out/ -- e.g.
-//                      dist/verify/main/index.js from `electron-vite build --outDir dist/verify`.
-//
-// They exist because of one measured hazard: someone can be RUNNING this app, from this checkout,
-// while a change to it is being verified. The stale-process sweep below matches on the repo path,
-// so a plain `launch` kills that running app -- along with any live-position watcher protecting
-// real money in it -- and `npm run build` rewrites the out/ it was started from. With a scratch
-// profile the sweep is narrowed to processes carrying that profile's path, and with APP_ENTRY the
-// build under test never overwrites the one in use.
-const USER_DATA_DIR = process.env.APP_USER_DATA_DIR ? path.resolve(process.env.APP_USER_DATA_DIR) : null
-const APP_ENTRY = process.env.APP_ENTRY ? path.resolve(APP_DIR, process.env.APP_ENTRY) : APP_DIR
-
-const samePath = (a, b) =>
-  process.platform === 'win32' ? path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase() : path.resolve(a) === path.resolve(b)
-
-let app = null
-let page = null
-
-const ELECTRON_BIN =
-  process.platform === 'win32'
-    ? path.join(APP_DIR, 'node_modules/electron/dist/electron.exe')
-    : process.platform === 'darwin'
-      ? path.join(APP_DIR, 'node_modules/electron/dist/Electron.app/Contents/MacOS/Electron')
-      : path.join(APP_DIR, 'node_modules/electron/dist/electron')
-
-/** Kills app processes left running by a previous run of this driver.
- *
- * The app is not leaking: main.ts handles `window-all-closed` with app.quit(), and killing the
- * main process tears its children down cleanly -- both were checked. What strands processes is
- * THIS DRIVER dying before quit() runs: a `timeout` expiring around a slow command, a Ctrl-C, a
- * crash. Playwright's electronApp.close() is the only thing that stops the app it launched, so if
- * the driver never reaches it, all four processes stay up. Measured: SIGKILL the driver after
- * launch and four remain.
- *
- * That matters because they hold the app's single-instance lock, so the NEXT launch exits
- * immediately with code 0 and no error, and Playwright reports a bare "Process failed to launch!"
- * naming no cause. The failure reads like a broken build, and it cost two debugging sessions
- * before it was understood.
- *
- * Matching on the repo path is not optional. Claude Code and VS Code are themselves Electron
- * apps, and a blanket `Stop-Process -Name electron` kills the editor this is running inside.
- *
- * With a scratch profile the match narrows to that profile's path, which every process of the
- * instance this driver launched carries on its command line and no other instance does. The repo
- * path alone also matches an app the user started themselves from this checkout.
- *
- * Windows-only, since that is where this was measured; a no-op elsewhere. */
-function reapStaleApps() {
-  if (process.platform !== 'win32') return Promise.resolve(0)
-  // -Force so a hung process still goes; SilentlyContinue so a process that exits between the
-  // query and the kill is not an error.
-  // .Contains() rather than -like: -like treats [ ] * ? as wildcards, and a path is a literal.
-  // Single-quoted PowerShell strings take backslashes literally, so the path needs no escaping
-  // beyond doubling any apostrophe in it.
-  const needle = (USER_DATA_DIR ?? APP_DIR).replace(/'/g, "''")
-  const script = `
-    $procs = Get-CimInstance Win32_Process -Filter "Name='electron.exe'" |
-      Where-Object { $_.CommandLine -and $_.CommandLine.Contains('${needle}') }
-    $procs | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-    ($procs | Measure-Object).Count`
-  return new Promise((resolve) => {
-    execFile(
-      'powershell',
-      ['-NoProfile', '-NonInteractive', '-Command', script],
-      { timeout: 15_000 },
-      (err, stdout) => resolve(err ? 0 : Number(String(stdout).trim()) || 0)
-    )
-  })
-}
+const SHOT_DIR = process.env.SCREENSHOT_DIR || path.join(APP_DIR, '.shots')
+fs.mkdirSync(SHOT_DIR, { recursive: true })
+
+// TWO OPTIONAL SWITCHES FOR DRIVING THE APP WITHOUT TOUCHING A REAL SESSION. Both are off unless
+// set, and with both off this driver behaves exactly as it always has.
+//
+//   APP_USER_DATA_DIR  a scratch profile folder. The app is launched with --user-data-dir, so its
+//                      settings, credentials, ledgers and single-instance lock all live there
+//                      instead of in %APPDATA%/newtradingbot.
+//   APP_ENTRY          a built main script to launch instead of this checkout's out/ -- e.g.
+//                      dist/verify/main/index.js from `electron-vite build --outDir dist/verify`.
+//
+// They exist because of one measured hazard: someone can be RUNNING this app, from this checkout,
+// while a change to it is being verified. The stale-process sweep below matches on the repo path,
+// so a plain `launch` kills that running app -- along with any live-position watcher protecting
+// real money in it -- and `npm run build` rewrites the out/ it was started from. With a scratch
+// profile the sweep is narrowed to processes carrying that profile's path, and with APP_ENTRY the
+// build under test never overwrites the one in use.
+const USER_DATA_DIR = process.env.APP_USER_DATA_DIR ? path.resolve(process.env.APP_USER_DATA_DIR) : null
+const APP_ENTRY = process.env.APP_ENTRY ? path.resolve(APP_DIR, process.env.APP_ENTRY) : APP_DIR
+
+let app = null
+let page = null
+
+/** The stale-process sweep (scripts/lib/electron.mjs), matched on the scratch profile's path when
+ * one is set, else on the repo path. */
+const reapStaleApps = () => reapAppsByPath(USER_DATA_DIR ?? APP_DIR)
 
 /** Strips one layer of surrounding quotes. Shells pass them through to argv, and every command
  * here takes the rest of the line as a single string, so a quoted argument arrives quoted. */

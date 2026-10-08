@@ -223,6 +223,7 @@ describe('buildSessionReport', () => {
   it('reads a span from its choice', () => {
     expect(spanStart('hour', NOW, null)).toBe(NOW - 3600)
     expect(spanStart('twelve', NOW, null)).toBe(NOW - 43_200)
+    expect(spanStart('day', NOW, null)).toBe(NOW - 86_400)
     expect(spanStart('session', NOW, T - 600)).toBe(T - 600)
   })
 })

@@ -35,6 +35,7 @@ function clock(sec: number): string {
 const SPANS: { span: ReportSpan; label: string }[] = [
   { span: 'hour', label: 'Last hour' },
   { span: 'twelve', label: 'Last 12 hours' },
+  { span: 'day', label: 'Last 24 hours' },
   { span: 'session', label: 'This session' }
 ]
 
@@ -85,8 +86,8 @@ function figures(report: SessionReport): { title: string; lines: string[] }[] {
 }
 
 /** The session report on Performance (shared/shadowReport.ts): what the app did over the last hour,
- * the last twelve hours, or since a session was started, and whether it held to the V3 document's
- * gates for its test runs. It reads, and asks nothing; saving it writes a file a person names. */
+ * the last twelve hours, the last day, or since a session was started, and whether it held to the
+ * V3 document's gates for its test runs. It reads, and asks nothing; saving it writes a file a person names. */
 export function SessionReportCard(): React.JSX.Element {
   const [session, setSession] = useState<number | null>(readSessionStart)
   const [report, setReport] = useState<SessionReport | null>(null)
@@ -134,8 +135,8 @@ export function SessionReportCard(): React.JSX.Element {
   return (
     <Card title="Session report">
       <p style={{ ...noteStyle, marginTop: 0 }}>
-        What the app did over the last hour, the last twelve hours, or since a session was started, and whether it held to the gates the V3 document sets for its test
-        runs: nothing traded on a stale or bad price, from an invalid answer, twice or past a limit; more than {REPORT_LINES.aiSuccess * 100}% of calls answered
+        What the app did over the last hour, the last twelve hours, the last day, or since a session was started, and whether it held to the gates the V3 document sets for
+        its test runs: nothing traded on a stale or bad price, from an invalid answer, twice or past a limit; more than {REPORT_LINES.aiSuccess * 100}% of calls answered
         and {REPORT_LINES.validation * 100}% valid; and over twelve hours, every recommendation with an outcome, every trade traced, costs charged and news linked.
         It reads what is on file and asks nothing. Profit is reported, not gated.
       </p>

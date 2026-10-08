@@ -27,8 +27,8 @@ import { rMultiple } from './paperRisk'
 
 export const SESSION_REPORT_VERSION = 'session-report-v1'
 
-export type ReportSpan = 'hour' | 'twelve' | 'session'
-export const REPORT_SPAN_SECONDS = { hour: 3600, twelve: 43_200 } as const
+export type ReportSpan = 'hour' | 'twelve' | 'day' | 'session'
+export const REPORT_SPAN_SECONDS = { hour: 3600, twelve: 43_200, day: 86_400 } as const
 
 /** The gates' lines, from the document's §39, written down before any run. */
 export const REPORT_LINES = {

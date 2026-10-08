@@ -165,9 +165,11 @@ export const sessionReportBrowserDeps: SessionReportDeps = {
   nowSec: () => Math.floor(Date.now() / 1000)
 }
 
-/** The span a choice names: the last hour, the last twelve hours, or since the session began. */
+/** The span a choice names: the last hour, the last twelve hours, the last day, or since the session
+ * began. */
 export function spanStart(span: ReportSpan, nowSec: number, sessionStartedSec: number | null): number {
   if (span === 'hour') return nowSec - 3600
   if (span === 'twelve') return nowSec - 43_200
+  if (span === 'day') return nowSec - 86_400
   return sessionStartedSec ?? SESSION_STARTED_SEC
 }

@@ -642,8 +642,8 @@ slid to 98.4 over fifteen minutes, past three quarters of the way to its 2% stop
 ### The session report
 
 Since 6 October 2026 (the V3 plan's Stage 8) Performance has a **Session report** card
-(`shared/shadowReport.ts`). It covers the last hour, the last twelve hours, or the time since
-**Start a session**. It reports what the app did and whether it held to the gates the V3 document
+(`shared/shadowReport.ts`). It covers the last hour, the last twelve hours, the last day (since
+7 October 2026, for the document's 24-hour run), or the time since **Start a session**. It reports what the app did and whether it held to the gates the V3 document
 sets for its 1-hour and 12-hour test runs. It reads what is on file and asks nothing. **Save as
 JSON** and **Save as CSV** write it to a file you name.
 
@@ -698,6 +698,18 @@ Two things to know:
   prices, and the slippage gate names it. A position a person makes carries none either.
 - **Kept only while the app runs:** the stream's log, the alerts and the refused trades. The report
   says when the app started, and reaches back no further for those.
+
+**The runs themselves** are made by `scripts/shadow-run.mjs` (since 7 October 2026; before that the
+script lived outside the repo): hours of the real market, feeds and stream on a scratch profile and
+a separate build (`npx electron-vite build --outDir dist/<name>`, never `out/`), with OpenRouter faked
+in the main process before the first window opens, so that nothing is spent and the only key ever
+stored is a made-up one the fake answers. It writes a status line every ten minutes, the last hour's
+report every hour (what the app keeps only in memory, on file), and at the end the hour, twelve-hour,
+day and session reports as JSON and CSV; then the watch goes off, the fake key is removed and the app
+closes. A run killed by a restart is resumed with `RESUME=1`, which keeps the profile and the output
+and runs the minutes left; `scripts/shadow-analyze.py` prints every segment, the hourly and final
+reports with their gates, and the records on file. The profile has to be inside the run's own root
+and is never the real one; the script refuses to run the `out/` build.
 
 Checked on a separate build and a scratch profile. It was seeded with an hour of records: one
 event, a watch answer and a failed call, a news analyst's call, and a paper trade of the watch's

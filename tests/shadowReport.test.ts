@@ -5,6 +5,7 @@ import { rMultiple } from '../shared/paperRisk'
 import {
   REPORT_LINES,
   refusalReason,
+  REPORT_SPAN_SECONDS,
   sessionReportCsv,
   sessionReportOf,
   type GateId,
@@ -421,5 +422,16 @@ describe("the stream's host", () => {
     expect(lines.some((line) => line.startsWith('stream,data host switches,12,'))).toBe(true)
     const unopened = sessionReportOf(input({ connection: { open: false, connects: 0, drops: 0, lastMessageAt: null, gaps: [], host: null, hostSwitches: 0, dataHostSwitches: 0 } }))
     expect(unopened.stream?.host).toBeNull()
+  })
+})
+
+// The 24-hour run (the document's §38) reads as one span, and a day is long enough for every gate.
+describe('the day span', () => {
+  it('is a day long, and the twelve-hour gates apply to it', () => {
+    expect(REPORT_SPAN_SECONDS.day).toBe(86_400)
+    const day = sessionReportOf(input({ span: 'day', fromSec: T - 24 * HOUR }))
+    expect(day.span).toBe('day')
+    expect(day.twelveHour).toBe(true)
+    expect(day.gates.filter((gate) => gate.twelveHour).every((gate) => gate.status !== 'not measured' || gate.detail.length > 0)).toBe(true)
   })
 })
