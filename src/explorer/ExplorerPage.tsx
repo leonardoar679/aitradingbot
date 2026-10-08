@@ -25,6 +25,7 @@ import { WhyButton } from '../news/WhyItMovedHost'
 import { NewsCard } from './NewsCard'
 import { NewsFeedCard } from './NewsFeedCard'
 import { NewsRecordCard } from './NewsRecordCard'
+import { CandidatesCard } from './CandidatesCard'
 
 const PAIRS_SHOWN = 15
 const EVENTS_SHOWN = 25
@@ -303,6 +304,8 @@ export function ExplorerPage({
               It costs one request a pair a minute, and it stays on across restarts until it is switched off.
             </p>
           </Card>
+
+          <CandidatesCard />
 
           <Card title="Now">
             {pairs.length === 0 ? (

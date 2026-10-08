@@ -1,6 +1,7 @@
 import { BTC_REGIME_PCT, btcRegimeOf, type AiMarketReturns, type BtcRegime } from './aiEventMarket'
 import type { Candle, SymbolInfo, Ticker24h } from './ipc'
-import { pickUniverse } from './marketScanner'
+import type { EventBand, EventDirection, MarketEventType } from './marketEvent'
+import { pickUniverse, type ScannerPair } from './marketScanner'
 
 // WHAT THE APP RESEARCHES WHEN IT OPENS: THE LIQUID PAIRS, WHAT MOVED OVER A DAY AND A WEEK, WHAT
 // IS TRENDING, AND WHAT STATE THE MARKET IS IN.
@@ -15,8 +16,10 @@ import { pickUniverse } from './marketScanner'
 // below, because a status shown on Overview and used to rank what is on offer must be the same rule
 // each time it is read.
 
-/** research-v2 (6 October 2026): the status gained the market's regime in a word. */
-export const MARKET_RESEARCH_VERSION = 'research-v2'
+/** research-v2 (6 October 2026): the status gained the market's regime in a word. research-v3 (8
+ * October 2026, the V5 document's §14-17): each pair's day and week in more figures, two scores
+ * across the universe, the candidates, and the emerging movers beside the scanner. */
+export const MARKET_RESEARCH_VERSION = 'research-v3'
 
 /** The most traded USDT pairs, at most this many... */
 export const RESEARCH_UNIVERSE_SIZE = 50
@@ -30,6 +33,13 @@ export const RESEARCH_REFRESH_MS = 10 * 60_000
 export const TRENDING_REFRESH_MS = 15 * 60_000
 /** CoinGecko's free list of the coins searched most in the last 24 hours. No key. */
 export const TRENDING_URL = 'https://api.coingecko.com/api/v3/search/trending'
+/** A complete day that closed this far above its open is a strong day (the V5 document, §16). */
+export const STRONG_DAY_PCT = 2
+/** The pairs the funnel keeps (the V5 document, §14): the top this many by the larger of a pair's
+ * two scores, the day's and the week's. */
+export const RESEARCH_CANDIDATES = 15
+/** The day's and the week's biggest movers listed on Markets, each way. */
+export const MOVERS_SHOWN = 8
 
 const DAY = 86_400
 
@@ -104,6 +114,27 @@ export interface ResearchPair {
   /** The price now against the highest of those seven days and today, in percent: zero at the high,
    * negative below it. */
   fromHigh7dPct: number | null
+  /** The day's range, its high over its low, in percent of the low (the V5 document, §15). Null
+   * without the ticker's high and low. */
+  range24hPct: number | null
+  /** The price now against the day's high, in percent: zero at the high, negative below it. */
+  fromHigh24hPct: number | null
+  /** The standard deviation of the seven complete days' close-to-close moves, in percent (§16).
+   * Null without eight complete days. */
+  volatility7dPct: number | null
+  /** How much of the week's path was one direction: the net move of the seven complete days over
+   * the sum of each day's move, 0 (back and forth) to 1 (straight). Null without eight complete
+   * days. */
+  trend7d: number | null
+  /** Of the last seven complete days, how many closed STRONG_DAY_PCT or more above their open. */
+  strongDays: number | null
+  /** The day's standing across the universe: the mean of the pair's z-scores for its day's move,
+   * its volume expansion (log), its range and its distance from the day's high, each over the pairs
+   * that have the figure (withScores). Null until scored, or without any figure. */
+  score24h: number | null
+  /** The week's standing the same way: its week's move, its volatility, its trend, its distance
+   * from the week's high and its strong days. */
+  score7d: number | null
   /** On CoinGecko's trending list when it was last read. */
   trending: boolean
 }
@@ -159,6 +190,9 @@ export interface ResearchState {
   finishedAt: number | null
   steps: ResearchStep[]
   pairs: ResearchPair[]
+  /** The funnel's choice (the V5 document, §14): the RESEARCH_CANDIDATES pairs standing highest by
+   * the larger of their two scores, best first. Empty until scored. */
+  candidates: string[]
   trending: TrendingCoin[] | null
   trendingAt: number | null
   market: MarketStatus | null
@@ -178,6 +212,7 @@ export function emptyResearchState(): ResearchState {
     finishedAt: null,
     steps: (Object.keys(STEP_LABELS) as ResearchStepId[]).map((id) => ({ id, label: STEP_LABELS[id], status: 'waiting', detail: null })),
     pairs: [],
+    candidates: [],
     trending: null,
     trendingAt: null,
     market: null
@@ -209,6 +244,14 @@ export function readResearchPair(pair: SymbolInfo & { quoteVolume24h: number }, 
   const base = complete.length >= 8 ? complete[complete.length - 8].close : null
   const meanVolume = week.length === 7 ? week.reduce((sum, bar) => sum + bar.volume, 0) / 7 : null
   const high = week.length === 7 ? Math.max(...week.map((bar) => bar.high), ...today.map((bar) => bar.high)) : null
+  // The week's path: eight closes, seven moves between them.
+  const closes = complete.length >= 8 ? complete.slice(-8).map((bar) => bar.close) : null
+  const moves = closes !== null && closes.every((close) => close > 0) ? closes.slice(1).map((close, index) => pctChange(close, closes[index])) : null
+  const volatility7dPct = moves === null ? null : standardDeviation(moves)
+  const path = closes === null ? null : closes.slice(1).reduce((sum, close, index) => sum + Math.abs(close - closes[index]), 0)
+  const trend7d = closes === null || path === null ? null : path > 0 ? Math.abs(closes[closes.length - 1] - closes[0]) / path : 0
+  const dayHigh = ticker.highPrice
+  const dayLow = ticker.lowPrice
   return {
     symbol: pair.symbol,
     baseAsset: pair.baseAsset,
@@ -219,8 +262,114 @@ export function readResearchPair(pair: SymbolInfo & { quoteVolume24h: number }, 
     volumeExpansion: meanVolume !== null && meanVolume > 0 ? ticker.volume / meanVolume : null,
     upDays: week.length === 7 ? week.filter((bar) => bar.close > bar.open).length : null,
     fromHigh7dPct: high !== null && high > 0 && price > 0 ? pctChange(price, high) : null,
+    range24hPct: dayHigh > 0 && dayLow > 0 && dayHigh >= dayLow ? pctChange(dayHigh, dayLow) : null,
+    fromHigh24hPct: dayHigh > 0 && price > 0 ? pctChange(price, dayHigh) : null,
+    volatility7dPct,
+    trend7d,
+    // To a hundredth of a percent, as the figure is shown: 102 over 100 is 2.00%, not 2.0000000000000018.
+    strongDays: week.length === 7 ? week.filter((bar) => bar.open > 0 && round2(pctChange(bar.close, bar.open)) >= STRONG_DAY_PCT).length : null,
+    score24h: null,
+    score7d: null,
     trending: false
   }
+}
+
+function standardDeviation(values: number[]): number {
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length
+  return Math.sqrt(values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length)
+}
+
+/** Each value's standing among the others, in standard deviations from their mean; null where the
+ * value is missing, and 0 for every value when they are all the same. With fewer than two values
+ * there is no standing. */
+function zScores(values: (number | null)[]): (number | null)[] {
+  const known = values.filter((value): value is number => value !== null && Number.isFinite(value))
+  if (known.length < 2) return values.map(() => null)
+  const mean = known.reduce((sum, value) => sum + value, 0) / known.length
+  const spread = standardDeviation(known)
+  return values.map((value) => (value === null || !Number.isFinite(value) ? null : spread > 0 ? (value - mean) / spread : 0))
+}
+
+const round2 = (value: number): number => Math.round(value * 100) / 100
+
+/** The mean of the standings a pair has, or null when it has none. */
+function meanStanding(standings: (number | null)[]): number | null {
+  const known = standings.filter((value): value is number => value !== null)
+  return known.length === 0 ? null : round2(known.reduce((sum, value) => sum + value, 0) / known.length)
+}
+
+/** The pairs scored against each other (the V5 document, §15-16): the day's score from the day's
+ * move, the volume expansion (its log, so a tenfold day counts as far as a tenth), the range and
+ * the distance from the day's high; the week's from the week's move, its volatility, its trend, the
+ * distance from the week's high and the strong days. Each input is a z-score over the pairs that
+ * have it, and a pair's score is the mean of the inputs it has, so a pair missing one is scored on
+ * the rest. Zero is the universe's middle; two is well above it. */
+export function withScores(pairs: ResearchPair[]): ResearchPair[] {
+  const day = [
+    pairs.map((pair) => pair.change24hPct),
+    pairs.map((pair) => (pair.volumeExpansion !== null && pair.volumeExpansion > 0 ? Math.log(pair.volumeExpansion) : null)),
+    pairs.map((pair) => pair.range24hPct),
+    pairs.map((pair) => pair.fromHigh24hPct)
+  ].map(zScores)
+  const week = [
+    pairs.map((pair) => pair.change7dPct),
+    pairs.map((pair) => pair.volatility7dPct),
+    pairs.map((pair) => pair.trend7d),
+    pairs.map((pair) => pair.fromHigh7dPct),
+    pairs.map((pair) => pair.strongDays)
+  ].map(zScores)
+  return pairs.map((pair, index) => ({ ...pair, score24h: meanStanding(day.map((input) => input[index])), score7d: meanStanding(week.map((input) => input[index])) }))
+}
+
+/** The funnel's choice (the V5 document, §14): the `count` pairs standing highest by the larger of
+ * their two scores, best first; a pair with neither score is not a candidate. */
+export function candidatesOf(pairs: ResearchPair[], count = RESEARCH_CANDIDATES): ResearchPair[] {
+  const best = (pair: ResearchPair): number => Math.max(pair.score24h ?? Number.NEGATIVE_INFINITY, pair.score7d ?? Number.NEGATIVE_INFINITY)
+  return pairs
+    .filter((pair) => Number.isFinite(best(pair)))
+    .sort((a, b) => best(b) - best(a) || a.symbol.localeCompare(b.symbol))
+    .slice(0, count)
+}
+
+/** A pair becoming interesting now (the V5 document, §17), as the scanner scores it every minute:
+ * its 15-minute move against its usual size, its 5 minutes' volume against the prior 100, and the
+ * rest of the event score (shared/marketEvent.ts), set beside the day it has had. */
+export interface EmergingMover {
+  symbol: string
+  /** The scanner's score, 0 to 100. */
+  score: number
+  band: EventBand
+  type: MarketEventType | null
+  direction: EventDirection
+  m15Pct: number
+  volumeRatio: number | null
+  /** The day's move from the research, or null when the pair is not among the researched. */
+  change24hPct: number | null
+  /** Among the day's MOVERS_SHOWN biggest risers already. */
+  inDayTop: boolean
+}
+
+/** The scanner's latest reading of every pair it watches, ranked by its score and set beside the
+ * day: a coin at +2% on the day and five times its volume now ranks above one at +15% going quiet.
+ * Empty while the scanner is off or has not read yet. */
+export function emergingMovers(research: ResearchPair[], scanner: ScannerPair[], count: number): EmergingMover[] {
+  const dayTop = new Set(rankMovers(research, '24h', MOVERS_SHOWN).up.map((pair) => pair.symbol))
+  const byDay = new Map(research.map((pair) => [pair.symbol, pair.change24hPct]))
+  return scanner
+    .filter((pair) => Number.isFinite(pair.score))
+    .map((pair) => ({
+      symbol: pair.symbol,
+      score: pair.score,
+      band: pair.band,
+      type: pair.type,
+      direction: pair.direction,
+      m15Pct: pair.returnsPct.m15,
+      volumeRatio: pair.volumeRatio,
+      change24hPct: byDay.get(pair.symbol) ?? null,
+      inDayTop: dayTop.has(pair.symbol)
+    }))
+    .sort((a, b) => b.score - a.score || a.symbol.localeCompare(b.symbol))
+    .slice(0, count)
 }
 
 export type MoverKind = '24h' | '7d' | 'volume'

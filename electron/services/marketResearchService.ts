@@ -5,12 +5,14 @@ import {
   RESEARCH_REFRESH_MS,
   TRENDING_REFRESH_MS,
   TRENDING_URL,
+  candidatesOf,
   emptyResearchState,
   marketStatusOf,
   markTrending,
   parseTrending,
   readResearchPair,
   researchUniverse,
+  withScores,
   withStep,
   type ResearchPair,
   type ResearchState
@@ -96,11 +98,18 @@ const pass = singleFlight(async (): Promise<void> => {
     if (ticker === undefined) throw new Error(`no ticker for ${pair.symbol}`)
     return readResearchPair(pair, ticker, await source.fetchRecentCandles(pair.symbol, '1d', RESEARCH_DAILY_BARS), nowSec)
   })
-  const pairs = read.filter((result): result is { ok: true; value: ResearchPair } => result.ok).map((result) => result.value)
+  // Scored against each other (the V5 document, §15-17), and the funnel's candidates named.
+  const pairs = withScores(read.filter((result): result is { ok: true; value: ResearchPair } => result.ok).map((result) => result.value))
+  const candidates = candidatesOf(pairs).map((pair) => pair.symbol)
   const missed = read.length - pairs.length
   publish(
     withStep(
-      withStep({ ...state, pairs: markTrending(pairs, state.trending) }, 'movers', 'done', `${pairs.length} read${missed > 0 ? `, ${missed} could not be` : ''}`),
+      withStep(
+        { ...state, pairs: markTrending(pairs, state.trending), candidates },
+        'movers',
+        'done',
+        `${pairs.length} read${missed > 0 ? `, ${missed} could not be` : ''}, ${candidates.length} candidates`
+      ),
       'market',
       'running',
       null

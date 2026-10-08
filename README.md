@@ -169,6 +169,19 @@ it opens, and every ten minutes after, whatever else is switched on
 - **A day and a week:** each pair's 24-hour move from the one all-pairs ticker request; its week
   from nine daily bars — the move from the close eight days back, the day's volume against the
   week's daily mean, how many of the seven days closed up, and how far it is from the week's high.
+  Since 8 October 2026 (the V5 document's §15–16; V5 Stage 3) also the day's range and the fall
+  from the day's high, from the ticker; and the week's volatility (the standard deviation of the
+  seven daily moves), its trend (the net week over the sum of the daily moves, 0 to 1) and its
+  strong days (closed 2% or more above their open).
+- **Two scores and the candidates** (§14–17): each pair's standing across the universe, input by
+  input as a z-score over the pairs that have the figure, averaged — the day's from its move, its
+  volume expansion (as a log), its range and its distance from the day's high; the week's from its
+  move, its volatility, its trend, its distance from the week's high and its strong days. Zero is
+  the middle, two well above it. The **candidates** are the 15 standing highest by the larger of
+  the two, on Discovery; Markets › Movers shows the scores beside every mover. The scanner's own
+  score, per pair per minute, is the **acceleration** the document asks for: Markets › Movers ›
+  Emerging ranks the scanner's latest reading of every watched pair by it, set beside the day, so a
+  coin at +2% on the day and five times its volume now ranks above one at +15% going quiet.
 - **Trending:** CoinGecko's free list of the most searched coins, matched to Binance's USDT pairs,
   read every fifteen minutes. When it cannot be read, that is said, and the last list is kept.
 - **The market's status:** Bitcoin and ether rising, falling or flat by the four-hour rule the event

@@ -1,11 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { BTC_REGIME_PCT } from '../shared/aiEventMarket'
 import type { Candle, SymbolInfo, Ticker24h } from '../shared/ipc'
+import type { ScannerPair } from '../shared/marketScanner'
 import {
+  MARKET_RESEARCH_VERSION,
+  MOVERS_SHOWN,
+  RESEARCH_CANDIDATES,
   RESEARCH_MIN_QUOTE_VOLUME,
   RESEARCH_UNIVERSE_SIZE,
   RISK_LINES,
+  STRONG_DAY_PCT,
+  candidatesOf,
   describeMarketRegime,
+  emergingMovers,
+  withScores,
   describeMarketStatus,
   emptyResearchState,
   markTrending,
@@ -64,10 +72,34 @@ function researched(symbol: string, over: Partial<ResearchPair> = {}): ResearchP
     volumeExpansion: 1,
     upDays: 3,
     fromHigh7dPct: -1,
+    range24hPct: null,
+    fromHigh24hPct: null,
+    volatility7dPct: null,
+    trend7d: null,
+    strongDays: null,
+    score24h: null,
+    score7d: null,
     trending: false,
     ...over
   }
 }
+
+const scanned = (symbol: string, over: Partial<ScannerPair> = {}): ScannerPair => ({
+  symbol,
+  baseAsset: symbol.replace('USDT', ''),
+  quoteAsset: 'USDT',
+  barTime: NOW - 60,
+  price: 100,
+  returnsPct: { m5: 0, m15: 0, h1: 0, h4: 0 },
+  volumeRatio: 1,
+  score: 0,
+  band: 'quiet',
+  type: null,
+  direction: 'flat',
+  quoteVolume24h: 30_000_000,
+  spreadPct: 0.01,
+  ...over
+})
 
 describe('the pairs researched', () => {
   it('are the scanner\'s scannable USDT pairs by volume, the first fifty, each over $20M a day', () => {
@@ -126,6 +158,119 @@ describe('a pair over a day and a week', () => {
     const short = week().slice(3)
     const read = readResearchPair({ ...info('SOL'), quoteVolume24h: 50_000_000 }, ticker('SOLUSDT'), short, NOW)
     expect(read).toMatchObject({ change7dPct: null, volumeExpansion: null, upDays: null, fromHigh7dPct: null })
+  })
+})
+
+describe("the funnel's figures (the V5 document, §15-16)", () => {
+  /** Eight complete days swinging up and down, each opening where the one before closed: closes 80,
+   * 84, 82, 86, 84, 88, 86, 90; and today, forming. */
+  const swings = (): Candle[] => {
+    const closes = [80, 84, 82, 86, 84, 88, 86, 90]
+    return [
+      ...closes.map((close, k) => {
+        const open = k === 0 ? 79 : closes[k - 1]
+        return bar(TODAY - (8 - k) * DAY, open, Math.max(open, close) + 1, Math.min(open, close) - 1, close, 100)
+      }),
+      bar(TODAY, 90, 92, 89, 91, 50)
+    ]
+  }
+
+  it("reads the day's range and the fall from the day's high from the ticker, and nothing without them", () => {
+    const pair = { ...info('SOL'), quoteVolume24h: 50_000_000 }
+    const read = readResearchPair(pair, ticker('SOLUSDT', { lastPrice: 100, highPrice: 110, lowPrice: 90 }), swings(), NOW)
+    expect(read.range24hPct).toBeCloseTo((110 / 90 - 1) * 100, 10)
+    expect(read.fromHigh24hPct).toBeCloseTo((100 / 110 - 1) * 100, 10)
+    const blank = readResearchPair(pair, ticker('SOLUSDT', { lastPrice: 100 }), swings(), NOW)
+    expect(blank.range24hPct).toBeNull()
+    expect(blank.fromHigh24hPct).toBeNull()
+    expect(blank.score24h).toBeNull()
+    expect(blank.score7d).toBeNull()
+  })
+
+  it("reads the week's volatility, its trend and its strong days from the eight closes, and nothing with fewer", () => {
+    const read = readResearchPair({ ...info('SOL'), quoteVolume24h: 50_000_000 }, ticker('SOLUSDT', { lastPrice: 100 }), swings(), NOW)
+    // Seven moves: +5%, -2.4%, +4.9%, -2.3%, +4.8%, -2.3%, +4.7%; their standard deviation.
+    expect(read.volatility7dPct).toBeCloseTo(3.54, 1)
+    // Ten net over a path of twenty-two.
+    expect(read.trend7d).toBeCloseTo(10 / 22, 10)
+    // Four of the seven closed 2% or more above their open: the up days, each near 5%.
+    expect(read.strongDays).toBe(4)
+    expect(read.upDays).toBe(4)
+    expect(STRONG_DAY_PCT).toBe(2)
+    const short = readResearchPair({ ...info('SOL'), quoteVolume24h: 50_000_000 }, ticker('SOLUSDT', { lastPrice: 100 }), swings().slice(2), NOW)
+    expect(short.volatility7dPct).toBeNull()
+    expect(short.trend7d).toBeNull()
+    expect(short.strongDays).toBeNull()
+  })
+
+  it('counts a day as strong at two percent exactly, and a flat path as no trend', () => {
+    const closes = [100, 102, 102, 102, 102, 102, 102, 102]
+    const flat = closes.map((close, k) => bar(TODAY - (8 - k) * DAY, k === 0 ? 100 : closes[k - 1], close + 1, (k === 0 ? 100 : closes[k - 1]) - 1, close, 100))
+    const read = readResearchPair({ ...info('SOL'), quoteVolume24h: 50_000_000 }, ticker('SOLUSDT', { lastPrice: 102 }), [...flat, bar(TODAY, 102, 103, 101, 102, 1)], NOW)
+    expect(read.strongDays).toBe(1)
+    expect(read.trend7d).toBeCloseTo(1, 10)
+    const still = closes.map((_, k) => bar(TODAY - (8 - k) * DAY, 100, 101, 99, 100, 100))
+    expect(readResearchPair({ ...info('SOL'), quoteVolume24h: 50_000_000 }, ticker('SOLUSDT', { lastPrice: 100 }), [...still, bar(TODAY, 100, 101, 99, 100, 1)], NOW).trend7d).toBe(0)
+  })
+})
+
+describe('the scores and the candidates (the V5 document, §14-17)', () => {
+  const a = researched('AAAUSDT', { change24hPct: 10, volumeExpansion: Math.E, range24hPct: 10, fromHigh24hPct: 0 })
+  const b = researched('BBBUSDT', { change24hPct: 0, volumeExpansion: 1, range24hPct: 5, fromHigh24hPct: -5 })
+  const c = researched('CCCUSDT', { change24hPct: -10, volumeExpansion: 1 / Math.E, range24hPct: 0, fromHigh24hPct: -10 })
+  /** The day's move only: scored on the one input it has. */
+  const d = researched('DDDUSDT', { change24hPct: 10, volumeExpansion: null, range24hPct: null, fromHigh24hPct: null, change7dPct: null, fromHigh7dPct: null, upDays: null })
+
+  it('stand each pair against the others, input by input, on the inputs it has, to a hundredth', () => {
+    const scored = withScores([a, b, c, d])
+    const of = (symbol: string): ResearchPair => scored.find((pair) => pair.symbol === symbol) as ResearchPair
+    // The day's move over [10, 0, -10, 10] stands 0.90 above the mean for 10; the three other inputs
+    // stand 1.22 apart for A, B and C.
+    expect(of('AAAUSDT').score24h).toBe(1.14)
+    expect(of('BBBUSDT').score24h).toBe(-0.08)
+    expect(of('CCCUSDT').score24h).toBe(-1.3)
+    expect(of('DDDUSDT').score24h).toBe(0.9)
+    // The week: A, B and C share one move, one high and three up days, so each stands in the middle; D has none.
+    expect(of('AAAUSDT').score7d).toBe(0)
+    expect(of('DDDUSDT').score7d).toBeNull()
+    // Scoring changes nothing else.
+    expect({ ...of('AAAUSDT'), score24h: null, score7d: null }).toEqual(a)
+  })
+
+  it('give a lone pair no standing, and an input that is the same everywhere a standing of zero', () => {
+    expect(withScores([a])[0].score24h).toBeNull()
+    const same = withScores([researched('X', { change24hPct: 3 }), researched('Y', { change24hPct: 3 })])
+    expect(same.map((pair) => pair.score24h)).toEqual([0, 0])
+  })
+
+  it('name the candidates by the larger of the two scores, best first, so many, and never a pair with neither', () => {
+    const scored = withScores([a, b, c, d, researched('EEEUSDT', { change24hPct: 0, volumeExpansion: null, range24hPct: null, fromHigh24hPct: null, change7dPct: null, fromHigh7dPct: null, upDays: null })])
+    expect(candidatesOf(scored).map((pair) => pair.symbol)).toEqual(['AAAUSDT', 'DDDUSDT', 'BBBUSDT', 'CCCUSDT', 'EEEUSDT'])
+    expect(candidatesOf(scored, 2).map((pair) => pair.symbol)).toEqual(['AAAUSDT', 'DDDUSDT'])
+    const blank = researched('ZZZUSDT', { change24hPct: 0, volumeExpansion: null, range24hPct: null, fromHigh24hPct: null, change7dPct: null, fromHigh7dPct: null, upDays: null })
+    expect(candidatesOf([blank]).map((pair) => pair.symbol)).toEqual([])
+    expect(RESEARCH_CANDIDATES).toBe(15)
+    expect(emptyResearchState().candidates).toEqual([])
+    expect(MARKET_RESEARCH_VERSION).toBe('research-v3')
+  })
+
+  it('rank the emerging movers by the scanner\'s score beside the day, marking the day\'s top risers, so many', () => {
+    const research = [researched('XXXUSDT', { change24hPct: 15 }), researched('YYYUSDT', { change24hPct: 2 })]
+    const scanner = [
+      scanned('XXXUSDT', { score: 10, returnsPct: { m5: 0, m15: -0.2, h1: 1, h4: 2 }, volumeRatio: 1 }),
+      scanned('YYYUSDT', { score: 80, band: 'candidate', type: 'pump', direction: 'up', returnsPct: { m5: 1, m15: 2.2, h1: 2, h4: 2 }, volumeRatio: 5 }),
+      scanned('ZZZUSDT', { score: 50, band: 'watch', direction: 'up' })
+    ]
+    const rows = emergingMovers(research, scanner, 10)
+    expect(rows.map((row) => [row.symbol, row.score, row.change24hPct, row.inDayTop])).toEqual([
+      ['YYYUSDT', 80, 2, true],
+      ['ZZZUSDT', 50, null, false],
+      ['XXXUSDT', 10, 15, true]
+    ])
+    expect(rows[0]).toMatchObject({ band: 'candidate', type: 'pump', direction: 'up', m15Pct: 2.2, volumeRatio: 5 })
+    expect(emergingMovers(research, scanner, 2).map((row) => row.symbol)).toEqual(['YYYUSDT', 'ZZZUSDT'])
+    expect(emergingMovers(research, [], 10)).toEqual([])
+    expect(MOVERS_SHOWN).toBe(8)
   })
 })
 

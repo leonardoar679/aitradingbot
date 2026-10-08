@@ -61,6 +61,8 @@ Taken on 5 October 2026, at commit `aef376d`.
 | | Research (added 8 October 2026, not an old card) | The record as tables, no model asked: exit rules, entry timing, holding time by kind, news timing, consensus, the score's inputs by ablation, capture and misses, false opportunities, the excursions on file; CSV each | AI Benchmark › Research |
 | **Routines** | New Routine, list, Reports | Backtests re-run on a schedule while the app is open | Backtest & Research › Automation |
 | **Market** | Chart, indicators, symbol search, ticker | The original dashboard | Markets |
+| | Movers › the Score columns and the Emerging tab (added 8 October 2026, V5 Stage 3) | Each mover's standing across the researched universe, the day's and the week's; the scanner's latest reading of every watched pair ranked by its score beside the day | Markets |
+| | Candidates (added 8 October 2026, V5 Stage 3) | The 15 liquid pairs standing highest by the larger of their two scores, read every ten minutes; a place to look, not a signal | Discovery › Market scanner |
 | **Backtest** | Configuration, Progress, Charts, Compare, Live | A strategy over history, trade charts, strategy comparison, the live strategy monitor | Backtest & Research |
 | | Market conditions, AI confirmation, Controller and Executor replay | Readouts and replays beside a backtest | Backtest & Research |
 | **Explorer** | Scanner | Scanner on or off and how many pairs it watches, with its status | Settings › Market (the switch); Discovery (the status) |

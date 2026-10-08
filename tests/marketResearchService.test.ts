@@ -84,7 +84,8 @@ describe('a pass', () => {
     expect(state.finishedAt).toBe(NOW)
     expect(state.steps.map((step) => [step.id, step.status, step.detail])).toEqual([
       ['universe', 'done', '4 USDT pairs trading at least $20M a day'],
-      ['movers', 'done', '3 read, 1 could not be'],
+      // Since 8 October 2026 (V5 Stage 3) the pairs read are scored and the candidates named: all three here.
+      ['movers', 'done', '3 read, 1 could not be, 3 candidates'],
       ['market', 'done', 'risk normal'],
       ['trending', 'done', '1 coin, 1 with a USDT pair on Binance']
     ])

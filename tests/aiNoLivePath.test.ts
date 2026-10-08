@@ -251,7 +251,8 @@ describe('AI code has no route to a real order', () => {
     expect(importsOf(join(SERVICES, 'marketResearchService.ts')).sort()).toEqual(['ipc', 'marketResearch', 'marketService', 'singleFlight'])
     expect(readFileSync(join(SERVICES, 'marketResearchService.ts'), 'utf-8')).not.toMatch(/resolveTradingEndpoint|credentials|apiKey/)
     const rules = join(ROOT, 'shared', 'marketResearch.ts')
-    expect(importsOf(rules).sort()).toEqual(['aiEventMarket', 'ipc', 'marketScanner'])
+    // Since 8 October 2026 (V5 Stage 3) the emerging movers are typed by the scanner's event words.
+    expect(importsOf(rules).sort()).toEqual(['aiEventMarket', 'ipc', 'marketEvent', 'marketScanner'])
     expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron/)
     const views = [join(ROOT, 'src', 'hooks', 'useMarketResearch.ts'), join(ROOT, 'src', 'overview', 'MarketStatusStrip.tsx'), join(ROOT, 'src', 'dashboard', 'MoversCard.tsx')]
     for (const path of views) {
