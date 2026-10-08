@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { AiCallRecord } from '../shared/aiLedger'
 import { roundTripFee } from '../shared/fees'
 import type { Candle, ExecutorConfig, PositionExecutorParams } from '../shared/ipc'
-import type { MarketEvent } from '../shared/marketEvent'
+import { EVENT_DETECTOR_VERSION, type MarketEvent } from '../shared/marketEvent'
 import { clearSettledFeedBars } from '../src/agents/opportunities'
 import { simulatePosition } from '../src/executors/engine'
 import { buildSessionReport, readTrade, spanStart, type SessionReportDeps } from '../src/performance/sessionReport'
@@ -165,13 +165,44 @@ describe('buildSessionReport', () => {
         reads.push(`${symbol}:${interval}:${startSec}`)
         return MINUTES.filter((candle) => candle.time >= startSec && candle.time <= endSec)
       },
-      alerts: () => [{ at: T - 60, severity: 'high' }],
-      refusals: () => [{ at: T - 120, source: 'watch', symbol: 'ADAUSDT', text: 'No paper trade: 3 are open already, the most at once.' }],
+      alerts: async () => [{ at: T - 60, severity: 'high' }],
+      refusals: async () => [{ id: 'r1', at: T - 120, source: 'watch', symbol: 'ADAUSDT', text: 'No paper trade: 3 are open already, the most at once.' }],
+      effectiveConfig: async () => ({ configVersion: 'cfg0000000001', engineVersion: 'eng0000000001' }),
       appStartedSec: T - 7200,
       nowSec: () => NOW,
       ...over
     }
   }
+
+  describe('the versions the report ran under', () => {
+    it('names the configuration, the engine, the detector and the prompt and schema versions of the span\'s calls', async () => {
+      const report = await buildSessionReport('hour', T - 3600, deps())
+      expect(report.versions).toEqual({ config: 'cfg0000000001', engine: 'eng0000000001', detector: EVENT_DETECTOR_VERSION, prompts: [ANSWER.promptVersion], schemas: [ANSWER.schemaVersion] })
+    })
+
+    it('reads the alerts and the refusals for the span, and says nothing of versions it could not read', async () => {
+      const asked: number[] = []
+      const report = await buildSessionReport(
+        'hour',
+        T - 3600,
+        deps({
+          alerts: async (sinceSec) => {
+            asked.push(sinceSec)
+            return []
+          },
+          refusals: async (sinceSec) => {
+            asked.push(sinceSec)
+            return []
+          },
+          effectiveConfig: async () => {
+            throw new Error('no bridge')
+          }
+        })
+      )
+      expect(asked).toEqual([T - 3600, T - 3600])
+      expect(report.versions).toBeNull()
+    })
+  })
 
   it('reads the records, the minutes of each trade and recommendation in the span, and reports them', async () => {
     const fake = deps()

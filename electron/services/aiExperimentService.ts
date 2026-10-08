@@ -15,6 +15,7 @@ import {
 } from '../../shared/aiExperiment'
 import { EVENT_DETECTOR_VERSION } from '../../shared/marketEvent'
 import { readAiCallsSince } from './aiLedgerService'
+import { configVersionNow } from './effectiveConfigService'
 import { appendJsonLine } from './jsonlStore'
 
 // Benchmark runs on disk (shared/aiExperiment.ts): one JSON line a run, append-only, in one file.
@@ -74,7 +75,7 @@ async function record(value: unknown): Promise<AiExperiment> {
     events: input.events,
     eventsOf: sampleOwner(rows, input.events),
     models: input.models,
-    versions: { ...totals.versions, detector: EVENT_DETECTOR_VERSION },
+    versions: { ...totals.versions, detector: EVENT_DETECTOR_VERSION, config: await configVersionNow() },
     scoring: eventScoring(),
     calls: totals.calls,
     failed: totals.failed,

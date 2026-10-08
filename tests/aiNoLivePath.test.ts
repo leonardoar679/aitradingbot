@@ -336,6 +336,9 @@ describe('AI code has no route to a real order', () => {
       // The models (the user's third choice): a question about an announcement's event is checked
       // against the reader's own record of the article before anything is asked.
       'electron/services/aiSignalService.ts',
+      // The effective configuration (the V4 document, §4-5): the news reader's switches as set, for
+      // the configuration version. It reads no article and changes no switch.
+      'electron/services/effectiveConfigService.ts',
       // ...and the event is raised through the scanner, from the coin's own candles.
       'electron/services/marketScannerService.ts',
       // The news feed (the second V3 document, 6 October 2026): Binance's announcements as stories,
@@ -345,6 +348,8 @@ describe('AI code has no route to a real order', () => {
       // Upbit's lists and the coins' candles, scored.
       'electron/services/newsRecordService.ts',
       'electron/services/newsService.ts',
+      // The same, composed: the switches among every other store's, read-only.
+      'shared/appConfig.ts',
       'shared/news.ts',
       'shared/newsActions.ts',
       'shared/newsRecord.ts',
@@ -407,7 +412,7 @@ describe('AI code has no route to a real order', () => {
       // stream's Bitcoin, and tells.
       [
         join(ROOT, 'src', 'news', 'NewsAlertScheduler.tsx'),
-        ['credentials.balances', 'credentials.list', 'feed.getState', 'feed.onUpdate', 'market.liveState', 'notify', 'settings.get']
+        ['credentials.balances', 'credentials.list', 'feed.getState', 'feed.onUpdate', 'market.liveState', 'notify', 'records.alert', 'records.alerts', 'settings.get']
       ]
     ]
     for (const [path, expected] of views) {
@@ -455,10 +460,12 @@ describe('AI code has no route to a real order', () => {
       'news.getState',
       'news.onUpdate',
       'notify',
+      'records.refusal',
       'settings.get'
     ])
-    // paperRefusals keeps this session's refused shorts, for the session report: a record, read by
-    // nothing that decides anything (held below).
+    // paperRefusals keeps this session's refused shorts, for the session report, and since 8 October
+    // 2026 each is written to the file as well: a record, read by nothing that decides anything
+    // (held below).
     expect(importsOf(scheduler).sort()).toEqual(['news', 'newsActions', 'newsPaperShort', 'paperRefusals', 'react'])
   })
 
@@ -486,11 +493,12 @@ describe('AI code has no route to a real order', () => {
       expect(source, path).not.toMatch(/onPrepareOrder|buildOpportunityProposal|buildAiProposal/)
       expect(importsOf(path), path).not.toContain('aiProposal')
     }
-    // The scheduler reaches the same six things through the bridge as before. The paper trader is
-    // handed to it whole, from the one file that writes.
+    // The scheduler reaches the same six things through the bridge as before, and since 8 October
+    // 2026 the records on file, to write a refusal (a record, read by nothing that decides). The
+    // paper trader is handed to it whole, from the one file that writes.
     const scheduler = readFileSync(join(ROOT, 'src', 'agents', 'OpportunityScheduler.tsx'), 'utf-8')
     // The third read of the scanner is the second look at an event whose candles could not be read.
-    expect([...scheduler.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]).sort()).toEqual(['ai', 'ai', 'ai', 'market', 'notify', 'scanner', 'scanner', 'scanner'])
+    expect([...scheduler.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]).sort()).toEqual(['ai', 'ai', 'ai', 'market', 'notify', 'records', 'scanner', 'scanner', 'scanner'])
     expect(importsOf(join(ROOT, 'src', 'agents', 'OpportunityScheduler.tsx')).sort()).toEqual(['marketEvent', 'opportunityWatch', 'react', 'watchPaperTrade'])
     // The main-process half reads the setting and the ledger, and nothing else.
     expect(importsOf(join(SERVICES, 'aiWatchService.ts')).sort()).toEqual(['aiConfigService', 'aiLedgerService', 'aiWatch'])
@@ -697,7 +705,18 @@ describe('AI code has no route to a real order', () => {
       return [...new Set([...text.matchAll(/window\.api\.(\w+)(?:\s*\.\s*(\w+))?/g)].map((match) => (match[2] === undefined ? match[1] : `${match[1]}.${match[2]}`)))].sort()
     }
     const reader = join(ROOT, 'src', 'performance', 'sessionReport.ts')
-    expect(calls(reader)).toEqual(['ai.getConfig', 'ai.listCalls', 'feed.getState', 'market.fetchHistoricalRange', 'market.liveState', 'scanner.listEvents', 'settings.get'])
+    expect(calls(reader)).toEqual([
+      'ai.getConfig',
+      'ai.listCalls',
+      'effectiveConfig',
+      'feed.getState',
+      'market.fetchHistoricalRange',
+      'market.liveState',
+      'records.alerts',
+      'records.refusals',
+      'scanner.listEvents',
+      'settings.get'
+    ])
     const card = join(ROOT, 'src', 'performance', 'SessionReportCard.tsx')
     expect(calls(card)).toEqual(['backtest.exportSave'])
     for (const path of [reader, card]) {
@@ -889,13 +908,15 @@ describe('AI code has no route to a real order', () => {
     expect([...source.matchAll(/window\.api\.(\w+)\.(\w+)/g)].map((match) => `${match[1]}.${match[2]}`).sort()).toEqual([
       'ai.listCalls',
       'market.fetchHistoricalRange',
+      // The refusals on file (since 8 October 2026): the reason a call got no paper position.
+      'records.refusals',
       'scanner.listEvents',
       'settings.get'
     ])
     expect(readFileSync(loader, 'utf-8')).not.toMatch(/window\.|ipcRenderer/)
     // aiOpportunityOutcome, fees and opportunities: the recommendation's own score on minute bars,
     // set beside where the paper position filled (since 8 October 2026). All of it reads.
-    expect(importsOf(loader).sort()).toEqual(['aiLedger', 'aiOpportunityOutcome', 'aiWatchPaper', 'engine', 'fees', 'ipc', 'marketScanner', 'opportunities', 'tradeLifecycle'])
+    expect(importsOf(loader).sort()).toEqual(['aiLedger', 'aiOpportunityOutcome', 'aiWatchPaper', 'engine', 'fees', 'ipc', 'marketScanner', 'opportunities', 'records', 'tradeLifecycle'])
     expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron/)
   })
 

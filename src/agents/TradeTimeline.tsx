@@ -9,6 +9,7 @@ const deps: TimelineDeps = {
   listEvents: (filter) => window.api.scanner.listEvents(filter),
   listCalls: (filter) => window.api.ai.listCalls(filter),
   listExecutors: async () => (await window.api.settings.get()).executors,
+  listRefusals: (filter) => window.api.records.refusals(filter),
   fetchCandles: async (exchange, symbol, startSec, endSec) => (await window.api.market.fetchHistoricalRange(exchange, symbol, '1m', startSec, endSec)).candles,
   nowSec: () => Math.floor(Date.now() / 1000)
 }

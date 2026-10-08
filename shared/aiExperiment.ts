@@ -37,6 +37,9 @@ export interface AiExperimentVersions {
   schema: string[]
   /** The detector the events were found by (shared/marketEvent.ts). */
   detector: string
+  /** The configuration version the run was recorded under (shared/appConfig.ts), since
+   * 8 October 2026; absent on records written before. */
+  config?: string
   /** For each model asked, the versions its provider said answered (AiCallRecord.servedModel):
    * what a name like `openai/gpt-5-mini` meant on the day. A model whose rows do not say is left
    * out, and a record written before this was kept has none. */

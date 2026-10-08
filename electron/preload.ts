@@ -55,6 +55,8 @@ import {
   type SymbolInfo,
   type Ticker24h
 } from '../shared/ipc'
+import type { EffectiveConfig } from '../shared/appConfig'
+import type { AlertRecordOnFile, PaperRefusalRecord, RecordFilter } from '../shared/records'
 
 const api = {
   ping: (): Promise<string> => ipcRenderer.invoke(IpcChannel.AppPing),
@@ -62,6 +64,8 @@ const api = {
   /** A desktop notice. Resolves false where the system cannot show one. */
   notify: (title: string, body: string, severity?: 'watch' | 'high' | 'critical'): Promise<boolean> =>
     ipcRenderer.invoke(IpcChannel.AppNotify, title, body, severity),
+  /** The effective configuration, read-only, with its versions (shared/appConfig.ts). */
+  effectiveConfig: (): Promise<EffectiveConfig> => ipcRenderer.invoke(IpcChannel.AppEffectiveConfig),
   settings: {
     get: (): Promise<AppSettings> => ipcRenderer.invoke(IpcChannel.SettingsGet),
     set: (patch: Partial<AppSettings>): Promise<AppSettings> =>
@@ -358,6 +362,14 @@ const api = {
   backtest: {
     exportSave: (request: BacktestExportRequest): Promise<BacktestExportResult> =>
       ipcRenderer.invoke(IpcChannel.BacktestExportSave, request)
+  },
+  /** The records on file (shared/records.ts): the app's own paper trades refused, and the alerts
+   * told, each written as it happens and read back by span. Records; nothing acts on them. */
+  records: {
+    refusal: (record: PaperRefusalRecord): Promise<PaperRefusalRecord | null> => ipcRenderer.invoke(IpcChannel.RecordsRefusal, record),
+    refusals: (filter: RecordFilter): Promise<{ rows: PaperRefusalRecord[]; skippedLines: number }> => ipcRenderer.invoke(IpcChannel.RecordsRefusals, filter),
+    alert: (record: AlertRecordOnFile): Promise<AlertRecordOnFile | null> => ipcRenderer.invoke(IpcChannel.RecordsAlert, record),
+    alerts: (filter: RecordFilter): Promise<{ rows: AlertRecordOnFile[]; skippedLines: number }> => ipcRenderer.invoke(IpcChannel.RecordsAlerts, filter)
   }
 }
 

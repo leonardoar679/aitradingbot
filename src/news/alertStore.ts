@@ -1,7 +1,11 @@
 import type { AlertSeverity } from '../../shared/alerts'
+import type { AlertRecordOnFile } from '../../shared/records'
 
 // The alerts raised this session (src/news/NewsAlertScheduler.tsx): what the sidebar's badge
-// counts and the banner shows. Kept for the session only: a restart does not raise old news again.
+// counts and the banner shows. Kept here for the session; since 8 October 2026 each is also written
+// to a file by the scheduler (shared/records.ts), and the day's are read back on start as told --
+// seen and dismissed already, so that a restart raises no old news again and Overview still shows
+// the day's major alerts.
 
 export interface AlertRecord {
   id: string
@@ -59,4 +63,19 @@ export function unseenCount(list: readonly AlertRecord[]): number {
 /** CRITICAL alerts not yet dismissed: the banner. */
 export function bannerAlerts(list: readonly AlertRecord[]): AlertRecord[] {
   return list.filter((alert) => alert.severity === 'critical' && !alert.dismissed)
+}
+
+/** Alerts read back from the file on start: kept as told, seen and dismissed already. One already
+ * held, by id, is left as it is. */
+export function seedAlerts(records: readonly AlertRecordOnFile[]): void {
+  const fresh = records.filter((record) => !alerts.some((entry) => entry.id === record.id)).map((record) => ({ ...record, seen: true, dismissed: true }))
+  if (fresh.length === 0) return
+  alerts = [...alerts, ...fresh].sort((a, b) => b.at - a.at).slice(0, KEPT)
+  publish()
+}
+
+/** Test seam. */
+export function resetAlerts(): void {
+  alerts = []
+  publish()
 }

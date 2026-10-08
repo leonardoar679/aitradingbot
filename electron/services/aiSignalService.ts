@@ -381,7 +381,7 @@ async function askModel(input: AskInput): Promise<AiSignalDecision> {
     // Fatal means every remaining decision would fail the same way, so the run stops here with
     // the reason instead of producing a tape of safety holds.
     if (error instanceof OpenRouterError && error.kind === 'fatal') throw error
-    return safeHold(input.candleTime, input.model, error)
+    return { ...safeHold(input.candleTime, input.model, error), callId: failed.id, promptVersion }
   }
 
   // From here the model has answered and been paid, usable or not.
@@ -398,7 +398,9 @@ async function askModel(input: AskInput): Promise<AiSignalDecision> {
         error: null,
         rejected: null,
         detail: verdict.detail,
-        usage
+        usage,
+        callId: input.key,
+        promptVersion
       }
     : {
         candleTime: input.candleTime,
@@ -410,7 +412,9 @@ async function askModel(input: AskInput): Promise<AiSignalDecision> {
         error: null,
         rejected: verdict.reason,
         detail: null,
-        usage
+        usage,
+        callId: input.key,
+        promptVersion
       }
 
   // A SAFETY HOLD IS NEVER CACHED; A REJECTED ANSWER ALWAYS IS. A safety hold is the absence of a

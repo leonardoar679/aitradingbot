@@ -13,7 +13,7 @@ import type { AiSignalDecision } from '../../shared/aiSignal'
 import { utcMidnight, watchEventIdsToday, watchNotice, watchPausedModels, watchSkipReason, type AiWatchConfig } from '../../shared/aiWatch'
 import { describeEventType, type MarketEvent } from '../../shared/marketEvent'
 import { askModels, fetchEventQuestion, type AskModelsResult, type CandleFetch } from './opportunities'
-import { recordPaperRefusal } from './paperRefusals'
+import { recordPaperRefusal, type PaperRefusal } from './paperRefusals'
 
 // The watch at work (shared/aiWatch.ts has its rules): given the events the scanner holds, take
 // up the ones the watch should ask about, put each to its models, and say so on the desktop when
@@ -40,6 +40,29 @@ export interface WatchDeps {
   /** Opens a paper trade on an answer, when that is switched on. Resolves to what came of it, or
    * to null when there is nothing to say. Absent, the watch only asks and notifies. */
   paperTrade?: (event: MarketEvent, decision: AiSignalDecision) => Promise<{ opened: boolean; text: string } | null>
+  /** Writes a refusal to the records on file (shared/records.ts), beside the session's own list.
+   * A record; nothing reads it to decide anything. Absent, the session's list is all there is. */
+  recordRefusal?: (refusal: PaperRefusal) => void
+}
+
+/** A paper trade refused: the sentence its writer gave, with the ids that join it to the trade's
+ * timeline, kept for the session and written to the file. */
+function refused(deps: WatchDeps, event: MarketEvent, decision: AiSignalDecision, text: string): void {
+  const nowMs = Date.now()
+  const side = opportunitySide(decision)
+  const refusal: PaperRefusal = {
+    id: `${event.id}:${decision.model}:${nowMs}`,
+    at: Math.floor(nowMs / 1000),
+    source: 'watch',
+    symbol: event.symbol,
+    text,
+    eventId: event.id,
+    model: decision.model,
+    ...(decision.callId !== undefined ? { callId: decision.callId } : {}),
+    ...(side === 'long' ? { side: 'buy' as const } : side === 'short' ? { side: 'sell' as const } : {})
+  }
+  recordPaperRefusal(refusal)
+  deps.recordRefusal?.(refusal)
 }
 
 export interface WatchActivity {
@@ -134,12 +157,12 @@ async function askAbout(event: MarketEvent, watch: AiWatchConfig, deps: WatchDep
           paper.push(outcome.text)
           opened = outcome.opened
           // For the session report: what was refused, and why.
-          if (!outcome.opened) recordPaperRefusal({ at: Math.floor(Date.now() / 1000), source: 'watch', symbol: event.symbol, text: outcome.text })
+          if (!outcome.opened) refused(deps, event, decision, outcome.text)
         }
       } catch (failure) {
         const text = `No paper trade: ${failure instanceof Error ? failure.message : String(failure)}`
         paper.push(text)
-        recordPaperRefusal({ at: Math.floor(Date.now() / 1000), source: 'watch', symbol: event.symbol, text })
+        refused(deps, event, decision, text)
       }
     }
     // One plain notice an event, raised by the first call to trade that arrives. An answer that

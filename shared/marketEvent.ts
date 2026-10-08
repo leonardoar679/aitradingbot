@@ -393,6 +393,9 @@ export function marketMoveOf(
 export interface MarketEvent {
   /** `exchange:symbol:time`. One pair raises at most one event a minute, so this is unique. */
   id: string
+  /** The detector that found it (EVENT_DETECTOR_VERSION), since 8 October 2026; absent on events
+   * recorded before. */
+  detector?: string
   exchange: Exchange
   symbol: string
   baseAsset: string
@@ -436,6 +439,7 @@ export function toMarketEvent(
   if (reading.type === null) throw new Error('A reading with no event type is not an event')
   return {
     id: marketEventId(market.exchange, market.symbol, reading.time),
+    detector: EVENT_DETECTOR_VERSION,
     exchange: market.exchange,
     symbol: market.symbol,
     baseAsset: market.baseAsset,

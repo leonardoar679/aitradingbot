@@ -463,7 +463,14 @@ export function planWatchPaperTrade(input: {
       entryExpiresAt: proposal.expiresAt ?? null,
       slippageRate
     },
-    mark: { eventId: event.id, eventTime: event.time, model: decision.model, confidence: decision.confidence }
+    mark: {
+      eventId: event.id,
+      eventTime: event.time,
+      model: decision.model,
+      confidence: decision.confidence,
+      ...(decision.callId !== undefined ? { callId: decision.callId } : {}),
+      ...(decision.promptVersion !== undefined ? { promptVersion: decision.promptVersion } : {})
+    }
   }
 }
 

@@ -10,6 +10,11 @@ export const IpcChannel = {
   AppPing: 'app:ping',
   AppGetVersion: 'app:getVersion',
   AppNotify: 'app:notify',
+  AppEffectiveConfig: 'app:effectiveConfig',
+  RecordsRefusal: 'records:refusal',
+  RecordsRefusals: 'records:refusals',
+  RecordsAlert: 'records:alert',
+  RecordsAlerts: 'records:alerts',
   BacktestExportSave: 'backtest:exportSave',
   SettingsGet: 'settings:get',
   SettingsSet: 'settings:set',
@@ -775,6 +780,10 @@ export interface ExecutorConfig {
     eventTime: number
     model: string
     confidence: number
+    /** The ledger row of the call it follows, and the question's version, since 8 October 2026: what
+     * joins the trade to its call without guessing by event and model. Absent on older trades. */
+    callId?: string
+    promptVersion?: string
     /** How it ended, written when the watch stops it because its position has closed: the exit,
      * what it made or lost in the quote asset after the simulation's fees, and the minute. A
      * stopped executor is not simulated again, so this is what its card has to show, and it is

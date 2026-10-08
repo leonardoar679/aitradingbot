@@ -5,7 +5,7 @@ import type { AlertSeverity } from '../../shared/alerts'
 import { roundTripFee } from '../../shared/fees'
 import type { AppSettings, Candle, ExecutorConfig, PositionExecutorParams } from '../../shared/ipc'
 import type { LiveConnection } from '../../shared/liveMarket'
-import type { MarketEvent } from '../../shared/marketEvent'
+import { EVENT_DETECTOR_VERSION, type MarketEvent } from '../../shared/marketEvent'
 import { healPaperRisk } from '../../shared/paperRisk'
 import { sessionReportOf, type ReportRecommendation, type ReportSpan, type ReportTradeReading, type SessionReport } from '../../shared/shadowReport'
 import { assembleFeed, loadFeedBars, scoreAnswer, type CandleFetch } from '../agents/opportunities'
@@ -15,8 +15,9 @@ import { subscribeAlerts } from '../news/alertStore'
 
 // WHAT THE SESSION REPORT READS (shared/shadowReport.ts has what it makes of it).
 //
-// The events, the call ledger and the executors, as far back as the span goes; the stream's log,
-// the alerts and the refusals, as far back as this session goes; the news feed's stories; and the
+// The events, the call ledger, the executors and, since 8 October 2026, the alerts and the refusals
+// (shared/records.ts), as far back as the span goes; the stream's log, as far back as this session
+// goes; the news feed's stories; the configuration's versions (shared/appConfig.ts); and the
 // minute candles of each of the app's own paper trades the span touched, and of each recommendation
 // it could act on, to see how far each trade went and whether each recommendation has its outcome.
 //
@@ -36,8 +37,12 @@ export interface SessionReportDeps {
   liveConnection: () => Promise<LiveConnection | null>
   stories: () => Promise<{ url: string; publishedAt: number }[]>
   fetchCandles: CandleFetch
-  alerts: () => readonly { at: number; severity: AlertSeverity }[]
-  refusals: () => readonly PaperRefusal[]
+  /** The alerts told and the paper trades refused at or after `sinceSec`: this session's and the
+   * file's together. */
+  alerts: (sinceSec: number) => Promise<readonly { at: number; severity: AlertSeverity }[]>
+  refusals: (sinceSec: number) => Promise<readonly PaperRefusal[]>
+  /** The configuration's versions; null where they cannot be read. */
+  effectiveConfig: () => Promise<{ configVersion: string; engineVersion: string } | null>
   appStartedSec: number
   nowSec: () => number
 }
@@ -75,14 +80,24 @@ export function readTrade(executor: ExecutorConfig, minutes: Candle[], nowSec: n
  * minutes cannot be read: that one reads as not measured, and the report says so. */
 export async function buildSessionReport(span: ReportSpan, fromSec: number, deps: SessionReportDeps): Promise<SessionReport> {
   const nowSec = deps.nowSec()
-  const [events, calls, settings, config, connection, stories] = await Promise.all([
+  const [events, calls, settings, config, connection, stories, alerts, refusals, versionsRead] = await Promise.all([
     deps.listEvents(fromSec - LEAD_SECONDS),
     deps.listCalls(fromSec - LEAD_SECONDS),
     deps.getSettings(),
     deps.getConfig(),
     deps.liveConnection().catch(() => null),
-    deps.stories().catch(() => [])
+    deps.stories().catch(() => []),
+    deps.alerts(fromSec).catch(() => []),
+    deps.refusals(fromSec).catch(() => []),
+    deps.effectiveConfig().catch(() => null)
   ])
+  // The versions the span's calls were made under, and the configuration's now.
+  const inSpan = calls.filter((row) => row.at >= fromSec && row.at <= nowSec)
+  const distinct = (values: string[]): string[] => [...new Set(values)].sort()
+  const versions =
+    versionsRead === null
+      ? null
+      : { config: versionsRead.configVersion, engine: versionsRead.engineVersion, detector: EVENT_DETECTOR_VERSION, prompts: distinct(inSpan.map((row) => row.promptVersion)), schemas: distinct(inSpan.map((row) => row.schemaVersion)) }
 
   // The app's own paper trades the span touched: opened in it, ended in it, or open now.
   const touched = settings.executors.filter((executor) => {
@@ -136,11 +151,12 @@ export async function buildSessionReport(span: ReportSpan, fromSec: number, deps
     watchPaper: { maxOpen: config.watchPaper.maxOpen, maxSameSide: config.watchPaper.maxSameSide },
     maxOutQuote: healPaperRisk(settings.paperRisk).maxOutQuote,
     connection,
-    alerts: [...deps.alerts()],
-    refusals: [...deps.refusals()],
+    alerts: [...alerts],
+    refusals: [...refusals],
     recommendations,
     trades,
-    stories
+    stories,
+    versions
   })
 }
 
@@ -153,14 +169,24 @@ export const sessionReportBrowserDeps: SessionReportDeps = {
   liveConnection: async () => (await window.api.market.liveState()).connection,
   stories: async () => (await window.api.feed.getState()).stories.map((story) => ({ url: story.url, publishedAt: story.publishedAt })),
   fetchCandles: async (exchange, symbol, interval, startSec, endSec) => (await window.api.market.fetchHistoricalRange(exchange, symbol, interval, startSec, endSec)).candles,
-  alerts: () => {
-    let held: readonly { at: number; severity: AlertSeverity }[] = []
+  // This session's, and the file's for the span, put together by id (shared/records.ts).
+  alerts: async (sinceSec) => {
+    let held: readonly { id: string; at: number; severity: AlertSeverity }[] = []
     subscribeAlerts((alerts) => {
       held = alerts
     })()
-    return held
+    const onFile = await window.api.records.alerts({ sinceSec }).catch(() => ({ rows: [] }))
+    return [...held, ...onFile.rows.filter((row) => !held.some((entry) => entry.id === row.id))].map((entry) => ({ at: entry.at, severity: entry.severity }))
   },
-  refusals: () => paperRefusals(),
+  refusals: async (sinceSec) => {
+    const session = paperRefusals()
+    const onFile = await window.api.records.refusals({ sinceSec }).catch(() => ({ rows: [] }))
+    return [...session, ...onFile.rows.filter((row) => !session.some((entry) => entry.id === row.id))]
+  },
+  effectiveConfig: async () => {
+    const config = await window.api.effectiveConfig()
+    return { configVersion: config.configVersion, engineVersion: config.engineVersion }
+  },
   appStartedSec: SESSION_STARTED_SEC,
   nowSec: () => Math.floor(Date.now() / 1000)
 }

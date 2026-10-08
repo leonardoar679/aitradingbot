@@ -5,6 +5,7 @@ import { GPT_MIN_CONFIDENCE } from './aiSignal'
 import { describeWatchPaperResult, watchPaperEntered, type WatchPaperOutcome } from './aiWatchPaper'
 import type { ExecutorConfig, PositionExecutorParams, PositionExitReason } from './ipc'
 import { describeEventType, type MarketEvent } from './marketEvent'
+import type { PaperRefusalRecord } from './records'
 
 // One trade's whole story, from the minute the scanner raised an event to how the position the
 // watch opened on it ended -- the V3 document's chain:
@@ -57,6 +58,9 @@ export interface WatchTradeRecords {
    * worked out: set beside the paper position's fill, which since 8 October 2026 can be taken from
    * the live book the second the trade was made. */
   scored?: OpportunityOutcome | null
+  /** Why the watch opened no paper position on this model's call, where the refusal is on file
+   * (shared/records.ts, since 8 October 2026). */
+  refusal?: PaperRefusalRecord | null
 }
 
 export interface TimelineStep {
@@ -191,11 +195,14 @@ export function traceWatchTrade(records: WatchTradeRecords): WatchTradeTrace {
   } else if (followed === null) {
     steps.push({ at: null, label: 'No paper position', detail: `None: ${describeDecider(records.model)} gave no answer to act on.`, tone: 'muted' })
   } else if (isActedCall(followed)) {
+    const refusal = records.refusal ?? null
     steps.push({
-      at: null,
+      at: refusal === null ? null : refusal.at,
       label: 'No paper position',
       detail:
-        'The watch opened none on this call. Paper trades may have been off, or following another model, or a limit or the paper account may have stopped it: which one was not recorded.',
+        refusal !== null
+          ? `The watch opened none on this call: ${refusal.text}`
+          : 'The watch opened none on this call. Paper trades may have been off, or following another model, or a limit or the paper account may have stopped it: which one was not recorded.',
       tone: 'muted'
     })
   } else {

@@ -4,6 +4,7 @@ import { watchPaperExecutors } from '../../shared/aiWatchPaper'
 import { positionSlippageRate } from '../../shared/fees'
 import type { Candle, Exchange, ExecutorConfig, PositionExecutorParams } from '../../shared/ipc'
 import type { MarketEventFilter, MarketEventPage } from '../../shared/marketScanner'
+import type { PaperRefusalRecord, RecordFilter } from '../../shared/records'
 import type { TradeFill, WatchTradeRecords } from '../../shared/tradeLifecycle'
 import { runExecutorSimulation } from '../executors/engine'
 import { decisionOfCall } from './opportunities'
@@ -17,6 +18,9 @@ export interface TimelineDeps {
   /** 1-minute candles of [startSec, endSec]. */
   fetchCandles: (exchange: Exchange, symbol: string, startSec: number, endSec: number) => Promise<Candle[]>
   nowSec: () => number
+  /** The refusals on file (shared/records.ts), for the reason a call got no paper position. Absent,
+   * none is read. */
+  listRefusals?: (filter: RecordFilter) => Promise<{ rows: PaperRefusalRecord[] }>
 }
 
 /** Rows read back to find one event's answers: a symbol's recent calls. */
@@ -78,16 +82,23 @@ export async function loadWatchTradeRecords(
   deps: TimelineDeps
 ): Promise<WatchTradeRecords> {
   const parsed = parseEventId(eventId)
-  const [events, calls, executors] = await Promise.all([
+  const [events, calls, executors, refusals] = await Promise.all([
     parsed === null ? Promise.resolve({ rows: [], skippedLines: 0 }) : deps.listEvents({ symbol: parsed.symbol, sinceSec: parsed.time - 60, limit: 200 }),
     parsed === null ? Promise.resolve({ rows: [], skippedLines: 0 }) : deps.listCalls({ symbol: parsed.symbol, limit: CALLS_READ }),
-    given === null ? deps.listExecutors() : Promise.resolve([given])
+    given === null ? deps.listExecutors() : Promise.resolve([given]),
+    parsed === null || deps.listRefusals === undefined ? Promise.resolve({ rows: [] as PaperRefusalRecord[] }) : deps.listRefusals({ sinceSec: parsed.time - 60, limit: 500 }).catch(() => ({ rows: [] as PaperRefusalRecord[] }))
   ])
   const executor =
     given ?? watchPaperExecutors(executors).find((entry) => entry.watch?.eventId === eventId && entry.watch.model === model) ?? null
   const fill = executor === null ? null : await simulateFill(executor, deps).catch(() => null)
   const event = events.rows.find((entry) => entry.id === eventId) ?? null
-  const followed = calls.rows.find((row) => row.eventId === eventId && row.model === model && row.status !== 'failed') ?? null
+  // The call the trade follows: by the row's id, where the trade's mark names it (since 8 October
+  // 2026), else by the event and the model, as before.
+  const named = executor?.watch?.callId
+  const followed =
+    (named === undefined ? undefined : calls.rows.find((row) => row.id === named)) ??
+    calls.rows.find((row) => row.eventId === eventId && row.model === model && row.status !== 'failed') ??
+    null
   const scored = executor === null || event === null || followed === null ? null : await scoreCall(event, followed, executor, deps).catch(() => null)
   return {
     eventId,
@@ -96,6 +107,7 @@ export async function loadWatchTradeRecords(
     calls: calls.rows.filter((row) => row.eventId === eventId),
     executor,
     fill,
-    scored
+    scored,
+    refusal: refusals.rows.find((entry) => entry.eventId === eventId && entry.model === model) ?? null
   }
 }

@@ -2,7 +2,12 @@ import { useEffect } from 'react'
 import { NOTICE_REPEAT_SECONDS, btcHourMovePct, crashNotice, crashStep, noticeCoins, noticeSeverity, repeatsNotice, storyNotice, storySeverity, type NoticedStory } from '../../shared/alerts'
 import { heldPlaces, type Holdings } from '../../shared/newsActions'
 import type { NewsFeedState } from '../../shared/newsFeed'
-import { addAlert } from './alertStore'
+import type { AlertRecordOnFile } from '../../shared/records'
+import { addAlert, seedAlerts } from './alertStore'
+
+/** An alert told, written to the records on file (shared/records.ts). A record; nothing reads it to
+ * decide anything. */
+const keep = (record: AlertRecordOnFile): void => void window.api.records.alert(record).catch(() => undefined)
 
 /** A story published longer ago than this when first read is not news to raise. */
 const FRESH_SECONDS = 30 * 60
@@ -59,6 +64,7 @@ export function NewsAlertScheduler(): null {
         const places = holdings === null ? [] : [...held].flatMap((ticker) => heldPlaces(ticker, holdings as Holdings))
         const notice = storyNotice(story, severity, places)
         addAlert({ id: story.id, severity, title: notice.title, body: notice.body, at: story.publishedAt, url: story.url })
+        keep({ id: story.id, severity, title: notice.title, body: notice.body, at: story.publishedAt, url: story.url })
         const level = noticeSeverity(severity)
         if (level === null || story.source === 'binance' || cancelled) continue
         noticed = noticed.filter((entry) => nowSec - entry.at < NOTICE_REPEAT_SECONDS)
@@ -70,6 +76,13 @@ export function NewsAlertScheduler(): null {
       }
     }
 
+    // The day's alerts, read back from the file: Overview's major alerts after a restart, as told.
+    void window.api.records
+      .alerts({ sinceSec: Math.floor(Date.now() / 1000) - 86_400 })
+      .then((page) => {
+        if (!cancelled) seedAlerts(page.rows)
+      })
+      .catch(() => undefined)
     void window.api.feed
       .getState()
       .then((state) => look(state))
@@ -89,6 +102,7 @@ export function NewsAlertScheduler(): null {
           if (!step.tell || move === null) return
           const notice = crashNotice(move)
           addAlert({ id: `btc-crash:${nowSec}`, severity: 'critical', title: notice.title, body: notice.body, at: nowSec })
+          keep({ id: `btc-crash:${nowSec}`, severity: 'critical', title: notice.title, body: notice.body, at: nowSec })
           void window.api.notify(notice.title, notice.body, 'critical').catch(() => undefined)
         })
         .catch(() => undefined)

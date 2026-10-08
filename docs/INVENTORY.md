@@ -106,7 +106,10 @@ All files are in the user's profile folder.
 
 These files are records, not settings, and stay where they are: `livePositions.json`,
 `liveOrders.json`, `livePositionWatchers.json`, `liveTwapRuns.json`, `aiLedger/`, `aiSignalCache/`,
-`aiExperiments/`, `marketEvents/`, `news/` and `aiModels.json`.
+`aiExperiments/`, `marketEvents/`, `news/` and `aiModels.json`; and, since 8 October 2026,
+`paperRefusals/` (the app's own paper trades refused, and why) and `alerts/` (the alerts told), one
+JSON line each in a file per UTC month (`shared/records.ts`), written by the main process as the
+renderer tells them and read back by the session report, a trade's timeline and Overview.
 
 ## What runs without a page open
 

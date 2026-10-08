@@ -280,6 +280,7 @@ describe('toMarketEvent', () => {
     const event = toMarketEvent(source, market)
     expect(event.id).toBe(marketEventId('binance', 'SOLUSDT', source.time))
     expect(event.id).toBe(`binance:SOLUSDT:${source.time}`)
+    expect(event.detector).toBe(EVENT_DETECTOR_VERSION)
     expect(event.type).toBe(source.type)
     expect(event.live).toBeNull()
     // Survives a file: what is written is what is read back.
@@ -472,8 +473,9 @@ describe('the detector and the version its events are recorded under', () => {
   it('has not changed what it finds without its version being bumped', () => {
     const hash = createHash('sha256').update(JSON.stringify(found)).digest('hex')
     // events-v2 (8 October 2026) added the market-wide move, a rule over one pass's events; what the
-    // detector makes of one pair's candles is unchanged, so the hash is the one events-v1 had.
-    expect({ version: EVENT_DETECTOR_VERSION, hash }).toEqual({ version: 'events-v2', hash: '01967d01c49cb4c7ff0891174d65a6679a5951d9f64b0a75c668e3e7a8f6149d' })
+    // detector makes of one pair's candles is unchanged. Later that day every event gained the
+    // detector's version as a field (`detector`), which moved this hash and nothing it finds.
+    expect({ version: EVENT_DETECTOR_VERSION, hash }).toEqual({ version: 'events-v2', hash: '6e6510eeac6d6b917f2dd56b232d09e0fef84b7537e2da378736540eb052a4f6' })
   })
 })
 

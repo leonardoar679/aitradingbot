@@ -202,6 +202,11 @@ export interface AiSignalDecision {
   model: string
   cached: boolean
   error: string | null
+  /** The ledger row this decision was written as (its cache key when the model answered, a random
+   * id when it did not), and the question's version, since 8 October 2026: what a trade made of it
+   * is joined to it by. Absent on decisions written before. */
+  callId?: string
+  promptVersion?: string
   /** Why the validator refused the model's answer; null or absent when it was usable.
    *
    * Distinct from `error`, and the difference is who was paid. An `error` means the model was

@@ -70,7 +70,8 @@ export interface SessionReportInput {
   span: ReportSpan
   fromSec: number
   toSec: number
-  /** When the app started: the stream's log, the alerts and the refusals reach back no further. */
+  /** When the app started: the stream's log reaches back no further. The alerts and the refusals
+   * are on file since 8 October 2026 and reach back as far as the span does. */
   appStartedSec: number
   events: Pick<MarketEvent, 'id' | 'time' | 'band'>[]
   calls: Pick<AiCallRecord, 'at' | 'source' | 'status' | 'model' | 'eventId' | 'recommendation' | 'confidence' | 'detail' | 'usage'>[]
@@ -85,6 +86,18 @@ export interface SessionReportInput {
   recommendations: ReportRecommendation[]
   trades: ReportTradeReading[]
   stories: { url: string; publishedAt: number }[]
+  /** The versions the span ran under (shared/appConfig.ts); null where they could not be read. */
+  versions?: ReportVersions | null
+}
+
+/** What a report was made under: the configuration and engine versions, the detector, and the
+ * prompt and schema versions of the span's calls. The V4 document's §61. */
+export interface ReportVersions {
+  config: string
+  engine: string
+  detector: string
+  prompts: string[]
+  schemas: string[]
 }
 
 export type GateId =
@@ -169,6 +182,8 @@ export interface SessionReport {
     /** Requests the stream refused. */
     subscribeErrors: number
   } | null
+  /** Null where the configuration could not be read. */
+  versions: ReportVersions | null
   gates: ReportGate[]
   /** Whether a twelve-hour gate applies: a span of twelve hours or more. */
   twelveHour: boolean
@@ -640,6 +655,7 @@ export function sessionReportOf(input: SessionReportInput): SessionReport {
     paper,
     alerts,
     stream,
+    versions: input.versions ?? null,
     gates,
     twelveHour,
     passed: gates.every((entry) => entry.status !== 'fail' || (entry.twelveHour && !twelveHour))
@@ -665,7 +681,14 @@ export function sessionReportCsv(report: SessionReport): string {
   const add = (section: string, item: string, value: string | number | null, detail = ''): void => void lines.push([section, item, value, detail])
   add('span', 'from', new Date(report.fromSec * 1000).toISOString())
   add('span', 'to', new Date(report.toSec * 1000).toISOString())
-  add('span', 'app started', new Date(report.appStartedSec * 1000).toISOString(), 'the stream, the alerts and the refusals reach back no further')
+  add('span', 'app started', new Date(report.appStartedSec * 1000).toISOString(), "the stream's log reaches back no further; the alerts and the refusals are on file")
+  if (report.versions !== null) {
+    add('versions', 'configuration', report.versions.config, 'every setting and constant together, as this profile runs')
+    add('versions', 'engine', report.versions.engine, 'the constants alone')
+    add('versions', 'detector', report.versions.detector)
+    add('versions', 'prompts', report.versions.prompts.join(' '), "the span's calls")
+    add('versions', 'schemas', report.versions.schemas.join(' '), "the span's calls")
+  }
   add('events', 'raised', report.events.raised)
   add('events', 'urgent', report.events.urgent)
   add('events', 'taken up by the watch', report.events.takenUp)

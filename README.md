@@ -746,6 +746,15 @@ What it reports:
 
   Profit is reported, not gated.
 - **Alerts** by severity, and the stream's connects, drops and gaps.
+- **The versions it ran under** (since 8 October 2026; the V4 document's §61): the configuration
+  and engine versions (Settings › Advanced › Effective configuration, `shared/appConfig.ts`), the
+  detector, and the prompt and schema versions of the span's calls.
+
+Since 8 October 2026 the alerts told and the paper trades refused are on file (`shared/records.ts`,
+one JSON line each in a file per UTC month), so the report reaches back for them as far as the span
+does; only the stream's log reaches back to the app's start. A trade's timeline reads the same file
+for the reason a call got no paper position, and the trade's mark names the ledger row of the call
+it follows, so the two are joined by id and not by guessing.
 
 The gates:
 - **Must be zero:**

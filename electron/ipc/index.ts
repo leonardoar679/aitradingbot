@@ -11,9 +11,11 @@ import { registerCredentialsHandlers } from './handlers/credentialsHandlers'
 import { registerLiveTradingHandlers } from './handlers/liveTradingHandlers'
 import { registerBacktestHandlers } from './handlers/backtestHandlers'
 import { registerAiHandlers } from './handlers/aiHandlers'
+import { registerRecordHandlers } from './handlers/recordHandlers'
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerAppHandlers()
+  registerRecordHandlers()
   registerSettingsHandlers()
   registerMarketHandlers(mainWindow)
   registerScannerHandlers(mainWindow)

@@ -1,0 +1,87 @@
+import { createHash } from 'node:crypto'
+import { describe, expect, it } from 'vitest'
+import { ENGINE_CONSTANTS, defaultStores, effectiveConfig, flattenConfig, healStores, stableJson, type EffectiveStores } from '../shared/appConfig'
+import { DEFAULT_AI_WATCH } from '../shared/aiWatch'
+import { EVENT_DETECTOR_VERSION } from '../shared/marketEvent'
+
+// THE EFFECTIVE CONFIGURATION AND ITS VERSIONS (shared/appConfig.ts; the V4 document, §4-5 and §61).
+// The engine version hashes the constants alone and is pinned here, so a constant changes only on
+// purpose; the configuration version hashes the stores with them, so two profiles, or one profile
+// before and after a setting, are told apart.
+
+const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex')
+
+/** Today's engine, as hashed. A change to any pinned constant moves it: change it here on purpose. */
+const PINNED_ENGINE_VERSION = '60c026073c92'
+
+describe('the engine version', () => {
+  it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {
+    const config = effectiveConfig(defaultStores(), sha256)
+    expect(config.engineVersion).toMatch(/^[0-9a-f]{12}$/)
+    expect(config.engineVersion).toBe(sha256(stableJson(ENGINE_CONSTANTS)).slice(0, 12))
+    expect(config.engine).toBe(ENGINE_CONSTANTS)
+    expect(ENGINE_CONSTANTS.marketEvent.detector).toBe(EVENT_DETECTOR_VERSION)
+  })
+
+  it('is today\'s, pinned', () => {
+    expect(effectiveConfig(defaultStores(), sha256).engineVersion).toBe(PINNED_ENGINE_VERSION)
+  })
+})
+
+describe('the configuration version', () => {
+  it('is the same for the same stores, and another for a setting changed', () => {
+    const a = effectiveConfig(defaultStores(), sha256)
+    const b = effectiveConfig(defaultStores(), sha256)
+    expect(a.configVersion).toBe(b.configVersion)
+    expect(a.configVersion).not.toBe(a.engineVersion)
+    const changed: EffectiveStores = { ...defaultStores(), scanner: { enabled: true, universeSize: 100 } }
+    expect(effectiveConfig(changed, sha256).configVersion).not.toBe(a.configVersion)
+    expect(effectiveConfig(changed, sha256).engineVersion).toBe(a.engineVersion)
+  })
+
+  it('does not depend on the order keys were written in', () => {
+    expect(stableJson({ b: 1, a: { d: [2, { f: 1, e: 2 }], c: null } })).toBe('{"a":{"c":null,"d":[2,{"e":2,"f":1}]},"b":1}')
+  })
+})
+
+describe('the stores, healed', () => {
+  it('reads an empty profile as the defaults', () => {
+    const live = { maxOrderQuote: 10, hardMaxOrderQuote: 25, dailyCapQuote: 50, dailyLossLimitQuote: 15, allocationQuote: null }
+    const healed = healStores({
+      settings: {},
+      ai: { defaultModel: 'openai/gpt-5-mini', enabledModels: ['openai/gpt-5-mini'], dailyCapUsd: 1, callsPerMinute: 30, watch: undefined, watchPaper: undefined, additions: undefined },
+      scanner: { enabled: false, universeSize: 60 },
+      news: undefined,
+      live
+    })
+    expect(healed).toEqual({ ...defaultStores(), live })
+  })
+
+  it('keeps what a profile set, and sorts the models so the order they were enabled in does not count', () => {
+    const live = { maxOrderQuote: 10, hardMaxOrderQuote: 25, dailyCapQuote: 50, dailyLossLimitQuote: 15, allocationQuote: 200 }
+    const healed = healStores({
+      settings: { paperRisk: { sizing: 'risk', riskQuote: 2, maxOutQuote: 500 }, alerts: { enabled: false } },
+      ai: { defaultModel: 'openai/gpt-5-mini', enabledModels: ['z/model', 'a/model', 'openai/gpt-5-mini'], dailyCapUsd: 5, callsPerMinute: 60, watch: { ...DEFAULT_AI_WATCH, enabled: true, models: ['openai/gpt-5-mini'] }, watchPaper: undefined, additions: undefined },
+      scanner: { enabled: true, universeSize: 40 },
+      news: undefined,
+      live
+    })
+    expect(healed.paperRisk).toEqual({ sizing: 'risk', riskQuote: 2, maxOutQuote: 500 })
+    expect(healed.alerts).toEqual({ enabled: false, sound: true })
+    expect(healed.ai).toEqual({ defaultModel: 'openai/gpt-5-mini', enabledModels: ['a/model', 'openai/gpt-5-mini', 'z/model'], dailyCapUsd: 5, callsPerMinute: 60 })
+    expect(healed.watch.enabled).toBe(true)
+    expect(healed.scanner).toEqual({ enabled: true, universeSize: 40 })
+    expect(healed.live.allocationQuote).toBe(200)
+  })
+})
+
+describe('the rows a card shows', () => {
+  it('flattens every value to its path, lists arrays, and names an empty one and a null', () => {
+    expect(flattenConfig({ a: { b: 1, c: [1, 2] }, d: null, e: [] }, 'x')).toEqual([
+      { path: 'x.a.b', value: '1' },
+      { path: 'x.a.c', value: '1, 2' },
+      { path: 'x.d', value: 'none' },
+      { path: 'x.e', value: '(none)' }
+    ])
+  })
+})

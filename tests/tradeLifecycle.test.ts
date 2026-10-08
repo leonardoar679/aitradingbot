@@ -270,3 +270,16 @@ describe('a fill from the live book, beside the score', () => {
     expect(traceWatchTrade(records()).steps.find((step) => step.label === 'Entered')?.detail).toBe('Filled at 100.1.')
   })
 })
+
+describe('the refusal on file', () => {
+  it('is the reason the timeline gives for no paper position, with when it was refused', () => {
+    const trace = traceWatchTrade(
+      records({
+        executor: null,
+        fill: null,
+        refusal: { id: 'r', at: T + 95, source: 'watch', symbol: 'SOLUSDT', text: 'No paper trade: 3 are open already, the most at once.', eventId: EVENT_ID, model: 'acme/follower' }
+      })
+    )
+    expect(trace.steps.at(-1)).toEqual({ at: T + 95, label: 'No paper position', detail: 'The watch opened none on this call: No paper trade: 3 are open already, the most at once.', tone: 'muted' })
+  })
+})

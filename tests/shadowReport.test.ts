@@ -461,3 +461,16 @@ describe('the stream, renewed', () => {
     expect(csv).toContain('refused requests')
   })
 })
+
+describe('the versions on the report', () => {
+  it('are carried as given, null where none were read, and written to the CSV', () => {
+    const versions = { config: 'cfg0000000001', engine: 'eng0000000001', detector: 'events-v2', prompts: ['opportunity-v1', 'market-move-v1'], schemas: ['opportunity-schema-v1'] }
+    const report = sessionReportOf(input({ versions }))
+    expect(report.versions).toEqual(versions)
+    expect(sessionReportOf(input()).versions).toBeNull()
+    const csv = sessionReportCsv(report)
+    expect(csv).toContain('versions,configuration,cfg0000000001')
+    expect(csv).toContain('versions,prompts,opportunity-v1 market-move-v1')
+    expect(sessionReportCsv(sessionReportOf(input()))).not.toContain('versions,')
+  })
+})

@@ -9,6 +9,7 @@ import { ModelsTab } from '../agents/ModelsTab'
 import { ModelRegistryCard } from '../agents/ModelRegistryCard'
 import { UsageTab } from '../agents/UsageTab'
 import { AiAdditionsCard } from '../agents/AiAdditionsCard'
+import { EffectiveConfigCard } from './EffectiveConfigCard'
 import type { Page } from '../navigation/pages'
 import { EssentialsCard } from './EssentialsCard'
 import { NewsSettingsCard } from './NewsSettingsCard'
@@ -149,6 +150,12 @@ function AdvancedSettings({ theme, setTheme, onNavigate }: { theme: Theme; setTh
       <ModelRegistryCard />
       <UsageTab />
       <AiAdditionsCard />
+
+      <SectionHeading
+        title="Effective configuration"
+        note="Every setting as the app reads it, every constant the engine runs on, and the versions a report and an experiment are stamped with. Read-only."
+      />
+      <EffectiveConfigCard />
 
       <SectionHeading title="Elsewhere" note="Two kinds of setting each have a page of their own." />
       <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>

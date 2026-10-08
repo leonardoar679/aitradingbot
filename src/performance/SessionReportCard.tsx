@@ -70,13 +70,13 @@ function figures(report: SessionReport): { title: string; lines: string[] }[] {
         `Net ${amounts(paper.net)} after fees of ${amounts(paper.fees, false)}${paper.rTrades === 0 ? '' : `; ${describeR(paper.r)} over the ${paper.rTrades} with a stop`}. Reported, not gated.`,
         `Furthest for a trade while it was held: ${paper.bestPct === null ? '—' : `${paper.bestPct.toFixed(2)}%`}; furthest against: ${paper.worstPct === null ? '—' : `${paper.worstPct.toFixed(2)}%`}.`,
         `From the event to the paper trade: ${paper.signalAgeSec.median === null ? '—' : `${Math.round(paper.signalAgeSec.median)} s`} at the median, ${paper.signalAgeSec.max === null ? '—' : `${Math.round(paper.signalAgeSec.max)} s`} at most.`,
-        paper.refused.length === 0 ? 'None refused this session.' : `Refused this session: ${paper.refused.map((entry) => `${entry.count} × ${entry.reason}`).join(' ')}`
+        paper.refused.length === 0 ? 'None refused in the span.' : `Refused in the span: ${paper.refused.map((entry) => `${entry.count} × ${entry.reason}`).join(' ')}`
       ]
     },
     {
       title: 'Alerts and the stream',
       lines: [
-        `Alerts this session: ${report.alerts.critical} CRITICAL, ${report.alerts.high} HIGH, ${report.alerts.watch} WATCH, ${report.alerts.info} INFO.`,
+        `Alerts in the span: ${report.alerts.critical} CRITICAL, ${report.alerts.high} HIGH, ${report.alerts.watch} WATCH, ${report.alerts.info} INFO.`,
         report.stream === null
           ? "The stream's log could not be read."
           : `The stream: ${report.stream.connects} connects and ${report.stream.drops} drops since the app started; ${report.stream.gaps} gaps in the span, ${report.stream.gapSeconds} s in all, the longest ${report.stream.longestGapSeconds} s. It is on ${report.stream.host ?? 'no host yet'}; it moved host ${report.stream.hostSwitches} ${report.stream.hostSwitches === 1 ? 'time' : 'times'} since the app started, and the data host moved ${report.stream.dataHostSwitches}. It was renewed ${report.stream.planned} ${report.stream.planned === 1 ? 'time' : 'times'} before its lifetime ran out, and the stream refused ${report.stream.subscribeErrors} ${report.stream.subscribeErrors === 1 ? 'request' : 'requests'}.`
@@ -165,8 +165,9 @@ export function SessionReportCard(): React.JSX.Element {
           <p style={{ ...noteStyle, margin: '0.7rem 0 0', color: 'var(--text-primary)' }}>
             From {clock(report.fromSec)} to {clock(report.toSec)}:{' '}
             <strong style={{ color: report.passed ? 'var(--up)' : 'var(--down)' }}>{report.passed ? 'every gate that applies passed' : 'a gate that applies failed'}</strong>.
-            {report.twelveHour ? '' : ' The twelve-hour gates apply to a span of twelve hours or more.'} The stream, the alerts and the refusals reach back to when the app
-            started, {clock(report.appStartedSec)}.
+            {report.twelveHour ? '' : ' The twelve-hour gates apply to a span of twelve hours or more.'} The stream's log reaches back to when the app started,{' '}
+            {clock(report.appStartedSec)}; the alerts and the refusals are on file.
+            {report.versions === null ? '' : ` Configuration ${report.versions.config}, engine ${report.versions.engine}, detector ${report.versions.detector}.`}
           </p>
           <div style={{ overflowX: 'auto', marginTop: '0.5rem' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>

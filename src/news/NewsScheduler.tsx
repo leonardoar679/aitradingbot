@@ -28,7 +28,13 @@ async function openShorts(item: NewsItem, config: NewsState['config']): Promise<
     for (const line of await openNewsShorts(item, actions, newsShortBrowserDeps)) {
       console.info(`Announcement ${item.id}: ${line}`)
       // For the session report: a short refused, and why.
-      if (!line.endsWith('was opened.')) recordPaperRefusal({ at: Math.floor(Date.now() / 1000), source: 'news', symbol: `${line.split(':')[0]}USDT`, text: line })
+      if (!line.endsWith('was opened.')) {
+        const nowMs = Date.now()
+        const refusal = { id: `${item.id}:${line.split(':')[0]}:${nowMs}`, at: Math.floor(nowMs / 1000), source: 'news' as const, symbol: `${line.split(':')[0]}USDT`, text: line }
+        recordPaperRefusal(refusal)
+        // And on file (shared/records.ts), so a restart loses it not.
+        void window.api.records.refusal(refusal).catch(() => undefined)
+      }
     }
   } catch (failure) {
     console.error('The news reader could not open its paper short:', failure)
