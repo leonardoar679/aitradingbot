@@ -1,9 +1,12 @@
 import { app } from 'electron'
 import { join } from 'path'
-import { readFile, mkdir } from 'fs/promises'
+import { mkdir } from 'fs/promises'
 import { writeJsonAtomic } from './atomicWrite'
 import { getRealizedPnlToday, getLastObservedFeeRate } from './livePositionsService'
-import { DEFAULT_LIVE_RISK_PCT, clampLiveLimit, healLiveRiskPct, liveRiskPctProblem, loadedLiveLimit, describeUnusableOrderSize, describeUntrustedLossTally } from '../../shared/liveLimits'
+import { DEFAULT_LIVE_LIMITS, DEFAULT_LIVE_RISK_PCT, clampLiveLimit, healLiveRiskPct, liveRiskPctProblem, loadedLiveLimit, describeUnusableOrderSize, describeUntrustedLossTally } from '../../shared/liveLimits'
+import { HARD_LIMITS, dailyLossWithinCap } from '../../shared/hardLimits'
+import { stampedConfig } from '../../shared/configMigration'
+import { readConfigFile } from './configFiles'
 import { nextDailyUsage, usageForDay } from './dailyUsage'
 import { committedAllocationQuote, describeAllocationBreach } from '../../shared/allocation'
 import { notionalFor, resolveLeverage } from '../../shared/perp'
@@ -18,18 +21,20 @@ import { breakerNotice } from '../../shared/notices'
 // Every check in canPlaceLiveOrder runs server-side (main process), immediately before every
 // real order — a renderer-side check is a UX nicety, never the actual gate.
 
-/** Absolute ceiling, code-only. No UI path, no settings.json edit, no IPC call can push
- * maxOrderQuote above this — the only way to raise it is to change this constant and rebuild.
+/** Absolute ceiling, code-only (shared/hardLimits.ts, with the other ceilings since 8 October
+ * 2026). No UI path, no settings.json edit, no IPC call can push maxOrderQuote above this — the
+ * only way to raise it is to change that constant and rebuild.
  *
  * Since canPlaceLiveOrder compares this against EXPOSURE rather than against the margin posted,
  * it bounds a leveraged order to 25 of market however that is paid for: 25 of margin at 1x, or
  * 2.50 at 10x. That is deliberate and is the point of a hard ceiling -- the worst thing an order
  * can do is set by what it controls, not by what was put down for it, and a ceiling that let the
  * second number stand in for the first would be a ceiling of 250 wearing a label reading 25. */
-const HARD_MAX_ORDER_QUOTE = 25
-const DEFAULT_MAX_ORDER_QUOTE = 10
-const DEFAULT_DAILY_CAP_QUOTE = 50
-const DEFAULT_DAILY_LOSS_LIMIT_QUOTE = 15
+const HARD_MAX_ORDER_QUOTE = HARD_LIMITS.liveMaxOrderQuote
+/** The defaults, in the one place every default lives (shared/appDefaults.ts DEFAULT_CONFIG). */
+const DEFAULT_MAX_ORDER_QUOTE = DEFAULT_LIVE_LIMITS.maxOrderQuote
+const DEFAULT_DAILY_CAP_QUOTE = DEFAULT_LIVE_LIMITS.dailyCapQuote
+const DEFAULT_DAILY_LOSS_LIMIT_QUOTE = DEFAULT_LIVE_LIMITS.dailyLossLimitQuote
 
 interface DailyUsage {
   date: string // UTC yyyy-mm-dd
@@ -76,24 +81,21 @@ function liveTradingPath(): string {
 
 async function load(): Promise<LiveTradingState> {
   if (cache) return cache
-  try {
-    const raw = await readFile(liveTradingPath(), 'utf-8')
-    cache = { ...DEFAULT_STATE, ...(JSON.parse(raw) as Partial<LiveTradingState>) }
-  } catch {
-    cache = { ...DEFAULT_STATE }
-  }
+  // Read once, through the migration steps it is behind (configFiles.ts).
+  cache = { ...DEFAULT_STATE, ...((await readConfigFile('liveTrading')) as Partial<LiveTradingState>) }
   // Heals a file holding a value that is not a usable number, rather than letting it through to
-  // the gates. Falls back to the same defaults a missing file would get.
+  // the gates. Falls back to the same defaults a missing file would get. The loss limit is held
+  // within the cap (shared/hardLimits.ts): above it, it would never trip.
   cache.maxOrderQuote = loadedLiveLimit(cache.maxOrderQuote, DEFAULT_MAX_ORDER_QUOTE, HARD_MAX_ORDER_QUOTE)
   cache.dailyCapQuote = loadedLiveLimit(cache.dailyCapQuote, DEFAULT_DAILY_CAP_QUOTE, null)
-  cache.dailyLossLimitQuote = loadedLiveLimit(cache.dailyLossLimitQuote, DEFAULT_DAILY_LOSS_LIMIT_QUOTE, null)
+  cache.dailyLossLimitQuote = dailyLossWithinCap(loadedLiveLimit(cache.dailyLossLimitQuote, DEFAULT_DAILY_LOSS_LIMIT_QUOTE, null), cache.dailyCapQuote)
   cache.riskPct = healLiveRiskPct(cache.riskPct)
   return cache
 }
 
 async function persist(): Promise<void> {
   await mkdir(app.getPath('userData'), { recursive: true })
-  await writeJsonAtomic(liveTradingPath(), cache)
+  await writeJsonAtomic(liveTradingPath(), cache === null ? cache : stampedConfig(cache))
 }
 
 function todayUtc(): string {
@@ -178,10 +180,14 @@ export async function setLiveTradingConfig(patch: {
       : state.maxOrderQuote
   const nextCap =
     patch.dailyCapQuote !== undefined ? clampLiveLimit('Daily cap', patch.dailyCapQuote, null) : state.dailyCapQuote
-  const nextLoss =
-    patch.dailyLossLimitQuote !== undefined
-      ? clampLiveLimit('Daily loss limit', patch.dailyLossLimitQuote, null)
-      : state.dailyLossLimitQuote
+  const askedLoss = patch.dailyLossLimitQuote !== undefined ? clampLiveLimit('Daily loss limit', patch.dailyLossLimitQuote, null) : null
+  if (askedLoss !== null && askedLoss > nextCap) {
+    throw new Error(
+      `A daily loss limit of ${askedLoss} is above the daily cap of ${nextCap}: a loss limit above what can be placed in a day never trips, so it has not been saved.`
+    )
+  }
+  // A cap lowered under the loss limit takes the loss limit down with it (shared/hardLimits.ts).
+  const nextLoss = dailyLossWithinCap(askedLoss ?? state.dailyLossLimitQuote, nextCap)
 
   const nextAllocation =
     patch.allocationQuote === undefined

@@ -165,6 +165,10 @@ export interface AppSettings {
    * means "never configured", which is what lets the UI offer setup instead of reporting a
    * balance of zero as though it were a fact. */
   paperAccount: PaperAccount | null
+  /** The version of this file's shape (shared/configMigration.ts), stamped by the main process
+   * each time it writes the file. Absent on a file from before 8 October 2026, which is read as
+   * version 0 and stamped on its first read. */
+  configVersion?: number
   /** How the paper trades the app opens by itself are sized, and how much they may have out
    * together (shared/paperRisk.ts). Absent on a file written before it existed, and healed on
    * every read: its defaults apply. */

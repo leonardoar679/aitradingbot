@@ -81,7 +81,12 @@ Duplicates, all intentional and kept:
 
 ## Settings, by where they are stored
 
-All files are in the user's profile folder.
+All files are in the user's profile folder. Since 8 October 2026 (V5 Stage 1) each of the five
+settings files carries `configVersion` (`shared/configMigration.ts`), stamped on its first read and
+on every write by `electron/services/configFiles.ts`; every default is composed in
+`shared/appDefaults.ts DEFAULT_CONFIG`; the hard limits above every setting are
+`shared/hardLimits.ts`; and what the start read (each file's version, every value healed) is shown
+under Settings › Advanced › Effective configuration.
 
 | File | Setting | Edited today on | New home |
 |---|---|---|---|
@@ -101,7 +106,7 @@ All files are in the user's profile folder.
 | | `dailyCapUsd`, `callsPerMinute` | Agents › Usage | Settings › AI |
 | | `watch` (on, models, events a day, lowest band, first model gates; and, added 8 October 2026, CONFIRM: a paper BUY it opens is told as ready to confirm as a real order a person places) | Agents › Opportunities › Watch | Opportunities (stays with its results) |
 | | `watchPaper` (on, model, stake, most open; and, added on 5 October 2026, most open in one direction, the losing run that pauses it, the Bitcoin move that drops a waiting trade) | Agents › Opportunities › Watch | Opportunities |
-| `scanner.json` | `enabled`, `universeSize` (20, 40, 60 or 100) | Explorer › Scanner | Settings › Market |
+| `scanner.json` | `enabled` (on by default since 8 October 2026; only `false` switches it off), `universeSize` (20, 40, 60 or 100) | Explorer › Scanner | Settings › Market |
 | `marketEvents/` | since 8 October 2026 an event may be a market-wide move (`type: 'market_move'`, on BTCUSDT, with `live.members`), and its members carry `live.marketMove`; detector version `events-v2` | — | Opportunities, Discovery |
 | `news.json` | `enabled`; for `delisting` and for `monitoringTag`, each: `notifyHeld`, `paperShort` (on, stake), `askModels` (added with the news reader, V3 Stage 7) | — | Settings › Market |
 | `credentials.json` (encrypted) | Binance and Upbit keys; when added, last tested, result | Settings | Connections |

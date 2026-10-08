@@ -1,8 +1,10 @@
 import { app } from 'electron'
 import { join } from 'path'
-import { readFile, mkdir } from 'fs/promises'
+import { mkdir } from 'fs/promises'
 import { writeJsonAtomic } from './atomicWrite'
 import type { AppSettings } from '../../shared/ipc'
+import { stampedConfig } from '../../shared/configMigration'
+import { readConfigFile } from './configFiles'
 
 const DEFAULT_SETTINGS: AppSettings = {
   theme: 'dark',
@@ -21,14 +23,11 @@ function settingsPath(): string {
   return join(app.getPath('userData'), 'settings.json')
 }
 
+/** settings.json read once, through the migration steps it is behind (configFiles.ts), over the
+ * defaults: a key the file lacks is the default's, and each store in it is healed by its own reader. */
 async function load(): Promise<AppSettings> {
   if (cache) return cache
-  try {
-    const raw = await readFile(settingsPath(), 'utf-8')
-    cache = { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<AppSettings>) }
-  } catch {
-    cache = { ...DEFAULT_SETTINGS }
-  }
+  cache = { ...DEFAULT_SETTINGS, ...((await readConfigFile('settings')) as Partial<AppSettings>) }
   return cache
 }
 
@@ -40,6 +39,6 @@ export async function setSettings(patch: Partial<AppSettings>): Promise<AppSetti
   const current = await load()
   cache = { ...current, ...patch }
   await mkdir(app.getPath('userData'), { recursive: true })
-  await writeJsonAtomic(settingsPath(), cache)
+  await writeJsonAtomic(settingsPath(), stampedConfig(cache))
   return cache
 }

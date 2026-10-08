@@ -12,8 +12,9 @@ import { EVENT_DETECTOR_VERSION } from '../shared/marketEvent'
 const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex')
 
 /** Today's engine, as hashed. A change to any pinned constant moves it: change it here on purpose. */
-// 8 October 2026: the fifth AI addition (its limit, prompt and schema) moved it from 60c026073c92.
-const PINNED_ENGINE_VERSION = '9f6c8af7757e'
+// 8 October 2026: the fifth AI addition (its limit, prompt and schema) moved it from 60c026073c92;
+// later that day the hard limits and the settings files' version (V5 Stage 1) moved it from 9f6c8af7757e.
+const PINNED_ENGINE_VERSION = 'fdf553c8b5bb'
 
 describe('the engine version', () => {
   it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {
@@ -51,7 +52,7 @@ describe('the stores, healed', () => {
     const healed = healStores({
       settings: {},
       ai: { defaultModel: 'openai/gpt-5-mini', enabledModels: ['openai/gpt-5-mini'], dailyCapUsd: 1, callsPerMinute: 30, watch: undefined, watchPaper: undefined, additions: undefined },
-      scanner: { enabled: false, universeSize: 60 },
+      scanner: { enabled: true, universeSize: 60 },
       news: undefined,
       live
     })

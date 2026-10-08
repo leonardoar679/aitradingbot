@@ -32,7 +32,10 @@ export interface ScannerConfigPatch {
   universeSize?: number
 }
 
-export const DEFAULT_SCANNER_CONFIG: ScannerConfig = { enabled: false, universeSize: DEFAULT_SCANNER_UNIVERSE }
+/** On from the first launch since 8 October 2026 (the V5 document, §130: abnormal moves are
+ * detected by themselves): it reads public data, costs no money and asks nothing; the watch, which
+ * asks, is a switch of its own and stays off. Only `false` in the file switches it off. */
+export const DEFAULT_SCANNER_CONFIG: ScannerConfig = { enabled: true, universeSize: DEFAULT_SCANNER_UNIVERSE }
 
 export function isScannerUniverseSize(value: unknown): value is (typeof SCANNER_UNIVERSE_SIZES)[number] {
   return (SCANNER_UNIVERSE_SIZES as readonly unknown[]).includes(value)

@@ -1,4 +1,15 @@
-import type { PaperPauseSettings, PaperRiskSettings } from './ipc'
+import { DEFAULT_AI_ADDITIONS, type AiAdditionsConfig } from './aiAdditions'
+import { DEFAULT_AI_CALLS_PER_MINUTE } from './aiPace'
+import { DEFAULT_AI_DAILY_CAP_USD, DEFAULT_AI_MODEL } from './aiSignal'
+import { DEFAULT_AI_WATCH, type AiWatchConfig } from './aiWatch'
+import { DEFAULT_AI_WATCH_PAPER, type AiWatchPaperConfig } from './aiWatchPaper'
+import { DEFAULT_ALERTS } from './alerts'
+import { HARD_LIMITS } from './hardLimits'
+import type { AlertSettings, PaperDigestSettings, PaperPauseSettings, PaperRiskSettings } from './ipc'
+import { DEFAULT_LIVE_LIMITS } from './liveLimits'
+import { DEFAULT_SCANNER_CONFIG, type ScannerConfig } from './marketScanner'
+import { DEFAULT_NEWS_CONFIG, type NewsConfig } from './news'
+import { DEFAULT_PAPER_DIGEST } from './paperDigest'
 import { DEFAULT_PAPER_PAUSE, describePaperPause, savePaperPause } from './paperPause'
 import { DEFAULT_PAPER_RISK, describePaperRisk } from './paperRisk'
 
@@ -11,9 +22,18 @@ import { DEFAULT_PAPER_RISK, describePaperRisk } from './paperRisk'
 // - aiConfig.json: the budget and models in electron/services/aiConfigService.ts, healAiWatch and
 //   healAiWatchPaper;
 // - scanner.json: marketScannerService.ts against DEFAULT_SCANNER_CONFIG;
-// - news.json: healNewsConfig.
+// - news.json: healNewsConfig;
+// - liveTrading.json: liveTradingService.ts against DEFAULT_LIVE_LIMITS.
 // tests/appDefaults.test.ts reads each of the shared ones empty and checks it comes back as its
 // default, so a default changes only where it is defined.
+//
+// THE DEFAULT CONFIGURATION (the V5 document, §6; since 8 October 2026) is every one of those
+// defaults composed into one object, DEFAULT_CONFIG: the one place to read what a fresh install
+// does, and what tests/hardLimits.test.ts holds the heals to -- an empty profile, healed, must equal
+// it exactly. Each default is still defined beside its own heal (the thing that changes it is the
+// thing that reads it); this object is where they are all seen together. Above every one of them
+// stand the hard limits (shared/hardLimits.ts), which nothing in a file can exceed; and since 8
+// October 2026 each settings file carries its version (shared/configMigration.ts).
 //
 // THE RISK LEVEL is how Settings says the rest in a word, as the document asks ("Risk:
 // Conservative" instead of twelve fields). Conservative is the shipped defaults of the two
@@ -21,6 +41,39 @@ import { DEFAULT_PAPER_RISK, describePaperRisk } from './paperRisk'
 // capped, and the losing run that pauses them -- every one of which only ever opens less. Anything
 // else is Custom. The limits on real orders are their own, set on Risk & Safety, and nothing here
 // changes them.
+
+/** Every store as the app reads it, healed: what a fresh install starts with where a file says
+ * nothing. The live limits are the stored ones; the hard ceiling on a real order is a hard limit
+ * and is shown beside them. */
+export interface EffectiveStores {
+  paperRisk: PaperRiskSettings
+  paperPause: Pick<PaperPauseSettings, 'lossR' | 'trades'>
+  paperDigest: PaperDigestSettings
+  alerts: AlertSettings
+  watch: AiWatchConfig
+  watchPaper: AiWatchPaperConfig
+  additions: AiAdditionsConfig
+  ai: { defaultModel: string; enabledModels: string[]; dailyCapUsd: number; callsPerMinute: number }
+  scanner: ScannerConfig
+  news: NewsConfig
+  live: { maxOrderQuote: number; hardMaxOrderQuote: number; dailyCapQuote: number; dailyLossLimitQuote: number; allocationQuote: number | null; riskPct: number }
+}
+
+/** What a fresh install's stores are: every default, composed. Nothing real is traded, no model is
+ * asked and nothing is opened by itself; the scanner and the four feeds read public data. */
+export const DEFAULT_CONFIG: EffectiveStores = {
+  paperRisk: DEFAULT_PAPER_RISK,
+  paperPause: { lossR: DEFAULT_PAPER_PAUSE.lossR, trades: DEFAULT_PAPER_PAUSE.trades },
+  paperDigest: DEFAULT_PAPER_DIGEST,
+  alerts: DEFAULT_ALERTS,
+  watch: DEFAULT_AI_WATCH,
+  watchPaper: DEFAULT_AI_WATCH_PAPER,
+  additions: DEFAULT_AI_ADDITIONS,
+  ai: { defaultModel: DEFAULT_AI_MODEL, enabledModels: [DEFAULT_AI_MODEL], dailyCapUsd: DEFAULT_AI_DAILY_CAP_USD, callsPerMinute: DEFAULT_AI_CALLS_PER_MINUTE },
+  scanner: DEFAULT_SCANNER_CONFIG,
+  news: DEFAULT_NEWS_CONFIG,
+  live: { ...DEFAULT_LIVE_LIMITS, hardMaxOrderQuote: HARD_LIMITS.liveMaxOrderQuote }
+}
 
 export type RiskLevel = 'conservative' | 'custom'
 

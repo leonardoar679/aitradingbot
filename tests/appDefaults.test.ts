@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_ALERTS, healAlerts } from '../shared/alerts'
-import { CONSERVATIVE_PAPER, conservativePaper, describeRiskLevel, riskLevelOf } from '../shared/appDefaults'
+import { CONSERVATIVE_PAPER, DEFAULT_CONFIG, conservativePaper, describeRiskLevel, riskLevelOf } from '../shared/appDefaults'
 import { DEFAULT_AI_DAILY_CAP_USD, DEFAULT_AI_MODEL } from '../shared/aiSignal'
 import { DEFAULT_AI_WATCH, healAiWatch } from '../shared/aiWatch'
 import { DEFAULT_AI_WATCH_PAPER, healAiWatchPaper } from '../shared/aiWatchPaper'
@@ -43,8 +43,10 @@ describe('a store read empty, or holding junk, heals to its default', () => {
     expect(DEFAULT_NEWS_CONFIG.delisting.paperShort.enabled).toBe(false)
     expect(DEFAULT_NEWS_CONFIG.monitoringTag.paperShort.enabled).toBe(false)
     expect(DEFAULT_AI_DAILY_CAP_USD).toBe(1)
-    // The scanner and the news reader are free, and wait to be switched on.
-    expect(DEFAULT_SCANNER_CONFIG.enabled).toBe(false)
+    // The scanner is free and on from the first launch (since 8 October 2026, the V5 document's
+    // §130); the news reader is free too, and waits to be switched on.
+    expect(DEFAULT_SCANNER_CONFIG.enabled).toBe(true)
+    expect(DEFAULT_CONFIG.scanner).toBe(DEFAULT_SCANNER_CONFIG)
     expect(DEFAULT_NEWS_CONFIG.enabled).toBe(false)
     // Notices are on, with sound.
     expect(DEFAULT_ALERTS).toEqual({ enabled: true, sound: true })

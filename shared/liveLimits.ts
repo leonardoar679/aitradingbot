@@ -84,6 +84,17 @@ export function describeUntrustedLossTally(realizedPnlToday: number): string | n
 export const LIVE_RISK_PCT_CHOICES = [0.1, 0.25, 0.5, 1, 2] as const
 export const DEFAULT_LIVE_RISK_PCT = 0.25
 
+/** What liveTrading.json holds on a fresh install (the limits a real order passes, as set), in
+ * the one place every default lives (shared/appDefaults.ts DEFAULT_CONFIG). The ceiling on the
+ * order size is not a default but a hard limit (shared/hardLimits.ts). */
+export const DEFAULT_LIVE_LIMITS: { maxOrderQuote: number; dailyCapQuote: number; dailyLossLimitQuote: number; allocationQuote: number | null; riskPct: number } = {
+  maxOrderQuote: 10,
+  dailyCapQuote: 50,
+  dailyLossLimitQuote: 15,
+  allocationQuote: null,
+  riskPct: DEFAULT_LIVE_RISK_PCT
+}
+
 /** A stored share, read as one: one of the choices, else the default. */
 export function healLiveRiskPct(value: unknown): number {
   return (LIVE_RISK_PCT_CHOICES as readonly unknown[]).includes(value) ? (value as number) : DEFAULT_LIVE_RISK_PCT

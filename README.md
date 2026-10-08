@@ -49,7 +49,7 @@ other.
 | | **Strategies** | **Active Runs**: a bot is a single continuous dry-run of a [chosen strategy](#strategies) against one exchange/symbol, optionally with a model asked to [confirm each entry](#ai-signals--paper-only); disabling one records a run, removing one archives it. **Execution**: the eight executor types, each running independently against live candles, the starter presets, and the New Executor form a call's filled-in form opens on — see [Executors](#executors) below. |
 | Research | **Backtest & Research** | **Backtest** runs a chosen strategy over a historical range and shows full stats, equity curve vs. buy-and-hold, monthly breakdown and a trade log; its **Live** view monitors the same route continuously ([Live strategy monitor](#live-strategy-monitor)), **Charts** replays each trade against the candles, and **Compare Strategies** ranks every registered strategy over the same candles. An optional tick box has a model [confirm each entry](#ai-signals--paper-only). Both views export CSV, JSON and a PNG. **Automation** re-runs saved backtests on a schedule while the app is open, each run keeping a session-only report. |
 | | **AI Benchmark** | Several models on the same questions, scored side by side: on candles, and on the events the scanner raised, with the no-model rows beside them — following, fading and holding every event, and the [quant strategies](#does-ai-help-the-models-against-the-quant-strategies) where they agree — and **Does AI help?**, the models against the quant strategies with three verdicts. Every run is kept as an experiment that can be reopened for nothing. Since 8 October 2026 a **Research** tab beside it reads the record with no model asked: exit rules on identical entries (the call's bracket, an ATR stop, a trailing stop, a time stop, and the exit check's own trades), entry timing (at the answer, one, three and five minutes on, and after a confirming bar), holding time by event type, news timing by kind, consensus, what each input of the signal score earns, capture and misses against a history scan at the lowest floor, false opportunities by kind, and the four questions the excursions on file answer -- each labelled GROSS, NET or LIVE PAPER, thirty trades a row and ten a slice or "not enough", and each saved as CSV. |
-| | **Discovery** | Two tabs. **Market scanner**: once a minute it reads the most traded USDT pairs on Binance and says what is moving, scores each the same way, and records the moves that qualify as events — see [Discovery](#discovery--a-market-scanner). Public market data only: no key, no model, no order. It is switched on, and its pairs chosen, under Settings › Market. **News & Market Events**: four free news feeds and Binance's announcements, each story with its coins, kind, impact and what the price did after, filtered by coin or by Major alerts, and what each kind of story has done once 30 are in — see [News & market events](#news--market-events); a count on Discovery in the sidebar says how many new alerts it holds. Below the stories, [Binance's own announcements](#binances-announcements-on-discovery) — delistings, Monitoring Tags, futures launches, listings — as they are released, with what each kind did to prices. The reader is switched on under Settings › Market too, with what a delisting or a tag does: a notice if you hold the coin, a paper short by the kind's rule, a question to the watch's models. |
+| | **Discovery** | Two tabs. **Market scanner**: once a minute it reads the most traded USDT pairs on Binance and says what is moving, scores each the same way, and records the moves that qualify as events — see [Discovery](#discovery--a-market-scanner). Public market data only: no key, no model, no order. It is on from the first launch (since 8 October 2026), and is switched off, and its pairs chosen, under Settings › Market. **News & Market Events**: four free news feeds and Binance's announcements, each story with its coins, kind, impact and what the price did after, filtered by coin or by Major alerts, and what each kind of story has done once 30 are in — see [News & market events](#news--market-events); a count on Discovery in the sidebar says how many new alerts it holds. Below the stories, [Binance's own announcements](#binances-announcements-on-discovery) — delistings, Monitoring Tags, futures launches, listings — as they are released, with what each kind did to prices. The reader is switched on under Settings › Market too, with what a delisting or a tag does: a notice if you hold the coin, a paper short by the kind's rule, a question to the watch's models. |
 | System | **Risk & Safety** | The live trading limits every real order is checked against (largest order, the day's notional, the day's loss, the managed allocation), and the share of the allocation a real order filled in from a call is sized to risk at the call's stop (a suggestion for the form, never a gate); the size of the paper trades the app opens by itself, the watch's and the news rules' (sized by what their stop would lose, by a share of the paper account's equity, or at their stake, and capped in what they stake together), the losing run in R that pauses them until resumed, the cap on what they stake on one side on coins that move with Bitcoin, and a daily notice of what they did; and the controller groups: executors under a shared stop-loss, take-profit and maximum drawdown with a P&L snapshot every 5 minutes, all stopped on a breach. Arming and the kill switch stay on the bar at the top of every page. |
 | | **Connections** | Every key the app holds: Binance and Upbit ([Credentials](#credentials--api-keys)), and the OpenRouter key for the AI models. Each is tested before it is stored, stored encrypted, and never read back into the window. |
 | | **Settings** | Since 6 October 2026, **Essentials** first: the six settings that decide what the app does by itself — trading mode (PAPER, LIVE READY with a verified key and the session disarmed, or LIVE ACTIVE when armed; read, never changed here), risk level (Conservative at the shipped paper defaults, or Custom, with a reset that only ever opens less), the market the scanner watches, the AI's mode (changed only on Opportunities, behind its priced confirmation), desktop notices with or without sound, and the exchange. Everything else is under **Advanced**, closed until opened: the Configuration Center, in sections, built only from settings that exist. **General**: appearance (Dark / Light / Colorblind-safe). **Market**: the scanner on or off, and how many pairs it watches; the reader of Binance's announcements, and what a delisting does. **AI**: which models may be asked, the default and the route, the daily budget, the pace, the [AI additions](#the-ai-additions) (each on or off, with its daily limit and what a day of it can cost), and what asking has cost. Keys stay on Connections and limits on Risk & Safety, each in the one place, linked from here. What the V3 document asked for that has no behaviour behind it (language, timezone, default order type, allowed pairs, other news sources…) is listed in `docs/INVENTORY.md` rather than added as a control. |
@@ -919,6 +919,33 @@ that reached its target. SOLUSDT's minutes were faked to match.
 - **Saving:** Save as JSON and Save as CSV wrote both files.
 - **Sessions:** Start a session made "This session" report from then.
 
+### The configuration: one set of defaults, hard limits, a version on each file
+
+Since 8 October 2026 (the V5 document's §4–7 and §107; V5 Stage 1):
+
+- **One set of defaults.** `shared/appDefaults.ts DEFAULT_CONFIG` composes every store's default —
+  the paper sizing and pause, the alerts, the AI budget and models, the watch and its paper trades,
+  the additions, the scanner, the news reader, the live limits — and `tests/hardLimits.test.ts`
+  holds the heals to it: an empty profile, healed, equals it exactly. Each default is still defined
+  beside its own heal, the thing that reads it. A fresh install watches the market (the scanner is
+  on: public data, no spend), asks no model, trades nothing real and opens nothing by itself.
+- **Hard limits above every setting** (`shared/hardLimits.ts`): a real order's size (25), the share
+  of an account one trade may risk (2%), the AI budget ($100 a day), the events the watch asks about
+  (40 a day), the models an event is put to (6), the pairs the scanner watches (100), and a daily
+  loss limit never above the daily cap. A stored value over a ceiling is held to it when the file is
+  read; a value written over one is refused with the ceiling named; the choice lists are pinned
+  against them by test. They are engine constants, so a change moves the engine version. Research
+  overrides are not a layer: the engine's thresholds are constants, shown read-only.
+- **A version on each settings file** (`shared/configMigration.ts`): `settings.json`,
+  `aiConfig.json`, `scanner.json`, `news.json` and `liveTrading.json` carry `configVersion`, stamped
+  on their first read and on every write (`electron/services/configFiles.ts`). A migration is a
+  numbered step run once, for when a value's meaning changes; the heal on every read stays. A file
+  from a newer version of the app is left as written.
+- **What the start read** is said once in the main process's log and shown under Settings ›
+  Advanced › Effective configuration ("What the start read"): each file's version and what was
+  migrated, and every value the heal changed — missing (it took its default), repaired, or clamped
+  to a hard limit — with the file it came from.
+
 ### Discovery — a market scanner
 
 **Discovery** answers "is anything happening?" for many pairs at once, by arithmetic, so that the
@@ -973,7 +1000,8 @@ the larger it was.
 
 It is public market data and nothing else: no key, no model, no order, and
 `tests/aiNoLivePath.test.ts` fails if the scanner ever imports something that trades or asks a
-model. It is off until switched on, stays on across restarts, reads the market at once when
+model. It is on from the first launch since 8 October 2026 (the V5 document's §130; only `false` in
+its file switches it off), stays as it was left across restarts, reads the market at once when
 switched on, and costs one request a pair a minute — sixty pairs take about seven seconds of each
 minute and about 130 of the 6,000 request-weight a minute Binance allows.
 

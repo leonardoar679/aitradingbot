@@ -1,4 +1,4 @@
-import { AI_ADDITION_DAILY_LIMITS, AI_ADDITION_PROMPT_VERSIONS, AI_ADDITION_SCHEMA_VERSIONS, DEFAULT_AI_ADDITIONS, healAiAdditions, type AiAdditionsConfig } from './aiAdditions'
+import { AI_ADDITION_DAILY_LIMITS, AI_ADDITION_PROMPT_VERSIONS, AI_ADDITION_SCHEMA_VERSIONS, healAiAdditions } from './aiAdditions'
 import { AI_CONFIRM_PROMPT_VERSION } from './aiConfirm'
 import { AI_CONTEXT_VERSION } from './aiContext'
 import {
@@ -9,38 +9,48 @@ import {
   AI_OPPORTUNITY_SCHEMA_VERSION,
   AI_OPPORTUNITY_TAG_PROMPT_VERSION
 } from './aiOpportunity'
-import { DEFAULT_AI_CALLS_PER_MINUTE } from './aiPace'
 import { AI_AGENT_PROMPT_VERSIONS, AI_AGENT_SCHEMA_VERSION, AI_PANEL_PROMPT_VERSION } from './aiPanel'
-import { AI_SCHEMA_VERSION, DEFAULT_AI_DAILY_CAP_USD, DEFAULT_AI_MODEL, GPT_MIN_CONFIDENCE, GPT_PROMPT_VERSION } from './aiSignal'
-import { AI_WATCH_BREAKER_CALLS, AI_WATCH_FRESH_SECONDS, DEFAULT_AI_WATCH, healAiWatch, type AiWatchConfig } from './aiWatch'
-import { DEFAULT_AI_WATCH_PAPER, healAiWatchPaper, type AiWatchPaperConfig } from './aiWatchPaper'
-import { BTC_CRASH_PCT, DEFAULT_ALERTS, HIGH_IMPACT, WATCH_IMPACT, healAlerts } from './alerts'
+import { AI_SCHEMA_VERSION, GPT_MIN_CONFIDENCE, GPT_PROMPT_VERSION } from './aiSignal'
+import { AI_WATCH_BREAKER_CALLS, AI_WATCH_FRESH_SECONDS, healAiWatch } from './aiWatch'
+import { healAiWatchPaper } from './aiWatchPaper'
+import { BTC_CRASH_PCT, HIGH_IMPACT, WATCH_IMPACT, healAlerts } from './alerts'
+import { DEFAULT_CONFIG, type EffectiveStores } from './appDefaults'
+import { CONFIG_FILE_VERSION, type ConfigFileName, type ConfigFileNote } from './configMigration'
 import { FEE_RATE, SLIPPAGE_RATE } from './fees'
-import type { AlertSettings, PaperDigestSettings, PaperPauseSettings, PaperRiskSettings } from './ipc'
+import { HARD_LIMITS } from './hardLimits'
 import { LIVE_GAP_SECONDS, LIVE_MARKET_VERSION, MAX_SPREAD_PCT, STALE_PRICE_MS } from './liveMarket'
 import { EVENT_CANDIDATE_SCORE, EVENT_COOLDOWN_SECONDS, EVENT_DETECTOR_VERSION, EVENT_MAX_RANKED, EVENT_URGENT_SCORE } from './marketEvent'
-import { DEFAULT_SCANNER_CONFIG, type ScannerConfig } from './marketScanner'
-import { DEFAULT_NEWS_CONFIG, healNewsConfig, type NewsConfig } from './news'
+import type { ScannerConfig } from './marketScanner'
+import { healNewsConfig } from './news'
 import { OPPORTUNITY_SCORE_VERSION } from './opportunityScore'
-import { DEFAULT_PAPER_DIGEST, healPaperDigest } from './paperDigest'
-import { DEFAULT_PAPER_PAUSE, healPaperPause } from './paperPause'
-import { DEFAULT_PAPER_RISK, PAPER_MIN_STAKE, healPaperRisk } from './paperRisk'
+import { healPaperDigest } from './paperDigest'
+import { healPaperPause } from './paperPause'
+import { PAPER_MIN_STAKE, healPaperRisk } from './paperRisk'
 import { SESSION_REPORT_VERSION } from './shadowReport'
 
-// THE EFFECTIVE CONFIGURATION, IN ONE PLACE, WITH A VERSION (the V4 document, §4-5 and §61).
+export type { EffectiveStores } from './appDefaults'
+
+// THE EFFECTIVE CONFIGURATION, IN ONE PLACE, WITH A VERSION (the V4 document, §4-5 and §61; the V5
+// document, §4-7 and §107).
 //
 // The document asks for a DefaultConfig and a ConfigResolver that give every missing setting its
 // default. In this app that resolver is one heal function per store, each run on every read
-// (shared/appDefaults.ts says which). What was missing was one place to see the whole of it -- every
-// store as the app reads it, and every constant the engine runs on -- and a version of that whole,
-// so a report or a benchmark says which configuration it was made under and two of them can be told
-// apart.
+// (shared/appDefaults.ts says which), and the defaults composed are DEFAULT_CONFIG there. What was
+// missing was one place to see the whole of it -- every store as the app reads it, and every
+// constant the engine runs on -- and a version of that whole, so a report or a benchmark says which
+// configuration it was made under and two of them can be told apart.
 //
 // TWO VERSIONS. The ENGINE version hashes the constants alone: the detector, the bands, the costs,
-// the prompts and schemas. It changes only when the code does, and a test pins today's, so a change
-// is a deliberate one. The CONFIGURATION version hashes the constants and the stores together: what
-// this profile runs under, now. The stores are read by the main process, which hashes with its own
-// crypto (electron/services/effectiveConfigService.ts); this module only composes.
+// the prompts and schemas, and since 8 October 2026 the hard limits above every setting
+// (shared/hardLimits.ts) and the settings files' version (shared/configMigration.ts). It changes
+// only when the code does, and a test pins today's, so a change is a deliberate one. The
+// CONFIGURATION version hashes the constants and the stores together: what this profile runs
+// under, now. The stores are read by the main process, which hashes with its own crypto
+// (electron/services/effectiveConfigService.ts); this module only composes.
+//
+// WHAT THE HEAL DID is told as well (the V5 document, §107: "undefined → safe default" must be
+// seen, not guessed at): healNote sets each file as read against the stores as healed and names
+// every value that was missing, repaired or clamped, for the card and for the log at start.
 //
 // NOTHING HERE IS EDITABLE (the user's choice on 8 October 2026): the engine's thresholds stay
 // pinned constants, shown read-only, so every record stays comparable.
@@ -73,24 +83,24 @@ export const ENGINE_CONSTANTS = {
     agents: AI_AGENT_PROMPT_VERSIONS
   },
   schemas: { signal: AI_SCHEMA_VERSION, opportunity: AI_OPPORTUNITY_SCHEMA_VERSION, agent: AI_AGENT_SCHEMA_VERSION, context: AI_CONTEXT_VERSION },
-  sessionReport: { version: SESSION_REPORT_VERSION }
+  sessionReport: { version: SESSION_REPORT_VERSION },
+  /** The ceilings above every setting (the V5 document, §5): in code, never in a file. */
+  hardLimits: HARD_LIMITS,
+  configFiles: { version: CONFIG_FILE_VERSION }
 } as const
 
-/** Every store as the app reads it, healed: what a fresh install starts with where a file says
- * nothing. The live limits are the stored ones; the hard ceiling on a real order is the live trading
- * service's own code and is shown beside them. */
-export interface EffectiveStores {
-  paperRisk: PaperRiskSettings
-  paperPause: Pick<PaperPauseSettings, 'lossR' | 'trades'>
-  paperDigest: PaperDigestSettings
-  alerts: AlertSettings
-  watch: AiWatchConfig
-  watchPaper: AiWatchPaperConfig
-  additions: AiAdditionsConfig
-  ai: { defaultModel: string; enabledModels: string[]; dailyCapUsd: number; callsPerMinute: number }
-  scanner: ScannerConfig
-  news: NewsConfig
-  live: { maxOrderQuote: number; hardMaxOrderQuote: number; dailyCapQuote: number; dailyLossLimitQuote: number; allocationQuote: number | null; riskPct: number }
+/** One value the heal changed on the way from a file to the store the app runs on. */
+export interface HealedValue {
+  file: ConfigFileName
+  /** The value's path in the effective stores, e.g. `ai.dailyCapUsd`. */
+  path: string
+  /** `missing`: not in the file, so its default; `clamped`: a number over a ceiling, held to it;
+   * `repaired`: anything else the heal would not take as written. */
+  how: 'missing' | 'repaired' | 'clamped'
+  /** The value as the file held it (JSON), or `—` when it held none. */
+  stored: string
+  /** The value the app runs on (JSON). */
+  effective: string
 }
 
 export interface EffectiveConfig {
@@ -100,23 +110,15 @@ export interface EffectiveConfig {
   configVersion: string
   engine: typeof ENGINE_CONSTANTS
   stores: EffectiveStores
+  /** Each settings file as read at start: there or not, its version, what was migrated. */
+  files: ConfigFileNote[]
+  /** Every value the heal changed at start. */
+  healed: HealedValue[]
 }
 
-/** What a fresh install's stores are: every default, composed. */
+/** What a fresh install's stores are: every default, composed (shared/appDefaults.ts). */
 export function defaultStores(): EffectiveStores {
-  return {
-    paperRisk: DEFAULT_PAPER_RISK,
-    paperPause: { lossR: DEFAULT_PAPER_PAUSE.lossR, trades: DEFAULT_PAPER_PAUSE.trades },
-    paperDigest: DEFAULT_PAPER_DIGEST,
-    alerts: DEFAULT_ALERTS,
-    watch: DEFAULT_AI_WATCH,
-    watchPaper: DEFAULT_AI_WATCH_PAPER,
-    additions: DEFAULT_AI_ADDITIONS,
-    ai: { defaultModel: DEFAULT_AI_MODEL, enabledModels: [DEFAULT_AI_MODEL], dailyCapUsd: DEFAULT_AI_DAILY_CAP_USD, callsPerMinute: DEFAULT_AI_CALLS_PER_MINUTE },
-    scanner: DEFAULT_SCANNER_CONFIG,
-    news: DEFAULT_NEWS_CONFIG,
-    live: { maxOrderQuote: 10, hardMaxOrderQuote: 25, dailyCapQuote: 50, dailyLossLimitQuote: 15, allocationQuote: null, riskPct: 0.25 }
-  }
+  return DEFAULT_CONFIG
 }
 
 /** The raw stores as read from their files, each healed by its own rule, into the effective ones.
@@ -160,11 +162,12 @@ export function stableJson(value: unknown): string {
 }
 
 /** The configuration composed and versioned. `hash` is the caller's (the main process's crypto, or
- * a test's), and the first twelve characters of what it gives are the version. */
-export function effectiveConfig(stores: EffectiveStores, hash: (text: string) => string): EffectiveConfig {
+ * a test's), and the first twelve characters of what it gives are the version. `start` is what the
+ * main process saw as it read the files; a composition made elsewhere has none. */
+export function effectiveConfig(stores: EffectiveStores, hash: (text: string) => string, start: { files: ConfigFileNote[]; healed: HealedValue[] } = { files: [], healed: [] }): EffectiveConfig {
   const engineVersion = hash(stableJson(ENGINE_CONSTANTS)).slice(0, 12)
   const configVersion = hash(stableJson({ engine: ENGINE_CONSTANTS, stores })).slice(0, 12)
-  return { engineVersion, configVersion, engine: ENGINE_CONSTANTS, stores }
+  return { engineVersion, configVersion, engine: ENGINE_CONSTANTS, stores, files: start.files, healed: start.healed }
 }
 
 /** Every value as one row: its path and its value, for the read-only card. */
@@ -173,4 +176,98 @@ export function flattenConfig(value: unknown, prefix = ''): { path: string; valu
     return Object.entries(value as Record<string, unknown>).flatMap(([key, entry]) => flattenConfig(entry, prefix === '' ? key : `${prefix}.${key}`))
   }
   return [{ path: prefix, value: Array.isArray(value) ? value.map((entry) => String(entry)).join(', ') || '(none)' : value === null ? 'none' : String(value) }]
+}
+
+/** Which file each store is read from, and under which key of it (null: the file's top level). */
+const STORE_FILES: Record<keyof EffectiveStores, { file: ConfigFileName; under: string | null }> = {
+  paperRisk: { file: 'settings', under: 'paperRisk' },
+  paperPause: { file: 'settings', under: 'paperPause' },
+  paperDigest: { file: 'settings', under: 'paperDigest' },
+  alerts: { file: 'settings', under: 'alerts' },
+  watch: { file: 'aiConfig', under: 'watch' },
+  watchPaper: { file: 'aiConfig', under: 'watchPaper' },
+  additions: { file: 'aiConfig', under: 'additions' },
+  ai: { file: 'aiConfig', under: null },
+  scanner: { file: 'scanner', under: null },
+  news: { file: 'news', under: null },
+  live: { file: 'liveTrading', under: null }
+}
+
+/** Values of the stores that no file holds: the ceiling is code, and the digest's last day is a
+ * record, not a setting. */
+const NOT_STORED = new Set(['live.hardMaxOrderQuote', 'paperDigest.lastDay'])
+
+/** The ceilings a clamped value lands on. */
+const CEILINGS = new Set<number>(Object.values(HARD_LIMITS))
+
+function leavesOf(value: unknown, path: string[]): { path: string[]; value: unknown }[] {
+  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    return Object.entries(value as Record<string, unknown>).flatMap(([key, entry]) => leavesOf(entry, [...path, key]))
+  }
+  return [{ path, value }]
+}
+
+function at(value: unknown, path: string[]): unknown {
+  let current = value
+  for (const key of path) {
+    if (typeof current !== 'object' || current === null) return undefined
+    current = (current as Record<string, unknown>)[key]
+  }
+  return current
+}
+
+function sameValue(stored: unknown, effective: unknown): boolean {
+  if (Array.isArray(stored) && Array.isArray(effective)) {
+    return stableJson([...stored].sort()) === stableJson([...effective].sort())
+  }
+  return stored === effective
+}
+
+/** news.json written before the Monitoring Tag was read held a delisting's switches at its top
+ * level; healNewsConfig reads them as the delisting's, and so does this. */
+function newsAsRead(raw: Record<string, unknown>): Record<string, unknown> {
+  if (raw.delisting !== undefined) return raw
+  const flat = ['notifyHeld', 'paperShort', 'askModels'].filter((key) => raw[key] !== undefined)
+  if (flat.length === 0) return raw
+  return { ...raw, delisting: Object.fromEntries(flat.map((key) => [key, raw[key]])) }
+}
+
+/** Every value the heal changed: each file as read (migrated, not healed) against the stores as
+ * healed. A file that was not there is not listed value by value -- the files note says it was not
+ * there -- so a fresh install reads as nothing healed. */
+export function healNote(raw: Partial<Record<ConfigFileName, Record<string, unknown>>>, stores: EffectiveStores): HealedValue[] {
+  const out: HealedValue[] = []
+  for (const store of Object.keys(STORE_FILES) as (keyof EffectiveStores)[]) {
+    const { file, under } = STORE_FILES[store]
+    const fileRaw = raw[file]
+    if (fileRaw === undefined) continue
+    const base = file === 'news' ? newsAsRead(fileRaw) : fileRaw
+    for (const leaf of leavesOf(stores[store], [store])) {
+      const path = leaf.path.join('.')
+      if (NOT_STORED.has(path)) continue
+      const stored = at(base, under === null ? leaf.path.slice(1) : [under, ...leaf.path.slice(1)])
+      if (stored === undefined) {
+        out.push({ file, path, how: 'missing', stored: '—', effective: JSON.stringify(leaf.value) ?? 'null' })
+        continue
+      }
+      if (sameValue(stored, leaf.value)) continue
+      const clamped =
+        typeof stored === 'number' && typeof leaf.value === 'number' && stored > leaf.value && (CEILINGS.has(leaf.value) || path === 'live.dailyLossLimitQuote')
+      out.push({ file, path, how: clamped ? 'clamped' : 'repaired', stored: JSON.stringify(stored) ?? 'null', effective: JSON.stringify(leaf.value) ?? 'null' })
+    }
+  }
+  return out
+}
+
+/** The heal in one sentence. */
+export function describeHealed(healed: HealedValue[]): string {
+  const count = (how: HealedValue['how']): number => healed.filter((entry) => entry.how === how).length
+  const parts: string[] = []
+  const missing = count('missing')
+  const repaired = count('repaired')
+  const clamped = count('clamped')
+  if (missing > 0) parts.push(`${missing} ${missing === 1 ? 'value was' : 'values were'} missing and took ${missing === 1 ? 'its' : 'their'} default${missing === 1 ? '' : 's'}`)
+  if (repaired > 0) parts.push(`${repaired} ${repaired === 1 ? 'was' : 'were'} repaired`)
+  if (clamped > 0) parts.push(`${clamped} ${clamped === 1 ? 'was' : 'were'} clamped to a hard limit`)
+  return parts.length === 0 ? 'Every stored value was read as written.' : parts.join('; ') + '.'
 }

@@ -11,6 +11,9 @@ import { DEFAULT_AI_WATCH_PAPER, aiWatchPaperProblem, healAiWatchPaper, type AiW
 import { AI_CALLS_PER_MINUTE_CHOICES, DEFAULT_AI_CALLS_PER_MINUTE, isCallsPerMinute } from '../../shared/aiPace'
 import { budgetProblem, type AiConfig, type AiConfigPatch, type AiModelCatalogue, type AiModelInfo } from '../../shared/aiCost'
 import { writeJsonAtomic } from './atomicWrite'
+import { stampedConfig } from '../../shared/configMigration'
+import { HARD_LIMITS, hardLimitProblem } from '../../shared/hardLimits'
+import { readConfigFile } from './configFiles'
 import { getDecryptedAiCredential } from './aiCredentialsService'
 import { nextDailyUsage, usageForDay, utcDayKey, type DailyUsageBucket } from './dailyUsage'
 import { fetchModelCatalogue } from './openRouterClient'
@@ -95,15 +98,11 @@ function routeProblem(route: AiRoute, defaultModel: string, enabledModels: strin
 
 async function load(): Promise<AiConfigState> {
   if (cache) return cache
-  let raw: Partial<AiConfigState> = {}
-  try {
-    raw = (JSON.parse(await readFile(configPath(), 'utf-8')) as Partial<AiConfigState> | null) ?? {}
-  } catch {
-    raw = {}
-  }
+  // Read once, through the migration steps it is behind (configFiles.ts).
+  const raw = (await readConfigFile('aiConfig')) as Partial<AiConfigState>
   // Heals a file holding something unusable rather than letting it through to the gate, the same
   // way liveTradingService does: a cap of NaN compares false against everything and would stop
-  // nothing.
+  // nothing. A cap over the hard limit (shared/hardLimits.ts) is held to it.
   // Never a panel: "the default" is asked by things that were promised one call a question.
   const defaultModel =
     typeof raw.defaultModel === 'string' && isAiModelId(raw.defaultModel) && !isPanelId(raw.defaultModel) ? raw.defaultModel : DEFAULT_AI_MODEL
@@ -125,7 +124,7 @@ async function load(): Promise<AiConfigState> {
     defaultModel,
     enabledModels,
     route,
-    dailyCapUsd: typeof cap === 'number' && Number.isFinite(cap) && cap >= 0 ? cap : DEFAULT_AI_DAILY_CAP_USD,
+    dailyCapUsd: typeof cap === 'number' && Number.isFinite(cap) && cap >= 0 ? Math.min(cap, HARD_LIMITS.aiDailyCapUsdMax) : DEFAULT_AI_DAILY_CAP_USD,
     dailyUsage:
       usage && typeof usage.date === 'string' && typeof usage.usedQuote === 'number' && Number.isFinite(usage.usedQuote)
         ? { date: usage.date, usedQuote: usage.usedQuote }
@@ -146,7 +145,7 @@ async function load(): Promise<AiConfigState> {
 
 async function persist(): Promise<void> {
   await mkdir(app.getPath('userData'), { recursive: true })
-  await writeJsonAtomic(configPath(), cache)
+  await writeJsonAtomic(configPath(), cache === null ? cache : stampedConfig(cache))
 }
 
 async function loadCatalogue(): Promise<StoredCatalogue | null> {
@@ -267,6 +266,8 @@ export async function setAiConfig(patch: AiConfigPatch): Promise<AiConfig> {
     if (!Number.isFinite(patch.dailyCapUsd) || patch.dailyCapUsd < 0) {
       throw new Error('The daily AI budget has to be a number of dollars, 0 or more. 0 switches AI calls off.')
     }
+    const over = hardLimitProblem('The daily AI budget', patch.dailyCapUsd, HARD_LIMITS.aiDailyCapUsdMax, ' dollars a day')
+    if (over !== null) throw new Error(over)
     dailyCapUsd = patch.dailyCapUsd
   }
 

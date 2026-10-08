@@ -321,7 +321,8 @@ describe('its setting', () => {
     expect(vi.getTimerCount()).toBe(1)
     expect(lists.calls).toHaveLength(3)
     expect((await getNewsState()).recent).toHaveLength(4)
-    expect(JSON.parse(readFileSync(join(dir, 'news.json'), 'utf-8'))).toEqual({ ...DEFAULT_NEWS_CONFIG, enabled: true })
+    // Written by this app, the file carries its version (shared/configMigration.ts).
+    expect(JSON.parse(readFileSync(join(dir, 'news.json'), 'utf-8'))).toEqual({ ...DEFAULT_NEWS_CONFIG, enabled: true, configVersion: 1 })
     // Saying "on" again while it is on starts nothing more.
     await setNewsConfig({ enabled: true })
     await whenNewsSettled()
@@ -333,7 +334,7 @@ describe('its setting', () => {
     expect(vi.getTimerCount()).toBe(2)
     const off = await relaunched.setNewsConfig({ enabled: false })
     expect(off.nextReadAt).toBeNull()
-    expect(JSON.parse(readFileSync(join(dir, 'news.json'), 'utf-8'))).toEqual(DEFAULT_NEWS_CONFIG)
+    expect(JSON.parse(readFileSync(join(dir, 'news.json'), 'utf-8'))).toEqual({ ...DEFAULT_NEWS_CONFIG, configVersion: 1 })
   })
 
   it('refuses anything but on or off, and heals a file holding something else', async () => {

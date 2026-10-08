@@ -1,6 +1,8 @@
 import { app } from 'electron'
 import { mkdir, readFile } from 'fs/promises'
 import { join } from 'path'
+import { stampedConfig } from '../../shared/configMigration'
+import { readConfigFile } from './configFiles'
 import {
   NEWS_CATALOGS,
   applyNewsConfigPatch,
@@ -74,20 +76,15 @@ function newsDir(): string {
 
 async function loadConfig(): Promise<NewsConfig> {
   if (config) return config
-  let raw: unknown = {}
-  try {
-    raw = JSON.parse(await readFile(configPath(), 'utf-8'))
-  } catch {
-    raw = {}
-  }
-  // Only `true` switches anything on: a file holding anything else is healed, not obeyed.
-  config = healNewsConfig(raw)
+  // Read once, through the migration steps it is behind (configFiles.ts). Only `true` switches
+  // anything on: a file holding anything else is healed, not obeyed.
+  config = healNewsConfig(await readConfigFile('news'))
   return config
 }
 
 async function persistConfig(): Promise<void> {
   await mkdir(app.getPath('userData'), { recursive: true })
-  await writeJsonAtomic(configPath(), config)
+  await writeJsonAtomic(configPath(), config === null ? config : stampedConfig(config))
 }
 
 function snapshot(current: NewsConfig): NewsState {

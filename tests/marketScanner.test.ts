@@ -410,8 +410,19 @@ describe("an announcement's event", () => {
 })
 
 describe('the setting', () => {
-  it('is off until switched on, and starts nothing at launch while off', async () => {
+  it('is on from the first launch (since 8 October 2026), which schedules its first pass', async () => {
     vi.useFakeTimers()
+    const { startMarketScanner, getScannerState } = await scanner()
+    await startMarketScanner()
+    expect(vi.getTimerCount()).toBe(1)
+    const state = await getScannerState()
+    expect(state.config).toEqual({ enabled: true, universeSize: 60 })
+    expect(state.nextPassAt).not.toBeNull()
+  })
+
+  it('starts nothing at launch when it was switched off', async () => {
+    vi.useFakeTimers()
+    writeFileSync(join(dir, 'scanner.json'), JSON.stringify({ enabled: false, universeSize: 60, configVersion: 1 }))
     const { startMarketScanner, getScannerState } = await scanner()
     await startMarketScanner()
     expect(vi.getTimerCount()).toBe(0)
@@ -429,7 +440,8 @@ describe('the setting', () => {
     expect(on.config).toEqual({ enabled: true, universeSize: 20 })
     expect(on.nextPassAt).not.toBeNull()
     expect(vi.getTimerCount()).toBe(1)
-    expect(JSON.parse(readFileSync(join(dir, 'scanner.json'), 'utf-8'))).toEqual({ enabled: true, universeSize: 20 })
+    // Written by this app, the file carries its version (shared/configMigration.ts).
+    expect(JSON.parse(readFileSync(join(dir, 'scanner.json'), 'utf-8'))).toEqual({ enabled: true, universeSize: 20, configVersion: 1 })
 
     // Left on: the next launch starts it.
     vi.resetModules()
@@ -460,10 +472,12 @@ describe('the setting', () => {
     await expect(setScannerConfig({ universeSize: 500 })).rejects.toThrow(/20, 40, 60 or 100/)
   })
 
-  it('heals a settings file holding something unusable, to off', async () => {
+  it('heals a settings file holding something unusable, to its defaults: on, and only `false` switches it off', async () => {
     writeFileSync(join(dir, 'scanner.json'), JSON.stringify({ enabled: 'yes', universeSize: 9999 }))
     const { getScannerState } = await scanner()
-    expect((await getScannerState()).config).toEqual({ enabled: false, universeSize: 60 })
+    expect((await getScannerState()).config).toEqual({ enabled: true, universeSize: 60 })
+    // Stamped on that first read, the unusable values left for the heal (the file is read, not rewritten by it).
+    expect(JSON.parse(readFileSync(join(dir, 'scanner.json'), 'utf-8'))).toEqual({ enabled: 'yes', universeSize: 9999, configVersion: 1 })
   })
 })
 
@@ -633,9 +647,11 @@ describe('a market-wide move (8 October 2026)', () => {
       ['BTCUSDT', served(thenFlat(withMove({ pct: 1.5, volume: 4 }, LEAD, 3), 1))],
       ...others.map((base, i): [string, unknown[]] => [`${base}USDT`, served(thenFlat(withMove({ pct: 3 + i * 0.2, volume: 8 }, LEAD, 17 + i), 1))])
     ])
-    // The watched set is re-picked only once an hour; this pass is given the new one.
+    // The watched set is re-picked only once an hour; this pass is given the new one. Off while it
+    // is set, or the setting (on by default since 8 October 2026) would start a pass of its own on
+    // the real clock, and this pass, one at a time, would find it running.
     const { setScannerConfig } = await scanner()
-    await setScannerConfig({ universeSize: 20 })
+    await setScannerConfig({ enabled: false, universeSize: 20 })
     const again = await scanOnce(NOW_MS + 60_000)
     const moves = again.recentEvents.filter((event) => event.type === 'market_move')
     expect(moves).toHaveLength(1)

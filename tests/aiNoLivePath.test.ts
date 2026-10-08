@@ -306,7 +306,20 @@ describe('AI code has no route to a real order', () => {
     }
     // It raises a delisting as an event through the scanner, which reads public candles; that is
     // the whole of what it reaches beyond its own files.
-    expect(importsOf(join(SERVICES, 'newsService.ts')).sort()).toEqual(['atomicWrite', 'electron', 'jsonlStore', 'marketScannerService', 'news', 'newsActions', 'path', 'promises'])
+    // Since 8 October 2026 (V5 Stage 1) its settings file is read through the one reader that
+    // stamps each file with its version (configFiles.ts, shared/configMigration.ts): no new reach.
+    expect(importsOf(join(SERVICES, 'newsService.ts')).sort()).toEqual([
+      'atomicWrite',
+      'configFiles',
+      'configMigration',
+      'electron',
+      'jsonlStore',
+      'marketScannerService',
+      'news',
+      'newsActions',
+      'path',
+      'promises'
+    ])
     // The record of the rules since the study reads the same lists, and Upbit's public list of
     // trading notices for the near miss it keeps beside them, when it is asked; and the coins'
     // candles through the market service that charts read: public data, kept in a file of its own.
@@ -354,6 +367,9 @@ describe('AI code has no route to a real order', () => {
       'electron/services/newsService.ts',
       // The same, composed: the switches among every other store's, read-only.
       'shared/appConfig.ts',
+      // Since 8 October 2026 (V5 Stage 1) the defaults composed, DEFAULT_CONFIG: the reader's
+      // defaults among every other store's, and nothing read.
+      'shared/appDefaults.ts',
       'shared/news.ts',
       'shared/newsActions.ts',
       'shared/newsRecord.ts',
@@ -1026,7 +1042,24 @@ describe('AI code has no route to a real order', () => {
     // keeps the threads and records what it told; the handler only hands it what the window sent.
     expect(importsOf(join(ROOT, 'electron', 'ipc', 'handlers', 'appHandlers.ts')).sort()).toEqual(['electron', 'ipc', 'noticeService', 'pingService'])
     expect(importsOf(join(SERVICES, 'noticeService.ts')).sort()).toEqual(['alerts', 'electron', 'ipc', 'recordStoreService', 'settingsService'])
-    expect(importsOf(join(ROOT, 'shared', 'appDefaults.ts')).sort()).toEqual(['ipc', 'paperPause', 'paperRisk'])
+    // Since 8 October 2026 (V5 Stage 1) it composes DEFAULT_CONFIG from every store's default
+    // constant: each a module of constants and heals, none of them trading, holding a key or asking.
+    expect(importsOf(join(ROOT, 'shared', 'appDefaults.ts')).sort()).toEqual([
+      'aiAdditions',
+      'aiPace',
+      'aiSignal',
+      'aiWatch',
+      'aiWatchPaper',
+      'alerts',
+      'hardLimits',
+      'ipc',
+      'liveLimits',
+      'marketScanner',
+      'news',
+      'paperDigest',
+      'paperPause',
+      'paperRisk'
+    ])
   })
 
   it('the AI\'s part of the status bar reads two settings and offers nothing', () => {

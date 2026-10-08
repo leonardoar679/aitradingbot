@@ -12,6 +12,7 @@ import { startNewsReader } from './services/newsService'
 import { startNewsFeed } from './services/newsFeedService'
 import { startAiAdditions } from './services/aiAdditionsService'
 import icon from '../build/icon.png?asset'
+import { describeConfigurationAtStart } from './services/effectiveConfigService'
 
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -111,6 +112,12 @@ if (!gotSingleInstanceLock) {
     // story of high impact the feed reads -- only while the watch is on, within its own daily limit
     // and the budget. It places nothing. See aiAdditionsService.ts.
     startAiAdditions()
+    // Says, once every store has read its file, what the start read: each settings file's version
+    // and what was migrated, and every value the heal changed (the V5 document, §107). It reads
+    // what the services already hold and changes nothing. See effectiveConfigService.ts.
+    void describeConfigurationAtStart()
+      .then((line) => console.log(line))
+      .catch((error) => console.error('The configuration could not be described:', error))
 
     app.on('activate', function () {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()

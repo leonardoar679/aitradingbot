@@ -2,6 +2,8 @@ import { app } from 'electron'
 import { mkdir, readFile } from 'fs/promises'
 import { join } from 'path'
 import type { SymbolInfo } from '../../shared/ipc'
+import { stampedConfig } from '../../shared/configMigration'
+import { readConfigFile } from './configFiles'
 import {
   EVENT_BAR_SECONDS,
   EVENT_COOLDOWN_SECONDS,
@@ -127,16 +129,13 @@ function sig(value: number): number {
 
 async function loadConfig(): Promise<ScannerConfig> {
   if (config) return config
-  let raw: Partial<ScannerConfig> = {}
-  try {
-    raw = (JSON.parse(await readFile(configPath(), 'utf-8')) as Partial<ScannerConfig> | null) ?? {}
-  } catch {
-    raw = {}
-  }
-  // A file holding something unusable is healed rather than obeyed: only `true` switches the
-  // scanner on, and only a size it knows is a size.
+  // Read once, through the migration steps it is behind (configFiles.ts).
+  const raw = (await readConfigFile('scanner')) as Partial<ScannerConfig>
+  // A file holding something unusable is healed rather than obeyed: the scanner is on by default
+  // (shared/marketScanner.ts, since 8 October 2026), so only `false` switches it off, and only a
+  // size it knows is a size.
   config = {
-    enabled: raw.enabled === true,
+    enabled: raw.enabled !== false,
     universeSize: isScannerUniverseSize(raw.universeSize) ? raw.universeSize : DEFAULT_SCANNER_CONFIG.universeSize
   }
   return config
@@ -144,7 +143,7 @@ async function loadConfig(): Promise<ScannerConfig> {
 
 async function persistConfig(): Promise<void> {
   await mkdir(app.getPath('userData'), { recursive: true })
-  await writeJsonAtomic(configPath(), config)
+  await writeJsonAtomic(configPath(), config === null ? config : stampedConfig(config))
 }
 
 function snapshot(current: ScannerConfig): ScannerState {
