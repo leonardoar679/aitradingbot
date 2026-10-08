@@ -27,6 +27,7 @@ import {
   type WatchPaperPlan
 } from '../shared/aiWatchPaper'
 import type { NewsReading, TradeReview } from '../shared/aiAdditions'
+import type { AiCallRecord } from '../shared/aiLedger'
 import type { NewsAgainstStory } from '../shared/paperNewsBlock'
 import { SLIPPAGE_RATE } from '../shared/fees'
 import type { Candle, ExecutorConfig, PaperAccount, PaperPauseSettings, PaperRiskSettings, PositionExecutorParams } from '../shared/ipc'
@@ -394,6 +395,8 @@ interface Rig {
     readings?: Record<string, NewsReading>
     now: number
     candles: Candle[] | Error
+    /** The ledger's rows, for the calibrated win rate (shared/expectedValue.ts). Absent: none. */
+    rows?: AiCallRecord[]
   }
   notices: { title: string; body: string; extra?: { kind: string; thread?: string; severity?: string } }[]
   settled: string[]
@@ -457,6 +460,7 @@ function rig(initial: Partial<Rig['state']> = {}): Rig {
       return state.stories ?? []
     },
     readings: async () => state.readings ?? {},
+    listCalls: async () => ({ rows: state.rows ?? [], skippedLines: 0 }),
     settle: async (target) => {
       made.settled.push(target.id)
     },
@@ -1418,5 +1422,63 @@ describe('a position near its stop', () => {
     expect(await settleWatchPaperTrades(r.deps)).toEqual([])
     // Two thirds of the way: under the line, not told.
     expect(r.notices).toEqual([])
+  })
+})
+
+describe('the expected value, before a paper trade is opened (8 October 2026)', () => {
+  /** Thirty of the watch's closed trades on breakouts, all won or all lost, with the rows that name
+   * their kind. Closed two days ago, and each loss a hundredth: the record is the expected value's
+   * to refuse, not the losing run's or the day's. */
+  function record(won: boolean): { executors: ExecutorConfig[]; rows: AiCallRecord[] } {
+    const executors: ExecutorConfig[] = []
+    const rows: AiCallRecord[] = []
+    for (let index = 0; index < 30; index++) {
+      const symbol = `X${index}USDT`
+      executors.push(
+        executor({
+          id: `old-${index}`,
+          symbol,
+          status: 'stopped',
+          stoppedAt: SOON - 2 * 86_400,
+          watch: { eventId: `binance:${symbol}:1`, eventTime: 1, model: A, confidence: 0.8, callId: `c${index}`, result: { exit: won ? 'take_profit' : 'stop_loss', pnlQuote: won ? 2 : -0.01, closedAt: SOON - 2 * 86_400 } }
+        })
+      )
+      rows.push({ id: `c${index}`, eventId: `binance:${symbol}:1`, model: A, eventType: 'breakout' } as AiCallRecord)
+    }
+    return { executors, rows }
+  }
+
+  it('is written on the trade at the model\'s own confidence while the watch has no calibrated rate, and refuses nothing', async () => {
+    const r = rig()
+    expect((await openWatchPaperTrade(event(), decision(), r.deps))?.opened).toBe(true)
+    // 80% of a 3% target less 20% of a 1.5% stop, less the round trip: fees 0.2%, half a 0.02% spread, slippage 0.04%.
+    expect(r.state.executors[0].watch?.ev).toEqual({ pct: 1.85, r: 1.23, basis: 'confidence', winRate: 0.8, sample: 0, scope: null })
+  })
+
+  it('refuses a trade whose expected value at a calibrated win rate is under the round trip, before the reviewer is asked', async () => {
+    const lost = record(false)
+    const r = rig({ executors: lost.executors, rows: lost.rows })
+    const result = await openWatchPaperTrade(event(), decision(), r.deps)
+    expect(result?.opened).toBe(false)
+    expect(result?.text).toMatch(/^No paper trade: Its expected value is -1\.7\d% at the calibrated win rate \(0% on 30 trades of this kind\), under the 0\.24% a round trip costs\.$/)
+    expect(r.reviewed).toEqual([])
+    expect(r.state.executors).toHaveLength(30)
+  })
+
+  it('opens at a calibrated rate that clears the round trip, and writes the rate it was read at', async () => {
+    const won = record(true)
+    const r = rig({ executors: won.executors, rows: won.rows })
+    expect((await openWatchPaperTrade(event(), decision(), r.deps))?.opened).toBe(true)
+    const opened = r.state.executors.find((entry) => entry.id === 'paper-1')
+    expect(opened?.watch?.ev).toEqual({ pct: 2.75, r: 1.83, basis: 'calibrated', winRate: 1, sample: 30, scope: 'event type' })
+  })
+
+  it('reads the model\'s confidence when the ledger cannot be read, and opens as before', async () => {
+    const r = rig()
+    r.deps.listCalls = async () => {
+      throw new Error('the ledger is locked')
+    }
+    expect((await openWatchPaperTrade(event(), decision(), r.deps))?.opened).toBe(true)
+    expect(r.state.executors[0].watch?.ev?.basis).toBe('confidence')
   })
 })

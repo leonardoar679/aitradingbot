@@ -1480,6 +1480,23 @@ it is paper.
   button still pressed by a person; the watch places nothing, with CONFIRM on or off. The bar reads
   AI: CONFIRM while it is on. It is not a term of the watch's price, so it is switched on and off
   under a running watch without the priced confirmation.
+- **An expected value** (8 October 2026; the V4 document, §37-38; `shared/expectedValue.ts`). What a
+  call is worth before a trade is made, as a number anyone can check: at a win rate p, a target
+  and a stop as distances from the entry, p × target − (1 − p) × stop, less what a round trip
+  costs (the fees on both fills, half the spread, slippage on both fills), in percent and in R.
+  The win rate is CALIBRATED on the watch's own closed paper trades over the last ninety days -- on
+  this model, this kind of event and this side when there are thirty or more, else the model's over
+  all its events when there are thirty -- and the model's own confidence otherwise, shown as that.
+  It is on each Opportunities row and card ("EV +0.40% (+0.27 R) at a 55% calibrated win rate on 41
+  breakout events") and on the trade's timeline as it was when the trade was opened. It refuses a
+  paper trade of the watch's only at a calibrated rate under the 0.24% a round trip costs, before
+  the reviewer is asked; at the model's confidence it refuses nothing, so a fresh install opens
+  paper trades as before.
+- **What an answer costs a trade** (8 October 2026; §77; `shared/aiCostPerTrade.ts`): for each of
+  the watch's paper trades, every call the watch made on its event, whichever model answered, plus
+  the reviewer's look at it and the exit check's looks at the trade, from the ledger; then by model
+  the cost a trade, a winning trade and a dollar of net result, on a Performance card over the last
+  30 days of calls. Read from the records; nothing is stored or acted on.
 - **A daily digest** (chosen the same day; `shared/paperDigest.ts`). One desktop notice a day, the
   first time the app is open after 00:00 UTC, says what the watch and the news rules opened and
   closed on paper the day before, and what each closed trade made against what it risked at its

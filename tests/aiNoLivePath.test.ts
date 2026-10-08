@@ -553,15 +553,19 @@ describe('AI code has no route to a real order', () => {
     // aiEventMarket names Bitcoin's pair, whose minutes the Bitcoin safeguard reads; it is arithmetic.
     // aiAdditions: the reviewer's REJECT, one more refusal before the trade is written. aiExit: what
     // the exit check's EXIT writes, a time limit brought forward and nothing else (held below).
+    // aiLedger and expectedValue (8 October 2026): the calibrated win rate the expected value is read
+    // at, from the ledger's rows and the closed trades on file; it only ever refuses.
     expect(importsOf(join(ROOT, 'src', 'agents', 'watchPaperTrade.ts')).sort()).toEqual([
       'aiAdditions',
       'aiCost',
       'aiEventMarket',
       'aiExit',
+      'aiLedger',
       'aiSignal',
       'aiWatchPaper',
       'engine',
       'executorFunding',
+      'expectedValue',
       'ipc',
       'liveMarket',
       'marketEvent',
@@ -733,6 +737,26 @@ describe('AI code has no route to a real order', () => {
     const row = join(ROOT, 'src', 'positions', 'LivePositionRow.tsx')
     expect(calls(row)).toEqual(['liveTrading.closePosition'])
     expect(readFileSync(row, 'utf-8')).toContain('thesis?: { watcher: LiveWatcherSummary; reading: ThesisReading | null } | null')
+  })
+
+  it('the expected value and the cost per trade are read from the records, and only ever refuse (8 October 2026)', () => {
+    // The V4 plan's Stage 7. Both rules are arithmetic on the records: the ledger's rows and the
+    // executors on file. The value refuses a paper trade of the watch's at a calibrated rate under
+    // the round trip, and nothing else acts on either.
+    const value = join(ROOT, 'shared', 'expectedValue.ts')
+    expect(importsOf(value).sort()).toEqual(['aiLedger', 'fees', 'ipc', 'marketEvent'])
+    expect(readFileSync(value, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron|liveTrading|placeLive|setExecutors/)
+    const cost = join(ROOT, 'shared', 'aiCostPerTrade.ts')
+    expect(importsOf(cost).sort()).toEqual(['aiLedger', 'ipc'])
+    expect(readFileSync(cost, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron|liveTrading|placeLive|setExecutors/)
+    const card = join(ROOT, 'src', 'performance', 'AiCostPerTradeCard.tsx')
+    expect([...readFileSync(card, 'utf-8').matchAll(/window\.api\.(\w+)\.(\w+)/g)].map((match) => `${match[1]}.${match[2]}`)).toEqual(['ai.listCalls'])
+    expect(readFileSync(card, 'utf-8')).not.toMatch(/liveTrading|LiveTrading|placeLive|settings\.set|setExecutors|settingsWrites|onPrepareOrder|aiProposal/)
+    // The writer reads the ledger through the one namespace it already reaches, and the gate is
+    // the block's, read before the reviewer is asked.
+    const writer = readFileSync(join(ROOT, 'src', 'agents', 'watchPaperTrade.ts'), 'utf-8')
+    expect(writer).toContain("rows = (await deps.listCalls({ source: 'watch', sinceSec: deps.nowSec() - EV_LINES.days * 86_400, limit: EV_ROWS })).rows")
+    expect(writer.indexOf('const evBlock = expectedValueBlock(ev)')).toBeLessThan(writer.indexOf('review = await deps.review(event, decision)'))
   })
 
   it('the session report reads what the app did and changes none of it', () => {

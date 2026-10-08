@@ -21,6 +21,8 @@ import { correlatedExposureBlock, readBtcCorrelation } from '../../shared/paperE
 import { newsAgainstBlock, type NewsAgainstStory } from '../../shared/paperNewsBlock'
 import { healPaperPause, paperPauseBlock } from '../../shared/paperPause'
 import { NEAR_STOP_SHARE, nearStopNotice, paperCloseNotice, stopProgress, type NoticeExtra } from '../../shared/notices'
+import type { AiCallFilter, AiCallPage, AiCallRecord } from '../../shared/aiLedger'
+import { EV_LINES, calibratedWinRate, expectedValueBlock, tradeExpectedValue, watchOutcomes, type TradeEv } from '../../shared/expectedValue'
 import { healPaperRisk, paperEquity, paperOutBlock, rMultiple } from '../../shared/paperRisk'
 import { describeExecutorFunding } from '../account/executorFunding'
 import { settleExecutorOnStop } from '../account/settleExecutor'
@@ -71,6 +73,8 @@ export function watchPaperExecutor(input: {
   nowSec: number
   book?: LiveBook | null
   btcCorrelation?: number | null
+  /** The call's expected value (shared/expectedValue.ts), written on the mark. */
+  ev?: TradeEv | null
 }): ExecutorConfig {
   const { event, plan, book } = input
   const spread = book === undefined || book === null ? null : bookSpreadPct(book)
@@ -79,6 +83,7 @@ export function watchPaperExecutor(input: {
       ? plan.mark
       : { ...plan.mark, book: { bid: book.bid, ask: book.ask, spreadPct: spread, ageMs: priceAgeMs(book, input.nowSec * 1000), source: book.source } }
   const mark = input.btcCorrelation === undefined ? withBook : { ...withBook, btcCorrelation: input.btcCorrelation }
+  const marked = input.ev === undefined || input.ev === null ? mark : { ...mark, ev: input.ev }
   const fill = book === undefined || book === null ? null : streamedEntry(book, plan.params, input.nowSec * 1000)
   return {
     id: input.id,
@@ -93,7 +98,7 @@ export function watchPaperExecutor(input: {
     stoppedAt: null,
     keepPosition: false,
     mode: 'paper',
-    watch: mark,
+    watch: marked,
     liveOrder: null,
     pendingLiveOrderIds: [],
     liveWatcherId: null,
@@ -127,6 +132,9 @@ export interface WatchPaperDeps {
   stories: () => Promise<NewsAgainstStory[]>
   /** The news analyst's readings by story id, from `sinceSec` on. */
   readings: (sinceSec: number) => Promise<Record<string, NewsReading>>
+  /** The ledger's rows (shared/aiLedger.ts), for the calibrated win rate the expected value is read
+   * at (shared/expectedValue.ts): the watch's calls over the last ninety days. */
+  listCalls: (filter: AiCallFilter) => Promise<AiCallPage>
   /** Books a stopped paper executor's result into the paper account. */
   settle: (executor: ExecutorConfig, nowSec: number) => Promise<unknown>
   /** A desktop notice, with its kind and thread (shared/notices.ts). */
@@ -141,6 +149,30 @@ export interface WatchPaperResult {
   opened: boolean
   /** One sentence for the Watch card. */
   text: string
+}
+
+/** Rows of the ledger read for the calibrated rate, at most. */
+const EV_ROWS = 5000
+
+/** The call's expected value for the plan (shared/expectedValue.ts): at the watch's own calibrated
+ * win rate where its record is long enough, else at the model's confidence. Null without a stop or
+ * a target. A ledger that cannot be read leaves the model's confidence. */
+async function expectedValueOf(event: MarketEvent, decision: AiSignalDecision, plan: OkPlan, book: LiveBook | null, executors: ExecutorConfig[], deps: WatchPaperDeps): Promise<TradeEv | null> {
+  let rows: AiCallRecord[] = []
+  try {
+    rows = (await deps.listCalls({ source: 'watch', sinceSec: deps.nowSec() - EV_LINES.days * 86_400, limit: EV_ROWS })).rows
+  } catch {
+    rows = []
+  }
+  const calibrated = calibratedWinRate(watchOutcomes(executors, rows), { model: decision.model, eventType: event.type, side: plan.side }, deps.nowSec())
+  return tradeExpectedValue({
+    confidence: decision.confidence,
+    calibrated,
+    stopPct: plan.params.stopLossPct,
+    targetPct: plan.params.takeProfitPct,
+    spreadPct: book === null ? null : bookSpreadPct(book),
+    slippageRate: plan.params.slippageRate
+  })
 }
 
 /** Opens a paper trade on an answer the watch got, if that is switched on and its limits allow.
@@ -192,6 +224,13 @@ export async function openWatchPaperTrade(
   const first = await readBook()
   const unfit = livePaperBlock(first, deps.nowSec() * 1000) ?? thinBookBlock(first, plan.side, plan.params.amountQuote) ?? (await newsAgainst(event, plan.side, deps))
   if (unfit !== null) return { opened: false, text: `No paper trade: ${unfit}` }
+
+  // The expected value (shared/expectedValue.ts): refused only at a CALIBRATED win rate under the
+  // margin a round trip costs; at the model's own confidence it is written on the trade and never
+  // refuses. Read before the reviewer, so no second look is paid for on a trade this refuses.
+  const ev = await expectedValueOf(event, decision, plan, first, before.executors, deps)
+  const evBlock = expectedValueBlock(ev)
+  if (evBlock !== null) return { opened: false, text: `No paper trade: ${evBlock}` }
 
   // A second look, where something about this trade stands out: its REJECT means no trade. A review
   // that was not asked, refused or could not be had leaves the trade as it was: it only opens less.
@@ -245,7 +284,7 @@ export async function openWatchPaperTrade(
         correlation: btcCorrelation
       })
     if (problem !== null) return problem
-    const executor = watchPaperExecutor({ id: deps.newId(), event, plan, nowSec: deps.nowSec(), book, btcCorrelation })
+    const executor = watchPaperExecutor({ id: deps.newId(), event, plan, nowSec: deps.nowSec(), book, btcCorrelation, ev })
     await deps.setExecutors([...fresh.executors, executor])
     made.executor = executor
     return null
@@ -468,6 +507,8 @@ export const watchPaperBrowserDeps: WatchPaperDeps = {
   stories: async () => (await window.api.feed.getState()).stories,
   readings: async (sinceSec) =>
     newsReadingsOf((await window.api.ai.listCalls({ source: 'addition', promptVersion: AI_ADDITION_PROMPT_VERSIONS.news, sinceSec, limit: 1000 })).rows),
+  // The ledger, read for the calibrated win rate: free, and the rows are already on file.
+  listCalls: (filter) => window.api.ai.listCalls(filter),
   // Not kept in Inventory (keepPosition is false), so nothing was handed over and the whole
   // result is cash.
   settle: (executor, nowSec) => settleExecutorOnStop({ executor, handedOver: { held: null, realizedPnl: 0 }, now: nowSec }),

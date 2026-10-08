@@ -8,6 +8,7 @@ import {
   opportunityWindow
 } from '../../shared/aiOpportunity'
 import { describeOpportunityExit, type OpportunityOutcome } from '../../shared/aiOpportunityOutcome'
+import { calibratedWinRate, describeExpectedValue, tradeExpectedValue, type WatchOutcome } from '../../shared/expectedValue'
 import { describeDecider } from '../../shared/aiPanel'
 import { opportunityProposalProblem } from '../../shared/aiProposal'
 import type { Candle } from '../../shared/ipc'
@@ -33,6 +34,9 @@ interface OpportunityCardProps {
   onPaperTrade?: (answer: EventAnswer) => void
   /** CONFIRM is on: a BUY's button fills in a real order a person places. */
   confirm?: boolean
+  /** The watch's closed paper trades with their calls (shared/expectedValue.ts), for each answer's
+   * expected value at a calibrated rate. */
+  outcomes?: WatchOutcome[]
 }
 
 function utcMinute(sec: number): string {
@@ -88,7 +92,8 @@ function AnswerRow({
   bars,
   nowSec,
   onPaperTrade,
-  confirm = false
+  confirm = false,
+  outcomes = []
 }: {
   item: EventFeedItem
   answer: EventAnswer
@@ -97,6 +102,7 @@ function AnswerRow({
   onPaperTrade?: (answer: EventAnswer) => void
   /** CONFIRM is on: a BUY's button fills in a real order a person places. */
   confirm?: boolean
+  outcomes?: WatchOutcome[]
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const { decision } = answer
@@ -108,6 +114,19 @@ function AnswerRow({
   const expired = validity !== null && nowSec >= validity.expiresAt
   // The same rule the form itself applies, asked here so the card can say why nothing is offered.
   const tradeProblem = side === null ? null : opportunityProposalProblem(item.event.time, decision, nowSec)
+  // The call's expected value (shared/expectedValue.ts): its levels as distances from the middle of
+  // its range, at the watch's calibrated win rate where it has one, else at the model's confidence.
+  const mid = detail?.entry ? (detail.entry.min + detail.entry.max) / 2 : null
+  const levelPct = (level: number | null): number | null => (mid === null || !(mid > 0) || level === null ? null : (Math.abs(level - mid) / mid) * 100)
+  const ev =
+    side === null || detail === null
+      ? null
+      : tradeExpectedValue({
+          confidence: decision.confidence,
+          calibrated: calibratedWinRate(outcomes, { model: answer.model, eventType: item.event.type, side: side === 'long' ? 'buy' : 'sell' }, nowSec),
+          stopPct: levelPct(detail.stopLoss),
+          targetPct: levelPct(detail.takeProfit)
+        })
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem', padding: '0.75rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-app)' }}>
@@ -144,6 +163,7 @@ function AnswerRow({
           <Field label="Hold" value={formatHoldingDuration(validity.holdSeconds)} />
         </div>
       )}
+      {ev !== null && <p style={noteStyle}>{describeExpectedValue(ev, item.event.type)}</p>}
 
       {outcome !== null && <p style={{ ...noteStyle, color: describeOutcome(outcome, expired).color }}>{describeOutcome(outcome, expired).text}</p>}
 
@@ -224,7 +244,7 @@ function WhyThisPair({ item }: { item: EventFeedItem }): React.JSX.Element {
  * A recommendation is shown with its clock: where to enter, until when, and what it has done
  * since. Nothing on the card trades. "Paper trade" opens the order form on another page, filled
  * in; a person sets the amount and submits it there. */
-export function OpportunityCard({ item, bars, nowSec, toAsk, busy, problem, onAsk, onPaperTrade, confirm = false }: OpportunityCardProps): React.JSX.Element {
+export function OpportunityCard({ item, bars, nowSec, toAsk, busy, problem, onAsk, onPaperTrade, confirm = false, outcomes = [] }: OpportunityCardProps): React.JSX.Element {
   const { event, answers } = item
   const [why, setWhy] = useState(false)
   const status = feedItemStatus(item, bars, nowSec)
@@ -279,7 +299,7 @@ export function OpportunityCard({ item, bars, nowSec, toAsk, busy, problem, onAs
       )}
 
       {answers.map((answer) => (
-        <AnswerRow key={answer.model} item={item} answer={answer} bars={bars} nowSec={nowSec} onPaperTrade={onPaperTrade} confirm={confirm} />
+        <AnswerRow key={answer.model} item={item} answer={answer} bars={bars} nowSec={nowSec} onPaperTrade={onPaperTrade} confirm={confirm} outcomes={outcomes} />
       ))}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', flexWrap: 'wrap' }}>

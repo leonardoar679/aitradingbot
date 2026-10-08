@@ -4,6 +4,7 @@ import { describeOpportunitySide, isActionableOpportunity, opportunitySide, oppo
 import { describeDecider } from '../../shared/aiPanel'
 import type { ExecutorConfig, PaperAccount } from '../../shared/ipc'
 import { MAX_SPREAD_PCT, STALE_PRICE_MS } from '../../shared/liveMarket'
+import { calibratedWinRate, describeExpectedValue, tradeExpectedValue, type WatchOutcome } from '../../shared/expectedValue'
 import { describeEventType } from '../../shared/marketEvent'
 import { describeEventType as describeStoryType, type NewsFeedState } from '../../shared/newsFeed'
 import { SIGNAL_WEIGHTS, storiesAbout } from '../../shared/opportunityScore'
@@ -71,7 +72,7 @@ function SignalSection({ row }: { row: OpportunityTableRow }): React.JSX.Element
   )
 }
 
-function PlanSection({ row, risk }: { row: OpportunityTableRow; risk: TableRisk | null }): React.JSX.Element | null {
+function PlanSection({ row, risk, outcomes, nowSec }: { row: OpportunityTableRow; risk: TableRisk | null; outcomes: WatchOutcome[]; nowSec: number }): React.JSX.Element | null {
   const answer = offeredAnswer(row)
   const detail = answer?.decision.detail ?? null
   const validity = answer === null ? null : opportunityWindow(row.item.event.time, detail)
@@ -80,6 +81,19 @@ function PlanSection({ row, risk }: { row: OpportunityTableRow; risk: TableRisk 
   const mid = (offer.entryMin + offer.entryMax) / 2
   const stopPct = detail.stopLoss === null || !(mid > 0) ? null : (Math.abs(mid - detail.stopLoss) / mid) * 100
   const way = offer.side === 'long' ? 'buy' : 'sell'
+  const targetPct = detail.takeProfit === null || !(mid > 0) ? null : (Math.abs(detail.takeProfit - mid) / mid) * 100
+  // The call's expected value (shared/expectedValue.ts), at the watch's calibrated win rate for this
+  // model on this kind of event where it has one, else at the model's own confidence.
+  const ev =
+    answer === null
+      ? null
+      : tradeExpectedValue({
+          confidence: answer.decision.confidence,
+          calibrated: calibratedWinRate(outcomes, { model: answer.model, eventType: row.item.event.type, side: way }, nowSec),
+          stopPct,
+          targetPct,
+          spreadPct: row.live?.quality.spreadPct ?? null
+        })
   const sized =
     risk === null
       ? null
@@ -96,6 +110,7 @@ function PlanSection({ row, risk }: { row: OpportunityTableRow; risk: TableRisk 
         {detail.stopLoss === null ? '—' : plain(detail.stopLoss)} · target {detail.takeProfit === null ? '—' : plain(detail.takeProfit)} · valid until {utcClock(validity.expiresAt)} UTC
         · held at most {formatHoldingDuration(validity.holdSeconds)}
       </p>
+      {ev !== null && <p style={lineStyle}>{describeExpectedValue(ev, row.item.event.type)}</p>}
       <p style={{ ...sectionTitle, marginTop: '0.6rem' }}>Invalid if</p>
       <ul style={{ ...lineStyle, paddingLeft: '1.1rem' }}>
         <li>its entry has not filled by {utcClock(validity.expiresAt)} UTC;</li>
@@ -186,6 +201,7 @@ function RowDetail({
   nowSec,
   risk,
   confirm = false,
+  outcomes,
   onPaperTrade
 }: {
   row: OpportunityTableRow
@@ -194,6 +210,8 @@ function RowDetail({
   risk: TableRisk | null
   /** CONFIRM is on: a BUY's button fills in a real order a person places. */
   confirm?: boolean
+  /** The watch's closed paper trades with their calls (shared/expectedValue.ts), for the calibrated rate. */
+  outcomes?: WatchOutcome[]
   onPaperTrade?: (item: EventFeedItem, answer: EventAnswer) => void
 }): React.JSX.Element {
   const answer = offeredAnswer(row)
@@ -208,7 +226,7 @@ function RowDetail({
             <LiveVerdictView reading={row.live} />
           </div>
         )}
-        <PlanSection row={row} risk={risk} />
+        <PlanSection row={row} risk={risk} outcomes={outcomes ?? []} nowSec={nowSec} />
         {row.offer === null && (
           <p style={lineStyle}>
             {row.status === null ? 'Where it stands is not known yet: its candles have not been read.' : `${describeFeedItemStatus(row.status)}: nothing is on offer from it.`}
@@ -318,6 +336,7 @@ export function OpportunityTableCard({
   news,
   risk,
   confirm = false,
+  outcomes,
   onPaperTrade
 }: {
   onOffer: OpportunityTableRow[]
@@ -327,6 +346,8 @@ export function OpportunityTableCard({
   risk: TableRisk | null
   /** CONFIRM is on, for every row: a BUY's button fills in a real order a person places. */
   confirm?: boolean
+  /** The watch's closed paper trades with their calls, for each row's expected value. */
+  outcomes?: WatchOutcome[]
   onPaperTrade?: (item: EventFeedItem, answer: EventAnswer) => void
 }): React.JSX.Element {
   const [open, setOpen] = useState<string | null>(null)
@@ -338,7 +359,7 @@ export function OpportunityTableCard({
         {open === row.item.event.id && (
           <tr>
             <td colSpan={COLUMNS.length} style={{ ...cellStyle, whiteSpace: 'normal', background: 'var(--bg-app)' }}>
-              <RowDetail row={row} news={news} nowSec={nowSec} risk={risk} confirm={confirm} onPaperTrade={onPaperTrade} />
+              <RowDetail row={row} news={news} nowSec={nowSec} risk={risk} confirm={confirm} outcomes={outcomes} onPaperTrade={onPaperTrade} />
             </td>
           </tr>
         )}

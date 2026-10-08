@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Card } from '../components/Card'
 import { describeAiOpportunityCost, type AiConfig } from '../../shared/aiCost'
 import { AI_OPPORTUNITY_MAX_MODELS, opportunitySide } from '../../shared/aiOpportunity'
+import { watchOutcomes } from '../../shared/expectedValue'
 import { describeDecider } from '../../shared/aiPanel'
 import type { AiOrderProposal } from '../../shared/aiProposal'
 import { watchEventIdsToday, watchPausedModels } from '../../shared/aiWatch'
@@ -203,6 +204,9 @@ export function OpportunitiesTab({
   // Models the watch has stopped asking today, read from the same rows that count its day.
   const paused = useMemo(() => watchPausedModels(calls, nowSec), [calls, nowSec])
   const watchTrades = useMemo(() => watchPaperExecutors(executors), [executors])
+  // The watch's closed paper trades joined to their calls: the calibrated win rate an expected value
+  // is read at (shared/expectedValue.ts). Read only.
+  const outcomes = useMemo(() => watchOutcomes(executors, calls), [executors, calls])
   const paperStanding = {
     hasAccount: paperAccount === undefined ? null : paperAccount !== null,
     open: watchTrades.filter((executor) => executor.status === 'active').map((executor) => executor.symbol),
@@ -242,6 +246,7 @@ export function OpportunitiesTab({
               : { paperRisk, account: paperAccount, executors, stakeQuote: config.watchPaper.stakeQuote, btcLimitPct: config.watchPaper.dropOnBtcMovePct }
           }
           confirm={config?.watch.confirmLive === true}
+          outcomes={outcomes}
           onPaperTrade={
             onPrepareOrder
               ? (item: EventFeedItem, answer: EventAnswer): void => {
@@ -300,6 +305,7 @@ export function OpportunitiesTab({
           problem={problems[item.event.id] ?? null}
           onAsk={() => void ask(item, ticked.filter((model) => !item.answers.some((answer) => answer.model === model)))}
           confirm={config?.watch.confirmLive === true}
+          outcomes={outcomes}
           onPaperTrade={
             onPrepareOrder
               ? (answer: EventAnswer): void => {

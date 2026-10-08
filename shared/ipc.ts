@@ -824,6 +824,10 @@ export interface ExecutorConfig {
      * Bitcoin's (shared/paperExposure.ts); null when they could not be read. Absent on one opened
      * before 6 October 2026, which counts as tracking Bitcoin. */
     btcCorrelation?: number | null
+    /** The call's expected value when the trade was opened (shared/expectedValue.ts), since
+     * 8 October 2026: in percent and in R, at a calibrated win rate or the model's own confidence.
+     * Shown on the trade's timeline; nothing reads it to act. */
+    ev?: { pct: number; r: number | null; basis: 'calibrated' | 'confidence'; winRate: number; sample: number; scope: 'event type' | 'all events' | null }
   }
   /** Set on a PAPER Position short opened by a rule research/NEWS.md measured, on Binance's
    * announcement (shared/newsActions.ts): which announcement and which coin. A delisting's is out

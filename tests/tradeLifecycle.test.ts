@@ -283,3 +283,17 @@ describe('the refusal on file', () => {
     expect(trace.steps.at(-1)).toEqual({ at: T + 95, label: 'No paper position', detail: 'The watch opened none on this call: No paper trade: 3 are open already, the most at once.', tone: 'muted' })
   })
 })
+
+describe('the expected value on the timeline (8 October 2026)', () => {
+  it('follows the plan with what the call was worth when the trade was opened, as written on its mark', () => {
+    const ev = { pct: 0.74, r: 0.49, basis: 'calibrated' as const, winRate: 0.55, sample: 41, scope: 'event type' as const }
+    const executor = watchTrade({ watch: { eventId: EVENT_ID, eventTime: T, model: 'acme/follower', confidence: 0.8, result: { exit: 'take_profit', pnlQuote: 3.79, closedAt: T + 1500 }, ev } })
+    const trace = traceWatchTrade(records({ executor }))
+    expect(trace.steps.map((step) => step.label)).toEqual(['Event raised', 'acme/follower', 'acme/contrarian', 'Paper position opened', 'Expected value', 'Entered', 'Closed'])
+    expect(trace.steps[4]).toMatchObject({ at: T + 60, detail: 'EV +0.74% (+0.49 R) at a 55% calibrated win rate on 41 breakout events.', tone: 'up' })
+    const guessed = traceWatchTrade(records({ executor: watchTrade({ watch: { eventId: EVENT_ID, eventTime: T, model: 'acme/follower', confidence: 0.8, ev: { ...ev, pct: -0.3, r: -0.2, basis: 'confidence', winRate: 0.66, sample: 0, scope: null } } }) }))
+    expect(guessed.steps[4]).toMatchObject({ detail: "EV -0.30% (-0.20 R) at the model's own 66% confidence; no calibrated win rate yet.", tone: 'down' })
+    // A trade opened before the value was written has no such step.
+    expect(traceWatchTrade(records()).steps.map((step) => step.label)).not.toContain('Expected value')
+  })
+})

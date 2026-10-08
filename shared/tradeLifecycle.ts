@@ -1,4 +1,5 @@
 import type { AiCallRecord } from './aiLedger'
+import { describeExpectedValue } from './expectedValue'
 import type { OpportunityOutcome } from './aiOpportunityOutcome'
 import { describeDecider } from './aiPanel'
 import { GPT_MIN_CONFIDENCE } from './aiSignal'
@@ -155,6 +156,15 @@ export function traceWatchTrade(records: WatchTradeRecords): WatchTradeTrace {
 
   if (executor !== null) {
     steps.push({ at: executor.createdAt, label: 'Paper position opened', detail: describePlan(executor, executor.quoteAsset) })
+    // Since 8 October 2026: what the call was worth when the trade was opened, as written on its mark.
+    if (executor.watch?.ev !== undefined) {
+      steps.push({
+        at: executor.createdAt,
+        label: 'Expected value',
+        detail: describeExpectedValue(executor.watch.ev, records.event?.type ?? null),
+        tone: executor.watch.ev.pct >= 0 ? 'up' : 'down'
+      })
+    }
     if (fill !== null && fill.enteredAt !== null && fill.entryPrice !== null) {
       const streamed = (executor.params as PositionExecutorParams).entryFill ?? null
       const scored = records.scored ?? null
