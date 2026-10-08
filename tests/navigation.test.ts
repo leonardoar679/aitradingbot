@@ -41,11 +41,12 @@ function newHomes(): string[] {
 
 describe('the sidebar', () => {
   it('has the four groups of the chosen layout, in order', () => {
-    expect(NAV_GROUPS.map((group) => group.title)).toEqual(['AI Trader', 'Trading', 'Research', 'System'])
+    // Research before Trading, as the second V3 document's §50 has the groups (since 8 October 2026).
+    expect(NAV_GROUPS.map((group) => group.title)).toEqual(['AI Trader', 'Research', 'Trading', 'System'])
     expect(NAV_GROUPS.map((group) => group.items.map((item) => item.label))).toEqual([
       ['Overview', 'Opportunities', 'Markets', 'AI Decisions', 'Positions', 'Performance'],
-      ['Paper Trading', 'Live Trading', 'Strategies'],
       ['Backtest & Research', 'AI Benchmark', 'Discovery'],
+      ['Paper Trading', 'Live Trading', 'Strategies'],
       ['Risk & Safety', 'Connections', 'Settings']
     ])
   })

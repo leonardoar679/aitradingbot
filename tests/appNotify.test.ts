@@ -5,11 +5,31 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // notice is shown silently. Driven here with Electron's pieces faked, and settings.json held in
 // memory.
 
-const rig = vi.hoisted(() => ({
-  handlers: new Map<string, (...args: unknown[]) => unknown>(),
-  shown: [] as { title: string; body: string; silent?: boolean }[],
-  stored: { alerts: undefined as unknown }
-}))
+const rig = vi.hoisted(() => {
+  /** The window the notice came from, as far as flashing its taskbar entry goes. */
+  const window = {
+    destroyed: false,
+    focused: false,
+    flashed: [] as boolean[],
+    onFocus: null as null | (() => void),
+    isDestroyed: () => window.destroyed,
+    isFocused: () => window.focused,
+    isMinimized: () => false,
+    restore: () => undefined,
+    show: () => undefined,
+    focus: () => undefined,
+    flashFrame: (on: boolean) => void window.flashed.push(on),
+    once: (event: string, listener: () => void) => {
+      if (event === 'focus') window.onFocus = listener
+    }
+  }
+  return {
+    handlers: new Map<string, (...args: unknown[]) => unknown>(),
+    shown: [] as { title: string; body: string; silent?: boolean }[],
+    stored: { alerts: undefined as unknown },
+    window
+  }
+})
 
 vi.mock('electron', () => {
   class Notification {
@@ -28,7 +48,7 @@ vi.mock('electron', () => {
   return {
     ipcMain: { handle: (channel: string, handler: (...args: unknown[]) => unknown) => rig.handlers.set(channel, handler) },
     app: { getVersion: () => '0.0.0' },
-    BrowserWindow: { fromWebContents: () => null },
+    BrowserWindow: { fromWebContents: () => rig.window },
     Notification
   }
 })
@@ -87,5 +107,38 @@ describe('a desktop notice', () => {
     await notify('x'.repeat(300), 'y'.repeat(900))
     expect(rig.shown[0].title).toHaveLength(120)
     expect(rig.shown[0].body).toHaveLength(400)
+  })
+})
+
+describe('a CRITICAL notice and the taskbar', () => {
+  beforeEach(() => {
+    rig.shown.length = 0
+    rig.window.flashed.length = 0
+    rig.window.onFocus = null
+    rig.window.focused = false
+    rig.window.destroyed = false
+    rig.stored.alerts = undefined
+  })
+
+  it('flashes the window until it is focused, and only for CRITICAL', async () => {
+    expect(await notify('CRITICAL: SOL', 'A hack.', 'critical')).toBe(true)
+    expect(rig.window.flashed).toEqual([true])
+    rig.window.onFocus?.()
+    expect(rig.window.flashed).toEqual([true, false])
+    for (const severity of ['high', 'watch', 'info', undefined]) {
+      rig.window.flashed.length = 0
+      await notify('t', 'b', severity)
+      expect(rig.window.flashed).toEqual([])
+    }
+  })
+
+  it('flashes nothing at a window already looked at, or gone', async () => {
+    rig.window.focused = true
+    await notify('CRITICAL: SOL', 'A hack.', 'critical')
+    expect(rig.window.flashed).toEqual([])
+    rig.window.focused = false
+    rig.window.destroyed = true
+    await notify('CRITICAL: SOL', 'A hack.', 'critical')
+    expect(rig.window.flashed).toEqual([])
   })
 })

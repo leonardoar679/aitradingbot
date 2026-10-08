@@ -18,7 +18,9 @@ export function registerAppHandlers(): void {
   // Every notice the app raises comes through here, so this is where the "Notifications" control
   // is obeyed (shared/alerts.ts): switched off, nothing is shown; without sound, it is shown
   // silently. A notice of news or the market may say how loud it is: WATCH is shown silently, HIGH
-  // and CRITICAL with sound. False, as for a desktop that cannot show one, when nothing was shown.
+  // and CRITICAL with sound; CRITICAL also flashes the window's taskbar entry until the window is
+  // focused, since a banner on a page nobody is looking at alerts nobody (the document's §28). False,
+  // as for a desktop that cannot show one, when nothing was shown.
   ipcMain.handle(IpcChannel.AppNotify, async (event, title: unknown, body: unknown, severity?: unknown): Promise<boolean> => {
     if (typeof title !== 'string' || typeof body !== 'string' || !Notification.isSupported()) return false
     const alerts = healAlerts((await getSettings()).alerts)
@@ -38,6 +40,15 @@ export function registerAppHandlers(): void {
       window.focus()
     })
     notification.show()
+    if (level === 'critical') {
+      const window = BrowserWindow.fromWebContents(event.sender)
+      if (window && !window.isDestroyed() && !window.isFocused()) {
+        window.flashFrame(true)
+        window.once('focus', () => {
+          if (!window.isDestroyed()) window.flashFrame(false)
+        })
+      }
+    }
     return true
   })
 }

@@ -86,19 +86,19 @@ export const NAV_GROUPS: NavGroup[] = [
     ]
   },
   {
-    title: 'Trading',
-    items: [
-      { page: 'paper-trading', label: 'Paper Trading', icon: ArrowLeftRight },
-      { page: 'live-trading', label: 'Live Trading', icon: Zap },
-      { page: 'strategies', label: 'Strategies', icon: Boxes }
-    ]
-  },
-  {
     title: 'Research',
     items: [
       { page: 'research', label: 'Backtest & Research', icon: History },
       { page: 'ai-benchmark', label: 'AI Benchmark', icon: Scale },
       { page: 'discovery', label: 'Discovery', icon: Compass }
+    ]
+  },
+  {
+    title: 'Trading',
+    items: [
+      { page: 'paper-trading', label: 'Paper Trading', icon: ArrowLeftRight },
+      { page: 'live-trading', label: 'Live Trading', icon: Zap },
+      { page: 'strategies', label: 'Strategies', icon: Boxes }
     ]
   },
   {

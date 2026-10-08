@@ -81,11 +81,11 @@ export function TopOpportunityCard({
   const readings = useNewsReadings(news)
   const pick = useMemo(() => overviewOpportunity(feed, bars, nowSec), [feed, bars, nowSec])
   // The entries on offer by their signal, as the table ranks them; the signal reads no live price.
-  const top = useMemo(
-    () =>
-      opportunityTableRows({ feed, bars, live: null, pairs: research?.pairs ?? [], regime: research?.market?.regime ?? null, news, readings, nowSec, nowMs: nowSec * 1000 }).onOffer[0] ?? null,
+  const offers = useMemo(
+    () => opportunityTableRows({ feed, bars, live: null, pairs: research?.pairs ?? [], regime: research?.market?.regime ?? null, news, readings, nowSec, nowMs: nowSec * 1000 }).onOffer,
     [feed, bars, research, news, readings, nowSec]
   )
+  const top = offers[0] ?? null
   const answerOf = top?.item.answers.find((entry) => entry.model === top.offer?.model) ?? null
   // The live price of the pair on offer, to say whether it can be entered now.
   const live = useLiveMarket(top !== null ? [top.item.event.symbol] : [])
@@ -148,6 +148,26 @@ export function TopOpportunityCard({
           {open}
         </div>
         {problem !== null && <p style={{ ...noteStyle, color: 'var(--down)', marginTop: '0.5rem' }}>{problem}</p>}
+        {offers.length > 1 && (
+          <p style={{ ...noteStyle, marginTop: '0.6rem', color: 'var(--text-secondary)' }}>
+            Also on offer:{' '}
+            {offers.slice(1, 3).map((entry, index) => (
+              <span key={entry.item.event.id}>
+                {index > 0 && ' · '}
+                {entry.item.event.symbol}
+                {entry.offer !== null && (
+                  <>
+                    {' '}
+                    <strong style={{ color: entry.offer.side === 'long' ? 'var(--up)' : 'var(--down)' }}>{describeOpportunitySide(entry.offer.side)}</strong> until{' '}
+                    {utcClock(entry.offer.expiresAt)} UTC
+                  </>
+                )}
+                , signal {entry.signal.score}
+              </span>
+            ))}
+            .
+          </p>
+        )}
       </Card>
     )
   }

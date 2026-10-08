@@ -7,9 +7,13 @@ navigation has 15 pages in four groups:
 | Group | Pages |
 |---|---|
 | AI TRADER | Overview, Opportunities, Markets, AI Decisions, Positions, Performance |
-| TRADING | Paper Trading, Live Trading, Strategies |
 | RESEARCH | Backtest & Research, AI Benchmark, Discovery |
+| TRADING | Paper Trading, Live Trading, Strategies |
 | SYSTEM | Risk & Safety, Connections, Settings |
+
+(Research before Trading since 8 October 2026, as the document's §50 has it; the groups were the
+other way round from 5 October.) Since 8 October 2026 Overview also has three blocks of its own, not
+old cards moved: Breaking events, News impact and Today's performance (`src/overview/`).
 
 Taken on 5 October 2026, at commit `aef376d`.
 
