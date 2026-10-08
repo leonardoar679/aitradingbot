@@ -22,6 +22,9 @@
 //   HOUR_REPORT_MINUTES  how often the last hour's report is saved; lowered for a short check     [60]
 //   EXPERIMENT     start one of the app's own runs at launch (shared/experimentRun.ts): shadow-1h,
 //                  paper-12h, or custom (RUN_MINUTES long); its report is saved at the end       [none]
+//   WATCH_MODELS   the models the watch asks, comma-separated (V5 Stage 13: three with FIRST_GATES=1
+//                  is the app's default since 8 October 2026)                      [openai/gpt-5-mini]
+//   FIRST_GATES    1 asks the first model alone and the others only when it calls a trade          [0]
 //
 // IT NEVER TOUCHES THE REAL PROFILE OR out/. The profile has to be inside SHADOW_ROOT and is never
 // the real profile or Electron's default; on a resume it has to carry the marker this script leaves;
@@ -52,6 +55,9 @@ const MIN_BAND = process.env.MIN_BAND ?? 'urgent'
 const EXPERIMENT = process.env.EXPERIMENT ?? ''
 if (EXPERIMENT !== '' && !['shadow-1h', 'paper-12h', 'custom'].includes(EXPERIMENT)) throw new Error(`EXPERIMENT is shadow-1h, paper-12h or custom: ${EXPERIMENT}`)
 const UNIVERSE_SIZE = Number(process.env.UNIVERSE_SIZE ?? 60)
+const WATCH_MODELS = (process.env.WATCH_MODELS ?? 'openai/gpt-5-mini').split(',').map((model) => model.trim()).filter(Boolean)
+if (WATCH_MODELS.length === 0 || WATCH_MODELS.length > 6) throw new Error(`WATCH_MODELS is one to six models, comma-separated: ${process.env.WATCH_MODELS}`)
+const FIRST_GATES = process.env.FIRST_GATES === '1'
 const SHADOW_ROOT = path.resolve(process.env.SHADOW_ROOT ?? path.join(os.tmpdir(), 'traderspider-shadow'))
 const PROFILE = path.join(SHADOW_ROOT, `${RUN_NAME}-profile`)
 const OUT = path.join(SHADOW_ROOT, `${RUN_NAME}-out`)
@@ -328,16 +334,16 @@ async function main() {
   // The user's watch, as on their profile, with a fake key the fake above answers. Setting it again
   // on a resumed segment changes nothing.
   const setup = await page.evaluate(
-    async ([minBand, fakeKey]) => {
+    async ([minBand, fakeKey, watchModels, firstGates]) => {
       const key = await window.api.ai.setCredentials(fakeKey)
       await window.api.ai.setConfig({ dailyCapUsd: 5, callsPerMinute: 30 })
       const watch = await window.api.ai.setConfig({
-        watch: { enabled: true, models: ['openai/gpt-5-mini'], maxEventsPerDay: 10, minBand, firstModelGates: false }
+        watch: { enabled: true, models: watchModels, maxEventsPerDay: 10, minBand, firstModelGates: firstGates }
       })
-      const paper = await window.api.ai.setConfig({ watchPaper: { enabled: true, model: 'openai/gpt-5-mini', stakeQuote: 100, maxOpen: 3 } })
+      const paper = await window.api.ai.setConfig({ watchPaper: { enabled: true, model: watchModels[0], stakeQuote: 100, maxOpen: 3 } })
       return { key: key.configured, watch: watch.watch, watchPaper: paper.watchPaper, additions: paper.additions, cap: paper.dailyCapUsd }
     },
-    [MIN_BAND, FAKE_KEY]
+    [MIN_BAND, FAKE_KEY, WATCH_MODELS, FIRST_GATES]
   )
   say(`setup: ${JSON.stringify(setup)}`)
 
