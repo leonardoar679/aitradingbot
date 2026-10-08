@@ -6,6 +6,10 @@ import {
   EVENT_CANDIDATE_SCORE,
   EVENT_COOLDOWN_SECONDS,
   EVENT_DETECTOR_VERSION,
+  MARKET_MOVE_BTC_PCT,
+  MARKET_MOVE_MIN_EVENTS,
+  MARKET_MOVE_SHARE,
+  marketMoveOf,
   EVENT_LOOKBACK_BARS,
   EVENT_URGENT_SCORE,
   EVENT_WATCH_SCORE,
@@ -467,7 +471,9 @@ describe('the detector and the version its events are recorded under', () => {
 
   it('has not changed what it finds without its version being bumped', () => {
     const hash = createHash('sha256').update(JSON.stringify(found)).digest('hex')
-    expect({ version: EVENT_DETECTOR_VERSION, hash }).toEqual({ version: 'events-v1', hash: '01967d01c49cb4c7ff0891174d65a6679a5951d9f64b0a75c668e3e7a8f6149d' })
+    // events-v2 (8 October 2026) added the market-wide move, a rule over one pass's events; what the
+    // detector makes of one pair's candles is unchanged, so the hash is the one events-v1 had.
+    expect({ version: EVENT_DETECTOR_VERSION, hash }).toEqual({ version: 'events-v2', hash: '01967d01c49cb4c7ff0891174d65a6679a5951d9f64b0a75c668e3e7a8f6149d' })
   })
 })
 
@@ -524,5 +530,47 @@ describe('eventReasons', () => {
     expect(half[3].fact).toBe('the last five minutes closed 75% of the way down their bars, by volume')
     // A break short of the full two usual moves is a break, and is not called more.
     expect(half[4].fact).toBe('below the low of the four hours before the move')
+  })
+})
+
+// A MARKET-WIDE MOVE (8 October 2026, the second V3 document's §17 and §43-44): one pass's events,
+// most of them one way, with Bitcoin, are one event on Bitcoin's pair. The lines were written down
+// before any result.
+describe('marketMoveOf', () => {
+  type Row = Parameters<typeof marketMoveOf>[0][number]
+  const row = (symbol: string, direction: Row['direction'] = 'up', over: Partial<Row> = {}): Row => ({ symbol, direction, band: 'candidate', score: 80, returnM15Pct: direction === 'up' ? 2 : -2, volumeRatio: 3, ...over })
+  const alts = (n: number, direction: Row['direction'] = 'up'): Row[] => Array.from({ length: n }, (_, i) => row(`A${i}USDT`, direction, { score: 70 + i }))
+  const btc = (returnM15Pct: number): { symbol: string; returnM15Pct: number } => ({ symbol: 'BTCUSDT', returnM15Pct })
+
+  it('is five or more events one way with Bitcoin: the members strongest first, the strongest band, Bitcoin left out', () => {
+    expect(MARKET_MOVE_MIN_EVENTS).toBe(5)
+    expect(MARKET_MOVE_SHARE).toBe(0.8)
+    expect(MARKET_MOVE_BTC_PCT).toBe(1)
+    const move = marketMoveOf([...alts(4), row('BTCUSDT', 'up', { band: 'urgent', score: 60 })], btc(1.2))
+    expect(move).not.toBeNull()
+    expect(move?.direction).toBe('up')
+    expect(move?.band).toBe('urgent')
+    expect(move?.members.map((member) => member.symbol)).toEqual(['A3USDT', 'A2USDT', 'A1USDT', 'A0USDT'])
+    expect(move?.members[0]).toEqual({ symbol: 'A3USDT', direction: 'up', score: 73, returnM15Pct: 2, volumeRatio: 3 })
+    // Without Bitcoin's own event, five alts are the move, all of them members.
+    expect(marketMoveOf(alts(5), btc(1))?.members).toHaveLength(5)
+  })
+
+  it('is nothing under five events, under four in five one way, or with Bitcoin not moving that way', () => {
+    expect(marketMoveOf(alts(4), btc(2))).toBeNull()
+    expect(marketMoveOf([...alts(3), ...alts(2, 'down')], btc(2))).toBeNull()
+    expect(marketMoveOf([...alts(4), ...alts(1, 'down')], btc(2))?.direction).toBe('up')
+    expect(marketMoveOf(alts(5), btc(0.99))).toBeNull()
+    expect(marketMoveOf(alts(5), btc(-3))).toBeNull()
+    expect(marketMoveOf(alts(5), null)).toBeNull()
+    // A volume spike with no direction is not an event of either way.
+    expect(marketMoveOf([...alts(4), row('XUSDT', 'none')], btc(2))).toBeNull()
+  })
+
+  it('mirrors for a fall', () => {
+    const move = marketMoveOf([...alts(6, 'down'), row('BTCUSDT', 'down', { band: 'candidate' })], btc(-1.5))
+    expect(move).toMatchObject({ direction: 'down', band: 'candidate' })
+    expect(move?.members).toHaveLength(6)
+    expect(move?.members.every((member) => member.direction === 'down')).toBe(true)
   })
 })

@@ -26,18 +26,7 @@ import {
   type AiSignalTape,
   type AiSignalTapeRequest
 } from '../../shared/aiSignal'
-import {
-  AI_CONTEXT_VERSION,
-  aiContextJson,
-  aiPromptVersion,
-  aiSchemaVersion,
-  buildAiContext,
-  buildEventContext,
-  buildNewsEventContext,
-  withAgentReports,
-  withMarketBlock,
-  type AiMarketContext
-} from '../../shared/aiContext'
+import { AI_CONTEXT_VERSION, aiContextJson, aiPromptVersion, aiSchemaVersion, buildAiContext, buildEventContext, buildNewsEventContext, withAgentReports, withMarketBlock, type AiMarketContext, buildMarketMoveContext } from '../../shared/aiContext'
 import { MARKET_REFERENCE_SYMBOLS } from '../../shared/aiEventMarket'
 import { newsEventKind, newsQuestionProblem } from '../../shared/newsActions'
 import { paceDelayMs } from '../../shared/aiPace'
@@ -98,6 +87,7 @@ import {
 } from './aiConfigService'
 import { appendAiCall, listAiCalls } from './aiLedgerService'
 import { withinWatchLimits } from './aiWatchService'
+import { listMarketEvents } from './marketScannerService'
 import { findNewsItem } from './newsService'
 import {
   AI_AGENT_SCHEMAS,
@@ -1362,8 +1352,37 @@ async function newsOpportunityQuestion(request: AiOpportunityQuestion): Promise<
   return context
 }
 
+/** The question about a market-wide move (market-move-v1), from a request that has been checked
+ * rather than trusted.
+ *
+ * THE MOVE IS LOOKED UP HERE, in this app's own record of the events its scanner raised
+ * (marketScannerService.ts). The request names the move by its id and sends Bitcoin's candles; the
+ * question is put only when that record holds a market-wide move of that id, on this pair, at the
+ * minute the candles end at -- so a caller cannot have a model asked, and billed, about the whole
+ * market by saying it moved. Its members come from the record, never from the request. */
+async function marketMoveQuestion(request: AiOpportunityQuestion): Promise<AiMarketContext> {
+  if (typeof request?.symbol !== 'string' || request.symbol !== MARKET_REFERENCE_SYMBOLS.btc) throw new Error(`A market-wide move is asked about on ${MARKET_REFERENCE_SYMBOLS.btc}, the market's own pair.`)
+  if (request.reference !== undefined && request.reference !== null) throw new Error('A question about a market-wide move is not asked with the market around it')
+  if (request.newsId !== undefined && request.newsId !== null) throw new Error('A question about a market-wide move is not asked with an announcement')
+  checkCandles(request.candles15m, '15-minute')
+  checkCandles(request.candles1m, '1-minute')
+  if (request.candles1m.length === 0) throw new Error('An opportunity needs completed 1-minute candles')
+  const last = request.candles1m[request.candles1m.length - 1]
+  const time = last.time + 60
+  const page = await listMarketEvents({ symbol: request.symbol, sinceSec: time - 3600, limit: 50 })
+  const event = page.rows.find((row) => row.id === request.marketMoveId && row.type === 'market_move')
+  if (event === undefined || event.live?.members === undefined || event.direction === 'none') throw new Error('This app raised no such market-wide move. Nothing was asked.')
+  if (event.time !== time) throw new Error('The question is not about the minute the market-wide move was raised at. Nothing was asked.')
+  const context = buildMarketMoveContext(request.candles15m, request.candles1m, { exchange: request.exchange, symbol: request.symbol }, { direction: event.direction, members: event.live.members })
+  if (!context?.event) {
+    throw new Error('These candles do not make a question: it needs twelve unbroken hours of 1-minute candles before the minute and seven days of 15-minute candles.')
+  }
+  return context
+}
+
 /** An event's question, of whichever kind the request is. */
 async function eventQuestion(request: AiOpportunityQuestion): Promise<AiMarketContext> {
+  if (request?.marketMoveId !== undefined && request.marketMoveId !== null) return marketMoveQuestion(request)
   return request?.newsId !== undefined && request.newsId !== null ? newsOpportunityQuestion(request) : opportunityQuestion(request)
 }
 

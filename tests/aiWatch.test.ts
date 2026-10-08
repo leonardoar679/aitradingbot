@@ -415,3 +415,14 @@ describe('watchNotice', () => {
     expect(watchNotice(event(), decision())?.key).toBe(watchNotice(event(), decision({ model: B, confidence: 0.9 }))?.key)
   })
 })
+
+describe('a member of a market-wide move', () => {
+  const state = (): { nowSec: number; takenToday: ReadonlySet<string> } => ({ nowSec: T + 10, takenToday: new Set<string>() })
+
+  it('is skipped: the move itself is the event the watch asks about', () => {
+    const member = event({ live: { ...(event().live as NonNullable<MarketEvent['live']>), marketMove: `binance:BTCUSDT:${T}` } })
+    expect(watchSkipReason(member, watch(), state())).toBe('It is part of a market-wide move, which the watch asks about as one event.')
+    const move = event({ symbol: 'BTCUSDT', baseAsset: 'BTC', id: `binance:BTCUSDT:${T}`, type: 'market_move' })
+    expect(watchSkipReason(move, watch(), state())).toBeNull()
+  })
+})

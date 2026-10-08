@@ -200,15 +200,31 @@ export const AI_OPPORTUNITY_TAG_SYSTEM_PROMPT = [
   ...OPPORTUNITY_LINES.slice(2)
 ].join('\n')
 
+/** The question about a market-wide move (market-move-v1, shared/aiContext.ts buildMarketMoveContext):
+ * Bitcoin's pair, with the pairs that moved its way as breadth. One paragraph more, after the one
+ * that says what the user message holds, and not a word of the rest changed.
+ *
+ * IT SAYS WHAT THE BLOCK IS, AND NOT WHAT IT MEANS. Whether a move the whole market made carries on
+ * or comes back is what the benchmark measures (research/EVENTS.md measured it for single pairs);
+ * the prompt does not answer it, for the reason the first one does not say what usually follows an
+ * event. Any trade it recommends is in BTCUSDT: the members are evidence, not pairs to trade. */
+export const AI_OPPORTUNITY_MARKET_MOVE_SYSTEM_PROMPT = [
+  ...OPPORTUNITY_LINES.slice(0, 2),
+  '"marketMove" is why this event was raised: in the minute it was read, most of the pairs the scanner watches moved the same way at once, with Bitcoin. The event block is BTCUSDT, the market\'s own pair, read from its candles: its type is "market_move" and its direction is the way most of the market moved; its score and components are what Bitcoin\'s candles alone show. members lists the pairs that moved that way, strongest first: symbol, direction, their 0-100 score, returnM15Pct (their return over the last fifteen minutes, in percent) and volumeRatio (their last five minutes\' traded value against the usual). Any trade you recommend is in BTCUSDT at the prices shown; the members are evidence of breadth, not pairs to trade.',
+  ...OPPORTUNITY_LINES.slice(2)
+].join('\n')
+
 /** The system text a context is sent under: the panel's decision when it carries analysts'
  * reports, an opportunity prompt when it carries an event -- the one with the announcement of its
- * kind, or the one with the market, when it carries either -- the review prompt when it names a
- * strategy, the standalone one otherwise. The same tests shared/aiContext.ts's aiPromptVersion
- * makes, so the text sent and the version recorded for it are chosen by one fact. */
+ * kind, the one with the market-wide move, or the one with the market, when it carries any of them
+ * -- the review prompt when it names a strategy, the standalone one otherwise. The same tests
+ * shared/aiContext.ts's aiPromptVersion makes, so the text sent and the version recorded for it are
+ * chosen by one fact. */
 function systemPromptFor(context: AiMarketContext): string {
   if (context.agents !== undefined) return AI_PANEL_SYSTEM_PROMPT
   if (context.event !== undefined) {
     if (context.news !== undefined) return context.news.kind === 'monitoring_tag' ? AI_OPPORTUNITY_TAG_SYSTEM_PROMPT : AI_OPPORTUNITY_NEWS_SYSTEM_PROMPT
+    if (context.marketMove !== undefined) return AI_OPPORTUNITY_MARKET_MOVE_SYSTEM_PROMPT
     return context.market === undefined ? AI_OPPORTUNITY_SYSTEM_PROMPT : AI_OPPORTUNITY_MARKET_SYSTEM_PROMPT
   }
   return context.strategy === undefined ? AI_SYSTEM_PROMPT : AI_CONFIRM_SYSTEM_PROMPT

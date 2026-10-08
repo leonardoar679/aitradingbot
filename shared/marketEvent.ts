@@ -30,8 +30,12 @@ import type { Candle, Exchange } from './ipc'
  * the bands, the cooldown and the rule for raising one. It is written on every recorded experiment
  * (shared/aiExperiment.ts), so that a sample drawn under one detector is not mistaken for a sample
  * drawn under another. tests/marketEvent.test.ts holds a hash of what the detector makes of a fixed
- * market beside this version: change what it finds, and this has to move with it. */
-export const EVENT_DETECTOR_VERSION = 'events-v1'
+ * market beside this version: change what it finds, and this has to move with it.
+ *
+ * events-v2 (8 October 2026): the market-wide move (marketMoveOf). A pair's reading is what it was
+ * under events-v1, hash and all; what changed is what one pass raises when most of the market moves
+ * at once. */
+export const EVENT_DETECTOR_VERSION = 'events-v2'
 
 export const EVENT_BAR_SECONDS = 60
 /** Completed 1-minute bars a reading is taken from: twelve hours. One request to an exchange. */
@@ -85,8 +89,9 @@ export const EVENT_MAX_RANKED = 3
 
 /** What the detector names a move -- and 'delisting' and 'monitoring_tag', which it never does:
  * those are events raised by Binance's announcement that it will delist the coin, or has added it to
- * its Monitoring Tag (toNewsEvent), not by the candles. */
-export const MARKET_EVENT_TYPES = ['pump', 'dump', 'breakout', 'breakdown', 'volume_spike', 'delisting', 'monitoring_tag'] as const
+ * its Monitoring Tag (toNewsEvent), not by the candles -- and 'market_move', which one pass raises
+ * on BTCUSDT when most of the market moves at once (marketMoveOf). */
+export const MARKET_EVENT_TYPES = ['pump', 'dump', 'breakout', 'breakdown', 'volume_spike', 'delisting', 'monitoring_tag', 'market_move'] as const
 export type MarketEventType = (typeof MARKET_EVENT_TYPES)[number]
 export type EventDirection = 'up' | 'down' | 'none'
 export type EventBand = 'quiet' | 'watch' | 'candidate' | 'urgent'
@@ -322,6 +327,67 @@ export interface EventLiveContext {
   /** 1 for the strongest candidate of its pass. Above EVENT_MAX_RANKED it was recorded and not
    * put forward. */
   rank: number
+  /** Set on an event raised in the same pass as a market-wide move it was part of: that move's id.
+   * The watch asks about the move, as one event, and not about this one. */
+  marketMove?: string
+  /** Set on a market-wide move (type 'market_move'): the pairs that moved its way in that pass,
+   * strongest first, Bitcoin's own pair left out. */
+  members?: MarketMoveMember[]
+}
+
+// ---------------------------------------------------------------------------------------------
+// A MARKET-WIDE MOVE (the second V3 document, §17 and §43-44). When Bitcoin drops, a dozen alts raise
+// events in one minute, and three questions about three of them are three readings of one thing.
+// Since 8 October 2026 one pass raises ONE event for it, on BTCUSDT, the market's own pair, with the
+// pairs that moved its way written on it; the watch asks about that, and skips the members. The
+// lines are engineering defaults, written down before any result: in the study week such minutes
+// took 7 of the watch's 67 questions.
+
+/** So many events raised in one pass, with a direction... */
+export const MARKET_MOVE_MIN_EVENTS = 5
+/** ...this share of them the same way... */
+export const MARKET_MOVE_SHARE = 0.8
+/** ...while Bitcoin's own fifteen-minute move is at least this, that way, in percent. */
+export const MARKET_MOVE_BTC_PCT = 1
+
+export interface MarketMoveMember {
+  symbol: string
+  direction: 'up' | 'down'
+  score: number
+  /** Its fifteen-minute return, in percent. */
+  returnM15Pct: number
+  volumeRatio: number | null
+}
+
+export interface MarketMove {
+  direction: 'up' | 'down'
+  /** The strongest band among the pairs that moved its way. */
+  band: EventBand
+  members: MarketMoveMember[]
+}
+
+/** The market-wide move in one pass's raised events, or null: at least MARKET_MOVE_MIN_EVENTS of
+ * them with a direction, MARKET_MOVE_SHARE of those one way, and Bitcoin's own fifteen-minute move
+ * MARKET_MOVE_BTC_PCT or more that way. `btcSymbol`'s own event, where it was raised, counts toward
+ * the share and the band and is not a member: the move is raised on it. */
+export function marketMoveOf(
+  candidates: readonly { symbol: string; direction: EventDirection; band: EventBand; score: number; returnM15Pct: number; volumeRatio: number | null }[],
+  btc: { symbol: string; returnM15Pct: number } | null
+): MarketMove | null {
+  if (btc === null) return null
+  const directional = candidates.filter((entry) => entry.direction !== 'none')
+  if (directional.length < MARKET_MOVE_MIN_EVENTS) return null
+  const up = directional.filter((entry) => entry.direction === 'up').length
+  const direction: 'up' | 'down' = up >= directional.length - up ? 'up' : 'down'
+  const same = directional.filter((entry) => entry.direction === direction)
+  if (same.length / directional.length < MARKET_MOVE_SHARE) return null
+  if (direction === 'up' ? btc.returnM15Pct < MARKET_MOVE_BTC_PCT : btc.returnM15Pct > -MARKET_MOVE_BTC_PCT) return null
+  const band = same.reduce<EventBand>((best, entry) => (BAND_RANK[entry.band] > BAND_RANK[best] ? entry.band : best), 'quiet')
+  const members = same
+    .filter((entry) => entry.symbol !== btc.symbol)
+    .sort((a, b) => b.score - a.score || a.symbol.localeCompare(b.symbol))
+    .map((entry) => ({ symbol: entry.symbol, direction, score: sig(entry.score), returnM15Pct: sig(entry.returnM15Pct), volumeRatio: entry.volumeRatio === null ? null : sig(entry.volumeRatio) }))
+  return { direction, band, members }
 }
 
 export interface MarketEvent {
@@ -525,7 +591,8 @@ const TYPE_LABEL: Record<MarketEventType, string> = {
   breakdown: 'Breakdown',
   volume_spike: 'Volume spike',
   delisting: 'Delisting',
-  monitoring_tag: 'Monitoring Tag'
+  monitoring_tag: 'Monitoring Tag',
+  market_move: 'Market-wide move'
 }
 
 export function describeEventType(type: MarketEventType): string {

@@ -4,6 +4,7 @@ import {
   AI_AGENT_SCHEMAS,
   AI_AGENT_SYSTEM_PROMPTS,
   AI_CONFIRM_SYSTEM_PROMPT,
+  AI_OPPORTUNITY_MARKET_MOVE_SYSTEM_PROMPT,
   AI_OPPORTUNITY_MARKET_SYSTEM_PROMPT,
   AI_OPPORTUNITY_NEWS_SYSTEM_PROMPT,
   AI_OPPORTUNITY_SCHEMA,
@@ -18,6 +19,7 @@ import {
 import { AI_CONFIRM_PROMPT_VERSION } from '../shared/aiConfirm'
 import { buildAiContext, withAgentReports } from '../shared/aiContext'
 import {
+  AI_OPPORTUNITY_MARKET_MOVE_PROMPT_VERSION,
   AI_OPPORTUNITY_MARKET_PROMPT_VERSION,
   AI_OPPORTUNITY_NEWS_PROMPT_VERSION,
   AI_OPPORTUNITY_PROMPT_VERSION,
@@ -49,6 +51,13 @@ const PINNED: { what: string; version: string; text: string; expectVersion: stri
     text: AI_SYSTEM_PROMPT,
     expectVersion: 'intraday-v2',
     expectHash: '6817473e2a04467eb5e02b7effeb8caf81da0885d22c2632c3152a37527786e3'
+  },
+  {
+    what: 'the market-wide move prompt',
+    version: AI_OPPORTUNITY_MARKET_MOVE_PROMPT_VERSION,
+    text: AI_OPPORTUNITY_MARKET_MOVE_SYSTEM_PROMPT,
+    expectVersion: 'market-move-v1',
+    expectHash: 'ce313e68e809b0939005cf4803b421f2884cede4e01130f919a1d2b2054aee72'
   },
   {
     what: 'the entry-review prompt',

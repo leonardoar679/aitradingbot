@@ -53,25 +53,36 @@ export const AI_OPPORTUNITY_NEWS_PROMPT_VERSION = 'opportunity-news-v1'
 /** The same, for the event Binance's Monitoring Tag raised: chosen by the user the same day, once the
  * tag had passed its own study. Its own prompt and cache keys; the delisting's are unchanged. */
 export const AI_OPPORTUNITY_TAG_PROMPT_VERSION = 'opportunity-tag-v1'
+/** The question about a market-wide move (shared/marketEvent.ts marketMoveOf): Bitcoin's pair, with
+ * the pairs that moved its way in the same minute listed as breadth. Chosen by the user on
+ * 7 October 2026 (the second V3 document, §17 and §43-44). Its own prompt and cache keys; the answer's
+ * shape is the same, and any trade in it is in BTCUSDT. */
+export const AI_OPPORTUNITY_MARKET_MOVE_PROMPT_VERSION = 'market-move-v1'
 
 /** The questions the app puts to events as they happen -- the scanner's, and an announcement's --
  * whose answers its feed, its journal and its live board read. The market question is a
  * benchmark's, and is read by the benchmark. */
-export const AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS: readonly string[] = [AI_OPPORTUNITY_PROMPT_VERSION, AI_OPPORTUNITY_NEWS_PROMPT_VERSION, AI_OPPORTUNITY_TAG_PROMPT_VERSION]
+export const AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS: readonly string[] = [
+  AI_OPPORTUNITY_PROMPT_VERSION,
+  AI_OPPORTUNITY_NEWS_PROMPT_VERSION,
+  AI_OPPORTUNITY_TAG_PROMPT_VERSION,
+  AI_OPPORTUNITY_MARKET_MOVE_PROMPT_VERSION
+]
 
 /** Which question an event is put as: the pair alone (opportunity-v1), the pair with the market
  * around it (opportunity-v2), or the pair with the announcement that raised it (opportunity-news-v1
  * for a delisting, opportunity-tag-v1 for the Monitoring Tag). */
-export type AiOpportunityQuestionKind = 'pair' | 'market' | 'news'
+export type AiOpportunityQuestionKind = 'pair' | 'market' | 'news' | 'marketMove'
 
 export function describeQuestionKind(kind: AiOpportunityQuestionKind): string {
-  return kind === 'market' ? 'with the market' : kind === 'news' ? 'with the announcement' : 'the pair alone'
+  return kind === 'market' ? 'with the market' : kind === 'news' ? 'with the announcement' : kind === 'marketMove' ? 'the market-wide move' : 'the pair alone'
 }
 
 /** The question a prompt version is, or null for one that is not an event's question. */
 export function questionKindOfPromptVersion(version: string): AiOpportunityQuestionKind | null {
   if (version === AI_OPPORTUNITY_PROMPT_VERSION) return 'pair'
   if (version === AI_OPPORTUNITY_NEWS_PROMPT_VERSION || version === AI_OPPORTUNITY_TAG_PROMPT_VERSION) return 'news'
+  if (version === AI_OPPORTUNITY_MARKET_MOVE_PROMPT_VERSION) return 'marketMove'
   return version === AI_OPPORTUNITY_MARKET_PROMPT_VERSION ? 'market' : null
 }
 
@@ -329,6 +340,11 @@ export interface AiOpportunityQuestion {
    * pair, from around this minute; otherwise nothing is asked.
    * Never sent with `reference`. */
   newsId?: number
+  /** Present when the event is a market-wide move (MarketEvent.type 'market_move'): its id. The
+   * main process looks the move up in its own record of the events it raised and puts the question
+   * with the move's members in it (market-move-v1), about BTCUSDT; otherwise nothing is asked.
+   * Never sent with `reference` or `newsId`. */
+  marketMoveId?: string
 }
 
 export interface AiOpportunityAskRequest extends AiOpportunityQuestion {

@@ -537,3 +537,85 @@ describe('an event put with the market around it', () => {
     expect((await listAiCalls({})).rows).toEqual([])
   })
 })
+
+// A market-wide move (8 October 2026) is asked about by its id, on Bitcoin's pair; the main process
+// takes the move's members from its own record of the events its scanner raised, or asks nothing.
+describe('a market-wide move', () => {
+  const moveTime = QUESTION.candles1m[QUESTION.candles1m.length - 1].time + 60
+  const moveId = `binance:BTCUSDT:${moveTime}`
+  const MEMBERS = [
+    { symbol: 'SOLUSDT', direction: 'up', score: 91, returnM15Pct: 3.1, volumeRatio: 4.7 },
+    { symbol: 'XRPUSDT', direction: 'up', score: 84, returnM15Pct: 2.2, volumeRatio: null }
+  ]
+
+  function onFile(event: Record<string, unknown>): void {
+    const dir = join(process.env.AI_TEST_USER_DATA as string, 'marketEvents')
+    mkdirSync(dir, { recursive: true })
+    appendFileSync(join(dir, `events-${new Date(moveTime * 1000).toISOString().slice(0, 7)}.jsonl`), JSON.stringify(event) + '\n')
+  }
+
+  const move = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+    id: moveId,
+    exchange: 'binance',
+    symbol: 'BTCUSDT',
+    baseAsset: 'BTC',
+    quoteAsset: 'USDT',
+    time: moveTime,
+    type: 'market_move',
+    direction: 'up',
+    band: 'urgent',
+    score: 70,
+    components: { price: 70, volume: 60, volatility: 70, pressure: 80, breakout: 70 },
+    price: PRICE,
+    returnsPct: { m1: 0.2, m5: 0.6, m15: 1.5, h1: 1.8, h4: 2.1 },
+    moveSigmas: 4,
+    volumeRatio: 3,
+    rangeRatio: 2,
+    live: { detectedAt: moveTime + 8, quoteVolume24h: 2_000_000_000, spreadPct: 0.01, candidateScore: 80, rank: 1, members: MEMBERS },
+    ...over
+  })
+
+  it('puts the question with the members from the record, under its own version, about BTCUSDT', async () => {
+    onFile(move())
+    const { bodies } = stubOpenRouter(() => ({}))
+    const { askAiOpportunity, listAiCalls } = await services()
+    const decision = await askAiOpportunity(request({ symbol: 'BTCUSDT', marketMoveId: moveId, model: 'openai/gpt-5-mini' }))
+    expect(decision).toMatchObject({ recommendation: 'buy', error: null, rejected: null, candleTime: moveTime })
+    expect(String(bodies[0].messages?.[0] && (bodies[0].messages as { content: string }[])[0].content)).toContain('"marketMove"')
+    const user = (bodies[0].messages as { content: string }[])[1].content
+    expect(user).toContain('"marketMove"')
+    expect(user).toContain('"SOLUSDT"')
+    expect(user).toContain('"market_move"')
+    expect((await listAiCalls({})).rows[0]).toMatchObject({ promptVersion: 'market-move-v1', eventType: 'market_move', symbol: 'BTCUSDT', eventId: moveId })
+  })
+
+  it('asks nothing for a move it did not raise, on another pair, at another minute, or with the market or an announcement', async () => {
+    const { askAiOpportunity } = await services()
+    stubOpenRouter(() => ({}))
+    await expect(askAiOpportunity(request({ symbol: 'BTCUSDT', marketMoveId: moveId }))).rejects.toThrow('This app raised no such market-wide move. Nothing was asked.')
+    onFile(move({ time: moveTime - 60, id: `binance:BTCUSDT:${moveTime - 60}` }))
+    await expect(askAiOpportunity(request({ symbol: 'BTCUSDT', marketMoveId: `binance:BTCUSDT:${moveTime - 60}` }))).rejects.toThrow('not about the minute the market-wide move was raised at')
+    onFile(move())
+    await expect(askAiOpportunity(request({ symbol: 'SOLUSDT', marketMoveId: moveId }))).rejects.toThrow("the market's own pair")
+    await expect(askAiOpportunity(request({ symbol: 'BTCUSDT', marketMoveId: moveId, newsId: 1 }))).rejects.toThrow('not asked with an announcement')
+    await expect(askAiOpportunity(request({ symbol: 'BTCUSDT', marketMoveId: moveId, reference: { btc: QUESTION, eth: QUESTION } }))).rejects.toThrow('not asked with the market around it')
+  })
+})
+
+describe("a market-wide move's id on another event of Bitcoin's", () => {
+  it('asks nothing: only a move the scanner raised as one is a move', async () => {
+    const moveTime = QUESTION.candles1m[QUESTION.candles1m.length - 1].time + 60
+    const moveId = `binance:BTCUSDT:${moveTime}`
+    const dir = join(process.env.AI_TEST_USER_DATA as string, 'marketEvents')
+    mkdirSync(dir, { recursive: true })
+    const pump = {
+      id: moveId, exchange: 'binance', symbol: 'BTCUSDT', baseAsset: 'BTC', quoteAsset: 'USDT', time: moveTime, type: 'pump', direction: 'up', band: 'urgent', score: 90,
+      components: { price: 90, volume: 90, volatility: 90, pressure: 90, breakout: 90 }, price: PRICE, returnsPct: { m1: 0.2, m5: 0.6, m15: 1.5, h1: 1.8, h4: 2.1 }, moveSigmas: 5, volumeRatio: 3, rangeRatio: 2,
+      live: { detectedAt: moveTime + 8, quoteVolume24h: 2_000_000_000, spreadPct: 0.01, candidateScore: 80, rank: 1, members: [] }
+    }
+    appendFileSync(join(dir, `events-${new Date(moveTime * 1000).toISOString().slice(0, 7)}.jsonl`), JSON.stringify(pump) + '\n')
+    const { askAiOpportunity } = await services()
+    stubOpenRouter(() => ({}))
+    await expect(askAiOpportunity(request({ symbol: 'BTCUSDT', marketMoveId: moveId }))).rejects.toThrow('This app raised no such market-wide move. Nothing was asked.')
+  })
+})

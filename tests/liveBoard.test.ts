@@ -171,7 +171,7 @@ describe('readLiveAnswers', () => {
     await readLiveAnswers([A], NOW, rig.deps)
     // The scanner's question and an announcement's: both are put to events as they happen.
     expect(rig.callFilters).toEqual([
-      { source: 'watch', promptVersions: ['opportunity-v1', 'opportunity-news-v1', 'opportunity-tag-v1'], sinceSec: NOW - LIVE_BOARD_DAYS * DAY, limit: 5000 },
+      { source: 'watch', promptVersions: ['opportunity-v1', 'opportunity-news-v1', 'opportunity-tag-v1', 'market-move-v1'], sinceSec: NOW - LIVE_BOARD_DAYS * DAY, limit: 5000 },
       // And the reviewer's verdicts on them (shared/aiAdditions.ts).
       { source: 'addition', promptVersion: 'reviewer-v1', sinceSec: NOW - LIVE_BOARD_DAYS * DAY, limit: 5000 }
     ])

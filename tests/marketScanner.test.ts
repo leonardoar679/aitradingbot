@@ -574,3 +574,76 @@ describe('a scan of history', () => {
     expect(market.rangeCalls).toEqual([])
   })
 })
+
+describe('a market-wide move (8 October 2026)', () => {
+  const alts = ['AAA', 'BBB', 'CCC', 'DDD', 'EEE']
+
+  function wholeMarket(btcPct: number): void {
+    market.symbols = [pair('BTC'), ...alts.map((base) => pair(base))]
+    market.tickers = [ticker('BTCUSDT', 2_000_000_000), ...alts.map((base, i) => ticker(`${base}USDT`, 40_000_000 + i * 1_000_000))]
+    market.books = market.symbols.map((entry) => ({ symbol: entry.symbol, bidPrice: 99.99, askPrice: 100.01 }))
+    market.candles = new Map<string, unknown[]>([
+      ['BTCUSDT', served(withMove({ pct: btcPct, volume: 4 }, LEAD, 3))],
+      ...alts.map((base, i): [string, unknown[]] => [`${base}USDT`, served(withMove({ pct: 3 + i * 0.2, volume: 8 }, LEAD, 7 + i))])
+    ])
+  }
+
+  it("raises one event on Bitcoin's pair with the pairs that moved its way on it, marks those, and the watch would skip them", async () => {
+    wholeMarket(1.5)
+    const { scanOnce } = await scanner()
+    const state = await scanOnce(NOW_MS)
+    expect(state.error).toBeNull()
+    const events = [...state.recentEvents].sort((a, b) => (a.live?.rank ?? 0) - (b.live?.rank ?? 0))
+    expect(events).toHaveLength(6)
+    const move = events[0]
+    expect(move).toMatchObject({ symbol: 'BTCUSDT', type: 'market_move', direction: 'up', band: 'urgent' })
+    expect(move.live).toMatchObject({ rank: 1 })
+    const members = move.live?.members ?? []
+    expect(members.map((member) => member.symbol).sort()).toEqual(['AAAUSDT', 'BBBUSDT', 'CCCUSDT', 'DDDUSDT', 'EEEUSDT'])
+    // Strongest first; the five pumps all score full marks, so they sort by name.
+    for (let i = 1; i < members.length; i++) expect(members[i - 1].score).toBeGreaterThanOrEqual(members[i].score)
+    expect(members[0]).toMatchObject({ direction: 'up' })
+    for (const member of events.slice(1)) {
+      expect(member.type).not.toBe('market_move')
+      expect(member.live?.marketMove).toBe(move.id)
+      expect(member.live?.rank).toBeGreaterThan(1)
+    }
+    expect(eventsOnFile()).toHaveLength(6)
+    // Once per cooldown: the next pass raises nothing again.
+    const again = await scanOnce(NOW_MS + 60_000)
+    expect(again.recentEvents).toHaveLength(6)
+  })
+
+  it('raises one move per cooldown: a minute later five other pairs moving with Bitcoin raise their own events, and no second move', async () => {
+    wholeMarket(1.5)
+    const { scanOnce } = await scanner()
+    expect((await scanOnce(NOW_MS)).recentEvents.filter((event) => event.type === 'market_move')).toHaveLength(1)
+    // The next minute: five pairs the first pass did not watch, each in a fresh pump, Bitcoin still up.
+    const others = ['FFF', 'GGG', 'HHH', 'III', 'JJJ']
+    market.symbols = [pair('BTC'), ...others.map((base) => pair(base))]
+    market.tickers = [ticker('BTCUSDT', 2_000_000_000), ...others.map((base, i) => ticker(`${base}USDT`, 40_000_000 + i * 1_000_000))]
+    market.books = market.symbols.map((entry) => ({ symbol: entry.symbol, bidPrice: 99.99, askPrice: 100.01 }))
+    market.candles = new Map<string, unknown[]>([
+      ['BTCUSDT', served(thenFlat(withMove({ pct: 1.5, volume: 4 }, LEAD, 3), 1))],
+      ...others.map((base, i): [string, unknown[]] => [`${base}USDT`, served(thenFlat(withMove({ pct: 3 + i * 0.2, volume: 8 }, LEAD, 17 + i), 1))])
+    ])
+    // The watched set is re-picked only once an hour; this pass is given the new one.
+    const { setScannerConfig } = await scanner()
+    await setScannerConfig({ universeSize: 20 })
+    const again = await scanOnce(NOW_MS + 60_000)
+    const moves = again.recentEvents.filter((event) => event.type === 'market_move')
+    expect(moves).toHaveLength(1)
+    const fresh = again.recentEvents.filter((event) => others.some((base) => event.symbol === `${base}USDT`))
+    expect(fresh.length).toBeGreaterThanOrEqual(5)
+    expect(fresh.every((event) => event.live?.marketMove === undefined)).toBe(true)
+  })
+
+  it('raises the pairs as it always did when Bitcoin did not move with them', async () => {
+    wholeMarket(0.3)
+    const { scanOnce } = await scanner()
+    const state = await scanOnce(NOW_MS)
+    expect(state.recentEvents.some((event) => event.type === 'market_move')).toBe(false)
+    expect(state.recentEvents.every((event) => event.live?.marketMove === undefined)).toBe(true)
+    expect(state.recentEvents.filter((event) => (event.live?.rank ?? 99) <= 3)).toHaveLength(3)
+  })
+})

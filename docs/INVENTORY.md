@@ -97,6 +97,7 @@ All files are in the user's profile folder.
 | | `watch` (on, models, events a day, lowest band, first model gates) | Agents › Opportunities › Watch | Opportunities (stays with its results) |
 | | `watchPaper` (on, model, stake, most open; and, added on 5 October 2026, most open in one direction, the losing run that pauses it, the Bitcoin move that drops a waiting trade) | Agents › Opportunities › Watch | Opportunities |
 | `scanner.json` | `enabled`, `universeSize` (20, 40, 60 or 100) | Explorer › Scanner | Settings › Market |
+| `marketEvents/` | since 8 October 2026 an event may be a market-wide move (`type: 'market_move'`, on BTCUSDT, with `live.members`), and its members carry `live.marketMove`; detector version `events-v2` | — | Opportunities, Discovery |
 | `news.json` | `enabled`; for `delisting` and for `monitoringTag`, each: `notifyHeld`, `paperShort` (on, stake), `askModels` (added with the news reader, V3 Stage 7) | — | Settings › Market |
 | `credentials.json` (encrypted) | Binance and Upbit keys; when added, last tested, result | Settings | Connections |
 | `aiCredentials.json` (encrypted) | The OpenRouter key | Agents | Connections |

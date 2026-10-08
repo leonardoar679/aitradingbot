@@ -8,6 +8,8 @@ import {
   EVENT_LOOKBACK_BARS,
   candidateScore,
   detectEvents,
+  isAtLeast,
+  marketMoveOf,
   raisesEvent,
   rankCandidates,
   readEventAt,
@@ -18,6 +20,7 @@ import {
   type MarketEvent,
   type RaisedEvent
 } from '../../shared/marketEvent'
+import { MARKET_REFERENCE_SYMBOLS } from '../../shared/aiEventMarket'
 import {
   DEFAULT_SCANNER_CONFIG,
   SCANNER_EXCHANGE,
@@ -289,22 +292,49 @@ export async function scanOnce(nowMs: number = Date.now()): Promise<ScannerState
         reading,
         candidateScore: candidateScore(reading.score, pair.quoteVolume24h, spreads.get(pair.symbol) ?? null)
       }))
-    for (const entry of rankCandidates(candidates)) {
-      const spread = spreads.get(entry.pair.symbol) ?? null
-      const event = toMarketEvent(
-        entry.reading,
-        { exchange: SCANNER_EXCHANGE, symbol: entry.pair.symbol, baseAsset: entry.pair.baseAsset, quoteAsset: entry.pair.quoteAsset },
-        {
-          detectedAt: Math.floor(Date.now() / 1000),
-          quoteVolume24h: Math.round(entry.pair.quoteVolume24h),
-          spreadPct: spread === null ? null : sig(spread),
-          candidateScore: sig(entry.candidateScore),
-          rank: entry.rank
-        }
-      )
+
+    // A MARKET-WIDE MOVE IS ONE EVENT (shared/marketEvent.ts marketMoveOf): raised on Bitcoin's pair
+    // from its own reading, ranked first, with the pairs that moved its way written on it; those are
+    // still raised and recorded, marked as part of it, and the watch asks about the move alone.
+    // Bitcoin's own event, where this pass raised one, becomes the move. One move per cooldown, like
+    // any event of Bitcoin's; inside it the pairs are raised as they always were.
+    const btc = fresh.find(({ pair }) => pair.symbol === MARKET_REFERENCE_SYMBOLS.btc) ?? null
+    const move = marketMoveOf(
+      candidates.map((entry) => ({ symbol: entry.symbol, direction: entry.reading.direction, band: entry.reading.band, score: entry.reading.score, returnM15Pct: entry.reading.returnsPct.m15, volumeRatio: entry.reading.volumeRatio })),
+      btc === null ? null : { symbol: btc.pair.symbol, returnM15Pct: btc.reading.returnsPct.m15 }
+    )
+    const btcEarlier = raised.get(MARKET_REFERENCE_SYMBOLS.btc) ?? []
+    const moveAllowed = move !== null && btc !== null && !btcEarlier.some((entry) => btc.reading.time - entry.time < EVENT_COOLDOWN_SECONDS && isAtLeast(entry.band, move.band))
+    const detectedAt = Math.floor(Date.now() / 1000)
+    const liveOf = (pair: WatchedPair, score: number, rank: number): NonNullable<MarketEvent['live']> => {
+      const spread = spreads.get(pair.symbol) ?? null
+      return { detectedAt, quoteVolume24h: Math.round(pair.quoteVolume24h), spreadPct: spread === null ? null : sig(spread), candidateScore: sig(score), rank }
+    }
+    const record = async (event: MarketEvent): Promise<void> => {
       remember(event)
       recentEvents = [event, ...recentEvents].slice(0, RECENT_EVENTS_KEPT)
       await appendJsonLine(join(eventsDir(), `events-${eventMonthKey(event.time)}.jsonl`), event)
+    }
+    let marketEventId: string | null = null
+    if (moveAllowed && move !== null && btc !== null) {
+      const event = toMarketEvent(
+        { ...btc.reading, type: 'market_move', direction: move.direction, band: move.band },
+        { exchange: SCANNER_EXCHANGE, symbol: btc.pair.symbol, baseAsset: btc.pair.baseAsset, quoteAsset: btc.pair.quoteAsset },
+        { ...liveOf(btc.pair, candidateScore(btc.reading.score, btc.pair.quoteVolume24h, spreads.get(btc.pair.symbol) ?? null), 1), members: move.members }
+      )
+      await record(event)
+      marketEventId = event.id
+    }
+    const members = new Set(marketEventId === null || move === null ? [] : move.members.map((member) => member.symbol))
+    const rest = marketEventId === null ? candidates : candidates.filter((entry) => entry.symbol !== MARKET_REFERENCE_SYMBOLS.btc)
+    for (const entry of rankCandidates(rest)) {
+      const live = liveOf(entry.pair, entry.candidateScore, marketEventId === null ? entry.rank : entry.rank + 1)
+      const event = toMarketEvent(
+        entry.reading,
+        { exchange: SCANNER_EXCHANGE, symbol: entry.pair.symbol, baseAsset: entry.pair.baseAsset, quoteAsset: entry.pair.quoteAsset },
+        marketEventId !== null && members.has(entry.symbol) ? { ...live, marketMove: marketEventId } : live
+      )
+      await record(event)
     }
 
     failed = failures

@@ -2,28 +2,14 @@ import { BollingerBands, RSI } from 'technicalindicators'
 import { aggregateCandles, bucketTimeFor } from './aggregateCandles'
 import { AI_CONFIRM_PROMPT_VERSION, type AiStrategyBlock } from './aiConfirm'
 import { buildMarketBlock, type AiMarketBlock, type EventReference } from './aiEventMarket'
-import {
-  AI_OPPORTUNITY_MARKET_PROMPT_VERSION,
-  AI_OPPORTUNITY_NEWS_PROMPT_VERSION,
-  AI_OPPORTUNITY_PROMPT_VERSION,
-  AI_OPPORTUNITY_SCHEMA_VERSION,
-  AI_OPPORTUNITY_TAG_PROMPT_VERSION
-} from './aiOpportunity'
+import { AI_OPPORTUNITY_MARKET_MOVE_PROMPT_VERSION, AI_OPPORTUNITY_MARKET_PROMPT_VERSION, AI_OPPORTUNITY_NEWS_PROMPT_VERSION, AI_OPPORTUNITY_PROMPT_VERSION, AI_OPPORTUNITY_SCHEMA_VERSION, AI_OPPORTUNITY_TAG_PROMPT_VERSION } from './aiOpportunity'
 import { AI_PANEL_PROMPT_VERSION, canonicalAgentReports, type AiAgentReports } from './aiPanel'
 import { AI_SCHEMA_VERSION, GPT_LOOKBACK_BARS, GPT_PROMPT_VERSION, type AiPositionState } from './aiSignal'
 import { computeAtr } from './atr'
 import { FEE_RATE, SLIPPAGE_RATE } from './fees'
 import { computeEma, wilderAdx } from './indicators'
 import { INTERVAL_SECONDS, type Candle, type Exchange, type Interval } from './ipc'
-import {
-  EVENT_BAR_SECONDS,
-  EVENT_LOOKBACK_BARS,
-  isAtLeast,
-  readEventAt,
-  type EventComponents,
-  type EventReading,
-  type MarketEventType
-} from './marketEvent'
+import { EVENT_BAR_SECONDS, EVENT_LOOKBACK_BARS, isAtLeast, readEventAt, type EventComponents, type EventReading, type MarketEventType, type MarketMoveMember } from './marketEvent'
 
 // What a model is shown before it decides.
 //
@@ -157,6 +143,16 @@ export interface AiMarketContext {
    * kept it. Rebuilt in the main process from its own record of the article; nobody hands one in.
    * ABSENT on every other question, for the reason `market` is, and always after `event`. */
   news?: AiNewsBlock
+  /** Present only on the question about a MARKET-WIDE MOVE (shared/marketEvent.ts marketMoveOf):
+   * the pairs that moved the same way as Bitcoin in the minute of the event, as breadth. Rebuilt
+   * in the main process from its own record of the move; nobody hands one in. ABSENT on every
+   * other question, for the reason `market` is, and always after `event`. */
+  marketMove?: AiMarketMoveBlock
+}
+
+/** A market-wide move as a model is shown it: the pairs that moved its way, strongest first. */
+export interface AiMarketMoveBlock {
+  members: MarketMoveMember[]
 }
 
 /** An announcement as a model is shown it: whose, what kind, its title as published, and when. */
@@ -175,10 +171,11 @@ export interface AiNewsBlock {
  * ledger cannot disagree: a context that carries analysts' reports is a panel's decision, one that
  * names a strategy is an entry review, one with an event is an opportunity -- with the market
  * around it or without -- and nothing else is any of those. */
-export function aiPromptVersion(context: Pick<AiMarketContext, 'strategy' | 'agents' | 'event' | 'market' | 'news'>): string {
+export function aiPromptVersion(context: Pick<AiMarketContext, 'strategy' | 'agents' | 'event' | 'market' | 'news' | 'marketMove'>): string {
   if (context.agents !== undefined) return AI_PANEL_PROMPT_VERSION
   if (context.event !== undefined) {
     if (context.news !== undefined) return context.news.kind === 'monitoring_tag' ? AI_OPPORTUNITY_TAG_PROMPT_VERSION : AI_OPPORTUNITY_NEWS_PROMPT_VERSION
+    if (context.marketMove !== undefined) return AI_OPPORTUNITY_MARKET_MOVE_PROMPT_VERSION
     return context.market === undefined ? AI_OPPORTUNITY_PROMPT_VERSION : AI_OPPORTUNITY_MARKET_PROMPT_VERSION
   }
   return context.strategy === undefined ? GPT_PROMPT_VERSION : AI_CONFIRM_PROMPT_VERSION
@@ -442,6 +439,27 @@ export function buildNewsEventContext(
   if (!base) return null
   // `event`, then `news`, last: see AiMarketContext.news.
   return { ...base, event: eventBlock({ ...reading, type: news.kind, direction: 'down' }, bars1m), news: { ...news } }
+}
+
+/** The question about a market-wide move, or null when these candles do not make one: Bitcoin's
+ * pair, read as an event's is, named 'market_move' and pointing the way most of the market moved,
+ * with the members the main process found in its own record of the move. The detector need not
+ * call Bitcoin's own minute anything: what raised the event is the breadth, which the main process
+ * checked when it raised it (electron/services/marketScannerService.ts). */
+export function buildMarketMoveContext(
+  candles15m: Candle[],
+  candles1m: Candle[],
+  meta: { exchange: Exchange; symbol: string },
+  move: { direction: 'up' | 'down'; members: MarketMoveMember[] }
+): AiMarketContext | null {
+  if (candles1m.length < EVENT_LOOKBACK_BARS) return null
+  const bars1m = candles1m.slice(-EVENT_LOOKBACK_BARS)
+  const reading = readEventAt(bars1m, bars1m.length - 1)
+  if (reading === null) return null
+  const base = eventSnapshot(candles15m, reading.time, meta)
+  if (!base) return null
+  // `event`, then `marketMove`, last: see AiMarketContext.marketMove.
+  return { ...base, event: eventBlock({ ...reading, type: 'market_move', direction: move.direction }, bars1m), marketMove: { members: move.members.map((member) => ({ ...member })) } }
 }
 
 /** An event's question with the market around it, or null when Bitcoin's or ether's candles do

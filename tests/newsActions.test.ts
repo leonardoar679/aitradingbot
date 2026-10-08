@@ -240,7 +240,7 @@ describe('a delisting put to the models', () => {
   })
 
   it("is read back with the scanner's question by the pages that show what the watch asked", () => {
-    expect(AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS).toEqual(['opportunity-v1', 'opportunity-news-v1', 'opportunity-tag-v1'])
+    expect(AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS).toEqual(['opportunity-v1', 'opportunity-news-v1', 'opportunity-tag-v1', 'market-move-v1'])
     expect(questionKindOfPromptVersion('opportunity-news-v1')).toBe('news')
     expect(questionKindOfPromptVersion('opportunity-tag-v1')).toBe('news')
     expect(describeQuestionKind('news')).toBe('with the announcement')

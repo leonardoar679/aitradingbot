@@ -369,6 +369,32 @@ Checked on 6 October 2026 on a separate build and a scratch profile, against the
   away.
 - **Why? on ETH** at a quiet moment read UNKNOWN: "not a move to explain".
 
+### A market-wide move is one question
+
+Since 8 October 2026 (the second V3 document's §17 and §43–44, chosen by the user on 7 October) one
+pass of the scanner raises ONE event for a move the whole market makes, instead of putting three of
+its pairs to the models. The rule (`shared/marketEvent.ts`, `marketMoveOf`, detector version
+`events-v2`): five or more events raised in the pass with a direction, four in five of them the same
+way, while Bitcoin's own fifteen-minute move is 1% or more that way. The event is raised on BTCUSDT,
+the market's own pair, from Bitcoin's own reading, named `market_move`, pointing the way most of the
+market moved, with the strongest band among the pairs that moved its way, ranked first; Bitcoin's own
+event, where the pass raised one, becomes the move. The pairs that moved its way are still raised and
+recorded, marked as part of it, and the watch skips them: "It is part of a market-wide move, which
+the watch asks about as one event." One move per half hour, like any event of Bitcoin's; the pairs
+that moved the other way are raised as they always were.
+
+**The question** (`market-move-v1`) is Bitcoin's pair, read as an event's is, with the members as
+breadth: each one's symbol, direction, score, fifteen-minute return and volume ratio. The main
+process looks the move up in its own record of the events it raised, and puts the question only for
+a move of that id on BTCUSDT at the minute the candles end at; the members come from the record,
+never from the request. Any trade in the answer is in BTCUSDT: the members are evidence, not pairs
+to trade, since a question carrying every member's candles would be many times the size, and the
+answer's levels could not be placed against a price the model was not shown. The answer is scored
+on Bitcoin's minutes and paper traded like any call, and its answers are compared on their own
+events. In the study week such minutes took 7 of the watch's 67 questions, so it replaces calls
+rather than adding them. The history scan ("Find events") is still one pair at a time, and finds no
+market-wide move in history.
+
 ### The opportunity table, and the market's regime
 
 Since 6 October 2026 (the second V3 document's §20, §24 and §42–44) what is on offer is ranked by

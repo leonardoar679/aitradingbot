@@ -110,6 +110,9 @@ async function askAbout(event: MarketEvent, watch: AiWatchConfig, deps: WatchDep
     // An event an announcement raised is asked about with the announcement in it. The id is all
     // that is sent: the main process looks the article up in what it read itself.
     if (event.news !== undefined) market = { ...market, newsId: event.news.articleId }
+    // A market-wide move is asked about by its id: the main process reads its members from its
+    // own record of the move, and the question is Bitcoin's pair with them as breadth.
+    if (event.type === 'market_move') market = { ...market, marketMoveId: event.id }
   } catch (failure) {
     // Nothing was asked, so nothing was spent and the event is not used up: the next pass may
     // take it again while it is still fresh.

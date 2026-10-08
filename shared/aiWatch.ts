@@ -175,6 +175,8 @@ export function watchSkipReason(
     return watch.models.length === 1 ? describeWatchPause(watch.models[0]) : 'Every model the watch asks has failed or been refused three times running today.'
   }
   if (event.live === null) return 'It was found by scanning history, not raised live.'
+  // Part of a market-wide move (shared/marketEvent.ts marketMoveOf): the move is the event asked about.
+  if (event.live.marketMove !== undefined) return 'It is part of a market-wide move, which the watch asks about as one event.'
   if (event.direction === 'none') return 'It has no direction to act on.'
   // An announcement's event is raised by the news, not the move: the band is what the candles
   // alone showed at that minute, and is not what the watch asks about it for.

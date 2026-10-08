@@ -553,3 +553,24 @@ describe('priceWatchCall', () => {
     ).rejects.toThrow(/No OpenRouter key \(CUSDT\)/)
   })
 })
+
+describe('a market-wide move (8 October 2026)', () => {
+  it("is put by its id, on Bitcoin's pair, and its members are skipped", async () => {
+    const r = rig()
+    const requests: AiOpportunityAskRequest[] = []
+    const ask = r.deps.ask
+    r.deps.ask = async (request) => {
+      requests.push(request)
+      return ask(request)
+    }
+    const move = event('BTCUSDT', { type: 'market_move', live: { ...(event().live as NonNullable<MarketEvent['live']>), members: [{ symbol: 'SOLUSDT', direction: 'up', score: 91, returnM15Pct: 3, volumeRatio: 4.7 }] } })
+    const member = event('SOLUSDT', { live: { ...(event().live as NonNullable<MarketEvent['live']>), rank: 2, marketMove: move.id } })
+    const pass = await watchPass([move, member], r.deps)
+    expect(pass.asked).toEqual([move.id])
+    expect(JSON.stringify(pass.skipped)).toContain('market-wide move')
+    expect(requests.map((request) => [request.symbol, request.marketMoveId])).toEqual([
+      ['BTCUSDT', move.id],
+      ['BTCUSDT', move.id]
+    ])
+  })
+})
