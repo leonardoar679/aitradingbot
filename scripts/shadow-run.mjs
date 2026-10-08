@@ -450,7 +450,10 @@ async function main() {
 
 async function nav(label) {
   const result = await page.evaluate((text) => {
-    const button = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === text)
+    // A page's button carries its notice badge in its text ("Discovery2" with two alerts pending),
+    // so the label is matched at the start of the text when no button matches it whole.
+    const buttons = [...document.querySelectorAll('button')]
+    const button = buttons.find((b) => b.textContent?.trim() === text) ?? buttons.find((b) => /^\d*$/.test((b.textContent?.trim() ?? '').slice(text.length)) && (b.textContent?.trim() ?? '').startsWith(text))
     if (!button) return 'NOT_FOUND'
     button.click()
     return 'OK'
