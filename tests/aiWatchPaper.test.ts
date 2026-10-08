@@ -597,6 +597,11 @@ describe('settleWatchPaperTrades', () => {
     expect(mark?.result?.pnlQuote).toBe(simulated.realizedPnl)
     expect(mark?.result?.pnlQuote).toBeGreaterThan(2.7)
     expect(mark?.result?.pnlQuote).toBeLessThan(3)
+    // And how far the price went for it and against it while it was held (8 October 2026): the
+    // second bar's high and the first bar's low, from the fill.
+    const fill = simulated.entryPrice ?? 100
+    expect(mark?.result?.bestPct).toBeCloseTo((103.5 / fill - 1) * 100, 6)
+    expect(mark?.result?.worstPct).toBeCloseTo((99.9 / fill - 1) * 100, 6)
     // And what it was opened on is still there beside it.
     expect(mark).toMatchObject({ eventId: event().id, eventTime: T, model: A, confidence: 0.8 })
   })

@@ -564,6 +564,7 @@ describe('AI code has no route to a real order', () => {
       'aiSignal',
       'aiWatchPaper',
       'engine',
+      'excursions',
       'executorFunding',
       'expectedValue',
       'ipc',
@@ -757,6 +758,23 @@ describe('AI code has no route to a real order', () => {
     const writer = readFileSync(join(ROOT, 'src', 'agents', 'watchPaperTrade.ts'), 'utf-8')
     expect(writer).toContain("rows = (await deps.listCalls({ source: 'watch', sinceSec: deps.nowSec() - EV_LINES.days * 86_400, limit: EV_ROWS })).rows")
     expect(writer.indexOf('const evBlock = expectedValueBlock(ev)')).toBeLessThan(writer.indexOf('review = await deps.review(event, decision)'))
+  })
+
+  it('the research on the record is arithmetic on the records, and the tab that shows it asks no model and acts on nothing (8 October 2026)', () => {
+    // The V4 plan's Stage 9. Each builder in shared/research/ imports shared modules only and never
+    // the window, the bridge or the main process; the tab reads the ledger, the events, the
+    // executors, public candles and a history scan, saves a CSV through the export dialog, and
+    // nothing more.
+    const research = join(ROOT, 'shared', 'research')
+    for (const name of readdirSync(research)) {
+      const path = join(research, name)
+      const source = readFileSync(path, 'utf-8')
+      expect(source, path).not.toMatch(/window\.|ipcRenderer|electron|liveTrading|placeLive|setExecutors|settings\.set|\.\.\/\.\.\/src/)
+    }
+    const tab = join(ROOT, 'src', 'agents', 'ResearchTab.tsx')
+    const calls = [...new Set([...readFileSync(tab, 'utf-8').matchAll(/window\.api\.(\w+)\.(\w+)/g)].map((match) => `${match[1]}.${match[2]}`))].sort()
+    expect(calls).toEqual(['ai.getConfig', 'ai.listCalls', 'backtest.exportSave', 'market.fetchHistoricalRange', 'scanner.getState', 'scanner.listEvents', 'scanner.onHistoryProgress', 'scanner.scanHistory', 'settings.get'])
+    expect(readFileSync(tab, 'utf-8')).not.toMatch(/liveTrading|LiveTrading|placeLive|settings\.set|setExecutors|settingsWrites|onPrepareOrder|aiProposal|askOpportunity|concludeMove|reviewTrade|\bexitCheck\b/)
   })
 
   it('the session report reads what the app did and changes none of it', () => {

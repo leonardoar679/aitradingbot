@@ -56,6 +56,7 @@ Taken on 5 October 2026, at commit `aef376d`.
 | | Does the exit check help? (added 6 October 2026, not an old card) | Each trade the exit check closed set against its plan, in R and in money, and its answers | Performance |
 | | Session report (added 6 October 2026, not an old card) | What the app did over the last hour, twelve hours or a session, and the V3 document's gates; saved as JSON or CSV | Performance |
 | | What an answer costs a trade (added 8 October 2026, not an old card) | By model, what the ledger says was spent to make each of the watch's paper trades: a trade, a winning trade, a dollar of net result | Performance |
+| | Research (added 8 October 2026, not an old card) | The record as tables, no model asked: exit rules, entry timing, holding time by kind, news timing, consensus, the score's inputs by ablation, capture and misses, false opportunities, the excursions on file; CSV each | AI Benchmark › Research |
 | **Routines** | New Routine, list, Reports | Backtests re-run on a schedule while the app is open | Backtest & Research › Automation |
 | **Market** | Chart, indicators, symbol search, ticker | The original dashboard | Markets |
 | **Backtest** | Configuration, Progress, Charts, Compare, Live | A strategy over history, trade charts, strategy comparison, the live strategy monitor | Backtest & Research |

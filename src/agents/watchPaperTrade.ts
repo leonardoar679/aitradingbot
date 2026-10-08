@@ -23,6 +23,7 @@ import { healPaperPause, paperPauseBlock } from '../../shared/paperPause'
 import { NEAR_STOP_SHARE, nearStopNotice, paperCloseNotice, stopProgress, type NoticeExtra } from '../../shared/notices'
 import type { AiCallFilter, AiCallPage, AiCallRecord } from '../../shared/aiLedger'
 import { EV_LINES, calibratedWinRate, expectedValueBlock, tradeExpectedValue, watchOutcomes, type TradeEv } from '../../shared/expectedValue'
+import { excursionOf } from '../../shared/research/excursions'
 import { healPaperRisk, paperEquity, paperOutBlock, rMultiple } from '../../shared/paperRisk'
 import { describeExecutorFunding } from '../account/executorFunding'
 import { settleExecutorOnStop } from '../account/settleExecutor'
@@ -360,7 +361,10 @@ export async function settleWatchPaperTrades(deps: WatchPaperDeps): Promise<stri
         // How it ended goes on its mark: a stopped executor is not simulated again, so this is what
         // its card and the Watch card have to show, with or without a paper account. One the exit
         // check's time limit ended is the check's exit.
-        found = { exit: aiExitOutcome(state.exitReason, executor.watch?.aiExit), pnlQuote: state.realizedPnl ?? 0, closedAt: state.closedAt ?? nowSec }
+        // With how far the price went for it and against it while it was held (shared/research/excursions.ts).
+        const held = state.enteredAt === null ? [] : candles.filter((bar) => bar.time >= (state.enteredAt ?? 0) && (state.closedAt === null || bar.time <= state.closedAt))
+        const excursions = state.enteredAt === null || state.entryPrice === null ? {} : excursionOf(held, state.entryPrice, (executor.params as PositionExecutorParams).side)
+        found = { exit: aiExitOutcome(state.exitReason, executor.watch?.aiExit), pnlQuote: state.realizedPnl ?? 0, closedAt: state.closedAt ?? nowSec, ...excursions }
       } else if (state.status === 'pending' && executor.watch !== undefined && watchPaper.dropOnBtcMovePct > 0) {
         // Still waiting for its entry: dropped when Bitcoin has moved against it since the event.
         const movePct = btcMoveAgainst({

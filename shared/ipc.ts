@@ -813,7 +813,16 @@ export interface ExecutorConfig {
      * one a person stopped first. `btc_moved` is one the watch dropped before it entered, because
      * Bitcoin had moved against it by more than its safeguard allows; `btcMovePct` is that move.
      * `ai_exit` is one the exit check closed: its time limit, brought forward, ended it. */
-    result?: { exit: PositionExitReason | 'btc_moved' | 'ai_exit'; pnlQuote: number; closedAt: number; btcMovePct?: number }
+    result?: {
+      exit: PositionExitReason | 'btc_moved' | 'ai_exit'
+      pnlQuote: number
+      closedAt: number
+      btcMovePct?: number
+      /** How far the price went for the trade and against it while it was held, in percent of the
+       * entry, from the minutes it was settled on (since 8 October 2026; absent before). */
+      bestPct?: number
+      worstPct?: number
+    }
     /** Set when the exit check answered EXIT while it was open (AiExitMark). */
     aiExit?: AiExitMark
     /** The live book it was opened against (shared/liveMarket.ts): its best bid and ask, the
