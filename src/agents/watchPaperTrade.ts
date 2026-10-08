@@ -131,6 +131,10 @@ export interface WatchPaperDeps {
   /** The pair's hourly moves over the last week against Bitcoin's (shared/paperExposure.ts), or
    * null when they cannot be read: it then counts as a pair that tracks Bitcoin. */
   btcCorrelation: (exchange: Exchange, symbol: string) => Promise<number | null>
+  /** The market's regime now (shared/marketResearch.ts), written on the trade's mark for where the
+   * result came from (shared/performance/attribution.ts); null where the research has not read it.
+   * A record: nothing here decides by it. */
+  regime: () => Promise<'panic' | 'high-vol' | 'recovery' | 'bull' | 'bear' | 'sideways' | null>
   /** The reviewer's second look (shared/aiAdditions.ts), asked in the main process only when
    * something about the trade stands out. Its REJECT refuses the trade; anything else leaves it. */
   review: (event: MarketEvent, decision: AiSignalDecision) => Promise<TradeReview>
@@ -277,7 +281,14 @@ export async function openWatchPaperTrade(
       return null
     }
   }
-  const [first, volatility, btcCorrelation] = await Promise.all([readBook(), readVolatility(), readCorrelation()])
+  const readRegime = async (): Promise<Awaited<ReturnType<WatchPaperDeps['regime']>>> => {
+    try {
+      return await deps.regime()
+    } catch {
+      return null
+    }
+  }
+  const [first, volatility, btcCorrelation, regime] = await Promise.all([readBook(), readVolatility(), readCorrelation(), readRegime()])
   const risk = healPaperRisk(before.paperRisk)
   const plan = planWatchPaperTrade({
     config: watchPaper,
@@ -287,6 +298,7 @@ export async function openWatchPaperTrade(
     nowSec: deps.nowSec(),
     lastPrice,
     equityQuote: paperEquity(before.paperAccount ?? null, before.executors, event.quoteAsset),
+    regime,
     conditions: conditionsOf({
       book: first,
       side: decision.recommendation === 'sell' ? 'sell' : 'buy',
@@ -582,6 +594,8 @@ export const watchPaperBrowserDeps: WatchPaperDeps = {
       symbol,
       Math.floor(Date.now() / 1000)
     ),
+  // The market's regime, read from the research done at launch and every ten minutes: a record on the mark.
+  regime: async () => (await window.api.research.getState()).market?.regime ?? null,
   review: (event, decision) => window.api.ai.reviewTrade({ event, decision }),
   // The stories on file, and the analyst's readings of them from the ledger: both free to read.
   stories: async () => (await window.api.feed.getState()).stories,

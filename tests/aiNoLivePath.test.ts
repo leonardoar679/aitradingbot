@@ -622,9 +622,10 @@ describe('AI code has no route to a real order', () => {
     // dynamicRisk (8 October 2026): the conditions' factor on the risk, arithmetic on what was read.
     expect(importsOf(rules).sort()).toEqual(['aiOpportunity', 'aiOpportunityOutcome', 'aiPanel', 'aiProposal', 'aiSignal', 'dynamicRisk', 'ipc', 'marketEvent', 'paperPause', 'paperRisk'])
     expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron/)
-    // The writer reaches settings, the price, candles, the stories on file, a notice and the setting.
+    // The writer reaches settings, the price, candles, the stories on file, a notice and the setting;
+    // and, since 8 October 2026, the research, to write the market's regime on the mark (a record).
     // Nothing else.
-    expect([...new Set([...source.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))].sort()).toEqual(['ai', 'feed', 'market', 'notify', 'settings'])
+    expect([...new Set([...source.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))].sort()).toEqual(['ai', 'feed', 'market', 'notify', 'research', 'settings'])
     // And it is the only file of the watch's that reaches settings at all.
     const others = ['opportunityWatch.ts', 'OpportunityScheduler.tsx', 'WatchCard.tsx', 'liveBoard.ts', 'LiveBoardCard.tsx', 'opportunityTable.ts', 'OpportunityTableCard.tsx', 'modelHealthWatch.ts', 'ModelHealthScheduler.tsx']
     for (const file of others) expect(readFileSync(join(ROOT, 'src', 'agents', file), 'utf-8'), file).not.toMatch(/window\.api\.settings/)
@@ -930,7 +931,8 @@ describe('AI code has no route to a real order', () => {
       .map((path) => path.slice(ROOT.length + 1).replace(/\\/g, '/'))
       .sort()
     // And since 8 October 2026 an experiment's report, for the same verdict over the run's span (V5 Stage 9).
-    expect(historyReaders).toEqual(['src/agents/EventBenchmarkView.tsx', 'src/agents/LiveBoardCard.tsx', 'src/ai-benchmark/experimentReport.ts'])
+    // And the attribution card (V5 Stage 10), for the news each closed trade's event had.
+    expect(historyReaders).toEqual(['src/agents/EventBenchmarkView.tsx', 'src/agents/LiveBoardCard.tsx', 'src/ai-benchmark/experimentReport.ts', 'src/performance/AttributionCard.tsx'])
   })
 
   it('the opportunity score ranks and the cap on one side refuses; both are arithmetic', () => {

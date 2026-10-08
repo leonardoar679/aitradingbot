@@ -9,6 +9,7 @@ import type { ExecutorConfig } from '../../shared/ipc'
 import { PaperRCurveCard } from './PaperRCurveCard'
 import { ExitCheckCard } from './ExitCheckCard'
 import { AiCostPerTradeCard } from './AiCostPerTradeCard'
+import { AttributionCard } from './AttributionCard'
 import { SessionReportCard } from './SessionReportCard'
 import { DailyReportCard } from './DailyReportCard'
 
@@ -77,6 +78,7 @@ export function PerformancePage(): React.JSX.Element {
       <PaperRCurveCard executors={executors} />
       <ExitCheckCard executors={executors} />
       <AiCostPerTradeCard executors={executors} />
+      <AttributionCard executors={executors} />
       <SessionReportCard />
       <DailyReportCard />
       <JournalCard paper={paperKeys} />

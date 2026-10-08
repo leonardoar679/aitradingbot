@@ -170,6 +170,11 @@ And a ninth on 6 October 2026:
 - **`StrategyHealthScheduler`** (8 October 2026) reads each running bot's health once an hour, for
   the bots that ask no model, and tells a DEGRADED one once a day on its thread; the bots that ask a
   model are read by their card, as before. It stops nothing.
+- **`AttributionCard`** on Performance (8 October 2026; `shared/performance/attribution.ts`): where
+  the result came from, over the app's own closed paper trades -- concentration, the signal at the
+  call, pair, cap tier, regime, model, kind, news, vote, and the pair's move over each window
+  against the exit -- read from the records on a click, with a CSV. The market's regime is written
+  on each paper trade's mark when it opens, as a record.
 - **`ExperimentScheduler`** (8 October 2026; `shared/experimentRun.ts`) builds the report of one of
   the app's own runs once it has ended -- the session report over its span, the document's five
   further gates, "Does AI help?" over its events, the costs and the verdict -- from the records, and

@@ -855,6 +855,10 @@ export interface ExecutorConfig {
      * 2026), and why: absent at the whole risk, and on one opened before. */
     riskFactor?: number
     riskReasons?: string[]
+    /** The market's regime when it was opened (shared/marketResearch.ts), for where the result came
+     * from (shared/performance/attribution.ts; since 8 October 2026): a record, read by nothing that
+     * decides. Null where the research had not read the market; absent on one opened before. */
+    regime?: 'panic' | 'high-vol' | 'recovery' | 'bull' | 'bear' | 'sideways' | null
   }
   /** Set on a PAPER Position short opened by a rule research/NEWS.md measured, on Binance's
    * announcement (shared/newsActions.ts): which announcement and which coin. A delisting's is out

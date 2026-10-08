@@ -400,6 +400,8 @@ interface Rig {
     candles: Candle[] | Error
     /** Fifteen-minute candles over thirty days (shared/dynamicRisk.ts). Absent: none, so no volatility is read. */
     candles15m?: Candle[] | Error
+    /** The market's regime (shared/marketResearch.ts). Absent: null, not read. */
+    regime?: 'bull' | 'bear' | 'sideways' | null | Error
     /** The ledger's rows, for the calibrated win rate (shared/expectedValue.ts). Absent: none. */
     rows?: AiCallRecord[]
   }
@@ -458,6 +460,10 @@ function rig(initial: Partial<Rig['state']> = {}): Rig {
     btcCorrelation: async () => {
       if (state.correlation instanceof Error) throw state.correlation
       return state.correlation === undefined ? 0.3 : state.correlation
+    },
+    regime: async () => {
+      if (state.regime instanceof Error) throw state.regime
+      return state.regime ?? null
     },
     review: async (asked, answer) => {
       made.reviewed.push(`${asked.id}:${answer.model}`)
@@ -1562,5 +1568,19 @@ describe('the risk by the conditions (shared/dynamicRisk.ts; 8 October 2026)', (
     })
     expect((await openWatchPaperTrade(event(), decision(), r.deps))?.opened).toBe(true)
     expect(r.state.executors.find((entry) => entry.id === 'paper-1')?.watch?.ev).toMatchObject({ basis: 'confidence', aiCostPct: 0.05, costsPct: 0.3, pct: 1.8 })
+  })
+})
+
+describe("the market's regime on the mark (shared/performance/attribution.ts; 8 October 2026)", () => {
+  it('writes the regime the research read when the trade opened, null where it had not, and opens as before when it cannot be read', async () => {
+    const bull = rig({ regime: 'bull' })
+    expect((await openWatchPaperTrade(event(), decision(), bull.deps))?.opened).toBe(true)
+    expect(bull.state.executors[0].watch?.regime).toBe('bull')
+    const unread = rig()
+    expect((await openWatchPaperTrade(event(), decision(), unread.deps))?.opened).toBe(true)
+    expect(unread.state.executors[0].watch?.regime).toBeNull()
+    const failed = rig({ regime: new Error('no research') })
+    expect((await openWatchPaperTrade(event(), decision(), failed.deps))?.opened).toBe(true)
+    expect(failed.state.executors[0].watch?.regime).toBeNull()
   })
 })

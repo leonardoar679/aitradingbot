@@ -417,6 +417,9 @@ export function planWatchPaperTrade(input: {
   /** The paper account's equity in the trade's quote (shared/paperRisk.ts paperEquity), for a trade
    * sized by a share of it; null or absent without an account. */
   equityQuote?: number | null
+  /** The market's regime now (shared/marketResearch.ts), written on the mark for where the result
+   * came from; null where it is not read. It decides nothing here. */
+  regime?: 'panic' | 'high-vol' | 'recovery' | 'bull' | 'bear' | 'sideways' | null
   /** The conditions it would be entered in (shared/dynamicRisk.ts; since 8 October 2026): what was
    * read of them. Absent, or every one null, the whole risk stands. */
   conditions?: {
@@ -505,7 +508,8 @@ export function planWatchPaperTrade(input: {
       confidence: decision.confidence,
       ...(decision.callId !== undefined ? { callId: decision.callId } : {}),
       ...(decision.promptVersion !== undefined ? { promptVersion: decision.promptVersion } : {}),
-      ...(multiplier.factor === 1 ? {} : { riskFactor: multiplier.factor, riskReasons: multiplier.reasons })
+      ...(multiplier.factor === 1 ? {} : { riskFactor: multiplier.factor, riskReasons: multiplier.reasons }),
+      ...(input.regime === undefined ? {} : { regime: input.regime })
     }
   }
 }

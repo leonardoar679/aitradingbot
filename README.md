@@ -909,6 +909,22 @@ What it reports:
   and engine versions (Settings › Advanced › Effective configuration, `shared/appConfig.ts`), the
   detector, and the prompt and schema versions of the span's calls.
 
+**Where the result came from** (since 8 October 2026; the V5 document's §82-90;
+`shared/performance/attribution.ts`, a card on Performance). Over the app's own paper trades that
+have closed in the last ninety days: concentration (the share of the net the best 1%, 5% and 10% of
+trades made, and "fragile" when the best five made nine tenths); the result by the signal score at
+the call (90+, 80 to 90, 70 to 80, under 70, not scored), by pair, by how much the pair trades a day
+(large from $100M, mid from $20M, small), by the market's regime at entry (the six words, recorded
+on the trade's mark since 8 October 2026, else Bitcoin's direction at the event), by model, by kind
+of event, by news (a fresh story pointing the trade's way, or none naming the coin) and by the vote;
+and where the net came from: what holding the pair from the entry to the plan's end at the stake
+would have made after fees, against the rest, which is the exit, by kind, news, model and vote.
+Thirty closed trades for a figure and ten for a slice, as the Research tab counts; a CSV of every
+table. The signal at the call is read back from the same records the table scores by -- the event,
+the answers in by then, the stories the feed still holds, the regime on the mark -- so nothing that
+trades ever reads the score; a trade older than the stories held reads as not scored. Read from the
+records; nothing here is stored or acted on.
+
 **Experiments in the app** (since 8 October 2026; the V5 document's §56-62 and §124-126;
 `shared/experimentRun.ts`). AI Benchmark › Experiments starts one of the app's own runs -- one hour,
 twelve hours, or a length of your own -- and lists every run kept. A run writes down what the app is
