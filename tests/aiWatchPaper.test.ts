@@ -26,7 +26,8 @@ import {
   type WatchPaperOutcome,
   type WatchPaperPlan
 } from '../shared/aiWatchPaper'
-import type { TradeReview } from '../shared/aiAdditions'
+import type { NewsReading, TradeReview } from '../shared/aiAdditions'
+import type { NewsAgainstStory } from '../shared/paperNewsBlock'
 import { SLIPPAGE_RATE } from '../shared/fees'
 import type { Candle, ExecutorConfig, PaperAccount, PaperPauseSettings, PaperRiskSettings, PositionExecutorParams } from '../shared/ipc'
 import type { MarketEvent } from '../shared/marketEvent'
@@ -388,6 +389,9 @@ interface Rig {
     correlation?: number | null | Error
     /** The reviewer's second look (shared/aiAdditions.ts). Absent: none asked. */
     review?: TradeReview | Error
+    /** The stories on file and the analyst's readings of them (shared/paperNewsBlock.ts). Absent: none. */
+    stories?: NewsAgainstStory[] | Error
+    readings?: Record<string, NewsReading>
     now: number
     candles: Candle[] | Error
   }
@@ -448,6 +452,11 @@ function rig(initial: Partial<Rig['state']> = {}): Rig {
       if (state.review instanceof Error) throw state.review
       return state.review ?? { asked: false, triggers: [], outcome: null }
     },
+    stories: async () => {
+      if (state.stories instanceof Error) throw state.stories
+      return state.stories ?? []
+    },
+    readings: async () => state.readings ?? {},
     settle: async (target) => {
       made.settled.push(target.id)
     },
@@ -1268,5 +1277,72 @@ describe('checked against the live price before it opens (shared/liveMarket.ts)'
       text: 'No paper trade: The live price is 15 seconds old, so the market it would enter is not known.'
     })
     expect(await refused({ ...tightBook('SOLUSDT', 100, SOON), bid: 99.8, ask: 100.2 })).toEqual({ opened: false, text: 'No paper trade: The spread is 0.400%, over the 0.1% a trade is entered at.' })
+  })
+})
+
+// Two more refusals, since 8 October 2026 (the second V3 document, §25): the best level on the side a
+// fill would take cannot hold the stake (shared/liveMarket.ts thinBookBlock), or major news on the
+// coin points against the side (shared/paperNewsBlock.ts). Both before any review, both only open less.
+describe('refused on the book behind it, and on news against it', () => {
+  const verdict = (answer: 'APPROVE' | 'REJECT'): TradeReview => ({
+    asked: true,
+    triggers: ['large_move'],
+    outcome: { status: 'answered', answer: { verdict: answer, confidence: 0.7, reason: 'A large move.' }, cached: false, model: A }
+  })
+  const hack = (over: Partial<NewsAgainstStory> = {}): NewsAgainstStory => ({
+    id: 'coindesk:1',
+    eventType: 'HACK',
+    assets: [{ ticker: 'SOL', relationship: 'DIRECT' }],
+    impact: 77,
+    publishedAt: T - 600,
+    stale: false,
+    title: 'Hackers drain a Solana bridge',
+    sourceName: 'CoinDesk',
+    ...over
+  })
+
+  it('refuses a buy when the best ask cannot hold the stake, before any review, and again inside the queue', async () => {
+    const r = rig({ book: { ...tightBook('SOLUSDT', 100, SOON), askQty: 0.5 }, review: verdict('APPROVE') })
+    const result = await openWatchPaperTrade(event(), decision(), r.deps)
+    expect(result?.opened).toBe(false)
+    expect(result?.text).toMatch(/^No paper trade: The ask holds 50(\.0\d)? in the quote, less than the 100 it would take, so a fill would go through the book\.$/)
+    expect(r.reviewed).toEqual([])
+    expect(r.writes).toBe(0)
+    // A sell takes the bid: a thin ask is no matter to it.
+    expect((await openWatchPaperTrade(event(), sell(), rig({ book: { ...tightBook('SOLUSDT', 100, SOON), askQty: 0.5 } }).deps))?.opened).toBe(true)
+    // The book thins while the reviewer thinks: judged again inside the queue.
+    const late = rig({ review: verdict('APPROVE') })
+    const review = late.deps.review
+    late.deps.review = async (asked, answer) => {
+      late.state.book = { ...tightBook('SOLUSDT', 100, SOON), askQty: 0.2 }
+      return review(asked, answer)
+    }
+    expect((await openWatchPaperTrade(event(), decision(), late.deps))?.text).toMatch(/^No paper trade: The ask holds 20/)
+    expect(late.reviewed).toHaveLength(1)
+    expect(late.writes).toBe(0)
+  })
+
+  it('refuses a buy on a major story naming the coin that points down, before any review, and lets a story its own way through', async () => {
+    const r = rig({ stories: [hack()], review: verdict('APPROVE') })
+    expect(await openWatchPaperTrade(event(), decision(), r.deps)).toEqual({
+      opened: false,
+      text: 'No paper trade: A story of impact 77 names SOL and points down, against a paper BUY ("Hackers drain a Solana bridge", CoinDesk, 08:57 UTC).'
+    })
+    expect(r.reviewed).toEqual([])
+    expect(r.writes).toBe(0)
+    // The same story is the way a sell wants: the sell opens, and the reviewer still looks at it.
+    const sold = rig({ stories: [hack()], review: verdict('APPROVE') })
+    expect((await openWatchPaperTrade(event(), sell(), sold.deps))?.opened).toBe(true)
+    expect(sold.reviewed).toHaveLength(1)
+    // The analyst read the story as pointing up: the buy opens.
+    const read = rig({
+      stories: [hack()],
+      readings: { 'coindesk:1': { ticker: 'SOL', relationship: 'DIRECT', direction: 'up', impact: 70, horizon: '4h', confidence: 0.6, pricedIn: false, reasons: 'read for the test' } }
+    })
+    expect((await openWatchPaperTrade(event(), decision(), read.deps))?.opened).toBe(true)
+  })
+
+  it('opens as before when the stories cannot be read: what could not be had leaves the trade as it was', async () => {
+    expect((await openWatchPaperTrade(event(), decision(), rig({ stories: new Error('feed down') }).deps))?.opened).toBe(true)
   })
 })

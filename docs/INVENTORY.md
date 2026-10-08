@@ -215,7 +215,10 @@ settings from the document have no behaviour behind them, so they are not added 
     5 October 2026, the watch's limit on how many are open in one direction, and, since 6 October
     2026, a cap on what they stake on one side on coins that move with Bitcoin (15% of the paper
     account, or of the money-out cap; `shared/paperExposure.ts`), shown on Risk & Safety;
-  - maximum slippage or spread.
+  - maximum slippage or spread. The watch's paper trades are refused on a spread over 0.1% (6 October
+    2026), and since 8 October 2026 on a best level that cannot hold the stake and on major news
+    against the side (`shared/liveMarket.ts`, `shared/paperNewsBlock.ts`); nothing limits a person's
+    own trades.
 - **News:** Binance's own announcements are read when switched on under Settings › Market, with
   what a delisting does (V3 Stage 7, after the study in `research/NEWS.md`). Since 6 October 2026,
   four free feeds are read too, always (CoinDesk, The Block, Cointelegraph, Decrypt), for Discovery's

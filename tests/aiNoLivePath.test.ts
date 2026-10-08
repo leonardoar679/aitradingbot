@@ -522,8 +522,9 @@ describe('AI code has no route to a real order', () => {
     // names and types, and nothing that acts.
     expect(importsOf(rules).sort()).toEqual(['aiOpportunity', 'aiOpportunityOutcome', 'aiPanel', 'aiProposal', 'aiSignal', 'ipc', 'marketEvent', 'paperPause', 'paperRisk'])
     expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron/)
-    // The writer reaches settings, the price, candles, a notice and the setting. Nothing else.
-    expect([...new Set([...source.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))].sort()).toEqual(['ai', 'market', 'notify', 'settings'])
+    // The writer reaches settings, the price, candles, the stories on file, a notice and the setting.
+    // Nothing else.
+    expect([...new Set([...source.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))].sort()).toEqual(['ai', 'feed', 'market', 'notify', 'settings'])
     // And it is the only file of the watch's that reaches settings at all.
     const others = ['opportunityWatch.ts', 'OpportunityScheduler.tsx', 'WatchCard.tsx', 'liveBoard.ts', 'LiveBoardCard.tsx', 'opportunityTable.ts', 'OpportunityTableCard.tsx']
     for (const file of others) expect(readFileSync(join(ROOT, 'src', 'agents', file), 'utf-8'), file).not.toMatch(/window\.api\.settings/)
@@ -550,6 +551,7 @@ describe('AI code has no route to a real order', () => {
       'liveMarket',
       'marketEvent',
       'paperExposure',
+      'paperNewsBlock',
       'paperPause',
       'paperRisk',
       'settingsWrites',

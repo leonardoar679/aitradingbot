@@ -191,11 +191,13 @@ function entered(result: { exit: string }): boolean {
   return result.exit !== 'entry_expired' && result.exit !== 'btc_moved'
 }
 
-/** A refusal's reason, with its figures taken out, so that like refusals count together. */
+/** A refusal's reason, with its figures taken out, and what it names at the end in parentheses (a
+ * story, say) with them, so that like refusals count together. */
 export function refusalReason(text: string): string {
   return text
     .replace(/^No paper (trade|short)[:.]\s*/i, '')
     .replace(/^[A-Z0-9]{2,12}: no paper short[.,]\s*/, '')
+    .replace(/\s*\(.*\)\.?$/, '.')
     .replace(/\d+(\.\d+)?/g, '#')
     .trim()
 }

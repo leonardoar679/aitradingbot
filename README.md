@@ -218,8 +218,10 @@ says which host the stream is on, and how often it, and the data host, moved; ne
   stakes, a fifth for the price's age; what held it down is said.
 - **The watch's paper trades are refused on it.** Before one opens, the live book of its pair is
   read — the stream's while fresh, otherwise once over REST — and with no fresh price, or a spread
-  over 0.1%, none is opened; the book it opened against is written on its mark. It only ever opens
-  less. The news rules' shorts are their measured rules, and are not changed by it.
+  over 0.1%, none is opened; nor, since 8 October 2026, when the best level on the side a fill would
+  take (the ask for a buy, the bid for a sell) holds less than the stake, since a fill there would go
+  through the book. The book it opened against is written on its mark. It only ever opens less. The
+  news rules' shorts are their measured rules, and are not changed by it.
 - **The models' question is not changed by it.** That question is built from completed candles
   only, so that a benchmark replaying an old event asks exactly what the watch asked live; a live
   bid and ask cannot be had for a replay. The plan had the question gain them; that was dropped for
@@ -318,6 +320,14 @@ What each raises:
 For a coin held, Binance's announcements keep the notice the reader already raises, so none is raised
 twice. The plan had the kill switch engaged as CRITICAL too. Only a person engages it, from the bar
 where it already shows, so it raises none.
+
+**News against a paper trade** (since 8 October 2026; the document's §25, "news contradicted"). A
+story of impact 70 or more naming the coin, published from three hours before the event to now,
+that points against the side — the news analyst's reading where it read the story about this coin,
+else its kind's way — refuses the watch's paper trade before the reviewer is asked, and names the
+story (`shared/paperNewsBlock.ts`). A story pointing the trade's own way changes nothing, and so
+does one with no way of its own; stories that cannot be read refuse nothing. The news rules' shorts
+are not changed.
 
 **Discovery's News & Market Events tab** lists the stories, newest first:
 - **Filters:** All, Bitcoin, Ethereum, Altcoins, Market-wide and Major alerts (HIGH and above).

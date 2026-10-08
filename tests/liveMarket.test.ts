@@ -8,6 +8,7 @@ import {
   foldMinute,
   isStale,
   livePaperBlock,
+  thinBookBlock,
   liveReturns,
   revalidate,
   type LiveBook,
@@ -137,5 +138,17 @@ describe('the minutes the stream sends', () => {
     expect(moves.m5).toBeCloseTo((100 / 98 - 1) * 100, 10)
     expect(liveReturns(minutes.slice(1), 100, NOW).m5).toBeNull()
     expect(liveReturns(minutes, null, NOW)).toEqual({ m1: null, m5: null })
+  })
+})
+
+describe('the book behind a paper trade', () => {
+  it('refuses a trade whose stake the best level on its side cannot hold', () => {
+    const thin = book({ bidQty: 0.3, askQty: 0.5 })
+    expect(thinBookBlock(thin, 'buy', 100)).toMatch(/^The ask holds 50(\.0\d)? in the quote, less than the 100 it would take, so a fill would go through the book\.$/)
+    expect(thinBookBlock(thin, 'sell', 100)).toMatch(/^The bid holds 30 in the quote/)
+    expect(thinBookBlock(book({ askQty: 1 }), 'buy', 100)).toBeNull()
+    expect(thinBookBlock(book({ askQty: 0.999 }), 'buy', 100)).not.toBeNull()
+    expect(thinBookBlock(book({ bidQty: 0.3 }), 'buy', 100)).toBeNull()
+    expect(thinBookBlock(null, 'buy', 100)).toBeNull()
   })
 })

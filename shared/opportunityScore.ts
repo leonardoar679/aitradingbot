@@ -102,7 +102,7 @@ const sideWord = (side: OpportunitySide): string => (side === 'long' ? 'BUY' : '
 
 /** Which way a story points for `coin`: the news analyst's reading where it read the story about
  * this coin, else the fixed rule's by the story's kind; null for neither way. */
-function storyWay(story: Pick<ReadStory, 'id' | 'eventType'>, coin: string, readings: Readonly<Record<string, NewsReading>> | undefined): 'up' | 'down' | null {
+export function storyWay(story: Pick<ReadStory, 'id' | 'eventType'>, coin: string, readings: Readonly<Record<string, NewsReading>> | undefined): 'up' | 'down' | null {
   const reading = readings?.[story.id]
   if (reading !== undefined && reading.ticker === coin) return reading.direction === 'none' ? null : reading.direction
   return expectedDirection(story.eventType)

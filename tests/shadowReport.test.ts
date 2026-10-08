@@ -435,3 +435,14 @@ describe('the day span', () => {
     expect(day.gates.filter((gate) => gate.twelveHour).every((gate) => gate.status !== 'not measured' || gate.detail.length > 0)).toBe(true)
   })
 })
+
+describe('a refusal that names what refused it', () => {
+  it('counts with its like: the named story, in parentheses at the end, is taken out with the figures', () => {
+    expect(refusalReason('No paper trade: A story of impact 77 names SOL and points down, against a paper BUY ("Exchange (part 2) halts SOL", CoinDesk, 08:50 UTC).')).toBe(
+      'A story of impact # names SOL and points down, against a paper BUY.'
+    )
+    expect(refusalReason('No paper trade: The ask holds 50.01 in the quote, less than the 100 it would take, so a fill would go through the book.')).toBe(
+      'The ask holds # in the quote, less than the # it would take, so a fill would go through the book.'
+    )
+  })
+})

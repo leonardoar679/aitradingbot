@@ -1,4 +1,4 @@
-import { reviewRefusal, type TradeReview } from '../../shared/aiAdditions'
+import { AI_ADDITION_PROMPT_VERSIONS, REVIEW_LINES, newsReadingsOf, reviewRefusal, type NewsReading, type TradeReview } from '../../shared/aiAdditions'
 import type { AiConfig } from '../../shared/aiCost'
 import { aiExitOutcome, aiExitPlanEnd, aiExitPlanParams, aiExitPlanResult, aiExitWrite, type AiExitOrder } from '../../shared/aiExit'
 import type { AiSignalDecision } from '../../shared/aiSignal'
@@ -15,9 +15,10 @@ import {
   type WatchPaperPlan
 } from '../../shared/aiWatchPaper'
 import type { AppSettings, Candle, Exchange, ExecutorConfig, PositionExecutorParams } from '../../shared/ipc'
-import { bookSpreadPct, livePaperBlock, priceAgeMs, type LiveBook } from '../../shared/liveMarket'
+import { bookSpreadPct, livePaperBlock, priceAgeMs, thinBookBlock, type LiveBook } from '../../shared/liveMarket'
 import type { MarketEvent } from '../../shared/marketEvent'
 import { correlatedExposureBlock, readBtcCorrelation } from '../../shared/paperExposure'
+import { newsAgainstBlock, type NewsAgainstStory } from '../../shared/paperNewsBlock'
 import { healPaperPause, paperPauseBlock } from '../../shared/paperPause'
 import { healPaperRisk, paperOutBlock } from '../../shared/paperRisk'
 import { describeExecutorFunding } from '../account/executorFunding'
@@ -31,8 +32,10 @@ import { settingsWrites } from '../utils/settingsWrites'
 // PAPER Position executor, appended to the executors on file, unless its limits, the paper money
 // the app's own trades have out, what they have out on one side on coins that move with Bitcoin
 // (shared/paperExposure.ts), a losing run of its own (shared/paperPause.ts), the reviewer's REJECT
-// where something about the trade stood out (shared/aiAdditions.ts), or the live price -- none
-// fresh, or a spread over 0.1% (shared/liveMarket.ts) -- refuse it. And
+// where something about the trade stood out (shared/aiAdditions.ts), the live price -- none
+// fresh, or a spread over 0.1% (shared/liveMarket.ts) -- or, since 8 October 2026, a best level on
+// the side a fill would take that cannot hold the stake (the same file), or major news on the coin
+// pointing against the side (shared/paperNewsBlock.ts), refuse it. And
 // a paper position of the watch's that has closed -- its stop, its target or its clock ended it,
 // or its entry expired unfilled -- is stopped and its result settled into the paper account, the
 // way pressing Stop on its card would, so that the money comes back and the count of open trades
@@ -115,6 +118,10 @@ export interface WatchPaperDeps {
   /** The reviewer's second look (shared/aiAdditions.ts), asked in the main process only when
    * something about the trade stands out. Its REJECT refuses the trade; anything else leaves it. */
   review: (event: MarketEvent, decision: AiSignalDecision) => Promise<TradeReview>
+  /** The stories on file that name coins (shared/newsFeed.ts), for the news against a trade. */
+  stories: () => Promise<NewsAgainstStory[]>
+  /** The news analyst's readings by story id, from `sinceSec` on. */
+  readings: (sinceSec: number) => Promise<Record<string, NewsReading>>
   /** Books a stopped paper executor's result into the paper account. */
   settle: (executor: ExecutorConfig, nowSec: number) => Promise<unknown>
   notify: (title: string, body: string) => void
@@ -157,9 +164,10 @@ export async function openWatchPaperTrade(
   const plan = planWatchPaperTrade({ config: watchPaper, risk: healPaperRisk(before.paperRisk), event, decision, nowSec: deps.nowSec(), lastPrice })
   if (!plan.ok) return { opened: false, text: `No paper trade: ${plan.reason}` }
 
-  // The market it would enter, live (shared/liveMarket.ts): with no fresh price, or a spread wider
-  // than a trade is entered at, none is opened. Looked at before a second look is asked for, so that
-  // the reviewer is not asked about a trade that could not be opened.
+  // The market it would enter, live (shared/liveMarket.ts): with no fresh price, a spread wider than
+  // a trade is entered at, or a best level that cannot hold the stake, none is opened; nor against
+  // major news on the coin (shared/paperNewsBlock.ts). Looked at before a second look is asked for,
+  // so that the reviewer is not asked about a trade that could not be opened.
   const readBook = async (): Promise<LiveBook | null> => {
     try {
       return await deps.liveBook(event.exchange, event.symbol)
@@ -167,7 +175,8 @@ export async function openWatchPaperTrade(
       return null
     }
   }
-  const unfit = livePaperBlock(await readBook(), deps.nowSec() * 1000)
+  const first = await readBook()
+  const unfit = livePaperBlock(first, deps.nowSec() * 1000) ?? thinBookBlock(first, plan.side, plan.params.amountQuote) ?? (await newsAgainst(event, plan.side, deps))
   if (unfit !== null) return { opened: false, text: `No paper trade: ${unfit}` }
 
   // A second look, where something about this trade stands out: its REJECT means no trade. A review
@@ -202,6 +211,7 @@ export async function openWatchPaperTrade(
       watchPaperBlock({ config: watchPaper, event, decision, executors: fresh.executors, nowSec: deps.nowSec() }) ??
       paperPauseBlock({ setting: healPaperPause(fresh.paperPause), executors: fresh.executors, source: 'watch' }) ??
       livePaperBlock(book, deps.nowSec() * 1000) ??
+      thinBookBlock(book, plan.side, plan.params.amountQuote) ??
       describeExecutorFunding({
         account: fresh.paperAccount ?? null,
         executors: fresh.executors,
@@ -232,6 +242,19 @@ export async function openWatchPaperTrade(
     // A desktop that cannot show it is not a reason to report a trade that was opened as not.
   }
   return { opened: true, text: `A paper ${plan.side === 'buy' ? 'BUY' : 'SELL'} of ${plan.params.amountQuote} ${event.quoteAsset} was opened, ${describeWatchPaperEntry(plan.params)}.` }
+}
+
+/** News against the trade (shared/paperNewsBlock.ts): a story of major impact naming the coin, from
+ * the reviewer's three hours before the event to now, pointing the other way. Stories or readings
+ * that cannot be read refuse nothing: as with the reviewer, what could not be had leaves the trade
+ * as it was. */
+async function newsAgainst(event: MarketEvent, side: 'buy' | 'sell', deps: WatchPaperDeps): Promise<string | null> {
+  try {
+    const [stories, readings] = await Promise.all([deps.stories(), deps.readings(event.time - REVIEW_LINES.majorNewsSeconds)])
+    return newsAgainstBlock({ event, side, stories, readings, nowSec: deps.nowSec() })
+  } catch {
+    return null
+  }
 }
 
 /** Stops and settles each paper trade of the watch's whose position has closed. Returns the names
@@ -395,6 +418,10 @@ export const watchPaperBrowserDeps: WatchPaperDeps = {
       Math.floor(Date.now() / 1000)
     ),
   review: (event, decision) => window.api.ai.reviewTrade({ event, decision }),
+  // The stories on file, and the analyst's readings of them from the ledger: both free to read.
+  stories: async () => (await window.api.feed.getState()).stories,
+  readings: async (sinceSec) =>
+    newsReadingsOf((await window.api.ai.listCalls({ source: 'addition', promptVersion: AI_ADDITION_PROMPT_VERSIONS.news, sinceSec, limit: 1000 })).rows),
   // Not kept in Inventory (keepPosition is false), so nothing was handed over and the whole
   // result is cash.
   settle: (executor, nowSec) => settleExecutorOnStop({ executor, handedOver: { held: null, realizedPnl: 0 }, now: nowSec }),

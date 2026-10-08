@@ -217,6 +217,19 @@ export function livePaperBlock(book: LiveBook | null, nowMs: number): string | n
   return null
 }
 
+/** Why a paper trade the watch would open now is refused on the book behind it, or null: the best
+ * level a fill would take (the ask for a buy, the bid for a sell) worth less, in the quote, than the
+ * stake. A liquid pair's best level holds thousands; a thin one can hold less than one small trade,
+ * and a fill there would go through the levels after it (the document's §25, "book liquidity
+ * disappeared"). With no book, livePaperBlock has said so. Only ever opens less. */
+export function thinBookBlock(book: LiveBook | null, side: ExecutorSide, amountQuote: number): string | null {
+  if (book === null) return null
+  const price = fillPrice(book, side)
+  const held = price * (side === 'buy' ? book.askQty : book.bidQty)
+  if (!Number.isFinite(held) || held >= amountQuote) return null
+  return `The ${side === 'buy' ? 'ask' : 'bid'} holds ${short(held)} in the quote, less than the ${short(amountQuote)} it would take, so a fill would go through the book.`
+}
+
 /** The 1-minute candles kept for a pair, with one from the stream folded in: the minute replaced if
  * it is there, added if it is new; the last `keep` kept. */
 export function foldMinute(minutes: LiveMinute[], minute: LiveMinute, keep: number): LiveMinute[] {
