@@ -5,7 +5,7 @@ import { describeDecider } from '../../shared/aiPanel'
 import type { ExecutorConfig, PaperAccount } from '../../shared/ipc'
 import { MAX_SPREAD_PCT, STALE_PRICE_MS } from '../../shared/liveMarket'
 import { calibratedWinRate, describeExpectedValue, tradeExpectedValue, type WatchOutcome } from '../../shared/expectedValue'
-import { describeEventType } from '../../shared/marketEvent'
+import { describeEventCause, describeEventStatus, describeEventType, type EventLife } from '../../shared/marketEvent'
 import { describeEventType as describeStoryType, type NewsFeedState } from '../../shared/newsFeed'
 import { SIGNAL_WEIGHTS, storiesAbout } from '../../shared/opportunityScore'
 import { correlatedCap, correlatedOut } from '../../shared/paperExposure'
@@ -256,15 +256,20 @@ function Row({
   index,
   open,
   onToggle,
-  muted
+  muted,
+  life
 }: {
   row: OpportunityTableRow
   index: number
   open: boolean
   onToggle: () => void
   muted: boolean
+  /** Where the event stands in its life (shared/marketEvent.ts), when the scanner still lists it. */
+  life?: EventLife
 }): React.JSX.Element {
   const { event } = row.item
+  const lifeWord = life === undefined ? null : describeEventStatus(life.status)
+  const lifeColor = life === undefined ? 'var(--text-muted)' : life.status === 'confirmed' || life.status === 'active' ? 'var(--up)' : life.status === 'weakening' ? 'var(--gold)' : 'var(--text-muted)'
   const day = row.research === null ? null : signedPct(row.research.change24hPct)
   const week = row.research?.change7dPct == null ? null : signedPct(row.research.change7dPct)
   const story = row.signal.story
@@ -297,6 +302,12 @@ function Row({
       <td style={{ ...cellStyle, color: week?.color }}>{week?.text ?? '—'}</td>
       <td style={{ ...cellStyle, color: event.direction === 'up' ? 'var(--up)' : event.direction === 'down' ? 'var(--down)' : 'var(--text-secondary)' }}>
         {describeEventType(event.type)} <span style={{ color: 'var(--text-muted)' }}>{utcClock(event.time)}</span>
+        {lifeWord !== null && (
+          <span style={{ color: lifeColor, fontSize: '0.68rem', fontWeight: 700, marginLeft: '0.35rem' }} title={lifeWord.detail} data-testid="event-life">
+            {lifeWord.word}
+          </span>
+        )}
+        {event.cause !== undefined && <span style={{ color: 'var(--text-muted)', fontSize: '0.68rem', marginLeft: '0.35rem' }}>· {describeEventCause(event.cause)}</span>}
       </td>
       <td style={{ ...cellStyle, color: story === null ? 'var(--text-muted)' : 'var(--text-primary)' }} title={story?.title}>
         {story === null ? '—' : `${describeStoryType(story.eventType)} ${story.impact}`}
@@ -337,7 +348,8 @@ export function OpportunityTableCard({
   risk,
   confirm = false,
   outcomes,
-  onPaperTrade
+  onPaperTrade,
+  lives = {}
 }: {
   onOffer: OpportunityTableRow[]
   recent: OpportunityTableRow[]
@@ -349,13 +361,15 @@ export function OpportunityTableCard({
   /** The watch's closed paper trades with their calls, for each row's expected value. */
   outcomes?: WatchOutcome[]
   onPaperTrade?: (item: EventFeedItem, answer: EventAnswer) => void
+  /** Where each recent event stands in its life, by id (the scanner's state). */
+  lives?: Record<string, EventLife>
 }): React.JSX.Element {
   const [open, setOpen] = useState<string | null>(null)
   const toggle = (id: string): void => setOpen((current) => (current === id ? null : id))
   const body = (rows: OpportunityTableRow[], offset: number, muted: boolean): React.JSX.Element[] =>
     rows.map((row, index) => (
       <Fragment key={row.item.event.id}>
-        <Row row={row} index={offset + index} open={open === row.item.event.id} onToggle={() => toggle(row.item.event.id)} muted={muted} />
+        <Row row={row} index={offset + index} open={open === row.item.event.id} onToggle={() => toggle(row.item.event.id)} muted={muted} life={lives[row.item.event.id]} />
         {open === row.item.event.id && (
           <tr>
             <td colSpan={COLUMNS.length} style={{ ...cellStyle, whiteSpace: 'normal', background: 'var(--bg-app)' }}>

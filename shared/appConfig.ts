@@ -20,7 +20,21 @@ import { FEE_RATE, SLIPPAGE_RATE } from './fees'
 import { HARD_LIMITS } from './hardLimits'
 import { healKeepRunning } from './keepRunning'
 import { LIVE_GAP_SECONDS, LIVE_MARKET_VERSION, MAX_SPREAD_PCT, STALE_PRICE_MS } from './liveMarket'
-import { EVENT_CANDIDATE_SCORE, EVENT_COOLDOWN_SECONDS, EVENT_DETECTOR_VERSION, EVENT_MAX_RANKED, EVENT_URGENT_SCORE } from './marketEvent'
+import {
+  EVENT_ACTIVE_PASSES,
+  EVENT_CANDIDATE_SCORE,
+  EVENT_CAUSE_NEWS_IMPACT,
+  EVENT_CAUSE_NEWS_SECONDS,
+  EVENT_CAUSE_ORGANIC_VOLUME,
+  EVENT_CONFIRM_VOLUME_RATIO,
+  EVENT_COOLDOWN_SECONDS,
+  EVENT_DETECTOR_VERSION,
+  EVENT_EXPIRY_SECONDS,
+  EVENT_MAX_RANKED,
+  EVENT_URGENT_SCORE,
+  FINGERPRINT_BUCKET_SECONDS,
+  FINGERPRINT_MOVE_STEP_PCT
+} from './marketEvent'
 import type { ScannerConfig } from './marketScanner'
 import { healNewsConfig } from './news'
 import { OPPORTUNITY_SCORE_VERSION } from './opportunityScore'
@@ -63,7 +77,16 @@ export const ENGINE_CONSTANTS = {
     candidateScore: EVENT_CANDIDATE_SCORE,
     urgentScore: EVENT_URGENT_SCORE,
     cooldownSeconds: EVENT_COOLDOWN_SECONDS,
-    maxRanked: EVENT_MAX_RANKED
+    maxRanked: EVENT_MAX_RANKED,
+    /** The event's life, its fingerprint and its cause (the V5 document, §19-21; since 8 October 2026). */
+    activePasses: EVENT_ACTIVE_PASSES,
+    expirySeconds: EVENT_EXPIRY_SECONDS,
+    confirmVolumeRatio: EVENT_CONFIRM_VOLUME_RATIO,
+    causeNewsSeconds: EVENT_CAUSE_NEWS_SECONDS,
+    causeNewsImpact: EVENT_CAUSE_NEWS_IMPACT,
+    causeOrganicVolume: EVENT_CAUSE_ORGANIC_VOLUME,
+    fingerprintBucketSeconds: FINGERPRINT_BUCKET_SECONDS,
+    fingerprintMoveStepPct: FINGERPRINT_MOVE_STEP_PCT
   },
   opportunityScore: { version: OPPORTUNITY_SCORE_VERSION },
   liveMarket: { version: LIVE_MARKET_VERSION, maxSpreadPct: MAX_SPREAD_PCT, stalePriceMs: STALE_PRICE_MS, gapSeconds: LIVE_GAP_SECONDS },

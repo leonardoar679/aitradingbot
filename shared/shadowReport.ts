@@ -73,7 +73,7 @@ export interface SessionReportInput {
   /** When the app started: the stream's log reaches back no further. The alerts and the refusals
    * are on file since 8 October 2026 and reach back as far as the span does. */
   appStartedSec: number
-  events: Pick<MarketEvent, 'id' | 'time' | 'band'>[]
+  events: (Pick<MarketEvent, 'id' | 'time' | 'band'> & { fingerprint?: string })[]
   calls: Pick<AiCallRecord, 'at' | 'source' | 'status' | 'model' | 'eventId' | 'recommendation' | 'confidence' | 'detail' | 'usage'>[]
   executors: ExecutorConfig[]
   /** The limits as they are set now. Each trade is checked against these. */
@@ -416,15 +416,23 @@ export function sessionReportOf(input: SessionReportInput): SessionReport {
     executor.watch !== undefined ? `event ${executor.watch.eventId}` : `${executor.newsRule?.ticker ?? '?'} on announcement ${executor.newsRule?.articleId ?? '?'}`
   const byKey = new Map<string, ExecutorConfig[]>()
   for (const executor of own) byKey.set(keyOf(executor), [...(byKey.get(keyOf(executor)) ?? []), executor])
+  // And, since 8 October 2026 (V5 Stage 4), two events of one fingerprint (shared/marketEvent.ts
+  // eventFingerprint): one move raised twice. Events recorded before carry none and are not counted.
+  const byPrint = new Map<string, number>()
+  for (const event of events) if (event.fingerprint !== undefined) byPrint.set(event.fingerprint, (byPrint.get(event.fingerprint) ?? 0) + 1)
+  const printed = events.filter((event) => event.fingerprint !== undefined).length
   gates.push(
     gate(
       'duplicates',
-      'Duplicate trades for one event',
+      'Duplicate trades for one event, or events of one fingerprint',
       false,
-      [...byKey.entries()].filter(([, group]) => group.length > 1 && group.some((executor) => within(executor.createdAt, input))).map(([key, group]) => `${group.length} for ${key}`),
-      opened.length,
-      'paper trades opened',
-      opened.length === 0 ? 'No paper trade of the app opened in this span.' : `${eachOf(opened.length, 'trade', 'trades')} was the only one for its event.`
+      [
+        ...[...byKey.entries()].filter(([, group]) => group.length > 1 && group.some((executor) => within(executor.createdAt, input))).map(([key, group]) => `${group.length} for ${key}`),
+        ...[...byPrint.entries()].filter(([, count]) => count > 1).map(([print, count]) => `${count} events of fingerprint ${print}`)
+      ],
+      opened.length + printed,
+      'paper trades opened and events raised',
+      `${opened.length === 0 ? 'No paper trade of the app opened in this span.' : `${eachOf(opened.length, 'trade', 'trades')} was the only one for its event.`} ${printed === 0 ? 'No event in the span carries a fingerprint.' : `No two of the ${printed} events share a fingerprint.`}`
     )
   )
 

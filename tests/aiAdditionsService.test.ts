@@ -41,7 +41,7 @@ vi.mock('../electron/services/marketService', () => ({
 
 const A = 'openai/gpt-5-mini'
 const NOW = Date.parse('2026-10-06T12:00:00Z') / 1000
-const ON: AiWatchConfig = { enabled: true, models: [A], maxEventsPerDay: 5, minBand: 'urgent', firstModelGates: false, confirmLive: false }
+const ON: AiWatchConfig = { enabled: true, models: [A], maxEventsPerDay: 5, minBand: 'urgent', firstModelGates: false, confirmLive: false, askAt: 'detected' }
 const READING: NewsReading = { ticker: 'SOL', relationship: 'DIRECT', direction: 'up', impact: 72, horizon: '4h', confidence: 0.7, pricedIn: false, reasons: 'A large listing.' }
 const CONCLUSION: WhyConclusion = { conclusion: 'The futures listing drew buyers, on three times the usual volume.', cites: ['story:a'], confidence: 0.6 }
 const VERDICT: ReviewVerdict = { verdict: 'REJECT', confidence: 0.7, reason: 'Another model sells it, and the move is overextended.' }

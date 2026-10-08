@@ -1,10 +1,10 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Candle, SymbolInfo, Ticker24h } from '../shared/ipc'
 import type { NewsItem } from '../shared/news'
-import { EVENT_LOOKBACK_BARS } from '../shared/marketEvent'
+import { EVENT_LOOKBACK_BARS, eventFingerprint } from '../shared/marketEvent'
 import {
   SCAN_HISTORY_MAX_DAYS,
   eventMonthKey,
@@ -24,6 +24,9 @@ vi.mock('../electron/services/noticeService', () => ({
   tell: (notice: { title: string; body: string; extra: { kind: string; thread?: string } }) => void told.push(notice),
   tellNotice: async () => true
 }))
+// The feed's stories, for the cause of an event (shared/marketEvent.ts eventCauseOf): none here.
+const feed = vi.hoisted(() => ({ stories: [] as { publishedAt: number; impact: number; assets: { ticker: string; relationship: 'DIRECT' | 'INDIRECT' }[] }[] }))
+vi.mock('../electron/services/newsFeedService', () => ({ getNewsFeedState: () => ({ stories: feed.stories }) }))
 
 // The exchange, faked at the one seam the scanner reaches it through.
 const market = vi.hoisted(() => ({
@@ -481,6 +484,91 @@ describe('the setting', () => {
   })
 })
 
+describe("the event's life on file (8 October 2026)", () => {
+  const statusOnFile = (): { kind: string; eventId: string; status: string; passes: number; at: number }[] => {
+    const folder = join(dir, 'marketEvents')
+    return readdirSync(folder)
+      .filter((name) => name.startsWith('status-'))
+      .flatMap((name) => readFileSync(join(folder, name), 'utf-8').split('\n').filter(Boolean).map((line) => JSON.parse(line) as { kind: string; eventId: string; status: string; passes: number; at: number }))
+  }
+  /** The minute after: the pump is over, the price is holding, the reading is still high. */
+  const aMinuteLater = (): void => {
+    market.candles.set('PUMPUSDT', served(thenFlat(withMove({ pct: 3, volume: 8 }, LEAD, 7), 1)))
+    market.candles.set('AAAUSDT', served(quiet(LEAD + 16, 11)))
+    market.candles.set('BBBUSDT', served(quiet(LEAD + 16, 13)))
+  }
+
+  it('begins detected at the raise, written down, with the cause and the fingerprint on the event', async () => {
+    const { scanOnce } = await scanner()
+    const state = await scanOnce(NOW_MS)
+    const event = state.recentEvents[0]
+    expect(state.lives[event.id]).toEqual({ status: 'detected', passesInBand: 0, at: event.time })
+    expect(event.cause).toBe('organic')
+    expect(event.fingerprint).toBe(eventFingerprint(event))
+    expect(statusOnFile()).toEqual([{ kind: 'status', eventId: event.id, status: 'detected', passes: 0, at: event.time, score: event.score, m15Pct: event.returnsPct.m15 }])
+    // Written on the event's record as well.
+    expect(JSON.parse(eventsOnFile()[0])).toMatchObject({ cause: 'organic', fingerprint: event.fingerprint })
+  })
+
+  it('is confirmed by the next pass that reads the pair in the band again, written down once more', async () => {
+    const { scanOnce } = await scanner()
+    const first = await scanOnce(NOW_MS)
+    const event = first.recentEvents[0]
+    aMinuteLater()
+    const second = await scanOnce(NOW_MS + 60_000)
+    expect(second.recentEvents).toHaveLength(1)
+    expect(second.lives[event.id]).toEqual({ status: 'confirmed', passesInBand: 1, at: event.time + 60 })
+    expect(statusOnFile().map((line) => line.status)).toEqual(['detected', 'confirmed'])
+    // The same reading again moves nothing, and writes nothing.
+    await scanOnce(NOW_MS + 60_000)
+    expect(statusOnFile()).toHaveLength(2)
+  })
+
+  it('reads the lives back after a restart, from the status file, and carries on from there', async () => {
+    const { scanOnce } = await scanner()
+    const event = (await scanOnce(NOW_MS)).recentEvents[0]
+    aMinuteLater()
+    await scanOnce(NOW_MS + 60_000)
+    vi.resetModules()
+    // Two minutes on: the price still holding. Confirmed once before the restart, this pass is the
+    // second in the band -- not the first, which it would be had the life begun again at detected.
+    market.candles.set('PUMPUSDT', served(thenFlat(withMove({ pct: 3, volume: 8 }, LEAD, 7), 2)))
+    market.candles.set('AAAUSDT', served(quiet(LEAD + 17, 11)))
+    market.candles.set('BBBUSDT', served(quiet(LEAD + 17, 13)))
+    const restarted = await scanner()
+    const state = await restarted.scanOnce(NOW_MS + 120_000)
+    expect(state.lives[event.id]).toEqual({ status: 'confirmed', passesInBand: 2, at: event.time + 120 })
+  })
+
+  it("expires an earlier event of the pair when a newer one takes its place: an announcement's, here, which is news by construction", async () => {
+    const delisting: NewsItem = { id: 990011, catalog: 161, title: 'Binance Will Delist PUMP on 2026-10-20', releaseSec: LAST + 110, seenAt: LAST + 123, category: 'DELISTING', tickers: ['PUMP'] }
+    const { scanOnce, raiseNewsEvent } = await scanner()
+    const event = (await scanOnce(NOW_MS)).recentEvents[0]
+    aMinuteLater()
+    const news = await raiseNewsEvent(delisting, 'PUMP', NOW_MS + 60_000)
+    expect(news).not.toBeNull()
+    expect(news?.cause).toBe('news')
+    const state = await scanner().then((module) => module.getScannerState())
+    expect(state.lives[event.id].status).toBe('expired')
+    expect(state.lives[news?.id ?? '']).toEqual({ status: 'detected', passesInBand: 0, at: news?.time })
+    expect(statusOnFile().map((line) => [line.eventId, line.status])).toEqual([
+      [event.id, 'detected'],
+      [event.id, 'expired'],
+      [news?.id, 'detected']
+    ])
+  })
+
+  it('reads a story on the coin just before as the cause', async () => {
+    feed.stories = [{ publishedAt: (LAST + 60) - 600, impact: 70, assets: [{ ticker: 'PUMP', relationship: 'DIRECT' }] }]
+    try {
+      const { scanOnce } = await scanner()
+      expect((await scanOnce(NOW_MS)).recentEvents[0].cause).toBe('news')
+    } finally {
+      feed.stories = []
+    }
+  })
+})
+
 describe('events on file', () => {
   it('lists them newest first, filtered, and counts lines it could not read', async () => {
     mkdirSync(join(dir, 'marketEvents'), { recursive: true })
@@ -556,7 +644,8 @@ describe('a scan of history', () => {
     market.candles.set('PUMPUSDT', served(pump.filter((bar) => bar.time < first.time)))
     const live = (await scanOnce(first.time * 1000 + 5_000)).recentEvents[0]
     expect(live.time).toBe(first.time)
-    expect({ ...live, live: null }).toEqual(first)
+    // The cause is read at a live raise, from the feed as it stood then; a scan of history has none.
+    expect({ ...live, live: null, cause: undefined }).toEqual(first)
   })
 
   it('reports a pair it could not read and scans the rest', async () => {

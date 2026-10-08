@@ -7,22 +7,29 @@ import { readConfigFile } from './configFiles'
 import {
   EVENT_BAR_SECONDS,
   EVENT_COOLDOWN_SECONDS,
+  EVENT_EXPIRY_SECONDS,
   EVENT_LOOKBACK_BARS,
   candidateScore,
   detectEvents,
+  eventCauseOf,
   isAtLeast,
   marketMoveOf,
+  nextEventLife,
   raisesEvent,
   rankCandidates,
   readEventAt,
+  startedLife,
   toMarketEvent,
   toNewsEvent,
   type EventBand,
+  type EventLife,
   type EventReading,
+  type EventStatusLine,
   type MarketEvent,
   type RaisedEvent
 } from '../../shared/marketEvent'
 import { MARKET_REFERENCE_SYMBOLS } from '../../shared/aiEventMarket'
+import { getNewsFeedState } from './newsFeedService'
 import {
   DEFAULT_SCANNER_CONFIG,
   SCANNER_EXCHANGE,
@@ -32,6 +39,7 @@ import {
   isScannerUniverseSize,
   matchesMarketEventFilter,
   nextPassDelayMs,
+  parseEventStatusLines,
   parseMarketEventLines,
   pickUniverse,
   spreadPct,
@@ -98,6 +106,11 @@ let universeSize = 0
 const pairs = new Map<string, ScannerPair>()
 /** Newest first. */
 let recentEvents: MarketEvent[] = []
+/** Where each recent event stands in its life (shared/marketEvent.ts), by id. Advanced every pass
+ * from the readings the pass made; each change appended to the month's status file; read back at
+ * start for the events on file. An event raised more than EVENT_LIFE_KEPT_SECONDS ago is dropped. */
+const lives = new Map<string, EventLife>()
+const EVENT_LIFE_KEPT_SECONDS = 2 * 3600
 /** The read of what is on file, shared by everyone who asks while it is under way. */
 let recentLoading: Promise<void> | null = null
 const raised = new Map<string, RaisedEvent[]>()
@@ -156,7 +169,8 @@ function snapshot(current: ScannerConfig): ScannerState {
     failed,
     error,
     pairs: [...pairs.values()].sort((a, b) => b.score - a.score || a.symbol.localeCompare(b.symbol)),
-    recentEvents: [...recentEvents]
+    recentEvents: [...recentEvents],
+    lives: Object.fromEntries([...lives].map(([id, life]) => [id, { ...life }]))
   }
 }
 
@@ -185,12 +199,13 @@ function remember(event: MarketEvent): void {
  * it opens, so one of them showed no events, and with the scanner off nothing ever corrected it.
  * A read that fails is logged and tried again by the next caller, rather than leaving the page
  * without its history for the rest of the session. */
-async function loadRecent(): Promise<void> {
+async function loadRecent(nowSec: number = Math.floor(Date.now() / 1000)): Promise<void> {
   if (recentLoading === null) {
     recentLoading = listMarketEvents({ limit: RECENT_EVENTS_KEPT }).then(
-      (page) => {
+      async (page) => {
         recentEvents = page.rows
         for (const event of [...page.rows].reverse()) remember(event)
+        await loadLives(nowSec)
       },
       (failure: unknown) => {
         recentLoading = null
@@ -199,6 +214,93 @@ async function loadRecent(): Promise<void> {
     )
   }
   return recentLoading
+}
+
+function statusPath(atSec: number): string {
+  return join(eventsDir(), `status-${eventMonthKey(atSec)}.jsonl`)
+}
+
+/** A status set, appended to the month's status file with the reading that set it. */
+async function appendStatus(event: Pick<MarketEvent, 'id'>, life: EventLife, score: number, m15Pct: number): Promise<void> {
+  const line: EventStatusLine = { kind: 'status', eventId: event.id, status: life.status, passes: life.passesInBand, at: life.at, score: sig(score), m15Pct: sig(m15Pct) }
+  await appendJsonLine(statusPath(life.at), line)
+}
+
+/** The lives of the recent events, from the status files of this month and the last: the latest
+ * line of each event raised in the last two hours, or detected where none was written. `nowSec`
+ * is the clock the first pass reads against, so a test can say what time it is. */
+async function loadLives(nowSec: number): Promise<void> {
+  const latest = new Map<string, EventStatusLine>()
+  for (const atSec of [nowSec - 32 * 86_400, nowSec]) {
+    let text = ''
+    try {
+      text = await readFile(statusPath(atSec), 'utf-8')
+    } catch {
+      continue
+    }
+    for (const line of parseEventStatusLines(text)) {
+      const known = latest.get(line.eventId)
+      if (known === undefined || line.at >= known.at) latest.set(line.eventId, line)
+    }
+  }
+  for (const event of recentEvents) {
+    if (nowSec - event.time > EVENT_LIFE_KEPT_SECONDS) continue
+    const line = latest.get(event.id)
+    lives.set(event.id, line === undefined ? startedLife(event) : { status: line.status, passesInBand: line.passes, at: line.at })
+  }
+}
+
+/** The feed's stories as the cause of an event needs them; none when the feed is not up. */
+function causeStories(): Parameters<typeof eventCauseOf>[1] {
+  try {
+    return getNewsFeedState().stories.map((story) => ({ publishedAt: story.publishedAt, impact: story.impact, assets: story.assets }))
+  } catch {
+    return []
+  }
+}
+
+/** An event's life begun: an earlier event of the pair still alive is over (this one takes its
+ * place), and the new one is detected, each written to the status file. */
+async function beginLife(event: MarketEvent): Promise<void> {
+  for (const [id, life] of lives) {
+    if (life.status === 'expired') continue
+    const earlier = recentEvents.find((entry) => entry.id === id)
+    if (earlier === undefined || earlier.symbol !== event.symbol || earlier.id === event.id) continue
+    const ended: EventLife = { ...life, status: 'expired', at: event.time }
+    lives.set(id, ended)
+    await appendStatus(earlier, ended, earlier.score, earlier.returnsPct.m15)
+  }
+  const life = startedLife(event)
+  lives.set(event.id, life)
+  await appendStatus(event, life, event.score, event.returnsPct.m15)
+}
+
+/** Every live event taken a pass further by what the pass read of its pair (nextEventLife). An
+ * event raised this very pass stays detected, since its reading is no later than its raise; one
+ * whose pair the pass did not read expires only by the clock; a change of status is written down. */
+async function advanceLives(fresh: { pair: WatchedPair; reading: EventReading }[], currentMinute: number): Promise<void> {
+  const readings = new Map(fresh.map((entry) => [entry.pair.symbol, entry.reading]))
+  for (const [id, life] of lives) {
+    const event = recentEvents.find((entry) => entry.id === id)
+    if (event === undefined || currentMinute - event.time > EVENT_LIFE_KEPT_SECONDS) {
+      lives.delete(id)
+      continue
+    }
+    if (life.status === 'expired') continue
+    const reading = readings.get(event.symbol)
+    if (reading === undefined) {
+      if (currentMinute - event.time >= EVENT_EXPIRY_SECONDS) {
+        const ended: EventLife = { ...life, status: 'expired', at: currentMinute }
+        lives.set(id, ended)
+        await appendStatus(event, ended, event.score, event.returnsPct.m15)
+      }
+      continue
+    }
+    const next = nextEventLife(event, life, reading)
+    if (next === life) continue
+    lives.set(id, next)
+    if (next.status !== life.status) await appendStatus(event, next, reading.score, reading.returnsPct.m15)
+  }
 }
 
 async function inBatches<T>(items: T[], concurrency: number, work: (item: T) => Promise<void>): Promise<void> {
@@ -243,7 +345,7 @@ export async function scanOnce(nowMs: number = Date.now()): Promise<ScannerState
   try {
     const source = scanSourceFor(SCANNER_EXCHANGE)
     const nowSec = Math.floor(nowMs / 1000)
-    await loadRecent()
+    await loadRecent(nowSec)
 
     if (universeSize !== current.universeSize || nowSec - universeAt >= UNIVERSE_MAX_AGE_SEC) {
       const [symbols, tickers] = await Promise.all([listSymbols(SCANNER_EXCHANGE), source.fetchAllTickers24h()])
@@ -314,10 +416,15 @@ export async function scanOnce(nowMs: number = Date.now()): Promise<ScannerState
       const spread = spreads.get(pair.symbol) ?? null
       return { detectedAt, quoteVolume24h: Math.round(pair.quoteVolume24h), spreadPct: spread === null ? null : sig(spread), candidateScore: sig(score), rank }
     }
+    const stories = causeStories()
     const record = async (event: MarketEvent): Promise<void> => {
+      // What the move looks like it is of, read at the raise from what is already known: shown,
+      // never given to a model.
+      event.cause = eventCauseOf(event, stories)
       remember(event)
       recentEvents = [event, ...recentEvents].slice(0, RECENT_EVENTS_KEPT)
       await appendJsonLine(join(eventsDir(), `events-${eventMonthKey(event.time)}.jsonl`), event)
+      await beginLife(event)
     }
     let marketEventId: string | null = null
     if (moveAllowed && move !== null && btc !== null) {
@@ -340,6 +447,8 @@ export async function scanOnce(nowMs: number = Date.now()): Promise<ScannerState
       )
       await record(event)
     }
+    // The events raised before this pass, taken a pass further by what it read of their pairs.
+    await advanceLives(fresh, currentMinute)
 
     failed = failures
     error = universe.length > 0 && failures === universe.length ? `No pair could be read. ${lastFailure}` : null
@@ -395,7 +504,7 @@ export async function raiseNewsEvent(item: NewsItem, ticker: string, nowMs: numb
   const type = newsEventKind(item)
   if (type === null) return null
   const current = await loadConfig()
-  await loadRecent()
+  await loadRecent(Math.floor(nowMs / 1000))
   const symbol = `${ticker}USDT`
   const pair = (await listSymbols(SCANNER_EXCHANGE)).find((entry) => entry.symbol === symbol)
   if (pair === undefined) return null
@@ -413,9 +522,12 @@ export async function raiseNewsEvent(item: NewsItem, ticker: string, nowMs: numb
     type
   )
   if (recentEvents.some((existing) => existing.id === event.id)) return null
+  // An announcement's event is news by construction (shared/marketEvent.ts eventCauseOf).
+  event.cause = eventCauseOf(event, [])
   remember(event)
   recentEvents = [event, ...recentEvents].slice(0, RECENT_EVENTS_KEPT)
   await appendJsonLine(join(eventsDir(), `events-${eventMonthKey(event.time)}.jsonl`), event)
+  await beginLife(event)
   notify(current)
   return event
 }

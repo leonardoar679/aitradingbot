@@ -113,6 +113,7 @@ export function WatchCard({
   const [band, setBand] = useState<AiWatchBand>(watch.minBand)
   const [gates, setGates] = useState(watch.firstModelGates)
   const [confirmLive, setConfirmLive] = useState(watch.confirmLive)
+  const [askAt, setAskAt] = useState<AiWatchConfig['askAt']>(watch.askAt)
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const [activity, setActivity] = useState<WatchActivity>(getWatchActivity())
@@ -145,7 +146,7 @@ export function WatchCard({
         setProblem('The scanner has not raised an event yet, so there is no question to price a call on. Switch the scanner on under Settings › Market, and switch the watch on once it has raised one.')
         return
       }
-      const next: AiWatchConfig = { enabled: true, models: chosen, maxEventsPerDay: limit, minBand: band, firstModelGates: gates && chosen.length > 1, confirmLive }
+      const next: AiWatchConfig = { enabled: true, models: chosen, maxEventsPerDay: limit, minBand: band, firstModelGates: gates && chosen.length > 1, confirmLive, askAt }
       const agreed = window.confirm(
         describeAiWatchCost({
           watch: next,
@@ -170,6 +171,22 @@ export function WatchCard({
     setProblem(null)
     try {
       onConfig(await window.api.ai.setConfig({ watch: { enabled: false } }))
+    } catch (failure) {
+      setProblem(describeError(failure))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** When to ask under a running watch (at the raise, or once confirmed): not a term of its price,
+   * so no second confirmation. */
+  async function setAskAtChoice(choice: AiWatchConfig['askAt']): Promise<void> {
+    if (busy) return
+    setBusy(true)
+    setProblem(null)
+    try {
+      onConfig(await window.api.ai.setConfig({ watch: { askAt: choice } }))
+      setAskAt(choice)
     } catch (failure) {
       setProblem(describeError(failure))
     } finally {
@@ -253,6 +270,19 @@ export function WatchCard({
             <input type="checkbox" aria-label="Tell me when a paper trade is ready to confirm as a real order" checked={watch.confirmLive} disabled={busy} onChange={() => void setConfirm(!watch.confirmLive)} />
             CONFIRM: tell me when a paper BUY it opens is ready to confirm as a real order, sized by my risk setting. I place it; it never does.
           </label>
+          <label style={{ ...labelStyle, marginTop: '0.3rem' }}>
+            Ask{' '}
+            <select
+              aria-label="When the watch asks"
+              value={watch.askAt}
+              disabled={busy}
+              onChange={(event) => void setAskAtChoice(event.target.value === 'confirmed' ? 'confirmed' : 'detected')}
+              style={inputStyle()}
+            >
+              <option value="detected">at the raise, within three minutes</option>
+              <option value="confirmed">once the event is confirmed, a pass later</option>
+            </select>
+          </label>
           {activity.last !== null && (
             <p style={{ ...noteStyle, color: activity.last.ok ? 'var(--text-secondary)' : 'var(--down)', marginTop: '0.3rem' }}>
               Last, at {utcClock(activity.last.at)} UTC: {activity.last.text}
@@ -326,6 +356,13 @@ export function WatchCard({
             <label style={labelStyle}>
               <input type="checkbox" aria-label="Tell me when a paper trade is ready to confirm as a real order" checked={confirmLive} disabled={busy} onChange={() => setConfirmLive((on) => !on)} />
               CONFIRM: tell me when a paper BUY it opens is ready to confirm as a real order, sized by my risk setting. I place it; it never does.
+            </label>
+            <label style={labelStyle}>
+              Ask{' '}
+              <select aria-label="When the watch asks" value={askAt} disabled={busy} onChange={(event) => setAskAt(event.target.value === 'confirmed' ? 'confirmed' : 'detected')} style={inputStyle()}>
+                <option value="detected">at the raise, within three minutes</option>
+                <option value="confirmed">once the event is confirmed, a pass later</option>
+              </select>
             </label>
           </div>
           <div style={{ display: 'flex', gap: '0.7rem', alignItems: 'center', flexWrap: 'wrap', marginTop: '0.9rem' }}>

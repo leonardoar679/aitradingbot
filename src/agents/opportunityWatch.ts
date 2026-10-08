@@ -10,8 +10,8 @@ import {
 } from '../../shared/aiOpportunity'
 import { describeDecider } from '../../shared/aiPanel'
 import type { AiSignalDecision } from '../../shared/aiSignal'
-import { AI_WATCH_FRESH_SECONDS, utcMidnight, watchEventIdsToday, watchNotice, watchPausedModels, watchSkipReason, type AiWatchConfig } from '../../shared/aiWatch'
-import { describeEventType, type MarketEvent } from '../../shared/marketEvent'
+import { AI_WATCH_FRESH_SECONDS, WATCH_NOT_CONFIRMED_REASON, utcMidnight, watchEventIdsToday, watchNotice, watchPausedModels, watchSkipReason, type AiWatchConfig } from '../../shared/aiWatch'
+import { describeEventType, type EventLife, type MarketEvent } from '../../shared/marketEvent'
 import { actionableRefusal, breakerNotice, confirmNotice, disagreementNotice, marketEventNotice, tradeBlockedNotice, type NoticeExtra } from '../../shared/notices'
 import { askModels, fetchEventQuestion, type AskModelsResult, type CandleFetch } from './opportunities'
 import { recordPaperRefusal, type PaperRefusal } from './paperRefusals'
@@ -250,7 +250,7 @@ export function unaskedMarketEvent(event: MarketEvent, reason: string, nowSec: n
  *
  * Safe to call again before it resolves -- a pass a minute is the scanner's pace, and a slow
  * model takes longer than that: an event is taken up by exactly one pass. */
-export async function watchPass(events: MarketEvent[], deps: WatchDeps): Promise<WatchPassResult> {
+export async function watchPass(events: MarketEvent[], deps: WatchDeps, lives: Readonly<Record<string, EventLife>> = {}): Promise<WatchPassResult> {
   const result: WatchPassResult = { asked: [], skipped: [], retry: [] }
   if (!events.some((event) => !handled.has(event.id))) return result
 
@@ -291,9 +291,16 @@ export async function watchPass(events: MarketEvent[], deps: WatchDeps): Promise
     // Another pass may have taken it while this one was reading the setting and the ledger.
     if (handled.has(event.id)) continue
     handled.add(event.id)
-    const reason = watchSkipReason(event, watch, { nowSec, takenToday, paused })
+    const reason = watchSkipReason(event, watch, { nowSec, takenToday, paused, lives })
     if (reason !== null) {
       result.skipped.push({ id: event.id, reason })
+      // Waiting for the event to be confirmed (askAt): not finished with, looked at again next pass
+      // while it is still fresh.
+      if (reason === WATCH_NOT_CONFIRMED_REASON) {
+        handled.delete(event.id)
+        result.retry.push(event.id)
+        continue
+      }
       if (unaskedMarketEvent(event, reason, nowSec)) {
         try {
           deps.notify(...noticeArgs(marketEventNotice(event, reason.charAt(0).toLowerCase() + reason.slice(1))))

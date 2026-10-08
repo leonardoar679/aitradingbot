@@ -97,7 +97,7 @@ function rig(input: { executors: ExecutorConfig[]; answer?: (request: ExitCheckR
   const bars: Record<string, Candle[]> = { 'SOLUSDT:1m': pairMinutes(), 'ABCUSDT:1m': pairMinutes().map((candle) => ({ ...candle, close: 200 - candle.close, open: 200 - candle.open, high: 200 - candle.low, low: 200 - candle.high })), 'BTCUSDT:1m': btcMinutes(), 'BTCUSDT:15m': btcQuarters() }
   made.deps = {
     getConfig: async () => ({
-      watch: { enabled: input.watchOn ?? true, models: [MODEL], maxEventsPerDay: 10, minBand: 'urgent', firstModelGates: false, confirmLive: false },
+      watch: { enabled: input.watchOn ?? true, models: [MODEL], maxEventsPerDay: 10, minBand: 'urgent', firstModelGates: false, confirmLive: false, askAt: 'detected' },
       additions: { news: true, why: true, exit: input.exitOn ?? true, review: true }
     }),
     getSettings: async () => ({ executors: input.executors }),

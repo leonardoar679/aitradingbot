@@ -474,8 +474,10 @@ describe('the detector and the version its events are recorded under', () => {
     const hash = createHash('sha256').update(JSON.stringify(found)).digest('hex')
     // events-v2 (8 October 2026) added the market-wide move, a rule over one pass's events; what the
     // detector makes of one pair's candles is unchanged. Later that day every event gained the
-    // detector's version as a field (`detector`), which moved this hash and nothing it finds.
-    expect({ version: EVENT_DETECTOR_VERSION, hash }).toEqual({ version: 'events-v2', hash: '6e6510eeac6d6b917f2dd56b232d09e0fef84b7537e2da378736540eb052a4f6' })
+    // detector's version as a field (`detector`), which moved this hash and nothing it finds; and
+    // with V5 Stage 4 a `fingerprint`, computed from the event's own figures, which moved it again
+    // (from 6e6510eeac6d6b917f2dd56b232d09e0fef84b7537e2da378736540eb052a4f6) and finds nothing new.
+    expect({ version: EVENT_DETECTOR_VERSION, hash }).toEqual({ version: 'events-v2', hash: '0ee63718239d237152745e12b13e3d563abbe0aba3f408f157226a90e51d6c2d' })
   })
 })
 

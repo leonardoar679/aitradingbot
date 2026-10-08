@@ -1040,6 +1040,27 @@ its file switches it off), stays as it was left across restarts, reads the marke
 switched on, and costs one request a pair a minute — sixty pairs take about seven seconds of each
 minute and about 130 of the 6,000 request-weight a minute Binance allows.
 
+**The event's life** (since 8 October 2026; the V5 document's §19–23; V5 Stage 4). An event is
+raised from one closed minute; what the minutes after it do is written down as a status, pass by
+pass, from the same readings the scanner shows (`shared/marketEvent.ts nextEventLife`): DETECTED at
+the raise; CONFIRMED when the next pass reads the pair in the band again the same way, or a breakout
+still beyond its level on 1.5× its usual volume; ACTIVE after two more such passes; WEAKENING when
+the score falls below the watch band or half the move is given back; EXPIRED when all of it is, an
+hour has passed, or a newer event of the pair takes its place. Each change is a line in
+`marketEvents/status-YYYY-MM.jsonl`, read back at start, and the status shows on the event on
+Opportunities and Discovery. It is a reading, never a control: the watch asks at the raise as it
+always did, unless its **Ask** setting says "once the event is confirmed, a pass later"
+(`askAt` on the Watch card, not a term of its price), in which case a detected event is looked at
+again next pass and one that weakened or expired first is not asked; an announcement's event is
+asked at once either way. The Research tab's entry-timing row ("after one confirming bar") is what
+says whether waiting is worth it. Each event also carries a **fingerprint** (the pair, the kind, the
+quarter-hour, the 15-minute move to the 2% step below, the volume to the nearest multiple), and the
+session report's duplicates gate fails two events of one fingerprint; and a **cause**, read at the
+raise and shown, never given to a model: with the market (a market-wide move or part of one),
+news-driven (a story naming the coin directly in the two hours before at impact 45 or more),
+exhaustion (the last five minutes against the move on less than the usual volume), organic (twice
+the usual volume or more), else unknown.
+
 **What an event is worth**, measured before any model was asked about one
 (`research/EVENTS.md`). Every event at candidate or above over three years on four large pairs was
 scored by one fixed trade — entered a minute after the last price the scanner saw, a stop and a

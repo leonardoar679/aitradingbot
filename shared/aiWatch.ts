@@ -3,7 +3,7 @@ import type { AiCallRecord } from './aiLedger'
 import { AI_OPPORTUNITY_MAX_MODELS, describeOpportunitySide, isActionableOpportunity, opportunitySide, opportunityWindow } from './aiOpportunity'
 import { describeDecider, isPanelId } from './aiPanel'
 import { AI_PROVIDER_LABEL, type AiSignalDecision, type AiSignalEstimate } from './aiSignal'
-import { EVENT_MAX_RANKED, describeEventType, isAtLeast, type MarketEvent } from './marketEvent'
+import { EVENT_MAX_RANKED, describeEventType, isAtLeast, type EventLife, type MarketEvent } from './marketEvent'
 
 // THE WATCH: events put to models without a click.
 //
@@ -60,6 +60,11 @@ export interface AiWatchConfig {
    * fill in a real order from the call, sized by the risk setting. A person types the phrase and
    * places it; the watch places nothing, with this on or off. Not a term of the watch's price. */
   confirmLive: boolean
+  /** When an event is put to the models (the V5 document, §19; since 8 October 2026): at the
+   * raise, within three minutes, as always; or once the event is CONFIRMED (shared/marketEvent.ts
+   * nextEventLife), a pass later, so that one minute's move does not spend a question. An
+   * announcement's event is asked at once either way. Not a term of the watch's price. */
+  askAt: 'detected' | 'confirmed'
 }
 
 export const DEFAULT_AI_WATCH: AiWatchConfig = {
@@ -68,8 +73,12 @@ export const DEFAULT_AI_WATCH: AiWatchConfig = {
   maxEventsPerDay: AI_WATCH_DEFAULT_EVENT_LIMIT,
   minBand: 'urgent',
   firstModelGates: false,
-  confirmLive: false
+  confirmLive: false,
+  askAt: 'detected'
 }
+
+/** Why the watch leaves an event for now under `askAt: 'confirmed'`: looked at again next pass. */
+export const WATCH_NOT_CONFIRMED_REASON = 'It is not confirmed yet.'
 
 export function isAiWatchEventLimit(value: unknown): value is (typeof AI_WATCH_EVENT_LIMITS)[number] {
   return (AI_WATCH_EVENT_LIMITS as readonly unknown[]).includes(value)
@@ -97,7 +106,9 @@ export function healAiWatch(value: unknown, enabledModels: string[]): AiWatchCon
     minBand: raw.minBand === 'candidate' ? 'candidate' : 'urgent',
     firstModelGates: raw.firstModelGates === true,
     // Off unless switched on; a file written before it existed keeps its watch as it was.
-    confirmLive: raw.confirmLive === true
+    confirmLive: raw.confirmLive === true,
+    // At the raise unless told to wait; a file written before it existed keeps its watch as it was.
+    askAt: raw.askAt === 'confirmed' ? 'confirmed' : 'detected'
   }
 }
 
@@ -107,6 +118,7 @@ export function aiWatchProblem(watch: AiWatchConfig, enabledModels: string[]): s
   if (typeof watch.enabled !== 'boolean') return 'The watch is either on or off'
   if (typeof watch.firstModelGates !== 'boolean') return 'Asking the first model alone is either on or off'
   if (typeof watch.confirmLive !== 'boolean') return 'Ready-to-confirm notices are either on or off'
+  if (watch.askAt !== 'detected' && watch.askAt !== 'confirmed') return 'The watch asks at the raise, or once the event is confirmed'
   if (!Array.isArray(watch.models) || !watch.models.every((model) => typeof model === 'string')) return 'The watch asks a list of models'
   if (watch.models.length > AI_OPPORTUNITY_MAX_MODELS) return `The watch asks at most ${AI_OPPORTUNITY_MAX_MODELS} models`
   if (new Set(watch.models).size !== watch.models.length) return 'The watch was given the same model twice'
@@ -172,11 +184,12 @@ export function describeWatchPause(model: string): string {
 
 /** Why the watch does not take up an event, or null when it does. `takenToday` is the events it
  * has already taken up today, the ones with a call in the air included; `paused` is the models it
- * has stopped asking today. */
+ * has stopped asking today; `lives` is where each recent event stands (the scanner's state), read
+ * when the watch asks at CONFIRMED. */
 export function watchSkipReason(
   event: MarketEvent,
   watch: AiWatchConfig,
-  state: { nowSec: number; takenToday: ReadonlySet<string>; paused?: ReadonlySet<string> }
+  state: { nowSec: number; takenToday: ReadonlySet<string>; paused?: ReadonlySet<string>; lives?: Readonly<Record<string, EventLife>> }
 ): string | null {
   if (!watch.enabled) return 'The watch is off.'
   if (watch.models.length === 0) return 'The watch has no model to ask.'
@@ -193,6 +206,14 @@ export function watchSkipReason(
   if (event.live.rank > EVENT_MAX_RANKED) return `It was not among the strongest ${EVENT_MAX_RANKED} of its minute.`
   if (state.nowSec - event.time > AI_WATCH_FRESH_SECONDS) return `It is more than ${AI_WATCH_FRESH_SECONDS / 60} minutes old.`
   if (!state.takenToday.has(event.id) && state.takenToday.size >= watch.maxEventsPerDay) return `The watch has asked about its ${watch.maxEventsPerDay} events for today.`
+  // Set to wait for the next pass: a detected event is left until it is confirmed (or further),
+  // and looked at again; one that weakened or expired first is simply not asked. An announcement's
+  // event is asked at once: its band is not what it is asked about for.
+  if (watch.askAt === 'confirmed' && event.news === undefined) {
+    const status = state.lives?.[event.id]?.status ?? 'detected'
+    if (status === 'detected') return WATCH_NOT_CONFIRMED_REASON
+    if (status === 'weakening' || status === 'expired') return `It was ${status === 'weakening' ? 'weakening' : 'over'} before it was confirmed.`
+  }
   return null
 }
 

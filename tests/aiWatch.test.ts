@@ -13,10 +13,11 @@ import {
   watchEventIdsToday,
   watchNotice,
   watchPausedModels,
+  WATCH_NOT_CONFIRMED_REASON,
   watchSkipReason,
   type AiWatchConfig
 } from '../shared/aiWatch'
-import type { MarketEvent } from '../shared/marketEvent'
+import type { EventLife, MarketEvent } from '../shared/marketEvent'
 
 const A = 'openai/gpt-5-mini'
 const B = 'mistralai/mistral-small-2603'
@@ -25,7 +26,7 @@ const T = Date.parse('2026-09-10T12:07:00Z') / 1000
 const MIDNIGHT = Date.parse('2026-09-10T00:00:00Z') / 1000
 
 function watch(overrides: Partial<AiWatchConfig> = {}): AiWatchConfig {
-  return { enabled: true, models: [A, B], maxEventsPerDay: 10, minBand: 'urgent', firstModelGates: false, confirmLive: false, ...overrides }
+  return { enabled: true, models: [A, B], maxEventsPerDay: 10, minBand: 'urgent', firstModelGates: false, confirmLive: false, askAt: 'detected', ...overrides }
 }
 
 function event(overrides: Partial<MarketEvent> = {}): MarketEvent {
@@ -108,7 +109,7 @@ describe('healAiWatch', () => {
   it('switches off a watch with a limit, a band or a gate that is not one of the choices', () => {
     expect(healAiWatch(watch({ maxEventsPerDay: 500 }), ENABLED)).toMatchObject({ enabled: false, maxEventsPerDay: 10 })
     expect(healAiWatch({ ...watch(), minBand: 'watch' }, ENABLED)).toMatchObject({ enabled: false, minBand: 'urgent' })
-    expect(healAiWatch({ ...watch(), firstModelGates: 'yes' }, ENABLED)).toMatchObject({ enabled: false, firstModelGates: false, confirmLive: false })
+    expect(healAiWatch({ ...watch(), firstModelGates: 'yes' }, ENABLED)).toMatchObject({ enabled: false, firstModelGates: false, confirmLive: false, askAt: 'detected' })
   })
 })
 
@@ -437,5 +438,35 @@ describe('CONFIRM (8 October 2026)', () => {
   it('must be on or off, and is not a term of the price', () => {
     expect(aiWatchProblem({ ...watch(), confirmLive: 'yes' } as unknown as AiWatchConfig, ENABLED)).toMatch(/on or off/)
     expect(sameWatchTerms(watch(), watch({ confirmLive: true }))).toBe(true)
+  })
+})
+
+describe('Ask at (8 October 2026)', () => {
+  const lives = (status: EventLife['status']): Record<string, EventLife> => ({ [event().id]: { status, passesInBand: status === 'detected' ? 0 : 1, at: T + 60 } })
+  const state = { nowSec: T + 10, takenToday: new Set<string>() }
+
+  it('asks at the raise unless told to wait, and a file written before it existed keeps its watch as it was', () => {
+    expect(DEFAULT_AI_WATCH.askAt).toBe('detected')
+    expect(healAiWatch(watch({ askAt: 'confirmed' }), ENABLED).askAt).toBe('confirmed')
+    for (const stored of ['yes', 1, null, undefined, 'detected']) expect(healAiWatch({ ...watch(), askAt: stored }, ENABLED)).toMatchObject({ enabled: true, askAt: 'detected' })
+  })
+
+  it('is one of two words, and is not a term of the price', () => {
+    expect(aiWatchProblem({ ...watch(), askAt: 'later' } as unknown as AiWatchConfig, ENABLED)).toMatch(/at the raise, or once/)
+    expect(sameWatchTerms(watch(), watch({ askAt: 'confirmed' }))).toBe(true)
+  })
+
+  it('leaves a detected event for the next pass, asks once it is confirmed or active, and not one that weakened or expired first', () => {
+    const waiting = watch({ askAt: 'confirmed' })
+    expect(watchSkipReason(event(), waiting, state)).toBe(WATCH_NOT_CONFIRMED_REASON)
+    expect(watchSkipReason(event(), waiting, { ...state, lives: lives('detected') })).toBe(WATCH_NOT_CONFIRMED_REASON)
+    expect(watchSkipReason(event(), waiting, { ...state, lives: lives('confirmed') })).toBeNull()
+    expect(watchSkipReason(event(), waiting, { ...state, lives: lives('active') })).toBeNull()
+    expect(watchSkipReason(event(), waiting, { ...state, lives: lives('weakening') })).toBe('It was weakening before it was confirmed.')
+    expect(watchSkipReason(event(), waiting, { ...state, lives: lives('expired') })).toBe('It was over before it was confirmed.')
+    // At the raise, the life is not read.
+    expect(watchSkipReason(event(), watch(), { ...state, lives: lives('expired') })).toBeNull()
+    // An announcement's event is asked at once: its band is not what it is asked about for.
+    expect(watchSkipReason(event({ news: { articleId: 1, title: 'Binance Will Delist SOL', releaseSec: T } }), waiting, state)).toBeNull()
   })
 })

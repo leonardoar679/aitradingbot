@@ -10,9 +10,13 @@ import {
   EVENT_MAX_RANKED,
   EVENT_URGENT_SCORE,
   EVENT_WATCH_SCORE,
+  describeEventCause,
+  describeEventStatus,
   describeEventType,
   type EventBand,
+  type EventCause,
   type EventDirection,
+  type EventLife,
   type MarketEvent,
   type MarketEventType
 } from '../../shared/marketEvent'
@@ -132,15 +136,28 @@ function NowTable({ pairs }: { pairs: ScannerPair[] }): React.JSX.Element {
   )
 }
 
-function EventsTable({ events, moves }: { events: MarketEvent[]; moves: Map<string, EventMoves> }): React.JSX.Element {
+/** Where an event stands in its life (shared/marketEvent.ts), and what its move looks like it is of. */
+function LifeCell({ life, cause }: { life: EventLife | undefined; cause: EventCause | undefined }): React.JSX.Element {
+  const status = life === undefined ? null : describeEventStatus(life.status)
+  const color = life === undefined ? 'var(--text-muted)' : life.status === 'active' || life.status === 'confirmed' ? 'var(--up)' : life.status === 'weakening' ? 'var(--gold)' : 'var(--text-muted)'
+  return (
+    <span title={status?.detail}>
+      <span style={{ color, fontWeight: 700 }}>{status?.word ?? '—'}</span>
+      {cause !== undefined && <span style={{ color: 'var(--text-muted)' }}> · {describeEventCause(cause)}</span>}
+    </span>
+  )
+}
+
+function EventsTable({ events, moves, lives }: { events: MarketEvent[]; moves: Map<string, EventMoves>; lives: Record<string, EventLife> }): React.JSX.Element {
   return (
     <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }} data-testid="events-table">
         <thead>
           <tr>
             <th style={headCellStyle}>Time (UTC)</th>
             <th style={headCellStyle}>Pair</th>
             <th style={headCellStyle}>Event</th>
+            <th style={headCellStyle}>Life</th>
             <th style={headCellStyle}>Score</th>
             <th style={headCellStyle}>15m move</th>
             <th style={headCellStyle}>Volume</th>
@@ -170,6 +187,9 @@ function EventsTable({ events, moves }: { events: MarketEvent[]; moves: Map<stri
                 </td>
                 <td style={cellStyle}>
                   <StateBadge type={event.type} band={event.band} direction={event.direction} />
+                </td>
+                <td style={cellStyle}>
+                  <LifeCell life={lives[event.id]} cause={event.cause} />
                 </td>
                 <td style={cellStyle}>{event.score.toFixed(0)}</td>
                 <td style={cellStyle}>
@@ -326,7 +346,7 @@ export function ExplorerPage({
             {events.length === 0 ? (
               <p style={noteStyle}>Nothing has reached the candidate band yet.</p>
             ) : (
-              <EventsTable events={events} moves={moves} />
+              <EventsTable events={events} moves={moves} lives={state?.lives ?? {}} />
             )}
             <p style={{ ...noteStyle, marginTop: '0.8rem' }}>
               A pair is listed when it reaches the candidate band, and again only if it climbs to urgent within half an

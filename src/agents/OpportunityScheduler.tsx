@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import type { MarketEvent } from '../../shared/marketEvent'
+import type { EventLife, MarketEvent } from '../../shared/marketEvent'
 import { watchPass, type WatchDeps } from './opportunityWatch'
 import { openWatchPaperTrade, settleWatchPaperTrades, watchPaperBrowserDeps } from './watchPaperTrade'
 
@@ -38,10 +38,10 @@ export function OpportunityScheduler(): null {
   useEffect(() => {
     let cancelled = false
     let again: ReturnType<typeof setTimeout> | null = null
-    const look = (events: MarketEvent[]): void => {
+    const look = (events: MarketEvent[], lives: Record<string, EventLife> = {}): void => {
       if (cancelled) return
       // A pass that could not read the setting or the ledger asked nothing; the next one tries again.
-      void watchPass(events, deps)
+      void watchPass(events, deps, lives)
         .then((result) => {
           // An event whose candles could not be read is looked at again, once the scanner's events
           // are read afresh, while it is still fresh: the pass will not take up a stale one.
@@ -50,7 +50,7 @@ export function OpportunityScheduler(): null {
             again = null
             void window.api.scanner
               .getState()
-              .then((state) => look(state.recentEvents))
+              .then((state) => look(state.recentEvents, state.lives))
               .catch(() => undefined)
           }, RETRY_MS)
         })
@@ -58,9 +58,9 @@ export function OpportunityScheduler(): null {
     }
     void window.api.scanner
       .getState()
-      .then((state) => look(state.recentEvents))
+      .then((state) => look(state.recentEvents, state.lives))
       .catch(() => undefined)
-    const stop = window.api.scanner.onUpdate((state) => look(state.recentEvents))
+    const stop = window.api.scanner.onUpdate((state) => look(state.recentEvents, state.lives))
     // On its own clock, not the scanner's: a paper trade opened yesterday still has to be closed
     // with the scanner off, and with paper trades themselves since switched off.
     const settle = (): void => {

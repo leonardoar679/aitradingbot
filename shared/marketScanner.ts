@@ -1,5 +1,5 @@
 import type { Exchange, SymbolInfo, Ticker24h } from './ipc'
-import { isAtLeast, isScannablePair, type EventBand, type EventDirection, type MarketEvent, type MarketEventType } from './marketEvent'
+import { EVENT_STATUSES, isAtLeast, isScannablePair, type EventBand, type EventDirection, type EventLife, type EventStatusLine, type MarketEvent, type MarketEventType } from './marketEvent'
 
 // What the scanner watches and what it reports. The detection itself is shared/marketEvent.ts;
 // the loop that fetches the candles is electron/services/marketScannerService.ts. This file is
@@ -76,6 +76,9 @@ export interface ScannerState {
   pairs: ScannerPair[]
   /** Newest first: what this session has raised, and what was on file when it started. */
   recentEvents: MarketEvent[]
+  /** Where each recent event stands in its life (shared/marketEvent.ts nextEventLife), by id; an
+   * event raised more than two hours ago is no longer listed. Since 8 October 2026. */
+  lives: Record<string, EventLife>
 }
 
 export interface MarketEventFilter {
@@ -201,6 +204,34 @@ export function parseMarketEventLines(text: string): { rows: MarketEvent[]; skip
     }
   }
   return { rows, skipped }
+}
+
+/** Reads a status file's text (marketEvents/status-YYYY-MM.jsonl), oldest first, skipping what
+ * does not parse, as the events file is read. */
+export function parseEventStatusLines(text: string): EventStatusLine[] {
+  const out: EventStatusLine[] = []
+  for (const line of text.split('\n')) {
+    if (line.trim() === '') continue
+    try {
+      const row = JSON.parse(line) as Partial<EventStatusLine> | null
+      if (
+        row !== null &&
+        typeof row === 'object' &&
+        row.kind === 'status' &&
+        typeof row.eventId === 'string' &&
+        typeof row.status === 'string' &&
+        (EVENT_STATUSES as readonly string[]).includes(row.status) &&
+        typeof row.at === 'number' &&
+        typeof row.score === 'number' &&
+        typeof row.m15Pct === 'number'
+      ) {
+        out.push({ kind: 'status', eventId: row.eventId, status: row.status, passes: typeof row.passes === 'number' ? row.passes : 0, at: row.at, score: row.score, m15Pct: row.m15Pct })
+      }
+    } catch {
+      // A torn line, skipped like an event's.
+    }
+  }
+  return out
 }
 
 export function matchesMarketEventFilter(event: MarketEvent, filter: MarketEventFilter): boolean {

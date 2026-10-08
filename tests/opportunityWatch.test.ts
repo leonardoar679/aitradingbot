@@ -15,7 +15,7 @@ const C = 'anthropic/claude-haiku-4.5'
 const T = Date.parse('2026-09-10T12:07:00Z') / 1000
 
 function watch(overrides: Partial<AiWatchConfig> = {}): AiWatchConfig {
-  return { enabled: true, models: [A, B], maxEventsPerDay: 10, minBand: 'urgent', firstModelGates: false, confirmLive: false, ...overrides }
+  return { enabled: true, models: [A, B], maxEventsPerDay: 10, minBand: 'urgent', firstModelGates: false, confirmLive: false, askAt: 'detected', ...overrides }
 }
 
 function event(symbol = 'SOLUSDT', overrides: Partial<MarketEvent> = {}, rank = 1): MarketEvent {

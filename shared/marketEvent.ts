@@ -418,6 +418,15 @@ export interface MarketEvent {
    * The reading beside it is the market at the minute the announcement was read, whatever it said.
    * ABSENT on every event the detector raised, so those read back exactly as they were written. */
   news?: { articleId: number; title: string; releaseSec: number }
+  /** What the event is of (eventFingerprint): the pair, the kind, the quarter-hour, the move to
+   * the nearest step and the volume to the nearest multiple, for telling one move raised twice
+   * from two moves. Since 8 October 2026 (V5 Stage 4); absent on events recorded before. */
+  fingerprint?: string
+  /** What the move looks like it is of (eventCauseOf), read when it was raised: news on the coin
+   * just before, the market moving as one, a move running out of volume, a move on its own volume,
+   * or none of those. Since 8 October 2026; absent on events recorded before. A reading, shown and
+   * never given to a model. */
+  cause?: EventCause
 }
 
 function sig(value: number): number {
@@ -467,7 +476,8 @@ export function toMarketEvent(
     moveSigmas: sig(reading.moveSigmas),
     volumeRatio: reading.volumeRatio === null ? null : sig(reading.volumeRatio),
     rangeRatio: reading.rangeRatio === null ? null : sig(reading.rangeRatio),
-    live
+    live,
+    fingerprint: eventFingerprint({ exchange: market.exchange, symbol: market.symbol, type: reading.type, time: reading.time, returnsPct: reading.returnsPct, volumeRatio: reading.volumeRatio })
   }
 }
 
@@ -484,6 +494,150 @@ export function toNewsEvent(
   type: 'delisting' | 'monitoring_tag'
 ): MarketEvent {
   return { ...toMarketEvent({ ...reading, type, direction: 'down' }, market, live), news: { ...news } }
+}
+
+// ---------------------------------------------------------------------------------------------
+// THE EVENT'S LIFE (the V5 document, §19-23; V5 Stage 4, 8 October 2026). An event is raised from
+// one closed minute, and the watch asks about it within three. What the minutes after it do is
+// written down as a status, pass by pass, from the same readings the scanner shows: DETECTED at the
+// raise; CONFIRMED when the next pass reads the pair in the band again the same way (or a breakout
+// still beyond its level on volume); ACTIVE after two more such passes; WEAKENING when the score
+// falls below the watch band or half the move is given back; EXPIRED when all of it is, an hour has
+// passed, or a newer event of the pair takes its place. A status is a reading, shown on the event;
+// the watch may be set to ask at CONFIRMED instead of at the raise (shared/aiWatch.ts askAt), a
+// pass later, and the Research tab's entry-timing row measures what waiting a bar is worth.
+
+export const EVENT_STATUSES = ['detected', 'confirmed', 'active', 'weakening', 'expired'] as const
+export type EventStatus = (typeof EVENT_STATUSES)[number]
+/** Passes in the band after the one that confirmed an event before it is active. */
+export const EVENT_ACTIVE_PASSES = 2
+/** An event is over this long after it was raised, whatever the price did. */
+export const EVENT_EXPIRY_SECONDS = 60 * 60
+/** A breakout holds when the close is still beyond its level with this much of the usual five
+ * minutes' volume behind it. */
+export const EVENT_CONFIRM_VOLUME_RATIO = 1.5
+
+export interface EventLife {
+  status: EventStatus
+  /** Passes since the raise that read the pair in the band, or holding its level: the one that
+   * confirmed it and the ones after. */
+  passesInBand: number
+  /** When the status was set: the reading's time, in seconds. */
+  at: number
+}
+
+/** One line of the status file (marketEvents/status-YYYY-MM.jsonl): a status set, with the reading
+ * that set it. */
+export interface EventStatusLine {
+  kind: 'status'
+  eventId: string
+  status: EventStatus
+  passes: number
+  at: number
+  score: number
+  m15Pct: number
+}
+
+/** What a later pass read of the event's pair, for its life. `breakPct` is the close against the
+ * four hours before the move, as the detector reads it; it matters to a breakout only. */
+export type EventFollowUp = Pick<EventReading, 'time' | 'price' | 'score' | 'band' | 'direction' | 'returnsPct' | 'volumeRatio'> & { breakPct?: number }
+
+/** An event's life as it begins: detected, at the raise. */
+export function startedLife(event: Pick<MarketEvent, 'time'>): EventLife {
+  return { status: 'detected', passesInBand: 0, at: event.time }
+}
+
+/** The life a reading of a later minute takes an event to. The same object back when nothing
+ * changed, so a caller can tell. The rules, in order: over (expired) when an hour has passed or
+ * the whole move is given back; a weakening event stays so; weakening when half the move is given
+ * back or the score has fallen below the watch band; confirmed, then active, pass by pass in the
+ * band or holding the level; otherwise as it was. */
+export function nextEventLife(event: Pick<MarketEvent, 'time' | 'price' | 'type' | 'direction' | 'returnsPct'>, life: EventLife, reading: EventFollowUp): EventLife {
+  if (life.status === 'expired' || reading.time <= life.at) return life
+  const at = reading.time
+  if (at - event.time >= EVENT_EXPIRY_SECONDS) return { ...life, status: 'expired', at }
+  const sign = event.direction === 'down' ? -1 : 1
+  const movePct = Math.abs(event.returnsPct.m15)
+  // How much further the event's way the price has gone since the raise; negative for given back.
+  const sincePct = event.price > 0 ? (reading.price / event.price - 1) * 100 * sign : 0
+  if (movePct > 0 && sincePct <= -movePct) return { ...life, status: 'expired', at }
+  if (life.status === 'weakening') return life
+  if ((movePct > 0 && sincePct <= -movePct / 2) || reading.score < EVENT_WATCH_SCORE) return { ...life, status: 'weakening', at }
+  const inBand = reading.direction === event.direction && isAtLeast(reading.band, 'candidate')
+  const breakSign = reading.breakPct === undefined ? 0 : Math.sign(reading.breakPct)
+  const holds = (event.type === 'breakout' || event.type === 'breakdown') && breakSign === sign && (reading.volumeRatio ?? 0) >= EVENT_CONFIRM_VOLUME_RATIO
+  if (!inBand && !holds) return life
+  const passesInBand = life.passesInBand + 1
+  return { status: passesInBand >= 1 + EVENT_ACTIVE_PASSES ? 'active' : 'confirmed', passesInBand, at }
+}
+
+export function describeEventStatus(status: EventStatus): { word: string; detail: string } {
+  const shown: Record<EventStatus, { word: string; detail: string }> = {
+    detected: { word: 'DETECTED', detail: 'Raised from one closed minute; the next pass says whether it holds.' },
+    confirmed: { word: 'CONFIRMED', detail: 'The next pass read the pair in the band again the same way, or a breakout still beyond its level on volume.' },
+    active: { word: 'ACTIVE', detail: `Held for ${EVENT_ACTIVE_PASSES} more passes after it was confirmed.` },
+    weakening: { word: 'WEAKENING', detail: 'The score fell below the watch band, or half the move was given back.' },
+    expired: { word: 'EXPIRED', detail: 'An hour has passed, the whole move was given back, or a newer event of the pair took its place.' }
+  }
+  return shown[status]
+}
+
+/** A quarter-hour of time, two percent of move, a multiple of volume: the steps the fingerprint
+ * rounds to, so one move raised twice reads as one and two moves as two. */
+export const FINGERPRINT_BUCKET_SECONDS = 15 * 60
+export const FINGERPRINT_MOVE_STEP_PCT = 2
+
+/** What the event is of (the V5 document, §20): the pair, the kind, the quarter-hour, the move to
+ * the step below and the volume to the nearest multiple. Two events with one fingerprint are one
+ * move; the session report counts them. */
+export function eventFingerprint(event: Pick<MarketEvent, 'exchange' | 'symbol' | 'type' | 'time' | 'returnsPct' | 'volumeRatio'>): string {
+  const bucket = Math.floor(event.time / FINGERPRINT_BUCKET_SECONDS)
+  const move = Math.floor(Math.abs(event.returnsPct.m15) / FINGERPRINT_MOVE_STEP_PCT) * FINGERPRINT_MOVE_STEP_PCT
+  const volume = event.volumeRatio === null ? '?' : String(Math.max(1, Math.round(event.volumeRatio)))
+  return `${event.exchange}:${event.symbol}:${event.type}:${bucket}:m${move}:v${volume}`
+}
+
+/** What a move looks like it is of (the V5 document, §21), read at the raise and shown; never
+ * given to a model. */
+export const EVENT_CAUSES = ['news', 'market', 'exhaustion', 'organic', 'unknown'] as const
+export type EventCause = (typeof EVENT_CAUSES)[number]
+/** A story on the coin published this long before the event, at this impact or more, reads as its cause. */
+export const EVENT_CAUSE_NEWS_SECONDS = 2 * 3600
+export const EVENT_CAUSE_NEWS_IMPACT = 45
+/** Volume this many times its usual reads as a move on its own volume. */
+export const EVENT_CAUSE_ORGANIC_VOLUME = 2
+
+/** A story as the cause needs it: when, how much it might matter, and which coins it names how. */
+export interface CauseStory {
+  publishedAt: number
+  impact: number
+  assets: { ticker: string; relationship: 'DIRECT' | 'INDIRECT' }[]
+}
+
+/** The first that applies: the market moving as one (a market-wide move, or part of one); news on
+ * the coin, directly, in the two hours before at impact 45 or more; exhaustion, the last five
+ * minutes against the move on less than the usual volume; organic, twice the usual volume or more;
+ * else unknown. An announcement's event is news by construction. */
+export function eventCauseOf(event: Pick<MarketEvent, 'baseAsset' | 'time' | 'type' | 'direction' | 'returnsPct' | 'volumeRatio' | 'live' | 'news'>, stories: CauseStory[]): EventCause {
+  if (event.type === 'market_move' || event.live?.marketMove !== undefined) return 'market'
+  if (event.news !== undefined) return 'news'
+  const named = stories.some(
+    (story) =>
+      story.publishedAt <= event.time &&
+      event.time - story.publishedAt <= EVENT_CAUSE_NEWS_SECONDS &&
+      story.impact >= EVENT_CAUSE_NEWS_IMPACT &&
+      story.assets.some((asset) => asset.relationship === 'DIRECT' && asset.ticker === event.baseAsset)
+  )
+  if (named) return 'news'
+  const against = event.direction === 'up' ? event.returnsPct.m5 < 0 : event.direction === 'down' ? event.returnsPct.m5 > 0 : false
+  if (against && (event.volumeRatio ?? 0) < 1) return 'exhaustion'
+  if ((event.volumeRatio ?? 0) >= EVENT_CAUSE_ORGANIC_VOLUME) return 'organic'
+  return 'unknown'
+}
+
+export function describeEventCause(cause: EventCause): string {
+  const shown: Record<EventCause, string> = { news: 'news-driven', market: 'with the market', exhaustion: 'exhaustion', organic: 'organic', unknown: 'unknown' }
+  return shown[cause]
 }
 
 /** How long after an event its page says what the price did: fifteen minutes, an hour, four hours. */

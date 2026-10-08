@@ -69,7 +69,7 @@ async function services() {
   return { ...tape, ...config, ...ledger }
 }
 
-const ON: AiWatchConfig = { enabled: true, models: [A], maxEventsPerDay: 5, minBand: 'urgent', firstModelGates: false, confirmLive: false }
+const ON: AiWatchConfig = { enabled: true, models: [A], maxEventsPerDay: 5, minBand: 'urgent', firstModelGates: false, confirmLive: false, askAt: 'detected' }
 
 beforeEach(() => {
   vi.resetModules()
@@ -87,7 +87,7 @@ afterEach(() => {
 describe('the watch setting', () => {
   it('is off until it is switched on, and stays on across a restart', async () => {
     const { getAiConfig, setAiConfig } = await services()
-    expect((await getAiConfig()).watch).toEqual({ enabled: false, models: [], maxEventsPerDay: 10, minBand: 'urgent', firstModelGates: false, confirmLive: false })
+    expect((await getAiConfig()).watch).toEqual({ enabled: false, models: [], maxEventsPerDay: 10, minBand: 'urgent', firstModelGates: false, confirmLive: false, askAt: 'detected' })
     expect((await setAiConfig({ watch: ON })).watch).toEqual(ON)
     vi.resetModules()
     expect((await (await services()).getAiConfig()).watch).toEqual(ON)

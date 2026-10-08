@@ -23,6 +23,7 @@ import { opportunityTableRows, tableSymbols } from './opportunityTable'
 import { OpportunityTableCard } from './OpportunityTableCard'
 import { useEventFeed } from './useEventFeed'
 import { WatchCard } from './WatchCard'
+import { useScanner } from '../hooks/useScanner'
 
 const EVENTS_SHOWN = 20
 /** How often the executors on file are read again, for the watch's own paper trades. */
@@ -58,6 +59,8 @@ export function OpportunitiesTab({
   const [config, setConfig] = useState<AiConfig | null>(null)
   const [ticked, setTicked] = useState<string[]>([])
   const [busyEvent, setBusyEvent] = useState<string | null>(null)
+  /** The scanner's state, for where each event stands in its life (shared/marketEvent.ts). */
+  const scanner = useScanner()
   const [problems, setProblems] = useState<Record<string, string>>({})
   const [configProblem, setConfigProblem] = useState<string | null>(null)
   const [shown, setShown] = useState(EVENTS_SHOWN)
@@ -246,6 +249,7 @@ export function OpportunitiesTab({
               : { paperRisk, account: paperAccount, executors, stakeQuote: config.watchPaper.stakeQuote, btcLimitPct: config.watchPaper.dropOnBtcMovePct }
           }
           confirm={config?.watch.confirmLive === true}
+          lives={scanner?.lives ?? {}}
           outcomes={outcomes}
           onPaperTrade={
             onPrepareOrder

@@ -256,6 +256,18 @@ describe('the gates that must be zero', () => {
     expect(gateOf(twice, 'duplicates').detail).toContain('2 for event event-sol')
   })
 
+  it('fails two events of one fingerprint (8 October 2026), and counts none among events without one', () => {
+    const print = 'binance:SOLUSDT:pump:1:m2:v5'
+    const twice = sessionReportOf(input({ events: [{ id: 'a', time: T - 600, band: 'urgent', fingerprint: print }, { id: 'b', time: T - 300, band: 'urgent', fingerprint: print }] }))
+    expect(gateOf(twice, 'duplicates')).toMatchObject({ status: 'fail' })
+    expect(gateOf(twice, 'duplicates').detail).toContain(`2 events of fingerprint ${print}`)
+    const apart = sessionReportOf(input({ events: [{ id: 'a', time: T - 600, band: 'urgent', fingerprint: 'x' }, { id: 'b', time: T - 300, band: 'urgent', fingerprint: 'y' }] }))
+    expect(gateOf(apart, 'duplicates').status).toBe('pass')
+    expect(gateOf(apart, 'duplicates').detail).toContain('No two of the 2 events share a fingerprint.')
+    const unprinted = sessionReportOf(input({ events: [{ id: 'a', time: T - 600, band: 'urgent' }, { id: 'b', time: T - 300, band: 'urgent' }] }))
+    expect(gateOf(unprinted, 'duplicates').detail).toContain('No event in the span carries a fingerprint.')
+  })
+
   it('fails a gap left open, or a trade opened on the stream inside one, and says when the log could not be read', () => {
     const stuck = sessionReportOf(input({ connection: { open: true, connects: 1, drops: 0, lastMessageAt: (T - 300) * 1000, gaps: [{ from: T - 121, to: null }], host: 'binance.com', hostSwitches: 0, dataHostSwitches: 0, connectedAt: null, planned: 0, subscribeErrors: 0 } }))
     expect(gateOf(stuck, 'stream_gaps').status).toBe('fail')
