@@ -29,11 +29,11 @@ import type { NewsEventType, ReadStory } from './newsFeed'
 // check's EXIT closes one of the app's own paper trades sooner than its plan would have -- never a
 // live one, and it never moves a stop or makes a trade longer (shared/aiExit.ts).
 
-export const AI_ADDITION_KINDS = ['news', 'why', 'exit', 'review'] as const
+export const AI_ADDITION_KINDS = ['news', 'why', 'exit', 'review', 'daily'] as const
 export type AiAdditionKind = (typeof AI_ADDITION_KINDS)[number]
 
 /** Calls a day each may make, at most: the plan's limits, chosen with the user's $5 day. */
-export const AI_ADDITION_DAILY_LIMITS: Record<AiAdditionKind, number> = { news: 40, why: 20, exit: 30, review: 20 }
+export const AI_ADDITION_DAILY_LIMITS: Record<AiAdditionKind, number> = { news: 40, why: 20, exit: 30, review: 20, daily: 1 }
 
 /** Each addition's question and answer, versioned as every prompt here is: part of the cache key and
  * of every ledger row, and pinned by a hash (tests/aiAdditions.test.ts). */
@@ -41,13 +41,15 @@ export const AI_ADDITION_PROMPT_VERSIONS: Record<AiAdditionKind, string> = {
   news: 'news-analyst-v1',
   why: 'why-conclusion-v1',
   exit: 'exit-check-v1',
-  review: 'reviewer-v1'
+  review: 'reviewer-v1',
+  daily: 'daily-summary-v1'
 }
 export const AI_ADDITION_SCHEMA_VERSIONS: Record<AiAdditionKind, string> = {
   news: 'news-reading-v1',
   why: 'why-conclusion-v1',
   exit: 'exit-verdict-v1',
-  review: 'review-verdict-v1'
+  review: 'review-verdict-v1',
+  daily: 'daily-summary-v1'
 }
 
 export const AI_ADDITION_INFO: Record<AiAdditionKind, { name: string; what: string; automatic: boolean }> = {
@@ -70,12 +72,17 @@ export const AI_ADDITION_INFO: Record<AiAdditionKind, { name: string; what: stri
     name: 'Reviewer',
     what: "A second look before one of the watch's paper trades, only when the models disagree, the move is unusually large, major news hit the coin or the pair is thin. REJECT means no trade; a review that cannot be had leaves the trade as it was.",
     automatic: true
+  },
+  daily: {
+    name: 'Daily summary',
+    what: "One paragraph about the day before, written from the daily report's figures on Performance: the market, the major news, the app's own paper trades, the models' standing and the risk condition. Asked once a day after 00:05 UTC by itself while the watch is on, or from the report on a click; held to one call a day. It writes about figures and recommends nothing.",
+    automatic: true
   }
 }
 
 /** On or off, each. Only `false` switches one off: on 6 October 2026 the user chose them on. */
 export type AiAdditionsConfig = Record<AiAdditionKind, boolean>
-export const DEFAULT_AI_ADDITIONS: AiAdditionsConfig = { news: true, why: true, exit: true, review: true }
+export const DEFAULT_AI_ADDITIONS: AiAdditionsConfig = { news: true, why: true, exit: true, review: true, daily: true }
 
 /** What came of asking an addition: an answer, from the cache or paid for; an answer refused and
  * kept; nothing asked, and why; or a call that got no answer. */
@@ -129,7 +136,7 @@ export function additionProblem(input: { kind: AiAdditionKind; additions: AiAddi
   if (!input.additions[input.kind]) return `The ${name.toLowerCase()} is switched off under Settings › AI.`
   if (input.automatic && !input.watchOn) return `The ${name.toLowerCase()} asks by itself only while the watch is on.`
   const limit = AI_ADDITION_DAILY_LIMITS[input.kind]
-  if (input.callsToday >= limit) return `The ${name.toLowerCase()} has made its ${limit} calls today.`
+  if (input.callsToday >= limit) return `The ${name.toLowerCase()} has made ${limit === 1 ? 'its one call' : `its ${limit} calls`} today.`
   return null
 }
 
@@ -850,6 +857,184 @@ export function exitVerdictsOf(rows: readonly Pick<AiCallRecord, 'promptVersion'
     const checked = validateExitVerdict(row.additionAnswer)
     const cut = row.subjectId.lastIndexOf(':')
     if (checked.ok && cut > 0) out.push({ executorId: row.subjectId.slice(0, cut), at: row.at, verdict: checked.verdict })
+  }
+  return out
+}
+
+// ---------------------------------------------------------------------------------------------
+// The daily summary (the V4 document, §87; the user's choice of 7 October 2026: one AI-written
+// paragraph a day, on by default inside the $5 day). The question is the daily report's figures
+// (shared/dailyReport.ts dailySummaryQuestionOf), bounded; the answer is a paragraph and a
+// confidence. It is asked once a day about the day before, after 00:05 UTC while the watch is on
+// (src/performance/dailySummary.ts), or from the report on a click.
+
+export const DAILY_SUMMARY_MAX_CHARS = 900
+export const DAILY_SUMMARY_MIN_CHARS = 20
+/** Characters a text in the question is cut to: a title, a reason, a model's name. */
+export const DAILY_SUMMARY_TEXT_CHARS = 200
+/** The most rows each list of the question may carry. */
+export const DAILY_SUMMARY_MAX_ROWS = { movers: 5, news: 8, tickers: 5, net: 10, refused: 6, models: 6 } as const
+
+export interface DailySummaryQuestion {
+  /** The UTC day, `YYYY-MM-DD`. */
+  day: string
+  market: {
+    regime: string | null
+    btcDayPct: number | null
+    ethDayPct: number | null
+    breadthPct: number | null
+    pairsRead: number
+    moversUp: { pair: string; dayPct: number }[]
+    moversDown: { pair: string; dayPct: number }[]
+  }
+  news: { title: string; source: string; impact: number; tickers: string[]; hourAfterPct: number | null }[]
+  /** False when the day is older than the feed keeps stories: nothing can be said of its news. */
+  newsKept: boolean
+  trades: {
+    opened: number
+    ended: number
+    openNow: number
+    net: { asset: string; amount: number }[]
+    r: number
+    rTrades: number
+    bestPct: number | null
+    worstPct: number | null
+    refused: { reason: string; count: number }[]
+  }
+  calls: { made: number; answered: number; valid: number; costUsd: number }
+  answers: { buy: number; sell: number; hold: number; noTrade: number }
+  models: { model: string; closed: number; netPctATrade: number | null; profitFactor: number | null }[]
+  risk: { pausedWatch: boolean; pausedNews: boolean; aiSpentUsd: number; aiCapUsd: number; healthPauses: number; highAlerts: number }
+}
+
+export interface DailySummaryAnswer {
+  summary: string
+  confidence: number
+}
+
+/** A paragraph, checked: of a sensible length, with a confidence in range. */
+export function validateDailySummary(value: unknown): { ok: true; summary: DailySummaryAnswer } | { ok: false; reason: string } {
+  const raw = (typeof value === 'object' && value !== null ? value : {}) as Record<string, unknown>
+  if (typeof raw.summary !== 'string' || raw.summary.trim().length < DAILY_SUMMARY_MIN_CHARS) return { ok: false, reason: 'summary is missing or too short' }
+  if (raw.summary.length > DAILY_SUMMARY_MAX_CHARS) return { ok: false, reason: `summary is longer than ${DAILY_SUMMARY_MAX_CHARS} characters` }
+  if (!finite(raw.confidence) || raw.confidence < 0 || raw.confidence > 1) return { ok: false, reason: 'confidence is missing or out of range' }
+  return { ok: true, summary: { summary: raw.summary.trim(), confidence: raw.confidence } }
+}
+
+export interface DailySummaryRequest {
+  day: string
+  question: DailySummaryQuestion
+}
+
+const numberOrNull = (value: unknown): value is number | null => value === null || finite(value)
+const text = (value: unknown): value is string => typeof value === 'string' && value.length <= DAILY_SUMMARY_TEXT_CHARS
+const rows = <T>(value: unknown, most: number, each: (entry: unknown) => T | null): T[] | null => {
+  if (!Array.isArray(value) || value.length > most) return null
+  const out: T[] = []
+  for (const entry of value) {
+    const read = each(entry)
+    if (read === null) return null
+    out.push(read)
+  }
+  return out
+}
+const record = (value: unknown): Record<string, unknown> | null => (typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : null)
+
+/** A request as it arrives over the bridge, read as one: a UTC day, and the question about it with
+ * each figure in its shape and each list within its bound, rebuilt so that nothing else passes; or
+ * null. */
+export function parseDailySummaryRequest(value: unknown): DailySummaryRequest | null {
+  const raw = record(value)
+  if (raw === null) return null
+  const { day } = raw
+  if (typeof day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day) || !Number.isFinite(Date.parse(`${day}T00:00:00Z`))) return null
+  const q = record(raw.question)
+  if (q === null || q.day !== day || typeof q.newsKept !== 'boolean') return null
+  const market = record(q.market)
+  const trades = record(q.trades)
+  const calls = record(q.calls)
+  const answers = record(q.answers)
+  const risk = record(q.risk)
+  if (market === null || trades === null || calls === null || answers === null || risk === null) return null
+  const mover = (entry: unknown): { pair: string; dayPct: number } | null => {
+    const item = record(entry)
+    return item !== null && text(item.pair) && finite(item.dayPct) ? { pair: item.pair, dayPct: item.dayPct } : null
+  }
+  const moversUp = rows(market.moversUp, DAILY_SUMMARY_MAX_ROWS.movers, mover)
+  const moversDown = rows(market.moversDown, DAILY_SUMMARY_MAX_ROWS.movers, mover)
+  if (moversUp === null || moversDown === null) return null
+  if (!(market.regime === null || text(market.regime)) || !numberOrNull(market.btcDayPct) || !numberOrNull(market.ethDayPct) || !numberOrNull(market.breadthPct) || !finite(market.pairsRead)) return null
+  const news = rows(q.news, DAILY_SUMMARY_MAX_ROWS.news, (entry) => {
+    const item = record(entry)
+    if (item === null || !text(item.title) || !text(item.source) || !finite(item.impact) || !numberOrNull(item.hourAfterPct)) return null
+    const tickers = rows(item.tickers, DAILY_SUMMARY_MAX_ROWS.tickers, (ticker) => (text(ticker) ? ticker : null))
+    return tickers === null ? null : { title: item.title, source: item.source, impact: item.impact, tickers, hourAfterPct: item.hourAfterPct }
+  })
+  if (news === null) return null
+  const net = rows(trades.net, DAILY_SUMMARY_MAX_ROWS.net, (entry) => {
+    const item = record(entry)
+    return item !== null && text(item.asset) && finite(item.amount) ? { asset: item.asset, amount: item.amount } : null
+  })
+  const refused = rows(trades.refused, DAILY_SUMMARY_MAX_ROWS.refused, (entry) => {
+    const item = record(entry)
+    return item !== null && text(item.reason) && finite(item.count) ? { reason: item.reason, count: item.count } : null
+  })
+  if (net === null || refused === null) return null
+  if (!finite(trades.opened) || !finite(trades.ended) || !finite(trades.openNow) || !finite(trades.r) || !finite(trades.rTrades) || !numberOrNull(trades.bestPct) || !numberOrNull(trades.worstPct)) return null
+  if (!finite(calls.made) || !finite(calls.answered) || !finite(calls.valid) || !finite(calls.costUsd)) return null
+  if (!finite(answers.buy) || !finite(answers.sell) || !finite(answers.hold) || !finite(answers.noTrade)) return null
+  const models = rows(q.models, DAILY_SUMMARY_MAX_ROWS.models, (entry) => {
+    const item = record(entry)
+    return item !== null && text(item.model) && finite(item.closed) && numberOrNull(item.netPctATrade) && numberOrNull(item.profitFactor)
+      ? { model: item.model, closed: item.closed, netPctATrade: item.netPctATrade, profitFactor: item.profitFactor }
+      : null
+  })
+  if (models === null) return null
+  if (typeof risk.pausedWatch !== 'boolean' || typeof risk.pausedNews !== 'boolean' || !finite(risk.aiSpentUsd) || !finite(risk.aiCapUsd) || !finite(risk.healthPauses) || !finite(risk.highAlerts)) return null
+  return {
+    day,
+    question: {
+      day,
+      market: { regime: market.regime, btcDayPct: market.btcDayPct, ethDayPct: market.ethDayPct, breadthPct: market.breadthPct, pairsRead: market.pairsRead, moversUp, moversDown },
+      news,
+      newsKept: q.newsKept,
+      trades: { opened: trades.opened, ended: trades.ended, openNow: trades.openNow, net, r: trades.r, rTrades: trades.rTrades, bestPct: trades.bestPct, worstPct: trades.worstPct, refused },
+      calls: { made: calls.made, answered: calls.answered, valid: calls.valid, costUsd: calls.costUsd },
+      answers: { buy: answers.buy, sell: answers.sell, hold: answers.hold, noTrade: answers.noTrade },
+      models,
+      risk: { pausedWatch: risk.pausedWatch, pausedNews: risk.pausedNews, aiSpentUsd: risk.aiSpentUsd, aiCapUsd: risk.aiCapUsd, healthPauses: risk.healthPauses, highAlerts: risk.highAlerts }
+    }
+  }
+}
+
+/** What a day's summary is filed under in the ledger. */
+export function dailySubjectId(day: string): string {
+  return `day:${day}`
+}
+
+/** The daily summary over the bridge (the main process's summarizeDay). */
+export interface DailySummary {
+  asked: boolean
+  outcome: AiAdditionOutcome<DailySummaryAnswer> | null
+}
+
+export interface DailySummaryOnFile {
+  day: string
+  summary: DailySummaryAnswer
+  at: number
+  model: string
+}
+
+/** The summaries on file, by the day each is about: the newest answered row under the addition's
+ * prompt for each day. */
+export function dailySummariesOf(rows: readonly Pick<AiCallRecord, 'promptVersion' | 'status' | 'subjectId' | 'additionAnswer' | 'at' | 'model'>[]): Record<string, DailySummaryOnFile> {
+  const out: Record<string, DailySummaryOnFile> = {}
+  for (const row of [...rows].sort((a, b) => a.at - b.at)) {
+    if (row.promptVersion !== AI_ADDITION_PROMPT_VERSIONS.daily || row.status !== 'ok' || row.subjectId === undefined || !row.subjectId.startsWith('day:')) continue
+    const checked = validateDailySummary(row.additionAnswer)
+    if (!checked.ok) continue
+    const day = row.subjectId.slice(4)
+    out[day] = { day, summary: checked.summary, at: row.at, model: row.model }
   }
   return out
 }

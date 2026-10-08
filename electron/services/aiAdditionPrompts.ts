@@ -1,4 +1,5 @@
 import {
+  DAILY_SUMMARY_MAX_CHARS,
   EXIT_MAX_REASON,
   EXIT_VERDICTS,
   NEWS_READING_DIRECTIONS,
@@ -62,6 +63,14 @@ export const AI_ADDITION_SYSTEM_PROMPTS: Record<AiAdditionKind, string> = {
     'confidence: 0 to 1. How clearly the evidence supports your verdict. It is not a probability; never claim certainty.',
     `reason: at most ${REVIEW_MAX_REASON} characters, plain text: what your verdict rests on.`,
     'You do not size the trade, move its levels or open anything.'
+  ].join('\n'),
+  daily: [
+    "You write the day's summary for a crypto trading app that measures whether its models help. Return only the requested JSON.",
+    "The user message is one UTC day's figures, as the app measured them: the market at the day's end (Bitcoin's and ether's day in percent, the regime by Bitcoin's moves, the share of pairs that rose, the biggest movers up and down); the stories of high impact that day, with the coin's move over the hour after each where it was measured; the app's own paper trades that day (opened, ended, open now, what they made after fees, in R, their best and worst moves, and why some were refused); the calls made and what they cost; what the models answered; the models' standing over the last thirty days; and the risk condition (paper trades paused, the AI budget, pauses of live trading by the exchange's health, high alerts).",
+    'Write one paragraph, plain text, in the order given: the market, the news, the paper trades, the models, the risk. Use ONLY the figures given: never add a figure, a cause, an event or a name that is not in them, and say plainly where a figure is missing. Where the news and a move line up, say so; where they do not, say that.',
+    `summary: at most ${DAILY_SUMMARY_MAX_CHARS} characters, plain text.`,
+    'confidence: 0 to 1. How fully the figures support what you wrote. It is not a probability; never claim certainty.',
+    'You do not recommend a trade, a coin, a model or a setting, and you do not predict.'
   ].join('\n')
 }
 
@@ -121,6 +130,18 @@ export const AI_ADDITION_SCHEMAS: Record<AiAdditionKind, { name: string; schema:
         reason: { type: 'string' }
       },
       required: ['verdict', 'confidence', 'reason']
+    }
+  },
+  daily: {
+    name: 'daily_summary',
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        summary: { type: 'string' },
+        confidence: { type: 'number' }
+      },
+      required: ['summary', 'confidence']
     }
   }
 }

@@ -546,6 +546,35 @@ describe('AI code has no route to a real order', () => {
     }
   })
 
+  it('the daily report reads the records, and the paragraph about it is asked through the additions\' own path (8 October 2026)', () => {
+    // The V4 plan's Stage 11. shared/dailyReport.ts is arithmetic on what is handed to it; the reader
+    // (src/performance/dailyReport.ts) reads the records, public candles and the feed; the look
+    // (src/performance/dailySummary.ts) builds the day before's report and asks for its paragraph
+    // through the bridge the additions share, which the main process holds to one call a day, the
+    // budget and the watch. The card builds, saves and asks. None of them writes a setting, opens,
+    // closes or sizes anything, or mentions the bridge an order travels over.
+    const rules = join(ROOT, 'shared', 'dailyReport.ts')
+    expect(importsOf(rules).sort()).toEqual(['aiAdditions', 'aiEventBenchmark', 'aiLedger', 'alerts', 'ipc', 'marketResearch', 'newsFeed', 'paperDigest', 'shadowReport'])
+    expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron|liveTrading|placeLive|setExecutors/)
+    const calls = (path: string): string[] => {
+      const text = readFileSync(path, 'utf-8')
+      return [...new Set([...text.matchAll(/window\.api\.(\w+)(?:\s*\.\s*(\w+))?/g)].map((match) => (match[2] === undefined ? match[1] : `${match[1]}.${match[2]}`)))].sort()
+    }
+    expect(calls(join(ROOT, 'src', 'performance', 'dailyReport.ts'))).toEqual(['ai.getConfig', 'ai.listCalls', 'feed.getState', 'market.fetchHistoricalRange', 'records.alerts', 'scanner.getState', 'scanner.listEvents', 'settings.get'])
+    expect(calls(join(ROOT, 'src', 'performance', 'dailySummary.ts'))).toEqual(['ai.getConfig', 'ai.listCalls', 'ai.summarizeDay'])
+    expect(calls(join(ROOT, 'src', 'performance', 'DailyReportCard.tsx'))).toEqual(['ai.listCalls', 'ai.summarizeDay', 'backtest.exportSave'])
+    const scheduler = join(ROOT, 'src', 'performance', 'DailySummaryScheduler.tsx')
+    expect(readFileSync(scheduler, 'utf-8')).not.toMatch(/window\.api/)
+    expect(importsOf(scheduler).sort()).toEqual(['dailySummary', 'react'])
+    for (const file of ['dailyReport.ts', 'dailySummary.ts', 'DailyReportCard.tsx', 'DailySummaryScheduler.tsx']) {
+      expect(readFileSync(join(ROOT, 'src', 'performance', file), 'utf-8'), file).not.toMatch(/liveTrading|LiveTrading|placeLive|settings\.set|setExecutors|settingsWrites|onPrepareOrder|aiProposal|askOpportunity|exitCheck|reviewTrade/)
+    }
+    // The main process reads the request in its shape and asks through the one path every addition takes.
+    const service = readFileSync(join(SERVICES, 'aiAdditionsService.ts'), 'utf-8')
+    expect(service).toContain('const parsed = parseDailySummaryRequest(request)')
+    expect(service).toContain("kind: 'daily',")
+  })
+
   it('what the watch opens by itself is paper, by a literal it cannot be handed', () => {
     // The rules (shared) and the one file that writes (renderer).
     const rules = join(ROOT, 'shared', 'aiWatchPaper.ts')

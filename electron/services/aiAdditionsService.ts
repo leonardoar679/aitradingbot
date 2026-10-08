@@ -5,6 +5,11 @@ import { join } from 'path'
 import {
   AI_ADDITION_DAILY_LIMITS,
   AI_ADDITION_KINDS,
+  dailySubjectId,
+  parseDailySummaryRequest,
+  validateDailySummary,
+  type DailySummary,
+  type DailySummaryQuestion,
   AI_ADDITION_PROMPT_VERSIONS,
   AI_ADDITION_SCHEMA_VERSIONS,
   EXIT_LINES,
@@ -427,6 +432,33 @@ export async function exitCheck(request: unknown): Promise<ExitCheck> {
   }
 }
 
+// ---------------------------------------------------------------------------------------------
+// The daily summary.
+
+/** One paragraph about one UTC day's report, from its figures as the renderer built them
+ * (shared/dailyReport.ts). The day has to be over; the figures are read in their shape and
+ * nothing else passes. Automatic when the look asks after 00:05 UTC, which holds it to the watch;
+ * a click asks with the watch off too. Either way one call a day, the budget, the cache. */
+export async function summarizeDay(request: unknown, automatic: boolean): Promise<DailySummary> {
+  const parsed = parseDailySummaryRequest(request)
+  if (parsed === null) throw new Error("A daily summary is asked about one UTC day's report, as its figures stand.")
+  const dayEnd = Date.parse(`${parsed.day}T00:00:00Z`) / 1000 + DAY
+  if (dayEnd > Math.floor(Date.now() / 1000)) throw new Error(`${parsed.day} is not over yet (UTC).`)
+  const outcome = await askAddition({
+    kind: 'daily',
+    subjectId: dailySubjectId(parsed.day),
+    symbol: 'BTCUSDT',
+    candleTime: dayEnd - 60,
+    payload: parsed.question,
+    automatic,
+    validate: (value) => {
+      const checked = validateDailySummary(value)
+      return checked.ok ? { ok: true, answer: checked.summary } : checked
+    }
+  })
+  return { asked: true, outcome }
+}
+
 const handled = new Set<string>()
 const queue: ReadStory[] = []
 let draining = false
@@ -486,6 +518,19 @@ export function startAiAdditions(): void {
 // ---------------------------------------------------------------------------------------------
 // What Settings › AI shows.
 
+/** A day's figures of a usual size, for pricing the summary before any has been asked. */
+const DAILY_SAMPLE: DailySummaryQuestion = {
+  day: '2026-10-07',
+  market: { regime: 'sideways', btcDayPct: 0.8, ethDayPct: -0.4, breadthPct: 52, pairsRead: 60, moversUp: Array.from({ length: 5 }, (_, k) => ({ pair: `COIN${k}USDT`, dayPct: 8 - k })), moversDown: Array.from({ length: 5 }, (_, k) => ({ pair: `ALT${k}USDT`, dayPct: -6 + k })) },
+  news: Array.from({ length: 4 }, () => ({ title: 'A headline of the usual length about a coin and what happened to it', source: 'CoinDesk', impact: 75, tickers: ['SOL'], hourAfterPct: 1.2 })),
+  newsKept: true,
+  trades: { opened: 3, ended: 2, openNow: 1, net: [{ asset: 'USDT', amount: 1.4 }], r: 0.6, rTrades: 2, bestPct: 2.1, worstPct: -1.2, refused: [{ reason: 'The paper account has no funds for it', count: 2 }] },
+  calls: { made: 12, answered: 12, valid: 12, costUsd: 0.09 },
+  answers: { buy: 4, sell: 1, hold: 5, noTrade: 2 },
+  models: [{ model: 'sample', closed: 40, netPctATrade: 0.2, profitFactor: 1.3 }],
+  risk: { pausedWatch: false, pausedNews: false, aiSpentUsd: 0.31, aiCapUsd: 5, healthPauses: 0, highAlerts: 3 }
+}
+
 /** A story's question of a usual length, for pricing one before any has been asked. */
 const SAMPLE_PAYLOAD: Record<AiAdditionKind, unknown> = {
   news: newsQuestionOf({
@@ -531,7 +576,8 @@ const SAMPLE_PAYLOAD: Record<AiAdditionKind, unknown> = {
     others: [{ model: 'other', call: 'SELL', confidence: 0.7 }],
     news: [{ title: 'A headline of the usual length about a coin and what happened to it', source: 'CoinDesk', kind: 'LISTING', impact: 72 }],
     triggers: ['models_disagree', 'major_news']
-  }
+  },
+  daily: DAILY_SAMPLE
 }
 
 /** Each addition's switch, what it has asked today and what one more call is expected to cost. Free:

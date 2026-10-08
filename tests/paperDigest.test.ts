@@ -126,17 +126,17 @@ describe("a day's digest", () => {
       body:
         'The watch opened 4 paper trades and closed 2, 1 of them ahead: +0.85 USDT after fees, or +0.50 R against what each risked at its stop; 1 more never entered. ' +
         'The news rules opened 2 paper shorts and closed 2, 1 of them ahead: +11.45 USDT after fees, or -0.86 R for the 1 with a stop. ' +
-        '1 is open now. Nothing real was placed.'
+        '1 is open now. Nothing real was placed. The daily report on Performance has the day.'
     })
   })
 
   it('says only what there is to say', () => {
     const opened = paperDigestNotice(paperDigest([watched('open', D + 20 * H)], DAY))
-    expect(opened?.body).toBe('The watch opened 1 paper trade. 1 is open now. Nothing real was placed.')
+    expect(opened?.body).toBe('The watch opened 1 paper trade. 1 is open now. Nothing real was placed. The daily report on Performance has the day.')
     const unfilled = paperDigestNotice(paperDigest([watched('unfilled', D - 2 * H, { exit: 'btc_moved', pnlQuote: 0, closedAt: D + H })], DAY))
-    expect(unfilled?.body).toBe('The watch opened no paper trades, and 1 never entered. None is open now. Nothing real was placed.')
+    expect(unfilled?.body).toBe('The watch opened no paper trades, and 1 never entered. None is open now. Nothing real was placed. The daily report on Performance has the day.')
     const delisted = paperDigestNotice(paperDigest([shorted('delisting', 100, null, { exit: 'time_limit', pnlQuote: 12.4, closedAt: D + 13 * H })], DAY))
-    expect(delisted?.body).toBe('The news rules opened 1 paper short and closed 1, 1 of them ahead: +12.40 USDT after fees, with no stop to measure R against. None is open now. Nothing real was placed.')
+    expect(delisted?.body).toBe('The news rules opened 1 paper short and closed 1, 1 of them ahead: +12.40 USDT after fees, with no stop to measure R against. None is open now. Nothing real was placed. The daily report on Performance has the day.')
   })
 
   it('is no notice on a day with nothing opened or closed', () => {

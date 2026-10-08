@@ -642,6 +642,29 @@ Since 8 October 2026 (the V4 document's §107-109; the user's choice: flag and t
   one request a stretch of events, and cut by the same rules as the benchmark; the live board shows
   the slices.
 
+### The daily report, and the fifth addition
+
+Since 8 October 2026 (the V4 document's §87; the user's choice: one AI-written paragraph a day, on by
+default inside the $5 day):
+
+- **The daily report** (`shared/dailyReport.ts`, on Performance): one UTC day as the records hold it.
+  The market at the day's end (Bitcoin's and ether's day, the regime by Bitcoin's moves, breadth, the
+  biggest movers up and down, from public candles); the major news of the day (impact 70 or more,
+  from the feed's stories, kept a week, with the hour that followed each); the app's own paper trades,
+  the calls, the answers and the alerts, as the session report has them over the day; the models'
+  standing over the last thirty days, as the live board scores it; and the risk condition (paper
+  pauses, the AI spend against the cap, live-trading pauses by the exchange's health, high alerts).
+  Yesterday, or any day back thirty, built on a click and stored nowhere; saved as JSON or CSV. The
+  paper digest notice points to it.
+- **The fifth addition: the daily summary** (`daily-summary-v1`, limit one call a day, ON unless
+  switched off under Settings › AI). After 00:05 UTC, while the watch is on, the day before's report
+  is built by itself and its figures, bounded, are put to the model the additions ask, which writes
+  one paragraph in the order given and from those figures only; it recommends nothing and predicts
+  nothing. The paragraph is filed in the ledger under its day and shown beside the report; with the
+  watch off, a button on the report asks for it. Like every addition it passes the budget, the pace,
+  the validator and the ledger (`electron/services/aiAdditionsService.ts summarizeDay`), and the
+  request is read in its shape, rebuilt, so that nothing but a day's figures reaches the model.
+
 ### The AI additions
 
 Since 6 October 2026 (the V3 plan's Stage 7) small questions are put to a model beside the watch's.

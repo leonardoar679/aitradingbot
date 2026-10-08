@@ -78,8 +78,10 @@ export function readTrade(executor: ExecutorConfig, minutes: Candle[], nowSec: n
 
 /** The report over `span`, from `fromSec` to now. Never throws for one trade or recommendation whose
  * minutes cannot be read: that one reads as not measured, and the report says so. */
-export async function buildSessionReport(span: ReportSpan, fromSec: number, deps: SessionReportDeps): Promise<SessionReport> {
+export async function buildSessionReport(span: ReportSpan, fromSec: number, deps: SessionReportDeps, toSec?: number): Promise<SessionReport> {
   const nowSec = deps.nowSec()
+  // The span's end: now, or a past moment for a day that is over (the daily report, ./dailyReport.ts).
+  const endSec = Math.min(toSec ?? nowSec, nowSec)
   const [events, calls, settings, config, connection, stories, alerts, refusals, versionsRead] = await Promise.all([
     deps.listEvents(fromSec - LEAD_SECONDS),
     deps.listCalls(fromSec - LEAD_SECONDS),
@@ -92,7 +94,7 @@ export async function buildSessionReport(span: ReportSpan, fromSec: number, deps
     deps.effectiveConfig().catch(() => null)
   ])
   // The versions the span's calls were made under, and the configuration's now.
-  const inSpan = calls.filter((row) => row.at >= fromSec && row.at <= nowSec)
+  const inSpan = calls.filter((row) => row.at >= fromSec && row.at <= endSec)
   const distinct = (values: string[]): string[] => [...new Set(values)].sort()
   const versions =
     versionsRead === null
@@ -103,7 +105,9 @@ export async function buildSessionReport(span: ReportSpan, fromSec: number, deps
   const touched = settings.executors.filter((executor) => {
     if (executor.mode !== 'paper' || executor.type !== 'position' || (executor.watch === undefined && executor.newsRule === undefined)) return false
     const result = executor.watch?.result ?? executor.newsRule?.result
-    return executor.createdAt >= fromSec || executor.status === 'active' || (result !== undefined && result.closedAt >= fromSec)
+    const opened = executor.createdAt >= fromSec && executor.createdAt <= endSec
+    const ended = result !== undefined && result.closedAt >= fromSec && result.closedAt <= endSec
+    return opened || ended || (executor.status === 'active' && executor.createdAt <= endSec)
   })
   const trades = await Promise.all(
     touched.map(async (executor): Promise<ReportTradeReading> => {
@@ -119,7 +123,7 @@ export async function buildSessionReport(span: ReportSpan, fromSec: number, deps
 
   // Each recommendation the watch could have acted on, for an event in the span, scored on its minutes.
   const feed = assembleFeed(
-    events.filter((event) => event.time >= fromSec && event.time <= nowSec),
+    events.filter((event) => event.time >= fromSec && event.time <= endSec),
     calls.filter((row) => row.source === 'watch')
   ).filter((item) => item.answers.some((answer) => isActionableOpportunity(answer.decision)))
   const bars = await loadFeedBars(feed, nowSec, deps.fetchCandles)
@@ -143,7 +147,7 @@ export async function buildSessionReport(span: ReportSpan, fromSec: number, deps
   return sessionReportOf({
     span,
     fromSec,
-    toSec: nowSec,
+    toSec: endSec,
     appStartedSec: deps.appStartedSec,
     events,
     calls,

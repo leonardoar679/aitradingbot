@@ -26,6 +26,7 @@ import { AlertBanner } from './news/AlertBanner'
 import { WhyItMovedHost } from './news/WhyItMovedHost'
 import { subscribeAlerts, unseenCount } from './news/alertStore'
 import { PaperDigestScheduler } from './risk/PaperDigestScheduler'
+import { DailySummaryScheduler } from './performance/DailySummaryScheduler'
 import { PaperPauseScheduler } from './risk/PaperPauseScheduler'
 import { RoutineScheduler } from './routines/RoutineScheduler'
 import { LiveTradingBar } from './livetrading/LiveTradingBar'
@@ -130,6 +131,11 @@ function App(): React.JSX.Element {
           before. It reads settings and says so; it opens and closes nothing. */}
       <ErrorBoundary label="The daily paper digest">
         <PaperDigestScheduler />
+      </ErrorBoundary>
+      {/* Once a day after 00:05 UTC, while the watch is on: the day before's report put to a model
+          for one paragraph, the fifth AI addition. It reads, builds and asks; it writes nothing. */}
+      <ErrorBoundary label="The daily summary">
+        <DailySummaryScheduler />
       </ErrorBoundary>
       {/* After a losing run, the watch's or the news rules' paper trades are paused until resumed
           on Risk & Safety. It writes the pause and says so; it opens and closes nothing. */}

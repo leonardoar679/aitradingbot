@@ -29,7 +29,7 @@ import type {
 import type { ResearchState } from '../shared/marketResearch'
 import type { LiveBook, LiveState } from '../shared/liveMarket'
 import type { NewsFeedState, StoryMark } from '../shared/newsFeed'
-import type { AiAdditionsStatus, ExitCheck, ExitCheckRequest, MoveConclusion, TradeReview } from '../shared/aiAdditions'
+import type { AiAdditionsStatus, DailySummary, DailySummaryRequest, ExitCheck, ExitCheckRequest, MoveConclusion, TradeReview } from '../shared/aiAdditions'
 import type { MarketEvent } from '../shared/marketEvent'
 import type { NewsConfigPatch, NewsFilter, NewsPage, NewsState } from '../shared/news'
 import type { NewsRecord } from '../shared/newsRecord'
@@ -252,6 +252,9 @@ const api = {
     // changed that it has not been asked about: the exit check. Its EXIT is written by the renderer,
     // on paper; this only asks.
     exitCheck: (request: ExitCheckRequest): Promise<ExitCheck> => ipcRenderer.invoke(IpcChannel.AiExitCheck, request),
+    // Billed unless held, once a day: the fifth addition's paragraph about one UTC day's report
+    // (shared/dailyReport.ts), by itself after 00:05 UTC while the watch is on, or on a click.
+    summarizeDay: (request: DailySummaryRequest, automatic: boolean): Promise<DailySummary> => ipcRenderer.invoke(IpcChannel.AiSummarizeDay, request, automatic),
     // The two calls below the "free" line that are not free: each is billed unless its answer is
     // already cached.
     confirmEntry: (request: AiEntryConfirmRequest): Promise<AiSignalDecision> =>

@@ -4,6 +4,12 @@ import { AI_ADDITION_SCHEMAS, AI_ADDITION_SYSTEM_PROMPTS, buildAdditionMessages 
 import {
   AI_ADDITION_DAILY_LIMITS,
   AI_ADDITION_PROMPT_VERSIONS,
+  DAILY_SUMMARY_MAX_CHARS,
+  DAILY_SUMMARY_MAX_ROWS,
+  dailySubjectId,
+  dailySummariesOf,
+  parseDailySummaryRequest,
+  validateDailySummary,
   AI_ADDITION_SCHEMA_VERSIONS,
   DEFAULT_AI_ADDITIONS,
   EXIT_LINES,
@@ -39,6 +45,7 @@ import {
   validateReviewVerdict,
   validateWhyConclusion,
   whyQuestionOf,
+  type DailySummaryRequest,
   type ReviewCall,
   type NewsReading
 } from '../shared/aiAdditions'
@@ -58,14 +65,14 @@ const READING: NewsReading = { ticker: 'SOL', relationship: 'DIRECT', direction:
 
 describe('the setting', () => {
   it('is on unless switched off, each, and only false switches one off', () => {
-    expect(DEFAULT_AI_ADDITIONS).toEqual({ news: true, why: true, exit: true, review: true })
-    expect(healAiAdditions(undefined)).toEqual({ news: true, why: true, exit: true, review: true })
-    expect(healAiAdditions({ news: false })).toEqual({ news: false, why: true, exit: true, review: true })
-    expect(healAiAdditions({ news: 'no', why: false, exit: false, review: false })).toEqual({ news: true, why: false, exit: false, review: false })
-    expect(healAiAdditions([false])).toEqual({ news: true, why: true, exit: true, review: true })
+    expect(DEFAULT_AI_ADDITIONS).toEqual({ news: true, why: true, exit: true, review: true, daily: true })
+    expect(healAiAdditions(undefined)).toEqual({ news: true, why: true, exit: true, review: true, daily: true })
+    expect(healAiAdditions({ news: false })).toEqual({ news: false, why: true, exit: true, review: true, daily: true })
+    expect(healAiAdditions({ news: 'no', why: false, exit: false, review: false, daily: false })).toEqual({ news: true, why: false, exit: false, review: false, daily: false })
+    expect(healAiAdditions([false])).toEqual({ news: true, why: true, exit: true, review: true, daily: true })
     // A setting saved before the exit check existed reads with it on: the user chose all four on.
-    expect(healAiAdditions({ news: true, why: false, review: true })).toEqual({ news: true, why: false, exit: true, review: true })
-    expect(AI_ADDITION_DAILY_LIMITS).toEqual({ news: 40, why: 20, exit: 30, review: 20 })
+    expect(healAiAdditions({ news: true, why: false, review: true })).toEqual({ news: true, why: false, exit: true, review: true, daily: true })
+    expect(AI_ADDITION_DAILY_LIMITS).toEqual({ news: 40, why: 20, exit: 30, review: 20, daily: 1 })
   })
 
   it("asks the watch's own model: the one its paper trades follow, else the first it asks, else the default", () => {
@@ -88,7 +95,7 @@ describe('the setting', () => {
 
   it('refuses a call when switched off, when it would ask by itself with the watch off, or at its daily limit', () => {
     const ask = (over: Partial<Parameters<typeof additionProblem>[0]> = {}): string | null =>
-      additionProblem({ kind: 'news', additions: { news: true, why: true, exit: true, review: true }, watchOn: true, automatic: true, callsToday: 0, ...over })
+      additionProblem({ kind: 'news', additions: { news: true, why: true, exit: true, review: true, daily: true }, watchOn: true, automatic: true, callsToday: 0, ...over })
     expect(ask()).toBeNull()
     expect(ask({ additions: { news: false, why: true, exit: true, review: true } })).toBe('The news analyst is switched off under Settings › AI.')
     expect(ask({ kind: 'exit', additions: { news: true, why: true, exit: false, review: true } })).toBe('The exit check is switched off under Settings › AI.')
@@ -97,6 +104,8 @@ describe('the setting', () => {
     expect(ask({ kind: 'exit', watchOn: false })).toBe('The exit check asks by itself only while the watch is on.')
     expect(ask({ kind: 'review', callsToday: 20 })).toBe('The reviewer has made its 20 calls today.')
     expect(ask({ kind: 'why', callsToday: 20 })).toBe('The "why did it move?" conclusion has made its 20 calls today.')
+    expect(ask({ kind: 'daily', callsToday: 1 })).toBe('The daily summary has made its one call today.')
+    expect(ask({ kind: 'daily', callsToday: 0 })).toBeNull()
     expect(ask({ kind: 'why', callsToday: 19 })).toBeNull()
     expect(ask({ watchOn: false })).toBe('The news analyst asks by itself only while the watch is on.')
     // Asked for by a person, the watch does not matter.
@@ -604,5 +613,69 @@ describe('a prompt and its version move together', () => {
   it("pins the reviewer's prompt and schema", () => {
     expect([AI_ADDITION_PROMPT_VERSIONS.review, sha(AI_ADDITION_SYSTEM_PROMPTS.review)]).toEqual(['reviewer-v1', '7eb73834d0258e57f927de802d2a85dd28704dc7645e4ae4e3726f7e328efd47'])
     expect([AI_ADDITION_SCHEMA_VERSIONS.review, sha(JSON.stringify(AI_ADDITION_SCHEMAS.review))]).toEqual(['review-verdict-v1', '528ba216008a938b4b7bfae4942e6c0ce786e57f841b0fd34b6942418dca0e10'])
+  })
+})
+
+describe('the daily summary', () => {
+  const question: DailySummaryRequest['question'] = {
+    day: '2026-10-07',
+    market: { regime: 'bull', btcDayPct: 2.1, ethDayPct: -0.4, breadthPct: 61, pairsRead: 60, moversUp: [{ pair: 'SOLUSDT', dayPct: 8 }], moversDown: [{ pair: 'XRPUSDT', dayPct: -6 }] },
+    news: [{ title: 'Binance lists SOL futures', source: 'CoinDesk', impact: 80, tickers: ['SOL'], hourAfterPct: 1.2 }],
+    newsKept: true,
+    trades: { opened: 3, ended: 2, openNow: 1, net: [{ asset: 'USDT', amount: 1.4 }], r: 0.6, rTrades: 2, bestPct: 2.1, worstPct: -1.2, refused: [{ reason: 'The paper account has no funds for it', count: 2 }] },
+    calls: { made: 12, answered: 12, valid: 11, costUsd: 0.09 },
+    answers: { buy: 4, sell: 1, hold: 5, noTrade: 2 },
+    models: [{ model: 'openai/gpt-5-mini', closed: 40, netPctATrade: 0.2, profitFactor: 1.3 }],
+    risk: { pausedWatch: false, pausedNews: false, aiSpentUsd: 0.31, aiCapUsd: 5, healthPauses: 0, highAlerts: 3 }
+  }
+
+  it('is a paragraph of a sensible length with a confidence in range, or it is refused', () => {
+    expect(DAILY_SUMMARY_MAX_CHARS).toBe(900)
+    expect(validateDailySummary({ summary: '  Bitcoin rose two percent on the day.  ', confidence: 0.5 })).toEqual({ ok: true, summary: { summary: 'Bitcoin rose two percent on the day.', confidence: 0.5 } })
+    expect(validateDailySummary({ summary: 'Too short.', confidence: 0.5 })).toEqual({ ok: false, reason: 'summary is missing or too short' })
+    expect(validateDailySummary({ summary: 'x'.repeat(901), confidence: 0.5 })).toEqual({ ok: false, reason: 'summary is longer than 900 characters' })
+    expect(validateDailySummary({ summary: 'A paragraph of a sensible length.', confidence: 1.5 })).toEqual({ ok: false, reason: 'confidence is missing or out of range' })
+    expect(validateDailySummary(null).ok).toBe(false)
+  })
+
+  it('reads a request over the bridge only in its shape, rebuilt so that nothing else passes', () => {
+    const parsed = parseDailySummaryRequest({ day: '2026-10-07', question: { ...question, extra: 'dropped' }, more: 1 })
+    expect(parsed).toEqual({ day: '2026-10-07', question })
+    expect(parseDailySummaryRequest({ day: 'yesterday', question })).toBeNull()
+    expect(parseDailySummaryRequest({ day: '2026-13-40', question })).toBeNull()
+    expect(parseDailySummaryRequest({ day: '2026-10-06', question })).toBeNull()
+    expect(parseDailySummaryRequest({ day: '2026-10-07', question: { ...question, market: { ...question.market, btcDayPct: 'up' } } })).toBeNull()
+    expect(parseDailySummaryRequest({ day: '2026-10-07', question: { ...question, news: Array.from({ length: DAILY_SUMMARY_MAX_ROWS.news + 1 }, () => question.news[0]) } })).toBeNull()
+    expect(parseDailySummaryRequest({ day: '2026-10-07', question: { ...question, news: [{ ...question.news[0], title: 'x'.repeat(201) }] } })).toBeNull()
+    expect(parseDailySummaryRequest({ day: '2026-10-07', question: { ...question, models: [{ ...question.models[0], closed: null }] } })).toBeNull()
+    expect(parseDailySummaryRequest({ day: '2026-10-07', question: { ...question, risk: { ...question.risk, pausedWatch: 'no' } } })).toBeNull()
+    expect(parseDailySummaryRequest({ day: '2026-10-07', question: { ...question, newsKept: 'yes' } })).toBeNull()
+    expect(parseDailySummaryRequest({ day: '2026-10-07', question: { ...question, market: { ...question.market, regime: null, btcDayPct: null } } })).not.toBeNull()
+    expect(parseDailySummaryRequest(null)).toBeNull()
+  })
+
+  it('is filed under its day, and read back from the ledger by the day, the newest answered row for each', () => {
+    expect(dailySubjectId('2026-10-07')).toBe('day:2026-10-07')
+    const row = (at: number, subjectId: string, over: Record<string, unknown> = {}): Parameters<typeof dailySummariesOf>[0][number] =>
+      ({ promptVersion: 'daily-summary-v1', status: 'ok', subjectId, at, model: 'm', additionAnswer: { summary: 'A paragraph about the day of a sensible length.', confidence: 0.4 }, ...over }) as Parameters<typeof dailySummariesOf>[0][number]
+    const on = dailySummariesOf([
+      row(10, 'day:2026-10-07'),
+      row(20, 'day:2026-10-07', { additionAnswer: { summary: 'The newer paragraph about the day, long enough.', confidence: 0.6 } }),
+      row(30, 'day:2026-10-06', { status: 'rejected' }),
+      row(40, 'day:2026-10-05', { promptVersion: 'exit-check-v1' }),
+      row(50, 'e-1'),
+      row(60, 'day:2026-10-04', { additionAnswer: { summary: 'short', confidence: 0.4 } })
+    ])
+    expect(Object.keys(on)).toEqual(['2026-10-07'])
+    expect(on['2026-10-07']).toEqual({ day: '2026-10-07', summary: { summary: 'The newer paragraph about the day, long enough.', confidence: 0.6 }, at: 20, model: 'm' })
+  })
+})
+
+describe('the daily summary, pinned', () => {
+  const sha = (text: string): string => createHash('sha256').update(text).digest('hex')
+  it("pins the daily summary's prompt and schema", () => {
+    expect([AI_ADDITION_PROMPT_VERSIONS.daily, sha(AI_ADDITION_SYSTEM_PROMPTS.daily)]).toEqual(['daily-summary-v1', 'd8764b69089d6cbc838e4b3a64703572e69215fedafb26ef7b170d1e44ee8fcc'])
+    expect([AI_ADDITION_SCHEMA_VERSIONS.daily, sha(JSON.stringify(AI_ADDITION_SCHEMAS.daily))]).toEqual(['daily-summary-v1', 'd55f4a9a99f22f57b7d00e9c02816ba5b2c4e00824097f8da7359ec5438c67d8'])
+    expect(AI_ADDITION_SCHEMAS.daily.name).toBe('daily_summary')
   })
 })

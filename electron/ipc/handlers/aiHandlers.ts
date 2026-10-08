@@ -13,7 +13,7 @@ import {
   setAiCredential,
   testAiCredential
 } from '../../services/aiCredentialsService'
-import { concludeMove, exitCheck, getAiAdditionsStatus, reviewTrade } from '../../services/aiAdditionsService'
+import { concludeMove, exitCheck, getAiAdditionsStatus, reviewTrade, summarizeDay } from '../../services/aiAdditionsService'
 import { getAiConfig, listAiModels, setAiConfig } from '../../services/aiConfigService'
 import { getAiExperiment, listAiExperiments, recordAiExperiment } from '../../services/aiExperimentService'
 import { getAiUsageSummary, listAiCalls } from '../../services/aiLedgerService'
@@ -78,4 +78,5 @@ export function registerAiHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(IpcChannel.AiConcludeMove, (_event, symbol: unknown) => concludeMove(symbol, false))
   ipcMain.handle(IpcChannel.AiReviewTrade, (_event, request: unknown) => reviewTrade(request))
   ipcMain.handle(IpcChannel.AiExitCheck, (_event, request: unknown) => exitCheck(request))
+  ipcMain.handle(IpcChannel.AiSummarizeDay, (_event, request: unknown, automatic: unknown) => summarizeDay(request, automatic === true))
 }

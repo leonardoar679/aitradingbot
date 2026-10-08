@@ -10,6 +10,7 @@ import { PaperRCurveCard } from './PaperRCurveCard'
 import { ExitCheckCard } from './ExitCheckCard'
 import { AiCostPerTradeCard } from './AiCostPerTradeCard'
 import { SessionReportCard } from './SessionReportCard'
+import { DailyReportCard } from './DailyReportCard'
 
 /** How often the executors on file are read again: for which journal rows the watch paper traded,
  * and for the running total in R of the app's own paper trades. */
@@ -77,6 +78,7 @@ export function PerformancePage(): React.JSX.Element {
       <ExitCheckCard executors={executors} />
       <AiCostPerTradeCard executors={executors} />
       <SessionReportCard />
+      <DailyReportCard />
       <JournalCard paper={paperKeys} />
     </>
   )

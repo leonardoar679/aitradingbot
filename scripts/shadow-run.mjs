@@ -224,6 +224,12 @@ async function main() {
       review_verdict(question) {
         const verdict = hash(`${question.event.pair}:${question.call.entryMin}`) % 4 === 0 ? 'REJECT' : 'APPROVE'
         return { verdict, confidence: 0.6, reason: `Fake review for the check: ${question.triggers.join(', ')}.` }
+      },
+      daily_summary(question) {
+        return {
+          summary: `Fake summary for the check: on ${question.day} Bitcoin ${question.market.btcDayPct ?? 'unread'}%, ${question.news.length} major stories, ${question.trades.opened} paper trades opened and ${question.trades.ended} ended, ${question.models.length} models ranked, AI spent ${question.risk.aiSpentUsd} of ${question.risk.aiCapUsd}.`,
+          confidence: 0.5
+        }
       }
     }
 

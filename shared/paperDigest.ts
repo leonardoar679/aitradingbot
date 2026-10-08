@@ -130,7 +130,7 @@ export function paperDigestNotice(digest: PaperDigest): { title: string; body: s
   const open = digest.openNow === 0 ? 'None is open now.' : `${digest.openNow} ${digest.openNow === 1 ? 'is' : 'are'} open now.`
   return {
     title: `Paper trades on ${date} ${MONTHS[month - 1]} (UTC)`,
-    body: `${sentences.join(' ')} ${open} Nothing real was placed.`
+    body: `${sentences.join(' ')} ${open} Nothing real was placed. The daily report on Performance has the day.`
   }
 }
 

@@ -2,7 +2,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ExitCheckRequest, ExitVerdict, NewsReading, ReviewVerdict, WhyConclusion } from '../shared/aiAdditions'
+import type { DailySummaryAnswer, DailySummaryRequest, ExitCheckRequest, ExitVerdict, NewsReading, ReviewVerdict, WhyConclusion } from '../shared/aiAdditions'
 import type { MarketEvent } from '../shared/marketEvent'
 import type { AiWatchConfig } from '../shared/aiWatch'
 import type { Candle, ExecutorConfig } from '../shared/ipc'
@@ -46,6 +46,7 @@ const READING: NewsReading = { ticker: 'SOL', relationship: 'DIRECT', direction:
 const CONCLUSION: WhyConclusion = { conclusion: 'The futures listing drew buyers, on three times the usual volume.', cites: ['story:a'], confidence: 0.6 }
 const VERDICT: ReviewVerdict = { verdict: 'REJECT', confidence: 0.7, reason: 'Another model sells it, and the move is overextended.' }
 const EXIT_VERDICT: ExitVerdict = { verdict: 'EXIT', confidence: 0.65, reason: 'It broke the level it was bought on.' }
+const DAILY: DailySummaryAnswer = { summary: 'Bitcoin rose 2.1% and the regime closed bull; one major story, a SOL futures listing, with SOL up 1.2% in the hour after; three paper trades opened and two ended, +1.40 USDT; one model ranked; nothing paused.', confidence: 0.55 }
 
 /** Four hours of closed minutes ending before NOW: flat at 100, and over the last hour to `end`. */
 function minutes(end: number): Candle[] {
@@ -87,7 +88,7 @@ function stubOpenRouter(reply: (call: number) => Reply | Promise<Reply> = () => 
   vi.stubGlobal('fetch', async (_url: string, init: { body?: string }) => {
     bodies.push(JSON.parse(init.body ?? '{}'))
     const asked = bodies[bodies.length - 1].response_format?.json_schema?.name
-    const answer = asked === 'why_conclusion' ? CONCLUSION : asked === 'review_verdict' ? VERDICT : asked === 'exit_verdict' ? EXIT_VERDICT : READING
+    const answer = asked === 'why_conclusion' ? CONCLUSION : asked === 'review_verdict' ? VERDICT : asked === 'exit_verdict' ? EXIT_VERDICT : asked === 'daily_summary' ? DAILY : READING
     const { status = 200, content = JSON.stringify(answer) } = await reply(bodies.length)
     const body =
       status === 200
@@ -689,12 +690,67 @@ describe('what Settings › AI shows', () => {
     expect(await getAiAdditionsStatus()).toEqual({
       model: A,
       watchOn: true,
-      additions: { news: true, why: true, exit: true, review: true },
-      limits: { news: 40, why: 20, exit: 30, review: 20 },
-      today: { news: 0, why: 0, exit: 0, review: 0 },
-      perCall: { news: { usd: null, basis: 'unknown' }, why: { usd: null, basis: 'unknown' }, exit: { usd: null, basis: 'unknown' }, review: { usd: null, basis: 'unknown' } }
+      additions: { news: true, why: true, exit: true, review: true, daily: true },
+      limits: { news: 40, why: 20, exit: 30, review: 20, daily: 1 },
+      today: { news: 0, why: 0, exit: 0, review: 0, daily: 0 },
+      perCall: { news: { usd: null, basis: 'unknown' }, why: { usd: null, basis: 'unknown' }, exit: { usd: null, basis: 'unknown' }, review: { usd: null, basis: 'unknown' }, daily: { usd: null, basis: 'unknown' } }
     })
     await analyseStory(story('a', { publishedAt: NOW - 50 * 60, seenAt: NOW - 49 * 60 }), true)
-    expect(await getAiAdditionsStatus()).toMatchObject({ today: { news: 1, why: 0, exit: 0, review: 0 }, perCall: { news: { usd: 0.001, basis: 'history' } } })
+    expect(await getAiAdditionsStatus()).toMatchObject({ today: { news: 1, why: 0, exit: 0, review: 0, daily: 0 }, perCall: { news: { usd: 0.001, basis: 'history' } } })
+  })
+})
+
+describe('the daily summary', () => {
+  const request: DailySummaryRequest = {
+    day: '2026-10-05',
+    question: {
+      day: '2026-10-05',
+      market: { regime: 'bull', btcDayPct: 2.1, ethDayPct: -0.4, breadthPct: 61, pairsRead: 60, moversUp: [{ pair: 'SOLUSDT', dayPct: 8 }], moversDown: [{ pair: 'XRPUSDT', dayPct: -6 }] },
+      news: [{ title: 'Binance lists SOL futures', source: 'CoinDesk', impact: 80, tickers: ['SOL'], hourAfterPct: 1.2 }],
+      newsKept: true,
+      trades: { opened: 3, ended: 2, openNow: 1, net: [{ asset: 'USDT', amount: 1.4 }], r: 0.6, rTrades: 2, bestPct: 2.1, worstPct: -1.2, refused: [] },
+      calls: { made: 12, answered: 12, valid: 11, costUsd: 0.09 },
+      answers: { buy: 4, sell: 1, hold: 5, noTrade: 2 },
+      models: [{ model: A, closed: 40, netPctATrade: 0.2, profitFactor: 1.3 }],
+      risk: { pausedWatch: false, pausedNews: false, aiSpentUsd: 0.31, aiCapUsd: 5, healthPauses: 0, highAlerts: 3 }
+    }
+  }
+
+  it('asks once about a day that is over, files the paragraph under the day, and serves the cache after', async () => {
+    const { bodies } = stubOpenRouter()
+    const { summarizeDay, setAiConfig, listAiCalls } = await services()
+    await setAiConfig({ watch: ON })
+    const first = await summarizeDay(request, true)
+    expect(first).toEqual({ asked: true, outcome: { status: 'answered', answer: DAILY, cached: false, model: A } })
+    expect(bodies).toHaveLength(1)
+    expect(bodies[0].response_format.json_schema.name).toBe('daily_summary')
+    expect(bodies[0].messages[0].content).toContain("You write the day's summary")
+    expect(JSON.parse(bodies[0].messages[1].content)).toEqual(request.question)
+    const rows = (await listAiCalls({ source: 'addition', limit: 10 })).rows
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ addition: 'daily', subjectId: 'day:2026-10-05', promptVersion: 'daily-summary-v1', schemaVersion: 'daily-summary-v1', status: 'ok', symbol: 'BTCUSDT', additionAnswer: DAILY })
+    // The same figures again: the paragraph on file, nothing spent.
+    expect(await summarizeDay(request, false)).toEqual({ asked: true, outcome: { status: 'answered', answer: DAILY, cached: true, model: A } })
+    expect(bodies).toHaveLength(1)
+    // Figures that changed: one call a day, and it was made.
+    const changed = { ...request, question: { ...request.question, risk: { ...request.question.risk, highAlerts: 4 } } }
+    expect(await summarizeDay(changed, false)).toEqual({ asked: true, outcome: { status: 'skipped', reason: 'The daily summary has made its one call today.' } })
+    expect(bodies).toHaveLength(1)
+  })
+
+  it('is held to the watch when it asks by itself, and not when a person asks', async () => {
+    const { bodies } = stubOpenRouter()
+    const { summarizeDay } = await services()
+    expect(await summarizeDay(request, true)).toEqual({ asked: true, outcome: { status: 'skipped', reason: 'The daily summary asks by itself only while the watch is on.' } })
+    expect(bodies).toHaveLength(0)
+    expect((await summarizeDay(request, false)).outcome).toMatchObject({ status: 'answered', cached: false })
+    expect(bodies).toHaveLength(1)
+  })
+
+  it('refuses a request that is not a day and its figures, and a day that is not over', async () => {
+    stubOpenRouter()
+    const { summarizeDay } = await services()
+    await expect(summarizeDay({ day: '2026-10-05' }, false)).rejects.toThrow("A daily summary is asked about one UTC day's report")
+    await expect(summarizeDay({ ...request, day: '2026-10-06', question: { ...request.question, day: '2026-10-06' } }, false)).rejects.toThrow('2026-10-06 is not over yet (UTC).')
   })
 })
