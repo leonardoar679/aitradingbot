@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
 import { Card } from '../components/Card'
 import { BotPositionRow } from './BotPositionRow'
@@ -8,9 +8,12 @@ import { settingsWrites } from '../utils/settingsWrites'
 import { LivePositionRow } from './LivePositionRow'
 import { LedgerCheck } from './LedgerCheck'
 import { LiveHistoryRow } from './LiveHistoryRow'
+import { OwnPaperTradesCard } from './OwnPaperTradesCard'
+import { liveSubjects, paperSubjects } from './thesisMeasure'
+import { useThesisReadings } from './useThesisReadings'
 import { emptyAccount, settle } from '../account/paperAccount'
 import type { Bot } from '../bots/types'
-import type { HeldPosition, LivePosition } from '../../shared/ipc'
+import type { ExecutorConfig, HeldPosition, LivePosition, LiveWatcherSummary } from '../../shared/ipc'
 
 const LIVE_POLL_MS = 15_000
 
@@ -26,8 +29,10 @@ const headerCellStyle: React.CSSProperties = {
 
 export function PositionsPage(): React.JSX.Element {
   const [bots, setBots] = useState<Bot[]>([])
+  const [executors, setExecutors] = useState<ExecutorConfig[]>([])
   const [heldPositions, setHeldPositions] = useState<HeldPosition[]>([])
   const [livePositions, setLivePositions] = useState<LivePosition[]>([])
+  const [watchers, setWatchers] = useState<LiveWatcherSummary[]>([])
   const [liveHistory, setLiveHistory] = useState<LivePosition[]>([])
   const [loaded, setLoaded] = useState(false)
   const [liveError, setLiveError] = useState<string | null>(null)
@@ -55,6 +60,11 @@ export function PositionsPage(): React.JSX.Element {
       .listClosedPositions()
       .then(setLiveHistory)
       .catch((error) => console.error('Failed to load live trade history:', error))
+    // The watchers' copies: each position's barriers, shown beside it with its thesis status.
+    window.api.liveTrading
+      .listActiveWatchers()
+      .then(setWatchers)
+      .catch((error) => console.error('Failed to load live watchers:', error))
   }
 
   useEffect(() => {
@@ -71,6 +81,7 @@ export function PositionsPage(): React.JSX.Element {
       .get()
       .then((settings) => {
         setBots(settings.bots)
+        setExecutors(settings.executors)
         setHeldPositions(settings.heldPositions)
         setLoaded(true)
         loadedRef.current = true
@@ -133,6 +144,11 @@ export function PositionsPage(): React.JSX.Element {
 
   const activeBots = bots.filter((b) => b.enabled)
 
+  // The theses of the app's own paper trades and of the real positions with a watcher, measured once
+  // a minute while the page is open (thesisMeasure.ts): shown, never acted on.
+  const subjects = useMemo(() => [...paperSubjects(executors), ...liveSubjects(livePositions, watchers)], [executors, livePositions, watchers])
+  const theses = useThesisReadings(subjects)
+
   return (
     <>
       <PageHeader
@@ -168,6 +184,8 @@ export function PositionsPage(): React.JSX.Element {
         )}
       </Card>
 
+      <OwnPaperTradesCard executors={executors} readings={theses.readings} measuredAt={theses.measuredAt} />
+
       <Card title="Live Positions — Real Money">
         {liveError && (
           <p style={{ color: 'var(--down)', fontSize: '0.78rem', margin: '0 0 0.7rem' }}>
@@ -194,9 +212,17 @@ export function PositionsPage(): React.JSX.Element {
                 </tr>
               </thead>
               <tbody>
-                {livePositions.map((position) => (
-                  <LivePositionRow key={position.id} position={position} onClosed={refreshLivePositions} />
-                ))}
+                {livePositions.map((position) => {
+                  const watcher = watchers.find((entry) => entry.livePositionId === position.id) ?? null
+                  return (
+                    <LivePositionRow
+                      key={position.id}
+                      position={position}
+                      onClosed={refreshLivePositions}
+                      thesis={watcher === null ? null : { watcher, reading: theses.readings[position.id] ?? null }}
+                    />
+                  )
+                })}
               </tbody>
             </table>
           </div>

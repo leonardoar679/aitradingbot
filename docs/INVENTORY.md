@@ -39,6 +39,7 @@ Taken on 5 October 2026, at commit `aef376d`.
 | **Positions** | Open Positions | Paper bots' open positions | Positions (unchanged) |
 | | Live Positions (with ledger check), Live Trade History | Real positions, closable; realized P&L | Positions (unchanged) |
 | | Inventory | Positions handed over from stopped paper executors | Positions (unchanged) |
+| | The App's Own Paper Trades | The watch's and the news rules' open paper trades, where each stands on the last closed minute, and its THESIS STATUS (a reading, never a control); a watched real position's barriers and status | Positions (new, 8 October 2026) |
 | **Agents** | API key | The OpenRouter key: set, test, remove | Connections; also above the AI pages while none is stored |
 | | Analyze | Ask a model about one market | AI Decisions |
 | | Opportunities › Watch | Puts events to models with no click; its paper trades | Opportunities |

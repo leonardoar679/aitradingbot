@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { ExitCheck, ExitCheckRequest } from '../shared/aiAdditions'
 import type { AiExitOrder } from '../shared/aiExit'
 import type { AiExitMark, Candle, ExecutorConfig, PositionExecutorParams } from '../shared/ipc'
-import { lookAtOpenTrades, readOpenTrade, type ExitCheckDeps } from '../src/agents/exitCheck'
+import { lookAtOpenTrades, type ExitCheckDeps } from '../src/agents/exitCheck'
+import { readOpenTrade } from '../src/agents/openTradeReading'
 
 // src/agents/exitCheck.ts: the look at the app's own open paper trades. Each one that has entered is
 // measured on its closed minutes and put to the main process; an answered EXIT is handed to the

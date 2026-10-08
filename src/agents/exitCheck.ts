@@ -1,22 +1,22 @@
-import { EXIT_LINES, describeExitTrigger, exitOrderOf, type ExitCheck, type ExitCheckRequest } from '../../shared/aiAdditions'
+import { describeExitTrigger, exitOrderOf, type ExitCheck, type ExitCheckRequest } from '../../shared/aiAdditions'
 import type { NoticeExtra } from '../../shared/notices'
 import type { AiConfig } from '../../shared/aiCost'
-import { MARKET_BARS_15M, MARKET_BARS_1M, MARKET_REFERENCE_SYMBOLS, referenceReturns, type ReferenceCandles } from '../../shared/aiEventMarket'
+import type { ReferenceCandles } from '../../shared/aiEventMarket'
 import type { AiExitOrder } from '../../shared/aiExit'
 import type { AppSettings, Candle, Exchange, ExecutorConfig } from '../../shared/ipc'
-import { marketRegimeOf, type MarketRegime } from '../../shared/marketResearch'
 import { ownOpenPaperTrades } from '../../shared/paperRisk'
-import { runExecutorSimulation } from '../executors/engine'
 import { exitNewsShort, newsShortBrowserDeps } from '../news/newsPaperShort'
+import { QUARTER_HOUR, readBitcoin, readOpenTrade, regimeAt, type OpenTradeReading } from './openTradeReading'
 import { exitWatchPaperTrade, watchPaperBrowserDeps } from './watchPaperTrade'
 
 // THE EXIT CHECK'S LOOK AT THE APP'S OWN OPEN PAPER TRADES (shared/aiAdditions.ts has the rules and
 // the question; shared/aiExit.ts says what an EXIT writes).
 //
 // Every two minutes while the watch is on and the check is switched on, each of the app's own paper
-// trades that has entered is measured on its closed minutes: where the engine says it entered, the
-// last close, the pair's last fifteen minutes, and the market's regime by Bitcoin's minutes when it
-// entered and now. Then it is put to the main process, which reads the trade itself from the
+// trades that has entered is measured on its closed minutes (openTradeReading.ts, which the Positions
+// page's thesis status reads by too): where the engine says it entered, the last close, the pair's
+// last fifteen minutes, and the market's regime by Bitcoin's minutes when it entered and now. Then
+// it is put to the main process, which reads the trade itself from the
 // executors on file, finds the reasons by fixed lines, and asks only for a reason it has not been
 // asked about on that trade before. An answered EXIT is handed to the file that writes that kind of
 // trade, which brings its time limit forward so that it closes at the next minute, on paper. KEEP
@@ -29,8 +29,6 @@ import { exitWatchPaperTrade, watchPaperBrowserDeps } from './watchPaperTrade'
 /** How often it looks. */
 export const EXIT_LOOK_MS = 120_000
 
-const QUARTER_HOUR = 900
-
 export interface ExitCheckDeps {
   getConfig: () => Promise<Pick<AiConfig, 'watch' | 'additions'>>
   getSettings: () => Promise<Pick<AppSettings, 'executors'>>
@@ -42,39 +40,6 @@ export interface ExitCheckDeps {
   exitNewsShort: (order: AiExitOrder) => Promise<boolean>
   notify: (title: string, body: string, extra?: NoticeExtra) => void
   nowSec: () => number
-}
-
-/** Where an open trade stands on its closed minutes. */
-export interface OpenTradeReading {
-  entryPrice: number
-  enteredAt: number
-  /** The last closed minute. */
-  last: Candle
-  /** The pair's move over its last fifteen closed minutes, in percent; null when they are not all
-   * there. */
-  move15mPct: number | null
-}
-
-/** Where a trade stands: where the engine says it entered, the last close, and the pair's last fifteen
- * minutes. Null for one that has not entered, has closed, or whose minutes are not of the last few. */
-export function readOpenTrade(executor: ExecutorConfig, minutes: Candle[], nowSec: number): OpenTradeReading | null {
-  const closed = minutes.filter((bar) => bar.time + 60 <= nowSec)
-  // Its own minutes are the ones the settle loops simulate: from when it was opened.
-  const own = closed.filter((bar) => bar.time >= executor.createdAt)
-  if (own.length === 0) return null
-  const state = runExecutorSimulation(own, executor, own[0].close)
-  if (state.kind !== 'position' || state.status !== 'open' || state.entryPrice === null || state.enteredAt === null) return null
-  const last = closed[closed.length - 1]
-  if (nowSec - (last.time + 60) > EXIT_LINES.priceMaxAgeSeconds) return null
-  const before = closed.find((bar) => bar.time === last.time - QUARTER_HOUR)
-  const move15mPct = before === undefined || !(before.close > 0) ? null : (last.close / before.close - 1) * 100
-  return { entryPrice: state.entryPrice, enteredAt: state.enteredAt, last, move15mPct }
-}
-
-/** The market's regime as of a minute, by Bitcoin's candles before it (shared/marketResearch.ts), or
- * null when they do not reach it. */
-export function regimeAt(btc: ReferenceCandles, time: number): MarketRegime | null {
-  return marketRegimeOf(referenceReturns(btc, time))
 }
 
 function triggersIn(check: ExitCheck): string {
@@ -109,13 +74,7 @@ export async function lookAtOpenTrades(deps: ExitCheckDeps): Promise<string[]> {
     let reading = bitcoin.get(exchange)
     if (reading === undefined) {
       const from = Math.min(...read.filter((entry) => entry.executor.exchange === exchange).map((entry) => entry.reading.enteredAt))
-      reading = Promise.all([
-        deps.fetchCandles(exchange, MARKET_REFERENCE_SYMBOLS.btc, '1m', from - (MARKET_BARS_1M + 1) * 60, nowSec),
-        deps.fetchCandles(exchange, MARKET_REFERENCE_SYMBOLS.btc, '15m', from - (MARKET_BARS_15M + 2) * QUARTER_HOUR, nowSec)
-      ]).then(
-        ([candles1m, candles15m]) => ({ candles1m, candles15m }),
-        () => null
-      )
+      reading = readBitcoin(deps.fetchCandles, exchange, from, nowSec)
       bitcoin.set(exchange, reading)
     }
     return reading

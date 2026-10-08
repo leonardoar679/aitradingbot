@@ -193,10 +193,16 @@ export function registerLiveTradingHandlers(): void {
     const watchers = await listActiveWatchers()
     return watchers.map((w) => ({
       executorId: w.executorId,
+      livePositionId: w.livePositionId,
       exchange: w.exchange,
       symbol: w.symbol,
       entryPrice: w.entryPrice,
       trailingPeakPrice: w.trailingPeakPrice,
+      takeProfitPct: w.takeProfitPct,
+      stopLossPct: w.stopLossPct,
+      timeLimitSec: w.timeLimitSec,
+      trailingStop: w.trailingStop,
+      enteredAt: w.enteredAt,
       consecutiveFailures: w.consecutiveFailures,
       lastError: w.lastError
     }))

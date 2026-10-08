@@ -42,7 +42,7 @@ other.
 | | **Opportunities** | What can be traded right now: the [watch](#ai-signals--paper-only) that puts events to models with no click, and [the table](#the-opportunity-table-and-the-markets-regime) of the recommendations still valid and the last hour's other events, ranked by a signal score with fixed weights ("No high-quality opportunity right now. Wait." when nothing is on offer), each entry checked against the [live price](#live-prices) — enterable now, waiting for its range, or invalidated, with an execution score — and a row opening the score, the plan and what ends it, the risk, the news and each model's reasoning. Below it, every event the scanner raised with each model's call, Ask and Paper trade. **Why?** beside a pair says what moved it, from the [news and Bitcoin](#news--market-events). A call fills in an order form at most; a person places it. |
 | | **Markets** | One pair on any supported exchange: candlestick chart with indicators, symbol search, live ticker. Below it, **Movers**: the liquid USDT pairs that moved most over the day and over the week, by volume against their week, and CoinGecko's trending list, from the [market research](#market-research-when-the-app-opens); a row opens its chart. **Why did it move?** for the chart's pair, by [fixed rules](#news--market-events). |
 | | **AI Decisions** | **Analyze** asks a model about one market; **Signals** lists every call any model has made and how it turned out. A model is handed a market snapshot and returns one JSON decision, and is given no tools at all. |
-| | **Positions** | Live paper positions for active bots; a **Live Positions** table of real Binance holdings from live-mode Order Executor fills, closable (fully or partially) for real; a **Live Trade History** table of realized P&L from closed live positions; an **Inventory** table of positions handed over from stopped paper executors (see [Position Handover](#position-handover--inventory)). |
+| | **Positions** | Live paper positions for active bots; a **Live Positions** table of real Binance holdings from live-mode Order Executor fills, closable (fully or partially) for real; a **Live Trade History** table of realized P&L from closed live positions; an **Inventory** table of positions handed over from stopped paper executors (see [Position Handover](#position-handover--inventory)); **The App's Own Paper Trades**, the watch's and the news rules' open paper trades, each with where it stands on the last closed minute and a **THESIS STATUS** (VALID, WEAKENING or BROKEN) that is a reading and never a control; a live position with a watcher shows the watcher's barriers and the same status (see [the thesis status](#the-ai-additions)). |
 | | **Performance** | Total value, active-bot count, bot P&L and system cards; the portfolio's value over time (value/composition, 1D/1W/1M/3M) and its largest holdings; what the watch's recommendations earned, in percent and in R, over the last 10/50/100 trades and 7/30 days, with and without the [reviewer](#the-ai-additions), and whether they beat the [quant strategies](#does-ai-help-the-models-against-the-quant-strategies) on the same events; the app's own paper trades, the watch's and the news rules', as a running total in R; the journal of every recommendation with its outcome, exportable as CSV, where any line opens [its whole story](#one-trades-whole-story) on one timeline. |
 | Trading | **Paper Trading** | The paper account paper strategies spend and hand back (fund it, balances, movements), and a manual paper order ticket — market/limit, live last price, session-only order history. Nothing here reaches an exchange. |
 | | **Live Trading** | Real money: the session's gates as they stand (armed, kill switch, the day's notional and loss, the managed allocation, exits being watched), and what you hold on each connected exchange, with Binance futures positions closable for real. |
@@ -665,6 +665,17 @@ What an answer does:
 - **Measured against the plan:** once the plan's own time limit has passed, the plan is simulated on
   the same minutes and its result is written beside the exit's. Performance's "Does the exit check
   help?" adds them up: better or worse than the plan, in R where the trade had a stop, and in money.
+
+**The thesis status** is shown on Positions beside each of the app's own open paper trades, and
+beside a real position that has a watcher: VALID, WEAKENING or BROKEN, by lines already in force
+elsewhere and said once (`shared/thesisStatus.ts`). WEAKENING when one of these holds: three quarters
+of the way from the entry to the stop; a story of impact 70 or more naming the coin and pointing
+against the side; Bitcoin's regime turned against the side since the entry; 2% against the trade
+over the pair's last fifteen minutes. BROKEN when the stop is hit, or two of them hold. It is
+measured once a minute while the page is open, on the last closed minute, as the exit check measures
+its trades (`src/agents/openTradeReading.ts`), and it is a reading: nothing acts on it. The exit
+check asks by its own triggers, a paper stop is a stop, and a watcher closes a real position by its
+own barriers.
 
 **The reviewer** makes at most 20 calls a day. It takes a second look before one of the watch's
 paper trades, and only when something about the trade stands out. It is asked in the main process,
@@ -3518,8 +3529,9 @@ src/                          React renderer app
   controllers/                Controller store, headless scheduler, page
   livetrading/                LiveTradingBar (arm/kill-switch bar), LiveOrderScheduler (headless
                                poller for resting limit orders) — see Live Trading
-  positions/                  Open paper positions; Live Positions + Live Trade History (real
-                               money); Inventory (handed-over paper positions)
+  positions/                  Open paper positions; the app's own paper trades with their THESIS
+                               STATUS (thesisMeasure.ts, useThesisReadings.ts); Live Positions +
+                               Live Trade History (real money); Inventory (handed-over paper positions)
   agents/                     The AI views the AI pages and Settings are made of: Analyze, Opportunities,
                               Signals, Benchmark, Models and Usage;
                               opportunities.ts (an event's candles, the feed, and what each answer did);

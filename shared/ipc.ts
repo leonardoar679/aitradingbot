@@ -359,10 +359,21 @@ export interface LiveExitResult {
  * number that would otherwise be invisible until the moment it triggers). */
 export interface LiveWatcherSummary {
   executorId: string
+  /** The real position it guards (LivePosition.id), since 8 October 2026: what Positions joins it
+   * by. */
+  livePositionId: string
   exchange: Exchange
   symbol: string
   entryPrice: number
   trailingPeakPrice: number
+  /** Its barriers and its entry's minute, since 8 October 2026: shown beside the position, and what
+   * its thesis status is measured on (src/positions/thesisMeasure.ts). A copy: changing one here
+   * changes nothing on the watcher. */
+  takeProfitPct: number | null
+  stopLossPct: number | null
+  timeLimitSec: number | null
+  trailingStop: { activationPct: number; trailPct: number } | null
+  enteredAt: number
   /** Consecutive failed evaluations. Non-zero means the exit barriers are not currently being
    * checked, so the UI must stop implying the position is protected. */
   consecutiveFailures: number

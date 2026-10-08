@@ -689,7 +689,9 @@ describe('AI code has no route to a real order', () => {
       'settings.get'
     ])
     expect(lookSource).not.toMatch(/liveTrading|LiveTrading|liveOrders|placeLive|settings\.set|setExecutors|onPrepareOrder|aiProposal|mode:/)
-    expect(importsOf(look).sort()).toEqual(['aiAdditions', 'aiCost', 'aiEventMarket', 'aiExit', 'engine', 'ipc', 'marketResearch', 'newsPaperShort', 'notices', 'paperRisk', 'watchPaperTrade'])
+    // Since 8 October 2026 the reading of a trade's minutes is openTradeReading.ts, shared with the
+    // thesis status on Positions; the look still reaches the engine only through it.
+    expect(importsOf(look).sort()).toEqual(['aiAdditions', 'aiCost', 'aiEventMarket', 'aiExit', 'ipc', 'newsPaperShort', 'notices', 'openTradeReading', 'paperRisk', 'watchPaperTrade'])
     expect(lookSource).toContain('ownOpenPaperTrades(executors)')
     const scheduler = join(ROOT, 'src', 'agents', 'ExitCheckScheduler.tsx')
     expect(readFileSync(scheduler, 'utf-8')).not.toMatch(/window\.api/)
@@ -697,6 +699,38 @@ describe('AI code has no route to a real order', () => {
     // What Performance shows of it reads the ledger, and the executors the page hands it.
     const card = join(ROOT, 'src', 'performance', 'ExitCheckCard.tsx')
     expect([...readFileSync(card, 'utf-8').matchAll(/window\.api\.(\w+)\.(\w+)/g)].map((match) => `${match[1]}.${match[2]}`)).toEqual(['ai.listCalls'])
+  })
+
+  it('the thesis status on Positions is a reading of the records, and nothing acts on it', () => {
+    // Since 8 October 2026 (the V4 plan's Stage 5). The rule is pure (shared/thesisStatus.ts); the
+    // reading of a trade's minutes is shared with the exit check (src/agents/openTradeReading.ts);
+    // the measuring and the page read candles, the feed and the ledger, and write nothing, ask no
+    // model, and open, size or close nothing. The live rows' label reads the watcher's copy.
+    const rules = join(ROOT, 'shared', 'thesisStatus.ts')
+    expect(importsOf(rules).sort()).toEqual(['aiAdditions', 'marketResearch', 'notices', 'paperNewsBlock'])
+    expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron|liveTrading|placeLive|setExecutors/)
+    const reading = join(ROOT, 'src', 'agents', 'openTradeReading.ts')
+    expect(importsOf(reading).sort()).toEqual(['aiAdditions', 'aiEventMarket', 'engine', 'ipc', 'marketResearch'])
+    expect(readFileSync(reading, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron|liveTrading|placeLive|setExecutors|settings/)
+    const measure = join(ROOT, 'src', 'positions', 'thesisMeasure.ts')
+    expect(importsOf(measure).sort()).toEqual(['aiAdditions', 'aiEventMarket', 'ipc', 'marketResearch', 'openTradeReading', 'paperNewsBlock', 'paperRisk', 'thesisStatus'])
+    expect(readFileSync(measure, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron|liveTrading|placeLive|setExecutors|settings|closePosition/)
+    const calls = (path: string): string[] => {
+      const text = readFileSync(path, 'utf-8')
+      return [...new Set([...text.matchAll(/window\.api\.(\w+)(?:\s*\.\s*(\w+))?/g)].map((match) => (match[2] === undefined ? match[1] : `${match[1]}.${match[2]}`)))].sort()
+    }
+    expect(calls(join(ROOT, 'src', 'positions', 'useThesisReadings.ts'))).toEqual(['ai.listCalls', 'feed.getState', 'market.fetchHistoricalRange'])
+    expect(calls(join(ROOT, 'src', 'positions', 'OwnPaperTradesCard.tsx'))).toEqual(['ai.listCalls'])
+    expect(calls(join(ROOT, 'src', 'positions', 'ThesisChip.tsx'))).toEqual([])
+    for (const name of ['useThesisReadings.ts', 'OwnPaperTradesCard.tsx', 'ThesisChip.tsx']) {
+      const path = join(ROOT, 'src', 'positions', name)
+      expect(readFileSync(path, 'utf-8'), path).not.toMatch(/liveTrading|LiveTrading|placeLive|settings\.set|setExecutors|settingsWrites|onPrepareOrder|aiProposal|closePosition|exitCheck|askOpportunity/)
+    }
+    // The page hands the live row its watcher's copy; the row's one real action, Close, is the
+    // person's two clicks it was before.
+    const row = join(ROOT, 'src', 'positions', 'LivePositionRow.tsx')
+    expect(calls(row)).toEqual(['liveTrading.closePosition'])
+    expect(readFileSync(row, 'utf-8')).toContain('thesis?: { watcher: LiveWatcherSummary; reading: ThesisReading | null } | null')
   })
 
   it('the session report reads what the app did and changes none of it', () => {

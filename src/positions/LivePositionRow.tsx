@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
-import { EXCHANGES, type LivePosition } from '../../shared/ipc'
+import { describeDuration } from '../../shared/aiCost'
+import { EXCHANGES, type LivePosition, type LiveWatcherSummary } from '../../shared/ipc'
 import { useLastPrice } from '../hooks/useLastPrice'
 import { formatQuotePrice } from '../utils/formatCurrency'
 import { netRealizedPnl } from '../../shared/fees'
+import { ThesisChip } from './ThesisChip'
+import type { ThesisReading } from './thesisMeasure'
 
 function pctColor(pct: number): string {
   return pct >= 0 ? 'var(--up)' : 'var(--down)'
@@ -10,12 +13,27 @@ function pctColor(pct: number): string {
 
 const cellStyle: React.CSSProperties = { padding: '0.65rem 0.9rem', fontSize: '0.82rem' }
 
+/** The watcher's barriers in words: what guards the position, read from its copy. */
+export function describeWatcherBarriers(watcher: Pick<LiveWatcherSummary, 'stopLossPct' | 'takeProfitPct' | 'trailingStop' | 'timeLimitSec' | 'consecutiveFailures'>): string {
+  const parts: string[] = []
+  if (watcher.stopLossPct !== null) parts.push(`stop ${watcher.stopLossPct}%`)
+  if (watcher.takeProfitPct !== null) parts.push(`target ${watcher.takeProfitPct}%`)
+  if (watcher.trailingStop !== null) parts.push(`trailing ${watcher.trailingStop.trailPct}% from +${watcher.trailingStop.activationPct}%`)
+  if (watcher.timeLimitSec !== null) parts.push(`time ${describeDuration(watcher.timeLimitSec * 1000).replace('about ', '')}`)
+  const words = parts.length === 0 ? 'watcher: no barriers' : `watcher: ${parts.join(' · ')}`
+  return watcher.consecutiveFailures > 0 ? `${words} (not being checked)` : words
+}
+
 export function LivePositionRow({
   position,
-  onClosed
+  onClosed,
+  thesis = null
 }: {
   position: LivePosition
   onClosed: () => void
+  /** Its watcher and its thesis status (src/positions/thesisMeasure.ts), where it has a watcher;
+   * null for a position nothing watches. Shown only: the watcher closes it by its own barriers. */
+  thesis?: { watcher: LiveWatcherSummary; reading: ThesisReading | null } | null
 }): React.JSX.Element {
   const markPrice = useLastPrice(position.exchange, position.symbol)
   const exchangeName = EXCHANGES.find((e) => e.id === position.exchange)?.name ?? position.exchange
@@ -69,6 +87,12 @@ export function LivePositionRow({
       <td style={{ ...cellStyle, fontWeight: 600, color: 'var(--text-primary)' }}>
         {position.symbol}
         <div style={{ fontSize: '0.7rem', fontWeight: 400, color: 'var(--text-muted)' }}>{exchangeName} · real holdings</div>
+        {thesis !== null && (
+          <div style={{ fontSize: '0.7rem', fontWeight: 400, color: 'var(--text-muted)', marginTop: '0.3rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+            <span>{describeWatcherBarriers(thesis.watcher)}</span>
+            {thesis.reading !== null ? <ThesisChip verdict={thesis.reading.verdict} /> : <span>thesis: measuring…</span>}
+          </div>
+        )}
       </td>
       <td style={cellStyle}>
         {position.qty} {position.baseAsset}
