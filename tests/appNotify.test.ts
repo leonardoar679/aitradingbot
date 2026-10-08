@@ -31,6 +31,9 @@ const rig = vi.hoisted(() => {
     handlers: new Map<string, (...args: unknown[]) => unknown>(),
     shown: [] as { title: string; body: string; silent?: boolean }[],
     recorded: [] as Record<string, unknown>[],
+    /** The alerts file as the service reads it back at start: what an earlier run told. */
+    onFile: [] as Record<string, unknown>[],
+    beeps: 0,
     stored: { alerts: undefined as unknown },
     window
   }
@@ -54,7 +57,8 @@ vi.mock('electron', () => {
     ipcMain: { handle: (channel: string, handler: (...args: unknown[]) => unknown) => rig.handlers.set(channel, handler) },
     app: { getVersion: () => '0.0.0' },
     BrowserWindow: { fromWebContents: () => rig.window, getAllWindows: () => [rig.window] },
-    Notification
+    Notification,
+    shell: { beep: () => void rig.beeps++ }
   }
 })
 vi.mock('../electron/services/settingsService', () => ({ getSettings: async () => ({ alerts: rig.stored.alerts }) }))
@@ -63,7 +67,8 @@ vi.mock('../electron/services/recordStoreService', () => ({
   appendAlert: async (record: Record<string, unknown>) => {
     rig.recorded.push(record)
     return record
-  }
+  },
+  readAlertsSince: async () => ({ rows: rig.onFile, skippedLines: 0 })
 }))
 
 import { registerAppHandlers } from '../electron/ipc/handlers/appHandlers'
@@ -78,8 +83,39 @@ beforeEach(() => {
   rig.shown.length = 0
   rig.recorded.length = 0
   rig.window.sent.length = 0
+  rig.onFile.length = 0
+  rig.beeps = 0
   resetNoticeThreads()
   vi.useRealTimers()
+})
+
+describe('after a restart (V5 Stage 8, 8 October 2026)', () => {
+  it('reads the threads told in the last day back from the file, so a daily thread is not told again', async () => {
+    rig.stored.alerts = undefined
+    const nowSec = Math.floor(Date.now() / 1000)
+    rig.onFile.push({ id: 'a', at: nowSec - 3 * 3600, severity: 'high', title: 'old', body: 'b', kind: 'CIRCUIT_BREAKER', thread: 'model:openai/gpt-5-mini' })
+    rig.onFile.push({ id: 'b', at: nowSec - 3 * 3600, severity: 'watch', title: 'old', body: 'b', kind: 'TRADE_BLOCKED', thread: 'paper-blocked' })
+    // The daily thread, told three hours ago by the run before: a repeat.
+    expect(await notify('degraded', 'b', 'high', { kind: 'CIRCUIT_BREAKER', thread: 'model:openai/gpt-5-mini', threadSeconds: 86_400 })).toBe(false)
+    // A half-hour thread told three hours ago has run out: told.
+    expect(await notify('blocked', 'b', 'watch', { kind: 'TRADE_BLOCKED', thread: 'paper-blocked' })).toBe(true)
+    // Another daily thread, not on file: told.
+    expect(await notify('degraded', 'b', 'high', { kind: 'CIRCUIT_BREAKER', thread: 'model:anthropic/claude-sonnet-5.5', threadSeconds: 86_400 })).toBe(true)
+    expect(rig.shown.map((shown) => shown.title)).toEqual(['blocked', 'degraded'])
+  })
+
+  it("sounds the minute's reminder under the Notifications control, and shows and records nothing", async () => {
+    const remind = (): Promise<unknown> => Promise.resolve(rig.handlers.get(IpcChannel.AppRemind)?.())
+    rig.stored.alerts = undefined
+    expect(await remind()).toBe(true)
+    rig.stored.alerts = { enabled: true, sound: false }
+    expect(await remind()).toBe(false)
+    rig.stored.alerts = { enabled: false, sound: true }
+    expect(await remind()).toBe(false)
+    expect(rig.beeps).toBe(1)
+    expect(rig.shown).toEqual([])
+    expect(rig.recorded).toEqual([])
+  })
 })
 
 describe('a desktop notice', () => {

@@ -1,12 +1,57 @@
 import { useEffect } from 'react'
-import { NOTICE_REPEAT_SECONDS, btcHourMovePct, crashNotice, crashStep, noticeCoins, noticeSeverity, repeatsNotice, storyNotice, storySeverity, type NoticedStory } from '../../shared/alerts'
+import { AI_ADDITION_PROMPT_VERSIONS, newsReadingsOf } from '../../shared/aiAdditions'
+import { NOTICE_REPEAT_SECONDS, btcHourMovePct, crashNotice, crashStep, noticeCoins, noticeSeverity, repeatsNotice, storyNotice, storySeverity, type NoticedStory, type StoryFacts } from '../../shared/alerts'
+import type { LiveState } from '../../shared/liveMarket'
 import { heldPlaces, type Holdings } from '../../shared/newsActions'
-import type { NewsFeedState } from '../../shared/newsFeed'
+import type { NewsFeedState, ReadStory } from '../../shared/newsFeed'
 import { addAlert, addToldAlert, seedAlerts } from './alertStore'
 
 /** A story published longer ago than this when first read is not news to raise. */
 const FRESH_SECONDS = 30 * 60
 const CRASH_LOOK_MS = 60_000
+/** How far before a story the watch's call on its coin is looked for. */
+const WATCH_CALL_SECONDS = 3 * 3600
+
+/** What is known of a story when it is told (shared/alerts.ts StoryFacts; the V5 document, §50):
+ * the pair's price now and its move since the story's minute -- from the reaction's first window
+ * where the feed has one, else from the minutes the live stream holds for the pair -- the source's
+ * class, what the price did, the analyst's reading where it answered already, and the watch's
+ * latest call on the coin's events. Read from what is on file and on the stream; what cannot be
+ * read is not said. */
+async function storyFactsOf(story: ReadStory, ticker: string, state: NewsFeedState, live: LiveState | null, nowSec: number): Promise<StoryFacts> {
+  const symbol = `${ticker}USDT`
+  const reaction = state.reactions[story.id] ?? null
+  let price: StoryFacts['price'] = null
+  const book = live?.books[symbol]
+  const minutes = live?.minutes[symbol] ?? []
+  const last = book !== undefined ? (book.bid + book.ask) / 2 : minutes.length > 0 ? minutes[minutes.length - 1].close : null
+  if (last !== null) {
+    const after = reaction?.after ?? null
+    const span = after?.m15 != null ? { movePct: after.m15, over: 'the fifteen minutes after' } : after?.m5 != null ? { movePct: after.m5, over: 'the five minutes after' } : null
+    if (span !== null) price = { last, ...span }
+    else {
+      const since = minutes.find((minute) => minute.time >= Math.floor(story.publishedAt / 60) * 60)
+      price = { last, movePct: since !== undefined && since.open > 0 ? ((last - since.open) / since.open) * 100 : null, over: 'the minutes since' }
+    }
+  }
+  let reading: StoryFacts['reading'] = null
+  let watchCall: StoryFacts['watchCall'] = null
+  try {
+    const [readings, calls] = await Promise.all([
+      window.api.ai.listCalls({ source: 'addition', promptVersion: AI_ADDITION_PROMPT_VERSIONS.news, sinceSec: story.publishedAt - 3600, limit: 200 }),
+      window.api.ai.listCalls({ source: 'watch', symbol, sinceSec: Math.min(nowSec, story.publishedAt) - WATCH_CALL_SECONDS, limit: 20 })
+    ])
+    const read = newsReadingsOf(readings.rows)[story.id]
+    if (read !== undefined) reading = { relationship: read.relationship, direction: read.direction, impact: read.impact }
+    const latest = calls.rows.filter((row) => row.status === 'ok' && row.recommendation !== null && row.eventId !== undefined).sort((a, b) => b.at - a.at)[0]
+    if (latest !== undefined) {
+      watchCall = { side: latest.recommendation === 'buy' ? 'BUY' : latest.recommendation === 'sell' ? 'SELL' : 'NO TRADE', confidence: latest.confidence ?? 0, model: latest.model }
+    }
+  } catch {
+    // The ledger that could not be read is not said.
+  }
+  return { price, sourceClass: story.sourceClass, reaction: reaction === null ? null : { verdict: reaction.verdict, pricedIn: reaction.pricedIn }, reading, watchCall }
+}
 
 /** What someone holds: the settings, and the real balances where a Binance key is stored. Balances
  * that cannot be read are left out, never guessed. */
@@ -51,13 +96,21 @@ export function NewsAlertScheduler(): null {
       } catch {
         holdings = null
       }
+      let live: LiveState | null = null
+      try {
+        live = await window.api.market.liveState()
+      } catch {
+        live = null
+      }
       for (const story of fresh) {
         const held = new Set(
           story.assets.filter((asset) => asset.relationship === 'DIRECT' && holdings !== null && heldPlaces(asset.ticker, holdings).length > 0).map((asset) => asset.ticker)
         )
         const severity = storySeverity(story, held, state.reactions[story.id]?.verdict ?? null)
         const places = holdings === null ? [] : [...held].flatMap((ticker) => heldPlaces(ticker, holdings as Holdings))
-        const notice = storyNotice(story, severity, places)
+        const ticker = story.assets.find((asset) => asset.relationship === 'DIRECT')?.ticker ?? null
+        const facts = ticker === null ? {} : await storyFactsOf(story, ticker, state, live, nowSec)
+        const notice = storyNotice(story, severity, places, facts)
         addAlert({ id: story.id, severity, title: notice.title, body: notice.body, at: story.publishedAt, url: story.url, kind: 'NEWS_EVENT' })
         const level = noticeSeverity(severity)
         if (level === null || story.source === 'binance' || cancelled) continue

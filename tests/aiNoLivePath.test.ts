@@ -392,7 +392,8 @@ describe('AI code has no route to a real order', () => {
     ])
     // The news's own files offer no model a question and no form a call.
     for (const file of readers.filter((name) => /\/news|News/.test(name))) {
-      expect(readFileSync(join(ROOT, file), 'utf-8'), file).not.toMatch(/window\.api\.ai\b|aiProposal|onPrepareOrder/)
+      // Since 8 October 2026 the alert scheduler reads the ledger (ai.listCalls) for a story's facts; nothing else of the AI's.
+      expect(readFileSync(join(ROOT, file), 'utf-8'), file).not.toMatch(/window\.api\.ai\.(?!listCalls\b)|aiProposal|onPrepareOrder/)
     }
   })
 
@@ -427,19 +428,21 @@ describe('AI code has no route to a real order', () => {
       [join(ROOT, 'src', 'explorer', 'NewsFeedCard.tsx'), ['feed.openLink']],
       [join(ROOT, 'src', 'news', 'WhyItMoved.tsx'), ['feed.openLink', 'market.fetchHistoricalRange']],
       [join(ROOT, 'src', 'news', 'WhyItMovedHost.tsx'), []],
-      [join(ROOT, 'src', 'news', 'AlertBanner.tsx'), ['feed.openLink']],
+      // The banner asks the main process for the minute's reminder while a CRITICAL alert is up (8 October 2026).
+      [join(ROOT, 'src', 'news', 'AlertBanner.tsx'), ['feed.openLink', 'remind']],
       // The opportunities table opens a story on the coin, as the news tab does.
       [join(ROOT, 'src', 'agents', 'OpportunityTableCard.tsx'), ['feed.openLink']],
-      // It reads what is held -- the settings and the balances a key can read -- and the live
-      // stream's Bitcoin, and tells.
+      // It reads what is held -- the settings and the balances a key can read -- the live stream
+      // (Bitcoin, and since 8 October 2026 the story's pair for its price), and the ledger for the
+      // analyst's reading and the watch's call on the coin; and tells.
       [
         join(ROOT, 'src', 'news', 'NewsAlertScheduler.tsx'),
-        ['credentials.balances', 'credentials.list', 'feed.getState', 'feed.onUpdate', 'market.liveState', 'notify', 'records.alerts', 'records.onTold', 'settings.get']
+        ['ai.listCalls', 'credentials.balances', 'credentials.list', 'feed.getState', 'feed.onUpdate', 'market.liveState', 'notify', 'records.alerts', 'records.onTold', 'settings.get']
       ]
     ]
     for (const [path, expected] of views) {
       expect(calls(path), path).toEqual(expected)
-      expect(readFileSync(path, 'utf-8'), path).not.toMatch(/liveTrading|LiveTrading|placeLive|onPrepareOrder|aiProposal|settings\.set|window\.api\.ai\b/)
+      expect(readFileSync(path, 'utf-8'), path).not.toMatch(/liveTrading|LiveTrading|placeLive|onPrepareOrder|aiProposal|settings\.set|window\.api\.ai\.(?!listCalls\b)/)
     }
   })
 
@@ -712,6 +715,9 @@ describe('AI code has no route to a real order', () => {
       'newsFeed',
       'newsFeedService',
       'node:crypto',
+      // The budget met is told once a day on the budget's thread (8 October 2026), through the notice service.
+      'noticeService',
+      'notices',
       'path',
       'promises',
       // The exit check reads the executors on file, to find the trade it is asked about among the

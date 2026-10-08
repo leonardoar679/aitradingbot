@@ -131,6 +131,11 @@ describe('a paper trade not opened', () => {
       body: 'No paper trade: the money-out cap of 1000 USDT is reached. Nothing was placed.',
       extra: { kind: 'TRADE_BLOCKED', thread: 'paper-blocked', severity: 'watch' }
     })
+    // A losing run's pause, in the words shared/paperPause.ts gives it (8 October 2026): a person can act on it,
+    // and it is told once a day on its own thread, not at every call it refuses.
+    const pause = "No paper trade: The watch's last 20 closed paper trades had lost 5 R by 12:00 UTC, so it opens none until they are resumed on Risk & Safety."
+    expect(actionableRefusal(pause)).toBe(true)
+    expect(tradeBlockedNotice('SOLUSDT', pause).extra).toEqual({ kind: 'TRADE_BLOCKED', thread: 'paper-paused', severity: 'watch', threadSeconds: 86_400 })
   })
 })
 

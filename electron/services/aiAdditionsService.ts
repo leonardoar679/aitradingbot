@@ -48,7 +48,9 @@ import { NOTABLE_MOVE_PCT, explainMove } from '../../shared/moveExplanation'
 import type { NewsFeedState, ReadStory } from '../../shared/newsFeed'
 import { writeJsonAtomic } from './atomicWrite'
 import { additionPromptChars, AI_ADDITION_SCHEMAS, buildAdditionMessages } from './aiAdditionPrompts'
-import { assertAiBudget, findAiModel, getAiConfig, recordAiSpend } from './aiConfigService'
+import { AiBudgetError, assertAiBudget, findAiModel, getAiConfig, recordAiSpend } from './aiConfigService'
+import { tell } from './noticeService'
+import { breakerNotice } from '../../shared/notices'
 import { getDecryptedAiCredential } from './aiCredentialsService'
 import { appendAiCall, listAiCalls } from './aiLedgerService'
 import { requestWithRetry, withCost } from './aiSignalService'
@@ -180,6 +182,9 @@ async function paid<T>(input: Parameters<typeof askAddition<T>>[0], model: strin
   try {
     await assertAiBudget()
   } catch (error) {
+    // The day's budget spent: told once a day on the budget's thread, as the watch's own calls are
+    // (aiSignalService.ts). Until 8 October 2026 an addition met the budget in silence.
+    if (error instanceof AiBudgetError) tell(breakerNotice('ai-budget', `${error.message} No addition is asked again until the budget is raised or the day turns.`))
     return { status: 'skipped', reason: error instanceof Error ? error.message : String(error) }
   }
   let apiKey: string

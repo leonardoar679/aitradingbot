@@ -67,6 +67,9 @@ const api = {
    * on its thread (shared/notices.ts NoticeExtra: its kind, its thread, how loud). */
   notify: (title: string, body: string, severity?: 'watch' | 'high' | 'critical', extra?: NoticeExtra): Promise<boolean> =>
     ipcRenderer.invoke(IpcChannel.AppNotify, title, body, severity, extra),
+  /** A reminder's sound for a CRITICAL banner still up (shared/alerts.ts): the main process beeps
+   * where notices are on with sound, and shows and records nothing. Resolves true when it did. */
+  remind: (): Promise<boolean> => ipcRenderer.invoke(IpcChannel.AppRemind),
   /** The effective configuration, read-only, with its versions (shared/appConfig.ts). */
   effectiveConfig: (): Promise<EffectiveConfig> => ipcRenderer.invoke(IpcChannel.AppEffectiveConfig),
   settings: {

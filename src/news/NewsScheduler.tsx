@@ -50,7 +50,11 @@ async function actOn(item: NewsItem, config: NewsState['config'], nowSec: number
   if (actions.notifyHeld) {
     try {
       const notice = newsHolderNotice(item, await readHoldings())
-      if (notice !== null) void window.api.notify(notice.title, notice.body, undefined, { kind: 'NEWS_EVENT', thread: String(item.id) }).catch(() => undefined)
+      // CRITICAL for a delisting of a coin held, HIGH for its Monitoring Tag (shared/alerts.ts); sent
+      // without a severity until 8 October 2026, which made it a silent WATCH.
+      if (notice !== null) {
+        void window.api.notify(notice.title, notice.body, item.category === 'DELISTING' ? 'critical' : 'high', { kind: 'NEWS_EVENT', thread: String(item.id) }).catch(() => undefined)
+      }
     } catch (failure) {
       console.error('The news reader could not check what is held:', failure)
     }

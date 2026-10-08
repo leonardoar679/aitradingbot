@@ -21,6 +21,7 @@ import { netUnrealizedPct } from '../../shared/fees'
 import { breakerNotice } from '../../shared/notices'
 import { describeStrategyHealth, strategyHealth } from '../../shared/strategyHealth'
 import { MEASURED_EXPECTATIONS } from '../backtest/marketConditions'
+import { GPT_INTRADAY_STRATEGY_ID } from '../../shared/aiSignal'
 
 interface BotCardProps {
   bot: Bot
@@ -66,12 +67,16 @@ function DryRunPanel({ bot, onPrepareOrder }: { bot: Bot; onPrepareOrder?: (prop
   const expectation = MEASURED_EXPECTATIONS.find((entry) => entry.strategyId === bot.strategyId)?.trades ?? null
   const health = useMemo(() => strategyHealth(summarizePaperTrades(result?.trades ?? [], bot.enabledAt).paperTrades, expectation), [result, bot.enabledAt, expectation])
   const degradedText = health.verdict === 'degraded' ? health.reasons.join('; ') : null
+  // A bot that asks no model is told by the hourly scheduler (./StrategyHealthScheduler.tsx, since
+  // 8 October 2026), whether or not this card is open; a bot that does is told from here, where its
+  // dry run already runs. The thread is the bot's own either way: once a day.
+  const toldHere = bot.strategyId === GPT_INTRADAY_STRATEGY_ID || confirmsEntries(bot)
   useEffect(() => {
-    if (degradedText === null) return
+    if (degradedText === null || !toldHere) return
     const notice = breakerNotice('strategy', `${bot.name}: ${degradedText}. It keeps running on paper; stop it under Strategies › Active Runs if that is what you want.`, `strategy:${bot.id}`)
     // A desktop that cannot show it is not a reason to fail the poll that read the trades.
     void window.api.notify(notice.title, notice.body, notice.extra.severity, notice.extra).catch(() => undefined)
-  }, [degradedText, bot.id, bot.name])
+  }, [degradedText, toldHere, bot.id, bot.name])
 
   if (status === 'loading') {
     return <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', padding: '0.5rem 0' }}>Loading market data…</div>

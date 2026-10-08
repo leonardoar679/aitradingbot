@@ -161,9 +161,15 @@ And a ninth on 6 October 2026:
 - **`NewsAlertScheduler`** gives each story the news feed reads in the session, published within
   the last half hour, a severity (INFO, WATCH, HIGH, CRITICAL), and looks at Bitcoin's last hour on
   the live stream once a minute. WATCH and above raise a desktop notice and a count on Discovery,
-  and CRITICAL a banner until dismissed. It writes nothing, and opens, closes, sells and asks
-  nothing. Beside it, `AlertBanner` and `WhyItMovedHost` (the "Why did it move?" window) are
-  mounted above every page.
+  and CRITICAL a banner until dismissed. Since 8 October 2026 the notice says what is known of the
+  story -- the pair's price and move, the source's class, what the price did, the analyst's reading,
+  the watch's call -- read from the stream and the ledger. It writes nothing, and opens, closes,
+  sells and asks nothing. Beside it, `AlertBanner` (which, since 8 October 2026, asks the main
+  process for a sound once a minute while a CRITICAL alert is up) and `WhyItMovedHost` (the "Why did
+  it move?" window) are mounted above every page.
+- **`StrategyHealthScheduler`** (8 October 2026) reads each running bot's health once an hour, for
+  the bots that ask no model, and tells a DEGRADED one once a day on its thread; the bots that ask a
+  model are read by their card, as before. It stops nothing.
 
 The main process also runs loops that need no window at all:
 - `marketScannerService` reads the market once a minute while it is on.

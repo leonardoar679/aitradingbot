@@ -381,7 +381,18 @@ What each raises:
   - Every story is still kept on its page.
 - **HIGH and CRITICAL** raise one with sound, where sound is on under Settings' Essentials, every
   time.
-- **CRITICAL** also stays as a red banner above every page until it is dismissed.
+- **CRITICAL** also stays as a red banner above every page until it is dismissed, and, since
+  8 October 2026 (the V5 document's §49), sounds again once a minute while the banner is up, under
+  the same control: the banner asks the main process for the reminder, which shows and records
+  nothing.
+- **What a story's notice says** (since 8 October 2026; the document's example in §50), where each
+  is known: the coin's price and its move since the story's minute, from the reaction's first window
+  or the minutes the live stream holds for the pair; the source's class; what the price did
+  ("Confirmed by the price", "Priced in", "The price went the other way"); the analyst's reading
+  where it answered already; the watch's latest call on the coin's events ("The watch said BUY at
+  72% (gpt-5-mini)"); and where the coin is held. None is a call of the notice's own, and what cannot
+  be read is not said. A delisting of a coin held is told CRITICAL and its Monitoring Tag HIGH (until
+  8 October 2026 the holder's notice named no severity, so it was a silent WATCH).
 - **WATCH and above** put a count on Discovery in the sidebar, and Discovery opens on the news until
   it is seen.
 
@@ -672,7 +683,13 @@ Since 8 October 2026 (the V4 document's §107-109; the user's choice: flag and t
   Channel + Regime 583, 2.34, 35.2%, 114 h). DEGRADED when it is losing (a profit factor under one) and
   behaving unlike what was measured (a win rate more than fifteen points under, or a hold three times
   the measured one or a third of it); a flag on the card under Strategies › Active Runs and one notice
-  a day. The bot keeps running; a person stops it (`shared/strategyHealth.ts`).
+  a day. The bot keeps running; a person stops it (`shared/strategyHealth.ts`). Since 8 October 2026
+  an hourly scheduler (`src/bots/StrategyHealthScheduler.tsx`) reads each running bot's health and
+  tells it whether or not Strategies is open, for the bots that ask no model; a GPT Intraday bot's or
+  a confirming bot's dry run can ask its model, which costs money, so those are read by their card as
+  before. The threads a notice is told once a day on are read back from the alerts file when the app
+  starts, so a restart no longer tells DEGRADED, the budget or a strategy again; and an addition
+  that meets the day's budget is told on the budget's thread, where before it was skipped in silence.
 - **A fixed bug.** The live board and the registry did not pass Bitcoin's regime to the benchmark's
   cut, so their slices by regime were always empty. Both now read Bitcoin's minutes before each event,
   one request a stretch of events, and cut by the same rules as the benchmark; the live board shows

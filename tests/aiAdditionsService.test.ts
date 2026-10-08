@@ -24,6 +24,10 @@ vi.mock('../electron/services/newsFeedService', () => ({
   getNewsFeedState: () => ({ stories: feed.stories, reactions: {} })
 }))
 const settings = vi.hoisted(() => ({ executors: [] as ExecutorConfig[] }))
+const told = vi.hoisted(() => ({ notices: [] as { title: string; extra: { kind: string; thread?: string } }[] }))
+vi.mock('../electron/services/noticeService', () => ({
+  tell: (notice: { title: string; extra: { kind: string; thread?: string } }) => void told.notices.push(notice)
+}))
 vi.mock('../electron/services/settingsService', () => ({
   getSettings: async () => ({ executors: settings.executors })
 }))
@@ -276,7 +280,8 @@ describe('the news analyst', () => {
     expect(outcomes).toEqual(['answered', 'skipped'])
   })
 
-  it('is not asked switched off, or once the daily budget is spent', async () => {
+  it('is not asked switched off, or once the daily budget is spent, which is told once a day on the budget\'s thread (8 October 2026)', async () => {
+    told.notices.length = 0
     const { bodies } = stubOpenRouter()
     const { analyseStory, setAiConfig } = await services()
     await setAiConfig({ watch: ON, additions: { news: false } })
@@ -285,6 +290,8 @@ describe('the news analyst', () => {
     const outcome = await analyseStory(story('a'), true)
     expect(outcome.status).toBe('skipped')
     expect(bodies).toHaveLength(0)
+    // Told on the budget's daily thread, as the watch's own calls are; the handler keeps the thread.
+    expect(told.notices.map((notice) => [notice.title, notice.extra.kind, notice.extra.thread])).toEqual([["Today's AI budget is spent", 'CIRCUIT_BREAKER', 'ai-budget']])
   })
 
   it('takes up each fresh story of high impact once, and one the price confirmed', async () => {

@@ -1,7 +1,7 @@
 import * as electron from 'electron'
-import { ALERT_KIND_SEVERITY, healAlertKind, healAlerts, healNoticeSeverity, noticeSeverity, threadStep, type AlertKind, type AlertSeverity, type AlertThread } from '../../shared/alerts'
+import { ALERT_KIND_SEVERITY, ALERT_THREAD_SECONDS, healAlertKind, healAlerts, healNoticeSeverity, noticeSeverity, threadKey, threadStep, type AlertKind, type AlertSeverity, type AlertThread } from '../../shared/alerts'
 import { IpcChannel } from '../../shared/ipc'
-import { appendAlert } from './recordStoreService'
+import { appendAlert, readAlertsSince } from './recordStoreService'
 import { getSettings } from './settingsService'
 
 // EVERY DESKTOP NOTICE THE APP RAISES COMES THROUGH HERE (the V4 document, §47-49): from the window
@@ -66,6 +66,52 @@ let threads: Record<string, AlertThread> = {}
 /** Notifications on screen. Held because one that has been garbage-collected cannot be clicked. */
 const shown = new Set<electron.Notification>()
 
+/** The threads told in the last day, read back from the alerts file once before the first notice
+ * (V5 Stage 8, 8 October 2026): a daily thread -- a degraded model or strategy, the budget -- was
+ * forgotten with the process, so a restart told it again. A record on file now counts as its thread's
+ * first telling. A file that cannot be read seeds nothing. */
+let seeded: Promise<void> | null = null
+function seedThreads(): Promise<void> {
+  if (seeded === null) {
+    try {
+      seeded = readAlertsSince({ sinceSec: Math.floor(Date.now() / 1000) - ALERT_THREAD_SECONDS * 48 })
+        .then((page) => {
+          for (const row of page.rows) {
+            if (row.kind === undefined || row.thread === undefined) continue
+            const key = threadKey(row.kind, row.thread)
+            const held = threads[key]
+            if (held === undefined) threads[key] = { count: 1, firstAt: row.at, lastAt: row.at }
+            else if (row.at < held.firstAt) threads[key] = { ...held, firstAt: row.at }
+          }
+        })
+        .catch(() => undefined)
+    } catch {
+      seeded = Promise.resolve()
+    }
+  }
+  return seeded
+}
+
+/** The minute's reminder for a CRITICAL banner still up (the V5 document, §49): a sound where
+ * notices are on with sound, and nothing shown or recorded -- the notice itself was. The window asks
+ * for it (src/news/AlertBanner.tsx) until the banner is dismissed. Resolves true when it sounded. */
+export async function remind(): Promise<boolean> {
+  try {
+    const alerts = await alertsControl()
+    if (!alerts.enabled || !alerts.sound) return false
+    electron.shell.beep()
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** The Notifications control (shared/alerts.ts), read as this service obeys it: the one place it
+ * reads a setting. */
+async function alertsControl(): Promise<ReturnType<typeof healAlerts>> {
+  return healAlerts((await getSettings()).alerts)
+}
+
 /** How loud a notice without a severity of its own is: by its kind, else as HIGH, which sounds. */
 export function noticeLevel(request: Pick<NoticeRequest, 'severity' | 'kind'>): 'watch' | 'high' | 'critical' {
   if (request.severity !== null) return request.severity
@@ -89,6 +135,7 @@ export async function tellNotice(request: NoticeRequest | null, sender: WebConte
   try {
     const nowSec = Math.floor(Date.now() / 1000)
     if (request.kind !== null && request.thread !== null) {
+      await seedThreads()
       const step = threadStep(threads, request.kind, request.thread, nowSec, request.threadSeconds ?? undefined)
       threads = step.threads
       if (step.repeat) return false
@@ -114,7 +161,7 @@ export async function tellNotice(request: NoticeRequest | null, sender: WebConte
     }
 
     if (!electron.Notification.isSupported()) return false
-    const alerts = healAlerts((await getSettings()).alerts)
+    const alerts = await alertsControl()
     if (!alerts.enabled) return false
     const notification = new electron.Notification({ title: request.title, body: request.body, silent: !alerts.sound || level === 'watch' })
     shown.add(notification)
@@ -152,7 +199,8 @@ export function tell(notice: { title: string; body: string; extra: { severity?: 
   void tellNotice(healNoticeRequest(notice.title, notice.body, notice.extra.severity, notice.extra))
 }
 
-/** Test seam: forgets every thread. */
+/** Test seam: forgets every thread, and reads the file again before the next notice. */
 export function resetNoticeThreads(): void {
   threads = {}
+  seeded = null
 }

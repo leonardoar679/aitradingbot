@@ -10,6 +10,7 @@ export const IpcChannel = {
   AppPing: 'app:ping',
   AppGetVersion: 'app:getVersion',
   AppNotify: 'app:notify',
+  AppRemind: 'app:remind',
   AppEffectiveConfig: 'app:effectiveConfig',
   RecordsRefusal: 'records:refusal',
   RecordsRefusals: 'records:refusals',

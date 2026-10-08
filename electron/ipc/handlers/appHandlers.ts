@@ -1,6 +1,6 @@
 import { ipcMain, app } from 'electron'
 import { IpcChannel } from '../../../shared/ipc'
-import { healNoticeRequest, tellNotice } from '../../services/noticeService'
+import { healNoticeRequest, remind, tellNotice } from '../../services/noticeService'
 import { pingService } from '../../services/pingService'
 
 export function registerAppHandlers(): void {
@@ -16,4 +16,7 @@ export function registerAppHandlers(): void {
   ipcMain.handle(IpcChannel.AppNotify, (event, title: unknown, body: unknown, severity?: unknown, extra?: unknown): Promise<boolean> =>
     tellNotice(healNoticeRequest(title, body, severity, extra), event.sender)
   )
+  // The minute's reminder for a CRITICAL banner still up (the V5 document, §49): a sound and nothing
+  // else, under the same control.
+  ipcMain.handle(IpcChannel.AppRemind, (): Promise<boolean> => remind())
 }

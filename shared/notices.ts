@@ -153,13 +153,23 @@ export function breakerNotice(what: 'ai-budget' | 'model' | 'live-loss' | 'healt
 /** A paper trade refused for a reason a person can act on: funds, the money-out cap. Not the market
  * reasons that repeat every minute (a spread, a stale price), which the Watch card says. */
 export function tradeBlockedNotice(symbol: string, reason: string): Notice {
-  return { title: `${symbol}: paper trade not opened`, body: `${reason} Nothing was placed.`, extra: { kind: 'TRADE_BLOCKED', thread: 'paper-blocked', severity: 'watch' } }
+  // A losing run's pause (shared/paperPause.ts) refuses every call until it is resumed: told once a
+  // day on a thread of its own, not once per call (V5 Stage 8, 8 October 2026).
+  const paused = PAUSE_REFUSAL.test(reason)
+  return {
+    title: `${symbol}: paper trade not opened`,
+    body: `${reason} Nothing was placed.`,
+    extra: { kind: 'TRADE_BLOCKED', thread: paused ? 'paper-paused' : 'paper-blocked', severity: 'watch', ...(paused ? { threadSeconds: 86_400 } : {}) }
+  }
 }
+
+/** The words of a pause's refusal (shared/paperPause.ts paperPauseBlock). */
+const PAUSE_REFUSAL = /paused|resumed on Risk & Safety/i
 
 /** The refusal reasons a person can act on, by the words the writer gives (shared/aiWatchPaper.ts,
  * shared/paperRisk.ts, shared/paperPause.ts): a word in each that the market reasons do not have. */
 export function actionableRefusal(text: string): boolean {
-  return /paper account|money-out|cap on what|paused|funds|balance/i.test(text)
+  return /paper account|money-out|cap on what|funds|balance/i.test(text) || PAUSE_REFUSAL.test(text)
 }
 
 function utcClock(sec: number): string {

@@ -1,12 +1,33 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { criticalReminderDue } from '../../shared/alerts'
 import { bannerAlerts, dismissAlert, subscribeAlerts, type AlertRecord } from './alertStore'
 
+/** How often the banner looks at the clock for the minute's reminder. */
+const REMINDER_LOOK_MS = 5000
+
 /** CRITICAL alerts stay here, above every page, until dismissed (the second V3 document, §29): a
- * hack or delisting of a coin you hold, or Bitcoin down 5% within an hour. It shows; it acts on
- * nothing. */
+ * hack or delisting of a coin you hold, or Bitcoin down 5% within an hour. While one is up, the
+ * main process is asked for a sound once a minute (the V5 document, §49; shared/alerts.ts), under
+ * the Notifications control. It shows and reminds; it acts on nothing. */
 export function AlertBanner(): React.JSX.Element | null {
   const [alerts, setAlerts] = useState<AlertRecord[]>([])
   useEffect(() => subscribeAlerts((list) => setAlerts(bannerAlerts(list))), [])
+  /** When the banner last sounded: the notice itself, when the banner came up. */
+  const lastSoundAt = useRef<number | null>(null)
+  useEffect(() => {
+    if (alerts.length === 0) {
+      lastSoundAt.current = null
+      return
+    }
+    if (lastSoundAt.current === null) lastSoundAt.current = Math.floor(Date.now() / 1000)
+    const timer = window.setInterval(() => {
+      const nowSec = Math.floor(Date.now() / 1000)
+      if (!criticalReminderDue(alerts.length, lastSoundAt.current, nowSec)) return
+      lastSoundAt.current = nowSec
+      void window.api.remind().catch(() => undefined)
+    }, REMINDER_LOOK_MS)
+    return (): void => window.clearInterval(timer)
+  }, [alerts])
   if (alerts.length === 0) return null
   return (
     <div role="alert" style={{ background: 'color-mix(in srgb, var(--down) 18%, var(--bg-app))', borderBottom: '1px solid var(--down)' }}>

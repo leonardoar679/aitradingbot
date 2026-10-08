@@ -20,6 +20,7 @@ import { ControllerScheduler } from './controllers/ControllerScheduler'
 import { OpportunityScheduler } from './agents/OpportunityScheduler'
 import { ExitCheckScheduler } from './agents/ExitCheckScheduler'
 import { ModelHealthScheduler } from './agents/ModelHealthScheduler'
+import { StrategyHealthScheduler } from './bots/StrategyHealthScheduler'
 import { NewsScheduler } from './news/NewsScheduler'
 import { NewsAlertScheduler } from './news/NewsAlertScheduler'
 import { AlertBanner } from './news/AlertBanner'
@@ -121,6 +122,11 @@ function App(): React.JSX.Element {
           nothing and switches nothing off. */}
       <ErrorBoundary label="The models' health">
         <ModelHealthScheduler />
+      </ErrorBoundary>
+      {/* The hourly look at each running bot's health, for the bots that ask no model: a DEGRADED
+          one is told once a day, whether or not Strategies is open. It stops nothing. */}
+      <ErrorBoundary label="The strategies' health">
+        <StrategyHealthScheduler />
       </ErrorBoundary>
       {/* What a delisting does: a notice to someone holding the coin, and the rule's paper short.
           Off unless the news reader is on; nothing it does is real. */}

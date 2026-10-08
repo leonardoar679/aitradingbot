@@ -1,5 +1,5 @@
 import type { AlertSettings, Candle } from './ipc'
-import { SAME_STORY_SECONDS, describeEventType, titleSimilarity, type ReactionVerdict, type ReadStory } from './newsFeed'
+import { SAME_STORY_SECONDS, describeEventType, titleSimilarity, type ReactionVerdict, type ReadStory, type SourceClass, type StoryReaction } from './newsFeed'
 
 // THE APP'S DESKTOP NOTICES: WHETHER THEY ARE RAISED AT ALL, WITH SOUND, AND HOW LOUD EACH IS.
 //
@@ -121,14 +121,51 @@ export function repeatsNotice(story: Pick<ReadStory, 'assets' | 'title'>, severi
   )
 }
 
+/** What is known of a story at the moment it is told (the V5 document's example notice, §50; since
+ * 8 October 2026): the coin's price and its move since the story's minute, the source's class, what
+ * the price did (shared/newsFeed.ts reactions), the analyst's reading where it answered already, and
+ * the watch's call on the matching event where there is one. Each is said only where it is known;
+ * none is a call of the notice's own. */
+export interface StoryFacts {
+  price?: { last: number; movePct: number | null; over: string } | null
+  sourceClass?: SourceClass | null
+  reaction?: Pick<StoryReaction, 'verdict' | 'pricedIn'> | null
+  reading?: { relationship: string; direction: string; impact: number } | null
+  watchCall?: { side: 'BUY' | 'SELL' | 'NO TRADE'; confidence: number; model: string } | null
+}
+
+const plainPrice = (value: number): string => Number(value.toPrecision(7)).toLocaleString('en-US', { maximumFractionDigits: 8 })
+const signedPct = (value: number): string => `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
+
 /** What the desktop is told of a story. */
-export function storyNotice(story: Pick<ReadStory, 'title' | 'sourceName' | 'eventType' | 'assets' | 'impact'>, severity: AlertSeverity, heldPlaces: string[] = []): { title: string; body: string } {
+export function storyNotice(story: Pick<ReadStory, 'title' | 'sourceName' | 'eventType' | 'assets' | 'impact'>, severity: AlertSeverity, heldPlaces: string[] = [], facts: StoryFacts = {}): { title: string; body: string } {
   const coins = noticeCoins(story)
   const head = severity === 'critical' ? 'CRITICAL' : severity === 'high' ? 'HIGH' : 'News'
+  const parts = [`${story.title} (${story.sourceName}${facts.sourceClass ? `, ${facts.sourceClass}` : ''}; impact ${story.impact}).`]
+  if (facts.price) parts.push(`${coins[0] ?? 'It'} at ${plainPrice(facts.price.last)}${facts.price.movePct === null ? '' : `, ${signedPct(facts.price.movePct)} over ${facts.price.over}`}.`)
+  if (facts.reaction) {
+    if (facts.reaction.pricedIn) parts.push('Priced in: it had moved its way before it was published.')
+    else if (facts.reaction.verdict === 'CONFIRMED') parts.push('Confirmed by the price.')
+    else if (facts.reaction.verdict === 'AGAINST') parts.push('The price went the other way.')
+  }
+  if (facts.reading) parts.push(`The analyst read it as ${facts.reading.relationship}, ${facts.reading.direction}, impact ${facts.reading.impact}.`)
+  if (facts.watchCall) parts.push(`The watch said ${facts.watchCall.side} at ${Math.round(facts.watchCall.confidence * 100)}% (${facts.watchCall.model.split('/').pop() ?? facts.watchCall.model}).`)
+  if (heldPlaces.length > 0) parts.push(`You hold it: ${heldPlaces.join('; ')}.`)
+  parts.push('Nothing was placed or sold.')
   return {
     title: `${head}: ${coins.length > 0 ? `${coins.slice(0, 3).join(', ')} · ` : ''}${describeEventType(story.eventType)}`,
-    body: `${story.title} (${story.sourceName}; impact ${story.impact}).${heldPlaces.length > 0 ? ` You hold it: ${heldPlaces.join('; ')}.` : ''} Nothing was placed or sold.`
+    body: parts.join(' ')
   }
+}
+
+/** How long a CRITICAL banner still up waits between reminders (the V5 document, §49). */
+export const CRITICAL_REMINDER_SECONDS = 60
+
+/** Whether a CRITICAL banner still up is due its reminder: one or more critical alerts shown and not
+ * dismissed, and a minute since it last sounded -- the notice itself, when the banner came up. Never
+ * before it has sounded once. */
+export function criticalReminderDue(critical: number, lastSoundAt: number | null, nowSec: number): boolean {
+  return critical > 0 && lastSoundAt !== null && nowSec - lastSoundAt >= CRITICAL_REMINDER_SECONDS
 }
 
 /** Severity, in the words the handler takes it in: none for INFO, which raises no notice. */

@@ -1,8 +1,12 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   BTC_CRASH_PCT,
   BTC_CRASH_REARM_PCT,
+  CRITICAL_REMINDER_SECONDS,
   NOTICE_REPEAT_SECONDS,
+  criticalReminderDue,
   btcHourMovePct,
   crashNotice,
   crashStep,
@@ -54,6 +58,36 @@ describe('a story', () => {
       body: 'SOL bridge hacked (CoinDesk; impact 77). You hold it: 3 SOL in the paper account. Nothing was placed or sold.'
     })
     expect(storyNotice({ title: 'Markets wait on the Fed', sourceName: 'Decrypt', eventType: 'MACRO', assets: [], impact: 37 }, 'watch').title).toBe('News: Macro')
+  })
+
+  it("says what is known of it when it is told (the V5 document's example, 8 October 2026): the price and its move, the source's class, what the price did, the analyst's reading, the watch's call", () => {
+    const sol = { title: 'SOL futures listed', sourceName: 'CoinDesk', eventType: 'LISTING' as const, assets: [{ ticker: 'SOL', relationship: 'DIRECT' as const }], impact: 72 }
+    expect(
+      storyNotice(sol, 'high', [], {
+        price: { last: 112.34, movePct: 1.234, over: 'the fifteen minutes after' },
+        sourceClass: 'media',
+        reaction: { verdict: 'CONFIRMED', pricedIn: false },
+        reading: { relationship: 'DIRECT', direction: 'up', impact: 70 },
+        watchCall: { side: 'BUY', confidence: 0.72, model: 'openai/gpt-5-mini' }
+      }).body
+    ).toBe(
+      'SOL futures listed (CoinDesk, media; impact 72). SOL at 112.34, +1.23% over the fifteen minutes after. Confirmed by the price. The analyst read it as DIRECT, up, impact 70. The watch said BUY at 72% (gpt-5-mini). Nothing was placed or sold.'
+    )
+    // Priced in outranks the verdict; against is said; a move not read is left out; nothing known says nothing.
+    expect(storyNotice(sol, 'high', [], { reaction: { verdict: 'CONFIRMED', pricedIn: true } }).body).toContain('Priced in: it had moved its way before it was published.')
+    expect(storyNotice(sol, 'high', [], { reaction: { verdict: 'AGAINST', pricedIn: false } }).body).toContain('The price went the other way.')
+    expect(storyNotice(sol, 'high', [], { reaction: { verdict: 'PENDING', pricedIn: false }, price: { last: 112, movePct: null, over: 'the minutes since' } }).body).toBe(
+      'SOL futures listed (CoinDesk; impact 72). SOL at 112. Nothing was placed or sold.'
+    )
+    expect(storyNotice(sol, 'high', ['3 SOL in the paper account'], {}).body).toBe('SOL futures listed (CoinDesk; impact 72). You hold it: 3 SOL in the paper account. Nothing was placed or sold.')
+  })
+
+  it("asks for the minute's reminder while a CRITICAL banner is up, a minute after it last sounded, and never before it has (the V5 document, §49)", () => {
+    expect(CRITICAL_REMINDER_SECONDS).toBe(60)
+    expect(criticalReminderDue(1, 1000, 1060)).toBe(true)
+    expect(criticalReminderDue(2, 1000, 1059)).toBe(false)
+    expect(criticalReminderDue(0, 1000, 2000)).toBe(false)
+    expect(criticalReminderDue(1, null, 2000)).toBe(false)
   })
 
   it('raises no notice at info, and sends only the three words the handler takes', () => {
@@ -206,5 +240,23 @@ describe('recycled news (8 October 2026)', () => {
     expect(storySeverity(story({ eventType: 'HACK', impact: 90, repeat: true }), new Set(['SOL']))).toBe('watch')
     expect(storySeverity(story({ impact: 30, repeat: true }), new Set())).toBe('info')
     expect(storySeverity(story({ impact: 90, repeat: false }), new Set())).toBe('high')
+  })
+})
+
+describe('the notices fixed on 8 October 2026 (V5 Stage 8), pinned in the files that raise them', () => {
+  const ROOT = join(__dirname, '..')
+  const read = (...parts: string[]): string => readFileSync(join(ROOT, ...parts), 'utf-8')
+
+  it("tells a delisting of a coin held as CRITICAL, and its Monitoring Tag as HIGH, where before it named no severity", () => {
+    expect(read('src', 'news', 'NewsScheduler.tsx')).toContain("item.category === 'DELISTING' ? 'critical' : 'high'")
+  })
+
+  it('reads each running bot\'s health from a scheduler, for the bots that ask no model, and leaves the others to their card', () => {
+    const scheduler = read('src', 'bots', 'StrategyHealthScheduler.tsx')
+    expect(scheduler).toContain('if (!bot.enabled || bot.strategyId === GPT_INTRADAY_STRATEGY_ID || confirmsEntries(bot)) continue')
+    expect(scheduler).not.toMatch(/window\.api\.ai\b/)
+    expect([...new Set([...scheduler.matchAll(/window\.api\.(\w+)(?:\.(\w+))?/g)].map((match) => (match[2] === undefined ? match[1] : `${match[1]}.${match[2]}`)))].sort()).toEqual(['notify', 'settings.get'])
+    expect(read('src', 'bots', 'BotCard.tsx')).toContain('const toldHere = bot.strategyId === GPT_INTRADAY_STRATEGY_ID || confirmsEntries(bot)')
+    expect(read('src', 'App.tsx')).toContain('<StrategyHealthScheduler />')
   })
 })
