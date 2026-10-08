@@ -7,7 +7,7 @@ import { useEventFeed } from '../agents/useEventFeed'
 import { subscribeAlerts, type AlertRecord } from '../news/alertStore'
 import type { Page } from '../navigation/pages'
 import { useNowSec } from '../utils/useNowSec'
-import { breakingEvents, describeTally, majorAlerts, tallyAnswers } from './overviewBlocks'
+import { breakingEvents, describeAnswers, majorAlerts } from './overviewBlocks'
 
 /** Events read for this card: the newest, as many as Opportunities shows at first. */
 const EVENTS_READ = 20
@@ -16,9 +16,10 @@ function utcClock(sec: number): string {
   return new Date(sec * 1000).toISOString().slice(11, 16)
 }
 
-/** The last hour's events at candidate or above, strongest first, with what the models said about
- * each, and the session's alerts at HIGH or above (the second V3 document, §51). It reads the
- * scanner's events, the ledger's answers and the alerts raised; it asks and opens nothing. */
+/** The last hour's events at candidate or above, strongest first (a market-wide move before the
+ * pairs in it), with what the models said about each, and the session's alerts at HIGH or above
+ * (the second V3 document, §51). It reads the scanner's events, the ledger's answers and the alerts
+ * raised; it asks and opens nothing. */
 export function BreakingEventsCard({ onNavigate }: { onNavigate: (page: Page) => void }): React.JSX.Element {
   const { feed, scannerOn, problem } = useEventFeed(EVENTS_READ)
   const nowSec = useNowSec(true, 15_000)
@@ -38,7 +39,7 @@ export function BreakingEventsCard({ onNavigate }: { onNavigate: (page: Page) =>
           {events.map((item) => (
             <li key={item.event.id}>
               <strong>{item.event.symbol}</strong> {describeEventType(item.event.type).toLowerCase()} at {utcClock(item.event.time)} UTC, score {item.event.score.toFixed(0)} ({item.event.band})
-              <span style={{ color: 'var(--text-secondary)' }}> · models: {describeTally(tallyAnswers(item.answers))}</span>
+              <span style={{ color: 'var(--text-secondary)' }}> · models: {describeAnswers(item)}</span>
             </li>
           ))}
         </ul>

@@ -6,7 +6,7 @@ import type { NewsReading } from '../shared/aiAdditions'
 import type { ReadStory, StoryReaction } from '../shared/newsFeed'
 import type { EventFeedItem } from '../src/agents/opportunities'
 import type { AlertRecord } from '../src/news/alertStore'
-import { BREAKING_SHOWN, breakingEvents, describeReaction, describeTally, majorAlerts, newsImpact, tallyAnswers, todaysPaper } from '../src/overview/overviewBlocks'
+import { BREAKING_SHOWN, breakingEvents, describeAnswers, describeReaction, describeTally, majorAlerts, newsImpact, tallyAnswers, todaysPaper } from '../src/overview/overviewBlocks'
 
 // Overview's blocks (the second V3 document, §51): the last hour's events, the news that matters,
 // and what the app's own paper trades did today, each a selection over what is on file.
@@ -163,5 +163,35 @@ describe("today's paper trades", () => {
     expect(today.net).toEqual([{ asset: 'USDT', amount: 1.3 }])
     expect(today.r).toBeGreaterThan(0)
     expect(todaysPaper([], T)).toEqual({ opened: 0, closed: 0, openNow: 0, net: [], r: 0, rTrades: 0, best: null, worst: null })
+  })
+})
+
+describe('a market-wide move among the breaking events', () => {
+  // The pairs that moved with Bitcoin out-score the move (its score is Bitcoin's own), and none of
+  // them was asked about: the move was, once. Overview puts the move first and says so of them.
+  const MOVE = `binance:BTCUSDT:${T - 120}`
+  const move = item({
+    id: MOVE,
+    symbol: 'BTCUSDT',
+    baseAsset: 'BTC',
+    time: T - 120,
+    type: 'market_move',
+    direction: 'down',
+    score: 85,
+    live: { detectedAt: T - 112, quoteVolume24h: 2_000_000_000, spreadPct: 0.01, candidateScore: 90, rank: 1, members: [{ symbol: 'ETHUSDT', direction: 'down', score: 93, returnM15Pct: -4.5, volumeRatio: 20 }] }
+  })
+  const member = (symbol: string, score: number, rank: number): EventFeedItem =>
+    item({ id: `binance:${symbol}:${T - 120}`, symbol, time: T - 120, type: 'breakdown', direction: 'down', score, live: { detectedAt: T - 112, quoteVolume24h: 1_000_000_000, spreadPct: 0.02, candidateScore: score, rank, marketMove: MOVE } })
+  const other = item({ id: `binance:LINKUSDT:${T - 600}`, symbol: 'LINKUSDT', time: T - 600, score: 88 })
+
+  it('comes before the pairs in it, however they score, and after a stronger event of its own', () => {
+    const feed = [member('ETHUSDT', 93, 2), member('BNBUSDT', 92, 3), other, move]
+    expect(breakingEvents(feed, T).map((entry) => entry.event.symbol)).toEqual(['LINKUSDT', 'BTCUSDT', 'ETHUSDT', 'BNBUSDT'])
+  })
+
+  it('is the event that was asked about; a pair in it says so instead of waiting for an answer', () => {
+    expect(describeAnswers(member('ETHUSDT', 93, 2))).toBe('part of a market-wide move')
+    expect(describeAnswers(move)).toBe('no answer yet')
+    expect(describeAnswers(item({}, [decision({ recommendation: 'buy' })]))).toBe('1 BUY')
   })
 })

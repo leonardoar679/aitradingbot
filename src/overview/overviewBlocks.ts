@@ -21,11 +21,21 @@ export const BREAKING_SHOWN = 5
 export const NEWS_IMPACT_SECONDS = 6 * 3600
 export const NEWS_IMPACT_SHOWN = 5
 
-/** The last hour's events at candidate or above, strongest first, with the answers held for them. */
+/** The last hour's events at candidate or above, strongest first -- except that the pairs of a
+ * market-wide move follow the move, whatever they score: the move is the one event of them the
+ * watch asked about, and a list that put its pairs above it would show the breadth before the
+ * event. */
 export function breakingEvents(feed: readonly EventFeedItem[], nowSec: number, shown = BREAKING_SHOWN): EventFeedItem[] {
-  return feed
-    .filter((item) => item.event.time >= nowSec - BREAKING_SECONDS && item.event.time <= nowSec && isAtLeast(item.event.band, 'candidate'))
-    .sort((a, b) => b.event.score - a.event.score || b.event.time - a.event.time)
+  const recent = feed.filter((item) => item.event.time >= nowSec - BREAKING_SECONDS && item.event.time <= nowSec && isAtLeast(item.event.band, 'candidate'))
+  const moves = new Map(recent.filter((item) => item.event.type === 'market_move').map((item) => [item.event.id, item.event.score]))
+  const place = (item: EventFeedItem): number => {
+    const move = item.event.live?.marketMove
+    const moveScore = move === undefined ? undefined : moves.get(move)
+    return moveScore === undefined ? item.event.score : Math.min(item.event.score, moveScore)
+  }
+  const first = (item: EventFeedItem): number => (item.event.type === 'market_move' ? 0 : 1)
+  return recent
+    .sort((a, b) => place(b) - place(a) || first(a) - first(b) || b.event.score - a.event.score || b.event.time - a.event.time)
     .slice(0, shown)
 }
 
@@ -58,6 +68,14 @@ export function describeTally(tally: AnswerTally): string {
   if (tally.none > 0) parts.push(`${tally.none} NO TRADE`)
   if (tally.refused > 0) parts.push(`${tally.refused} refused`)
   return parts.length === 0 ? 'no answer yet' : parts.join(', ')
+}
+
+/** What the models said about an event, in a few words -- or, for a pair that is part of a
+ * market-wide move, that it is: the move is the one event of them the watch asked about, so the
+ * pair is not waiting for an answer. */
+export function describeAnswers(item: EventFeedItem): string {
+  if (item.event.live?.marketMove !== undefined) return 'part of a market-wide move'
+  return describeTally(tallyAnswers(item.answers))
 }
 
 /** The alerts of this session at HIGH or above, newest first, as the store keeps them. */

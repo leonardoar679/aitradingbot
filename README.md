@@ -188,8 +188,9 @@ normal, and 15 trending coins, 8 of them on Binance.
 **Overview in five seconds** (since 8 October 2026; the document's §51). Under the market's status
 and the best opportunity (with the next two on offer named under it), Overview now has three more
 blocks, each a selection over what is on file (`src/overview/overviewBlocks.ts`): **Breaking
-events**, the last hour's events at candidate or above, strongest first, with what the models said
-about each and the session's HIGH and CRITICAL alerts; **News impact**, the strongest stories of the
+events**, the last hour's events at candidate or above, strongest first (a market-wide move before
+the pairs in it, which say they are part of it rather than waiting for an answer), with what the
+models said about each and the session's HIGH and CRITICAL alerts; **News impact**, the strongest stories of the
 last six hours that name a coin, with the analyst's reading where it read them and what the price
 did after; and **Today's performance**, the app's own paper trades opened, closed and open by the
 UTC day, their net after fees and in R, the best and the worst, and, with a Binance key, what real
