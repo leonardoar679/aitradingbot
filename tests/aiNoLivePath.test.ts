@@ -929,7 +929,8 @@ describe('AI code has no route to a real order', () => {
       .filter((path) => /window\.api\.feed\.history\(/.test(readFileSync(path, 'utf-8')))
       .map((path) => path.slice(ROOT.length + 1).replace(/\\/g, '/'))
       .sort()
-    expect(historyReaders).toEqual(['src/agents/EventBenchmarkView.tsx', 'src/agents/LiveBoardCard.tsx'])
+    // And since 8 October 2026 an experiment's report, for the same verdict over the run's span (V5 Stage 9).
+    expect(historyReaders).toEqual(['src/agents/EventBenchmarkView.tsx', 'src/agents/LiveBoardCard.tsx', 'src/ai-benchmark/experimentReport.ts'])
   })
 
   it('the opportunity score ranks and the cap on one side refuses; both are arithmetic', () => {

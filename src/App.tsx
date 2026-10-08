@@ -21,6 +21,7 @@ import { OpportunityScheduler } from './agents/OpportunityScheduler'
 import { ExitCheckScheduler } from './agents/ExitCheckScheduler'
 import { ModelHealthScheduler } from './agents/ModelHealthScheduler'
 import { StrategyHealthScheduler } from './bots/StrategyHealthScheduler'
+import { ExperimentScheduler } from './ai-benchmark/ExperimentScheduler'
 import { NewsScheduler } from './news/NewsScheduler'
 import { NewsAlertScheduler } from './news/NewsAlertScheduler'
 import { AlertBanner } from './news/AlertBanner'
@@ -127,6 +128,11 @@ function App(): React.JSX.Element {
           one is told once a day, whether or not Strategies is open. It stops nothing. */}
       <ErrorBoundary label="The strategies' health">
         <StrategyHealthScheduler />
+      </ErrorBoundary>
+      {/* The report of an experiment that has ended, built from the records and filed on its run
+          (shared/experimentRun.ts). It asks nothing and opens nothing. */}
+      <ErrorBoundary label="The experiments' reports">
+        <ExperimentScheduler />
       </ErrorBoundary>
       {/* What a delisting does: a notice to someone holding the coin, and the rule's paper short.
           Off unless the news reader is on; nothing it does is real. */}

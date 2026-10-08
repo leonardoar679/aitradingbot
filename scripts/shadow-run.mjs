@@ -20,6 +20,8 @@
 //   MODELS_FROM    a saved model catalogue to copy in, for the price estimates   [the real profile's]
 //   RESUME         1 keeps the profile and the output of an earlier segment and carries on
 //   HOUR_REPORT_MINUTES  how often the last hour's report is saved; lowered for a short check     [60]
+//   EXPERIMENT     start one of the app's own runs at launch (shared/experimentRun.ts): shadow-1h,
+//                  paper-12h, or custom (RUN_MINUTES long); its report is saved at the end       [none]
 //
 // IT NEVER TOUCHES THE REAL PROFILE OR out/. The profile has to be inside SHADOW_ROOT and is never
 // the real profile or Electron's default; on a resume it has to carry the marker this script leaves;
@@ -47,6 +49,8 @@ if (!/^[a-z0-9-]+$/.test(RUN_NAME)) throw new Error(`a run name of letters, digi
 const RUN_MINUTES = Number(process.env.RUN_MINUTES ?? 722)
 if (!Number.isFinite(RUN_MINUTES) || RUN_MINUTES <= 0) throw new Error(`RUN_MINUTES must be a number of minutes: ${process.env.RUN_MINUTES}`)
 const MIN_BAND = process.env.MIN_BAND ?? 'urgent'
+const EXPERIMENT = process.env.EXPERIMENT ?? ''
+if (EXPERIMENT !== '' && !['shadow-1h', 'paper-12h', 'custom'].includes(EXPERIMENT)) throw new Error(`EXPERIMENT is shadow-1h, paper-12h or custom: ${EXPERIMENT}`)
 const UNIVERSE_SIZE = Number(process.env.UNIVERSE_SIZE ?? 60)
 const SHADOW_ROOT = path.resolve(process.env.SHADOW_ROOT ?? path.join(os.tmpdir(), 'traderspider-shadow'))
 const PROFILE = path.join(SHADOW_ROOT, `${RUN_NAME}-profile`)
@@ -337,6 +341,22 @@ async function main() {
   )
   say(`setup: ${JSON.stringify(setup)}`)
 
+  // One of the app's own runs (shared/experimentRun.ts), started once the watch is on so that its
+  // record says so; a resumed segment finds it still running on file and starts none.
+  if (EXPERIMENT !== '') {
+    const started = await page.evaluate(
+      async ([kind, minutes]) => {
+        const { rows } = await window.api.experiments.list()
+        const running = rows.find((run) => run.status === 'running')
+        if (running) return { kept: running.id, endsAt: running.endsAt }
+        const run = await window.api.experiments.start({ kind, minutes })
+        return { id: run.id, endsAt: run.endsAt, mode: run.mode, versions: run.versions }
+      },
+      [EXPERIMENT, Math.max(3, Math.round(remainingMs / 60_000))]
+    )
+    say(`experiment: ${JSON.stringify(started)}`)
+  }
+
   await nav('Performance')
   const started = await inReportCard(async (card) => {
     // The card keeps the session's start in the profile's local storage; a resumed segment keeps it.
@@ -387,6 +407,27 @@ async function main() {
   texts.hour = await report('Last hour', 'hour', false)
   fs.writeFileSync(path.join(OUT, 'card-text.json'), JSON.stringify(texts, null, 2))
   for (const [name, text] of Object.entries(texts)) say(`report ${name}: ${text.headline}`)
+
+  // The experiment's report, filed by the app itself once the run has ended: waited for, then saved.
+  if (EXPERIMENT !== '') {
+    let reported = null
+    for (let k = 0; k < 60 && reported === null; k++) {
+      await new Promise((r) => setTimeout(r, 10_000))
+      const { rows } = await page.evaluate(() => window.api.experiments.list())
+      const run = rows.find((entry) => entry.report !== undefined) ?? null
+      if (run !== null) reported = run
+      else if (k === 20) {
+        // A run that still reads as running at the end of the segment is stopped: its report covers what ran.
+        const running = rows.find((entry) => entry.status === 'running')
+        if (running) await page.evaluate((id) => window.api.experiments.stop(id), running.id)
+      }
+    }
+    if (reported === null) say('experiment: no report was filed in ten minutes')
+    else {
+      fs.writeFileSync(path.join(OUT, `experiment-${reported.id}.json`), JSON.stringify(reported, null, 2))
+      say(`experiment ${reported.id}: ${reported.report.passed ? 'every gate that applies passed' : 'a gate failed'}; ${reported.report.verdict}; saved to ${path.join(OUT, `experiment-${reported.id}.json`)}`)
+    }
+  }
 
   // The news tab, for the record.
   await nav('Discovery')

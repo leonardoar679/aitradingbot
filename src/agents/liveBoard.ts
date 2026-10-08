@@ -53,8 +53,15 @@ export interface LiveAnswers {
 
 /** The watch's answers from `models` over the last LIVE_BOARD_DAYS, joined to the events they
  * were about. Free: it reads two files. */
-export async function readLiveAnswers(models: string[], nowSec: number, deps: Pick<LiveBoardDeps, 'listCalls' | 'listEvents'>): Promise<LiveAnswers> {
-  const sinceSec = nowSec - LIVE_BOARD_DAYS * 86_400
+export async function readLiveAnswers(
+  models: string[],
+  nowSec: number,
+  deps: Pick<LiveBoardDeps, 'listCalls' | 'listEvents'>,
+  /** A span of its own instead of the last LIVE_BOARD_DAYS: an experiment's (shared/experimentRun.ts). */
+  span?: { fromSec: number; toSec: number }
+): Promise<LiveAnswers> {
+  const sinceSec = span === undefined ? nowSec - LIVE_BOARD_DAYS * 86_400 : span.fromSec
+  const untilSec = span === undefined ? nowSec : span.toSec
   const [calls, onFile, reviewed] = await Promise.all([
     deps.listCalls({ source: 'watch', promptVersions: AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS, sinceSec, limit: ROWS_READ }),
     // An answer inside the period can be about an event raised a few minutes before it began.
@@ -67,7 +74,7 @@ export async function readLiveAnswers(models: string[], nowSec: number, deps: Pi
   // feed follows too. A call that never reached a model has nothing to score.
   const kept = new Map<string, Map<string, { decision: ReturnType<typeof decisionOfCall>; at: number }>>()
   for (const row of [...calls.rows].sort((a, b) => a.at - b.at)) {
-    if (row.eventId === undefined || row.status === 'failed' || !models.includes(row.model)) continue
+    if (row.eventId === undefined || row.status === 'failed' || !models.includes(row.model) || row.at > untilSec) continue
     const byModel = kept.get(row.eventId) ?? new Map<string, { decision: ReturnType<typeof decisionOfCall>; at: number }>()
     if (!byModel.has(row.model)) byModel.set(row.model, { decision: decisionOfCall(row), at: row.at })
     kept.set(row.eventId, byModel)

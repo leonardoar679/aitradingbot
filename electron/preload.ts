@@ -14,6 +14,7 @@ import type {
 import type { AiBenchmarkPeek, AiBenchmarkPeekRequest } from '../shared/aiBenchmark'
 import type { AiEntryConfirmRequest, AiEntryPeek } from '../shared/aiConfirm'
 import type { AiExperiment, AiExperimentInput, AiExperimentPage } from '../shared/aiExperiment'
+import type { ExperimentKind, ExperimentReport, ExperimentRun } from '../shared/experimentRun'
 import type { AiOpportunityAskRequest, AiOpportunityPeek, AiOpportunityPeekRequest } from '../shared/aiOpportunity'
 import type { AiConfig, AiConfigPatch, AiKeyInfo, AiModelCatalogue, AiUsageSummary } from '../shared/aiCost'
 import type { AiCallFilter, AiCallPage } from '../shared/aiLedger'
@@ -384,6 +385,20 @@ const api = {
   },
   /** The records on file (shared/records.ts): the app's own paper trades refused, and the alerts
    * told, each written as it happens and read back by span. Records; nothing acts on them. */
+  // The runs the app keeps of itself (shared/experimentRun.ts): a record and a clock in the main
+  // process, the report built by the window at the end and filed through `report`. Nothing here
+  // asks a model or trades.
+  experiments: {
+    start: (input: { kind: ExperimentKind; minutes?: number | null }): Promise<ExperimentRun> => ipcRenderer.invoke(IpcChannel.ExperimentStart, input),
+    list: (): Promise<{ rows: ExperimentRun[]; skippedLines: number }> => ipcRenderer.invoke(IpcChannel.ExperimentList),
+    stop: (id: string): Promise<ExperimentRun | null> => ipcRenderer.invoke(IpcChannel.ExperimentStop, id),
+    report: (id: string, report: ExperimentReport): Promise<ExperimentRun | null> => ipcRenderer.invoke(IpcChannel.ExperimentReport, id, report),
+    onUpdate: (listener: (run: ExperimentRun) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, run: ExperimentRun): void => listener(run)
+      ipcRenderer.on(IpcChannel.ExperimentUpdate, handler)
+      return () => ipcRenderer.removeListener(IpcChannel.ExperimentUpdate, handler)
+    }
+  },
   records: {
     refusal: (record: PaperRefusalRecord): Promise<PaperRefusalRecord | null> => ipcRenderer.invoke(IpcChannel.RecordsRefusal, record),
     refusals: (filter: RecordFilter): Promise<{ rows: PaperRefusalRecord[]; skippedLines: number }> => ipcRenderer.invoke(IpcChannel.RecordsRefusals, filter),

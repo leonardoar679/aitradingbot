@@ -909,6 +909,27 @@ What it reports:
   and engine versions (Settings › Advanced › Effective configuration, `shared/appConfig.ts`), the
   detector, and the prompt and schema versions of the span's calls.
 
+**Experiments in the app** (since 8 October 2026; the V5 document's §56-62 and §124-126;
+`shared/experimentRun.ts`). AI Benchmark › Experiments starts one of the app's own runs -- one hour,
+twelve hours, or a length of your own -- and lists every run kept. A run writes down what the app is
+as it starts: the mode the chip read (SHADOW with the watch off or asking only, PAPER with its paper
+trades, CONFIRM with the switch), the prompt, context, schema, detector, configuration and engine
+versions, the watch's models and the scanner's universe. The main process keeps the record and the
+clock (`aiExperiments/runs.jsonl`, one line a change, the newest line an id's run), so a run
+continues to its end across a restart, and a run still going refuses a second. When it ends, the
+window builds its report from the records and files it on the run: the session report over the
+run's span with its gates; the document's five further gates (no two paper trades from one call,
+every watch call naming its event, every watch trade naming its call, no row of the ledger without
+a status, no gap in the stream over three minutes); "Does AI help?" over the span's events for each
+model the watch asked (the quant rows, holding, the model, the hybrids, and the news and live-price
+verdicts); the costs (fees, slippage as the engine charged it, the answers); and "AI ADDING VALUE:
+YES / NOT YET / NOT ENOUGH TRADES" by pinned lines: thirty closed paper trades or more, the net after
+fees and the answers' cost above nought, gains over losses above one, and the deepest fall under ten
+R. A run that ended while the app was closed is reported at the next launch. The report is shown on
+the tab and saved as JSON or CSV. A run changes nothing about how the app runs, and asks nothing
+itself; the shadow harness (`scripts/shadow-run.mjs`, `EXPERIMENT=shadow-1h|paper-12h|custom`) starts
+one at launch, so its runs are the app's own.
+
 Since 8 October 2026 the alerts told and the paper trades refused are on file (`shared/records.ts`,
 one JSON line each in a file per UTC month), so the report reaches back for them as far as the span
 does; only the stream's log reaches back to the app's start. A trade's timeline reads the same file

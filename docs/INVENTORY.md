@@ -170,6 +170,12 @@ And a ninth on 6 October 2026:
 - **`StrategyHealthScheduler`** (8 October 2026) reads each running bot's health once an hour, for
   the bots that ask no model, and tells a DEGRADED one once a day on its thread; the bots that ask a
   model are read by their card, as before. It stops nothing.
+- **`ExperimentScheduler`** (8 October 2026; `shared/experimentRun.ts`) builds the report of one of
+  the app's own runs once it has ended -- the session report over its span, the document's five
+  further gates, "Does AI help?" over its events, the costs and the verdict -- from the records, and
+  files it on the run through the main process, which keeps the runs and their clock
+  (`experimentRunService.ts`, `aiExperiments/runs.jsonl`). Started and shown on AI Benchmark ›
+  Experiments. It asks nothing and opens nothing.
 
 The main process also runs loops that need no window at all:
 - `marketScannerService` reads the market once a minute while it is on.

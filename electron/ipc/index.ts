@@ -13,10 +13,12 @@ import { registerBacktestHandlers } from './handlers/backtestHandlers'
 import { registerAiHandlers } from './handlers/aiHandlers'
 import { registerRecordHandlers } from './handlers/recordHandlers'
 import { registerHealthHandlers } from './handlers/healthHandlers'
+import { registerExperimentHandlers } from './handlers/experimentHandlers'
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerAppHandlers()
   registerRecordHandlers()
+  registerExperimentHandlers(mainWindow)
   registerSettingsHandlers()
   registerMarketHandlers(mainWindow)
   registerScannerHandlers(mainWindow)

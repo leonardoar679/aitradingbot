@@ -7,7 +7,7 @@ import type { AppSettings, Candle, ExecutorConfig, PositionExecutorParams } from
 import type { LiveConnection } from '../../shared/liveMarket'
 import { EVENT_DETECTOR_VERSION, type MarketEvent } from '../../shared/marketEvent'
 import { healPaperRisk } from '../../shared/paperRisk'
-import { sessionReportOf, type ReportRecommendation, type ReportSpan, type ReportTradeReading, type SessionReport } from '../../shared/shadowReport'
+import { sessionReportOf, type ReportRecommendation, type ReportSpan, type ReportTradeReading, type SessionReport, type SessionReportInput } from '../../shared/shadowReport'
 import { assembleFeed, loadFeedBars, scoreAnswer, type CandleFetch } from '../agents/opportunities'
 import { paperRefusals, SESSION_STARTED_SEC, type PaperRefusal } from '../agents/paperRefusals'
 import { runExecutorSimulation } from '../executors/engine'
@@ -79,6 +79,12 @@ export function readTrade(executor: ExecutorConfig, minutes: Candle[], nowSec: n
 /** The report over `span`, from `fromSec` to now. Never throws for one trade or recommendation whose
  * minutes cannot be read: that one reads as not measured, and the report says so. */
 export async function buildSessionReport(span: ReportSpan, fromSec: number, deps: SessionReportDeps, toSec?: number): Promise<SessionReport> {
+  return sessionReportOf(await collectSessionReportInput(span, fromSec, deps, toSec))
+}
+
+/** What the report is made of, read from the records (shared/shadowReport.ts SessionReportInput):
+ * the same input an experiment's report adds its own gates to (shared/experimentRun.ts). */
+export async function collectSessionReportInput(span: ReportSpan, fromSec: number, deps: SessionReportDeps, toSec?: number): Promise<SessionReportInput> {
   const nowSec = deps.nowSec()
   // The span's end: now, or a past moment for a day that is over (the daily report, ./dailyReport.ts).
   const endSec = Math.min(toSec ?? nowSec, nowSec)
@@ -144,7 +150,7 @@ export async function buildSessionReport(span: ReportSpan, fromSec: number, deps
     }
   }
 
-  return sessionReportOf({
+  return {
     span,
     fromSec,
     toSec: endSec,
@@ -161,7 +167,7 @@ export async function buildSessionReport(span: ReportSpan, fromSec: number, deps
     trades,
     stories,
     versions
-  })
+  }
 }
 
 /** The same, against the running app. Every call reads. */
