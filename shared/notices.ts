@@ -160,3 +160,14 @@ export function actionableRefusal(text: string): boolean {
 function utcClock(sec: number): string {
   return new Date(sec * 1000).toISOString().slice(11, 16)
 }
+
+/** CONFIRM: a paper BUY the watch opened, told as ready to confirm as a real order (the V4 document,
+ * §45). The person fills the order in from Opportunities and places it; nothing is placed by this. */
+export function confirmNotice(event: Pick<MarketEvent, 'id' | 'symbol' | 'type' | 'time'>, call: { who: string; confidence: number }): Notice {
+  const at = `${new Date(event.time * 1000).toISOString().slice(11, 16)} UTC`
+  return {
+    title: `${event.symbol}: ready to confirm`,
+    body: `${call.who} at ${Math.round(call.confidence * 100)}% confidence called a BUY on the ${describeEventType(event.type).toLowerCase()} at ${at}, and a paper trade is open on it. Open Opportunities and press Confirm to fill in a real order from the call, sized by your risk setting: you place it, and nothing is placed by this.`,
+    extra: { kind: 'TRADE_OPPORTUNITY', thread: `confirm:${event.id}`, severity: 'high' }
+  }
+}

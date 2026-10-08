@@ -410,6 +410,9 @@ export function planWatchPaperTrade(input: {
   nowSec: number
   /** The price now. Null means the event's own price, the last the model saw. */
   lastPrice: number | null
+  /** The paper account's equity in the trade's quote (shared/paperRisk.ts paperEquity), for a trade
+   * sized by a share of it; null or absent without an account. */
+  equityQuote?: number | null
 }): WatchPaperPlan {
   const { config, event, decision } = input
   const current = input.lastPrice ?? event.price
@@ -440,7 +443,7 @@ export function planWatchPaperTrade(input: {
   // Its market fills give up what its score charges them (shared/aiOpportunityOutcome.ts), and it is
   // sized with that in what it risks.
   const slippageRate = slippageRateForEvent({ live: event.live ?? null })
-  const size = sizePaperTrade({ risk: input.risk, stakeQuote: config.stakeQuote, stopPct: proposal.stopLossPct, quoteAsset: event.quoteAsset, slippageRate })
+  const size = sizePaperTrade({ risk: input.risk, stakeQuote: config.stakeQuote, stopPct: proposal.stopLossPct, quoteAsset: event.quoteAsset, slippageRate, equityQuote: input.equityQuote })
   if (!size.ok) return { ok: false, reason: size.reason }
   const side: ExecutorSide = proposal.side ?? 'buy'
   return {

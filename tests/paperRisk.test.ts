@@ -5,12 +5,15 @@ import {
   PAPER_MAX_OUT_CHOICES,
   PAPER_MIN_STAKE,
   PAPER_RISK_CHOICES,
+  PAPER_RISK_PCT_CHOICES,
   describePaperRisk,
   healPaperRisk,
+  paperEquity,
   paperOut,
   paperOutBlock,
   paperRiskProblem,
   paperStake,
+  riskPerTrade,
   riskedAtStop,
   sizePaperTrade
 } from '../shared/paperRisk'
@@ -19,7 +22,7 @@ import {
 // rules' -- are sized, and how much they may stake together. The two writers are held to it in
 // tests/aiWatchPaper.test.ts and tests/newsActions.test.ts.
 
-const RISK: PaperRiskSettings = { sizing: 'risk', riskQuote: 1, maxOutQuote: 1000 }
+const RISK: PaperRiskSettings = { sizing: 'risk', riskQuote: 1, riskPct: 0.25, maxOutQuote: 1000 }
 
 const params = (amountQuote: number): PositionExecutorParams => ({
   side: 'buy',
@@ -63,32 +66,32 @@ const NEWS = { articleId: 7, ticker: 'XRP', releaseSec: 1, title: 'Binance Will 
 
 describe('the setting', () => {
   it('is on until changed: a stop risks about 1, and 1,000 at most out together', () => {
-    expect(DEFAULT_PAPER_RISK).toEqual({ sizing: 'risk', riskQuote: 1, maxOutQuote: 1000 })
+    expect(DEFAULT_PAPER_RISK).toEqual({ sizing: 'risk', riskQuote: 1, riskPct: 0.25, maxOutQuote: 1000 })
     for (const nothing of [undefined, null, 'risk', 7, []]) expect(healPaperRisk(nothing)).toEqual(DEFAULT_PAPER_RISK)
   })
 
   it('reads back each of its choices, and no cap as a choice of its own', () => {
-    expect(healPaperRisk({ sizing: 'stake', riskQuote: 25, maxOutQuote: null })).toEqual({ sizing: 'stake', riskQuote: 25, maxOutQuote: null })
-    for (const riskQuote of PAPER_RISK_CHOICES) for (const maxOutQuote of PAPER_MAX_OUT_CHOICES) expect(healPaperRisk({ sizing: 'risk', riskQuote, maxOutQuote })).toEqual({ sizing: 'risk', riskQuote, maxOutQuote })
+    expect(healPaperRisk({ sizing: 'stake', riskQuote: 25, riskPct: 0.25, maxOutQuote: null })).toEqual({ sizing: 'stake', riskQuote: 25, riskPct: 0.25, maxOutQuote: null })
+    for (const riskQuote of PAPER_RISK_CHOICES) for (const maxOutQuote of PAPER_MAX_OUT_CHOICES) expect(healPaperRisk({ sizing: 'risk', riskQuote, maxOutQuote })).toEqual({ sizing: 'risk', riskQuote, riskPct: 0.25, maxOutQuote })
   })
 
   it('heals a field that is not one of its choices to its default, a missing cap included', () => {
     expect(healPaperRisk({ sizing: 'kelly', riskQuote: 3, maxOutQuote: 123 })).toEqual(DEFAULT_PAPER_RISK)
-    expect(healPaperRisk({ sizing: 'stake', riskQuote: 10 })).toEqual({ sizing: 'stake', riskQuote: 10, maxOutQuote: 1000 })
-    expect(healPaperRisk({ sizing: 'stake', riskQuote: '10', maxOutQuote: '500' })).toEqual({ sizing: 'stake', riskQuote: 1, maxOutQuote: 1000 })
+    expect(healPaperRisk({ sizing: 'stake', riskQuote: 10 })).toEqual({ sizing: 'stake', riskQuote: 10, riskPct: 0.25, maxOutQuote: 1000 })
+    expect(healPaperRisk({ sizing: 'stake', riskQuote: '10', riskPct: 0.25, maxOutQuote: '500' })).toEqual({ sizing: 'stake', riskQuote: 1, riskPct: 0.25, maxOutQuote: 1000 })
   })
 
   it('can only be saved as one of its choices', () => {
     expect(paperRiskProblem(RISK)).toBeNull()
     expect(paperRiskProblem({ ...RISK, maxOutQuote: null })).toBeNull()
-    expect(paperRiskProblem({ ...RISK, sizing: 'kelly' as 'risk' })).toMatch(/sized by the risk at its stop, or by its stake/)
+    expect(paperRiskProblem({ ...RISK, sizing: 'kelly' as 'risk' })).toMatch(/sized by the risk at its stop, by a share of the paper account, or by its stake/)
     expect(paperRiskProblem({ ...RISK, riskQuote: 3 })).toMatch(/risks 1, 2, 5, 10, 25, 50/)
     expect(paperRiskProblem({ ...RISK, maxOutQuote: 0 })).toMatch(/or have no cap/)
   })
 
   it('says how it is set', () => {
     expect(describePaperRisk(RISK)).toBe('Each with a stop stakes what would lose about 1 there, after fees, and never more than its own stake. Together they stake at most 1,000.')
-    expect(describePaperRisk({ sizing: 'stake', riskQuote: 5, maxOutQuote: null })).toBe('Each stakes its own stake. There is no cap on what they stake together.')
+    expect(describePaperRisk({ sizing: 'stake', riskQuote: 5, riskPct: 0.25, maxOutQuote: null })).toBe('Each stakes its own stake. There is no cap on what they stake together.')
   })
 })
 
@@ -164,5 +167,53 @@ describe('what the app has out', () => {
     expect(paperOut(open, 'USDT') + 255.34).toBeGreaterThan(1000)
     expect(paperOutBlock({ risk: RISK, executors: open, quoteAsset: 'USDT', amountQuote: 255.34 })).toBeNull()
     expect(paperOutBlock({ risk: RISK, executors: open, quoteAsset: 'USDT', amountQuote: 255.35 })).not.toBeNull()
+  })
+})
+
+describe('a stake sized by a share of the paper account (8 October 2026)', () => {
+  const EQUITY: PaperRiskSettings = { sizing: 'equity', riskQuote: 1, riskPct: 0.5, maxOutQuote: 1000 }
+  const account = (usdt: number): { balances: Record<string, number> } => ({ balances: { USDT: usdt } })
+
+  it('is on offer as a choice, read back, and saved only as one of its shares', () => {
+    expect(PAPER_RISK_PCT_CHOICES).toEqual([0.1, 0.25, 0.5, 1, 2])
+    expect(healPaperRisk({ sizing: 'equity', riskQuote: 2, riskPct: 1, maxOutQuote: 500 })).toEqual({ sizing: 'equity', riskQuote: 2, riskPct: 1, maxOutQuote: 500 })
+    expect(healPaperRisk({ sizing: 'equity', riskQuote: 2, riskPct: 3, maxOutQuote: 500 }).riskPct).toBe(0.25)
+    expect(paperRiskProblem(EQUITY)).toBeNull()
+    expect(paperRiskProblem({ ...EQUITY, riskPct: 3 })).toMatch(/risks 0.1, 0.25, 0.5, 1, 2% of the paper account/)
+  })
+
+  it("measures the account's equity in a quote asset: its balance and what its own trades have out", () => {
+    expect(paperEquity(account(900), [position('a', 100, { watch: WATCH })], 'USDT')).toBe(1000)
+    expect(paperEquity(account(900), [position('a', 100)], 'USDT')).toBe(900)
+    expect(paperEquity(account(0), [], 'USDT')).toBeNull()
+    expect(paperEquity(null, [position('a', 100, { watch: WATCH })], 'USDT')).toBeNull()
+    expect(paperEquity(undefined, [], 'USDT')).toBeNull()
+    expect(paperEquity({ balances: { BTC: 1 } }, [], 'USDT')).toBeNull()
+  })
+
+  it('risks the share of the equity at the stop, and the fixed risk without an account', () => {
+    expect(riskPerTrade(EQUITY, 1000)).toBe(5)
+    expect(riskPerTrade(EQUITY, null)).toBe(1)
+    expect(riskPerTrade(EQUITY, undefined)).toBe(1)
+    // An equity of nothing, or less, is no equity to take a share of: the fixed risk stands.
+    expect(riskPerTrade(EQUITY, 0)).toBe(1)
+    expect(riskPerTrade(EQUITY, -50)).toBe(1)
+    expect(riskPerTrade(RISK, 1000)).toBe(1)
+    // 5 at a 1.5% stop and 0.2% of fees: 5 / 1.7% is 294.11; held to a stake of 100.
+    expect(paperStake({ risk: EQUITY, stakeQuote: 1000, stopPct: 1.5, equityQuote: 1000 })).toBe(294.11)
+    expect(paperStake({ risk: EQUITY, stakeQuote: 100, stopPct: 1.5, equityQuote: 1000 })).toBe(100)
+    expect(paperStake({ risk: EQUITY, stakeQuote: 1000, stopPct: 1.5, equityQuote: null })).toBe(58.82)
+    expect(paperStake({ risk: EQUITY, stakeQuote: 1000, stopPct: 1.5 })).toBe(58.82)
+    expect(sizePaperTrade({ risk: EQUITY, stakeQuote: 100, stopPct: 25, quoteAsset: 'USDT', equityQuote: 1000 })).toEqual({ ok: true, amountQuote: 19.84 })
+    expect(sizePaperTrade({ risk: EQUITY, stakeQuote: 100, stopPct: 25, quoteAsset: 'USDT', equityQuote: 100 })).toEqual({
+      ok: false,
+      reason: 'Its stop is 25% away, so risking 0.5 USDT there stakes 1.98 USDT: under the 5 the smallest order on Binance is worth.'
+    })
+  })
+
+  it('says how it is set', () => {
+    expect(describePaperRisk(EQUITY)).toBe(
+      "Each with a stop stakes what would lose about 0.5% of the paper account's equity there, after fees, and never more than its own stake; without a paper account, about 1. Together they stake at most 1,000."
+    )
   })
 })

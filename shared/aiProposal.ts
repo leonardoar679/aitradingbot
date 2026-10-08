@@ -2,6 +2,7 @@ import { INTERVAL_SECONDS, type Exchange, type ExecutorSide, type Interval, type
 import { GPT_FLAT, GPT_MIN_CONFIDENCE, gptActionFor, type AiSignalDecision } from './aiSignal'
 import { isActionableOpportunity, opportunitySide, opportunityWindow } from './aiOpportunity'
 import { describeDecider } from './aiPanel'
+import { FEE_RATE } from './fees'
 import { describeEventType, type MarketEvent, type MarketEventType } from './marketEvent'
 
 // FROM A CALL TO AN ORDER, BY HAND.
@@ -269,6 +270,41 @@ export function aiProposalPositionParams(proposal: AiOrderProposal, defaults: Po
     timeLimitSec: proposal.timeLimitSec,
     trailingStop: null
   }
+}
+
+/** Binance's smallest order on a USDT pair is worth 5, as the paper trades are held to: a suggestion
+ * under it is none. */
+const MIN_SUGGESTED_QUOTE = 5
+
+export interface SuggestedLiveAmount {
+  amountQuote: number
+  /** What the stop would lose, about: the share of the base, to a hundredth. */
+  riskQuote: number
+  /** What the share was taken of. */
+  basis: 'allocation' | 'daily cap'
+  /** Held down to the max order size. */
+  capped: boolean
+}
+
+/** What a real order filled in from a call is suggested to stake (the V4 document, §35-36): the risk
+ * setting's share of the managed allocation -- or of the day's cap, without one -- lost at the
+ * call's stop after a round trip's fees, and never over the max order size. A suggestion for the
+ * form, which a person may change before placing; the model never sizes. Null without a usable
+ * stop, a base to take the share of (an allocation of nothing is one), or a size worth placing. */
+export function suggestedLiveAmount(input: { riskPct: number; allocationQuote: number | null; dailyCapQuote: number; maxOrderQuote: number; stopLossPct: number | null }): SuggestedLiveAmount | null {
+  const base = input.allocationQuote ?? input.dailyCapQuote
+  if (!(base > 0) || !(input.riskPct > 0) || input.stopLossPct === null || !(input.stopLossPct > 0) || !(input.maxOrderQuote > 0)) return null
+  const riskQuote = (base * input.riskPct) / 100
+  const raw = riskQuote / (input.stopLossPct / 100 + 2 * FEE_RATE)
+  const amountQuote = Math.floor(Math.min(raw, input.maxOrderQuote) * 100) / 100
+  if (amountQuote < MIN_SUGGESTED_QUOTE) return null
+  return { amountQuote, riskQuote: Math.round(riskQuote * 100) / 100, basis: input.allocationQuote !== null ? 'allocation' : 'daily cap', capped: raw > input.maxOrderQuote }
+}
+
+/** The suggestion in words, for the form. */
+export function describeSuggestedLiveAmount(suggested: SuggestedLiveAmount, input: { riskPct: number; stopLossPct: number; quoteAsset: string }): string {
+  const held = suggested.capped ? ' Held to the max order size.' : ''
+  return `Amount ${plainNumber(suggested.amountQuote)} ${input.quoteAsset}: ${input.riskPct}% of your ${suggested.basis} (${plainNumber(suggested.riskQuote)} ${input.quoteAsset}) lost at the ${input.stopLossPct}% stop, after fees.${held} Sized by your risk setting on Risk & Safety, not by the model; change it as you like.`
 }
 
 /** When a position made from a proposal gives up waiting to enter, in Unix seconds, or null when

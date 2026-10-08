@@ -204,7 +204,9 @@ describe('AI code has no route to a real order', () => {
     // and nothing from the renderer or the main process. A recommendation on an event added two
     // of those imports on 2026-10-04: what a recommendation is, and the name of an event's type.
     const rules = readFileSync(join(ROOT, 'shared', 'aiProposal.ts'), 'utf-8')
-    expect(importsOf(join(ROOT, 'shared', 'aiProposal.ts')).sort()).toEqual(['aiOpportunity', 'aiPanel', 'aiSignal', 'ipc', 'marketEvent'])
+    // And, since 8 October 2026, the fee rate: the amount a real order from a call is suggested to
+    // stake is what the person's risk share would lose at the call's stop after fees.
+    expect(importsOf(join(ROOT, 'shared', 'aiProposal.ts')).sort()).toEqual(['aiOpportunity', 'aiPanel', 'aiSignal', 'fees', 'ipc', 'marketEvent'])
     expect(rules).not.toMatch(/window\.|ipcRenderer|electron/)
   })
 

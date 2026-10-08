@@ -3,6 +3,7 @@ import {
   NEAR_STOP_SHARE,
   actionableRefusal,
   breakerNotice,
+  confirmNotice,
   disagreementNotice,
   liveExitNotice,
   marketEventNotice,
@@ -123,5 +124,16 @@ describe('a paper trade not opened', () => {
       body: 'No paper trade: the money-out cap of 1000 USDT is reached. Nothing was placed.',
       extra: { kind: 'TRADE_BLOCKED', thread: 'paper-blocked', severity: 'watch' }
     })
+  })
+})
+
+describe('a paper BUY ready to confirm (8 October 2026)', () => {
+  it('names the call, says a paper trade is open, and that pressing Confirm fills in a real order a person places', () => {
+    const notice = confirmNotice(EVENT, { who: 'GPT-5 mini', confidence: 0.74 })
+    expect(notice.title).toBe('SOLUSDT: ready to confirm')
+    expect(notice.body).toBe(
+      'GPT-5 mini at 74% confidence called a BUY on the breakout at 22:53 UTC, and a paper trade is open on it. Open Opportunities and press Confirm to fill in a real order from the call, sized by your risk setting: you place it, and nothing is placed by this.'
+    )
+    expect(notice.extra).toEqual({ kind: 'TRADE_OPPORTUNITY', thread: 'confirm:binance:SOLUSDT:1791500000', severity: 'high' })
   })
 })

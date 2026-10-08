@@ -76,3 +76,21 @@ export function describeUntrustedLossTally(realizedPnlToday: number): string | n
   if (Number.isFinite(realizedPnlToday)) return null
   return `Today's realized P&L could not be totalled (${realizedPnlToday}), so the daily loss limit cannot be enforced — live orders are blocked until this is resolved`
 }
+
+/** Of the managed allocation, or of the day's cap without one, the share one real order filled in
+ * from a call is sized to risk at the call's stop (shared/aiProposal.ts suggestedLiveAmount): a
+ * suggestion for the order form, which a person may change, and never a gate. Since 8 October 2026
+ * (the V4 document, §35-36). */
+export const LIVE_RISK_PCT_CHOICES = [0.1, 0.25, 0.5, 1, 2] as const
+export const DEFAULT_LIVE_RISK_PCT = 0.25
+
+/** A stored share, read as one: one of the choices, else the default. */
+export function healLiveRiskPct(value: unknown): number {
+  return (LIVE_RISK_PCT_CHOICES as readonly unknown[]).includes(value) ? (value as number) : DEFAULT_LIVE_RISK_PCT
+}
+
+/** Why a share cannot be saved, or null when it can. */
+export function liveRiskPctProblem(value: unknown): string | null {
+  if ((LIVE_RISK_PCT_CHOICES as readonly unknown[]).includes(value)) return null
+  return `A real order filled in from a call risks ${LIVE_RISK_PCT_CHOICES.join(', ')}% of the allocation at its stop (got ${String(value)})`
+}

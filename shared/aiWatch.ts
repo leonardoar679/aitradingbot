@@ -55,6 +55,11 @@ export interface AiWatchConfig {
   /** Ask the first model alone, and the others only when it calls a trade. Most events are no
    * trade, so most then cost one call instead of one a model. */
   firstModelGates: boolean
+  /** CONFIRM (the V4 document, §45; chosen 8 October 2026, off by default). With paper trades on, a
+   * paper BUY the watch opens is also told as ready to confirm, and Opportunities' row offers to
+   * fill in a real order from the call, sized by the risk setting. A person types the phrase and
+   * places it; the watch places nothing, with this on or off. Not a term of the watch's price. */
+  confirmLive: boolean
 }
 
 export const DEFAULT_AI_WATCH: AiWatchConfig = {
@@ -62,7 +67,8 @@ export const DEFAULT_AI_WATCH: AiWatchConfig = {
   models: [],
   maxEventsPerDay: AI_WATCH_DEFAULT_EVENT_LIMIT,
   minBand: 'urgent',
-  firstModelGates: false
+  firstModelGates: false,
+  confirmLive: false
 }
 
 export function isAiWatchEventLimit(value: unknown): value is (typeof AI_WATCH_EVENT_LIMITS)[number] {
@@ -89,7 +95,9 @@ export function healAiWatch(value: unknown, enabledModels: string[]): AiWatchCon
     models,
     maxEventsPerDay: isAiWatchEventLimit(raw.maxEventsPerDay) ? raw.maxEventsPerDay : AI_WATCH_DEFAULT_EVENT_LIMIT,
     minBand: raw.minBand === 'candidate' ? 'candidate' : 'urgent',
-    firstModelGates: raw.firstModelGates === true
+    firstModelGates: raw.firstModelGates === true,
+    // Off unless switched on; a file written before it existed keeps its watch as it was.
+    confirmLive: raw.confirmLive === true
   }
 }
 
@@ -98,6 +106,7 @@ export function healAiWatch(value: unknown, enabledModels: string[]): AiWatchCon
 export function aiWatchProblem(watch: AiWatchConfig, enabledModels: string[]): string | null {
   if (typeof watch.enabled !== 'boolean') return 'The watch is either on or off'
   if (typeof watch.firstModelGates !== 'boolean') return 'Asking the first model alone is either on or off'
+  if (typeof watch.confirmLive !== 'boolean') return 'Ready-to-confirm notices are either on or off'
   if (!Array.isArray(watch.models) || !watch.models.every((model) => typeof model === 'string')) return 'The watch asks a list of models'
   if (watch.models.length > AI_OPPORTUNITY_MAX_MODELS) return `The watch asks at most ${AI_OPPORTUNITY_MAX_MODELS} models`
   if (new Set(watch.models).size !== watch.models.length) return 'The watch was given the same model twice'

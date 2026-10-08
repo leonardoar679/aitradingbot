@@ -280,7 +280,8 @@ export async function setAiConfig(patch: AiConfigPatch): Promise<AiConfig> {
       models: asked.models ?? state.watch.models,
       maxEventsPerDay: asked.maxEventsPerDay ?? state.watch.maxEventsPerDay,
       minBand: asked.minBand ?? state.watch.minBand,
-      firstModelGates: asked.firstModelGates ?? state.watch.firstModelGates
+      firstModelGates: asked.firstModelGates ?? state.watch.firstModelGates,
+      confirmLive: asked.confirmLive ?? state.watch.confirmLive
     }
     const problem = aiWatchProblem(candidate, enabledModels)
     if (problem !== null) throw new Error(problem)

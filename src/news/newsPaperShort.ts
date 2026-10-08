@@ -15,7 +15,7 @@ import {
 import type { AppSettings, Candle, Exchange, ExecutorConfig, PositionExecutorParams, SymbolInfo } from '../../shared/ipc'
 import { correlatedExposureBlock, readBtcCorrelation } from '../../shared/paperExposure'
 import { healPaperPause, paperPauseBlock } from '../../shared/paperPause'
-import { healPaperRisk, paperOutBlock, sizePaperTrade } from '../../shared/paperRisk'
+import { healPaperRisk, paperEquity, paperOutBlock, sizePaperTrade } from '../../shared/paperRisk'
 import { describeExecutorFunding } from '../account/executorFunding'
 import { settleExecutorOnStop } from '../account/settleExecutor'
 import { runExecutorSimulation } from '../executors/engine'
@@ -162,7 +162,14 @@ export async function openNewsShorts(item: NewsItem, actions: Pick<NewsKindActio
       // A tag's short has a stop, and is sized by what it would lose there where that is how the
       // app's own paper trades are sized; a delisting's has none, and stakes its stake.
       const risk = healPaperRisk(fresh.paperRisk)
-      const size = sizePaperTrade({ risk, stakeQuote: stake, stopPct: drafted.stopLossPct, quoteAsset: pair.quoteAsset, slippageRate })
+      const size = sizePaperTrade({
+        risk,
+        stakeQuote: stake,
+        stopPct: drafted.stopLossPct,
+        quoteAsset: pair.quoteAsset,
+        slippageRate,
+        equityQuote: paperEquity(fresh.paperAccount ?? null, fresh.executors, pair.quoteAsset)
+      })
       if (!size.ok) return { refused: size.reason }
       const params: PositionExecutorParams = { ...drafted, amountQuote: size.amountQuote }
       const problem =

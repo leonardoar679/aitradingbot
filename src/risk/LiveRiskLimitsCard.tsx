@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
+import { LIVE_RISK_PCT_CHOICES } from '../../shared/liveLimits'
 import { describeFeeRateMismatch } from '../../shared/observedFee'
 import { Card } from '../components/Card'
 import type { LiveTradingStatus } from '../../shared/ipc'
@@ -14,6 +15,7 @@ export function LiveRiskLimitsCard(): React.JSX.Element {
   const [dailyCapQuote, setDailyCapQuote] = useState('')
   const [dailyLossLimitQuote, setDailyLossLimitQuote] = useState('')
   const [allocationQuote, setAllocationQuote] = useState('')
+  const [riskPct, setRiskPct] = useState('')
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -27,6 +29,7 @@ export function LiveRiskLimitsCard(): React.JSX.Element {
       // Blank and 0 are different answers -- "not using an allocation" and "an allocation of
       // nothing" -- so an unset allocation must come back as an empty field, never as "0".
       setAllocationQuote(s.allocationQuote === null ? '' : String(s.allocationQuote))
+      setRiskPct(String(s.riskPct))
     })
   }
 
@@ -43,7 +46,8 @@ export function LiveRiskLimitsCard(): React.JSX.Element {
         maxOrderQuote: Number(maxOrderQuote),
         dailyCapQuote: Number(dailyCapQuote),
         dailyLossLimitQuote: Number(dailyLossLimitQuote),
-        allocationQuote: allocationQuote.trim() === '' ? null : Number(allocationQuote)
+        allocationQuote: allocationQuote.trim() === '' ? null : Number(allocationQuote),
+        riskPct: Number(riskPct)
       })
       refresh()
       setSaved(true)
@@ -123,7 +127,22 @@ export function LiveRiskLimitsCard(): React.JSX.Element {
             style={textInputStyle()}
           />
         </div>
+        <div style={{ flex: '1 1 160px' }}>
+          <label style={fieldLabelStyle()}>A real order from a call risks (% of the allocation)</label>
+          <select aria-label="The share of the allocation a real order from a call risks" value={riskPct} onChange={(e) => setRiskPct(e.target.value)} style={textInputStyle()}>
+            {LIVE_RISK_PCT_CHOICES.map((choice) => (
+              <option key={choice} value={String(choice)}>
+                {choice}%
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
+      <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0.7rem 0 0', lineHeight: 1.5 }}>
+        An order form filled in from a model's call opens with its amount sized by this: the share of the managed allocation, or of the daily cap
+        without one, that the call's stop would lose after fees, under the max order size. A suggestion, which you may change before placing;
+        the model is never asked for an amount, and no gate reads it.
+      </p>
       <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0.7rem 0 0', lineHeight: 1.5 }}>
         {status.allocationQuote === null
           ? 'A managed allocation is the only limit here that bounds the total rather than the day. Every cap above resets at midnight UTC, so a 50-a-day cap still permits 1,500 over a month. Set an amount and this app will never have more than that at work at once. Your funds never move — they stay on your exchange, under your keys; this is permission, not a deposit.'

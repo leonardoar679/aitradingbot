@@ -16,14 +16,17 @@ export function StrategiesPage({
   autoOpenPresets,
   onPresetsOpened,
   proposal,
+  proposalLive = false,
   onProposalTaken
 }: {
   tab: StrategiesTab
   onTab: (tab: StrategiesTab) => void
-  onPrepareOrder: (proposal: AiOrderProposal) => void
+  onPrepareOrder: (proposal: AiOrderProposal, live?: boolean) => void
   autoOpenPresets: boolean
   onPresetsOpened: () => void
   proposal: AiOrderProposal | null
+  /** The call was confirmed (CONFIRM): the form opens as a real order where the session allows. */
+  proposalLive?: boolean
   onProposalTaken: () => void
 }): React.JSX.Element {
   return (
@@ -44,6 +47,7 @@ export function StrategiesPage({
           autoOpenPresets={autoOpenPresets}
           onPresetsOpened={onPresetsOpened}
           proposal={proposal}
+          proposalLive={proposalLive}
           onProposalTaken={onProposalTaken}
         />
       )}

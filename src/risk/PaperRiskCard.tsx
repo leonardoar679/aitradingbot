@@ -6,7 +6,9 @@ import {
   PAPER_MAX_OUT_CHOICES,
   PAPER_MIN_STAKE,
   PAPER_RISK_CHOICES,
+  PAPER_RISK_PCT_CHOICES,
   healPaperRisk,
+  paperEquity,
   paperOut,
   paperRiskProblem,
   paperStake
@@ -133,10 +135,13 @@ export function PaperRiskCard(): React.JSX.Element {
     return <Card title="Paper trades the app opens by itself">{problem ?? 'Loading…'}</Card>
   }
 
-  const examples = EXAMPLE_STOPS.map((stopPct) => `${amount(paperStake({ risk: draft, stakeQuote: Number.POSITIVE_INFINITY, stopPct }))} at a stop ${stopPct}% away`)
+  // The equity a share is taken of, as it stands now: the USDT balance and what is out.
+  const equity = paperEquity(account, executors, 'USDT')
+  const examples = EXAMPLE_STOPS.map((stopPct) => `${amount(paperStake({ risk: draft, stakeQuote: Number.POSITIVE_INFINITY, stopPct, equityQuote: equity }))} at a stop ${stopPct}% away`)
   const changed =
     draft.sizing !== saved.sizing ||
     draft.riskQuote !== saved.riskQuote ||
+    draft.riskPct !== saved.riskPct ||
     draft.maxOutQuote !== saved.maxOutQuote ||
     digest !== digestSaved ||
     pauseDraft.lossR !== pause.lossR ||
@@ -158,11 +163,28 @@ export function PaperRiskCard(): React.JSX.Element {
             aria-label="Size each paper trade"
             value={draft.sizing}
             disabled={busy}
-            onChange={(event) => setDraft({ ...draft, sizing: event.target.value === 'stake' ? 'stake' : 'risk' })}
+            onChange={(event) => setDraft({ ...draft, sizing: event.target.value === 'stake' ? 'stake' : event.target.value === 'equity' ? 'equity' : 'risk' })}
             style={textInputStyle()}
           >
             <option value="risk">By what its stop would lose</option>
+            <option value="equity">By a share of the paper account</option>
             <option value="stake">At its own stake</option>
+          </select>
+        </div>
+        <div style={{ flex: '1 1 180px' }}>
+          <label style={fieldLabelStyle()}>Of the paper account, a stop loses (%)</label>
+          <select
+            aria-label="What share of the paper account a paper trade's stop loses"
+            value={draft.riskPct}
+            disabled={busy || draft.sizing !== 'equity'}
+            onChange={(event) => setDraft({ ...draft, riskPct: Number(event.target.value) })}
+            style={textInputStyle()}
+          >
+            {PAPER_RISK_PCT_CHOICES.map((choice) => (
+              <option key={choice} value={choice}>
+                {choice}%
+              </option>
+            ))}
           </select>
         </div>
         <div style={{ flex: '1 1 180px' }}>
@@ -170,7 +192,7 @@ export function PaperRiskCard(): React.JSX.Element {
           <select
             aria-label="What a paper trade's stop loses"
             value={draft.riskQuote}
-            disabled={busy || draft.sizing !== 'risk'}
+            disabled={busy || draft.sizing === 'stake'}
             onChange={(event) => setDraft({ ...draft, riskQuote: Number(event.target.value) })}
             style={textInputStyle()}
           >
@@ -202,7 +224,9 @@ export function PaperRiskCard(): React.JSX.Element {
       <p style={noteStyle}>
         {draft.sizing === 'risk'
           ? `A trade with a stop stakes what would lose about ${draft.riskQuote} there after a round trip's fees: ${examples.join(', ')}. Never more than its own stake, the watch's or a Monitoring Tag short's, so a near stop is held to that; one that would stake under ${PAPER_MIN_STAKE} is not opened, being less than the smallest order on Binance. A delisting's short has no stop, and stakes its own.`
-          : "Each trade stakes its own stake: the watch's, or a news rule's."}{' '}
+          : draft.sizing === 'equity'
+            ? `A trade with a stop stakes what would lose about ${draft.riskPct}% of the paper account's equity there after a round trip's fees${equity === null ? ` -- with no paper account in USDT, about ${draft.riskQuote}, as sized by risk` : `: ${amount((equity * draft.riskPct) / 100)} on ${amount(equity)} USDT now, its balance and what its own trades have out`}: ${examples.join(', ')}. Never more than its own stake, so a near stop is held to that; one that would stake under ${PAPER_MIN_STAKE} is not opened. A delisting's short has no stop, and stakes its own.`
+            : "Each trade stakes its own stake: the watch's, or a news rule's."}{' '}
         {draft.maxOutQuote === null
           ? 'Nothing caps what they stake together.'
           : `The watch and the news rules open nothing that would take what their open paper trades stake together past ${amount(draft.maxOutQuote)}, in a quote asset.`}{' '}

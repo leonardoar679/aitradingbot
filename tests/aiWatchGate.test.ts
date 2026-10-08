@@ -8,7 +8,7 @@ import type { AiWatchConfig } from '../shared/aiWatch'
 // finishes.
 
 const T = Date.parse('2026-09-10T12:07:00Z') / 1000
-const WATCH: AiWatchConfig = { enabled: true, models: ['openai/gpt-5-mini'], maxEventsPerDay: 5, minBand: 'urgent', firstModelGates: false }
+const WATCH: AiWatchConfig = { enabled: true, models: ['openai/gpt-5-mini'], maxEventsPerDay: 5, minBand: 'urgent', firstModelGates: false, confirmLive: false }
 
 type Row = Pick<AiCallRecord, 'at' | 'source' | 'eventId'>
 const ledger: Row[] = []

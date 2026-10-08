@@ -13,7 +13,7 @@ export function OpportunitiesPage({
 }: {
   /** Opens an executor form filled in from a recommendation. The form is on another page, so this
    * page only hands the proposal up; it has no way to submit one. */
-  onPrepareOrder: (proposal: AiOrderProposal) => void
+  onPrepareOrder: (proposal: AiOrderProposal, live?: boolean) => void
 }): React.JSX.Element {
   return (
     <>

@@ -135,7 +135,7 @@ describe('the budget in the main process', () => {
       dailyCapUsd: DEFAULT_AI_DAILY_CAP_USD,
       spentTodayUsd: 0,
       // Nothing asks a model without a click until the watch is switched on.
-      watch: { enabled: false, models: [], maxEventsPerDay: 10, minBand: 'urgent', firstModelGates: false },
+      watch: { enabled: false, models: [], maxEventsPerDay: 10, minBand: 'urgent', firstModelGates: false, confirmLive: false },
       // And nothing opens a position without one, paper or otherwise, until that is switched on too.
       watchPaper: { enabled: false, model: null, stakeQuote: 100, maxOpen: 3, maxSameSide: 2, pauseAfterLosses: 3, dropOnBtcMovePct: 1 },
       callsPerMinute: 30,

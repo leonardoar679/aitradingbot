@@ -15,7 +15,7 @@ const C = 'anthropic/claude-haiku-4.5'
 const T = Date.parse('2026-09-10T12:07:00Z') / 1000
 
 function watch(overrides: Partial<AiWatchConfig> = {}): AiWatchConfig {
-  return { enabled: true, models: [A, B], maxEventsPerDay: 10, minBand: 'urgent', firstModelGates: false, ...overrides }
+  return { enabled: true, models: [A, B], maxEventsPerDay: 10, minBand: 'urgent', firstModelGates: false, confirmLive: false, ...overrides }
 }
 
 function event(symbol = 'SOLUSDT', overrides: Partial<MarketEvent> = {}, rank = 1): MarketEvent {
@@ -625,5 +625,38 @@ describe('the notices the watch raises', () => {
     const rested = r.notices.find((notice) => notice.extra?.kind === 'CIRCUIT_BREAKER')
     expect(rested).toMatchObject({ title: 'A model is rested for the day', extra: { thread: `model:${B}`, threadSeconds: 86_400 } })
     expect(r.asked.map((call) => call.model)).toEqual([A])
+  })
+})
+
+describe('CONFIRM: a paper BUY opened is told as ready to confirm (8 October 2026)', () => {
+  const OPENED = { opened: true, text: 'A paper BUY of 100 USDT was opened, at market.' }
+
+  it('raises one notice of the opportunity kind on its own thread, for a buy that opened, when CONFIRM is on', async () => {
+    const r = rig({ watch: watch({ models: [A], confirmLive: true }) })
+    r.deps.paperTrade = async () => OPENED
+    await watchPass([event()], r.deps)
+    expect(r.notices).toHaveLength(1)
+    expect(r.notices[0]).toMatchObject({ title: 'SOLUSDT: ready to confirm', extra: { kind: 'TRADE_OPPORTUNITY', thread: `confirm:${event().id}`, severity: 'high' } })
+    expect(r.notices[0].body).toContain('press Confirm to fill in a real order')
+    expect(r.notices[0].body).toContain('nothing is placed by this')
+  })
+
+  it('raises none with CONFIRM off', async () => {
+    const off = rig({ watch: watch({ models: [A] }) })
+    off.deps.paperTrade = async () => OPENED
+    await watchPass([event()], off.deps)
+    expect(off.asked).toHaveLength(1)
+    expect(off.notices.filter((notice) => /ready to confirm/.test(notice.title))).toEqual([])
+  })
+
+  it('raises none for a trade that was not opened: there is nothing to confirm', async () => {
+    // Its own pass: the watch remembers what it asked about within a test, so a second pass on the
+    // same event would ask nothing and prove nothing.
+    const refused = rig({ watch: watch({ models: [A], confirmLive: true }) })
+    refused.deps.paperTrade = async () => ({ opened: false, text: 'No paper trade: the money-out cap is reached.' })
+    await watchPass([event()], refused.deps)
+    expect(refused.asked).toHaveLength(1)
+    expect(refused.notices.filter((notice) => /ready to confirm/.test(notice.title))).toEqual([])
+    expect(refused.notices.some((notice) => /paper trade not opened/.test(notice.title))).toBe(true)
   })
 })

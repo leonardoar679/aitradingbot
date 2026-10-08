@@ -21,7 +21,7 @@ import { correlatedExposureBlock, readBtcCorrelation } from '../../shared/paperE
 import { newsAgainstBlock, type NewsAgainstStory } from '../../shared/paperNewsBlock'
 import { healPaperPause, paperPauseBlock } from '../../shared/paperPause'
 import { NEAR_STOP_SHARE, nearStopNotice, paperCloseNotice, stopProgress, type NoticeExtra } from '../../shared/notices'
-import { healPaperRisk, paperOutBlock, rMultiple } from '../../shared/paperRisk'
+import { healPaperRisk, paperEquity, paperOutBlock, rMultiple } from '../../shared/paperRisk'
 import { describeExecutorFunding } from '../account/executorFunding'
 import { settleExecutorOnStop } from '../account/settleExecutor'
 import { runExecutorSimulation } from '../executors/engine'
@@ -167,7 +167,15 @@ export async function openWatchPaperTrade(
   } catch {
     lastPrice = null
   }
-  const plan = planWatchPaperTrade({ config: watchPaper, risk: healPaperRisk(before.paperRisk), event, decision, nowSec: deps.nowSec(), lastPrice })
+  const plan = planWatchPaperTrade({
+    config: watchPaper,
+    risk: healPaperRisk(before.paperRisk),
+    event,
+    decision,
+    nowSec: deps.nowSec(),
+    lastPrice,
+    equityQuote: paperEquity(before.paperAccount ?? null, before.executors, event.quoteAsset)
+  })
   if (!plan.ok) return { opened: false, text: `No paper trade: ${plan.reason}` }
 
   // The market it would enter, live (shared/liveMarket.ts): with no fresh price, a spread wider than

@@ -12,7 +12,7 @@ import { describeDecider } from '../../shared/aiPanel'
 import type { AiSignalDecision } from '../../shared/aiSignal'
 import { AI_WATCH_FRESH_SECONDS, utcMidnight, watchEventIdsToday, watchNotice, watchPausedModels, watchSkipReason, type AiWatchConfig } from '../../shared/aiWatch'
 import { describeEventType, type MarketEvent } from '../../shared/marketEvent'
-import { actionableRefusal, breakerNotice, disagreementNotice, marketEventNotice, tradeBlockedNotice, type NoticeExtra } from '../../shared/notices'
+import { actionableRefusal, breakerNotice, confirmNotice, disagreementNotice, marketEventNotice, tradeBlockedNotice, type NoticeExtra } from '../../shared/notices'
 import { askModels, fetchEventQuestion, type AskModelsResult, type CandleFetch } from './opportunities'
 import { recordPaperRefusal, type PaperRefusal } from './paperRefusals'
 
@@ -158,6 +158,11 @@ async function askAbout(event: MarketEvent, watch: AiWatchConfig, deps: WatchDep
         if (outcome !== null) {
           paper.push(outcome.text)
           opened = outcome.opened
+          // CONFIRM (shared/aiWatch.ts): a paper BUY opened is also told as ready to confirm as a
+          // real order, which a person fills in from Opportunities and places. Nothing here does.
+          if (outcome.opened && watch.confirmLive && opportunitySide(decision) === 'long') {
+            told(confirmNotice(event, { who: describeDecider(decision.model), confidence: decision.confidence }))
+          }
           // For the session report: what was refused, and why.
           if (!outcome.opened) refused(deps, event, decision, outcome.text)
           // A refusal a person can act on -- the paper account, the money-out cap, a pause -- is

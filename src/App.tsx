@@ -44,6 +44,8 @@ function App(): React.JSX.Element {
   // or a running bot, cleared as soon as Execution has opened that form. What crosses between pages is
   // a filled-in form, never an order: see shared/aiProposal.ts.
   const [orderProposal, setOrderProposal] = useState<AiOrderProposal | null>(null)
+  /** With the proposal: it was confirmed (CONFIRM), so the form opens as a real order where allowed. */
+  const [orderLive, setOrderLive] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   // Alerts at WATCH or above not yet seen: the badge on Discovery, which opens on its news while any
   // is waiting.
@@ -73,7 +75,8 @@ function App(): React.JSX.Element {
 
   // The same hand-over from every place a call is shown: Overview, Opportunities, AI Decisions, a
   // running bot. The form is on Strategies › Execution.
-  function prepareOrder(proposal: AiOrderProposal): void {
+  function prepareOrder(proposal: AiOrderProposal, live = false): void {
+    setOrderLive(live)
     setOrderProposal(proposal)
     navigate({ page: 'strategies', tab: 'execution' })
   }
@@ -187,6 +190,7 @@ function App(): React.JSX.Element {
                 autoOpenPresets={presetsRequested}
                 onPresetsOpened={() => setPresetsRequested(false)}
                 proposal={orderProposal}
+                proposalLive={orderLive}
                 onProposalTaken={() => setOrderProposal(null)}
               />
             )}

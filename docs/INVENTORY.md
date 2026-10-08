@@ -64,7 +64,7 @@ Taken on 5 October 2026, at commit `aef376d`.
 | | News & Market Events (added 6 October 2026, not an old card) | Four free news feeds and Binance's announcements, each story's coins, kind, impact and what the price did after; what each kind did | Discovery › News & Market Events, which it opens on while an alert is unseen |
 | **Settings** | Appearance | Theme | Settings › General |
 | | API Credentials | Exchange keys: set, test, remove | Connections |
-| | Risk Limits | Live order size, daily cap, daily loss limit, allocation | Risk & Safety |
+| | Risk Limits | Live order size, daily cap, daily loss limit, allocation; and, added 8 October 2026, the share of the allocation a real order filled in from a call is sized to risk | Risk & Safety |
 | **Live trading bar** (every page) | Arm, kill switch, watchers, blocked exits | The gates real orders pass | Stays on every page, with status chips added; the detail on Live Trading |
 
 Duplicates, all intentional and kept:
@@ -89,13 +89,13 @@ All files are in the user's profile folder.
 | | `heldPositions` | Positions | Positions |
 | | `controllers` | Controllers | Risk & Safety |
 | | `paperAccount` | Account | Paper Trading |
-| | `paperRisk` (added 5 October 2026): how the paper trades the app opens by itself are sized, by what their stop would lose or at their stake, and what they may stake together | — | Risk & Safety |
+| | `paperRisk` (added 5 October 2026): how the paper trades the app opens by itself are sized, by what their stop would lose, by a share of the paper account's equity (added 8 October 2026), or at their stake, and what they may stake together | — | Risk & Safety |
 | | `paperDigest` (added 5 October 2026): the daily notice of what those trades did, on or off, and the last day it told | — | Risk & Safety |
 | | `paperPause` (added 5 October 2026): the losing run in R that pauses those trades, or never; and for the watch and for the news rules, each, whether a run has paused it and when it was last resumed | — | Risk & Safety |
 | | `alerts` (added 6 October 2026): desktop notices on or off, and with sound or silent; obeyed where every notice is raised (`appHandlers.ts`) | — | Settings › Essentials |
 | `aiConfig.json` | `defaultModel`, `enabledModels`, `route` | Agents › Models | Settings › AI |
 | | `dailyCapUsd`, `callsPerMinute` | Agents › Usage | Settings › AI |
-| | `watch` (on, models, events a day, lowest band, first model gates) | Agents › Opportunities › Watch | Opportunities (stays with its results) |
+| | `watch` (on, models, events a day, lowest band, first model gates; and, added 8 October 2026, CONFIRM: a paper BUY it opens is told as ready to confirm as a real order a person places) | Agents › Opportunities › Watch | Opportunities (stays with its results) |
 | | `watchPaper` (on, model, stake, most open; and, added on 5 October 2026, most open in one direction, the losing run that pauses it, the Bitcoin move that drops a waiting trade) | Agents › Opportunities › Watch | Opportunities |
 | `scanner.json` | `enabled`, `universeSize` (20, 40, 60 or 100) | Explorer › Scanner | Settings › Market |
 | `marketEvents/` | since 8 October 2026 an event may be a market-wide move (`type: 'market_move'`, on BTCUSDT, with `live.members`), and its members carry `live.marketMove`; detector version `events-v2` | — | Opportunities, Discovery |
@@ -103,7 +103,7 @@ All files are in the user's profile folder.
 | `credentials.json` (encrypted) | Binance and Upbit keys; when added, last tested, result | Settings | Connections |
 | `aiCredentials.json` (encrypted) | The OpenRouter key | Agents | Connections |
 | `liveTrading.json` | Session armed, kill switch | Live trading bar | The bar (stays); detail on Live Trading |
-| | Max order size, daily cap, daily loss limit, allocation | Settings | Risk & Safety |
+| | Max order size, daily cap, daily loss limit, allocation; and, added 8 October 2026, the share of the allocation a real order filled in from a call is sized to risk | Settings | Risk & Safety |
 
 These files are records, not settings, and stay where they are: `livePositions.json`,
 `liveOrders.json`, `livePositionWatchers.json`, `liveTwapRuns.json`, `aiLedger/`, `aiSignalCache/`,

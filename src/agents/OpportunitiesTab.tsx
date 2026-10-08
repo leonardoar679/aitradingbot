@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Card } from '../components/Card'
 import { describeAiOpportunityCost, type AiConfig } from '../../shared/aiCost'
-import { AI_OPPORTUNITY_MAX_MODELS } from '../../shared/aiOpportunity'
+import { AI_OPPORTUNITY_MAX_MODELS, opportunitySide } from '../../shared/aiOpportunity'
 import { describeDecider } from '../../shared/aiPanel'
 import type { AiOrderProposal } from '../../shared/aiProposal'
 import { watchEventIdsToday, watchPausedModels } from '../../shared/aiWatch'
@@ -50,7 +50,9 @@ export function OpportunitiesTab({
 }: {
   /** Opens an executor form filled in from a recommendation. The form is on another page, so this
    * tab only hands the proposal up; it has no way to submit one. */
-  onPrepareOrder?: (proposal: AiOrderProposal) => void
+  /** `live`, since 8 October 2026: the call was confirmed (CONFIRM), so the form opens as a real
+   * order where the session allows one. */
+  onPrepareOrder?: (proposal: AiOrderProposal, live?: boolean) => void
 } = {}): React.JSX.Element {
   const [config, setConfig] = useState<AiConfig | null>(null)
   const [ticked, setTicked] = useState<string[]>([])
@@ -174,7 +176,8 @@ export function OpportunitiesTab({
       setProblem(event.id, result.problem)
       return
     }
-    onPrepareOrder(result.proposal)
+    // CONFIRM: a BUY is confirmed as a real order; a short is paper, as always.
+    onPrepareOrder(result.proposal, config?.watch.confirmLive === true && opportunitySide(answer.decision) === 'long')
   }
 
   function toggle(model: string): void {
@@ -238,6 +241,7 @@ export function OpportunitiesTab({
               ? null
               : { paperRisk, account: paperAccount, executors, stakeQuote: config.watchPaper.stakeQuote, btcLimitPct: config.watchPaper.dropOnBtcMovePct }
           }
+          confirm={config?.watch.confirmLive === true}
           onPaperTrade={
             onPrepareOrder
               ? (item: EventFeedItem, answer: EventAnswer): void => {
@@ -295,6 +299,7 @@ export function OpportunitiesTab({
           busy={busyEvent === item.event.id}
           problem={problems[item.event.id] ?? null}
           onAsk={() => void ask(item, ticked.filter((model) => !item.answers.some((answer) => answer.model === model)))}
+          confirm={config?.watch.confirmLive === true}
           onPaperTrade={
             onPrepareOrder
               ? (answer: EventAnswer): void => {

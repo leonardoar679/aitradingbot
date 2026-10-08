@@ -90,7 +90,7 @@ export interface EffectiveStores {
   ai: { defaultModel: string; enabledModels: string[]; dailyCapUsd: number; callsPerMinute: number }
   scanner: ScannerConfig
   news: NewsConfig
-  live: { maxOrderQuote: number; hardMaxOrderQuote: number; dailyCapQuote: number; dailyLossLimitQuote: number; allocationQuote: number | null }
+  live: { maxOrderQuote: number; hardMaxOrderQuote: number; dailyCapQuote: number; dailyLossLimitQuote: number; allocationQuote: number | null; riskPct: number }
 }
 
 export interface EffectiveConfig {
@@ -115,7 +115,7 @@ export function defaultStores(): EffectiveStores {
     ai: { defaultModel: DEFAULT_AI_MODEL, enabledModels: [DEFAULT_AI_MODEL], dailyCapUsd: DEFAULT_AI_DAILY_CAP_USD, callsPerMinute: DEFAULT_AI_CALLS_PER_MINUTE },
     scanner: DEFAULT_SCANNER_CONFIG,
     news: DEFAULT_NEWS_CONFIG,
-    live: { maxOrderQuote: 10, hardMaxOrderQuote: 25, dailyCapQuote: 50, dailyLossLimitQuote: 15, allocationQuote: null }
+    live: { maxOrderQuote: 10, hardMaxOrderQuote: 25, dailyCapQuote: 50, dailyLossLimitQuote: 15, allocationQuote: null, riskPct: 0.25 }
   }
 }
 

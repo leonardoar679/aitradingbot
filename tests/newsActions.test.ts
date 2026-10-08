@@ -304,7 +304,7 @@ describe('its setting', () => {
 /** Each short at its kind's stake, with no cap: how the rules are held here. Sizing by risk and the
  * cap on what the app's own paper trades have out (shared/paperRisk.ts) are held under their own
  * heading. */
-const STAKE: PaperRiskSettings = { sizing: 'stake', riskQuote: 1, maxOutQuote: null }
+const STAKE: PaperRiskSettings = { sizing: 'stake', riskQuote: 1, riskPct: 0.25, maxOutQuote: null }
 
 interface Rig {
   deps: NewsShortDeps
@@ -721,7 +721,7 @@ describe("a Monitoring Tag's short", () => {
 })
 
 describe('sized by risk, and held to what the app has out (shared/paperRisk.ts)', () => {
-  const RISK: PaperRiskSettings = { sizing: 'risk', riskQuote: 1, maxOutQuote: null }
+  const RISK: PaperRiskSettings = { sizing: 'risk', riskQuote: 1, riskPct: 0.25, maxOutQuote: null }
   const amountOf = (made: ExecutorConfig): number => (made.params as PositionExecutorParams).amountQuote
 
   it("sizes a tag's short by what its stop would lose, and leaves a delisting's, which has none, at its stake", async () => {
@@ -767,7 +767,7 @@ describe('sized by risk, and held to what the app has out (shared/paperRisk.ts)'
 
 describe('held to what the app has out on one side on coins that move with Bitcoin (shared/paperExposure.ts)', () => {
   it('opens no short on a coin that tracks Bitcoin past the cap, and opens one that does not', async () => {
-    const CAPPED: PaperRiskSettings = { sizing: 'stake', riskQuote: 1, maxOutQuote: 1000 }
+    const CAPPED: PaperRiskSettings = { sizing: 'stake', riskQuote: 1, riskPct: 0.25, maxOutQuote: 1000 }
     // A short of the rules' own already open, of 100, opened before correlations were written down.
     const open = delistingShort('n-1', 'AAA', 100, A - 60)
     const tracking = rig({ risk: CAPPED, executors: [open], correlation: 0.8 })

@@ -31,6 +31,8 @@ interface OpportunityCardProps {
   onAsk: () => void
   /** Opens the order form for one answer. Absent where no form is on offer at all. */
   onPaperTrade?: (answer: EventAnswer) => void
+  /** CONFIRM is on: a BUY's button fills in a real order a person places. */
+  confirm?: boolean
 }
 
 function utcMinute(sec: number): string {
@@ -85,13 +87,16 @@ function AnswerRow({
   answer,
   bars,
   nowSec,
-  onPaperTrade
+  onPaperTrade,
+  confirm = false
 }: {
   item: EventFeedItem
   answer: EventAnswer
   bars: Candle[] | undefined
   nowSec: number
   onPaperTrade?: (answer: EventAnswer) => void
+  /** CONFIRM is on: a BUY's button fills in a real order a person places. */
+  confirm?: boolean
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const { decision } = answer
@@ -150,7 +155,7 @@ function AnswerRow({
         )}
         {side !== null && onPaperTrade && tradeProblem === null && (
           <button onClick={() => onPaperTrade(answer)} style={buttonStyle('primary')}>
-            Paper trade
+            {confirm === true && side === 'long' ? 'Confirm' : 'Paper trade'}
           </button>
         )}
         {side !== null && tradeProblem !== null && <span style={{ ...noteStyle, flex: '1 1 240px' }}>{tradeProblem}</span>}
@@ -219,7 +224,7 @@ function WhyThisPair({ item }: { item: EventFeedItem }): React.JSX.Element {
  * A recommendation is shown with its clock: where to enter, until when, and what it has done
  * since. Nothing on the card trades. "Paper trade" opens the order form on another page, filled
  * in; a person sets the amount and submits it there. */
-export function OpportunityCard({ item, bars, nowSec, toAsk, busy, problem, onAsk, onPaperTrade }: OpportunityCardProps): React.JSX.Element {
+export function OpportunityCard({ item, bars, nowSec, toAsk, busy, problem, onAsk, onPaperTrade, confirm = false }: OpportunityCardProps): React.JSX.Element {
   const { event, answers } = item
   const [why, setWhy] = useState(false)
   const status = feedItemStatus(item, bars, nowSec)
@@ -274,7 +279,7 @@ export function OpportunityCard({ item, bars, nowSec, toAsk, busy, problem, onAs
       )}
 
       {answers.map((answer) => (
-        <AnswerRow key={answer.model} item={item} answer={answer} bars={bars} nowSec={nowSec} onPaperTrade={onPaperTrade} />
+        <AnswerRow key={answer.model} item={item} answer={answer} bars={bars} nowSec={nowSec} onPaperTrade={onPaperTrade} confirm={confirm} />
       ))}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', flexWrap: 'wrap' }}>

@@ -217,10 +217,14 @@ export interface PaperDigestSettings {
  * their stop would lose, and capped in what they stake together. Both only ever open less. */
 export interface PaperRiskSettings {
   /** 'risk': a trade with a stop stakes what would lose about `riskQuote` there, after fees, and
-   * never more than its own stake. 'stake': each stakes its own stake. */
-  sizing: 'risk' | 'stake'
+   * never more than its own stake. 'stake': each stakes its own stake. 'equity' (since 8 October
+   * 2026): as 'risk', with the risk per trade a share of the paper account's equity, `riskPct`,
+   * and `riskQuote` where there is no paper account to measure. */
+  sizing: 'risk' | 'stake' | 'equity'
   /** In the trade's quote asset. */
   riskQuote: number
+  /** Of the paper account's equity, in percent: what one trade risks at its stop under 'equity'. */
+  riskPct: number
   /** The most their open paper trades may stake together, per quote asset. Null: no cap. */
   maxOutQuote: number | null
 }
@@ -285,6 +289,10 @@ export interface LiveTradingStatus {
   /** What is at work right now against that allocation, derived from the live positions and
    * resting orders that exist. Always 0 when allocationQuote is null. */
   allocationCommittedQuote: number
+  /** Of the allocation, or of the day's cap without one, the share in percent a real order filled
+   * in from a call is sized to risk at the call's stop (shared/aiProposal.ts suggestedLiveAmount).
+   * A suggestion for the form, since 8 October 2026; no gate reads it. */
+  riskPct: number
 }
 
 /** The result of one real order fill. `avgFillPrice` is notional-weighted across a market

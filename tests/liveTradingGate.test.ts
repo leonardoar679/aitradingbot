@@ -371,3 +371,15 @@ describe('the daily loss limit, told', () => {
     expect(told).toHaveLength(1)
   })
 })
+
+describe('the share a real order from a call risks (8 October 2026)', () => {
+  it('is a quarter of a percent until set, kept across the other limits, and saved only as one of its choices', async () => {
+    const service = await freshService()
+    expect((await service.getLiveTradingStatus()).riskPct).toBe(0.25)
+    await service.setLiveTradingConfig({ riskPct: 1 })
+    await service.setLiveTradingConfig({ maxOrderQuote: 20 })
+    expect((await service.getLiveTradingStatus()).riskPct).toBe(1)
+    for (const bad of [3, Number.NaN, -1]) await expect(service.setLiveTradingConfig({ riskPct: bad })).rejects.toThrow(/risks 0.1, 0.25, 0.5, 1, 2%/)
+    expect((await service.getLiveTradingStatus()).riskPct).toBe(1)
+  })
+})

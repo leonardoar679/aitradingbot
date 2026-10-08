@@ -3,7 +3,7 @@ import { join } from 'path'
 import { readFile, mkdir } from 'fs/promises'
 import { writeJsonAtomic } from './atomicWrite'
 import { getRealizedPnlToday, getLastObservedFeeRate } from './livePositionsService'
-import { clampLiveLimit, loadedLiveLimit, describeUnusableOrderSize, describeUntrustedLossTally } from '../../shared/liveLimits'
+import { DEFAULT_LIVE_RISK_PCT, clampLiveLimit, healLiveRiskPct, liveRiskPctProblem, loadedLiveLimit, describeUnusableOrderSize, describeUntrustedLossTally } from '../../shared/liveLimits'
 import { nextDailyUsage, usageForDay } from './dailyUsage'
 import { committedAllocationQuote, describeAllocationBreach } from '../../shared/allocation'
 import { notionalFor, resolveLeverage } from '../../shared/perp'
@@ -47,6 +47,9 @@ interface LiveTradingState {
    * shared/allocation.ts. Unlike every other limit here it is not clamped to a hard ceiling,
    * because it can only ever refuse orders the other gates would have allowed. */
   allocationQuote: number | null
+  /** The share of the allocation (or the day's cap) a real order filled in from a call is sized to
+   * risk at the call's stop: a suggestion for the form (shared/liveLimits.ts), read by no gate. */
+  riskPct: number
 }
 
 const DEFAULT_STATE: LiveTradingState = {
@@ -55,7 +58,8 @@ const DEFAULT_STATE: LiveTradingState = {
   dailyCapQuote: DEFAULT_DAILY_CAP_QUOTE,
   dailyLossLimitQuote: DEFAULT_DAILY_LOSS_LIMIT_QUOTE,
   dailyUsage: null,
-  allocationQuote: null
+  allocationQuote: null,
+  riskPct: DEFAULT_LIVE_RISK_PCT
 }
 
 // Deliberately never persisted and never set true by default — every app launch starts with
@@ -83,6 +87,7 @@ async function load(): Promise<LiveTradingState> {
   cache.maxOrderQuote = loadedLiveLimit(cache.maxOrderQuote, DEFAULT_MAX_ORDER_QUOTE, HARD_MAX_ORDER_QUOTE)
   cache.dailyCapQuote = loadedLiveLimit(cache.dailyCapQuote, DEFAULT_DAILY_CAP_QUOTE, null)
   cache.dailyLossLimitQuote = loadedLiveLimit(cache.dailyLossLimitQuote, DEFAULT_DAILY_LOSS_LIMIT_QUOTE, null)
+  cache.riskPct = healLiveRiskPct(cache.riskPct)
   return cache
 }
 
@@ -113,6 +118,7 @@ export interface LiveTradingStatus {
   /** Mirrors the shared LiveTradingStatus fields -- see shared/ipc.ts and shared/allocation.ts. */
   allocationQuote: number | null
   allocationCommittedQuote: number
+  riskPct: number
 }
 
 export async function getLiveTradingStatus(): Promise<LiveTradingStatus> {
@@ -128,7 +134,8 @@ export async function getLiveTradingStatus(): Promise<LiveTradingStatus> {
     realizedPnlToday: await getRealizedPnlToday(),
     observedFeeRate: await getLastObservedFeeRate(),
     allocationQuote: state.allocationQuote,
-    allocationCommittedQuote: state.allocationQuote === null ? 0 : await committedNow()
+    allocationCommittedQuote: state.allocationQuote === null ? 0 : await committedNow(),
+    riskPct: state.riskPct
   }
 }
 
@@ -159,6 +166,8 @@ export async function setLiveTradingConfig(patch: {
    * leaves it alone -- the three shapes have to stay distinguishable, since "clear it" and
    * "don't touch it" mean opposite things for a gate. */
   allocationQuote?: number | null
+  /** The share a real order filled in from a call is sized to risk: one of its choices. */
+  riskPct?: number
 }): Promise<LiveTradingStatus> {
   const state = await load()
   // Validated before ANY field is assigned, so a bad third value cannot leave the first two
@@ -181,6 +190,13 @@ export async function setLiveTradingConfig(patch: {
         ? null
         : allocationOrThrow(patch.allocationQuote)
 
+  if (patch.riskPct !== undefined) {
+    const problem = liveRiskPctProblem(patch.riskPct)
+    if (problem !== null) throw new Error(problem)
+  }
+  const nextRisk = patch.riskPct === undefined ? state.riskPct : patch.riskPct
+
+  state.riskPct = nextRisk
   state.allocationQuote = nextAllocation
   state.maxOrderQuote = nextMax
   state.dailyCapQuote = nextCap

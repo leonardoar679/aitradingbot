@@ -33,7 +33,8 @@ export async function getEffectiveConfig(): Promise<EffectiveConfig> {
       hardMaxOrderQuote: live.hardMaxOrderQuote,
       dailyCapQuote: live.dailyCapQuote,
       dailyLossLimitQuote: live.dailyLossLimitQuote,
-      allocationQuote: live.allocationQuote
+      allocationQuote: live.allocationQuote,
+      riskPct: live.riskPct
     }
   })
   return effectiveConfig(stores, sha256)

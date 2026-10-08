@@ -69,7 +69,7 @@ async function services() {
   return { ...tape, ...config, ...ledger }
 }
 
-const ON: AiWatchConfig = { enabled: true, models: [A], maxEventsPerDay: 5, minBand: 'urgent', firstModelGates: false }
+const ON: AiWatchConfig = { enabled: true, models: [A], maxEventsPerDay: 5, minBand: 'urgent', firstModelGates: false, confirmLive: false }
 
 beforeEach(() => {
   vi.resetModules()
@@ -87,7 +87,7 @@ afterEach(() => {
 describe('the watch setting', () => {
   it('is off until it is switched on, and stays on across a restart', async () => {
     const { getAiConfig, setAiConfig } = await services()
-    expect((await getAiConfig()).watch).toEqual({ enabled: false, models: [], maxEventsPerDay: 10, minBand: 'urgent', firstModelGates: false })
+    expect((await getAiConfig()).watch).toEqual({ enabled: false, models: [], maxEventsPerDay: 10, minBand: 'urgent', firstModelGates: false, confirmLive: false })
     expect((await setAiConfig({ watch: ON })).watch).toEqual(ON)
     vi.resetModules()
     expect((await (await services()).getAiConfig()).watch).toEqual(ON)
@@ -401,5 +401,16 @@ describe('a call made in the watch\'s name', () => {
     expect(bodies).toEqual([])
     // Nothing was asked, so the event has not used one of the day's places.
     expect((await listAiCalls({ source: 'watch' })).rows).toEqual([])
+  })
+})
+
+describe('CONFIRM under a running watch (8 October 2026)', () => {
+  it('is switched on and off without switching the watch off: it is not a term of the price', async () => {
+    const { setAiConfig } = await services()
+    await setAiConfig({ enabledModels: [A, B] })
+    await setAiConfig({ watch: ON })
+    expect((await setAiConfig({ watch: { confirmLive: true } })).watch).toEqual({ ...ON, confirmLive: true })
+    expect((await setAiConfig({ watch: { confirmLive: false } })).watch).toEqual(ON)
+    await expect(setAiConfig({ watch: { confirmLive: 'yes' as unknown as boolean } })).rejects.toThrow(/on or off/)
   })
 })

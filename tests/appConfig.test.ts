@@ -46,7 +46,7 @@ describe('the configuration version', () => {
 
 describe('the stores, healed', () => {
   it('reads an empty profile as the defaults', () => {
-    const live = { maxOrderQuote: 10, hardMaxOrderQuote: 25, dailyCapQuote: 50, dailyLossLimitQuote: 15, allocationQuote: null }
+    const live = { maxOrderQuote: 10, hardMaxOrderQuote: 25, dailyCapQuote: 50, dailyLossLimitQuote: 15, allocationQuote: null, riskPct: 0.25 }
     const healed = healStores({
       settings: {},
       ai: { defaultModel: 'openai/gpt-5-mini', enabledModels: ['openai/gpt-5-mini'], dailyCapUsd: 1, callsPerMinute: 30, watch: undefined, watchPaper: undefined, additions: undefined },
@@ -58,15 +58,15 @@ describe('the stores, healed', () => {
   })
 
   it('keeps what a profile set, and sorts the models so the order they were enabled in does not count', () => {
-    const live = { maxOrderQuote: 10, hardMaxOrderQuote: 25, dailyCapQuote: 50, dailyLossLimitQuote: 15, allocationQuote: 200 }
+    const live = { maxOrderQuote: 10, hardMaxOrderQuote: 25, dailyCapQuote: 50, dailyLossLimitQuote: 15, allocationQuote: 200, riskPct: 0.25 }
     const healed = healStores({
-      settings: { paperRisk: { sizing: 'risk', riskQuote: 2, maxOutQuote: 500 }, alerts: { enabled: false } },
+      settings: { paperRisk: { sizing: 'risk', riskQuote: 2, riskPct: 0.25, maxOutQuote: 500 }, alerts: { enabled: false } },
       ai: { defaultModel: 'openai/gpt-5-mini', enabledModels: ['z/model', 'a/model', 'openai/gpt-5-mini'], dailyCapUsd: 5, callsPerMinute: 60, watch: { ...DEFAULT_AI_WATCH, enabled: true, models: ['openai/gpt-5-mini'] }, watchPaper: undefined, additions: undefined },
       scanner: { enabled: true, universeSize: 40 },
       news: undefined,
       live
     })
-    expect(healed.paperRisk).toEqual({ sizing: 'risk', riskQuote: 2, maxOutQuote: 500 })
+    expect(healed.paperRisk).toEqual({ sizing: 'risk', riskQuote: 2, riskPct: 0.25, maxOutQuote: 500 })
     expect(healed.alerts).toEqual({ enabled: false, sound: true })
     expect(healed.ai).toEqual({ defaultModel: 'openai/gpt-5-mini', enabledModels: ['a/model', 'openai/gpt-5-mini', 'z/model'], dailyCapUsd: 5, callsPerMinute: 60 })
     expect(healed.watch.enabled).toBe(true)

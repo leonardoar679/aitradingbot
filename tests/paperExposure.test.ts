@@ -119,7 +119,7 @@ function trade(
   return base as ExecutorConfig
 }
 
-const CAPPED: PaperRiskSettings = { sizing: 'stake', riskQuote: 1, maxOutQuote: 1000 }
+const CAPPED: PaperRiskSettings = { sizing: 'stake', riskQuote: 1, riskPct: 0.25, maxOutQuote: 1000 }
 const funded = (usdt: number): PaperAccount => ({ balances: { USDT: usdt }, initialBalances: { USDT: usdt }, createdAt: 0, ledger: [] })
 
 describe('what the app has out on one side, on coins that move with Bitcoin', () => {

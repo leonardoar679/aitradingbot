@@ -8,7 +8,7 @@ import { describeEventType } from '../../shared/marketEvent'
 import { describeEventType as describeStoryType, type NewsFeedState } from '../../shared/newsFeed'
 import { SIGNAL_WEIGHTS, storiesAbout } from '../../shared/opportunityScore'
 import { correlatedCap, correlatedOut } from '../../shared/paperExposure'
-import { healPaperRisk, paperStake, riskedAtStop } from '../../shared/paperRisk'
+import { healPaperRisk, paperEquity, paperStake, riskedAtStop } from '../../shared/paperRisk'
 import { formatHoldingDuration } from '../backtest/formatTradeTime'
 import { WhyButton } from '../news/WhyItMovedHost'
 import { buttonStyle, cellStyle, headCellStyle, noteStyle, reasonLabel, signedPct } from './agentStyles'
@@ -80,7 +80,10 @@ function PlanSection({ row, risk }: { row: OpportunityTableRow; risk: TableRisk 
   const mid = (offer.entryMin + offer.entryMax) / 2
   const stopPct = detail.stopLoss === null || !(mid > 0) ? null : (Math.abs(mid - detail.stopLoss) / mid) * 100
   const way = offer.side === 'long' ? 'buy' : 'sell'
-  const sized = risk === null ? null : paperStake({ risk: healPaperRisk(risk.paperRisk), stakeQuote: risk.stakeQuote, stopPct })
+  const sized =
+    risk === null
+      ? null
+      : paperStake({ risk: healPaperRisk(risk.paperRisk), stakeQuote: risk.stakeQuote, stopPct, equityQuote: paperEquity(risk.account, risk.executors, row.item.event.quoteAsset) })
   const lost = sized === null || stopPct === null ? null : riskedAtStop({ amountQuote: sized, stopLossPct: stopPct })
   const quote = row.item.event.quoteAsset
   const cap = risk === null ? null : correlatedCap({ account: risk.account, risk: healPaperRisk(risk.paperRisk), quoteAsset: quote })
@@ -182,15 +185,19 @@ function RowDetail({
   news,
   nowSec,
   risk,
+  confirm = false,
   onPaperTrade
 }: {
   row: OpportunityTableRow
   news: NewsFeedState | null
   nowSec: number
   risk: TableRisk | null
+  /** CONFIRM is on: a BUY's button fills in a real order a person places. */
+  confirm?: boolean
   onPaperTrade?: (item: EventFeedItem, answer: EventAnswer) => void
 }): React.JSX.Element {
   const answer = offeredAnswer(row)
+  const confirming = confirm === true && answer !== null && answer.decision.recommendation === 'buy'
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem 1.6rem', padding: '0.8rem 0.4rem 0.9rem' }}>
       <SignalSection row={row} />
@@ -210,9 +217,13 @@ function RowDetail({
         {answer !== null && onPaperTrade !== undefined && (
           <div>
             <button onClick={() => onPaperTrade(row.item, answer)} style={buttonStyle('primary')}>
-              Paper trade
+              {confirming ? 'Confirm' : 'Paper trade'}
             </button>
-            <span style={{ ...noteStyle, marginLeft: '0.6rem' }}>Fills in an order form on Strategies › Execution; a person sets the amount and submits it.</span>
+            <span style={{ ...noteStyle, marginLeft: '0.6rem' }}>
+              {confirming
+                ? 'Fills in a real order from this call on Strategies › Execution, sized by your risk setting; you type the phrase and place it.'
+                : 'Fills in an order form on Strategies › Execution; a person sets the amount and submits it.'}
+            </span>
           </div>
         )}
       </div>
@@ -306,6 +317,7 @@ export function OpportunityTableCard({
   nowSec,
   news,
   risk,
+  confirm = false,
   onPaperTrade
 }: {
   onOffer: OpportunityTableRow[]
@@ -313,6 +325,8 @@ export function OpportunityTableCard({
   nowSec: number
   news: NewsFeedState | null
   risk: TableRisk | null
+  /** CONFIRM is on, for every row: a BUY's button fills in a real order a person places. */
+  confirm?: boolean
   onPaperTrade?: (item: EventFeedItem, answer: EventAnswer) => void
 }): React.JSX.Element {
   const [open, setOpen] = useState<string | null>(null)
@@ -324,7 +338,7 @@ export function OpportunityTableCard({
         {open === row.item.event.id && (
           <tr>
             <td colSpan={COLUMNS.length} style={{ ...cellStyle, whiteSpace: 'normal', background: 'var(--bg-app)' }}>
-              <RowDetail row={row} news={news} nowSec={nowSec} risk={risk} onPaperTrade={onPaperTrade} />
+              <RowDetail row={row} news={news} nowSec={nowSec} risk={risk} confirm={confirm} onPaperTrade={onPaperTrade} />
             </td>
           </tr>
         )}

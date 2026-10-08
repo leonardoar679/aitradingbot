@@ -86,13 +86,15 @@ export function describeLiveReadiness(readiness: LiveReadiness): ModeLabel {
   }
 }
 
-export type WatchMode = 'no-key' | 'off' | 'shadow' | 'paper-trades'
+export type WatchMode = 'no-key' | 'off' | 'shadow' | 'paper-trades' | 'confirm'
 
 export function watchModeOf(input: { keyConfigured: boolean; config: Pick<AiConfig, 'watch' | 'watchPaper'> | null }): WatchMode {
   if (!input.keyConfigured) return 'no-key'
   // Paper trades switched on with the watch off open nothing: the watch is what opens them.
   if (input.config === null || !input.config.watch.enabled) return 'off'
-  return input.config.watchPaper.enabled ? 'paper-trades' : 'shadow'
+  if (!input.config.watchPaper.enabled) return 'shadow'
+  // CONFIRM (8 October 2026): paper trades, and a notice when one is ready to confirm for real.
+  return input.config.watch.confirmLive ? 'confirm' : 'paper-trades'
 }
 
 export function describeWatchMode(mode: WatchMode): ModeLabel {
@@ -105,6 +107,12 @@ export function describeWatchMode(mode: WatchMode): ModeLabel {
       return { label: 'AI: SHADOW', detail: 'The watch asks models about events and scores their calls, and opens nothing.', tone: 'info' }
     case 'paper-trades':
       return { label: 'AI: PAPER TRADES', detail: 'The watch opens paper positions on its calls by itself. Never a real one.', tone: 'warn' }
+    case 'confirm':
+      return {
+        label: 'AI: CONFIRM',
+        detail: 'The watch opens paper positions on its calls by itself and tells you when one is ready to confirm as a real order. You place it; it never does.',
+        tone: 'warn'
+      }
   }
 }
 

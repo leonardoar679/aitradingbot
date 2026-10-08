@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { X, AlertTriangle } from 'lucide-react'
 import { ExchangeSelect } from '../components/ExchangeSelect'
 import { SymbolSearch } from '../components/SymbolSearch'
@@ -17,6 +17,9 @@ import {
   aiProposalEntryRange,
   aiProposalPositionParams,
   describeAiProposal,
+  describeSuggestedLiveAmount,
+  suggestedLiveAmount,
+  type SuggestedLiveAmount,
   isAiCallStale,
   isAiProposalExpired,
   type AiOrderProposal,
@@ -69,6 +72,10 @@ interface NewExecutorModalProps {
    * its stop, target and horizon filled in. It never sets the amount and never sets the mode --
    * the form opens on paper exactly as an empty one does. Null for a form opened by hand. */
   proposal?: AiOrderProposal | null
+  /** Since 8 October 2026: the call was confirmed from Opportunities (CONFIRM), so the form opens
+   * as a real order where the session allows one, and says why not where it does not. The phrase
+   * is still typed and the button still pressed by a person. */
+  proposalLive?: boolean
   onCreate: (input: {
     name: string
     type: ExecutorType
@@ -185,7 +192,7 @@ function defaultMarketMakingParams(): MarketMakingExecutorParams {
 const DEFAULT_SPREAD_BUY_EXCHANGE = EXCHANGES.find((e) => e.id === 'bithumb') ?? EXCHANGES[0]
 const DEFAULT_SPREAD_SELL_EXCHANGE = EXCHANGES.find((e) => e.id === 'upbit') ?? EXCHANGES[1]
 
-export function NewExecutorModal({ onCreate, onClose, account, existingExecutors, proposal = null }: NewExecutorModalProps): React.JSX.Element {
+export function NewExecutorModal({ onCreate, onClose, account, existingExecutors, proposal = null, proposalLive = false }: NewExecutorModalProps): React.JSX.Element {
   // A proposal chooses what the form OPENS on. Every field stays editable, and the two things
   // that decide what an order risks -- the amount and paper-or-live -- are not among them.
   const [name, setName] = useState(proposal ? aiProposalName(proposal) : '')
@@ -218,6 +225,10 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
   const [marketMakingParams, setMarketMakingParams] = useState<MarketMakingExecutorParams>(defaultMarketMakingParams())
   const [mode, setMode] = useState<'paper' | 'live'>('paper')
   const [liveConfirmText, setLiveConfirmText] = useState('')
+  /** The amount a real order from this call would stake, by the risk setting (shared/aiProposal.ts):
+   * filled in once the limits are known, until the amount is changed by hand. */
+  const [suggested, setSuggested] = useState<SuggestedLiveAmount | null>(null)
+  const [amountTouched, setAmountTouched] = useState(false)
   const [binanceCredentialConfigured, setBinanceCredentialConfigured] = useState(false)
   const [liveTradingStatus, setLiveTradingStatus] = useState<LiveTradingStatus | null>(null)
   // A call belongs to one candle. The form can be left open past it, so the banner is told the
@@ -321,6 +332,39 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
     liveTradingStatus !== null &&
     liveTradingStatus.sessionArmed &&
     !liveTradingStatus.killSwitchEngaged
+
+  // The suggestion: the risk setting's share of the allocation (or the day's cap) lost at the call's
+  // stop, under the max order size. The model never sizes; a person may change it.
+  useEffect(() => {
+    if (proposal === null || liveTradingStatus === null || amountTouched) return
+    const suggestion = suggestedLiveAmount({
+      riskPct: liveTradingStatus.riskPct,
+      allocationQuote: liveTradingStatus.allocationQuote,
+      dailyCapQuote: liveTradingStatus.dailyCapQuote,
+      maxOrderQuote: liveTradingStatus.maxOrderQuote,
+      stopLossPct: proposal.stopLossPct
+    })
+    setSuggested(suggestion)
+    if (suggestion !== null) setPositionParams((current) => ({ ...current, amountQuote: suggestion.amountQuote }))
+  }, [proposal, liveTradingStatus, amountTouched])
+
+  // Confirmed from Opportunities (CONFIRM): a real order where the session allows one, once; a
+  // person may switch it back to paper.
+  const liveAsked = useRef(false)
+  useEffect(() => {
+    if (!proposalLive || liveAsked.current || !canGoLive) return
+    liveAsked.current = true
+    setMode('live')
+  }, [proposalLive, canGoLive])
+  const liveBlockedReason = !binanceCredentialConfigured
+    ? 'no verified Binance key'
+    : liveTradingStatus?.killSwitchEngaged
+      ? 'the kill switch is engaged'
+      : liveTradingStatus !== null && !liveTradingStatus.sessionArmed
+        ? 'the session is not armed'
+        : exchange !== 'binance'
+          ? 'it is not on Binance'
+          : 'this form cannot go live as it stands'
 
   // Force back to paper the instant anything that made 'live' valid stops being true — switching
   // type/exchange/execution-strategy, or the session getting disarmed elsewhere, must never leave
@@ -667,6 +711,15 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
               {describeAiProposal(proposal).map((line) => (
                 <span key={line}>{line}</span>
               ))}
+              {suggested !== null && proposal.stopLossPct !== null && liveTradingStatus !== null && (
+                <span style={{ color: 'var(--text-primary)' }}>{describeSuggestedLiveAmount(suggested, { riskPct: liveTradingStatus.riskPct, stopLossPct: proposal.stopLossPct, quoteAsset: pair.quoteAsset })}</span>
+              )}
+              {proposalLive && !canGoLive && (
+                <span style={{ color: 'var(--gold)', fontWeight: 600 }}>
+                  Confirmed as a real order, but none can be placed now ({liveBlockedReason}): this form is paper. Arm the session on the bar with a
+                  verified Binance key and confirm again, or submit it on paper.
+                </span>
+              )}
               {proposalStale && !proposalExpired && (
                 <span style={{ color: 'var(--gold)', fontWeight: 600 }}>
                   The candle this call was made for has closed, so it is no longer the model’s current view. Ask again
@@ -720,7 +773,15 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
             )}
             {type === 'dca' && <DcaForm params={dcaParams} onChange={setDcaParams} />}
             {type === 'twap' && <TwapForm params={twapParams} onChange={setTwapParams} />}
-            {type === 'position' && <PositionForm params={positionParams} onChange={setPositionParams} />}
+            {type === 'position' && (
+              <PositionForm
+                params={positionParams}
+                onChange={(next) => {
+                  if (next.amountQuote !== positionParams.amountQuote) setAmountTouched(true)
+                  setPositionParams(next)
+                }}
+              />
+            )}
             {type === 'order' && <OrderForm params={orderParams} onChange={setOrderParams} />}
             {type === 'xemm' && <XemmForm params={xemmParams} onChange={setXemmParams} />}
             {type === 'arbitrage' && <ArbitrageForm params={arbitrageParams} onChange={setArbitrageParams} />}

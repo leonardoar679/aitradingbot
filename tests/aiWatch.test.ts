@@ -25,7 +25,7 @@ const T = Date.parse('2026-09-10T12:07:00Z') / 1000
 const MIDNIGHT = Date.parse('2026-09-10T00:00:00Z') / 1000
 
 function watch(overrides: Partial<AiWatchConfig> = {}): AiWatchConfig {
-  return { enabled: true, models: [A, B], maxEventsPerDay: 10, minBand: 'urgent', firstModelGates: false, ...overrides }
+  return { enabled: true, models: [A, B], maxEventsPerDay: 10, minBand: 'urgent', firstModelGates: false, confirmLive: false, ...overrides }
 }
 
 function event(overrides: Partial<MarketEvent> = {}): MarketEvent {
@@ -108,7 +108,7 @@ describe('healAiWatch', () => {
   it('switches off a watch with a limit, a band or a gate that is not one of the choices', () => {
     expect(healAiWatch(watch({ maxEventsPerDay: 500 }), ENABLED)).toMatchObject({ enabled: false, maxEventsPerDay: 10 })
     expect(healAiWatch({ ...watch(), minBand: 'watch' }, ENABLED)).toMatchObject({ enabled: false, minBand: 'urgent' })
-    expect(healAiWatch({ ...watch(), firstModelGates: 'yes' }, ENABLED)).toMatchObject({ enabled: false, firstModelGates: false })
+    expect(healAiWatch({ ...watch(), firstModelGates: 'yes' }, ENABLED)).toMatchObject({ enabled: false, firstModelGates: false, confirmLive: false })
   })
 })
 
@@ -424,5 +424,18 @@ describe('a member of a market-wide move', () => {
     expect(watchSkipReason(member, watch(), state())).toBe('It is part of a market-wide move, which the watch asks about as one event.')
     const move = event({ symbol: 'BTCUSDT', baseAsset: 'BTC', id: `binance:BTCUSDT:${T}`, type: 'market_move' })
     expect(watchSkipReason(move, watch(), state())).toBeNull()
+  })
+})
+
+describe('CONFIRM (8 October 2026)', () => {
+  it('is off until switched on by `true`, and does not switch the watch off when it is missing from an older file', () => {
+    expect(DEFAULT_AI_WATCH.confirmLive).toBe(false)
+    expect(healAiWatch(watch({ confirmLive: true }), ENABLED).confirmLive).toBe(true)
+    for (const stored of ['true', 1, null, undefined]) expect(healAiWatch({ ...watch(), confirmLive: stored }, ENABLED)).toMatchObject({ enabled: true, confirmLive: false })
+  })
+
+  it('must be on or off, and is not a term of the price', () => {
+    expect(aiWatchProblem({ ...watch(), confirmLive: 'yes' } as unknown as AiWatchConfig, ENABLED)).toMatch(/on or off/)
+    expect(sameWatchTerms(watch(), watch({ confirmLive: true }))).toBe(true)
   })
 })

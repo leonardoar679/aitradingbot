@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { clampLiveLimit, loadedLiveLimit, describeUnusableOrderSize, describeUntrustedLossTally } from '../shared/liveLimits'
+import { DEFAULT_LIVE_RISK_PCT, LIVE_RISK_PCT_CHOICES, clampLiveLimit, healLiveRiskPct, liveRiskPctProblem, loadedLiveLimit, describeUnusableOrderSize, describeUntrustedLossTally } from '../shared/liveLimits'
 
 describe('clampLiveLimit', () => {
   it('keeps an ordinary value', () => {
@@ -125,5 +125,16 @@ describe('describeUntrustedLossTally', () => {
     // block at all. Neither is a number this gate should be reasoning about.
     expect(describeUntrustedLossTally(Infinity)).not.toBeNull()
     expect(describeUntrustedLossTally(-Infinity)).not.toBeNull()
+  })
+})
+
+describe('the share a real order from a call risks (8 October 2026)', () => {
+  it('is one of its choices, read back as one, else the default', () => {
+    expect(LIVE_RISK_PCT_CHOICES).toEqual([0.1, 0.25, 0.5, 1, 2])
+    expect(DEFAULT_LIVE_RISK_PCT).toBe(0.25)
+    for (const choice of LIVE_RISK_PCT_CHOICES) expect(healLiveRiskPct(choice)).toBe(choice)
+    for (const bad of [undefined, null, '1', 3, Number.NaN, Number.POSITIVE_INFINITY]) expect(healLiveRiskPct(bad)).toBe(0.25)
+    expect(liveRiskPctProblem(1)).toBeNull()
+    expect(liveRiskPctProblem(3)).toMatch(/risks 0.1, 0.25, 0.5, 1, 2% of the allocation/)
   })
 })

@@ -1,21 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import {
-  aiProposalEntryExpiry,
-  aiProposalEntryRange,
-  aiProposalName,
-  aiProposalOrigin,
-  aiProposalPositionParams,
-  aiProposalProblem,
-  buildAiProposal,
-  buildOpportunityProposal,
-  describeAiProposal,
-  describeAiProposalOrigin,
-  isAiCallStale,
-  isAiProposalExpired,
-  opportunityProposalProblem
-} from '../shared/aiProposal'
+import { aiProposalEntryExpiry, aiProposalEntryRange, aiProposalName, aiProposalOrigin, aiProposalPositionParams, aiProposalProblem, buildAiProposal, buildOpportunityProposal, describeAiProposal, describeAiProposalOrigin, describeSuggestedLiveAmount, isAiCallStale, isAiProposalExpired, opportunityProposalProblem, suggestedLiveAmount } from '../shared/aiProposal'
 import { validateOpportunityAnswer } from '../shared/aiOpportunity'
 import type { AiSignalDecision } from '../shared/aiSignal'
 import type { PositionExecutorParams } from '../shared/ipc'
@@ -201,13 +187,16 @@ describe('a proposal opens a form, and a person submits it', () => {
   const page = readFileSync(join(ROOT, 'src', 'executors', 'ExecutorsPage.tsx'), 'utf-8')
 
   it('the form opens on paper however it was opened', () => {
-    // The mode starts as the literal 'paper', and is set in exactly two places: the checkbox a
-    // person ticks, and the effect that forces it BACK to paper. A third would be a way for
-    // something other than that checkbox to make an order real.
+    // The mode starts as the literal 'paper', and is set in exactly three places: the checkbox a
+    // person ticks, the effect that forces it BACK to paper, and -- since 8 October 2026, CONFIRM --
+    // the effect that ticks it for a call confirmed from Opportunities, which runs once and only
+    // where the checkbox itself could be ticked (canGoLive: a verified key, the session armed by a
+    // person, no kill switch). The phrase is still typed and the button still pressed by a person.
     expect(modal).toContain("useState<'paper' | 'live'>('paper')")
-    expect(modal.match(/setMode\(/g)).toHaveLength(2)
+    expect(modal.match(/setMode\(/g)).toHaveLength(3)
     expect(modal).toContain("setMode(e.target.checked ? 'live' : 'paper')")
     expect(modal).toContain("setMode('paper')")
+    expect(modal).toMatch(/if \(!proposalLive \|\| liveAsked\.current \|\| !canGoLive\) return\r?\n\s+liveAsked\.current = true\r?\n\s+setMode\('live'\)/)
   })
 
   it('a live order still needs its phrase typed, with or without a proposal', () => {
@@ -455,9 +444,24 @@ describe('a short can be paper traded and cannot be placed', () => {
 
   it('a proposal sets the side of the form and nothing about whether it is real', () => {
     // The only things read off a proposal are what the form opens on, what it is recorded as,
-    // and whether it has expired.
+    // whether it has expired, and -- since 8 October 2026 -- its stop, read to size the amount by
+    // the PERSON'S risk setting (suggestedLiveAmount): the model still names no amount.
     const reads = [...modal.matchAll(/proposal\??\.(\w+)/g)].map((match) => match[1])
-    expect(new Set(reads)).toEqual(new Set(['exchange', 'pair', 'side', 'expiresAt', 'candleTime', 'interval']))
+    expect(new Set(reads)).toEqual(new Set(['exchange', 'pair', 'side', 'expiresAt', 'candleTime', 'interval', 'stopLossPct']))
+    expect(modal).toContain('stopLossPct: proposal.stopLossPct')
+  })
+
+  it('Confirm is on offer for a BUY alone, and hands the form the call and nothing more (8 October 2026)', () => {
+    // CONFIRM: the row's button fills in a real order from a BUY; a short stays paper, and the
+    // flag that opens the form as real is computed from the setting and the side, nothing else.
+    const tab = readFileSync(join(ROOT, 'src', 'agents', 'OpportunitiesTab.tsx'), 'utf-8')
+    expect(tab).toContain("onPrepareOrder(result.proposal, config?.watch.confirmLive === true && opportunitySide(answer.decision) === 'long')")
+    expect(readFileSync(join(ROOT, 'src', 'agents', 'OpportunityTableCard.tsx'), 'utf-8')).toContain("const confirming = confirm === true && answer !== null && answer.decision.recommendation === 'buy'")
+    expect(readFileSync(join(ROOT, 'src', 'agents', 'OpportunityCard.tsx'), 'utf-8')).toContain("{confirm === true && side === 'long' ? 'Confirm' : 'Paper trade'}")
+    // The page keeps the flag with the proposal and lets go of both together.
+    const page = readFileSync(join(ROOT, 'src', 'executors', 'ExecutorsPage.tsx'), 'utf-8')
+    expect(page).toContain('setFormLive(proposalLive)')
+    expect(page).toContain('proposalLive={formLive}')
   })
 
   it('the form will not submit an expired recommendation as it stands', () => {
@@ -467,5 +471,38 @@ describe('a short can be paper traded and cannot be placed', () => {
     const create = modal.slice(modal.indexOf('function handleCreate(): void {'), modal.indexOf('return (\n    <div\n      onClick={onClose}'))
     expect(create.indexOf('isAiProposalExpired(proposal, Math.floor(Date.now() / 1000))')).toBeGreaterThan(0)
     expect(create.indexOf('isAiProposalExpired(proposal, Math.floor(Date.now() / 1000))')).toBeLessThan(create.indexOf('onCreate({'))
+  })
+})
+
+describe('the amount a real order from a call is suggested to stake (8 October 2026)', () => {
+  const limits = { riskPct: 0.25, allocationQuote: 5000, dailyCapQuote: 50, maxOrderQuote: 25 }
+
+  it("is the risk setting's share of the allocation lost at the stop after fees, under the max order size", () => {
+    // 0.25% of 5,000 is 12.5; at a 1.5% stop and 0.2% of fees that stakes 735.29, held to 25.
+    expect(suggestedLiveAmount({ ...limits, stopLossPct: 1.5 })).toEqual({ amountQuote: 25, riskQuote: 12.5, basis: 'allocation', capped: true })
+    expect(suggestedLiveAmount({ ...limits, maxOrderQuote: 1000, stopLossPct: 1.5 })).toEqual({ amountQuote: 735.29, riskQuote: 12.5, basis: 'allocation', capped: false })
+  })
+
+  it("takes the share of the day's cap without an allocation, and none of an allocation of nothing", () => {
+    // 0.25% of 50 is 0.125; at a 1.5% stop that stakes 7.35.
+    expect(suggestedLiveAmount({ ...limits, allocationQuote: null, stopLossPct: 1.5 })).toEqual({ amountQuote: 7.35, riskQuote: 0.13, basis: 'daily cap', capped: false })
+    expect(suggestedLiveAmount({ ...limits, allocationQuote: 0, stopLossPct: 1.5 })).toBeNull()
+  })
+
+  it('suggests nothing without a usable stop, a share, a cap, or a size worth placing', () => {
+    expect(suggestedLiveAmount({ ...limits, stopLossPct: null })).toBeNull()
+    expect(suggestedLiveAmount({ ...limits, stopLossPct: 0 })).toBeNull()
+    expect(suggestedLiveAmount({ ...limits, riskPct: 0, stopLossPct: 1.5 })).toBeNull()
+    expect(suggestedLiveAmount({ ...limits, maxOrderQuote: 0, stopLossPct: 1.5 })).toBeNull()
+    // 0.1% of 50 at a 5% stop: 0.05 / 5.2% is 0.96, under the 5 the smallest order is worth.
+    expect(suggestedLiveAmount({ riskPct: 0.1, allocationQuote: null, dailyCapQuote: 50, maxOrderQuote: 25, stopLossPct: 5 })).toBeNull()
+  })
+
+  it('says what it is, whose setting sized it, and that the model did not', () => {
+    const suggested = suggestedLiveAmount({ ...limits, stopLossPct: 1.5 })
+    expect(suggested).not.toBeNull()
+    expect(describeSuggestedLiveAmount(suggested!, { riskPct: 0.25, stopLossPct: 1.5, quoteAsset: 'USDT' })).toBe(
+      'Amount 25 USDT: 0.25% of your allocation (12.5 USDT) lost at the 1.5% stop, after fees. Held to the max order size. Sized by your risk setting on Risk & Safety, not by the model; change it as you like.'
+    )
   })
 })

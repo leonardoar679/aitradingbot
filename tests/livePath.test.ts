@@ -9,7 +9,7 @@ const T = Date.parse('2026-10-08T09:00:00Z') / 1000
 
 const key = (over: Partial<CredentialStatus> = {}): CredentialStatus => ({ exchange: 'binance', configured: true, addedAt: T - 86_400, lastTestedAt: T - 3600, lastTestOk: true, ...over })
 const status = (over: Partial<LiveTradingStatus> = {}): LiveTradingStatus =>
-  ({ sessionArmed: false, killSwitchEngaged: false, maxOrderQuote: 10, hardMaxOrderQuote: 25, dailyCapQuote: 50, dailyUsedQuote: 0, dailyLossLimitQuote: 15, realizedPnlToday: 0, observedFeeRate: null, allocationQuote: null, allocationCommittedQuote: 0, ...over }) as LiveTradingStatus
+  ({ sessionArmed: false, killSwitchEngaged: false, maxOrderQuote: 10, hardMaxOrderQuote: 25, dailyCapQuote: 50, dailyUsedQuote: 0, dailyLossLimitQuote: 15, realizedPnlToday: 0, observedFeeRate: null, allocationQuote: null, allocationCommittedQuote: 0, riskPct: 0.25, ...over }) as LiveTradingStatus
 const account = (usdt: number): PaperAccount => ({ balances: { USDT: usdt }, initialBalances: { USDT: usdt }, createdAt: T, ledger: [] }) as unknown as PaperAccount
 const executor = (over: Record<string, unknown>): ExecutorConfig => ({ type: 'position', mode: 'paper', name: 'Grid', params: { side: 'buy' }, ...over }) as unknown as ExecutorConfig
 

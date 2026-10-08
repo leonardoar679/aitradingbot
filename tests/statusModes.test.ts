@@ -60,8 +60,8 @@ describe('the trading mode', () => {
 })
 
 describe('the watch mode', () => {
-  const config = (watch: boolean, paper: boolean): { watch: typeof DEFAULT_AI_WATCH; watchPaper: typeof DEFAULT_AI_WATCH_PAPER } => ({
-    watch: { ...DEFAULT_AI_WATCH, enabled: watch, models: ['openai/gpt-5-mini'] },
+  const config = (watch: boolean, paper: boolean, confirm = false): { watch: typeof DEFAULT_AI_WATCH; watchPaper: typeof DEFAULT_AI_WATCH_PAPER } => ({
+    watch: { ...DEFAULT_AI_WATCH, enabled: watch, models: ['openai/gpt-5-mini'], confirmLive: confirm },
     watchPaper: { ...DEFAULT_AI_WATCH_PAPER, enabled: paper, model: 'openai/gpt-5-mini' }
   })
 
@@ -85,6 +85,15 @@ describe('the watch mode', () => {
     expect(modes.map((mode) => describeWatchMode(mode).label)).toEqual(['AI: NO KEY', 'AI: WATCH OFF', 'AI: SHADOW', 'AI: PAPER TRADES'])
     expect(describeWatchMode('shadow').detail).toContain('opens nothing')
     expect(describeWatchMode('paper-trades').detail).toContain('Never a real one.')
+  })
+
+  it('is confirm with paper trades and CONFIRM both on (8 October 2026), and CONFIRM alone changes nothing', () => {
+    expect(watchModeOf({ keyConfigured: true, config: config(true, true, true) })).toBe('confirm')
+    expect(watchModeOf({ keyConfigured: true, config: config(true, false, true) })).toBe('shadow')
+    expect(watchModeOf({ keyConfigured: true, config: config(false, true, true) })).toBe('off')
+    expect(watchModeOf({ keyConfigured: false, config: config(true, true, true) })).toBe('no-key')
+    expect(describeWatchMode('confirm')).toMatchObject({ label: 'AI: CONFIRM', tone: 'warn' })
+    expect(describeWatchMode('confirm').detail).toContain('You place it; it never does.')
   })
 
   it("states the day's spend against its budget", () => {

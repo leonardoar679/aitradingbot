@@ -50,7 +50,7 @@ const SOON = T + 20
 /** Each trade at its own stake, with no cap: how the watch's own rules are held here. Sizing by
  * risk and the cap on what the app's own paper trades have out (shared/paperRisk.ts) are held below,
  * under their own heading. */
-const STAKE: PaperRiskSettings = { sizing: 'stake', riskQuote: 1, maxOutQuote: null }
+const STAKE: PaperRiskSettings = { sizing: 'stake', riskQuote: 1, riskPct: 0.25, maxOutQuote: null }
 
 function config(overrides: Partial<AiWatchPaperConfig> = {}): AiWatchPaperConfig {
   return { enabled: true, model: A, stakeQuote: 100, maxOpen: 3, maxSameSide: 2, pauseAfterLosses: 3, dropOnBtcMovePct: 1, ...overrides }
@@ -1026,7 +1026,7 @@ describe('the safeguards', () => {
 })
 
 describe('sized by risk, and held to what the app has out (shared/paperRisk.ts)', () => {
-  const RISK: PaperRiskSettings = { sizing: 'risk', riskQuote: 1, maxOutQuote: null }
+  const RISK: PaperRiskSettings = { sizing: 'risk', riskQuote: 1, riskPct: 0.25, maxOutQuote: null }
   const amountOf = (made: ExecutorConfig): number => (made.params as PositionExecutorParams).amountQuote
 
   it('stakes what its stop would lose about the risk at, after fees, and never more than its stake', () => {
@@ -1049,7 +1049,7 @@ describe('sized by risk, and held to what the app has out (shared/paperRisk.ts)'
   })
 
   it('says how it is sized, and what the app may have out, before it is switched on', () => {
-    const text = describeAiWatchPaper({ config: config({ stakeQuote: 250 }), risk: { sizing: 'risk', riskQuote: 2, maxOutQuote: 1000 }, watchOn: true, hasPaperAccount: false })
+    const text = describeAiWatchPaper({ config: config({ stakeQuote: 250 }), risk: { sizing: 'risk', riskQuote: 2, riskPct: 0.25, maxOutQuote: 1000 }, watchOn: true, hasPaperAccount: false })
     expect(text).toContain("a PAPER position is opened at once, with nobody pressing anything, staking at most 250 of the pair's quote currency, sized so that being stopped out loses about 2.")
     expect(text).toContain(
       'On Risk & Safety, for every paper trade the app opens by itself: Each with a stop stakes what would lose about 2 there, after fees, and never more than its own stake. Together they stake at most 1,000.'
@@ -1094,7 +1094,7 @@ describe('sized by risk, and held to what the app has out (shared/paperRisk.ts)'
 })
 
 describe('held to what the app has out on one side on coins that move with Bitcoin (shared/paperExposure.ts)', () => {
-  const CAPPED: PaperRiskSettings = { sizing: 'stake', riskQuote: 1, maxOutQuote: 1000 }
+  const CAPPED: PaperRiskSettings = { sizing: 'stake', riskQuote: 1, riskPct: 0.25, maxOutQuote: 1000 }
   const roomy = config({ maxOpen: 5, maxSameSide: 5 })
   /** The watch's open paper BUY of 100 on ETHUSDT, opened before correlations were written down. */
   const ethBuy = executor({ symbol: 'ETHUSDT', eventId: 'eth' })

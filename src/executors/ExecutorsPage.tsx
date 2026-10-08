@@ -44,6 +44,7 @@ export function ExecutorsPage({
   autoOpenPresets = false,
   onPresetsOpened,
   proposal = null,
+  proposalLive = false,
   onProposalTaken,
   embedded = false
 }: {
@@ -52,6 +53,9 @@ export function ExecutorsPage({
   /** A model's call to open the New Executor form from (shared/aiProposal.ts). Taken once, the
    * way the presets request is: this page opens the form and tells the app to let go of it. */
   proposal?: AiOrderProposal | null
+  /** With it, since 8 October 2026: the call was confirmed (CONFIRM), so the form opens as a real
+   * order where the session allows one. */
+  proposalLive?: boolean
   onProposalTaken?: () => void
   /** Leaves the title to the page this sits on (Strategies, as its Execution view). */
   embedded?: boolean
@@ -66,6 +70,7 @@ export function ExecutorsPage({
    * here: nothing below creates an executor from one, and handleCreate runs only when the form's
    * own button is pressed. */
   const [formProposal, setFormProposal] = useState<AiOrderProposal | null>(null)
+  const [formLive, setFormLive] = useState(false)
   const [showPresets, setShowPresets] = useState(false)
   const [paperAccount, setPaperAccount] = useState<PaperAccount | null>(null)
 
@@ -80,13 +85,15 @@ export function ExecutorsPage({
   useEffect(() => {
     if (proposal === null) return
     setFormProposal(proposal)
+    setFormLive(proposalLive)
     setShowNew(true)
     onProposalTaken?.()
-  }, [proposal, onProposalTaken])
+  }, [proposal, proposalLive, onProposalTaken])
 
   function closeNew(): void {
     setShowNew(false)
     setFormProposal(null)
+    setFormLive(false)
   }
   const [selectedId, setSelectedId] = useState<string | null>(null)
   /** Every failure below used to be a console.error and nothing else. In a packaged app with no
@@ -893,6 +900,7 @@ export function ExecutorsPage({
           onCreate={handleCreate}
           onClose={closeNew}
           proposal={formProposal}
+          proposalLive={formLive}
           account={paperAccount}
           existingExecutors={executors}
         />
