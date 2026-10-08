@@ -11,6 +11,8 @@ import { startExchangeHealth } from './services/exchangeHealthService'
 import { startNewsReader } from './services/newsService'
 import { startNewsFeed } from './services/newsFeedService'
 import { startAiAdditions } from './services/aiAdditionsService'
+import { startLiveUserStream } from './services/liveUserStreamService'
+import { startLiveReconcile } from './services/liveReconcileService'
 import icon from '../build/icon.png?asset'
 import { describeConfigurationAtStart } from './services/effectiveConfigService'
 import { getAiConfig } from './services/aiConfigService'
@@ -209,6 +211,17 @@ if (!gotSingleInstanceLock) {
     // story of high impact the feed reads -- only while the watch is on, within its own daily limit
     // and the budget. It places nothing. See aiAdditionsService.ts.
     startAiAdditions()
+    // The account's own stream (the V5 document, S101): while a Binance key is stored and the
+    // session is armed or an order or position of the app's own is open, one authenticated socket
+    // hears each order's fate and the balances after it, and books a fill at once through the
+    // function the 5-second poll uses. It places, cancels and sizes nothing. See
+    // liveUserStreamService.ts.
+    startLiveUserStream()
+    // The reconciliation (S102): once a minute while a key is stored, the orders resting on the
+    // exchange and the account's balances against the ledgers; what disagrees is told as a notice
+    // and shown on Live Trading and Positions, and the ledger is never rewritten by it. See
+    // liveReconcileService.ts.
+    startLiveReconcile()
     // Says, once every store has read its file, what the start read: each settings file's version
     // and what was migrated, and every value the heal changed (the V5 document, §107). It reads
     // what the services already hold and changes nothing. See effectiveConfigService.ts.

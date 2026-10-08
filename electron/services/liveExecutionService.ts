@@ -1,5 +1,6 @@
-import { canTradeOn, type Exchange, type LiveOrderRecord, type LivePosition } from '../../shared/ipc'
+import { canTradeOn, type Exchange, type LiveOrder, type LiveOrderRecord, type LivePosition } from '../../shared/ipc'
 import { describeLiveShortfall } from '../../shared/liveBalances'
+import { resolvedOrderStatus } from '../../shared/userStream'
 import { canCloseLivePosition, canPlaceLiveOrder, recordLiveOrderUsage, checkLossLimitAndAutoDisarm } from './liveTradingService'
 import { recordLiveFill } from './livePositionsService'
 import { freeBalanceFor, getDecryptedCredential } from './credentialsService'
@@ -86,6 +87,46 @@ export async function executeLiveClose(position: LivePosition, quantity: number)
   await recordLiveFill(position.exchange, position.symbol, position.baseAsset, position.quoteAsset, 'sell', result.filledQty, result.avgFillPrice, result.commissions, stepQty)
   await checkLossLimitAndAutoDisarm()
   return { ...result, placedAt: Math.floor(Date.now() / 1000) }
+}
+
+export interface LiveOrderResolution {
+  executorId: string
+  liveOrderId: string
+  liveOrder: LiveOrderRecord
+  status: 'filled' | 'cancelled' | 'expired'
+}
+
+/** One at a time: the poll and the user-data stream can hear the same fill within the same
+ * second, and the second to arrive must read the ledger the first already wrote. */
+let turn: Promise<unknown> = Promise.resolve()
+function inTurn<T>(work: () => Promise<T>): Promise<T> {
+  const run = turn.then(work, work)
+  turn = run.catch(() => undefined)
+  return run
+}
+
+/** One resting order's fate, as the exchange reports it, written into the ledgers: the order
+ * resolved, the daily cap's reservation settled against what executed, the fill recorded on the
+ * position, and the loss limit looked at after a sell. Shared by the 5-second poll
+ * (liveTradingHandlers.ts), the user-data stream (liveUserStreamService.ts) and the reconciliation
+ * (liveReconcileService.ts), so a fill is booked once whichever hears it first: the next to hear
+ * it reads the order as resolved and does nothing. Null while the order still rests, and for an
+ * order already resolved. */
+export async function resolveOrderFromExchange(order: LiveOrder, result: LiveOrderResult): Promise<LiveOrderResolution | null> {
+  const status = resolvedOrderStatus(result.status)
+  if (status === null) return null
+  return inTurn(async () => {
+    const current = await getLiveOrder(order.id)
+    if (current === null || current.status !== 'open') return null
+    await resolveLiveOrder(order.id, status, result.filledQty, result.filledQty > 0 ? result.avgFillPrice : null)
+    const reserved = order.quantity * order.limitPrice
+    await recordLiveOrderUsage(result.cummulativeQuoteQty - reserved, order.placedAt)
+    if (result.filledQty > 0) {
+      await recordLiveFill(order.exchange, order.symbol, order.baseAsset, order.quoteAsset, order.side, result.filledQty, result.avgFillPrice, result.commissions)
+      if (order.side === 'sell') await checkLossLimitAndAutoDisarm()
+    }
+    return { executorId: order.executorId, liveOrderId: order.id, liveOrder: { ...result, placedAt: order.placedAt }, status }
+  })
 }
 
 /** Cancels one resting live limit order by its ledger id — ungated (cancelling only ever reduces

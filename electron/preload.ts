@@ -58,6 +58,8 @@ import {
 } from '../shared/ipc'
 import type { EffectiveConfig } from '../shared/appConfig'
 import type { HealthState } from '../shared/exchangeHealth'
+import type { ReconciliationReadout } from '../shared/reconcileLive'
+import type { UserStreamState } from '../shared/userStream'
 import type { NoticeExtra } from '../shared/notices'
 import type { AlertRecordOnFile, PaperRefusalRecord, RecordFilter } from '../shared/records'
 
@@ -281,6 +283,8 @@ const api = {
     pollOpenOrders: (): Promise<
       { executorId: string; liveOrderId: string; liveOrder: LiveOrderRecord; status: 'filled' | 'cancelled' | 'expired' }[]
     > => ipcRenderer.invoke(IpcChannel.LiveTradingPollOpenOrders),
+    userStream: (): Promise<UserStreamState> => ipcRenderer.invoke(IpcChannel.LiveTradingUserStream),
+    reconciliation: (): Promise<ReconciliationReadout> => ipcRenderer.invoke(IpcChannel.LiveTradingReconciliation),
     cancelOrder: (liveOrderId: string): Promise<LiveOrderRecord> =>
       ipcRenderer.invoke(IpcChannel.LiveTradingCancelOrder, liveOrderId),
     createWatcher: (

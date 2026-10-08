@@ -187,8 +187,10 @@ import { ALERT_KINDS, ALERT_KIND_SEVERITY, ALERT_THREAD_SECONDS, healAlertKind, 
 // EVERY KIND THE V4 DOCUMENT NAMES (§48), IN THREADS (§49): a kind's loudness when a notice names
 // none, and one notice per thread per window.
 describe('the kinds and the threads', () => {
-  it('names the eleven kinds the document lists, each with how loud it is', () => {
-    expect([...ALERT_KINDS]).toEqual(['MARKET_EVENT', 'NEWS_EVENT', 'TRADE_OPPORTUNITY', 'TRADE_EXECUTED', 'TRADE_BLOCKED', 'POSITION_RISK', 'TARGET_REACHED', 'STOP_TRIGGERED', 'MODEL_DISAGREEMENT', 'SYSTEM_FAILURE', 'CIRCUIT_BREAKER'])
+  it('names the eleven kinds the document lists and the reconciliation (V5 S102), each with how loud it is', () => {
+    // Widened on 8 October 2026: RECONCILIATION, HIGH, is the V5 document's own kind for what the
+    // exchange holds against what the ledger knows (electron/services/liveReconcileService.ts).
+    expect([...ALERT_KINDS]).toEqual(['MARKET_EVENT', 'NEWS_EVENT', 'TRADE_OPPORTUNITY', 'TRADE_EXECUTED', 'TRADE_BLOCKED', 'POSITION_RISK', 'TARGET_REACHED', 'STOP_TRIGGERED', 'MODEL_DISAGREEMENT', 'SYSTEM_FAILURE', 'CIRCUIT_BREAKER', 'RECONCILIATION'])
     expect(ALERT_KIND_SEVERITY).toEqual({
       MARKET_EVENT: 'watch',
       NEWS_EVENT: 'watch',
@@ -200,7 +202,8 @@ describe('the kinds and the threads', () => {
       STOP_TRIGGERED: 'high',
       MODEL_DISAGREEMENT: 'watch',
       SYSTEM_FAILURE: 'high',
-      CIRCUIT_BREAKER: 'high'
+      CIRCUIT_BREAKER: 'high',
+      RECONCILIATION: 'high'
     })
     expect(healAlertKind('STOP_TRIGGERED')).toBe('STOP_TRIGGERED')
     expect(healAlertKind('stop_triggered')).toBeNull()

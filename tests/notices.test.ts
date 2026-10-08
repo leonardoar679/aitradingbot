@@ -11,8 +11,7 @@ import {
   paperCloseNotice,
   stopProgress,
   systemFailureNotice,
-  tradeBlockedNotice
-} from '../shared/notices'
+  tradeBlockedNotice, reconciliationNotice, RECONCILIATION_THREAD_SECONDS } from '../shared/notices'
 
 // THE NOTICES THE V4 DOCUMENT NAMES (§47-48), each in words (shared/notices.ts): what is said, how
 // loud, of what kind, and on which thread. The handler that tells them is tested in appNotify.
@@ -147,5 +146,21 @@ describe('a paper BUY ready to confirm (8 October 2026)', () => {
       'GPT-5 mini at 74% confidence called a BUY on the breakout at 22:53 UTC, and a paper trade is open on it. Open Opportunities and press Confirm to fill in a real order from the call, sized by your risk setting: you place it, and nothing is placed by this.'
     )
     expect(notice.extra).toEqual({ kind: 'TRADE_OPPORTUNITY', thread: 'confirm:binance:SOLUSDT:1791500000', severity: 'high' })
+  })
+})
+
+describe('what the reconciliation found (the V5 document, S102; 8 October 2026)', () => {
+  it('names a resting order the ledger does not know, or a holding the account does not back, HIGH on its own thread for four hours, and changes nothing', () => {
+    const order = reconciliationNotice('order', 'ETHUSDT: a SELL of 0.05 at 4000 is resting on Binance (order 777, placed 12:00 UTC), and this app has no record of it.', 'order:ETHUSDT:777')
+    expect(order).toEqual({
+      title: 'A resting order this app does not know',
+      body: 'ETHUSDT: a SELL of 0.05 at 4000 is resting on Binance (order 777, placed 12:00 UTC), and this app has no record of it. Nothing was changed: the record is yours to put right.',
+      extra: { kind: 'RECONCILIATION', thread: 'reconcile:order:ETHUSDT:777', severity: 'high', threadSeconds: 4 * 3600 }
+    })
+    expect(RECONCILIATION_THREAD_SECONDS).toBe(4 * 3600)
+    const asset = reconciliationNotice('asset', 'The ledger says 1 ETH; Binance holds 0.4 ETH.', 'asset:ETH')
+    expect(asset.title).toBe('A holding the account does not back')
+    expect(asset.extra.thread).toBe('reconcile:asset:ETH')
+    expect(asset.extra.severity).toBe('high')
   })
 })

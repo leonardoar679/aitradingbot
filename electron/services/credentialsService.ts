@@ -7,7 +7,7 @@ import { fetchUpbitBalances } from './exchanges/upbitTrading'
 import { fetchFuturesPositions, fetchOpenFuturesOrders } from './exchanges/binanceFutures'
 import { cancelProtectiveStop, closeFuturesPosition, placeProtectiveStop } from './exchanges/binanceFuturesTrading'
 import { canCloseLivePosition } from './liveTradingService'
-import { freeBalance, readableBalances } from '../../shared/liveBalances'
+import { freeBalance, readableBalances, type ExchangeBalance } from '../../shared/liveBalances'
 import type { CredentialStatus, Exchange, LiveBalanceSnapshot } from '../../shared/ipc'
 import type { FuturesCloseResult, FuturesReadout } from '../../shared/futuresPositions'
 import { describeStopPlacementError, readableProtectiveStops, type ProtectiveStop } from '../../shared/futuresStops'
@@ -181,6 +181,16 @@ export async function readLiveBalances(exchange: Exchange, force = false): Promi
   if (!entry) throw new Error(`No API key is connected for ${exchange}`)
 
   const raw = await reader(decrypt(entry.apiKeyEnc), decrypt(entry.apiSecretEnc))
+  const { rows, unreadable } = readableBalances(raw)
+  const snapshot: LiveBalanceSnapshot = { exchange, rows, unreadable, fetchedAt: Date.now() }
+  balanceCache.set(exchange, snapshot)
+  return snapshot
+}
+
+/** The balances as the account's own stream just reported them (liveUserStreamService.ts; the V5
+ * document, S101), kept as a read made now: the page's next read is answered from them instead of
+ * a signed request, and a trade's funding check still reads fresh (freeBalanceFor). */
+export function updateBalanceCache(exchange: Exchange, raw: readonly ExchangeBalance[]): LiveBalanceSnapshot {
   const { rows, unreadable } = readableBalances(raw)
   const snapshot: LiveBalanceSnapshot = { exchange, rows, unreadable, fetchedAt: Date.now() }
   balanceCache.set(exchange, snapshot)

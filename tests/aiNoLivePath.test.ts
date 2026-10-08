@@ -61,7 +61,11 @@ const LIVE_MODULES = new Set([
   'binanceTrading',
   'binanceFuturesTrading',
   'upbitTrading',
-  'credentialsService'
+  'credentialsService',
+  // Added 8 October 2026 (the V5 document, S101-102): the account's own stream books fills, and the
+  // reconciliation resolves orders the exchange no longer rests. Neither reads a model.
+  'liveUserStreamService',
+  'liveReconcileService'
 ])
 
 function isAiService(file: string): boolean {

@@ -2613,13 +2613,28 @@ daily loss-limit gate above.
 
 A market order resolves synchronously; a limit order rests until it fills, gets cancelled, or
 expires. `electron/services/liveOrdersService.ts` is the source of truth for every resting order
-(own `liveOrders.json`), polled every 5s by `LiveOrderScheduler` (a headless component mounted in
-`App.tsx`, same shape as `RoutineScheduler`) — deliberately polling rather than an authenticated
-websocket user-data-stream (listenKey lifecycle, keep-alive renewal, reconnect handling), which
-would be disproportionate infrastructure for a tool with no sub-second latency requirement. The
-ledger survives app restarts, so an order still resting when the app closes is picked up correctly
-next launch with no reconciliation logic beyond "poll every open record." The Execution view's
-existing generic **Stop** button doubles as the real cancel action for a resting live order.
+(own `liveOrders.json`). Since 8 October 2026 (the V5 document, §101-102) the main process hears
+its fate first: **the account's own stream** (`electron/services/liveUserStreamService.ts`, the
+listen key in `electron/services/exchanges/binanceUserStream.ts`) is one authenticated socket, open
+while a Binance key is stored and the session is armed or an order or position of this app is open,
+kept alive every thirty minutes and renewed before Binance's day is up through the same helper the
+public stream uses; each order report is booked at once through `resolveOrderFromExchange`
+(`electron/services/liveExecutionService.ts`), the one function the 5-second poll by
+`LiveOrderScheduler` (a headless component mounted in `App.tsx`) also uses, one at a time, so a fill
+is booked once whichever hears it first and the poll stays as the check. Each balances frame
+refreshes the balance cache. **The reconciliation** (`electron/services/liveReconcileService.ts`)
+looks once a minute while a key is stored: the orders resting on the exchange (`GET /openOrders`)
+against the ledger — a resting order the ledger does not know is told as a **RECONCILIATION**
+notice (HIGH, once per order per four hours), a ledger order the exchange no longer rests is asked
+about and resolved as the poll resolves it — and the account's balances against the open positions
+by the rule the Positions page applied until then (`shared/reconcileLive.ts`), a shortfall told on
+the asset's thread. The ledger is never rewritten by any of it; Live Trading's "The account's own
+stream" card and the Positions page's ledger check show the last look. Verified without a key: unit
+tests on a local WebSocket server with the transport faked, and the in-app check on a scratch
+profile with a made-up key, the main process's fetch and the `USER_STREAM_URL` seam faked. The
+ledger survives app restarts, so an order still resting when the app closes is picked up next
+launch by the poll and the stream alike. The Execution view's existing generic **Stop** button
+doubles as the real cancel action for a resting live order.
 
 ## Architecture
 

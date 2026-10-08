@@ -163,6 +163,20 @@ export function tradeBlockedNotice(symbol: string, reason: string): Notice {
   }
 }
 
+/** What the reconciliation found (the V5 document, §102; V5 Stage 11, 8 October 2026): a resting
+ * order on the exchange the ledger does not know, or an asset the ledger claims more of than the
+ * account holds. HIGH, once per order or asset per RECONCILIATION_THREAD_SECONDS while it stands.
+ * The ledger is never rewritten by it: the notice says what was found, and a person puts it right. */
+export const RECONCILIATION_THREAD_SECONDS = 4 * 3600
+
+export function reconciliationNotice(what: 'order' | 'asset', detail: string, thread: string): Notice {
+  return {
+    title: what === 'order' ? 'A resting order this app does not know' : 'A holding the account does not back',
+    body: `${detail} Nothing was changed: the record is yours to put right.`,
+    extra: { kind: 'RECONCILIATION', thread: `reconcile:${thread}`, severity: 'high', threadSeconds: RECONCILIATION_THREAD_SECONDS }
+  }
+}
+
 /** The words of a pause's refusal (shared/paperPause.ts paperPauseBlock). */
 const PAUSE_REFUSAL = /paused|resumed on Risk & Safety/i
 

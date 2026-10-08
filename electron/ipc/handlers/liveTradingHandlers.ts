@@ -11,9 +11,19 @@ import {
   checkLossLimitAndAutoDisarm
 } from '../../services/liveTradingService'
 import { listOpenLivePositions, listClosedLivePositions, getLivePosition, recordLiveFill } from '../../services/livePositionsService'
-import { createLiveOrder, listOpenLiveOrders, resolveLiveOrder } from '../../services/liveOrdersService'
+import { createLiveOrder, listOpenLiveOrders } from '../../services/liveOrdersService'
 import { singleFlight } from '../../services/singleFlight'
-import { assertLiveOrderAffordable, executeLiveClose, cancelLiveOrderById, cancelSiblingLiveOrders, placeLiveMarketOrder } from '../../services/liveExecutionService'
+import {
+  assertLiveOrderAffordable,
+  executeLiveClose,
+  cancelLiveOrderById,
+  cancelSiblingLiveOrders,
+  placeLiveMarketOrder,
+  resolveOrderFromExchange,
+  type LiveOrderResolution
+} from '../../services/liveExecutionService'
+import { drainStreamResolutions, getUserStreamState } from '../../services/liveUserStreamService'
+import { getReconciliationState } from '../../services/liveReconcileService'
 import {
   createWatcher,
   listActiveWatchers,
@@ -24,15 +34,6 @@ import {
 import { createTwapRun, listActiveTwapRuns, stopTwapRun, drainResolvedTwapEvents } from '../../services/liveTwapService'
 import { getDecryptedCredential } from '../../services/credentialsService'
 import { placeLimitOrder, queryOrder } from '../../services/exchanges/binanceTrading'
-
-/** Binance's own status strings, mapped onto the three-way resolution LiveOrder cares about.
- * Null means still resting (NEW/PARTIALLY_FILLED/PENDING_CANCEL) — nothing to do yet. */
-function resolvedStatus(binanceStatus: string): 'filled' | 'cancelled' | 'expired' | null {
-  if (binanceStatus === 'FILLED') return 'filled'
-  if (binanceStatus === 'CANCELED') return 'cancelled'
-  if (binanceStatus === 'EXPIRED' || binanceStatus === 'REJECTED') return 'expired'
-  return null
-}
 
 export function registerLiveTradingHandlers(): void {
   ipcMain.handle(IpcChannel.LiveTradingGetStatus, () => getLiveTradingStatus())
@@ -116,8 +117,12 @@ export function registerLiveTradingHandlers(): void {
     }
   )
 
-  // Polled by LiveOrderScheduler every few seconds — the only place a resting live limit order's
-  // fate is discovered. No gate check: querying status is read-only and changes nothing.
+  // Polled by LiveOrderScheduler every few seconds: the check on a resting live limit order's
+  // fate. Since 8 October 2026 (the V5 document, S101) the account's own stream hears a fill first
+  // and books it through the same function (resolveOrderFromExchange, one at a time), so the poll
+  // finds such an order already resolved and does nothing with it; what the stream and the
+  // reconciliation resolved is handed to the renderer here, with the poll's own. No gate check:
+  // querying status is read-only and changes nothing.
   ipcMain.handle(
     IpcChannel.LiveTradingPollOpenOrders,
     // Guarded because this both resolves the order ledger and records the fill against the
@@ -125,37 +130,28 @@ export function registerLiveTradingHandlers(): void {
     // same real fill, doubling the tracked quantity and the daily cap usage. Guarded here rather
     // than only at the caller so the ledger is safe from any caller.
     singleFlight(
-      async (): Promise<
-        { executorId: string; liveOrderId: string; liveOrder: LiveOrderRecord; status: 'filled' | 'cancelled' | 'expired' }[]
-      > => {
-      const open = await listOpenLiveOrders()
-      const resolutions: { executorId: string; liveOrderId: string; liveOrder: LiveOrderRecord; status: 'filled' | 'cancelled' | 'expired' }[] =
-        []
-
-      for (const order of open) {
-        try {
-          const { apiKey, apiSecret } = await getDecryptedCredential(order.exchange)
-          const result = await queryOrder(apiKey, apiSecret, order.symbol, order.orderId)
-          const status = resolvedStatus(result.status)
-          if (status === null) continue // still resting
-
-          await resolveLiveOrder(order.id, status, result.filledQty, result.filledQty > 0 ? result.avgFillPrice : null)
-          const reserved = order.quantity * order.limitPrice
-          await recordLiveOrderUsage(result.cummulativeQuoteQty - reserved, order.placedAt)
-          if (result.filledQty > 0) {
-            await recordLiveFill(order.exchange, order.symbol, order.baseAsset, order.quoteAsset, order.side, result.filledQty, result.avgFillPrice, result.commissions)
-            if (order.side === 'sell') await checkLossLimitAndAutoDisarm()
+      async (): Promise<LiveOrderResolution[]> => {
+        const open = await listOpenLiveOrders()
+        const resolutions: LiveOrderResolution[] = []
+        for (const order of open) {
+          try {
+            const { apiKey, apiSecret } = await getDecryptedCredential(order.exchange)
+            const result = await queryOrder(apiKey, apiSecret, order.symbol, order.orderId)
+            const resolution = await resolveOrderFromExchange(order, result)
+            if (resolution !== null) resolutions.push(resolution)
+          } catch (error) {
+            console.error(`Failed to poll live order ${order.id}:`, error)
           }
-          resolutions.push({ executorId: order.executorId, liveOrderId: order.id, liveOrder: { ...result, placedAt: order.placedAt }, status })
-        } catch (error) {
-          console.error(`Failed to poll live order ${order.id}:`, error)
         }
-      }
-      return resolutions
+        return [...drainStreamResolutions(), ...resolutions]
       },
-      () => []
+      () => drainStreamResolutions()
     )
   )
+
+  // The account's own stream and the reconciliation, read-only, for Live Trading and Positions.
+  ipcMain.handle(IpcChannel.LiveTradingUserStream, () => getUserStreamState())
+  ipcMain.handle(IpcChannel.LiveTradingReconciliation, () => getReconciliationState())
 
   // Cancelling a resting order — deliberately ungated. Cancellation only ever reduces risk, so
   // it's never blocked by session-arm, the kill switch, or any cap (see the Phase 2c plan).

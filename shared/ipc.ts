@@ -119,6 +119,9 @@ export const IpcChannel = {
   LiveTradingListActiveTwapRuns: 'liveTrading:listActiveTwapRuns',
   LiveTradingStopTwapRun: 'liveTrading:stopTwapRun',
   LiveTradingDrainTwapEvents: 'liveTrading:drainTwapEvents',
+  /** The account's own stream and the reconciliation, read-only (the V5 document, S101-102). */
+  LiveTradingUserStream: 'liveTrading:userStream',
+  LiveTradingReconciliation: 'liveTrading:reconciliation',
   ExecutorPlaceLiveOrder: 'executor:placeLiveOrder',
   ExecutorPlaceLiveLimitOrder: 'executor:placeLiveLimitOrder'
 } as const

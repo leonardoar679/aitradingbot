@@ -131,3 +131,64 @@ export function describeDiscrepancy(discrepancy: LiveDiscrepancy, exchangeLabel:
     `this app cannot tell that apart from a fill it missed, so it will not adjust the record on its own.`
   )
 }
+
+/** An order resting on the exchange, as the reconciliation reads it (GET /openOrders). */
+export interface OpenOrderOnExchange {
+  orderId: number
+  symbol: string
+  side: 'buy' | 'sell'
+  status: string
+  origQty: number
+  executedQty: number
+  price: number
+  /** Seconds. */
+  placedAt: number
+}
+
+/** What the main process's reconciliation last found (electron/services/liveReconcileService.ts;
+ * the V5 document, S102), for Live Trading and Positions to show. */
+export interface ReconciliationReadout {
+  /** Seconds; null before the first look. */
+  at: number | null
+  /** Resting on the exchange with no record here. */
+  unknownOrders: OpenOrderOnExchange[]
+  /** Assets the ledger claims more of than the account holds. */
+  discrepancies: LiveDiscrepancy[]
+  /** Assets whose balance could not be read as a number. */
+  unchecked: string[]
+  /** Ledger orders the exchange no longer rested, resolved by the check since the app started. */
+  resolvedByCheck: number
+  /** Whether a key was stored at the last look: without one there is nothing to reconcile. */
+  keyStored: boolean
+  error: string | null
+}
+
+const clockOf = (sec: number): string => `${new Date(sec * 1000).toISOString().slice(11, 16)} UTC`
+
+/** The words for a resting order the ledger does not know: the notice's and the card's. */
+export function describeUnknownOrder(order: OpenOrderOnExchange, exchangeLabel: string): string {
+  return `${order.symbol}: a ${order.side.toUpperCase()} of ${order.origQty} at ${order.price} is resting on ${exchangeLabel} (order ${order.orderId}, placed ${clockOf(order.placedAt)}), and this app has no record of it.`
+}
+
+/** One line for the reconciliation's state, and one for each thing it found. */
+export function describeReconciliation(readout: ReconciliationReadout, exchangeLabel: string): { line: string; tone: 'up' | 'down' | 'muted'; findings: string[] } {
+  if (readout.at === null) return { line: 'Not checked yet: the first look comes within a minute of the start.', tone: 'muted', findings: [] }
+  if (!readout.keyStored) return { line: `No ${exchangeLabel} key is connected, so there is nothing to check.`, tone: 'muted', findings: [] }
+  if (readout.error !== null) return { line: `Could not check at ${clockOf(readout.at)}: ${readout.error}`, tone: 'muted', findings: [] }
+  const findings = [
+    ...readout.unknownOrders.map((order) => describeUnknownOrder(order, exchangeLabel)),
+    ...readout.discrepancies.map((discrepancy) => describeDiscrepancy(discrepancy, exchangeLabel))
+  ]
+  const resolved =
+    readout.resolvedByCheck > 0
+      ? ` ${readout.resolvedByCheck} order${readout.resolvedByCheck === 1 ? '' : 's'} the exchange no longer rested ${readout.resolvedByCheck === 1 ? 'was' : 'were'} resolved by the check.`
+      : ''
+  if (findings.length === 0) {
+    const unchecked =
+      readout.unchecked.length > 0
+        ? ` ${readout.unchecked.join(', ')} could not be read, so ${readout.unchecked.length === 1 ? 'that holding was' : 'those holdings were'} not checked.`
+        : ''
+    return { line: `Checked at ${clockOf(readout.at)}: the orders resting on ${exchangeLabel} and the account's balances agree with the ledger.${resolved}${unchecked}`, tone: 'up', findings: [] }
+  }
+  return { line: `Checked at ${clockOf(readout.at)}: ${findings.length} thing${findings.length === 1 ? '' : 's'} the ledger does not agree with. Nothing was changed.${resolved}`, tone: 'down', findings }
+}

@@ -139,7 +139,9 @@ boundary. They are unchanged by the reorganization:
 - **`ControllerScheduler`** takes P&L snapshots every 5 minutes and stops a controller's executors
   on a breach.
 - **`LiveOrderScheduler`** polls resting real orders every 5 seconds, and writes resolved orders and
-  watcher exits back into settings.
+  watcher exits back into settings. Since 8 October 2026 the account's own stream in the main
+  process (`liveUserStreamService`) hears a fill first and books it through the same function; the
+  poll is the check, and hands the renderer what the stream and the reconciliation resolved.
 - **`PortfolioScheduler`** values the portfolio for the chart.
 - **`OpportunityScheduler`** is the watch: it puts events to models and opens and settles its paper
   trades when those are switched on.
@@ -209,6 +211,17 @@ The main process also runs loops that need no window at all:
   the live order gate refuses a NEW real position while the exchange is degraded (stale data with
   REST failing, a clock over five seconds off, REST slow three reads running, a key whose last test
   failed), and never a closing order. The bar and Live Trading show it (`shared/exchangeHealth.ts`).
+- `liveUserStreamService` (added 8 October 2026; the V5 document, §101) keeps one authenticated
+  socket to Binance's user-data stream while a key is stored and the session is armed or an order or
+  position of the app's own is open: a listen key (`exchanges/binanceUserStream.ts`), kept alive
+  every thirty minutes and renewed before the day is up, each order report booked at once through
+  `resolveOrderFromExchange`, each balances frame into the balance cache. It places nothing.
+- `liveReconcileService` (added 8 October 2026; §102) looks once a minute while a key is stored at
+  the orders resting on the exchange and the account's balances against the ledgers; a resting
+  order the ledger does not know and a holding the account does not back are told as RECONCILIATION
+  notices (HIGH, a thread per order or asset, four hours), a ledger order the exchange no longer
+  rests is resolved as the poll resolves it, and the ledger is never rewritten. Live Trading and
+  Positions show its last look.
 - `livePositionWatchersService` evaluates live exits every 5 seconds.
 - `liveTwapService` places TWAP slices.
 

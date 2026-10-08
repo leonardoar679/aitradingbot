@@ -1,3 +1,4 @@
+import type { OpenOrderOnExchange } from '../../../shared/reconcileLive'
 import { createHmac } from 'crypto'
 import type { Commissions } from '../../../shared/observedFee'
 import { fetchMarketData, resolveTradingEndpoint } from './binance'
@@ -386,6 +387,37 @@ export async function queryOrder(apiKey: string, apiSecret: string, symbol: stri
 export async function cancelOrder(apiKey: string, apiSecret: string, symbol: string, orderId: number): Promise<LiveOrderResult> {
   const data = (await signedRequest(apiKey, apiSecret, '/order', { symbol, orderId: String(orderId) }, 'DELETE')) as BinanceOrderResponse
   return parseOrderResponse(data)
+}
+
+export type { OpenOrderOnExchange }
+
+interface BinanceOpenOrderRow {
+  orderId: number
+  symbol: string
+  side: string
+  status: string
+  origQty: string
+  executedQty: string
+  price: string
+  time: number
+}
+
+/** Every order resting on the account (signed GET /openOrders), for the reconciliation
+ * (electron/services/liveReconcileService.ts; the V5 document, §102): what the exchange holds
+ * against what the ledger knows. Read-only: it places, cancels and sizes nothing. */
+export async function fetchOpenOrders(apiKey: string, apiSecret: string): Promise<OpenOrderOnExchange[]> {
+  const data = await signedRequest(apiKey, apiSecret, '/openOrders', {}, 'GET')
+  if (!Array.isArray(data)) return []
+  return (data as BinanceOpenOrderRow[]).map((row) => ({
+    orderId: Number(row.orderId),
+    symbol: String(row.symbol),
+    side: row.side === 'SELL' ? 'sell' : 'buy',
+    status: String(row.status),
+    origQty: Number(row.origQty),
+    executedQty: Number(row.executedQty),
+    price: Number(row.price),
+    placedAt: Math.floor(Number(row.time) / 1000)
+  }))
 }
 
 /** The trading rules for one symbol, for the UI to check a strategy against BEFORE it is created.

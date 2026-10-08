@@ -195,7 +195,11 @@ export const ALERT_KINDS = [
   'STOP_TRIGGERED',
   'MODEL_DISAGREEMENT',
   'SYSTEM_FAILURE',
-  'CIRCUIT_BREAKER'
+  'CIRCUIT_BREAKER',
+  /** The V5 document's §102 (8 October 2026): what the exchange holds against what the ledger
+   * knows -- a resting order the app has no record of, or an asset it claims more of than the
+   * account holds. One notice an order or an asset; the ledger is never rewritten by it. */
+  'RECONCILIATION'
 ] as const
 
 export type AlertKind = (typeof ALERT_KINDS)[number]
@@ -212,7 +216,8 @@ export const ALERT_KIND_SEVERITY: Record<AlertKind, AlertSeverity> = {
   STOP_TRIGGERED: 'high',
   MODEL_DISAGREEMENT: 'watch',
   SYSTEM_FAILURE: 'high',
-  CIRCUIT_BREAKER: 'high'
+  CIRCUIT_BREAKER: 'high',
+  RECONCILIATION: 'high'
 }
 
 export function healAlertKind(value: unknown): AlertKind | null {
