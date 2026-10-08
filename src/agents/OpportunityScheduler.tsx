@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import type { EventLife, MarketEvent } from '../../shared/marketEvent'
-import { watchPass, type WatchDeps } from './opportunityWatch'
-import { openWatchPaperTrade, settleWatchPaperTrades, watchPaperBrowserDeps } from './watchPaperTrade'
+import { sweepRestartMisses, watchPass, type WatchDeps } from './opportunityWatch'
+import { openWatchPaperTrade, settleWatchPaperTrades, watchPaperBrowserDeps, watchTradedEventIds } from './watchPaperTrade'
 
 /** How often the watch's own paper trades are looked at for one that has closed. A minute: a
  * position is judged on minutes that have closed. */
@@ -56,6 +56,21 @@ export function OpportunityScheduler(): null {
         })
         .catch((error: unknown) => console.error('The watch could not look at the events raised:', error))
     }
+    // The record whole across a restart (shared/restartMisses.ts; the V5 document, §94): an event
+    // answered before this start with an answer to act on, no trade and no refusal is written as a
+    // refusal at stage restart, before the first pass. A record; the event is not asked again
+    // either way.
+    void sweepRestartMisses({
+      listCalls: deps.listCalls,
+      listRefusals: (filter) => window.api.records.refusals(filter),
+      tradedEventIds: watchTradedEventIds,
+      recordRefusal: deps.recordRefusal,
+      nowSec: deps.nowSec
+    })
+      .then((misses) => {
+        if (misses.length > 0) console.log(`The restart sweep wrote ${misses.length} refusal(s) for answers the app was not running to act on.`)
+      })
+      .catch((error: unknown) => console.error('The restart sweep failed:', error))
     void window.api.scanner
       .getState()
       .then((state) => look(state.recentEvents, state.lives))

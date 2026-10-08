@@ -21,6 +21,8 @@ export interface PaperRefusal {
   model?: string
   callId?: string
   side?: 'buy' | 'sell'
+  /** `restart`: written at start for an answer the app was not running to act on (shared/restartMisses.ts). */
+  stage?: 'restart'
 }
 
 const KEPT = 2000

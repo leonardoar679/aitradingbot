@@ -1,3 +1,4 @@
+import { CACHE_RETENTION_DAYS, type RecordSizes } from './retention'
 import { AI_ADDITION_DAILY_LIMITS, AI_ADDITION_PROMPT_VERSIONS, AI_ADDITION_SCHEMA_VERSIONS, healAiAdditions } from './aiAdditions'
 import { AI_CONFIRM_PROMPT_VERSION } from './aiConfirm'
 import { AI_CONTEXT_VERSION } from './aiContext'
@@ -113,7 +114,10 @@ export const ENGINE_CONSTANTS = {
   sessionReport: { version: SESSION_REPORT_VERSION },
   /** The ceilings above every setting (the V5 document, §5): in code, never in a file. */
   hardLimits: HARD_LIMITS,
-  configFiles: { version: CONFIG_FILE_VERSION }
+  configFiles: { version: CONFIG_FILE_VERSION },
+  /** The records' retention (the V5 document, §93; since 8 October 2026): the answer cache is swept
+   * of files older than this at start; the monthly files are kept. */
+  retention: { answerCacheDays: CACHE_RETENTION_DAYS }
 } as const
 
 /** One value the heal changed on the way from a file to the store the app runs on. */
@@ -141,6 +145,8 @@ export interface EffectiveConfig {
   files: ConfigFileNote[]
   /** Every value the heal changed at start. */
   healed: HealedValue[]
+  /** What the records weigh and what the start swept (shared/retention.ts); null where not measured. */
+  sizes: RecordSizes | null
 }
 
 /** What a fresh install's stores are: every default, composed (shared/appDefaults.ts). */
@@ -192,10 +198,10 @@ export function stableJson(value: unknown): string {
 /** The configuration composed and versioned. `hash` is the caller's (the main process's crypto, or
  * a test's), and the first twelve characters of what it gives are the version. `start` is what the
  * main process saw as it read the files; a composition made elsewhere has none. */
-export function effectiveConfig(stores: EffectiveStores, hash: (text: string) => string, start: { files: ConfigFileNote[]; healed: HealedValue[] } = { files: [], healed: [] }): EffectiveConfig {
+export function effectiveConfig(stores: EffectiveStores, hash: (text: string) => string, start: { files: ConfigFileNote[]; healed: HealedValue[]; sizes?: RecordSizes | null } = { files: [], healed: [] }): EffectiveConfig {
   const engineVersion = hash(stableJson(ENGINE_CONSTANTS)).slice(0, 12)
   const configVersion = hash(stableJson({ engine: ENGINE_CONSTANTS, stores })).slice(0, 12)
-  return { engineVersion, configVersion, engine: ENGINE_CONSTANTS, stores, files: start.files, healed: start.healed }
+  return { engineVersion, configVersion, engine: ENGINE_CONSTANTS, stores, files: start.files, healed: start.healed, sizes: start.sizes ?? null }
 }
 
 /** Every value as one row: its path and its value, for the read-only card. */

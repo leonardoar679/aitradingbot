@@ -611,3 +611,11 @@ export const watchPaperBrowserDeps: WatchPaperDeps = {
   newId: () => crypto.randomUUID(),
   queue: (work) => settingsWrites(work)
 }
+
+/** The events the watch's own paper trades were opened on, from the books: what the restart sweep
+ * (./opportunityWatch.ts sweepRestartMisses; the V5 document, §94) reads to tell an answer traded
+ * from one never acted on. A read of settings, which this file alone of the watch's may make. */
+export async function watchTradedEventIds(): Promise<ReadonlySet<string>> {
+  const settings = await window.api.settings.get()
+  return new Set(watchPaperExecutors(settings.executors).map((executor) => executor.watch?.eventId).filter((id): id is string => typeof id === 'string'))
+}

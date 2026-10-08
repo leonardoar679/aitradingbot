@@ -1629,6 +1629,14 @@ a rule worth keeping.
   the watch's name (`electron/services/aiWatchService.ts`), from the two things only it owns —
   the setting and the ledger — one check at a time, so that two events arriving together cannot
   both take the day's last place. The daily AI budget is checked after that, as for every call.
+- **The record is whole across a restart** (since 8 October 2026; the V5 document, §94). The watch
+  asks and, on an answer it would act on, opens its paper trade in the same breath; closed between
+  the two, it used to forget the event for good, since the ledger said it had been asked about.
+  Now, before its first pass, it reads today's ledger (`shared/restartMisses.ts`, run by
+  `sweepRestartMisses` in `opportunityWatch.ts`): an event with an answer to act on by the vote's
+  own rule, no paper trade of the watch's on the books and no refusal on file is written as a
+  refusal at stage `restart` ("the app was not running when it could have been entered") and
+  shown as MISSED. The event is still never asked again; the session report's gates hold.
 - **A model that keeps failing is rested.** One whose last three calls for the watch today all
   failed or were refused is not asked again until the next UTC day; the others still are, and
   the card says who was left out. A refused answer was paid for, and a provider that is down
@@ -2714,7 +2722,11 @@ electron/preload.ts  ── contextBridge ──▶  window.api.*  (renderer)
   the daily budget, owned by the main process for the reason `liveTrading.json` is: a spending
   limit the renderer could rewrite through a settings patch is a limit in name only),
   `aiModels.json` (the cached price list), `aiSignalCache/` (one file per answered decision) and
-  `aiLedger/` (the append-only call history).
+  `aiLedger/` (the append-only call history). Since 8 October 2026 (the V5 document, §93) the
+  answer cache is swept at start of files older than 90 days (`shared/retention.ts`,
+  `electron/services/recordRetentionService.ts`; a pinned constant under the engine's
+  `retention`), the monthly files are kept whole, and what every record directory weighs is on the
+  effective-config card under "What the start read" and in the start's log line.
 - **`backend/`** is a minimal, unused standalone Express service (one `/health` route). AI calls
   are made from the Electron main process, where the key can sit in the OS keychain; nothing in
   the app talks to `backend/`.

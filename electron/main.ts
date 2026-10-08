@@ -15,6 +15,7 @@ import { startLiveUserStream } from './services/liveUserStreamService'
 import { startLiveReconcile } from './services/liveReconcileService'
 import icon from '../build/icon.png?asset'
 import { describeConfigurationAtStart } from './services/effectiveConfigService'
+import { sweepAnswerCache } from './services/recordRetentionService'
 import { getAiConfig } from './services/aiConfigService'
 import { getSettings } from './services/settingsService'
 import { closeAction, healKeepRunning, trayTooltip } from '../shared/keepRunning'
@@ -225,7 +226,15 @@ if (!gotSingleInstanceLock) {
     // Says, once every store has read its file, what the start read: each settings file's version
     // and what was migrated, and every value the heal changed (the V5 document, §107). It reads
     // what the services already hold and changes nothing. See effectiveConfigService.ts.
-    void describeConfigurationAtStart()
+    // First the answer cache is swept of files older than the retention (shared/retention.ts; the
+    // V5 document, §93) -- cached answers alone, never a monthly file -- so that the line says what
+    // the records weigh after it. See recordRetentionService.ts.
+    void sweepAnswerCache()
+      .catch((error) => {
+        console.error('The answer cache could not be swept:', error)
+        return 0
+      })
+      .then(() => describeConfigurationAtStart())
       .then((line) => console.log(line))
       .catch((error) => console.error('The configuration could not be described:', error))
 

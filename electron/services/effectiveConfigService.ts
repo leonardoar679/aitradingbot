@@ -1,6 +1,8 @@
 import { createHash } from 'crypto'
 import { describeHealed, effectiveConfig, healNote, healStores, type EffectiveConfig } from '../../shared/appConfig'
 import { describeConfigFiles } from '../../shared/configMigration'
+import { describeRecordSizes } from '../../shared/retention'
+import { recordSizes } from './recordRetentionService'
 import { getAiConfig } from './aiConfigService'
 import { configFileNotes, rawConfigFiles } from './configFiles'
 import { getLiveTradingStatus } from './liveTradingService'
@@ -17,7 +19,7 @@ import { getSettings } from './settingsService'
 const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex')
 
 export async function getEffectiveConfig(): Promise<EffectiveConfig> {
-  const [settings, ai, scanner, news, live] = await Promise.all([getSettings(), getAiConfig(), getScannerState(), getNewsState(), getLiveTradingStatus()])
+  const [settings, ai, scanner, news, live, sizes] = await Promise.all([getSettings(), getAiConfig(), getScannerState(), getNewsState(), getLiveTradingStatus(), recordSizes()])
   const stores = healStores({
     settings: { paperRisk: settings.paperRisk, paperPause: settings.paperPause, paperDigest: settings.paperDigest, alerts: settings.alerts, keepRunningWhenClosed: settings.keepRunningWhenClosed },
     ai: {
@@ -41,7 +43,7 @@ export async function getEffectiveConfig(): Promise<EffectiveConfig> {
     }
   })
   // Every store's service has read its file by now, so the notes are whole.
-  return effectiveConfig(stores, sha256, { files: configFileNotes(), healed: healNote(rawConfigFiles(), stores) })
+  return effectiveConfig(stores, sha256, { files: configFileNotes(), healed: healNote(rawConfigFiles(), stores), sizes })
 }
 
 /** The configuration version alone, for a record that names it. */
@@ -57,6 +59,7 @@ export async function describeConfigurationAtStart(): Promise<string> {
   const changed = config.healed.filter((entry) => entry.how !== 'missing').map((entry) => `${entry.path} ${entry.how} (${entry.stored} → ${entry.effective})`)
   return (
     `Configuration ${config.configVersion} (engine ${config.engineVersion}). ${describeConfigFiles(config.files)} ${describeHealed(config.healed)}` +
-    (changed.length > 0 ? ` ${changed.join('; ')}.` : '')
+    (changed.length > 0 ? ` ${changed.join('; ')}.` : '') +
+    (config.sizes === null ? '' : ` ${describeRecordSizes(config.sizes)}`)
   )
 }

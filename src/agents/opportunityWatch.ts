@@ -14,8 +14,10 @@ import { AI_WATCH_FRESH_SECONDS, WATCH_NOT_CONFIRMED_REASON, utcMidnight, watchE
 import { describeEventType, type EventLife, type MarketEvent } from '../../shared/marketEvent'
 import { voteOf } from '../../shared/opportunityVote'
 import { actionableRefusal, breakerNotice, confirmNotice, disagreementNotice, marketEventNotice, tradeBlockedNotice, type NoticeExtra } from '../../shared/notices'
-import { askModels, fetchEventQuestion, type AskModelsResult, type CandleFetch } from './opportunities'
-import { recordPaperRefusal, type PaperRefusal } from './paperRefusals'
+import { askModels, decisionOfCall, fetchEventQuestion, type AskModelsResult, type CandleFetch } from './opportunities'
+import { recordPaperRefusal, SESSION_STARTED_SEC, type PaperRefusal } from './paperRefusals'
+import type { PaperRefusalRecord, RecordFilter } from '../../shared/records'
+import { answeredBeforeStart, restartMisses } from '../../shared/restartMisses'
 
 // The watch at work (shared/aiWatch.ts has its rules): given the events the scanner holds, take
 // up the ones the watch should ask about, put each to its models, and say so on the desktop when
@@ -408,4 +410,41 @@ export function resetWatch(): void {
   handled.clear()
   inFlight.clear()
   activity = { asking: [], last: null, answered: 0 }
+}
+
+export interface RestartSweepDeps {
+  listCalls: WatchDeps['listCalls']
+  /** The refusals on file since a time (shared/records.ts). */
+  listRefusals: (filter: RecordFilter) => Promise<{ rows: PaperRefusalRecord[] }>
+  /** The events the watch's own paper trades were opened on, from the books (./watchPaperTrade.ts). */
+  tradedEventIds: () => Promise<ReadonlySet<string>>
+  recordRefusal?: WatchDeps['recordRefusal']
+  nowSec: () => number
+  /** Seconds: when this run of the app began. Answers at or after it are this run's own. */
+  startedSec?: number
+}
+
+/** THE RECORD WHOLE ACROSS A RESTART (shared/restartMisses.ts; the V5 document, §94). Once, at
+ * start, before the first pass: today's ledger is read, and an event answered before this start
+ * with an answer to act on, no paper trade of the watch's on the books and no refusal on file is
+ * written as a refusal at stage `restart`. The event is not asked again either way (the ledger
+ * already says it was); the record is made whole. Resolves to what was written. */
+export async function sweepRestartMisses(deps: RestartSweepDeps): Promise<PaperRefusal[]> {
+  const nowSec = deps.nowSec()
+  const sinceSec = utcMidnight(nowSec)
+  const [page, refusals, traded] = await Promise.all([
+    deps.listCalls({ source: 'watch', sinceSec, limit: LEDGER_ROWS_READ }),
+    deps.listRefusals({ sinceSec }),
+    deps.tradedEventIds()
+  ])
+  const rows = page.rows
+    .filter((row): row is typeof row & { eventId: string } => typeof row.eventId === 'string')
+    .map((row) => ({ eventId: row.eventId, symbol: row.symbol, model: row.model, status: row.status, at: row.at, decision: { ...decisionOfCall(row), callId: row.id } }))
+  const refused = new Set(refusals.rows.map((refusal) => refusal.eventId).filter((id): id is string => typeof id === 'string'))
+  const misses = restartMisses({ answered: answeredBeforeStart(rows, deps.startedSec ?? SESSION_STARTED_SEC), traded, refused, nowSec })
+  for (const miss of misses) {
+    recordPaperRefusal(miss)
+    deps.recordRefusal?.(miss)
+  }
+  return misses
 }

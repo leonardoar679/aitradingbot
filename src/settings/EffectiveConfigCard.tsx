@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { describeHealed, flattenConfig, type EffectiveConfig } from '../../shared/appConfig'
 import { describeConfigFiles } from '../../shared/configMigration'
+import { describeRecordSizes, formatBytes } from '../../shared/retention'
 import { Card } from '../components/Card'
 import { noteStyle } from '../agents/agentStyles'
 
@@ -85,6 +86,14 @@ export function EffectiveConfigCard(): React.JSX.Element {
       )}
       {current.healed.length > 0 &&
         table(current.healed.map((entry) => ({ path: entry.path, value: `${entry.how}: ${entry.stored} → ${entry.effective}`, home: `${entry.file}.json` })))}
+      {current.sizes !== null && (
+        <>
+          <p style={{ ...noteStyle, marginBottom: 0 }} data-testid="records-note">
+            {describeRecordSizes(current.sizes)}
+          </p>
+          {table(current.sizes.directories.map((directory) => ({ path: directory.name, value: `${directory.files} file${directory.files === 1 ? '' : 's'}, ${formatBytes(directory.bytes)}` })))}
+        </>
+      )}
     </>
   )
 

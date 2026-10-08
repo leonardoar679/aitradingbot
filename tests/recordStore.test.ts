@@ -45,6 +45,9 @@ describe('a refusal on file', () => {
     expect(await appendPaperRefusal({ id: 'x', at: 'now', source: 'watch', symbol: 'SOLUSDT', text: 'no' })).toBeNull()
     expect(await appendPaperRefusal('junk')).toBeNull()
     expect(healPaperRefusalRecord({ id: 'x', at: T, source: 'watch', symbol: 'SOLUSDT', text: 'no', side: 'sideways', eventId: 42 })).toEqual({ id: 'x', at: T, source: 'watch', symbol: 'SOLUSDT', text: 'no' })
+    // The restart stage (8 October 2026) is kept; any other word is not a stage.
+    expect(healPaperRefusalRecord({ id: 'x', at: T, source: 'watch', symbol: 'SOLUSDT', text: 'no', stage: 'restart' })).toEqual({ id: 'x', at: T, source: 'watch', symbol: 'SOLUSDT', text: 'no', stage: 'restart' })
+    expect(healPaperRefusalRecord({ id: 'x', at: T, source: 'watch', symbol: 'SOLUSDT', text: 'no', stage: 'later' })).toEqual({ id: 'x', at: T, source: 'watch', symbol: 'SOLUSDT', text: 'no' })
     expect(parseRecordLines('{"id":"a","at":1,"source":"watch","symbol":"S","text":"t"}\nnot json\n{"id":"b"}\n', healPaperRefusalRecord)).toEqual({
       rows: [{ id: 'a', at: 1, source: 'watch', symbol: 'S', text: 't' }],
       skipped: 2

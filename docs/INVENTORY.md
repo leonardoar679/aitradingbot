@@ -123,7 +123,10 @@ These files are records, not settings, and stay where they are: `livePositions.j
 `aiExperiments/`, `marketEvents/`, `news/` and `aiModels.json`; and, since 8 October 2026,
 `paperRefusals/` (the app's own paper trades refused, and why) and `alerts/` (the alerts told), one
 JSON line each in a file per UTC month (`shared/records.ts`), written by the main process as the
-renderer tells them and read back by the session report, a trade's timeline and Overview.
+renderer tells them and read back by the session report, a trade's timeline and Overview. Since
+8 October 2026 (the V5 document, §93) `aiSignalCache/` is swept at start of files older than 90
+days (`recordRetentionService`), nothing else is ever deleted, and the size of each record
+directory is on the effective-config card.
 
 ## What runs without a page open
 
@@ -144,7 +147,9 @@ boundary. They are unchanged by the reorganization:
   poll is the check, and hands the renderer what the stream and the reconciliation resolved.
 - **`PortfolioScheduler`** values the portfolio for the chart.
 - **`OpportunityScheduler`** is the watch: it puts events to models and opens and settles its paper
-  trades when those are switched on.
+  trades when those are switched on. Since 8 October 2026 (the V5 document, §94) it first reads
+  today's ledger and writes a refusal at stage `restart` for an answer the app was not running to
+  act on (`shared/restartMisses.ts`), so the record is whole and the event is shown as MISSED.
 
 A sixth was added after, in V3 Stage 7:
 - **`NewsScheduler`** acts on a delisting, or a coin added to the Monitoring Tag, that the news

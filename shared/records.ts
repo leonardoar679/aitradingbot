@@ -27,6 +27,9 @@ export interface PaperRefusalRecord {
   model?: string
   callId?: string
   side?: 'buy' | 'sell'
+  /** `restart` (the V5 document, §94; since 8 October 2026): written at start for an answer the
+   * app was not running to act on (shared/restartMisses.ts). Absent on every other refusal. */
+  stage?: 'restart'
 }
 
 /** An alert as told: what the badge counted and the banner showed. Whether it was seen or dismissed
@@ -91,6 +94,7 @@ export function healPaperRefusalRecord(value: unknown): PaperRefusalRecord | nul
   if (model !== null) record.model = model
   if (callId !== null) record.callId = callId
   if (SIDES.includes(raw.side as (typeof SIDES)[number])) record.side = raw.side as PaperRefusalRecord['side']
+  if (raw.stage === 'restart') record.stage = 'restart'
   return record
 }
 
