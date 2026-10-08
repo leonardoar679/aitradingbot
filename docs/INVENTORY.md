@@ -29,6 +29,7 @@ Taken on 5 October 2026, at commit `aef376d`.
 | **Account** | Get started, Add funds, Balances, Movements | The paper account: set up, fund, balances, ledger | Paper Trading |
 | | Live balances (one card per connected exchange) | Real balances read over the user's key | Live Trading |
 | | Futures positions | Real Binance futures positions, closable, exchange-held stops | Live Trading |
+| | The path to live (added 8 October 2026, not an old card) | Where a person stands on the document's safe workflow to live: the key and its test, paper trading, the two test runs, a trade from a call, the session armed; read-only | Live Trading |
 | **Trade** | Order Ticket, Session Orders | A manual paper order and this session's orders | Paper Trading |
 | **Bots** | Active, Runs, Archived | Strategy bots on paper, their finished runs, archived ones | Strategies › Active Runs |
 | **Executors** | Local Executor, Bots on this executor | Where bots and executors run | Strategies › Execution |

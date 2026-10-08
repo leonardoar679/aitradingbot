@@ -2118,6 +2118,15 @@ in this app requires a verified credential first.
 
 ## Live Trading — Real Money
 
+**The path to live** (since 8 October 2026; the second V3 document's §56). Live Trading opens with a
+read-only checklist of the document's safe workflow, each step read from what is on file
+(`shared/livePath.ts`): a Binance key stored, and tested; paper trading in use (a funded paper account,
+or the watch's paper trades on); the 1-hour and 12-hour test runs, read on a click against the
+session report's gates; a position made from a call's filled-in form and placed by a person (named
+as the form names it, or carrying the recommendation's entry range on paper); and the session armed.
+It says how many are done and which is next, and opens and arms nothing: the key is on Connections,
+the report on Performance, arming on the bar.
+
 A verified Binance key unlocks live mode for five of the eight executor types. Each shipped as its
 own reviewed, tested pass rather than as one big switch:
 

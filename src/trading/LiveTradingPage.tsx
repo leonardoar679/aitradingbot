@@ -4,6 +4,7 @@ import { PageHeader } from '../components/PageHeader'
 import { SummaryLine } from '../components/SummaryLine'
 import { TextLink } from '../components/TextLink'
 import { LiveAccountSection } from '../account/LiveAccountSection'
+import { LivePathCard } from './LivePathCard'
 import type { LiveTradingStatus, LiveWatcherSummary } from '../../shared/ipc'
 import type { Page } from '../navigation/pages'
 
@@ -81,12 +82,14 @@ function LiveSessionCard({ onNavigate }: { onNavigate: (page: Page) => void }): 
   )
 }
 
-/** Real money: the session's gates, and what you really hold on each connected exchange. */
+/** Real money: the session's gates, where you stand on the path to live, and what you really hold on
+ * each connected exchange. */
 export function LiveTradingPage({ onNavigate }: { onNavigate: (page: Page) => void }): React.JSX.Element {
   return (
     <>
-      <PageHeader title="Live Trading" subtitle="Real money: the session's gates, and what you hold on your connected exchanges" />
+      <PageHeader title="Live Trading" subtitle="Real money: the session's gates, the path to live, and what you hold on your connected exchanges" />
       <LiveSessionCard onNavigate={onNavigate} />
+      <LivePathCard onNavigate={onNavigate} />
       <LiveAccountSection />
     </>
   )
