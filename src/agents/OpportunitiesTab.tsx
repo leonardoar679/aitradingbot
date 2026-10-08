@@ -25,9 +25,13 @@ import { useEventFeed } from './useEventFeed'
 import { WatchCard } from './WatchCard'
 import { useScanner } from '../hooks/useScanner'
 import { getWatchActivity, subscribeWatchActivity } from './opportunityWatch'
+import { modelTradeCosts, tradeCosts } from '../../shared/aiCostPerTrade'
 
 /** How far back the refusals on file are read, for MISSED on the table: the last hour's events. */
 const REFUSALS_BACK_SEC = 2 * 3600
+/** Days of the ledger each model's cost a trade is read over (shared/aiCostPerTrade.ts), as Performance reads it. */
+const AI_COST_DAYS = 30
+const AI_COST_ROWS = 5000
 
 const EVENTS_SHOWN = 20
 /** How often the executors on file are read again, for the watch's own paper trades. */
@@ -69,6 +73,9 @@ export function OpportunitiesTab({
    * one status for the table (shared/opportunityStatus.ts). Read only. */
   const [asking, setAsking] = useState<string[]>(getWatchActivity().asking)
   const [refusedEvents, setRefusedEvents] = useState<ReadonlySet<string>>(new Set())
+  /** What each model's answers cost a trade, over the last thirty days of the ledger: part of the
+   * costs an expected value is net of (shared/expectedValue.ts). Read only. */
+  const [aiCostByModel, setAiCostByModel] = useState<Record<string, number>>({})
   useEffect(() => subscribeWatchActivity((activity) => setAsking(activity.asking)), [])
   const [problems, setProblems] = useState<Record<string, string>>({})
   const [configProblem, setConfigProblem] = useState<string | null>(null)
@@ -212,6 +219,19 @@ export function OpportunitiesTab({
 
   const enabled = config?.enabledModels ?? []
   const watchTrades = useMemo(() => watchPaperExecutors(executors), [executors])
+  useEffect(() => {
+    let cancelled = false
+    void window.api.ai
+      .listCalls({ sinceSec: Math.floor(Date.now() / 1000) - AI_COST_DAYS * 86_400, limit: AI_COST_ROWS })
+      .then((page) => {
+        if (cancelled) return
+        setAiCostByModel(Object.fromEntries(modelTradeCosts(tradeCosts(executors, page.rows)).map((entry) => [entry.model, entry.perTradeUsd])))
+      })
+      .catch(() => undefined)
+    return (): void => {
+      cancelled = true
+    }
+  }, [executors])
   // The events a paper trade of the app's own is, or was, open on: EXECUTED on the table.
   const tradedEvents = useMemo(() => new Set(watchTrades.map((executor) => executor.watch?.eventId).filter((id): id is string => typeof id === 'string')), [watchTrades])
   // The live prices of the pairs in the table, those on offer first: each entry is checked against them.
@@ -278,6 +298,7 @@ export function OpportunitiesTab({
           confirm={config?.watch.confirmLive === true}
           lives={scanner?.lives ?? {}}
           outcomes={outcomes}
+          aiCostByModel={aiCostByModel}
           onPaperTrade={
             onPrepareOrder
               ? (item: EventFeedItem, answer: EventAnswer): void => {
@@ -337,6 +358,8 @@ export function OpportunitiesTab({
           onAsk={() => void ask(item, ticked.filter((model) => !item.answers.some((answer) => answer.model === model)))}
           confirm={config?.watch.confirmLive === true}
           outcomes={outcomes}
+          aiCostByModel={aiCostByModel}
+          stakeQuote={config?.watchPaper.stakeQuote ?? null}
           onPaperTrade={
             onPrepareOrder
               ? (answer: EventAnswer): void => {

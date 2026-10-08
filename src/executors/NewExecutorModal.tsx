@@ -26,6 +26,7 @@ import {
   type AiProposalOrigin
 } from '../../shared/aiProposal'
 import { executorAllocatedQuote } from './computeSnapshot'
+import { RISK_LINES, riskMultiplier, riskReasonsText, volatilityRatio, type RiskMultiplier } from '../../shared/dynamicRisk'
 import { DcaForm } from './DcaForm'
 import { TwapForm } from './TwapForm'
 import { PositionForm } from './PositionForm'
@@ -333,8 +334,32 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
     liveTradingStatus.sessionArmed &&
     !liveTradingStatus.killSwitchEngaged
 
-  // The suggestion: the risk setting's share of the allocation (or the day's cap) lost at the call's
-  // stop, under the max order size. The model never sizes; a person may change it.
+  // The conditions a real order from a call would be entered in (shared/dynamicRisk.ts; since
+  // 8 October 2026): the pair's fifteen-minute range now against its thirty-day usual, read once
+  // for the proposal's pair. The book, the vote and the exposure are the watch's to read; here the
+  // volatility alone. What cannot be read reduces nothing.
+  const [conditions, setConditions] = useState<RiskMultiplier | null>(null)
+  useEffect(() => {
+    if (proposal === null) return
+    let cancelled = false
+    const nowSec = Math.floor(Date.now() / 1000)
+    window.api.market
+      .fetchHistoricalRange(exchange, pair.symbol, '15m', nowSec - RISK_LINES.usualDays * 86_400, nowSec)
+      .then((result) => {
+        if (cancelled) return
+        setConditions(riskMultiplier({ volatilityRatio: volatilityRatio(result.candles, nowSec), spreadPct: null, liquidityCover: null, dissent: null, correlatedShare: null }))
+      })
+      .catch(() => {
+        if (!cancelled) setConditions(null)
+      })
+    return (): void => {
+      cancelled = true
+    }
+  }, [proposal, exchange, pair.symbol])
+
+  // The suggestion: the risk setting's share of the allocation (or the day's cap), at the conditions'
+  // factor, lost at the call's stop after fees and slippage, under the max order size and what is
+  // left of the day's cap. The model never sizes; a person may change it.
   useEffect(() => {
     if (proposal === null || liveTradingStatus === null || amountTouched) return
     const suggestion = suggestedLiveAmount({
@@ -342,11 +367,13 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
       allocationQuote: liveTradingStatus.allocationQuote,
       dailyCapQuote: liveTradingStatus.dailyCapQuote,
       maxOrderQuote: liveTradingStatus.maxOrderQuote,
-      stopLossPct: proposal.stopLossPct
+      stopLossPct: proposal.stopLossPct,
+      dailyUsedQuote: liveTradingStatus.dailyUsedQuote,
+      factor: conditions?.factor ?? null
     })
     setSuggested(suggestion)
     if (suggestion !== null) setPositionParams((current) => ({ ...current, amountQuote: suggestion.amountQuote }))
-  }, [proposal, liveTradingStatus, amountTouched])
+  }, [proposal, liveTradingStatus, amountTouched, conditions])
 
   // Confirmed from Opportunities (CONFIRM): a real order where the session allows one, once; a
   // person may switch it back to paper.
@@ -712,7 +739,12 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
                 <span key={line}>{line}</span>
               ))}
               {suggested !== null && proposal.stopLossPct !== null && liveTradingStatus !== null && (
-                <span style={{ color: 'var(--text-primary)' }}>{describeSuggestedLiveAmount(suggested, { riskPct: liveTradingStatus.riskPct, stopLossPct: proposal.stopLossPct, quoteAsset: pair.quoteAsset })}</span>
+                <span style={{ color: 'var(--text-primary)' }}>
+                  {describeSuggestedLiveAmount(suggested, { riskPct: liveTradingStatus.riskPct, stopLossPct: proposal.stopLossPct, quoteAsset: pair.quoteAsset, reasons: conditions?.reasons })}
+                </span>
+              )}
+              {suggested === null && conditions !== null && conditions.factor === 0 && proposal.stopLossPct !== null && liveTradingStatus !== null && (
+                <span style={{ color: 'var(--down)', fontWeight: 600 }}>No amount is suggested: the conditions allow no trade ({riskReasonsText(conditions)}).</span>
               )}
               {proposalLive && !canGoLive && (
                 <span style={{ color: 'var(--gold)', fontWeight: 600 }}>

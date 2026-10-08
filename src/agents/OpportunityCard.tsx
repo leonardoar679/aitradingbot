@@ -16,6 +16,7 @@ import { EVENT_MAX_RANKED, describeEventType, eventReasons } from '../../shared/
 import { formatHoldingDuration } from '../backtest/formatTradeTime'
 import { buttonStyle, noteStyle, reasonLabel, signedPct } from './agentStyles'
 import { describeFeedItemStatus, feedItemStatus, scoreAnswer, type EventAnswer, type EventFeedItem, type FeedItemStatus } from './opportunities'
+import { aiCostPct } from '../../shared/aiCostPerTrade'
 
 interface OpportunityCardProps {
   item: EventFeedItem
@@ -37,6 +38,10 @@ interface OpportunityCardProps {
   /** The watch's closed paper trades with their calls (shared/expectedValue.ts), for each answer's
    * expected value at a calibrated rate. */
   outcomes?: WatchOutcome[]
+  /** What each model's answers cost a trade, in dollars (shared/aiCostPerTrade.ts), and the watch's
+   * stake it is read against: part of the costs the expected value is net of. */
+  aiCostByModel?: Readonly<Record<string, number>>
+  stakeQuote?: number | null
 }
 
 function utcMinute(sec: number): string {
@@ -93,7 +98,9 @@ function AnswerRow({
   nowSec,
   onPaperTrade,
   confirm = false,
-  outcomes = []
+  outcomes = [],
+  aiCostByModel = {},
+  stakeQuote = null
 }: {
   item: EventFeedItem
   answer: EventAnswer
@@ -103,6 +110,8 @@ function AnswerRow({
   /** CONFIRM is on: a BUY's button fills in a real order a person places. */
   confirm?: boolean
   outcomes?: WatchOutcome[]
+  aiCostByModel?: Readonly<Record<string, number>>
+  stakeQuote?: number | null
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const { decision } = answer
@@ -125,7 +134,9 @@ function AnswerRow({
           confidence: decision.confidence,
           calibrated: calibratedWinRate(outcomes, { model: answer.model, eventType: item.event.type, side: side === 'long' ? 'buy' : 'sell' }, nowSec),
           stopPct: levelPct(detail.stopLoss),
-          targetPct: levelPct(detail.takeProfit)
+          targetPct: levelPct(detail.takeProfit),
+          // The model's answers' cost a trade, as a share of the watch's stake (the V5 document, §73).
+          aiCostPct: stakeQuote === null ? null : aiCostPct(aiCostByModel[answer.model] ?? null, stakeQuote)
         })
 
   return (
@@ -244,7 +255,7 @@ function WhyThisPair({ item }: { item: EventFeedItem }): React.JSX.Element {
  * A recommendation is shown with its clock: where to enter, until when, and what it has done
  * since. Nothing on the card trades. "Paper trade" opens the order form on another page, filled
  * in; a person sets the amount and submits it there. */
-export function OpportunityCard({ item, bars, nowSec, toAsk, busy, problem, onAsk, onPaperTrade, confirm = false, outcomes = [] }: OpportunityCardProps): React.JSX.Element {
+export function OpportunityCard({ item, bars, nowSec, toAsk, busy, problem, onAsk, onPaperTrade, confirm = false, outcomes = [], aiCostByModel = {}, stakeQuote = null }: OpportunityCardProps): React.JSX.Element {
   const { event, answers } = item
   const [why, setWhy] = useState(false)
   const status = feedItemStatus(item, bars, nowSec)
@@ -299,7 +310,7 @@ export function OpportunityCard({ item, bars, nowSec, toAsk, busy, problem, onAs
       )}
 
       {answers.map((answer) => (
-        <AnswerRow key={answer.model} item={item} answer={answer} bars={bars} nowSec={nowSec} onPaperTrade={onPaperTrade} confirm={confirm} outcomes={outcomes} />
+        <AnswerRow key={answer.model} item={item} answer={answer} bars={bars} nowSec={nowSec} onPaperTrade={onPaperTrade} confirm={confirm} outcomes={outcomes} aiCostByModel={aiCostByModel} stakeQuote={stakeQuote} />
       ))}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', flexWrap: 'wrap' }}>

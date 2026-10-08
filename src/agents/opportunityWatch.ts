@@ -43,7 +43,7 @@ export interface WatchDeps {
   /** Opens a paper trade on an answer, when that is switched on. Resolves to what came of it, or
    * to null when there is nothing to say. Absent, the watch only asks and notifies. `byVote`
    * (since 8 October 2026): the answer is the one the models' vote chose, whichever model gave it. */
-  paperTrade?: (event: MarketEvent, decision: AiSignalDecision, byVote?: boolean) => Promise<{ opened: boolean; text: string } | null>
+  paperTrade?: (event: MarketEvent, decision: AiSignalDecision, byVote?: boolean, vote?: { taking: number; usable: number }) => Promise<{ opened: boolean; text: string } | null>
   /** Writes a refusal to the records on file (shared/records.ts), beside the session's own list.
    * A record; nothing reads it to decide anything. Absent, the session's list is all there is. */
   recordRefusal?: (refusal: PaperRefusal) => void
@@ -168,10 +168,10 @@ async function askAbout(event: MarketEvent, watch: AiWatchConfig, deps: WatchDep
 
   /** Hands an answer to the paper trader, when there is one, and says what came of it: true when a
    * trade was opened. A refusal is written down, and told when a person can act on it. */
-  const tradeOn = async (decision: AiSignalDecision): Promise<boolean> => {
+  const tradeOn = async (decision: AiSignalDecision, tally?: { taking: number; usable: number }): Promise<boolean> => {
     if (deps.paperTrade === undefined) return false
     try {
-      const outcome = await deps.paperTrade(event, decision, byVote)
+      const outcome = await deps.paperTrade(event, decision, byVote, tally)
       if (outcome === null) return false
       paper.push(outcome.text)
       // CONFIRM (shared/aiWatch.ts): a paper BUY opened is also told as ready to confirm as a
@@ -230,7 +230,11 @@ async function askAbout(event: MarketEvent, watch: AiWatchConfig, deps: WatchDep
     const decisions = results.map((result) => result.decision)
     const vote = voteOf(decisions)
     let opened = false
-    if (vote.chosen !== null) opened = await tradeOn(vote.chosen)
+    // How many of the usable answers took the side: a vote that passed with one not on it reduces
+    // the risk (shared/dynamicRisk.ts).
+    const usable = vote.consensus.long + vote.consensus.short + vote.consensus.noTrade
+    const taking = vote.side === 'long' ? vote.consensus.long : vote.side === 'short' ? vote.consensus.short : 0
+    if (vote.chosen !== null) opened = await tradeOn(vote.chosen, { taking, usable })
     else if (vote.refusal !== null) {
       const first = decisions.find((decision): decision is AiSignalDecision => isActionableOpportunity(decision) && decision !== null)
       const text = `No paper trade: ${vote.refusal}`

@@ -16,7 +16,7 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 // 8 October 2026: the fifth AI addition (its limit, prompt and schema) moved it from 60c026073c92;
 // later that day the hard limits and the settings files' version (V5 Stage 1) moved it from 9f6c8af7757e,
 // and the event's life, fingerprint and cause (V5 Stage 4) from fdf553c8b5bb.
-const PINNED_ENGINE_VERSION = '7c19c8f631cf'
+const PINNED_ENGINE_VERSION = '7e9adb65bce8'
 
 describe('the engine version', () => {
   it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {

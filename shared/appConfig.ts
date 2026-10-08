@@ -41,6 +41,7 @@ import { OPPORTUNITY_SCORE_VERSION } from './opportunityScore'
 import { healPaperDigest } from './paperDigest'
 import { healPaperPause } from './paperPause'
 import { PAPER_MIN_STAKE, healPaperRisk } from './paperRisk'
+import { RISK_LINES } from './dynamicRisk'
 import { SESSION_REPORT_VERSION } from './shadowReport'
 
 export type { EffectiveStores } from './appDefaults'
@@ -92,6 +93,8 @@ export const ENGINE_CONSTANTS = {
   liveMarket: { version: LIVE_MARKET_VERSION, maxSpreadPct: MAX_SPREAD_PCT, stalePriceMs: STALE_PRICE_MS, gapSeconds: LIVE_GAP_SECONDS },
   fees: { feeRate: FEE_RATE, slippageRate: SLIPPAGE_RATE },
   paperRisk: { minStake: PAPER_MIN_STAKE },
+  /** Risk by the conditions (the V5 document, §46-47; since 8 October 2026). */
+  dynamicRisk: RISK_LINES,
   alerts: { highImpact: HIGH_IMPACT, watchImpact: WATCH_IMPACT, btcCrashPct: BTC_CRASH_PCT },
   aiWatch: { freshSeconds: AI_WATCH_FRESH_SECONDS, breakerCalls: AI_WATCH_BREAKER_CALLS, minConfidence: GPT_MIN_CONFIDENCE },
   aiAdditions: { dailyLimits: AI_ADDITION_DAILY_LIMITS, prompts: AI_ADDITION_PROMPT_VERSIONS, schemas: AI_ADDITION_SCHEMA_VERSIONS },

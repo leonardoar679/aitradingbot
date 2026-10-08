@@ -6,7 +6,8 @@ import { GPT_MIN_CONFIDENCE, type AiSignalDecision } from './aiSignal'
 import type { Candle, ExecutorConfig, ExecutorSide, PaperPauseSettings, PaperRiskSettings, PositionExecutorParams } from './ipc'
 import { describeEventType, type MarketEvent } from './marketEvent'
 import { describePaperPause } from './paperPause'
-import { describePaperRisk, describeR, rMultiple, sizePaperTrade } from './paperRisk'
+import { describePaperRisk, describeR, rMultiple, riskPerTrade, sizePaperTrade } from './paperRisk'
+import { riskMultiplier, riskReasonsText, riskRefusal, type RiskMultiplier } from './dynamicRisk'
 
 // PAPER TRADES FROM THE WATCH.
 //
@@ -394,7 +395,7 @@ export function watchPaperDropNotice(executor: Pick<ExecutorConfig, 'symbol' | '
 }
 
 export type WatchPaperPlan =
-  | { ok: true; name: string; side: ExecutorSide; params: PositionExecutorParams; mark: WatchPaperMark }
+  | { ok: true; name: string; side: ExecutorSide; params: PositionExecutorParams; mark: WatchPaperMark; /** The risk it is sized at where the conditions reduced it (shared/dynamicRisk.ts), in words; null at the whole. */ riskNote: string | null }
   | { ok: false; reason: string }
 
 /** The paper position an answer becomes at this moment and this price, or why it becomes none.
@@ -416,6 +417,17 @@ export function planWatchPaperTrade(input: {
   /** The paper account's equity in the trade's quote (shared/paperRisk.ts paperEquity), for a trade
    * sized by a share of it; null or absent without an account. */
   equityQuote?: number | null
+  /** The conditions it would be entered in (shared/dynamicRisk.ts; since 8 October 2026): what was
+   * read of them. Absent, or every one null, the whole risk stands. */
+  conditions?: {
+    volatilityRatio: number | null
+    spreadPct: number | null
+    /** What the best level holds in the quote on the side taken; the cover is read against the
+     * stake sized at the whole risk. */
+    bestLevelQuote: number | null
+    dissent: boolean | null
+    correlatedShare: number | null
+  }
 }): WatchPaperPlan {
   const { config, event, decision } = input
   const current = input.lastPrice ?? event.price
@@ -446,13 +458,30 @@ export function planWatchPaperTrade(input: {
   // Its market fills give up what its score charges them (shared/aiOpportunityOutcome.ts), and it is
   // sized with that in what it risks.
   const slippageRate = slippageRateForEvent({ live: event.live ?? null })
-  const size = sizePaperTrade({ risk: input.risk, stakeQuote: config.stakeQuote, stopPct: proposal.stopLossPct, quoteAsset: event.quoteAsset, slippageRate, equityQuote: input.equityQuote })
+  const sizing = { risk: input.risk, stakeQuote: config.stakeQuote, stopPct: proposal.stopLossPct, quoteAsset: event.quoteAsset, slippageRate, equityQuote: input.equityQuote }
+  const whole = sizePaperTrade(sizing)
+  if (!whole.ok) return { ok: false, reason: whole.reason }
+  // The conditions' factor on the risk (shared/dynamicRisk.ts): none at extreme volatility, six
+  // tenths with any other condition against it. The best level's cover is read against the stake
+  // at the whole risk, so that a reduced stake does not read as better covered.
+  const conditions = input.conditions
+  const multiplier = riskMultiplier({
+    volatilityRatio: conditions?.volatilityRatio ?? null,
+    spreadPct: conditions?.spreadPct ?? null,
+    liquidityCover: conditions?.bestLevelQuote === undefined || conditions.bestLevelQuote === null ? null : conditions.bestLevelQuote / whole.amountQuote,
+    dissent: conditions?.dissent ?? null,
+    correlatedShare: conditions?.correlatedShare ?? null
+  })
+  const refusal = riskRefusal(multiplier)
+  if (refusal !== null) return { ok: false, reason: refusal }
+  const size = multiplier.factor === 1 ? whole : sizePaperTrade({ ...sizing, multiplier: multiplier.factor })
   if (!size.ok) return { ok: false, reason: size.reason }
   const side: ExecutorSide = proposal.side ?? 'buy'
   return {
     ok: true,
     name: `Watch: ${describeOpportunitySide(opportunitySide(decision))} ${event.symbol}`,
     side,
+    riskNote: riskNoteOf(input.risk, input.equityQuote, multiplier, event.quoteAsset),
     // No leverage field: absent is 1x, the only thing the watch ever opens.
     params: {
       side,
@@ -475,9 +504,21 @@ export function planWatchPaperTrade(input: {
       model: decision.model,
       confidence: decision.confidence,
       ...(decision.callId !== undefined ? { callId: decision.callId } : {}),
-      ...(decision.promptVersion !== undefined ? { promptVersion: decision.promptVersion } : {})
+      ...(decision.promptVersion !== undefined ? { promptVersion: decision.promptVersion } : {}),
+      ...(multiplier.factor === 1 ? {} : { riskFactor: multiplier.factor, riskReasons: multiplier.reasons })
     }
   }
+}
+
+/** The risk a trade is sized at once the conditions reduced it, in words: "risk 0.15% (high
+ * volatility, 1.8× its usual)" by a share of the account, "risk 0.6 USDT (…)" by a fixed risk,
+ * "the stake at 60% (…)" by its stake. Null at the whole risk. */
+export function riskNoteOf(risk: PaperRiskSettings, equityQuote: number | null | undefined, multiplier: RiskMultiplier, quoteAsset: string): string | null {
+  if (multiplier.factor === 1) return null
+  const reasons = riskReasonsText(multiplier)
+  if (risk.sizing === 'stake') return `the stake at ${Math.round(multiplier.factor * 100)}% (${reasons})`
+  if (risk.sizing === 'equity' && equityQuote !== null && equityQuote !== undefined && equityQuote > 0) return `risk ${(risk.riskPct * multiplier.factor).toFixed(2)}% (${reasons})`
+  return `risk ${Number((riskPerTrade(risk, equityQuote) * multiplier.factor).toFixed(2))} ${quoteAsset} (${reasons})`
 }
 
 function utcClock(sec: number): string {
@@ -503,7 +544,8 @@ export function watchPaperNotice(
     title: `${event.symbol}: paper ${plan.side === 'buy' ? 'BUY' : 'SELL'} opened`,
     body:
       `${describeDecider(plan.mark.model)} at ${Math.round(plan.mark.confidence * 100)}% confidence, on the ${describeEventType(event.type).toLowerCase()} at ${utcClock(event.time)} UTC. ` +
-      `A paper position of ${plan.params.amountQuote} ${event.quoteAsset} was opened ${describeWatchPaperEntry(plan.params)}, with its stop ${plan.params.stopLossPct}% away and its target ${plan.params.takeProfitPct}%. ` +
+      `A paper position of ${plan.params.amountQuote} ${event.quoteAsset} was opened ${describeWatchPaperEntry(plan.params)}, with its stop ${plan.params.stopLossPct}% away and its target ${plan.params.takeProfitPct}%` +
+      `${plan.riskNote === null ? '' : `, at ${plan.riskNote}`}. ` +
       'Nothing real has been placed. It is on Strategies › Execution.'
   }
 }

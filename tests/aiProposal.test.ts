@@ -478,14 +478,14 @@ describe('the amount a real order from a call is suggested to stake (8 October 2
   const limits = { riskPct: 0.25, allocationQuote: 5000, dailyCapQuote: 50, maxOrderQuote: 25 }
 
   it("is the risk setting's share of the allocation lost at the stop after fees, under the max order size", () => {
-    // 0.25% of 5,000 is 12.5; at a 1.5% stop and 0.2% of fees that stakes 735.29, held to 25.
-    expect(suggestedLiveAmount({ ...limits, stopLossPct: 1.5 })).toEqual({ amountQuote: 25, riskQuote: 12.5, basis: 'allocation', capped: true })
-    expect(suggestedLiveAmount({ ...limits, maxOrderQuote: 1000, stopLossPct: 1.5 })).toEqual({ amountQuote: 735.29, riskQuote: 12.5, basis: 'allocation', capped: false })
+    // 0.25% of 5,000 is 12.5; at a 1.5% stop, 0.2% of fees and 0.04% of slippage that stakes 718.39, held to 25.
+    expect(suggestedLiveAmount({ ...limits, stopLossPct: 1.5 })).toEqual({ amountQuote: 25, riskQuote: 12.5, basis: 'allocation', capped: true, heldBy: 'max order size', factor: 1 })
+    expect(suggestedLiveAmount({ ...limits, maxOrderQuote: 1000, dailyCapQuote: 5000, stopLossPct: 1.5 })).toEqual({ amountQuote: 718.39, riskQuote: 12.5, basis: 'allocation', capped: false, heldBy: null, factor: 1 })
   })
 
   it("takes the share of the day's cap without an allocation, and none of an allocation of nothing", () => {
-    // 0.25% of 50 is 0.125; at a 1.5% stop that stakes 7.35.
-    expect(suggestedLiveAmount({ ...limits, allocationQuote: null, stopLossPct: 1.5 })).toEqual({ amountQuote: 7.35, riskQuote: 0.13, basis: 'daily cap', capped: false })
+    // 0.25% of 50 is 0.125; at a 1.5% stop that stakes 7.18.
+    expect(suggestedLiveAmount({ ...limits, allocationQuote: null, stopLossPct: 1.5 })).toEqual({ amountQuote: 7.18, riskQuote: 0.13, basis: 'daily cap', capped: false, heldBy: null, factor: 1 })
     expect(suggestedLiveAmount({ ...limits, allocationQuote: 0, stopLossPct: 1.5 })).toBeNull()
   })
 
@@ -502,7 +502,25 @@ describe('the amount a real order from a call is suggested to stake (8 October 2
     const suggested = suggestedLiveAmount({ ...limits, stopLossPct: 1.5 })
     expect(suggested).not.toBeNull()
     expect(describeSuggestedLiveAmount(suggested!, { riskPct: 0.25, stopLossPct: 1.5, quoteAsset: 'USDT' })).toBe(
-      'Amount 25 USDT: 0.25% of your allocation (12.5 USDT) lost at the 1.5% stop, after fees. Held to the max order size. Sized by your risk setting on Risk & Safety, not by the model; change it as you like.'
+      'Amount 25 USDT: 0.25% of your allocation (12.5 USDT) lost at the 1.5% stop, after fees and slippage. Held to the max order size. Sized by your risk setting on Risk & Safety, not by the model; change it as you like.'
     )
+  })
+
+  it("is held to what is left of the day's cap, reduced by the conditions' factor, and none at a factor of none (8 October 2026)", () => {
+    // The day's cap holds the suggestion as it would hold the order: at the fixture's 50 with nothing spent, and at what is left of it after.
+    expect(suggestedLiveAmount({ ...limits, maxOrderQuote: 1000, stopLossPct: 1.5 })).toEqual({ amountQuote: 50, riskQuote: 12.5, basis: 'allocation', capped: true, heldBy: 'daily cap', factor: 1 })
+    expect(suggestedLiveAmount({ ...limits, maxOrderQuote: 1000, stopLossPct: 1.5, dailyUsedQuote: 45 })).toEqual({ amountQuote: 5, riskQuote: 12.5, basis: 'allocation', capped: true, heldBy: 'daily cap', factor: 1 })
+    expect(suggestedLiveAmount({ ...limits, maxOrderQuote: 1000, stopLossPct: 1.5, dailyUsedQuote: 50 })).toBeNull()
+    // 0.25% of 5,000 at six tenths is 7.5; at a 1.5% stop that stakes 431.03.
+    expect(suggestedLiveAmount({ ...limits, maxOrderQuote: 1000, dailyCapQuote: 5000, stopLossPct: 1.5, factor: 0.6 })).toEqual({ amountQuote: 431.03, riskQuote: 7.5, basis: 'allocation', capped: false, heldBy: null, factor: 0.6 })
+    expect(suggestedLiveAmount({ ...limits, stopLossPct: 1.5, factor: 0 })).toBeNull()
+    // The pair's own slippage rate, where it is known: 0.1% a fill here.
+    expect(suggestedLiveAmount({ ...limits, maxOrderQuote: 1000, dailyCapQuote: 5000, stopLossPct: 1.5, slippageRate: 0.001 })).toEqual({ amountQuote: 657.89, riskQuote: 12.5, basis: 'allocation', capped: false, heldBy: null, factor: 1 })
+    const reduced = suggestedLiveAmount({ ...limits, maxOrderQuote: 1000, dailyCapQuote: 5000, stopLossPct: 1.5, factor: 0.6 })
+    expect(describeSuggestedLiveAmount(reduced!, { riskPct: 0.25, stopLossPct: 1.5, quoteAsset: 'USDT', reasons: ['high volatility, 1.8× its usual'] })).toBe(
+      'Amount 431.03 USDT: 0.25% of your allocation at 60% (7.5 USDT) lost at the 1.5% stop, after fees and slippage. The risk is 60% of the setting for the conditions: high volatility, 1.8× its usual. Sized by your risk setting on Risk & Safety, not by the model; change it as you like.'
+    )
+    const held = suggestedLiveAmount({ ...limits, maxOrderQuote: 1000, stopLossPct: 1.5, dailyUsedQuote: 45 })
+    expect(describeSuggestedLiveAmount(held!, { riskPct: 0.25, stopLossPct: 1.5, quoteAsset: 'USDT' })).toContain("after fees and slippage. Held to what is left of the day's cap.")
   })
 })

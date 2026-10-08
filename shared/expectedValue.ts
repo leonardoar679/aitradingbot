@@ -85,20 +85,25 @@ export interface ExpectedValue {
   pct: number
   /** Over the stop; null without one. */
   r: number | null
-  /** What a round trip costs here, in percent: fees, half the spread, slippage. */
+  /** What a round trip costs here, in percent: fees, half the spread, slippage, and the model's
+   * answers where their cost a trade is known (aiCostPct). */
   costsPct: number
+  /** Of the costs, what the model's answers cost a trade as a share of the stake, in percent
+   * (shared/aiCostPerTrade.ts; since 8 October 2026). 0 where not known. */
+  aiCostPct: number
 }
 
 /** The expected value at a win rate, for a stop and a target as distances from the entry in
  * percent; null without both. */
-export function expectedValue(input: { winRate: number; stopPct: number | null; targetPct: number | null; spreadPct?: number | null; slippageRate?: number | null }): ExpectedValue | null {
+export function expectedValue(input: { winRate: number; stopPct: number | null; targetPct: number | null; spreadPct?: number | null; slippageRate?: number | null; aiCostPct?: number | null }): ExpectedValue | null {
   const { stopPct, targetPct } = input
   if (stopPct === null || !(stopPct > 0) || targetPct === null || !(targetPct > 0) || !(input.winRate >= 0 && input.winRate <= 1)) return null
   const spread = input.spreadPct !== null && input.spreadPct !== undefined && Number.isFinite(input.spreadPct) && input.spreadPct > 0 ? input.spreadPct : 0
   const slippage = input.slippageRate !== null && input.slippageRate !== undefined && Number.isFinite(input.slippageRate) && input.slippageRate >= 0 && input.slippageRate < 1 ? input.slippageRate : SLIPPAGE_RATE
-  const costsPct = 2 * FEE_RATE * 100 + spread / 2 + 2 * slippage * 100
+  const aiCostPct = input.aiCostPct !== null && input.aiCostPct !== undefined && Number.isFinite(input.aiCostPct) && input.aiCostPct > 0 ? input.aiCostPct : 0
+  const costsPct = 2 * FEE_RATE * 100 + spread / 2 + 2 * slippage * 100 + aiCostPct
   const pct = input.winRate * targetPct - (1 - input.winRate) * stopPct - costsPct
-  return { pct, r: pct / stopPct, costsPct }
+  return { pct, r: pct / stopPct, costsPct, aiCostPct }
 }
 
 /** A trade's expected value with where its win rate came from: what is shown, and what is written
@@ -112,6 +117,10 @@ export interface TradeEv {
   /** Closed trades the rate was measured on; 0 at the model's confidence. */
   sample: number
   scope: CalibratedRate['scope'] | null
+  /** The costs it is net of, and the model's answers' share of them, in percent of the entry
+   * (since 8 October 2026; absent on a mark written before). */
+  costsPct?: number
+  aiCostPct?: number
 }
 
 export function tradeExpectedValue(input: {
@@ -121,9 +130,11 @@ export function tradeExpectedValue(input: {
   targetPct: number | null
   spreadPct?: number | null
   slippageRate?: number | null
+  /** What the model's answers cost a trade, as a share of the stake in percent (shared/aiCostPerTrade.ts). */
+  aiCostPct?: number | null
 }): TradeEv | null {
   const winRate = input.calibrated !== null ? input.calibrated.rate : input.confidence
-  const ev = expectedValue({ winRate, stopPct: input.stopPct, targetPct: input.targetPct, spreadPct: input.spreadPct, slippageRate: input.slippageRate })
+  const ev = expectedValue({ winRate, stopPct: input.stopPct, targetPct: input.targetPct, spreadPct: input.spreadPct, slippageRate: input.slippageRate, aiCostPct: input.aiCostPct })
   if (ev === null) return null
   return {
     pct: Math.round(ev.pct * 100) / 100,
@@ -131,7 +142,9 @@ export function tradeExpectedValue(input: {
     basis: input.calibrated !== null ? 'calibrated' : 'confidence',
     winRate: Math.round(winRate * 1000) / 1000,
     sample: input.calibrated?.sample ?? 0,
-    scope: input.calibrated?.scope ?? null
+    scope: input.calibrated?.scope ?? null,
+    costsPct: Math.round(ev.costsPct * 1000) / 1000,
+    aiCostPct: Math.round(ev.aiCostPct * 1000) / 1000
   }
 }
 
@@ -143,11 +156,14 @@ function eventWords(eventType: string | null): string {
 }
 
 /** "EV +0.40% (+0.27 R) at a 55% calibrated win rate on 41 breakout events". */
-export function describeExpectedValue(ev: Pick<TradeEv, 'pct' | 'r' | 'basis' | 'winRate' | 'sample' | 'scope'>, eventType: string | null): string {
+export function describeExpectedValue(ev: Pick<TradeEv, 'pct' | 'r' | 'basis' | 'winRate' | 'sample' | 'scope'> & Partial<Pick<TradeEv, 'costsPct' | 'aiCostPct'>>, eventType: string | null): string {
   const figures = `EV ${signed(ev.pct, 2)}%${ev.r === null ? '' : ` (${signed(ev.r, 2)} R)`}`
-  if (ev.basis === 'confidence') return `${figures} at the model's own ${Math.round(ev.winRate * 100)}% confidence; no calibrated win rate yet.`
+  // The model's answers' cost is named only where it is in the figure: a reader of the costs can
+  // then see what the answers took of the edge.
+  const costs = ev.aiCostPct !== undefined && ev.aiCostPct > 0 && ev.costsPct !== undefined ? ` Net of costs of ${ev.costsPct.toFixed(2)}%, of which the model's answers ${ev.aiCostPct.toFixed(2)}% of the stake.` : ''
+  if (ev.basis === 'confidence') return `${figures} at the model's own ${Math.round(ev.winRate * 100)}% confidence; no calibrated win rate yet.${costs}`
   const on = ev.scope === 'all events' ? `${ev.sample} of its trades, all events` : `${ev.sample} ${eventWords(eventType)}`
-  return `${figures} at a ${Math.round(ev.winRate * 100)}% calibrated win rate on ${on}.`
+  return `${figures} at a ${Math.round(ev.winRate * 100)}% calibrated win rate on ${on}.${costs}`
 }
 
 /** Why a paper trade of the watch's is not opened on its expected value, or null: only at a

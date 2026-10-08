@@ -398,6 +398,8 @@ interface Rig {
     readings?: Record<string, NewsReading>
     now: number
     candles: Candle[] | Error
+    /** Fifteen-minute candles over thirty days (shared/dynamicRisk.ts). Absent: none, so no volatility is read. */
+    candles15m?: Candle[] | Error
     /** The ledger's rows, for the calibrated win rate (shared/expectedValue.ts). Absent: none. */
     rows?: AiCallRecord[]
   }
@@ -448,6 +450,10 @@ function rig(initial: Partial<Rig['state']> = {}): Rig {
     fetchCandles: async () => {
       if (state.candles instanceof Error) throw state.candles
       return state.candles
+    },
+    fifteenMinuteCandles: async () => {
+      if (state.candles15m instanceof Error) throw state.candles15m
+      return state.candles15m ?? []
     },
     btcCorrelation: async () => {
       if (state.correlation instanceof Error) throw state.correlation
@@ -1333,7 +1339,9 @@ describe('refused on the book behind it, and on news against it', () => {
     const r = rig({ book: { ...tightBook('SOLUSDT', 100, SOON), askQty: 0.5 }, review: verdict('APPROVE') })
     const result = await openWatchPaperTrade(event(), decision(), r.deps)
     expect(result?.opened).toBe(false)
-    expect(result?.text).toMatch(/^No paper trade: The ask holds 50(\.0\d)? in the quote, less than the 100 it would take, so a fill would go through the book\.$/)
+    // A level that cannot cover the stake three times over reduces it to six tenths (shared/dynamicRisk.ts,
+    // 8 October 2026) before the level's own refusal reads it: 60, which 50 still cannot hold.
+    expect(result?.text).toMatch(/^No paper trade: The ask holds 50(\.0\d)? in the quote, less than the 60 it would take, so a fill would go through the book\.$/)
     expect(r.reviewed).toEqual([])
     expect(r.writes).toBe(0)
     // A sell takes the bid: a thin ask is no matter to it.
@@ -1469,7 +1477,7 @@ describe('the expected value, before a paper trade is opened (8 October 2026)', 
     const r = rig()
     expect((await openWatchPaperTrade(event(), decision(), r.deps))?.opened).toBe(true)
     // 80% of a 3% target less 20% of a 1.5% stop, less the round trip: fees 0.2%, half a 0.02% spread, slippage 0.04%.
-    expect(r.state.executors[0].watch?.ev).toEqual({ pct: 1.85, r: 1.23, basis: 'confidence', winRate: 0.8, sample: 0, scope: null })
+    expect(r.state.executors[0].watch?.ev).toEqual({ pct: 1.85, r: 1.23, basis: 'confidence', winRate: 0.8, sample: 0, scope: null, costsPct: 0.25, aiCostPct: 0 })
   })
 
   it('refuses a trade whose expected value at a calibrated win rate is under the round trip, before the reviewer is asked', async () => {
@@ -1487,7 +1495,7 @@ describe('the expected value, before a paper trade is opened (8 October 2026)', 
     const r = rig({ executors: won.executors, rows: won.rows })
     expect((await openWatchPaperTrade(event(), decision(), r.deps))?.opened).toBe(true)
     const opened = r.state.executors.find((entry) => entry.id === 'paper-1')
-    expect(opened?.watch?.ev).toEqual({ pct: 2.75, r: 1.83, basis: 'calibrated', winRate: 1, sample: 30, scope: 'event type' })
+    expect(opened?.watch?.ev).toEqual({ pct: 2.75, r: 1.83, basis: 'calibrated', winRate: 1, sample: 30, scope: 'event type', costsPct: 0.25, aiCostPct: 0 })
   })
 
   it('reads the model\'s confidence when the ledger cannot be read, and opens as before', async () => {
@@ -1497,5 +1505,62 @@ describe('the expected value, before a paper trade is opened (8 October 2026)', 
     }
     expect((await openWatchPaperTrade(event(), decision(), r.deps))?.opened).toBe(true)
     expect(r.state.executors[0].watch?.ev?.basis).toBe('confidence')
+  })
+})
+
+describe('the risk by the conditions (shared/dynamicRisk.ts; 8 October 2026)', () => {
+  /** Fifteen-minute bars reaching back thirty days to now, the last fourteen `ratio` times as wide as the rest. */
+  const month = (ratio: number): Candle[] => {
+    const count = 30 * 96
+    return Array.from({ length: count }, (_, k) => {
+      const width = k >= count - 14 ? 0.2 * ratio : 0.2
+      return { time: SOON - count * 900 + k * 900, open: 100, high: 100 + width / 2, low: 100 - width / 2, close: 100, volume: 1 }
+    })
+  }
+
+  it('refuses a trade at extreme volatility, with the reason, and asks no reviewer', async () => {
+    const r = rig({ candles15m: month(3.4) })
+    expect(await openWatchPaperTrade(event(), decision(), r.deps)).toEqual({ opened: false, text: 'No paper trade: The conditions allow no trade: extreme volatility, 3.4× its usual.' })
+    expect(r.reviewed).toEqual([])
+    expect(r.state.executors).toEqual([])
+  })
+
+  it('opens at six tenths of the stake at high volatility, says so, and writes it on the mark', async () => {
+    const r = rig({ candles15m: month(1.8) })
+    expect(await openWatchPaperTrade(event(), decision(), r.deps)).toEqual({
+      opened: true,
+      text: 'A paper BUY of 60 USDT was opened, entered at 100.01 from the live book, at the stake at 60% (high volatility, 1.8× its usual).'
+    })
+    expect(r.state.executors[0]).toMatchObject({ params: { amountQuote: 60 }, watch: { riskFactor: 0.6, riskReasons: ['high volatility, 1.8× its usual'] } })
+    expect(r.notices[0].body).toContain('with its stop 1.5% away and its target 3%, at the stake at 60% (high volatility, 1.8× its usual).')
+  })
+
+  it("reduces on a vote's dissent, and reads nothing from candles that cannot be had", async () => {
+    const dissent = rig({ candles15m: new Error('no candles') })
+    expect((await openWatchPaperTrade(event(), decision(B), dissent.deps, { byVote: true, vote: { taking: 2, usable: 3 } }))?.text).toContain('at the stake at 60% (a model would not take it)')
+    const whole = rig({ candles15m: new Error('no candles') })
+    expect(await openWatchPaperTrade(event(), decision(B), whole.deps, { byVote: true, vote: { taking: 3, usable: 3 } })).toEqual({
+      opened: true,
+      text: 'A paper BUY of 100 USDT was opened, entered at 100.01 from the live book.'
+    })
+    expect(whole.state.executors[0].watch?.riskFactor).toBeUndefined()
+  })
+
+  it("charges the model's cost a trade in the expected value, as a share of the stake", async () => {
+    // One earlier trade of the model's, whose event's call cost $0.05: on a stake of 100, 0.05%.
+    const r = rig({
+      executors: [
+        executor({
+          id: 'old',
+          symbol: 'ETHUSDT',
+          status: 'stopped',
+          stoppedAt: SOON - 86_400,
+          watch: { eventId: 'binance:ETHUSDT:1', eventTime: 1, model: A, confidence: 0.8, callId: 'c-old', result: { exit: 'take_profit', pnlQuote: 2, closedAt: SOON - 86_400 } }
+        })
+      ],
+      rows: [{ id: 'c-old', source: 'watch', eventId: 'binance:ETHUSDT:1', model: A, eventType: 'breakout', usage: { promptTokens: 1, completionTokens: 1, costUsd: 0.05, latencyMs: 1 } } as AiCallRecord]
+    })
+    expect((await openWatchPaperTrade(event(), decision(), r.deps))?.opened).toBe(true)
+    expect(r.state.executors.find((entry) => entry.id === 'paper-1')?.watch?.ev).toMatchObject({ basis: 'confidence', aiCostPct: 0.05, costsPct: 0.3, pct: 1.8 })
   })
 })

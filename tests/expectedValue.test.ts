@@ -100,6 +100,13 @@ describe('the expected value', () => {
     // Half the spread and the trade's own slippage on both fills are part of the round trip.
     expect(expectedValue({ winRate: 0.55, stopPct: 1.5, targetPct: 3, spreadPct: 0.1, slippageRate: 0.0005 })?.costsPct).toBeCloseTo(0.2 + 0.05 + 0.1, 10)
     expect(expectedValue({ winRate: 1, stopPct: 1.5, targetPct: 3 })?.pct).toBeCloseTo(2.76, 10)
+    // The model's answers' cost a trade, as a share of the stake, is a cost too (8 October 2026, the V5 document's §73).
+    const withAi = expectedValue({ winRate: 0.55, stopPct: 1.5, targetPct: 3, aiCostPct: 0.05 })
+    expect(withAi?.costsPct).toBeCloseTo(0.29, 10)
+    expect(withAi?.aiCostPct).toBe(0.05)
+    expect(withAi?.pct).toBeCloseTo(0.685, 10)
+    for (const none of [null, undefined, 0, -1, Number.NaN]) expect(expectedValue({ winRate: 0.55, stopPct: 1.5, targetPct: 3, aiCostPct: none })?.aiCostPct).toBe(0)
+    expect(tradeExpectedValue({ confidence: 0.8, calibrated: null, stopPct: 1.5, targetPct: 3, aiCostPct: 0.0512 })).toMatchObject({ pct: 1.81, costsPct: 0.291, aiCostPct: 0.051 })
     expect(expectedValue({ winRate: 0, stopPct: 1.5, targetPct: 3 })?.pct).toBeCloseTo(-1.74, 10)
   })
 
@@ -112,9 +119,9 @@ describe('the expected value', () => {
 
   it("is read at the calibrated rate where there is one, else at the model's confidence, and says which", () => {
     const calibrated = { rate: 0.55, sample: 41, scope: 'event type' as const }
-    expect(tradeExpectedValue({ confidence: 0.8, calibrated, stopPct: 1.5, targetPct: 3 })).toEqual({ pct: 0.74, r: 0.49, basis: 'calibrated', winRate: 0.55, sample: 41, scope: 'event type' })
+    expect(tradeExpectedValue({ confidence: 0.8, calibrated, stopPct: 1.5, targetPct: 3 })).toEqual({ pct: 0.74, r: 0.49, basis: 'calibrated', winRate: 0.55, sample: 41, scope: 'event type', costsPct: 0.24, aiCostPct: 0 })
     // 0.8 × 3 − 0.2 × 1.5 − 0.24 = 1.86.
-    expect(tradeExpectedValue({ confidence: 0.8, calibrated: null, stopPct: 1.5, targetPct: 3 })).toEqual({ pct: 1.86, r: 1.24, basis: 'confidence', winRate: 0.8, sample: 0, scope: null })
+    expect(tradeExpectedValue({ confidence: 0.8, calibrated: null, stopPct: 1.5, targetPct: 3 })).toEqual({ pct: 1.86, r: 1.24, basis: 'confidence', winRate: 0.8, sample: 0, scope: null, costsPct: 0.24, aiCostPct: 0 })
     expect(tradeExpectedValue({ confidence: 0.8, calibrated, stopPct: null, targetPct: 3 })).toBeNull()
   })
 })
@@ -125,6 +132,11 @@ describe('in words, and as a refusal', () => {
     expect(describeExpectedValue({ pct: -0.2, r: -0.13, basis: 'calibrated', winRate: 0.4, sample: 35, scope: 'all events' }, 'pump')).toBe('EV -0.20% (-0.13 R) at a 40% calibrated win rate on 35 of its trades, all events.')
     expect(describeExpectedValue({ pct: 1.86, r: 1.24, basis: 'confidence', winRate: 0.8, sample: 0, scope: null }, 'breakout')).toBe("EV +1.86% (+1.24 R) at the model's own 80% confidence; no calibrated win rate yet.")
     expect(describeExpectedValue({ pct: 0.5, r: null, basis: 'calibrated', winRate: 0.6, sample: 30, scope: 'event type' }, 'something_else')).toBe('EV +0.50% at a 60% calibrated win rate on 30 events of this kind.')
+    // The costs are named only where the model's answers are in them.
+    expect(describeExpectedValue({ pct: 1.81, r: 1.21, basis: 'confidence', winRate: 0.8, sample: 0, scope: null, costsPct: 0.291, aiCostPct: 0.051 }, 'breakout')).toBe(
+      "EV +1.81% (+1.21 R) at the model's own 80% confidence; no calibrated win rate yet. Net of costs of 0.29%, of which the model's answers 0.05% of the stake."
+    )
+    expect(describeExpectedValue({ pct: 0.74, r: 0.49, basis: 'calibrated', winRate: 0.55, sample: 41, scope: 'event type', costsPct: 0.24, aiCostPct: 0 }, 'breakout')).toBe('EV +0.74% (+0.49 R) at a 55% calibrated win rate on 41 breakout events.')
   })
 
   it('refuses only at a calibrated rate under the round trip, never at the confidence, and not at the line', () => {

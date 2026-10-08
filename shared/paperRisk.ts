@@ -106,18 +106,20 @@ export function riskPerTrade(risk: PaperRiskSettings, equityQuote: number | null
  * slippage (`slippageRate`, on both fills), rounded down to a hundredth -- never more than its own
  * stake. A trade with no stop stakes its stake. `equityQuote` is the paper account's equity
  * (paperEquity), read by the share; absent or null, the fixed risk stands. */
-export function paperStake(input: { risk: PaperRiskSettings; stakeQuote: number; stopPct: number | null; slippageRate?: number | null; equityQuote?: number | null }): number {
+export function paperStake(input: { risk: PaperRiskSettings; stakeQuote: number; stopPct: number | null; slippageRate?: number | null; equityQuote?: number | null; multiplier?: number | null }): number {
   const { risk, stakeQuote, stopPct } = input
-  if (risk.sizing === 'stake' || stopPct === null || !(stopPct > 0)) return stakeQuote
-  const lostPerQuote = stopPct / 100 + 2 * FEE_RATE + 2 * positionSlippageRate(input)
-  return Math.min(stakeQuote, Math.floor((riskPerTrade(risk, input.equityQuote) / lostPerQuote) * 100) / 100)
+  // The conditions' factor on the risk (shared/dynamicRisk.ts; since 8 October 2026): the whole,
+  // six tenths, or none. Anything else is read as the whole.
+  const factor = input.multiplier !== undefined && input.multiplier !== null && Number.isFinite(input.multiplier) && input.multiplier >= 0 && input.multiplier <= 1 ? input.multiplier : 1
+  const whole = risk.sizing === 'stake' || stopPct === null || !(stopPct > 0) ? stakeQuote : Math.min(stakeQuote, Math.floor((riskPerTrade(risk, input.equityQuote) / (stopPct / 100 + 2 * FEE_RATE + 2 * positionSlippageRate(input))) * 100) / 100)
+  return factor === 1 ? whole : Math.floor(whole * factor * 100) / 100
 }
 
 export type PaperSize = { ok: true; amountQuote: number } | { ok: false; reason: string }
 
 /** What a trade stakes, or why it is not opened: sized under what an order on Binance must be
  * worth. */
-export function sizePaperTrade(input: { risk: PaperRiskSettings; stakeQuote: number; stopPct: number | null; quoteAsset: string; slippageRate?: number | null; equityQuote?: number | null }): PaperSize {
+export function sizePaperTrade(input: { risk: PaperRiskSettings; stakeQuote: number; stopPct: number | null; quoteAsset: string; slippageRate?: number | null; equityQuote?: number | null; multiplier?: number | null }): PaperSize {
   const amountQuote = paperStake(input)
   if (amountQuote >= PAPER_MIN_STAKE) return { ok: true, amountQuote }
   return {

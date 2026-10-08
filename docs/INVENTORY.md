@@ -258,7 +258,12 @@ settings from the document have no behaviour behind them, so they are not added 
   - maximum slippage or spread. The watch's paper trades are refused on a spread over 0.1% (6 October
     2026), and since 8 October 2026 on a best level that cannot hold the stake and on major news
     against the side (`shared/liveMarket.ts`, `shared/paperNewsBlock.ts`); nothing limits a person's
-    own trades.
+    own trades;
+  - risk falling with the conditions. Since 8 October 2026 (the V5 document, §46-47) the watch's
+    paper trades are sized at six tenths of the risk on high volatility, a spread of 0.05% or more, a
+    thin best level, a vote with dissent or correlated exposure already out, and refused at extreme
+    volatility (`shared/dynamicRisk.ts`); the amount a real order from a call is suggested to stake
+    follows the volatility. Pinned lines, not settings.
 - **News:** Binance's own announcements are read when switched on under Settings › Market, with
   what a delisting does (V3 Stage 7, after the study in `research/NEWS.md`). Since 6 October 2026,
   four free feeds are read too, always (CoinDesk, The Block, Cointelegraph, Decrypt), for Discovery's

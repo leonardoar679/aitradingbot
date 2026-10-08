@@ -1658,8 +1658,22 @@ it is paper.
     account, or none in that quote, the fixed risk per trade stands, so a fresh install sizes as
     before. The same share, set on Risk & Safety beside the live limits, sizes the amount an order
     form filled in from a call opens with: that share of the managed allocation (or of the day's cap,
-    without one) lost at the call's stop after fees, under the max order size -- a suggestion a
-    person may change before placing, and never a gate; the model is never asked for an amount.
+    without one) lost at the call's stop after fees and slippage, under the max order size and what
+    is left of the day's cap -- a suggestion a person may change before placing, and never a gate;
+    the model is never asked for an amount.
+  - **Risk by the conditions** (8 October 2026; the V5 document, §46-47 and §72-73;
+    `shared/dynamicRisk.ts`): the risk per trade falls with the conditions a trade is entered in,
+    to six tenths, or to none. Read when the watch sizes a paper trade: the pair's average true
+    range over its last fourteen fifteen-minute bars against the usual of that figure over thirty
+    days (one and a half times its usual reduces; three times is NO TRADE, a refusal on file:
+    "The conditions allow no trade: extreme volatility, 3.4× its usual"); a spread of 0.05% or
+    more; a best level that holds the stake fewer than three times over; a vote that passed with
+    a usable answer not on the side taken; and more than a tenth of the paper money already out on
+    that side on coins that move with Bitcoin. Any of those is six tenths, with the reasons; what
+    could not be read reduces nothing. The trade's notice and its mark say the risk it was sized
+    at ("at risk 0.15% (high volatility, 1.8× its usual)"). The amount a real order from a call is
+    suggested to stake is reduced the same way by the volatility, the one condition the form reads
+    for itself. Every line is a pinned constant on Settings › Advanced › Effective configuration.
 
   Both only ever open less, so either may be changed while paper trades are on, and neither is
   asked again by the watch's confirmation, which names them. A settings file written before them
@@ -1679,7 +1693,9 @@ it is paper.
 - **An expected value** (8 October 2026; the V4 document, §37-38; `shared/expectedValue.ts`). What a
   call is worth before a trade is made, as a number anyone can check: at a win rate p, a target
   and a stop as distances from the entry, p × target − (1 − p) × stop, less what a round trip
-  costs (the fees on both fills, half the spread, slippage on both fills), in percent and in R.
+  costs (the fees on both fills, half the spread, slippage on both fills, and, since 8 October 2026
+  by the V5 document's §73, what the model's answers cost a trade over the last thirty days as a
+  share of the stake, `shared/aiCostPerTrade.ts`, where it has made one), in percent and in R.
   The win rate is CALIBRATED on the watch's own closed paper trades over the last ninety days -- on
   this model, this kind of event and this side when there are thirty or more, else the model's over
   all its events when there are thirty -- and the model's own confidence otherwise, shown as that.
@@ -3721,6 +3737,7 @@ shared/                       Code both processes run, so they cannot disagree a
   planReadings.ts             The model's entry, stop and target read against the event's record: against the event's and the live price, in usual fifteen-minute moves, in R
   aiHelp.ts                   "Does AI help?": quant, AI, hybrid and holding side by side, and three verdicts by a 95% margin and a 30-trade floor
   paperExposure.ts            A pair's hourly correlation with Bitcoin, and the cap on what the app's own paper trades stake on one side on pairs that track it
+  dynamicRisk.ts              Risk by the conditions: the range now against its thirty-day usual, the spread, the best level's cover, a vote's dissent and the correlated exposure, into the whole risk, six tenths or none
   newsTitles.ts, news.ts      Which kind of news a Binance title is, and which coins it names (the study's patterns); what the reader keeps of each article, and what each kind did
   newsFeed.ts                 The news feeds read: RSS, a story's coins, kind, credibility and impact, the same story from several sources, what the price did after, and what each kind has done
   aiAdditions.ts              The AI additions: each one's switch, daily limit and prompt version; the news analyst's question and answer; the conclusion to "Why did it move?" with its evidence and citations; the exit check's triggers, question and verdict; and the reviewer's, checked

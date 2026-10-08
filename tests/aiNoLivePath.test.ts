@@ -616,7 +616,8 @@ describe('AI code has no route to a real order', () => {
     // The rules import the proposal's arithmetic, the sizing's (paperRisk), the slippage the score
     // charges (aiOpportunityOutcome), the losing run's words for the confirmation (paperPause), a few
     // names and types, and nothing that acts.
-    expect(importsOf(rules).sort()).toEqual(['aiOpportunity', 'aiOpportunityOutcome', 'aiPanel', 'aiProposal', 'aiSignal', 'ipc', 'marketEvent', 'paperPause', 'paperRisk'])
+    // dynamicRisk (8 October 2026): the conditions' factor on the risk, arithmetic on what was read.
+    expect(importsOf(rules).sort()).toEqual(['aiOpportunity', 'aiOpportunityOutcome', 'aiPanel', 'aiProposal', 'aiSignal', 'dynamicRisk', 'ipc', 'marketEvent', 'paperPause', 'paperRisk'])
     expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron/)
     // The writer reaches settings, the price, candles, the stories on file, a notice and the setting.
     // Nothing else.
@@ -639,11 +640,15 @@ describe('AI code has no route to a real order', () => {
     expect(importsOf(join(ROOT, 'src', 'agents', 'watchPaperTrade.ts')).sort()).toEqual([
       'aiAdditions',
       'aiCost',
+      // aiCostPerTrade and dynamicRisk (8 October 2026): the model's cost a trade the expected value
+      // is net of, and the conditions' factor on the risk; both arithmetic on what was read.
+      'aiCostPerTrade',
       'aiEventMarket',
       'aiExit',
       'aiLedger',
       'aiSignal',
       'aiWatchPaper',
+      'dynamicRisk',
       'engine',
       'excursions',
       'executorFunding',
@@ -673,7 +678,8 @@ describe('AI code has no route to a real order', () => {
     expect(importsOf(rules).sort()).toEqual(['fees', 'ipc'])
     const source = readFileSync(rules, 'utf-8')
     expect(source).not.toMatch(/window\.|ipcRenderer|electron|liveTrading|placeLive/)
-    expect(source).toContain('return Math.min(stakeQuote, ')
+    // Since 8 October 2026 the conditions' factor is applied after the cap (shared/dynamicRisk.ts).
+    expect(source).toContain('Math.min(stakeQuote, ')
     // The card on Risk & Safety reads and saves the setting, and reaches nothing else.
     const card = readFileSync(join(ROOT, 'src', 'risk', 'PaperRiskCard.tsx'), 'utf-8')
     expect([...new Set([...card.matchAll(/window\.api\.(\w+)(?:\s*\.\s*(\w+))?/g)].map((match) => `${match[1]}.${match[2]}`))].sort()).toEqual(['settings.get', 'settings.set'])

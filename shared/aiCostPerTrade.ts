@@ -34,7 +34,7 @@ export function tradeCosts(executors: readonly ExecutorConfig[], rows: readonly 
     let callsUsd = 0
     let additionsUsd = 0
     for (const row of rows) {
-      const cost = row.usage.costUsd ?? 0
+      const cost = row.usage?.costUsd ?? 0
       if (row.source === 'watch' && row.eventId === mark.eventId) callsUsd += cost
       else if (row.addition === 'review' && row.subjectId === mark.eventId) additionsUsd += cost
       else if (row.addition === 'exit' && row.subjectId !== undefined && row.subjectId.startsWith(`${executor.id}:`)) additionsUsd += cost
@@ -92,6 +92,20 @@ export function modelTradeCosts(costs: readonly TradeCost[]): ModelTradeCosts[] 
     })
   }
   return out.sort((a, b) => b.perTradeUsd - a.perTradeUsd || a.model.localeCompare(b.model))
+}
+
+/** What a model's answers cost a trade, over the trades it made from these rows; null before it
+ * has made one. What the expected value charges (shared/expectedValue.ts; since 8 October 2026). */
+export function modelCostPerTrade(model: string, executors: readonly ExecutorConfig[], rows: readonly AiCallRecord[]): number | null {
+  const entry = modelTradeCosts(tradeCosts(executors, rows)).find((candidate) => candidate.model === model)
+  return entry === undefined || entry.trades === 0 ? null : entry.perTradeUsd
+}
+
+/** That cost as a share of the stake, in percent, the quote taken as dollars: the app's own paper
+ * trades are on USDT pairs. Null without a cost or a stake. */
+export function aiCostPct(perTradeUsd: number | null, stakeQuote: number): number | null {
+  if (perTradeUsd === null || !Number.isFinite(perTradeUsd) || perTradeUsd < 0 || !(stakeQuote > 0)) return null
+  return (perTradeUsd / stakeQuote) * 100
 }
 
 const usd = (value: number): string => (value < 0.01 && value > 0 ? `$${value.toFixed(4)}` : `$${value.toFixed(2)}`)

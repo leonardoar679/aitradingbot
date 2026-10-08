@@ -14,10 +14,12 @@ import {
   type WatchPaperOutcome,
   type WatchPaperPlan
 } from '../../shared/aiWatchPaper'
-import type { AppSettings, Candle, Exchange, ExecutorConfig, PositionExecutorParams } from '../../shared/ipc'
+import type { AppSettings, Candle, Exchange, ExecutorConfig, PaperAccount, PaperRiskSettings, PositionExecutorParams } from '../../shared/ipc'
 import { bookSpreadPct, livePaperBlock, priceAgeMs, streamedEntry, thinBookBlock, type LiveBook } from '../../shared/liveMarket'
 import type { MarketEvent } from '../../shared/marketEvent'
-import { correlatedExposureBlock, readBtcCorrelation } from '../../shared/paperExposure'
+import { CORRELATED_SHARE, correlatedCap, correlatedExposureBlock, correlatedOut, readBtcCorrelation, tracksBtc } from '../../shared/paperExposure'
+import { RISK_LINES, volatilityRatio } from '../../shared/dynamicRisk'
+import { aiCostPct, modelCostPerTrade } from '../../shared/aiCostPerTrade'
 import { newsAgainstBlock, type NewsAgainstStory } from '../../shared/paperNewsBlock'
 import { healPaperPause, paperPauseBlock } from '../../shared/paperPause'
 import { NEAR_STOP_SHARE, nearStopNotice, paperCloseNotice, stopProgress, type NoticeExtra } from '../../shared/notices'
@@ -123,6 +125,9 @@ export interface WatchPaperDeps {
   liveBook: (exchange: Exchange, symbol: string) => Promise<LiveBook | null>
   /** 1-minute candles of [startSec, endSec]. */
   fetchCandles: (exchange: Exchange, symbol: string, startSec: number, endSec: number) => Promise<Candle[]>
+  /** Fifteen-minute candles of [startSec, endSec], for the pair's range now against its usual
+   * (shared/dynamicRisk.ts; since 8 October 2026). */
+  fifteenMinuteCandles: (exchange: Exchange, symbol: string, startSec: number, endSec: number) => Promise<Candle[]>
   /** The pair's hourly moves over the last week against Bitcoin's (shared/paperExposure.ts), or
    * null when they cannot be read: it then counts as a pair that tracks Bitcoin. */
   btcCorrelation: (exchange: Exchange, symbol: string) => Promise<number | null>
@@ -166,14 +171,53 @@ async function expectedValueOf(event: MarketEvent, decision: AiSignalDecision, p
     rows = []
   }
   const calibrated = calibratedWinRate(watchOutcomes(executors, rows), { model: decision.model, eventType: event.type, side: plan.side }, deps.nowSec())
+  // What the model's answers cost a trade (shared/aiCostPerTrade.ts), over the last thirty days of
+  // the ledger, every source: the watch's calls and the additions' looks. Part of the costs the
+  // value is net of (the V5 document, §73). A ledger that cannot be read charges nothing.
+  let costRows: AiCallRecord[] = []
+  try {
+    costRows = (await deps.listCalls({ sinceSec: deps.nowSec() - AI_COST_DAYS * 86_400, limit: EV_ROWS })).rows
+  } catch {
+    costRows = []
+  }
   return tradeExpectedValue({
     confidence: decision.confidence,
     calibrated,
     stopPct: plan.params.stopLossPct,
     targetPct: plan.params.takeProfitPct,
     spreadPct: book === null ? null : bookSpreadPct(book),
-    slippageRate: plan.params.slippageRate
+    slippageRate: plan.params.slippageRate,
+    aiCostPct: aiCostPct(modelCostPerTrade(decision.model, executors, costRows), plan.params.amountQuote)
   })
+}
+
+/** Days of the ledger the model's cost a trade is read over, as the Performance card reads it. */
+const AI_COST_DAYS = 30
+
+/** The conditions a trade would be entered in (shared/dynamicRisk.ts), from what was read: the live
+ * book's spread and best level, the pair's range against its usual, the vote's tally, and what the
+ * app's own paper trades have out on this side on coins that move with Bitcoin, as a share of the
+ * paper money the cap is a share of. What could not be read is null, and reduces nothing. */
+function conditionsOf(input: {
+  book: LiveBook | null
+  side: 'buy' | 'sell'
+  volatilityRatio: number | null
+  vote?: { taking: number; usable: number }
+  executors: ExecutorConfig[]
+  account: PaperAccount | null
+  risk: PaperRiskSettings
+  quoteAsset: string
+  btcCorrelation: number | null
+}): NonNullable<Parameters<typeof planWatchPaperTrade>[0]['conditions']> {
+  const cap = correlatedCap({ account: input.account, risk: input.risk, quoteAsset: input.quoteAsset })
+  const correlatedShare = cap === null || !(cap > 0) || !tracksBtc(input.btcCorrelation) ? null : correlatedOut(input.executors, input.side, input.quoteAsset) / (cap / CORRELATED_SHARE)
+  return {
+    volatilityRatio: input.volatilityRatio,
+    spreadPct: input.book === null ? null : bookSpreadPct(input.book),
+    bestLevelQuote: input.book === null ? null : input.side === 'buy' ? input.book.ask * input.book.askQty : input.book.bid * input.book.bidQty,
+    dissent: input.vote === undefined ? null : input.vote.usable > input.vote.taking,
+    correlatedShare
+  }
 }
 
 /** Opens a paper trade on an answer the watch got, if that is switched on and its limits allow.
@@ -187,6 +231,8 @@ export async function openWatchPaperTrade(
     /** The answer is the one the models' vote chose (shared/opportunityVote.ts, since 8 October
      * 2026): followed whichever model gave it. Without it, only the named model's answers are. */
     byVote?: boolean
+    /** How many of the vote's usable answers took the side: one not on it reduces the risk. */
+    vote?: { taking: number; usable: number }
   } = {}
 ): Promise<WatchPaperResult | null> {
   const { watchPaper } = await deps.getConfig()
@@ -205,21 +251,6 @@ export async function openWatchPaperTrade(
   } catch {
     lastPrice = null
   }
-  const plan = planWatchPaperTrade({
-    config: watchPaper,
-    risk: healPaperRisk(before.paperRisk),
-    event,
-    decision,
-    nowSec: deps.nowSec(),
-    lastPrice,
-    equityQuote: paperEquity(before.paperAccount ?? null, before.executors, event.quoteAsset)
-  })
-  if (!plan.ok) return { opened: false, text: `No paper trade: ${plan.reason}` }
-
-  // The market it would enter, live (shared/liveMarket.ts): with no fresh price, a spread wider than
-  // a trade is entered at, or a best level that cannot hold the stake, none is opened; nor against
-  // major news on the coin (shared/paperNewsBlock.ts). Looked at before a second look is asked for,
-  // so that the reviewer is not asked about a trade that could not be opened.
   const readBook = async (): Promise<LiveBook | null> => {
     try {
       return await deps.liveBook(event.exchange, event.symbol)
@@ -227,7 +258,53 @@ export async function openWatchPaperTrade(
       return null
     }
   }
-  const first = await readBook()
+  // The conditions it would be entered in (shared/dynamicRisk.ts; since 8 October 2026), read
+  // together before it is sized: the live book, the pair's fifteen-minute range against its
+  // thirty-day usual, and whether the pair moves with Bitcoin (for what is out on this side). What
+  // cannot be read is null and reduces nothing: the risk only ever falls on what was read.
+  const readVolatility = async (): Promise<number | null> => {
+    try {
+      const now = deps.nowSec()
+      return volatilityRatio(await deps.fifteenMinuteCandles(event.exchange, event.symbol, now - RISK_LINES.usualDays * 86_400, now), now)
+    } catch {
+      return null
+    }
+  }
+  const readCorrelation = async (): Promise<number | null> => {
+    try {
+      return await deps.btcCorrelation(event.exchange, event.symbol)
+    } catch {
+      return null
+    }
+  }
+  const [first, volatility, btcCorrelation] = await Promise.all([readBook(), readVolatility(), readCorrelation()])
+  const risk = healPaperRisk(before.paperRisk)
+  const plan = planWatchPaperTrade({
+    config: watchPaper,
+    risk,
+    event,
+    decision,
+    nowSec: deps.nowSec(),
+    lastPrice,
+    equityQuote: paperEquity(before.paperAccount ?? null, before.executors, event.quoteAsset),
+    conditions: conditionsOf({
+      book: first,
+      side: decision.recommendation === 'sell' ? 'sell' : 'buy',
+      volatilityRatio: volatility,
+      vote: options.vote,
+      executors: before.executors,
+      account: before.paperAccount ?? null,
+      risk,
+      quoteAsset: event.quoteAsset,
+      btcCorrelation
+    })
+  })
+  if (!plan.ok) return { opened: false, text: `No paper trade: ${plan.reason}` }
+
+  // The market it would enter, live (shared/liveMarket.ts): with no fresh price, a spread wider than
+  // a trade is entered at, or a best level that cannot hold the stake, none is opened; nor against
+  // major news on the coin (shared/paperNewsBlock.ts). Looked at before a second look is asked for,
+  // so that the reviewer is not asked about a trade that could not be opened.
   const unfit = livePaperBlock(first, deps.nowSec() * 1000) ?? thinBookBlock(first, plan.side, plan.params.amountQuote) ?? (await newsAgainst(event, plan.side, deps))
   if (unfit !== null) return { opened: false, text: `No paper trade: ${unfit}` }
 
@@ -251,13 +328,6 @@ export async function openWatchPaperTrade(
 
   // Read again, as a review can take seconds: the trade is judged on the market as it is now.
   const book = await readBook()
-  // Whether the pair moves with Bitcoin, for what the app's trades have out on one side of it.
-  let btcCorrelation: number | null = null
-  try {
-    btcCorrelation = await deps.btcCorrelation(event.exchange, event.symbol)
-  } catch {
-    btcCorrelation = null
-  }
 
   // Checked again on the executors read inside the queue, with the funds and with what the app's
   // own paper trades have out together, and on one side on coins that move with Bitcoin: two
@@ -305,7 +375,7 @@ export async function openWatchPaperTrade(
   }
   return {
     opened: true,
-    text: `A paper ${plan.side === 'buy' ? 'BUY' : 'SELL'} of ${plan.params.amountQuote} ${event.quoteAsset} was opened, ${describeWatchPaperEntry((made.executor?.params as PositionExecutorParams | undefined) ?? plan.params)}.`
+    text: `A paper ${plan.side === 'buy' ? 'BUY' : 'SELL'} of ${plan.params.amountQuote} ${event.quoteAsset} was opened, ${describeWatchPaperEntry((made.executor?.params as PositionExecutorParams | undefined) ?? plan.params)}${plan.riskNote === null ? '' : `, at ${plan.riskNote}`}.`
   }
 }
 
@@ -504,6 +574,7 @@ export const watchPaperBrowserDeps: WatchPaperDeps = {
   // The live stream is Binance's: an event on another exchange has no live book here.
   liveBook: (exchange, symbol) => (exchange === 'binance' ? window.api.market.liveBook(symbol) : Promise.resolve(null)),
   fetchCandles: async (exchange, symbol, startSec, endSec) => (await window.api.market.fetchHistoricalRange(exchange, symbol, '1m', startSec, endSec)).candles,
+  fifteenMinuteCandles: async (exchange, symbol, startSec, endSec) => (await window.api.market.fetchHistoricalRange(exchange, symbol, '15m', startSec, endSec)).candles,
   btcCorrelation: (exchange, symbol) =>
     readBtcCorrelation(
       async (from, pair, startSec, endSec) => (await window.api.market.fetchHistoricalRange(from, pair, '1h', startSec, endSec)).candles,

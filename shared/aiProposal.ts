@@ -2,7 +2,7 @@ import { INTERVAL_SECONDS, type Exchange, type ExecutorSide, type Interval, type
 import { GPT_FLAT, GPT_MIN_CONFIDENCE, gptActionFor, type AiSignalDecision } from './aiSignal'
 import { isActionableOpportunity, opportunitySide, opportunityWindow } from './aiOpportunity'
 import { describeDecider } from './aiPanel'
-import { FEE_RATE } from './fees'
+import { FEE_RATE, SLIPPAGE_RATE } from './fees'
 import { describeEventType, type MarketEvent, type MarketEventType } from './marketEvent'
 
 // FROM A CALL TO AN ORDER, BY HAND.
@@ -278,33 +278,60 @@ const MIN_SUGGESTED_QUOTE = 5
 
 export interface SuggestedLiveAmount {
   amountQuote: number
-  /** What the stop would lose, about: the share of the base, to a hundredth. */
+  /** What the stop would lose, about: the share of the base, to a hundredth, after the conditions'
+   * factor. */
   riskQuote: number
   /** What the share was taken of. */
   basis: 'allocation' | 'daily cap'
-  /** Held down to the max order size. */
+  /** Held down: to the max order size, or to what is left of the day's cap (since 8 October 2026). */
   capped: boolean
+  heldBy: 'max order size' | 'daily cap' | null
+  /** The conditions' factor on the risk (shared/dynamicRisk.ts): 1 where none applied. */
+  factor: number
 }
 
 /** What a real order filled in from a call is suggested to stake (the V4 document, §35-36): the risk
  * setting's share of the managed allocation -- or of the day's cap, without one -- lost at the
- * call's stop after a round trip's fees, and never over the max order size. A suggestion for the
- * form, which a person may change before placing; the model never sizes. Null without a usable
- * stop, a base to take the share of (an allocation of nothing is one), or a size worth placing. */
-export function suggestedLiveAmount(input: { riskPct: number; allocationQuote: number | null; dailyCapQuote: number; maxOrderQuote: number; stopLossPct: number | null }): SuggestedLiveAmount | null {
+ * call's stop after a round trip's fees and slippage, never over the max order size nor over what
+ * is left of the day's cap, and reduced by the conditions' factor where one applies (the V5
+ * document, §47; shared/dynamicRisk.ts). A suggestion for the form, which a person may change
+ * before placing; the model never sizes. Null without a usable stop, a base to take the share of
+ * (an allocation of nothing is one), a size worth placing, or at a factor of none. */
+export function suggestedLiveAmount(input: {
+  riskPct: number
+  allocationQuote: number | null
+  dailyCapQuote: number
+  maxOrderQuote: number
+  stopLossPct: number | null
+  /** Slippage on each fill, as a rate; the usual rate where absent. */
+  slippageRate?: number | null
+  /** What real orders have spent of the day's cap already; nothing where absent. */
+  dailyUsedQuote?: number | null
+  /** The conditions' factor on the risk; the whole where absent. */
+  factor?: number | null
+}): SuggestedLiveAmount | null {
   const base = input.allocationQuote ?? input.dailyCapQuote
   if (!(base > 0) || !(input.riskPct > 0) || input.stopLossPct === null || !(input.stopLossPct > 0) || !(input.maxOrderQuote > 0)) return null
-  const riskQuote = (base * input.riskPct) / 100
-  const raw = riskQuote / (input.stopLossPct / 100 + 2 * FEE_RATE)
-  const amountQuote = Math.floor(Math.min(raw, input.maxOrderQuote) * 100) / 100
+  const factor = input.factor !== undefined && input.factor !== null && Number.isFinite(input.factor) && input.factor >= 0 && input.factor <= 1 ? input.factor : 1
+  if (factor === 0) return null
+  const slippage = input.slippageRate !== undefined && input.slippageRate !== null && Number.isFinite(input.slippageRate) && input.slippageRate >= 0 && input.slippageRate < 1 ? input.slippageRate : SLIPPAGE_RATE
+  const riskQuote = ((base * input.riskPct) / 100) * factor
+  const raw = riskQuote / (input.stopLossPct / 100 + 2 * FEE_RATE + 2 * slippage)
+  const used = input.dailyUsedQuote !== undefined && input.dailyUsedQuote !== null && Number.isFinite(input.dailyUsedQuote) && input.dailyUsedQuote > 0 ? input.dailyUsedQuote : 0
+  const remaining = Math.max(0, input.dailyCapQuote - used)
+  const ceiling = Math.min(input.maxOrderQuote, remaining)
+  const amountQuote = Math.floor(Math.min(raw, ceiling) * 100) / 100
   if (amountQuote < MIN_SUGGESTED_QUOTE) return null
-  return { amountQuote, riskQuote: Math.round(riskQuote * 100) / 100, basis: input.allocationQuote !== null ? 'allocation' : 'daily cap', capped: raw > input.maxOrderQuote }
+  const heldBy = raw > ceiling ? (remaining < input.maxOrderQuote ? 'daily cap' : 'max order size') : null
+  return { amountQuote, riskQuote: Math.round(riskQuote * 100) / 100, basis: input.allocationQuote !== null ? 'allocation' : 'daily cap', capped: heldBy !== null, heldBy, factor }
 }
 
-/** The suggestion in words, for the form. */
-export function describeSuggestedLiveAmount(suggested: SuggestedLiveAmount, input: { riskPct: number; stopLossPct: number; quoteAsset: string }): string {
-  const held = suggested.capped ? ' Held to the max order size.' : ''
-  return `Amount ${plainNumber(suggested.amountQuote)} ${input.quoteAsset}: ${input.riskPct}% of your ${suggested.basis} (${plainNumber(suggested.riskQuote)} ${input.quoteAsset}) lost at the ${input.stopLossPct}% stop, after fees.${held} Sized by your risk setting on Risk & Safety, not by the model; change it as you like.`
+/** The suggestion in words, for the form. `reasons` are the conditions' (shared/dynamicRisk.ts)
+ * where the factor is under the whole. */
+export function describeSuggestedLiveAmount(suggested: SuggestedLiveAmount, input: { riskPct: number; stopLossPct: number; quoteAsset: string; reasons?: readonly string[] }): string {
+  const held = suggested.heldBy === 'max order size' ? ' Held to the max order size.' : suggested.heldBy === 'daily cap' ? " Held to what is left of the day's cap." : ''
+  const reduced = suggested.factor < 1 ? ` The risk is ${Math.round(suggested.factor * 100)}% of the setting for the conditions${input.reasons !== undefined && input.reasons.length > 0 ? `: ${input.reasons.join('; ')}` : ''}.` : ''
+  return `Amount ${plainNumber(suggested.amountQuote)} ${input.quoteAsset}: ${input.riskPct}% of your ${suggested.basis}${suggested.factor < 1 ? ` at ${Math.round(suggested.factor * 100)}%` : ''} (${plainNumber(suggested.riskQuote)} ${input.quoteAsset}) lost at the ${input.stopLossPct}% stop, after fees and slippage.${held}${reduced} Sized by your risk setting on Risk & Safety, not by the model; change it as you like.`
 }
 
 /** When a position made from a proposal gives up waiting to enter, in Unix seconds, or null when

@@ -844,7 +844,11 @@ export interface ExecutorConfig {
     /** The call's expected value when the trade was opened (shared/expectedValue.ts), since
      * 8 October 2026: in percent and in R, at a calibrated win rate or the model's own confidence.
      * Shown on the trade's timeline; nothing reads it to act. */
-    ev?: { pct: number; r: number | null; basis: 'calibrated' | 'confidence'; winRate: number; sample: number; scope: 'event type' | 'all events' | null }
+    ev?: { pct: number; r: number | null; basis: 'calibrated' | 'confidence'; winRate: number; sample: number; scope: 'event type' | 'all events' | null; costsPct?: number; aiCostPct?: number }
+    /** The conditions' factor on the risk it was sized at (shared/dynamicRisk.ts; since 8 October
+     * 2026), and why: absent at the whole risk, and on one opened before. */
+    riskFactor?: number
+    riskReasons?: string[]
   }
   /** Set on a PAPER Position short opened by a rule research/NEWS.md measured, on Binance's
    * announcement (shared/newsActions.ts): which announcement and which coin. A delisting's is out

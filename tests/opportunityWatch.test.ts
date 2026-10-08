@@ -332,14 +332,15 @@ describe('watchPass: paper trades', () => {
 
   it('hands over the vote with two or more models (8 October 2026): the surest of the agreeing, once they have all answered', async () => {
     const r = rig({ answer: (model) => ({ confidence: model === B ? 0.9 : 0.7 }) })
-    const handed: { symbol: string; model: string; byVote: boolean | undefined }[] = []
-    r.deps.paperTrade = async (about, answer, byVote) => {
-      handed.push({ symbol: about.symbol, model: answer.model, byVote })
+    const handed: { symbol: string; model: string; byVote: boolean | undefined; vote: { taking: number; usable: number } | undefined }[] = []
+    r.deps.paperTrade = async (about, answer, byVote, vote) => {
+      handed.push({ symbol: about.symbol, model: answer.model, byVote, vote })
       return OPENED
     }
     const result = await watchPass([event()], r.deps)
     expect(result.asked).toHaveLength(1)
-    expect(handed).toEqual([{ symbol: 'SOLUSDT', model: B, byVote: true }])
+    // With the tally: how many of the usable answers took the side (shared/dynamicRisk.ts reads a dissent from it).
+    expect(handed).toEqual([{ symbol: 'SOLUSDT', model: B, byVote: true, vote: { taking: 2, usable: 2 } }])
     expect(getWatchActivity().last?.text).toContain('Vote: BUY 2/2.')
   })
 

@@ -6,6 +6,7 @@ import type { ExecutorConfig, PaperAccount } from '../../shared/ipc'
 import { MAX_SPREAD_PCT, STALE_PRICE_MS } from '../../shared/liveMarket'
 import { calibratedWinRate, describeExpectedValue, tradeExpectedValue, type WatchOutcome } from '../../shared/expectedValue'
 import { describeEventCause, describeEventStatus, describeEventType, type EventLife } from '../../shared/marketEvent'
+import { aiCostPct } from '../../shared/aiCostPerTrade'
 import { describeOpportunityStatus } from '../../shared/opportunityStatus'
 import { voteOf } from '../../shared/opportunityVote'
 import { levelReadings } from '../../shared/planReadings'
@@ -101,7 +102,20 @@ function WhyNowSection({ row, life }: { row: OpportunityTableRow; life?: EventLi
  * event's record and the live price (shared/planReadings.ts), with the call's expected value
  * (shared/expectedValue.ts) at the watch's calibrated win rate for this model on this kind of event
  * where it has one, else at the model's own confidence. */
-function LevelsSection({ row, outcomes, nowSec }: { row: OpportunityTableRow; outcomes: WatchOutcome[]; nowSec: number }): React.JSX.Element | null {
+function LevelsSection({
+  row,
+  outcomes,
+  nowSec,
+  risk,
+  aiCostByModel
+}: {
+  row: OpportunityTableRow
+  outcomes: WatchOutcome[]
+  nowSec: number
+  risk: TableRisk | null
+  /** What each model's answers cost a trade, in dollars (shared/aiCostPerTrade.ts). */
+  aiCostByModel: Readonly<Record<string, number>>
+}): React.JSX.Element | null {
   const answer = offeredAnswer(row)
   const detail = answer?.decision.detail ?? null
   const validity = answer === null ? null : opportunityWindow(row.item.event.time, detail)
@@ -109,12 +123,16 @@ function LevelsSection({ row, outcomes, nowSec }: { row: OpportunityTableRow; ou
   const { offer } = row
   const way = offer.side === 'long' ? 'buy' : 'sell'
   const read = levelReadings({ event: row.item.event, side: way, entryMin: offer.entryMin, entryMax: offer.entryMax, stopLoss: detail.stopLoss, takeProfit: detail.takeProfit, livePrice: row.price })
+  // The model's answers' cost a trade, as a share of what the app would stake on it: part of the
+  // costs the value is net of (the V5 document, §73).
+  const stake = risk === null ? null : paperStake({ risk: healPaperRisk(risk.paperRisk), stakeQuote: risk.stakeQuote, stopPct: read.stopPct, equityQuote: paperEquity(risk.account, risk.executors, row.item.event.quoteAsset) })
   const ev = tradeExpectedValue({
     confidence: answer.decision.confidence,
     calibrated: calibratedWinRate(outcomes, { model: answer.model, eventType: row.item.event.type, side: way }, nowSec),
     stopPct: read.stopPct,
     targetPct: read.targetPct,
-    spreadPct: row.live?.quality.spreadPct ?? null
+    spreadPct: row.live?.quality.spreadPct ?? null,
+    aiCostPct: stake === null ? null : aiCostPct(aiCostByModel[answer.model] ?? null, stake)
   })
   return (
     <div>
@@ -265,7 +283,8 @@ function RowDetail({
   confirm = false,
   outcomes,
   onPaperTrade,
-  life
+  life,
+  aiCostByModel
 }: {
   row: OpportunityTableRow
   news: NewsFeedState | null
@@ -278,6 +297,8 @@ function RowDetail({
   onPaperTrade?: (item: EventFeedItem, answer: EventAnswer) => void
   /** Where the event stands in its life, when the scanner still lists it. */
   life?: EventLife
+  /** What each model's answers cost a trade, in dollars (shared/aiCostPerTrade.ts), for the expected value. */
+  aiCostByModel?: Readonly<Record<string, number>>
 }): React.JSX.Element {
   const answer = offeredAnswer(row)
   const confirming = confirm === true && answer !== null && answer.decision.recommendation === 'buy'
@@ -296,7 +317,7 @@ function RowDetail({
             <LiveVerdictView reading={row.live} />
           </div>
         )}
-        <LevelsSection row={row} outcomes={outcomes ?? []} nowSec={nowSec} />
+        <LevelsSection row={row} outcomes={outcomes ?? []} nowSec={nowSec} risk={risk} aiCostByModel={aiCostByModel ?? {}} />
         <InvalidSection row={row} risk={risk} />
         <RiskSection row={row} risk={risk} />
         {row.offer === null && (
@@ -429,7 +450,8 @@ export function OpportunityTableCard({
   confirm = false,
   outcomes,
   onPaperTrade,
-  lives = {}
+  lives = {},
+  aiCostByModel = {}
 }: {
   onOffer: OpportunityTableRow[]
   recent: OpportunityTableRow[]
@@ -443,6 +465,8 @@ export function OpportunityTableCard({
   onPaperTrade?: (item: EventFeedItem, answer: EventAnswer) => void
   /** Where each recent event stands in its life, by id (the scanner's state). */
   lives?: Record<string, EventLife>
+  /** What each model's answers cost a trade, in dollars (shared/aiCostPerTrade.ts), for the expected value. */
+  aiCostByModel?: Readonly<Record<string, number>>
 }): React.JSX.Element {
   const [open, setOpen] = useState<string | null>(null)
   const toggle = (id: string): void => setOpen((current) => (current === id ? null : id))
@@ -453,7 +477,7 @@ export function OpportunityTableCard({
         {open === row.item.event.id && (
           <tr>
             <td colSpan={COLUMNS.length} style={{ ...cellStyle, whiteSpace: 'normal', background: 'var(--bg-app)' }}>
-              <RowDetail row={row} news={news} nowSec={nowSec} risk={risk} confirm={confirm} outcomes={outcomes} onPaperTrade={onPaperTrade} life={lives[row.item.event.id]} />
+              <RowDetail row={row} news={news} nowSec={nowSec} risk={risk} confirm={confirm} outcomes={outcomes} onPaperTrade={onPaperTrade} life={lives[row.item.event.id]} aiCostByModel={aiCostByModel} />
             </td>
           </tr>
         )}
