@@ -70,7 +70,8 @@ function figures(report: SessionReport): { title: string; lines: string[] }[] {
         `Net ${amounts(paper.net)} after fees of ${amounts(paper.fees, false)}${paper.rTrades === 0 ? '' : `; ${describeR(paper.r)} over the ${paper.rTrades} with a stop`}. Reported, not gated.`,
         `Furthest for a trade while it was held: ${paper.bestPct === null ? '—' : `${paper.bestPct.toFixed(2)}%`}; furthest against: ${paper.worstPct === null ? '—' : `${paper.worstPct.toFixed(2)}%`}.`,
         `From the event to the paper trade: ${paper.signalAgeSec.median === null ? '—' : `${Math.round(paper.signalAgeSec.median)} s`} at the median, ${paper.signalAgeSec.max === null ? '—' : `${Math.round(paper.signalAgeSec.max)} s`} at most.`,
-        paper.refused.length === 0 ? 'None refused in the span.' : `Refused in the span: ${paper.refused.map((entry) => `${entry.count} × ${entry.reason}`).join(' ')}`
+        paper.refused.length === 0 ? 'None refused in the span.' : `Refused in the span: ${paper.refused.map((entry) => `${entry.count} × ${entry.reason}`).join(' ')}`,
+        `${paper.missed} missed: ${paper.missed === 1 ? 'an event' : 'events'} the watch held back from, by its refusals on file, and never traded after.`
       ]
     },
     {

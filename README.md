@@ -519,16 +519,39 @@ events, strongest signal first. Its columns:
 - its 24 hours and 7 days, from the research;
 - the event, and the strongest story about the coin;
 - how many of the models would take the side;
-- the action: BUY or SELL with ENTERABLE, WAITING or INVALIDATED, or where the event stands;
+- its status, one word (since 8 October 2026, the V5 document's §42): DISCOVERED, ANALYSING, NO
+  TRADE, QUALIFIED, READY, EXECUTED, MISSED, INVALIDATED or EXPIRED, with ENTERABLE, WAITING or
+  INVALIDATED beside an entry on offer;
 - the signal, the execution, and when the entry runs out.
 
-A row opens what is behind it:
-- the score, part by part, and the live check;
-- the plan, and what ends it: the entry unfilled by its expiry, Bitcoin moving against it by the
-  watch's safeguard, a spread over 0.1%, or no price fresher than ten seconds;
+A row opens what is behind it, arranged (since 8 October 2026) under the V5 document's eight
+questions (§55):
+- why this coin: the score, part by part;
+- why now: the event, where it stands in its life, and what it is read as;
+- why this entry, this stop and this target: the plan, its expected value, and the model's levels
+  read against the record (`shared/planReadings.ts`): the entry range against the event's price
+  and the live price; the stop and the target as a percent of the entry's middle and as multiples
+  of the pair's usual fifteen-minute move; the target in R against the stop;
+- what could invalidate it: the entry unfilled by its expiry, Bitcoin moving against it by the
+  watch's safeguard, a spread over 0.1%, or no price fresher than ten seconds; and, once in, the
+  lines its thesis reads WEAKENING and BROKEN at;
 - what it would risk, sized as the app sizes its own paper trades, and what the app has out on that
   side;
-- the news on the coin, and each model's answer with its reasoning.
+- which news: the stories on the coin;
+- which models: each model's answer with its reasoning, and with two or more the vote the watch's
+  paper trade follows.
+
+**One status** (`shared/opportunityStatus.ts`, since 8 October 2026). Where an event stood was said
+in three places: the feed's word, the live check's, and the paper trade's ends; and two of the
+document's words had no place: ANALYSING and MISSED. The table says it in one word, the first that
+applies: EXECUTED (a paper trade of the app's own is, or was, open on it); ANALYSING (a call about it
+is in the air); DISCOVERED (nothing has answered it); NO TRADE (answered, and none would act);
+MISSED (the price came into an entry's range and the app opened no paper trade on it: a refusal on
+file says why, or its paper trades were off; or it ran out unfilled behind a refusal) or EXPIRED (it
+ran out, and the price never came into the range); READY (an entry on offer, enterable now);
+QUALIFIED (on offer, waiting for its price or for the stream to be read); INVALIDATED (the live check
+ended it: Bitcoin against it, the spread over the line, or no fresh price). It is read from what the
+page already holds and decides nothing. The session report counts the events MISSED.
 
 Paper trade fills in a form, as before. Overview's top card leads with the same entry, and shows its
 signal.
@@ -857,7 +880,8 @@ What it reports:
 - **The watch's answers:** BUY and SELL it would act on; HOLD; and NO TRADE, a side it would not
   act on.
 - **Paper trades:**
-  - opened, ended and open now, and those refused, by reason;
+  - opened, ended and open now, and those refused, by reason; and the events missed: held back
+    from by a refusal on file, and never traded after;
   - the net in money and in R, and the fees;
   - how far each went for and against it while held;
   - how long from the event to the trade.
@@ -3693,6 +3717,8 @@ shared/                       Code both processes run, so they cannot disagree a
   marketResearch.ts           What the app studies as it opens: the liquid pairs, a day's and a week's movers, trending, the market's status and its regime
   liveMarket.ts               The live price against a recommendation: spread, age, an execution score, and enterable, waiting or invalidated
   opportunityScore.ts         The signal score of an opportunity: seven parts by fixed weights and three penalties, shown part by part
+  opportunityStatus.ts        One status for an opportunity, the first that applies: discovered, analysing, no trade, qualified, ready, executed, missed, invalidated, expired
+  planReadings.ts             The model's entry, stop and target read against the event's record: against the event's and the live price, in usual fifteen-minute moves, in R
   aiHelp.ts                   "Does AI help?": quant, AI, hybrid and holding side by side, and three verdicts by a 95% margin and a 30-trade floor
   paperExposure.ts            A pair's hourly correlation with Bitcoin, and the cap on what the app's own paper trades stake on one side on pairs that track it
   newsTitles.ts, news.ts      Which kind of news a Binance title is, and which coins it names (the study's patterns); what the reader keeps of each article, and what each kind did
@@ -3755,7 +3781,8 @@ src/                          React renderer app
                               paperRefusals.ts (this session's refused paper trades, for the
                               session report);
                               opportunityTable.ts + OpportunityTableCard (the Opportunities table: what
-                              is on offer and the last hour's other events, with their scores);
+                              is on offer and the last hour's other events, with their scores and one
+                              status each; a row's drawer under the eight questions);
                               quantState.ts + AiHelpCard (the two strategies' state at each event, read
                               from their own exports, and "Does AI help?");
                               liveBoard.ts (the watch's answers joined to their events, for the leaderboard);

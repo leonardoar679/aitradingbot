@@ -82,7 +82,7 @@ export interface SessionReportInput {
   /** Null when the stream's log could not be read. */
   connection: LiveConnection | null
   alerts: { at: number; severity: AlertSeverity }[]
-  refusals: { at: number; source: 'watch' | 'news'; text: string }[]
+  refusals: { at: number; source: 'watch' | 'news'; text: string; eventId?: string }[]
   recommendations: ReportRecommendation[]
   trades: ReportTradeReading[]
   stories: { url: string; publishedAt: number }[]
@@ -157,6 +157,10 @@ export interface SessionReport {
     /** Open now. */
     open: number
     refused: { reason: string; count: number }[]
+    /** MISSED (the V5 document, §42; since 8 October 2026): events the watch answered with a call
+     * to act on and refused to trade, by the refusals on file, with no paper trade of the app's
+     * opened on them in the end. */
+    missed: number
     net: { asset: string; amount: number }[]
     r: number
     rTrades: number
@@ -336,6 +340,9 @@ export function sessionReportOf(input: SessionReportInput): SessionReport {
     const reason = refusalReason(refusal.text)
     byReason.set(reason, (byReason.get(reason) ?? 0) + 1)
   }
+  // Missed: the events the watch held back from, by the refusals on file, and never traded after.
+  const tradedEvents = new Set(own.map((executor) => executor.watch?.eventId).filter((id): id is string => typeof id === 'string'))
+  const missed = new Set(refusalsIn.filter((refusal) => refusal.source === 'watch' && refusal.eventId !== undefined && !tradedEvents.has(refusal.eventId)).map((refusal) => refusal.eventId as string)).size
   const paper: SessionReport['paper'] = {
     opened: opened.length,
     openedWatch: openedWatch.length,
@@ -343,6 +350,7 @@ export function sessionReportOf(input: SessionReportInput): SessionReport {
     ended: ended.length,
     open: own.filter((executor) => executor.status === 'active').length,
     refused: [...byReason.entries()].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason)),
+    missed,
     net,
     r,
     rTrades,
@@ -715,6 +723,7 @@ export function sessionReportCsv(report: SessionReport): string {
   add('paper', 'ended', report.paper.ended)
   add('paper', 'open now', report.paper.open)
   for (const refusal of report.paper.refused) add('paper refused', refusal.reason, refusal.count)
+  add('paper', 'missed', report.paper.missed, 'events the watch would have acted on and held back from, by the refusals on file, never traded after')
   for (const entry of report.paper.net) add('paper net', entry.asset, Number(entry.amount.toPrecision(8)), 'after fees')
   add('paper', 'R', Number(report.paper.r.toFixed(4)), `over ${report.paper.rTrades} with a stop`)
   for (const entry of report.paper.fees) add('paper fees', entry.asset, Number(entry.amount.toPrecision(8)))

@@ -5,6 +5,7 @@ import type { MarketRegime, ResearchPair } from '../../shared/marketResearch'
 import type { NewsReading } from '../../shared/aiAdditions'
 import type { NewsFeedState } from '../../shared/newsFeed'
 import { scoredSide, signalScore, type SignalCall, type SignalScore } from '../../shared/opportunityScore'
+import { opportunityStatusOf, type OpportunityStatus } from '../../shared/opportunityStatus'
 import { liveReadingOf, type LiveReading } from './liveVerdict'
 import { feedItemStatus, rightNowRows, type EventFeedItem, type FeedItemStatus, type RightNowRow } from './opportunities'
 
@@ -39,6 +40,8 @@ export interface OpportunityTableRow {
   research: Pick<ResearchPair, 'change24hPct' | 'change7dPct'> | null
   /** Of the models that answered, how many would take the side at the confidence acted on. */
   agreement: { taking: number; answered: number }
+  /** Where the opportunity stands, in one word (shared/opportunityStatus.ts; since 8 October 2026). */
+  standing: OpportunityStatus
 }
 
 /** Each answer, as the score counts it. */
@@ -72,6 +75,12 @@ export function opportunityTableRows(input: {
   /** The watch's Bitcoin safeguard and stake, where known: what the live check holds an entry to. */
   btcLimitPct?: number
   stakeQuote?: number
+  /** The pairs whose events the watch is asking about right now, for ANALYSING. */
+  asking?: readonly string[]
+  /** Events with a refusal of the app's own paper trade on file, for MISSED. */
+  refusedEvents?: ReadonlySet<string>
+  /** Events a paper trade of the app's own is, or was, open on, for EXECUTED. */
+  tradedEvents?: ReadonlySet<string>
 }): { onOffer: OpportunityTableRow[]; recent: OpportunityTableRow[] } {
   const stories = input.news?.stories ?? []
   const reactions = input.news?.reactions ?? {}
@@ -82,16 +91,27 @@ export function opportunityTableRows(input: {
     const answered = calls.filter((call) => !call.refused)
     const book = input.live?.books[event.symbol] ?? null
     const researched = input.pairs.find((pair) => pair.symbol === event.symbol) ?? null
+    const status = offer !== null ? 'valid' : feedItemStatus(item, input.bars.get(event.id), input.nowSec)
+    const live = offer === null ? null : liveReadingOf(offer, input.live, { btcLimitPct: input.btcLimitPct, stakeQuote: input.stakeQuote, nowMs: input.nowMs })
     return {
       item,
       offer,
-      status: offer !== null ? 'valid' : feedItemStatus(item, input.bars.get(event.id), input.nowSec),
+      status,
       side,
       signal: signalScore({ event, side, calls, stories, reactions, readings: input.readings, regime: input.regime, nowSec: input.nowSec }),
-      live: offer === null ? null : liveReadingOf(offer, input.live, { btcLimitPct: input.btcLimitPct, stakeQuote: input.stakeQuote, nowMs: input.nowMs }),
+      live,
       price: book === null ? null : (book.bid + book.ask) / 2,
       research: researched === null ? null : { change24hPct: researched.change24hPct, change7dPct: researched.change7dPct },
-      agreement: { taking: side === null ? 0 : answered.filter((call) => call.acted && call.side === side).length, answered: answered.length }
+      agreement: { taking: side === null ? 0 : answered.filter((call) => call.acted && call.side === side).length, answered: answered.length },
+      standing: opportunityStatusOf({
+        answered: item.answers.length,
+        asking: (input.asking ?? []).includes(event.symbol),
+        feed: status,
+        live: live?.verdict.state ?? null,
+        liveReasons: live?.verdict.reasons ?? [],
+        refused: input.refusedEvents?.has(event.id) ?? false,
+        traded: input.tradedEvents?.has(event.id) ?? false
+      })
     }
   }
   const byScore = (a: OpportunityTableRow, b: OpportunityTableRow): number => b.signal.score - a.signal.score || b.item.event.time - a.item.event.time

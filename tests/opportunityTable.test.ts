@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { AiCallRecord } from '../shared/aiLedger'
 import { AI_OPPORTUNITY_PROMPT_VERSION, AI_OPPORTUNITY_SCHEMA_VERSION } from '../shared/aiOpportunity'
 import type { AiSignalDetail } from '../shared/aiSignal'
+import type { Candle } from '../shared/ipc'
 import { LIVE_MAX_INTEREST, emptyLiveState, type LiveState } from '../shared/liveMarket'
 import type { MarketEvent } from '../shared/marketEvent'
 import type { ResearchPair } from '../shared/marketResearch'
@@ -111,16 +112,23 @@ function researched(symbol: string, change24hPct: number, change7dPct: number | 
   return { symbol, baseAsset: symbol.replace('USDT', ''), price: 100, change24hPct, quoteVolume24h: 3e7, change7dPct, volumeExpansion: null, upDays: null, fromHigh7dPct: null, trending: false }
 }
 
-function rows(feedEvents: MarketEvent[], calls: AiCallRecord[], over: { live?: LiveState | null; stories?: ReadStory[]; pairs?: ResearchPair[] } = {}): ReturnType<typeof opportunityTableRows> {
+function rows(
+  feedEvents: MarketEvent[],
+  calls: AiCallRecord[],
+  over: { live?: LiveState | null; stories?: ReadStory[]; pairs?: ResearchPair[]; bars?: Map<string, Candle[]>; asking?: string[]; refusedEvents?: Set<string>; tradedEvents?: Set<string> } = {}
+): ReturnType<typeof opportunityTableRows> {
   return opportunityTableRows({
     feed: assembleFeed(feedEvents, calls),
-    bars: new Map(),
+    bars: over.bars ?? new Map(),
     live: over.live === undefined ? null : over.live,
     pairs: over.pairs ?? [],
     regime: 'bull',
     news: news(over.stories ?? []),
     nowSec: NOW,
-    nowMs: NOW * 1000
+    nowMs: NOW * 1000,
+    asking: over.asking,
+    refusedEvents: over.refusedEvents,
+    tradedEvents: over.tradedEvents
   })
 }
 
@@ -152,6 +160,34 @@ describe('the opportunities table', () => {
     ])
     // Nothing on offer: no live check, and no entry.
     expect(table.recent[0]).toMatchObject({ offer: null, live: null })
+  })
+
+  it('gives each row one status, from the answers, the feed, the live check, the calls in the air and what is on file', () => {
+    const live: LiveState = {
+      ...emptyLiveState(),
+      books: { SOLUSDT: { symbol: 'SOLUSDT', bid: 99.99, bidQty: 10, ask: 100.01, askQty: 10, updatedAt: NOW * 1000, source: 'stream' } }
+    }
+    // On offer: READY at a live price inside the range, QUALIFIED before the stream is read,
+    // ANALYSING while a call about the pair is in the air, EXECUTED once the app's own paper trade is on it.
+    expect(rows([event('SOLUSDT')], [call()], { live }).onOffer[0].standing).toBe('ready')
+    expect(rows([event('SOLUSDT')], [call()]).onOffer[0].standing).toBe('qualified')
+    expect(rows([event('SOLUSDT')], [call()], { live, asking: ['SOLUSDT'] }).onOffer[0].standing).toBe('analysing')
+    expect(rows([event('SOLUSDT')], [call()], { live, tradedEvents: new Set([event('SOLUSDT').id]) }).onOffer[0].standing).toBe('executed')
+    // Beside them: DISCOVERED with nothing answered, NO TRADE when the models would not act.
+    const beside = rows([event('XRPUSDT', T - 600), event('DOGEUSDT', T - 1200)], [call({ symbol: 'XRPUSDT', candleTime: T - 600, recommendation: 'hold', confidence: 0.6, detail: NONE })])
+    expect(Object.fromEntries(beside.recent.map((row) => [row.item.event.symbol, row.standing]))).toEqual({ XRPUSDT: 'no_trade', DOGEUSDT: 'discovered' })
+    // An entry that ran out unfilled, by candles that never came into its range: EXPIRED, or MISSED behind a refusal on file.
+    const ada = event('ADAUSDT', T - 1200)
+    const never = new Map([[ada.id, Array.from({ length: 22 }, (_, k) => ({ time: T - 1200 + k * 60, open: 105, high: 105.5, low: 104.5, close: 105, volume: 1 }))]])
+    const ran = (over: { refusedEvents?: Set<string>; tradedEvents?: Set<string>; bars: Map<string, Candle[]> }) => rows([ada], [call({ symbol: 'ADAUSDT', candleTime: T - 1200 })], over).recent[0]
+    expect(ran({ bars: never })).toMatchObject({ status: 'expired', standing: 'expired' })
+    expect(ran({ bars: never, refusedEvents: new Set([ada.id]) }).standing).toBe('missed')
+    expect(ran({ bars: never, refusedEvents: new Set(['binance:OTHER:1']) }).standing).toBe('expired')
+    // The price came into the range and the feed scores the answer as a trade that ran: MISSED with
+    // nothing of the app's own on it, refused or not; EXECUTED with its own paper trade.
+    const came = new Map([[ada.id, Array.from({ length: 22 }, (_, k) => ({ time: T - 1200 + k * 60, open: 100, high: 100.4, low: 99.7, close: 100.1, volume: 1 }))]])
+    expect(ran({ bars: came })).toMatchObject({ status: 'open', standing: 'missed' })
+    expect(ran({ bars: came, tradedEvents: new Set([ada.id]) }).standing).toBe('executed')
   })
 
   it('shows at most so many of the others, the strongest signal first', () => {

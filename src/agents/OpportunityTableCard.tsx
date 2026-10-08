@@ -6,6 +6,10 @@ import type { ExecutorConfig, PaperAccount } from '../../shared/ipc'
 import { MAX_SPREAD_PCT, STALE_PRICE_MS } from '../../shared/liveMarket'
 import { calibratedWinRate, describeExpectedValue, tradeExpectedValue, type WatchOutcome } from '../../shared/expectedValue'
 import { describeEventCause, describeEventStatus, describeEventType, type EventLife } from '../../shared/marketEvent'
+import { describeOpportunityStatus } from '../../shared/opportunityStatus'
+import { voteOf } from '../../shared/opportunityVote'
+import { levelReadings } from '../../shared/planReadings'
+import { THESIS_LINES } from '../../shared/thesisStatus'
 import { describeEventType as describeStoryType, type NewsFeedState } from '../../shared/newsFeed'
 import { SIGNAL_WEIGHTS, storiesAbout } from '../../shared/opportunityScore'
 import { correlatedCap, correlatedOut } from '../../shared/paperExposure'
@@ -14,7 +18,7 @@ import { formatHoldingDuration } from '../backtest/formatTradeTime'
 import { WhyButton } from '../news/WhyItMovedHost'
 import { buttonStyle, cellStyle, headCellStyle, noteStyle, reasonLabel, signedPct } from './agentStyles'
 import { LiveVerdictView } from './LiveVerdictView'
-import { describeFeedItemStatus, type EventAnswer, type EventFeedItem } from './opportunities'
+import type { EventAnswer, EventFeedItem } from './opportunities'
 import type { OpportunityTableRow } from './opportunityTable'
 
 const plain = (value: number): string => Number(value.toPrecision(7)).toLocaleString('en-US', { maximumFractionDigits: 8 })
@@ -46,7 +50,7 @@ function SignalSection({ row }: { row: OpportunityTableRow }): React.JSX.Element
   const { signal } = row
   return (
     <div>
-      <p style={sectionTitle}>Signal {signal.score}/100</p>
+      <p style={sectionTitle}>Why this coin · signal {signal.score}/100</p>
       {signal.parts.map((part) => (
         <p key={part.id} style={{ ...lineStyle, display: 'flex' }}>
           <span style={{ flex: '0 0 64px', color: 'var(--text-primary)', fontWeight: 600 }}>{part.label}</span>
@@ -72,36 +76,46 @@ function SignalSection({ row }: { row: OpportunityTableRow }): React.JSX.Element
   )
 }
 
-function PlanSection({ row, risk, outcomes, nowSec }: { row: OpportunityTableRow; risk: TableRisk | null; outcomes: WatchOutcome[]; nowSec: number }): React.JSX.Element | null {
+/** Why now: the event, where it stands in its life and what it is read as (shared/marketEvent.ts). */
+function WhyNowSection({ row, life }: { row: OpportunityTableRow; life?: EventLife }): React.JSX.Element {
+  const { event } = row.item
+  const lifeWord = life === undefined ? null : describeEventStatus(life.status)
+  const move = signedPct(event.returnsPct.m15)
+  return (
+    <div>
+      <p style={sectionTitle}>Why now</p>
+      <p style={lineStyle}>
+        <strong style={{ color: event.direction === 'up' ? 'var(--up)' : event.direction === 'down' ? 'var(--down)' : 'var(--text-primary)' }}>{describeEventType(event.type)}</strong> at{' '}
+        {utcClock(event.time)} UTC, {event.band}, score {Math.round(event.score)}: <span style={{ color: move.color }}>{move.text}</span> in fifteen minutes, {event.moveSigmas.toFixed(1)} of its usual
+        moves{event.volumeRatio === null ? '' : `, on ${event.volumeRatio.toFixed(1)}× its usual volume`}.
+      </p>
+      <p style={lineStyle}>
+        {lifeWord === null ? 'The scanner no longer lists it, so where it stands in its life is not read.' : `${lifeWord.word}: ${lifeWord.detail}`}
+        {event.cause !== undefined ? ` Read as ${describeEventCause(event.cause)}.` : ''}
+      </p>
+    </div>
+  )
+}
+
+/** The plan, and why this entry, this stop and this target: the model's levels read against the
+ * event's record and the live price (shared/planReadings.ts), with the call's expected value
+ * (shared/expectedValue.ts) at the watch's calibrated win rate for this model on this kind of event
+ * where it has one, else at the model's own confidence. */
+function LevelsSection({ row, outcomes, nowSec }: { row: OpportunityTableRow; outcomes: WatchOutcome[]; nowSec: number }): React.JSX.Element | null {
   const answer = offeredAnswer(row)
   const detail = answer?.decision.detail ?? null
   const validity = answer === null ? null : opportunityWindow(row.item.event.time, detail)
-  if (row.offer === null || detail?.entry == null || validity === null) return null
+  if (row.offer === null || answer === null || detail?.entry == null || validity === null) return null
   const { offer } = row
-  const mid = (offer.entryMin + offer.entryMax) / 2
-  const stopPct = detail.stopLoss === null || !(mid > 0) ? null : (Math.abs(mid - detail.stopLoss) / mid) * 100
   const way = offer.side === 'long' ? 'buy' : 'sell'
-  const targetPct = detail.takeProfit === null || !(mid > 0) ? null : (Math.abs(detail.takeProfit - mid) / mid) * 100
-  // The call's expected value (shared/expectedValue.ts), at the watch's calibrated win rate for this
-  // model on this kind of event where it has one, else at the model's own confidence.
-  const ev =
-    answer === null
-      ? null
-      : tradeExpectedValue({
-          confidence: answer.decision.confidence,
-          calibrated: calibratedWinRate(outcomes, { model: answer.model, eventType: row.item.event.type, side: way }, nowSec),
-          stopPct,
-          targetPct,
-          spreadPct: row.live?.quality.spreadPct ?? null
-        })
-  const sized =
-    risk === null
-      ? null
-      : paperStake({ risk: healPaperRisk(risk.paperRisk), stakeQuote: risk.stakeQuote, stopPct, equityQuote: paperEquity(risk.account, risk.executors, row.item.event.quoteAsset) })
-  const lost = sized === null || stopPct === null ? null : riskedAtStop({ amountQuote: sized, stopLossPct: stopPct })
-  const quote = row.item.event.quoteAsset
-  const cap = risk === null ? null : correlatedCap({ account: risk.account, risk: healPaperRisk(risk.paperRisk), quoteAsset: quote })
-  const out = risk === null ? 0 : correlatedOut(risk.executors, way, quote)
+  const read = levelReadings({ event: row.item.event, side: way, entryMin: offer.entryMin, entryMax: offer.entryMax, stopLoss: detail.stopLoss, takeProfit: detail.takeProfit, livePrice: row.price })
+  const ev = tradeExpectedValue({
+    confidence: answer.decision.confidence,
+    calibrated: calibratedWinRate(outcomes, { model: answer.model, eventType: row.item.event.type, side: way }, nowSec),
+    stopPct: read.stopPct,
+    targetPct: read.targetPct,
+    spreadPct: row.live?.quality.spreadPct ?? null
+  })
   return (
     <div>
       <p style={sectionTitle}>The plan</p>
@@ -111,7 +125,26 @@ function PlanSection({ row, risk, outcomes, nowSec }: { row: OpportunityTableRow
         · held at most {formatHoldingDuration(validity.holdSeconds)}
       </p>
       {ev !== null && <p style={lineStyle}>{describeExpectedValue(ev, row.item.event.type)}</p>}
-      <p style={{ ...sectionTitle, marginTop: '0.6rem' }}>Invalid if</p>
+      <p style={{ ...sectionTitle, marginTop: '0.6rem' }}>Why this entry</p>
+      <p style={lineStyle}>{read.entry}</p>
+      <p style={{ ...sectionTitle, marginTop: '0.6rem' }}>Why this stop</p>
+      <p style={lineStyle}>{read.stop}</p>
+      <p style={{ ...sectionTitle, marginTop: '0.6rem' }}>Why this target</p>
+      <p style={lineStyle}>{read.target}</p>
+      <p style={noteStyle}>The levels are the model&apos;s, from its answer; the readings are the app&apos;s, against the event&apos;s record and the live price.</p>
+    </div>
+  )
+}
+
+/** What could invalidate it: what ends the entry before it fills, and, once in, what its thesis
+ * reads as weakening or broken (shared/thesisStatus.ts). */
+function InvalidSection({ row, risk }: { row: OpportunityTableRow; risk: TableRisk | null }): React.JSX.Element | null {
+  const answer = offeredAnswer(row)
+  const validity = answer === null ? null : opportunityWindow(row.item.event.time, answer.decision.detail)
+  if (row.offer === null || validity === null) return null
+  return (
+    <div>
+      <p style={sectionTitle}>What could invalidate it</p>
       <ul style={{ ...lineStyle, paddingLeft: '1.1rem' }}>
         <li>its entry has not filled by {utcClock(validity.expiresAt)} UTC;</li>
         {risk !== null && risk.btcLimitPct > 0 && <li>Bitcoin moves {risk.btcLimitPct}% against it from the event&apos;s minute;</li>}
@@ -119,21 +152,42 @@ function PlanSection({ row, risk, outcomes, nowSec }: { row: OpportunityTableRow
         <li>no price fresher than {STALE_PRICE_MS / 1000} seconds can be had.</li>
       </ul>
       <p style={noteStyle}>Outside its range it waits, and is entered only if the price comes back into it before it expires.</p>
-      {risk !== null && (
-        <>
-          <p style={{ ...sectionTitle, marginTop: '0.6rem' }}>The risk</p>
-          <p style={lineStyle}>
-            {sized === null ? '' : `Sized as the app sizes its own paper trades, it stakes ${plain(sized)} ${quote}`}
-            {stopPct === null ? '.' : `, with its stop ${stopPct.toFixed(2)}% away`}
-            {lost === null ? '' : `: stopped out, it loses about ${lost.toFixed(2)} ${quote} after fees.`}
-          </p>
-          <p style={lineStyle}>
-            {cap === null
-              ? `There is no cap on what the app's own paper trades stake on one side.`
-              : `On this side, on coins that move with Bitcoin, the app's own open paper trades stake ${plain(out)} of the ${plain(cap)} ${quote} they may have out together.`}
-          </p>
-        </>
-      )}
+      <p style={{ ...lineStyle, marginTop: '0.35rem' }}>
+        Once in, its thesis reads WEAKENING when the price has covered {Math.round(THESIS_LINES.nearStopShare * 100)}% of the way to the stop, when a story against it at impact{' '}
+        {THESIS_LINES.newsImpact} or more names the coin, or when the pair moves {THESIS_LINES.oppositeMovePct}% against it over fifteen minutes; BROKEN at the stop, or with{' '}
+        {THESIS_LINES.brokenReasons} of those at once.
+      </p>
+    </div>
+  )
+}
+
+/** What it would risk, sized as the app sizes its own paper trades (shared/paperRisk.ts), and what
+ * the app has out on that side (shared/paperExposure.ts). */
+function RiskSection({ row, risk }: { row: OpportunityTableRow; risk: TableRisk | null }): React.JSX.Element | null {
+  const detail = offeredAnswer(row)?.decision.detail ?? null
+  if (row.offer === null || risk === null || detail?.entry == null) return null
+  const { offer } = row
+  const mid = (offer.entryMin + offer.entryMax) / 2
+  const stopPct = detail.stopLoss === null || !(mid > 0) ? null : (Math.abs(mid - detail.stopLoss) / mid) * 100
+  const way = offer.side === 'long' ? 'buy' : 'sell'
+  const quote = row.item.event.quoteAsset
+  const sized = paperStake({ risk: healPaperRisk(risk.paperRisk), stakeQuote: risk.stakeQuote, stopPct, equityQuote: paperEquity(risk.account, risk.executors, quote) })
+  const lost = stopPct === null ? null : riskedAtStop({ amountQuote: sized, stopLossPct: stopPct })
+  const cap = correlatedCap({ account: risk.account, risk: healPaperRisk(risk.paperRisk), quoteAsset: quote })
+  const out = correlatedOut(risk.executors, way, quote)
+  return (
+    <div>
+      <p style={sectionTitle}>The risk</p>
+      <p style={lineStyle}>
+        {`Sized as the app sizes its own paper trades, it stakes ${plain(sized)} ${quote}`}
+        {stopPct === null ? '.' : `, with its stop ${stopPct.toFixed(2)}% away`}
+        {lost === null ? '' : `: stopped out, it loses about ${lost.toFixed(2)} ${quote} after fees.`}
+      </p>
+      <p style={lineStyle}>
+        {cap === null
+          ? `There is no cap on what the app's own paper trades stake on one side.`
+          : `On this side, on coins that move with Bitcoin, the app's own open paper trades stake ${plain(out)} of the ${plain(cap)} ${quote} they may have out together.`}
+      </p>
     </div>
   )
 }
@@ -143,7 +197,7 @@ function NewsSection({ row, news, nowSec }: { row: OpportunityTableRow; news: Ne
   const stories = news === null ? [] : storiesAbout(event.baseAsset, event.time, news.stories, nowSec)
   return (
     <div>
-      <p style={sectionTitle}>News on {event.baseAsset}</p>
+      <p style={sectionTitle}>Which news · {event.baseAsset}</p>
       {stories.length === 0 && <p style={lineStyle}>{news === null ? 'The news has not been read yet.' : 'No story names it in the three hours before the event or since.'}</p>}
       {stories.slice(0, 5).map((story) => {
         const reaction = news?.reactions[story.id]
@@ -167,10 +221,18 @@ function NewsSection({ row, news, nowSec }: { row: OpportunityTableRow; news: Ne
 
 function ModelsSection({ row }: { row: OpportunityTableRow }): React.JSX.Element {
   const { answers } = row.item
+  // With two or more answers, the vote the watch's paper trade follows (shared/opportunityVote.ts).
+  const vote = answers.length >= 2 ? voteOf(answers.map((answer) => answer.decision)) : null
   return (
     <div>
-      <p style={sectionTitle}>The models</p>
+      <p style={sectionTitle}>Which models</p>
       {answers.length === 0 && <p style={lineStyle}>No model has been asked about it. Ask is on its card below.</p>}
+      {vote !== null && (
+        <p style={{ ...lineStyle, marginBottom: '0.45rem' }} data-testid="models-vote">
+          <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Vote</span> {vote.text}
+          {vote.refusal !== null ? ` · ${vote.refusal}` : ''}
+        </p>
+      )}
       {answers.map((answer) => {
         const side = opportunitySide(answer.decision)
         const { detail } = answer.decision
@@ -202,7 +264,8 @@ function RowDetail({
   risk,
   confirm = false,
   outcomes,
-  onPaperTrade
+  onPaperTrade,
+  life
 }: {
   row: OpportunityTableRow
   news: NewsFeedState | null
@@ -213,12 +276,19 @@ function RowDetail({
   /** The watch's closed paper trades with their calls (shared/expectedValue.ts), for the calibrated rate. */
   outcomes?: WatchOutcome[]
   onPaperTrade?: (item: EventFeedItem, answer: EventAnswer) => void
+  /** Where the event stands in its life, when the scanner still lists it. */
+  life?: EventLife
 }): React.JSX.Element {
   const answer = offeredAnswer(row)
   const confirming = confirm === true && answer !== null && answer.decision.recommendation === 'buy'
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem 1.6rem', padding: '0.8rem 0.4rem 0.9rem' }}>
-      <SignalSection row={row} />
+      {/* The eight questions (the V5 document, §55): why this coin, why now, why this entry, stop and
+          target, which news, which models, and what could invalidate it. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+        <SignalSection row={row} />
+        <WhyNowSection row={row} life={life} />
+      </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
         {row.offer !== null && (
           <div>
@@ -226,10 +296,12 @@ function RowDetail({
             <LiveVerdictView reading={row.live} />
           </div>
         )}
-        <PlanSection row={row} risk={risk} outcomes={outcomes ?? []} nowSec={nowSec} />
+        <LevelsSection row={row} outcomes={outcomes ?? []} nowSec={nowSec} />
+        <InvalidSection row={row} risk={risk} />
+        <RiskSection row={row} risk={risk} />
         {row.offer === null && (
           <p style={lineStyle}>
-            {row.status === null ? 'Where it stands is not known yet: its candles have not been read.' : `${describeFeedItemStatus(row.status)}: nothing is on offer from it.`}
+            {row.status === null && row.standing === 'qualified' ? 'Where it stands is not known yet: its candles have not been read.' : describeOpportunityStatus(row.standing).detail} Nothing is on offer from it.
           </p>
         )}
         {answer !== null && onPaperTrade !== undefined && (
@@ -273,12 +345,20 @@ function Row({
   const day = row.research === null ? null : signedPct(row.research.change24hPct)
   const week = row.research?.change7dPct == null ? null : signedPct(row.research.change7dPct)
   const story = row.signal.story
-  const action =
-    row.offer !== null ? (
-      <LiveVerdictView reading={row.live} compact />
-    ) : (
-      <span style={{ color: 'var(--text-muted)' }}>{row.status === null ? '—' : describeFeedItemStatus(row.status).toUpperCase()}</span>
-    )
+  // One status (shared/opportunityStatus.ts), and for an entry on offer the live check beside it.
+  const standing = describeOpportunityStatus(row.standing)
+  const action = (
+    <>
+      <strong style={{ color: standing.tone === 'primary' ? 'var(--text-primary)' : `var(--${standing.tone})` }} title={standing.detail} data-testid="opportunity-status">
+        {standing.word}
+      </strong>
+      {row.offer !== null && (
+        <span style={{ display: 'block' }}>
+          <LiveVerdictView reading={row.live} compact />
+        </span>
+      )}
+    </>
+  )
   return (
     <tr onClick={onToggle} style={{ cursor: 'pointer', opacity: muted ? 0.8 : 1, background: open ? 'var(--bg-app)' : undefined }}>
       <td style={{ ...cellStyle, color: 'var(--text-muted)' }}>
@@ -333,7 +413,7 @@ function Row({
   )
 }
 
-const COLUMNS = ['#', 'Pair', 'Price', '24h', '7d', 'Event', 'News', 'AI', 'Action', 'Signal', 'Execution', 'Until (UTC)']
+const COLUMNS = ['#', 'Pair', 'Price', '24h', '7d', 'Event', 'News', 'AI', 'Status', 'Signal', 'Execution', 'Until (UTC)']
 
 /** What can be acted on now, as a table (./opportunityTable.ts): each entry on offer, and the last
  * hour's other events, with the signal score and, for an entry, the execution the live price allows.
@@ -373,7 +453,7 @@ export function OpportunityTableCard({
         {open === row.item.event.id && (
           <tr>
             <td colSpan={COLUMNS.length} style={{ ...cellStyle, whiteSpace: 'normal', background: 'var(--bg-app)' }}>
-              <RowDetail row={row} news={news} nowSec={nowSec} risk={risk} confirm={confirm} outcomes={outcomes} onPaperTrade={onPaperTrade} />
+              <RowDetail row={row} news={news} nowSec={nowSec} risk={risk} confirm={confirm} outcomes={outcomes} onPaperTrade={onPaperTrade} life={lives[row.item.event.id]} />
             </td>
           </tr>
         )}

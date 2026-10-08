@@ -193,6 +193,24 @@ describe('the figures', () => {
     expect(report.stream).toEqual({ connects: 4, drops: 3, gaps: 2, gapSeconds: 90 + 100, longestGapSeconds: 100, host: 'binance.com', hostSwitches: 1, dataHostSwitches: 2, planned: 0, subscribeErrors: 0 })
   })
 
+  it("counts the events the watch held back from and never traded after, once each: the table's MISSED", () => {
+    const refusals: SessionReportInput['refusals'] = [
+      { at: T - 100, source: 'watch', text: 'No paper trade: 3 are open already, the most at once.', eventId: 'event-ada' },
+      { at: T - 90, source: 'watch', text: 'Models split: 1 BUY · 1 SELL.', eventId: 'event-ada' },
+      // The watch did trade this one after all (sol is an own paper trade).
+      { at: T - 80, source: 'watch', text: 'No paper trade: no price fresher than 10 seconds.', eventId: 'event-sol' },
+      // A news rule's refusal is not the watch's.
+      { at: T - 70, source: 'news', text: 'ABC: no paper short, as it has no USDT pair on Binance.', eventId: 'event-abc' },
+      // Before the span.
+      { at: T - 2 * HOUR, source: 'watch', text: 'No paper trade: old.', eventId: 'event-old' },
+      // With no event named.
+      { at: T - 60, source: 'watch', text: 'No paper trade: unplaced.' }
+    ]
+    expect(sessionReportOf(input({ refusals })).paper.missed).toBe(1)
+    expect(sessionReportOf(input({ refusals: [] })).paper.missed).toBe(0)
+    expect(sessionReportCsv(sessionReportOf(input({ refusals }))).split('\n').some((line) => line.startsWith('paper,missed,1,'))).toBe(true)
+  })
+
   it('reads latency by nearest rank: the median and the 95th percentile of the answers that came back', () => {
     const latency = (ms: number): Call => call({ eventId: 'x', usage: { promptTokens: 1, completionTokens: 1, costUsd: 0, latencyMs: ms } })
     const report = sessionReportOf(input({ calls: [latency(4000), latency(1000), latency(3000), latency(2000), call({ status: 'failed', usage: { promptTokens: 0, completionTokens: 0, costUsd: null, latencyMs: 30_000 } })] }))

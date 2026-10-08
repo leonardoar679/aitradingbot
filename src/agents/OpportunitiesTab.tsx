@@ -24,6 +24,10 @@ import { OpportunityTableCard } from './OpportunityTableCard'
 import { useEventFeed } from './useEventFeed'
 import { WatchCard } from './WatchCard'
 import { useScanner } from '../hooks/useScanner'
+import { getWatchActivity, subscribeWatchActivity } from './opportunityWatch'
+
+/** How far back the refusals on file are read, for MISSED on the table: the last hour's events. */
+const REFUSALS_BACK_SEC = 2 * 3600
 
 const EVENTS_SHOWN = 20
 /** How often the executors on file are read again, for the watch's own paper trades. */
@@ -61,6 +65,11 @@ export function OpportunitiesTab({
   const [busyEvent, setBusyEvent] = useState<string | null>(null)
   /** The scanner's state, for where each event stands in its life (shared/marketEvent.ts). */
   const scanner = useScanner()
+  /** The pairs the watch is asking about now (ANALYSING), and the events it refused to trade (MISSED):
+   * one status for the table (shared/opportunityStatus.ts). Read only. */
+  const [asking, setAsking] = useState<string[]>(getWatchActivity().asking)
+  const [refusedEvents, setRefusedEvents] = useState<ReadonlySet<string>>(new Set())
+  useEffect(() => subscribeWatchActivity((activity) => setAsking(activity.asking)), [])
   const [problems, setProblems] = useState<Record<string, string>>({})
   const [configProblem, setConfigProblem] = useState<string | null>(null)
   const [shown, setShown] = useState(EVENTS_SHOWN)
@@ -71,6 +80,19 @@ export function OpportunitiesTab({
   const nowSec = useNowSec(true, 15_000)
   // The scanner's events, the answers held for them and the candles since: shared with Overview.
   const { events, scannerOn, calls, feed, bars, loadCalls, problem: feedProblem, watchAnswered } = useEventFeed(shown)
+  // The refusals on file, read again whenever the watch answers: the events it held back from (MISSED). Read only.
+  useEffect(() => {
+    let cancelled = false
+    void window.api.records
+      .refusals({ sinceSec: Math.floor(Date.now() / 1000) - REFUSALS_BACK_SEC })
+      .then((page) => {
+        if (!cancelled) setRefusedEvents(new Set(page.rows.map((row) => row.eventId).filter((id): id is string => typeof id === 'string')))
+      })
+      .catch(() => undefined)
+    return (): void => {
+      cancelled = true
+    }
+  }, [watchAnswered])
   const loadProblem = configProblem ?? feedProblem
   // The market's regime and each pair's day and week, and the news on the coins: for the table.
   const { state: research } = useMarketResearch()
@@ -189,6 +211,9 @@ export function OpportunitiesTab({
   }
 
   const enabled = config?.enabledModels ?? []
+  const watchTrades = useMemo(() => watchPaperExecutors(executors), [executors])
+  // The events a paper trade of the app's own is, or was, open on: EXECUTED on the table.
+  const tradedEvents = useMemo(() => new Set(watchTrades.map((executor) => executor.watch?.eventId).filter((id): id is string => typeof id === 'string')), [watchTrades])
   // The live prices of the pairs in the table, those on offer first: each entry is checked against them.
   const live = useLiveMarket(useMemo(() => tableSymbols(feed, bars, nowSec), [feed, bars, nowSec]))
   const table = opportunityTableRows({
@@ -202,11 +227,13 @@ export function OpportunitiesTab({
     nowSec,
     nowMs: Date.now(),
     btcLimitPct: config?.watchPaper.dropOnBtcMovePct,
-    stakeQuote: config?.watchPaper.stakeQuote
+    stakeQuote: config?.watchPaper.stakeQuote,
+    asking,
+    refusedEvents,
+    tradedEvents
   })
   // Models the watch has stopped asking today, read from the same rows that count its day.
   const paused = useMemo(() => watchPausedModels(calls, nowSec), [calls, nowSec])
-  const watchTrades = useMemo(() => watchPaperExecutors(executors), [executors])
   // The watch's closed paper trades joined to their calls: the calibrated win rate an expected value
   // is read at (shared/expectedValue.ts). Read only.
   const outcomes = useMemo(() => watchOutcomes(executors, calls), [executors, calls])
