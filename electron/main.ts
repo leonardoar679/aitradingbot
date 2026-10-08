@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow } from 'electron'
+import { app, shell, BrowserWindow, Menu, Tray, nativeImage } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc'
@@ -6,13 +6,26 @@ import { startLivePositionWatcherLoop } from './services/livePositionWatchersSer
 import { startLiveTwapLoop } from './services/liveTwapService'
 import { startMarketScanner } from './services/marketScannerService'
 import { startMarketResearch } from './services/marketResearchService'
-import { startLiveMarket } from './services/liveMarketService'
+import { getLiveState, startLiveMarket } from './services/liveMarketService'
 import { startExchangeHealth } from './services/exchangeHealthService'
 import { startNewsReader } from './services/newsService'
 import { startNewsFeed } from './services/newsFeedService'
 import { startAiAdditions } from './services/aiAdditionsService'
 import icon from '../build/icon.png?asset'
 import { describeConfigurationAtStart } from './services/effectiveConfigService'
+import { getAiConfig } from './services/aiConfigService'
+import { getSettings } from './services/settingsService'
+import { closeAction, healKeepRunning, trayTooltip } from '../shared/keepRunning'
+import { liveMarketStateOf } from '../shared/liveMarketState'
+
+/** How often the tray's tooltip is read again. */
+const TRAY_REFRESH_MS = 30_000
+
+/** True once quitting was asked for -- the tray's Quit, the OS, a second instance ending -- so a
+ * close that follows is a close and not a hide (shared/keepRunning.ts). */
+let quitting = false
+let tray: Tray | null = null
+let lastTooltip = ''
 
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -25,7 +38,11 @@ function createWindow(): BrowserWindow {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      // The renderer's schedulers (the watch, the exit check, the live-order poll) run at full
+      // rate while the window is minimized or hidden (the V5 document, §98-99). Chromium would
+      // otherwise hold a hidden page's timers to once a second, and to once a minute after a while.
+      backgroundThrottling: false
     }
   })
 
@@ -38,6 +55,27 @@ function createWindow(): BrowserWindow {
     return { action: 'deny' }
   })
 
+  // Closing the window (the V5 document, §98-99; shared/keepRunning.ts): with "Keep running when
+  // the window is closed" on (Settings › Essentials), the window hides to the tray and every loop
+  // runs on until Quit; off, the app quits as it always did. The setting is read as it stands at
+  // that moment, so a change needs no restart. A quit already asked for is never turned into a hide.
+  mainWindow.on('close', (event) => {
+    if (quitting) return
+    event.preventDefault()
+    getSettings()
+      .then((settings) => closeAction(healKeepRunning(settings.keepRunningWhenClosed), quitting))
+      .catch((): 'quit' => 'quit')
+      .then((action) => {
+        if (action === 'hide' && !quitting) {
+          mainWindow.hide()
+          void refreshTray()
+        } else {
+          quitting = true
+          mainWindow.destroy()
+        }
+      })
+  })
+
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
@@ -47,9 +85,63 @@ function createWindow(): BrowserWindow {
   return mainWindow
 }
 
+/** The window shown and in front: from the tray, or from a second launch. */
+function showWindow(): void {
+  const [existing] = BrowserWindow.getAllWindows()
+  if (!existing) {
+    createWindow()
+    return
+  }
+  if (!existing.isVisible()) existing.show()
+  if (existing.isMinimized()) existing.restore()
+  existing.focus()
+}
+
+/** The tray's tooltip: the socket, the watch, the app's own open paper trades, and what closing
+ * the window does. Read from what the services already hold; nothing is asked or changed. */
+async function refreshTray(): Promise<void> {
+  if (tray === null || tray.isDestroyed()) return
+  const [settings, ai] = await Promise.all([getSettings(), getAiConfig()])
+  const connection = getLiveState().connection
+  const nowMs = Date.now()
+  lastTooltip = trayTooltip({
+    state: liveMarketStateOf(connection, nowMs),
+    ageMs: connection.lastMessageAt === null ? null : nowMs - connection.lastMessageAt,
+    watchOn: ai.watch.enabled,
+    ownOpen: settings.executors.filter((executor) => executor.watch !== undefined && executor.status === 'active').length,
+    keepRunning: healKeepRunning(settings.keepRunningWhenClosed)
+  })
+  tray.setToolTip(lastTooltip)
+}
+
+/** The tray icon (the V5 document, §98-99): always there, so a hidden window has a way back, with
+ * Open and Quit. Quit is the one way to end the app while "Keep running when the window is
+ * closed" is on. */
+function createTray(): void {
+  tray = new Tray(nativeImage.createFromPath(icon))
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: 'Open TraderSpider', click: showWindow },
+      { type: 'separator' },
+      {
+        label: 'Quit TraderSpider',
+        click: (): void => {
+          quitting = true
+          app.quit()
+        }
+      }
+    ])
+  )
+  tray.on('click', showWindow)
+  void refreshTray().catch(() => undefined)
+  setInterval(() => void refreshTray().catch(() => undefined), TRAY_REFRESH_MS)
+  // Read by the in-app checks (scripts and scratch profiles only): the tooltip as last set.
+  ;(globalThis as { __traderspiderTray?: { tooltip: () => string } }).__traderspiderTray = { tooltip: (): string => lastTooltip }
+}
+
 // Only one instance of the app should run at a time. If a second launch is attempted,
 // this process (which already holds the lock) is handed the new launch's args instead —
-// we just use that as a signal to refocus the existing window, then let the second
+// we just use that as a signal to show and refocus the existing window, then let the second
 // process's own app.quit() (below) end it.
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 
@@ -57,11 +149,13 @@ if (!gotSingleInstanceLock) {
   app.quit()
 } else {
   app.on('second-instance', () => {
-    const [existingWindow] = BrowserWindow.getAllWindows()
-    if (existingWindow) {
-      if (existingWindow.isMinimized()) existingWindow.restore()
-      existingWindow.focus()
-    }
+    showWindow()
+  })
+
+  // Asked to quit -- the tray, the OS, app.quit() from anywhere: the windows' close handlers let
+  // it through rather than hiding.
+  app.on('before-quit', () => {
+    quitting = true
   })
 
   app.whenReady().then(() => {
@@ -73,17 +167,20 @@ if (!gotSingleInstanceLock) {
 
     const mainWindow = createWindow()
     registerIpcHandlers(mainWindow)
+    createTray()
     // Watches every real live Position, unattended, for a take-profit/stop-loss/trailing-stop/
     // time-limit exit — main-process-resident rather than driven by a renderer, so it does not
     // depend on which page is open or whether the window has focus. It does NOT outlive the app:
-    // window-all-closed quits on Windows and Linux, which ends this loop while any resting order
-    // already placed stays live on the exchange. See livePositionWatchersService.ts.
+    // closing the window quits on Windows and Linux unless "Keep running when the window is closed"
+    // is on (Settings › Essentials, off by default), in which case the window hides to the tray and
+    // this loop runs on until Quit; either way any resting order already placed stays live on the
+    // exchange. See livePositionWatchersService.ts.
     startLivePositionWatcherLoop()
     // Places the remaining slices of every live TWAP run on their configured interval, same
     // main-process-resident reasoning as the watcher loop above. See liveTwapService.ts.
     startLiveTwapLoop()
     // Reads every watched pair once a minute and says what is moving. Public market data only:
-    // no key, no model, no order. It starts here only if it was left switched on, and it is
+    // no key, no model, no order. It starts here unless it was switched off, and it is
     // main-process-resident for the same reason as the two loops above. See
     // marketScannerService.ts.
     void startMarketScanner().catch((error) => console.error('Market scanner failed to start:', error))

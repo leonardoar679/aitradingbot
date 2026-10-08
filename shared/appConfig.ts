@@ -18,6 +18,7 @@ import { DEFAULT_CONFIG, type EffectiveStores } from './appDefaults'
 import { CONFIG_FILE_VERSION, type ConfigFileName, type ConfigFileNote } from './configMigration'
 import { FEE_RATE, SLIPPAGE_RATE } from './fees'
 import { HARD_LIMITS } from './hardLimits'
+import { healKeepRunning } from './keepRunning'
 import { LIVE_GAP_SECONDS, LIVE_MARKET_VERSION, MAX_SPREAD_PCT, STALE_PRICE_MS } from './liveMarket'
 import { EVENT_CANDIDATE_SCORE, EVENT_COOLDOWN_SECONDS, EVENT_DETECTOR_VERSION, EVENT_MAX_RANKED, EVENT_URGENT_SCORE } from './marketEvent'
 import type { ScannerConfig } from './marketScanner'
@@ -125,7 +126,7 @@ export function defaultStores(): EffectiveStores {
  * `settings` is settings.json's top level; `ai` the AI config as its service hands it out; the rest
  * as each service hands them out. */
 export function healStores(input: {
-  settings: { paperRisk?: unknown; paperPause?: unknown; paperDigest?: unknown; alerts?: unknown }
+  settings: { paperRisk?: unknown; paperPause?: unknown; paperDigest?: unknown; alerts?: unknown; keepRunningWhenClosed?: unknown }
   ai: { defaultModel: string; enabledModels: string[]; dailyCapUsd: number; callsPerMinute: number; watch: unknown; watchPaper: unknown; additions: unknown }
   scanner: ScannerConfig
   news: unknown
@@ -138,6 +139,7 @@ export function healStores(input: {
     paperPause: { lossR: pause.lossR, trades: pause.trades },
     paperDigest: { enabled: healPaperDigest(input.settings.paperDigest).enabled, lastDay: null },
     alerts: healAlerts(input.settings.alerts),
+    app: { keepRunningWhenClosed: healKeepRunning(input.settings.keepRunningWhenClosed) },
     watch,
     watchPaper: healAiWatchPaper(input.ai.watchPaper, watch.models),
     additions: healAiAdditions(input.ai.additions),
@@ -184,6 +186,7 @@ const STORE_FILES: Record<keyof EffectiveStores, { file: ConfigFileName; under: 
   paperPause: { file: 'settings', under: 'paperPause' },
   paperDigest: { file: 'settings', under: 'paperDigest' },
   alerts: { file: 'settings', under: 'alerts' },
+  app: { file: 'settings', under: null },
   watch: { file: 'aiConfig', under: 'watch' },
   watchPaper: { file: 'aiConfig', under: 'watchPaper' },
   additions: { file: 'aiConfig', under: 'additions' },

@@ -3,6 +3,7 @@ import { Card } from '../components/Card'
 import { TextLink } from '../components/TextLink'
 import type { AiConfig } from '../../shared/aiCost'
 import { DEFAULT_ALERTS, healAlerts } from '../../shared/alerts'
+import { DEFAULT_KEEP_RUNNING, healKeepRunning } from '../../shared/keepRunning'
 import { conservativePaper, describeRiskLevel } from '../../shared/appDefaults'
 import type { AlertSettings, CredentialStatus, LiveTradingStatus, PaperPauseSettings, PaperRiskSettings } from '../../shared/ipc'
 import { DEFAULT_SCANNER_UNIVERSE, SCANNER_UNIVERSE_SIZES, type ScannerConfig } from '../../shared/marketScanner'
@@ -49,6 +50,7 @@ export function EssentialsCard({ onNavigate }: { onNavigate: (page: Page) => voi
   const [scanner, setScanner] = useState<ScannerConfig | null>(null)
   const [paper, setPaper] = useState<{ paperRisk: PaperRiskSettings; paperPause: PaperPauseSettings } | null>(null)
   const [alerts, setAlerts] = useState<AlertSettings>(DEFAULT_ALERTS)
+  const [keepRunning, setKeepRunning] = useState<boolean>(DEFAULT_KEEP_RUNNING)
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
 
@@ -57,6 +59,7 @@ export function EssentialsCard({ onNavigate }: { onNavigate: (page: Page) => voi
       (settings) => {
         setPaper({ paperRisk: healPaperRisk(settings.paperRisk), paperPause: healPaperPause(settings.paperPause) })
         setAlerts(healAlerts(settings.alerts))
+        setKeepRunning(healKeepRunning(settings.keepRunningWhenClosed))
       },
       (failure: unknown) => setProblem(describeError(failure))
     )
@@ -127,6 +130,15 @@ export function EssentialsCard({ onNavigate }: { onNavigate: (page: Page) => voi
       await settingsWrites(async () => {
         const fresh = await window.api.settings.get()
         await window.api.settings.set({ alerts: { ...healAlerts(fresh.alerts), ...patch } })
+      })
+      readSettings()
+    })
+
+  /** What closing the window does (shared/keepRunning.ts): hide to the tray and run on, or quit. */
+  const setKeepRunningWhenClosed = (next: boolean): Promise<void> =>
+    run(async () => {
+      await settingsWrites(async () => {
+        await window.api.settings.set({ keepRunningWhenClosed: next })
       })
       readSettings()
     })
@@ -253,6 +265,24 @@ export function EssentialsCard({ onNavigate }: { onNavigate: (page: Page) => voi
           {alerts.enabled
             ? 'A call from the watch, a paper trade opened or paused, the daily digest and news about a coin you hold each raise a desktop notice.'
             : 'No desktop notice is raised; what would have been said is still on its page.'}
+        </p>
+      </Row>
+
+      <Row label="When closed">
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', color: 'var(--text-primary)' }}>
+          <input
+            type="checkbox"
+            aria-label="Keep running when the window is closed"
+            checked={keepRunning}
+            disabled={busy || paper === null}
+            onChange={(event) => void setKeepRunningWhenClosed(event.target.checked)}
+          />
+          Keep running in the tray when the window is closed
+        </label>
+        <p style={noteStyle}>
+          {keepRunning
+            ? 'Closing the window hides it: the watch, its paper trades, the exit check and the real position watchers run on until Quit from the tray icon.'
+            : 'Closing the window quits the app: everything that runs in it stops, and a resting real order stays on the exchange. The tray icon shows the socket and the watch while the app runs.'}
         </p>
       </Row>
 

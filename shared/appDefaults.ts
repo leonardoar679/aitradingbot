@@ -6,6 +6,7 @@ import { DEFAULT_AI_WATCH_PAPER, type AiWatchPaperConfig } from './aiWatchPaper'
 import { DEFAULT_ALERTS } from './alerts'
 import { HARD_LIMITS } from './hardLimits'
 import type { AlertSettings, PaperDigestSettings, PaperPauseSettings, PaperRiskSettings } from './ipc'
+import { DEFAULT_KEEP_RUNNING } from './keepRunning'
 import { DEFAULT_LIVE_LIMITS } from './liveLimits'
 import { DEFAULT_SCANNER_CONFIG, type ScannerConfig } from './marketScanner'
 import { DEFAULT_NEWS_CONFIG, type NewsConfig } from './news'
@@ -50,6 +51,8 @@ export interface EffectiveStores {
   paperPause: Pick<PaperPauseSettings, 'lossR' | 'trades'>
   paperDigest: PaperDigestSettings
   alerts: AlertSettings
+  /** What closing the window does (shared/keepRunning.ts). */
+  app: { keepRunningWhenClosed: boolean }
   watch: AiWatchConfig
   watchPaper: AiWatchPaperConfig
   additions: AiAdditionsConfig
@@ -66,6 +69,7 @@ export const DEFAULT_CONFIG: EffectiveStores = {
   paperPause: { lossR: DEFAULT_PAPER_PAUSE.lossR, trades: DEFAULT_PAPER_PAUSE.trades },
   paperDigest: DEFAULT_PAPER_DIGEST,
   alerts: DEFAULT_ALERTS,
+  app: { keepRunningWhenClosed: DEFAULT_KEEP_RUNNING },
   watch: DEFAULT_AI_WATCH,
   watchPaper: DEFAULT_AI_WATCH_PAPER,
   additions: DEFAULT_AI_ADDITIONS,

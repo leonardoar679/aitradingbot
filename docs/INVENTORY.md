@@ -102,6 +102,7 @@ under Settings › Advanced › Effective configuration.
 | | `paperDigest` (added 5 October 2026): the daily notice of what those trades did, on or off, and the last day it told | — | Risk & Safety |
 | | `paperPause` (added 5 October 2026): the losing run in R that pauses those trades, or never; and for the watch and for the news rules, each, whether a run has paused it and when it was last resumed | — | Risk & Safety |
 | | `alerts` (added 6 October 2026): desktop notices on or off, and with sound or silent; obeyed where every notice is raised (`appHandlers.ts`) | — | Settings › Essentials |
+| | `keepRunningWhenClosed` (added 8 October 2026, V5 Stage 2): closing the window hides it to the tray and everything runs on, or quits the app (off by default; `shared/keepRunning.ts`) | — | Settings › Essentials |
 | `aiConfig.json` | `defaultModel`, `enabledModels`, `route` | Agents › Models | Settings › AI |
 | | `dailyCapUsd`, `callsPerMinute` | Agents › Usage | Settings › AI |
 | | `watch` (on, models, events a day, lowest band, first model gates; and, added 8 October 2026, CONFIRM: a paper BUY it opens is told as ready to confirm as a real order a person places) | Agents › Opportunities › Watch | Opportunities (stays with its results) |
@@ -122,6 +123,12 @@ JSON line each in a file per UTC month (`shared/records.ts`), written by the mai
 renderer tells them and read back by the session report, a trade's timeline and Overview.
 
 ## What runs without a page open
+
+Since 8 October 2026 (V5 Stage 2) the window is not throttled while minimized
+(`backgroundThrottling: false`), a tray icon shows the socket, the watch and the app's own open
+paper trades, and with "Keep running when the window is closed" on (Settings › Essentials;
+`keepRunningWhenClosed`, off by default) closing the window hides it and everything below runs on
+until Quit from the tray.
 
 Five renderer schedulers are mounted in `App.tsx` above every page, each behind its own error
 boundary. They are unchanged by the reorganization:

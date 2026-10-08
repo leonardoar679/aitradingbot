@@ -1032,8 +1032,11 @@ describe('AI code has no route to a real order', () => {
       'settings.set'
     ])
     expect(source).not.toMatch(/onPrepareOrder|aiProposal|placeLive|setSessionArmed|KillSwitch|liveTrading\.setConfig|ai\.setConfig|window\.api\.executors/)
-    expect(source.match(/window\.api\.settings\.set\(/g)).toHaveLength(2)
+    // Three since 8 October 2026 (V5 Stage 2): the third is the tray's switch, which only ever
+    // changes what closing the window does (shared/keepRunning.ts).
+    expect(source.match(/window\.api\.settings\.set\(/g)).toHaveLength(3)
     expect(source).toContain('window.api.settings.set({ alerts: { ...healAlerts(fresh.alerts), ...patch } })')
+    expect(source).toContain('window.api.settings.set({ keepRunningWhenClosed: next })')
     expect(source).toContain('window.api.settings.set(conservativePaper(healPaperPause(fresh.paperPause)))')
     // The page it sits on still mentions no bridge an order travels over (held above, for routes).
     expect(readFileSync(join(ROOT, 'src', 'settings', 'SettingsPanel.tsx'), 'utf-8')).not.toMatch(/liveTrading|LiveTrading|placeLive/)
@@ -1053,6 +1056,7 @@ describe('AI code has no route to a real order', () => {
       'alerts',
       'hardLimits',
       'ipc',
+      'keepRunning',
       'liveLimits',
       'marketScanner',
       'news',

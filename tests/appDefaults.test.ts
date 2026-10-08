@@ -5,6 +5,7 @@ import { DEFAULT_AI_DAILY_CAP_USD, DEFAULT_AI_MODEL } from '../shared/aiSignal'
 import { DEFAULT_AI_WATCH, healAiWatch } from '../shared/aiWatch'
 import { DEFAULT_AI_WATCH_PAPER, healAiWatchPaper } from '../shared/aiWatchPaper'
 import type { PaperPauseSettings } from '../shared/ipc'
+import { DEFAULT_KEEP_RUNNING, healKeepRunning } from '../shared/keepRunning'
 import { DEFAULT_SCANNER_CONFIG } from '../shared/marketScanner'
 import { DEFAULT_NEWS_CONFIG, healNewsConfig } from '../shared/news'
 import { DEFAULT_PAPER_DIGEST, healPaperDigest } from '../shared/paperDigest'
@@ -26,7 +27,8 @@ describe('a store read empty, or holding junk, heals to its default', () => {
     { name: 'alerts', heal: healAlerts, fallback: DEFAULT_ALERTS },
     { name: 'watch', heal: (value) => healAiWatch(value, [DEFAULT_AI_MODEL]), fallback: DEFAULT_AI_WATCH },
     { name: 'watchPaper', heal: (value) => healAiWatchPaper(value, []), fallback: DEFAULT_AI_WATCH_PAPER },
-    { name: 'news', heal: healNewsConfig, fallback: DEFAULT_NEWS_CONFIG }
+    { name: 'news', heal: healNewsConfig, fallback: DEFAULT_NEWS_CONFIG },
+    { name: 'keepRunningWhenClosed', heal: healKeepRunning, fallback: DEFAULT_KEEP_RUNNING }
   ]
   for (const store of stores) {
     it(store.name, () => {
@@ -48,6 +50,9 @@ describe('a store read empty, or holding junk, heals to its default', () => {
     expect(DEFAULT_SCANNER_CONFIG.enabled).toBe(true)
     expect(DEFAULT_CONFIG.scanner).toBe(DEFAULT_SCANNER_CONFIG)
     expect(DEFAULT_NEWS_CONFIG.enabled).toBe(false)
+    // Closing the window quits, unless a person switches the tray on (8 October 2026).
+    expect(DEFAULT_KEEP_RUNNING).toBe(false)
+    expect(DEFAULT_CONFIG.app.keepRunningWhenClosed).toBe(false)
     // Notices are on, with sound.
     expect(DEFAULT_ALERTS).toEqual({ enabled: true, sound: true })
   })

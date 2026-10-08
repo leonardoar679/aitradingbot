@@ -183,6 +183,9 @@ export interface AppSettings {
   /** Whether the app raises desktop notices at all, and with sound (shared/alerts.ts). Absent until
    * first written, and healed on every read: on, with sound. */
   alerts?: AlertSettings
+  /** Whether closing the window hides it to the tray and keeps everything running, or quits the
+   * app (shared/keepRunning.ts). Absent until first written, and healed on every read: off. */
+  keepRunningWhenClosed?: boolean
 }
 
 /** The app's desktop notices: on or off, and with sound or silent. */

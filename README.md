@@ -946,6 +946,28 @@ Since 8 October 2026 (the V5 document's §4–7 and §107; V5 Stage 1):
   migrated, and every value the heal changed — missing (it took its default), repaired, or clamped
   to a hard limit — with the file it came from.
 
+### Alive while minimized, and after the window is closed
+
+Since 8 October 2026 (the V5 document's §98–99; V5 Stage 2). Everything that runs by itself is
+mounted above every page (the renderer's schedulers: the watch, its paper trades, the exit check,
+the live-order poll) or in the main process (the scanner, the research, the feeds, the live socket,
+the health measure, the real position watchers), so it is alive whichever page is open. Two things
+ended it before this cycle, and one still does unless you choose otherwise:
+
+- **Minimized, the window ran slow.** Chromium holds a hidden page's timers to once a second, and
+  to once a minute after a while. The window is now built with `backgroundThrottling: false`
+  (`electron/main.ts`), so the renderer's schedulers tick at full rate minimized or hidden.
+- **Closing the window quit the app.** It still does, by default: a person who closes the app while
+  the watch is on expects it to stop spending. **"Keep running in the tray when the window is
+  closed"** (Settings › Essentials, off until switched on; `keepRunningWhenClosed` in
+  settings.json, healed by `shared/keepRunning.ts`) changes that: closing hides the window, and the
+  watch, its paper trades, the exit check and the real position watchers run on until **Quit** from
+  the tray icon. The setting is read at the moment of closing, so a change needs no restart; a quit
+  already asked for (the tray's Quit, the OS) is never turned into a hide.
+- **A tray icon**, always: its tooltip says the live-price socket as the bar's chip does, the watch
+  on or off, how many of the app's own paper trades are open, and what closing the window does;
+  its menu opens the window or quits. A second launch of the app shows the window it finds.
+
 ### Discovery — a market scanner
 
 **Discovery** answers "is anything happening?" for many pairs at once, by arithmetic, so that the
