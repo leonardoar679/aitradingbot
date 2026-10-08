@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AI_ADDITION_PROMPT_VERSIONS, latestWhyOf, type MoveConclusion, type WhyEvidence, type WhyOnFile } from '../../shared/aiAdditions'
 import { formatUsd } from '../../shared/aiCost'
 import { describeDecider } from '../../shared/aiPanel'
@@ -25,8 +25,11 @@ function Cited({ cites, evidence }: { cites: string[]; evidence: WhyEvidence[] |
  * the price shown. The main process rebuilds the evidence from candles and the stories it holds; the
  * conclusion has to cite what it rests on, or it is dropped. It asks only on a click, and places
  * nothing. */
-export function WhyConclusion({ symbol }: { symbol: string }): React.JSX.Element {
+export function WhyConclusion({ symbol, onFound }: { symbol: string; onFound?: (found: WhyOnFile | null) => void }): React.JSX.Element {
   const [onFile, setOnFile] = useState<WhyOnFile | null>(null)
+  /** Hands what is on file up to the view above, for its timeline (since 8 October 2026). */
+  const handUp = useRef(onFound)
+  handUp.current = onFound
   const [perCall, setPerCall] = useState<number | null>(null)
   const [enabled, setEnabled] = useState(true)
   const [asked, setAsked] = useState<MoveConclusion | null>(null)
@@ -38,7 +41,10 @@ export function WhyConclusion({ symbol }: { symbol: string }): React.JSX.Element
     const sinceSec = Math.floor(Date.now() / 1000) - ON_FILE_SECONDS
     window.api.ai.listCalls({ source: 'addition', promptVersion: AI_ADDITION_PROMPT_VERSIONS.why, symbol, sinceSec, limit: 50 }).then(
       (page) => {
-        if (!cancelled) setOnFile(latestWhyOf(page.rows, symbol))
+        if (cancelled) return
+        const found = latestWhyOf(page.rows, symbol)
+        setOnFile(found)
+        handUp.current?.(found)
       },
       () => undefined
     )

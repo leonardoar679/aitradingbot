@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { Candle } from '../shared/ipc'
-import { FEED_SOURCES, toStory, type FeedStory } from '../shared/newsFeed'
+import { FEED_SOURCES, toStory, type FeedStory, type StorySource } from '../shared/newsFeed'
 
 // electron/services/newsFeedService.ts, driven with its feeds, Binance's pairs, the coins' candles
 // and the news reader faked, and its two files in a folder of its own: what a read keeps, once;
@@ -145,14 +145,21 @@ describe('the news feed', () => {
     const sol = stories[0]
     expect(sol).toMatchObject({ eventType: 'LISTING', assets: [{ ticker: 'SOL', relationship: 'DIRECT' }] })
     expect(stories[1]).toMatchObject({ sourceClass: 'exchange', eventType: 'DELISTING', assets: [{ ticker: 'PEPE', relationship: 'DIRECT' }] })
-    // Written once each: the new three beside the one already on file, which is not written again.
-    const lines = readFileSync(join(rig.dir, 'news', 'feed-2026-10.jsonl'), 'utf-8').split('\n').filter((line) => line.trim() !== '' && line !== 'not json')
-    expect(lines.map((line) => (JSON.parse(line) as FeedStory).title)).toEqual([
+    // Written once each: the new two beside the one already on file, which is not written again;
+    // and Cointelegraph's copy of the SOL story as a source record on it, not a story (8 October 2026).
+    const lines = readFileSync(join(rig.dir, 'news', 'feed-2026-10.jsonl'), 'utf-8')
+      .split('\n')
+      .filter((line) => line.trim() !== '' && line !== 'not json')
+      .map((line) => JSON.parse(line) as FeedStory | StorySource)
+    expect(lines.map((row) => ('kind' in row ? `source of ${row.storyId}: ${row.sourceName}` : row.title))).toEqual([
       'An older story',
       'Coinbase will list SOL futures for US traders',
-      'Coinbase will list SOL futures for traders in the US',
+      `source of ${sol.id}: Cointelegraph`,
       'Bitcoin ETF inflows jump'
     ])
+    expect(sol.sources).toEqual([{ kind: 'source', storyId: sol.id, source: 'cointelegraph', sourceName: 'Cointelegraph', url: 'https://cointelegraph.com/news/sol-futures', publishedAt: SOL_AT + 300, seenAt: NOW }])
+    // The older story was told two days ago; the ETF story is new: neither is recycled news.
+    expect(stories.map((story) => story.repeat ?? false)).toEqual([false, false, false, false])
   })
 
   it('measures what the price did, keeps the reaction four hours on, and gives no history under thirty', () => {
@@ -168,7 +175,7 @@ describe('the news feed', () => {
     const kept = readFileSync(join(rig.dir, 'news', 'reactions-2026-10.jsonl'), 'utf-8').trim().split('\n')
     expect(kept).toHaveLength(1)
     expect(JSON.parse(kept[0])).toMatchObject({ storyId: btc.id, eventType: 'ETF' })
-    expect(state.impact).toEqual([{ eventType: 'ETF', stories: 1, enough: false, medianPct: null, shareUp1h: null }])
+    expect(state.impact).toEqual([{ eventType: 'ETF', stories: 1, enough: false, medianPct: null, shareUp1h: null, excursions: null }])
     // The delisting is measured too; the older story names no coin.
     expect(rig.requests.some((request) => request.startsWith('PEPEUSDT 1m'))).toBe(true)
   })
@@ -185,11 +192,11 @@ describe('the news feed', () => {
     const sept = at('Hackers drain a SOL bridge', SEPT_AT, '2026-09')
     const aug = at('Bitcoin ETF approved', AUG_AT, '2026-08')
     const marks = await newsHistory(NOW - 3 * 86_400, NOW)
+    // The SOL story once: its second source is a record on it, not a story of its own.
     expect(marks.map((mark) => [mark.publishedAt, mark.tickers, mark.eventType])).toEqual([
       [OLD_AT, [], 'OTHER'],
       [BTC_AT, ['BTC'], 'ETF'],
-      [SOL_AT, ['SOL'], 'LISTING'],
-      [SOL_AT + 300, ['SOL'], 'LISTING']
+      [SOL_AT, ['SOL'], 'LISTING']
     ])
     // Back into September: that month's file is read too, and nothing older than 35 days.
     const longer = await newsHistory(AUG_AT - 60, NOW)

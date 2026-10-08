@@ -7,8 +7,12 @@ import {
   assetDictionary,
   eventTypeOf,
   expectedDirection,
+  describeTypeExcursions,
   foldSameStories,
   impactByType,
+  isRepeatOf,
+  isSameStory,
+  isStorySource,
   namedTickers,
   parseRss,
   readStory,
@@ -165,9 +169,41 @@ describe('the same story from several sources', () => {
       ['decrypt:2', []],
       ['coindesk:1', ['Decrypt']]
     ])
+    expect(folded.map((entry) => entry.sources)).toEqual([[], []])
     // The same source twice is two stories; seven hours apart, two stories.
     expect(foldSameStories([first, { ...first, id: 'coindesk:2', publishedAt: NOW - 2000 }])).toHaveLength(2)
     expect(foldSameStories([first, { ...later, publishedAt: first.publishedAt + 7 * 3600 }])).toHaveLength(2)
+  })
+
+  it('is one story at record time since 8 October 2026: a second source is a source record on it, and named with it', () => {
+    const first = readStory(story({ id: 'coindesk:1', title: 'SOL jumps 8% as ETF filing advances', publishedAt: NOW - 3000 }), DICTIONARY, 0.85, NOW)
+    const copy = story({ id: 'decrypt:1', source: 'decrypt', sourceName: DECRYPT.name, title: 'Solana SOL jumps 8% as the ETF filing advances', publishedAt: NOW - 1000 })
+    expect(isSameStory(first, copy)).toBe(true)
+    expect(isSameStory(copy, first)).toBe(true)
+    expect(isSameStory(first, { ...copy, source: 'coindesk' })).toBe(false)
+    expect(isSameStory(first, { ...copy, publishedAt: first.publishedAt + 6 * 3600 + 1 })).toBe(false)
+    expect(isSameStory(first, { ...copy, title: 'Something else entirely' })).toBe(false)
+    const record = { kind: 'source' as const, storyId: 'coindesk:1', source: 'decrypt', sourceName: 'Decrypt', url: copy.url, publishedAt: copy.publishedAt, seenAt: NOW }
+    expect(isStorySource(record)).toBe(true)
+    expect(isStorySource({ ...record, kind: 'story' })).toBe(false)
+    expect(isStorySource(first)).toBe(false)
+    const folded = foldSameStories([first], [record, { ...record, storyId: 'other:9' }])
+    expect(folded).toHaveLength(1)
+    expect(folded[0].alsoIn).toEqual(['Decrypt'])
+    expect(folded[0].sources).toEqual([record])
+  })
+
+  it('is recycled news a title like one of the previous seven days\', beyond six hours: half the impact', () => {
+    const first = story({ id: 'coindesk:1', title: 'SOL jumps 8% as ETF filing advances', publishedAt: NOW - 2 * 86_400 })
+    const again = story({ id: 'coindesk:2', title: 'Solana SOL jumps 8% as the ETF filing advances', publishedAt: NOW - 600 })
+    expect(isRepeatOf(first, again)).toBe(true)
+    expect(isRepeatOf(first, { ...again, publishedAt: first.publishedAt + 6 * 3600 })).toBe(false)
+    expect(isRepeatOf({ ...first, publishedAt: NOW - 8 * 86_400 }, again)).toBe(false)
+    expect(isRepeatOf(first, { ...again, title: 'Something else entirely' })).toBe(false)
+    const fresh = readStory(again, DICTIONARY, 0.85, NOW)
+    const recycled = readStory({ ...again, repeat: true }, DICTIONARY, 0.85, NOW)
+    expect(recycled.impact).toBe(Math.round(fresh.impact * 0.5))
+    expect(recycled.repeat).toBe(true)
   })
 })
 
@@ -197,6 +233,22 @@ describe('what the price did', () => {
     expect(reaction.volumeRatio).toBeCloseTo(1, 10)
     // A listing up 1.2% in fifteen minutes is confirmed, and it had already moved its way before.
     expect(reaction).toMatchObject({ verdict: 'CONFIRMED', pricedIn: true })
+  })
+
+  it('measures how far the price went up and down within an hour and within four (8 October 2026)', () => {
+    const bars = minutes({ 10: { close: 100 }, 30: { close: 100 }, 100: { close: 100 }, 200: { close: 100 } })
+    bars[60 + 10] = { ...bars[60 + 10], high: 102.5, low: 99.8 }
+    bars[60 + 30] = { ...bars[60 + 30], high: 100.4, low: 97 }
+    bars[60 + 100] = { ...bars[60 + 100], high: 104, low: 100 }
+    bars[60 + 200] = { ...bars[60 + 200], high: 100, low: 95 }
+    const reaction = react('LISTING', bars)
+    expect(reaction.excursion).toEqual({ best1hPct: expect.closeTo(2.5, 10), worst1hPct: expect.closeTo(-3, 10), best4hPct: expect.closeTo(4, 10), worst4hPct: expect.closeTo(-5, 10) })
+    // The minutes reaching an hour and not four: the four hours are not known.
+    const short = react('LISTING', bars.filter((bar) => bar.time <= MINUTE + 90 * 60), MINUTE + 95 * 60)
+    expect(short.excursion).toEqual({ best1hPct: expect.closeTo(2.5, 10), worst1hPct: expect.closeTo(-3, 10), best4hPct: null, worst4hPct: null })
+    // A minute missing inside the hour: the hour is not known either.
+    const gap = react('LISTING', bars.filter((bar) => bar.time !== MINUTE + 20 * 60))
+    expect(gap.excursion?.best1hPct).toBeNull()
   })
 
   it('is against the news, none, or not yet known', () => {
@@ -239,5 +291,36 @@ describe('what each kind of news did', () => {
     expect(table[1].medianPct).toBeNull()
     expect(table[0].medianPct?.h1).toBeCloseTo(-5.5, 10)
     expect(table[0].shareUp1h).toBeCloseTo(9 / 30, 10)
+  })
+})
+
+describe('what each kind of news did, in excursions (8 October 2026)', () => {
+  const reaction = (type: StoryReaction['eventType'], worst1h: number, best1h: number, withExcursion = true): StoryReaction => ({
+    storyId: `${type}-${worst1h}-${best1h}-${Math.random()}`,
+    ticker: 'SOL',
+    symbol: 'SOLUSDT',
+    eventType: type,
+    publishedAt: NOW,
+    before15mPct: 0,
+    after: { m5: 0, m15: 0, h1: 0, h4: 0 },
+    volumeRatio: 1,
+    verdict: 'NONE',
+    pricedIn: false,
+    measuredAt: NOW,
+    ...(withExcursion ? { excursion: { best1hPct: best1h, worst1hPct: worst1h, best4hPct: best1h * 2, worst4hPct: worst1h * 2 } } : {})
+  })
+
+  it('gives the medians from thirty reactions that carry them, and nothing from fewer, old reactions aside', () => {
+    const enough = Array.from({ length: IMPACT_MIN_STORIES }, (_, k) => reaction('HACK', -k / 10, k / 20))
+    const old = Array.from({ length: 5 }, () => reaction('HACK', 0, 0, false))
+    const table = impactByType([...enough, ...old])
+    expect(table[0]).toMatchObject({ eventType: 'HACK', stories: 35, enough: true })
+    expect(table[0].excursions).toEqual({ best1hPct: expect.closeTo(0.725, 10), worst1hPct: expect.closeTo(-1.45, 10), best4hPct: expect.closeTo(1.45, 10), worst4hPct: expect.closeTo(-2.9, 10) })
+    expect(describeTypeExcursions(table[0])).toBe('Within an hour of a hack or exploit story, the median worst move was -1.45% and the median best +0.72%; within four hours, -2.90% and +1.45%.')
+    // Thirty-one reactions of which twenty-nine carry excursions: enough for the moves, not for these.
+    const few = [...Array.from({ length: IMPACT_MIN_STORIES - 1 }, (_, k) => reaction('LISTING', -k / 10, k / 20)), reaction('LISTING', 0, 0, false), reaction('LISTING', 0, 0, false)]
+    const listing = impactByType(few)[0]
+    expect(listing).toMatchObject({ eventType: 'LISTING', stories: 31, enough: true, excursions: null })
+    expect(describeTypeExcursions(listing)).toBeNull()
   })
 })

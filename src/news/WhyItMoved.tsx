@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Candle } from '../../shared/ipc'
-import { explainMove, type CauseLabel, type MoveExplanation } from '../../shared/moveExplanation'
+import { explainMove, type CauseLabel, type CauseRole, type MoveExplanation } from '../../shared/moveExplanation'
 import { WhyConclusion } from '../agents/WhyConclusion'
 import { useNewsFeed } from './useNewsFeed'
 
@@ -15,10 +15,21 @@ const signed = (value: number | null): string => (value === null ? '—' : `${va
  * its usual volume, and the stories that name it, with how sure that is. It reads public candles
  * and the news feed, and never names a cause it did not find. Below it, the AI's conclusion
  * (../agents/WhyConclusion.tsx), asked only on a click at the price shown. */
+const ROLE_TONE: Record<CauseRole, string> = {
+  'PRIMARY CATALYST': 'var(--up)',
+  SECONDARY: 'var(--text-secondary)',
+  'MARKET AMPLIFIER': 'var(--gold)',
+  UNRELATED: 'var(--text-muted)',
+  UNKNOWN: 'var(--text-muted)'
+}
+
 export function WhyItMoved({ symbol }: { symbol: string }): React.JSX.Element {
   const feed = useNewsFeed()
   const [bars, setBars] = useState<{ pair: Candle[]; btc: Candle[]; at: number } | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
+  /** The analyst's newest conclusion for the pair, for the timeline: what the conclusion view below
+   * found on file, or made on a click, handed up. This view reads no ledger itself. */
+  const [reading, setReading] = useState<{ at: number; text: string } | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -49,7 +60,8 @@ export function WhyItMoved({ symbol }: { symbol: string }): React.JSX.Element {
     bars: bars.pair,
     btcBars: bars.btc,
     stories: feed.stories,
-    nowSec: bars.at
+    nowSec: bars.at,
+    reading
   })
 
   return (
@@ -71,6 +83,7 @@ export function WhyItMoved({ symbol }: { symbol: string }): React.JSX.Element {
           explanation.causes.map((cause, index) => (
             <div key={`${cause.kind}-${index}`} style={{ display: 'flex', gap: '0.6rem', alignItems: 'baseline', padding: '0.35rem 0', borderTop: '1px solid var(--border)', fontSize: '0.8rem' }}>
               <span style={{ width: 70, flexShrink: 0, color: 'var(--text-muted)', textTransform: 'uppercase', fontSize: '0.68rem', fontWeight: 700 }}>{cause.kind}</span>
+              <span style={{ width: 128, flexShrink: 0, color: ROLE_TONE[cause.role], fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.03em' }}>{cause.role}</span>
               <span style={{ flex: 1, color: 'var(--text-primary)', lineHeight: 1.45 }}>{cause.text}</span>
               <span style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{cause.relevance}/100</span>
               {cause.url !== undefined && (
@@ -85,12 +98,26 @@ export function WhyItMoved({ symbol }: { symbol: string }): React.JSX.Element {
           ))
         )}
       </div>
+      {explanation.timeline.length > 0 && (
+        <div style={{ marginTop: '0.9rem' }}>
+          <div style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>In order</div>
+          {explanation.timeline.map((entry, index) => (
+            <div key={`${entry.kind}-${entry.at}-${index}`} style={{ display: 'flex', gap: '0.6rem', alignItems: 'baseline', padding: '0.25rem 0', fontSize: '0.78rem', borderTop: '1px solid var(--border)' }}>
+              <span style={{ width: 58, flexShrink: 0, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{new Date(entry.at * 1000).toISOString().slice(11, 16)} UTC</span>
+              <span style={{ width: 58, flexShrink: 0, color: 'var(--text-muted)', textTransform: 'uppercase', fontSize: '0.66rem', fontWeight: 700 }}>{entry.kind}</span>
+              <span style={{ flex: 1, color: 'var(--text-primary)', lineHeight: 1.45 }}>{entry.text}</span>
+            </div>
+          ))}
+        </div>
+      )}
       <p style={{ margin: '0.8rem 0 0', fontSize: '0.74rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-        KNOWN is an announcement by Binance about the coin; PROBABLE a story about it with nothing pointing the other way; POSSIBLE a story that only mentions
+        A PRIMARY CATALYST is a story that names the coin directly, before the move began, at a relevance of 70 or more; SECONDARY a story before it that
+        names the coin or reads at 40, or a surge in volume; MARKET AMPLIFIER Bitcoin making half the move; UNRELATED a story published after the move
+        began, which cannot have caused it. KNOWN is an announcement by Binance about the coin; PROBABLE a story about it with nothing pointing the other way; POSSIBLE a story that only mentions
         it, the whole market moving with Bitcoin, or a surge in volume with no story found; UNKNOWN none of these. A cause named is a story found or a
         figure measured, never a guess.
       </p>
-      <WhyConclusion symbol={symbol} />
+      <WhyConclusion symbol={symbol} onFound={(found) => setReading(found === null ? null : { at: found.at, text: found.conclusion.conclusion })} />
     </div>
   )
 }

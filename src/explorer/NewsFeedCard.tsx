@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Card } from '../components/Card'
 import { HIGH_IMPACT, WATCH_IMPACT } from '../../shared/alerts'
-import { IMPACT_MIN_STORIES, describeEventType, type ReadStory, type StoryReaction } from '../../shared/newsFeed'
+import { describeEventType, describeTypeExcursions, IMPACT_MIN_STORIES, type ReadStory, type StoryReaction } from '../../shared/newsFeed'
 import { describeNewsReading } from '../../shared/aiAdditions'
 import { markAlertsSeen } from '../news/alertStore'
 import { useNewsFeed } from '../news/useNewsFeed'
@@ -201,6 +201,7 @@ export function NewsFeedCard(): React.JSX.Element {
                   <th style={head}>1h</th>
                   <th style={head}>4h</th>
                   <th style={head}>Up at 1h</th>
+                  <th style={head}>Worst / best in 1h</th>
                 </tr>
               </thead>
               <tbody>
@@ -215,9 +216,12 @@ export function NewsFeedCard(): React.JSX.Element {
                         <td style={cell}>{pct(row.medianPct.h1)}</td>
                         <td style={cell}>{pct(row.medianPct.h4)}</td>
                         <td style={cell}>{row.shareUp1h === null ? '—' : `${Math.round(row.shareUp1h * 100)}%`}</td>
+                        <td style={cell} title={describeTypeExcursions(row) ?? 'Not enough reactions carry their excursions yet.'}>
+                          {row.excursions === null ? '—' : `${pct(row.excursions.worst1hPct)} / ${pct(row.excursions.best1hPct)}`}
+                        </td>
                       </>
                     ) : (
-                      <td style={{ ...cell, color: 'var(--text-muted)' }} colSpan={5}>
+                      <td style={{ ...cell, color: 'var(--text-muted)' }} colSpan={6}>
                         Insufficient historical evidence: {row.stories} of the {IMPACT_MIN_STORIES} needed.
                       </td>
                     )}

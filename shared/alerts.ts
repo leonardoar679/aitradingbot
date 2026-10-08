@@ -42,8 +42,10 @@ export const WATCH_IMPACT = 45
 export const BTC_CRASH_PCT = -5
 
 /** A story's severity, given the coins held. */
-export function storySeverity(story: Pick<ReadStory, 'impact' | 'eventType' | 'assets' | 'stale'>, held: ReadonlySet<string>, reaction: ReactionVerdict | null = null): AlertSeverity {
+export function storySeverity(story: Pick<ReadStory, 'impact' | 'eventType' | 'assets' | 'stale'> & Partial<Pick<ReadStory, 'repeat'>>, held: ReadonlySet<string>, reaction: ReactionVerdict | null = null): AlertSeverity {
   if (story.stale) return 'info'
+  // Recycled news (shared/newsFeed.ts, since 8 October 2026) was told once already: never HIGH.
+  if (story.repeat === true) return story.impact >= WATCH_IMPACT ? 'watch' : 'info'
   const heldDirect = story.assets.some((asset) => asset.relationship === 'DIRECT' && held.has(asset.ticker))
   if (heldDirect && (story.eventType === 'HACK' || story.eventType === 'DELISTING')) return 'critical'
   if (story.impact >= HIGH_IMPACT || reaction === 'CONFIRMED') return 'high'

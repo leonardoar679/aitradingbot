@@ -31,6 +31,11 @@ export const STALE_STORY_SECONDS = 86_400
 /** Two titles this alike within this long are one story from several sources. */
 export const SAME_STORY_SIMILARITY = 0.6
 export const SAME_STORY_SECONDS = 6 * 3600
+/** A story whose title is this alike one of the previous seven days', beyond the six hours the same
+ * story is folded within, is recycled news (since 8 October 2026): its impact is halved, and no
+ * alert is raised HIGH on it. */
+export const REPEAT_SECONDS = 7 * 86_400
+export const REPEAT_IMPACT_FACTOR = 0.5
 /** Reactions are measured up to four hours after; one this old is final. */
 export const REACTION_FINAL_SECONDS = 4 * 3600 + 120
 /** Fewer stories of a kind than this, and no history is shown for it. */
@@ -106,6 +111,26 @@ export interface FeedStory {
   tickers?: string[]
   /** Set on a story from Binance's announcements: its kind, by the news reader's patterns. */
   binanceCategory?: string | null
+  /** Set at read time since 8 October 2026: its title is like one of the previous seven days',
+   * beyond the six hours the same story is folded within. Recycled news. */
+  repeat?: boolean
+}
+
+/** Another source that carried a story already on file: written at read time since 8 October 2026
+ * as a record of its own in the feed file, not as a story. `storyId` is the story it is part of. */
+export interface StorySource {
+  kind: 'source'
+  storyId: string
+  source: string
+  sourceName: string
+  url: string
+  publishedAt: number
+  seenAt: number
+}
+
+export function isStorySource(value: unknown): value is StorySource {
+  const row = value as Partial<StorySource> | null
+  return typeof row === 'object' && row !== null && row.kind === 'source' && typeof row.storyId === 'string' && typeof row.source === 'string' && typeof row.sourceName === 'string' && typeof row.publishedAt === 'number'
 }
 
 export interface StoryAsset {
@@ -123,8 +148,11 @@ export interface ReadStory extends FeedStory {
    * how fresh it is. */
   impact: number
   stale: boolean
-  /** The other sources that carried the same story. */
+  /** The other sources that carried the same story: those recorded with it, and those folded in
+   * when it is shown. */
   alsoIn: string[]
+  /** The sources recorded with it (StorySource), since 8 October 2026. */
+  sources: StorySource[]
 }
 
 export interface FeedSourceStatus {
@@ -402,12 +430,14 @@ function freshness(ageSeconds: number): number {
 }
 
 /** A story read: its coins, its kind, its impact and whether it is old news. */
-export function readStory(story: FeedStory, dictionary: AssetDictionary, credibility: number, nowSec: number): Omit<ReadStory, 'alsoIn'> {
+export function readStory(story: FeedStory, dictionary: AssetDictionary, credibility: number, nowSec: number): Omit<ReadStory, 'alsoIn' | 'sources'> {
   const assets = storyAssets(story, dictionary)
   const eventType = eventTypeOf(story)
   const marketWide = assets.length === 0 && MARKET_WIDE.has(eventType)
   const relation = assets.some((asset) => asset.relationship === 'DIRECT') ? 1 : assets.length > 0 ? 0.6 : marketWide ? 0.8 : 0.4
-  const impact = Math.round(TYPE_WEIGHT[eventType] * relation * credibility * freshness(Math.max(0, nowSec - story.publishedAt)))
+  // Recycled news is half the news: it was told once already.
+  const recycled = story.repeat === true ? REPEAT_IMPACT_FACTOR : 1
+  const impact = Math.round(TYPE_WEIGHT[eventType] * relation * credibility * freshness(Math.max(0, nowSec - story.publishedAt)) * recycled)
   return { ...story, assets, marketWide, eventType, credibility, impact, stale: story.seenAt - story.publishedAt > STALE_STORY_SECONDS }
 }
 
@@ -433,20 +463,36 @@ export function titleSimilarity(a: string, b: string): number {
   return shared / (left.size + right.size - shared)
 }
 
+/** Whether two stories are the same story from two sources: different sources, within six hours of
+ * each other, with titles this alike. */
+export function isSameStory(a: Pick<FeedStory, 'source' | 'publishedAt' | 'title'>, b: Pick<FeedStory, 'source' | 'publishedAt' | 'title'>): boolean {
+  return a.source !== b.source && Math.abs(a.publishedAt - b.publishedAt) <= SAME_STORY_SECONDS && titleSimilarity(a.title, b.title) >= SAME_STORY_SIMILARITY
+}
+
+/** Whether `story` recycles `earlier`: a title this alike, published more than six hours and at
+ * most seven days after it. From any source, its own included. */
+export function isRepeatOf(earlier: Pick<FeedStory, 'publishedAt' | 'title'>, story: Pick<FeedStory, 'publishedAt' | 'title'>): boolean {
+  const gap = story.publishedAt - earlier.publishedAt
+  return gap > SAME_STORY_SECONDS && gap <= REPEAT_SECONDS && titleSimilarity(earlier.title, story.title) >= SAME_STORY_SIMILARITY
+}
+
 /** Stories newest first, each carried once: a story another source published first, within six
- * hours and with a title this alike, is folded into it and named in its `alsoIn`. */
-export function foldSameStories(stories: Omit<ReadStory, 'alsoIn'>[]): ReadStory[] {
+ * hours and with a title this alike, is folded into it and named in its `alsoIn`. The sources
+ * recorded with a story (since 8 October 2026) are set on it and named there too; folding at this
+ * point is for records written before them. */
+export function foldSameStories(stories: Omit<ReadStory, 'alsoIn' | 'sources'>[], sources: readonly StorySource[] = []): ReadStory[] {
   const byTime = [...stories].sort((a, b) => a.publishedAt - b.publishedAt || a.id.localeCompare(b.id))
   const kept: ReadStory[] = []
   for (const story of byTime) {
-    const same = kept.find(
-      (earlier) => earlier.source !== story.source && story.publishedAt - earlier.publishedAt <= SAME_STORY_SECONDS && titleSimilarity(earlier.title, story.title) >= SAME_STORY_SIMILARITY
-    )
+    const same = kept.find((earlier) => story.publishedAt >= earlier.publishedAt && isSameStory(earlier, story))
     if (same !== undefined) {
       if (!same.alsoIn.includes(story.sourceName)) same.alsoIn.push(story.sourceName)
       continue
     }
-    kept.push({ ...story, alsoIn: [] })
+    const own = sources.filter((source) => source.storyId === story.id)
+    const alsoIn: string[] = []
+    for (const source of own) if (!alsoIn.includes(source.sourceName)) alsoIn.push(source.sourceName)
+    kept.push({ ...story, alsoIn, sources: own })
   }
   return kept.sort((a, b) => b.publishedAt - a.publishedAt || a.id.localeCompare(b.id))
 }
@@ -472,6 +518,17 @@ export interface StoryReaction {
   /** It had already moved its way before it was published. */
   pricedIn: boolean
   measuredAt: number
+  /** How far the price went up and down within an hour and within four, from the close of the minute
+   * it was published in, in percent (since 8 October 2026; absent on a reaction measured before).
+   * Null at a horizon the minutes do not reach. */
+  excursion?: StoryExcursion
+}
+
+export interface StoryExcursion {
+  best1hPct: number | null
+  worst1hPct: number | null
+  best4hPct: number | null
+  worst4hPct: number | null
 }
 
 /** A move this large in the fifteen minutes after is a reaction. */
@@ -512,6 +569,22 @@ export function storyReaction(input: { storyId: string; ticker: string; symbol: 
     verdict = signed >= REACTION_PCT ? 'CONFIRMED' : signed <= -REACTION_PCT ? 'AGAINST' : 'NONE'
   }
   const pricedIn = direction !== null && before15mPct !== null && (direction === 'up' ? before15mPct : -before15mPct) >= REACTION_PCT
+  // The excursions: the highest high and the lowest low of the minutes after, to each horizon,
+  // only where the minutes reach it.
+  const excursionTo = (minutesAfter: number): { best: number | null; worst: number | null } => {
+    if (base === null || !(base > 0)) return { best: null, worst: null }
+    let high = Number.NEGATIVE_INFINITY
+    let low = Number.POSITIVE_INFINITY
+    for (let offset = 1; offset <= minutesAfter; offset++) {
+      const bar = byTime.get(minute + offset * 60)
+      if (bar === undefined) return { best: null, worst: null }
+      high = Math.max(high, bar.high)
+      low = Math.min(low, bar.low)
+    }
+    return { best: (high / base - 1) * 100, worst: (low / base - 1) * 100 }
+  }
+  const hour = excursionTo(60)
+  const fourHours = excursionTo(240)
   return {
     storyId: input.storyId,
     ticker: input.ticker,
@@ -523,7 +596,8 @@ export function storyReaction(input: { storyId: string; ticker: string; symbol: 
     volumeRatio,
     verdict,
     pricedIn,
-    measuredAt: input.nowSec
+    measuredAt: input.nowSec,
+    excursion: { best1hPct: hour.best, worst1hPct: hour.worst, best4hPct: fourHours.best, worst4hPct: fourHours.worst }
   }
 }
 
@@ -536,6 +610,9 @@ export interface TypeImpact {
   medianPct: { m5: number | null; m15: number | null; h1: number | null; h4: number | null } | null
   /** Of them, the share up an hour after. Null below IMPACT_MIN_STORIES. */
   shareUp1h: number | null
+  /** The median excursions, from the reactions that carry them (since 8 October 2026). Null below
+   * IMPACT_MIN_STORIES of those. */
+  excursions: StoryExcursion | null
 }
 
 function median(values: number[]): number | null {
@@ -556,15 +633,30 @@ export function impactByType(reactions: readonly StoryReaction[]): TypeImpact[] 
       const enough = rows.length >= IMPACT_MIN_STORIES
       const pick = (key: keyof StoryReaction['after']): number | null => median(rows.map((row) => row.after[key]).filter((value): value is number => value !== null))
       const hour = rows.map((row) => row.after.h1).filter((value): value is number => value !== null)
+      const measured = rows.map((row) => row.excursion).filter((value): value is StoryExcursion => value !== undefined)
+      const pickExcursion = (key: keyof StoryExcursion): number | null => median(measured.map((row) => row[key]).filter((value): value is number => value !== null))
       return {
         eventType,
         stories: rows.length,
         enough,
         medianPct: enough ? { m5: pick('m5'), m15: pick('m15'), h1: pick('h1'), h4: pick('h4') } : null,
-        shareUp1h: enough && hour.length > 0 ? hour.filter((value) => value > 0).length / hour.length : null
+        shareUp1h: enough && hour.length > 0 ? hour.filter((value) => value > 0).length / hour.length : null,
+        excursions:
+          measured.length >= IMPACT_MIN_STORIES
+            ? { best1hPct: pickExcursion('best1hPct'), worst1hPct: pickExcursion('worst1hPct'), best4hPct: pickExcursion('best4hPct'), worst4hPct: pickExcursion('worst4hPct') }
+            : null
       }
     })
     .sort((a, b) => b.stories - a.stories || a.eventType.localeCompare(b.eventType))
+}
+
+const signedPct = (value: number | null): string => (value === null ? '—' : `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`)
+
+/** One sentence on a kind's excursions, once thirty reactions carry them; null before. */
+export function describeTypeExcursions(row: Pick<TypeImpact, 'eventType' | 'excursions'>): string | null {
+  if (row.excursions === null) return null
+  const kind = describeEventType(row.eventType).toLowerCase()
+  return `Within an hour of a ${kind} story, the median worst move was ${signedPct(row.excursions.worst1hPct)} and the median best ${signedPct(row.excursions.best1hPct)}; within four hours, ${signedPct(row.excursions.worst4hPct)} and ${signedPct(row.excursions.best4hPct)}.`
 }
 
 /** How a kind of news reads in words. */

@@ -13,6 +13,9 @@ import {
   STORY_HISTORY_MAX_SECONDS,
   assetDictionary,
   foldSameStories,
+  isRepeatOf,
+  isSameStory,
+  isStorySource,
   impactByType,
   parseRss,
   readStory,
@@ -24,6 +27,7 @@ import {
   type FeedStory,
   type NewsFeedState,
   type ReadStory,
+  type StorySource,
   type StoryMark,
   type StoryReaction
 } from '../../shared/newsFeed'
@@ -68,6 +72,8 @@ const FEEDS_DEAD_SECONDS = 30 * 60
 let lastAnyRead: number | null = Math.floor(Date.now() / 1000)
 let feedsDeadTold = false
 let sources: FeedSourceStatus[] = FEED_SOURCES.map((source) => ({ id: source.id, name: source.name, lastReadAt: null, ok: null, error: null, items: 0 }))
+/** Another feed's copy of a story on file, recorded as such (shared/newsFeed.ts StorySource). */
+const storySources: StorySource[] = []
 let state: NewsFeedState = { version: NEWS_FEED_VERSION, sources, stories: [], reactions: {}, impact: [], measured: 0, updatedAt: null }
 const listeners = new Set<(state: NewsFeedState) => void>()
 let started = false
@@ -128,6 +134,11 @@ async function load(): Promise<void> {
   const nowSec = Math.floor(Date.now() / 1000)
   for (const { name } of (await listMonthFiles(newsDir(), FEED_FILE)).slice(0, 2)) {
     for (const row of await readLines(name)) {
+      // A source record (since 8 October 2026): another feed's copy of a story already on file.
+      if (isStorySource(row)) {
+        if (nowSec - row.publishedAt <= FEED_KEEP_SECONDS) storySources.push(row)
+        continue
+      }
       if (!isStory(row) || seen.has(row.id)) continue
       seen.add(row.id)
       if (nowSec - row.publishedAt <= FEED_KEEP_SECONDS) raw.push(row)
@@ -179,7 +190,7 @@ async function rebuild(): Promise<void> {
   }
   const credibility = new Map<string, number>([...FEED_SOURCES.map((source) => [source.id, source.credibility] as [string, number]), [BINANCE_SOURCE.id, BINANCE_SOURCE.credibility]])
   const read = [...raw, ...announcements].map((story) => readStory(story, dictionary as AssetDictionary, credibility.get(story.source) ?? 0.5, nowSec))
-  const stories: ReadStory[] = foldSameStories(read).slice(0, STORIES_SHOWN)
+  const stories: ReadStory[] = foldSameStories(read, storySources).slice(0, STORIES_SHOWN)
   const reactions: Record<string, StoryReaction> = {}
   for (const reaction of finalReactions) reactions[reaction.storyId] = reaction
   for (const [id, reaction] of liveReactions) reactions[id] = reaction
@@ -245,8 +256,19 @@ const readFeeds = singleFlight(async (): Promise<void> => {
         const story = toStory(item, source, nowSec)
         if (story === null || seen.has(story.id)) continue
         seen.add(story.id)
-        raw.push(story)
-        await appendJsonLine(join(newsDir(), `feed-${monthKey(story.publishedAt)}.jsonl`), story)
+        // The same story from a second source (shared/newsFeed.ts isSameStory, since 8 October
+        // 2026) is written as a source of the one on file, not as a story of its own.
+        const same = raw.find((earlier) => isSameStory(earlier, story))
+        if (same !== undefined) {
+          const record: StorySource = { kind: 'source', storyId: same.id, source: story.source, sourceName: story.sourceName, url: story.url, publishedAt: story.publishedAt, seenAt: nowSec }
+          storySources.push(record)
+          await appendJsonLine(join(newsDir(), `feed-${monthKey(story.publishedAt)}.jsonl`), record)
+          continue
+        }
+        // Recycled news: a title like one of the previous seven days' beyond those six hours.
+        const kept: FeedStory = raw.some((earlier) => isRepeatOf(earlier, story)) ? { ...story, repeat: true } : story
+        raw.push(kept)
+        await appendJsonLine(join(newsDir(), `feed-${monthKey(story.publishedAt)}.jsonl`), kept)
       }
       next.push({ id: source.id, name: source.name, lastReadAt: nowSec, ok: true, error: null, items: items.length })
     } catch (error) {

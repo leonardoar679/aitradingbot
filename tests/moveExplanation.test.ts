@@ -113,3 +113,56 @@ describe('why a pair moved', () => {
     expect(result.summary).toMatch(/^SOLUSDT's last 60 minutes could not be read\./)
   })
 })
+
+describe('each cause\'s part, and the order things happened (8 October 2026)', () => {
+  it('names a direct story before the move at 70 or more the primary catalyst, a weaker one secondary, a faint mention unknown', () => {
+    const primary = explain([story({ impact: 75 })])
+    expect(primary.causes[0]).toMatchObject({ kind: 'news', role: 'PRIMARY CATALYST', relevance: 75 })
+    expect(explain([story({ impact: 60 })]).causes[0].role).toBe('SECONDARY')
+    expect(explain([story({ impact: 75, assets: [{ ticker: 'SOL', relationship: 'INDIRECT' }] })]).causes[0].role).toBe('SECONDARY')
+    expect(explain([story({ impact: 30, assets: [{ ticker: 'SOL', relationship: 'INDIRECT' }] })]).causes[0].role).toBe('UNKNOWN')
+  })
+
+  it('names a story published after the move began unrelated, and rests no label on it', () => {
+    // The move is half made at the thirty-first minute of the hour (the thirtieth bar from its end); a story ten minutes later cannot be its cause.
+    const base = explain([])
+    expect(base.moveStartAt).toBe(LAST - 30 * 60)
+    const late = explain([story({ impact: 75, publishedAt: (base.moveStartAt ?? 0) + 600 })])
+    expect(late.causes[0]).toMatchObject({ role: 'UNRELATED' })
+    expect(late.causes[0].text).toMatch(/ — published after the move began$/)
+    expect(late.label).toBe('POSSIBLE')
+    expect(explain([story({ impact: 75, publishedAt: (base.moveStartAt ?? 0) - 60 })]).label).toBe('PROBABLE')
+  })
+
+  it('names Bitcoin the market amplifier and a surge in volume secondary', () => {
+    expect(explain([], minutes(104.7), minutes(103)).causes[0]).toMatchObject({ kind: 'market', role: 'MARKET AMPLIFIER' })
+    expect(explain([], minutes(104.7, 30)).causes[0]).toMatchObject({ kind: 'volume', role: 'SECONDARY' })
+  })
+
+  it('tells what happened in order: the market, the story, the volume peak, the move half made, and the analyst', () => {
+    const bars = minutes(104.7, 10)
+    bars[bars.length - 20] = { ...bars[bars.length - 20], volume: 80 }
+    const result = explainMove({
+      symbol: 'SOLUSDT',
+      ticker: 'SOL',
+      bars,
+      btcBars: minutes(101),
+      stories: [story({ impact: 75, publishedAt: NOW - 50 * 60 })],
+      nowSec: NOW,
+      reading: { at: NOW - 120, text: 'The listing explains most of it.' }
+    })
+    expect(result.timeline.map((entry) => [entry.kind, entry.at])).toEqual([
+      ['market', NOW - 3600],
+      ['story', NOW - 50 * 60],
+      ['price', LAST - 30 * 60],
+      ['volume', LAST - 19 * 60],
+      ['reading', NOW - 120]
+    ])
+    expect(result.timeline[1].text).toBe('Solana ecosystem announcement (CoinDesk): primary catalyst.')
+    expect(result.timeline[2].text).toBe('The move is half made: +4.70% by 12:00 UTC.')
+    expect(result.timeline[3].text).toBe('Volume peaks at 8.0× its usual minute.')
+    expect(result.timeline[4].text).toBe('The analyst: The listing explains most of it.')
+    // No volume peak worth telling, and no analyst: neither is on the timeline.
+    expect(explain([story()]).timeline.map((entry) => entry.kind)).toEqual(['market', 'story', 'price'])
+  })
+})

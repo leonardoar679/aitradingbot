@@ -320,7 +320,7 @@ describe('the conclusion to "Why did it move?"', () => {
     const { bodies } = stubOpenRouter()
     const { concludeMove, listAiCalls, AI_ADDITION_SYSTEM_PROMPTS } = await services()
     market.bars = { SOLUSDT: minutes(102.5), BTCUSDT: minutes(100) }
-    feed.stories = [story('a')]
+    feed.stories = [story('a', { publishedAt: NOW - 50 * 60, seenAt: NOW - 49 * 60 })]
     const result = await concludeMove('SOLUSDT', false)
     expect(result.explanation).toMatchObject({ label: 'PROBABLE', movePct: expect.closeTo(2.5, 6) })
     expect(result.question?.evidence.map((item) => item.id)).toEqual(['story:a'])
@@ -347,7 +347,7 @@ describe('the conclusion to "Why did it move?"', () => {
     const { bodies } = stubOpenRouter()
     const { concludeMove } = await services()
     market.bars = { SOLUSDT: minutes(100.2), BTCUSDT: minutes(100) }
-    feed.stories = [story('a')]
+    feed.stories = [story('a', { publishedAt: NOW - 50 * 60, seenAt: NOW - 49 * 60 })]
     expect((await concludeMove('SOLUSDT', false)).outcome).toBeNull()
     market.bars = { SOLUSDT: minutes(102.5), BTCUSDT: minutes(100) }
     feed.stories = [story('a', { assets: [{ ticker: 'XRP', relationship: 'DIRECT' }] })]
@@ -361,7 +361,7 @@ describe('the conclusion to "Why did it move?"', () => {
     stubOpenRouter(() => ({ content: JSON.stringify({ ...CONCLUSION, cites: ['market'] }) }))
     const { concludeMove } = await services()
     market.bars = { SOLUSDT: minutes(102.5), BTCUSDT: minutes(100) }
-    feed.stories = [story('a')]
+    feed.stories = [story('a', { publishedAt: NOW - 50 * 60, seenAt: NOW - 49 * 60 })]
     expect((await concludeMove('SOLUSDT', false)).outcome).toEqual({ status: 'refused', reason: 'It cites "market", which is not one of the evidence listed.', cached: false, model: A })
   })
 
@@ -378,7 +378,7 @@ describe('the conclusion to "Why did it move?"', () => {
     const { startAiAdditions, setAiConfig, listAiCalls } = await services()
     await setAiConfig({ watch: ON })
     market.bars = { SOLUSDT: minutes(102.5), BTCUSDT: minutes(100) }
-    feed.stories = [story('a')]
+    feed.stories = [story('a', { publishedAt: NOW - 50 * 60, seenAt: NOW - 49 * 60 })]
     startAiAdditions()
     feed.listener?.({ stories: feed.stories, reactions: {} } as unknown as NewsFeedState)
     await vi.waitFor(async () => expect((await listAiCalls({ source: 'addition' })).rows.map((row) => row.addition).sort()).toEqual(['news', 'why']))
@@ -694,7 +694,7 @@ describe('what Settings › AI shows', () => {
       today: { news: 0, why: 0, exit: 0, review: 0 },
       perCall: { news: { usd: null, basis: 'unknown' }, why: { usd: null, basis: 'unknown' }, exit: { usd: null, basis: 'unknown' }, review: { usd: null, basis: 'unknown' } }
     })
-    await analyseStory(story('a'), true)
+    await analyseStory(story('a', { publishedAt: NOW - 50 * 60, seenAt: NOW - 49 * 60 }), true)
     expect(await getAiAdditionsStatus()).toMatchObject({ today: { news: 1, why: 0, exit: 0, review: 0 }, perCall: { news: { usd: 0.001, basis: 'history' } } })
   })
 })

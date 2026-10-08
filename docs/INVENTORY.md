@@ -62,7 +62,7 @@ Taken on 5 October 2026, at commit `aef376d`.
 | | Market conditions, AI confirmation, Controller and Executor replay | Readouts and replays beside a backtest | Backtest & Research |
 | **Explorer** | Scanner | Scanner on or off and how many pairs it watches, with its status | Settings › Market (the switch); Discovery (the status) |
 | | Now, Events | What is moving, scored the same way for every pair; recorded events | Discovery › Market scanner |
-| | News & Market Events (added 6 October 2026, not an old card) | Four free news feeds and Binance's announcements, each story's coins, kind, impact and what the price did after; what each kind did | Discovery › News & Market Events, which it opens on while an alert is unseen |
+| | News & Market Events (added 6 October 2026, not an old card) | Four free news feeds and Binance's announcements, each story's coins, kind, impact and what the price did after; what each kind did, with the median excursions within an hour since 8 October 2026; a second source recorded on the story, and recycled news at half the impact | Discovery › News & Market Events, which it opens on while an alert is unseen |
 | **Settings** | Appearance | Theme | Settings › General |
 | | API Credentials | Exchange keys: set, test, remove | Connections |
 | | Risk Limits | Live order size, daily cap, daily loss limit, allocation; and, added 8 October 2026, the share of the allocation a real order filled in from a call is sized to risk | Risk & Safety |

@@ -22,7 +22,7 @@ import type { ReadStory } from '../shared/newsFeed'
 
 const NOW = Date.parse('2026-10-06T12:00:30Z') / 1000
 
-const story = (over: Partial<Pick<ReadStory, 'impact' | 'eventType' | 'assets' | 'stale'>> = {}): Pick<ReadStory, 'impact' | 'eventType' | 'assets' | 'stale'> => ({
+const story = (over: Partial<Pick<ReadStory, 'impact' | 'eventType' | 'assets' | 'stale' | 'repeat'>> = {}): Pick<ReadStory, 'impact' | 'eventType' | 'assets' | 'stale' | 'repeat'> => ({
   impact: 50,
   eventType: 'PARTNERSHIP',
   assets: [{ ticker: 'SOL', relationship: 'DIRECT' }],
@@ -196,5 +196,15 @@ describe('the kinds and the threads', () => {
     const held = threadStep(step.threads, 'CIRCUIT_BREAKER', 'model:a', t0, 86_400).threads
     expect(threadStep(held, 'CIRCUIT_BREAKER', 'model:a', t0 + 86_399, 86_400).repeat).toBe(true)
     expect(Object.keys(threadStep(held, 'NEWS_EVENT', 'x', t0 + 3 * 86_400).threads)).toEqual(['NEWS_EVENT:x'])
+  })
+})
+
+describe('recycled news (8 October 2026)', () => {
+  it('is never HIGH, nor CRITICAL: told once already, it is WATCH at most', () => {
+    expect(storySeverity(story({ impact: 90, repeat: true }), new Set())).toBe('watch')
+    expect(storySeverity(story({ impact: 90, repeat: true }), new Set(), 'CONFIRMED')).toBe('watch')
+    expect(storySeverity(story({ eventType: 'HACK', impact: 90, repeat: true }), new Set(['SOL']))).toBe('watch')
+    expect(storySeverity(story({ impact: 30, repeat: true }), new Set())).toBe('info')
+    expect(storySeverity(story({ impact: 90, repeat: false }), new Set())).toBe('high')
   })
 })

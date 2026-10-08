@@ -294,7 +294,13 @@ of them is shown. CoinGecko's news needs a paid plan and CryptoPanic a key, so n
 - **Old news:** published more than a day before it was first read, it is marked so and raises
   nothing.
 - **One story, several sources:** titles from different feeds within six hours that share at least
-  60% of their words are one story, listed with "and N more".
+  60% of their words are one story, listed with "and N more". Since 8 October 2026 that is settled
+  when the story is read: the second feed's copy is written to the feed file as a source record on
+  the story (`StorySource`), not as a story of its own; records written before then are still folded
+  when shown.
+- **Recycled news** (8 October 2026): a title that is 60% like one of the previous seven days', beyond
+  those six hours, is marked `repeat` when read. Its impact is halved, and no alert on it is ever
+  HIGH or CRITICAL -- it was told once already.
 
 **What the price did.** Five minutes after a story names a coin traded on Binance, the coin's
 1-minute candles are read, and read again at each pass for up to twelve hours:
@@ -307,7 +313,11 @@ of them is shown. CoinGecko's news needs a paid plan and CryptoPanic a key, so n
 
 Once its four hours are in, a reaction is final and kept in `news/reactions-YYYY-MM.jsonl`. **What
 each kind did** (the median move and the share that rose, at each horizon) is shown only from 30
-final stories of a kind. Below that it says "Insufficient historical evidence".
+final stories of a kind. Below that it says "Insufficient historical evidence". Since 8 October 2026
+a reaction also carries its **excursions**: how far the price went up and down within an hour and
+within four, from the same minute; the kinds table shows the median worst and best within an hour
+once 30 reactions carry them, with one sentence per kind ("Within an hour of a hack story, the
+median worst move was -2.10% and the median best +0.80%; within four hours, …").
 
 **"Why did it move?"** A Why? button beside a pair reads its last four hours of minutes and
 Bitcoin's, and answers by fixed rules (`shared/moveExplanation.ts`). The button is on Discovery's
@@ -320,6 +330,16 @@ events and news, on Right Now, and on Markets for the chart's pair.
 
 It never invents a cause. A cause named is a story found or a figure measured, and with none it
 says "No cause found".
+
+Since 8 October 2026 (the V4 document, §25) each cause also has a **role**, beside the label:
+**PRIMARY CATALYST** (a story that names the coin directly, published before the move began -- the
+minute it had come half its way -- at a relevance of 70 or more), **SECONDARY** (a story before the
+move that names it directly or reads at 40 or more; a surge in volume, which confirms a move and
+does not cause it), **MARKET AMPLIFIER** (Bitcoin making half or more of the move, the same way),
+**UNRELATED** (a story published after the move began, which cannot have caused it and rests no
+label), **UNKNOWN** (a faint mention). And the answer is told **in order**: Bitcoin over the window,
+each story as it was published, the minute the volume peaked, the minute the move was half made, and
+the analyst's conclusion where one is on file.
 
 **Alerts** (`shared/alerts.ts`) are raised for each story first read in this session and published
 within the last half hour:
