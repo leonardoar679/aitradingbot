@@ -15,7 +15,7 @@ import {
   type WatchPaperPlan
 } from '../../shared/aiWatchPaper'
 import type { AppSettings, Candle, Exchange, ExecutorConfig, PositionExecutorParams } from '../../shared/ipc'
-import { bookSpreadPct, livePaperBlock, priceAgeMs, thinBookBlock, type LiveBook } from '../../shared/liveMarket'
+import { bookSpreadPct, livePaperBlock, priceAgeMs, streamedEntry, thinBookBlock, type LiveBook } from '../../shared/liveMarket'
 import type { MarketEvent } from '../../shared/marketEvent'
 import { correlatedExposureBlock, readBtcCorrelation } from '../../shared/paperExposure'
 import { newsAgainstBlock, type NewsAgainstStory } from '../../shared/paperNewsBlock'
@@ -59,7 +59,10 @@ type OkPlan = Extract<WatchPaperPlan, { ok: true }>
 /** The executor a plan becomes. Paper, unlevered, and its position is not kept when it stops:
  * a paper trade the watch opened is closed by its own levels, not handed to Inventory. The live
  * book it was opened against, where there was one, and its pair's correlation with Bitcoin, where
- * it was read for it, are written on its mark. */
+ * it was read for it, are written on its mark. Since 8 October 2026, where that book's fill price
+ * is inside the entry range, the trade enters there and then (PositionExecutorParams.entryFill,
+ * shared/liveMarket.ts streamedEntry) instead of waiting for a minute bar inside the range; the
+ * recommendation's score stays on minute bars, and the two are shown side by side. */
 export function watchPaperExecutor(input: {
   id: string
   event: Pick<MarketEvent, 'exchange' | 'symbol' | 'baseAsset' | 'quoteAsset'>
@@ -75,6 +78,7 @@ export function watchPaperExecutor(input: {
       ? plan.mark
       : { ...plan.mark, book: { bid: book.bid, ask: book.ask, spreadPct: spread, ageMs: priceAgeMs(book, input.nowSec * 1000), source: book.source } }
   const mark = input.btcCorrelation === undefined ? withBook : { ...withBook, btcCorrelation: input.btcCorrelation }
+  const fill = book === undefined || book === null ? null : streamedEntry(book, plan.params, input.nowSec * 1000)
   return {
     id: input.id,
     name: plan.name,
@@ -97,7 +101,7 @@ export function watchPaperExecutor(input: {
     liveDcaBasePrice: null,
     liveTwapRunId: null,
     liveTwapResult: null,
-    params: plan.params
+    params: fill === null ? plan.params : { ...plan.params, entryFill: fill }
   }
 }
 
@@ -205,6 +209,7 @@ export async function openWatchPaperTrade(
   // answers arriving together both passed the look above, and only one of them may be the pair's
   // open trade. A trade that closed in between may have ended a losing run, and that is read again
   // too; and the live price is judged as of now.
+  const made: { executor: ExecutorConfig | null } = { executor: null }
   const refused = await deps.queue(async (): Promise<string | null> => {
     const fresh = await deps.getSettings()
     const problem =
@@ -230,7 +235,9 @@ export async function openWatchPaperTrade(
         correlation: btcCorrelation
       })
     if (problem !== null) return problem
-    await deps.setExecutors([...fresh.executors, watchPaperExecutor({ id: deps.newId(), event, plan, nowSec: deps.nowSec(), book, btcCorrelation })])
+    const executor = watchPaperExecutor({ id: deps.newId(), event, plan, nowSec: deps.nowSec(), book, btcCorrelation })
+    await deps.setExecutors([...fresh.executors, executor])
+    made.executor = executor
     return null
   })
   if (refused !== null) return { opened: false, text: `No paper trade: ${refused}` }
@@ -241,7 +248,10 @@ export async function openWatchPaperTrade(
   } catch {
     // A desktop that cannot show it is not a reason to report a trade that was opened as not.
   }
-  return { opened: true, text: `A paper ${plan.side === 'buy' ? 'BUY' : 'SELL'} of ${plan.params.amountQuote} ${event.quoteAsset} was opened, ${describeWatchPaperEntry(plan.params)}.` }
+  return {
+    opened: true,
+    text: `A paper ${plan.side === 'buy' ? 'BUY' : 'SELL'} of ${plan.params.amountQuote} ${event.quoteAsset} was opened, ${describeWatchPaperEntry((made.executor?.params as PositionExecutorParams | undefined) ?? plan.params)}.`
+  }
 }
 
 /** News against the trade (shared/paperNewsBlock.ts): a story of major impact naming the coin, from

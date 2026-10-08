@@ -81,6 +81,7 @@ All files are in the user's profile folder.
 | File | Setting | Edited today on | New home |
 |---|---|---|---|
 | `settings.json` | `theme` | Settings | Settings › General |
+| | `executors[].params.entryFill` (added 8 October 2026): the live book's fill a watch paper trade entered at, the second it was made; the score stays on minute bars | — | Strategies › Execution (the card), the trade's timeline |
 | | `bots`, `botRuns` | Bots | Strategies › Active Runs |
 | | `executors` (the watch's paper trades are written by `src/agents/watchPaperTrade.ts`) | Executors | Strategies › Execution |
 | | `routines` | Routines | Backtest & Research › Automation |

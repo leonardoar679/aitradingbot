@@ -1,5 +1,5 @@
 import { btcMoveAgainst } from './aiWatchPaper'
-import type { Candle, ExecutorSide } from './ipc'
+import type { Candle, ExecutorSide, PositionExecutorParams } from './ipc'
 import { spreadPct } from './marketScanner'
 
 // LIVE PRICES: WHAT A PAIR TRADES AT NOW, AS AGAINST WHAT ITS LAST CANDLE CLOSED AT.
@@ -228,6 +228,18 @@ export function thinBookBlock(book: LiveBook | null, side: ExecutorSide, amountQ
   const held = price * (side === 'buy' ? book.askQty : book.bidQty)
   if (!Number.isFinite(held) || held >= amountQuote) return null
   return `The ${side === 'buy' ? 'ask' : 'bid'} holds ${short(held)} in the quote, less than the ${short(amountQuote)} it would take, so a fill would go through the book.`
+}
+
+/** The fill a paper trade takes from the live book the second it is made, or null: the ask (for a
+ * buy) or the bid (for a sell), when the book is fresh and within the line (livePaperBlock) and that
+ * price is inside the recommendation's entry range. Null, and the trade waits by its range on minute
+ * bars as before: a price outside the range is neither chased nor bought from its far side. The
+ * document's §41: a paper trade filled where the market was, not at the next minute's bar. */
+export function streamedEntry(book: LiveBook | null, params: Pick<PositionExecutorParams, 'side' | 'entryRange'>, nowMs: number): { price: number; at: number } | null {
+  if (book === null || params.entryRange === undefined || params.entryRange === null || livePaperBlock(book, nowMs) !== null) return null
+  const price = fillPrice(book, params.side)
+  if (!(price >= params.entryRange.min && price <= params.entryRange.max)) return null
+  return { price, at: Math.floor(nowMs / 1000) }
 }
 
 /** The 1-minute candles kept for a pair, with one from the stream folded in: the minute replaced if

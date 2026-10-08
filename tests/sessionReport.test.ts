@@ -227,3 +227,12 @@ describe('buildSessionReport', () => {
     expect(spanStart('session', NOW, T - 600)).toBe(T - 600)
   })
 })
+
+describe('readTrade, on a trade filled from the live book', () => {
+  it('reads the fill as its entry, from the minute it was made in', () => {
+    const fill = { price: 100.05, at: OPENED + 20 }
+    const reading = readTrade(trade({}, { entryFill: fill }), MINUTES, NOW)
+    expect(reading.enteredAt).toBe(Math.floor((OPENED + 20) / 60) * 60)
+    expect(reading.entryPrice).toBeCloseTo(100.05 * (1 + (PARAMS.slippageRate ?? 0)), 10)
+  })
+})

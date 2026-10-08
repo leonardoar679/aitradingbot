@@ -301,3 +301,43 @@ describe('grid level construction and cycling', () => {
     expect(s.realizedPnl).toBeCloseTo(amountPerLevel * tp - amountPerLevel * (2 + tp) * FEE_RATE, 9)
   })
 })
+
+// A fill already taken from the live book (PositionExecutorParams.entryFill, since 8 October 2026):
+// the position is in the market from the minute containing it, at that price plus slippage, and the
+// entry rules are not consulted. That minute can stop it and cannot pay its target.
+describe('simulatePosition: a fill already taken from the live book', () => {
+  const M = 600
+  const p: PositionExecutorParams = {
+    side: 'buy', entryPrice: null, amountQuote: 1000, takeProfitPct: 4, stopLossPct: 2, timeLimitSec: 600, trailingStop: null,
+    entryRange: { min: 99.8, max: 100.2 }, entryExpiresAt: M - 60, slippageRate: 0.0002, entryFill: { price: 100.01, at: M + 18 }
+  }
+
+  it('is open from the minute of the fill, at the fill plus slippage, whatever the range or the expiry say', () => {
+    const state = simulatePosition([c(M, 100, 100.5, 99.9, 100.2)], p)
+    expect(state).toMatchObject({ status: 'open', enteredAt: M, levelPrice: 100.01 })
+    expect(state.entryPrice).toBeCloseTo(100.01 * 1.0002, 10)
+    // A series that begins after the fill's minute is open from its first bar.
+    expect(simulatePosition([c(M + 60, 100.2, 100.4, 100.1, 100.3)], p)).toMatchObject({ status: 'open', enteredAt: M })
+    // Candles before the fill's minute are not read: a stop in them is not a stop.
+    expect(simulatePosition([c(M - 60, 100, 100.1, 90, 95), c(M, 100, 100.5, 99.9, 100.2)], p)).toMatchObject({ status: 'open' })
+  })
+
+  it("stops in the fill's minute, but is not paid its target there, since the high may have come before the fill", () => {
+    expect(simulatePosition([c(M, 100, 105, 99.9, 104.5)], p)).toMatchObject({ status: 'open' })
+    expect(simulatePosition([c(M, 100, 105, 99.9, 104.5), c(M + 60, 104.5, 104.6, 104.4, 104.5)], p)).toMatchObject({ status: 'closed', exitReason: 'take_profit' })
+    expect(simulatePosition([c(M, 100, 100.5, 97, 97.5)], p)).toMatchObject({ status: 'closed', exitReason: 'stop_loss', closedAt: M })
+  })
+
+  it('counts its time from that minute, and a short mirrors', () => {
+    const flat = [c(M, 100, 100.1, 99.9, 100), c(M + 300, 100, 100.1, 99.9, 100), c(M + 600, 100, 100.1, 99.9, 100)]
+    expect(simulatePosition(flat, p)).toMatchObject({ status: 'closed', exitReason: 'time_limit', closedAt: M + 600 })
+    const short: PositionExecutorParams = { ...p, side: 'sell', entryFill: { price: 99.99, at: M + 18 } }
+    expect(simulatePosition([c(M, 100, 103, 99.9, 102.5)], short)).toMatchObject({ status: 'closed', exitReason: 'stop_loss' })
+    expect(simulatePosition([c(M, 100, 100.1, 95, 95.5), c(M + 60, 95.5, 95.6, 95, 95.2)], short)).toMatchObject({ status: 'closed', exitReason: 'take_profit' })
+  })
+
+  it('is as it was without a fill, or with one that is not a price', () => {
+    expect(simulatePosition([c(M, 100.9, 101, 100.8, 100.9)], { ...p, entryFill: null, entryExpiresAt: null })).toMatchObject({ status: 'pending' })
+    expect(simulatePosition([c(M, 100.9, 101, 100.8, 100.9)], { ...p, entryFill: { price: Number.NaN, at: M }, entryExpiresAt: null })).toMatchObject({ status: 'pending' })
+  })
+})

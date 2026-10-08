@@ -8,6 +8,7 @@ import {
   foldMinute,
   isStale,
   livePaperBlock,
+  streamedEntry,
   thinBookBlock,
   liveReturns,
   revalidate,
@@ -150,5 +151,26 @@ describe('the book behind a paper trade', () => {
     expect(thinBookBlock(book({ askQty: 0.999 }), 'buy', 100)).not.toBeNull()
     expect(thinBookBlock(book({ bidQty: 0.3 }), 'buy', 100)).toBeNull()
     expect(thinBookBlock(null, 'buy', 100)).toBeNull()
+  })
+})
+
+describe('the fill a paper trade takes from the live book', () => {
+  const range = { side: 'buy' as const, entryRange: { min: 99.9, max: 100.2 } }
+
+  it('is the ask for a buy and the bid for a sell, the second it is inside the range, else none', () => {
+    expect(streamedEntry(book(), range, NOW_MS)).toEqual({ price: 100.01, at: NOW })
+    expect(streamedEntry(book(), { ...range, side: 'sell' }, NOW_MS)).toEqual({ price: 99.99, at: NOW })
+    // At the edges it is inside; a hair past them it is not.
+    expect(streamedEntry(book({ bid: 100.15, ask: 100.2 }), range, NOW_MS)).toEqual({ price: 100.2, at: NOW })
+    expect(streamedEntry(book({ bid: 100.16, ask: 100.21 }), range, NOW_MS)).toBeNull()
+    expect(streamedEntry(book({ bid: 99.8, ask: 99.85 }), range, NOW_MS)).toBeNull()
+    expect(streamedEntry(book(), { side: 'buy', entryRange: null }, NOW_MS)).toBeNull()
+  })
+
+  it('takes none from a book the trade would be refused on: stale, wide, one-sided, or missing', () => {
+    expect(streamedEntry(book({ updatedAt: NOW_MS - 11_000 }), range, NOW_MS)).toBeNull()
+    expect(streamedEntry(book({ bid: 99.8, ask: 100.2 }), range, NOW_MS)).toBeNull()
+    expect(streamedEntry(book({ bid: 100.05, ask: 100.0 }), range, NOW_MS)).toBeNull()
+    expect(streamedEntry(null, range, NOW_MS)).toBeNull()
   })
 })

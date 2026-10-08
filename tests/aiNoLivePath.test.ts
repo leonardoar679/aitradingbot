@@ -893,7 +893,9 @@ describe('AI code has no route to a real order', () => {
       'settings.get'
     ])
     expect(readFileSync(loader, 'utf-8')).not.toMatch(/window\.|ipcRenderer/)
-    expect(importsOf(loader).sort()).toEqual(['aiLedger', 'aiWatchPaper', 'engine', 'ipc', 'marketScanner', 'tradeLifecycle'])
+    // aiOpportunityOutcome, fees and opportunities: the recommendation's own score on minute bars,
+    // set beside where the paper position filled (since 8 October 2026). All of it reads.
+    expect(importsOf(loader).sort()).toEqual(['aiLedger', 'aiOpportunityOutcome', 'aiWatchPaper', 'engine', 'fees', 'ipc', 'marketScanner', 'opportunities', 'tradeLifecycle'])
     expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron/)
   })
 

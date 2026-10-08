@@ -1,4 +1,5 @@
 import type { AiCallRecord } from './aiLedger'
+import type { OpportunityOutcome } from './aiOpportunityOutcome'
 import { describeDecider } from './aiPanel'
 import { GPT_MIN_CONFIDENCE } from './aiSignal'
 import { describeWatchPaperResult, watchPaperEntered, type WatchPaperOutcome } from './aiWatchPaper'
@@ -52,6 +53,10 @@ export interface WatchTradeRecords {
   /** The paper position the watch opened on this model's call, if it opened one. */
   executor: ExecutorConfig | null
   fill: TradeFill | null
+  /** The recommendation's own score, on minute bars (shared/aiOpportunityOutcome.ts), where it was
+   * worked out: set beside the paper position's fill, which since 8 October 2026 can be taken from
+   * the live book the second the trade was made. */
+  scored?: OpportunityOutcome | null
 }
 
 export interface TimelineStep {
@@ -147,7 +152,21 @@ export function traceWatchTrade(records: WatchTradeRecords): WatchTradeTrace {
   if (executor !== null) {
     steps.push({ at: executor.createdAt, label: 'Paper position opened', detail: describePlan(executor, executor.quoteAsset) })
     if (fill !== null && fill.enteredAt !== null && fill.entryPrice !== null) {
-      steps.push({ at: fill.enteredAt, label: 'Entered', detail: `Filled at ${plainNumber(fill.entryPrice)}.` })
+      const streamed = (executor.params as PositionExecutorParams).entryFill ?? null
+      const scored = records.scored ?? null
+      const scoredNote =
+        scored === null
+          ? ''
+          : scored.entryPrice !== null && scored.entryTime !== null
+            ? `; scored on minute bars: ${plainNumber(scored.entryPrice)} at ${secondsClock(scored.entryTime)} UTC`
+            : scored.status === 'expired'
+              ? '; scored on minute bars: expired unfilled'
+              : ''
+      steps.push({
+        at: fill.enteredAt,
+        label: 'Entered',
+        detail: streamed !== null ? `Filled at ${plainNumber(fill.entryPrice)} from the live book at ${secondsClock(streamed.at)} UTC${scoredNote}.` : `Filled at ${plainNumber(fill.entryPrice)}${scoredNote}.`
+      })
     }
     if (outcome !== null) {
       steps.push({
@@ -196,6 +215,8 @@ export function traceWatchTrade(records: WatchTradeRecords): WatchTradeTrace {
     ids: { eventId: records.eventId, callIds: calls.map((row) => row.id), executorId: executor?.id ?? null }
   }
 }
+
+const secondsClock = (sec: number): string => new Date(sec * 1000).toISOString().slice(11, 19)
 
 /** The three prices side by side, in words. Where there is no fill, says why rather than "none
  * yet": a fill only comes later to a position that is still waiting to enter. */

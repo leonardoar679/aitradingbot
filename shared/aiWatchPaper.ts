@@ -472,8 +472,9 @@ function utcClock(sec: number): string {
 }
 
 /** Where a paper trade of the watch's enters, in a few words: "to enter between 99.8 and 100.2". */
-export function describeWatchPaperEntry(params: Pick<PositionExecutorParams, 'entryPrice' | 'entryRange'>): string {
+export function describeWatchPaperEntry(params: Pick<PositionExecutorParams, 'entryPrice' | 'entryRange' | 'entryFill'>): string {
   const shown = (price: number): number => Number(price.toPrecision(8))
+  if (params.entryFill != null) return `entered at ${shown(params.entryFill.price)} from the live book`
   if (params.entryRange != null) return `to enter between ${shown(params.entryRange.min)} and ${shown(params.entryRange.max)}`
   return params.entryPrice === null ? 'at market' : `waiting for ${shown(params.entryPrice)}`
 }

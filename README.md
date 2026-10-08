@@ -234,6 +234,16 @@ says which host the stream is on, and how often it, and the data host, moved; ne
   take (the ask for a buy, the bid for a sell) holds less than the stake, since a fill there would go
   through the book. The book it opened against is written on its mark. It only ever opens less. The
   news rules' shorts are their measured rules, and are not changed by it.
+- **It fills from that book** (since 8 October 2026; the document's §41). Where the book's fill
+  price — the ask for a buy, the bid for a sell — is inside the entry range the second the trade is
+  made, the trade enters there and then, at that price plus its slippage, instead of waiting for the
+  first minute bar inside the range: an answer at second 18 of a minute no longer loses the minute.
+  The fill is written on the trade (`entryFill`), the engine runs its barriers from that minute (which
+  can stop it and cannot pay its target, as the score's own rule for an entry inside a bar has it),
+  and a trade in the market is no longer dropped for Bitcoin's move. The recommendation's SCORE stays
+  on minute bars, unchanged and replayable, and the trade's timeline sets the two side by side:
+  "Filled at 100.07 from the live book at 12:00:38 UTC; scored on minute bars: 100.12 at 12:03 UTC",
+  or "expired unfilled". A price outside the range waits by the range, as before.
 - **The models' question is not changed by it.** That question is built from completed candles
   only, so that a benchmark replaying an old event asks exactly what the watch asked live; a live
   bid and ask cannot be had for a replay. The plan had the question gain them; that was dropped for

@@ -657,6 +657,15 @@ export interface PositionExecutorParams {
    * a paper trade and its score agree on what it cost. Absent or null, a position fills at its
    * prices, as every one a person makes, and every one stored before this existed, still does. */
   slippageRate?: number | null
+  /** Simulation only. A fill already taken when the executor was made: the streamed ask (for a buy)
+   * or bid (for a sell) at the second the recommendation was enterable (shared/liveMarket.ts
+   * streamedEntry), in Unix seconds. The position is in the market from the minute containing
+   * `at`, at `price` plus its slippage, and `entryRange`, `entryPrice` and `entryExpiresAt` are not
+   * consulted. Set on the watch's paper trades since 8 October 2026 (src/agents/watchPaperTrade.ts),
+   * so that an answer at second 18 of a minute does not wait for the next one; the recommendation's
+   * score stays on minute bars, and the two are shown side by side. Never on a live executor, and
+   * absent on every one stored before. */
+  entryFill?: { price: number; at: number } | null
 }
 
 /** How a simulated position ended. `entry_expired` is one that never began: its entry was not

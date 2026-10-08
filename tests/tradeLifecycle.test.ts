@@ -254,3 +254,19 @@ describe('reading one trade by its ids', () => {
     expect(parseEventId('binance::12')).toBeNull()
   })
 })
+
+// Since 8 October 2026 a paper position can fill from the live book the second it was made; the
+// timeline then says so, and sets the recommendation's own score on minute bars beside it.
+describe('a fill from the live book, beside the score', () => {
+  const streamed = (): WatchTradeRecords => records({ executor: watchTrade({ params: { ...(watchTrade().params as PositionExecutorParams), entryFill: { price: 100.05, at: T + 38 } } }), fill: { ...FILL, enteredAt: T, entryPrice: 100.07 } })
+
+  it('says where and when it filled, and what the score made of the same minutes', () => {
+    const scored = traceWatchTrade({ ...streamed(), scored: { status: 'closed', entryTime: T + 180, entryPrice: 100.12, exit: 'take_profit', exitTime: T + 1500, exitPrice: 103.1, netPct: 2.7, r: 1.8, bestPct: 3.1, worstPct: -0.2, heldMinutes: 22 } })
+    expect(scored.steps.find((step) => step.label === 'Entered')?.detail).toBe('Filled at 100.07 from the live book at 12:07:38 UTC; scored on minute bars: 100.12 at 12:10:00 UTC.')
+    const expired = traceWatchTrade({ ...streamed(), scored: { status: 'expired', entryTime: null, entryPrice: null, exit: null, exitTime: null, exitPrice: null, netPct: null, r: null, bestPct: null, worstPct: null, heldMinutes: null } })
+    expect(expired.steps.find((step) => step.label === 'Entered')?.detail).toBe('Filled at 100.07 from the live book at 12:07:38 UTC; scored on minute bars: expired unfilled.')
+    expect(traceWatchTrade(streamed()).steps.find((step) => step.label === 'Entered')?.detail).toBe('Filled at 100.07 from the live book at 12:07:38 UTC.')
+    // A fill by the minute bars reads as before, with the score beside it where there is one.
+    expect(traceWatchTrade(records()).steps.find((step) => step.label === 'Entered')?.detail).toBe('Filled at 100.1.')
+  })
+})

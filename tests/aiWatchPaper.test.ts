@@ -492,7 +492,8 @@ describe('openWatchPaperTrade', () => {
   it('opens one paper position, says so on the desktop, and says nothing real was placed', async () => {
     const r = rig()
     const result = await openWatchPaperTrade(event(), decision(), r.deps)
-    expect(result).toEqual({ opened: true, text: 'A paper BUY of 100 USDT was opened, to enter between 99.8 and 100.2.' })
+    // The rig's tight book is inside the range, so since 8 October 2026 the trade fills from it there and then.
+    expect(result).toEqual({ opened: true, text: 'A paper BUY of 100 USDT was opened, entered at 100.01 from the live book.' })
     expect(r.state.executors).toHaveLength(1)
     expect(r.state.executors[0]).toMatchObject({ id: 'paper-1', mode: 'paper', type: 'position', name: 'Watch: BUY SOLUSDT', watch: { eventId: event().id, model: A } })
     expect(r.notices).toHaveLength(1)
@@ -1051,7 +1052,7 @@ describe('sized by risk, and held to what the app has out (shared/paperRisk.ts)'
 
   it('opens it at that size with nothing stored, by the defaults, and says so', async () => {
     const r = rig({ risk: undefined })
-    expect(await openWatchPaperTrade(event(), decision(), r.deps)).toEqual({ opened: true, text: 'A paper BUY of 57.47 USDT was opened, to enter between 99.8 and 100.2.' })
+    expect(await openWatchPaperTrade(event(), decision(), r.deps)).toEqual({ opened: true, text: 'A paper BUY of 57.47 USDT was opened, entered at 100.01 from the live book.' })
     expect(amountOf(r.state.executors[0])).toBe(57.47)
     expect(r.notices[0].body).toContain('A paper position of 57.47 USDT was opened')
   })
@@ -1344,5 +1345,51 @@ describe('refused on the book behind it, and on news against it', () => {
 
   it('opens as before when the stories cannot be read: what could not be had leaves the trade as it was', async () => {
     expect((await openWatchPaperTrade(event(), decision(), rig({ stories: new Error('feed down') }).deps))?.opened).toBe(true)
+  })
+})
+
+// Since 8 October 2026 a paper trade of the watch's fills from the live book the second it is made,
+// where that book's fill price is inside the entry range (PositionExecutorParams.entryFill). The
+// recommendation's score stays on minute bars.
+describe('filled from the live book', () => {
+  it('carries the streamed fill when the ask is inside the range, and not when it is outside', () => {
+    const inside = watchPaperExecutor({ id: 'w1', event: event(), plan: okPlan(), nowSec: SOON, book: tightBook('SOLUSDT', 100, SOON) })
+    expect((inside.params as PositionExecutorParams).entryFill).toEqual({ price: 100.01, at: SOON })
+    expect((inside.params as PositionExecutorParams).entryRange).toEqual({ min: 99.8, max: 100.2 })
+    const outside = watchPaperExecutor({ id: 'w2', event: event(), plan: okPlan({ lastPrice: 100.9 }), nowSec: SOON, book: tightBook('SOLUSDT', 100.9, SOON) })
+    expect((outside.params as PositionExecutorParams).entryFill).toBeUndefined()
+    const noBook = watchPaperExecutor({ id: 'w3', event: event(), plan: okPlan(), nowSec: SOON })
+    expect((noBook.params as PositionExecutorParams).entryFill).toBeUndefined()
+    expect(inside.mode).toBe('paper')
+  })
+
+  it('says so when it opens, and the trade is in the market from then', async () => {
+    const r = rig()
+    const result = await openWatchPaperTrade(event(), decision(), r.deps)
+    expect(result).toEqual({ opened: true, text: 'A paper BUY of 100 USDT was opened, entered at 100.01 from the live book.' })
+    const made = r.state.executors[0]
+    expect((made.params as PositionExecutorParams).entryFill).toEqual({ price: 100.01, at: SOON })
+    expect(made.watch?.book).toMatchObject({ bid: 99.99, ask: 100.01, source: 'stream' })
+  })
+
+  it('is settled at its target from the fill, and is not dropped for a Bitcoin move since it is in the market', async () => {
+    const minute = Math.floor(SOON / 60) * 60
+    const r = rig({ now: SOON })
+    await openWatchPaperTrade(event(), decision(), r.deps)
+    // Bitcoin falls 2% after the event, which drops a trade still waiting to enter; this one entered.
+    const btcFall = [bar(minute - 60, 100, 100, 100, 100), bar(minute, 100, 100, 98, 98), bar(minute + 60, 98, 98, 98, 98)]
+    const flat = [bar(minute, 100, 100.3, 99.9, 100.1), bar(minute + 60, 100.1, 100.4, 100, 100.2)]
+    r.deps.fetchCandles = async (_exchange, symbol) => (symbol === 'BTCUSDT' ? btcFall : flat)
+    r.state.now = minute + 180
+    expect(await settleWatchPaperTrades(r.deps)).toEqual([])
+    expect(r.state.executors[0].status).toBe('active')
+    // Then the target: 3% from the fill, paid in the second minute, never in the fill's own.
+    r.deps.fetchCandles = async (_exchange, symbol) => (symbol === 'BTCUSDT' ? btcFall : [bar(minute, 100, 105, 99.9, 100.1), bar(minute + 60, 100.1, 103.5, 100, 103.2)])
+    expect(await settleWatchPaperTrades(r.deps)).toHaveLength(1)
+    const ended = r.state.executors[0]
+    expect(ended.status).toBe('stopped')
+    expect(ended.watch?.result?.exit).toBe('take_profit')
+    expect(ended.watch?.result?.closedAt).toBe(minute + 60)
+    expect(ended.watch?.result?.pnlQuote).toBeGreaterThan(0)
   })
 })

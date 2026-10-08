@@ -335,7 +335,13 @@ export function simulateTwap(candles: Candle[], params: TwapExecutorParams, crea
  * lost whichever level ends it, as it would be against a recommendation's own levels. That is how a
  * recommendation is scored (shared/aiOpportunityOutcome.ts), every entry included, so a paper trade
  * made from one costs what its score says. Without a rate a position fills at its prices, and its
- * levels are measured from its entry, as they always were. */
+ * levels are measured from its entry, as they always were.
+ *
+ * A position that carries a fill already taken (`entryFill`, the streamed price the second it was
+ * made) is in the market from the minute containing it, at that price plus its slippage, and the
+ * three entry rules above are not consulted. That minute can stop it and cannot pay its target:
+ * its high may have come before the fill, which is the rule a recommendation's score keeps for an
+ * entry inside a bar. Candles before that minute are not read. */
 export function simulatePosition(candles: Candle[], params: PositionExecutorParams): PositionExecutorState {
   const isBuy = params.side === 'buy'
   const leverage = resolveLeverage(params.leverage)
@@ -354,7 +360,20 @@ export function simulatePosition(candles: Candle[], params: PositionExecutorPara
   let liqPrice: number | null = null
   let fundingPaid = 0
 
+  const fill = params.entryFill ?? null
+  const filled = fill !== null && Number.isFinite(fill.price) && fill.price > 0 && Number.isFinite(fill.at)
+  if (filled) {
+    levelPrice = fill.price
+    entryPrice = marketFill(fill.price, isBuy)
+    status = 'open'
+    enteredAt = Math.floor(fill.at / 60) * 60
+    trailingPeakPrice = fill.price
+    liqPrice = liquidationPrice({ entryPrice, leverage, side: params.side })
+  }
+
   for (const candle of candles) {
+    if (filled && enteredAt !== null && candle.time < enteredAt) continue
+    const entryMinute = filled && candle.time === enteredAt
     if (status === 'pending') {
       if (params.entryExpiresAt != null && candle.time >= params.entryExpiresAt) {
         status = 'closed'
@@ -387,13 +406,13 @@ export function simulatePosition(candles: Candle[], params: PositionExecutorPara
     if (status !== 'open' || entryPrice === null || levelPrice === null || enteredAt === null) continue
 
     if (trailingPeakPrice === null) trailingPeakPrice = levelPrice
-    trailingPeakPrice = isBuy ? Math.max(trailingPeakPrice, candle.high) : Math.min(trailingPeakPrice, candle.low)
+    if (!entryMinute) trailingPeakPrice = isBuy ? Math.max(trailingPeakPrice, candle.high) : Math.min(trailingPeakPrice, candle.low)
 
     const slTarget = params.stopLossPct !== null ? (isBuy ? levelPrice * (1 - params.stopLossPct / 100) : levelPrice * (1 + params.stopLossPct / 100)) : null
     const slHit = slTarget !== null && (isBuy ? candle.low <= slTarget : candle.high >= slTarget)
 
     const tpTarget = params.takeProfitPct !== null ? (isBuy ? levelPrice * (1 + params.takeProfitPct / 100) : levelPrice * (1 - params.takeProfitPct / 100)) : null
-    const tpHit = tpTarget !== null && (isBuy ? candle.high >= tpTarget : candle.low <= tpTarget)
+    const tpHit = !entryMinute && tpTarget !== null && (isBuy ? candle.high >= tpTarget : candle.low <= tpTarget)
 
     let trailHit = false
     let trailTarget: number | null = null
@@ -406,7 +425,7 @@ export function simulatePosition(candles: Candle[], params: PositionExecutorPara
         trailTarget = isBuy
           ? trailingPeakPrice * (1 - params.trailingStop.trailPct / 100)
           : trailingPeakPrice * (1 + params.trailingStop.trailPct / 100)
-        trailHit = isBuy ? candle.low <= trailTarget : candle.high >= trailTarget
+        trailHit = !entryMinute && (isBuy ? candle.low <= trailTarget : candle.high >= trailTarget)
       }
     }
 
