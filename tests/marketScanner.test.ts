@@ -18,6 +18,12 @@ import {
 import { T0, quiet, thenFlat, withMove } from './eventCandles'
 
 vi.mock('electron', () => ({ app: { getPath: () => process.env.SCANNER_TEST_USER_DATA } }))
+/** What the main process told (the V4 document, §48): the scanner failing three passes running. */
+const told = vi.hoisted(() => [] as { title: string; body: string; extra: { kind: string; thread?: string } }[])
+vi.mock('../electron/services/noticeService', () => ({
+  tell: (notice: { title: string; body: string; extra: { kind: string; thread?: string } }) => void told.push(notice),
+  tellNotice: async () => true
+}))
 
 // The exchange, faked at the one seam the scanner reaches it through.
 const market = vi.hoisted(() => ({
@@ -645,5 +651,22 @@ describe('a market-wide move (8 October 2026)', () => {
     expect(state.recentEvents.some((event) => event.type === 'market_move')).toBe(false)
     expect(state.recentEvents.every((event) => event.live?.marketMove === undefined)).toBe(true)
     expect(state.recentEvents.filter((event) => (event.live?.rank ?? 99) <= 3)).toHaveLength(3)
+  })
+})
+
+describe('the scanner failing', () => {
+  it('is told once after three passes running fail, not on the first, and not again on the fourth', async () => {
+    told.length = 0
+    market.failing = new Set(market.symbols.map((entry) => entry.symbol))
+    const { scanOnce } = await scanner()
+    expect((await scanOnce(NOW_MS)).error).not.toBeNull()
+    await scanOnce(NOW_MS + 60_000)
+    expect(told).toEqual([])
+    await scanOnce(NOW_MS + 120_000)
+    expect(told).toHaveLength(1)
+    expect(told[0]).toMatchObject({ title: 'The scanner is failing', extra: { kind: 'SYSTEM_FAILURE', thread: 'scanner' } })
+    expect(told[0].body).toContain('Three passes running')
+    await scanOnce(NOW_MS + 180_000)
+    expect(told).toHaveLength(1)
   })
 })

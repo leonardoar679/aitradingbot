@@ -1,4 +1,4 @@
-import type { AlertSeverity } from '../../shared/alerts'
+import type { AlertKind, AlertSeverity } from '../../shared/alerts'
 import type { AlertRecordOnFile } from '../../shared/records'
 
 // The alerts raised this session (src/news/NewsAlertScheduler.tsx): what the sidebar's badge
@@ -19,6 +19,8 @@ export interface AlertRecord {
   /** A CRITICAL one stays as a banner until this. */
   dismissed: boolean
   url?: string
+  /** What it was (shared/alerts.ts); absent on one told before kinds were kept. */
+  kind?: AlertKind
 }
 
 type Listener = (alerts: readonly AlertRecord[]) => void
@@ -77,5 +79,15 @@ export function seedAlerts(records: readonly AlertRecordOnFile[]): void {
 /** Test seam. */
 export function resetAlerts(): void {
   alerts = []
+  publish()
+}
+
+/** A notice as the main process told it, whatever raised it: kept for Overview's major alerts, and
+ * for the banner when CRITICAL. Only news lights Discovery's badge, which is its own; every other
+ * kind is held as seen. One already held, by id, is left as it is. */
+export function addToldAlert(record: AlertRecordOnFile): void {
+  if (alerts.some((entry) => entry.id === record.id)) return
+  const news = record.kind === 'NEWS_EVENT'
+  alerts = [{ ...record, seen: !news || record.severity === 'info', dismissed: record.severity !== 'critical' }, ...alerts].slice(0, KEPT)
   publish()
 }

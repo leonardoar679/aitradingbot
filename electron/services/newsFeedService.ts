@@ -31,6 +31,8 @@ import { appendJsonLine, listMonthFiles } from './jsonlStore'
 import { listSymbols, scanSourceFor } from './marketService'
 import { getNewsState, onNewsUpdate } from './newsService'
 import { singleFlight } from './singleFlight'
+import { systemFailureNotice } from '../../shared/notices'
+import { tell } from './noticeService'
 
 // THE NEWS FEED: FOUR FREE MEDIA FEEDS AND BINANCE'S OWN ANNOUNCEMENTS, AS STORIES (the second V3
 // document, §11-14; the arithmetic is shared/newsFeed.ts).
@@ -61,6 +63,10 @@ const finalIds = new Set<string>()
 const liveReactions = new Map<string, StoryReaction>()
 let dictionary: AssetDictionary | null = null
 let pairByBase = new Map<string, string>()
+/** No feed read for this long is the feeds dead. */
+const FEEDS_DEAD_SECONDS = 30 * 60
+let lastAnyRead: number | null = Math.floor(Date.now() / 1000)
+let feedsDeadTold = false
 let sources: FeedSourceStatus[] = FEED_SOURCES.map((source) => ({ id: source.id, name: source.name, lastReadAt: null, ok: null, error: null, items: 0 }))
 let state: NewsFeedState = { version: NEWS_FEED_VERSION, sources, stories: [], reactions: {}, impact: [], measured: 0, updatedAt: null }
 const listeners = new Set<(state: NewsFeedState) => void>()
@@ -249,6 +255,14 @@ const readFeeds = singleFlight(async (): Promise<void> => {
     }
   }
   sources = next
+  // Every feed failing for half an hour is told once (SYSTEM_FAILURE); one feed down is the usual.
+  const readSec = Math.floor(Date.now() / 1000)
+  if (next.some((entry) => entry.ok)) lastAnyRead = readSec
+  else if (lastAnyRead !== null && readSec - lastAnyRead >= FEEDS_DEAD_SECONDS && !feedsDeadTold) {
+    feedsDeadTold = true
+    tell(systemFailureNotice('feed', `None of the ${next.length} feeds has been read for ${Math.round((readSec - lastAnyRead) / 60)} minutes: ${next[0]?.error ?? 'they could not be read'}.`))
+  }
+  if (next.some((entry) => entry.ok)) feedsDeadTold = false
   await rebuild()
   await measureReactions()
 }, () => undefined)

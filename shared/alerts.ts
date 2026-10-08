@@ -138,3 +138,83 @@ export function noticeSeverity(severity: AlertSeverity): 'watch' | 'high' | 'cri
 export function healNoticeSeverity(value: unknown): 'watch' | 'high' | 'critical' | null {
   return value === 'watch' || value === 'high' || value === 'critical' ? value : null
 }
+
+// EVERY KIND THE V4 DOCUMENT NAMES (§48), IN THREADS (§49). Each notice the app raises carries a kind,
+// so that Overview, the session report and the records on file can say what it was; and a kind with
+// a thread -- a pair, an event, a trade, or a fixed name -- is told once per thread per half hour:
+// a repeat inside the window is counted on the thread and raises nothing. The handler in the main
+// process keeps the threads (the notice service there); the arithmetic is here.
+
+export const ALERT_KINDS = [
+  'MARKET_EVENT',
+  'NEWS_EVENT',
+  'TRADE_OPPORTUNITY',
+  'TRADE_EXECUTED',
+  'TRADE_BLOCKED',
+  'POSITION_RISK',
+  'TARGET_REACHED',
+  'STOP_TRIGGERED',
+  'MODEL_DISAGREEMENT',
+  'SYSTEM_FAILURE',
+  'CIRCUIT_BREAKER'
+] as const
+
+export type AlertKind = (typeof ALERT_KINDS)[number]
+
+/** How loud a kind is when the notice names no severity of its own: WATCH is silent; HIGH sounds. */
+export const ALERT_KIND_SEVERITY: Record<AlertKind, AlertSeverity> = {
+  MARKET_EVENT: 'watch',
+  NEWS_EVENT: 'watch',
+  TRADE_OPPORTUNITY: 'high',
+  TRADE_EXECUTED: 'watch',
+  TRADE_BLOCKED: 'watch',
+  POSITION_RISK: 'high',
+  TARGET_REACHED: 'high',
+  STOP_TRIGGERED: 'high',
+  MODEL_DISAGREEMENT: 'watch',
+  SYSTEM_FAILURE: 'high',
+  CIRCUIT_BREAKER: 'high'
+}
+
+export function healAlertKind(value: unknown): AlertKind | null {
+  return typeof value === 'string' && (ALERT_KINDS as readonly string[]).includes(value) ? (value as AlertKind) : null
+}
+
+export function describeAlertKind(kind: AlertKind): string {
+  return kind.toLowerCase().replace(/_/g, ' ')
+}
+
+/** How long a thread holds repeats back. */
+export const ALERT_THREAD_SECONDS = 30 * 60
+
+export interface AlertThread {
+  /** Notices on the thread in its window, the one told included. */
+  count: number
+  firstAt: number
+  lastAt: number
+}
+
+export function threadKey(kind: AlertKind, thread: string): string {
+  return `${kind}:${thread}`
+}
+
+/** One notice against its thread: a repeat when the thread was told within `windowSec`; the
+ * threads updated either way, with threads whose window has passed forgotten. */
+export function threadStep(
+  threads: Readonly<Record<string, AlertThread>>,
+  kind: AlertKind,
+  thread: string,
+  nowSec: number,
+  windowSec: number = ALERT_THREAD_SECONDS
+): { repeat: boolean; threads: Record<string, AlertThread> } {
+  const key = threadKey(kind, thread)
+  const kept: Record<string, AlertThread> = {}
+  for (const [entry, state] of Object.entries(threads)) if (nowSec - state.firstAt < ALERT_THREAD_SECONDS * 48) kept[entry] = state
+  const held = kept[key]
+  if (held !== undefined && nowSec - held.firstAt < windowSec) {
+    kept[key] = { ...held, count: held.count + 1, lastAt: nowSec }
+    return { repeat: true, threads: kept }
+  }
+  kept[key] = { count: 1, firstAt: nowSec, lastAt: nowSec }
+  return { repeat: false, threads: kept }
+}

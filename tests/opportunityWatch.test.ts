@@ -75,7 +75,7 @@ interface Rig {
   deps: WatchDeps
   /** Every call to a model: which, about which pair, and under what label. */
   asked: { model: string; symbol: string; source: string | undefined }[]
-  notices: { title: string; body: string }[]
+  notices: { title: string; body: string; extra?: { kind: string; thread?: string; severity?: string } }[]
   /** The ledger the watch counts its day from. A call that answers adds a row. */
   rows: (Pick<AiCallRecord, 'at' | 'source' | 'eventId'> & Partial<Pick<AiCallRecord, 'model' | 'status'>>)[]
   /** Candle fetches made. */
@@ -102,8 +102,8 @@ function rig(initial: Partial<Rig['state']> = {}): Rig {
       made.rows.push({ at: state.now, source: 'watch', eventId: `binance:${request.symbol}:${T}`, model, status: reply.error ? 'failed' : reply.rejected ? 'rejected' : 'ok' })
       return decision(model, reply)
     },
-    notify: (title, body) => {
-      made.notices.push({ title, body })
+    notify: (title, body, extra) => {
+      made.notices.push({ title, body, extra })
     },
     nowSec: () => state.now
   }
@@ -572,5 +572,58 @@ describe('a market-wide move (8 October 2026)', () => {
       ['BTCUSDT', move.id],
       ['BTCUSDT', move.id]
     ])
+  })
+})
+
+// THE KINDS THE V4 DOCUMENT NAMES (§48), as the watch raises them: an urgent event it could not ask
+// about, models on opposite sides, a model rested for the day, and the call itself with its kind.
+describe('the notices the watch raises', () => {
+  it('tells an urgent fresh event as a market event while it is off, on the pair\'s thread, and asks nothing', async () => {
+    const r = rig({ watch: watch({ enabled: false }) })
+    await watchPass([event(), event('ETHUSDT', { band: 'candidate' }, 2)], r.deps)
+    expect(r.asked).toEqual([])
+    expect(r.notices).toHaveLength(1)
+    expect(r.notices[0]).toMatchObject({ title: 'SOLUSDT: breakout (urgent)', extra: { kind: 'MARKET_EVENT', thread: 'SOLUSDT', severity: 'watch' } })
+    expect(r.notices[0].body).toContain('The watch did not ask about it: the watch is off.')
+    // A stale one, or a member of a market-wide move, is not: the first is old news, the second is
+    // the move's to tell.
+    const later = rig({ watch: watch({ enabled: false }), now: T + 400 })
+    await watchPass([event()], later.deps)
+    expect(later.notices).toEqual([])
+    const member = rig({ watch: watch({ enabled: false }) })
+    await watchPass([event('BNBUSDT', { live: { detectedAt: T + 8, quoteVolume24h: 1, spreadPct: 0.01, candidateScore: 90, rank: 2, marketMove: 'binance:BTCUSDT:1' } })], member.deps)
+    expect(member.notices).toEqual([])
+  })
+
+  it('tells an urgent event left for the day\'s limit, and not one left for its own sake', async () => {
+    const r = rig({ watch: watch({ maxEventsPerDay: 1 }) })
+    await watchPass([event('SOLUSDT', {}, 1), event('ETHUSDT', {}, 2), event('BNBUSDT', { band: 'candidate' }, 3)], r.deps)
+    const events = r.notices.filter((notice) => notice.extra?.kind === 'MARKET_EVENT')
+    expect(events.map((notice) => notice.extra?.thread)).toEqual(['ETHUSDT'])
+    expect(events[0].body).toContain('the watch has asked about its 1 events for today')
+  })
+
+  it('tells the call with its kind, on the event\'s thread', async () => {
+    const r = rig({ watch: watch({ models: [A] }) })
+    await watchPass([event()], r.deps)
+    expect(r.notices).toEqual([{ title: 'SOLUSDT: BUY', body: expect.any(String), extra: { kind: 'TRADE_OPPORTUNITY', thread: event().id } }])
+  })
+
+  it('tells models on opposite sides, on the event\'s thread', async () => {
+    const r = rig({ answer: (model) => (model === B ? { recommendation: 'sell', detail: { ...LONG, stopLoss: 101.5, takeProfit: 97 } } : {}) })
+    await watchPass([event()], r.deps)
+    const split = r.notices.find((notice) => notice.extra?.kind === 'MODEL_DISAGREEMENT')
+    expect(split).toMatchObject({ title: 'SOLUSDT: the models disagree', extra: { thread: event().id, severity: 'watch' } })
+    expect(split?.body).toContain('BUY from')
+    expect(split?.body).toContain('SELL from')
+  })
+
+  it('tells a model rested for the day once, on its own thread held for the day', async () => {
+    const r = rig()
+    for (let i = 0; i < 3; i++) r.rows.push({ at: T - 600 + i, source: 'watch', eventId: `binance:ADAUSDT:${T - 600 + i}`, model: B, status: 'failed' })
+    await watchPass([event()], r.deps)
+    const rested = r.notices.find((notice) => notice.extra?.kind === 'CIRCUIT_BREAKER')
+    expect(rested).toMatchObject({ title: 'A model is rested for the day', extra: { thread: `model:${B}`, threadSeconds: 86_400 } })
+    expect(r.asked.map((call) => call.model)).toEqual([A])
   })
 })

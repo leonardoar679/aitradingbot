@@ -1,7 +1,9 @@
-import { emptyHealthState, HEALTH_LINES, healthVerdict, type HealthState, type HealthVerdict } from '../../shared/exchangeHealth'
+import { describePause, emptyHealthState, HEALTH_LINES, healthVerdict, type HealthState, type HealthVerdict } from '../../shared/exchangeHealth'
+import { breakerNotice } from '../../shared/notices'
 import { listCredentialStatus } from './credentialsService'
 import { resolveEndpoint } from './exchanges/binance'
 import { getLiveState } from './liveMarketService'
+import { tell } from './noticeService'
 
 // THE EXCHANGE HEALTH MONITOR (shared/exchangeHealth.ts has the rule). Once a minute it asks the
 // data host the time -- one small public request -- and keeps how long it took and how far this
@@ -15,6 +17,8 @@ export const healthProbe = { everyMs: 60_000, timeoutMs: 10_000 }
 
 let state: HealthState = emptyHealthState()
 let started = false
+/** Whether the last measurement paused live entries: a change either way is told. */
+let wasDegraded = false
 const listeners = new Set<(state: HealthState) => void>()
 
 export function onHealthUpdate(listener: (state: HealthState) => void): () => void {
@@ -91,6 +95,10 @@ export async function probeOnce(): Promise<HealthState> {
     if (state.restFailures === HEALTH_LINES.restFailuresToPause) console.warn(`Exchange health: the data host has failed ${state.restFailures} reads running:`, error instanceof Error ? error.message : error)
   }
   publish()
+  const verdict = liveHealth()
+  if (verdict.degraded && !wasDegraded) tell(breakerNotice('health', describePause(verdict) ?? 'Live trading is paused.'))
+  if (!verdict.degraded && wasDegraded) tell(breakerNotice('health-ok', 'The exchange answers again: new live orders are no longer paused by its health.', 'health-ok'))
+  wasDegraded = verdict.degraded
   return current()
 }
 
@@ -105,4 +113,5 @@ export function startExchangeHealth(): void {
 /** Test seam: forgets every measurement. */
 export function resetExchangeHealth(): void {
   state = emptyHealthState()
+  wasDegraded = false
 }

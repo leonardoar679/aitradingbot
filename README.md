@@ -356,6 +356,26 @@ For a coin held, Binance's announcements keep the notice the reader already rais
 twice. The plan had the kill switch engaged as CRITICAL too. Only a person engages it, from the bar
 where it already shows, so it raises none.
 
+**Every kind the V4 document names, in threads** (since 8 October 2026; §47-49). Every notice the app
+raises -- from the window, or from the main process's own loops -- goes through one service
+(`electron/services/noticeService.ts`) and carries a kind (`shared/alerts.ts`): MARKET_EVENT (an
+urgent event the watch could not ask about: off, no model, every model rested, the day's events
+spent; Bitcoin's crash), NEWS_EVENT, TRADE_OPPORTUNITY (a call), TRADE_EXECUTED (a paper trade opened
+or run out, the exit check closing one, a news short, the daily digest), TRADE_BLOCKED (a paper trade
+not opened for a reason a person can act on -- the paper account, the money-out cap, a pause -- or
+dropped before entry), POSITION_RISK (a paper or real position three quarters of the way to its
+stop), TARGET_REACHED and STOP_TRIGGERED (a paper trade's or a real position's close, in money and
+R), MODEL_DISAGREEMENT (models on opposite sides of one event), SYSTEM_FAILURE (the scanner failing
+three passes running, the stream dead for three minutes, every feed unread for half an hour, the
+OpenRouter key rejected) and CIRCUIT_BREAKER (the day's AI budget spent, a model rested for the day,
+the losing-run pause, the live session disarmed by the day's loss, live entries paused or resumed by
+the exchange's health). A kind with a thread -- a pair, an event, a trade, or a fixed name -- is told
+once per thread per half hour (a day for the budget and a rested model, an hour for a failure): a
+repeat inside the window is counted on the thread and raises nothing. A notice that names no severity
+is as loud as its kind: WATCH silent, HIGH with sound. What is told is written to the alerts file
+(`shared/records.ts`) and sent to the window whatever the desktop could show, so Overview's major
+alerts hold it; only news lights Discovery's badge. The texts are `shared/notices.ts`.
+
 **News against a paper trade** (since 8 October 2026; the document's §25, "news contradicted"). A
 story of impact 70 or more naming the coin, published from three hours before the event to now,
 that points against the side — the news analyst's reading where it read the story about this coin,

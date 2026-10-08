@@ -10,8 +10,9 @@ import {
 } from '../../shared/aiOpportunity'
 import { describeDecider } from '../../shared/aiPanel'
 import type { AiSignalDecision } from '../../shared/aiSignal'
-import { utcMidnight, watchEventIdsToday, watchNotice, watchPausedModels, watchSkipReason, type AiWatchConfig } from '../../shared/aiWatch'
+import { AI_WATCH_FRESH_SECONDS, utcMidnight, watchEventIdsToday, watchNotice, watchPausedModels, watchSkipReason, type AiWatchConfig } from '../../shared/aiWatch'
 import { describeEventType, type MarketEvent } from '../../shared/marketEvent'
+import { actionableRefusal, breakerNotice, disagreementNotice, marketEventNotice, tradeBlockedNotice, type NoticeExtra } from '../../shared/notices'
 import { askModels, fetchEventQuestion, type AskModelsResult, type CandleFetch } from './opportunities'
 import { recordPaperRefusal, type PaperRefusal } from './paperRefusals'
 
@@ -35,7 +36,8 @@ export interface WatchDeps {
   listCalls: (filter: AiCallFilter) => Promise<AiCallPage>
   fetchCandles: CandleFetch
   ask: (request: AiOpportunityAskRequest) => Promise<AiSignalDecision>
-  notify: (title: string, body: string) => void
+  /** A desktop notice, with its kind and thread (shared/notices.ts). */
+  notify: (title: string, body: string, extra?: NoticeExtra) => void
   nowSec: () => number
   /** Opens a paper trade on an answer, when that is switched on. Resolves to what came of it, or
    * to null when there is nothing to say. Absent, the watch only asks and notifies. */
@@ -158,6 +160,12 @@ async function askAbout(event: MarketEvent, watch: AiWatchConfig, deps: WatchDep
           opened = outcome.opened
           // For the session report: what was refused, and why.
           if (!outcome.opened) refused(deps, event, decision, outcome.text)
+          // A refusal a person can act on -- the paper account, the money-out cap, a pause -- is
+          // told; the market's reasons, which repeat every minute, are the Watch card's.
+          if (!outcome.opened && actionableRefusal(outcome.text)) told(tradeBlockedNotice(event.symbol, outcome.text))
+          // A refusal a person can act on -- the paper account, the money-out cap, a pause -- is
+          // told; the market's reasons, which repeat every minute, are the Watch card's.
+          if (!outcome.opened && actionableRefusal(outcome.text)) told(tradeBlockedNotice(event.symbol, outcome.text))
         }
       } catch (failure) {
         const text = `No paper trade: ${failure instanceof Error ? failure.message : String(failure)}`
@@ -174,7 +182,7 @@ async function askAbout(event: MarketEvent, watch: AiWatchConfig, deps: WatchDep
     if (notice !== null) {
       noticed = true
       try {
-        deps.notify(notice.title, notice.body)
+        deps.notify(notice.title, notice.body, { kind: 'TRADE_OPPORTUNITY', thread: event.id })
       } catch {
         // A desktop that cannot show it is not a reason to lose an answer that was paid for.
       }
@@ -182,9 +190,27 @@ async function askAbout(event: MarketEvent, watch: AiWatchConfig, deps: WatchDep
     return decision
   }
 
-  /** What the models said, then what was done about it, then who was not asked. */
-  const told = (results: AskModelsResult['results'], heldBack: number): { text: string; ok: boolean; retry: boolean } => {
+  /** A notice of the document's kinds, told without failing the pass that raised it. */
+  const told = (notice: { title: string; body: string; extra: NoticeExtra }): void => {
+    try {
+      deps.notify(notice.title, notice.body, notice.extra)
+    } catch {
+      // A desktop that cannot show it is not a reason to lose an answer that was paid for.
+    }
+  }
+
+  /** What the models said, then what was done about it, then who was not asked. Models on opposite
+   * sides are told (MODEL_DISAGREEMENT); a model rested for the day is told once a day. */
+  const outcome = (results: AskModelsResult['results'], heldBack: number): { text: string; ok: boolean; retry: boolean } => {
     const said = summarize(event, results, heldBack)
+    const sides = results.flatMap((result) => {
+      const side = result.decision === null ? null : opportunitySide(result.decision)
+      return side === 'long' || side === 'short' ? [{ model: describeDecider(result.model), side }] : []
+    })
+    if (sides.some((entry) => entry.side === 'long') && sides.some((entry) => entry.side === 'short')) told(disagreementNotice(event, sides))
+    for (const model of resting) {
+      told(breakerNotice('model', `${describeDecider(model)} failed or was refused three times running today, and the watch does not ask it again until midnight UTC. The other models are still asked.`, `model:${model}`))
+    }
     // Who was left out, in a few words: the card says why on a line of its own.
     const rested = resting.length === 0 ? '' : ` Not asked: ${resting.map((model) => describeDecider(model)).join(', ')}, rested until midnight UTC.`
     return { text: `${said.text}${paper.map((line) => ` ${line}`).join('')}${rested}`, ok: said.ok, retry: false }
@@ -192,12 +218,27 @@ async function askAbout(event: MarketEvent, watch: AiWatchConfig, deps: WatchDep
 
   const gated = watch.firstModelGates && watch.models.length > 1
   const first = await askModels(gated ? watch.models.slice(0, 1) : watch.models, ask)
-  if (!gated) return told(first.results, 0)
+  if (!gated) return outcome(first.results, 0)
   // Most events are no trade. The first model says so alone, and the others are asked only about
   // what it would act on.
-  if (!isActionableOpportunity(first.results[0].decision)) return told(first.results, watch.models.length - 1)
+  if (!isActionableOpportunity(first.results[0].decision)) return outcome(first.results, watch.models.length - 1)
   const rest = await askModels(watch.models.slice(1), ask)
-  return told([...first.results, ...rest.results], 0)
+  return outcome([...first.results, ...rest.results], 0)
+}
+
+/** An urgent event raised live in the last few minutes that the watch could have asked about and
+ * did not, because of its own state -- off, no model, every model rested, the day's events spent --
+ * is told as a MARKET_EVENT, once per pair per thread. An event skipped for its own sake (below the
+ * band, not among the strongest, part of a move, stale) is not: that is the watch choosing. */
+/** A notice as the arguments `notify` takes. */
+function noticeArgs(notice: { title: string; body: string; extra: NoticeExtra }): [string, string, NoticeExtra] {
+  return [notice.title, notice.body, notice.extra]
+}
+
+export function unaskedMarketEvent(event: MarketEvent, reason: string, nowSec: number): boolean {
+  if (event.live === null || event.live.marketMove !== undefined || event.band !== 'urgent' || event.direction === 'none') return false
+  if (nowSec - event.time > AI_WATCH_FRESH_SECONDS) return false
+  return /^The watch is off\.|no model to ask|failed or been refused|has asked about its \d+ events for today/.test(reason)
 }
 
 /** One look at the scanner's events. Resolves when every event it took up has been answered.
@@ -210,8 +251,20 @@ export async function watchPass(events: MarketEvent[], deps: WatchDeps): Promise
 
   const { watch } = await deps.getConfig()
   // Off: nothing is marked. An event waiting here when the watch is switched on is taken up only
-  // if it is still fresh, like any other.
-  if (!watch.enabled) return result
+  // if it is still fresh, like any other. An urgent one is told as a market event, once per pair.
+  if (!watch.enabled) {
+    const nowSec = deps.nowSec()
+    for (const event of events) {
+      if (!handled.has(event.id) && unaskedMarketEvent(event, 'The watch is off.', nowSec)) {
+        try {
+          deps.notify(...noticeArgs(marketEventNotice(event, 'the watch is off.')))
+        } catch {
+          // A desktop that cannot show it is not a reason to fail the pass.
+        }
+      }
+    }
+    return result
+  }
 
   const nowSec = deps.nowSec()
   const page = await deps.listCalls({ source: 'watch', sinceSec: utcMidnight(nowSec), limit: LEDGER_ROWS_READ })
@@ -236,6 +289,13 @@ export async function watchPass(events: MarketEvent[], deps: WatchDeps): Promise
     const reason = watchSkipReason(event, watch, { nowSec, takenToday, paused })
     if (reason !== null) {
       result.skipped.push({ id: event.id, reason })
+      if (unaskedMarketEvent(event, reason, nowSec)) {
+        try {
+          deps.notify(...noticeArgs(marketEventNotice(event, reason.charAt(0).toLowerCase() + reason.slice(1))))
+        } catch {
+          // A desktop that cannot show it is not a reason to fail the pass.
+        }
+      }
       continue
     }
     takenToday.add(event.id)

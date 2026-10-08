@@ -58,6 +58,12 @@ vi.mock('../electron/services/exchanges/binance', () => ({
   },
   fetchMarketData: async (path: string) => ({ response: await fetch(`${rig.hosts.current.restRoot}${path}`), endpoint: rig.hosts.current })
 }))
+/** What the main process told: the stream dead (the V4 document, §48). */
+const told = vi.hoisted(() => [] as { title: string; body: string; extra: { kind: string; thread?: string } }[])
+vi.mock('../electron/services/noticeService', () => ({
+  tell: (notice: { title: string; body: string; extra: { kind: string; thread?: string } }) => void told.push(notice),
+  tellNotice: async () => true
+}))
 vi.mock('../electron/services/marketService', () => ({
   scanSourceFor: () => ({
     fetchRecentCandles: async (symbol: string) => {
@@ -276,5 +282,24 @@ describe('the connection, renewed and read again', () => {
     rig.handlers?.onOpen?.(socket)
     await vi.advanceTimersByTimeAsync(10)
     expect(rig.seeded).toEqual([])
+  })
+})
+
+describe('the stream dead', () => {
+  it('is told once a gap has been open three minutes, once per gap, and again for the next gap', async () => {
+    told.length = 0
+    rig.handlers?.onMessage(message('btcusdt@kline_1m', { s: 'BTCUSDT', k: { t: NOW_MS, o: '1', h: '1', l: '1', c: '1', v: '1', x: false } }))
+    await vi.advanceTimersByTimeAsync(66_000)
+    expect(getLiveState().connection.gaps.at(-1)?.to).toBeNull()
+    expect(told).toEqual([])
+    await vi.advanceTimersByTimeAsync(120_000)
+    expect(told).toHaveLength(1)
+    expect(told[0]).toMatchObject({ title: 'The live stream is dead', extra: { kind: 'SYSTEM_FAILURE', thread: 'stream' } })
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(told).toHaveLength(1)
+    // The next frame closes the gap; a gap after that is told again.
+    rig.handlers?.onMessage(message('btcusdt@kline_1m', { s: 'BTCUSDT', k: { t: NOW_MS, o: '1', h: '1', l: '1', c: '1', v: '1', x: false } }))
+    await vi.advanceTimersByTimeAsync(190_000)
+    expect(told).toHaveLength(2)
   })
 })

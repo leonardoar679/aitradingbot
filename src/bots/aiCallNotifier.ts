@@ -21,7 +21,7 @@ export function announceBotAiCall(bot: Bot, call: BotAiCall | null, nowSec: numb
   if (announced.has(notice.key)) return false
   announced.add(notice.key)
   // A desktop that cannot show it is not a reason to fail the poll that noticed the call.
-  void window.api.notify(notice.title, notice.body).catch(() => undefined)
+  void window.api.notify(notice.title, notice.body, undefined, { kind: 'TRADE_OPPORTUNITY', thread: notice.key }).catch(() => undefined)
   return true
 }
 

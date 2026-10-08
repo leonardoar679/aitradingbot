@@ -10,6 +10,12 @@ const rig = vi.hoisted(() => ({
   server: { skewMs: 50, delayMs: 0, fail: false }
 }))
 
+/** What the main process told: live entries paused, and resumed (the V4 document, §48). */
+const told = vi.hoisted(() => [] as { title: string; body: string; extra: { kind: string; thread?: string } }[])
+vi.mock('../electron/services/noticeService', () => ({
+  tell: (notice: { title: string; body: string; extra: { kind: string; thread?: string } }) => void told.push(notice),
+  tellNotice: async () => true
+}))
 vi.mock('../electron/services/liveMarketService', () => ({ getLiveState: () => ({ connection: rig.live }) }))
 vi.mock('../electron/services/credentialsService', () => ({
   listCredentialStatus: async () => [{ exchange: 'binance', configured: rig.key.configured, lastTestOk: rig.key.lastTestOk }]
@@ -99,5 +105,22 @@ describe('one measurement', () => {
     rig.server.skewMs = 5_400
     await probeOnce()
     expect(liveHealthReasons()).toEqual(["the clock is 5.4 s behind Binance's"])
+  })
+})
+
+describe('the pause, told', () => {
+  it('is told when live entries pause and when they resume, once each, not on every measurement', async () => {
+    told.length = 0
+    rig.server.skewMs = 9_000
+    await probeOnce()
+    await probeOnce()
+    expect(told).toHaveLength(1)
+    expect(told[0]).toMatchObject({ title: 'LIVE TRADING PAUSED', extra: { kind: 'CIRCUIT_BREAKER', thread: 'health' } })
+    expect(told[0].body).toContain("the clock is 9 s behind Binance's")
+    rig.server.skewMs = 50
+    await probeOnce()
+    await probeOnce()
+    expect(told).toHaveLength(2)
+    expect(told[1]).toMatchObject({ title: 'Live trading resumed', extra: { kind: 'CIRCUIT_BREAKER', thread: 'health-ok' } })
   })
 })

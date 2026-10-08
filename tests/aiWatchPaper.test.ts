@@ -395,7 +395,7 @@ interface Rig {
     now: number
     candles: Candle[] | Error
   }
-  notices: { title: string; body: string }[]
+  notices: { title: string; body: string; extra?: { kind: string; thread?: string; severity?: string } }[]
   settled: string[]
   writes: number
   /** Each review asked for, as event id and model. */
@@ -460,8 +460,8 @@ function rig(initial: Partial<Rig['state']> = {}): Rig {
     settle: async (target) => {
       made.settled.push(target.id)
     },
-    notify: (title, body) => {
-      made.notices.push({ title, body })
+    notify: (title, body, extra) => {
+      made.notices.push({ title, body, extra })
     },
     nowSec: () => state.now,
     newId: () => `paper-${++ids}`,
@@ -577,6 +577,9 @@ describe('settleWatchPaperTrades', () => {
     expect(await settleWatchPaperTrades(r.deps)).toEqual(['Watch: BUY SOLUSDT'])
     expect(r.state.executors[0]).toMatchObject({ status: 'stopped', stoppedAt: start + 300 })
     expect(r.settled).toEqual(['w1'])
+    // Told as its kind (the V4 document, §48): the target reached, with the result in money and R.
+    expect(r.notices.at(-1)).toMatchObject({ title: 'SOLUSDT: paper BUY reached its target', extra: { kind: 'TARGET_REACHED', thread: 'w1', severity: 'high' } })
+    expect(r.notices.at(-1)?.body).toMatch(/^\+2\.\d+ USDT \(\+\d+\.\d\d R\) after fees, on paper\./)
   })
 
   it('writes on it how it ended: the exit, the minute, and what a stake of 100 made after fees', async () => {
@@ -599,10 +602,12 @@ describe('settleWatchPaperTrades', () => {
     expect(await settleWatchPaperTrades(stopped.deps)).toHaveLength(1)
     expect(stopped.state.executors[0].watch?.result).toMatchObject({ exit: 'stop_loss', closedAt: start })
     expect(stopped.state.executors[0].watch?.result?.pnlQuote).toBeLessThan(-1.5)
+    expect(stopped.notices.at(-1)).toMatchObject({ title: 'SOLUSDT: paper BUY hit its stop', extra: { kind: 'STOP_TRIGGERED', thread: 'w1' } })
     const timed = rig({ executors: [trade()], now: start + 4000, candles: [bar(start, 100, 100.4, 99.9, 100.2), bar(start + 3600, 100.2, 100.4, 100, 100.3)] })
     expect(await settleWatchPaperTrades(timed.deps)).toHaveLength(1)
     expect(timed.state.executors[0].status).toBe('stopped')
     expect(timed.state.executors[0].watch?.result).toMatchObject({ exit: 'time_limit', closedAt: start + 3600 })
+    expect(timed.notices.at(-1)).toMatchObject({ title: 'SOLUSDT: paper BUY ran out its time limit', extra: { kind: 'TRADE_EXECUTED', thread: 'w1', severity: 'watch' } })
   })
 
   it('stops one whose entry expired unfilled, which bought nothing', async () => {
@@ -983,6 +988,7 @@ describe('the safeguards', () => {
       expect(r.notices).toEqual([
         {
           title: 'SOLUSDT: paper BUY dropped',
+          extra: { kind: 'TRADE_BLOCKED', thread: 'w1' },
           body: 'Bitcoin fell 1.17% after the call on the 09:07 UTC event, before this trade entered, so the watch dropped it. Nothing real was placed or held.'
         }
       ])
@@ -1391,5 +1397,26 @@ describe('filled from the live book', () => {
     expect(ended.watch?.result?.exit).toBe('take_profit')
     expect(ended.watch?.result?.closedAt).toBe(minute + 60)
     expect(ended.watch?.result?.pnlQuote).toBeGreaterThan(0)
+  })
+})
+
+describe('a position near its stop', () => {
+  const start = Math.ceil(SOON / 60) * 60
+  const trade = (): ExecutorConfig => watchPaperExecutor({ id: 'w1', event: event(), plan: okPlan(), nowSec: SOON })
+
+  it('is told once it is three quarters of the way there, on the trade\'s thread, and left open', async () => {
+    const r = rig({ executors: [trade()], now: start + 300, candles: [bar(start, 100, 100.4, 99.9, 100.2), bar(start + 60, 100.2, 100.3, 98.7, 98.8)] })
+    expect(await settleWatchPaperTrades(r.deps)).toEqual([])
+    expect(r.state.executors[0].status).toBe('active')
+    expect(r.notices).toHaveLength(1)
+    expect(r.notices[0]).toMatchObject({ title: 'SOLUSDT: near its stop', extra: { kind: 'POSITION_RISK', thread: 'w1', severity: 'high' } })
+    expect(r.notices[0].body).toContain('80% of the way from its entry to its stop, at 98.8')
+  })
+
+  it('is not told while it is further from its stop than that', async () => {
+    const r = rig({ executors: [trade()], now: start + 300, candles: [bar(start, 100, 100.4, 99.9, 100.2), bar(start + 60, 100.2, 100.3, 98.9, 99)] })
+    expect(await settleWatchPaperTrades(r.deps)).toEqual([])
+    // Two thirds of the way: under the line, not told.
+    expect(r.notices).toEqual([])
   })
 })

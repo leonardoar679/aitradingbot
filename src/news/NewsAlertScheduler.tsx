@@ -2,12 +2,7 @@ import { useEffect } from 'react'
 import { NOTICE_REPEAT_SECONDS, btcHourMovePct, crashNotice, crashStep, noticeCoins, noticeSeverity, repeatsNotice, storyNotice, storySeverity, type NoticedStory } from '../../shared/alerts'
 import { heldPlaces, type Holdings } from '../../shared/newsActions'
 import type { NewsFeedState } from '../../shared/newsFeed'
-import type { AlertRecordOnFile } from '../../shared/records'
-import { addAlert, seedAlerts } from './alertStore'
-
-/** An alert told, written to the records on file (shared/records.ts). A record; nothing reads it to
- * decide anything. */
-const keep = (record: AlertRecordOnFile): void => void window.api.records.alert(record).catch(() => undefined)
+import { addAlert, addToldAlert, seedAlerts } from './alertStore'
 
 /** A story published longer ago than this when first read is not news to raise. */
 const FRESH_SECONDS = 30 * 60
@@ -63,8 +58,7 @@ export function NewsAlertScheduler(): null {
         const severity = storySeverity(story, held, state.reactions[story.id]?.verdict ?? null)
         const places = holdings === null ? [] : [...held].flatMap((ticker) => heldPlaces(ticker, holdings as Holdings))
         const notice = storyNotice(story, severity, places)
-        addAlert({ id: story.id, severity, title: notice.title, body: notice.body, at: story.publishedAt, url: story.url })
-        keep({ id: story.id, severity, title: notice.title, body: notice.body, at: story.publishedAt, url: story.url })
+        addAlert({ id: story.id, severity, title: notice.title, body: notice.body, at: story.publishedAt, url: story.url, kind: 'NEWS_EVENT' })
         const level = noticeSeverity(severity)
         if (level === null || story.source === 'binance' || cancelled) continue
         noticed = noticed.filter((entry) => nowSec - entry.at < NOTICE_REPEAT_SECONDS)
@@ -72,7 +66,8 @@ export function NewsAlertScheduler(): null {
         // Held back or told, it is news told: a third telling is held back against either.
         noticed.push({ coins: noticeCoins(story), title: story.title, at: nowSec })
         if (repeat) continue
-        void window.api.notify(notice.title, notice.body, level).catch(() => undefined)
+        // Told through the one handler, which records it under the story's id and tells the window.
+        void window.api.notify(notice.title, notice.body, level, { kind: 'NEWS_EVENT', id: story.id, url: story.url }).catch(() => undefined)
       }
     }
 
@@ -83,6 +78,11 @@ export function NewsAlertScheduler(): null {
         if (!cancelled) seedAlerts(page.rows)
       })
       .catch(() => undefined)
+    // And each notice as it is told from now on, whatever raised it: a real position's exit, the
+    // live loss limit, the exchange's health, a failure, a breaker.
+    const stopTold = window.api.records.onTold((record) => {
+      if (!cancelled) addToldAlert(record)
+    })
     void window.api.feed
       .getState()
       .then((state) => look(state))
@@ -101,9 +101,8 @@ export function NewsAlertScheduler(): null {
           telling = step.telling
           if (!step.tell || move === null) return
           const notice = crashNotice(move)
-          addAlert({ id: `btc-crash:${nowSec}`, severity: 'critical', title: notice.title, body: notice.body, at: nowSec })
-          keep({ id: `btc-crash:${nowSec}`, severity: 'critical', title: notice.title, body: notice.body, at: nowSec })
-          void window.api.notify(notice.title, notice.body, 'critical').catch(() => undefined)
+          addAlert({ id: `btc-crash:${nowSec}`, severity: 'critical', title: notice.title, body: notice.body, at: nowSec, kind: 'MARKET_EVENT' })
+          void window.api.notify(notice.title, notice.body, 'critical', { kind: 'MARKET_EVENT', thread: 'BTCUSDT', id: `btc-crash:${nowSec}` }).catch(() => undefined)
         })
         .catch(() => undefined)
     }
@@ -111,6 +110,7 @@ export function NewsAlertScheduler(): null {
 
     return (): void => {
       cancelled = true
+      stopTold()
       stop()
       clearInterval(timer)
     }

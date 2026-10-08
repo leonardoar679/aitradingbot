@@ -28,7 +28,7 @@ export function PaperPauseScheduler(): null {
       })
         .then((notices) => {
           if (cancelled) return
-          for (const notice of notices) void window.api.notify(notice.title, notice.body).catch(() => undefined)
+          for (const notice of notices) void window.api.notify(notice.title, notice.body, undefined, { kind: 'CIRCUIT_BREAKER', thread: 'paper-pause' }).catch(() => undefined)
         })
         .catch((failure: unknown) => console.error('The losing-run pause could not read the paper trades:', failure))
     }

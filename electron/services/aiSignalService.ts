@@ -75,16 +75,7 @@ import type { AiCallRecord } from '../../shared/aiLedger'
 import { INTERVAL_SECONDS, type Candle } from '../../shared/ipc'
 import { writeJsonAtomic } from './atomicWrite'
 import { getDecryptedAiCredential } from './aiCredentialsService'
-import {
-  assertAiBudget,
-  budgetRemainingUsd,
-  findAiModel,
-  getAiConfig,
-  recordAiSpend,
-  resolveAiDecider,
-  resolveAiModel,
-  resolveAiPipeline
-} from './aiConfigService'
+import { assertAiBudget, budgetRemainingUsd, findAiModel, getAiConfig, recordAiSpend, resolveAiDecider, resolveAiModel, resolveAiPipeline, AiBudgetError } from './aiConfigService'
 import { appendAiCall, listAiCalls } from './aiLedgerService'
 import { withinWatchLimits } from './aiWatchService'
 import { listMarketEvents } from './marketScannerService'
@@ -100,6 +91,8 @@ import {
   responseSchemaFor
 } from './aiPrompt'
 import { chatCompletion, OpenRouterError, type ChatCompletionResult } from './openRouterClient'
+import { breakerNotice, systemFailureNotice } from '../../shared/notices'
+import { tell } from './noticeService'
 
 interface CachedDecision extends AiSignalDecision {
   promptVersion: string
@@ -333,7 +326,13 @@ interface AskInput {
 
 /** The paid path: one decision that is not in the cache. */
 async function askModel(input: AskInput): Promise<AiSignalDecision> {
-  await assertAiBudget()
+  try {
+    await assertAiBudget()
+  } catch (error) {
+    // The day's budget spent: a breaker tripped, told once a day (the V4 document, §48).
+    if (error instanceof AiBudgetError) tell(breakerNotice('ai-budget', `${error.message} No model is asked again until the budget is raised or the day turns.`))
+    throw error
+  }
 
   const promptVersion = aiPromptVersion(input.context)
   const row = {
@@ -378,6 +377,8 @@ async function askModel(input: AskInput): Promise<AiSignalDecision> {
       detail: null
     }
     await record('ledger write', appendAiCall(failed))
+    // The key refused: told as a failure of something the app runs on, once an hour.
+    if (error instanceof OpenRouterError && error.status === 401) tell(systemFailureNotice('ai-key', `${error.message} Every call fails the same way until the key on Connections is replaced.`))
     // Fatal means every remaining decision would fail the same way, so the run stops here with
     // the reason instead of producing a tape of safety holds.
     if (error instanceof OpenRouterError && error.kind === 'fatal') throw error

@@ -48,6 +48,8 @@ import { newsEventKind } from '../../shared/newsActions'
 import { writeJsonAtomic } from './atomicWrite'
 import { appendJsonLine, listMonthFiles } from './jsonlStore'
 import { cancelHistoricalRangeFetch, fetchHistoricalRange, listSymbols, scanSourceFor } from './marketService'
+import { systemFailureNotice } from '../../shared/notices'
+import { tell } from './noticeService'
 
 // The market scanner: once a minute, read every watched pair and say what is moving.
 //
@@ -103,6 +105,9 @@ let nextPassAt: number | null = null
 let failed = 0
 let error: string | null = null
 let timer: ReturnType<typeof setTimeout> | null = null
+/** Passes failing in a row before it is told. */
+const FAILING_PASSES_TOLD = 3
+let failingPasses = 0
 let passInFlight = false
 /** The pass started by switching the scanner on, which nothing waits for. */
 let background: Promise<unknown> = Promise.resolve()
@@ -346,6 +351,9 @@ export async function scanOnce(nowMs: number = Date.now()): Promise<ScannerState
     lastPassAt = Math.floor(Date.now() / 1000)
     lastPassMs = Date.now() - started
   }
+  // Three passes failing running are told once (SYSTEM_FAILURE); one pass is the market's noise.
+  failingPasses = error === null ? 0 : failingPasses + 1
+  if (failingPasses === FAILING_PASSES_TOLD) tell(systemFailureNotice('scanner', `${error ?? 'The pass failed.'} Three passes running; the next is tried as usual.`))
   notify(current)
   return snapshot(current)
 }

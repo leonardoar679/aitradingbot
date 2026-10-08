@@ -10,6 +10,8 @@ import { notionalFor, resolveLeverage } from '../../shared/perp'
 import { listOpenLivePositions } from './livePositionsService'
 import { listOpenLiveOrders } from './liveOrdersService'
 import { liveHealthReasons } from './exchangeHealthService'
+import { tell } from './noticeService'
+import { breakerNotice } from '../../shared/notices'
 
 // Safety state for real order placement — deliberately its own file, separate from
 // settings.json and credentials.json, so a bug in either of those can never weaken a gate here.
@@ -322,6 +324,17 @@ export async function checkLossLimitAndAutoDisarm(): Promise<void> {
   // A tally that cannot be totalled disarms too: the auto-shutoff shares the loss limit's `<=`
   // comparison, so without this a poisoned ledger would silently switch off the shutoff as well.
   if (describeUntrustedLossTally(realizedPnlToday) !== null || realizedPnlToday <= -state.dailyLossLimitQuote) {
+    const wasArmed = sessionArmed
     sessionArmed = false
+    // Told once, when it disarms: a breaker tripped (the V4 document, §48).
+    if (wasArmed) {
+      tell(
+        breakerNotice(
+          'live-loss',
+          describeUntrustedLossTally(realizedPnlToday) ??
+            `Realized ${realizedPnlToday.toFixed(2)} today against a limit of ${state.dailyLossLimitQuote}: the session is disarmed for today. Open positions keep their watchers, which can still close them while the session is armed again.`
+        )
+      )
+    }
   }
 }

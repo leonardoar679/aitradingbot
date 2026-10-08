@@ -16,6 +16,8 @@ import { currentDataEndpoint, dataHostSwitchCount, fetchMarketData, onDataHostCh
 import { createReconnectingSocket } from './exchanges/reconnectingSocket'
 import { scanSourceFor } from './marketService'
 import { getSettings } from './settingsService'
+import { systemFailureNotice } from '../../shared/notices'
+import { tell } from './noticeService'
 
 // THE LIVE MARKET: ONE PUBLIC SOCKET TO BINANCE'S MARKET-DATA HOST (the second V3 document, §7-8).
 //
@@ -74,6 +76,9 @@ let requestId = 0
 let dirty = false
 let started = false
 let lastBackfillAt = -Infinity
+/** A gap this long is the stream dead. */
+const DEAD_STREAM_MS = 180_000
+let deadTold = false
 const listeners = new Set<(state: LiveState) => void>()
 
 export function onLiveUpdate(listener: (state: LiveState) => void): () => void {
@@ -125,7 +130,10 @@ function noteMessage(nowMs: number): void {
   const gapOpen = last !== undefined && last.to === null
   const closedGap = gapOpen ? [...gaps.slice(0, -1), { ...last, to: Math.floor(nowMs / 1000) }] : gaps
   state = { ...state, connection: { ...connection, lastMessageAt: nowMs, gaps: closedGap } }
-  if (gapOpen) backfillMinutes('a gap in the stream closed')
+  if (gapOpen) {
+    deadTold = false
+    backfillMinutes('a gap in the stream closed')
+  }
 }
 
 function asNumber(value: unknown): number {
@@ -310,7 +318,14 @@ function checkGap(): void {
   const { connection } = state
   const nowMs = Date.now()
   const last = connection.gaps[connection.gaps.length - 1]
-  if (last !== undefined && last.to === null) return
+  if (last !== undefined && last.to === null) {
+    // A gap open this long is the stream dead, told once per gap (SYSTEM_FAILURE).
+    if (!deadTold && nowMs - last.from * 1000 >= DEAD_STREAM_MS) {
+      deadTold = true
+      tell(systemFailureNotice('stream', `No frame from the live-price socket for ${Math.round((nowMs - last.from * 1000) / 1000)} s. No paper trade of the app's own opens on a stale price, and new live entries pause while REST fails too.`))
+    }
+    return
+  }
   const since = connection.lastMessageAt
   if (since === null || nowMs - since < LIVE_GAP_SECONDS * 1000) return
   state = { ...state, connection: { ...connection, gaps: [...connection.gaps, { from: Math.floor(since / 1000), to: null }].slice(-GAPS_KEPT) } }

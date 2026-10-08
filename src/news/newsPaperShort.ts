@@ -1,4 +1,5 @@
 import { aiExitOutcome, aiExitPlanEnd, aiExitPlanParams, aiExitPlanResult, aiExitWrite, type AiExitOrder } from '../../shared/aiExit'
+import type { NoticeExtra } from '../../shared/notices'
 import type { NewsItem, NewsKindActions } from '../../shared/news'
 import {
   delistingShortParams,
@@ -99,7 +100,7 @@ export interface NewsShortDeps {
   btcCorrelation: (exchange: Exchange, symbol: string) => Promise<number | null>
   /** Books a stopped paper executor's result into the paper account. */
   settle: (executor: ExecutorConfig, nowSec: number) => Promise<unknown>
-  notify: (title: string, body: string) => void
+  notify: (title: string, body: string, extra?: NoticeExtra) => void
   nowSec: () => number
   newId: () => string
   /** Runs a read-modify-write of settings with no other one inside it. */
@@ -187,7 +188,7 @@ export async function openNewsShorts(item: NewsItem, actions: Pick<NewsKindActio
       await deps.setExecutors([...fresh.executors, executor])
       const notice = newsShortNotice(item, ticker, params, pair.quoteAsset)
       try {
-        deps.notify(notice.title, notice.body)
+        deps.notify(notice.title, notice.body, { kind: 'TRADE_EXECUTED', thread: executor.id })
       } catch {
         // A desktop that cannot show it is not a reason to report a short that was opened as not.
       }
@@ -307,7 +308,7 @@ export const newsShortBrowserDeps: NewsShortDeps = {
   // Not kept in Inventory (keepPosition is false), so nothing was handed over and the whole
   // result is cash.
   settle: (executor, nowSec) => settleExecutorOnStop({ executor, handedOver: { held: null, realizedPnl: 0 }, now: nowSec }),
-  notify: (title, body) => void window.api.notify(title, body).catch(() => undefined),
+  notify: (title, body, extra) => void window.api.notify(title, body, extra?.severity, extra).catch(() => undefined),
   nowSec: () => Math.floor(Date.now() / 1000),
   newId: () => crypto.randomUUID(),
   queue: (work) => settingsWrites(work)

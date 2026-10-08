@@ -37,6 +37,12 @@ vi.mock('../electron/services/marketService', () => ({
     }
   })
 }))
+/** What the main process told: every feed dead (the V4 document, §48). */
+const told = vi.hoisted(() => [] as { title: string; body: string; extra: { kind: string; thread?: string } }[])
+vi.mock('../electron/services/noticeService', () => ({
+  tell: (notice: { title: string; body: string; extra: { kind: string; thread?: string } }) => void told.push(notice),
+  tellNotice: async () => true
+}))
 vi.mock('../electron/services/newsService', () => ({
   getNewsState: async () => ({
     config: {},
@@ -205,5 +211,20 @@ describe('the news feed', () => {
     expect(await openStoryLink('not a link')).toBe(false)
     expect(await openStoryLink(42)).toBe(false)
     expect(rig.opened).toEqual(['https://www.coindesk.com/sol-futures'])
+  })
+})
+
+describe('the feeds dead', () => {
+  it('is told once every feed has failed for half an hour, and not while one still answers', async () => {
+    told.length = 0
+    for (const url of Object.keys(rig.feeds)) rig.feeds[url] = { status: 503, body: '' }
+    // Ten reads, three minutes apart: the first nine are under half an hour since the last good read.
+    await vi.advanceTimersByTimeAsync(27 * 60_000)
+    expect(told).toEqual([])
+    await vi.advanceTimersByTimeAsync(6 * 60_000)
+    expect(told).toHaveLength(1)
+    expect(told[0]).toMatchObject({ title: 'The news feeds cannot be read', extra: { kind: 'SYSTEM_FAILURE', thread: 'feed' } })
+    await vi.advanceTimersByTimeAsync(6 * 60_000)
+    expect(told).toHaveLength(1)
   })
 })

@@ -1,4 +1,5 @@
 import { EXIT_LINES, describeExitTrigger, exitOrderOf, type ExitCheck, type ExitCheckRequest } from '../../shared/aiAdditions'
+import type { NoticeExtra } from '../../shared/notices'
 import type { AiConfig } from '../../shared/aiCost'
 import { MARKET_BARS_15M, MARKET_BARS_1M, MARKET_REFERENCE_SYMBOLS, referenceReturns, type ReferenceCandles } from '../../shared/aiEventMarket'
 import type { AiExitOrder } from '../../shared/aiExit'
@@ -39,7 +40,7 @@ export interface ExitCheckDeps {
   /** The two writers, each handed an EXIT for one of its own trades. */
   exitWatchTrade: (order: AiExitOrder) => Promise<boolean>
   exitNewsShort: (order: AiExitOrder) => Promise<boolean>
-  notify: (title: string, body: string) => void
+  notify: (title: string, body: string, extra?: NoticeExtra) => void
   nowSec: () => number
 }
 
@@ -159,7 +160,7 @@ export async function lookAtOpenTrades(deps: ExitCheckDeps): Promise<string[]> {
     }
     lines.push(`${executor.symbol}: EXIT (${triggersIn(check)}); it closes at the next minute, on paper.`)
     try {
-      deps.notify(`Exit check: ${executor.name} closes`, `Asked because ${triggersIn(check)}. ${order.reason} It closes at the next minute, on paper.`)
+      deps.notify(`Exit check: ${executor.name} closes`, `Asked because ${triggersIn(check)}. ${order.reason} It closes at the next minute, on paper.`, { kind: 'TRADE_EXECUTED', thread: executor.id })
     } catch {
       // A desktop that cannot show it is not a reason to report a trade that is closing as not.
     }
@@ -175,6 +176,6 @@ export const exitCheckBrowserDeps: ExitCheckDeps = {
   exitCheck: (request) => window.api.ai.exitCheck(request),
   exitWatchTrade: (order) => exitWatchPaperTrade(order, watchPaperBrowserDeps),
   exitNewsShort: (order) => exitNewsShort(order, newsShortBrowserDeps),
-  notify: (title, body) => void window.api.notify(title, body).catch(() => undefined),
+  notify: (title, body, extra) => void window.api.notify(title, body, extra?.severity, extra).catch(() => undefined),
   nowSec: () => Math.floor(Date.now() / 1000)
 }

@@ -121,7 +121,8 @@ describe('telling the desktop', () => {
     expect(announceBotAiCall(BOT, entered, open)).toBe(true)
     expect(announceBotAiCall(BOT, entered, open + 120)).toBe(false)
     expect(notify).toHaveBeenCalledTimes(1)
-    expect(notify).toHaveBeenCalledWith('GPT BTC hourly: BUY BTCUSDT', expect.stringContaining('Nothing has been placed'))
+    // With its kind and its thread (shared/notices.ts), since 8 October 2026.
+    expect(notify).toHaveBeenCalledWith('GPT BTC hourly: BUY BTCUSDT', expect.stringContaining('Nothing has been placed'), undefined, { kind: 'TRADE_OPPORTUNITY', thread: expect.any(String) })
 
     // The next call is a different one.
     const next: BotAiCall = { ...entered, decision: decision(T0 + 8 * BAR) }
@@ -148,15 +149,19 @@ describe('telling the desktop', () => {
 describe('the notice is words on the desktop and nothing more', () => {
   it('the handler shows text and focuses the window: it is handed nothing to act on', () => {
     const handler = readFileSync(join(ROOT, 'electron', 'ipc', 'handlers', 'appHandlers.ts'), 'utf-8')
-    // Its only inputs are a title and a body, and the only thing a click does is show the window.
-    // Since 6 October 2026 a notice of news or the market may also say how loud it is (shared/alerts.ts).
-    expect(handler).toContain('ipcMain.handle(IpcChannel.AppNotify, async (event, title: unknown, body: unknown, severity?: unknown): Promise<boolean> => {')
-    // Since 6 October 2026 it reads one thing more, the Notifications control (shared/alerts.ts):
-    // whether to show the notice at all, and with sound. Those two lines are the only mention of
-    // settings it may have -- it writes none, and reads no executor.
-    const reads = ["import { getSettings } from '../../services/settingsService'", 'healAlerts((await getSettings()).alerts)']
-    for (const line of reads) expect(handler).toContain(line)
-    expect(reads.reduce((rest, line) => rest.replace(line, ''), handler)).not.toMatch(/placeLive|liveTrading|executor|settings/i)
+    // Its inputs are a title, a body, how loud, and the notice's kind and thread, and it hands them
+    // to the one service that tells every notice (since 8 October 2026); it reads nothing itself.
+    expect(handler).toContain('ipcMain.handle(IpcChannel.AppNotify, (event, title: unknown, body: unknown, severity?: unknown, extra?: unknown): Promise<boolean> =>')
+    expect(handler).toContain('tellNotice(healNoticeRequest(title, body, severity, extra), event.sender)')
+    expect(handler).not.toMatch(/placeLive|liveTrading|executor|settings/i)
+    // The service reads one thing, the Notifications control (shared/alerts.ts): whether to show the
+    // notice at all, and with sound; and it writes one thing, the record of what it told
+    // (shared/records.ts). Those lines are the only mention of settings and of a write it may have;
+    // the only thing a click does is show the window, and it reads no executor.
+    const service = readFileSync(join(ROOT, 'electron', 'services', 'noticeService.ts'), 'utf-8')
+    const reads = ["import { getSettings } from './settingsService'", 'healAlerts((await getSettings()).alerts)', "import { appendAlert } from './recordStoreService'"]
+    for (const line of reads) expect(service).toContain(line)
+    expect(reads.reduce((rest, line) => rest.replace(line, ''), service)).not.toMatch(/placeLive|liveTrading|executor|settings/i)
   })
 
   it('the notifier and the bot views reach for no order path', () => {

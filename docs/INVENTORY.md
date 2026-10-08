@@ -182,7 +182,7 @@ reaches it. A call may span lines. The `news` channels were added after: four in
 
 | Namespace | Channels | Called from |
 |---|---|---|
-| `app` | `ping`, `getVersion`, `notify` | `notify`: the watch, its paper trader, the bots' call notifier, the digest and the pause, and `NewsAlertScheduler` (with a severity: silent at WATCH) |
+| `app` | `ping`, `getVersion`, `notify`, `effectiveConfig` | `notify`: the watch, its paper trader, the bots' call notifier, the digest and the pause, the exit check, the news short and `NewsAlertScheduler`; since 8 October 2026 each carries a kind and a thread (`shared/notices.ts`), and one service tells them all and the main process's own (`electron/services/noticeService.ts`) |
 | `settings` | `get`, `set` | Almost every page and scheduler; writes go through `utils/settingsWrites.ts` and `utils/serialQueue.ts` |
 | `market` | 12: symbols, symbol rules, candles and ticker subscriptions, 24-hour ticker, historical ranges; and since 6 October 2026, 4 more for live prices: interest, state, a pair's book, updates | Charts, Market, Backtest, executors, the watch, benchmarks, Explorer; live prices: Right Now, Overview's top card, and the watch's paper writer |
 | `backtest` | `exportSave` | Backtest results, strategy comparison, Journal |

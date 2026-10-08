@@ -147,3 +147,54 @@ describe("Bitcoin's fall", () => {
     expect(crashNotice(-5.5).title).toBe('CRITICAL: Bitcoin -5.50% in an hour')
   })
 })
+
+import { ALERT_KINDS, ALERT_KIND_SEVERITY, ALERT_THREAD_SECONDS, healAlertKind, threadStep, type AlertThread } from '../shared/alerts'
+
+// EVERY KIND THE V4 DOCUMENT NAMES (§48), IN THREADS (§49): a kind's loudness when a notice names
+// none, and one notice per thread per window.
+describe('the kinds and the threads', () => {
+  it('names the eleven kinds the document lists, each with how loud it is', () => {
+    expect([...ALERT_KINDS]).toEqual(['MARKET_EVENT', 'NEWS_EVENT', 'TRADE_OPPORTUNITY', 'TRADE_EXECUTED', 'TRADE_BLOCKED', 'POSITION_RISK', 'TARGET_REACHED', 'STOP_TRIGGERED', 'MODEL_DISAGREEMENT', 'SYSTEM_FAILURE', 'CIRCUIT_BREAKER'])
+    expect(ALERT_KIND_SEVERITY).toEqual({
+      MARKET_EVENT: 'watch',
+      NEWS_EVENT: 'watch',
+      TRADE_OPPORTUNITY: 'high',
+      TRADE_EXECUTED: 'watch',
+      TRADE_BLOCKED: 'watch',
+      POSITION_RISK: 'high',
+      TARGET_REACHED: 'high',
+      STOP_TRIGGERED: 'high',
+      MODEL_DISAGREEMENT: 'watch',
+      SYSTEM_FAILURE: 'high',
+      CIRCUIT_BREAKER: 'high'
+    })
+    expect(healAlertKind('STOP_TRIGGERED')).toBe('STOP_TRIGGERED')
+    expect(healAlertKind('stop_triggered')).toBeNull()
+    expect(healAlertKind(42)).toBeNull()
+  })
+
+  it('tells the first notice on a thread, counts a repeat inside the window, and tells again after it', () => {
+    const t0 = 1_791_500_000
+    let threads: Record<string, AlertThread> = {}
+    let step = threadStep(threads, 'MARKET_EVENT', 'SOLUSDT', t0)
+    expect(step.repeat).toBe(false)
+    threads = step.threads
+    step = threadStep(threads, 'MARKET_EVENT', 'SOLUSDT', t0 + 60)
+    expect(step.repeat).toBe(true)
+    expect(step.threads['MARKET_EVENT:SOLUSDT']).toEqual({ count: 2, firstAt: t0, lastAt: t0 + 60 })
+    threads = step.threads
+    // Another pair, and another kind on the same pair, are their own threads.
+    expect(threadStep(threads, 'MARKET_EVENT', 'ETHUSDT', t0 + 60).repeat).toBe(false)
+    expect(threadStep(threads, 'POSITION_RISK', 'SOLUSDT', t0 + 60).repeat).toBe(false)
+    // The window is from the first telling, not the last repeat.
+    expect(threadStep(threads, 'MARKET_EVENT', 'SOLUSDT', t0 + ALERT_THREAD_SECONDS - 1).repeat).toBe(true)
+    step = threadStep(threads, 'MARKET_EVENT', 'SOLUSDT', t0 + ALERT_THREAD_SECONDS)
+    expect(step.repeat).toBe(false)
+    expect(step.threads['MARKET_EVENT:SOLUSDT']).toEqual({ count: 1, firstAt: t0 + ALERT_THREAD_SECONDS, lastAt: t0 + ALERT_THREAD_SECONDS })
+    // A window of the notice's own, and threads a day old forgotten.
+    expect(threadStep(step.threads, 'CIRCUIT_BREAKER', 'model:a', t0, 86_400).repeat).toBe(false)
+    const held = threadStep(step.threads, 'CIRCUIT_BREAKER', 'model:a', t0, 86_400).threads
+    expect(threadStep(held, 'CIRCUIT_BREAKER', 'model:a', t0 + 86_399, 86_400).repeat).toBe(true)
+    expect(Object.keys(threadStep(held, 'NEWS_EVENT', 'x', t0 + 3 * 86_400).threads)).toEqual(['NEWS_EVENT:x'])
+  })
+})

@@ -20,7 +20,8 @@ import type { MarketEvent } from '../../shared/marketEvent'
 import { correlatedExposureBlock, readBtcCorrelation } from '../../shared/paperExposure'
 import { newsAgainstBlock, type NewsAgainstStory } from '../../shared/paperNewsBlock'
 import { healPaperPause, paperPauseBlock } from '../../shared/paperPause'
-import { healPaperRisk, paperOutBlock } from '../../shared/paperRisk'
+import { NEAR_STOP_SHARE, nearStopNotice, paperCloseNotice, stopProgress, type NoticeExtra } from '../../shared/notices'
+import { healPaperRisk, paperOutBlock, rMultiple } from '../../shared/paperRisk'
 import { describeExecutorFunding } from '../account/executorFunding'
 import { settleExecutorOnStop } from '../account/settleExecutor'
 import { runExecutorSimulation } from '../executors/engine'
@@ -128,7 +129,8 @@ export interface WatchPaperDeps {
   readings: (sinceSec: number) => Promise<Record<string, NewsReading>>
   /** Books a stopped paper executor's result into the paper account. */
   settle: (executor: ExecutorConfig, nowSec: number) => Promise<unknown>
-  notify: (title: string, body: string) => void
+  /** A desktop notice, with its kind and thread (shared/notices.ts). */
+  notify: (title: string, body: string, extra?: NoticeExtra) => void
   nowSec: () => number
   newId: () => string
   /** Runs a read-modify-write of settings with no other one inside it. */
@@ -244,7 +246,7 @@ export async function openWatchPaperTrade(
 
   const notice = watchPaperNotice(event, plan)
   try {
-    deps.notify(notice.title, notice.body)
+    deps.notify(notice.title, notice.body, { kind: 'TRADE_EXECUTED', thread: made.executor?.id ?? event.id })
   } catch {
     // A desktop that cannot show it is not a reason to report a trade that was opened as not.
   }
@@ -322,7 +324,24 @@ export async function settleWatchPaperTrades(deps: WatchPaperDeps): Promise<stri
         })
         if (movePct !== null) found = { exit: 'btc_moved', pnlQuote: 0, closedAt: nowSec, btcMovePct: movePct }
       }
-      if (found === null) continue
+      if (found === null) {
+        // Still open: within three quarters of the way to its stop, it is told, once per trade per
+        // thread. Judged where it is judged, on the last closed minute.
+        if (state.status === 'open' && state.levelPrice !== null) {
+          const params = executor.params as PositionExecutorParams
+          const price = candles[candles.length - 1].close
+          const progress = stopProgress({ side: params.side, entryPrice: state.levelPrice, stopPct: params.stopLossPct, price })
+          if (progress !== null && progress >= NEAR_STOP_SHARE) {
+            const near = nearStopNotice({ id: executor.id, symbol: executor.symbol, side: params.side, real: false }, progress, price)
+            try {
+              deps.notify(near.title, near.body, near.extra)
+            } catch {
+              // A desktop that cannot show it is not a reason to fail the pass.
+            }
+          }
+        }
+        continue
+      }
       const result: WatchPaperOutcome = found
       const stopped = await deps.queue(async (): Promise<boolean> => {
         const fresh = await deps.getSettings()
@@ -338,9 +357,18 @@ export async function settleWatchPaperTrades(deps: WatchPaperDeps): Promise<stri
       if (result.exit === 'btc_moved' && executor.watch !== undefined) {
         const notice = watchPaperDropNotice(executor, executor.watch.eventTime, result.btcMovePct ?? 0)
         try {
-          deps.notify(notice.title, notice.body)
+          deps.notify(notice.title, notice.body, { kind: 'TRADE_BLOCKED', thread: executor.id })
         } catch {
           // A desktop that cannot show it is not a reason to report a trade that was dropped as not.
+        }
+      } else if (result.exit !== 'entry_expired' && result.exit !== 'btc_moved') {
+        // How it ended, in its own kind: the target reached, the stop triggered, or a trade run out.
+        const params = executor.params as PositionExecutorParams
+        const closed = paperCloseNotice({ id: executor.id, symbol: executor.symbol, side: params.side, quoteAsset: executor.quoteAsset }, { exit: result.exit, pnlQuote: result.pnlQuote, r: rMultiple(result.pnlQuote, params) })
+        try {
+          deps.notify(closed.title, closed.body, closed.extra)
+        } catch {
+          // A desktop that cannot show it is not a reason to report a trade that closed as not.
         }
       }
     } catch (failure) {
@@ -435,7 +463,7 @@ export const watchPaperBrowserDeps: WatchPaperDeps = {
   // Not kept in Inventory (keepPosition is false), so nothing was handed over and the whole
   // result is cash.
   settle: (executor, nowSec) => settleExecutorOnStop({ executor, handedOver: { held: null, realizedPnl: 0 }, now: nowSec }),
-  notify: (title, body) => void window.api.notify(title, body).catch(() => undefined),
+  notify: (title, body, extra) => void window.api.notify(title, body, extra?.severity, extra).catch(() => undefined),
   nowSec: () => Math.floor(Date.now() / 1000),
   newId: () => crypto.randomUUID(),
   queue: (work) => settingsWrites(work)

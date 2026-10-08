@@ -8,6 +8,8 @@ import { getLivePosition } from './livePositionsService'
 import { executeLiveClose, cancelSiblingLiveOrders } from './liveExecutionService'
 import { evaluateWatcher } from './watcherEvaluation'
 import { describeIncompleteExit } from './watcherExit'
+import { liveExitNotice } from '../../shared/notices'
+import { tell } from './noticeService'
 
 export { evaluateWatcher } from './watcherEvaluation'
 
@@ -215,6 +217,8 @@ async function tick(): Promise<void> {
               closedAt: settled.closedAt ?? nowSec
             }
           })
+          // Told as its kind: the target reached, the stop triggered, or the time run out.
+          tell(liveExitNotice({ executorId: watcher.executorId, symbol: watcher.symbol, exitReason: reason, exitPrice: settled.exitPrice as number, realizedPnl: settled.realizedPnl as number, quoteAsset: settled.quoteAsset }))
         }
       }
       watcher.consecutiveFailures = 0

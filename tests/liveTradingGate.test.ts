@@ -28,6 +28,12 @@ vi.mock('../electron/services/liveOrdersService', () => ({
 vi.mock('../electron/services/exchangeHealthService', () => ({
   liveHealthReasons: () => state.unhealthy
 }))
+/** What the main process told: the session disarmed by the day's loss (the V4 document, §48). */
+const told = vi.hoisted(() => [] as { title: string; body: string; extra: { kind: string; thread?: string } }[])
+vi.mock('../electron/services/noticeService', () => ({
+  tell: (notice: { title: string; body: string; extra: { kind: string; thread?: string } }) => void told.push(notice),
+  tellNotice: async () => true
+}))
 
 type Service = typeof import('../electron/services/liveTradingService')
 
@@ -348,5 +354,20 @@ describe('the gate while the exchange is degraded', () => {
     expect((await service.canPlaceLiveOrder(5)).allowed).toBe(false)
     state.unhealthy = []
     expect(await service.canPlaceLiveOrder(5)).toEqual({ allowed: true, reason: null })
+  })
+})
+
+describe('the daily loss limit, told', () => {
+  it('tells once when it disarms an armed session, and not again while it stays disarmed', async () => {
+    told.length = 0
+    const service = await freshService()
+    state.realizedPnlToday = -100
+    await service.checkLossLimitAndAutoDisarm()
+    expect((await service.getLiveTradingStatus()).sessionArmed).toBe(false)
+    expect(told).toHaveLength(1)
+    expect(told[0]).toMatchObject({ title: 'Live trading disarmed: the daily loss limit', extra: { kind: 'CIRCUIT_BREAKER', thread: 'live-loss' } })
+    expect(told[0].body).toContain('-100.00')
+    await service.checkLossLimitAndAutoDisarm()
+    expect(told).toHaveLength(1)
   })
 })

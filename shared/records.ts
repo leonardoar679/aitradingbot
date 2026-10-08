@@ -1,4 +1,4 @@
-import type { AlertSeverity } from './alerts'
+import { healAlertKind, type AlertKind, type AlertSeverity } from './alerts'
 
 // RECORDS THE APP KEPT ONLY IN MEMORY, NOW ON FILE (the V4 document, §48 and §97): the app's own
 // paper trades refused, each with why, and the alerts raised. Both were kept for the session only,
@@ -39,6 +39,10 @@ export interface AlertRecordOnFile {
   title: string
   body: string
   url?: string
+  /** Since every notice carries a kind (shared/alerts.ts): what it was, and its thread. Absent on
+   * alerts written before. */
+  kind?: AlertKind
+  thread?: string
 }
 
 export interface RecordFilter {
@@ -103,6 +107,10 @@ export function healAlertRecord(value: unknown): AlertRecordOnFile | null {
   const record: AlertRecordOnFile = { id, at, severity: raw.severity as AlertSeverity, title, body }
   const url = text(raw.url, 500)
   if (url !== null && /^https:\/\//.test(url)) record.url = url
+  const kind = healAlertKind(raw.kind)
+  if (kind !== null) record.kind = kind
+  const thread = text(raw.thread, 200)
+  if (thread !== null) record.thread = thread
   return record
 }
 

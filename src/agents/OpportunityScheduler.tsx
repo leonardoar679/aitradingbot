@@ -18,7 +18,7 @@ const deps: WatchDeps = {
   fetchCandles: async (exchange, symbol, interval, startSec, endSec) => (await window.api.market.fetchHistoricalRange(exchange, symbol, interval, startSec, endSec)).candles,
   ask: (request) => window.api.ai.askOpportunity(request),
   // A desktop that cannot show it is not a reason to fail the pass that got the answer.
-  notify: (title, body) => void window.api.notify(title, body).catch(() => undefined),
+  notify: (title, body, extra) => void window.api.notify(title, body, extra?.severity, extra).catch(() => undefined),
   nowSec: () => Math.floor(Date.now() / 1000),
   // Paper only, and only when the user has switched it on (./watchPaperTrade.ts).
   paperTrade: (event, decision) => openWatchPaperTrade(event, decision, watchPaperBrowserDeps),

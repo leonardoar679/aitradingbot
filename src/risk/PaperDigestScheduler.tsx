@@ -25,7 +25,7 @@ export function PaperDigestScheduler(): null {
         return plan.notice
       })
         .then((notice) => {
-          if (notice !== null && !cancelled) void window.api.notify(notice.title, notice.body).catch(() => undefined)
+          if (notice !== null && !cancelled) void window.api.notify(notice.title, notice.body, 'watch', { kind: 'TRADE_EXECUTED', thread: 'paper-digest' }).catch(() => undefined)
         })
         .catch((failure: unknown) => console.error('The daily paper digest could not be read:', failure))
     }

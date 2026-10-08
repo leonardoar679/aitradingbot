@@ -57,14 +57,16 @@ import {
 } from '../shared/ipc'
 import type { EffectiveConfig } from '../shared/appConfig'
 import type { HealthState } from '../shared/exchangeHealth'
+import type { NoticeExtra } from '../shared/notices'
 import type { AlertRecordOnFile, PaperRefusalRecord, RecordFilter } from '../shared/records'
 
 const api = {
   ping: (): Promise<string> => ipcRenderer.invoke(IpcChannel.AppPing),
   getVersion: (): Promise<string> => ipcRenderer.invoke(IpcChannel.AppGetVersion),
-  /** A desktop notice. Resolves false where the system cannot show one. */
-  notify: (title: string, body: string, severity?: 'watch' | 'high' | 'critical'): Promise<boolean> =>
-    ipcRenderer.invoke(IpcChannel.AppNotify, title, body, severity),
+  /** A desktop notice. Resolves false where the system cannot show one, or when it repeats one told
+   * on its thread (shared/notices.ts NoticeExtra: its kind, its thread, how loud). */
+  notify: (title: string, body: string, severity?: 'watch' | 'high' | 'critical', extra?: NoticeExtra): Promise<boolean> =>
+    ipcRenderer.invoke(IpcChannel.AppNotify, title, body, severity, extra),
   /** The effective configuration, read-only, with its versions (shared/appConfig.ts). */
   effectiveConfig: (): Promise<EffectiveConfig> => ipcRenderer.invoke(IpcChannel.AppEffectiveConfig),
   settings: {
@@ -380,7 +382,13 @@ const api = {
     refusal: (record: PaperRefusalRecord): Promise<PaperRefusalRecord | null> => ipcRenderer.invoke(IpcChannel.RecordsRefusal, record),
     refusals: (filter: RecordFilter): Promise<{ rows: PaperRefusalRecord[]; skippedLines: number }> => ipcRenderer.invoke(IpcChannel.RecordsRefusals, filter),
     alert: (record: AlertRecordOnFile): Promise<AlertRecordOnFile | null> => ipcRenderer.invoke(IpcChannel.RecordsAlert, record),
-    alerts: (filter: RecordFilter): Promise<{ rows: AlertRecordOnFile[]; skippedLines: number }> => ipcRenderer.invoke(IpcChannel.RecordsAlerts, filter)
+    alerts: (filter: RecordFilter): Promise<{ rows: AlertRecordOnFile[]; skippedLines: number }> => ipcRenderer.invoke(IpcChannel.RecordsAlerts, filter),
+    /** Each notice as it is told, whatever raised it and whatever the desktop could show. */
+    onTold: (listener: (record: AlertRecordOnFile) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, record: AlertRecordOnFile): void => listener(record)
+      ipcRenderer.on(IpcChannel.AlertsTold, handler)
+      return () => ipcRenderer.removeListener(IpcChannel.AlertsTold, handler)
+    }
   }
 }
 

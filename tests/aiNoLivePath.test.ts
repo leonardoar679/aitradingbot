@@ -271,7 +271,9 @@ describe('AI code has no route to a real order', () => {
       expect(importsOf(path).filter((name) => aiModuleNames.has(name)), path).toEqual([])
     }
     const service = readFileSync(join(SERVICES, 'liveMarketService.ts'), 'utf-8')
-    expect(importsOf(join(SERVICES, 'liveMarketService.ts')).sort()).toEqual(['binance', 'ipc', 'liveMarket', 'marketService', 'reconnectingSocket', 'settingsService', 'ws'])
+    // noticeService and notices (since 8 October 2026): the stream dead for three minutes is told,
+    // as a failure of something the app runs on; a notice places nothing.
+    expect(importsOf(join(SERVICES, 'liveMarketService.ts')).sort()).toEqual(['binance', 'ipc', 'liveMarket', 'marketService', 'noticeService', 'notices', 'reconnectingSocket', 'settingsService', 'ws'])
     expect(service).toContain('const endpoint = await resolveEndpoint()')
     expect(service).not.toMatch(/resolveTradingEndpoint|credentials|apiKey|setSettings|settings\.set/)
     // The rules are arithmetic: the scanner's spread, the watch's Bitcoin rule, and types.
@@ -386,7 +388,8 @@ describe('AI code has no route to a real order', () => {
       expect(importsOf(path).filter((name) => LIVE_MODULES.has(name)), path).toEqual([])
       expect(importsOf(path).filter((name) => aiModuleNames.has(name)), path).toEqual([])
     }
-    expect(importsOf(join(SERVICES, 'newsFeedService.ts')).sort()).toEqual(['electron', 'jsonlStore', 'marketService', 'news', 'newsFeed', 'newsService', 'path', 'promises', 'singleFlight'])
+    // noticeService and notices (since 8 October 2026): every feed unread for half an hour is told.
+    expect(importsOf(join(SERVICES, 'newsFeedService.ts')).sort()).toEqual(['electron', 'jsonlStore', 'marketService', 'news', 'newsFeed', 'newsService', 'noticeService', 'notices', 'path', 'promises', 'singleFlight'])
     const service = readFileSync(join(SERVICES, 'newsFeedService.ts'), 'utf-8')
     expect(service).toContain("if (parsed.protocol !== 'https:' || !FEED_HOSTS.includes(parsed.hostname)) return false")
     expect(service).not.toMatch(/resolveTradingEndpoint|credentials|apiKey|setSettings/)
@@ -412,7 +415,7 @@ describe('AI code has no route to a real order', () => {
       // stream's Bitcoin, and tells.
       [
         join(ROOT, 'src', 'news', 'NewsAlertScheduler.tsx'),
-        ['credentials.balances', 'credentials.list', 'feed.getState', 'feed.onUpdate', 'market.liveState', 'notify', 'records.alert', 'records.alerts', 'settings.get']
+        ['credentials.balances', 'credentials.list', 'feed.getState', 'feed.onUpdate', 'market.liveState', 'notify', 'records.alerts', 'records.onTold', 'settings.get']
       ]
     ]
     for (const [path, expected] of views) {
@@ -449,7 +452,9 @@ describe('AI code has no route to a real order', () => {
     // paperExposure to their cap on one side on coins that move with Bitcoin, and paperPause refuses
     // one after a losing run: arithmetic, which only ever opens less (held below). aiExit is what the
     // exit check's EXIT writes: a time limit brought forward, and nothing else (held below).
-    expect(importsOf(writer).sort()).toEqual(['aiExit', 'engine', 'executorFunding', 'ipc', 'news', 'newsActions', 'paperExposure', 'paperPause', 'paperRisk', 'settingsWrites', 'settleExecutor'])
+    // notices (since 8 October 2026): the words of a notice, pure; the writer still tells through
+    // the one dependency it is handed.
+    expect(importsOf(writer).sort()).toEqual(['aiExit', 'engine', 'executorFunding', 'ipc', 'news', 'newsActions', 'notices', 'paperExposure', 'paperPause', 'paperRisk', 'settingsWrites', 'settleExecutor'])
     expect(readFileSync(rules, 'utf-8')).toContain("executor.newsRule !== undefined && executor.mode === 'paper' && executor.type === 'position'")
     // The scheduler reads -- the news, the settings, the balances a key can read -- and notifies.
     // Every write goes through the writer above.
@@ -558,6 +563,7 @@ describe('AI code has no route to a real order', () => {
       'ipc',
       'liveMarket',
       'marketEvent',
+      'notices',
       'paperExposure',
       'paperNewsBlock',
       'paperPause',
@@ -683,7 +689,7 @@ describe('AI code has no route to a real order', () => {
       'settings.get'
     ])
     expect(lookSource).not.toMatch(/liveTrading|LiveTrading|liveOrders|placeLive|settings\.set|setExecutors|onPrepareOrder|aiProposal|mode:/)
-    expect(importsOf(look).sort()).toEqual(['aiAdditions', 'aiCost', 'aiEventMarket', 'aiExit', 'engine', 'ipc', 'marketResearch', 'newsPaperShort', 'paperRisk', 'watchPaperTrade'])
+    expect(importsOf(look).sort()).toEqual(['aiAdditions', 'aiCost', 'aiEventMarket', 'aiExit', 'engine', 'ipc', 'marketResearch', 'newsPaperShort', 'notices', 'paperRisk', 'watchPaperTrade'])
     expect(lookSource).toContain('ownOpenPaperTrades(executors)')
     const scheduler = join(ROOT, 'src', 'agents', 'ExitCheckScheduler.tsx')
     expect(readFileSync(scheduler, 'utf-8')).not.toMatch(/window\.api/)
@@ -874,7 +880,10 @@ describe('AI code has no route to a real order', () => {
     // The page it sits on still mentions no bridge an order travels over (held above, for routes).
     expect(readFileSync(join(ROOT, 'src', 'settings', 'SettingsPanel.tsx'), 'utf-8')).not.toMatch(/liveTrading|LiveTrading|placeLive/)
     // Every desktop notice obeys the notifications setting, read where the notice is raised.
-    expect(importsOf(join(ROOT, 'electron', 'ipc', 'handlers', 'appHandlers.ts')).sort()).toEqual(['alerts', 'electron', 'ipc', 'pingService', 'settingsService'])
+    // Since 8 October 2026 one service tells every notice (noticeService.ts): it reads the setting,
+    // keeps the threads and records what it told; the handler only hands it what the window sent.
+    expect(importsOf(join(ROOT, 'electron', 'ipc', 'handlers', 'appHandlers.ts')).sort()).toEqual(['electron', 'ipc', 'noticeService', 'pingService'])
+    expect(importsOf(join(SERVICES, 'noticeService.ts')).sort()).toEqual(['alerts', 'electron', 'ipc', 'recordStoreService', 'settingsService'])
     expect(importsOf(join(ROOT, 'shared', 'appDefaults.ts')).sort()).toEqual(['ipc', 'paperPause', 'paperRisk'])
   })
 

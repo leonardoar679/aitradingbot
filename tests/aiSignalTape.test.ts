@@ -12,6 +12,12 @@ import type { Candle } from '../shared/ipc'
 // decision billed twice, a dead key asked two thousand times, a run that spends past its budget.
 
 vi.mock('electron', () => ({ app: { getPath: () => process.env.AI_TEST_USER_DATA } }))
+/** What the main process told (the V4 document, §48): the key rejected, the day's budget spent. */
+const told = vi.hoisted(() => [] as { title: string; body: string; extra: { kind: string; thread?: string } }[])
+vi.mock('../electron/services/noticeService', () => ({
+  tell: (notice: { title: string; body: string; extra: { kind: string; thread?: string } }) => void told.push(notice),
+  tellNotice: async () => true
+}))
 vi.mock('../electron/services/aiCredentialsService', () => ({
   getDecryptedAiCredential: async () => ({ apiKey: 'sk-or-test' })
 }))
@@ -98,6 +104,7 @@ async function services() {
 
 beforeEach(() => {
   vi.resetModules()
+  told.length = 0
   process.env.AI_TEST_USER_DATA = mkdtempSync(join(tmpdir(), 'ai-tape-'))
 })
 
@@ -244,6 +251,9 @@ describe('a run that should stop', () => {
     await expect(generateAiSignalTape(request(6))).rejects.toThrow(/rejected the API key/)
     // One request. Not three per decision across six decisions.
     expect(bodies).toHaveLength(1)
+    // And told as a failure of something the app runs on, on the key's thread.
+    expect(told).toHaveLength(1)
+    expect(told[0]).toMatchObject({ title: 'The OpenRouter key was rejected', extra: { kind: 'SYSTEM_FAILURE', thread: 'ai-key' } })
   })
 
   it('gives up after five decisions fail in a row', async () => {
@@ -269,6 +279,9 @@ describe('a run that should stop', () => {
     await setAiConfig({ dailyCapUsd: COST * 1.5 })
     await expect(generateAiSignalTape(request(5))).rejects.toThrow(/budget is used up/)
     expect(bodies).toHaveLength(2)
+    // And told as a breaker tripped, on the budget's thread.
+    expect(told.map((notice) => notice.extra.thread)).toEqual(['ai-budget'])
+    expect(told[0]).toMatchObject({ title: "Today's AI budget is spent", extra: { kind: 'CIRCUIT_BREAKER' } })
 
     await setAiConfig({ dailyCapUsd: 1 })
     const resumed = await generateAiSignalTape(request(5, 'resumed'))
