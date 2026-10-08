@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_AI_WATCH } from '../shared/aiWatch'
 import { DEFAULT_AI_WATCH_PAPER } from '../shared/aiWatchPaper'
+import type { LiveConnection } from '../shared/liveMarket'
+import { describeLiveMarket, liveMarketStateOf } from '../src/status/liveMarketChip'
 import {
   connectionStateOf,
   describeAiSpend,
@@ -132,5 +134,38 @@ describe('live readiness, for Settings', () => {
     expect(describeLiveReadiness('not-verified').tone).toBe('warn')
     expect(describeLiveReadiness('blocked').label).toBe('KILL SWITCH')
     expect(describeLiveReadiness('paper-only').label).toBe('PAPER')
+  })
+})
+
+// The bar's LIVE MARKET chip (the V4 document, §12): what the socket is doing, read from its log.
+describe('the live market chip', () => {
+  const now = Date.parse('2026-10-08T12:00:00Z')
+  const connection = (over: Partial<Pick<LiveConnection, 'open' | 'host' | 'lastMessageAt'>> = {}): Pick<LiveConnection, 'open' | 'host' | 'lastMessageAt'> => ({
+    open: true,
+    host: 'data-api.binance.vision',
+    lastMessageAt: now - 300,
+    ...over
+  })
+
+  it('reads the socket: off before one is opened, live while frames arrive, quiet after ten seconds, stale after a minute, reconnecting while closed', () => {
+    expect(liveMarketStateOf(null, now)).toBe('off')
+    expect(liveMarketStateOf(connection({ host: null }), now)).toBe('off')
+    expect(liveMarketStateOf(connection(), now)).toBe('live')
+    expect(liveMarketStateOf(connection({ lastMessageAt: now - 9_999 }), now)).toBe('live')
+    expect(liveMarketStateOf(connection({ lastMessageAt: now - 10_000 }), now)).toBe('quiet')
+    expect(liveMarketStateOf(connection({ lastMessageAt: now - 59_999 }), now)).toBe('quiet')
+    expect(liveMarketStateOf(connection({ lastMessageAt: now - 60_000 }), now)).toBe('stale')
+    expect(liveMarketStateOf(connection({ lastMessageAt: null }), now)).toBe('quiet')
+    expect(liveMarketStateOf(connection({ open: false }), now)).toBe('reconnecting')
+    expect(liveMarketStateOf(connection({ open: false, lastMessageAt: now - 90_000 }), now)).toBe('reconnecting')
+  })
+
+  it('says the age of the last frame, in tenths under ten seconds and whole seconds after', () => {
+    expect(describeLiveMarket('live', 300)).toMatchObject({ label: 'LIVE MARKET · 0.3 s', tone: 'safe' })
+    expect(describeLiveMarket('quiet', 12_400)).toMatchObject({ label: 'LIVE MARKET · QUIET 12 s', tone: 'warn' })
+    expect(describeLiveMarket('stale', 95_000)).toMatchObject({ label: 'MARKET DATA STALE · 95 s', tone: 'blocked' })
+    expect(describeLiveMarket('reconnecting', null)).toMatchObject({ label: 'LIVE MARKET: RECONNECTING', tone: 'warn' })
+    expect(describeLiveMarket('off', null)).toMatchObject({ label: 'LIVE MARKET: OFF', tone: 'muted' })
+    expect(describeLiveMarket('live', null).label).toBe('LIVE MARKET · no frame yet')
   })
 })

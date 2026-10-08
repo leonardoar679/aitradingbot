@@ -1,5 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+/** The sockets the adapter opens, faked: their address, their handlers, and whether each was stopped. */
+const sockets = vi.hoisted(() => ({
+  made: [] as { url: string; handlers: { onOpen?: (socket: { on: () => void }) => void; onConnectFailed?: (consecutive: number) => void }; stopped: boolean }[]
+}))
+vi.mock('../electron/services/exchanges/reconnectingSocket', () => ({
+  createReconnectingSocket: (url: string, handlers: (typeof sockets.made)[number]['handlers']) => {
+    const made = { url, handlers, stopped: false }
+    sockets.made.push(made)
+    return () => {
+      made.stopped = true
+    }
+  }
+}))
+
 // Which Binance host each kind of request is allowed to reach.
 //
 // This exists because of a real failure with a tempting one-line fix. In this region binance.com
@@ -15,7 +29,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 //
 // So the lists are split, and these tests pin the split rather than the wiring that implements it.
 
-const { ENDPOINTS_FOR_TEST, fetchMarketData, resolveEndpoint, resolveTradingEndpoint, resetResolvedEndpoints, onDataHostChange, currentDataEndpoint, dataHostSwitchCount, probeDataPartner } =
+const { ENDPOINTS_FOR_TEST, fetchMarketData, resolveEndpoint, resolveTradingEndpoint, resetResolvedEndpoints, onDataHostChange, currentDataEndpoint, dataHostSwitchCount, probeDataPartner, binanceAdapter } =
   await import('../electron/services/exchanges/binance')
 
 const KLINE = [[1, '1', '1', '1', '1', '1']]
@@ -358,5 +372,69 @@ describe('when the data host moves it is told, and a failing socket can ask for 
     await fetchMarketData(PATH)
     expect(heard).toEqual([])
     expect(dataHostSwitchCount()).toBe(1)
+  })
+})
+
+// THE CHART'S OWN SOCKETS FOLLOW THE DATA HOST (the V4 document, §12), by the rule the live-price
+// socket keeps: open and receiving, it stays whatever REST does; closed, it follows a REST move at
+// once; failing to connect three times in a row, it goes to the host that answers.
+describe("a chart's socket", () => {
+  const PATH = '/klines?symbol=SOLUSDT&interval=1m&limit=2'
+
+  it('stays while open, follows a REST move while closed, and moves to the host that answers after three failed connects', async () => {
+    const hosts: Record<string, Behaviour> = { 'api.binance.com': 'answers', 'data-api.binance.vision': 'answers' }
+    stubBehaviour(hosts)
+    sockets.made.length = 0
+    const stop = await binanceAdapter.subscribeCandles('SOLUSDT', '1m', () => {})
+    expect(sockets.made.map((made) => made.url)).toEqual(['wss://stream.binance.com:9443/ws/solusdt@kline_1m'])
+    const first = sockets.made[0]
+    let closeListener: (() => void) | null = null
+    first.handlers.onOpen?.({ on: ((event: string, listener: () => void) => void (event === 'close' && (closeListener = listener))) as () => void })
+
+    // Open and receiving: REST moving to the mirror leaves it where it is.
+    hosts['api.binance.com'] = 'silent'
+    await fetchMarketData(PATH)
+    expect(currentDataEndpoint()?.name).toBe('data-api.binance.vision')
+    expect(first.stopped).toBe(false)
+    expect(sockets.made).toHaveLength(1)
+
+    // Three connects in a row failed: the host REST is on now is taken, and the old socket stopped.
+    first.handlers.onConnectFailed?.(2)
+    expect(sockets.made).toHaveLength(1)
+    first.handlers.onConnectFailed?.(3)
+    await vi.waitFor(() => expect(sockets.made).toHaveLength(2))
+    expect(first.stopped).toBe(true)
+    expect(sockets.made[1].url).toBe('wss://data-stream.binance.vision/ws/solusdt@kline_1m')
+
+    // Closed, and REST moves back to binance.com: it follows at once.
+    const second = sockets.made[1]
+    let secondClose: (() => void) | null = null
+    second.handlers.onOpen?.({ on: ((event: string, listener: () => void) => void (event === 'close' && (secondClose = listener))) as () => void })
+    secondClose?.()
+    hosts['api.binance.com'] = 'answers'
+    hosts['data-api.binance.vision'] = 'silent'
+    await fetchMarketData(PATH)
+    expect(currentDataEndpoint()?.name).toBe('binance.com')
+    expect(second.stopped).toBe(true)
+    expect(sockets.made).toHaveLength(3)
+    expect(sockets.made[2].url).toBe('wss://stream.binance.com:9443/ws/solusdt@kline_1m')
+
+    // Stopped for good: nothing follows any more.
+    stop()
+    expect(sockets.made[2].stopped).toBe(true)
+    hosts['api.binance.com'] = 'silent'
+    hosts['data-api.binance.vision'] = 'answers'
+    await fetchMarketData(PATH)
+    expect(sockets.made).toHaveLength(3)
+    expect(closeListener).not.toBeNull()
+  })
+
+  it('opens the ticker the same way, on the data host of the moment', async () => {
+    stubBehaviour({ 'api.binance.com': 451, 'data-api.binance.vision': 'answers' })
+    sockets.made.length = 0
+    const stop = await binanceAdapter.subscribeTicker('SOLUSDT', () => {})
+    expect(sockets.made.map((made) => made.url)).toEqual(['wss://data-stream.binance.vision/ws/solusdt@ticker'])
+    stop()
+    expect(sockets.made[0].stopped).toBe(true)
   })
 })

@@ -159,7 +159,7 @@ describe('buildSessionReport', () => {
       listCalls: async () => [ANSWER],
       getSettings: async () => ({ executors: [trade()], paperRisk: undefined }),
       getConfig: async () => ({ watchPaper: { enabled: true, model: MODEL, stakeQuote: 100, maxOpen: 3, maxSameSide: 2, pauseAfterLosses: 3, dropOnBtcMovePct: 1 } }),
-      liveConnection: async () => ({ open: true, connects: 1, drops: 0, lastMessageAt: NOW * 1000, gaps: [], host: 'data-api.binance.vision', hostSwitches: 0, dataHostSwitches: 0 }),
+      liveConnection: async () => ({ open: true, connects: 1, drops: 0, lastMessageAt: NOW * 1000, gaps: [], host: 'data-api.binance.vision', hostSwitches: 0, dataHostSwitches: 0, connectedAt: null, planned: 0, subscribeErrors: 0 }),
       stories: async () => [{ url: 'https://www.coindesk.com/a', publishedAt: T - 600 }],
       fetchCandles: async (_exchange, symbol, interval, startSec, endSec) => {
         reads.push(`${symbol}:${interval}:${startSec}`)

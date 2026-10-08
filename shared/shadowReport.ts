@@ -155,7 +155,20 @@ export interface SessionReport {
   }
   alerts: Record<AlertSeverity, number>
   /** Connects, drops and host moves are since the app started; gaps are those in the span. */
-  stream: { connects: number; drops: number; gaps: number; gapSeconds: number; longestGapSeconds: number; host: string | null; hostSwitches: number; dataHostSwitches: number } | null
+  stream: {
+    connects: number
+    drops: number
+    gaps: number
+    gapSeconds: number
+    longestGapSeconds: number
+    host: string | null
+    hostSwitches: number
+    dataHostSwitches: number
+    /** Renewals before the connection's lifetime ran out: not drops. */
+    planned: number
+    /** Requests the stream refused. */
+    subscribeErrors: number
+  } | null
   gates: ReportGate[]
   /** Whether a twelve-hour gate applies: a span of twelve hours or more. */
   twelveHour: boolean
@@ -341,7 +354,9 @@ export function sessionReportOf(input: SessionReportInput): SessionReport {
           longestGapSeconds: gapLengths.length === 0 ? 0 : Math.max(...gapLengths),
           host: input.connection.host,
           hostSwitches: input.connection.hostSwitches,
-          dataHostSwitches: input.connection.dataHostSwitches
+          dataHostSwitches: input.connection.dataHostSwitches,
+          planned: input.connection.planned,
+          subscribeErrors: input.connection.subscribeErrors
         }
 
   const gates: ReportGate[] = []
@@ -685,6 +700,8 @@ export function sessionReportCsv(report: SessionReport): string {
     add('stream', 'host', report.stream.host, 'the data host the socket is on')
     add('stream', 'host switches', report.stream.hostSwitches, 'since the app started: the socket moved to a host that answers')
     add('stream', 'data host switches', report.stream.dataHostSwitches, 'since the app started: REST moved to its partner')
+    add('stream', 'planned renewals', report.stream.planned, "since the app started: the connection renewed before Binance's 24-hour cut, a second socket open before the first closed; not a drop")
+    add('stream', 'refused requests', report.stream.subscribeErrors, 'since the app started: subscriptions the stream did not accept')
   }
   for (const entry of report.gates) {
     const applies = !entry.twelveHour || report.twelveHour

@@ -33,6 +33,9 @@ export const LIVE_PUSH_MS = 250
 export const LIVE_MAX_DEPTH_PAIRS = 5
 /** Pairs the window may ask the stream for at once, besides Bitcoin and ether. */
 export const LIVE_MAX_INTEREST = 12
+/** No message for this long while streams are wanted is a gap: written down for the session
+ * report, and shown as stale on the bar. */
+export const LIVE_GAP_SECONDS = 60
 
 export interface LiveBook {
   symbol: string
@@ -76,6 +79,13 @@ export interface LiveConnection {
   hostSwitches: number
   /** Times the data host for REST requests moved, in the main process, since the app started. */
   dataHostSwitches: number
+  /** When the socket in use opened, in milliseconds; null while none is open. */
+  connectedAt: number | null
+  /** Times the connection was renewed before its lifetime ran out (Binance closes a stream after
+   * 24 hours): a second socket opened, and only then the first closed. Not a drop. */
+  planned: number
+  /** Requests the stream refused (a subscription it did not accept), since the app started. */
+  subscribeErrors: number
 }
 
 export interface LiveState {
@@ -89,7 +99,7 @@ export interface LiveState {
 }
 
 export function emptyLiveState(): LiveState {
-  return { books: {}, depth: {}, minutes: {}, btcMinutes: [], connection: { open: false, connects: 0, drops: 0, lastMessageAt: null, gaps: [], host: null, hostSwitches: 0, dataHostSwitches: 0 } }
+  return { books: {}, depth: {}, minutes: {}, btcMinutes: [], connection: { open: false, connects: 0, drops: 0, lastMessageAt: null, gaps: [], host: null, hostSwitches: 0, dataHostSwitches: 0, connectedAt: null, planned: 0, subscribeErrors: 0 } }
 }
 
 export function bookSpreadPct(book: Pick<LiveBook, 'bid' | 'ask'>): number | null {

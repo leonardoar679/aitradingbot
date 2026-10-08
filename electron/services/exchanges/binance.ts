@@ -376,58 +376,112 @@ async function fetchTicker24h(symbol: string): Promise<Ticker24h> {
   }
 }
 
+/** Connects in a row a single-stream socket may fail before its host is looked at again. */
+const SOCKET_FAILS_BEFORE_RECHECK = 3
+
+/** A single-stream socket (a chart's candles, its ticker) that follows the data host by the same
+ * rule as the live-price socket (liveMarketService.ts): one that is open and receiving stays where
+ * it is, whatever REST does; one that cannot connect three times in a row goes to the host that
+ * answers -- the host REST has moved to, if it has, else the partner, probed once; and one that is
+ * closed follows a REST move at once. Never binance.us, which is nobody's partner. */
+function hostFollowingSocket(first: RestEndpoint, path: string, label: string, onMessage: (raw: Buffer) => void): () => void {
+  let host: RestEndpoint = first
+  let open = false
+  let rechecking = false
+  let stop: (() => void) | null = null
+  let stopped = false
+  const openOn = (endpoint: RestEndpoint): void => {
+    host = endpoint
+    open = false
+    stop = createReconnectingSocket(`${endpoint.wsBase}/${path}`, {
+      onOpen: (socket) => {
+        open = true
+        socket.on('close', () => {
+          open = false
+        })
+      },
+      onMessage,
+      onError: (error) => console.error(`${endpoint.name} ${label} socket error: ${error.message}`),
+      onConnectFailed: (consecutive) => {
+        if (consecutive >= SOCKET_FAILS_BEFORE_RECHECK) void recheck(endpoint)
+      }
+    })
+  }
+  const moveTo = (to: RestEndpoint, why: string): void => {
+    if (stopped || to.name === host.name) return
+    stop?.()
+    console.warn(`Binance ${label} socket moves from ${host.name} to ${to.name}: ${why}.`)
+    openOn(to)
+  }
+  const recheck = async (from: RestEndpoint): Promise<void> => {
+    if (rechecking) return
+    rechecking = true
+    try {
+      const current = currentDataEndpoint()
+      const next = current !== null && current.name !== from.name ? current : await probeDataPartner(`the ${label} socket could not connect`)
+      if (next !== null) moveTo(next, 'its socket could not connect')
+    } catch (error) {
+      console.warn(`Binance ${label} socket: the host could not be looked at again:`, error)
+    } finally {
+      rechecking = false
+    }
+  }
+  const off = onDataHostChange((to) => {
+    if (!open) moveTo(to, 'the data host moved while its socket was closed')
+  })
+  openOn(first)
+  return () => {
+    stopped = true
+    off()
+    stop?.()
+    stop = null
+  }
+}
+
 async function subscribeCandles(
   symbol: string,
   interval: Interval,
   onUpdate: (candle: Candle) => void
 ): Promise<() => void> {
-  const endpoint = await resolveEndpoint()
   const key = `${symbol.toLowerCase()}@kline_${interval}`
-  return createReconnectingSocket(`${endpoint.wsBase}/${key}`, {
-    onMessage: (raw) => {
-      let parsed: BinanceKlineMessage
-      try {
-        parsed = JSON.parse(raw.toString())
-      } catch {
-        return
-      }
-      const k = parsed.k
-      onUpdate({
-        time: Math.floor(k.t / 1000),
-        open: Number(k.o),
-        high: Number(k.h),
-        low: Number(k.l),
-        close: Number(k.c),
-        volume: Number(k.v)
-      })
-    },
-    onError: (error) => console.error(`${endpoint.name} candle socket error:`, error)
+  return hostFollowingSocket(await resolveEndpoint(), key, 'candle', (raw) => {
+    let parsed: BinanceKlineMessage
+    try {
+      parsed = JSON.parse(raw.toString())
+    } catch {
+      return
+    }
+    const k = parsed.k
+    onUpdate({
+      time: Math.floor(k.t / 1000),
+      open: Number(k.o),
+      high: Number(k.h),
+      low: Number(k.l),
+      close: Number(k.c),
+      volume: Number(k.v)
+    })
   })
 }
 
 async function subscribeTicker(symbol: string, onUpdate: (ticker: Ticker24h) => void): Promise<() => void> {
-  const endpoint = await resolveEndpoint()
   const key = `${symbol.toLowerCase()}@ticker`
-  return createReconnectingSocket(`${endpoint.wsBase}/${key}`, {
-    onMessage: (raw) => {
-      let parsed: BinanceTicker24hMessage
-      try {
-        parsed = JSON.parse(raw.toString())
-      } catch {
-        return
-      }
-      onUpdate({
-        symbol: parsed.s,
-        lastPrice: Number(parsed.c),
-        priceChange: Number(parsed.p),
-        priceChangePercent: Number(parsed.P),
-        highPrice: Number(parsed.h),
-        lowPrice: Number(parsed.l),
-        volume: Number(parsed.v),
-        quoteVolume: Number(parsed.q)
-      })
-    },
-    onError: (error) => console.error(`${endpoint.name} ticker socket error:`, error)
+  return hostFollowingSocket(await resolveEndpoint(), key, 'ticker', (raw) => {
+    let parsed: BinanceTicker24hMessage
+    try {
+      parsed = JSON.parse(raw.toString())
+    } catch {
+      return
+    }
+    onUpdate({
+      symbol: parsed.s,
+      lastPrice: Number(parsed.c),
+      priceChange: Number(parsed.p),
+      priceChangePercent: Number(parsed.P),
+      highPrice: Number(parsed.h),
+      lowPrice: Number(parsed.l),
+      volume: Number(parsed.v),
+      quoteVolume: Number(parsed.q)
+    })
   })
 }
 

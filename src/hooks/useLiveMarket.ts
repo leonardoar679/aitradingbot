@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { LiveState } from '../../shared/liveMarket'
+import type { LiveConnection, LiveState } from '../../shared/liveMarket'
 
 /** Live prices for `symbols` -- the pairs a page is showing a recommendation on -- from the one
  * public socket the main process holds (electron/services/liveMarketService.ts), kept current four
@@ -33,4 +33,29 @@ export function useLiveMarket(symbols: string[]): LiveState | null {
   }, [])
 
   return state
+}
+
+/** The socket's state alone, for the bar on every page: it asks for no pair, and leaves the page's
+ * interest alone. Null until first read. */
+export function useLiveConnection(): LiveConnection | null {
+  const [connection, setConnection] = useState<LiveConnection | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    window.api.market.liveState().then(
+      (next) => {
+        if (!cancelled) setConnection(next.connection)
+      },
+      () => undefined
+    )
+    const stop = window.api.market.onLiveUpdate((next) => {
+      if (!cancelled) setConnection(next.connection)
+    })
+    return (): void => {
+      cancelled = true
+      stop()
+    }
+  }, [])
+
+  return connection
 }

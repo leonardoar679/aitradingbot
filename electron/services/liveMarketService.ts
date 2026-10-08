@@ -1,6 +1,7 @@
 import WebSocket from 'ws'
 import type { ExecutorConfig } from '../../shared/ipc'
 import {
+  LIVE_GAP_SECONDS,
   LIVE_MAX_DEPTH_PAIRS,
   LIVE_MAX_INTEREST,
   LIVE_PUSH_MS,
@@ -38,12 +39,17 @@ import { getSettings } from './settingsService'
 // looked at first, then the partner is probed once; a move closes the socket here and opens one
 // there, and what is shown is asked for again as it opens. A closed socket also follows a REST move at
 // once, since it has nothing to lose by it.
+//
+// A CONNECTION IS RENEWED BEFORE BINANCE'S 24-HOUR CUT (reconnectingSocket.ts): a second socket is
+// opened beside the first, and the first is closed only once the second is open, so the day's end
+// is not a drop. After a drop, and after a gap closes, the minutes the stream did not deliver are
+// read again over REST for every pair streamed. A frame that is not a stream's -- the answer to a
+// request, or its refusal -- is counted rather than dropped, and the window is told how the socket
+// stands.
 
 const ALWAYS_MINUTES = ['BTCUSDT', 'ETHUSDT']
 const BTC_MINUTES_KEPT = 130
 const MINUTES_KEPT = 12
-/** No message for this long while streams are wanted is a gap, kept for the session report. */
-const GAP_SECONDS = 60
 const GAPS_KEPT = 50
 const OWN_TRADES_REFRESH_MS = 60_000
 const REST_TIMEOUT_MS = 6_000
@@ -51,6 +57,9 @@ const REST_TIMEOUT_MS = 6_000
  * timeout on a dead host, so this is about a minute. */
 const SOCKET_FAILS_BEFORE_RECHECK = 3
 const SYMBOL = /^[A-Z0-9]{2,30}$/
+/** At most one REST read of every minute series this often: a socket that flaps would otherwise
+ * ask for every pair's minutes on each reopening. */
+const BACKFILL_EVERY_MS = 30_000
 
 let state: LiveState = emptyLiveState()
 let interest: string[] = []
@@ -64,6 +73,7 @@ let subscribed = new Set<string>()
 let requestId = 0
 let dirty = false
 let started = false
+let lastBackfillAt = -Infinity
 const listeners = new Set<(state: LiveState) => void>()
 
 export function onLiveUpdate(listener: (state: LiveState) => void): () => void {
@@ -112,8 +122,10 @@ function noteMessage(nowMs: number): void {
   const connection = state.connection
   const gaps = connection.gaps
   const last = gaps[gaps.length - 1]
-  const closedGap = last !== undefined && last.to === null ? [...gaps.slice(0, -1), { ...last, to: Math.floor(nowMs / 1000) }] : gaps
+  const gapOpen = last !== undefined && last.to === null
+  const closedGap = gapOpen ? [...gaps.slice(0, -1), { ...last, to: Math.floor(nowMs / 1000) }] : gaps
   state = { ...state, connection: { ...connection, lastMessageAt: nowMs, gaps: closedGap } }
+  if (gapOpen) backfillMinutes('a gap in the stream closed')
 }
 
 function asNumber(value: unknown): number {
@@ -127,7 +139,18 @@ function handle(raw: Buffer): void {
   } catch {
     return
   }
-  if (typeof parsed.stream !== 'string' || typeof parsed.data !== 'object' || parsed.data === null) return
+  if (typeof parsed.stream !== 'string' || typeof parsed.data !== 'object' || parsed.data === null) {
+    // Not a stream's frame: the answer to a request (`result`, null when it was accepted) or its
+    // refusal. Either is the socket alive; a refusal is counted and said.
+    const frame = parsed as { result?: unknown; error?: unknown; id?: unknown }
+    if (frame.error !== undefined && frame.error !== null) {
+      state = { ...state, connection: { ...state.connection, subscribeErrors: state.connection.subscribeErrors + 1 } }
+      dirty = true
+      console.warn(`Live market: the stream refused a request: ${JSON.stringify(frame.error)}`)
+    }
+    if (typeof frame.id === 'number') noteMessage(Date.now())
+    return
+  }
   const nowMs = Date.now()
   noteMessage(nowMs)
   const [name, kind] = parsed.stream.split('@')
@@ -176,6 +199,24 @@ async function seedMinutes(symbol: string): Promise<void> {
   }
 }
 
+/** Reads again, over REST, the minutes of every pair streamed: after a drop, or a gap, the minutes
+ * the stream did not deliver. seedMinutes keeps what the stream already sent. */
+function backfillMinutes(why: string): void {
+  const nowMs = Date.now()
+  if (nowMs - lastBackfillAt < BACKFILL_EVERY_MS) return
+  lastBackfillAt = nowMs
+  const symbols = [...new Set([...ALWAYS_MINUTES, ...bookPairs()])]
+  console.info(`Live market: ${why}; the minutes of ${symbols.length} pairs are read again.`)
+  for (const symbol of symbols) void seedMinutes(symbol)
+}
+
+/** The connection's lifetime from the environment, for a check that cannot wait most of a day;
+ * else the socket's own default, under Binance's 24 hours. */
+function socketLifetimeMs(): number | undefined {
+  const raw = Number(process.env.LIVE_SOCKET_LIFETIME_MS)
+  return Number.isFinite(raw) && raw > 0 ? raw : undefined
+}
+
 async function ensureSocket(): Promise<void> {
   if (stopSocket !== null) return
   const endpoint = await resolveEndpoint()
@@ -197,25 +238,38 @@ function openSocket(endpoint: RestEndpoint): void {
   socketHost = endpoint.name
   state = { ...state, connection: { ...state.connection, host: endpoint.name } }
   dirty = true
-  stopSocket = createReconnectingSocket(`${base}/stream?streams=${ALWAYS_MINUTES.map((symbol) => `${lower(symbol)}@kline_1m`).join('/')}`, {
-    onOpen: (current) => {
-      socket = current
-      subscribed = new Set(ALWAYS_MINUTES.map((symbol) => `${lower(symbol)}@kline_1m`))
-      state = { ...state, connection: { ...state.connection, open: true, connects: state.connection.connects + 1 } }
-      current.on('close', () => {
-        if (socket !== current) return
-        socket = null
-        state = { ...state, connection: { ...state.connection, open: false, drops: state.connection.drops + 1 } }
-        dirty = true
-      })
-      syncStreams()
+  stopSocket = createReconnectingSocket(
+    `${base}/stream?streams=${ALWAYS_MINUTES.map((symbol) => `${lower(symbol)}@kline_1m`).join('/')}`,
+    {
+      onOpen: (current, renewed) => {
+        socket = current
+        subscribed = new Set(ALWAYS_MINUTES.map((symbol) => `${lower(symbol)}@kline_1m`))
+        // Reopened after a drop: the minutes the stream did not deliver are read again. A renewal
+        // missed nothing, since the socket it replaced was open until this one was.
+        const reopened = !renewed && state.connection.connects > 0
+        const { connection } = state
+        state = {
+          ...state,
+          connection: { ...connection, open: true, connects: connection.connects + 1, connectedAt: Date.now(), planned: renewed ? connection.planned + 1 : connection.planned }
+        }
+        if (renewed) console.info(`Live market: the socket on ${endpoint.name} was renewed before its lifetime ran out.`)
+        current.on('close', () => {
+          if (socket !== current) return
+          socket = null
+          state = { ...state, connection: { ...state.connection, open: false, connectedAt: null, drops: state.connection.drops + 1 } }
+          dirty = true
+        })
+        syncStreams()
+        if (reopened) backfillMinutes('the socket reopened')
+      },
+      onMessage: handle,
+      onError: (error) => console.error(`${endpoint.name} live market socket error: ${describeError(error)}`),
+      onConnectFailed: (consecutive) => {
+        if (consecutive >= SOCKET_FAILS_BEFORE_RECHECK) void recheckHost(endpoint)
+      }
     },
-    onMessage: handle,
-    onError: (error) => console.error(`${endpoint.name} live market socket error: ${describeError(error)}`),
-    onConnectFailed: (consecutive) => {
-      if (consecutive >= SOCKET_FAILS_BEFORE_RECHECK) void recheckHost(endpoint)
-    }
-  })
+    { lifetimeMs: socketLifetimeMs() }
+  )
 }
 
 /** The socket on `from` cannot connect: is there a host that answers? First the data host as REST
@@ -245,7 +299,7 @@ function moveSocket(to: RestEndpoint, why: string): void {
   socket = null
   subscribed = new Set()
   stop?.()
-  state = { ...state, connection: { ...state.connection, open: false, hostSwitches: state.connection.hostSwitches + 1 } }
+  state = { ...state, connection: { ...state.connection, open: false, connectedAt: null, hostSwitches: state.connection.hostSwitches + 1 } }
   console.warn(`Live market: the socket moves from ${from} to ${to.name}: ${why}.`)
   openSocket(to)
 }
@@ -258,7 +312,7 @@ function checkGap(): void {
   const last = connection.gaps[connection.gaps.length - 1]
   if (last !== undefined && last.to === null) return
   const since = connection.lastMessageAt
-  if (since === null || nowMs - since < GAP_SECONDS * 1000) return
+  if (since === null || nowMs - since < LIVE_GAP_SECONDS * 1000) return
   state = { ...state, connection: { ...connection, gaps: [...connection.gaps, { from: Math.floor(since / 1000), to: null }].slice(-GAPS_KEPT) } }
   dirty = true
 }

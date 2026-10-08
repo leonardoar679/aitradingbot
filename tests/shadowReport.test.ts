@@ -107,7 +107,7 @@ function input(over: Partial<SessionReportInput> = {}): SessionReportInput {
     executors,
     watchPaper: { maxOpen: 3, maxSameSide: 2 },
     maxOutQuote: null,
-    connection: { open: true, connects: 2, drops: 1, lastMessageAt: T * 1000, gaps: [{ from: T - 1200, to: T - 1100 }], host: 'data-api.binance.vision', hostSwitches: 0, dataHostSwitches: 0 },
+    connection: { open: true, connects: 2, drops: 1, lastMessageAt: T * 1000, gaps: [{ from: T - 1200, to: T - 1100 }], host: 'data-api.binance.vision', hostSwitches: 0, dataHostSwitches: 0, connectedAt: null, planned: 0, subscribeErrors: 0 },
     alerts: [
       { at: T - 100, severity: 'high' },
       { at: T - 200, severity: 'info' },
@@ -181,7 +181,7 @@ describe('the figures', () => {
           { at: T - 300, source: 'news', text: 'ABC: no paper short, as it has no USDT pair on Binance.' },
           { at: T - 2 * HOUR, source: 'watch', text: 'No paper trade: old.' }
         ],
-        connection: { open: true, connects: 4, drops: 3, lastMessageAt: T * 1000, gaps: [{ from: T - 2 * HOUR, to: T - 2 * HOUR + 60 }, { from: T - HOUR - 30, to: T - HOUR + 90 }, { from: T - 400, to: T - 300 }], host: 'binance.com', hostSwitches: 1, dataHostSwitches: 2 }
+        connection: { open: true, connects: 4, drops: 3, lastMessageAt: T * 1000, gaps: [{ from: T - 2 * HOUR, to: T - 2 * HOUR + 60 }, { from: T - HOUR - 30, to: T - HOUR + 90 }, { from: T - 400, to: T - 300 }], host: 'binance.com', hostSwitches: 1, dataHostSwitches: 2, connectedAt: null, planned: 0, subscribeErrors: 0 }
       })
     )
     expect(report.paper.refused).toEqual([
@@ -190,7 +190,7 @@ describe('the figures', () => {
     ])
     expect(report.alerts).toEqual({ info: 1, watch: 0, high: 1, critical: 0 })
     // The gap that began before the span counts from where the span begins.
-    expect(report.stream).toEqual({ connects: 4, drops: 3, gaps: 2, gapSeconds: 90 + 100, longestGapSeconds: 100, host: 'binance.com', hostSwitches: 1, dataHostSwitches: 2 })
+    expect(report.stream).toEqual({ connects: 4, drops: 3, gaps: 2, gapSeconds: 90 + 100, longestGapSeconds: 100, host: 'binance.com', hostSwitches: 1, dataHostSwitches: 2, planned: 0, subscribeErrors: 0 })
   })
 
   it('reads latency by nearest rank: the median and the 95th percentile of the answers that came back', () => {
@@ -257,14 +257,14 @@ describe('the gates that must be zero', () => {
   })
 
   it('fails a gap left open, or a trade opened on the stream inside one, and says when the log could not be read', () => {
-    const stuck = sessionReportOf(input({ connection: { open: true, connects: 1, drops: 0, lastMessageAt: (T - 300) * 1000, gaps: [{ from: T - 121, to: null }], host: 'binance.com', hostSwitches: 0, dataHostSwitches: 0 } }))
+    const stuck = sessionReportOf(input({ connection: { open: true, connects: 1, drops: 0, lastMessageAt: (T - 300) * 1000, gaps: [{ from: T - 121, to: null }], host: 'binance.com', hostSwitches: 0, dataHostSwitches: 0, connectedAt: null, planned: 0, subscribeErrors: 0 } }))
     expect(gateOf(stuck, 'stream_gaps').status).toBe('fail')
     expect(gateOf(stuck, 'stream_gaps').detail).toContain('open since 11:57 UTC')
-    expect(gateOf(sessionReportOf(input({ connection: { open: true, connects: 1, drops: 0, lastMessageAt: null, gaps: [{ from: T - 119, to: null }], host: 'binance.com', hostSwitches: 0, dataHostSwitches: 0 } })), 'stream_gaps').status).toBe('pass')
-    const inside = sessionReportOf(input({ connection: { open: true, connects: 1, drops: 0, lastMessageAt: null, gaps: [{ from: T - 1900, to: T - 1700 }], host: 'binance.com', hostSwitches: 0, dataHostSwitches: 0 } }))
+    expect(gateOf(sessionReportOf(input({ connection: { open: true, connects: 1, drops: 0, lastMessageAt: null, gaps: [{ from: T - 119, to: null }], host: 'binance.com', hostSwitches: 0, dataHostSwitches: 0, connectedAt: null, planned: 0, subscribeErrors: 0 } })), 'stream_gaps').status).toBe('pass')
+    const inside = sessionReportOf(input({ connection: { open: true, connects: 1, drops: 0, lastMessageAt: null, gaps: [{ from: T - 1900, to: T - 1700 }], host: 'binance.com', hostSwitches: 0, dataHostSwitches: 0, connectedAt: null, planned: 0, subscribeErrors: 0 } }))
     expect(gateOf(inside, 'stream_gaps').detail).toContain("SOLUSDT opened on the stream's price inside a gap")
     // The same trade on a price read from the exchange instead is not.
-    const rest = sessionReportOf(input({ executors: [trade('sol', {}, { book: { ...BOOK, source: 'rest' } })], connection: { open: true, connects: 1, drops: 0, lastMessageAt: null, gaps: [{ from: T - 1900, to: T - 1700 }], host: 'binance.com', hostSwitches: 0, dataHostSwitches: 0 } }))
+    const rest = sessionReportOf(input({ executors: [trade('sol', {}, { book: { ...BOOK, source: 'rest' } })], connection: { open: true, connects: 1, drops: 0, lastMessageAt: null, gaps: [{ from: T - 1900, to: T - 1700 }], host: 'binance.com', hostSwitches: 0, dataHostSwitches: 0, connectedAt: null, planned: 0, subscribeErrors: 0 } }))
     expect(gateOf(rest, 'stream_gaps').status).toBe('pass')
     expect(gateOf(sessionReportOf(input({ connection: null })), 'stream_gaps').status).toBe('not measured')
   })
@@ -412,7 +412,7 @@ describe('the spreadsheet', () => {
 // is and how often it, and the data host, moved. Moves are told, never gated: a move is the fix.
 describe("the stream's host", () => {
   it('names the host the socket is on and its moves, and never fails a gate for them', () => {
-    const moved = sessionReportOf(input({ connection: { open: true, connects: 13, drops: 0, lastMessageAt: T * 1000, gaps: [], host: 'binance.com', hostSwitches: 12, dataHostSwitches: 12 } }))
+    const moved = sessionReportOf(input({ connection: { open: true, connects: 13, drops: 0, lastMessageAt: T * 1000, gaps: [], host: 'binance.com', hostSwitches: 12, dataHostSwitches: 12, connectedAt: null, planned: 0, subscribeErrors: 0 } }))
     expect(moved.stream).toMatchObject({ host: 'binance.com', hostSwitches: 12, dataHostSwitches: 12 })
     expect(moved.gates.find((gate) => gate.id === 'stream_gaps')?.status).toBe('pass')
     expect(moved.passed).toBe(true)
@@ -420,7 +420,7 @@ describe("the stream's host", () => {
     expect(lines).toContain('stream,host,binance.com,the data host the socket is on')
     expect(lines.some((line) => line.startsWith('stream,host switches,12,'))).toBe(true)
     expect(lines.some((line) => line.startsWith('stream,data host switches,12,'))).toBe(true)
-    const unopened = sessionReportOf(input({ connection: { open: false, connects: 0, drops: 0, lastMessageAt: null, gaps: [], host: null, hostSwitches: 0, dataHostSwitches: 0 } }))
+    const unopened = sessionReportOf(input({ connection: { open: false, connects: 0, drops: 0, lastMessageAt: null, gaps: [], host: null, hostSwitches: 0, dataHostSwitches: 0, connectedAt: null, planned: 0, subscribeErrors: 0 } }))
     expect(unopened.stream?.host).toBeNull()
   })
 })
@@ -444,5 +444,20 @@ describe('a refusal that names what refused it', () => {
     expect(refusalReason('No paper trade: The ask holds 50.01 in the quote, less than the 100 it would take, so a fill would go through the book.')).toBe(
       'The ask holds # in the quote, less than the # it would take, so a fill would go through the book.'
     )
+  })
+})
+
+describe('the stream, renewed', () => {
+  it('shows planned renewals and refused requests, and neither fails a gate', () => {
+    const report = sessionReportOf(
+      input({
+        connection: { open: true, connects: 4, drops: 0, lastMessageAt: T * 1000, gaps: [], host: 'data-api.binance.vision', hostSwitches: 0, dataHostSwitches: 0, connectedAt: (T - 7200) * 1000, planned: 3, subscribeErrors: 2 }
+      })
+    )
+    expect(report.stream).toMatchObject({ connects: 4, drops: 0, gaps: 0, planned: 3, subscribeErrors: 2 })
+    expect(gateOf(report, 'stream_gaps').status).toBe('pass')
+    const csv = sessionReportCsv(report)
+    expect(csv).toContain('planned renewals')
+    expect(csv).toContain('refused requests')
   })
 })

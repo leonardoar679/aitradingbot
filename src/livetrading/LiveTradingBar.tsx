@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { AlertTriangle, Power, ShieldOff } from 'lucide-react'
 import type { CredentialStatus, LiveTradingStatus, LiveWatcherSummary } from '../../shared/ipc'
 import { AiStatusChip } from '../ai/AiStatusChip'
+import { useLiveConnection } from '../hooks/useLiveMarket'
 import { StatusChip } from '../status/StatusChip'
+import { describeLiveMarket, liveMarketStateOf } from '../status/liveMarketChip'
 import { connectionStateOf, describeConnection, describeTradingMode, tradingModeOf } from '../status/statusModes'
 import { describeBlockedExits } from './blockedExits'
 
@@ -41,6 +43,14 @@ export function LiveTradingBar(): React.JSX.Element | null {
   // than about turning real trading on. Disarming and engaging the kill switch stay one click --
   // they only ever reduce risk, and hesitating there is the wrong failure mode.
   const [pendingConfirm, setPendingConfirm] = useState<'arm' | 'release' | null>(null)
+  // The live-price socket's state, with a clock of its own: the age of the last frame is shown,
+  // and it has to grow while nothing arrives.
+  const connection = useLiveConnection()
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 500)
+    return (): void => clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     if (pendingConfirm === null) return
@@ -117,6 +127,7 @@ export function LiveTradingBar(): React.JSX.Element | null {
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
       <StatusChip mode={describeTradingMode(tradingModeOf({ binanceKey: credentialConfigured, status }))} />
       <StatusChip mode={describeConnection('Binance', connectionStateOf(binance))} />
+      <StatusChip mode={describeLiveMarket(liveMarketStateOf(connection, nowMs), connection?.lastMessageAt == null ? null : nowMs - connection.lastMessageAt)} />
       <AiStatusChip />
     </span>
   )

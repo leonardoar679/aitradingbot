@@ -151,7 +151,11 @@ The main process also runs loops that need no window at all:
   live book and minute of the pairs shown and of the app's own paper trades, Bitcoin's and ether's
   minutes always, and a log of drops, quiet gaps and host moves. Since 7 October 2026 a socket that
   cannot connect three times in a row moves to the data host that answers (never binance.us), and a
-  closed one follows a REST move at once. Public data only.
+  closed one follows a REST move at once. Since 8 October 2026 the connection is renewed before
+  Binance's 24-hour cut (a second socket opened before the first is closed; counted apart from
+  drops), the minutes missed in a drop or a gap are read again over REST, refused requests are
+  counted, the chart's own sockets follow the data host by the same rule, and the bar shows the
+  socket's state (`src/status/liveMarketChip.ts`). Public data only.
 - `newsService` reads Binance's two announcement lists once a minute while it is on (added in V3
   Stage 7).
 - `aiAdditionsService` (added 6 October 2026) puts each story of high impact the news feed reads to

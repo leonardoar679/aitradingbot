@@ -163,3 +163,64 @@ describe('createReconnectingSocket', () => {
     40_000
   )
 })
+
+// BINANCE CLOSES A STREAM AFTER 24 HOURS. Left to that, the cut is a drop with a backoff behind it.
+// A connection is renewed before then: a second socket is opened beside the first, and the first is
+// closed only once the second is open.
+describe('a connection renewed before its lifetime runs out', () => {
+  it('opens the second socket before it closes the first, and counts neither a drop nor a failed connect', async () => {
+    const { server, url } = await startServer()
+    const connections: WsSocket[] = []
+    let firstStateAtSecond: number | null = null
+    server.on('connection', (ws: WsSocket) => {
+      if (connections.length === 1) firstStateAtSecond = connections[0].readyState
+      connections.push(ws)
+    })
+    const opened: boolean[] = []
+    const failed: number[] = []
+    track(
+      createReconnectingSocket(
+        url,
+        { onMessage: () => {}, onOpen: (_socket, renewed) => opened.push(renewed), onConnectFailed: (consecutive) => failed.push(consecutive) },
+        { lifetimeMs: 300 }
+      )
+    )
+
+    expect(await waitFor(() => connections.length >= 2, 4000)).toBe(true)
+    // At the moment the second connection arrived, the first was still open: nothing is missed
+    // between them.
+    expect(firstStateAtSecond).toBe(connections[0].OPEN)
+    expect(await waitFor(() => connections[0].readyState === connections[0].CLOSED, 4000)).toBe(true)
+    expect(opened.slice(0, 2)).toEqual([false, true])
+    expect(failed).toEqual([])
+    // Each connection has a lifetime of its own: a third follows the second.
+    expect(await waitFor(() => connections.length >= 3, 4000)).toBe(true)
+  })
+
+  it('keeps the socket in use when the renewal cannot open, and tries again', async () => {
+    let handshakes = 0
+    // The second handshake is refused; every other is accepted.
+    const server = new WebSocketServer({ port: 0, verifyClient: () => handshakes++ !== 1 })
+    servers.push(server)
+    await new Promise<void>((resolve) => server.once('listening', resolve))
+    const url = `ws://127.0.0.1:${(server.address() as { port: number }).port}`
+    const connections: WsSocket[] = []
+    server.on('connection', (ws: WsSocket) => connections.push(ws))
+    const opened: boolean[] = []
+    const failed: number[] = []
+    track(
+      createReconnectingSocket(
+        url,
+        { onMessage: () => {}, onOpen: (_socket, renewed) => opened.push(renewed), onConnectFailed: (consecutive) => failed.push(consecutive), onError: () => {} },
+        { lifetimeMs: 300, rotateRetryMs: 200 }
+      )
+    )
+
+    expect(await waitFor(() => connections.length >= 2, 6000)).toBe(true)
+    expect(handshakes).toBeGreaterThanOrEqual(3)
+    expect(opened.slice(0, 2)).toEqual([false, true])
+    // The refused renewal was not a failed connect of the socket in use, which stayed open until
+    // its renewal was.
+    expect(failed).toEqual([])
+  })
+})

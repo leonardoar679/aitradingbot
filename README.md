@@ -221,6 +221,18 @@ Binance at all. A closed socket also follows a REST move at once, having nothing
 move is not a drop, and what is shown is asked for again as the new socket opens. The session report
 says which host the stream is on, and how often it, and the data host, moved; neither is a gate.
 
+**The connection is renewed before Binance's 24-hour cut, and holes are filled** (since 8 October
+2026; the V4 document's §12). Binance closes every stream connection after 24 hours; left to that,
+the cut is a drop. So after twenty-three and a half hours a second socket is opened to the same host,
+and the first is closed only once the second is open: a planned renewal, counted apart from drops,
+with nothing missed between. After a drop, and after a gap closes, the minutes the stream did not
+deliver are read again over REST for every pair streamed. A frame that is not a stream's — the
+answer to a request, or its refusal — is counted rather than dropped. The bar shows the socket's
+state on every page: LIVE MARKET with the age of the last frame, QUIET after ten seconds without
+one, MARKET DATA STALE after a minute (a gap), RECONNECTING while it is closed. The chart's own
+sockets (the candles and the ticker of the pair shown) follow the data host by the same rule as the
+live socket.
+
 - **Each recommendation on offer is checked against it.** ENTERABLE when what a fill would pay —
   the ask for a buy, the bid for a sell — is inside the entry range, the spread is within 0.1% and
   the price is under ten seconds old; WAITING while the price is outside the range, since the entry

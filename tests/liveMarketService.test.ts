@@ -18,6 +18,8 @@ const rig = vi.hoisted(() => {
     onClose: null as null | (() => void),
     settings: { executors: [] as unknown[] },
     fetched: [] as string[],
+    /** Pairs whose recent minutes were read over REST. */
+    seeded: [] as string[],
     rest: { ok: true, row: {} as Record<string, unknown> },
     /** Sockets stopped for good: a move stops the old one. */
     stops: 0,
@@ -56,7 +58,14 @@ vi.mock('../electron/services/exchanges/binance', () => ({
   },
   fetchMarketData: async (path: string) => ({ response: await fetch(`${rig.hosts.current.restRoot}${path}`), endpoint: rig.hosts.current })
 }))
-vi.mock('../electron/services/marketService', () => ({ scanSourceFor: () => ({ fetchRecentCandles: async () => [] }) }))
+vi.mock('../electron/services/marketService', () => ({
+  scanSourceFor: () => ({
+    fetchRecentCandles: async (symbol: string) => {
+      rig.seeded.push(symbol)
+      return []
+    }
+  })
+}))
 vi.mock('../electron/services/settingsService', () => ({ getSettings: async () => rig.settings }))
 
 import { getLiveState, liveBook, onLiveUpdate, setLiveInterest, startLiveMarket } from '../electron/services/liveMarketService'
@@ -217,5 +226,55 @@ describe('the live market', () => {
     expect(rig.urls.length).toBe(before)
     expect(rig.stops).toBe(2)
     expect(getLiveState().connection).toMatchObject({ host: 'data-api.binance.vision', hostSwitches: 2 })
+  })
+})
+
+// THE CONNECTION, RENEWED AND READ AGAIN (the V4 document, §12): a socket reopened after a drop reads
+// every streamed pair's minutes again, a renewal before the lifetime does not, a frame that is not a
+// stream's is the socket alive, and a gap closing reads the minutes again, at most once in thirty
+// seconds.
+describe('the connection, renewed and read again', () => {
+  it("reads every streamed pair's minutes again when the socket reopens after a drop, and not on a planned renewal", async () => {
+    await vi.advanceTimersByTimeAsync(31_000)
+    rig.seeded.length = 0
+    const openedAt = Date.now()
+    rig.handlers?.onOpen?.(socket)
+    await vi.waitFor(() => expect(rig.seeded).toEqual(expect.arrayContaining(['BTCUSDT', 'ETHUSDT'])))
+    expect(getLiveState().connection).toMatchObject({ open: true, connectedAt: openedAt, planned: 0 })
+    // A renewal half a minute later, past the guard that spares a flapping socket: it reads nothing
+    // again, since the socket it replaced was open until it was.
+    rig.handlers?.onMessage(message('btcusdt@kline_1m', { s: 'BTCUSDT', k: { t: NOW_MS, o: '1', h: '1', l: '1', c: '1', v: '1', x: false } }))
+    await vi.advanceTimersByTimeAsync(31_000)
+    rig.seeded.length = 0
+    rig.handlers?.onOpen?.(socket, true)
+    await vi.advanceTimersByTimeAsync(10)
+    expect(rig.seeded).toEqual([])
+    expect(getLiveState().connection).toMatchObject({ open: true, planned: 1 })
+  })
+
+  it('counts a request the stream refused, and takes its answers as the socket alive', () => {
+    const before = getLiveState().connection
+    rig.handlers?.onMessage(Buffer.from(JSON.stringify({ error: { code: 2, msg: 'Invalid request' }, id: 9 })))
+    rig.handlers?.onMessage(Buffer.from(JSON.stringify({ result: null, id: 10 })))
+    const after = getLiveState().connection
+    expect(after.subscribeErrors).toBe(before.subscribeErrors + 1)
+    expect(after.lastMessageAt).toBe(Date.now())
+  })
+
+  it('reads the minutes again when a gap closes, and not again within thirty seconds', async () => {
+    // The gap clock looks every five seconds, from the app's start: a minute and a tick.
+    await vi.advanceTimersByTimeAsync(66_000)
+    expect(getLiveState().connection.gaps.at(-1)?.to).toBeNull()
+    rig.seeded.length = 0
+    rig.handlers?.onMessage(message('btcusdt@kline_1m', { s: 'BTCUSDT', k: { t: NOW_MS, o: '1', h: '1', l: '1', c: '1', v: '1', x: false } }))
+    expect(getLiveState().connection.gaps.at(-1)?.to).toBe(Math.floor(Date.now() / 1000))
+    await vi.waitFor(() => expect(rig.seeded).toContain('BTCUSDT'))
+    // A drop and a reopening seconds later read nothing again: once in thirty seconds.
+    rig.seeded.length = 0
+    rig.onClose?.()
+    expect(getLiveState().connection).toMatchObject({ open: false, connectedAt: null })
+    rig.handlers?.onOpen?.(socket)
+    await vi.advanceTimersByTimeAsync(10)
+    expect(rig.seeded).toEqual([])
   })
 })
