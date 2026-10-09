@@ -120,6 +120,9 @@ for name in ('day', 'twelve', 'session', 'hour'):
 # --- the records on file, over every segment -----------------------------------------------------
 print('\n===== raw records')
 events = jsonl(os.path.join(PROFILE, 'marketEvents', '*.jsonl'))
+# Since V5 Stage 4 the events file also holds each event's status lines ({kind: 'status'}); the
+# records are the event lines alone.
+events = [e for e in events if e.get('kind') != 'status']
 for e in events:
     live = e.get('live') or {}
     print(f'EVENT {clock(e["time"])} {e["symbol"] + tag(e["symbol"]):20} {e["band"]:9} {e["type"]:12} {e["direction"]:4} score {e["score"]:.1f} price {e["price"]} move15m {e["returnsPct"]["m15"]:.2f}% sigmas {e["moveSigmas"]:.1f} rank {live.get("rank")} vol24h {live.get("quoteVolume24h")} spread {live.get("spreadPct")}')
