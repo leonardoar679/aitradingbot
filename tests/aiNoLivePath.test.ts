@@ -294,6 +294,35 @@ describe('AI code has no route to a real order', () => {
       expect(readFileSync(path, 'utf-8'), path).not.toMatch(/fetch\(|https?:\/\/|credentials|apiKey|liveTrading|placeLive|openRouter/)
     }
     expect(importsOf(join(SERVICES, 'forecastWorkerService.ts')).sort()).toEqual(['path', 'trainWorker', 'worker_threads'])
+    // The live forecast (V6 Stage 7) reads the bars, the models and the live book, and writes its own
+    // record; its channels only read it. Neither reaches anything that trades, holds a key or asks a
+    // model.
+    const engine = join(SERVICES, 'forecastService.ts')
+    const handlers = join(ROOT, 'electron', 'ipc', 'handlers', 'forecastHandlers.ts')
+    for (const path of [engine, handlers]) {
+      expect(importsOf(path).filter((name) => LIVE_MODULES.has(name) || aiModuleNames.has(name)), path).toEqual([])
+      expect(readFileSync(path, 'utf-8'), path).not.toMatch(/fetch\(|https?:\/\/|credentials|apiKey|liveTrading|placeLive|openRouter|prepareOrder/)
+    }
+    expect(importsOf(engine).sort()).toEqual([
+      'aciTable',
+      'atomicWrite',
+      'bars',
+      'electron',
+      'features',
+      'forecastDataService',
+      'forecastRecord',
+      'forecastTrainingService',
+      'jsonlStore',
+      'liveMarket',
+      'marketResearch',
+      'models',
+      'outcome',
+      'path',
+      'prediction',
+      'promises',
+      'refresh',
+      'status'
+    ])
   })
 
   it('the live prices read the public stream and refuse, never place', () => {

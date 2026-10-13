@@ -141,8 +141,11 @@ models, a folder a run (`<horizon>.json`, the walk forward's `oos-<horizon>.bin`
 Stage 6, the calibration made from it, `calibration.json`), `current.json` (the run in use, the walk
 forward whose verdicts and calibration hold, the verdicts) and `training-YYYY-MM.jsonl` (a line for
 every fit, walk forward and calibration), written by `forecastTrainingService` (V6 Stage 5), which keeps
-the run in use and the one before it and deletes older runs after a walk forward. Nothing else is
-ever deleted.
+the run in use and the one before it and deletes older runs after a walk forward; and `forecasts/`
+holds the live forecast's record (V6 Stage 7): every pair's forecast at each quarter-hour and each made
+again between closes (`predictions-YYYY-MM.jsonl`), each horizon's outcome when due
+(`outcomes-YYYY-MM.jsonl`) and the adaptive levels (`aci.json`), its month files deleted at start once
+their month ended over 180 days before. Nothing else is ever deleted.
 
 ## What runs without a page open
 
@@ -231,6 +234,11 @@ The main process also runs loops that need no window at all:
   night at 00:30 UTC unless `forecast.refitNightly` is off; it writes `forecastModels/`. Since V6
   Stage 6 each walk forward also writes its calibration, and a run without one is calibrated again
   from its record at start. Public data only; no key, no model call, no order.
+- `forecastService` (added 13 October 2026, V6 Stage 7) forecasts every pair at every five-minute
+  close with those models and their calibration, and again between closes for a story of impact 70
+  naming it, an event the scanner raised on it, a live price out of its range or a volume shock, at
+  most once a minute; it writes `forecasts/`, each horizon's outcome when due, and moves the adaptive
+  levels by them. Public data only; no key, no model call, no order.
 - `aiAdditionsService` (added 6 October 2026) puts each story of high impact the news feed reads to
   the news analyst, once, and asks why the coin it names moved, while the watch is on, each within
   its daily limit and the AI budget.

@@ -374,6 +374,27 @@ NEUTRAL. A walk forward writes its calibration beside its record (`forecastModel
 calibration.json`, about 280 KB), read back with its verdicts; a run walked forward before it existed,
 or under another version, is calibrated again from its record at the next start, with nothing fitted.
 
+**The forecast, live** (since 13 October 2026; the V6 document's §38-43; V6 Stage 7;
+`electron/services/forecastService.ts`, the rules in `shared/forecast/{view,outcome,refresh,aciTable,
+forecastRecord}.ts`). At every five-minute close, once the bars are in, every pair of the research is
+forecast at the five horizons -- about forty pairs in some forty milliseconds, in the main process --
+each level read where the **adaptive step** has moved it: once a moment, by the share of the outcomes
+due at that moment that fell below it, so that a market that turns wider than the walk forward's
+weeks is followed. Between closes a pair is **forecast again** when a story of impact 70 names it, the
+scanner raises an event on it, its live price leaves its 80% range or a volume shock hits it, at most
+once a minute; the new forecast names the one it replaced. A forecast's **price levels stay fixed** as
+the price moves, and its percentages are said from the live price (§41: read from $180 as +2% to +5%,
+the same levels from $184 are -0.2% to +2.7%); each horizon **expires** at its close (§38), and one
+whose 80% range the live price has left is invalidated (§39). On record in `forecasts/`: every pair's
+forecast at each quarter-hour (the 5-minute, 15-minute and 1-hour horizons, and the 4- and 24-hour
+ones on the hour) and each forecast made again, in `predictions-YYYY-MM.jsonl`; for each of their
+horizons, once due and never before, the outcome -- the move, the path's best and worst, where it
+fell against the shown levels and the price-only ones, and the kinds of error (§43: right or wrong
+direction, right range, too narrow, too wide, late) -- in `outcomes-YYYY-MM.jsonl`, or, an hour after
+it was due, a line saying its bars never came; and the adaptive levels in `aci.json`. A restart
+picks up the outcomes still owed; month files older than 180 days are deleted at start. The window
+reads it all through `window.api.forecast` (state, the latest forecasts, one pair's, a pair's record).
+
 ### Live prices
 
 Candles are context; the stream is the price now (the second V3 document's §7, §8, §25 and §42).

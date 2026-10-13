@@ -1,0 +1,353 @@
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { FORECAST_BAR_SECONDS, coarseBars, type ForecastBar } from '../shared/forecast/bars'
+import { aciUpdate } from '../shared/forecast/calibration'
+import { HORIZONS, type Horizon } from '../shared/forecast/features'
+import type { GbtModel } from '../shared/forecast/ml/gbt'
+import { QUANTILE_LEVELS } from '../shared/forecast/ml/quantile'
+import type { FlatTree } from '../shared/forecast/ml/tree'
+import { MODELS_VERSION, type FittedHorizon } from '../shared/forecast/models'
+import { buildRunCalibration, type RunCalibration } from '../shared/forecast/runCalibration'
+import { emptyLiveState, type LiveState } from '../shared/liveMarket'
+import { promoted, recordOf } from './forecastRecords'
+
+// THE FORECAST, LIVE (electron/services/forecastService.ts; the V6 document, §38-43): every pair
+// forecast at every close once there are models and a calibration; the quarter-hour's forecasts on
+// record, and each horizon's outcome written once when due, never before; the adaptive levels moved
+// once a moment; a forecast made again between closes for a story, an event or a price out of its
+// range, at most once a minute; and the outcomes still owed read back at a restart. The bars, the
+// models and the calibration are faked; the forecasting is the app's own.
+
+vi.mock('electron', () => ({ app: { getPath: () => process.env.AI_TEST_USER_DATA } }))
+
+const T0 = Date.parse('2026-08-01T00:00:00Z') / 1000
+const DAYS = 34
+const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT']
+
+function walk(seed: number, base: number): ForecastBar[] {
+  let state = seed >>> 0
+  const next = (): number => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0
+    return state / 2 ** 32
+  }
+  const gauss = (): number => Math.sqrt(-2 * Math.log(next() + 1e-12)) * Math.cos(2 * Math.PI * next())
+  const bars: ForecastBar[] = []
+  let price = base
+  for (let index = 0; index < DAYS * 288; index++) {
+    const open = price
+    price = price * Math.exp(0.002 * gauss())
+    const volume = 100 * (0.5 + next())
+    bars.push({ time: T0 + index * FORECAST_BAR_SECONDS, open, high: Math.max(open, price) * 1.0005, low: Math.min(open, price) * 0.9995, close: price, volume, quoteVolume: volume * price, takerBuyVolume: volume * next(), trades: 50 })
+  }
+  return bars
+}
+
+const fake = vi.hoisted(() => ({
+  market: new Map<string, ForecastBar[]>(),
+  /** The close the bars are held up to. */
+  now: 0,
+  /** Bars left out of what is held, by pair: a gap. */
+  gaps: new Map<string, [number, number]>(),
+  barListeners: [] as ((closedAt: number) => void)[],
+  models: new Map<string, unknown>(),
+  calibration: null as unknown,
+  current: null as { runId: string; fittedAt: number; foldsRunId: string | null } | null
+}))
+
+vi.mock('../electron/services/forecastDataService', () => ({
+  forecastUniverse: () => [...fake.market.keys()],
+  forecastSeries: (symbol: string) => {
+    const bars = fake.market.get(symbol)
+    if (bars === undefined) return null
+    const gap = fake.gaps.get(symbol)
+    const m5 = bars.filter((bar) => bar.time < fake.now && (gap === undefined || bar.time < gap[0] || bar.time >= gap[1]))
+    return { m5, h1: coarseBars(m5, '1h', fake.now) }
+  },
+  onForecastBars: (listener: (closedAt: number) => void) => {
+    fake.barListeners.push(listener)
+    return () => undefined
+  }
+}))
+
+vi.mock('../electron/services/forecastTrainingService', () => ({
+  currentForecastModels: () => fake.models,
+  currentForecastCalibration: () => fake.calibration,
+  getForecastTrainingState: () => ({ status: 'ready', current: fake.current, calibratedRunId: null, progress: null, lastError: null, nextRefitAt: null, promotions: [] }),
+  onForecastTraining: () => () => undefined
+}))
+
+const leaf = (value: number): FlatTree => ({ feature: [-1], threshold: [0], bin: [0], left: [-1], right: [-1], value: [value], cover: [0], gain: [0] })
+const constantGbt = (base: number, loss: GbtModel['loss'] = { kind: 'l2' }): GbtModel => ({ kind: 'gbt', loss, base, features: 63, grown: 1, trees: [leaf(0)] })
+const ridge = { kind: 'ridge' as const, mean: [0], scale: [1], coef: [0], intercept: 0, columns: [0] }
+const RESIDUAL = [-1.28, -0.67, 0, 0.67, 1.28]
+function tinyFitted(horizon: Horizon): FittedHorizon {
+  return {
+    version: MODELS_VERSION,
+    horizon,
+    persistence: { residual: RESIDUAL },
+    volatility: { size: ridge, residual: RESIDUAL },
+    technical: { center: ridge, residual: RESIDUAL },
+    forest: { center: { kind: 'forest', features: 63, trees: [leaf(0)] }, residual: RESIDUAL },
+    gbt: { center: constantGbt(0), size: constantGbt(0), residual: RESIDUAL },
+    quantileGbt: { levels: QUANTILE_LEVELS.map((tau, index) => constantGbt(RESIDUAL[index], { kind: 'pinball', tau })) },
+    gbtPrice: { center: constantGbt(0), size: constantGbt(0), residual: RESIDUAL }
+  }
+}
+
+const CALIBRATION: RunCalibration = buildRunCalibration(
+  new Map(HORIZONS.map((horizon, index) => [horizon, recordOf({ rows: 6000, seed: 50 + index, horizon })])),
+  HORIZONS.flatMap((horizon) => promoted(horizon, ['persistence', 'gbt'])),
+  'run-folds'
+)
+const MARKET = new Map(SYMBOLS.map((symbol, index) => [symbol, walk(11 + index * 17, [60_000, 2_500, 150, 0.6][index])]))
+/** A close on the hour, thirty days in. */
+const HOUR = T0 + 30 * 86_400
+
+const dir = (): string => join(process.env.AI_TEST_USER_DATA as string, 'forecasts')
+const lines = (name: string): Record<string, unknown>[] => {
+  const path = join(dir(), name)
+  return existsSync(path) ? readFileSync(path, 'utf-8').trim().split('\n').filter(Boolean).map((line) => JSON.parse(line)) : []
+}
+const month = '2026-08'
+
+async function engine(options: { live?: LiveState } = {}) {
+  const mod = await import('../electron/services/forecastService')
+  mod.forecastForTest.reset()
+  mod.startForecast(() => options.live ?? null)
+  return mod
+}
+
+async function closeAt(mod: Awaited<ReturnType<typeof engine>>, closedAt: number): Promise<void> {
+  fake.now = closedAt
+  await mod.forecastForTest.pass(closedAt)
+}
+
+beforeEach(() => {
+  vi.resetModules()
+  process.env.AI_TEST_USER_DATA = mkdtempSync(join(tmpdir(), 'forecast-live-'))
+  fake.market = MARKET
+  fake.now = HOUR
+  fake.gaps = new Map()
+  fake.barListeners.length = 0
+  fake.models = new Map(HORIZONS.map((horizon) => [horizon, tinyFitted(horizon)]))
+  fake.calibration = CALIBRATION
+  fake.current = { runId: 'run-models', fittedAt: HOUR - 3600, foldsRunId: 'run-folds' }
+})
+
+describe('a close', () => {
+  it('forecasts every pair with its bars, once there are models and their calibration', async () => {
+    fake.models = new Map()
+    const live = await engine()
+    await closeAt(live, HOUR)
+    expect(live.getForecastEngineState()).toMatchObject({ status: 'waiting', waitingFor: 'models' })
+    fake.models = new Map(HORIZONS.map((horizon) => [horizon, tinyFitted(horizon)]))
+    fake.calibration = null
+    await closeAt(live, HOUR)
+    expect(live.getForecastEngineState().waitingFor).toBe('calibration')
+    fake.calibration = CALIBRATION
+    await closeAt(live, HOUR)
+    const state = live.getForecastEngineState()
+    expect(state).toMatchObject({ status: 'running', waitingFor: null, predictions: SYMBOLS.length, lastPassAt: HOUR })
+    const sol = live.forecastOf('SOLUSDT')!
+    expect(Object.keys(sol.horizons).sort()).toEqual([...HORIZONS].sort())
+    expect(sol.barTime).toBe(HOUR)
+    expect(sol.currentPrice).toBe(MARKET.get('SOLUSDT')!.find((bar) => bar.time === HOUR - 300)!.close)
+    expect(sol.versions).toMatchObject({ run: 'run-models', foldsRun: 'run-folds' })
+    expect(live.latestForecasts().map((prediction) => prediction.pair)).toEqual([...SYMBOLS].sort())
+    // It is told on the onForecastBars listener it set at start.
+    expect(fake.barListeners).toHaveLength(1)
+  })
+
+  it('forecasts from the close it is told, whatever later bars are held, and writes no outcome early', async () => {
+    const live = await engine()
+    fake.now = HOUR + 600
+    await live.forecastForTest.pass(HOUR)
+    expect(live.forecastOf('SOLUSDT')!.currentPrice).toBe(MARKET.get('SOLUSDT')!.find((bar) => bar.time === HOUR - 300)!.close)
+    // The 5-minute horizon recorded at HOUR is due at HOUR + 300: not by HOUR, though its bars are held.
+    await live.forecastForTest.pass(HOUR)
+    expect(lines(`outcomes-${month}.jsonl`)).toHaveLength(0)
+  })
+
+  it('leaves out a pair whose bar at the close is not there', async () => {
+    fake.gaps.set('XRPUSDT', [HOUR - 300, HOUR])
+    const live = await engine()
+    await closeAt(live, HOUR)
+    expect(live.forecastOf('XRPUSDT')).toBeNull()
+    expect(live.getForecastEngineState().predictions).toBe(3)
+  })
+})
+
+describe('the record', () => {
+  it('holds every pair at the quarter-hours -- the short horizons, all five on the hour -- and nothing between', async () => {
+    const live = await engine()
+    await closeAt(live, HOUR)
+    await closeAt(live, HOUR + 300)
+    await closeAt(live, HOUR + 900)
+    const recorded = lines(`predictions-${month}.jsonl`)
+    expect(recorded.map((line) => line.t)).toEqual([...Array(4).fill(HOUR), ...Array(4).fill(HOUR + 900)])
+    expect(Object.keys(recorded[0].h as object).sort()).toEqual([...HORIZONS].sort())
+    expect(Object.keys(recorded[4].h as object).sort()).toEqual(['hour1', 'minutes15', 'minutes5'])
+    expect(recorded.every((line) => line.why === 'grid')).toBe(true)
+    // A close passed again does not record it twice.
+    await closeAt(live, HOUR + 900)
+    expect(lines(`predictions-${month}.jsonl`)).toHaveLength(8)
+  })
+
+  it('writes each horizon\'s outcome once when it is due, never before, and moves the adaptive levels once a moment', async () => {
+    const live = await engine()
+    await closeAt(live, HOUR)
+    expect(lines(`outcomes-${month}.jsonl`)).toHaveLength(0)
+    await closeAt(live, HOUR + 300)
+    let outcomes = lines(`outcomes-${month}.jsonl`)
+    expect(outcomes.map((line) => line.h)).toEqual(Array(4).fill('minutes5'))
+    expect(outcomes.every((line) => line.t === HOUR && line.due === HOUR + 300)).toBe(true)
+    const sol = outcomes.find((line) => line.pair === 'SOLUSDT')!
+    const bars = MARKET.get('SOLUSDT')!
+    const from = bars.find((bar) => bar.time === HOUR - 300)!.close
+    expect(sol.move).toBeCloseTo((bars.find((bar) => bar.time === HOUR)!.close / from - 1) * 100, 4)
+    const aci = JSON.parse(readFileSync(join(dir(), 'aci.json'), 'utf-8'))
+    expect(aci.calibrationRun).toBe('run-folds')
+    expect(aci.updatedAt).toBe(HOUR + 300)
+    expect(Object.keys(aci.levels).sort()).toEqual(['minutes5/v1/pooled', 'minutes5/v2/pooled'])
+    // One step for the moment, by the share of its four outcomes below each level.
+    const share = [0, 1, 2, 3, 4].map((level) => outcomes.filter((line) => (line.below as string)[level] === '1').length / outcomes.length)
+    expect(aci.levels['minutes5/v2/pooled']).toEqual(aciUpdate([0.1, 0.25, 0.5, 0.75, 0.9], share))
+    // Passed again at the same close: nothing written twice, the levels not moved again.
+    await closeAt(live, HOUR + 300)
+    expect(lines(`outcomes-${month}.jsonl`)).toHaveLength(4)
+    expect(JSON.parse(readFileSync(join(dir(), 'aci.json'), 'utf-8'))).toEqual(aci)
+    await closeAt(live, HOUR + 900)
+    outcomes = lines(`outcomes-${month}.jsonl`)
+    expect(outcomes.filter((line) => line.h === 'minutes15')).toHaveLength(4)
+    expect(live.getForecastEngineState()).toMatchObject({ outcomes: 8, missing: 0 })
+  })
+
+  it('reads each forecast at the levels the adaptive step keeps for its cell', async () => {
+    const live = await engine()
+    await closeAt(live, HOUR)
+    const plain = live.forecastOf('SOLUSDT')!.horizons.hour1!.width80Pct
+    live.forecastForTest.setAci({ calibrationRun: 'run-folds', levels: { 'hour1/v2/pooled': [0.02, 0.25, 0.5, 0.75, 0.98] }, updatedAt: HOUR })
+    await closeAt(live, HOUR)
+    expect(live.forecastOf('SOLUSDT')!.horizons.hour1!.width80Pct).toBeGreaterThan(plain)
+  })
+
+  it('writes a horizon whose bars never came as missing, an hour after it was due', async () => {
+    const live = await engine()
+    await closeAt(live, HOUR)
+    fake.gaps.set('SOLUSDT', [HOUR, HOUR + 7200])
+    await closeAt(live, HOUR + 300)
+    expect(lines(`outcomes-${month}.jsonl`).some((line) => line.pair === 'SOLUSDT')).toBe(false)
+    // An hour after the 5-minute horizon was due it is written missing; the others wait their hour.
+    await closeAt(live, HOUR + 300 + 3600)
+    const missingOf = (): unknown[] => lines(`outcomes-${month}.jsonl`).filter((line) => line.pair === 'SOLUSDT' && typeof line.missing === 'string').map((line) => line.h)
+    expect(missingOf()).toEqual(['minutes5'])
+    await closeAt(live, HOUR + 7200)
+    expect((missingOf() as string[]).sort()).toEqual(['hour1', 'minutes15', 'minutes5'])
+    expect(live.getForecastEngineState().missing).toBe(3)
+  })
+
+  it('is read back at a restart for the outcomes still owed', async () => {
+    const first = await engine()
+    await closeAt(first, HOUR)
+    await closeAt(first, HOUR + 300)
+    vi.resetModules()
+    const again = await import('../electron/services/forecastService')
+    again.forecastForTest.reset()
+    await again.forecastForTest.readOwed(HOUR + 600)
+    const owed = again.forecastForTest.owed
+    expect(owed.size).toBe(4)
+    expect([...owed.values()].every((entry) => !entry.horizons.has('minutes5') && entry.horizons.has('hours24'))).toBe(true)
+    expect(again.getForecastEngineState().pending).toBe(16)
+    // A day and more later, what was recorded then is no longer owed.
+    again.forecastForTest.reset()
+    await again.forecastForTest.readOwed(HOUR + 27 * 3600)
+    expect(again.forecastForTest.owed.size).toBe(0)
+  })
+})
+
+describe('between closes', () => {
+  it('forecasts a coin again for a story of impact 70 naming it, once a story and once a minute, naming the one it replaced', async () => {
+    const live = await engine()
+    await closeAt(live, HOUR)
+    const before = live.forecastOf('SOLUSDT')!
+    const now = before.generatedAt + 10_000
+    const story = (id: string, impact: number, ticker = 'SOL'): { id: string; seenAt: number; impact: number; assets: { ticker: string; relationship: string }[] } => ({ id, seenAt: now / 1000, impact, assets: [{ ticker, relationship: 'DIRECT' }] })
+    await live.forecastNewsSignal({ stories: [story('a', 69)] }, now)
+    expect(live.getForecastEngineState().refreshes).toBe(0)
+    await live.forecastNewsSignal({ stories: [story('b', 80)] }, now)
+    expect(live.getForecastEngineState().refreshes).toBe(1)
+    const refreshed = lines(`predictions-${month}.jsonl`).filter((line) => line.why === 'refresh')
+    expect(refreshed).toHaveLength(1)
+    expect(refreshed[0]).toMatchObject({ pair: 'SOLUSDT', reasons: ['news'], previous: before.id })
+    expect(live.forecastOf('SOLUSDT')!.id).not.toBe(before.id)
+    // The same story again, or another inside the minute: nothing.
+    await live.forecastNewsSignal({ stories: [story('b', 80), story('c', 90)] }, now + 30_000)
+    expect(live.getForecastEngineState().refreshes).toBe(1)
+    await live.forecastNewsSignal({ stories: [story('d', 90)] }, now + 61_000)
+    expect(live.getForecastEngineState().refreshes).toBe(2)
+    // A story already read, a minute and more later: nothing.
+    await live.forecastNewsSignal({ stories: [story('b', 80)] }, now + 130_000)
+    expect(live.getForecastEngineState().refreshes).toBe(2)
+    // A story seen before the forecast was made is in it already: nothing.
+    await live.forecastNewsSignal({ stories: [{ ...story('g', 95), seenAt: before.generatedAt / 1000 - 60 }] }, now + 400_000)
+    expect(live.getForecastEngineState().refreshes).toBe(2)
+    // An indirect mention, or a coin not forecast: nothing.
+    await live.forecastNewsSignal({ stories: [{ ...story('e', 95, 'ETH'), assets: [{ ticker: 'ETH', relationship: 'INDIRECT' }] }, story('f', 95, 'NOPE')] }, now + 200_000)
+    expect(live.getForecastEngineState().refreshes).toBe(2)
+    // A story seen after the forecast moves it once; told of it again, nothing.
+    const late = { ...story('h', 90), seenAt: (now + 500_000) / 1000 }
+    await live.forecastNewsSignal({ stories: [late] }, now + 500_000)
+    expect(live.getForecastEngineState().refreshes).toBe(3)
+    await live.forecastNewsSignal({ stories: [late] }, now + 600_000)
+    expect(live.getForecastEngineState().refreshes).toBe(3)
+  })
+
+  it('forecasts a coin again for an event the scanner raised, and for a live price out of its range', async () => {
+    const live: LiveState = emptyLiveState()
+    const mod = await engine({ live })
+    await closeAt(mod, HOUR)
+    const now = mod.forecastOf('ETHUSDT')!.generatedAt + 1000
+    await mod.forecastScannerSignal({ recentEvents: [{ id: 'binance:ETHUSDT:1', symbol: 'ETHUSDT' }] }, now)
+    expect(lines(`predictions-${month}.jsonl`).filter((line) => line.why === 'refresh').map((line) => [line.pair, line.reasons])).toEqual([['ETHUSDT', ['event']]])
+    // BTC's live price far above its range: forecast again; one inside it: not.
+    const btc = mod.forecastOf('BTCUSDT')!
+    const lead = btc.horizons[btc.bestHorizon ?? 'hour1']!
+    const high = lead.quantilePrices[4] * 1.01
+    live.books.BTCUSDT = { symbol: 'BTCUSDT', bid: high, bidQty: 1, ask: high, askQty: 1, updatedAt: now, source: 'stream' }
+    live.books.SOLUSDT = { symbol: 'SOLUSDT', bid: mod.forecastOf('SOLUSDT')!.horizons.hour1!.quantilePrices[2], bidQty: 1, ask: mod.forecastOf('SOLUSDT')!.horizons.hour1!.quantilePrices[2], askQty: 1, updatedAt: now, source: 'stream' }
+    await mod.forecastLiveSignal(live, now)
+    const reasons = lines(`predictions-${month}.jsonl`).filter((line) => line.why === 'refresh').map((line) => [line.pair, line.reasons])
+    expect(reasons).toEqual([
+      ['ETHUSDT', ['event']],
+      ['BTCUSDT', ['band']]
+    ])
+  })
+})
+
+describe('the record read for a pair', () => {
+  it('is its forecasts and outcomes since a moment', async () => {
+    const live = await engine()
+    await closeAt(live, HOUR)
+    await closeAt(live, HOUR + 300)
+    const history = await live.forecastHistory('SOLUSDT', HOUR - 60)
+    expect(history.predictions.map((line) => line.pair)).toEqual(['SOLUSDT'])
+    expect(history.outcomes.map((line) => line.h)).toEqual(['minutes5'])
+    expect((await live.forecastHistory('SOLUSDT', HOUR + 60)).predictions).toEqual([])
+    expect(await live.forecastHistory(42, HOUR)).toEqual({ predictions: [], outcomes: [] })
+  })
+})
+
+describe('the record on disk', () => {
+  it('sweeps month files older than 180 days at start, and keeps the rest', async () => {
+    mkdirSync(dir(), { recursive: true })
+    writeFileSync(join(dir(), 'predictions-2025-12.jsonl'), '')
+    writeFileSync(join(dir(), 'outcomes-2026-09.jsonl'), '')
+    writeFileSync(join(dir(), 'notes.txt'), '')
+    await engine()
+    await vi.waitFor(() => expect(existsSync(join(dir(), 'predictions-2025-12.jsonl'))).toBe(false))
+    expect(existsSync(join(dir(), 'outcomes-2026-09.jsonl'))).toBe(true)
+    expect(existsSync(join(dir(), 'notes.txt'))).toBe(true)
+  })
+})

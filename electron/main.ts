@@ -8,6 +8,10 @@ import { startMarketScanner } from './services/marketScannerService'
 import { startMarketResearch } from './services/marketResearchService'
 import { startForecastData } from './services/forecastDataService'
 import { startForecastTraining } from './services/forecastTrainingService'
+import { forecastLiveSignal, forecastNewsSignal, forecastScannerSignal, startForecast } from './services/forecastService'
+import { onScannerUpdate } from './services/marketScannerService'
+import { onNewsFeedUpdate } from './services/newsFeedService'
+import { onLiveUpdate } from './services/liveMarketService'
 import { stopForecastWorker } from './services/forecastWorkerService'
 import { getLiveState, startLiveMarket } from './services/liveMarketService'
 import { startExchangeHealth } from './services/exchangeHealthService'
@@ -205,6 +209,20 @@ if (!gotSingleInstanceLock) {
     // key, no model of anyone else's, no order. See forecastTrainingService.ts.
     startForecastTraining()
     app.on('will-quit', stopForecastWorker)
+    // Forecasts every pair at every five-minute close with those models, and again between closes when
+    // a story of high impact names it, the scanner raises an event on it, its live price leaves its
+    // range or a volume shock hits it; records the forecasts and, when due, what happened. Public
+    // data only: no key, no model of anyone else's, no order. See forecastService.ts.
+    startForecast(getLiveState)
+    onNewsFeedUpdate((state) => void forecastNewsSignal(state).catch((error) => console.error('A forecast news signal failed:', error)))
+    onScannerUpdate((state) => void forecastScannerSignal(state).catch((error) => console.error('A forecast scanner signal failed:', error)))
+    let liveCheckedAt = 0
+    onLiveUpdate((state) => {
+      // Four pushes a second: the stream is looked at for the forecast every five seconds.
+      if (Date.now() - liveCheckedAt < 5000) return
+      liveCheckedAt = Date.now()
+      void forecastLiveSignal(state).catch((error) => console.error('A forecast live signal failed:', error))
+    })
     // Holds one public socket to the market-data host: the best bid and ask and the minute forming
     // for the pairs shown and the app's own paper trades, and Bitcoin's and ether's minutes always.
     // No key, no model, no order. See liveMarketService.ts.

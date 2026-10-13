@@ -55,6 +55,11 @@ export const IpcChannel = {
   ResearchRefresh: 'research:refresh',
   ResearchUpdate: 'research:update',
   FeedGetState: 'feed:getState',
+  ForecastGetState: 'forecast:getState',
+  ForecastList: 'forecast:list',
+  ForecastGet: 'forecast:get',
+  ForecastHistory: 'forecast:history',
+  ForecastUpdate: 'forecast:update',
   FeedUpdate: 'feed:update',
   FeedOpenLink: 'feed:openLink',
   FeedHistory: 'feed:history',
@@ -160,6 +165,20 @@ export interface PaperAccount {
   initialBalances: Record<string, number>
   createdAt: number
   ledger: AccountLedgerEntry[]
+}
+
+/** What the price forecast stands at (the V6 document; V6 Stage 7): its engine, its training and its
+ * bars, for the window. */
+export interface ForecastState {
+  engine: import('./forecast/status').EngineState
+  training: import('./forecast/status').TrainingState
+  data: import('./forecast/bars').ForecastDataStatus
+}
+
+/** A pair's forecasts on record and their outcomes. */
+export interface ForecastHistory {
+  predictions: import('./forecast/forecastRecord').PredictionLine[]
+  outcomes: (import('./forecast/forecastRecord').OutcomeLine | import('./forecast/forecastRecord').MissingOutcomeLine)[]
 }
 
 export interface AppSettings {

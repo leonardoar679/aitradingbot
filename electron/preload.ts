@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import type { FuturesCloseResult, FuturesReadout } from '../shared/futuresPositions'
 import type { ProtectiveStop } from '../shared/futuresStops'
+import type { PricePrediction } from '../shared/forecast/prediction'
 import type { SymbolTradingRules } from '../shared/exchangeMinimums'
 import type {
   AiCredentialStatus,
@@ -40,6 +41,8 @@ import {
   type Candle,
   type CredentialStatus,
   type Exchange,
+  type ForecastHistory,
+  type ForecastState,
   type HistoricalRangeProgress,
   type HistoricalRangeResult,
   type Interval,
@@ -164,6 +167,20 @@ const api = {
       const handler = (_event: IpcRendererEvent, state: NewsFeedState): void => listener(state)
       ipcRenderer.on(IpcChannel.FeedUpdate, handler)
       return () => ipcRenderer.removeListener(IpcChannel.FeedUpdate, handler)
+    }
+  },
+  // The price forecast (the V6 document): what it stands at, every pair's latest forecast, one pair's,
+  // and a pair's record of forecasts and outcomes. Made from public market data; these only read it.
+  // `onUpdate` is told the close of each pass, and the window asks for what it shows.
+  forecast: {
+    getState: (): Promise<ForecastState> => ipcRenderer.invoke(IpcChannel.ForecastGetState),
+    list: (): Promise<PricePrediction[]> => ipcRenderer.invoke(IpcChannel.ForecastList),
+    get: (symbol: string): Promise<PricePrediction | null> => ipcRenderer.invoke(IpcChannel.ForecastGet, symbol),
+    history: (symbol: string, fromSec: number): Promise<ForecastHistory> => ipcRenderer.invoke(IpcChannel.ForecastHistory, symbol, fromSec),
+    onUpdate: (listener: (closedAt: number | null) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, closedAt: number | null): void => listener(closedAt)
+      ipcRenderer.on(IpcChannel.ForecastUpdate, handler)
+      return () => ipcRenderer.removeListener(IpcChannel.ForecastUpdate, handler)
     }
   },
   // The market research done at launch and every ten minutes: public market data and CoinGecko's

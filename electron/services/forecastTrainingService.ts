@@ -6,11 +6,12 @@ import { HORIZONS, type Horizon } from '../../shared/forecast/features'
 import { parseFitted } from '../../shared/forecast/modelFile'
 import type { FittedHorizon } from '../../shared/forecast/models'
 import type { RunCalibration } from '../../shared/forecast/runCalibration'
+import type { TrainingState } from '../../shared/forecast/status'
 import { MIN_READY_PAIRS, fitDueAtStart, healForecastSettings, nextNightlyAt, promotionsOf, runIdAt, runsToSweep, type Promotion } from '../../shared/forecast/training'
 import type { CalibrateResult, FitResult, FoldsResult } from '../forecast/trainWorker'
 import { writeJsonAtomic } from './atomicWrite'
 import { getForecastDataStatus, onForecastBars } from './forecastDataService'
-import { askWorker, type WorkerProgress } from './forecastWorkerService'
+import { askWorker } from './forecastWorkerService'
 import { appendJsonLine } from './jsonlStore'
 import { getSettings } from './settingsService'
 
@@ -31,21 +32,6 @@ import { getSettings } from './settingsService'
 // from its record on file, without fitting anything.
 //
 // IT FITS ON PUBLIC MARKET DATA AND NOTHING ELSE. No key, no model of anyone else's, no order.
-
-export type TrainingStatus = 'waiting' | 'fitting' | 'testing' | 'ready' | 'failed'
-
-export interface TrainingState {
-  status: TrainingStatus
-  /** The run in use, when it was fitted, and the walk forward whose verdicts hold. */
-  current: { runId: string; fittedAt: number; foldsRunId: string | null } | null
-  /** The walk forward whose calibration is in use; null before there is one. */
-  calibratedRunId: string | null
-  progress: WorkerProgress | null
-  lastError: string | null
-  /** Seconds: the next nightly refit, when it is on. */
-  nextRefitAt: number | null
-  promotions: Promotion[]
-}
 
 interface CurrentFile {
   runId: string
