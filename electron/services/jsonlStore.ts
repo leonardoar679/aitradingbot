@@ -66,6 +66,19 @@ export function appendJsonLine(path: string, record: unknown): Promise<void> {
   return next
 }
 
+/** Appends many records, one line each, in one write, behind the same per-file queue as
+ * appendJsonLine: a page of a thousand bars is one append, not a thousand. */
+export function appendJsonLines(path: string, records: readonly unknown[]): Promise<void> {
+  if (records.length === 0) return Promise.resolve()
+  const previous = appendQueues.get(path) ?? Promise.resolve()
+  const next = previous.catch(() => undefined).then(() => appendLine(path, records.map((record) => JSON.stringify(record)).join('\n')))
+  appendQueues.set(
+    path,
+    next.catch(() => undefined)
+  )
+  return next
+}
+
 /** The month files in `dir`, newest month first. `pattern` matches a file name and captures its
  * `YYYY-MM`. A directory that does not exist yet has no files, which is not an error. */
 export async function listMonthFiles(dir: string, pattern: RegExp): Promise<{ name: string; month: string }[]> {

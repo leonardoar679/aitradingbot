@@ -217,6 +217,30 @@ trading realized today. None of them asks or opens anything. The same day the si
 the document's order (AI Trader, Research, Trading, System), and a CRITICAL notice flashes the
 window's taskbar entry until the window is focused (`electron/ipc/handlers/appHandlers.ts`).
 
+### The price forecast's data
+
+Since 13 October 2026 (the V6 document's §15 and §40; V6 Stage 2) the app keeps its own bars for the
+price forecast: **ninety days of five-minute klines** for the pairs the research reads, and Bitcoin
+and ether always, in `forecastData/<PAIR>-<YYYY-MM>.jsonl`, one bar a line
+(`electron/services/forecastDataService.ts`; the arithmetic is `shared/forecast/bars.ts`). A bar
+carries what the app's candles do not: its quote volume, the volume market buyers took (the
+document's buy/sell pressure) and its number of trades. A bar is written once, when it has closed,
+and never while forming; every reading at a moment goes through `barsUpTo`, which returns only the
+bars that had closed by it (§53); and the hours are built from the five-minute bars by the app's own
+bucket rule, so an hour reads the same in training and live, and an hour that had not ended is not
+one.
+
+A first start reads about 1,300 pages from the public data host the app already fails over between
+(the request the scanner and the research use, never the one that trades), at most about eight a
+second, a few minutes in all and under a sixth of Binance's per-minute budget; after that, one page a
+pair a few seconds after every five-minute close. A rate limit is obeyed: while its wait lasts no
+request is made, and the next pass carries on. A gap the exchange left is asked for again once a
+session. A page from a data host that serves another market than binance.com's (binance.us) is
+refused and the pass ends there, so another exchange's prices never enter the forecast's history;
+its status names the host while that lasts. The files weigh about 100 MB for fifty pairs, and a month
+file whose month ended before the ninety days is deleted at start. It holds no key, asks no model and places nothing;
+`tests/aiNoLivePath.test.ts` holds it to that.
+
 ### Live prices
 
 Candles are context; the stream is the price now (the second V3 document's §7, §8, §25 and §42).
@@ -2592,6 +2616,17 @@ is chosen once and kept. Now:
 Signed requests are untouched: they resolve their own host. Checked in the app with `api.binance.com`
 cut off: the next candle request came from the mirror, and so did the following 65 requests, with the
 scanner's pass finishing as usual.
+
+**One probe at the start of a session** (since 13 October 2026). The first requests of a session
+arrive together -- the scanner, the research, the feeds' coin list, the forecast's bars -- and each
+used to run a probe of its own, the last to finish setting the host. In V6 Stage 2's check one of them,
+whose request to the mirror timed out, went on to binance.us and set it after the others had chosen
+the mirror, and the whole session read another market from then on: a stored five-minute bar of
+Bitcoin had no volume at all, as binance.us has it, where the mirror's had 41.5 BTC in 6,107 trades.
+Now the first resolution is shared by every request that arrives while it is under way, for data and
+for trading alike; and binance.com and its mirror are each tried twice before binance.us, so one
+request that times out is not a reason to read another market for a session. The forecast's bars
+also refuse a page from any host but binance.com's two, and say so (below).
 
 **Closing or cancelling is never blocked by any of the above** (only by session-arm/kill-switch for
 closes, and by *nothing at all* for cancels) — those gates exist to bound how much *new* risk a

@@ -4,7 +4,9 @@
 // only grows and is never read back after a few days: an answer is served from it only for the
 // same question, which a market moves on from. It is swept of files older than CACHE_RETENTION_DAYS
 // at start. The sizes of every record directory go on the effective-config card, so that what the
-// app keeps is never a guess. Everything here is arithmetic; the sweep itself is the main
+// app keeps is never a guess. The price forecast's bars (forecastData/, since 13 October 2026) are
+// swept by their own service of the month files older than the ninety days it keeps
+// (shared/forecast/bars.ts staleMonth). Everything here is arithmetic; the sweep itself is the main
 // process's (electron/services/recordRetentionService.ts).
 
 /** A cached answer older than this, by its file's modification time, is swept at start. */
@@ -35,7 +37,7 @@ export interface RecordSizes {
 }
 
 /** The record directories measured, in the order shown. */
-export const RECORD_DIRECTORIES = ['aiLedger', 'aiSignalCache', 'marketEvents', 'paperRefusals', 'alerts', 'news', 'aiExperiments'] as const
+export const RECORD_DIRECTORIES = ['aiLedger', 'aiSignalCache', 'marketEvents', 'paperRefusals', 'alerts', 'news', 'aiExperiments', 'forecastData'] as const
 
 export function formatBytes(bytes: number): string {
   if (!(bytes >= 0) || !Number.isFinite(bytes)) return '0 B'

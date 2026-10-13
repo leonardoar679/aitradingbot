@@ -131,8 +131,10 @@ These files are records, not settings, and stay where they are: `livePositions.j
 JSON line each in a file per UTC month (`shared/records.ts`), written by the main process as the
 renderer tells them and read back by the session report, a trade's timeline and Overview. Since
 8 October 2026 (the V5 document, §93) `aiSignalCache/` is swept at start of files older than 90
-days (`recordRetentionService`), nothing else is ever deleted, and the size of each record
-directory is on the effective-config card.
+days (`recordRetentionService`), and the size of each record directory is on the effective-config
+card. Since 13 October 2026 `forecastData/` holds the price forecast's five-minute bars, a file per
+pair and UTC month (`forecastDataService`, V6 Stage 2), and a month file whose month ended before the
+ninety days the forecast keeps is deleted at start; nothing else is ever deleted.
 
 ## What runs without a page open
 
@@ -211,6 +213,10 @@ The main process also runs loops that need no window at all:
   socket's state (`src/status/liveMarketChip.ts`). Public data only.
 - `newsService` reads Binance's two announcement lists once a minute while it is on (added in V3
   Stage 7).
+- `forecastDataService` (added 13 October 2026, V6 Stage 2) keeps ninety days of five-minute bars
+  for the research's pairs and Bitcoin and ether in `forecastData/`, read from the public data host
+  a few minutes after the research first names its pairs and a page a pair after every five-minute
+  close. Public data only.
 - `aiAdditionsService` (added 6 October 2026) puts each story of high impact the news feed reads to
   the news analyst, once, and asks why the coin it names moved, while the watch is on, each within
   its daily limit and the AI budget.

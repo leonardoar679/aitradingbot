@@ -266,6 +266,29 @@ describe('AI code has no route to a real order', () => {
     }
   })
 
+  it("the forecast's bars are public data, kept, and reach nothing else (13 October 2026)", () => {
+    // The V6 document's price forecast learns from ninety days of five-minute bars of the research's
+    // pairs, kept in forecastData/ (V6 Stage 2). Its service reads the data host through the request
+    // the scanner and the research read through, never the resolver that trades; it imports nothing
+    // that trades, holds a key or asks a model; and everything under shared/forecast is arithmetic.
+    const service = join(SERVICES, 'forecastDataService.ts')
+    expect(importsOf(service).filter((name) => LIVE_MODULES.has(name))).toEqual([])
+    expect(importsOf(service).filter((name) => aiModuleNames.has(name))).toEqual([])
+    expect(importsOf(service).sort()).toEqual(['bars', 'binance', 'electron', 'jsonlStore', 'marketResearchService', 'path', 'promises'])
+    const source = readFileSync(service, 'utf-8')
+    expect(source).not.toMatch(/resolveTradingEndpoint|credentials|apiKey|signed|placeLive|liveTrading/)
+    expect(source).toContain("import { fetchMarketData, servesBinanceComMarket } from './exchanges/binance'")
+    const walk = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? walk(join(dir, entry.name)) : /\.ts$/.test(entry.name) ? [join(dir, entry.name)] : []))
+    const shared = walk(join(ROOT, 'shared', 'forecast'))
+    expect(shared.length).toBeGreaterThan(0)
+    for (const path of shared) {
+      expect(importsOf(path).filter((name) => LIVE_MODULES.has(name) || aiModuleNames.has(name)), path).toEqual([])
+      expect(readFileSync(path, 'utf-8'), path).not.toMatch(/window\.|ipcRenderer|electron|placeLive|liveTrading/)
+    }
+    expect(importsOf(join(ROOT, 'shared', 'forecast', 'bars.ts')).sort()).toEqual(['aggregateCandles', 'ipc'])
+  })
+
   it('the live prices read the public stream and refuse, never place', () => {
     // Since 6 October 2026 one public socket streams the best bid and ask and the minute forming
     // for the pairs shown and the app's own paper trades (the second V3 document, §7). It is held to

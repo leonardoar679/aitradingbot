@@ -139,24 +139,63 @@ async function probe(endpoints: RestEndpoint[], purpose: string): Promise<RestEn
     }
   }
   throw new Error(
-    `No reachable Binance ${purpose} endpoint (tried: ${endpoints.map((e) => e.name).join(', ')})`
+    `No reachable Binance ${purpose} endpoint (tried: ${[...new Set(endpoints.map((e) => e.name))].join(', ')})`
   )
 }
+
+// ONE PROBE AT A TIME. The first requests of a session arrive together -- the scanner, the research,
+// the feeds' coin list, the forecast's bars -- and each used to run a probe of its own, the last to
+// finish setting the host. On 13 October 2026 one of them, whose request to the mirror timed out,
+// went on to binance.us and set it after the others had chosen the mirror, and the whole session
+// read another market from then on: thin, with whole bars of no trade. So the first resolution is
+// shared by every request that arrives while it is under way.
+let resolvingData: Promise<RestEndpoint> | null = null
+let resolvingTrading: Promise<RestEndpoint> | null = null
+
+/** The order the first data resolution tries the hosts in: binance.com and its mirror, twice, before
+ * binance.us. One request that times out is not a reason to read another market for a session: the
+ * probe that went to binance.us on 13 October 2026 had had one request to the mirror time out. */
+const DATA_PROBE_ORDER: RestEndpoint[] = [DATA_ENDPOINTS[0], DATA_ENDPOINTS[1], DATA_ENDPOINTS[0], DATA_ENDPOINTS[1], DATA_ENDPOINTS[2]]
 
 /** Host for candles, symbols and tickers. May be the public data mirror. */
 export async function resolveEndpoint(): Promise<RestEndpoint> {
   if (resolvedDataEndpoint) return resolvedDataEndpoint
-  resolvedDataEndpoint = await probe(DATA_ENDPOINTS, 'market data')
-  return resolvedDataEndpoint
+  if (resolvingData === null) {
+    resolvingData = probe(DATA_PROBE_ORDER, 'market data')
+      .then((endpoint) => {
+        resolvedDataEndpoint = endpoint
+        return endpoint
+      })
+      .finally(() => {
+        resolvingData = null
+      })
+  }
+  return resolvingData
 }
 
 /** Host for SIGNED requests -- balances, orders, cancels. Restricted to hosts that actually
  * implement the trading routes, so a region where only the data mirror is reachable fails loudly
- * here instead of signing a real order and sending it somewhere it cannot execute. */
+ * here instead of signing a real order and sending it somewhere it cannot execute. Resolved once for
+ * every request that arrives while it is under way, as the data host is. */
 export async function resolveTradingEndpoint(): Promise<RestEndpoint> {
   if (resolvedTradingEndpoint) return resolvedTradingEndpoint
-  resolvedTradingEndpoint = await probe(TRADING_ENDPOINTS, 'trading')
-  return resolvedTradingEndpoint
+  if (resolvingTrading === null) {
+    resolvingTrading = probe(TRADING_ENDPOINTS, 'trading')
+      .then((endpoint) => {
+        resolvedTradingEndpoint = endpoint
+        return endpoint
+      })
+      .finally(() => {
+        resolvingTrading = null
+      })
+  }
+  return resolvingTrading
+}
+
+/** Whether a data host serves binance.com's market: its REST host and its mirror do; binance.us is
+ * another exchange, with its own symbols, prices and volumes. */
+export function servesBinanceComMarket(endpoint: Pick<RestEndpoint, 'name'>): boolean {
+  return endpoint.name === DATA_ENDPOINTS[0].name || endpoint.name === DATA_ENDPOINTS[1].name
 }
 
 /** Test seam. The two memos are module-level, so a suite that exercises failover would otherwise
@@ -164,6 +203,8 @@ export async function resolveTradingEndpoint(): Promise<RestEndpoint> {
 export function resetResolvedEndpoints(): void {
   resolvedDataEndpoint = null
   resolvedTradingEndpoint = null
+  resolvingData = null
+  resolvingTrading = null
   partnerFailedAt = -Infinity
   dataHostSwitches = 0
   dataHostListeners.clear()

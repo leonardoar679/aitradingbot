@@ -438,3 +438,69 @@ describe("a chart's socket", () => {
     expect(sockets.made[0].stopped).toBe(true)
   })
 })
+
+// On 13 October 2026 the first requests of a session each ran a probe of their own, and the last to
+// finish set the host: one whose request to the mirror timed out went on to binance.us and set it
+// after the others had chosen the mirror. The forecast's bars for the session came from another
+// market (found by V6 Stage 2's check: a bar of BTCUSDT with no volume at all, as binance.us has it).
+describe('the first resolution of a session', () => {
+  const PROBE = 'klines?symbol=BTCUSDT&interval=1m&limit=1'
+
+  it('is one probe, shared by every request that arrives while it is under way', async () => {
+    const tried = stubBehaviour({ 'api.binance.com': 451, 'data-api.binance.vision': 'answers' })
+    const all = await Promise.all(Array.from({ length: 5 }, () => resolveEndpoint()))
+    expect(new Set(all.map((endpoint) => endpoint.name))).toEqual(new Set(['data-api.binance.vision']))
+    expect(tried.filter((url) => url.includes(PROBE))).toEqual([
+      `https://api.binance.com/api/v3/${PROBE}`,
+      `https://data-api.binance.vision/api/v3/${PROBE}`
+    ])
+  })
+
+  it('gives binance.com and the mirror a second round before binance.us', async () => {
+    let mirrorAsked = 0
+    const tried: string[] = []
+    vi.stubGlobal('fetch', (url: string) => {
+      const u = String(url)
+      tried.push(u)
+      if (u.includes('api.binance.com')) return Promise.resolve({ ok: false, status: 451, statusText: 'Refused', json: () => Promise.resolve({ code: 0 }) })
+      if (u.includes('data-api.binance.vision')) {
+        mirrorAsked++
+        // The mirror's first request times out; the next answers.
+        if (mirrorAsked === 1) return Promise.reject(new DOMException('The operation was aborted due to timeout', 'TimeoutError'))
+        return Promise.resolve({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve(KLINE) })
+      }
+      return Promise.resolve({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve(KLINE) })
+    })
+    expect((await resolveEndpoint()).name).toBe('data-api.binance.vision')
+    expect(tried.some((url) => url.includes('api.binance.us'))).toBe(false)
+  })
+
+  it('goes to binance.us only after both rounds failed, and names each host once when none answers', async () => {
+    const tried = stubBehaviour({ 'api.binance.com': 451, 'api.binance.us': 'answers' })
+    expect((await resolveEndpoint()).name).toBe('binance.us')
+    expect(tried.filter((url) => url.includes(PROBE)).map((url) => new URL(url).host)).toEqual([
+      'api.binance.com',
+      'data-api.binance.vision',
+      'api.binance.com',
+      'data-api.binance.vision',
+      'api.binance.us'
+    ])
+    resetResolvedEndpoints()
+    stubBehaviour({})
+    await expect(resolveEndpoint()).rejects.toThrow('(tried: binance.com, data-api.binance.vision, binance.us)')
+  })
+
+  it('resolves the trading host once for every request that arrives while it is under way', async () => {
+    const tried = stubBehaviour({ 'api.binance.com': 'answers' })
+    const all = await Promise.all(Array.from({ length: 4 }, () => resolveTradingEndpoint()))
+    expect(all.every((endpoint) => endpoint.name === 'binance.com')).toBe(true)
+    expect(tried.filter((url) => url.includes(PROBE))).toHaveLength(1)
+  })
+
+  it('tells which hosts serve binance.com\'s market', async () => {
+    const { servesBinanceComMarket } = await import('../electron/services/exchanges/binance')
+    expect(servesBinanceComMarket({ name: 'binance.com' })).toBe(true)
+    expect(servesBinanceComMarket({ name: 'data-api.binance.vision' })).toBe(true)
+    expect(servesBinanceComMarket({ name: 'binance.us' })).toBe(false)
+  })
+})

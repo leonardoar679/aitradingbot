@@ -6,6 +6,7 @@ import { startLivePositionWatcherLoop } from './services/livePositionWatchersSer
 import { startLiveTwapLoop } from './services/liveTwapService'
 import { startMarketScanner } from './services/marketScannerService'
 import { startMarketResearch } from './services/marketResearchService'
+import { startForecastData } from './services/forecastDataService'
 import { getLiveState, startLiveMarket } from './services/liveMarketService'
 import { startExchangeHealth } from './services/exchangeHealthService'
 import { startNewsReader } from './services/newsService'
@@ -191,6 +192,11 @@ if (!gotSingleInstanceLock) {
     // moved over a day and a week, what is trending, and the market's state. Public data only, and
     // always on, as the second V3 document asks. See marketResearchService.ts.
     startMarketResearch()
+    // Keeps ninety days of five-minute bars for the pairs the research reads, and Bitcoin and ether,
+    // and extends them as each bar closes: what the price forecast trains on and predicts from (the
+    // V6 document, §15 and §40). Public data only: no key, no model, no order. It waits for the
+    // research to name its pairs. See forecastDataService.ts.
+    startForecastData()
     // Holds one public socket to the market-data host: the best bid and ask and the minute forming
     // for the pairs shown and the app's own paper trades, and Bitcoin's and ether's minutes always.
     // No key, no model, no order. See liveMarketService.ts.
