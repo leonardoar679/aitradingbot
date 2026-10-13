@@ -722,7 +722,10 @@ export const SCAN_EXCLUDED_BASES: ReadonlySet<string> = new Set([
   'PAXG',
   // Tether's gold, pegged to an ounce as PAXG is; on Binance's USDT list by October 2026, and seen
   // among the market research's movers before it was left out here.
-  'XAUT'
+  'XAUT',
+  // A dollar stablecoin on Binance's USDT list by October 2026, trading $30M a day: its ninety days
+  // of five-minute bars, read for the price forecast (V6 Stage 3), never left 0.9992 to 1.0011.
+  'U'
 ])
 
 /** Whether a pair belongs in the watched set at all: quoted in the one asset every watched pair

@@ -241,6 +241,27 @@ its status names the host while that lasts. The files weigh about 100 MB for fif
 file whose month ended before the ninety days is deleted at start. It holds no key, asks no model and places nothing;
 `tests/aiNoLivePath.test.ts` holds it to that.
 
+**What the forecast reads at a moment** (since 13 October 2026; the V6 document's §15-17; V6 Stage 3;
+`shared/forecast/features.ts`). A pair's state at T as one row of 63 numbers: its log moves over five
+minutes to a week; its realized volatility over the hour, four hours and the day, and each move set
+against the usual move for its time (the day's volatility scaled by the square root of time); its
+acceleration and trend; where it stands in its day's and week's range; the last hour's range against
+the day's; its volume against its day and the share market buyers took; the indicators the strategies
+and the chart already compute -- EMA 20/50/200, RSI, ATR, Bollinger and ADX, through the same functions
+-- each over a fixed span ending at T; Bitcoin's and ether's moves, the share of pairs that rose, the
+alts against Bitcoin, a rolling beta to Bitcoin and what is left of the hour's move beside it; the
+market's regime in its six words; the pair's class (BTC, ETH, the ten most traded after them as large,
+the next twenty mid, the most volatile fifth as high-vol, the rest other); and the hour and the weekday.
+Three properties are tested: a bar changed or added after T leaves the row at T the same to the byte;
+the row is the same from the days the app holds as from the whole history; and without what a figure
+needs -- the bar that closed at T, a whole day before it, three quarters of the two days the
+quarter-hourly readings take -- there is no row. A coin whose week stayed within 1% is pegged and has
+none, and no part in the market at T: on the real ninety days a dollar stablecoin trading $30M a day,
+`U`, was among the research's pairs, and is now left out of the scanner and the research too. On those
+ninety days of 37 pairs, every fifteen minutes, 97% of the rows were read, and no figure was constant.
+What happened after a moment (`shared/forecast/targets.ts`) is the move to the close a horizon on and
+the best and worst on the way, and none across a gap.
+
 ### Live prices
 
 Candles are context; the stream is the price now (the second V3 document's §7, §8, §25 and §42).

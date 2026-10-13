@@ -335,6 +335,8 @@ describe('isScannablePair', () => {
     expect(isScannablePair({ baseAsset: 'SOL', quoteAsset: 'BTC' })).toBe(false)
     expect(isScannablePair({ baseAsset: 'USDC', quoteAsset: 'USDT' })).toBe(false)
     expect(isScannablePair({ baseAsset: 'WBTC', quoteAsset: 'USDT' })).toBe(false)
+    // The dollar stablecoin found among the research's pairs on 13 October 2026 (V6 Stage 3).
+    expect(isScannablePair({ baseAsset: 'U', quoteAsset: 'USDT' })).toBe(false)
     // Ends in "UP" and is not a leveraged token.
     expect(isScannablePair({ baseAsset: 'JUP', quoteAsset: 'USDT' })).toBe(true)
   })
