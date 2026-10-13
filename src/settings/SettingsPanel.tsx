@@ -13,6 +13,7 @@ import { EffectiveConfigCard } from './EffectiveConfigCard'
 import type { Page } from '../navigation/pages'
 import type { UiMode } from '../../shared/uiMode'
 import { EssentialsCard } from './EssentialsCard'
+import { NotificationsCard } from './NotificationsCard'
 import { NewsSettingsCard } from './NewsSettingsCard'
 import { ScannerSettingsCard } from './ScannerSettingsCard'
 
@@ -138,6 +139,9 @@ function AdvancedSettings({ theme, setTheme, onNavigate }: { theme: Theme; setTh
           })}
         </div>
       </Card>
+
+      <SectionHeading title="Notifications" note="What each notice sounds like, how loud, and when it is quiet. The switch for notices themselves is on Essentials." />
+      <NotificationsCard />
 
       <SectionHeading title="Market" note="What the scanner watches, and whether Binance's announcements are read. Both are shown on Explorer." />
       <ScannerSettingsCard />

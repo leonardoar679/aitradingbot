@@ -104,67 +104,67 @@ describe('after a restart (V5 Stage 8, 8 October 2026)', () => {
     expect(rig.shown.map((shown) => shown.title)).toEqual(['blocked', 'degraded'])
   })
 
-  it("sounds the minute's reminder under the Notifications control, and shows and records nothing", async () => {
+  it("lets the window sound the minute's reminder while notices are on, whatever the sound switch says, and shows, records and beeps nothing", async () => {
+    // Since V6 Stage 13 the window plays the critical sound itself (src/sound/player.ts): CRITICAL is
+    // heard with sound off, and only notices off silences it.
     const remind = (): Promise<unknown> => Promise.resolve(rig.handlers.get(IpcChannel.AppRemind)?.())
     rig.stored.alerts = undefined
     expect(await remind()).toBe(true)
     rig.stored.alerts = { enabled: true, sound: false }
-    expect(await remind()).toBe(false)
+    expect(await remind()).toBe(true)
     rig.stored.alerts = { enabled: false, sound: true }
     expect(await remind()).toBe(false)
-    expect(rig.beeps).toBe(1)
+    expect(rig.beeps).toBe(0)
     expect(rig.shown).toEqual([])
     expect(rig.recorded).toEqual([])
   })
 })
 
 describe('a desktop notice', () => {
-  it('is shown, with sound, when nothing is stored', async () => {
+  it('is shown, silently, when nothing is stored: the window plays its sound', async () => {
     rig.stored.alerts = undefined
     expect(await notify('Paper trade: SOLUSDT', 'A paper position was opened.')).toBe(true)
-    expect(rig.shown).toEqual([{ title: 'Paper trade: SOLUSDT', body: 'A paper position was opened.', silent: false }])
+    expect(rig.shown).toEqual([{ title: 'Paper trade: SOLUSDT', body: 'A paper position was opened.', silent: true }])
   })
 
-  it('is shown silently without sound, and not at all when notices are off, and is a record either way', async () => {
+  it('is not shown when notices are off, nor on the desktop with its notices off, and is a record either way', async () => {
     rig.stored.alerts = { enabled: true, sound: false }
     expect(await notify('t', 'b')).toBe(true)
     expect(rig.shown).toEqual([{ title: 't', body: 'b', silent: true }])
     rig.stored.alerts = { enabled: false, sound: true }
     expect(await notify('t', 'b')).toBe(false)
+    rig.stored.alerts = { enabled: true, sound: true, desktop: false }
+    expect(await notify('t', 'b')).toBe(false)
     expect(rig.shown).toHaveLength(1)
     // Switched off on the desktop, it is still what the app told: on file, and in the window.
-    expect(rig.recorded).toHaveLength(2)
-    expect(rig.window.sent).toHaveLength(2)
+    expect(rig.recorded).toHaveLength(3)
+    expect(rig.window.sent).toHaveLength(3)
   })
 
-  it('is silent at WATCH, and with sound at HIGH and CRITICAL where sound is on', async () => {
+  it('is always silent on the desktop, carrying on its record the sound its meaning makes (V6 Stage 13)', async () => {
     rig.stored.alerts = undefined
-    await notify('w', 'b', 'watch')
-    await notify('h', 'b', 'high')
+    await notify('w', 'b', 'watch', { kind: 'MARKET_EVENT' })
+    await notify('h', 'b', 'high', { kind: 'STOP_TRIGGERED' })
     await notify('c', 'b', 'critical')
-    await notify('x', 'b', 'loud')
-    expect(rig.shown.map((shown) => [shown.title, shown.silent])).toEqual([
-      ['w', true],
-      ['h', false],
-      ['c', false],
-      ['x', false]
-    ])
-    rig.shown.length = 0
-    rig.stored.alerts = { enabled: true, sound: false }
-    await notify('c', 'b', 'critical')
-    expect(rig.shown[0].silent).toBe(true)
-  })
-
-  it('takes how loud it is from its kind when it names no severity: a blocked trade is silent, a stop sounds', async () => {
-    rig.stored.alerts = undefined
+    await notify('o', 'b', 'high', { kind: 'TRADE_OPPORTUNITY' })
+    await notify('chosen', 'b', 'high', { kind: 'TRADE_OPPORTUNITY', sound: 'warning' })
+    await notify('quiet', 'b', 'high', { kind: 'MARKET_EVENT', sound: 'none' })
     await notify('blocked', 'b', undefined, { kind: 'TRADE_BLOCKED' })
-    await notify('stop', 'b', undefined, { kind: 'STOP_TRIGGERED' })
     await notify('plain', 'b')
-    expect(rig.shown.map((shown) => [shown.title, shown.silent])).toEqual([
-      ['blocked', true],
-      ['stop', false],
-      ['plain', false]
+    expect(rig.shown.every((shown) => shown.silent === true)).toBe(true)
+    expect((rig.recorded as { title: string; sound?: string }[]).map((record) => [record.title, record.sound])).toEqual([
+      ['w', 'information'],
+      ['h', 'warning'],
+      ['c', 'critical'],
+      ['o', 'opportunity'],
+      ['chosen', 'warning'],
+      ['quiet', 'none'],
+      ['blocked', 'none'],
+      ['plain', 'none']
     ])
+  })
+
+  it('takes how loud it is from its kind when it names no severity', async () => {
     expect(noticeLevel({ severity: null, kind: 'MARKET_EVENT' })).toBe('watch')
     expect(noticeLevel({ severity: 'critical', kind: 'MARKET_EVENT' })).toBe('critical')
     expect(noticeLevel({ severity: null, kind: null })).toBe('high')

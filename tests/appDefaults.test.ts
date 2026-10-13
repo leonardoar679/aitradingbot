@@ -65,16 +65,19 @@ describe('a store read empty, or holding junk, heals to its default', () => {
     expect(DEFAULT_CONFIG.app.keepRunningWhenClosed).toBe(false)
     // The sidebar opens in its normal personality (the V6 document, §65; 13 October 2026).
     expect(DEFAULT_CONFIG.app.uiMode).toBe('normal')
-    // Notices are on, with sound.
-    expect(DEFAULT_ALERTS).toEqual({ enabled: true, sound: true })
+    // Notices are on, with sound, and on the desktop too (silent there: the window plays the sound, V6 Stage 13).
+    expect(DEFAULT_ALERTS).toEqual({ enabled: true, sound: true, desktop: true })
+    expect(DEFAULT_CONFIG.sounds).toEqual({ volume: 0.7, mutedKinds: [], cooldownSec: 30, quietHours: null })
   })
 })
 
 describe('notifications', () => {
   it('only false switches either off', () => {
-    expect(healAlerts({ enabled: false, sound: true })).toEqual({ enabled: false, sound: true })
-    expect(healAlerts({ enabled: true, sound: false })).toEqual({ enabled: true, sound: false })
-    expect(healAlerts({ enabled: 'no', sound: 0 })).toEqual({ enabled: true, sound: true })
+    expect(healAlerts({ enabled: false, sound: true })).toEqual({ enabled: false, sound: true, desktop: true })
+    expect(healAlerts({ enabled: true, sound: true, desktop: false }).desktop).toBe(false)
+    expect(healAlerts({ desktop: 'no' }).desktop).toBe(true)
+    expect(healAlerts({ enabled: true, sound: false })).toEqual({ enabled: true, sound: false, desktop: true })
+    expect(healAlerts({ enabled: 'no', sound: 0 })).toEqual({ enabled: true, sound: true, desktop: true })
   })
 })
 

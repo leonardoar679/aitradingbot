@@ -49,6 +49,8 @@ function createWindow(): BrowserWindow {
     icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
+      // The window plays the notices' sounds (src/sound/; V6 Stage 13) with nobody pressing anything.
+      autoplayPolicy: 'no-user-gesture-required',
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,

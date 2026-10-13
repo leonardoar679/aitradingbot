@@ -227,12 +227,18 @@ export interface AppSettings {
    * forecast trader (shared/forecast/trader.ts), off until switched on. Absent until first written, and
    * healed on every read. Written whole: a patch replaces it. */
   forecast?: { refitNightly?: boolean; trader?: Partial<import('./forecast/trader').ForecastTraderSettings> }
+  /** How the four sounds play (shared/sounds.ts; V6 Stage 13): the volume, kinds muted, the cooldown,
+   * quiet hours. Absent until first written, and healed on every read. */
+  sounds?: Partial<import('./sounds').SoundSettings>
 }
 
 /** The app's desktop notices: on or off, and with sound or silent. */
 export interface AlertSettings {
   enabled: boolean
   sound: boolean
+  /** Whether the operating system's notices are shown (V6 Stage 13). Off, notices are still recorded,
+   * shown in the window and heard. Absent before: on. */
+  desktop?: boolean
 }
 
 /** A losing run pauses the paper trades the app opens by itself, the watch's and the news rules'

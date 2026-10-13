@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { criticalReminderDue } from '../../shared/alerts'
 import { bannerAlerts, dismissAlert, subscribeAlerts, type AlertRecord } from './alertStore'
+import { playSound } from '../sound/player'
+import { soundPrefs } from '../sound/hearing'
 
 /** How often the banner looks at the clock for the minute's reminder. */
 const REMINDER_LOOK_MS = 5000
 
 /** CRITICAL alerts stay here, above every page, until dismissed (the second V3 document, §29): a
  * hack or delisting of a coin you hold, or Bitcoin down 5% within an hour. While one is up, the
- * main process is asked for a sound once a minute (the V5 document, §49; shared/alerts.ts), under
- * the Notifications control. It shows and reminds; it acts on nothing. */
+ * critical sound (shared/sounds.ts; V6 Stage 13) is played again once a minute (the V5 document, §49)
+ * where the main process says notices are on -- heard whatever the sound switch says. It shows and
+ * reminds; it acts on nothing. */
 export function AlertBanner(): React.JSX.Element | null {
   const [alerts, setAlerts] = useState<AlertRecord[]>([])
   useEffect(() => subscribeAlerts((list) => setAlerts(bannerAlerts(list))), [])
@@ -24,7 +27,12 @@ export function AlertBanner(): React.JSX.Element | null {
       const nowSec = Math.floor(Date.now() / 1000)
       if (!criticalReminderDue(alerts.length, lastSoundAt.current, nowSec)) return
       lastSoundAt.current = nowSec
-      void window.api.remind().catch(() => undefined)
+      void window.api.remind().then(
+        (may) => {
+          if (may) playSound('critical', soundPrefs().sounds.volume)
+        },
+        () => undefined
+      )
     }, REMINDER_LOOK_MS)
     return (): void => window.clearInterval(timer)
   }, [alerts])

@@ -1214,7 +1214,16 @@ describe('AI code has no route to a real order', () => {
     // Since 8 October 2026 one service tells every notice (noticeService.ts): it reads the setting,
     // keeps the threads and records what it told; the handler only hands it what the window sent.
     expect(importsOf(join(ROOT, 'electron', 'ipc', 'handlers', 'appHandlers.ts')).sort()).toEqual(['electron', 'ipc', 'noticeService', 'pingService'])
-    expect(importsOf(join(SERVICES, 'noticeService.ts')).sort()).toEqual(['alerts', 'electron', 'ipc', 'recordStoreService', 'settingsService'])
+    // sounds (V6 Stage 13): which sound a notice's meaning makes, written on its record for the window.
+    expect(importsOf(join(SERVICES, 'noticeService.ts')).sort()).toEqual(['alerts', 'electron', 'ipc', 'recordStoreService', 'settingsService', 'sounds'])
+    // What plays the sounds and shows them reads the settings, the told records and the forecast's ranking
+    // (for the top prediction's chime), and asks for the minute's reminder: nothing that trades or asks.
+    for (const name of readdirSync(join(ROOT, 'src', 'sound'))) {
+      const source = readFileSync(join(ROOT, 'src', 'sound', name), 'utf-8')
+      expect([...new Set([...source.matchAll(/window\.api\.(\w+)\.(\w+)/g)].map((match) => `${match[1]}.${match[2]}`))].filter((call) => !['settings.get', 'records.onTold', 'forecast.onUpdate', 'forecast.ranking'].includes(call)), name).toEqual([])
+      expect(source, name).not.toMatch(/settings\.set|liveTrading|placeLive|notify\(/)
+    }
+    expect(readFileSync(join(SERVICES, 'noticeService.ts'), 'utf-8')).not.toMatch(/beep\(/)
     // Since 8 October 2026 (V5 Stage 1) it composes DEFAULT_CONFIG from every store's default
     // constant: each a module of constants and heals, none of them trading, holding a key or asking.
     expect(importsOf(join(ROOT, 'shared', 'appDefaults.ts')).sort()).toEqual([
@@ -1233,6 +1242,7 @@ describe('AI code has no route to a real order', () => {
       'paperDigest',
       'paperPause',
       'paperRisk',
+      'sounds',
       'tradePlan',
       'trader',
       'training',

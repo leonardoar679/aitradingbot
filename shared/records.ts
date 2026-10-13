@@ -46,6 +46,9 @@ export interface AlertRecordOnFile {
    * alerts written before. */
   kind?: AlertKind
   thread?: string
+  /** The sound it made (shared/sounds.ts; V6 Stage 13): chosen where it was raised, else by its kind.
+   * Absent on alerts written before. */
+  sound?: import('./sounds').NoticeSound
 }
 
 export interface RecordFilter {

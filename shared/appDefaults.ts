@@ -14,6 +14,7 @@ import { DEFAULT_PAPER_DIGEST } from './paperDigest'
 import { DEFAULT_PAPER_PAUSE, describePaperPause, savePaperPause } from './paperPause'
 import { DEFAULT_PAPER_RISK, describePaperRisk } from './paperRisk'
 import { DEFAULT_UI_MODE, type UiMode } from './uiMode'
+import { DEFAULT_SOUND_SETTINGS, type SoundSettings } from './sounds'
 import { DEFAULT_FORECAST_SETTINGS, type ForecastSettings } from './forecast/training'
 import { DEFAULT_FORECAST_TRADER, type ForecastTraderSettings } from './forecast/trader'
 import type { TargetLevel } from './forecast/tradePlan'
@@ -56,6 +57,8 @@ export interface EffectiveStores {
   paperPause: Pick<PaperPauseSettings, 'lossR' | 'trades'>
   paperDigest: PaperDigestSettings
   alerts: AlertSettings
+  /** How the four sounds play (shared/sounds.ts; V6 Stage 13). */
+  sounds: SoundSettings
   /** What closing the window does (shared/keepRunning.ts), and which groups of the sidebar start open
    * (shared/uiMode.ts). */
   app: { keepRunningWhenClosed: boolean; uiMode: UiMode }
@@ -77,6 +80,7 @@ export const DEFAULT_CONFIG: EffectiveStores = {
   paperPause: { lossR: DEFAULT_PAPER_PAUSE.lossR, trades: DEFAULT_PAPER_PAUSE.trades },
   paperDigest: DEFAULT_PAPER_DIGEST,
   alerts: DEFAULT_ALERTS,
+  sounds: DEFAULT_SOUND_SETTINGS,
   app: { keepRunningWhenClosed: DEFAULT_KEEP_RUNNING, uiMode: DEFAULT_UI_MODE },
   forecast: DEFAULT_FORECAST_SETTINGS,
   watch: DEFAULT_AI_WATCH,

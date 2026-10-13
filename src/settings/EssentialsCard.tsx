@@ -265,8 +265,8 @@ export function EssentialsCard({ onNavigate, onUiModeChange }: { onNavigate: (pa
       <Row label="Notifications">
         <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem', flexWrap: 'wrap', fontSize: '0.82rem', color: 'var(--text-primary)' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <input type="checkbox" aria-label="Desktop notices" checked={alerts.enabled} disabled={busy || paper === null} onChange={(event) => void setAlert({ enabled: event.target.checked })} />
-            Desktop notices
+            <input type="checkbox" aria-label="Notices" checked={alerts.enabled} disabled={busy || paper === null} onChange={(event) => void setAlert({ enabled: event.target.checked })} />
+            Notices
           </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: alerts.enabled ? 'var(--text-primary)' : 'var(--text-muted)' }}>
             <input
@@ -281,8 +281,8 @@ export function EssentialsCard({ onNavigate, onUiModeChange }: { onNavigate: (pa
         </div>
         <p style={noteStyle}>
           {alerts.enabled
-            ? 'A call from the watch, a paper trade opened or paused, the daily digest and news about a coin you hold each raise a desktop notice.'
-            : 'No desktop notice is raised; what would have been said is still on its page.'}
+            ? 'A call from the watch, a paper trade opened or paused, the daily digest and news about a coin you hold each raise a notice, heard by its meaning -- each sound, its volume and quiet hours are under Advanced › Notifications.'
+            : 'No notice is raised and none is heard, critical included; what would have been said is still on its page.'}
         </p>
       </Row>
 

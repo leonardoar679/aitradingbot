@@ -25,13 +25,13 @@ import { SAME_STORY_SECONDS, describeEventType, titleSimilarity, type ReactionVe
 // alike. Other news about the same coin is told. The story is still kept on its page, and HIGH and
 // CRITICAL are always told.
 
-export const DEFAULT_ALERTS: AlertSettings = { enabled: true, sound: true }
+export const DEFAULT_ALERTS: AlertSettings = { enabled: true, sound: true, desktop: true }
 
 /** A stored setting, read as one: settings.json is written by the renderer, so it is healed rather
  * than obeyed. Only `false` switches either off. */
 export function healAlerts(value: unknown): AlertSettings {
   const raw = (typeof value === 'object' && value !== null && !Array.isArray(value) ? value : {}) as Partial<Record<keyof AlertSettings, unknown>>
-  return { enabled: raw.enabled !== false, sound: raw.sound !== false }
+  return { enabled: raw.enabled !== false, sound: raw.sound !== false, desktop: raw.desktop !== false }
 }
 
 export type AlertSeverity = 'info' | 'watch' | 'high' | 'critical'

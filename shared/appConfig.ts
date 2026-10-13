@@ -15,6 +15,7 @@ import { AI_SCHEMA_VERSION, GPT_MIN_CONFIDENCE, GPT_PROMPT_VERSION } from './aiS
 import { AI_WATCH_BREAKER_CALLS, AI_WATCH_FRESH_SECONDS, healAiWatch } from './aiWatch'
 import { healAiWatchPaper } from './aiWatchPaper'
 import { BTC_CRASH_PCT, HIGH_IMPACT, WATCH_IMPACT, healAlerts } from './alerts'
+import { SOUND_SCORES, TOP_CHANGE_CHIME_SECONDS, healSoundSettings } from './sounds'
 import { DEFAULT_CONFIG, type EffectiveStores } from './appDefaults'
 import { CONFIG_FILE_VERSION, type ConfigFileName, type ConfigFileNote } from './configMigration'
 import { FEE_RATE, SLIPPAGE_RATE } from './fees'
@@ -123,6 +124,8 @@ export const ENGINE_CONSTANTS = {
   /** Risk by the conditions (the V5 document, §46-47; since 8 October 2026). */
   dynamicRisk: RISK_LINES,
   alerts: { highImpact: HIGH_IMPACT, watchImpact: WATCH_IMPACT, btcCrashPct: BTC_CRASH_PCT },
+  /** The four sounds' scores, and the chime for a new top prediction (V6 Stage 13). */
+  sounds: { scores: SOUND_SCORES, topChangeChimeSeconds: TOP_CHANGE_CHIME_SECONDS },
   aiWatch: { freshSeconds: AI_WATCH_FRESH_SECONDS, breakerCalls: AI_WATCH_BREAKER_CALLS, minConfidence: GPT_MIN_CONFIDENCE },
   aiAdditions: { dailyLimits: AI_ADDITION_DAILY_LIMITS, prompts: AI_ADDITION_PROMPT_VERSIONS, schemas: AI_ADDITION_SCHEMA_VERSIONS },
   prompts: {
@@ -217,7 +220,7 @@ export function defaultStores(): EffectiveStores {
  * `settings` is settings.json's top level; `ai` the AI config as its service hands it out; the rest
  * as each service hands them out. */
 export function healStores(input: {
-  settings: { paperRisk?: unknown; paperPause?: unknown; paperDigest?: unknown; alerts?: unknown; keepRunningWhenClosed?: unknown; uiMode?: unknown; forecast?: unknown }
+  settings: { paperRisk?: unknown; paperPause?: unknown; paperDigest?: unknown; alerts?: unknown; sounds?: unknown; keepRunningWhenClosed?: unknown; uiMode?: unknown; forecast?: unknown }
   ai: { defaultModel: string; enabledModels: string[]; dailyCapUsd: number; callsPerMinute: number; watch: unknown; watchPaper: unknown; additions: unknown }
   scanner: ScannerConfig
   news: unknown
@@ -230,6 +233,7 @@ export function healStores(input: {
     paperPause: { lossR: pause.lossR, trades: pause.trades },
     paperDigest: { enabled: healPaperDigest(input.settings.paperDigest).enabled, lastDay: null },
     alerts: healAlerts(input.settings.alerts),
+    sounds: healSoundSettings(input.settings.sounds),
     app: { keepRunningWhenClosed: healKeepRunning(input.settings.keepRunningWhenClosed), uiMode: healUiMode(input.settings.uiMode) },
     forecast: healForecastSettings(input.settings.forecast),
     watch,
@@ -278,6 +282,7 @@ const STORE_FILES: Record<keyof EffectiveStores, { file: ConfigFileName; under: 
   paperPause: { file: 'settings', under: 'paperPause' },
   paperDigest: { file: 'settings', under: 'paperDigest' },
   alerts: { file: 'settings', under: 'alerts' },
+  sounds: { file: 'settings', under: 'sounds' },
   app: { file: 'settings', under: null },
   forecast: { file: 'settings', under: 'forecast' },
   watch: { file: 'aiConfig', under: 'watch' },

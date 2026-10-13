@@ -1,6 +1,7 @@
 import * as electron from 'electron'
 import { ALERT_KIND_SEVERITY, ALERT_THREAD_SECONDS, healAlertKind, healAlerts, healNoticeSeverity, noticeSeverity, threadKey, threadStep, type AlertKind, type AlertSeverity, type AlertThread } from '../../shared/alerts'
 import { IpcChannel } from '../../shared/ipc'
+import { soundFor, type NoticeSound } from '../../shared/sounds'
 import { appendAlert, readAlertsSince } from './recordStoreService'
 import { getSettings } from './settingsService'
 
@@ -17,9 +18,12 @@ import { getSettings } from './settingsService'
 // - THE RECORD: what is told is written to the alerts file (shared/records.ts) and sent to the
 //   window, whatever the desktop can show, so that Overview's major alerts and the session report
 //   hold it after a restart. A notice the Notifications control hides is still a record.
-// - THE DESKTOP: the Notifications control is obeyed -- off, nothing is shown; without sound, it is
-//   shown silently; WATCH is silent, HIGH and CRITICAL sound; CRITICAL flashes the taskbar entry
-//   until the window is focused. Clicking one brings the window back and does nothing else.
+// - THE DESKTOP: the Notifications control is obeyed -- off, nothing is shown, and with the desktop's
+//   notices off (V6 Stage 13) it is recorded, shown in the window and heard, but not on the desktop.
+//   It is always SILENT there: since V6 Stage 13 the window plays the sound its meaning chose
+//   (shared/sounds.ts, src/sound/), which the record carries, so the app's sound is the only one.
+//   CRITICAL flashes the taskbar entry until the window is focused. Clicking one brings the window
+//   back and does nothing else.
 //
 // Electron is imported as a namespace: a test that fakes none of it still loads whatever tells a
 // notice, and the notice fails inside its own try.
@@ -38,6 +42,8 @@ export interface NoticeRequest {
   threadSeconds: number | null
   id: string | null
   url: string | null
+  /** The sound it makes, where chosen where it was raised (shared/sounds.ts). */
+  sound: NoticeSound | null
 }
 
 const text = (value: unknown, max: number): string | null => (typeof value === 'string' && value.trim() !== '' ? value.slice(0, max) : null)
@@ -58,7 +64,8 @@ export function healNoticeRequest(title: unknown, body: unknown, severity?: unkn
     thread: text(raw.thread, 200),
     threadSeconds: seconds,
     id: text(raw.id, 200),
-    url: url !== null && /^https:\/\//.test(url) ? url : null
+    url: url !== null && /^https:\/\//.test(url) ? url : null,
+    sound: raw.sound === 'information' || raw.sound === 'opportunity' || raw.sound === 'warning' || raw.sound === 'critical' || raw.sound === 'none' ? raw.sound : null
   }
 }
 
@@ -92,15 +99,13 @@ function seedThreads(): Promise<void> {
   return seeded
 }
 
-/** The minute's reminder for a CRITICAL banner still up (the V5 document, §49): a sound where
- * notices are on with sound, and nothing shown or recorded -- the notice itself was. The window asks
- * for it (src/news/AlertBanner.tsx) until the banner is dismissed. Resolves true when it sounded. */
+/** The minute's reminder for a CRITICAL banner still up (the V5 document, §49): whether it may sound --
+ * notices on, whatever the sound switch says, CRITICAL being heard regardless (V6 Stage 13). Nothing is
+ * shown or recorded -- the notice itself was -- and the window plays the critical sound itself
+ * (src/news/AlertBanner.tsx, src/sound/player.ts): the main process no longer beeps. */
 export async function remind(): Promise<boolean> {
   try {
-    const alerts = await alertsControl()
-    if (!alerts.enabled || !alerts.sound) return false
-    electron.shell.beep()
-    return true
+    return (await alertsControl()).enabled
   } catch {
     return false
   }
@@ -150,7 +155,9 @@ export async function tellNotice(request: NoticeRequest | null, sender: WebConte
       body: request.body,
       ...(request.url !== null ? { url: request.url } : {}),
       ...(request.kind !== null ? { kind: request.kind } : {}),
-      ...(request.thread !== null ? { thread: request.thread } : {})
+      ...(request.thread !== null ? { thread: request.thread } : {}),
+      // The sound its meaning makes, which the window plays: chosen where it was raised, else its kind's.
+      sound: soundFor({ sound: request.sound, kind: request.kind, severity }) ?? 'none'
     }
     const written = await appendAlert(record).catch((error: unknown) => {
       console.error('The alert could not be written:', error)
@@ -162,8 +169,9 @@ export async function tellNotice(request: NoticeRequest | null, sender: WebConte
 
     if (!electron.Notification.isSupported()) return false
     const alerts = await alertsControl()
-    if (!alerts.enabled) return false
-    const notification = new electron.Notification({ title: request.title, body: request.body, silent: !alerts.sound || level === 'watch' })
+    if (!alerts.enabled || alerts.desktop === false) return false
+    // Silent: the window plays the sound (src/sound/), so that the app's own is the only one heard.
+    const notification = new electron.Notification({ title: request.title, body: request.body, silent: true })
     shown.add(notification)
     const forget = (): void => void shown.delete(notification)
     notification.on('close', forget)
@@ -195,7 +203,7 @@ export async function tellNotice(request: NoticeRequest | null, sender: WebConte
 
 /** Tells a notice built by shared/notices.ts: its text and its extra, from the main process's own
  * loops. Never throws. */
-export function tell(notice: { title: string; body: string; extra: { severity?: 'watch' | 'high' | 'critical'; kind: AlertKind; thread?: string; threadSeconds?: number; id?: string; url?: string } }): void {
+export function tell(notice: { title: string; body: string; extra: { severity?: 'watch' | 'high' | 'critical'; kind: AlertKind; thread?: string; threadSeconds?: number; id?: string; url?: string; sound?: NoticeSound } }): void {
   void tellNotice(healNoticeRequest(notice.title, notice.body, notice.extra.severity, notice.extra))
 }
 

@@ -60,7 +60,7 @@ other.
 |  | **AI Decisions** | **Analyze** asks a model about one market; **Signals** lists every call any model has made and how it turned out. A model is handed a market snapshot and returns one JSON decision, and is given no tools at all. |
 | System | **Risk** (the page titled Risk & Safety) | The sidebar's **Controllers** opens it at the controller groups. The live trading limits every real order is checked against (largest order, the day's notional, the day's loss, the managed allocation), and the share of the allocation a real order filled in from a call is sized to risk at the call's stop (a suggestion for the form, never a gate); the size of the paper trades the app opens by itself, the watch's and the news rules' (sized by what their stop would lose, by a share of the paper account's equity, or at their stake, and capped in what they stake together), the losing run in R that pauses them until resumed, the cap on what they stake on one side on coins that move with Bitcoin, and a daily notice of what they did; and the controller groups: executors under a shared stop-loss, take-profit and maximum drawdown with a P&L snapshot every 5 minutes, all stopped on a breach. Arming and the kill switch stay on the bar at the top of every page. |
 |  | **Connections** | Every key the app holds: Binance and Upbit ([Credentials](#credentials--api-keys)), and the OpenRouter key for the AI models. Each is tested before it is stored, stored encrypted, and never read back into the window. |
-|  | **Settings** | Since 6 October 2026, **Essentials** first: the six settings that decide what the app does by itself — trading mode (PAPER, LIVE READY with a verified key and the session disarmed, or LIVE ACTIVE when armed; read, never changed here), risk mode (since 13 October 2026, V6 Stage 12: Conservative, a fresh install's, Balanced or Aggressive -- the paper trades the app opens by itself, how they are sized and capped, and the forecast trader's caps -- or Custom; [from forecast to trade](#the-price-forecasts-data); a mode never changes the limits on real orders), the market the scanner watches, the AI's mode (changed only on Opportunities, behind its priced confirmation), desktop notices with or without sound, and the exchange; and since 13 October 2026 the sidebar's layout, normal or expert. Everything else is under **Advanced**, closed until opened: the Configuration Center, in sections, built only from settings that exist. **General**: appearance (Dark / Light / Colorblind-safe). **Market**: the scanner on or off, and how many pairs it watches; the reader of Binance's announcements, and what a delisting does. **AI**: which models may be asked, the default and the route, the daily budget, the pace, the [AI additions](#the-ai-additions) (each on or off, with its daily limit and what a day of it can cost), and what asking has cost. Keys stay on Connections and limits on Risk & Safety, each in the one place, linked from here. What the V3 document asked for that has no behaviour behind it (language, timezone, default order type, allowed pairs, other news sources…) is listed in `docs/INVENTORY.md` rather than added as a control. |
+|  | **Settings** | Since 6 October 2026, **Essentials** first: the six settings that decide what the app does by itself — trading mode (PAPER, LIVE READY with a verified key and the session disarmed, or LIVE ACTIVE when armed; read, never changed here), risk mode (since 13 October 2026, V6 Stage 12: Conservative, a fresh install's, Balanced or Aggressive -- the paper trades the app opens by itself, how they are sized and capped, and the forecast trader's caps -- or Custom; [from forecast to trade](#the-price-forecasts-data); a mode never changes the limits on real orders), the market the scanner watches, the AI's mode (changed only on Opportunities, behind its priced confirmation), desktop notices with or without sound, and the exchange (since 13 October 2026 every notice also has a [sound by its meaning](#sounds-by-meaning), set under Advanced › Notifications); and since 13 October 2026 the sidebar's layout, normal or expert. Everything else is under **Advanced**, closed until opened: the Configuration Center, in sections, built only from settings that exist. **General**: appearance (Dark / Light / Colorblind-safe). **Market**: the scanner on or off, and how many pairs it watches; the reader of Binance's announcements, and what a delisting does. **AI**: which models may be asked, the default and the route, the daily budget, the pace, the [AI additions](#the-ai-additions) (each on or off, with its daily limit and what a day of it can cost), and what asking has cost. Keys stay on Connections and limits on Risk & Safety, each in the one place, linked from here. What the V3 document asked for that has no behaviour behind it (language, timezone, default order type, allowed pairs, other news sources…) is listed in `docs/INVENTORY.md` rather than added as a control. |
 
 **The status bar** at the top of every page carries three chips beside the arm and kill controls,
 each read from the thing it describes (`src/status/statusModes.ts`); hovering one says what it
@@ -536,6 +536,30 @@ paused after 5 R lost over 20, the forecast trader at 2 open, 1 a side, its targ
 (2), 2,500, 25%, 8 R, 4 and 2, P80; Aggressive 1% (5), 5,000, 35%, 10 R, 6 and 3, P90. A fresh install
 is Conservative -- sized by the paper account where there is one, which without one is the 1 it always
 was -- and anything else reads Custom. A mode never touches the limits on real orders.
+
+### Sounds by meaning
+
+Since 13 October 2026 (the V6 document's §72-80 and §109-110; V6 Stage 13; `shared/sounds.ts`,
+`src/sound/`) a notice is heard by what it means, so that it can be told by ear before it is read.
+Four sounds, each a fixed score played in the window by Web Audio: **Information**, a soft two-note
+chime rising a sixth -- something to know; **Opportunity**, three notes rising -- something to act on;
+**Warning**, two notes falling -- something going against you; **Critical**, a pulse of three, played
+again each minute its banner is up -- something to stop for. Each is under a second and a half, nothing
+above 2.5 kHz, rising over at least five milliseconds, never louder than the volume. Where a notice is
+raised it may choose its sound; otherwise its kind and severity choose by one table, and some are seen,
+not heard: a trade refused, a models' disagreement, a degraded model. A repeat on a notice's thread
+raises nothing, so plays nothing, and every sound is shown too -- the banner for critical, a note in the
+window's corner for the rest -- never sound alone. The top prediction changing pair chimes, at most once
+in half an hour, with a note. The desktop's own notices are always silent, so the app's sound is the only
+one heard, and can be switched off altogether while the window still shows, hears and records each
+notice. **Settings › Advanced › Notifications**: sound on or off (also on Essentials), the volume (70% to
+begin with), a test of each sound, and, under its own Advanced, the kinds heard, the cooldown between two
+of one sound (30 seconds to begin with), quiet hours on the computer's clock, and the desktop's notices;
+**critical is heard through all of them** -- with sound off, in quiet hours, for a muted kind -- and only
+switching notices off on Essentials silences it. **Simulate the events** plays each event the document
+names -- news, a pump, a dump, a strong bull and bear, a prediction changing, a trade ready and opened, a
+stop, a target, a circuit breaker, an exchange failing -- as it would sound under those controls, with its
+note, telling and recording nothing.
 
 ### Live prices
 

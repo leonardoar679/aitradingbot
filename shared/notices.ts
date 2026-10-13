@@ -19,6 +19,8 @@ export interface NoticeExtra {
   threadSeconds?: number
   id?: string
   url?: string
+  /** The sound it makes, where its meaning is not its kind's (shared/sounds.ts; V6 Stage 13). */
+  sound?: import('./sounds').NoticeSound
 }
 
 export interface Notice {

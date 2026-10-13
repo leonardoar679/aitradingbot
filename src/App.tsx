@@ -29,6 +29,8 @@ import { ExperimentScheduler } from './ai-benchmark/ExperimentScheduler'
 import { NewsScheduler } from './news/NewsScheduler'
 import { NewsAlertScheduler } from './news/NewsAlertScheduler'
 import { AlertBanner } from './news/AlertBanner'
+import { NoticeSounds } from './sound/NoticeSounds'
+import { NoticeToasts } from './sound/NoticeToasts'
 import { WhyItMovedHost } from './news/WhyItMovedHost'
 import { subscribeAlerts, unseenCount } from './news/alertStore'
 import { PaperDigestScheduler } from './risk/PaperDigestScheduler'
@@ -218,6 +220,8 @@ function App(): React.JSX.Element {
       </ErrorBoundary>
       <ErrorBoundary label="The alert banner">
         <AlertBanner />
+        <NoticeSounds />
+        <NoticeToasts />
       </ErrorBoundary>
       <ErrorBoundary label="Why did it move">
         <WhyItMovedHost />
