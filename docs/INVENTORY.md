@@ -10,7 +10,7 @@ the expert one (Settings › Essentials › Layout, `uiMode`) opens every group.
 |---|---|
 | AI TRADER | Home, Predictions, Opportunities, Positions, Performance |
 | TRADING | Paper (Paper Trading), Live (Live Trading) |
-| RESEARCH | Backtest (Backtest & Research), AI Benchmark |
+| RESEARCH | Backtest (Backtest & Research), Forecast Lab, AI Benchmark |
 | ALL FEATURES | Strategies; Bots and Executors (Strategies' two views); Controllers (Risk & Safety, at its card); Routines (Backtest & Research › Automation); Market (the page titled Market, once Markets); Portfolio (Performance, at the portfolio cards); Explorer (the page titled Explorer, once Discovery); Overview; AI Decisions |
 | SYSTEM | Risk (Risk & Safety), Connections, Settings |
 
@@ -82,6 +82,7 @@ Taken on 5 October 2026, at commit `aef376d`.
 | **Live trading bar** (every page) | Arm, kill switch, watchers, blocked exits | The gates real orders pass | Stays on every page, with status chips added; the detail on Live Trading |
 | **The price forecast** (added 13 October 2026, V6 Stage 10, not an old page) | Best current prediction, Top predictions | The ranking's first pair: its likely ranges at 15 minutes, an hour and four hours from the live price, its bull and bear cases, quality, reliability, the story moving it, volume, momentum, the watch's vote where it asked, and the decision; the top three under it | Home |
 | | Ranked forecasts, and a row's drawer | Every pair's forecast best first, with filters; the drawer's timeline to 24 hours, Why?, Why this range?, its recorded forecasts against the price, and the decision | Predictions |
+| | The Forecast Lab (added 13 October 2026, V6 Stage 11) | How the forecast did on the walk forward's weeks and on the live record: performance by horizon, variant and class, calibration, kinds of error and drift, by event, V1 to V4 on the same moments, the leaderboard with promotion and DEGRADED, a tested hour replayed, the forecast trader and its comparison with the strategies, buy and hold and the hybrid; the nightly refit's switch; CSV each | Forecast Lab |
 
 Duplicates, all intentional and kept:
 - **The live board** appears on Opportunities and again in the event benchmark, beside the same

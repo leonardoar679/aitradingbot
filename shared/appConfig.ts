@@ -59,6 +59,7 @@ import { EDGE_VERSION, ROUND_TRIP_PCT } from './forecast/edge'
 import { QUALITY_LINES, QUALITY_VERSION } from './forecast/quality'
 import { RANK_LINES, RANK_VERSION } from './forecast/ranking'
 import { CHANGE_LINES } from './forecast/predictionChange'
+import { LAB_LINES, LAB_VERSION } from './forecast/lab'
 import { DECISION_LINES, DECISION_VERSION } from './forecast/tradeDecision'
 import { NEWS_FEED_VERSION } from './newsFeed'
 import { PREDICTION_LINES, PREDICTION_VERSION } from './forecast/prediction'
@@ -169,7 +170,8 @@ export const ENGINE_CONSTANTS = {
     rank: { version: RANK_VERSION, ...RANK_LINES },
     decision: { version: DECISION_VERSION, ...DECISION_LINES },
     change: CHANGE_LINES,
-    degradedThreadSeconds: DEGRADED_THREAD_SECONDS
+    degradedThreadSeconds: DEGRADED_THREAD_SECONDS,
+    lab: { version: LAB_VERSION, ...LAB_LINES }
   }
 } as const
 

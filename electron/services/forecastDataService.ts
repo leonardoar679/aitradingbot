@@ -195,6 +195,12 @@ async function readPair(symbol: string): Promise<ForecastBar[]> {
   return bars
 }
 
+/** Every bar of a pair on file, oldest first: the whole history kept, not the days held for the live
+ * forecast. What the Forecast Lab replays and runs the strategies on (V6 Stage 11). */
+export function readForecastBars(symbol: string): Promise<ForecastBar[]> {
+  return readPair(symbol)
+}
+
 /** The windows built from every bar of a pair: the last days of five-minute bars, and the hours. */
 function rebuild(entry: PairSeries, bars: readonly ForecastBar[], nowSec: number): void {
   entry.m5 = bars.filter((bar) => bar.time >= nowSec - LIVE_M5_DAYS * 86_400)

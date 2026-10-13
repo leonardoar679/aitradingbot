@@ -22,8 +22,9 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 // reliability and prediction lines (V6 Stage 6) from 9bdf452dfbad, and its refresh, outcome and record
 // lines (V6 Stage 7, set on it late, here) and its news lines and the feed's kinds (V6 Stage 8) from
 // ca5f8f97fce7; its quality, edge, ranking and trade-decision lines (V6 Stage 9) from 23ced32587e9; the
-// PREDICTION CHANGED lines and the degraded model's daily thread (V6 Stage 10) from 6b0724f0b3e7.
-const PINNED_ENGINE_VERSION = '26f5ec2cd7fe'
+// PREDICTION CHANGED lines and the degraded model's daily thread (V6 Stage 10) from 6b0724f0b3e7; the
+// Forecast Lab's lines (V6 Stage 11) from 26f5ec2cd7fe.
+const PINNED_ENGINE_VERSION = 'd4f993254490'
 
 describe('the engine version', () => {
   it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {

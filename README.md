@@ -51,6 +51,7 @@ other.
 | Trading | **Paper** (the page titled Paper Trading) | The paper account paper strategies spend and hand back (fund it, balances, movements), and a manual paper order ticket — market/limit, live last price, session-only order history. Nothing here reaches an exchange. |
 |  | **Live** (the page titled Live Trading) | Real money: the session's gates as they stand (armed, kill switch, the day's notional and loss, the managed allocation, exits being watched), and what you hold on each connected exchange, with Binance futures positions closable for real. |
 | Research | **Backtest** (the page titled Backtest & Research) | **Backtest** runs a chosen strategy over a historical range and shows full stats, equity curve vs. buy-and-hold, monthly breakdown and a trade log; its **Live** view monitors the same route continuously ([Live strategy monitor](#live-strategy-monitor)), **Charts** replays each trade against the candles, and **Compare Strategies** ranks every registered strategy over the same candles. An optional tick box has a model [confirm each entry](#ai-signals--paper-only). Both views export CSV, JSON and a PNG. **Automation** re-runs saved backtests on a schedule while the app is open, each run keeping a session-only report. |
+|  | **Forecast Lab** | How the price forecast did (since 13 October 2026, V6 Stage 11; [the Lab](#the-price-forecasts-data)): on the walk forward's weeks, which it had not seen, and on the live record, each said as which -- performance by horizon, variant and class, calibration, kinds of error and drift, by event, V1 to V4 on the same moments, the leaderboard, a tested hour replayed, and the forecast trader against Trend Regime 4h, Short-Term Channel 15m, buy and hold and the hybrid; the nightly refit's switch. CSV each. Reading it asks no model and places nothing. |
 |  | **AI Benchmark** | Several models on the same questions, scored side by side: on candles, and on the events the scanner raised, with the no-model rows beside them — following, fading and holding every event, and the [quant strategies](#does-ai-help-the-models-against-the-quant-strategies) where they agree — and **Does AI help?**, the models against the quant strategies with three verdicts. Every run is kept as an experiment that can be reopened for nothing. Since 8 October 2026 a **Research** tab beside it reads the record with no model asked: exit rules on identical entries (the call's bracket, an ATR stop, a trailing stop, a time stop, and the exit check's own trades), entry timing (at the answer, one, three and five minutes on, and after a confirming bar), holding time by event type, news timing by kind, consensus, what each input of the signal score earns, capture and misses against a history scan at the lowest floor, false opportunities by kind, and the four questions the excursions on file answer -- each labelled GROSS, NET or LIVE PAPER, thirty trades a row and ten a slice or "not enough", and each saved as CSV. |
 | All Features | **Strategies** | The sidebar's **Bots** and **Executors** open its two views. **Active Runs**: a bot is a single continuous dry-run of a [chosen strategy](#strategies) against one exchange/symbol, optionally with a model asked to [confirm each entry](#ai-signals--paper-only); disabling one records a run, removing one archives it. **Execution**: the eight executor types, each running independently against live candles, the starter presets, and the New Executor form a call's filled-in form opens on — see [Executors](#executors) below. |
 |  | **Market** (Markets until 13 October 2026) | One pair on any supported exchange: candlestick chart with indicators, symbol search, live ticker. Below it, **Movers**: the liquid USDT pairs that moved most over the day and over the week, by volume against their week, and CoinGecko's trending list, from the [market research](#market-research-when-the-app-opens); a row opens its chart. **Why did it move?** for the chart's pair, by [fixed rules](#news--market-events). |
@@ -468,6 +469,44 @@ usual move, over at least 200 outcomes, told once a model and horizon a day; a m
 persistence weighs nothing and reads as not promoted, not as degraded (on the real record most models
 at 4 and 24 hours, which would otherwise be told every night). It stays computed and on record, and its
 weight falls with its own score.
+
+**The Forecast Lab** (since 13 October 2026; the V6 document's §27-28, §42-43, §49-50 and §90-105; V6 Stage
+11; `shared/forecast/{lab,labWalkForward,labFile}.ts`, `electron/services/forecastLabService.ts`,
+`src/forecastLab/`). Two records, each said as which. **The walk forward's**: once a walk forward's
+calibration is in use, the worker makes its Lab, once a run (`forecastModels/<run>/lab.json`, and each
+horizon's tested hours for the replay in `lab-replay-<horizon>.json`): every pair's whole hours of the
+weeks tested, each forecast with weights and a calibration from the weeks before it alone, said in
+percent and called by the forecast's own rule with P(up)'s skill and the class's usual width read from
+the weeks before it too; and around each, from the bars on file, the hour before it, the day's range
+and the move to twice the horizon, and the stories published in the four hours before that named the
+coin. **The live record's**: the last seven days of `forecasts/`, each outcome joined to its forecast
+and read four ways on the same moments -- V1 price only, V2 every market model, V3 with the news's
+rules, V4 with the analyst's readings, the one shown (each recorded forecast now keeps V2's own levels
+where a story moved it, and the coin's last hour in usual moves). For both, by horizon, variant and
+class: the share of moves whose way the median called, the calls and how many were right, the 50% and
+80% ranges' coverage, the median's MAE, RMSE and bias, the pinball loss and, on the walk forward, its
+skill over persistence, the 80% width, the calibration curve (the share at or below each level against
+its nominal) and the tails, P(up) against what went up; §43's kinds of error with **EARLY** (a call
+whose move came after the horizon, by twice it); drift (§42) -- after an hour's shock of two usual
+moves, a median that followed it where the move turned (over-reacting), or did not where the move went
+on past the likely range (under-reacting) -- and, live, the forecasts made again between closes and how
+far each moved the hour's median; the same by event (§92-93): after a pump or a dump, on a break of the
+day's range, with a story, a listing, a hack, an ETF, macro news. The **leaderboard** (§103-105) sets
+every model at every horizon side by side with its weight, whether it was promoted and whether its last
+week found it degraded. The **replay** (§95) draws a tested hour's levels at a horizon over the path
+that came, with the coin's stories on file and the analyst's readings of them. The **forecast trader**
+(§97) trades forecasts as the rules stand -- a called way, an edge after costs, a profit likelier than
+55 in a hundred, a range not too wide -- in at the close, stopped at P10 (P90 for a sell), taken at P75
+(P25), else out at the horizon's close, one open trade a pair, the stop taken where the path touched
+both; and, for research, on the median alone where it clears the round trip; win rate, profit factor,
+expectancy, net and drawdown, all net of 0.24%. **Run the comparison** sets it, at a horizon, against
+Trend Regime 4h and Short-Term Channel 15m (each its own backtest, on the forecast's bars on file), buy
+and hold, and the hybrid -- the forecast's trades where a strategy's state agreed -- in the window, with
+nothing asked, every row over one window: from where both strategies' warm-ups have passed on the bars
+on file (Trend Regime reads 80 days before it trades, and the files keep 90) to the walk forward's last
+hour, on the pairs whose history reaches that far back. The replay and the comparison read the bars
+from the files, the live forecast holding only its last days. The walk forward's pairs are today's research universe: survivorship
+bias, which the page says. The nightly refit's switch is here.
 
 ### Live prices
 

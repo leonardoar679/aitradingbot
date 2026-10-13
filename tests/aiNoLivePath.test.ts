@@ -344,6 +344,45 @@ describe('AI code has no route to a real order', () => {
       expect([...new Set([...source.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))].filter((bridge) => bridge !== 'forecast'), name).toEqual([])
       expect(source, name).not.toMatch(/liveTrading|LiveTrading|placeLive|onPrepareOrder|prepareOrder|aiProposal|settings\.set/)
     }
+    // The Forecast Lab (V6 Stage 11) reads the forecast's own records, the bars, the news on file and the
+    // training's, and makes its figures in the same worker; its page reads the forecast's bridge, saves
+    // CSV through the backtest's, and sets the nightly refit's switch and nothing else in the settings.
+    const labService = join(SERVICES, 'forecastLabService.ts')
+    expect(importsOf(labService).filter((name) => LIVE_MODULES.has(name) || aiModuleNames.has(name))).toEqual([])
+    expect(importsOf(labService).sort()).toEqual([
+      'bars',
+      'electron',
+      'ensemble',
+      'features',
+      'forecastDataService',
+      'forecastRecord',
+      'forecastService',
+      'forecastTrainingService',
+      'forecastWorkerService',
+      'ipc',
+      'jsonlStore',
+      'lab',
+      'labFile',
+      'labView',
+      'labWalkForward',
+      'models',
+      'newsFeedService',
+      'path',
+      'promises',
+      'settingsService',
+      'training',
+      'walkForward'
+    ])
+    expect(readFileSync(labService, 'utf-8')).not.toMatch(/fetch\(|https?:\/\/|credentials|apiKey|liveTrading|placeLive|openRouter|prepareOrder|setSettings|settings\.set/)
+    const labPage = readdirSync(join(ROOT, 'src', 'forecastLab')).filter((name) => /\.tsx?$/.test(name))
+    expect(labPage.length).toBeGreaterThan(0)
+    for (const name of labPage) {
+      const source = readFileSync(join(ROOT, 'src', 'forecastLab', name), 'utf-8')
+      expect([...new Set([...source.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))].filter((bridge) => !['forecast', 'settings', 'backtest'].includes(bridge)), name).toEqual([])
+      expect([...source.matchAll(/window\.api\.backtest\.(\w+)/g)].map((match) => match[1]).filter((call) => call !== 'exportSave'), name).toEqual([])
+      expect([...source.matchAll(/window\.api\.settings\.(\w+)\(([^)]*)/g)].every((match) => match[1] === 'set' && match[2].startsWith('{ forecast: { refitNightly')), name).toBe(true)
+      expect(source, name).not.toMatch(/liveTrading|LiveTrading|placeLive|onPrepareOrder|prepareOrder|aiProposal/)
+    }
   })
 
   it('the live prices read the public stream and refuse, never place', () => {

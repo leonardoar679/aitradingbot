@@ -59,8 +59,10 @@ export interface HorizonLine {
   parts: [ForecastModelId, number, number][]
   /** Its quality, 0 to 100 (V6 Stage 9). */
   qual?: number
-  /** Where a story moved V3 or V4: its levels and the story. */
+  /** Where a story moved V3 or V4: its levels and the story; and V2's own levels, which the shown
+   * forecast's then are not (V6 Stage 11, for the Lab's variants on the same moments). */
   news?: Partial<Record<'v3' | 'v4', NewsLine>>
+  v2?: number[]
 }
 
 export interface NewsLine {
@@ -97,6 +99,8 @@ export interface PredictionLine {
   h: Partial<Record<Horizon, HorizonLine>>
   /** The trade decision at the lead horizon (V6 Stage 9): its side, whether to trade, and why not. */
   trade?: { h: Horizon; side: 'BUY' | 'SELL' | null; ok: boolean; why: string[]; edge: number | null; pProfit: number | null }
+  /** The coin's last hour in its usual moves at the close (V6 Stage 11): what the Lab reads a shock by. */
+  z1h?: number
 }
 
 /** A forecast's line, carrying the horizons given. */
@@ -125,6 +129,7 @@ export function predictionLine(prediction: PricePrediction, horizons: readonly H
       ...newsOf(range)
     }
   }
+  const z1h = prediction.market?.z1h
   return {
     v: FORECAST_RECORD_VERSION,
     id: prediction.id,
@@ -140,6 +145,7 @@ export function predictionLine(prediction: PricePrediction, horizons: readonly H
     why,
     ...(refresh === undefined ? {} : { reasons: refresh.reasons, ...(refresh.previous === null ? {} : { previous: refresh.previous }) }),
     h,
+    ...(z1h === undefined || !Number.isFinite(z1h) ? {} : { z1h: Math.round(z1h * 1000) / 1000 }),
     ...(decision === undefined
       ? {}
       : {
@@ -155,7 +161,7 @@ export function predictionLine(prediction: PricePrediction, horizons: readonly H
   }
 }
 
-function newsOf(range: PricePrediction['horizons'][Horizon] & object): Pick<HorizonLine, 'news'> {
+function newsOf(range: PricePrediction['horizons'][Horizon] & object): Pick<HorizonLine, 'news' | 'v2'> {
   const out: NonNullable<HorizonLine['news']> = {}
   for (const variant of ['v3', 'v4'] as const) {
     const effect = range.news[variant]
@@ -173,7 +179,8 @@ function newsOf(range: PricePrediction['horizons'][Horizon] & object): Pick<Hori
       fromLibrary: effect.fromLibrary
     }
   }
-  return Object.keys(out).length === 0 ? {} : { news: out }
+  const v2 = range.variants.v2
+  return Object.keys(out).length === 0 ? {} : { news: out, ...(v2 === undefined ? {} : { v2: v2.quantilesPct.map(pct4) }) }
 }
 
 const isNumbers = (value: unknown, length: number): value is number[] => Array.isArray(value) && value.length === length && value.every((entry) => typeof entry === 'number' && Number.isFinite(entry))

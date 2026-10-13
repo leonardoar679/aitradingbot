@@ -498,6 +498,11 @@ export function setForecastReadings(next: Record<string, AnalystReadingInput>): 
   readings = next
 }
 
+/** The analyst's readings on file, by story, as last handed in: what the Lab's replay shows beside a story. */
+export function forecastNewsReadings(): Readonly<Record<string, AnalystReadingInput>> {
+  return readings
+}
+
 /** The news: a story of high impact naming a coin forecast moves its forecast, once. */
 export async function forecastNewsSignal(next: NewsSignal, nowMs: number = Date.now()): Promise<void> {
   feed = next

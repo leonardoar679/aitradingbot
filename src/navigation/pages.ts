@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   Radar,
   CandlestickChart,
+  ChartSpline,
   Atom,
   Anchor,
   TrendingUp,
@@ -48,6 +49,7 @@ export type Page =
   | 'strategies'
   | 'research'
   | 'ai-benchmark'
+  | 'forecast-lab'
   | 'discovery'
   | 'risk'
   | 'connections'
@@ -97,6 +99,7 @@ export type NavId =
   | 'paper'
   | 'live'
   | 'backtest'
+  | 'forecast-lab'
   | 'ai-benchmark'
   | 'strategies'
   | 'bots'
@@ -162,6 +165,7 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: History,
     items: [
       { id: 'backtest', label: 'Backtest', icon: History, target: { page: 'research', tab: 'backtest' } },
+      { id: 'forecast-lab', label: 'Forecast Lab', icon: ChartSpline, target: { page: 'forecast-lab' } },
       { id: 'ai-benchmark', label: 'AI Benchmark', icon: Scale, target: { page: 'ai-benchmark' } }
     ]
   },

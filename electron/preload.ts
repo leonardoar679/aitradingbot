@@ -4,6 +4,7 @@ import type { FuturesCloseResult, FuturesReadout } from '../shared/futuresPositi
 import type { ProtectiveStop } from '../shared/futuresStops'
 import type { PricePrediction } from '../shared/forecast/prediction'
 import type { TradeDecision } from '../shared/forecast/tradeDecision'
+import type { ForecastLabView, ForecastReplay } from '../shared/forecast/labView'
 import type { ForecastRanking as ForecastRankingView } from '../shared/forecast/ranking'
 import type { SymbolTradingRules } from '../shared/exchangeMinimums'
 import type {
@@ -181,6 +182,9 @@ const api = {
     history: (symbol: string, fromSec: number): Promise<ForecastHistory> => ipcRenderer.invoke(IpcChannel.ForecastHistory, symbol, fromSec),
     ranking: (): Promise<ForecastRankingView> => ipcRenderer.invoke(IpcChannel.ForecastRanking),
     decision: (symbol: string): Promise<TradeDecision | null> => ipcRenderer.invoke(IpcChannel.ForecastDecision, symbol),
+    lab: (): Promise<ForecastLabView> => ipcRenderer.invoke(IpcChannel.ForecastLab),
+    replay: (pair: string, t: number): Promise<ForecastReplay | null> => ipcRenderer.invoke(IpcChannel.ForecastReplay, pair, t),
+    bars: (pair: string, width: '15m' | '1h' | '4h', fromSec: number, toSec: number): Promise<Candle[]> => ipcRenderer.invoke(IpcChannel.ForecastBars, pair, width, fromSec, toSec),
     onUpdate: (listener: (closedAt: number | null) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, closedAt: number | null): void => listener(closedAt)
       ipcRenderer.on(IpcChannel.ForecastUpdate, handler)

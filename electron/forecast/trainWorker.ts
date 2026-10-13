@@ -8,6 +8,9 @@ import { fitGbt, lossOf, predictGbt } from '../../shared/forecast/ml/gbt'
 import { FORECAST_MODELS, fitHorizon, normalizedTarget, predictHorizon, type FittedHorizon, type ForecastModelId } from '../../shared/forecast/models'
 import { serializeRunCalibration } from '../../shared/forecast/calibrationFile'
 import { serializeFitted } from '../../shared/forecast/modelFile'
+import { LAB_VERSION, type TraderRule } from '../../shared/forecast/lab'
+import { serializeLab, serializeReplay, type LabFile } from '../../shared/forecast/labFile'
+import { walkForwardLab, type StoryMarkInput } from '../../shared/forecast/labWalkForward'
 import { decodeOos, encodeOos, OOS_VERSION, type OosRecord } from '../../shared/forecast/oosRecord'
 import { buildPanel, type Panel } from '../../shared/forecast/panel'
 import { buildRunCalibration, type RunCalibration } from '../../shared/forecast/runCalibration'
@@ -29,6 +32,9 @@ import { finalSplit, foldRows, lastFoldScores, planFolds, rowsFor, scoreRows, ty
 //   then the calibration made from them (shared/forecast/runCalibration.ts), in calibration.json.
 // - CALIBRATE: the calibration made again from the hourly forecasts on file, for a run walked forward
 //   before the calibration's version changed.
+// - LAB (V6 Stage 11): what the Forecast Lab shows of a walk forward -- its forecasts scored, called,
+//   replayed as trades and set beside the bars around them (shared/forecast/labWalkForward.ts) -- in
+//   forecastModels/<run>/lab.json, and each horizon's forecasts for the replay in lab-replay-<horizon>.json.
 //
 // IT TRAINS ON PUBLIC MARKET DATA AND NOTHING ELSE. No key, no model of anyone else's, no order, no
 // network: it reads the bars on file and writes the models it fitted beside them.
@@ -42,6 +48,7 @@ export type WorkerRequest =
   | { id: number; task: 'fit'; dataDir: string; outDir: string; runId: string; nowSec: number }
   | { id: number; task: 'folds'; dataDir: string; outDir: string; runId: string; nowSec: number }
   | { id: number; task: 'calibrate'; outDir: string; runId: string; promotions: Promotion[] }
+  | { id: number; task: 'lab'; dataDir: string; outDir: string; runId: string; promotions: Promotion[]; stories: StoryMarkInput[]; nowSec: number }
 
 export interface FitResult {
   task: 'fit'
@@ -89,6 +96,13 @@ export interface CalibrateResult {
   ms: number
 }
 
+export interface LabResult {
+  task: 'lab'
+  runId: string
+  horizons: { horizon: Horizon; rows: number; trades: Record<TraderRule, number> }[]
+  ms: number
+}
+
 export interface SelftestResult {
   task: 'selftest'
   trees: number
@@ -98,7 +112,7 @@ export interface SelftestResult {
 }
 
 export type WorkerReply =
-  | { id: number; ok: true; result: SelftestResult | FitResult | FoldsResult | CalibrateResult }
+  | { id: number; ok: true; result: SelftestResult | FitResult | FoldsResult | CalibrateResult | LabResult }
   | { id: number; ok: false; error: string }
   | { id: number; progress: { step: string; done: number; total: number } }
 
@@ -279,6 +293,36 @@ async function calibrate(request: Extract<WorkerRequest, { task: 'calibrate' }>)
   return { task: 'calibrate', runId: request.runId, calibration, ms: Date.now() - started }
 }
 
+/** The Lab of a walk forward's record: read, scored and written beside it. */
+async function lab(request: Extract<WorkerRequest, { task: 'lab' }>): Promise<LabResult> {
+  const started = Date.now()
+  const dir = join(request.outDir, request.runId)
+  progress(request.id, 'reading the bars', 0, HORIZONS.length + 1)
+  const market = await loadMarket(request.dataDir)
+  const bars = new Map([...market].map(([symbol, series]) => [symbol, series.m5]))
+  const file: LabFile = { version: LAB_VERSION, runId: request.runId, madeAt: request.nowSec, span: null, pairs: [], horizons: {} }
+  const pairs = new Set<string>()
+  const results: LabResult['horizons'] = []
+  for (const [index, horizon] of HORIZONS.entries()) {
+    progress(request.id, `the Lab at ${horizon}`, index + 1, HORIZONS.length + 1)
+    const bytes = await readFile(join(dir, `oos-${horizon}.bin`)).catch(() => null)
+    const record = bytes === null ? null : decodeOos(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength))
+    if (record === null || record.horizon !== horizon) continue
+    const made = walkForwardLab(record, request.promotions, bars, request.stories)
+    file.horizons[horizon] = made.lab
+    for (const row of made.replay) {
+      pairs.add(row.pair)
+      file.span = file.span === null ? { from: row.t, to: row.t } : { from: Math.min(file.span.from, row.t), to: Math.max(file.span.to, row.t) }
+    }
+    await writeFile(join(dir, `lab-replay-${horizon}.json`), serializeReplay(horizon, made.replay), 'utf-8')
+    results.push({ horizon, rows: made.lab.rows, trades: { rules: made.lab.trader.rules.trades, medians: made.lab.trader.medians.trades } })
+  }
+  if (results.length === 0) throw new Error(`no out-of-sample record of ${request.runId} for the Lab`)
+  file.pairs = [...pairs].sort()
+  await writeFile(join(dir, 'lab.json'), serializeLab(file), 'utf-8')
+  return { task: 'lab', runId: request.runId, horizons: results, ms: Date.now() - started }
+}
+
 /** A fit on a made-up problem, to show that the worker runs, and how fast: y = sin(x0) + noise growing
  * with x1, the L2 boosting's loss on held-back rows against predicting the mean. */
 function selftest(rows: number, cols: number, seed: number): SelftestResult {
@@ -321,13 +365,14 @@ function selftest(rows: number, cols: number, seed: number): SelftestResult {
 }
 
 parentPort?.on('message', (request: WorkerRequest) => {
-  const reply = (result: SelftestResult | FitResult | FoldsResult | CalibrateResult): void => void parentPort?.postMessage({ id: request.id, ok: true, result } satisfies WorkerReply)
+  const reply = (result: SelftestResult | FitResult | FoldsResult | CalibrateResult | LabResult): void => void parentPort?.postMessage({ id: request.id, ok: true, result } satisfies WorkerReply)
   const fail = (error: unknown): void => void parentPort?.postMessage({ id: request.id, ok: false, error: error instanceof Error ? error.message : String(error) } satisfies WorkerReply)
   try {
     if (request.task === 'selftest') reply(selftest(request.rows, Math.max(2, request.cols), request.seed))
     else if (request.task === 'fit') fit(request).then(reply, fail)
     else if (request.task === 'folds') folds(request).then(reply, fail)
     else if (request.task === 'calibrate') calibrate(request).then(reply, fail)
+    else if (request.task === 'lab') lab(request).then(reply, fail)
     else fail(new Error('unknown task'))
   } catch (error) {
     fail(error)

@@ -35,6 +35,7 @@ const ALL_PAGES: Page[] = [
   'strategies',
   'research',
   'ai-benchmark',
+  'forecast-lab',
   'discovery',
   'risk',
   'connections',
@@ -61,7 +62,7 @@ describe('the sidebar', () => {
     expect(NAV_GROUPS.map((group) => group.items.map((item) => item.label))).toEqual([
       ['Home', 'Predictions', 'Opportunities', 'Positions', 'Performance'],
       ['Paper', 'Live'],
-      ['Backtest', 'AI Benchmark'],
+      ['Backtest', 'Forecast Lab', 'AI Benchmark'],
       ['Strategies', 'Bots', 'Executors', 'Controllers', 'Routines', 'Market', 'Portfolio', 'Explorer', 'Overview', 'AI Decisions'],
       ['Risk', 'Connections', 'Settings']
     ])

@@ -95,6 +95,8 @@ export interface RunCalibration {
 
 /** One hour of one pair from the walk forward's record. */
 export interface Row {
+  /** Its index in the record it was read from (V6 Stage 11: the Lab reads its time, pair and path). */
+  at?: number
   quantiles: Partial<Record<ForecastModelId, number[]>>
   z: number
   cls: PairClass
@@ -112,7 +114,7 @@ export function rowsOf(record: OosRecord): Row[] {
     if (!Number.isFinite(z) || !(usual > 0)) continue
     const quantiles: Partial<Record<ForecastModelId, number[]>> = {}
     for (const model of record.models) quantiles[model] = oosQuantiles(record, row, model)
-    out.push({ quantiles, z, cls: PAIR_CLASSES[record.cls[row]], regime: MARKET_REGIMES[record.regime[row]], fold: record.fold[row], usual })
+    out.push({ at: row, quantiles, z, cls: PAIR_CLASSES[record.cls[row]], regime: MARKET_REGIMES[record.regime[row]], fold: record.fold[row], usual })
   }
   return out
 }
@@ -181,6 +183,8 @@ function apply(fitted: Fitted, row: Row): number[] {
 /** A row forecast out of sample: its calibrated quantiles and raw P(up), persistence's beside them,
  * and, once a map could be fitted before its week, its P(up) and the base rate of the weeks before. */
 export interface ScoredRow {
+  /** The record row it came from, where known. */
+  at?: number
   cls: PairClass
   regime: MarketRegime
   week: number
@@ -260,7 +264,7 @@ export function scoreOutOfSample(rows: readonly Row[], members: VariantId, promo
     for (const row of rows) {
       if (row.fold !== week) continue
       const quantiles = apply(fitted, row)
-      scored.push({ cls: row.cls, regime: row.regime, week, quantiles, floor: apply(floor, row), z: row.z, raw: rawPUp(quantiles), pUp: null, base: null })
+      scored.push({ at: row.at, cls: row.cls, regime: row.regime, week, quantiles, floor: apply(floor, row), z: row.z, raw: rawPUp(quantiles), pUp: null, base: null })
     }
   }
   const scoredWeeks = [...new Set(scored.map((entry) => entry.week))].sort((a, b) => a - b)
