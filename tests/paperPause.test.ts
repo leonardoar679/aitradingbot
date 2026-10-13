@@ -105,7 +105,7 @@ const block = (executors: ExecutorConfig[], setting: PaperPauseSettings = ON, so
 describe('the setting', () => {
   it('pauses after 5 R lost over the last 20 until it is changed, and is healed rather than obeyed', () => {
     const none = { countFrom: null, paused: null }
-    expect(DEFAULT_PAPER_PAUSE).toEqual({ lossR: 5, trades: 20, watch: none, news: none })
+    expect(DEFAULT_PAPER_PAUSE).toEqual({ lossR: 5, trades: 20, watch: none, news: none, forecast: none })
     expect(healPaperPause(undefined)).toEqual(DEFAULT_PAPER_PAUSE)
     expect(healPaperPause('5 R')).toEqual(DEFAULT_PAPER_PAUSE)
     for (const lossR of PAPER_PAUSE_LOSS_CHOICES) for (const trades of PAPER_PAUSE_TRADE_CHOICES) expect(healPaperPause({ lossR, trades })).toMatchObject({ lossR, trades })
@@ -269,7 +269,7 @@ describe('the pause', () => {
   it('is saved as chosen, keeping each side\'s pause, and switched off lifts it', () => {
     const stored: PaperPauseSettings = { ...ON, watch: { countFrom: D, paused: { at: D + H, r: -5, trades: 5 } } }
     expect(savePaperPause(stored, { lossR: 8, trades: 50 })).toEqual({ ...stored, lossR: 8, trades: 50 })
-    expect(savePaperPause(stored, { lossR: null, trades: 20 })).toEqual({ lossR: null, trades: 20, watch: { countFrom: D, paused: null }, news: ON.news })
+    expect(savePaperPause(stored, { lossR: null, trades: 20 })).toEqual({ lossR: null, trades: 20, watch: { countFrom: D, paused: null }, news: ON.news, forecast: ON.forecast })
   })
 })
 

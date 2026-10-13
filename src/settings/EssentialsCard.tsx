@@ -5,7 +5,8 @@ import type { AiConfig } from '../../shared/aiCost'
 import { DEFAULT_ALERTS, healAlerts } from '../../shared/alerts'
 import { DEFAULT_KEEP_RUNNING, healKeepRunning } from '../../shared/keepRunning'
 import { DEFAULT_UI_MODE, UI_MODES, describeUiMode, healUiMode, type UiMode } from '../../shared/uiMode'
-import { conservativePaper, describeRiskLevel } from '../../shared/appDefaults'
+import { RISK_MODES, RISK_MODE_NAMES, describeRiskMode, riskModePatch, type PresetRiskMode } from '../../shared/appDefaults'
+import { healForecastSettings, type ForecastSettings } from '../../shared/forecast/training'
 import type { AlertSettings, CredentialStatus, LiveTradingStatus, PaperPauseSettings, PaperRiskSettings } from '../../shared/ipc'
 import { DEFAULT_SCANNER_UNIVERSE, SCANNER_UNIVERSE_SIZES, type ScannerConfig } from '../../shared/marketScanner'
 import { healPaperPause } from '../../shared/paperPause'
@@ -39,7 +40,9 @@ function Row({ label, children }: { label: string; children: React.ReactNode }):
  * level, market universe, AI mode, notifications and exchange. Everything else is under Advanced.
  *
  * IT CHANGES ONLY WHAT IS SAFE TO CHANGE IN ONE CLICK: the scanner's pairs and switch, the desktop
- * notices, and the paper settings put back to Conservative, which only ever open less. Whether real
+ * notices, and the risk mode (since 13 October 2026, the V6 document's §66: Conservative, Balanced or
+ * Aggressive), which sets only how big the app's own PAPER trades are and how many it keeps -- no real
+ * order, and no switch that opens any by itself: whether the forecast trader is on is kept. Whether real
  * orders can be placed is read and shown, never changed here -- arming and the kill switch stay on
  * the bar, and the limits on Risk & Safety. Whether the AI asks, or trades on paper, is changed only
  * on Opportunities, after the confirmation that states what a day of it can cost. */
@@ -49,7 +52,7 @@ export function EssentialsCard({ onNavigate, onUiModeChange }: { onNavigate: (pa
   const [keyConfigured, setKeyConfigured] = useState<boolean | null>(null)
   const [config, setConfig] = useState<AiConfig | null>(null)
   const [scanner, setScanner] = useState<ScannerConfig | null>(null)
-  const [paper, setPaper] = useState<{ paperRisk: PaperRiskSettings; paperPause: PaperPauseSettings } | null>(null)
+  const [paper, setPaper] = useState<{ paperRisk: PaperRiskSettings; paperPause: PaperPauseSettings; forecast: ForecastSettings } | null>(null)
   const [alerts, setAlerts] = useState<AlertSettings>(DEFAULT_ALERTS)
   const [keepRunning, setKeepRunning] = useState<boolean>(DEFAULT_KEEP_RUNNING)
   const [uiMode, setUiMode] = useState<UiMode>(DEFAULT_UI_MODE)
@@ -59,7 +62,7 @@ export function EssentialsCard({ onNavigate, onUiModeChange }: { onNavigate: (pa
   function readSettings(): void {
     window.api.settings.get().then(
       (settings) => {
-        setPaper({ paperRisk: healPaperRisk(settings.paperRisk), paperPause: healPaperPause(settings.paperPause) })
+        setPaper({ paperRisk: healPaperRisk(settings.paperRisk), paperPause: healPaperPause(settings.paperPause), forecast: healForecastSettings(settings.forecast) })
         setAlerts(healAlerts(settings.alerts))
         setKeepRunning(healKeepRunning(settings.keepRunningWhenClosed))
         setUiMode(healUiMode(settings.uiMode))
@@ -156,11 +159,11 @@ export function EssentialsCard({ onNavigate, onUiModeChange }: { onNavigate: (pa
       readSettings()
     })
 
-  const resetPaper = (): Promise<void> =>
+  const setRiskMode = (mode: PresetRiskMode): Promise<void> =>
     run(async () => {
       await settingsWrites(async () => {
         const fresh = await window.api.settings.get()
-        await window.api.settings.set(conservativePaper(healPaperPause(fresh.paperPause)))
+        await window.api.settings.set(riskModePatch(mode, { paperPause: healPaperPause(fresh.paperPause), forecast: healForecastSettings(fresh.forecast) }))
       })
       readSettings()
     })
@@ -168,7 +171,7 @@ export function EssentialsCard({ onNavigate, onUiModeChange }: { onNavigate: (pa
   const readiness = describeLiveReadiness(
     liveReadinessOf({ mode: tradingModeOf({ binanceKey: binance?.configured === true, status }), connection: connectionStateOf(binance) })
   )
-  const risk = paper === null ? null : describeRiskLevel({ paperRisk: paper.paperRisk, paperPause: paper.paperPause })
+  const risk = paper === null ? null : describeRiskMode({ paperRisk: paper.paperRisk, paperPause: paper.paperPause, trader: paper.forecast.trader })
   const watch = keyConfigured === null ? null : describeWatchMode(watchModeOf({ keyConfigured, config }))
   const universe = scanner?.universeSize ?? DEFAULT_SCANNER_UNIVERSE
 
@@ -185,29 +188,31 @@ export function EssentialsCard({ onNavigate, onUiModeChange }: { onNavigate: (pa
         </p>
       </Row>
 
-      <Row label="Risk level">
+      <Row label="Risk mode">
         {risk === null ? (
           <span style={noteStyle}>Loading…</span>
         ) : (
           <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: risk.label === 'Conservative' ? 'var(--up)' : 'var(--gold)' }}>{risk.label}</span>
-              {risk.label !== 'Conservative' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: risk.mode === 'conservative' ? 'var(--up)' : 'var(--gold)', marginRight: '0.3rem' }}>{risk.label}</span>
+              {RISK_MODES.map((mode) => (
                 <button
-                  aria-label="Reset the paper settings to Conservative"
-                  onClick={() => void resetPaper()}
-                  disabled={busy}
-                  style={{ ...formButtonStyle('secondary'), padding: '0.3rem 0.7rem', opacity: busy ? 0.6 : 1 }}
+                  key={mode}
+                  aria-label={`Set the risk mode to ${RISK_MODE_NAMES[mode]}`}
+                  aria-pressed={risk.mode === mode}
+                  onClick={() => void setRiskMode(mode)}
+                  disabled={busy || risk.mode === mode}
+                  style={{ ...formButtonStyle(risk.mode === mode ? 'primary' : 'secondary'), padding: '0.3rem 0.7rem', opacity: busy ? 0.6 : 1 }}
                 >
-                  Reset to Conservative
+                  {RISK_MODE_NAMES[mode]}
                 </button>
-              )}
+              ))}
             </div>
             <p style={noteStyle}>
               {risk.detail}
               {status !== null &&
                 ` Real orders, when live trading is armed: at most ${amount(status.maxOrderQuote)} an order, ${amount(status.dailyCapQuote)} a day, and a day's loss of ${amount(status.dailyLossLimitQuote)}.`}{' '}
-              All of it is set on <TextLink onClick={() => onNavigate('risk')}>Risk &amp; Safety</TextLink>; a reset puts back only the paper settings.
+              All of it is set on <TextLink onClick={() => onNavigate('risk')}>Risk &amp; Safety</TextLink>; a mode sets only the paper settings.
             </p>
           </>
         )}

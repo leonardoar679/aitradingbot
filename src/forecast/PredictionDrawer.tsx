@@ -13,6 +13,9 @@ import type { TradeDecision } from '../../shared/forecast/tradeDecision'
 import { forecastView } from '../../shared/forecast/view'
 import type { LiveState } from '../../shared/liveMarket'
 import { ForecastHistoryChart } from './ForecastHistoryChart'
+import type { AiOrderProposal } from '../../shared/aiProposal'
+import { tradeThisOf } from './tradeThis'
+import { useRiskTarget } from './useRiskTarget'
 import { callColor, callLabel, decisionWords, leadHorizon, momentumWord, pairText, priceText, rangeText, signedPct, timeLeftText, volumeWord, HORIZON_NEXT, HORIZON_SHORT } from './forecastWords'
 
 const section: React.CSSProperties = { borderTop: '1px solid var(--border)', paddingTop: '0.7rem', marginTop: '0.7rem' }
@@ -22,8 +25,22 @@ const line: React.CSSProperties = { margin: '0.15rem 0', fontSize: '0.8rem', col
 /** One pair's forecast in full (the V6 document, §35-37, §58 and §94): its timeline, WHY? -- the
  * evidence behind it -- WHY THIS RANGE?, its history against the price, and the decision. Everything
  * here is read from the forecast, the research, the news on file and the records; nothing is asked. */
-export function PredictionDrawer({ prediction, decision, live, onClose }: { prediction: PricePrediction; decision: TradeDecision | null; live: LiveState | null; onClose: () => void }): React.JSX.Element {
+export function PredictionDrawer({
+  prediction,
+  decision,
+  live,
+  onClose,
+  onPrepareOrder
+}: {
+  prediction: PricePrediction
+  decision: TradeDecision | null
+  live: LiveState | null
+  onClose: () => void
+  /** TRADE THIS (V6 Stage 12): the plan filled into the Position form, for a person to place. */
+  onPrepareOrder?: (proposal: AiOrderProposal) => void
+}): React.JSX.Element {
   const nowSec = useNowSec(true, 5_000)
+  const targetLevel = useRiskTarget()
   const research = useMarketResearch().state
   const feedState = useNewsFeed()
   const readings = useNewsReadings(feedState)
@@ -56,6 +73,7 @@ export function PredictionDrawer({ prediction, decision, live, onClose }: { pred
   const reading = story === null ? undefined : readings[story.storyId]
   const answers = useMemo(() => feed.find((item) => item.event.symbol === prediction.pair && item.answers.length > 0)?.answers ?? [], [feed, prediction.pair])
   const words = decisionWords(decision)
+  const trade = tradeThisOf({ prediction, decision, livePrice, targetLevel, nowSec })
 
   return (
     <aside
@@ -173,6 +191,25 @@ export function PredictionDrawer({ prediction, decision, live, onClose }: { pred
         <h3 style={heading}>The trade</h3>
         <p style={{ ...line, fontWeight: 600, color: words.trade ? 'var(--up)' : 'var(--text-secondary)' }}>{words.label}</p>
         {words.detail !== '' && <p style={noteStyle}>{words.detail}</p>}
+        {'plan' in trade && (
+          <p style={line}>
+            The plan, from ${priceText(trade.plan.entryPrice)}: enter in ${priceText(trade.plan.entryMin)} ~ ${priceText(trade.plan.entryMax)} until {new Date(trade.plan.validUntil * 1000).toISOString().slice(11, 16)} UTC; stop {trade.plan.stopPct.toFixed(2)}% away (${priceText(trade.plan.stopPrice)}); target {trade.plan.targetPct.toFixed(2)}% at its {trade.plan.targetLevel} (${priceText(trade.plan.targetPrice)}); held at most {HORIZON_SHORT[trade.plan.horizon]}.
+          </p>
+        )}
+        {onPrepareOrder !== undefined && (
+          <button
+            type="button"
+            style={{ ...buttonStyle('primary', 'problem' in trade), marginTop: '0.4rem' }}
+            disabled={'problem' in trade}
+            title={'problem' in trade ? trade.problem : 'Fills in the Position form, on paper; a person places it.'}
+            onClick={() => {
+              if ('proposal' in trade) onPrepareOrder(trade.proposal)
+            }}
+          >
+            TRADE THIS
+          </button>
+        )}
+        {'problem' in trade && onPrepareOrder !== undefined && <p style={noteStyle}>{trade.problem}</p>}
         {prediction.invalidationConditions.length > 0 && <p style={{ ...noteStyle, marginTop: '0.4rem' }}>It would be undone if: {prediction.invalidationConditions.join(' ')}</p>}
         <p style={{ ...noteStyle, marginTop: '0.4rem' }}>{HORIZON_NEXT[lead]} is its lead horizon. A forecast is not a trade; nothing was placed.</p>
       </div>

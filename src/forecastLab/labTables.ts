@@ -1,6 +1,7 @@
 import { HORIZONS, PAIR_CLASSES, type Horizon, type PairClass } from '../../shared/forecast/features'
 import { LIVE_VARIANTS, type LabErrorKind, type LabEvent, type LabMetrics, type LeaderRow, type LiveLab, type TraderStats } from '../../shared/forecast/lab'
 import type { LabFile } from '../../shared/forecast/labFile'
+import { CLASS_LINES, type ClassRecord } from '../../shared/forecast/opportunityClass'
 
 // THE FORECAST LAB'S TABLES (V6 Stage 11, 13 October 2026): each card's headers and rows, from the Lab's
 // figures, the same for the page and its CSV. A share is said in percent, a move in percent with its
@@ -177,6 +178,18 @@ export function traderTable(lab: LabFile): LabTableData {
 }
 
 export const COMPARISON_HEADERS = ['What', ...TRADER_HEADERS]
+
+const VERDICT_NAME: Record<ClassRecord['verdict'], string> = { APPROVED: 'APPROVED', PROBATION: 'PROBATION', DISABLED: 'DISABLED', NOT_ENOUGH: 'NOT ENOUGH DATA' }
+
+/** Every opportunity class (§99) with its two records and its verdict, approved first. */
+export function classesTable(classes: readonly ClassRecord[]): LabTableData {
+  const order: ClassRecord['verdict'][] = ['APPROVED', 'PROBATION', 'DISABLED', 'NOT_ENOUGH']
+  const sorted = [...classes].sort((a, b) => order.indexOf(a.verdict) - order.indexOf(b.verdict) || b.history.trades - a.history.trades || a.key.localeCompare(b.key))
+  return {
+    headers: ['Class (coin / horizon / setup)', 'Replayed trades', 'Replayed net', 'Live paper trades', 'Live paper net', 'Verdict'],
+    rows: sorted.map((record) => [record.key, `${record.history.trades} of ${CLASS_LINES.minHistoryTrades}`, pct(record.history.netPct), record.live.trades, pct(record.live.netPct), VERDICT_NAME[record.verdict]])
+  }
+}
 
 export function csvCell(value: string | number): string {
   const text = String(value)

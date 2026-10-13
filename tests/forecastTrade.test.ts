@@ -215,7 +215,7 @@ describe('the ranking', () => {
 describe('the trade decision', () => {
   const live = { price: 100, updatedAt: T * 1000 + 4000, spreadPct: 0.02 }
   const decide = (hour: ForecastRange, patch: Partial<DecisionInput> = {}, predictionPatch: Partial<PricePrediction> = {}) =>
-    decideTrade({ prediction: prediction('SOLUSDT', hour, predictionPatch), horizon: 'hour1', nowMs: T * 1000 + 5000, live, classApproved: null, ...patch })
+    decideTrade({ prediction: prediction('SOLUSDT', hour, predictionPatch), horizon: 'hour1', nowMs: T * 1000 + 5000, live, classOf: null, ...patch })
   const codes = (decision: ReturnType<typeof decideTrade>): string[] => decision.reasons.map((reason) => reason.code)
 
   it('is TRADE where nothing holds it back, a BUY for a bull and a SELL for a bear', () => {
@@ -230,7 +230,7 @@ describe('the trade decision', () => {
     expect(codes(decide(range({ direction: 'NEUTRAL' })))).toEqual(['NO_CALL'])
     // One reason is enough to be NO TRADE.
     expect(decide(range({ reliability: 'LOW' })).decision).toBe('NO_TRADE')
-    expect(decide(range(), { classApproved: false }).decision).toBe('NO_TRADE')
+    expect(decide(range(), { classOf: () => ({ key: 'mid/hour1/other', verdict: 'NOT_ENOUGH' }) }).decision).toBe('NO_TRADE')
     expect(codes(decide(range({ uncertain: true })))).toEqual(['UNCERTAIN'])
     expect(codes(decide(range({ quantilesPct: [-1, -0.5, 0.2, 0.6, 1] })))).toEqual(['EDGE_UNDER_COSTS'])
     expect(codes(decide(range({ quantilesPct: [-4, -1, 0.1, 2, 6] })))).toEqual(['UNLIKELY_PROFIT'])
@@ -243,8 +243,18 @@ describe('the trade decision', () => {
     expect(codes(decide(range(), { live: { ...live, updatedAt: T * 1000 - 10_000 } }))).toEqual(['STALE_PRICE'])
     expect(codes(decide(range(), { live: { ...live, spreadPct: DECISION_LINES.maxSpreadPct + 0.01 } }))).toEqual(['SPREAD'])
     expect(codes(decide(range(), { nowMs: (T + DECISION_LINES.staleBarsSec + 1) * 1000, live: { ...live, updatedAt: (T + DECISION_LINES.staleBarsSec) * 1000 } }))).toEqual(['STALE_BARS'])
-    expect(codes(decide(range(), { classApproved: false }))).toEqual(['CLASS_NOT_APPROVED'])
-    expect(codes(decide(range(), { classApproved: true }))).toEqual([])
+    // Its opportunity class (V6 Stage 12): traded where approved or on probation; not where it lost or
+    // was not traded enough on the replayed weeks; not judged where no class is read.
+    const judged = (verdict: 'APPROVED' | 'PROBATION' | 'DISABLED' | 'NOT_ENOUGH') => decide(range(), { classOf: (side: 'BUY' | 'SELL') => ({ key: `mid/hour1/${side}`, verdict }) })
+    expect(codes(judged('DISABLED'))).toEqual(['CLASS_NOT_APPROVED'])
+    expect(codes(judged('NOT_ENOUGH'))).toEqual(['CLASS_NOT_APPROVED'])
+    expect(judged('NOT_ENOUGH').reasons[0].text).toBe('Its kind of opportunity (mid/hour1/BUY) has not been traded enough on the replayed weeks to be judged.')
+    expect(codes(judged('APPROVED'))).toEqual([])
+    expect(codes(judged('PROBATION'))).toEqual([])
+    expect(judged('PROBATION')).toMatchObject({ classKey: 'mid/hour1/BUY', classVerdict: 'PROBATION' })
+    expect(decide(range(), { classOf: null })).toMatchObject({ classKey: null, classVerdict: null })
+    // No way called: no class is read.
+    expect(decide(range({ direction: 'NEUTRAL' }), { classOf: () => ({ key: 'x', verdict: 'DISABLED' }) }).classKey).toBeNull()
     // Several at once, every one said.
     expect(codes(decide(range({ direction: 'NEUTRAL', reliability: 'LOW' }), { live: null }))).toEqual(['NO_CALL', 'RELIABILITY_LOW', 'STALE_PRICE'])
     expect(decide(range({ uncertain: true })).reasons[0].text).toMatch(/does not know enough/)

@@ -1,4 +1,5 @@
 import type { Horizon, PairClass } from './features'
+import { DEFAULT_FORECAST_TRADER, healForecastTrader, type ForecastTraderSettings } from './trader'
 import type { ForecastModelId } from './models'
 import { promotionChecklist, type CheckLine } from './promotion'
 import type { ModelScore } from './walkForward'
@@ -24,14 +25,17 @@ export const RUNS_KEPT = 2
 
 export interface ForecastSettings {
   refitNightly: boolean
+  /** The forecast trader (V6 Stage 12; shared/forecast/trader.ts): off until switched on. */
+  trader: ForecastTraderSettings
 }
 
-export const DEFAULT_FORECAST_SETTINGS: ForecastSettings = { refitNightly: true }
+export const DEFAULT_FORECAST_SETTINGS: ForecastSettings = { refitNightly: true, trader: DEFAULT_FORECAST_TRADER }
 
-/** A stored setting, read as one: only `false` switches the nightly refit off. */
+/** A stored setting, read as one: only `false` switches the nightly refit off, and the trader is healed
+ * as its own. */
 export function healForecastSettings(value: unknown): ForecastSettings {
   const raw = (typeof value === 'object' && value !== null && !Array.isArray(value) ? value : {}) as Record<string, unknown>
-  return { refitNightly: raw.refitNightly !== false }
+  return { refitNightly: raw.refitNightly !== false, trader: healForecastTrader(raw.trader) }
 }
 
 /** The next half past midnight UTC after `nowSec`. */

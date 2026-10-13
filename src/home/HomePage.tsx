@@ -26,7 +26,7 @@ export function HomePage({ onPrepareOrder, onNavigate }: { onPrepareOrder: (prop
     <>
       <PageHeader title="Home" subtitle="The market in a line, the best prediction now, what can be acted on, and what you hold" />
       <MarketStatusStrip />
-      <BestPredictionCard prediction={prediction} ranked={best} live={live} onDetails={details} />
+      <BestPredictionCard prediction={prediction} ranked={best} live={live} onDetails={details} onPrepareOrder={onPrepareOrder} />
       <TopPredictions ranked={top3} predictions={predictions} onDetails={details} />
       <TopOpportunityCard onPrepareOrder={onPrepareOrder} onNavigate={onNavigate} />
       <HoldingsSummary onNavigate={onNavigate} />

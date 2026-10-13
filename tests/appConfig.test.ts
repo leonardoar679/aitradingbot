@@ -23,8 +23,9 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 // lines (V6 Stage 7, set on it late, here) and its news lines and the feed's kinds (V6 Stage 8) from
 // ca5f8f97fce7; its quality, edge, ranking and trade-decision lines (V6 Stage 9) from 23ced32587e9; the
 // PREDICTION CHANGED lines and the degraded model's daily thread (V6 Stage 10) from 6b0724f0b3e7; the
-// Forecast Lab's lines (V6 Stage 11) from 26f5ec2cd7fe.
-const PINNED_ENGINE_VERSION = 'd4f993254490'
+// Forecast Lab's lines (V6 Stage 11) from 26f5ec2cd7fe; the trade plan's and the opportunity classes'
+// lines and the decision's class (V6 Stage 12) from d4f993254490.
+const PINNED_ENGINE_VERSION = 'b1d829b1f829'
 
 describe('the engine version', () => {
   it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {
@@ -79,7 +80,8 @@ describe('the stores, healed', () => {
       news: undefined,
       live
     })
-    expect(healed.paperRisk).toEqual({ sizing: 'risk', riskQuote: 2, riskPct: 0.25, maxOutQuote: 500 })
+    // A profile written before the correlated share was a setting (V6 Stage 12) reads the 0.15 it was.
+    expect(healed.paperRisk).toEqual({ sizing: 'risk', riskQuote: 2, riskPct: 0.25, maxOutQuote: 500, correlatedShare: 0.15 })
     expect(healed.alerts).toEqual({ enabled: false, sound: true })
     expect(healed.app).toEqual({ keepRunningWhenClosed: true, uiMode: 'expert' })
     expect(healed.ai).toEqual({ defaultModel: 'openai/gpt-5-mini', enabledModels: ['a/model', 'openai/gpt-5-mini', 'z/model'], dailyCapUsd: 5, callsPerMinute: 60 })

@@ -6,7 +6,9 @@ import type { HorizonLine, OutcomeLine, PredictionLine } from './forecastRecord'
 import { QUANTILE_LEVELS, meanPinball } from './ml/quantile'
 import type { ForecastModelId } from './models'
 import { errorsOf, insideOf, type ErrorKind } from './outcome'
+import { classKeyOf, setupOf } from './opportunityClass'
 import type { CheckLine } from './promotion'
+import type { MarketRegime } from '../marketResearch'
 import type { Promotion } from './training'
 import { DECISION_LINES } from './tradeDecision'
 import type { ModelScore } from './walkForward'
@@ -35,7 +37,7 @@ import type { ModelScore } from './walkForward'
 // trader on the median alone where it clears the round trip, with no direction gate. Everything is
 // net of the round trip's 0.24% (fees and slippage); a sell is a paper short.
 
-export const LAB_VERSION = 'forecast-lab-v1'
+export const LAB_VERSION = 'forecast-lab-v2'
 
 export const LAB_LINES = {
   /** An hour's move of this many usual moves before a forecast is a shock: a pump, or a dump. */
@@ -86,6 +88,8 @@ export interface LabCase {
   /** What a story moved its median by, and the kinds of the coin's stories before it. */
   newsShift?: number
   kinds?: readonly string[]
+  /** The market's regime at it (V6 Stage 12): a trade's setup reads it. */
+  regime?: MarketRegime | null
   /** Its pinball loss in usual moves, and persistence's on the same outcome (the walk forward). */
   pinballZ?: number
   floorPinballZ?: number
@@ -259,6 +263,8 @@ export interface LabTrade {
   t: number
   horizon: Horizon
   side: 'BUY' | 'SELL'
+  /** Its opportunity class (shared/forecast/opportunityClass.ts; V6 Stage 12). */
+  classKey?: string
   exit: 'stop' | 'target' | 'close'
   grossPct: number
   netPct: number
@@ -292,7 +298,8 @@ export function tradeOf(entry: LabCase, rule: TraderRule): LabTrade | null {
     else if (target !== null && entry.worst <= target) [exit, gross] = ['target', -target]
     else [exit, gross] = ['close', -entry.move]
   }
-  return { pair: entry.pair, t: entry.t, horizon: entry.horizon, side, exit, grossPct: gross, netPct: gross - ROUND_TRIP_PCT }
+  const setup = setupOf({ side, story: (entry.kinds ?? []).length > 0 || (entry.newsShift ?? 0) !== 0, breakout: entry.breakout === true, prior: entry.prior ?? null, regime: entry.regime ?? null })
+  return { pair: entry.pair, t: entry.t, horizon: entry.horizon, side, classKey: classKeyOf(entry.cls, entry.horizon, setup), exit, grossPct: gross, netPct: gross - ROUND_TRIP_PCT }
 }
 
 /** The trades of a horizon's cases under a rule, one open a pair at a time, in time. */

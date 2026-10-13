@@ -24,8 +24,8 @@ import { describeR, rMultiple } from './paperRisk'
 //
 // IT IS PAPER. Nothing here reaches an order.
 
-export type PaperPauseSource = 'watch' | 'news'
-export const PAPER_PAUSE_SOURCES: readonly PaperPauseSource[] = ['watch', 'news']
+export type PaperPauseSource = 'watch' | 'news' | 'forecast'
+export const PAPER_PAUSE_SOURCES: readonly PaperPauseSource[] = ['watch', 'news', 'forecast']
 export const PAPER_PAUSE_LOSS_CHOICES = [3, 5, 8, 10] as const
 export const PAPER_PAUSE_TRADE_CHOICES = [10, 20, 50] as const
 
@@ -34,7 +34,7 @@ const NOT_PAUSED: PaperPauseState = { countFrom: null, paused: null }
 /** What applies until it is changed: 5 R lost together over the last 20. A trade sized by risk
  * loses about 1 R at its stop (shared/paperRisk.ts), so five stopped out, and nothing won back,
  * pause one. */
-export const DEFAULT_PAPER_PAUSE: PaperPauseSettings = { lossR: 5, trades: 20, watch: NOT_PAUSED, news: NOT_PAUSED }
+export const DEFAULT_PAPER_PAUSE: PaperPauseSettings = { lossR: 5, trades: 20, watch: NOT_PAUSED, news: NOT_PAUSED, forecast: NOT_PAUSED }
 
 /** A hair of floating point is not short of the loss: five trades of -1 R each can add up to
  * -4.9999999999999995. */
@@ -78,7 +78,8 @@ export function healPaperPause(value: unknown): PaperPauseSettings {
     lossR: raw.lossR === null ? null : isLossChoice(raw.lossR) ? raw.lossR : DEFAULT_PAPER_PAUSE.lossR,
     trades: isTradeChoice(raw.trades) ? raw.trades : DEFAULT_PAPER_PAUSE.trades,
     watch: healState(raw.watch),
-    news: healState(raw.news)
+    news: healState(raw.news),
+    forecast: healState(raw.forecast)
   }
 }
 
@@ -94,7 +95,8 @@ export function paperPauseProblem(setting: Pick<PaperPauseSettings, 'lossR' | 't
 function sourceOf(executor: ExecutorConfig): PaperPauseSource | null {
   if (executor.mode !== 'paper' || executor.type !== 'position') return null
   if (executor.watch !== undefined) return 'watch'
-  return executor.newsRule !== undefined ? 'news' : null
+  if (executor.newsRule !== undefined) return 'news'
+  return executor.forecast !== undefined ? 'forecast' : null
 }
 
 export interface PaperRun {
@@ -112,7 +114,7 @@ export function paperRun(executors: ExecutorConfig[], source: PaperPauseSource, 
   const closed: { closedAt: number; r: number }[] = []
   for (const executor of executors) {
     if (executor.status !== 'stopped' || sourceOf(executor) !== source) continue
-    const result = executor.watch?.result ?? executor.newsRule?.result
+    const result = executor.watch?.result ?? executor.newsRule?.result ?? executor.forecast?.result
     if (result === undefined || result.exit === 'entry_expired' || result.exit === 'btc_moved') continue
     if (from !== null && result.closedAt <= from) continue
     const r = rMultiple(result.pnlQuote, executor.params as PositionExecutorParams)
@@ -146,7 +148,8 @@ const SIDES: Record<
     one: 'paper short',
     many: 'paper shorts',
     counted: ' with a stop'
-  }
+  },
+  forecast: { name: 'The forecast trader', whose: "The forecast trader's", its: 'its', it: 'it', is: 'is', has: 'has', opens: 'it opens', one: 'paper trade', many: 'paper trades', counted: '' }
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -227,7 +230,7 @@ export function resumePaperPause(setting: PaperPauseSettings, source: PaperPause
  * the record since each was last resumed is judged as it stands. */
 export function savePaperPause(stored: PaperPauseSettings, chosen: Pick<PaperPauseSettings, 'lossR' | 'trades'>): PaperPauseSettings {
   if (chosen.lossR !== null) return { ...stored, lossR: chosen.lossR, trades: chosen.trades }
-  return { lossR: null, trades: chosen.trades, watch: { ...stored.watch, paused: null }, news: { ...stored.news, paused: null } }
+  return { lossR: null, trades: chosen.trades, watch: { ...stored.watch, paused: null }, news: { ...stored.news, paused: null }, forecast: { ...stored.forecast, paused: null } }
 }
 
 /** The setting in a sentence, as it is set, in the words the watch's other limits use: "them" is

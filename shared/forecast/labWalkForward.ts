@@ -1,7 +1,7 @@
 import type { ForecastBar } from './bars'
 import { classify, type Direction } from './direction'
 import { ENSEMBLE_LINES } from './ensemble'
-import { HORIZON_BARS, PAIR_CLASSES, type Horizon, type PairClass } from './features'
+import { HORIZON_BARS, MARKET_REGIMES, PAIR_CLASSES, type Horizon, type PairClass } from './features'
 import { LAB_EVENTS, LAB_LINES, eventsOf, labDrift, labMetrics, replayTrades, traderStats, type LabCase, type LabDrift, type LabEvent, type LabMetrics, type LabTrade, type TraderRule, type TraderStats } from './lab'
 import { QUANTILE_LEVELS, meanPinball } from './ml/quantile'
 import type { ForecastModelId } from './models'
@@ -204,6 +204,7 @@ export function walkForwardLab(
         prior: context.prior,
         breakout: context.breakout,
         kinds: context.kinds,
+        regime: MARKET_REGIMES[record.regime[at]] ?? null,
         pinballZ: meanPinball(entry.z, entry.quantiles),
         floorPinballZ: meanPinball(entry.z, entry.floor)
       })

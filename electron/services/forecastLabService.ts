@@ -12,7 +12,8 @@ import type { ForecastModelId } from '../../shared/forecast/models'
 import type { ForecastLabStatus, ForecastLabView, ForecastReplay } from '../../shared/forecast/labView'
 import { healForecastSettings } from '../../shared/forecast/training'
 import type { ModelScore } from '../../shared/forecast/walkForward'
-import type { Candle } from '../../shared/ipc'
+import { classTable, type ClassRecord, type ClassVerdict } from '../../shared/forecast/opportunityClass'
+import type { Candle, ExecutorConfig, PositionExecutorParams } from '../../shared/ipc'
 import { readForecastBars } from './forecastDataService'
 import { forecastNewsReadings } from './forecastService'
 import { currentForecastCalibration, getForecastTrainingState, onForecastTraining } from './forecastTrainingService'
@@ -37,6 +38,9 @@ let lab: LabFile | null = null
 let status: ForecastLabStatus = { state: 'waiting', runId: null, progress: null, lastError: null }
 let making: Promise<void> | null = null
 const replays = new Map<string, ReplayRow[]>()
+/** Every opportunity class judged, by key, read again a minute at most after it was last read. */
+let classes: { at: number; records: ClassRecord[]; byKey: Map<string, ClassRecord> } = { at: 0, records: [], byKey: new Map() }
+const CLASSES_MS = 60_000
 /** A pair's bars read from its files, kept a minute: a comparison reads each pair at two widths. */
 const onFile = new Map<string, { at: number; bars: Promise<ForecastBar[]> }>()
 const ON_FILE_MS = 60_000
@@ -90,6 +94,7 @@ async function make(runId: string): Promise<void> {
     lab = read
     replays.clear()
     status = { state: 'ready', runId, progress: null, lastError: null }
+    await readClasses().catch(() => undefined)
     await appendJsonLine(join(modelsDir(), `training-${recordMonth(nowSec)}.jsonl`), { at: nowSec, kind: 'lab', runId, ok: true, ms: Date.now() - started }).catch(() => undefined)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -110,6 +115,7 @@ async function ensure(): Promise<void> {
     lab = read
     replays.clear()
     status = { state: 'ready', runId, progress: null, lastError: null }
+    await readClasses().catch(() => undefined)
     return
   }
   // A walk forward or a fit under way comes first; the worker answers one request at a time.
@@ -121,7 +127,40 @@ async function ensure(): Promise<void> {
 
 export function startForecastLab(): void {
   onForecastTraining(() => void ensure().catch((error) => console.error('The forecast Lab could not be made:', error)))
-  void ensure().catch((error) => console.error('The forecast Lab could not be made:', error))
+  void ensure()
+    .then(() => readClasses())
+    .catch((error) => console.error('The forecast Lab could not be made:', error))
+  const timer = setInterval(() => void readClasses().catch(() => undefined), CLASSES_MS)
+  timer.unref?.()
+}
+
+/** The forecast trader's closed paper trades, by class, net in percent of what each staked. */
+function livePaper(executors: readonly ExecutorConfig[]): { classKey: string; netPct: number }[] {
+  const out: { classKey: string; netPct: number }[] = []
+  for (const executor of executors) {
+    const mark = executor.forecast
+    if (executor.mode !== 'paper' || mark?.result === undefined || mark.result.exit === 'entry_expired') continue
+    const stake = (executor.params as PositionExecutorParams).amountQuote
+    if (!(stake > 0)) continue
+    out.push({ classKey: mark.classKey, netPct: (mark.result.pnlQuote / stake) * 100 })
+  }
+  return out
+}
+
+/** Every class judged now (shared/forecast/opportunityClass.ts): the Lab's replay as the rules stand, and
+ * the trader's own paper. */
+async function readClasses(): Promise<ClassRecord[]> {
+  const history = lab === null ? [] : HORIZONS.flatMap((horizon) => (lab?.horizons[horizon]?.trades.rules ?? []).filter((trade) => trade.classKey !== undefined).map((trade) => ({ classKey: trade.classKey as string, netPct: trade.netPct })))
+  const settings = await getSettings().catch(() => ({ executors: [] as ExecutorConfig[] }))
+  const records = classTable(history, livePaper(settings.executors ?? []))
+  classes = { at: Date.now(), records, byKey: new Map(records.map((record) => [record.key, record])) }
+  return records
+}
+
+/** How a class stands, as last read: NOT ENOUGH where neither record holds it. What the engine's
+ * decisions are judged by (electron/main.ts hands it in). */
+export function forecastClassVerdict(key: string): ClassVerdict {
+  return classes.byKey.get(key)?.verdict ?? 'NOT_ENOUGH'
 }
 
 /** The record's lines of a kind from `fromSec` on, every pair. */
@@ -207,6 +246,7 @@ export async function getForecastLab(): Promise<ForecastLabView> {
     leaderboard: await leaderboard(),
     live: await readLive(nowSec),
     liveDays: LAB_LINES.liveDays,
+    classes: Date.now() - classes.at < CLASSES_MS ? classes.records : await readClasses(),
     refit: { on: settings.refitNightly, nextAt: training.nextRefitAt, trainingStatus: training.status, lastFitAt: training.current?.fittedAt ?? null }
   }
 }
@@ -266,6 +306,8 @@ export const forecastLabForTest = {
     making = null
     replays.clear()
     onFile.clear()
+    classes = { at: 0, records: [], byKey: new Map() }
   },
+  readClasses,
   making: (): Promise<void> | null => making
 }

@@ -223,9 +223,10 @@ export interface AppSettings {
    * Features away, expert opens every group. Absent until first written, and healed on every read:
    * normal. */
   uiMode?: 'normal' | 'expert'
-  /** The price forecast's nightly refit, on unless switched off (shared/forecast/training.ts). Absent
-   * until first written, and healed on every read: on. */
-  forecast?: { refitNightly?: boolean }
+  /** The price forecast's nightly refit, on unless switched off (shared/forecast/training.ts), and the
+   * forecast trader (shared/forecast/trader.ts), off until switched on. Absent until first written, and
+   * healed on every read. Written whole: a patch replaces it. */
+  forecast?: { refitNightly?: boolean; trader?: Partial<import('./forecast/trader').ForecastTraderSettings> }
 }
 
 /** The app's desktop notices: on or off, and with sound or silent. */
@@ -243,6 +244,8 @@ export interface PaperPauseSettings {
   trades: number
   watch: PaperPauseState
   news: PaperPauseState
+  /** The forecast trader's (V6 Stage 12). Absent before it: not paused. */
+  forecast: PaperPauseState
 }
 
 export interface PaperPauseState {
@@ -275,6 +278,10 @@ export interface PaperRiskSettings {
   riskPct: number
   /** The most their open paper trades may stake together, per quote asset. Null: no cap. */
   maxOutQuote: number | null
+  /** Of the paper account's funding (or the money-out cap without one), the most those open on one
+   * side may stake on pairs that move with Bitcoin (shared/paperExposure.ts). Absent before the risk
+   * modes (V6 Stage 12): 0.15, as it was fixed. */
+  correlatedShare?: number
 }
 
 /** Status of a stored exchange API credential. Crosses IPC — never the raw key/secret, which
@@ -900,6 +907,10 @@ export interface ExecutorConfig {
    * a stop and a target and is out within the hour. Never present on a live executor:
    * src/news/newsPaperShort.ts, the one file that makes one, spells paper as a literal. How it
    * ended is written on it when it is stopped, as on the watch's. */
+  /** Set on a PAPER Position the forecast trader opened (shared/forecast/trader.ts; V6 Stage 12): the
+   * forecast, the decision and the plan it followed, and how it ended once stopped. Never on a live
+   * executor: src/forecast/forecastTrader.ts, the one file that makes one, spells paper as a literal. */
+  forecast?: import('./forecast/trader').ForecastTradeMark
   newsRule?: {
     articleId: number
     ticker: string

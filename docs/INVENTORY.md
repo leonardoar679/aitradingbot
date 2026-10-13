@@ -81,8 +81,9 @@ Taken on 5 October 2026, at commit `aef376d`.
 | | Risk Limits | Live order size, daily cap, daily loss limit, allocation; and, added 8 October 2026, the share of the allocation a real order filled in from a call is sized to risk | Risk & Safety |
 | **Live trading bar** (every page) | Arm, kill switch, watchers, blocked exits | The gates real orders pass | Stays on every page, with status chips added; the detail on Live Trading |
 | **The price forecast** (added 13 October 2026, V6 Stage 10, not an old page) | Best current prediction, Top predictions | The ranking's first pair: its likely ranges at 15 minutes, an hour and four hours from the live price, its bull and bear cases, quality, reliability, the story moving it, volume, momentum, the watch's vote where it asked, and the decision; the top three under it | Home |
-| | Ranked forecasts, and a row's drawer | Every pair's forecast best first, with filters; the drawer's timeline to 24 hours, Why?, Why this range?, its recorded forecasts against the price, and the decision | Predictions |
-| | The Forecast Lab (added 13 October 2026, V6 Stage 11) | How the forecast did on the walk forward's weeks and on the live record: performance by horizon, variant and class, calibration, kinds of error and drift, by event, V1 to V4 on the same moments, the leaderboard with promotion and DEGRADED, a tested hour replayed, the forecast trader and its comparison with the strategies, buy and hold and the hybrid; the nightly refit's switch; CSV each | Forecast Lab |
+| | Ranked forecasts, and a row's drawer | Every pair's forecast best first, with filters; the drawer's timeline to 24 hours, Why?, Why this range?, its recorded forecasts against the price, the decision, and since V6 Stage 12 its trade plan and TRADE THIS | Predictions |
+| | Start AI trading (added 13 October 2026, V6 Stage 12) | The forecast trader on paper, off until switched on: what the risk mode holds it to, its open and closed paper trades, what its last pass did | Predictions |
+| | The Forecast Lab (added 13 October 2026, V6 Stage 11) | How the forecast did on the walk forward's weeks and on the live record: performance by horizon, variant and class, calibration, kinds of error and drift, by event, V1 to V4 on the same moments, the leaderboard with promotion and DEGRADED, a tested hour replayed, the forecast trader and its comparison with the strategies, buy and hold and the hybrid; the nightly refit's switch; since V6 Stage 12 the opportunity classes, each APPROVED, PROBATION, DISABLED or NOT ENOUGH DATA; CSV each | Forecast Lab |
 
 Duplicates, all intentional and kept:
 - **The live board** appears on Opportunities and again in the event benchmark, beside the same
@@ -111,13 +112,14 @@ under Settings › Advanced › Effective configuration.
 | | `heldPositions` | Positions | Positions |
 | | `controllers` | Controllers | Risk & Safety |
 | | `paperAccount` | Account | Paper Trading |
-| | `paperRisk` (added 5 October 2026): how the paper trades the app opens by itself are sized, by what their stop would lose, by a share of the paper account's equity (added 8 October 2026), or at their stake, and what they may stake together | — | Risk & Safety |
+| | `paperRisk` (added 5 October 2026): how the paper trades the app opens by itself are sized, by what their stop would lose, by a share of the paper account's equity (added 8 October 2026), or at their stake, and what they may stake together; and, added 13 October 2026 (V6 Stage 12), `correlatedShare`, the share they may stake on one side on coins that move with Bitcoin (0.15 as it was fixed) | — | Risk & Safety; the risk mode on Settings › Essentials |
 | | `paperDigest` (added 5 October 2026): the daily notice of what those trades did, on or off, and the last day it told | — | Risk & Safety |
-| | `paperPause` (added 5 October 2026): the losing run in R that pauses those trades, or never; and for the watch and for the news rules, each, whether a run has paused it and when it was last resumed | — | Risk & Safety |
+| | `paperPause` (added 5 October 2026): the losing run in R that pauses those trades, or never; and for the watch, the news rules and, since V6 Stage 12, the forecast trader, each, whether a run has paused it and when it was last resumed | — | Risk & Safety |
 | | `alerts` (added 6 October 2026): desktop notices on or off, and with sound or silent; obeyed where every notice is raised (`appHandlers.ts`) | — | Settings › Essentials |
 | | `keepRunningWhenClosed` (added 8 October 2026, V5 Stage 2): closing the window hides it to the tray and everything runs on, or quits the app (off by default; `shared/keepRunning.ts`) | — | Settings › Essentials |
 | | `uiMode` (added 13 October 2026, V6 Stage 1): the sidebar's layout, Normal (Research and All Features folded until opened) or Expert (every group open) | — | Settings › Essentials › Layout |
 | | `forecast.refitNightly` (added 13 October 2026, V6 Stage 5): the price forecast refitted every night at 00:30 UTC on the newest ninety days, and at a start when the last fit is over 26 hours old (on unless `false`; `shared/forecast/training.ts`) | — | Forecast Lab (V6 Stage 11); until then `settings.json` and the effective-config card |
+| | `forecast.trader` (added 13 October 2026, V6 Stage 12): START AI TRADING, the forecast trader opening paper Positions on TRADE decisions by itself (off until switched on), its stake, and how many it keeps open and on one side, which the risk mode sets (`shared/forecast/trader.ts`) | — | Predictions (Start AI trading); the caps by the risk mode on Settings › Essentials |
 | `aiConfig.json` | `defaultModel`, `enabledModels`, `route` | Agents › Models | Settings › AI |
 | | `dailyCapUsd`, `callsPerMinute` | Agents › Usage | Settings › AI |
 | | `watch` (on, models, events a day, lowest band, first model gates; and, added 8 October 2026, CONFIRM: a paper BUY it opens is told as ready to confirm as a real order a person places; added with V5 Stage 4, `askAt`: at the raise, or once the event is confirmed a pass later; and since V5 Stage 5 three models offered by default with the first gating, and the paper trade following their vote when two or more are asked) | Agents › Opportunities › Watch | Opportunities (stays with its results) |
@@ -174,6 +176,12 @@ boundary. They are unchanged by the reorganization:
   trades when those are switched on. Since 8 October 2026 (the V5 document, §94) it first reads
   today's ledger and writes a refusal at stage `restart` for an answer the app was not running to
   act on (`shared/restartMisses.ts`), so the record is whole and the event is shown as MISSED.
+
+And since 13 October 2026 (V6 Stage 12):
+- **`ForecastTraderScheduler`** is the forecast trader (`src/forecast/forecastTrader.ts`): after each
+  of the forecast's passes, while switched on, it opens a paper Position on each TRADE decision in an
+  approved or probation opportunity class, and every minute it settles those that have closed.
+  Switched off, a pass reads one setting and opens nothing.
 
 A sixth was added after, in V3 Stage 7:
 - **`NewsScheduler`** acts on a delisting, or a coin added to the Monitoring Tag, that the news
@@ -301,7 +309,7 @@ use them.
 The Configuration Center is built from the settings above. Since 6 October 2026 (the second V3
 document) Settings opens on **Essentials**, the six settings that decide what the app does by
 itself: trading mode (read from the live gates: PAPER, LIVE READY or LIVE ACTIVE), risk level
-(Conservative or Custom, from `shared/appDefaults.ts`), the scanner's market, the AI's mode (changed
+(Conservative, Balanced or Aggressive since V6 Stage 12, or Custom, from `shared/appDefaults.ts`), the scanner's market, the AI's mode (changed
 only on Opportunities), notifications, and the exchange. The rest is under **Advanced**. These
 settings from the document have no behaviour behind them, so they are not added as controls:
 - **General:** language, currency, timezone, startup page. Desktop notices have had a switch, with

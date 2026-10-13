@@ -210,7 +210,8 @@ describe('AI code has no route to a real order', () => {
     const rules = readFileSync(join(ROOT, 'shared', 'aiProposal.ts'), 'utf-8')
     // And, since 8 October 2026, the fee rate: the amount a real order from a call is suggested to
     // stake is what the person's risk share would lose at the call's stop after fees.
-    expect(importsOf(join(ROOT, 'shared', 'aiProposal.ts')).sort()).toEqual(['aiOpportunity', 'aiPanel', 'aiSignal', 'fees', 'ipc', 'marketEvent'])
+    // tradePlan (V6 Stage 12): the forecast's TRADE decision fills in the same form from its plan, a type.
+    expect(importsOf(join(ROOT, 'shared', 'aiProposal.ts')).sort()).toEqual(['aiOpportunity', 'aiPanel', 'aiSignal', 'fees', 'ipc', 'marketEvent', 'tradePlan'])
     expect(rules).not.toMatch(/window\.|ipcRenderer|electron/)
   })
 
@@ -308,6 +309,7 @@ describe('AI code has no route to a real order', () => {
     expect(importsOf(engine).sort()).toEqual([
       'aciTable',
       'atomicWrite',
+      'atr',
       'bars',
       'electron',
       'features',
@@ -321,6 +323,7 @@ describe('AI code has no route to a real order', () => {
       'models',
       'newsEffect',
       'noticeService',
+      'opportunityClass',
       'outcome',
       'path',
       'prediction',
@@ -335,15 +338,33 @@ describe('AI code has no route to a real order', () => {
       'tradeDecision'
     ])
     expect(readFileSync(engine, 'utf-8')).not.toMatch(/setSettings|settings\.set/)
-    // What shows the forecast (V6 Stage 10) reads the forecast's bridge and the stream's, and offers no
-    // call to an order.
+    // What shows the forecast (V6 Stage 10) reads the forecast's bridge; since V6 Stage 12 TRADE THIS fills
+    // in the Position form (onPrepareOrder, a proposal of shared/aiProposal.ts) and a person places it. No
+    // file of it reaches the bridge a real order travels over. Three files beyond: the forecast trader's
+    // writer, which writes PAPER executors only, spelling paper as a literal and handing nothing to a form;
+    // its card, which writes its switch and nothing else; and the risk mode's reader.
     const screen = readdirSync(join(ROOT, 'src', 'forecast')).filter((name) => /\.tsx?$/.test(name))
     expect(screen.length).toBeGreaterThan(0)
+    const bridgesOf = (source: string): string[] => [...new Set([...source.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))].sort()
+    const allowed: Record<string, string[]> = { 'forecastTrader.ts': ['forecast', 'market', 'notify', 'settings'], 'ForecastTraderCard.tsx': ['settings'], 'useRiskTarget.ts': ['settings'] }
     for (const name of screen) {
       const source = readFileSync(join(ROOT, 'src', 'forecast', name), 'utf-8')
-      expect([...new Set([...source.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))].filter((bridge) => bridge !== 'forecast'), name).toEqual([])
-      expect(source, name).not.toMatch(/liveTrading|LiveTrading|placeLive|onPrepareOrder|prepareOrder|aiProposal|settings\.set/)
+      expect(bridgesOf(source).filter((bridge) => !(allowed[name] ?? ['forecast']).includes(bridge)), name).toEqual([])
+      expect(source, name).not.toMatch(/liveTrading|LiveTrading|placeLive|setSessionArmed|liveBridge/)
+      if (allowed[name] === undefined) expect(source, name).not.toMatch(/settings\.set/)
     }
+    const writer = readFileSync(join(ROOT, 'src', 'forecast', 'forecastTrader.ts'), 'utf-8')
+    expect(writer).toMatch(/^ {4}mode: 'paper',\r?$/m)
+    expect(writer.match(/mode: 'paper'/g)).toHaveLength(1)
+    expect(writer).not.toMatch(/mode: (?!'paper')|onPrepareOrder|prepareOrder|aiProposal|forecastProposal/)
+    expect(writer.match(/window\.api\.settings\.set\(/g)).toHaveLength(1)
+    expect(writer).toContain('await window.api.settings.set({ executors })')
+    const card = readFileSync(join(ROOT, 'src', 'forecast', 'ForecastTraderCard.tsx'), 'utf-8')
+    expect(card.match(/window\.api\.settings\.set\(/g)).toHaveLength(1)
+    expect(card).toContain('await window.api.settings.set({ forecast: { ...forecast, trader: { ...forecast.trader, enabled: on } } })')
+    expect(readFileSync(join(ROOT, 'src', 'forecast', 'useRiskTarget.ts'), 'utf-8')).not.toMatch(/settings\.set/)
+    // The trader's shared rules are arithmetic, and its mark is never on a live executor's path.
+    for (const rules of ['trader.ts', 'tradePlan.ts', 'opportunityClass.ts']) expect(importsOf(join(ROOT, 'shared', 'forecast', rules)).filter((name) => LIVE_MODULES.has(name) || aiModuleNames.has(name)), rules).toEqual([])
     // The Forecast Lab (V6 Stage 11) reads the forecast's own records, the bars, the news on file and the
     // training's, and makes its figures in the same worker; its page reads the forecast's bridge, saves
     // CSV through the backtest's, and sets the nightly refit's switch and nothing else in the settings.
@@ -367,6 +388,7 @@ describe('AI code has no route to a real order', () => {
       'labWalkForward',
       'models',
       'newsFeedService',
+      'opportunityClass',
       'path',
       'promises',
       'settingsService',
@@ -380,7 +402,10 @@ describe('AI code has no route to a real order', () => {
       const source = readFileSync(join(ROOT, 'src', 'forecastLab', name), 'utf-8')
       expect([...new Set([...source.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))].filter((bridge) => !['forecast', 'settings', 'backtest'].includes(bridge)), name).toEqual([])
       expect([...source.matchAll(/window\.api\.backtest\.(\w+)/g)].map((match) => match[1]).filter((call) => call !== 'exportSave'), name).toEqual([])
-      expect([...source.matchAll(/window\.api\.settings\.(\w+)\(([^)]*)/g)].every((match) => match[1] === 'set' && match[2].startsWith('{ forecast: { refitNightly')), name).toBe(true)
+      // One write of the settings at most: the forecast's, whole, with the refit switched.
+      const writes = source.match(/window\.api\.settings\.set\(/g) ?? []
+      expect(writes.length <= 1 && (writes.length === 0 || source.includes('window.api.settings.set({ forecast: { ...healForecastSettings(fresh.forecast), refitNightly: on } })')), name).toBe(true)
+      expect([...source.matchAll(/window\.api\.settings\.(\w+)/g)].every((match) => match[1] === 'get' || match[1] === 'set'), name).toBe(true)
       expect(source, name).not.toMatch(/liveTrading|LiveTrading|placeLive|onPrepareOrder|prepareOrder|aiProposal/)
     }
   })
@@ -1180,7 +1205,9 @@ describe('AI code has no route to a real order', () => {
     expect(source).toContain('window.api.settings.set({ alerts: { ...healAlerts(fresh.alerts), ...patch } })')
     expect(source).toContain('window.api.settings.set({ keepRunningWhenClosed: next })')
     expect(source).toContain('window.api.settings.set({ uiMode: next })')
-    expect(source).toContain('window.api.settings.set(conservativePaper(healPaperPause(fresh.paperPause)))')
+    // The risk mode (V6 Stage 12) writes only the paper settings and the forecast trader's caps, keeping
+    // whether it is on (shared/appDefaults.ts riskModePatch).
+    expect(source).toContain('window.api.settings.set(riskModePatch(mode, { paperPause: healPaperPause(fresh.paperPause), forecast: healForecastSettings(fresh.forecast) }))')
     // The page it sits on still mentions no bridge an order travels over (held above, for routes).
     expect(readFileSync(join(ROOT, 'src', 'settings', 'SettingsPanel.tsx'), 'utf-8')).not.toMatch(/liveTrading|LiveTrading|placeLive/)
     // Every desktop notice obeys the notifications setting, read where the notice is raised.
@@ -1206,6 +1233,8 @@ describe('AI code has no route to a real order', () => {
       'paperDigest',
       'paperPause',
       'paperRisk',
+      'tradePlan',
+      'trader',
       'training',
       'uiMode'
     ])

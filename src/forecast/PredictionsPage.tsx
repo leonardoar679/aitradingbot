@@ -9,6 +9,8 @@ import type { Direction } from '../../shared/forecast/direction'
 import { forecastView } from '../../shared/forecast/view'
 import { LIVE_MAX_INTEREST } from '../../shared/liveMarket'
 import { PredictionDrawer } from './PredictionDrawer'
+import type { AiOrderProposal } from '../../shared/aiProposal'
+import { ForecastTraderCard } from './ForecastTraderCard'
 import { NO_FILTERS, predictionRows, type PredictionFilters } from './predictionRows'
 import { takeWantedPrediction, useForecast } from './useForecast'
 import { callColor, callLabel, decisionWords, forecastStatusText, pairText, rangeText, signedPct, timeLeftText, HORIZON_SHORT } from './forecastWords'
@@ -18,7 +20,7 @@ const CLASS_NAMES: Record<PairClass, string> = { btc: 'Bitcoin', eth: 'Ether', l
 /** Every pair's forecast, ranked (the V6 document, §32-37 and §69-70): the table best first, with the
  * page's filters, and a row's whole forecast in the drawer. Live percentages where the stream holds
  * the pair; the close's elsewhere. Reading it asks no model and places nothing. */
-export function PredictionsPage(): React.JSX.Element {
+export function PredictionsPage({ onPrepareOrder }: { onPrepareOrder?: (proposal: AiOrderProposal) => void }): React.JSX.Element {
   const { state, predictions, ranking } = useForecast()
   const [filters, setFilters] = useState<PredictionFilters>(NO_FILTERS)
   const [open, setOpen] = useState<string | null>(() => takeWantedPrediction())
@@ -124,7 +126,8 @@ export function PredictionsPage(): React.JSX.Element {
           Ranked once a pass, at each pair's ranked horizon: the edge after a round trip's 0.24% and half the spread, weighed by reliability, the news, liquidity and execution, less the range's uncertainty, the market's risk and the cost. A row opens its whole forecast. A forecast is not a trade; nothing was placed.
         </p>
       </Card>
-      {openPrediction !== undefined && <PredictionDrawer prediction={openPrediction} decision={openDecision} live={live} onClose={() => setOpen(null)} />}
+      <ForecastTraderCard />
+      {openPrediction !== undefined && <PredictionDrawer prediction={openPrediction} decision={openDecision} live={live} onClose={() => setOpen(null)} onPrepareOrder={onPrepareOrder} />}
     </>
   )
 }

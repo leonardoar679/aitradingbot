@@ -1,5 +1,6 @@
 import type { Horizon } from './features'
 import type { LeaderRow, LiveLab } from './lab'
+import type { ClassRecord } from './opportunityClass'
 import type { LabFile } from './labFile'
 import type { ReplayRow } from './labWalkForward'
 import type { WorkerProgress } from './status'
@@ -23,6 +24,8 @@ export interface ForecastLabView {
   /** The live record of the last `liveDays`. */
   live: LiveLab
   liveDays: number
+  /** Every opportunity class the replay or the trader's live paper holds, judged (V6 Stage 12). */
+  classes: ClassRecord[]
   refit: { on: boolean; nextAt: number | null; trainingStatus: string; lastFitAt: number | null }
 }
 

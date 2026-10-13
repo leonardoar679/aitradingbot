@@ -8,8 +8,8 @@ import { startMarketScanner } from './services/marketScannerService'
 import { startMarketResearch } from './services/marketResearchService'
 import { startForecastData } from './services/forecastDataService'
 import { startForecastTraining } from './services/forecastTrainingService'
-import { startForecastLab } from './services/forecastLabService'
-import { forecastLiveSignal, forecastNewsSignal, forecastScannerSignal, setForecastReadings, startForecast } from './services/forecastService'
+import { forecastClassVerdict, startForecastLab } from './services/forecastLabService'
+import { forecastLiveSignal, forecastNewsSignal, forecastScannerSignal, setForecastClassVerdicts, setForecastReadings, startForecast } from './services/forecastService'
 import { listAiCalls } from './services/aiLedgerService'
 import { AI_ADDITION_PROMPT_VERSIONS, newsReadingsAt } from '../shared/aiAdditions'
 import { onScannerUpdate } from './services/marketScannerService'
@@ -214,6 +214,9 @@ if (!gotSingleInstanceLock) {
     // Makes the Forecast Lab of each walk forward once it is in use, in the same worker: its record
     // scored, called and replayed as trades (V6 Stage 11). See forecastLabService.ts.
     startForecastLab()
+    // The decisions are judged by each opportunity class's record: the Lab's replay and the forecast
+    // trader's own paper (V6 Stage 12).
+    setForecastClassVerdicts(forecastClassVerdict)
     app.on('will-quit', stopForecastWorker)
     // Forecasts every pair at every five-minute close with those models, and again between closes when
     // a story of high impact names it, the scanner raises an event on it, its live price leaves its

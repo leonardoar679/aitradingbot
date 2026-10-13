@@ -1113,7 +1113,7 @@ describe('sized by risk, and held to what the app has out (shared/paperRisk.ts)'
     const near = rig({ risk: capped, config: roomy, executors: [own, shorted] })
     expect(await openWatchPaperTrade(event(), decision(), near.deps)).toEqual({
       opened: false,
-      text: "No paper trade: The watch's and the news rules' open paper trades stake 950 USDT together, and 57.47 more would take them past the 1,000 set on Risk & Safety."
+      text: "No paper trade: The app's own open paper trades stake 950 USDT together, and 57.47 more would take them past the 1,000 set on Risk & Safety."
     })
     expect(near.state.executors).toHaveLength(2)
     // One of them stopped, there is room again.

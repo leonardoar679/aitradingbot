@@ -4,6 +4,7 @@ import { isActionableOpportunity, opportunitySide, opportunityWindow } from './a
 import { describeDecider } from './aiPanel'
 import { FEE_RATE, SLIPPAGE_RATE } from './fees'
 import { describeEventType, type MarketEvent, type MarketEventType } from './marketEvent'
+import type { TradePlan } from './forecast/tradePlan'
 
 // FROM A CALL TO AN ORDER, BY HAND.
 //
@@ -29,6 +30,10 @@ import { describeEventType, type MarketEvent, type MarketEventType } from './mar
 // That form can be submitted on paper and cannot be switched to Live: the order form refuses Live
 // for any Position that is not a buy, because on a spot account a live "sell" would sell coins
 // the user holds, which is not what a short call means. tests/aiProposal.test.ts pins it.
+//
+// Since 13 October 2026 (the V6 document, §107-108; V6 Stage 12) the price forecast's TRADE decision
+// fills in the same form, by the same rules, from its trade plan (shared/forecast/tradePlan.ts): TRADE
+// THIS. Its model is FORECAST_PROPOSAL_MODEL.
 //
 // Nothing here imports an order path or is imported by one. It is arithmetic on a decision.
 
@@ -412,8 +417,54 @@ function describeOpportunityProposal(proposal: AiOrderProposal): string[] {
   ]
 }
 
+/** Who a form filled in from the price forecast says it is from (V6 Stage 12). */
+export const FORECAST_PROPOSAL_MODEL = 'price-forecast'
+
+const round2 = (value: number): number => Math.round(value * 100) / 100
+
+/** The Position form a TRADE decision's plan fills in (TRADE THIS): its side, the entry zone, the stop
+ * and target from the live price, the horizon as the time limit, and the plan's validity, the next
+ * five-minute close. Like every proposal, no amount, no mode, no leverage: paper until a person ticks
+ * Live Trading and types its phrase, and a sell is paper only. */
+export function forecastProposal(input: { plan: TradePlan; confidence: number; barTime: number }): AiOrderProposal {
+  const { plan } = input
+  return {
+    exchange: 'binance',
+    pair: { symbol: plan.pair, baseAsset: plan.pair.replace(/USDT$/, ''), quoteAsset: 'USDT' },
+    model: FORECAST_PROPOSAL_MODEL,
+    candleTime: input.barTime,
+    interval: '1m',
+    confidence: input.confidence,
+    referencePrice: plan.entryPrice,
+    stopLossPct: round2(plan.stopPct),
+    takeProfitPct: round2(plan.targetPct),
+    timeLimitSec: plan.holdSec,
+    side: plan.side === 'BUY' ? 'buy' : 'sell',
+    entryPrice: null,
+    entryRange: { min: plan.entryMin, max: plan.entryMax },
+    expiresAt: plan.validUntil
+  }
+}
+
+/** The same, for a form filled in from the price forecast's plan. */
+function describeForecastProposal(proposal: AiOrderProposal): string[] {
+  const short = proposal.side === 'sell'
+  const [against, toward] = short ? ['above', 'below'] : ['below', 'above']
+  const zone = proposal.entryRange === undefined ? '' : ` ${plainNumber(proposal.entryRange.min)} to ${plainNumber(proposal.entryRange.max)}`
+  return [
+    `Filled in from the price forecast: ${short ? 'SELL' : 'BUY'} ${proposal.pair.symbol}, its forecast read at the ${utcClock(proposal.candleTime)} UTC close, ${Math.round(proposal.confidence * 100)}% the way it calls.`,
+    `It enters at market inside the zone${zone}, around the live price of ${plainNumber(proposal.referencePrice)}. Its stop is ${proposal.stopLossPct}% ${against} the entry, at the forecast's bad case or one and a half five-minute ranges, whichever is farther, and its target ${proposal.takeProfitPct}% ${toward} it, at the level the risk mode takes. The time limit is the forecast's horizon, ${durationLabel(proposal.timeLimitSec)}.`,
+    'On paper, with the entry left as it is, the position enters in the first minute the price trades inside that zone: a price that has left it is not chased.',
+    `Its plan is good until ${utcClock(proposal.expiresAt ?? proposal.candleTime)} UTC, the next five-minute close. After that this form will not submit it as it stands, and a paper position still waiting to enter then is abandoned.`,
+    short
+      ? 'A short is paper only: this app places no short or leveraged order, so Live Trading cannot be ticked for it. The amount is yours to set, and nothing is placed until you submit this form.'
+      : 'The amount is yours to set: the forecast is never asked for one. Nothing is placed until you submit this form, and real money still needs Live Trading ticked below and its phrase typed.'
+  ]
+}
+
 /** What the form says about where its values came from, above the fields themselves. */
 export function describeAiProposal(proposal: AiOrderProposal): string[] {
+  if (proposal.model === FORECAST_PROPOSAL_MODEL) return describeForecastProposal(proposal)
   if (proposal.expiresAt !== undefined) return describeOpportunityProposal(proposal)
   const who = describeDecider(proposal.model)
   const levels =

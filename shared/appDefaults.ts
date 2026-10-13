@@ -15,6 +15,8 @@ import { DEFAULT_PAPER_PAUSE, describePaperPause, savePaperPause } from './paper
 import { DEFAULT_PAPER_RISK, describePaperRisk } from './paperRisk'
 import { DEFAULT_UI_MODE, type UiMode } from './uiMode'
 import { DEFAULT_FORECAST_SETTINGS, type ForecastSettings } from './forecast/training'
+import { DEFAULT_FORECAST_TRADER, type ForecastTraderSettings } from './forecast/trader'
+import type { TargetLevel } from './forecast/tradePlan'
 
 // WHAT A FRESH INSTALL STARTS WITH, AND THE RISK LEVEL IN A WORD.
 //
@@ -38,12 +40,13 @@ import { DEFAULT_FORECAST_SETTINGS, type ForecastSettings } from './forecast/tra
 // stand the hard limits (shared/hardLimits.ts), which nothing in a file can exceed; and since 8
 // October 2026 each settings file carries its version (shared/configMigration.ts).
 //
-// THE RISK LEVEL is how Settings says the rest in a word, as the document asks ("Risk:
-// Conservative" instead of twelve fields). Conservative is the shipped defaults of the two
-// settings for the app's own paper trades that may be changed at any time -- how they are sized and
-// capped, and the losing run that pauses them -- every one of which only ever opens less. Anything
-// else is Custom. The limits on real orders are their own, set on Risk & Safety, and nothing here
-// changes them.
+// THE RISK MODE is how Settings says the rest in a word, as the documents ask ("Risk: Conservative"
+// instead of twelve fields). Since 13 October 2026 (the V6 document, §66 and §106) there are three --
+// Conservative, Balanced and Aggressive -- each a set of the settings for the paper trades the app
+// opens by itself: how they are sized (a share of the paper account at the stop) and capped, what
+// they stake on one side on coins that move with Bitcoin, the losing run that pauses them, and how
+// many the forecast trader keeps open. Conservative is a fresh install's. Anything else is Custom.
+// The limits on real orders are their own, set on Risk & Safety, and nothing here changes them.
 
 /** Every store as the app reads it, healed: what a fresh install starts with where a file says
  * nothing. The live limits are the stored ones; the hard ceiling on a real order is a hard limit
@@ -86,38 +89,74 @@ export const DEFAULT_CONFIG: EffectiveStores = {
   live: { ...DEFAULT_LIVE_LIMITS, hardMaxOrderQuote: HARD_LIMITS.liveMaxOrderQuote }
 }
 
-export type RiskLevel = 'conservative' | 'custom'
+export type RiskMode = 'conservative' | 'balanced' | 'aggressive' | 'custom'
+export type PresetRiskMode = Exclude<RiskMode, 'custom'>
+export const RISK_MODES: readonly PresetRiskMode[] = ['conservative', 'balanced', 'aggressive']
 
-/** What Conservative is: the paper sizing and cap, and the pause's loss and run, at their defaults. */
-export const CONSERVATIVE_PAPER: { paperRisk: PaperRiskSettings; pause: Pick<PaperPauseSettings, 'lossR' | 'trades'> } = {
-  paperRisk: DEFAULT_PAPER_RISK,
-  pause: { lossR: DEFAULT_PAPER_PAUSE.lossR, trades: DEFAULT_PAPER_PAUSE.trades }
+/** What each mode holds the app's own paper trades to (the V6 document, §66 and §106; V6 Stage 12):
+ * the risk a trade takes at its stop, a share of the paper account's equity (and a fixed amount
+ * without one), what they stake together, what they stake on one side on coins that move with
+ * Bitcoin, the losing run that pauses them, how many the forecast trader keeps open, on one side,
+ * and the level its target is set at. Conservative is a fresh install's. */
+export const RISK_MODE_PRESETS: Record<
+  PresetRiskMode,
+  { paperRisk: PaperRiskSettings; pause: Pick<PaperPauseSettings, 'lossR' | 'trades'>; trader: Pick<ForecastTraderSettings, 'maxOpen' | 'maxSameSide'>; targetLevel: TargetLevel }
+> = {
+  conservative: { paperRisk: DEFAULT_PAPER_RISK, pause: { lossR: DEFAULT_PAPER_PAUSE.lossR, trades: DEFAULT_PAPER_PAUSE.trades }, trader: { maxOpen: DEFAULT_FORECAST_TRADER.maxOpen, maxSameSide: DEFAULT_FORECAST_TRADER.maxSameSide }, targetLevel: 'P75' },
+  balanced: { paperRisk: { sizing: 'equity', riskQuote: 2, riskPct: 0.5, maxOutQuote: 2500, correlatedShare: 0.25 }, pause: { lossR: 8, trades: 20 }, trader: { maxOpen: 4, maxSameSide: 2 }, targetLevel: 'P80' },
+  aggressive: { paperRisk: { sizing: 'equity', riskQuote: 5, riskPct: 1, maxOutQuote: 5000, correlatedShare: 0.35 }, pause: { lossR: 10, trades: 20 }, trader: { maxOpen: 6, maxSameSide: 3 }, targetLevel: 'P90' }
 }
 
-/** Conservative when every one of those is at its default; Custom otherwise, whichever way it was
- * changed. */
-export function riskLevelOf(input: { paperRisk: PaperRiskSettings; paperPause: Pick<PaperPauseSettings, 'lossR' | 'trades'> }): RiskLevel {
-  const { paperRisk, pause } = CONSERVATIVE_PAPER
-  const same =
-    input.paperRisk.sizing === paperRisk.sizing &&
-    input.paperRisk.riskQuote === paperRisk.riskQuote &&
-    input.paperRisk.maxOutQuote === paperRisk.maxOutQuote &&
-    input.paperPause.lossR === pause.lossR &&
-    input.paperPause.trades === pause.trades
-  return same ? 'conservative' : 'custom'
+export const RISK_MODE_NAMES: Record<RiskMode, string> = { conservative: 'Conservative', balanced: 'Balanced', aggressive: 'Aggressive', custom: 'Custom' }
+
+interface ModeInput {
+  paperRisk: PaperRiskSettings
+  paperPause: Pick<PaperPauseSettings, 'lossR' | 'trades'>
+  trader: Pick<ForecastTraderSettings, 'maxOpen' | 'maxSameSide'>
 }
 
-/** The paper settings put back to Conservative. Whether the watch or the news rules are paused is
- * kept as it is: a reset is not a Resume. */
-export function conservativePaper(stored: PaperPauseSettings): { paperRisk: PaperRiskSettings; paperPause: PaperPauseSettings } {
-  return { paperRisk: { ...CONSERVATIVE_PAPER.paperRisk }, paperPause: savePaperPause(stored, CONSERVATIVE_PAPER.pause) }
+/** The mode every one of those settings is at; Custom when any is not at one mode's, whichever way. */
+export function riskModeOf(input: ModeInput): RiskMode {
+  for (const mode of RISK_MODES) {
+    const { paperRisk, pause, trader } = RISK_MODE_PRESETS[mode]
+    const same =
+      input.paperRisk.sizing === paperRisk.sizing &&
+      input.paperRisk.riskQuote === paperRisk.riskQuote &&
+      input.paperRisk.riskPct === paperRisk.riskPct &&
+      input.paperRisk.maxOutQuote === paperRisk.maxOutQuote &&
+      (input.paperRisk.correlatedShare ?? 0.15) === paperRisk.correlatedShare &&
+      input.paperPause.lossR === pause.lossR &&
+      input.paperPause.trades === pause.trades &&
+      input.trader.maxOpen === trader.maxOpen &&
+      input.trader.maxSameSide === trader.maxSameSide
+    if (same) return mode
+  }
+  return 'custom'
 }
 
-/** The level in a word, and what it holds the app's own paper trades to, as set. */
-export function describeRiskLevel(input: { paperRisk: PaperRiskSettings; paperPause: Pick<PaperPauseSettings, 'lossR' | 'trades'> }): { label: string; detail: string } {
-  const level = riskLevelOf(input)
+/** The settings a mode writes. Whether the watch, the news rules or the forecast trader is paused is
+ * kept as it is (a mode is not a Resume), and so is whether the forecast trader is on. The limits on
+ * real orders are not among them: a mode never touches them. */
+export function riskModePatch(mode: PresetRiskMode, stored: { paperPause: PaperPauseSettings; forecast: ForecastSettings }): { paperRisk: PaperRiskSettings; paperPause: PaperPauseSettings; forecast: ForecastSettings } {
+  const preset = RISK_MODE_PRESETS[mode]
   return {
-    label: level === 'conservative' ? 'Conservative' : 'Custom',
-    detail: `For the paper trades the app opens by itself: ${describePaperRisk(input.paperRisk)} ${describePaperPause(input.paperPause)}`
+    paperRisk: { ...preset.paperRisk },
+    paperPause: savePaperPause(stored.paperPause, preset.pause),
+    forecast: { ...stored.forecast, trader: { ...stored.forecast.trader, ...preset.trader } }
+  }
+}
+
+/** The level the forecast trader's target is set at: the mode's, and Conservative's when Custom. */
+export function targetLevelOf(mode: RiskMode): TargetLevel {
+  return RISK_MODE_PRESETS[mode === 'custom' ? 'conservative' : mode].targetLevel
+}
+
+/** The mode in a word, and what it holds the app's own paper trades to, as set. */
+export function describeRiskMode(input: ModeInput): { mode: RiskMode; label: string; detail: string } {
+  const mode = riskModeOf(input)
+  return {
+    mode,
+    label: RISK_MODE_NAMES[mode],
+    detail: `For the paper trades the app opens by itself: ${describePaperRisk(input.paperRisk)} ${describePaperPause(input.paperPause)} The forecast trader keeps at most ${input.trader.maxOpen} open, ${input.trader.maxSameSide} on one side, its target at ${targetLevelOf(mode)}. The limits on real orders are their own, on Risk & Safety: a mode never changes them.`
   }
 }

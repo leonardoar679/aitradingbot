@@ -21,6 +21,7 @@ import { ConnectionsPage } from './connections/ConnectionsPage'
 import { SettingsPanel } from './settings/SettingsPanel'
 import { ControllerScheduler } from './controllers/ControllerScheduler'
 import { OpportunityScheduler } from './agents/OpportunityScheduler'
+import { ForecastTraderScheduler } from './forecast/ForecastTraderScheduler'
 import { ExitCheckScheduler } from './agents/ExitCheckScheduler'
 import { ModelHealthScheduler } from './agents/ModelHealthScheduler'
 import { StrategyHealthScheduler } from './bots/StrategyHealthScheduler'
@@ -165,6 +166,7 @@ function App(): React.JSX.Element {
           place anything, and what it opens by itself is paper. */}
       <ErrorBoundary label="The opportunity watch">
         <OpportunityScheduler />
+        <ForecastTraderScheduler />
       </ErrorBoundary>
       {/* The exit check: only while the watch is on, and only the app's own paper trades. Its EXIT
           closes one at the next minute, on paper; it never moves a stop or touches a live one. */}
@@ -246,7 +248,7 @@ function App(): React.JSX.Element {
               the boundary latching its error for the rest of the session. */}
           <ErrorBoundary key={page} label={`The ${pageLabel(page)} page`}>
             {page === 'home' && <HomePage onPrepareOrder={prepareOrder} onNavigate={navigate} />}
-            {page === 'predictions' && <PredictionsPage />}
+            {page === 'predictions' && <PredictionsPage onPrepareOrder={prepareOrder} />}
             {page === 'overview' && <OverviewPage onGetStarted={openPresets} onPrepareOrder={prepareOrder} onNavigate={navigate} />}
             {page === 'opportunities' && <OpportunitiesPage onPrepareOrder={prepareOrder} />}
             {page === 'markets' && <Dashboard />}

@@ -60,6 +60,8 @@ import { QUALITY_LINES, QUALITY_VERSION } from './forecast/quality'
 import { RANK_LINES, RANK_VERSION } from './forecast/ranking'
 import { CHANGE_LINES } from './forecast/predictionChange'
 import { LAB_LINES, LAB_VERSION } from './forecast/lab'
+import { PLAN_LINES, PLAN_VERSION } from './forecast/tradePlan'
+import { CLASS_LINES as OPPORTUNITY_CLASS_LINES } from './forecast/opportunityClass'
 import { DECISION_LINES, DECISION_VERSION } from './forecast/tradeDecision'
 import { NEWS_FEED_VERSION } from './newsFeed'
 import { PREDICTION_LINES, PREDICTION_VERSION } from './forecast/prediction'
@@ -171,7 +173,9 @@ export const ENGINE_CONSTANTS = {
     decision: { version: DECISION_VERSION, ...DECISION_LINES },
     change: CHANGE_LINES,
     degradedThreadSeconds: DEGRADED_THREAD_SECONDS,
-    lab: { version: LAB_VERSION, ...LAB_LINES }
+    lab: { version: LAB_VERSION, ...LAB_LINES },
+    plan: { version: PLAN_VERSION, ...PLAN_LINES },
+    classes: OPPORTUNITY_CLASS_LINES
   }
 } as const
 

@@ -2,6 +2,9 @@ import { useMemo } from 'react'
 import { Card } from '../components/Card'
 import { buttonStyle, noteStyle } from '../agents/agentStyles'
 import { opportunitySide } from '../../shared/aiOpportunity'
+import type { AiOrderProposal } from '../../shared/aiProposal'
+import { tradeThisOf } from './tradeThis'
+import { useRiskTarget } from './useRiskTarget'
 import type { PricePrediction } from '../../shared/forecast/prediction'
 import type { RankedForecast } from '../../shared/forecast/ranking'
 import { forecastView } from '../../shared/forecast/view'
@@ -31,14 +34,18 @@ export function BestPredictionCard({
   prediction,
   ranked,
   live,
-  onDetails
+  onDetails,
+  onPrepareOrder
 }: {
   prediction: PricePrediction | null
   ranked: RankedForecast | null
   live: LiveState | null
   onDetails: (pair: string) => void
+  /** TRADE THIS (V6 Stage 12): the plan filled into the Position form, for a person to place. */
+  onPrepareOrder?: (proposal: AiOrderProposal) => void
 }): React.JSX.Element {
   const nowSec = useNowSec(true)
+  const targetLevel = useRiskTarget()
   const { feed } = useEventFeed(20)
   const consensus = useMemo(() => {
     if (prediction === null) return null
@@ -60,6 +67,7 @@ export function BestPredictionCard({
   const leadView = lead === null ? undefined : view.horizons[lead]
   const decision = decisionWords(ranked?.decision)
   const rows = predictionCardRows(prediction, view, consensus)
+  const trade = tradeThisOf({ prediction, decision: ranked?.decision, livePrice, targetLevel, nowSec })
   return (
     <Card title="Best current prediction" actions={<button type="button" style={buttonStyle('secondary')} onClick={() => onDetails(prediction.pair)}>Details</button>}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.9rem', flexWrap: 'wrap' }}>
@@ -78,9 +86,24 @@ export function BestPredictionCard({
           </div>
         ))}
       </div>
-      <div style={{ marginTop: '0.8rem', padding: '0.6rem 0.75rem', borderRadius: 'var(--radius-sm)', background: 'var(--bg-app)', border: '1px solid var(--border)' }}>
-        <strong style={{ color: decision.trade ? 'var(--up)' : 'var(--text-secondary)' }}>{decision.label}</strong>
-        {decision.detail !== '' && <span style={{ ...noteStyle, marginLeft: '0.5rem' }}>{decision.detail}</span>}
+      <div style={{ marginTop: '0.8rem', padding: '0.6rem 0.75rem', borderRadius: 'var(--radius-sm)', background: 'var(--bg-app)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 18rem' }}>
+          <strong style={{ color: decision.trade ? 'var(--up)' : 'var(--text-secondary)' }}>{decision.label}</strong>
+          {decision.detail !== '' && <span style={{ ...noteStyle, marginLeft: '0.5rem' }}>{decision.detail}</span>}
+        </div>
+        {onPrepareOrder !== undefined && (
+          <button
+            type="button"
+            style={buttonStyle('primary', 'problem' in trade)}
+            disabled={'problem' in trade}
+            title={'problem' in trade ? trade.problem : 'Fills in the Position form, on paper; a person places it.'}
+            onClick={() => {
+              if ('proposal' in trade) onPrepareOrder(trade.proposal)
+            }}
+          >
+            TRADE THIS
+          </button>
+        )}
       </div>
       <p style={{ ...noteStyle, marginTop: '0.6rem' }}>
         A range, not a point: half the moves are meant to land inside the likely range, eight in ten between the bear and bull cases. It is a forecast, not a trade; nothing was placed.

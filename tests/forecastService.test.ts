@@ -530,3 +530,42 @@ describe('why the range (§36)', () => {
     expect(HORIZONS.map((horizon) => live.forecastOf('SOLUSDT')!.horizons[horizon]?.rangeDrivers)).toEqual(HORIZONS.map(() => []))
   })
 })
+
+describe('from the forecast to a trade (V6 Stage 12)', () => {
+  it("reads the five-minute ATR at the close, for a trade plan's zone and nearest stop", async () => {
+    const live = await engine()
+    await closeAt(live, HOUR)
+    const atr = live.forecastOf('SOLUSDT')!.market?.atr5mPct
+    // The walk's five-minute moves are about 0.2%, its bars a tenth of that wider either way.
+    expect(atr).toBeGreaterThan(0.05)
+    expect(atr).toBeLessThan(1)
+  })
+
+  it("judges each decision's opportunity class by the verdicts handed in, and none before they are", async () => {
+    const live = await engine()
+    await closeAt(live, HOUR)
+    // Every forecast here is NEUTRAL: no side, so no class is read, whatever the verdicts.
+    live.setForecastClassVerdicts(() => 'APPROVED')
+    await closeAt(live, HOUR + 300)
+    expect(live.forecastDecision('SOLUSDT')).toMatchObject({ classKey: null, classVerdict: null })
+    // A forecast calling a way: its class -- its coin, the horizon and its setup -- judged by the verdicts.
+    const sol = live.forecastOf('SOLUSDT')!
+    const bull = { ...sol, horizons: { ...sol.horizons, hour1: { ...sol.horizons.hour1!, direction: 'BULLISH' as const } }, bestHorizon: 'hour1' as const }
+    const asked: string[] = []
+    live.setForecastClassVerdicts((key) => {
+      asked.push(key)
+      return 'DISABLED'
+    })
+    const judged = live.forecastForTest.decide(bull, (HOUR + 300) * 1000)
+    expect(asked).toEqual([`${sol.pairClass}/hour1/other`])
+    expect(judged).toMatchObject({ classKey: `${sol.pairClass}/hour1/other`, classVerdict: 'DISABLED' })
+    expect(judged.reasons.map((reason) => reason.code)).toContain('CLASS_NOT_APPROVED')
+    // A story about the coin makes it a news setup.
+    const story = { variant: 'v4' as const, storyId: 's', title: 'A listing', source: 'CoinDesk', kind: 'LISTING', impact: 80, ageSec: 60, novelty: 1, pricedIn: false, fromLibrary: true, shiftPct: 0.5, widenPct: 0, widenShare: 0 }
+    const withNews = { ...bull, horizons: { ...bull.horizons, hour1: { ...bull.horizons.hour1, news: { v3: null, v4: story } } } }
+    expect(live.forecastForTest.decide(withNews, (HOUR + 300) * 1000).classKey).toBe(`${sol.pairClass}/hour1/news`)
+    // Before the verdicts are handed in, no class is judged.
+    live.setForecastClassVerdicts(null)
+    expect(live.forecastForTest.decide(bull, (HOUR + 300) * 1000)).toMatchObject({ classKey: null, classVerdict: null })
+  })
+})

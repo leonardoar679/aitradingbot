@@ -1,6 +1,7 @@
 import { MAX_SPREAD_PCT, STALE_PRICE_MS } from '../liveMarket'
 import { edgeOf, type Edge } from './edge'
 import type { Horizon } from './features'
+import { classTradable, type ClassVerdict } from './opportunityClass'
 import type { PricePrediction } from './prediction'
 
 // THE FORECAST AND THE TRADE ARE TWO THINGS (the V6 document, §29-30, §62-63; V6 Stage 9, 13 October
@@ -14,10 +15,12 @@ import type { PricePrediction } from './prediction'
 //   newer than ten seconds; STALE_BARS: the close it was read at is more than two bars old;
 // - REGIME_AGAINST: a BUY in a falling or panicking market, a SELL in a rising or recovering one;
 // - RELIABILITY_LOW, QUALITY_LOW: under 60 (shared/forecast/quality.ts);
-// - CLASS_NOT_APPROVED: its opportunity class has not earned trading (V6 Stage 12; unjudged until then).
+// - CLASS_NOT_APPROVED: its opportunity class (shared/forecast/opportunityClass.ts, V6 Stage 12) is
+//   not APPROVED or on PROBATION: not traded enough on the replayed weeks to be judged, or it lost.
+//   Where no class is read, it is not judged.
 // TRADE where none holds. A SELL is a paper trade only, as every short in the app is.
 
-export const DECISION_VERSION = 'decision-v1'
+export const DECISION_VERSION = 'decision-v2'
 
 export const DECISION_LINES = {
   minProfitChance: 0.55,
@@ -48,6 +51,9 @@ export interface TradeDecision {
   reasons: { code: NoTradeReason; text: string }[]
   edge: Edge | null
   quality: number
+  /** Its opportunity class and the class's verdict (V6 Stage 12); null where none was read. */
+  classKey: string | null
+  classVerdict: ClassVerdict | null
   /** Unix milliseconds. */
   at: number
 }
@@ -58,8 +64,16 @@ export interface DecisionInput {
   nowMs: number
   /** The live book's mid and when it came, and its spread, where the stream holds it. */
   live: { price: number; updatedAt: number; spreadPct: number | null } | null
-  /** Whether the forecast's opportunity class has earned trading; null before it is judged. */
-  classApproved: boolean | null
+  /** The opportunity class a trade on its side falls in, and how the class stands; null where none is
+   * read, and then it is not judged. */
+  classOf: ((side: 'BUY' | 'SELL') => { key: string; verdict: ClassVerdict }) | null
+}
+
+const VERDICT_WORDS: Record<ClassVerdict, string> = {
+  APPROVED: 'has earned trading',
+  PROBATION: 'is on probation',
+  NOT_ENOUGH: 'has not been traded enough on the replayed weeks to be judged',
+  DISABLED: 'lost on the replayed weeks or on live paper'
 }
 
 const HORIZON_WORDS: Record<Horizon, string> = { minutes5: '5-minute', minutes15: '15-minute', hour1: '1-hour', hours4: '4-hour', hours24: '24-hour' }
@@ -91,7 +105,8 @@ export function decideTrade(input: DecisionInput): TradeDecision {
   if (live === null || input.nowMs - live.updatedAt > STALE_PRICE_MS) add('STALE_PRICE', 'There is no live price newer than ten seconds.')
   else if (live.spreadPct !== null && live.spreadPct > DECISION_LINES.maxSpreadPct) add('SPREAD', `The spread is ${live.spreadPct.toFixed(3)}%, over the ${DECISION_LINES.maxSpreadPct}% a trade is entered at.`)
   if (input.nowMs / 1000 - prediction.barTime > DECISION_LINES.staleBarsSec) add('STALE_BARS', 'The bars it was read from are more than two closes old.')
-  if (input.classApproved === false) add('CLASS_NOT_APPROVED', 'Its kind of opportunity has not earned trading.')
+  const opportunity = side === null || input.classOf === null ? null : input.classOf(side)
+  if (opportunity !== null && !classTradable(opportunity.verdict)) add('CLASS_NOT_APPROVED', `Its kind of opportunity (${opportunity.key}) ${VERDICT_WORDS[opportunity.verdict]}.`)
   return {
     version: DECISION_VERSION,
     pair: prediction.pair,
@@ -101,6 +116,8 @@ export function decideTrade(input: DecisionInput): TradeDecision {
     reasons,
     edge,
     quality: range?.quality.score ?? 0,
+    classKey: opportunity?.key ?? null,
+    classVerdict: opportunity?.verdict ?? null,
     at: input.nowMs
   }
 }

@@ -33,6 +33,9 @@ export const PAPER_RISK_CHOICES = [1, 2, 5, 10, 25, 50] as const
 export const PAPER_MAX_OUT_CHOICES = [250, 500, 1000, 2500, 5000, 10000] as const
 /** Of the paper account's equity, in percent, what one trade may risk at its stop. */
 export const PAPER_RISK_PCT_CHOICES = [0.1, 0.25, 0.5, 1, 2] as const
+/** Of the paper account's funding, the most those open on one side may stake on pairs that move with
+ * Bitcoin: the risk modes' three (V6 Stage 12). */
+export const PAPER_CORRELATED_CHOICES = [0.15, 0.25, 0.35] as const
 /** Binance's smallest order on a USDT pair -- what the app's own paper trades are on -- is worth 5
  * USDT. */
 export const PAPER_MIN_STAKE = 5
@@ -41,7 +44,7 @@ export const PAPER_MIN_STAKE = 5
  * watch's and the news rules' default stake of 100, and together they stake at most 1,000. Against
  * the stops the models have given (a median of 1% from the entry), a stake of 100 is then held to
  * 100 only for a stop nearer than about 0.8%. */
-export const DEFAULT_PAPER_RISK: PaperRiskSettings = { sizing: 'risk', riskQuote: 1, riskPct: 0.25, maxOutQuote: 1000 }
+export const DEFAULT_PAPER_RISK: PaperRiskSettings = { sizing: 'equity', riskQuote: 1, riskPct: 0.25, maxOutQuote: 1000, correlatedShare: 0.15 }
 
 function isRiskChoice(value: unknown): value is number {
   return (PAPER_RISK_CHOICES as readonly unknown[]).includes(value)
@@ -64,7 +67,8 @@ export function healPaperRisk(value: unknown): PaperRiskSettings {
     sizing: raw.sizing === 'risk' || raw.sizing === 'stake' || raw.sizing === 'equity' ? raw.sizing : DEFAULT_PAPER_RISK.sizing,
     riskQuote: isRiskChoice(raw.riskQuote) ? raw.riskQuote : DEFAULT_PAPER_RISK.riskQuote,
     riskPct: isRiskPctChoice(raw.riskPct) ? raw.riskPct : DEFAULT_PAPER_RISK.riskPct,
-    maxOutQuote: raw.maxOutQuote === null ? null : isMaxOutChoice(raw.maxOutQuote) ? raw.maxOutQuote : DEFAULT_PAPER_RISK.maxOutQuote
+    maxOutQuote: raw.maxOutQuote === null ? null : isMaxOutChoice(raw.maxOutQuote) ? raw.maxOutQuote : DEFAULT_PAPER_RISK.maxOutQuote,
+    correlatedShare: (PAPER_CORRELATED_CHOICES as readonly unknown[]).includes(raw.correlatedShare) ? (raw.correlatedShare as number) : 0.15
   }
 }
 
@@ -149,12 +153,16 @@ export function describeR(r: number): string {
   return `${r > 0 ? '+' : ''}${r.toFixed(2)} R`
 }
 
-/** The app's own open paper trades: the watch's and the news rules', each a paper Position carrying
- * its mark. An executor that is not paper is never one of them, whatever it carries. */
+/** The app's own open paper trades: the watch's, the news rules' and, since V6 Stage 12, the forecast
+ * trader's, each a paper Position carrying its mark. An executor that is not paper is never one of
+ * them, whatever it carries. */
 export function ownOpenPaperTrades(executors: ExecutorConfig[]): ExecutorConfig[] {
   return executors.filter(
     (executor) =>
-      executor.status === 'active' && executor.mode === 'paper' && executor.type === 'position' && (executor.watch !== undefined || executor.newsRule !== undefined)
+      executor.status === 'active' &&
+      executor.mode === 'paper' &&
+      executor.type === 'position' &&
+      (executor.watch !== undefined || executor.newsRule !== undefined || executor.forecast !== undefined)
   )
 }
 
@@ -178,7 +186,7 @@ export function paperOutBlock(input: { risk: PaperRiskSettings; executors: Execu
   const out = paperOut(input.executors, input.quoteAsset)
   // A hundredth of a cent of rounding is not over the cap.
   if (out + input.amountQuote <= cap + 1e-6) return null
-  return `The watch's and the news rules' open paper trades stake ${shown(out)} ${input.quoteAsset} together, and ${shown(input.amountQuote)} more would take them past the ${shown(cap)} set on Risk & Safety.`
+  return `The app's own open paper trades stake ${shown(out)} ${input.quoteAsset} together, and ${shown(input.amountQuote)} more would take them past the ${shown(cap)} set on Risk & Safety.`
 }
 
 /** The setting in a sentence, as it is set. */

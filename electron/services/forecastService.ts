@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { mkdir, readFile, readdir, unlink } from 'fs/promises'
 import { join } from 'path'
-import { staleMonth } from '../../shared/forecast/bars'
+import { staleMonth, type ForecastBar } from '../../shared/forecast/bars'
 import { cellKey, emptyAciTable, levelsOf, parseAciTable, stepAciTable, type AciTable, type CellKey } from '../../shared/forecast/aciTable'
 import { FEATURE_NAMES, HORIZONS, crossSectionAt, endsAt, featuresAt, quickAt, type Horizon, type PairClass, type PairQuick, type PairSeries } from '../../shared/forecast/features'
 import {
@@ -28,6 +28,8 @@ import { funnel, rankOf, type ForecastRanking, type RankedForecast } from '../..
 import { refreshReasons, type RefreshReason } from '../../shared/forecast/refresh'
 import { cellOf } from '../../shared/forecast/runCalibration'
 import { decideTrade, type TradeDecision } from '../../shared/forecast/tradeDecision'
+import { breakoutAt, classKeyOf, setupOf, type ClassVerdict } from '../../shared/forecast/opportunityClass'
+import { computeAtr } from '../../shared/atr'
 import type { EngineState } from '../../shared/forecast/status'
 import { bookSpreadPct, executionQuality, isStale, type LiveState } from '../../shared/liveMarket'
 import type { MarketRegime } from '../../shared/marketResearch'
@@ -107,7 +109,9 @@ interface PairInput {
   usualMinuteVolume: number | null
   /** The coin's last hour in its usual moves, the market's breadth over it, and its volume against its
    * usual hour. */
-  market: { z1h: number; breadth1h: number; volRatio1h: number }
+  market: { z1h: number; breadth1h: number; volRatio1h: number; atr5mPct: number | null }
+  /** Whether the close broke the day before's range: an opportunity's setup (V6 Stage 12). */
+  breakout: boolean
   /** What moved each horizon's size reading most (§36). */
   drivers: Partial<Record<Horizon, RangeDriver[]>>
 }
@@ -250,7 +254,39 @@ function decisionFor(prediction: PricePrediction, nowMs: number): TradeDecision 
   const horizon = prediction.bestHorizon ?? (prediction.horizons.hour1 !== undefined ? 'hour1' : (Object.keys(prediction.horizons)[0] as keyof PricePrediction['horizons']))
   const book = liveState()?.books[prediction.pair]
   const live = book === undefined || !(book.bid > 0) || !(book.ask > 0) ? null : { price: (book.bid + book.ask) / 2, updatedAt: book.updatedAt, spreadPct: bookSpreadPct(book) }
-  return decideTrade({ prediction, horizon, nowMs, live, classApproved: null })
+  const range = prediction.horizons[horizon]
+  const judge = classVerdicts
+  // The class a trade on its side falls in (shared/forecast/opportunityClass.ts), judged by the Lab's
+  // record and the trader's own, as electron/main.ts hands them in; not judged before they are.
+  const classOf =
+    judge === null || range === undefined
+      ? null
+      : (side: 'BUY' | 'SELL'): { key: string; verdict: ClassVerdict } => {
+          const setup = setupOf({ side, story: range.news.v4 !== null || range.news.v3 !== null, breakout: inputs.get(prediction.pair)?.breakout === true, prior: prediction.market?.z1h ?? null, regime: prediction.regime })
+          const key = classKeyOf(prediction.pairClass, horizon, setup)
+          return { key, verdict: judge(key) }
+        }
+  return decideTrade({ prediction, horizon, nowMs, live, classOf })
+}
+
+/** How each opportunity class stands, as electron/main.ts hands it in (forecastLabService.ts); null
+ * until it is, and then no class is judged. */
+let classVerdicts: ((key: string) => ClassVerdict) | null = null
+
+export function setForecastClassVerdicts(judge: ((key: string) => ClassVerdict) | null): void {
+  classVerdicts = judge
+}
+
+/** The five-minute bars the ATR is read over (shared/atr.ts), and the ATR of the last of them in percent
+ * of the close: what a trade plan's entry zone and nearest stop are measured in (V6 Stage 12). */
+const ATR_BARS = 14
+
+function atr5mPctAt(bars: readonly ForecastBar[]): number | null {
+  if (bars.length < ATR_BARS + 1) return null
+  const atr = computeAtr([...bars], ATR_BARS)
+  const last = atr[atr.length - 1]
+  const close = bars[bars.length - 1].close
+  return Number.isFinite(last) && last > 0 && close > 0 ? (last / close) * 100 : null
 }
 
 /** Every pair's decision, and the ranking of them all. */
@@ -393,7 +429,19 @@ async function pass(closedAt: number): Promise<void> {
     }
     const hour = series.m5.slice(Math.max(0, at - 12), at)
     const usualMinuteVolume = hour.length === 12 ? hour.reduce((sum, entry) => sum + entry.volume, 0) / 60 : null
-    inputs.set(symbol, { models, rv24h: row[RV24], rvRatio: row[RATIO], cls, regime: cross.regime, price: bar.close, barTime: closedAt, usualMinuteVolume, market: { z1h: row[Z1H], breadth1h: row[BREADTH1H], volRatio1h: row[VOL1H] }, drivers })
+    inputs.set(symbol, {
+      models,
+      rv24h: row[RV24],
+      rvRatio: row[RATIO],
+      cls,
+      regime: cross.regime,
+      price: bar.close,
+      barTime: closedAt,
+      usualMinuteVolume,
+      market: { z1h: row[Z1H], breadth1h: row[BREADTH1H], volRatio1h: row[VOL1H], atr5mPct: atr5mPctAt(series.m5.slice(Math.max(0, at - ATR_BARS - 1), at)) },
+      breakout: breakoutAt(series.m5.slice(Math.max(0, at - 290), at), closedAt),
+      drivers
+    })
   }
   await settle(closedAt)
   const nowMs = Date.now()
@@ -695,6 +743,8 @@ export const forecastForTest = {
     aci = table
   },
   aci: (): AciTable | null => aci,
+  /** A forecast's decision now, as a pass makes it. */
+  decide: decisionFor,
   /** A close's calls followed on these forecasts, with this top ten. */
   async follow(predictions: readonly PricePrediction[], top10: readonly string[]): Promise<void> {
     latest.clear()

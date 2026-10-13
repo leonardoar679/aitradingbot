@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { ExecutorConfig, PaperRiskSettings, PositionExecutorParams } from '../shared/ipc'
 import {
   DEFAULT_PAPER_RISK,
+  PAPER_CORRELATED_CHOICES,
   PAPER_MAX_OUT_CHOICES,
   PAPER_MIN_STAKE,
   PAPER_RISK_CHOICES,
@@ -65,20 +66,23 @@ const WATCH = { eventId: 'binance:SOLUSDT:1', eventTime: 1, model: 'openai/gpt-5
 const NEWS = { articleId: 7, ticker: 'XRP', releaseSec: 1, title: 'Binance Will Delist XRP on 2026-10-20', category: 'DELISTING' as const }
 
 describe('the setting', () => {
-  it('is on until changed: a stop risks about 1, and 1,000 at most out together', () => {
-    expect(DEFAULT_PAPER_RISK).toEqual({ sizing: 'risk', riskQuote: 1, riskPct: 0.25, maxOutQuote: 1000 })
+  it('is on until changed: a stop risks about 0.25% of the paper account (1 without one), 1,000 at most out together, 15% of it on one side on coins that move with Bitcoin', () => {
+    // Since 13 October 2026 (V6 Stage 12) a fresh install is the Conservative risk mode: sized by a share
+    // of the paper account, which without one is the 1 it always was.
+    expect(DEFAULT_PAPER_RISK).toEqual({ sizing: 'equity', riskQuote: 1, riskPct: 0.25, maxOutQuote: 1000, correlatedShare: 0.15 })
     for (const nothing of [undefined, null, 'risk', 7, []]) expect(healPaperRisk(nothing)).toEqual(DEFAULT_PAPER_RISK)
   })
 
   it('reads back each of its choices, and no cap as a choice of its own', () => {
-    expect(healPaperRisk({ sizing: 'stake', riskQuote: 25, riskPct: 0.25, maxOutQuote: null })).toEqual({ sizing: 'stake', riskQuote: 25, riskPct: 0.25, maxOutQuote: null })
-    for (const riskQuote of PAPER_RISK_CHOICES) for (const maxOutQuote of PAPER_MAX_OUT_CHOICES) expect(healPaperRisk({ sizing: 'risk', riskQuote, maxOutQuote })).toEqual({ sizing: 'risk', riskQuote, riskPct: 0.25, maxOutQuote })
+    expect(healPaperRisk({ sizing: 'stake', riskQuote: 25, riskPct: 0.25, maxOutQuote: null })).toEqual({ sizing: 'stake', riskQuote: 25, riskPct: 0.25, maxOutQuote: null, correlatedShare: 0.15 })
+    for (const riskQuote of PAPER_RISK_CHOICES) for (const maxOutQuote of PAPER_MAX_OUT_CHOICES) expect(healPaperRisk({ sizing: 'risk', riskQuote, maxOutQuote })).toEqual({ sizing: 'risk', riskQuote, riskPct: 0.25, maxOutQuote, correlatedShare: 0.15 })
+    for (const correlatedShare of PAPER_CORRELATED_CHOICES) expect(healPaperRisk({ sizing: 'risk', correlatedShare }).correlatedShare).toBe(correlatedShare)
   })
 
   it('heals a field that is not one of its choices to its default, a missing cap included', () => {
-    expect(healPaperRisk({ sizing: 'kelly', riskQuote: 3, maxOutQuote: 123 })).toEqual(DEFAULT_PAPER_RISK)
-    expect(healPaperRisk({ sizing: 'stake', riskQuote: 10 })).toEqual({ sizing: 'stake', riskQuote: 10, riskPct: 0.25, maxOutQuote: 1000 })
-    expect(healPaperRisk({ sizing: 'stake', riskQuote: '10', riskPct: 0.25, maxOutQuote: '500' })).toEqual({ sizing: 'stake', riskQuote: 1, riskPct: 0.25, maxOutQuote: 1000 })
+    expect(healPaperRisk({ sizing: 'kelly', riskQuote: 3, maxOutQuote: 123, correlatedShare: 0.5 })).toEqual(DEFAULT_PAPER_RISK)
+    expect(healPaperRisk({ sizing: 'stake', riskQuote: 10 })).toEqual({ sizing: 'stake', riskQuote: 10, riskPct: 0.25, maxOutQuote: 1000, correlatedShare: 0.15 })
+    expect(healPaperRisk({ sizing: 'stake', riskQuote: '10', riskPct: 0.25, maxOutQuote: '500' })).toEqual({ sizing: 'stake', riskQuote: 1, riskPct: 0.25, maxOutQuote: 1000, correlatedShare: 0.15 })
   })
 
   it('can only be saved as one of its choices', () => {
@@ -156,7 +160,7 @@ describe('what the app has out', () => {
     const executors = [position('watch', 600, { watch: WATCH }), position('news', 300, { newsRule: NEWS })]
     expect(paperOutBlock({ risk: RISK, executors, quoteAsset: 'USDT', amountQuote: 100 })).toBeNull()
     expect(paperOutBlock({ risk: RISK, executors, quoteAsset: 'USDT', amountQuote: 100.01 })).toBe(
-      "The watch's and the news rules' open paper trades stake 900 USDT together, and 100.01 more would take them past the 1,000 set on Risk & Safety."
+      "The app's own open paper trades stake 900 USDT together, and 100.01 more would take them past the 1,000 set on Risk & Safety."
     )
     // Out in another quote asset, or with no cap, nothing is refused.
     expect(paperOutBlock({ risk: RISK, executors, quoteAsset: 'BTC', amountQuote: 1000 })).toBeNull()
@@ -176,7 +180,7 @@ describe('a stake sized by a share of the paper account (8 October 2026)', () =>
 
   it('is on offer as a choice, read back, and saved only as one of its shares', () => {
     expect(PAPER_RISK_PCT_CHOICES).toEqual([0.1, 0.25, 0.5, 1, 2])
-    expect(healPaperRisk({ sizing: 'equity', riskQuote: 2, riskPct: 1, maxOutQuote: 500 })).toEqual({ sizing: 'equity', riskQuote: 2, riskPct: 1, maxOutQuote: 500 })
+    expect(healPaperRisk({ sizing: 'equity', riskQuote: 2, riskPct: 1, maxOutQuote: 500 })).toEqual({ sizing: 'equity', riskQuote: 2, riskPct: 1, maxOutQuote: 500, correlatedShare: 0.15 })
     expect(healPaperRisk({ sizing: 'equity', riskQuote: 2, riskPct: 3, maxOutQuote: 500 }).riskPct).toBe(0.25)
     expect(paperRiskProblem(EQUITY)).toBeNull()
     expect(paperRiskProblem({ ...EQUITY, riskPct: 3 })).toMatch(/risks 0.1, 0.25, 0.5, 1, 2% of the paper account/)

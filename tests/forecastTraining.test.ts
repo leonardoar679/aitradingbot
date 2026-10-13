@@ -256,9 +256,13 @@ describe('the schedule', () => {
     expect(runIdAt(Date.parse('2026-10-13T02:31:59Z') / 1000)).toBe('run-20261013-0231')
     expect(RUNS_KEPT).toBe(2)
     expect(runsToSweep(['run-20261010-0030', 'run-20261011-0030', 'run-20261012-0030', 'run-20261013-0030', 'current.json'], ['run-20261010-0030'])).toEqual(['run-20261011-0030'])
-    expect(healForecastSettings(undefined)).toEqual({ refitNightly: true })
-    expect(healForecastSettings({ refitNightly: 'no' })).toEqual({ refitNightly: true })
-    expect(healForecastSettings({ refitNightly: false })).toEqual({ refitNightly: false })
+    // The forecast trader beside it (V6 Stage 12): off until switched on, healed as its own.
+    const off = { enabled: false, stakeQuote: 100, maxOpen: 2, maxSameSide: 1 }
+    expect(healForecastSettings(undefined)).toEqual({ refitNightly: true, trader: off })
+    expect(healForecastSettings({ refitNightly: 'no' })).toEqual({ refitNightly: true, trader: off })
+    expect(healForecastSettings({ refitNightly: false, trader: { enabled: 'yes', maxOpen: 4 } })).toEqual({ refitNightly: false, trader: { ...off, maxOpen: 4 } })
+    expect(healForecastSettings({ trader: { enabled: true, stakeQuote: 250, maxOpen: 6, maxSameSide: 3 } }).trader).toEqual({ enabled: true, stakeQuote: 250, maxOpen: 6, maxSameSide: 3 })
+    expect(healForecastSettings({ trader: { enabled: true, stakeQuote: 99, maxOpen: 5, maxSameSide: 0 } }).trader).toEqual({ ...off, enabled: true })
   })
 })
 

@@ -164,6 +164,12 @@ describe('the forecast trader (§97)', () => {
     // An edge, but less likely than 55 in a hundred to clear the cost.
     expect(tradeOf(labCase({ dir: 'BULLISH', q: [-0.5, -0.2, 0.2, 2, 8] }), 'rules')).toBeNull()
     expect(tradeOf(bull(), 'rules')?.side).toBe('BUY')
+    // Each trade's opportunity class (V6 Stage 12): its coin, horizon and setup.
+    expect(tradeOf(bull(), 'rules')?.classKey).toBe('large/hour1/other')
+    expect(tradeOf(bull({ kinds: ['LISTING'] }), 'rules')?.classKey).toBe('large/hour1/news')
+    expect(tradeOf(bull({ breakout: true }), 'rules')?.classKey).toBe('large/hour1/breakout')
+    expect(tradeOf(bull({ prior: -2.5 }), 'rules')?.classKey).toBe('large/hour1/reversal')
+    expect(tradeOf(bull({ regime: 'bull' }), 'rules')?.classKey).toBe('large/hour1/trend')
   })
 
   it('takes the stop first where the path touched both, then the target, else the close, all net of the round trip', () => {

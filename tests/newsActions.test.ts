@@ -758,7 +758,7 @@ describe('sized by risk, and held to what the app has out (shared/paperRisk.ts)'
     // 100 out in a trade of the watch's: the first short of 500 fits, the second would make 1,100.
     expect(await openNewsShorts(item, { paperShort: { enabled: true, stakeQuote: 500 } }, r.deps)).toEqual([
       'ICX: a paper short of 500 USDT was opened.',
-      "SCRT: no paper short. The watch's and the news rules' open paper trades stake 600 USDT together, and 500 more would take them past the 1,000 set on Risk & Safety.",
+      "SCRT: no paper short. The app's own open paper trades stake 600 USDT together, and 500 more would take them past the 1,000 set on Risk & Safety.",
       'STORJ: no paper short, as it has no USDT pair on Binance.'
     ])
     expect(r.state.executors.map((executor) => executor.symbol)).toEqual(['BTCUSDT', 'ICXUSDT'])

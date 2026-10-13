@@ -92,7 +92,14 @@ export function tracksBtc(correlation: number | null | undefined): boolean {
 
 /** The correlation written on one of the app's own paper trades when it was opened. */
 function markedCorrelation(executor: ExecutorConfig): number | null | undefined {
-  return executor.watch !== undefined ? executor.watch.btcCorrelation : executor.newsRule?.btcCorrelation
+  if (executor.watch !== undefined) return executor.watch.btcCorrelation
+  return executor.newsRule !== undefined ? executor.newsRule.btcCorrelation : executor.forecast?.btcCorrelation
+}
+
+/** The share the setting holds them to: the risk mode's, or 0.15 as it was fixed before the modes. */
+export function correlatedShareOf(risk: Pick<PaperRiskSettings, 'correlatedShare'>): number {
+  const share = risk.correlatedShare
+  return share !== undefined && Number.isFinite(share) && share > 0 && share < 1 ? share : CORRELATED_SHARE
 }
 
 /** What the app's own open paper trades on `side` stake together in `quoteAsset`, on pairs that
@@ -118,8 +125,9 @@ function fundedWith(account: PaperAccount | null, quoteAsset: string): number {
  * with in the quote asset, or of the money-out cap without an account; null with neither. */
 export function correlatedCap(input: { account: PaperAccount | null; risk: PaperRiskSettings; quoteAsset: string }): number | null {
   const funded = fundedWith(input.account, input.quoteAsset)
-  if (funded > 0) return funded * CORRELATED_SHARE
-  return input.risk.maxOutQuote === null ? null : input.risk.maxOutQuote * CORRELATED_SHARE
+  const share = correlatedShareOf(input.risk)
+  if (funded > 0) return funded * share
+  return input.risk.maxOutQuote === null ? null : input.risk.maxOutQuote * share
 }
 
 const shown = (amount: number): string => Number(amount.toFixed(2)).toLocaleString('en-US')
@@ -148,13 +156,13 @@ export function correlatedExposureBlock(input: {
       ? "Its pair's correlation with Bitcoin could not be read, so it counts as one that moves with it"
       : `Its pair moves with Bitcoin (its hourly moves over ${CORRELATION_DAYS} days correlate at ${input.correlation.toFixed(2)})`
   const of = fundedWith(input.account, input.quoteAsset) > 0 ? 'what the paper account was funded with' : 'the money-out cap'
-  return `${why}, and the app's open paper ${way}s on such pairs stake ${shown(out)} ${input.quoteAsset} together: ${shown(input.amountQuote)} more would take them past ${shown(cap)}, ${Math.round(CORRELATED_SHARE * 100)}% of ${of}.`
+  return `${why}, and the app's open paper ${way}s on such pairs stake ${shown(out)} ${input.quoteAsset} together: ${shown(input.amountQuote)} more would take them past ${shown(cap)}, ${Math.round(correlatedShareOf(input.risk) * 100)}% of ${of}.`
 }
 
 /** The rule in a sentence, for Risk & Safety. */
 export function describeCorrelatedExposure(input: { account: PaperAccount | null; risk: PaperRiskSettings; quoteAsset: string }): string {
   const cap = correlatedCap(input)
-  const line = `On pairs whose hourly moves over ${CORRELATION_DAYS} days correlate with Bitcoin's at ${CORRELATED_LINE} or more, those open on one side stake at most ${Math.round(CORRELATED_SHARE * 100)}%`
+  const line = `On pairs whose hourly moves over ${CORRELATION_DAYS} days correlate with Bitcoin's at ${CORRELATED_LINE} or more, those open on one side stake at most ${Math.round(correlatedShareOf(input.risk) * 100)}%`
   if (cap === null) return `${line} of the paper account, or of the money-out cap; with neither, there is no such limit.`
   const of = fundedWith(input.account, input.quoteAsset) > 0 ? 'of what the paper account was funded with' : 'of the money-out cap'
   return `${line} ${of}: ${shown(cap)} ${input.quoteAsset} together.`

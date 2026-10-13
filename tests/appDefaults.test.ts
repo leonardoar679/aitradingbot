@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_ALERTS, healAlerts } from '../shared/alerts'
-import { CONSERVATIVE_PAPER, DEFAULT_CONFIG, conservativePaper, describeRiskLevel, riskLevelOf } from '../shared/appDefaults'
+import { DEFAULT_CONFIG, RISK_MODES, RISK_MODE_PRESETS, describeRiskMode, riskModeOf, riskModePatch, targetLevelOf } from '../shared/appDefaults'
+import { DEFAULT_FORECAST_TRADER, healForecastTrader } from '../shared/forecast/trader'
 import { DEFAULT_AI_DAILY_CAP_USD, DEFAULT_AI_MODEL, DEFAULT_ENABLED_MODELS } from '../shared/aiSignal'
 import { DEFAULT_AI_WATCH, healAiWatch } from '../shared/aiWatch'
 import { DEFAULT_AI_WATCH_PAPER, healAiWatchPaper } from '../shared/aiWatchPaper'
@@ -77,40 +78,66 @@ describe('notifications', () => {
   })
 })
 
-describe('the risk level', () => {
+describe('the risk mode (V6 Stage 12)', () => {
   const pause = { lossR: DEFAULT_PAPER_PAUSE.lossR, trades: DEFAULT_PAPER_PAUSE.trades }
+  const trader = { maxOpen: DEFAULT_FORECAST_TRADER.maxOpen, maxSameSide: DEFAULT_FORECAST_TRADER.maxSameSide }
 
-  it('is Conservative at the shipped defaults, and Custom when any of them is changed, either way', () => {
-    expect(CONSERVATIVE_PAPER).toEqual({ paperRisk: DEFAULT_PAPER_RISK, pause: { lossR: 5, trades: 20 } })
-    expect(riskLevelOf({ paperRisk: DEFAULT_PAPER_RISK, paperPause: pause })).toBe('conservative')
-    expect(riskLevelOf({ paperRisk: DEFAULT_PAPER_RISK, paperPause: DEFAULT_PAPER_PAUSE })).toBe('conservative')
+  it('is Conservative at a fresh install, each mode at its own settings, and Custom when any of them is changed, either way', () => {
+    expect(RISK_MODE_PRESETS.conservative).toEqual({ paperRisk: DEFAULT_PAPER_RISK, pause: { lossR: 5, trades: 20 }, trader: { maxOpen: 2, maxSameSide: 1 }, targetLevel: 'P75' })
+    expect(RISK_MODE_PRESETS.balanced).toEqual({ paperRisk: { sizing: 'equity', riskQuote: 2, riskPct: 0.5, maxOutQuote: 2500, correlatedShare: 0.25 }, pause: { lossR: 8, trades: 20 }, trader: { maxOpen: 4, maxSameSide: 2 }, targetLevel: 'P80' })
+    expect(RISK_MODE_PRESETS.aggressive).toEqual({ paperRisk: { sizing: 'equity', riskQuote: 5, riskPct: 1, maxOutQuote: 5000, correlatedShare: 0.35 }, pause: { lossR: 10, trades: 20 }, trader: { maxOpen: 6, maxSameSide: 3 }, targetLevel: 'P90' })
+    expect(riskModeOf({ paperRisk: DEFAULT_PAPER_RISK, paperPause: pause, trader })).toBe('conservative')
+    expect(riskModeOf({ paperRisk: DEFAULT_PAPER_RISK, paperPause: DEFAULT_PAPER_PAUSE, trader: DEFAULT_FORECAST_TRADER })).toBe('conservative')
+    for (const mode of RISK_MODES) {
+      const preset = RISK_MODE_PRESETS[mode]
+      expect(riskModeOf({ paperRisk: preset.paperRisk, paperPause: preset.pause, trader: preset.trader })).toBe(mode)
+      // Every setting a mode sets is one of its choices: a mode is never healed away.
+      expect(healPaperRisk(preset.paperRisk)).toEqual(preset.paperRisk)
+      expect(healForecastTrader({ ...preset.trader, enabled: true })).toEqual({ ...DEFAULT_FORECAST_TRADER, ...preset.trader, enabled: true })
+    }
     const changes = [
-      { paperRisk: { ...DEFAULT_PAPER_RISK, sizing: 'stake' as const }, paperPause: pause },
-      { paperRisk: { ...DEFAULT_PAPER_RISK, riskQuote: 2 }, paperPause: pause },
-      { paperRisk: { ...DEFAULT_PAPER_RISK, maxOutQuote: 500 }, paperPause: pause },
-      { paperRisk: { ...DEFAULT_PAPER_RISK, maxOutQuote: null }, paperPause: pause },
-      { paperRisk: DEFAULT_PAPER_RISK, paperPause: { ...pause, lossR: 3 } },
-      { paperRisk: DEFAULT_PAPER_RISK, paperPause: { ...pause, lossR: null } },
-      { paperRisk: DEFAULT_PAPER_RISK, paperPause: { ...pause, trades: 50 } }
+      { paperRisk: { ...DEFAULT_PAPER_RISK, sizing: 'risk' as const }, paperPause: pause, trader },
+      { paperRisk: { ...DEFAULT_PAPER_RISK, riskQuote: 2 }, paperPause: pause, trader },
+      { paperRisk: { ...DEFAULT_PAPER_RISK, riskPct: 0.5 }, paperPause: pause, trader },
+      { paperRisk: { ...DEFAULT_PAPER_RISK, maxOutQuote: 500 }, paperPause: pause, trader },
+      { paperRisk: { ...DEFAULT_PAPER_RISK, maxOutQuote: null }, paperPause: pause, trader },
+      { paperRisk: { ...DEFAULT_PAPER_RISK, correlatedShare: 0.25 }, paperPause: pause, trader },
+      { paperRisk: DEFAULT_PAPER_RISK, paperPause: { ...pause, lossR: 3 }, trader },
+      { paperRisk: DEFAULT_PAPER_RISK, paperPause: { ...pause, lossR: null }, trader },
+      { paperRisk: DEFAULT_PAPER_RISK, paperPause: { ...pause, trades: 50 }, trader },
+      { paperRisk: DEFAULT_PAPER_RISK, paperPause: pause, trader: { ...trader, maxOpen: 4 } },
+      { paperRisk: DEFAULT_PAPER_RISK, paperPause: pause, trader: { ...trader, maxSameSide: 2 } }
     ]
-    for (const changed of changes) expect(riskLevelOf(changed), JSON.stringify(changed)).toBe('custom')
+    for (const changed of changes) expect(riskModeOf(changed), JSON.stringify(changed)).toBe('custom')
+    // A profile written before the share was a setting reads it as the 0.15 it was.
+    const { correlatedShare: _dropped, ...older } = DEFAULT_PAPER_RISK
+    expect(riskModeOf({ paperRisk: older, paperPause: pause, trader })).toBe('conservative')
   })
 
-  it('is put back to Conservative without lifting a pause, which only Resume does', () => {
-    const stored: PaperPauseSettings = { lossR: null, trades: 50, watch: { countFrom: 100, paused: { at: 200, r: -5.5, trades: 6 } }, news: { countFrom: null, paused: null } }
-    const reset = conservativePaper(stored)
-    expect(reset.paperRisk).toEqual(DEFAULT_PAPER_RISK)
-    expect(reset.paperRisk).not.toBe(DEFAULT_PAPER_RISK)
-    expect(reset.paperPause).toEqual({ ...stored, lossR: 5, trades: 20 })
-    expect(riskLevelOf({ paperRisk: reset.paperRisk, paperPause: reset.paperPause })).toBe('conservative')
+  it('writes only the paper settings and the trader\'s caps, keeping every pause and whether the trader is on', () => {
+    const stored: PaperPauseSettings = { lossR: null, trades: 50, watch: { countFrom: 100, paused: { at: 200, r: -5.5, trades: 6 } }, news: { countFrom: null, paused: null }, forecast: { countFrom: 300, paused: null } }
+    const forecast = { refitNightly: false, trader: { enabled: true, stakeQuote: 250, maxOpen: 2, maxSameSide: 1 } }
+    const patch = riskModePatch('aggressive', { paperPause: stored, forecast })
+    expect(Object.keys(patch).sort()).toEqual(['forecast', 'paperPause', 'paperRisk'])
+    expect(patch.paperRisk).toEqual(RISK_MODE_PRESETS.aggressive.paperRisk)
+    expect(patch.paperRisk).not.toBe(RISK_MODE_PRESETS.aggressive.paperRisk)
+    expect(patch.paperPause).toEqual({ ...stored, lossR: 10, trades: 20 })
+    expect(patch.forecast).toEqual({ refitNightly: false, trader: { enabled: true, stakeQuote: 250, maxOpen: 6, maxSameSide: 3 } })
+    expect(riskModeOf({ paperRisk: patch.paperRisk, paperPause: patch.paperPause, trader: patch.forecast.trader })).toBe('aggressive')
+    // Off, it stays off: a mode is no switch.
+    const off = riskModePatch('balanced', { paperPause: stored, forecast: { ...forecast, trader: { ...forecast.trader, enabled: false } } })
+    expect(off.forecast.trader).toEqual({ enabled: false, stakeQuote: 250, maxOpen: 4, maxSameSide: 2 })
+    expect(targetLevelOf('balanced')).toBe('P80')
+    expect(targetLevelOf('custom')).toBe('P75')
   })
 
-  it('says itself in a word and what it holds the paper trades to', () => {
-    expect(describeRiskLevel({ paperRisk: DEFAULT_PAPER_RISK, paperPause: pause })).toEqual({
-      label: 'Conservative',
-      detail:
-        'For the paper trades the app opens by itself: Each with a stop stakes what would lose about 1 there, after fees, and never more than its own stake. Together they stake at most 1,000. Once the last 20 of them to close have lost 5 R together, none is opened until they are resumed on Risk & Safety.'
-    })
-    expect(describeRiskLevel({ paperRisk: { ...DEFAULT_PAPER_RISK, maxOutQuote: null }, paperPause: { lossR: null, trades: 20 } }).label).toBe('Custom')
+  it('says itself in a word and what it holds the paper trades to, and that it never touches the live limits', () => {
+    const described = describeRiskMode({ paperRisk: DEFAULT_PAPER_RISK, paperPause: pause, trader })
+    expect(described.mode).toBe('conservative')
+    expect(described.label).toBe('Conservative')
+    expect(described.detail).toBe(
+      "For the paper trades the app opens by itself: Each with a stop stakes what would lose about 0.25% of the paper account's equity there, after fees, and never more than its own stake; without a paper account, about 1. Together they stake at most 1,000. Once the last 20 of them to close have lost 5 R together, none is opened until they are resumed on Risk & Safety. The forecast trader keeps at most 2 open, 1 on one side, its target at P75. The limits on real orders are their own, on Risk & Safety: a mode never changes them."
+    )
+    expect(describeRiskMode({ paperRisk: { ...DEFAULT_PAPER_RISK, maxOutQuote: null }, paperPause: { lossR: null, trades: 20 }, trader }).label).toBe('Custom')
   })
 })

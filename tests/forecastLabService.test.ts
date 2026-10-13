@@ -140,6 +140,38 @@ describe('making the Lab', () => {
   })
 })
 
+describe('the opportunity classes (V6 Stage 12)', () => {
+  it("judges each class from the Lab's replay and the trader's closed paper trades, NOT ENOUGH where neither holds it", async () => {
+    // The worker's Lab with 30 replayed trades in one class, each of +0.5%.
+    const lab = await service()
+    const { askWorker } = await import('../electron/services/forecastWorkerService')
+    vi.mocked(askWorker).mockImplementationOnce(async (request) => {
+      const { outDir, runId } = request as { outDir: string; runId: string }
+      mkdirSync(join(outDir, runId), { recursive: true })
+      const trades = Array.from({ length: 30 }, (_, k) => ({ pair: 'SOLUSDT', t: T + k * 3600, horizon: 'hour1', side: 'BUY', classKey: 'large/hour1/trend', exit: 'close', grossPct: 0.74, netPct: 0.5 }))
+      const stats = { trades: 30, wins: 30, winRate: 1, profitFactor: null, expectancyPct: 0.5, netPct: 15, maxDrawdownPct: 0, costPct: 7.2 }
+      const horizon = { rows: 0, weeks: [], variants: {}, events: {}, drift: { shocks: 0, overReacting: 0, underReacting: 0 }, trader: { rules: stats, medians: stats }, trades: { rules: trades, medians: [] } }
+      writeFileSync(join(outDir, runId, 'lab.json'), serializeLab({ ...labFile(runId), horizons: { hour1: horizon as never } }))
+      return { id: 1, ok: true, result: { task: 'lab', runId, horizons: [], ms: 1 } }
+    })
+    // One closed paper trade of the trader's in that class, which lost 2% of its stake.
+    // An entry that expired unfilled is no trade, and one without its mark's result not yet closed.
+    fake.settings = {
+      executors: [
+        { id: 'f1', mode: 'paper', type: 'position', status: 'stopped', params: { amountQuote: 50 }, forecast: { classKey: 'large/hour1/trend', result: { exit: 'stop_loss', pnlQuote: -1, closedAt: T } } },
+        { id: 'f2', mode: 'paper', type: 'position', status: 'stopped', params: { amountQuote: 50 }, forecast: { classKey: 'large/hour1/trend', result: { exit: 'entry_expired', pnlQuote: 0, closedAt: T } } },
+        { id: 'f3', mode: 'paper', type: 'position', status: 'active', params: { amountQuote: 50 }, forecast: { classKey: 'large/hour1/trend' } }
+      ]
+    }
+    await settle(lab)
+    await lab.forecastLabForTest.readClasses()
+    const view = await lab.getForecastLab()
+    expect(view.classes).toEqual([{ key: 'large/hour1/trend', history: { trades: 30, netPct: 15 }, live: { trades: 1, netPct: -2 }, verdict: 'PROBATION' }])
+    expect(lab.forecastClassVerdict('large/hour1/trend')).toBe('PROBATION')
+    expect(lab.forecastClassVerdict('mid/hours4/news')).toBe('NOT_ENOUGH')
+  })
+})
+
 describe('what the page is shown', () => {
   it('the leaderboard from the walk forward\'s own record, the live record of the last week, and the refit', async () => {
     mkdirSync(models(), { recursive: true })

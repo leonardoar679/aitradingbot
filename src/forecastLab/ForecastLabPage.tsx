@@ -4,8 +4,11 @@ import { PageHeader } from '../components/PageHeader'
 import { buttonStyle, cellStyle, headCellStyle, inputStyle, noteStyle } from '../agents/agentStyles'
 import { HORIZONS, type Horizon, type PairClass } from '../../shared/forecast/features'
 import { LAB_EVENTS, type LabEvent } from '../../shared/forecast/lab'
+import { CLASS_LINES } from '../../shared/forecast/opportunityClass'
 import type { ForecastLabView } from '../../shared/forecast/labView'
 import { describeError } from '../utils/ipcError'
+import { settingsWrites } from '../utils/settingsWrites'
+import { healForecastSettings } from '../../shared/forecast/training'
 import {
   CLASS_NAME,
   COMPARISON_HEADERS,
@@ -13,6 +16,7 @@ import {
   HORIZON_NAME,
   calibrationTable,
   classesOf,
+  classesTable,
   driftTable,
   errorsTable,
   eventsTable,
@@ -117,8 +121,12 @@ export function ForecastLabPage(): React.JSX.Element {
   const lab = view?.lab ?? null
   const classes = useMemo(() => (lab === null ? (['pooled'] as const) : classesOf(lab)), [lab])
 
+  // The forecast's settings are written whole (a patch replaces them): the trader's are kept as they are.
   const setRefit = (on: boolean): void => {
-    void window.api.settings.set({ forecast: { refitNightly: on } }).then(
+    void settingsWrites(async () => {
+      const fresh = await window.api.settings.get()
+      await window.api.settings.set({ forecast: { ...healForecastSettings(fresh.forecast), refitNightly: on } })
+    }).then(
       () => setView((current) => (current === null ? current : { ...current, refit: { ...current.refit, on } })),
       (failure) => setNote(describeError(failure))
     )
@@ -251,6 +259,15 @@ export function ForecastLabPage(): React.JSX.Element {
         <Card title="Leaderboard">
           <p style={{ ...noteStyle, marginTop: 0 }}>Every model at every horizon on the walk forward's outcomes, its weight in the forecast shown, whether it was promoted, and whether its last week found it degraded. A model is never switched off: its weight falls with its score.</p>
           <LabTable table={leaderTable(view.leaderboard)} name="leaderboard" onNote={setNote} />
+        </Card>
+      )}
+
+      {view !== null && (
+        <Card title="Opportunity classes">
+          <p style={{ ...noteStyle, marginTop: 0 }}>
+            Each kind of coin, horizon and setup -- a story about the coin, a break of the day's range, a call against an hour's shock, the market's way, or none -- judged on the forecast trader's replay of the walk forward, as the rules stand, and on its own live paper trades: APPROVED where both have made money, PROBATION where the replay has and the live paper has not yet {CLASS_LINES.minLiveTrades} trades, DISABLED where either lost, NOT ENOUGH DATA under {CLASS_LINES.minHistoryTrades} replayed trades. The forecast trader trades only an approved class or one on probation.
+          </p>
+          <LabTable table={classesTable(view.classes)} name="classes" onNote={setNote} />
         </Card>
       )}
 

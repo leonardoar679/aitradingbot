@@ -136,7 +136,7 @@ export interface PricePrediction {
   barTime: number
   /** The coin's last hour in units of its usual move, its volume against its usual hour, and the share
    * of coins that rose in the hour, at that close; null where not read. */
-  market: { z1h: number; breadth1h: number; volRatio1h: number | null } | null
+  market: { z1h: number; breadth1h: number; volRatio1h: number | null; atr5mPct?: number | null } | null
   versions: { prediction: string; models: string; features: string; ensemble: string; calibration: string; runCalibration: string; news: string; quality: string; run: string; foldsRun: string }
 }
 
@@ -174,7 +174,7 @@ export interface PredictionInput {
   news?: PredictionNews
   /** The coin's last hour in units of its usual move and the share of pairs that rose in it, from its
    * row, for the quality's market confirmation (V6 Stage 9). */
-  market?: { z1h: number; breadth1h: number; volRatio1h?: number }
+  market?: { z1h: number; breadth1h: number; volRatio1h?: number; atr5mPct?: number | null }
   /** Each horizon's range drivers, where the engine read them from the size model. */
   drivers?: Partial<Record<Horizon, RangeDriver[]>>
   runId: string
@@ -367,7 +367,7 @@ export function makePrediction(input: PredictionInput): PricePrediction | null {
     pairClass: input.pairClass,
     regime: input.regime,
     barTime: input.barTime,
-    market: input.market === undefined ? null : { z1h: input.market.z1h, breadth1h: input.market.breadth1h, volRatio1h: input.market.volRatio1h ?? null },
+    market: input.market === undefined ? null : { z1h: input.market.z1h, breadth1h: input.market.breadth1h, volRatio1h: input.market.volRatio1h ?? null, atr5mPct: input.market.atr5mPct ?? null },
     versions: {
       prediction: PREDICTION_VERSION,
       models: MODELS_VERSION,
