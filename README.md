@@ -992,7 +992,10 @@ Two things to know:
 script lived outside the repo): hours of the real market, feeds and stream on a scratch profile and
 a separate build (`npx electron-vite build --outDir dist/<name>`, never `out/`), with OpenRouter faked
 in the main process before the first window opens, so that nothing is spent and the only key ever
-stored is a made-up one the fake answers. It writes a status line every ten minutes, the last hour's
+stored is a made-up one the fake answers. Notices are kept off the desktop and silent, but the app's
+own handler still tells them, so every one told is on file (`alerts/`) as it is for a person, and the
+status line counts every request (since 12 October 2026; before that the handler was replaced and a
+run's notices never reached the file). It writes a status line every ten minutes, the last hour's
 report every hour (what the app keeps only in memory, on file), and at the end the hour, twelve-hour,
 day and session reports as JSON and CSV; then the watch goes off, the fake key is removed and the app
 closes. A run killed by a restart is resumed with `RESUME=1`, which keeps the profile and the output

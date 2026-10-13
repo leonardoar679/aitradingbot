@@ -144,7 +144,7 @@ for f in sorted(glob.glob(os.path.join(OUT, 'main-fake-*.json'))):
     for o in fake['other']:
         print('  OTHER', o)
     for n in fake['notices']:
-        print(f'  NOTICE {clock(n["at"] / 1000)} [{n["severity"]}] {n["title"]} :: {n["body"][:220]}')
+        print(f'  NOTICE {clock(n["at"] / 1000)} [{n["severity"]}] {n.get("kind") or "-"} {n["title"]} :: {n["body"][:220]}')
 
 stories = jsonl(os.path.join(PROFILE, 'news', 'feed-*.jsonl'))
 start = segments[0]['startedAt'] / 1000 if segments else 0

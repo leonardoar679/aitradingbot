@@ -148,13 +148,27 @@ async function main() {
   }
   say(`scratch profile: ${actual}`)
 
-  // BEFORE anything can ask a model: OpenRouter faked; notices recorded, not shown; saves into OUT.
-  const stubbed = await app.evaluate(({ ipcMain, dialog, BrowserWindow }, outDir) => {
+  // BEFORE anything can ask a model: OpenRouter faked; notices kept off the desktop; saves into OUT.
+  const stubbed = await app.evaluate(({ ipcMain, dialog, BrowserWindow, Notification, shell }, outDir) => {
+    // Notices: nothing on the desktop and no sound, but the app's own handler still runs, so the
+    // thread rule applies and every notice told is on file (alerts/) as it is for the user -- the
+    // experiment's report and the daily report read them there. Each request is recorded here as
+    // well, before the thread rule, with its kind. (Until 12 October 2026 the handler was replaced:
+    // a run's notices never reached the file, and one the main process raised itself -- health, a
+    // reconciliation -- still showed on the desktop and beeped.) Electron keeps ipcMain.handle's
+    // functions in _invokeHandlers; should that map go, the handler is replaced as before and the
+    // start line says so.
     globalThis.__notices = []
+    Notification.isSupported = () => false
+    shell.beep = () => undefined
+    const handlers = ipcMain._invokeHandlers
+    const own = handlers instanceof Map ? handlers.get('app:notify') : undefined
+    globalThis.__noticesOnFile = typeof own === 'function'
     ipcMain.removeHandler('app:notify')
-    ipcMain.handle('app:notify', async (_event, title, body, severity) => {
-      globalThis.__notices.push({ at: Date.now(), title, body, severity: severity ?? null })
-      return true
+    ipcMain.handle('app:notify', async (event, title, body, severity, extra) => {
+      const kind = extra !== null && typeof extra === 'object' && typeof extra.kind === 'string' ? extra.kind : null
+      globalThis.__notices.push({ at: Date.now(), title, body, severity: severity ?? null, kind })
+      return typeof own === 'function' ? own(event, title, body, severity, extra) : true
     })
     dialog.showSaveDialog = async (...args) => {
       const options = args.find((arg) => arg && typeof arg === 'object' && 'defaultPath' in arg)
@@ -293,7 +307,7 @@ async function main() {
       globalThis.__other.push({ at: Date.now(), url: u.split('?')[0] })
       return reply({ error: { code: 404, message: 'not faked in this check' } }, 404)
     }
-    return 'stubbed'
+    return globalThis.__noticesOnFile ? 'stubbed; notices on file as the app writes them' : 'stubbed; notices recorded only (the handler could not be wrapped)'
   }, OUT)
   say(`main process: ${stubbed}`)
 
