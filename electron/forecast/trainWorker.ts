@@ -6,9 +6,12 @@ import { HORIZONS, PAIR_CLASSES, type Horizon, type PairClass, type PairSeries }
 import { binMatrix, fitCuts, rngOf, type Matrix } from '../../shared/forecast/ml/bins'
 import { fitGbt, lossOf, predictGbt } from '../../shared/forecast/ml/gbt'
 import { FORECAST_MODELS, fitHorizon, normalizedTarget, predictHorizon, type FittedHorizon, type ForecastModelId } from '../../shared/forecast/models'
+import { serializeRunCalibration } from '../../shared/forecast/calibrationFile'
 import { serializeFitted } from '../../shared/forecast/modelFile'
-import { encodeOos, OOS_VERSION, type OosRecord } from '../../shared/forecast/oosRecord'
+import { decodeOos, encodeOos, OOS_VERSION, type OosRecord } from '../../shared/forecast/oosRecord'
 import { buildPanel, type Panel } from '../../shared/forecast/panel'
+import { buildRunCalibration, type RunCalibration } from '../../shared/forecast/runCalibration'
+import { promotionsOf, type Promotion } from '../../shared/forecast/training'
 import { finalSplit, foldRows, planFolds, rowsFor, scoreRows, type Fold, type ModelScore } from '../../shared/forecast/walkForward'
 
 // THE FORECAST'S TRAINING, OFF THE MAIN THREAD (the V6 document, §13 and §51-53; V6 Stages 4-5, 13
@@ -22,7 +25,10 @@ import { finalSplit, foldRows, planFolds, rowsFor, scoreRows, type Fold, type Mo
 //   written to forecastModels/<run>/<horizon>.json. These are what the live forecast reads.
 // - FOLDS: the walk forward -- each of the last weeks forecast by models fitted only on the rows before
 //   it (shared/forecast/walkForward.ts) -- every model scored on outcomes it never saw, by class, and
-//   the hourly forecasts kept in forecastModels/<run>/oos-<horizon>.bin for the calibration and the Lab.
+//   the hourly forecasts kept in forecastModels/<run>/oos-<horizon>.bin for the calibration and the Lab;
+//   then the calibration made from them (shared/forecast/runCalibration.ts), in calibration.json.
+// - CALIBRATE: the calibration made again from the hourly forecasts on file, for a run walked forward
+//   before the calibration's version changed.
 //
 // IT TRAINS ON PUBLIC MARKET DATA AND NOTHING ELSE. No key, no model of anyone else's, no order, no
 // network: it reads the bars on file and writes the models it fitted beside them.
@@ -35,6 +41,7 @@ export type WorkerRequest =
   | { id: number; task: 'selftest'; rows: number; cols: number; seed: number }
   | { id: number; task: 'fit'; dataDir: string; outDir: string; runId: string; nowSec: number }
   | { id: number; task: 'folds'; dataDir: string; outDir: string; runId: string; nowSec: number }
+  | { id: number; task: 'calibrate'; outDir: string; runId: string; promotions: Promotion[] }
 
 export interface FitResult {
   task: 'fit'
@@ -51,6 +58,27 @@ export interface FoldsResult {
   runId: string
   folds: Fold[]
   horizons: { horizon: Horizon; tested: number; kept: number; scores: { model: ForecastModelId; overall: ModelScore; byClass: Partial<Record<PairClass, ModelScore>> }[] }[]
+  calibration: CalibrationSummary[]
+  ms: number
+}
+
+/** What a calibration made of each horizon: the ensemble's honest score, every class together. */
+export interface CalibrationSummary {
+  horizon: Horizon
+  rows: number
+  weeks: number[]
+  coverage80: number | null
+  coverage50: number | null
+  skill: number | null
+  brier: number | null
+  direction: number | null
+  weights: { model: ForecastModelId; weight: number }[]
+}
+
+export interface CalibrateResult {
+  task: 'calibrate'
+  runId: string
+  calibration: CalibrationSummary[]
   ms: number
 }
 
@@ -63,7 +91,7 @@ export interface SelftestResult {
 }
 
 export type WorkerReply =
-  | { id: number; ok: true; result: SelftestResult | FitResult | FoldsResult }
+  | { id: number; ok: true; result: SelftestResult | FitResult | FoldsResult | CalibrateResult }
   | { id: number; ok: false; error: string }
   | { id: number; progress: { step: string; done: number; total: number } }
 
@@ -143,6 +171,7 @@ async function folds(request: Extract<WorkerRequest, { task: 'folds' }>): Promis
   const last = panel.time[panel.rows - 1] ?? 0
   const plan = planFolds(first, last)
   const horizons: FoldsResult['horizons'] = []
+  const records = new Map<Horizon, OosRecord>()
   let step = 0
   for (const [hIndex, horizon] of HORIZONS.entries()) {
     const rows = rowsFor(panel, horizon)
@@ -190,9 +219,56 @@ async function folds(request: Extract<WorkerRequest, { task: 'folds' }>): Promis
       quantiles: Float32Array.from(kept.flatMap(({ entry }) => FORECAST_MODELS.flatMap((model) => entry.quantiles[model])))
     }
     await writeFile(join(dir, `oos-${horizon}.bin`), encodeOos(record))
+    records.set(horizon, record)
     horizons.push({ horizon, tested: tested.length, kept: kept.length, scores })
   }
-  return { task: 'folds', runId: request.runId, folds: plan, horizons, ms: Date.now() - started }
+  progress(request.id, 'calibrating', step, HORIZONS.length * plan.length)
+  const calibration = await writeCalibration(dir, records, promotionsOf(horizons), request.runId)
+  return { task: 'folds', runId: request.runId, folds: plan, horizons, calibration, ms: Date.now() - started }
+}
+
+/** The calibration from a walk forward's records, written beside them; what it made of each horizon. */
+async function writeCalibration(dir: string, records: ReadonlyMap<Horizon, OosRecord>, promotions: readonly Promotion[], runId: string): Promise<CalibrationSummary[]> {
+  const calibration = buildRunCalibration(records, promotions, runId)
+  await writeFile(join(dir, 'calibration.json'), serializeRunCalibration(calibration), 'utf-8')
+  return summaryOf(calibration)
+}
+
+function summaryOf(calibration: RunCalibration): CalibrationSummary[] {
+  return HORIZONS.flatMap((horizon) => {
+    const entry = calibration.horizons[horizon]
+    if (entry === undefined) return []
+    const honest = entry.variants.v2.honest.pooled
+    const figure = (value: number | undefined): number | null => (value !== undefined && Number.isFinite(value) ? value : null)
+    return [
+      {
+        horizon,
+        rows: entry.rows,
+        weeks: entry.variants.v2.honest.weeks,
+        coverage80: figure(honest?.coverage80),
+        coverage50: figure(honest?.coverage50),
+        skill: figure(honest?.skill),
+        brier: figure(honest?.brier),
+        direction: figure(honest?.direction),
+        weights: entry.variants.v2.weights.pooled
+      }
+    ]
+  })
+}
+
+/** The calibration made again from the hourly forecasts a walk forward left on file. */
+async function calibrate(request: Extract<WorkerRequest, { task: 'calibrate' }>): Promise<CalibrateResult> {
+  const started = Date.now()
+  const dir = join(request.outDir, request.runId)
+  const records = new Map<Horizon, OosRecord>()
+  for (const horizon of HORIZONS) {
+    const bytes = await readFile(join(dir, `oos-${horizon}.bin`)).catch(() => null)
+    const record = bytes === null ? null : decodeOos(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength))
+    if (record !== null && record.horizon === horizon) records.set(horizon, record)
+  }
+  if (records.size === 0) throw new Error(`no out-of-sample record of ${request.runId} to calibrate on`)
+  const calibration = await writeCalibration(dir, records, request.promotions, request.runId)
+  return { task: 'calibrate', runId: request.runId, calibration, ms: Date.now() - started }
 }
 
 /** A fit on a made-up problem, to show that the worker runs, and how fast: y = sin(x0) + noise growing
@@ -237,12 +313,13 @@ function selftest(rows: number, cols: number, seed: number): SelftestResult {
 }
 
 parentPort?.on('message', (request: WorkerRequest) => {
-  const reply = (result: SelftestResult | FitResult | FoldsResult): void => void parentPort?.postMessage({ id: request.id, ok: true, result } satisfies WorkerReply)
+  const reply = (result: SelftestResult | FitResult | FoldsResult | CalibrateResult): void => void parentPort?.postMessage({ id: request.id, ok: true, result } satisfies WorkerReply)
   const fail = (error: unknown): void => void parentPort?.postMessage({ id: request.id, ok: false, error: error instanceof Error ? error.message : String(error) } satisfies WorkerReply)
   try {
     if (request.task === 'selftest') reply(selftest(request.rows, Math.max(2, request.cols), request.seed))
     else if (request.task === 'fit') fit(request).then(reply, fail)
     else if (request.task === 'folds') folds(request).then(reply, fail)
+    else if (request.task === 'calibrate') calibrate(request).then(reply, fail)
     else fail(new Error('unknown task'))
   } catch (error) {
     fail(error)

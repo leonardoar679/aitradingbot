@@ -137,9 +137,10 @@ days (`recordRetentionService`), and the size of each record directory is on the
 card. Since 13 October 2026 `forecastData/` holds the price forecast's five-minute bars, a file per
 pair and UTC month (`forecastDataService`, V6 Stage 2), and a month file whose month ended before the
 ninety days the forecast keeps is deleted at start; and `forecastModels/` holds the forecast's fitted
-models, a folder a run (`<horizon>.json` and the walk forward's `oos-<horizon>.bin`), `current.json`
-(the run in use, the walk forward whose verdicts hold, the verdicts) and `training-YYYY-MM.jsonl` (a
-line for every fit and walk forward), written by `forecastTrainingService` (V6 Stage 5), which keeps
+models, a folder a run (`<horizon>.json`, the walk forward's `oos-<horizon>.bin` and, since V6
+Stage 6, the calibration made from it, `calibration.json`), `current.json` (the run in use, the walk
+forward whose verdicts and calibration hold, the verdicts) and `training-YYYY-MM.jsonl` (a line for
+every fit, walk forward and calibration), written by `forecastTrainingService` (V6 Stage 5), which keeps
 the run in use and the one before it and deletes older runs after a walk forward. Nothing else is
 ever deleted.
 
@@ -227,8 +228,9 @@ The main process also runs loops that need no window at all:
 - `forecastTrainingService` (added 13 October 2026, V6 Stage 5) fits the forecast's models in a
   worker thread of their own (`electron/forecast/trainWorker.ts`, through `forecastWorkerService`):
   a first fit once the bars are there for twenty pairs, the walk forward after it, and a refit every
-  night at 00:30 UTC unless `forecast.refitNightly` is off; it writes `forecastModels/`. Public data
-  only; no key, no model call, no order.
+  night at 00:30 UTC unless `forecast.refitNightly` is off; it writes `forecastModels/`. Since V6
+  Stage 6 each walk forward also writes its calibration, and a run without one is calibrated again
+  from its record at start. Public data only; no key, no model call, no order.
 - `aiAdditionsService` (added 6 October 2026) puts each story of high impact the news feed reads to
   the news analyst, once, and asks why the coin it names moved, while the watch is on, each within
   its daily limit and the AI budget.

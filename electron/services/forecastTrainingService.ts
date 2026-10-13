@@ -1,11 +1,13 @@
 import { app } from 'electron'
 import { mkdir, readFile, readdir, rm } from 'fs/promises'
 import { join } from 'path'
+import { parseRunCalibration } from '../../shared/forecast/calibrationFile'
 import { HORIZONS, type Horizon } from '../../shared/forecast/features'
 import { parseFitted } from '../../shared/forecast/modelFile'
 import type { FittedHorizon } from '../../shared/forecast/models'
+import type { RunCalibration } from '../../shared/forecast/runCalibration'
 import { MIN_READY_PAIRS, fitDueAtStart, healForecastSettings, nextNightlyAt, promotionsOf, runIdAt, runsToSweep, type Promotion } from '../../shared/forecast/training'
-import type { FitResult, FoldsResult } from '../forecast/trainWorker'
+import type { CalibrateResult, FitResult, FoldsResult } from '../forecast/trainWorker'
 import { writeJsonAtomic } from './atomicWrite'
 import { getForecastDataStatus, onForecastBars } from './forecastDataService'
 import { askWorker, type WorkerProgress } from './forecastWorkerService'
@@ -20,11 +22,13 @@ import { getSettings } from './settingsService'
 // which scores each model on weeks it was not fitted on and decides which weigh. Every night at half
 // past midnight UTC it does both again on the newest ninety days, unless the refit is switched off.
 //
-// ON FILE (forecastModels/): a folder a run, with its five horizons' models (<horizon>.json) and its
-// out-of-sample record (oos-<horizon>.bin); current.json, naming the run in use and the walk forward
-// whose verdicts hold; and training-YYYY-MM.jsonl, a line for every fit and walk forward, whether it
+// ON FILE (forecastModels/): a folder a run, with its five horizons' models (<horizon>.json), its
+// out-of-sample record (oos-<horizon>.bin) and the calibration made from it (calibration.json, V6
+// Stage 6); current.json, naming the run in use and the walk forward whose verdicts and calibration
+// hold; and training-YYYY-MM.jsonl, a line for every fit, walk forward and calibration, whether it
 // worked, how long it took and what it found. The run in use and the one before it are kept; older
-// ones are deleted.
+// ones are deleted. A walk forward's calibration that is missing or of another version is made again
+// from its record on file, without fitting anything.
 //
 // IT FITS ON PUBLIC MARKET DATA AND NOTHING ELSE. No key, no model of anyone else's, no order.
 
@@ -34,6 +38,8 @@ export interface TrainingState {
   status: TrainingStatus
   /** The run in use, when it was fitted, and the walk forward whose verdicts hold. */
   current: { runId: string; fittedAt: number; foldsRunId: string | null } | null
+  /** The walk forward whose calibration is in use; null before there is one. */
+  calibratedRunId: string | null
   progress: WorkerProgress | null
   lastError: string | null
   /** Seconds: the next nightly refit, when it is on. */
@@ -48,8 +54,9 @@ interface CurrentFile {
   promotions: Promotion[]
 }
 
-const state: TrainingState = { status: 'waiting', current: null, progress: null, lastError: null, nextRefitAt: null, promotions: [] }
+const state: TrainingState = { status: 'waiting', current: null, calibratedRunId: null, progress: null, lastError: null, nextRefitAt: null, promotions: [] }
 let models: Map<Horizon, FittedHorizon> = new Map()
+let calibration: RunCalibration | null = null
 let started = false
 let running: Promise<void> | null = null
 let timer: ReturnType<typeof setTimeout> | null = null
@@ -87,6 +94,28 @@ async function loadRun(runId: string): Promise<Map<Horizon, FittedHorizon> | nul
     out.set(horizon, fitted)
   }
   return out
+}
+
+/** A walk forward's calibration from its file; null when it is missing, damaged or of another version. */
+async function loadCalibration(runId: string): Promise<RunCalibration | null> {
+  const text = await readFile(join(modelsDir(), runId, 'calibration.json'), 'utf-8').catch(() => null)
+  const read = text === null ? null : parseRunCalibration(text)
+  return read !== null && read.runId === runId ? read : null
+}
+
+/** Puts a walk forward's calibration in use: from its file, or made again from its record. */
+async function useCalibration(runId: string, promotions: Promotion[]): Promise<void> {
+  let read = await loadCalibration(runId)
+  if (read === null) {
+    const answer = await askWorker({ task: 'calibrate', outDir: modelsDir(), runId, promotions })
+    if (!answer.ok) throw new Error(answer.error)
+    const made = answer.result as CalibrateResult
+    await record({ kind: 'calibrate', runId, ok: true, ms: made.ms, calibration: made.calibration })
+    read = await loadCalibration(runId)
+    if (read === null) throw new Error(`the calibration of ${runId} could not be read back`)
+  }
+  calibration = read
+  state.calibratedRunId = runId
 }
 
 async function writeCurrent(file: CurrentFile): Promise<void> {
@@ -149,10 +178,24 @@ function runTraining(why: 'first' | 'nightly' | 'stale'): Promise<void> {
       if (!foldsAnswer.ok) throw new Error(foldsAnswer.error)
       const folds = foldsAnswer.result as FoldsResult
       const promotions = promotionsOf(folds.horizons)
+      const made = await loadCalibration(runId)
+      if (made === null) throw new Error(`the calibration of ${runId} could not be read back`)
       await writeCurrent({ ...current, foldsRunId: runId, promotions })
       state.current = { runId, fittedAt: nowSec, foldsRunId: runId }
       state.promotions = promotions
-      await record({ kind: 'folds', why, runId, ok: true, ms: folds.ms, folds: folds.folds, horizons: folds.horizons.map((entry) => ({ horizon: entry.horizon, tested: entry.tested, kept: entry.kept, scores: entry.scores })), promotions })
+      calibration = made
+      state.calibratedRunId = runId
+      await record({
+        kind: 'folds',
+        why,
+        runId,
+        ok: true,
+        ms: folds.ms,
+        folds: folds.folds,
+        horizons: folds.horizons.map((entry) => ({ horizon: entry.horizon, tested: entry.tested, kept: entry.kept, scores: entry.scores })),
+        promotions,
+        calibration: folds.calibration
+      })
       await sweepRuns([runId])
       state.status = 'ready'
     } catch (error) {
@@ -205,6 +248,16 @@ export function startForecastTraining(): void {
         state.promotions = current.promotions
         state.status = 'ready'
         tell()
+        // The walk forward's calibration with its verdicts; a run whose models could not be read back
+        // is fitted again, and walked forward again, below.
+        const foldsRunId = current.foldsRunId
+        if (foldsRunId !== null) {
+          await useCalibration(foldsRunId, current.promotions).catch(async (error) => {
+            state.lastError = describe(error)
+            await record({ kind: 'error', why: 'calibrate', runId: foldsRunId, ok: false, error: state.lastError })
+          })
+          tell()
+        }
       }
     }
     const settings = healForecastSettings((await getSettings()).forecast)
@@ -234,6 +287,11 @@ export function currentForecastModels(): ReadonlyMap<Horizon, FittedHorizon> {
   return models
 }
 
+/** The calibration in use: the newest walk forward's; null before the first is done. */
+export function currentForecastCalibration(): RunCalibration | null {
+  return calibration
+}
+
 /** Told when the models, the verdicts or the status change. */
 export function onForecastTraining(listener: () => void): () => void {
   listeners.add(listener)
@@ -245,8 +303,9 @@ export const forecastTrainingForTest = {
   run: runTraining,
   nightly: nightlyRefit,
   reset(): void {
-    Object.assign(state, { status: 'waiting', current: null, progress: null, lastError: null, nextRefitAt: null, promotions: [] })
+    Object.assign(state, { status: 'waiting', current: null, calibratedRunId: null, progress: null, lastError: null, nextRefitAt: null, promotions: [] })
     models = new Map()
+    calibration = null
     started = false
     running = null
     if (timer !== null) clearTimeout(timer)

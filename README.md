@@ -325,6 +325,55 @@ called the way of 51-52% of the moves at fifteen minutes and an hour. At 4 and 2
 did not beat persistence, and the forest's range was too narrow there; they stay on record, not
 weighing.
 
+**The prediction: a range, a call, and how far to trust it** (since 13 October 2026; the V6
+document's §5-10, §14, §25-26 and §56-61; V6 Stage 6; `shared/forecast/{ensemble,calibration,
+direction,reliability,runCalibration,prediction}.ts`). The promoted models are combined level by
+level, each weighing by how much its pinball loss was under persistence's (persistence alone where
+none was), per pair class where the class has 2,000 outcomes of its own; the spread between their
+medians is put back into the range, as a mixture of them would show it, so the range is wider where
+they disagree. The range is then **calibrated** level by level on the walk forward's outcomes, each
+level moved by the error that fell at it, in units of the forecast's own half-width, per class and
+horizon; an adaptive step will move each level with the live outcomes as they come (V6 Stage 7). A
+book whose spread is over 0.1% widens it further. **P(up)** is the share of the calibrated range above
+zero, mapped to the share of such forecasts that did go up -- a map fitted on readings made out of
+sample, every step of it holding 200 outcomes.
+
+All of it is **scored honestly**: each tested week forecast with weights and a calibration made only
+from the weeks before it, so that what is shown is what it did on outcomes it had not seen. On the
+real record of 13 October (39 pairs, three weeks scored, about 18,600 outcomes a horizon) the
+calibrated 80% range held 77-80% of the outcomes at every horizon and the 50% range 48-50%, and the
+calibrated forecast's pinball loss was 0.8-2.0% under calibrated persistence's. Its P(up) knew nothing:
+against the better of an even chance and the share that went up in the weeks before, its skill was
+between -1.9% and +0.7% in every horizon and class. A map fitted on the very forecasts it mapped had
+shown the opposite -- at 24 hours it read 67% for 7,524 outcomes of which 49% went up, a month's drift
+learned as direction -- which is why the map and its skill are out of sample.
+
+The call follows fixed lines: **BULLISH** at a P(up) of at least 58% with the median above zero,
+**BEARISH** mirrored, and only where the horizon's P(up) beat what knows nothing by at least 1% on weeks
+it was not fitted on (that 1% was set after the first real walk forward, as the noise of two weeks of
+a class's outcomes); **STRONG** at 65%, a median of at least 1% (four times a round trip's 0.24%), a
+prediction quality of 75 (V6 Stage 9) and a bad case no further from zero than the median;
+**NEUTRAL / UNCERTAIN** where the 80% range is over three times the class's usual width; NEUTRAL
+otherwise. A P(up) without that skill is shown as the base rate -- the share that went up over the
+weeks scored -- since it knows no more: the map had read 32% at 24 hours for most large coins.
+On that record every pair is NEUTRAL at every horizon, as the plan said to expect. The
+**reliability** (LOW, MEDIUM, HIGH) is the weakest of four readings: the cell's tested outcomes (2,000
+for HIGH), its range's honest coverage (within 3 points of 80% for HIGH), the models' agreement, and
+the market (panic LOW, high volatility or an hour at twice the day's pace at best MEDIUM). In the
+record's 962 bear hours the 1- and 4-hour ranges held 66-67%: one episode, too few to calibrate on,
+which the adaptive step is there for.
+
+The **prediction** is the document's §5 object -- for each horizon the likely range (P25 to P75, its
+`confidenceLevel` 50), its prices, the median, and the bear and bull cases (P10 and P90) -- with the
+calibrated P(up), the call, its confidence (the calibrated chance of the way it calls), its
+reliability and why, when it expires (the 1-hour forecast from the 15:00 close at 16:00), each
+model's weight and median, the calibration's shift (which with them add up to the median), and the
+price-only variant (V1) beside the one shown (V2). The pair's call is its **best horizon's**: the one
+whose calibrated forecast beat calibrated persistence by most for its class; with none, it is
+NEUTRAL. A walk forward writes its calibration beside its record (`forecastModels/<run>/
+calibration.json`, about 280 KB), read back with its verdicts; a run walked forward before it existed,
+or under another version, is calibrated again from its record at the next start, with nothing fitted.
+
 ### Live prices
 
 Candles are context; the stream is the price now (the second V3 document's §7, §8, §25 and §42).

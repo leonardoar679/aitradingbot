@@ -6,14 +6,18 @@ import { HORIZONS, type Horizon } from '../shared/forecast/features'
 import type { GbtModel } from '../shared/forecast/ml/gbt'
 import { QUANTILE_LEVELS } from '../shared/forecast/ml/quantile'
 import type { FlatTree } from '../shared/forecast/ml/tree'
+import { serializeRunCalibration } from '../shared/forecast/calibrationFile'
 import { serializeFitted } from '../shared/forecast/modelFile'
 import { MODELS_VERSION, type FittedHorizon } from '../shared/forecast/models'
+import { buildRunCalibration } from '../shared/forecast/runCalibration'
 import { nextNightlyAt, runIdAt } from '../shared/forecast/training'
+import { promoted, recordOf } from './forecastRecords'
 
 // THE FORECAST'S FITS, KEPT AND RUN (electron/services/forecastTrainingService.ts; the V6 document, §13,
 // §51 and §104): a fit once the bars are there, read back from its files and put in use; the walk
-// forward's verdicts after it; the nightly refit; a failed fit leaving the models in use as they were;
-// and the runs older than the two newest swept. The worker, the bars and the settings are faked.
+// forward's verdicts and its calibration after it; a calibration missing from a run on file made again
+// from its record; the nightly refit; a failed fit leaving the models in use as they were; and the runs
+// older than the two newest swept. The worker, the bars and the settings are faked.
 
 vi.mock('electron', () => ({ app: { getPath: () => process.env.AI_TEST_USER_DATA } }))
 
@@ -49,6 +53,14 @@ function writeRun(dir: string, runId: string): void {
   for (const horizon of HORIZONS) writeFileSync(join(dir, runId, `${horizon}.json`), serializeFitted(tinyFitted(horizon)))
 }
 
+const CALIBRATION = buildRunCalibration(new Map([['hour1', recordOf({ rows: 6000, seed: 41 })]]), promoted('hour1', ['persistence', 'gbt']), 'placeholder')
+
+/** A run's calibration on file, as the worker writes it after a walk forward. */
+function writeCalibration(dir: string, runId: string): void {
+  mkdirSync(join(dir, runId), { recursive: true })
+  writeFileSync(join(dir, runId, 'calibration.json'), serializeRunCalibration({ ...CALIBRATION, runId }))
+}
+
 const score = (pinball: number): Record<string, number> => ({ n: 9000, pinball, coverage80: 0.8, coverage50: 0.5, direction: 0.5, bias: 0, width80: 2.5 })
 
 vi.mock('../electron/services/forecastWorkerService', () => ({
@@ -59,6 +71,8 @@ vi.mock('../electron/services/forecastWorkerService', () => ({
       writeRun(request.outDir, request.runId)
       return { id: 1, ok: true, result: { task: 'fit', runId: request.runId, symbols: ['BTCUSDT'], rows: 100, span: { from: 0, to: 1 }, horizons: [], ms: 5 } }
     }
+    writeCalibration(request.outDir, request.runId)
+    if (request.task === 'calibrate') return { id: 3, ok: true, result: { task: 'calibrate', runId: request.runId, calibration: [], ms: 2 } }
     return {
       id: 2,
       ok: true,
@@ -76,6 +90,7 @@ vi.mock('../electron/services/forecastWorkerService', () => ({
             { model: 'technical', overall: score(0.31), byClass: {} }
           ]
         })),
+        calibration: [],
         ms: 7
       }
     }
@@ -140,6 +155,10 @@ describe('the first fit', () => {
     expect(lines.map((line) => line.kind)).toEqual(['fit', 'folds'])
     expect(lines.every((line) => line.ok === true)).toBe(true)
     expect(state.nextRefitAt).toBe(nextNightlyAt(Math.floor(Date.now() / 1000)))
+    // The walk forward's calibration is in use with its verdicts.
+    expect(state.calibratedRunId).toBe(state.current?.runId)
+    expect(training.currentForecastCalibration()?.runId).toBe(state.current?.runId)
+    expect(training.currentForecastCalibration()?.horizons.hour1?.variants.v2.weights.pooled).toEqual([{ model: 'gbt', weight: 1 }])
   })
 })
 
@@ -147,6 +166,7 @@ describe('a start with models in use', () => {
   it('fits nothing while they are fresh', async () => {
     const runId = 'run-20261012-0030'
     writeRun(dir(), runId)
+    writeCalibration(dir(), runId)
     writeFileSync(join(dir(), 'current.json'), JSON.stringify({ runId, fittedAt: Math.floor(Date.now() / 1000) - 3600, foldsRunId: runId, promotions: [] }))
     const training = await service()
     training.startForecastTraining()
@@ -155,11 +175,38 @@ describe('a start with models in use', () => {
     expect(fake.asked).toEqual([])
     expect(training.currentForecastModels().size).toBe(HORIZONS.length)
     expect(training.getForecastTrainingState().current?.runId).toBe(runId)
+    expect(training.currentForecastCalibration()?.runId).toBe(runId)
+  })
+
+  it('makes a calibration missing from its walk forward again from the record, fitting nothing', async () => {
+    const runId = 'run-20261012-0030'
+    writeRun(dir(), runId)
+    writeFileSync(join(dir(), 'current.json'), JSON.stringify({ runId, fittedAt: Math.floor(Date.now() / 1000) - 3600, foldsRunId: runId, promotions: [] }))
+    const training = await service()
+    training.startForecastTraining()
+    await vi.waitFor(() => expect(training.currentForecastCalibration()?.runId).toBe(runId))
+    expect(fake.asked).toEqual([{ task: 'calibrate', runId }])
+    expect(training.getForecastTrainingState().calibratedRunId).toBe(runId)
+    const records = readdirSync(dir()).filter((name) => name.startsWith('training-'))
+    expect(JSON.parse(readFileSync(join(dir(), records[0]), 'utf-8').trim())).toMatchObject({ kind: 'calibrate', runId, ok: true })
+  })
+
+  it("makes it again where the file on record is another run's", async () => {
+    const runId = 'run-20261012-0030'
+    writeRun(dir(), runId)
+    writeCalibration(dir(), runId)
+    writeFileSync(join(dir(), runId, 'calibration.json'), serializeRunCalibration({ ...CALIBRATION, runId: 'run-20261001-0030' }))
+    writeFileSync(join(dir(), 'current.json'), JSON.stringify({ runId, fittedAt: Math.floor(Date.now() / 1000) - 3600, foldsRunId: runId, promotions: [] }))
+    const training = await service()
+    training.startForecastTraining()
+    await vi.waitFor(() => expect(training.currentForecastCalibration()?.runId).toBe(runId))
+    expect(fake.asked).toEqual([{ task: 'calibrate', runId }])
   })
 
   it('refits stale ones, and keeps them in use when the fit fails, saying why', async () => {
     const runId = 'run-20261010-0030'
     writeRun(dir(), runId)
+    writeCalibration(dir(), runId)
     writeFileSync(join(dir(), 'current.json'), JSON.stringify({ runId, fittedAt: Math.floor(Date.now() / 1000) - 30 * 3600, foldsRunId: runId, promotions: [] }))
     fake.failFit = true
     const training = await service()
@@ -177,6 +224,7 @@ describe('a start with models in use', () => {
   it('does not refit stale ones with the nightly refit switched off', async () => {
     const runId = 'run-20261010-0030'
     writeRun(dir(), runId)
+    writeCalibration(dir(), runId)
     writeFileSync(join(dir(), 'current.json'), JSON.stringify({ runId, fittedAt: Math.floor(Date.now() / 1000) - 30 * 3600, foldsRunId: runId, promotions: [] }))
     fake.settings = { forecast: { refitNightly: false } }
     const training = await service()
@@ -197,19 +245,43 @@ describe('a refit', () => {
   it('puts its models in use at once, and keeps the walk forward before it until its own is done', async () => {
     const runId = 'run-20261010-0030'
     writeRun(dir(), runId)
+    writeCalibration(dir(), runId)
     const promotions = [{ horizon: 'hour1', model: 'gbt', promoted: true, lines: [] }]
     writeFileSync(join(dir(), 'current.json'), JSON.stringify({ runId, fittedAt: Math.floor(Date.now() / 1000) - 30 * 3600, foldsRunId: runId, promotions }))
     const training = await service()
     const { askWorker } = await import('../electron/services/forecastWorkerService')
     const real = vi.mocked(askWorker).getMockImplementation()!
     vi.mocked(askWorker).mockImplementation(async (request, onProgress) => (request.task === 'folds' ? { id: 3, ok: false, error: 'the walk forward was cut short' } : real(request, onProgress)))
-    await training.forecastTrainingForTest.run('stale')
+    training.startForecastTraining()
+    await vi.waitFor(() => expect(training.getForecastTrainingState().lastError).toBe('the walk forward was cut short'))
     vi.mocked(askWorker).mockImplementation(real)
     const current = JSON.parse(readFileSync(join(dir(), 'current.json'), 'utf-8'))
     expect(current.runId).not.toBe(runId)
     expect(current.foldsRunId).toBe(runId)
     expect(current.promotions).toEqual(promotions)
-    expect(training.getForecastTrainingState()).toMatchObject({ status: 'ready', lastError: 'the walk forward was cut short', promotions })
+    expect(training.getForecastTrainingState()).toMatchObject({ status: 'ready', promotions, calibratedRunId: runId })
+    expect(training.currentForecastCalibration()?.runId).toBe(runId)
+  })
+
+  it('keeps the verdicts and the calibration before it when its own calibration cannot be read back', async () => {
+    const runId = 'run-20261010-0030'
+    writeRun(dir(), runId)
+    writeCalibration(dir(), runId)
+    writeFileSync(join(dir(), 'current.json'), JSON.stringify({ runId, fittedAt: Math.floor(Date.now() / 1000) - 30 * 3600, foldsRunId: runId, promotions: [] }))
+    const training = await service()
+    const { askWorker } = await import('../electron/services/forecastWorkerService')
+    const real = vi.mocked(askWorker).getMockImplementation()!
+    vi.mocked(askWorker).mockImplementation(async (request, onProgress) => {
+      const answer = await real(request, onProgress)
+      const { outDir, runId: asked } = request as { outDir: string; runId: string }
+      if (request.task === 'folds') writeFileSync(join(outDir, asked, 'calibration.json'), '{"torn"')
+      return answer
+    })
+    training.startForecastTraining()
+    await vi.waitFor(() => expect(training.getForecastTrainingState().lastError).toMatch(/calibration of .+ could not be read back/))
+    vi.mocked(askWorker).mockImplementation(real)
+    expect(JSON.parse(readFileSync(join(dir(), 'current.json'), 'utf-8')).foldsRunId).toBe(runId)
+    expect(training.currentForecastCalibration()?.runId).toBe(runId)
   })
 
   it('is made at night when it is on, and not when it is off', async () => {

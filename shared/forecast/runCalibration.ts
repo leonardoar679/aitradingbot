@@ -1,0 +1,319 @@
+import { buildCell, calibrate, type CalibrationCell } from './calibration'
+import { calibratedPUp, fitPUp, rawPUp } from './direction'
+import { ENSEMBLE_LINES, combine, lossesOf, weightsFromLosses, type MemberWeight } from './ensemble'
+import type { MarketRegime } from '../marketResearch'
+import { HORIZONS, HORIZON_BARS, MARKET_REGIMES, PAIR_CLASSES, type Horizon, type PairClass } from './features'
+import type { IsotonicModel } from './ml/isotonic'
+import { QUANTILE_LEVELS, meanPinball } from './ml/quantile'
+import type { ForecastModelId } from './models'
+import { oosQuantiles, type OosRecord } from './oosRecord'
+import { usualMove } from './targets'
+import type { Promotion } from './training'
+
+// A RUN'S CALIBRATION (the V6 document, §14, §25-26, §49 and §56-61; V6 Stage 6, 13 October 2026),
+// made from its walk forward's record of what every model forecast for every hour of the weeks it
+// was tested on (shared/forecast/oosRecord.ts).
+//
+// FOR THE LIVE FORECAST, for each horizon: the ensemble's weights, the calibration cells and each
+// class's usual width, from every week; and the map from raw P(up) to the share that went up, from
+// the readings made out of sample (shared/forecast/direction.ts says why).
+//
+// AN HONEST SCORE of all of it, each figure on outcomes the part it scores never saw: each week after
+// the first forecast with weights and a calibration made only from the weeks before it -- its
+// coverage and its pinball loss against calibrated persistence's -- and, from the week after that,
+// its P(up) mapped by what the earlier out-of-sample readings did, scored against the better of two
+// forecasts that know nothing of the row: an even chance, and the share that went up in the weeks
+// before (its direction skill). The better of the two, because on the real record the weeks' drift
+// turned: carrying it forward scored worse than an even chance, and a P(up) that only beat that would
+// have shown a skill it did not have. That is what the Lab and the reliability show.
+//
+// TWO VARIANTS (§49), each calibrated on its own record: V1, price only -- gbt on the price figures --
+// and V2, the ensemble of every market model. The news (V3) and the AI (V4) adjust V2 live (V6 Stage
+// 8) and are calibrated on the live record as it grows. Persistence is calibrated the same way, as the
+// floor the honest skill is measured against.
+
+export const RUN_CALIBRATION_VERSION = 'run-calibration-v2'
+export const VARIANTS = ['v1', 'v2'] as const
+export type VariantId = (typeof VARIANTS)[number]
+
+const P10 = QUANTILE_LEVELS.indexOf(0.1)
+const P25 = QUANTILE_LEVELS.indexOf(0.25)
+const P75 = QUANTILE_LEVELS.indexOf(0.75)
+const P90 = QUANTILE_LEVELS.indexOf(0.9)
+
+export interface CurveBin {
+  /** The mean P(up) forecast in the bin, the share that went up, and how many. */
+  predicted: number
+  observed: number
+  n: number
+}
+
+export interface HonestScore {
+  /** Outcomes scored for the range, and of them those scored for P(up). */
+  n: number
+  nDirection: number
+  coverage80: number
+  coverage50: number
+  /** The calibrated forecast's mean pinball loss, and calibrated persistence's on the same outcomes. */
+  pinball: number
+  persistencePinball: number
+  /** 1 - pinball / persistencePinball: above zero, it knew more than the usual move's size. */
+  skill: number
+  /** The mean squared error of P(up), and 1 less it over the better of an even chance's and the
+   * weeks-before base rate's: above zero, P(up) knew more than either. */
+  brier: number
+  directionSkill: number
+  /** The share that went up, and of the moves whose way P(up) called (over 50% for up, under for
+   * down; exactly 50% calls none) the share called right. */
+  upShare: number
+  direction: number
+  curve: CurveBin[]
+}
+
+export interface VariantCalibration {
+  weights: { pooled: MemberWeight[]; byClass: Partial<Record<PairClass, MemberWeight[]>> }
+  cells: { pooled: CalibrationCell; byClass: Partial<Record<PairClass, CalibrationCell>> }
+  pUp: IsotonicModel
+  /** The median width of the calibrated 80% range, in percent. */
+  usualWidth80Pct: { pooled: number; byClass: Partial<Record<PairClass, number>> }
+  honest: { pooled: HonestScore | null; byClass: Partial<Record<PairClass, HonestScore>>; weeks: number[] }
+}
+
+export interface HorizonCalibration {
+  horizon: Horizon
+  rows: number
+  variants: Record<VariantId, VariantCalibration>
+}
+
+export interface RunCalibration {
+  version: string
+  runId: string
+  horizons: Partial<Record<Horizon, HorizonCalibration>>
+}
+
+/** One hour of one pair from the walk forward's record. */
+export interface Row {
+  quantiles: Partial<Record<ForecastModelId, number[]>>
+  z: number
+  cls: PairClass
+  regime: MarketRegime
+  fold: number
+  usual: number
+}
+
+export function rowsOf(record: OosRecord): Row[] {
+  const out: Row[] = []
+  const bars = HORIZON_BARS[record.horizon]
+  for (let row = 0; row < record.rows; row++) {
+    const z = record.z[row]
+    const usual = usualMove(record.rv24h[row], bars)
+    if (!Number.isFinite(z) || !(usual > 0)) continue
+    const quantiles: Partial<Record<ForecastModelId, number[]>> = {}
+    for (const model of record.models) quantiles[model] = oosQuantiles(record, row, model)
+    out.push({ quantiles, z, cls: PAIR_CLASSES[record.cls[row]], regime: MARKET_REGIMES[record.regime[row]], fold: record.fold[row], usual })
+  }
+  return out
+}
+
+type Members = VariantId | 'persistence'
+
+interface Fitted {
+  weights: VariantCalibration['weights']
+  cells: VariantCalibration['cells']
+  usualWidth80Pct: VariantCalibration['usualWidth80Pct']
+}
+
+function byClassOf<T extends { cls: PairClass }>(rows: readonly T[]): Map<PairClass, T[]> {
+  const out = new Map<PairClass, T[]>()
+  for (const row of rows) {
+    const mine = out.get(row.cls)
+    if (mine === undefined) out.set(row.cls, [row])
+    else mine.push(row)
+  }
+  return out
+}
+
+function weightsFor(members: Members, rows: readonly Row[], promoted: ReadonlySet<ForecastModelId>): MemberWeight[] {
+  if (members === 'persistence') return [{ model: 'persistence', weight: 1 }]
+  if (members === 'v1') return [{ model: 'gbt-price', weight: 1 }]
+  return weightsFromLosses(lossesOf(rows), promoted)
+}
+
+const widthPct = (quantiles: readonly number[], usual: number): number => (Math.exp(quantiles[P90] * usual) - Math.exp(quantiles[P10] * usual)) * 100
+
+function median(values: number[]): number {
+  if (values.length === 0) return Number.NaN
+  const sorted = [...values].sort((a, b) => a - b)
+  const middle = sorted.length >> 1
+  return sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2
+}
+
+/** Weights, cells and the usual widths from rows of the record. */
+function fit(rows: readonly Row[], members: Members, promoted: ReadonlySet<ForecastModelId>): Fitted {
+  const classes = byClassOf(rows)
+  const pooledWeights = weightsFor(members, rows, promoted)
+  const weightsByClass: Partial<Record<PairClass, MemberWeight[]>> = {}
+  for (const [cls, mine] of classes) if (mine.length >= ENSEMBLE_LINES.minCellRows) weightsByClass[cls] = weightsFor(members, mine, promoted)
+  const combined = rows.map((row) => ({ cls: row.cls, row, quantiles: combine(row.quantiles, weightsByClass[row.cls] ?? pooledWeights).quantiles }))
+  const pooledCell = buildCell(combined.map((entry) => ({ quantiles: entry.quantiles, z: entry.row.z })))
+  const cellsByClass: Partial<Record<PairClass, CalibrationCell>> = {}
+  for (const [cls, mine] of byClassOf(combined)) {
+    if (mine.length >= ENSEMBLE_LINES.minCellRows) cellsByClass[cls] = buildCell(mine.map((entry) => ({ quantiles: entry.quantiles, z: entry.row.z })))
+  }
+  const widths = combined.map((entry) => ({ cls: entry.cls, width: widthPct(calibrate(entry.quantiles, cellsByClass[entry.cls] ?? pooledCell), entry.row.usual) }))
+  const widthByClass: Partial<Record<PairClass, number>> = {}
+  for (const [cls, mine] of byClassOf(widths)) widthByClass[cls] = median(mine.map((entry) => entry.width))
+  return {
+    weights: { pooled: pooledWeights, byClass: weightsByClass },
+    cells: { pooled: pooledCell, byClass: cellsByClass },
+    usualWidth80Pct: { pooled: median(widths.map((entry) => entry.width)), byClass: widthByClass }
+  }
+}
+
+/** One row's calibrated quantiles by a fitted calibration. */
+function apply(fitted: Fitted, row: Row): number[] {
+  const combined = combine(row.quantiles, fitted.weights.byClass[row.cls] ?? fitted.weights.pooled)
+  return calibrate(combined.quantiles, fitted.cells.byClass[row.cls] ?? fitted.cells.pooled)
+}
+
+/** A row forecast out of sample: its calibrated quantiles and raw P(up), persistence's beside them,
+ * and, once a map could be fitted before its week, its P(up) and the base rate of the weeks before. */
+export interface ScoredRow {
+  cls: PairClass
+  regime: MarketRegime
+  week: number
+  quantiles: readonly number[]
+  floor: readonly number[]
+  z: number
+  raw: number
+  pUp: number | null
+  base: number | null
+}
+
+/** The honest score of rows forecast out of sample. */
+export function honestScore(entries: readonly ScoredRow[]): HonestScore | null {
+  const n = entries.length
+  if (n === 0) return null
+  let inside80 = 0
+  let inside50 = 0
+  let pinball = 0
+  let floor = 0
+  let nDirection = 0
+  let brier = 0
+  let even = 0
+  let reference = 0
+  let up = 0
+  let calls = 0
+  let called = 0
+  const bins = Array.from({ length: 10 }, () => ({ predicted: 0, observed: 0, n: 0 }))
+  for (const entry of entries) {
+    const q = entry.quantiles
+    if (entry.z >= q[P10] && entry.z <= q[P90]) inside80++
+    if (entry.z >= q[P25] && entry.z <= q[P75]) inside50++
+    pinball += meanPinball(entry.z, q)
+    floor += meanPinball(entry.z, entry.floor)
+    if (entry.pUp === null || entry.base === null) continue
+    const wentUp = entry.z > 0 ? 1 : 0
+    nDirection++
+    brier += (entry.pUp - wentUp) ** 2
+    even += 0.25
+    reference += (entry.base - wentUp) ** 2
+    up += wentUp
+    if (entry.z !== 0 && entry.pUp !== 0.5) {
+      calls++
+      if (entry.pUp > 0.5 === entry.z > 0) called++
+    }
+    const bin = bins[Math.min(9, Math.max(0, Math.floor(entry.pUp * 10)))]
+    bin.predicted += entry.pUp
+    bin.observed += wentUp
+    bin.n++
+  }
+  const per = (value: number, over: number): number => (over > 0 ? value / over : Number.NaN)
+  return {
+    n,
+    nDirection,
+    coverage80: inside80 / n,
+    coverage50: inside50 / n,
+    pinball: pinball / n,
+    persistencePinball: floor / n,
+    skill: floor > 0 ? 1 - pinball / floor : Number.NaN,
+    brier: per(brier, nDirection),
+    directionSkill: nDirection > 0 ? 1 - brier / Math.min(even, reference) : Number.NaN,
+    upShare: per(up, nDirection),
+    direction: per(called, calls),
+    curve: bins.filter((bin) => bin.n > 0).map((bin) => ({ predicted: bin.predicted / bin.n, observed: bin.observed / bin.n, n: bin.n }))
+  }
+}
+
+/** Every week after the first forecast with what the weeks before it alone gave; and, from the week
+ * after that, each row's P(up) mapped by what the out-of-sample readings before its week did. */
+export function scoreOutOfSample(rows: readonly Row[], members: VariantId, promoted: ReadonlySet<ForecastModelId>): ScoredRow[] {
+  const weeks = [...new Set(rows.map((row) => row.fold))].sort((a, b) => a - b)
+  const scored: ScoredRow[] = []
+  for (const week of weeks.slice(1)) {
+    const before = rows.filter((row) => row.fold < week)
+    if (before.length < ENSEMBLE_LINES.minCellRows) continue
+    const fitted = fit(before, members, promoted)
+    const floor = fit(before, 'persistence', promoted)
+    for (const row of rows) {
+      if (row.fold !== week) continue
+      const quantiles = apply(fitted, row)
+      scored.push({ cls: row.cls, regime: row.regime, week, quantiles, floor: apply(floor, row), z: row.z, raw: rawPUp(quantiles), pUp: null, base: null })
+    }
+  }
+  const scoredWeeks = [...new Set(scored.map((entry) => entry.week))].sort((a, b) => a - b)
+  for (const week of scoredWeeks.slice(1)) {
+    const map = fitPUp(scored.filter((entry) => entry.week < week).map((entry) => ({ raw: entry.raw, up: entry.z > 0 })))
+    const earlier = rows.filter((row) => row.fold < week)
+    const base = earlier.filter((row) => row.z > 0).length / earlier.length
+    for (const entry of scored) {
+      if (entry.week !== week) continue
+      entry.pUp = calibratedPUp(map, entry.raw)
+      entry.base = base
+    }
+  }
+  return scored
+}
+
+function variantOf(rows: readonly Row[], members: VariantId, promoted: ReadonlySet<ForecastModelId>): VariantCalibration {
+  const scored = scoreOutOfSample(rows, members, promoted)
+  const byClass: Partial<Record<PairClass, HonestScore>> = {}
+  for (const [cls, mine] of byClassOf(scored)) {
+    const score = honestScore(mine)
+    if (score !== null) byClass[cls] = score
+  }
+  return {
+    ...fit(rows, members, promoted),
+    pUp: fitPUp(scored.map((entry) => ({ raw: entry.raw, up: entry.z > 0 }))),
+    honest: { pooled: honestScore(scored), byClass, weeks: [...new Set(scored.map((entry) => entry.week))].sort((a, b) => a - b) }
+  }
+}
+
+/** A run's calibration from its walk forward's records and the verdicts on them. */
+export function buildRunCalibration(records: ReadonlyMap<Horizon, OosRecord>, promotions: readonly Promotion[], runId: string): RunCalibration {
+  const horizons: Partial<Record<Horizon, HorizonCalibration>> = {}
+  for (const horizon of HORIZONS) {
+    const record = records.get(horizon)
+    if (record === undefined) continue
+    const rows = rowsOf(record)
+    if (rows.length < ENSEMBLE_LINES.minCellRows) continue
+    const promoted = new Set(promotions.filter((entry) => entry.horizon === horizon && entry.promoted).map((entry) => entry.model))
+    const variants = {} as Record<VariantId, VariantCalibration>
+    for (const variant of VARIANTS) variants[variant] = variantOf(rows, variant, promoted)
+    horizons[horizon] = { horizon, rows: rows.length, variants }
+  }
+  return { version: RUN_CALIBRATION_VERSION, runId, horizons }
+}
+
+/** What a pair of a class reads of a variant's calibration: its class's own where it had enough
+ * outcomes, the horizon's otherwise. */
+export function cellOf(variant: VariantCalibration, cls: PairClass): { weights: MemberWeight[]; cell: CalibrationCell; usualWidth80Pct: number; honest: HonestScore | null; ownClass: boolean } {
+  const ownClass = variant.cells.byClass[cls] !== undefined
+  return {
+    weights: variant.weights.byClass[cls] ?? variant.weights.pooled,
+    cell: variant.cells.byClass[cls] ?? variant.cells.pooled,
+    usualWidth80Pct: variant.usualWidth80Pct.byClass[cls] ?? variant.usualWidth80Pct.pooled,
+    honest: (ownClass ? variant.honest.byClass[cls] : undefined) ?? variant.honest.pooled,
+    ownClass
+  }
+}
