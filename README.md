@@ -43,7 +43,8 @@ other.
 
 | Group | Entry | What it does |
 |---|---|---|
-| AI Trader | **Home** | The landing page since 13 October 2026 (the V6 document, §3): the market in a line (the regime, Bitcoin, ether, the other pairs and the risk state, as on Overview), the opportunity that can be acted on now, and what you hold. The prediction goes on top once the forecast engine makes one. Opening it asks no model and places nothing. |
+| AI Trader | **Home** | The landing page since 13 October 2026 (the V6 document, §3): the market in a line (the regime, Bitcoin, ether, the other pairs and the risk state, as on Overview), the forecast's **best current prediction** and its top three ([on screen](#the-price-forecasts-data)), the opportunity that can be acted on now, and what you hold. Opening it asks no model and places nothing. |
+|  | **Predictions** | Every pair's price forecast, ranked by its edge after costs (since 13 October 2026, V6 Stage 10), with filters by pair, horizon, call, kind of coin, tradable and news; a row opens its whole forecast: the timeline to 24 hours, Why?, Why this range?, its recorded forecasts against the price, and the decision. Reading it asks no model and places nothing. |
 |  | **Opportunities** | What can be traded right now: the [watch](#ai-signals--paper-only) that puts events to models with no click, and [the table](#the-opportunity-table-and-the-markets-regime) of the recommendations still valid and the last hour's other events, ranked by a signal score with fixed weights ("No high-quality opportunity right now. Wait." when nothing is on offer), each entry checked against the [live price](#live-prices) — enterable now, waiting for its range, or invalidated, with an execution score — and a row opening the score, the plan and what ends it, the risk, the news and each model's reasoning. Below it, every event the scanner raised with each model's call, Ask and Paper trade — or **Confirm** on a BUY while CONFIRM is on (see [the watch's paper trades](#ai-signals--paper-only)), which fills in a real order from the call, sized by the risk setting on Risk & Safety, for a person to place. **Why?** beside a pair says what moved it, from the [news and Bitcoin](#news--market-events). A call fills in an order form at most; a person places it. |
 |  | **Positions** | Live paper positions for active bots; a **Live Positions** table of real Binance holdings from live-mode Order Executor fills, closable (fully or partially) for real; a **Live Trade History** table of realized P&L from closed live positions; an **Inventory** table of positions handed over from stopped paper executors (see [Position Handover](#position-handover--inventory)); **The App's Own Paper Trades**, the watch's and the news rules' open paper trades, each with where it stands on the last closed minute and a **THESIS STATUS** (VALID, WEAKENING or BROKEN) that is a reading and never a control; a live position with a watcher shows the watcher's barriers and the same status (see [the thesis status](#the-ai-additions)). |
 |  | **Performance** | Total value, active-bot count, bot P&L and system cards; the portfolio's value over time (value/composition, 1D/1W/1M/3M) and its largest holdings; what the watch's recommendations earned, in percent and in R, over the last 10/50/100 trades and 7/30 days, with and without the [reviewer](#the-ai-additions), and whether they beat the [quant strategies](#does-ai-help-the-models-against-the-quant-strategies) on the same events; the app's own paper trades, the watch's and the news rules', as a running total in R; the journal of every recommendation with its outcome, exportable as CSV, where any line opens [its whole story](#one-trades-whole-story) on one timeline. |
@@ -438,6 +439,35 @@ A forecast's invalidation now names the market too (§5): Bitcoin falling 1% wit
 the market turning to panic, a story of impact 70 against the coin. Each recorded forecast carries its
 quality and its decision; the window reads the ranking and a pair's decision through
 `window.api.forecast`.
+
+**The forecast on screen** (since 13 October 2026; the V6 document's §3, §34-37, §70-71, §94, §105 and
+§118; V6 Stage 10; `src/forecast/`). Home leads with the **best current prediction**, the ranking's
+first pair: its call, its price, its likely ranges over the next fifteen minutes, hour and four hours,
+said from the live price where the stream holds it, its bull and bear cases, quality, reliability and
+best horizon, the story moving it, its volume against its usual hour, its momentum, the watch's models'
+vote where the watch asked about its event, how long it stays valid, and the decision -- with the
+reasons, NO TRADE on the real record -- and the top three under it; DETAILS opens it on
+**Predictions**. That page ranks every pair, with filters, and a row opens the **drawer**: the timeline
+from now to 24 hours (each horizon's call, ranges, P(up), quality and time left); **Why?** -- the day's
+and the week's move, momentum, volume, the regime, the story and what its kind did before, the news
+analyst's reading and the watch's answers on file (a model's own words shown as its own), and each
+model's weight and median; **Why this range?** -- its 80% width against its class's usual, and the three
+figures that moved the reading of a boosted size model most, from its trees' own paths (each split's
+change credited to the figure it splits on, so that with the base they add up to the reading), each
+said in words and its units: of the two boosted size models, on every figure and on the price's
+alone, the one weighing more in the pair's forecast at that horizon, and none where neither weighs
+(at 24 hours, on the real record, only the price-only one did); and the pair's **recorded forecasts
+against the price** over the last day, each quarter-hour's ranges drawn at the moment they were for. **PREDICTION CHANGED** (§71), an alert kind
+of its own, HIGH: when the call at the best horizon of a top-ten pair, one held or one an active
+executor trades turns from BULLISH to BEARISH or back and holds two passes running -- one close's
+wobble is not a change, and a NEUTRAL is never one -- once a pair an hour, with the ranges before and
+after and the model, story or regime behind it. **MODEL DEGRADED** (§105), WATCH: a model in use --
+promoted at that horizon by the same walk forward, and persistence always -- whose last walked-forward
+week held its 80% range outside 70-90%, lost to persistence or was off by more than a quarter of the
+usual move, over at least 200 outcomes, told once a model and horizon a day; a model that never beat
+persistence weighs nothing and reads as not promoted, not as degraded (on the real record most models
+at 4 and 24 hours, which would otherwise be told every night). It stays computed and on record, and its
+weight falls with its own score.
 
 ### Live prices
 

@@ -8,15 +8,16 @@ the expert one (Settings › Essentials › Layout, `uiMode`) opens every group.
 
 | Group | Entries (the page each opens) |
 |---|---|
-| AI TRADER | Home, Opportunities, Positions, Performance |
+| AI TRADER | Home, Predictions, Opportunities, Positions, Performance |
 | TRADING | Paper (Paper Trading), Live (Live Trading) |
 | RESEARCH | Backtest (Backtest & Research), AI Benchmark |
 | ALL FEATURES | Strategies; Bots and Executors (Strategies' two views); Controllers (Risk & Safety, at its card); Routines (Backtest & Research › Automation); Market (the page titled Market, once Markets); Portfolio (Performance, at the portfolio cards); Explorer (the page titled Explorer, once Discovery); Overview; AI Decisions |
 | SYSTEM | Risk (Risk & Safety), Connections, Settings |
 
 Home is new (V6 Stage 1): the market in a line, the top opportunity and what you hold, the cards
-Overview has; the prediction goes on top of it once the forecast engine makes one. Overview keeps
-everything it had. From 5 to 13 October 2026 the sidebar had four groups (AI TRADER, RESEARCH,
+Overview has; since V6 Stage 10 it leads with the forecast's best current prediction and its top
+three, and Predictions (new, after Home) ranks every pair's forecast. Overview keeps everything it
+had. From 5 to 13 October 2026 the sidebar had four groups (AI TRADER, RESEARCH,
 TRADING, SYSTEM; Research before Trading from 8 October). Since 8 October 2026 Overview also has
 three blocks of its own, not old cards moved: Breaking events, News impact and Today's performance
 (`src/overview/`).
@@ -79,6 +80,8 @@ Taken on 5 October 2026, at commit `aef376d`.
 | | API Credentials | Exchange keys: set, test, remove | Connections |
 | | Risk Limits | Live order size, daily cap, daily loss limit, allocation; and, added 8 October 2026, the share of the allocation a real order filled in from a call is sized to risk | Risk & Safety |
 | **Live trading bar** (every page) | Arm, kill switch, watchers, blocked exits | The gates real orders pass | Stays on every page, with status chips added; the detail on Live Trading |
+| **The price forecast** (added 13 October 2026, V6 Stage 10, not an old page) | Best current prediction, Top predictions | The ranking's first pair: its likely ranges at 15 minutes, an hour and four hours from the live price, its bull and bear cases, quality, reliability, the story moving it, volume, momentum, the watch's vote where it asked, and the decision; the top three under it | Home |
+| | Ranked forecasts, and a row's drawer | Every pair's forecast best first, with filters; the drawer's timeline to 24 hours, Why?, Why this range?, its recorded forecasts against the price, and the decision | Predictions |
 
 Duplicates, all intentional and kept:
 - **The live board** appears on Opportunities and again in the event benchmark, beside the same

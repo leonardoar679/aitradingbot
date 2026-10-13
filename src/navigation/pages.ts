@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   KeyRound,
   Settings,
+  Telescope,
   type LucideIcon
 } from 'lucide-react'
 import type { UiMode } from '../../shared/uiMode'
@@ -35,6 +36,7 @@ import type { UiMode } from '../../shared/uiMode'
 
 export type Page =
   | 'home'
+  | 'predictions'
   | 'overview'
   | 'opportunities'
   | 'markets'
@@ -88,6 +90,7 @@ export type NavTarget =
 
 export type NavId =
   | 'home'
+  | 'predictions'
   | 'opportunities'
   | 'positions'
   | 'performance'
@@ -136,6 +139,7 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: House,
     items: [
       { id: 'home', label: 'Home', icon: House, target: { page: 'home' } },
+      { id: 'predictions', label: 'Predictions', icon: Telescope, target: { page: 'predictions' } },
       { id: 'opportunities', label: 'Opportunities', icon: Radar, target: { page: 'opportunities' } },
       { id: 'positions', label: 'Positions', icon: Anchor, target: { page: 'positions' } },
       { id: 'performance', label: 'Performance', icon: TrendingUp, target: { page: 'performance' } }

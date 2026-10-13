@@ -303,6 +303,8 @@ describe('AI code has no route to a real order', () => {
       expect(importsOf(path).filter((name) => LIVE_MODULES.has(name) || aiModuleNames.has(name)), path).toEqual([])
       expect(readFileSync(path, 'utf-8'), path).not.toMatch(/fetch\(|https?:\/\/|credentials|apiKey|liveTrading|placeLive|openRouter|prepareOrder/)
     }
+    // noticeService, settingsService, predictionChange and rangeDrivers (V6 Stage 10): a watched coin's
+    // turned call is told, the pairs held and traded read from the settings; a notice places nothing.
     expect(importsOf(engine).sort()).toEqual([
       'aciTable',
       'atomicWrite',
@@ -318,15 +320,30 @@ describe('AI code has no route to a real order', () => {
       'marketResearchService',
       'models',
       'newsEffect',
+      'noticeService',
       'outcome',
       'path',
       'prediction',
+      'predictionChange',
       'promises',
+      'rangeDrivers',
       'ranking',
       'refresh',
+      'runCalibration',
+      'settingsService',
       'status',
       'tradeDecision'
     ])
+    expect(readFileSync(engine, 'utf-8')).not.toMatch(/setSettings|settings\.set/)
+    // What shows the forecast (V6 Stage 10) reads the forecast's bridge and the stream's, and offers no
+    // call to an order.
+    const screen = readdirSync(join(ROOT, 'src', 'forecast')).filter((name) => /\.tsx?$/.test(name))
+    expect(screen.length).toBeGreaterThan(0)
+    for (const name of screen) {
+      const source = readFileSync(join(ROOT, 'src', 'forecast', name), 'utf-8')
+      expect([...new Set([...source.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))].filter((bridge) => bridge !== 'forecast'), name).toEqual([])
+      expect(source, name).not.toMatch(/liveTrading|LiveTrading|placeLive|onPrepareOrder|prepareOrder|aiProposal|settings\.set/)
+    }
   })
 
   it('the live prices read the public stream and refuse, never place', () => {

@@ -129,6 +129,14 @@ export function scoreRows(quantiles: readonly (readonly number[])[], outcomes: r
   return { n, pinball: per(pinball, n), coverage80: per(inside80, n), coverage50: per(inside50, n), direction: per(called, calls), bias: per(bias, n), width80: per(width, n) }
 }
 
+/** Each model's score over the last week a walk forward tested, alone: what a model's degradation is
+ * read from (§105; V6 Stage 10). `z` is the outcome of each tested row, in its order. */
+export function lastFoldScores<M extends string>(tested: readonly { fold: number; quantiles: Record<M, number[]> }[], z: readonly number[], models: readonly M[]): { model: M; score: ModelScore }[] {
+  const lastFold = tested.reduce((latest, entry) => Math.max(latest, entry.fold), -1)
+  const rows = tested.map((entry, at) => ({ entry, at })).filter(({ entry }) => entry.fold === lastFold)
+  return models.map((model) => ({ model, score: scoreRows(rows.map(({ entry }) => entry.quantiles[model]), rows.map(({ at }) => z[at])) }))
+}
+
 /** The horizon's bars, for a reader that wants it in time. */
 export function horizonSeconds(horizon: Horizon): number {
   return HORIZON_BARS[horizon] * 300

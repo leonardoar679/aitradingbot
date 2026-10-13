@@ -16,8 +16,9 @@ import { promoted, recordOf } from './forecastRecords'
 // THE FORECAST'S FITS, KEPT AND RUN (electron/services/forecastTrainingService.ts; the V6 document, §13,
 // §51 and §104): a fit once the bars are there, read back from its files and put in use; the walk
 // forward's verdicts and its calibration after it; a calibration missing from a run on file made again
-// from its record; the nightly refit; a failed fit leaving the models in use as they were; and the runs
-// older than the two newest swept. The worker, the bars and the settings are faked.
+// from its record; the nightly refit; a failed fit leaving the models in use as they were; the runs
+// older than the two newest swept; and a model the walk forward's last week found worse, told (§105).
+// The worker, the bars, the settings and the desktop are faked.
 
 vi.mock('electron', () => ({ app: { getPath: () => process.env.AI_TEST_USER_DATA } }))
 
@@ -26,7 +27,12 @@ const fake = vi.hoisted(() => ({
   failFit: false,
   data: { ready: 25, pairs: 30 },
   listeners: [] as (() => void)[],
-  settings: {} as Record<string, unknown>
+  settings: {} as Record<string, unknown>,
+  /** Each model's score over the walk forward's four weeks, and over its last week alone (none on file
+   * before V6 Stage 10), at every horizon. */
+  scores: null as { model: string; overall: Record<string, number>; byClass: Record<string, never> }[] | null,
+  lastWeek: null as { model: string; score: Record<string, number> }[] | null,
+  told: [] as { title: string; body: string; extra?: Record<string, unknown> }[]
 }))
 
 const leaf = (value: number): FlatTree => ({ feature: [-1], threshold: [0], bin: [0], left: [-1], right: [-1], value: [value], cover: [0], gain: [0] })
@@ -84,11 +90,12 @@ vi.mock('../electron/services/forecastWorkerService', () => ({
           horizon,
           tested: 9000,
           kept: 2000,
-          scores: [
+          scores: fake.scores ?? [
             { model: 'persistence', overall: score(0.3), byClass: {} },
             { model: 'gbt', overall: score(0.29), byClass: {} },
             { model: 'technical', overall: score(0.31), byClass: {} }
-          ]
+          ],
+          ...(fake.lastWeek === null ? {} : { lastWeek: fake.lastWeek })
         })),
         calibration: [],
         ms: 7
@@ -107,6 +114,12 @@ vi.mock('../electron/services/forecastDataService', () => ({
 
 vi.mock('../electron/services/settingsService', () => ({ getSettings: async () => ({ ...fake.settings }) }))
 
+vi.mock('../electron/services/noticeService', () => ({
+  tell: (notice: { title: string; body: string; extra?: Record<string, unknown> }) => {
+    fake.told.push(notice)
+  }
+}))
+
 const dir = (): string => join(process.env.AI_TEST_USER_DATA as string, 'forecastModels')
 
 async function service() {
@@ -123,6 +136,9 @@ beforeEach(() => {
   fake.data = { ready: 25, pairs: 30 }
   fake.listeners.length = 0
   fake.settings = {}
+  fake.scores = null
+  fake.lastWeek = null
+  fake.told.length = 0
 })
 
 describe('the first fit', () => {
@@ -334,5 +350,70 @@ describe('the runs on file', () => {
     // Not read back, the run is not in use: a fit was made in its place.
     expect(fake.asked[0]?.task).toBe('fit')
     expect(training.getForecastTrainingState().current?.runId).not.toBe(runId)
+  })
+})
+
+describe('a degraded model (§105)', () => {
+  it("is told from the walk forward's last week for a model in use, a model and horizon a thread, a day a notice, and stays in use", async () => {
+    // Over the four weeks gbt, the forest, the quantile boosting and gbt-price beat persistence and are
+    // promoted; technical lost to it and is not.
+    fake.scores = [
+      { model: 'persistence', overall: score(0.3), byClass: {} },
+      { model: 'gbt', overall: score(0.29), byClass: {} },
+      { model: 'technical', overall: score(0.31), byClass: {} },
+      { model: 'random-forest', overall: score(0.29), byClass: {} },
+      { model: 'quantile-gbt', overall: score(0.29), byClass: {} },
+      { model: 'gbt-price', overall: score(0.29), byClass: {} }
+    ]
+    fake.lastWeek = [
+      { model: 'persistence', score: score(0.3) },
+      // Within every line: not told.
+      { model: 'gbt', score: score(0.29) },
+      // A pinball loss above persistence's, but never promoted: not told.
+      { model: 'technical', score: score(0.32) },
+      // Its 80% range held 65% of the week.
+      { model: 'random-forest', score: { ...score(0.29), coverage80: 0.65 } },
+      // Its median off by 0.3 of the usual move.
+      { model: 'quantile-gbt', score: { ...score(0.29), bias: -0.3 } },
+      // Too few outcomes in the week to judge: not told, however far off.
+      { model: 'gbt-price', score: { ...score(0.5), n: 150, coverage80: 0.4 } }
+    ]
+    const training = await service()
+    await training.forecastTrainingForTest.run('first')
+    expect(training.getForecastTrainingState().status).toBe('ready')
+    const threads = fake.told.map((notice) => notice.extra?.thread)
+    expect(threads).toEqual(HORIZONS.flatMap((horizon) => ['random-forest', 'quantile-gbt'].map((model) => `degraded:forecast:${model}:${horizon}`)))
+    expect(fake.told.every((notice) => notice.extra?.kind === 'MODEL_DEGRADED' && notice.extra?.severity === 'watch' && notice.extra?.threadSeconds === 86_400)).toBe(true)
+    expect(fake.told[0].title).toBe('Forecast model degraded: random-forest, 5 minutes')
+    expect(fake.told[0].body).toMatch(/held 65\.0% of the week's outcomes/)
+    expect(fake.told[1].body).toMatch(/off by -0\.30 of the usual move/)
+    // On record with the walk forward; nothing switched off.
+    const records = readdirSync(dir()).filter((name) => name.startsWith('training-'))
+    const folds = readFileSync(join(dir(), records[0]), 'utf-8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line))
+      .find((line) => line.kind === 'folds')
+    expect(folds.degraded).toEqual(HORIZONS.flatMap((horizon) => ['random-forest', 'quantile-gbt'].map((model) => `${model}:${horizon}`)))
+    expect([...training.currentForecastModels().keys()].sort()).toEqual([...HORIZONS].sort())
+  })
+
+  it('tells persistence too where its own range held the wrong share, though it cannot lose to itself', async () => {
+    fake.lastWeek = [
+      { model: 'persistence', score: { ...score(0.3), coverage80: 0.62 } },
+      // Under persistence's loss and within the lines: not told.
+      { model: 'gbt', score: score(0.29) }
+    ]
+    const training = await service()
+    await training.forecastTrainingForTest.run('first')
+    expect(fake.told.map((notice) => notice.extra?.thread)).toEqual(HORIZONS.map((horizon) => `degraded:forecast:persistence:${horizon}`))
+    expect(fake.told[0].body).toMatch(/^Over the last week its 80% interval held 62\.0% of the week's outcomes\. /)
+  })
+
+  it('tells nothing from a walk forward with no last week on file', async () => {
+    const training = await service()
+    await training.forecastTrainingForTest.run('first')
+    expect(training.getForecastTrainingState().status).toBe('ready')
+    expect(fake.told).toEqual([])
   })
 })

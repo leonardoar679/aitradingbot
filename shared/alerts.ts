@@ -199,7 +199,12 @@ export const ALERT_KINDS = [
   /** The V5 document's §102 (8 October 2026): what the exchange holds against what the ledger
    * knows -- a resting order the app has no record of, or an asset it claims more of than the
    * account holds. One notice an order or an asset; the ledger is never rewritten by it. */
-  'RECONCILIATION'
+  'RECONCILIATION',
+  /** The V6 document's §71 (13 October 2026): a watched coin's forecast turned from BULLISH to BEARISH,
+   * or back, and held (shared/forecast/predictionChange.ts). */
+  'PREDICTION_CHANGED',
+  /** The V6 document's §105: a forecast model whose last week went wrong, told once a day. */
+  'MODEL_DEGRADED'
 ] as const
 
 export type AlertKind = (typeof ALERT_KINDS)[number]
@@ -217,7 +222,9 @@ export const ALERT_KIND_SEVERITY: Record<AlertKind, AlertSeverity> = {
   MODEL_DISAGREEMENT: 'watch',
   SYSTEM_FAILURE: 'high',
   CIRCUIT_BREAKER: 'high',
-  RECONCILIATION: 'high'
+  RECONCILIATION: 'high',
+  PREDICTION_CHANGED: 'high',
+  MODEL_DEGRADED: 'watch'
 }
 
 export function healAlertKind(value: unknown): AlertKind | null {

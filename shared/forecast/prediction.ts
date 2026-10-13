@@ -7,6 +7,7 @@ import { QUANTILE_LEVELS } from './ml/quantile'
 import { MODELS_VERSION, type ForecastModelId } from './models'
 import { NEWS_EFFECT_VERSION, newsEffectOf, type AnalystReadingInput, type KindReactions, type NewsEffect, type NewsStoryInput } from './newsEffect'
 import { QUALITY_VERSION, qualityOf, type PredictionQuality } from './quality'
+import type { RangeDriver } from './rangeDrivers'
 import { reliabilityOf, type Reliability } from './reliability'
 import { RUN_CALIBRATION_VERSION, VARIANTS, cellOf, type ForecastVariant, type RunCalibration } from './runCalibration'
 import { usualMove } from './targets'
@@ -103,6 +104,8 @@ export interface ForecastRange {
   news: { v3: NewsEffect | null; v4: NewsEffect | null }
   /** How much a thin book widened the range: 1 where it did not. */
   spreadStretch: number
+  /** The three figures that moved its size reading most (§36; shared/forecast/rangeDrivers.ts). */
+  rangeDrivers: RangeDriver[]
   variants: Partial<Record<ForecastVariant, { medianPct: number; lowPct: number; highPct: number; quantilesPct: number[]; pUp: number; pUpMapped: number }>>
 }
 
@@ -131,6 +134,9 @@ export interface PricePrediction {
   regime: MarketRegime
   /** Unix seconds: the close the forecast was read at. */
   barTime: number
+  /** The coin's last hour in units of its usual move, its volume against its usual hour, and the share
+   * of coins that rose in the hour, at that close; null where not read. */
+  market: { z1h: number; breadth1h: number; volRatio1h: number | null } | null
   versions: { prediction: string; models: string; features: string; ensemble: string; calibration: string; runCalibration: string; news: string; quality: string; run: string; foldsRun: string }
 }
 
@@ -168,7 +174,9 @@ export interface PredictionInput {
   news?: PredictionNews
   /** The coin's last hour in units of its usual move and the share of pairs that rose in it, from its
    * row, for the quality's market confirmation (V6 Stage 9). */
-  market?: { z1h: number; breadth1h: number }
+  market?: { z1h: number; breadth1h: number; volRatio1h?: number }
+  /** Each horizon's range drivers, where the engine read them from the size model. */
+  drivers?: Partial<Record<Horizon, RangeDriver[]>>
   runId: string
   foldsRunId: string
 }
@@ -292,6 +300,7 @@ function rangeOf(input: PredictionInput, horizon: Horizon): ForecastRange | null
     newsShiftLogPct: (logs[P50] - v2.quantiles[P50] * usual) * 100,
     news,
     spreadStretch,
+    rangeDrivers: input.drivers?.[horizon] ?? [],
     variants
   }
 }
@@ -358,6 +367,7 @@ export function makePrediction(input: PredictionInput): PricePrediction | null {
     pairClass: input.pairClass,
     regime: input.regime,
     barTime: input.barTime,
+    market: input.market === undefined ? null : { z1h: input.market.z1h, breadth1h: input.market.breadth1h, volRatio1h: input.market.volRatio1h ?? null },
     versions: {
       prediction: PREDICTION_VERSION,
       models: MODELS_VERSION,

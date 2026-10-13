@@ -58,12 +58,13 @@ import { REFRESH_LINES } from './forecast/refresh'
 import { EDGE_VERSION, ROUND_TRIP_PCT } from './forecast/edge'
 import { QUALITY_LINES, QUALITY_VERSION } from './forecast/quality'
 import { RANK_LINES, RANK_VERSION } from './forecast/ranking'
+import { CHANGE_LINES } from './forecast/predictionChange'
 import { DECISION_LINES, DECISION_VERSION } from './forecast/tradeDecision'
 import { NEWS_FEED_VERSION } from './newsFeed'
 import { PREDICTION_LINES, PREDICTION_VERSION } from './forecast/prediction'
 import { RELIABILITY_LINES } from './forecast/reliability'
 import { RUN_CALIBRATION_VERSION } from './forecast/runCalibration'
-import { DEGRADATION_LINES, PROMOTION_LINES } from './forecast/promotion'
+import { DEGRADATION_LINES, DEGRADED_THREAD_SECONDS, PROMOTION_LINES } from './forecast/promotion'
 import { MIN_READY_PAIRS, healForecastSettings } from './forecast/training'
 import { FOLDS } from './forecast/walkForward'
 
@@ -166,7 +167,9 @@ export const ENGINE_CONSTANTS = {
     quality: { version: QUALITY_VERSION, ...QUALITY_LINES },
     edge: { version: EDGE_VERSION, roundTripPct: ROUND_TRIP_PCT },
     rank: { version: RANK_VERSION, ...RANK_LINES },
-    decision: { version: DECISION_VERSION, ...DECISION_LINES }
+    decision: { version: DECISION_VERSION, ...DECISION_LINES },
+    change: CHANGE_LINES,
+    degradedThreadSeconds: DEGRADED_THREAD_SECONDS
   }
 } as const
 

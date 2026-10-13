@@ -19,11 +19,14 @@ import {
   type PredictionLine
 } from '../../shared/forecast/forecastRecord'
 import { predictHorizon, type ForecastModelId } from '../../shared/forecast/models'
+import { rangeDriversFor, type RangeDriver } from '../../shared/forecast/rangeDrivers'
 import { dueAt, outcomeOf } from '../../shared/forecast/outcome'
 import { NEWS_EFFECT_LINES, newsSkillOf, type AnalystReadingInput, type KindReactions, type NewsStoryInput } from '../../shared/forecast/newsEffect'
 import { makePrediction, type PredictionNews, type PricePrediction } from '../../shared/forecast/prediction'
+import { predictionChangedNotice, stepCall, type CallTrack } from '../../shared/forecast/predictionChange'
 import { funnel, rankOf, type ForecastRanking, type RankedForecast } from '../../shared/forecast/ranking'
 import { refreshReasons, type RefreshReason } from '../../shared/forecast/refresh'
+import { cellOf } from '../../shared/forecast/runCalibration'
 import { decideTrade, type TradeDecision } from '../../shared/forecast/tradeDecision'
 import type { EngineState } from '../../shared/forecast/status'
 import { bookSpreadPct, executionQuality, isStale, type LiveState } from '../../shared/liveMarket'
@@ -33,6 +36,8 @@ import { forecastSeries, forecastUniverse, onForecastBars } from './forecastData
 import { currentForecastCalibration, currentForecastModels, getForecastTrainingState, onForecastTraining } from './forecastTrainingService'
 import { appendJsonLines } from './jsonlStore'
 import { getResearchState } from './marketResearchService'
+import { tell } from './noticeService'
+import { getSettings } from './settingsService'
 
 // THE FORECAST, LIVE (the V6 document, §38-43; V6 Stage 7, 13 October 2026).
 //
@@ -50,6 +55,11 @@ import { getResearchState } from './marketResearchService'
 // THE TRADE (V6 Stage 9), kept apart from the forecast: after every pass and every forecast made again,
 // each pair's TradeDecision at its lead horizon (shared/forecast/tradeDecision.ts) and the ranking of
 // them all, with its top ten and three (ranking.ts), from the research's volumes and the live book.
+//
+// PREDICTION CHANGED (V6 Stage 10, §71): every pair's call at its best horizon is followed close by
+// close (shared/forecast/predictionChange.ts); one the person watches -- among the top ten, held, or
+// traded by a paper executor of theirs -- that turns from BULLISH to BEARISH, or back, and holds, is
+// told on its own thread, once an hour.
 //
 // THE NEWS (V6 Stage 8): the stories the news feed holds naming a coin, its reaction library and the
 // news analyst's readings on file (handed in by electron/main.ts, which reads the AI ledger -- this
@@ -95,8 +105,11 @@ interface PairInput {
   price: number
   barTime: number
   usualMinuteVolume: number | null
-  /** The coin's last hour in its usual moves, and the market's breadth over it. */
-  market: { z1h: number; breadth1h: number }
+  /** The coin's last hour in its usual moves, the market's breadth over it, and its volume against its
+   * usual hour. */
+  market: { z1h: number; breadth1h: number; volRatio1h: number }
+  /** What moved each horizon's size reading most (§36). */
+  drivers: Partial<Record<Horizon, RangeDriver[]>>
 }
 
 const blank = (): EngineState => ({ status: 'waiting', waitingFor: 'models', lastPassAt: null, lastPassMs: null, predictions: 0, recorded: 0, outcomes: 0, missing: 0, refreshes: 0, pending: 0, lastError: null })
@@ -104,6 +117,7 @@ const blank = (): EngineState => ({ status: 'waiting', waitingFor: 'models', las
 const state: EngineState = blank()
 const latest = new Map<string, PricePrediction>()
 const decisions = new Map<string, TradeDecision>()
+const calls = new Map<string, CallTrack>()
 let ranking: ForecastRanking = { at: null, ranked: [], top10: [], top3: [] }
 const inputs = new Map<string, PairInput>()
 const lastRefreshAt = new Map<string, number>()
@@ -130,6 +144,7 @@ const RV24 = FEATURE_NAMES.indexOf('rv_24h')
 const RATIO = FEATURE_NAMES.indexOf('rv_ratio')
 const Z1H = FEATURE_NAMES.indexOf('z_1h')
 const BREADTH1H = FEATURE_NAMES.indexOf('breadth_1h')
+const VOL1H = FEATURE_NAMES.indexOf('vol_ratio_1h')
 /** The stake an execution's quality is read for, in the quote. */
 const RANKING_STAKE = 100
 const NEWS_SKILL_DAYS = NEWS_EFFECT_LINES.skillDays
@@ -143,7 +158,15 @@ function recordsDir(): string {
   return join(app.getPath('userData'), 'forecasts')
 }
 
-function tell(): void {
+function tellNotice(notice: Parameters<typeof tell>[0]): void {
+  try {
+    tell(notice)
+  } catch (error) {
+    console.error('A forecast notice could not be told:', error)
+  }
+}
+
+function told(): void {
   for (const listener of listeners) {
     try {
       listener()
@@ -211,6 +234,7 @@ function predictionFor(symbol: string, nowMs: number): PricePrediction | null {
     rvRatio: input.rvRatio,
     spreadPct: liveBook(symbol, nowMs)?.spreadPct ?? null,
     market: input.market,
+    drivers: input.drivers,
     models: input.models,
     calibration,
     levels: (horizon, variant, cell) => levelsOf(aci, cellKey(horizon, variant, cell)),
@@ -329,7 +353,7 @@ async function pass(closedAt: number): Promise<void> {
   state.waitingFor = fitted.size === 0 ? 'models' : calibration === null ? 'calibration' : null
   if (state.waitingFor !== null) {
     state.status = 'waiting'
-    tell()
+    told()
     return
   }
   const market = new Map<string, PairSeries>()
@@ -347,7 +371,7 @@ async function pass(closedAt: number): Promise<void> {
   if (btc === undefined || cross === null) {
     state.status = 'waiting'
     state.waitingFor = 'bars'
-    tell()
+    told()
     return
   }
   inputs.clear()
@@ -358,13 +382,18 @@ async function pass(closedAt: number): Promise<void> {
     const at = endsAt(series, closedAt).m5
     const bar = series.m5[at - 1]
     const models: PairInput['models'] = {}
+    const drivers: PairInput['drivers'] = {}
+    const cls = cross.classes.get(symbol)!
     for (const horizon of HORIZONS) {
       const model = fitted.get(horizon)
-      if (model !== undefined) models[horizon] = predictHorizon(model, row)
+      if (model === undefined) continue
+      models[horizon] = predictHorizon(model, row)
+      const variant = calibration?.horizons[horizon]?.variants.v2
+      drivers[horizon] = rangeDriversFor(model, variant === undefined ? [] : cellOf(variant, cls).weights, row)
     }
     const hour = series.m5.slice(Math.max(0, at - 12), at)
     const usualMinuteVolume = hour.length === 12 ? hour.reduce((sum, entry) => sum + entry.volume, 0) / 60 : null
-    inputs.set(symbol, { models, rv24h: row[RV24], rvRatio: row[RATIO], cls: cross.classes.get(symbol)!, regime: cross.regime, price: bar.close, barTime: closedAt, usualMinuteVolume, market: { z1h: row[Z1H], breadth1h: row[BREADTH1H] } })
+    inputs.set(symbol, { models, rv24h: row[RV24], rvRatio: row[RATIO], cls, regime: cross.regime, price: bar.close, barTime: closedAt, usualMinuteVolume, market: { z1h: row[Z1H], breadth1h: row[BREADTH1H], volRatio1h: row[VOL1H] }, drivers })
   }
   await settle(closedAt)
   const nowMs = Date.now()
@@ -384,8 +413,32 @@ async function pass(closedAt: number): Promise<void> {
     state.recorded += lines.length
     lastRecordedAt = closedAt
   }
+  await followCalls()
   Object.assign(state, { status: 'running', predictions: latest.size, pending: pendingCount(), lastPassAt: closedAt, lastPassMs: Date.now() - startedAt, lastError: null })
-  tell()
+  told()
+}
+
+/** The pairs the person watches: the top ten, those held, and those a paper executor of theirs trades. */
+async function watchedPairs(): Promise<Set<string>> {
+  const watched = new Set(ranking.top10)
+  try {
+    const settings = await getSettings()
+    for (const held of settings.heldPositions ?? []) watched.add(held.symbol)
+    for (const executor of settings.executors ?? []) if (executor.status === 'active') watched.add(executor.symbol)
+  } catch {
+    // Settings unreadable: the top ten alone.
+  }
+  return watched
+}
+
+/** Every pair's call followed for a close; a watched one that turned, told. */
+async function followCalls(): Promise<void> {
+  const watched = await watchedPairs()
+  for (const prediction of latest.values()) {
+    const { track, change } = stepCall(calls.get(prediction.pair), prediction)
+    calls.set(prediction.pair, track)
+    if (change !== null && watched.has(prediction.pair)) tellNotice(predictionChangedNotice(change))
+  }
 }
 
 /** A pass at a close, one at a time; a close that comes while one runs is left to the next. */
@@ -416,7 +469,7 @@ async function refresh(symbol: string, reasons: RefreshReason[], nowMs: number):
   state.recorded++
   state.refreshes++
   state.pending = pendingCount()
-  tell()
+  told()
 }
 
 /** Whether a pair's forecast should be made again now, and if so made again. */
@@ -565,7 +618,7 @@ export function startForecast(live: () => LiveState | null): void {
   // New models or a new calibration put in use: the close already in is forecast with them.
   onForecastTraining(() => {
     if (lastClosedAt !== null && state.waitingFor !== null && currentForecastCalibration() !== null && currentForecastModels().size > 0) void passAt(lastClosedAt)
-    else tell()
+    else told()
   })
 }
 
@@ -637,10 +690,18 @@ export const forecastForTest = {
     aci = table
   },
   aci: (): AciTable | null => aci,
+  /** A close's calls followed on these forecasts, with this top ten. */
+  async follow(predictions: readonly PricePrediction[], top10: readonly string[]): Promise<void> {
+    latest.clear()
+    for (const prediction of predictions) latest.set(prediction.pair, prediction)
+    ranking = { ...ranking, top10: [...top10] }
+    await followCalls()
+  },
   reset(): void {
     Object.assign(state, blank())
     latest.clear()
     decisions.clear()
+    calls.clear()
     ranking = { at: null, ranked: [], top10: [], top3: [] }
     inputs.clear()
     lastRefreshAt.clear()

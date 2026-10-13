@@ -3,7 +3,7 @@ import { FORECAST_MODELS } from '../shared/forecast/models'
 import { OOS_VERSION, decodeOos, encodeOos, oosQuantiles, type OosRecord } from '../shared/forecast/oosRecord'
 import { DEGRADATION_LINES, PROMOTION_LINES, degradationOf, degradedForecastNotice, promotionChecklist } from '../shared/forecast/promotion'
 import { RUNS_KEPT, fitDueAtStart, healForecastSettings, nextNightlyAt, promotionsOf, runIdAt, runsToSweep } from '../shared/forecast/training'
-import { FOLDS, HORIZON_STEP_SEC, MAX_VALIDATION_SHARE, finalSplit, foldRows, knownBefore, planFolds, rowsFor, scoreRows, type ModelScore } from '../shared/forecast/walkForward'
+import { FOLDS, HORIZON_STEP_SEC, MAX_VALIDATION_SHARE, finalSplit, foldRows, knownBefore, lastFoldScores, planFolds, rowsFor, scoreRows, type ModelScore } from '../shared/forecast/walkForward'
 import { HORIZONS } from '../shared/forecast/features'
 import { outcomeKnownAt } from '../shared/forecast/panel'
 import type { Panel } from '../shared/forecast/panel'
@@ -151,6 +151,30 @@ describe('a score out of sample', () => {
     expect(scoreRows([q, q], [0, 0.4]).direction).toBe(1)
     // A median of zero calls no way: only the second forecast's call counts.
     expect(scoreRows([[-1, -0.5, 0, 0.5, 1], q], [0.3, 0.4]).direction).toBe(1)
+  })
+})
+
+describe("the walk forward's last week", () => {
+  it("is scored on the last fold tested alone, model by model, whatever the rows' order", () => {
+    const wide = [-2, -1, 0, 1, 2]
+    const narrow = [-0.2, -0.1, 0, 0.1, 0.2]
+    // Weeks 0 and 1 held every outcome in both models' ranges; the last week, 2, held one in three
+    // of the narrow model's.
+    const tested = [
+      { fold: 2, quantiles: { wide, narrow } },
+      { fold: 0, quantiles: { wide, narrow } },
+      { fold: 2, quantiles: { wide, narrow } },
+      { fold: 1, quantiles: { wide, narrow } },
+      { fold: 2, quantiles: { wide, narrow } }
+    ]
+    const z = [1.5, 0.05, -1, 0.1, 0.1]
+    const last = lastFoldScores(tested, z, ['wide', 'narrow'] as const)
+    expect(last.map((entry) => entry.model)).toEqual(['wide', 'narrow'])
+    expect(last[0].score.n).toBe(3)
+    expect(last[0].score.coverage80).toBe(1)
+    expect(last[1].score.coverage80).toBeCloseTo(1 / 3)
+    expect(last[1].score).toEqual(scoreRows([narrow, narrow, narrow], [1.5, -1, 0.1]))
+    expect(lastFoldScores([], [], ['wide'] as const)[0].score.n).toBe(0)
   })
 })
 

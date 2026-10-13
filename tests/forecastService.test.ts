@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FORECAST_BAR_SECONDS, coarseBars, type ForecastBar } from '../shared/forecast/bars'
 import { aciUpdate } from '../shared/forecast/calibration'
-import { HORIZONS, type Horizon } from '../shared/forecast/features'
+import { FEATURE_NAMES, HORIZONS, type Horizon } from '../shared/forecast/features'
 import type { GbtModel } from '../shared/forecast/ml/gbt'
 import { QUANTILE_LEVELS } from '../shared/forecast/ml/quantile'
 import type { FlatTree } from '../shared/forecast/ml/tree'
@@ -53,8 +53,19 @@ const fake = vi.hoisted(() => ({
   barListeners: [] as ((closedAt: number) => void)[],
   models: new Map<string, unknown>(),
   calibration: null as unknown,
-  current: null as { runId: string; fittedAt: number; foldsRunId: string | null } | null
+  current: null as { runId: string; fittedAt: number; foldsRunId: string | null } | null,
+  /** What the desktop was told, and the settings read for the pairs held and traded. */
+  told: [] as { title: string; body: string; extra?: Record<string, unknown> }[],
+  settings: {} as Record<string, unknown>
 }))
+
+vi.mock('../electron/services/noticeService', () => ({
+  tell: (notice: { title: string; body: string; extra?: Record<string, unknown> }) => {
+    fake.told.push(notice)
+  }
+}))
+
+vi.mock('../electron/services/settingsService', () => ({ getSettings: async () => fake.settings }))
 
 vi.mock('../electron/services/forecastDataService', () => ({
   forecastUniverse: () => [...fake.market.keys()],
@@ -142,6 +153,8 @@ beforeEach(() => {
   fake.models = new Map(HORIZONS.map((horizon) => [horizon, tinyFitted(horizon)]))
   fake.calibration = CALIBRATION
   fake.current = { runId: 'run-models', fittedAt: HOUR - 3600, foldsRunId: 'run-folds' }
+  fake.told = []
+  fake.settings = {}
 })
 
 describe('a close', () => {
@@ -445,5 +458,75 @@ describe('the record on disk', () => {
     await vi.waitFor(() => expect(existsSync(join(dir(), 'predictions-2025-12.jsonl'))).toBe(false))
     expect(existsSync(join(dir(), 'outcomes-2026-09.jsonl'))).toBe(true)
     expect(existsSync(join(dir(), 'notes.txt'))).toBe(true)
+  })
+})
+
+describe('a watched coin whose call turns (§71)', () => {
+  /** A pass's forecast of a pair, its call at its best horizon set. */
+  const called = (live: Awaited<ReturnType<typeof engine>>, pair: string, direction: 'BULLISH' | 'BEARISH' | 'NEUTRAL') => {
+    const made = live.forecastOf(pair)!
+    const hour = made.horizons.hour1!
+    return { ...made, bestHorizon: 'hour1' as const, horizons: { ...made.horizons, hour1: { ...hour, direction } } }
+  }
+
+  it('is told once the new call has held two passes, for the top ten, a pair held and a pair an active executor trades only', async () => {
+    const live = await engine()
+    await closeAt(live, HOUR)
+    fake.settings = { heldPositions: [{ symbol: 'XRPUSDT' }], executors: [{ symbol: 'ETHUSDT', status: 'active' }, { symbol: 'SOLUSDT', status: 'stopped' }] }
+    const pass = (direction: 'BULLISH' | 'BEARISH' | 'NEUTRAL') =>
+      live.forecastForTest.follow(
+        SYMBOLS.map((pair) => called(live, pair, direction)),
+        ['BTCUSDT']
+      )
+    // The close's own pass held every call NEUTRAL; two passes make BULLISH the call.
+    await pass('BULLISH')
+    await pass('BULLISH')
+    await pass('BEARISH')
+    // One close's turn is not a change, and NEUTRAL to BULLISH was none.
+    expect(fake.told).toEqual([])
+    await pass('BEARISH')
+    expect(fake.told.map((notice) => notice.extra?.thread).sort()).toEqual(['prediction:BTCUSDT', 'prediction:ETHUSDT', 'prediction:XRPUSDT'])
+    expect(fake.told.every((notice) => notice.extra?.kind === 'PREDICTION_CHANGED' && notice.extra?.threadSeconds === 3600)).toBe(true)
+    expect(fake.told.find((notice) => notice.extra?.thread === 'prediction:BTCUSDT')!.title).toBe('PREDICTION CHANGED: BTC/USDT BULLISH → BEARISH')
+    // Held, it is not told again.
+    await pass('BEARISH')
+    expect(fake.told).toHaveLength(3)
+  })
+
+  it('tells the top ten alone when the settings cannot be read', async () => {
+    const live = await engine()
+    await closeAt(live, HOUR)
+    fake.settings = null as unknown as Record<string, unknown>
+    for (const direction of ['BULLISH', 'BULLISH', 'BEARISH', 'BEARISH'] as const) await live.forecastForTest.follow(SYMBOLS.map((pair) => called(live, pair, direction)), ['SOLUSDT'])
+    expect(fake.told.map((notice) => notice.extra?.thread)).toEqual(['prediction:SOLUSDT'])
+  })
+})
+
+describe('why the range (§36)', () => {
+  // A size model that reads the hour's volatility: every row's lies above zero, so it widens by 0.1.
+  const RV1H = FEATURE_NAMES.indexOf('rv_1h')
+  const split: FlatTree = { feature: [RV1H, -1, -1], threshold: [0, 0, 0], bin: [0, 0, 0], left: [1, -1, -1], right: [2, -1, -1], value: [0, -0.1, 0.1], cover: [2, 1, 1], gain: [1, 0, 0] }
+  const sized = (horizon: Horizon): FittedHorizon => {
+    const fitted = tinyFitted(horizon)
+    return { ...fitted, gbt: { ...fitted.gbt, size: { ...constantGbt(0), trees: [split] } } }
+  }
+
+  it('gives the drivers of the boosted size model the calibration weighs, and none where it weighs no boosted model', async () => {
+    fake.models = new Map(HORIZONS.map((horizon) => [horizon, sized(horizon)]))
+    const live = await engine()
+    await closeAt(live, HOUR)
+    const drivers = live.forecastOf('SOLUSDT')!.horizons.hour1!.rangeDrivers
+    expect(drivers).toHaveLength(1)
+    expect(drivers[0]).toMatchObject({ model: 'gbt', feature: 'rv_1h' })
+    expect(drivers[0].effect).toBeCloseTo(0.1, 12)
+    expect(drivers[0].text).toMatch(/^its last hour's volatility was \d+\.\d\d%, which widened the range$/)
+    // A calibration weighing persistence alone: no boosted model's reading to explain.
+    fake.calibration = buildRunCalibration(
+      new Map(HORIZONS.map((horizon, index) => [horizon, recordOf({ rows: 6000, seed: 50 + index, horizon })])),
+      HORIZONS.flatMap((horizon) => promoted(horizon, ['persistence'])),
+      'run-folds'
+    )
+    await closeAt(live, HOUR + 300)
+    expect(HORIZONS.map((horizon) => live.forecastOf('SOLUSDT')!.horizons[horizon]?.rangeDrivers)).toEqual(HORIZONS.map(() => []))
   })
 })

@@ -62,11 +62,16 @@ export function degradationOf(recent: ModelScore, persistenceRecent: ModelScore,
 
 const HORIZON_WORDS: Record<Horizon, string> = { minutes5: '5 minutes', minutes15: '15 minutes', hour1: '1 hour', hours4: '4 hours', hours24: '24 hours' }
 
+/** A day: a degraded model is told once a day on its thread. */
+export const DEGRADED_THREAD_SECONDS = 86_400
+
 /** What the desktop is told of a degraded model, once a day on its thread. */
-export function degradedForecastNotice(model: ForecastModelId, horizon: Horizon, reasons: readonly string[]): { title: string; body: string; thread: string } {
+export function degradedForecastNotice(model: ForecastModelId, horizon: Horizon, reasons: readonly string[]): { title: string; body: string; thread: string; extra: { kind: 'MODEL_DEGRADED'; severity: 'watch'; thread: string; threadSeconds: number } } {
+  const thread = `degraded:forecast:${model}:${horizon}`
   return {
     title: `Forecast model degraded: ${model}, ${HORIZON_WORDS[horizon]}`,
     body: `Over the last week ${reasons.join('; ')}. It stays computed and on record; its weight in the forecast falls with its score. Nothing was placed or sold.`,
-    thread: `degraded:forecast:${model}:${horizon}`
+    thread,
+    extra: { kind: 'MODEL_DEGRADED', severity: 'watch', thread, threadSeconds: DEGRADED_THREAD_SECONDS }
   }
 }

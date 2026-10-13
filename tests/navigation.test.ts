@@ -23,6 +23,7 @@ import { DEFAULT_UI_MODE, healUiMode } from '../shared/uiMode'
 
 const ALL_PAGES: Page[] = [
   'home',
+  'predictions',
   'overview',
   'opportunities',
   'markets',
@@ -58,7 +59,7 @@ describe('the sidebar', () => {
   it('has the five groups of the V6 layout, in order, and only Research and All Features fold', () => {
     expect(NAV_GROUPS.map((group) => group.title)).toEqual(['AI Trader', 'Trading', 'Research', 'All Features', 'System'])
     expect(NAV_GROUPS.map((group) => group.items.map((item) => item.label))).toEqual([
-      ['Home', 'Opportunities', 'Positions', 'Performance'],
+      ['Home', 'Predictions', 'Opportunities', 'Positions', 'Performance'],
       ['Paper', 'Live'],
       ['Backtest', 'AI Benchmark'],
       ['Strategies', 'Bots', 'Executors', 'Controllers', 'Routines', 'Market', 'Portfolio', 'Explorer', 'Overview', 'AI Decisions'],

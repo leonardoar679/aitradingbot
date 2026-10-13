@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { HomePage } from './home/HomePage'
+import { PredictionsPage } from './forecast/PredictionsPage'
 import { OverviewPage } from './overview/OverviewPage'
 import { OpportunitiesPage } from './opportunities/OpportunitiesPage'
 import { Dashboard } from './dashboard/Dashboard'
@@ -244,6 +245,7 @@ function App(): React.JSX.Element {
               the boundary latching its error for the rest of the session. */}
           <ErrorBoundary key={page} label={`The ${pageLabel(page)} page`}>
             {page === 'home' && <HomePage onPrepareOrder={prepareOrder} onNavigate={navigate} />}
+            {page === 'predictions' && <PredictionsPage />}
             {page === 'overview' && <OverviewPage onGetStarted={openPresets} onPrepareOrder={prepareOrder} onNavigate={navigate} />}
             {page === 'opportunities' && <OpportunitiesPage onPrepareOrder={prepareOrder} />}
             {page === 'markets' && <Dashboard />}

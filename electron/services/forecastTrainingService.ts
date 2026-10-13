@@ -7,11 +7,13 @@ import { parseFitted } from '../../shared/forecast/modelFile'
 import type { FittedHorizon } from '../../shared/forecast/models'
 import type { RunCalibration } from '../../shared/forecast/runCalibration'
 import type { TrainingState } from '../../shared/forecast/status'
+import { degradationOf, degradedForecastNotice } from '../../shared/forecast/promotion'
 import { MIN_READY_PAIRS, fitDueAtStart, healForecastSettings, nextNightlyAt, promotionsOf, runIdAt, runsToSweep, type Promotion } from '../../shared/forecast/training'
 import type { CalibrateResult, FitResult, FoldsResult } from '../forecast/trainWorker'
 import { writeJsonAtomic } from './atomicWrite'
 import { getForecastDataStatus, onForecastBars } from './forecastDataService'
 import { askWorker } from './forecastWorkerService'
+import { tell as tellNotice } from './noticeService'
 import { appendJsonLine } from './jsonlStore'
 import { getSettings } from './settingsService'
 
@@ -104,6 +106,34 @@ async function useCalibration(runId: string, promotions: Promotion[]): Promise<v
   state.calibratedRunId = runId
 }
 
+/** Each model in use whose last week went wrong, told: once a day on its thread (§105). In use is
+ * promoted at that horizon by the same walk forward: a model that never beat persistence weighs
+ * nothing and is shown as not promoted, not as degraded (on the real record of 13 October most models
+ * at 4 and 24 hours, which would have been told every night). Persistence, always in use, too: it
+ * cannot lose to itself but can hold the wrong share or be off. It stays computed and on record;
+ * nothing is switched off. */
+function tellDegraded(horizons: FoldsResult['horizons'], promotions: readonly Promotion[]): string[] {
+  const inUse = new Set(promotions.filter((promotion) => promotion.promoted).map((promotion) => `${promotion.model}:${promotion.horizon}`))
+  const degraded: string[] = []
+  for (const entry of horizons) {
+    const floor = entry.lastWeek?.find((row) => row.model === 'persistence')?.score
+    if (floor === undefined) continue
+    for (const row of entry.lastWeek) {
+      if (!inUse.has(`${row.model}:${entry.horizon}`)) continue
+      const verdict = degradationOf(row.score, floor, null)
+      if (!verdict.degraded) continue
+      degraded.push(`${row.model}:${entry.horizon}`)
+      try {
+        const notice = degradedForecastNotice(row.model, entry.horizon, verdict.reasons)
+        tellNotice({ title: notice.title, body: notice.body, extra: notice.extra })
+      } catch (error) {
+        console.error('A degraded model could not be told:', error)
+      }
+    }
+  }
+  return degraded
+}
+
 async function writeCurrent(file: CurrentFile): Promise<void> {
   await mkdir(modelsDir(), { recursive: true })
   await writeJsonAtomic(join(modelsDir(), 'current.json'), file)
@@ -180,7 +210,8 @@ function runTraining(why: 'first' | 'nightly' | 'stale'): Promise<void> {
         folds: folds.folds,
         horizons: folds.horizons.map((entry) => ({ horizon: entry.horizon, tested: entry.tested, kept: entry.kept, scores: entry.scores })),
         promotions,
-        calibration: folds.calibration
+        calibration: folds.calibration,
+        degraded: tellDegraded(folds.horizons, promotions)
       })
       await sweepRuns([runId])
       state.status = 'ready'

@@ -12,7 +12,7 @@ import { decodeOos, encodeOos, OOS_VERSION, type OosRecord } from '../../shared/
 import { buildPanel, type Panel } from '../../shared/forecast/panel'
 import { buildRunCalibration, type RunCalibration } from '../../shared/forecast/runCalibration'
 import { promotionsOf, type Promotion } from '../../shared/forecast/training'
-import { finalSplit, foldRows, planFolds, rowsFor, scoreRows, type Fold, type ModelScore } from '../../shared/forecast/walkForward'
+import { finalSplit, foldRows, lastFoldScores, planFolds, rowsFor, scoreRows, type Fold, type ModelScore } from '../../shared/forecast/walkForward'
 
 // THE FORECAST'S TRAINING, OFF THE MAIN THREAD (the V6 document, §13 and §51-53; V6 Stages 4-5, 13
 // October 2026). Fitting trees on hundreds of thousands of rows takes minutes of one core; done in the
@@ -57,7 +57,14 @@ export interface FoldsResult {
   task: 'folds'
   runId: string
   folds: Fold[]
-  horizons: { horizon: Horizon; tested: number; kept: number; scores: { model: ForecastModelId; overall: ModelScore; byClass: Partial<Record<PairClass, ModelScore>> }[] }[]
+  horizons: {
+    horizon: Horizon
+    tested: number
+    kept: number
+    scores: { model: ForecastModelId; overall: ModelScore; byClass: Partial<Record<PairClass, ModelScore>> }[]
+    /** Each model's score on the last week tested alone: what a degraded model is judged by (§105). */
+    lastWeek: { model: ForecastModelId; score: ModelScore }[]
+  }[]
   calibration: CalibrationSummary[]
   ms: number
 }
@@ -198,6 +205,7 @@ async function folds(request: Extract<WorkerRequest, { task: 'folds' }>): Promis
       }
       return { model, overall: scoreRows(tested.map((entry) => entry.quantiles[model]), z), byClass }
     })
+    const lastWeek = lastFoldScores(tested, z, FORECAST_MODELS)
     // The record keeps an hour a row.
     const kept = tested.map((entry, at) => ({ entry, at })).filter(({ entry }) => panel.time[entry.row] % 3600 === 0)
     const record: OosRecord = {
@@ -220,7 +228,7 @@ async function folds(request: Extract<WorkerRequest, { task: 'folds' }>): Promis
     }
     await writeFile(join(dir, `oos-${horizon}.bin`), encodeOos(record))
     records.set(horizon, record)
-    horizons.push({ horizon, tested: tested.length, kept: kept.length, scores })
+    horizons.push({ horizon, tested: tested.length, kept: kept.length, scores, lastWeek })
   }
   progress(request.id, 'calibrating', step, HORIZONS.length * plan.length)
   const calibration = await writeCalibration(dir, records, promotionsOf(horizons), request.runId)
