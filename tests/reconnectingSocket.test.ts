@@ -16,8 +16,17 @@ afterEach(() => {
   servers = []
 })
 
+/** A server whose own sockets and listener never throw: a client the app terminates resets the
+ * connection under it (ECONNRESET on Windows), and an 'error' with no listener would take the test
+ * worker down with it -- seen on 13 October 2026 as "Worker exited unexpectedly" under a heavy run. */
+function quiet(server: WebSocketServer): WebSocketServer {
+  server.on('error', () => undefined)
+  server.on('connection', (ws: WsSocket) => ws.on('error', () => undefined))
+  return server
+}
+
 async function startServer(options: { autoPong?: boolean } = {}): Promise<{ server: WebSocketServer; url: string }> {
-  const server = new WebSocketServer({ port: 0, autoPong: options.autoPong ?? true })
+  const server = quiet(new WebSocketServer({ port: 0, autoPong: options.autoPong ?? true }))
   servers.push(server)
   await new Promise<void>((resolve) => server.once('listening', resolve))
   const port = (server.address() as { port: number }).port
@@ -146,7 +155,7 @@ describe('createReconnectingSocket', () => {
 
       // The host comes back: the socket opens, and the count is forgotten with it. It is then
       // dropped and the host is gone again, and the next failed connect is the first of a new run.
-      const again = new WebSocketServer({ port })
+      const again = quiet(new WebSocketServer({ port }))
       servers.push(again)
       await new Promise<void>((resolve) => again.once('listening', resolve))
       let opened = 0
@@ -200,7 +209,7 @@ describe('a connection renewed before its lifetime runs out', () => {
   it('keeps the socket in use when the renewal cannot open, and tries again', async () => {
     let handshakes = 0
     // The second handshake is refused; every other is accepted.
-    const server = new WebSocketServer({ port: 0, verifyClient: () => handshakes++ !== 1 })
+    const server = quiet(new WebSocketServer({ port: 0, verifyClient: () => handshakes++ !== 1 }))
     servers.push(server)
     await new Promise<void>((resolve) => server.once('listening', resolve))
     const url = `ws://127.0.0.1:${(server.address() as { port: number }).port}`

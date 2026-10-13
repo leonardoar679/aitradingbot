@@ -217,8 +217,11 @@ describe('a start with models in use', () => {
     expect(state.status).toBe('ready')
     expect(state.current?.runId).toBe(runId)
     expect(training.currentForecastModels().size).toBe(HORIZONS.length)
-    const records = readdirSync(dir()).filter((name) => name.startsWith('training-'))
-    expect(JSON.parse(readFileSync(join(dir(), records[0]), 'utf-8').trim())).toMatchObject({ kind: 'error', ok: false, why: 'stale' })
+    // The error is said at once, and written a moment after.
+    await vi.waitFor(() => {
+      const records = readdirSync(dir()).filter((name) => name.startsWith('training-'))
+      expect(JSON.parse(readFileSync(join(dir(), records[0]), 'utf-8').trim())).toMatchObject({ kind: 'error', ok: false, why: 'stale' })
+    })
   })
 
   it('does not refit stale ones with the nightly refit switched off', async () => {

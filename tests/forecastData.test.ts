@@ -221,7 +221,8 @@ describe('a data host that serves another market', () => {
     const kept = data.getForecastDataStatus()
     expect(kept.refusedHost).toBeNull()
     expect(kept.barsWritten).toBeGreaterThan(4 * 25_000)
-  })
+    // Ninety days of four pairs written to disk: half a second alone, ten times that on a busy run.
+  }, 20_000)
 
   it('stops a pair\'s gap repairs at the first refusal, and loads it again once the host is binance.com\'s', async () => {
     const last = lastClosedBarTime(Math.floor(Date.now() / 1000))
