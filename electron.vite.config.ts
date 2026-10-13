@@ -8,7 +8,10 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'electron/main.ts')
+          index: resolve(__dirname, 'electron/main.ts'),
+          // The price forecast's training, in a worker thread of its own (electron/forecast/trainWorker.ts):
+          // built beside index.js as forecastWorker.js, which forecastWorkerService.ts starts.
+          forecastWorker: resolve(__dirname, 'electron/forecast/trainWorker.ts')
         }
       }
     }

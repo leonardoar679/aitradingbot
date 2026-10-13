@@ -262,6 +262,22 @@ ninety days of 37 pairs, every fifteen minutes, 97% of the rows were read, and n
 What happened after a moment (`shared/forecast/targets.ts`) is the move to the close a horizon on and
 the best and worst on the way, and none across a gap.
 
+**The machine learning** (since 13 October 2026; the V6 document's §12-14, §26 and §59; V6 Stage 4;
+`shared/forecast/ml/`), written here in TypeScript, with no new dependency and no native module:
+figures cut into at most 64 bins at their quantiles; a regression tree grown a level at a time on
+second-order histograms (the smaller child's built, the larger's its parent's less it); gradient
+boosting on it at an L2 loss or at a pinball loss for a quantile, each leaf of a quantile's tree set
+to its rows' quantile, stopped when the held-back rows stop improving; a random forest of bootstrap
+trees; ridge regression by Cholesky; the pinball loss, quantiles combined level by level
+(Vincentization) and the distribution read back from them; isotonic regression, which turns a raw
+P(up) into the share of such forecasts that did go up; and conformal calibration -- an interval
+widened by the ceil((n+1)(1-alpha))-th of n held-out scores holds its share of new outcomes, and the
+adaptive step moves that share back to its aim when the market changes. Every fit is seeded, so the
+same rows give the same model to the byte, written as canonical JSON. The fitting runs in a worker
+thread of its own, built beside the main process's file (`electron/forecast/trainWorker.ts`), so a
+fit never holds up a socket or a window; `scripts/forecast-bench.mjs` times the built worker: 200,000
+rows of 63 figures, sixty-five trees in about fourteen seconds on this machine.
+
 ### Live prices
 
 Candles are context; the stream is the price now (the second V3 document's §7, §8, §25 and §42).

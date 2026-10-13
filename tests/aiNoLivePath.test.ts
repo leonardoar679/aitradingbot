@@ -287,6 +287,13 @@ describe('AI code has no route to a real order', () => {
       expect(readFileSync(path, 'utf-8'), path).not.toMatch(/window\.|ipcRenderer|electron|placeLive|liveTrading/)
     }
     expect(importsOf(join(ROOT, 'shared', 'forecast', 'bars.ts')).sort()).toEqual(['aggregateCandles', 'ipc'])
+    // The training runs in a worker thread (V6 Stage 4): it is handed what to fit and reaches no
+    // network, no key, nothing that trades and nothing that asks a model.
+    for (const path of [join(ROOT, 'electron', 'forecast', 'trainWorker.ts'), join(SERVICES, 'forecastWorkerService.ts')]) {
+      expect(importsOf(path).filter((name) => LIVE_MODULES.has(name) || aiModuleNames.has(name)), path).toEqual([])
+      expect(readFileSync(path, 'utf-8'), path).not.toMatch(/fetch\(|https?:\/\/|credentials|apiKey|liveTrading|placeLive|openRouter/)
+    }
+    expect(importsOf(join(SERVICES, 'forecastWorkerService.ts')).sort()).toEqual(['path', 'trainWorker', 'worker_threads'])
   })
 
   it('the live prices read the public stream and refuse, never place', () => {
