@@ -1,12 +1,13 @@
 import type { MarketRegime } from '../marketResearch'
 import { CALIBRATION_VERSION, calibrate } from './calibration'
 import { DIRECTION_LINES, calibratedPUp, classify, confidenceOf, rawPUp, type Direction } from './direction'
-import { ENSEMBLE_VERSION, combine, halfWidth, widenAround } from './ensemble'
+import { ENSEMBLE_VERSION, combine, halfWidth, sigmaOf, widenAround } from './ensemble'
 import { FEATURES_VERSION, HORIZONS, HORIZON_BARS, type Horizon, type PairClass } from './features'
 import { QUANTILE_LEVELS } from './ml/quantile'
 import { MODELS_VERSION, type ForecastModelId } from './models'
+import { NEWS_EFFECT_VERSION, newsEffectOf, type AnalystReadingInput, type KindReactions, type NewsEffect, type NewsStoryInput } from './newsEffect'
 import { reliabilityOf, type Reliability } from './reliability'
-import { RUN_CALIBRATION_VERSION, VARIANTS, cellOf, type RunCalibration, type VariantId } from './runCalibration'
+import { RUN_CALIBRATION_VERSION, VARIANTS, cellOf, type ForecastVariant, type RunCalibration } from './runCalibration'
 import { usualMove } from './targets'
 
 // THE PREDICTION (the V6 document, §5-10, §14, §25 and §59-61; V6 Stage 6, 13 October 2026): what may
@@ -30,8 +31,11 @@ import { usualMove } from './targets'
 //   16:00.
 // - Each model's part (§14) is its weight and its median, in log-return percent -- so that the
 //   weighted medians and the calibration's shift add up to the forecast's median exactly.
-// - The variants (§49): V1, price only, and V2, every market model, each calibrated on its own record.
-//   V2 is the one shown; the news (V3) and the AI (V4) adjust it in V6 Stage 8.
+// - The variants (§49): V1, price only, and V2, every market model, each calibrated on its own record;
+//   V3, V2 moved by the news, and V4, by the news as the analyst read it (shared/forecast/newsEffect.ts),
+//   each read at its own adaptive levels. V4 is the one shown: V2 itself where no story moves it. Until
+//   the news-moved forecasts' own outcomes show their P(up) knew more than an even chance, by the same
+//   line as V2's, a story moves the range and not the P(up), and calls no way.
 // - A THIN BOOK widens it (§57): the closes it learned from already carry the bounce of a usual spread,
 //   so only the half-spread beyond 0.05% -- a spread over a tenth of a percent -- is added, as a
 //   variance, to the calibrated range. The models' disagreement widened it before the calibration.
@@ -90,9 +94,13 @@ export interface ForecastRange {
    * they add up to the median in log-return percent. */
   contributions: { model: ForecastModelId; weight: number; medianLogPct: number }[]
   calibrationShiftLogPct: number
+  /** What the news moved the median by, in log-return percent (V4's story; 0 where none). */
+  newsShiftLogPct: number
+  /** The story that moved V3 and the one that moved V4, where one did (§58). */
+  news: { v3: NewsEffect | null; v4: NewsEffect | null }
   /** How much a thin book widened the range: 1 where it did not. */
   spreadStretch: number
-  variants: Partial<Record<VariantId, { medianPct: number; lowPct: number; highPct: number; quantilesPct: number[]; pUp: number; pUpMapped: number }>>
+  variants: Partial<Record<ForecastVariant, { medianPct: number; lowPct: number; highPct: number; quantilesPct: number[]; pUp: number; pUpMapped: number }>>
 }
 
 export interface PricePrediction {
@@ -103,6 +111,7 @@ export interface PricePrediction {
   horizons: Partial<Record<Horizon, ForecastRange>>
   /** The close the forecast was read at. */
   currentPrice: number
+  /** The story that moved the lead horizon's forecast, and its impact (§5). */
   mainCatalyst?: string
   newsImpact?: number
   /** The best horizon's confidence, in percent. */
@@ -119,7 +128,18 @@ export interface PricePrediction {
   regime: MarketRegime
   /** Unix seconds: the close the forecast was read at. */
   barTime: number
-  versions: { prediction: string; models: string; features: string; ensemble: string; calibration: string; runCalibration: string; run: string; foldsRun: string }
+  versions: { prediction: string; models: string; features: string; ensemble: string; calibration: string; runCalibration: string; news: string; run: string; foldsRun: string }
+}
+
+/** What the news gives a pair's forecast: the stories naming its coin as the app holds them, the
+ * reaction library, the analyst's readings on file, and how far its news-moved forecasts' P(up)
+ * has beaten an even chance on their own outcomes, by horizon (null below their least). */
+export interface PredictionNews {
+  ticker: string
+  stories: readonly NewsStoryInput[]
+  library: readonly KindReactions[]
+  readings?: Readonly<Record<string, AnalystReadingInput>>
+  skill?: Partial<Record<Horizon, number | null>>
 }
 
 export interface PredictionInput {
@@ -141,7 +161,8 @@ export interface PredictionInput {
   calibration: RunCalibration
   /** The levels the adaptive step reads a variant's cell at, where the engine keeps them (V6 Stage
    * 7): the cell is the pair's class where it has one of its own (`ownClass`), the horizon's otherwise. */
-  levels?: (horizon: Horizon, variant: VariantId, cell: PairClass | 'pooled') => readonly number[] | undefined
+  levels?: (horizon: Horizon, variant: ForecastVariant, cell: PairClass | 'pooled') => readonly number[] | undefined
+  news?: PredictionNews
   /** The prediction quality per horizon (V6 Stage 9). */
   quality?: Partial<Record<Horizon, number>>
   runId: string
@@ -161,7 +182,7 @@ function rangeOf(input: PredictionInput, horizon: Horizon): ForecastRange | null
   const usual = usualMove(input.rv24h, HORIZON_BARS[horizon])
   if (!(usual > 0) || !(input.price > 0)) return null
   const variants: ForecastRange['variants'] = {}
-  let shown: { quantiles: number[]; pUp: number; pUpMapped: number; combined: ReturnType<typeof combine>; read: ReturnType<typeof cellOf> } | null = null
+  let v2: { quantiles: number[]; pUp: number; pUpMapped: number; combined: ReturnType<typeof combine>; read: ReturnType<typeof cellOf> } | null = null
   for (const variant of VARIANTS) {
     const read = cellOf(calibration.variants[variant], input.pairClass)
     const combined = combine(models, read.weights)
@@ -172,9 +193,32 @@ function rangeOf(input: PredictionInput, horizon: Horizon): ForecastRange | null
     const base = read.honest !== null && Number.isFinite(read.honest.upShare) ? read.honest.upShare : 0.5
     const pUp = skilful ? pUpMapped : base
     variants[variant] = { medianPct: pctOf(quantiles[P50] * usual), lowPct: pctOf(quantiles[P25] * usual), highPct: pctOf(quantiles[P75] * usual), quantilesPct: quantiles.map((q) => pctOf(q * usual)), pUp, pUpMapped }
-    if (variant === 'v2') shown = { quantiles, pUp, pUpMapped, combined, read }
+    if (variant === 'v2') v2 = { quantiles, pUp, pUpMapped, combined, read }
   }
-  if (shown === null) return null
+  if (v2 === null) return null
+  // The news (V3) and the AI (V4): V2's combination read at the variant's own levels, its median moved
+  // and its range widened by the story that moves it most.
+  const cell = v2.read.ownClass ? input.pairClass : 'pooled'
+  const news: ForecastRange['news'] = { v3: null, v4: null }
+  let shown = { quantiles: v2.quantiles, pUp: v2.pUp, pUpMapped: v2.pUpMapped, directionSkill: v2.read.honest?.directionSkill ?? null }
+  for (const variant of ['v3', 'v4'] as const) {
+    const effect = input.news === undefined ? null : newsEffectOf({ variant, ...input.news, horizon, nowSec: Math.floor(input.generatedAt / 1000) })
+    news[variant] = effect
+    if (effect === null) {
+      variants[variant] = variants.v2
+      continue
+    }
+    const levelled = calibrate(v2.combined.quantiles, v2.read.cell, input.levels?.(horizon, variant, cell) ?? QUANTILE_LEVELS)
+    const shiftZ = Math.log(1 + effect.shiftPct / 100) / usual
+    const shifted = levelled.map((q) => q + shiftZ)
+    const quantiles = widenAround(shifted, effect.widenPct > 0 ? effect.widenPct / 100 / usual : effect.widenShare * sigmaOf(shifted))
+    const pUpMapped = calibratedPUp(calibration.variants.v2.pUp, rawPUp(quantiles))
+    const live = input.news?.skill?.[horizon] ?? null
+    const skilful = live !== null && live >= DIRECTION_LINES.minDirectionSkill
+    const pUp = skilful ? pUpMapped : v2.pUp
+    variants[variant] = { medianPct: pctOf(quantiles[P50] * usual), lowPct: pctOf(quantiles[P25] * usual), highPct: pctOf(quantiles[P75] * usual), quantilesPct: quantiles.map((q) => pctOf(q * usual)), pUp, pUpMapped }
+    if (variant === 'v4') shown = { quantiles, pUp, pUpMapped, directionSkill: skilful ? live : (v2.read.honest?.directionSkill ?? null) }
+  }
   const excessLog = Math.max(0, (input.spreadPct ?? 0) / 2 - PREDICTION_LINES.usualHalfSpreadPct) / 100
   const widened = widenAround(shown.quantiles, excessLog / usual)
   const spreadStretch = halfWidth(widened) / halfWidth(shown.quantiles)
@@ -188,18 +232,18 @@ function rangeOf(input: PredictionInput, horizon: Horizon): ForecastRange | null
     p10Pct: quantilesPct[P10],
     p90Pct: quantilesPct[P90],
     width80Pct,
-    usualWidth80Pct: shown.read.usualWidth80Pct,
+    usualWidth80Pct: v2.read.usualWidth80Pct,
     quality: input.quality?.[horizon] ?? null,
-    directionSkill: shown.read.honest?.directionSkill ?? null
+    directionSkill: shown.directionSkill
   })
   const trust = reliabilityOf({
-    cellRows: shown.read.honest?.n ?? 0,
-    coverage80: shown.read.honest?.coverage80 ?? Number.NaN,
-    disagreement: shown.combined.disagreement / halfWidth(shown.combined.quantiles),
+    cellRows: v2.read.honest?.n ?? 0,
+    coverage80: v2.read.honest?.coverage80 ?? Number.NaN,
+    disagreement: v2.combined.disagreement / halfWidth(v2.combined.quantiles),
     regime: input.regime,
     rvRatio: input.rvRatio
   })
-  const contributions = shown.combined.members.map((member) => ({ model: member.model, weight: member.weight, medianLogPct: member.median * usual * 100 }))
+  const contributions = v2.combined.members.map((member) => ({ model: member.model, weight: member.weight, medianLogPct: member.median * usual * 100 }))
   const combinedMedianLogPct = contributions.reduce((sum, member) => sum + member.weight * member.medianLogPct, 0)
   return {
     lowPct: quantilesPct[P25],
@@ -221,13 +265,15 @@ function rangeOf(input: PredictionInput, horizon: Horizon): ForecastRange | null
     reliability: trust.reliability,
     reliabilityReasons: trust.reasons,
     width80Pct,
-    usualWidth80Pct: shown.read.usualWidth80Pct,
-    skill: shown.read.honest?.skill ?? null,
-    directionSkill: shown.read.honest?.directionSkill ?? null,
-    ownClass: shown.read.ownClass,
+    usualWidth80Pct: v2.read.usualWidth80Pct,
+    skill: v2.read.honest?.skill ?? null,
+    directionSkill: shown.directionSkill,
+    ownClass: v2.read.ownClass,
     expiresAt: (input.barTime + HORIZON_BARS[horizon] * 300) * 1000,
     contributions,
-    calibrationShiftLogPct: logs[P50] * 100 - combinedMedianLogPct,
+    calibrationShiftLogPct: v2.quantiles[P50] * usual * 100 - combinedMedianLogPct,
+    newsShiftLogPct: (logs[P50] - v2.quantiles[P50] * usual) * 100,
+    news,
     spreadStretch,
     variants
   }
@@ -265,12 +311,14 @@ export function makePrediction(input: PredictionInput): PricePrediction | null {
       : direction === 'BEARISH'
         ? [`The price rises above ${priceText(lead.quantilePrices[P90])}, the ${words} bull case.`]
         : [`The price leaves ${priceText(lead.quantilePrices[P10])} – ${priceText(lead.quantilePrices[P90])}, the ${words} 80% range.`]
+  const catalyst = lead.news.v4
   return {
     pair: input.pair,
     generatedAt: input.generatedAt,
     direction,
     horizons,
     currentPrice: input.price,
+    ...(catalyst === null ? {} : { mainCatalyst: catalyst.title, newsImpact: catalyst.impact }),
     confidence: confidenceOf(lead.pUp, direction),
     reliability: lead.reliability,
     invalidationConditions,
@@ -289,6 +337,7 @@ export function makePrediction(input: PredictionInput): PricePrediction | null {
       ensemble: ENSEMBLE_VERSION,
       calibration: CALIBRATION_VERSION,
       runCalibration: RUN_CALIBRATION_VERSION,
+      news: NEWS_EFFECT_VERSION,
       run: input.runId,
       foldsRun: input.foldsRunId
     }

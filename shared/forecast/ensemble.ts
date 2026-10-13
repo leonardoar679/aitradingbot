@@ -77,6 +77,11 @@ export function halfWidth(quantiles: readonly number[]): number {
   return Math.max(ENSEMBLE_LINES.scaleFloor, (quantiles[P90] - quantiles[P10]) / 2)
 }
 
+/** The standard deviation a normal distribution with these quantiles' 80% range would have. */
+export function sigmaOf(quantiles: readonly number[]): number {
+  return halfWidth(quantiles) / Z80
+}
+
 /** Quantiles widened about their median as a spread `extra` (one standard deviation, in their units)
  * added to them would widen a distribution: its variance added to theirs. */
 export function widenAround(quantiles: readonly number[], extra: number): number[] {

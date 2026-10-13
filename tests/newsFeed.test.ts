@@ -112,7 +112,8 @@ describe('which coins a story names', () => {
 
 describe('what kind of news', () => {
   it('is the first rule the words meet, and Binance its own kind', () => {
-    expect(eventTypeOf({ title: 'Exploit drains $40M from a bridge after it listed a token', summary: '' })).toBe('HACK')
+    expect(eventTypeOf({ title: 'Exploit drains $40M from a bridge after it listed a token', summary: '' })).toBe('EXPLOIT')
+    expect(eventTypeOf({ title: 'Exchange hacked, $40M stolen', summary: '' })).toBe('HACK')
     expect(eventTypeOf({ title: 'Coinbase will list XYZ', summary: '' })).toBe('LISTING')
     expect(eventTypeOf({ title: 'SEC sues an exchange', summary: '' })).toBe('REGULATION')
     expect(eventTypeOf({ title: 'U.S. scraps proposed reporting rule for crypto', summary: '' })).toBe('REGULATION')
@@ -122,15 +123,35 @@ describe('what kind of news', () => {
     expect(eventTypeOf({ title: 'Spot ETH ETFs see inflows', summary: '' })).toBe('ETF')
     expect(eventTypeOf({ title: 'Token unlock of 2% next week', summary: '' })).toBe('TOKEN_UNLOCK')
     expect(eventTypeOf({ title: 'Markets wait on the Fed', summary: '' })).toBe('MACRO')
-    expect(eventTypeOf({ title: 'Mainnet goes live', summary: '' })).toBe('UPGRADE')
+    expect(eventTypeOf({ title: 'Mainnet goes live', summary: '' })).toBe('MAINNET')
+    expect(eventTypeOf({ title: 'Network upgrade scheduled for Tuesday', summary: '' })).toBe('UPGRADE')
     expect(eventTypeOf({ title: 'A partnership with a bank', summary: '' })).toBe('PARTNERSHIP')
     expect(eventTypeOf({ title: 'A quiet day', summary: '' })).toBe('OTHER')
     expect(eventTypeOf({ title: 'Notice', summary: '', binanceCategory: 'MONITORING_TAG' })).toBe('DELISTING')
     expect(eventTypeOf({ title: 'Notice', summary: '', binanceCategory: 'FUTURES_LAUNCH' })).toBe('LISTING')
   })
 
+  it('tells the kinds of the V6 document apart (feed-v2, 13 October 2026)', () => {
+    expect(eventTypeOf({ title: 'Lending protocol loses $12M to a flash loan attack', summary: '' })).toBe('EXPLOIT')
+    expect(eventTypeOf({ title: 'Reentrancy vulnerability found in a vault', summary: '' })).toBe('EXPLOIT')
+    expect(eventTypeOf({ title: 'Layer-2 airdrop opens to early users', summary: '' })).toBe('AIRDROP')
+    expect(eventTypeOf({ title: 'Wallet startup raises $25M led by a venture fund', summary: '' })).toBe('FUNDING')
+    expect(eventTypeOf({ title: 'Protocol closes a Series A', summary: '' })).toBe('FUNDING')
+    // A central bank's rates are macro, not a round; "raises" with no sum is neither.
+    expect(eventTypeOf({ title: 'Fed raises rates by a quarter point', summary: '' })).toBe('MACRO')
+    expect(eventTypeOf({ title: 'Report raises questions about a stablecoin', summary: '' })).toBe('OTHER')
+    expect(eventTypeOf({ title: '$1 billion in longs liquidated as bitcoin slides', summary: '' })).toBe('LIQUIDATION')
+    expect(eventTypeOf({ title: 'Shorts squeezed as ether jumps', summary: '' })).toBe('LIQUIDATION')
+    expect(eventTypeOf({ title: 'Exchange suspends withdrawals after an outage', summary: '' })).toBe('EXCHANGE_OUTAGE')
+    expect(eventTypeOf({ title: 'Withdrawals halted for maintenance', summary: '' })).toBe('EXCHANGE_OUTAGE')
+    // A delisting is a delisting, whatever is suspended with it.
+    expect(eventTypeOf({ title: 'Binance will delist XYZ and suspend trading', summary: '' })).toBe('DELISTING')
+  })
+
   it('says which way it would move its coin, where it says', () => {
     expect([expectedDirection('HACK'), expectedDirection('LISTING'), expectedDirection('MACRO')]).toEqual(['down', 'up', null])
+    expect([expectedDirection('EXPLOIT'), expectedDirection('MAINNET'), expectedDirection('FUNDING')]).toEqual(['down', 'up', 'up'])
+    expect([expectedDirection('AIRDROP'), expectedDirection('LIQUIDATION'), expectedDirection('EXCHANGE_OUTAGE')]).toEqual([null, null, null])
   })
 })
 
@@ -226,6 +247,8 @@ describe('what the price did', () => {
     // The minute after it was published in closed elsewhere: it is not where a move is measured from.
     const reaction = react('LISTING', minutes({ [-15]: { close: 99 }, 1: { close: 100.3 }, 5: { close: 100.5 }, 15: { close: 101.2 }, 60: { close: 102 }, 240: { close: 99.5 } }))
     expect(reaction.before15mPct).toBeCloseTo(1.0101, 3)
+    // The minute after (§21; since 13 October 2026).
+    expect(reaction.after.m1).toBeCloseTo(0.3, 10)
     expect(reaction.after.m5).toBeCloseTo(0.5, 10)
     expect(reaction.after.m15).toBeCloseTo(1.2, 10)
     expect(reaction.after.h1).toBeCloseTo(2, 10)
@@ -291,6 +314,10 @@ describe('what each kind of news did', () => {
     expect(table[1].medianPct).toBeNull()
     expect(table[0].medianPct?.h1).toBeCloseTo(-5.5, 10)
     expect(table[0].shareUp1h).toBeCloseTo(9 / 30, 10)
+    // Reactions measured before the minute after was: none for it; those with it, their median.
+    expect(table[0].medianPct?.m1).toBeNull()
+    const withMinute = enough.map((row, k) => ({ ...row, after: { ...row.after, m1: k < 15 ? 0.1 : 0.3 } }))
+    expect(impactByType(withMinute)[0].medianPct?.m1).toBeCloseTo(0.2, 10)
   })
 })
 
@@ -316,7 +343,7 @@ describe('what each kind of news did, in excursions (8 October 2026)', () => {
     const table = impactByType([...enough, ...old])
     expect(table[0]).toMatchObject({ eventType: 'HACK', stories: 35, enough: true })
     expect(table[0].excursions).toEqual({ best1hPct: expect.closeTo(0.725, 10), worst1hPct: expect.closeTo(-1.45, 10), best4hPct: expect.closeTo(1.45, 10), worst4hPct: expect.closeTo(-2.9, 10) })
-    expect(describeTypeExcursions(table[0])).toBe('Within an hour of a hack or exploit story, the median worst move was -1.45% and the median best +0.72%; within four hours, -2.90% and +1.45%.')
+    expect(describeTypeExcursions(table[0])).toBe('Within an hour of a hack story, the median worst move was -1.45% and the median best +0.72%; within four hours, -2.90% and +1.45%.')
     // Thirty-one reactions of which twenty-nine carry excursions: enough for the moves, not for these.
     const few = [...Array.from({ length: IMPACT_MIN_STORIES - 1 }, (_, k) => reaction('LISTING', -k / 10, k / 20)), reaction('LISTING', 0, 0, false), reaction('LISTING', 0, 0, false)]
     const listing = impactByType(few)[0]

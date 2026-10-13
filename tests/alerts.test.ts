@@ -38,6 +38,8 @@ describe('a story', () => {
   it('is critical as a hack or a delisting of a coin held, by its subject, and only then', () => {
     expect(storySeverity(story({ eventType: 'HACK', impact: 20 }), new Set(['SOL']))).toBe('critical')
     expect(storySeverity(story({ eventType: 'DELISTING', impact: 20 }), new Set(['SOL']))).toBe('critical')
+    // An exploit is told as a hack is (since 13 October 2026, when the two were told apart).
+    expect(storySeverity(story({ eventType: 'EXPLOIT', impact: 20 }), new Set(['SOL']))).toBe('critical')
     expect(storySeverity(story({ eventType: 'HACK', impact: 20 }), new Set(['XRP']))).toBe('info')
     expect(storySeverity(story({ eventType: 'HACK', impact: 20, assets: [{ ticker: 'SOL', relationship: 'INDIRECT' }] }), new Set(['SOL']))).toBe('info')
     expect(storySeverity(story({ eventType: 'LISTING', impact: 20 }), new Set(['SOL']))).toBe('info')
@@ -54,7 +56,7 @@ describe('a story', () => {
 
   it("is told with its coins, its kind, where it is held, and that nothing was sold", () => {
     expect(storyNotice({ title: 'SOL bridge hacked', sourceName: 'CoinDesk', eventType: 'HACK', assets: [{ ticker: 'SOL', relationship: 'DIRECT' }], impact: 77 }, 'critical', ['3 SOL in the paper account'])).toEqual({
-      title: 'CRITICAL: SOL · Hack or exploit',
+      title: 'CRITICAL: SOL · Hack',
       body: 'SOL bridge hacked (CoinDesk; impact 77). You hold it: 3 SOL in the paper account. Nothing was placed or sold.'
     })
     expect(storyNotice({ title: 'Markets wait on the Fed', sourceName: 'Decrypt', eventType: 'MACRO', assets: [], impact: 37 }, 'watch').title).toBe('News: Macro')

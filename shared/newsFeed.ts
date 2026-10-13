@@ -22,7 +22,7 @@ import type { Candle } from './ipc'
 //
 // IT READS. Nothing here asks a model, places anything or holds a key.
 
-export const NEWS_FEED_VERSION = 'feed-v1'
+export const NEWS_FEED_VERSION = 'feed-v2'
 export const FEED_READ_MS = 3 * 60_000
 /** Stories kept on screen and in memory: a week of them. */
 export const FEED_KEEP_SECONDS = 7 * 86_400
@@ -65,7 +65,26 @@ export const BINANCE_SOURCE: Omit<FeedSource, 'url'> = { id: 'binance', name: 'B
 /** The hosts a story's link may open in the browser: the sources', and nothing else. */
 export const FEED_HOSTS: readonly string[] = ['www.coindesk.com', 'coindesk.com', 'www.theblock.co', 'theblock.co', 'cointelegraph.com', 'decrypt.co', 'www.binance.com']
 
-export type NewsEventType = 'HACK' | 'DELISTING' | 'LISTING' | 'ETF' | 'REGULATION' | 'TOKEN_UNLOCK' | 'MACRO' | 'UPGRADE' | 'PARTNERSHIP' | 'OTHER'
+/** The kinds of news (the V6 document, §19). Since 13 October 2026 (feed-v2, V6 Stage 8) an exploit is
+ * told apart from a hack, a mainnet from an upgrade, and airdrops, funding, liquidations and exchange
+ * outages have kinds of their own. */
+export type NewsEventType =
+  | 'HACK'
+  | 'EXPLOIT'
+  | 'DELISTING'
+  | 'LISTING'
+  | 'ETF'
+  | 'REGULATION'
+  | 'TOKEN_UNLOCK'
+  | 'MACRO'
+  | 'MAINNET'
+  | 'UPGRADE'
+  | 'AIRDROP'
+  | 'FUNDING'
+  | 'LIQUIDATION'
+  | 'EXCHANGE_OUTAGE'
+  | 'PARTNERSHIP'
+  | 'OTHER'
 
 /** A story as the history keeps it for measuring what news did (shared/aiHelp.ts): the coins it
  * named, when, its kind, and whether it was old news when read. */
@@ -379,15 +398,22 @@ export function storyAssets(story: Pick<FeedStory, 'title' | 'summary' | 'ticker
 // What kind of news, and how much it might matter.
 
 const TYPE_RULES: readonly [NewsEventType, RegExp][] = [
-  ['HACK', /\b(hack(ed|er|ers|s)?|exploit(ed|s)?|drain(ed|s)?|stolen|breach(ed)?|heist|attacker)\b/i],
+  ['HACK', /\b(hack(ed|er|ers|s)?|stolen|breach(ed)?|heist|attacker)\b/i],
+  ['EXPLOIT', /\b(exploit(ed|s|er|ers)?|drain(ed|s|er)?|flash[- ]loans?|re-?entrancy|vulnerabilit(y|ies))\b/i],
   ['DELISTING', /\b(delist(s|ed|ing)?|monitoring tag)\b/i],
   ['LISTING', /\b(will list|lists|listing|to list|launch(es)? trading|futures launch)\b/i],
   ['ETF', /\betfs?\b/i],
+  ['EXCHANGE_OUTAGE', /\b(outages?|downtime|(halt(s|ed)?|suspend(s|ed)?|pause[sd]?) (all )?(withdrawals|deposits|trading)|withdrawals? (halted|suspended|paused))\b/i],
+  ['LIQUIDATION', /\b(liquidat(ed|es|ion|ions)|longs? (wiped|liquidated)|shorts? (squeezed|liquidated)|margin calls?)\b/i],
   ['REGULATION', /\b(sec|cftc|regulat\w*|rules?|lawsuit|sues?|sued|court|bans?|banned|legislat\w*|senate|congress|licen[cs]e[sd]?|fined?|sanction\w*)\b/i],
   ['TOKEN_UNLOCK', /\bunlock(s|ed|ing)?\b/i],
+  ['AIRDROP', /\bairdrop(s|ped|ping)?\b/i],
   // Not "treasury" alone: in this news it is mostly a company's coins, not the bond market.
   ['MACRO', /\b(fed|fomc|inflation|cpi|ppi|rate cuts?|interest rates?|jobs report|payrolls|tariffs?|recession|treasury yields?|powell)\b/i],
-  ['UPGRADE', /\b(upgrade[sd]?|mainnet|hard ?fork|testnet)\b/i],
+  ['MAINNET', /\b(mainnet|main net)\b/i],
+  ['UPGRADE', /\b(upgrade[sd]?|hard ?fork|testnet)\b/i],
+  // "Raises" alone is a central bank's rates as often as a round; a sum after it is a round.
+  ['FUNDING', /(\braise[sd]? \$|\bfunding round\b|\bseed round\b|\bseries [a-d]\b)/i],
   ['PARTNERSHIP', /\b(partner(s|ship|ships|ed)?|collaborat\w*|integrat\w*|teams? up)\b/i]
 ]
 
@@ -402,26 +428,32 @@ export function eventTypeOf(story: Pick<FeedStory, 'title' | 'summary' | 'binanc
 
 /** Which way a kind of news would move its coin, where it says. */
 export function expectedDirection(type: NewsEventType): 'up' | 'down' | null {
-  if (type === 'HACK' || type === 'DELISTING') return 'down'
-  if (type === 'LISTING' || type === 'ETF' || type === 'UPGRADE' || type === 'PARTNERSHIP') return 'up'
+  if (type === 'HACK' || type === 'EXPLOIT' || type === 'DELISTING') return 'down'
+  if (type === 'LISTING' || type === 'ETF' || type === 'MAINNET' || type === 'UPGRADE' || type === 'FUNDING' || type === 'PARTNERSHIP') return 'up'
   return null
 }
 
 const TYPE_WEIGHT: Record<NewsEventType, number> = {
   HACK: 90,
+  EXPLOIT: 90,
   DELISTING: 85,
   LISTING: 75,
   ETF: 70,
+  EXCHANGE_OUTAGE: 65,
   REGULATION: 60,
   TOKEN_UNLOCK: 55,
   MACRO: 55,
+  LIQUIDATION: 55,
+  MAINNET: 50,
   UPGRADE: 45,
+  AIRDROP: 45,
+  FUNDING: 40,
   PARTNERSHIP: 40,
   OTHER: 20
 }
 
 /** The kinds that concern the whole market when no coin is named. */
-const MARKET_WIDE: ReadonlySet<NewsEventType> = new Set(['MACRO', 'REGULATION', 'ETF'])
+const MARKET_WIDE: ReadonlySet<NewsEventType> = new Set(['MACRO', 'REGULATION', 'ETF', 'LIQUIDATION', 'EXCHANGE_OUTAGE'])
 
 /** Fresh in its first hour; from there worth less, down to four tenths at a day, and no less. */
 function freshness(ageSeconds: number): number {
@@ -510,8 +542,9 @@ export interface StoryReaction {
   publishedAt: number
   /** The move over the fifteen minutes before the minute it was published in, in percent. */
   before15mPct: number | null
-  /** The moves from the close of the minute it was published in. */
-  after: { m5: number | null; m15: number | null; h1: number | null; h4: number | null }
+  /** The moves from the close of the minute it was published in; the minute after since 13 October
+   * 2026 (V6 Stage 8; absent on a reaction measured before). */
+  after: { m1?: number | null; m5: number | null; m15: number | null; h1: number | null; h4: number | null }
   /** Volume in the fifteen minutes after, against the mean fifteen minutes of the hour before. */
   volumeRatio: number | null
   verdict: ReactionVerdict
@@ -546,7 +579,7 @@ export function storyReaction(input: { storyId: string; ticker: string; symbol: 
   const base = byTime.get(minute)?.close ?? null
   const at = (offsetMinutes: number): number | null => byTime.get(minute + offsetMinutes * 60)?.close ?? null
   const change = (to: number | null, from: number | null): number | null => (to === null || from === null || !(from > 0) ? null : (to / from - 1) * 100)
-  const after = { m5: change(at(5), base), m15: change(at(15), base), h1: change(at(60), base), h4: change(at(240), base) }
+  const after = { m1: change(at(1), base), m5: change(at(5), base), m15: change(at(15), base), h1: change(at(60), base), h4: change(at(240), base) }
   const before15mPct = change(base, at(-15))
   const volumeOver = (fromMinute: number, minutes: number): number | null => {
     let sum = 0
@@ -607,7 +640,7 @@ export interface TypeImpact {
   /** Whether there are enough for the figures below to be shown. */
   enough: boolean
   /** The median move after, at each horizon, in percent. Null below IMPACT_MIN_STORIES. */
-  medianPct: { m5: number | null; m15: number | null; h1: number | null; h4: number | null } | null
+  medianPct: { m1: number | null; m5: number | null; m15: number | null; h1: number | null; h4: number | null } | null
   /** Of them, the share up an hour after. Null below IMPACT_MIN_STORIES. */
   shareUp1h: number | null
   /** The median excursions, from the reactions that carry them (since 8 October 2026). Null below
@@ -631,7 +664,7 @@ export function impactByType(reactions: readonly StoryReaction[]): TypeImpact[] 
     .map((eventType) => {
       const rows = final.filter((reaction) => reaction.eventType === eventType)
       const enough = rows.length >= IMPACT_MIN_STORIES
-      const pick = (key: keyof StoryReaction['after']): number | null => median(rows.map((row) => row.after[key]).filter((value): value is number => value !== null))
+      const pick = (key: keyof StoryReaction['after']): number | null => median(rows.map((row) => row.after[key]).filter((value): value is number => typeof value === 'number'))
       const hour = rows.map((row) => row.after.h1).filter((value): value is number => value !== null)
       const measured = rows.map((row) => row.excursion).filter((value): value is StoryExcursion => value !== undefined)
       const pickExcursion = (key: keyof StoryExcursion): number | null => median(measured.map((row) => row[key]).filter((value): value is number => value !== null))
@@ -639,7 +672,7 @@ export function impactByType(reactions: readonly StoryReaction[]): TypeImpact[] 
         eventType,
         stories: rows.length,
         enough,
-        medianPct: enough ? { m5: pick('m5'), m15: pick('m15'), h1: pick('h1'), h4: pick('h4') } : null,
+        medianPct: enough ? { m1: pick('m1'), m5: pick('m5'), m15: pick('m15'), h1: pick('h1'), h4: pick('h4') } : null,
         shareUp1h: enough && hour.length > 0 ? hour.filter((value) => value > 0).length / hour.length : null,
         excursions:
           measured.length >= IMPACT_MIN_STORIES
@@ -662,14 +695,20 @@ export function describeTypeExcursions(row: Pick<TypeImpact, 'eventType' | 'excu
 /** How a kind of news reads in words. */
 export function describeEventType(type: NewsEventType): string {
   const words: Record<NewsEventType, string> = {
-    HACK: 'Hack or exploit',
+    HACK: 'Hack',
+    EXPLOIT: 'Exploit',
     DELISTING: 'Delisting or warning',
     LISTING: 'Listing',
     ETF: 'ETF',
     REGULATION: 'Regulation',
     TOKEN_UNLOCK: 'Token unlock',
     MACRO: 'Macro',
+    MAINNET: 'Mainnet',
     UPGRADE: 'Upgrade',
+    AIRDROP: 'Airdrop',
+    FUNDING: 'Funding',
+    LIQUIDATION: 'Liquidations',
+    EXCHANGE_OUTAGE: 'Exchange outage',
     PARTNERSHIP: 'Partnership',
     OTHER: 'Other'
   }

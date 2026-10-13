@@ -50,7 +50,12 @@ import { CALIBRATION_LINES, CALIBRATION_VERSION } from './forecast/calibration'
 import { DIRECTION_LINES } from './forecast/direction'
 import { ENSEMBLE_LINES, ENSEMBLE_VERSION } from './forecast/ensemble'
 import { CLASS_LINES, FEATURES_VERSION, PEG_RANGE } from './forecast/features'
+import { FORECAST_RECORD_DAYS, FORECAST_RECORD_VERSION } from './forecast/forecastRecord'
 import { MODELS_VERSION, TRAINING } from './forecast/models'
+import { NEWS_EFFECT_LINES, NEWS_EFFECT_VERSION } from './forecast/newsEffect'
+import { OUTCOME_LINES, OUTCOME_VERSION } from './forecast/outcome'
+import { REFRESH_LINES } from './forecast/refresh'
+import { NEWS_FEED_VERSION } from './newsFeed'
 import { PREDICTION_LINES, PREDICTION_VERSION } from './forecast/prediction'
 import { RELIABILITY_LINES } from './forecast/reliability'
 import { RUN_CALIBRATION_VERSION } from './forecast/runCalibration'
@@ -149,7 +154,11 @@ export const ENGINE_CONSTANTS = {
     calibration: { version: CALIBRATION_VERSION, run: RUN_CALIBRATION_VERSION, ...CALIBRATION_LINES },
     direction: DIRECTION_LINES,
     reliability: RELIABILITY_LINES,
-    prediction: { version: PREDICTION_VERSION, ...PREDICTION_LINES }
+    prediction: { version: PREDICTION_VERSION, ...PREDICTION_LINES },
+    refresh: REFRESH_LINES,
+    outcome: { version: OUTCOME_VERSION, ...OUTCOME_LINES },
+    record: { version: FORECAST_RECORD_VERSION, days: FORECAST_RECORD_DAYS },
+    news: { version: NEWS_EFFECT_VERSION, feed: NEWS_FEED_VERSION, ...NEWS_EFFECT_LINES }
   }
 } as const
 

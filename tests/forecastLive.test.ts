@@ -45,6 +45,8 @@ function range(patch: Partial<ForecastRange> = {}): ForecastRange {
     expiresAt: (T + 3600) * 1000,
     contributions: [{ model: 'gbt', weight: 1, medianLogPct: 0.5 }],
     calibrationShiftLogPct: 0,
+    newsShiftLogPct: 0,
+    news: { v3: null, v4: null },
     spreadStretch: 1,
     variants: { v1: { medianPct: 0.4, lowPct: -1.1, highPct: 1.9, quantilesPct: [-2.1, -1.1, 0.4, 1.9, 2.9], pUp: 0.54, pUpMapped: 0.54 } },
     ...patch
@@ -69,7 +71,7 @@ function prediction(horizons: PricePrediction['horizons'] = { hour1: range(), mi
     pairClass: 'large',
     regime: 'sideways',
     barTime: T,
-    versions: { prediction: 'prediction-v1', models: 'models-v1', features: 'features-v1', ensemble: 'ensemble-v1', calibration: 'calibration-v1', runCalibration: 'run-calibration-v2', run: 'run-x', foldsRun: 'run-y' }
+    versions: { prediction: 'prediction-v1', models: 'models-v1', features: 'features-v1', ensemble: 'ensemble-v1', calibration: 'calibration-v1', runCalibration: 'run-calibration-v2', news: 'news-effect-v1', run: 'run-x', foldsRun: 'run-y' }
   }
 }
 
@@ -140,11 +142,12 @@ describe('an outcome', () => {
   })
 
   it('names each kind of error the close can tell', () => {
-    expect(errorsOf(hour, -0.5, 0.2, -0.6)).toEqual(['WRONG_DIRECTION', 'RIGHT_RANGE'])
+    // A call gone wrong with no story behind it misread the market (V6 Stage 8).
+    expect(errorsOf(hour, -0.5, 0.2, -0.6)).toEqual(['WRONG_DIRECTION', 'RIGHT_RANGE', 'MARKET_MISREAD'])
     // A bear's median is below zero, as its call requires.
     const bear = { ...hour, direction: 'BEARISH' as const, quantilesPct: [-3, -2, -0.5, 1, 2] }
     expect(errorsOf(bear, -0.5, 0.2, -0.6)).toEqual(['CORRECT_DIRECTION', 'RIGHT_RANGE'])
-    expect(errorsOf(bear, 0.6, 0.7, -0.1)).toEqual(['WRONG_DIRECTION', 'RIGHT_RANGE'])
+    expect(errorsOf(bear, 0.6, 0.7, -0.1)).toEqual(['WRONG_DIRECTION', 'RIGHT_RANGE', 'MARKET_MISREAD'])
     expect(errorsOf({ ...hour, direction: 'NEUTRAL' }, 3.5, 3.6, 0)).toEqual(['TOO_NARROW'])
     expect(errorsOf({ ...hour, direction: 'NEUTRAL' }, -2.01, 0, -2.1)).toEqual(['TOO_NARROW'])
     expect(errorsOf({ ...hour, direction: 'NEUTRAL' }, 0, 0, 0)).toEqual(['RIGHT_RANGE'])
@@ -160,9 +163,9 @@ describe('an outcome', () => {
     expect(errorsOf(wide, 2.5, 2.6, 0)).toEqual(['RIGHT_RANGE'])
     // The move came and went: the path reached the median forecast, the close came back below where
     // it started.
-    expect(errorsOf(hour, -0.2, 0.6, -0.3)).toEqual(['WRONG_DIRECTION', 'RIGHT_RANGE', 'LATE'])
-    expect(errorsOf(hour, -0.2, 0.4, -0.3)).toEqual(['WRONG_DIRECTION', 'RIGHT_RANGE'])
-    expect(errorsOf({ ...hour, direction: 'BEARISH', quantilesPct: [-3, -2, -0.5, 1, 2] }, 0.2, 0.3, -0.6)).toEqual(['WRONG_DIRECTION', 'RIGHT_RANGE', 'LATE'])
+    expect(errorsOf(hour, -0.2, 0.6, -0.3)).toEqual(['WRONG_DIRECTION', 'RIGHT_RANGE', 'LATE', 'MARKET_MISREAD'])
+    expect(errorsOf(hour, -0.2, 0.4, -0.3)).toEqual(['WRONG_DIRECTION', 'RIGHT_RANGE', 'MARKET_MISREAD'])
+    expect(errorsOf({ ...hour, direction: 'BEARISH', quantilesPct: [-3, -2, -0.5, 1, 2] }, 0.2, 0.3, -0.6)).toEqual(['WRONG_DIRECTION', 'RIGHT_RANGE', 'LATE', 'MARKET_MISREAD'])
     // A move of exactly nothing calls neither way right or wrong.
     expect(errorsOf(hour, 0, 0, 0)).toEqual(['RIGHT_RANGE'])
   })
@@ -248,6 +251,12 @@ describe('the record', () => {
     expect(written).toMatchObject({ id: line.id, h: 'hour1', due: T + 3600, below: '00011', v1below: '00001', in80: true, cell: 'large' })
     expect(parseOutcomeLine(JSON.parse(JSON.stringify(written)))).toEqual(written)
     expect(parseOutcomeLine({ ...written, below: '0001' })).toBeNull()
+    // Where a story moved V3 and not V4 (the analyst read it as another coin's), only V3's levels.
+    const moved = { ...line, h: { hour1: { ...line.h.hour1!, news: { v3: { q: [-1, 0, 1, 2.5, 4], pUpMapped: 0.6, story: 's1', kind: 'LISTING', impact: 80, shift: 1, widen: 0.5, widenShare: 0, fromLibrary: true } } } } }
+    const onlyV3 = outcomeLine(moved, 'hour1', outcome)
+    expect(onlyV3).toMatchObject({ v3below: '00011' })
+    expect(onlyV3.v4below).toBeUndefined()
+    expect(onlyV3.newsPUp).toBeUndefined()
     const missing = missingOutcomeLine(line, 'hour1', T + 3600, 'no bars')
     const back = parseOutcomeLine(JSON.parse(JSON.stringify(missing)))!
     expect(isMissing(back)).toBe(true)

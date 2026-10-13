@@ -20,7 +20,8 @@ import {
 } from '../../shared/forecast/forecastRecord'
 import { predictHorizon, type ForecastModelId } from '../../shared/forecast/models'
 import { dueAt, outcomeOf } from '../../shared/forecast/outcome'
-import { makePrediction, type PricePrediction } from '../../shared/forecast/prediction'
+import { NEWS_EFFECT_LINES, newsSkillOf, type AnalystReadingInput, type KindReactions, type NewsStoryInput } from '../../shared/forecast/newsEffect'
+import { makePrediction, type PredictionNews, type PricePrediction } from '../../shared/forecast/prediction'
 import { refreshReasons, type RefreshReason } from '../../shared/forecast/refresh'
 import type { EngineState } from '../../shared/forecast/status'
 import { bookSpreadPct, isStale, type LiveState } from '../../shared/liveMarket'
@@ -43,6 +44,11 @@ import { appendJsonLines } from './jsonlStore'
 // volume shock hits it, at most once a minute (shared/forecast/refresh.ts); the new forecast names the
 // one it replaced.
 //
+// THE NEWS (V6 Stage 8): the stories the news feed holds naming a coin, its reaction library and the
+// news analyst's readings on file (handed in by electron/main.ts, which reads the AI ledger -- this
+// service reaches nothing that asks a model) move its forecast (shared/forecast/newsEffect.ts); the
+// news-moved forecasts' own outcomes say, in time, whether their P(up) may be shown.
+//
 // ON RECORD (forecasts/): every pair's forecast at every quarter-hour and every forecast made again
 // (predictions-YYYY-MM.jsonl); an outcome for each of their horizons once it is due, never before
 // (outcomes-YYYY-MM.jsonl; shared/forecast/forecastRecord.ts); and the adaptive levels (aci.json),
@@ -53,7 +59,20 @@ import { appendJsonLines } from './jsonlStore'
 
 /** What the news feed and the scanner tell it (electron/main.ts hands their states on). */
 export interface NewsSignal {
-  stories: readonly { id: string; seenAt: number; impact: number; assets: readonly { ticker: string; relationship: string }[] }[]
+  stories: readonly {
+    id: string
+    title?: string
+    sourceName?: string
+    eventType?: string
+    publishedAt?: number
+    seenAt: number
+    impact: number
+    stale?: boolean
+    repeat?: boolean
+    assets: readonly { ticker: string; relationship: string }[]
+  }[]
+  reactions?: Readonly<Record<string, { pricedIn: boolean }>>
+  impact?: readonly KindReactions[]
 }
 export interface ScannerSignal {
   recentEvents: readonly { id: string; symbol: string }[]
@@ -82,6 +101,12 @@ const owed = new Map<string, { line: PredictionLine; horizons: Set<Horizon> }>()
 /** Stories and events already looked at, so that each moves a pair's forecast once. */
 const seenStories = new Set<string>()
 const seenEvents = new Set<string>()
+/** The news as last told: the feed's stories, reactions and library; the analyst's readings. */
+let feed: NewsSignal | null = null
+let readings: Record<string, AnalystReadingInput> = {}
+/** The news-moved forecasts' outcomes, for their own skill: forecasts/news-outcomes.jsonl. */
+const newsOutcomes: { h: Horizon; due: number; pUp: number; up: boolean }[] = []
+let newsSkill: Partial<Record<Horizon, number | null>> = {}
 let aci: AciTable | null = null
 let lastRecordedAt = 0
 let lastClosedAt: number | null = null
@@ -92,6 +117,7 @@ const listeners = new Set<() => void>()
 
 const RV24 = FEATURE_NAMES.indexOf('rv_24h')
 const RATIO = FEATURE_NAMES.indexOf('rv_ratio')
+const NEWS_SKILL_DAYS = NEWS_EFFECT_LINES.skillDays
 /** How long past due an outcome waits for its bars before it is written as missing. */
 const MISSING_AFTER_SEC = 3600
 /** How far back a restart reads the record for outcomes still owed: the longest horizon and two
@@ -126,6 +152,34 @@ function liveBook(symbol: string, nowMs: number): { mid: number; spreadPct: numb
   return { mid: (book.bid + book.ask) / 2, spreadPct: bookSpreadPct(book) }
 }
 
+/** A coin's news as the forecast reads it: the stories naming it, as their subject or not (which of
+ * them count is shared/forecast/newsEffect.ts's to say), with their reactions' priced-in. Undefined
+ * where there are none. */
+function newsFor(symbol: string): PredictionNews | undefined {
+  if (feed === null || !symbol.endsWith('USDT')) return undefined
+  const ticker = symbol.slice(0, -4)
+  const stories: NewsStoryInput[] = []
+  for (const story of feed.stories) {
+    const asset = story.assets.find((entry) => entry.ticker === ticker)
+    if (asset === undefined) continue
+    stories.push({
+      id: story.id,
+      title: story.title ?? '',
+      source: story.sourceName ?? '',
+      kind: story.eventType ?? 'OTHER',
+      impact: story.impact,
+      publishedAt: story.publishedAt ?? story.seenAt,
+      seenAt: story.seenAt,
+      stale: story.stale === true,
+      repeat: story.repeat === true,
+      relationship: asset.relationship === 'DIRECT' ? 'DIRECT' : 'INDIRECT',
+      pricedIn: feed.reactions?.[story.id]?.pricedIn === true
+    })
+  }
+  if (stories.length === 0) return undefined
+  return { ticker, stories, library: feed.impact ?? [], readings, skill: newsSkill }
+}
+
 function predictionFor(symbol: string, nowMs: number): PricePrediction | null {
   const input = inputs.get(symbol)
   const calibration = currentForecastCalibration()
@@ -144,6 +198,7 @@ function predictionFor(symbol: string, nowMs: number): PricePrediction | null {
     models: input.models,
     calibration,
     levels: (horizon, variant, cell) => levelsOf(aci, cellKey(horizon, variant, cell)),
+    news: newsFor(symbol),
     runId: current.runId,
     foldsRunId: calibration.runId
   })
@@ -180,7 +235,12 @@ async function settle(closedAt: number): Promise<void> {
       const recorded = entry.line.h[horizon]!
       const series = seriesOf(entry.line.pair)
       const path = series === null ? [] : series.m5.filter((bar) => bar.time >= entry.line.t && bar.time < due)
-      const outcome = outcomeOf({ horizon, quantilesPct: recorded.q, pUp: recorded.pUp, direction: recorded.dir, width80Pct: recorded.width, usualWidth80Pct: recorded.usualWidth }, entry.line.t, entry.line.price, path)
+      const outcome = outcomeOf(
+        { horizon, quantilesPct: recorded.q, pUp: recorded.pUp, direction: recorded.dir, width80Pct: recorded.width, usualWidth80Pct: recorded.usualWidth, newsShiftPct: recorded.news?.v4?.shift ?? 0 },
+        entry.line.t,
+        entry.line.price,
+        path
+      )
       if (outcome !== null) lines.push(outcomeLine(entry.line, horizon, outcome))
       else if (closedAt - due >= MISSING_AFTER_SEC) lines.push(missingOutcomeLine(entry.line, horizon, due, path.length === 0 ? 'no bars' : `${path.length} of its bars`))
       else continue
@@ -200,6 +260,15 @@ async function settle(closedAt: number): Promise<void> {
   for (const line of measured) {
     steps.push({ key: cellKey(line.h, 'v2', line.cell), below: [...line.below].map((flag) => flag === '1') })
     if (line.v1below.length === 5) steps.push({ key: cellKey(line.h, 'v1', line.cell), below: [...line.v1below].map((flag) => flag === '1') })
+    // The news-moved forecasts' levels learn only from the outcomes a story moved.
+    if (line.v3below !== undefined) steps.push({ key: cellKey(line.h, 'v3', line.cell), below: [...line.v3below].map((flag) => flag === '1') })
+    if (line.v4below !== undefined) steps.push({ key: cellKey(line.h, 'v4', line.cell), below: [...line.v4below].map((flag) => flag === '1') })
+  }
+  const touched = measured.filter((line) => line.newsPUp !== undefined).map((line) => ({ h: line.h, due: line.due, pUp: line.newsPUp!, up: line.up }))
+  if (touched.length > 0) {
+    newsOutcomes.push(...touched)
+    await appendJsonLines(join(recordsDir(), 'news-outcomes.jsonl'), touched)
+    newsSkill = newsSkillOf(newsOutcomes, closedAt)
   }
   aci = stepAciTable(aci, steps, closedAt)
   await writeJsonAtomic(join(recordsDir(), 'aci.json'), aci)
@@ -321,9 +390,16 @@ async function consider(symbol: string, signals: { newsImpact?: number | null; n
   return reasons
 }
 
+/** The analyst's readings on file, by story id, each with when it was answered (electron/main.ts
+ * reads them from the AI ledger). */
+export function setForecastReadings(next: Record<string, AnalystReadingInput>): void {
+  readings = next
+}
+
 /** The news: a story of high impact naming a coin forecast moves its forecast, once. */
-export async function forecastNewsSignal(feed: NewsSignal, nowMs: number = Date.now()): Promise<void> {
-  for (const story of feed.stories) {
+export async function forecastNewsSignal(next: NewsSignal, nowMs: number = Date.now()): Promise<void> {
+  feed = next
+  for (const story of next.stories) {
     if (seenStories.has(story.id)) continue
     seenStories.add(story.id)
     for (const asset of story.assets) {
@@ -390,6 +466,23 @@ async function readOwed(nowSec: number): Promise<void> {
   state.pending = pendingCount()
 }
 
+/** The news-moved forecasts' outcomes of the last days, for their own skill. */
+async function readNewsOutcomes(nowSec: number): Promise<void> {
+  const text = await readFile(join(recordsDir(), 'news-outcomes.jsonl'), 'utf-8').catch(() => '')
+  const since = nowSec - NEWS_SKILL_DAYS * 86_400
+  newsOutcomes.length = 0
+  for (const line of text.split('\n')) {
+    if (line.trim() === '') continue
+    try {
+      const row = JSON.parse(line) as { h?: unknown; due?: unknown; pUp?: unknown; up?: unknown }
+      if (HORIZONS.includes(row.h as Horizon) && typeof row.due === 'number' && row.due >= since && typeof row.pUp === 'number' && typeof row.up === 'boolean') newsOutcomes.push({ h: row.h as Horizon, due: row.due, pUp: row.pUp, up: row.up })
+    } catch {
+      // A torn line: skipped.
+    }
+  }
+  newsSkill = newsSkillOf(newsOutcomes, nowSec)
+}
+
 async function sweepOldRecords(nowSec: number): Promise<void> {
   const names = await readdir(recordsDir()).catch(() => [] as string[])
   for (const name of names) {
@@ -417,6 +510,7 @@ export function startForecast(live: () => LiveState | null): void {
       }
     }
     await readOwed(nowSec)
+    await readNewsOutcomes(nowSec)
   })().catch((error) => console.error('The forecast record could not be read back:', error))
   onForecastBars((closedAt) => void passAt(closedAt))
   // New models or a new calibration put in use: the close already in is forecast with them.
@@ -492,6 +586,10 @@ export const forecastForTest = {
     owed.clear()
     seenStories.clear()
     seenEvents.clear()
+    feed = null
+    readings = {}
+    newsOutcomes.length = 0
+    newsSkill = {}
     aci = null
     lastRecordedAt = 0
     lastClosedAt = null

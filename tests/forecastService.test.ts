@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FORECAST_BAR_SECONDS, coarseBars, type ForecastBar } from '../shared/forecast/bars'
 import { aciUpdate } from '../shared/forecast/calibration'
 import { HORIZONS, type Horizon } from '../shared/forecast/features'
@@ -123,6 +123,10 @@ async function closeAt(mod: Awaited<ReturnType<typeof engine>>, closedAt: number
   fake.now = closedAt
   await mod.forecastForTest.pass(closedAt)
 }
+
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 beforeEach(() => {
   vi.resetModules()
@@ -323,6 +327,67 @@ describe('between closes', () => {
       ['ETHUSDT', ['event']],
       ['BTCUSDT', ['band']]
     ])
+  })
+})
+
+describe('the news', () => {
+  it("moves a coin's forecast by a story naming it, records the news-moved levels, and learns them from their outcomes", async () => {
+    // The forecasts are stamped with the clock: it is set, so that the story comes after the first.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime((HOUR + 10) * 1000)
+    const live = await engine()
+    await closeAt(live, HOUR)
+    const before = live.forecastOf('SOLUSDT')!
+    const seen = before.generatedAt / 1000 + 5
+    const library = [{ eventType: 'LISTING', enough: true, medianPct: { m1: 0.2, m5: 1.1, m15: 2.2, h1: 3.4, h4: 3 }, excursions: { best1hPct: 5, worst1hPct: -1, best4hPct: 7, worst4hPct: -3 } }]
+    live.setForecastReadings({ s1: { ticker: 'SOL', relationship: 'DIRECT', direction: 'up', impact: 90, pricedIn: false, at: seen + 1 } })
+    await live.forecastNewsSignal(
+      {
+        stories: [
+          {
+            id: 's1',
+            title: 'Binance lists a Solana product',
+            sourceName: 'Binance',
+            eventType: 'LISTING',
+            publishedAt: seen - 30,
+            seenAt: seen,
+            impact: 80,
+            assets: [
+              { ticker: 'SOL', relationship: 'DIRECT' },
+              { ticker: 'ETH', relationship: 'INDIRECT' }
+            ]
+          }
+        ],
+        reactions: {},
+        impact: library
+      },
+      seen * 1000 + 2000
+    )
+    const after = live.forecastOf('SOLUSDT')!
+    expect(after.id).not.toBe(before.id)
+    expect(after.horizons.minutes5!.news.v3!.storyId).toBe('s1')
+    expect(after.horizons.minutes5!.news.v4!.impact).toBe(90)
+    expect(after.mainCatalyst).toBe('Binance lists a Solana product')
+    const refreshed = lines(`predictions-${month}.jsonl`).find((line) => line.why === 'refresh')!
+    const recorded = (refreshed.h as Record<string, { news?: Record<string, { story: string }> }>).minutes5
+    expect(recorded.news?.v3?.story).toBe('s1')
+    expect(recorded.news?.v4?.story).toBe('s1')
+    // Its 5-minute outcome, when due: where the close fell against V3's and V4's levels, and their own
+    // adaptive levels moved by it alone.
+    vi.setSystemTime((HOUR + 310) * 1000)
+    await closeAt(live, HOUR + 300)
+    const outcome = lines(`outcomes-${month}.jsonl`).find((line) => line.id === refreshed.id && line.h === 'minutes5')!
+    expect(outcome.v3below).toMatch(/^[01]{5}$/)
+    expect(outcome.v4below).toMatch(/^[01]{5}$/)
+    expect(typeof outcome.newsPUp).toBe('number')
+    const others = lines(`outcomes-${month}.jsonl`).filter((line) => line.id !== refreshed.id)
+    expect(others.every((line) => line.v3below === undefined)).toBe(true)
+    const aci = JSON.parse(readFileSync(join(dir(), 'aci.json'), 'utf-8'))
+    expect(Object.keys(aci.levels)).toEqual(expect.arrayContaining(['minutes5/v3/pooled', 'minutes5/v4/pooled']))
+    expect(lines('news-outcomes.jsonl')).toEqual([{ h: 'minutes5', due: HOUR + 300, pUp: outcome.newsPUp, up: outcome.up }])
+    // At that close the story still moves Solana's forecast, and not ether's, which it only mentions.
+    expect(live.forecastOf('SOLUSDT')!.horizons.minutes5!.news.v3).not.toBeNull()
+    expect(live.forecastOf('ETHUSDT')!.horizons.minutes5!.news.v3).toBeNull()
   })
 })
 

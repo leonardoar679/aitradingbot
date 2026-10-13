@@ -395,6 +395,29 @@ it was due, a line saying its bars never came; and the adaptive levels in `aci.j
 picks up the outcomes still owed; month files older than 180 days are deleted at start. The window
 reads it all through `window.api.forecast` (state, the latest forecasts, one pair's, a pair's record).
 
+**The news in the forecast** (since 13 October 2026; the V6 document's §18-24, §43, §49, §54-55 and
+§58; V6 Stage 8; `shared/forecast/newsEffect.ts`). The models forecast from the market alone; a story
+then moves a coin's forecast by fixed rules over what the app had seen of it by the forecast's moment,
+never after. The stories that count name the coin as their subject and were seen in the four hours
+before; of them, the one that moves it most. **How much (V3, "+news"):** the reaction library's
+median path for the story's kind -- its median move a minute, five, fifteen, an hour and four hours
+after publication, used only from thirty measured stories -- says what is still to come from the
+story's age to its age plus the horizon; that is the shift of the forecast's median, times the story's
+impact, times its novelty (new news whole, a story carried again half, old news nothing), and nothing
+where the market had moved its way before it was published. The kind's spread widens the range the
+same way; a kind without its thirty stories moves no median and only widens, by up to half the
+forecast's own spread again. **The AI (V4, "+news +AI"):** where the news analyst read the story -- asked
+live when it came, so that its reading holds only what was known then -- its direction, impact and
+"priced in" stand for the rules', and a story it read as another coin's moves nothing; nothing new is
+asked. V4 is the forecast shown, and V2 itself where no story moves it; the story is named as its
+catalyst (§5's `mainCatalyst` and `newsImpact`), and what it moved is recorded beside the forecast
+before it (§58). Until the news-moved forecasts' own outcomes -- two hundred at a horizon over thirty
+days, kept in `forecasts/news-outcomes.jsonl` -- show their P(up) beat what knows nothing by the same 1%
+as V2's had to, a story moves the range and not the P(up), and calls no way; their levels are moved by
+the adaptive step only from the outcomes a story moved. Two kinds of error join the outcomes (§43):
+NEWS_MISREAD, a story that moved the median one way before the close went the other, and
+MARKET_MISREAD, a call gone wrong with no story behind it.
+
 ### Live prices
 
 Candles are context; the stream is the price now (the second V3 document's §7, §8, §25 and §42).
@@ -481,11 +504,16 @@ of them is shown. CoinGecko's news needs a paid plan and CryptoPanic a key, so n
   title, a coin is DIRECT; only in the summary, INDIRECT.
 - **Its kind:** hack, delisting, listing, ETF, regulation, token unlock, macro, upgrade, partnership
   or other, the first of those patterns its title and summary meet. Binance's announcements keep the
-  kind the study sorted them by.
+  kind the study sorted them by. Since 13 October 2026 (`feed-v2`, the V6 document's §19) an exploit
+  (exploit, drain, flash loan, reentrancy) is told apart from a hack and alerts as one does, a mainnet
+  from an upgrade, and an airdrop, a funding round (a raise of a sum, a seed round, a Series A to D),
+  liquidations and an exchange outage (an outage, or withdrawals, deposits or trading halted) have
+  kinds of their own; a reaction also keeps the move a minute after (§21).
 - **Its source's credibility:** Binance 1.0, CoinDesk and The Block 0.85, Cointelegraph and Decrypt
   0.8.
-- **An impact from 0 to 100:** the kind's weight (hack 90, delisting 85, listing 75, ETF 70,
-  regulation 60, unlock and macro 55, upgrade 45, partnership 40, other 20), times how directly it
+- **An impact from 0 to 100:** the kind's weight (hack and exploit 90, delisting 85, listing 75, ETF
+  70, exchange outage 65, regulation 60, unlock, macro and liquidations 55, mainnet 50, upgrade and
+  airdrop 45, funding and partnership 40, other 20), times how directly it
   concerns a coin (named 1, mentioned 0.6, market-wide 0.8, neither 0.4), times the credibility,
   times its freshness (full for an hour, down to four tenths at a day).
 - **Old news:** published more than a day before it was first read, it is marked so and raises

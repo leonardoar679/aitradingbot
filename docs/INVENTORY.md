@@ -144,8 +144,9 @@ every fit, walk forward and calibration), written by `forecastTrainingService` (
 the run in use and the one before it and deletes older runs after a walk forward; and `forecasts/`
 holds the live forecast's record (V6 Stage 7): every pair's forecast at each quarter-hour and each made
 again between closes (`predictions-YYYY-MM.jsonl`), each horizon's outcome when due
-(`outcomes-YYYY-MM.jsonl`) and the adaptive levels (`aci.json`), its month files deleted at start once
-their month ended over 180 days before. Nothing else is ever deleted.
+(`outcomes-YYYY-MM.jsonl`), the adaptive levels (`aci.json`) and, since V6 Stage 8, the outcomes of the
+forecasts a story moved (`news-outcomes.jsonl`), its month files deleted at start once their month
+ended over 180 days before. Nothing else is ever deleted.
 
 ## What runs without a page open
 
@@ -238,7 +239,9 @@ The main process also runs loops that need no window at all:
   close with those models and their calibration, and again between closes for a story of impact 70
   naming it, an event the scanner raised on it, a live price out of its range or a volume shock, at
   most once a minute; it writes `forecasts/`, each horizon's outcome when due, and moves the adaptive
-  levels by them. Public data only; no key, no model call, no order.
+  levels by them. Since V6 Stage 8 the stories the news feed holds and the news analyst's readings on
+  file (handed in by `electron/main.ts` from the AI ledger) move a coin's forecast by fixed rules; it
+  asks nothing. Public data only; no key, no model call, no order.
 - `aiAdditionsService` (added 6 October 2026) puts each story of high impact the news feed reads to
   the news analyst, once, and asks why the coin it names moved, while the watch is on, each within
   its daily limit and the AI budget.

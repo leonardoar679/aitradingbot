@@ -236,6 +236,18 @@ export function newsReadingsOf(rows: readonly Pick<AiCallRecord, 'promptVersion'
   return out
 }
 
+/** The analyst's readings on file with when each was answered, by story id: what the price forecast
+ * may use of a reading at a moment is only what was answered by then (the V6 document, §55). */
+export function newsReadingsAt(rows: readonly Pick<AiCallRecord, 'promptVersion' | 'status' | 'subjectId' | 'additionAnswer' | 'at'>[]): Record<string, NewsReading & { at: number }> {
+  const out: Record<string, NewsReading & { at: number }> = {}
+  for (const row of rows) {
+    if (row.promptVersion !== AI_ADDITION_PROMPT_VERSIONS.news || row.status !== 'ok' || row.subjectId === undefined) continue
+    const verdict = validateNewsReading(row.additionAnswer)
+    if (verdict.ok && (out[row.subjectId] === undefined || row.at < out[row.subjectId].at)) out[row.subjectId] = { ...verdict.reading, at: row.at }
+  }
+  return out
+}
+
 /** A reading in a line, for the news list. */
 export function describeNewsReading(reading: NewsReading): string {
   const coin = reading.ticker === null ? 'no coin' : `${reading.ticker} (${reading.relationship === 'DIRECT' ? 'the subject' : 'mentioned'})`

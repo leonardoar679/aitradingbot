@@ -138,7 +138,9 @@ describe('the prediction', () => {
     // The 1-hour forecast from the 15:00 close is no longer valid at 16:00 (§38).
     expect(hour.expiresAt).toBe(Date.parse('2026-10-13T16:00:00Z'))
     expect(prediction.horizons.hours4!.expiresAt).toBe(Date.parse('2026-10-13T19:00:00Z'))
-    expect(Object.keys(hour.variants).sort()).toEqual(['v1', 'v2'])
+    // V3 and V4 are V2 itself where no story moves it.
+    expect(Object.keys(hour.variants).sort()).toEqual(['v1', 'v2', 'v3', 'v4'])
+    expect(hour.variants.v4).toEqual(hour.variants.v2)
     expect(hour.variants.v2!.quantilesPct).toEqual(hour.quantilesPct)
     expect(hour.variants.v1!.quantilesPct).toHaveLength(5)
     // The class's usual width is in percent, as the range's: a row of the usual size, on the record's

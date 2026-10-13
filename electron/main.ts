@@ -8,7 +8,9 @@ import { startMarketScanner } from './services/marketScannerService'
 import { startMarketResearch } from './services/marketResearchService'
 import { startForecastData } from './services/forecastDataService'
 import { startForecastTraining } from './services/forecastTrainingService'
-import { forecastLiveSignal, forecastNewsSignal, forecastScannerSignal, startForecast } from './services/forecastService'
+import { forecastLiveSignal, forecastNewsSignal, forecastScannerSignal, setForecastReadings, startForecast } from './services/forecastService'
+import { listAiCalls } from './services/aiLedgerService'
+import { AI_ADDITION_PROMPT_VERSIONS, newsReadingsAt } from '../shared/aiAdditions'
 import { onScannerUpdate } from './services/marketScannerService'
 import { onNewsFeedUpdate } from './services/newsFeedService'
 import { onLiveUpdate } from './services/liveMarketService'
@@ -214,7 +216,16 @@ if (!gotSingleInstanceLock) {
     // range or a volume shock hits it; records the forecasts and, when due, what happened. Public
     // data only: no key, no model of anyone else's, no order. See forecastService.ts.
     startForecast(getLiveState)
-    onNewsFeedUpdate((state) => void forecastNewsSignal(state).catch((error) => console.error('A forecast news signal failed:', error)))
+    // The news analyst's readings on file go with the stories, each with when it was answered; reading
+    // them costs nothing.
+    onNewsFeedUpdate((state) => {
+      void (async (): Promise<void> => {
+        const sinceSec = Math.floor(Date.now() / 1000) - 8 * 86_400
+        const page = await listAiCalls({ source: 'addition', promptVersion: AI_ADDITION_PROMPT_VERSIONS.news, sinceSec, limit: 1000 }).catch(() => null)
+        if (page !== null) setForecastReadings(newsReadingsAt(page.rows))
+        await forecastNewsSignal(state)
+      })().catch((error) => console.error('A forecast news signal failed:', error))
+    })
     onScannerUpdate((state) => void forecastScannerSignal(state).catch((error) => console.error('A forecast scanner signal failed:', error)))
     let liveCheckedAt = 0
     onLiveUpdate((state) => {

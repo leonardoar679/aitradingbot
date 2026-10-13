@@ -35,6 +35,8 @@ import type { Promotion } from './training'
 export const RUN_CALIBRATION_VERSION = 'run-calibration-v2'
 export const VARIANTS = ['v1', 'v2'] as const
 export type VariantId = (typeof VARIANTS)[number]
+/** The four of §49: V3 (+news) and V4 (+news +AI) are made live from V2 (shared/forecast/newsEffect.ts). */
+export type ForecastVariant = VariantId | 'v3' | 'v4'
 
 const P10 = QUANTILE_LEVELS.indexOf(0.1)
 const P25 = QUANTILE_LEVELS.indexOf(0.25)

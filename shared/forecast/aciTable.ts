@@ -1,7 +1,7 @@
 import { CALIBRATION_LINES, aciUpdate } from './calibration'
 import type { Horizon, PairClass } from './features'
 import { QUANTILE_LEVELS } from './ml/quantile'
-import type { VariantId } from './runCalibration'
+import type { ForecastVariant } from './runCalibration'
 
 // THE ADAPTIVE LEVELS, KEPT (the V6 document, §57; V6 Stage 7, 13 October 2026): for every horizon,
 // variant and calibration cell, the five levels its calibrated quantiles are read at
@@ -9,7 +9,7 @@ import type { VariantId } from './runCalibration'
 // that fell at or below it. They belong to one walk forward's calibration: a new one starts them
 // again at P10, P25, P50, P75 and P90.
 
-export type CellKey = `${Horizon}/${VariantId}/${PairClass | 'pooled'}`
+export type CellKey = `${Horizon}/${ForecastVariant}/${PairClass | 'pooled'}`
 
 export interface AciTable {
   /** The walk forward whose calibration the levels move. */
@@ -19,7 +19,7 @@ export interface AciTable {
   updatedAt: number
 }
 
-export const cellKey = (horizon: Horizon, variant: VariantId, cell: PairClass | 'pooled'): CellKey => `${horizon}/${variant}/${cell}`
+export const cellKey = (horizon: Horizon, variant: ForecastVariant, cell: PairClass | 'pooled'): CellKey => `${horizon}/${variant}/${cell}`
 
 export function emptyAciTable(calibrationRun: string): AciTable {
   return { calibrationRun, levels: {}, updatedAt: 0 }
@@ -53,7 +53,7 @@ export function parseAciTable(value: unknown): AciTable | null {
   if (typeof raw !== 'object' || raw === null || typeof raw.calibrationRun !== 'string' || typeof raw.updatedAt !== 'number' || typeof raw.levels !== 'object' || raw.levels === null) return null
   const levels: AciTable['levels'] = {}
   for (const [key, entry] of Object.entries(raw.levels)) {
-    if (!/^[a-z0-9]+\/v[12]\/[a-z-]+$/.test(key)) return null
+    if (!/^[a-z0-9]+\/v[1-4]\/[a-z-]+$/.test(key)) return null
     if (!Array.isArray(entry) || entry.length !== QUANTILE_LEVELS.length || !entry.every((tau) => typeof tau === 'number' && tau >= CALIBRATION_LINES.aciLow && tau <= CALIBRATION_LINES.aciHigh)) return null
     levels[key as CellKey] = entry
   }

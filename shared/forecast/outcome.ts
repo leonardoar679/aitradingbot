@@ -13,10 +13,11 @@ import { QUANTILE_LEVELS } from './ml/quantile'
 // - TOO_WIDE when it fell inside the likely range (P25-P75) of a range over twice its class's usual
 //   width: it said far more could happen than did;
 // - LATE when a call's move came and went on the way -- the path reached the median it forecast, and
-//   the close was on the other side of where it started: the move had been caught at its end.
+//   the close was on the other side of where it started: the move had been caught at its end;
+// - NEWS_MISREAD when a story moved the forecast's median one way and the close went the other
+//   (V6 Stage 8), and MARKET_MISREAD when a call went wrong with no story behind it.
 // EARLY (the move came after the horizon) needs the path beyond it and is read on the Lab (V6 Stage
-// 11), with the drift between a forecast and its refreshes (§42); NEWS_MISREAD and MARKET_MISREAD
-// with the news adjustment (V6 Stage 8).
+// 11), with the drift between a forecast and its refreshes (§42).
 
 export const OUTCOME_VERSION = 'forecast-outcome-v1'
 
@@ -26,7 +27,7 @@ export const OUTCOME_LINES = {
   tooWide: 2
 } as const
 
-export type ErrorKind = 'CORRECT_DIRECTION' | 'WRONG_DIRECTION' | 'RIGHT_RANGE' | 'TOO_NARROW' | 'TOO_WIDE' | 'LATE'
+export type ErrorKind = 'CORRECT_DIRECTION' | 'WRONG_DIRECTION' | 'RIGHT_RANGE' | 'TOO_NARROW' | 'TOO_WIDE' | 'LATE' | 'NEWS_MISREAD' | 'MARKET_MISREAD'
 
 /** What an outcome is judged against: one horizon of a recorded forecast. */
 export interface ForecastedHorizon {
@@ -37,6 +38,8 @@ export interface ForecastedHorizon {
   direction: Direction
   width80Pct: number
   usualWidth80Pct: number
+  /** What a story moved the median by, in percent; none, or 0, where no story moved it. */
+  newsShiftPct?: number
 }
 
 export interface ForecastOutcome {
@@ -83,6 +86,9 @@ export function errorsOf(forecast: ForecastedHorizon, movePct: number, bestPct: 
   if (inside50 && forecast.usualWidth80Pct > 0 && forecast.width80Pct > OUTCOME_LINES.tooWide * forecast.usualWidth80Pct) out.push('TOO_WIDE')
   const late = forecast.direction === 'BULLISH' ? bestPct >= q[P50] && movePct < 0 : forecast.direction === 'BEARISH' ? worstPct <= q[P50] && movePct > 0 : false
   if (late) out.push('LATE')
+  const shift = forecast.newsShiftPct ?? 0
+  if (shift !== 0 && movePct !== 0 && Math.sign(movePct) !== Math.sign(shift)) out.push('NEWS_MISREAD')
+  if (shift === 0 && out.includes('WRONG_DIRECTION')) out.push('MARKET_MISREAD')
   return out
 }
 

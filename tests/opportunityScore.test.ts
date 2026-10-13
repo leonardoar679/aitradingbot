@@ -109,7 +109,7 @@ describe('the signal score', () => {
     expect(part(score({ stories: [story()] }), 'news')).toMatchObject({ value: 60, fact: 'Listing, impact 60: Binance lists a Solana product (CoinDesk)' })
     // A hack, for a BUY: it points the other way, and counts nothing.
     const against = part(score({ stories: [story({ eventType: 'HACK', title: 'Solana bridge drained', impact: 77 })] }), 'news')
-    expect(against).toMatchObject({ value: 0, fact: 'Hack or exploit, impact 77: Solana bridge drained (CoinDesk), which points the other way' })
+    expect(against).toMatchObject({ value: 0, fact: 'Hack, impact 77: Solana bridge drained (CoinDesk), which points the other way' })
     // For a SELL the hack is the case: in full.
     expect(part(score({ side: 'short', stories: [story({ eventType: 'HACK', impact: 77 })] }), 'news').value).toBe(77)
     // A kind with no way of its own counts half, and so does any story with no side to read it by.

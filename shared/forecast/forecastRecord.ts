@@ -15,8 +15,9 @@ import type { RefreshReason } from './refresh'
 // 1-hour horizons; its 4- and 24-hour ones on the hour, where a quarter-hour's would mostly repeat
 // the last -- and every forecast made again between closes (§39), with the one it replaced. For each
 // horizon: the five levels of the forecast shown and of the price-only one beside it (§49), P(up),
-// the call, the widths, the skills, the calibration cell, and each model's part (§14). Every figure in
-// percent to four decimals, a probability to three.
+// the call, the widths, the skills, the calibration cell, and each model's part (§14); and, where a
+// story moved it (V6 Stage 8), the news-moved forecasts' levels (V3, V4), the story and what it did
+// (§58). Every figure in percent to four decimals, a probability to three.
 //
 // AN OUTCOME a line a horizon, written once when it is due (shared/forecast/outcome.ts), with what it
 // is judged by repeated, so that a line can be read alone: where the close fell against the shown
@@ -55,6 +56,21 @@ export interface HorizonLine {
   v1: number[]
   v1pUp: number
   parts: [ForecastModelId, number, number][]
+  /** Where a story moved V3 or V4: its levels and the story. */
+  news?: Partial<Record<'v3' | 'v4', NewsLine>>
+}
+
+export interface NewsLine {
+  q: number[]
+  /** V4's P(up) as the map read it, beside the one shown, for measuring the news's own skill. */
+  pUpMapped: number
+  story: string
+  kind: string
+  impact: number
+  shift: number
+  widen: number
+  widenShare: number
+  fromLibrary: boolean
 }
 
 export interface PredictionLine {
@@ -99,7 +115,8 @@ export function predictionLine(prediction: PricePrediction, horizons: readonly H
       cell: range.ownClass ? prediction.pairClass : 'pooled',
       v1: (v1?.quantilesPct ?? []).map(pct4),
       v1pUp: p3(v1?.pUp ?? Number.NaN),
-      parts: range.contributions.map((member) => [member.model, p3(member.weight), pct4(member.medianLogPct)])
+      parts: range.contributions.map((member) => [member.model, p3(member.weight), pct4(member.medianLogPct)]),
+      ...newsOf(range)
     }
   }
   return {
@@ -118,6 +135,27 @@ export function predictionLine(prediction: PricePrediction, horizons: readonly H
     ...(refresh === undefined ? {} : { reasons: refresh.reasons, ...(refresh.previous === null ? {} : { previous: refresh.previous }) }),
     h
   }
+}
+
+function newsOf(range: PricePrediction['horizons'][Horizon] & object): Pick<HorizonLine, 'news'> {
+  const out: NonNullable<HorizonLine['news']> = {}
+  for (const variant of ['v3', 'v4'] as const) {
+    const effect = range.news[variant]
+    const levels = range.variants[variant]
+    if (effect === null || levels === undefined) continue
+    out[variant] = {
+      q: levels.quantilesPct.map(pct4),
+      pUpMapped: p3(levels.pUpMapped),
+      story: effect.storyId,
+      kind: effect.kind,
+      impact: effect.impact,
+      shift: pct4(effect.shiftPct),
+      widen: pct4(effect.widenPct),
+      widenShare: p3(effect.widenShare),
+      fromLibrary: effect.fromLibrary
+    }
+  }
+  return Object.keys(out).length === 0 ? {} : { news: out }
 }
 
 const isNumbers = (value: unknown, length: number): value is number[] => Array.isArray(value) && value.length === length && value.every((entry) => typeof entry === 'number' && Number.isFinite(entry))
@@ -160,6 +198,12 @@ export interface OutcomeLine {
   cell: PairClass | 'pooled'
   cls: PairClass
   errors: ErrorKind[]
+  /** Where a story moved the forecast: where the close fell against V3's and V4's levels, V4's P(up)
+   * as the map read it, and the shift. */
+  v3below?: string
+  v4below?: string
+  newsPUp?: number
+  newsShift?: number
 }
 
 /** A horizon whose outcome could not be read. */
@@ -201,7 +245,9 @@ export function outcomeLine(recorded: PredictionLine, horizon: Horizon, outcome:
     pUp: line.pUp,
     cell: line.cell,
     cls: recorded.cls,
-    errors: outcome.errors
+    errors: outcome.errors,
+    ...(line.news?.v3 === undefined ? {} : { v3below: flags(line.news.v3.q.map((level) => outcome.movePct <= level)) }),
+    ...(line.news?.v4 === undefined ? {} : { v4below: flags(line.news.v4.q.map((level) => outcome.movePct <= level)), newsPUp: line.news.v4.pUpMapped, newsShift: line.news.v4.shift })
   }
 }
 
