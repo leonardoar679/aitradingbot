@@ -278,6 +278,53 @@ thread of its own, built beside the main process's file (`electron/forecast/trai
 fit never holds up a socket or a window; `scripts/forecast-bench.mjs` times the built worker: 200,000
 rows of 63 figures, sixty-five trees in about fourteen seconds on this machine.
 
+**The models and how they are judged** (since 13 October 2026; the V6 document's §13, §51-53 and
+§104-105; V6 Stage 5; `shared/forecast/{panel,models,walkForward,promotion,training}.ts`). Every
+model forecasts a move in units of the pair's usual move for its horizon -- so a quiet large coin and
+a wild small one are learned together -- as five quantiles, P10 to P90: **persistence** (the
+training moves' own quantiles: no forecast at all, the line every other model has to beat),
+**volatility** (a ridge regression of how big the move will be, HAR-style, on the volatility's own
+readings), **technical** (a ridge regression of the move on every figure), **random-forest**,
+**gbt** (boosted trees for the centre and for the size), **quantile-gbt** (boosted trees at each
+quantile's own loss), and **gbt-price** (gbt on the price figures alone, §49's "price only"). They
+learn from every pair's row every quarter-hour (every hour for 4 and 24 hours) over the ninety days,
+after the 26 the first rows need.
+
+They are judged by a **walk forward**: each of the last four weeks is forecast by models fitted only
+on rows whose outcome was known an hour before that week began -- a row whose four hours reach into
+the week is not learned from (purged), nor is the hour before it (an embargo) -- and the boosting is
+stopped on the stretch just before, purged the same way. The training before each week is every row
+before it, at least thirty days (the document's sixty-day window does not fit in ninety days with
+four weeks tested). A model **weighs** in the forecast only once its weeks earn it, line by line,
+every line fixed before any result was seen: at least 5,000 outcomes, an 80% interval that held
+between 75% and 85% of them, and a pinball loss below persistence's on the same outcomes; for a
+horizon the forecast trader takes, also a positive net after costs over thirty replayed trades, once
+the trader has replayed them (V6 Stages 11-12). Not promoted, a model is still computed and kept on
+record. A model whose week went wrong -- coverage more than ten points from 80%, a loss above
+persistence's, the median off by more than a quarter of the usual move, or the trader's last thirty
+trades on it losing -- is **DEGRADED**: flagged and told once a day on a thread of its own, never
+deleted or switched off by the app (told from V6 Stage 7, when live outcomes exist).
+
+The fitting is done by itself (`electron/services/forecastTrainingService.ts`, in the worker): a
+**first fit** once the bars are there for twenty pairs, then the walk forward in the background;
+and a **refit every night** at 00:30 UTC on the newest ninety days, or at the next start when the
+last fit is over 26 hours old. The nightly refit is on unless switched off (`forecast.refitNightly`
+in `settings.json`; Forecast Lab, V6 Stage 11); public data, no spend. A refit's models are put in
+use as soon as they are read back from their files, and the walk forward before it keeps its
+verdicts until the refit's own is done; a fit that fails leaves the models and verdicts in use as
+they were and says why. On file in `forecastModels/`: a folder a run with its five horizons' models
+(`<horizon>.json`, about half a megabyte each) and the walk forward's hourly forecasts beside what
+happened (`oos-<horizon>.bin`, in columns), `current.json` naming the run in use and the walk forward
+whose verdicts hold, and `training-YYYY-MM.jsonl`, a line for every fit and walk forward; the run in
+use and the one before it are kept, older ones deleted. On the real ninety days of 39 pairs, on this
+machine, a first fit (227,509 rows) took two minutes and its walk forward five, the window answering
+in 2 ms throughout. What the walk forward found is what was expected: the size of a move can be
+forecast and its direction barely. Persistence's 80% range held 78-80% of the outcomes; the boosted
+models' pinball loss was 1-2% under persistence's at five minutes to an hour, and their medians
+called the way of 51-52% of the moves at fifteen minutes and an hour. At 4 and 24 hours most models
+did not beat persistence, and the forest's range was too narrow there; they stay on record, not
+weighing.
+
 ### Live prices
 
 Candles are context; the stream is the price now (the second V3 document's §7, §8, §25 and §42).

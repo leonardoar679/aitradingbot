@@ -112,6 +112,8 @@ under Settings › Advanced › Effective configuration.
 | | `paperPause` (added 5 October 2026): the losing run in R that pauses those trades, or never; and for the watch and for the news rules, each, whether a run has paused it and when it was last resumed | — | Risk & Safety |
 | | `alerts` (added 6 October 2026): desktop notices on or off, and with sound or silent; obeyed where every notice is raised (`appHandlers.ts`) | — | Settings › Essentials |
 | | `keepRunningWhenClosed` (added 8 October 2026, V5 Stage 2): closing the window hides it to the tray and everything runs on, or quits the app (off by default; `shared/keepRunning.ts`) | — | Settings › Essentials |
+| | `uiMode` (added 13 October 2026, V6 Stage 1): the sidebar's layout, Normal (Research and All Features folded until opened) or Expert (every group open) | — | Settings › Essentials › Layout |
+| | `forecast.refitNightly` (added 13 October 2026, V6 Stage 5): the price forecast refitted every night at 00:30 UTC on the newest ninety days, and at a start when the last fit is over 26 hours old (on unless `false`; `shared/forecast/training.ts`) | — | Forecast Lab (V6 Stage 11); until then `settings.json` and the effective-config card |
 | `aiConfig.json` | `defaultModel`, `enabledModels`, `route` | Agents › Models | Settings › AI |
 | | `dailyCapUsd`, `callsPerMinute` | Agents › Usage | Settings › AI |
 | | `watch` (on, models, events a day, lowest band, first model gates; and, added 8 October 2026, CONFIRM: a paper BUY it opens is told as ready to confirm as a real order a person places; added with V5 Stage 4, `askAt`: at the raise, or once the event is confirmed a pass later; and since V5 Stage 5 three models offered by default with the first gating, and the paper trade following their vote when two or more are asked) | Agents › Opportunities › Watch | Opportunities (stays with its results) |
@@ -134,7 +136,12 @@ renderer tells them and read back by the session report, a trade's timeline and 
 days (`recordRetentionService`), and the size of each record directory is on the effective-config
 card. Since 13 October 2026 `forecastData/` holds the price forecast's five-minute bars, a file per
 pair and UTC month (`forecastDataService`, V6 Stage 2), and a month file whose month ended before the
-ninety days the forecast keeps is deleted at start; nothing else is ever deleted.
+ninety days the forecast keeps is deleted at start; and `forecastModels/` holds the forecast's fitted
+models, a folder a run (`<horizon>.json` and the walk forward's `oos-<horizon>.bin`), `current.json`
+(the run in use, the walk forward whose verdicts hold, the verdicts) and `training-YYYY-MM.jsonl` (a
+line for every fit and walk forward), written by `forecastTrainingService` (V6 Stage 5), which keeps
+the run in use and the one before it and deletes older runs after a walk forward. Nothing else is
+ever deleted.
 
 ## What runs without a page open
 
@@ -217,6 +224,11 @@ The main process also runs loops that need no window at all:
   for the research's pairs and Bitcoin and ether in `forecastData/`, read from the public data host
   a few minutes after the research first names its pairs and a page a pair after every five-minute
   close. Public data only.
+- `forecastTrainingService` (added 13 October 2026, V6 Stage 5) fits the forecast's models in a
+  worker thread of their own (`electron/forecast/trainWorker.ts`, through `forecastWorkerService`):
+  a first fit once the bars are there for twenty pairs, the walk forward after it, and a refit every
+  night at 00:30 UTC unless `forecast.refitNightly` is off; it writes `forecastModels/`. Public data
+  only; no key, no model call, no order.
 - `aiAdditionsService` (added 6 October 2026) puts each story of high impact the news feed reads to
   the news analyst, once, and asks why the coin it names moved, while the watch is on, each within
   its daily limit and the AI budget.

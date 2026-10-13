@@ -37,7 +37,7 @@ export interface RecordSizes {
 }
 
 /** The record directories measured, in the order shown. */
-export const RECORD_DIRECTORIES = ['aiLedger', 'aiSignalCache', 'marketEvents', 'paperRefusals', 'alerts', 'news', 'aiExperiments', 'forecastData'] as const
+export const RECORD_DIRECTORIES = ['aiLedger', 'aiSignalCache', 'marketEvents', 'paperRefusals', 'alerts', 'news', 'aiExperiments', 'forecastData', 'forecastModels'] as const
 
 export function formatBytes(bytes: number): string {
   if (!(bytes >= 0) || !Number.isFinite(bytes)) return '0 B'

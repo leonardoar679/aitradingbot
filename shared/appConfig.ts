@@ -45,6 +45,12 @@ import { PAPER_MIN_STAKE, healPaperRisk } from './paperRisk'
 import { RISK_LINES } from './dynamicRisk'
 import { SESSION_REPORT_VERSION } from './shadowReport'
 import { healUiMode } from './uiMode'
+import { FORECAST_DATA_VERSION, FORECAST_HISTORY_DAYS } from './forecast/bars'
+import { CLASS_LINES, FEATURES_VERSION, PEG_RANGE } from './forecast/features'
+import { MODELS_VERSION, TRAINING } from './forecast/models'
+import { DEGRADATION_LINES, PROMOTION_LINES } from './forecast/promotion'
+import { MIN_READY_PAIRS, healForecastSettings } from './forecast/training'
+import { FOLDS } from './forecast/walkForward'
 
 export type { EffectiveStores } from './appDefaults'
 
@@ -118,7 +124,22 @@ export const ENGINE_CONSTANTS = {
   configFiles: { version: CONFIG_FILE_VERSION },
   /** The records' retention (the V5 document, §93; since 8 October 2026): the answer cache is swept
    * of files older than this at start; the monthly files are kept. */
-  retention: { answerCacheDays: CACHE_RETENTION_DAYS }
+  retention: { answerCacheDays: CACHE_RETENTION_DAYS },
+  /** The price forecast (the V6 document; since 13 October 2026): its bars, its figures, its models,
+   * what they are fitted at, the walk forward, and the lines a model is promoted and degraded at. */
+  forecast: {
+    data: FORECAST_DATA_VERSION,
+    historyDays: FORECAST_HISTORY_DAYS,
+    features: FEATURES_VERSION,
+    pegRange: PEG_RANGE,
+    classLines: CLASS_LINES,
+    models: MODELS_VERSION,
+    training: TRAINING,
+    folds: FOLDS,
+    minReadyPairs: MIN_READY_PAIRS,
+    promotion: PROMOTION_LINES,
+    degradation: DEGRADATION_LINES
+  }
 } as const
 
 /** One value the heal changed on the way from a file to the store the app runs on. */
@@ -159,7 +180,7 @@ export function defaultStores(): EffectiveStores {
  * `settings` is settings.json's top level; `ai` the AI config as its service hands it out; the rest
  * as each service hands them out. */
 export function healStores(input: {
-  settings: { paperRisk?: unknown; paperPause?: unknown; paperDigest?: unknown; alerts?: unknown; keepRunningWhenClosed?: unknown; uiMode?: unknown }
+  settings: { paperRisk?: unknown; paperPause?: unknown; paperDigest?: unknown; alerts?: unknown; keepRunningWhenClosed?: unknown; uiMode?: unknown; forecast?: unknown }
   ai: { defaultModel: string; enabledModels: string[]; dailyCapUsd: number; callsPerMinute: number; watch: unknown; watchPaper: unknown; additions: unknown }
   scanner: ScannerConfig
   news: unknown
@@ -173,6 +194,7 @@ export function healStores(input: {
     paperDigest: { enabled: healPaperDigest(input.settings.paperDigest).enabled, lastDay: null },
     alerts: healAlerts(input.settings.alerts),
     app: { keepRunningWhenClosed: healKeepRunning(input.settings.keepRunningWhenClosed), uiMode: healUiMode(input.settings.uiMode) },
+    forecast: healForecastSettings(input.settings.forecast),
     watch,
     watchPaper: healAiWatchPaper(input.ai.watchPaper, watch.models),
     additions: healAiAdditions(input.ai.additions),
@@ -220,6 +242,7 @@ const STORE_FILES: Record<keyof EffectiveStores, { file: ConfigFileName; under: 
   paperDigest: { file: 'settings', under: 'paperDigest' },
   alerts: { file: 'settings', under: 'alerts' },
   app: { file: 'settings', under: null },
+  forecast: { file: 'settings', under: 'forecast' },
   watch: { file: 'aiConfig', under: 'watch' },
   watchPaper: { file: 'aiConfig', under: 'watchPaper' },
   additions: { file: 'aiConfig', under: 'additions' },

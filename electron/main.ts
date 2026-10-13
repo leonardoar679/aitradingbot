@@ -7,6 +7,8 @@ import { startLiveTwapLoop } from './services/liveTwapService'
 import { startMarketScanner } from './services/marketScannerService'
 import { startMarketResearch } from './services/marketResearchService'
 import { startForecastData } from './services/forecastDataService'
+import { startForecastTraining } from './services/forecastTrainingService'
+import { stopForecastWorker } from './services/forecastWorkerService'
 import { getLiveState, startLiveMarket } from './services/liveMarketService'
 import { startExchangeHealth } from './services/exchangeHealthService'
 import { startNewsReader } from './services/newsService'
@@ -197,6 +199,12 @@ if (!gotSingleInstanceLock) {
     // V6 document, §15 and §40). Public data only: no key, no model, no order. It waits for the
     // research to name its pairs. See forecastDataService.ts.
     startForecastData()
+    // Fits the price forecast's models on those bars once enough pairs are there, then scores them on
+    // weeks they were not fitted on, and does both again each night at half past midnight UTC unless
+    // switched off -- in a worker thread, so the main process is never held up. Public data only: no
+    // key, no model of anyone else's, no order. See forecastTrainingService.ts.
+    startForecastTraining()
+    app.on('will-quit', stopForecastWorker)
     // Holds one public socket to the market-data host: the best bid and ask and the minute forming
     // for the pairs shown and the app's own paper trades, and Bitcoin's and ether's minutes always.
     // No key, no model, no order. See liveMarketService.ts.

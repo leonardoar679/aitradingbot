@@ -1117,6 +1117,7 @@ describe('AI code has no route to a real order', () => {
       'paperDigest',
       'paperPause',
       'paperRisk',
+      'training',
       'uiMode'
     ])
   })

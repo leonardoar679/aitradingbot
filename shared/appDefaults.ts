@@ -14,6 +14,7 @@ import { DEFAULT_PAPER_DIGEST } from './paperDigest'
 import { DEFAULT_PAPER_PAUSE, describePaperPause, savePaperPause } from './paperPause'
 import { DEFAULT_PAPER_RISK, describePaperRisk } from './paperRisk'
 import { DEFAULT_UI_MODE, type UiMode } from './uiMode'
+import { DEFAULT_FORECAST_SETTINGS, type ForecastSettings } from './forecast/training'
 
 // WHAT A FRESH INSTALL STARTS WITH, AND THE RISK LEVEL IN A WORD.
 //
@@ -55,6 +56,8 @@ export interface EffectiveStores {
   /** What closing the window does (shared/keepRunning.ts), and which groups of the sidebar start open
    * (shared/uiMode.ts). */
   app: { keepRunningWhenClosed: boolean; uiMode: UiMode }
+  /** The price forecast's nightly refit (shared/forecast/training.ts). */
+  forecast: ForecastSettings
   watch: AiWatchConfig
   watchPaper: AiWatchPaperConfig
   additions: AiAdditionsConfig
@@ -72,6 +75,7 @@ export const DEFAULT_CONFIG: EffectiveStores = {
   paperDigest: DEFAULT_PAPER_DIGEST,
   alerts: DEFAULT_ALERTS,
   app: { keepRunningWhenClosed: DEFAULT_KEEP_RUNNING, uiMode: DEFAULT_UI_MODE },
+  forecast: DEFAULT_FORECAST_SETTINGS,
   watch: DEFAULT_AI_WATCH,
   watchPaper: DEFAULT_AI_WATCH_PAPER,
   additions: DEFAULT_AI_ADDITIONS,

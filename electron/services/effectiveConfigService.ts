@@ -21,7 +21,7 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 export async function getEffectiveConfig(): Promise<EffectiveConfig> {
   const [settings, ai, scanner, news, live, sizes] = await Promise.all([getSettings(), getAiConfig(), getScannerState(), getNewsState(), getLiveTradingStatus(), recordSizes()])
   const stores = healStores({
-    settings: { paperRisk: settings.paperRisk, paperPause: settings.paperPause, paperDigest: settings.paperDigest, alerts: settings.alerts, keepRunningWhenClosed: settings.keepRunningWhenClosed, uiMode: settings.uiMode },
+    settings: { paperRisk: settings.paperRisk, paperPause: settings.paperPause, paperDigest: settings.paperDigest, alerts: settings.alerts, keepRunningWhenClosed: settings.keepRunningWhenClosed, uiMode: settings.uiMode, forecast: settings.forecast },
     ai: {
       defaultModel: ai.defaultModel,
       enabledModels: ai.enabledModels,

@@ -16,8 +16,10 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 // 8 October 2026: the fifth AI addition (its limit, prompt and schema) moved it from 60c026073c92;
 // later that day the hard limits and the settings files' version (V5 Stage 1) moved it from 9f6c8af7757e,
 // and the event's life, fingerprint and cause (V5 Stage 4) from fdf553c8b5bb; the conditions' risk lines
-// (V5 Stage 7) from 0f3c4a0f6b6c, and the records' retention (V5 Stage 12) from 7e9adb65bce8.
-const PINNED_ENGINE_VERSION = '3bd9a23b9d16'
+// (V5 Stage 7) from 0f3c4a0f6b6c, and the records' retention (V5 Stage 12) from 7e9adb65bce8. 13 October
+// 2026: the price forecast's constants -- its bars, figures, models, training, walk forward, promotion and
+// degradation lines (V6 Stage 5) -- moved it from 3bd9a23b9d16.
+const PINNED_ENGINE_VERSION = '9bdf452dfbad'
 
 describe('the engine version', () => {
   it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {

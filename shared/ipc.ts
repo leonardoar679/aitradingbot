@@ -199,6 +199,9 @@ export interface AppSettings {
    * Features away, expert opens every group. Absent until first written, and healed on every read:
    * normal. */
   uiMode?: 'normal' | 'expert'
+  /** The price forecast's nightly refit, on unless switched off (shared/forecast/training.ts). Absent
+   * until first written, and healed on every read: on. */
+  forecast?: { refitNightly?: boolean }
 }
 
 /** The app's desktop notices: on or off, and with sound or silent. */
