@@ -6,7 +6,7 @@
 //   npm run build
 //   node scripts/drive-app.mjs
 //   driver> launch
-//   driver> nav Backtest & Research
+//   driver> nav Backtest
 //   driver> ss backtest
 //
 // Requires playwright-core, which is deliberately NOT a dependency of this app -- it exists only
@@ -24,30 +24,54 @@ import * as path from 'node:path'
 
 import { APP_DIR, ELECTRON_BIN, reapStaleApps as reapAppsByPath, samePath } from './lib/electron.mjs'
 
-const SHOT_DIR = process.env.SCREENSHOT_DIR || path.join(APP_DIR, '.shots')
-fs.mkdirSync(SHOT_DIR, { recursive: true })
-
-// TWO OPTIONAL SWITCHES FOR DRIVING THE APP WITHOUT TOUCHING A REAL SESSION. Both are off unless
-// set, and with both off this driver behaves exactly as it always has.
-//
-//   APP_USER_DATA_DIR  a scratch profile folder. The app is launched with --user-data-dir, so its
-//                      settings, credentials, ledgers and single-instance lock all live there
-//                      instead of in %APPDATA%/newtradingbot.
-//   APP_ENTRY          a built main script to launch instead of this checkout's out/ -- e.g.
-//                      dist/verify/main/index.js from `electron-vite build --outDir dist/verify`.
-//
-// They exist because of one measured hazard: someone can be RUNNING this app, from this checkout,
-// while a change to it is being verified. The stale-process sweep below matches on the repo path,
-// so a plain `launch` kills that running app -- along with any live-position watcher protecting
-// real money in it -- and `npm run build` rewrites the out/ it was started from. With a scratch
-// profile the sweep is narrowed to processes carrying that profile's path, and with APP_ENTRY the
-// build under test never overwrites the one in use.
-const USER_DATA_DIR = process.env.APP_USER_DATA_DIR ? path.resolve(process.env.APP_USER_DATA_DIR) : null
-const APP_ENTRY = process.env.APP_ENTRY ? path.resolve(APP_DIR, process.env.APP_ENTRY) : APP_DIR
-
-let app = null
-let page = null
-
+const SHOT_DIR = process.env.SCREENSHOT_DIR || path.join(APP_DIR, '.shots')
+
+fs.mkdirSync(SHOT_DIR, { recursive: true })
+
+
+
+// TWO OPTIONAL SWITCHES FOR DRIVING THE APP WITHOUT TOUCHING A REAL SESSION. Both are off unless
+
+// set, and with both off this driver behaves exactly as it always has.
+
+//
+
+//   APP_USER_DATA_DIR  a scratch profile folder. The app is launched with --user-data-dir, so its
+
+//                      settings, credentials, ledgers and single-instance lock all live there
+
+//                      instead of in %APPDATA%/newtradingbot.
+
+//   APP_ENTRY          a built main script to launch instead of this checkout's out/ -- e.g.
+
+//                      dist/verify/main/index.js from `electron-vite build --outDir dist/verify`.
+
+//
+
+// They exist because of one measured hazard: someone can be RUNNING this app, from this checkout,
+
+// while a change to it is being verified. The stale-process sweep below matches on the repo path,
+
+// so a plain `launch` kills that running app -- along with any live-position watcher protecting
+
+// real money in it -- and `npm run build` rewrites the out/ it was started from. With a scratch
+
+// profile the sweep is narrowed to processes carrying that profile's path, and with APP_ENTRY the
+
+// build under test never overwrites the one in use.
+
+const USER_DATA_DIR = process.env.APP_USER_DATA_DIR ? path.resolve(process.env.APP_USER_DATA_DIR) : null
+
+const APP_ENTRY = process.env.APP_ENTRY ? path.resolve(APP_DIR, process.env.APP_ENTRY) : APP_DIR
+
+
+
+let app = null
+
+let page = null
+
+
+
 /** The stale-process sweep (scripts/lib/electron.mjs), matched on the scratch profile's path when
  * one is set, else on the repo path. */
 const reapStaleApps = () => reapAppsByPath(USER_DATA_DIR ?? APP_DIR)
@@ -115,20 +139,27 @@ const COMMANDS = {
     page = await app.firstWindow()
     await page.waitForLoadState('domcontentloaded')
     // The renderer mounts React, then fetches settings and candles over IPC. There is no ready
-    // signal to wait on, so wait for the sidebar the app always renders. Overview is its first
-    // entry and the page the app opens on.
+    // signal to wait on, so wait for the sidebar the app always renders. Home is its first entry
+    // and the page the app opens on (since 13 October 2026).
     await page.waitForFunction(
-      () => [...document.querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Overview'),
+      () => [...document.querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Home'),
       { timeout: 30_000 }
     )
     console.log('launched:', app.windows().map((w) => w.url()).join(', '))
   },
 
-  /** Sidebar navigation. Every page in this app is a plain <button> carrying its label. */
+  /** Sidebar navigation. Every page in this app is a plain <button> carrying its label. A group the
+   * normal layout folds (Research, All Features) is opened first when the label is not on screen. */
   async nav(label) {
     if (!need()) return
-    const r = await page.evaluate((t) => {
-      const el = [...document.querySelectorAll('button')].find((e) => e.textContent?.trim() === t)
+    const r = await page.evaluate(async (t) => {
+      const find = () => [...document.querySelectorAll('button')].find((e) => e.textContent?.trim() === t)
+      let el = find()
+      if (!el) {
+        for (const header of document.querySelectorAll('nav button[aria-expanded="false"]')) header.click()
+        await new Promise((resolve) => setTimeout(resolve, 300))
+        el = find()
+      }
       if (!el) return 'NOT_FOUND'
       el.click()
       return 'OK'
@@ -347,7 +378,7 @@ const COMMANDS = {
 
   help() {
     console.log('commands:', Object.keys(COMMANDS).join(', '))
-    console.log('e.g.  launch | nav Backtest & Research | form | set-select 4 trend-regime-ensemble |')
+    console.log('e.g.  launch | nav Backtest | form | set-select 4 trend-regime-ensemble |')
     console.log('      click-text Start | wait-text "Total Net Profit" | ss result |')
     console.log('      click-in-card Trend Regime BTC :: Enable Bot')
   }

@@ -4,6 +4,7 @@ import { TextLink } from '../components/TextLink'
 import type { AiConfig } from '../../shared/aiCost'
 import { DEFAULT_ALERTS, healAlerts } from '../../shared/alerts'
 import { DEFAULT_KEEP_RUNNING, healKeepRunning } from '../../shared/keepRunning'
+import { DEFAULT_UI_MODE, UI_MODES, describeUiMode, healUiMode, type UiMode } from '../../shared/uiMode'
 import { conservativePaper, describeRiskLevel } from '../../shared/appDefaults'
 import type { AlertSettings, CredentialStatus, LiveTradingStatus, PaperPauseSettings, PaperRiskSettings } from '../../shared/ipc'
 import { DEFAULT_SCANNER_UNIVERSE, SCANNER_UNIVERSE_SIZES, type ScannerConfig } from '../../shared/marketScanner'
@@ -42,7 +43,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }):
  * orders can be placed is read and shown, never changed here -- arming and the kill switch stay on
  * the bar, and the limits on Risk & Safety. Whether the AI asks, or trades on paper, is changed only
  * on Opportunities, after the confirmation that states what a day of it can cost. */
-export function EssentialsCard({ onNavigate }: { onNavigate: (page: Page) => void }): React.JSX.Element {
+export function EssentialsCard({ onNavigate, onUiModeChange }: { onNavigate: (page: Page) => void; onUiModeChange: (mode: UiMode) => void }): React.JSX.Element {
   const [status, setStatus] = useState<LiveTradingStatus | null>(null)
   const [binance, setBinance] = useState<CredentialStatus | undefined>(undefined)
   const [keyConfigured, setKeyConfigured] = useState<boolean | null>(null)
@@ -51,6 +52,7 @@ export function EssentialsCard({ onNavigate }: { onNavigate: (page: Page) => voi
   const [paper, setPaper] = useState<{ paperRisk: PaperRiskSettings; paperPause: PaperPauseSettings } | null>(null)
   const [alerts, setAlerts] = useState<AlertSettings>(DEFAULT_ALERTS)
   const [keepRunning, setKeepRunning] = useState<boolean>(DEFAULT_KEEP_RUNNING)
+  const [uiMode, setUiMode] = useState<UiMode>(DEFAULT_UI_MODE)
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
 
@@ -60,6 +62,7 @@ export function EssentialsCard({ onNavigate }: { onNavigate: (page: Page) => voi
         setPaper({ paperRisk: healPaperRisk(settings.paperRisk), paperPause: healPaperPause(settings.paperPause) })
         setAlerts(healAlerts(settings.alerts))
         setKeepRunning(healKeepRunning(settings.keepRunningWhenClosed))
+        setUiMode(healUiMode(settings.uiMode))
       },
       (failure: unknown) => setProblem(describeError(failure))
     )
@@ -140,6 +143,16 @@ export function EssentialsCard({ onNavigate }: { onNavigate: (page: Page) => voi
       await settingsWrites(async () => {
         await window.api.settings.set({ keepRunningWhenClosed: next })
       })
+      readSettings()
+    })
+
+  /** Which groups of the sidebar start open (shared/uiMode.ts). It changes nothing the app does. */
+  const setLayout = (next: UiMode): Promise<void> =>
+    run(async () => {
+      await settingsWrites(async () => {
+        await window.api.settings.set({ uiMode: next })
+      })
+      onUiModeChange(next)
       readSettings()
     })
 
@@ -289,6 +302,23 @@ export function EssentialsCard({ onNavigate }: { onNavigate: (page: Page) => voi
       <Row label="Exchange">
         <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>Binance · spot · USDT pairs</div>
         <p style={noteStyle}>Market data is public and needs no key; a key is needed only to place real orders.</p>
+      </Row>
+
+      <Row label="Layout">
+        <select
+          aria-label="Sidebar layout"
+          value={uiMode}
+          disabled={busy || paper === null}
+          onChange={(event) => void setLayout(healUiMode(event.target.value))}
+          style={{ ...textInputStyle(), width: 'auto', padding: '0.35rem 0.6rem' }}
+        >
+          {UI_MODES.map((mode) => (
+            <option key={mode} value={mode}>
+              {describeUiMode(mode).label}
+            </option>
+          ))}
+        </select>
+        <p style={noteStyle}>{describeUiMode(uiMode).detail} Every page is in the sidebar either way; this changes nothing the app does.</p>
       </Row>
 
       {problem !== null && <p style={{ ...noteStyle, color: 'var(--down)' }}>{problem}</p>}

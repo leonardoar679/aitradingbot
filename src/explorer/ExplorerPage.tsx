@@ -281,7 +281,7 @@ export function ExplorerPage({
 
   return (
     <>
-      <PageHeader title="Discovery" subtitle="What is moving right now, measured the same way for every pair, and the news around it" />
+      <PageHeader title="Explorer" subtitle="What is moving right now, measured the same way for every pair, and the news around it" />
       <PageTabs<DiscoveryTab>
         tabs={[
           { id: 'scanner', label: 'Market scanner' },

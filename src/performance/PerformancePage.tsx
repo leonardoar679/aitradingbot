@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
+import { anchorElementId } from '../navigation/pages'
 import { PortfolioHistory, PortfolioSummary } from '../portfolio/PortfolioSections'
 import { LiveBoardCard } from '../agents/LiveBoardCard'
 import { JournalCard } from '../agents/JournalCard'
@@ -72,8 +73,10 @@ export function PerformancePage(): React.JSX.Element {
   return (
     <>
       <PageHeader title="Performance" subtitle="What the portfolio, the bots and the AI's recommendations have done" />
-      <PortfolioSummary />
-      <PortfolioHistory />
+      <div id={anchorElementId('portfolio')} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', scrollMarginTop: '1rem' }}>
+        <PortfolioSummary />
+        <PortfolioHistory />
+      </div>
       {models !== null && <LiveBoardCard title="What the watch's recommendations earned" models={models} refreshKey={answered} />}
       <PaperRCurveCard executors={executors} />
       <ExitCheckCard executors={executors} />

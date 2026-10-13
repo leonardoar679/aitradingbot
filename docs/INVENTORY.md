@@ -1,19 +1,25 @@
 # Inventory: what the app has, and where each part goes
 
 This is phase 1 of the V3 reorganization. It maps every page, setting, scheduler and IPC channel
-before anything is re-homed, so that nothing is lost on the way. Nothing here is deleted. The new
-navigation has 15 pages in four groups:
+before anything is re-homed, so that nothing is lost on the way. Nothing here is deleted. Since 13
+October 2026 (the V6 document, §64-65) the sidebar has five groups and two personalities: the normal
+one folds RESEARCH and ALL FEATURES away, one click from opening (remembered on the computer), and
+the expert one (Settings › Essentials › Layout, `uiMode`) opens every group. The app opens on Home.
 
-| Group | Pages |
+| Group | Entries (the page each opens) |
 |---|---|
-| AI TRADER | Overview, Opportunities, Markets, AI Decisions, Positions, Performance |
-| RESEARCH | Backtest & Research, AI Benchmark, Discovery |
-| TRADING | Paper Trading, Live Trading, Strategies |
-| SYSTEM | Risk & Safety, Connections, Settings |
+| AI TRADER | Home, Opportunities, Positions, Performance |
+| TRADING | Paper (Paper Trading), Live (Live Trading) |
+| RESEARCH | Backtest (Backtest & Research), AI Benchmark |
+| ALL FEATURES | Strategies; Bots and Executors (Strategies' two views); Controllers (Risk & Safety, at its card); Routines (Backtest & Research › Automation); Market (the page titled Market, once Markets); Portfolio (Performance, at the portfolio cards); Explorer (the page titled Explorer, once Discovery); Overview; AI Decisions |
+| SYSTEM | Risk (Risk & Safety), Connections, Settings |
 
-(Research before Trading since 8 October 2026, as the document's §50 has it; the groups were the
-other way round from 5 October.) Since 8 October 2026 Overview also has three blocks of its own, not
-old cards moved: Breaking events, News impact and Today's performance (`src/overview/`).
+Home is new (V6 Stage 1): the market in a line, the top opportunity and what you hold, the cards
+Overview has; the prediction goes on top of it once the forecast engine makes one. Overview keeps
+everything it had. From 5 to 13 October 2026 the sidebar had four groups (AI TRADER, RESEARCH,
+TRADING, SYSTEM; Research before Trading from 8 October). Since 8 October 2026 Overview also has
+three blocks of its own, not old cards moved: Breaking events, News impact and Today's performance
+(`src/overview/`).
 
 Taken on 5 October 2026, at commit `aef376d`.
 
@@ -24,18 +30,18 @@ Taken on 5 October 2026, at commit `aef376d`.
 | **Portfolio** (landing page) | First-run card | Offers the starter presets when nothing is set up | Overview |
 | | Total Value | Value of everything held, change since the session started | Overview (value) and Performance |
 | | Active Bots, Bot PNL, System | How many bots run, their combined P&L, assets and executors | Performance |
-| | Portfolio evolution chart | Value or composition over 1D/1W/1M/3M | Performance |
+| | Portfolio evolution chart | Value or composition over 1D/1W/1M/3M | Performance (Portfolio) |
 | | Top holdings | The largest holdings | Performance |
 | **Account** | Get started, Add funds, Balances, Movements | The paper account: set up, fund, balances, ledger | Paper Trading |
 | | Live balances (one card per connected exchange) | Real balances read over the user's key | Live Trading |
 | | Futures positions | Real Binance futures positions, closable, exchange-held stops | Live Trading |
 | | The path to live (added 8 October 2026, not an old card) | Where a person stands on the document's safe workflow to live: the key and its test, paper trading, the two test runs, a trade from a call, the session armed; read-only | Live Trading |
 | **Trade** | Order Ticket, Session Orders | A manual paper order and this session's orders | Paper Trading |
-| **Bots** | Active, Runs, Archived | Strategy bots on paper, their finished runs, archived ones | Strategies › Active Runs |
-| **Executors** | Local Executor, Bots on this executor | Where bots and executors run | Strategies › Execution |
-| | Executor cards, detail view | Every executor, paper or live, with its state | Strategies › Execution |
+| **Bots** | Active, Runs, Archived | Strategy bots on paper, their finished runs, archived ones | Strategies › Active Runs (Bots) |
+| **Executors** | Local Executor, Bots on this executor | Where bots and executors run | Strategies › Execution (Executors) |
+| | Executor cards, detail view | Every executor, paper or live, with its state | Strategies › Execution (Executors) |
 | | New Executor (8 types), Starter Presets | Make an executor by hand or from a preset, or from a call's filled-in form | Strategies › Execution |
-| **Controllers** | New Controller, list, Snapshots | Groups executors under shared stop-loss, take-profit and drawdown limits | Risk & Safety |
+| **Controllers** | New Controller, list, Snapshots | Groups executors under shared stop-loss, take-profit and drawdown limits | Risk & Safety (Controllers) |
 | **Positions** | Open Positions | Paper bots' open positions | Positions (unchanged) |
 | | Live Positions (with ledger check), Live Trade History | Real positions, closable; realized P&L | Positions (unchanged) |
 | | Inventory | Positions handed over from stopped paper executors | Positions (unchanged) |
@@ -44,7 +50,7 @@ Taken on 5 October 2026, at commit `aef376d`.
 | | Analyze | Ask a model about one market | AI Decisions |
 | | Events (added 8 October 2026, V5 Stage 5) | Each recent event with every model's answer, read-only | AI Decisions |
 | | Opportunities › Watch | Puts events to models with no click; its paper trades | Opportunities |
-| | Opportunities › Right now | Recommendations still valid, ranked; since 6 October 2026 a table with the last hour's other events, a signal and an execution score, and a row that opens the plan, the risk, the news and each model's reasoning | Opportunities, and the top one on Overview |
+| | Opportunities › Right now | Recommendations still valid, ranked; since 6 October 2026 a table with the last hour's other events, a signal and an execution score, and a row that opens the plan, the risk, the news and each model's reasoning | Opportunities, and the top one on Home and Overview |
 | | Opportunities › Models to ask, Events | Each event with its answers, Ask and Paper trade | Opportunities |
 | | Opportunities › What the watch's recommendations earned | The live board over the last 10/50/100 trades and 7/30 days; since 6 October 2026 with "Does AI help?" | Performance |
 | | Opportunities › Journal | Every recommendation with its outcome, CSV export | Performance |
@@ -60,15 +66,15 @@ Taken on 5 October 2026, at commit `aef376d`.
 | | Session report (added 6 October 2026, not an old card) | What the app did over the last hour, twelve hours or a session, and the V3 document's gates; saved as JSON or CSV | Performance |
 | | What an answer costs a trade (added 8 October 2026, not an old card) | By model, what the ledger says was spent to make each of the watch's paper trades: a trade, a winning trade, a dollar of net result | Performance |
 | | Research (added 8 October 2026, not an old card) | The record as tables, no model asked: exit rules, entry timing, holding time by kind, news timing, consensus, the score's inputs by ablation, capture and misses, false opportunities, the excursions on file; CSV each | AI Benchmark › Research |
-| **Routines** | New Routine, list, Reports | Backtests re-run on a schedule while the app is open | Backtest & Research › Automation |
+| **Routines** | New Routine, list, Reports | Backtests re-run on a schedule while the app is open | Backtest & Research › Automation (Routines) |
 | **Market** | Chart, indicators, symbol search, ticker | The original dashboard | Markets |
 | | Movers › the Score columns and the Emerging tab (added 8 October 2026, V5 Stage 3) | Each mover's standing across the researched universe, the day's and the week's; the scanner's latest reading of every watched pair ranked by its score beside the day | Markets |
-| | Candidates (added 8 October 2026, V5 Stage 3) | The 15 liquid pairs standing highest by the larger of their two scores, read every ten minutes; a place to look, not a signal | Discovery › Market scanner |
+| | Candidates (added 8 October 2026, V5 Stage 3) | The 15 liquid pairs standing highest by the larger of their two scores, read every ten minutes; a place to look, not a signal | Explorer › Market scanner |
 | **Backtest** | Configuration, Progress, Charts, Compare, Live | A strategy over history, trade charts, strategy comparison, the live strategy monitor | Backtest & Research |
 | | Market conditions, AI confirmation, Controller and Executor replay | Readouts and replays beside a backtest | Backtest & Research |
-| **Explorer** | Scanner | Scanner on or off and how many pairs it watches, with its status | Settings › Market (the switch); Discovery (the status) |
-| | Now, Events | What is moving, scored the same way for every pair; recorded events | Discovery › Market scanner |
-| | News & Market Events (added 6 October 2026, not an old card) | Four free news feeds and Binance's announcements, each story's coins, kind, impact and what the price did after; what each kind did, with the median excursions within an hour since 8 October 2026; a second source recorded on the story, and recycled news at half the impact | Discovery › News & Market Events, which it opens on while an alert is unseen |
+| **Explorer** | Scanner | Scanner on or off and how many pairs it watches, with its status | Settings › Market (the switch); Explorer (the status) |
+| | Now, Events | What is moving, scored the same way for every pair; recorded events | Explorer › Market scanner |
+| | News & Market Events (added 6 October 2026, not an old card) | Four free news feeds and Binance's announcements, each story's coins, kind, impact and what the price did after; what each kind did, with the median excursions within an hour since 8 October 2026; a second source recorded on the story, and recycled news at half the impact | Explorer › News & Market Events, which it opens on while an alert is unseen |
 | **Settings** | Appearance | Theme | Settings › General |
 | | API Credentials | Exchange keys: set, test, remove | Connections |
 | | Risk Limits | Live order size, daily cap, daily loss limit, allocation; and, added 8 October 2026, the share of the allocation a real order filled in from a call is sized to risk | Risk & Safety |
@@ -111,7 +117,7 @@ under Settings › Advanced › Effective configuration.
 | | `watch` (on, models, events a day, lowest band, first model gates; and, added 8 October 2026, CONFIRM: a paper BUY it opens is told as ready to confirm as a real order a person places; added with V5 Stage 4, `askAt`: at the raise, or once the event is confirmed a pass later; and since V5 Stage 5 three models offered by default with the first gating, and the paper trade following their vote when two or more are asked) | Agents › Opportunities › Watch | Opportunities (stays with its results) |
 | | `watchPaper` (on, model, stake, most open; and, added on 5 October 2026, most open in one direction, the losing run that pauses it, the Bitcoin move that drops a waiting trade) | Agents › Opportunities › Watch | Opportunities |
 | `scanner.json` | `enabled` (on by default since 8 October 2026; only `false` switches it off), `universeSize` (20, 40, 60 or 100) | Explorer › Scanner | Settings › Market |
-| `marketEvents/` | since 8 October 2026 an event may be a market-wide move (`type: 'market_move'`, on BTCUSDT, with `live.members`), and its members carry `live.marketMove`; detector version `events-v2`; since V5 Stage 4 each event carries a `fingerprint` and a `cause`, and `status-YYYY-MM.jsonl` holds each event's life (DETECTED → CONFIRMED → ACTIVE → WEAKENING → EXPIRED), one line a change, read back at start | — | Opportunities, Discovery |
+| `marketEvents/` | since 8 October 2026 an event may be a market-wide move (`type: 'market_move'`, on BTCUSDT, with `live.members`), and its members carry `live.marketMove`; detector version `events-v2`; since V5 Stage 4 each event carries a `fingerprint` and a `cause`, and `status-YYYY-MM.jsonl` holds each event's life (DETECTED → CONFIRMED → ACTIVE → WEAKENING → EXPIRED), one line a change, read back at start | — | Opportunities, Explorer |
 | `news.json` | `enabled`; for `delisting` and for `monitoringTag`, each: `notifyHeld`, `paperShort` (on, stake), `askModels` (added with the news reader, V3 Stage 7) | — | Settings › Market |
 | `credentials.json` (encrypted) | Binance and Upbit keys; when added, last tested, result | Settings | Connections |
 | `aiCredentials.json` (encrypted) | The OpenRouter key | Agents | Connections |

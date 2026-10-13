@@ -317,7 +317,7 @@ async function main() {
   })
   page.on('pageerror', (error) => consoleLog.write(`[${new Date().toISOString()}] PAGEERROR: ${error.stack ?? error}\n`))
   await page.waitForLoadState('domcontentloaded')
-  await page.waitForFunction(() => [...document.querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Overview'), null, { timeout: 60_000 })
+  await page.waitForFunction(() => [...document.querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Home'), null, { timeout: 60_000 })
   say('launched')
 
   // A one-second heartbeat in the page: how late the page's own timers ran, all run.
@@ -388,8 +388,8 @@ async function main() {
     return card.innerText.match(/A session started at [^\n]+/)?.[0] ?? 'no note'
   })
   say(`session: ${started}`)
-  await nav('Overview')
-  await shot(`s${SEGMENT}-00-overview`)
+  await nav('Home')
+  await shot(`s${SEGMENT}-00-home`)
 
   const endAt = t0 + remainingMs
   let nextStatus = Date.now() + 60_000
@@ -404,7 +404,7 @@ async function main() {
       nextStatus += STATUS_EVERY_MS
     }
     if (Date.now() >= nextShot) {
-      await shot(`s${SEGMENT}-${String(shots++).padStart(2, '0')}-overview`)
+      await shot(`s${SEGMENT}-${String(shots++).padStart(2, '0')}-home`)
       nextShot += SHOT_EVERY_MS
     }
     if (Date.now() >= nextHourReport && Date.now() + 5 * 60_000 < endAt) {
@@ -450,7 +450,7 @@ async function main() {
   }
 
   // The news tab, for the record.
-  await nav('Discovery')
+  await nav('Explorer')
   await page.evaluate(async () => {
     await new Promise((r) => setTimeout(r, 1500))
     const tab = [...document.querySelectorAll('button')].find((b) => /News/.test(b.textContent ?? '') && /Market Events/.test(b.textContent ?? ''))
@@ -463,11 +463,20 @@ async function main() {
 }
 
 async function nav(label) {
-  const result = await page.evaluate((text) => {
-    // A page's button carries its notice badge in its text ("Discovery2" with two alerts pending),
-    // so the label is matched at the start of the text when no button matches it whole.
-    const buttons = [...document.querySelectorAll('button')]
-    const button = buttons.find((b) => b.textContent?.trim() === text) ?? buttons.find((b) => /^\d*$/.test((b.textContent?.trim() ?? '').slice(text.length)) && (b.textContent?.trim() ?? '').startsWith(text))
+  const result = await page.evaluate(async (text) => {
+    // A page's button carries its notice badge in its text ("Explorer2" with two alerts pending),
+    // so the label is matched at the start of the text when no button matches it whole. A group the
+    // normal layout folds (Research, All Features) is opened first when the label is not on screen.
+    const find = () => {
+      const buttons = [...document.querySelectorAll('button')]
+      return buttons.find((b) => b.textContent?.trim() === text) ?? buttons.find((b) => /^\d*$/.test((b.textContent?.trim() ?? '').slice(text.length)) && (b.textContent?.trim() ?? '').startsWith(text))
+    }
+    let button = find()
+    if (!button) {
+      for (const header of document.querySelectorAll('nav button[aria-expanded="false"]')) header.click()
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      button = find()
+    }
     if (!button) return 'NOT_FOUND'
     button.click()
     return 'OK'
@@ -553,7 +562,7 @@ async function hourReport(n) {
     await new Promise((r) => setTimeout(r, 1000))
     const read = await report('Last hour', `s${SEGMENT}-hour-${String(n).padStart(2, '0')}`, false, path.join(OUT, 'hour-reports'), '')
     say(`hour ${n}: ${read.headline}`)
-    await nav('Overview')
+    await nav('Home')
   } catch (failure) {
     say(`hour report ${n} failed: ${failure}`)
   }

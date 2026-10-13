@@ -11,6 +11,7 @@ import { DEFAULT_NEWS_CONFIG, healNewsConfig } from '../shared/news'
 import { DEFAULT_PAPER_DIGEST, healPaperDigest } from '../shared/paperDigest'
 import { DEFAULT_PAPER_PAUSE, healPaperPause } from '../shared/paperPause'
 import { DEFAULT_PAPER_RISK, healPaperRisk } from '../shared/paperRisk'
+import { DEFAULT_UI_MODE, healUiMode } from '../shared/uiMode'
 import { tradingModeOf, watchModeOf } from '../src/status/statusModes'
 
 // shared/appDefaults.ts: what a fresh install starts with. The document's "ConfigResolver" is the
@@ -29,7 +30,8 @@ describe('a store read empty, or holding junk, heals to its default', () => {
     { name: 'watch', heal: (value) => healAiWatch(value, [...DEFAULT_ENABLED_MODELS]), fallback: DEFAULT_AI_WATCH },
     { name: 'watchPaper', heal: (value) => healAiWatchPaper(value, []), fallback: DEFAULT_AI_WATCH_PAPER },
     { name: 'news', heal: healNewsConfig, fallback: DEFAULT_NEWS_CONFIG },
-    { name: 'keepRunningWhenClosed', heal: healKeepRunning, fallback: DEFAULT_KEEP_RUNNING }
+    { name: 'keepRunningWhenClosed', heal: healKeepRunning, fallback: DEFAULT_KEEP_RUNNING },
+    { name: 'uiMode', heal: healUiMode, fallback: DEFAULT_UI_MODE }
   ]
   for (const store of stores) {
     it(store.name, () => {
@@ -60,6 +62,8 @@ describe('a store read empty, or holding junk, heals to its default', () => {
     // Closing the window quits, unless a person switches the tray on (8 October 2026).
     expect(DEFAULT_KEEP_RUNNING).toBe(false)
     expect(DEFAULT_CONFIG.app.keepRunningWhenClosed).toBe(false)
+    // The sidebar opens in its normal personality (the V6 document, §65; 13 October 2026).
+    expect(DEFAULT_CONFIG.app.uiMode).toBe('normal')
     // Notices are on, with sound.
     expect(DEFAULT_ALERTS).toEqual({ enabled: true, sound: true })
   })

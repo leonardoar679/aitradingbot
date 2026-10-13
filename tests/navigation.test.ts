@@ -1,13 +1,28 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_TABS, NAV_GROUPS, NAV_ITEMS, pageLabel, type Page } from '../src/navigation/pages'
+import {
+  DEFAULT_PAGE,
+  DEFAULT_TABS,
+  NAV_GROUPS,
+  NAV_ITEMS,
+  activeNavId,
+  anchorElementId,
+  foldedCount,
+  groupOf,
+  isGroupOpen,
+  pageLabel,
+  type NavGroupId,
+  type Page
+} from '../src/navigation/pages'
+import { DEFAULT_UI_MODE, healUiMode } from '../shared/uiMode'
 
-// The sidebar is arranged around a trade (the V3 document's layout, chosen on 2026-10-05), and
+// The sidebar has the V6 document's two personalities (§64-65, §116; 13 October 2026), and
 // docs/INVENTORY.md says where every card of the old pages went. These tests hold the two to each
 // other: a page renamed in one and not the other, or a page left with nothing on it, fails here.
 
 const ALL_PAGES: Page[] = [
+  'home',
   'overview',
   'opportunities',
   'markets',
@@ -40,26 +55,104 @@ function newHomes(): string[] {
 }
 
 describe('the sidebar', () => {
-  it('has the four groups of the chosen layout, in order', () => {
-    // Research before Trading, as the second V3 document's §50 has the groups (since 8 October 2026).
-    expect(NAV_GROUPS.map((group) => group.title)).toEqual(['AI Trader', 'Research', 'Trading', 'System'])
+  it('has the five groups of the V6 layout, in order, and only Research and All Features fold', () => {
+    expect(NAV_GROUPS.map((group) => group.title)).toEqual(['AI Trader', 'Trading', 'Research', 'All Features', 'System'])
     expect(NAV_GROUPS.map((group) => group.items.map((item) => item.label))).toEqual([
-      ['Overview', 'Opportunities', 'Markets', 'AI Decisions', 'Positions', 'Performance'],
-      ['Backtest & Research', 'AI Benchmark', 'Discovery'],
-      ['Paper Trading', 'Live Trading', 'Strategies'],
-      ['Risk & Safety', 'Connections', 'Settings']
+      ['Home', 'Opportunities', 'Positions', 'Performance'],
+      ['Paper', 'Live'],
+      ['Backtest', 'AI Benchmark'],
+      ['Strategies', 'Bots', 'Executors', 'Controllers', 'Routines', 'Market', 'Portfolio', 'Explorer', 'Overview', 'AI Decisions'],
+      ['Risk', 'Connections', 'Settings']
     ])
+    expect(NAV_GROUPS.filter((group) => group.foldable).map((group) => group.id)).toEqual(['research', 'all-features'])
   })
 
-  it('lists every page exactly once, each under its own label', () => {
-    expect(NAV_ITEMS.map((item) => item.page).sort()).toEqual([...ALL_PAGES].sort())
+  it('reaches every page, each entry once under its own label and id', () => {
+    expect([...new Set(NAV_ITEMS.map((item) => item.target.page))].sort()).toEqual([...ALL_PAGES].sort())
     expect(new Set(NAV_ITEMS.map((item) => item.label)).size).toBe(NAV_ITEMS.length)
+    expect(new Set(NAV_ITEMS.map((item) => item.id)).size).toBe(NAV_ITEMS.length)
     for (const page of ALL_PAGES) expect(pageLabel(page)).not.toBe(page)
   })
 
-  it('opens each page that has views on a view it has', () => {
+  it('opens the shortcut entries where that part of the app lives', () => {
+    const target = (id: string): unknown => NAV_ITEMS.find((item) => item.id === id)?.target
+    expect(target('bots')).toEqual({ page: 'strategies', tab: 'runs' })
+    expect(target('executors')).toEqual({ page: 'strategies', tab: 'execution' })
+    expect(target('controllers')).toEqual({ page: 'risk', anchor: 'controllers' })
+    expect(target('routines')).toEqual({ page: 'research', tab: 'automation' })
+    expect(target('portfolio')).toEqual({ page: 'performance', anchor: 'portfolio' })
+    expect(target('explorer')).toEqual({ page: 'discovery' })
+    expect(target('market')).toEqual({ page: 'markets' })
+    expect(anchorElementId('controllers')).toBe('nav-anchor-controllers')
+  })
+
+  it('opens on Home, each page with views on a view it has', () => {
+    expect(DEFAULT_PAGE).toBe('home')
     expect(Object.keys(DEFAULT_TABS).every((page) => (ALL_PAGES as string[]).includes(page))).toBe(true)
     expect(DEFAULT_TABS).toEqual({ strategies: 'runs', research: 'backtest', 'ai-decisions': 'analyze', discovery: 'scanner' })
+  })
+
+  it('a page is named by its plain entry, not a shortcut into it', () => {
+    expect(pageLabel('strategies')).toBe('Strategies')
+    expect(pageLabel('risk')).toBe('Risk')
+    expect(pageLabel('performance')).toBe('Performance')
+    expect(pageLabel('research')).toBe('Backtest')
+    expect(pageLabel('discovery')).toBe('Explorer')
+  })
+})
+
+describe('the current entry', () => {
+  it('is the one chosen while it still describes where the app is', () => {
+    expect(activeNavId('strategies', { ...DEFAULT_TABS, strategies: 'runs' }, 'strategies')).toBe('strategies')
+    expect(activeNavId('strategies', { ...DEFAULT_TABS, strategies: 'runs' }, 'bots')).toBe('bots')
+    expect(activeNavId('risk', DEFAULT_TABS, 'controllers')).toBe('controllers')
+    expect(activeNavId('performance', DEFAULT_TABS, 'portfolio')).toBe('portfolio')
+  })
+
+  it("is the page's view's entry after a hand-off moved the app elsewhere", () => {
+    // A call's order form opens Strategies on Execution: Executors, though Bots was chosen last.
+    expect(activeNavId('strategies', { ...DEFAULT_TABS, strategies: 'execution' }, 'bots')).toBe('executors')
+    expect(activeNavId('research', { ...DEFAULT_TABS, research: 'automation' }, 'backtest')).toBe('routines')
+    // A page with no view of its own falls to its plain entry, whatever was chosen elsewhere.
+    expect(activeNavId('risk', DEFAULT_TABS, 'home')).toBe('risk')
+    expect(activeNavId('home', DEFAULT_TABS, null)).toBe('home')
+  })
+
+  it('names its group', () => {
+    expect(groupOf('explorer')).toBe('all-features')
+    expect(groupOf('home')).toBe('ai-trader')
+    expect(groupOf('backtest')).toBe('research')
+  })
+})
+
+describe('folding', () => {
+  const research = NAV_GROUPS.find((group) => group.id === 'research')!
+  const trading = NAV_GROUPS.find((group) => group.id === 'trading')!
+  const none = new Set<NavGroupId>()
+
+  it('folds Research and All Features in the normal mode, opens them in the expert one', () => {
+    expect(isGroupOpen(research, 'normal', none, null)).toBe(false)
+    expect(isGroupOpen(research, 'expert', none, null)).toBe(true)
+    expect(isGroupOpen(trading, 'normal', none, null)).toBe(true)
+  })
+
+  it('opens a folded group that was opened, or that holds the current entry', () => {
+    expect(isGroupOpen(research, 'normal', new Set<NavGroupId>(['research']), null)).toBe(true)
+    expect(isGroupOpen(research, 'normal', none, 'research')).toBe(true)
+    expect(isGroupOpen(research, 'normal', none, 'all-features')).toBe(false)
+  })
+
+  it('a folded group carries the counts of the entries it hides, and an open one none', () => {
+    const all = NAV_GROUPS.find((group) => group.id === 'all-features')!
+    expect(foldedCount(all, false, { discovery: 3 })).toBe(3)
+    expect(foldedCount(all, true, { discovery: 3 })).toBe(0)
+    expect(foldedCount(research, false, { discovery: 3 })).toBe(0)
+  })
+
+  it('reads a stored mode as normal unless it says expert', () => {
+    expect(DEFAULT_UI_MODE).toBe('normal')
+    expect(healUiMode('expert')).toBe('expert')
+    for (const stored of [undefined, null, 'Expert', 'normal', 1, {}]) expect(healUiMode(stored)).toBe('normal')
   })
 })
 
@@ -81,7 +174,7 @@ describe('the inventory and the sidebar agree', () => {
     }
   })
 
-  it('leaves no page in the sidebar with nothing on it', () => {
+  it('leaves no entry in the sidebar with nothing on it', () => {
     for (const label of labels) {
       expect(
         homes.some((home) => home.includes(label)),

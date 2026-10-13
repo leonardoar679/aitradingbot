@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { HomePage } from './home/HomePage'
 import { OverviewPage } from './overview/OverviewPage'
 import { OpportunitiesPage } from './opportunities/OpportunitiesPage'
 import { Dashboard } from './dashboard/Dashboard'
@@ -34,14 +35,56 @@ import { RoutineScheduler } from './routines/RoutineScheduler'
 import { LiveTradingBar } from './livetrading/LiveTradingBar'
 import { LiveOrderScheduler } from './livetrading/LiveOrderScheduler'
 import { PortfolioScheduler } from './portfolio/PortfolioScheduler'
-import { DEFAULT_TABS, pageLabel, type NavTarget, type Page, type PageTabs } from './navigation/pages'
+import { DEFAULT_PAGE, DEFAULT_TABS, activeNavId, anchorElementId, pageLabel, type NavAnchor, type NavId, type NavItem, type NavTarget, type Page, type PageTabs } from './navigation/pages'
 import type { AiOrderProposal } from '../shared/aiProposal'
+import { DEFAULT_UI_MODE, healUiMode, type UiMode } from '../shared/uiMode'
+
+/** When an entry that opens at a part of a page scrolls to it, after the page is drawn. */
+const ANCHOR_SCROLL_MS = [0, 250, 700, 1500]
 
 function App(): React.JSX.Element {
-  const [page, setPage] = useState<Page>('overview')
+  const [page, setPage] = useState<Page>(DEFAULT_PAGE)
   // The view each page with more than one is showing. Held here rather than in the page, so a
   // hand-off from another page can open it on the view it needs.
   const [tabs, setTabs] = useState<PageTabs>(DEFAULT_TABS)
+  // The sidebar entry last chosen: several entries open one page (Strategies, Bots, Executors), and
+  // the one chosen is the one shown as current while it still describes where the app is.
+  const [chosenNav, setChosenNav] = useState<NavId | null>(null)
+  // A part of a page an entry opens at, scrolled to once the page has drawn.
+  const [pendingAnchor, setPendingAnchor] = useState<NavAnchor | null>(null)
+  const [uiMode, setUiMode] = useState<UiMode>(DEFAULT_UI_MODE)
+  useEffect(() => {
+    window.api.settings.get().then(
+      (settings) => setUiMode(healUiMode(settings.uiMode)),
+      () => undefined
+    )
+  }, [])
+  useEffect(() => {
+    if (pendingAnchor === null) return
+    // Scrolled to again as the page settles: the cards above a part load their data after the first
+    // paint and grow, pushing it down. A person scrolling or typing in the meantime stops it.
+    const id = anchorElementId(pendingAnchor)
+    let stopped = false
+    const stop = (): void => {
+      stopped = true
+    }
+    window.addEventListener('wheel', stop, { passive: true })
+    window.addEventListener('keydown', stop)
+    window.addEventListener('pointerdown', stop)
+    const timers = ANCHOR_SCROLL_MS.map((delay) =>
+      setTimeout(() => {
+        if (!stopped) document.getElementById(id)?.scrollIntoView({ block: 'start' })
+      }, delay)
+    )
+    const done = setTimeout(() => setPendingAnchor(null), ANCHOR_SCROLL_MS[ANCHOR_SCROLL_MS.length - 1] + 100)
+    return (): void => {
+      for (const timer of timers) clearTimeout(timer)
+      clearTimeout(done)
+      window.removeEventListener('wheel', stop)
+      window.removeEventListener('keydown', stop)
+      window.removeEventListener('pointerdown', stop)
+    }
+  }, [page, pendingAnchor])
   // Set when Overview's first-run card is clicked, cleared as soon as Execution has acted on it.
   const [presetsRequested, setPresetsRequested] = useState(false)
   // Set when a model's call is turned into an order form on Overview, Opportunities, AI Decisions
@@ -51,7 +94,7 @@ function App(): React.JSX.Element {
   /** With the proposal: it was confirmed (CONFIRM), so the form opens as a real order where allowed. */
   const [orderLive, setOrderLive] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
-  // Alerts at WATCH or above not yet seen: the badge on Discovery, which opens on its news while any
+  // Alerts at WATCH or above not yet seen: the badge on Explorer, which opens on its news while any
   // is waiting.
   const [unseenAlerts, setUnseenAlerts] = useState(0)
   useEffect(() => subscribeAlerts((alerts) => setUnseenAlerts(unseenCount(alerts))), [])
@@ -62,6 +105,7 @@ function App(): React.JSX.Element {
       return
     }
     setPage(target.page)
+    if (target.anchor !== undefined) setPendingAnchor(target.anchor)
     if (target.page === 'strategies' && target.tab !== undefined) {
       const tab = target.tab
       setTabs((current) => ({ ...current, strategies: tab }))
@@ -88,6 +132,12 @@ function App(): React.JSX.Element {
   function openPresets(): void {
     setPresetsRequested(true)
     navigate({ page: 'strategies', tab: 'execution' })
+  }
+
+  /** A sidebar entry chosen. Explorer opens on its news while an alert there is unseen. */
+  function choose(item: NavItem): void {
+    setChosenNav(item.id)
+    navigate(item.target.page === 'discovery' && unseenAlerts > 0 ? { page: 'discovery', tab: 'news' } : item.target)
   }
 
   return (
@@ -171,10 +221,11 @@ function App(): React.JSX.Element {
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <ErrorBoundary label="The sidebar">
           <Sidebar
-            currentPage={page}
-            onNavigate={(next) => navigate(next === 'discovery' && unseenAlerts > 0 ? { page: 'discovery', tab: 'news' } : next)}
+            activeId={activeNavId(page, tabs, chosenNav)}
+            onChoose={choose}
             collapsed={collapsed}
             onToggleCollapsed={() => setCollapsed((c) => !c)}
+            uiMode={uiMode}
             badges={{ discovery: unseenAlerts }}
           />
         </ErrorBoundary>
@@ -192,6 +243,7 @@ function App(): React.JSX.Element {
           {/* Keyed by page so navigating away from a broken page and back retries it, rather than
               the boundary latching its error for the rest of the session. */}
           <ErrorBoundary key={page} label={`The ${pageLabel(page)} page`}>
+            {page === 'home' && <HomePage onPrepareOrder={prepareOrder} onNavigate={navigate} />}
             {page === 'overview' && <OverviewPage onGetStarted={openPresets} onPrepareOrder={prepareOrder} onNavigate={navigate} />}
             {page === 'opportunities' && <OpportunitiesPage onPrepareOrder={prepareOrder} />}
             {page === 'markets' && <Dashboard />}
@@ -225,7 +277,7 @@ function App(): React.JSX.Element {
             )}
             {page === 'risk' && <RiskSafetyPage />}
             {page === 'connections' && <ConnectionsPage />}
-            {page === 'settings' && <SettingsPanel onNavigate={navigate} />}
+            {page === 'settings' && <SettingsPanel onNavigate={navigate} onUiModeChange={setUiMode} />}
           </ErrorBoundary>
         </main>
       </div>

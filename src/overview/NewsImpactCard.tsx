@@ -47,7 +47,7 @@ export function NewsImpactCard({ onNavigate }: { onNavigate: (page: Page) => voi
         </ul>
       )}
       <p style={{ margin: '0.7rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-        Every story, with its link, is on <TextLink onClick={() => onNavigate('discovery')}>Discovery</TextLink>.
+        Every story, with its link, is on <TextLink onClick={() => onNavigate('discovery')}>Explorer</TextLink>.
       </p>
     </Card>
   )

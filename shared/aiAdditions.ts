@@ -55,7 +55,7 @@ export const AI_ADDITION_SCHEMA_VERSIONS: Record<AiAdditionKind, string> = {
 export const AI_ADDITION_INFO: Record<AiAdditionKind, { name: string; what: string; automatic: boolean }> = {
   news: {
     name: 'News analyst',
-    what: "Reads each story of high impact once, as it arrives: which coin it concerns, which way it points, how much and for how long, and whether it is already in the price. Shown on Discovery's news, and weighed in the news part of the signal score.",
+    what: "Reads each story of high impact once, as it arrives: which coin it concerns, which way it points, how much and for how long, and whether it is already in the price. Shown on Explorer's news, and weighed in the news part of the signal score.",
     automatic: true
   },
   why: {

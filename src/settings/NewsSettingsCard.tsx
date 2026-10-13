@@ -53,7 +53,7 @@ function KindRows(props: {
 
 /** The news reader's settings: the reader, and what each of the two kinds that passed does -- a
  * notice to someone holding the coin, the paper short of the kind's rule research/NEWS.md measured,
- * and a question to the watch's models. What it has read is on Discovery. The main process checks
+ * and a question to the watch's models. What it has read is on Explorer. The main process checks
  * every value again. */
 export function NewsSettingsCard(): React.JSX.Element {
   const [config, setConfig] = useState<NewsConfig | null>(null)
@@ -105,7 +105,7 @@ export function NewsSettingsCard(): React.JSX.Element {
         Once a minute, a few seconds after the minute begins, Binance&apos;s three public announcement lists are read (delistings, new
         listings, and its news) and each new article is kept once and sorted by its title: a delisting, a coin added to the Monitoring
         Tag, a futures launch, a spot listing, or none of these. That is three requests a minute, and no key is used. What it has read
-        is on Discovery. It stays on across restarts until you switch it off.
+        is on Explorer. It stays on across restarts until you switch it off.
       </p>
 
       <KindRows

@@ -67,7 +67,7 @@ export function CandidatesCard(): React.JSX.Element {
       )}
       <p style={{ margin: '0.6rem 0 0', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
         The {RESEARCH_CANDIDATES} liquid pairs standing highest by the larger of their two scores across the researched universe, read every ten minutes
-        (Markets › Movers has every pair and its figures). A place to look, not a signal: events are raised on every watched pair, and nothing here asks a
+        (Market › Movers has every pair and its figures). A place to look, not a signal: events are raised on every watched pair, and nothing here asks a
         model or places anything.
       </p>
     </Card>

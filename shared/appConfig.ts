@@ -44,6 +44,7 @@ import { healPaperPause } from './paperPause'
 import { PAPER_MIN_STAKE, healPaperRisk } from './paperRisk'
 import { RISK_LINES } from './dynamicRisk'
 import { SESSION_REPORT_VERSION } from './shadowReport'
+import { healUiMode } from './uiMode'
 
 export type { EffectiveStores } from './appDefaults'
 
@@ -158,7 +159,7 @@ export function defaultStores(): EffectiveStores {
  * `settings` is settings.json's top level; `ai` the AI config as its service hands it out; the rest
  * as each service hands them out. */
 export function healStores(input: {
-  settings: { paperRisk?: unknown; paperPause?: unknown; paperDigest?: unknown; alerts?: unknown; keepRunningWhenClosed?: unknown }
+  settings: { paperRisk?: unknown; paperPause?: unknown; paperDigest?: unknown; alerts?: unknown; keepRunningWhenClosed?: unknown; uiMode?: unknown }
   ai: { defaultModel: string; enabledModels: string[]; dailyCapUsd: number; callsPerMinute: number; watch: unknown; watchPaper: unknown; additions: unknown }
   scanner: ScannerConfig
   news: unknown
@@ -171,7 +172,7 @@ export function healStores(input: {
     paperPause: { lossR: pause.lossR, trades: pause.trades },
     paperDigest: { enabled: healPaperDigest(input.settings.paperDigest).enabled, lastDay: null },
     alerts: healAlerts(input.settings.alerts),
-    app: { keepRunningWhenClosed: healKeepRunning(input.settings.keepRunningWhenClosed) },
+    app: { keepRunningWhenClosed: healKeepRunning(input.settings.keepRunningWhenClosed), uiMode: healUiMode(input.settings.uiMode) },
     watch,
     watchPaper: healAiWatchPaper(input.ai.watchPaper, watch.models),
     additions: healAiAdditions(input.ai.additions),

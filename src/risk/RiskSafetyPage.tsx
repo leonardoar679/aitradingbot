@@ -1,5 +1,6 @@
 import { PageHeader } from '../components/PageHeader'
 import { ControllersPage } from '../controllers/ControllersPage'
+import { anchorElementId } from '../navigation/pages'
 import { LiveRiskLimitsCard } from './LiveRiskLimitsCard'
 import { PaperRiskCard } from './PaperRiskCard'
 
@@ -20,7 +21,7 @@ export function RiskSafetyPage(): React.JSX.Element {
       </p>
       <LiveRiskLimitsCard />
       <PaperRiskCard />
-      <div style={{ marginTop: '0.4rem' }}>
+      <div id={anchorElementId('controllers')} style={{ marginTop: '0.4rem', scrollMarginTop: '1rem' }}>
         <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>Controller groups</h2>
         <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
           Executors grouped under a shared stop-loss, take-profit and maximum drawdown, with a P&amp;L snapshot every five

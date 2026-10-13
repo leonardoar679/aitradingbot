@@ -13,6 +13,7 @@ import { DEFAULT_NEWS_CONFIG, type NewsConfig } from './news'
 import { DEFAULT_PAPER_DIGEST } from './paperDigest'
 import { DEFAULT_PAPER_PAUSE, describePaperPause, savePaperPause } from './paperPause'
 import { DEFAULT_PAPER_RISK, describePaperRisk } from './paperRisk'
+import { DEFAULT_UI_MODE, type UiMode } from './uiMode'
 
 // WHAT A FRESH INSTALL STARTS WITH, AND THE RISK LEVEL IN A WORD.
 //
@@ -51,8 +52,9 @@ export interface EffectiveStores {
   paperPause: Pick<PaperPauseSettings, 'lossR' | 'trades'>
   paperDigest: PaperDigestSettings
   alerts: AlertSettings
-  /** What closing the window does (shared/keepRunning.ts). */
-  app: { keepRunningWhenClosed: boolean }
+  /** What closing the window does (shared/keepRunning.ts), and which groups of the sidebar start open
+   * (shared/uiMode.ts). */
+  app: { keepRunningWhenClosed: boolean; uiMode: UiMode }
   watch: AiWatchConfig
   watchPaper: AiWatchPaperConfig
   additions: AiAdditionsConfig
@@ -69,7 +71,7 @@ export const DEFAULT_CONFIG: EffectiveStores = {
   paperPause: { lossR: DEFAULT_PAPER_PAUSE.lossR, trades: DEFAULT_PAPER_PAUSE.trades },
   paperDigest: DEFAULT_PAPER_DIGEST,
   alerts: DEFAULT_ALERTS,
-  app: { keepRunningWhenClosed: DEFAULT_KEEP_RUNNING },
+  app: { keepRunningWhenClosed: DEFAULT_KEEP_RUNNING, uiMode: DEFAULT_UI_MODE },
   watch: DEFAULT_AI_WATCH,
   watchPaper: DEFAULT_AI_WATCH_PAPER,
   additions: DEFAULT_AI_ADDITIONS,

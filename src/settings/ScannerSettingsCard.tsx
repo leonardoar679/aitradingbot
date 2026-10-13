@@ -6,7 +6,7 @@ import { inputStyle, noteStyle } from '../agents/agentStyles'
 import { describeError } from '../utils/ipcError'
 
 /** The scanner's two settings: on or off, and how many pairs it watches. What it is reading now,
- * and what it has raised, are on Discovery. Every value is checked again by the main process,
+ * and what it has raised, are on Explorer. Every value is checked again by the main process,
  * which refuses a size that is not one of the choices. */
 export function ScannerSettingsCard(): React.JSX.Element {
   const [config, setConfig] = useState<ScannerConfig | null>(null)
@@ -72,7 +72,7 @@ export function ScannerSettingsCard(): React.JSX.Element {
         Once a minute, a few seconds after the minute closes, every watched pair is read from its last twelve hours of 1-minute
         candles. This is public market data only: no key is used, no model is asked and nothing is placed. It costs one request a
         pair a minute, and it stays on across restarts until you switch it off. What it is reading, and the events it has raised,
-        are on Discovery; the watch on Opportunities asks models only about events it raises.
+        are on Explorer; the watch on Opportunities asks models only about events it raises.
       </p>
     </Card>
   )

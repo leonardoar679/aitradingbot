@@ -58,7 +58,7 @@ export function BreakingEventsCard({ onNavigate }: { onNavigate: (page: Page) =>
       )}
       <p style={{ margin: '0.7rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
         Every event is on <TextLink onClick={() => onNavigate('opportunities')}>Opportunities</TextLink>, and the news behind the alerts on{' '}
-        <TextLink onClick={() => onNavigate('discovery')}>Discovery</TextLink>.
+        <TextLink onClick={() => onNavigate('discovery')}>Explorer</TextLink>.
       </p>
     </Card>
   )

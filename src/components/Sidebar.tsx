@@ -1,27 +1,67 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { NAV_GROUPS, type Page } from '../navigation/pages'
+import { useState } from 'react'
+import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import { NAV_GROUPS, foldedCount, groupOf, isGroupOpen, type NavGroupId, type NavId, type NavItem, type Page } from '../navigation/pages'
+import type { UiMode } from '../../shared/uiMode'
 import appIcon from '../../build/icon.png'
 
 interface SidebarProps {
-  currentPage: Page
-  onNavigate: (page: Page) => void
+  activeId: NavId | null
+  onChoose: (item: NavItem) => void
   collapsed: boolean
   onToggleCollapsed: () => void
-  /** A count shown beside a page: alerts not yet seen, on Discovery. */
+  uiMode: UiMode
+  /** A count shown beside a page's entries: alerts not yet seen, on Explorer. */
   badges?: Partial<Record<Page, number>>
 }
 
-export function Sidebar({
-  currentPage,
-  onNavigate,
-  collapsed,
-  onToggleCollapsed,
-  badges = {}
-}: SidebarProps): React.JSX.Element {
+/** Which folded groups were opened, remembered on this computer only. A browser store that cannot be
+ * read is every group folded, not an error. */
+const OPEN_GROUPS_KEY = 'nav.openGroups'
+
+function readOpenGroups(): Set<NavGroupId> {
+  try {
+    const stored: unknown = JSON.parse(window.localStorage.getItem(OPEN_GROUPS_KEY) ?? '[]')
+    return new Set(Array.isArray(stored) ? (stored.filter((id) => NAV_GROUPS.some((group) => group.id === id)) as NavGroupId[]) : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function writeOpenGroups(open: ReadonlySet<NavGroupId>): void {
+  try {
+    window.localStorage.setItem(OPEN_GROUPS_KEY, JSON.stringify([...open]))
+  } catch {
+    // Not remembered; the groups open folded next time.
+  }
+}
+
+export function Sidebar({ activeId, onChoose, collapsed, onToggleCollapsed, uiMode, badges = {} }: SidebarProps): React.JSX.Element {
+  const [opened, setOpened] = useState<Set<NavGroupId>>(readOpenGroups)
+  const activeGroup = activeId === null ? null : groupOf(activeId)
+
+  function toggleGroup(id: NavGroupId): void {
+    setOpened((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      writeOpenGroups(next)
+      return next
+    })
+  }
+
+  function openGroupAndExpand(id: NavGroupId): void {
+    setOpened((current) => {
+      const next = new Set(current).add(id)
+      writeOpenGroups(next)
+      return next
+    })
+    if (collapsed) onToggleCollapsed()
+  }
+
   return (
     <nav
       style={{
-        // Wide enough for the longest label, "Backtest & Research", beside its icon.
+        // Wide enough for the longest label, "Opportunities", beside its icon and a badge.
         width: collapsed ? 64 : 200,
         flexShrink: 0,
         display: 'flex',
@@ -91,78 +131,83 @@ export function Sidebar({
           overflowY: 'auto'
         }}
       >
-        {NAV_GROUPS.map((group, index) => (
-          <div key={group.title} style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
-            {collapsed ? (
-              // Collapsed, a group is a rule between icons: the four still read as four.
-              index > 0 && <div style={{ borderTop: '1px solid var(--border)', margin: '0.35rem 0.4rem' }} />
-            ) : (
-              <div
-                style={{
-                  padding: index === 0 ? '0.15rem 0.6rem 0.2rem' : '0.6rem 0.6rem 0.2rem',
-                  fontSize: '0.66rem',
-                  fontWeight: 700,
-                  letterSpacing: '0.08em',
-                  textTransform: 'uppercase',
-                  color: 'var(--text-muted)',
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                {group.title}
-              </div>
-            )}
-            {group.items.map(({ page, label, icon: Icon }) => {
-              const active = currentPage === page
-              return (
+        {NAV_GROUPS.map((group, index) => {
+          const open = isGroupOpen(group, uiMode, opened, activeGroup)
+          const folds = group.foldable && uiMode !== 'expert'
+          const GroupIcon = group.icon
+          const hidden = foldedCount(group, open, badges)
+          return (
+            <div key={group.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
+              {collapsed ? (
+                // Narrow, a group is a rule between icons, and a folded group one icon that opens it.
+                index > 0 && <div style={{ borderTop: '1px solid var(--border)', margin: '0.35rem 0.4rem' }} />
+              ) : folds ? (
                 <button
-                  key={page}
-                  onClick={() => onNavigate(page)}
-                  title={label}
-                  className={`nav-item${active ? ' nav-item-active' : ''}`}
+                  onClick={() => toggleGroup(group.id)}
+                  aria-expanded={open}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: collapsed ? 'center' : 'flex-start',
-                    gap: '0.55rem',
-                    // Tight enough for all fifteen to fit a 760-pixel-high window without scrolling.
+                    justifyContent: 'space-between',
+                    padding: index === 0 ? '0.15rem 0.6rem 0.2rem' : '0.6rem 0.6rem 0.2rem',
+                    border: 'none',
+                    background: 'transparent',
+                    cursor: 'pointer',
+                    fontSize: '0.66rem',
+                    fontWeight: 700,
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                    color: 'var(--text-muted)',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  <span>{group.title}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    {hidden > 0 && <Badge count={hidden} collapsed={false} />}
+                    <ChevronDown size={12} style={{ transform: open ? 'none' : 'rotate(-90deg)', transition: 'transform 0.15s ease' }} />
+                  </span>
+                </button>
+              ) : (
+                <div
+                  style={{
+                    padding: index === 0 ? '0.15rem 0.6rem 0.2rem' : '0.6rem 0.6rem 0.2rem',
+                    fontSize: '0.66rem',
+                    fontWeight: 700,
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                    color: 'var(--text-muted)',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  {group.title}
+                </div>
+              )}
+              {collapsed && !open && (
+                <button
+                  onClick={() => openGroupAndExpand(group.id)}
+                  title={group.title}
+                  aria-label={`Open ${group.title}`}
+                  className="nav-item"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                     padding: '0.38rem 0.6rem',
                     borderRadius: 'var(--radius-sm)',
                     border: 'none',
                     background: 'transparent',
-                    color: active ? 'var(--accent)' : 'var(--text-secondary)',
-                    cursor: 'pointer',
-                    fontSize: '0.85rem',
-                    fontWeight: active ? 600 : 500,
-                    whiteSpace: 'nowrap'
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer'
                   }}
                 >
-                  <Icon size={18} />
-                  {!collapsed && <span>{label}</span>}
-                  {(badges[page] ?? 0) > 0 && (
-                    <span
-                      aria-label={`${badges[page]} new`}
-                      style={{
-                        marginLeft: collapsed ? 0 : 'auto',
-                        minWidth: collapsed ? 8 : 18,
-                        height: collapsed ? 8 : 18,
-                        padding: collapsed ? 0 : '0 5px',
-                        borderRadius: 999,
-                        background: 'var(--down)',
-                        color: '#fff',
-                        fontSize: '0.66rem',
-                        fontWeight: 700,
-                        lineHeight: '18px',
-                        textAlign: 'center'
-                      }}
-                    >
-                      {collapsed ? '' : badges[page]}
-                    </span>
-                  )}
+                  <GroupIcon size={18} />
+                  {hidden > 0 && <Badge count={hidden} collapsed />}
                 </button>
-              )
-            })}
-          </div>
-        ))}
+              )}
+              {open && group.items.map((item) => <NavButton key={item.id} item={item} active={activeId === item.id} collapsed={collapsed} badge={badges[item.target.page] ?? 0} onChoose={onChoose} />)}
+            </div>
+          )
+        })}
       </div>
 
       <button
@@ -185,5 +230,61 @@ export function Sidebar({
         {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
       </button>
     </nav>
+  )
+}
+
+function NavButton({ item, active, collapsed, badge, onChoose }: { item: NavItem; active: boolean; collapsed: boolean; badge: number; onChoose: (item: NavItem) => void }): React.JSX.Element {
+  const Icon = item.icon
+  return (
+    <button
+      onClick={() => onChoose(item)}
+      title={item.label}
+      className={`nav-item${active ? ' nav-item-active' : ''}`}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: collapsed ? 'center' : 'flex-start',
+        gap: '0.55rem',
+        // Tight enough for the open groups to fit a 760-pixel-high window.
+        padding: '0.38rem 0.6rem',
+        borderRadius: 'var(--radius-sm)',
+        border: 'none',
+        background: 'transparent',
+        color: active ? 'var(--accent)' : 'var(--text-secondary)',
+        cursor: 'pointer',
+        fontSize: '0.85rem',
+        fontWeight: active ? 600 : 500,
+        whiteSpace: 'nowrap'
+      }}
+    >
+      <Icon size={18} />
+      {!collapsed && <span>{item.label}</span>}
+      {badge > 0 && <Badge count={badge} collapsed={collapsed} pushRight />}
+    </button>
+  )
+}
+
+function Badge({ count, collapsed, pushRight = false }: { count: number; collapsed: boolean; pushRight?: boolean }): React.JSX.Element {
+  return (
+    <span
+      aria-label={`${count} new`}
+      style={{
+        marginLeft: pushRight && !collapsed ? 'auto' : 0,
+        minWidth: collapsed ? 8 : 18,
+        height: collapsed ? 8 : 18,
+        padding: collapsed ? 0 : '0 5px',
+        borderRadius: 999,
+        background: 'var(--down)',
+        color: '#fff',
+        fontSize: '0.66rem',
+        fontWeight: 700,
+        letterSpacing: 0,
+        lineHeight: '18px',
+        textAlign: 'center',
+        textTransform: 'none'
+      }}
+    >
+      {collapsed ? '' : count}
+    </span>
   )
 }

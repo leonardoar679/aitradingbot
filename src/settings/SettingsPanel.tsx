@@ -11,6 +11,7 @@ import { UsageTab } from '../agents/UsageTab'
 import { AiAdditionsCard } from '../agents/AiAdditionsCard'
 import { EffectiveConfigCard } from './EffectiveConfigCard'
 import type { Page } from '../navigation/pages'
+import type { UiMode } from '../../shared/uiMode'
 import { EssentialsCard } from './EssentialsCard'
 import { NewsSettingsCard } from './NewsSettingsCard'
 import { ScannerSettingsCard } from './ScannerSettingsCard'
@@ -59,7 +60,7 @@ function SectionHeading({ title, note }: { title: string; note: string }): React
  * SMART DEFAULTS FIRST, ADVANCED SECOND (the second V3 document, 6 October 2026). The six settings
  * that decide what the app does by itself are at the top (EssentialsCard); everything else is under
  * Advanced, closed until opened. A fresh install needs nothing from it. */
-export function SettingsPanel({ onNavigate }: { onNavigate: (page: Page) => void }): React.JSX.Element {
+export function SettingsPanel({ onNavigate, onUiModeChange }: { onNavigate: (page: Page) => void; onUiModeChange: (mode: UiMode) => void }): React.JSX.Element {
   const { theme, setTheme } = useTheme()
   const [advanced, setAdvanced] = useState(readAdvancedOpen)
 
@@ -74,7 +75,7 @@ export function SettingsPanel({ onNavigate }: { onNavigate: (page: Page) => void
     <>
       <PageHeader title="Settings" subtitle="What the app does by itself, in six settings, with the rest under Advanced" />
 
-      <EssentialsCard onNavigate={onNavigate} />
+      <EssentialsCard onNavigate={onNavigate} onUiModeChange={onUiModeChange} />
 
       <button
         aria-expanded={advanced}
@@ -138,7 +139,7 @@ function AdvancedSettings({ theme, setTheme, onNavigate }: { theme: Theme; setTh
         </div>
       </Card>
 
-      <SectionHeading title="Market" note="What the scanner watches, and whether Binance's announcements are read. Both are shown on Discovery." />
+      <SectionHeading title="Market" note="What the scanner watches, and whether Binance's announcements are read. Both are shown on Explorer." />
       <ScannerSettingsCard />
       <NewsSettingsCard />
 

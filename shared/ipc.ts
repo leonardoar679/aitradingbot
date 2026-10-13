@@ -195,6 +195,10 @@ export interface AppSettings {
   /** Whether closing the window hides it to the tray and keeps everything running, or quits the
    * app (shared/keepRunning.ts). Absent until first written, and healed on every read: off. */
   keepRunningWhenClosed?: boolean
+  /** Which of the sidebar's two personalities (shared/uiMode.ts): normal folds Research and All
+   * Features away, expert opens every group. Absent until first written, and healed on every read:
+   * normal. */
+  uiMode?: 'normal' | 'expert'
 }
 
 /** The app's desktop notices: on or off, and with sound or silent. */
