@@ -182,11 +182,14 @@ describe('the prediction', () => {
     expect(up.horizons.hour1!.pUp).toBe(up.horizons.hour1!.pUpMapped)
     expect(up.horizons.hour1!.pUp).toBeGreaterThan(0.58)
     expect(up.invalidationConditions[0]).toMatch(/^The price falls below .+, the 1-hour bear case\.$/)
+    // And the market turning on it (§5).
+    expect(up.invalidationConditions.slice(1)).toEqual(['Bitcoin falls 1% within fifteen minutes.', 'The market turns to panic.', 'A story of impact 70 or more goes against the coin.'])
     const bear = up.horizons.hour1!.quantilePrices[0]
     expect(up.invalidationConditions[0]).toContain(Number(bear.toPrecision(6)).toLocaleString('en-US', { maximumFractionDigits: 10 }))
     const down = makePrediction(input(KNOWING, -1.5, { models: { hour1: modelsOf(1, -1.5, FLOOR) } }))!
     expect(down.direction).toBe('BEARISH')
     expect(down.invalidationConditions[0]).toMatch(/^The price rises above .+, the 1-hour bull case\.$/)
+    expect(down.invalidationConditions.slice(1)).toEqual(['Bitcoin rises 1% within fifteen minutes.', 'The market turns to a rally.', 'A story of impact 70 or more goes for the coin.'])
   })
 
   /** KNOWING with each of its scores at the hour edited. */
@@ -200,12 +203,24 @@ describe('the prediction', () => {
 
   it('calls no way at a horizon whose direction skill was under its line, and none for the pair without a best horizon', () => {
     const models = { hour1: modelsOf(1, 1.5, FLOOR) }
-    const sure = makePrediction(input(KNOWING, 1.5, { models, quality: { hour1: 90 } }))!
+    // The coin's last hour and the market going its way: its quality clears STRONG's 75.
+    const market = { z1h: 1.5, breadth1h: 0.8 }
+    const sure = makePrediction(input(KNOWING, 1.5, { models, market }))!
     expect(sure.direction).toBe('BULLISH')
+    expect(sure.horizons.hour1!.quality.score).toBeGreaterThanOrEqual(75)
     expect(sure.strong).toBe(true)
-    const unskilled = makePrediction(input(edited({ directionSkill: 0.005 }), 1.5, { models, quality: { hour1: 90 } }))!
+    // Against it, the quality is lower; and read from bars five minutes old as well, it falls under
+    // STRONG's 75: BULLISH, not STRONG.
+    const against = makePrediction(input(KNOWING, 1.5, { models, market: { z1h: -2, breadth1h: 0.1 } }))!
+    expect(against.horizons.hour1!.quality.score).toBeLessThan(sure.horizons.hour1!.quality.score)
+    expect(against.direction).toBe('BULLISH')
+    const late = makePrediction(input(KNOWING, 1.5, { models, market: { z1h: -2, breadth1h: 0.1 }, generatedAt: Date.parse('2026-10-13T15:05:00Z') }))!
+    expect(late.horizons.hour1!.quality.score).toBeLessThan(75)
+    expect(late.direction).toBe('BULLISH')
+    expect(late.strong).toBe(false)
+    const unskilled = makePrediction(input(edited({ directionSkill: 0.005 }), 1.5, { models, market }))!
     expect(unskilled.horizons.hour1!.direction).toBe('NEUTRAL')
-    const noBest = makePrediction(input(edited({ skill: -0.01 }), 1.5, { models, quality: { hour1: 90 } }))!
+    const noBest = makePrediction(input(edited({ skill: -0.01 }), 1.5, { models, market }))!
     expect(noBest.bestHorizon).toBeNull()
     expect(noBest.horizons.hour1!.direction).toBe('BULLISH')
     expect(noBest.direction).toBe('NEUTRAL')

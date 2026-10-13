@@ -315,14 +315,17 @@ describe('AI code has no route to a real order', () => {
       'jsonlStore',
       'liveMarket',
       'marketResearch',
+      'marketResearchService',
       'models',
       'newsEffect',
       'outcome',
       'path',
       'prediction',
       'promises',
+      'ranking',
       'refresh',
-      'status'
+      'status',
+      'tradeDecision'
     ])
   })
 

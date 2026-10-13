@@ -37,6 +37,7 @@ function range(patch: Partial<ForecastRange> = {}): ForecastRange {
     confidence: 55,
     reliability: 'HIGH',
     reliabilityReasons: [],
+    quality: { score: 55, parts: { direction: 0, range: 80, calibration: 90, news: null, confirmation: null, agreement: 100, freshness: 100 } },
     width80Pct: 5,
     usualWidth80Pct: 4,
     skill: 0.01,
@@ -71,7 +72,7 @@ function prediction(horizons: PricePrediction['horizons'] = { hour1: range(), mi
     pairClass: 'large',
     regime: 'sideways',
     barTime: T,
-    versions: { prediction: 'prediction-v1', models: 'models-v1', features: 'features-v1', ensemble: 'ensemble-v1', calibration: 'calibration-v1', runCalibration: 'run-calibration-v2', news: 'news-effect-v1', run: 'run-x', foldsRun: 'run-y' }
+    versions: { prediction: 'prediction-v1', models: 'models-v1', features: 'features-v1', ensemble: 'ensemble-v1', calibration: 'calibration-v1', runCalibration: 'run-calibration-v2', news: 'news-effect-v1', quality: 'quality-v1', run: 'run-x', foldsRun: 'run-y' }
   }
 }
 
@@ -235,7 +236,7 @@ describe('the record', () => {
     const line = predictionLine(prediction(), ['hour1', 'hours24'], 'refresh', { reasons: ['news'], previous: 'SOLUSDT:prev' })
     expect(Object.keys(line.h)).toEqual(['hour1'])
     expect(line).toMatchObject({ v: FORECAST_RECORD_VERSION, pair: 'SOLUSDT', t: T, price: 180, cls: 'large', why: 'refresh', reasons: ['news'], previous: 'SOLUSDT:prev' })
-    expect(line.h.hour1).toMatchObject({ q: [-2, -1, 0.5, 2, 3], dir: 'NEUTRAL', cell: 'large', v1: [-2.1, -1.1, 0.4, 1.9, 2.9], parts: [['gbt', 1, 0.5]] })
+    expect(line.h.hour1).toMatchObject({ q: [-2, -1, 0.5, 2, 3], dir: 'NEUTRAL', cell: 'large', v1: [-2.1, -1.1, 0.4, 1.9, 2.9], parts: [['gbt', 1, 0.5]], qual: 55 })
     expect(parsePredictionLine(JSON.parse(JSON.stringify(line)))).toEqual(line)
     expect(parsePredictionLine({ ...line, v: 'forecast-record-v0' })).toBeNull()
     expect(parsePredictionLine({ ...line, h: { hour1: { ...line.h.hour1, q: [1, 2] } } })).toBeNull()

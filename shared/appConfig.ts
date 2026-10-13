@@ -55,6 +55,10 @@ import { MODELS_VERSION, TRAINING } from './forecast/models'
 import { NEWS_EFFECT_LINES, NEWS_EFFECT_VERSION } from './forecast/newsEffect'
 import { OUTCOME_LINES, OUTCOME_VERSION } from './forecast/outcome'
 import { REFRESH_LINES } from './forecast/refresh'
+import { EDGE_VERSION, ROUND_TRIP_PCT } from './forecast/edge'
+import { QUALITY_LINES, QUALITY_VERSION } from './forecast/quality'
+import { RANK_LINES, RANK_VERSION } from './forecast/ranking'
+import { DECISION_LINES, DECISION_VERSION } from './forecast/tradeDecision'
 import { NEWS_FEED_VERSION } from './newsFeed'
 import { PREDICTION_LINES, PREDICTION_VERSION } from './forecast/prediction'
 import { RELIABILITY_LINES } from './forecast/reliability'
@@ -158,7 +162,11 @@ export const ENGINE_CONSTANTS = {
     refresh: REFRESH_LINES,
     outcome: { version: OUTCOME_VERSION, ...OUTCOME_LINES },
     record: { version: FORECAST_RECORD_VERSION, days: FORECAST_RECORD_DAYS },
-    news: { version: NEWS_EFFECT_VERSION, feed: NEWS_FEED_VERSION, ...NEWS_EFFECT_LINES }
+    news: { version: NEWS_EFFECT_VERSION, feed: NEWS_FEED_VERSION, ...NEWS_EFFECT_LINES },
+    quality: { version: QUALITY_VERSION, ...QUALITY_LINES },
+    edge: { version: EDGE_VERSION, roundTripPct: ROUND_TRIP_PCT },
+    rank: { version: RANK_VERSION, ...RANK_LINES },
+    decision: { version: DECISION_VERSION, ...DECISION_LINES }
   }
 } as const
 

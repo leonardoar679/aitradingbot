@@ -71,6 +71,10 @@ vi.mock('../electron/services/forecastDataService', () => ({
   }
 }))
 
+vi.mock('../electron/services/marketResearchService', () => ({
+  getResearchState: () => ({ pairs: [{ symbol: 'BTCUSDT', quoteVolume24h: 2e9 }, { symbol: 'SOLUSDT', quoteVolume24h: 4e8 }] })
+}))
+
 vi.mock('../electron/services/forecastTrainingService', () => ({
   currentForecastModels: () => fake.models,
   currentForecastCalibration: () => fake.calibration,
@@ -180,6 +184,33 @@ describe('a close', () => {
     await closeAt(live, HOUR)
     expect(live.forecastOf('XRPUSDT')).toBeNull()
     expect(live.getForecastEngineState().predictions).toBe(3)
+  })
+})
+
+describe('the trade', () => {
+  it("is decided for every pair at its lead horizon after a pass, ranked, and kept apart from the forecast", async () => {
+    const live = await engine()
+    await closeAt(live, HOUR)
+    const ranking = live.forecastRanking()
+    expect(ranking.at).toBe(HOUR)
+    expect(ranking.ranked.map((entry) => entry.pair).sort()).toEqual([...SYMBOLS].sort())
+    expect(ranking.top3).toHaveLength(3)
+    expect(ranking.top10).toHaveLength(SYMBOLS.length)
+    const sol = live.forecastDecision('SOLUSDT')!
+    expect(sol.horizon).toBe(live.forecastOf('SOLUSDT')!.bestHorizon ?? 'hour1')
+    // No skilful direction in this market, and no live book: no call, no live price.
+    expect(sol).toMatchObject({ decision: 'NO_TRADE', side: null })
+    expect(sol.reasons.map((reason) => reason.code)).toEqual(expect.arrayContaining(['NO_CALL', 'STALE_PRICE']))
+    // The research's volumes give the liquidity; a pair it has none for is at the floor.
+    const bySymbol = new Map(ranking.ranked.map((entry) => [entry.pair, entry]))
+    expect(bySymbol.get('BTCUSDT')!.parts.liquidity).toBe(1)
+    expect(bySymbol.get('XRPUSDT')!.parts.liquidity).toBe(0.2)
+    expect(live.forecastDecision('NOPEUSDT')).toBeNull()
+    // On record with the forecast: the decision at its lead horizon, and each horizon's quality.
+    const line = lines(`predictions-${month}.jsonl`).find((entry) => entry.pair === 'SOLUSDT')!
+    expect(line.trade).toMatchObject({ h: sol.horizon, side: null, ok: false })
+    expect((line.trade as { why: string[] }).why).toEqual(sol.reasons.map((reason) => reason.code))
+    expect(typeof (line.h as Record<string, { qual: number }>).hour1.qual).toBe('number')
   })
 })
 

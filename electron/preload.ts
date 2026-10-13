@@ -3,6 +3,8 @@ import { electronAPI } from '@electron-toolkit/preload'
 import type { FuturesCloseResult, FuturesReadout } from '../shared/futuresPositions'
 import type { ProtectiveStop } from '../shared/futuresStops'
 import type { PricePrediction } from '../shared/forecast/prediction'
+import type { TradeDecision } from '../shared/forecast/tradeDecision'
+import type { ForecastRanking as ForecastRankingView } from '../shared/forecast/ranking'
 import type { SymbolTradingRules } from '../shared/exchangeMinimums'
 import type {
   AiCredentialStatus,
@@ -177,6 +179,8 @@ const api = {
     list: (): Promise<PricePrediction[]> => ipcRenderer.invoke(IpcChannel.ForecastList),
     get: (symbol: string): Promise<PricePrediction | null> => ipcRenderer.invoke(IpcChannel.ForecastGet, symbol),
     history: (symbol: string, fromSec: number): Promise<ForecastHistory> => ipcRenderer.invoke(IpcChannel.ForecastHistory, symbol, fromSec),
+    ranking: (): Promise<ForecastRankingView> => ipcRenderer.invoke(IpcChannel.ForecastRanking),
+    decision: (symbol: string): Promise<TradeDecision | null> => ipcRenderer.invoke(IpcChannel.ForecastDecision, symbol),
     onUpdate: (listener: (closedAt: number | null) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, closedAt: number | null): void => listener(closedAt)
       ipcRenderer.on(IpcChannel.ForecastUpdate, handler)

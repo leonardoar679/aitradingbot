@@ -241,7 +241,8 @@ The main process also runs loops that need no window at all:
   most once a minute; it writes `forecasts/`, each horizon's outcome when due, and moves the adaptive
   levels by them. Since V6 Stage 8 the stories the news feed holds and the news analyst's readings on
   file (handed in by `electron/main.ts` from the AI ledger) move a coin's forecast by fixed rules; it
-  asks nothing. Public data only; no key, no model call, no order.
+  asks nothing. Since V6 Stage 9 it decides, after every pass, whether each pair's forecast is worth
+  trading and ranks them all; it places nothing. Public data only; no key, no model call, no order.
 - `aiAdditionsService` (added 6 October 2026) puts each story of high impact the news feed reads to
   the news analyst, once, and asks why the coin it names moved, while the watch is on, each within
   its daily limit and the AI budget.

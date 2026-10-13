@@ -6,6 +6,7 @@ import { FEATURES_VERSION, HORIZONS, HORIZON_BARS, type Horizon, type PairClass 
 import { QUANTILE_LEVELS } from './ml/quantile'
 import { MODELS_VERSION, type ForecastModelId } from './models'
 import { NEWS_EFFECT_VERSION, newsEffectOf, type AnalystReadingInput, type KindReactions, type NewsEffect, type NewsStoryInput } from './newsEffect'
+import { QUALITY_VERSION, qualityOf, type PredictionQuality } from './quality'
 import { reliabilityOf, type Reliability } from './reliability'
 import { RUN_CALIBRATION_VERSION, VARIANTS, cellOf, type ForecastVariant, type RunCalibration } from './runCalibration'
 import { usualMove } from './targets'
@@ -79,6 +80,8 @@ export interface ForecastRange {
   confidence: number
   reliability: Reliability
   reliabilityReasons: string[]
+  /** How good it is, 0 to 100, and from what (shared/forecast/quality.ts). */
+  quality: PredictionQuality
   /** The width of P10-P90, and the pair class's usual width at the horizon, in percent. */
   width80Pct: number
   usualWidth80Pct: number
@@ -128,7 +131,7 @@ export interface PricePrediction {
   regime: MarketRegime
   /** Unix seconds: the close the forecast was read at. */
   barTime: number
-  versions: { prediction: string; models: string; features: string; ensemble: string; calibration: string; runCalibration: string; news: string; run: string; foldsRun: string }
+  versions: { prediction: string; models: string; features: string; ensemble: string; calibration: string; runCalibration: string; news: string; quality: string; run: string; foldsRun: string }
 }
 
 /** What the news gives a pair's forecast: the stories naming its coin as the app holds them, the
@@ -163,8 +166,9 @@ export interface PredictionInput {
    * 7): the cell is the pair's class where it has one of its own (`ownClass`), the horizon's otherwise. */
   levels?: (horizon: Horizon, variant: ForecastVariant, cell: PairClass | 'pooled') => readonly number[] | undefined
   news?: PredictionNews
-  /** The prediction quality per horizon (V6 Stage 9). */
-  quality?: Partial<Record<Horizon, number>>
+  /** The coin's last hour in units of its usual move and the share of pairs that rose in it, from its
+   * row, for the quality's market confirmation (V6 Stage 9). */
+  market?: { z1h: number; breadth1h: number }
   runId: string
   foldsRunId: string
 }
@@ -226,6 +230,18 @@ function rangeOf(input: PredictionInput, horizon: Horizon): ForecastRange | null
   const quantilesPct = logs.map(pctOf)
   const quantilePrices = logs.map((value) => input.price * Math.exp(value))
   const width80Pct = quantilesPct[P90] - quantilesPct[P10]
+  const shownNews = news.v4
+  const quality = qualityOf({
+    pUp: shown.pUp,
+    directionSkill: shown.directionSkill,
+    width80Pct,
+    usualWidth80Pct: v2.read.usualWidth80Pct,
+    coverage80: v2.read.honest?.coverage80 ?? Number.NaN,
+    disagreement: v2.combined.disagreement / halfWidth(v2.combined.quantiles),
+    news: shownNews === null ? null : { impact: shownNews.impact, novelty: shownNews.novelty, fromLibrary: shownNews.fromLibrary, shiftPct: shownNews.shiftPct },
+    market: input.market ?? null,
+    ageSec: Math.max(0, input.generatedAt / 1000 - input.barTime)
+  })
   const call = classify({
     pUp: shown.pUp,
     medianPct: quantilesPct[P50],
@@ -233,7 +249,7 @@ function rangeOf(input: PredictionInput, horizon: Horizon): ForecastRange | null
     p90Pct: quantilesPct[P90],
     width80Pct,
     usualWidth80Pct: v2.read.usualWidth80Pct,
-    quality: input.quality?.[horizon] ?? null,
+    quality: quality.score,
     directionSkill: shown.directionSkill
   })
   const trust = reliabilityOf({
@@ -264,6 +280,7 @@ function rangeOf(input: PredictionInput, horizon: Horizon): ForecastRange | null
     confidence: confidenceOf(shown.pUp, call.direction),
     reliability: trust.reliability,
     reliabilityReasons: trust.reasons,
+    quality,
     width80Pct,
     usualWidth80Pct: v2.read.usualWidth80Pct,
     skill: v2.read.honest?.skill ?? null,
@@ -305,11 +322,22 @@ export function makePrediction(input: PredictionInput): PricePrediction | null {
   const lead = horizons[leadHorizon]!
   const direction: Direction = bestHorizon === null ? 'NEUTRAL' : lead.direction
   const words = HORIZON_WORDS[leadHorizon]
+  // What would undo it (§5): its own bad case, and the market turning on it.
   const invalidationConditions =
     direction === 'BULLISH'
-      ? [`The price falls below ${priceText(lead.quantilePrices[P10])}, the ${words} bear case.`]
+      ? [
+          `The price falls below ${priceText(lead.quantilePrices[P10])}, the ${words} bear case.`,
+          'Bitcoin falls 1% within fifteen minutes.',
+          'The market turns to panic.',
+          'A story of impact 70 or more goes against the coin.'
+        ]
       : direction === 'BEARISH'
-        ? [`The price rises above ${priceText(lead.quantilePrices[P90])}, the ${words} bull case.`]
+        ? [
+            `The price rises above ${priceText(lead.quantilePrices[P90])}, the ${words} bull case.`,
+            'Bitcoin rises 1% within fifteen minutes.',
+            'The market turns to a rally.',
+            'A story of impact 70 or more goes for the coin.'
+          ]
         : [`The price leaves ${priceText(lead.quantilePrices[P10])} – ${priceText(lead.quantilePrices[P90])}, the ${words} 80% range.`]
   const catalyst = lead.news.v4
   return {
@@ -338,6 +366,7 @@ export function makePrediction(input: PredictionInput): PricePrediction | null {
       calibration: CALIBRATION_VERSION,
       runCalibration: RUN_CALIBRATION_VERSION,
       news: NEWS_EFFECT_VERSION,
+      quality: QUALITY_VERSION,
       run: input.runId,
       foldsRun: input.foldsRunId
     }

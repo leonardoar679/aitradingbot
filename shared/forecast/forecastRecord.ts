@@ -6,6 +6,7 @@ import { FORECAST_MODELS, type ForecastModelId } from './models'
 import type { ErrorKind, ForecastOutcome } from './outcome'
 import type { PricePrediction } from './prediction'
 import type { RefreshReason } from './refresh'
+import type { TradeDecision } from './tradeDecision'
 
 // THE FORECAST ON RECORD (the V6 document, §26-28, §42, §49 and §94; V6 Stage 7, 13 October 2026):
 // forecasts/predictions-YYYY-MM.jsonl and forecasts/outcomes-YYYY-MM.jsonl, a JSON line each, by the
@@ -56,6 +57,8 @@ export interface HorizonLine {
   v1: number[]
   v1pUp: number
   parts: [ForecastModelId, number, number][]
+  /** Its quality, 0 to 100 (V6 Stage 9). */
+  qual?: number
   /** Where a story moved V3 or V4: its levels and the story. */
   news?: Partial<Record<'v3' | 'v4', NewsLine>>
 }
@@ -92,10 +95,12 @@ export interface PredictionLine {
   reasons?: RefreshReason[]
   previous?: string
   h: Partial<Record<Horizon, HorizonLine>>
+  /** The trade decision at the lead horizon (V6 Stage 9): its side, whether to trade, and why not. */
+  trade?: { h: Horizon; side: 'BUY' | 'SELL' | null; ok: boolean; why: string[]; edge: number | null; pProfit: number | null }
 }
 
 /** A forecast's line, carrying the horizons given. */
-export function predictionLine(prediction: PricePrediction, horizons: readonly Horizon[], why: PredictionLine['why'], refresh?: { reasons: RefreshReason[]; previous: string | null }): PredictionLine {
+export function predictionLine(prediction: PricePrediction, horizons: readonly Horizon[], why: PredictionLine['why'], refresh?: { reasons: RefreshReason[]; previous: string | null }, decision?: TradeDecision): PredictionLine {
   const h: PredictionLine['h'] = {}
   for (const horizon of horizons) {
     const range = prediction.horizons[horizon]
@@ -116,6 +121,7 @@ export function predictionLine(prediction: PricePrediction, horizons: readonly H
       v1: (v1?.quantilesPct ?? []).map(pct4),
       v1pUp: p3(v1?.pUp ?? Number.NaN),
       parts: range.contributions.map((member) => [member.model, p3(member.weight), pct4(member.medianLogPct)]),
+      qual: range.quality.score,
       ...newsOf(range)
     }
   }
@@ -133,7 +139,19 @@ export function predictionLine(prediction: PricePrediction, horizons: readonly H
     foldsRun: prediction.versions.foldsRun,
     why,
     ...(refresh === undefined ? {} : { reasons: refresh.reasons, ...(refresh.previous === null ? {} : { previous: refresh.previous }) }),
-    h
+    h,
+    ...(decision === undefined
+      ? {}
+      : {
+          trade: {
+            h: decision.horizon,
+            side: decision.side,
+            ok: decision.decision === 'TRADE',
+            why: decision.reasons.map((reason) => reason.code),
+            edge: decision.edge === null ? null : pct4(decision.edge.edgePct),
+            pProfit: decision.edge === null ? null : p3(decision.edge.pProfit)
+          }
+        })
   }
 }
 

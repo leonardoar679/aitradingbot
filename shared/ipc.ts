@@ -59,6 +59,8 @@ export const IpcChannel = {
   ForecastList: 'forecast:list',
   ForecastGet: 'forecast:get',
   ForecastHistory: 'forecast:history',
+  ForecastRanking: 'forecast:ranking',
+  ForecastDecision: 'forecast:decision',
   ForecastUpdate: 'forecast:update',
   FeedUpdate: 'feed:update',
   FeedOpenLink: 'feed:openLink',

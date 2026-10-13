@@ -418,6 +418,27 @@ the adaptive step only from the outcomes a story moved. Two kinds of error join 
 NEWS_MISREAD, a story that moved the median one way before the close went the other, and
 MARKET_MISREAD, a call gone wrong with no story behind it.
 
+**The forecast and the trade** (since 13 October 2026; the V6 document's §29-33, §62-63 and §69; V6
+Stage 9; `shared/forecast/{quality,edge,ranking,tradeDecision}.ts`). Each horizon's forecast has a
+**quality** from 0 to 100 (§31): the weighted mean of its direction (how far P(up) is from an even
+chance, and nothing without a skilful direction), its range against its class's usual, its
+calibration, the story moving it, the market's confirmation of its way, the models' agreement and how
+fresh its bars are -- a reading that cannot be had left out, so that no forecast without a skilful
+direction reaches the 75 a STRONG call needs. Its **edge** (§29, §62) is the move it expects (three
+tenths of each tail and four of the median) less a round trip's 0.24% and the live spread, and the
+chance it clears them. A **TradeDecision**, kept apart from the forecast (§63), is TRADE or NO TRADE
+with every reason that holds: no way called, a range too wide, an edge under costs or a profit less
+likely than 55 in a hundred, a spread over 0.1%, no live price newer than ten seconds, bars more than
+two closes old, a market going the other way, a LOW reliability, a quality under 60, or (from V6
+Stage 12) an opportunity class that has not earned trading; a SELL is paper only, as every short in
+the app. Every pair is **ranked** (§69) by edge x reliability x news x liquidity x execution, less
+uncertainty, market risk and cost, ties by quality and volume, with its top ten and three (§32, §70):
+a coin up 25% today with a flat forecast ranks under one up 7% whose forecast clears its costs (§33).
+A forecast's invalidation now names the market too (§5): Bitcoin falling 1% within fifteen minutes,
+the market turning to panic, a story of impact 70 against the coin. Each recorded forecast carries its
+quality and its decision; the window reads the ranking and a pair's decision through
+`window.api.forecast`.
+
 ### Live prices
 
 Candles are context; the stream is the price now (the second V3 document's §7, §8, §25 and §42).

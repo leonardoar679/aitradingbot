@@ -22,14 +22,17 @@ import { predictHorizon, type ForecastModelId } from '../../shared/forecast/mode
 import { dueAt, outcomeOf } from '../../shared/forecast/outcome'
 import { NEWS_EFFECT_LINES, newsSkillOf, type AnalystReadingInput, type KindReactions, type NewsStoryInput } from '../../shared/forecast/newsEffect'
 import { makePrediction, type PredictionNews, type PricePrediction } from '../../shared/forecast/prediction'
+import { funnel, rankOf, type ForecastRanking, type RankedForecast } from '../../shared/forecast/ranking'
 import { refreshReasons, type RefreshReason } from '../../shared/forecast/refresh'
+import { decideTrade, type TradeDecision } from '../../shared/forecast/tradeDecision'
 import type { EngineState } from '../../shared/forecast/status'
-import { bookSpreadPct, isStale, type LiveState } from '../../shared/liveMarket'
+import { bookSpreadPct, executionQuality, isStale, type LiveState } from '../../shared/liveMarket'
 import type { MarketRegime } from '../../shared/marketResearch'
 import { writeJsonAtomic } from './atomicWrite'
 import { forecastSeries, forecastUniverse, onForecastBars } from './forecastDataService'
 import { currentForecastCalibration, currentForecastModels, getForecastTrainingState, onForecastTraining } from './forecastTrainingService'
 import { appendJsonLines } from './jsonlStore'
+import { getResearchState } from './marketResearchService'
 
 // THE FORECAST, LIVE (the V6 document, §38-43; V6 Stage 7, 13 October 2026).
 //
@@ -43,6 +46,10 @@ import { appendJsonLines } from './jsonlStore'
 // of impact 70 names it, the scanner raises an event on it, the live price leaves its 80% range or a
 // volume shock hits it, at most once a minute (shared/forecast/refresh.ts); the new forecast names the
 // one it replaced.
+//
+// THE TRADE (V6 Stage 9), kept apart from the forecast: after every pass and every forecast made again,
+// each pair's TradeDecision at its lead horizon (shared/forecast/tradeDecision.ts) and the ranking of
+// them all, with its top ten and three (ranking.ts), from the research's volumes and the live book.
 //
 // THE NEWS (V6 Stage 8): the stories the news feed holds naming a coin, its reaction library and the
 // news analyst's readings on file (handed in by electron/main.ts, which reads the AI ledger -- this
@@ -88,12 +95,16 @@ interface PairInput {
   price: number
   barTime: number
   usualMinuteVolume: number | null
+  /** The coin's last hour in its usual moves, and the market's breadth over it. */
+  market: { z1h: number; breadth1h: number }
 }
 
 const blank = (): EngineState => ({ status: 'waiting', waitingFor: 'models', lastPassAt: null, lastPassMs: null, predictions: 0, recorded: 0, outcomes: 0, missing: 0, refreshes: 0, pending: 0, lastError: null })
 
 const state: EngineState = blank()
 const latest = new Map<string, PricePrediction>()
+const decisions = new Map<string, TradeDecision>()
+let ranking: ForecastRanking = { at: null, ranked: [], top10: [], top3: [] }
 const inputs = new Map<string, PairInput>()
 const lastRefreshAt = new Map<string, number>()
 /** Recorded forecasts with horizons still owed an outcome, by id. */
@@ -117,6 +128,10 @@ const listeners = new Set<() => void>()
 
 const RV24 = FEATURE_NAMES.indexOf('rv_24h')
 const RATIO = FEATURE_NAMES.indexOf('rv_ratio')
+const Z1H = FEATURE_NAMES.indexOf('z_1h')
+const BREADTH1H = FEATURE_NAMES.indexOf('breadth_1h')
+/** The stake an execution's quality is read for, in the quote. */
+const RANKING_STAKE = 100
 const NEWS_SKILL_DAYS = NEWS_EFFECT_LINES.skillDays
 /** How long past due an outcome waits for its bars before it is written as missing. */
 const MISSING_AFTER_SEC = 3600
@@ -195,6 +210,7 @@ function predictionFor(symbol: string, nowMs: number): PricePrediction | null {
     rv24h: input.rv24h,
     rvRatio: input.rvRatio,
     spreadPct: liveBook(symbol, nowMs)?.spreadPct ?? null,
+    market: input.market,
     models: input.models,
     calibration,
     levels: (horizon, variant, cell) => levelsOf(aci, cellKey(horizon, variant, cell)),
@@ -202,6 +218,36 @@ function predictionFor(symbol: string, nowMs: number): PricePrediction | null {
     runId: current.runId,
     foldsRunId: calibration.runId
   })
+}
+
+/** A pair's trade decision at its lead horizon -- its best, or the hour's -- from its forecast and the
+ * live book. */
+function decisionFor(prediction: PricePrediction, nowMs: number): TradeDecision {
+  const horizon = prediction.bestHorizon ?? (prediction.horizons.hour1 !== undefined ? 'hour1' : (Object.keys(prediction.horizons)[0] as keyof PricePrediction['horizons']))
+  const book = liveState()?.books[prediction.pair]
+  const live = book === undefined || !(book.bid > 0) || !(book.ask > 0) ? null : { price: (book.bid + book.ask) / 2, updatedAt: book.updatedAt, spreadPct: bookSpreadPct(book) }
+  return decideTrade({ prediction, horizon, nowMs, live, classApproved: null })
+}
+
+/** Every pair's decision, and the ranking of them all. */
+function rankAll(nowMs: number): void {
+  const volumes = new Map(getResearchState().pairs.map((pair) => [pair.symbol, pair.quoteVolume24h]))
+  const state = liveState()
+  const ranked: RankedForecast[] = []
+  for (const prediction of latest.values()) {
+    const decision = decisionFor(prediction, nowMs)
+    decisions.set(prediction.pair, decision)
+    const book = state?.books[prediction.pair] ?? null
+    const execution = book === null ? null : executionQuality({ book, depth: state?.depth[prediction.pair] ?? null, side: decision.side === 'SELL' ? 'sell' : 'buy', stakeQuote: RANKING_STAKE, nowMs }).score
+    ranked.push({ ...rankOf({ prediction, horizon: decision.horizon, edge: decision.edge, quoteVolume24h: volumes.get(prediction.pair) ?? null, execution }), decision })
+  }
+  const ordered = funnel(ranked)
+  ranking = {
+    at: latest.values().next().value?.barTime ?? null,
+    ranked: ordered.ranked as RankedForecast[],
+    top10: ordered.top10.map((entry) => entry.pair),
+    top3: ordered.top3.map((entry) => entry.pair)
+  }
 }
 
 async function writeLines(kind: 'predictions' | 'outcomes', lines: readonly (PredictionLine | OutcomeLine | MissingOutcomeLine)[]): Promise<void> {
@@ -318,7 +364,7 @@ async function pass(closedAt: number): Promise<void> {
     }
     const hour = series.m5.slice(Math.max(0, at - 12), at)
     const usualMinuteVolume = hour.length === 12 ? hour.reduce((sum, entry) => sum + entry.volume, 0) / 60 : null
-    inputs.set(symbol, { models, rv24h: row[RV24], rvRatio: row[RATIO], cls: cross.classes.get(symbol)!, regime: cross.regime, price: bar.close, barTime: closedAt, usualMinuteVolume })
+    inputs.set(symbol, { models, rv24h: row[RV24], rvRatio: row[RATIO], cls: cross.classes.get(symbol)!, regime: cross.regime, price: bar.close, barTime: closedAt, usualMinuteVolume, market: { z1h: row[Z1H], breadth1h: row[BREADTH1H] } })
   }
   await settle(closedAt)
   const nowMs = Date.now()
@@ -328,9 +374,11 @@ async function pass(closedAt: number): Promise<void> {
     const prediction = predictionFor(symbol, nowMs)
     if (prediction !== null) latest.set(symbol, prediction)
   }
+  decisions.clear()
+  rankAll(nowMs)
   const horizons = recordedHorizons(closedAt)
   if (horizons.length > 0 && closedAt > lastRecordedAt) {
-    const lines = [...latest.values()].map((prediction) => predictionLine(prediction, horizons, 'grid'))
+    const lines = [...latest.values()].map((prediction) => predictionLine(prediction, horizons, 'grid', undefined, decisions.get(prediction.pair)))
     await writeLines('predictions', lines)
     for (const line of lines) owe(line)
     state.recorded += lines.length
@@ -361,7 +409,8 @@ async function refresh(symbol: string, reasons: RefreshReason[], nowMs: number):
   if (prediction === null) return
   latest.set(symbol, prediction)
   lastRefreshAt.set(symbol, nowMs)
-  const line = predictionLine(prediction, HORIZONS, 'refresh', { reasons, previous: previous?.id ?? null })
+  rankAll(nowMs)
+  const line = predictionLine(prediction, HORIZONS, 'refresh', { reasons, previous: previous?.id ?? null }, decisions.get(symbol))
   await writeLines('predictions', [line])
   owe(line)
   state.recorded++
@@ -533,6 +582,16 @@ export function forecastOf(symbol: unknown): PricePrediction | null {
   return typeof symbol === 'string' ? (latest.get(symbol) ?? null) : null
 }
 
+/** Every pair's place, best first, with its decision; the top ten and three. */
+export function forecastRanking(): ForecastRanking {
+  return ranking
+}
+
+/** A pair's trade decision at its lead horizon; null before it is forecast. */
+export function forecastDecision(symbol: unknown): TradeDecision | null {
+  return typeof symbol === 'string' ? (decisions.get(symbol) ?? null) : null
+}
+
 /** A pair's record since `fromSec`: its forecasts and their outcomes. */
 export async function forecastHistory(symbol: unknown, fromSec: unknown): Promise<{ predictions: PredictionLine[]; outcomes: (OutcomeLine | MissingOutcomeLine)[] }> {
   if (typeof symbol !== 'string' || typeof fromSec !== 'number' || !Number.isFinite(fromSec)) return { predictions: [], outcomes: [] }
@@ -581,6 +640,8 @@ export const forecastForTest = {
   reset(): void {
     Object.assign(state, blank())
     latest.clear()
+    decisions.clear()
+    ranking = { at: null, ranked: [], top10: [], top3: [] }
     inputs.clear()
     lastRefreshAt.clear()
     owed.clear()
