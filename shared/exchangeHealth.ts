@@ -1,3 +1,4 @@
+import { ENGLISH, type I18n } from './i18n/translate'
 import { LIVE_GAP_SECONDS } from './liveMarket'
 
 // EXCHANGE HEALTH, AND WHEN LIVE ENTRIES PAUSE (the V4 document, §12 and §92-93).
@@ -66,32 +67,36 @@ export function emptyHealthState(): HealthState {
   return { measuredAt: null, host: null, restLatencyMs: null, restFailures: 0, slowReads: 0, clockSkewMs: null, streamOpen: false, dataAgeS: null, keyOk: null }
 }
 
-const seconds = (value: number): string => `${Number(value.toFixed(1))} s`
+const seconds = (value: number, i18n: I18n = ENGLISH): string =>
+  i18n.language === 'en' ? `${Number(value.toFixed(1))} s` : i18n.t('{seconds} s', { seconds: i18n.num(Number(value.toFixed(1)), 0, 1) })
 
-/** The rule: what, if anything, makes the exchange one not to open a real position on now. */
-export function healthVerdict(state: HealthState): HealthVerdict {
+/** The rule: what, if anything, makes the exchange one not to open a real position on now. Its reasons
+ * in English, as the gate gives them, unless handed a language (V6 Stage 14). */
+export function healthVerdict(state: HealthState, i18n: I18n = ENGLISH): HealthVerdict {
+  const { t } = i18n
   const reasons: string[] = []
   const noStream = !state.streamOpen || state.dataAgeS === null || state.dataAgeS >= HEALTH_LINES.staleDataSeconds
   if (noStream && state.restFailures >= HEALTH_LINES.restFailuresToPause) {
     reasons.push(
       state.dataAgeS === null
-        ? `no market data: the stream has delivered nothing and REST has failed ${state.restFailures} reads running`
-        : `market data stale ${seconds(state.dataAgeS)} and REST has failed ${state.restFailures} reads running`
+        ? t('no market data: the stream has delivered nothing and REST has failed {count} reads running', { count: state.restFailures })
+        : t('market data stale {age} and REST has failed {count} reads running', { age: seconds(state.dataAgeS, i18n), count: state.restFailures })
     )
   }
   if (state.clockSkewMs !== null && Math.abs(state.clockSkewMs) > HEALTH_LINES.clockSkewMs) {
-    reasons.push(`the clock is ${seconds(Math.abs(state.clockSkewMs) / 1000)} ${state.clockSkewMs > 0 ? 'behind' : 'ahead of'} Binance's`)
+    const skew = seconds(Math.abs(state.clockSkewMs) / 1000, i18n)
+    reasons.push(state.clockSkewMs > 0 ? t("the clock is {skew} behind Binance's", { skew }) : t("the clock is {skew} ahead of Binance's", { skew }))
   }
   if (state.slowReads >= HEALTH_LINES.slowReadsToPause) {
-    reasons.push(`REST has taken over ${HEALTH_LINES.slowReadMs / 1000} s ${state.slowReads} reads running`)
+    reasons.push(t('REST has taken over {limit} {count} reads running', { limit: seconds(HEALTH_LINES.slowReadMs / 1000, i18n), count: state.slowReads }))
   }
-  if (state.keyOk === false) reasons.push("the Binance key's last test failed")
+  if (state.keyOk === false) reasons.push(t("the Binance key's last test failed"))
   return { degraded: reasons.length > 0, reasons }
 }
 
 /** The sentence the bar and the gate give: what is paused, and why. */
-export function describePause(verdict: HealthVerdict): string | null {
-  return verdict.degraded ? `Live trading is paused: ${verdict.reasons.join('; ')}. Exits are not paused by this.` : null
+export function describePause(verdict: HealthVerdict, { t }: I18n = ENGLISH): string | null {
+  return verdict.degraded ? t('Live trading is paused: {reasons}. Exits are not paused by this.', { reasons: verdict.reasons.join(t('; ')) }) : null
 }
 
 /** The figures in a few words each, for the card. */

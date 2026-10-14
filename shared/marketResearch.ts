@@ -2,6 +2,7 @@ import { BTC_REGIME_PCT, btcRegimeOf, type AiMarketReturns, type BtcRegime } fro
 import type { Candle, SymbolInfo, Ticker24h } from './ipc'
 import type { EventBand, EventDirection, MarketEventType } from './marketEvent'
 import { pickUniverse, type ScannerPair } from './marketScanner'
+import { ENGLISH, msg, type I18n } from './i18n/translate'
 
 // WHAT THE APP RESEARCHES WHEN IT OPENS: THE LIQUID PAIRS, WHAT MOVED OVER A DAY AND A WEEK, WHAT
 // IS TRENDING, AND WHAT STATE THE MARKET IS IN.
@@ -85,17 +86,19 @@ export function marketRegimeOf(btc: Pick<AiMarketReturns, 'h1' | 'h4' | 'h24'> |
   return 'sideways'
 }
 
-/** The regime as it is shown: its word, and the tone it is shown in. */
-export function describeMarketRegime(regime: MarketRegime): { word: string; tone: 'up' | 'down' | 'muted' | 'gold' } {
-  const shown: Record<MarketRegime, { word: string; tone: 'up' | 'down' | 'muted' | 'gold' }> = {
-    panic: { word: 'PANIC', tone: 'down' },
-    'high-vol': { word: 'HIGH-VOL', tone: 'gold' },
-    recovery: { word: 'RECOVERY', tone: 'up' },
-    bull: { word: 'BULL', tone: 'up' },
-    bear: { word: 'BEAR', tone: 'down' },
-    sideways: { word: 'SIDEWAYS', tone: 'muted' }
-  }
-  return shown[regime]
+const REGIME_SHOWN: Record<MarketRegime, { word: string; tone: 'up' | 'down' | 'muted' | 'gold' }> = {
+  panic: { word: msg('PANIC'), tone: 'down' },
+  'high-vol': { word: msg('HIGH-VOL'), tone: 'gold' },
+  recovery: { word: msg('RECOVERY'), tone: 'up' },
+  bull: { word: msg('BULL'), tone: 'up' },
+  bear: { word: msg('BEAR'), tone: 'down' },
+  sideways: { word: msg('SIDEWAYS'), tone: 'muted' }
+}
+
+/** The regime as it is shown: its word, in a language, and the tone it is shown in. */
+export function describeMarketRegime(regime: MarketRegime, { t }: I18n = ENGLISH): { word: string; tone: 'up' | 'down' | 'muted' | 'gold' } {
+  const shown = REGIME_SHOWN[regime]
+  return { word: t(shown.word), tone: shown.tone }
 }
 
 export interface ResearchPair {
@@ -169,6 +172,32 @@ export interface MarketStatus {
   risk: RiskState
   /** Why the risk state is what it is, in words; empty when it is normal. */
   riskReasons: string[]
+  /** The same as codes and their figures, for the window to word in the person's language (V6 Stage
+   * 14); absent on a status read before. */
+  riskCodes?: RiskReason[]
+}
+
+/** One reason the risk state is raised: Bitcoin's fall or move over an hour or the day, or how few
+ * pairs rose. */
+export interface RiskReason {
+  code: 'btc-fell-1h' | 'btc-fell-24h' | 'btc-moved-1h' | 'btc-moved-24h' | 'breadth'
+  value: number
+}
+
+/** A risk reason in a language. */
+export function riskReasonText(reason: RiskReason, { t, pctPlain, pct }: I18n = ENGLISH): string {
+  switch (reason.code) {
+    case 'btc-fell-1h':
+      return t('Bitcoin fell {move} in the last hour', { move: pctPlain(Math.abs(reason.value), 2) })
+    case 'btc-fell-24h':
+      return t('Bitcoin fell {move} over the day', { move: pctPlain(Math.abs(reason.value), 2) })
+    case 'btc-moved-1h':
+      return t('Bitcoin moved {move} in the last hour', { move: pct(reason.value, 2) })
+    case 'btc-moved-24h':
+      return t('Bitcoin moved {move} over the day', { move: pct(reason.value, 2) })
+    case 'breadth':
+      return t('only {share} of the pairs rose over the day', { share: pctPlain(Math.round(reason.value * 100), 0) })
+  }
 }
 
 export type ResearchStepId = 'universe' | 'movers' | 'market' | 'trending'
@@ -178,8 +207,11 @@ export interface ResearchStep {
   id: ResearchStepId
   label: string
   status: ResearchStepStatus
-  /** What came of it, or why it failed. */
+  /** What came of it, or why it failed, in English as recorded. */
   detail: string | null
+  /** The same as a key and its values, for the window to say in its language (V6 Stage 14); absent
+   * where the detail is an error's own words. */
+  said?: { key: string; values: Readonly<Record<string, string | number>> }
 }
 
 export interface ResearchState {
@@ -198,11 +230,11 @@ export interface ResearchState {
   market: MarketStatus | null
 }
 
-const STEP_LABELS: Record<ResearchStepId, string> = {
-  universe: 'Liquid pairs',
-  movers: 'Movers over a day and a week',
-  market: 'Bitcoin, ether and the market',
-  trending: 'Trending'
+export const STEP_LABELS: Record<ResearchStepId, string> = {
+  universe: msg('Liquid pairs'),
+  movers: msg('Movers over a day and a week'),
+  market: msg('Bitcoin, ether and the market'),
+  trending: msg('Trending')
 }
 
 export function emptyResearchState(): ResearchState {
@@ -220,9 +252,17 @@ export function emptyResearchState(): ResearchState {
 }
 
 /** The state with one step's status changed. */
-export function withStep(state: ResearchState, id: ResearchStepId, status: ResearchStepStatus, detail: string | null): ResearchState {
-  return { ...state, steps: state.steps.map((step) => (step.id === id ? { ...step, status, detail } : step)) }
+export function withStep(state: ResearchState, id: ResearchStepId, status: ResearchStepStatus, detail: string | null, said?: ResearchStep['said']): ResearchState {
+  return { ...state, steps: state.steps.map((step) => (step.id === id ? { ...step, status, detail, said } : step)) }
 }
+
+/** What a step came to, in a language: its key's words where it has one, else as recorded. */
+export function stepDetailText(step: Pick<ResearchStep, 'detail' | 'said'>, { t }: I18n = ENGLISH): string | null {
+  return step.said === undefined ? step.detail : t(step.said.key, step.said.values)
+}
+
+/** The market's risk as a step records it. */
+export const RISK_DETAIL: Record<RiskState, string> = { normal: msg('risk normal'), elevated: msg('risk elevated'), panic: msg('risk panic') }
 
 /** The pairs researched: the scanner's own choice of scannable USDT pairs -- no stablecoins, pegged
  * tokens or stock tokens -- by the day's quote volume, the first RESEARCH_UNIVERSE_SIZE of them that
@@ -457,82 +497,108 @@ export function marketStatusOf(input: { btc15m: Candle[]; eth15m: Candle[]; pair
   const alt: AltStrength | null = altVsBtcPct === null ? null : altVsBtcPct >= ALT_LINE_PCT ? 'strong' : altVsBtcPct <= -ALT_LINE_PCT ? 'weak' : 'in line'
   const breadth = input.pairs.length === 0 ? null : input.pairs.filter((pair) => pair.change24hPct > 0).length / input.pairs.length
 
-  const reasons: { level: RiskState; text: string }[] = []
+  const reasons: { level: RiskState; reason: RiskReason }[] = []
   const h1 = btc?.returns.h1 ?? null
   const h24 = btc?.returns.h24 ?? btcDay
-  if (h1 !== null && h1 <= RISK_LINES.panicH1Pct) reasons.push({ level: 'panic', text: `Bitcoin fell ${Math.abs(h1).toFixed(2)}% in the last hour` })
-  if (h24 !== null && h24 <= RISK_LINES.panicH24Pct) reasons.push({ level: 'panic', text: `Bitcoin fell ${Math.abs(h24).toFixed(2)}% over the day` })
-  if (h1 !== null && h1 > RISK_LINES.panicH1Pct && Math.abs(h1) >= RISK_LINES.elevatedH1Pct) {
-    reasons.push({ level: 'elevated', text: `Bitcoin moved ${h1 > 0 ? '+' : ''}${h1.toFixed(2)}% in the last hour` })
-  }
-  if (h24 !== null && h24 > RISK_LINES.panicH24Pct && Math.abs(h24) >= RISK_LINES.elevatedH24Pct) {
-    reasons.push({ level: 'elevated', text: `Bitcoin moved ${h24 > 0 ? '+' : ''}${h24.toFixed(2)}% over the day` })
-  }
-  if (breadth !== null && breadth < RISK_LINES.elevatedBreadth) reasons.push({ level: 'elevated', text: `only ${Math.round(breadth * 100)}% of the pairs rose over the day` })
+  if (h1 !== null && h1 <= RISK_LINES.panicH1Pct) reasons.push({ level: 'panic', reason: { code: 'btc-fell-1h', value: h1 } })
+  if (h24 !== null && h24 <= RISK_LINES.panicH24Pct) reasons.push({ level: 'panic', reason: { code: 'btc-fell-24h', value: h24 } })
+  if (h1 !== null && h1 > RISK_LINES.panicH1Pct && Math.abs(h1) >= RISK_LINES.elevatedH1Pct) reasons.push({ level: 'elevated', reason: { code: 'btc-moved-1h', value: h1 } })
+  if (h24 !== null && h24 > RISK_LINES.panicH24Pct && Math.abs(h24) >= RISK_LINES.elevatedH24Pct) reasons.push({ level: 'elevated', reason: { code: 'btc-moved-24h', value: h24 } })
+  if (breadth !== null && breadth < RISK_LINES.elevatedBreadth) reasons.push({ level: 'elevated', reason: { code: 'breadth', value: breadth } })
   const risk: RiskState = reasons.some((reason) => reason.level === 'panic') ? 'panic' : reasons.length > 0 ? 'elevated' : 'normal'
   // The day from the ticker where the bars do not reach it, as the risk state reads it.
   const regime = btc === null || h1 === null ? null : marketRegimeOf({ h1, h4: btc.returns.h4, h24 })
-  return { btc, eth, altVsBtcPct, alt, breadth, regime, risk, riskReasons: reasons.map((reason) => reason.text) }
+  return {
+    btc,
+    eth,
+    altVsBtcPct,
+    alt,
+    breadth,
+    regime,
+    risk,
+    riskReasons: reasons.map((entry) => riskReasonText(entry.reason)),
+    riskCodes: reasons.map((entry) => entry.reason)
+  }
 }
 
-const signed = (value: number): string => `${value > 0 ? '+' : ''}${value.toFixed(2)}%`
-
-/** Why the regime is what it is, in a sentence, from Bitcoin's returns. */
-function regimeDetail(regime: MarketRegime, btc: AiMarketReturns): string {
-  const day = btc.h24 === null ? '' : `, ${signed(btc.h24)} over the day`
-  if (regime === 'panic') return `Bitcoin ${signed(btc.h1)} in the last hour${day}: past the panic lines (${RISK_LINES.panicH1Pct}% in an hour, ${RISK_LINES.panicH24Pct}% in a day).`
-  if (regime === 'high-vol') return `Bitcoin ${signed(btc.h1)} in the last hour, past the ${RISK_LINES.elevatedH1Pct}% line either way.`
-  if (regime === 'recovery') return `Bitcoin ${signed(btc.h4)} over four hours, after a day down${btc.h24 === null ? '' : ` ${signed(btc.h24)}`}.`
-  if (regime === 'sideways') return `Bitcoin ${signed(btc.h4)} over four hours${day}: no direction.`
-  return `Bitcoin ${signed(btc.h4)} over four hours${day}.`
+/** Why the regime is what it is, in a sentence, from Bitcoin's returns, in a language. */
+function regimeDetail(regime: MarketRegime, btc: AiMarketReturns, i18n: I18n): string {
+  const { t, pct, share } = i18n
+  const signed = (value: number): string => pct(value, 2)
+  const values = { h1: signed(btc.h1), h4: signed(btc.h4), h24: btc.h24 === null ? '' : signed(btc.h24) }
+  const day = btc.h24 !== null
+  if (regime === 'panic') {
+    const lines = { ...values, lineH1: pct(RISK_LINES.panicH1Pct, 0), lineH24: pct(RISK_LINES.panicH24Pct, 0) }
+    return day
+      ? t('Bitcoin {h1} in the last hour, {h24} over the day: past the panic lines ({lineH1} in an hour, {lineH24} in a day).', lines)
+      : t('Bitcoin {h1} in the last hour: past the panic lines ({lineH1} in an hour, {lineH24} in a day).', lines)
+  }
+  if (regime === 'high-vol') return t('Bitcoin {h1} in the last hour, past the {line} line either way.', { ...values, line: share(RISK_LINES.elevatedH1Pct) })
+  if (regime === 'recovery') return day ? t('Bitcoin {h4} over four hours, after a day down {h24}.', values) : t('Bitcoin {h4} over four hours, after a day down.', values)
+  if (regime === 'sideways') return day ? t('Bitcoin {h4} over four hours, {h24} over the day: no direction.', values) : t('Bitcoin {h4} over four hours: no direction.', values)
+  return day ? t('Bitcoin {h4} over four hours, {h24} over the day.', values) : t('Bitcoin {h4} over four hours.', values)
 }
 
 /** The status in five words with a line each, for the strip at the top of Overview. */
-export function describeMarketStatus(status: MarketStatus): {
+const RISK_WORDS: Record<RiskState, string> = { normal: msg('NORMAL'), elevated: msg('ELEVATED'), panic: msg('PANIC') }
+
+export function describeMarketStatus(
+  status: MarketStatus,
+  i18n: I18n = ENGLISH
+): {
   id: 'regime' | 'btc' | 'eth' | 'alt' | 'risk'
   label: string
   value: string
   detail: string
   tone: 'up' | 'down' | 'muted' | 'gold'
 }[] {
-  const regimeWord = (regime: BtcRegime): string => (regime === 'rising' ? 'RISING' : regime === 'falling' ? 'FALLING' : 'FLAT')
+  const { t, pct, pctPlain } = i18n
+  const signed = (value: number): string => pct(value, 2)
+  const regimeWord = (regime: BtcRegime): string => (regime === 'rising' ? t('RISING') : regime === 'falling' ? t('FALLING') : t('FLAT'))
   const regimeTone = (regime: BtcRegime): 'up' | 'down' | 'muted' => (regime === 'rising' ? 'up' : regime === 'falling' ? 'down' : 'muted')
-  const sideLine = (name: string, side: MarketSide | null): { value: string; detail: string; tone: 'up' | 'down' | 'muted' } =>
+  const sideLine = (unread: string, side: MarketSide | null): { value: string; detail: string; tone: 'up' | 'down' | 'muted' } =>
     side === null
-      ? { value: '—', detail: `${name} could not be read.`, tone: 'muted' }
+      ? { value: '—', detail: unread, tone: 'muted' }
       : {
           value: regimeWord(side.regime),
-          detail: `${signed(side.returns.h4)} over four hours${side.returns.h24 === null ? '' : `, ${signed(side.returns.h24)} over the day`}.`,
+          detail:
+            side.returns.h24 === null
+              ? t('{h4} over four hours.', { h4: signed(side.returns.h4) })
+              : t('{h4} over four hours, {h24} over the day.', { h4: signed(side.returns.h4), h24: signed(side.returns.h24) }),
           tone: regimeTone(side.regime)
         }
-  const btc = sideLine('Bitcoin', status.btc)
-  const eth = sideLine('Ether', status.eth)
+  const btc = sideLine(t('Bitcoin could not be read.'), status.btc)
+  const eth = sideLine(t('Ether could not be read.'), status.eth)
   const alt =
     status.alt === null || status.altVsBtcPct === null
-      ? { value: '—', detail: 'Not enough pairs read.', tone: 'muted' as const }
+      ? { value: '—', detail: t('Not enough pairs read.'), tone: 'muted' as const }
       : {
-          value: status.alt === 'strong' ? 'STRONG' : status.alt === 'weak' ? 'WEAK' : 'IN LINE',
-          detail: `The other pairs' median day was ${signed(status.altVsBtcPct)} against Bitcoin's${status.breadth === null ? '' : `; ${Math.round(status.breadth * 100)}% of them rose`}.`,
+          value: status.alt === 'strong' ? t('STRONG') : status.alt === 'weak' ? t('WEAK') : t('IN LINE'),
+          detail:
+            status.breadth === null
+              ? t("The other pairs' median day was {move} against Bitcoin's.", { move: signed(status.altVsBtcPct) })
+              : t("The other pairs' median day was {move} against Bitcoin's; {share} of them rose.", { move: signed(status.altVsBtcPct), share: pctPlain(Math.round(status.breadth * 100), 0) }),
           tone: status.alt === 'strong' ? ('up' as const) : status.alt === 'weak' ? ('down' as const) : ('muted' as const)
         }
+  const reasons = status.riskCodes === undefined ? status.riskReasons : status.riskCodes.map((reason) => riskReasonText(reason, i18n))
   const risk = {
-    value: status.risk.toUpperCase(),
-    detail: status.risk === 'normal' ? 'Nothing past the lines it is drawn at.' : `${status.riskReasons.join('; ')}.`.replace(/^./, (first) => first.toUpperCase()),
+    value: t(RISK_WORDS[status.risk]),
+    detail: status.risk === 'normal' ? t('Nothing past the lines it is drawn at.') : t('{reasons}.', { reasons: reasons.join(t('; ')) }).replace(/^./, (first) => first.toUpperCase()),
     tone: status.risk === 'normal' ? ('up' as const) : status.risk === 'panic' ? ('down' as const) : ('gold' as const)
   }
   const regime =
     status.regime === null || status.btc === null
-      ? { value: '—', detail: 'Bitcoin could not be read.', tone: 'muted' as const }
+      ? { value: '—', detail: t('Bitcoin could not be read.'), tone: 'muted' as const }
       : {
-          value: describeMarketRegime(status.regime).word,
-          detail: regimeDetail(status.regime, status.btc.returns),
+          value: describeMarketRegime(status.regime, i18n).word,
+          detail: regimeDetail(status.regime, status.btc.returns, i18n),
           tone: describeMarketRegime(status.regime).tone
         }
   return [
-    { id: 'regime', label: 'REGIME', ...regime },
+    { id: 'regime', label: t('REGIME'), ...regime },
     { id: 'btc', label: 'BTC', ...btc },
     { id: 'eth', label: 'ETH', ...eth },
-    { id: 'alt', label: 'ALT', ...alt },
-    { id: 'risk', label: 'RISK', ...risk }
+    { id: 'alt', label: t('ALT'), ...alt },
+    { id: 'risk', label: t('RISK'), ...risk }
   ]
 }

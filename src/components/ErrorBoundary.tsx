@@ -1,6 +1,7 @@
 import { Component } from 'react'
-import type { ErrorInfo, ReactNode } from 'react'
+import type { ContextType, ErrorInfo, ReactNode } from 'react'
 import { AlertTriangle, RotateCcw } from 'lucide-react'
+import { ShownContext } from '../i18n/I18nProvider'
 
 /** Without this, a render error anywhere unmounts the WHOLE React tree: React 18 deliberately
  * clears the root rather than leave a half-rendered UI up. Verified by running the app against a
@@ -14,11 +15,16 @@ import { AlertTriangle, RotateCcw } from 'lucide-react'
  * Caveat worth knowing when reading a bug report: this catches errors thrown while rendering, in
  * lifecycle methods, and in effect bodies. It does NOT catch errors inside event handlers or
  * inside a promise an effect kicked off -- those never reached the renderer's commit phase, and
- * React lets them go to window.onerror instead. */
+ * React lets them go to window.onerror instead.
+ *
+ * Its words are in the language shown where it stands (V6 Stage 14): `label` is a key, and a page's
+ * boundary names its page by the page's own label (`page`), put into the label's {page}. */
 export class ErrorBoundary extends Component<
-  { label: string; children: ReactNode },
+  { label: string; page?: string; children: ReactNode },
   { error: Error | null }
 > {
+  static contextType = ShownContext
+  declare context: ContextType<typeof ShownContext>
   state: { error: Error | null } = { error: null }
 
   static getDerivedStateFromError(error: Error): { error: Error } {
@@ -27,12 +33,14 @@ export class ErrorBoundary extends Component<
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
     // Keep the original stack reachable in devtools -- the fallback below only shows the message.
-    console.error(`[${this.props.label}] render failed:`, error, info.componentStack)
+    console.error(`[${this.props.page ?? this.props.label}] render failed:`, error, info.componentStack)
   }
 
   render(): ReactNode {
     const { error } = this.state
     if (error === null) return this.props.children
+    const { t } = this.context
+    const what = this.props.page === undefined ? t(this.props.label) : t(this.props.label, { page: t(this.props.page) })
 
     return (
       <div
@@ -49,14 +57,15 @@ export class ErrorBoundary extends Component<
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--down)', fontWeight: 700 }}>
           <AlertTriangle size={16} />
-          {this.props.label} could not be displayed
+          {t('{what} could not be displayed', { what })}
         </div>
         <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-          Something in this section hit an error, so it has been replaced with this message instead
-          of taking the rest of the app down with it. Everything outside this section still works
-          normally, and no trading state was changed by this error.
+          {t(
+            'Something in this section hit an error, so it has been replaced with this message instead of taking the rest of the app down with it. Everything outside this section still works normally, and no trading state was changed by this error.'
+          )}
         </div>
         <code
+          dir="auto"
           style={{
             fontSize: '0.75rem',
             color: 'var(--text-muted)',
@@ -87,7 +96,7 @@ export class ErrorBoundary extends Component<
             }}
           >
             <RotateCcw size={13} />
-            Try again
+            {t('Try again')}
           </button>
         </div>
       </div>

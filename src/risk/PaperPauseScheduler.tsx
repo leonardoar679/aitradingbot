@@ -1,3 +1,4 @@
+import { noticeI18n } from '../i18n/current'
 import { useEffect } from 'react'
 import { healPaperPause, planPaperPause } from '../../shared/paperPause'
 import { settingsWrites } from '../utils/settingsWrites'
@@ -21,7 +22,7 @@ export function PaperPauseScheduler(): null {
       settingsWrites(async () => {
         if (cancelled) return []
         const settings = await window.api.settings.get()
-        const plan = planPaperPause({ setting: healPaperPause(settings.paperPause), executors: settings.executors, nowSec: Math.floor(Date.now() / 1000) })
+        const plan = planPaperPause({ setting: healPaperPause(settings.paperPause), executors: settings.executors, nowSec: Math.floor(Date.now() / 1000) }, noticeI18n())
         if (plan === null) return []
         await window.api.settings.set({ paperPause: plan.setting })
         return plan.notices

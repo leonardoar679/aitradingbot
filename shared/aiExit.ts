@@ -175,7 +175,7 @@ function utcClock(sec: number): string {
 
 /** The reasons on a mark, in words: the ones it knows. */
 export function describeAiExitTriggers(triggers: readonly string[]): string {
-  return triggers.filter((trigger): trigger is ExitTrigger => (EXIT_TRIGGERS as readonly string[]).includes(trigger)).map(describeExitTrigger).join(', ')
+  return triggers.filter((trigger): trigger is ExitTrigger => (EXIT_TRIGGERS as readonly string[]).includes(trigger)).map((trigger) => describeExitTrigger(trigger)).join(', ')
 }
 
 /** What a trade's card says about an EXIT on it: when, why and what was said, what it did, and what

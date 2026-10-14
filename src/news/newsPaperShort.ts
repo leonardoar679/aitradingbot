@@ -20,6 +20,8 @@ import { describeExecutorFunding } from '../account/executorFunding'
 import { settleExecutorOnStop } from '../account/settleExecutor'
 import { runExecutorSimulation } from '../executors/engine'
 import { settingsWrites } from '../utils/settingsWrites'
+import { ENGLISH, type I18n } from '../../shared/i18n/translate'
+import { noticeI18n } from '../i18n/current'
 
 // THE ONE FILE THAT WRITES WHAT THE NEWS DOES (shared/newsActions.ts has the rules).
 //
@@ -105,6 +107,8 @@ export interface NewsShortDeps {
   newId: () => string
   /** Runs a read-modify-write of settings with no other one inside it. */
   queue: <T>(work: () => Promise<T>) => Promise<T>
+  /** The person's language, for the notice (V6 Stage 14). Its lines, which are records, stay English. */
+  i18n?: () => I18n
 }
 
 /** Opens the rule's paper short on each coin an announcement names, where it is switched on for
@@ -193,7 +197,7 @@ export async function openNewsShorts(item: NewsItem, actions: Pick<NewsKindActio
       if (problem !== null) return { refused: problem }
       const executor = newsShortExecutor({ id: deps.newId(), item, ticker, pair, nowSec, params, btcCorrelation })
       await deps.setExecutors([...fresh.executors, executor])
-      const notice = newsShortNotice(item, ticker, params, pair.quoteAsset)
+      const notice = newsShortNotice(item, ticker, params, pair.quoteAsset, deps.i18n?.() ?? ENGLISH)
       try {
         deps.notify(notice.title, notice.body, { kind: 'TRADE_EXECUTED', thread: executor.id })
       } catch {
@@ -318,5 +322,6 @@ export const newsShortBrowserDeps: NewsShortDeps = {
   notify: (title, body, extra) => void window.api.notify(title, body, extra?.severity, extra).catch(() => undefined),
   nowSec: () => Math.floor(Date.now() / 1000),
   newId: () => crypto.randomUUID(),
-  queue: (work) => settingsWrites(work)
+  queue: (work) => settingsWrites(work),
+  i18n: noticeI18n
 }

@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { closeWhy, openWhy, subscribeWhy } from './whyStore'
 import { WhyItMoved } from './WhyItMoved'
+import { useI18n } from '../i18n'
 
 /** The one "Why did it move?" panel, over whichever page asked for it (./whyStore.ts). Escape or
  * the backdrop closes it. */
 export function WhyItMovedHost(): React.JSX.Element | null {
+  const { t } = useI18n()
   const [symbol, setSymbol] = useState<string | null>(null)
   useEffect(() => subscribeWhy(setSymbol), [])
   useEffect(() => {
@@ -23,14 +25,14 @@ export function WhyItMovedHost(): React.JSX.Element | null {
     >
       <div
         role="dialog"
-        aria-label={`Why did ${symbol} move?`}
+        aria-label={t('Why did {pair} move?', { pair: symbol })}
         onClick={(event) => event.stopPropagation()}
         style={{ width: 'min(760px, 100%)', maxHeight: '80vh', overflowY: 'auto', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '1.1rem 1.25rem' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.8rem' }}>
-          <h2 style={{ margin: 0, fontSize: '1rem', color: 'var(--text-primary)' }}>Why did {symbol} move?</h2>
+          <h2 style={{ margin: 0, fontSize: '1rem', color: 'var(--text-primary)' }}>{t('Why did {pair} move?', { pair: symbol })}</h2>
           <button onClick={closeWhy} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '0.25rem 0.7rem', color: 'var(--text-primary)', cursor: 'pointer' }}>
-            Close
+            {t('Close')}
           </button>
         </div>
         <WhyItMoved symbol={symbol} />
@@ -41,10 +43,11 @@ export function WhyItMovedHost(): React.JSX.Element | null {
 
 /** The button that opens it, for a pair. */
 export function WhyButton({ symbol, compact = false }: { symbol: string; compact?: boolean }): React.JSX.Element {
+  const { t } = useI18n()
   return (
     <button
       onClick={() => openWhy(symbol)}
-      title={`Why did ${symbol} move?`}
+      title={t('Why did {pair} move?', { pair: symbol })}
       style={{
         background: 'none',
         border: '1px solid var(--border)',
@@ -56,7 +59,7 @@ export function WhyButton({ symbol, compact = false }: { symbol: string; compact
         whiteSpace: 'nowrap'
       }}
     >
-      Why?
+      {t('Why?@@a button')}
     </button>
   )
 }

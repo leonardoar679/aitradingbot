@@ -1,3 +1,5 @@
+import { noticeI18n } from '../i18n/current'
+import { msg } from '../../shared/i18n/translate'
 import { useEffect } from 'react'
 import { AI_ADDITION_PROMPT_VERSIONS, newsReadingsOf } from '../../shared/aiAdditions'
 import { NOTICE_REPEAT_SECONDS, btcHourMovePct, crashNotice, crashStep, noticeCoins, noticeSeverity, repeatsNotice, storyNotice, storySeverity, type NoticedStory, type StoryFacts } from '../../shared/alerts'
@@ -27,11 +29,11 @@ async function storyFactsOf(story: ReadStory, ticker: string, state: NewsFeedSta
   const last = book !== undefined ? (book.bid + book.ask) / 2 : minutes.length > 0 ? minutes[minutes.length - 1].close : null
   if (last !== null) {
     const after = reaction?.after ?? null
-    const span = after?.m15 != null ? { movePct: after.m15, over: 'the fifteen minutes after' } : after?.m5 != null ? { movePct: after.m5, over: 'the five minutes after' } : null
+    const span = after?.m15 != null ? { movePct: after.m15, over: msg('the fifteen minutes after') } : after?.m5 != null ? { movePct: after.m5, over: msg('the five minutes after') } : null
     if (span !== null) price = { last, ...span }
     else {
       const since = minutes.find((minute) => minute.time >= Math.floor(story.publishedAt / 60) * 60)
-      price = { last, movePct: since !== undefined && since.open > 0 ? ((last - since.open) / since.open) * 100 : null, over: 'the minutes since' }
+      price = { last, movePct: since !== undefined && since.open > 0 ? ((last - since.open) / since.open) * 100 : null, over: msg('the minutes since') }
     }
   }
   let reading: StoryFacts['reading'] = null
@@ -107,10 +109,10 @@ export function NewsAlertScheduler(): null {
           story.assets.filter((asset) => asset.relationship === 'DIRECT' && holdings !== null && heldPlaces(asset.ticker, holdings).length > 0).map((asset) => asset.ticker)
         )
         const severity = storySeverity(story, held, state.reactions[story.id]?.verdict ?? null)
-        const places = holdings === null ? [] : [...held].flatMap((ticker) => heldPlaces(ticker, holdings as Holdings))
+        const places = holdings === null ? [] : [...held].flatMap((ticker) => heldPlaces(ticker, holdings as Holdings, noticeI18n()))
         const ticker = story.assets.find((asset) => asset.relationship === 'DIRECT')?.ticker ?? null
         const facts = ticker === null ? {} : await storyFactsOf(story, ticker, state, live, nowSec)
-        const notice = storyNotice(story, severity, places, facts)
+        const notice = storyNotice(story, severity, places, facts, noticeI18n())
         addAlert({ id: story.id, severity, title: notice.title, body: notice.body, at: story.publishedAt, url: story.url, kind: 'NEWS_EVENT' })
         const level = noticeSeverity(severity)
         if (level === null || story.source === 'binance' || cancelled) continue
@@ -153,7 +155,7 @@ export function NewsAlertScheduler(): null {
           const step = crashStep(move, telling)
           telling = step.telling
           if (!step.tell || move === null) return
-          const notice = crashNotice(move)
+          const notice = crashNotice(move, noticeI18n())
           addAlert({ id: `btc-crash:${nowSec}`, severity: 'critical', title: notice.title, body: notice.body, at: nowSec, kind: 'MARKET_EVENT' })
           void window.api.notify(notice.title, notice.body, 'critical', { kind: 'MARKET_EVENT', thread: 'BTCUSDT', id: `btc-crash:${nowSec}` }).catch(() => undefined)
         })

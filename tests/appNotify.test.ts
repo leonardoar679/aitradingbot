@@ -34,7 +34,7 @@ const rig = vi.hoisted(() => {
     /** The alerts file as the service reads it back at start: what an earlier run told. */
     onFile: [] as Record<string, unknown>[],
     beeps: 0,
-    stored: { alerts: undefined as unknown },
+    stored: { alerts: undefined as unknown, language: undefined as unknown },
     window
   }
 })
@@ -61,7 +61,7 @@ vi.mock('electron', () => {
     shell: { beep: () => void rig.beeps++ }
   }
 })
-vi.mock('../electron/services/settingsService', () => ({ getSettings: async () => ({ alerts: rig.stored.alerts }) }))
+vi.mock('../electron/services/settingsService', () => ({ getSettings: async () => ({ alerts: rig.stored.alerts, language: rig.stored.language }) }))
 vi.mock('../electron/services/pingService', () => ({ pingService: () => 'pong' }))
 vi.mock('../electron/services/recordStoreService', () => ({
   appendAlert: async (record: Record<string, unknown>) => {
@@ -72,8 +72,10 @@ vi.mock('../electron/services/recordStoreService', () => ({
 }))
 
 import { registerAppHandlers } from '../electron/ipc/handlers/appHandlers'
-import { noticeLevel, resetNoticeThreads } from '../electron/services/noticeService'
+import { noticeLevel, resetNoticeThreads, tell } from '../electron/services/noticeService'
 import { IpcChannel } from '../shared/ipc'
+import { translate, type I18n } from '../shared/i18n/translate'
+import { breakerNotice } from '../shared/notices'
 
 registerAppHandlers()
 const notify = (title: unknown, body: unknown, severity?: unknown, extra?: unknown): Promise<unknown> =>
@@ -117,6 +119,30 @@ describe('after a restart (V5 Stage 8, 8 October 2026)', () => {
     expect(rig.beeps).toBe(0)
     expect(rig.shown).toEqual([])
     expect(rig.recorded).toEqual([])
+  })
+})
+
+describe('a notice the main process words itself (V6 Stage 14)', () => {
+  it("is built in the language the person chose, and in English where none was chosen or it cannot be read", async () => {
+    rig.stored.alerts = undefined
+    const told = (thread: string): void => tell((i18n: I18n) => breakerNotice('health', i18n.t('Live trading is paused.'), thread, i18n))
+    rig.stored.language = 'ja'
+    told('health-ja')
+    rig.stored.language = 'ar'
+    await vi.waitFor(() => expect(rig.shown).toHaveLength(1))
+    told('health-ar')
+    await vi.waitFor(() => expect(rig.shown).toHaveLength(2))
+    rig.stored.language = undefined
+    told('health-none')
+    await vi.waitFor(() => expect(rig.shown).toHaveLength(3))
+    rig.stored.language = 'fr'
+    told('health-fr')
+    await vi.waitFor(() => expect(rig.shown).toHaveLength(4))
+    expect(rig.shown.map((shown) => shown.title)).toEqual([translate('ja', 'LIVE TRADING PAUSED'), translate('ar', 'LIVE TRADING PAUSED'), 'LIVE TRADING PAUSED', 'LIVE TRADING PAUSED'])
+    expect(rig.shown[0].body).toContain(translate('ja', 'Live trading is paused.'))
+    expect(rig.shown[0].title).not.toBe('LIVE TRADING PAUSED')
+    // What is on file is what was told, in the language it was told in.
+    expect(rig.recorded.map((record) => record.title)).toEqual(rig.shown.map((shown) => shown.title))
   })
 })
 

@@ -1,13 +1,7 @@
 import type { PortfolioSnapshotData } from '../portfolio/computePortfolioSnapshot'
+import { ENGLISH, type I18n } from '../../shared/i18n/translate'
 
 type Valued = Pick<PortfolioSnapshotData, 'totalValue' | 'costOutsideQuote' | 'hasPaperAccount'>
-
-function formatUsd(value: number): string {
-  const sign = value < 0 ? '-' : ''
-  return `${sign}$${Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
-
-const signed = (value: number): string => `${value >= 0 ? '+' : ''}${formatUsd(value)}`
 
 /** What the positions in a snapshot have made, rather than what was put into them: its total less
  * what its positions cost from outside it (computePortfolioSnapshot's costOutsideQuote). */
@@ -25,10 +19,14 @@ export function madeIn(snapshot: Valued): number {
  * whole stake to it: the first paper trade the watch opened read "+$54.20 this session" on an
  * account that had made nothing. So it says what the positions are worth and what they are up or
  * down, and nothing about a session. What closed trades made is on Performance. */
-export function portfolioValueLine(first: Valued | null, latest: Valued): string {
+export function portfolioValueLine(first: Valued | null, latest: Valued, { t, money, signedMoney }: I18n = ENGLISH): string {
+  const usd = (value: number): string => money(value, 'USD', 2)
+  const signed = (value: number): string => signedMoney(value, 'USD', 2)
   if (!latest.hasPaperAccount) {
-    return `${formatUsd(latest.totalValue)} in open positions${latest.costOutsideQuote > 0 ? `, ${signed(madeIn(latest))} on them` : ''}`
+    return latest.costOutsideQuote > 0
+      ? t('{value} in open positions, {change} on them', { value: usd(latest.totalValue), change: signed(madeIn(latest)) })
+      : t('{value} in open positions', { value: usd(latest.totalValue) })
   }
-  if (first === null || first === latest) return formatUsd(latest.totalValue)
-  return `${formatUsd(latest.totalValue)}, ${signed(madeIn(latest) - madeIn(first))} this session`
+  if (first === null || first === latest) return usd(latest.totalValue)
+  return t('{value}, {change} this session', { value: usd(latest.totalValue), change: signed(madeIn(latest) - madeIn(first)) })
 }

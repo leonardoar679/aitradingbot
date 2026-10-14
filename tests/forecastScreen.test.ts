@@ -117,13 +117,14 @@ describe('the words a forecast reads in', () => {
     expect(callLabel({ direction: 'NEUTRAL', strong: false, uncertain: true })).toBe('NEUTRAL / UNCERTAIN')
     expect(callLabel({ direction: 'BULLISH', strong: true, uncertain: false })).toBe('STRONG BULLISH')
     expect(callLabel({ direction: 'BEARISH', strong: false, uncertain: false })).toBe('BEARISH')
-    expect([0.8, -1.2, 0, -0.001, Number.NaN].map((value) => signedPct(value))).toEqual(['+0.80%', '-1.20%', '+0.00%', '-0.00%', '—'])
+    // No sign on a move that rounds to nothing: Intl's rule, the same in every language (V6 Stage 14).
+    expect([0.8, -1.2, 0, -0.001, Number.NaN].map((value) => signedPct(value))).toEqual(['+0.80%', '-1.20%', '0.00%', '0.00%', '—'])
     expect(rangeText(0.8, 2.1)).toBe('+0.80% ~ +2.10%')
-    expect([0, -5, 59_001, 3_540_001, 3_600_000, 36_000_000].map(timeLeftText)).toEqual(['FORECAST EXPIRED', 'FORECAST EXPIRED', 'valid 1 min', 'valid 1.0 h', 'valid 1.0 h', 'valid 10 h'])
+    expect([0, -5, 59_001, 3_540_001, 3_600_000, 36_000_000].map((ms) => timeLeftText(ms))).toEqual(['FORECAST EXPIRED', 'FORECAST EXPIRED', 'valid 1 min', 'valid 1.0 h', 'valid 1.0 h', 'valid 10 h'])
   })
 
   it('reads momentum in usual moves and volume against the usual hour, at fixed lines', () => {
-    expect([2, 1.99, 1, 0.99, -0.99, -1, -1.99, -2, null, Number.NaN].map(momentumWord)).toEqual(['STRONG UP', 'UP', 'UP', 'FLAT', 'FLAT', 'DOWN', 'DOWN', 'STRONG DOWN', '—', '—'])
+    expect([2, 1.99, 1, 0.99, -0.99, -1, -1.99, -2, null, Number.NaN].map((z) => momentumWord(z))).toEqual(['STRONG UP', 'UP', 'UP', 'FLAT', 'FLAT', 'DOWN', 'DOWN', 'STRONG DOWN', '—', '—'])
     expect(volumeWord(3.74)).toBe('3.7× its usual hour')
     expect(volumeWord(null)).toBe('—')
   })
@@ -164,7 +165,8 @@ describe('the best prediction card (§3, §118)', () => {
   it('has every field, the percentages from the live price where there is one', () => {
     const sol = prediction('SOLUSDT', { mainCatalyst: 'Exchange lists SOL perpetuals', newsImpact: 82 })
     const fromClose = predictionCardRows(sol, forecastView(sol, null, T * 1000 + 600_000), '3 / 3 bullish')
-    expect(fromClose.left).toEqual([
+    const shown = (rows: { name: string; value: string }[]): { name: string; value: string }[] => rows.map(({ name, value }) => ({ name, value }))
+    expect(shown(fromClose.left)).toEqual([
       { name: 'Current', value: '$180 (last close)' },
       { name: 'Next 15 min', value: '-0.50% ~ +0.70%' },
       { name: 'Next 1 hour', value: '-1.00% ~ +2.00%' },
@@ -172,7 +174,7 @@ describe('the best prediction card (§3, §118)', () => {
       { name: 'Bull case', value: '+3.00%' },
       { name: 'Bear case', value: '-2.00%' }
     ])
-    expect(fromClose.right).toEqual([
+    expect(shown(fromClose.right)).toEqual([
       { name: 'Forecast quality', value: '55 / 100' },
       { name: 'Reliability', value: 'HIGH' },
       { name: 'Best horizon', value: '1 hour' },
@@ -183,10 +185,10 @@ describe('the best prediction card (§3, §118)', () => {
     ])
     // From a live $183.60 the same levels read lower (§41); the 15 minutes past its close have expired.
     const live = predictionCardRows(sol, forecastView(sol, 183.6, (T + 1200) * 1000), null)
-    expect(live.left[0]).toEqual({ name: 'Current', value: '$183.6' })
+    expect(shown(live.left)[0]).toEqual({ name: 'Current', value: '$183.6' })
     expect(live.left[1].value).toBe('-2.45% ~ -1.27% (expired)')
-    expect(live.left[2].value).toBe('-2.94% ~ +0.00%')
-    expect(live.right[6]).toEqual({ name: 'AI consensus', value: 'not asked' })
+    expect(live.left[2].value).toBe('-2.94% ~ 0.00%')
+    expect(shown(live.right)[6]).toEqual({ name: 'AI consensus', value: 'not asked' })
     // No best horizon: the hour leads, and says none beat a plain range.
     expect(predictionCardRows(prediction('SOLUSDT', { bestHorizon: null }), forecastView(sol, null, T * 1000), null).right[2].value).toBe('none beat a plain range')
   })

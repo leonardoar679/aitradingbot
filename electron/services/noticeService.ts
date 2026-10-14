@@ -2,6 +2,8 @@ import * as electron from 'electron'
 import { ALERT_KIND_SEVERITY, ALERT_THREAD_SECONDS, healAlertKind, healAlerts, healNoticeSeverity, noticeSeverity, threadKey, threadStep, type AlertKind, type AlertSeverity, type AlertThread } from '../../shared/alerts'
 import { IpcChannel } from '../../shared/ipc'
 import { soundFor, type NoticeSound } from '../../shared/sounds'
+import { healLanguage } from '../../shared/i18n/languages'
+import { ENGLISH, i18nFor, type I18n } from '../../shared/i18n/translate'
 import { appendAlert, readAlertsSince } from './recordStoreService'
 import { getSettings } from './settingsService'
 
@@ -201,10 +203,32 @@ export async function tellNotice(request: NoticeRequest | null, sender: WebConte
   }
 }
 
+/** The language the person chose, for what the main process words itself (V6 Stage 14): English where
+ * none was chosen or none can be read. */
+export async function noticeI18n(): Promise<I18n> {
+  try {
+    const language = healLanguage((await getSettings()).language)
+    return language === null ? ENGLISH : i18nFor(language)
+  } catch {
+    return ENGLISH
+  }
+}
+
+type TellableNotice = { title: string; body: string; extra: { severity?: 'watch' | 'high' | 'critical'; kind: AlertKind; thread?: string; threadSeconds?: number; id?: string; url?: string; sound?: NoticeSound } }
+
 /** Tells a notice built by shared/notices.ts: its text and its extra, from the main process's own
- * loops. Never throws. */
-export function tell(notice: { title: string; body: string; extra: { severity?: 'watch' | 'high' | 'critical'; kind: AlertKind; thread?: string; threadSeconds?: number; id?: string; url?: string; sound?: NoticeSound } }): void {
-  void tellNotice(healNoticeRequest(notice.title, notice.body, notice.extra.severity, notice.extra))
+ * loops -- or, handed a builder, the notice it builds in the person's language. Never throws. */
+export function tell(notice: TellableNotice | ((i18n: I18n) => TellableNotice)): void {
+  if (typeof notice !== 'function') {
+    void tellNotice(healNoticeRequest(notice.title, notice.body, notice.extra.severity, notice.extra))
+    return
+  }
+  void noticeI18n()
+    .then((i18n) => {
+      const built = notice(i18n)
+      return tellNotice(healNoticeRequest(built.title, built.body, built.extra.severity, built.extra))
+    })
+    .catch((error: unknown) => console.error('A notice could not be told:', error))
 }
 
 /** Test seam: forgets every thread, and reads the file again before the next notice. */

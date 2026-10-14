@@ -96,8 +96,11 @@ export async function probeOnce(): Promise<HealthState> {
   }
   publish()
   const verdict = liveHealth()
-  if (verdict.degraded && !wasDegraded) tell(breakerNotice('health', describePause(verdict) ?? 'Live trading is paused.'))
-  if (!verdict.degraded && wasDegraded) tell(breakerNotice('health-ok', 'The exchange answers again: new live orders are no longer paused by its health.', 'health-ok'))
+  if (verdict.degraded && !wasDegraded) {
+    const measured = current()
+    tell((i18n) => breakerNotice('health', describePause(healthVerdict(measured, i18n), i18n) ?? i18n.t('Live trading is paused.'), 'health', i18n))
+  }
+  if (!verdict.degraded && wasDegraded) tell((i18n) => breakerNotice('health-ok', i18n.t('The exchange answers again: new live orders are no longer paused by its health.'), 'health-ok', i18n))
   wasDegraded = verdict.degraded
   return current()
 }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, Search } from 'lucide-react'
 import type { Exchange, SymbolInfo } from '../../shared/ipc'
 import { describeError } from '../utils/ipcError'
+import { useI18n } from '../i18n'
 
 interface SymbolSearchProps {
   exchange: Exchange
@@ -12,6 +13,7 @@ interface SymbolSearchProps {
 const MAX_RESULTS = 30
 
 export function SymbolSearch({ exchange, symbol, onSelect }: SymbolSearchProps): React.JSX.Element {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [symbols, setSymbols] = useState<SymbolInfo[]>([])
@@ -106,7 +108,7 @@ export function SymbolSearch({ exchange, symbol, onSelect }: SymbolSearchProps):
           style={{
             position: 'absolute',
             top: 'calc(100% + 0.4rem)',
-            left: 0,
+            insetInlineStart: 0,
             width: 260,
             background: 'var(--bg-surface)',
             border: '1px solid var(--border)',
@@ -130,7 +132,7 @@ export function SymbolSearch({ exchange, symbol, onSelect }: SymbolSearchProps):
               ref={inputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search BTC, ETH, SOL..."
+              placeholder={t('Search BTC, ETH, SOL...')}
               style={{
                 flex: 1,
                 background: 'transparent',
@@ -142,15 +144,15 @@ export function SymbolSearch({ exchange, symbol, onSelect }: SymbolSearchProps):
             />
           </div>
           <div style={{ maxHeight: 280, overflowY: 'auto' }}>
-            {loading && <StatusRow text="Loading pairs..." />}
-            {!loading && loadError !== null && (
-              <StatusRow text={`Couldn't load pairs (${loadError}) — close and reopen to retry.`} />
-            )}
-            {!loading && loadError === null && results.length === 0 && <StatusRow text="No matches" />}
+            {loading && <StatusRow text={t('Loading pairs...')} />}
+            {!loading && loadError !== null && <StatusRow text={t("Couldn't load pairs ({error}) — close and reopen to retry.", { error: loadError })} />}
+            {!loading && loadError === null && results.length === 0 && <StatusRow text={t('No matches')} />}
             {!loading &&
               results.map((s) => (
                 <button
                   key={s.symbol}
+                  // A pair reads as written, BTC then /USDT, in a right-to-left window too.
+                  dir="ltr"
                   onClick={() => {
                     onSelect(s)
                     setOpen(false)
@@ -168,7 +170,7 @@ export function SymbolSearch({ exchange, symbol, onSelect }: SymbolSearchProps):
                     color: s.symbol === symbol ? 'var(--accent)' : 'var(--text-primary)',
                     cursor: 'pointer',
                     fontSize: '0.85rem',
-                    textAlign: 'left'
+                    textAlign: 'start'
                   }}
                 >
                   <span style={{ fontWeight: 600 }}>{s.baseAsset}</span>

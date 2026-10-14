@@ -1,3 +1,5 @@
+import { ENGLISH, type I18n } from './i18n/translate'
+
 /** Clamps one real-money risk limit, and refuses a value that would quietly switch it off.
  *
  * Every gate in liveTradingService compares with `>` or `<=`, and both are false against NaN. So
@@ -72,9 +74,9 @@ export function describeUnusableOrderSize(quoteAmount: number): string | null {
  *
  * Failing closed is the right direction here. A loss limit exists to stop trading after a bad
  * day; if the app cannot work out how bad the day was, not trading is the safe answer. */
-export function describeUntrustedLossTally(realizedPnlToday: number): string | null {
+export function describeUntrustedLossTally(realizedPnlToday: number, { t }: I18n = ENGLISH): string | null {
   if (Number.isFinite(realizedPnlToday)) return null
-  return `Today's realized P&L could not be totalled (${realizedPnlToday}), so the daily loss limit cannot be enforced — live orders are blocked until this is resolved`
+  return t("Today's realized P&L could not be totalled ({value}), so the daily loss limit cannot be enforced — live orders are blocked until this is resolved", { value: String(realizedPnlToday) })
 }
 
 /** Of the managed allocation, or of the day's cap without one, the share one real order filled in

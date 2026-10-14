@@ -1,3 +1,5 @@
+import { ENGLISH, type I18n } from './i18n/translate'
+
 /** Shaping for the balances a real exchange reports, kept out of both the fetch code and the UI
  * so it can be tested against the shapes an exchange actually returns.
  *
@@ -81,21 +83,24 @@ export function freeBalance(readout: BalanceReadout, asset: string): number {
  * in front of the exchange's own balance check, not the last line of defence: the exchange still
  * refuses an order there is no money for. Blocking a legitimate order because a balance could not
  * be read would be a real failure; letting one through that the exchange then refuses is not. */
-export function describeLiveShortfall({
-  side,
-  quoteAsset,
-  quoteAmount,
-  free,
-  exchangeLabel
-}: {
-  side: 'buy' | 'sell'
-  quoteAsset: string
-  /** What the order will spend, in the quote asset. */
-  quoteAmount: number
-  /** Spendable balance in that asset -- freeBalance(), not including funds locked in orders. */
-  free: number
-  exchangeLabel: string
-}): string | null {
+export function describeLiveShortfall(
+  {
+    side,
+    quoteAsset,
+    quoteAmount,
+    free,
+    exchangeLabel
+  }: {
+    side: 'buy' | 'sell'
+    quoteAsset: string
+    /** What the order will spend, in the quote asset. */
+    quoteAmount: number
+    /** Spendable balance in that asset -- freeBalance(), not including funds locked in orders. */
+    free: number
+    exchangeLabel: string
+  },
+  i18n: I18n = ENGLISH
+): string | null {
   if (side !== 'buy') return null
   // An unusable size is already refused, with its own message, by the live trading gate this
   // stands beside. Reporting it a second time here as a funding problem would name the wrong
@@ -107,7 +112,13 @@ export function describeLiveShortfall({
   // be read.
   if (!(free < quoteAmount)) return null
 
-  return `Not enough ${quoteAsset} on ${exchangeLabel}: this order spends ${quoteAmount} and only ${free} is free. Funds held in resting orders do not count -- cancel one, or add ${quoteAmount - free} ${quoteAsset}.`
+  return i18n.t('Not enough {asset} on {exchange}: this order spends {amount} and only {free} is free. Funds held in resting orders do not count -- cancel one, or add {missing} {asset}.', {
+    asset: quoteAsset,
+    exchange: exchangeLabel,
+    amount: figureIn(quoteAmount, i18n),
+    free: figureIn(free, i18n),
+    missing: figureIn(quoteAmount - free, i18n)
+  })
 }
 
 /** The heads-up for a laddered strategy whose FULL plan costs more than is free, as opposed to
@@ -121,20 +132,33 @@ export function describeLiveShortfall({
  *
  * Returns null when the plan fits, when the total is not a usable number, or when the free
  * balance could not be read -- the same allow-on-doubt rule as everything else here. */
-export function describeLivePlanShortfall({
-  quoteAsset,
-  planTotal,
-  free,
-  exchangeLabel
-}: {
-  quoteAsset: string
-  /** What every order in the plan adds up to, in the quote asset. */
-  planTotal: number
-  free: number
-  exchangeLabel: string
-}): string | null {
+export function describeLivePlanShortfall(
+  {
+    quoteAsset,
+    planTotal,
+    free,
+    exchangeLabel
+  }: {
+    quoteAsset: string
+    /** What every order in the plan adds up to, in the quote asset. */
+    planTotal: number
+    free: number
+    exchangeLabel: string
+  },
+  i18n: I18n = ENGLISH
+): string | null {
   if (!Number.isFinite(planTotal) || planTotal <= 0) return null
   if (!(free < planTotal)) return null
 
-  return `This plan places ${planTotal} ${quoteAsset} of orders in total and only ${free} is free on ${exchangeLabel}. It will start, then stop being able to place its later orders. Fund the difference or reduce the size.`
+  return i18n.t(
+    'This plan places {total} {asset} of orders in total and only {free} is free on {exchange}. It will start, then stop being able to place its later orders. Fund the difference or reduce the size.',
+    { total: figureIn(planTotal, i18n), asset: quoteAsset, free: figureIn(free, i18n), exchange: exchangeLabel }
+  )
+}
+
+/** A figure as the English always wrote it (`digits` fixed, or as JavaScript prints it), else in the
+ * language's own form (V6 Stage 14). */
+function figureIn(value: number, i18n: I18n, digits?: number): string {
+  if (i18n.language === 'en') return digits === undefined ? String(value) : value.toFixed(digits)
+  return digits === undefined ? i18n.num(value, 0, 8) : i18n.num(value, digits, digits)
 }

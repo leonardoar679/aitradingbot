@@ -1,3 +1,4 @@
+import { ENGLISH, type I18n } from '../../shared/i18n/translate'
 import type { AiConfig } from '../../shared/aiCost'
 import { summarizeEventBenchmark } from '../../shared/aiEventBenchmark'
 import { describeModelHealth, modelHealth, type ModelHealth } from '../../shared/modelHealth'
@@ -21,6 +22,8 @@ export interface ModelHealthDeps extends LiveBoardDeps {
   getConfig: () => Promise<AiConfig>
   notify: (title: string, body: string, extra?: NoticeExtra) => void
   nowSec: () => number
+  /** The language its notice is said in (V6 Stage 14); English where absent. */
+  i18n?: () => I18n
 }
 
 export interface ModelHealthReport {
@@ -72,7 +75,8 @@ export async function lookAtModelHealth(deps: ModelHealthDeps): Promise<ModelHea
       const health = modelHealth(row)
       next.models[model] = health
       if (health.degraded) {
-        const notice = breakerNotice('degraded', describeModelHealth(model, health), `degraded:${model}`)
+        const say = deps.i18n?.() ?? ENGLISH
+        const notice = breakerNotice('degraded', describeModelHealth(model, health, say), `degraded:${model}`, say)
         deps.notify(notice.title, notice.body, notice.extra)
       }
     }

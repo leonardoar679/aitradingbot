@@ -13,6 +13,7 @@ import { AiCostPerTradeCard } from './AiCostPerTradeCard'
 import { AttributionCard } from './AttributionCard'
 import { SessionReportCard } from './SessionReportCard'
 import { DailyReportCard } from './DailyReportCard'
+import { EnglishOnly, useI18n } from '../i18n'
 
 /** How often the executors on file are read again: for which journal rows the watch paper traded,
  * and for the running total in R of the app's own paper trades. */
@@ -22,6 +23,7 @@ const PAPER_REFRESH_MS = 30_000
  * recommendations went on to earn, and what the app's own paper trades came to, trade by trade. Everything here reads; nothing asks a model,
  * and every result is worked out again from candles rather than stored. */
 export function PerformancePage(): React.JSX.Element {
+  const { t } = useI18n()
   const [models, setModels] = useState<string[] | null>(null)
   const [executors, setExecutors] = useState<ExecutorConfig[] | null>(null)
   // The watch answers with nobody pressing anything, so the board is told when it has.
@@ -72,19 +74,24 @@ export function PerformancePage(): React.JSX.Element {
 
   return (
     <>
-      <PageHeader title="Performance" subtitle="What the portfolio, the bots and the AI's recommendations have done" />
+      <PageHeader title={t('Performance')} subtitle={t("What the portfolio, the bots and the AI's recommendations have done")} />
+      {/* The summary in the window's language (V6 Stage 14); the analysis below it, for an expert, in English. */}
       <div id={anchorElementId('portfolio')} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', scrollMarginTop: '1rem' }}>
         <PortfolioSummary />
-        <PortfolioHistory />
+        <EnglishOnly>
+          <PortfolioHistory />
+        </EnglishOnly>
       </div>
-      {models !== null && <LiveBoardCard title="What the watch's recommendations earned" models={models} refreshKey={answered} />}
       <PaperRCurveCard executors={executors} />
-      <ExitCheckCard executors={executors} />
-      <AiCostPerTradeCard executors={executors} />
-      <AttributionCard executors={executors} />
-      <SessionReportCard />
-      <DailyReportCard />
-      <JournalCard paper={paperKeys} />
+      <EnglishOnly>
+        {models !== null && <LiveBoardCard title="What the watch's recommendations earned" models={models} refreshKey={answered} />}
+        <ExitCheckCard executors={executors} />
+        <AiCostPerTradeCard executors={executors} />
+        <AttributionCard executors={executors} />
+        <SessionReportCard />
+        <DailyReportCard />
+        <JournalCard paper={paperKeys} />
+      </EnglishOnly>
     </>
   )
 }

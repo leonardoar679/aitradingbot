@@ -1,3 +1,4 @@
+import { ENGLISH, msg, type I18n } from './i18n/translate'
 import type { NewsReading } from './aiAdditions'
 import type { OpportunitySide } from './aiOpportunity'
 import { eventReasons, liquidityScore, type MarketEvent } from './marketEvent'
@@ -98,7 +99,7 @@ export interface SignalCall {
 }
 
 const clamp = (value: number, low: number, high: number): number => Math.min(high, Math.max(low, value))
-const sideWord = (side: OpportunitySide): string => (side === 'long' ? 'BUY' : 'SELL')
+const SIDE_WORDS: Record<OpportunitySide, string> = { long: msg('BUY'), short: msg('SELL') }
 
 /** Which way a story points for `coin`: the news analyst's reading where it read the story about
  * this coin, else the fixed rule's by the story's kind; null for neither way. */
@@ -135,9 +136,15 @@ export function signalScore(input: {
   readings?: Readonly<Record<string, NewsReading>>
   regime: MarketRegime | null
   nowSec: number
+  /** The language its words are in: English unless handed another (V6 Stage 14). Its figures are the
+   * same in every one. */
+  i18n?: I18n
 }): SignalScore {
   const { event, side } = input
-  const reasons = eventReasons(event)
+  const i18n = input.i18n ?? ENGLISH
+  const { t } = i18n
+  const sideWord = (way: OpportunitySide): string => t(SIDE_WORDS[way])
+  const reasons = eventReasons(event, i18n)
   const reasonOf = (component: 'volume' | 'volatility' | 'breakout'): string => reasons.find((reason) => reason.component === component)?.fact ?? ''
 
   // The news: the strongest story about the coin that is not old news, by its impact and how far it
@@ -152,14 +159,14 @@ export function signalScore(input: {
   }
   const read = best === null ? undefined : input.readings?.[best.story.id]
   const byAnalyst = read !== undefined && read.ticker === event.baseAsset
+  const story = best === null ? null : { kind: describeEventType(best.story.eventType, i18n), impact: best.story.impact, title: best.story.title, source: best.story.sourceName }
+  const analyst = !byAnalyst ? '' : read.direction === 'none' ? t(', read by the news analyst as pointing neither way') : read.direction === 'up' ? t(', read by the news analyst as pointing up') : t(', read by the news analyst as pointing down')
   const newsFact =
-    best === null
+    best === null || story === null
       ? about.length > 0
-        ? 'only old news names the coin'
-        : `no story names ${event.baseAsset} in the ${SIGNAL_NEWS_SECONDS / 3600} hours before the event or since`
-      : `${describeEventType(best.story.eventType)}, impact ${best.story.impact}: ${best.story.title} (${best.story.sourceName})${
-          best.agreement === 0 ? ', which points the other way' : ''
-        }${byAnalyst ? `, read by the news analyst as ${read.direction === 'none' ? 'pointing neither way' : `pointing ${read.direction}`}` : ''}`
+        ? t('only old news names the coin')
+        : t('no story names {coin} in the {hours} hours before the event or since', { coin: event.baseAsset, hours: SIGNAL_NEWS_SECONDS / 3600 })
+      : `${best.agreement === 0 ? t('{kind}, impact {impact}: {title} ({source}), which points the other way', story) : t('{kind}, impact {impact}: {title} ({source})', story)}${analyst}`
 
   // The models: how many of those that answered would take this side, at the confidence acted on.
   const answered = input.calls.filter((call) => !call.refused)
@@ -167,31 +174,29 @@ export function signalScore(input: {
   const modelsValue = answered.length === 0 ? 0 : (100 * taking) / answered.length
   const modelsFact =
     answered.length === 0
-      ? 'no model has answered'
+      ? t('no model has answered')
       : side === null
-        ? `${answered.length} answered, and none would trade it`
-        : `${taking} of the ${answered.length} that answered would ${sideWord(side)} at the confidence this app acts on`
+        ? t('{count} answered, and none would trade it', { count: answered.length })
+        : t('{taking} of the {count} that answered would {side} at the confidence this app acts on', { taking, count: answered.length, side: sideWord(side) })
 
   const regimeValue = input.regime === null || side === null ? 50 : REGIME_FIT[input.regime][side]
-  const regimeFact =
-    input.regime === null
-      ? 'the market has not been read'
-      : `${describeMarketRegime(input.regime).word}${side === null ? '' : `, for a ${sideWord(side)}`}`
+  const regimeWord = input.regime === null ? '' : describeMarketRegime(input.regime, i18n).word
+  const regimeFact = input.regime === null ? t('the market has not been read') : side === null ? regimeWord : t('{regime}, for a {side}', { regime: regimeWord, side: sideWord(side) })
 
   const quoteVolume = event.live?.quoteVolume24h ?? null
   const parts: Omit<SignalPart, 'points' | 'weight'>[] = [
-    { id: 'event', label: 'Event', value: event.score, fact: `the scanner scored it ${Math.round(event.score)}` },
-    { id: 'volume', label: 'Volume', value: event.components.volume, fact: reasonOf('volume') },
-    { id: 'breakout', label: 'Break', value: event.components.breakout, fact: reasonOf('breakout') },
+    { id: 'event', label: t('Event'), value: event.score, fact: t('the scanner scored it {score}', { score: Math.round(event.score) }) },
+    { id: 'volume', label: t('Volume'), value: event.components.volume, fact: reasonOf('volume') },
+    { id: 'breakout', label: t('Break'), value: event.components.breakout, fact: reasonOf('breakout') },
     {
       id: 'liquidity',
-      label: 'Liquidity',
+      label: t('Liquidity'),
       value: liquidityScore(quoteVolume),
-      fact: quoteVolume === null ? 'how much it trades is not known' : `${Math.round(quoteVolume / 1e6).toLocaleString('en-US')}M a day`
+      fact: quoteVolume === null ? t('how much it trades is not known') : t('{amount}M a day', { amount: Math.round(quoteVolume / 1e6) })
     },
-    { id: 'news', label: 'News', value: best === null ? 0 : best.value, fact: newsFact },
-    { id: 'regime', label: 'Regime', value: regimeValue, fact: regimeFact },
-    { id: 'models', label: 'Models', value: modelsValue, fact: modelsFact }
+    { id: 'news', label: t('News'), value: best === null ? 0 : best.value, fact: newsFact },
+    { id: 'regime', label: t('Regime'), value: regimeValue, fact: regimeFact },
+    { id: 'models', label: t('Models'), value: modelsValue, fact: modelsFact }
   ]
   const weighed: SignalPart[] = parts.map((part) => {
     const weight = SIGNAL_WEIGHTS[part.id]
@@ -201,18 +206,18 @@ export function signalScore(input: {
 
   const penalties: SignalPenalty[] = []
   const wild = clamp((event.components.volatility - CALM_BARS) / (100 - CALM_BARS), 0, 1)
-  if (wild > 0) penalties.push({ id: 'volatility', label: 'Wild bars', points: SIGNAL_PENALTIES.volatility * wild, fact: reasonOf('volatility') })
+  if (wild > 0) penalties.push({ id: 'volatility', label: t('Wild bars'), points: SIGNAL_PENALTIES.volatility * wild, fact: reasonOf('volatility') })
   const pricedIn = best !== null && input.reactions[best.story.id]?.pricedIn === true
   if (pricedIn || (best === null && about.length > 0)) {
     penalties.push({
       id: 'staleNews',
-      label: 'Old news',
+      label: t('Old news'),
       points: SIGNAL_PENALTIES.staleNews,
-      fact: pricedIn ? 'the price had already moved its way before the story was published' : 'the only stories that name the coin are old news'
+      fact: pricedIn ? t('the price had already moved its way before the story was published') : t('the only stories that name the coin are old news')
     })
   }
   if (answered.some((call) => call.side === 'long') && answered.some((call) => call.side === 'short')) {
-    penalties.push({ id: 'disagreement', label: 'Models split', points: SIGNAL_PENALTIES.disagreement, fact: 'the models take opposite sides' })
+    penalties.push({ id: 'disagreement', label: t('Models split'), points: SIGNAL_PENALTIES.disagreement, fact: t('the models take opposite sides') })
   }
 
   const total = weighed.reduce((sum, part) => sum + part.points, 0) - penalties.reduce((sum, penalty) => sum + penalty.points, 0)

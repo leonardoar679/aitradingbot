@@ -1,3 +1,4 @@
+import type { I18n } from '../../shared/i18n/translate'
 const CURRENCY_SYMBOLS: Record<string, string> = {
   USD: '$',
   USDT: '$',
@@ -42,8 +43,11 @@ export function formatAssetNumber(value: number, asset: string): string {
 }
 
 /** Formats a price in its actual quote currency — "$64,010.10" for USD, "₩91,100,000" for
- * KRW, "0.03000000 BTC" for a crypto-quoted pair — instead of assuming everything is USD. */
-export function formatQuotePrice(value: number, quoteAsset: string): string {
+ * KRW, "0.03000000 BTC" for a crypto-quoted pair — instead of assuming everything is USD. Handed a
+ * language (V6 Stage 14), in that language's own separators and currency placing, at the same
+ * precision. */
+export function formatQuotePrice(value: number, quoteAsset: string, i18n?: I18n): string {
+  if (i18n !== undefined && i18n.language !== 'en') return i18n.money(value, quoteAsset)
   const quote = quoteAsset.toUpperCase()
   const symbol = CURRENCY_SYMBOLS[quote]
   const formatted = formatAssetNumber(value, quoteAsset)

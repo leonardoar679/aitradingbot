@@ -1,3 +1,4 @@
+import { ENGLISH, type I18n } from './i18n/translate'
 import type { LivePosition } from './ipc'
 import type { BalanceReadout } from './liveBalances'
 
@@ -122,13 +123,12 @@ export function reconcileLivePositions(
 }
 
 /** One discrepancy, said plainly, including what it means for the buttons on the page. */
-export function describeDiscrepancy(discrepancy: LiveDiscrepancy, exchangeLabel: string): string {
+export function describeDiscrepancy(discrepancy: LiveDiscrepancy, exchangeLabel: string, i18n: I18n = ENGLISH): string {
   const { asset, ledgerQty, exchangeQty, symbols } = discrepancy
-  const where = symbols.length === 1 ? symbols[0] : symbols.join(' and ')
-  return (
-    `This app tracks ${ledgerQty} ${asset} open on ${where}, but ${exchangeLabel} reports ${exchangeQty} ${asset} in the account. ` +
-    `Closing here sells what the app tracks, so it would be rejected. The usual cause is selling or moving the ${asset} on the exchange itself; ` +
-    `this app cannot tell that apart from a fill it missed, so it will not adjust the record on its own.`
+  const where = symbols.length === 1 ? symbols[0] : i18n.language === 'en' ? symbols.join(' and ') : i18n.list(symbols)
+  return i18n.t(
+    'This app tracks {ledger} {asset} open on {where}, but {exchange} reports {held} {asset} in the account. Closing here sells what the app tracks, so it would be rejected. The usual cause is selling or moving the {asset} on the exchange itself; this app cannot tell that apart from a fill it missed, so it will not adjust the record on its own.',
+    { ledger: String(ledgerQty), asset, where, exchange: exchangeLabel, held: String(exchangeQty) }
   )
 }
 
@@ -163,32 +163,42 @@ export interface ReconciliationReadout {
   error: string | null
 }
 
-const clockOf = (sec: number): string => `${new Date(sec * 1000).toISOString().slice(11, 16)} UTC`
+/** "07:45 UTC", in a language. */
+const clockOf = (sec: number, i18n: I18n = ENGLISH): string => i18n.t('{time} UTC', { time: i18n.language === 'en' ? new Date(sec * 1000).toISOString().slice(11, 16) : i18n.utcTime(sec * 1000) })
 
 /** The words for a resting order the ledger does not know: the notice's and the card's. */
-export function describeUnknownOrder(order: OpenOrderOnExchange, exchangeLabel: string): string {
-  return `${order.symbol}: a ${order.side.toUpperCase()} of ${order.origQty} at ${order.price} is resting on ${exchangeLabel} (order ${order.orderId}, placed ${clockOf(order.placedAt)}), and this app has no record of it.`
+export function describeUnknownOrder(order: OpenOrderOnExchange, exchangeLabel: string, i18n: I18n = ENGLISH): string {
+  const values = { pair: order.symbol, qty: String(order.origQty), price: String(order.price), exchange: exchangeLabel, id: String(order.orderId), time: clockOf(order.placedAt, i18n) }
+  return order.side === 'sell'
+    ? i18n.t('{pair}: a SELL of {qty} at {price} is resting on {exchange} (order {id}, placed {time}), and this app has no record of it.', values)
+    : i18n.t('{pair}: a BUY of {qty} at {price} is resting on {exchange} (order {id}, placed {time}), and this app has no record of it.', values)
 }
 
-/** One line for the reconciliation's state, and one for each thing it found. */
-export function describeReconciliation(readout: ReconciliationReadout, exchangeLabel: string): { line: string; tone: 'up' | 'down' | 'muted'; findings: string[] } {
-  if (readout.at === null) return { line: 'Not checked yet: the first look comes within a minute of the start.', tone: 'muted', findings: [] }
-  if (!readout.keyStored) return { line: `No ${exchangeLabel} key is connected, so there is nothing to check.`, tone: 'muted', findings: [] }
-  if (readout.error !== null) return { line: `Could not check at ${clockOf(readout.at)}: ${readout.error}`, tone: 'muted', findings: [] }
+/** One line for the reconciliation's state, and one for each thing it found, in a language. */
+export function describeReconciliation(readout: ReconciliationReadout, exchangeLabel: string, i18n: I18n = ENGLISH): { line: string; tone: 'up' | 'down' | 'muted'; findings: string[] } {
+  const { t } = i18n
+  if (readout.at === null) return { line: t('Not checked yet: the first look comes within a minute of the start.'), tone: 'muted', findings: [] }
+  if (!readout.keyStored) return { line: t('No {exchange} key is connected, so there is nothing to check.', { exchange: exchangeLabel }), tone: 'muted', findings: [] }
+  if (readout.error !== null) return { line: t('Could not check at {time}: {error}', { time: clockOf(readout.at, i18n), error: readout.error }), tone: 'muted', findings: [] }
   const findings = [
-    ...readout.unknownOrders.map((order) => describeUnknownOrder(order, exchangeLabel)),
-    ...readout.discrepancies.map((discrepancy) => describeDiscrepancy(discrepancy, exchangeLabel))
+    ...readout.unknownOrders.map((order) => describeUnknownOrder(order, exchangeLabel, i18n)),
+    ...readout.discrepancies.map((discrepancy) => describeDiscrepancy(discrepancy, exchangeLabel, i18n))
   ]
-  const resolved =
-    readout.resolvedByCheck > 0
-      ? ` ${readout.resolvedByCheck} order${readout.resolvedByCheck === 1 ? '' : 's'} the exchange no longer rested ${readout.resolvedByCheck === 1 ? 'was' : 'were'} resolved by the check.`
-      : ''
+  const resolved = readout.resolvedByCheck > 0 ? ` ${t('{count} orders the exchange no longer rested were resolved by the check.', { count: readout.resolvedByCheck })}` : ''
   if (findings.length === 0) {
     const unchecked =
       readout.unchecked.length > 0
-        ? ` ${readout.unchecked.join(', ')} could not be read, so ${readout.unchecked.length === 1 ? 'that holding was' : 'those holdings were'} not checked.`
+        ? ` ${
+            readout.unchecked.length === 1
+              ? t('{assets} could not be read, so that holding was not checked.', { assets: readout.unchecked.join(', ') })
+              : t('{assets} could not be read, so those holdings were not checked.', { assets: readout.unchecked.join(', ') })
+          }`
         : ''
-    return { line: `Checked at ${clockOf(readout.at)}: the orders resting on ${exchangeLabel} and the account's balances agree with the ledger.${resolved}${unchecked}`, tone: 'up', findings: [] }
+    return {
+      line: `${t("Checked at {time}: the orders resting on {exchange} and the account's balances agree with the ledger.", { time: clockOf(readout.at, i18n), exchange: exchangeLabel })}${resolved}${unchecked}`,
+      tone: 'up',
+      findings: []
+    }
   }
-  return { line: `Checked at ${clockOf(readout.at)}: ${findings.length} thing${findings.length === 1 ? '' : 's'} the ledger does not agree with. Nothing was changed.${resolved}`, tone: 'down', findings }
+  return { line: `${t('Checked at {time}: {count} things the ledger does not agree with. Nothing was changed.', { time: clockOf(readout.at, i18n), count: findings.length })}${resolved}`, tone: 'down', findings }
 }

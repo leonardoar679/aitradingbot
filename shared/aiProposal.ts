@@ -1,3 +1,4 @@
+import { ENGLISH, msg, type I18n } from './i18n/translate'
 import { INTERVAL_SECONDS, type Exchange, type ExecutorSide, type Interval, type PositionExecutorParams, type SymbolInfo } from './ipc'
 import { GPT_FLAT, GPT_MIN_CONFIDENCE, gptActionFor, type AiSignalDecision } from './aiSignal'
 import { isActionableOpportunity, opportunitySide, opportunityWindow } from './aiOpportunity'
@@ -184,24 +185,24 @@ export function opportunityObstacle(eventTime: number, decision: AiSignalDecisio
 }
 
 /** Why no order form is offered for a recommendation on an event, or null when one is. */
-export function opportunityProposalProblem(eventTime: number, decision: AiSignalDecision, nowSec: number, lastPrice: number | null = null): string | null {
+export function opportunityProposalProblem(eventTime: number, decision: AiSignalDecision, nowSec: number, lastPrice: number | null = null, { t, pctPlain, utcTime }: I18n = ENGLISH): string | null {
   const obstacle = opportunityObstacle(eventTime, decision, nowSec, lastPrice)
   if (obstacle === null) return null
   switch (obstacle.code) {
     case 'unreached':
-      return 'The model was not reached, so there is no call to act on.'
+      return t('The model was not reached, so there is no call to act on.')
     case 'refused':
-      return 'The answer was refused, so there is no call to act on.'
+      return t('The answer was refused, so there is no call to act on.')
     case 'no_trade':
-      return 'A call not to trade opens nothing.'
+      return t('A call not to trade opens nothing.')
     case 'low_confidence':
-      return `This app acts on a call at ${Math.round(GPT_MIN_CONFIDENCE * 100)}% confidence or more, so no order form is offered for this one.`
+      return t('This app acts on a call at {share} confidence or more, so no order form is offered for this one.', { share: pctPlain(Math.round(GPT_MIN_CONFIDENCE * 100), 0) })
     case 'expired':
-      return `Its entry expired at ${utcClock(obstacle.expiresAt)} UTC, so no order form is offered for it. Ask again for a current one.`
+      return t('Its entry expired at {time} UTC, so no order form is offered for it. Ask again for a current one.', { time: utcTime(obstacle.expiresAt * 1000) })
     case 'through_stop':
-      return 'The price has already gone through its stop, so no order form is offered for it.'
+      return t('The price has already gone through its stop, so no order form is offered for it.')
     case 'at_target':
-      return 'The price has already reached its target, so no order form is offered for it.'
+      return t('The price has already reached its target, so no order form is offered for it.')
   }
 }
 
@@ -333,10 +334,37 @@ export function suggestedLiveAmount(input: {
 
 /** The suggestion in words, for the form. `reasons` are the conditions' (shared/dynamicRisk.ts)
  * where the factor is under the whole. */
-export function describeSuggestedLiveAmount(suggested: SuggestedLiveAmount, input: { riskPct: number; stopLossPct: number; quoteAsset: string; reasons?: readonly string[] }): string {
-  const held = suggested.heldBy === 'max order size' ? ' Held to the max order size.' : suggested.heldBy === 'daily cap' ? " Held to what is left of the day's cap." : ''
-  const reduced = suggested.factor < 1 ? ` The risk is ${Math.round(suggested.factor * 100)}% of the setting for the conditions${input.reasons !== undefined && input.reasons.length > 0 ? `: ${input.reasons.join('; ')}` : ''}.` : ''
-  return `Amount ${plainNumber(suggested.amountQuote)} ${input.quoteAsset}: ${input.riskPct}% of your ${suggested.basis}${suggested.factor < 1 ? ` at ${Math.round(suggested.factor * 100)}%` : ''} (${plainNumber(suggested.riskQuote)} ${input.quoteAsset}) lost at the ${input.stopLossPct}% stop, after fees and slippage.${held}${reduced} Sized by your risk setting on Risk & Safety, not by the model; change it as you like.`
+export function describeSuggestedLiveAmount(
+  suggested: SuggestedLiveAmount,
+  input: { riskPct: number; stopLossPct: number; quoteAsset: string; reasons?: readonly string[] },
+  i18n: I18n = ENGLISH
+): string {
+  const { t } = i18n
+  const reduced = suggested.factor < 1
+  const values = {
+    amount: plainNumberIn(suggested.amountQuote, i18n),
+    asset: input.quoteAsset,
+    risk: percentIn(input.riskPct, i18n),
+    factor: percentIn(Math.round(suggested.factor * 100), i18n),
+    riskAmount: plainNumberIn(suggested.riskQuote, i18n),
+    stop: percentIn(input.stopLossPct, i18n)
+  }
+  const amount =
+    suggested.basis === 'allocation'
+      ? reduced
+        ? t('Amount {amount} {asset}: {risk} of your allocation at {factor} ({riskAmount} {asset}) lost at the {stop} stop, after fees and slippage.', values)
+        : t('Amount {amount} {asset}: {risk} of your allocation ({riskAmount} {asset}) lost at the {stop} stop, after fees and slippage.', values)
+      : reduced
+        ? t('Amount {amount} {asset}: {risk} of your daily cap at {factor} ({riskAmount} {asset}) lost at the {stop} stop, after fees and slippage.', values)
+        : t('Amount {amount} {asset}: {risk} of your daily cap ({riskAmount} {asset}) lost at the {stop} stop, after fees and slippage.', values)
+  const held = suggested.heldBy === 'max order size' ? t('Held to the max order size.') : suggested.heldBy === 'daily cap' ? t("Held to what is left of the day's cap.") : null
+  const why =
+    !reduced
+      ? null
+      : input.reasons !== undefined && input.reasons.length > 0
+        ? t('The risk is {factor} of the setting for the conditions: {reasons}.', { factor: values.factor, reasons: input.reasons.join(t('; ')) })
+        : t('The risk is {factor} of the setting for the conditions.', { factor: values.factor })
+  return [amount, held, why, t('Sized by your risk setting on Risk & Safety, not by the model; change it as you like.')].filter((part): part is string => part !== null).join(' ')
 }
 
 /** When a position made from a proposal gives up waiting to enter, in Unix seconds, or null when
@@ -380,40 +408,80 @@ function plainNumber(value: number): string {
   return Number(value.toPrecision(8)).toLocaleString('en-US', { maximumFractionDigits: 8 })
 }
 
-function durationLabel(sec: number): string {
-  if (sec % 86_400 === 0) return sec === 86_400 ? '1 day' : `${sec / 86_400} days`
-  if (sec % 3600 === 0) return sec === 3600 ? '1 hour' : `${sec / 3600} hours`
-  return `${Math.round(sec / 60)} minutes`
+function durationLabel(sec: number, { t }: I18n = ENGLISH): string {
+  if (sec % 86_400 === 0) return t('{count} days', { count: sec / 86_400 })
+  if (sec % 3600 === 0) return t('{count} hours', { count: sec / 3600 })
+  return t('{count} minutes', { count: Math.round(sec / 60) })
+}
+
+/** The same three, in a language (V6 Stage 14): English exactly as before. */
+function clockIn(sec: number, i18n: I18n): string {
+  return i18n.language === 'en' ? utcClock(sec) : i18n.utcTime(sec * 1000)
+}
+
+function plainNumberIn(value: number, i18n: I18n): string {
+  return i18n.language === 'en' ? plainNumber(value) : i18n.num(Number(value.toPrecision(8)), 0, 8)
+}
+
+/** A percentage a person or a model set, as it was set: "1.25%". */
+function percentIn(value: number, i18n: I18n): string {
+  return i18n.language === 'en' ? `${value}%` : i18n.share(value, 4)
+}
+
+/** The closing sentence of a form filled in from a call: whose the amount is, and what real money needs. */
+const AMOUNT_YOURS = {
+  short: msg('A short is paper only: this app places no short or leveraged order, so Live Trading cannot be ticked for it. The amount is yours to set, and nothing is placed until you submit this form.'),
+  model: msg('The amount is yours to set: a model is never asked for one. Nothing is placed until you submit this form, and real money still needs Live Trading ticked below and its phrase typed.'),
+  forecast: msg('The amount is yours to set: the forecast is never asked for one. Nothing is placed until you submit this form, and real money still needs Live Trading ticked below and its phrase typed.')
 }
 
 /** The same, for a form filled in from a recommendation on an event. */
-function describeOpportunityProposal(proposal: AiOrderProposal): string[] {
-  const who = describeDecider(proposal.model)
+function describeOpportunityProposal(proposal: AiOrderProposal, i18n: I18n): string[] {
+  const { t } = i18n
   const short = proposal.side === 'sell'
-  const [against, toward] = short ? ['above', 'below'] : ['below', 'above']
-  const event = proposal.eventType !== undefined ? describeEventType(proposal.eventType).toLowerCase() : 'event'
-  const range = proposal.entryRange !== undefined ? `, ${plainNumber(proposal.entryRange.min)} to ${plainNumber(proposal.entryRange.max)}` : ''
+  const event =
+    proposal.eventType === undefined ? t('event@@market event') : i18n.language === 'en' ? describeEventType(proposal.eventType).toLowerCase() : describeEventType(proposal.eventType, i18n)
+  const values = {
+    model: describeDecider(proposal.model, i18n),
+    pair: proposal.pair.symbol,
+    confidence: percentIn(Math.round(proposal.confidence * 100), i18n),
+    event,
+    time: clockIn(proposal.candleTime, i18n),
+    until: clockIn(proposal.expiresAt ?? proposal.candleTime, i18n),
+    price: plainNumberIn(proposal.entryPrice ?? 0, i18n),
+    min: plainNumberIn(proposal.entryRange?.min ?? 0, i18n),
+    max: plainNumberIn(proposal.entryRange?.max ?? 0, i18n),
+    stop: percentIn(proposal.stopLossPct ?? 0, i18n),
+    target: percentIn(proposal.takeProfitPct ?? 0, i18n),
+    duration: durationLabel(proposal.timeLimitSec, i18n)
+  }
+  const ranged = proposal.entryRange !== undefined
   const entry =
     proposal.entryPrice === null || proposal.entryPrice === undefined
-      ? `It enters at market: the price is inside the range the model named${range}.`
-      : `It waits for a price of ${plainNumber(proposal.entryPrice)}, the nearer edge of the range the model named${range}.`
+      ? ranged
+        ? t('It enters at market: the price is inside the range the model named, {min} to {max}.', values)
+        : t('It enters at market: the price is inside the range the model named.', values)
+      : ranged
+        ? t('It waits for a price of {price}, the nearer edge of the range the model named, {min} to {max}.', values)
+        : t('It waits for a price of {price}, the nearer edge of the range the model named.', values)
   // What the entry above does on paper, which is not quite what either kind of entry is.
-  const paper =
-    proposal.entryRange === undefined
-      ? null
-      : 'On paper, with the entry left as it is, the position enters in the first minute the price trades inside that range, from whichever side: a price that has left it is not chased, and is not bought at once from its far side.'
+  const paper = !ranged
+    ? null
+    : t('On paper, with the entry left as it is, the position enters in the first minute the price trades inside that range, from whichever side: a price that has left it is not chased, and is not bought at once from its far side.')
   const levels =
     proposal.stopLossPct !== null && proposal.takeProfitPct !== null
-      ? `The model's stop is ${proposal.stopLossPct}% ${against} that entry and its target ${proposal.takeProfitPct}% ${toward} it.`
-      : "One of the model's levels is not a usable distance from that entry, so the form's usual one is shown in its place."
+      ? short
+        ? t("The model's stop is {stop} above that entry and its target {target} below it.", values)
+        : t("The model's stop is {stop} below that entry and its target {target} above it.", values)
+      : t("One of the model's levels is not a usable distance from that entry, so the form's usual one is shown in its place.")
   return [
-    `Filled in from an AI recommendation: ${who} said ${short ? 'SELL' : 'BUY'} ${proposal.pair.symbol} at ${Math.round(proposal.confidence * 100)}% confidence, on the ${event} raised at ${utcClock(proposal.candleTime)} UTC.`,
-    `${entry} ${levels} The time limit is the ${durationLabel(proposal.timeLimitSec)} it said to hold for.`,
-    ...(paper === null ? [] : [paper]),
-    `Its entry is good until ${utcClock(proposal.expiresAt ?? proposal.candleTime)} UTC. After that this form will not submit it as it stands, and a paper position still waiting to enter then is abandoned.`,
     short
-      ? 'A short is paper only: this app places no short or leveraged order, so Live Trading cannot be ticked for it. The amount is yours to set, and nothing is placed until you submit this form.'
-      : 'The amount is yours to set: a model is never asked for one. Nothing is placed until you submit this form, and real money still needs Live Trading ticked below and its phrase typed.'
+      ? t('Filled in from an AI recommendation: {model} said SELL {pair} at {confidence} confidence, on the {event} raised at {time} UTC.', values)
+      : t('Filled in from an AI recommendation: {model} said BUY {pair} at {confidence} confidence, on the {event} raised at {time} UTC.', values),
+    [entry, levels, t('The time limit is the {duration} it said to hold for.', values)].join(' '),
+    ...(paper === null ? [] : [paper]),
+    t('Its entry is good until {until} UTC. After that this form will not submit it as it stands, and a paper position still waiting to enter then is abandoned.', values),
+    t(short ? AMOUNT_YOURS.short : AMOUNT_YOURS.model)
   ]
 }
 
@@ -447,38 +515,68 @@ export function forecastProposal(input: { plan: TradePlan; confidence: number; b
 }
 
 /** The same, for a form filled in from the price forecast's plan. */
-function describeForecastProposal(proposal: AiOrderProposal): string[] {
+function describeForecastProposal(proposal: AiOrderProposal, i18n: I18n): string[] {
+  const { t } = i18n
   const short = proposal.side === 'sell'
-  const [against, toward] = short ? ['above', 'below'] : ['below', 'above']
-  const zone = proposal.entryRange === undefined ? '' : ` ${plainNumber(proposal.entryRange.min)} to ${plainNumber(proposal.entryRange.max)}`
+  const values = {
+    pair: proposal.pair.symbol,
+    time: clockIn(proposal.candleTime, i18n),
+    until: clockIn(proposal.expiresAt ?? proposal.candleTime, i18n),
+    confidence: percentIn(Math.round(proposal.confidence * 100), i18n),
+    min: plainNumberIn(proposal.entryRange?.min ?? 0, i18n),
+    max: plainNumberIn(proposal.entryRange?.max ?? 0, i18n),
+    price: plainNumberIn(proposal.referencePrice, i18n),
+    stop: percentIn(proposal.stopLossPct ?? 0, i18n),
+    target: percentIn(proposal.takeProfitPct ?? 0, i18n),
+    duration: durationLabel(proposal.timeLimitSec, i18n)
+  }
+  const enters =
+    proposal.entryRange === undefined
+      ? t('It enters at market inside the zone, around the live price of {price}.', values)
+      : t('It enters at market inside the zone {min} to {max}, around the live price of {price}.', values)
+  const levels = short
+    ? t("Its stop is {stop} above the entry, at the forecast's bad case or one and a half five-minute ranges, whichever is farther, and its target {target} below it, at the level the risk mode takes.", values)
+    : t("Its stop is {stop} below the entry, at the forecast's bad case or one and a half five-minute ranges, whichever is farther, and its target {target} above it, at the level the risk mode takes.", values)
   return [
-    `Filled in from the price forecast: ${short ? 'SELL' : 'BUY'} ${proposal.pair.symbol}, its forecast read at the ${utcClock(proposal.candleTime)} UTC close, ${Math.round(proposal.confidence * 100)}% the way it calls.`,
-    `It enters at market inside the zone${zone}, around the live price of ${plainNumber(proposal.referencePrice)}. Its stop is ${proposal.stopLossPct}% ${against} the entry, at the forecast's bad case or one and a half five-minute ranges, whichever is farther, and its target ${proposal.takeProfitPct}% ${toward} it, at the level the risk mode takes. The time limit is the forecast's horizon, ${durationLabel(proposal.timeLimitSec)}.`,
-    'On paper, with the entry left as it is, the position enters in the first minute the price trades inside that zone: a price that has left it is not chased.',
-    `Its plan is good until ${utcClock(proposal.expiresAt ?? proposal.candleTime)} UTC, the next five-minute close. After that this form will not submit it as it stands, and a paper position still waiting to enter then is abandoned.`,
     short
-      ? 'A short is paper only: this app places no short or leveraged order, so Live Trading cannot be ticked for it. The amount is yours to set, and nothing is placed until you submit this form.'
-      : 'The amount is yours to set: the forecast is never asked for one. Nothing is placed until you submit this form, and real money still needs Live Trading ticked below and its phrase typed.'
+      ? t('Filled in from the price forecast: SELL {pair}, its forecast read at the {time} UTC close, {confidence} the way it calls.', values)
+      : t('Filled in from the price forecast: BUY {pair}, its forecast read at the {time} UTC close, {confidence} the way it calls.', values),
+    [enters, levels, t("The time limit is the forecast's horizon, {duration}.", values)].join(' '),
+    t('On paper, with the entry left as it is, the position enters in the first minute the price trades inside that zone: a price that has left it is not chased.'),
+    t('Its plan is good until {until} UTC, the next five-minute close. After that this form will not submit it as it stands, and a paper position still waiting to enter then is abandoned.', values),
+    t(short ? AMOUNT_YOURS.short : AMOUNT_YOURS.forecast)
   ]
 }
 
-/** What the form says about where its values came from, above the fields themselves. */
-export function describeAiProposal(proposal: AiOrderProposal): string[] {
-  if (proposal.model === FORECAST_PROPOSAL_MODEL) return describeForecastProposal(proposal)
-  if (proposal.expiresAt !== undefined) return describeOpportunityProposal(proposal)
-  const who = describeDecider(proposal.model)
+/** What the form says about where its values came from, above the fields themselves; in the language
+ * of the form (V6 Stage 14). */
+export function describeAiProposal(proposal: AiOrderProposal, i18n: I18n = ENGLISH): string[] {
+  if (proposal.model === FORECAST_PROPOSAL_MODEL) return describeForecastProposal(proposal, i18n)
+  if (proposal.expiresAt !== undefined) return describeOpportunityProposal(proposal, i18n)
+  const { t } = i18n
+  const values = {
+    model: describeDecider(proposal.model, i18n),
+    pair: proposal.pair.symbol,
+    confidence: percentIn(Math.round(proposal.confidence * 100), i18n),
+    interval: proposal.interval,
+    time: clockIn(proposal.candleTime, i18n),
+    price: plainNumberIn(proposal.referencePrice, i18n),
+    stop: percentIn(proposal.stopLossPct ?? 0, i18n),
+    target: percentIn(proposal.takeProfitPct ?? 0, i18n),
+    duration: durationLabel(proposal.timeLimitSec, i18n)
+  }
   const levels =
     proposal.stopLossPct !== null && proposal.takeProfitPct !== null
-      ? `Its stop and target were set against a price of ${plainNumber(proposal.referencePrice)}: ${proposal.stopLossPct}% below and ${proposal.takeProfitPct}% above. Here they apply to your own fill.`
+      ? t('Its stop and target were set against a price of {price}: {stop} below and {target} above. Here they apply to your own fill.', values)
       : proposal.stopLossPct !== null
-        ? `Its stop was set against a price of ${plainNumber(proposal.referencePrice)}: ${proposal.stopLossPct}% below. It named no usable target, so the form's usual one is shown.`
+        ? t("Its stop was set against a price of {price}: {stop} below. It named no usable target, so the form's usual one is shown.", values)
         : proposal.takeProfitPct !== null
-          ? `Its target was set against a price of ${plainNumber(proposal.referencePrice)}: ${proposal.takeProfitPct}% above. It named no usable stop, so the form's usual one is shown.`
-          : "It named no usable stop or target, so the form's usual ones are shown."
+          ? t("Its target was set against a price of {price}: {target} above. It named no usable stop, so the form's usual one is shown.", values)
+          : t("It named no usable stop or target, so the form's usual ones are shown.")
   return [
-    `Filled in from an AI call: ${who} said BUY ${proposal.pair.symbol} at ${Math.round(proposal.confidence * 100)}% confidence, for the ${proposal.interval} candle that opened ${utcClock(proposal.candleTime)} UTC.`,
-    `${levels} The time limit is the ${durationLabel(proposal.timeLimitSec)} it said the call plays out over.`,
-    'The amount is yours to set: a model is never asked for one. Nothing is placed until you submit this form, and real money still needs Live Trading ticked below and its phrase typed.'
+    t('Filled in from an AI call: {model} said BUY {pair} at {confidence} confidence, for the {interval} candle that opened {time} UTC.', values),
+    [levels, t('The time limit is the {duration} it said the call plays out over.', values)].join(' '),
+    t(AMOUNT_YOURS.model)
   ]
 }
 
@@ -488,14 +586,17 @@ export function describeAiProposal(proposal: AiOrderProposal): string[] {
  * nobody is looking. So the notice says what was called, until when, and what to do -- and that
  * nothing has been placed, because a notification about a BUY reads otherwise. `key` is the same
  * for every sighting of one call, so it is raised once however many pollers see it. */
-export function aiCallNotice(botName: string, proposal: AiOrderProposal): { key: string; title: string; body: string } {
-  const until = utcClock(proposal.candleTime + INTERVAL_SECONDS[proposal.interval])
+export function aiCallNotice(botName: string, proposal: AiOrderProposal, i18n: I18n = ENGLISH): { key: string; title: string; body: string } {
+  const close = proposal.candleTime + INTERVAL_SECONDS[proposal.interval]
+  const until = i18n.language === 'en' ? utcClock(close) : i18n.utcTime(close * 1000)
   return {
     key: `${proposal.exchange}:${proposal.pair.symbol}:${proposal.model}:${proposal.candleTime}`,
-    title: `${botName}: BUY ${proposal.pair.symbol}`,
-    body:
-      `${describeDecider(proposal.model)} at ${Math.round(proposal.confidence * 100)}% confidence. Nothing has been placed. ` +
-      `An order form is on offer until ${until} UTC: open Bots and press Prepare an order from this call.`
+    title: i18n.t('{bot}: BUY {pair}', { bot: botName, pair: proposal.pair.symbol }),
+    body: i18n.t('{model} at {confidence} confidence. Nothing has been placed. An order form is on offer until {time} UTC: open Bots and press Prepare an order from this call.', {
+      model: describeDecider(proposal.model, i18n),
+      confidence: i18n.pctPlain(Math.round(proposal.confidence * 100), 0),
+      time: until
+    })
   }
 }
 

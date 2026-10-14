@@ -42,7 +42,7 @@ import {
   type TradeReview
 } from '../../shared/aiAdditions'
 import { AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS } from '../../shared/aiOpportunity'
-import { averageCallCostUsd, estimateCallCostUsd } from '../../shared/aiCost'
+import { averageCallCostUsd, budgetProblem, estimateCallCostUsd } from '../../shared/aiCost'
 import { HIGH_IMPACT } from '../../shared/alerts'
 import { NOTABLE_MOVE_PCT, explainMove } from '../../shared/moveExplanation'
 import type { NewsFeedState, ReadStory } from '../../shared/newsFeed'
@@ -184,7 +184,17 @@ async function paid<T>(input: Parameters<typeof askAddition<T>>[0], model: strin
   } catch (error) {
     // The day's budget spent: told once a day on the budget's thread, as the watch's own calls are
     // (aiSignalService.ts). Until 8 October 2026 an addition met the budget in silence.
-    if (error instanceof AiBudgetError) tell(breakerNotice('ai-budget', `${error.message} No addition is asked again until the budget is raised or the day turns.`))
+    if (error instanceof AiBudgetError) {
+      const { capUsd, spentUsd } = error
+      tell((i18n) =>
+        breakerNotice(
+          'ai-budget',
+          i18n.t('{problem} No addition is asked again until the budget is raised or the day turns.', { problem: i18n.language === 'en' ? error.message : (budgetProblem(capUsd, spentUsd, i18n) ?? error.message) }),
+          'ai-budget',
+          i18n
+        )
+      )
+    }
     return { status: 'skipped', reason: error instanceof Error ? error.message : String(error) }
   }
   let apiKey: string

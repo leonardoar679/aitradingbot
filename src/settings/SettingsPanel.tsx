@@ -16,6 +16,8 @@ import { EssentialsCard } from './EssentialsCard'
 import { NotificationsCard } from './NotificationsCard'
 import { NewsSettingsCard } from './NewsSettingsCard'
 import { ScannerSettingsCard } from './ScannerSettingsCard'
+import { LanguageCard } from './LanguageCard'
+import { EnglishOnly, useI18n, type Language } from '../i18n'
 
 /** Whether Advanced was left open, remembered on this computer only. A browser store that cannot be
  * read is a closed Advanced, not an error. */
@@ -61,7 +63,16 @@ function SectionHeading({ title, note }: { title: string; note: string }): React
  * SMART DEFAULTS FIRST, ADVANCED SECOND (the second V3 document, 6 October 2026). The six settings
  * that decide what the app does by itself are at the top (EssentialsCard); everything else is under
  * Advanced, closed until opened. A fresh install needs nothing from it. */
-export function SettingsPanel({ onNavigate, onUiModeChange }: { onNavigate: (page: Page) => void; onUiModeChange: (mode: UiMode) => void }): React.JSX.Element {
+export function SettingsPanel({
+  onNavigate,
+  onUiModeChange,
+  onLanguageChange
+}: {
+  onNavigate: (page: Page) => void
+  onUiModeChange: (mode: UiMode) => void
+  onLanguageChange: (language: Language) => void
+}): React.JSX.Element {
+  const { t } = useI18n()
   const { theme, setTheme } = useTheme()
   const [advanced, setAdvanced] = useState(readAdvancedOpen)
 
@@ -74,9 +85,10 @@ export function SettingsPanel({ onNavigate, onUiModeChange }: { onNavigate: (pag
 
   return (
     <>
-      <PageHeader title="Settings" subtitle="What the app does by itself, in six settings, with the rest under Advanced" />
+      <PageHeader title={t('Settings')} subtitle={t('What the app does by itself, in six settings, with the rest under Advanced')} />
 
       <EssentialsCard onNavigate={onNavigate} onUiModeChange={onUiModeChange} />
+      <LanguageCard onLanguageChange={onLanguageChange} />
 
       <button
         aria-expanded={advanced}
@@ -93,11 +105,11 @@ export function SettingsPanel({ onNavigate, onUiModeChange }: { onNavigate: (pag
           cursor: 'pointer'
         }}
       >
-        {advanced ? '▾ Advanced' : '▸ Advanced'}
+        {advanced ? `▾ ${t('Advanced')}` : `▸ ${t('Advanced')}`}
       </button>
       {!advanced && (
         <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-          Appearance, the scanner and the news reader in full, the AI models, their route, the daily budget and what asking has cost.
+          {t('Notifications, appearance, the scanner and the news reader in full, the AI models, their route, the daily budget and what asking has cost.')}
         </p>
       )}
       {advanced && <AdvancedSettings theme={theme} setTheme={setTheme} onNavigate={onNavigate} />}
@@ -105,10 +117,16 @@ export function SettingsPanel({ onNavigate, onUiModeChange }: { onNavigate: (pag
   )
 }
 
-/** Every setting that is not one of the six: as the page held them before, section by section. */
+/** Every setting that is not one of the six: as the page held them before, section by section. The
+ * notifications are in the window's language (V6 Stage 14); the rest is for an expert, in English. */
 function AdvancedSettings({ theme, setTheme, onNavigate }: { theme: Theme; setTheme: (theme: Theme) => void; onNavigate: (page: Page) => void }): React.JSX.Element {
+  const { t } = useI18n()
   return (
     <>
+      <SectionHeading title={t('Notifications')} note={t('What each notice sounds like, how loud, and when it is quiet. The switch for notices themselves is on Essentials.')} />
+      <NotificationsCard />
+
+      <EnglishOnly>
       <SectionHeading title="General" note="How the app looks." />
       <Card title="Appearance">
         <div style={{ display: 'flex', gap: '0.6rem' }}>
@@ -140,9 +158,6 @@ function AdvancedSettings({ theme, setTheme, onNavigate }: { theme: Theme; setTh
         </div>
       </Card>
 
-      <SectionHeading title="Notifications" note="What each notice sounds like, how loud, and when it is quiet. The switch for notices themselves is on Essentials." />
-      <NotificationsCard />
-
       <SectionHeading title="Market" note="What the scanner watches, and whether Binance's announcements are read. Both are shown on Explorer." />
       <ScannerSettingsCard />
       <NewsSettingsCard />
@@ -168,6 +183,7 @@ function AdvancedSettings({ theme, setTheme, onNavigate }: { theme: Theme; setTh
         every real order is checked against, and the controller groups, are on{' '}
         <TextLink onClick={() => onNavigate('risk')}>Risk &amp; Safety</TextLink>.
       </p>
+      </EnglishOnly>
     </>
   )
 }

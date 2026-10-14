@@ -1,3 +1,4 @@
+import { ENGLISH, type I18n } from './i18n/translate'
 import { opportunitySide, opportunityWindow, type OpportunitySide } from './aiOpportunity'
 import type { AiSignalDecision } from './aiSignal'
 import { FEE_RATE, SLIPPAGE_RATE } from './fees'
@@ -271,8 +272,8 @@ export function scoreOpportunity(call: OpportunityCall, bars: Candle[], nowSec: 
   return { status: 'open', entryTime, entryPrice, exit: null, exitTime: null, exitPrice: null, netPct: null, r: null, bestPct: best, worstPct: worst, heldMinutes: null }
 }
 
-export function describeOpportunityExit(exit: OpportunityExit): string {
-  if (exit === 'take_profit') return 'target reached'
-  if (exit === 'stop_loss') return 'stopped out'
-  return 'time ran out'
+export function describeOpportunityExit(exit: OpportunityExit, { t }: I18n = ENGLISH): string {
+  if (exit === 'take_profit') return t('target reached')
+  if (exit === 'stop_loss') return t('stopped out')
+  return t('time ran out')
 }

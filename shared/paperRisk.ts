@@ -1,5 +1,6 @@
 import { FEE_RATE, positionSlippageRate } from './fees'
 import type { ExecutorConfig, PaperAccount, PaperRiskSettings, PositionExecutorParams } from './ipc'
+import { ENGLISH, type I18n } from './i18n/translate'
 
 // THE PAPER TRADES THE APP OPENS BY ITSELF: HOW BIG EACH IS, AND HOW MUCH THEY HAVE OUT TOGETHER.
 //
@@ -123,12 +124,22 @@ export type PaperSize = { ok: true; amountQuote: number } | { ok: false; reason:
 
 /** What a trade stakes, or why it is not opened: sized under what an order on Binance must be
  * worth. */
-export function sizePaperTrade(input: { risk: PaperRiskSettings; stakeQuote: number; stopPct: number | null; quoteAsset: string; slippageRate?: number | null; equityQuote?: number | null; multiplier?: number | null }): PaperSize {
+export function sizePaperTrade(
+  input: { risk: PaperRiskSettings; stakeQuote: number; stopPct: number | null; quoteAsset: string; slippageRate?: number | null; equityQuote?: number | null; multiplier?: number | null },
+  i18n: I18n = ENGLISH
+): PaperSize {
   const amountQuote = paperStake(input)
   if (amountQuote >= PAPER_MIN_STAKE) return { ok: true, amountQuote }
+  const figure = (value: number): string => (i18n.language === 'en' ? shown(value) : i18n.num(Number(value.toFixed(2)), 0, 2))
   return {
     ok: false,
-    reason: `Its stop is ${shown(input.stopPct ?? 0)}% away, so risking ${shown(riskPerTrade(input.risk, input.equityQuote))} ${input.quoteAsset} there stakes ${shown(amountQuote)} ${input.quoteAsset}: under the ${PAPER_MIN_STAKE} the smallest order on Binance is worth.`
+    reason: i18n.t('Its stop is {stop}% away, so risking {risk} {asset} there stakes {stake} {asset}: under the {minimum} the smallest order on Binance is worth.', {
+      stop: figure(input.stopPct ?? 0),
+      risk: figure(riskPerTrade(input.risk, input.equityQuote)),
+      asset: input.quoteAsset,
+      stake: figure(amountQuote),
+      minimum: PAPER_MIN_STAKE
+    })
   }
 }
 
@@ -148,9 +159,9 @@ export function rMultiple(pnlQuote: number, params: Pick<PositionExecutorParams,
   return risked === null ? null : pnlQuote / risked
 }
 
-/** "+1.00 R", "-0.50 R". */
-export function describeR(r: number): string {
-  return `${r > 0 ? '+' : ''}${r.toFixed(2)} R`
+/** "+1.00 R", "-0.50 R", in a language's own decimals. */
+export function describeR(r: number, { signed }: I18n = ENGLISH): string {
+  return `${signed(r, 2)} R`
 }
 
 /** The app's own open paper trades: the watch's, the news rules' and, since V6 Stage 12, the forecast
@@ -180,23 +191,33 @@ export function paperOut(executors: ExecutorConfig[], quoteAsset: string): numbe
 
 /** Why one more of the app's own paper trades, staking `amountQuote`, is not opened, or null: it
  * would take what they have out together past the cap. */
-export function paperOutBlock(input: { risk: PaperRiskSettings; executors: ExecutorConfig[]; quoteAsset: string; amountQuote: number }): string | null {
+export function paperOutBlock(input: { risk: PaperRiskSettings; executors: ExecutorConfig[]; quoteAsset: string; amountQuote: number }, i18n: I18n = ENGLISH): string | null {
   const cap = input.risk.maxOutQuote
   if (cap === null) return null
   const out = paperOut(input.executors, input.quoteAsset)
   // A hundredth of a cent of rounding is not over the cap.
   if (out + input.amountQuote <= cap + 1e-6) return null
-  return `The app's own open paper trades stake ${shown(out)} ${input.quoteAsset} together, and ${shown(input.amountQuote)} more would take them past the ${shown(cap)} set on Risk & Safety.`
+  const figure = (value: number): string => (i18n.language === 'en' ? shown(value) : i18n.num(Number(value.toFixed(2)), 0, 2))
+  return i18n.t("The app's own open paper trades stake {out} {asset} together, and {more} more would take them past the {cap} set on Risk & Safety.", {
+    out: figure(out),
+    asset: input.quoteAsset,
+    more: figure(input.amountQuote),
+    cap: figure(cap)
+  })
 }
 
 /** The setting in a sentence, as it is set. */
-export function describePaperRisk(risk: PaperRiskSettings): string {
+export function describePaperRisk(risk: PaperRiskSettings, { t, num, share }: I18n = ENGLISH): string {
+  const amount = (value: number): string => num(Number(value.toFixed(2)), 0, 2)
   const sizing =
     risk.sizing === 'risk'
-      ? `Each with a stop stakes what would lose about ${risk.riskQuote} there, after fees, and never more than its own stake.`
+      ? t('Each with a stop stakes what would lose about {amount} there, after fees, and never more than its own stake.', { amount: amount(risk.riskQuote) })
       : risk.sizing === 'equity'
-        ? `Each with a stop stakes what would lose about ${risk.riskPct}% of the paper account's equity there, after fees, and never more than its own stake; without a paper account, about ${risk.riskQuote}.`
-        : 'Each stakes its own stake.'
-  const out = risk.maxOutQuote === null ? 'There is no cap on what they stake together.' : `Together they stake at most ${shown(risk.maxOutQuote)}.`
+        ? t("Each with a stop stakes what would lose about {share} of the paper account's equity there, after fees, and never more than its own stake; without a paper account, about {amount}.", {
+            share: share(risk.riskPct),
+            amount: amount(risk.riskQuote)
+          })
+        : t('Each stakes its own stake.')
+  const out = risk.maxOutQuote === null ? t('There is no cap on what they stake together.') : t('Together they stake at most {amount}.', { amount: amount(risk.maxOutQuote) })
   return `${sizing} ${out}`
 }

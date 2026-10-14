@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { healPaperDigest, planPaperDigest } from '../../shared/paperDigest'
 import { settingsWrites } from '../utils/settingsWrites'
+import { noticeI18n } from '../i18n/current'
 
 /** How often it looks whether a new UTC day has begun. */
 const LOOK_MS = 5 * 60_000
@@ -19,7 +20,7 @@ export function PaperDigestScheduler(): null {
         if (cancelled) return null
         const settings = await window.api.settings.get()
         const setting = healPaperDigest(settings.paperDigest)
-        const plan = planPaperDigest({ setting, executors: settings.executors, nowSec: Math.floor(Date.now() / 1000) })
+        const plan = planPaperDigest({ setting, executors: settings.executors, nowSec: Math.floor(Date.now() / 1000) }, noticeI18n())
         if (plan === null) return null
         await window.api.settings.set({ paperDigest: { ...setting, lastDay: plan.day } })
         return plan.notice

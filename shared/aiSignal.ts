@@ -1,3 +1,4 @@
+import { ENGLISH, type I18n } from './i18n/translate'
 import { INTERVAL_SECONDS, type Candle, type Exchange, type Interval } from './ipc'
 import { computeAtr } from './atr'
 import type { AiAgentReports } from './aiPanel'
@@ -105,11 +106,11 @@ export const AI_KEY_PREFIX = 'sk-or-'
  * posting it to OpenRouter, and this app holds other secrets that a key field can be handed by
  * mistake: an exchange key, or the OpenAI key it used to ask for. One of those must not leave the
  * machine in order to find out that it is the wrong one. */
-export function describeUnusableAiKey(value: string): string | null {
+export function describeUnusableAiKey(value: string, { t }: I18n = ENGLISH): string | null {
   const key = value.trim()
-  if (key === '') return `${AI_PROVIDER_LABEL} API key is required`
-  if (/\s/.test(key)) return `That is not one ${AI_PROVIDER_LABEL} key: it has a space or a line break in the middle.`
-  if (!key.startsWith(AI_KEY_PREFIX)) return `That does not look like an ${AI_PROVIDER_LABEL} key: they start with "${AI_KEY_PREFIX}".`
+  if (key === '') return t('{provider} API key is required', { provider: AI_PROVIDER_LABEL })
+  if (/\s/.test(key)) return t('That is not one {provider} key: it has a space or a line break in the middle.', { provider: AI_PROVIDER_LABEL })
+  if (!key.startsWith(AI_KEY_PREFIX)) return t('That does not look like an {provider} key: they start with "{prefix}".', { provider: AI_PROVIDER_LABEL, prefix: AI_KEY_PREFIX })
   return null
 }
 

@@ -32,7 +32,7 @@ export function Card({
         >
           {title}
         </h2>
-        {actions !== undefined && <div style={{ marginLeft: 'auto' }}>{actions}</div>}
+        {actions !== undefined && <div style={{ marginInlineStart: 'auto' }}>{actions}</div>}
       </div>
       {children}
     </section>

@@ -1,7 +1,8 @@
+import { ENGLISH, type I18n } from './i18n/translate'
 import type { AiCallRecord } from './aiLedger'
 import { FEE_RATE, SLIPPAGE_RATE } from './fees'
 import type { ExecutorConfig, PositionExecutorParams } from './ipc'
-import { MARKET_EVENT_TYPES, describeEventType, type MarketEventType } from './marketEvent'
+import { MARKET_EVENT_TYPES, eventTypeWord, type MarketEventType } from './marketEvent'
 
 // THE EXPECTED VALUE OF A CALL (the V4 document, §37-38): what a trade on it is worth before it is
 // made, as a number anyone can check. At a win rate p, a target `target`% away and a stop `stop`%
@@ -150,26 +151,39 @@ export function tradeExpectedValue(input: {
 
 const signed = (value: number, digits: number): string => `${value >= 0 ? '+' : ''}${value.toFixed(digits)}`
 
-function eventWords(eventType: string | null): string {
-  if (eventType !== null && (MARKET_EVENT_TYPES as readonly string[]).includes(eventType)) return `${describeEventType(eventType as MarketEventType).toLowerCase()} events`
-  return 'events of this kind'
-}
-
-/** "EV +0.40% (+0.27 R) at a 55% calibrated win rate on 41 breakout events". */
-export function describeExpectedValue(ev: Pick<TradeEv, 'pct' | 'r' | 'basis' | 'winRate' | 'sample' | 'scope'> & Partial<Pick<TradeEv, 'costsPct' | 'aiCostPct'>>, eventType: string | null): string {
-  const figures = `EV ${signed(ev.pct, 2)}%${ev.r === null ? '' : ` (${signed(ev.r, 2)} R)`}`
+/** "EV +0.40% (+0.27 R) at a 55% calibrated win rate on 41 breakout events", in a language. */
+export function describeExpectedValue(
+  ev: Pick<TradeEv, 'pct' | 'r' | 'basis' | 'winRate' | 'sample' | 'scope'> & Partial<Pick<TradeEv, 'costsPct' | 'aiCostPct'>>,
+  eventType: string | null,
+  i18n: I18n = ENGLISH
+): string {
+  const { t, pctPlain } = i18n
+  const pct = (value: number): string => (i18n.language === 'en' ? `${signed(value, 2)}%` : i18n.pct(value, 2))
+  const figures = ev.r === null ? t('EV {ev}', { ev: pct(ev.pct) }) : t('EV {ev} ({r} R)', { ev: pct(ev.pct), r: i18n.language === 'en' ? signed(ev.r, 2) : i18n.signed(ev.r, 2) })
   // The model's answers' cost is named only where it is in the figure: a reader of the costs can
   // then see what the answers took of the edge.
-  const costs = ev.aiCostPct !== undefined && ev.aiCostPct > 0 && ev.costsPct !== undefined ? ` Net of costs of ${ev.costsPct.toFixed(2)}%, of which the model's answers ${ev.aiCostPct.toFixed(2)}% of the stake.` : ''
-  if (ev.basis === 'confidence') return `${figures} at the model's own ${Math.round(ev.winRate * 100)}% confidence; no calibrated win rate yet.${costs}`
-  const on = ev.scope === 'all events' ? `${ev.sample} of its trades, all events` : `${ev.sample} ${eventWords(eventType)}`
-  return `${figures} at a ${Math.round(ev.winRate * 100)}% calibrated win rate on ${on}.${costs}`
+  const costs =
+    ev.aiCostPct !== undefined && ev.aiCostPct > 0 && ev.costsPct !== undefined
+      ? ` ${t("Net of costs of {costs}, of which the model's answers {ai} of the stake.", { costs: pctPlain(ev.costsPct, 2), ai: pctPlain(ev.aiCostPct, 2) })}`
+      : ''
+  const rate = pctPlain(Math.round(ev.winRate * 100), 0)
+  if (ev.basis === 'confidence') return `${t("{figures} at the model's own {rate} confidence; no calibrated win rate yet.", { figures, rate })}${costs}`
+  const known = eventType !== null && (MARKET_EVENT_TYPES as readonly string[]).includes(eventType)
+  const said =
+    ev.scope === 'all events'
+      ? t('{figures} at a {rate} calibrated win rate on {count} of its trades, all events.', { figures, rate, count: ev.sample })
+      : known
+        ? t('{figures} at a {rate} calibrated win rate on {count} {kind} events.', { figures, rate, count: ev.sample, kind: eventTypeWord(eventType as MarketEventType, i18n) })
+        : t('{figures} at a {rate} calibrated win rate on {count} events of this kind.', { figures, rate, count: ev.sample })
+  return `${said}${costs}`
 }
 
 /** Why a paper trade of the watch's is not opened on its expected value, or null: only at a
  * calibrated rate, and only under the margin a round trip costs. */
-export function expectedValueBlock(ev: TradeEv | null): string | null {
+export function expectedValueBlock(ev: TradeEv | null, i18n: I18n = ENGLISH): string | null {
   if (ev === null || ev.basis !== 'calibrated' || ev.pct >= EV_LINES.marginPct) return null
-  const on = ev.scope === 'all events' ? `${ev.sample} of its trades` : `${ev.sample} trades of this kind`
-  return `Its expected value is ${signed(ev.pct, 2)}% at the calibrated win rate (${Math.round(ev.winRate * 100)}% on ${on}), under the ${EV_LINES.marginPct}% a round trip costs.`
+  const values = { ev: i18n.language === 'en' ? `${signed(ev.pct, 2)}%` : i18n.pct(ev.pct, 2), rate: i18n.pctPlain(Math.round(ev.winRate * 100), 0), count: ev.sample, margin: i18n.share(EV_LINES.marginPct) }
+  return ev.scope === 'all events'
+    ? i18n.t('Its expected value is {ev} at the calibrated win rate ({rate} on {count} of its trades), under the {margin} a round trip costs.', values)
+    : i18n.t('Its expected value is {ev} at the calibrated win rate ({rate} on {count} trades of this kind), under the {margin} a round trip costs.', values)
 }

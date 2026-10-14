@@ -1,3 +1,4 @@
+import { ENGLISH, msg, type I18n } from './i18n/translate'
 import type { AiConfig } from './aiCost'
 import type { AiCallRecord } from './aiLedger'
 import type { AiSignalDecision } from './aiSignal'
@@ -249,10 +250,15 @@ export function newsReadingsAt(rows: readonly Pick<AiCallRecord, 'promptVersion'
 }
 
 /** A reading in a line, for the news list. */
-export function describeNewsReading(reading: NewsReading): string {
-  const coin = reading.ticker === null ? 'no coin' : `${reading.ticker} (${reading.relationship === 'DIRECT' ? 'the subject' : 'mentioned'})`
-  const way = reading.direction === 'none' ? 'no direction' : reading.direction
-  return `${coin}, ${way}, impact ${reading.impact} over ${reading.horizon}, ${Math.round(reading.confidence * 100)}%${reading.pricedIn ? ', already priced in' : ''}`
+const READING_WAYS: Record<NewsReading['direction'], string> = { up: msg('up'), down: msg('down'), none: msg('no direction') }
+const READING_HORIZONS: Record<NewsReading['horizon'], string> = { '15m': msg('15m'), '1h': msg('1h'), '4h': msg('4h'), '1d': msg('1d') }
+
+/** The analyst's reading in a line, in a language: English unless handed the person's (V6 Stage 14). Its
+ * own words, `reasons`, are not part of it. */
+export function describeNewsReading(reading: NewsReading, { t, pctPlain }: I18n = ENGLISH): string {
+  const coin = reading.ticker === null ? t('no coin') : reading.relationship === 'DIRECT' ? t('{coin} (the subject)', { coin: reading.ticker }) : t('{coin} (mentioned)', { coin: reading.ticker })
+  const values = { coin, way: t(READING_WAYS[reading.direction] ?? reading.direction), impact: reading.impact, horizon: t(READING_HORIZONS[reading.horizon] ?? reading.horizon), confidence: pctPlain(Math.round(reading.confidence * 100), 0) }
+  return reading.pricedIn ? t('{coin}, {way}, impact {impact} over {horizon}, {confidence}, already priced in', values) : t('{coin}, {way}, impact {impact} over {horizon}, {confidence}', values)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -376,14 +382,15 @@ export type ReviewTrigger = (typeof REVIEW_TRIGGERS)[number]
 export const REVIEW_VERDICTS = ['APPROVE', 'REJECT'] as const
 export const REVIEW_MAX_REASON = 300
 
-export function describeReviewTrigger(trigger: ReviewTrigger): string {
-  const words: Record<ReviewTrigger, string> = {
-    models_disagree: 'the models disagree',
-    large_move: 'the move is unusually large',
-    major_news: 'major news hit the coin',
-    thin_pair: 'the pair is thin'
-  }
-  return words[trigger]
+const REVIEW_TRIGGER_WORDS: Record<ReviewTrigger, string> = {
+  models_disagree: msg('the models disagree@@a review trigger'),
+  large_move: msg('the move is unusually large'),
+  major_news: msg('major news hit the coin'),
+  thin_pair: msg('the pair is thin')
+}
+
+export function describeReviewTrigger(trigger: ReviewTrigger, { t }: I18n = ENGLISH): string {
+  return t(REVIEW_TRIGGER_WORDS[trigger])
 }
 
 type ReviewEvent = Pick<MarketEvent, 'id' | 'symbol' | 'baseAsset' | 'time' | 'type' | 'direction' | 'score' | 'returnsPct' | 'moveSigmas' | 'volumeRatio' | 'price' | 'live' | 'news'>
@@ -577,9 +584,10 @@ export function validateReviewVerdict(value: unknown): { ok: true; verdict: Revi
 
 /** Why a reviewed trade is not opened, or null: only a REJECT the reviewer gave stops one. A review
  * that was not asked, was refused, or failed leaves the trade as it was. */
-export function reviewRefusal(review: TradeReview | null): string | null {
+export function reviewRefusal(review: TradeReview | null, i18n: I18n = ENGLISH): string | null {
   if (review === null || review.outcome === null || review.outcome.status !== 'answered' || review.outcome.answer.verdict !== 'REJECT') return null
-  return `The reviewer rejected it (${review.triggers.map(describeReviewTrigger).join(', ')}): ${review.outcome.answer.reason}`
+  // The reviewer's own reason is a model's words: left as it wrote them.
+  return i18n.t('The reviewer rejected it ({triggers}): {reason}', { triggers: review.triggers.map((trigger) => describeReviewTrigger(trigger, i18n)).join(i18n.t(', ')), reason: review.outcome.answer.reason })
 }
 
 /** The reviewer's verdicts on file, by event id: answered rows of its prompt, checked again. */
@@ -618,15 +626,16 @@ export const EXIT_MAX_REASON = 300
 /** Of the call or the announcement a trade was opened on, at most this much is shown. */
 export const EXIT_THESIS_CHARS = 300
 
-export function describeExitTrigger(trigger: ExitTrigger): string {
-  const words: Record<ExitTrigger, string> = {
-    near_target: 'it is near its target',
-    near_stop: 'it is near its stop',
-    news: 'news on the coin',
-    regime_change: "the market's regime changed",
-    opposite_move: 'a sharp move against it'
-  }
-  return words[trigger]
+const EXIT_TRIGGER_WORDS: Record<ExitTrigger, string> = {
+  near_target: msg('it is near its target'),
+  near_stop: msg('it is near its stop'),
+  news: msg('news on the coin'),
+  regime_change: msg("the market's regime changed"),
+  opposite_move: msg('a sharp move against it')
+}
+
+export function describeExitTrigger(trigger: ExitTrigger, { t }: I18n = ENGLISH): string {
+  return t(EXIT_TRIGGER_WORDS[trigger])
 }
 
 /** One of the app's own open paper trades, as the exit check reads it from the executors on file. */

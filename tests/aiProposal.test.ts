@@ -457,7 +457,7 @@ describe('a short can be paper traded and cannot be placed', () => {
     const tab = readFileSync(join(ROOT, 'src', 'agents', 'OpportunitiesTab.tsx'), 'utf-8')
     expect(tab).toContain("onPrepareOrder(result.proposal, config?.watch.confirmLive === true && opportunitySide(answer.decision) === 'long')")
     expect(readFileSync(join(ROOT, 'src', 'agents', 'OpportunityTableCard.tsx'), 'utf-8')).toContain("const confirming = confirm === true && answer !== null && answer.decision.recommendation === 'buy'")
-    expect(readFileSync(join(ROOT, 'src', 'agents', 'OpportunityCard.tsx'), 'utf-8')).toContain("{confirm === true && side === 'long' ? 'Confirm' : 'Paper trade'}")
+    expect(readFileSync(join(ROOT, 'src', 'agents', 'OpportunityCard.tsx'), 'utf-8')).toContain("{confirm === true && side === 'long' ? t('Confirm') : t('Paper trade')}")
     // The page keeps the flag with the proposal and lets go of both together.
     const page = readFileSync(join(ROOT, 'src', 'executors', 'ExecutorsPage.tsx'), 'utf-8')
     expect(page).toContain('setFormLive(proposalLive)')

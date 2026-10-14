@@ -13,14 +13,32 @@ import type { AiOrderProposal } from '../../shared/aiProposal'
 import { ForecastTraderCard } from './ForecastTraderCard'
 import { NO_FILTERS, predictionRows, type PredictionFilters } from './predictionRows'
 import { takeWantedPrediction, useForecast } from './useForecast'
-import { callColor, callLabel, decisionWords, forecastStatusText, pairText, rangeText, signedPct, timeLeftText, HORIZON_SHORT } from './forecastWords'
+import { callColor, callLabel, decisionWords, firstReason, forecastStatusText, pairText, rangeText, reliabilityWord, signedPct, timeLeftText, HORIZON_SHORT } from './forecastWords'
+import { msg, useI18n } from '../i18n'
 
-const CLASS_NAMES: Record<PairClass, string> = { btc: 'Bitcoin', eth: 'Ether', large: 'Large', mid: 'Mid', 'high-vol': 'High volatility', other: 'Other' }
+const CLASS_NAMES: Record<PairClass, string> = { btc: msg('Bitcoin'), eth: msg('Ether'), large: msg('Large'), mid: msg('Mid'), 'high-vol': msg('High volatility'), other: msg('Other') }
+
+const COLUMNS = [
+  msg('#'),
+  msg('Pair'),
+  msg('At'),
+  msg('Call'),
+  msg('Likely'),
+  msg('Bear · bull'),
+  msg('P(up)'),
+  msg('Quality'),
+  msg('Reliability'),
+  msg('Edge after costs'),
+  msg('Decision'),
+  msg('Valid')
+]
 
 /** Every pair's forecast, ranked (the V6 document, §32-37 and §69-70): the table best first, with the
  * page's filters, and a row's whole forecast in the drawer. Live percentages where the stream holds
  * the pair; the close's elsewhere. Reading it asks no model and places nothing. */
 export function PredictionsPage({ onPrepareOrder }: { onPrepareOrder?: (proposal: AiOrderProposal) => void }): React.JSX.Element {
+  const i18n = useI18n()
+  const { t, pctPlain } = i18n
   const { state, predictions, ranking } = useForecast()
   const [filters, setFilters] = useState<PredictionFilters>(NO_FILTERS)
   const [open, setOpen] = useState<string | null>(() => takeWantedPrediction())
@@ -35,55 +53,53 @@ export function PredictionsPage({ onPrepareOrder }: { onPrepareOrder?: (proposal
 
   return (
     <>
-      <PageHeader title="Predictions" subtitle="Every pair's forecast, ranked by its edge after costs, its reliability, the news, liquidity and execution" />
-      <p style={{ ...noteStyle, margin: '0 0 0.9rem' }}>{forecastStatusText(state)}</p>
-      <Card title="Ranked forecasts">
+      <PageHeader title={t('Predictions')} subtitle={t("Every pair's forecast, ranked by its edge after costs, its reliability, the news, liquidity and execution")} />
+      <p style={{ ...noteStyle, margin: '0 0 0.9rem' }}>{forecastStatusText(state, i18n)}</p>
+      <Card title={t('Ranked forecasts')}>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '0.7rem' }}>
-          <input value={filters.query} onChange={(change) => set('query', change.target.value)} placeholder="Pair" aria-label="Pair" style={{ ...inputStyle(), width: '7rem' }} />
-          <select value={filters.horizon} onChange={(change) => set('horizon', change.target.value as Horizon | 'ranked')} style={inputStyle()} aria-label="Horizon">
-            <option value="ranked">Its ranked horizon</option>
+          <input value={filters.query} onChange={(change) => set('query', change.target.value)} placeholder={t('Pair')} aria-label={t('Pair')} style={{ ...inputStyle(), width: '7rem' }} />
+          <select value={filters.horizon} onChange={(change) => set('horizon', change.target.value as Horizon | 'ranked')} style={inputStyle()} aria-label={t('Horizon')}>
+            <option value="ranked">{t('Its ranked horizon')}</option>
             {HORIZONS.map((horizon) => (
               <option key={horizon} value={horizon}>
-                {HORIZON_SHORT[horizon]}
+                {t(HORIZON_SHORT[horizon])}
               </option>
             ))}
           </select>
-          <select value={filters.call} onChange={(change) => set('call', change.target.value as Direction | 'all')} style={inputStyle()} aria-label="Call">
-            <option value="all">Every call</option>
-            <option value="BULLISH">Bullish</option>
-            <option value="BEARISH">Bearish</option>
-            <option value="NEUTRAL">Neutral</option>
+          <select value={filters.call} onChange={(change) => set('call', change.target.value as Direction | 'all')} style={inputStyle()} aria-label={t('Call')}>
+            <option value="all">{t('Every call')}</option>
+            <option value="BULLISH">{t('Bullish')}</option>
+            <option value="BEARISH">{t('Bearish')}</option>
+            <option value="NEUTRAL">{t('Neutral')}</option>
           </select>
-          <select value={filters.pairClass} onChange={(change) => set('pairClass', change.target.value as PairClass | 'all')} style={inputStyle()} aria-label="Kind of coin">
-            <option value="all">Every kind of coin</option>
+          <select value={filters.pairClass} onChange={(change) => set('pairClass', change.target.value as PairClass | 'all')} style={inputStyle()} aria-label={t('Kind of coin')}>
+            <option value="all">{t('Every kind of coin')}</option>
             {PAIR_CLASSES.map((pairClass) => (
               <option key={pairClass} value={pairClass}>
-                {CLASS_NAMES[pairClass]}
+                {t(CLASS_NAMES[pairClass])}
               </option>
             ))}
           </select>
           <label style={{ ...noteStyle, display: 'inline-flex', gap: '0.3rem', alignItems: 'center' }}>
             <input type="checkbox" checked={filters.tradeOnly} onChange={(change) => set('tradeOnly', change.target.checked)} />
-            Tradable only
+            {t('Tradable only')}
           </label>
           <label style={{ ...noteStyle, display: 'inline-flex', gap: '0.3rem', alignItems: 'center' }}>
             <input type="checkbox" checked={filters.newsOnly} onChange={(change) => set('newsOnly', change.target.checked)} />
-            With news
+            {t('With news')}
           </label>
-          <span style={{ ...noteStyle, marginLeft: 'auto' }}>
-            {rows.length} of {ranking?.ranked.length ?? 0} pairs
-          </span>
+          <span style={{ ...noteStyle, marginInlineStart: 'auto' }}>{t('{shown} of {count} pairs', { shown: rows.length, count: ranking?.ranked.length ?? 0 })}</span>
         </div>
         {rows.length === 0 ? (
-          <p style={noteStyle}>{ranking === null || ranking.ranked.length === 0 ? 'No forecast yet.' : 'No pair passes these filters.'}</p>
+          <p style={noteStyle}>{ranking === null || ranking.ranked.length === 0 ? t('No forecast yet.') : t('No pair passes these filters.')}</p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  {['#', 'Pair', 'At', 'Call', 'Likely', 'Bear · bull', 'P(up)', 'Quality', 'Reliability', 'Edge after costs', 'Decision', 'Valid'].map((name) => (
+                  {COLUMNS.map((name) => (
                     <th key={name} style={headCellStyle}>
-                      {name}
+                      {t(name)}
                     </th>
                   ))}
                 </tr>
@@ -95,26 +111,30 @@ export function PredictionsPage({ onPrepareOrder }: { onPrepareOrder?: (proposal
                   const view = forecastView(row.prediction, livePrice, nowSec * 1000).horizons[row.horizon]
                   const range = row.prediction.horizons[row.horizon]
                   if (view === undefined || range === undefined) return null
-                  const decision = decisionWords(row.ranked.decision)
+                  const decision = decisionWords(row.ranked.decision, i18n)
                   const edge = row.horizon === row.ranked.horizon ? row.ranked.decision.edge : null
                   return (
                     <tr key={row.ranked.pair} onClick={() => setOpen(row.ranked.pair)} style={{ cursor: 'pointer', background: open === row.ranked.pair ? 'var(--bg-app)' : undefined }}>
                       <td style={cellStyle}>{row.rank}</td>
-                      <td style={{ ...cellStyle, fontWeight: 600 }}>{pairText(row.ranked.pair)}</td>
-                      <td style={cellStyle}>{HORIZON_SHORT[row.horizon]}</td>
-                      <td style={{ ...cellStyle, color: callColor(range.direction), fontWeight: 600 }}>{callLabel(range)}</td>
-                      <td style={{ ...cellStyle, fontVariantNumeric: 'tabular-nums' }}>{rangeText(view.lowPct, view.highPct)}</td>
-                      <td style={{ ...cellStyle, fontVariantNumeric: 'tabular-nums' }}>
-                        {signedPct(view.bearPct)} · {signedPct(view.bullPct)}
+                      <td dir="ltr" style={{ ...cellStyle, fontWeight: 600 }}>
+                        {pairText(row.ranked.pair)}
                       </td>
-                      <td style={cellStyle}>{Math.round(range.pUp * 100)}%</td>
+                      <td style={cellStyle}>{t(HORIZON_SHORT[row.horizon])}</td>
+                      <td style={{ ...cellStyle, color: callColor(range.direction), fontWeight: 600 }}>{callLabel(range, i18n)}</td>
+                      <td style={{ ...cellStyle, fontVariantNumeric: 'tabular-nums' }}>{rangeText(view.lowPct, view.highPct, i18n)}</td>
+                      <td style={{ ...cellStyle, fontVariantNumeric: 'tabular-nums' }}>{t('{bear} · {bull}', { bear: signedPct(view.bearPct, 2, i18n), bull: signedPct(view.bullPct, 2, i18n) })}</td>
+                      <td style={cellStyle}>{pctPlain(Math.round(range.pUp * 100), 0)}</td>
                       <td style={cellStyle}>{range.quality.score}</td>
-                      <td style={cellStyle}>{range.reliability}</td>
-                      <td style={cellStyle}>{edge === null ? '—' : `${signedPct(edge.edgePct)} (${edge.side}, ${Math.round(edge.pProfit * 100)}% to clear)`}</td>
-                      <td style={{ ...cellStyle, whiteSpace: 'normal', minWidth: '12rem', color: decision.trade ? 'var(--up)' : 'var(--text-secondary)' }} title={decision.detail}>
-                        {decision.trade ? decision.label : `NO TRADE · ${row.ranked.decision.reasons[0]?.text ?? ''}`}
+                      <td style={cellStyle}>{reliabilityWord(range.reliability, i18n)}</td>
+                      <td style={cellStyle}>
+                        {edge === null
+                          ? '—'
+                          : t('{edge} ({side}, {chance} to clear)', { edge: signedPct(edge.edgePct, 2, i18n), side: edge.side === 'SELL' ? t('SELL') : t('BUY'), chance: pctPlain(Math.round(edge.pProfit * 100), 0) })}
                       </td>
-                      <td style={cellStyle}>{view.invalidated ? 'INVALIDATED' : timeLeftText(view.timeLeftMs)}</td>
+                      <td style={{ ...cellStyle, whiteSpace: 'normal', minWidth: '12rem', color: decision.trade ? 'var(--up)' : 'var(--text-secondary)' }} title={decision.detail}>
+                        {decision.trade ? decision.label : t('NO TRADE · {reason}', { reason: firstReason(row.ranked.decision, i18n) })}
+                      </td>
+                      <td style={cellStyle}>{view.invalidated ? t('INVALIDATED') : timeLeftText(view.timeLeftMs, i18n)}</td>
                     </tr>
                   )
                 })}
@@ -123,7 +143,9 @@ export function PredictionsPage({ onPrepareOrder }: { onPrepareOrder?: (proposal
           </div>
         )}
         <p style={{ ...noteStyle, marginTop: '0.7rem' }}>
-          Ranked once a pass, at each pair's ranked horizon: the edge after a round trip's 0.24% and half the spread, weighed by reliability, the news, liquidity and execution, less the range's uncertainty, the market's risk and the cost. A row opens its whole forecast. A forecast is not a trade; nothing was placed.
+          {t(
+            "Ranked once a pass, at each pair's ranked horizon: the edge after a round trip's 0.24% and half the spread, weighed by reliability, the news, liquidity and execution, less the range's uncertainty, the market's risk and the cost. A row opens its whole forecast. A forecast is not a trade; nothing was placed."
+          )}
         </p>
       </Card>
       <ForecastTraderCard />

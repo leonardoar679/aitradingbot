@@ -85,7 +85,7 @@ describe('the stores, healed', () => {
     expect(healed.paperRisk).toEqual({ sizing: 'risk', riskQuote: 2, riskPct: 0.25, maxOutQuote: 500, correlatedShare: 0.15 })
     expect(healed.alerts).toEqual({ enabled: false, sound: true, desktop: true })
     expect(healed.sounds).toEqual({ volume: 0.7, mutedKinds: [], cooldownSec: 30, quietHours: null })
-    expect(healed.app).toEqual({ keepRunningWhenClosed: true, uiMode: 'expert' })
+    expect(healed.app).toEqual({ keepRunningWhenClosed: true, uiMode: 'expert', language: null })
     expect(healed.ai).toEqual({ defaultModel: 'openai/gpt-5-mini', enabledModels: ['a/model', 'openai/gpt-5-mini', 'z/model'], dailyCapUsd: 5, callsPerMinute: 60 })
     expect(healed.watch.enabled).toBe(true)
     expect(healed.scanner).toEqual({ enabled: true, universeSize: 40 })

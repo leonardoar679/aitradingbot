@@ -22,7 +22,7 @@ export function SummaryLine({
       }}
     >
       <span style={{ color: 'var(--text-secondary)', flexShrink: 0 }}>{label}</span>
-      <span style={{ fontWeight: 600, color, textAlign: 'right' }}>{value}</span>
+      <span style={{ fontWeight: 600, color, textAlign: 'end' }}>{value}</span>
     </div>
   )
 }

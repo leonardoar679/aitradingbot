@@ -20,10 +20,16 @@ import { T0, quiet, thenFlat, withMove } from './eventCandles'
 vi.mock('electron', () => ({ app: { getPath: () => process.env.SCANNER_TEST_USER_DATA } }))
 /** What the main process told (the V4 document, §48): the scanner failing three passes running. */
 const told = vi.hoisted(() => [] as { title: string; body: string; extra: { kind: string; thread?: string } }[])
-vi.mock('../electron/services/noticeService', () => ({
-  tell: (notice: { title: string; body: string; extra: { kind: string; thread?: string } }) => void told.push(notice),
-  tellNotice: async () => true
-}))
+// A notice the main process builds in the person's language (V6 Stage 14) is handed as a builder:
+// built here in English, as the language of a profile that chose none.
+vi.mock('../electron/services/noticeService', async () => {
+  const { ENGLISH } = await import('../shared/i18n/translate')
+  type Told = { title: string; body: string; extra: { kind: string; thread?: string } }
+  return {
+    tell: (notice: Told | ((i18n: typeof ENGLISH) => Told)) => void told.push(typeof notice === 'function' ? notice(ENGLISH) : notice),
+    tellNotice: async () => true
+  }
+})
 // The feed's stories, for the cause of an event (shared/marketEvent.ts eventCauseOf): none here.
 const feed = vi.hoisted(() => ({ stories: [] as { publishedAt: number; impact: number; assets: { ticker: string; relationship: 'DIRECT' | 'INDIRECT' }[] }[] }))
 vi.mock('../electron/services/newsFeedService', () => ({ getNewsFeedState: () => ({ stories: feed.stories }) }))

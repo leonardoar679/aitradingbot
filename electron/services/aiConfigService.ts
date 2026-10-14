@@ -67,7 +67,17 @@ let catalogue: StoredCatalogue | null | undefined
  * "<name>: <message>", and the renderer strips only the standard "Error: " prefix, so a custom
  * name was printed to the user: "AiBudgetError: AI calls are switched off". The class is told
  * apart with instanceof, which never needed the name. */
-export class AiBudgetError extends Error {}
+export class AiBudgetError extends Error {
+  /** The cap and the day's spend it was refused on, so a notice can say it in the person's language
+   * (V6 Stage 14). */
+  constructor(
+    message: string,
+    readonly capUsd: number = 0,
+    readonly spentUsd: number = 0
+  ) {
+    super(message)
+  }
+}
 
 function configPath(): string {
   return join(app.getPath('userData'), 'aiConfig.json')
@@ -410,8 +420,9 @@ export async function resolveAiPipeline(requested: { model?: string; route?: unk
  * caller can forget to look at the answer. */
 export async function assertAiBudget(): Promise<void> {
   const state = await load()
-  const problem = budgetProblem(state.dailyCapUsd, usageForDay(state.dailyUsage, today()))
-  if (problem !== null) throw new AiBudgetError(problem)
+  const spent = usageForDay(state.dailyUsage, today())
+  const problem = budgetProblem(state.dailyCapUsd, spent)
+  if (problem !== null) throw new AiBudgetError(problem, state.dailyCapUsd, spent)
 }
 
 export async function budgetRemainingUsd(): Promise<number> {

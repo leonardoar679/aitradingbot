@@ -60,7 +60,7 @@ other.
 |  | **AI Decisions** | **Analyze** asks a model about one market; **Signals** lists every call any model has made and how it turned out. A model is handed a market snapshot and returns one JSON decision, and is given no tools at all. |
 | System | **Risk** (the page titled Risk & Safety) | The sidebar's **Controllers** opens it at the controller groups. The live trading limits every real order is checked against (largest order, the day's notional, the day's loss, the managed allocation), and the share of the allocation a real order filled in from a call is sized to risk at the call's stop (a suggestion for the form, never a gate); the size of the paper trades the app opens by itself, the watch's and the news rules' (sized by what their stop would lose, by a share of the paper account's equity, or at their stake, and capped in what they stake together), the losing run in R that pauses them until resumed, the cap on what they stake on one side on coins that move with Bitcoin, and a daily notice of what they did; and the controller groups: executors under a shared stop-loss, take-profit and maximum drawdown with a P&L snapshot every 5 minutes, all stopped on a breach. Arming and the kill switch stay on the bar at the top of every page. |
 |  | **Connections** | Every key the app holds: Binance and Upbit ([Credentials](#credentials--api-keys)), and the OpenRouter key for the AI models. Each is tested before it is stored, stored encrypted, and never read back into the window. |
-|  | **Settings** | Since 6 October 2026, **Essentials** first: the six settings that decide what the app does by itself — trading mode (PAPER, LIVE READY with a verified key and the session disarmed, or LIVE ACTIVE when armed; read, never changed here), risk mode (since 13 October 2026, V6 Stage 12: Conservative, a fresh install's, Balanced or Aggressive -- the paper trades the app opens by itself, how they are sized and capped, and the forecast trader's caps -- or Custom; [from forecast to trade](#the-price-forecasts-data); a mode never changes the limits on real orders), the market the scanner watches, the AI's mode (changed only on Opportunities, behind its priced confirmation), desktop notices with or without sound, and the exchange (since 13 October 2026 every notice also has a [sound by its meaning](#sounds-by-meaning), set under Advanced › Notifications); and since 13 October 2026 the sidebar's layout, normal or expert. Everything else is under **Advanced**, closed until opened: the Configuration Center, in sections, built only from settings that exist. **General**: appearance (Dark / Light / Colorblind-safe). **Market**: the scanner on or off, and how many pairs it watches; the reader of Binance's announcements, and what a delisting does. **AI**: which models may be asked, the default and the route, the daily budget, the pace, the [AI additions](#the-ai-additions) (each on or off, with its daily limit and what a day of it can cost), and what asking has cost. Keys stay on Connections and limits on Risk & Safety, each in the one place, linked from here. What the V3 document asked for that has no behaviour behind it (language, timezone, default order type, allowed pairs, other news sources…) is listed in `docs/INVENTORY.md` rather than added as a control. |
+|  | **Settings** | Since 6 October 2026, **Essentials** first: the six settings that decide what the app does by itself — trading mode (PAPER, LIVE READY with a verified key and the session disarmed, or LIVE ACTIVE when armed; read, never changed here), risk mode (since 13 October 2026, V6 Stage 12: Conservative, a fresh install's, Balanced or Aggressive -- the paper trades the app opens by itself, how they are sized and capped, and the forecast trader's caps -- or Custom; [from forecast to trade](#the-price-forecasts-data); a mode never changes the limits on real orders), the market the scanner watches, the AI's mode (changed only on Opportunities, behind its priced confirmation), desktop notices with or without sound, and the exchange (since 13 October 2026 every notice also has a [sound by its meaning](#sounds-by-meaning), set under Advanced › Notifications); and since 13 October 2026 the sidebar's layout, normal or expert. Then **Language** (since 13 October 2026): the [ten languages](#ten-languages), each by its own name. Everything else is under **Advanced**, closed until opened: the Configuration Center, in sections, built only from settings that exist. **General**: appearance (Dark / Light / Colorblind-safe). **Market**: the scanner on or off, and how many pairs it watches; the reader of Binance's announcements, and what a delisting does. **AI**: which models may be asked, the default and the route, the daily budget, the pace, the [AI additions](#the-ai-additions) (each on or off, with its daily limit and what a day of it can cost), and what asking has cost. Keys stay on Connections and limits on Risk & Safety, each in the one place, linked from here. What the V3 document asked for that has no behaviour behind it (timezone, default order type, allowed pairs, other news sources…) is listed in `docs/INVENTORY.md` rather than added as a control. |
 
 **The status bar** at the top of every page carries three chips beside the arm and kill controls,
 each read from the thing it describes (`src/status/statusModes.ts`); hovering one says what it
@@ -560,6 +560,27 @@ switching notices off on Essentials silences it. **Simulate the events** plays e
 names -- news, a pump, a dump, a strong bull and bear, a prediction changing, a trade ready and opened, a
 stop, a target, a circuit breaker, an exchange failing -- as it would sound under those controls, with its
 note, telling and recording nothing.
+
+### Ten languages
+
+Since 13 October 2026 (the V6 document's §81-89 and §111; V6 Stage 14; `shared/i18n/`, `src/i18n/`) the
+normal-user pages are in ten languages -- English, Simplified and Traditional Chinese, Japanese, Korean,
+Vietnamese, Thai, Indonesian, Hindi and Arabic -- chosen under **Settings › Language**, and at the first
+launch from the computer's own language, offered first. Translated: the sidebar, Home, Predictions,
+Opportunities, Positions and Performance's summary; Settings' Essentials, Notifications and Language;
+every notice and alert, the main process's too, in the language chosen when it is told; and the trade
+plan with its Position form, and their errors. The expert pages -- Research and All Features, and the
+cards of a translated page that are for an expert -- stay in English, set left to right inside an Arabic
+window, and the language card says so. Arabic is right to left: the layout mirrors by the sides of
+reading, while charts, pairs, prices and model names read left to right inside it. A figure is a value,
+never translated text: each language's decimal mark, grouping, currency placing and dates (the Buddhist
+era in Thai), always in Latin digits, at the precision a price needs. A model's own words are shown as it
+wrote them, labelled. The translations were made against one dictionary of trading terms
+(`shared/i18n/terms.ts`), not by native speakers, and until a language has had a native speaker's review
+the language card and the first launch's chooser say so beside it. Records, files and the models'
+prompts stay in English. `node scripts/i18n-keys.mjs` lists what a catalog lacks; `tests/i18n.test.ts`
+holds every catalog to every key in the code and to the dictionary, says where English may stay, renders
+the translated pages and builds every notice in each language.
 
 ### Live prices
 
@@ -4198,6 +4219,8 @@ shared/                       Code both processes run, so they cannot disagree a
   newsRules.ts, newsRecord.ts The studies' bracket and four-hour hold as arithmetic, shared with research/announcementStudy.ts; the record of the two rules and the two near misses since the studies
   upbitTitles.ts              Which kind of notice an Upbit title is, and which coins it names (the Upbit study's patterns), for the near miss on record
   indicators.ts, atr.ts, …    Indicator and fee arithmetic shared with the strategies
+  i18n/                       The ten languages: the keys, the translator, numbers and dates in each, the
+                              dictionary of trading terms, and one catalog per language (locales/)
 
 src/                          React renderer app
   App.tsx                     Page router + mounts the headless schedulers
@@ -4285,6 +4308,8 @@ src/                          React renderer app
   hooks/                      Small shared hooks (e.g. useLastPrice, useMarketResearch)
   ai/                         Renderer side of one AI decision: fetch its window, price it, ask
   utils/                      Formatting helpers
+  i18n/                       The window's language: its provider, what stays English (EnglishOnly), and
+                              the language chooser of the first launch
 
 scripts/                      Packaging/signing helper scripts
 docs/INVENTORY.md             Every page, setting, scheduler and IPC channel, and where each went in the sidebar's layout

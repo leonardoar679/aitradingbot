@@ -14,6 +14,7 @@ import { useThesisReadings } from './useThesisReadings'
 import { emptyAccount, settle } from '../account/paperAccount'
 import type { Bot } from '../bots/types'
 import type { ExecutorConfig, HeldPosition, LivePosition, LiveWatcherSummary } from '../../shared/ipc'
+import { useI18n } from '../i18n'
 
 const LIVE_POLL_MS = 15_000
 
@@ -24,10 +25,11 @@ const headerCellStyle: React.CSSProperties = {
   letterSpacing: '0.06em',
   textTransform: 'uppercase',
   color: 'var(--text-muted)',
-  textAlign: 'left'
+  textAlign: 'start'
 }
 
 export function PositionsPage(): React.JSX.Element {
+  const { t } = useI18n()
   const [bots, setBots] = useState<Bot[]>([])
   const [executors, setExecutors] = useState<ExecutorConfig[]>([])
   const [heldPositions, setHeldPositions] = useState<HeldPosition[]>([])
@@ -151,27 +153,20 @@ export function PositionsPage(): React.JSX.Element {
 
   return (
     <>
-      <PageHeader
-        title="Positions"
-        subtitle="Paper positions from bots and executors, plus any real-money positions — each section says which it is"
-      />
-      <Card title="Open Positions">
-        {loaded && activeBots.length === 0 && (
-          <p style={{ color: 'var(--text-secondary)', margin: 0 }}>
-            No active bots. Enable a bot under Strategies › Active Runs to see its paper position here.
-          </p>
-        )}
+      <PageHeader title={t('Positions')} subtitle={t('Paper positions from bots and executors, plus any real-money positions — each section says which it is')} />
+      <Card title={t('Open Positions')}>
+        {loaded && activeBots.length === 0 && <p style={{ color: 'var(--text-secondary)', margin: 0 }}>{t('No active bots. Enable a bot under Strategies › Active Runs to see its paper position here.')}</p>}
         {activeBots.length > 0 && (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  <th style={headerCellStyle}>Bot</th>
-                  <th style={headerCellStyle}>Side</th>
-                  <th style={headerCellStyle}>Entry</th>
-                  <th style={headerCellStyle}>Mark</th>
-                  <th style={headerCellStyle}>Stop</th>
-                  <th style={headerCellStyle}>Unrealized P&amp;L</th>
+                  <th style={headerCellStyle}>{t('Bot')}</th>
+                  <th style={headerCellStyle}>{t('Side')}</th>
+                  <th style={headerCellStyle}>{t('Entry')}</th>
+                  <th style={headerCellStyle}>{t('Mark')}</th>
+                  <th style={headerCellStyle}>{t('Stop')}</th>
+                  <th style={headerCellStyle}>{t('Unrealized P&L')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -186,16 +181,15 @@ export function PositionsPage(): React.JSX.Element {
 
       <OwnPaperTradesCard executors={executors} readings={theses.readings} measuredAt={theses.measuredAt} />
 
-      <Card title="Live Positions — Real Money">
+      <Card title={t('Live Positions — Real Money')}>
         {liveError && (
           <p style={{ color: 'var(--down)', fontSize: '0.78rem', margin: '0 0 0.7rem' }}>
-            Failed to refresh live positions ({liveError}) — the list below may be stale. Retrying every {LIVE_POLL_MS / 1000}s.
+            {t('Failed to refresh live positions ({error}) — the list below may be stale. Retrying every {seconds}s.', { error: liveError, seconds: LIVE_POLL_MS / 1000 })}
           </p>
         )}
         {livePositions.length === 0 && (
           <p style={{ color: 'var(--text-secondary)', margin: 0 }}>
-            No open live positions. A live-mode Order, Position, DCA, TWAP or Grid executor's BUY fill lands here — closing one places a real market
-            sell.
+            {t("No open live positions. A live-mode Order, Position, DCA, TWAP or Grid executor's BUY fill lands here — closing one places a real market sell.")}
           </p>
         )}
         {livePositions.length > 0 && (
@@ -203,11 +197,11 @@ export function PositionsPage(): React.JSX.Element {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  <th style={headerCellStyle}>Symbol</th>
-                  <th style={headerCellStyle}>Qty</th>
-                  <th style={headerCellStyle}>Avg Cost</th>
-                  <th style={headerCellStyle}>Mark</th>
-                  <th style={headerCellStyle}>Unrealized P&amp;L</th>
+                  <th style={headerCellStyle}>{t('Symbol')}</th>
+                  <th style={headerCellStyle}>{t('Qty')}</th>
+                  <th style={headerCellStyle}>{t('Avg Cost')}</th>
+                  <th style={headerCellStyle}>{t('Mark')}</th>
+                  <th style={headerCellStyle}>{t('Unrealized P&L')}</th>
                   <th style={headerCellStyle}></th>
                 </tr>
               </thead>
@@ -230,22 +224,18 @@ export function PositionsPage(): React.JSX.Element {
         {livePositions.length > 0 && <LedgerCheck positions={livePositions} />}
       </Card>
 
-      <Card title="Live Trade History — Realized P&L">
-        {liveHistory.length === 0 && (
-          <p style={{ color: 'var(--text-secondary)', margin: 0 }}>
-            No closed live positions yet. Once a live position is fully closed, it lands here with its realized P&amp;L.
-          </p>
-        )}
+      <Card title={t('Live Trade History — Realized P&L')}>
+        {liveHistory.length === 0 && <p style={{ color: 'var(--text-secondary)', margin: 0 }}>{t('No closed live positions yet. Once a live position is fully closed, it lands here with its realized P&L.')}</p>}
         {liveHistory.length > 0 && (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  <th style={headerCellStyle}>Symbol</th>
-                  <th style={headerCellStyle}>Entry</th>
-                  <th style={headerCellStyle}>Exit</th>
-                  <th style={headerCellStyle}>Realized P&amp;L</th>
-                  <th style={headerCellStyle}>Closed</th>
+                  <th style={headerCellStyle}>{t('Symbol')}</th>
+                  <th style={headerCellStyle}>{t('Entry')}</th>
+                  <th style={headerCellStyle}>{t('Exit')}</th>
+                  <th style={headerCellStyle}>{t('Realized P&L')}</th>
+                  <th style={headerCellStyle}>{t('Closed@@a column')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -258,17 +248,15 @@ export function PositionsPage(): React.JSX.Element {
         )}
       </Card>
 
-      <Card title="Inventory (Handed-Over Positions)">
+      <Card title={t('Inventory (Handed-Over Positions)')}>
         {loaded && heldPositions.length === 0 && (
           <p style={{ color: 'var(--text-secondary)', margin: 0 }}>
-            Nothing here yet. When an executor with "Keep position when stopped" enabled is stopped mid-trade, its
-            open position lands here instead of being discarded.
+            {t('Nothing here yet. When an executor with "Keep position when stopped" enabled is stopped mid-trade, its open position lands here instead of being discarded.')}
           </p>
         )}
         {heldError !== null && (
           <p style={{ color: 'var(--down)', fontSize: '0.78rem', margin: '0 0 0.7rem' }}>
-            That position could not be closed ({heldError}) — it is still listed below, and still
-            counts toward your holdings. Try Close again.
+            {t('That position could not be closed ({error}) — it is still listed below, and still counts toward your holdings. Try Close again.', { error: heldError })}
           </p>
         )}
         {heldPositions.length > 0 && (
@@ -276,12 +264,12 @@ export function PositionsPage(): React.JSX.Element {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  <th style={headerCellStyle}>Source</th>
-                  <th style={headerCellStyle}>Side</th>
-                  <th style={headerCellStyle}>Entry</th>
-                  <th style={headerCellStyle}>Mark</th>
-                  <th style={headerCellStyle}>Amount</th>
-                  <th style={headerCellStyle}>Unrealized P&amp;L</th>
+                  <th style={headerCellStyle}>{t('Source')}</th>
+                  <th style={headerCellStyle}>{t('Side')}</th>
+                  <th style={headerCellStyle}>{t('Entry')}</th>
+                  <th style={headerCellStyle}>{t('Mark')}</th>
+                  <th style={headerCellStyle}>{t('Amount')}</th>
+                  <th style={headerCellStyle}>{t('Unrealized P&L')}</th>
                   <th style={headerCellStyle}></th>
                 </tr>
               </thead>

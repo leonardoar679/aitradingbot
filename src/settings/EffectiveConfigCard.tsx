@@ -12,7 +12,7 @@ const STORE_HOMES: Record<keyof EffectiveConfig['stores'], string> = {
   paperDigest: 'Risk & Safety',
   alerts: 'Settings › Essentials',
   sounds: 'Settings › Notifications',
-  app: 'Settings › Essentials',
+  app: 'Settings › Essentials and Language',
   forecast: 'Forecast Lab and Predictions',
   watch: 'Opportunities',
   watchPaper: 'Opportunities',

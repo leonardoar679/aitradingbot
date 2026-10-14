@@ -1,3 +1,4 @@
+import { noticeI18n } from '../i18n/current'
 import { useEffect } from 'react'
 import { GPT_INTRADAY_STRATEGY_ID } from '../../shared/aiSignal'
 import { breakerNotice } from '../../shared/notices'
@@ -38,9 +39,15 @@ export function StrategyHealthScheduler(): null {
           const run = await fetchBotDryRunResult(bot)
           if (run === null) continue
           const expectation = MEASURED_EXPECTATIONS.find((entry) => entry.strategyId === bot.strategyId)?.trades ?? null
-          const health = strategyHealth(summarizePaperTrades(run.result.trades, bot.enabledAt).paperTrades, expectation)
+          const say = noticeI18n()
+          const health = strategyHealth(summarizePaperTrades(run.result.trades, bot.enabledAt).paperTrades, expectation, say)
           if (health.verdict !== 'degraded') continue
-          const notice = breakerNotice('strategy', `${bot.name}: ${health.reasons.join('; ')}. It keeps running on paper; stop it under Strategies › Active Runs if that is what you want.`, `strategy:${bot.id}`)
+          const notice = breakerNotice(
+            'strategy',
+            say.t('{bot}: {reasons}. It keeps running on paper; stop it under Strategies › Active Runs if that is what you want.', { bot: bot.name, reasons: health.reasons.join(say.t('; ')) }),
+            `strategy:${bot.id}`,
+            say
+          )
           // Told through the one handler: once a day on the bot's thread, on file, and in the window.
           void window.api.notify(notice.title, notice.body, notice.extra.severity, notice.extra).catch(() => undefined)
         } catch {

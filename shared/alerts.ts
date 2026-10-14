@@ -1,3 +1,4 @@
+import { ENGLISH, msg, type I18n } from './i18n/translate'
 import type { AlertSettings, Candle } from './ipc'
 import { SAME_STORY_SECONDS, describeEventType, titleSimilarity, type ReactionVerdict, type ReadStory, type SourceClass, type StoryReaction } from './newsFeed'
 
@@ -75,11 +76,12 @@ export function crashStep(movePct: number | null, telling: boolean): { tell: boo
   return { tell: false, telling }
 }
 
-/** What the desktop is told of a crash. */
-export function crashNotice(movePct: number): { title: string; body: string } {
+/** What the desktop is told of a crash, in a language. */
+export function crashNotice(movePct: number, i18n: I18n = ENGLISH): { title: string; body: string } {
+  const { t } = i18n
   return {
-    title: `CRITICAL: Bitcoin ${movePct.toFixed(2)}% in an hour`,
-    body: `Bitcoin has fallen ${Math.abs(movePct).toFixed(2)}% within the last hour. Nothing was placed or sold; what is open is on Positions and Strategies.`
+    title: t('CRITICAL: Bitcoin {move} in an hour', { move: i18n.language === 'en' ? `${movePct.toFixed(2)}%` : i18n.pct(movePct, 2) }),
+    body: t('Bitcoin has fallen {move} within the last hour. Nothing was placed or sold; what is open is on Positions and Strategies.', { move: i18n.pctPlain(Math.abs(movePct), 2) })
   }
 }
 
@@ -134,26 +136,58 @@ export interface StoryFacts {
   watchCall?: { side: 'BUY' | 'SELL' | 'NO TRADE'; confidence: number; model: string } | null
 }
 
-const plainPrice = (value: number): string => Number(value.toPrecision(7)).toLocaleString('en-US', { maximumFractionDigits: 8 })
-const signedPct = (value: number): string => `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
+/** A source's class, a reading's relationship and its way, as a story's notice says them. */
+const SOURCE_CLASS_WORDS: Record<string, string> = { exchange: msg('exchange@@a source'), media: msg('media@@a source'), official: msg('official@@a source') }
+const RELATIONSHIP_WORDS: Record<string, string> = { DIRECT: msg('DIRECT'), INDIRECT: msg('INDIRECT'), NONE: msg('NONE@@a relationship') }
+const WAY_WORDS: Record<string, string> = { up: msg('up'), down: msg('down'), none: msg('no direction') }
+const CALL_WORDS: Record<string, string> = { BUY: msg('BUY'), SELL: msg('SELL'), 'NO TRADE': msg('NO TRADE') }
 
-/** What the desktop is told of a story. */
-export function storyNotice(story: Pick<ReadStory, 'title' | 'sourceName' | 'eventType' | 'assets' | 'impact'>, severity: AlertSeverity, heldPlaces: string[] = [], facts: StoryFacts = {}): { title: string; body: string } {
+/** What the desktop is told of a story, in a language. The headline is the feed's own. */
+export function storyNotice(
+  story: Pick<ReadStory, 'title' | 'sourceName' | 'eventType' | 'assets' | 'impact'>,
+  severity: AlertSeverity,
+  heldPlaces: string[] = [],
+  facts: StoryFacts = {},
+  i18n: I18n = ENGLISH
+): { title: string; body: string } {
+  const { t } = i18n
+  const word = (table: Record<string, string>, value: string): string => (table[value] === undefined ? value : t(table[value]))
+  const plainPrice = (value: number): string => i18n.num(Number(value.toPrecision(7)), 0, 8)
+  const signedPct = (value: number): string => (i18n.language === 'en' ? `${value >= 0 ? '+' : ''}${value.toFixed(2)}%` : i18n.pct(value, 2))
   const coins = noticeCoins(story)
-  const head = severity === 'critical' ? 'CRITICAL' : severity === 'high' ? 'HIGH' : 'News'
-  const parts = [`${story.title} (${story.sourceName}${facts.sourceClass ? `, ${facts.sourceClass}` : ''}; impact ${story.impact}).`]
-  if (facts.price) parts.push(`${coins[0] ?? 'It'} at ${plainPrice(facts.price.last)}${facts.price.movePct === null ? '' : `, ${signedPct(facts.price.movePct)} over ${facts.price.over}`}.`)
-  if (facts.reaction) {
-    if (facts.reaction.pricedIn) parts.push('Priced in: it had moved its way before it was published.')
-    else if (facts.reaction.verdict === 'CONFIRMED') parts.push('Confirmed by the price.')
-    else if (facts.reaction.verdict === 'AGAINST') parts.push('The price went the other way.')
+  const head = severity === 'critical' ? t('CRITICAL') : severity === 'high' ? t('HIGH') : t('News')
+  const source = facts.sourceClass ? t('{source}, {kind}', { source: story.sourceName, kind: word(SOURCE_CLASS_WORDS, facts.sourceClass) }) : story.sourceName
+  const parts = [t('{title} ({source}; impact {impact}).', { title: story.title, source, impact: story.impact })]
+  if (facts.price) {
+    const coin = coins[0] ?? t('It')
+    parts.push(
+      facts.price.movePct === null
+        ? t('{coin} at {price}.', { coin, price: plainPrice(facts.price.last) })
+        : t('{coin} at {price}, {move} over {over}.', { coin, price: plainPrice(facts.price.last), move: signedPct(facts.price.movePct), over: t(facts.price.over) })
+    )
   }
-  if (facts.reading) parts.push(`The analyst read it as ${facts.reading.relationship}, ${facts.reading.direction}, impact ${facts.reading.impact}.`)
-  if (facts.watchCall) parts.push(`The watch said ${facts.watchCall.side} at ${Math.round(facts.watchCall.confidence * 100)}% (${facts.watchCall.model.split('/').pop() ?? facts.watchCall.model}).`)
-  if (heldPlaces.length > 0) parts.push(`You hold it: ${heldPlaces.join('; ')}.`)
-  parts.push('Nothing was placed or sold.')
+  if (facts.reaction) {
+    if (facts.reaction.pricedIn) parts.push(t('Priced in: it had moved its way before it was published.'))
+    else if (facts.reaction.verdict === 'CONFIRMED') parts.push(t('Confirmed by the price.'))
+    else if (facts.reaction.verdict === 'AGAINST') parts.push(t('The price went the other way.'))
+  }
+  if (facts.reading) {
+    parts.push(t('The analyst read it as {relationship}, {way}, impact {impact}.', { relationship: word(RELATIONSHIP_WORDS, facts.reading.relationship), way: word(WAY_WORDS, facts.reading.direction), impact: facts.reading.impact }))
+  }
+  if (facts.watchCall) {
+    parts.push(
+      t('The watch said {call} at {confidence} ({model}).', {
+        call: word(CALL_WORDS, facts.watchCall.side),
+        confidence: i18n.pctPlain(Math.round(facts.watchCall.confidence * 100), 0),
+        model: facts.watchCall.model.split('/').pop() ?? facts.watchCall.model
+      })
+    )
+  }
+  if (heldPlaces.length > 0) parts.push(t('You hold it: {places}.', { places: heldPlaces.join(t('; ')) }))
+  parts.push(t('Nothing was placed or sold.'))
+  const kind = describeEventType(story.eventType, i18n)
   return {
-    title: `${head}: ${coins.length > 0 ? `${coins.slice(0, 3).join(', ')} · ` : ''}${describeEventType(story.eventType)}`,
+    title: coins.length > 0 ? t('{head}: {coins} · {kind}', { head, coins: coins.slice(0, 3).join(', '), kind }) : t('{head}: {kind}', { head, kind }),
     body: parts.join(' ')
   }
 }
@@ -206,6 +240,24 @@ export const ALERT_KINDS = [
   /** The V6 document's §105: a forecast model whose last week went wrong, told once a day. */
   'MODEL_DEGRADED'
 ] as const
+
+/** Each kind by name, as Settings › Notifications lists them (V6 Stage 14): keys, said in a language. */
+export const ALERT_KIND_NAMES: Record<AlertKind, string> = {
+  MARKET_EVENT: msg('market event'),
+  NEWS_EVENT: msg('news event'),
+  TRADE_OPPORTUNITY: msg('trade opportunity'),
+  TRADE_EXECUTED: msg('trade executed'),
+  TRADE_BLOCKED: msg('trade blocked'),
+  POSITION_RISK: msg('position risk'),
+  TARGET_REACHED: msg('target reached@@a kind of notice'),
+  STOP_TRIGGERED: msg('stop triggered'),
+  MODEL_DISAGREEMENT: msg('model disagreement'),
+  SYSTEM_FAILURE: msg('system failure'),
+  CIRCUIT_BREAKER: msg('circuit breaker'),
+  RECONCILIATION: msg('reconciliation'),
+  PREDICTION_CHANGED: msg('prediction changed'),
+  MODEL_DEGRADED: msg('model degraded')
+}
 
 export type AlertKind = (typeof ALERT_KINDS)[number]
 

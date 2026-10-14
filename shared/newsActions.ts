@@ -1,3 +1,4 @@
+import { ENGLISH, type I18n } from './i18n/translate'
 import { dailyQuoteVolumeOf, slippageRateFor } from './aiOpportunityOutcome'
 import type { Candle, ExecutorConfig, HeldPosition, PaperAccount, PositionExecutorParams } from './ipc'
 import type { ExchangeBalance } from './liveBalances'
@@ -143,15 +144,22 @@ export function describeNewsShortOrigin(mark: NewsShortMark): string {
     : `Opened by the news reader, with nobody pressing anything, on Binance's announcement at ${at} UTC that it will delist ${mark.ticker}: a short held four hours by the rule research/NEWS.md measured. Paper.`
 }
 
-export function newsShortNotice(item: NewsItem, ticker: string, params: PositionExecutorParams, quoteAsset: string): { title: string; body: string } {
-  const at = utcClock(item.releaseSec)
-  const opened = `A paper short of ${params.amountQuote} ${quoteAsset} was opened by the rule`
+export function newsShortNotice(item: NewsItem, ticker: string, params: PositionExecutorParams, quoteAsset: string, i18n: I18n = ENGLISH): { title: string; body: string } {
+  const { t } = i18n
+  const values = {
+    coin: ticker,
+    time: i18n.language === 'en' ? utcClock(item.releaseSec) : i18n.utcTime(item.releaseSec * 1000),
+    amount: String(params.amountQuote),
+    asset: quoteAsset,
+    stop: pct(params.stopLossPct),
+    target: pct(params.takeProfitPct)
+  }
   return {
-    title: `Paper short: ${ticker}${quoteAsset}`,
+    title: t('Paper short: {pair}', { pair: `${ticker}${quoteAsset}` }),
     body:
       item.category === 'MONITORING_TAG'
-        ? `Binance added ${ticker} to its Monitoring Tag (announced ${at} UTC). ${opened}: a stop ${pct(params.stopLossPct)} above, a target ${pct(params.takeProfitPct)} below, out within the hour. Paper: nothing real was placed.`
-        : `Binance will delist ${ticker} (announced ${at} UTC). ${opened}, out four hours after the announcement. Paper: nothing real was placed.`
+        ? t('Binance added {coin} to its Monitoring Tag (announced {time} UTC). A paper short of {amount} {asset} was opened by the rule: a stop {stop} above, a target {target} below, out within the hour. Paper: nothing real was placed.', values)
+        : t('Binance will delist {coin} (announced {time} UTC). A paper short of {amount} {asset} was opened by the rule, out four hours after the announcement. Paper: nothing real was placed.', values)
   }
 }
 
@@ -164,42 +172,41 @@ export interface Holdings {
   executors: ExecutorConfig[]
 }
 
-function amount(value: number): string {
-  return Number(value.toPrecision(6)).toLocaleString('en-US', { maximumFractionDigits: 8 })
-}
-
-export function heldPlaces(ticker: string, holdings: Holdings): string[] {
+export function heldPlaces(ticker: string, holdings: Holdings, i18n: I18n = ENGLISH): string[] {
+  const { t } = i18n
+  const amount = (value: number): string => i18n.num(Number(value.toPrecision(6)), 0, 8)
   const places: string[] = []
   const real = holdings.live?.find((row) => row.asset === ticker)
-  if (real !== undefined && real.free + real.locked > 0) places.push(`${amount(real.free + real.locked)} ${ticker} on Binance`)
+  if (real !== undefined && real.free + real.locked > 0) places.push(t('{amount} {coin} on Binance', { amount: amount(real.free + real.locked), coin: ticker }))
   const paper = holdings.paperAccount?.balances[ticker] ?? 0
-  if (paper > 0) places.push(`${amount(paper)} ${ticker} in the paper account`)
-  if (holdings.heldPositions.some((held) => held.baseAsset === ticker)) places.push(`a paper position in Inventory`)
+  if (paper > 0) places.push(t('{amount} {coin} in the paper account', { amount: amount(paper), coin: ticker }))
+  if (holdings.heldPositions.some((held) => held.baseAsset === ticker)) places.push(t('a paper position in Inventory'))
   // A short of a rule's is not something held: it is on the other side.
   const running = holdings.executors.filter((executor) => executor.status === 'active' && executor.baseAsset === ticker && executor.newsRule === undefined)
-  if (running.length > 0) places.push(`${running.length === 1 ? 'an executor' : `${running.length} executors`} running on ${ticker}`)
+  if (running.length > 0) places.push(running.length === 1 ? t('an executor running on {coin}', { coin: ticker }) : t('{count} executors running on {coin}', { count: running.length, coin: ticker }))
   return places
 }
 
 /** The notice to someone holding a coin Binance will delist, or has added to its Monitoring Tag;
- * null when they hold none of the coins, or for any other kind of news. */
-export function newsHolderNotice(item: NewsItem, holdings: Holdings): { title: string; body: string } | null {
+ * null when they hold none of the coins, or for any other kind of news. In a language. */
+export function newsHolderNotice(item: NewsItem, holdings: Holdings, i18n: I18n = ENGLISH): { title: string; body: string } | null {
+  const { t } = i18n
   if (!isActedNewsCategory(item.category)) return null
-  const held = item.tickers.map((ticker) => ({ ticker, places: heldPlaces(ticker, holdings) })).filter((entry) => entry.places.length > 0)
+  const held = item.tickers.map((ticker) => ({ ticker, places: heldPlaces(ticker, holdings, i18n) })).filter((entry) => entry.places.length > 0)
   if (held.length === 0) return null
   const names = held.map((entry) => entry.ticker).join(', ')
   // The title of the announcement goes last: a notice is cut at 400 characters, and what must not
   // be cut is that nothing has been sold.
-  const where = `You hold ${held.map((entry) => entry.places.join(' and ')).join('; ')}. Nothing has been sold. `
-  const announced = `Announced ${utcClock(item.releaseSec)} UTC: "${item.title}"`
+  const where = t('You hold {places}. Nothing has been sold.', { places: held.map((entry) => entry.places.join(t(' and '))).join(t('; ')) })
+  const announced = t('Announced {time} UTC: "{title}"', { time: i18n.language === 'en' ? utcClock(item.releaseSec) : i18n.utcTime(item.releaseSec * 1000), title: item.title })
   return item.category === 'MONITORING_TAG'
     ? {
-        title: `Binance's Monitoring Tag now includes ${names}, which you hold`,
-        body: `${where}Coins Binance added to the tag were on average 12% lower a day later, and 84 of 97 were later delisted (research/NEWS.md). ${announced}`
+        title: t("Binance's Monitoring Tag now includes {coins}, which you hold", { coins: names }),
+        body: `${where} ${t('Coins Binance added to the tag were on average 12% lower a day later, and 84 of 97 were later delisted (research/NEWS.md).')} ${announced}`
       }
     : {
-        title: `Binance will delist ${names}, which you hold`,
-        body: `${where}Coins Binance announced it would delist were on average 13% lower four hours later (research/NEWS.md). ${announced}`
+        title: t('Binance will delist {coins}, which you hold', { coins: names }),
+        body: `${where} ${t('Coins Binance announced it would delist were on average 13% lower four hours later (research/NEWS.md).')} ${announced}`
       }
 }
 

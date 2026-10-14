@@ -34,6 +34,7 @@ import { OrderForm } from './OrderForm'
 import { XemmForm } from './XemmForm'
 import { ArbitrageForm } from './ArbitrageForm'
 import { MarketMakingForm } from './MarketMakingForm'
+import { EnglishOnly, msg, Translated, useI18n } from '../i18n'
 import { fieldLabelStyle, textInputStyle } from './formStyles'
 import { twapNumOrders, buildGridLevels } from './engine'
 import {
@@ -91,15 +92,16 @@ interface NewExecutorModalProps {
   onClose: () => void
 }
 
-const TYPE_TABS: { id: ExecutorType; label: string }[] = [
-  { id: 'grid', label: 'Grid' },
-  { id: 'dca', label: 'DCA' },
-  { id: 'twap', label: 'TWAP' },
-  { id: 'position', label: 'Position' },
-  { id: 'order', label: 'Order' },
-  { id: 'xemm', label: 'XEMM' },
-  { id: 'arbitrage', label: 'Arbitrage' },
-  { id: 'marketmaking', label: 'Market Making' }
+/** Each type's tab; an acronym is shown as written, in every language. */
+const TYPE_TABS: { id: ExecutorType; label: string; acronym?: true }[] = [
+  { id: 'grid', label: msg('Grid@@executor type') },
+  { id: 'dca', label: 'DCA', acronym: true },
+  { id: 'twap', label: 'TWAP', acronym: true },
+  { id: 'position', label: msg('Position@@executor type') },
+  { id: 'order', label: msg('Order@@executor type') },
+  { id: 'xemm', label: 'XEMM', acronym: true },
+  { id: 'arbitrage', label: msg('Arbitrage@@executor type') },
+  { id: 'marketmaking', label: msg('Market Making@@executor type') }
 ]
 
 // Order Executors always hand their fill over as a position; Position Executors default to
@@ -193,7 +195,18 @@ function defaultMarketMakingParams(): MarketMakingExecutorParams {
 const DEFAULT_SPREAD_BUY_EXCHANGE = EXCHANGES.find((e) => e.id === 'bithumb') ?? EXCHANGES[0]
 const DEFAULT_SPREAD_SELL_EXCHANGE = EXCHANGES.find((e) => e.id === 'upbit') ?? EXCHANGES[1]
 
-export function NewExecutorModal({ onCreate, onClose, account, existingExecutors, proposal = null, proposalLive = false }: NewExecutorModalProps): React.JSX.Element {
+/** A form filled in from a call or from a trade plan (TRADE THIS) is the order form of the pages that are
+ * translated, and is in the window's language (V6 Stage 14): its Position form, the call's account above
+ * it, and every error it gives. The other types' own fields stay English, as the page that opens the form
+ * by hand does. */
+export function NewExecutorModal(props: NewExecutorModalProps): React.JSX.Element {
+  const form = <ExecutorFormModal {...props} />
+  return props.proposal === null || props.proposal === undefined ? form : <Translated>{form}</Translated>
+}
+
+function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, proposal = null, proposalLive = false }: NewExecutorModalProps): React.JSX.Element {
+  const i18n = useI18n()
+  const { t } = i18n
   // A proposal chooses what the form OPENS on. Every field stays editable, and the two things
   // that decide what an order risks -- the amount and paper-or-live -- are not among them.
   const [name, setName] = useState(proposal ? aiProposalName(proposal) : '')
@@ -347,7 +360,7 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
       .fetchHistoricalRange(exchange, pair.symbol, '15m', nowSec - RISK_LINES.usualDays * 86_400, nowSec)
       .then((result) => {
         if (cancelled) return
-        setConditions(riskMultiplier({ volatilityRatio: volatilityRatio(result.candles, nowSec), spreadPct: null, liquidityCover: null, dissent: null, correlatedShare: null }))
+        setConditions(riskMultiplier({ volatilityRatio: volatilityRatio(result.candles, nowSec), spreadPct: null, liquidityCover: null, dissent: null, correlatedShare: null }, i18n))
       })
       .catch(() => {
         if (!cancelled) setConditions(null)
@@ -355,7 +368,7 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
     return (): void => {
       cancelled = true
     }
-  }, [proposal, exchange, pair.symbol])
+  }, [proposal, exchange, pair.symbol, i18n])
 
   // The suggestion: the risk setting's share of the allocation (or the day's cap), at the conditions'
   // factor, lost at the call's stop after fees and slippage, under the max order size and what is
@@ -384,14 +397,14 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
     setMode('live')
   }, [proposalLive, canGoLive])
   const liveBlockedReason = !binanceCredentialConfigured
-    ? 'no verified Binance key'
+    ? t('no verified Binance key')
     : liveTradingStatus?.killSwitchEngaged
-      ? 'the kill switch is engaged'
+      ? t('the kill switch is engaged')
       : liveTradingStatus !== null && !liveTradingStatus.sessionArmed
-        ? 'the session is not armed'
+        ? t('the session is not armed')
         : exchange !== 'binance'
-          ? 'it is not on Binance'
-          : 'this form cannot go live as it stands'
+          ? t('it is not on Binance')
+          : t('this form cannot go live as it stands')
 
   // Force back to paper the instant anything that made 'live' valid stops being true — switching
   // type/exchange/execution-strategy, or the session getting disarmed elsewhere, must never leave
@@ -542,15 +555,18 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
   const pendingQuoteAsset = isSpreadType
     ? (type === 'xemm' ? xemmParams : arbitrageParams).buyingMarket.quoteAsset
     : pair.quoteAsset
-  const fundingProblem = describeExecutorFunding({
-    account,
-    executors: existingExecutors,
-    mode,
-    quoteAsset: pendingQuoteAsset,
-    // Same helper that totals what is already committed, so the two can never disagree about
-    // what a strategy of this type costs.
-    amountQuote: executorAllocatedQuote({ type, params: pendingParams } as unknown as ExecutorConfig)
-  })
+  const fundingProblem = describeExecutorFunding(
+    {
+      account,
+      executors: existingExecutors,
+      mode,
+      quoteAsset: pendingQuoteAsset,
+      // Same helper that totals what is already committed, so the two can never disagree about
+      // what a strategy of this type costs.
+      amountQuote: executorAllocatedQuote({ type, params: pendingParams } as unknown as ExecutorConfig)
+    },
+    i18n
+  )
   const underfunded = fundingProblem !== null
 
   // Every live executor type in this app is buy-only (see canGoLiveOrder and its siblings above),
@@ -563,22 +579,28 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
   // fires, so falling short there is a warning, not a refusal.
   const liveOrderShortfall =
     mode === 'live' && liveFree !== null
-      ? describeLiveShortfall({
-          side: 'buy',
-          quoteAsset: pair.quoteAsset,
-          quoteAmount: liveAmountQuote,
-          free: liveFree,
-          exchangeLabel: 'Binance'
-        })
+      ? describeLiveShortfall(
+          {
+            side: 'buy',
+            quoteAsset: pair.quoteAsset,
+            quoteAmount: liveAmountQuote,
+            free: liveFree,
+            exchangeLabel: 'Binance'
+          },
+          i18n
+        )
       : null
   const livePlanShortfall =
     mode === 'live' && liveFree !== null && liveOrderShortfall === null
-      ? describeLivePlanShortfall({
-          quoteAsset: pair.quoteAsset,
-          planTotal: executorAllocatedQuote({ type, params: pendingParams } as unknown as ExecutorConfig),
-          free: liveFree,
-          exchangeLabel: 'Binance'
-        })
+      ? describeLivePlanShortfall(
+          {
+            quoteAsset: pair.quoteAsset,
+            planTotal: executorAllocatedQuote({ type, params: pendingParams } as unknown as ExecutorConfig),
+            free: liveFree,
+            exchangeLabel: 'Binance'
+          },
+          i18n
+        )
       : null
   // The same two questions again, asked of the managed allocation rather than of the exchange
   // balance. They are genuinely separate limits: the balance is what the money can buy, the
@@ -587,35 +609,44 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
   // be read, and not-known must never block -- the main-process check is the real one regardless.
   const allocationOrderBreach =
     mode === 'live' && liveTradingStatus !== null
-      ? describeAllocationBreach({
-          allocationQuote: liveTradingStatus.allocationQuote,
-          committedQuote: liveTradingStatus.allocationCommittedQuote,
-          orderQuote: liveAmountQuote,
-          quoteAsset: pair.quoteAsset
-        })
+      ? describeAllocationBreach(
+          {
+            allocationQuote: liveTradingStatus.allocationQuote,
+            committedQuote: liveTradingStatus.allocationCommittedQuote,
+            orderQuote: liveAmountQuote,
+            quoteAsset: pair.quoteAsset
+          },
+          i18n
+        )
       : null
   const allocationPlanShortfall =
     mode === 'live' && liveTradingStatus !== null && allocationOrderBreach === null
-      ? describeAllocationPlanShortfall({
-          allocationQuote: liveTradingStatus.allocationQuote,
-          committedQuote: liveTradingStatus.allocationCommittedQuote,
-          planTotal: executorAllocatedQuote({ type, params: pendingParams } as unknown as ExecutorConfig),
-          quoteAsset: pair.quoteAsset
-        })
+      ? describeAllocationPlanShortfall(
+          {
+            allocationQuote: liveTradingStatus.allocationQuote,
+            committedQuote: liveTradingStatus.allocationCommittedQuote,
+            planTotal: executorAllocatedQuote({ type, params: pendingParams } as unknown as ExecutorConfig),
+            quoteAsset: pair.quoteAsset
+          },
+          i18n
+        )
       : null
   // Not a shortfall but a refusal: an order under the exchange's minimum is not one that might
   // fail, it is one that cannot be placed at all. Every rung of a ladder hits it equally, so a
   // strategy whose smallest order is too small has nothing it can ever do.
   const belowExchangeMinimum =
     mode === 'live'
-      ? describeBelowExchangeMinimum({
-          perOrderQuote: liveSmallestOrderQuote,
-          orderCount: liveOrderCount,
-          rules: symbolRules,
-          symbol: pair.symbol,
-          quoteAsset: pair.quoteAsset,
-          exchangeLabel: 'Binance'
-        })
+      ? describeBelowExchangeMinimum(
+          {
+            perOrderQuote: liveSmallestOrderQuote,
+            orderCount: liveOrderCount,
+            rules: symbolRules,
+            symbol: pair.symbol,
+            quoteAsset: pair.quoteAsset,
+            exchangeLabel: 'Binance'
+          },
+          i18n
+        )
       : null
   const liveUnaffordable = liveOrderShortfall !== null || allocationOrderBreach !== null || belowExchangeMinimum !== null
 
@@ -692,17 +723,17 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.9rem 1.1rem', borderBottom: '1px solid var(--border)' }}>
-          <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>New Executor</span>
+          <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{t('New Executor')}</span>
           <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
             <X size={18} />
           </button>
         </div>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', padding: '0.9rem 1.1rem 0', gap: '0.4rem' }}>
-          {TYPE_TABS.map((t) => (
+          {TYPE_TABS.map((tab) => (
             <button
-              key={t.id}
-              onClick={() => handleTypeChange(t.id)}
+              key={tab.id}
+              onClick={() => handleTypeChange(tab.id)}
               style={{
                 flex: '1 1 30%',
                 padding: '0.5rem',
@@ -710,12 +741,12 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
                 fontWeight: 700,
                 border: 'none',
                 borderRadius: 'var(--radius-sm)',
-                background: type === t.id ? 'var(--accent-soft)' : 'var(--bg-app)',
-                color: type === t.id ? 'var(--accent)' : 'var(--text-secondary)',
+                background: type === tab.id ? 'var(--accent-soft)' : 'var(--bg-app)',
+                color: type === tab.id ? 'var(--accent)' : 'var(--text-secondary)',
                 cursor: 'pointer'
               }}
             >
-              {t.label}
+              {tab.acronym === true ? tab.label : t(tab.label)}
             </button>
           ))}
         </div>
@@ -735,62 +766,67 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
                 color: 'var(--text-secondary)'
               }}
             >
-              {describeAiProposal(proposal).map((line) => (
+              {describeAiProposal(proposal, i18n).map((line) => (
                 <span key={line}>{line}</span>
               ))}
               {suggested !== null && proposal.stopLossPct !== null && liveTradingStatus !== null && (
                 <span style={{ color: 'var(--text-primary)' }}>
-                  {describeSuggestedLiveAmount(suggested, { riskPct: liveTradingStatus.riskPct, stopLossPct: proposal.stopLossPct, quoteAsset: pair.quoteAsset, reasons: conditions?.reasons })}
+                  {describeSuggestedLiveAmount(suggested, { riskPct: liveTradingStatus.riskPct, stopLossPct: proposal.stopLossPct, quoteAsset: pair.quoteAsset, reasons: conditions?.reasons }, i18n)}
                 </span>
               )}
               {suggested === null && conditions !== null && conditions.factor === 0 && proposal.stopLossPct !== null && liveTradingStatus !== null && (
-                <span style={{ color: 'var(--down)', fontWeight: 600 }}>No amount is suggested: the conditions allow no trade ({riskReasonsText(conditions)}).</span>
+                <span style={{ color: 'var(--down)', fontWeight: 600 }}>{t('No amount is suggested: the conditions allow no trade ({reasons}).', { reasons: riskReasonsText(conditions, i18n) })}</span>
               )}
               {proposalLive && !canGoLive && (
                 <span style={{ color: 'var(--gold)', fontWeight: 600 }}>
-                  Confirmed as a real order, but none can be placed now ({liveBlockedReason}): this form is paper. Arm the session on the bar with a
-                  verified Binance key and confirm again, or submit it on paper.
+                  {t(
+                    'Confirmed as a real order, but none can be placed now ({reason}): this form is paper. Arm the session on the bar with a verified Binance key and confirm again, or submit it on paper.',
+                    { reason: liveBlockedReason }
+                  )}
                 </span>
               )}
               {proposalStale && !proposalExpired && (
                 <span style={{ color: 'var(--gold)', fontWeight: 600 }}>
-                  The candle this call was made for has closed, so it is no longer the model’s current view. Ask again
-                  under AI Decisions before acting on it.
+                  {t('The candle this call was made for has closed, so it is no longer the model’s current view. Ask again under AI Decisions before acting on it.')}
                 </span>
               )}
               {proposalExpired && (
                 <span style={{ color: 'var(--gold)', fontWeight: 600 }}>
-                  This recommendation’s entry has expired, so this form will not submit it as it stands. Ask again under
-                  Opportunities or AI Decisions, or change the form into an order of your own.
+                  {t('This recommendation’s entry has expired, so this form will not submit it as it stands. Ask again under Opportunities or AI Decisions, or change the form into an order of your own.')}
                 </span>
               )}
             </div>
           )}
           <div>
-            <label style={fieldLabelStyle()}>Name</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. BTC Grid" autoFocus style={textInputStyle()} />
+            <label style={fieldLabelStyle()}>{t('Name')}</label>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('e.g. BTC Grid')} autoFocus style={textInputStyle()} />
           </div>
 
           {!isSpreadType && (
             <>
               <div style={{ display: 'flex', gap: '0.7rem' }}>
                 <div style={{ flex: 1 }}>
-                  <label style={fieldLabelStyle()}>Exchange</label>
+                  <label style={fieldLabelStyle()}>{t('Exchange')}</label>
                   <ExchangeSelect exchange={exchange} onSelect={handleExchangeChange} />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <label style={fieldLabelStyle()}>Symbol</label>
+                  <label style={fieldLabelStyle()}>{t('Symbol')}</label>
                   <SymbolSearch exchange={exchange} symbol={pair.symbol} onSelect={setPair} />
                 </div>
               </div>
               <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
-                Last price: {lastPrice !== null ? lastPrice : 'loading…'}
+                {t('Last price: {price}', { price: lastPrice !== null ? (i18n.language === 'en' ? String(lastPrice) : i18n.num(lastPrice, 0, 10)) : t('loading…') })}
               </p>
             </>
           )}
 
           <div style={{ borderTop: '1px solid var(--border)', paddingTop: '0.9rem' }}>
-            {type === 'grid' && <GridForm params={gridParams} onChange={setGridParams} />}
+            {/* The other types' own fields are an expert page's, in English (V6 Stage 14). */}
+            {type === 'grid' && (
+              <EnglishOnly>
+                <GridForm params={gridParams} onChange={setGridParams} />
+              </EnglishOnly>
+            )}
             {type === 'grid' && (gridBounds.blocking ?? gridBounds.warning) !== null && (
               <p
                 style={{
@@ -803,8 +839,16 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
                 {gridBounds.blocking ?? gridBounds.warning}
               </p>
             )}
-            {type === 'dca' && <DcaForm params={dcaParams} onChange={setDcaParams} />}
-            {type === 'twap' && <TwapForm params={twapParams} onChange={setTwapParams} />}
+            {type === 'dca' && (
+              <EnglishOnly>
+                <DcaForm params={dcaParams} onChange={setDcaParams} />
+              </EnglishOnly>
+            )}
+            {type === 'twap' && (
+              <EnglishOnly>
+                <TwapForm params={twapParams} onChange={setTwapParams} />
+              </EnglishOnly>
+            )}
             {type === 'position' && (
               <PositionForm
                 params={positionParams}
@@ -814,16 +858,34 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
                 }}
               />
             )}
-            {type === 'order' && <OrderForm params={orderParams} onChange={setOrderParams} />}
-            {type === 'xemm' && <XemmForm params={xemmParams} onChange={setXemmParams} />}
-            {type === 'arbitrage' && <ArbitrageForm params={arbitrageParams} onChange={setArbitrageParams} />}
-            {isSpreadType && spreadAssetsMismatched && (
-              <p style={{ fontSize: '0.75rem', color: 'var(--down)', margin: '0.6rem 0 0' }}>
-                Buying and Selling Market must be the same asset pair (same base and quote asset) — comparing different
-                instruments produces a meaningless spread. Pick matching pairs on each exchange.
-              </p>
+            {type === 'order' && (
+              <EnglishOnly>
+                <OrderForm params={orderParams} onChange={setOrderParams} />
+              </EnglishOnly>
             )}
-            {type === 'marketmaking' && <MarketMakingForm params={marketMakingParams} onChange={setMarketMakingParams} />}
+            {type === 'xemm' && (
+              <EnglishOnly>
+                <XemmForm params={xemmParams} onChange={setXemmParams} />
+              </EnglishOnly>
+            )}
+            {type === 'arbitrage' && (
+              <EnglishOnly>
+                <ArbitrageForm params={arbitrageParams} onChange={setArbitrageParams} />
+              </EnglishOnly>
+            )}
+            {isSpreadType && spreadAssetsMismatched && (
+              <EnglishOnly>
+                <p style={{ fontSize: '0.75rem', color: 'var(--down)', margin: '0.6rem 0 0' }}>
+                  Buying and Selling Market must be the same asset pair (same base and quote asset) — comparing different
+                  instruments produces a meaningless spread. Pick matching pairs on each exchange.
+                </p>
+              </EnglishOnly>
+            )}
+            {type === 'marketmaking' && (
+              <EnglishOnly>
+                <MarketMakingForm params={marketMakingParams} onChange={setMarketMakingParams} />
+              </EnglishOnly>
+            )}
           </div>
 
           {mode !== 'live' && (
@@ -845,21 +907,20 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
                   disabled={isSpreadType || handoverBlockedByLeverage}
                   onChange={(e) => setKeepPosition(e.target.checked)}
                 />
-                Keep position when stopped (hand over to Inventory)
+                {t('Keep position when stopped (hand over to Inventory)')}
               </label>
               {handoverBlockedByLeverage && (
                 <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
-                  Inventory holds spot assets, and a leveraged position isn’t one — it’s a deposit controlling a larger
-                  amount, which no holding row can say. Stopping this closes it at the market price instead and returns
-                  the result, profit or loss, to your balance.
+                  {t(
+                    'Inventory holds spot assets, and a leveraged position isn’t one — it’s a deposit controlling a larger amount, which no holding row can say. Stopping this closes it at the market price instead and returns the result, profit or loss, to your balance.'
+                  )}
                 </p>
               )}
             </>
           )}
           {mode === 'live' && (
             <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
-              Position Handover doesn't apply to live orders — a real fill is always tracked on the Positions page
-              regardless of this setting.
+              {t("Position Handover doesn't apply to live orders — a real fill is always tracked on the Positions page regardless of this setting.")}
             </p>
           )}
 
@@ -897,7 +958,7 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
                 />
                 <AlertTriangle size={14} />
                 {type === 'position'
-                  ? 'Live Trading — enters and watches a real position'
+                  ? t('Live Trading — enters and watches a real position')
                   : type === 'dca'
                     ? 'Live Trading — places a real ladder of resting orders'
                     : type === 'twap'
@@ -910,19 +971,19 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
               {!canGoLive && (
                 <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
                   {exchange !== 'binance'
-                    ? 'Live trading is only available on Binance.'
+                    ? t('Live trading is only available on Binance.')
                     : type === 'order' && !canGoLiveOrder
                       ? orderParams.executionStrategy !== 'market' && orderParams.executionStrategy !== 'limit'
                         ? 'Live trading only supports market and limit orders so far.'
                         : 'Set a limit price first.'
                       : type === 'position' && !canGoLivePosition
                         ? resolveLeverage(positionParams.leverage) !== 1
-                          ? 'Leverage is simulation-only — this app has no futures connection, so a live Position is 1x spot. Clear the Leverage field to go live.'
+                          ? t('Leverage is simulation-only — this app has no futures connection, so a live Position is 1x spot. Clear the Leverage field to go live.')
                           : positionParams.side !== 'buy'
-                            ? 'Live Position entries are buy-only — spot trading can’t open a short.'
+                            ? t('Live Position entries are buy-only — spot trading can’t open a short.')
                             : positionParams.entryPrice !== null
-                              ? 'Set a market entry (leave Entry Price blank) for live — a resting live entry isn’t supported yet.'
-                              : 'Set at least one exit condition — take-profit, stop-loss, trailing stop, or time limit — before going live.'
+                              ? t('Set a market entry (leave Entry Price blank) for live — a resting live entry isn’t supported yet.')
+                              : t('Set at least one exit condition — take-profit, stop-loss, trailing stop, or time limit — before going live.')
                         : type === 'dca' && !canGoLiveDca
                           ? 'Live DCA is buy-only — spot trading can’t open a short.'
                           : type === 'twap' && !canGoLiveTwap
@@ -930,10 +991,10 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
                             : type === 'grid' && !canGoLiveGrid
                               ? 'Live Grid is buy-only — spot trading can’t open a short.'
                               : !binanceCredentialConfigured
-                                ? 'Add a verified Binance API key on Connections first.'
+                                ? t('Add a verified Binance API key on Connections first.')
                                 : liveTradingStatus?.killSwitchEngaged
-                                  ? 'The kill switch is engaged — release it from the live trading bar first.'
-                                  : 'Arm live trading for this session from the live trading bar first.'}
+                                  ? t('The kill switch is engaged — release it from the live trading bar first.')
+                                  : t('Arm live trading for this session from the live trading bar first.')}
                 </p>
               )}
 
@@ -941,7 +1002,10 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
                 <>
                   <p style={{ fontSize: '0.75rem', color: 'var(--down)', margin: 0, fontWeight: 600 }}>
                     {type === 'position'
-                      ? `This will immediately place a real BUY market order for ${positionParams.amountQuote} ${pair.quoteAsset} of ${pair.symbol} on Binance, then watch it for take-profit/stop-loss/trailing-stop/time-limit and exit automatically with a real sell — no per-exit confirmation. Stop on Strategies › Execution force-exits it manually at any time.`
+                      ? t(
+                          'This will immediately place a real BUY market order for {amount} {asset} of {pair} on Binance, then watch it for take-profit/stop-loss/trailing-stop/time-limit and exit automatically with a real sell — no per-exit confirmation. Stop on Strategies › Execution force-exits it manually at any time.',
+                          { amount: i18n.language === 'en' ? String(positionParams.amountQuote) : i18n.num(positionParams.amountQuote, 0, 8), asset: pair.quoteAsset, pair: pair.symbol }
+                        )
                       : type === 'dca'
                         ? `This will place ${dcaParams.levels.length} real resting BUY limit order${dcaParams.levels.length === 1 ? '' : 's'} for ${pair.symbol} on Binance, one per level (may fill immediately if a level is already at or above the current price). Once any level fills, the resulting position is watched for take-profit/stop-loss/time-limit and exits automatically with a real sell — no per-exit confirmation. Stop cancels every remaining resting level and force-exits any filled position, all at once.`
                         : type === 'twap'
@@ -959,11 +1023,14 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
                   </p>
                   {!liveAmountOk && liveTradingStatus && (
                     <p style={{ fontSize: '0.75rem', color: 'var(--down)', margin: 0 }}>
-                      {type === 'dca' ? 'The largest level' : type === 'twap' ? 'Each slice' : type === 'grid' ? 'The per-level amount' : 'Amount'} exceeds the configured max live order size ({liveTradingStatus.maxOrderQuote}).
+                      {type === 'position' || type === 'order'
+                        ? t('Amount exceeds the configured max live order size ({max}).', { max: i18n.language === 'en' ? String(liveTradingStatus.maxOrderQuote) : i18n.num(liveTradingStatus.maxOrderQuote, 0, 8) })
+                        : `${type === 'dca' ? 'The largest level' : type === 'twap' ? 'Each slice' : 'The per-level amount'} exceeds the configured max live order size (${liveTradingStatus.maxOrderQuote}).`}
                     </p>
                   )}
                   <div>
-                    <label style={fieldLabelStyle()}>Type "{LIVE_CONFIRM_PHRASE}" to confirm</label>
+                    {/* The phrase itself is typed as it is written, in every language. */}
+                    <label style={fieldLabelStyle()}>{t('Type "{phrase}" to confirm', { phrase: LIVE_CONFIRM_PHRASE })}</label>
                     <input
                       value={liveConfirmText}
                       onChange={(e) => setLiveConfirmText(e.target.value)}
@@ -1001,7 +1068,7 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
             onClick={onClose}
             style={{ flex: 1, background: 'var(--bg-app)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '0.7rem', color: 'var(--text-primary)', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}
           >
-            Cancel
+            {t('Cancel')}
           </button>
           <button
             onClick={handleCreate}
@@ -1023,7 +1090,7 @@ export function NewExecutorModal({ onCreate, onClose, account, existingExecutors
               opacity: name.trim() && canSubmitLive && !spreadAssetsMismatched && !gridBlocked && !blockedByExpiry ? 1 : 0.6
             }}
           >
-            {mode === 'live' ? (type === 'position' ? 'Enter Real Position' : 'Place Real Order') : 'Create Executor'}
+            {mode === 'live' ? (type === 'position' ? t('Enter Real Position') : t('Place Real Order')) : t('Create Executor')}
           </button>
         </div>
       </div>

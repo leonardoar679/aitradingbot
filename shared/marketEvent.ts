@@ -1,3 +1,4 @@
+import { ENGLISH, msg, type I18n } from './i18n/translate'
 import type { Candle, Exchange } from './ipc'
 
 // What is moving, measured the same way for every pair.
@@ -97,6 +98,14 @@ export type EventDirection = 'up' | 'down' | 'none'
 export type EventBand = 'quiet' | 'watch' | 'candidate' | 'urgent'
 
 const BAND_RANK: Record<EventBand, number> = { quiet: 0, watch: 1, candidate: 2, urgent: 3 }
+
+const BAND_WORDS: Record<EventBand, string> = { quiet: msg('quiet@@band'), watch: msg('watch@@band'), candidate: msg('candidate@@band'), urgent: msg('urgent@@band') }
+
+/** An event's band in a word, in a language (V6 Stage 14). */
+export function describeBand(band: EventBand, { t }: I18n = ENGLISH): string {
+  const word = BAND_WORDS[band]
+  return word === undefined ? band : t(word)
+}
 
 export interface EventComponents {
   price: number
@@ -571,13 +580,13 @@ export function nextEventLife(event: Pick<MarketEvent, 'time' | 'price' | 'type'
   return { status: passesInBand >= 1 + EVENT_ACTIVE_PASSES ? 'active' : 'confirmed', passesInBand, at }
 }
 
-export function describeEventStatus(status: EventStatus): { word: string; detail: string } {
+export function describeEventStatus(status: EventStatus, { t }: I18n = ENGLISH): { word: string; detail: string } {
   const shown: Record<EventStatus, { word: string; detail: string }> = {
-    detected: { word: 'DETECTED', detail: 'Raised from one closed minute; the next pass says whether it holds.' },
-    confirmed: { word: 'CONFIRMED', detail: 'The next pass read the pair in the band again the same way, or a breakout still beyond its level on volume.' },
-    active: { word: 'ACTIVE', detail: `Held for ${EVENT_ACTIVE_PASSES} more passes after it was confirmed.` },
-    weakening: { word: 'WEAKENING', detail: 'The score fell below the watch band, or half the move was given back.' },
-    expired: { word: 'EXPIRED', detail: 'An hour has passed, the whole move was given back, or a newer event of the pair took its place.' }
+    detected: { word: t('DETECTED'), detail: t('Raised from one closed minute; the next pass says whether it holds.') },
+    confirmed: { word: t('CONFIRMED'), detail: t('The next pass read the pair in the band again the same way, or a breakout still beyond its level on volume.') },
+    active: { word: t('ACTIVE'), detail: t('Held for {count} more passes after it was confirmed.', { count: EVENT_ACTIVE_PASSES }) },
+    weakening: { word: t('WEAKENING'), detail: t('The score fell below the watch band, or half the move was given back.') },
+    expired: { word: t('EXPIRED'), detail: t('An hour has passed, the whole move was given back, or a newer event of the pair took its place.') }
   }
   return shown[status]
 }
@@ -635,9 +644,10 @@ export function eventCauseOf(event: Pick<MarketEvent, 'baseAsset' | 'time' | 'ty
   return 'unknown'
 }
 
-export function describeEventCause(cause: EventCause): string {
-  const shown: Record<EventCause, string> = { news: 'news-driven', market: 'with the market', exhaustion: 'exhaustion', organic: 'organic', unknown: 'unknown' }
-  return shown[cause]
+const CAUSE_WORDS: Record<EventCause, string> = { news: msg('news-driven'), market: msg('with the market'), exhaustion: msg('exhaustion'), organic: msg('organic'), unknown: msg('unknown@@a cause') }
+
+export function describeEventCause(cause: EventCause, { t }: I18n = ENGLISH): string {
+  return t(CAUSE_WORDS[cause])
 }
 
 /** How long after an event its page says what the price did: fifteen minutes, an hour, four hours. */
@@ -746,18 +756,35 @@ export function isScannablePair(pair: { baseAsset: string; quoteAsset: string; s
 }
 
 const TYPE_LABEL: Record<MarketEventType, string> = {
-  pump: 'Pump',
-  dump: 'Dump',
-  breakout: 'Breakout',
-  breakdown: 'Breakdown',
-  volume_spike: 'Volume spike',
-  delisting: 'Delisting',
-  monitoring_tag: 'Monitoring Tag',
-  market_move: 'Market-wide move'
+  pump: msg('Pump'),
+  dump: msg('Dump'),
+  breakout: msg('Breakout'),
+  breakdown: msg('Breakdown'),
+  volume_spike: msg('Volume spike'),
+  delisting: msg('Delisting'),
+  monitoring_tag: msg('Monitoring Tag'),
+  market_move: msg('Market-wide move')
 }
 
-export function describeEventType(type: MarketEventType): string {
-  return TYPE_LABEL[type]
+/** An event's kind by name, in a language: English unless handed another (V6 Stage 14). */
+export function describeEventType(type: MarketEventType, { t }: I18n = ENGLISH): string {
+  return t(TYPE_LABEL[type])
+}
+
+const TYPE_WORD: Record<MarketEventType, string> = {
+  pump: msg('pump'),
+  dump: msg('dump'),
+  breakout: msg('breakout@@an event'),
+  breakdown: msg('breakdown'),
+  volume_spike: msg('volume spike'),
+  delisting: msg('delisting@@an event'),
+  monitoring_tag: msg('Monitoring Tag@@inside a sentence'),
+  market_move: msg('market-wide move')
+}
+
+/** An event's kind inside a sentence -- "a pump at 07:45" -- in a language. */
+export function eventTypeWord(type: MarketEventType, { t }: I18n = ENGLISH): string {
+  return t(TYPE_WORD[type])
 }
 
 /** One of the five things an event's score is the mean of, with the fact behind it. */
@@ -770,8 +797,8 @@ export interface EventReason {
   fact: string
 }
 
-function times(value: number): string {
-  return `${value.toFixed(1)} times`
+function times(value: number, { t, num }: I18n = ENGLISH): string {
+  return t('{count} times', { count: num(value, 1, 1) })
 }
 
 /** Why this pair was singled out: each component of its score beside the reading behind it.
@@ -779,49 +806,62 @@ function times(value: number): string {
  * Only what the event's own record holds. A component whose reading was not kept -- where the
  * closes sat, how far past the range the price went -- is said from the score, which is that
  * reading on a fixed scale. */
-export function eventReasons(event: Pick<MarketEvent, 'components' | 'returnsPct' | 'moveSigmas' | 'volumeRatio' | 'rangeRatio' | 'direction'>): EventReason[] {
+export function eventReasons(event: Pick<MarketEvent, 'components' | 'returnsPct' | 'moveSigmas' | 'volumeRatio' | 'rangeRatio' | 'direction'>, i18n: I18n = ENGLISH): EventReason[] {
+  const { t, num } = i18n
   const { components } = event
   const up = event.direction !== 'down'
-  const move = `${event.returnsPct.m15 >= 0 ? '+' : ''}${event.returnsPct.m15.toFixed(2)}%`
+  const move = i18n.language === 'en' ? `${event.returnsPct.m15 >= 0 ? '+' : ''}${event.returnsPct.m15.toFixed(2)}%` : i18n.pct(event.returnsPct.m15, 2)
+  const pressure = { share: i18n.pctPlain(Math.round(50 + components.pressure / 2), 0) }
+  const fullBreak = components.breakout >= 100
   return [
     {
       component: 'price',
-      label: 'Move',
+      label: t('Move'),
       score: components.price,
-      fact: `${move} in fifteen minutes, ${times(Math.abs(event.moveSigmas))} its usual size (full at ${FULL_MOVE_SIGMAS})`
+      fact: t('{move} in fifteen minutes, {times} its usual size (full at {full})', { move, times: times(Math.abs(event.moveSigmas), i18n), full: num(FULL_MOVE_SIGMAS, 0, 2) })
     },
     {
       component: 'volume',
-      label: 'Volume',
+      label: t('Volume'),
       score: components.volume,
       fact:
         event.volumeRatio === null
-          ? 'nothing traded in the hours before to compare the last five minutes with'
-          : `the last five minutes traded ${times(event.volumeRatio)} the usual (full at ${FULL_VOLUME_RATIO})`
+          ? t('nothing traded in the hours before to compare the last five minutes with')
+          : t('the last five minutes traded {times} the usual (full at {full})', { times: times(event.volumeRatio, i18n), full: num(FULL_VOLUME_RATIO, 0, 2) })
     },
     {
       component: 'volatility',
-      label: 'Bar size',
+      label: t('Bar size'),
       score: components.volatility,
-      fact: event.rangeRatio === null ? 'no usual bar size to compare with' : `bars ${times(event.rangeRatio)} their usual range (full at ${FULL_RANGE_RATIO})`
+      fact: event.rangeRatio === null ? t('no usual bar size to compare with') : t('bars {times} their usual range (full at {full})', { times: times(event.rangeRatio, i18n), full: num(FULL_RANGE_RATIO, 0, 2) })
     },
     {
       component: 'pressure',
-      label: 'Pressure',
+      label: t('Pressure'),
       score: components.pressure,
       fact:
         components.pressure > 0
-          ? `the last five minutes closed ${Math.round(50 + components.pressure / 2)}% of the way ${up ? 'up' : 'down'} their bars, by volume`
-          : `the last five minutes did not close on the ${up ? 'upper' : 'lower'} side of their bars`
+          ? up
+            ? t('the last five minutes closed {share} of the way up their bars, by volume', pressure)
+            : t('the last five minutes closed {share} of the way down their bars, by volume', pressure)
+          : up
+            ? t('the last five minutes did not close on the upper side of their bars')
+            : t('the last five minutes did not close on the lower side of their bars')
     },
     {
       component: 'breakout',
-      label: 'Break',
+      label: t('Break'),
       score: components.breakout,
       fact:
         components.breakout > 0
-          ? `${up ? 'above the high' : 'below the low'} of the four hours before the move${components.breakout >= 100 ? `, by ${FULL_BREAK_SIGMAS} usual moves or more` : ''}`
-          : 'inside the range of the four hours before the move'
+          ? up
+            ? fullBreak
+              ? t('above the high of the four hours before the move, by {count} usual moves or more', { count: FULL_BREAK_SIGMAS })
+              : t('above the high of the four hours before the move')
+            : fullBreak
+              ? t('below the low of the four hours before the move, by {count} usual moves or more', { count: FULL_BREAK_SIGMAS })
+              : t('below the low of the four hours before the move')
+          : t('inside the range of the four hours before the move')
     }
   ]
 }

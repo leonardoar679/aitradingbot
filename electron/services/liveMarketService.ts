@@ -322,7 +322,14 @@ function checkGap(): void {
     // A gap open this long is the stream dead, told once per gap (SYSTEM_FAILURE).
     if (!deadTold && nowMs - last.from * 1000 >= DEAD_STREAM_MS) {
       deadTold = true
-      tell(systemFailureNotice('stream', `No frame from the live-price socket for ${Math.round((nowMs - last.from * 1000) / 1000)} s. No paper trade of the app's own opens on a stale price, and new live entries pause while REST fails too.`))
+      const quietS = Math.round((nowMs - last.from * 1000) / 1000)
+      tell((i18n) =>
+        systemFailureNotice(
+          'stream',
+          i18n.t("No frame from the live-price socket for {seconds} s. No paper trade of the app's own opens on a stale price, and new live entries pause while REST fails too.", { seconds: quietS }),
+          i18n
+        )
+      )
     }
     return
   }

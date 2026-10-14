@@ -159,7 +159,13 @@ describe('the notice is words on the desktop and nothing more', () => {
     // (shared/records.ts). Those lines are the only mention of settings and of a write it may have;
     // the only thing a click does is show the window, and it reads no executor.
     const service = readFileSync(join(ROOT, 'electron', 'services', 'noticeService.ts'), 'utf-8')
-    const reads = ["import { getSettings } from './settingsService'", 'healAlerts((await getSettings()).alerts)', "import { appendAlert, readAlertsSince } from './recordStoreService'"]
+    // Since V6 Stage 14 it reads one more: the language the person chose, which a notice it builds is said in.
+    const reads = [
+      "import { getSettings } from './settingsService'",
+      'healAlerts((await getSettings()).alerts)',
+      'healLanguage((await getSettings()).language)',
+      "import { appendAlert, readAlertsSince } from './recordStoreService'"
+    ]
     for (const line of reads) expect(service).toContain(line)
     expect(reads.reduce((rest, line) => rest.replace(line, ''), service)).not.toMatch(/placeLive|liveTrading|executor|settings/i)
   })

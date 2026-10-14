@@ -1,3 +1,4 @@
+import { noticeI18n } from '../i18n/current'
 import { useEffect, useMemo } from 'react'
 import { Bot as BotIcon, Archive } from 'lucide-react'
 import { EXCHANGES } from '../../shared/ipc'
@@ -73,9 +74,18 @@ function DryRunPanel({ bot, onPrepareOrder }: { bot: Bot; onPrepareOrder?: (prop
   const toldHere = bot.strategyId === GPT_INTRADAY_STRATEGY_ID || confirmsEntries(bot)
   useEffect(() => {
     if (degradedText === null || !toldHere) return
-    const notice = breakerNotice('strategy', `${bot.name}: ${degradedText}. It keeps running on paper; stop it under Strategies › Active Runs if that is what you want.`, `strategy:${bot.id}`)
+    // The notice in the person's language (V6 Stage 14): the card itself is an expert page's, in English.
+    const say = noticeI18n()
+    const reasons = strategyHealth(summarizePaperTrades(result?.trades ?? [], bot.enabledAt).paperTrades, expectation, say).reasons.join(say.t('; '))
+    const notice = breakerNotice(
+      'strategy',
+      say.t('{bot}: {reasons}. It keeps running on paper; stop it under Strategies › Active Runs if that is what you want.', { bot: bot.name, reasons }),
+      `strategy:${bot.id}`,
+      say
+    )
     // A desktop that cannot show it is not a reason to fail the poll that read the trades.
     void window.api.notify(notice.title, notice.body, notice.extra.severity, notice.extra).catch(() => undefined)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- told once a degraded reading appears, on its text
   }, [degradedText, toldHere, bot.id, bot.name])
 
   if (status === 'loading') {

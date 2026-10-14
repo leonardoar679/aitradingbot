@@ -14,10 +14,12 @@ import { DEFAULT_PAPER_DIGEST } from './paperDigest'
 import { DEFAULT_PAPER_PAUSE, describePaperPause, savePaperPause } from './paperPause'
 import { DEFAULT_PAPER_RISK, describePaperRisk } from './paperRisk'
 import { DEFAULT_UI_MODE, type UiMode } from './uiMode'
+import type { Language } from './i18n/languages'
 import { DEFAULT_SOUND_SETTINGS, type SoundSettings } from './sounds'
 import { DEFAULT_FORECAST_SETTINGS, type ForecastSettings } from './forecast/training'
 import { DEFAULT_FORECAST_TRADER, type ForecastTraderSettings } from './forecast/trader'
 import type { TargetLevel } from './forecast/tradePlan'
+import { ENGLISH, msg, type I18n } from './i18n/translate'
 
 // WHAT A FRESH INSTALL STARTS WITH, AND THE RISK LEVEL IN A WORD.
 //
@@ -61,7 +63,7 @@ export interface EffectiveStores {
   sounds: SoundSettings
   /** What closing the window does (shared/keepRunning.ts), and which groups of the sidebar start open
    * (shared/uiMode.ts). */
-  app: { keepRunningWhenClosed: boolean; uiMode: UiMode }
+  app: { keepRunningWhenClosed: boolean; uiMode: UiMode; language: Language | null }
   /** The price forecast's nightly refit (shared/forecast/training.ts). */
   forecast: ForecastSettings
   watch: AiWatchConfig
@@ -81,7 +83,8 @@ export const DEFAULT_CONFIG: EffectiveStores = {
   paperDigest: DEFAULT_PAPER_DIGEST,
   alerts: DEFAULT_ALERTS,
   sounds: DEFAULT_SOUND_SETTINGS,
-  app: { keepRunningWhenClosed: DEFAULT_KEEP_RUNNING, uiMode: DEFAULT_UI_MODE },
+  // No language until one is chosen: the first launch asks, offering the computer's (shared/i18n).
+  app: { keepRunningWhenClosed: DEFAULT_KEEP_RUNNING, uiMode: DEFAULT_UI_MODE, language: null },
   forecast: DEFAULT_FORECAST_SETTINGS,
   watch: DEFAULT_AI_WATCH,
   watchPaper: DEFAULT_AI_WATCH_PAPER,
@@ -111,7 +114,7 @@ export const RISK_MODE_PRESETS: Record<
   aggressive: { paperRisk: { sizing: 'equity', riskQuote: 5, riskPct: 1, maxOutQuote: 5000, correlatedShare: 0.35 }, pause: { lossR: 10, trades: 20 }, trader: { maxOpen: 6, maxSameSide: 3 }, targetLevel: 'P90' }
 }
 
-export const RISK_MODE_NAMES: Record<RiskMode, string> = { conservative: 'Conservative', balanced: 'Balanced', aggressive: 'Aggressive', custom: 'Custom' }
+export const RISK_MODE_NAMES: Record<RiskMode, string> = { conservative: msg('Conservative'), balanced: msg('Balanced'), aggressive: msg('Aggressive'), custom: msg('Custom') }
 
 interface ModeInput {
   paperRisk: PaperRiskSettings
@@ -155,12 +158,17 @@ export function targetLevelOf(mode: RiskMode): TargetLevel {
   return RISK_MODE_PRESETS[mode === 'custom' ? 'conservative' : mode].targetLevel
 }
 
-/** The mode in a word, and what it holds the app's own paper trades to, as set. */
-export function describeRiskMode(input: ModeInput): { mode: RiskMode; label: string; detail: string } {
+/** The mode in a word, and what it holds the app's own paper trades to, as set, in a language: English
+ * unless handed another (V6 Stage 14). */
+export function describeRiskMode(input: ModeInput, i18n: I18n = ENGLISH): { mode: RiskMode; label: string; detail: string } {
+  const { t } = i18n
   const mode = riskModeOf(input)
   return {
     mode,
-    label: RISK_MODE_NAMES[mode],
-    detail: `For the paper trades the app opens by itself: ${describePaperRisk(input.paperRisk)} ${describePaperPause(input.paperPause)} The forecast trader keeps at most ${input.trader.maxOpen} open, ${input.trader.maxSameSide} on one side, its target at ${targetLevelOf(mode)}. The limits on real orders are their own, on Risk & Safety: a mode never changes them.`
+    label: t(RISK_MODE_NAMES[mode]),
+    detail: t(
+      'For the paper trades the app opens by itself: {sizing} {pause} The forecast trader keeps at most {open} open, {side} on one side, its target at {level}. The limits on real orders are their own, on Risk & Safety: a mode never changes them.',
+      { sizing: describePaperRisk(input.paperRisk, i18n), pause: describePaperPause(input.paperPause, i18n), open: input.trader.maxOpen, side: input.trader.maxSameSide, level: targetLevelOf(mode) }
+    )
   }
 }

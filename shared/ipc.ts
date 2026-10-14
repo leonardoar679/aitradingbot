@@ -223,6 +223,10 @@ export interface AppSettings {
    * Features away, expert opens every group. Absent until first written, and healed on every read:
    * normal. */
   uiMode?: 'normal' | 'expert'
+  /** The language the normal-user pages and the notices are in (shared/i18n/languages.ts; V6 Stage 14).
+   * Absent until chosen: the first launch asks, offering the computer's language, and the expert pages
+   * stay English in any. Healed on every read. */
+  language?: import('./i18n/languages').Language
   /** The price forecast's nightly refit, on unless switched off (shared/forecast/training.ts), and the
    * forecast trader (shared/forecast/trader.ts), off until switched on. Absent until first written, and
    * healed on every read. Written whole: a patch replaces it. */

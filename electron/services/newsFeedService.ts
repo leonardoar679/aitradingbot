@@ -282,7 +282,12 @@ const readFeeds = singleFlight(async (): Promise<void> => {
   if (next.some((entry) => entry.ok)) lastAnyRead = readSec
   else if (lastAnyRead !== null && readSec - lastAnyRead >= FEEDS_DEAD_SECONDS && !feedsDeadTold) {
     feedsDeadTold = true
-    tell(systemFailureNotice('feed', `None of the ${next.length} feeds has been read for ${Math.round((readSec - lastAnyRead) / 60)} minutes: ${next[0]?.error ?? 'they could not be read'}.`))
+    const feeds = next.length
+    const minutes = Math.round((readSec - lastAnyRead) / 60)
+    const error = next[0]?.error ?? null
+    tell((i18n) =>
+      systemFailureNotice('feed', i18n.t('None of the {feeds} feeds has been read for {minutes} minutes: {error}.', { feeds, minutes, error: error ?? i18n.t('they could not be read') }), i18n)
+    )
   }
   if (next.some((entry) => entry.ok)) feedsDeadTold = false
   await rebuild()

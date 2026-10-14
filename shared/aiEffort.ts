@@ -1,3 +1,4 @@
+import { ENGLISH, msg, type I18n } from './i18n/translate'
 import { isAiModelSlug } from './aiSignal'
 
 // HOW HARD A MODEL IS ASKED TO THINK, AS PART OF WHO IS ASKED.
@@ -62,7 +63,10 @@ export function isAiModelId(id: string): boolean {
 }
 
 /** A model id as it is said in a sentence. */
-export function describeAiModelId(id: string): string {
+export function describeAiModelId(id: string, { t }: I18n = ENGLISH): string {
   const { slug, effort } = splitAiModelId(id)
-  return effort === null ? slug : `${slug} at ${effort} effort`
+  return effort === null ? slug : t('{model} at {effort} effort', { model: slug, effort: t(EFFORT_WORDS[effort] ?? effort) })
 }
+
+/** A reasoning effort in a word. */
+const EFFORT_WORDS: Record<string, string> = { minimal: msg('minimal'), low: msg('low'), medium: msg('medium'), high: msg('high') }

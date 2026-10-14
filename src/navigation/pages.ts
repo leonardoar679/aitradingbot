@@ -25,6 +25,7 @@ import {
   type LucideIcon
 } from 'lucide-react'
 import type { UiMode } from '../../shared/uiMode'
+import { msg } from '../../shared/i18n/translate'
 
 // The sidebar has two personalities (the V6 document, §64-65 and §116; 13 October 2026). The normal
 // path runs AI TRADER -> TRADING: the prediction, the opportunity, the position, paper or live. The
@@ -137,65 +138,65 @@ export interface NavGroup {
 export const NAV_GROUPS: NavGroup[] = [
   {
     id: 'ai-trader',
-    title: 'AI Trader',
+    title: msg('AI Trader'),
     foldable: false,
     icon: House,
     items: [
-      { id: 'home', label: 'Home', icon: House, target: { page: 'home' } },
-      { id: 'predictions', label: 'Predictions', icon: Telescope, target: { page: 'predictions' } },
-      { id: 'opportunities', label: 'Opportunities', icon: Radar, target: { page: 'opportunities' } },
-      { id: 'positions', label: 'Positions', icon: Anchor, target: { page: 'positions' } },
-      { id: 'performance', label: 'Performance', icon: TrendingUp, target: { page: 'performance' } }
+      { id: 'home', label: msg('Home'), icon: House, target: { page: 'home' } },
+      { id: 'predictions', label: msg('Predictions'), icon: Telescope, target: { page: 'predictions' } },
+      { id: 'opportunities', label: msg('Opportunities'), icon: Radar, target: { page: 'opportunities' } },
+      { id: 'positions', label: msg('Positions'), icon: Anchor, target: { page: 'positions' } },
+      { id: 'performance', label: msg('Performance'), icon: TrendingUp, target: { page: 'performance' } }
     ]
   },
   {
     id: 'trading',
-    title: 'Trading',
+    title: msg('Trading'),
     foldable: false,
     icon: ArrowLeftRight,
     items: [
-      { id: 'paper', label: 'Paper', icon: ArrowLeftRight, target: { page: 'paper-trading' } },
-      { id: 'live', label: 'Live', icon: Zap, target: { page: 'live-trading' } }
+      { id: 'paper', label: msg('Paper'), icon: ArrowLeftRight, target: { page: 'paper-trading' } },
+      { id: 'live', label: msg('Live'), icon: Zap, target: { page: 'live-trading' } }
     ]
   },
   {
     id: 'research',
-    title: 'Research',
+    title: msg('Research'),
     foldable: true,
     icon: History,
     items: [
-      { id: 'backtest', label: 'Backtest', icon: History, target: { page: 'research', tab: 'backtest' } },
-      { id: 'forecast-lab', label: 'Forecast Lab', icon: ChartSpline, target: { page: 'forecast-lab' } },
-      { id: 'ai-benchmark', label: 'AI Benchmark', icon: Scale, target: { page: 'ai-benchmark' } }
+      { id: 'backtest', label: msg('Backtest'), icon: History, target: { page: 'research', tab: 'backtest' } },
+      { id: 'forecast-lab', label: msg('Forecast Lab'), icon: ChartSpline, target: { page: 'forecast-lab' } },
+      { id: 'ai-benchmark', label: msg('AI Benchmark'), icon: Scale, target: { page: 'ai-benchmark' } }
     ]
   },
   {
     id: 'all-features',
-    title: 'All Features',
+    title: msg('All Features'),
     foldable: true,
     icon: Layers,
     items: [
-      { id: 'strategies', label: 'Strategies', icon: Boxes, target: { page: 'strategies' } },
-      { id: 'bots', label: 'Bots', icon: Bot, target: { page: 'strategies', tab: 'runs' } },
-      { id: 'executors', label: 'Executors', icon: Cpu, target: { page: 'strategies', tab: 'execution' } },
-      { id: 'controllers', label: 'Controllers', icon: Layers, target: { page: 'risk', anchor: 'controllers' } },
-      { id: 'routines', label: 'Routines', icon: Repeat, target: { page: 'research', tab: 'automation' } },
-      { id: 'market', label: 'Market', icon: CandlestickChart, target: { page: 'markets' } },
-      { id: 'portfolio', label: 'Portfolio', icon: Wallet, target: { page: 'performance', anchor: 'portfolio' } },
-      { id: 'explorer', label: 'Explorer', icon: Compass, target: { page: 'discovery' } },
-      { id: 'overview', label: 'Overview', icon: LayoutDashboard, target: { page: 'overview' } },
-      { id: 'ai-decisions', label: 'AI Decisions', icon: Atom, target: { page: 'ai-decisions' } }
+      { id: 'strategies', label: msg('Strategies'), icon: Boxes, target: { page: 'strategies' } },
+      { id: 'bots', label: msg('Bots'), icon: Bot, target: { page: 'strategies', tab: 'runs' } },
+      { id: 'executors', label: msg('Executors'), icon: Cpu, target: { page: 'strategies', tab: 'execution' } },
+      { id: 'controllers', label: msg('Controllers'), icon: Layers, target: { page: 'risk', anchor: 'controllers' } },
+      { id: 'routines', label: msg('Routines'), icon: Repeat, target: { page: 'research', tab: 'automation' } },
+      { id: 'market', label: msg('Market'), icon: CandlestickChart, target: { page: 'markets' } },
+      { id: 'portfolio', label: msg('Portfolio'), icon: Wallet, target: { page: 'performance', anchor: 'portfolio' } },
+      { id: 'explorer', label: msg('Explorer'), icon: Compass, target: { page: 'discovery' } },
+      { id: 'overview', label: msg('Overview'), icon: LayoutDashboard, target: { page: 'overview' } },
+      { id: 'ai-decisions', label: msg('AI Decisions'), icon: Atom, target: { page: 'ai-decisions' } }
     ]
   },
   {
     id: 'system',
-    title: 'System',
+    title: msg('System'),
     foldable: false,
     icon: Settings,
     items: [
-      { id: 'risk', label: 'Risk', icon: ShieldCheck, target: { page: 'risk' } },
-      { id: 'connections', label: 'Connections', icon: KeyRound, target: { page: 'connections' } },
-      { id: 'settings', label: 'Settings', icon: Settings, target: { page: 'settings' } }
+      { id: 'risk', label: msg('Risk'), icon: ShieldCheck, target: { page: 'risk' } },
+      { id: 'connections', label: msg('Connections'), icon: KeyRound, target: { page: 'connections' } },
+      { id: 'settings', label: msg('Settings'), icon: Settings, target: { page: 'settings' } }
     ]
   }
 ]
@@ -208,7 +209,8 @@ function firstItemFor(page: Page): NavItem | undefined {
   return items.find((item) => !('tab' in item.target && item.target.tab !== undefined) && item.target.anchor === undefined) ?? items[0]
 }
 
-/** What a page is called where a message names it: its sidebar entry's label. */
+/** What a page is called where a message names it: its sidebar entry's label, in English; a translated
+ * place shows it through t(). */
 export function pageLabel(page: Page): string {
   return firstItemFor(page)?.label ?? page
 }

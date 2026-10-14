@@ -1,6 +1,7 @@
 import { AI_WATCH_PAPER_DEFAULT_BTC_MOVE, AI_WATCH_PAPER_DEFAULT_STAKE } from '../../shared/aiWatchPaper'
 import { executionQuality, revalidate, type ExecutionQuality, type LiveState, type LiveVerdict } from '../../shared/liveMarket'
 import type { RightNowRow } from './opportunities'
+import { ENGLISH, msg, type I18n } from '../../shared/i18n/translate'
 
 export interface LiveReading {
   verdict: LiveVerdict
@@ -15,7 +16,7 @@ export interface LiveReading {
 export function liveReadingOf(
   row: Pick<RightNowRow, 'item' | 'side' | 'entryMin' | 'entryMax' | 'expiresAt'>,
   live: LiveState | null,
-  options: { btcLimitPct?: number; stakeQuote?: number; nowMs: number }
+  options: { btcLimitPct?: number; stakeQuote?: number; nowMs: number; i18n?: I18n }
 ): LiveReading | null {
   if (live === null) return null
   const { symbol, time } = row.item.event
@@ -33,15 +34,18 @@ export function liveReadingOf(
       btcMinutes: live.btcMinutes,
       btcPrice,
       btcLimitPct: options.btcLimitPct ?? AI_WATCH_PAPER_DEFAULT_BTC_MOVE,
-      nowMs: options.nowMs
+      nowMs: options.nowMs,
+      i18n: options.i18n
     }),
-    quality: executionQuality({ book, depth: live.depth[symbol] ?? null, side, stakeQuote: options.stakeQuote ?? AI_WATCH_PAPER_DEFAULT_STAKE, nowMs: options.nowMs })
+    quality: executionQuality({ book, depth: live.depth[symbol] ?? null, side, stakeQuote: options.stakeQuote ?? AI_WATCH_PAPER_DEFAULT_STAKE, nowMs: options.nowMs, i18n: options.i18n })
   }
 }
 
-/** The verdict in a word, as shown. */
-export function describeLiveState(verdict: LiveVerdict): { word: string; tone: 'up' | 'gold' | 'down' } {
-  if (verdict.state === 'enterable') return { word: 'ENTERABLE', tone: 'up' }
-  if (verdict.state === 'waiting') return { word: 'WAITING', tone: 'gold' }
-  return { word: 'INVALIDATED', tone: 'down' }
+const STATE_WORDS = { enterable: msg('ENTERABLE'), waiting: msg('WAITING'), invalidated: msg('INVALIDATED') }
+
+/** The verdict in a word, as shown, in a language. */
+export function describeLiveState(verdict: LiveVerdict, { t }: I18n = ENGLISH): { word: string; tone: 'up' | 'gold' | 'down' } {
+  if (verdict.state === 'enterable') return { word: t(STATE_WORDS.enterable), tone: 'up' }
+  if (verdict.state === 'waiting') return { word: t(STATE_WORDS.waiting), tone: 'gold' }
+  return { word: t(STATE_WORDS.invalidated), tone: 'down' }
 }

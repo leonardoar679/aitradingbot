@@ -1,3 +1,4 @@
+import { ENGLISH, type I18n } from './i18n/translate'
 import {
   AI_HORIZON_BARS,
   AI_MARKET_REGIMES,
@@ -304,10 +305,10 @@ export function opportunityConsensus(decisions: (AiSignalDecision | null | undef
   }
 }
 
-export function describeOpportunitySide(side: OpportunitySide | null): string {
-  if (side === 'long') return 'BUY'
-  if (side === 'short') return 'SELL'
-  return 'NO TRADE'
+export function describeOpportunitySide(side: OpportunitySide | null, { t }: I18n = ENGLISH): string {
+  if (side === 'long') return t('BUY')
+  if (side === 'short') return t('SELL')
+  return t('NO TRADE')
 }
 
 // ---------------------------------------------------------------------------------------------

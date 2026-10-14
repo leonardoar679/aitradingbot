@@ -6,6 +6,7 @@ import { describeEscalation, type AiRoute } from './aiRoute'
 import { AI_PROVIDER_LABEL, GPT_MAX_DECISIONS, describeGptCadence, type AiSignalEstimate } from './aiSignal'
 import type { AiWatchConfig } from './aiWatch'
 import type { AiWatchPaperConfig } from './aiWatchPaper'
+import { ENGLISH, type I18n } from './i18n/translate'
 
 // What AI calls cost, and what bounds them.
 //
@@ -86,13 +87,19 @@ export interface AiConfigPatch {
 /** `$0.0021`, `$0.0113`, `$1.40`. Up to four decimals under ten cents, because that is where a
  * single call's cost lives: at two decimals a $0.0019 call reads as free, and a $0.0149 call reads
  * as a third cheaper than it is. Trailing zeros past the cents are dropped, so `$0.05` stays `$0.05`. */
-export function formatUsd(value: number): string {
+export function formatUsd(value: number, i18n: I18n = ENGLISH): string {
   if (!Number.isFinite(value)) return '—'
   const abs = Math.abs(value)
-  if (abs === 0) return '$0.00'
-  if (abs < 0.0001) return '<$0.0001'
-  if (abs < 0.1) return `$${value.toFixed(4).replace(/(\.\d{2}\d*?)0+$/, '$1')}`
-  return `$${value.toFixed(2)}`
+  if (i18n.language === 'en') {
+    if (abs === 0) return '$0.00'
+    if (abs < 0.0001) return '<$0.0001'
+    if (abs < 0.1) return `$${value.toFixed(4).replace(/(\.\d{2}\d*?)0+$/, '$1')}`
+    return `$${value.toFixed(2)}`
+  }
+  // The same precision in the language's own form: four decimals under a dime, its zeros trimmed to two.
+  if (abs === 0) return i18n.money(0, 'USD', 2)
+  if (abs < 0.0001) return i18n.t('<{amount}', { amount: i18n.money(0.0001, 'USD', 4) })
+  return abs < 0.1 ? i18n.money(value, 'USD', 4, 2) : i18n.money(value, 'USD', 2)
 }
 
 /** Why a call may not be made right now, or null when it may.
@@ -101,14 +108,15 @@ export function formatUsd(value: number): string {
  * asks first. This catches what a confirmation cannot -- a bot left running, a model that costs
  * fifty times what the last one did. The message says the cache is intact because that is the
  * first thing someone stopped mid-run needs to know. */
-export function budgetProblem(capUsd: number, spentUsd: number): string | null {
+export function budgetProblem(capUsd: number, spentUsd: number, i18n: I18n = ENGLISH): string | null {
+  const { t } = i18n
   if (!(capUsd > 0)) {
-    return 'AI calls are switched off: the daily AI budget is $0. Raise it under Settings › AI.'
+    return t('AI calls are switched off: the daily AI budget is $0. Raise it under Settings › AI.')
   }
   if (spentUsd >= capUsd) {
-    return (
-      `Today's AI budget is used up (${formatUsd(spentUsd)} of ${formatUsd(capUsd)}). Everything generated so far is ` +
-      'cached, so nothing is lost: raise the budget under Settings › AI, or run again after midnight UTC.'
+    return t(
+      "Today's AI budget is used up ({spent} of {cap}). Everything generated so far is cached, so nothing is lost: raise the budget under Settings › AI, or run again after midnight UTC.",
+      { spent: formatUsd(spentUsd, i18n), cap: formatUsd(capUsd, i18n) }
     )
   }
   return null
@@ -149,22 +157,21 @@ export function averageCallLatencyMs(rows: AiCallRecord[]): number | null {
 
 /** `about 40 seconds`, `about 12 minutes`, `about 2 hours 25 minutes`. Rounded as coarsely as the
  * figure deserves: it is a pace multiplied by a count, not a schedule. */
-export function describeDuration(ms: number): string {
+export function describeDuration(ms: number, { t }: I18n = ENGLISH): string {
   const seconds = ms / 1000
   if (seconds < 90) {
     const whole = Math.max(1, Math.round(seconds))
-    return `about ${whole} ${whole === 1 ? 'second' : 'seconds'}`
+    return t('about {count} seconds', { count: whole })
   }
   const minutes = seconds / 60
-  if (minutes < 90) return `about ${Math.round(minutes)} minutes`
+  if (minutes < 90) return t('about {count} minutes', { count: Math.round(minutes) })
   let hours = Math.floor(minutes / 60)
   let rest = Math.round((minutes - hours * 60) / 5) * 5
   if (rest === 60) {
     hours++
     rest = 0
   }
-  const whole = `${hours} ${hours === 1 ? 'hour' : 'hours'}`
-  return rest === 0 ? `about ${whole}` : `about ${whole} ${rest} minutes`
+  return rest === 0 ? t('about {count} hours', { count: hours }) : t('about {count} hours {minutes} minutes', { count: hours, minutes: rest })
 }
 
 /** How long a tape's calls will take, as a sentence for its confirmation, or null when the run
@@ -464,48 +471,58 @@ export interface AiOpportunityCostInput {
 /** The same question describeAiRunCost asks, for one event put to several models
  * (shared/aiOpportunity.ts). One call a model, each priced on its own line, and the time is the
  * slowest of them rather than their sum: they are asked together and none waits on another. */
-export function describeAiOpportunityCost(input: AiOpportunityCostInput): string {
-  const count = (n: number, one: string, many: string): string => `${n.toLocaleString()} ${n === 1 ? one : many}`
+export function describeAiOpportunityCost(input: AiOpportunityCostInput, i18n: I18n = ENGLISH): string {
+  const { t } = i18n
+  const usd = (value: number): string => formatUsd(value, i18n)
   const asking = input.models.filter((model) => !model.held)
   const held = input.models.length - asking.length
   const priced = asking.filter((model) => model.perCallCostUsd !== null)
   const knownUsd = priced.reduce((sum, model) => sum + (model.perCallCostUsd ?? 0), 0)
 
   const lines = asking.map((model) => {
-    if (model.perCallCostUsd === null) return `  ${describeDecider(model.model)}: cost not known (no call history here and no published price)`
-    const basis = model.costBasis === 'history' ? 'going by its recent calls here' : 'going by its price list, an estimate'
-    return `  ${describeDecider(model.model)}: about ${formatUsd(model.perCallCostUsd)} ${basis}`
+    const who = describeDecider(model.model, i18n)
+    if (model.perCallCostUsd === null) return `  ${t('{model}: cost not known (no call history here and no published price)', { model: who })}`
+    return model.costBasis === 'history'
+      ? `  ${t('{model}: about {cost} going by its recent calls here', { model: who, cost: usd(model.perCallCostUsd) })}`
+      : `  ${t('{model}: about {cost} going by its price list, an estimate', { model: who, cost: usd(model.perCallCostUsd) })}`
   })
   const sum =
     priced.length === 0
-      ? 'What that will cost in all is not known.'
+      ? t('What that will cost in all is not known.')
       : priced.length === asking.length
-        ? `About ${formatUsd(knownUsd)} in all.`
-        : `About ${formatUsd(knownUsd)} for the ${priced.length === 1 ? 'one model' : `${priced.length} models`} with a known price; the rest is not known.`
+        ? t('About {cost} in all.', { cost: usd(knownUsd) })
+        : priced.length === 1
+          ? t('About {cost} for the one model with a known price; the rest is not known.', { cost: usd(knownUsd) })
+          : t('About {cost} for the {count} models with a known price; the rest is not known.', { cost: usd(knownUsd), count: priced.length })
   const slowest = Math.max(0, ...asking.map((model) => model.perCallLatencyMs ?? 0))
   const time = !asking.every((model) => model.perCallLatencyMs != null)
-    ? 'How long that takes is not known: a model that has not been called here has no pace to go by.'
+    ? t('How long that takes is not known: a model that has not been called here has no pace to go by.')
     : asking.length === 1
-      ? `That takes ${describeDuration(slowest)} at the pace it has answered here.`
-      : `They are asked together, so that takes ${describeDuration(slowest)}: as long as the slowest of them has been taking here.`
+      ? t('That takes {time} at the pace it has answered here.', { time: describeDuration(slowest, i18n) })
+      : t('They are asked together, so that takes {time}: as long as the slowest of them has been taking here.', { time: describeDuration(slowest, i18n) })
   const budget =
     priced.length > 0 && knownUsd > input.budgetRemainingUsd
-      ? `${formatUsd(input.budgetRemainingUsd)} of today's AI budget is left, which is less than that: the calls stop when it runs out.`
-      : `${formatUsd(input.budgetRemainingUsd)} of today's AI budget is left.`
+      ? t("{left} of today's AI budget is left, which is less than that: the calls stop when it runs out.", { left: usd(input.budgetRemainingUsd) })
+      : t("{left} of today's AI budget is left.", { left: usd(input.budgetRemainingUsd) })
+  const ask = t('Ask {count} models about the {event} on {pair} through {provider}. Each is shown the same snapshot and answers on its own.', {
+    count: input.models.length,
+    event: input.event,
+    pair: input.symbol,
+    provider: AI_PROVIDER_LABEL
+  })
+  const already = held === 0 ? '' : held === 1 ? ` ${t('1 has already answered and is not asked again.')}` : ` ${t('{count} have already answered and are not asked again.', { count: held })}`
 
   return [
-    `Ask ${count(input.models.length, 'model', 'models')} about the ${input.event} on ${input.symbol} through ${AI_PROVIDER_LABEL}. ` +
-      `Each is shown the same snapshot and answers on its own.` +
-      (held > 0 ? ` ${held === 1 ? '1 has' : `${held} have`} already answered and ${held === 1 ? 'is' : 'are'} not asked again.` : ''),
+    ask + already,
     '',
-    `${count(asking.length, 'call', 'calls')} will be made:`,
+    t('{count} calls will be made:', { count: asking.length }),
     ...lines,
     sum,
     ...(asking.length > 0 ? [time] : []),
     '',
-    `${budget} An answer is cached once it is bought, and is never asked for twice.`,
+    `${budget} ${t('An answer is cached once it is bought, and is never asked for twice.')}`,
     '',
-    'Continue?'
+    t('Continue?')
   ].join('\n')
 }
 

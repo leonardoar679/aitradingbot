@@ -4,10 +4,11 @@ import { TextLink } from '../components/TextLink'
 import { describeOpportunitySide, opportunitySide } from '../../shared/aiOpportunity'
 import { describeDecider } from '../../shared/aiPanel'
 import type { AiOrderProposal } from '../../shared/aiProposal'
-import { describeEventType } from '../../shared/marketEvent'
+import { describeBand, eventTypeWord } from '../../shared/marketEvent'
+import { useI18n, type I18n } from '../i18n'
 import { useNowSec } from '../utils/useNowSec'
 import { buttonStyle, noteStyle } from '../agents/agentStyles'
-import { overviewOpportunity, proposalForAnswer, type EventAnswer, type EventFeedItem } from '../agents/opportunities'
+import { describeWhatItLacks, overviewOpportunity, proposalForAnswer, type EventAnswer, type EventFeedItem } from '../agents/opportunities'
 import { liveReadingOf } from '../agents/liveVerdict'
 import { LiveVerdictView } from '../agents/LiveVerdictView'
 import { opportunityTableRows } from '../agents/opportunityTable'
@@ -21,36 +22,41 @@ import type { Page } from '../navigation/pages'
 /** Events read for this card: the newest, as many as Opportunities shows at first. */
 const EVENTS_READ = 20
 
-function plainNumber(value: number): string {
-  return Number(value.toPrecision(7)).toLocaleString('en-US', { maximumFractionDigits: 8 })
+/** A price as the card writes one: seven significant figures. */
+function plainNumber(value: number, { num }: I18n): string {
+  return num(Number(value.toPrecision(7)), 0, 8)
 }
 
-function utcClock(sec: number): string {
-  return new Date(sec * 1000).toISOString().slice(11, 16)
-}
-
-function describeEvent(item: EventFeedItem): string {
+function describeEvent(item: EventFeedItem, i18n: I18n): string {
   const { event } = item
-  return `${event.symbol}: ${describeEventType(event.type).toLowerCase()} at ${utcClock(event.time)} UTC, score ${event.score.toFixed(0)} (${event.band})`
+  return i18n.t('{pair}: {kind} at {time} UTC, score {score} ({band})', {
+    pair: event.symbol,
+    kind: eventTypeWord(event.type, i18n),
+    time: i18n.utcTime(event.time * 1000),
+    score: Math.round(event.score),
+    band: describeBand(event.band, i18n)
+  })
 }
 
 /** What the models asked about an event said, model by model. */
 function Answers({ answers }: { answers: EventAnswer[] }): React.JSX.Element {
-  if (answers.length === 0) return <p style={{ ...noteStyle, marginTop: '0.5rem' }}>No model has answered about it.</p>
+  const i18n = useI18n()
+  const { t, pctPlain } = i18n
+  if (answers.length === 0) return <p style={{ ...noteStyle, marginTop: '0.5rem' }}>{t('No model has answered about it.')}</p>
   return (
     <p style={{ ...noteStyle, marginTop: '0.5rem', color: 'var(--text-secondary)' }}>
-      What the models said:{' '}
+      {t('What the models said:')}{' '}
       {answers.map((answer, index) => {
         const side = opportunitySide(answer.decision)
         const refused = Boolean(answer.decision.rejected)
         return (
           <span key={answer.model}>
             {index > 0 && ' · '}
-            {describeDecider(answer.model)}{' '}
+            <span dir="ltr">{describeDecider(answer.model, i18n)}</span>{' '}
             <strong style={{ color: refused ? 'var(--down)' : side === 'long' ? 'var(--up)' : side === 'short' ? 'var(--down)' : 'var(--text-secondary)' }}>
-              {refused ? 'REFUSED' : side === null ? 'NO TRADE' : describeOpportunitySide(side)}
+              {refused ? t('REFUSED') : describeOpportunitySide(side, i18n)}
             </strong>
-            {!refused && ` ${Math.round(answer.decision.confidence * 100)}%`}
+            {!refused && ` ${pctPlain(Math.round(answer.decision.confidence * 100), 0)}`}
           </span>
         )
       })}
@@ -73,6 +79,8 @@ export function TopOpportunityCard({
   onPrepareOrder: (proposal: AiOrderProposal) => void
   onNavigate: (page: Page) => void
 }): React.JSX.Element {
+  const i18n = useI18n()
+  const { t, pctPlain, utcTime } = i18n
   const { events, scannerOn, feed, bars, problem: feedProblem } = useEventFeed(EVENTS_READ)
   const nowSec = useNowSec(true, 15_000)
   const [problem, setProblem] = useState<string | null>(null)
@@ -92,7 +100,7 @@ export function TopOpportunityCard({
 
   async function paperTrade(item: EventFeedItem, answer: EventAnswer): Promise<void> {
     setProblem(null)
-    const result = await proposalForAnswer(item, answer, async () => (await window.api.market.fetchTicker24h(item.event.exchange, item.event.symbol)).lastPrice)
+    const result = await proposalForAnswer(item, answer, async () => (await window.api.market.fetchTicker24h(item.event.exchange, item.event.symbol)).lastPrice, undefined, i18n)
     if ('problem' in result) {
       setProblem(result.problem)
       return
@@ -101,13 +109,13 @@ export function TopOpportunityCard({
   }
 
   const open = (
-    <TextLink onClick={() => onNavigate('opportunities')}>Open Opportunities</TextLink>
+    <TextLink onClick={() => onNavigate('opportunities')}>{t('Open Opportunities')}</TextLink>
   )
 
   if (feedProblem !== null || events === null) {
     return (
-      <Card title="What can be acted on">
-        <p style={noteStyle}>{feedProblem ?? 'Loading…'}</p>
+      <Card title={t('What can be acted on')}>
+        <p style={noteStyle}>{feedProblem ?? t('Loading…')}</p>
       </Card>
     )
   }
@@ -117,52 +125,52 @@ export function TopOpportunityCard({
     const answer = answerOf
     const detail = answer.decision.detail
     const left = Math.max(0, row.expiresAt - nowSec)
+    const leftText = left < 60 ? t('{seconds}s left', { seconds: left }) : t('{minutes} min left', { minutes: Math.ceil(left / 60) })
     return (
-      <Card title="What can be acted on">
-        <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>{describeEvent(row.item)}</div>
+      <Card title={t('What can be acted on')}>
+        <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>{describeEvent(row.item, i18n)}</div>
         <div style={{ marginTop: '0.45rem', fontSize: '0.88rem', color: 'var(--text-primary)' }}>
-          <strong style={{ color: row.side === 'long' ? 'var(--up)' : 'var(--down)' }}>{describeOpportunitySide(row.side)}</strong> between{' '}
-          {plainNumber(row.entryMin)} and {plainNumber(row.entryMax)}, until {utcClock(row.expiresAt)} UTC ({left < 60 ? `${left}s` : `${Math.ceil(left / 60)} min`} left)
+          <strong style={{ color: row.side === 'long' ? 'var(--up)' : 'var(--down)' }}>{describeOpportunitySide(row.side, i18n)}</strong>{' '}
+          {t('between {low} and {high}, until {time} UTC ({left})', { low: plainNumber(row.entryMin, i18n), high: plainNumber(row.entryMax, i18n), time: utcTime(row.expiresAt * 1000), left: leftText })}
           {detail !== undefined && detail !== null && detail.stopLoss !== null && detail.takeProfit !== null && (
-            <span style={{ color: 'var(--text-secondary)' }}>
-              {' '}
-              · stop {plainNumber(detail.stopLoss)} · target {plainNumber(detail.takeProfit)}
-            </span>
+            <span style={{ color: 'var(--text-secondary)' }}> {t('· stop {stop} · target {target}', { stop: plainNumber(detail.stopLoss, i18n), target: plainNumber(detail.takeProfit, i18n) })}</span>
           )}
         </div>
         <div style={{ marginTop: '0.35rem' }}>
-          <span style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>Signal </span>
-          <strong style={{ fontSize: '0.84rem', color: 'var(--text-primary)' }}>{top.signal.score}/100</strong>
-          <span style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}> · Now: </span>
-          <LiveVerdictView reading={liveReadingOf(row, live, { nowMs: Date.now() })} />
+          <span style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>{t('Signal')} </span>
+          <strong style={{ fontSize: '0.84rem', color: 'var(--text-primary)' }}>{t('{score}/100', { score: top.signal.score })}</strong>
+          <span style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}> · {t('Now:')} </span>
+          <LiveVerdictView reading={liveReadingOf(row, live, { nowMs: Date.now(), i18n })} />
         </div>
         <p style={{ ...noteStyle, marginTop: '0.4rem' }}>
-          The surest call to act on: {describeDecider(row.model)} at {Math.round(answer.decision.confidence * 100)}%. A model&apos;s confidence is not a
-          probability of profit, and taking every event has lost money (research/EVENTS.md).
+          {t("The surest call to act on: {model} at {confidence}. A model's confidence is not a probability of profit, and taking every event has lost money (research/EVENTS.md).", {
+            model: describeDecider(row.model, i18n),
+            confidence: pctPlain(Math.round(answer.decision.confidence * 100), 0)
+          })}
         </p>
         <Answers answers={row.item.answers} />
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.9rem', marginTop: '0.8rem', flexWrap: 'wrap' }}>
           <button onClick={() => void paperTrade(row.item, answer)} style={buttonStyle('primary')}>
-            Paper trade
+            {t('Paper trade')}
           </button>
           {open}
         </div>
         {problem !== null && <p style={{ ...noteStyle, color: 'var(--down)', marginTop: '0.5rem' }}>{problem}</p>}
         {offers.length > 1 && (
           <p style={{ ...noteStyle, marginTop: '0.6rem', color: 'var(--text-secondary)' }}>
-            Also on offer:{' '}
+            {t('Also on offer:')}{' '}
             {offers.slice(1, 3).map((entry, index) => (
               <span key={entry.item.event.id}>
                 {index > 0 && ' · '}
-                {entry.item.event.symbol}
+                <span dir="ltr">{entry.item.event.symbol}</span>
                 {entry.offer !== null && (
                   <>
                     {' '}
-                    <strong style={{ color: entry.offer.side === 'long' ? 'var(--up)' : 'var(--down)' }}>{describeOpportunitySide(entry.offer.side)}</strong> until{' '}
-                    {utcClock(entry.offer.expiresAt)} UTC
+                    <strong style={{ color: entry.offer.side === 'long' ? 'var(--up)' : 'var(--down)' }}>{describeOpportunitySide(entry.offer.side, i18n)}</strong>{' '}
+                    {t('until {time} UTC', { time: utcTime(entry.offer.expiresAt * 1000) })}
                   </>
                 )}
-                , signal {entry.signal.score}
+                {t(', signal {score}', { score: entry.signal.score })}
               </span>
             ))}
             .
@@ -175,19 +183,17 @@ export function TopOpportunityCard({
   // Nothing on offer, so the pick is the strongest event of the last hour, where there is one.
   const candidate = pick.kind === 'none' ? pick.candidate : null
   return (
-    <Card title="What can be acted on">
-      <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>No high-quality opportunity right now. Wait.</div>
+    <Card title={t('What can be acted on')}>
+      <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>{t('No high-quality opportunity right now. Wait.')}</div>
       {candidate !== null ? (
         <>
           <p style={{ ...noteStyle, marginTop: '0.45rem', color: 'var(--text-secondary)' }}>
-            The strongest event of the last hour: {describeEvent(candidate.item)}. {candidate.lacks}
+            {t('The strongest event of the last hour: {event}.', { event: describeEvent(candidate.item, i18n) })} {describeWhatItLacks(candidate.item, candidate.status, i18n)}
           </p>
           <Answers answers={candidate.item.answers} />
         </>
       ) : (
-        <p style={{ ...noteStyle, marginTop: '0.45rem' }}>
-          {scannerOn === false ? 'The scanner is off, so no event is being raised.' : 'The scanner has raised no event in the last hour.'}
-        </p>
+        <p style={{ ...noteStyle, marginTop: '0.45rem' }}>{scannerOn === false ? t('The scanner is off, so no event is being raised.') : t('The scanner has raised no event in the last hour.')}</p>
       )}
       <div style={{ marginTop: '0.7rem', fontSize: '0.82rem' }}>{open}</div>
     </Card>

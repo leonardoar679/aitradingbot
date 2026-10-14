@@ -1,3 +1,6 @@
+import { ENGLISH, type I18n } from '../../shared/i18n/translate'
+import { classKeyWords, HORIZON_NAME } from '../../shared/forecast/words'
+import { noticeI18n } from '../i18n/current'
 import type { AppSettings, Candle, ExecutorConfig, PositionExecutorParams } from '../../shared/ipc'
 import { riskModeOf, targetLevelOf } from '../../shared/appDefaults'
 import { SLIPPAGE_RATE } from '../../shared/fees'
@@ -53,6 +56,8 @@ export interface ForecastTraderDeps {
   nowSec: () => number
   newId: () => string
   queue: <T>(work: () => Promise<T>) => Promise<T>
+  /** The language its card's lines and its notices are in (V6 Stage 14); English where absent. */
+  i18n?: () => I18n
 }
 
 /** The forecast trader's paper trades among the executors: paper Positions carrying its mark. */
@@ -111,7 +116,7 @@ export function forecastPaperExecutor(input: {
 
 export interface ForecastTraderResult {
   opened: string[]
-  /** Each TRADE decision not opened, and why. */
+  /** Each TRADE decision not opened, and why: said in the trader's language, for its card. */
   refused: { pair: string; why: string }[]
 }
 
@@ -120,13 +125,16 @@ const mid = (book: LiveBook): number => (book.bid + book.ask) / 2
 /** One pass: every TRADE decision the trader may open, opened. Nothing while it is switched off. */
 export async function openForecastTrades(deps: ForecastTraderDeps): Promise<ForecastTraderResult> {
   const result: ForecastTraderResult = { opened: [], refused: [] }
+  // Its card's lines and its notices in the person's language (V6 Stage 14); nothing decides by them.
+  const say = deps.i18n?.() ?? ENGLISH
+  const { t } = say
   const settings = await deps.getSettings()
   const forecast = healForecastSettings(settings.forecast)
   if (!forecast.trader.enabled) return result
   const ranking = await deps.ranking()
   const trades = ranking.ranked.filter((entry) => entry.decision.decision === 'TRADE')
   if (trades.length === 0) return result
-  const paused = paperPauseBlock({ setting: healPaperPause(settings.paperPause), executors: settings.executors, source: 'forecast' })
+  const paused = paperPauseBlock({ setting: healPaperPause(settings.paperPause), executors: settings.executors, source: 'forecast' }, say)
   if (paused !== null) {
     for (const entry of trades) result.refused.push({ pair: entry.pair, why: paused })
     return result
@@ -139,24 +147,24 @@ export async function openForecastTrades(deps: ForecastTraderDeps): Promise<Fore
     const decision = entry.decision
     const prediction = predictions.get(entry.pair)
     if (prediction === undefined) {
-      refuse('Its forecast is no longer held.')
+      refuse(t('Its forecast is no longer held.'))
       continue
     }
     if (decision.classVerdict === null || !classTradable(decision.classVerdict)) {
-      refuse(`Its kind of opportunity (${decision.classKey ?? 'not read'}) is not approved or on probation.`)
+      refuse(t('Its kind of opportunity ({kind}) is not approved or on probation.', { kind: decision.classKey === null ? t('not read') : classKeyWords(decision.classKey, say) }))
       continue
     }
     const book = await deps.liveBook(entry.pair)
     const nowSec = deps.nowSec()
-    const blocked = livePaperBlock(book, nowSec * 1000)
+    const blocked = livePaperBlock(book, nowSec * 1000, say)
     if (blocked !== null || book === null) {
-      refuse(blocked ?? 'No live price.')
+      refuse(blocked ?? t('No live price.'))
       continue
     }
     const price = mid(book)
     const plan = tradePlanOf({ decision, prediction, livePrice: price, atr5mPct: prediction.market?.atr5mPct ?? null, targetLevel })
     if (plan === null || !planValid(plan, price, nowSec)) {
-      refuse('Its plan does not hold at the live price: no target clears a round trip, or the next close has come.')
+      refuse(t('Its plan does not hold at the live price: no target clears a round trip, or the next close has come.'))
       continue
     }
     const correlation = await deps.btcCorrelation(entry.pair)
@@ -164,19 +172,23 @@ export async function openForecastTrades(deps: ForecastTraderDeps): Promise<Fore
       // Everything that counts what is open is read again here, inside the queue.
       const fresh = await deps.getSettings()
       const trader = healForecastSettings(fresh.forecast).trader
-      if (!trader.enabled) return 'The forecast trader was switched off.'
+      if (!trader.enabled) return t('The forecast trader was switched off.')
       const open = forecastPaperExecutors(fresh.executors).filter((executor) => executor.status === 'active')
-      if (open.some((executor) => executor.symbol === entry.pair)) return 'It already has a paper trade open on the pair.'
-      if (open.length >= trader.maxOpen) return `It has ${open.length} paper trades open, the most the risk mode keeps.`
+      if (open.some((executor) => executor.symbol === entry.pair)) return t('It already has a paper trade open on the pair.')
+      if (open.length >= trader.maxOpen) return t('It has {count} paper trades open, the most the risk mode keeps.', { count: open.length })
       const sameSide = open.filter((executor) => executor.forecast?.side === plan.side).length
-      if (sameSide >= trader.maxSameSide) return `It has ${sameSide} paper ${plan.side}s open, the most the risk mode keeps on one side.`
+      if (sameSide >= trader.maxSameSide) {
+        return plan.side === 'BUY'
+          ? t('It has {count} paper BUYs open, the most the risk mode keeps on one side.', { count: sameSide })
+          : t('It has {count} paper SELLs open, the most the risk mode keeps on one side.', { count: sameSide })
+      }
       const freshRisk = healPaperRisk(fresh.paperRisk)
-      const size = sizePaperTrade({ risk: freshRisk, stakeQuote: trader.stakeQuote, stopPct: plan.stopPct, quoteAsset: 'USDT', slippageRate: SLIPPAGE_RATE, equityQuote: paperEquity(fresh.paperAccount, fresh.executors, 'USDT') })
+      const size = sizePaperTrade({ risk: freshRisk, stakeQuote: trader.stakeQuote, stopPct: plan.stopPct, quoteAsset: 'USDT', slippageRate: SLIPPAGE_RATE, equityQuote: paperEquity(fresh.paperAccount, fresh.executors, 'USDT') }, say)
       if (!size.ok) return size.reason
-      const out = paperOutBlock({ risk: freshRisk, executors: fresh.executors, quoteAsset: 'USDT', amountQuote: size.amountQuote })
+      const out = paperOutBlock({ risk: freshRisk, executors: fresh.executors, quoteAsset: 'USDT', amountQuote: size.amountQuote }, say)
       if (out !== null) return out
       const side = plan.side === 'BUY' ? 'buy' : 'sell'
-      const correlated = correlatedExposureBlock({ account: fresh.paperAccount, risk: freshRisk, executors: fresh.executors, quoteAsset: 'USDT', side, amountQuote: size.amountQuote, correlation })
+      const correlated = correlatedExposureBlock({ account: fresh.paperAccount, risk: freshRisk, executors: fresh.executors, quoteAsset: 'USDT', side, amountQuote: size.amountQuote, correlation }, say)
       if (correlated !== null) return correlated
       const range = prediction.horizons[decision.horizon]!
       const spread = bookSpreadPct(book)
@@ -206,9 +218,18 @@ export async function openForecastTrades(deps: ForecastTraderDeps): Promise<Fore
     }
     result.opened.push(entry.pair)
     try {
+      const values = {
+        pair: entry.pair,
+        horizon: say.language === 'en' ? decision.horizon : t(HORIZON_NAME[decision.horizon]),
+        price: say.language === 'en' ? price.toPrecision(6) : say.num(Number(price.toPrecision(6)), 0, 10),
+        stop: say.pctPlain(plan.stopPct, 2),
+        target: say.pctPlain(plan.targetPct, 2),
+        level: plan.targetLevel,
+        minutes: Math.round(plan.holdSec / 60)
+      }
       deps.notify(
-        `Forecast paper trade: ${plan.side} ${entry.pair}`,
-        `The ${decision.horizon} forecast traded, on paper: in around ${price.toPrecision(6)}, stop ${plan.stopPct.toFixed(2)}% away, target ${plan.targetPct.toFixed(2)}% at its ${plan.targetLevel}, held at most ${Math.round(plan.holdSec / 60)} minutes. Nothing real was placed.`,
+        plan.side === 'BUY' ? t('Forecast paper trade: BUY {pair}', values) : t('Forecast paper trade: SELL {pair}', values),
+        t('The {horizon} forecast traded, on paper: in around {price}, stop {stop} away, target {target} at its {level}, held at most {minutes} minutes. Nothing real was placed.', values),
         { kind: 'TRADE_EXECUTED', severity: 'watch', thread: `forecast-trade:${entry.pair}` }
       )
     } catch {
@@ -243,7 +264,11 @@ export async function settleForecastTrades(deps: ForecastTraderDeps): Promise<st
       settled.push(executor.name)
       if (ended.exit !== 'entry_expired') {
         const params = executor.params as PositionExecutorParams
-        const closed = paperCloseNotice({ id: executor.id, symbol: executor.symbol, side: params.side, quoteAsset: executor.quoteAsset }, { exit: ended.exit, pnlQuote: ended.pnlQuote, r: rMultiple(ended.pnlQuote, params) })
+        const closed = paperCloseNotice(
+          { id: executor.id, symbol: executor.symbol, side: params.side, quoteAsset: executor.quoteAsset },
+          { exit: ended.exit, pnlQuote: ended.pnlQuote, r: rMultiple(ended.pnlQuote, params) },
+          deps.i18n?.() ?? ENGLISH
+        )
         try {
           deps.notify(closed.title, closed.body, closed.extra)
         } catch {
@@ -279,5 +304,6 @@ export const forecastTraderBrowserDeps: ForecastTraderDeps = {
   notify: (title, body, extra) => void window.api.notify(title, body, extra?.severity, extra).catch(() => undefined),
   nowSec: () => Math.floor(Date.now() / 1000),
   newId: () => crypto.randomUUID(),
-  queue: (work) => settingsWrites(work)
+  queue: (work) => settingsWrites(work),
+  i18n: noticeI18n
 }

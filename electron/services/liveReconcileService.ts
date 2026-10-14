@@ -47,7 +47,7 @@ export async function reconcileOnce(): Promise<ReconciliationState> {
     const known = new Set(ledger.filter((order) => order.exchange === 'binance').map(keyOf))
     const unknown = onExchange.filter((order) => !known.has(keyOf(order)))
     for (const order of unknown) {
-      tell(reconciliationNotice('order', describeUnknownOrder(order, 'Binance'), `order:${keyOf(order)}`))
+      tell((i18n) => reconciliationNotice('order', describeUnknownOrder(order, 'Binance', i18n), `order:${keyOf(order)}`, i18n))
     }
     // A ledger order the exchange no longer rests: filled, cancelled or expired while nothing heard
     // it. Asked about one by one and resolved as the poll resolves it.
@@ -70,7 +70,7 @@ export async function reconcileOnce(): Promise<ReconciliationState> {
       positions.filter((position) => position.exchange === 'binance'),
       balances
     )
-    for (const discrepancy of reconciled.discrepancies) tell(reconciliationNotice('asset', describeDiscrepancy(discrepancy, 'Binance'), `asset:${discrepancy.asset}`))
+    for (const discrepancy of reconciled.discrepancies) tell((i18n) => reconciliationNotice('asset', describeDiscrepancy(discrepancy, 'Binance', i18n), `asset:${discrepancy.asset}`, i18n))
     state = { at: nowSec, unknownOrders: unknown, discrepancies: reconciled.discrepancies, unchecked: reconciled.unchecked, resolvedByCheck: state.resolvedByCheck + resolved, keyStored: true, error: null }
   } catch (error) {
     state = { ...state, at: nowSec, error: error instanceof Error ? error.message : String(error) }

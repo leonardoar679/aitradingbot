@@ -350,11 +350,17 @@ export async function checkLossLimitAndAutoDisarm(): Promise<void> {
     sessionArmed = false
     // Told once, when it disarms: a breaker tripped (the V4 document, §48).
     if (wasArmed) {
-      tell(
+      const limit = state.dailyLossLimitQuote
+      tell((i18n) =>
         breakerNotice(
           'live-loss',
-          describeUntrustedLossTally(realizedPnlToday) ??
-            `Realized ${realizedPnlToday.toFixed(2)} today against a limit of ${state.dailyLossLimitQuote}: the session is disarmed for today. Open positions keep their watchers, which can still close them while the session is armed again.`
+          describeUntrustedLossTally(realizedPnlToday, i18n) ??
+            i18n.t('Realized {pnl} today against a limit of {limit}: the session is disarmed for today. Open positions keep their watchers, which can still close them while the session is armed again.', {
+              pnl: i18n.language === 'en' ? realizedPnlToday.toFixed(2) : i18n.num(realizedPnlToday, 2, 2),
+              limit: i18n.language === 'en' ? String(limit) : i18n.num(limit, 0, 8)
+            }),
+          'live-loss',
+          i18n
         )
       )
     }

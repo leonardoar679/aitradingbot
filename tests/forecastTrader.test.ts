@@ -328,7 +328,8 @@ describe('the forecast trader (§66-68)', () => {
     const two = world({ ranked: [ranked('SOLUSDT'), ranked('ETHUSDT'), ranked('XRPUSDT')], trader: { maxOpen: 2, maxSameSide: 1 } })
     const result = await openForecastTrades(two.deps)
     expect(result.opened).toEqual(['SOLUSDT'])
-    expect(result.refused.map((entry) => entry.why)).toEqual([expect.stringMatching(/1 paper BUYs open, the most the risk mode keeps on one side/), expect.stringMatching(/1 paper BUYs open/)])
+    // One is said as one since V6 Stage 14 (en.json's singular).
+    expect(result.refused.map((entry) => entry.why)).toEqual([expect.stringMatching(/1 paper BUY open, the most the risk mode keeps on one side/), expect.stringMatching(/1 paper BUY open/)])
     const again = await openForecastTrades(two.deps)
     expect(again.refused[0].why).toBe('It already has a paper trade open on the pair.')
     const wider = world({ ranked: [ranked('SOLUSDT'), ranked('ETHUSDT'), ranked('XRPUSDT')], trader: { maxOpen: 2, maxSameSide: 3 } })

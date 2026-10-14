@@ -1,5 +1,6 @@
 import type { AiCallRecord } from '../../shared/aiLedger'
 import type { AiModelInfo } from '../../shared/aiCost'
+import { ENGLISH, type I18n } from '../../shared/i18n/translate'
 
 // WHAT EACH MODEL COSTS AND HOW IT HAS ANSWERED (the V5 document, §34; V5 Stage 5): the catalogue's
 // price a million tokens and whether the model takes a strict schema, and from thirty days of the
@@ -39,13 +40,19 @@ export function modelFactsOf(model: string, catalogue: readonly AiModelInfo[], r
 }
 
 /** The facts in a line: "$0.25 in · $2.00 out a million tokens · strict schema · 100 calls in 30 days, 6.4 s at the median, 0% refused or failed". */
-export function describeModelFacts(facts: ModelFacts): string {
-  const price = facts.promptPer1M === null || facts.completionPer1M === null ? 'no fixed price' : `$${facts.promptPer1M.toFixed(2)} in · $${facts.completionPer1M.toFixed(2)} out a million tokens`
-  const schema = facts.schema === null ? 'not in the catalogue' : facts.schema ? 'strict schema' : 'no strict schema'
+export function describeModelFacts(facts: ModelFacts, i18n: I18n = ENGLISH): string {
+  const { t, num, money, pctPlain } = i18n
+  const usd = (value: number): string => (i18n.language === 'en' ? `$${value.toFixed(2)}` : money(value, 'USD', 2))
+  const price = facts.promptPer1M === null || facts.completionPer1M === null ? t('no fixed price') : t('{in} in · {out} out a million tokens', { in: usd(facts.promptPer1M), out: usd(facts.completionPer1M) })
+  const schema = facts.schema === null ? t('not in the catalogue') : facts.schema ? t('strict schema') : t('no strict schema')
   const record =
     facts.calls === 0
-      ? 'no calls in 30 days'
-      : `${facts.calls} ${facts.calls === 1 ? 'call' : 'calls'} in 30 days, ${facts.medianLatencyMs === null ? '?' : (facts.medianLatencyMs / 1000).toFixed(1)} s at the median, ${Math.round(facts.refusedOrFailedPct ?? 0)}% refused or failed`
+      ? t('no calls in 30 days')
+      : t('{count} calls in 30 days, {seconds} s at the median, {share} refused or failed', {
+          count: facts.calls,
+          seconds: facts.medianLatencyMs === null ? '?' : num(facts.medianLatencyMs / 1000, 1, 1),
+          share: pctPlain(Math.round(facts.refusedOrFailedPct ?? 0), 0)
+        })
   return `${price} · ${schema} · ${record}`
 }
 

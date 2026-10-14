@@ -461,7 +461,10 @@ export async function scanOnce(nowMs: number = Date.now()): Promise<ScannerState
   }
   // Three passes failing running are told once (SYSTEM_FAILURE); one pass is the market's noise.
   failingPasses = error === null ? 0 : failingPasses + 1
-  if (failingPasses === FAILING_PASSES_TOLD) tell(systemFailureNotice('scanner', `${error ?? 'The pass failed.'} Three passes running; the next is tried as usual.`))
+  // The pass's own error stays as it was thrown.
+  if (failingPasses === FAILING_PASSES_TOLD) {
+    tell((i18n) => systemFailureNotice('scanner', i18n.t('{error} Three passes running; the next is tried as usual.', { error: error ?? i18n.t('The pass failed.') }), i18n))
+  }
   notify(current)
   return snapshot(current)
 }

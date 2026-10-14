@@ -3,6 +3,7 @@ import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { NAV_GROUPS, foldedCount, groupOf, isGroupOpen, type NavGroupId, type NavId, type NavItem, type Page } from '../navigation/pages'
 import type { UiMode } from '../../shared/uiMode'
 import appIcon from '../../build/icon.png'
+import { useI18n } from '../i18n'
 
 interface SidebarProps {
   activeId: NavId | null
@@ -36,6 +37,9 @@ function writeOpenGroups(open: ReadonlySet<NavGroupId>): void {
 }
 
 export function Sidebar({ activeId, onChoose, collapsed, onToggleCollapsed, uiMode, badges = {} }: SidebarProps): React.JSX.Element {
+  const { t, dir } = useI18n()
+  // Right to left the sidebar is on the right: its arrows point the other way.
+  const rtl = dir === 'rtl'
   const [opened, setOpened] = useState<Set<NavGroupId>>(readOpenGroups)
   const activeGroup = activeId === null ? null : groupOf(activeId)
 
@@ -67,7 +71,7 @@ export function Sidebar({ activeId, onChoose, collapsed, onToggleCollapsed, uiMo
         display: 'flex',
         flexDirection: 'column',
         background: 'var(--bg-surface)',
-        borderRight: '1px solid var(--border)',
+        borderInlineEnd: '1px solid var(--border)',
         transition: 'width 0.15s ease',
         overflow: 'hidden'
       }}
@@ -103,7 +107,7 @@ export function Sidebar({ activeId, onChoose, collapsed, onToggleCollapsed, uiMo
           <select
             value="local"
             onChange={() => {}}
-            aria-label="Workspace"
+            aria-label={t('Workspace')}
             style={{
               width: '100%',
               background: 'var(--bg-app)',
@@ -116,7 +120,7 @@ export function Sidebar({ activeId, onChoose, collapsed, onToggleCollapsed, uiMo
               cursor: 'pointer'
             }}
           >
-            <option value="local">local</option>
+            <option value="local">{t('local@@the workspace')}</option>
           </select>
         </div>
       )}
@@ -161,10 +165,10 @@ export function Sidebar({ activeId, onChoose, collapsed, onToggleCollapsed, uiMo
                     whiteSpace: 'nowrap'
                   }}
                 >
-                  <span>{group.title}</span>
+                  <span>{t(group.title)}</span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                     {hidden > 0 && <Badge count={hidden} collapsed={false} />}
-                    <ChevronDown size={12} style={{ transform: open ? 'none' : 'rotate(-90deg)', transition: 'transform 0.15s ease' }} />
+                    <ChevronDown size={12} style={{ transform: open ? 'none' : rtl ? 'rotate(90deg)' : 'rotate(-90deg)', transition: 'transform 0.15s ease' }} />
                   </span>
                 </button>
               ) : (
@@ -179,14 +183,14 @@ export function Sidebar({ activeId, onChoose, collapsed, onToggleCollapsed, uiMo
                     whiteSpace: 'nowrap'
                   }}
                 >
-                  {group.title}
+                  {t(group.title)}
                 </div>
               )}
               {collapsed && !open && (
                 <button
                   onClick={() => openGroupAndExpand(group.id)}
-                  title={group.title}
-                  aria-label={`Open ${group.title}`}
+                  title={t(group.title)}
+                  aria-label={t('Open {group}', { group: t(group.title) })}
                   className="nav-item"
                   style={{
                     display: 'flex',
@@ -212,7 +216,7 @@ export function Sidebar({ activeId, onChoose, collapsed, onToggleCollapsed, uiMo
 
       <button
         onClick={onToggleCollapsed}
-        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        aria-label={collapsed ? t('Expand sidebar') : t('Collapse sidebar')}
         className="icon-button"
         style={{
           display: 'flex',
@@ -227,18 +231,19 @@ export function Sidebar({ activeId, onChoose, collapsed, onToggleCollapsed, uiMo
           cursor: 'pointer'
         }}
       >
-        {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+        {collapsed === rtl ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
       </button>
     </nav>
   )
 }
 
 function NavButton({ item, active, collapsed, badge, onChoose }: { item: NavItem; active: boolean; collapsed: boolean; badge: number; onChoose: (item: NavItem) => void }): React.JSX.Element {
+  const { t } = useI18n()
   const Icon = item.icon
   return (
     <button
       onClick={() => onChoose(item)}
-      title={item.label}
+      title={t(item.label)}
       className={`nav-item${active ? ' nav-item-active' : ''}`}
       style={{
         display: 'flex',
@@ -258,18 +263,19 @@ function NavButton({ item, active, collapsed, badge, onChoose }: { item: NavItem
       }}
     >
       <Icon size={18} />
-      {!collapsed && <span>{item.label}</span>}
+      {!collapsed && <span>{t(item.label)}</span>}
       {badge > 0 && <Badge count={badge} collapsed={collapsed} pushRight />}
     </button>
   )
 }
 
 function Badge({ count, collapsed, pushRight = false }: { count: number; collapsed: boolean; pushRight?: boolean }): React.JSX.Element {
+  const { t, num } = useI18n()
   return (
     <span
-      aria-label={`${count} new`}
+      aria-label={t('{count} new', { count })}
       style={{
-        marginLeft: pushRight && !collapsed ? 'auto' : 0,
+        marginInlineStart: pushRight && !collapsed ? 'auto' : 0,
         minWidth: collapsed ? 8 : 18,
         height: collapsed ? 8 : 18,
         padding: collapsed ? 0 : '0 5px',
@@ -284,7 +290,7 @@ function Badge({ count, collapsed, pushRight = false }: { count: number; collaps
         textTransform: 'none'
       }}
     >
-      {collapsed ? '' : count}
+      {collapsed ? '' : num(count)}
     </span>
   )
 }

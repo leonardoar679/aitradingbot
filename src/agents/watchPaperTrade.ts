@@ -31,6 +31,8 @@ import { describeExecutorFunding } from '../account/executorFunding'
 import { settleExecutorOnStop } from '../account/settleExecutor'
 import { runExecutorSimulation } from '../executors/engine'
 import { settingsWrites } from '../utils/settingsWrites'
+import { ENGLISH, type I18n } from '../../shared/i18n/translate'
+import { noticeI18n } from '../i18n/current'
 
 // THE ONE FILE OF THE WATCH'S THAT WRITES ANYTHING (shared/aiWatchPaper.ts has the rules).
 //
@@ -153,12 +155,22 @@ export interface WatchPaperDeps {
   newId: () => string
   /** Runs a read-modify-write of settings with no other one inside it. */
   queue: <T>(work: () => Promise<T>) => Promise<T>
+  /** The language the person reads its notices and its card's line in (V6 Stage 14); English where
+   * absent. What it records is English whatever this is. */
+  i18n?: () => I18n
 }
 
 export interface WatchPaperResult {
   opened: boolean
-  /** One sentence for the Watch card. */
+  /** One sentence, in English: what is recorded and refused by. */
   text: string
+  /** The same sentence in the person's language, for the Watch card and a notice, where it is not the English. */
+  shown?: string
+}
+
+/** A result, with its sentence in the person's language where that differs from the English. */
+function resultOf(opened: boolean, text: string, shown: string): WatchPaperResult {
+  return shown === text ? { opened, text } : { opened, text, shown }
 }
 
 /** Rows of the ledger read for the calibrated rate, at most. */
@@ -241,13 +253,17 @@ export async function openWatchPaperTrade(
 ): Promise<WatchPaperResult | null> {
   const { watchPaper } = await deps.getConfig()
   if (!watchPaper.enabled || (options.byVote !== true && decision.model !== watchPaper.model)) return null
+  // English for the record and the rules that read it; the person's language for what they read.
+  const say = deps.i18n?.() ?? ENGLISH
+  const refusedWith = (text: string, shown: string): WatchPaperResult => resultOf(false, `No paper trade: ${text}`, say.t('No paper trade: {reason}', { reason: shown }))
 
   const before = await deps.getSettings()
   // Its own limits, then the losing run that pauses the app's own paper trades (shared/paperPause.ts).
-  const blocked =
-    watchPaperBlock({ config: watchPaper, event, decision, executors: before.executors, nowSec: deps.nowSec(), byVote: options.byVote === true }) ??
-    paperPauseBlock({ setting: healPaperPause(before.paperPause), executors: before.executors, source: 'watch' })
-  if (blocked !== null) return { opened: false, text: `No paper trade: ${blocked}` }
+  const blockedIn = (i18n: I18n): string | null =>
+    watchPaperBlock({ config: watchPaper, event, decision, executors: before.executors, nowSec: deps.nowSec(), byVote: options.byVote === true }, i18n) ??
+    paperPauseBlock({ setting: healPaperPause(before.paperPause), executors: before.executors, source: 'watch' }, i18n)
+  const blocked = blockedIn(ENGLISH)
+  if (blocked !== null) return refusedWith(blocked, blockedIn(say) ?? blocked)
 
   let lastPrice: number | null = null
   try {
@@ -290,42 +306,50 @@ export async function openWatchPaperTrade(
   }
   const [first, volatility, btcCorrelation, regime] = await Promise.all([readBook(), readVolatility(), readCorrelation(), readRegime()])
   const risk = healPaperRisk(before.paperRisk)
-  const plan = planWatchPaperTrade({
-    config: watchPaper,
-    risk,
-    event,
-    decision,
-    nowSec: deps.nowSec(),
-    lastPrice,
-    equityQuote: paperEquity(before.paperAccount ?? null, before.executors, event.quoteAsset),
-    regime,
-    conditions: conditionsOf({
-      book: first,
-      side: decision.recommendation === 'sell' ? 'sell' : 'buy',
-      volatilityRatio: volatility,
-      vote: options.vote,
-      executors: before.executors,
-      account: before.paperAccount ?? null,
+  const planIn = (i18n: I18n): WatchPaperPlan =>
+    planWatchPaperTrade({
+      config: watchPaper,
       risk,
-      quoteAsset: event.quoteAsset,
-      btcCorrelation
+      event,
+      decision,
+      nowSec: deps.nowSec(),
+      lastPrice,
+      equityQuote: paperEquity(before.paperAccount ?? null, before.executors, event.quoteAsset),
+      regime,
+      conditions: conditionsOf({
+        book: first,
+        side: decision.recommendation === 'sell' ? 'sell' : 'buy',
+        volatilityRatio: volatility,
+        vote: options.vote,
+        executors: before.executors,
+        account: before.paperAccount ?? null,
+        risk,
+        quoteAsset: event.quoteAsset,
+        btcCorrelation
+      }),
+      i18n
     })
-  })
-  if (!plan.ok) return { opened: false, text: `No paper trade: ${plan.reason}` }
+  const plan = planIn(ENGLISH)
+  // The same plan in the person's language: its words only, for the notice and the card.
+  const shownPlan = say === ENGLISH ? plan : planIn(say)
+  if (!plan.ok) return refusedWith(plan.reason, shownPlan.ok ? plan.reason : shownPlan.reason)
 
   // The market it would enter, live (shared/liveMarket.ts): with no fresh price, a spread wider than
   // a trade is entered at, or a best level that cannot hold the stake, none is opened; nor against
   // major news on the coin (shared/paperNewsBlock.ts). Looked at before a second look is asked for,
   // so that the reviewer is not asked about a trade that could not be opened.
-  const unfit = livePaperBlock(first, deps.nowSec() * 1000) ?? thinBookBlock(first, plan.side, plan.params.amountQuote) ?? (await newsAgainst(event, plan.side, deps))
-  if (unfit !== null) return { opened: false, text: `No paper trade: ${unfit}` }
+  const marketIn = (i18n: I18n): string | null => livePaperBlock(first, deps.nowSec() * 1000, i18n) ?? thinBookBlock(first, plan.side, plan.params.amountQuote, i18n)
+  const market = marketIn(ENGLISH)
+  if (market !== null) return refusedWith(market, marketIn(say) ?? market)
+  const news = await newsAgainst(event, plan.side, deps, say)
+  if (news !== null) return refusedWith(news.text, news.shown)
 
   // The expected value (shared/expectedValue.ts): refused only at a CALIBRATED win rate under the
   // margin a round trip costs; at the model's own confidence it is written on the trade and never
   // refuses. Read before the reviewer, so no second look is paid for on a trade this refuses.
   const ev = await expectedValueOf(event, decision, plan, first, before.executors, deps)
   const evBlock = expectedValueBlock(ev)
-  if (evBlock !== null) return { opened: false, text: `No paper trade: ${evBlock}` }
+  if (evBlock !== null) return refusedWith(evBlock, expectedValueBlock(ev, say) ?? evBlock)
 
   // A second look, where something about this trade stands out: its REJECT means no trade. A review
   // that was not asked, refused or could not be had leaves the trade as it was: it only opens less.
@@ -336,7 +360,7 @@ export async function openWatchPaperTrade(
     review = null
   }
   const rejected = reviewRefusal(review)
-  if (rejected !== null) return { opened: false, text: `No paper trade: ${rejected}` }
+  if (rejected !== null) return refusedWith(rejected, reviewRefusal(review, say) ?? rejected)
 
   // Read again, as a review can take seconds: the trade is judged on the market as it is now.
   const book = await readBook()
@@ -347,58 +371,77 @@ export async function openWatchPaperTrade(
   // open trade. A trade that closed in between may have ended a losing run, and that is read again
   // too; and the live price is judged as of now.
   const made: { executor: ExecutorConfig | null } = { executor: null }
-  const refused = await deps.queue(async (): Promise<string | null> => {
+  const refused = await deps.queue(async (): Promise<{ text: string; shown: string } | null> => {
     const fresh = await deps.getSettings()
-    const problem =
-      watchPaperBlock({ config: watchPaper, event, decision, executors: fresh.executors, nowSec: deps.nowSec(), byVote: options.byVote === true }) ??
-      paperPauseBlock({ setting: healPaperPause(fresh.paperPause), executors: fresh.executors, source: 'watch' }) ??
-      livePaperBlock(book, deps.nowSec() * 1000) ??
-      thinBookBlock(book, plan.side, plan.params.amountQuote) ??
-      describeExecutorFunding({
-        account: fresh.paperAccount ?? null,
-        executors: fresh.executors,
-        mode: 'paper',
-        quoteAsset: event.quoteAsset,
-        amountQuote: plan.params.amountQuote
-      }) ??
-      paperOutBlock({ risk: healPaperRisk(fresh.paperRisk), executors: fresh.executors, quoteAsset: event.quoteAsset, amountQuote: plan.params.amountQuote }) ??
-      correlatedExposureBlock({
-        account: fresh.paperAccount ?? null,
-        risk: healPaperRisk(fresh.paperRisk),
-        executors: fresh.executors,
-        quoteAsset: event.quoteAsset,
-        side: plan.side,
-        amountQuote: plan.params.amountQuote,
-        correlation: btcCorrelation
-      })
-    if (problem !== null) return problem
+    const problemIn = (i18n: I18n): string | null =>
+      watchPaperBlock({ config: watchPaper, event, decision, executors: fresh.executors, nowSec: deps.nowSec(), byVote: options.byVote === true }, i18n) ??
+      paperPauseBlock({ setting: healPaperPause(fresh.paperPause), executors: fresh.executors, source: 'watch' }, i18n) ??
+      livePaperBlock(book, deps.nowSec() * 1000, i18n) ??
+      thinBookBlock(book, plan.side, plan.params.amountQuote, i18n) ??
+      describeExecutorFunding(
+        {
+          account: fresh.paperAccount ?? null,
+          executors: fresh.executors,
+          mode: 'paper',
+          quoteAsset: event.quoteAsset,
+          amountQuote: plan.params.amountQuote
+        },
+        i18n
+      ) ??
+      paperOutBlock({ risk: healPaperRisk(fresh.paperRisk), executors: fresh.executors, quoteAsset: event.quoteAsset, amountQuote: plan.params.amountQuote }, i18n) ??
+      correlatedExposureBlock(
+        {
+          account: fresh.paperAccount ?? null,
+          risk: healPaperRisk(fresh.paperRisk),
+          executors: fresh.executors,
+          quoteAsset: event.quoteAsset,
+          side: plan.side,
+          amountQuote: plan.params.amountQuote,
+          correlation: btcCorrelation
+        },
+        i18n
+      )
+    const problem = problemIn(ENGLISH)
+    if (problem !== null) return { text: problem, shown: problemIn(say) ?? problem }
     const executor = watchPaperExecutor({ id: deps.newId(), event, plan, nowSec: deps.nowSec(), book, btcCorrelation, ev })
     await deps.setExecutors([...fresh.executors, executor])
     made.executor = executor
     return null
   })
-  if (refused !== null) return { opened: false, text: `No paper trade: ${refused}` }
+  if (refused !== null) return refusedWith(refused.text, refused.shown)
 
-  const notice = watchPaperNotice(event, plan)
+  const notice = watchPaperNotice(event, plan, say, shownPlan.ok ? shownPlan.riskNote : plan.riskNote)
   try {
     deps.notify(notice.title, notice.body, { kind: 'TRADE_EXECUTED', thread: made.executor?.id ?? event.id })
   } catch {
     // A desktop that cannot show it is not a reason to report a trade that was opened as not.
   }
-  return {
-    opened: true,
-    text: `A paper ${plan.side === 'buy' ? 'BUY' : 'SELL'} of ${plan.params.amountQuote} ${event.quoteAsset} was opened, ${describeWatchPaperEntry((made.executor?.params as PositionExecutorParams | undefined) ?? plan.params)}${plan.riskNote === null ? '' : `, at ${plan.riskNote}`}.`
-  }
+  const entered = (made.executor?.params as PositionExecutorParams | undefined) ?? plan.params
+  const riskNote = shownPlan.ok ? shownPlan.riskNote : plan.riskNote
+  const values = { amount: String(plan.params.amountQuote), asset: event.quoteAsset, entry: describeWatchPaperEntry(entered, say), risk: riskNote ?? '' }
+  return resultOf(
+    true,
+    `A paper ${plan.side === 'buy' ? 'BUY' : 'SELL'} of ${plan.params.amountQuote} ${event.quoteAsset} was opened, ${describeWatchPaperEntry(entered)}${plan.riskNote === null ? '' : `, at ${plan.riskNote}`}.`,
+    plan.side === 'buy'
+      ? riskNote === null
+        ? say.t('A paper BUY of {amount} {asset} was opened, {entry}.', values)
+        : say.t('A paper BUY of {amount} {asset} was opened, {entry}, at {risk}.', values)
+      : riskNote === null
+        ? say.t('A paper SELL of {amount} {asset} was opened, {entry}.', values)
+        : say.t('A paper SELL of {amount} {asset} was opened, {entry}, at {risk}.', values)
+  )
 }
 
 /** News against the trade (shared/paperNewsBlock.ts): a story of major impact naming the coin, from
  * the reviewer's three hours before the event to now, pointing the other way. Stories or readings
  * that cannot be read refuse nothing: as with the reviewer, what could not be had leaves the trade
  * as it was. */
-async function newsAgainst(event: MarketEvent, side: 'buy' | 'sell', deps: WatchPaperDeps): Promise<string | null> {
+async function newsAgainst(event: MarketEvent, side: 'buy' | 'sell', deps: WatchPaperDeps, say: I18n): Promise<{ text: string; shown: string } | null> {
   try {
     const [stories, readings] = await Promise.all([deps.stories(), deps.readings(event.time - REVIEW_LINES.majorNewsSeconds)])
-    return newsAgainstBlock({ event, side, stories, readings, nowSec: deps.nowSec() })
+    const input = { event, side, stories, readings, nowSec: deps.nowSec() }
+    const text = newsAgainstBlock(input)
+    return text === null ? null : { text, shown: newsAgainstBlock(input, say) ?? text }
   } catch {
     return null
   }
@@ -470,7 +513,7 @@ export async function settleWatchPaperTrades(deps: WatchPaperDeps): Promise<stri
           const price = candles[candles.length - 1].close
           const progress = stopProgress({ side: params.side, entryPrice: state.levelPrice, stopPct: params.stopLossPct, price })
           if (progress !== null && progress >= NEAR_STOP_SHARE) {
-            const near = nearStopNotice({ id: executor.id, symbol: executor.symbol, side: params.side, real: false }, progress, price)
+            const near = nearStopNotice({ id: executor.id, symbol: executor.symbol, side: params.side, real: false }, progress, price, deps.i18n?.() ?? ENGLISH)
             try {
               deps.notify(near.title, near.body, near.extra)
             } catch {
@@ -493,7 +536,7 @@ export async function settleWatchPaperTrades(deps: WatchPaperDeps): Promise<stri
       await deps.settle(executor, nowSec)
       settled.push(executor.name)
       if (result.exit === 'btc_moved' && executor.watch !== undefined) {
-        const notice = watchPaperDropNotice(executor, executor.watch.eventTime, result.btcMovePct ?? 0)
+        const notice = watchPaperDropNotice(executor, executor.watch.eventTime, result.btcMovePct ?? 0, deps.i18n?.() ?? ENGLISH)
         try {
           deps.notify(notice.title, notice.body, { kind: 'TRADE_BLOCKED', thread: executor.id })
         } catch {
@@ -502,7 +545,11 @@ export async function settleWatchPaperTrades(deps: WatchPaperDeps): Promise<stri
       } else if (result.exit !== 'entry_expired' && result.exit !== 'btc_moved') {
         // How it ended, in its own kind: the target reached, the stop triggered, or a trade run out.
         const params = executor.params as PositionExecutorParams
-        const closed = paperCloseNotice({ id: executor.id, symbol: executor.symbol, side: params.side, quoteAsset: executor.quoteAsset }, { exit: result.exit, pnlQuote: result.pnlQuote, r: rMultiple(result.pnlQuote, params) })
+        const closed = paperCloseNotice(
+          { id: executor.id, symbol: executor.symbol, side: params.side, quoteAsset: executor.quoteAsset },
+          { exit: result.exit, pnlQuote: result.pnlQuote, r: rMultiple(result.pnlQuote, params) },
+          deps.i18n?.() ?? ENGLISH
+        )
         try {
           deps.notify(closed.title, closed.body, closed.extra)
         } catch {
@@ -609,7 +656,8 @@ export const watchPaperBrowserDeps: WatchPaperDeps = {
   notify: (title, body, extra) => void window.api.notify(title, body, extra?.severity, extra).catch(() => undefined),
   nowSec: () => Math.floor(Date.now() / 1000),
   newId: () => crypto.randomUUID(),
-  queue: (work) => settingsWrites(work)
+  queue: (work) => settingsWrites(work),
+  i18n: noticeI18n
 }
 
 /** The events the watch's own paper trades were opened on, from the books: what the restart sweep

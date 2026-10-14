@@ -1,3 +1,4 @@
+import { noticeI18n } from '../i18n/current'
 import { useEffect } from 'react'
 import type { EventLife, MarketEvent } from '../../shared/marketEvent'
 import { sweepRestartMisses, watchPass, type WatchDeps } from './opportunityWatch'
@@ -19,6 +20,8 @@ const deps: WatchDeps = {
   ask: (request) => window.api.ai.askOpportunity(request),
   // A desktop that cannot show it is not a reason to fail the pass that got the answer.
   notify: (title, body, extra) => void window.api.notify(title, body, extra?.severity, extra).catch(() => undefined),
+  // Its notices and the Watch card's line in the person's language (V6 Stage 14).
+  i18n: noticeI18n,
   nowSec: () => Math.floor(Date.now() / 1000),
   // Paper only, and only when the user has switched it on (./watchPaperTrade.ts).
   paperTrade: (event, decision, byVote, vote) => openWatchPaperTrade(event, decision, watchPaperBrowserDeps, { byVote: byVote === true, vote }),

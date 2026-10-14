@@ -1,5 +1,6 @@
 import { aiCallNotice } from '../../shared/aiProposal'
 import { botAiProposal, type Bot, type BotAiCall } from './types'
+import { noticeI18n } from '../i18n/current'
 
 // A running bot makes its call when nobody is looking, and the order form that call can be turned
 // into is on offer only until its candle closes. This is what says so on the desktop.
@@ -17,7 +18,7 @@ const announced = new Set<string>()
 export function announceBotAiCall(bot: Bot, call: BotAiCall | null, nowSec: number = Math.floor(Date.now() / 1000)): boolean {
   const proposal = botAiProposal(bot, call, nowSec)
   if (proposal === null) return false
-  const notice = aiCallNotice(bot.name, proposal)
+  const notice = aiCallNotice(bot.name, proposal, noticeI18n())
   if (announced.has(notice.key)) return false
   announced.add(notice.key)
   // A desktop that cannot show it is not a reason to fail the poll that noticed the call.

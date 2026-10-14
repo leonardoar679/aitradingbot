@@ -218,7 +218,8 @@ async function tick(): Promise<void> {
             }
           })
           // Told as its kind: the target reached, the stop triggered, or the time run out.
-          tell(liveExitNotice({ executorId: watcher.executorId, symbol: watcher.symbol, exitReason: reason, exitPrice: settled.exitPrice as number, realizedPnl: settled.realizedPnl as number, quoteAsset: settled.quoteAsset }))
+          const exit = { executorId: watcher.executorId, symbol: watcher.symbol, exitReason: reason, exitPrice: settled.exitPrice as number, realizedPnl: settled.realizedPnl as number, quoteAsset: settled.quoteAsset }
+          tell((i18n) => liveExitNotice(exit, i18n))
         }
       }
       watcher.consecutiveFailures = 0

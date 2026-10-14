@@ -1,3 +1,4 @@
+import { ENGLISH, type I18n } from './i18n/translate'
 import type { EventBenchmarkRow, EventTrade } from './aiEventBenchmark'
 import { MIN_SCORED_CALLS } from './aiOutcome'
 import { describeDecider } from './aiPanel'
@@ -127,7 +128,10 @@ export function promotionChecklist(input: { live: LiveRowForHealth; benchmark: {
 
 export interface ModelHealth {
   degraded: boolean
+  /** In English, as recorded. */
   reasons: string[]
+  /** The same as codes, worded in any language from `rolling` (V6 Stage 14); absent on one read before. */
+  codes?: ('losing' | 'miscalibrated')[]
   closed: number
   /** Over the last HEALTH_ROLLING_TRADES closed trades; the figures are null under that many. */
   rolling: { trades: number; expectancyPct: number | null; profitFactor: number | null; meanConfidencePct: number | null; hitRatePct: number | null }
@@ -137,28 +141,49 @@ export function modelHealth(row: Pick<EventBenchmarkRow, 'trades'>): ModelHealth
   const closed = closedTrades(row.trades)
   const recent = closed.slice(0, HEALTH_ROLLING_TRADES)
   if (recent.length < HEALTH_ROLLING_TRADES) {
-    return { degraded: false, reasons: [], closed: closed.length, rolling: { trades: recent.length, expectancyPct: null, profitFactor: null, meanConfidencePct: null, hitRatePct: null } }
+    return { degraded: false, reasons: [], codes: [], closed: closed.length, rolling: { trades: recent.length, expectancyPct: null, profitFactor: null, meanConfidencePct: null, hitRatePct: null } }
   }
   const nets = recent.map((trade) => trade.outcome.netPct ?? 0)
   const expectancyPct = points(nets.reduce((sum, net) => sum + net, 0) / recent.length)
   const profitFactor = profitFactorOf(nets)
   const meanConfidencePct = points((recent.reduce((sum, trade) => sum + trade.confidence, 0) / recent.length) * 100)
   const hitRatePct = points((nets.filter((net) => net > 0).length / recent.length) * 100)
-  const reasons: string[] = []
-  if (expectancyPct < 0 && profitFactor !== null && profitFactor < 1) {
-    reasons.push(`losing over its last ${HEALTH_ROLLING_TRADES} closed trades: ${signed(expectancyPct)}% a trade, profit factor ${profitFactor.toFixed(2)}`)
+  const codes: ('losing' | 'miscalibrated')[] = []
+  if (expectancyPct < 0 && profitFactor !== null && profitFactor < 1) codes.push('losing')
+  if (Math.abs(meanConfidencePct - hitRatePct) > HEALTH_CONFIDENCE_SLACK_POINTS) codes.push('miscalibrated')
+  const rolling = { trades: recent.length, expectancyPct, profitFactor, meanConfidencePct, hitRatePct }
+  return { degraded: codes.length > 0, reasons: codes.map((code) => healthReasonText(code, rolling)), codes, closed: closed.length, rolling }
+}
+
+/** A reason a model is degraded, in a language, from its rolling figures. */
+export function healthReasonText(code: 'losing' | 'miscalibrated', rolling: ModelHealth['rolling'], i18n: I18n = ENGLISH): string {
+  const { t, num } = i18n
+  if (code === 'losing') {
+    return t('losing over its last {count} closed trades: {expectancy}% a trade, profit factor {pf}', {
+      count: HEALTH_ROLLING_TRADES,
+      expectancy: i18n.language === 'en' ? signed(rolling.expectancyPct ?? 0) : i18n.signed(rolling.expectancyPct ?? 0, 2),
+      pf: num(rolling.profitFactor ?? 0, 2, 2)
+    })
   }
-  if (Math.abs(meanConfidencePct - hitRatePct) > HEALTH_CONFIDENCE_SLACK_POINTS) {
-    reasons.push(`says ${meanConfidencePct.toFixed(0)}% and is right ${hitRatePct.toFixed(0)}% of the time over those trades`)
-  }
-  return { degraded: reasons.length > 0, reasons, closed: closed.length, rolling: { trades: recent.length, expectancyPct, profitFactor, meanConfidencePct, hitRatePct } }
+  return t('says {says}% and is right {right}% of the time over those trades', { says: num(rolling.meanConfidencePct ?? 0, 0, 0), right: num(rolling.hitRatePct ?? 0, 0, 0) })
 }
 
 /** The notice's body, and the registry's line. */
-export function describeModelHealth(model: string, health: ModelHealth): string {
-  if (health.degraded) return `${describeDecider(model)} has degraded: ${health.reasons.join('; ')}. The watch still asks it; untick it on Opportunities to stop asking it. Nothing is switched off by this.`
-  if (health.rolling.expectancyPct === null) return `${describeDecider(model)}: ${health.rolling.trades} of ${HEALTH_ROLLING_TRADES} closed trades, not enough to judge.`
-  return `${describeDecider(model)}: as expected over its last ${HEALTH_ROLLING_TRADES} closed trades (${signed(health.rolling.expectancyPct)}% a trade, says ${health.rolling.meanConfidencePct?.toFixed(0)}% and is right ${health.rolling.hitRatePct?.toFixed(0)}%).`
+export function describeModelHealth(model: string, health: ModelHealth, i18n: I18n = ENGLISH): string {
+  const { t, num } = i18n
+  const who = describeDecider(model, i18n)
+  if (health.degraded) {
+    const reasons = health.codes === undefined || health.codes.length === 0 ? health.reasons : health.codes.map((code) => healthReasonText(code, health.rolling, i18n))
+    return t('{model} has degraded: {reasons}. The watch still asks it; untick it on Opportunities to stop asking it. Nothing is switched off by this.', { model: who, reasons: reasons.join(t('; ')) })
+  }
+  if (health.rolling.expectancyPct === null) return t('{model}: {trades} of {count} closed trades, not enough to judge.', { model: who, trades: health.rolling.trades, count: HEALTH_ROLLING_TRADES })
+  return t('{model}: as expected over its last {count} closed trades ({expectancy}% a trade, says {says}% and is right {right}%).', {
+    model: who,
+    count: HEALTH_ROLLING_TRADES,
+    expectancy: i18n.language === 'en' ? signed(health.rolling.expectancyPct) : i18n.signed(health.rolling.expectancyPct, 2),
+    says: num(health.rolling.meanConfidencePct ?? 0, 0, 0),
+    right: num(health.rolling.hitRatePct ?? 0, 0, 0)
+  })
 }
 
 /** The app's own paper trades on a model's calls, as they were settled: the record the live board is

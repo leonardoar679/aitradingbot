@@ -7,12 +7,15 @@ import type { ExecutorConfig, LivePosition } from '../../shared/ipc'
 import { usePortfolioSnapshots, usePortfolioStatus } from '../portfolio/portfolioStore'
 import type { Page } from '../navigation/pages'
 import { portfolioValueLine } from './portfolioValueLine'
+import { Interpolate, useI18n } from '../i18n'
 
 const POLL_MS = 30_000
 
 /** What you hold: the portfolio's value, the paper strategies running (and how many of them the
  * watch opened), and the real positions open. It reads; it changes nothing. */
 export function HoldingsSummary({ onNavigate }: { onNavigate: (page: Page) => void }): React.JSX.Element {
+  const i18n = useI18n()
+  const { t } = i18n
   const snapshots = usePortfolioSnapshots()
   const status = usePortfolioStatus()
   const [executors, setExecutors] = useState<ExecutorConfig[] | null>(null)
@@ -49,29 +52,42 @@ export function HoldingsSummary({ onNavigate }: { onNavigate: (page: Page) => vo
   const watchOpen = executors === null ? 0 : watchPaperExecutors(executors).filter((executor) => executor.status === 'active').length
 
   return (
-    <Card title="What you hold">
+    <Card title={t('What you hold')}>
       <SummaryLine
-        label="Portfolio value"
+        label={t('Portfolio value')}
         value={
           status !== 'ready' || latest === null
             ? status === 'error'
-              ? 'Unavailable'
-              : 'Loading…'
-            : portfolioValueLine(snapshots[0], latest)
+              ? t('Unavailable')
+              : t('Loading…')
+            : portfolioValueLine(snapshots[0], latest, i18n)
         }
       />
       <SummaryLine
-        label="Paper strategies running"
-        value={running === null ? 'Loading…' : running.length === 0 ? 'None' : `${running.length}${watchOpen > 0 ? `, ${watchOpen} opened by the watch` : ''}`}
+        label={t('Paper strategies running')}
+        value={
+          running === null
+            ? t('Loading…')
+            : running.length === 0
+              ? t('None')
+              : watchOpen > 0
+                ? t('{count}, {watch} opened by the watch', { count: running.length, watch: watchOpen })
+                : String(running.length)
+        }
       />
       <SummaryLine
-        label="Real positions open"
-        value={positions === null ? 'Loading…' : positions.length === 0 ? 'None' : `${positions.length}: ${positions.map((position) => position.symbol).join(', ')}`}
+        label={t('Real positions open')}
+        value={positions === null ? t('Loading…') : positions.length === 0 ? t('None') : t('{count}: {pairs}', { count: positions.length, pairs: positions.map((position) => position.symbol).join(', ') })}
         tone={positions !== null && positions.length > 0 ? 'gold' : undefined}
       />
       <p style={{ margin: '0.7rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-        Every position is on <TextLink onClick={() => onNavigate('positions')}>Positions</TextLink>, and how it has all done on{' '}
-        <TextLink onClick={() => onNavigate('performance')}>Performance</TextLink>.
+        <Interpolate
+          text={t('Every position is on {positions}, and how it has all done on {performance}.')}
+          values={{
+            positions: <TextLink onClick={() => onNavigate('positions')}>{t('Positions')}</TextLink>,
+            performance: <TextLink onClick={() => onNavigate('performance')}>{t('Performance')}</TextLink>
+          }}
+        />
       </p>
     </Card>
   )

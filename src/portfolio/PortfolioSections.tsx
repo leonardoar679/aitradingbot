@@ -6,6 +6,7 @@ import { TopHoldings } from './TopHoldings'
 import { usePortfolioSnapshots, usePortfolioStatus, usePortfolioErrorMessage } from './portfolioStore'
 import type { Bot } from '../../shared/ipc'
 import { cleanIpcErrorMessage } from '../utils/ipcError'
+import { useI18n } from '../i18n'
 
 // What was the Portfolio page, in the pieces the new pages are made of: the first-run card leads
 // Overview, and the value, the chart and the holdings are on Performance. Every figure still comes
@@ -91,6 +92,9 @@ export function FirstRunCard({ onGetStarted }: { onGetStarted: () => void }): Re
 
 /** Total value, bots running and their P&L, and what the system holds. */
 export function PortfolioSummary(): React.JSX.Element {
+  const i18n = useI18n()
+  const { t } = i18n
+  const usd = (value: number): string => (i18n.language === 'en' ? formatUsd(value) : i18n.money(value, 'USD', 2))
   const { bots } = useSettingsCounts()
   const runningBots = bots.filter((b) => b.enabled).length
 
@@ -112,7 +116,7 @@ export function PortfolioSummary(): React.JSX.Element {
   // launching the app with open positions that their portfolio was worth $0.00 -- which is both
   // wrong and alarming -- for however long that first pass took.
   const pending = status !== 'ready'
-  const pendingValue = status === 'error' ? 'Unavailable' : 'Loading…'
+  const pendingValue = status === 'error' ? t('Unavailable') : t('Loading…')
 
   return (
     <>
@@ -128,33 +132,37 @@ export function PortfolioSummary(): React.JSX.Element {
             lineHeight: 1.5
           }}
         >
-          Couldn't read your portfolio{errorMessage ? `: ${cleanIpcErrorMessage(errorMessage)}` : '.'} Your positions are unaffected —
-          this page only reads them. It retries automatically every couple of minutes.
+          {errorMessage
+            ? t("Couldn't read your portfolio: {error} Your positions are unaffected — this page only reads them. It retries automatically every couple of minutes.", { error: cleanIpcErrorMessage(errorMessage) })
+            : t("Couldn't read your portfolio. Your positions are unaffected — this page only reads them. It retries automatically every couple of minutes.")}
         </div>
       )}
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
         <StatCard
           icon={Briefcase}
-          label="Total Value"
-          value={pending ? pendingValue : formatUsd(totalValue)}
-          sub={!pending && sessionChange !== null ? `${formatUsd(sessionChange)} since session start` : undefined}
+          label={t('Total Value')}
+          value={pending ? pendingValue : usd(totalValue)}
+          sub={!pending && sessionChange !== null ? t('{change} since session start', { change: usd(sessionChange) }) : undefined}
           subColor={sessionChange !== null && sessionChange < 0 ? 'var(--down)' : 'var(--up)'}
         />
-        <StatCard icon={BotIcon} label="Active Bots" value={`${runningBots} running`} />
+        <StatCard icon={BotIcon} label={t('Active Bots')} value={t('{count} running', { count: runningBots })} wraps />
         <StatCard
           icon={TrendingUp}
-          label="Bot PNL"
+          label={t('Bot PNL')}
           value={
             pending
               ? pendingValue
               : botsAggregatePct !== null
-                ? `${botsAggregatePct >= 0 ? '+' : ''}${botsAggregatePct.toFixed(2)}%`
-                : 'No paper trades yet'
+                ? i18n.language === 'en'
+                  ? `${botsAggregatePct >= 0 ? '+' : ''}${botsAggregatePct.toFixed(2)}%`
+                  : i18n.pct(botsAggregatePct, 2)
+                : t('No paper trades yet')
           }
           valueColor={!pending && botsAggregatePct !== null ? (botsAggregatePct >= 0 ? 'var(--up)' : 'var(--down)') : undefined}
+          wraps={!pending && botsAggregatePct === null}
         />
-        <StatCard icon={Link2} label="System" value={pending ? pendingValue : `${holdings.length} assets / ${activeExecutorCount} executors`} />
+        <StatCard icon={Link2} label={t('System')} value={pending ? pendingValue : t('{assets} assets / {executors} executors', { assets: holdings.length, executors: activeExecutorCount })} wraps />
       </div>
     </>
   )

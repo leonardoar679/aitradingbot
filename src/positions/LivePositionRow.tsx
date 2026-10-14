@@ -6,6 +6,7 @@ import { formatQuotePrice } from '../utils/formatCurrency'
 import { netRealizedPnl } from '../../shared/fees'
 import { ThesisChip } from './ThesisChip'
 import type { ThesisReading } from './thesisMeasure'
+import { ENGLISH, useI18n, type I18n } from '../i18n'
 
 function pctColor(pct: number): string {
   return pct >= 0 ? 'var(--up)' : 'var(--down)'
@@ -14,14 +15,15 @@ function pctColor(pct: number): string {
 const cellStyle: React.CSSProperties = { padding: '0.65rem 0.9rem', fontSize: '0.82rem' }
 
 /** The watcher's barriers in words: what guards the position, read from its copy. */
-export function describeWatcherBarriers(watcher: Pick<LiveWatcherSummary, 'stopLossPct' | 'takeProfitPct' | 'trailingStop' | 'timeLimitSec' | 'consecutiveFailures'>): string {
+export function describeWatcherBarriers(watcher: Pick<LiveWatcherSummary, 'stopLossPct' | 'takeProfitPct' | 'trailingStop' | 'timeLimitSec' | 'consecutiveFailures'>, i18n: I18n = ENGLISH): string {
+  const { t, share } = i18n
   const parts: string[] = []
-  if (watcher.stopLossPct !== null) parts.push(`stop ${watcher.stopLossPct}%`)
-  if (watcher.takeProfitPct !== null) parts.push(`target ${watcher.takeProfitPct}%`)
-  if (watcher.trailingStop !== null) parts.push(`trailing ${watcher.trailingStop.trailPct}% from +${watcher.trailingStop.activationPct}%`)
-  if (watcher.timeLimitSec !== null) parts.push(`time ${describeDuration(watcher.timeLimitSec * 1000).replace('about ', '')}`)
-  const words = parts.length === 0 ? 'watcher: no barriers' : `watcher: ${parts.join(' · ')}`
-  return watcher.consecutiveFailures > 0 ? `${words} (not being checked)` : words
+  if (watcher.stopLossPct !== null) parts.push(t('stop {share}', { share: share(watcher.stopLossPct) }))
+  if (watcher.takeProfitPct !== null) parts.push(t('target {share}', { share: share(watcher.takeProfitPct) }))
+  if (watcher.trailingStop !== null) parts.push(t('trailing {trail} from +{activation}', { trail: share(watcher.trailingStop.trailPct), activation: share(watcher.trailingStop.activationPct) }))
+  if (watcher.timeLimitSec !== null) parts.push(t('time {span}', { span: describeDuration(watcher.timeLimitSec * 1000, i18n).replace(i18n.language === 'en' ? 'about ' : '', '') }))
+  const words = parts.length === 0 ? t('watcher: no barriers') : t('watcher: {barriers}', { barriers: parts.join(' · ') })
+  return watcher.consecutiveFailures > 0 ? t('{words} (not being checked)', { words }) : words
 }
 
 export function LivePositionRow({
@@ -35,6 +37,8 @@ export function LivePositionRow({
    * null for a position nothing watches. Shown only: the watcher closes it by its own barriers. */
   thesis?: { watcher: LiveWatcherSummary; reading: ThesisReading | null } | null
 }): React.JSX.Element {
+  const i18n = useI18n()
+  const { t } = i18n
   const markPrice = useLastPrice(position.exchange, position.symbol)
   const exchangeName = EXCHANGES.find((e) => e.id === position.exchange)?.name ?? position.exchange
   // Net of the round-trip fee, matching what closing at this mark would actually realize and
@@ -86,22 +90,24 @@ export function LivePositionRow({
     <tr style={{ borderBottom: '1px solid var(--border)' }}>
       <td style={{ ...cellStyle, fontWeight: 600, color: 'var(--text-primary)' }}>
         {position.symbol}
-        <div style={{ fontSize: '0.7rem', fontWeight: 400, color: 'var(--text-muted)' }}>{exchangeName} · real holdings</div>
+        <div style={{ fontSize: '0.7rem', fontWeight: 400, color: 'var(--text-muted)' }}>{t('{exchange} · real holdings', { exchange: exchangeName })}</div>
         {thesis !== null && (
           <div style={{ fontSize: '0.7rem', fontWeight: 400, color: 'var(--text-muted)', marginTop: '0.3rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-            <span>{describeWatcherBarriers(thesis.watcher)}</span>
-            {thesis.reading !== null ? <ThesisChip verdict={thesis.reading.verdict} /> : <span>thesis: measuring…</span>}
+            <span>{describeWatcherBarriers(thesis.watcher, i18n)}</span>
+            {thesis.reading !== null ? <ThesisChip verdict={thesis.reading.verdict} /> : <span>{t('thesis: measuring…')}</span>}
           </div>
         )}
       </td>
       <td style={cellStyle}>
         {position.qty} {position.baseAsset}
       </td>
-      <td style={cellStyle}>{formatQuotePrice(position.avgCost, position.quoteAsset)}</td>
-      <td style={cellStyle}>{markPrice !== null ? formatQuotePrice(markPrice, position.quoteAsset) : '—'}</td>
+      <td style={cellStyle}>{formatQuotePrice(position.avgCost, position.quoteAsset, i18n)}</td>
+      <td style={cellStyle}>{markPrice !== null ? formatQuotePrice(markPrice, position.quoteAsset, i18n) : '—'}</td>
       <td style={{ ...cellStyle, fontWeight: 600, color: pnlPct !== null ? pctColor(pnlPct) : 'var(--text-muted)' }}>
         {unrealizedQuote !== null && pnlPct !== null
-          ? `${unrealizedQuote >= 0 ? '+' : ''}${formatQuotePrice(unrealizedQuote, position.quoteAsset)} (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%)`
+          ? i18n.language === 'en'
+            ? `${unrealizedQuote >= 0 ? '+' : ''}${formatQuotePrice(unrealizedQuote, position.quoteAsset)} (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%)`
+            : t('{pnl} ({pct})', { pnl: i18n.signedMoney(unrealizedQuote, position.quoteAsset), pct: i18n.pct(pnlPct, 2) })
           : '—'}
       </td>
       <td style={cellStyle}>
@@ -165,9 +171,9 @@ export function LivePositionRow({
               opacity: !closeQtyValid ? 0.5 : 1
             }}
           >
-            {closing ? 'Closing…' : confirming ? `Confirm real sell of ${closeQtyText} ${position.baseAsset}?` : 'Close'}
+            {closing ? t('Closing…') : confirming ? t('Confirm real sell of {qty} {asset}?', { qty: closeQtyText, asset: position.baseAsset }) : t('Close@@a position')}
           </button>
-          {!closeQtyValid && <div style={{ fontSize: '0.68rem', color: 'var(--down)' }}>Enter a qty between 0 and {position.qty}</div>}
+          {!closeQtyValid && <div style={{ fontSize: '0.68rem', color: 'var(--down)' }}>{t('Enter a qty between 0 and {max}', { max: String(position.qty) })}</div>}
           {error && <div style={{ fontSize: '0.7rem', color: 'var(--down)' }}>{error}</div>}
         </div>
       </td>

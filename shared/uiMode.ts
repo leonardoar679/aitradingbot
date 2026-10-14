@@ -1,3 +1,5 @@
+import { ENGLISH, type I18n } from './i18n/translate'
+
 // TWO PERSONALITIES (the V6 document, §64-65 and §116; V6 Stage 1, 13 October 2026).
 //
 // A normal user sees the few pages the normal path runs through -- Home, then the prediction, the
@@ -17,8 +19,8 @@ export function healUiMode(value: unknown): UiMode {
   return value === 'expert' ? 'expert' : DEFAULT_UI_MODE
 }
 
-export function describeUiMode(mode: UiMode): { label: string; detail: string } {
+export function describeUiMode(mode: UiMode, { t }: I18n = ENGLISH): { label: string; detail: string } {
   return mode === 'expert'
-    ? { label: 'Expert', detail: 'Every group in the sidebar is open: research, and every feature the app has, beside the prediction.' }
-    : { label: 'Normal', detail: 'The sidebar opens on the prediction, the opportunities and the positions; Research and All Features are folded away, one click from opening.' }
+    ? { label: t('Expert'), detail: t('Every group in the sidebar is open: research, and every feature the app has, beside the prediction.') }
+    : { label: t('Normal'), detail: t('The sidebar opens on the prediction, the opportunities and the positions; Research and All Features are folded away, one click from opening.') }
 }

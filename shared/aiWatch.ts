@@ -1,9 +1,10 @@
+import { ENGLISH, type I18n } from './i18n/translate'
 import { formatUsd } from './aiCost'
 import type { AiCallRecord } from './aiLedger'
 import { AI_OPPORTUNITY_MAX_MODELS, describeOpportunitySide, isActionableOpportunity, opportunitySide, opportunityWindow } from './aiOpportunity'
 import { describeDecider, isPanelId } from './aiPanel'
 import { AI_PROVIDER_LABEL, DEFAULT_ENABLED_MODELS, type AiSignalDecision, type AiSignalEstimate } from './aiSignal'
-import { EVENT_MAX_RANKED, describeEventType, isAtLeast, type EventLife, type MarketEvent } from './marketEvent'
+import { EVENT_MAX_RANKED, describeBand, eventTypeWord, isAtLeast, type EventLife, type MarketEvent } from './marketEvent'
 
 // THE WATCH: events put to models without a click.
 //
@@ -184,8 +185,8 @@ export function watchPausedModels(calls: Pick<AiCallRecord, 'at' | 'source' | 'm
   return paused
 }
 
-export function describeWatchPause(model: string): string {
-  return `${describeDecider(model)} failed or was refused on its last ${AI_WATCH_BREAKER_CALLS} calls for the watch today, so the watch is not asking it again until midnight UTC.`
+export function describeWatchPause(model: string, i18n: I18n = ENGLISH): string {
+  return i18n.t('{model} failed or was refused on its last {count} calls for the watch today, so the watch is not asking it again until midnight UTC.', { model: describeDecider(model, i18n), count: AI_WATCH_BREAKER_CALLS })
 }
 
 /** Why the watch does not take up an event, or null when it does. `takenToday` is the events it
@@ -195,30 +196,32 @@ export function describeWatchPause(model: string): string {
 export function watchSkipReason(
   event: MarketEvent,
   watch: AiWatchConfig,
-  state: { nowSec: number; takenToday: ReadonlySet<string>; paused?: ReadonlySet<string>; lives?: Readonly<Record<string, EventLife>> }
+  state: { nowSec: number; takenToday: ReadonlySet<string>; paused?: ReadonlySet<string>; lives?: Readonly<Record<string, EventLife>> },
+  i18n: I18n = ENGLISH
 ): string | null {
-  if (!watch.enabled) return 'The watch is off.'
-  if (watch.models.length === 0) return 'The watch has no model to ask.'
+  const { t } = i18n
+  if (!watch.enabled) return t('The watch is off.')
+  if (watch.models.length === 0) return t('The watch has no model to ask.')
   if (state.paused !== undefined && watch.models.every((model) => state.paused?.has(model))) {
-    return watch.models.length === 1 ? describeWatchPause(watch.models[0]) : 'Every model the watch asks has failed or been refused three times running today.'
+    return watch.models.length === 1 ? describeWatchPause(watch.models[0], i18n) : t('Every model the watch asks has failed or been refused three times running today.')
   }
-  if (event.live === null) return 'It was found by scanning history, not raised live.'
+  if (event.live === null) return t('It was found by scanning history, not raised live.')
   // Part of a market-wide move (shared/marketEvent.ts marketMoveOf): the move is the event asked about.
-  if (event.live.marketMove !== undefined) return 'It is part of a market-wide move, which the watch asks about as one event.'
-  if (event.direction === 'none') return 'It has no direction to act on.'
+  if (event.live.marketMove !== undefined) return t('It is part of a market-wide move, which the watch asks about as one event.')
+  if (event.direction === 'none') return t('It has no direction to act on.')
   // An announcement's event is raised by the news, not the move: the band is what the candles
   // alone showed at that minute, and is not what the watch asks about it for.
-  if (event.news === undefined && !isAtLeast(event.band, watch.minBand)) return `It is below the ${watch.minBand} band the watch asks about.`
-  if (event.live.rank > EVENT_MAX_RANKED) return `It was not among the strongest ${EVENT_MAX_RANKED} of its minute.`
-  if (state.nowSec - event.time > AI_WATCH_FRESH_SECONDS) return `It is more than ${AI_WATCH_FRESH_SECONDS / 60} minutes old.`
-  if (!state.takenToday.has(event.id) && state.takenToday.size >= watch.maxEventsPerDay) return `The watch has asked about its ${watch.maxEventsPerDay} events for today.`
+  if (event.news === undefined && !isAtLeast(event.band, watch.minBand)) return t('It is below the {band} band the watch asks about.', { band: describeBand(watch.minBand, i18n) })
+  if (event.live.rank > EVENT_MAX_RANKED) return t('It was not among the strongest {count} of its minute.', { count: EVENT_MAX_RANKED })
+  if (state.nowSec - event.time > AI_WATCH_FRESH_SECONDS) return t('It is more than {minutes} minutes old.', { minutes: AI_WATCH_FRESH_SECONDS / 60 })
+  if (!state.takenToday.has(event.id) && state.takenToday.size >= watch.maxEventsPerDay) return t('The watch has asked about its {count} events for today.', { count: watch.maxEventsPerDay })
   // Set to wait for the next pass: a detected event is left until it is confirmed (or further),
   // and looked at again; one that weakened or expired first is simply not asked. An announcement's
   // event is asked at once: its band is not what it is asked about for.
   if (watch.askAt === 'confirmed' && event.news === undefined) {
     const status = state.lives?.[event.id]?.status ?? 'detected'
     if (status === 'detected') return WATCH_NOT_CONFIRMED_REASON
-    if (status === 'weakening' || status === 'expired') return `It was ${status === 'weakening' ? 'weakening' : 'over'} before it was confirmed.`
+    if (status === 'weakening' || status === 'expired') return status === 'weakening' ? t('It was weakening before it was confirmed.') : t('It was over before it was confirmed.')
   }
   return null
 }
@@ -268,63 +271,79 @@ export function describeAiWatchCost(input: {
   budgetRemainingUsd: number
   dailyCapUsd: number
   scannerOn: boolean
-}): string {
+}, i18n: I18n = ENGLISH): string {
+  const { t } = i18n
+  const usd = (value: number): string => formatUsd(value, i18n)
   const { watch } = input
-  const count = (n: number, one: string, many: string): string => `${n.toLocaleString()} ${n === 1 ? one : many}`
   const priced = input.models.every((model) => model.perCallCostUsd !== null)
   const perEvent = input.models.reduce((sum, model) => sum + (model.perCallCostUsd ?? 0), 0)
   const most = perEvent * watch.maxEventsPerDay
   const firstOnly = (input.models[0]?.perCallCostUsd ?? 0) * watch.maxEventsPerDay
   const gated = watch.firstModelGates && input.models.length > 1
   const lines = input.models.map((model) => {
-    if (model.perCallCostUsd === null) return `  ${describeDecider(model.model)}: cost not known (no call history here and no published price)`
-    const basis = model.costBasis === 'history' ? 'going by its recent calls here' : 'going by its price list, an estimate'
-    return `  ${describeDecider(model.model)}: about ${formatUsd(model.perCallCostUsd)} a call ${basis}`
+    const who = describeDecider(model.model, i18n)
+    if (model.perCallCostUsd === null) return `  ${t('{model}: cost not known (no call history here and no published price)', { model: who })}`
+    return model.costBasis === 'history'
+      ? `  ${t('{model}: about {cost} a call going by its recent calls here', { model: who, cost: usd(model.perCallCostUsd) })}`
+      : `  ${t('{model}: about {cost} a call going by its price list, an estimate', { model: who, cost: usd(model.perCallCostUsd) })}`
   })
   const sum = !priced
-    ? 'What that can cost in a day is not known, because a model in it has no known price.'
+    ? t('What that can cost in a day is not known, because a model in it has no known price.')
     : gated
-      ? `At most about ${formatUsd(most)} a day, if every event is passed on; about ${formatUsd(firstOnly)} if none is.`
-      : `At most about ${formatUsd(most)} a day.`
+      ? t('At most about {most} a day, if every event is passed on; about {least} if none is.', { most: usd(most), least: usd(firstOnly) })
+      : t('At most about {most} a day.', { most: usd(most) })
   const budget =
     priced && most > input.dailyCapUsd
-      ? `That is more than the daily AI budget of ${formatUsd(input.dailyCapUsd)}: the watch stops when the budget is used up, and so does everything else that asks a model that day.`
-      : `The daily AI budget of ${formatUsd(input.dailyCapUsd)} still applies, and ${formatUsd(input.budgetRemainingUsd)} of today's is left.`
+      ? t('That is more than the daily AI budget of {cap}: the watch stops when the budget is used up, and so does everything else that asks a model that day.', { cap: usd(input.dailyCapUsd) })
+      : t("The daily AI budget of {cap} still applies, and {left} of today's is left.", { cap: usd(input.dailyCapUsd), left: usd(input.budgetRemainingUsd) })
+  const asked = { count: input.models.length, provider: AI_PROVIDER_LABEL }
   return [
-    `Switch the watch on? While it is on, each ${watch.minBand === 'urgent' ? 'urgent ' : ''}event the scanner puts forward is put to ${count(input.models.length, 'model', 'models')} through ${AI_PROVIDER_LABEL} without a click, for as long as the app is open.`,
+    watch.minBand === 'urgent'
+      ? t('Switch the watch on? While it is on, each urgent event the scanner puts forward is put to {count} models through {provider} without a click, for as long as the app is open.', asked)
+      : t('Switch the watch on? While it is on, each event the scanner puts forward is put to {count} models through {provider} without a click, for as long as the app is open.', asked),
     '',
-    `At most ${count(watch.maxEventsPerDay, 'event', 'events')} a day:`,
+    t('At most {count} events a day:', { count: watch.maxEventsPerDay }),
     ...lines,
-    ...(gated ? [`${describeDecider(input.models[0].model)} is asked first, and the ${input.models.length === 2 ? 'other' : 'others'} only when it calls a trade.`] : []),
+    ...(gated
+      ? [
+          input.models.length === 2
+            ? t('{model} is asked first, and the other only when it calls a trade.', { model: describeDecider(input.models[0].model, i18n) })
+            : t('{model} is asked first, and the others only when it calls a trade.', { model: describeDecider(input.models[0].model, i18n) })
+        ]
+      : []),
     sum,
     '',
     budget,
-    ...(input.scannerOn ? [] : ['The scanner is off, so the watch has nothing to ask about until it is switched on under Settings › Market.']),
-    'It recommends and notifies. It places nothing real, and it stays on across restarts until you switch it off.',
+    ...(input.scannerOn ? [] : [t('The scanner is off, so the watch has nothing to ask about until it is switched on under Settings › Market.')]),
+    t('It recommends and notifies. It places nothing real, and it stays on across restarts until you switch it off.'),
     '',
-    'Switch it on?'
+    t('Switch it on?')
   ].join('\n')
-}
-
-function utcClock(sec: number): string {
-  return new Date(sec * 1000).toISOString().slice(11, 16)
 }
 
 /** What the desktop is told when the watch gets a call this app would act on. Null for anything
  * else. `key` is the same for every answer about one event, so one event raises one notice
  * however many models call it. The notice says nothing has been placed, because a notification
  * that reads "BUY" reads otherwise. */
-export function watchNotice(event: MarketEvent, decision: AiSignalDecision): { key: string; title: string; body: string } | null {
+export function watchNotice(event: MarketEvent, decision: AiSignalDecision, i18n: I18n = ENGLISH): { key: string; title: string; body: string } | null {
   if (!isActionableOpportunity(decision)) return null
   const validity = opportunityWindow(event.time, decision.detail)
   if (validity === null) return null
+  const { t, pctPlain, utcTime } = i18n
   const side = opportunitySide(decision)
+  const values = {
+    model: describeDecider(decision.model, i18n),
+    confidence: pctPlain(Math.round(decision.confidence * 100), 0),
+    kind: eventTypeWord(event.type, i18n),
+    time: utcTime(event.time * 1000),
+    until: utcTime(validity.expiresAt * 1000)
+  }
   return {
     key: event.id,
-    title: `${event.symbol}: ${describeOpportunitySide(side)}`,
+    title: t('{pair}: {side}', { pair: event.symbol, side: describeOpportunitySide(side, i18n) }),
     body:
-      `${describeDecider(decision.model)} at ${Math.round(decision.confidence * 100)}% confidence, on the ${describeEventType(event.type).toLowerCase()} at ${utcClock(event.time)} UTC. Nothing has been placed` +
-      `${side === 'short' ? ', and a short can only be paper traded' : ''}. ` +
-      `Its entry is good until ${utcClock(validity.expiresAt)} UTC: open Opportunities.`
+      side === 'short'
+        ? t('{model} at {confidence} confidence, on the {kind} at {time} UTC. Nothing has been placed, and a short can only be paper traded. Its entry is good until {until} UTC: open Opportunities.', values)
+        : t('{model} at {confidence} confidence, on the {kind} at {time} UTC. Nothing has been placed. Its entry is good until {until} UTC: open Opportunities.', values)
   }
 }

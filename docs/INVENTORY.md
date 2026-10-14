@@ -119,6 +119,7 @@ under Settings › Advanced › Effective configuration.
 | | `sounds` (added 13 October 2026, V6 Stage 13): the four sounds' volume, the kinds muted, the cooldown between two of one sound, quiet hours (`shared/sounds.ts`) | — | Settings › Advanced › Notifications |
 | | `keepRunningWhenClosed` (added 8 October 2026, V5 Stage 2): closing the window hides it to the tray and everything runs on, or quits the app (off by default; `shared/keepRunning.ts`) | — | Settings › Essentials |
 | | `uiMode` (added 13 October 2026, V6 Stage 1): the sidebar's layout, Normal (Research and All Features folded until opened) or Expert (every group open) | — | Settings › Essentials › Layout |
+| | `language` (added 13 October 2026, V6 Stage 14): the language of the normal-user pages and of every notice, one of ten; absent until chosen, when the first launch asks, offering the computer's (`shared/i18n/languages.ts`) | — | Settings › Language; the first launch's chooser |
 | | `forecast.refitNightly` (added 13 October 2026, V6 Stage 5): the price forecast refitted every night at 00:30 UTC on the newest ninety days, and at a start when the last fit is over 26 hours old (on unless `false`; `shared/forecast/training.ts`) | — | Forecast Lab (V6 Stage 11); until then `settings.json` and the effective-config card |
 | | `forecast.trader` (added 13 October 2026, V6 Stage 12): START AI TRADING, the forecast trader opening paper Positions on TRADE decisions by itself (off until switched on), its stake, and how many it keeps open and on one side, which the risk mode sets (`shared/forecast/trader.ts`) | — | Predictions (Start AI trading); the caps by the risk mode on Settings › Essentials |
 | `aiConfig.json` | `defaultModel`, `enabledModels`, `route` | Agents › Models | Settings › AI |
@@ -313,7 +314,8 @@ itself: trading mode (read from the live gates: PAPER, LIVE READY or LIVE ACTIVE
 (Conservative, Balanced or Aggressive since V6 Stage 12, or Custom, from `shared/appDefaults.ts`), the scanner's market, the AI's mode (changed
 only on Opportunities), notifications, and the exchange. The rest is under **Advanced**. These
 settings from the document have no behaviour behind them, so they are not added as controls:
-- **General:** language, currency, timezone, startup page. Desktop notices have had a switch, with
+- **General:** currency, timezone, startup page (the language has been chosen under Settings ›
+  Language since 13 October 2026, V6 Stage 14). Desktop notices have had a switch, with
   sound, since 6 October 2026; the daily paper digest has one of its own, on Risk & Safety.
 - **Market:**
   - default exchange: the scanner reads Binance;

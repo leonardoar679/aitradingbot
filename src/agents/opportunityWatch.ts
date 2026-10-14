@@ -11,13 +11,14 @@ import {
 import { describeDecider } from '../../shared/aiPanel'
 import type { AiSignalDecision } from '../../shared/aiSignal'
 import { AI_WATCH_FRESH_SECONDS, WATCH_NOT_CONFIRMED_REASON, utcMidnight, watchEventIdsToday, watchNotice, watchPausedModels, watchSkipReason, type AiWatchConfig } from '../../shared/aiWatch'
-import { describeEventType, type EventLife, type MarketEvent } from '../../shared/marketEvent'
+import { eventTypeWord, type EventLife, type MarketEvent } from '../../shared/marketEvent'
 import { voteOf } from '../../shared/opportunityVote'
 import { actionableRefusal, breakerNotice, confirmNotice, disagreementNotice, marketEventNotice, tradeBlockedNotice, type NoticeExtra } from '../../shared/notices'
 import { askModels, decisionOfCall, fetchEventQuestion, type AskModelsResult, type CandleFetch } from './opportunities'
 import { recordPaperRefusal, SESSION_STARTED_SEC, type PaperRefusal } from './paperRefusals'
 import type { PaperRefusalRecord, RecordFilter } from '../../shared/records'
 import { answeredBeforeStart, restartMisses } from '../../shared/restartMisses'
+import { ENGLISH, type I18n } from '../../shared/i18n/translate'
 
 // The watch at work (shared/aiWatch.ts has its rules): given the events the scanner holds, take
 // up the ones the watch should ask about, put each to its models, and say so on the desktop when
@@ -45,10 +46,13 @@ export interface WatchDeps {
   /** Opens a paper trade on an answer, when that is switched on. Resolves to what came of it, or
    * to null when there is nothing to say. Absent, the watch only asks and notifies. `byVote`
    * (since 8 October 2026): the answer is the one the models' vote chose, whichever model gave it. */
-  paperTrade?: (event: MarketEvent, decision: AiSignalDecision, byVote?: boolean, vote?: { taking: number; usable: number }) => Promise<{ opened: boolean; text: string } | null>
+  paperTrade?: (event: MarketEvent, decision: AiSignalDecision, byVote?: boolean, vote?: { taking: number; usable: number }) => Promise<{ opened: boolean; text: string; shown?: string } | null>
   /** Writes a refusal to the records on file (shared/records.ts), beside the session's own list.
    * A record; nothing reads it to decide anything. Absent, the session's list is all there is. */
   recordRefusal?: (refusal: PaperRefusal) => void
+  /** The language its notices and the Watch card's line are in (V6 Stage 14); English where absent.
+   * The reasons it decides by, and what it records, are English whatever this is. */
+  i18n?: () => I18n
 }
 
 /** A paper trade refused: the sentence its writer gave, with the ids that join it to the trade's
@@ -116,16 +120,18 @@ export function subscribeWatchActivity(listener: (activity: WatchActivity) => vo
   }
 }
 
-/** One line on what the models said, for the Watch card. */
-function summarize(event: MarketEvent, results: AskModelsResult['results'], heldBack: number): { text: string; ok: boolean } {
+/** One line on what the models said, for the Watch card, in the person's language. */
+function summarize(event: MarketEvent, results: AskModelsResult['results'], heldBack: number, i18n: I18n): { text: string; ok: boolean } {
+  const { t } = i18n
   const parts = results.map((result) => {
-    if (result.decision === null) return `${describeDecider(result.model)} did not answer (${result.problem ?? 'no reason given'})`
-    if (result.decision.rejected) return `${describeDecider(result.model)}'s answer was refused`
-    return `${describeDecider(result.model)} ${describeOpportunitySide(opportunitySide(result.decision))} at ${Math.round(result.decision.confidence * 100)}%`
+    const who = describeDecider(result.model, i18n)
+    if (result.decision === null) return t('{model} did not answer ({problem})', { model: who, problem: result.problem ?? t('no reason given') })
+    if (result.decision.rejected) return t("{model}'s answer was refused", { model: who })
+    return t('{model} {call} at {confidence}', { model: who, call: describeOpportunitySide(opportunitySide(result.decision), i18n), confidence: i18n.pctPlain(Math.round(result.decision.confidence * 100), 0) })
   })
-  const held = heldBack > 0 ? ` Not passed on to the other ${heldBack === 1 ? 'model' : `${heldBack} models`}.` : ''
+  const held = heldBack === 0 ? '' : heldBack === 1 ? ` ${t('Not passed on to the other model.')}` : ` ${t('Not passed on to the other {count} models.', { count: heldBack })}`
   return {
-    text: `${event.symbol} ${describeEventType(event.type).toLowerCase()}: ${parts.join('; ')}.${held}`,
+    text: `${t('{pair} {kind}: {answers}.', { pair: event.symbol, kind: eventTypeWord(event.type, i18n), answers: parts.join(t('; ')) })}${held}`,
     ok: results.every((result) => result.decision !== null)
   }
 }
@@ -146,9 +152,10 @@ async function askAbout(event: MarketEvent, watch: AiWatchConfig, deps: WatchDep
     // Nothing was asked, so nothing was spent and the event is not used up: the next pass may
     // take it again while it is still fresh.
     const message = failure instanceof Error ? failure.message : String(failure)
-    return { text: `${event.symbol}: its candles could not be read (${message}).`, ok: false, retry: true }
+    return { text: (deps.i18n?.() ?? ENGLISH).t('{pair}: its candles could not be read ({problem}).', { pair: event.symbol, problem: message }), ok: false, retry: true }
   }
 
+  const say = deps.i18n?.() ?? ENGLISH
   /** A notice of the document's kinds, told without failing the pass that raised it. */
   const told = (notice: { title: string; body: string; extra: NoticeExtra }): void => {
     try {
@@ -175,21 +182,22 @@ async function askAbout(event: MarketEvent, watch: AiWatchConfig, deps: WatchDep
     try {
       const outcome = await deps.paperTrade(event, decision, byVote, tally)
       if (outcome === null) return false
-      paper.push(outcome.text)
+      paper.push(outcome.shown ?? outcome.text)
       // CONFIRM (shared/aiWatch.ts): a paper BUY opened is also told as ready to confirm as a
       // real order, which a person fills in from Opportunities and places. Nothing here does.
       if (outcome.opened && watch.confirmLive && opportunitySide(decision) === 'long') {
-        told(confirmNotice(event, { who: describeDecider(decision.model), confidence: decision.confidence }))
+        told(confirmNotice(event, { who: describeDecider(decision.model, say), confidence: decision.confidence }, say))
       }
       // For the session report: what was refused, and why. A refusal a person can act on -- the
       // paper account, the money-out cap, a pause -- is told; the market's reasons, which repeat
-      // every minute, are the Watch card's.
+      // every minute, are the Watch card's. Which it is, and its thread, are read from the English.
       if (!outcome.opened) refused(deps, event, decision, outcome.text)
-      if (!outcome.opened && actionableRefusal(outcome.text)) told(tradeBlockedNotice(event.symbol, outcome.text))
+      if (!outcome.opened && actionableRefusal(outcome.text)) told(tradeBlockedNotice(event.symbol, outcome.text, say, outcome.shown ?? outcome.text))
       return outcome.opened
     } catch (failure) {
-      const text = `No paper trade: ${failure instanceof Error ? failure.message : String(failure)}`
-      paper.push(text)
+      const message = failure instanceof Error ? failure.message : String(failure)
+      const text = `No paper trade: ${message}`
+      paper.push(say.t('No paper trade: {reason}', { reason: message }))
       refused(deps, event, decision, text)
       return false
     }
@@ -200,7 +208,7 @@ async function askAbout(event: MarketEvent, watch: AiWatchConfig, deps: WatchDep
    * one and none follows it. A paper trade opened on a later answer is still told: that is
    * something done, not one more opinion. */
   const plainNotice = (decision: AiSignalDecision, opened: boolean): void => {
-    const notice = noticed || opened ? null : watchNotice(event, decision)
+    const notice = noticed || opened ? null : watchNotice(event, decision, say)
     if (opened) noticed = true
     if (notice !== null) {
       noticed = true
@@ -231,6 +239,7 @@ async function askAbout(event: MarketEvent, watch: AiWatchConfig, deps: WatchDep
   const voted = async (results: AskModelsResult['results']): Promise<string> => {
     const decisions = results.map((result) => result.decision)
     const vote = voteOf(decisions)
+    const shownVote = say === ENGLISH ? vote : voteOf(decisions, say)
     let opened = false
     // How many of the usable answers took the side: a vote that passed with one not on it reduces
     // the risk (shared/dynamicRisk.ts).
@@ -240,30 +249,37 @@ async function askAbout(event: MarketEvent, watch: AiWatchConfig, deps: WatchDep
     else if (vote.refusal !== null) {
       const first = decisions.find((decision): decision is AiSignalDecision => isActionableOpportunity(decision) && decision !== null)
       const text = `No paper trade: ${vote.refusal}`
-      paper.push(text)
+      paper.push(say.t('No paper trade: {reason}', { reason: shownVote.refusal ?? vote.refusal }))
       if (first !== undefined) refused(deps, event, first, text)
     }
     // The plain notice, held back for the vote: the first call to trade's, unless a trade opened.
     if (firstActionable !== null) plainNotice(firstActionable, opened)
-    return vote.text
+    return shownVote.text
   }
 
   /** What the models said, the vote where there was one, then what was done about it, then who was
    * not asked. Models on opposite sides are told (MODEL_DISAGREEMENT); a model rested for the day
    * is told once a day. */
   const outcome = async (results: AskModelsResult['results'], heldBack: number): Promise<{ text: string; ok: boolean; retry: boolean }> => {
-    const said = summarize(event, results, heldBack)
+    const said = summarize(event, results, heldBack, say)
     const sides = results.flatMap((result) => {
       const side = result.decision === null ? null : opportunitySide(result.decision)
-      return side === 'long' || side === 'short' ? [{ model: describeDecider(result.model), side }] : []
+      return side === 'long' || side === 'short' ? [{ model: describeDecider(result.model, say), side }] : []
     })
-    if (sides.some((entry) => entry.side === 'long') && sides.some((entry) => entry.side === 'short')) told(disagreementNotice(event, sides))
-    const vote = byVote && results.length >= 2 ? ` Vote: ${await voted(results)}.` : ''
+    if (sides.some((entry) => entry.side === 'long') && sides.some((entry) => entry.side === 'short')) told(disagreementNotice(event, sides, say))
+    const vote = byVote && results.length >= 2 ? ` ${say.t('Vote: {vote}.', { vote: await voted(results) })}` : ''
     for (const model of resting) {
-      told(breakerNotice('model', `${describeDecider(model)} failed or was refused three times running today, and the watch does not ask it again until midnight UTC. The other models are still asked.`, `model:${model}`))
+      told(
+        breakerNotice(
+          'model',
+          say.t('{model} failed or was refused three times running today, and the watch does not ask it again until midnight UTC. The other models are still asked.', { model: describeDecider(model, say) }),
+          `model:${model}`,
+          say
+        )
+      )
     }
     // Who was left out, in a few words: the card says why on a line of its own.
-    const rested = resting.length === 0 ? '' : ` Not asked: ${resting.map((model) => describeDecider(model)).join(', ')}, rested until midnight UTC.`
+    const rested = resting.length === 0 ? '' : ` ${say.t('Not asked: {models}, rested until midnight UTC.', { models: resting.map((model) => describeDecider(model, say)).join(', ') })}`
     return { text: `${said.text}${vote}${paper.map((line) => ` ${line}`).join('')}${rested}`, ok: said.ok, retry: false }
   }
 
@@ -301,6 +317,7 @@ export async function watchPass(events: MarketEvent[], deps: WatchDeps, lives: R
   if (!events.some((event) => !handled.has(event.id))) return result
 
   const { watch } = await deps.getConfig()
+  const say = deps.i18n?.() ?? ENGLISH
   // Off: nothing is marked. An event waiting here when the watch is switched on is taken up only
   // if it is still fresh, like any other. An urgent one is told as a market event, once per pair.
   if (!watch.enabled) {
@@ -308,7 +325,7 @@ export async function watchPass(events: MarketEvent[], deps: WatchDeps, lives: R
     for (const event of events) {
       if (!handled.has(event.id) && unaskedMarketEvent(event, 'The watch is off.', nowSec)) {
         try {
-          deps.notify(...noticeArgs(marketEventNotice(event, 'the watch is off.')))
+          deps.notify(...noticeArgs(marketEventNotice(event, say.t('the watch is off.'), say)))
         } catch {
           // A desktop that cannot show it is not a reason to fail the pass.
         }
@@ -348,8 +365,10 @@ export async function watchPass(events: MarketEvent[], deps: WatchDeps, lives: R
         continue
       }
       if (unaskedMarketEvent(event, reason, nowSec)) {
+        // Which reasons are told is read from the English; the notice says it in the person's language.
+        const shown = watchSkipReason(event, watch, { nowSec, takenToday, paused, lives }, say) ?? reason
         try {
-          deps.notify(...noticeArgs(marketEventNotice(event, reason.charAt(0).toLowerCase() + reason.slice(1))))
+          deps.notify(...noticeArgs(marketEventNotice(event, shown.charAt(0).toLowerCase() + shown.slice(1), say)))
         } catch {
           // A desktop that cannot show it is not a reason to fail the pass.
         }
@@ -362,7 +381,7 @@ export async function watchPass(events: MarketEvent[], deps: WatchDeps, lives: R
     asking.push(
       askAbout(event, asked, deps, resting)
         // Whatever went wrong, the event stops counting as one being asked about.
-        .catch((failure: unknown) => ({ text: `${event.symbol}: ${failure instanceof Error ? failure.message : String(failure)}`, ok: false, retry: false }))
+        .catch((failure: unknown) => ({ text: say.t('{pair}: {problem}', { pair: event.symbol, problem: failure instanceof Error ? failure.message : String(failure) }), ok: false, retry: false }))
         .then((outcome) => {
           inFlight.delete(event.id)
           if (outcome.retry) {

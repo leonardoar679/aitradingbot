@@ -4,10 +4,11 @@ import { describeDecider } from './aiPanel'
 import { buildOpportunityProposal, opportunityObstacle } from './aiProposal'
 import { GPT_MIN_CONFIDENCE, type AiSignalDecision } from './aiSignal'
 import type { Candle, ExecutorConfig, ExecutorSide, PaperPauseSettings, PaperRiskSettings, PositionExecutorParams } from './ipc'
-import { describeEventType, type MarketEvent } from './marketEvent'
+import { eventTypeWord, type MarketEvent } from './marketEvent'
 import { describePaperPause } from './paperPause'
 import { describePaperRisk, describeR, rMultiple, riskPerTrade, sizePaperTrade } from './paperRisk'
 import { riskMultiplier, riskReasonsText, riskRefusal, type RiskMultiplier } from './dynamicRisk'
+import { ENGLISH, msg, type I18n } from './i18n/translate'
 
 // PAPER TRADES FROM THE WATCH.
 //
@@ -170,9 +171,10 @@ export function aiWatchPaperProblem(config: AiWatchPaperConfig, watchModels: str
 /** What a paper trade of the watch's stakes, in the words that follow "staking": "100 of the pair's
  * quote currency", or "at most 100 of the pair's quote currency, sized so that being stopped out
  * loses about 1". */
-export function describeWatchPaperSize(config: Pick<AiWatchPaperConfig, 'stakeQuote'>, risk: PaperRiskSettings): string {
-  const stake = `${config.stakeQuote} of the pair's quote currency`
-  return risk.sizing === 'risk' ? `at most ${stake}, sized so that being stopped out loses about ${risk.riskQuote}` : stake
+export function describeWatchPaperSize(config: Pick<AiWatchPaperConfig, 'stakeQuote'>, risk: PaperRiskSettings, { t }: I18n = ENGLISH): string {
+  return risk.sizing === 'risk'
+    ? t("at most {stake} of the pair's quote currency, sized so that being stopped out loses about {risk}", { stake: config.stakeQuote, risk: risk.riskQuote })
+    : t("{stake} of the pair's quote currency", { stake: config.stakeQuote })
 }
 
 /** What switching it on does, said before it is switched on. `pause` is the losing run that
@@ -183,41 +185,43 @@ export function describeAiWatchPaper(input: {
   pause?: Pick<PaperPauseSettings, 'lossR' | 'trades'>
   watchOn: boolean
   hasPaperAccount: boolean
-}): string {
+}, i18n: I18n = ENGLISH): string {
+  const { t, pctPlain } = i18n
   const { config } = input
-  const who = config.model === null ? 'the chosen model' : describeDecider(config.model)
-  const confidence = Math.round(GPT_MIN_CONFIDENCE * 100)
+  const who = config.model === null ? t('the chosen model') : describeDecider(config.model, i18n)
+  const confidence = pctPlain(Math.round(GPT_MIN_CONFIDENCE * 100), 0)
+  const pause = input.pause === undefined ? '' : ` ${describePaperPause(input.pause, i18n)}`
   return [
-    'Let the watch open paper trades by itself?',
+    t('Let the watch open paper trades by itself?'),
     '',
-    `While this is on, each time ${who} answers an event the watch put to it with BUY or SELL at ${confidence}% confidence or more, a PAPER position is opened at once, with nobody pressing anything, staking ${describeWatchPaperSize(config, input.risk)}.`,
+    t('While this is on, each time {model} answers an event the watch put to it with BUY or SELL at {confidence} confidence or more, a PAPER position is opened at once, with nobody pressing anything, staking {size}.', {
+      model: who,
+      confidence,
+      size: describeWatchPaperSize(config, input.risk, i18n)
+    }),
     '',
-    'It is the position the Paper trade button would have filled in: it enters in the first minute the price trades inside the range the model named, and is abandoned if that has not happened when its entry expires; with the model\'s own stop and target, and its holding time as the time limit.',
-    `At most ${config.maxOpen} open at once, one an event, and one on a pair at a time. When a position has closed, it is stopped, and its card on Strategies › Execution says how it ended.`,
-    describeWatchPaperSafeguards(config),
-    `On Risk & Safety, for every paper trade the app opens by itself: ${describePaperRisk(input.risk)}${input.pause === undefined ? '' : ` ${describePaperPause(input.pause)}`}`,
+    t("It is the position the Paper trade button would have filled in: it enters in the first minute the price trades inside the range the model named, and is abandoned if that has not happened when its entry expires; with the model's own stop and target, and its holding time as the time limit."),
+    t('At most {count} open at once, one an event, and one on a pair at a time. When a position has closed, it is stopped, and its card on Strategies › Execution says how it ended.', { count: config.maxOpen }),
+    describeWatchPaperSafeguards(config, i18n),
+    t('On Risk & Safety, for every paper trade the app opens by itself: {sizing}', { sizing: describePaperRisk(input.risk, i18n) }) + pause,
     input.hasPaperAccount
-      ? 'Its result goes to the paper account, and a trade the paper account cannot fund is not opened.'
-      : 'No paper account is set up, so their results are added to no balance, and nothing limits what these positions add up to. Set one up under Account to hold them to a balance.',
+      ? t('Its result goes to the paper account, and a trade the paper account cannot fund is not opened.')
+      : t('No paper account is set up, so their results are added to no balance, and nothing limits what these positions add up to. Set one up under Account to hold them to a balance.'),
     '',
-    'It is paper. Nothing is placed on an exchange, and this cannot be pointed at real money. A SELL is a short, which this app only ever paper trades.',
-    'It asks no model and costs nothing: what the watch may ask, and spend, is unchanged.',
-    ...(input.watchOn ? [] : ['The watch itself is off, so nothing will be opened until it is switched on.']),
+    t('It is paper. Nothing is placed on an exchange, and this cannot be pointed at real money. A SELL is a short, which this app only ever paper trades.'),
+    t('It asks no model and costs nothing: what the watch may ask, and spend, is unchanged.'),
+    ...(input.watchOn ? [] : [t('The watch itself is off, so nothing will be opened until it is switched on.')]),
     '',
-    'Switch it on?'
+    t('Switch it on?')
   ].join('\n')
 }
 
-/** The safeguards in a sentence, as they are set. */
-export function describeWatchPaperSafeguards(config: Pick<AiWatchPaperConfig, 'maxSameSide' | 'pauseAfterLosses' | 'dropOnBtcMovePct'>): string {
-  const side = `At most ${config.maxSameSide} open in one direction.`
-  const pause =
-    config.pauseAfterLosses > 0 ? ` After ${config.pauseAfterLosses} in a row close at a loss in one day, none is opened until midnight UTC.` : ' No pause after losses.'
-  const btc =
-    config.dropOnBtcMovePct > 0
-      ? ` One still waiting to enter is dropped if Bitcoin moves ${config.dropOnBtcMovePct}% against it after the event.`
-      : ' Bitcoin moving does not drop one.'
-  return side + pause + btc
+/** The safeguards in a sentence, as they are set, in a language. */
+export function describeWatchPaperSafeguards(config: Pick<AiWatchPaperConfig, 'maxSameSide' | 'pauseAfterLosses' | 'dropOnBtcMovePct'>, { t, share }: I18n = ENGLISH): string {
+  const side = t('At most {count} open in one direction.', { count: config.maxSameSide })
+  const pause = config.pauseAfterLosses > 0 ? t('After {count} in a row close at a loss in one day, none is opened until midnight UTC.', { count: config.pauseAfterLosses }) : t('No pause after losses.')
+  const btc = config.dropOnBtcMovePct > 0 ? t('One still waiting to enter is dropped if Bitcoin moves {move} against it after the event.', { move: share(config.dropOnBtcMovePct) }) : t('Bitcoin moving does not drop one.')
+  return `${side} ${pause} ${btc}`
 }
 
 export type WatchPaperMark = NonNullable<ExecutorConfig['watch']>
@@ -236,9 +240,9 @@ export function describeWatchPaperOrigin(mark: WatchPaperMark): string {
 }
 
 /** An amount of a quote asset with its sign, to four significant digits: "+3.786 USDT". */
-function signedQuote(amount: number, asset: string): string {
+export function signedQuote(amount: number, asset: string, { num }: I18n = ENGLISH): string {
   const shown = Number(amount.toPrecision(4))
-  return `${shown > 0 ? '+' : ''}${shown} ${asset}`
+  return `${shown > 0 ? '+' : ''}${num(shown, 0, 10)} ${asset}`
 }
 
 /** Whether a paper trade that ended was ever in the market: one that never entered, or was dropped
@@ -248,25 +252,29 @@ export function watchPaperEntered(result: WatchPaperOutcome): boolean {
 }
 
 const EXIT_WORDS: Record<Exclude<WatchPaperOutcome['exit'], 'entry_expired' | 'btc_moved'>, string> = {
-  take_profit: 'Target reached',
-  stop_loss: 'Stopped out',
-  time_limit: 'Time ran out',
-  trailing_stop: 'Trailing stop',
-  liquidation: 'Liquidated',
-  ai_exit: 'Closed by the exit check'
+  take_profit: msg('Target reached'),
+  stop_loss: msg('Stopped out'),
+  time_limit: msg('Time ran out'),
+  trailing_stop: msg('Trailing stop'),
+  liquidation: msg('Liquidated'),
+  ai_exit: msg('Closed by the exit check')
 }
 
 /** How a paper trade ended, for its card and its timeline: the exit, what it made or lost, and --
  * given its parameters, where it had a stop -- that in R, against what its stop would have lost
  * (shared/paperRisk.ts). A news rule's short ends the same ways, and is told the same way. */
-export function describeWatchPaperResult(result: WatchPaperOutcome, quoteAsset: string, params?: Pick<PositionExecutorParams, 'amountQuote' | 'stopLossPct'>): string {
-  if (result.exit === 'entry_expired') return 'Never entered: the price did not trade in its entry range before it expired.'
+export function describeWatchPaperResult(result: WatchPaperOutcome, quoteAsset: string, params?: Pick<PositionExecutorParams, 'amountQuote' | 'stopLossPct'>, i18n: I18n = ENGLISH): string {
+  const { t, pctPlain } = i18n
+  if (result.exit === 'entry_expired') return t('Never entered: the price did not trade in its entry range before it expired.')
   if (result.exit === 'btc_moved') {
     const move = result.btcMovePct ?? 0
-    return `Dropped before it entered: Bitcoin ${move < 0 ? 'fell' : 'rose'} ${Math.abs(move).toFixed(2)}% after the call.`
+    return move < 0
+      ? t('Dropped before it entered: Bitcoin fell {move} after the call.', { move: pctPlain(Math.abs(move), 2) })
+      : t('Dropped before it entered: Bitcoin rose {move} after the call.', { move: pctPlain(Math.abs(move), 2) })
   }
   const r = params === undefined ? null : rMultiple(result.pnlQuote, params)
-  return `${EXIT_WORDS[result.exit]}: ${signedQuote(result.pnlQuote, quoteAsset)} after fees${r === null ? '' : `, ${describeR(r)}`}.`
+  const values = { exit: t(EXIT_WORDS[result.exit]), pnl: signedQuote(result.pnlQuote, quoteAsset, i18n) }
+  return r === null ? t('{exit}: {pnl} after fees.', values) : t('{exit}: {pnl} after fees, {r}.', { ...values, r: describeR(r, i18n) })
 }
 
 export interface WatchPaperTally {
@@ -308,14 +316,25 @@ export function watchPaperTally(executors: ExecutorConfig[]): WatchPaperTally {
 }
 
 /** The tally in a sentence, or nothing when none has ended. A sum and two counts: not a rate. */
-export function describeWatchPaperTally(tally: WatchPaperTally): string {
+export function describeWatchPaperTally(tally: WatchPaperTally, i18n: I18n = ENGLISH): string {
+  const { t } = i18n
   if (tally.ended === 0) return ''
-  const ended = `${tally.ended} ${tally.ended === 1 ? 'has' : 'have'} ended`
-  if (tally.entered === 0) return `${ended}, and ${tally.ended === 1 ? 'it never' : 'none'} entered.`
-  const sums = tally.pnl.map((entry) => signedQuote(entry.amount, entry.asset))
-  const total = sums.length === 1 ? sums[0] : `${sums.slice(0, -1).join(', ')} and ${sums[sums.length - 1]}`
-  const r = tally.rTrades === 0 ? '' : `, or ${describeR(tally.r)}${tally.rTrades < tally.entered ? ` for the ${tally.rTrades} with a stop` : ''}`
-  return `${ended}: ${tally.entered} entered, ${tally.ahead} of them ahead, ${total} in all after fees${r}.`
+  if (tally.entered === 0) return tally.ended === 1 ? t('1 has ended, and it never entered.') : t('{count} have ended, and none entered.', { count: tally.ended })
+  const sums = tally.pnl.map((entry) => signedQuote(entry.amount, entry.asset, i18n))
+  const values = { count: tally.ended, entered: tally.entered, ahead: tally.ahead, total: i18n.list(sums), r: describeR(tally.r, i18n), stopped: tally.rTrades }
+  const ended = tally.ended === 1 ? 'one' : 'many'
+  const r = tally.rTrades === 0 ? 'none' : tally.rTrades < tally.entered ? 'some' : 'all'
+  return t(TALLY_SENTENCES[`${ended}:${r}`], values)
+}
+
+/** The tally's sentence: one trade ended or more, and none, some or all of them with a stop. */
+const TALLY_SENTENCES: Record<string, string> = {
+  'one:none': msg('1 has ended: {entered} entered, {ahead} of them ahead, {total} in all after fees.'),
+  'one:some': msg('1 has ended: {entered} entered, {ahead} of them ahead, {total} in all after fees, or {r} for the {stopped} with a stop.'),
+  'one:all': msg('1 has ended: {entered} entered, {ahead} of them ahead, {total} in all after fees, or {r}.'),
+  'many:none': msg('{count} have ended: {entered} entered, {ahead} of them ahead, {total} in all after fees.'),
+  'many:some': msg('{count} have ended: {entered} entered, {ahead} of them ahead, {total} in all after fees, or {r} for the {stopped} with a stop.'),
+  'many:all': msg('{count} have ended: {entered} entered, {ahead} of them ahead, {total} in all after fees, or {r}.')
 }
 
 /** Why the watch opens no paper trade on this answer whatever the price is doing, or null when its
@@ -330,18 +349,19 @@ export function watchPaperBlock(input: {
   /** The answer is the one the models' vote chose (shared/opportunityVote.ts, since 8 October
    * 2026): followed whichever model gave it. Without it, only the named model's answers are. */
   byVote?: boolean
-}): string | null {
+}, i18n: I18n = ENGLISH): string | null {
+  const { t } = i18n
   const { config, event } = input
-  if (!config.enabled || config.model === null) return 'Paper trades from the watch are off.'
-  if (input.byVote !== true && input.decision.model !== config.model) return `Paper trades follow ${describeDecider(config.model)}, and this answer is not its.`
+  if (!config.enabled || config.model === null) return t('Paper trades from the watch are off.')
+  if (input.byVote !== true && input.decision.model !== config.model) return t('Paper trades follow {model}, and this answer is not its.', { model: describeDecider(config.model, i18n) })
   const own = watchPaperExecutors(input.executors)
-  if (own.some((executor) => executor.watch?.eventId === event.id)) return 'A paper trade was already opened for this event.'
+  if (own.some((executor) => executor.watch?.eventId === event.id)) return t('A paper trade was already opened for this event.')
   const open = own.filter((executor) => executor.status === 'active')
   if (open.some((executor) => executor.exchange === event.exchange && executor.symbol === event.symbol)) {
-    return `A paper trade of the watch's is still open on ${event.symbol}.`
+    return t("A paper trade of the watch's is still open on {pair}.", { pair: event.symbol })
   }
   if (open.length >= config.maxOpen) {
-    return `The watch has ${open.length} paper ${open.length === 1 ? 'trade' : 'trades'} open, and ${config.maxOpen} is the most it keeps.`
+    return t('The watch has {count} paper trades open, and {max} is the most it keeps.', { count: open.length, max: config.maxOpen })
   }
   // A call to hold opens nothing anyway, and the plan says so.
   const side: ExecutorSide | null = input.decision.recommendation === 'buy' ? 'buy' : input.decision.recommendation === 'sell' ? 'sell' : null
@@ -349,7 +369,9 @@ export function watchPaperBlock(input: {
     const sameWay = open.filter((executor) => (executor.params as PositionExecutorParams).side === side).length
     if (sameWay >= config.maxSameSide) {
       const word = side === 'buy' ? 'BUY' : 'SELL'
-      return `The watch has ${sameWay} paper ${word}${sameWay === 1 ? '' : 's'} open, and ${config.maxSameSide} in one direction is the most it keeps: coins move together, so more would be one bet on the market.`
+      return word === 'BUY'
+        ? t('The watch has {count} paper BUYs open, and {max} in one direction is the most it keeps: coins move together, so more would be one bet on the market.', { count: sameWay, max: config.maxSameSide })
+        : t('The watch has {count} paper SELLs open, and {max} in one direction is the most it keeps: coins move together, so more would be one bet on the market.', { count: sameWay, max: config.maxSameSide })
     }
   }
   return watchPaperPause(input.executors, config, input.nowSec)
@@ -358,7 +380,7 @@ export function watchPaperBlock(input: {
 /** Why the watch opens no paper trade for the rest of today, or null when it may: the last
  * `pauseAfterLosses` of its paper trades that closed today, after entering, all lost. Counted from
  * the results on file; a new UTC day starts the count again. */
-export function watchPaperPause(executors: ExecutorConfig[], config: Pick<AiWatchPaperConfig, 'pauseAfterLosses'>, nowSec: number): string | null {
+export function watchPaperPause(executors: ExecutorConfig[], config: Pick<AiWatchPaperConfig, 'pauseAfterLosses'>, nowSec: number, { t }: I18n = ENGLISH): string | null {
   const run = config.pauseAfterLosses
   if (run <= 0) return null
   const midnight = Math.floor(nowSec / 86_400) * 86_400
@@ -368,7 +390,7 @@ export function watchPaperPause(executors: ExecutorConfig[], config: Pick<AiWatc
     .sort((a, b) => a.closedAt - b.closedAt)
   const last = today.slice(-run)
   if (last.length < run || last.some((result) => result.pnlQuote >= 0)) return null
-  return `The last ${run} paper trades of the watch's to close today all lost, so it opens none until 00:00 UTC.`
+  return t("The last {count} paper trades of the watch's to close today all lost, so it opens none until 00:00 UTC.", { count: run })
 }
 
 /** How far Bitcoin has moved since an event, in percent, when that is against a paper trade on it
@@ -386,12 +408,22 @@ export function btcMoveAgainst(input: { side: ExecutorSide; eventTime: number; b
 }
 
 /** What the desktop is told when the watch drops a paper trade before it entered. */
-export function watchPaperDropNotice(executor: Pick<ExecutorConfig, 'symbol' | 'params'>, eventTime: number, movePct: number): { title: string; body: string } {
-  const side = (executor.params as PositionExecutorParams).side === 'sell' ? 'SELL' : 'BUY'
+export function watchPaperDropNotice(executor: Pick<ExecutorConfig, 'symbol' | 'params'>, eventTime: number, movePct: number, i18n: I18n = ENGLISH): { title: string; body: string } {
+  const { t } = i18n
+  const sell = (executor.params as PositionExecutorParams).side === 'sell'
+  const values = { move: i18n.pctPlain(Math.abs(movePct), 2), time: clockIn(eventTime, i18n) }
   return {
-    title: `${executor.symbol}: paper ${side} dropped`,
-    body: `Bitcoin ${movePct < 0 ? 'fell' : 'rose'} ${Math.abs(movePct).toFixed(2)}% after the call on the ${utcClock(eventTime)} UTC event, before this trade entered, so the watch dropped it. Nothing real was placed or held.`
+    title: sell ? t('{pair}: paper SELL dropped', { pair: executor.symbol }) : t('{pair}: paper BUY dropped', { pair: executor.symbol }),
+    body:
+      movePct < 0
+        ? t('Bitcoin fell {move} after the call on the {time} UTC event, before this trade entered, so the watch dropped it. Nothing real was placed or held.', values)
+        : t('Bitcoin rose {move} after the call on the {time} UTC event, before this trade entered, so the watch dropped it. Nothing real was placed or held.', values)
   }
+}
+
+/** "07:45", as the records write it in English; in a language's own form elsewhere. */
+function clockIn(sec: number, i18n: I18n): string {
+  return i18n.language === 'en' ? utcClock(sec) : i18n.utcTime(sec * 1000)
 }
 
 export type WatchPaperPlan =
@@ -431,60 +463,68 @@ export function planWatchPaperTrade(input: {
     dissent: boolean | null
     correlatedShare: number | null
   }
+  /** The language its reasons and its risk note are in (V6 Stage 14): English, as recorded, unless the
+   * writer asks for the person's to say them in. What it plans is the same in every one. */
+  i18n?: I18n
 }): WatchPaperPlan {
+  const i18n = input.i18n ?? ENGLISH
+  const { t } = i18n
   const { config, event, decision } = input
   const current = input.lastPrice ?? event.price
   const obstacle = opportunityObstacle(event.time, decision, input.nowSec, current)
   if (obstacle !== null) {
     switch (obstacle.code) {
       case 'unreached':
-        return { ok: false, reason: 'The model was not reached.' }
+        return { ok: false, reason: t('The model was not reached.') }
       case 'refused':
-        return { ok: false, reason: 'Its answer was refused.' }
+        return { ok: false, reason: t('Its answer was refused.') }
       case 'no_trade':
-        return { ok: false, reason: 'It called no trade.' }
+        return { ok: false, reason: t('It called no trade.') }
       case 'low_confidence':
-        return { ok: false, reason: `Its call is below the ${Math.round(GPT_MIN_CONFIDENCE * 100)}% confidence this app acts on.` }
+        return { ok: false, reason: t('Its call is below the {share} confidence this app acts on.', { share: i18n.pctPlain(Math.round(GPT_MIN_CONFIDENCE * 100), 0) }) }
       case 'expired':
-        return { ok: false, reason: 'Its entry had already expired.' }
+        return { ok: false, reason: t('Its entry had already expired.') }
       case 'through_stop':
-        return { ok: false, reason: 'The price had already gone through its stop.' }
+        return { ok: false, reason: t('The price had already gone through its stop.') }
       case 'at_target':
-        return { ok: false, reason: 'The price had already reached its target.' }
+        return { ok: false, reason: t('The price had already reached its target.') }
     }
   }
   const proposal = buildOpportunityProposal({ event, decision, nowSec: input.nowSec, lastPrice: input.lastPrice })
-  if (proposal === null || proposal.entryRange === undefined) return { ok: false, reason: 'Its recommendation could not be turned into a position.' }
+  if (proposal === null || proposal.entryRange === undefined) return { ok: false, reason: t('Its recommendation could not be turned into a position.') }
   if (proposal.stopLossPct === null || proposal.takeProfitPct === null) {
-    return { ok: false, reason: 'Its stop or its target is not a usable distance from the entry.' }
+    return { ok: false, reason: t('Its stop or its target is not a usable distance from the entry.') }
   }
   // Its market fills give up what its score charges them (shared/aiOpportunityOutcome.ts), and it is
   // sized with that in what it risks.
   const slippageRate = slippageRateForEvent({ live: event.live ?? null })
   const sizing = { risk: input.risk, stakeQuote: config.stakeQuote, stopPct: proposal.stopLossPct, quoteAsset: event.quoteAsset, slippageRate, equityQuote: input.equityQuote }
-  const whole = sizePaperTrade(sizing)
+  const whole = sizePaperTrade(sizing, i18n)
   if (!whole.ok) return { ok: false, reason: whole.reason }
   // The conditions' factor on the risk (shared/dynamicRisk.ts): none at extreme volatility, six
   // tenths with any other condition against it. The best level's cover is read against the stake
   // at the whole risk, so that a reduced stake does not read as better covered.
   const conditions = input.conditions
-  const multiplier = riskMultiplier({
-    volatilityRatio: conditions?.volatilityRatio ?? null,
-    spreadPct: conditions?.spreadPct ?? null,
-    liquidityCover: conditions?.bestLevelQuote === undefined || conditions.bestLevelQuote === null ? null : conditions.bestLevelQuote / whole.amountQuote,
-    dissent: conditions?.dissent ?? null,
-    correlatedShare: conditions?.correlatedShare ?? null
-  })
-  const refusal = riskRefusal(multiplier)
+  const multiplier = riskMultiplier(
+    {
+      volatilityRatio: conditions?.volatilityRatio ?? null,
+      spreadPct: conditions?.spreadPct ?? null,
+      liquidityCover: conditions?.bestLevelQuote === undefined || conditions.bestLevelQuote === null ? null : conditions.bestLevelQuote / whole.amountQuote,
+      dissent: conditions?.dissent ?? null,
+      correlatedShare: conditions?.correlatedShare ?? null
+    },
+    i18n
+  )
+  const refusal = riskRefusal(multiplier, i18n)
   if (refusal !== null) return { ok: false, reason: refusal }
-  const size = multiplier.factor === 1 ? whole : sizePaperTrade({ ...sizing, multiplier: multiplier.factor })
+  const size = multiplier.factor === 1 ? whole : sizePaperTrade({ ...sizing, multiplier: multiplier.factor }, i18n)
   if (!size.ok) return { ok: false, reason: size.reason }
   const side: ExecutorSide = proposal.side ?? 'buy'
   return {
     ok: true,
     name: `Watch: ${describeOpportunitySide(opportunitySide(decision))} ${event.symbol}`,
     side,
-    riskNote: riskNoteOf(input.risk, input.equityQuote, multiplier, event.quoteAsset),
+    riskNote: riskNoteOf(input.risk, input.equityQuote, multiplier, event.quoteAsset, i18n),
     // No leverage field: absent is 1x, the only thing the watch ever opens.
     params: {
       side,
@@ -517,12 +557,16 @@ export function planWatchPaperTrade(input: {
 /** The risk a trade is sized at once the conditions reduced it, in words: "risk 0.15% (high
  * volatility, 1.8× its usual)" by a share of the account, "risk 0.6 USDT (…)" by a fixed risk,
  * "the stake at 60% (…)" by its stake. Null at the whole risk. */
-export function riskNoteOf(risk: PaperRiskSettings, equityQuote: number | null | undefined, multiplier: RiskMultiplier, quoteAsset: string): string | null {
+export function riskNoteOf(risk: PaperRiskSettings, equityQuote: number | null | undefined, multiplier: RiskMultiplier, quoteAsset: string, i18n: I18n = ENGLISH): string | null {
   if (multiplier.factor === 1) return null
-  const reasons = riskReasonsText(multiplier)
-  if (risk.sizing === 'stake') return `the stake at ${Math.round(multiplier.factor * 100)}% (${reasons})`
-  if (risk.sizing === 'equity' && equityQuote !== null && equityQuote !== undefined && equityQuote > 0) return `risk ${(risk.riskPct * multiplier.factor).toFixed(2)}% (${reasons})`
-  return `risk ${Number((riskPerTrade(risk, equityQuote) * multiplier.factor).toFixed(2))} ${quoteAsset} (${reasons})`
+  const { t } = i18n
+  const reasons = riskReasonsText(multiplier, i18n)
+  if (risk.sizing === 'stake') return t('the stake at {share} ({reasons})', { share: i18n.pctPlain(Math.round(multiplier.factor * 100), 0), reasons })
+  if (risk.sizing === 'equity' && equityQuote !== null && equityQuote !== undefined && equityQuote > 0) {
+    return t('risk {share} ({reasons})', { share: i18n.language === 'en' ? `${(risk.riskPct * multiplier.factor).toFixed(2)}%` : i18n.pctPlain(risk.riskPct * multiplier.factor, 2), reasons })
+  }
+  const amount = Number((riskPerTrade(risk, equityQuote) * multiplier.factor).toFixed(2))
+  return t('risk {amount} {asset} ({reasons})', { amount: i18n.language === 'en' ? String(amount) : i18n.num(amount, 0, 2), asset: quoteAsset, reasons })
 }
 
 function utcClock(sec: number): string {
@@ -530,26 +574,42 @@ function utcClock(sec: number): string {
 }
 
 /** Where a paper trade of the watch's enters, in a few words: "to enter between 99.8 and 100.2". */
-export function describeWatchPaperEntry(params: Pick<PositionExecutorParams, 'entryPrice' | 'entryRange' | 'entryFill'>): string {
-  const shown = (price: number): number => Number(price.toPrecision(8))
-  if (params.entryFill != null) return `entered at ${shown(params.entryFill.price)} from the live book`
-  if (params.entryRange != null) return `to enter between ${shown(params.entryRange.min)} and ${shown(params.entryRange.max)}`
-  return params.entryPrice === null ? 'at market' : `waiting for ${shown(params.entryPrice)}`
+export function describeWatchPaperEntry(params: Pick<PositionExecutorParams, 'entryPrice' | 'entryRange' | 'entryFill'>, i18n: I18n = ENGLISH): string {
+  const { t } = i18n
+  const shown = (price: number): string => (i18n.language === 'en' ? String(Number(price.toPrecision(8))) : i18n.num(Number(price.toPrecision(8)), 0, 10))
+  if (params.entryFill != null) return t('entered at {price} from the live book', { price: shown(params.entryFill.price) })
+  if (params.entryRange != null) return t('to enter between {low} and {high}', { low: shown(params.entryRange.min), high: shown(params.entryRange.max) })
+  return params.entryPrice === null ? t('at market') : t('waiting for {price}', { price: shown(params.entryPrice) })
 }
 
 /** What the desktop is told when the watch has opened a paper trade. It says it is paper, and that
  * nothing real was placed, because a notification that reads "BUY" reads otherwise. */
 export function watchPaperNotice(
   event: Pick<MarketEvent, 'id' | 'symbol' | 'quoteAsset' | 'time' | 'type'>,
-  plan: Extract<WatchPaperPlan, { ok: true }>
+  plan: Extract<WatchPaperPlan, { ok: true }>,
+  i18n: I18n = ENGLISH,
+  /** The risk note in the notice's language, where the plan's own is English. */
+  riskNote: string | null = plan.riskNote
 ): { key: string; title: string; body: string } {
+  const { t } = i18n
+  const values = {
+    model: describeDecider(plan.mark.model, i18n),
+    confidence: i18n.pctPlain(Math.round(plan.mark.confidence * 100), 0),
+    kind: eventTypeWord(event.type, i18n),
+    time: clockIn(event.time, i18n),
+    amount: String(plan.params.amountQuote),
+    asset: event.quoteAsset,
+    entry: describeWatchPaperEntry(plan.params, i18n),
+    stop: String(plan.params.stopLossPct),
+    target: String(plan.params.takeProfitPct),
+    risk: riskNote ?? ''
+  }
   return {
     key: `${event.id}:paper`,
-    title: `${event.symbol}: paper ${plan.side === 'buy' ? 'BUY' : 'SELL'} opened`,
+    title: plan.side === 'buy' ? t('{pair}: paper BUY opened', { pair: event.symbol }) : t('{pair}: paper SELL opened', { pair: event.symbol }),
     body:
-      `${describeDecider(plan.mark.model)} at ${Math.round(plan.mark.confidence * 100)}% confidence, on the ${describeEventType(event.type).toLowerCase()} at ${utcClock(event.time)} UTC. ` +
-      `A paper position of ${plan.params.amountQuote} ${event.quoteAsset} was opened ${describeWatchPaperEntry(plan.params)}, with its stop ${plan.params.stopLossPct}% away and its target ${plan.params.takeProfitPct}%` +
-      `${plan.riskNote === null ? '' : `, at ${plan.riskNote}`}. ` +
-      'Nothing real has been placed. It is on Strategies › Execution.'
+      riskNote === null
+        ? t('{model} at {confidence} confidence, on the {kind} at {time} UTC. A paper position of {amount} {asset} was opened {entry}, with its stop {stop}% away and its target {target}%. Nothing real has been placed. It is on Strategies › Execution.', values)
+        : t('{model} at {confidence} confidence, on the {kind} at {time} UTC. A paper position of {amount} {asset} was opened {entry}, with its stop {stop}% away and its target {target}%, at {risk}. Nothing real has been placed. It is on Strategies › Execution.', values)
   }
 }

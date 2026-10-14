@@ -67,16 +67,18 @@ export function subscribeToPortfolio(listener: () => void): () => void {
   return () => listeners.delete(listener)
 }
 
+// Each hook reads the same on a server render as in the window: the tests render the translated pages
+// in every language (tests/i18n.test.ts).
 export function usePortfolioSnapshots(): PortfolioSnapshot[] {
-  return useSyncExternalStore(subscribeToPortfolio, getPortfolioSnapshots)
+  return useSyncExternalStore(subscribeToPortfolio, getPortfolioSnapshots, getPortfolioSnapshots)
 }
 
 export function usePortfolioStatus(): PortfolioStatus {
-  return useSyncExternalStore(subscribeToPortfolio, getPortfolioStatus)
+  return useSyncExternalStore(subscribeToPortfolio, getPortfolioStatus, getPortfolioStatus)
 }
 
 export function usePortfolioErrorMessage(): string | null {
-  return useSyncExternalStore(subscribeToPortfolio, getPortfolioErrorMessage)
+  return useSyncExternalStore(subscribeToPortfolio, getPortfolioErrorMessage, getPortfolioErrorMessage)
 }
 
 export function useLatestPortfolioSnapshot(): PortfolioSnapshot | null {

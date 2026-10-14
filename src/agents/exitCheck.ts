@@ -1,3 +1,5 @@
+import { ENGLISH, type I18n } from '../../shared/i18n/translate'
+import { noticeI18n } from '../i18n/current'
 import { describeExitTrigger, exitOrderOf, type ExitCheck, type ExitCheckRequest } from '../../shared/aiAdditions'
 import type { NoticeExtra } from '../../shared/notices'
 import type { AiConfig } from '../../shared/aiCost'
@@ -40,10 +42,12 @@ export interface ExitCheckDeps {
   exitNewsShort: (order: AiExitOrder) => Promise<boolean>
   notify: (title: string, body: string, extra?: NoticeExtra) => void
   nowSec: () => number
+  /** The language its notice is said in (V6 Stage 14); English where absent. */
+  i18n?: () => I18n
 }
 
-function triggersIn(check: ExitCheck): string {
-  return check.triggers.map(describeExitTrigger).join(', ')
+function triggersIn(check: ExitCheck, i18n: I18n = ENGLISH): string {
+  return check.triggers.map((trigger) => describeExitTrigger(trigger, i18n)).join(i18n.t(', '))
 }
 
 /** One look at the app's own open paper trades. Returns a line for each it asked about, saying what
@@ -119,7 +123,13 @@ export async function lookAtOpenTrades(deps: ExitCheckDeps): Promise<string[]> {
     }
     lines.push(`${executor.symbol}: EXIT (${triggersIn(check)}); it closes at the next minute, on paper.`)
     try {
-      deps.notify(`Exit check: ${executor.name} closes`, `Asked because ${triggersIn(check)}. ${order.reason} It closes at the next minute, on paper.`, { kind: 'TRADE_EXECUTED', thread: executor.id })
+      const say = deps.i18n?.() ?? ENGLISH
+      // The reason is the model's own words, left as it wrote them.
+      deps.notify(
+        say.t('Exit check: {name} closes', { name: executor.name }),
+        say.t('Asked because {triggers}. {reason} It closes at the next minute, on paper.', { triggers: triggersIn(check, say), reason: order.reason }),
+        { kind: 'TRADE_EXECUTED', thread: executor.id }
+      )
     } catch {
       // A desktop that cannot show it is not a reason to report a trade that is closing as not.
     }
@@ -136,5 +146,6 @@ export const exitCheckBrowserDeps: ExitCheckDeps = {
   exitWatchTrade: (order) => exitWatchPaperTrade(order, watchPaperBrowserDeps),
   exitNewsShort: (order) => exitNewsShort(order, newsShortBrowserDeps),
   notify: (title, body, extra) => void window.api.notify(title, body, extra?.severity, extra).catch(() => undefined),
-  nowSec: () => Math.floor(Date.now() / 1000)
+  nowSec: () => Math.floor(Date.now() / 1000),
+  i18n: noticeI18n
 }

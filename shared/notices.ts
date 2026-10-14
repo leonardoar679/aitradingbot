@@ -1,12 +1,14 @@
 import type { AlertKind, AlertSeverity } from './alerts'
-import { describeEventType, type MarketEvent } from './marketEvent'
+import { describeBand, eventTypeWord, type MarketEvent } from './marketEvent'
+import { ENGLISH, msg, type I18n } from './i18n/translate'
 
 // THE NOTICES THE DOCUMENT NAMES, EACH IN WORDS (the V4 document, §47-49), beside the ones the app
 // already raised (a story, a crash, a call, a paper trade opened, a drop, the digest, the pause, the
 // exit check). Every notice goes through one handler in the main process (noticeService.ts), which
 // obeys the Notifications control, keeps one THREAD per kind and pair for thirty minutes so that a
 // repeat updates the thread and raises no new notice, records what it told (shared/records.ts) and
-// tells the window. The texts are here, pure, so that each is pinned by a test.
+// tells the window. The texts are here, pure, so that each is pinned by a test. Since V6 Stage 14 each is
+// said in a language: English unless the window or the main process hands the person's (I18n).
 
 /** What a notice carries beside its text: how loud, what kind, which thread it belongs to (a pair,
  * an event, a trade, or a fixed name), its id on file where the caller has one, a link. */
@@ -29,25 +31,34 @@ export interface Notice {
   extra: NoticeExtra
 }
 
-const pct = (value: number): string => `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
-const money = (value: number, asset: string): string => `${value >= 0 ? '+' : ''}${Number(value.toFixed(2))} ${asset}`
+const pctIn = (value: number, i18n: I18n): string => (i18n.language === 'en' ? `${value >= 0 ? '+' : ''}${value.toFixed(2)}%` : i18n.pct(value, 2))
+const moneyIn = (value: number, asset: string, i18n: I18n): string =>
+  i18n.language === 'en' ? `${value >= 0 ? '+' : ''}${Number(value.toFixed(2))} ${asset}` : `${i18n.signed(Number(value.toFixed(2)), 2)} ${asset}`
 
-/** An urgent event the watch did not ask about, and why: told once per pair per thread. */
-export function marketEventNotice(event: Pick<MarketEvent, 'symbol' | 'type' | 'band' | 'score' | 'returnsPct' | 'time'>, why: string): Notice {
+/** An urgent event the watch did not ask about, and why: told once per pair per thread. `why` is said
+ * in the notice's language by its caller. */
+export function marketEventNotice(event: Pick<MarketEvent, 'symbol' | 'type' | 'band' | 'score' | 'returnsPct' | 'time'>, why: string, i18n: I18n = ENGLISH): Notice {
+  const { t } = i18n
   return {
-    title: `${event.symbol}: ${describeEventType(event.type).toLowerCase()} (${event.band})`,
-    body: `Score ${Math.round(event.score)}, ${pct(event.returnsPct.m15)} in fifteen minutes at ${utcClock(event.time)} UTC. The watch did not ask about it: ${why} Nothing was placed.`,
+    title: t('{pair}: {kind} ({band})', { pair: event.symbol, kind: eventTypeWord(event.type, i18n), band: describeBand(event.band, i18n) }),
+    body: t('Score {score}, {move} in fifteen minutes at {time} UTC. The watch did not ask about it: {why} Nothing was placed.', {
+      score: Math.round(event.score),
+      move: pctIn(event.returnsPct.m15, i18n),
+      time: utcClock(event.time, i18n),
+      why
+    }),
     extra: { kind: 'MARKET_EVENT', thread: event.symbol, severity: 'watch' }
   }
 }
 
 /** Models on opposite sides of one event. */
-export function disagreementNotice(event: Pick<MarketEvent, 'id' | 'symbol' | 'type'>, sides: { model: string; side: 'long' | 'short' }[]): Notice {
+export function disagreementNotice(event: Pick<MarketEvent, 'id' | 'symbol' | 'type'>, sides: { model: string; side: 'long' | 'short' }[], i18n: I18n = ENGLISH): Notice {
+  const { t } = i18n
   const longs = sides.filter((entry) => entry.side === 'long').map((entry) => entry.model)
   const shorts = sides.filter((entry) => entry.side === 'short').map((entry) => entry.model)
   return {
-    title: `${event.symbol}: the models disagree`,
-    body: `On the ${describeEventType(event.type).toLowerCase()}: BUY from ${longs.join(', ')}; SELL from ${shorts.join(', ')}. The paper trade, if any, follows the model it is set to.`,
+    title: t('{pair}: the models disagree', { pair: event.symbol }),
+    body: t('On the {kind}: BUY from {longs}; SELL from {shorts}. The paper trade, if any, follows the model it is set to.', { kind: eventTypeWord(event.type, i18n), longs: longs.join(', '), shorts: shorts.join(', ') }),
     extra: { kind: 'MODEL_DISAGREEMENT', thread: event.id, severity: 'watch' }
   }
 }
@@ -55,27 +66,38 @@ export function disagreementNotice(event: Pick<MarketEvent, 'id' | 'symbol' | 't
 export type PaperCloseExit = 'take_profit' | 'stop_loss' | 'trailing_stop' | 'time_limit' | 'liquidation' | 'ai_exit'
 
 /** A paper trade of the app's own closed: how, and what it made or lost, in money and in R. */
+/** How a paper trade ended, whole: a buy's and a sell's, by its end. */
+const PAPER_CLOSED: Record<'buy' | 'sell', Record<PaperCloseExit, string>> = {
+  buy: {
+    take_profit: msg('{pair}: paper BUY reached its target'),
+    stop_loss: msg('{pair}: paper BUY hit its stop'),
+    trailing_stop: msg('{pair}: paper BUY hit its trailing stop'),
+    liquidation: msg('{pair}: paper BUY was liquidated'),
+    ai_exit: msg('{pair}: paper BUY was closed by the exit check'),
+    time_limit: msg('{pair}: paper BUY ran out its time limit')
+  },
+  sell: {
+    take_profit: msg('{pair}: paper SELL reached its target'),
+    stop_loss: msg('{pair}: paper SELL hit its stop'),
+    trailing_stop: msg('{pair}: paper SELL hit its trailing stop'),
+    liquidation: msg('{pair}: paper SELL was liquidated'),
+    ai_exit: msg('{pair}: paper SELL was closed by the exit check'),
+    time_limit: msg('{pair}: paper SELL ran out its time limit')
+  }
+}
+
 export function paperCloseNotice(
   trade: { id: string; symbol: string; side: 'buy' | 'sell'; quoteAsset: string },
-  result: { exit: PaperCloseExit; pnlQuote: number; r: number | null }
+  result: { exit: PaperCloseExit; pnlQuote: number; r: number | null },
+  i18n: I18n = ENGLISH
 ): Notice {
-  const how =
-    result.exit === 'take_profit'
-      ? 'reached its target'
-      : result.exit === 'stop_loss'
-        ? 'hit its stop'
-        : result.exit === 'trailing_stop'
-          ? 'hit its trailing stop'
-          : result.exit === 'liquidation'
-            ? 'was liquidated'
-            : result.exit === 'ai_exit'
-              ? 'was closed by the exit check'
-              : 'ran out its time limit'
+  const { t } = i18n
   const kind: AlertKind = result.exit === 'take_profit' ? 'TARGET_REACHED' : result.exit === 'stop_loss' || result.exit === 'trailing_stop' || result.exit === 'liquidation' ? 'STOP_TRIGGERED' : 'TRADE_EXECUTED'
-  const r = result.r === null ? '' : ` (${result.r >= 0 ? '+' : ''}${result.r.toFixed(2)} R)`
+  const pnl = moneyIn(result.pnlQuote, trade.quoteAsset, i18n)
+  const r = result.r === null ? null : i18n.language === 'en' ? `${result.r >= 0 ? '+' : ''}${result.r.toFixed(2)}` : i18n.signed(result.r, 2)
   return {
-    title: `${trade.symbol}: paper ${trade.side === 'buy' ? 'BUY' : 'SELL'} ${how}`,
-    body: `${money(result.pnlQuote, trade.quoteAsset)}${r} after fees, on paper. Nothing real was placed or sold.`,
+    title: t(PAPER_CLOSED[trade.side][result.exit] ?? PAPER_CLOSED[trade.side].time_limit, { pair: trade.symbol }),
+    body: r === null ? t('{pnl} after fees, on paper. Nothing real was placed or sold.', { pnl }) : t('{pnl} ({r} R) after fees, on paper. Nothing real was placed or sold.', { pnl, r }),
     extra: { kind, thread: trade.id, severity: kind === 'TRADE_EXECUTED' ? 'watch' : 'high' }
   }
 }
@@ -96,71 +118,97 @@ export function stopProgress(input: { side: 'buy' | 'sell'; entryPrice: number; 
 }
 
 /** A position of the app's own, paper or real, within the share of the way to its stop. */
-export function nearStopNotice(position: { id: string; symbol: string; side: 'buy' | 'sell'; real: boolean }, progress: number, price: number): Notice {
+export function nearStopNotice(position: { id: string; symbol: string; side: 'buy' | 'sell'; real: boolean }, progress: number, price: number, i18n: I18n = ENGLISH): Notice {
+  const { t } = i18n
+  const values = { share: i18n.pctPlain(Math.round(progress * 100), 0), price: String(price) }
+  const key = position.real
+    ? position.side === 'buy'
+      ? msg('The real BUY is {share} of the way from its entry to its stop, at {price}. Its stop is still in place on its watcher; nothing was done.')
+      : msg('The real SELL is {share} of the way from its entry to its stop, at {price}. Its stop is still in place on its watcher; nothing was done.')
+    : position.side === 'buy'
+      ? msg('The paper BUY is {share} of the way from its entry to its stop, at {price}. Its stop is still in place; nothing was done.')
+      : msg('The paper SELL is {share} of the way from its entry to its stop, at {price}. Its stop is still in place; nothing was done.')
   return {
-    title: `${position.symbol}: near its stop`,
-    body: `The ${position.real ? 'real' : 'paper'} ${position.side === 'buy' ? 'BUY' : 'SELL'} is ${Math.round(progress * 100)}% of the way from its entry to its stop, at ${price}. Its stop is still in place${position.real ? ' on its watcher' : ''}; nothing was done.`,
+    title: t('{pair}: near its stop', { pair: position.symbol }),
+    body: t(key, values),
     extra: { kind: 'POSITION_RISK', thread: position.id, severity: 'high' }
   }
 }
 
+/** How a real position closed, whole, by its end. */
+const LIVE_CLOSED: Record<'take_profit' | 'stop_loss' | 'trailing_stop' | 'time_limit' | 'manual', string> = {
+  take_profit: msg('{pair}: real position reached its target'),
+  time_limit: msg('{pair}: real position ran out its time limit'),
+  trailing_stop: msg('{pair}: real position hit its trailing stop'),
+  manual: msg('{pair}: real position was closed by hand'),
+  stop_loss: msg('{pair}: real position hit its stop')
+}
+
 /** A real position closed by its watcher: by its target, its stop, or its time limit. */
-export function liveExitNotice(exit: { executorId: string; symbol: string; exitReason: 'take_profit' | 'stop_loss' | 'trailing_stop' | 'time_limit' | 'manual'; exitPrice: number; realizedPnl: number; quoteAsset: string }): Notice {
-  const how =
-    exit.exitReason === 'take_profit'
-      ? 'reached its target'
-      : exit.exitReason === 'time_limit'
-        ? 'ran out its time limit'
-        : exit.exitReason === 'trailing_stop'
-          ? 'hit its trailing stop'
-          : exit.exitReason === 'manual'
-            ? 'was closed by hand'
-            : 'hit its stop'
+export function liveExitNotice(
+  exit: { executorId: string; symbol: string; exitReason: 'take_profit' | 'stop_loss' | 'trailing_stop' | 'time_limit' | 'manual'; exitPrice: number; realizedPnl: number; quoteAsset: string },
+  i18n: I18n = ENGLISH
+): Notice {
+  const { t } = i18n
   const kind: AlertKind = exit.exitReason === 'take_profit' ? 'TARGET_REACHED' : exit.exitReason === 'time_limit' || exit.exitReason === 'manual' ? 'TRADE_EXECUTED' : 'STOP_TRIGGERED'
   return {
-    title: `${exit.symbol}: real position ${how}`,
-    body: `Closed by its watcher at ${exit.exitPrice}: ${money(exit.realizedPnl, exit.quoteAsset)} realized. A real sell was placed.`,
+    title: t(LIVE_CLOSED[exit.exitReason] ?? LIVE_CLOSED.stop_loss, { pair: exit.symbol }),
+    body: t('Closed by its watcher at {price}: {pnl} realized. A real sell was placed.', { price: String(exit.exitPrice), pnl: moneyIn(exit.realizedPnl, exit.quoteAsset, i18n) }),
     extra: { kind, thread: exit.executorId, severity: 'high' }
   }
 }
 
-/** Something the app runs on has failed: the scanner, the stream, the feeds, the AI key. */
-export function systemFailureNotice(what: 'scanner' | 'stream' | 'feed' | 'ai-key', detail: string): Notice {
-  const titles = { scanner: 'The scanner is failing', stream: 'The live stream is dead', feed: 'The news feeds cannot be read', 'ai-key': 'The OpenRouter key was rejected' }
-  return { title: titles[what], body: `${detail} Nothing was placed; what is open keeps its stops.`, extra: { kind: 'SYSTEM_FAILURE', thread: what, severity: 'high', threadSeconds: 3600 } }
+const FAILURE_TITLES = {
+  scanner: msg('The scanner is failing'),
+  stream: msg('The live stream is dead'),
+  feed: msg('The news feeds cannot be read'),
+  'ai-key': msg('The OpenRouter key was rejected')
+}
+
+/** Something the app runs on has failed: the scanner, the stream, the feeds, the AI key. `detail` is said
+ * in the notice's language by its caller. */
+export function systemFailureNotice(what: 'scanner' | 'stream' | 'feed' | 'ai-key', detail: string, { t }: I18n = ENGLISH): Notice {
+  return {
+    title: t(FAILURE_TITLES[what]),
+    body: t('{detail} Nothing was placed; what is open keeps its stops.', { detail }),
+    extra: { kind: 'SYSTEM_FAILURE', thread: what, severity: 'high', threadSeconds: 3600 }
+  }
+}
+
+const BREAKER_TITLES = {
+  'ai-budget': msg("Today's AI budget is spent"),
+  model: msg('A model is rested for the day'),
+  'live-loss': msg('Live trading disarmed: the daily loss limit'),
+  health: msg('LIVE TRADING PAUSED'),
+  'health-ok': msg('Live trading resumed'),
+  degraded: msg('A model has degraded'),
+  strategy: msg('A strategy is not doing what was measured')
 }
 
 /** A breaker tripped: the AI budget, a model rested, the day's live loss, the exchange's health;
  * and, since 8 October 2026, a model or a strategy whose record has degraded (shared/modelHealth.ts,
- * shared/strategyHealth.ts), told once a day on its own thread and switching nothing off. */
-export function breakerNotice(what: 'ai-budget' | 'model' | 'live-loss' | 'health' | 'health-ok' | 'degraded' | 'strategy', detail: string, thread: string = what): Notice {
-  const titles = {
-    'ai-budget': "Today's AI budget is spent",
-    model: 'A model is rested for the day',
-    'live-loss': 'Live trading disarmed: the daily loss limit',
-    health: 'LIVE TRADING PAUSED',
-    'health-ok': 'Live trading resumed',
-    degraded: 'A model has degraded',
-    strategy: 'A strategy is not doing what was measured'
-  }
+ * shared/strategyHealth.ts), told once a day on its own thread and switching nothing off. `detail` is
+ * said in the notice's language by its caller. */
+export function breakerNotice(what: 'ai-budget' | 'model' | 'live-loss' | 'health' | 'health-ok' | 'degraded' | 'strategy', detail: string, thread: string = what, { t }: I18n = ENGLISH): Notice {
   const severity: AlertSeverity = what === 'health-ok' ? 'watch' : 'high'
   const daily = what === 'model' || what === 'ai-budget' || what === 'degraded' || what === 'strategy'
   return {
-    title: titles[what],
+    title: t(BREAKER_TITLES[what]),
     body: detail,
     extra: { kind: 'CIRCUIT_BREAKER', thread, severity: severity === 'watch' ? 'watch' : 'high', threadSeconds: daily ? 86_400 : 1800 }
   }
 }
 
 /** A paper trade refused for a reason a person can act on: funds, the money-out cap. Not the market
- * reasons that repeat every minute (a spread, a stale price), which the Watch card says. */
-export function tradeBlockedNotice(symbol: string, reason: string): Notice {
+ * reasons that repeat every minute (a spread, a stale price), which the Watch card says. The thread is
+ * read from the English `reason`; the body says `shown`, the same reason in the notice's language. */
+export function tradeBlockedNotice(symbol: string, reason: string, { t }: I18n = ENGLISH, shown: string = reason): Notice {
   // A losing run's pause (shared/paperPause.ts) refuses every call until it is resumed: told once a
   // day on a thread of its own, not once per call (V5 Stage 8, 8 October 2026).
   const paused = PAUSE_REFUSAL.test(reason)
   return {
-    title: `${symbol}: paper trade not opened`,
-    body: `${reason} Nothing was placed.`,
+    title: t('{pair}: paper trade not opened', { pair: symbol }),
+    body: t('{reason} Nothing was placed.', { reason: shown }),
     extra: { kind: 'TRADE_BLOCKED', thread: paused ? 'paper-paused' : 'paper-blocked', severity: 'watch', ...(paused ? { threadSeconds: 86_400 } : {}) }
   }
 }
@@ -171,10 +219,10 @@ export function tradeBlockedNotice(symbol: string, reason: string): Notice {
  * The ledger is never rewritten by it: the notice says what was found, and a person puts it right. */
 export const RECONCILIATION_THREAD_SECONDS = 4 * 3600
 
-export function reconciliationNotice(what: 'order' | 'asset', detail: string, thread: string): Notice {
+export function reconciliationNotice(what: 'order' | 'asset', detail: string, thread: string, { t }: I18n = ENGLISH): Notice {
   return {
-    title: what === 'order' ? 'A resting order this app does not know' : 'A holding the account does not back',
-    body: `${detail} Nothing was changed: the record is yours to put right.`,
+    title: what === 'order' ? t('A resting order this app does not know') : t('A holding the account does not back'),
+    body: t('{detail} Nothing was changed: the record is yours to put right.', { detail }),
     extra: { kind: 'RECONCILIATION', thread: `reconcile:${thread}`, severity: 'high', threadSeconds: RECONCILIATION_THREAD_SECONDS }
   }
 }
@@ -188,17 +236,20 @@ export function actionableRefusal(text: string): boolean {
   return /paper account|money-out|cap on what|funds|balance/i.test(text) || PAUSE_REFUSAL.test(text)
 }
 
-function utcClock(sec: number): string {
-  return new Date(sec * 1000).toISOString().slice(11, 16)
+function utcClock(sec: number, i18n: I18n = ENGLISH): string {
+  return i18n.language === 'en' ? new Date(sec * 1000).toISOString().slice(11, 16) : i18n.utcTime(sec * 1000)
 }
 
 /** CONFIRM: a paper BUY the watch opened, told as ready to confirm as a real order (the V4 document,
  * §45). The person fills the order in from Opportunities and places it; nothing is placed by this. */
-export function confirmNotice(event: Pick<MarketEvent, 'id' | 'symbol' | 'type' | 'time'>, call: { who: string; confidence: number }): Notice {
-  const at = `${new Date(event.time * 1000).toISOString().slice(11, 16)} UTC`
+export function confirmNotice(event: Pick<MarketEvent, 'id' | 'symbol' | 'type' | 'time'>, call: { who: string; confidence: number }, i18n: I18n = ENGLISH): Notice {
+  const { t } = i18n
   return {
-    title: `${event.symbol}: ready to confirm`,
-    body: `${call.who} at ${Math.round(call.confidence * 100)}% confidence called a BUY on the ${describeEventType(event.type).toLowerCase()} at ${at}, and a paper trade is open on it. Open Opportunities and press Confirm to fill in a real order from the call, sized by your risk setting: you place it, and nothing is placed by this.`,
+    title: t('{pair}: ready to confirm', { pair: event.symbol }),
+    body: t(
+      '{model} at {confidence} confidence called a BUY on the {kind} at {time} UTC, and a paper trade is open on it. Open Opportunities and press Confirm to fill in a real order from the call, sized by your risk setting: you place it, and nothing is placed by this.',
+      { model: call.who, confidence: i18n.pctPlain(Math.round(call.confidence * 100), 0), kind: eventTypeWord(event.type, i18n), time: utcClock(event.time, i18n) }
+    ),
     extra: { kind: 'TRADE_OPPORTUNITY', thread: `confirm:${event.id}`, severity: 'high' }
   }
 }

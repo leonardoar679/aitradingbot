@@ -8,7 +8,8 @@ import type { AiOrderProposal } from '../../shared/aiProposal'
 import { watchEventIdsToday, watchPausedModels } from '../../shared/aiWatch'
 import { describeWatchPaperTally, watchPaperExecutors, watchPaperPause, watchPaperTally } from '../../shared/aiWatchPaper'
 import type { ExecutorConfig, PaperAccount } from '../../shared/ipc'
-import { describeEventType } from '../../shared/marketEvent'
+import { eventTypeWord } from '../../shared/marketEvent'
+import { useI18n } from '../i18n'
 import { healPaperPause, paperPauseBlock } from '../../shared/paperPause'
 import { describeError } from '../utils/ipcError'
 import { useNowSec } from '../utils/useNowSec'
@@ -64,6 +65,8 @@ export function OpportunitiesTab({
    * order where the session allows one. */
   onPrepareOrder?: (proposal: AiOrderProposal, live?: boolean) => void
 } = {}): React.JSX.Element {
+  const i18n = useI18n()
+  const { t } = i18n
   const [config, setConfig] = useState<AiConfig | null>(null)
   const [ticked, setTicked] = useState<string[]>([])
   const [busyEvent, setBusyEvent] = useState<string | null>(null)
@@ -171,24 +174,27 @@ export function OpportunitiesTab({
       const toAsk = peek.models.filter((model) => model.decision === null).map((model) => model.model)
       if (toAsk.length > 0) {
         const agreed = window.confirm(
-          describeAiOpportunityCost({
-            symbol: event.symbol,
-            event: describeEventType(event.type).toLowerCase(),
-            models: peek.models.map((model) => ({
-              model: model.model,
-              held: model.decision !== null,
-              perCallCostUsd: model.perCallCostUsd,
-              costBasis: model.costBasis,
-              perCallLatencyMs: model.perCallLatencyMs
-            })),
-            budgetRemainingUsd: peek.budgetRemainingUsd
-          })
+          describeAiOpportunityCost(
+            {
+              symbol: event.symbol,
+              event: eventTypeWord(event.type, i18n),
+              models: peek.models.map((model) => ({
+                model: model.model,
+                held: model.decision !== null,
+                perCallCostUsd: model.perCallCostUsd,
+                costBasis: model.costBasis,
+                perCallLatencyMs: model.perCallLatencyMs
+              })),
+              budgetRemainingUsd: peek.budgetRemainingUsd
+            },
+            i18n
+          )
         )
         if (!agreed) return
         const asked = await askModels(toAsk, (model) => window.api.ai.askOpportunity({ ...market, model, source: 'opportunity' }))
         const failed = asked.results.filter((result) => result.problem !== null)
         if (failed.length > 0) {
-          setProblem(event.id, failed.map((result) => `${describeDecider(result.model)} did not answer: ${result.problem}`).join(' '))
+          setProblem(event.id, failed.map((result) => t('{model} did not answer: {problem}', { model: describeDecider(result.model, i18n), problem: result.problem ?? '' })).join(' '))
         }
       }
       await loadCalls()
@@ -204,7 +210,7 @@ export function OpportunitiesTab({
     const { event } = item
     setProblem(event.id, null)
     // The price now, so the form can say whether it enters at market or waits.
-    const result = await proposalForAnswer(item, answer, async () => (await window.api.market.fetchTicker24h(event.exchange, event.symbol)).lastPrice)
+    const result = await proposalForAnswer(item, answer, async () => (await window.api.market.fetchTicker24h(event.exchange, event.symbol)).lastPrice, undefined, i18n)
     if ('problem' in result) {
       setProblem(event.id, result.problem)
       return
@@ -250,7 +256,8 @@ export function OpportunitiesTab({
     stakeQuote: config?.watchPaper.stakeQuote,
     asking,
     refusedEvents,
-    tradedEvents
+    tradedEvents,
+    i18n
   })
   // Models the watch has stopped asking today, read from the same rows that count its day.
   const paused = useMemo(() => watchPausedModels(calls, nowSec), [calls, nowSec])
@@ -261,11 +268,11 @@ export function OpportunitiesTab({
     hasAccount: paperAccount === undefined ? null : paperAccount !== null,
     open: watchTrades.filter((executor) => executor.status === 'active').map((executor) => executor.symbol),
     total: watchTrades.length,
-    ended: describeWatchPaperTally(watchPaperTally(watchTrades)),
+    ended: describeWatchPaperTally(watchPaperTally(watchTrades), i18n),
     // A losing run, which waits for Resume on Risk & Safety, before the pause that ends at midnight.
     pause:
-      paperPauseBlock({ setting: healPaperPause(paperPause), executors: watchTrades, source: 'watch' }) ??
-      (config === null ? null : watchPaperPause(watchTrades, config.watchPaper, nowSec)),
+      paperPauseBlock({ setting: healPaperPause(paperPause), executors: watchTrades, source: 'watch' }, i18n) ??
+      (config === null ? null : watchPaperPause(watchTrades, config.watchPaper, nowSec, i18n)),
     risk: paperRisk,
     pauseSetting: paperPause
   }
@@ -309,40 +316,35 @@ export function OpportunitiesTab({
         />
       )}
 
-      <Card title="Models to ask">
+      <Card title={t('Models to ask')}>
         {config === null ? (
-          <p style={noteStyle}>{loadProblem ?? 'Loading…'}</p>
+          <p style={noteStyle}>{loadProblem ?? t('Loading…')}</p>
         ) : (
           <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
             {enabled.map((model) => (
               <label key={model} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', color: 'var(--text-primary)', cursor: 'pointer' }}>
                 <input type="checkbox" checked={ticked.includes(model)} onChange={() => toggle(model)} />
-                {describeDecider(model)}
+                <span dir="ltr">{describeDecider(model, i18n)}</span>
               </label>
             ))}
           </div>
         )}
         <p style={{ ...noteStyle, marginTop: '0.8rem' }}>
-          Each ticked model is shown the same snapshot of an event and answers on its own; none sees another&apos;s answer.
-          An answer is BUY, SELL or NO TRADE, and a call to trade names an entry range, a stop, a target, how long the entry
-          stays valid and how long to hold. SELL is a short, which this app can only paper trade. Nothing is asked until
-          you press Ask on an event, and the price of those calls is stated first. Models are enabled under Settings › AI.
+          {t(
+            "Each ticked model is shown the same snapshot of an event and answers on its own; none sees another's answer. An answer is BUY, SELL or NO TRADE, and a call to trade names an entry range, a stop, a target, how long the entry stays valid and how long to hold. SELL is a short, which this app can only paper trade. Nothing is asked until you press Ask on an event, and the price of those calls is stated first. Models are enabled under Settings › AI."
+          )}
         </p>
       </Card>
 
       {scannerOn === false && (
         <p style={{ ...noteStyle, color: 'var(--gold)' }}>
-          The scanner is off, so no new events are being raised. Switch it on under Settings › Market. Events it raised earlier are
-          still listed here.
+          {t('The scanner is off, so no new events are being raised. Switch it on under Settings › Market. Events it raised earlier are still listed here.')}
         </p>
       )}
 
       {events !== null && feed.length === 0 && (
-        <Card title="Events">
-          <p style={noteStyle}>
-            No event has been raised yet. The scanner records a pair when its last fifteen minutes are unusual enough to be
-            a candidate; on sixty pairs that is a few an hour.
-          </p>
+        <Card title={t('Events')}>
+          <p style={noteStyle}>{t('No event has been raised yet. The scanner records a pair when its last fifteen minutes are unusual enough to be a candidate; on sixty pairs that is a few an hour.')}</p>
         </Card>
       )}
 
@@ -372,22 +374,16 @@ export function OpportunitiesTab({
 
       {events !== null && events.length > shown && (
         <button onClick={() => setShown((count) => count + EVENTS_SHOWN)} style={{ ...buttonStyle('secondary'), alignSelf: 'flex-start' }}>
-          Show {Math.min(EVENTS_SHOWN, events.length - shown)} more
+          {t('Show {count} more', { count: Math.min(EVENTS_SHOWN, events.length - shown) })}
         </button>
       )}
 
-      <p style={noteStyle}>
-        What the watch&apos;s recommendations went on to earn, over its last trades and days, and the journal of every one,
-        are on Performance.
-      </p>
+      <p style={noteStyle}>{t("What the watch's recommendations went on to earn, over its last trades and days, and the journal of every one, are on Performance.")}</p>
 
       <p style={noteStyle}>
-        What a recommendation has done is worked out from 1-minute candles each time this tab is looked at, never stored.
-        An answer can only be acted on from the first minute that opens after it arrived, so a slower model enters later.
-        An entry fills the first time the price trades in its range while it is valid, at the open if that is inside the
-        range and otherwise at the nearer edge; a bar that touches both the stop and the target counts as the stop; fees
-        are paid on both fills and slippage on every market fill. An event is something unusual, not a signal
-        (research/EVENTS.md), and a model&apos;s confidence is not a probability of profit.
+        {t(
+          "What a recommendation has done is worked out from 1-minute candles each time this tab is looked at, never stored. An answer can only be acted on from the first minute that opens after it arrived, so a slower model enters later. An entry fills the first time the price trades in its range while it is valid, at the open if that is inside the range and otherwise at the nearer edge; a bar that touches both the stop and the target counts as the stop; fees are paid on both fills and slippage on every market fill. An event is something unusual, not a signal (research/EVENTS.md), and a model's confidence is not a probability of profit."
+        )}
       </p>
     </>
   )

@@ -8,6 +8,7 @@ import { scoredSide, signalScore, type SignalCall, type SignalScore } from '../.
 import { opportunityStatusOf, type OpportunityStatus } from '../../shared/opportunityStatus'
 import { liveReadingOf, type LiveReading } from './liveVerdict'
 import { feedItemStatus, rightNowRows, type EventFeedItem, type FeedItemStatus, type RightNowRow } from './opportunities'
+import type { I18n } from '../../shared/i18n/translate'
 
 // THE OPPORTUNITIES TABLE (the second V3 document, §43-44): what can be acted on now, and the last
 // hour's other events beside it, each with two scores -- the signal (shared/opportunityScore.ts) and,
@@ -81,6 +82,9 @@ export function opportunityTableRows(input: {
   refusedEvents?: ReadonlySet<string>
   /** Events a paper trade of the app's own is, or was, open on, for EXECUTED. */
   tradedEvents?: ReadonlySet<string>
+  /** The language the rows' words are in (V6 Stage 14); English without one. What a row's status is,
+   * is read from the English words, whatever the language. */
+  i18n?: I18n
 }): { onOffer: OpportunityTableRow[]; recent: OpportunityTableRow[] } {
   const stories = input.news?.stories ?? []
   const reactions = input.news?.reactions ?? {}
@@ -92,13 +96,15 @@ export function opportunityTableRows(input: {
     const book = input.live?.books[event.symbol] ?? null
     const researched = input.pairs.find((pair) => pair.symbol === event.symbol) ?? null
     const status = offer !== null ? 'valid' : feedItemStatus(item, input.bars.get(event.id), input.nowSec)
-    const live = offer === null ? null : liveReadingOf(offer, input.live, { btcLimitPct: input.btcLimitPct, stakeQuote: input.stakeQuote, nowMs: input.nowMs })
+    const checked = offer === null ? null : liveReadingOf(offer, input.live, { btcLimitPct: input.btcLimitPct, stakeQuote: input.stakeQuote, nowMs: input.nowMs })
+    const live =
+      offer === null || input.i18n === undefined || input.i18n.language === 'en' ? checked : liveReadingOf(offer, input.live, { btcLimitPct: input.btcLimitPct, stakeQuote: input.stakeQuote, nowMs: input.nowMs, i18n: input.i18n })
     return {
       item,
       offer,
       status,
       side,
-      signal: signalScore({ event, side, calls, stories, reactions, readings: input.readings, regime: input.regime, nowSec: input.nowSec }),
+      signal: signalScore({ event, side, calls, stories, reactions, readings: input.readings, regime: input.regime, nowSec: input.nowSec, i18n: input.i18n }),
       live,
       price: book === null ? null : (book.bid + book.ask) / 2,
       research: researched === null ? null : { change24hPct: researched.change24hPct, change7dPct: researched.change7dPct },
@@ -107,8 +113,8 @@ export function opportunityTableRows(input: {
         answered: item.answers.length,
         asking: (input.asking ?? []).includes(event.symbol),
         feed: status,
-        live: live?.verdict.state ?? null,
-        liveReasons: live?.verdict.reasons ?? [],
+        live: checked?.verdict.state ?? null,
+        liveReasons: checked?.verdict.reasons ?? [],
         refused: input.refusedEvents?.has(event.id) ?? false,
         traded: input.tradedEvents?.has(event.id) ?? false
       })

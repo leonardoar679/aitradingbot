@@ -1,3 +1,4 @@
+import { ENGLISH, type I18n } from './i18n/translate'
 import { describeOpportunitySide, isActionableOpportunity, opportunityConsensus, opportunitySide, type OpportunityConsensus, type OpportunitySide } from './aiOpportunity'
 import type { AiSignalDecision } from './aiSignal'
 
@@ -24,23 +25,21 @@ export interface OpportunityVote {
   text: string
 }
 
-function sideWord(side: OpportunitySide | 'no_trade'): string {
-  return side === 'no_trade' ? 'NO TRADE' : describeOpportunitySide(side)
-}
-
 /** The answers of several models to one event, counted. A side taken below the confidence this
  * app acts on is counted as no trade, as the watch would read it alone; a refused or failed
- * answer is not usable. */
-export function voteOf(decisions: (AiSignalDecision | null | undefined)[]): OpportunityVote {
+ * answer is not usable. Its words in English unless handed a language (V6 Stage 14). */
+export function voteOf(decisions: (AiSignalDecision | null | undefined)[], i18n: I18n = ENGLISH): OpportunityVote {
+  const { t } = i18n
+  const sideWord = (side: OpportunitySide | 'no_trade'): string => (side === 'no_trade' ? t('NO TRADE') : describeOpportunitySide(side, i18n))
   const counted = decisions.map((decision) =>
     decision && decision.error === null && !decision.rejected && !isActionableOpportunity(decision) ? { ...decision, recommendation: 'hold' as const, detail: null } : decision
   )
   const consensus = opportunityConsensus(counted)
   const usable = consensus.long + consensus.short + consensus.noTrade
   const tally = [
-    consensus.long > 0 ? `${consensus.long} BUY` : null,
-    consensus.short > 0 ? `${consensus.short} SELL` : null,
-    consensus.noTrade > 0 ? `${consensus.noTrade} NO TRADE` : null
+    consensus.long > 0 ? t('{count} BUY', { count: consensus.long }) : null,
+    consensus.short > 0 ? t('{count} SELL', { count: consensus.short }) : null,
+    consensus.noTrade > 0 ? t('{count} NO TRADE', { count: consensus.noTrade }) : null
   ]
     .filter((part): part is string => part !== null)
     .join(' · ')
@@ -48,10 +47,10 @@ export function voteOf(decisions: (AiSignalDecision | null | undefined)[]): Oppo
     const onSide = decisions.filter((decision): decision is AiSignalDecision => isActionableOpportunity(decision) && decision !== null && opportunitySide(decision) === consensus.call)
     const chosen = onSide.reduce<AiSignalDecision | null>((best, decision) => (best === null || decision.confidence > best.confidence ? decision : best), null)
     const taking = consensus.call === 'long' ? consensus.long : consensus.short
-    return { consensus, side: consensus.call, chosen, refusal: null, text: `${sideWord(consensus.call)} ${taking}/${usable}` }
+    return { consensus, side: consensus.call, chosen, refusal: null, text: t('{side} {taking}/{usable}', { side: sideWord(consensus.call), taking, usable }) }
   }
-  if (usable === 0) return { consensus, side: null, chosen: null, refusal: 'No model gave a usable answer.', text: 'no usable answer' }
-  if (consensus.disagreement) return { consensus, side: null, chosen: null, refusal: `Models split: ${tally}.`, text: `split ${tally}` }
-  if (consensus.long > 0 || consensus.short > 0) return { consensus, side: null, chosen: null, refusal: `Models did not agree: ${tally}.`, text: `no majority ${tally}` }
-  return { consensus, side: null, chosen: null, refusal: null, text: `NO TRADE ${consensus.noTrade}/${usable}` }
+  if (usable === 0) return { consensus, side: null, chosen: null, refusal: t('No model gave a usable answer.'), text: t('no usable answer') }
+  if (consensus.disagreement) return { consensus, side: null, chosen: null, refusal: t('Models split: {tally}.', { tally }), text: t('split {tally}', { tally }) }
+  if (consensus.long > 0 || consensus.short > 0) return { consensus, side: null, chosen: null, refusal: t('Models did not agree: {tally}.', { tally }), text: t('no majority {tally}', { tally }) }
+  return { consensus, side: null, chosen: null, refusal: null, text: t('{side} {taking}/{usable}', { side: t('NO TRADE'), taking: consensus.noTrade, usable }) }
 }

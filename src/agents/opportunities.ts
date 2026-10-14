@@ -1,3 +1,4 @@
+import { ENGLISH, msg, type I18n } from '../../shared/i18n/translate'
 import { MARKET_BARS_15M, MARKET_BARS_1M, MARKET_REFERENCE_SYMBOLS, type EventReference, type ReferenceCandles } from '../../shared/aiEventMarket'
 import type { AiCallRecord } from '../../shared/aiLedger'
 import {
@@ -247,16 +248,17 @@ export function feedItemStatus(item: EventFeedItem, bars: Candle[] | undefined, 
   return null
 }
 
-export function describeFeedItemStatus(status: FeedItemStatus): string {
-  const label: Record<FeedItemStatus, string> = {
-    waiting: 'Not asked',
-    asked: 'No trade',
-    valid: 'Entry on offer',
-    open: 'In a trade',
-    expired: 'Expired',
-    closed: 'Closed'
-  }
-  return label[status]
+const FEED_STATUS_WORDS: Record<FeedItemStatus, string> = {
+  waiting: msg('Not asked'),
+  asked: msg('No trade'),
+  valid: msg('Entry on offer'),
+  open: msg('In a trade'),
+  expired: msg('Expired'),
+  closed: msg('Closed')
+}
+
+export function describeFeedItemStatus(status: FeedItemStatus, { t }: I18n = ENGLISH): string {
+  return t(FEED_STATUS_WORDS[status])
 }
 
 export interface RightNowRow {
@@ -318,21 +320,27 @@ export type OverviewOpportunity =
   | { kind: 'valid'; row: RightNowRow; answer: EventAnswer }
   | { kind: 'none'; candidate: { item: EventFeedItem; status: FeedItemStatus | null; lacks: string } | null }
 
-/** What one event lacks to be acted on now, in a sentence, from its status. */
-export function describeWhatItLacks(item: EventFeedItem, status: FeedItemStatus | null): string {
-  if (status === 'waiting') return 'No model has been asked about it.'
+/** What one event lacks to be acted on now, in a sentence, from its status, in a language. */
+export function describeWhatItLacks(item: EventFeedItem, status: FeedItemStatus | null, i18n: I18n = ENGLISH): string {
+  const { t, pctPlain } = i18n
+  if (status === 'waiting') return t('No model has been asked about it.')
   if (status === 'asked') {
     const answered = item.answers.filter((answer) => !answer.decision.rejected)
-    if (answered.length === 0) return 'Every answer to it was refused.'
+    if (answered.length === 0) return t('Every answer to it was refused.')
     const surest = answered.reduce((best, answer) => (answer.decision.confidence > best.decision.confidence ? answer : best))
     const side = opportunitySide(surest.decision)
-    return `No model would act on it: the surest answer was ${describeDecider(surest.model)}'s ${side === null ? 'NO TRADE' : describeOpportunitySide(side)} at ${Math.round(surest.decision.confidence * 100)}%, and this app acts at ${Math.round(GPT_MIN_CONFIDENCE * 100)}% or more.`
+    return t("No model would act on it: the surest answer was {model}'s {call} at {confidence}, and this app acts at {line} or more.", {
+      model: describeDecider(surest.model, i18n),
+      call: describeOpportunitySide(side, i18n),
+      confidence: pctPlain(Math.round(surest.decision.confidence * 100), 0),
+      line: pctPlain(Math.round(GPT_MIN_CONFIDENCE * 100), 0)
+    })
   }
-  if (status === 'expired') return 'Its entry ran out without filling.'
-  if (status === 'open') return 'Its entry has filled: it is a position now, not an offer.'
-  if (status === 'closed') return 'Its trades are over.'
-  if (status === 'valid') return 'Its entry is still on offer.'
-  return 'The candles that would say where it stands have not been read yet.'
+  if (status === 'expired') return t('Its entry ran out without filling.')
+  if (status === 'open') return t('Its entry has filled: it is a position now, not an offer.')
+  if (status === 'closed') return t('Its trades are over.')
+  if (status === 'valid') return t('Its entry is still on offer.')
+  return t('The candles that would say where it stands have not been read yet.')
 }
 
 /** What Overview leads with: the strongest recommendation that can still be acted on, or -- the
@@ -361,7 +369,8 @@ export async function proposalForAnswer(
   item: EventFeedItem,
   answer: EventAnswer,
   lastPrice: () => Promise<number | null>,
-  now: () => number = () => Math.floor(Date.now() / 1000)
+  now: () => number = () => Math.floor(Date.now() / 1000),
+  i18n: I18n = ENGLISH
 ): Promise<{ proposal: AiOrderProposal } | { problem: string }> {
   let price: number | null = null
   try {
@@ -372,7 +381,7 @@ export async function proposalForAnswer(
   const nowSec = now()
   const proposal = buildOpportunityProposal({ event: item.event, decision: answer.decision, nowSec, lastPrice: price })
   if (proposal === null) {
-    return { problem: opportunityProposalProblem(item.event.time, answer.decision, nowSec, price) ?? 'No order form can be made from this recommendation.' }
+    return { problem: opportunityProposalProblem(item.event.time, answer.decision, nowSec, price, i18n) ?? i18n.t('No order form can be made from this recommendation.') }
   }
   return { proposal }
 }

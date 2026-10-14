@@ -1,3 +1,4 @@
+import { ENGLISH, msg, type I18n } from './i18n/translate'
 import { EXIT_LINES, REVIEW_LINES } from './aiAdditions'
 import type { MarketRegime } from './marketResearch'
 import { NEAR_STOP_SHARE, stopProgress } from './notices'
@@ -86,29 +87,33 @@ export function thesisStatus(input: ThesisInput): ThesisVerdict {
   return { status, reasons, stopProgress: progress }
 }
 
-export function describeThesisReason(reason: ThesisReason): string {
-  const words: Record<ThesisReason, string> = {
-    stop_hit: 'its stop is hit',
-    near_stop: 'it is near its stop',
-    news_against: 'news against it',
-    regime_against: "Bitcoin's regime turned against it",
-    opposite_move: 'a sharp move against it'
-  }
-  return words[reason]
+const REASON_WORDS: Record<ThesisReason, string> = {
+  stop_hit: msg('its stop is hit'),
+  near_stop: msg('it is near its stop'),
+  news_against: msg('news against it'),
+  regime_against: msg("Bitcoin's regime turned against it"),
+  opposite_move: msg('a sharp move against it')
 }
 
-/** The status as it is shown: its word, the tone it is shown in, and what it means. */
-export function describeThesisStatus(status: ThesisStatus): { word: ThesisStatus; tone: 'up' | 'gold' | 'down'; detail: string } {
-  const shown: Record<ThesisStatus, { word: ThesisStatus; tone: 'up' | 'gold' | 'down'; detail: string }> = {
-    VALID: { word: 'VALID', tone: 'up', detail: 'Nothing measured here is against it. A reading, not a decision: its stop and its exit check stand as they are.' },
-    WEAKENING: { word: 'WEAKENING', tone: 'gold', detail: 'One thing measured here is against it. A reading, not a decision: its stop and its exit check stand as they are.' },
-    BROKEN: { word: 'BROKEN', tone: 'down', detail: 'Its stop is hit, or two things measured here are against it. A reading, not a decision: its stop, or its watcher, closes it; nothing here does.' }
-  }
-  return shown[status]
+export function describeThesisReason(reason: ThesisReason, { t }: I18n = ENGLISH): string {
+  return t(REASON_WORDS[reason])
+}
+
+const STATUS_SHOWN: Record<ThesisStatus, { word: string; tone: 'up' | 'gold' | 'down'; detail: string }> = {
+  VALID: { word: msg('VALID'), tone: 'up', detail: msg('Nothing measured here is against it. A reading, not a decision: its stop and its exit check stand as they are.') },
+  WEAKENING: { word: msg('WEAKENING'), tone: 'gold', detail: msg('One thing measured here is against it. A reading, not a decision: its stop and its exit check stand as they are.') },
+  BROKEN: { word: msg('BROKEN'), tone: 'down', detail: msg('Its stop is hit, or two things measured here are against it. A reading, not a decision: its stop, or its watcher, closes it; nothing here does.') }
+}
+
+/** The status as it is shown: its word, the tone it is shown in, and what it means, in a language. */
+export function describeThesisStatus(status: ThesisStatus, { t }: I18n = ENGLISH): { word: string; tone: 'up' | 'gold' | 'down'; detail: string } {
+  const shown = STATUS_SHOWN[status]
+  return { word: t(shown.word), tone: shown.tone, detail: t(shown.detail) }
 }
 
 /** One sentence: the status and its reasons. "WEAKENING: it is near its stop." */
-export function describeThesisVerdict(verdict: Pick<ThesisVerdict, 'status' | 'reasons'>): string {
-  if (verdict.reasons.length === 0) return `${verdict.status}: nothing measured is against it.`
-  return `${verdict.status}: ${verdict.reasons.map(describeThesisReason).join('; ')}.`
+export function describeThesisVerdict(verdict: Pick<ThesisVerdict, 'status' | 'reasons'>, i18n: I18n = ENGLISH): string {
+  const status = i18n.t(STATUS_SHOWN[verdict.status].word)
+  if (verdict.reasons.length === 0) return i18n.t('{status}: nothing measured is against it.', { status })
+  return i18n.t('{status}: {reasons}.', { status, reasons: verdict.reasons.map((reason) => describeThesisReason(reason, i18n)).join(i18n.t('; ')) })
 }

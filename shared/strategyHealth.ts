@@ -1,3 +1,4 @@
+import { ENGLISH, type I18n } from './i18n/translate'
 // STRATEGY HEALTH, SHOWN AND NEVER ACTING (the V4 document, §109).
 //
 // A bot's dry run keeps the trades its strategy made on its pair since the bot was switched on
@@ -57,11 +58,15 @@ export function profitFactorOf(returns: readonly number[]): number | null {
   return loss > 0 ? gain / loss : null
 }
 
-export function describeHours(hours: number): string {
-  return hours < 48 ? `${hours.toFixed(0)} h` : `${(hours / 24).toFixed(1)} days`
+export function describeHours(hours: number, i18n: I18n = ENGLISH): string {
+  if (i18n.language === 'en') return hours < 48 ? `${hours.toFixed(0)} h` : `${(hours / 24).toFixed(1)} days`
+  return hours < 48 ? i18n.t('{hours} h', { hours: i18n.num(hours, 0, 0) }) : i18n.t('{days} days', { days: i18n.num(hours / 24, 1, 1) })
 }
 
-export function strategyHealth(trades: readonly StrategyTrade[], expectation: StrategyTradeExpectation | null): StrategyHealth {
+/** Its record against what was measured; its reasons in English, as recorded, unless handed a language
+ * (V6 Stage 14). */
+export function strategyHealth(trades: readonly StrategyTrade[], expectation: StrategyTradeExpectation | null, i18n: I18n = ENGLISH): StrategyHealth {
+  const { t, num } = i18n
   const closed = [...trades].sort((a, b) => b.exitTime - a.exitTime)
   if (closed.length < STRATEGY_HEALTH_TRADES) return { verdict: 'not enough', closed: closed.length, profitFactor: null, winRatePct: null, meanHoldHours: null, reasons: [] }
   const recent = closed.slice(0, STRATEGY_HEALTH_TRADES)
@@ -72,13 +77,15 @@ export function strategyHealth(trades: readonly StrategyTrade[], expectation: St
   const figures = { closed: closed.length, profitFactor, winRatePct, meanHoldHours }
   if (expectation === null) return { verdict: 'unmeasured', ...figures, reasons: [] }
   const unlike: string[] = []
-  if (winRatePct < expectation.winRatePct - STRATEGY_WIN_RATE_SLACK_POINTS) unlike.push(`wins ${winRatePct.toFixed(0)}% of the time against ${expectation.winRatePct.toFixed(0)}% measured`)
+  if (winRatePct < expectation.winRatePct - STRATEGY_WIN_RATE_SLACK_POINTS) {
+    unlike.push(t('wins {rate}% of the time against {measured}% measured', { rate: num(winRatePct, 0, 0), measured: num(expectation.winRatePct, 0, 0) }))
+  }
   if (meanHoldHours >= expectation.meanHoldHours * STRATEGY_HOLD_RATIO || meanHoldHours <= expectation.meanHoldHours / STRATEGY_HOLD_RATIO) {
-    unlike.push(`holds ${describeHours(meanHoldHours)} a trade against ${describeHours(expectation.meanHoldHours)} measured`)
+    unlike.push(t('holds {hold} a trade against {measured} measured', { hold: describeHours(meanHoldHours, i18n), measured: describeHours(expectation.meanHoldHours, i18n) }))
   }
   const losing = profitFactor !== null && profitFactor < 1
   if (!losing || unlike.length === 0) return { verdict: 'as measured', ...figures, reasons: [] }
-  return { verdict: 'degraded', ...figures, reasons: [`profit factor ${profitFactor.toFixed(2)} over its last ${STRATEGY_HEALTH_TRADES} closed trades`, ...unlike] }
+  return { verdict: 'degraded', ...figures, reasons: [t('profit factor {pf} over its last {count} closed trades', { pf: num(profitFactor, 2, 2), count: STRATEGY_HEALTH_TRADES }), ...unlike] }
 }
 
 /** One line for the bot's card. */

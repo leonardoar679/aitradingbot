@@ -140,7 +140,7 @@ export function AiConfirmationCard({ report }: { report: ConfirmationReport }): 
                       </td>
                       <td style={cellStyle}>{refused ? '—' : `${(review.decision.confidence * 100).toFixed(0)}%`}</td>
                       <td style={{ ...cellStyle, whiteSpace: 'normal', color: 'var(--text-secondary)' }}>
-                        {review.decision.detail?.reasonCodes.map(reasonLabel).join(', ') || '—'}
+                        {review.decision.detail?.reasonCodes.map((code) => reasonLabel(code)).join(', ') || '—'}
                       </td>
                       <td style={{ ...cellStyle, color: outcome.color }}>{outcome.text}</td>
                     </tr>

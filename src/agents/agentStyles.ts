@@ -1,3 +1,4 @@
+import { ENGLISH, msg, type I18n } from '../../shared/i18n/translate'
 import { INTERVAL_SECONDS, type Interval } from '../../shared/ipc'
 import { formatHoldingDuration } from '../backtest/formatTradeTime'
 
@@ -80,9 +81,11 @@ export function recommendationColor(recommendation: 'buy' | 'sell' | 'hold' | nu
   return 'var(--text-secondary)'
 }
 
-/** `+0.42%`, coloured by sign. A dash while the horizon has not closed yet. */
-export function signedPct(value: number | null): { text: string; color: string } {
+/** `+0.42%`, coloured by sign. A dash while the horizon has not closed yet. In English unless handed a
+ * language (V6 Stage 14). */
+export function signedPct(value: number | null, i18n: I18n = ENGLISH): { text: string; color: string } {
   if (value === null) return { text: '—', color: 'var(--text-muted)' }
+  if (i18n.language !== 'en') return { text: i18n.pct(value, 2), color: value >= 0 ? 'var(--up)' : 'var(--down)' }
   return { text: `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`, color: value >= 0 ? 'var(--up)' : 'var(--down)' }
 }
 
@@ -91,8 +94,37 @@ export function horizonLabel(bars: number, interval: Interval): string {
   return formatHoldingDuration(bars * INTERVAL_SECONDS[interval])
 }
 
-/** `trend_up` as `trend up`. The codes are a closed vocabulary, so this is all the formatting
- * they need. */
-export function reasonLabel(code: string): string {
-  return code.replace(/_/g, ' ')
+/** A model's codes in words: its reasons, the regime and the risk it read (shared/aiSignal.ts). */
+const CODE_WORDS: Record<string, string> = {
+  trend_up: msg('trend up'),
+  trend_down: msg('trend down'),
+  momentum_up: msg('momentum up'),
+  momentum_down: msg('momentum down'),
+  breakout: msg('breakout@@a reason'),
+  breakdown: msg('breakdown@@a reason'),
+  overbought: msg('overbought'),
+  oversold: msg('oversold'),
+  range_bound: msg('range bound'),
+  high_volatility: msg('high volatility'),
+  low_volatility: msg('low volatility'),
+  volume_confirms: msg('volume confirms'),
+  volume_absent: msg('volume absent'),
+  timeframes_agree: msg('timeframes agree'),
+  timeframes_conflict: msg('timeframes conflict'),
+  cost_exceeds_edge: msg('cost exceeds edge'),
+  strong_bull: msg('strong bull'),
+  bull: msg('bull@@a model reading'),
+  neutral: msg('neutral@@a model reading'),
+  bear: msg('bear@@a model reading'),
+  strong_bear: msg('strong bear'),
+  low: msg('low@@risk'),
+  medium: msg('medium@@risk'),
+  high: msg('high@@risk')
+}
+
+/** `trend_up` as `trend up`, in a language. The codes are a closed vocabulary, so this is all the
+ * formatting they need. */
+export function reasonLabel(code: string, { t }: I18n = ENGLISH): string {
+  const words = CODE_WORDS[code]
+  return words === undefined ? code.replace(/_/g, ' ') : t(words)
 }

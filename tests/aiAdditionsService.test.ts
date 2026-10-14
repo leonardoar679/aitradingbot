@@ -25,9 +25,15 @@ vi.mock('../electron/services/newsFeedService', () => ({
 }))
 const settings = vi.hoisted(() => ({ executors: [] as ExecutorConfig[] }))
 const told = vi.hoisted(() => ({ notices: [] as { title: string; extra: { kind: string; thread?: string } }[] }))
-vi.mock('../electron/services/noticeService', () => ({
-  tell: (notice: { title: string; extra: { kind: string; thread?: string } }) => void told.notices.push(notice)
-}))
+// A notice the main process builds in the person's language (V6 Stage 14) is handed as a builder:
+// built here in English, as the language of a profile that chose none.
+vi.mock('../electron/services/noticeService', async () => {
+  const { ENGLISH } = await import('../shared/i18n/translate')
+  type Told = { title: string; extra: { kind: string; thread?: string } }
+  return {
+    tell: (notice: Told | ((i18n: typeof ENGLISH) => Told)) => void told.notices.push(typeof notice === 'function' ? notice(ENGLISH) : notice)
+  }
+})
 vi.mock('../electron/services/settingsService', () => ({
   getSettings: async () => ({ executors: settings.executors })
 }))

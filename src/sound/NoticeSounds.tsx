@@ -3,6 +3,7 @@ import { healAlerts } from '../../shared/alerts'
 import { healSoundSettings } from '../../shared/sounds'
 import { hearNotice, setSoundPrefs, soundOfRecord, topPredictionChime } from './hearing'
 import { showToast } from './NoticeToasts'
+import { noticeI18n } from '../i18n/current'
 
 /** How often the controls are read again, so a change on Settings is heard within it. */
 const PREFS_MS = 30_000
@@ -34,9 +35,10 @@ export function NoticeSounds(): null {
         (ranking) => {
           const top = ranking.ranked[0]?.pair ?? null
           if (cancelled || !topPredictionChime(top, Math.floor(Date.now() / 1000)) || top === null) return
-          // Not a desktop notice: a chime and a toast, as the document has it (§72).
+          // Not a desktop notice: a chime and a toast, as the document has it (§72), in the person's language.
+          const { t } = noticeI18n()
           hearNotice({ sound: 'information', kind: null, severity: 'watch' } as never)
-          showToast({ id: `top:${top}:${Date.now()}`, title: `Top prediction: ${top.replace(/USDT$/, '/USDT')}`, body: 'The best-ranked forecast is now on another pair. Home shows it.', sound: 'information' })
+          showToast({ id: `top:${top}:${Date.now()}`, title: t('Top prediction: {pair}', { pair: top.replace(/USDT$/, '/USDT') }), body: t('The best-ranked forecast is now on another pair. Home shows it.'), sound: 'information' })
         },
         () => undefined
       )

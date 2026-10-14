@@ -43,6 +43,11 @@ import { PortfolioScheduler } from './portfolio/PortfolioScheduler'
 import { DEFAULT_PAGE, DEFAULT_TABS, activeNavId, anchorElementId, pageLabel, type NavAnchor, type NavId, type NavItem, type NavTarget, type Page, type PageTabs } from './navigation/pages'
 import type { AiOrderProposal } from '../shared/aiProposal'
 import { DEFAULT_UI_MODE, healUiMode, type UiMode } from '../shared/uiMode'
+import { EnglishOnly, I18nProvider, healLanguage, languageForLocales, msg, type Language } from './i18n'
+import { LanguageChooser } from './i18n/LanguageChooser'
+
+/** The pages shown in the window's language (V6 Stage 14); every other stays English. */
+const TRANSLATED_PAGES: ReadonlySet<Page> = new Set<Page>(['home', 'predictions', 'opportunities', 'positions', 'performance', 'settings'])
 
 /** When an entry that opens at a part of a page scrolls to it, after the page is drawn. */
 const ANCHOR_SCROLL_MS = [0, 250, 700, 1500]
@@ -58,12 +63,26 @@ function App(): React.JSX.Element {
   // A part of a page an entry opens at, scrolled to once the page has drawn.
   const [pendingAnchor, setPendingAnchor] = useState<NavAnchor | null>(null)
   const [uiMode, setUiMode] = useState<UiMode>(DEFAULT_UI_MODE)
+  // The language of the normal-user pages and the notices (V6 Stage 14): English until settings are
+  // read; none on file, and the first launch asks, offering the computer's (the V6 document, §87).
+  const [language, setLanguage] = useState<Language>('en')
+  const [askLanguage, setAskLanguage] = useState(false)
   useEffect(() => {
     window.api.settings.get().then(
-      (settings) => setUiMode(healUiMode(settings.uiMode)),
+      (settings) => {
+        setUiMode(healUiMode(settings.uiMode))
+        const chosen = healLanguage(settings.language)
+        if (chosen === null) setAskLanguage(true)
+        else setLanguage(chosen)
+      },
       () => undefined
     )
   }, [])
+  async function chooseLanguage(next: Language): Promise<void> {
+    await window.api.settings.set({ language: next })
+    setLanguage(next)
+    setAskLanguage(false)
+  }
   useEffect(() => {
     if (pendingAnchor === null) return
     // Scrolled to again as the page settles: the cards above a part load their data after the first
@@ -146,88 +165,92 @@ function App(): React.JSX.Element {
   }
 
   return (
+    <I18nProvider language={language}>
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
       {/* Each headless scheduler gets its own boundary: LiveOrderScheduler is the only thing that
           reconciles resolved real orders and watcher exits back into settings, so it must not be
           able to take the kill switch or the rest of the UI down with it -- and if it does die,
           its fallback panel is visible rather than silent, because a dead reconciler means real
           fills stop being recorded. */}
-      <ErrorBoundary label="The routine scheduler">
+      <ErrorBoundary label={msg("The routine scheduler")}>
         <RoutineScheduler />
       </ErrorBoundary>
-      <ErrorBoundary label="The controller scheduler">
+      <ErrorBoundary label={msg("The controller scheduler")}>
         <ControllerScheduler />
       </ErrorBoundary>
-      <ErrorBoundary label="The live order scheduler">
+      <ErrorBoundary label={msg("The live order scheduler")}>
         <LiveOrderScheduler />
       </ErrorBoundary>
-      <ErrorBoundary label="The portfolio scheduler">
+      <ErrorBoundary label={msg("The portfolio scheduler")}>
         <PortfolioScheduler />
       </ErrorBoundary>
       {/* The watch: off unless switched on from Opportunities. It asks models; it has no way to
           place anything, and what it opens by itself is paper. */}
-      <ErrorBoundary label="The opportunity watch">
+      <ErrorBoundary label={msg("The opportunity watch")}>
         <OpportunityScheduler />
         <ForecastTraderScheduler />
       </ErrorBoundary>
       {/* The exit check: only while the watch is on, and only the app's own paper trades. Its EXIT
           closes one at the next minute, on paper; it never moves a stop or touches a live one. */}
-      <ErrorBoundary label="The exit check">
+      <ErrorBoundary label={msg("The exit check")}>
         <ExitCheckScheduler />
       </ErrorBoundary>
       {/* The daily look at each model's health: a DEGRADED mark and one notice a day. It asks
           nothing and switches nothing off. */}
-      <ErrorBoundary label="The models' health">
+      <ErrorBoundary label={msg("The models' health")}>
         <ModelHealthScheduler />
       </ErrorBoundary>
       {/* The hourly look at each running bot's health, for the bots that ask no model: a DEGRADED
           one is told once a day, whether or not Strategies is open. It stops nothing. */}
-      <ErrorBoundary label="The strategies' health">
+      <ErrorBoundary label={msg("The strategies' health")}>
         <StrategyHealthScheduler />
       </ErrorBoundary>
       {/* The report of an experiment that has ended, built from the records and filed on its run
           (shared/experimentRun.ts). It asks nothing and opens nothing. */}
-      <ErrorBoundary label="The experiments' reports">
+      <ErrorBoundary label={msg("The experiments' reports")}>
         <ExperimentScheduler />
       </ErrorBoundary>
       {/* What a delisting does: a notice to someone holding the coin, and the rule's paper short.
           Off unless the news reader is on; nothing it does is real. */}
-      <ErrorBoundary label="The news reader's actions">
+      <ErrorBoundary label={msg("The news reader's actions")}>
         <NewsScheduler />
       </ErrorBoundary>
       {/* Once a day, a notice of what the watch's and the news rules' paper trades did the day
           before. It reads settings and says so; it opens and closes nothing. */}
-      <ErrorBoundary label="The daily paper digest">
+      <ErrorBoundary label={msg("The daily paper digest")}>
         <PaperDigestScheduler />
       </ErrorBoundary>
       {/* Once a day after 00:05 UTC, while the watch is on: the day before's report put to a model
           for one paragraph, the fifth AI addition. It reads, builds and asks; it writes nothing. */}
-      <ErrorBoundary label="The daily summary">
+      <ErrorBoundary label={msg("The daily summary")}>
         <DailySummaryScheduler />
       </ErrorBoundary>
       {/* After a losing run, the watch's or the news rules' paper trades are paused until resumed
           on Risk & Safety. It writes the pause and says so; it opens and closes nothing. */}
-      <ErrorBoundary label="The losing-run pause">
+      <ErrorBoundary label={msg("The losing-run pause")}>
         <PaperPauseScheduler />
       </ErrorBoundary>
       {/* The news feed's alerts and Bitcoin's falls, by severity: a notice, a badge, and for the
           critical ones a banner. It reads and tells; it opens, closes and sells nothing. */}
-      <ErrorBoundary label="The news alerts">
+      <ErrorBoundary label={msg("The news alerts")}>
         <NewsAlertScheduler />
       </ErrorBoundary>
-      <ErrorBoundary label="The live trading bar">
-        <LiveTradingBar />
+      {/* The live trading bar is Live Trading's, an expert page's: English, left to right, in any window. */}
+      <ErrorBoundary label={msg("The live trading bar")}>
+        <EnglishOnly>
+          <LiveTradingBar />
+        </EnglishOnly>
       </ErrorBoundary>
-      <ErrorBoundary label="The alert banner">
+      <ErrorBoundary label={msg("The alert banner")}>
         <AlertBanner />
         <NoticeSounds />
         <NoticeToasts />
       </ErrorBoundary>
-      <ErrorBoundary label="Why did it move">
+      <ErrorBoundary label={msg("Why did it move")}>
         <WhyItMovedHost />
       </ErrorBoundary>
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        <ErrorBoundary label="The sidebar">
+        <ErrorBoundary label={msg("The sidebar")}>
           <Sidebar
             activeId={activeNavId(page, tabs, chosenNav)}
             onChoose={choose}
@@ -250,11 +273,19 @@ function App(): React.JSX.Element {
         >
           {/* Keyed by page so navigating away from a broken page and back retries it, rather than
               the boundary latching its error for the rest of the session. */}
-          <ErrorBoundary key={page} label={`The ${pageLabel(page)} page`}>
+          <ErrorBoundary key={page} label={msg('The {page} page')} page={pageLabel(page)}>
             {page === 'home' && <HomePage onPrepareOrder={prepareOrder} onNavigate={navigate} />}
             {page === 'predictions' && <PredictionsPage onPrepareOrder={prepareOrder} />}
-            {page === 'overview' && <OverviewPage onGetStarted={openPresets} onPrepareOrder={prepareOrder} onNavigate={navigate} />}
             {page === 'opportunities' && <OpportunitiesPage onPrepareOrder={prepareOrder} />}
+            {page === 'positions' && <PositionsPage />}
+            {page === 'performance' && <PerformancePage />}
+            {page === 'settings' && <SettingsPanel onNavigate={navigate} onUiModeChange={setUiMode} onLanguageChange={setLanguage} />}
+            {/* The pages not translated (the user's answer of 13 October 2026: the normal-user pages are)
+                stay English, left to right, inside any window. A translated part of one -- the Position
+                form -- brings the window's language back itself. */}
+            {!TRANSLATED_PAGES.has(page) && (
+            <EnglishOnly>
+            {page === 'overview' && <OverviewPage onGetStarted={openPresets} onPrepareOrder={prepareOrder} onNavigate={navigate} />}
             {page === 'markets' && <Dashboard />}
             {page === 'ai-decisions' && (
               <AiDecisionsPage
@@ -263,8 +294,6 @@ function App(): React.JSX.Element {
                 onPrepareOrder={prepareOrder}
               />
             )}
-            {page === 'positions' && <PositionsPage />}
-            {page === 'performance' && <PerformancePage />}
             {page === 'paper-trading' && <PaperTradingPage />}
             {page === 'live-trading' && <LiveTradingPage onNavigate={navigate} />}
             {page === 'strategies' && (
@@ -287,11 +316,14 @@ function App(): React.JSX.Element {
             )}
             {page === 'risk' && <RiskSafetyPage />}
             {page === 'connections' && <ConnectionsPage />}
-            {page === 'settings' && <SettingsPanel onNavigate={navigate} onUiModeChange={setUiMode} />}
+            </EnglishOnly>
+            )}
           </ErrorBoundary>
         </main>
       </div>
     </div>
+    {askLanguage && <LanguageChooser offered={languageForLocales(navigator.languages)} onChoose={chooseLanguage} />}
+    </I18nProvider>
   )
 }
 

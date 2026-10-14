@@ -1,3 +1,4 @@
+import { ENGLISH, msg, type I18n } from './i18n/translate'
 import { MARKET_REFERENCE_SYMBOLS } from './aiEventMarket'
 import type { Candle, Exchange, ExecutorConfig, ExecutorSide, PaperAccount, PaperRiskSettings, PositionExecutorParams } from './ipc'
 import { ownOpenPaperTrades } from './paperRisk'
@@ -143,20 +144,30 @@ export function correlatedExposureBlock(input: {
   amountQuote: number
   /** The new trade's pair's correlation with Bitcoin; null when it could not be read. */
   correlation: number | null
-}): string | null {
+}, i18n: I18n = ENGLISH): string | null {
   if (!tracksBtc(input.correlation)) return null
   const cap = correlatedCap(input)
   if (cap === null) return null
   const out = correlatedOut(input.executors, input.side, input.quoteAsset)
   // A hundredth of a cent of rounding is not over the cap.
   if (out + input.amountQuote <= cap + 1e-6) return null
-  const way = input.side === 'buy' ? 'BUY' : 'SELL'
+  const { t } = i18n
+  const figure = (value: number): string => (i18n.language === 'en' ? shown(value) : i18n.num(Number(value.toFixed(2)), 0, 2))
   const why =
     input.correlation === null
-      ? "Its pair's correlation with Bitcoin could not be read, so it counts as one that moves with it"
-      : `Its pair moves with Bitcoin (its hourly moves over ${CORRELATION_DAYS} days correlate at ${input.correlation.toFixed(2)})`
-  const of = fundedWith(input.account, input.quoteAsset) > 0 ? 'what the paper account was funded with' : 'the money-out cap'
-  return `${why}, and the app's open paper ${way}s on such pairs stake ${shown(out)} ${input.quoteAsset} together: ${shown(input.amountQuote)} more would take them past ${shown(cap)}, ${Math.round(correlatedShareOf(input.risk) * 100)}% of ${of}.`
+      ? t("Its pair's correlation with Bitcoin could not be read, so it counts as one that moves with it")
+      : t('Its pair moves with Bitcoin (its hourly moves over {days} days correlate at {correlation})', { days: CORRELATION_DAYS, correlation: i18n.num(input.correlation, 2, 2) })
+  const funded = fundedWith(input.account, input.quoteAsset) > 0
+  const values = { why, out: figure(out), asset: input.quoteAsset, more: figure(input.amountQuote), cap: figure(cap), share: i18n.pctPlain(Math.round(correlatedShareOf(input.risk) * 100), 0) }
+  const key =
+    input.side === 'buy'
+      ? funded
+        ? msg("{why}, and the app's open paper BUYs on such pairs stake {out} {asset} together: {more} more would take them past {cap}, {share} of what the paper account was funded with.")
+        : msg("{why}, and the app's open paper BUYs on such pairs stake {out} {asset} together: {more} more would take them past {cap}, {share} of the money-out cap.")
+      : funded
+        ? msg("{why}, and the app's open paper SELLs on such pairs stake {out} {asset} together: {more} more would take them past {cap}, {share} of what the paper account was funded with.")
+        : msg("{why}, and the app's open paper SELLs on such pairs stake {out} {asset} together: {more} more would take them past {cap}, {share} of the money-out cap.")
+  return t(key, values)
 }
 
 /** The rule in a sentence, for Risk & Safety. */

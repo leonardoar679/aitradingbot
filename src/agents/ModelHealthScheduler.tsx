@@ -1,3 +1,4 @@
+import { noticeI18n } from '../i18n/current'
 import { useEffect } from 'react'
 import { lookAtModelHealth, type ModelHealthDeps } from './modelHealthWatch'
 
@@ -15,6 +16,7 @@ const deps: ModelHealthDeps = {
   fetchCandles: async (exchange, symbol, interval, startSec, endSec) => (await window.api.market.fetchHistoricalRange(exchange, symbol, interval, startSec, endSec)).candles,
   // A desktop that cannot show it is not a reason to fail the look.
   notify: (title, body, extra) => void window.api.notify(title, body, extra?.severity, extra).catch(() => undefined),
+  i18n: noticeI18n,
   nowSec: () => Math.floor(Date.now() / 1000)
 }
 

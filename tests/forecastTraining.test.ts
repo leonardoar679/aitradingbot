@@ -220,7 +220,7 @@ describe('degradation', () => {
   const floor = score()
 
   it('reads each way a week can go wrong', () => {
-    expect(degradationOf(score(), floor, null)).toEqual({ degraded: false, reasons: [] })
+    expect(degradationOf(score(), floor, null)).toEqual({ degraded: false, reasons: [], codes: [] })
     expect(degradationOf(score({ coverage80: 0.69 }), floor, null).reasons[0]).toMatch(/69.0%/)
     expect(degradationOf(score({ coverage80: 0.71 }), floor, null).degraded).toBe(false)
     expect(degradationOf(score({ pinball: 0.31 }), floor, null).reasons[0]).toMatch(/above persistence/)

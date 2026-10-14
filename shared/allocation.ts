@@ -15,6 +15,7 @@
  * that drifts the first time anything is missed -- a fill recorded while the app was closed, a
  * cancel that never came back -- and it drifts silently, in the direction of permitting more. */
 
+import { ENGLISH, type I18n } from './i18n/translate'
 import type { LiveOrder, LivePosition } from './ipc'
 
 /** Capital tied up in one open position: what it cost, not what it is worth now.
@@ -64,19 +65,23 @@ export function allocationRemainingQuote(allocationQuote: number, committedQuote
  *
  * Returns a sentence rather than a boolean because this reaches the user as the reason a real
  * order was refused, and "blocked by allocation" tells them nothing about what to change. */
-export function describeAllocationBreach({
-  allocationQuote,
-  committedQuote,
-  orderQuote,
-  quoteAsset
-}: {
-  /** Null means no allocation is configured -- this app's other gates still apply and this one
-   * does not. Not the same as 0, which is an allocation of nothing and blocks everything. */
-  allocationQuote: number | null
-  committedQuote: number
-  orderQuote: number
-  quoteAsset: string
-}): string | null {
+export function describeAllocationBreach(
+  {
+    allocationQuote,
+    committedQuote,
+    orderQuote,
+    quoteAsset
+  }: {
+    /** Null means no allocation is configured -- this app's other gates still apply and this one
+     * does not. Not the same as 0, which is an allocation of nothing and blocks everything. */
+    allocationQuote: number | null
+    committedQuote: number
+    orderQuote: number
+    quoteAsset: string
+  },
+  i18n: I18n = ENGLISH
+): string | null {
+  const { t } = i18n
   if (allocationQuote === null) return null
 
   // Every comparison below is a `>` test and all of those are false against NaN, so an unusable
@@ -84,18 +89,24 @@ export function describeAllocationBreach({
   // that has bitten this app before. An allocation that cannot be read is treated as blocking,
   // because the alternative is treating it as permission.
   if (!Number.isFinite(allocationQuote) || allocationQuote < 0) {
-    return 'The managed allocation could not be read, so no real order can be placed against it. Set it again on Risk & Safety.'
+    return t('The managed allocation could not be read, so no real order can be placed against it. Set it again on Risk & Safety.')
   }
   if (!Number.isFinite(committedQuote) || committedQuote < 0) {
-    return 'What this app already has committed could not be worked out, so it cannot tell whether this order fits inside your allocation.'
+    return t('What this app already has committed could not be worked out, so it cannot tell whether this order fits inside your allocation.')
   }
   if (!Number.isFinite(orderQuote) || orderQuote <= 0) {
-    return 'That order size is not a usable number, so it cannot be checked against your allocation.'
+    return t('That order size is not a usable number, so it cannot be checked against your allocation.')
   }
 
   const remaining = allocationRemainingQuote(allocationQuote, committedQuote)
   if (orderQuote > remaining) {
-    return `This order would put ${(committedQuote + orderQuote).toFixed(2)} ${quoteAsset} to work, past the ${allocationQuote.toFixed(2)} ${quoteAsset} you allocated. ${committedQuote.toFixed(2)} is already committed, leaving ${remaining.toFixed(2)}. Raise the allocation on Risk & Safety, or close something first.`
+    return t('This order would put {total} {asset} to work, past the {allocation} {asset} you allocated. {committed} is already committed, leaving {remaining}. Raise the allocation on Risk & Safety, or close something first.', {
+      total: figureIn(committedQuote + orderQuote, i18n, 2),
+      asset: quoteAsset,
+      allocation: figureIn(allocationQuote, i18n, 2),
+      committed: figureIn(committedQuote, i18n, 2),
+      remaining: figureIn(remaining, i18n, 2)
+    })
   }
   return null
 }
@@ -110,17 +121,20 @@ export function describeAllocationBreach({
  * finished nor undone. Knowing that before creating it is the whole point, but it is a warning
  * rather than a refusal, because capital freed by an earlier level closing may well cover a later
  * one -- the app cannot know, and refusing on a guess would block a plan that would have worked. */
-export function describeAllocationPlanShortfall({
-  allocationQuote,
-  committedQuote,
-  planTotal,
-  quoteAsset
-}: {
-  allocationQuote: number | null
-  committedQuote: number
-  planTotal: number
-  quoteAsset: string
-}): string | null {
+export function describeAllocationPlanShortfall(
+  {
+    allocationQuote,
+    committedQuote,
+    planTotal,
+    quoteAsset
+  }: {
+    allocationQuote: number | null
+    committedQuote: number
+    planTotal: number
+    quoteAsset: string
+  },
+  i18n: I18n = ENGLISH
+): string | null {
   // Both of the guards either side of the finite check are provably redundant, and both stay.
   //
   // The null one is redundant only because Number.isFinite(null) happens to be false. Leaning on
@@ -140,5 +154,15 @@ export function describeAllocationPlanShortfall({
   // would fail the comparison into warning rather than out of it.
   if (!(planTotal > remaining)) return null
 
-  return `Every order this strategy places adds up to ${planTotal.toFixed(2)} ${quoteAsset}, and only ${remaining.toFixed(2)} of your ${allocationQuote.toFixed(2)} ${quoteAsset} allocation is free. The later orders will be refused when they fire unless something closes first.`
+  return i18n.t(
+    'Every order this strategy places adds up to {total} {asset}, and only {remaining} of your {allocation} {asset} allocation is free. The later orders will be refused when they fire unless something closes first.',
+    { total: figureIn(planTotal, i18n, 2), asset: quoteAsset, remaining: figureIn(remaining, i18n, 2), allocation: figureIn(allocationQuote, i18n, 2) }
+  )
+}
+
+/** A figure as the English always wrote it (`digits` fixed, or as JavaScript prints it), else in the
+ * language's own form (V6 Stage 14). */
+function figureIn(value: number, i18n: I18n, digits?: number): string {
+  if (i18n.language === 'en') return digits === undefined ? String(value) : value.toFixed(digits)
+  return digits === undefined ? i18n.num(value, 0, 8) : i18n.num(value, digits, digits)
 }

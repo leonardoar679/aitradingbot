@@ -1,4 +1,5 @@
 import type { Candle } from './ipc'
+import { ENGLISH, msg, type I18n } from './i18n/translate'
 
 // NEWS FROM THE WHOLE MARKET, MATCHED TO COINS AND JUDGED BY WHAT THE PRICE DID (the second V3
 // document, §11-14 and §53).
@@ -693,24 +694,52 @@ export function describeTypeExcursions(row: Pick<TypeImpact, 'eventType' | 'excu
 }
 
 /** How a kind of news reads in words. */
-export function describeEventType(type: NewsEventType): string {
-  const words: Record<NewsEventType, string> = {
-    HACK: 'Hack',
-    EXPLOIT: 'Exploit',
-    DELISTING: 'Delisting or warning',
-    LISTING: 'Listing',
-    ETF: 'ETF',
-    REGULATION: 'Regulation',
-    TOKEN_UNLOCK: 'Token unlock',
-    MACRO: 'Macro',
-    MAINNET: 'Mainnet',
-    UPGRADE: 'Upgrade',
-    AIRDROP: 'Airdrop',
-    FUNDING: 'Funding',
-    LIQUIDATION: 'Liquidations',
-    EXCHANGE_OUTAGE: 'Exchange outage',
-    PARTNERSHIP: 'Partnership',
-    OTHER: 'Other'
-  }
-  return words[type]
+const EVENT_TYPE_NAMES: Record<NewsEventType, string> = {
+  HACK: msg('Hack'),
+  EXPLOIT: msg('Exploit'),
+  DELISTING: msg('Delisting or warning'),
+  LISTING: msg('Listing'),
+  ETF: msg('ETF'),
+  REGULATION: msg('Regulation'),
+  TOKEN_UNLOCK: msg('Token unlock'),
+  MACRO: msg('Macro'),
+  MAINNET: msg('Mainnet'),
+  UPGRADE: msg('Upgrade'),
+  AIRDROP: msg('Airdrop'),
+  FUNDING: msg('Funding'),
+  LIQUIDATION: msg('Liquidations'),
+  EXCHANGE_OUTAGE: msg('Exchange outage'),
+  PARTNERSHIP: msg('Partnership'),
+  OTHER: msg('Other')
+}
+
+/** A story's kind by name, in a language: English unless handed another (V6 Stage 14). */
+export function describeEventType(type: NewsEventType, { t }: I18n = ENGLISH): string {
+  const name = EVENT_TYPE_NAMES[type]
+  return name === undefined ? type : t(name)
+}
+
+const STORY_KIND_WORDS: Record<NewsEventType, string> = {
+  HACK: msg('hack'),
+  EXPLOIT: msg('exploit'),
+  DELISTING: msg('delisting'),
+  LISTING: msg('listing'),
+  ETF: msg('ETF@@a kind of story'),
+  REGULATION: msg('regulation'),
+  TOKEN_UNLOCK: msg('token unlock'),
+  MACRO: msg('macro'),
+  MAINNET: msg('mainnet'),
+  UPGRADE: msg('upgrade'),
+  AIRDROP: msg('airdrop'),
+  FUNDING: msg('funding'),
+  LIQUIDATION: msg('liquidation'),
+  EXCHANGE_OUTAGE: msg('exchange outage'),
+  PARTNERSHIP: msg('partnership'),
+  OTHER: msg('other')
+}
+
+/** A story's kind inside a sentence -- "a listing story" -- in a language. */
+export function storyKindWord(type: NewsEventType, { t }: I18n = ENGLISH): string {
+  const word = STORY_KIND_WORDS[type]
+  return word === undefined ? type.toLowerCase() : t(word)
 }

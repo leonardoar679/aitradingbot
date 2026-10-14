@@ -4,6 +4,7 @@ import { AI_KEY_PREFIX, AI_PROVIDER_LABEL, describeUnusableAiKey, type AiCredent
 import { formatUsd, type AiConfig } from '../../shared/aiCost'
 import { buttonStyle, inputStyle, noteStyle } from '../agents/agentStyles'
 import { describeError } from '../utils/ipcError'
+import { Interpolate, useI18n } from '../i18n'
 
 /** Where the OpenRouter key is added, replaced, tested and removed.
  *
@@ -27,6 +28,9 @@ export function AiKeyCard({
   /** Told what is stored now, after a key is saved, replaced or removed. */
   onChanged?: (status: AiCredentialStatus) => void
 }): React.JSX.Element {
+  const i18n = useI18n()
+  const { t } = i18n
+  const provider = AI_PROVIDER_LABEL
   const [status, setStatus] = useState<AiCredentialStatus | null>(null)
   const [config, setConfig] = useState<AiConfig | null>(null)
   const [replacing, setReplacing] = useState(false)
@@ -70,7 +74,7 @@ export function AiKeyCard({
       await window.api.ai.listModels(false).catch(() => undefined)
       setApiKey('')
       setReplacing(false)
-      return { ok: true, text: `${AI_PROVIDER_LABEL} key verified and saved.` }
+      return { ok: true, text: t('{provider} key verified and saved.', { provider }) }
     }, true)
 
   const test = (): Promise<void> =>
@@ -82,7 +86,7 @@ export function AiKeyCard({
   const remove = (): Promise<void> =>
     run(async () => {
       await window.api.ai.removeCredentials()
-      return { ok: true, text: 'Key removed.' }
+      return { ok: true, text: t('Key removed.') }
     }, true)
 
   const configured = status?.configured === true
@@ -90,23 +94,18 @@ export function AiKeyCard({
   // Said while it is being typed, not after the click: the main process refuses the same values,
   // but by then the user has been made to wait for a refusal the field could have given.
   const typed = apiKey.trim()
-  const problem = typed === '' ? null : describeUnusableAiKey(typed)
+  const problem = typed === '' ? null : describeUnusableAiKey(typed, i18n)
   const cannotSave = busy || typed === '' || problem !== null
 
-  const title =
-    where === 'connections'
-      ? `AI models — ${AI_PROVIDER_LABEL}`
-      : configured
-        ? `${AI_PROVIDER_LABEL} API key`
-        : `Add your ${AI_PROVIDER_LABEL} API key`
+  const title = where === 'connections' ? t('AI models — {provider}', { provider }) : configured ? t('{provider} API key', { provider }) : t('Add your {provider} API key', { provider })
 
   return (
     <Card title={title}>
       <p style={{ ...noteStyle, marginBottom: '0.9rem' }}>
-        One {AI_PROVIDER_LABEL} key reaches every model this app asks. It is used only for chart signals, backtests,
-        paper bots, Opportunities, AI Decisions and AI Benchmark: AI signals have no live-order route. The key is stored
-        encrypted by the operating system and is never read back into this window. Saving one asks {AI_PROVIDER_LABEL} a
-        free question about the key itself and spends nothing.
+        {t(
+          'One {provider} key reaches every model this app asks. It is used only for chart signals, backtests, paper bots, Opportunities, AI Decisions and AI Benchmark: AI signals have no live-order route. The key is stored encrypted by the operating system and is never read back into this window. Saving one asks {provider} a free question about the key itself and spends nothing.',
+          { provider }
+        )}
       </p>
       {status?.legacyOpenAiKey && (
         <p
@@ -119,20 +118,24 @@ export function AiKeyCard({
             marginBottom: '0.9rem'
           }}
         >
-          An OpenAI key from before this app used {AI_PROVIDER_LABEL} is still stored here. It is no longer used or
-          sent anywhere. Adding an {AI_PROVIDER_LABEL} key replaces it, or{' '}
-          <button
-            onClick={() => void remove()}
-            disabled={busy}
-            style={{ background: 'none', border: 'none', padding: 0, color: 'var(--down)', cursor: 'pointer', font: 'inherit', textDecoration: 'underline' }}
-          >
-            remove it now
-          </button>
-          .
+          <Interpolate
+            text={t('An OpenAI key from before this app used {provider} is still stored here. It is no longer used or sent anywhere. Adding an {provider} key replaces it, or {remove}.', { provider })}
+            values={{
+              remove: (
+                <button
+                  onClick={() => void remove()}
+                  disabled={busy}
+                  style={{ background: 'none', border: 'none', padding: 0, color: 'var(--down)', cursor: 'pointer', font: 'inherit', textDecoration: 'underline' }}
+                >
+                  {t('remove it now')}
+                </button>
+              )
+            }}
+          />
         </p>
       )}
       {status === null ? (
-        <p style={noteStyle}>Checking for a stored key…</p>
+        <p style={noteStyle}>{t('Checking for a stored key…')}</p>
       ) : showForm ? (
         <form
           onSubmit={(event) => {
@@ -144,7 +147,7 @@ export function AiKeyCard({
           <label
             style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}
           >
-            {AI_PROVIDER_LABEL} API key
+            {t('{provider} API key', { provider })}
             <input
               type="password"
               value={apiKey}
@@ -155,14 +158,11 @@ export function AiKeyCard({
               style={{ ...inputStyle(), width: '100%', maxWidth: 560, boxSizing: 'border-box' }}
             />
           </label>
-          <p style={noteStyle}>
-            Keys are made at openrouter.ai/keys and start with &quot;{AI_KEY_PREFIX}&quot;. Paste yours here and press
-            Test &amp; Save.
-          </p>
+          <p style={noteStyle}>{t('Keys are made at openrouter.ai/keys and start with "{prefix}". Paste yours here and press Test & Save.', { prefix: AI_KEY_PREFIX })}</p>
           {problem !== null && <p style={{ ...noteStyle, color: 'var(--down)' }}>{problem}</p>}
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button type="submit" disabled={cannotSave} style={buttonStyle('primary', cannotSave)}>
-              {busy ? 'Testing…' : 'Test & Save'}
+              {busy ? t('Testing…') : t('Test & Save')}
             </button>
             {replacing && (
               <button
@@ -174,7 +174,7 @@ export function AiKeyCard({
                 disabled={busy}
                 style={buttonStyle('secondary', busy)}
               >
-                Cancel
+                {t('Cancel')}
               </button>
             )}
           </div>
@@ -182,28 +182,28 @@ export function AiKeyCard({
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
           <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', lineHeight: 1.6 }}>
-            Key configured.
+            {t('Key configured.')}
             {config && (
               <>
-                {' '}Default model {config.defaultModel}. {formatUsd(config.spentTodayUsd)} of today&apos;s{' '}
-                {formatUsd(config.dailyCapUsd)} AI budget spent.
-                {where === 'connections' && ' Models, the budget and the pace are under Settings › AI, and every call is under AI Decisions › Signals.'}
+                {' '}
+                {t("Default model {model}. {spent} of today's {cap} AI budget spent.", { model: config.defaultModel, spent: formatUsd(config.spentTodayUsd, i18n), cap: formatUsd(config.dailyCapUsd, i18n) })}
+                {where === 'connections' && ` ${t('Models, the budget and the pace are under Settings › AI, and every call is under AI Decisions › Signals.')}`}
               </>
             )}
           </div>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button onClick={() => setReplacing(true)} disabled={busy} style={buttonStyle('secondary', busy)}>
-              Replace key
+              {t('Replace key')}
             </button>
             <button onClick={() => void test()} disabled={busy} style={buttonStyle('secondary', busy)}>
-              Test
+              {t('Test')}
             </button>
             <button
               onClick={() => void remove()}
               disabled={busy}
               style={{ ...buttonStyle('secondary', busy), background: 'transparent', border: '1px solid var(--down)', color: 'var(--down)' }}
             >
-              Remove
+              {t('Remove')}
             </button>
           </div>
         </div>

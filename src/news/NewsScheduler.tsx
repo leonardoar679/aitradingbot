@@ -1,3 +1,4 @@
+import { noticeI18n } from '../i18n/current'
 import { useEffect } from 'react'
 import { newsActionsFor, type NewsItem, type NewsState } from '../../shared/news'
 import { DELISTING_SHORT_LATEST_SECONDS, NEWS_NOTICE_LATEST_SECONDS, isFreshNews, newsHolderNotice, tagShortWindow, type Holdings } from '../../shared/newsActions'
@@ -49,7 +50,7 @@ async function actOn(item: NewsItem, config: NewsState['config'], nowSec: number
   if (actions === null) return
   if (actions.notifyHeld) {
     try {
-      const notice = newsHolderNotice(item, await readHoldings())
+      const notice = newsHolderNotice(item, await readHoldings(), noticeI18n())
       // CRITICAL for a delisting of a coin held, HIGH for its Monitoring Tag (shared/alerts.ts); sent
       // without a severity until 8 October 2026, which made it a silent WATCH.
       if (notice !== null) {

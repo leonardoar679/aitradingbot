@@ -1,5 +1,6 @@
 import { formatUsd, type AiConfig } from '../../shared/aiCost'
 import type { CredentialStatus, LiveTradingStatus } from '../../shared/ipc'
+import { ENGLISH, type I18n } from '../../shared/i18n/translate'
 
 // What the status bar and Overview say about the state of things, read from the gates
 // themselves rather than from a setting that claims to describe them.
@@ -63,26 +64,26 @@ export function liveReadinessOf(input: { mode: TradingMode; connection: Connecti
   return input.connection === 'ok' ? 'ready' : 'not-verified'
 }
 
-export function describeLiveReadiness(readiness: LiveReadiness): ModeLabel {
+export function describeLiveReadiness(readiness: LiveReadiness, { t }: I18n = ENGLISH): ModeLabel {
   switch (readiness) {
     case 'paper-only':
-      return { label: 'PAPER', detail: 'No Binance key is stored, so no real order can be placed. A verified key on Connections makes live trading ready.', tone: 'safe' }
+      return { label: t('PAPER'), detail: t('No Binance key is stored, so no real order can be placed. A verified key on Connections makes live trading ready.'), tone: 'safe' }
     case 'not-verified':
-      return { label: 'PAPER · KEY NOT VERIFIED', detail: 'A Binance key is stored but its last test failed, so live trading is not ready. Test it again on Connections.', tone: 'warn' }
+      return { label: t('PAPER · KEY NOT VERIFIED'), detail: t('A Binance key is stored but its last test failed, so live trading is not ready. Test it again on Connections.'), tone: 'warn' }
     case 'ready':
       return {
-        label: 'PAPER · LIVE READY',
-        detail: 'A verified Binance key is stored and the live session is disarmed: no real order can be placed until it is armed on the bar, for this session only.',
+        label: t('PAPER · LIVE READY'),
+        detail: t('A verified Binance key is stored and the live session is disarmed: no real order can be placed until it is armed on the bar, for this session only.'),
         tone: 'safe'
       }
     case 'active':
       return {
-        label: 'LIVE ACTIVE',
-        detail: 'The live session is armed: the live executors you made can place real orders, within the limits on Risk & Safety. No model can place one.',
+        label: t('LIVE ACTIVE'),
+        detail: t('The live session is armed: the live executors you made can place real orders, within the limits on Risk & Safety. No model can place one.'),
         tone: 'live'
       }
     case 'blocked':
-      return { label: 'KILL SWITCH', detail: 'Every new real order is blocked until the kill switch is released.', tone: 'blocked' }
+      return { label: t('KILL SWITCH'), detail: t('Every new real order is blocked until the kill switch is released.'), tone: 'blocked' }
   }
 }
 
@@ -97,28 +98,34 @@ export function watchModeOf(input: { keyConfigured: boolean; config: Pick<AiConf
   return input.config.watch.confirmLive ? 'confirm' : 'paper-trades'
 }
 
-export function describeWatchMode(mode: WatchMode): ModeLabel {
+export function describeWatchMode(mode: WatchMode, { t }: I18n = ENGLISH): ModeLabel {
   switch (mode) {
     case 'no-key':
-      return { label: 'AI: NO KEY', detail: 'No OpenRouter key is stored, so no model can be asked.', tone: 'muted' }
+      return { label: t('AI: NO KEY'), detail: t('No OpenRouter key is stored, so no model can be asked.'), tone: 'muted' }
     case 'off':
-      return { label: 'AI: WATCH OFF', detail: 'Models are asked only when you ask them.', tone: 'muted' }
+      return { label: t('AI: WATCH OFF'), detail: t('Models are asked only when you ask them.'), tone: 'muted' }
     case 'shadow':
-      return { label: 'AI: SHADOW', detail: 'The watch asks models about events and scores their calls, and opens nothing.', tone: 'info' }
+      return { label: t('AI: SHADOW'), detail: t('The watch asks models about events and scores their calls, and opens nothing.'), tone: 'info' }
     case 'paper-trades':
-      return { label: 'AI: PAPER TRADES', detail: 'The watch opens paper positions on its calls by itself. Never a real one.', tone: 'warn' }
+      return { label: t('AI: PAPER TRADES'), detail: t('The watch opens paper positions on its calls by itself. Never a real one.'), tone: 'warn' }
     case 'confirm':
       return {
-        label: 'AI: CONFIRM',
-        detail: 'The watch opens paper positions on its calls by itself and tells you when one is ready to confirm as a real order. You place it; it never does.',
+        label: t('AI: CONFIRM'),
+        detail: t('The watch opens paper positions on its calls by itself and tells you when one is ready to confirm as a real order. You place it; it never does.'),
         tone: 'warn'
       }
   }
 }
 
+/** The watch's mode as Essentials names it: without the "AI:" its label begins with on the bar. */
+export function watchModeWord(mode: WatchMode, { t }: I18n = ENGLISH): string {
+  const words: Record<WatchMode, string> = { 'no-key': t('NO KEY'), off: t('WATCH OFF'), shadow: t('SHADOW'), 'paper-trades': t('PAPER TRADES'), confirm: t('CONFIRM') }
+  return words[mode]
+}
+
 /** What has been spent on AI calls today, against the day's budget. */
-export function describeAiSpend(config: Pick<AiConfig, 'spentTodayUsd' | 'dailyCapUsd'>): string {
-  return `${formatUsd(config.spentTodayUsd)} of ${formatUsd(config.dailyCapUsd)} today`
+export function describeAiSpend(config: Pick<AiConfig, 'spentTodayUsd' | 'dailyCapUsd'>, i18n: I18n = ENGLISH): string {
+  return i18n.t('{spent} of {cap} today', { spent: formatUsd(config.spentTodayUsd, i18n), cap: formatUsd(config.dailyCapUsd, i18n) })
 }
 
 export type ConnectionState = 'none' | 'ok' | 'failed'

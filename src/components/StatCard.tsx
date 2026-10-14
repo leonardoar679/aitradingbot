@@ -7,6 +7,9 @@ interface StatCardProps {
   valueColor?: string
   sub?: string
   subColor?: string
+  /** A value in words rather than a figure: it wraps instead of being cut, since a translation may run
+   * longer than the English (V6 Stage 14). A figure is never broken. */
+  wraps?: boolean
 }
 
 export function StatCard({
@@ -15,7 +18,8 @@ export function StatCard({
   value,
   valueColor,
   sub,
-  subColor
+  subColor,
+  wraps = false
 }: StatCardProps): React.JSX.Element {
   return (
     <section
@@ -49,9 +53,7 @@ export function StatCard({
           fontSize: '1.4rem',
           fontWeight: 700,
           color: valueColor ?? 'var(--text-primary)',
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis'
+          ...(wraps ? { lineHeight: 1.3 } : { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' })
         }}
       >
         {value}

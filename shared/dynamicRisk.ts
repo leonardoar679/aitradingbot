@@ -1,3 +1,4 @@
+import { ENGLISH, type I18n } from './i18n/translate'
 import type { Candle } from './ipc'
 
 // RISK BY THE CONDITIONS (the V5 document, §46-47 and §72-73; V5 Stage 7, 8 October 2026). What the
@@ -62,33 +63,35 @@ export interface RiskMultiplier {
   reasons: string[]
 }
 
-const times = (value: number): string => `${value.toFixed(1)}× its usual`
 const read = (value: number | null): value is number => value !== null && Number.isFinite(value)
 
 /** The factor on the risk per trade, and why: none at extreme volatility, six tenths with any
- * other condition against it, else the whole. */
-export function riskMultiplier(conditions: RiskConditions): RiskMultiplier {
+ * other condition against it, else the whole. Its reasons in English, as recorded, unless handed a
+ * language (V6 Stage 14). */
+export function riskMultiplier(conditions: RiskConditions, i18n: I18n = ENGLISH): RiskMultiplier {
+  const { t, num } = i18n
+  const times = (value: number): string => t('{ratio}× its usual', { ratio: num(value, 1, 1) })
   const { volatilityRatio: ratio } = conditions
-  if (read(ratio) && ratio >= RISK_LINES.volatilityExtreme) return { factor: 0, reasons: [`extreme volatility, ${times(ratio)}`] }
+  if (read(ratio) && ratio >= RISK_LINES.volatilityExtreme) return { factor: 0, reasons: [t('extreme volatility, {times}', { times: times(ratio) })] }
   const reasons: string[] = []
-  if (read(ratio) && ratio >= RISK_LINES.volatilityHigh) reasons.push(`high volatility, ${times(ratio)}`)
-  if (read(conditions.spreadPct) && conditions.spreadPct >= RISK_LINES.spreadPct) reasons.push(`a spread of ${conditions.spreadPct.toFixed(3)}%`)
-  if (read(conditions.liquidityCover) && conditions.liquidityCover < RISK_LINES.liquidityCover) reasons.push(`the best level covers the stake ${conditions.liquidityCover.toFixed(1)} times`)
-  if (conditions.dissent === true) reasons.push('a model would not take it')
+  if (read(ratio) && ratio >= RISK_LINES.volatilityHigh) reasons.push(t('high volatility, {times}', { times: times(ratio) }))
+  if (read(conditions.spreadPct) && conditions.spreadPct >= RISK_LINES.spreadPct) reasons.push(t('a spread of {spread}', { spread: i18n.pctPlain(conditions.spreadPct, 3) }))
+  if (read(conditions.liquidityCover) && conditions.liquidityCover < RISK_LINES.liquidityCover) reasons.push(t('the best level covers the stake {count} times', { count: num(conditions.liquidityCover, 1, 1) }))
+  if (conditions.dissent === true) reasons.push(t('a model would not take it'))
   if (read(conditions.correlatedShare) && conditions.correlatedShare > RISK_LINES.correlatedShare) {
-    reasons.push(`${Math.round(conditions.correlatedShare * 100)}% of the paper money already out on this side on coins that move with Bitcoin`)
+    reasons.push(t('{share} of the paper money already out on this side on coins that move with Bitcoin', { share: i18n.pctPlain(Math.round(conditions.correlatedShare * 100), 0) }))
   }
   return reasons.length === 0 ? { factor: 1, reasons: [] } : { factor: RISK_LINES.reduced, reasons }
 }
 
 /** The reasons in one breath: "high volatility, 1.8× its usual; a spread of 0.060%". */
-export function riskReasonsText(multiplier: Pick<RiskMultiplier, 'reasons'>): string {
-  return multiplier.reasons.join('; ')
+export function riskReasonsText(multiplier: Pick<RiskMultiplier, 'reasons'>, { t }: I18n = ENGLISH): string {
+  return multiplier.reasons.join(t('; '))
 }
 
 /** Why no trade is made at the conditions, or null: the one condition that refuses. */
-export function riskRefusal(multiplier: RiskMultiplier): string | null {
-  return multiplier.factor === 0 ? `The conditions allow no trade: ${riskReasonsText(multiplier)}.` : null
+export function riskRefusal(multiplier: RiskMultiplier, i18n: I18n = ENGLISH): string | null {
+  return multiplier.factor === 0 ? i18n.t('The conditions allow no trade: {reasons}.', { reasons: riskReasonsText(multiplier, i18n) }) : null
 }
 
 /** The average true range of the last `n` bars, as a percent of the last close: each bar's range

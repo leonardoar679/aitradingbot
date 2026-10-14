@@ -1,4 +1,5 @@
 import type { AccountLedgerEntry, PaperAccount } from '../../shared/ipc'
+import { ENGLISH, type I18n } from '../../shared/i18n/translate'
 
 // The simulated account behind paper trading. Every function here is pure: it takes an account
 // and returns a new one, so the rules can be tested without a running app and a caller can never
@@ -58,32 +59,42 @@ export function fundedAssets(account: PaperAccount): { asset: string; amount: nu
  * Returning the reason rather than a boolean is the point: "Create" being greyed out with no
  * explanation is the failure mode this app keeps running into, and money is the most confusing
  * place for it to happen. */
-export function describeInsufficientFunds({
-  account,
-  asset,
-  amount,
-  committed
-}: {
-  account: PaperAccount
-  asset: string
-  amount: number
-  committed: number
-}): string | null {
+export function describeInsufficientFunds(
+  {
+    account,
+    asset,
+    amount,
+    committed
+  }: {
+    account: PaperAccount
+    asset: string
+    amount: number
+    committed: number
+  },
+  i18n: I18n = ENGLISH
+): string | null {
   // Not >= 0: a NaN amount passes no comparison at all, so testing the good case explicitly is
   // what keeps it out. JSON cannot store NaN either, so one that reached storage would come back
   // as null and read as zero.
-  if (!Number.isFinite(amount)) return 'Enter a valid amount.'
-  if (amount <= 0) return 'Amount must be greater than zero.'
+  const { t, num } = i18n
+  if (!Number.isFinite(amount)) return t('Enter a valid amount.')
+  if (amount <= 0) return t('Amount must be greater than zero.')
 
   const total = totalBalance(account, asset)
   if (total <= 0) {
-    return `This account holds no ${asset}. Add some under Paper Trading before starting a strategy that spends it.`
+    return t('This account holds no {asset}. Add some under Paper Trading before starting a strategy that spends it.', { asset })
   }
   const available = availableBalance(account, asset, committed)
   if (amount > available) {
     const short = amount - available
     const spare = Math.max(0, available)
-    return `Not enough ${asset}: this needs ${amount.toLocaleString()} but only ${spare.toLocaleString()} is free — ${short.toLocaleString()} short. Stop another strategy to release funds, or lower the amount.`
+    const figure = (value: number): string => (i18n.language === 'en' ? value.toLocaleString() : num(value, 0, 3))
+    return t('Not enough {asset}: this needs {needed} but only {free} is free — {short} short. Stop another strategy to release funds, or lower the amount.', {
+      asset,
+      needed: figure(amount),
+      free: figure(spare),
+      short: figure(short)
+    })
   }
   return null
 }

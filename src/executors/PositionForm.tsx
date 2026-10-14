@@ -9,6 +9,9 @@ import {
   notionalFor,
   resolveLeverage
 } from '../../shared/perp'
+import { msg, useI18n } from '../i18n'
+
+const SIDE_WORDS: Record<ExecutorSide, string> = { buy: msg('buy@@order side'), sell: msg('sell@@order side') }
 
 interface PositionFormProps {
   params: PositionExecutorParams
@@ -16,6 +19,11 @@ interface PositionFormProps {
 }
 
 export function PositionForm({ params, onChange }: PositionFormProps): React.JSX.Element {
+  const i18n = useI18n()
+  const { t } = i18n
+  /** A figure the person typed or the form worked out, as English always showed it, else in the language's form. */
+  const figure = (value: number, digits?: number): string =>
+    i18n.language === 'en' ? (digits === undefined ? String(value) : value.toFixed(digits)) : digits === undefined ? i18n.num(value, 0, 8) : i18n.num(value, digits, digits)
   function set<K extends keyof PositionExecutorParams>(key: K, value: PositionExecutorParams[K]): void {
     onChange({ ...params, [key]: value })
   }
@@ -40,14 +48,14 @@ export function PositionForm({ params, onChange }: PositionFormProps): React.JSX
       <div style={{ display: 'flex', gap: '0.5rem' }}>
         {(['buy', 'sell'] as ExecutorSide[]).map((s) => (
           <button key={s} style={sideButtonStyle(params.side === s, s)} onClick={() => set('side', s)}>
-            {s}
+            {t(SIDE_WORDS[s])}
           </button>
         ))}
       </div>
 
       <div style={{ display: 'flex', gap: '0.7rem' }}>
         <div style={{ flex: 1 }}>
-          <label style={fieldLabelStyle()}>Entry Price (blank = market)</label>
+          <label style={fieldLabelStyle()}>{t('Entry Price (blank = market)')}</label>
           <input
             type="number"
             value={params.entryPrice ?? ''}
@@ -56,7 +64,7 @@ export function PositionForm({ params, onChange }: PositionFormProps): React.JSX
           />
         </div>
         <div style={{ flex: 1 }}>
-          <label style={fieldLabelStyle()}>Amount (quote)</label>
+          <label style={fieldLabelStyle()}>{t('Amount (quote)')}</label>
           <input
             type="number"
             value={params.amountQuote || ''}
@@ -68,7 +76,7 @@ export function PositionForm({ params, onChange }: PositionFormProps): React.JSX
 
       <div style={{ display: 'flex', gap: '0.7rem' }}>
         <div style={{ flex: 1 }}>
-          <label style={fieldLabelStyle()}>Take Profit % (optional)</label>
+          <label style={fieldLabelStyle()}>{t('Take Profit % (optional)')}</label>
           <input
             type="number"
             step="0.1"
@@ -78,7 +86,7 @@ export function PositionForm({ params, onChange }: PositionFormProps): React.JSX
           />
         </div>
         <div style={{ flex: 1 }}>
-          <label style={fieldLabelStyle()}>Stop Loss % (optional)</label>
+          <label style={fieldLabelStyle()}>{t('Stop Loss % (optional)')}</label>
           <input
             type="number"
             step="0.1"
@@ -91,7 +99,7 @@ export function PositionForm({ params, onChange }: PositionFormProps): React.JSX
 
       <div style={{ display: 'flex', gap: '0.7rem' }}>
         <div style={{ flex: 1 }}>
-          <label style={fieldLabelStyle()}>Time Limit, hours (optional)</label>
+          <label style={fieldLabelStyle()}>{t('Time Limit, hours (optional)')}</label>
           <input
             type="number"
             value={params.timeLimitSec !== null ? params.timeLimitSec / 3600 : ''}
@@ -100,7 +108,7 @@ export function PositionForm({ params, onChange }: PositionFormProps): React.JSX
           />
         </div>
         <div style={{ flex: 1 }}>
-          <label style={fieldLabelStyle()}>Leverage (blank = 1x, no leverage)</label>
+          <label style={fieldLabelStyle()}>{t('Leverage (blank = 1x, no leverage)')}</label>
           <input
             type="number"
             step="1"
@@ -117,24 +125,33 @@ export function PositionForm({ params, onChange }: PositionFormProps): React.JSX
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
         {leverageOutOfRange ? (
           <p style={{ fontSize: '0.72rem', color: 'var(--down)', margin: 0 }}>
-            Leverage has to be between {MIN_LEVERAGE} and {MAX_LEVERAGE}. This will be simulated at 1x.
+            {t('Leverage has to be between {min} and {max}. This will be simulated at 1x.', { min: MIN_LEVERAGE, max: MAX_LEVERAGE })}
           </p>
         ) : leverage === 1 ? (
           <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
-            1x is no leverage: you hold what you paid for, and no fall in price can close the position for you.
+            {t('1x is no leverage: you hold what you paid for, and no fall in price can close the position for you.')}
           </p>
         ) : (
           <>
             <p style={{ fontSize: '0.72rem', color: 'var(--down)', margin: 0, fontWeight: 600 }}>
-              At {leverage}x, {params.amountQuote || 0} controls {notionalFor(params.amountQuote || 0, leverage)} of the
-              market. A {distancePct !== null ? distancePct.toFixed(2) : '—'}% move against you
-              {liqPrice !== null ? ' — down to ' + liqPrice.toFixed(2) : ''} wipes out the entire{' '}
-              {params.amountQuote || 0}: the position is closed for you and the whole amount is gone.
+              {((): string => {
+                const values = {
+                  leverage: figure(leverage),
+                  amount: figure(params.amountQuote || 0),
+                  notional: figure(notionalFor(params.amountQuote || 0, leverage)),
+                  distance: distancePct !== null ? figure(distancePct, 2) : '—',
+                  price: liqPrice !== null ? figure(liqPrice, 2) : ''
+                }
+                return liqPrice !== null
+                  ? t('At {leverage}x, {amount} controls {notional} of the market. A {distance}% move against you — down to {price} wipes out the entire {amount}: the position is closed for you and the whole amount is gone.', values)
+                  : t('At {leverage}x, {amount} controls {notional} of the market. A {distance}% move against you wipes out the entire {amount}: the position is closed for you and the whole amount is gone.', values)
+              })()}
             </p>
             <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
-              The fees scale too — {leverage}x leverage costs {leverage}x the trading fee on the same amount — and a
-              leveraged position pays funding roughly every 8 hours just to stay open. Simulation only: this app has no
-              futures connection, so live trading is refused above 1x.
+              {t(
+                'The fees scale too — {leverage}x leverage costs {leverage}x the trading fee on the same amount — and a leveraged position pays funding roughly every 8 hours just to stay open. Simulation only: this app has no futures connection, so live trading is refused above 1x.',
+                { leverage: figure(leverage) }
+              )}
             </p>
           </>
         )}
@@ -146,13 +163,13 @@ export function PositionForm({ params, onChange }: PositionFormProps): React.JSX
           checked={trailingEnabled}
           onChange={(e) => set('trailingStop', e.target.checked ? { activationPct: 1, trailPct: 0.5 } : null)}
         />
-        Trailing stop
+        {t('Trailing stop')}
       </label>
 
       {trailingEnabled && params.trailingStop && (
         <div style={{ display: 'flex', gap: '0.7rem' }}>
           <div style={{ flex: 1 }}>
-            <label style={fieldLabelStyle()}>Activation %</label>
+            <label style={fieldLabelStyle()}>{t('Activation %')}</label>
             <input
               type="number"
               step="0.1"
@@ -162,7 +179,7 @@ export function PositionForm({ params, onChange }: PositionFormProps): React.JSX
             />
           </div>
           <div style={{ flex: 1 }}>
-            <label style={fieldLabelStyle()}>Trail %</label>
+            <label style={fieldLabelStyle()}>{t('Trail %')}</label>
             <input
               type="number"
               step="0.1"

@@ -1,6 +1,8 @@
 import type { Horizon } from './features'
 import type { ForecastModelId } from './models'
 import type { ModelScore } from './walkForward'
+import { HORIZON_SPAN } from './words'
+import { ENGLISH, type I18n } from '../i18n/translate'
 
 // PROMOTION AND DEGRADATION (the V6 document, §104-105; V6 Stage 5, 13 October 2026).
 //
@@ -50,27 +52,53 @@ export function promotionChecklist(score: ModelScore, persistence: ModelScore, t
 
 /** Whether a model's last week went wrong, and why. `recentTradesNet` is its last thirty trades' net,
  * or null without thirty. Too few outcomes in the week to say: not degraded. */
-export function degradationOf(recent: ModelScore, persistenceRecent: ModelScore, recentTradesNet: number | null): { degraded: boolean; reasons: string[] } {
-  if (recent.n < DEGRADATION_LINES.minOutcomes) return { degraded: false, reasons: [] }
-  const reasons: string[] = []
-  if (!within(recent.coverage80, DEGRADATION_LINES.coverageTolerance)) reasons.push(`its 80% interval held ${pct(recent.coverage80)} of the week's outcomes`)
-  if (recent.pinball > persistenceRecent.pinball) reasons.push(`its pinball loss (${recent.pinball.toFixed(4)}) was above persistence's (${persistenceRecent.pinball.toFixed(4)})`)
-  if (Math.abs(recent.bias) > DEGRADATION_LINES.biasLimit) reasons.push(`its median was off by ${recent.bias.toFixed(2)} of the usual move on average`)
-  if (recentTradesNet !== null && recentTradesNet < 0) reasons.push(`the trader's last ${DEGRADATION_LINES.trades} trades on it lost ${(-recentTradesNet * 100).toFixed(2)}%`)
-  return { degraded: reasons.length > 0, reasons }
+/** Why a model is degraded, as a code and its figures, worded in any language by degradationText (V6
+ * Stage 14). */
+export type DegradationReason =
+  | { code: 'coverage'; coverage80: number }
+  | { code: 'pinball'; pinball: number; persistence: number }
+  | { code: 'bias'; bias: number }
+  | { code: 'trades'; lostPct: number }
+
+export function degradationText(reason: DegradationReason, { t, num, pctPlain }: I18n = ENGLISH): string {
+  switch (reason.code) {
+    case 'coverage':
+      return t("its 80% interval held {share} of the week's outcomes", { share: pctPlain(reason.coverage80 * 100, 1) })
+    case 'pinball':
+      return t("its pinball loss ({loss}) was above persistence's ({floor})", { loss: num(reason.pinball, 4, 4), floor: num(reason.persistence, 4, 4) })
+    case 'bias':
+      return t('its median was off by {bias} of the usual move on average', { bias: num(reason.bias, 2, 2) })
+    case 'trades':
+      return t("the trader's last {count} trades on it lost {loss}", { count: DEGRADATION_LINES.trades, loss: pctPlain(reason.lostPct, 2) })
+  }
 }
 
-const HORIZON_WORDS: Record<Horizon, string> = { minutes5: '5 minutes', minutes15: '15 minutes', hour1: '1 hour', hours4: '4 hours', hours24: '24 hours' }
+export function degradationOf(recent: ModelScore, persistenceRecent: ModelScore, recentTradesNet: number | null): { degraded: boolean; reasons: string[]; codes: DegradationReason[] } {
+  if (recent.n < DEGRADATION_LINES.minOutcomes) return { degraded: false, reasons: [], codes: [] }
+  const codes: DegradationReason[] = []
+  if (!within(recent.coverage80, DEGRADATION_LINES.coverageTolerance)) codes.push({ code: 'coverage', coverage80: recent.coverage80 })
+  if (recent.pinball > persistenceRecent.pinball) codes.push({ code: 'pinball', pinball: recent.pinball, persistence: persistenceRecent.pinball })
+  if (Math.abs(recent.bias) > DEGRADATION_LINES.biasLimit) codes.push({ code: 'bias', bias: recent.bias })
+  if (recentTradesNet !== null && recentTradesNet < 0) codes.push({ code: 'trades', lostPct: -recentTradesNet * 100 })
+  return { degraded: codes.length > 0, reasons: codes.map((code) => degradationText(code)), codes }
+}
 
 /** A day: a degraded model is told once a day on its thread. */
 export const DEGRADED_THREAD_SECONDS = 86_400
 
 /** What the desktop is told of a degraded model, once a day on its thread. */
-export function degradedForecastNotice(model: ForecastModelId, horizon: Horizon, reasons: readonly string[]): { title: string; body: string; thread: string; extra: { kind: 'MODEL_DEGRADED'; severity: 'watch'; thread: string; threadSeconds: number } } {
+export function degradedForecastNotice(
+  model: ForecastModelId,
+  horizon: Horizon,
+  reasons: readonly (string | DegradationReason)[],
+  i18n: I18n = ENGLISH
+): { title: string; body: string; thread: string; extra: { kind: 'MODEL_DEGRADED'; severity: 'watch'; thread: string; threadSeconds: number } } {
+  const { t } = i18n
   const thread = `degraded:forecast:${model}:${horizon}`
+  const worded = reasons.map((reason) => (typeof reason === 'string' ? reason : degradationText(reason, i18n)))
   return {
-    title: `Forecast model degraded: ${model}, ${HORIZON_WORDS[horizon]}`,
-    body: `Over the last week ${reasons.join('; ')}. It stays computed and on record; its weight in the forecast falls with its score. Nothing was placed or sold.`,
+    title: t('Forecast model degraded: {model}, {horizon}', { model, horizon: t(HORIZON_SPAN[horizon]) }),
+    body: t('Over the last week {reasons}. It stays computed and on record; its weight in the forecast falls with its score. Nothing was placed or sold.', { reasons: worded.join(t('; ')) }),
     thread,
     extra: { kind: 'MODEL_DEGRADED', severity: 'watch', thread, threadSeconds: DEGRADED_THREAD_SECONDS }
   }

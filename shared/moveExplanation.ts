@@ -1,5 +1,6 @@
 import type { Candle } from './ipc'
 import { expectedDirection, type ReadStory } from './newsFeed'
+import { ENGLISH, msg, type I18n } from './i18n/translate'
 
 // "WHY DID IT MOVE?" (the second V3 document, §30): a pair's move set against Bitcoin's over the
 // same minutes, its volume against its usual, and the news that names it -- and a label for how sure
@@ -25,6 +26,16 @@ export type CauseLabel = 'KNOWN' | 'PROBABLE' | 'POSSIBLE' | 'UNKNOWN'
  * - UNRELATED: a story published after the move began, which cannot have caused it;
  * - UNKNOWN: a story that only mentions the coin, faintly. */
 export type CauseRole = 'PRIMARY CATALYST' | 'SECONDARY' | 'MARKET AMPLIFIER' | 'UNRELATED' | 'UNKNOWN'
+
+/** Each label and role as the window shows it, in a language (V6 Stage 14). */
+export const LABEL_WORDS: Record<CauseLabel, string> = { KNOWN: msg('KNOWN'), PROBABLE: msg('PROBABLE'), POSSIBLE: msg('POSSIBLE'), UNKNOWN: msg('UNKNOWN') }
+export const ROLE_WORDS: Record<CauseRole, string> = {
+  'PRIMARY CATALYST': msg('PRIMARY CATALYST'),
+  SECONDARY: msg('SECONDARY'),
+  'MARKET AMPLIFIER': msg('MARKET AMPLIFIER'),
+  UNRELATED: msg('UNRELATED'),
+  UNKNOWN: msg('UNKNOWN@@a role')
+}
 
 export interface MoveCause {
   kind: 'news' | 'market' | 'volume'
@@ -127,7 +138,14 @@ export function explainMove(input: {
   nowSec: number
   /** The analyst's conclusion on file, for the timeline; null or absent for none. */
   reading?: { at: number; text: string } | null
+  /** The language its sentences are in (V6 Stage 14): English, as a model is shown them, unless the
+   * window hands the person's. Its labels and figures are the same in every one. */
+  i18n?: I18n
 }): MoveExplanation {
+  const i18n = input.i18n ?? ENGLISH
+  const { t, num, utcTime } = i18n
+  const signedIn = (value: number): string => (i18n.language === 'en' ? signed(value) : Math.abs(value) < 0.005 ? i18n.pct(0, 2) : i18n.pct(value, 2))
+  const clock = (sec: number): string => (i18n.language === 'en' ? utcClock(sec) : utcTime(sec * 1000))
   const minutes = input.windowMinutes ?? 60
   const { movePct, volumeRatio, moveStartAt, volumePeak } = windowOf(input.bars, minutes, input.nowSec)
   const btcMovePct = input.ticker === 'BTC' ? movePct : windowOf(input.btcBars, minutes, input.nowSec).movePct
@@ -165,41 +183,50 @@ export function explainMove(input: {
     else if (relationship === 'DIRECT' && story.sourceClass === 'exchange') known = true
     else if (relationship === 'DIRECT' && !against) probable = true
     else possible = true
+    const source = story.alsoIn.length > 0 ? t('{source} and {count} more', { source: story.sourceName, count: story.alsoIn.length }) : story.sourceName
+    const told = t('{title} ({source}, {time} UTC)', { title: story.title, source, time: clock(story.publishedAt) })
     causes.push({
       kind: 'news',
-      text: `${story.title} (${story.sourceName}${story.alsoIn.length > 0 ? ` and ${story.alsoIn.length} more` : ''}, ${utcClock(story.publishedAt)} UTC)${against ? ' — it would have moved it the other way' : ''}${late ? ' — published after the move began' : ''}`,
+      text: `${told}${against ? t(' — it would have moved it the other way') : ''}${late ? t(' — published after the move began') : ''}`,
       relevance,
       role,
       storyId: story.id,
       url: story.url
     })
-    timeline.push({ at: story.publishedAt, kind: 'story', text: `${story.title} (${story.sourceName}): ${role.toLowerCase()}.` })
+    timeline.push({ at: story.publishedAt, kind: 'story', text: t('{title} ({source}): {role}.', { title: story.title, source: story.sourceName, role: i18n.language === 'en' ? role.toLowerCase() : t(ROLE_WORDS[role]) }) })
   }
   if (marketShare !== null && marketShare >= MARKET_SHARE && btcMovePct !== null) {
     possible = true
-    causes.push({ kind: 'market', text: `Bitcoin moved ${signed(btcMovePct)} over the same ${minutes} minutes: about ${Math.round(marketShare * 100)}% of this move.`, relevance: Math.round(marketShare * 80), role: 'MARKET AMPLIFIER' })
+    causes.push({
+      kind: 'market',
+      text: t('Bitcoin moved {move} over the same {minutes} minutes: about {share} of this move.', { move: signedIn(btcMovePct), minutes, share: i18n.pctPlain(Math.round(marketShare * 100), 0) }),
+      relevance: Math.round(marketShare * 80),
+      role: 'MARKET AMPLIFIER'
+    })
   }
   if (volumeRatio !== null && volumeRatio >= SURGE) {
     if (found.length === 0) possible = true
-    causes.push({ kind: 'volume', text: `Volume ${volumeRatio.toFixed(1)}× its usual over those minutes.`, relevance: Math.round(Math.min(70, 20 * volumeRatio)), role: 'SECONDARY' })
+    causes.push({ kind: 'volume', text: t('Volume {ratio}× its usual over those minutes.', { ratio: num(volumeRatio, 1, 1) }), relevance: Math.round(Math.min(70, 20 * volumeRatio)), role: 'SECONDARY' })
   }
   causes.sort((a, b) => b.relevance - a.relevance)
   // The rest of the timeline: the market's move over the window, the volume's peak, the move
   // beginning, and the analyst's reading where there is one.
-  if (btcMovePct !== null && input.ticker !== 'BTC') timeline.push({ at: windowStart, kind: 'market', text: `Bitcoin ${signed(btcMovePct)} over the same ${minutes} minutes.` })
-  if (volumePeak !== null && volumePeak.ratio >= SURGE) timeline.push({ at: volumePeak.at, kind: 'volume', text: `Volume peaks at ${volumePeak.ratio.toFixed(1)}× its usual minute.` })
-  if (moveStartAt !== null && movePct !== null && Math.abs(movePct) >= NOTABLE_MOVE_PCT) timeline.push({ at: moveStartAt, kind: 'price', text: `The move is half made: ${signed(movePct)} by ${utcClock(input.nowSec)} UTC.` })
-  if (input.reading !== undefined && input.reading !== null) timeline.push({ at: input.reading.at, kind: 'reading', text: `The analyst: ${input.reading.text}` })
+  if (btcMovePct !== null && input.ticker !== 'BTC') timeline.push({ at: windowStart, kind: 'market', text: t('Bitcoin {move} over the same {minutes} minutes.', { move: signedIn(btcMovePct), minutes }) })
+  if (volumePeak !== null && volumePeak.ratio >= SURGE) timeline.push({ at: volumePeak.at, kind: 'volume', text: t('Volume peaks at {ratio}× its usual minute.', { ratio: num(volumePeak.ratio, 1, 1) }) })
+  if (moveStartAt !== null && movePct !== null && Math.abs(movePct) >= NOTABLE_MOVE_PCT) timeline.push({ at: moveStartAt, kind: 'price', text: t('The move is half made: {move} by {time} UTC.', { move: signedIn(movePct), time: clock(input.nowSec) }) })
+  if (input.reading !== undefined && input.reading !== null) timeline.push({ at: input.reading.at, kind: 'reading', text: t('The analyst: {words}', { words: input.reading.text }) })
   timeline.sort((a, b) => a.at - b.at || a.kind.localeCompare(b.kind))
 
   const what =
     movePct === null
-      ? `${input.symbol}'s last ${minutes} minutes could not be read.`
-      : `${input.symbol} moved ${signed(movePct)} in ${minutes} minutes${volumeRatio === null ? '' : ` on ${volumeRatio.toFixed(1)}× its usual volume`}.`
+      ? t("{pair}'s last {minutes} minutes could not be read.", { pair: input.symbol, minutes })
+      : volumeRatio === null
+        ? t('{pair} moved {move} in {minutes} minutes.', { pair: input.symbol, move: signedIn(movePct), minutes })
+        : t('{pair} moved {move} in {minutes} minutes on {ratio}× its usual volume.', { pair: input.symbol, move: signedIn(movePct), minutes, ratio: num(volumeRatio, 1, 1) })
   // A move too small to be one, or one that could not be read, has nothing to explain: what was
   // found is still listed, and no cause is named.
   if (movePct === null || Math.abs(movePct) < NOTABLE_MOVE_PCT) {
-    const quiet = movePct === null ? '' : ` That is under ${NOTABLE_MOVE_PCT}% either way: not a move to explain.`
+    const quiet = movePct === null ? '' : ` ${t('That is under {line} either way: not a move to explain.', { line: i18n.share(NOTABLE_MOVE_PCT) })}`
     return { symbol: input.symbol, windowMinutes: minutes, movePct, volumeRatio, btcMovePct, marketShare, label: 'UNKNOWN', causes, summary: `${what}${quiet}`, moveStartAt, timeline }
   }
 
@@ -208,9 +235,13 @@ export function explainMove(input: {
   // of what was found for POSSIBLE. Bitcoin's share, where it made most of the move, is said too.
   const named = label === 'KNOWN' || label === 'PROBABLE' ? causes.find((cause) => cause.kind === 'news') : causes[0]
   const market = causes.find((cause) => cause.kind === 'market')
+  const hours = minutes / 60 + LEAD_SECONDS / 3600
+  const which = label === 'KNOWN' ? t('Known cause') : label === 'PROBABLE' ? t('Probable cause') : t('Possible cause')
   const why =
     label === 'UNKNOWN' || named === undefined
-      ? `No cause found: no story names ${input.ticker} in the last ${minutes / 60 + LEAD_SECONDS / 3600} hours${btcMovePct === null ? '' : `, and Bitcoin moved ${signed(btcMovePct)}`}.`
-      : `${label === 'KNOWN' ? 'Known cause' : label === 'PROBABLE' ? 'Probable cause' : 'Possible cause'}: ${named.text}${/[.!?]$/.test(named.text) ? '' : '.'}${market !== undefined && market !== named ? ` ${market.text}` : ''}`
+      ? btcMovePct === null
+        ? t('No cause found: no story names {coin} in the last {hours} hours.', { coin: input.ticker, hours })
+        : t('No cause found: no story names {coin} in the last {hours} hours, and Bitcoin moved {move}.', { coin: input.ticker, hours, move: signedIn(btcMovePct) })
+      : `${t('{which}: {cause}', { which, cause: named.text })}${/[.!?。！？।؟]$/.test(named.text) ? '' : t('.@@end of a sentence')}${market !== undefined && market !== named ? ` ${market.text}` : ''}`
   return { symbol: input.symbol, windowMinutes: minutes, movePct, volumeRatio, btcMovePct, marketShare, label, causes, summary: `${what} ${why}`, moveStartAt, timeline }
 }

@@ -1,6 +1,7 @@
 import { btcMoveAgainst } from './aiWatchPaper'
 import type { Candle, ExecutorSide, PositionExecutorParams } from './ipc'
 import { spreadPct } from './marketScanner'
+import { ENGLISH, type I18n } from './i18n/translate'
 
 // LIVE PRICES: WHAT A PAIR TRADES AT NOW, AS AGAINST WHAT ITS LAST CANDLE CLOSED AT.
 //
@@ -133,18 +134,28 @@ export interface ExecutionQuality {
   reasons: string[]
 }
 
-const short = (value: number): string => Number(value.toPrecision(4)).toLocaleString('en-US')
+/** A price or an amount at four significant figures, in a language. */
+const short = (value: number, { num }: I18n = ENGLISH): string => num(Number(value.toPrecision(4)), 0, 10)
 
-/** How good the conditions are to execute in, now, for a stake of `stakeQuote` on `side`. */
-export function executionQuality(input: { book: LiveBook | null; depth?: LiveDepth | null; side: ExecutorSide; stakeQuote: number; nowMs: number }): ExecutionQuality {
+/** How good the conditions are to execute in, now, for a stake of `stakeQuote` on `side`. Its reasons
+ * are in English unless handed a language (V6 Stage 14). */
+export function executionQuality(input: { book: LiveBook | null; depth?: LiveDepth | null; side: ExecutorSide; stakeQuote: number; nowMs: number; i18n?: I18n }): ExecutionQuality {
   const { book } = input
-  if (book === null) return { score: 0, spreadPct: null, depthQuote: null, ageMs: null, reasons: ['no live price'] }
+  const i18n = input.i18n ?? ENGLISH
+  const { t, pctPlain, share } = i18n
+  if (book === null) return { score: 0, spreadPct: null, depthQuote: null, ageMs: null, reasons: [t('no live price')] }
   const reasons: string[] = []
   const spread = bookSpreadPct(book)
   // Full marks up to a tight spread, nothing at the line a trade is entered at, straight between.
   const spreadPart = spread === null ? 0 : clamp01(1 - (spread - TIGHT_SPREAD_PCT) / (MAX_SPREAD_PCT - TIGHT_SPREAD_PCT))
-  if (spread === null) reasons.push('the book is one-sided or crossed')
-  else if (spread > MAX_SPREAD_PCT / 2) reasons.push(`spread ${spread.toFixed(3)}%${spread > MAX_SPREAD_PCT ? `, over the ${MAX_SPREAD_PCT}% a trade is entered at` : ''}`)
+  if (spread === null) reasons.push(t('the book is one-sided or crossed'))
+  else if (spread > MAX_SPREAD_PCT / 2) {
+    reasons.push(
+      spread > MAX_SPREAD_PCT
+        ? t('spread {spread}, over the {line} a trade is entered at', { spread: pctPlain(spread, 3), line: share(MAX_SPREAD_PCT) })
+        : t('spread {spread}', { spread: pctPlain(spread, 3) })
+    )
+  }
   const levels = input.depth === undefined || input.depth === null ? null : input.side === 'buy' ? input.depth.asks : input.depth.bids
   const depthQuote =
     levels !== null && levels.length > 0
@@ -154,10 +165,13 @@ export function executionQuality(input: { book: LiveBook | null; depth?: LiveDep
         : book.bid * book.bidQty
   // Ten stakes on the side a fill would take is plenty; one stake is the least worth trading into.
   const depthPart = input.stakeQuote > 0 ? clamp01(depthQuote / (input.stakeQuote * 10)) : 1
-  if (depthPart < 1) reasons.push(`${short(depthQuote)} on offer${levels === null ? ' at the best price' : ' in the five best levels'}, against a stake of ${short(input.stakeQuote)}`)
+  if (depthPart < 1) {
+    const amounts = { depth: short(depthQuote, i18n), stake: short(input.stakeQuote, i18n) }
+    reasons.push(levels === null ? t('{depth} on offer at the best price, against a stake of {stake}', amounts) : t('{depth} on offer in the five best levels, against a stake of {stake}', amounts))
+  }
   const ageMs = priceAgeMs(book, input.nowMs)
   const freshPart = ageMs <= FRESH_PRICE_MS ? 1 : clamp01(1 - (ageMs - FRESH_PRICE_MS) / (STALE_PRICE_MS - FRESH_PRICE_MS))
-  if (freshPart < 1) reasons.push(`price ${Math.round(ageMs / 1000)} s old`)
+  if (freshPart < 1) reasons.push(t('price {seconds} s old', { seconds: Math.round(ageMs / 1000) }))
   return { score: Math.round(100 * (0.5 * spreadPart + 0.3 * depthPart + 0.2 * freshPart)), spreadPct: spread, depthQuote, ageMs, reasons }
 }
 
@@ -170,10 +184,6 @@ export type LiveVerdict =
   /** It no longer stands, or cannot be judged: expired, Bitcoin against it by the watch's
    * safeguard, a spread over the line, or no fresh price. */
   | { state: 'invalidated'; price: number | null; reasons: string[] }
-
-function utcClock(sec: number): string {
-  return new Date(sec * 1000).toISOString().slice(11, 16)
-}
 
 /** Bitcoin's minutes with the price now as the last one, for btcMoveAgainst: the rule the watch
  * drops a waiting paper trade by, read from the stream instead of from a fetch. */
@@ -197,33 +207,38 @@ export function revalidate(input: {
   btcPrice: number | null
   btcLimitPct: number
   nowMs: number
+  /** The language its reasons are in: English unless handed another (V6 Stage 14). */
+  i18n?: I18n
 }): LiveVerdict {
+  const i18n = input.i18n ?? ENGLISH
+  const { t, pctPlain, share, utcTime } = i18n
   const nowSec = Math.floor(input.nowMs / 1000)
   const reasons: string[] = []
-  if (nowSec >= input.expiresAt) reasons.push(`its entry expired at ${utcClock(input.expiresAt)} UTC`)
+  if (nowSec >= input.expiresAt) reasons.push(t('its entry expired at {time} UTC', { time: utcTime(input.expiresAt * 1000) }))
   const move = btcMoveAgainst({ side: input.side, eventTime: input.eventTime, btc: btcWithNow(input.btcMinutes, input.btcPrice, nowSec), limitPct: input.btcLimitPct })
-  if (move !== null) reasons.push(`Bitcoin ${move < 0 ? 'fell' : 'rose'} ${Math.abs(move).toFixed(2)}% since the event`)
+  if (move !== null) reasons.push(move < 0 ? t('Bitcoin fell {move} since the event', { move: pctPlain(Math.abs(move), 2) }) : t('Bitcoin rose {move} since the event', { move: pctPlain(Math.abs(move), 2) }))
   const { book } = input
-  if (book === null) reasons.push('no live price')
-  else if (isStale(book, input.nowMs)) reasons.push(`the price is ${Math.round(priceAgeMs(book, input.nowMs) / 1000)} s old`)
+  if (book === null) reasons.push(t('no live price'))
+  else if (isStale(book, input.nowMs)) reasons.push(t('the price is {seconds} s old', { seconds: Math.round(priceAgeMs(book, input.nowMs) / 1000) }))
   const spread = book === null ? null : bookSpreadPct(book)
-  if (book !== null && spread === null) reasons.push('the book is one-sided or crossed')
-  if (spread !== null && spread > MAX_SPREAD_PCT) reasons.push(`the spread is ${spread.toFixed(3)}%, over the ${MAX_SPREAD_PCT}% a trade is entered at`)
+  if (book !== null && spread === null) reasons.push(t('the book is one-sided or crossed'))
+  if (spread !== null && spread > MAX_SPREAD_PCT) reasons.push(t('the spread is {spread}, over the {line} a trade is entered at', { spread: pctPlain(spread, 3), line: share(MAX_SPREAD_PCT) }))
   const price = book === null ? null : fillPrice(book, input.side)
   if (reasons.length > 0 || price === null) return { state: 'invalidated', price, reasons }
-  if (price < input.entryMin) return { state: 'waiting', price, reasons: [`${input.side === 'buy' ? 'the ask' : 'the bid'} ${short(price)} is under the range`] }
-  if (price > input.entryMax) return { state: 'waiting', price, reasons: [`${input.side === 'buy' ? 'the ask' : 'the bid'} ${short(price)} is over the range`] }
+  const at = { price: short(price, i18n) }
+  if (price < input.entryMin) return { state: 'waiting', price, reasons: [input.side === 'buy' ? t('the ask {price} is under the range', at) : t('the bid {price} is under the range', at)] }
+  if (price > input.entryMax) return { state: 'waiting', price, reasons: [input.side === 'buy' ? t('the ask {price} is over the range', at) : t('the bid {price} is over the range', at)] }
   return { state: 'enterable', price, reasons: [] }
 }
 
 /** Why a paper trade the watch would open now is refused on the live price, or null: no fresh price
  * to know the market by, or a spread over the line. Only ever opens less. */
-export function livePaperBlock(book: LiveBook | null, nowMs: number): string | null {
-  if (book === null) return 'The live price could not be read, so the market it would enter is not known.'
-  if (isStale(book, nowMs)) return `The live price is ${Math.round(priceAgeMs(book, nowMs) / 1000)} seconds old, so the market it would enter is not known.`
+export function livePaperBlock(book: LiveBook | null, nowMs: number, { t, pctPlain, share }: I18n = ENGLISH): string | null {
+  if (book === null) return t('The live price could not be read, so the market it would enter is not known.')
+  if (isStale(book, nowMs)) return t('The live price is {seconds} seconds old, so the market it would enter is not known.', { seconds: Math.round(priceAgeMs(book, nowMs) / 1000) })
   const spread = bookSpreadPct(book)
-  if (spread === null) return 'The book is one-sided or crossed, so no fill price can be known.'
-  if (spread > MAX_SPREAD_PCT) return `The spread is ${spread.toFixed(3)}%, over the ${MAX_SPREAD_PCT}% a trade is entered at.`
+  if (spread === null) return t('The book is one-sided or crossed, so no fill price can be known.')
+  if (spread > MAX_SPREAD_PCT) return t('The spread is {spread}, over the {line} a trade is entered at.', { spread: pctPlain(spread, 3), line: share(MAX_SPREAD_PCT) })
   return null
 }
 
@@ -232,12 +247,15 @@ export function livePaperBlock(book: LiveBook | null, nowMs: number): string | n
  * stake. A liquid pair's best level holds thousands; a thin one can hold less than one small trade,
  * and a fill there would go through the levels after it (the document's §25, "book liquidity
  * disappeared"). With no book, livePaperBlock has said so. Only ever opens less. */
-export function thinBookBlock(book: LiveBook | null, side: ExecutorSide, amountQuote: number): string | null {
+export function thinBookBlock(book: LiveBook | null, side: ExecutorSide, amountQuote: number, i18n: I18n = ENGLISH): string | null {
   if (book === null) return null
   const price = fillPrice(book, side)
   const held = price * (side === 'buy' ? book.askQty : book.bidQty)
   if (!Number.isFinite(held) || held >= amountQuote) return null
-  return `The ${side === 'buy' ? 'ask' : 'bid'} holds ${short(held)} in the quote, less than the ${short(amountQuote)} it would take, so a fill would go through the book.`
+  const values = { held: short(held, i18n), needed: short(amountQuote, i18n) }
+  return side === 'buy'
+    ? i18n.t('The ask holds {held} in the quote, less than the {needed} it would take, so a fill would go through the book.', values)
+    : i18n.t('The bid holds {held} in the quote, less than the {needed} it would take, so a fill would go through the book.', values)
 }
 
 /** The fill a paper trade takes from the live book the second it is made, or null: the ask (for a

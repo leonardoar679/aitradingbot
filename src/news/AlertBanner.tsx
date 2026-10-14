@@ -3,6 +3,7 @@ import { criticalReminderDue } from '../../shared/alerts'
 import { bannerAlerts, dismissAlert, subscribeAlerts, type AlertRecord } from './alertStore'
 import { playSound } from '../sound/player'
 import { soundPrefs } from '../sound/hearing'
+import { useI18n } from '../i18n'
 
 /** How often the banner looks at the clock for the minute's reminder. */
 const REMINDER_LOOK_MS = 5000
@@ -13,6 +14,7 @@ const REMINDER_LOOK_MS = 5000
  * where the main process says notices are on -- heard whatever the sound switch says. It shows and
  * reminds; it acts on nothing. */
 export function AlertBanner(): React.JSX.Element | null {
+  const { t } = useI18n()
   const [alerts, setAlerts] = useState<AlertRecord[]>([])
   useEffect(() => subscribeAlerts((list) => setAlerts(bannerAlerts(list))), [])
   /** When the banner last sounded: the notice itself, when the banner came up. */
@@ -41,22 +43,24 @@ export function AlertBanner(): React.JSX.Element | null {
     <div role="alert" style={{ background: 'color-mix(in srgb, var(--down) 18%, var(--bg-app))', borderBottom: '1px solid var(--down)' }}>
       {alerts.slice(0, 3).map((alert) => (
         <div key={alert.id} style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', padding: '0.45rem 1rem', fontSize: '0.8rem', color: 'var(--text-primary)' }}>
-          <strong style={{ color: 'var(--down)', whiteSpace: 'nowrap' }}>{alert.title}</strong>
-          <span style={{ color: 'var(--text-secondary)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{alert.body}</span>
+          {/* What was told, in the language it was told in: dir auto, so an English notice in an Arabic
+              window reads left to right. */}
+          <strong dir="auto" style={{ color: 'var(--down)', whiteSpace: 'nowrap' }}>{alert.title}</strong>
+          <span dir="auto" style={{ color: 'var(--text-secondary)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{alert.body}</span>
           {alert.url !== undefined && (
             <button
               onClick={() => void window.api.feed.openLink(alert.url as string).catch(() => undefined)}
               style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '0.2rem 0.6rem', fontSize: '0.74rem', color: 'var(--text-primary)', cursor: 'pointer' }}
             >
-              Open
+              {t('Open@@a link')}
             </button>
           )}
           <button
-            aria-label={`Dismiss: ${alert.title}`}
+            aria-label={t('Dismiss: {title}', { title: alert.title })}
             onClick={() => dismissAlert(alert.id)}
             style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '0.2rem 0.6rem', fontSize: '0.74rem', color: 'var(--text-primary)', cursor: 'pointer' }}
           >
-            Dismiss
+            {t('Dismiss')}
           </button>
         </div>
       ))}

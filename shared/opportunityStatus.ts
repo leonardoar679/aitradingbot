@@ -1,3 +1,4 @@
+import { ENGLISH, msg, type I18n } from './i18n/translate'
 // ONE STATUS FOR AN OPPORTUNITY (the V5 document, §42; V5 Stage 6, 8 October 2026). Where an event
 // stands was said in three places -- the feed's word (waiting, asked, valid, open, expired, closed:
 // src/agents/opportunities.ts feedItemStatus), the live check's (ENTERABLE, WAITING, INVALIDATED:
@@ -47,17 +48,19 @@ export function opportunityStatusOf(input: OpportunityStatusInput): OpportunityS
   return 'qualified'
 }
 
-export function describeOpportunityStatus(status: OpportunityStatus): { word: string; tone: 'up' | 'gold' | 'down' | 'muted' | 'primary'; detail: string } {
-  const shown: Record<OpportunityStatus, { word: string; tone: 'up' | 'gold' | 'down' | 'muted' | 'primary'; detail: string }> = {
-    discovered: { word: 'DISCOVERED', tone: 'muted', detail: 'Raised by the scanner; no model has answered it.' },
-    analysing: { word: 'ANALYSING', tone: 'primary', detail: 'A call about it is in the air.' },
-    no_trade: { word: 'NO TRADE', tone: 'muted', detail: 'The models answered, and none would act on it.' },
-    qualified: { word: 'QUALIFIED', tone: 'gold', detail: 'An entry is on offer and waits for its price to come into the range, or for the stream to be read.' },
-    ready: { word: 'READY', tone: 'up', detail: 'An entry is on offer and the live price is inside its range, fresh, on a spread within the line.' },
-    executed: { word: 'EXECUTED', tone: 'up', detail: 'A paper trade of the app\'s own is, or was, open on it.' },
-    missed: { word: 'MISSED', tone: 'down', detail: 'An entry was there to take and the app opened no paper trade on it: a refusal on file says why, or its paper trades were off.' },
-    invalidated: { word: 'INVALIDATED', tone: 'down', detail: 'The live check ended it: Bitcoin against it, the spread over the line, or no fresh price.' },
-    expired: { word: 'EXPIRED', tone: 'muted', detail: 'Its entry ran out, and the price never came into the range.' }
-  }
-  return shown[status]
+const STATUS_SHOWN: Record<OpportunityStatus, { word: string; tone: 'up' | 'gold' | 'down' | 'muted' | 'primary'; detail: string }> = {
+  discovered: { word: msg('DISCOVERED'), tone: 'muted', detail: msg('Raised by the scanner; no model has answered it.') },
+  analysing: { word: msg('ANALYSING'), tone: 'primary', detail: msg('A call about it is in the air.') },
+  no_trade: { word: msg('NO TRADE'), tone: 'muted', detail: msg('The models answered, and none would act on it.') },
+  qualified: { word: msg('QUALIFIED'), tone: 'gold', detail: msg('An entry is on offer and waits for its price to come into the range, or for the stream to be read.') },
+  ready: { word: msg('READY'), tone: 'up', detail: msg('An entry is on offer and the live price is inside its range, fresh, on a spread within the line.') },
+  executed: { word: msg('EXECUTED'), tone: 'up', detail: msg("A paper trade of the app's own is, or was, open on it.") },
+  missed: { word: msg('MISSED'), tone: 'down', detail: msg('An entry was there to take and the app opened no paper trade on it: a refusal on file says why, or its paper trades were off.') },
+  invalidated: { word: msg('INVALIDATED'), tone: 'down', detail: msg('The live check ended it: Bitcoin against it, the spread over the line, or no fresh price.') },
+  expired: { word: msg('EXPIRED'), tone: 'muted', detail: msg('Its entry ran out, and the price never came into the range.') }
+}
+
+export function describeOpportunityStatus(status: OpportunityStatus, { t }: I18n = ENGLISH): { word: string; tone: 'up' | 'gold' | 'down' | 'muted' | 'primary'; detail: string } {
+  const shown = STATUS_SHOWN[status]
+  return { word: t(shown.word), tone: shown.tone, detail: t(shown.detail) }
 }

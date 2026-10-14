@@ -3,6 +3,10 @@ import { edgeOf, type Edge } from './edge'
 import type { Horizon } from './features'
 import { classTradable, type ClassVerdict } from './opportunityClass'
 import type { PricePrediction } from './prediction'
+import { reliabilityReasonText, type ReliabilityReason } from './reliability'
+import { classKeyWords, HORIZON_ADJECTIVE } from './words'
+import { ENGLISH, msg, type I18n } from '../i18n/translate'
+import type { MarketRegime } from '../marketResearch'
 
 // THE FORECAST AND THE TRADE ARE TWO THINGS (the V6 document, §29-30, §62-63; V6 Stage 9, 13 October
 // 2026). A forecast says what may happen; a TradeDecision says whether it is worth trading, and where
@@ -42,13 +46,37 @@ export type NoTradeReason =
   | 'QUALITY_LOW'
   | 'CLASS_NOT_APPROVED'
 
+/** What a reason was read from, so the window can word it in the person's language (V6 Stage 14):
+ * absent on a decision made before. */
+export interface ReasonValues {
+  /** NO_CALL: there was no forecast at the horizon at all. */
+  missing?: boolean
+  expectedPct?: number
+  costPct?: number
+  pProfit?: number
+  side?: 'BUY' | 'SELL'
+  regime?: MarketRegime
+  reliability?: ReliabilityReason[]
+  score?: number
+  spreadPct?: number
+  classKey?: string
+  verdict?: ClassVerdict
+}
+
+export interface DecisionReason {
+  code: NoTradeReason
+  /** In English, as recorded. */
+  text: string
+  values?: ReasonValues
+}
+
 export interface TradeDecision {
   version: string
   pair: string
   horizon: Horizon
   side: 'BUY' | 'SELL' | null
   decision: 'TRADE' | 'NO_TRADE'
-  reasons: { code: NoTradeReason; text: string }[]
+  reasons: DecisionReason[]
   edge: Edge | null
   quality: number
   /** Its opportunity class and the class's verdict (V6 Stage 12); null where none was read. */
@@ -69,44 +97,89 @@ export interface DecisionInput {
   classOf: ((side: 'BUY' | 'SELL') => { key: string; verdict: ClassVerdict }) | null
 }
 
-const VERDICT_WORDS: Record<ClassVerdict, string> = {
-  APPROVED: 'has earned trading',
-  PROBATION: 'is on probation',
-  NOT_ENOUGH: 'has not been traded enough on the replayed weeks to be judged',
-  DISABLED: 'lost on the replayed weeks or on live paper'
+const VERDICT_SENTENCES: Record<ClassVerdict, string> = {
+  APPROVED: msg('Its kind of opportunity ({kind}) has earned trading.'),
+  PROBATION: msg('Its kind of opportunity ({kind}) is on probation.'),
+  NOT_ENOUGH: msg('Its kind of opportunity ({kind}) has not been traded enough on the replayed weeks to be judged.'),
+  DISABLED: msg('Its kind of opportunity ({kind}) lost on the replayed weeks or on live paper.')
 }
 
-const HORIZON_WORDS: Record<Horizon, string> = { minutes5: '5-minute', minutes15: '15-minute', hour1: '1-hour', hours4: '4-hour', hours24: '24-hour' }
-const pct = (value: number): string => `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
+/** A trade against the market's way, side by side: a buy in a falling or panicking market, a sell in a
+ * rising or recovering one. */
+const REGIME_AGAINST: Record<string, string> = {
+  'BUY:bear': msg('A BUY against a bear market.'),
+  'BUY:panic': msg('A BUY against a panic market.'),
+  'SELL:bull': msg('A SELL against a bull market.'),
+  'SELL:recovery': msg('A SELL against a recovery market.')
+}
+
+/** A reason in a language, from its code and what it was read from; one made before it carried its
+ * values reads as recorded. */
+export function reasonText(reason: DecisionReason, horizon: Horizon, i18n: I18n = ENGLISH): string {
+  const values = reason.values
+  if (values === undefined) return reason.text
+  const { t, pct, pctPlain, num } = i18n
+  const words = t(HORIZON_ADJECTIVE[horizon])
+  switch (reason.code) {
+    case 'NO_CALL':
+      return values.missing === true ? t('There is no {horizon} forecast.', { horizon: words }) : t('The {horizon} forecast calls no way.', { horizon: words })
+    case 'UNCERTAIN':
+      return t("The {horizon} range is over three times as wide as this kind of coin's usual: the forecast does not know enough.", { horizon: words })
+    case 'EDGE_UNDER_COSTS':
+      return t("The move it expects ({expected}) does not clear a round trip's {cost}.", { expected: pct(values.expectedPct ?? Number.NaN, 2), cost: pctPlain(values.costPct ?? Number.NaN, 2) })
+    case 'UNLIKELY_PROFIT':
+      return t('It clears its costs only {count} times in a hundred.', { count: Math.round((values.pProfit ?? 0) * 100) })
+    case 'REGIME_AGAINST':
+      return t(REGIME_AGAINST[`${values.side ?? 'BUY'}:${values.regime ?? 'bear'}`] ?? REGIME_AGAINST['BUY:bear'])
+    case 'RELIABILITY_LOW':
+      return t('Its reliability is LOW: {reasons}.', { reasons: (values.reliability ?? []).map((entry) => reliabilityReasonText(entry, i18n)).join(t('; ')) })
+    case 'QUALITY_LOW':
+      return t('Its quality is {score}, under {line}.', { score: num(values.score ?? 0, 0, 0), line: num(DECISION_LINES.minQuality, 0, 0) })
+    case 'STALE_PRICE':
+      return t('There is no live price newer than ten seconds.')
+    case 'SPREAD':
+      return t('The spread is {spread}, over the {line} a trade is entered at.', { spread: pctPlain(values.spreadPct ?? Number.NaN, 3), line: pctPlain(DECISION_LINES.maxSpreadPct, 1) })
+    case 'STALE_BARS':
+      return t('The bars it was read from are more than two closes old.')
+    case 'CLASS_NOT_APPROVED':
+      return t(VERDICT_SENTENCES[values.verdict ?? 'NOT_ENOUGH'], { kind: classKeyWords(values.classKey ?? '', i18n) })
+  }
+}
 
 export function decideTrade(input: DecisionInput): TradeDecision {
   const { prediction, horizon } = input
   const range = prediction.horizons[horizon]
   const reasons: TradeDecision['reasons'] = []
-  const add = (code: NoTradeReason, text: string): void => void reasons.push({ code, text })
-  const words = HORIZON_WORDS[horizon]
+  const add = (code: NoTradeReason, values: ReasonValues = {}): void => {
+    reasons.push({ code, text: reasonText({ code, text: '', values }, horizon), values })
+  }
+  // A forecast made before its reliability carried codes: its reasons as they were worded.
+  const addWorded = (code: NoTradeReason, text: string): void => void reasons.push({ code, text })
   const side = range === undefined ? null : range.direction === 'BULLISH' ? 'BUY' : range.direction === 'BEARISH' ? 'SELL' : null
   let edge: Edge | null = null
-  if (range === undefined) add('NO_CALL', `There is no ${words} forecast.`)
+  if (range === undefined) add('NO_CALL', { missing: true })
   else {
-    if (range.uncertain) add('UNCERTAIN', `The ${words} range is over three times as wide as this kind of coin's usual: the forecast does not know enough.`)
-    if (side === null) add('NO_CALL', `The ${words} forecast calls no way.`)
+    if (range.uncertain) add('UNCERTAIN')
+    if (side === null) add('NO_CALL')
     else {
       edge = edgeOf(range.quantilesPct, side, input.live?.spreadPct ?? null)
-      if (edge.edgePct <= 0) add('EDGE_UNDER_COSTS', `The move it expects (${pct(edge.expectedPct)}) does not clear a round trip's ${edge.costPct.toFixed(2)}%.`)
-      else if (edge.pProfit < DECISION_LINES.minProfitChance) add('UNLIKELY_PROFIT', `It clears its costs only ${Math.round(edge.pProfit * 100)} times in a hundred.`)
+      if (edge.edgePct <= 0) add('EDGE_UNDER_COSTS', { expectedPct: edge.expectedPct, costPct: edge.costPct })
+      else if (edge.pProfit < DECISION_LINES.minProfitChance) add('UNLIKELY_PROFIT', { pProfit: edge.pProfit })
       const regime = prediction.regime
-      if ((side === 'BUY' && (regime === 'bear' || regime === 'panic')) || (side === 'SELL' && (regime === 'bull' || regime === 'recovery'))) add('REGIME_AGAINST', `A ${side} against a ${regime} market.`)
+      if ((side === 'BUY' && (regime === 'bear' || regime === 'panic')) || (side === 'SELL' && (regime === 'bull' || regime === 'recovery'))) add('REGIME_AGAINST', { side, regime })
     }
-    if (range.reliability === 'LOW') add('RELIABILITY_LOW', `Its reliability is LOW: ${range.reliabilityReasons.join('; ')}.`)
-    if (range.quality.score < DECISION_LINES.minQuality) add('QUALITY_LOW', `Its quality is ${range.quality.score}, under ${DECISION_LINES.minQuality}.`)
+    if (range.reliability === 'LOW') {
+      if (range.reliabilityCodes === undefined) addWorded('RELIABILITY_LOW', `Its reliability is LOW: ${range.reliabilityReasons.join('; ')}.`)
+      else add('RELIABILITY_LOW', { reliability: range.reliabilityCodes })
+    }
+    if (range.quality.score < DECISION_LINES.minQuality) add('QUALITY_LOW', { score: range.quality.score })
   }
   const live = input.live
-  if (live === null || input.nowMs - live.updatedAt > STALE_PRICE_MS) add('STALE_PRICE', 'There is no live price newer than ten seconds.')
-  else if (live.spreadPct !== null && live.spreadPct > DECISION_LINES.maxSpreadPct) add('SPREAD', `The spread is ${live.spreadPct.toFixed(3)}%, over the ${DECISION_LINES.maxSpreadPct}% a trade is entered at.`)
-  if (input.nowMs / 1000 - prediction.barTime > DECISION_LINES.staleBarsSec) add('STALE_BARS', 'The bars it was read from are more than two closes old.')
+  if (live === null || input.nowMs - live.updatedAt > STALE_PRICE_MS) add('STALE_PRICE')
+  else if (live.spreadPct !== null && live.spreadPct > DECISION_LINES.maxSpreadPct) add('SPREAD', { spreadPct: live.spreadPct })
+  if (input.nowMs / 1000 - prediction.barTime > DECISION_LINES.staleBarsSec) add('STALE_BARS')
   const opportunity = side === null || input.classOf === null ? null : input.classOf(side)
-  if (opportunity !== null && !classTradable(opportunity.verdict)) add('CLASS_NOT_APPROVED', `Its kind of opportunity (${opportunity.key}) ${VERDICT_WORDS[opportunity.verdict]}.`)
+  if (opportunity !== null && !classTradable(opportunity.verdict)) add('CLASS_NOT_APPROVED', { classKey: opportunity.key, verdict: opportunity.verdict })
   return {
     version: DECISION_VERSION,
     pair: prediction.pair,

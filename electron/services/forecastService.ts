@@ -485,7 +485,7 @@ async function followCalls(): Promise<void> {
   for (const prediction of latest.values()) {
     const { track, change } = stepCall(calls.get(prediction.pair), prediction)
     calls.set(prediction.pair, track)
-    if (change !== null && watched.has(prediction.pair)) tellNotice(predictionChangedNotice(change))
+    if (change !== null && watched.has(prediction.pair)) tellNotice((i18n) => predictionChangedNotice(change, i18n))
   }
 }
 

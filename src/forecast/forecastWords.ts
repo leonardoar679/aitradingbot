@@ -1,43 +1,53 @@
 import type { Direction } from '../../shared/forecast/direction'
 import type { Horizon } from '../../shared/forecast/features'
 import type { ForecastRange, PricePrediction } from '../../shared/forecast/prediction'
-import type { TradeDecision } from '../../shared/forecast/tradeDecision'
+import { reasonText, type TradeDecision } from '../../shared/forecast/tradeDecision'
 import type { PredictionView } from '../../shared/forecast/view'
+import { forecastPrice, HORIZON_NAME, HORIZON_NEXT, HORIZON_SHORT } from '../../shared/forecast/words'
 import type { ForecastState } from '../../shared/ipc'
+import { ENGLISH, msg, type I18n } from '../../shared/i18n/translate'
 
 // HOW THE FORECAST READS ON SCREEN (the V6 document, §3, §34-37, §70 and §118; V6 Stage 10, 13 October
 // 2026): the same words on Home, the Predictions page and the drawer, so that a call, a range or a
-// reason reads one way wherever it is shown. Words only; nothing here reads or asks anything.
+// reason reads one way wherever it is shown. Words only; nothing here reads or asks anything. Since V6
+// Stage 14 each is said in a language -- English unless handed the person's -- with its numbers in the
+// language's own form (§86, §89).
 
-export const HORIZON_SHORT: Record<Horizon, string> = { minutes5: '5m', minutes15: '15m', hour1: '1h', hours4: '4h', hours24: '24h' }
-export const HORIZON_NEXT: Record<Horizon, string> = { minutes5: 'Next 5 min', minutes15: 'Next 15 min', hour1: 'Next 1 hour', hours4: 'Next 4 hours', hours24: 'Next 24 hours' }
+export { HORIZON_NAME, HORIZON_NEXT, HORIZON_SHORT }
 
 /** A call as it is shown: STRONG where it is, NEUTRAL / UNCERTAIN where the range is too wide (§61). */
-export function callLabel(range: Pick<ForecastRange, 'direction' | 'strong' | 'uncertain'>): string {
-  if (range.uncertain) return 'NEUTRAL / UNCERTAIN'
-  return range.strong ? `STRONG ${range.direction}` : range.direction
+export function callLabel(range: Pick<ForecastRange, 'direction' | 'strong' | 'uncertain'>, { t }: I18n = ENGLISH): string {
+  if (range.uncertain) return t('NEUTRAL / UNCERTAIN')
+  if (range.strong && range.direction === 'BULLISH') return t('STRONG BULLISH')
+  if (range.strong && range.direction === 'BEARISH') return t('STRONG BEARISH')
+  return t(CALL_NAMES[range.direction])
 }
+
+const CALL_NAMES: Record<Direction, string> = { BULLISH: msg('BULLISH'), BEARISH: msg('BEARISH'), NEUTRAL: msg('NEUTRAL') }
 
 export function callColor(direction: Direction): string {
   return direction === 'BULLISH' ? 'var(--up)' : direction === 'BEARISH' ? 'var(--down)' : 'var(--text-secondary)'
 }
 
-/** A move in percent with its sign: +0.80%, -1.20%. */
-export function signedPct(value: number, digits = 2): string {
-  if (!Number.isFinite(value)) return '—'
-  const fixed = value.toFixed(digits)
-  return `${value > 0 || (value === 0 && !fixed.startsWith('-')) ? '+' : ''}${fixed}%`
+/** A move in percent with its sign: +0.80%, -1.20%; none on a move that rounds to nothing. */
+export function signedPct(value: number, digits = 2, i18n: I18n = ENGLISH): string {
+  return i18n.pct(value, digits)
 }
 
 /** A likely range: +0.80% ~ +2.10%. */
-export function rangeText(lowPct: number, highPct: number): string {
-  return `${signedPct(lowPct)} ~ ${signedPct(highPct)}`
+export function rangeText(lowPct: number, highPct: number, i18n: I18n = ENGLISH): string {
+  return i18n.t('{low} ~ {high}', { low: i18n.pct(lowPct, 2), high: i18n.pct(highPct, 2) })
 }
 
 /** A price as the app writes one: six significant figures. */
-export function priceText(value: number): string {
-  if (!Number.isFinite(value)) return '—'
-  return Number(value.toPrecision(6)).toLocaleString('en-US', { maximumFractionDigits: 10 })
+export function priceText(value: number, i18n: I18n = ENGLISH): string {
+  return forecastPrice(value, i18n)
+}
+
+/** A price in dollars, six significant figures: $182.4 where English puts the sign, 182,4 $ where
+ * Vietnamese does. */
+export function dollarText(value: number, i18n: I18n = ENGLISH): string {
+  return i18n.dollars(value)
 }
 
 /** A pair as it reads: SOL / USDT. */
@@ -46,53 +56,63 @@ export function pairText(pair: string): string {
 }
 
 /** How long a forecast has left before its horizon's close (§38): FORECAST EXPIRED once it has none. */
-export function timeLeftText(ms: number): string {
-  if (!(ms > 0)) return 'FORECAST EXPIRED'
+export function timeLeftText(ms: number, { t, num }: I18n = ENGLISH): string {
+  if (!(ms > 0)) return t('FORECAST EXPIRED')
   const minutes = Math.ceil(ms / 60_000)
-  if (minutes < 60) return `valid ${minutes} min`
+  if (minutes < 60) return t('valid {minutes} min', { minutes: num(minutes, 0, 0) })
   const hours = ms / 3_600_000
-  return `valid ${hours < 10 ? hours.toFixed(1) : Math.round(hours)} h`
+  return t('valid {hours} h', { hours: hours < 10 ? num(hours, 1, 1) : num(Math.round(hours), 0, 0) })
 }
 
 /** The coin's last hour in its usual moves, in a word (§3's "Momentum"). */
-export function momentumWord(z1h: number | null | undefined): string {
+export function momentumWord(z1h: number | null | undefined, { t }: I18n = ENGLISH): string {
   if (z1h === null || z1h === undefined || !Number.isFinite(z1h)) return '—'
-  if (z1h >= 2) return 'STRONG UP'
-  if (z1h >= 1) return 'UP'
-  if (z1h <= -2) return 'STRONG DOWN'
-  if (z1h <= -1) return 'DOWN'
-  return 'FLAT'
+  if (z1h >= 2) return t('STRONG UP')
+  if (z1h >= 1) return t('UP')
+  if (z1h <= -2) return t('STRONG DOWN')
+  if (z1h <= -1) return t('DOWN')
+  return t('FLAT')
 }
 
 /** Its volume against its usual hour (§3's "Volume: 3.7×"). */
-export function volumeWord(ratio: number | null | undefined): string {
+export function volumeWord(ratio: number | null | undefined, { t, num }: I18n = ENGLISH): string {
   if (ratio === null || ratio === undefined || !Number.isFinite(ratio)) return '—'
-  return `${ratio.toFixed(1)}× its usual hour`
+  return t('{ratio}× its usual hour', { ratio: num(ratio, 1, 1) })
 }
 
-/** The story moving the forecast, in a line (§3's "News catalyst"). */
-export function newsWord(prediction: Pick<PricePrediction, 'mainCatalyst' | 'newsImpact'>): string {
-  if (prediction.mainCatalyst === undefined) return 'none'
+/** The story moving the forecast, in a line (§3's "News catalyst"). Its headline is the feed's own. */
+export function newsWord(prediction: Pick<PricePrediction, 'mainCatalyst' | 'newsImpact'>, { t }: I18n = ENGLISH): string {
+  if (prediction.mainCatalyst === undefined) return t('none')
   const impact = prediction.newsImpact ?? 0
-  return `${impact >= 70 ? 'HIGH' : impact >= 40 ? 'MODERATE' : 'LOW'} IMPACT · ${prediction.mainCatalyst}`
+  const catalyst = prediction.mainCatalyst
+  if (impact >= 70) return t('HIGH IMPACT · {catalyst}', { catalyst })
+  return impact >= 40 ? t('MODERATE IMPACT · {catalyst}', { catalyst }) : t('LOW IMPACT · {catalyst}', { catalyst })
 }
 
 /** What the decision says, as a label and the reasons behind a NO TRADE. */
-export function decisionWords(decision: TradeDecision | null | undefined): { label: string; detail: string; trade: boolean } {
-  if (decision === null || decision === undefined) return { label: 'NO DECISION YET', detail: '', trade: false }
-  if (decision.decision === 'TRADE') return { label: `TRADE: ${decision.side}`, detail: decision.side === 'SELL' ? 'A sell is a paper trade only.' : '', trade: true }
-  return { label: 'NO TRADE', detail: decision.reasons.map((reason) => reason.text).join(' '), trade: false }
+export function decisionWords(decision: TradeDecision | null | undefined, i18n: I18n = ENGLISH): { label: string; detail: string; trade: boolean } {
+  const { t } = i18n
+  if (decision === null || decision === undefined) return { label: t('NO DECISION YET'), detail: '', trade: false }
+  if (decision.decision === 'TRADE') return { label: decision.side === 'SELL' ? t('TRADE: SELL') : t('TRADE: BUY'), detail: decision.side === 'SELL' ? t('A sell is a paper trade only.') : '', trade: true }
+  return { label: t('NO TRADE'), detail: decision.reasons.map((reason) => reasonText(reason, decision.horizon, i18n)).join(' '), trade: false }
+}
+
+/** A decision's first reason, in a language: what a table row shows of a NO TRADE. */
+export function firstReason(decision: TradeDecision, i18n: I18n = ENGLISH): string {
+  const reason = decision.reasons[0]
+  return reason === undefined ? '' : reasonText(reason, decision.horizon, i18n)
 }
 
 /** The models asked about the coin's event, in a line (§118's "AI consensus: 3 / 3"). */
-export function aiConsensusWord(sides: readonly ('long' | 'short' | null)[]): string | null {
+export function aiConsensusWord(sides: readonly ('long' | 'short' | null)[], { t }: I18n = ENGLISH): string | null {
   if (sides.length === 0) return null
   const up = sides.filter((side) => side === 'long').length
   const down = sides.filter((side) => side === 'short').length
-  if (up > down) return `${up} / ${sides.length} bullish`
-  if (down > up) return `${down} / ${sides.length} bearish`
-  if (up > 0) return `split: ${up} bullish, ${down} bearish of ${sides.length}`
-  return `0 / ${sides.length}: no trade`
+  const total = sides.length
+  if (up > down) return t('{count} / {total} bullish', { count: up, total })
+  if (down > up) return t('{count} / {total} bearish', { count: down, total })
+  if (up > 0) return t('split: {up} bullish, {down} bearish of {total}', { up, down, total })
+  return t('0 / {total}: no trade', { total })
 }
 
 /** The horizon a pair is led by: its best, or the hour's. */
@@ -102,61 +122,95 @@ export function leadHorizon(prediction: PricePrediction): Horizon | null {
   return (Object.keys(prediction.horizons)[0] as Horizon | undefined) ?? null
 }
 
-/** Where the forecast stands, in a line (the Predictions page's status line). */
-export function forecastStatusText(state: ForecastState | null): string {
-  if (state === null) return 'Reading the forecast…'
+/** Where the forecast stands, in a line (the Predictions page's status line). An error is the
+ * engine's own words. */
+export function forecastStatusText(state: ForecastState | null, i18n: I18n = ENGLISH): string {
+  const { t, num, utcTime } = i18n
+  if (state === null) return t('Reading the forecast…')
   const { engine, training, data } = state
-  const bars = data.pairs > 0 && data.ready < data.pairs ? ` ${data.ready} of ${data.pairs} pairs' bars are up to date.` : ''
+  const bars = data.pairs > 0 && data.ready < data.pairs ? t("{ready} of {pairs} pairs' bars are up to date.", { ready: data.ready, pairs: data.pairs }) : ''
   const error = engine.lastError ?? training.lastError
-  const tail = error === null ? '' : ` Last error: ${error}`
+  const tail = error === null ? '' : t('Last error: {error}', { error })
+  const join = (...parts: string[]): string => parts.filter((part) => part !== '').join(' ')
   if (engine.status === 'waiting') {
-    const step = training.progress === null ? '' : ` (${training.progress.step}, ${training.progress.done} of ${training.progress.total})`
+    const progress = training.progress
     const what =
       engine.waitingFor === 'models'
         ? training.status === 'failed'
-          ? 'Its first fit failed; it is tried again at the next start or the nightly refit.'
-          : `It is fitting its first models${step}.`
+          ? t('Its first fit failed; it is tried again at the next start or the nightly refit.')
+          : progress === null
+            ? t('It is fitting its first models.')
+            : t('It is fitting its first models ({step}, {done} of {total}).', { step: progress.step, done: progress.done, total: progress.total })
         : engine.waitingFor === 'calibration'
-          ? `Its models are fitted; the walk forward its ranges are calibrated on is running${step}.`
-          : 'It waits for the bars of the close.'
-    return `No forecast yet. ${what}${bars}${tail}`
+          ? progress === null
+            ? t('Its models are fitted; the walk forward its ranges are calibrated on is running.')
+            : t('Its models are fitted; the walk forward its ranges are calibrated on is running ({step}, {done} of {total}).', { step: progress.step, done: progress.done, total: progress.total })
+          : t('It waits for the bars of the close.')
+    return join(t('No forecast yet.'), what, bars, tail)
   }
-  const at = engine.lastPassAt === null ? '' : ` The last pass read the ${new Date(engine.lastPassAt * 1000).toISOString().slice(11, 16)} UTC close${engine.lastPassMs === null ? '' : ` in ${engine.lastPassMs} ms`}.`
-  const record = ` Since the app started: ${engine.recorded} forecasts recorded, ${engine.outcomes} outcomes written${engine.missing > 0 ? ` (${engine.missing} with no price to judge by)` : ''}, ${engine.refreshes} forecasts made again between closes.`
-  return `Forecasting ${engine.predictions} pairs at every 5-minute close.${at}${record}${bars}${tail}`
+  const at =
+    engine.lastPassAt === null
+      ? ''
+      : engine.lastPassMs === null
+        ? t('The last pass read the {time} UTC close.', { time: utcTime(engine.lastPassAt * 1000) })
+        : t('The last pass read the {time} UTC close in {ms} ms.', { time: utcTime(engine.lastPassAt * 1000), ms: num(engine.lastPassMs, 0, 0) })
+  const record =
+    engine.missing > 0
+      ? t('Since the app started: {recorded} forecasts recorded, {outcomes} outcomes written ({missing} with no price to judge by), {refreshes} forecasts made again between closes.', {
+          recorded: engine.recorded,
+          outcomes: engine.outcomes,
+          missing: engine.missing,
+          refreshes: engine.refreshes
+        })
+      : t('Since the app started: {recorded} forecasts recorded, {outcomes} outcomes written, {refreshes} forecasts made again between closes.', { recorded: engine.recorded, outcomes: engine.outcomes, refreshes: engine.refreshes })
+  return join(t('Forecasting {count} pairs at every 5-minute close.', { count: engine.predictions }), at, record, bars, tail)
 }
 
 /** The horizons the best prediction's card shows, as §3 has them. */
 export const CARD_HORIZONS: Horizon[] = ['minutes15', 'hour1', 'hours4']
 
 export interface CardRow {
+  /** What the row is, as a key: the same in every language, for React. */
+  id: string
   name: string
   value: string
 }
 
+const RELIABILITY_NAMES: Record<string, string> = { LOW: msg('LOW'), MEDIUM: msg('MEDIUM'), HIGH: msg('HIGH') }
+
+/** A reliability in a word, in a language. */
+export function reliabilityWord(reliability: string | undefined, { t }: I18n = ENGLISH): string {
+  if (reliability === undefined) return '—'
+  const name = RELIABILITY_NAMES[reliability]
+  return name === undefined ? reliability : t(name)
+}
+
 /** The best prediction's card, row by row (§3 and §118): the price and the likely ranges, the bull and
  * bear cases, then what the forecast is worth and what moves it. Percentages from the view's price. */
-export function predictionCardRows(prediction: PricePrediction, view: PredictionView, consensus: string | null): { left: CardRow[]; right: CardRow[] } {
+export function predictionCardRows(prediction: PricePrediction, view: PredictionView, consensus: string | null, i18n: I18n = ENGLISH): { left: CardRow[]; right: CardRow[] } {
+  const { t } = i18n
   const lead = leadHorizon(prediction)
   const leadRange = lead === null ? undefined : prediction.horizons[lead]
   const leadView = lead === null ? undefined : view.horizons[lead]
+  const current = dollarText(view.price, i18n)
   const left: CardRow[] = [
-    { name: 'Current', value: `$${priceText(view.price)}${view.priceFrom === 'close' ? ' (last close)' : ''}` },
+    { id: 'current', name: t('Current'), value: view.priceFrom === 'close' ? t('{price} (last close)', { price: current }) : current },
     ...CARD_HORIZONS.map((horizon) => {
       const range = view.horizons[horizon]
-      return { name: HORIZON_NEXT[horizon], value: range === undefined ? '—' : `${rangeText(range.lowPct, range.highPct)}${range.expired ? ' (expired)' : ''}` }
+      const text = range === undefined ? '—' : rangeText(range.lowPct, range.highPct, i18n)
+      return { id: horizon, name: t(HORIZON_NEXT[horizon]), value: range !== undefined && range.expired ? t('{range} (expired)', { range: text }) : text }
     }),
-    { name: 'Bull case', value: leadView === undefined ? '—' : signedPct(leadView.bullPct) },
-    { name: 'Bear case', value: leadView === undefined ? '—' : signedPct(leadView.bearPct) }
+    { id: 'bull', name: t('Bull case'), value: leadView === undefined ? '—' : signedPct(leadView.bullPct, 2, i18n) },
+    { id: 'bear', name: t('Bear case'), value: leadView === undefined ? '—' : signedPct(leadView.bearPct, 2, i18n) }
   ]
   const right: CardRow[] = [
-    { name: 'Forecast quality', value: leadRange === undefined ? '—' : `${leadRange.quality.score} / 100` },
-    { name: 'Reliability', value: leadRange?.reliability ?? '—' },
-    { name: 'Best horizon', value: lead === null ? '—' : prediction.bestHorizon === null ? 'none beat a plain range' : HORIZON_NEXT[lead].replace('Next ', '') },
-    { name: 'News catalyst', value: newsWord(prediction) },
-    { name: 'Volume', value: volumeWord(prediction.market?.volRatio1h) },
-    { name: 'Momentum', value: momentumWord(prediction.market?.z1h) },
-    { name: 'AI consensus', value: consensus ?? 'not asked' }
+    { id: 'quality', name: t('Forecast quality'), value: leadRange === undefined ? '—' : t('{score} / 100', { score: leadRange.quality.score }) },
+    { id: 'reliability', name: t('Reliability'), value: reliabilityWord(leadRange?.reliability, i18n) },
+    { id: 'best', name: t('Best horizon'), value: lead === null ? '—' : prediction.bestHorizon === null ? t('none beat a plain range') : t(HORIZON_NAME[lead]) },
+    { id: 'news', name: t('News catalyst'), value: newsWord(prediction, i18n) },
+    { id: 'volume', name: t('Volume'), value: volumeWord(prediction.market?.volRatio1h, i18n) },
+    { id: 'momentum', name: t('Momentum'), value: momentumWord(prediction.market?.z1h, i18n) },
+    { id: 'ai', name: t('AI consensus'), value: consensus ?? t('not asked') }
   ]
   return { left, right }
 }

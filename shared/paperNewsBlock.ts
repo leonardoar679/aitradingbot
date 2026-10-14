@@ -1,3 +1,4 @@
+import { ENGLISH, type I18n } from './i18n/translate'
 import { REVIEW_LINES, type NewsReading } from './aiAdditions'
 import type { MarketEvent } from './marketEvent'
 import type { ReadStory } from './newsFeed'
@@ -42,15 +43,18 @@ export function storiesAgainst(input: NewsAgainstInput): NewsAgainstStory[] {
     .sort((a, b) => b.impact - a.impact || b.publishedAt - a.publishedAt)
 }
 
-const clock = (sec: number): string => `${new Date(sec * 1000).toISOString().slice(11, 16)} UTC`
 const MAX_TITLE = 90
 
 /** Why a paper trade is refused on the news, or null: the strongest story against it, named last, in
- * parentheses, so that the session report counts such refusals together by coin and side. */
-export function newsAgainstBlock(input: NewsAgainstInput): string | null {
+ * parentheses, so that the session report counts such refusals together by coin and side. In English, as
+ * recorded, unless handed a language (V6 Stage 14). */
+export function newsAgainstBlock(input: NewsAgainstInput, i18n: I18n = ENGLISH): string | null {
   const story = storiesAgainst(input)[0]
   if (story === undefined) return null
   const title = story.title.length > MAX_TITLE ? `${story.title.slice(0, MAX_TITLE - 3).trimEnd()}…` : story.title
-  const way = input.side === 'buy' ? 'down' : 'up'
-  return `A story of impact ${Math.round(story.impact)} names ${input.event.baseAsset} and points ${way}, against a paper ${input.side === 'buy' ? 'BUY' : 'SELL'} ("${title}", ${story.sourceName}, ${clock(story.publishedAt)}).`
+  const clock = i18n.t('{time} UTC', { time: i18n.language === 'en' ? new Date(story.publishedAt * 1000).toISOString().slice(11, 16) : i18n.utcTime(story.publishedAt * 1000) })
+  const values = { impact: Math.round(story.impact), coin: input.event.baseAsset, title, source: story.sourceName, time: clock }
+  return input.side === 'buy'
+    ? i18n.t('A story of impact {impact} names {coin} and points down, against a paper BUY ("{title}", {source}, {time}).', values)
+    : i18n.t('A story of impact {impact} names {coin} and points up, against a paper SELL ("{title}", {source}, {time}).', values)
 }

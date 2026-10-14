@@ -1,5 +1,6 @@
 import type { ExecutorConfig, PaperPauseSettings, PaperPauseState, PositionExecutorParams } from './ipc'
 import { describeR, rMultiple } from './paperRisk'
+import { ENGLISH, msg, type I18n } from './i18n/translate'
 
 // A LOSING RUN PAUSES THE APP'S OWN PAPER TRADES, UNTIL SOMEONE RESUMES THEM.
 //
@@ -172,40 +173,99 @@ function lostR(run: PaperRun): string {
   return `${Math.abs(run.r).toFixed(2)} R${run.trades === 1 ? '' : ' together'}`
 }
 
+/** The pause's sentences, whole, side by side (V6 Stage 14): each says one side's run in full, so that a
+ * language says it in its own order. `one` is a run of a single trade. */
+const PAUSE_SENTENCES: Record<PaperPauseSource, { paused: [string, string]; reached: [string, string]; title: string; body: [string, string] }> = {
+  watch: {
+    paused: [
+      msg("The watch's last closed paper trade had lost {loss} R by {moment}, so it opens none until they are resumed on Risk & Safety."),
+      msg("The watch's last {count} closed paper trades had lost {loss} R together by {moment}, so it opens none until they are resumed on Risk & Safety.")
+    ],
+    reached: [
+      msg("The watch's last closed paper trade lost {loss} R, so it opens none until they are resumed on Risk & Safety."),
+      msg("The watch's last {count} closed paper trades lost {loss} R together, so it opens none until they are resumed on Risk & Safety.")
+    ],
+    title: msg("The watch's paper trades are paused"),
+    body: [
+      msg("The watch's last closed paper trade lost {loss} R: Risk & Safety pauses them at {line} R. It opens none until they are resumed there, and any still open run to their end. Nothing real was placed or closed."),
+      msg("The watch's last {count} closed paper trades lost {loss} R together: Risk & Safety pauses them at {line} R. It opens none until they are resumed there, and any still open run to their end. Nothing real was placed or closed.")
+    ]
+  },
+  news: {
+    paused: [
+      msg("The news rules' last closed paper short with a stop had lost {loss} R by {moment}, so they open none until they are resumed on Risk & Safety."),
+      msg("The news rules' last {count} closed paper shorts with a stop had lost {loss} R together by {moment}, so they open none until they are resumed on Risk & Safety.")
+    ],
+    reached: [
+      msg("The news rules' last closed paper short with a stop lost {loss} R, so they open none until they are resumed on Risk & Safety."),
+      msg("The news rules' last {count} closed paper shorts with a stop lost {loss} R together, so they open none until they are resumed on Risk & Safety.")
+    ],
+    title: msg("The news rules' paper shorts are paused"),
+    body: [
+      msg("The news rules' last closed paper short with a stop lost {loss} R: Risk & Safety pauses them at {line} R. They open none until they are resumed there, and any still open run to their end. Nothing real was placed or closed."),
+      msg("The news rules' last {count} closed paper shorts with a stop lost {loss} R together: Risk & Safety pauses them at {line} R. They open none until they are resumed there, and any still open run to their end. Nothing real was placed or closed.")
+    ]
+  },
+  forecast: {
+    paused: [
+      msg("The forecast trader's last closed paper trade had lost {loss} R by {moment}, so it opens none until they are resumed on Risk & Safety."),
+      msg("The forecast trader's last {count} closed paper trades had lost {loss} R together by {moment}, so it opens none until they are resumed on Risk & Safety.")
+    ],
+    reached: [
+      msg("The forecast trader's last closed paper trade lost {loss} R, so it opens none until they are resumed on Risk & Safety."),
+      msg("The forecast trader's last {count} closed paper trades lost {loss} R together, so it opens none until they are resumed on Risk & Safety.")
+    ],
+    title: msg("The forecast trader's paper trades are paused"),
+    body: [
+      msg("The forecast trader's last closed paper trade lost {loss} R: Risk & Safety pauses them at {line} R. It opens none until they are resumed there, and any still open run to their end. Nothing real was placed or closed."),
+      msg("The forecast trader's last {count} closed paper trades lost {loss} R together: Risk & Safety pauses them at {line} R. It opens none until they are resumed there, and any still open run to their end. Nothing real was placed or closed.")
+    ]
+  }
+}
+
+/** One of a pair of sentences, by the run's length. */
+const byRun = (pair: [string, string], trades: number): string => (trades === 1 ? pair[0] : pair[1])
+
 /** Why one side opens no paper trade now, or null when it may: a losing run paused it and it has
  * not been resumed, or its run has just reached the loss and the pause is not yet written down.
- * Switched off, nothing pauses. */
-export function paperPauseBlock(input: { setting: PaperPauseSettings; executors: ExecutorConfig[]; source: PaperPauseSource }): string | null {
+ * Switched off, nothing pauses. In English unless handed a language (V6 Stage 14). */
+export function paperPauseBlock(input: { setting: PaperPauseSettings; executors: ExecutorConfig[]; source: PaperPauseSource }, { t, num, utcTime, utcDay }: I18n = ENGLISH): string | null {
   const { setting, source } = input
   if (setting.lossR === null) return null
-  const side = SIDES[source]
+  const sentences = PAUSE_SENTENCES[source]
   const paused = setting[source].paused
   if (paused !== null) {
-    return `${side.whose} ${lastClosed(source, paused.trades)} had lost ${lostR(paused)} by ${utcMoment(paused.at)}, so ${side.opens} none until they are resumed on Risk & Safety.`
+    return t(byRun(sentences.paused, paused.trades), {
+      count: paused.trades,
+      loss: num(Math.abs(paused.r), 2, 2),
+      moment: t('{time} UTC on {day}', { time: utcTime(paused.at * 1000), day: utcDay(paused.at * 1000) })
+    })
   }
   const run = paperRun(input.executors, source, setting)
   if (!reached(run, setting.lossR)) return null
-  return `${side.whose} ${lastClosed(source, run.trades)} lost ${lostR(run)}, so ${side.opens} none until they are resumed on Risk & Safety.`
+  return t(byRun(sentences.reached, run.trades), { count: run.trades, loss: num(Math.abs(run.r), 2, 2) })
 }
 
-/** What the desktop is told, once, when a run pauses one side. */
-export function paperPauseNotice(source: PaperPauseSource, run: PaperRun, lossR: number): { title: string; body: string } {
-  const side = SIDES[source]
-  const opens = side.opens.charAt(0).toUpperCase() + side.opens.slice(1)
+/** What the desktop is told, once, when a run pauses one side, in a language. */
+export function paperPauseNotice(source: PaperPauseSource, run: PaperRun, lossR: number, { t, num }: I18n = ENGLISH): { title: string; body: string } {
+  const sentences = PAUSE_SENTENCES[source]
   return {
-    title: `${side.whose} ${side.many} are paused`,
-    body: `${side.whose} ${lastClosed(source, run.trades)} lost ${lostR(run)}: Risk & Safety pauses them at ${lossR} R. ${opens} none until they are resumed there, and any still open run to their end. Nothing real was placed or closed.`
+    title: t(sentences.title),
+    body: t(byRun(sentences.body, run.trades), { count: run.trades, loss: num(Math.abs(run.r), 2, 2), line: num(lossR, 0, 2) })
   }
 }
 
 /** What a look finds: each side whose run has reached the loss, and that is not paused yet, is
  * paused now, with the notice that says so. Null when there is nothing to write: switched off, or
  * no new pause. */
-export function planPaperPause(input: {
-  setting: PaperPauseSettings
-  executors: ExecutorConfig[]
-  nowSec: number
-}): { setting: PaperPauseSettings; notices: { title: string; body: string }[] } | null {
+export function planPaperPause(
+  input: {
+    setting: PaperPauseSettings
+    executors: ExecutorConfig[]
+    nowSec: number
+  },
+  i18n: I18n = ENGLISH
+): { setting: PaperPauseSettings; notices: { title: string; body: string }[] } | null {
   const { lossR } = input.setting
   if (lossR === null) return null
   let next = input.setting
@@ -215,7 +275,7 @@ export function planPaperPause(input: {
     const run = paperRun(input.executors, source, input.setting)
     if (!reached(run, lossR)) continue
     next = { ...next, [source]: { ...input.setting[source], paused: { at: input.nowSec, r: run.r, trades: run.trades } } }
-    notices.push(paperPauseNotice(source, run, lossR))
+    notices.push(paperPauseNotice(source, run, lossR, i18n))
   }
   return notices.length === 0 ? null : { setting: next, notices }
 }
@@ -235,9 +295,9 @@ export function savePaperPause(stored: PaperPauseSettings, chosen: Pick<PaperPau
 
 /** The setting in a sentence, as it is set, in the words the watch's other limits use: "them" is
  * the trades of the one it is said of. */
-export function describePaperPause(setting: Pick<PaperPauseSettings, 'lossR' | 'trades'>): string {
-  if (setting.lossR === null) return 'No losing run pauses them.'
-  return `Once the last ${setting.trades} of them to close have lost ${setting.lossR} R together, none is opened until they are resumed on Risk & Safety.`
+export function describePaperPause(setting: Pick<PaperPauseSettings, 'lossR' | 'trades'>, { t, num }: I18n = ENGLISH): string {
+  if (setting.lossR === null) return t('No losing run pauses them.')
+  return t('Once the last {count} of them to close have lost {loss} R together, none is opened until they are resumed on Risk & Safety.', { count: setting.trades, loss: num(setting.lossR, 0, 2) })
 }
 
 /** Where one side stands, for Risk & Safety: paused, and since when, or what its run adds up to. */

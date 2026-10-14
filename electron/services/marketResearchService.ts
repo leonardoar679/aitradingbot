@@ -1,5 +1,7 @@
 import type { SymbolInfo, Ticker24h } from '../../shared/ipc'
+import { msg } from '../../shared/i18n/translate'
 import {
+  RISK_DETAIL,
   RESEARCH_DAILY_BARS,
   RESEARCH_MARKET_BARS,
   RESEARCH_REFRESH_MS,
@@ -90,7 +92,14 @@ const pass = singleFlight(async (): Promise<void> => {
   }
   const universe = researchUniverse(symbols, tickers)
   const tickerOf = new Map(tickers.map((ticker) => [ticker.symbol, ticker]))
-  publish(withStep(withStep(state, 'universe', 'done', `${universe.length} USDT pairs trading at least $20M a day`), 'movers', 'running', null))
+  publish(
+    withStep(
+      withStep(state, 'universe', 'done', `${universe.length} USDT pairs trading at least $20M a day`, { key: msg('{count} USDT pairs trading at least $20M a day'), values: { count: universe.length } }),
+      'movers',
+      'running',
+      null
+    )
+  )
 
   const nowSec = Math.floor(Date.now() / 1000)
   const read = await inBatches(universe, CONCURRENCY, async (pair) => {
@@ -108,7 +117,10 @@ const pass = singleFlight(async (): Promise<void> => {
         { ...state, pairs: markTrending(pairs, state.trending), candidates },
         'movers',
         'done',
-        `${pairs.length} read${missed > 0 ? `, ${missed} could not be` : ''}, ${candidates.length} candidates`
+        `${pairs.length} read${missed > 0 ? `, ${missed} could not be` : ''}, ${candidates.length} candidates`,
+        missed > 0
+          ? { key: msg('{read} read, {missed} could not be, {count} candidates'), values: { read: pairs.length, missed, count: candidates.length } }
+          : { key: msg('{read} read, {count} candidates'), values: { read: pairs.length, count: candidates.length } }
       ),
       'market',
       'running',
@@ -122,7 +134,7 @@ const pass = singleFlight(async (): Promise<void> => {
       source.fetchRecentCandles('ETHUSDT', '15m', RESEARCH_MARKET_BARS)
     ])
     const market = marketStatusOf({ btc15m, eth15m, pairs, nowSec: Math.floor(Date.now() / 1000) })
-    publish({ ...withStep({ ...state, market }, 'market', 'done', `risk ${market.risk}`), running: false, finishedAt: Math.floor(Date.now() / 1000) })
+    publish({ ...withStep({ ...state, market }, 'market', 'done', `risk ${market.risk}`, { key: RISK_DETAIL[market.risk], values: {} }), running: false, finishedAt: Math.floor(Date.now() / 1000) })
   } catch (error) {
     publish({ ...withStep(state, 'market', 'failed', describeFailure(error)), running: false, finishedAt: Math.floor(Date.now() / 1000) })
   }
@@ -133,18 +145,30 @@ const readTrending = singleFlight(async (): Promise<void> => {
   try {
     const response = await fetch(TRENDING_URL, { signal: AbortSignal.timeout(TRENDING_TIMEOUT_MS) })
     if (!response.ok) throw new Error(`CoinGecko answered ${response.status}`)
+    // Read before anything else is awaited: once the request's timeout fires, Electron's fetch can no
+    // longer read the body ("Body is unusable"), and the first listing of the symbols, at a busy start
+    // beside the pass's own, has taken longer than that (V6 Stage 14's check).
+    const body: unknown = await response.json()
     if (symbols.length === 0) symbols = await listSymbols('binance')
-    const trending = parseTrending(await response.json(), symbols)
+    const trending = parseTrending(body, symbols)
     const matched = trending.filter((coin) => coin.pair !== null).length
     publish({
-      ...withStep(state, 'trending', 'done', `${trending.length} ${trending.length === 1 ? 'coin' : 'coins'}, ${matched} with a USDT pair on Binance`),
+      ...withStep(state, 'trending', 'done', `${trending.length} ${trending.length === 1 ? 'coin' : 'coins'}, ${matched} with a USDT pair on Binance`, {
+        key: msg('{count} coins, {matched} with a USDT pair on Binance'),
+        values: { count: trending.length, matched }
+      }),
       trending,
       trendingAt: Math.floor(Date.now() / 1000),
       pairs: markTrending(state.pairs, trending)
     })
   } catch (error) {
     // Unavailable is said, and the last list read, if any, is kept with its time.
-    publish(withStep(state, 'trending', 'failed', `CoinGecko's trending list could not be read: ${describeFailure(error)}`))
+    publish(
+      withStep(state, 'trending', 'failed', `CoinGecko's trending list could not be read: ${describeFailure(error)}`, {
+        key: msg("CoinGecko's trending list could not be read: {error}"),
+        values: { error: describeFailure(error) }
+      })
+    )
   }
 }, () => undefined)
 

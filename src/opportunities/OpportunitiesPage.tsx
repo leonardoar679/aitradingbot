@@ -2,6 +2,7 @@ import { PageHeader } from '../components/PageHeader'
 import { AiKeyGate } from '../ai/AiKeyGate'
 import { OpportunitiesTab } from '../agents/OpportunitiesTab'
 import type { AiOrderProposal } from '../../shared/aiProposal'
+import { useI18n } from '../i18n'
 
 /** What can be traded right now: the watch, the recommendations still valid, and every event the
  * scanner raised with what the models asked about it recommend.
@@ -15,12 +16,10 @@ export function OpportunitiesPage({
    * page only hands the proposal up; it has no way to submit one. */
   onPrepareOrder: (proposal: AiOrderProposal, live?: boolean) => void
 }): React.JSX.Element {
+  const { t } = useI18n()
   return (
     <>
-      <PageHeader
-        title="Opportunities"
-        subtitle="What can be traded right now: the events the scanner raised, and what the models asked about them recommend"
-      />
+      <PageHeader title={t('Opportunities')} subtitle={t('What can be traded right now: the events the scanner raised, and what the models asked about them recommend')} />
       <AiKeyGate>{(version) => <OpportunitiesTab key={version} onPrepareOrder={onPrepareOrder} />}</AiKeyGate>
     </>
   )

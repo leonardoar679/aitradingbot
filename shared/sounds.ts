@@ -1,4 +1,5 @@
 import { ALERT_KINDS, type AlertKind, type AlertSeverity } from './alerts'
+import { msg } from './i18n/translate'
 
 // SOUNDS BY MEANING (the V6 document, §72-80 and §109-110; V6 Stage 13, 13 October 2026). Four sounds, each
 // a fixed score -- its notes, its wave, its envelope -- played by the window (src/sound/player.ts), so that
@@ -170,33 +171,34 @@ export function shouldPlay(input: {
   lastPlayedMs: Partial<Record<SoundName, number>>
 }): { play: boolean; why: string | null } {
   const { sound, settings } = input
-  if (sound === null) return { play: false, why: 'It makes no sound: it is seen, not heard.' }
-  if (!input.alerts.enabled) return { play: false, why: 'Notices are off.' }
+  // Each why is a key (shared/i18n/translate.ts): the window shows it in the person's language.
+  if (sound === null) return { play: false, why: msg('It makes no sound: it is seen, not heard.') }
+  if (!input.alerts.enabled) return { play: false, why: msg('Notices are off.') }
   if (sound === 'critical') return { play: true, why: null }
-  if (!input.alerts.sound) return { play: false, why: 'Sound is off.' }
-  if (inQuietHours(settings.quietHours, input.hourOfDay)) return { play: false, why: 'Quiet hours.' }
-  if (input.kind !== undefined && input.kind !== null && settings.mutedKinds.includes(input.kind)) return { play: false, why: 'Its kind is muted.' }
+  if (!input.alerts.sound) return { play: false, why: msg('Sound is off.') }
+  if (inQuietHours(settings.quietHours, input.hourOfDay)) return { play: false, why: msg('Quiet hours.') }
+  if (input.kind !== undefined && input.kind !== null && settings.mutedKinds.includes(input.kind)) return { play: false, why: msg('Its kind is muted.') }
   const last = input.lastPlayedMs[sound]
-  if (last !== undefined && input.nowMs - last < settings.cooldownSec * 1000) return { play: false, why: 'The same sound played moments ago.' }
+  if (last !== undefined && input.nowMs - last < settings.cooldownSec * 1000) return { play: false, why: msg('The same sound played moments ago.') }
   return { play: true, why: null }
 }
 
 // THE SIMULATOR (§76, §109): the events the document names, each as the notice it raises, so that what
 // each sounds like can be heard, and pinned.
 export const SIMULATED_EVENTS: readonly { name: string; title: string; kind: AlertKind; severity: Exclude<AlertSeverity, 'info'>; sound?: NoticeSound }[] = [
-  { name: 'simulateNewsEvent', title: 'News: a listing on Binance', kind: 'NEWS_EVENT', severity: 'watch' },
-  { name: 'simulateMajorNews', title: 'High-impact news: an exploit drains a bridge', kind: 'NEWS_EVENT', severity: 'high' },
-  { name: 'simulatePump', title: 'SOL/USDT up 4% in five minutes', kind: 'MARKET_EVENT', severity: 'watch' },
-  { name: 'simulateDump', title: 'SOL/USDT down 4% in five minutes', kind: 'MARKET_EVENT', severity: 'high' },
-  { name: 'simulateStrongBullish', title: 'STRONG BULLISH: SOL/USDT, next hour', kind: 'TRADE_OPPORTUNITY', severity: 'high', sound: 'opportunity' },
-  { name: 'simulateStrongBearish', title: 'STRONG BEARISH: SOL/USDT, next hour', kind: 'TRADE_OPPORTUNITY', severity: 'high', sound: 'warning' },
-  { name: 'simulatePredictionFlip', title: 'PREDICTION CHANGED: SOL/USDT BULLISH → BEARISH', kind: 'PREDICTION_CHANGED', severity: 'high' },
-  { name: 'simulateTradeReady', title: 'Trade ready: BUY SOL/USDT', kind: 'TRADE_OPPORTUNITY', severity: 'high' },
-  { name: 'simulateTradeExecuted', title: 'Paper trade opened: BUY SOL/USDT', kind: 'TRADE_EXECUTED', severity: 'watch' },
-  { name: 'simulateStopLoss', title: 'Stop triggered: SOL/USDT', kind: 'STOP_TRIGGERED', severity: 'high' },
-  { name: 'simulateTakeProfit', title: 'Target reached: SOL/USDT', kind: 'TARGET_REACHED', severity: 'high' },
-  { name: 'simulateCircuitBreaker', title: 'Circuit breaker: the day’s loss limit reached', kind: 'CIRCUIT_BREAKER', severity: 'critical' },
-  { name: 'simulateExchangeFailure', title: 'Exchange failure: Binance does not answer', kind: 'SYSTEM_FAILURE', severity: 'critical' }
+  { name: 'simulateNewsEvent', title: msg('News: a listing on Binance'), kind: 'NEWS_EVENT', severity: 'watch' },
+  { name: 'simulateMajorNews', title: msg('High-impact news: an exploit drains a bridge'), kind: 'NEWS_EVENT', severity: 'high' },
+  { name: 'simulatePump', title: msg('SOL/USDT up 4% in five minutes'), kind: 'MARKET_EVENT', severity: 'watch' },
+  { name: 'simulateDump', title: msg('SOL/USDT down 4% in five minutes'), kind: 'MARKET_EVENT', severity: 'high' },
+  { name: 'simulateStrongBullish', title: msg('STRONG BULLISH: SOL/USDT, next hour'), kind: 'TRADE_OPPORTUNITY', severity: 'high', sound: 'opportunity' },
+  { name: 'simulateStrongBearish', title: msg('STRONG BEARISH: SOL/USDT, next hour'), kind: 'TRADE_OPPORTUNITY', severity: 'high', sound: 'warning' },
+  { name: 'simulatePredictionFlip', title: msg('PREDICTION CHANGED: SOL/USDT BULLISH → BEARISH'), kind: 'PREDICTION_CHANGED', severity: 'high' },
+  { name: 'simulateTradeReady', title: msg('Trade ready: BUY SOL/USDT'), kind: 'TRADE_OPPORTUNITY', severity: 'high' },
+  { name: 'simulateTradeExecuted', title: msg('Paper trade opened: BUY SOL/USDT'), kind: 'TRADE_EXECUTED', severity: 'watch' },
+  { name: 'simulateStopLoss', title: msg('Stop triggered: SOL/USDT'), kind: 'STOP_TRIGGERED', severity: 'high' },
+  { name: 'simulateTakeProfit', title: msg('Target reached: SOL/USDT'), kind: 'TARGET_REACHED', severity: 'high' },
+  { name: 'simulateCircuitBreaker', title: msg('Circuit breaker: the day’s loss limit reached'), kind: 'CIRCUIT_BREAKER', severity: 'critical' },
+  { name: 'simulateExchangeFailure', title: msg('Exchange failure: Binance does not answer'), kind: 'SYSTEM_FAILURE', severity: 'critical' }
 ]
 
 /** The chime for the top prediction changing pair (§72): at most once in this long. */

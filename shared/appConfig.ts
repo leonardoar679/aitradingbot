@@ -46,6 +46,7 @@ import { PAPER_MIN_STAKE, healPaperRisk } from './paperRisk'
 import { RISK_LINES } from './dynamicRisk'
 import { SESSION_REPORT_VERSION } from './shadowReport'
 import { healUiMode } from './uiMode'
+import { healLanguage } from './i18n/languages'
 import { FORECAST_DATA_VERSION, FORECAST_HISTORY_DAYS } from './forecast/bars'
 import { CALIBRATION_LINES, CALIBRATION_VERSION } from './forecast/calibration'
 import { DIRECTION_LINES } from './forecast/direction'
@@ -220,7 +221,7 @@ export function defaultStores(): EffectiveStores {
  * `settings` is settings.json's top level; `ai` the AI config as its service hands it out; the rest
  * as each service hands them out. */
 export function healStores(input: {
-  settings: { paperRisk?: unknown; paperPause?: unknown; paperDigest?: unknown; alerts?: unknown; sounds?: unknown; keepRunningWhenClosed?: unknown; uiMode?: unknown; forecast?: unknown }
+  settings: { paperRisk?: unknown; paperPause?: unknown; paperDigest?: unknown; alerts?: unknown; sounds?: unknown; keepRunningWhenClosed?: unknown; uiMode?: unknown; language?: unknown; forecast?: unknown }
   ai: { defaultModel: string; enabledModels: string[]; dailyCapUsd: number; callsPerMinute: number; watch: unknown; watchPaper: unknown; additions: unknown }
   scanner: ScannerConfig
   news: unknown
@@ -234,7 +235,7 @@ export function healStores(input: {
     paperDigest: { enabled: healPaperDigest(input.settings.paperDigest).enabled, lastDay: null },
     alerts: healAlerts(input.settings.alerts),
     sounds: healSoundSettings(input.settings.sounds),
-    app: { keepRunningWhenClosed: healKeepRunning(input.settings.keepRunningWhenClosed), uiMode: healUiMode(input.settings.uiMode) },
+    app: { keepRunningWhenClosed: healKeepRunning(input.settings.keepRunningWhenClosed), uiMode: healUiMode(input.settings.uiMode), language: healLanguage(input.settings.language) },
     forecast: healForecastSettings(input.settings.forecast),
     watch,
     watchPaper: healAiWatchPaper(input.ai.watchPaper, watch.models),

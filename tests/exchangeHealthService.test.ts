@@ -12,10 +12,16 @@ const rig = vi.hoisted(() => ({
 
 /** What the main process told: live entries paused, and resumed (the V4 document, §48). */
 const told = vi.hoisted(() => [] as { title: string; body: string; extra: { kind: string; thread?: string } }[])
-vi.mock('../electron/services/noticeService', () => ({
-  tell: (notice: { title: string; body: string; extra: { kind: string; thread?: string } }) => void told.push(notice),
-  tellNotice: async () => true
-}))
+// A notice the main process builds in the person's language (V6 Stage 14) is handed as a builder:
+// built here in English, as the language of a profile that chose none.
+vi.mock('../electron/services/noticeService', async () => {
+  const { ENGLISH } = await import('../shared/i18n/translate')
+  type Told = { title: string; body: string; extra: { kind: string; thread?: string } }
+  return {
+    tell: (notice: Told | ((i18n: typeof ENGLISH) => Told)) => void told.push(typeof notice === 'function' ? notice(ENGLISH) : notice),
+    tellNotice: async () => true
+  }
+})
 vi.mock('../electron/services/liveMarketService', () => ({ getLiveState: () => ({ connection: rig.live }) }))
 vi.mock('../electron/services/credentialsService', () => ({
   listCredentialStatus: async () => [{ exchange: 'binance', configured: rig.key.configured, lastTestOk: rig.key.lastTestOk }]

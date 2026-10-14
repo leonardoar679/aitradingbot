@@ -1,4 +1,5 @@
 import type { MarketRegime } from '../marketResearch'
+import { ENGLISH, type I18n } from '../i18n/translate'
 
 // HOW FAR A FORECAST CAN BE TRUSTED (the V6 document, §25; V6 Stage 6, 13 October 2026): not how sure
 // it is of its direction -- that is its confidence -- but whether its range has earned belief. Four
@@ -32,24 +33,58 @@ export interface ReliabilityInput {
   rvRatio: number
 }
 
-export function reliabilityOf(input: ReliabilityInput): { reliability: Reliability; reasons: string[] } {
-  const graded: { grade: Reliability; reason: string }[] = []
+/** Why a forecast is as reliable as it is, as a code and its figure, worded in any language by
+ * reliabilityReasonText (V6 Stage 14): the window says it in the person's. */
+export type ReliabilityReason =
+  | { code: 'tested'; rows: number }
+  | { code: 'held'; coverage80: number }
+  | { code: 'untested' }
+  | { code: 'agree' }
+  | { code: 'disagree' }
+  | { code: 'panic' }
+  | { code: 'fast' }
+  | { code: 'steady' }
+
+export function reliabilityReasonText(reason: ReliabilityReason, { t, num, pctPlain }: I18n = ENGLISH): string {
+  switch (reason.code) {
+    case 'tested':
+      return t('tested on {rows} outcomes', { rows: num(reason.rows, 0, 0) })
+    case 'held':
+      return t('its 80% range held {share} of them', { share: pctPlain(reason.coverage80 * 100, 1) })
+    case 'untested':
+      return t('its range has not been tested')
+    case 'agree':
+      return t('the models agree')
+    case 'disagree':
+      return t('the models disagree')
+    case 'panic':
+      return t('the market is in panic')
+    case 'fast':
+      return t('the market is moving fast')
+    case 'steady':
+      return t('the market is steady')
+  }
+}
+
+export function reliabilityOf(input: ReliabilityInput): { reliability: Reliability; reasons: string[]; codes: ReliabilityReason[] } {
+  const graded: { grade: Reliability; reason: ReliabilityReason }[] = []
   const lines = RELIABILITY_LINES
   graded.push({
     grade: input.cellRows >= lines.rows.high ? 'HIGH' : input.cellRows >= lines.rows.medium ? 'MEDIUM' : 'LOW',
-    reason: `tested on ${input.cellRows} outcomes`
+    reason: { code: 'tested', rows: input.cellRows }
   })
   const error = Number.isFinite(input.coverage80) ? Math.abs(input.coverage80 - 0.8) : Number.POSITIVE_INFINITY
   graded.push({
     grade: error <= lines.coverageError.high ? 'HIGH' : error <= lines.coverageError.medium ? 'MEDIUM' : 'LOW',
-    reason: Number.isFinite(input.coverage80) ? `its 80% range held ${(input.coverage80 * 100).toFixed(1)}% of them` : 'its range has not been tested'
+    reason: Number.isFinite(input.coverage80) ? { code: 'held', coverage80: input.coverage80 } : { code: 'untested' }
   })
   graded.push({
     grade: input.disagreement <= lines.disagreement.high ? 'HIGH' : input.disagreement <= lines.disagreement.medium ? 'MEDIUM' : 'LOW',
-    reason: input.disagreement <= lines.disagreement.high ? 'the models agree' : 'the models disagree'
+    reason: { code: input.disagreement <= lines.disagreement.high ? 'agree' : 'disagree' }
   })
   const stable: Reliability = input.regime === 'panic' ? 'LOW' : input.regime === 'high-vol' || input.rvRatio >= lines.rvRatio ? 'MEDIUM' : 'HIGH'
-  graded.push({ grade: stable, reason: input.regime === 'panic' ? 'the market is in panic' : stable === 'MEDIUM' ? 'the market is moving fast' : 'the market is steady' })
+  graded.push({ grade: stable, reason: { code: input.regime === 'panic' ? 'panic' : stable === 'MEDIUM' ? 'fast' : 'steady' } })
   const reliability = graded.reduce<Reliability>((low, entry) => (RANK[entry.grade] < RANK[low] ? entry.grade : low), 'HIGH')
-  return { reliability, reasons: graded.filter((entry) => entry.grade === reliability).map((entry) => entry.reason) }
+  const codes = graded.filter((entry) => entry.grade === reliability).map((entry) => entry.reason)
+  return { reliability, reasons: codes.map((code) => reliabilityReasonText(code)), codes }
 }

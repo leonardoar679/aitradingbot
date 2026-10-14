@@ -3,6 +3,7 @@ import { useDryRun, classifyBotOpenPosition } from '../bots/useDryRun'
 import { formatQuotePrice } from '../utils/formatCurrency'
 import { gptRouteOf, type Bot } from '../bots/types'
 import { netUnrealizedPct } from '../../shared/fees'
+import { useI18n } from '../i18n'
 
 function pctColor(pct: number): string {
   return pct >= 0 ? 'var(--up)' : 'var(--down)'
@@ -11,6 +12,8 @@ function pctColor(pct: number): string {
 const cellStyle: React.CSSProperties = { padding: '0.65rem 0.9rem', fontSize: '0.82rem' }
 
 export function BotPositionRow({ bot }: { bot: Bot }): React.JSX.Element {
+  const i18n = useI18n()
+  const { t } = i18n
   const dryRun = useDryRun(
     bot.exchange,
     bot.symbol,
@@ -41,26 +44,20 @@ export function BotPositionRow({ bot }: { bot: Bot }): React.JSX.Element {
         </div>
       </td>
       <td style={cellStyle}>
-        {dryRun.status === 'loading' && <span style={{ color: 'var(--text-muted)' }}>Loading…</span>}
-        {dryRun.status === 'error' && <span style={{ color: 'var(--down)' }}>Error</span>}
-        {dryRun.status === 'running' && position && (
-          <span style={{ color: 'var(--up)', fontWeight: 600 }}>Long</span>
-        )}
+        {dryRun.status === 'loading' && <span style={{ color: 'var(--text-muted)' }}>{t('Loading…')}</span>}
+        {dryRun.status === 'error' && <span style={{ color: 'var(--down)' }}>{t('Error')}</span>}
+        {dryRun.status === 'running' && position && <span style={{ color: 'var(--up)', fontWeight: 600 }}>{t('Long')}</span>}
         {dryRun.status === 'running' && !position && (
           <span style={{ color: 'var(--text-muted)' }}>
-            Flat
-            {open.kind === 'preexisting' && (
-              <div style={{ fontSize: '0.68rem' }}>strategy long since before you enabled this bot</div>
-            )}
+            {t('Flat')}
+            {open.kind === 'preexisting' && <div style={{ fontSize: '0.68rem' }}>{t('strategy long since before you enabled this bot')}</div>}
           </span>
         )}
       </td>
-      <td style={cellStyle}>{position ? formatQuotePrice(position.entryPrice, bot.quoteAsset) : '—'}</td>
-      <td style={cellStyle}>{markPrice !== null ? formatQuotePrice(markPrice, bot.quoteAsset) : '—'}</td>
-      <td style={cellStyle}>{position ? formatQuotePrice(position.stopPrice, bot.quoteAsset) : '—'}</td>
-      <td style={{ ...cellStyle, fontWeight: 600, color: pnlPct !== null ? pctColor(pnlPct) : 'var(--text-muted)' }}>
-        {pnlPct !== null ? `${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%` : '—'}
-      </td>
+      <td style={cellStyle}>{position ? formatQuotePrice(position.entryPrice, bot.quoteAsset, i18n) : '—'}</td>
+      <td style={cellStyle}>{markPrice !== null ? formatQuotePrice(markPrice, bot.quoteAsset, i18n) : '—'}</td>
+      <td style={cellStyle}>{position ? formatQuotePrice(position.stopPrice, bot.quoteAsset, i18n) : '—'}</td>
+      <td style={{ ...cellStyle, fontWeight: 600, color: pnlPct !== null ? pctColor(pnlPct) : 'var(--text-muted)' }}>{pnlPct !== null ? i18n.pct(pnlPct, 2) : '—'}</td>
     </tr>
   )
 }

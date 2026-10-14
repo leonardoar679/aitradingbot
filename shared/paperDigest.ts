@@ -1,3 +1,4 @@
+import { ENGLISH, msg, type I18n } from './i18n/translate'
 import type { ExecutorConfig, PaperDigestSettings, PositionExecutorParams } from './ipc'
 import { describeR, rMultiple } from './paperRisk'
 
@@ -94,52 +95,59 @@ export function paperDigest(executors: ExecutorConfig[], day: string): PaperDige
 }
 
 /** "+0.30", "-1.25": signed as the app writes amounts elsewhere. */
-const signed = (value: number): string => `${value > 0 ? '+' : ''}${value.toFixed(2)}`
+const signed = (value: number, i18n: I18n): string => (i18n.language === 'en' ? `${value > 0 ? '+' : ''}${value.toFixed(2)}` : i18n.signed(value, 2))
+
+/** Each origin's words: its name, and its trades counted (V6 Stage 14). */
+const GROUP_WORDS = {
+  watch: { name: msg('The watch'), none: msg('no paper trades'), counted: msg('{count} paper trades') },
+  news: { name: msg('The news rules'), none: msg('no paper shorts'), counted: msg('{count} paper shorts') }
+} as const
 
 /** One origin's day in a sentence: "The watch opened 3 paper trades and closed 2, 1 of them ahead:
  * +0.30 USDT after fees, or +0.20 R against what each risked at its stop; 1 more never entered."
- * Null when it opened and closed nothing. */
-function groupSentence(name: string, noun: [string, string], group: PaperDigestGroup): string | null {
+ * Null when it opened and closed nothing. In a language. */
+function groupSentence(whose: keyof typeof GROUP_WORDS, group: PaperDigestGroup, i18n: I18n): string | null {
   if (group.opened === 0 && group.closed === 0) return null
-  const counted = (n: number): string => (n === 0 ? `no ${noun[1]}` : `${n} ${n === 1 ? noun[0] : noun[1]}`)
+  const { t } = i18n
+  const words = GROUP_WORDS[whose]
+  const counted = (n: number): string => (n === 0 ? t(words.none) : t(words.counted, { count: n }))
   const entered = group.closed - group.neverEntered
-  let sentence = `${name} opened ${counted(group.opened)}`
+  let sentence = t('{name} opened {opened}', { name: t(words.name), opened: counted(group.opened) })
   if (entered > 0) {
-    const sums = group.pnl.map((entry) => `${signed(entry.amount)} ${entry.asset}`).join(' and ')
+    const sums = group.pnl.map((entry) => `${signed(entry.amount, i18n)} ${entry.asset}`).join(t(' and '))
     const r =
       group.rTrades === 0
-        ? ', with no stop to measure R against'
+        ? t(', with no stop to measure R against')
         : group.rTrades === entered
-          ? `, or ${describeR(group.r)} against what each risked at its stop`
-          : `, or ${describeR(group.r)} for the ${group.rTrades} with a stop`
-    sentence += ` and closed ${entered}, ${group.ahead} of them ahead: ${sums} after fees${r}`
+          ? t(', or {r} against what each risked at its stop', { r: describeR(group.r, i18n) })
+          : t(', or {r} for the {count} with a stop', { r: describeR(group.r, i18n), count: group.rTrades })
+    sentence = t('{sentence} and closed {entered}, {ahead} of them ahead: {sums} after fees{r}', { sentence, entered, ahead: group.ahead, sums, r })
   }
-  if (group.neverEntered > 0) sentence += entered > 0 ? `; ${group.neverEntered} more never entered` : `, and ${group.neverEntered} never entered`
-  return `${sentence}.`
+  if (group.neverEntered > 0) {
+    sentence = entered > 0 ? t('{sentence}; {count} more never entered', { sentence, count: group.neverEntered }) : t('{sentence}, and {count} never entered', { sentence, count: group.neverEntered })
+  }
+  return t('{sentence}.', { sentence })
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-
-/** The notice for a day, or null when nothing was opened or closed on it. */
-export function paperDigestNotice(digest: PaperDigest): { title: string; body: string } | null {
-  const sentences = [groupSentence('The watch', ['paper trade', 'paper trades'], digest.watch), groupSentence('The news rules', ['paper short', 'paper shorts'], digest.news)].filter(
-    (sentence): sentence is string => sentence !== null
-  )
+/** The notice for a day, or null when nothing was opened or closed on it, in a language. */
+export function paperDigestNotice(digest: PaperDigest, i18n: I18n = ENGLISH): { title: string; body: string } | null {
+  const { t } = i18n
+  const sentences = [groupSentence('watch', digest.watch, i18n), groupSentence('news', digest.news, i18n)].filter((sentence): sentence is string => sentence !== null)
   if (sentences.length === 0) return null
-  const [, month, date] = digest.day.split('-').map(Number)
-  const open = digest.openNow === 0 ? 'None is open now.' : `${digest.openNow} ${digest.openNow === 1 ? 'is' : 'are'} open now.`
+  const [year, month, date] = digest.day.split('-').map(Number)
+  const open = digest.openNow === 0 ? t('None is open now.') : t('{count} are open now.', { count: digest.openNow })
   return {
-    title: `Paper trades on ${date} ${MONTHS[month - 1]} (UTC)`,
-    body: `${sentences.join(' ')} ${open} Nothing real was placed. The daily report on Performance has the day.`
+    title: t('Paper trades on {day} (UTC)', { day: i18n.utcDay(Date.UTC(year, month - 1, date)) }),
+    body: t('{sentences} {open} Nothing real was placed. The daily report on Performance has the day.', { sentences: sentences.join(' '), open })
   }
 }
 
 /** Whether to tell a day now, and which: the UTC day before `nowSec`, once, while the digest is on.
  * Null when it is off or that day has been told; otherwise the day to mark as told, and the notice,
  * or null for a day with nothing to tell. */
-export function planPaperDigest(input: { setting: PaperDigestSettings; executors: ExecutorConfig[]; nowSec: number }): { day: string; notice: { title: string; body: string } | null } | null {
+export function planPaperDigest(input: { setting: PaperDigestSettings; executors: ExecutorConfig[]; nowSec: number }, i18n: I18n = ENGLISH): { day: string; notice: { title: string; body: string } | null } | null {
   if (!input.setting.enabled) return null
   const day = utcDay(input.nowSec - 86_400)
   if (input.setting.lastDay !== null && input.setting.lastDay >= day) return null
-  return { day, notice: paperDigestNotice(paperDigest(input.executors, day)) }
+  return { day, notice: paperDigestNotice(paperDigest(input.executors, day), i18n) }
 }

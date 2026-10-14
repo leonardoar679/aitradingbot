@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { Candle, SymbolInfo, Ticker24h } from '../shared/ipc'
-import { TRENDING_URL, type ResearchState } from '../shared/marketResearch'
+import { TRENDING_URL, stepDetailText, type ResearchState } from '../shared/marketResearch'
+import { i18nFor } from '../shared/i18n/translate'
 
 // electron/services/marketResearchService.ts, driven with the market data source faked: what a pass
 // reads, in what order it says so, and what it keeps when a part of it fails. It reads the data
@@ -15,11 +16,19 @@ const rig = vi.hoisted(() => ({
   daily: [] as Candle[],
   fifteen: [] as Candle[],
   fetched: [] as string[],
-  trending: { ok: true, body: {} as unknown }
+  trending: { ok: true, body: {} as unknown },
+  /** Listings of the symbols so far, and how long one takes. */
+  listings: 0,
+  listDelayMs: 0,
+  /** Answers as Electron's fetch does once a request's timeout has fired: a body read after a listing
+   * that ran since the answer came cannot be read. */
+  strictBody: false
 }))
 
 vi.mock('../electron/services/marketService', () => ({
   listSymbols: async () => {
+    rig.listings++
+    if (rig.listDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, rig.listDelayMs))
     if (rig.failList) throw new Error('451 geo-blocked')
     return rig.symbols
   },
@@ -58,7 +67,15 @@ beforeAll(() => {
   vi.stubGlobal('fetch', async (url: string) => {
     rig.fetched.push(url)
     if (!rig.trending.ok) throw new Error('network down')
-    return { ok: true, status: 200, json: async () => rig.trending.body }
+    const listed = rig.listings
+    return {
+      ok: true,
+      status: 200,
+      json: async () => {
+        if (rig.strictBody && rig.listings !== listed) throw new TypeError('Body is unusable: Body has already been read')
+        return rig.trending.body
+      }
+    }
   })
   rig.symbols = [info('BTC'), info('ETH'), info('SOL'), info('PEPE')]
   rig.tickers = [ticker('BTCUSDT', 5e9), ticker('ETHUSDT', 3e9), ticker('SOLUSDT', 1e9), ticker('PEPEUSDT', 25e6)]
@@ -89,6 +106,11 @@ describe('a pass', () => {
       ['market', 'done', 'risk normal'],
       ['trending', 'done', '1 coin, 1 with a USDT pair on Binance']
     ])
+    // Since V6 Stage 14 each detail is also a key the window says in its language: the same words in English.
+    for (const done of state.steps) {
+      expect(stepDetailText(done)).toBe(done.detail)
+      expect(stepDetailText(done, i18nFor('ja'))).not.toBe(done.detail)
+    }
     expect(state.pairs.map((pair) => [pair.symbol, pair.trending])).toEqual([
       ['BTCUSDT', false],
       ['ETHUSDT', false],
@@ -110,6 +132,7 @@ describe('a pass', () => {
     rig.trending.ok = true
     const step = state.steps.find((entry) => entry.id === 'trending')
     expect(step).toMatchObject({ status: 'failed', detail: "CoinGecko's trending list could not be read: network down" })
+    expect(stepDetailText(step!, i18nFor('ja'))).toBe('CoinGecko の注目リストを読み込めませんでした：network down')
     expect(state.trending?.map((coin) => coin.symbol)).toEqual(['SOL'])
     expect(state.pairs.find((pair) => pair.symbol === 'SOLUSDT')?.trending).toBe(true)
   })
@@ -122,5 +145,24 @@ describe('a pass', () => {
     expect(state.steps[0]).toMatchObject({ id: 'universe', status: 'failed', detail: '451 geo-blocked' })
     expect(state.running).toBe(false)
     expect(state.pairs).toEqual(before)
+  })
+})
+
+describe("CoinGecko's trending list", () => {
+  it('is read before the symbols it is matched against are listed, so a slow first listing cannot outlast its timeout', async () => {
+    // A fresh start: no symbols listed yet, and the pass's own listing slow.
+    vi.resetModules()
+    rig.listDelayMs = 50
+    rig.strictBody = true
+    try {
+      const fresh = await import('../electron/services/marketResearchService')
+      const state = await fresh.refreshResearch()
+      expect(state.steps.find((step) => step.id === 'trending')).toMatchObject({ status: 'done', detail: '1 coin, 1 with a USDT pair on Binance' })
+    } finally {
+      rig.listDelayMs = 0
+      rig.strictBody = false
+      rig.requests.length = 0
+      rig.fetched.length = 0
+    }
   })
 })

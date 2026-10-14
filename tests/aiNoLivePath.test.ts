@@ -211,7 +211,8 @@ describe('AI code has no route to a real order', () => {
     // And, since 8 October 2026, the fee rate: the amount a real order from a call is suggested to
     // stake is what the person's risk share would lose at the call's stop after fees.
     // tradePlan (V6 Stage 12): the forecast's TRADE decision fills in the same form from its plan, a type.
-    expect(importsOf(join(ROOT, 'shared', 'aiProposal.ts')).sort()).toEqual(['aiOpportunity', 'aiPanel', 'aiSignal', 'fees', 'ipc', 'marketEvent', 'tradePlan'])
+    // translate (V6 Stage 14): its words said in a language, English unless handed another.
+    expect(importsOf(join(ROOT, 'shared', 'aiProposal.ts')).sort()).toEqual(['aiOpportunity', 'aiPanel', 'aiSignal', 'fees', 'ipc', 'marketEvent', 'tradePlan', 'translate'])
     expect(rules).not.toMatch(/window\.|ipcRenderer|electron/)
   })
 
@@ -238,7 +239,8 @@ describe('AI code has no route to a real order', () => {
       expect(source, path).not.toMatch(/liveTrading|LiveTrading|liveOrders|placeLive|window\.api\.executors|window\.api\.ai\b/)
     }
     // The detector is arithmetic on candles: it imports types and nothing else.
-    expect(importsOf(join(ROOT, 'shared', 'marketEvent.ts'))).toEqual(['ipc'])
+    // translate (V6 Stage 14): its words said in a language, English unless handed another.
+    expect(importsOf(join(ROOT, 'shared', 'marketEvent.ts'))).toEqual(['translate', 'ipc'])
   })
 
   it('the market research reads public data and reaches nothing else', () => {
@@ -252,12 +254,14 @@ describe('AI code has no route to a real order', () => {
       expect(importsOf(path).filter((name) => LIVE_MODULES.has(name)), path).toEqual([])
       expect(importsOf(path).filter((name) => aiModuleNames.has(name)), path).toEqual([])
     }
-    // The data host's reads, through the scanner's own source; never the resolver that trades.
-    expect(importsOf(join(SERVICES, 'marketResearchService.ts')).sort()).toEqual(['ipc', 'marketResearch', 'marketService', 'singleFlight'])
+    // The data host's reads, through the scanner's own source; never the resolver that trades. Since V6
+    // Stage 14 the translator too, to mark each step's words as a key the window says in its language.
+    expect(importsOf(join(SERVICES, 'marketResearchService.ts')).sort()).toEqual(['ipc', 'marketResearch', 'marketService', 'singleFlight', 'translate'])
     expect(readFileSync(join(SERVICES, 'marketResearchService.ts'), 'utf-8')).not.toMatch(/resolveTradingEndpoint|credentials|apiKey/)
     const rules = join(ROOT, 'shared', 'marketResearch.ts')
     // Since 8 October 2026 (V5 Stage 3) the emerging movers are typed by the scanner's event words.
-    expect(importsOf(rules).sort()).toEqual(['aiEventMarket', 'ipc', 'marketEvent', 'marketScanner'])
+    // translate (V6 Stage 14): its words said in a language, English unless handed another.
+    expect(importsOf(rules).sort()).toEqual(['aiEventMarket', 'ipc', 'marketEvent', 'marketScanner', 'translate'])
     expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron/)
     const views = [join(ROOT, 'src', 'hooks', 'useMarketResearch.ts'), join(ROOT, 'src', 'overview', 'MarketStatusStrip.tsx'), join(ROOT, 'src', 'dashboard', 'MoversCard.tsx')]
     for (const path of views) {
@@ -429,7 +433,8 @@ describe('AI code has no route to a real order', () => {
     expect(service).not.toMatch(/resolveTradingEndpoint|credentials|apiKey|setSettings|settings\.set/)
     // The rules are arithmetic: the scanner's spread, the watch's Bitcoin rule, and types.
     const rules = join(ROOT, 'shared', 'liveMarket.ts')
-    expect(importsOf(rules).sort()).toEqual(['aiWatchPaper', 'ipc', 'marketScanner'])
+    // translate (V6 Stage 14): its words said in a language, English unless handed another.
+    expect(importsOf(rules).sort()).toEqual(['aiWatchPaper', 'ipc', 'marketScanner', 'translate'])
     expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron/)
     // What shows it reads the market bridge alone, and offers no call to an order.
     for (const path of [join(ROOT, 'src', 'hooks', 'useLiveMarket.ts'), join(ROOT, 'src', 'agents', 'liveVerdict.ts'), join(ROOT, 'src', 'agents', 'LiveVerdictView.tsx')]) {
@@ -437,8 +442,9 @@ describe('AI code has no route to a real order', () => {
       expect([...new Set([...source.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))], path).toEqual(path.endsWith('useLiveMarket.ts') ? ['market'] : [])
       expect(source, path).not.toMatch(/liveTrading|LiveTrading|placeLive|onPrepareOrder|aiProposal|settings\.set/)
     }
-    // The watch's writer refuses on it inside the queue, among its other refusals.
-    expect(readFileSync(join(ROOT, 'src', 'agents', 'watchPaperTrade.ts'), 'utf-8')).toContain('livePaperBlock(book, deps.nowSec() * 1000) ??')
+    // The watch's writer refuses on it inside the queue, among its other refusals (in English for the
+    // record, and in the person's language for the card: V6 Stage 14).
+    expect(readFileSync(join(ROOT, 'src', 'agents', 'watchPaperTrade.ts'), 'utf-8')).toContain('livePaperBlock(book, deps.nowSec() * 1000, i18n) ??')
   })
 
   it('the news reader reads one public list and reaches nothing else', () => {
@@ -561,9 +567,12 @@ describe('AI code has no route to a real order', () => {
     const service = readFileSync(join(SERVICES, 'newsFeedService.ts'), 'utf-8')
     expect(service).toContain("if (parsed.protocol !== 'https:' || !FEED_HOSTS.includes(parsed.hostname)) return false")
     expect(service).not.toMatch(/resolveTradingEndpoint|credentials|apiKey|setSettings/)
-    expect(importsOf(join(ROOT, 'shared', 'newsFeed.ts'))).toEqual(['ipc'])
-    expect(importsOf(join(ROOT, 'shared', 'moveExplanation.ts')).sort()).toEqual(['ipc', 'newsFeed'])
-    expect(importsOf(join(ROOT, 'shared', 'alerts.ts')).sort()).toEqual(['ipc', 'newsFeed'])
+    // translate (V6 Stage 14): its words said in a language, English unless handed another.
+    expect(importsOf(join(ROOT, 'shared', 'newsFeed.ts'))).toEqual(['ipc', 'translate'])
+    // translate (V6 Stage 14): the window has its sentences said in the person's language.
+    expect(importsOf(join(ROOT, 'shared', 'moveExplanation.ts')).sort()).toEqual(['ipc', 'newsFeed', 'translate'])
+    // translate (V6 Stage 14): its words said in a language, English unless handed another.
+    expect(importsOf(join(ROOT, 'shared', 'alerts.ts')).sort()).toEqual(['ipc', 'newsFeed', 'translate'])
     for (const file of ['newsFeed.ts', 'moveExplanation.ts', 'alerts.ts']) {
       expect(readFileSync(join(ROOT, 'shared', file), 'utf-8'), file).not.toMatch(/window\.|ipcRenderer|electron\//)
     }
@@ -607,7 +616,8 @@ describe('AI code has no route to a real order', () => {
     expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron/)
     // The rules read a coin's usual move with the detector's arithmetic, which imports types alone,
     // and what its fills give up with the scorer's (aiOpportunityOutcome): arithmetic.
-    expect(importsOf(rules).sort()).toEqual(['aiOpportunityOutcome', 'ipc', 'liveBalances', 'marketEvent', 'news', 'newsRules'])
+    // translate (V6 Stage 14): its words said in a language, English unless handed another.
+    expect(importsOf(rules).sort()).toEqual(['aiOpportunityOutcome', 'ipc', 'liveBalances', 'marketEvent', 'news', 'newsRules', 'translate'])
     // Paper is written where the executor is made, and the function that makes it takes no mode.
     const source = readFileSync(writer, 'utf-8')
     expect(source.match(/mode: 'paper'/g)).toHaveLength(2)
@@ -624,7 +634,8 @@ describe('AI code has no route to a real order', () => {
     // exit check's EXIT writes: a time limit brought forward, and nothing else (held below).
     // notices (since 8 October 2026): the words of a notice, pure; the writer still tells through
     // the one dependency it is handed.
-    expect(importsOf(writer).sort()).toEqual(['aiExit', 'engine', 'executorFunding', 'ipc', 'news', 'newsActions', 'notices', 'paperExposure', 'paperPause', 'paperRisk', 'settingsWrites', 'settleExecutor'])
+    // current and translate (V6 Stage 14): its notice in the person's language; its lines stay English.
+    expect(importsOf(writer).sort()).toEqual(['aiExit', 'current', 'engine', 'executorFunding', 'ipc', 'news', 'newsActions', 'notices', 'paperExposure', 'paperPause', 'paperRisk', 'settingsWrites', 'settleExecutor', 'translate'])
     expect(readFileSync(rules, 'utf-8')).toContain("executor.newsRule !== undefined && executor.mode === 'paper' && executor.type === 'position'")
     // The scheduler reads -- the news, the settings, the balances a key can read -- and notifies.
     // Every write goes through the writer above.
@@ -641,7 +652,8 @@ describe('AI code has no route to a real order', () => {
     // paperRefusals keeps this session's refused shorts, for the session report, and since 8 October
     // 2026 each is written to the file as well: a record, read by nothing that decides anything
     // (held below).
-    expect(importsOf(scheduler).sort()).toEqual(['news', 'newsActions', 'newsPaperShort', 'paperRefusals', 'react'])
+    // current (V6 Stage 14): the window's language, read for the notices it tells.
+    expect(importsOf(scheduler).sort()).toEqual(['current', 'news', 'newsActions', 'newsPaperShort', 'paperRefusals', 'react'])
   })
 
   it('the watch asks and notifies, and all but one of its files has nothing to write with', () => {
@@ -683,7 +695,8 @@ describe('AI code has no route to a real order', () => {
     // The second read of the records (8 October 2026, the V5 document, §94): the refusals on file,
     // for the restart sweep that writes one for an answer the app was not running to act on.
     expect([...scheduler.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]).sort()).toEqual(['ai', 'ai', 'ai', 'market', 'notify', 'records', 'records', 'scanner', 'scanner', 'scanner'])
-    expect(importsOf(join(ROOT, 'src', 'agents', 'OpportunityScheduler.tsx')).sort()).toEqual(['marketEvent', 'opportunityWatch', 'react', 'watchPaperTrade'])
+    // current (V6 Stage 14): the window's language, read for the notices it tells.
+    expect(importsOf(join(ROOT, 'src', 'agents', 'OpportunityScheduler.tsx')).sort()).toEqual(['current', 'marketEvent', 'opportunityWatch', 'react', 'watchPaperTrade'])
     // The main-process half reads the setting and the ledger, and nothing else.
     expect(importsOf(join(SERVICES, 'aiWatchService.ts')).sort()).toEqual(['aiConfigService', 'aiLedgerService', 'aiWatch'])
   })
@@ -696,14 +709,18 @@ describe('AI code has no route to a real order', () => {
     for (const path of [join(ROOT, 'shared', 'modelHealth.ts'), join(ROOT, 'shared', 'strategyHealth.ts')]) {
       expect(readFileSync(path, 'utf-8'), path).not.toMatch(/window\.|ipcRenderer|electron\/|liveTrading|placeLive|setConfig|updateConfig|enabled:|mode: /)
     }
-    expect(importsOf(join(ROOT, 'shared', 'strategyHealth.ts'))).toEqual([])
-    expect(importsOf(join(ROOT, 'shared', 'modelHealth.ts')).sort()).toEqual(['aiEventBenchmark', 'aiOutcome', 'aiPanel', 'aiWatchPaper', 'ipc', 'strategyHealth'])
+    // translate (V6 Stage 14): its words said in a language, English unless handed another.
+    expect(importsOf(join(ROOT, 'shared', 'strategyHealth.ts'))).toEqual(['translate'])
+    // translate (V6 Stage 14): its words said in a language, English unless handed another.
+    expect(importsOf(join(ROOT, 'shared', 'modelHealth.ts')).sort()).toEqual(['aiEventBenchmark', 'aiOutcome', 'aiPanel', 'aiWatchPaper', 'ipc', 'strategyHealth', 'translate'])
     const look = join(ROOT, 'src', 'agents', 'modelHealthWatch.ts')
-    expect(importsOf(look).sort()).toEqual(['aiCost', 'aiEventBenchmark', 'liveBoard', 'modelHealth', 'notices'])
+    // translate (V6 Stage 14): its notice in the person's language.
+    expect(importsOf(look).sort()).toEqual(['aiCost', 'aiEventBenchmark', 'liveBoard', 'modelHealth', 'notices', 'translate'])
     expect(readFileSync(look, 'utf-8')).not.toMatch(/window\.|setConfig|updateConfig|enabled|disable|placeLive|liveTrading/)
     const scheduler = join(ROOT, 'src', 'agents', 'ModelHealthScheduler.tsx')
     expect([...readFileSync(scheduler, 'utf-8').matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]).sort()).toEqual(['ai', 'ai', 'market', 'notify', 'scanner'])
-    expect(importsOf(scheduler).sort()).toEqual(['modelHealthWatch', 'react'])
+    // current (V6 Stage 14): the window's language, read for the notice it tells.
+    expect(importsOf(scheduler).sort()).toEqual(['current', 'modelHealthWatch', 'react'])
     // A strategy's health is told from the bot's card, which reaches the desktop and nothing else.
     const card = readFileSync(join(ROOT, 'src', 'bots', 'BotCard.tsx'), 'utf-8')
     expect([...new Set([...card.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))]).toEqual(['notify'])
@@ -770,7 +787,8 @@ describe('AI code has no route to a real order', () => {
     // charges (aiOpportunityOutcome), the losing run's words for the confirmation (paperPause), a few
     // names and types, and nothing that acts.
     // dynamicRisk (8 October 2026): the conditions' factor on the risk, arithmetic on what was read.
-    expect(importsOf(rules).sort()).toEqual(['aiOpportunity', 'aiOpportunityOutcome', 'aiPanel', 'aiProposal', 'aiSignal', 'dynamicRisk', 'ipc', 'marketEvent', 'paperPause', 'paperRisk'])
+    // translate (V6 Stage 14): its words said in a language, English unless handed another.
+    expect(importsOf(rules).sort()).toEqual(['aiOpportunity', 'aiOpportunityOutcome', 'aiPanel', 'aiProposal', 'aiSignal', 'dynamicRisk', 'ipc', 'marketEvent', 'paperPause', 'paperRisk', 'translate'])
     expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron/)
     // The writer reaches settings, the price, candles, the stories on file, a notice and the setting;
     // and, since 8 October 2026, the research, to write the market's regime on the mark (a record).
@@ -802,6 +820,9 @@ describe('AI code has no route to a real order', () => {
       'aiLedger',
       'aiSignal',
       'aiWatchPaper',
+      // current and translate (V6 Stage 14): the person's language, for its notices and the card's line;
+      // what is recorded and refused by stays English.
+      'current',
       'dynamicRisk',
       'engine',
       'excursions',
@@ -816,7 +837,8 @@ describe('AI code has no route to a real order', () => {
       'paperPause',
       'paperRisk',
       'settingsWrites',
-      'settleExecutor'
+      'settleExecutor',
+      'translate'
     ])
     expect(readFileSync(join(ROOT, 'src', 'account', 'settleExecutor.ts'), 'utf-8')).toContain("if (executor.mode === 'live') return null")
     // It only ever looks at its own: a paper Position carrying the watch's mark.
@@ -829,7 +851,8 @@ describe('AI code has no route to a real order', () => {
     // what they have out together. Both only ever open less: a sized trade is at most its own stake,
     // and the cap only refuses. It is arithmetic on a setting and the executors on file.
     const rules = join(ROOT, 'shared', 'paperRisk.ts')
-    expect(importsOf(rules).sort()).toEqual(['fees', 'ipc'])
+    // translate (V6 Stage 14): its words said in a language, English unless handed another.
+    expect(importsOf(rules).sort()).toEqual(['fees', 'ipc', 'translate'])
     const source = readFileSync(rules, 'utf-8')
     expect(source).not.toMatch(/window\.|ipcRenderer|electron|liveTrading|placeLive/)
     // Since 8 October 2026 the conditions' factor is applied after the cap (shared/dynamicRisk.ts).
@@ -942,7 +965,8 @@ describe('AI code has no route to a real order', () => {
     expect(lookSource).not.toMatch(/liveTrading|LiveTrading|liveOrders|placeLive|settings\.set|setExecutors|onPrepareOrder|aiProposal|mode:/)
     // Since 8 October 2026 the reading of a trade's minutes is openTradeReading.ts, shared with the
     // thesis status on Positions; the look still reaches the engine only through it.
-    expect(importsOf(look).sort()).toEqual(['aiAdditions', 'aiCost', 'aiEventMarket', 'aiExit', 'ipc', 'newsPaperShort', 'notices', 'openTradeReading', 'paperRisk', 'watchPaperTrade'])
+    // current and translate (V6 Stage 14): its notice in the person's language.
+    expect(importsOf(look).sort()).toEqual(['aiAdditions', 'aiCost', 'aiEventMarket', 'aiExit', 'current', 'ipc', 'newsPaperShort', 'notices', 'openTradeReading', 'paperRisk', 'translate', 'watchPaperTrade'])
     expect(lookSource).toContain('ownOpenPaperTrades(executors)')
     const scheduler = join(ROOT, 'src', 'agents', 'ExitCheckScheduler.tsx')
     expect(readFileSync(scheduler, 'utf-8')).not.toMatch(/window\.api/)
@@ -958,7 +982,8 @@ describe('AI code has no route to a real order', () => {
     // the measuring and the page read candles, the feed and the ledger, and write nothing, ask no
     // model, and open, size or close nothing. The live rows' label reads the watcher's copy.
     const rules = join(ROOT, 'shared', 'thesisStatus.ts')
-    expect(importsOf(rules).sort()).toEqual(['aiAdditions', 'marketResearch', 'notices', 'paperNewsBlock'])
+    // translate (V6 Stage 14): its words said in a language, English unless handed another.
+    expect(importsOf(rules).sort()).toEqual(['aiAdditions', 'marketResearch', 'notices', 'paperNewsBlock', 'translate'])
     expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron|liveTrading|placeLive|setExecutors/)
     const reading = join(ROOT, 'src', 'agents', 'openTradeReading.ts')
     expect(importsOf(reading).sort()).toEqual(['aiAdditions', 'aiEventMarket', 'engine', 'ipc', 'marketResearch'])
@@ -989,7 +1014,8 @@ describe('AI code has no route to a real order', () => {
     // executors on file. The value refuses a paper trade of the watch's at a calibrated rate under
     // the round trip, and nothing else acts on either.
     const value = join(ROOT, 'shared', 'expectedValue.ts')
-    expect(importsOf(value).sort()).toEqual(['aiLedger', 'fees', 'ipc', 'marketEvent'])
+    // translate (V6 Stage 14): its words said in a language, English unless handed another.
+    expect(importsOf(value).sort()).toEqual(['aiLedger', 'fees', 'ipc', 'marketEvent', 'translate'])
     expect(readFileSync(value, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron|liveTrading|placeLive|setExecutors/)
     const cost = join(ROOT, 'shared', 'aiCostPerTrade.ts')
     expect(importsOf(cost).sort()).toEqual(['aiLedger', 'ipc'])
@@ -1093,8 +1119,9 @@ describe('AI code has no route to a real order', () => {
     const score = join(ROOT, 'shared', 'opportunityScore.ts')
     const exposure = join(ROOT, 'shared', 'paperExposure.ts')
     // The news analyst's reading of a story is one more observation the news part takes (a type).
-    expect(importsOf(score).sort()).toEqual(['aiAdditions', 'aiOpportunity', 'marketEvent', 'marketResearch', 'newsFeed'])
-    expect(importsOf(exposure).sort()).toEqual(['aiEventMarket', 'ipc', 'paperRisk'])
+    // translate (V6 Stage 14): its words said in a language, English unless handed another.
+    expect(importsOf(score).sort()).toEqual(['aiAdditions', 'aiOpportunity', 'marketEvent', 'marketResearch', 'newsFeed', 'translate'])
+    expect(importsOf(exposure).sort()).toEqual(['aiEventMarket', 'ipc', 'paperRisk', 'translate'])
     for (const path of [score, exposure]) {
       expect(readFileSync(path, 'utf-8'), path).not.toMatch(/window\.|ipcRenderer|electron\/|liveTrading|placeLive|setExecutors|status: '|mode: /)
     }
@@ -1102,10 +1129,11 @@ describe('AI code has no route to a real order', () => {
     for (const writer of [join(ROOT, 'src', 'agents', 'watchPaperTrade.ts'), join(ROOT, 'src', 'news', 'newsPaperShort.ts')]) {
       const source = readFileSync(writer, 'utf-8')
       const at = source.indexOf('paperOutBlock({')
-      const next = source.indexOf('correlatedExposureBlock({', at)
+      const next = source.indexOf('correlatedExposureBlock(', at)
       expect(at, writer).toBeGreaterThan(-1)
       expect(next, writer).toBeGreaterThan(at)
-      expect(source.slice(at, next), writer).toMatch(/\}\) \?\?\s+$/)
+      // The watch's says its refusal in a language too (V6 Stage 14).
+      expect(source.slice(at, next), writer).toMatch(/\}(, i18n)?\) \?\?\s+$/)
     }
     // The score is shown and ranks by: nothing that asks a model or writes reads it.
     for (const file of ['watchPaperTrade.ts', 'opportunityWatch.ts', 'OpportunityScheduler.tsx']) {
@@ -1120,7 +1148,8 @@ describe('AI code has no route to a real order', () => {
     // them and to mark the day told -- and the notice, and nothing that opens, closes or asks.
     const rules = join(ROOT, 'shared', 'paperDigest.ts')
     // R is paperRisk's arithmetic: what a trade made over what its stop would have lost.
-    expect(importsOf(rules).sort()).toEqual(['ipc', 'paperRisk'])
+    // translate (V6 Stage 14): its words said in a language, English unless handed another.
+    expect(importsOf(rules).sort()).toEqual(['ipc', 'paperRisk', 'translate'])
     expect(readFileSync(rules, 'utf-8')).not.toMatch(/window\.|ipcRenderer|electron|liveTrading|placeLive/)
     const scheduler = join(ROOT, 'src', 'risk', 'PaperDigestScheduler.tsx')
     const source = readFileSync(scheduler, 'utf-8')
@@ -1129,7 +1158,8 @@ describe('AI code has no route to a real order', () => {
       'settings.get',
       'settings.set'
     ])
-    expect(importsOf(scheduler).sort()).toEqual(['paperDigest', 'react', 'settingsWrites'])
+    // current (V6 Stage 14): the window's language, read for the notices it tells.
+    expect(importsOf(scheduler).sort()).toEqual(['current', 'paperDigest', 'react', 'settingsWrites'])
     // What it writes is the day it told, beside the switch, and nothing else: never the executors.
     expect(source.match(/window\.api\.settings\.set\(/g)).toHaveLength(1)
     expect(source).toContain('window.api.settings.set({ paperDigest: { ...setting, lastDay: plan.day } })')
@@ -1143,7 +1173,8 @@ describe('AI code has no route to a real order', () => {
     // closes nothing.
     const rules = join(ROOT, 'shared', 'paperPause.ts')
     // R is paperRisk's arithmetic: what a trade made over what its stop would have lost.
-    expect(importsOf(rules).sort()).toEqual(['ipc', 'paperRisk'])
+    // translate (V6 Stage 14): its words said in a language, English unless handed another.
+    expect(importsOf(rules).sort()).toEqual(['ipc', 'paperRisk', 'translate'])
     const source = readFileSync(rules, 'utf-8')
     expect(source).not.toMatch(/window\.|ipcRenderer|electron|liveTrading|placeLive/)
     // It makes no executor and stops none.
@@ -1152,8 +1183,9 @@ describe('AI code has no route to a real order', () => {
       [join(ROOT, 'src', 'agents', 'watchPaperTrade.ts'), 'watch'],
       [join(ROOT, 'src', 'news', 'newsPaperShort.ts'), 'news']
     ] as const
+    // Read inside the queue, on fresh settings; the watch's says its refusal in a language too (V6 Stage 14).
     for (const [writer, side] of writers) {
-      expect(readFileSync(writer, 'utf-8'), writer).toContain(`paperPauseBlock({ setting: healPaperPause(fresh.paperPause), executors: fresh.executors, source: '${side}' })`)
+      expect(readFileSync(writer, 'utf-8'), writer).toContain(`paperPauseBlock({ setting: healPaperPause(fresh.paperPause), executors: fresh.executors, source: '${side}' }`)
     }
     const scheduler = join(ROOT, 'src', 'risk', 'PaperPauseScheduler.tsx')
     const watching = readFileSync(scheduler, 'utf-8')
@@ -1162,7 +1194,8 @@ describe('AI code has no route to a real order', () => {
       'settings.get',
       'settings.set'
     ])
-    expect(importsOf(scheduler).sort()).toEqual(['paperPause', 'react', 'settingsWrites'])
+    // current (V6 Stage 14): the window's language, read for the notices it tells.
+    expect(importsOf(scheduler).sort()).toEqual(['current', 'paperPause', 'react', 'settingsWrites'])
     expect(watching.match(/window\.api\.settings\.set\(/g)).toHaveLength(1)
     expect(watching).toContain('window.api.settings.set({ paperPause: plan.setting })')
   })
@@ -1215,7 +1248,8 @@ describe('AI code has no route to a real order', () => {
     // keeps the threads and records what it told; the handler only hands it what the window sent.
     expect(importsOf(join(ROOT, 'electron', 'ipc', 'handlers', 'appHandlers.ts')).sort()).toEqual(['electron', 'ipc', 'noticeService', 'pingService'])
     // sounds (V6 Stage 13): which sound a notice's meaning makes, written on its record for the window.
-    expect(importsOf(join(SERVICES, 'noticeService.ts')).sort()).toEqual(['alerts', 'electron', 'ipc', 'recordStoreService', 'settingsService', 'sounds'])
+    // languages and translate (V6 Stage 14): a notice the main process builds is said in the person's language.
+    expect(importsOf(join(SERVICES, 'noticeService.ts')).sort()).toEqual(['alerts', 'electron', 'ipc', 'languages', 'recordStoreService', 'settingsService', 'sounds', 'translate'])
     // What plays the sounds and shows them reads the settings, the told records and the forecast's ranking
     // (for the top prediction's chime), and asks for the minute's reminder: nothing that trades or asks.
     for (const name of readdirSync(join(ROOT, 'src', 'sound'))) {
@@ -1236,6 +1270,8 @@ describe('AI code has no route to a real order', () => {
       'hardLimits',
       'ipc',
       'keepRunning',
+      // languages and translate (V6 Stage 14): the language a profile chose, and the risk mode said in one.
+      'languages',
       'liveLimits',
       'marketScanner',
       'news',
@@ -1246,6 +1282,7 @@ describe('AI code has no route to a real order', () => {
       'tradePlan',
       'trader',
       'training',
+      'translate',
       'uiMode'
     ])
   })
@@ -1260,7 +1297,8 @@ describe('AI code has no route to a real order', () => {
     expect(importsOf(chip).sort()).toEqual(['StatusChip', 'aiCost', 'react', 'statusModes'])
     const modes = readFileSync(join(ROOT, 'src', 'status', 'statusModes.ts'), 'utf-8')
     expect(modes).not.toMatch(/window\.|ipcRenderer|electron/)
-    expect(importsOf(join(ROOT, 'src', 'status', 'statusModes.ts')).sort()).toEqual(['aiCost', 'ipc'])
+    // translate (V6 Stage 14): Essentials has the modes said in the person's language.
+    expect(importsOf(join(ROOT, 'src', 'status', 'statusModes.ts')).sort()).toEqual(['aiCost', 'ipc', 'translate'])
   })
 
   it("a trade's timeline reads what is on file and writes nothing", () => {

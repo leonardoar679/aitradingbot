@@ -1,3 +1,4 @@
+import { ENGLISH, type I18n } from '../../shared/i18n/translate'
 // Formatting trade timestamps for display.
 //
 // EVERYTHING HERE IS UTC, deliberately, and it is the only defensible choice in this app. The
@@ -46,13 +47,13 @@ export function formatUtcShort(unixSeconds: number): string {
  * Two units at most. A trend follower holds for weeks, and "38d 6h 12m" reads as noise where
  * "38d 6h" reads as a duration. Under a minute is shown as `<1m` rather than `0m`, since a
  * zero-length hold would look like a bug in the engine rather than a very short trade. */
-export function formatHoldingDuration(seconds: number): string {
+export function formatHoldingDuration(seconds: number, { t }: I18n = ENGLISH): string {
   if (!Number.isFinite(seconds) || seconds < 0) return ''
-  if (seconds < MINUTE) return '<1m'
+  if (seconds < MINUTE) return t('<1m')
   const days = Math.floor(seconds / DAY)
   const hours = Math.floor((seconds % DAY) / HOUR)
   const minutes = Math.floor((seconds % HOUR) / MINUTE)
-  if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`
-  if (hours > 0) return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`
-  return `${minutes}m`
+  if (days > 0) return hours > 0 ? t('{days}d {hours}h', { days, hours }) : t('{days}d', { days })
+  if (hours > 0) return minutes > 0 ? t('{hours}h {minutes}m', { hours, minutes }) : t('{hours}h', { hours })
+  return t('{minutes}m', { minutes })
 }

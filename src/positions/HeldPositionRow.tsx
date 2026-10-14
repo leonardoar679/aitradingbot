@@ -4,6 +4,7 @@ import { useLastPrice } from '../hooks/useLastPrice'
 import { formatQuotePrice } from '../utils/formatCurrency'
 import { netUnrealizedPct } from '../../shared/fees'
 import { describeHeldCloseBlock, describeHeldCloseConfirm, heldPositionCloseValue } from './closeHeldPosition'
+import { useI18n } from '../i18n'
 
 function pctColor(pct: number): string {
   return pct >= 0 ? 'var(--up)' : 'var(--down)'
@@ -20,13 +21,15 @@ export function HeldPositionRow({
    * price it is worked out from is the one this row is showing the user. */
   onClose: (id: string, closeValue: number) => void
 }): React.JSX.Element {
+  const i18n = useI18n()
+  const { t } = i18n
   const markPrice = useLastPrice(position.exchange, position.symbol)
   const exchangeName = EXCHANGES.find((e) => e.id === position.exchange)?.name ?? position.exchange
   const pnlPct = markPrice !== null ? netUnrealizedPct(position.entryPrice, markPrice, position.side) : null
 
   const [confirming, setConfirming] = useState(false)
   const closeValue = heldPositionCloseValue(position, markPrice)
-  const closeBlock = describeHeldCloseBlock(position, markPrice)
+  const closeBlock = describeHeldCloseBlock(position, markPrice, i18n)
 
   function handleCloseClick(): void {
     // Refused rather than discarded when it cannot be valued. Closing has to pay back what the
@@ -52,19 +55,17 @@ export function HeldPositionRow({
         </div>
       </td>
       <td style={{ ...cellStyle, color: position.side === 'buy' ? 'var(--up)' : 'var(--down)', fontWeight: 600, textTransform: 'uppercase' }}>
-        {position.side === 'buy' ? 'Long' : 'Short'}
+        {position.side === 'buy' ? t('Long') : t('Short')}
       </td>
-      <td style={cellStyle}>{formatQuotePrice(position.entryPrice, position.quoteAsset)}</td>
-      <td style={cellStyle}>{markPrice !== null ? formatQuotePrice(markPrice, position.quoteAsset) : '—'}</td>
-      <td style={cellStyle}>{formatQuotePrice(position.amountQuote, position.quoteAsset)}</td>
-      <td style={{ ...cellStyle, fontWeight: 600, color: pnlPct !== null ? pctColor(pnlPct) : 'var(--text-muted)' }}>
-        {pnlPct !== null ? `${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%` : '—'}
-      </td>
+      <td style={cellStyle}>{formatQuotePrice(position.entryPrice, position.quoteAsset, i18n)}</td>
+      <td style={cellStyle}>{markPrice !== null ? formatQuotePrice(markPrice, position.quoteAsset, i18n) : '—'}</td>
+      <td style={cellStyle}>{formatQuotePrice(position.amountQuote, position.quoteAsset, i18n)}</td>
+      <td style={{ ...cellStyle, fontWeight: 600, color: pnlPct !== null ? pctColor(pnlPct) : 'var(--text-muted)' }}>{pnlPct !== null ? i18n.pct(pnlPct, 2) : '—'}</td>
       <td style={cellStyle}>
         <button
           onClick={handleCloseClick}
           disabled={closeValue === null}
-          title={closeBlock ?? `Sells this position at ${formatQuotePrice(markPrice ?? 0, position.quoteAsset)} and returns the proceeds to your balance`}
+          title={closeBlock ?? t('Sells this position at {price} and returns the proceeds to your balance', { price: formatQuotePrice(markPrice ?? 0, position.quoteAsset, i18n) })}
           style={{
             background: confirming ? 'var(--down)' : 'transparent',
             border: '1px solid var(--border)',
@@ -77,7 +78,7 @@ export function HeldPositionRow({
             opacity: closeValue === null ? 0.5 : 1
           }}
         >
-          {closeValue === null ? 'Close' : confirming ? describeHeldCloseConfirm(position, markPrice) : 'Close'}
+          {closeValue === null ? t('Close@@a position') : confirming ? describeHeldCloseConfirm(position, markPrice, i18n) : t('Close@@a position')}
         </button>
         {closeBlock !== null && (
           <div style={{ marginTop: '0.3rem', fontSize: '0.68rem', color: 'var(--text-muted)', maxWidth: '18rem', lineHeight: 1.4 }}>

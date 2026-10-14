@@ -12,7 +12,8 @@ import { DEFAULT_SCANNER_UNIVERSE, SCANNER_UNIVERSE_SIZES, type ScannerConfig } 
 import { healPaperPause } from '../../shared/paperPause'
 import { healPaperRisk } from '../../shared/paperRisk'
 import type { Page } from '../navigation/pages'
-import { connectionStateOf, describeAiSpend, describeLiveReadiness, describeWatchMode, liveReadinessOf, tradingModeOf, watchModeOf, type Tone } from '../status/statusModes'
+import { connectionStateOf, describeAiSpend, describeLiveReadiness, describeWatchMode, liveReadinessOf, tradingModeOf, watchModeOf, watchModeWord, type Tone } from '../status/statusModes'
+import { Interpolate, useI18n } from '../i18n'
 import { describeError } from '../utils/ipcError'
 import { settingsWrites } from '../utils/settingsWrites'
 import { formButtonStyle, textInputStyle } from './formStyles'
@@ -24,8 +25,6 @@ const toneColor = (tone: Tone): string =>
   tone === 'safe' ? 'var(--up)' : tone === 'live' || tone === 'blocked' ? 'var(--down)' : tone === 'warn' ? 'var(--gold)' : 'var(--text-primary)'
 
 const noteStyle: React.CSSProperties = { margin: '0.2rem 0 0', fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.5 }
-
-const amount = (value: number): string => value.toLocaleString('en-US', { maximumFractionDigits: 2 })
 
 function Row({ label, children }: { label: string; children: React.ReactNode }): React.JSX.Element {
   return (
@@ -47,6 +46,9 @@ function Row({ label, children }: { label: string; children: React.ReactNode }):
  * the bar, and the limits on Risk & Safety. Whether the AI asks, or trades on paper, is changed only
  * on Opportunities, after the confirmation that states what a day of it can cost. */
 export function EssentialsCard({ onNavigate, onUiModeChange }: { onNavigate: (page: Page) => void; onUiModeChange: (mode: UiMode) => void }): React.JSX.Element {
+  const i18n = useI18n()
+  const { t } = i18n
+  const amount = (value: number): string => i18n.num(value, 0, 2)
   const [status, setStatus] = useState<LiveTradingStatus | null>(null)
   const [binance, setBinance] = useState<CredentialStatus | undefined>(undefined)
   const [keyConfigured, setKeyConfigured] = useState<boolean | null>(null)
@@ -169,69 +171,73 @@ export function EssentialsCard({ onNavigate, onUiModeChange }: { onNavigate: (pa
     })
 
   const readiness = describeLiveReadiness(
-    liveReadinessOf({ mode: tradingModeOf({ binanceKey: binance?.configured === true, status }), connection: connectionStateOf(binance) })
+    liveReadinessOf({ mode: tradingModeOf({ binanceKey: binance?.configured === true, status }), connection: connectionStateOf(binance) }),
+    i18n
   )
-  const risk = paper === null ? null : describeRiskMode({ paperRisk: paper.paperRisk, paperPause: paper.paperPause, trader: paper.forecast.trader })
-  const watch = keyConfigured === null ? null : describeWatchMode(watchModeOf({ keyConfigured, config }))
+  const risk = paper === null ? null : describeRiskMode({ paperRisk: paper.paperRisk, paperPause: paper.paperPause, trader: paper.forecast.trader }, i18n)
+  const watchMode = keyConfigured === null ? null : watchModeOf({ keyConfigured, config })
+  const watch = watchMode === null ? null : describeWatchMode(watchMode, i18n)
   const universe = scanner?.universeSize ?? DEFAULT_SCANNER_UNIVERSE
 
   return (
-    <Card title="Essentials">
-      <p style={{ ...noteStyle, margin: '0 0 0.4rem' }}>
-        The six settings that decide what the app does by itself. The rest are under Advanced, below; nothing there is needed to start.
-      </p>
+    <Card title={t('Essentials')}>
+      <p style={{ ...noteStyle, margin: '0 0 0.4rem' }}>{t('The six settings that decide what the app does by itself. The rest are under Advanced, below; nothing there is needed to start.')}</p>
 
-      <Row label="Trading mode">
+      <Row label={t('Trading mode')}>
         <div style={{ fontSize: '0.85rem', fontWeight: 700, color: toneColor(readiness.tone) }}>{readiness.label}</div>
         <p style={noteStyle}>
-          {readiness.detail} Keys are on <TextLink onClick={() => onNavigate('connections')}>Connections</TextLink>.
+          {readiness.detail} <Interpolate text={t('Keys are on {connections}.')} values={{ connections: <TextLink onClick={() => onNavigate('connections')}>{t('Connections')}</TextLink> }} />
         </p>
       </Row>
 
-      <Row label="Risk mode">
+      <Row label={t('Risk mode')}>
         {risk === null ? (
-          <span style={noteStyle}>Loading…</span>
+          <span style={noteStyle}>{t('Loading…')}</span>
         ) : (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: risk.mode === 'conservative' ? 'var(--up)' : 'var(--gold)', marginRight: '0.3rem' }}>{risk.label}</span>
+              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: risk.mode === 'conservative' ? 'var(--up)' : 'var(--gold)', marginInlineEnd: '0.3rem' }}>{risk.label}</span>
               {RISK_MODES.map((mode) => (
                 <button
                   key={mode}
-                  aria-label={`Set the risk mode to ${RISK_MODE_NAMES[mode]}`}
+                  aria-label={t('Set the risk mode to {mode}', { mode: t(RISK_MODE_NAMES[mode]) })}
                   aria-pressed={risk.mode === mode}
                   onClick={() => void setRiskMode(mode)}
                   disabled={busy || risk.mode === mode}
                   style={{ ...formButtonStyle(risk.mode === mode ? 'primary' : 'secondary'), padding: '0.3rem 0.7rem', opacity: busy ? 0.6 : 1 }}
                 >
-                  {RISK_MODE_NAMES[mode]}
+                  {t(RISK_MODE_NAMES[mode])}
                 </button>
               ))}
             </div>
             <p style={noteStyle}>
               {risk.detail}
               {status !== null &&
-                ` Real orders, when live trading is armed: at most ${amount(status.maxOrderQuote)} an order, ${amount(status.dailyCapQuote)} a day, and a day's loss of ${amount(status.dailyLossLimitQuote)}.`}{' '}
-              All of it is set on <TextLink onClick={() => onNavigate('risk')}>Risk &amp; Safety</TextLink>; a mode sets only the paper settings.
+                ` ${t("Real orders, when live trading is armed: at most {order} an order, {day} a day, and a day's loss of {loss}.", {
+                  order: amount(status.maxOrderQuote),
+                  day: amount(status.dailyCapQuote),
+                  loss: amount(status.dailyLossLimitQuote)
+                })}`}{' '}
+              <Interpolate text={t('All of it is set on {risk}; a mode sets only the paper settings.')} values={{ risk: <TextLink onClick={() => onNavigate('risk')}>{t('Risk & Safety')}</TextLink> }} />
             </p>
           </>
         )}
       </Row>
 
-      <Row label="Market">
+      <Row label={t('Market')}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flexWrap: 'wrap' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', color: 'var(--text-primary)' }}>
             <input
               type="checkbox"
-              aria-label="Watch the market"
+              aria-label={t('Watch the market')}
               checked={scanner?.enabled === true}
               disabled={busy || scanner === null}
               onChange={(event) => void setScannerConfig({ enabled: event.target.checked })}
             />
-            Watch the market
+            {t('Watch the market')}
           </label>
           <select
-            aria-label="Pairs the scanner watches"
+            aria-label={t('Pairs the scanner watches')}
             value={universe}
             disabled={busy || scanner === null}
             onChange={(event) => void setScannerConfig({ universeSize: Number(event.target.value) })}
@@ -239,79 +245,80 @@ export function EssentialsCard({ onNavigate, onUiModeChange }: { onNavigate: (pa
           >
             {SCANNER_UNIVERSE_SIZES.map((size) => (
               <option key={size} value={size}>
-                {size === DEFAULT_SCANNER_UNIVERSE ? `Auto: the ${size} most traded USDT pairs` : `The ${size} most traded USDT pairs`}
+                {size === DEFAULT_SCANNER_UNIVERSE ? t('Auto: the {count} most traded USDT pairs', { count: size }) : t('The {count} most traded USDT pairs', { count: size })}
               </option>
             ))}
           </select>
         </div>
         <p style={noteStyle}>
           {scanner?.enabled === true
-            ? 'The scanner reads these pairs once a minute and raises what moves unusually; it is free and places nothing.'
-            : 'The scanner is off, so no event is raised for the AI or for you. It is free and places nothing.'}
+            ? t('The scanner reads these pairs once a minute and raises what moves unusually; it is free and places nothing.')
+            : t('The scanner is off, so no event is raised for the AI or for you. It is free and places nothing.')}
         </p>
       </Row>
 
-      <Row label="AI">
-        <div style={{ fontSize: '0.85rem', fontWeight: 700, color: watch === null ? 'var(--text-muted)' : toneColor(watch.tone) }}>
-          {watch === null ? 'Loading…' : watch.label.replace(/^AI: /, '')}
-        </div>
+      <Row label={t('AI')}>
+        <div style={{ fontSize: '0.85rem', fontWeight: 700, color: watch === null ? 'var(--text-muted)' : toneColor(watch.tone) }}>{watchMode === null ? t('Loading…') : watchModeWord(watchMode, i18n)}</div>
         <p style={noteStyle}>
           {watch?.detail}
-          {config !== null && keyConfigured === true && ` Spent ${describeAiSpend(config)}.`} The watch, and its paper trades, are switched on and off on{' '}
-          <TextLink onClick={() => onNavigate('opportunities')}>Opportunities</TextLink>, after a confirmation stating the most a day can cost.
+          {config !== null && keyConfigured === true && ` ${t('Spent {spent}.', { spent: describeAiSpend(config, i18n) })}`}{' '}
+          <Interpolate
+            text={t('The watch, and its paper trades, are switched on and off on {opportunities}, after a confirmation stating the most a day can cost.')}
+            values={{ opportunities: <TextLink onClick={() => onNavigate('opportunities')}>{t('Opportunities')}</TextLink> }}
+          />
         </p>
       </Row>
 
-      <Row label="Notifications">
+      <Row label={t('Notifications')}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem', flexWrap: 'wrap', fontSize: '0.82rem', color: 'var(--text-primary)' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <input type="checkbox" aria-label="Notices" checked={alerts.enabled} disabled={busy || paper === null} onChange={(event) => void setAlert({ enabled: event.target.checked })} />
-            Notices
+            <input type="checkbox" aria-label={t('Notices')} checked={alerts.enabled} disabled={busy || paper === null} onChange={(event) => void setAlert({ enabled: event.target.checked })} />
+            {t('Notices')}
           </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: alerts.enabled ? 'var(--text-primary)' : 'var(--text-muted)' }}>
             <input
               type="checkbox"
-              aria-label="Notices with sound"
+              aria-label={t('Notices with sound')}
               checked={alerts.sound}
               disabled={busy || paper === null || !alerts.enabled}
               onChange={(event) => void setAlert({ sound: event.target.checked })}
             />
-            With sound
+            {t('With sound')}
           </label>
         </div>
         <p style={noteStyle}>
           {alerts.enabled
-            ? 'A call from the watch, a paper trade opened or paused, the daily digest and news about a coin you hold each raise a notice, heard by its meaning -- each sound, its volume and quiet hours are under Advanced › Notifications.'
-            : 'No notice is raised and none is heard, critical included; what would have been said is still on its page.'}
+            ? t('A call from the watch, a paper trade opened or paused, the daily digest and news about a coin you hold each raise a notice, heard by its meaning -- each sound, its volume and quiet hours are under Advanced › Notifications.')
+            : t('No notice is raised and none is heard, critical included; what would have been said is still on its page.')}
         </p>
       </Row>
 
-      <Row label="When closed">
+      <Row label={t('When closed')}>
         <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', color: 'var(--text-primary)' }}>
           <input
             type="checkbox"
-            aria-label="Keep running when the window is closed"
+            aria-label={t('Keep running when the window is closed')}
             checked={keepRunning}
             disabled={busy || paper === null}
             onChange={(event) => void setKeepRunningWhenClosed(event.target.checked)}
           />
-          Keep running in the tray when the window is closed
+          {t('Keep running in the tray when the window is closed')}
         </label>
         <p style={noteStyle}>
           {keepRunning
-            ? 'Closing the window hides it: the watch, its paper trades, the exit check and the real position watchers run on until Quit from the tray icon.'
-            : 'Closing the window quits the app: everything that runs in it stops, and a resting real order stays on the exchange. The tray icon shows the socket and the watch while the app runs.'}
+            ? t('Closing the window hides it: the watch, its paper trades, the exit check and the real position watchers run on until Quit from the tray icon.')
+            : t('Closing the window quits the app: everything that runs in it stops, and a resting real order stays on the exchange. The tray icon shows the socket and the watch while the app runs.')}
         </p>
       </Row>
 
-      <Row label="Exchange">
-        <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>Binance · spot · USDT pairs</div>
-        <p style={noteStyle}>Market data is public and needs no key; a key is needed only to place real orders.</p>
+      <Row label={t('Exchange')}>
+        <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>{t('Binance · spot · USDT pairs')}</div>
+        <p style={noteStyle}>{t('Market data is public and needs no key; a key is needed only to place real orders.')}</p>
       </Row>
 
-      <Row label="Layout">
+      <Row label={t('Layout')}>
         <select
-          aria-label="Sidebar layout"
+          aria-label={t('Sidebar layout')}
           value={uiMode}
           disabled={busy || paper === null}
           onChange={(event) => void setLayout(healUiMode(event.target.value))}
@@ -319,11 +326,13 @@ export function EssentialsCard({ onNavigate, onUiModeChange }: { onNavigate: (pa
         >
           {UI_MODES.map((mode) => (
             <option key={mode} value={mode}>
-              {describeUiMode(mode).label}
+              {describeUiMode(mode, i18n).label}
             </option>
           ))}
         </select>
-        <p style={noteStyle}>{describeUiMode(uiMode).detail} Every page is in the sidebar either way; this changes nothing the app does.</p>
+        <p style={noteStyle}>
+          {describeUiMode(uiMode, i18n).detail} {t('Every page is in the sidebar either way; this changes nothing the app does.')}
+        </p>
       </Row>
 
       {problem !== null && <p style={{ ...noteStyle, color: 'var(--down)' }}>{problem}</p>}

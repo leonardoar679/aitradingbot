@@ -14,10 +14,16 @@ import type { Candle } from '../shared/ipc'
 vi.mock('electron', () => ({ app: { getPath: () => process.env.AI_TEST_USER_DATA } }))
 /** What the main process told (the V4 document, §48): the key rejected, the day's budget spent. */
 const told = vi.hoisted(() => [] as { title: string; body: string; extra: { kind: string; thread?: string } }[])
-vi.mock('../electron/services/noticeService', () => ({
-  tell: (notice: { title: string; body: string; extra: { kind: string; thread?: string } }) => void told.push(notice),
-  tellNotice: async () => true
-}))
+// A notice the main process builds in the person's language (V6 Stage 14) is handed as a builder:
+// built here in English, as the language of a profile that chose none.
+vi.mock('../electron/services/noticeService', async () => {
+  const { ENGLISH } = await import('../shared/i18n/translate')
+  type Told = { title: string; body: string; extra: { kind: string; thread?: string } }
+  return {
+    tell: (notice: Told | ((i18n: typeof ENGLISH) => Told)) => void told.push(typeof notice === 'function' ? notice(ENGLISH) : notice),
+    tellNotice: async () => true
+  }
+})
 vi.mock('../electron/services/aiCredentialsService', () => ({
   getDecryptedAiCredential: async () => ({ apiKey: 'sk-or-test' })
 }))

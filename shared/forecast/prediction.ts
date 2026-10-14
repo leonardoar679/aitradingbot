@@ -8,7 +8,9 @@ import { MODELS_VERSION, type ForecastModelId } from './models'
 import { NEWS_EFFECT_VERSION, newsEffectOf, type AnalystReadingInput, type KindReactions, type NewsEffect, type NewsStoryInput } from './newsEffect'
 import { QUALITY_VERSION, qualityOf, type PredictionQuality } from './quality'
 import type { RangeDriver } from './rangeDrivers'
-import { reliabilityOf, type Reliability } from './reliability'
+import { reliabilityOf, type Reliability, type ReliabilityReason } from './reliability'
+import { forecastPrice, HORIZON_ADJECTIVE } from './words'
+import { ENGLISH, type I18n } from '../i18n/translate'
 import { RUN_CALIBRATION_VERSION, VARIANTS, cellOf, type ForecastVariant, type RunCalibration } from './runCalibration'
 import { usualMove } from './targets'
 
@@ -81,6 +83,9 @@ export interface ForecastRange {
   confidence: number
   reliability: Reliability
   reliabilityReasons: string[]
+  /** The same as codes, for the window to word in the person's language (V6 Stage 14); absent on a
+   * forecast made before. */
+  reliabilityCodes?: ReliabilityReason[]
   /** How good it is, 0 to 100, and from what (shared/forecast/quality.ts). */
   quality: PredictionQuality
   /** The width of P10-P90, and the pair class's usual width at the horizon, in percent. */
@@ -181,10 +186,32 @@ export interface PredictionInput {
   foldsRunId: string
 }
 
-const HORIZON_WORDS: Record<Horizon, string> = { minutes5: '5-minute', minutes15: '15-minute', hour1: '1-hour', hours4: '4-hour', hours24: '24-hour' }
-
 const pctOf = (logReturn: number): number => (Math.exp(logReturn) - 1) * 100
-const priceText = (value: number): string => Number(value.toPrecision(6)).toLocaleString('en-US', { maximumFractionDigits: 10 })
+
+/** What would undo a forecast (§5), led by its horizon: its own bad case, and the market turning on it.
+ * In English on the forecast; the window words it again in the person's language (V6 Stage 14). */
+export function invalidationConditionsOf(direction: Direction, horizon: Horizon, lead: Pick<ForecastRange, 'quantilePrices'>, i18n: I18n = ENGLISH): string[] {
+  const { t } = i18n
+  const words = t(HORIZON_ADJECTIVE[horizon])
+  const price = (value: number): string => forecastPrice(value, i18n)
+  if (direction === 'BULLISH') {
+    return [
+      t('The price falls below {price}, the {horizon} bear case.', { price: price(lead.quantilePrices[P10]), horizon: words }),
+      t('Bitcoin falls 1% within fifteen minutes.'),
+      t('The market turns to panic.'),
+      t('A story of impact 70 or more goes against the coin.')
+    ]
+  }
+  if (direction === 'BEARISH') {
+    return [
+      t('The price rises above {price}, the {horizon} bull case.', { price: price(lead.quantilePrices[P90]), horizon: words }),
+      t('Bitcoin rises 1% within fifteen minutes.'),
+      t('The market turns to a rally.'),
+      t('A story of impact 70 or more goes for the coin.')
+    ]
+  }
+  return [t('The price leaves {low} – {high}, the {horizon} 80% range.', { low: price(lead.quantilePrices[P10]), high: price(lead.quantilePrices[P90]), horizon: words })]
+}
 
 /** One horizon's range from its models' quantiles and the run's calibration. */
 function rangeOf(input: PredictionInput, horizon: Horizon): ForecastRange | null {
@@ -288,6 +315,7 @@ function rangeOf(input: PredictionInput, horizon: Horizon): ForecastRange | null
     confidence: confidenceOf(shown.pUp, call.direction),
     reliability: trust.reliability,
     reliabilityReasons: trust.reasons,
+    reliabilityCodes: trust.codes,
     quality,
     width80Pct,
     usualWidth80Pct: v2.read.usualWidth80Pct,
@@ -330,24 +358,8 @@ export function makePrediction(input: PredictionInput): PricePrediction | null {
   const leadHorizon = bestHorizon ?? (horizons.hour1 !== undefined ? 'hour1' : made[0])
   const lead = horizons[leadHorizon]!
   const direction: Direction = bestHorizon === null ? 'NEUTRAL' : lead.direction
-  const words = HORIZON_WORDS[leadHorizon]
   // What would undo it (§5): its own bad case, and the market turning on it.
-  const invalidationConditions =
-    direction === 'BULLISH'
-      ? [
-          `The price falls below ${priceText(lead.quantilePrices[P10])}, the ${words} bear case.`,
-          'Bitcoin falls 1% within fifteen minutes.',
-          'The market turns to panic.',
-          'A story of impact 70 or more goes against the coin.'
-        ]
-      : direction === 'BEARISH'
-        ? [
-            `The price rises above ${priceText(lead.quantilePrices[P90])}, the ${words} bull case.`,
-            'Bitcoin rises 1% within fifteen minutes.',
-            'The market turns to a rally.',
-            'A story of impact 70 or more goes for the coin.'
-          ]
-        : [`The price leaves ${priceText(lead.quantilePrices[P10])} – ${priceText(lead.quantilePrices[P90])}, the ${words} 80% range.`]
+  const invalidationConditions = invalidationConditionsOf(direction, leadHorizon, lead)
   const catalyst = lead.news.v4
   return {
     pair: input.pair,

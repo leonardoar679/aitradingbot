@@ -16,7 +16,13 @@ import { ForecastHistoryChart } from './ForecastHistoryChart'
 import type { AiOrderProposal } from '../../shared/aiProposal'
 import { tradeThisOf } from './tradeThis'
 import { useRiskTarget } from './useRiskTarget'
-import { callColor, callLabel, decisionWords, leadHorizon, momentumWord, pairText, priceText, rangeText, signedPct, timeLeftText, volumeWord, HORIZON_NEXT, HORIZON_SHORT } from './forecastWords'
+import { callColor, callLabel, decisionWords, dollarText, leadHorizon, momentumWord, pairText, rangeText, signedPct, timeLeftText, volumeWord, HORIZON_NEXT, HORIZON_SHORT, reliabilityWord } from './forecastWords'
+import { invalidationConditionsOf } from '../../shared/forecast/prediction'
+import { driverText } from '../../shared/forecast/rangeDrivers'
+import { reliabilityReasonText } from '../../shared/forecast/reliability'
+import { REGIME_NAME, forecastModelName } from '../../shared/forecast/words'
+import { storyKindWord, type NewsEventType } from '../../shared/newsFeed'
+import { msg, useI18n } from '../i18n'
 
 const section: React.CSSProperties = { borderTop: '1px solid var(--border)', paddingTop: '0.7rem', marginTop: '0.7rem' }
 const heading: React.CSSProperties = { margin: '0 0 0.4rem', fontSize: '0.7rem', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-secondary)' }
@@ -39,6 +45,9 @@ export function PredictionDrawer({
   /** TRADE THIS (V6 Stage 12): the plan filled into the Position form, for a person to place. */
   onPrepareOrder?: (proposal: AiOrderProposal) => void
 }): React.JSX.Element {
+  const i18n = useI18n()
+  const { t, pctPlain, utcTime } = i18n
+  const pct = (value: number | null | undefined): string => (value === null || value === undefined ? '—' : signedPct(value, 2, i18n))
   const nowSec = useNowSec(true, 5_000)
   const targetLevel = useRiskTarget()
   const research = useMarketResearch().state
@@ -72,128 +81,222 @@ export function PredictionDrawer({
   const kind = story === null ? undefined : feedState?.impact.find((row) => row.eventType === story.kind)
   const reading = story === null ? undefined : readings[story.storyId]
   const answers = useMemo(() => feed.find((item) => item.event.symbol === prediction.pair && item.answers.length > 0)?.answers ?? [], [feed, prediction.pair])
-  const words = decisionWords(decision)
-  const trade = tradeThisOf({ prediction, decision, livePrice, targetLevel, nowSec })
+  const words = decisionWords(decision, i18n)
+  const trade = tradeThisOf({ prediction, decision, livePrice, targetLevel, nowSec }, i18n)
+  const rtl = i18n.dir === 'rtl'
+  const reasons = leadRange === undefined ? [] : (leadRange.reliabilityCodes?.map((code) => reliabilityReasonText(code, i18n)) ?? leadRange.reliabilityReasons)
+  const undone = leadRange === undefined ? prediction.invalidationConditions : invalidationConditionsOf(prediction.direction, lead, leadRange, i18n)
+  const price = dollarText(view.price, i18n)
+  const horizonShort = t(HORIZON_SHORT[lead])
 
   return (
     <aside
       style={{
         position: 'fixed',
         top: 0,
-        right: 0,
+        insetInlineEnd: 0,
         bottom: 0,
         width: 'min(46rem, 100vw)',
         overflowY: 'auto',
         background: 'var(--bg-surface)',
-        borderLeft: '1px solid var(--border)',
-        boxShadow: '-8px 0 24px rgba(0,0,0,0.25)',
+        borderInlineStart: '1px solid var(--border)',
+        boxShadow: `${rtl ? 8 : -8}px 0 24px rgba(0,0,0,0.25)`,
         padding: '1.25rem',
         zIndex: 50
       }}
-      aria-label={`The forecast of ${pairText(prediction.pair)}`}
+      aria-label={t('The forecast of {pair}', { pair: pairText(prediction.pair) })}
     >
       <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.8rem', flexWrap: 'wrap' }}>
-        <h2 style={{ margin: 0, fontSize: '1.15rem' }}>{pairText(prediction.pair)}</h2>
-        {leadRange !== undefined && <strong style={{ color: callColor(leadRange.direction) }}>{callLabel(leadRange)}</strong>}
-        <span style={noteStyle}>
-          ${priceText(view.price)} {view.priceFrom === 'live' ? `(live, ${signedPct(view.movedPct)} since the close)` : '(last close)'}
-        </span>
-        <button type="button" style={{ ...buttonStyle('secondary'), marginLeft: 'auto' }} onClick={onClose}>
-          Close
+        <h2 dir="ltr" style={{ margin: 0, fontSize: '1.15rem' }}>
+          {pairText(prediction.pair)}
+        </h2>
+        {leadRange !== undefined && <strong style={{ color: callColor(leadRange.direction) }}>{callLabel(leadRange, i18n)}</strong>}
+        <span style={noteStyle}>{view.priceFrom === 'live' ? t('{price} (live, {move} since the close)', { price, move: pct(view.movedPct) }) : t('{price} (last close)', { price })}</span>
+        <button type="button" style={{ ...buttonStyle('secondary'), marginInlineStart: 'auto' }} onClick={onClose}>
+          {t('Close')}
         </button>
       </div>
       <p style={{ ...noteStyle, marginTop: '0.4rem' }}>
-        Read at the {new Date(prediction.barTime * 1000).toISOString().slice(11, 16)} UTC close; confidence {prediction.confidence}% the way it leans, reliability {prediction.reliability}
-        {leadRange !== undefined && leadRange.reliabilityReasons.length > 0 ? ` (${leadRange.reliabilityReasons.join('; ')})` : ''}.
+        {reasons.length > 0
+          ? t('Read at the {time} UTC close; confidence {confidence} the way it leans, reliability {reliability} ({reasons}).', {
+              time: utcTime(prediction.barTime * 1000),
+              confidence: pctPlain(prediction.confidence, 0),
+              reliability: reliabilityWord(prediction.reliability, i18n),
+              reasons: reasons.join(t('; '))
+            })
+          : t('Read at the {time} UTC close; confidence {confidence} the way it leans, reliability {reliability}.', {
+              time: utcTime(prediction.barTime * 1000),
+              confidence: pctPlain(prediction.confidence, 0),
+              reliability: reliabilityWord(prediction.reliability, i18n)
+            })}
       </p>
 
       <div style={section}>
-        <h3 style={heading}>Timeline</h3>
-        <p style={line}>NOW · ${priceText(view.price)}</p>
+        <h3 style={heading}>{t('Timeline')}</h3>
+        <p style={line}>{t('NOW · {price}', { price })}</p>
         {HORIZONS.map((horizon) => {
           const range = view.horizons[horizon]
           const full = prediction.horizons[horizon]
           if (range === undefined || full === undefined) return null
           return (
-            <p key={horizon} style={{ ...line, paddingLeft: '1rem', borderLeft: `2px solid ${callColor(full.direction)}` }}>
-              <strong>{HORIZON_SHORT[horizon]}</strong> · {callLabel(full)} · likely {rangeText(range.lowPct, range.highPct)} · bear {signedPct(range.bearPct)} · bull {signedPct(range.bullPct)} · P(up) {Math.round(full.pUp * 100)}% · quality {full.quality.score} · {timeLeftText(range.timeLeftMs)}
-              {range.invalidated ? ' · INVALIDATED: the price has left its 80% range' : ''}
+            <p key={horizon} style={{ ...line, paddingInlineStart: '1rem', borderInlineStart: `2px solid ${callColor(full.direction)}` }}>
+              <strong>{t(HORIZON_SHORT[horizon])}</strong>{' '}
+              {t('· {call} · likely {range} · bear {bear} · bull {bull} · P(up) {pUp} · quality {quality} · {time}', {
+                call: callLabel(full, i18n),
+                range: rangeText(range.lowPct, range.highPct, i18n),
+                bear: pct(range.bearPct),
+                bull: pct(range.bullPct),
+                pUp: pctPlain(Math.round(full.pUp * 100), 0),
+                quality: full.quality.score,
+                time: timeLeftText(range.timeLeftMs, i18n)
+              })}
+              {range.invalidated ? ` ${t('· INVALIDATED: the price has left its 80% range')}` : ''}
             </p>
           )
         })}
       </div>
 
       <div style={section}>
-        <h3 style={heading}>Why?</h3>
-        <p style={line}>24 hours: {pair === undefined ? '—' : signedPct(pair.change24hPct)} · 7 days: {pair?.change7dPct === null || pair === undefined ? '—' : signedPct(pair.change7dPct)}</p>
-        <p style={line}>Momentum: {momentumWord(prediction.market?.z1h)} · Volume: {volumeWord(prediction.market?.volRatio1h)} · Market: {prediction.regime}</p>
+        <h3 style={heading}>{t('Why?')}</h3>
+        <p style={line}>{t('24 hours: {day} · 7 days: {week}', { day: pct(pair?.change24hPct), week: pct(pair?.change7dPct) })}</p>
         <p style={line}>
-          News:{' '}
+          {t('Momentum: {momentum} · Volume: {volume} · Market: {regime}', {
+            momentum: momentumWord(prediction.market?.z1h, i18n),
+            volume: volumeWord(prediction.market?.volRatio1h, i18n),
+            regime: t(REGIME_NAME[prediction.regime] ?? prediction.regime)
+          })}
+        </p>
+        <p style={line}>
           {story === null
-            ? 'no story about the coin in the last four hours'
-            : `${story.kind.toLowerCase()} story, impact ${story.impact} — "${story.title}" (${story.source}); it moved the median ${signedPct(story.shiftPct)}${story.fromLibrary ? '' : ' (no history for its kind: it only widened the range)'}`}
+            ? t('News: no story about the coin in the last four hours')
+            : story.fromLibrary
+              ? t('News: {kind} story, impact {impact} — “{title}” ({source}); it moved the median {shift}', {
+                  kind: storyKindWord(story.kind as NewsEventType, i18n),
+                  impact: story.impact,
+                  title: story.title,
+                  source: story.source,
+                  shift: pct(story.shiftPct)
+                })
+              : t('News: {kind} story, impact {impact} — “{title}” ({source}); it moved the median {shift} (no history for its kind: it only widened the range)', {
+                  kind: storyKindWord(story.kind as NewsEventType, i18n),
+                  impact: story.impact,
+                  title: story.title,
+                  source: story.source,
+                  shift: pct(story.shiftPct)
+                })}
         </p>
         {kind?.medianPct !== null && kind?.medianPct !== undefined && (
           <p style={line}>
-            Stories of its kind before ({kind.stories}): median move {signedPct(kind.medianPct.m5 ?? Number.NaN)} at 5 min, {signedPct(kind.medianPct.h1 ?? Number.NaN)} at 1 h, {signedPct(kind.medianPct.h4 ?? Number.NaN)} at 4 h.
+            {t('Stories of its kind before ({count}): median move {m5} at 5 min, {h1} at 1 h, {h4} at 4 h.', {
+              count: kind.stories,
+              m5: pct(kind.medianPct.m5 ?? Number.NaN),
+              h1: pct(kind.medianPct.h1 ?? Number.NaN),
+              h4: pct(kind.medianPct.h4 ?? Number.NaN)
+            })}
           </p>
         )}
-        {reading !== undefined && <p style={line}>The news analyst read it as: {describeNewsReading(reading)}. AI summary, in its own words: “{reading.reasons}”</p>}
-        {answers.length > 0 && (
+        {reading !== undefined && (
           <p style={line}>
-            The watch's models on its event:{' '}
-            {answers.map((answer) => `${answer.model}: ${answer.decision.recommendation}${answer.decision.rationale ? ` — “${answer.decision.rationale.slice(0, 160)}”` : ''}`).join(' · ')}
+            {t('The news analyst read it as: {reading}.', { reading: describeNewsReading(reading, i18n) })} <AiWords label={t('AI summary, in its own words:')} words={reading.reasons} />
           </p>
+        )}
+        {answers.length > 0 && (
+          <div style={line}>
+            {t("The watch's models on its event:")}
+            {answers.map((answer) => (
+              <p key={answer.model} style={{ ...line, paddingInlineStart: '1rem' }}>
+                <span dir="ltr">{answer.model}</span>: {t(RECOMMENDATIONS[answer.decision.recommendation] ?? answer.decision.recommendation)}
+                {answer.decision.rationale ? (
+                  <>
+                    {' '}
+                    <AiWords label={t('AI summary, in its own words:')} words={answer.decision.rationale.slice(0, 160)} />
+                  </>
+                ) : null}
+              </p>
+            ))}
+          </div>
         )}
         {leadRange !== undefined && (
           <p style={line}>
-            The models at {HORIZON_SHORT[lead]}: {leadRange.contributions.map((member) => `${member.model} ${Math.round(member.weight * 100)}% (median ${signedPct(member.medianLogPct)})`).join(', ')}; calibration moved it {signedPct(leadRange.calibrationShiftLogPct)}
-            {leadRange.newsShiftLogPct !== 0 ? `, the news ${signedPct(leadRange.newsShiftLogPct)}` : ''}.
+            {leadRange.newsShiftLogPct !== 0
+              ? t('The models at {horizon}: {members}; calibration moved it {shift}, the news {news}.', {
+                  horizon: horizonShort,
+                  members: membersText(leadRange.contributions),
+                  shift: pct(leadRange.calibrationShiftLogPct),
+                  news: pct(leadRange.newsShiftLogPct)
+                })
+              : t('The models at {horizon}: {members}; calibration moved it {shift}.', {
+                  horizon: horizonShort,
+                  members: membersText(leadRange.contributions),
+                  shift: pct(leadRange.calibrationShiftLogPct)
+                })}
           </p>
         )}
       </div>
 
       {leadRange !== undefined && (
         <div style={section}>
-          <h3 style={heading}>Why this range?</h3>
+          <h3 style={heading}>{t('Why this range?')}</h3>
           <p style={line}>
-            Its 80% range is {leadRange.width80Pct.toFixed(2)}% wide, against {leadRange.usualWidth80Pct.toFixed(2)}% usual for its kind of coin at {HORIZON_SHORT[lead]}: the forecast expects {leadRange.width80Pct > leadRange.usualWidth80Pct ? 'wider' : 'narrower'} moves than usual.{' '}
+            {leadRange.width80Pct > leadRange.usualWidth80Pct
+              ? t('Its 80% range is {width} wide, against {usual} usual for its kind of coin at {horizon}: the forecast expects wider moves than usual.', { width: pctPlain(leadRange.width80Pct, 2), usual: pctPlain(leadRange.usualWidth80Pct, 2), horizon: horizonShort })
+              : t('Its 80% range is {width} wide, against {usual} usual for its kind of coin at {horizon}: the forecast expects narrower moves than usual.', { width: pctPlain(leadRange.width80Pct, 2), usual: pctPlain(leadRange.usualWidth80Pct, 2), horizon: horizonShort })}{' '}
             {leadRange.rangeDrivers.length === 0
-              ? `No boosted model weighs at ${HORIZON_SHORT[lead]}: its range is the other models' reading of the day's volatility.`
-              : `What moved the ${leadRange.rangeDrivers[0].model === 'gbt-price' ? 'price-only boosted' : 'boosted'} model's reading of the move's size most:`}
+              ? t("No boosted model weighs at {horizon}: its range is the other models' reading of the day's volatility.", { horizon: horizonShort })
+              : leadRange.rangeDrivers[0].model === 'gbt-price'
+                ? t("What moved the price-only boosted model's reading of the move's size most:")
+                : t("What moved the boosted model's reading of the move's size most:")}
           </p>
-          <ol style={{ margin: '0.2rem 0 0.2rem 1.2rem', padding: 0 }}>
+          <ol style={{ margin: '0.2rem 0', paddingInlineStart: '1.2rem' }}>
             {leadRange.rangeDrivers.map((driver) => (
               <li key={driver.feature} style={line}>
-                {driver.text}
+                {driverText(driver, i18n)}
               </li>
             ))}
-            {story !== null && (story.widenPct > 0 || story.widenShare > 0) && <li style={line}>a story about the coin, which widened it</li>}
-            {leadRange.spreadStretch > 1 && <li style={line}>a thin book: its spread widened it {Math.round((leadRange.spreadStretch - 1) * 100)}%</li>}
+            {story !== null && (story.widenPct > 0 || story.widenShare > 0) && <li style={line}>{t('a story about the coin, which widened it')}</li>}
+            {leadRange.spreadStretch > 1 && <li style={line}>{t('a thin book: its spread widened it {share}', { share: pctPlain(Math.round((leadRange.spreadStretch - 1) * 100), 0) })}</li>}
           </ol>
         </div>
       )}
 
       <div style={section}>
-        <h3 style={heading}>Its forecasts against the price</h3>
+        <h3 style={heading}>{t('Its forecasts against the price')}</h3>
         <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.4rem', flexWrap: 'wrap' }}>
           {HORIZONS.filter((horizon) => horizon !== 'hours24').map((horizon) => (
             <button key={horizon} type="button" style={buttonStyle(horizon === chartHorizon ? 'primary' : 'secondary')} onClick={() => setChartHorizon(horizon)}>
-              {HORIZON_SHORT[horizon]}
+              {t(HORIZON_SHORT[horizon])}
             </button>
           ))}
         </div>
-        {history.length === 0 ? <p style={noteStyle}>No forecast of it on record yet: one is kept every quarter hour.</p> : <ForecastHistoryChart lines={history} horizon={chartHorizon} />}
-        <p style={noteStyle}>The blue lines are each forecast's likely range and the dotted ones its 80% range, drawn at the moment it was a forecast for; the gold line is the price at each close.</p>
+        {history.length === 0 ? (
+          <p style={noteStyle}>{t('No forecast of it on record yet: one is kept every quarter hour.')}</p>
+        ) : (
+          // A chart reads left to right in every language.
+          <div dir="ltr">
+            <ForecastHistoryChart lines={history} horizon={chartHorizon} />
+          </div>
+        )}
+        <p style={noteStyle}>{t("The blue lines are each forecast's likely range and the dotted ones its 80% range, drawn at the moment it was a forecast for; the gold line is the price at each close.")}</p>
       </div>
 
       <div style={section}>
-        <h3 style={heading}>The trade</h3>
+        <h3 style={heading}>{t('The trade')}</h3>
         <p style={{ ...line, fontWeight: 600, color: words.trade ? 'var(--up)' : 'var(--text-secondary)' }}>{words.label}</p>
         {words.detail !== '' && <p style={noteStyle}>{words.detail}</p>}
         {'plan' in trade && (
           <p style={line}>
-            The plan, from ${priceText(trade.plan.entryPrice)}: enter in ${priceText(trade.plan.entryMin)} ~ ${priceText(trade.plan.entryMax)} until {new Date(trade.plan.validUntil * 1000).toISOString().slice(11, 16)} UTC; stop {trade.plan.stopPct.toFixed(2)}% away (${priceText(trade.plan.stopPrice)}); target {trade.plan.targetPct.toFixed(2)}% at its {trade.plan.targetLevel} (${priceText(trade.plan.targetPrice)}); held at most {HORIZON_SHORT[trade.plan.horizon]}.
+            {t('The plan, from {price}: enter in {low} ~ {high} until {time} UTC; stop {stop} away ({stopPrice}); target {target} at its {level} ({targetPrice}); held at most {horizon}.', {
+              price: dollarText(trade.plan.entryPrice, i18n),
+              low: dollarText(trade.plan.entryMin, i18n),
+              high: dollarText(trade.plan.entryMax, i18n),
+              time: utcTime(trade.plan.validUntil * 1000),
+              stop: pctPlain(trade.plan.stopPct, 2),
+              stopPrice: dollarText(trade.plan.stopPrice, i18n),
+              target: pctPlain(trade.plan.targetPct, 2),
+              level: trade.plan.targetLevel,
+              targetPrice: dollarText(trade.plan.targetPrice, i18n),
+              horizon: t(HORIZON_SHORT[trade.plan.horizon])
+            })}
           </p>
         )}
         {onPrepareOrder !== undefined && (
@@ -201,18 +304,38 @@ export function PredictionDrawer({
             type="button"
             style={{ ...buttonStyle('primary', 'problem' in trade), marginTop: '0.4rem' }}
             disabled={'problem' in trade}
-            title={'problem' in trade ? trade.problem : 'Fills in the Position form, on paper; a person places it.'}
+            title={'problem' in trade ? trade.problem : t('Fills in the Position form, on paper; a person places it.')}
             onClick={() => {
               if ('proposal' in trade) onPrepareOrder(trade.proposal)
             }}
           >
-            TRADE THIS
+            {t('TRADE THIS')}
           </button>
         )}
         {'problem' in trade && onPrepareOrder !== undefined && <p style={noteStyle}>{trade.problem}</p>}
-        {prediction.invalidationConditions.length > 0 && <p style={{ ...noteStyle, marginTop: '0.4rem' }}>It would be undone if: {prediction.invalidationConditions.join(' ')}</p>}
-        <p style={{ ...noteStyle, marginTop: '0.4rem' }}>{HORIZON_NEXT[lead]} is its lead horizon. A forecast is not a trade; nothing was placed.</p>
+        {undone.length > 0 && <p style={{ ...noteStyle, marginTop: '0.4rem' }}>{t('It would be undone if: {conditions}', { conditions: undone.join(' ') })}</p>}
+        <p style={{ ...noteStyle, marginTop: '0.4rem' }}>{t('{horizon} is its lead horizon. A forecast is not a trade; nothing was placed.', { horizon: t(HORIZON_NEXT[lead]) })}</p>
       </div>
     </aside>
+  )
+
+  /** The weighing models, each with its weight and median. */
+  function membersText(members: readonly { model: string; weight: number; medianLogPct: number }[]): string {
+    return members.map((member) => t('{model} {weight} (median {median})', { model: forecastModelName(member.model, i18n), weight: pctPlain(Math.round(member.weight * 100), 0), median: pct(member.medianLogPct) })).join(t(', '))
+  }
+}
+
+/** What a model recommended, in a word. */
+const RECOMMENDATIONS: Record<string, string> = { buy: msg('buy'), sell: msg('sell'), hold: msg('hold') }
+
+/** A model's own words (the V6 document, §89): labelled, and left as it wrote them, in its language. */
+function AiWords({ label, words }: { label: string; words: string }): React.JSX.Element {
+  return (
+    <span>
+      <em>{label}</em>{' '}
+      <span lang="en" dir="auto">
+        “{words}”
+      </span>
+    </span>
   )
 }

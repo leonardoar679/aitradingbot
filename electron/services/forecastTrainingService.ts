@@ -124,8 +124,10 @@ function tellDegraded(horizons: FoldsResult['horizons'], promotions: readonly Pr
       if (!verdict.degraded) continue
       degraded.push(`${row.model}:${entry.horizon}`)
       try {
-        const notice = degradedForecastNotice(row.model, entry.horizon, verdict.reasons)
-        tellNotice({ title: notice.title, body: notice.body, extra: notice.extra })
+        tellNotice((i18n) => {
+          const notice = degradedForecastNotice(row.model, entry.horizon, verdict.codes, i18n)
+          return { title: notice.title, body: notice.body, extra: notice.extra }
+        })
       } catch (error) {
         console.error('A degraded model could not be told:', error)
       }

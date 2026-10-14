@@ -1,3 +1,4 @@
+import { ENGLISH, type I18n } from './i18n/translate'
 import {
   AI_MARKET_REGIMES,
   AI_MAX_REASON_CODES,
@@ -122,9 +123,9 @@ export function deciderCalls(id: string): number {
 }
 
 /** A decider as it is named to a person: a model by its id, a panel as what it is. */
-export function describeDecider(id: string): string {
+export function describeDecider(id: string, i18n: I18n = ENGLISH): string {
   const model = panelModelOf(id)
-  return model === null ? describeAiModelId(id) : `the agent panel on ${describeAiModelId(model)}`
+  return model === null ? describeAiModelId(id, i18n) : i18n.t('the agent panel on {model}', { model: describeAiModelId(model, i18n) })
 }
 
 export type AiAgentVerdictOf<R extends AiAgentRole> = { ok: true; report: AiAgentReports[R] } | { ok: false; reason: string }

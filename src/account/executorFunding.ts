@@ -1,3 +1,4 @@
+import { ENGLISH, type I18n } from '../../shared/i18n/translate'
 import type { ExecutorConfig, PaperAccount } from '../../shared/ipc'
 import { committedByAsset } from './accountCommitments'
 import { describeInsufficientFunds } from './paperAccount'
@@ -21,15 +22,18 @@ export interface FundingRequest {
  * Requests are summed per asset before checking, so adding a whole starter pack is judged on what
  * the pack costs together. Checking each one alone is how three affordable strategies add up to
  * one the account cannot cover. */
-export function describeBatchFunding({
-  account,
-  executors,
-  requests
-}: {
-  account: PaperAccount | null
-  executors: ExecutorConfig[]
-  requests: FundingRequest[]
-}): string | null {
+export function describeBatchFunding(
+  {
+    account,
+    executors,
+    requests
+  }: {
+    account: PaperAccount | null
+    executors: ExecutorConfig[]
+    requests: FundingRequest[]
+  },
+  i18n: I18n = ENGLISH
+): string | null {
   // Falsy, not just null: a settings file written before the account existed has no
   // paperAccount key at all, and `undefined === null` is false -- which would send an absent
   // account straight into a property read.
@@ -44,31 +48,37 @@ export function describeBatchFunding({
   }
 
   for (const [asset, amount] of Object.entries(wanted)) {
-    const problem = describeInsufficientFunds({
-      account,
-      asset,
-      amount,
-      committed: committed[asset] ?? 0
-    })
+    const problem = describeInsufficientFunds(
+      {
+        account,
+        asset,
+        amount,
+        committed: committed[asset] ?? 0
+      },
+      i18n
+    )
     if (problem !== null) return problem
   }
   return null
 }
 
 /** The single-executor case, which is what the New Executor form asks. */
-export function describeExecutorFunding({
-  account,
-  executors,
-  mode,
-  quoteAsset,
-  amountQuote
-}: {
-  account: PaperAccount | null
-  executors: ExecutorConfig[]
-  mode: 'paper' | 'live'
-  quoteAsset: string
-  amountQuote: number
-}): string | null {
+export function describeExecutorFunding(
+  {
+    account,
+    executors,
+    mode,
+    quoteAsset,
+    amountQuote
+  }: {
+    account: PaperAccount | null
+    executors: ExecutorConfig[]
+    mode: 'paper' | 'live'
+    quoteAsset: string
+    amountQuote: number
+  },
+  i18n: I18n = ENGLISH
+): string | null {
   if (mode === 'live') return null
-  return describeBatchFunding({ account, executors, requests: [{ quoteAsset, amountQuote }] })
+  return describeBatchFunding({ account, executors, requests: [{ quoteAsset, amountQuote }] }, i18n)
 }

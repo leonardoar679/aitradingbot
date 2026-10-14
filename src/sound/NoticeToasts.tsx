@@ -42,7 +42,7 @@ export function NoticeToasts(): React.JSX.Element | null {
   }, [])
   if (list.length === 0) return null
   return (
-    <div aria-live="polite" style={{ position: 'fixed', right: '1rem', bottom: '1rem', zIndex: 60, display: 'grid', gap: '0.5rem', width: 'min(22rem, calc(100vw - 2rem))' }}>
+    <div aria-live="polite" style={{ position: 'fixed', insetInlineEnd: '1rem', bottom: '1rem', zIndex: 60, display: 'grid', gap: '0.5rem', width: 'min(22rem, calc(100vw - 2rem))' }}>
       {list.map((toast) => (
         <div
           key={toast.id}
@@ -54,15 +54,16 @@ export function NoticeToasts(): React.JSX.Element | null {
           style={{
             background: 'var(--bg-surface)',
             border: '1px solid var(--border)',
-            borderLeft: `3px solid ${toast.sound === null ? 'var(--border)' : ACCENT[toast.sound]}`,
+            borderInlineStart: `3px solid ${toast.sound === null ? 'var(--border)' : ACCENT[toast.sound]}`,
             borderRadius: 'var(--radius-sm)',
             boxShadow: '0 6px 18px rgba(0,0,0,0.25)',
             padding: '0.55rem 0.75rem',
             cursor: 'pointer'
           }}
         >
-          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>{toast.title}</div>
-          <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '0.15rem', lineHeight: 1.45 }}>{toast.body}</div>
+          {/* In the language it was told in. */}
+          <div dir="auto" style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>{toast.title}</div>
+          <div dir="auto" style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '0.15rem', lineHeight: 1.45 }}>{toast.body}</div>
         </div>
       ))}
     </div>

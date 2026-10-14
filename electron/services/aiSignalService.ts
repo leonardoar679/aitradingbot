@@ -68,7 +68,7 @@ import {
   type AiBenchmarkPeek,
   type AiBenchmarkPeekRequest
 } from '../../shared/aiBenchmark'
-import { averageCallCostUsd, averageCallLatencyMs, estimateCallCostUsd } from '../../shared/aiCost'
+import { averageCallCostUsd, averageCallLatencyMs, budgetProblem, estimateCallCostUsd } from '../../shared/aiCost'
 import { escalates, routedDecision } from '../../shared/aiRoute'
 import { splitAiModelId } from '../../shared/aiEffort'
 import type { AiCallRecord } from '../../shared/aiLedger'
@@ -330,7 +330,17 @@ async function askModel(input: AskInput): Promise<AiSignalDecision> {
     await assertAiBudget()
   } catch (error) {
     // The day's budget spent: a breaker tripped, told once a day (the V4 document, §48).
-    if (error instanceof AiBudgetError) tell(breakerNotice('ai-budget', `${error.message} No model is asked again until the budget is raised or the day turns.`))
+    if (error instanceof AiBudgetError) {
+      const { capUsd, spentUsd } = error
+      tell((i18n) =>
+        breakerNotice(
+          'ai-budget',
+          i18n.t('{problem} No model is asked again until the budget is raised or the day turns.', { problem: i18n.language === 'en' ? error.message : (budgetProblem(capUsd, spentUsd, i18n) ?? error.message) }),
+          'ai-budget',
+          i18n
+        )
+      )
+    }
     throw error
   }
 
@@ -378,7 +388,18 @@ async function askModel(input: AskInput): Promise<AiSignalDecision> {
     }
     await record('ledger write', appendAiCall(failed))
     // The key refused: told as a failure of something the app runs on, once an hour.
-    if (error instanceof OpenRouterError && error.status === 401) tell(systemFailureNotice('ai-key', `${error.message} Every call fails the same way until the key on Connections is replaced.`))
+    if (error instanceof OpenRouterError && error.status === 401) {
+      // OpenRouter's own words stay in English, as it wrote them; in another language the notice says
+      // what they mean.
+      const said = error.message
+      tell((i18n) =>
+        systemFailureNotice(
+          'ai-key',
+          i18n.t('{error} Every call fails the same way until the key on Connections is replaced.', { error: i18n.language === 'en' ? said : i18n.t('OpenRouter rejected the API key.') }),
+          i18n
+        )
+      )
+    }
     // Fatal means every remaining decision would fail the same way, so the run stops here with
     // the reason instead of producing a tape of safety holds.
     if (error instanceof OpenRouterError && error.kind === 'fatal') throw error

@@ -3,7 +3,8 @@
   "include": [
     "src/**/*",
     "src/**/*.tsx",
-    "shared/**/*"
+    "shared/**/*",
+    "shared/**/*.json"
   ],
   "compilerOptions": {
     "composite": true,

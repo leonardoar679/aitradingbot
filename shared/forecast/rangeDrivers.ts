@@ -2,6 +2,7 @@ import type { MemberWeight } from './ensemble'
 import { FEATURE_NAMES } from './features'
 import { gbtContributions, type GbtModel } from './ml/gbt'
 import type { FittedHorizon, ForecastModelId } from './models'
+import { ENGLISH, msg, type I18n } from '../i18n/translate'
 
 // WHY THIS RANGE (the V6 document, §36; V6 Stage 10, 13 October 2026): "the model expects higher
 // volatility because...". The boosted size model (shared/forecast/models.ts, gbt's size) learned how
@@ -26,77 +27,107 @@ export interface RangeDriver {
 // root sums of squares, both as fractions; the true ranges are already in percent; moves against the
 // usual are in usual moves (the day's volatility scaled to the window); positions are shares of a
 // range; the taker's share is read less a half, and the fifteen minutes' volume against the fifteen
-// before as a log.
-const share = (value: number): string => `${Number(value.toFixed(2))}×`
-const pct = (value: number): string => `${value >= 0 ? '+' : ''}${(value * 100).toFixed(2)}%`
-const size = (value: number): string => `${(value * 100).toFixed(2)}%`
-const whole = (value: number): string => `${(value * 100).toFixed(0)}%`
-const count = (value: number): string => `${Number(Math.abs(value).toFixed(1))}`
-const units = (value: number): string => `${value >= 0 ? 'up' : 'down'} ${count(value)} times its usual move`
-const fromAverage = (value: number, average: string): string => `it is ${count(value)} usual days' moves ${value >= 0 ? 'above' : 'below'} its ${average}`
+// before as a log. Each is said by a key with its value in its place (V6 Stage 14), in any language.
+type Say = (value: number, i18n: I18n) => string
 
-const REGIME_WORDS: Record<string, string> = { panic: 'in panic', 'high-vol': 'highly volatile', recovery: 'recovering', bull: 'in a bull run', bear: 'in a bear run', sideways: 'moving sideways' }
-const CLASS_WORDS: Record<string, string> = { btc: 'Bitcoin', eth: 'ether', large: 'a large coin', mid: 'a mid-sized coin', 'high-vol': 'a high-volatility coin', other: 'a coin of no other kind' }
+const share = (value: number, { num }: I18n): string => `${num(value, 0, 2)}×`
+const pct = (value: number, i18n: I18n): string => i18n.pct(value * 100, 2)
+const size = (value: number, i18n: I18n): string => i18n.pctPlain(value * 100, 2)
+const whole = (value: number, i18n: I18n): string => i18n.pctPlain(value * 100, 0)
+const count = (value: number, { num }: I18n): string => num(Math.abs(value), 0, 1)
 
-const WORDS: Record<string, (v: number) => string> = {
-  r_5m: (v) => `the last five minutes moved ${pct(v)}`,
-  r_15m: (v) => `the last fifteen minutes moved ${pct(v)}`,
-  r_30m: (v) => `the last half hour moved ${pct(v)}`,
-  r_1h: (v) => `the last hour moved ${pct(v)}`,
-  r_4h: (v) => `the last four hours moved ${pct(v)}`,
-  r_24h: (v) => `the last day moved ${pct(v)}`,
-  r_7d: (v) => `the last week moved ${pct(v)}`,
-  rv_1h: (v) => `its last hour's volatility was ${size(v)}`,
-  rv_4h: (v) => `its last four hours' volatility was ${size(v)}`,
-  rv_24h: (v) => `its day's volatility was ${size(v)}`,
-  rv_ratio: (v) => `its last hour moved at ${share(v)} the day's pace`,
-  z_15m: (v) => `its last fifteen minutes went ${units(v)}`,
-  z_1h: (v) => `its last hour went ${units(v)}`,
-  z_4h: (v) => `its last four hours went ${units(v)}`,
-  z_24h: (v) => `its last day went ${units(v)}`,
-  acc_15m: (v) => `its last fifteen minutes ran ${count(v)} usual moves ${v >= 0 ? 'above' : 'below'} the fifteen before`,
-  slope_1h: (v) => `its trend over the last hour was ${units(v)}`,
-  slope_4h: (v) => `its trend over the last four hours was ${units(v)}`,
-  pos_24h: (v) => `it stands at ${whole(v)} of its day's range, from the low`,
-  pos_7d: (v) => `it stands at ${whole(v)} of its week's range, from the low`,
-  from_high_24h: (v) => `it is ${count(v)} usual days' moves below its day's high`,
-  from_low_24h: (v) => `it is ${count(v)} usual days' moves above its day's low`,
-  atr_15m: (v) => `its fifteen-minute true range is ${v.toFixed(2)}%`,
-  atr_1h: (v) => `its hourly true range is ${v.toFixed(2)}%`,
-  range_exp: (v) => `its last hour's range was ${share(v)} the day's usual hour`,
-  vol_ratio_1h: (v) => `volume is ${share(v)} its usual hour`,
-  vol_acc_15m: (v) => `volume in the last fifteen minutes is ${share(Math.exp(v))} the fifteen before`,
-  taker_1h: (v) => `buyers took ${whole(v + 0.5)} of the last hour's volume`,
-  taker_4h: (v) => `buyers took ${whole(v + 0.5)} of the last four hours' volume`,
-  ema20_1h: (v) => fromAverage(v, '20-hour average'),
-  ema50_1h: (v) => fromAverage(v, '50-hour average'),
-  ema200_1h: (v) => fromAverage(v, '200-hour average'),
-  rsi_15m: (v) => `its fifteen-minute RSI is ${v.toFixed(0)}`,
-  rsi_1h: (v) => `its hourly RSI is ${v.toFixed(0)}`,
-  bb_pos_1h: (v) => `it stands at ${whole(v)} of its hourly Bollinger band, from the lower edge`,
-  bb_width_1h: (v) => `its hourly Bollinger band is ${size(v)} wide`,
-  adx_1h: (v) => `its hourly trend strength (ADX) is ${v.toFixed(0)}`,
-  btc_r_1h: (v) => `Bitcoin's last hour moved ${pct(v)}`,
-  btc_r_4h: (v) => `Bitcoin's last four hours moved ${pct(v)}`,
-  btc_r_24h: (v) => `Bitcoin's last day moved ${pct(v)}`,
-  eth_r_1h: (v) => `ether's last hour moved ${pct(v)}`,
-  eth_r_4h: (v) => `ether's last four hours moved ${pct(v)}`,
-  breadth_1h: (v) => `${whole(v)} of the coins rose in the last hour`,
-  breadth_24h: (v) => `${whole(v)} of the coins rose over the day`,
-  alt_strength: (v) => `the other coins' median day ran ${pct(v)} against Bitcoin's`,
-  beta_btc: (v) => `its beta to Bitcoin is ${Number(v.toFixed(2))}`,
-  idio_1h: (v) => `its own last hour, beyond what Bitcoin's explains, was ${pct(v)}`
+/** A figure's sentence, one for each sign of it. */
+const signed =
+  (up: string, down: string): Say =>
+  (value, i18n) =>
+    i18n.t(value >= 0 ? up : down, { count: count(value, i18n) })
+const moved =
+  (key: string): Say =>
+  (value, i18n) =>
+    i18n.t(key, { move: pct(value, i18n) })
+
+const REGIME_WORDS: Record<string, [string, string]> = {
+  panic: [msg('the market is in panic'), msg('the market is not in panic')],
+  'high-vol': [msg('the market is highly volatile'), msg('the market is not highly volatile')],
+  recovery: [msg('the market is recovering'), msg('the market is not recovering')],
+  bull: [msg('the market is in a bull run'), msg('the market is not in a bull run')],
+  bear: [msg('the market is in a bear run'), msg('the market is not in a bear run')],
+  sideways: [msg('the market is moving sideways'), msg('the market is not moving sideways')]
+}
+const CLASS_WORDS: Record<string, [string, string]> = {
+  btc: [msg('it is Bitcoin'), msg('it is not Bitcoin')],
+  eth: [msg('it is ether'), msg('it is not ether')],
+  large: [msg('it is a large coin'), msg('it is not a large coin')],
+  mid: [msg('it is a mid-sized coin'), msg('it is not a mid-sized coin')],
+  'high-vol': [msg('it is a high-volatility coin'), msg('it is not a high-volatility coin')],
+  other: [msg('it is a coin of no other kind'), msg('it is not a coin of no other kind')]
 }
 
-/** A figure in words, with its value. */
-export function describeFeature(feature: string, value: number): string {
+const WORDS: Record<string, Say> = {
+  r_5m: moved(msg('the last five minutes moved {move}')),
+  r_15m: moved(msg('the last fifteen minutes moved {move}')),
+  r_30m: moved(msg('the last half hour moved {move}')),
+  r_1h: moved(msg('the last hour moved {move}')),
+  r_4h: moved(msg('the last four hours moved {move}')),
+  r_24h: moved(msg('the last day moved {move}')),
+  r_7d: moved(msg('the last week moved {move}')),
+  rv_1h: (v, i) => i.t("its last hour's volatility was {size}", { size: size(v, i) }),
+  rv_4h: (v, i) => i.t("its last four hours' volatility was {size}", { size: size(v, i) }),
+  rv_24h: (v, i) => i.t("its day's volatility was {size}", { size: size(v, i) }),
+  rv_ratio: (v, i) => i.t("its last hour moved at {share} the day's pace", { share: share(v, i) }),
+  z_15m: signed(msg('its last fifteen minutes went up {count} times its usual move'), msg('its last fifteen minutes went down {count} times its usual move')),
+  z_1h: signed(msg('its last hour went up {count} times its usual move'), msg('its last hour went down {count} times its usual move')),
+  z_4h: signed(msg('its last four hours went up {count} times its usual move'), msg('its last four hours went down {count} times its usual move')),
+  z_24h: signed(msg('its last day went up {count} times its usual move'), msg('its last day went down {count} times its usual move')),
+  acc_15m: signed(msg('its last fifteen minutes ran {count} usual moves above the fifteen before'), msg('its last fifteen minutes ran {count} usual moves below the fifteen before')),
+  slope_1h: signed(msg('its trend over the last hour was up {count} times its usual move'), msg('its trend over the last hour was down {count} times its usual move')),
+  slope_4h: signed(msg('its trend over the last four hours was up {count} times its usual move'), msg('its trend over the last four hours was down {count} times its usual move')),
+  pos_24h: (v, i) => i.t("it stands at {share} of its day's range, from the low", { share: whole(v, i) }),
+  pos_7d: (v, i) => i.t("it stands at {share} of its week's range, from the low", { share: whole(v, i) }),
+  from_high_24h: (v, i) => i.t("it is {count} usual days' moves below its day's high", { count: count(v, i) }),
+  from_low_24h: (v, i) => i.t("it is {count} usual days' moves above its day's low", { count: count(v, i) }),
+  atr_15m: (v, i) => i.t('its fifteen-minute true range is {size}', { size: i.pctPlain(v, 2) }),
+  atr_1h: (v, i) => i.t('its hourly true range is {size}', { size: i.pctPlain(v, 2) }),
+  range_exp: (v, i) => i.t("its last hour's range was {share} the day's usual hour", { share: share(v, i) }),
+  vol_ratio_1h: (v, i) => i.t('volume is {share} its usual hour', { share: share(v, i) }),
+  vol_acc_15m: (v, i) => i.t('volume in the last fifteen minutes is {share} the fifteen before', { share: share(Math.exp(v), i) }),
+  taker_1h: (v, i) => i.t("buyers took {share} of the last hour's volume", { share: whole(v + 0.5, i) }),
+  taker_4h: (v, i) => i.t("buyers took {share} of the last four hours' volume", { share: whole(v + 0.5, i) }),
+  ema20_1h: signed(msg("it is {count} usual days' moves above its 20-hour average"), msg("it is {count} usual days' moves below its 20-hour average")),
+  ema50_1h: signed(msg("it is {count} usual days' moves above its 50-hour average"), msg("it is {count} usual days' moves below its 50-hour average")),
+  ema200_1h: signed(msg("it is {count} usual days' moves above its 200-hour average"), msg("it is {count} usual days' moves below its 200-hour average")),
+  rsi_15m: (v, i) => i.t('its fifteen-minute RSI is {value}', { value: i.num(v, 0, 0) }),
+  rsi_1h: (v, i) => i.t('its hourly RSI is {value}', { value: i.num(v, 0, 0) }),
+  bb_pos_1h: (v, i) => i.t('it stands at {share} of its hourly Bollinger band, from the lower edge', { share: whole(v, i) }),
+  bb_width_1h: (v, i) => i.t('its hourly Bollinger band is {size} wide', { size: size(v, i) }),
+  adx_1h: (v, i) => i.t('its hourly trend strength (ADX) is {value}', { value: i.num(v, 0, 0) }),
+  btc_r_1h: moved(msg("Bitcoin's last hour moved {move}")),
+  btc_r_4h: moved(msg("Bitcoin's last four hours moved {move}")),
+  btc_r_24h: moved(msg("Bitcoin's last day moved {move}")),
+  eth_r_1h: moved(msg("ether's last hour moved {move}")),
+  eth_r_4h: moved(msg("ether's last four hours moved {move}")),
+  breadth_1h: (v, i) => i.t('{share} of the coins rose in the last hour', { share: whole(v, i) }),
+  breadth_24h: (v, i) => i.t('{share} of the coins rose over the day', { share: whole(v, i) }),
+  alt_strength: moved(msg("the other coins' median day ran {move} against Bitcoin's")),
+  beta_btc: (v, i) => i.t('its beta to Bitcoin is {value}', { value: i.num(v, 0, 2) }),
+  idio_1h: moved(msg("its own last hour, beyond what Bitcoin's explains, was {move}"))
+}
+
+/** A figure in words, with its value, in a language: English unless handed another. */
+export function describeFeature(feature: string, value: number, i18n: I18n = ENGLISH): string {
   const say = WORDS[feature]
-  if (say !== undefined) return say(value)
+  if (say !== undefined) return say(value, i18n)
   const yes = value > 0.5
-  if (feature.startsWith('regime_')) return `the market is ${yes ? '' : 'not '}${REGIME_WORDS[feature.slice(7)] ?? feature.slice(7)}`
-  if (feature.startsWith('class_')) return `it is ${yes ? '' : 'not '}${CLASS_WORDS[feature.slice(6)] ?? feature.slice(6)}`
-  if (feature.startsWith('hour_') || feature.startsWith('dow_')) return 'the time of day and week'
-  return `${feature.replace(/_/g, ' ')} is ${Number(value.toPrecision(3))}`
+  const pair = feature.startsWith('regime_') ? REGIME_WORDS[feature.slice(7)] : feature.startsWith('class_') ? CLASS_WORDS[feature.slice(6)] : undefined
+  if (pair !== undefined) return i18n.t(yes ? pair[0] : pair[1])
+  if (feature.startsWith('hour_') || feature.startsWith('dow_')) return i18n.t('the time of day and week')
+  return i18n.t('{figure} is {value}', { figure: feature.replace(/_/g, ' '), value: i18n.num(Number(value.toPrecision(3)), 0, 10) })
+}
+
+/** A driver's line, in a language: its figure, and whether it widened the range or narrowed it. */
+export function driverText(driver: Pick<RangeDriver, 'feature' | 'value' | 'effect'>, i18n: I18n = ENGLISH): string {
+  const figure = describeFeature(driver.feature, driver.value, i18n)
+  return driver.effect > 0 ? i18n.t('{figure}, which widened the range', { figure }) : i18n.t('{figure}, which narrowed it', { figure })
 }
 
 /** The three figures that moved a row's size reading most, by a boosted size model. */
@@ -110,7 +141,7 @@ export function rangeDriversOf(model: GbtModel, row: ArrayLike<number>, top = 3,
     .map(({ index, effect }) => {
       const feature = FEATURE_NAMES[index] ?? `figure ${index}`
       const value = row[index]
-      return { model: name, feature, effect, value, text: `${describeFeature(feature, value)}${effect > 0 ? ', which widened the range' : ', which narrowed it'}` }
+      return { model: name, feature, effect, value, text: driverText({ feature, value, effect }) }
     })
 }
 
