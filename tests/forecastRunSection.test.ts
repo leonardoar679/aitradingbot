@@ -149,8 +149,13 @@ describe("the run's forecast gates (§113-114)", () => {
     const run = hourRun()
     expect(gate(run, 'forecast_outcomes').status).toBe('pass')
     const without = { ...run, outcomes: run.outcomes.filter((line) => !(line.id === 'p0' && line.h === 'hour1')) }
-    expect(gate(without, 'forecast_outcomes')).toMatchObject({ status: 'fail' })
-    const explained = { ...without, outcomes: [...without.outcomes, missing('p0', T, 'hour1')] }
+    // Within the engine's hour for its bars, an outcome not written waits; past it, it is missing.
+    expect(gate(without, 'forecast_outcomes')).toMatchObject({ status: 'pass' })
+    expect(gate(without, 'forecast_outcomes').detail).toContain('1 more waits for bars')
+    const anHourOn = T + 3600 + RUN_LINES.missingAfterSeconds + RUN_LINES.outcomeGraceSeconds
+    expect(gate({ ...without, asOfSec: anHourOn - 1 }, 'forecast_outcomes').status).toBe('pass')
+    expect(gate({ ...without, asOfSec: anHourOn }, 'forecast_outcomes')).toMatchObject({ status: 'fail' })
+    const explained = { ...without, outcomes: [...without.outcomes, missing('p0', T, 'hour1')], asOfSec: anHourOn }
     expect(gate(explained, 'forecast_outcomes')).toMatchObject({ status: 'pass' })
     expect(gate(explained, 'forecast_outcomes').detail).toContain('1 of them a line saying why')
     // A horizon due after the span, or too near its end to be written yet, is not wanted.
@@ -159,7 +164,7 @@ describe("the run's forecast gates (§113-114)", () => {
 
   it('wants, read an hour on, the hours of the forecasts too', () => {
     const run = hourRun({ toSec: T + 3600 })
-    const later = T + 3600 + 3600 + RUN_LINES.outcomeGraceSeconds
+    const later = T + 3600 + 3600 + RUN_LINES.missingAfterSeconds + RUN_LINES.outcomeGraceSeconds
     // As the run ends, an hour's horizon of its forecasts is not due; read an hour on, each is.
     const atEnd = forecastRunSectionOf(run).gates.find((gate) => gate.id === 'forecast_outcomes')!
     const onFile = run.outcomes.length

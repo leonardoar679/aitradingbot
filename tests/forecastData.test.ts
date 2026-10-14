@@ -183,6 +183,30 @@ describe('a pass after', () => {
   })
 })
 
+describe('a pair that left the research', () => {
+  it("is brought up to date while the forecast owes it outcomes, and left once it owes none; the forecast's universe stays the research's", async () => {
+    const data = await service()
+    data.forecastDataForTest.setUniverse(['BTCUSDT'])
+    let owed: string[] = ['SOLUSDT']
+    data.setOwedPairs(() => owed)
+    await data.forecastDataForTest.pass()
+    expect(new Set(asked.map((entry) => entry.symbol))).toEqual(new Set(['BTCUSDT', 'SOLUSDT']))
+    expect(linesIn('SOLUSDT').length).toBeGreaterThan(0)
+    expect(data.forecastUniverse()).toEqual(['BTCUSDT'])
+    asked.length = 0
+    owed = []
+    await data.forecastDataForTest.pass()
+    expect(asked.some((entry) => entry.symbol === 'SOLUSDT')).toBe(false)
+    // An engine that cannot say leaves the universe alone, read.
+    data.setOwedPairs(() => {
+      throw new Error('not started')
+    })
+    asked.length = 0
+    await data.forecastDataForTest.pass()
+    expect(asked.every((entry) => entry.symbol === 'BTCUSDT')).toBe(true)
+  })
+})
+
 describe('a rate limit', () => {
   it('stops every request while its wait lasts, says until when, and the pass ends where it is', async () => {
     const data = await service()

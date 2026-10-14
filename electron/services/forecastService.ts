@@ -34,7 +34,7 @@ import type { EngineState } from '../../shared/forecast/status'
 import { bookSpreadPct, executionQuality, isStale, type LiveState } from '../../shared/liveMarket'
 import type { MarketRegime } from '../../shared/marketResearch'
 import { writeJsonAtomic } from './atomicWrite'
-import { forecastSeries, forecastUniverse, onForecastBars } from './forecastDataService'
+import { forecastSeries, forecastUniverse, onForecastBars, setOwedPairs } from './forecastDataService'
 import { currentForecastCalibration, currentForecastModels, getForecastTrainingState, onForecastTraining } from './forecastTrainingService'
 import { appendJsonLines } from './jsonlStore'
 import { getResearchState } from './marketResearchService'
@@ -329,6 +329,11 @@ function owe(line: PredictionLine): void {
 }
 
 const pendingCount = (): number => [...owed.values()].reduce((sum, entry) => sum + entry.horizons.size, 0)
+
+/** The pairs outcomes are still owed for: the data keeps their bars coming until they are judged. */
+export function owedForecastPairs(): string[] {
+  return [...new Set([...owed.values()].map((entry) => entry.line.pair))]
+}
 
 /** The outcomes due by the close `closedAt` written, each once; the adaptive levels moved by them,
  * once for the moment. */
@@ -653,6 +658,7 @@ export function startForecast(live: () => LiveState | null): void {
   if (started) return
   started = true
   liveState = live
+  setOwedPairs(owedForecastPairs)
   const nowSec = Math.floor(Date.now() / 1000)
   void (async (): Promise<void> => {
     await sweepOldRecords(nowSec)

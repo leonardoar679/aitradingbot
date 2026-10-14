@@ -271,10 +271,26 @@ async function catchUp(symbol: string): Promise<void> {
   entry.ready = true
 }
 
-/** Every pair of the universe, three at a time, each brought up to date. A rate limit stops the
- * pass where it is: the next pass carries on. */
+/** The pairs the forecast still owes outcomes for, as the engine tells them (forecastService.ts): one
+ * that left the research is brought up to date until it owes none, so that its forecasts are judged
+ * rather than written as missing an hour on. Found by V6 Stage 15's run: a pair that fell under the
+ * research's volume line lost the outcomes of its last forecasts. */
+let owedPairs: () => readonly string[] = () => []
+
+export function setOwedPairs(read: () => readonly string[]): void {
+  owedPairs = read
+}
+
+/** Every pair of the universe, and every pair the forecast still owes outcomes for, three at a time,
+ * each brought up to date. A rate limit stops the pass where it is: the next pass carries on. */
 async function pass(): Promise<void> {
-  const pairs = [...universe]
+  let owed: readonly string[] = []
+  try {
+    owed = owedPairs()
+  } catch {
+    // The engine unreadable: the universe alone.
+  }
+  const pairs = [...new Set([...universe, ...owed])]
   let next = 0
   let limited = false
   const lane = async (): Promise<void> => {
@@ -419,6 +435,7 @@ export const forecastDataForTest = {
   reset(): void {
     series.clear()
     universe = []
+    owedPairs = (): readonly string[] => []
     started = false
     if (timer !== null) clearTimeout(timer)
     timer = null

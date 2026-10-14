@@ -56,7 +56,9 @@ const fake = vi.hoisted(() => ({
   current: null as { runId: string; fittedAt: number; foldsRunId: string | null } | null,
   /** What the desktop was told, and the settings read for the pairs held and traded. */
   told: [] as { title: string; body: string; extra?: Record<string, unknown> }[],
-  settings: {} as Record<string, unknown>
+  settings: {} as Record<string, unknown>,
+  /** What the engine handed the data, to read the pairs it still owes outcomes for. */
+  owedReader: null as null | (() => readonly string[])
 }))
 
 // A notice the main process builds in the person's language (V6 Stage 14) is handed as a builder: built
@@ -74,6 +76,9 @@ vi.mock('../electron/services/noticeService', async () => {
 vi.mock('../electron/services/settingsService', () => ({ getSettings: async () => fake.settings }))
 
 vi.mock('../electron/services/forecastDataService', () => ({
+  setOwedPairs: (read: () => readonly string[]) => {
+    fake.owedReader = read
+  },
   forecastUniverse: () => [...fake.market.keys()],
   forecastSeries: (symbol: string) => {
     const bars = fake.market.get(symbol)
@@ -305,6 +310,9 @@ describe('the record', () => {
   it('is read back at a restart for the outcomes still owed', async () => {
     const first = await engine()
     await closeAt(first, HOUR)
+    // The pairs still owed outcomes are handed to the data, which keeps their bars coming until judged.
+    expect(first.owedForecastPairs().sort()).toEqual([...SYMBOLS].sort())
+    expect([...(fake.owedReader?.() ?? [])].sort()).toEqual([...SYMBOLS].sort())
     await closeAt(first, HOUR + 300)
     vi.resetModules()
     const again = await import('../electron/services/forecastService')

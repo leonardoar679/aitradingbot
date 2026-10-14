@@ -20,8 +20,12 @@ export const RUN_LINES = {
   gridSeconds: 900,
   /** A forecast is made within this long of its close. */
   madeWithinSeconds: 120,
-  /** An outcome is written at the first close after it is due: judged missing only past this. */
+  /** An outcome is written at the first close after it is due: wanted only past this. */
   outcomeGraceSeconds: 600,
+  /** Its bars still short, the engine waits this long past due before it writes a line saying why
+   * (forecastService.ts MISSING_AFTER_SEC): until then an outcome not written is waiting, not missing --
+   * as V6 Stage 15's run found, one gate earlier calling it unjudged. */
+  missingAfterSeconds: 3600,
   /** A trade is on a stale forecast when its forecast's close is more than two closes old. */
   staleTradeSeconds: 600,
   /** The trades a profitability conclusion needs (shared/experimentRun.ts VERDICT_LINES). */
@@ -200,23 +204,27 @@ function refreshGate(refreshes: readonly PredictionLine[]): ForecastRunGate {
 function outcomesGate(lines: readonly PredictionLine[], judged: readonly (OutcomeLine | MissingOutcomeLine)[], asOfSec: number): ForecastRunGate {
   const label = 'Every due forecast is judged'
   const written = new Set(judged.map((line) => `${line.id}|${line.h}`))
-  const due: string[] = []
+  const due: { key: string; dueAt: number }[] = []
   for (const line of lines) {
     for (const horizon of Object.keys(line.h) as Horizon[]) {
-      if (line.t + horizonSeconds(horizon) + RUN_LINES.outcomeGraceSeconds <= asOfSec) due.push(`${line.id}|${horizon}`)
+      const dueAt = line.t + horizonSeconds(horizon)
+      if (dueAt + RUN_LINES.outcomeGraceSeconds <= asOfSec) due.push({ key: `${line.id}|${horizon}`, dueAt })
     }
   }
   if (due.length === 0) return { id: 'forecast_outcomes', label, status: 'not measured', detail: 'No forecast of the span has fallen due with time to judge it.' }
-  const unjudged = due.filter((key) => !written.has(key))
+  const unjudged = due.filter((entry) => !written.has(entry.key))
+  // Not written within the engine's hour for its bars, with time to write the line after: missing.
+  const late = unjudged.filter((entry) => entry.dueAt + RUN_LINES.missingAfterSeconds + RUN_LINES.outcomeGraceSeconds <= asOfSec)
+  const waiting = unjudged.length - late.length
   const missing = judged.filter((line) => isMissing(line)).length
   return {
     id: 'forecast_outcomes',
     label,
-    status: unjudged.length === 0 ? 'pass' : 'fail',
+    status: late.length === 0 ? 'pass' : 'fail',
     detail:
-      unjudged.length === 0
-        ? `Each of the ${plural(due.length, 'due horizon', 'due horizons')} has its outcome${missing > 0 ? `, ${missing} of them a line saying why it could not be judged` : ''}.`
-        : `${plural(unjudged.length, 'due horizon has', 'due horizons have')} no outcome, the first ${unjudged[0].replace('|', ' at ')}.`
+      late.length === 0
+        ? `Each of the ${plural(due.length - waiting, 'due horizon', 'due horizons')} has its outcome${missing > 0 ? `, ${missing} of them a line saying why it could not be judged` : ''}${waiting > 0 ? `; ${plural(waiting, 'more waits', 'more wait')} for bars, as the engine waits an hour` : ''}.`
+        : `${plural(late.length, 'due horizon has', 'due horizons have')} no outcome an hour after it was due, the first ${late[0].key.replace('|', ' at ')}.`
   }
 }
 

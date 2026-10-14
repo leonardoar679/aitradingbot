@@ -105,6 +105,7 @@ vi.mock('../electron/services/forecastWorkerService', () => ({
 }))
 
 vi.mock('../electron/services/forecastDataService', () => ({
+  setOwedPairs: () => undefined,
   getForecastDataStatus: () => ({ ...fake.data }),
   onForecastBars: (listener: () => void) => {
     fake.listeners.push(listener)
