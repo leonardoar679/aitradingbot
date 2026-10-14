@@ -27,6 +27,9 @@ export interface ExperimentReportDeps {
   forecastRecord: (fromSec: number, toSec: number) => Promise<ForecastHistory>
   /** The notices on file since a moment, with the sound each made. */
   alertsOnFile: (sinceSec: number) => Promise<readonly { at: number; sound?: string }[]>
+  /** The stories read, each marked where it names directly a coin with a USDT pair on Binance, and what
+   * the price did around each (V6 Stage 16); null where they cannot be read. */
+  storyReactions: () => Promise<{ stories: { id: string; publishedAt: number; tradable: boolean }[]; reactions: Record<string, { after: { h4: number | null } }> } | null>
 }
 
 /** "Does AI help?" over the span's events, one entry a model the watch asked. A model that answered
@@ -51,8 +54,16 @@ async function helpOver(run: ExperimentRun, deps: ExperimentReportDeps, nowSec: 
 /** The price forecast over the span (V6 Stage 15); null where its record could not be read. */
 async function forecastOver(span: { fromSec: number; toSec: number }, executors: readonly ExecutorConfig[], deps: ExperimentReportDeps): Promise<ForecastRunSection | null> {
   try {
-    const [record, alerts] = await Promise.all([deps.forecastRecord(span.fromSec, span.toSec), deps.alertsOnFile(span.fromSec)])
-    return forecastRunSectionOf({ fromSec: span.fromSec, toSec: span.toSec, predictions: record.predictions, outcomes: record.outcomes, executors, alerts })
+    const [record, alerts, news] = await Promise.all([deps.forecastRecord(span.fromSec, span.toSec), deps.alertsOnFile(span.fromSec), deps.storyReactions().catch(() => null)])
+    return forecastRunSectionOf({
+      fromSec: span.fromSec,
+      toSec: span.toSec,
+      predictions: record.predictions,
+      outcomes: record.outcomes,
+      executors,
+      alerts,
+      ...(news === null ? {} : { stories: news.stories, reactions: news.reactions })
+    })
   } catch {
     return null
   }
@@ -77,5 +88,13 @@ export const experimentReportBrowserDeps: ExperimentReportDeps = {
   fetchQuant: async (exchange, symbol, interval, startSec, endSec) => (await window.api.market.fetchHistoricalRange(exchange, symbol, interval, startSec, endSec)).candles,
   storyMarks: (fromSec, toSec) => window.api.feed.history(fromSec, toSec),
   forecastRecord: (fromSec, toSec) => window.api.forecast.record(fromSec, toSec),
-  alertsOnFile: async (sinceSec) => (await window.api.records.alerts({ sinceSec })).rows
+  alertsOnFile: async (sinceSec) => (await window.api.records.alerts({ sinceSec })).rows,
+  storyReactions: async () => {
+    const [feed, symbols] = await Promise.all([window.api.feed.getState(), window.api.market.listSymbols('binance')])
+    const bases = new Set(symbols.filter((symbol) => symbol.quoteAsset === 'USDT').map((symbol) => symbol.baseAsset))
+    return {
+      stories: feed.stories.map((story) => ({ id: story.id, publishedAt: story.publishedAt, tradable: story.assets.some((asset) => asset.relationship === 'DIRECT' && bases.has(asset.ticker)) })),
+      reactions: feed.reactions
+    }
+  }
 }

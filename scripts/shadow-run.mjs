@@ -629,6 +629,33 @@ async function main() {
     }
   }
 
+  // The Forecast Lab, for the record (V6 Stage 16, §49-50): the walk forward's weeks and the live record,
+  // V1 to V4, and the forecast trader against the strategies, buy and hold and the hybrid over the ninety
+  // days, as the app computes them -- its data, and the page as it reads.
+  try {
+    const lab = await page.evaluate(() => window.api.forecast.lab())
+    fs.writeFileSync(path.join(OUT, 'forecast-lab.json'), JSON.stringify(lab, null, 2))
+    await nav('Forecast Lab')
+    const compared = await page.evaluate(async () => {
+      const find = () => [...document.querySelectorAll('main button')].find((b) => /^(Run the comparison|Running \d+ of \d+ pairs…)$/.test(b.textContent?.trim() ?? ''))
+      let until = Date.now() + 120_000
+      while (Date.now() < until && find() === undefined) await new Promise((r) => setTimeout(r, 2000))
+      const button = find()
+      if (button === undefined) return 'no comparison button'
+      button.click()
+      await new Promise((r) => setTimeout(r, 2000))
+      until = Date.now() + 20 * 60_000
+      while (Date.now() < until && /^Running/.test(find()?.textContent?.trim() ?? '')) await new Promise((r) => setTimeout(r, 5000))
+      return find()?.textContent?.trim() ?? 'gone'
+    })
+    say(`forecast lab comparison: ${compared}`)
+    fs.writeFileSync(path.join(OUT, 'forecast-lab-page.txt'), await page.evaluate(() => document.querySelector('main')?.innerText ?? ''))
+    await shot(`s${SEGMENT}-94-forecast-lab`)
+    say('forecast lab: saved')
+  } catch (failure) {
+    say(`the forecast lab could not be saved: ${failure}`)
+  }
+
   // The news tab, for the record.
   await nav('Explorer')
   await page.evaluate(async () => {
@@ -797,14 +824,30 @@ async function forecastSection(fromSec, toSec) {
   execFileSync(path.join(APP_DIR, 'node_modules', '.bin', process.platform === 'win32' ? 'esbuild.cmd' : 'esbuild'), [path.join(APP_DIR, 'shared', 'forecast', 'runSection.ts'), '--bundle', '--format=esm', '--platform=node', `--outfile=${bundle}`, '--log-level=error'], { shell: true })
   const { forecastRunSectionOf } = await import(`file:///${bundle.replace(/\\/g, '/')}?${Date.now()}`)
   const read = await page.evaluate(
-    async ([from, to]) => ({
-      record: await window.api.forecast.record(from, to),
-      alerts: (await window.api.records.alerts({ sinceSec: from })).rows.map((row) => ({ at: row.at, sound: row.sound })),
-      executors: (await window.api.settings.get()).executors
-    }),
+    async ([from, to]) => {
+      const [feed, symbols] = await Promise.all([window.api.feed.getState(), window.api.market.listSymbols('binance')])
+      const bases = new Set(symbols.filter((symbol) => symbol.quoteAsset === 'USDT').map((symbol) => symbol.baseAsset))
+      return {
+        record: await window.api.forecast.record(from, to),
+        alerts: (await window.api.records.alerts({ sinceSec: from })).rows.map((row) => ({ at: row.at, sound: row.sound })),
+        executors: (await window.api.settings.get()).executors,
+        stories: feed.stories.map((story) => ({ id: story.id, publishedAt: story.publishedAt, tradable: story.assets.some((asset) => asset.relationship === 'DIRECT' && bases.has(asset.ticker)) })),
+        reactions: feed.reactions
+      }
+    },
     [fromSec, toSec]
   )
-  return forecastRunSectionOf({ fromSec, toSec, predictions: read.record.predictions, outcomes: read.record.outcomes, executors: read.executors, alerts: read.alerts, asOfSec: Math.floor(Date.now() / 1000) })
+  return forecastRunSectionOf({
+    fromSec,
+    toSec,
+    predictions: read.record.predictions,
+    outcomes: read.record.outcomes,
+    executors: read.executors,
+    alerts: read.alerts,
+    stories: read.stories,
+    reactions: read.reactions,
+    asOfSec: Math.floor(Date.now() / 1000)
+  })
 }
 
 async function shot(name) {

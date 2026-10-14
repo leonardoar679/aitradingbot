@@ -136,8 +136,17 @@ def forecast_of(section, title):
         m = row['metrics']
         moved, unmoved = row['news']['moved'], row['news']['unmoved']
         print(f'  {h:10} judged {row["outcomes"]:5}  way right {share(m["direction"]):7} calls {m["calls"]} right {share(m["callsRight"]):7} in 50% {share(m["coverage50"]):7} in 80% {share(m["coverage80"]):7} median error {pct(m["mae"]):9} bias {pct(m["bias"]):9} bull {row["bull"]["right"]}/{row["bull"]["calls"]} bear {row["bear"]["right"]}/{row["bear"]["calls"]}  story-moved {moved["n"]} ({share(moved["coverage80"])} in 80%)  the rest {unmoved["n"]} ({share(unmoved["coverage80"])} in 80%)')
+    for h, row in section['horizons'].items():
+        for variant, m in (row.get('variants') or {}).items():
+            print(f'  {h:10} {variant.upper()}  n {m["n"]:5}  way right {share(m["direction"]):7} in 80% {share(m["coverage80"]):7} median error {pct(m["mae"]):9} bias {pct(m["bias"]):9} pinball {pct(m["pinball"])}')
+    classes = section.get('classes')
+    if classes:
+        print(f'  calls at the lead horizon: {json.dumps(classes["calls"])}; coin classes: {json.dumps(classes["pairClasses"])}')
+    for name in ('top', 'best', 'worst'):
+        for row in section.get(name) or []:
+            print(f'  {name:5} {row["pair"]:12} {clock(row["t"])} {row["horizon"]:10} {row["call"]:15} quality {row["quality"]} median {pct(row["medianPct"])} moved {pct(row["movePct"])} in80 {row["in80"]}')
     t = section['trades']
-    print(f'  forecast trader: {t["opened"]} opened, {t["closed"]} closed, {t["wins"]} ahead, net {t["netQuote"]:.2f}' + (f'  -- {section["sampleNote"]}' if section.get('sampleNote') else ''))
+    print(f'  forecast trader: {t["opened"]} opened, {t["closed"]} closed, {t["wins"]} ahead, net {t["netQuote"]:.2f}, fees {t.get("feesQuote", 0):.2f}, slippage {t.get("slippageQuote", 0):.3f}, best {json.dumps(t.get("best"))}, worst {json.dumps(t.get("worst"))}' + (f'  -- {section["sampleNote"]}' if section.get('sampleNote') else ''))
     for g in section['gates']:
         print(f'  {g["id"]:18} {g["status"]:13} {g["detail"]}')
 

@@ -1,18 +1,22 @@
+import { FEE_RATE, positionSlippageRate } from '../fees'
 import type { ExecutorConfig } from '../ipc'
 import { HORIZON_BARS, type Horizon } from './features'
 import type { MissingOutcomeLine, OutcomeLine, PredictionLine } from './forecastRecord'
-import { liveLab, type LabMetrics } from './lab'
+import { liveLab, type LabMetrics, type LiveVariant } from './lab'
 
-// THE PRICE FORECAST IN A RUN'S REPORT (the V6 document, §45-48 and §113-114; V6 Stage 15, 13 October
-// 2026): what the engine forecast over a run's span and how it came out, read from its own record
-// (forecasts/predictions-*.jsonl and outcomes-*.jsonl) -- the forecasts made, per horizon the calls'
-// accuracy, the ranges' coverage and the median's error, the bull and bear calls' success, the forecasts
-// a story moved against the rest, and the forecast trader's paper trades -- with the document's gates for
-// a shadow run: forecasts made at their closes and stamped right, a refresh linked to what it replaced,
-// every due forecast judged, every notice's sound on file, and no trade on a stale forecast. A span
-// shorter than a horizon judges none of it, and says so.
+// THE PRICE FORECAST IN A RUN'S REPORT (the V6 document, §45-50 and §113-114; V6 Stages 15-16, 13
+// October 2026): what the engine forecast over a run's span and how it came out, read from its own
+// record (forecasts/predictions-*.jsonl and outcomes-*.jsonl) -- the forecasts made and their calls, per
+// horizon the calls' accuracy, the ranges' coverage and the median's error, the four variants on the same
+// moments (§49), the bull and bear calls' success, the forecasts a story moved against the rest, the
+// best-rated, best-called and worst-called forecasts, and the forecast trader's paper trades with their
+// fees and slippage -- with the document's gates for a run: forecasts made at their closes and stamped
+// right, every pair at every close, every forecast calibrated, a refresh linked to what it replaced, every
+// due forecast judged, every story measured to four hours, every notice's sound on file, no trade on a
+// stale forecast, and every trade's record whole. A span shorter than a horizon judges none of it, and
+// says so.
 
-export const RUN_SECTION_VERSION = 'forecast-run-v1'
+export const RUN_SECTION_VERSION = 'forecast-run-v2'
 
 /** The lines the gates are read by, pinned. */
 export const RUN_LINES = {
@@ -28,8 +32,13 @@ export const RUN_LINES = {
   missingAfterSeconds: 3600,
   /** A trade is on a stale forecast when its forecast's close is more than two closes old. */
   staleTradeSeconds: 600,
+  /** A story's reaction is measured to four hours: wanted only this long after it. */
+  storySeconds: 4 * 3600 + 600,
   /** The trades a profitability conclusion needs (shared/experimentRun.ts VERDICT_LINES). */
-  minTrades: 30
+  minTrades: 30,
+  /** The best-rated forecasts listed, and the best and worst called. */
+  top: 10,
+  extremes: 5
 } as const
 
 export const SAMPLE_NOTE = 'Sample size is too small for a profitability conclusion.'
@@ -38,6 +47,9 @@ export interface RunHorizon {
   outcomes: number
   /** The shown forecast's (V4's) figures over the span's outcomes. */
   metrics: LabMetrics
+  /** §49: the four variants on the same moments -- V1 price only, V2 with the technical figures, V3 with
+   * the news, V4 with the AI's reading (what is shown). */
+  variants: Record<LiveVariant, LabMetrics>
   /** BULLISH calls and how many ended up; BEARISH calls and how many ended down. */
   bull: { calls: number; right: number }
   bear: { calls: number; right: number }
@@ -45,11 +57,45 @@ export interface RunHorizon {
   news: { moved: LabMetrics; unmoved: LabMetrics }
 }
 
+/** One forecast at its lead horizon, and how it came out where it has. */
+export interface RunForecastRow {
+  pair: string
+  t: number
+  horizon: Horizon
+  call: string
+  quality: number | null
+  medianPct: number
+  movePct: number | null
+  in80: boolean | null
+}
+
 export interface ForecastRunGate {
-  id: 'forecast_made' | 'forecast_stamped' | 'forecast_refresh' | 'forecast_outcomes' | 'notice_sounds' | 'stale_trades'
+  id:
+    | 'forecast_made'
+    | 'forecast_stamped'
+    | 'forecast_history'
+    | 'forecast_calibrated'
+    | 'forecast_refresh'
+    | 'forecast_outcomes'
+    | 'news_reactions'
+    | 'notice_sounds'
+    | 'stale_trades'
+    | 'trades_whole'
   label: string
   status: 'pass' | 'fail' | 'not measured'
   detail: string
+}
+
+export interface ForecastRunTrades {
+  opened: number
+  closed: number
+  wins: number
+  /** After fees and slippage, as the engine charged them. */
+  netQuote: number
+  feesQuote: number
+  slippageQuote: number
+  best: { pair: string; pnlQuote: number } | null
+  worst: { pair: string; pnlQuote: number } | null
 }
 
 export interface ForecastRunSection {
@@ -65,8 +111,14 @@ export interface ForecastRunSection {
     refreshes: number
     byReason: Record<string, number>
   }
+  /** §48: the span's forecasts by their call at their lead horizon, and by their coin's class. */
+  classes: { calls: Record<string, number>; pairClasses: Record<string, number> }
   horizons: Partial<Record<Horizon, RunHorizon>>
-  trades: { opened: number; closed: number; wins: number; netQuote: number }
+  /** §48: the best-rated forecasts at their lead horizon, and the best and worst called once judged. */
+  top: RunForecastRow[]
+  best: RunForecastRow[]
+  worst: RunForecastRow[]
+  trades: ForecastRunTrades
   /** SAMPLE_NOTE where fewer trades closed than a conclusion needs. */
   sampleNote: string | null
   gates: ForecastRunGate[]
@@ -77,6 +129,7 @@ export interface ForecastRunSection {
 export interface ForecastRunInput {
   fromSec: number
   toSec: number
+  /** The record's forecasts: those of the span are judged; any before it may be named by a trade. */
   predictions: readonly PredictionLine[]
   outcomes: readonly (OutcomeLine | MissingOutcomeLine)[]
   executors: readonly ExecutorConfig[]
@@ -86,6 +139,11 @@ export interface ForecastRunInput {
    * it, is wanted judged. The span's end where absent -- a report filed as the run ends; a run read an
    * hour on wants its forecasts' hours too. */
   asOfSec?: number
+  /** The stories read, each with the coins it names directly that trade against USDT on Binance, and
+   * what the price did around each (shared/newsFeed.ts): a story measured to four hours has `h4`. Absent
+   * where they could not be read: the gate is then not measured. */
+  stories?: readonly { id: string; publishedAt: number; tradable: boolean }[]
+  reactions?: Readonly<Record<string, { after: { h4: number | null } }>>
 }
 
 const isMissing = (line: OutcomeLine | MissingOutcomeLine): line is MissingOutcomeLine => 'missing' in line
@@ -97,9 +155,24 @@ export function horizonSeconds(horizon: Horizon): number {
   return HORIZON_BARS[horizon] * 300
 }
 
+/** The horizon a forecast is read at: its best, else the hour, else the first it has. */
+function leadOf(line: PredictionLine): Horizon | null {
+  if (line.best !== null && line.h[line.best] !== undefined) return line.best
+  if (line.h.hour1 !== undefined) return 'hour1'
+  return (Object.keys(line.h) as Horizon[])[0] ?? null
+}
+
+/** A forecast's call in a word: UNCERTAIN, STRONG BULLISH, BULLISH, NEUTRAL and so on. */
+function callOf(line: PredictionLine, horizon: Horizon): string {
+  const at = line.h[horizon]!
+  if (at.uncertain) return 'UNCERTAIN'
+  return at.strong ? `STRONG ${at.dir}` : at.dir
+}
+
 /** The section over a span, from the record and the executors. */
 export function forecastRunSectionOf(input: ForecastRunInput): ForecastRunSection {
   const span = { fromSec: input.fromSec, toSec: input.toSec }
+  const asOfSec = Math.max(span.toSec, input.asOfSec ?? span.toSec)
   const lines = input.predictions.filter((line) => within(line.t, span))
   const ids = new Set(lines.map((line) => line.id))
   const judged = input.outcomes.filter((line) => ids.has(line.id))
@@ -114,11 +187,36 @@ export function forecastRunSectionOf(input: ForecastRunInput): ForecastRunSectio
     horizons[horizon] = {
       outcomes: read.outcomes,
       metrics: read.variants.v4,
+      variants: read.variants,
       bull: { calls: bull.length, right: bull.filter((line) => line.move > 0).length },
       bear: { calls: bear.length, right: bear.filter((line) => line.move < 0).length },
       news: read.news
     }
   }
+
+  // §48: the calls, the best-rated, and the best and worst called.
+  const calls: Record<string, number> = {}
+  const pairClasses: Record<string, number> = {}
+  const outcomeOf = new Map(outcomes.map((line) => [`${line.id}|${line.h}`, line]))
+  const rows: RunForecastRow[] = []
+  for (const line of lines) {
+    pairClasses[line.cls] = (pairClasses[line.cls] ?? 0) + 1
+    const horizon = leadOf(line)
+    if (horizon === null) continue
+    const call = callOf(line, horizon)
+    calls[call] = (calls[call] ?? 0) + 1
+    const at = line.h[horizon]!
+    const outcome = outcomeOf.get(`${line.id}|${horizon}`)
+    rows.push({ pair: line.pair, t: line.t, horizon, call, quality: at.qual ?? null, medianPct: at.q[2], movePct: outcome?.move ?? null, in80: outcome?.in80 ?? null })
+  }
+  const top = rows
+    .filter((row) => row.quality !== null)
+    .sort((a, b) => (b.quality ?? 0) - (a.quality ?? 0) || a.t - b.t || a.pair.localeCompare(b.pair))
+    .slice(0, RUN_LINES.top)
+  const error = (row: RunForecastRow): number => Math.abs((row.movePct ?? 0) - row.medianPct)
+  const byError = rows.filter((row) => row.movePct !== null).sort((a, b) => error(a) - error(b) || a.t - b.t || a.pair.localeCompare(b.pair))
+  const best = byError.slice(0, RUN_LINES.extremes)
+  const worst = byError.slice(-RUN_LINES.extremes).reverse()
 
   const grid = lines.filter((line) => line.why === 'grid')
   const gridCloses = new Set(grid.map((line) => line.t)).size
@@ -131,28 +229,59 @@ export function forecastRunSectionOf(input: ForecastRunInput): ForecastRunSectio
   // The forecast trader's paper trades opened in the span, and those of them that closed in it.
   const trades = input.executors.filter((executor) => executor.forecast !== undefined && within(executor.forecast.openedAt, span))
   const closed = trades.filter((executor) => executor.forecast?.result !== undefined && within(executor.forecast.result.closedAt, span))
-  const netQuote = closed.reduce((sum, executor) => sum + (executor.forecast?.result?.pnlQuote ?? 0), 0)
-  const wins = closed.filter((executor) => (executor.forecast?.result?.pnlQuote ?? 0) > 0).length
 
   const gates = [
     madeGate(lines.length, gridCloses, expectedGridCloses),
     stampedGate(lines),
+    historyGate(grid),
+    calibratedGate(lines),
     refreshGate(refreshes),
-    outcomesGate(lines, judged, Math.max(span.toSec, input.asOfSec ?? span.toSec)),
+    outcomesGate(lines, judged, asOfSec),
+    reactionsGate(input, span, asOfSec),
     soundsGate(input.alerts.filter((alert) => within(alert.at, span))),
-    staleGate(trades)
+    staleGate(trades),
+    wholeGate(trades)
   ]
   return {
     version: RUN_SECTION_VERSION,
     fromSec: span.fromSec,
     toSec: span.toSec,
     predictions: { lines: lines.length, pairs: new Set(lines.map((line) => line.pair)).size, gridCloses, expectedGridCloses, refreshes: refreshes.length, byReason },
+    classes: { calls, pairClasses },
     horizons,
-    trades: { opened: trades.length, closed: closed.length, wins, netQuote },
+    top,
+    best,
+    worst,
+    trades: tradesOf(trades, closed),
     sampleNote: closed.length < RUN_LINES.minTrades ? SAMPLE_NOTE : null,
     gates,
     passed: gates.every((gate) => gate.status !== 'fail')
   }
+}
+
+/** What the trades made, and what their fills cost: a fee on each fill, the slippage the engine charges
+ * each, on the trades that entered. */
+function tradesOf(trades: readonly ExecutorConfig[], closed: readonly ExecutorConfig[]): ForecastRunTrades {
+  let netQuote = 0
+  let feesQuote = 0
+  let slippageQuote = 0
+  let wins = 0
+  let best: ForecastRunTrades['best'] = null
+  let worst: ForecastRunTrades['worst'] = null
+  for (const executor of closed) {
+    const result = executor.forecast!.result!
+    netQuote += result.pnlQuote
+    if (result.pnlQuote > 0) wins++
+    if (best === null || result.pnlQuote > best.pnlQuote) best = { pair: executor.symbol, pnlQuote: result.pnlQuote }
+    if (worst === null || result.pnlQuote < worst.pnlQuote) worst = { pair: executor.symbol, pnlQuote: result.pnlQuote }
+    if (result.exit === 'entry_expired' || result.exit === 'btc_moved') continue
+    // A record without its stake adds no cost rather than breaking the report.
+    const params = (executor.params ?? {}) as { amountQuote?: number; slippageRate?: number | null }
+    const stake = typeof params.amountQuote === 'number' && Number.isFinite(params.amountQuote) ? params.amountQuote : 0
+    feesQuote += stake * FEE_RATE * 2
+    slippageQuote += stake * 2 * positionSlippageRate(params)
+  }
+  return { opened: trades.length, closed: closed.length, wins, netQuote, feesQuote, slippageQuote, best, worst }
 }
 
 /** Forecasts were made, at each quarter-hour close of the span but at most one at its edges. */
@@ -183,6 +312,47 @@ function stampedGate(lines: readonly PredictionLine[]): ForecastRunGate {
     label,
     status: wrong.length === 0 ? 'pass' : 'fail',
     detail: wrong.length === 0 ? `Each of the ${plural(lines.length, 'forecast', 'forecasts')} is stamped with its close and was made after it, in time.` : `${plural(wrong.length, 'forecast is', 'forecasts are')} stamped wrong or made late, the first ${wrong[0].pair} at ${wrong[0].t}.`
+  }
+}
+
+/** §114, history complete: no pair skipped a quarter-hour close between its first and its last in the
+ * span -- the engine forecasts a pair only with its bars there. */
+function historyGate(grid: readonly PredictionLine[]): ForecastRunGate {
+  const label = 'Every pair is forecast at every close'
+  if (grid.length === 0) return { id: 'forecast_history', label, status: 'not measured', detail: 'No quarter-hour forecast is on record in the span.' }
+  const closes = [...new Set(grid.map((line) => line.t))].sort((a, b) => a - b)
+  const byPair = new Map<string, Set<number>>()
+  for (const line of grid) {
+    const held = byPair.get(line.pair) ?? new Set<number>()
+    held.add(line.t)
+    byPair.set(line.pair, held)
+  }
+  const holes: { pair: string; t: number }[] = []
+  for (const [pair, held] of byPair) {
+    const first = Math.min(...held)
+    const last = Math.max(...held)
+    for (const close of closes) if (close > first && close < last && !held.has(close)) holes.push({ pair, t: close })
+  }
+  return {
+    id: 'forecast_history',
+    label,
+    status: holes.length === 0 ? 'pass' : 'fail',
+    detail: holes.length === 0 ? `Each of the ${plural(byPair.size, 'pair is', 'pairs are')} on record at every quarter-hour close from its first to its last.` : `${plural(new Set(holes.map((hole) => hole.pair)).size, 'pair skipped', 'pairs skipped')} a close, the first ${holes[0].pair} at ${holes[0].t}.`
+  }
+}
+
+/** §114, calibration recorded: each forecast names the model run it came from and the walk forward
+ * that calibrated it. */
+function calibratedGate(lines: readonly PredictionLine[]): ForecastRunGate {
+  const label = 'Every forecast names its calibration'
+  if (lines.length === 0) return { id: 'forecast_calibrated', label, status: 'not measured', detail: 'No forecast is on record in the span.' }
+  const named = (value: unknown): boolean => typeof value === 'string' && value !== '' && value !== 'none'
+  const unnamed = lines.filter((line) => !named(line.run) || !named(line.foldsRun)).length
+  return {
+    id: 'forecast_calibrated',
+    label,
+    status: unnamed === 0 ? 'pass' : 'fail',
+    detail: unnamed === 0 ? `Each of the ${plural(lines.length, 'forecast', 'forecasts')} names its model run and the walk forward that calibrated it.` : `${plural(unnamed, 'forecast names', 'forecasts name')} no model run or no calibration.`
   }
 }
 
@@ -228,6 +398,22 @@ function outcomesGate(lines: readonly PredictionLine[], judged: readonly (Outcom
   }
 }
 
+/** §114, news correlation complete: every story of the span naming a coin traded on Binance, once four
+ * hours have passed, has what the price did around it measured to four hours. */
+function reactionsGate(input: ForecastRunInput, span: { fromSec: number; toSec: number }, asOfSec: number): ForecastRunGate {
+  const label = 'Every story is measured to four hours'
+  if (input.stories === undefined || input.reactions === undefined) return { id: 'news_reactions', label, status: 'not measured', detail: "The stories' reactions could not be read." }
+  const due = input.stories.filter((story) => story.tradable && within(story.publishedAt, span) && story.publishedAt + RUN_LINES.storySeconds <= asOfSec)
+  if (due.length === 0) return { id: 'news_reactions', label, status: 'not measured', detail: 'No story of the span naming a traded coin has had four hours yet.' }
+  const unmeasured = due.filter((story) => (input.reactions![story.id]?.after.h4 ?? null) === null)
+  return {
+    id: 'news_reactions',
+    label,
+    status: unmeasured.length === 0 ? 'pass' : 'fail',
+    detail: unmeasured.length === 0 ? `Each of the ${plural(due.length, 'story', 'stories')} naming a traded coin has its four hours measured.` : `${plural(unmeasured.length, 'story has', 'stories have')} no four-hour reaction.`
+  }
+}
+
 /** Every notice told in the span recorded the sound it made (V6 Stage 13). */
 function soundsGate(alerts: readonly { sound?: string }[]): ForecastRunGate {
   const label = "Every notice's sound is on file"
@@ -254,5 +440,23 @@ function staleGate(trades: readonly ExecutorConfig[]): ForecastRunGate {
     label,
     status: stale.length === 0 ? 'pass' : 'fail',
     detail: stale.length === 0 ? `Each of the ${plural(trades.length, 'paper trade', 'paper trades')} the forecast trader opened followed a forecast of its own close and plan.` : `${plural(stale.length, 'paper trade followed', 'paper trades followed')} a stale forecast.`
+  }
+}
+
+/** §114, no missing lifecycle record: each forecast trade names its forecast and carries its five levels
+ * and its plan, and one stopped carries how it ended. */
+function wholeGate(trades: readonly ExecutorConfig[]): ForecastRunGate {
+  const label = "Every forecast trade's record is whole"
+  if (trades.length === 0) return { id: 'trades_whole', label, status: 'not measured', detail: 'The forecast trader opened nothing in the span.' }
+  const broken = trades.filter((executor) => {
+    const mark = executor.forecast!
+    if (typeof mark.predictionId !== 'string' || mark.predictionId === '' || mark.quantilesPct.length !== 5 || mark.plan === undefined) return true
+    return executor.status === 'stopped' && mark.result === undefined
+  })
+  return {
+    id: 'trades_whole',
+    label,
+    status: broken.length === 0 ? 'pass' : 'fail',
+    detail: broken.length === 0 ? `Each of the ${plural(trades.length, 'paper trade', 'paper trades')} names its forecast, carries its levels and plan, and once stopped how it ended.` : `${plural(broken.length, "paper trade's record is", "paper trades' records are")} missing a part.`
   }
 }

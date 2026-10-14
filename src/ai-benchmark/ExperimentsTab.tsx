@@ -26,8 +26,16 @@ function forecastCsvLines(section: ForecastRunSection, quote: (value: string | n
     const m = row.metrics
     lines.push(['forecast horizon', HORIZON_WORDS[horizon] ?? horizon, row.outcomes, `direction ${share(m.direction)}; in 50% ${share(m.coverage50)}; in 80% ${share(m.coverage80)}; median error ${pctOf(m.mae)}; bias ${pctOf(m.bias)}; bull ${outOf(row.bull.right, row.bull.calls)}; bear ${outOf(row.bear.right, row.bear.calls)}; story-moved ${inRange(row.news.moved)}; the rest ${inRange(row.news.unmoved)}`].map(quote).join(','))
   }
+  for (const [horizon, row] of Object.entries(section.horizons)) {
+    if (row === undefined || row.variants === undefined) continue
+    for (const [variant, m] of Object.entries(row.variants)) lines.push(['forecast variant', `${HORIZON_WORDS[horizon] ?? horizon} ${variant.toUpperCase()}`, m.n, `in 80% ${share(m.coverage80)}; median error ${pctOf(m.mae)}; way right ${share(m.direction)}`].map(quote).join(','))
+  }
+  for (const [call, count] of Object.entries(section.classes?.calls ?? {})) lines.push(['forecast calls', call, count, 'at the lead horizon'].map(quote).join(','))
+  for (const [list, rows] of [['best rated', section.top ?? []], ['best called', section.best ?? []], ['worst called', section.worst ?? []]] as const) {
+    for (const row of rows) lines.push([`forecast ${list}`, `${row.pair} ${stamp(row.t)}`, row.quality ?? '', `${HORIZON_WORDS[row.horizon] ?? row.horizon} ${row.call}, median ${pctOf(row.medianPct)}, moved ${pctOf(row.movePct)}`].map(quote).join(','))
+  }
   for (const gate of section.gates) lines.push(['forecast gate', gate.label, gate.status.toUpperCase(), gate.detail].map(quote).join(','))
-  lines.push(['forecast trader', 'paper trades', trades.closed, `${trades.opened} opened, ${trades.closed} closed, ${trades.wins} ahead, net ${trades.netQuote.toFixed(2)}`].map(quote).join(','))
+  lines.push(['forecast trader', 'paper trades', trades.closed, `${trades.opened} opened, ${trades.closed} closed, ${trades.wins} ahead, net ${trades.netQuote.toFixed(2)}, fees ${(trades.feesQuote ?? 0).toFixed(2)}, slippage ${(trades.slippageQuote ?? 0).toFixed(3)}`].map(quote).join(','))
   if (section.sampleNote !== null) lines.push(['forecast trader', 'note', '', section.sampleNote].map(quote).join(','))
   return lines
 }
@@ -78,8 +86,29 @@ function ForecastSectionView({ section }: { section: ForecastRunSection }): Reac
           </table>
         </div>
       )}
+      {section.classes !== undefined && (
+        <p style={noteStyle}>
+          Their calls at the lead horizon: {Object.entries(section.classes.calls).map(([call, count]) => `${call} ${count}`).join(', ') || 'none'}; by the coin&apos;s class: {Object.entries(section.classes.pairClasses).map(([cls, count]) => `${cls} ${count}`).join(', ') || 'none'}.
+        </p>
+      )}
+      {rows.some(([, row]) => row.variants !== undefined) && (
+        <p style={noteStyle}>
+          The four variants on the same moments, in 80% and the median&apos;s error: {rows
+            .filter(([, row]) => row.variants !== undefined)
+            .map(([horizon, row]) => `${HORIZON_WORDS[horizon] ?? horizon}: ${Object.entries(row.variants).map(([variant, m]) => `${variant.toUpperCase()} ${share(m.coverage80)} ${pctOf(m.mae)}`).join(' · ')}`)
+            .join('; ')}
+          .
+        </p>
+      )}
+      {(section.best ?? []).length > 0 && (
+        <p style={noteStyle}>
+          Best called: {section.best.map((row) => `${row.pair} at ${stamp(row.t)} (median ${pctOf(row.medianPct)}, moved ${pctOf(row.movePct)})`).join('; ')}. Worst called:{' '}
+          {section.worst.map((row) => `${row.pair} at ${stamp(row.t)} (median ${pctOf(row.medianPct)}, moved ${pctOf(row.movePct)})`).join('; ')}.
+        </p>
+      )}
       <p style={noteStyle}>
-        The forecast trader: {trades.opened} paper trades opened, {trades.closed} closed, {trades.wins} of them ahead, net {money(trades.netQuote)} after fees.{section.sampleNote === null ? '' : ` ${section.sampleNote}`}
+        The forecast trader: {trades.opened} paper trades opened, {trades.closed} closed, {trades.wins} of them ahead, net {money(trades.netQuote)} after fees of {money(trades.feesQuote ?? 0)} and slippage of {money(trades.slippageQuote ?? 0, 3)}.
+        {section.sampleNote === null ? '' : ` ${section.sampleNote}`}
       </p>
     </div>
   )

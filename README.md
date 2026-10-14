@@ -1327,7 +1327,15 @@ read from its own record: the forecasts made, and per horizon how often the call
 forecasts a story moved against the rest, and the forecast trader's paper trades -- under thirty closed,
 "Sample size is too small for a profitability conclusion." -- with six gates of its own: forecasts at the
 quarter-hour closes, each stamped with its close and made in time, a refresh naming its reason and what
-it replaced, every due horizon judged, every notice's sound on file, and no trade on a stale forecast.
+it replaced, every due horizon judged (one still waiting for its bars within the engine's hour is waiting,
+not missing), every notice's sound on file, and no trade on a stale forecast. Since V6 Stage 16 (§48-50 and
+§114) it carries as well the forecasts' calls at their lead horizon and their coins' classes, the four
+variants on the same moments -- price only, with the technical figures, with the news, with the AI's
+reading -- the ten best-rated forecasts and the five best and worst called, the forecast trader's fees,
+slippage and best and worst trade, and four gates more: every pair forecast at every close between its
+first and its last (the history whole), every forecast naming the walk forward that calibrated it, every
+story naming a coin traded on Binance measured to four hours once it has had them, and every forecast
+trade's record whole.
 
 Since 8 October 2026 the alerts told and the paper trades refused are on file (`shared/records.ts`,
 one JSON line each in a file per UTC month), so the report reaches back for them as far as the span
@@ -1399,7 +1407,10 @@ spend, read from its own ledger on disk, is held under `CEILING_USD` ($3 at most
 together and across UTC days -- the app's daily cap is set each minute to what today has spent plus what
 the ceiling leaves, and at the ceiling the key is removed and the AI switched off. At the end the AI is
 switched off before anything waits, and both copies are deleted from the scratch profile after the app
-closes (the log says DELETE BY HAND if they cannot be).
+closes (the log says DELETE BY HAND if they cannot be). At the end the Forecast Lab's data is saved
+(`forecast-lab.json`), its comparison of the forecast trader with Trend Regime 4h, Short-Term Channel 15m,
+buy and hold and the hybrid is run over the bars on file, and the page is saved as it reads
+(`forecast-lab-page.txt`).
 
 Checked on a separate build and a scratch profile. It was seeded with an hour of records: one
 event, a watch answer and a failed call, a news analyst's call, and a paper trade of the watch's

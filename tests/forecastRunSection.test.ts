@@ -96,10 +96,12 @@ describe('what a run holds of the forecast', () => {
     const trade = (id: string, openedAt: number, pnlQuote: number | null): ExecutorConfig =>
       ({
         id,
+        symbol: `${id.toUpperCase()}USDT`,
         forecast: { predictionId: 'p0', barTime: openedAt - 60, openedAt, horizon: 'hour1', side: 'BUY', classKey: 'large/hour1/trend', verdict: 'PROBATION', quantilesPct: [], pUp: 0.6, edgePct: 0.3, pProfit: 0.6, plan: { entryMin: 1, entryMax: 1, stopPct: 1, targetPct: 1, targetLevel: 'P75', holdSec: 3600, validUntil: openedAt + 240 }, ...(pnlQuote === null ? {} : { result: { exit: 'take_profit', pnlQuote, closedAt: openedAt + 1800 } }) }
       }) as unknown as ExecutorConfig
     const section = forecastRunSectionOf(hourRun({ executors: [trade('a', T + 300, 1.5), trade('b', T + 600, -0.5), trade('c', T + 900, null), trade('old', T - 3600, 9)] }))
-    expect(section.trades).toEqual({ opened: 3, closed: 2, wins: 1, netQuote: 1 })
+    // Without their stakes on record they add no fees or slippage; the best and the worst are named.
+    expect(section.trades).toEqual({ opened: 3, closed: 2, wins: 1, netQuote: 1, feesQuote: 0, slippageQuote: 0, best: { pair: 'AUSDT', pnlQuote: 1.5 }, worst: { pair: 'BUSDT', pnlQuote: -0.5 } })
     expect(section.sampleNote).toBe(SAMPLE_NOTE)
     expect(SAMPLE_NOTE).toBe('Sample size is too small for a profitability conclusion.')
     expect(section.gates.find((gate) => gate.id === 'stale_trades')?.status).toBe('pass')
@@ -211,5 +213,106 @@ describe("the experiment's report", () => {
     expect(experimentReportOf({ session, sessionInput, help: [], forecast: good })).toMatchObject({ forecast: good, passed: true })
     const bad = forecastRunSectionOf(hourRun({ alerts: [{ at: T + 60 }] }))
     expect(experimentReportOf({ session, sessionInput, help: [], forecast: bad }).passed).toBe(false)
+  })
+})
+
+describe("the twelve-hour run's report (§48-49, §114)", () => {
+  const gate = (input: ForecastRunInput, id: string): { status: string; detail: string } => forecastRunSectionOf(input).gates.find((entry) => entry.id === id)!
+
+  it('counts the calls at each forecast\'s lead horizon, and its coin\'s class', () => {
+    const run = hourRun({ toSec: T + 3600 })
+    const predictions = [
+      prediction('a', T, {}, { hour1: horizonLine({ dir: 'BULLISH' }) }),
+      prediction('b', T + 900, { cls: 'btc' }, { hour1: horizonLine({ dir: 'BULLISH', strong: true }) }),
+      prediction('c', T + 1800, {}, { hour1: horizonLine({ uncertain: true }) }),
+      prediction('d', T + 2700, { best: 'minutes15' }, { minutes15: horizonLine({ dir: 'BEARISH' }), hour1: horizonLine({ dir: 'BULLISH' }) }),
+      prediction('e', T + 3600, { best: null }, { hour1: horizonLine() })
+    ]
+    const section = forecastRunSectionOf({ ...run, predictions, outcomes: [] })
+    expect(section.classes.calls).toEqual({ BULLISH: 1, 'STRONG BULLISH': 1, UNCERTAIN: 1, BEARISH: 1, NEUTRAL: 1 })
+    expect(section.classes.pairClasses).toEqual({ large: 4, btc: 1 })
+  })
+
+  it('lists the best-rated forecasts, and the best and worst called once judged', () => {
+    const run = hourRun({ toSec: T + 3600 })
+    const predictions = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((k) => prediction(`q${k}`, T + (k % 5) * 900, { pair: `P${k}USDT` }, { hour1: horizonLine({ qual: 40 + k }) }))
+    const outcomes = predictions.slice(0, 8).map((line, k) => outcome(line.id, line.t, 'hour1', 0.5 + (k - 4) * 0.25))
+    const section = forecastRunSectionOf({ ...run, predictions, outcomes })
+    expect(section.top.map((row) => row.quality)).toEqual([51, 50, 49, 48, 47, 46, 45, 44, 43, 42])
+    expect(section.top[0]).toMatchObject({ pair: 'P11USDT', horizon: 'hour1', call: 'NEUTRAL', medianPct: 0.5, movePct: null, in80: null })
+    // The median is 0.5: the move nearest it is the best called, the farthest the worst; a tie goes to
+    // the earlier forecast.
+    expect(section.best.map((row) => row.pair)).toEqual(['P4USDT', 'P5USDT', 'P3USDT', 'P6USDT', 'P2USDT'])
+    expect(section.worst.map((row) => row.pair)).toEqual(['P0USDT', 'P7USDT', 'P1USDT', 'P2USDT', 'P6USDT'])
+    expect(section.best[0].movePct).toBe(0.5)
+  })
+
+  it('carries the four variants on the same moments (§49)', () => {
+    const section = forecastRunSectionOf(hourRun())
+    const hour = section.horizons.minutes5!
+    expect(Object.keys(hour.variants).sort()).toEqual(['v1', 'v2', 'v3', 'v4'])
+    expect(hour.variants.v4).toEqual(hour.metrics)
+    expect(hour.variants.v1.n).toBe(hour.metrics.n)
+  })
+
+  it("counts the forecast trades' fees and slippage, their best and worst", () => {
+    const trade = (id: string, symbol: string, pnlQuote: number, exit = 'take_profit'): ExecutorConfig =>
+      ({
+        id,
+        symbol,
+        status: 'stopped',
+        params: { amountQuote: 100, slippageRate: 0.0005 },
+        forecast: { predictionId: 'p0', barTime: T + 240, openedAt: T + 300, horizon: 'hour1', side: 'BUY', classKey: 'k', verdict: 'PROBATION', quantilesPct: [-2, -1, 0.5, 2, 3], pUp: 0.6, edgePct: 0.3, pProfit: 0.6, plan: { entryMin: 1, entryMax: 1, stopPct: 1, targetPct: 1, targetLevel: 'P75', holdSec: 3600, validUntil: T + 540 }, result: { exit, pnlQuote, closedAt: T + 1800 } }
+      }) as unknown as ExecutorConfig
+    const section = forecastRunSectionOf(hourRun({ executors: [trade('a', 'SOLUSDT', 2), trade('b', 'ETHUSDT', -1), trade('c', 'BTCUSDT', 0, 'entry_expired')] }))
+    expect(section.trades).toMatchObject({ opened: 3, closed: 3, wins: 1, netQuote: 1, best: { pair: 'SOLUSDT', pnlQuote: 2 }, worst: { pair: 'ETHUSDT', pnlQuote: -1 } })
+    // Two that entered: a fee of 0.1% on each fill, and the slippage the engine charges each.
+    expect(section.trades.feesQuote).toBeCloseTo(2 * 100 * 0.001 * 2, 10)
+    expect(section.trades.slippageQuote).toBeCloseTo(2 * 100 * 2 * 0.0005, 10)
+    expect(gate(hourRun({ executors: [trade('a', 'SOLUSDT', 2)] }), 'trades_whole').status).toBe('pass')
+  })
+
+  it('wants every pair at every quarter-hour close between its first and its last (history complete)', () => {
+    const run = hourRun({ toSec: T + 3600 })
+    const two = [0, 900, 1800, 2700].flatMap((offset) => [prediction(`s${offset}`, T + offset), prediction(`e${offset}`, T + offset, { pair: 'ETHUSDT' })])
+    expect(gate({ ...run, predictions: two }, 'forecast_history').status).toBe('pass')
+    // ETH from the second close on: a pair joining the universe is no hole.
+    expect(gate({ ...run, predictions: two.filter((line) => line.id !== 'e0') }, 'forecast_history').status).toBe('pass')
+    expect(gate({ ...run, predictions: two.filter((line) => line.id !== 'e900') }, 'forecast_history')).toMatchObject({ status: 'fail' })
+    expect(gate({ ...run, predictions: [] }, 'forecast_history').status).toBe('not measured')
+  })
+
+  it('wants every forecast to name its model run and its calibration', () => {
+    const run = hourRun({ toSec: T + 3600 })
+    expect(gate(run, 'forecast_calibrated').status).toBe('pass')
+    expect(gate({ ...run, predictions: [...run.predictions, prediction('x', T + 900, { foldsRun: '' })] }, 'forecast_calibrated').status).toBe('fail')
+    expect(gate({ ...run, predictions: [...run.predictions, prediction('x', T + 900, { run: 'none' })] }, 'forecast_calibrated').status).toBe('fail')
+  })
+
+  it('wants every story naming a traded coin measured to four hours once it has had them (news correlation complete)', () => {
+    const run = hourRun({ toSec: T + 3600 })
+    const asOf = T + 3600 + RUN_LINES.storySeconds
+    const stories = [
+      { id: 'a', publishedAt: T + 60, tradable: true },
+      { id: 'b', publishedAt: T + 120, tradable: false },
+      { id: 'c', publishedAt: T + 3500, tradable: true },
+      { id: 'old', publishedAt: T - 60, tradable: true }
+    ]
+    expect(gate(run, 'news_reactions').status).toBe('not measured')
+    expect(gate({ ...run, stories, reactions: {} }, 'news_reactions').status).toBe('not measured')
+    expect(gate({ ...run, stories, reactions: { a: { after: { h4: 1.2 } } }, asOfSec: T + 60 + RUN_LINES.storySeconds }, 'news_reactions').status).toBe('pass')
+    expect(gate({ ...run, stories, reactions: { a: { after: { h4: 1.2 } } }, asOfSec: asOf }, 'news_reactions')).toMatchObject({ status: 'fail' })
+    expect(gate({ ...run, stories, reactions: { a: { after: { h4: 1.2 } }, c: { after: { h4: null } } }, asOfSec: asOf }, 'news_reactions').status).toBe('fail')
+    expect(gate({ ...run, stories, reactions: { a: { after: { h4: 1.2 } }, c: { after: { h4: -0.4 } } }, asOfSec: asOf }, 'news_reactions').status).toBe('pass')
+  })
+
+  it("wants every forecast trade's record whole: its forecast, levels and plan, and once stopped its end", () => {
+    const mark = { predictionId: 'p0', barTime: T + 240, openedAt: T + 300, horizon: 'hour1', side: 'BUY', classKey: 'k', verdict: 'APPROVED', quantilesPct: [-2, -1, 0.5, 2, 3], pUp: 0.6, edgePct: 0.3, pProfit: 0.6, plan: { entryMin: 1, entryMax: 1, stopPct: 1, targetPct: 1, targetLevel: 'P75', holdSec: 3600, validUntil: T + 540 } }
+    const of = (patch: Record<string, unknown>, status = 'active'): ExecutorConfig => ({ id: 'x', symbol: 'SOLUSDT', status, params: { amountQuote: 100 }, forecast: { ...mark, ...patch } }) as unknown as ExecutorConfig
+    expect(gate(hourRun({ executors: [of({})] }), 'trades_whole').status).toBe('pass')
+    expect(gate(hourRun({ executors: [of({}, 'stopped')] }), 'trades_whole').status).toBe('fail')
+    expect(gate(hourRun({ executors: [of({ result: { exit: 'stop_loss', pnlQuote: -1, closedAt: T + 900 } }, 'stopped')] }), 'trades_whole').status).toBe('pass')
+    expect(gate(hourRun({ executors: [of({ predictionId: '' })] }), 'trades_whole').status).toBe('fail')
+    expect(gate(hourRun({ executors: [of({ quantilesPct: [1, 2, 3] })] }), 'trades_whole').status).toBe('fail')
   })
 })
