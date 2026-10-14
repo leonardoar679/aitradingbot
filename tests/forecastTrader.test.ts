@@ -251,7 +251,7 @@ describe('the forecast trader (§66-68)', () => {
     decision: decision(pair, patch)
   })
 
-  function world(patch: { enabled?: boolean; executors?: ExecutorConfig[]; ranked?: RankedForecast[]; pause?: typeof DEFAULT_PAPER_PAUSE; book?: Partial<LiveBook> | null; maxOutQuote?: number | null; correlation?: number | null; trader?: Record<string, unknown>; barTime?: number } = {}) {
+  function world(patch: { enabled?: boolean; executors?: ExecutorConfig[]; ranked?: RankedForecast[]; pause?: typeof DEFAULT_PAPER_PAUSE; book?: Partial<LiveBook> | null; maxOutQuote?: number | null; correlation?: number | null; trader?: Record<string, unknown>; barTime?: number; prediction?: Partial<PricePrediction> } = {}) {
     const nowSec = T + 60
     const store = {
       executors: patch.executors ?? [],
@@ -269,7 +269,7 @@ describe('the forecast trader (§66-68)', () => {
         store.executors = executors
       },
       ranking: async () => ranking,
-      predictions: async () => ranking.ranked.map((entry) => prediction(entry.pair, {}, patch.barTime === undefined ? {} : { barTime: patch.barTime })),
+      predictions: async () => ranking.ranked.map((entry) => prediction(entry.pair, {}, { ...(patch.barTime === undefined ? {} : { barTime: patch.barTime }), ...patch.prediction })),
       liveBook: async (pair) => (patch.book === null ? null : book(pair, nowSec, patch.book ?? {})),
       btcCorrelation: async () => (patch.correlation === undefined ? 0.2 : patch.correlation),
       fetchCandles: async () => [],
@@ -322,6 +322,22 @@ describe('the forecast trader (§66-68)', () => {
     const late = world({ barTime: T - 300 })
     expect((await openForecastTrades(late.deps)).refused[0].why).toMatch(/plan does not hold/)
     for (const case_ of [notEnough, unjudged, stale, wide, gone, late]) expect(case_.store.executors).toEqual([])
+  })
+
+  // Found by V6 Stage 16's 12-hour run: the pass decides on the books the stream holds, those of the
+  // pairs on screen, so a pair off screen was never decided TRADE.
+  it('decides again, on the book it reads, a call the pass held back by the live price alone, and reads none for one held back by more', async () => {
+    const stale: Partial<TradeDecision> = { decision: 'NO_TRADE', reasons: [{ code: 'STALE_PRICE', text: 'There is no live price newer than ten seconds.' }] }
+    const held = world({ ranked: [ranked('SOLUSDT', stale)] })
+    expect(await openForecastTrades(held.deps)).toEqual({ opened: ['SOLUSDT'], refused: [] })
+    expect(held.store.executors[0]).toMatchObject({ mode: 'paper', symbol: 'SOLUSDT', forecast: { side: 'BUY', classKey: 'large/hour1/other', verdict: 'PROBATION' } })
+    // Decided again, another line holds it back: refused, saying which.
+    const against = world({ ranked: [ranked('SOLUSDT', stale)], prediction: { regime: 'bear' } })
+    expect((await openForecastTrades(against.deps)).refused).toEqual([{ pair: 'SOLUSDT', why: 'A BUY against a bear market.' }])
+    // Held back by more than the price: no book is read for it, and nothing is said.
+    const more = world({ ranked: [ranked('SOLUSDT', { decision: 'NO_TRADE', reasons: [{ code: 'QUALITY_LOW', text: 'Its quality is 50, under 60.' }, ...stale.reasons!] })] })
+    expect(await openForecastTrades(more.deps)).toEqual({ opened: [], refused: [] })
+    for (const case_ of [against, more]) expect(case_.store.executors).toEqual([])
   })
 
   it('keeps one trade a pair, as many open and on one side as the risk mode keeps, and pauses on its own losing run', async () => {

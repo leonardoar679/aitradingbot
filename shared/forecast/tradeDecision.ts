@@ -1,4 +1,4 @@
-import { MAX_SPREAD_PCT, STALE_PRICE_MS } from '../liveMarket'
+import { bookSpreadPct, MAX_SPREAD_PCT, STALE_PRICE_MS, type LiveBook } from '../liveMarket'
 import { edgeOf, type Edge } from './edge'
 import type { Horizon } from './features'
 import { classTradable, type ClassVerdict } from './opportunityClass'
@@ -193,4 +193,31 @@ export function decideTrade(input: DecisionInput): TradeDecision {
     classVerdict: opportunity?.verdict ?? null,
     at: input.nowMs
   }
+}
+
+/** What a decision reads of a book: its mid, when it came and its spread; null without a two-sided one. */
+export function liveOfBook(book: LiveBook | null | undefined): DecisionInput['live'] {
+  return book === null || book === undefined || !(book.bid > 0) || !(book.ask > 0) ? null : { price: (book.bid + book.ask) / 2, updatedAt: book.updatedAt, spreadPct: bookSpreadPct(book) }
+}
+
+/** The lines read from the live book; a decision held back by these alone is worth reading a book for. */
+const PRICE_REASONS: ReadonlySet<NoTradeReason> = new Set(['STALE_PRICE', 'SPREAD'])
+
+/** A call whose every other line is cleared: NO TRADE only for the live price, as it was at the pass (a
+ * forecast that calls no way is held back by NO_CALL too). */
+export function heldBackByPrice(decision: TradeDecision): boolean {
+  return decision.decision === 'NO_TRADE' && decision.reasons.every((reason) => PRICE_REASONS.has(reason.code))
+}
+
+/** A decision made again on a book read since, by the same lines and with its opportunity class as it
+ * was judged; without a book, the decision as it was made. The forecast's pass decides on the books the
+ * stream holds then -- the pairs on screen and those of the app's own trades -- so any other pair is
+ * decided without a live price. Found by V6 Stage 16's 12-hour run: Home said there was no live price
+ * newer than ten seconds beside the live price it showed, and the forecast trader, which opened only
+ * what was decided TRADE, could never have traded a pair that was not on screen. */
+export function decideOnBook(decision: TradeDecision, prediction: PricePrediction, book: LiveBook | null | undefined, nowMs: number): TradeDecision {
+  const live = liveOfBook(book)
+  if (live === null || prediction.pair !== decision.pair) return decision
+  const judged = decision.classKey === null || decision.classVerdict === null ? null : { key: decision.classKey, verdict: decision.classVerdict }
+  return decideTrade({ prediction, horizon: decision.horizon, nowMs, live, classOf: judged === null ? null : (): { key: string; verdict: ClassVerdict } => judged })
 }

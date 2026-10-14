@@ -720,6 +720,13 @@ async function nav(label) {
       const buttons = [...document.querySelectorAll('button')]
       return buttons.find((b) => b.textContent?.trim() === text) ?? buttons.find((b) => /^\d*$/.test((b.textContent?.trim() ?? '').slice(text.length)) && (b.textContent?.trim() ?? '').startsWith(text))
     }
+    // A sidebar collapsed by hand shows icons without their labels: it is expanded first (V6 Stage 16's
+    // 12-hour run lost its pages from the eleventh hour on to a sidebar collapsed while the window was moved).
+    const collapsed = document.querySelector('nav button[aria-label="Expand sidebar"]')
+    if (collapsed) {
+      collapsed.click()
+      await new Promise((resolve) => setTimeout(resolve, 300))
+    }
     let button = find()
     if (!button) {
       for (const header of document.querySelectorAll('nav button[aria-expanded="false"]')) header.click()

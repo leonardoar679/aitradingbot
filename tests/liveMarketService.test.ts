@@ -144,10 +144,12 @@ describe('the live market', () => {
     rig.settings.executors = [
       { status: 'active', mode: 'paper', type: 'position', symbol: 'XRPUSDT', watch: { eventId: 'e', eventTime: 1, model: 'm', confidence: 0.8 } },
       { status: 'active', mode: 'paper', type: 'position', symbol: 'ADAUSDT' },
-      { status: 'stopped', mode: 'paper', type: 'position', symbol: 'DOGEUSDT', watch: { eventId: 'f', eventTime: 1, model: 'm', confidence: 0.8 } }
+      { status: 'stopped', mode: 'paper', type: 'position', symbol: 'DOGEUSDT', watch: { eventId: 'f', eventTime: 1, model: 'm', confidence: 0.8 } },
+      // The forecast trader's own (V6 Stage 16).
+      { status: 'active', mode: 'paper', type: 'position', symbol: 'LINKUSDT', forecast: { predictionId: 'LINKUSDT:1', side: 'BUY' } }
     ]
     await vi.advanceTimersByTimeAsync(60_000)
-    expect(rig.sent).toEqual([{ method: 'SUBSCRIBE', params: ['xrpusdt@bookTicker', 'xrpusdt@kline_1m'], id: 3 }])
+    expect(rig.sent).toEqual([{ method: 'SUBSCRIBE', params: ['linkusdt@bookTicker', 'linkusdt@kline_1m', 'xrpusdt@bookTicker', 'xrpusdt@kline_1m'], id: 3 }])
   })
 
   it('writes down a quiet minute as a gap, closed by the next message, and a closed socket as a drop', async () => {

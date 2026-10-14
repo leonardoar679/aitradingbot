@@ -9,7 +9,7 @@ import { describeNewsReading } from '../../shared/aiAdditions'
 import { HORIZONS, type Horizon } from '../../shared/forecast/features'
 import type { PredictionLine } from '../../shared/forecast/forecastRecord'
 import type { PricePrediction } from '../../shared/forecast/prediction'
-import type { TradeDecision } from '../../shared/forecast/tradeDecision'
+import { decideOnBook, type TradeDecision } from '../../shared/forecast/tradeDecision'
 import { forecastView } from '../../shared/forecast/view'
 import type { LiveState } from '../../shared/liveMarket'
 import { ForecastHistoryChart } from './ForecastHistoryChart'
@@ -81,8 +81,10 @@ export function PredictionDrawer({
   const kind = story === null ? undefined : feedState?.impact.find((row) => row.eventType === story.kind)
   const reading = story === null ? undefined : readings[story.storyId]
   const answers = useMemo(() => feed.find((item) => item.event.symbol === prediction.pair && item.answers.length > 0)?.answers ?? [], [feed, prediction.pair])
-  const words = decisionWords(decision, i18n)
-  const trade = tradeThisOf({ prediction, decision, livePrice, targetLevel, nowSec }, i18n)
+  // The decision on the book the window holds now, where it holds one (shared/forecast/tradeDecision.ts).
+  const decided = decision === null ? null : decideOnBook(decision, prediction, book, nowSec * 1000)
+  const words = decisionWords(decided, i18n)
+  const trade = tradeThisOf({ prediction, decision: decided, livePrice, targetLevel, nowSec }, i18n)
   const rtl = i18n.dir === 'rtl'
   const reasons = leadRange === undefined ? [] : (leadRange.reliabilityCodes?.map((code) => reliabilityReasonText(code, i18n)) ?? leadRange.reliabilityReasons)
   const undone = leadRange === undefined ? prediction.invalidationConditions : invalidationConditionsOf(prediction.direction, lead, leadRange, i18n)

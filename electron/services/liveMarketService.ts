@@ -339,14 +339,15 @@ function checkGap(): void {
   dirty = true
 }
 
-/** The pairs the app's own paper trades are open on: their books are streamed whatever is shown. */
+/** The pairs the app's own paper trades are open on -- the watch's, the news rules' and, since V6 Stage
+ * 16, the forecast trader's -- their books are streamed whatever is shown. */
 async function readOwnTrades(): Promise<void> {
   try {
     const { executors } = await getSettings()
     const pairs = [
       ...new Set(
         executors
-          .filter((executor: ExecutorConfig) => executor.status === 'active' && executor.mode === 'paper' && executor.type === 'position' && (executor.watch !== undefined || executor.newsRule !== undefined))
+          .filter((executor: ExecutorConfig) => executor.status === 'active' && executor.mode === 'paper' && executor.type === 'position' && (executor.watch !== undefined || executor.newsRule !== undefined || executor.forecast !== undefined))
           .map((executor) => executor.symbol)
           .filter((symbol) => SYMBOL.test(symbol))
       )

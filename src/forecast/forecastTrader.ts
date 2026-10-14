@@ -7,6 +7,7 @@ import { SLIPPAGE_RATE } from '../../shared/fees'
 import { classTradable } from '../../shared/forecast/opportunityClass'
 import type { PricePrediction } from '../../shared/forecast/prediction'
 import type { ForecastRanking } from '../../shared/forecast/ranking'
+import { decideOnBook, heldBackByPrice, reasonText } from '../../shared/forecast/tradeDecision'
 import { planValid, tradePlanOf, type TradePlan } from '../../shared/forecast/tradePlan'
 import type { ForecastTradeMark } from '../../shared/forecast/trader'
 import { healForecastSettings } from '../../shared/forecast/training'
@@ -23,7 +24,9 @@ import { settingsWrites } from '../utils/settingsWrites'
 // October 2026; the rules are shared/forecast/{tradePlan,opportunityClass,trader}.ts).
 //
 // START AI TRADING. Switched on (off until a person does), after each of the forecast's passes, each
-// TRADE decision in the ranking's order -- in an APPROVED or a PROBATION opportunity class -- becomes a
+// TRADE decision in the ranking's order -- and each call the pass held back by the live price alone,
+// decided again on the book it reads (shared/forecast/tradeDecision.ts, decideOnBook), since the pass
+// reads only the books the stream holds -- in an APPROVED or a PROBATION opportunity class -- becomes a
 // PAPER Position executor from its trade plan, appended to the executors on file, unless: the trader's
 // own losing run has paused it (shared/paperPause.ts); it has as many open as the risk mode keeps, or
 // as many on that side, or one on the pair already; the live price is stale or its spread too wide
@@ -132,7 +135,7 @@ export async function openForecastTrades(deps: ForecastTraderDeps): Promise<Fore
   const forecast = healForecastSettings(settings.forecast)
   if (!forecast.trader.enabled) return result
   const ranking = await deps.ranking()
-  const trades = ranking.ranked.filter((entry) => entry.decision.decision === 'TRADE')
+  const trades = ranking.ranked.filter((entry) => entry.decision.decision === 'TRADE' || heldBackByPrice(entry.decision))
   if (trades.length === 0) return result
   const paused = paperPauseBlock({ setting: healPaperPause(settings.paperPause), executors: settings.executors, source: 'forecast' }, say)
   if (paused !== null) {
@@ -144,14 +147,13 @@ export async function openForecastTrades(deps: ForecastTraderDeps): Promise<Fore
   const targetLevel = targetLevelOf(riskModeOf({ paperRisk: risk, paperPause: healPaperPause(settings.paperPause), trader: forecast.trader }))
   for (const entry of trades) {
     const refuse = (why: string): void => void result.refused.push({ pair: entry.pair, why })
-    const decision = entry.decision
     const prediction = predictions.get(entry.pair)
     if (prediction === undefined) {
       refuse(t('Its forecast is no longer held.'))
       continue
     }
-    if (decision.classVerdict === null || !classTradable(decision.classVerdict)) {
-      refuse(t('Its kind of opportunity ({kind}) is not approved or on probation.', { kind: decision.classKey === null ? t('not read') : classKeyWords(decision.classKey, say) }))
+    if (entry.decision.classVerdict === null || !classTradable(entry.decision.classVerdict)) {
+      refuse(t('Its kind of opportunity ({kind}) is not approved or on probation.', { kind: entry.decision.classKey === null ? t('not read') : classKeyWords(entry.decision.classKey, say) }))
       continue
     }
     const book = await deps.liveBook(entry.pair)
@@ -159,6 +161,12 @@ export async function openForecastTrades(deps: ForecastTraderDeps): Promise<Fore
     const blocked = livePaperBlock(book, nowSec * 1000, say)
     if (blocked !== null || book === null) {
       refuse(blocked ?? t('No live price.'))
+      continue
+    }
+    // A call the pass held back for want of a live price, decided again on the book just read.
+    const decision = entry.decision.decision === 'TRADE' ? entry.decision : decideOnBook(entry.decision, prediction, book, nowSec * 1000)
+    if (decision.decision !== 'TRADE') {
+      refuse(reasonText(decision.reasons[0], decision.horizon, say))
       continue
     }
     const price = mid(book)

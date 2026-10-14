@@ -273,7 +273,9 @@ describe('the run\'s calibration', () => {
     expect(last.every((entry) => entry.base === 0)).toBe(true)
   })
 
-  it('weighs the model that knew the scale, holds its range, and beats persistence honestly', () => {
+  // Two walk forwards over a record each: unhurried, as the whole suite runs beside them (both took over
+  // five seconds on a loaded machine on 14 October 2026).
+  it('weighs the model that knew the scale, holds its range, and beats persistence honestly', { timeout: 60_000 }, () => {
     const calibration = buildRunCalibration(new Map([['hour1', RECORD]]), PROMOTIONS, 'run-test')
     expect(calibration.version).toBe(RUN_CALIBRATION_VERSION)
     const v2 = calibration.horizons.hour1!.variants.v2
@@ -290,7 +292,7 @@ describe('the run\'s calibration', () => {
     expect(Object.keys(v2.cells.byClass).sort()).toEqual([...PAIR_CLASSES].sort())
   })
 
-  it('finds direction where a model knew it', () => {
+  it('finds direction where a model knew it', { timeout: 60_000 }, () => {
     const calibration = buildRunCalibration(new Map([['hour1', recordOf({ rows: 14_000, seed: 23, drift: 0.6 })]]), PROMOTIONS, 'run-test')
     const honest = calibration.horizons.hour1!.variants.v2.honest.pooled!
     expect(honest.directionSkill).toBeGreaterThan(0.05)

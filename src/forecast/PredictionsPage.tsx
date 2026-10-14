@@ -11,7 +11,7 @@ import { LIVE_MAX_INTEREST } from '../../shared/liveMarket'
 import { PredictionDrawer } from './PredictionDrawer'
 import type { AiOrderProposal } from '../../shared/aiProposal'
 import { ForecastTraderCard } from './ForecastTraderCard'
-import { NO_FILTERS, predictionRows, type PredictionFilters } from './predictionRows'
+import { NO_FILTERS, predictionRows, rowDecision, type PredictionFilters } from './predictionRows'
 import { takeWantedPrediction, useForecast } from './useForecast'
 import { callColor, callLabel, decisionWords, firstReason, forecastStatusText, pairText, rangeText, reliabilityWord, signedPct, timeLeftText, HORIZON_SHORT } from './forecastWords'
 import { msg, useI18n } from '../i18n'
@@ -111,8 +111,9 @@ export function PredictionsPage({ onPrepareOrder }: { onPrepareOrder?: (proposal
                   const view = forecastView(row.prediction, livePrice, nowSec * 1000).horizons[row.horizon]
                   const range = row.prediction.horizons[row.horizon]
                   if (view === undefined || range === undefined) return null
-                  const decision = decisionWords(row.ranked.decision, i18n)
-                  const edge = row.horizon === row.ranked.horizon ? row.ranked.decision.edge : null
+                  const decided = rowDecision(row, live, nowSec * 1000)
+                  const decision = decisionWords(decided, i18n)
+                  const edge = row.horizon === row.ranked.horizon ? decided.edge : null
                   return (
                     <tr key={row.ranked.pair} onClick={() => setOpen(row.ranked.pair)} style={{ cursor: 'pointer', background: open === row.ranked.pair ? 'var(--bg-app)' : undefined }}>
                       <td style={cellStyle}>{row.rank}</td>
@@ -132,7 +133,7 @@ export function PredictionsPage({ onPrepareOrder }: { onPrepareOrder?: (proposal
                           : t('{edge} ({side}, {chance} to clear)', { edge: signedPct(edge.edgePct, 2, i18n), side: edge.side === 'SELL' ? t('SELL') : t('BUY'), chance: pctPlain(Math.round(edge.pProfit * 100), 0) })}
                       </td>
                       <td style={{ ...cellStyle, whiteSpace: 'normal', minWidth: '12rem', color: decision.trade ? 'var(--up)' : 'var(--text-secondary)' }} title={decision.detail}>
-                        {decision.trade ? decision.label : t('NO TRADE · {reason}', { reason: firstReason(row.ranked.decision, i18n) })}
+                        {decision.trade ? decision.label : t('NO TRADE · {reason}', { reason: firstReason(decided, i18n) })}
                       </td>
                       <td style={cellStyle}>{view.invalidated ? t('INVALIDATED') : timeLeftText(view.timeLeftMs, i18n)}</td>
                     </tr>

@@ -7,6 +7,7 @@ import { tradeThisOf } from './tradeThis'
 import { useRiskTarget } from './useRiskTarget'
 import type { PricePrediction } from '../../shared/forecast/prediction'
 import type { RankedForecast } from '../../shared/forecast/ranking'
+import { decideOnBook } from '../../shared/forecast/tradeDecision'
 import { forecastView } from '../../shared/forecast/view'
 import type { LiveState } from '../../shared/liveMarket'
 import { useEventFeed } from '../agents/useEventFeed'
@@ -30,7 +31,8 @@ function Row({ name, children }: { name: string; children: React.ReactNode }): R
  * ranking's first -- with its likely ranges, its bull and bear cases, its quality and reliability,
  * the story moving it, its volume and momentum, the models' vote where the watch asked about it, and
  * whether it is worth trading and, if not, why. The percentages are from the live price where the
- * stream holds it (§41). Reading it asks no model and places nothing. */
+ * stream holds it (§41), and so is the decision: the pass made it on the books the stream held then.
+ * Reading it asks no model and places nothing. */
 export function BestPredictionCard({
   prediction,
   ranked,
@@ -71,9 +73,10 @@ export function BestPredictionCard({
   const lead = leadHorizon(prediction)
   const leadRange = lead === null ? undefined : prediction.horizons[lead]
   const leadView = lead === null ? undefined : view.horizons[lead]
-  const decision = decisionWords(ranked?.decision, i18n)
+  const decided = ranked === null ? undefined : decideOnBook(ranked.decision, prediction, book, nowSec * 1000)
+  const decision = decisionWords(decided, i18n)
   const rows = predictionCardRows(prediction, view, consensus, i18n)
-  const trade = tradeThisOf({ prediction, decision: ranked?.decision, livePrice, targetLevel, nowSec }, i18n)
+  const trade = tradeThisOf({ prediction, decision: decided, livePrice, targetLevel, nowSec }, i18n)
   return (
     <Card
       title={t('Best current prediction')}

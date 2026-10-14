@@ -21,6 +21,7 @@ import { predictionChangedNotice } from '../shared/forecast/predictionChange'
 import type { RankedForecast } from '../shared/forecast/ranking'
 import type { TradeDecision } from '../shared/forecast/tradeDecision'
 import { describeUntrustedLossTally } from '../shared/liveLimits'
+import { emptyLiveState } from '../shared/liveMarket'
 import type { MarketEvent } from '../shared/marketEvent'
 import { newsHolderNotice, newsShortNotice } from '../shared/newsActions'
 import type { NewsItem } from '../shared/newsFeed'
@@ -57,7 +58,8 @@ describe('the catalogs against the code', () => {
     expect(keysIn(`t('Open@@a position') + msg("A \\"quoted\\" word") + t(\`Two\nlines\`) + it('no') + count(t)`)).toEqual(['Open@@a position', 'A "quoted" word', 'Two\nlines'])
   })
 
-  it('sees every key: none hidden in a t() argument, none with values written outside t() and msg()', () => {
+  // A walk over every source file: unhurried, as the whole suite runs beside it.
+  it('sees every key: none hidden in a t() argument, none with values written outside t() and msg()', { timeout: 60_000 }, () => {
     const hidden: string[] = []
     const calleeName = (call: ts.CallExpression): string => (ts.isIdentifier(call.expression) ? call.expression.text : ts.isPropertyAccessExpression(call.expression) ? call.expression.name.text : '')
     for (const file of ['src', 'shared', 'electron'].flatMap(sourcesUnder)) {
@@ -730,6 +732,31 @@ describe("the forecast's cards with a forecast in them, in every language", () =
         expect({ language, name, missed: missedKeys(language) }).toEqual({ language, name, missed: [] })
         expect({ language, name, english: englishIn(language, textInLanguage(html, language)) }).toEqual({ language, name, english: [] })
       }
+    }
+  }, 60_000)
+})
+
+// Found by V6 Stage 16's 12-hour run: Home said there was no live price newer than ten seconds beside the
+// live price it showed. The decision was the pass's, made on the books the stream held then.
+describe("the forecast's cards on the book the window holds", () => {
+  it("decide on it where the window holds one, and show the pass's decision where it holds none", async () => {
+    const { BestPredictionCard } = await import('../src/forecast/BestPredictionCard')
+    const { PredictionDrawer } = await import('../src/forecast/PredictionDrawer')
+    const none = (): undefined => undefined
+    const neutral: PricePrediction = { ...PREDICTION, barTime: Math.floor(Date.now() / 1000) - 60, horizons: { ...PREDICTION.horizons, hour1: rangeOf([-1.5, -0.2, 0.1, 0.4, 2.9], { direction: 'NEUTRAL' }) } }
+    const atPass: TradeDecision = { ...NO_TRADE, reasons: [NO_TRADE.reasons[0], { code: 'STALE_PRICE', text: '', values: {} }], classKey: null, classVerdict: null }
+    // Read a minute from now, so that no clock the render reads finds it old.
+    const live = { ...emptyLiveState(), books: { SOLUSDT: { symbol: 'SOLUSDT', bid: 179.99, bidQty: 10, ask: 180.01, askQty: 10, updatedAt: Date.now() + 60_000, source: 'stream' as const } } }
+    const ranked = { ...RANKED, decision: atPass }
+    const stale = 'There is no live price newer than ten seconds.'
+    for (const [name, element, said] of [
+      ['the card, the window holding no book', createElement(BestPredictionCard, { prediction: neutral, ranked, live: null, onDetails: none }), true],
+      ['the card, the window holding a fresh one', createElement(BestPredictionCard, { prediction: neutral, ranked, live, onDetails: none }), false],
+      ['the drawer, the window holding no book', createElement(PredictionDrawer, { prediction: neutral, decision: atPass, live: null, onClose: none }), true],
+      ['the drawer, the window holding a fresh one', createElement(PredictionDrawer, { prediction: neutral, decision: atPass, live, onClose: none }), false]
+    ] as const) {
+      const html = await render(element, 'en')
+      expect({ name, calls: html.includes('The 1-hour forecast calls no way.'), stale: html.includes(stale) }).toEqual({ name, calls: true, stale: said })
     }
   }, 60_000)
 })

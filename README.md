@@ -439,7 +439,13 @@ a coin up 25% today with a flat forecast ranks under one up 7% whose forecast cl
 A forecast's invalidation now names the market too (§5): Bitcoin falling 1% within fifteen minutes,
 the market turning to panic, a story of impact 70 against the coin. Each recorded forecast carries its
 quality and its decision; the window reads the ranking and a pair's decision through
-`window.api.forecast`.
+`window.api.forecast`. The pass decides on the books the stream holds then -- the pairs on screen and
+those of the app's own paper trades -- so since V6 Stage 16 a decision is **made again on a book read
+since**, by the same lines and with its class as judged: Home's card, the drawer and the Predictions
+table on the book the window holds, and the forecast trader on the one it reads for a call the pass held
+back by the live price alone (the 12-hour run found Home saying there was no live price beside the live
+price it showed, and the trader blind to every pair off screen). The forecast trader's own pairs are
+streamed whatever is shown, as the watch's and the news rules' are.
 
 **The forecast on screen** (since 13 October 2026; the V6 document's §3, §34-37, §70-71, §94, §105 and
 §118; V6 Stage 10; `src/forecast/`). Home leads with the **best current prediction**, the ranking's

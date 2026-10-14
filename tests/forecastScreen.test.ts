@@ -23,7 +23,8 @@ import {
   timeLeftText,
   volumeWord
 } from '../src/forecast/forecastWords'
-import { NO_FILTERS, predictionRows } from '../src/forecast/predictionRows'
+import { NO_FILTERS, predictionRows, rowDecision } from '../src/forecast/predictionRows'
+import { emptyLiveState } from '../shared/liveMarket'
 
 // THE FORECAST ON SCREEN (src/forecast/, shared/forecast/{predictionChange,rangeDrivers}.ts; the V6
 // document, §3, §34-37, §70-71 and §118): the words a forecast reads in, the best prediction's card row
@@ -209,7 +210,16 @@ describe('the Predictions table', () => {
     quality: 55,
     quoteVolume24h: 1e8,
     parts: { edge: 0, reliability: 1, news: 1, liquidity: 1, execution: 1, uncertainty: 0, marketRisk: 0, cost: 5 },
-    decision: pair === 'SOLUSDT' ? decision(pair, { decision: 'TRADE', side: 'BUY', reasons: [] }) : decision(pair)
+    decision:
+      pair === 'SOLUSDT'
+        ? decision(pair, { decision: 'TRADE', side: 'BUY', reasons: [] })
+        : // A call the pass held back by the live price alone (V6 Stage 16): tradable on a live price.
+          pair === 'PEPEUSDT'
+          ? decision(pair, { side: 'SELL', reasons: [{ code: 'STALE_PRICE', text: 'There is no live price newer than ten seconds.' }] })
+          : // And one held back by more.
+            pair === 'XRPUSDT'
+            ? decision(pair, { side: 'BUY', reasons: [{ code: 'QUALITY_LOW', text: 'Its quality is 55, under 60.' }, { code: 'STALE_PRICE', text: 'There is no live price newer than ten seconds.' }] })
+            : decision(pair)
   }))
   // A pair ranked with no forecast in hand is left out.
   const ranking: ForecastRanking = { at: T, ranked: [...ranked, { ...ranked[0], pair: 'DOGEUSDT' }], top10: pairs, top3: pairs.slice(0, 3) }
@@ -226,9 +236,19 @@ describe('the Predictions table', () => {
     expect(shown({ call: 'BEARISH' })).toEqual(['3:PEPEUSDT:hour1'])
     expect(shown({ call: 'NEUTRAL' })).toEqual(['1:BTCUSDT:hour1', '4:XRPUSDT:hour1'])
     expect(shown({ pairClass: 'high-vol' })).toEqual(['3:PEPEUSDT:hour1'])
-    expect(shown({ tradeOnly: true })).toEqual(['2:SOLUSDT:hour1'])
+    expect(shown({ tradeOnly: true })).toEqual(['2:SOLUSDT:hour1', '3:PEPEUSDT:hour1'])
     expect(shown({ newsOnly: true })).toEqual(['2:SOLUSDT:hour1'])
     expect(shown({ call: 'BULLISH', pairClass: 'btc' })).toEqual([])
+  })
+
+  it('decides a row again on the book the stream holds for its pair, and leaves one it holds none for as the pass made it', () => {
+    const pepe = predictionRows(ranking, predictions, NO_FILTERS).find((row) => row.ranked.pair === 'PEPEUSDT')!
+    const book = { symbol: 'PEPEUSDT', bid: 99.99, bidQty: 1, ask: 100.01, askQty: 1, updatedAt: T * 1000 + 1000, source: 'stream' as const }
+    expect(rowDecision(pepe, null, T * 1000 + 2000)).toBe(pepe.ranked.decision)
+    expect(rowDecision(pepe, { ...emptyLiveState(), books: { BTCUSDT: { ...book, symbol: 'BTCUSDT' } } }, T * 1000 + 2000)).toBe(pepe.ranked.decision)
+    const decided = rowDecision(pepe, { ...emptyLiveState(), books: { PEPEUSDT: book } }, T * 1000 + 2000)
+    expect(decided.at).toBe(T * 1000 + 2000)
+    expect(decided.reasons.map((reason) => reason.code)).not.toContain('STALE_PRICE')
   })
 
   it('reads every pair at one horizon when one is chosen, leaving out a pair without it', () => {

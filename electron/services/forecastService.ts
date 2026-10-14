@@ -27,7 +27,7 @@ import { predictionChangedNotice, stepCall, type CallTrack } from '../../shared/
 import { funnel, rankOf, type ForecastRanking, type RankedForecast } from '../../shared/forecast/ranking'
 import { refreshReasons, type RefreshReason } from '../../shared/forecast/refresh'
 import { cellOf } from '../../shared/forecast/runCalibration'
-import { decideTrade, type TradeDecision } from '../../shared/forecast/tradeDecision'
+import { decideTrade, liveOfBook, type TradeDecision } from '../../shared/forecast/tradeDecision'
 import { breakoutAt, classKeyOf, setupOf, type ClassVerdict } from '../../shared/forecast/opportunityClass'
 import { computeAtr } from '../../shared/atr'
 import type { EngineState } from '../../shared/forecast/status'
@@ -252,8 +252,7 @@ function predictionFor(symbol: string, nowMs: number): PricePrediction | null {
  * live book. */
 function decisionFor(prediction: PricePrediction, nowMs: number): TradeDecision {
   const horizon = prediction.bestHorizon ?? (prediction.horizons.hour1 !== undefined ? 'hour1' : (Object.keys(prediction.horizons)[0] as keyof PricePrediction['horizons']))
-  const book = liveState()?.books[prediction.pair]
-  const live = book === undefined || !(book.bid > 0) || !(book.ask > 0) ? null : { price: (book.bid + book.ask) / 2, updatedAt: book.updatedAt, spreadPct: bookSpreadPct(book) }
+  const live = liveOfBook(liveState()?.books[prediction.pair])
   const range = prediction.horizons[horizon]
   const judge = classVerdicts
   // The class a trade on its side falls in (shared/forecast/opportunityClass.ts), judged by the Lab's

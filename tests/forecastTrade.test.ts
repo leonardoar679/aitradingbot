@@ -5,7 +5,8 @@ import type { NewsEffect } from '../shared/forecast/newsEffect'
 import type { ForecastRange, PricePrediction } from '../shared/forecast/prediction'
 import { QUALITY_LINES, qualityOf, type QualityInput } from '../shared/forecast/quality'
 import { RANK_LINES, funnel, rankOf } from '../shared/forecast/ranking'
-import { DECISION_LINES, decideTrade, type DecisionInput } from '../shared/forecast/tradeDecision'
+import { DECISION_LINES, decideOnBook, decideTrade, heldBackByPrice, liveOfBook, type DecisionInput } from '../shared/forecast/tradeDecision'
+import type { LiveBook } from '../shared/liveMarket'
 
 // THE FORECAST AGAINST THE TRADE (shared/forecast/{quality,edge,ranking,tradeDecision}.ts; the V6
 // document, §29-33, §62-63 and §69): how good a forecast is, what it is worth after costs, where it
@@ -258,5 +259,41 @@ describe('the trade decision', () => {
     // Several at once, every one said.
     expect(codes(decide(range({ direction: 'NEUTRAL', reliability: 'LOW' }), { live: null }))).toEqual(['NO_CALL', 'RELIABILITY_LOW', 'STALE_PRICE'])
     expect(decide(range({ uncertain: true })).reasons[0].text).toMatch(/does not know enough/)
+  })
+
+  // Found by V6 Stage 16's 12-hour run: the pass decides on the books the stream holds, those of the
+  // pairs on screen, so Home said "no live price" beside the live price it showed, and the forecast
+  // trader could have traded no pair off screen.
+  it('is made again on a book read after the pass, with its class as judged; without one it stands as made', () => {
+    const judged = (verdict: 'PROBATION' | 'NOT_ENOUGH') => () => ({ key: 'large/hour1/other', verdict })
+    const atPass = decide(range(), { live: null, classOf: judged('PROBATION') })
+    expect(codes(atPass)).toEqual(['STALE_PRICE'])
+    expect(heldBackByPrice(atPass)).toBe(true)
+    const book: LiveBook = { symbol: 'SOLUSDT', bid: 99.99, bidQty: 10, ask: 100.01, askQty: 10, updatedAt: T * 1000 + 6000, source: 'rest' }
+    const p = prediction('SOLUSDT', range())
+    const nowMs = T * 1000 + 7000
+    expect(decideOnBook(atPass, p, book, nowMs)).toMatchObject({ decision: 'TRADE', side: 'BUY', reasons: [], classKey: 'large/hour1/other', classVerdict: 'PROBATION', at: nowMs })
+    // A book too old, or too wide, holds it back again; the spread is the book's.
+    expect(codes(decideOnBook(atPass, p, { ...book, updatedAt: nowMs - 10_001 }, nowMs))).toEqual(['STALE_PRICE'])
+    expect(codes(decideOnBook(atPass, p, { ...book, bid: 99.8, ask: 100.2 }, nowMs))).toEqual(['SPREAD'])
+    expect(heldBackByPrice(decide(range(), { live: { ...live, spreadPct: DECISION_LINES.maxSpreadPct + 0.01 } }))).toBe(true)
+    expect(liveOfBook(book)).toEqual({ price: 100, updatedAt: book.updatedAt, spreadPct: expect.closeTo(0.02, 9) })
+    // Without a book, a one-sided one, or for another pair's forecast, it stands as made.
+    expect(decideOnBook(atPass, p, null, nowMs)).toBe(atPass)
+    expect(decideOnBook(atPass, p, undefined, nowMs)).toBe(atPass)
+    expect(decideOnBook(atPass, p, { ...book, bid: 0 }, nowMs)).toBe(atPass)
+    expect(decideOnBook(atPass, prediction('ETHUSDT', range()), book, nowMs)).toBe(atPass)
+    // Its class as judged at the pass: one that had not earned it still has not, and is not held back
+    // by the price alone.
+    const unearned = decide(range(), { live: null, classOf: judged('NOT_ENOUGH') })
+    expect(heldBackByPrice(unearned)).toBe(false)
+    expect(codes(decideOnBook(unearned, p, book, nowMs))).toEqual(['CLASS_NOT_APPROVED'])
+    // Not judged at the pass: not judged now.
+    expect(decideOnBook(decide(range(), { live: null }), p, book, nowMs)).toMatchObject({ decision: 'TRADE', classKey: null, classVerdict: null })
+    // No way called is no call, whatever the price; and a TRADE is not held back.
+    const neutral = decide(range({ direction: 'NEUTRAL' }), { live: null })
+    expect(heldBackByPrice(neutral)).toBe(false)
+    expect(codes(decideOnBook(neutral, prediction('SOLUSDT', range({ direction: 'NEUTRAL' })), book, nowMs))).toEqual(['NO_CALL'])
+    expect(heldBackByPrice(decide(range()))).toBe(false)
   })
 })
