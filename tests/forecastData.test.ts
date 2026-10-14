@@ -183,6 +183,18 @@ describe('a pass after', () => {
   })
 })
 
+describe('a page that does not come', () => {
+  it('is waited for at most fifteen seconds, so a stall fails its pair and not the pass', async () => {
+    const data = await service()
+    const binance = await import('../electron/services/exchanges/binance')
+    data.forecastDataForTest.setUniverse(['BTCUSDT'])
+    await data.forecastDataForTest.pass()
+    const calls = vi.mocked(binance.fetchMarketData).mock.calls
+    expect(calls.length).toBeGreaterThan(0)
+    expect(calls.every((call) => call[1] === 15_000)).toBe(true)
+  })
+})
+
 describe('a pair that left the research', () => {
   it("is brought up to date while the forecast owes it outcomes, and left once it owes none; the forecast's universe stays the research's", async () => {
     const data = await service()

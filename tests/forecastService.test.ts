@@ -330,6 +330,13 @@ describe('the record', () => {
 })
 
 describe('between closes', () => {
+  // The clock just after the close the bars are held to, as the engine runs: a forecast is made again
+  // only from bars at most a close old (V6 Stage 16).
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime((HOUR + 10) * 1000)
+  })
+
   it('forecasts a coin again for a story of impact 70 naming it, once a story and once a minute, naming the one it replaced', async () => {
     const live = await engine()
     await closeAt(live, HOUR)
@@ -364,6 +371,21 @@ describe('between closes', () => {
     expect(live.getForecastEngineState().refreshes).toBe(3)
     await live.forecastNewsSignal({ stories: [late] }, now + 600_000)
     expect(live.getForecastEngineState().refreshes).toBe(3)
+  })
+
+  it('makes no forecast again from bars more than a close old, as when the data stopped coming', async () => {
+    const live = await engine()
+    await closeAt(live, HOUR)
+    const before = live.forecastOf('SOLUSDT')!
+    expect(before.barTime).toBe(HOUR)
+    const story = (id: string, atSec: number): { id: string; seenAt: number; impact: number; assets: { ticker: string; relationship: string }[] } => ({ id, seenAt: atSec, impact: 90, assets: [{ ticker: 'SOL', relationship: 'DIRECT' }] })
+    // Two closes on, no pass since: the bars are stale, and nothing is made again.
+    await live.forecastNewsSignal({ stories: [story('late', HOUR + 660)] }, (HOUR + 660) * 1000)
+    expect(live.getForecastEngineState().refreshes).toBe(0)
+    expect(live.forecastOf('SOLUSDT')!.id).toBe(before.id)
+    // One close on, its pass not yet run: made again.
+    await live.forecastNewsSignal({ stories: [story('soon', HOUR + 320)] }, (HOUR + 320) * 1000)
+    expect(live.getForecastEngineState().refreshes).toBe(1)
   })
 
   it('forecasts a coin again for an event the scanner raised, and for a live price out of its range', async () => {

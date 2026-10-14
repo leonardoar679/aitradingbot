@@ -128,12 +128,17 @@ async function paced(): Promise<void> {
   lastRequestAt = Date.now()
 }
 
+/** How long a page is waited for. The host answers in well under a second; one that stalls, as in an
+ * outage, fails its pair for the pass rather than holding the pass -- and the closes after it -- with it,
+ * as V6 Stage 16's run found two quarter-hour closes go unforecast without one. */
+const PAGE_TIMEOUT_MS = 15_000
+
 /** One page of a pair's five-minute bars from `startSec`, the closed ones only. */
 async function fetchPage(symbol: string, startSec: number): Promise<ForecastBar[]> {
   await paced()
   status.requests++
   status.weight += KLINES_WEIGHT
-  const { response, endpoint } = await fetchMarketData(`/klines?symbol=${symbol}&interval=5m&startTime=${startSec * 1000}&limit=${KLINES_PAGE}`)
+  const { response, endpoint } = await fetchMarketData(`/klines?symbol=${symbol}&interval=5m&startTime=${startSec * 1000}&limit=${KLINES_PAGE}`, PAGE_TIMEOUT_MS)
   if (response.status === 429 || response.status === 418) {
     const after = Number(response.headers.get('retry-after'))
     const wait = Number.isFinite(after) && after > 0 ? after * 1000 : response.status === 418 ? BAN_WAIT_MS : RATE_LIMIT_WAIT_MS

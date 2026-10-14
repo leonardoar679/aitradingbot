@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { mkdir, readFile, readdir, unlink } from 'fs/promises'
 import { join } from 'path'
-import { staleMonth, type ForecastBar } from '../../shared/forecast/bars'
+import { FORECAST_BAR_SECONDS, lastClosedBarTime, staleMonth, type ForecastBar } from '../../shared/forecast/bars'
 import { cellKey, emptyAciTable, levelsOf, parseAciTable, stepAciTable, type AciTable, type CellKey } from '../../shared/forecast/aciTable'
 import { FEATURE_NAMES, HORIZONS, crossSectionAt, endsAt, featuresAt, quickAt, type Horizon, type PairClass, type PairQuick, type PairSeries } from '../../shared/forecast/features'
 import {
@@ -530,6 +530,11 @@ async function consider(symbol: string, signals: { newsImpact?: number | null; n
   const prediction = latest.get(symbol)
   const input = inputs.get(symbol)
   if (prediction === undefined || input === undefined || passing !== null) return []
+  // A forecast more than a close behind -- its bars not read since, as in an outage -- is not made again
+  // from them: a refresh would restate stale bars as new. Found by V6 Stage 16's run: one made ten minutes
+  // after its close while the data could not be read.
+  const latestClose = lastClosedBarTime(Math.floor(nowMs / 1000)) + FORECAST_BAR_SECONDS
+  if (prediction.barTime < latestClose - FORECAST_BAR_SECONDS) return []
   const lead = prediction.horizons[prediction.bestHorizon ?? 'hour1'] ?? Object.values(prediction.horizons)[0]
   const reasons = refreshReasons({
     nowMs,
