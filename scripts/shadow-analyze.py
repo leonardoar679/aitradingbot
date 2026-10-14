@@ -117,6 +117,47 @@ for name in ('day', 'twelve', 'session', 'hour'):
         continue
     gates_of(r, name)
 
+# --- the experiment's report and the price forecast (V6 Stage 15) ---------------------------------
+
+
+def share(value):
+    return '-' if value is None else f'{value * 100:.1f}%'
+
+
+def pct(value):
+    return '-' if value is None else f'{value:.3f}%'
+
+
+def forecast_of(section, title):
+    p = section['predictions']
+    print(f'===== {title}: {clock(section["fromSec"])} to {clock(section["toSec"])}  passed={section["passed"]}')
+    print(f'  {p["lines"]} forecasts of {p["pairs"]} pairs, at {p["gridCloses"]} of {p["expectedGridCloses"]} quarter-hour closes; {p["refreshes"]} refreshes {json.dumps(p["byReason"])}')
+    for h, row in section['horizons'].items():
+        m = row['metrics']
+        moved, unmoved = row['news']['moved'], row['news']['unmoved']
+        print(f'  {h:10} judged {row["outcomes"]:5}  way right {share(m["direction"]):7} calls {m["calls"]} right {share(m["callsRight"]):7} in 50% {share(m["coverage50"]):7} in 80% {share(m["coverage80"]):7} median error {pct(m["mae"]):9} bias {pct(m["bias"]):9} bull {row["bull"]["right"]}/{row["bull"]["calls"]} bear {row["bear"]["right"]}/{row["bear"]["calls"]}  story-moved {moved["n"]} ({share(moved["coverage80"])} in 80%)  the rest {unmoved["n"]} ({share(unmoved["coverage80"])} in 80%)')
+    t = section['trades']
+    print(f'  forecast trader: {t["opened"]} opened, {t["closed"]} closed, {t["wins"]} ahead, net {t["netQuote"]:.2f}' + (f'  -- {section["sampleNote"]}' if section.get('sampleNote') else ''))
+    for g in section['gates']:
+        print(f'  {g["id"]:18} {g["status"]:13} {g["detail"]}')
+
+
+for f in sorted(glob.glob(os.path.join(OUT, 'experiment-*.json'))):
+    run = load(f)
+    report = run.get('report') or {}
+    print(f'\n===== {os.path.basename(f)}: {run["kind"]} {run["minutes"]} min {run["mode"]}, models {", ".join(run["models"]) or "none"}; passed={report.get("passed")}; verdict {report.get("verdict")}; AI ${(report.get("costs") or {}).get("aiUsd", 0):.4f}')
+    for g in report.get('gates', []):
+        print(f'  {g["id"]:20} {g["status"]:13} {g["detail"]}')
+    if report.get('forecast'):
+        forecast_of(report['forecast'], 'the forecast as the report filed it, at the run\'s end')
+settled = load(os.path.join(OUT, 'forecast-section.json'))
+if settled:
+    print()
+    forecast_of(settled, 'the forecast once the run\'s last forecasts came due')
+spend = load(os.path.join(ROOT, 'real-ai-spend.json'))
+if spend:
+    print(f'\n===== real models: runs {", ".join(spend["runs"])}; retired profiles ${spend["retiredUsd"]:.4f}; ceiling ${spend["ceilingUsd"]}')
+
 # --- the records on file, over every segment -----------------------------------------------------
 print('\n===== raw records')
 events = jsonl(os.path.join(PROFILE, 'marketEvents', '*.jsonl'))

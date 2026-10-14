@@ -185,6 +185,8 @@ const api = {
     lab: (): Promise<ForecastLabView> => ipcRenderer.invoke(IpcChannel.ForecastLab),
     replay: (pair: string, t: number): Promise<ForecastReplay | null> => ipcRenderer.invoke(IpcChannel.ForecastReplay, pair, t),
     bars: (pair: string, width: '15m' | '1h' | '4h', fromSec: number, toSec: number): Promise<Candle[]> => ipcRenderer.invoke(IpcChannel.ForecastBars, pair, width, fromSec, toSec),
+    /** Every pair's forecasts made in a span, and their outcomes on file: what a run's report judges. */
+    record: (fromSec: number, toSec: number): Promise<ForecastHistory> => ipcRenderer.invoke(IpcChannel.ForecastRecord, fromSec, toSec),
     onUpdate: (listener: (closedAt: number | null) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, closedAt: number | null): void => listener(closedAt)
       ipcRenderer.on(IpcChannel.ForecastUpdate, handler)

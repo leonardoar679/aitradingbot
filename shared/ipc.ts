@@ -64,6 +64,7 @@ export const IpcChannel = {
   ForecastLab: 'forecast:lab',
   ForecastReplay: 'forecast:replay',
   ForecastBars: 'forecast:bars',
+  ForecastRecord: 'forecast:record',
   ForecastUpdate: 'forecast:update',
   FeedUpdate: 'feed:update',
   FeedOpenLink: 'feed:openLink',

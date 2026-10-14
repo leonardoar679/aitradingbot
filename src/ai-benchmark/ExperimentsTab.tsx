@@ -5,10 +5,85 @@ import { sessionReportCsv } from '../../shared/shadowReport'
 import { describeDecider } from '../../shared/aiPanel'
 import { buttonStyle, cellStyle, headCellStyle, inputStyle, noteStyle } from '../agents/agentStyles'
 import { inR, pct } from '../agents/EventTables'
+import type { ForecastRunSection } from '../../shared/forecast/runSection'
+import type { LabMetrics } from '../../shared/forecast/lab'
 
 const stamp = (sec: number): string => new Date(sec * 1000).toISOString().slice(0, 16).replace('T', ' ')
 const money = (value: number, digits = 2): string => `${value >= 0 ? '' : '-'}${Math.abs(value).toFixed(digits)}`
 const STATUS_TONE: Record<ExperimentRun['status'], string> = { running: 'var(--gold)', ended: 'var(--text-primary)', reported: 'var(--up)', stopped: 'var(--text-muted)' }
+const HORIZON_WORDS: Record<string, string> = { minutes5: '5 min', minutes15: '15 min', hour1: '1 hour', hours4: '4 hours', hours24: '24 hours' }
+const share = (value: number | null): string => (value === null ? '—' : `${(value * 100).toFixed(1)}%`)
+const pctOf = (value: number | null): string => (value === null ? '—' : `${value.toFixed(3)}%`)
+const outOf = (right: number, of: number): string => (of === 0 ? 'none called' : `${right} of ${of}`)
+const inRange = (metrics: LabMetrics): string => (metrics.n === 0 ? 'none' : `${metrics.n}, ${share(metrics.coverage80)} in 80%`)
+
+/** The forecast's lines of the run as a spreadsheet's (V6 Stage 15). */
+function forecastCsvLines(section: ForecastRunSection, quote: (value: string | number | null) => string): string[] {
+  const { predictions, trades } = section
+  const lines = [['forecast', 'forecasts', predictions.lines, `${predictions.pairs} pairs, at ${predictions.gridCloses} of ${predictions.expectedGridCloses} quarter-hour closes, ${predictions.refreshes} refreshes`].map(quote).join(',')]
+  for (const [horizon, row] of Object.entries(section.horizons)) {
+    if (row === undefined) continue
+    const m = row.metrics
+    lines.push(['forecast horizon', HORIZON_WORDS[horizon] ?? horizon, row.outcomes, `direction ${share(m.direction)}; in 50% ${share(m.coverage50)}; in 80% ${share(m.coverage80)}; median error ${pctOf(m.mae)}; bias ${pctOf(m.bias)}; bull ${outOf(row.bull.right, row.bull.calls)}; bear ${outOf(row.bear.right, row.bear.calls)}; story-moved ${inRange(row.news.moved)}; the rest ${inRange(row.news.unmoved)}`].map(quote).join(','))
+  }
+  for (const gate of section.gates) lines.push(['forecast gate', gate.label, gate.status.toUpperCase(), gate.detail].map(quote).join(','))
+  lines.push(['forecast trader', 'paper trades', trades.closed, `${trades.opened} opened, ${trades.closed} closed, ${trades.wins} ahead, net ${trades.netQuote.toFixed(2)}`].map(quote).join(','))
+  if (section.sampleNote !== null) lines.push(['forecast trader', 'note', '', section.sampleNote].map(quote).join(','))
+  return lines
+}
+
+/** The price forecast over the run: what it made, and how each horizon came out (V6 Stage 15). */
+function ForecastSectionView({ section }: { section: ForecastRunSection }): React.JSX.Element {
+  const { predictions, trades } = section
+  const reasons = Object.entries(predictions.byReason).map(([reason, count]) => `${reason} ${count}`).join(', ')
+  const rows = Object.entries(section.horizons).filter((entry): entry is [string, NonNullable<ForecastRunSection['horizons'][keyof ForecastRunSection['horizons']]>] => entry[1] !== undefined)
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+      <p style={{ margin: 0, fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-primary)' }}>The price forecast</p>
+      <p style={noteStyle}>
+        {predictions.lines} forecasts of {predictions.pairs} pairs on record, at {predictions.gridCloses} of the span&apos;s {predictions.expectedGridCloses} quarter-hour closes; {predictions.refreshes} made again between closes
+        {reasons === '' ? '' : ` (${reasons})`}.
+      </p>
+      {rows.length === 0 ? (
+        <p style={noteStyle}>No forecast of the span has come due yet.</p>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                {['Horizon', 'Judged', 'Way right', 'In 50%', 'In 80%', 'Median error', 'Bias', 'BULLISH right', 'BEARISH right', 'Story-moved', 'The rest'].map((column) => (
+                  <th key={column} style={headCellStyle}>
+                    {column}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(([horizon, row]) => (
+                <tr key={horizon}>
+                  <td style={cellStyle}>{HORIZON_WORDS[horizon] ?? horizon}</td>
+                  <td style={cellStyle}>{row.outcomes}</td>
+                  <td style={cellStyle}>{share(row.metrics.direction)}</td>
+                  <td style={cellStyle}>{share(row.metrics.coverage50)}</td>
+                  <td style={cellStyle}>{share(row.metrics.coverage80)}</td>
+                  <td style={cellStyle}>{pctOf(row.metrics.mae)}</td>
+                  <td style={cellStyle}>{pctOf(row.metrics.bias)}</td>
+                  <td style={cellStyle}>{outOf(row.bull.right, row.bull.calls)}</td>
+                  <td style={cellStyle}>{outOf(row.bear.right, row.bear.calls)}</td>
+                  <td style={cellStyle}>{inRange(row.news.moved)}</td>
+                  <td style={cellStyle}>{inRange(row.news.unmoved)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p style={noteStyle}>
+        The forecast trader: {trades.opened} paper trades opened, {trades.closed} closed, {trades.wins} of them ahead, net {money(trades.netQuote)} after fees.{section.sampleNote === null ? '' : ` ${section.sampleNote}`}
+      </p>
+    </div>
+  )
+}
 
 /** The run as a spreadsheet: the session report's lines, then the run's own gates, figures and verdict. */
 function experimentCsv(run: ExperimentRun): string {
@@ -26,6 +101,7 @@ function experimentCsv(run: ExperimentRun): string {
   lines.push(['costs', 'ai', report.costs.aiUsd, 'dollars, every call in the span'].map(quote).join(','))
   for (const [key, value] of Object.entries(report.figures)) lines.push(['verdict figure', key, value, ''].map(quote).join(','))
   lines.push(['verdict', 'AI adding value', report.verdict, describeExperimentVerdict(report.verdict, report.figures)].map(quote).join(','))
+  if (report.forecast !== undefined) lines.push(...forecastCsvLines(report.forecast, quote))
   for (const entry of report.help) {
     for (const row of entry.rows) lines.push(['does AI help', `${entry.model}: ${row.label}`, row.row.meanNetPct, `${row.row.closed} closed, ${row.row.wins} won`].map(quote).join(','))
     for (const verdict of entry.verdicts) lines.push(['does AI help', `${entry.model}: ${verdict.question}`, verdict.answer, verdict.text].map(quote).join(','))
@@ -78,7 +154,11 @@ function ReportView({ run }: { run: ExperimentRun }): React.JSX.Element {
             </tr>
           </thead>
           <tbody>
-            {[...session.gates.map((gate) => ({ label: gate.label, status: gate.status, detail: gate.detail })), ...report.gates.map((gate) => ({ label: gate.label, status: gate.status, detail: gate.detail }))].map((gate) => (
+            {[
+              ...session.gates.map((gate) => ({ label: gate.label, status: gate.status, detail: gate.detail })),
+              ...report.gates.map((gate) => ({ label: gate.label, status: gate.status, detail: gate.detail })),
+              ...(report.forecast?.gates ?? []).map((gate) => ({ label: gate.label, status: gate.status, detail: gate.detail }))
+            ].map((gate) => (
               <tr key={gate.label}>
                 <td style={cellStyle}>{gate.label}</td>
                 <td style={{ ...cellStyle, fontWeight: 700, color: gate.status === 'pass' ? 'var(--up)' : gate.status === 'fail' ? 'var(--down)' : 'var(--text-muted)' }}>{gate.status.toUpperCase()}</td>
@@ -88,6 +168,7 @@ function ReportView({ run }: { run: ExperimentRun }): React.JSX.Element {
           </tbody>
         </table>
       </div>
+      {report.forecast !== undefined && <ForecastSectionView section={report.forecast} />}
       {report.help.length === 0 ? (
         <p style={noteStyle}>Does AI help? Nothing could be scored over the span: no event the watch answered, or no candles yet.</p>
       ) : (

@@ -6,7 +6,7 @@ import { forecastDecision, forecastHistory, forecastOf, forecastRanking, getFore
 import type { ForecastRanking } from '../../../shared/forecast/ranking'
 import type { TradeDecision } from '../../../shared/forecast/tradeDecision'
 import { getForecastTrainingState } from '../../services/forecastTrainingService'
-import { forecastBars, forecastReplay, getForecastLab } from '../../services/forecastLabService'
+import { forecastBars, forecastRecordSpan, forecastReplay, getForecastLab } from '../../services/forecastLabService'
 import type { ForecastLabView, ForecastReplay } from '../../../shared/forecast/labView'
 import type { Candle } from '../../../shared/ipc'
 
@@ -31,4 +31,5 @@ export function registerForecastHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(IpcChannel.ForecastLab, (): Promise<ForecastLabView> => getForecastLab())
   ipcMain.handle(IpcChannel.ForecastReplay, (_event, pair: unknown, t: unknown): Promise<ForecastReplay | null> => forecastReplay(pair, t))
   ipcMain.handle(IpcChannel.ForecastBars, (_event, pair: unknown, width: unknown, fromSec: unknown, toSec: unknown): Promise<Candle[]> => forecastBars(pair, width, fromSec, toSec))
+  ipcMain.handle(IpcChannel.ForecastRecord, (_event, fromSec: unknown, toSec: unknown): Promise<ForecastHistory> => forecastRecordSpan(fromSec, toSec))
 }

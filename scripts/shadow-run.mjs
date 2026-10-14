@@ -25,12 +25,30 @@
 //   WATCH_MODELS   the models the watch asks, comma-separated (V5 Stage 13: three with FIRST_GATES=1
 //                  is the app's default since 8 October 2026)                      [openai/gpt-5-mini]
 //   FIRST_GATES    1 asks the first model alone and the others only when it calls a trade          [0]
+//   WATCH_PAPER    0 leaves the watch's paper trades off: a SHADOW run                                [1]
+//   FORECAST_TRADER  1 switches the price forecast's paper trader on (V6 Stage 12)                   [0]
+//   FORECAST_DATA_FROM  a profile whose forecastData/ (public 5-minute bars) is copied in, so the
+//                  forecast's ninety days need not all be read again                                 [none]
+//   WAIT_FORECAST  1 starts the run's clock only once the forecast engine has fitted, calibrated and
+//                  made its first pass (V6 Stage 15)                                                 [0]
+//   SETTLE_MINUTES after the run, the app is kept open this long with the AI off, so the forecasts
+//                  of the run's last hour come due; then the forecast's section is saved         [0]
+//   REAL_AI        1 asks the real models (V6 Stages 15-16; the user's answer of 13 October 2026):
+//                  the real profile's encrypted aiCredentials.json and the Local State that unlocks
+//                  it are COPIED into the scratch profile -- read, never shown, never written to --
+//                  and no fake is installed. Every real run's spend, read from its own ledger on
+//                  disk, is held under CEILING_USD for all of them together, across UTC days: the
+//                  app's daily cap is set each minute to what today has spent plus what the ceiling
+//                  leaves, and at the ceiling the key is removed and the AI switched off. The copies
+//                  are deleted at the end (by hand, from the profile, if a run is killed).     [0]
+//   CEILING_USD    the ceiling of every REAL_AI run together                                           [3]
 //
 // IT NEVER TOUCHES THE REAL PROFILE OR out/. The profile has to be inside SHADOW_ROOT and is never
 // the real profile or Electron's default; on a resume it has to carry the marker this script leaves;
 // and the app's own userData folder is checked after launch. The fake is installed in the main
 // process before the first window opens, so even a key left in the profile by a killed segment could
-// reach nothing. The only key ever stored is a made-up one the fake answers.
+// reach nothing. The only key ever stored is a made-up one the fake answers -- except with REAL_AI=1,
+// when the real profile's two files are copied in (above) and nothing else is read from it.
 //
 // A SEGMENT is one launch. A run killed by a Windows restart is resumed with RESUME=1: the profile
 // keeps its events, ledger, executors and stories (the app's own files), the output keeps its logs,
@@ -58,6 +76,19 @@ const UNIVERSE_SIZE = Number(process.env.UNIVERSE_SIZE ?? 60)
 const WATCH_MODELS = (process.env.WATCH_MODELS ?? 'openai/gpt-5-mini').split(',').map((model) => model.trim()).filter(Boolean)
 if (WATCH_MODELS.length === 0 || WATCH_MODELS.length > 6) throw new Error(`WATCH_MODELS is one to six models, comma-separated: ${process.env.WATCH_MODELS}`)
 const FIRST_GATES = process.env.FIRST_GATES === '1'
+const WATCH_PAPER = process.env.WATCH_PAPER !== '0'
+const FORECAST_TRADER = process.env.FORECAST_TRADER === '1'
+const FORECAST_DATA_FROM = process.env.FORECAST_DATA_FROM ?? ''
+const WAIT_FORECAST = process.env.WAIT_FORECAST === '1'
+const SETTLE_MINUTES = Number(process.env.SETTLE_MINUTES ?? 0)
+if (!Number.isFinite(SETTLE_MINUTES) || SETTLE_MINUTES < 0) throw new Error(`SETTLE_MINUTES must be a number of minutes: ${process.env.SETTLE_MINUTES}`)
+const REAL_AI = process.env.REAL_AI === '1'
+const CEILING_USD = Number(process.env.CEILING_USD ?? 3)
+if (!Number.isFinite(CEILING_USD) || CEILING_USD <= 0 || CEILING_USD > 3) throw new Error(`CEILING_USD is above nought and at most 3, the user's ceiling: ${process.env.CEILING_USD}`)
+/** What is kept back from the ceiling: a call's cost is known only once it has been made. */
+const CEILING_MARGIN_USD = 0.1
+const REAL_PROFILE = path.join(process.env.APPDATA ?? '', 'newtradingbot')
+const KEY_FILES = ['aiCredentials.json', 'Local State']
 const SHADOW_ROOT = path.resolve(process.env.SHADOW_ROOT ?? path.join(os.tmpdir(), 'traderspider-shadow'))
 const PROFILE = path.join(SHADOW_ROOT, `${RUN_NAME}-profile`)
 const OUT = path.join(SHADOW_ROOT, `${RUN_NAME}-out`)
@@ -69,6 +100,8 @@ const SHOT_EVERY_MS = 30 * 60_000
 const HOUR_REPORT_EVERY_MS = Number(process.env.HOUR_REPORT_MINUTES ?? 60) * 60_000
 const FAKE_KEY = 'sk-or-v1-check-only-not-a-real-key'
 const MARKER = path.join(PROFILE, 'shadow-run.json')
+/** Every REAL_AI run's spend: the runs (whose profiles' ledgers are read) and what retired profiles spent. */
+const SPEND_FILE = path.join(SHADOW_ROOT, 'real-ai-spend.json')
 
 // --- the refusals ------------------------------------------------------------------------------
 const appData = process.env.APPDATA ?? ''
@@ -83,16 +116,91 @@ if (RESUME) {
   if (!fs.existsSync(MARKER)) throw new Error(`nothing to resume: ${MARKER} is not there, so this profile was not made by this script`)
 } else {
   if (fs.existsSync(PROFILE) && !fs.existsSync(MARKER)) throw new Error(`refusing to delete ${PROFILE}: it was not made by this script`)
+  // What a REAL_AI profile spent stays counted against the ceiling once the profile is gone.
+  if (fs.existsSync(PROFILE)) {
+    const spent = ledgerSpendUsd(PROFILE)
+    if (spent > 0) {
+      const book = readSpendBook()
+      book.retiredUsd += spent
+      writeSpendBook(book)
+    }
+  }
   fs.rmSync(PROFILE, { recursive: true, force: true })
   fs.rmSync(OUT, { recursive: true, force: true })
   fs.mkdirSync(PROFILE, { recursive: true })
   fs.mkdirSync(OUT, { recursive: true })
   fs.writeFileSync(path.join(PROFILE, 'scanner.json'), JSON.stringify({ enabled: true, universeSize: UNIVERSE_SIZE }, null, 2))
+  // English, chosen: the first launch's language chooser (V6 Stage 14) is not asked, and the labels this
+  // script presses read as it writes them.
+  fs.writeFileSync(path.join(PROFILE, 'settings.json'), JSON.stringify({ language: 'en' }, null, 2))
+  if (FORECAST_DATA_FROM !== '') {
+    const from = path.join(FORECAST_DATA_FROM, 'forecastData')
+    if (!fs.existsSync(from)) throw new Error(`no forecastData in ${FORECAST_DATA_FROM}`)
+    fs.cpSync(from, path.join(PROFILE, 'forecastData'), { recursive: true })
+  }
   // The public model catalogue (prices, for the cost estimates on screen); nothing in it is a key.
   if (fs.existsSync(MODELS_FROM)) fs.copyFileSync(MODELS_FROM, path.join(PROFILE, 'aiModels.json'))
   fs.writeFileSync(MARKER, JSON.stringify({ createdBy: 'scripts/shadow-run.mjs', runName: RUN_NAME, createdAt: new Date().toISOString(), key: 'fake' }, null, 2))
 }
 fs.mkdirSync(path.join(OUT, 'hour-reports'), { recursive: true })
+
+// --- the real models' spend (REAL_AI) --------------------------------------------------------------
+/** What a profile's own ledger says it spent, in dollars, from `sinceSec` on: every call on file. */
+function ledgerSpendUsd(profile, sinceSec = 0) {
+  const dir = path.join(profile, 'aiLedger')
+  if (!fs.existsSync(dir)) return 0
+  let total = 0
+  for (const name of fs.readdirSync(dir).filter((file) => /^calls-.*\.jsonl$/.test(file))) {
+    for (const line of fs.readFileSync(path.join(dir, name), 'utf8').split('\n')) {
+      if (line.trim() === '') continue
+      try {
+        const row = JSON.parse(line)
+        const cost = row?.usage?.costUsd
+        if (typeof cost === 'number' && Number.isFinite(cost) && cost > 0 && (row.at ?? 0) >= sinceSec) total += cost
+      } catch {
+        // A torn line: not a call.
+      }
+    }
+  }
+  return total
+}
+function readSpendBook() {
+  const read = fs.existsSync(SPEND_FILE) ? JSON.parse(fs.readFileSync(SPEND_FILE, 'utf8')) : null
+  return { retiredUsd: typeof read?.retiredUsd === 'number' ? read.retiredUsd : 0, runs: Array.isArray(read?.runs) ? read.runs : [] }
+}
+function writeSpendBook(book) {
+  fs.writeFileSync(SPEND_FILE, JSON.stringify({ ...book, ceilingUsd: CEILING_USD, updatedAt: new Date().toISOString() }, null, 2))
+}
+/** Every REAL_AI run's spend together: the retired profiles', and each listed run's own ledger. */
+function realSpendUsd() {
+  const book = readSpendBook()
+  let total = book.retiredUsd
+  for (const run of book.runs) total += ledgerSpendUsd(path.join(SHADOW_ROOT, `${run}-profile`))
+  return total
+}
+/** The key files out of the scratch profile: the app's own removal first, then what is left. */
+function removeKeyCopies() {
+  const left = []
+  for (const name of KEY_FILES) {
+    const file = path.join(PROFILE, name)
+    try {
+      if (fs.existsSync(file)) fs.rmSync(file, { force: true })
+    } catch {
+      left.push(name)
+    }
+  }
+  return left
+}
+if (REAL_AI) {
+  if (!fs.existsSync(path.join(REAL_PROFILE, 'aiCredentials.json')) || !fs.existsSync(path.join(REAL_PROFILE, 'Local State'))) throw new Error('REAL_AI: the real profile holds no saved key to copy')
+  const book = readSpendBook()
+  if (!book.runs.includes(RUN_NAME)) book.runs.push(RUN_NAME)
+  writeSpendBook(book)
+  const spent = realSpendUsd()
+  if (spent >= CEILING_USD - CEILING_MARGIN_USD) throw new Error(`REAL_AI: the runs have spent $${spent.toFixed(4)} of the $${CEILING_USD} ceiling: nothing is left to ask with`)
+  // Copied, byte for byte, never read here: the key stays encrypted to this Windows account.
+  for (const name of KEY_FILES) fs.copyFileSync(path.join(REAL_PROFILE, name), path.join(PROFILE, name))
+}
 
 // --- the segments ------------------------------------------------------------------------------
 const SEGMENTS_FILE = path.join(OUT, 'segments.json')
@@ -132,6 +240,8 @@ delete env.ELECTRON_RUN_AS_NODE
 let app = null
 let page = null
 let startSec = Math.floor(segments[0].startedAt / 1000)
+/** When the run's minutes started: at launch, or once the forecast was ready (WAIT_FORECAST). */
+let clockStart = t0
 
 async function main() {
   say(`run ${RUN_NAME}: segment ${SEGMENT}, ${Math.round(remainingMs / 60_000)} of ${RUN_MINUTES} minutes left${RESUME ? ' (resumed)' : ''}`)
@@ -148,8 +258,9 @@ async function main() {
   }
   say(`scratch profile: ${actual}`)
 
-  // BEFORE anything can ask a model: OpenRouter faked; notices kept off the desktop; saves into OUT.
-  const stubbed = await app.evaluate(({ ipcMain, dialog, BrowserWindow, Notification, shell }, outDir) => {
+  // BEFORE anything can ask a model: OpenRouter faked (unless REAL_AI); notices kept off the desktop;
+  // saves into OUT.
+  const stubbed = await app.evaluate(({ ipcMain, dialog, BrowserWindow, Notification, shell }, [outDir, realAi]) => {
     // Notices: nothing on the desktop and no sound, but the app's own handler still runs, so the
     // thread rule applies and every notice told is on file (alerts/) as it is for the user -- the
     // experiment's report and the daily report read them there. Each request is recorded here as
@@ -260,6 +371,7 @@ async function main() {
     const real = globalThis.fetch
     globalThis.__asked = []
     globalThis.__other = []
+    if (realAi) return `${globalThis.__noticesOnFile ? 'notices on file as the app writes them' : 'notices recorded only'}; REAL models asked, no fake installed`
     const reply = (body, status = 200) => ({
       ok: status === 200, status, statusText: status === 200 ? 'OK' : 'Error', headers: { get: () => null },
       text: async () => JSON.stringify(body), json: async () => body
@@ -308,7 +420,7 @@ async function main() {
       return reply({ error: { code: 404, message: 'not faked in this check' } }, 404)
     }
     return globalThis.__noticesOnFile ? 'stubbed; notices on file as the app writes them' : 'stubbed; notices recorded only (the handler could not be wrapped)'
-  }, OUT)
+  }, [OUT, REAL_AI])
   say(`main process: ${stubbed}`)
 
   page = await app.firstWindow()
@@ -345,22 +457,59 @@ async function main() {
     })
   })
 
-  // The user's watch, as on their profile, with a fake key the fake above answers. Setting it again
-  // on a resumed segment changes nothing.
+  // With the real key in the profile, nothing may be spent before the run is set up: the cap at nought.
+  if (REAL_AI) await page.evaluate(() => window.api.ai.setConfig({ dailyCapUsd: 0 }))
+
+  // The forecast fitted, calibrated and forecasting before the clock starts -- and before the watch is
+  // switched on, so that nothing is asked while it waits. The run's clock starts when it is ready.
+  if (WAIT_FORECAST) {
+    const until = Date.now() + 60 * 60_000
+    let last = ''
+    for (;;) {
+      const state = await page.evaluate(() => window.api.forecast.getState())
+      const line = `forecast: training ${state.training.status}, calibrated ${state.training.calibratedRunId ?? 'none'}, engine ${state.engine.status}${state.engine.waitingFor ? ` (waiting for ${state.engine.waitingFor})` : ''}, last pass ${state.engine.lastPassAt ?? 'none'}`
+      if (line !== last) say(line)
+      last = line
+      if (state.training.calibratedRunId !== null && state.engine.status === 'running' && state.engine.lastPassAt !== null) break
+      if (Date.now() > until) throw new Error('the forecast engine was not forecasting within an hour')
+      await new Promise((resolve) => setTimeout(resolve, 20_000))
+    }
+  }
+  if (WAIT_FORECAST) {
+    clockStart = Date.now()
+    segments[segments.length - 1].startedAt = clockStart
+    fs.writeFileSync(SEGMENTS_FILE, JSON.stringify(segments, null, 2))
+    say(`the forecast is ready: the run's ${Math.round(remainingMs / 60_000)} minutes start now`)
+  }
+
+  // The user's watch, as on their profile, with a fake key the fake above answers -- or, with REAL_AI,
+  // the real key copied in, the app's own three default models first-gated unless WATCH_MODELS names
+  // others, and a daily cap the ceiling sets. Setting it again on a resumed segment changes nothing.
+  const watchModels = REAL_AI && process.env.WATCH_MODELS === undefined ? await page.evaluate(async () => (await window.api.ai.getConfig()).watch.models) : WATCH_MODELS
+  const firstGates = REAL_AI && process.env.FIRST_GATES === undefined ? true : FIRST_GATES
   const setup = await page.evaluate(
-    async ([minBand, fakeKey, watchModels, firstGates]) => {
-      const key = await window.api.ai.setCredentials(fakeKey)
-      await window.api.ai.setConfig({ dailyCapUsd: 5, callsPerMinute: 30 })
+    async ([minBand, fakeKey, models, gates, paperOn, realAi, cap]) => {
+      const key = realAi ? await window.api.ai.credentialsStatus() : await window.api.ai.setCredentials(fakeKey)
+      await window.api.ai.setConfig({ dailyCapUsd: cap, callsPerMinute: 30 })
       const watch = await window.api.ai.setConfig({
-        watch: { enabled: true, models: watchModels, maxEventsPerDay: 10, minBand, firstModelGates: firstGates }
+        watch: { enabled: true, models, maxEventsPerDay: 10, minBand, firstModelGates: gates }
       })
-      const paper = await window.api.ai.setConfig({ watchPaper: { enabled: true, model: watchModels[0], stakeQuote: 100, maxOpen: 3 } })
+      const paper = await window.api.ai.setConfig({ watchPaper: { enabled: paperOn, model: models[0], stakeQuote: 100, maxOpen: 3 } })
       return { key: key.configured, watch: watch.watch, watchPaper: paper.watchPaper, additions: paper.additions, cap: paper.dailyCapUsd }
     },
-    [MIN_BAND, FAKE_KEY, WATCH_MODELS, FIRST_GATES]
+    [MIN_BAND, FAKE_KEY, watchModels, firstGates, WATCH_PAPER, REAL_AI, REAL_AI ? capForCeiling() : 5]
   )
   say(`setup: ${JSON.stringify(setup)}`)
-
+  if (REAL_AI && !setup.key) throw new Error('REAL_AI: the copied key could not be read by the scratch profile')
+  if (FORECAST_TRADER) {
+    const trader = await page.evaluate(async () => {
+      const settings = await window.api.settings.get()
+      const forecast = settings.forecast ?? {}
+      const next = await window.api.settings.set({ forecast: { ...forecast, trader: { ...(forecast.trader ?? {}), enabled: true } } })
+      return next.forecast?.trader ?? null
+    })
+    say(`forecast trader: ${JSON.stringify(trader)}`)
+  }
   // One of the app's own runs (shared/experimentRun.ts), started once the watch is on so that its
   // record says so; a resumed segment finds it still running on file and starts none.
   if (EXPERIMENT !== '') {
@@ -391,14 +540,20 @@ async function main() {
   await nav('Home')
   await shot(`s${SEGMENT}-00-home`)
 
-  const endAt = t0 + remainingMs
+  if (WAIT_FORECAST && SEGMENT === 1) startSec = Math.floor(clockStart / 1000)
+  const endAt = clockStart + remainingMs
   let nextStatus = Date.now() + 60_000
   let nextShot = Date.now() + SHOT_EVERY_MS
   let nextHourReport = Date.now() + HOUR_REPORT_EVERY_MS
   let shots = 1
   let hours = 0
+  let nextCeiling = Date.now() + 60_000
   while (Date.now() < endAt) {
     await new Promise((r) => setTimeout(r, 5000))
+    if (Date.now() >= nextCeiling) {
+      await holdCeiling()
+      nextCeiling += 60_000
+    }
     if (Date.now() >= nextStatus) {
       await status()
       nextStatus += STATUS_EVERY_MS
@@ -449,6 +604,31 @@ async function main() {
     }
   }
 
+  // The AI off before anything waits: nothing more is asked or spent.
+  if (REAL_AI) await aiOff('the run has ended')
+  if (REAL_AI) say(`real models: this run spent $${ledgerSpendUsd(PROFILE).toFixed(4)}; every real run together $${realSpendUsd().toFixed(4)} of $${CEILING_USD}`)
+
+  // The forecasts of the run's last hour come due, then the forecast's section over the run is saved
+  // from the record, by the app's own rule (shared/forecast/runSection.ts, bundled as it is).
+  if (SETTLE_MINUTES > 0) {
+    say(`settling ${SETTLE_MINUTES} minutes for the last forecasts to come due`)
+    const settleEnd = Date.now() + SETTLE_MINUTES * 60_000
+    while (Date.now() < settleEnd) {
+      await new Promise((r) => setTimeout(r, 30_000))
+      if (Date.now() >= nextStatus) {
+        await status()
+        nextStatus += STATUS_EVERY_MS
+      }
+    }
+    try {
+      const section = await forecastSection(Math.floor(clockStart / 1000), Math.floor(endAt / 1000))
+      fs.writeFileSync(path.join(OUT, 'forecast-section.json'), JSON.stringify(section, null, 2))
+      say(`forecast section: ${section.predictions.lines} forecasts, ${Object.entries(section.horizons).map(([h, row]) => `${h} ${row.outcomes} judged, in 80% ${row.metrics.coverage80 === null ? '—' : (row.metrics.coverage80 * 100).toFixed(1) + '%'}`).join('; ')}; gates ${section.gates.map((gate) => `${gate.id} ${gate.status}`).join(', ')}`)
+    } catch (failure) {
+      say(`the forecast section could not be made: ${failure?.stack ?? failure}`)
+    }
+  }
+
   // The news tab, for the record.
   await nav('Explorer')
   await page.evaluate(async () => {
@@ -460,6 +640,48 @@ async function main() {
   await shot(`s${SEGMENT}-92-news`)
   segments[segments.length - 1].endedAt = Date.now()
   fs.writeFileSync(SEGMENTS_FILE, JSON.stringify(segments, null, 2))
+}
+
+/** Today's (UTC) spend in this profile, plus what the ceiling leaves of every real run's together: the
+ * app stops asking once today has spent it. */
+function capForCeiling() {
+  const midnight = Math.floor(Date.now() / 86_400_000) * 86_400
+  const left = CEILING_USD - CEILING_MARGIN_USD - realSpendUsd()
+  return Math.max(0, Math.round((ledgerSpendUsd(PROFILE, midnight) + Math.max(0, left)) * 10_000) / 10_000)
+}
+
+let ceilingReached = false
+/** The ceiling held: the cap set again, or at it the key removed and the AI switched off. */
+async function holdCeiling() {
+  if (!REAL_AI || ceilingReached || page === null) return
+  const spent = realSpendUsd()
+  if (spent >= CEILING_USD - CEILING_MARGIN_USD) {
+    ceilingReached = true
+    await aiOff(`the runs have spent $${spent.toFixed(4)} of the $${CEILING_USD} ceiling`)
+    return
+  }
+  try {
+    await page.evaluate((cap) => window.api.ai.setConfig({ dailyCapUsd: cap }), capForCeiling())
+  } catch (failure) {
+    say(`the cap could not be set: ${failure}`)
+  }
+}
+
+/** The AI off for the rest of the run: the watch, its paper trades and the additions; the key removed
+ * from the scratch profile. */
+async function aiOff(why) {
+  try {
+    const off = await page.evaluate(async () => {
+      const watch = await window.api.ai.setConfig({ watch: { enabled: false } })
+      const paper = await window.api.ai.setConfig({ watchPaper: { enabled: false } })
+      const additions = await window.api.ai.setConfig({ additions: { news: false, why: false, exit: false, review: false, daily: false } })
+      await window.api.ai.removeCredentials()
+      return { watch: watch.watch.enabled, paper: paper.watchPaper.enabled, additions: additions.additions, key: (await window.api.ai.credentialsStatus()).configured }
+    })
+    say(`AI off (${why}): ${JSON.stringify(off)}`)
+  } catch (failure) {
+    say(`switching the AI off failed (${why}): ${failure}`)
+  }
 }
 
 async function nav(label) {
@@ -568,6 +790,23 @@ async function hourReport(n) {
   }
 }
 
+/** The forecast's section over a span, from the record read in the window and the app's own rule. */
+async function forecastSection(fromSec, toSec) {
+  const { execFileSync } = await import('node:child_process')
+  const bundle = path.join(OUT, 'runSection.mjs')
+  execFileSync(path.join(APP_DIR, 'node_modules', '.bin', process.platform === 'win32' ? 'esbuild.cmd' : 'esbuild'), [path.join(APP_DIR, 'shared', 'forecast', 'runSection.ts'), '--bundle', '--format=esm', '--platform=node', `--outfile=${bundle}`, '--log-level=error'], { shell: true })
+  const { forecastRunSectionOf } = await import(`file:///${bundle.replace(/\\/g, '/')}?${Date.now()}`)
+  const read = await page.evaluate(
+    async ([from, to]) => ({
+      record: await window.api.forecast.record(from, to),
+      alerts: (await window.api.records.alerts({ sinceSec: from })).rows.map((row) => ({ at: row.at, sound: row.sound })),
+      executors: (await window.api.settings.get()).executors
+    }),
+    [fromSec, toSec]
+  )
+  return forecastRunSectionOf({ fromSec, toSec, predictions: read.record.predictions, outcomes: read.record.outcomes, executors: read.executors, alerts: read.alerts })
+}
+
 async function shot(name) {
   try {
     await page.screenshot({ path: path.join(OUT, `${name}.png`) })
@@ -656,6 +895,12 @@ async function shutDown() {
   }
   if (app) await app.close().catch((failure) => say(`close failed: ${failure}`))
   say('closed')
+  if (REAL_AI) {
+    await new Promise((r) => setTimeout(r, 2000))
+    const left = removeKeyCopies()
+    const still = KEY_FILES.filter((name) => fs.existsSync(path.join(PROFILE, name)))
+    say(still.length === 0 ? 'the key copies are deleted from the scratch profile' : `DELETE BY HAND from ${PROFILE}: ${still.join(', ')}${left.length > 0 ? ' (could not be removed)' : ''}`)
+  }
 }
 
 try {

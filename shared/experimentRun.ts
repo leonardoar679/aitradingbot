@@ -3,6 +3,7 @@ import type { ExecutorConfig } from './ipc'
 import { positionSlippageRate } from './fees'
 import { rMultiple } from './paperRisk'
 import type { ReportVersions, SessionReport, SessionReportInput } from './shadowReport'
+import type { ForecastRunSection } from './forecast/runSection'
 
 // EXPERIMENTS IN THE APP (the V5 document, §56-62 and §124-126; V5 Stage 9, 8 October 2026). A run
 // is a record: when it began, when it ends, what mode the app was in, the versions it ran under, the
@@ -101,7 +102,10 @@ export interface ExperimentReport {
   costs: { feesQuote: number; slippageQuote: number; aiUsd: number }
   figures: ExperimentVerdictFigures
   verdict: ExperimentVerdict
-  /** Every gate that applies, the session's and these, passed. */
+  /** The price forecast over the span, with its gates (shared/forecast/runSection.ts; V6 Stage 15).
+   * Absent on a report filed before, or where the record could not be read. */
+  forecast?: ForecastRunSection
+  /** Every gate that applies, the session's, these and the forecast's, passed. */
   passed: boolean
 }
 
@@ -314,10 +318,11 @@ export function experimentSlippageQuote(input: Pick<SessionReportInput, 'fromSec
 }
 
 /** The report, from the session report over the span and the input it was built from. */
-export function experimentReportOf(input: { session: SessionReport; sessionInput: SessionReportInput; help: ExperimentReport['help'] }): ExperimentReport {
+export function experimentReportOf(input: { session: SessionReport; sessionInput: SessionReportInput; help: ExperimentReport['help']; forecast?: ForecastRunSection | null }): ExperimentReport {
   const gates = experimentGates(input.sessionInput)
   const figures = experimentFigures(input.sessionInput)
   const feesQuote = input.session.paper.fees.reduce((sum, entry) => sum + entry.amount, 0)
+  const forecast = input.forecast ?? null
   return {
     version: EXPERIMENT_RUNS_VERSION,
     session: input.session,
@@ -326,7 +331,8 @@ export function experimentReportOf(input: { session: SessionReport; sessionInput
     costs: { feesQuote, slippageQuote: experimentSlippageQuote(input.sessionInput), aiUsd: input.session.calls.costUsd },
     figures,
     verdict: experimentVerdictOf(figures),
-    passed: input.session.passed && gates.every((gate) => gate.status === 'pass')
+    ...(forecast === null ? {} : { forecast }),
+    passed: input.session.passed && gates.every((gate) => gate.status === 'pass') && (forecast === null || forecast.passed)
   }
 }
 

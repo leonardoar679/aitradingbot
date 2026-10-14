@@ -1320,7 +1320,14 @@ fees and the answers' cost above nought, gains over losses above one, and the de
 R. A run that ended while the app was closed is reported at the next launch. The report is shown on
 the tab and saved as JSON or CSV. A run changes nothing about how the app runs, and asks nothing
 itself; the shadow harness (`scripts/shadow-run.mjs`, `EXPERIMENT=shadow-1h|paper-12h|custom`) starts
-one at launch, so its runs are the app's own.
+one at launch, so its runs are the app's own. Since 13 October 2026 (the V6 document's §45-48 and
+§113-114; V6 Stage 15) the report carries the price forecast over the span (`shared/forecast/runSection.ts`),
+read from its own record: the forecasts made, and per horizon how often the call's way was right, the
+50% and 80% ranges' coverage, the median's error and bias, the BULLISH and BEARISH calls' success, the
+forecasts a story moved against the rest, and the forecast trader's paper trades -- under thirty closed,
+"Sample size is too small for a profitability conclusion." -- with six gates of its own: forecasts at the
+quarter-hour closes, each stamped with its close and made in time, a refresh naming its reason and what
+it replaced, every due horizon judged, every notice's sound on file, and no trade on a stale forecast.
 
 Since 8 October 2026 the alerts told and the paper trades refused are on file (`shared/records.ts`,
 one JSON line each in a file per UTC month), so the report reaches back for them as far as the span
@@ -1378,6 +1385,21 @@ closes. A run killed by a restart is resumed with `RESUME=1`, which keeps the pr
 and runs the minutes left; `scripts/shadow-analyze.py` prints every segment, the hourly and final
 reports with their gates, and the records on file. The profile has to be inside the run's own root
 and is never the real one; the script refuses to run the `out/` build.
+
+Since 13 October 2026 (V6 Stage 15) a run is set in English before it launches, so the first launch's
+language chooser is not asked; `WAIT_FORECAST=1` starts its minutes once the price forecast has fitted,
+calibrated and made a pass (`FORECAST_DATA_FROM` copies a profile's public bars in, so the ninety days
+need not be read again); `SETTLE_MINUTES` keeps the app open after the run with the AI off, so that the
+run's last forecasts come due, and then saves the forecast's section over the run (`forecast-section.json`)
+by the app's own rule; `WATCH_PAPER=0` makes a SHADOW run and `FORECAST_TRADER=1` switches the forecast's
+paper trader on. With `REAL_AI=1` (the user's answer of 13 October 2026: the two V6 test runs only) the
+real models are asked: the real profile's encrypted key file and the Local State that unlocks it are
+copied into the scratch profile, byte for byte and never read, no fake is installed, and every such run's
+spend, read from its own ledger on disk, is held under `CEILING_USD` ($3 at most) for all of them
+together and across UTC days -- the app's daily cap is set each minute to what today has spent plus what
+the ceiling leaves, and at the ceiling the key is removed and the AI switched off. At the end the AI is
+switched off before anything waits, and both copies are deleted from the scratch profile after the app
+closes (the log says DELETE BY HAND if they cannot be).
 
 Checked on a separate build and a scratch profile. It was seeded with an hour of records: one
 event, a watch answer and a failed call, a news analyst's call, and a paper trade of the watch's

@@ -81,8 +81,15 @@ describe('an alert on file', () => {
     expect(await appendAlert({ id: 'story-2', at: T + 60, severity: 'watch', title: 'WATCH: a listing', body: 'A coin listed.', url: 'http://plain.example/a' })).toEqual({ id: 'story-2', at: T + 60, severity: 'watch', title: 'WATCH: a listing', body: 'A coin listed.' })
     expect(await appendAlert({ id: 'bad', at: T, severity: 'loud', title: 't', body: 'b' })).toBeNull()
     expect(healAlertRecord({ id: 'x', at: T, severity: 'critical', title: 't', body: 'b', url: 'javascript:alert(1)' })).toEqual({ id: 'x', at: T, severity: 'critical', title: 't', body: 'b' })
+    // The sound a notice made is kept, and only one of the five (V6 Stage 13).
+    expect(healAlertRecord({ id: 's', at: T, severity: 'watch', title: 't', body: 'b', kind: 'MODEL_DEGRADED', sound: 'none' })).toEqual({ id: 's', at: T, severity: 'watch', title: 't', body: 'b', kind: 'MODEL_DEGRADED', sound: 'none' })
+    expect(healAlertRecord({ id: 's', at: T, severity: 'high', title: 't', body: 'b', sound: 'warning' })?.sound).toBe('warning')
+    expect(healAlertRecord({ id: 's', at: T, severity: 'high', title: 't', body: 'b', sound: 'siren' })).not.toHaveProperty('sound')
     expect((await readAlertsSince({ sinceSec: T + 1 })).rows.map((row) => row.id)).toEqual(['story-2'])
-    expect((await readAlertsSince({ sinceSec: 0 })).rows.map((row) => row.id)).toEqual(['story-2', 'story-1'])
+    // Written with its sound, it is read back with it.
+    expect(await appendAlert({ id: 'heard', at: T + 120, severity: 'high', title: 'STOP: SOLUSDT', body: 'Hit.', kind: 'STOP_TRIGGERED', sound: 'warning' })).toMatchObject({ sound: 'warning' })
+    expect((await readAlertsSince({ sinceSec: T + 100 })).rows.find((row) => row.id === 'heard')?.sound).toBe('warning')
+    expect((await readAlertsSince({ sinceSec: 0 })).rows.map((row) => row.id)).toEqual(['heard', 'story-2', 'story-1'])
   })
 })
 

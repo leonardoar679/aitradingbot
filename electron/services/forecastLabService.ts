@@ -13,7 +13,7 @@ import type { ForecastLabStatus, ForecastLabView, ForecastReplay } from '../../s
 import { healForecastSettings } from '../../shared/forecast/training'
 import type { ModelScore } from '../../shared/forecast/walkForward'
 import { classTable, type ClassRecord, type ClassVerdict } from '../../shared/forecast/opportunityClass'
-import type { Candle, ExecutorConfig, PositionExecutorParams } from '../../shared/ipc'
+import type { Candle, ExecutorConfig, ForecastHistory, PositionExecutorParams } from '../../shared/ipc'
 import { readForecastBars } from './forecastDataService'
 import { forecastNewsReadings } from './forecastService'
 import { currentForecastCalibration, getForecastTrainingState, onForecastTraining } from './forecastTrainingService'
@@ -180,6 +180,16 @@ async function readRecord(kind: 'predictions' | 'outcomes', fromSec: number): Pr
     }
   }
   return out
+}
+
+/** The forecasts on record made at closes in a span, every pair, and every outcome of them on file (V6
+ * Stage 15): what a run's report judges. */
+export async function forecastRecordSpan(fromSec: unknown, toSec: unknown): Promise<ForecastHistory> {
+  if (typeof fromSec !== 'number' || typeof toSec !== 'number' || !Number.isFinite(fromSec) || !Number.isFinite(toSec) || toSec < fromSec) return { predictions: [], outcomes: [] }
+  const predictions = (await readRecord('predictions', fromSec)).map(parsePredictionLine).filter((line): line is PredictionLine => line !== null && line.t >= fromSec && line.t <= toSec)
+  const ids = new Set(predictions.map((line) => line.id))
+  const outcomes = (await readRecord('outcomes', fromSec)).map(parseOutcomeLine).filter((line): line is NonNullable<ReturnType<typeof parseOutcomeLine>> => line !== null && ids.has(line.id))
+  return { predictions, outcomes }
 }
 
 async function readLive(nowSec: number): Promise<LiveLab> {

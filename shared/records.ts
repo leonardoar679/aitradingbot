@@ -118,6 +118,10 @@ export function healAlertRecord(value: unknown): AlertRecordOnFile | null {
   if (kind !== null) record.kind = kind
   const thread = text(raw.thread, 200)
   if (thread !== null) record.thread = thread
+  // The sound it made (V6 Stage 13), kept: until V6 Stage 15's run found it, healing dropped it, and no
+  // notice on file said what it sounded like.
+  const sound = raw.sound
+  if (sound === 'information' || sound === 'opportunity' || sound === 'warning' || sound === 'critical' || sound === 'none') record.sound = sound
   return record
 }
 
