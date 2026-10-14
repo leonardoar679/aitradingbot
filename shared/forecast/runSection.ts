@@ -78,6 +78,10 @@ export interface ForecastRunInput {
   executors: readonly ExecutorConfig[]
   /** The notices told in the span, with the sound each made where it was recorded. */
   alerts: readonly { at: number; sound?: string }[]
+  /** When the section is read: every horizon of the span's forecasts due by then, with time to write
+   * it, is wanted judged. The span's end where absent -- a report filed as the run ends; a run read an
+   * hour on wants its forecasts' hours too. */
+  asOfSec?: number
 }
 
 const isMissing = (line: OutcomeLine | MissingOutcomeLine): line is MissingOutcomeLine => 'missing' in line
@@ -130,7 +134,7 @@ export function forecastRunSectionOf(input: ForecastRunInput): ForecastRunSectio
     madeGate(lines.length, gridCloses, expectedGridCloses),
     stampedGate(lines),
     refreshGate(refreshes),
-    outcomesGate(lines, judged, span.toSec),
+    outcomesGate(lines, judged, Math.max(span.toSec, input.asOfSec ?? span.toSec)),
     soundsGate(input.alerts.filter((alert) => within(alert.at, span))),
     staleGate(trades)
   ]
@@ -191,18 +195,18 @@ function refreshGate(refreshes: readonly PredictionLine[]): ForecastRunGate {
   }
 }
 
-/** Every horizon of every forecast that fell due in the span, with time to write it, was judged: an
- * outcome, or a line saying why it could not be. */
-function outcomesGate(lines: readonly PredictionLine[], judged: readonly (OutcomeLine | MissingOutcomeLine)[], toSec: number): ForecastRunGate {
+/** Every horizon of every forecast that fell due by the time the section is read, with time to write
+ * it, was judged: an outcome, or a line saying why it could not be. */
+function outcomesGate(lines: readonly PredictionLine[], judged: readonly (OutcomeLine | MissingOutcomeLine)[], asOfSec: number): ForecastRunGate {
   const label = 'Every due forecast is judged'
   const written = new Set(judged.map((line) => `${line.id}|${line.h}`))
   const due: string[] = []
   for (const line of lines) {
     for (const horizon of Object.keys(line.h) as Horizon[]) {
-      if (line.t + horizonSeconds(horizon) + RUN_LINES.outcomeGraceSeconds <= toSec) due.push(`${line.id}|${horizon}`)
+      if (line.t + horizonSeconds(horizon) + RUN_LINES.outcomeGraceSeconds <= asOfSec) due.push(`${line.id}|${horizon}`)
     }
   }
-  if (due.length === 0) return { id: 'forecast_outcomes', label, status: 'not measured', detail: 'No forecast fell due in the span with time to judge it.' }
+  if (due.length === 0) return { id: 'forecast_outcomes', label, status: 'not measured', detail: 'No forecast of the span has fallen due with time to judge it.' }
   const unjudged = due.filter((key) => !written.has(key))
   const missing = judged.filter((line) => isMissing(line)).length
   return {

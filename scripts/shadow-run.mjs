@@ -804,7 +804,7 @@ async function forecastSection(fromSec, toSec) {
     }),
     [fromSec, toSec]
   )
-  return forecastRunSectionOf({ fromSec, toSec, predictions: read.record.predictions, outcomes: read.record.outcomes, executors: read.executors, alerts: read.alerts })
+  return forecastRunSectionOf({ fromSec, toSec, predictions: read.record.predictions, outcomes: read.record.outcomes, executors: read.executors, alerts: read.alerts, asOfSec: Math.floor(Date.now() / 1000) })
 }
 
 async function shot(name) {

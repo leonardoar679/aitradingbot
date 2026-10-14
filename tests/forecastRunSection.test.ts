@@ -157,6 +157,23 @@ describe("the run's forecast gates (§113-114)", () => {
     expect(gate({ ...run, toSec: T + 300 + RUN_LINES.outcomeGraceSeconds - 1, outcomes: [] }, 'forecast_outcomes').status).toBe('not measured')
   })
 
+  it('wants, read an hour on, the hours of the forecasts too', () => {
+    const run = hourRun({ toSec: T + 3600 })
+    const later = T + 3600 + 3600 + RUN_LINES.outcomeGraceSeconds
+    // As the run ends, an hour's horizon of its forecasts is not due; read an hour on, each is.
+    const atEnd = forecastRunSectionOf(run).gates.find((gate) => gate.id === 'forecast_outcomes')!
+    const onFile = run.outcomes.length
+    expect(atEnd.status).toBe('pass')
+    const asOf = forecastRunSectionOf({ ...run, asOfSec: later }).gates.find((gate) => gate.id === 'forecast_outcomes')!
+    expect(asOf.status).toBe('fail')
+    const hours = run.predictions.map((line) => outcome(line.id, line.t, 'hour1', 0.2))
+    const judged = forecastRunSectionOf({ ...run, outcomes: [...run.outcomes.filter((line) => line.h !== 'hour1'), ...hours], asOfSec: later })
+    expect(judged.gates.find((gate) => gate.id === 'forecast_outcomes')!.status).toBe('pass')
+    expect(onFile).toBeGreaterThan(0)
+    // A moment before the span's end reads as its end.
+    expect(forecastRunSectionOf({ ...run, asOfSec: T }).gates.find((gate) => gate.id === 'forecast_outcomes')!.status).toBe('pass')
+  })
+
   it("wants every notice's sound on file", () => {
     expect(gate(hourRun(), 'notice_sounds').status).toBe('pass')
     expect(gate(hourRun({ alerts: [{ at: T + 60, sound: 'warning' }, { at: T + 120 }] }), 'notice_sounds').status).toBe('fail')
