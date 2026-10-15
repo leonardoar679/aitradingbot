@@ -377,7 +377,7 @@ describe('watchPass: paper trades', () => {
     // Paper trades switched off: the paper trader has nothing to say, as openWatchPaperTrade then.
     const off = async (): Promise<null> => null
     // The first model's BUY, which put the event to the other two, and their NO TRADE: no notice.
-    // The twelve-hour run of 14 October rang for such a BUY.
+    // The 1-hour run of 14 October rang for such a BUY, on PYTH's breakout.
     const refused = rig({ watch: watch({ models: [A, B, C], firstModelGates: true }), answer: (model) => (model === A ? {} : NO_TRADE) })
     refused.deps.paperTrade = off
     await watchPass([event()], refused.deps)

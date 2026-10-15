@@ -132,9 +132,9 @@ day was read. Eleven days and one stake a trade are too few for any of these row
 
 So the forecast ships as a guide to how far a coin may move in calm conditions, and the forecast
 trader, off by default, stays off. Since V6.1 (below) its ranges are widened after a sharp move of
-Bitcoin's, at the horizons where the walk forward shows that helps. A direction it could trade would have to come from information it
-does not have yet: the news library filling to thirty stories a kind, or a feature with a measured
-edge.
+Bitcoin's, at the horizons where the walk forward shows that helps. A direction it could trade would
+have to come from information it does not have yet: the news library filling to thirty stories a kind,
+or a feature with a measured edge.
 
 ## The gates
 
@@ -240,8 +240,8 @@ closes from its minutes, a crossing making every pair's forecast again.
 - One of Bitcoin's bar pages faked to fall 3% into the 06:45 close widened the hour's and the day's
   ranges of all 24 pairs, and no other horizon. The record kept their V2 levels and the factors.
 
-The 15-minute verdict changed between two fits a day apart, which is why the rule is judged again at
-every refit rather than fixed. Its evidence is still thin: 14 moments in three weeks.
+The 15-minute verdict changed between two fits six hours apart, which is why the rule is judged again
+at every refit rather than fixed. Its evidence is still thin: 14 moments in three weeks.
 
 ## The models' calls and their cost
 
