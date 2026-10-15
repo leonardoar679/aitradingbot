@@ -130,6 +130,14 @@ export interface TodayPaper {
 
 const UTC_DAY = 86_400
 
+/** The paper strategies running, for What you hold: every active executor that is not live. One made
+ * before executors had a mode (August 2026) has none and runs as paper (src/executors/
+ * useExecutorSimulation.ts), so it is counted as one: a rehearsal of a profile from then counted four
+ * of its five (15 October 2026). */
+export function paperRunning(executors: readonly ExecutorConfig[]): ExecutorConfig[] {
+  return executors.filter((executor) => executor.mode !== 'live' && executor.status === 'active')
+}
+
 /** What the app's own paper trades did today, by the UTC day, from the executors on file. */
 export function todaysPaper(executors: readonly ExecutorConfig[], nowSec: number): TodayPaper {
   const dayStart = Math.floor(nowSec / UTC_DAY) * UTC_DAY

@@ -6,6 +6,7 @@ import { watchPaperExecutors } from '../../shared/aiWatchPaper'
 import type { ExecutorConfig, LivePosition } from '../../shared/ipc'
 import { usePortfolioSnapshots, usePortfolioStatus } from '../portfolio/portfolioStore'
 import type { Page } from '../navigation/pages'
+import { paperRunning } from './overviewBlocks'
 import { portfolioValueLine } from './portfolioValueLine'
 import { Interpolate, useI18n } from '../i18n'
 
@@ -48,7 +49,7 @@ export function HoldingsSummary({ onNavigate }: { onNavigate: (page: Page) => vo
   }, [])
 
   const latest = snapshots.length > 0 ? snapshots[snapshots.length - 1] : null
-  const running = executors === null ? null : executors.filter((executor) => executor.mode === 'paper' && executor.status === 'active')
+  const running = executors === null ? null : paperRunning(executors)
   const watchOpen = executors === null ? 0 : watchPaperExecutors(executors).filter((executor) => executor.status === 'active').length
 
   return (

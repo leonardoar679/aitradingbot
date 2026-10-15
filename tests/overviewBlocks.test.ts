@@ -6,7 +6,7 @@ import type { NewsReading } from '../shared/aiAdditions'
 import type { ReadStory, StoryReaction } from '../shared/newsFeed'
 import type { EventFeedItem } from '../src/agents/opportunities'
 import type { AlertRecord } from '../src/news/alertStore'
-import { BREAKING_SHOWN, breakingEvents, describeAnswers, describeReaction, describeTally, majorAlerts, newsImpact, tallyAnswers, todaysPaper } from '../src/overview/overviewBlocks'
+import { BREAKING_SHOWN, breakingEvents, describeAnswers, describeReaction, describeTally, majorAlerts, newsImpact, paperRunning, tallyAnswers, todaysPaper } from '../src/overview/overviewBlocks'
 
 // Overview's blocks (the second V3 document, §51): the last hour's events, the news that matters,
 // and what the app's own paper trades did today, each a selection over what is on file.
@@ -163,6 +163,12 @@ describe("today's paper trades", () => {
     expect(today.net).toEqual([{ asset: 'USDT', amount: 1.3 }])
     expect(today.r).toBeGreaterThan(0)
     expect(todaysPaper([], T)).toEqual({ opened: 0, closed: 0, openNow: 0, net: [], r: 0, rTrades: 0, best: null, worst: null })
+  })
+
+  it('counts every active executor that is not live as a paper strategy running, one from before executors had a mode among them (15 October 2026)', () => {
+    const grid = (over: Record<string, unknown>): ExecutorConfig => ({ id: 'g', type: 'grid', status: 'active', symbol: 'BTCUSDT', quoteAsset: 'USDT', createdAt: T - 86_400, ...over }) as unknown as ExecutorConfig
+    const executors = [grid({ id: 'old' }), grid({ id: 'paper', mode: 'paper' }), grid({ id: 'live', mode: 'live' }), grid({ id: 'done', mode: 'paper', status: 'stopped' })]
+    expect(paperRunning(executors).map((executor) => executor.id)).toEqual(['old', 'paper'])
   })
 })
 
