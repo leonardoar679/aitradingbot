@@ -356,7 +356,8 @@ describe('watchPass: paper trades', () => {
     await watchPass([event()], split.deps)
     expect(handed).toBe(0)
     expect(refusals).toEqual(['No paper trade: Models split: 1 BUY · 1 SELL.'])
-    expect(split.notices.some((notice) => notice.extra?.kind === 'MODEL_DISAGREEMENT')).toBe(true)
+    // The disagreement is told, and no call to trade beside it (15 October 2026).
+    expect(split.notices.map((notice) => notice.extra?.kind)).toEqual(['MODEL_DISAGREEMENT'])
     expect(getWatchActivity().last?.text).toContain('Vote: split 1 BUY · 1 SELL.')
 
     const half = rig({ answer: (model) => (model === B ? NO_TRADE : {}) })
@@ -369,6 +370,27 @@ describe('watchPass: paper trades', () => {
     await watchPass([event('ETHUSDT')], half.deps)
     expect(handed).toBe(0)
     expect(halfRefusals).toEqual(['No paper trade: Models did not agree: 1 BUY · 1 NO TRADE.'])
+    expect(half.notices).toEqual([])
+  })
+
+  it('tells a call to trade only when the vote takes its side, as the answer it chose (15 October 2026)', async () => {
+    // Paper trades switched off: the paper trader has nothing to say, as openWatchPaperTrade then.
+    const off = async (): Promise<null> => null
+    // The first model's BUY, which put the event to the other two, and their NO TRADE: no notice.
+    // The twelve-hour run of 14 October rang for such a BUY.
+    const refused = rig({ watch: watch({ models: [A, B, C], firstModelGates: true }), answer: (model) => (model === A ? {} : NO_TRADE) })
+    refused.deps.paperTrade = off
+    await watchPass([event()], refused.deps)
+    expect(refused.asked.map((call) => call.model)).toEqual([A, B, C])
+    expect(refused.notices).toEqual([])
+    expect(getWatchActivity().last?.text).toContain('Vote: no majority 1 BUY · 2 NO TRADE.')
+
+    // Two of three on the side: one notice, in the name of the surer.
+    const taken = rig({ watch: watch({ models: [A, B, C] }), answer: (model) => (model === C ? NO_TRADE : { confidence: model === B ? 0.9 : 0.7 }) })
+    taken.deps.paperTrade = off
+    await watchPass([event('ETHUSDT')], taken.deps)
+    expect(taken.notices).toEqual([{ title: 'ETHUSDT: BUY', body: expect.any(String), extra: { kind: 'TRADE_OPPORTUNITY', thread: event('ETHUSDT').id } }])
+    expect(taken.notices[0].body).toContain(`${B} at 90% confidence`)
   })
 
   it('hands over nothing this app would not act on: no trade, a side under 65%, a refused answer, a call that failed', async () => {

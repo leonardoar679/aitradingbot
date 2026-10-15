@@ -169,11 +169,9 @@ async function askAbout(event: MarketEvent, watch: AiWatchConfig, deps: WatchDep
   const paper: string[] = []
   // THE VOTE (shared/opportunityVote.ts; the V5 document, §39): with two or more models asked and
   // a paper trader to hand the answer to, the paper trade follows what the answers add up to, once
-  // they are all in, and the plain notice waits for that; with one model, or with no paper
-  // trader, each answer is acted on and told as it arrives, as it always was.
+  // they are all in, and so does the plain notice; with one model, or with no paper trader, each
+  // answer is acted on and told as it arrives, as it always was.
   const byVote = watch.models.length >= 2 && deps.paperTrade !== undefined
-  /** The first answer that would have traded, under a vote: the plain notice is its, after the vote. */
-  let firstActionable: AiSignalDecision | null = null
 
   /** Hands an answer to the paper trader, when there is one, and says what came of it: true when a
    * trade was opened. A refusal is written down, and told when a person can act on it. */
@@ -203,10 +201,10 @@ async function askAbout(event: MarketEvent, watch: AiWatchConfig, deps: WatchDep
     }
   }
 
-  /** One plain notice an event, raised by the first call to trade that arrives. An answer that
-   * opened a paper trade has raised a notice of its own, which says more, so it raises no plain
-   * one and none follows it. A paper trade opened on a later answer is still told: that is
-   * something done, not one more opinion. */
+  /** One plain notice an event, raised by the first call to trade that arrives, or under a vote by
+   * the answer the vote chose. An answer that opened a paper trade has raised a notice of its own,
+   * which says more, so it raises no plain one and none follows it. A paper trade opened on a later
+   * answer is still told: that is something done, not one more opinion. */
   const plainNotice = (decision: AiSignalDecision, opened: boolean): void => {
     const notice = noticed || opened ? null : watchNotice(event, decision, say)
     if (opened) noticed = true
@@ -225,10 +223,7 @@ async function askAbout(event: MarketEvent, watch: AiWatchConfig, deps: WatchDep
     // A call the watch would act on may open a paper trade, when that is switched on -- at once
     // with one model, after the vote with more. Whatever comes of it, the answer was paid for and
     // is returned.
-    if (byVote) {
-      if (isActionableOpportunity(decision) && firstActionable === null) firstActionable = decision
-      return decision
-    }
+    if (byVote) return decision
     const opened = isActionableOpportunity(decision) ? await tradeOn(decision) : false
     plainNotice(decision, opened)
     return decision
@@ -252,8 +247,11 @@ async function askAbout(event: MarketEvent, watch: AiWatchConfig, deps: WatchDep
       paper.push(say.t('No paper trade: {reason}', { reason: shownVote.refusal ?? vote.refusal }))
       if (first !== undefined) refused(deps, event, first, text)
     }
-    // The plain notice, held back for the vote: the first call to trade's, unless a trade opened.
-    if (firstActionable !== null) plainNotice(firstActionable, opened)
+    // The plain notice, held back for the vote: the answer it chose, unless a trade opened on it. A
+    // vote that took no side raises none (since 15 October 2026; it had rung for the first call to
+    // trade, which the vote had refused): its refusal is on the Watch card and on file, and models
+    // on opposite sides are told as a disagreement.
+    if (vote.chosen !== null) plainNotice(vote.chosen, opened)
     return shownVote.text
   }
 

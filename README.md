@@ -2087,8 +2087,10 @@ a rule worth keeping.
   fails every call it is sent, so asking on only buys more of the same. Counted from the ledger,
   and held in the main process as well, like the day's events.
 - **It recommends and notifies.** An answer lands on its event's card exactly as one bought with
-  Ask does, and the first call to trade on an event raises one desktop notice, which says that
-  nothing has been placed. **It places nothing real**: it opens no order form and no real order.
+  Ask does, and a call to trade on an event raises one desktop notice, which says that nothing has
+  been placed: with one model its first call, and with more only a side their vote takes, in the
+  name of the surest on it (since 15 October 2026; a call the vote refused had rung as well).
+  **It places nothing real**: it opens no order form and no real order.
   What it may do beyond that is the next paragraph, and only when that is switched on.
 - **It runs while the app is open**, whichever page is showing, and stays on across restarts
   until it is switched off. With the watch and the scanner both on, starting the app can

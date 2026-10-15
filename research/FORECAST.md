@@ -202,9 +202,10 @@ the data's; SOL was left out, not forecast from stale bars; each of its 6 stalle
 | check run | the analysis stopped at a coin with a Chinese name, its output's code page unable to hold it | `c514d80` |
 | check run | a faked run left its emptied key file in its scratch profile (only ever a placeholder key) | the harness deletes it at the end |
 
-Seen and left as they are: the first model's BUY or SELL is told as a TRADE OPPORTUNITY notice even
-when the vote then refuses the trade (by design, so the call is not lost); Arabic money reads
-"$US 211.03" by its locale's own rule.
+The first model's BUY or SELL was told as a TRADE OPPORTUNITY notice even when the vote then refused
+the trade. Since 15 October the notice rings only for a side the vote takes, in the name of the surest
+model on it; a refused call stays on the Watch card and on file. Arabic money reads "$US 211.03" by its
+locale's own rule, and is left as it is.
 
 ## After V6: the ranges after a sharp Bitcoin move (V6.1, 15 October 2026)
 
