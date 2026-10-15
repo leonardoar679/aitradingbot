@@ -459,6 +459,7 @@
   "What moved the boosted model's reading of the move's size most:": "बूस्टेड मॉडल की चाल के आकार की रीडिंग को सबसे ज़्यादा किसने हिलाया:",
   "a story about the coin, which widened it": "इस कॉइन की एक ख़बर, जिसने रेंज चौड़ी की",
   "a thin book: its spread widened it {share}": "पतली ऑर्डर बुक: इसके स्प्रेड ने रेंज {share} चौड़ी की",
+  "Bitcoin's sharp move ({moves} usual moves in fifteen minutes) widened it ×{factor}: on the weeks tested, after such moves it held {before} of the time, widened {after}": "बिटकॉइन की तेज़ चाल (पंद्रह मिनट में सामान्य चाल का {moves} गुना) ने रेंज ×{factor} चौड़ी की: परखे गए हफ़्तों में ऐसी चालों के बाद रेंज {before} बार सही रही, चौड़ी करने पर {after}",
   "Its forecasts against the price": "इसके पूर्वानुमान बनाम कीमत",
   "No forecast of it on record yet: one is kept every quarter hour.": "अभी इसका कोई पूर्वानुमान दर्ज नहीं है: हर पंद्रह मिनट में एक रखा जाता है।",
   "The blue lines are each forecast's likely range and the dotted ones its 80% range, drawn at the moment it was a forecast for; the gold line is the price at each close.": "नीली रेखाएँ हर पूर्वानुमान की संभावित रेंज हैं और बिंदीदार उसकी 80% रेंज, उस क्षण पर खींची गई जिसके लिए वह पूर्वानुमान था; सुनहरी रेखा हर क्लोज़ पर कीमत है।",

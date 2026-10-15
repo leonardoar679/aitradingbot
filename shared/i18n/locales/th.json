@@ -459,6 +459,7 @@
   "What moved the boosted model's reading of the move's size most:": "สิ่งที่ขยับการอ่านขนาดการเคลื่อนไหวของโมเดลแบบบูสต์มากที่สุด:",
   "a story about the coin, which widened it": "ข่าวเกี่ยวกับเหรียญนี้ ซึ่งทำให้ช่วงกว้างขึ้น",
   "a thin book: its spread widened it {share}": "สมุดคำสั่งซื้อขายบาง: สเปรดทำให้ช่วงกว้างขึ้น {share}",
+  "Bitcoin's sharp move ({moves} usual moves in fifteen minutes) widened it ×{factor}: on the weeks tested, after such moves it held {before} of the time, widened {after}": "การเคลื่อนไหวรุนแรงของบิตคอยน์ ({moves} เท่าของการเคลื่อนไหวปกติในสิบห้านาที) ทำให้ช่วงกว้างขึ้น ×{factor}: ในสัปดาห์ที่ทดสอบ หลังการเคลื่อนไหวเช่นนี้ ช่วงครอบคลุม {before} ของครั้ง และ {after} เมื่อขยายแล้ว",
   "Its forecasts against the price": "การคาดการณ์ของมันเทียบกับราคา",
   "No forecast of it on record yet: one is kept every quarter hour.": "ยังไม่มีบันทึกการคาดการณ์ของมัน จะเก็บไว้ทุกสิบห้านาที",
   "The blue lines are each forecast's likely range and the dotted ones its 80% range, drawn at the moment it was a forecast for; the gold line is the price at each close.": "เส้นสีน้ำเงินคือช่วงที่น่าจะเป็นของการคาดการณ์แต่ละครั้ง และเส้นประคือช่วง 80% วาดไว้ ณ เวลาที่มันคาดการณ์ไว้ เส้นสีทองคือราคาเมื่อปิดแต่ละครั้ง",

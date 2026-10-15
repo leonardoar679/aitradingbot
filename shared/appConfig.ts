@@ -68,6 +68,7 @@ import { DECISION_LINES, DECISION_VERSION } from './forecast/tradeDecision'
 import { NEWS_FEED_VERSION } from './newsFeed'
 import { PREDICTION_LINES, PREDICTION_VERSION } from './forecast/prediction'
 import { RELIABILITY_LINES } from './forecast/reliability'
+import { SHOCK_LINES, SHOCK_VERSION } from './forecast/shock'
 import { RUN_CALIBRATION_VERSION } from './forecast/runCalibration'
 import { DEGRADATION_LINES, DEGRADED_THREAD_SECONDS, PROMOTION_LINES } from './forecast/promotion'
 import { MIN_READY_PAIRS, healForecastSettings } from './forecast/training'
@@ -167,6 +168,7 @@ export const ENGINE_CONSTANTS = {
     direction: DIRECTION_LINES,
     reliability: RELIABILITY_LINES,
     prediction: { version: PREDICTION_VERSION, ...PREDICTION_LINES },
+    shock: { version: SHOCK_VERSION, ...SHOCK_LINES },
     refresh: REFRESH_LINES,
     outcome: { version: OUTCOME_VERSION, ...OUTCOME_LINES },
     record: { version: FORECAST_RECORD_VERSION, days: FORECAST_RECORD_DAYS },

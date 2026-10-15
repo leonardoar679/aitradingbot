@@ -5,6 +5,7 @@ import { FORECAST_MODELS, type ForecastModelId } from '../shared/forecast/models
 import { PREDICTION_VERSION, bestHorizonOf, makePrediction, type ForecastRange, type PredictionInput } from '../shared/forecast/prediction'
 import { RELIABILITY_LINES, reliabilityOf, type ReliabilityInput } from '../shared/forecast/reliability'
 import { buildRunCalibration, cellOf, type HonestScore, type RunCalibration } from '../shared/forecast/runCalibration'
+import { noShockRecord, stretchShock } from '../shared/forecast/shock'
 import { usualMove } from '../shared/forecast/targets'
 import { promoted, recordOf, scaled } from './forecastRecords'
 
@@ -263,6 +264,29 @@ describe('the prediction', () => {
     expect(usual.width80Pct).toBeCloseTo(plain.width80Pct, 12)
     expect(thin.spreadStretch).toBeGreaterThan(1)
     expect(thin.width80Pct).toBeGreaterThan(plain.width80Pct)
+  })
+
+  // V6.1: Bitcoin's sharp move widens a horizon whose rule the walk forward adopted, and nothing else.
+  it("widens for Bitcoin's sharp move where the horizon's rule is in use, past its line, and leaves calm moments alone", () => {
+    const rule = { ...noShockRecord(), adopted: true, refusal: null, k80: 1.5, k50: 1.25, moments: 12, rows: 400, before: { in80: 0.6, in50: 0.35, pinball: 0.5 }, after: { in80: 0.79, in50: 0.49, pinball: 0.47 } }
+    const withRule: RunCalibration = { ...FLAT, horizons: { ...FLAT.horizons, hour1: { ...FLAT.horizons.hour1!, shock: rule } } }
+    const plain = makePrediction(input(withRule, 0, { btc15: 1 }))!.horizons.hour1!
+    const shocked = makePrediction(input(withRule, 0, { btc15: -2.8 }))!.horizons.hour1!
+    expect(PREDICTION_VERSION).toBe('prediction-v2')
+    expect(plain.shock).toBeNull()
+    expect(plain.quantilesPct).toEqual(makePrediction(input(FLAT, 0))!.horizons.hour1!.quantilesPct)
+    expect(shocked.shock).toEqual({ btc15: -2.8, k80: 1.5, k50: 1.25, held: { before: 0.6, after: 0.79 } })
+    // The levels in usual moves stretched about the median: the outer pair by 1.5, the inner by 1.25.
+    const usual = usualMove(0.04, 12)
+    const asMoves = (range: ForecastRange): number[] => range.quantilesPct.map((value) => Math.log(1 + value / 100) / usual)
+    const expected = stretchShock(asMoves(plain), 1.5, 1.25)
+    asMoves(shocked).forEach((value, level) => expect(value).toBeCloseTo(expected[level], 9))
+    expect(shocked.width80Pct).toBeGreaterThan(plain.width80Pct)
+    // A rule not in use, or none at all, widens nothing whatever Bitcoin did.
+    const refused: RunCalibration = { ...FLAT, horizons: { ...FLAT.horizons, hour1: { ...FLAT.horizons.hour1!, shock: { ...rule, adopted: false, refusal: 'pinball' } } } }
+    expect(makePrediction(input(refused, 0, { btc15: 4 }))!.horizons.hour1!.shock).toBeNull()
+    expect(makePrediction(input(FLAT, 0, { btc15: 4 }))!.horizons.hour1!.quantilesPct).toEqual(plain.quantilesPct)
+    expect(makePrediction(input(withRule, 0))!.horizons.hour1!.shock).toBeNull()
   })
 
   it('leaves out a horizon with no calibration, and is none without any', () => {

@@ -340,5 +340,34 @@ describe('the run\'s calibration', () => {
     // A figure that could not be measured is written as null and read back as one that was not.
     const unmeasured = damage((copy) => (copy.horizons.hour1.variants.v2.honest.pooled.direction = null)) as ReturnType<typeof parseRunCalibration>
     expect(unmeasured!.horizons.hour1!.variants.v2.honest.pooled!.direction).toBeNaN()
+    // The rule on Bitcoin's sharp moves (V6.1): read back whole, refused part-made, and absent on a file
+    // from before it.
+    expect(back!.horizons.hour1!.shock).toEqual(calibration.horizons.hour1!.shock)
+    expect(damage((copy) => (copy.horizons.hour1.shock.k80 = 0.5))).toBeNull()
+    expect(damage((copy) => (copy.horizons.hour1.shock.refusal = 'never'))).toBeNull()
+    expect(damage((copy) => (copy.horizons.hour1.shock.adopted = true))).toBeNull()
+    expect(damage((copy) => (copy.horizons.hour1.shock.before = { in80: 0.5 }))).toBeNull()
+    expect((damage((copy) => delete copy.horizons.hour1.shock) as ReturnType<typeof parseRunCalibration>)!.horizons.hour1!.shock).toBeUndefined()
+  })
+
+  // V6.1: the rule on Bitcoin's sharp moves, fitted on the forecast shown as it was scored out of sample.
+  it("fits the rule on Bitcoin's sharp moves where the record keeps them, and says there is none where it does not", { timeout: 60_000 }, () => {
+    expect(buildRunCalibration(new Map([['hour1', RECORD]]), PROMOTIONS, 'run-test').horizons.hour1!.shock).toMatchObject({ adopted: false, refusal: 'no_record' })
+    // Every fortieth hour past the line either way, its move two and a half times as wide as its levels.
+    const record = recordOf({ rows: 14_000, seed: 21 })
+    const btc15 = new Float32Array(record.rows)
+    for (let row = 0; row < record.rows; row++) {
+      if (row % 40 === 0) {
+        btc15[row] = row % 80 === 0 ? 3 : -2.6
+        record.z[row] *= 2.5
+      } else btc15[row] = 0.3
+    }
+    const shock = buildRunCalibration(new Map([['hour1', { ...record, btc15 }]]), PROMOTIONS, 'run-test').horizons.hour1!.shock!
+    expect(shock).toMatchObject({ adopted: true, refusal: null })
+    expect(shock.moments).toBeGreaterThanOrEqual(200)
+    expect(shock.k80).toBeGreaterThan(1.8)
+    expect(shock.k80).toBeLessThan(3.2)
+    expect(shock.before!.in80).toBeLessThan(0.6)
+    expect(shock.after!.in80).toBeGreaterThan(shock.before!.in80)
   })
 })

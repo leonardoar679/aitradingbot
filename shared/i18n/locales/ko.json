@@ -459,6 +459,7 @@
   "What moved the boosted model's reading of the move's size most:": "부스팅 모델이 움직임의 크기를 읽는 데 가장 큰 영향을 준 것:",
   "a story about the coin, which widened it": "이 코인에 관한 뉴스로 범위가 넓어짐",
   "a thin book: its spread widened it {share}": "호가가 얇음: 스프레드로 범위가 {share} 넓어짐",
+  "Bitcoin's sharp move ({moves} usual moves in fifteen minutes) widened it ×{factor}: on the weeks tested, after such moves it held {before} of the time, widened {after}": "비트코인의 급격한 움직임(15분간 평소 움직임의 {moves}배)으로 범위가 ×{factor} 넓어짐: 검증한 몇 주 동안 이런 움직임 뒤에 범위 안에 든 경우는 {before}, 넓힌 뒤에는 {after}",
   "Its forecasts against the price": "예측과 실제 가격",
   "No forecast of it on record yet: one is kept every quarter hour.": "아직 예측 기록이 없습니다. 15분마다 하나씩 보관합니다.",
   "The blue lines are each forecast's likely range and the dotted ones its 80% range, drawn at the moment it was a forecast for; the gold line is the price at each close.": "파란 선은 각 예측의 예상 범위, 점선은 80% 범위로, 예측 대상 시각에 그려집니다. 금색 선은 각 마감 시점의 가격입니다.",

@@ -64,10 +64,15 @@ export interface HorizonLine {
   parts: [ForecastModelId, number, number][]
   /** Its quality, 0 to 100 (V6 Stage 9). */
   qual?: number
-  /** Where a story moved V3 or V4: its levels and the story; and V2's own levels, which the shown
-   * forecast's then are not (V6 Stage 11, for the Lab's variants on the same moments). */
+  /** Where a story moved V3 or V4: its levels and the story (V6 Stage 11, for the Lab's variants on the
+   * same moments). */
   news?: Partial<Record<'v3' | 'v4', NewsLine>>
+  /** V2's own levels, wherever the shown forecast's are not -- a story moved them, a thin book or, since
+   * V6.1, Bitcoin's sharp move widened them: what the adaptive V2 levels learn from. */
   v2?: number[]
+  /** Where Bitcoin's sharp move widened it (V6.1): Bitcoin's last fifteen minutes in its usual moves, and
+   * the outer and inner factors. */
+  shock?: [number, number, number]
 }
 
 export interface NewsLine {
@@ -131,7 +136,7 @@ export function predictionLine(prediction: PricePrediction, horizons: readonly H
       v1pUp: p3(v1?.pUp ?? Number.NaN),
       parts: range.contributions.map((member) => [member.model, p3(member.weight), pct4(member.medianLogPct)]),
       qual: range.quality.score,
-      ...newsOf(range)
+      ...ownLevelsOf(range)
     }
   }
   const z1h = prediction.market?.z1h
@@ -166,7 +171,9 @@ export function predictionLine(prediction: PricePrediction, horizons: readonly H
   }
 }
 
-function newsOf(range: PricePrediction['horizons'][Horizon] & object): Pick<HorizonLine, 'news' | 'v2'> {
+/** Where the shown levels are not V2's own: the story that moved them, V2's levels, and Bitcoin's sharp
+ * move where it widened them. */
+function ownLevelsOf(range: PricePrediction['horizons'][Horizon] & object): Pick<HorizonLine, 'news' | 'v2' | 'shock'> {
   const out: NonNullable<HorizonLine['news']> = {}
   for (const variant of ['v3', 'v4'] as const) {
     const effect = range.news[variant]
@@ -185,7 +192,13 @@ function newsOf(range: PricePrediction['horizons'][Horizon] & object): Pick<Hori
     }
   }
   const v2 = range.variants.v2
-  return Object.keys(out).length === 0 ? {} : { news: out, ...(v2 === undefined ? {} : { v2: v2.quantilesPct.map(pct4) }) }
+  const shock = range.shock ?? null
+  const moved = Object.keys(out).length > 0 || range.spreadStretch !== 1 || shock !== null
+  return {
+    ...(Object.keys(out).length === 0 ? {} : { news: out }),
+    ...(moved && v2 !== undefined ? { v2: v2.quantilesPct.map(pct4) } : {}),
+    ...(shock === null ? {} : { shock: [p3(shock.btc15), p3(shock.k80), p3(shock.k50)] as [number, number, number] })
+  }
 }
 
 const isNumbers = (value: unknown, length: number): value is number[] => Array.isArray(value) && value.length === length && value.every((entry) => typeof entry === 'number' && Number.isFinite(entry))
@@ -234,6 +247,9 @@ export interface OutcomeLine {
   v4below?: string
   newsPUp?: number
   newsShift?: number
+  /** Where the shown levels were not V2's own (V6.1): where the close fell against V2's, what the
+   * adaptive V2 levels learn from. */
+  v2below?: string
 }
 
 /** A horizon whose outcome could not be read. */
@@ -276,6 +292,7 @@ export function outcomeLine(recorded: PredictionLine, horizon: Horizon, outcome:
     cell: line.cell,
     cls: recorded.cls,
     errors: outcome.errors,
+    ...(line.v2 === undefined ? {} : { v2below: flags(line.v2.map((level) => outcome.movePct <= level)) }),
     ...(line.news?.v3 === undefined ? {} : { v3below: flags(line.news.v3.q.map((level) => outcome.movePct <= level)) }),
     ...(line.news?.v4 === undefined ? {} : { v4below: flags(line.news.v4.q.map((level) => outcome.movePct <= level)), newsPUp: line.news.v4.pUpMapped, newsShift: line.news.v4.shift })
   }

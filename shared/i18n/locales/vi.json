@@ -459,6 +459,7 @@
   "What moved the boosted model's reading of the move's size most:": "Điều tác động nhiều nhất tới cách mô hình boosting đọc độ lớn biến chuyển:",
   "a story about the coin, which widened it": "một tin về coin này, đã nới rộng khoảng",
   "a thin book: its spread widened it {share}": "sổ lệnh mỏng: chênh lệch giá đã nới rộng khoảng {share}",
+  "Bitcoin's sharp move ({moves} usual moves in fifteen minutes) widened it ×{factor}: on the weeks tested, after such moves it held {before} of the time, widened {after}": "biến động mạnh của Bitcoin ({moves} lần mức biến động thường lệ trong mười lăm phút) đã nới rộng khoảng ×{factor}: trong các tuần được kiểm tra, sau những biến động như vậy khoảng này đúng {before} số lần, khi nới rộng là {after}",
   "Its forecasts against the price": "Các dự báo của nó so với giá",
   "No forecast of it on record yet: one is kept every quarter hour.": "Chưa có dự báo nào của nó được ghi lại: cứ mỗi mười lăm phút lưu một bản.",
   "The blue lines are each forecast's likely range and the dotted ones its 80% range, drawn at the moment it was a forecast for; the gold line is the price at each close.": "Các đường màu xanh là khoảng khả dĩ của từng dự báo và các đường chấm là khoảng 80% của nó, vẽ tại thời điểm mà nó dự báo; đường màu vàng là giá ở mỗi lần đóng.",

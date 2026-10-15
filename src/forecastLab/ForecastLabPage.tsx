@@ -24,6 +24,7 @@ import {
   liveTable,
   performanceTable,
   pUpCurveTable,
+  shockTable,
   tableCsv,
   traderCells,
   traderTable,
@@ -252,6 +253,15 @@ export function ForecastLabPage(): React.JSX.Element {
         <Card title="The live record: V1 to V4 on the same moments">
           <p style={{ ...noteStyle, marginTop: 0 }}>Every recorded forecast whose horizon has come, read four ways: price only, every market model, with the news's rules, and with the analyst's readings (the forecast shown). Where no story moved a forecast, V3 and V4 are V2.</p>
           <LabTable table={liveTable(view.live)} name="live" onNote={setNote} />
+        </Card>
+      )}
+
+      {view !== null && Object.keys(view.shock).length > 0 && (
+        <Card title="After Bitcoin's sharp moves">
+          <p style={{ ...noteStyle, marginTop: 0 }}>
+            Where Bitcoin's last fifteen minutes reach {view.shock.hour1?.line ?? 2.5} of its usual moves, a horizon's ranges are widened about their median -- the 80% range by one factor, the 50% by another -- fitted on the walk forward's moments past the line, and only at a horizon where, each week widened by factors from the other weeks alone, the 80% range came nearer 80% and the pinball loss was no worse. Calm moments are never touched. Live: the forecasts it widened, and how their 80% ranges held widened and by V2's own levels.
+          </p>
+          <LabTable table={shockTable(view.shock, view.live)} name="shock" onNote={setNote} />
         </Card>
       )}
 

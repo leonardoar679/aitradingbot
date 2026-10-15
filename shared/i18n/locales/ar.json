@@ -459,6 +459,7 @@
   "What moved the boosted model's reading of the move's size most:": "ما حرّك قراءة النموذج المعزَّز لحجم الحركة أكثر من غيره:",
   "a story about the coin, which widened it": "خبر عن العملة، وسّع النطاق",
   "a thin book: its spread widened it {share}": "دفتر أوامر رقيق: وسّع فارقه السعري النطاق {share}",
+  "Bitcoin's sharp move ({moves} usual moves in fifteen minutes) widened it ×{factor}: on the weeks tested, after such moves it held {before} of the time, widened {after}": "حركة بيتكوين الحادة ({moves} ضعف حركتها المعتادة في خمس عشرة دقيقة) وسّعت النطاق ×{factor}: في الأسابيع المختبرة، بعد مثل هذه الحركات صدق النطاق في {before} من المرات، وبعد التوسيع {after}",
   "Its forecasts against the price": "توقعاته مقابل السعر",
   "No forecast of it on record yet: one is kept every quarter hour.": "لا يوجد توقع له في السجل بعد: يُحفظ واحد كل ربع ساعة.",
   "The blue lines are each forecast's likely range and the dotted ones its 80% range, drawn at the moment it was a forecast for; the gold line is the price at each close.": "الخطوط الزرقاء هي النطاق المرجّح لكل توقع والمنقطة نطاقه 80%، مرسومة عند اللحظة التي كان التوقع لها؛ والخط الذهبي هو السعر عند كل إغلاق.",

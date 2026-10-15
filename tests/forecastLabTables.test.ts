@@ -6,7 +6,8 @@ import type { LabFile } from '../shared/forecast/labFile'
 import type { LabHorizon } from '../shared/forecast/labWalkForward'
 import type { Candle } from '../shared/ipc'
 import { QUANTS } from '../src/agents/quantState'
-import { calibrationTable, classesOf, leaderTable, performanceTable, tableCsv, traderTable } from '../src/forecastLab/labTables'
+import { calibrationTable, classesOf, leaderTable, performanceTable, shockTable, tableCsv, traderTable } from '../src/forecastLab/labTables'
+import { noShockRecord } from '../shared/forecast/shock'
 import { buyAndHold, hybridTrades, runComparison } from '../src/forecastLab/strategyComparison'
 
 // THE FORECAST LAB'S TABLES AND ITS COMPARISON (src/forecastLab/; V6 Stage 11): each card's rows from
@@ -53,6 +54,23 @@ describe('the tables', () => {
       ['persistence', 'the floor', 'within its lines'],
       ['gbt', '1.00%', 'DEGRADED']
     ])
+  })
+
+  // V6.1: the rule on Bitcoin's sharp moves at each horizon, whether it is in use and why not, and what it
+  // widened live.
+  it("says the rule on Bitcoin's sharp moves at each horizon, why one is not in use, and what it widened live", () => {
+    const adopted = { ...noShockRecord(), adopted: true, refusal: null, k80: 1.434, k50: 1.41, moments: 14, rows: 561, before: { in80: 0.633, in50: 0.33, pinball: 0.4193 }, after: { in80: 0.793, in50: 0.494, pinball: 0.408 } }
+    const widened = labMetrics([entry(1), entry(-3)])
+    const table = shockTable(
+      { hour1: adopted, minutes5: { ...adopted, adopted: false, refusal: 'pinball' }, hours4: { ...noShockRecord(), refusal: 'too_few', moments: 3, rows: 90 }, hours24: noShockRecord() },
+      { from: T, to: T, horizons: { hour1: { outcomes: 2, variants: { v1: widened, v2: widened, v3: widened, v4: widened }, news: { moved: widened, unmoved: widened }, shock: { widened, unwidened: labMetrics([entry(-3)]) } } }, events: {}, drift: { shocks: 0, overReacting: 0, underReacting: 0, refreshes: 0, byReason: {}, meanChangePct: null } }
+    )
+    expect(table.rows.map((row) => row[0])).toEqual(['5m', '1h', '4h', '24h'])
+    expect(table.rows[1]).toEqual(['1h', 14, 561, '63.3%', '79.3%', '0.4193', '0.4080', 'x1.43 / x1.41', 'yes', 2, '50.0%', '0.0%'])
+    expect(table.rows[0][8]).toBe('no: widening made the pinball loss worse')
+    expect(table.rows[0][9]).toBe(0)
+    expect(table.rows[2].slice(3, 9)).toEqual(['—', '—', '—', '—', '—', 'no: too few moments past the line to fit from'])
+    expect(table.rows[3][8]).toMatch(/^no: no record of Bitcoin's moves/)
   })
 
   it('saves a table as CSV, quoting what needs it', () => {

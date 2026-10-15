@@ -316,7 +316,8 @@ use as soon as they are read back from their files, and the walk forward before 
 verdicts until the refit's own is done; a fit that fails leaves the models and verdicts in use as
 they were and says why. On file in `forecastModels/`: a folder a run with its five horizons' models
 (`<horizon>.json`, about half a megabyte each) and the walk forward's hourly forecasts beside what
-happened (`oos-<horizon>.bin`, in columns), `current.json` naming the run in use and the walk forward
+happened (`oos-<horizon>.bin`, in columns; since V6.1 with Bitcoin's last fifteen minutes at each hour),
+`current.json` naming the run in use and the walk forward
 whose verdicts hold, and `training-YYYY-MM.jsonl`, a line for every fit and walk forward; the run in
 use and the one before it are kept, older ones deleted. On the real ninety days of 39 pairs, on this
 machine, a first fit (227,509 rows) took two minutes and its walk forward five, the window answering
@@ -375,6 +376,26 @@ whose calibrated forecast beat calibrated persistence by most for its class; wit
 NEUTRAL. A walk forward writes its calibration beside its record (`forecastModels/<run>/
 calibration.json`, about 280 KB), read back with its verdicts; a run walked forward before it existed,
 or under another version, is calibrated again from its record at the next start, with nothing fitted.
+
+**After a sharp move of Bitcoin's** (since 15 October 2026; V6.1; `shared/forecast/shock.ts`, measured
+first in `research/rangeLag.ts`). V6's runs found the ranges too narrow when the whole market moved at
+once: after the U.S. inflation report the 4-hour range held 51%, in a sell-off the next night the
+hour's 45%. Most such misses come from moves that begin after a forecast is made, which no range set then
+can know; what is known at its moment is Bitcoin's last fifteen minutes, in its usual moves. Each walk
+forward now keeps it with every row, and each calibration fits, per horizon, two factors -- one for the
+outer pair of levels, one for the inner -- that would have had the rows past 2.5 usual moves held 80% and
+50%. A horizon uses them only where, cross-fitted (each week widened by factors from the other weeks
+alone), its 80% range came nearer 80% and its pinball loss was no worse, from at least eight moments and
+150 rows; calm moments are never touched. Live, Bitcoin's figure is read from its row at each close and
+from its minutes between closes, and its crossing the line makes every pair's forecast again (reason
+`market`). A widened range says so under **Why this range?**, in every language; its record keeps V2's
+own levels, as for a story or a thin book, and the adaptive V2 levels learn from where the close fell
+against those. On the first walk forward of 15 October it held at 15 minutes (71.8% to 80.7% held) and an
+hour (63.3% to 79.3%); on a fit six hours later, at an hour (64.1% to 79.0%) and a day (73.8% to 79.7%),
+and not at 15 minutes, whose loss rose by 0.0002 -- which is why each refit judges it again. The
+Forecast Lab's **After Bitcoin's sharp moves** card says which horizons each refit adopts and why not, and
+how the forecasts it widened held live; a run's report says the same of its span. A walk forward made
+before keeps its ranges until the next refit writes Bitcoin's moves.
 
 **The forecast, live** (since 13 October 2026; the V6 document's §38-43; V6 Stage 7;
 `electron/services/forecastService.ts`, the rules in `shared/forecast/{view,outcome,refresh,aciTable,

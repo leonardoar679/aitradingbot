@@ -14,6 +14,7 @@ import { walkForwardLab, type StoryMarkInput } from '../../shared/forecast/labWa
 import { decodeOos, encodeOos, OOS_VERSION, type OosRecord } from '../../shared/forecast/oosRecord'
 import { buildPanel, type Panel } from '../../shared/forecast/panel'
 import { buildRunCalibration, type RunCalibration } from '../../shared/forecast/runCalibration'
+import { btc15ByTime } from '../../shared/forecast/shock'
 import { promotionsOf, type Promotion } from '../../shared/forecast/training'
 import { finalSplit, foldRows, lastFoldScores, planFolds, rowsFor, scoreRows, type Fold, type ModelScore } from '../../shared/forecast/walkForward'
 
@@ -193,6 +194,9 @@ async function folds(request: Extract<WorkerRequest, { task: 'folds' }>): Promis
   const plan = planFolds(first, last)
   const horizons: FoldsResult['horizons'] = []
   const records = new Map<Horizon, OosRecord>()
+  // Bitcoin's last fifteen minutes at each moment, kept with every row (V6.1): what the calibration's rule
+  // on Bitcoin's sharp moves is fitted on (shared/forecast/shock.ts).
+  const btc15 = btc15ByTime(panel)
   let step = 0
   for (const [hIndex, horizon] of HORIZONS.entries()) {
     const rows = rowsFor(panel, horizon)
@@ -238,7 +242,8 @@ async function folds(request: Extract<WorkerRequest, { task: 'folds' }>): Promis
       y: Float32Array.from(kept, ({ entry }) => panel.y[horizon][entry.row]),
       best: Float32Array.from(kept, ({ entry }) => panel.best[horizon][entry.row]),
       worst: Float32Array.from(kept, ({ entry }) => panel.worst[horizon][entry.row]),
-      quantiles: Float32Array.from(kept.flatMap(({ entry }) => FORECAST_MODELS.flatMap((model) => entry.quantiles[model])))
+      quantiles: Float32Array.from(kept.flatMap(({ entry }) => FORECAST_MODELS.flatMap((model) => entry.quantiles[model]))),
+      btc15: Float32Array.from(kept, ({ entry }) => btc15.get(panel.time[entry.row]) ?? Number.NaN)
     }
     await writeFile(join(dir, `oos-${horizon}.bin`), encodeOos(record))
     records.set(horizon, record)

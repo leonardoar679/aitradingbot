@@ -259,8 +259,20 @@ export async function getForecastLab(): Promise<ForecastLabView> {
     live: await readLive(nowSec),
     liveDays: LAB_LINES.liveDays,
     classes: Date.now() - classes.at < CLASSES_MS ? classes.records : await readClasses(),
-    refit: { on: settings.refitNightly, nextAt: training.nextRefitAt, trainingStatus: training.status, lastFitAt: training.current?.fittedAt ?? null }
+    refit: { on: settings.refitNightly, nextAt: training.nextRefitAt, trainingStatus: training.status, lastFitAt: training.current?.fittedAt ?? null },
+    shock: shockRulesInUse()
   }
+}
+
+/** The calibration in use's rule on Bitcoin's sharp moves, by horizon (V6.1). */
+function shockRulesInUse(): ForecastLabView['shock'] {
+  const calibration = currentForecastCalibration()
+  const out: ForecastLabView['shock'] = {}
+  for (const horizon of HORIZONS) {
+    const rule = calibration?.horizons[horizon]?.shock
+    if (rule !== undefined) out[horizon] = rule
+  }
+  return out
 }
 
 async function replayRows(horizon: Horizon): Promise<ReplayRow[]> {

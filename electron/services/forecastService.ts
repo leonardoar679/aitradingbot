@@ -27,6 +27,7 @@ import { makePrediction, type PredictionNews, type PricePrediction } from '../..
 import { predictionChangedNotice, stepCall, type CallTrack } from '../../shared/forecast/predictionChange'
 import { funnel, rankOf, type ForecastRanking, type RankedForecast } from '../../shared/forecast/ranking'
 import { refreshReasons, type RefreshReason } from '../../shared/forecast/refresh'
+import { SHOCK_LINES, liveBtc15 } from '../../shared/forecast/shock'
 import { cellOf } from '../../shared/forecast/runCalibration'
 import { decideTrade, liveOfBook, type TradeDecision } from '../../shared/forecast/tradeDecision'
 import { breakoutAt, classKeyOf, setupOf, type ClassVerdict } from '../../shared/forecast/opportunityClass'
@@ -149,6 +150,7 @@ const RV24 = FEATURE_NAMES.indexOf('rv_24h')
 const RATIO = FEATURE_NAMES.indexOf('rv_ratio')
 const Z1H = FEATURE_NAMES.indexOf('z_1h')
 const BREADTH1H = FEATURE_NAMES.indexOf('breadth_1h')
+const Z15 = FEATURE_NAMES.indexOf('z_15m')
 const VOL1H = FEATURE_NAMES.indexOf('vol_ratio_1h')
 /** The stake an execution's quality is read for, in the quote. */
 const RANKING_STAKE = 100
@@ -223,6 +225,23 @@ function newsFor(symbol: string): PredictionNews | undefined {
   return { ticker, stories, library: feed.impact ?? [], readings, skill: newsSkill }
 }
 
+/** Bitcoin's last fifteen minutes in its usual moves (V6.1, shared/forecast/shock.ts): its z_15m at the
+ * last close, with the day's volatility it is measured by; and, read from its live minutes, the latest. */
+let closeBtc: { btc15: number | null; rv24h: number | null } = { btc15: null, rv24h: null }
+let liveBtc: { btc15: number; atMs: number } | null = null
+/** How long the live reading stands for the close's: the stream reads it every five seconds. */
+const LIVE_BTC_MS = 15_000
+
+function currentBtc15(nowMs: number): number | null {
+  return liveBtc !== null && nowMs - liveBtc.atMs <= LIVE_BTC_MS ? liveBtc.btc15 : closeBtc.btc15
+}
+
+/** Whether any horizon's rule on Bitcoin's sharp moves is in use: without one, its crossing changes nothing. */
+function shockRuleInUse(): boolean {
+  const calibration = currentForecastCalibration()
+  return calibration !== null && HORIZONS.some((horizon) => calibration.horizons[horizon]?.shock?.adopted === true)
+}
+
 function predictionFor(symbol: string, nowMs: number): PricePrediction | null {
   const input = inputs.get(symbol)
   const calibration = currentForecastCalibration()
@@ -244,6 +263,7 @@ function predictionFor(symbol: string, nowMs: number): PricePrediction | null {
     calibration,
     levels: (horizon, variant, cell) => levelsOf(aci, cellKey(horizon, variant, cell)),
     news: newsFor(symbol),
+    btc15: currentBtc15(nowMs),
     runId: current.runId,
     foldsRunId: calibration.runId
   })
@@ -369,7 +389,9 @@ async function settle(closedAt: number): Promise<void> {
   if (aci === null || aci.calibrationRun !== calibration.runId) aci = emptyAciTable(calibration.runId)
   const steps: { key: CellKey; below: boolean[] }[] = []
   for (const line of measured) {
-    steps.push({ key: cellKey(line.h, 'v2', line.cell), below: [...line.below].map((flag) => flag === '1') })
+    // V2's levels learn from V2's own, where the shown were moved off them (V6.1): a story's, a thin book's
+    // or Bitcoin's sharp move's widening teaches them nothing.
+    steps.push({ key: cellKey(line.h, 'v2', line.cell), below: [...(line.v2below ?? line.below)].map((flag) => flag === '1') })
     if (line.v1below.length === 5) steps.push({ key: cellKey(line.h, 'v1', line.cell), below: [...line.v1below].map((flag) => flag === '1') })
     // The news-moved forecasts' levels learn only from the outcomes a story moved.
     if (line.v3below !== undefined) steps.push({ key: cellKey(line.h, 'v3', line.cell), below: [...line.v3below].map((flag) => flag === '1') })
@@ -416,10 +438,12 @@ async function pass(closedAt: number): Promise<void> {
     return
   }
   inputs.clear()
+  closeBtc = { btc15: null, rv24h: null }
   for (const [symbol, series] of market) {
     // A row needs the bar that closed at the close (featuresAt); its close is the forecast's price.
     const row = featuresAt({ symbol, series, btcH1: btc.h1, cross, tSec: closedAt })
     if (row === null) continue
+    if (symbol === 'BTCUSDT') closeBtc = { btc15: row[Z15], rv24h: row[RV24] }
     const at = endsAt(series, closedAt).m5
     const bar = series.m5[at - 1]
     const models: PairInput['models'] = {}
@@ -452,6 +476,9 @@ async function pass(closedAt: number): Promise<void> {
   const nowMs = Date.now()
   latest.clear()
   lastRefreshAt.clear()
+  // A close reads Bitcoin's sharp move from its own bars, as the walk forward did (V6.1); the stream's reading
+  // starts again from it, so that a crossing after the close makes the forecasts again.
+  liveBtc = null
   for (const symbol of inputs.keys()) {
     const prediction = predictionFor(symbol, nowMs)
     if (prediction !== null) latest.set(symbol, prediction)
@@ -529,7 +556,7 @@ async function refresh(symbol: string, reasons: RefreshReason[], nowMs: number):
 }
 
 /** Whether a pair's forecast should be made again now, and if so made again. */
-async function consider(symbol: string, signals: { newsImpact?: number | null; newEvent?: boolean; minuteVolume?: number | null }, nowMs: number): Promise<RefreshReason[]> {
+async function consider(symbol: string, signals: { newsImpact?: number | null; newEvent?: boolean; minuteVolume?: number | null; marketShock?: boolean }, nowMs: number): Promise<RefreshReason[]> {
   const prediction = latest.get(symbol)
   const input = inputs.get(symbol)
   if (prediction === undefined || input === undefined || passing !== null) return []
@@ -547,7 +574,8 @@ async function consider(symbol: string, signals: { newsImpact?: number | null; n
     livePrice: liveBook(symbol, nowMs)?.mid ?? null,
     band: lead === undefined ? null : [lead.quantilePrices[0], lead.quantilePrices[4]],
     minuteVolume: signals.minuteVolume,
-    usualMinuteVolume: input.usualMinuteVolume
+    usualMinuteVolume: input.usualMinuteVolume,
+    marketShock: signals.marketShock
   })
   if (reasons.length > 0) await refresh(symbol, reasons, nowMs)
   return reasons
@@ -592,6 +620,14 @@ export async function forecastScannerSignal(scanner: ScannerSignal, nowMs: numbe
 /** The live stream: a pair whose price left its forecast's 80% range, or whose minute forming has
  * traded three times its usual minute, has its forecast made again. */
 export async function forecastLiveSignal(live: LiveState, nowMs: number = Date.now()): Promise<void> {
+  // Bitcoin's sharp move (V6.1): read from its minutes, which are always streamed; its crossing the line
+  // since the last reading -- the stream's, however old, or the close's before any -- makes every pair's
+  // forecast again, where a horizon's rule is in use to widen them.
+  const before = liveBtc !== null ? liveBtc.btc15 : closeBtc.btc15
+  const btc15 = closeBtc.rv24h === null ? null : liveBtc15(live.btcMinutes, closeBtc.rv24h)
+  if (btc15 !== null) liveBtc = { btc15, atMs: nowMs }
+  const crossed = btc15 !== null && Math.abs(btc15) >= SHOCK_LINES.line && (before === null || Math.abs(before) < SHOCK_LINES.line)
+  if (crossed && shockRuleInUse()) for (const symbol of [...latest.keys()]) await consider(symbol, { marketShock: true }, nowMs)
   for (const symbol of Object.keys(live.books)) {
     if (!latest.has(symbol)) continue
     const minutes = live.minutes[symbol] ?? []
@@ -786,6 +822,8 @@ export const forecastForTest = {
     lastClosedAt = null
     started = false
     passing = null
+    closeBtc = { btc15: null, rv24h: null }
+    liveBtc = null
     liveState = (): LiveState | null => null
     listeners.clear()
   }

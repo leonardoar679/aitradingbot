@@ -274,6 +274,21 @@ describe('the live record (§49)', () => {
     expect(live.drift.byReason).toEqual({ NEWS: 1 })
     expect(live.drift.meanChangePct).toBeCloseTo(0.4, 12)
     expect([live.from, live.to]).toEqual([T, T + 900])
+    // None widened for Bitcoin's move: no such part.
+    expect(hour.shock).toBeUndefined()
+  })
+
+  // V6.1: the forecasts Bitcoin's sharp move widened, as shown, and by V2's own levels beside them.
+  it("reads the forecasts Bitcoin's sharp move widened, and how V2's own levels would have held them", () => {
+    const widened = horizonLine({ q: [-4, -2, 0.5, 3, 5], v2: [-2, -1, 0.5, 2, 3], shock: [-3.1, 1.6, 1.4] })
+    const lines = [prediction('a', T, widened), prediction('b', T + 900, widened), prediction('c', T + 1800, horizonLine())]
+    // -3 inside the widened 80% range, outside V2's; 1 inside both; 0.3 on the unwidened forecast.
+    const hour = liveLab(lines, [outcome('a', T, -3), outcome('b', T + 900, 1), outcome('c', T + 1800, 0.3)]).horizons.hour1!
+    expect(hour.outcomes).toBe(3)
+    expect(hour.shock!.widened.n).toBe(2)
+    expect(hour.shock!.widened.coverage80).toBe(1)
+    expect(hour.shock!.unwidened.n).toBe(2)
+    expect(hour.shock!.unwidened.coverage80).toBe(0.5)
   })
 })
 

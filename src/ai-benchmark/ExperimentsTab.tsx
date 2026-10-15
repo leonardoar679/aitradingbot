@@ -24,7 +24,7 @@ function forecastCsvLines(section: ForecastRunSection, quote: (value: string | n
   for (const [horizon, row] of Object.entries(section.horizons)) {
     if (row === undefined) continue
     const m = row.metrics
-    lines.push(['forecast horizon', HORIZON_WORDS[horizon] ?? horizon, row.outcomes, `direction ${share(m.direction)}; in 50% ${share(m.coverage50)}; in 80% ${share(m.coverage80)}; median error ${pctOf(m.mae)}; bias ${pctOf(m.bias)}; bull ${outOf(row.bull.right, row.bull.calls)}; bear ${outOf(row.bear.right, row.bear.calls)}; story-moved ${inRange(row.news.moved)}; the rest ${inRange(row.news.unmoved)}`].map(quote).join(','))
+    lines.push(['forecast horizon', HORIZON_WORDS[horizon] ?? horizon, row.outcomes, `direction ${share(m.direction)}; in 50% ${share(m.coverage50)}; in 80% ${share(m.coverage80)}; median error ${pctOf(m.mae)}; bias ${pctOf(m.bias)}; bull ${outOf(row.bull.right, row.bull.calls)}; bear ${outOf(row.bear.right, row.bear.calls)}; story-moved ${inRange(row.news.moved)}; the rest ${inRange(row.news.unmoved)}${row.shock === undefined ? '' : `; widened for Bitcoin's move ${inRange(row.shock.widened)}, unwidened ${share(row.shock.unwidened.coverage80)} in 80%`}`].map(quote).join(','))
   }
   for (const [horizon, row] of Object.entries(section.horizons)) {
     if (row === undefined || row.variants === undefined) continue

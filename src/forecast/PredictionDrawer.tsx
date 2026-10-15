@@ -46,7 +46,7 @@ export function PredictionDrawer({
   onPrepareOrder?: (proposal: AiOrderProposal) => void
 }): React.JSX.Element {
   const i18n = useI18n()
-  const { t, pctPlain, utcTime } = i18n
+  const { t, pctPlain, utcTime, num } = i18n
   const pct = (value: number | null | undefined): string => (value === null || value === undefined ? '—' : signedPct(value, 2, i18n))
   const nowSec = useNowSec(true, 5_000)
   const targetLevel = useRiskTarget()
@@ -257,6 +257,16 @@ export function PredictionDrawer({
             ))}
             {story !== null && (story.widenPct > 0 || story.widenShare > 0) && <li style={line}>{t('a story about the coin, which widened it')}</li>}
             {leadRange.spreadStretch > 1 && <li style={line}>{t('a thin book: its spread widened it {share}', { share: pctPlain(Math.round((leadRange.spreadStretch - 1) * 100), 0) })}</li>}
+            {leadRange.shock !== null && leadRange.shock !== undefined && leadRange.shock.held !== null && (
+              <li style={line}>
+                {t("Bitcoin's sharp move ({moves} usual moves in fifteen minutes) widened it ×{factor}: on the weeks tested, after such moves it held {before} of the time, widened {after}", {
+                  moves: num(Math.abs(leadRange.shock.btc15), 1, 1),
+                  factor: num(leadRange.shock.k80, 2, 2),
+                  before: pctPlain(Math.round(leadRange.shock.held.before * 100), 0),
+                  after: pctPlain(Math.round(leadRange.shock.held.after * 100), 0)
+                })}
+              </li>
+            )}
           </ol>
         </div>
       )}

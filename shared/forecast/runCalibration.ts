@@ -7,6 +7,7 @@ import type { IsotonicModel } from './ml/isotonic'
 import { QUANTILE_LEVELS, meanPinball } from './ml/quantile'
 import type { ForecastModelId } from './models'
 import { oosQuantiles, type OosRecord } from './oosRecord'
+import { noShockRecord, shockRuleOf, type ShockRule } from './shock'
 import { usualMove } from './targets'
 import type { Promotion } from './training'
 
@@ -31,8 +32,13 @@ import type { Promotion } from './training'
 // and V2, the ensemble of every market model. The news (V3) and the AI (V4) adjust V2 live (V6 Stage
 // 8) and are calibrated on the live record as it grows. Persistence is calibrated the same way, as the
 // floor the honest skill is measured against.
+//
+// AND THE RULE ON BITCOIN'S SHARP MOVES (V6.1, shared/forecast/shock.ts): fitted on the forecast shown (V2)
+// as it was scored out of sample, and adopted per horizon only where it held cross-fitted.
 
-export const RUN_CALIBRATION_VERSION = 'run-calibration-v2'
+/** run-calibration-v3 (V6.1): each horizon carries its rule on Bitcoin's sharp moves. A v2 file is made
+ * again from its record at the next start. */
+export const RUN_CALIBRATION_VERSION = 'run-calibration-v3'
 export const VARIANTS = ['v1', 'v2'] as const
 export type VariantId = (typeof VARIANTS)[number]
 /** The four of §49: V3 (+news) and V4 (+news +AI) are made live from V2 (shared/forecast/newsEffect.ts). */
@@ -85,6 +91,8 @@ export interface HorizonCalibration {
   horizon: Horizon
   rows: number
   variants: Record<VariantId, VariantCalibration>
+  /** The rule on Bitcoin's sharp moves (V6.1); absent on a calibration made before it. */
+  shock?: ShockRule
 }
 
 export interface RunCalibration {
@@ -281,18 +289,19 @@ export function scoreOutOfSample(rows: readonly Row[], members: VariantId, promo
   return scored
 }
 
-function variantOf(rows: readonly Row[], members: VariantId, promoted: ReadonlySet<ForecastModelId>): VariantCalibration {
+function variantOf(rows: readonly Row[], members: VariantId, promoted: ReadonlySet<ForecastModelId>): { calibration: VariantCalibration; scored: ScoredRow[] } {
   const scored = scoreOutOfSample(rows, members, promoted)
   const byClass: Partial<Record<PairClass, HonestScore>> = {}
   for (const [cls, mine] of byClassOf(scored)) {
     const score = honestScore(mine)
     if (score !== null) byClass[cls] = score
   }
-  return {
+  const calibration = {
     ...fit(rows, members, promoted),
     pUp: fitPUp(scored.map((entry) => ({ raw: entry.raw, up: entry.z > 0 }))),
     honest: { pooled: honestScore(scored), byClass, weeks: [...new Set(scored.map((entry) => entry.week))].sort((a, b) => a - b) }
   }
+  return { calibration, scored }
 }
 
 /** A run's calibration from its walk forward's records and the verdicts on them. */
@@ -305,8 +314,16 @@ export function buildRunCalibration(records: ReadonlyMap<Horizon, OosRecord>, pr
     if (rows.length < ENSEMBLE_LINES.minCellRows) continue
     const promoted = new Set(promotions.filter((entry) => entry.horizon === horizon && entry.promoted).map((entry) => entry.model))
     const variants = {} as Record<VariantId, VariantCalibration>
-    for (const variant of VARIANTS) variants[variant] = variantOf(rows, variant, promoted)
-    horizons[horizon] = { horizon, rows: rows.length, variants }
+    let shown: ScoredRow[] = []
+    for (const variant of VARIANTS) {
+      const made = variantOf(rows, variant, promoted)
+      variants[variant] = made.calibration
+      if (variant === 'v2') shown = made.scored
+    }
+    const btc15 = record.btc15
+    const shock =
+      btc15 === undefined ? noShockRecord() : shockRuleOf(shown.map((entry) => ({ z: entry.z, q: entry.quantiles, week: entry.week, t: record.time[entry.at!], btc15: btc15[entry.at!] })))
+    horizons[horizon] = { horizon, rows: rows.length, variants, shock }
   }
   return { version: RUN_CALIBRATION_VERSION, runId, horizons }
 }

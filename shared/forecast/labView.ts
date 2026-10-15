@@ -3,6 +3,7 @@ import type { LeaderRow, LiveLab } from './lab'
 import type { ClassRecord } from './opportunityClass'
 import type { LabFile } from './labFile'
 import type { ReplayRow } from './labWalkForward'
+import type { ShockRule } from './shock'
 import type { WorkerProgress } from './status'
 
 // WHAT THE FORECAST LAB PAGE IS SHOWN (V6 Stage 11, 13 October 2026), as the main process's
@@ -27,6 +28,8 @@ export interface ForecastLabView {
   /** Every opportunity class the replay or the trader's live paper holds, judged (V6 Stage 12). */
   classes: ClassRecord[]
   refit: { on: boolean; nextAt: number | null; trainingStatus: string; lastFitAt: number | null }
+  /** The rule on Bitcoin's sharp moves of the calibration in use, by horizon (V6.1); empty before one. */
+  shock: Partial<Record<Horizon, ShockRule>>
 }
 
 export interface ForecastReplay {

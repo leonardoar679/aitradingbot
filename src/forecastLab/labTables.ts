@@ -2,6 +2,7 @@ import { HORIZONS, PAIR_CLASSES, type Horizon, type PairClass } from '../../shar
 import { LIVE_VARIANTS, type LabErrorKind, type LabEvent, type LabMetrics, type LeaderRow, type LiveLab, type TraderStats } from '../../shared/forecast/lab'
 import type { LabFile } from '../../shared/forecast/labFile'
 import { CLASS_LINES, type ClassRecord } from '../../shared/forecast/opportunityClass'
+import type { ShockRefusal, ShockRule } from '../../shared/forecast/shock'
 
 // THE FORECAST LAB'S TABLES (V6 Stage 11, 13 October 2026): each card's headers and rows, from the Lab's
 // figures, the same for the page and its CSV. A share is said in percent, a move in percent with its
@@ -141,6 +142,39 @@ export function liveTable(live: LiveLab): LabTableData {
 }
 
 /** Every model at every horizon (§103-105). */
+const SHOCK_REFUSAL: Record<ShockRefusal, string> = {
+  no_record: 'no record of Bitcoin\'s moves: a walk forward from before the rule, until the next refit',
+  too_few: 'too few moments past the line to fit from',
+  coverage: 'widening did not bring the 80% range nearer 80%',
+  pinball: 'widening made the pinball loss worse'
+}
+
+/** The rule on Bitcoin's sharp moves at each horizon (V6.1): what the walk forward found past the line,
+ * cross-fitted, whether it is in use and why not; and the live record's forecasts it widened. */
+export function shockTable(rules: Partial<Record<Horizon, ShockRule>>, live: LiveLab): LabTableData {
+  return {
+    headers: ['Horizon', 'Moments', 'Hours', 'In the 80% range, as forecast', 'Widened', 'Pinball, as forecast', 'Widened', 'Factors (80% / 50%)', 'In use', 'Live: widened', 'In the 80% range', 'Unwidened'],
+    rows: HORIZONS.filter((horizon) => rules[horizon] !== undefined).map((horizon) => {
+      const rule = rules[horizon]!
+      const widened = live.horizons[horizon]?.shock
+      return [
+        HORIZON_NAME[horizon],
+        rule.moments,
+        rule.rows,
+        share(rule.before?.in80),
+        share(rule.after?.in80),
+        plain(rule.before?.pinball, 4),
+        plain(rule.after?.pinball, 4),
+        rule.refusal === 'too_few' || rule.refusal === 'no_record' ? '—' : `x${rule.k80.toFixed(2)} / x${rule.k50.toFixed(2)}`,
+        rule.adopted ? 'yes' : `no: ${SHOCK_REFUSAL[rule.refusal ?? 'too_few']}`,
+        widened?.widened.n ?? 0,
+        share(widened?.widened.coverage80),
+        share(widened?.unwidened.coverage80)
+      ]
+    })
+  }
+}
+
 export function leaderTable(rows: readonly LeaderRow[]): LabTableData {
   return {
     headers: ['Horizon', 'Model', 'Outcomes', 'Pinball', 'Skill over persistence', 'In the 80% range', 'Median\'s way right', 'Weight', 'Promoted', 'Last week'],

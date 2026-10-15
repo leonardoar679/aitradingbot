@@ -10,6 +10,7 @@ import { QUANTILE_LEVELS } from '../shared/forecast/ml/quantile'
 import type { FlatTree } from '../shared/forecast/ml/tree'
 import { MODELS_VERSION, type FittedHorizon } from '../shared/forecast/models'
 import { buildRunCalibration, type RunCalibration } from '../shared/forecast/runCalibration'
+import { noShockRecord } from '../shared/forecast/shock'
 import { emptyLiveState, type LiveState } from '../shared/liveMarket'
 import { promoted, recordOf } from './forecastRecords'
 
@@ -130,6 +131,26 @@ const CALIBRATION: RunCalibration = buildRunCalibration(
 const MARKET = new Map(SYMBOLS.map((symbol, index) => [symbol, walk(11 + index * 17, [60_000, 2_500, 150, 0.6][index])]))
 /** A close on the hour, thirty days in. */
 const HOUR = T0 + 30 * 86_400
+
+/** The calibration with an adopted rule on Bitcoin's sharp moves at the horizons given (V6.1). */
+function withShockRule(horizons: Horizon[], k80 = 1.5, k50 = 1.25): RunCalibration {
+  const rule = { ...noShockRecord(), adopted: true, refusal: null, k80, k50, moments: 12, rows: 400, before: { in80: 0.6, in50: 0.35, pinball: 0.5 }, after: { in80: 0.79, in50: 0.49, pinball: 0.47 } }
+  return { ...CALIBRATION, horizons: Object.fromEntries(Object.entries(CALIBRATION.horizons).map(([horizon, entry]) => [horizon, horizons.includes(horizon as Horizon) ? { ...entry, shock: rule } : entry])) }
+}
+
+/** The market with Bitcoin's bars falling 3% over the fifteen minutes to `close` (V6.1). */
+function btcFalling(close: number): Map<string, ForecastBar[]> {
+  const scale = new Map([
+    [close - 900, 0.99],
+    [close - 600, 0.98],
+    [close - 300, 0.97]
+  ])
+  const btc = MARKET.get('BTCUSDT')!.map((bar) => {
+    const k = scale.get(bar.time)
+    return k === undefined ? bar : { ...bar, open: bar.open * k, high: bar.high * k, low: bar.low * k, close: bar.close * k }
+  })
+  return new Map([...MARKET, ['BTCUSDT', btc]])
+}
 
 const dir = (): string => join(process.env.AI_TEST_USER_DATA as string, 'forecasts')
 const lines = (name: string): Record<string, unknown>[] => {
@@ -289,6 +310,37 @@ describe('the record', () => {
     expect(live.getForecastEngineState()).toMatchObject({ outcomes: 8, missing: 0 })
   })
 
+  // V6.1: Bitcoin's own last fifteen minutes at the close widen the horizons whose rule is in use; the record
+  // keeps V2's own levels, and the adaptive V2 levels learn from where the close fell against those.
+  it("widens every pair's ranges past Bitcoin's line where a horizon's rule is in use, and teaches V2's levels from V2's own", async () => {
+    fake.calibration = withShockRule(['hour1', 'minutes5'], 3, 3)
+    const calm = await engine()
+    await closeAt(calm, HOUR)
+    expect(calm.forecastOf('SOLUSDT')!.horizons.hour1!.shock).toBeNull()
+    fake.market = btcFalling(HOUR)
+    process.env.AI_TEST_USER_DATA = mkdtempSync(join(tmpdir(), 'forecast-live-'))
+    const live = await engine()
+    await closeAt(live, HOUR)
+    for (const symbol of SYMBOLS) {
+      const hour1 = live.forecastOf(symbol)!.horizons.hour1!
+      expect(hour1.shock).toMatchObject({ k80: 3, k50: 3 })
+      expect(hour1.shock!.btc15).toBeLessThan(-2.5)
+      expect(live.forecastOf(symbol)!.horizons.minutes15!.shock).toBeNull()
+    }
+    const recorded = lines(`predictions-${month}.jsonl`).find((line) => line.pair === 'SOLUSDT')!.h as Record<string, { v2?: number[]; shock?: number[] }>
+    expect(recorded.hour1.v2).toHaveLength(5)
+    expect(recorded.hour1.shock).toHaveLength(3)
+    expect(recorded.minutes15.v2).toBeUndefined()
+    await closeAt(live, HOUR + 300)
+    const outcomes = lines(`outcomes-${month}.jsonl`).filter((line) => line.h === 'minutes5')
+    expect(outcomes).toHaveLength(4)
+    const shareOf = (key: 'below' | 'v2below'): number[] => [0, 1, 2, 3, 4].map((level) => outcomes.filter((line) => (line[key] as string)[level] === '1').length / outcomes.length)
+    // The widening moved where the closes fell against the shown levels: V2's learn from V2's own.
+    expect(shareOf('v2below')).not.toEqual(shareOf('below'))
+    const aci = JSON.parse(readFileSync(join(dir(), 'aci.json'), 'utf-8'))
+    expect(aci.levels['minutes5/v2/pooled']).toEqual(aciUpdate([0.1, 0.25, 0.5, 0.75, 0.9], shareOf('v2below')))
+  })
+
   it('reads each forecast at the levels the adaptive step keeps for its cell', async () => {
     const live = await engine()
     await closeAt(live, HOUR)
@@ -413,6 +465,67 @@ describe('between closes', () => {
       ['ETHUSDT', ['event']],
       ['BTCUSDT', ['band']]
     ])
+  })
+
+  // V6.1: Bitcoin's minutes crossing the sharp-move line make every pair's forecast again, where a rule is
+  // in use to widen them, once; without one, nothing.
+  it("forecasts every pair again when Bitcoin's live minutes cross its sharp-move line, where a rule is in use", async () => {
+    const sharp = (nowMs: number): LiveState['btcMinutes'] => {
+      const last = Math.floor(nowMs / 60_000) * 60
+      return Array.from({ length: 20 }, (_, k) => ({ time: last - (19 - k) * 60, open: 60_000, high: 60_000, low: 60_000, close: k === 19 ? 58_200 : 60_000, volume: 1, closed: k < 19 }))
+    }
+    const marketRefreshes = (): unknown[][] => lines(`predictions-${month}.jsonl`).filter((line) => line.why === 'refresh' && (line.reasons as string[]).includes('market')).map((line) => [line.pair])
+    const without = emptyLiveState()
+    const plain = await engine({ live: without })
+    await closeAt(plain, HOUR)
+    const at = plain.forecastOf('SOLUSDT')!.generatedAt + 1000
+    without.btcMinutes = sharp(at)
+    await plain.forecastLiveSignal(without, at)
+    expect(marketRefreshes()).toEqual([])
+
+    fake.calibration = withShockRule(['hour1'])
+    process.env.AI_TEST_USER_DATA = mkdtempSync(join(tmpdir(), 'forecast-live-'))
+    const live = emptyLiveState()
+    const mod = await engine({ live })
+    await closeAt(mod, HOUR)
+    const now = mod.forecastOf('SOLUSDT')!.generatedAt + 1000
+    expect(mod.forecastOf('SOLUSDT')!.horizons.hour1!.shock).toBeNull()
+    live.btcMinutes = sharp(now)
+    await mod.forecastLiveSignal(live, now)
+    expect(marketRefreshes().sort()).toEqual([...SYMBOLS].sort().map((pair) => [pair]))
+    expect(mod.forecastOf('SOLUSDT')!.horizons.hour1!.shock).toMatchObject({ k80: 1.5, k50: 1.25 })
+    expect(mod.forecastOf('SOLUSDT')!.horizons.hour1!.shock!.btc15).toBeLessThan(-2.5)
+    // A coin made again for another reason a minute on, the stream silent since: its reading is old, and the
+    // close's, calm, is read.
+    await mod.forecastScannerSignal({ recentEvents: [{ id: 'binance:SOLUSDT:9', symbol: 'SOLUSDT' }] }, now + 61_000)
+    expect(lines(`predictions-${month}.jsonl`).filter((line) => line.why === 'refresh' && line.pair === 'SOLUSDT').map((line) => line.reasons)).toEqual([['market'], ['event']])
+    expect(mod.forecastOf('SOLUSDT')!.horizons.hour1!.shock).toBeNull()
+    // Still past the line a minute on, however long since the last reading: no crossing, nothing made again.
+    await mod.forecastLiveSignal(live, now + 61_000)
+    expect(marketRefreshes()).toHaveLength(SYMBOLS.length)
+    // Back under it, and past it again: a crossing.
+    live.btcMinutes = live.btcMinutes.map((minute) => ({ ...minute, close: 60_000 }))
+    await mod.forecastLiveSignal(live, now + 62_000)
+    live.btcMinutes = sharp(now + 123_000)
+    await mod.forecastLiveSignal(live, now + 123_000)
+    expect(marketRefreshes()).toHaveLength(2 * SYMBOLS.length)
+    // The next close, the stream silent since: its reading is old, and Bitcoin's own bars, calm, say.
+    vi.setSystemTime((HOUR + 310) * 1000)
+    await closeAt(mod, HOUR + 300)
+    expect(mod.forecastOf('SOLUSDT')!.barTime).toBe(HOUR + 300)
+    expect(mod.forecastOf('SOLUSDT')!.horizons.hour1!.shock).toBeNull()
+    // A close reads Bitcoin from its own bars, whatever the stream said a moment before; the stream past
+    // the line after it is a crossing.
+    vi.setSystemTime((HOUR + 605) * 1000)
+    live.btcMinutes = sharp((HOUR + 605) * 1000)
+    await mod.forecastLiveSignal(live, (HOUR + 605) * 1000)
+    expect(marketRefreshes()).toHaveLength(3 * SYMBOLS.length)
+    vi.setSystemTime((HOUR + 606) * 1000)
+    await closeAt(mod, HOUR + 600)
+    expect(mod.forecastOf('SOLUSDT')!.horizons.hour1!.shock).toBeNull()
+    await mod.forecastLiveSignal(live, (HOUR + 607) * 1000)
+    expect(marketRefreshes()).toHaveLength(4 * SYMBOLS.length)
+    expect(mod.forecastOf('SOLUSDT')!.horizons.hour1!.shock).not.toBeNull()
   })
 })
 

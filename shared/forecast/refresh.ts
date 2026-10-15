@@ -5,7 +5,9 @@
 // - a story of impact 70 or more names the coin;
 // - the scanner raised an event on it;
 // - the live price left the forecast's 80% range at its lead horizon (it is invalidated);
-// - a volume shock: the minute forming has traded three times the pair's usual minute.
+// - a volume shock: the minute forming has traded three times the pair's usual minute;
+// - Bitcoin's last fifteen minutes crossed the line its sharp moves widen the ranges at (V6.1,
+//   shared/forecast/shock.ts): every pair, since the ranges it widens are every pair's.
 // At most once a minute a pair, so that a busy story does not forecast a coin sixty times an hour.
 // A change of the market's regime is read from the bars, so it is a close's, and every pair is
 // forecast then anyway.
@@ -16,7 +18,7 @@ export const REFRESH_LINES = {
   volumeShock: 3
 } as const
 
-export type RefreshReason = 'news' | 'event' | 'band' | 'volume'
+export type RefreshReason = 'news' | 'event' | 'band' | 'volume' | 'market'
 
 export interface RefreshCheck {
   nowMs: number
@@ -32,6 +34,8 @@ export interface RefreshCheck {
   /** The minute forming's volume and the pair's usual minute's. */
   minuteVolume?: number | null
   usualMinuteVolume?: number | null
+  /** Whether Bitcoin's last fifteen minutes have just crossed the sharp-move line (V6.1). */
+  marketShock?: boolean
 }
 
 /** Why a pair's forecast should be made again now; none within a minute of the last time. */
@@ -45,5 +49,6 @@ export function refreshReasons(check: RefreshCheck): RefreshReason[] {
   const volume = check.minuteVolume
   const usual = check.usualMinuteVolume
   if (volume !== null && volume !== undefined && usual !== null && usual !== undefined && usual > 0 && volume >= REFRESH_LINES.volumeShock * usual) out.push('volume')
+  if (check.marketShock === true) out.push('market')
   return out
 }

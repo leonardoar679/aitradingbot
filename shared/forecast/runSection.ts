@@ -55,6 +55,8 @@ export interface RunHorizon {
   bear: { calls: number; right: number }
   /** The forecasts a story moved, and the rest. */
   news: { moved: LabMetrics; unmoved: LabMetrics }
+  /** The forecasts Bitcoin's sharp move widened, and the same by V2's own levels (V6.1); absent where none. */
+  shock?: { widened: LabMetrics; unwidened: LabMetrics }
 }
 
 /** One forecast at its lead horizon, and how it came out where it has. */
@@ -193,7 +195,8 @@ export function forecastRunSectionOf(input: ForecastRunInput): ForecastRunSectio
       variants: read.variants,
       bull: { calls: bull.length, right: bull.filter((line) => line.move > 0).length },
       bear: { calls: bear.length, right: bear.filter((line) => line.move < 0).length },
-      news: read.news
+      news: read.news,
+      ...(read.shock === undefined ? {} : { shock: read.shock })
     }
   }
 

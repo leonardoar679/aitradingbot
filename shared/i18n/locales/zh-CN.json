@@ -459,6 +459,7 @@
   "What moved the boosted model's reading of the move's size most:": "对提升树模型判断波动幅度影响最大的因素：",
   "a story about the coin, which widened it": "一条关于该币的新闻，使区间变宽",
   "a thin book: its spread widened it {share}": "订单簿较薄：其价差使区间变宽了 {share}",
+  "Bitcoin's sharp move ({moves} usual moves in fifteen minutes) widened it ×{factor}: on the weeks tested, after such moves it held {before} of the time, widened {after}": "比特币急剧波动（十五分钟内 {moves} 个常规波动）使区间变宽 ×{factor}：在测试的几周里，此类波动之后区间覆盖了 {before} 的情况，变宽后为 {after}",
   "Its forecasts against the price": "其预测与价格对比",
   "No forecast of it on record yet: one is kept every quarter hour.": "还没有它的预测记录：每刻钟保存一次。",
   "The blue lines are each forecast's likely range and the dotted ones its 80% range, drawn at the moment it was a forecast for; the gold line is the price at each close.": "蓝线是每次预测的可能区间，虚线是其 80% 区间，画在它所预测的那个时刻；金线是每次收盘的价格。",

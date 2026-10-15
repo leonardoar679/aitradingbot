@@ -90,6 +90,8 @@ export interface LabCase {
   kinds?: readonly string[]
   /** The market's regime at it (V6 Stage 12): a trade's setup reads it. */
   regime?: MarketRegime | null
+  /** Whether Bitcoin's sharp move widened the forecast shown (V6.1). */
+  shock?: boolean
   /** Its pinball loss in usual moves, and persistence's on the same outcome (the walk forward). */
   pinballZ?: number
   floorPinballZ?: number
@@ -379,6 +381,9 @@ export interface LiveLabHorizon {
   variants: Record<LiveVariant, LabMetrics>
   /** The shown forecast where a story moved it, and where none did. */
   news: { moved: LabMetrics; unmoved: LabMetrics }
+  /** The forecasts Bitcoin's sharp move widened (V6.1): as shown, and by V2's own levels beside them --
+   * what the widening changed. Absent where it widened none. */
+  shock?: { widened: LabMetrics; unwidened: LabMetrics }
 }
 
 export interface LiveLab {
@@ -421,7 +426,8 @@ export function liveCases(predictions: ReadonlyMap<string, PredictionLine>, outc
       worst: outcome.worst,
       prior: line.z1h ?? null,
       newsShift: variant === 'v3' || variant === 'v4' ? (story?.shift ?? 0) : 0,
-      kinds: story === undefined ? [] : [story.kind]
+      kinds: story === undefined ? [] : [story.kind],
+      shock: horizon.shock !== undefined
     })
   }
   return out
@@ -434,10 +440,12 @@ export function liveLab(predictionLines: readonly PredictionLine[], outcomes: re
   for (const horizon of [...new Set(byVariant.v4.map((entry) => entry.horizon))]) {
     const pick = (variant: LiveVariant): LabCase[] => byVariant[variant].filter((entry) => entry.horizon === horizon)
     const shown = pick('v4')
+    const widened = shown.filter((entry) => entry.shock === true)
     horizons[horizon] = {
       outcomes: shown.length,
       variants: Object.fromEntries(LIVE_VARIANTS.map((variant) => [variant, labMetrics(pick(variant))])) as Record<LiveVariant, LabMetrics>,
-      news: { moved: labMetrics(shown.filter((entry) => (entry.kinds ?? []).length > 0)), unmoved: labMetrics(shown.filter((entry) => (entry.kinds ?? []).length === 0)) }
+      news: { moved: labMetrics(shown.filter((entry) => (entry.kinds ?? []).length > 0)), unmoved: labMetrics(shown.filter((entry) => (entry.kinds ?? []).length === 0)) },
+      ...(widened.length === 0 ? {} : { shock: { widened: labMetrics(widened), unwidened: labMetrics(pick('v2').filter((entry) => entry.shock === true)) } })
     }
   }
   const events: LiveLab['events'] = {}

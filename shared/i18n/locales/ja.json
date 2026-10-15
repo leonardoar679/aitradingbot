@@ -459,6 +459,7 @@
   "What moved the boosted model's reading of the move's size most:": "ブースティングモデルが値動きの大きさを読むのに最も効いた要因：",
   "a story about the coin, which widened it": "このコインに関するニュースで、レンジが広がりました",
   "a thin book: its spread widened it {share}": "板が薄い：スプレッドでレンジが {share} 広がりました",
+  "Bitcoin's sharp move ({moves} usual moves in fifteen minutes) widened it ×{factor}: on the weeks tested, after such moves it held {before} of the time, widened {after}": "ビットコインの急変（15分間で通常の変動の {moves} 倍）でレンジが ×{factor} 広がりました：検証した数週間では、このような変動の後にレンジに収まったのは {before}、広げた後は {after} でした",
   "Its forecasts against the price": "予測と実際の価格",
   "No forecast of it on record yet: one is kept every quarter hour.": "まだ予測の記録がありません。15分ごとに1件保存します。",
   "The blue lines are each forecast's likely range and the dotted ones its 80% range, drawn at the moment it was a forecast for; the gold line is the price at each close.": "青い線は各予測の想定レンジ、点線は80%レンジで、予測の対象時刻に描かれます。金色の線は各確定時点の価格です。",

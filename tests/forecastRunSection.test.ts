@@ -263,6 +263,17 @@ describe("the twelve-hour run's report (§48-49, §114)", () => {
     expect(Object.keys(hour.variants).sort()).toEqual(['v1', 'v2', 'v3', 'v4'])
     expect(hour.variants.v4).toEqual(hour.metrics)
     expect(hour.variants.v1.n).toBe(hour.metrics.n)
+    expect(hour.shock).toBeUndefined()
+  })
+
+  it("carries the forecasts Bitcoin's sharp move widened, beside V2's own levels (V6.1)", () => {
+    const run = hourRun()
+    const widened = run.predictions.map((line, index) => (index === 0 ? { ...line, h: { ...line.h, minutes5: { ...line.h.minutes5!, v2: [-0.3, -0.1, 0.05, 0.2, 0.35], shock: [3, 1.5, 1.2] as [number, number, number] } } } : line))
+    const hour = forecastRunSectionOf({ ...run, predictions: widened }).horizons.minutes5!
+    expect(hour.shock!.widened.n).toBe(1)
+    expect(hour.shock!.widened.coverage80).toBe(1)
+    // 0.4 is over V2's own P90 of 0.35: outside.
+    expect(hour.shock!.unwidened.coverage80).toBe(0)
   })
 
   it("counts the forecast trades' fees and slippage, their best and worst", () => {

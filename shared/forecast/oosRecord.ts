@@ -10,8 +10,13 @@ import { FORECAST_MODELS, type ForecastModelId } from './models'
 // IN COLUMNS, NOT JSON. Thirty-five numbers a row (seven models, five quantiles) as text would be ten
 // times the size: forecastModels/<run>/oos-<horizon>.bin is a header -- a JSON line saying what the
 // columns are -- and the columns after it, each a typed array.
+//
+// forecast-oos-v2 (V6.1, 15 October 2026) adds Bitcoin's last fifteen minutes at each row's moment, in its
+// usual moves, for the calibration's rule on Bitcoin's sharp moves (shared/forecast/shock.ts). A v1 record
+// still reads, without it: no rule is fitted from it until the next refit writes a v2.
 
-export const OOS_VERSION = 'forecast-oos-v1'
+export const OOS_VERSION = 'forecast-oos-v2'
+const OOS_V1 = 'forecast-oos-v1'
 
 export interface OosRecord {
   version: string
@@ -33,10 +38,14 @@ export interface OosRecord {
   worst: Float32Array
   /** rows x models x five quantiles of z. */
   quantiles: Float32Array
+  /** Bitcoin's last fifteen minutes at the row's moment, in its usual moves (its own z_15m figure);
+   * NaN where Bitcoin had no row then. Absent on a v1 record. */
+  btc15?: Float32Array
 }
 
-type Column = 'time' | 'pair' | 'cls' | 'regime' | 'fold' | 'z' | 'rv24h' | 'y' | 'best' | 'worst' | 'quantiles'
-const COLUMNS: { name: Column; type: 'u32' | 'u16' | 'u8' | 'f32'; width: (record: { models: readonly unknown[] }) => number }[] = [
+type Column = 'time' | 'pair' | 'cls' | 'regime' | 'fold' | 'z' | 'rv24h' | 'y' | 'best' | 'worst' | 'quantiles' | 'btc15'
+type ColumnSpec = { name: Column; type: 'u32' | 'u16' | 'u8' | 'f32'; width: (record: { models: readonly unknown[] }) => number }
+const COLUMNS_V1: ColumnSpec[] = [
   { name: 'time', type: 'u32', width: () => 1 },
   { name: 'pair', type: 'u16', width: () => 1 },
   { name: 'cls', type: 'u8', width: () => 1 },
@@ -49,6 +58,7 @@ const COLUMNS: { name: Column; type: 'u32' | 'u16' | 'u8' | 'f32'; width: (recor
   { name: 'worst', type: 'f32', width: () => 1 },
   { name: 'quantiles', type: 'f32', width: (record) => record.models.length * QUANTILE_LEVELS.length }
 ]
+const COLUMNS: ColumnSpec[] = [...COLUMNS_V1, { name: 'btc15', type: 'f32', width: () => 1 }]
 const BYTES = { u32: 4, u16: 2, u8: 1, f32: 4 } as const
 const align = (offset: number): number => Math.ceil(offset / 8) * 8
 
@@ -64,7 +74,7 @@ export function encodeOos(record: OosRecord): Uint8Array {
   new DataView(bytes.buffer).setUint32(0, header.length, true)
   bytes.set(header, 4)
   for (const { column, at } of placed) {
-    const values = record[column.name]
+    const values = column.name === 'btc15' ? (record.btc15 ?? new Float32Array(record.rows).fill(Number.NaN)) : record[column.name]
     bytes.set(new Uint8Array(values.buffer, values.byteOffset, record.rows * column.width(record) * BYTES[column.type]), at)
   }
   return bytes
@@ -82,8 +92,9 @@ export function decodeOos(bytes: Uint8Array): OosRecord | null {
     return null
   }
   const models = header.models
+  const columns = header.version === OOS_VERSION ? COLUMNS : header.version === OOS_V1 ? COLUMNS_V1 : null
   if (
-    header.version !== OOS_VERSION ||
+    columns === null ||
     !HORIZONS.includes(header.horizon as Horizon) ||
     !Array.isArray(header.symbols) ||
     !Array.isArray(models) ||
@@ -96,7 +107,7 @@ export function decodeOos(bytes: Uint8Array): OosRecord | null {
   const shape = { models: models as ForecastModelId[] }
   let offset = align(4 + headerLength)
   const out: Partial<Record<Column, Uint32Array | Uint16Array | Uint8Array | Float32Array>> = {}
-  for (const column of COLUMNS) {
+  for (const column of columns) {
     const length = rows * column.width(shape)
     const byteLength = length * BYTES[column.type]
     if (offset + byteLength > bytes.length) return null
@@ -105,7 +116,7 @@ export function decodeOos(bytes: Uint8Array): OosRecord | null {
     offset = align(offset + byteLength)
   }
   return {
-    version: OOS_VERSION,
+    version: header.version as string,
     horizon: header.horizon as Horizon,
     symbols: header.symbols as string[],
     models: shape.models,
@@ -120,7 +131,8 @@ export function decodeOos(bytes: Uint8Array): OosRecord | null {
     y: out.y as Float32Array,
     best: out.best as Float32Array,
     worst: out.worst as Float32Array,
-    quantiles: out.quantiles as Float32Array
+    quantiles: out.quantiles as Float32Array,
+    ...(out.btc15 === undefined ? {} : { btc15: out.btc15 as Float32Array })
   }
 }
 

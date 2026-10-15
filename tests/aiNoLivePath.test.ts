@@ -310,6 +310,7 @@ describe('AI code has no route to a real order', () => {
     }
     // noticeService, settingsService, predictionChange and rangeDrivers (V6 Stage 10): a watched coin's
     // turned call is told, the pairs held and traded read from the settings; a notice places nothing.
+    // shock (V6.1): Bitcoin's last fifteen minutes read from its minutes, which the live book already gave.
     expect(importsOf(engine).sort()).toEqual([
       'aciTable',
       'atomicWrite',
@@ -338,6 +339,7 @@ describe('AI code has no route to a real order', () => {
       'refresh',
       'runCalibration',
       'settingsService',
+      'shock',
       'status',
       'tradeDecision'
     ])

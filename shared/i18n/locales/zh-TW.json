@@ -459,6 +459,7 @@
   "What moved the boosted model's reading of the move's size most:": "對提升樹模型判斷波動幅度影響最大的因素：",
   "a story about the coin, which widened it": "一則關於該幣的新聞，使區間變寬",
   "a thin book: its spread widened it {share}": "委託簿較薄：其價差使區間變寬了 {share}",
+  "Bitcoin's sharp move ({moves} usual moves in fifteen minutes) widened it ×{factor}: on the weeks tested, after such moves it held {before} of the time, widened {after}": "比特幣急劇波動（十五分鐘內 {moves} 個常規波動）使區間變寬 ×{factor}：在測試的幾週裡，此類波動之後區間涵蓋了 {before} 的情況，變寬後為 {after}",
   "Its forecasts against the price": "其預測與價格對比",
   "No forecast of it on record yet: one is kept every quarter hour.": "還沒有它的預測紀錄：每刻鐘儲存一次。",
   "The blue lines are each forecast's likely range and the dotted ones its 80% range, drawn at the moment it was a forecast for; the gold line is the price at each close.": "藍線是每次預測的可能區間，虛線是其 80% 區間，畫在它所預測的那個時刻；金線是每次收盤的價格。",

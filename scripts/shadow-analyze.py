@@ -141,6 +141,9 @@ def forecast_of(section, title):
         m = row['metrics']
         moved, unmoved = row['news']['moved'], row['news']['unmoved']
         print(f'  {h:10} judged {row["outcomes"]:5}  way right {share(m["direction"]):7} calls {m["calls"]} right {share(m["callsRight"]):7} in 50% {share(m["coverage50"]):7} in 80% {share(m["coverage80"]):7} median error {pct(m["mae"]):9} bias {pct(m["bias"]):9} bull {row["bull"]["right"]}/{row["bull"]["calls"]} bear {row["bear"]["right"]}/{row["bear"]["calls"]}  story-moved {moved["n"]} ({share(moved["coverage80"])} in 80%)  the rest {unmoved["n"]} ({share(unmoved["coverage80"])} in 80%)')
+        shock = row.get('shock')
+        if shock is not None:
+            print(f'  {h:10} widened for Bitcoin\'s move {shock["widened"]["n"]} ({share(shock["widened"]["coverage80"])} in 80%; by V2\'s own levels {share(shock["unwidened"]["coverage80"])})')
     for h, row in section['horizons'].items():
         for variant, m in (row.get('variants') or {}).items():
             print(f'  {h:10} {variant.upper()}  n {m["n"]:5}  way right {share(m["direction"]):7} in 80% {share(m["coverage80"]):7} median error {pct(m["mae"]):9} bias {pct(m["bias"]):9} pinball {pct(m["pinball"])}')

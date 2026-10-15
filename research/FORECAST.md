@@ -131,7 +131,8 @@ day was read. Eleven days and one stake a trade are too few for any of these row
    2-hour runs. Sample size is too small for a profitability conclusion.
 
 So the forecast ships as a guide to how far a coin may move in calm conditions, and the forecast
-trader, off by default, stays off. A direction it could trade would have to come from information it
+trader, off by default, stays off. Since V6.1 (below) its ranges are widened after a sharp move of
+Bitcoin's, at the horizons where the walk forward shows that helps. A direction it could trade would have to come from information it
 does not have yet: the news library filling to thirty stories a kind, or a feature with a measured
 edge.
 
@@ -204,6 +205,42 @@ the data's; SOL was left out, not forecast from stale bars; each of its 6 stalle
 Seen and left as they are: the first model's BUY or SELL is told as a TRADE OPPORTUNITY notice even
 when the vote then refuses the trade (by design, so the call is not lost); Arabic money reads
 "$US 211.03" by its locale's own rule.
+
+## After V6: the ranges after a sharp Bitcoin move (V6.1, 15 October 2026)
+
+`research/rangeLag.ts` set every tested hour's range beside what the market was doing at its moment
+(walk forward `run-20261015-0015`, 41 pairs, three weeks):
+
+- Most of the ranges' misses come from moves that begin after the forecast is made. When Bitcoin moved 3
+  or more of its usual moves during the horizon, the 80% range held 26-41% at every horizon, and no range
+  set at the forecast's moment can know that.
+- What is known at the moment is Bitcoin's last fifteen minutes. After 2.5 or more of its usual moves (14
+  moments in three weeks), the 80% range held 72.5% at 5 minutes, 71.8% at 15, 63.3% at an hour and 79.9%
+  at four.
+- Widened by factors fitted on the other weeks (one for the outer pair of levels, one for the inner),
+  those moments held 79.7%, 80.7%, 79.3% and 80.2%, with the pinball loss a little higher at 5 minutes,
+  a little lower at 15 minutes, 2.7% lower at an hour and a little higher at four.
+- The whole market's last fifteen minutes fired only 5 times in three weeks and over-widened; it is not
+  used.
+
+So each refit now fits that widening per horizon and adopts it only where, cross-fitted, the 80% range
+of those moments comes nearer 80% and their pinball loss is no worse (`shared/forecast/shock.ts`; at least
+eight moments and 150 rows). Live, Bitcoin's figure is read at each close from its own bars, and between
+closes from its minutes, a crossing making every pair's forecast again.
+
+**The in-app check** (9 of 9, on a copy of the check run's profile, OpenRouter faked):
+
+- The walk forward on file, made before the rule, was calibrated again with no rule, and nothing was
+  widened.
+- A fresh fit (`run-20261015-0611`) kept Bitcoin's moves and adopted the rule at an hour (64.1% to 79.0%
+  held, pinball 0.4191 to 0.4090) and at a day (73.8% to 79.7%, 0.3821 to 0.3808). It refused it at 5
+  minutes (pinball worse), at 15 (pinball worse by 0.0002) and at four hours (80.6% already).
+  `research/rangeLag.ts` reads the same record to the same figures at 5 minutes, an hour and four hours.
+- One of Bitcoin's bar pages faked to fall 3% into the 06:45 close widened the hour's and the day's
+  ranges of all 24 pairs, and no other horizon. The record kept their V2 levels and the factors.
+
+The 15-minute verdict changed between two fits a day apart, which is why the rule is judged again at
+every refit rather than fixed. Its evidence is still thin: 14 moments in three weeks.
 
 ## The models' calls and their cost
 

@@ -12,6 +12,7 @@ import { reliabilityOf, type Reliability, type ReliabilityReason } from './relia
 import { forecastPrice, HORIZON_ADJECTIVE } from './words'
 import { ENGLISH, type I18n } from '../i18n/translate'
 import { RUN_CALIBRATION_VERSION, VARIANTS, cellOf, type ForecastVariant, type RunCalibration } from './runCalibration'
+import { shockFor, stretchShock } from './shock'
 import { usualMove } from './targets'
 
 // THE PREDICTION (the V6 document, §5-10, §14, §25 and §59-61; V6 Stage 6, 13 October 2026): what may
@@ -43,8 +44,12 @@ import { usualMove } from './targets'
 // - A THIN BOOK widens it (§57): the closes it learned from already carry the bounce of a usual spread,
 //   so only the half-spread beyond 0.05% -- a spread over a tenth of a percent -- is added, as a
 //   variance, to the calibrated range. The models' disagreement widened it before the calibration.
+// - BITCOIN'S SHARP MOVE widens it (V6.1, shared/forecast/shock.ts): at a horizon whose rule the walk
+//   forward adopted, with Bitcoin's last fifteen minutes at or past 2.5 usual moves, the outer and inner
+//   pairs of levels are stretched about the median by the rule's factors. Calm moments are untouched.
 
-export const PREDICTION_VERSION = 'prediction-v1'
+/** prediction-v2 (V6.1): a range may be widened for Bitcoin's sharp move. */
+export const PREDICTION_VERSION = 'prediction-v2'
 
 export const PREDICTION_LINES = {
   /** The half-spread, in percent, the training closes already carry. */
@@ -109,6 +114,10 @@ export interface ForecastRange {
   news: { v3: NewsEffect | null; v4: NewsEffect | null }
   /** How much a thin book widened the range: 1 where it did not. */
   spreadStretch: number
+  /** Where Bitcoin's sharp move widened it (V6.1): Bitcoin's last fifteen minutes in its usual moves, the
+   * outer and inner factors, and the share of the walk forward's moments past the line whose 80% range held,
+   * as forecast and widened (cross-fitted); null where it did not, absent on a forecast made before. */
+  shock?: { btc15: number; k80: number; k50: number; held: { before: number; after: number } | null } | null
   /** The three figures that moved its size reading most (§36; shared/forecast/rangeDrivers.ts). */
   rangeDrivers: RangeDriver[]
   variants: Partial<Record<ForecastVariant, { medianPct: number; lowPct: number; highPct: number; quantilesPct: number[]; pUp: number; pUpMapped: number }>>
@@ -182,6 +191,8 @@ export interface PredictionInput {
   market?: { z1h: number; breadth1h: number; volRatio1h?: number; atr5mPct?: number | null }
   /** Each horizon's range drivers, where the engine read them from the size model. */
   drivers?: Partial<Record<Horizon, RangeDriver[]>>
+  /** Bitcoin's last fifteen minutes in its usual moves: the close's, or the stream's where fresher (V6.1). */
+  btc15?: number | null
   runId: string
   foldsRunId: string
 }
@@ -261,7 +272,10 @@ function rangeOf(input: PredictionInput, horizon: Horizon): ForecastRange | null
   const excessLog = Math.max(0, (input.spreadPct ?? 0) / 2 - PREDICTION_LINES.usualHalfSpreadPct) / 100
   const widened = widenAround(shown.quantiles, excessLog / usual)
   const spreadStretch = halfWidth(widened) / halfWidth(shown.quantiles)
-  const logs = widened.map((q) => q * usual)
+  // Bitcoin's sharp move (V6.1): an adopted horizon past the line, stretched about its median.
+  const shock = shockFor(calibration.shock, input.btc15)
+  const final = shock === null ? widened : stretchShock(widened, shock.k80, shock.k50)
+  const logs = final.map((q) => q * usual)
   const quantilesPct = logs.map(pctOf)
   const quantilePrices = logs.map((value) => input.price * Math.exp(value))
   const width80Pct = quantilesPct[P90] - quantilesPct[P10]
@@ -328,6 +342,15 @@ function rangeOf(input: PredictionInput, horizon: Horizon): ForecastRange | null
     newsShiftLogPct: (logs[P50] - v2.quantiles[P50] * usual) * 100,
     news,
     spreadStretch,
+    shock:
+      shock === null
+        ? null
+        : {
+            btc15: input.btc15 as number,
+            k80: shock.k80,
+            k50: shock.k50,
+            held: calibration.shock?.before && calibration.shock.after ? { before: calibration.shock.before.in80, after: calibration.shock.after.in80 } : null
+          },
     rangeDrivers: input.drivers?.[horizon] ?? [],
     variants
   }

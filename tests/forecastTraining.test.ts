@@ -283,13 +283,16 @@ describe('the out-of-sample record', () => {
     y: Float32Array.from([0.004, -0.01, 0.016]),
     best: Float32Array.from([0.006, 0.001, 0.02]),
     worst: Float32Array.from([-0.002, -0.012, -0.001]),
-    quantiles: Float32Array.from({ length: 3 * FORECAST_MODELS.length * 5 }, (_, index) => index / 8)
+    quantiles: Float32Array.from({ length: 3 * FORECAST_MODELS.length * 5 }, (_, index) => index / 8),
+    btc15: Float32Array.from([0.4, -2.75, Number.NaN])
   }
 
   it('reads back as written, column by column', () => {
     const back = decodeOos(encodeOos(record))
     expect(back).not.toBeNull()
-    for (const key of ['time', 'pair', 'cls', 'regime', 'fold', 'z', 'rv24h', 'y', 'best', 'worst', 'quantiles'] as const) expect([...back![key]], key).toEqual([...record[key]])
+    for (const key of ['time', 'pair', 'cls', 'regime', 'fold', 'z', 'rv24h', 'y', 'best', 'worst', 'quantiles', 'btc15'] as const) expect([...back![key]!], key).toEqual([...record[key]!])
+    // Without Bitcoin's moves to write, NaN.
+    expect([...decodeOos(encodeOos({ ...record, btc15: undefined }))!.btc15!].every(Number.isNaN)).toBe(true)
     expect(back!.symbols).toEqual(record.symbols)
     expect(oosQuantiles(back!, 1, 'gbt')).toEqual([...record.quantiles.subarray((1 * FORECAST_MODELS.length + FORECAST_MODELS.indexOf('gbt')) * 5, (1 * FORECAST_MODELS.length + FORECAST_MODELS.indexOf('gbt')) * 5 + 5)])
   })
@@ -305,5 +308,18 @@ describe('the out-of-sample record', () => {
     new DataView(wrong.buffer).setUint32(0, text.length, true)
     wrong.set(text, 4)
     expect(decodeOos(wrong)).toBeNull()
+  })
+
+  it('reads a v1 record, written before Bitcoin\'s moves were kept, without them (V6.1)', () => {
+    const bytes = encodeOos(record)
+    const headerLength = new DataView(bytes.buffer, bytes.byteOffset).getUint32(0, true)
+    const header = new TextDecoder().decode(bytes.subarray(4, 4 + headerLength))
+    expect(header).toContain(`"version":"${OOS_VERSION}"`)
+    // The same layout with the v1 name: its last column is not read.
+    bytes.set(new TextEncoder().encode(header.replace(OOS_VERSION, 'forecast-oos-v1')), 4)
+    const back = decodeOos(bytes)!
+    expect(back.version).toBe('forecast-oos-v1')
+    expect(back.btc15).toBeUndefined()
+    expect([...back.z]).toEqual([...record.z])
   })
 })

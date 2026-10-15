@@ -25,8 +25,9 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 // PREDICTION CHANGED lines and the degraded model's daily thread (V6 Stage 10) from 6b0724f0b3e7; the
 // Forecast Lab's lines (V6 Stage 11) from 26f5ec2cd7fe; the trade plan's and the opportunity classes'
 // lines and the decision's class (V6 Stage 12) from d4f993254490; the four sounds' scores and the top
-// prediction's chime (V6 Stage 13) from b1d829b1f829.
-const PINNED_ENGINE_VERSION = '9fbd5ea2297a'
+// prediction's chime (V6 Stage 13) from b1d829b1f829; the rule on Bitcoin's sharp moves, its record and
+// the prediction's version (V6.1) from 9fbd5ea2297a.
+const PINNED_ENGINE_VERSION = 'd2b9e695247f'
 
 describe('the engine version', () => {
   it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {

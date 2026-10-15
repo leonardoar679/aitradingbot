@@ -188,6 +188,10 @@ describe('a forecast made again before the next close', () => {
     expect(refreshReasons({ ...base, minuteVolume: 29, usualMinuteVolume: 10 })).toEqual([])
     expect(refreshReasons({ ...base, minuteVolume: 30, usualMinuteVolume: 0 })).toEqual([])
     expect(refreshReasons({ ...base, newsImpact: 90, newEvent: true })).toEqual(['news', 'event'])
+    // Bitcoin crossing the sharp-move line (V6.1).
+    expect(refreshReasons({ ...base, marketShock: true })).toEqual(['market'])
+    expect(refreshReasons({ ...base, marketShock: false })).toEqual([])
+    expect(refreshReasons({ ...base, marketShock: true, newEvent: true })).toEqual(['event', 'market'])
   })
 
   it('at most once a minute', () => {
@@ -262,5 +266,24 @@ describe('the record', () => {
     const back = parseOutcomeLine(JSON.parse(JSON.stringify(missing)))!
     expect(isMissing(back)).toBe(true)
     expect(isMissing(written)).toBe(false)
+  })
+
+  // V6.1: a horizon whose shown levels are not V2's own keeps V2's, and its outcome says where the close fell
+  // against them -- what the adaptive V2 levels learn from.
+  it("keeps V2's own levels where the shown were widened, and where the close fell against them", () => {
+    const v2 = { medianPct: 0.5, lowPct: -0.8, highPct: 1.6, quantilesPct: [-1.5, -0.8, 0.5, 1.6, 2.4], pUp: 0.55, pUpMapped: 0.55 }
+    const widened = range({ variants: { ...range().variants, v2 }, shock: { btc15: -2.84, k80: 1.444, k50: 1.2, held: null } })
+    const line = predictionLine(prediction({ hour1: widened }), ['hour1'], 'grid')
+    expect(line.h.hour1).toMatchObject({ q: [-2, -1, 0.5, 2, 3], v2: [-1.5, -0.8, 0.5, 1.6, 2.4], shock: [-2.84, 1.444, 1.2] })
+    expect(parsePredictionLine(JSON.parse(JSON.stringify(line)))).toEqual(line)
+    // A thin book's widening keeps V2's too; a range as V2 made it keeps neither.
+    expect(predictionLine(prediction({ hour1: range({ variants: { ...range().variants, v2 }, spreadStretch: 1.1 }) }), ['hour1'], 'grid').h.hour1!.v2).toEqual(v2.quantilesPct)
+    const plain = predictionLine(prediction({ hour1: range({ variants: { ...range().variants, v2 }, shock: null }) }), ['hour1'], 'grid').h.hour1!
+    expect(plain.v2).toBeUndefined()
+    expect(plain.shock).toBeUndefined()
+    // A move of 1.95%: under the shown P75 (2%), over V2's (1.6%) and under its P90 (2.4%).
+    const outcome = outcomeOf({ horizon: 'hour1', quantilesPct: line.h.hour1!.q, pUp: 0.55, direction: 'NEUTRAL', width80Pct: 5, usualWidth80Pct: 4 }, T, 180, Array.from({ length: 12 }, () => ({ high: 184, low: 179, close: 180 * 1.0195 })))!
+    expect(outcomeLine(line, 'hour1', outcome)).toMatchObject({ below: '00011', v2below: '00001' })
+    expect(outcomeLine(predictionLine(prediction(), ['hour1'], 'grid'), 'hour1', outcome).v2below).toBeUndefined()
   })
 })

@@ -189,7 +189,11 @@ for (const horizon of HORIZONS) {
     const list = pairsAt.get(t) ?? []
     list.push(pair)
     pairsAt.set(t, list)
-    return { row, t, week: row.week, btc15: zMove('BTCUSDT', t, 900), btc60: zMove('BTCUSDT', t, 3600), mkt15: null, btcAhead: zMove('BTCUSDT', t, span, true) }
+    // Bitcoin's last fifteen minutes as the record keeps them (forecast-oos-v2, V6.1: its own z_15m, what the
+    // app's rule reads), or as the bars give them on an older record.
+    const kept = record.btc15?.[row.at!]
+    const btc15 = kept !== undefined && Number.isFinite(kept) ? kept : zMove('BTCUSDT', t, 900)
+    return { row, t, week: row.week, btc15, btc60: zMove('BTCUSDT', t, 3600), mkt15: null, btcAhead: zMove('BTCUSDT', t, span, true) }
   })
   const mktAt = new Map<number, number | null>()
   for (const [t, pairs] of pairsAt) {

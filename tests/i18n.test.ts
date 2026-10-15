@@ -721,7 +721,17 @@ describe("the forecast's cards with a forecast in them, in every language", () =
         })
       },
       { name: 'the drawer, to trade', element: createElement(PredictionDrawer, { prediction: PREDICTION, decision: TRADE, live: null, onClose: none, onPrepareOrder: none }) },
-      { name: 'the drawer, not to', element: createElement(PredictionDrawer, { prediction: PREDICTION, decision: NO_TRADE, live: null, onClose: none }) }
+      { name: 'the drawer, not to', element: createElement(PredictionDrawer, { prediction: PREDICTION, decision: NO_TRADE, live: null, onClose: none }) },
+      // Its range widened for Bitcoin's sharp move (V6.1).
+      {
+        name: "the drawer, widened for Bitcoin's move",
+        element: createElement(PredictionDrawer, {
+          prediction: { ...PREDICTION, horizons: { ...PREDICTION.horizons, hour1: { ...PREDICTION.horizons.hour1!, shock: { btc15: -2.84, k80: 1.43, k50: 1.41, held: { before: 0.633, after: 0.793 } } } } },
+          decision: NO_TRADE,
+          live: null,
+          onClose: none
+        })
+      }
     ]
     for (const language of LANGUAGES) {
       for (const { name, element } of cards) {
@@ -733,6 +743,20 @@ describe("the forecast's cards with a forecast in them, in every language", () =
         expect({ language, name, english: englishIn(language, textInLanguage(html, language)) }).toEqual({ language, name, english: [] })
       }
     }
+  }, 60_000)
+})
+
+// V6.1: the drawer says a range was widened for Bitcoin's sharp move, by how much, and how such moments held.
+describe("the drawer's range widened for Bitcoin's sharp move", () => {
+  it('says the move, the factor and what the walk forward held before and after', async () => {
+    const { PredictionDrawer } = await import('../src/forecast/PredictionDrawer')
+    const none = (): undefined => undefined
+    const widened = { ...PREDICTION, horizons: { ...PREDICTION.horizons, hour1: { ...PREDICTION.horizons.hour1!, shock: { btc15: -2.84, k80: 1.434, k50: 1.41, held: { before: 0.633, after: 0.793 } } } } }
+    const html = await render(createElement(PredictionDrawer, { prediction: widened, decision: NO_TRADE, live: null, onClose: none }), 'en')
+    expect(html).toContain('sharp move (2.8 usual moves in fifteen minutes) widened it ×1.43: on the weeks tested, after such moves it held 63% of the time, widened 79%')
+    // Not widened: not said.
+    const plain = await render(createElement(PredictionDrawer, { prediction: PREDICTION, decision: NO_TRADE, live: null, onClose: none }), 'en')
+    expect(plain).not.toContain('sharp move')
   }, 60_000)
 })
 

@@ -6,6 +6,7 @@ import { QUANTILE_LEVELS } from './ml/quantile'
 import { canonicalJson } from './ml/serialize'
 import { FORECAST_MODELS, type ForecastModelId } from './models'
 import { RUN_CALIBRATION_VERSION, VARIANTS, type CurveBin, type HonestScore, type HorizonCalibration, type RunCalibration, type VariantCalibration } from './runCalibration'
+import type { ShockRefusal, ShockRule, ShockScore } from './shock'
 
 // A RUN'S CALIBRATION ON FILE (V6 Stage 6, 13 October 2026): forecastModels/<run>/calibration.json,
 // one line of canonical JSON, every number at seven significant digits and a figure that could not be
@@ -107,6 +108,27 @@ function readVariant(value: unknown): VariantCalibration | null {
   }
 }
 
+const SHOCK_REFUSALS: readonly ShockRefusal[] = ['no_record', 'too_few', 'coverage', 'pinball']
+
+function readShockScore(value: unknown): ShockScore | null | undefined {
+  if (value === null) return null
+  if (!isObject(value) || !finite(value.in80) || !finite(value.in50) || !finite(value.pinball)) return undefined
+  return { in80: value.in80, in50: value.in50, pinball: value.pinball }
+}
+
+/** A horizon's rule on Bitcoin's sharp moves (V6.1): undefined where none was written, null where one was
+ * and is not whole -- adopted exactly where nothing refused it, its factors at least 1. */
+function readShock(value: unknown): ShockRule | null | undefined {
+  if (value === undefined) return undefined
+  if (!isObject(value) || typeof value.version !== 'string' || !finite(value.line) || !finite(value.k80) || !finite(value.k50) || !finite(value.moments) || !finite(value.rows)) return null
+  if (value.k80 < 1 || value.k50 < 1 || typeof value.adopted !== 'boolean') return null
+  const refusal = value.refusal === null ? null : SHOCK_REFUSALS.find((entry) => entry === value.refusal)
+  const before = readShockScore(value.before)
+  const after = readShockScore(value.after)
+  if (refusal === undefined || before === undefined || after === undefined || value.adopted !== (refusal === null)) return null
+  return { version: value.version, line: value.line, k80: value.k80, k50: value.k50, moments: value.moments, rows: value.rows, before, after, adopted: value.adopted, refusal }
+}
+
 /** A run's calibration read back; null for a file that is not one, from another version, or damaged
  * anywhere. */
 export function parseRunCalibration(text: string): RunCalibration | null {
@@ -126,7 +148,9 @@ export function parseRunCalibration(text: string): RunCalibration | null {
       if (read === null) return null
       variants[variant] = read
     }
-    horizons[key as Horizon] = { horizon: key as Horizon, rows: entry.rows, variants }
+    const shock = readShock(entry.shock)
+    if (shock === null) return null
+    horizons[key as Horizon] = { horizon: key as Horizon, rows: entry.rows, variants, ...(shock === undefined ? {} : { shock }) }
   }
   return { version: RUN_CALIBRATION_VERSION, runId: raw.runId, horizons }
 }
