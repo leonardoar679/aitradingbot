@@ -480,7 +480,8 @@ weight falls with its own score.
 
 **The Forecast Lab** (since 13 October 2026; the V6 document's §27-28, §42-43, §49-50 and §90-105; V6 Stage
 11; `shared/forecast/{lab,labWalkForward,labFile}.ts`, `electron/services/forecastLabService.ts`,
-`src/forecastLab/`). Two records, each said as which. **The walk forward's**: once a walk forward's
+`src/forecastLab/`). What it and V6's two test runs measured -- calibrated ranges, no direction, no
+trade -- is in `research/FORECAST.md`. Two records, each said as which. **The walk forward's**: once a walk forward's
 calibration is in use, the worker makes its Lab, once a run (`forecastModels/<run>/lab.json`, and each
 horizon's tested hours for the replay in `lab-replay-<horizon>.json`): every pair's whole hours of the
 weeks tested, each forecast with weights and a calibration from the weeks before it alone, said in

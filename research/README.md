@@ -75,6 +75,7 @@ CANDLE_DIR=<dir with the json> node --max-old-space-size=4096 research/.final.mj
 | `fetch-upbit-notices.mjs` | Upbit's trading notices: titles and the second each was first posted, from 2017 |
 | `../shared/upbitTitles.ts` | Which of three kinds an Upbit notice is (a KRW listing, its caution designation, a delisting), and the coins it names, by fixed patterns (`tests/upbitTitles.test.ts`). Written here, and moved to `shared/` unchanged once the app's record of the near misses read Upbit's cautions with it |
 | `upbit.ts` | Whether Upbit's notices move a coin's price on Binance by enough to trade after them. None does: a KRW listing is over within its minute, a delisting nearly so, and a caution's slow fall, held short four hours, misses its bar (`UPBIT.md`) |
+| `FORECAST.md` | What V6's price forecast was measured to do, by the app's own Forecast Lab and `scripts/shadow-run.mjs` rather than a script here: its walk forward, its 1-hour and 12-hour runs and its comparison with the strategies. Its ranges are calibrated and a little better than a plain range; it has no direction, and its rules never traded |
 
 ## What the study did not establish
 

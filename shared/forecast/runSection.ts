@@ -351,8 +351,8 @@ function historyGate(grid: readonly PredictionLine[], passes: readonly { t: numb
   }
   const whole =
     passes.length > 0
-      ? `Each of the ${plural(byPair.size, 'pair is', 'pairs are')} on record at every quarter-hour close its pass held bars for, from its first.`
-      : `Each of the ${plural(byPair.size, 'pair is', 'pairs are')} on record at every quarter-hour close from its first to its last.`
+      ? `Each of the ${plural(byPair.size, 'pair', 'pairs')} is on record at every quarter-hour close its pass held bars for, from its first.`
+      : `Each of the ${plural(byPair.size, 'pair', 'pairs')} is on record at every quarter-hour close from its first to its last.`
   return {
     id: 'forecast_history',
     label,

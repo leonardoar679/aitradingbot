@@ -303,7 +303,7 @@ describe("the twelve-hour run's report (§48-49, §114)", () => {
     const left = two.filter((line) => line.id !== 'e900' && line.id !== 'e1800')
     expect(gate({ ...run, predictions: left }, 'forecast_history').status).toBe('fail')
     const away = [{ t: T, held: ['ETHUSDT', 'SOLUSDT'] }, { t: T + 900, held: ['SOLUSDT'] }, { t: T + 1800, held: ['SOLUSDT'] }, { t: T + 2700, held: ['ETHUSDT', 'SOLUSDT'] }]
-    expect(gate({ ...run, predictions: left, passes: away }, 'forecast_history')).toMatchObject({ status: 'pass', detail: 'Each of the 2 pairs are on record at every quarter-hour close its pass held bars for, from its first.' })
+    expect(gate({ ...run, predictions: left, passes: away }, 'forecast_history')).toMatchObject({ status: 'pass', detail: 'Each of the 2 pairs is on record at every quarter-hour close its pass held bars for, from its first.' })
     // Held and not forecast: a hole, at its last close too.
     expect(gate({ ...run, predictions: two.filter((line) => line.id !== 'e2700'), passes: held(['ETHUSDT', 'SOLUSDT']) }, 'forecast_history')).toMatchObject({ status: 'fail', detail: `1 pair skipped a close, the first ETHUSDT at ${T + 2700}.` })
     // Held but never forecast -- too young for its figures -- is not wanted; nor is a pair before its first.

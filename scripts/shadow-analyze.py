@@ -12,9 +12,14 @@ import datetime
 import glob
 import json
 import os
+import sys
 import tempfile
 
-ROOT = os.environ.get('SHADOW_ROOT') or os.path.join(tempfile.gettempdir(), 'traderspider-shadow')
+# A coin's name need not be Latin (Binance lists some by their Chinese names): written to a file on
+# Windows, the output's code page could not hold it, and the listing stopped at the first such event.
+sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
+ROOT =os.environ.get('SHADOW_ROOT') or os.path.join(tempfile.gettempdir(), 'traderspider-shadow')
 RUN = os.environ.get('RUN_NAME', 'shadow')
 OUT = os.path.join(ROOT, f'{RUN}-out')
 PROFILE = os.path.join(ROOT, f'{RUN}-profile')
