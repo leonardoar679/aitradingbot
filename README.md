@@ -1444,6 +1444,15 @@ closes (the log says DELETE BY HAND if they cannot be). At the end the Forecast 
 buy and hold and the hybrid is run over the bars on file, and the page is saved as it reads
 (`forecast-lab-page.txt`).
 
+Since 15 October 2026 `FROM_PROFILE` makes a run a profile's next launch, a rehearsal of it: the
+profile's own files are copied in -- its settings, AI setup, bots, executors, ledger, events and the page's
+local storage -- and never its keys (either credentials file, their backups, the Local State that unlocks
+them), its cookies or the browser's caches; nothing is written to it. Its watch, the watch's paper trades
+and its cap are left as it has them, only the made-up key is added, and the first launch's language
+question, when it is asked, is answered on the screen. The fake answers a bot's signal and the panel's
+three analysts as well. The window is marked a test, in its title and along its foot, as every check's
+window has been since 13 October, when one was taken for the app and a key typed into it.
+
 Checked on a separate build and a scratch profile. It was seeded with an hour of records: one
 event, a watch answer and a failed call, a news analyst's call, and a paper trade of the watch's
 that reached its target. SOLUSDT's minutes were faked to match.

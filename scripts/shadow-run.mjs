@@ -42,13 +42,22 @@
 //                  leaves, and at the ceiling the key is removed and the AI switched off. The copies
 //                  are deleted at the end (by hand, from the profile, if a run is killed).     [0]
 //   CEILING_USD    the ceiling of every REAL_AI run together                                           [3]
+//   FROM_PROFILE   a profile whose own files are copied in, so that the run is that profile's next
+//                  launch (15 October 2026): its settings, AI setup, bots, executors, ledger and events
+//                  as they are, and its watch, the watch's paper trades and its cap left as it has
+//                  them. Never its keys -- either credentials file, their backups, the Local State that
+//                  unlocks them -- its cookies or the browser's caches; it is read, never written to.
+//                  The made-up key the fake answers is added, and the first launch's language question,
+//                  when it is asked, is answered English on the screen                             [none]
 //
 // IT NEVER TOUCHES THE REAL PROFILE OR out/. The profile has to be inside SHADOW_ROOT and is never
 // the real profile or Electron's default; on a resume it has to carry the marker this script leaves;
 // and the app's own userData folder is checked after launch. The fake is installed in the main
 // process before the first window opens, so even a key left in the profile by a killed segment could
 // reach nothing. The only key ever stored is a made-up one the fake answers -- except with REAL_AI=1,
-// when the real profile's two files are copied in (above) and nothing else is read from it.
+// when the real profile's two files are copied in (above) and nothing else is read from it. With
+// FROM_PROFILE a profile's own files are copied in, its keys never; and nothing is written to it. The
+// window is marked as a test, in its title and along its foot.
 //
 // A SEGMENT is one launch. A run killed by a Windows restart is resumed with RESUME=1: the profile
 // keeps its events, ledger, executors and stories (the app's own files), the output keeps its logs,
@@ -89,6 +98,25 @@ if (!Number.isFinite(CEILING_USD) || CEILING_USD <= 0 || CEILING_USD > 3) throw 
 const CEILING_MARGIN_USD = 0.1
 const REAL_PROFILE = path.join(process.env.APPDATA ?? '', 'newtradingbot')
 const KEY_FILES = ['aiCredentials.json', 'Local State']
+const FROM_PROFILE = process.env.FROM_PROFILE === undefined || process.env.FROM_PROFILE === '' ? '' : path.resolve(process.env.FROM_PROFILE)
+if (FROM_PROFILE !== '' && !fs.existsSync(path.join(FROM_PROFILE, 'settings.json'))) throw new Error(`FROM_PROFILE: no settings.json in ${FROM_PROFILE}`)
+if (FROM_PROFILE !== '' && REAL_AI) throw new Error('FROM_PROFILE is a rehearsal, with OpenRouter faked: not with REAL_AI')
+/** A profile's own files (FROM_PROFILE), as the app writes them: its JSON files at the top and its
+ * camelCase folders, with the page's local storage (three conveniences of the screen). Never a key --
+ * no name with "credentials" in it, nor Local State -- and nothing of the browser's: its cookies
+ * (Network), caches and session storage are named in capitals, spaces and underscores. */
+function ownFilesOf(from) {
+  return fs
+    .readdirSync(from, { withFileTypes: true })
+    .filter((entry) => {
+      if (/credentials/i.test(entry.name) || KEY_FILES.includes(entry.name)) return false
+      if (entry.isFile()) return /^[A-Za-z]+\.json$/.test(entry.name)
+      return entry.isDirectory() && (/^[a-z][A-Za-z0-9]*$/.test(entry.name) || entry.name === 'Local Storage')
+    })
+    .map((entry) => entry.name)
+}
+/** Whether the copied profile's first launch asks its language: none on file. */
+let languageAsked = false
 const SHADOW_ROOT = path.resolve(process.env.SHADOW_ROOT ?? path.join(os.tmpdir(), 'traderspider-shadow'))
 const PROFILE = path.join(SHADOW_ROOT, `${RUN_NAME}-profile`)
 const OUT = path.join(SHADOW_ROOT, `${RUN_NAME}-out`)
@@ -99,6 +127,9 @@ const STATUS_EVERY_MS = 10 * 60_000
 const SHOT_EVERY_MS = 30 * 60_000
 const HOUR_REPORT_EVERY_MS = Number(process.env.HOUR_REPORT_MINUTES ?? 60) * 60_000
 const FAKE_KEY = 'sk-or-v1-check-only-not-a-real-key'
+/** The window's title for the whole run (13 October 2026: a check window was taken for the app, and a
+ * key typed into it): it and the page's banner say what it is. */
+const TEST_TITLE = 'TEST WINDOW - an automated check on a scratch profile - not your TraderSpider'
 const MARKER = path.join(PROFILE, 'shadow-run.json')
 /** Every REAL_AI run's spend: the runs (whose profiles' ledgers are read) and what retired profiles spent. */
 const SPEND_FILE = path.join(SHADOW_ROOT, 'real-ai-spend.json')
@@ -110,6 +141,7 @@ for (const forbidden of [path.join(appData, 'newtradingbot'), path.join(appData,
   if (samePath(PROFILE, forbidden)) throw new Error(`refusing the profile ${PROFILE}`)
 }
 if (!samePath(path.dirname(PROFILE), SHADOW_ROOT)) throw new Error(`the profile must be inside ${SHADOW_ROOT}`)
+if (FROM_PROFILE !== '' && samePath(FROM_PROFILE, PROFILE)) throw new Error('FROM_PROFILE is the run\'s own profile')
 if (!fs.existsSync(ENTRY)) throw new Error(`${path.relative(APP_DIR, ENTRY)} is missing: build it with npx electron-vite build --outDir dist/${RUN_NAME}`)
 if (samePath(path.dirname(path.dirname(ENTRY)), path.join(APP_DIR, 'out'))) throw new Error('refusing to run the out/ build, which the user runs the app from')
 if (RESUME) {
@@ -129,17 +161,26 @@ if (RESUME) {
   fs.rmSync(OUT, { recursive: true, force: true })
   fs.mkdirSync(PROFILE, { recursive: true })
   fs.mkdirSync(OUT, { recursive: true })
-  fs.writeFileSync(path.join(PROFILE, 'scanner.json'), JSON.stringify({ enabled: true, universeSize: UNIVERSE_SIZE }, null, 2))
-  // English, chosen: the first launch's language chooser (V6 Stage 14) is not asked, and the labels this
-  // script presses read as it writes them.
-  fs.writeFileSync(path.join(PROFILE, 'settings.json'), JSON.stringify({ language: 'en' }, null, 2))
+  if (FROM_PROFILE !== '') {
+    const copied = ownFilesOf(FROM_PROFILE)
+    for (const name of copied) fs.cpSync(path.join(FROM_PROFILE, name), path.join(PROFILE, name), { recursive: true })
+    const settings = JSON.parse(fs.readFileSync(path.join(PROFILE, 'settings.json'), 'utf8'))
+    languageAsked = typeof settings.language !== 'string'
+    fs.writeFileSync(path.join(OUT, 'from-profile.json'), JSON.stringify({ from: FROM_PROFILE, copied, languageAsked }, null, 2))
+  } else {
+    fs.writeFileSync(path.join(PROFILE, 'scanner.json'), JSON.stringify({ enabled: true, universeSize: UNIVERSE_SIZE }, null, 2))
+    // English, chosen: the first launch's language chooser (V6 Stage 14) is not asked, and the labels this
+    // script presses read as it writes them.
+    fs.writeFileSync(path.join(PROFILE, 'settings.json'), JSON.stringify({ language: 'en' }, null, 2))
+  }
   if (FORECAST_DATA_FROM !== '') {
     const from = path.join(FORECAST_DATA_FROM, 'forecastData')
     if (!fs.existsSync(from)) throw new Error(`no forecastData in ${FORECAST_DATA_FROM}`)
     fs.cpSync(from, path.join(PROFILE, 'forecastData'), { recursive: true })
   }
-  // The public model catalogue (prices, for the cost estimates on screen); nothing in it is a key.
-  if (fs.existsSync(MODELS_FROM)) fs.copyFileSync(MODELS_FROM, path.join(PROFILE, 'aiModels.json'))
+  // The public model catalogue (prices, for the cost estimates on screen); nothing in it is a key. A
+  // profile copied in keeps its own.
+  if (FROM_PROFILE === '' && fs.existsSync(MODELS_FROM)) fs.copyFileSync(MODELS_FROM, path.join(PROFILE, 'aiModels.json'))
   fs.writeFileSync(MARKER, JSON.stringify({ createdBy: 'scripts/shadow-run.mjs', runName: RUN_NAME, createdAt: new Date().toISOString(), key: 'fake' }, null, 2))
 }
 fs.mkdirSync(path.join(OUT, 'hour-reports'), { recursive: true })
@@ -365,6 +406,24 @@ async function main() {
           summary: `Fake summary for the check: on ${question.day} Bitcoin ${question.market.btcDayPct ?? 'unread'}%, ${question.news.length} major stories, ${question.trades.opened} paper trades opened and ${question.trades.ended} ended, ${question.models.length} models ranked, AI spent ${question.risk.aiSpentUsd} of ${question.risk.aiCapUsd}.`,
           confidence: 0.5
         }
+      },
+      // A bot's signal and the panel's three analysts (FROM_PROFILE, 15 October 2026: a profile copied
+      // in brings its AI bots), with no levels, which the validator allows.
+      intraday_signal(question) {
+        const buy = hash(JSON.stringify(question)) % 3 === 0
+        return {
+          recommendation: buy ? 'buy' : 'hold', confidence: buy ? 0.68 : 0.55, marketRegime: 'neutral', riskLevel: 'medium', horizonBars: 4,
+          stopLoss: null, takeProfit: null, reasonCodes: buy ? ['momentum_up'] : ['cost_exceeds_edge'], rationale: 'Fake answer for the check.'
+        }
+      },
+      trend_report() {
+        return { regime: 'neutral', confidence: 0.55, reasonCodes: ['cost_exceeds_edge'], note: 'Fake report for the check.' }
+      },
+      momentum_report() {
+        return { momentum: 'none', confidence: 0.55, reasonCodes: ['cost_exceeds_edge'], note: 'Fake report for the check.' }
+      },
+      risk_report() {
+        return { riskLevel: 'medium', verdict: 'marginal', confidence: 0.55, reasonCodes: ['cost_exceeds_edge'], note: 'Fake report for the check.' }
       }
     }
 
@@ -424,13 +483,35 @@ async function main() {
   say(`main process: ${stubbed}`)
 
   page = await app.firstWindow()
+  await app.evaluate(({ app: electronApp, BrowserWindow }, title) => {
+    const mark = (win) => {
+      win.on('page-title-updated', (event) => event.preventDefault())
+      win.setTitle(title)
+    }
+    for (const win of BrowserWindow.getAllWindows()) mark(win)
+    electronApp.on('browser-window-created', (_event, win) => mark(win))
+  }, TEST_TITLE)
   page.on('console', (msg) => {
     if (msg.type() === 'error' || msg.type() === 'warning') consoleLog.write(`[${new Date().toISOString()}] ${msg.type()}: ${msg.text()}\n`)
   })
   page.on('pageerror', (error) => consoleLog.write(`[${new Date().toISOString()}] PAGEERROR: ${error.stack ?? error}\n`))
   await page.waitForLoadState('domcontentloaded')
   await page.waitForFunction(() => [...document.querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Home'), null, { timeout: 60_000 })
+  await banner()
   say('launched')
+
+  // A profile copied in (FROM_PROFILE): the made-up key at once, as its own was there from the start,
+  // and nothing else of its setup changed; then its language question, when it is asked, answered on
+  // the screen as a person would.
+  if (FROM_PROFILE !== '') {
+    const own = await page.evaluate(async (fakeKey) => {
+      const key = await window.api.ai.setCredentials(fakeKey)
+      const config = await window.api.ai.getConfig()
+      return { key: key.configured, watch: config.watch, watchPaper: config.watchPaper, additions: config.additions, cap: config.dailyCapUsd }
+    }, FAKE_KEY)
+    say(`the profile's own setup, kept: ${JSON.stringify(own)}`)
+    if (languageAsked) await answerLanguage()
+  }
 
   // A one-second heartbeat in the page: how late the page's own timers ran, all run.
   await page.evaluate(() => {
@@ -485,22 +566,25 @@ async function main() {
   // The user's watch, as on their profile, with a fake key the fake above answers -- or, with REAL_AI,
   // the real key copied in, the app's own three default models first-gated unless WATCH_MODELS names
   // others, and a daily cap the ceiling sets. Setting it again on a resumed segment changes nothing.
-  const watchModels = REAL_AI && process.env.WATCH_MODELS === undefined ? await page.evaluate(async () => (await window.api.ai.getConfig()).watch.models) : WATCH_MODELS
-  const firstGates = REAL_AI && process.env.FIRST_GATES === undefined ? true : FIRST_GATES
-  const setup = await page.evaluate(
-    async ([minBand, fakeKey, models, gates, paperOn, realAi, cap]) => {
-      const key = realAi ? await window.api.ai.credentialsStatus() : await window.api.ai.setCredentials(fakeKey)
-      await window.api.ai.setConfig({ dailyCapUsd: cap, callsPerMinute: 30 })
-      const watch = await window.api.ai.setConfig({
-        watch: { enabled: true, models, maxEventsPerDay: 10, minBand, firstModelGates: gates }
-      })
-      const paper = await window.api.ai.setConfig({ watchPaper: { enabled: paperOn, model: models[0], stakeQuote: 100, maxOpen: 3 } })
-      return { key: key.configured, watch: watch.watch, watchPaper: paper.watchPaper, additions: paper.additions, cap: paper.dailyCapUsd }
-    },
-    [MIN_BAND, FAKE_KEY, watchModels, firstGates, WATCH_PAPER, REAL_AI, REAL_AI ? capForCeiling() : 5]
-  )
-  say(`setup: ${JSON.stringify(setup)}`)
-  if (REAL_AI && !setup.key) throw new Error('REAL_AI: the copied key could not be read by the scratch profile')
+  // A profile copied in keeps its own (above).
+  if (FROM_PROFILE === '') {
+    const watchModels = REAL_AI && process.env.WATCH_MODELS === undefined ? await page.evaluate(async () => (await window.api.ai.getConfig()).watch.models) : WATCH_MODELS
+    const firstGates = REAL_AI && process.env.FIRST_GATES === undefined ? true : FIRST_GATES
+    const setup = await page.evaluate(
+      async ([minBand, fakeKey, models, gates, paperOn, realAi, cap]) => {
+        const key = realAi ? await window.api.ai.credentialsStatus() : await window.api.ai.setCredentials(fakeKey)
+        await window.api.ai.setConfig({ dailyCapUsd: cap, callsPerMinute: 30 })
+        const watch = await window.api.ai.setConfig({
+          watch: { enabled: true, models, maxEventsPerDay: 10, minBand, firstModelGates: gates }
+        })
+        const paper = await window.api.ai.setConfig({ watchPaper: { enabled: paperOn, model: models[0], stakeQuote: 100, maxOpen: 3 } })
+        return { key: key.configured, watch: watch.watch, watchPaper: paper.watchPaper, additions: paper.additions, cap: paper.dailyCapUsd }
+      },
+      [MIN_BAND, FAKE_KEY, watchModels, firstGates, WATCH_PAPER, REAL_AI, REAL_AI ? capForCeiling() : 5]
+    )
+    say(`setup: ${JSON.stringify(setup)}`)
+    if (REAL_AI && !setup.key) throw new Error('REAL_AI: the copied key could not be read by the scratch profile')
+  }
   if (FORECAST_TRADER) {
     const trader = await page.evaluate(async () => {
       const settings = await window.api.settings.get()
@@ -739,6 +823,49 @@ async function nav(label) {
   }, label)
   if (result !== 'OK') say(`nav ${label}: ${result}`)
   await new Promise((r) => setTimeout(r, 1200))
+  await banner()
+}
+
+/** The banner along the window's foot, outside the app's own page, that it is a test (TEST_TITLE). */
+async function banner() {
+  await page
+    .evaluate(() => {
+      if (document.getElementById('check-banner') !== null) return
+      const div = document.createElement('div')
+      div.id = 'check-banner'
+      div.textContent = 'TEST WINDOW: an automated run on a scratch profile, closing by itself. Not your TraderSpider; nothing typed here is kept.'
+      Object.assign(div.style, { position: 'fixed', left: '0', right: '0', bottom: '0', zIndex: '9999', padding: '6px 12px', background: '#b45309', color: '#fff', font: '600 12px sans-serif', textAlign: 'center', pointerEvents: 'none' })
+      document.body.appendChild(div)
+    })
+    .catch(() => undefined)
+}
+
+/** The first launch's language question (src/i18n/LanguageChooser.tsx), answered English as a person
+ * would answer it: the question kept as a screenshot, and the language it offered said. */
+async function answerLanguage() {
+  const asked = await page.evaluate(async () => {
+    const until = Date.now() + 30_000
+    let dialog = null
+    while (Date.now() < until && dialog === null) {
+      dialog = document.querySelector('[aria-labelledby="language-chooser-title"]')
+      if (dialog === null) await new Promise((resolve) => setTimeout(resolve, 500))
+    }
+    return dialog === null ? null : { offered: dialog.querySelector('button[aria-checked="true"]')?.getAttribute('lang') ?? null }
+  })
+  if (asked === null) {
+    say('language: not asked')
+    return
+  }
+  await shot(`s${SEGMENT}-00-language`)
+  const answered = await page.evaluate(async () => {
+    const dialog = document.querySelector('[aria-labelledby="language-chooser-title"]')
+    dialog?.querySelector('button[role="radio"][lang="en"]')?.click()
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    ;[...(dialog?.querySelectorAll('button') ?? [])].find((button) => button.getAttribute('role') !== 'radio')?.click()
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+    return document.querySelector('[aria-labelledby="language-chooser-title"]') === null
+  })
+  say(`language: asked, offering ${asked.offered ?? 'none'}; English chosen${answered ? '' : ', BUT THE QUESTION STAYED'}`)
 }
 
 async function inReportCard(fn, arg = null) {
