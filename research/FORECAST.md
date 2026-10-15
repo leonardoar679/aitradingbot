@@ -76,8 +76,10 @@ NEUTRAL all of the time.
 | 4 hours | 50.7% | 50.4% | 50.7% | 50.7% |
 
 The technical models add about two points of coverage at 15 minutes and an hour over price alone; the
-news rules add a fraction of a point; the AI layer added nothing, because the news analyst was not
-asked about any story in the run (V4 is V3 where no reading is on file). A story moved 215 of the
+news rules add a fraction of a point; the AI layer added nothing. The news analyst was switched on, but
+it reads only a story rated impact 70 or more, or one whose price reaction is confirmed, and the day had
+neither: its stories rated 48 at most, and all 24 reactions measured came out NONE (V4 is V3 where no
+reading is on file). A story moved 215 of the
 1,212 forecasts; those held their 1-hour range less often than the rest (65.6% against 75.3%), and their
 4-hour range more often (55.7% against 48.8%, on 97 and 256). Without a library of thirty stories of a
 kind, the news adjuster only widens a range, and that library is not there yet.
@@ -174,9 +176,14 @@ outages. The three forecast failures each led to a fix:
 **The check run on the fixed build (`s16v`):** every forecast gate that applies passed — forecasts at 8
 of 8 quarter-hour closes, each stamped and made in time, each of the 24 pairs at every close its pass
 held bars for, 71 refreshes linked, 730 of 730 due horizons judged, every notice's sound on file — and so
-did the session reports' and the experiment's own gates, with no stream gap. No outage came during it,
-so the page timeout was not exercised by one; its test pins it. The watch's two paper trades in it came
-from faked answers and are not a result.
+did the session reports' and the experiment's own gates, with no stream gap. The watch's two paper
+trades in it came from faked answers and are not a result.
+
+**An outage, made on purpose:** no outage came during the check run, so on a copy of its profile one
+pair's bar requests (SOL's) were made to hang until their own signal ended them, as the 14th's had. The
+04:00 and 04:05 closes were each forecast for the other 25 pairs, the passes done in 34 and 23 ms after
+the data's; SOL was left out, not forecast from stale bars; each of its 6 stalled requests ended on its
+15-second timeout; and once its requests answered, SOL was forecast again at the 04:10 close.
 
 ## What the runs found and what was fixed
 
@@ -191,7 +198,8 @@ from faked answers and are not a result.
 | 12-hour run | the forecast trader's own pairs were not streamed, as the watch's are | `d6d4cdc` |
 | 12-hour run | the history gate counted pairs that left the universe | `5be8789` |
 | 12-hour run | the sidebar, collapsed by hand mid-run, hid the pages' names from the harness, so the Lab's comparison did not run (it was run afterwards on a copy of the run's profile) | `d6d4cdc` (harness) |
-| check run | the analysis stopped at a coin with a Chinese name, its output's code page unable to hold it | with this page |
+| check run | the analysis stopped at a coin with a Chinese name, its output's code page unable to hold it | `c514d80` |
+| check run | a faked run left its emptied key file in its scratch profile (only ever a placeholder key) | the harness deletes it at the end |
 
 Seen and left as they are: the first model's BUY or SELL is told as a TRADE OPPORTUNITY notice even
 when the vote then refuses the trade (by design, so the call is not lost); Arabic money reads

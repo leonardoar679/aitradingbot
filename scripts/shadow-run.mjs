@@ -951,6 +951,15 @@ async function shutDown() {
     const left = removeKeyCopies()
     const still = KEY_FILES.filter((name) => fs.existsSync(path.join(PROFILE, name)))
     say(still.length === 0 ? 'the key copies are deleted from the scratch profile' : `DELETE BY HAND from ${PROFILE}: ${still.join(', ')}${left.length > 0 ? ' (could not be removed)' : ''}`)
+  } else {
+    // The fake key is removed through the app, which leaves its emptied file behind: deleted too, so
+    // that no scratch profile keeps a credentials file (V6 Stage 16's check run left one).
+    await new Promise((r) => setTimeout(r, 2000))
+    try {
+      fs.rmSync(path.join(PROFILE, 'aiCredentials.json'), { force: true })
+    } catch (failure) {
+      say(`DELETE BY HAND from ${PROFILE}: aiCredentials.json (${failure})`)
+    }
   }
 }
 
