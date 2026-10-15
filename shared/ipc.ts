@@ -185,6 +185,8 @@ export interface ForecastState {
 export interface ForecastHistory {
   predictions: import('./forecast/forecastRecord').PredictionLine[]
   outcomes: (import('./forecast/forecastRecord').OutcomeLine | import('./forecast/forecastRecord').MissingOutcomeLine)[]
+  /** A span's passes (forecast:record only, since V6 Stage 16): the pairs each recorded close held bars for. */
+  passes?: import('./forecast/forecastRecord').PassLine[]
 }
 
 export interface AppSettings {

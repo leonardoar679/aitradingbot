@@ -11,6 +11,7 @@ import {
   outcomeLine,
   parseOutcomeLine,
   parsePredictionLine,
+  passLine,
   predictionLine,
   recordMonth,
   recordedHorizons,
@@ -461,6 +462,9 @@ async function pass(closedAt: number): Promise<void> {
   if (horizons.length > 0 && closedAt > lastRecordedAt) {
     const lines = [...latest.values()].map((prediction) => predictionLine(prediction, horizons, 'grid', undefined, decisions.get(prediction.pair)))
     await writeLines('predictions', lines)
+    // The pairs this pass held bars for: one of them not forecast at the close was skipped, as one that
+    // had left the research's pairs was not (shared/forecast/forecastRecord.ts, PassLine).
+    await appendJsonLines(join(recordsDir(), `passes-${recordMonth(closedAt)}.jsonl`), [passLine(closedAt, market.keys())])
     for (const line of lines) owe(line)
     state.recorded += lines.length
     lastRecordedAt = closedAt
@@ -650,7 +654,7 @@ async function readNewsOutcomes(nowSec: number): Promise<void> {
 async function sweepOldRecords(nowSec: number): Promise<void> {
   const names = await readdir(recordsDir()).catch(() => [] as string[])
   for (const name of names) {
-    const month = /^(?:predictions|outcomes)-(\d{4}-\d{2})\.jsonl$/.exec(name)?.[1]
+    const month = /^(?:predictions|outcomes|passes)-(\d{4}-\d{2})\.jsonl$/.exec(name)?.[1]
     if (month !== undefined && staleMonth(month, nowSec, FORECAST_RECORD_DAYS)) await unlink(join(recordsDir(), name)).catch(() => undefined)
   }
 }

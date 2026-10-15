@@ -25,6 +25,11 @@ import type { TradeDecision } from './tradeDecision'
 // forecast's levels and the price-only one's, and the kinds of error. A horizon whose bars never came
 // (a gap at the exchange, the app closed for days) is written as missing, an hour after it was due,
 // so that every forecast recorded has an outcome line for each of its horizons.
+//
+// A PASS a line at each quarter-hour close recorded (forecasts/passes-YYYY-MM.jsonl, since V6 Stage
+// 16), naming the pairs the pass held bars for: a pair skipped at a close is then told from one that
+// had left the research's pairs, which the forecasts alone cannot tell -- the 12-hour run's history
+// gate counted three coins that left them for hours as skipping every close.
 
 export const FORECAST_RECORD_VERSION = 'forecast-record-v1'
 
@@ -286,6 +291,24 @@ export function parseOutcomeLine(value: unknown): OutcomeLine | MissingOutcomeLi
 }
 
 export const isMissing = (line: OutcomeLine | MissingOutcomeLine): line is MissingOutcomeLine => 'missing' in line
+
+export interface PassLine {
+  v: string
+  /** The close. */
+  t: number
+  /** The pairs the pass held bars for, by name. */
+  held: string[]
+}
+
+export function passLine(t: number, held: Iterable<string>): PassLine {
+  return { v: FORECAST_RECORD_VERSION, t, held: [...held].sort() }
+}
+
+export function parsePassLine(value: unknown): PassLine | null {
+  const raw = value as Partial<PassLine> | null
+  if (typeof raw !== 'object' || raw === null || raw.v !== FORECAST_RECORD_VERSION || typeof raw.t !== 'number' || !Number.isFinite(raw.t) || !Array.isArray(raw.held) || !raw.held.every((pair) => typeof pair === 'string')) return null
+  return raw as PassLine
+}
 
 /** The month file a forecast read at `barTime` belongs in. */
 export function recordMonth(barTime: number): string {

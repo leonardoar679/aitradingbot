@@ -203,6 +203,16 @@ describe("the run's forecast gates (§113-114)", () => {
 })
 
 describe("the experiment's report", () => {
+  it('hands the passes on record to the history gate (V6 Stage 16)', async () => {
+    const { forecastOver } = await import('../src/ai-benchmark/experimentReport')
+    // ETH out of the research's pairs at the second close: not held, so not skipped.
+    const lines = [0, 900, 1800, 2700].flatMap((offset) => [prediction(`s${offset}`, T + offset), prediction(`e${offset}`, T + offset, { pair: 'ETHUSDT' })]).filter((line) => line.id !== 'e900')
+    const passes = [0, 900, 1800, 2700].map((offset) => ({ v: 'forecast-record-v1', t: T + offset, held: offset === 900 ? ['SOLUSDT'] : ['ETHUSDT', 'SOLUSDT'] }))
+    const deps = { forecastRecord: async () => ({ predictions: lines, outcomes: [], passes }), alertsOnFile: async () => [], storyReactions: async () => null } as never
+    const section = await forecastOver({ fromSec: T, toSec: T + 3600 }, [], deps)
+    expect(section?.gates.find((entry) => entry.id === 'forecast_history')?.status).toBe('pass')
+  })
+
   it('carries the forecast and fails on its gates, and stays as it was without it', () => {
     const session = { passed: true, paper: { fees: [] }, calls: { costUsd: 0 } } as never
     const sessionInput = { fromSec: T, toSec: T + 3600, calls: [], executors: [], connection: null } as never
@@ -280,6 +290,28 @@ describe("the twelve-hour run's report (§48-49, §114)", () => {
     expect(gate({ ...run, predictions: two.filter((line) => line.id !== 'e0') }, 'forecast_history').status).toBe('pass')
     expect(gate({ ...run, predictions: two.filter((line) => line.id !== 'e900') }, 'forecast_history')).toMatchObject({ status: 'fail' })
     expect(gate({ ...run, predictions: [] }, 'forecast_history').status).toBe('not measured')
+  })
+
+  // Found by V6 Stage 16's 12-hour run: three coins that left the research's pairs for hours read as
+  // skipping every close. Where the passes are on record, a pair is wanted where its pass held it.
+  it('wants, where the passes are on record, every pair at each close its pass held bars for, from its first', () => {
+    const run = hourRun({ toSec: T + 3600 })
+    const two = [0, 900, 1800, 2700].flatMap((offset) => [prediction(`s${offset}`, T + offset), prediction(`e${offset}`, T + offset, { pair: 'ETHUSDT' })])
+    const held = (pairs: string[]): { t: number; held: string[] }[] => [0, 900, 1800, 2700].map((offset) => ({ t: T + offset, held: pairs }))
+    // ETH left the research's pairs at the second close and came back at the fourth: a hole by the older
+    // record's rule, and none where the passes say it was not held.
+    const left = two.filter((line) => line.id !== 'e900' && line.id !== 'e1800')
+    expect(gate({ ...run, predictions: left }, 'forecast_history').status).toBe('fail')
+    const away = [{ t: T, held: ['ETHUSDT', 'SOLUSDT'] }, { t: T + 900, held: ['SOLUSDT'] }, { t: T + 1800, held: ['SOLUSDT'] }, { t: T + 2700, held: ['ETHUSDT', 'SOLUSDT'] }]
+    expect(gate({ ...run, predictions: left, passes: away }, 'forecast_history')).toMatchObject({ status: 'pass', detail: 'Each of the 2 pairs are on record at every quarter-hour close its pass held bars for, from its first.' })
+    // Held and not forecast: a hole, at its last close too.
+    expect(gate({ ...run, predictions: two.filter((line) => line.id !== 'e2700'), passes: held(['ETHUSDT', 'SOLUSDT']) }, 'forecast_history')).toMatchObject({ status: 'fail', detail: `1 pair skipped a close, the first ETHUSDT at ${T + 2700}.` })
+    // Held but never forecast -- too young for its figures -- is not wanted; nor is a pair before its first.
+    expect(gate({ ...run, predictions: two, passes: held(['BATUSDT', 'ETHUSDT', 'SOLUSDT']) }, 'forecast_history').status).toBe('pass')
+    expect(gate({ ...run, predictions: two.filter((line) => line.id !== 'e0'), passes: held(['ETHUSDT', 'SOLUSDT']) }, 'forecast_history').status).toBe('pass')
+    // A pass after the span, or between quarter-hours, is not read.
+    const outside = [...held(['SOLUSDT']), { t: T + 3600 + 900, held: ['ETHUSDT', 'SOLUSDT'] }, { t: T + 2400, held: ['ETHUSDT'] }]
+    expect(gate({ ...run, predictions: two.filter((line) => line.id !== 'e2700'), passes: outside }, 'forecast_history').status).toBe('pass')
   })
 
   it('wants every forecast to name its model run and its calibration', () => {

@@ -393,7 +393,9 @@ ones on the hour) and each forecast made again, in `predictions-YYYY-MM.jsonl`; 
 horizons, once due and never before, the outcome -- the move, the path's best and worst, where it
 fell against the shown levels and the price-only ones, and the kinds of error (§43: right or wrong
 direction, right range, too narrow, too wide, late) -- in `outcomes-YYYY-MM.jsonl`, or, an hour after
-it was due, a line saying its bars never came; and the adaptive levels in `aci.json`. A restart
+it was due, a line saying its bars never came; at each quarter-hour recorded, since V6 Stage 16, the
+pairs the pass held bars for, in `passes-YYYY-MM.jsonl` (so that a pair skipped is told from one that
+had left the research's pairs); and the adaptive levels in `aci.json`. A restart
 picks up the outcomes still owed; month files older than 180 days are deleted at start. The window
 reads it all through `window.api.forecast` (state, the latest forecasts, one pair's, a pair's record).
 
@@ -1338,8 +1340,10 @@ not missing), every notice's sound on file, and no trade on a stale forecast. Si
 §114) it carries as well the forecasts' calls at their lead horizon and their coins' classes, the four
 variants on the same moments -- price only, with the technical figures, with the news, with the AI's
 reading -- the ten best-rated forecasts and the five best and worst called, the forecast trader's fees,
-slippage and best and worst trade, and four gates more: every pair forecast at every close between its
-first and its last (the history whole), every forecast naming the walk forward that calibrated it, every
+slippage and best and worst trade, and four gates more: every pair forecast at every close its pass held
+bars for, from its first forecast on (the history whole; on a record from before the passes, every
+close between its first and its last -- which counted three coins that left the research's pairs for
+hours as skipping every close), every forecast naming the walk forward that calibrated it, every
 story naming a coin traded on Binance measured to four hours once it has had them, and every forecast
 trade's record whole.
 

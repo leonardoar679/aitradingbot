@@ -3,7 +3,7 @@ import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { coarseBars, type CoarseWidth, type ForecastBar } from '../../shared/forecast/bars'
 import { HORIZONS, type Horizon } from '../../shared/forecast/features'
-import { FORECAST_RECORD_DAYS, isMissing, parseOutcomeLine, parsePredictionLine, recordMonth, type OutcomeLine, type PredictionLine } from '../../shared/forecast/forecastRecord'
+import { FORECAST_RECORD_DAYS, isMissing, parseOutcomeLine, parsePassLine, parsePredictionLine, recordMonth, type OutcomeLine, type PassLine, type PredictionLine } from '../../shared/forecast/forecastRecord'
 import { LAB_LINES, LAB_VERSION, leaderboardOf, liveLab, type LeaderRow, type LiveLab } from '../../shared/forecast/lab'
 import { parseLab, parseReplay, type LabFile } from '../../shared/forecast/labFile'
 import type { ReplayRow } from '../../shared/forecast/labWalkForward'
@@ -164,7 +164,7 @@ export function forecastClassVerdict(key: string): ClassVerdict {
 }
 
 /** The record's lines of a kind from `fromSec` on, every pair. */
-async function readRecord(kind: 'predictions' | 'outcomes', fromSec: number): Promise<unknown[]> {
+async function readRecord(kind: 'predictions' | 'outcomes' | 'passes', fromSec: number): Promise<unknown[]> {
   const nowSec = Math.floor(Date.now() / 1000)
   const months = [...new Set([recordMonth(Math.max(fromSec, nowSec - FORECAST_RECORD_DAYS * 86_400)), recordMonth(nowSec)])].sort()
   const out: unknown[] = []
@@ -189,7 +189,9 @@ export async function forecastRecordSpan(fromSec: unknown, toSec: unknown): Prom
   const predictions = (await readRecord('predictions', fromSec)).map(parsePredictionLine).filter((line): line is PredictionLine => line !== null && line.t >= fromSec && line.t <= toSec)
   const ids = new Set(predictions.map((line) => line.id))
   const outcomes = (await readRecord('outcomes', fromSec)).map(parseOutcomeLine).filter((line): line is NonNullable<ReturnType<typeof parseOutcomeLine>> => line !== null && ids.has(line.id))
-  return { predictions, outcomes }
+  // The pairs each close's pass held bars for (since V6 Stage 16): what the history gate wants forecast.
+  const passes = (await readRecord('passes', fromSec)).map(parsePassLine).filter((line): line is PassLine => line !== null && line.t >= fromSec && line.t <= toSec)
+  return { predictions, outcomes, passes }
 }
 
 async function readLive(nowSec: number): Promise<LiveLab> {

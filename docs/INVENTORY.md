@@ -152,7 +152,8 @@ every fit, walk forward and calibration), written by `forecastTrainingService` (
 the run in use and the one before it and deletes older runs after a walk forward; and `forecasts/`
 holds the live forecast's record (V6 Stage 7): every pair's forecast at each quarter-hour and each made
 again between closes (`predictions-YYYY-MM.jsonl`), each horizon's outcome when due
-(`outcomes-YYYY-MM.jsonl`), the adaptive levels (`aci.json`) and, since V6 Stage 8, the outcomes of the
+(`outcomes-YYYY-MM.jsonl`), since V6 Stage 16 the pairs each recorded quarter-hour's pass held bars for
+(`passes-YYYY-MM.jsonl`), the adaptive levels (`aci.json`) and, since V6 Stage 8, the outcomes of the
 forecasts a story moved (`news-outcomes.jsonl`), its month files deleted at start once their month
 ended over 180 days before. Nothing else is ever deleted.
 

@@ -202,12 +202,15 @@ describe('a close', () => {
     expect(lines(`outcomes-${month}.jsonl`)).toHaveLength(0)
   })
 
-  it('leaves out a pair whose bar at the close is not there', async () => {
+  it('leaves out a pair whose bar at the close is not there, its pass saying it held the pair', async () => {
     fake.gaps.set('XRPUSDT', [HOUR - 300, HOUR])
     const live = await engine()
     await closeAt(live, HOUR)
     expect(live.forecastOf('XRPUSDT')).toBeNull()
     expect(live.getForecastEngineState().predictions).toBe(3)
+    // Held, and not forecast: what a run's history gate calls a skipped close (V6 Stage 16).
+    expect(lines(`passes-${month}.jsonl`)).toEqual([{ v: 'forecast-record-v1', t: HOUR, held: [...SYMBOLS].sort() }])
+    expect(lines(`predictions-${month}.jsonl`).map((line) => line.pair)).not.toContain('XRPUSDT')
   })
 })
 
@@ -249,9 +252,12 @@ describe('the record', () => {
     expect(Object.keys(recorded[0].h as object).sort()).toEqual([...HORIZONS].sort())
     expect(Object.keys(recorded[4].h as object).sort()).toEqual(['hour1', 'minutes15', 'minutes5'])
     expect(recorded.every((line) => line.why === 'grid')).toBe(true)
+    // And at each of them the pairs its pass held bars for (V6 Stage 16); none between.
+    expect(lines(`passes-${month}.jsonl`)).toEqual([HOUR, HOUR + 900].map((t) => ({ v: 'forecast-record-v1', t, held: [...SYMBOLS].sort() })))
     // A close passed again does not record it twice.
     await closeAt(live, HOUR + 900)
     expect(lines(`predictions-${month}.jsonl`)).toHaveLength(8)
+    expect(lines(`passes-${month}.jsonl`)).toHaveLength(2)
   })
 
   it('writes each horizon\'s outcome once when it is due, never before, and moves the adaptive levels once a moment', async () => {
@@ -488,10 +494,12 @@ describe('the record on disk', () => {
   it('sweeps month files older than 180 days at start, and keeps the rest', async () => {
     mkdirSync(dir(), { recursive: true })
     writeFileSync(join(dir(), 'predictions-2025-12.jsonl'), '')
+    writeFileSync(join(dir(), 'passes-2025-12.jsonl'), '')
     writeFileSync(join(dir(), 'outcomes-2026-09.jsonl'), '')
     writeFileSync(join(dir(), 'notes.txt'), '')
     await engine()
     await vi.waitFor(() => expect(existsSync(join(dir(), 'predictions-2025-12.jsonl'))).toBe(false))
+    await vi.waitFor(() => expect(existsSync(join(dir(), 'passes-2025-12.jsonl'))).toBe(false))
     expect(existsSync(join(dir(), 'outcomes-2026-09.jsonl'))).toBe(true)
     expect(existsSync(join(dir(), 'notes.txt'))).toBe(true)
   })

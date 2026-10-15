@@ -849,6 +849,7 @@ async function forecastSection(fromSec, toSec) {
     toSec,
     predictions: read.record.predictions,
     outcomes: read.record.outcomes,
+    passes: read.record.passes,
     executors: read.executors,
     alerts: read.alerts,
     stories: read.stories,

@@ -51,8 +51,9 @@ async function helpOver(run: ExperimentRun, deps: ExperimentReportDeps, nowSec: 
   }
 }
 
-/** The price forecast over the span (V6 Stage 15); null where its record could not be read. */
-async function forecastOver(span: { fromSec: number; toSec: number }, executors: readonly ExecutorConfig[], deps: ExperimentReportDeps): Promise<ForecastRunSection | null> {
+/** The price forecast over the span (V6 Stage 15); null where its record could not be read. Exported
+ * for its test. */
+export async function forecastOver(span: { fromSec: number; toSec: number }, executors: readonly ExecutorConfig[], deps: ExperimentReportDeps): Promise<ForecastRunSection | null> {
   try {
     const [record, alerts, news] = await Promise.all([deps.forecastRecord(span.fromSec, span.toSec), deps.alertsOnFile(span.fromSec), deps.storyReactions().catch(() => null)])
     return forecastRunSectionOf({
@@ -60,6 +61,7 @@ async function forecastOver(span: { fromSec: number; toSec: number }, executors:
       toSec: span.toSec,
       predictions: record.predictions,
       outcomes: record.outcomes,
+      ...(record.passes === undefined ? {} : { passes: record.passes }),
       executors,
       alerts,
       ...(news === null ? {} : { stories: news.stories, reactions: news.reactions })

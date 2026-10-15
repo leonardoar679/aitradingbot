@@ -173,6 +173,31 @@ describe('the opportunity classes (V6 Stage 12)', () => {
 })
 
 describe('what the page is shown', () => {
+  it("reads a span's record for a run's report: its forecasts, their outcomes, and its passes (V6 Stage 16)", async () => {
+    mkdirSync(records(), { recursive: true })
+    const now = Math.floor(Date.now() / 1000)
+    const month = new Date(now * 1000).toISOString().slice(0, 7)
+    const t = Math.floor(now / 900) * 900 - 1800
+    const hour1 = { q: [-2, -1, 0.5, 2, 3], pUp: 0.55, dir: 'NEUTRAL', strong: false, uncertain: false, rel: 'HIGH', width: 5, usualWidth: 4, skill: 0, dirSkill: 0, cell: 'large', v1: [-2, -1, 0.5, 2, 3], v1pUp: 0.5, parts: [] }
+    const line = (id: string, at: number): Record<string, unknown> => ({ v: 'forecast-record-v1', id, pair: 'SOLUSDT', t: at, at: at * 1000 + 7000, price: 180, cls: 'large', regime: 'sideways', best: 'hour1', run: 'r', foldsRun: 'f', why: 'grid', h: { hour1 } })
+    writeFileSync(join(records(), `predictions-${month}.jsonl`), [line('before', t - 900), line('in', t)].map((entry) => JSON.stringify(entry)).join('\n') + '\n')
+    const outcome = { v: 'forecast-record-v1', id: 'in', pair: 'SOLUSDT', h: 'hour1', t, due: t + 3600, move: 1, best: 1.2, worst: -0.2, below: '00011', v1below: '00011', in80: true, in50: true, up: true, dir: 'NEUTRAL', pUp: 0.55, cell: 'large', cls: 'large', errors: [] }
+    writeFileSync(join(records(), `outcomes-${month}.jsonl`), `${JSON.stringify({ ...outcome, id: 'before', t: t - 900 })}\n${JSON.stringify(outcome)}\n`)
+    const passes = [
+      { v: 'forecast-record-v1', t: t - 900, held: ['SOLUSDT'] },
+      { v: 'forecast-record-v1', t, held: ['ETHUSDT', 'SOLUSDT'] },
+      // Another version's, or not a list: not read.
+      { v: 'forecast-record-v0', t, held: ['XRPUSDT'] },
+      { v: 'forecast-record-v1', t, held: 'SOLUSDT' }
+    ]
+    writeFileSync(join(records(), `passes-${month}.jsonl`), passes.map((entry) => JSON.stringify(entry)).join('\n') + '\n{torn\n')
+    const lab = await service()
+    const span = await lab.forecastRecordSpan(t, t + 600)
+    expect(span.predictions.map((entry) => entry.id)).toEqual(['in'])
+    expect(span.outcomes.map((entry) => entry.id)).toEqual(['in'])
+    expect(span.passes).toEqual([{ v: 'forecast-record-v1', t, held: ['ETHUSDT', 'SOLUSDT'] }])
+  })
+
   it('the leaderboard from the walk forward\'s own record, the live record of the last week, and the refit', async () => {
     mkdirSync(models(), { recursive: true })
     const now = Math.floor(Date.now() / 1000)

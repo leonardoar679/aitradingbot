@@ -16,7 +16,7 @@ import { liveLab, type LabMetrics, type LiveVariant } from './lab'
 // stale forecast, and every trade's record whole. A span shorter than a horizon judges none of it, and
 // says so.
 
-export const RUN_SECTION_VERSION = 'forecast-run-v2'
+export const RUN_SECTION_VERSION = 'forecast-run-v3'
 
 /** The lines the gates are read by, pinned. */
 export const RUN_LINES = {
@@ -144,6 +144,9 @@ export interface ForecastRunInput {
    * where they could not be read: the gate is then not measured. */
   stories?: readonly { id: string; publishedAt: number; tradable: boolean }[]
   reactions?: Readonly<Record<string, { after: { h4: number | null } }>>
+  /** The pairs each recorded close's pass held bars for (forecasts/passes-*.jsonl, since V6 Stage 16).
+   * Absent on an older record: a pair is then wanted at every close from its first to its last. */
+  passes?: readonly { t: number; held: readonly string[] }[]
 }
 
 const isMissing = (line: OutcomeLine | MissingOutcomeLine): line is MissingOutcomeLine => 'missing' in line
@@ -233,7 +236,7 @@ export function forecastRunSectionOf(input: ForecastRunInput): ForecastRunSectio
   const gates = [
     madeGate(lines.length, gridCloses, expectedGridCloses),
     stampedGate(lines),
-    historyGate(grid),
+    historyGate(grid, (input.passes ?? []).filter((pass) => within(pass.t, span) && pass.t % RUN_LINES.gridSeconds === 0)),
     calibratedGate(lines),
     refreshGate(refreshes),
     outcomesGate(lines, judged, asOfSec),
@@ -315,9 +318,12 @@ function stampedGate(lines: readonly PredictionLine[]): ForecastRunGate {
   }
 }
 
-/** §114, history complete: no pair skipped a quarter-hour close between its first and its last in the
- * span -- the engine forecasts a pair only with its bars there. */
-function historyGate(grid: readonly PredictionLine[]): ForecastRunGate {
+/** §114, history complete: no pair skipped a quarter-hour close -- the engine forecasts a pair only with
+ * its bars there. Where the passes are on record, a pair is wanted at each close whose pass held bars
+ * for it, from its first forecast in the span on: one that had left the research's pairs was not held,
+ * and one never yet forecast -- too young for its figures -- is not wanted. On an older record, at every
+ * close from its first to its last. */
+function historyGate(grid: readonly PredictionLine[], passes: readonly { t: number; held: readonly string[] }[]): ForecastRunGate {
   const label = 'Every pair is forecast at every close'
   if (grid.length === 0) return { id: 'forecast_history', label, status: 'not measured', detail: 'No quarter-hour forecast is on record in the span.' }
   const closes = [...new Set(grid.map((line) => line.t))].sort((a, b) => a - b)
@@ -328,16 +334,30 @@ function historyGate(grid: readonly PredictionLine[]): ForecastRunGate {
     byPair.set(line.pair, held)
   }
   const holes: { pair: string; t: number }[] = []
-  for (const [pair, held] of byPair) {
-    const first = Math.min(...held)
-    const last = Math.max(...held)
-    for (const close of closes) if (close > first && close < last && !held.has(close)) holes.push({ pair, t: close })
+  if (passes.length > 0) {
+    const firsts = new Map([...byPair].map(([pair, held]) => [pair, Math.min(...held)]))
+    for (const pass of [...passes].sort((a, b) => a.t - b.t)) {
+      for (const pair of pass.held) {
+        const first = firsts.get(pair)
+        if (first !== undefined && first < pass.t && !byPair.get(pair)!.has(pass.t)) holes.push({ pair, t: pass.t })
+      }
+    }
+  } else {
+    for (const [pair, held] of byPair) {
+      const first = Math.min(...held)
+      const last = Math.max(...held)
+      for (const close of closes) if (close > first && close < last && !held.has(close)) holes.push({ pair, t: close })
+    }
   }
+  const whole =
+    passes.length > 0
+      ? `Each of the ${plural(byPair.size, 'pair is', 'pairs are')} on record at every quarter-hour close its pass held bars for, from its first.`
+      : `Each of the ${plural(byPair.size, 'pair is', 'pairs are')} on record at every quarter-hour close from its first to its last.`
   return {
     id: 'forecast_history',
     label,
     status: holes.length === 0 ? 'pass' : 'fail',
-    detail: holes.length === 0 ? `Each of the ${plural(byPair.size, 'pair is', 'pairs are')} on record at every quarter-hour close from its first to its last.` : `${plural(new Set(holes.map((hole) => hole.pair)).size, 'pair skipped', 'pairs skipped')} a close, the first ${holes[0].pair} at ${holes[0].t}.`
+    detail: holes.length === 0 ? whole : `${plural(new Set(holes.map((hole) => hole.pair)).size, 'pair skipped', 'pairs skipped')} a close, the first ${holes[0].pair} at ${holes[0].t}.`
   }
 }
 
