@@ -304,7 +304,11 @@ export async function openWatchPaperTrade(
       return null
     }
   }
-  const [first, volatility, btcCorrelation, regime] = await Promise.all([readBook(), readVolatility(), readCorrelation(), readRegime()])
+  // The book after the rest: thirty days of candles can take as long as a request's timeout, and a
+  // book read beside them was judged on a market that had moved on -- the rehearsal of 15 October 2026
+  // refused a trade on a price 17 seconds old, held that long by a candle read that timed out.
+  const [volatility, btcCorrelation, regime] = await Promise.all([readVolatility(), readCorrelation(), readRegime()])
+  const first = await readBook()
   const risk = healPaperRisk(before.paperRisk)
   const planIn = (i18n: I18n): WatchPaperPlan =>
     planWatchPaperTrade({

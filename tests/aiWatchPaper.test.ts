@@ -1318,6 +1318,19 @@ describe('checked against the live price before it opens (shared/liveMarket.ts)'
     })
     expect(await refused({ ...tightBook('SOLUSDT', 100, SOON), bid: 99.8, ask: 100.2 })).toEqual({ opened: false, text: 'No paper trade: The spread is 0.400%, over the 0.1% a trade is entered at.' })
   })
+
+  it('reads the book after the slower reads, so that a candle read held by a timeout leaves it fresh (15 October 2026)', async () => {
+    // The rehearsal of the user's profile refused a trade on a price 17 seconds old: the thirty days of
+    // fifteen-minute candles read beside it had waited on a connection that timed out.
+    const r = rig()
+    const candles = r.deps.fifteenMinuteCandles
+    r.deps.fifteenMinuteCandles = async (exchange, symbol, startSec, endSec) => {
+      r.state.now += 17
+      return candles(exchange, symbol, startSec, endSec)
+    }
+    expect((await openWatchPaperTrade(event(), decision(), r.deps))?.opened).toBe(true)
+    expect(r.state.executors[0].watch?.book?.ageMs).toBe(0)
+  })
 })
 
 // Two more refusals, since 8 October 2026 (the second V3 document, §25): the best level on the side a
