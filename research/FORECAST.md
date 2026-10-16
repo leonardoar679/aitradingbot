@@ -307,6 +307,43 @@ crossing). What each refit chose, and how the forecasts in each state held live,
 **The market's shock states** card and in a run's report; the figures of the first fits and runs on the new
 rows are Stage 15's to report.
 
+## Scheduled events (V7.1 Stage 12, 16 October 2026)
+
+The macro calendar (`shared/calendar/macro-2026.json`, compiled by `research/fetch-macro-calendar.mjs` from
+the BLS and Federal Reserve schedules: 45 releases of 2026 -- 12 CPI, 13 PPI, 12 Employment Situation, 8
+FOMC statements; ETF decisions and token unlocks have no free source and are left out) marks the hour
+before a release as the market's PRE_EVENT state, in training and live. It never moves a median: the
+surprise is the market's own reaction.
+
+**What Bitcoin did after the eleven releases inside a scratch profile's ninety days** (17 July to 16 October
+2026; `research/eventImpact.ts`, shipped as `shared/calendar/event-impact-2026.json`; every kind under the
+thirty releases the page calls enough):
+
+| Release | 5 min | 15 min | 1 hour | 4 hours | a shock after (15 min past 2.5 usual moves) |
+|---|---|---|---|---|---|
+| CPI, 3 releases | median 0.24% | 0.64% (4.2 usual moves) | 0.70% (3.0) | 1.32% | 3 of 3 |
+| PPI, 3 | 0.40% | 0.23% (0.8) | 1.04% (1.9) | 1.11% | 1 of 3 |
+| Employment Situation, 3 | 0.25% | 0.16% (0.7) | 0.05% (0.2) | 1.66% | 1 of 3 |
+| FOMC statement, 2 | 0.17% | 0.07% (0.4) | 0.27% (0.7) | 0.46% | 0 of 2 |
+
+The 14 October CPI itself: Bitcoin fell 1.18% in the first five minutes (12.5 usual moves), 1.21% at
+fifteen, 1.43% at the hour and 2.53% at four hours, never above the close before by more than 0.09%; one
+usual hourly move down was touched at five minutes.
+
+**The 14 October CPI on the walk forward** (`run-20261016-0640`, 31 pairs, out of sample; the Lab's
+**Scheduled events** card shows the same): the record's hour before the release, 12:00 UTC, and the first
+hour after, 13:00. Made at 12:00, before a fall no range set then could know, the 80% ranges held 16% at 5
+minutes, 16% at 15, 23% at an hour and 16% at four hours; made at 13:00, once the fall was in the bars,
+they held 94%, 77%, 84% and 94%. The sharp-move rule could not help the hour before (Bitcoin's fifteen
+minutes at 12:00 were 0.2 usual moves) and did not fire at 13:00 either (by then its last fifteen minutes
+were 0.6: the fall was over in the quarter-hour after the release). The PPI the next day read the same way
+at 4 hours (13% before, 14% after, the day's drift) and held at the shorter horizons; the Employment
+Situation of 2 October 68-90% before and 87-97% after. That is the case for PRE_EVENT: the hour before a
+release is where the ranges are too narrow, and the calendar is what is known then. Its widening is fitted
+and judged like any state's at the next refit (each state needs eight moments and 150 rows past the line
+before a rule is fitted, so a few releases' hours will not carry it on their own until the record holds
+them); the shock-aware figures on the features-v2 rows are Stage 15's to report.
+
 ## The models' calls and their cost
 
 | Run | calls | answered | valid | latency, median / 95th | spent |

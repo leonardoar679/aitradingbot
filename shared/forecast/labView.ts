@@ -1,3 +1,5 @@
+import type { EventImpactFile } from '../calendar/eventImpact'
+import type { MacroEvent } from '../calendar/macro'
 import type { Horizon, PairClass } from './features'
 import type { LeaderRow, LiveLab } from './lab'
 import type { ClassRecord } from './opportunityClass'
@@ -46,6 +48,9 @@ export interface ForecastLabView {
   /** The direction models of the calibration in use, by horizon (V7.1 Stage 2); empty before a walk
    * forward that read them. */
   direction: Partial<Record<Horizon, DirectionView>>
+  /** The macro calendar (V7.1 Stage 12): when it was read, the next releases from now, and the shipped
+   * history of what Bitcoin did after past releases. */
+  calendar: { readAt: string; next: MacroEvent[]; impact: EventImpactFile | null }
 }
 
 export interface ForecastReplay {

@@ -1,11 +1,13 @@
+import { MACRO_EVENTS, type MacroEvent } from '../calendar/macro'
 import type { ForecastBar } from './bars'
 import { classify, type Direction } from './direction'
+import { eventReplayOf, type EventReplayInput, type EventReplayRow } from './eventReplay'
 import { ENSEMBLE_LINES } from './ensemble'
 import { HORIZON_BARS, MARKET_REGIMES, PAIR_CLASSES, type Horizon, type PairClass } from './features'
 import { LAB_EVENTS, LAB_LINES, eventsOf, labDrift, labMetrics, replayTrades, traderStats, type LabCase, type LabDrift, type LabEvent, type LabMetrics, type LabTrade, type TraderRule, type TraderStats } from './lab'
 import { QUANTILE_LEVELS, meanPinball } from './ml/quantile'
 import type { ForecastModelId } from './models'
-import type { OosRecord } from './oosRecord'
+import { oosState, type OosRecord } from './oosRecord'
 import { VARIANTS, honestScore, rowsOf, scoreOutOfSample, type CurveBin, type ScoredRow, type VariantId } from './runCalibration'
 import { usualMove } from './targets'
 import type { Promotion } from './training'
@@ -45,6 +47,9 @@ export interface LabHorizon {
   drift: LabDrift
   trader: Record<TraderRule, TraderStats>
   trades: Record<TraderRule, LabTrade[]>
+  /** The macro calendar's releases inside the tested weeks, replayed (V7.1 Stage 12; shared/forecast/
+   * eventReplay.ts); absent on a Lab made before. */
+  releases?: EventReplayRow[]
 }
 
 /** One tested hour of a pair as the replay shows it: V2's five levels in percent, its P(up) and call,
@@ -152,7 +157,8 @@ export function walkForwardLab(
   record: OosRecord,
   promotions: readonly Promotion[],
   market: ReadonlyMap<string, readonly ForecastBar[]>,
-  stories: readonly StoryMarkInput[]
+  stories: readonly StoryMarkInput[],
+  releases: readonly MacroEvent[] = MACRO_EVENTS
 ): { lab: LabHorizon; replay: ReplayRow[]; cases: Record<VariantId, LabCase[]> } {
   const horizon: Horizon = record.horizon
   const bars = HORIZON_BARS[horizon]
@@ -224,6 +230,12 @@ export function walkForwardLab(
     if (mine.length > 0) events[event] = labMetrics(mine)
   }
   const trades = { rules: replayTrades(shown, 'rules'), medians: replayTrades(shown, 'medians') }
+  // The calendar's releases inside the tested weeks (V7.1 Stage 12), from V2's rows as scored out of sample.
+  const scoredShown = scoreOutOfSample(rows, 'v2', promoted).filter((entry) => entry.at !== undefined)
+  const replayRows: EventReplayInput[] = scoredShown.map((entry) => {
+    const state = oosState(record, entry.at!)
+    return { t: record.time[entry.at!], pair: record.symbols[record.pair[entry.at!]], z: entry.z, q: entry.quantiles, week: entry.week, btc15: record.btc15?.[entry.at!] ?? Number.NaN, pUp: entry.pUp, ...(state === undefined ? {} : { state }) }
+  })
   return {
     lab: {
       rows: shown.length,
@@ -232,7 +244,8 @@ export function walkForwardLab(
       events,
       drift: labDrift(shown),
       trader: { rules: traderStats(trades.rules), medians: traderStats(trades.medians) },
-      trades: { rules: trades.rules.slice(0, LAB_LINES.tradesKept), medians: trades.medians.slice(0, LAB_LINES.tradesKept) }
+      trades: { rules: trades.rules.slice(0, LAB_LINES.tradesKept), medians: trades.medians.slice(0, LAB_LINES.tradesKept) },
+      releases: eventReplayOf(replayRows, releases)
     },
     replay: shown.map((entry) => ({ t: entry.t, pair: entry.pair, q: [...entry.q], pUp: entry.pUp, dir: entry.dir, move: entry.move, best: entry.best, worst: entry.worst })),
     cases

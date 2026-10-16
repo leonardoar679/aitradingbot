@@ -14,6 +14,8 @@ import { directionSourceOf } from '../../shared/forecast/runCalibration'
 import { healForecastSettings } from '../../shared/forecast/training'
 import type { ModelScore } from '../../shared/forecast/walkForward'
 import { classTable, type ClassRecord, type ClassVerdict } from '../../shared/forecast/opportunityClass'
+import { EVENT_IMPACT } from '../../shared/calendar/eventImpact'
+import { MACRO_CALENDAR_READ_AT, nextReleases } from '../../shared/calendar/macro'
 import type { Candle, ExecutorConfig, ForecastHistory, PositionExecutorParams } from '../../shared/ipc'
 import { readForecastBars } from './forecastDataService'
 import { forecastNewsReadings } from './forecastService'
@@ -263,9 +265,14 @@ export async function getForecastLab(): Promise<ForecastLabView> {
     refit: { on: settings.refitNightly, nextAt: training.nextRefitAt, trainingStatus: training.status, lastFitAt: training.current?.fittedAt ?? null },
     shock: shockRulesInUse(),
     marketShock: marketShockRulesInUse(),
-    direction: directionInUse()
+    direction: directionInUse(),
+    // The macro calendar (V7.1 Stage 12): the next releases, and what past ones did.
+    calendar: { readAt: MACRO_CALENDAR_READ_AT, next: nextReleases(nowSec, NEXT_RELEASES), impact: EVENT_IMPACT }
   }
 }
+
+/** How many of the calendar's coming releases the page lists. */
+const NEXT_RELEASES = 6
 
 /** The calibration in use's rules by market shock state, by horizon (V7.1 Stage 11). */
 function marketShockRulesInUse(): ForecastLabView['marketShock'] {

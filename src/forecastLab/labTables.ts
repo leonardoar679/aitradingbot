@@ -7,6 +7,8 @@ import { CLASS_LINES, type ClassRecord } from '../../shared/forecast/opportunity
 import type { DirectionScore, PUpSource } from '../../shared/forecast/runCalibration'
 import type { ShockRefusal, ShockRule } from '../../shared/forecast/shock'
 import { WIDENED_STATES, type MarketShockRules, type MarketShockState, type ShockWidening } from '../../shared/forecast/marketShock'
+import type { EventImpactFile } from '../../shared/calendar/eventImpact'
+import { MACRO_KINDS, type MacroEvent, type MacroKind } from '../../shared/calendar/macro'
 
 // THE FORECAST LAB'S TABLES (V6 Stage 11, 13 October 2026): each card's headers and rows, from the Lab's
 // figures, the same for the page and its CSV. A share is said in percent, a move in percent with its
@@ -221,6 +223,78 @@ export function marketShockTable(rules: Partial<Record<Horizon, MarketShockRules
     }
   }
   return { headers: ['Horizon', 'State', 'Moments', 'Hours', 'In the 80% range, as forecast', 'Widened', 'Pinball, as forecast', 'Widened', 'Factors (80% / 50%)', 'In use', 'The horizon widens by', 'Live: forecasts in the state', 'In the 80% range'], rows }
+}
+
+const KIND_NAME: Record<MacroKind, string> = { CPI: 'Consumer Price Index', PPI: 'Producer Price Index', JOBS: 'Employment Situation', FOMC: 'FOMC statement' }
+const utc = (sec: number): string => `${new Date(sec * 1000).toISOString().slice(0, 16).replace('T', ' ')} UTC`
+
+/** The calendar's coming releases (V7.1 Stage 12). */
+export function nextReleasesTable(next: readonly MacroEvent[]): LabTableData {
+  return { headers: ['Release', 'Reports on', 'When (UTC)', 'Eastern'], rows: next.map((event) => [KIND_NAME[event.kind], event.reference ?? '—', utc(event.at), `${event.date} ${event.timeEt}`]) }
+}
+
+/** What Bitcoin did after past releases, by kind (V7.1 Stage 12; research/eventImpact.ts): the median move
+ * from the close before at each window, in percent and in its usual moves, the typical high and low within
+ * four hours, how often the fifteen minutes after were a shock, and how soon a usual hour's move was touched;
+ * a kind with fewer than thirty releases said so. */
+export function impactTable(impact: EventImpactFile | null): LabTableData {
+  const headers = ['Release', 'Releases', 'Median |move| 5m', '15m', '1h', '4h', 'In usual moves, 15m', '1h', 'Typical high', 'Typical low', 'A shock after', 'A usual hour touched within 4h', 'Typically at', 'Regimes seen', 'Enough to use']
+  if (impact === null) return { headers, rows: [] }
+  const rows = MACRO_KINDS.map((kind) => {
+    const entry = impact.kinds[kind]
+    const minutes = (value: number | null): string => (value === null ? '—' : `${Math.round(value)} min`)
+    return [
+      KIND_NAME[kind],
+      entry.n,
+      `${plain(entry.medianAbsPct.m5, 2)}%`,
+      `${plain(entry.medianAbsPct.m15, 2)}%`,
+      `${plain(entry.medianAbsPct.h1, 2)}%`,
+      `${plain(entry.medianAbsPct.h4, 2)}%`,
+      plain(entry.medianAbsZ.m15, 1),
+      plain(entry.medianAbsZ.h1, 1),
+      pct(entry.medianMaxUpPct),
+      pct(entry.medianMaxDownPct),
+      share(entry.shockAfterShare, 0),
+      share(entry.touchedWithin4hShare, 0),
+      minutes(entry.medianTouchMin),
+      Object.entries(entry.byRegime)
+        .map(([regime, count]) => `${regime} ${count}`)
+        .join(', ') || '—',
+      entry.enough ? 'yes' : `no: ${entry.n} of ${impact.minSamples} needed`
+    ]
+  })
+  return { headers, rows }
+}
+
+/** The calendar's releases inside the walk forward's weeks, replayed (V7.1 Stage 12; shared/forecast/
+ * eventReplay.ts): at each horizon, the hour before each release and the first hour at or after it, every
+ * pair together -- how the 80% range held and the pinball loss as forecast, widened by the line's rule and
+ * by the states' rules, the market's state there, Bitcoin's fifteen minutes, and the calls. */
+export function releasesTable(lab: LabFile): LabTableData {
+  const headers = ['Release', 'When (UTC)', 'Horizon', 'Hour', 'Pairs', 'State', "Bitcoin's 15 min", 'In the 80% range, as forecast', 'By the line', 'By the states', 'Pinball, as forecast', 'By the line', 'By the states', 'Calls', 'Right']
+  const rows: (string | number)[][] = []
+  for (const horizon of HORIZONS) {
+    for (const row of lab.horizons[horizon]?.releases ?? []) {
+      rows.push([
+        KIND_NAME[row.kind],
+        utc(row.at),
+        HORIZON_NAME[horizon],
+        row.hour === 'before' ? `before (${utc(row.t).slice(11)})` : `after (${utc(row.t).slice(11)})`,
+        row.n,
+        row.state === null ? '—' : STATE_NAME[row.state],
+        row.btc15 === null ? '—' : plain(row.btc15, 1),
+        share(row.asForecast.in80),
+        share(row.byLine?.in80),
+        share(row.byStates?.in80),
+        plain(row.asForecast.pinball, 4),
+        plain(row.byLine?.pinball, 4),
+        plain(row.byStates?.pinball, 4),
+        row.calls,
+        row.calls === 0 ? '—' : `${row.callsRight} (${share(row.callsRight / row.calls, 0)})`
+      ])
+    }
+  }
+  return { headers, rows }
 }
 
 const DIRECTION_MODEL_NAME: Record<(typeof DIRECTION_MODELS)[number], string> = {

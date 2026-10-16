@@ -6,7 +6,8 @@ import type { LabFile } from '../shared/forecast/labFile'
 import type { LabHorizon } from '../shared/forecast/labWalkForward'
 import type { Candle } from '../shared/ipc'
 import { QUANTS } from '../src/agents/quantState'
-import { calibrationTable, classesOf, leaderTable, marketShockTable, performanceTable, shockTable, tableCsv, traderTable } from '../src/forecastLab/labTables'
+import { calibrationTable, classesOf, impactTable, leaderTable, marketShockTable, nextReleasesTable, performanceTable, releasesTable, shockTable, tableCsv, traderTable } from '../src/forecastLab/labTables'
+import { EVENT_IMPACT } from '../shared/calendar/eventImpact'
 import { noShockRecord } from '../shared/forecast/shock'
 import { buyAndHold, hybridTrades, runComparison } from '../src/forecastLab/strategyComparison'
 
@@ -102,6 +103,31 @@ describe('the tables', () => {
     const lined = marketShockTable({ hour1: { ...rules, chosen: 'line' as const } }, live)
     expect(lined.rows[4][9]).toBe('fitted, the horizon widens otherwise')
     expect(lined.rows[4][10]).toMatch(/^V6\.1's one rule past the line/)
+  })
+
+  // V7.1 Stage 12: the calendar's next releases, the impact history by kind, and the releases replayed on the
+  // walk forward.
+  it("says the next releases, what past ones did by kind, and each release replayed on the walk forward's weeks", () => {
+    const cpi = { kind: 'CPI' as const, name: 'Consumer Price Index', reference: 'September 2026', date: '2026-10-14', timeEt: '08:30', at: Date.parse('2026-10-14T12:30:00Z') / 1000 }
+    expect(nextReleasesTable([cpi, { ...cpi, kind: 'FOMC', reference: undefined, date: '2026-10-28', timeEt: '14:00', at: Date.parse('2026-10-28T18:00:00Z') / 1000 }]).rows).toEqual([
+      ['Consumer Price Index', 'September 2026', '2026-10-14 12:30 UTC', '2026-10-14 08:30'],
+      ['FOMC statement', '—', '2026-10-28 18:00 UTC', '2026-10-28 14:00']
+    ])
+    const impact = impactTable(EVENT_IMPACT)
+    expect(impact.rows.map((row) => row[0])).toEqual(['Consumer Price Index', 'Producer Price Index', 'Employment Situation', 'FOMC statement'])
+    expect(impact.rows[0][14]).toMatch(/^no: \d+ of 30 needed$/)
+    expect(impactTable(null).rows).toEqual([])
+    const score = { in80: 0.6, in50: 0.3, pinball: 0.5 }
+    const releases = [
+      { kind: 'CPI' as const, name: 'Consumer Price Index', at: cpi.at, hour: 'before' as const, t: cpi.at - 1800, n: 40, asForecast: score, byLine: score, byStates: null, state: 'NORMAL' as const, btc15: 0.3, calls: 0, callsRight: 0 },
+      { kind: 'CPI' as const, name: 'Consumer Price Index', at: cpi.at, hour: 'after' as const, t: cpi.at + 1800, n: 40, asForecast: score, byLine: { in80: 0.8, in50: 0.5, pinball: 0.47 }, byStates: { in80: 0.82, in50: 0.5, pinball: 0.46 }, state: 'POST_EVENT_SHOCK' as const, btc15: -7.4, calls: 4, callsRight: 3 }
+    ]
+    const table = releasesTable({ ...lab, horizons: { hour1: { ...horizonLab(), releases } } })
+    expect(table.rows).toEqual([
+      ['Consumer Price Index', '2026-10-14 12:30 UTC', '1h', 'before (12:00 UTC)', 40, 'Normal', '0.3', '60.0%', '60.0%', '—', '0.5000', '0.5000', '—', 0, '—'],
+      ['Consumer Price Index', '2026-10-14 12:30 UTC', '1h', 'after (13:00 UTC)', 40, "After a sharp move of Bitcoin's", '-7.4', '60.0%', '80.0%', '82.0%', '0.5000', '0.4700', '0.4600', 4, '3 (75%)']
+    ])
+    expect(releasesTable(lab).rows).toEqual([])
   })
 
   it('saves a table as CSV, quoting what needs it', () => {

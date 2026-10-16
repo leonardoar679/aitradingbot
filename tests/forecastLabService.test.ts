@@ -239,6 +239,11 @@ describe('what the page is shown', () => {
     expect(view.refit).toMatchObject({ on: false, nextAt: 1_800_000_000, trainingStatus: 'ready' })
     expect(view.shock).toEqual({ hour1: rule })
     expect(view.marketShock).toEqual({ hour1: rules })
+    // The macro calendar (V7.1 Stage 12): the next six releases from now, and the shipped impact history.
+    expect(view.calendar.readAt).toBe('2026-10-16')
+    expect(view.calendar.next.length).toBeLessThanOrEqual(6)
+    expect(view.calendar.next.every((event, index) => event.at >= Math.floor(Date.now() / 1000) && (index === 0 || event.at >= view.calendar.next[index - 1].at))).toBe(true)
+    expect(view.calendar.impact?.version).toBe('event-impact-v1')
   })
 
   it('replays a tested hour with its path and its coin\'s stories and readings, and serves a pair\'s bars at a width', async () => {

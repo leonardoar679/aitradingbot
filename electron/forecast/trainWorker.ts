@@ -15,6 +15,7 @@ import { walkForwardLab, type StoryMarkInput } from '../../shared/forecast/labWa
 import { decodeOos, encodeOos, OOS_VERSION, type OosRecord } from '../../shared/forecast/oosRecord'
 import { buildPanel, type Panel } from '../../shared/forecast/panel'
 import { buildRunCalibration, type RunCalibration } from '../../shared/forecast/runCalibration'
+import { preEventAt } from '../../shared/calendar/macro'
 import { btcTimelineOf, marketShockByTime, shockMomentsOf, STATE_UNKNOWN, MARKET_SHOCK_STATES } from '../../shared/forecast/marketShock'
 import { btc15ByTime } from '../../shared/forecast/shock'
 import { promotionsOf, type Promotion } from '../../shared/forecast/training'
@@ -203,7 +204,7 @@ async function folds(request: Extract<WorkerRequest, { task: 'folds' }>): Promis
   // The market's shock state at each moment (V7.1 Stage 11): the shock moments read from Bitcoin's bars at
   // every five-minute close over the span, the state from its row at each moment of the grid.
   const btc = market.get('BTCUSDT')!
-  const states = marketShockByTime(panel, shockMomentsOf(btcTimelineOf(btc, first - 5 * 3600, last)))
+  const states = marketShockByTime(panel, shockMomentsOf(btcTimelineOf(btc, first - 5 * 3600, last)), preEventAt)
   let step = 0
   for (const [hIndex, horizon] of HORIZONS.entries()) {
     const rows = rowsFor(panel, horizon)

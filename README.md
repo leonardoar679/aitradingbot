@@ -426,6 +426,27 @@ price against the call, once per crossing). The Forecast Lab's **The market's sh
 state's rule by horizon, the horizon's choice, and the live record's forecasts in each state; a run's report
 says the same of its span; `research/rangeLag.ts` reads a record to the same figures beside V6.1's.
 
+**Scheduled events** (since 16 October 2026; V7.1 Stage 12; `shared/calendar/macro.ts`,
+`research/fetch-macro-calendar.mjs`, `research/eventImpact.ts`, `shared/forecast/eventReplay.ts`). The
+U.S. releases that move every market at once -- the Consumer Price Index, the Producer Price Index and the
+Employment Situation (the Bureau of Labor Statistics, 8:30 AM Eastern) and the FOMC statement (the Federal
+Reserve, 2:00 PM Eastern on the meeting's last day) -- are compiled from the two public schedules into
+`shared/calendar/macro-2026.json` (45 releases of 2026, each Eastern time turned into UTC by the
+daylight-saving rule; versioned data, no key; the BLS reading is also kept as text for the day the site
+refuses a script). ETF decisions and token unlocks have no free, dated source and are left out, said so on
+the page. Within the hour before a release the market is in its PRE_EVENT state, in training and live
+alike, whose widening each refit fits and judges as any state's; the calendar never moves a forecast's
+median: the surprise is the market's own reaction, read as Bitcoin's fifteen minutes after
+(POST_EVENT_SHOCK). What Bitcoin did after each past release inside the bars on file -- the move at five
+minutes, fifteen, an hour and four in percent and in its usual moves, the high and low within four hours,
+when a usual hour's move was first touched, the regime -- is measured by `research/eventImpact.ts` and
+shipped as `shared/calendar/event-impact-2026.json` (11 releases of July to October 2026 from a scratch
+profile's ninety days); a kind under thirty releases is shown and not used. The Forecast Lab's **Scheduled
+events** card shows the next releases, the history by kind, and every release inside the walk forward's
+weeks replayed: the record's hour before it and the first hour at or after it, every pair together, as
+forecast (V6), widened by the sharp-move rule (V6.1) and by the states' rules, with the market's state there,
+Bitcoin's fifteen minutes and the calls -- the 14 October 2026 CPI (12:30 UTC) first among them.
+
 **Which way: the direction models** (since 16 October 2026; V7.1 Stage 2; `shared/forecast/models.ts`,
 `shared/forecast/ml/{logistic,gbt}.ts`, judged in `shared/forecast/runCalibration.ts`, measured in
 `research/direction.ts`). V6's forecast read its P(up) off its range's distribution, and on three walk

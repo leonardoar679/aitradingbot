@@ -30,6 +30,8 @@
 // nothing and asks nothing.
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { MACRO_EVENTS } from '../shared/calendar/macro'
+import { eventReplayOf } from '../shared/forecast/eventReplay'
 import { HORIZON_BARS, type Horizon } from '../shared/forecast/features'
 import { WIDENED_STATES, marketShockRulesOf, marketWidening, type MarketShockRow } from '../shared/forecast/marketShock'
 import { meanPinball } from '../shared/forecast/ml/quantile'
@@ -326,6 +328,21 @@ for (const horizon of HORIZONS) {
     }
   }
 
+  // THE CALENDAR'S RELEASES REPLAYED (V7.1 Stage 12; shared/forecast/eventReplay.ts): each release inside the
+  // tested weeks at the record's hour before it and the first hour at or after it, as the Lab shows them;
+  // with the states where the record keeps them, without otherwise.
+  const replayed = eventReplayOf(
+    scored.map((row) => {
+      const state = oosState(record, row.at!)
+      return { t: record.time[row.at!], pair: record.symbols[record.pair[row.at!]], z: row.z, q: row.quantiles, week: row.week, btc15: record.btc15?.[row.at!] ?? Number.NaN, pUp: row.pUp, ...(state === undefined ? {} : { state }) }
+    }),
+    MACRO_EVENTS
+  )
+  for (const row of replayed) {
+    const score = (value: { in80: number; pinball: number } | null): string => (value === null ? '-' : `${pct(value.in80)} / ${value.pinball.toFixed(4)}`)
+    console.log(`  ${row.kind} ${new Date(row.at * 1000).toISOString().slice(0, 16)} ${row.hour.padEnd(6)} ${new Date(row.t * 1000).toISOString().slice(11, 16)} n ${row.n} state ${row.state ?? '-'} btc15 ${row.btc15 === null ? '-' : row.btc15.toFixed(1)}: 80% held / pinball as forecast ${score(row.asForecast)}; by the line ${score(row.byLine)}; by the states ${score(row.byStates)}; calls ${row.calls} right ${row.callsRight}`)
+  }
+
   // THE MARKET'S SHOCK STATES (V7.1 Stage 11): the hours in each state as forecast, each state's rule as the
   // app fits it, and V6.1's rule against the states' on every hour either would widen -- the app's own
   // arithmetic (shared/forecast/marketShock.ts), so that calibration.json can be set against it.
@@ -378,9 +395,9 @@ for (const horizon of HORIZONS) {
     const score = scoreShock(indices.map((index) => rows[index]))
     return `80% ${pct(score.in80)} pinball ${score.pinball.toFixed(4)}`
   }
-  const all = both.map((_, index) => index)
+  const every = both.map((_, index) => index)
   console.log(`  against ${RUN_BEFORE} on ${both.length} hours in common (${touched.length} in a state or past the line), fitted on every week:`)
-  console.log(`    V6.1 (old ranges + its line rule):      all ${on(v61, all)}; shock hours ${on(v61, touched)}`)
-  console.log(`    shock-aware (new ranges alone):         all ${on(aware, all)}; shock hours ${on(aware, touched)}`)
-  console.log(`    hybrid (new ranges + chosen rules):     all ${on(hybrid, all)}; shock hours ${on(hybrid, touched)}`)
+  console.log(`    V6.1 (old ranges + its line rule):      all ${on(v61, every)}; shock hours ${on(v61, touched)}`)
+  console.log(`    shock-aware (new ranges alone):         all ${on(aware, every)}; shock hours ${on(aware, touched)}`)
+  console.log(`    hybrid (new ranges + chosen rules):     all ${on(hybrid, every)}; shock hours ${on(hybrid, touched)}`)
 }

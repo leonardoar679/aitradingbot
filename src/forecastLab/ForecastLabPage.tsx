@@ -6,6 +6,7 @@ import { HORIZONS, type Horizon, type PairClass } from '../../shared/forecast/fe
 import { FIRST_TOUCH } from '../../shared/forecast/firstTouch'
 import { LAB_EVENTS, type LabEvent } from '../../shared/forecast/lab'
 import { MARKET_SHOCK_LINES } from '../../shared/forecast/marketShock'
+import { EVENT_IMPACT_LINES } from '../../shared/calendar/eventImpact'
 import { CLASS_LINES } from '../../shared/forecast/opportunityClass'
 import type { ForecastLabView } from '../../shared/forecast/labView'
 import { describeError } from '../utils/ipcError'
@@ -24,10 +25,13 @@ import {
   errorsTable,
   eventsTable,
   leaderTable,
+  impactTable,
   liveTable,
   marketShockTable,
+  nextReleasesTable,
   performanceTable,
   pUpCurveTable,
+  releasesTable,
   shockTable,
   tableCsv,
   timingTable,
@@ -277,6 +281,17 @@ export function ForecastLabPage(): React.JSX.Element {
             Since V7.1 Stage 11 every forecast carries the market's state at its moment, read from what was known then: after a sharp move of Bitcoin's (its last fifteen minutes at or past {MARKET_SHOCK_LINES.line} usual moves), in a trending move (the same sharp fifteen minutes with the forty-five before them already at or past {MARKET_SHOCK_LINES.trendLine} of their usual moves the same way), in a liquidation cascade (a sharp fall with the breadth of the last fifteen minutes at or under {Math.round(MARKET_SHOCK_LINES.liquidationBreadth * 100)}% and the market's volume at {MARKET_SHOCK_LINES.liquidationVolume} times its usual or more), recovering (within {MARKET_SHOCK_LINES.recoveryHours} hours after a shock, Bitcoin's hour at least {MARKET_SHOCK_LINES.recoveryLine} usual move against it), before a scheduled release (once the calendar is in), or normal. Each state's widening is fitted and judged as the sharp-move rule above is, on the walk forward's moments in the state; the horizon then widens by the states' rules or by the one rule past the line, whichever had the lower pinball loss on every moment either would touch -- or by neither where neither passed its own test, the models having been fitted on the same figures. Live: the forecasts made in each state, and how their 80% ranges held.
           </p>
           <LabTable table={marketShockTable(view.marketShock, view.live)} name="market-shock" onNote={setNote} />
+        </Card>
+      )}
+
+      {view !== null && (
+        <Card title="Scheduled events">
+          <p style={{ ...noteStyle, marginTop: 0 }}>
+            The macro calendar (read {view.calendar.readAt} from the Bureau of Labor Statistics' and the Federal Reserve's public schedules; ETF decisions and token unlocks have no free, dated source and are left out): within the hour before a release the market is in its PRE_EVENT state, whose widening each refit fits and judges as any state's. The calendar never moves a forecast's median: the surprise is the market's own reaction, read as Bitcoin's fifteen minutes after. Below, what Bitcoin did after each past release inside the bars on file, by kind -- a kind under {EVENT_IMPACT_LINES.minSamples} releases is shown and not used -- and the releases inside the walk forward's weeks replayed: the record's hour before each and the first hour at or after it, every pair together, as forecast (V6), widened by the sharp-move rule (V6.1) and by the states' rules, with the market's state there and the calls. On a run fitted before the market's figures joined the rows, "as forecast" is the models from before.
+          </p>
+          <LabTable table={nextReleasesTable(view.calendar.next)} name="next-releases" onNote={setNote} />
+          <LabTable table={impactTable(view.calendar.impact)} name="event-impact" onNote={setNote} />
+          {view.lab !== null && HORIZONS.some((horizon) => (view.lab!.horizons[horizon]?.releases ?? []).length > 0) && <LabTable table={releasesTable(view.lab)} name="releases" onNote={setNote} />}
         </Card>
       )}
 

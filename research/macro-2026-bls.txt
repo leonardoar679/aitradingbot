@@ -1,0 +1,7 @@
+# The Bureau of Labor Statistics' 2026 release schedule for the three reports the forecast's calendar keeps,
+# as read in a browser from https://www.bls.gov/schedule/2026/home.htm on 16 October 2026 (the site answers
+# a script with 403). Every release at 8:30 AM Eastern. The second January PPI is the delayed December 2025
+# report. research/fetch-macro-calendar.mjs reads this file when the site refuses it.
+CPI: January 13, February 13, March 11, April 10, May 12, June 10, July 14, August 12, September 11, October 14, November 10, December 10
+PPI: January 14, January 30, February 27, March 18, April 14, May 13, June 11, July 15, August 13, September 10, October 15, November 13, December 15
+JOBS: January 9, February 11, March 6, April 3, May 8, June 5, July 2, August 7, September 4, October 2, November 6, December 4

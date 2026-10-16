@@ -29,6 +29,7 @@ import { funnel, rankOf, type ForecastRanking, type RankedForecast } from '../..
 import { acrossMedian, refreshReasons, type RefreshReason } from '../../shared/forecast/refresh'
 import { SHOCK_LINES, liveBtcMove } from '../../shared/forecast/shock'
 import { MARKET_SHOCK_LINES, btcTimelineOf, marketShockStateOf, shockMomentsOf, type MarketShockState, type ShockMoment } from '../../shared/forecast/marketShock'
+import { preEventAt } from '../../shared/calendar/macro'
 import { cellOf } from '../../shared/forecast/runCalibration'
 import { decideTrade, liveOfBook, type TradeDecision } from '../../shared/forecast/tradeDecision'
 import { breakoutAt, classKeyOf, setupOf, type ClassVerdict } from '../../shared/forecast/opportunityClass'
@@ -264,7 +265,8 @@ function currentBtc15(nowMs: number): number | null {
  * null before a close read them. */
 function marketStateOf(btc15: number | null, btc1h: number | null, tSec: number): MarketShockState | null {
   if (closeMarket === null || btc15 === null || btc1h === null) return null
-  return marketShockStateOf({ t: tSec, btc15, btc1h, breadth15: closeMarket.breadth15, volAcc15: closeMarket.volAcc15 }, closeMarket.moments)
+  // Before a scheduled release (V7.1 Stage 12): the calendar's word, within the hour before it.
+  return marketShockStateOf({ t: tSec, btc15, btc1h, breadth15: closeMarket.breadth15, volAcc15: closeMarket.volAcc15 }, closeMarket.moments, { preEvent: preEventAt(tSec) })
 }
 
 /** The market's state now: from the stream's reading while it is fresh, at the moment it was read; the

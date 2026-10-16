@@ -60,7 +60,9 @@ const fake = vi.hoisted(() => ({
   told: [] as { title: string; body: string; extra?: Record<string, unknown> }[],
   settings: {} as Record<string, unknown>,
   /** What the engine handed the data, to read the pairs it still owes outcomes for. */
-  owedReader: null as null | (() => readonly string[])
+  owedReader: null as null | (() => readonly string[]),
+  /** A scheduled release's moment (V7.1 Stage 12), or none. */
+  releaseAt: null as number | null
 }))
 
 // A notice the main process builds in the person's language (V6 Stage 14) is handed as a builder: built
@@ -76,6 +78,12 @@ vi.mock('../electron/services/noticeService', async () => {
 })
 
 vi.mock('../electron/services/settingsService', () => ({ getSettings: async () => fake.settings }))
+
+// The macro calendar (V7.1 Stage 12) as the test sets it: a release at `fake.releaseAt`, or none.
+vi.mock('../shared/calendar/macro', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../shared/calendar/macro')>()
+  return { ...actual, preEventAt: (tSec: number): boolean => fake.releaseAt !== null && tSec < fake.releaseAt && fake.releaseAt - tSec <= 3600 }
+})
 
 vi.mock('../electron/services/forecastDataService', () => ({
   setOwedPairs: (read: () => readonly string[]) => {
@@ -192,6 +200,7 @@ beforeEach(() => {
   fake.current = { runId: 'run-models', fittedAt: HOUR - 3600, foldsRunId: 'run-folds' }
   fake.told = []
   fake.settings = {}
+  fake.releaseAt = null
 })
 
 describe('a close', () => {
@@ -296,6 +305,34 @@ describe("the market's state", () => {
     // Five hours on, the window past: NORMAL again.
     await closeAt(fallen, HOUR + 5 * 3600)
     expect(fallen.forecastOf('SOLUSDT')!.marketState).toBe('NORMAL')
+  })
+
+  // V7.1 Stage 12: the hour before a scheduled release is PRE_EVENT, on the forecast and its record line; a
+  // shock outranks it; past the release it is over.
+  it('is PRE_EVENT within the hour before a scheduled release, and a shock outranks it', async () => {
+    fake.releaseAt = HOUR + 1800
+    const live = await engine()
+    await closeAt(live, HOUR)
+    expect(live.forecastOf('SOLUSDT')!.marketState).toBe('PRE_EVENT')
+    expect(live.getForecastEngineState().market!.state).toBe('PRE_EVENT')
+    expect(lines(`predictions-${month}.jsonl`).every((line) => line.state === 'PRE_EVENT')).toBe(true)
+    // The release passed: the next close is NORMAL.
+    await closeAt(live, HOUR + 1800)
+    expect(live.forecastOf('SOLUSDT')!.marketState).toBe('NORMAL')
+    // The stream's reading between closes reads the calendar too: a release ahead again, PRE_EVENT.
+    fake.releaseAt = HOUR + 1800 + 2400
+    const stream = emptyLiveState()
+    process.env.AI_TEST_USER_DATA = mkdtempSync(join(tmpdir(), 'forecast-live-'))
+    const mod = await engine({ live: stream })
+    await closeAt(mod, HOUR + 1800)
+    expect(mod.forecastOf('SOLUSDT')!.marketState).toBe('PRE_EVENT')
+    // Bitcoin falling sharply into the release's hour: a shock, whatever the calendar says.
+    fake.market = btcFalling(HOUR)
+    fake.releaseAt = HOUR + 1800
+    process.env.AI_TEST_USER_DATA = mkdtempSync(join(tmpdir(), 'forecast-live-'))
+    const shocked = await engine()
+    await closeAt(shocked, HOUR)
+    expect(shocked.forecastOf('SOLUSDT')!.marketState).toBe('POST_EVENT_SHOCK')
   })
 
   it("widens by the state's rule where the horizon chose the states', and records which state", async () => {

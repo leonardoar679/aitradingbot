@@ -1,0 +1,378 @@
+{
+  "version": "macro-calendar-v1",
+  "year": 2026,
+  "readAt": "2026-10-16",
+  "sources": [
+    {
+      "kind": "FOMC",
+      "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+      "how": "read live"
+    },
+    {
+      "kind": "BLS",
+      "url": "https://www.bls.gov/schedule/2026/home.htm",
+      "how": "read live"
+    }
+  ],
+  "leftOut": "ETF decisions and token unlocks: no free, dated source.",
+  "kinds": {
+    "CPI": "Consumer Price Index",
+    "PPI": "Producer Price Index",
+    "JOBS": "Employment Situation",
+    "FOMC": "FOMC statement"
+  },
+  "events": [
+    {
+      "kind": "JOBS",
+      "name": "Employment Situation",
+      "date": "2026-01-09",
+      "timeEt": "08:30",
+      "at": 1767965400,
+      "reference": "December 2025"
+    },
+    {
+      "kind": "CPI",
+      "name": "Consumer Price Index",
+      "date": "2026-01-13",
+      "timeEt": "08:30",
+      "at": 1768311000,
+      "reference": "December 2025"
+    },
+    {
+      "kind": "PPI",
+      "name": "Producer Price Index",
+      "date": "2026-01-14",
+      "timeEt": "08:30",
+      "at": 1768397400,
+      "reference": "November 2025"
+    },
+    {
+      "kind": "FOMC",
+      "name": "FOMC statement",
+      "date": "2026-01-28",
+      "timeEt": "14:00",
+      "at": 1769626800
+    },
+    {
+      "kind": "PPI",
+      "name": "Producer Price Index",
+      "date": "2026-01-30",
+      "timeEt": "08:30",
+      "at": 1769779800,
+      "reference": "December 2025"
+    },
+    {
+      "kind": "JOBS",
+      "name": "Employment Situation",
+      "date": "2026-02-11",
+      "timeEt": "08:30",
+      "at": 1770816600,
+      "reference": "January 2026"
+    },
+    {
+      "kind": "CPI",
+      "name": "Consumer Price Index",
+      "date": "2026-02-13",
+      "timeEt": "08:30",
+      "at": 1770989400,
+      "reference": "January 2026"
+    },
+    {
+      "kind": "PPI",
+      "name": "Producer Price Index",
+      "date": "2026-02-27",
+      "timeEt": "08:30",
+      "at": 1772199000,
+      "reference": "January 2026"
+    },
+    {
+      "kind": "JOBS",
+      "name": "Employment Situation",
+      "date": "2026-03-06",
+      "timeEt": "08:30",
+      "at": 1772803800,
+      "reference": "February 2026"
+    },
+    {
+      "kind": "CPI",
+      "name": "Consumer Price Index",
+      "date": "2026-03-11",
+      "timeEt": "08:30",
+      "at": 1773232200,
+      "reference": "February 2026"
+    },
+    {
+      "kind": "PPI",
+      "name": "Producer Price Index",
+      "date": "2026-03-18",
+      "timeEt": "08:30",
+      "at": 1773837000,
+      "reference": "February 2026"
+    },
+    {
+      "kind": "FOMC",
+      "name": "FOMC statement",
+      "date": "2026-03-18",
+      "timeEt": "14:00",
+      "at": 1773856800
+    },
+    {
+      "kind": "JOBS",
+      "name": "Employment Situation",
+      "date": "2026-04-03",
+      "timeEt": "08:30",
+      "at": 1775219400,
+      "reference": "March 2026"
+    },
+    {
+      "kind": "CPI",
+      "name": "Consumer Price Index",
+      "date": "2026-04-10",
+      "timeEt": "08:30",
+      "at": 1775824200,
+      "reference": "March 2026"
+    },
+    {
+      "kind": "PPI",
+      "name": "Producer Price Index",
+      "date": "2026-04-14",
+      "timeEt": "08:30",
+      "at": 1776169800,
+      "reference": "March 2026"
+    },
+    {
+      "kind": "FOMC",
+      "name": "FOMC statement",
+      "date": "2026-04-29",
+      "timeEt": "14:00",
+      "at": 1777485600
+    },
+    {
+      "kind": "JOBS",
+      "name": "Employment Situation",
+      "date": "2026-05-08",
+      "timeEt": "08:30",
+      "at": 1778243400,
+      "reference": "April 2026"
+    },
+    {
+      "kind": "CPI",
+      "name": "Consumer Price Index",
+      "date": "2026-05-12",
+      "timeEt": "08:30",
+      "at": 1778589000,
+      "reference": "April 2026"
+    },
+    {
+      "kind": "PPI",
+      "name": "Producer Price Index",
+      "date": "2026-05-13",
+      "timeEt": "08:30",
+      "at": 1778675400,
+      "reference": "April 2026"
+    },
+    {
+      "kind": "JOBS",
+      "name": "Employment Situation",
+      "date": "2026-06-05",
+      "timeEt": "08:30",
+      "at": 1780662600,
+      "reference": "May 2026"
+    },
+    {
+      "kind": "CPI",
+      "name": "Consumer Price Index",
+      "date": "2026-06-10",
+      "timeEt": "08:30",
+      "at": 1781094600,
+      "reference": "May 2026"
+    },
+    {
+      "kind": "PPI",
+      "name": "Producer Price Index",
+      "date": "2026-06-11",
+      "timeEt": "08:30",
+      "at": 1781181000,
+      "reference": "May 2026"
+    },
+    {
+      "kind": "FOMC",
+      "name": "FOMC statement",
+      "date": "2026-06-17",
+      "timeEt": "14:00",
+      "at": 1781719200
+    },
+    {
+      "kind": "JOBS",
+      "name": "Employment Situation",
+      "date": "2026-07-02",
+      "timeEt": "08:30",
+      "at": 1782995400,
+      "reference": "June 2026"
+    },
+    {
+      "kind": "CPI",
+      "name": "Consumer Price Index",
+      "date": "2026-07-14",
+      "timeEt": "08:30",
+      "at": 1784032200,
+      "reference": "June 2026"
+    },
+    {
+      "kind": "PPI",
+      "name": "Producer Price Index",
+      "date": "2026-07-15",
+      "timeEt": "08:30",
+      "at": 1784118600,
+      "reference": "June 2026"
+    },
+    {
+      "kind": "FOMC",
+      "name": "FOMC statement",
+      "date": "2026-07-29",
+      "timeEt": "14:00",
+      "at": 1785348000
+    },
+    {
+      "kind": "JOBS",
+      "name": "Employment Situation",
+      "date": "2026-08-07",
+      "timeEt": "08:30",
+      "at": 1786105800,
+      "reference": "July 2026"
+    },
+    {
+      "kind": "CPI",
+      "name": "Consumer Price Index",
+      "date": "2026-08-12",
+      "timeEt": "08:30",
+      "at": 1786537800,
+      "reference": "July 2026"
+    },
+    {
+      "kind": "PPI",
+      "name": "Producer Price Index",
+      "date": "2026-08-13",
+      "timeEt": "08:30",
+      "at": 1786624200,
+      "reference": "July 2026"
+    },
+    {
+      "kind": "JOBS",
+      "name": "Employment Situation",
+      "date": "2026-09-04",
+      "timeEt": "08:30",
+      "at": 1788525000,
+      "reference": "August 2026"
+    },
+    {
+      "kind": "PPI",
+      "name": "Producer Price Index",
+      "date": "2026-09-10",
+      "timeEt": "08:30",
+      "at": 1789043400,
+      "reference": "August 2026"
+    },
+    {
+      "kind": "CPI",
+      "name": "Consumer Price Index",
+      "date": "2026-09-11",
+      "timeEt": "08:30",
+      "at": 1789129800,
+      "reference": "August 2026"
+    },
+    {
+      "kind": "FOMC",
+      "name": "FOMC statement",
+      "date": "2026-09-16",
+      "timeEt": "14:00",
+      "at": 1789581600
+    },
+    {
+      "kind": "JOBS",
+      "name": "Employment Situation",
+      "date": "2026-10-02",
+      "timeEt": "08:30",
+      "at": 1790944200,
+      "reference": "September 2026"
+    },
+    {
+      "kind": "CPI",
+      "name": "Consumer Price Index",
+      "date": "2026-10-14",
+      "timeEt": "08:30",
+      "at": 1791981000,
+      "reference": "September 2026"
+    },
+    {
+      "kind": "PPI",
+      "name": "Producer Price Index",
+      "date": "2026-10-15",
+      "timeEt": "08:30",
+      "at": 1792067400,
+      "reference": "September 2026"
+    },
+    {
+      "kind": "FOMC",
+      "name": "FOMC statement",
+      "date": "2026-10-28",
+      "timeEt": "14:00",
+      "at": 1793210400
+    },
+    {
+      "kind": "JOBS",
+      "name": "Employment Situation",
+      "date": "2026-11-06",
+      "timeEt": "08:30",
+      "at": 1793971800,
+      "reference": "October 2026"
+    },
+    {
+      "kind": "CPI",
+      "name": "Consumer Price Index",
+      "date": "2026-11-10",
+      "timeEt": "08:30",
+      "at": 1794317400,
+      "reference": "October 2026"
+    },
+    {
+      "kind": "PPI",
+      "name": "Producer Price Index",
+      "date": "2026-11-13",
+      "timeEt": "08:30",
+      "at": 1794576600,
+      "reference": "October 2026"
+    },
+    {
+      "kind": "JOBS",
+      "name": "Employment Situation",
+      "date": "2026-12-04",
+      "timeEt": "08:30",
+      "at": 1796391000,
+      "reference": "November 2026"
+    },
+    {
+      "kind": "FOMC",
+      "name": "FOMC statement",
+      "date": "2026-12-09",
+      "timeEt": "14:00",
+      "at": 1796842800
+    },
+    {
+      "kind": "CPI",
+      "name": "Consumer Price Index",
+      "date": "2026-12-10",
+      "timeEt": "08:30",
+      "at": 1796909400,
+      "reference": "November 2026"
+    },
+    {
+      "kind": "PPI",
+      "name": "Producer Price Index",
+      "date": "2026-12-15",
+      "timeEt": "08:30",
+      "at": 1797341400,
+      "reference": "November 2026"
+    }
+  ]
+}

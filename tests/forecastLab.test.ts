@@ -379,6 +379,17 @@ describe('the walk forward', () => {
     // And the price-only variant and its classes are read beside it.
     expect(made.lab.variants.v1.pooled.n).toBe(made.cases.v1.length)
     expect(Object.keys(made.lab.variants.v2.byClass).length).toBeGreaterThan(1)
+    // The calendar's releases (V7.1 Stage 12): none of the real calendar falls in 1970, so none; one handed
+    // in at the record's hour 9,000 and a half is read at its hour before and its first hour after.
+    expect(made.lab.releases).toEqual([])
+    const release = { kind: 'CPI' as const, name: 'Consumer Price Index', date: '1970-01-01', timeEt: '08:30', at: 9000 * 3600 + 1800 }
+    const replayed = walkForwardLab(record, promotions, new Map(), [], [release]).lab.releases!
+    expect(replayed.map((row) => [row.hour, row.t, row.n])).toEqual([
+      ['before', 9000 * 3600, 1],
+      ['after', 9001 * 3600, 1]
+    ])
+    expect(replayed[0].byLine).toBeNull()
+    expect(replayed[0].byStates).toBeNull()
   })
 })
 
