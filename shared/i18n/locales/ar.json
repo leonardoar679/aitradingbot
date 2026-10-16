@@ -404,7 +404,6 @@
   "Trail %": "مسافة التتبع %",
   "Best current prediction": "أفضل تنبؤ حالي",
   "The forecast has not made its first pass yet: it waits for its bars, its first fit and its walk forward, a few minutes after a first start.": "لم يُجرِ التوقع جولته الأولى بعد: ينتظر بياناته وأول ملاءمة واختبار السير للأمام، بعد بضع دقائق من أول تشغيل.",
-  "Details": "التفاصيل",
   "Fills in the Position form, on paper; a person places it.": "يملأ نموذج المركز تجريبيًا؛ ويضعه شخص.",
   "TRADE THIS": "تداول هذا",
   "A range, not a point: half the moves are meant to land inside the likely range, eight in ten between the bear and bull cases. It is a forecast, not a trade; nothing was placed.": "نطاق لا نقطة: يُفترض أن يقع نصف التحركات داخل النطاق المرجّح، وثمانية من كل عشرة بين الحالتين الهبوطية والصعودية. هذا توقع لا صفقة؛ لم يوضع أي شيء.",
@@ -1849,5 +1848,10 @@
   "Bitcoin's last fifteen minutes ran {move} against the fifteen before": "الدقائق الخمس عشرة الأخيرة لبيتكوين مقابل الخمس عشرة السابقة {move}",
   "{share} of the coins rose over the last fifteen minutes": "ارتفع {share} من العملات في الدقائق الخمس عشرة الأخيرة",
   "the market's volume in the last fifteen minutes is {share} its usual": "حجم السوق في الدقائق الخمس عشرة الأخيرة {share} من معتاده",
-  "The {horizon} forecasts of the last day held {share} of their 80% ranges, under {line}: the engine has drifted, and nothing is traded at this horizon.": "توقعات {horizon} في اليوم الماضي صدقت ضمن نطاقاتها 80% بنسبة {share} فقط، دون {line}: المحرك انحرف، ولا يُتداول شيء على هذا الأفق."
+  "The {horizon} forecasts of the last day held {share} of their 80% ranges, under {line}: the engine has drifted, and nothing is traded at this horizon.": "توقعات {horizon} في اليوم الماضي صدقت ضمن نطاقاتها 80% بنسبة {share} فقط، دون {line}: المحرك انحرف، ولا يُتداول شيء على هذا الأفق.",
+  "VIEW WHY": "اعرض السبب",
+  "PAPER TRADE": "تداول تجريبي",
+  "{name} (data only)": "{name} (بيانات فقط)",
+  "{exchange} demo": "حساب {exchange} التجريبي",
+  "Mode@@of an executor": "الوضع"
 }

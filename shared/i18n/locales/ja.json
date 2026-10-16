@@ -404,7 +404,6 @@
   "Trail %": "追随幅 %",
   "Best current prediction": "現在の最良の予測",
   "The forecast has not made its first pass yet: it waits for its bars, its first fit and its walk forward, a few minutes after a first start.": "予測はまだ最初の一巡をしていません。初回起動後、足のデータ、最初の学習、ウォークフォワードを待つため数分かかります。",
-  "Details": "詳細",
   "Fills in the Position form, on paper; a person places it.": "ポジションのフォームをペーパーで入力します。発注するのは人です。",
   "TRADE THIS": "これを取引",
   "A range, not a point: half the moves are meant to land inside the likely range, eight in ten between the bear and bull cases. It is a forecast, not a trade; nothing was placed.": "点ではなく範囲です。値動きの半分は想定レンジ内に、10回に8回は下振れケースと上振れケースの間に収まるはずです。これは予測であって取引ではなく、何も発注していません。",
@@ -1849,5 +1848,10 @@
   "Bitcoin's last fifteen minutes ran {move} against the fifteen before": "ビットコインの直近15分はその前の15分に対して {move}",
   "{share} of the coins rose over the last fifteen minutes": "直近15分でコインの {share} が上昇",
   "the market's volume in the last fifteen minutes is {share} its usual": "市場の直近15分の出来高は通常の {share}",
-  "The {horizon} forecasts of the last day held {share} of their 80% ranges, under {line}: the engine has drifted, and nothing is traded at this horizon.": "過去1日の{horizon}予測のうち80%レンジに収まったのは {share} で、{line} を下回りました。エンジンがずれており、この期間では何も取引しません。"
+  "The {horizon} forecasts of the last day held {share} of their 80% ranges, under {line}: the engine has drifted, and nothing is traded at this horizon.": "過去1日の{horizon}予測のうち80%レンジに収まったのは {share} で、{line} を下回りました。エンジンがずれており、この期間では何も取引しません。",
+  "VIEW WHY": "理由を見る",
+  "PAPER TRADE": "ペーパートレード",
+  "{name} (data only)": "{name}（データのみ）",
+  "{exchange} demo": "{exchange} デモ",
+  "Mode@@of an executor": "モード"
 }

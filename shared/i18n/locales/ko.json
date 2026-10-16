@@ -404,7 +404,6 @@
   "Trail %": "추적 폭 %",
   "Best current prediction": "현재 최고의 예측",
   "The forecast has not made its first pass yet: it waits for its bars, its first fit and its walk forward, a few minutes after a first start.": "예측이 아직 첫 회차를 마치지 않았습니다. 처음 시작한 뒤 봉 데이터, 첫 학습, 워크포워드를 기다리느라 몇 분 걸립니다.",
-  "Details": "자세히",
   "Fills in the Position form, on paper; a person places it.": "포지션 주문서를 모의로 채웁니다. 주문은 사람이 합니다.",
   "TRADE THIS": "이 거래 실행",
   "A range, not a point: half the moves are meant to land inside the likely range, eight in ten between the bear and bull cases. It is a forecast, not a trade; nothing was placed.": "점이 아니라 범위입니다. 움직임의 절반은 예상 범위 안에, 10번 중 8번은 하락 시와 상승 시 사이에 들어와야 합니다. 이것은 예측이지 거래가 아니며, 아무것도 주문하지 않았습니다.",
@@ -1849,5 +1848,10 @@
   "Bitcoin's last fifteen minutes ran {move} against the fifteen before": "비트코인 최근 15분이 그 전 15분 대비 {move}",
   "{share} of the coins rose over the last fifteen minutes": "최근 15분 동안 코인의 {share}가 상승",
   "the market's volume in the last fifteen minutes is {share} its usual": "시장의 최근 15분 거래량은 평소의 {share}",
-  "The {horizon} forecasts of the last day held {share} of their 80% ranges, under {line}: the engine has drifted, and nothing is traded at this horizon.": "지난 하루의 {horizon} 예측 가운데 80% 범위 안에 든 것은 {share}로, {line}에 못 미칩니다. 엔진이 어긋나 있어 이 기간에는 아무것도 거래하지 않습니다."
+  "The {horizon} forecasts of the last day held {share} of their 80% ranges, under {line}: the engine has drifted, and nothing is traded at this horizon.": "지난 하루의 {horizon} 예측 가운데 80% 범위 안에 든 것은 {share}로, {line}에 못 미칩니다. 엔진이 어긋나 있어 이 기간에는 아무것도 거래하지 않습니다.",
+  "VIEW WHY": "이유 보기",
+  "PAPER TRADE": "모의 거래",
+  "{name} (data only)": "{name} (데이터만)",
+  "{exchange} demo": "{exchange} 데모",
+  "Mode@@of an executor": "모드"
 }

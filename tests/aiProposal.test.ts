@@ -187,20 +187,23 @@ describe('a proposal opens a form, and a person submits it', () => {
   const page = readFileSync(join(ROOT, 'src', 'executors', 'ExecutorsPage.tsx'), 'utf-8')
 
   it('the form opens on paper however it was opened', () => {
-    // The mode starts as the literal 'paper', and is set in exactly five places: the checkbox a
-    // person ticks, the effect that forces it BACK to paper, -- since 8 October 2026, CONFIRM --
-    // the effect that ticks it for a call confirmed from Opportunities, which runs once and only
-    // where the checkbox itself could be ticked (canGoLive: a verified key, the session armed by a
-    // person, no kill switch), and -- since V7.1 Stage 8 -- the demo checkbox a person ticks and the
-    // effect that forces demo back to paper. Nothing ever sets 'live' but the person's checkbox and
-    // the confirmed call. The phrase is still typed and the button still pressed by a person.
+    // The mode starts as the literal 'paper', and is set in exactly six places: the three radio buttons
+    // of the mode selector a person picks (since V7.1 Stage 14 one selector, Paper / demo / Live, in
+    // place of two switches), the effect that forces it BACK to paper, -- since 8 October 2026, CONFIRM
+    // -- the effect that picks live for a call confirmed from Opportunities, which runs once and only
+    // where the button itself could be picked (canGoLive: a verified key, the session armed by a person,
+    // no kill switch), and -- since V7.1 Stage 8 -- the effect that forces demo back to paper. Nothing
+    // ever sets 'live' but the person's radio button, disabled where live is out of reach, and the
+    // confirmed call. The phrase is still typed and the button still pressed by a person.
     expect(modal).toContain("useState<ExecutorMode>('paper')")
-    expect(modal.match(/setMode\(/g)).toHaveLength(5)
-    expect(modal).toContain("setMode(e.target.checked ? 'live' : 'paper')")
-    expect(modal).toContain("setMode(e.target.checked ? 'demo' : 'paper')")
+    expect(modal.match(/setMode\(/g)).toHaveLength(6)
     expect(modal).toContain("if (!canGoDemo && mode === 'demo') setMode('paper')")
     expect(modal).toContain("setMode('paper')")
-    expect(modal.match(/setMode\('live'\)/g)).toHaveLength(1)
+    expect(modal.match(/setMode\('live'\)/g)).toHaveLength(2)
+    expect(modal.match(/setMode\('demo'\)/g)).toHaveLength(1)
+    // The live radio button is the person's, and out of reach where live is: its input is disabled there.
+    expect(modal).toMatch(/type="radio"\s+name="executor-mode"\s+checked=\{mode === 'live'\}\s+disabled=\{!canGoLive\}\s+onChange=\{\(\) => \{\s+setMode\('live'\)/)
+    expect(modal).toMatch(/type="radio"\s+name="executor-mode"\s+checked=\{mode === 'demo'\}\s+disabled=\{!canGoDemo\}\s+onChange=\{\(\) => \{\s+setMode\('demo'\)/)
     expect(modal).toMatch(/if \(!proposalLive \|\| liveAsked\.current \|\| !canGoLive\) return\r?\n\s+liveAsked\.current = true\r?\n\s+setMode\('live'\)/)
   })
 

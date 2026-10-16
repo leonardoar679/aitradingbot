@@ -82,7 +82,7 @@ export function BestPredictionCard({
       title={t('Best current prediction')}
       actions={
         <button type="button" style={buttonStyle('secondary')} onClick={() => onDetails(prediction.pair)}>
-          {t('Details')}
+          {t('VIEW WHY')}
         </button>
       }
     >
@@ -119,7 +119,7 @@ export function BestPredictionCard({
               if ('proposal' in trade) onPrepareOrder(trade.proposal)
             }}
           >
-            {t('TRADE THIS')}
+            {t('PAPER TRADE')}
           </button>
         )}
       </div>

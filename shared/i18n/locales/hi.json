@@ -404,7 +404,6 @@
   "Trail %": "ट्रेल %",
   "Best current prediction": "मौजूदा सबसे अच्छी भविष्यवाणी",
   "The forecast has not made its first pass yet: it waits for its bars, its first fit and its walk forward, a few minutes after a first start.": "पूर्वानुमान ने अभी अपना पहला दौर पूरा नहीं किया है: यह पहली बार शुरू होने के कुछ मिनट बाद अपने बार, पहले फ़िट और वॉक-फ़ॉरवर्ड का इंतज़ार करता है।",
-  "Details": "विवरण",
   "Fills in the Position form, on paper; a person places it.": "पोज़िशन फ़ॉर्म पेपर पर भर देता है; ऑर्डर कोई व्यक्ति लगाता है।",
   "TRADE THIS": "यह ट्रेड करें",
   "A range, not a point: half the moves are meant to land inside the likely range, eight in ten between the bear and bull cases. It is a forecast, not a trade; nothing was placed.": "एक रेंज, कोई एक बिंदु नहीं: आधी चालें संभावित रेंज के भीतर आनी चाहिए, दस में से आठ मंदी और तेज़ी वाले मामलों के बीच। यह एक पूर्वानुमान है, ट्रेड नहीं; कुछ भी नहीं लगाया गया।",
@@ -1849,5 +1848,10 @@
   "Bitcoin's last fifteen minutes ran {move} against the fifteen before": "बिटकॉइन के पिछले पंद्रह मिनट उससे पहले के पंद्रह की तुलना में {move}",
   "{share} of the coins rose over the last fifteen minutes": "पिछले पंद्रह मिनट में {share} कॉइन चढ़े",
   "the market's volume in the last fifteen minutes is {share} its usual": "पिछले पंद्रह मिनट में बाज़ार का वॉल्यूम सामान्य का {share} है",
-  "The {horizon} forecasts of the last day held {share} of their 80% ranges, under {line}: the engine has drifted, and nothing is traded at this horizon.": "पिछले दिन के {horizon} पूर्वानुमान अपनी 80% रेंज में केवल {share} बार सही रहे, {line} से कम: इंजन भटक गया है, और इस अवधि पर कुछ भी ट्रेड नहीं किया जाता।"
+  "The {horizon} forecasts of the last day held {share} of their 80% ranges, under {line}: the engine has drifted, and nothing is traded at this horizon.": "पिछले दिन के {horizon} पूर्वानुमान अपनी 80% रेंज में केवल {share} बार सही रहे, {line} से कम: इंजन भटक गया है, और इस अवधि पर कुछ भी ट्रेड नहीं किया जाता।",
+  "VIEW WHY": "कारण देखें",
+  "PAPER TRADE": "पेपर ट्रेड",
+  "{name} (data only)": "{name} (केवल डेटा)",
+  "{exchange} demo": "{exchange} डेमो",
+  "Mode@@of an executor": "मोड"
 }

@@ -404,7 +404,6 @@
   "Trail %": "Jarak ikut %",
   "Best current prediction": "Prediksi terbaik saat ini",
   "The forecast has not made its first pass yet: it waits for its bars, its first fit and its walk forward, a few minutes after a first start.": "Prakiraan belum menjalankan putaran pertamanya: ia menunggu data bar, fit pertama, dan walk forward-nya, beberapa menit setelah mulai pertama kali.",
-  "Details": "Detail",
   "Fills in the Position form, on paper; a person places it.": "Mengisi formulir Posisi, secara simulasi; seseorang yang menempatkannya.",
   "TRADE THIS": "TRADE INI",
   "A range, not a point: half the moves are meant to land inside the likely range, eight in ten between the bear and bull cases. It is a forecast, not a trade; nothing was placed.": "Sebuah rentang, bukan titik: separuh pergerakan diharapkan jatuh dalam rentang kemungkinan, delapan dari sepuluh di antara skenario turun dan naik. Ini prakiraan, bukan trade; tidak ada yang ditempatkan.",
@@ -1849,5 +1848,10 @@
   "Bitcoin's last fifteen minutes ran {move} against the fifteen before": "lima belas menit terakhir Bitcoin terhadap lima belas menit sebelumnya {move}",
   "{share} of the coins rose over the last fifteen minutes": "{share} dari koin naik dalam lima belas menit terakhir",
   "the market's volume in the last fifteen minutes is {share} its usual": "volume pasar dalam lima belas menit terakhir {share} dari biasanya",
-  "The {horizon} forecasts of the last day held {share} of their 80% ranges, under {line}: the engine has drifted, and nothing is traded at this horizon.": "Prakiraan {horizon} sehari terakhir hanya tepat {share} dalam rentang 80%-nya, di bawah {line}: mesin telah melenceng, dan tidak ada yang diperdagangkan pada horizon ini."
+  "The {horizon} forecasts of the last day held {share} of their 80% ranges, under {line}: the engine has drifted, and nothing is traded at this horizon.": "Prakiraan {horizon} sehari terakhir hanya tepat {share} dalam rentang 80%-nya, di bawah {line}: mesin telah melenceng, dan tidak ada yang diperdagangkan pada horizon ini.",
+  "VIEW WHY": "LIHAT ALASAN",
+  "PAPER TRADE": "DAGANG SIMULASI",
+  "{name} (data only)": "{name} (hanya data)",
+  "{exchange} demo": "Demo {exchange}",
+  "Mode@@of an executor": "Modus"
 }

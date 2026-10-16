@@ -404,7 +404,6 @@
   "Trail %": "回撤跟随 %",
   "Best current prediction": "当前最佳预测",
   "The forecast has not made its first pass yet: it waits for its bars, its first fit and its walk forward, a few minutes after a first start.": "预测引擎还没有完成第一轮：首次启动后，它要等待 K线数据、首次拟合和滚动验证，需要几分钟。",
-  "Details": "详情",
   "Fills in the Position form, on paper; a person places it.": "以模拟方式填好仓位表单；由人来下单。",
   "TRADE THIS": "交易此项",
   "A range, not a point: half the moves are meant to land inside the likely range, eight in ten between the bear and bull cases. It is a forecast, not a trade; nothing was placed.": "这是一个区间，不是一个点：一半的走势应落在可能区间内，十次中有八次落在下行情形与上行情形之间。这是预测，不是交易；没有下任何单。",
@@ -1849,5 +1848,10 @@
   "Bitcoin's last fifteen minutes ran {move} against the fifteen before": "比特币最近十五分钟相对之前十五分钟变动 {move}",
   "{share} of the coins rose over the last fifteen minutes": "最近十五分钟有 {share} 的币种上涨",
   "the market's volume in the last fifteen minutes is {share} its usual": "市场最近十五分钟的成交量为平常的 {share}",
-  "The {horizon} forecasts of the last day held {share} of their 80% ranges, under {line}: the engine has drifted, and nothing is traded at this horizon.": "过去一天的{horizon}预测只有 {share} 落在其 80% 区间内，低于 {line}：引擎已偏移，此期限内不进行任何交易。"
+  "The {horizon} forecasts of the last day held {share} of their 80% ranges, under {line}: the engine has drifted, and nothing is traded at this horizon.": "过去一天的{horizon}预测只有 {share} 落在其 80% 区间内，低于 {line}：引擎已偏移，此期限内不进行任何交易。",
+  "VIEW WHY": "查看原因",
+  "PAPER TRADE": "模拟交易",
+  "{name} (data only)": "{name}（仅数据）",
+  "{exchange} demo": "{exchange} 模拟盘",
+  "Mode@@of an executor": "模式"
 }

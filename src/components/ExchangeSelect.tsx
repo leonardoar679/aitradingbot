@@ -1,11 +1,15 @@
-import { EXCHANGES, type Exchange } from '../../shared/ipc'
+import { EXCHANGES, canTradeOn, type Exchange } from '../../shared/ipc'
+import { useI18n } from '../i18n'
 
 interface ExchangeSelectProps {
   exchange: Exchange
   onSelect: (exchange: Exchange) => void
+  /** Where an executor is made (V7.1 Stage 14): an exchange this app cannot trade on is said to be data only. */
+  tradeNotes?: boolean
 }
 
-export function ExchangeSelect({ exchange, onSelect }: ExchangeSelectProps): React.JSX.Element {
+export function ExchangeSelect({ exchange, onSelect, tradeNotes = false }: ExchangeSelectProps): React.JSX.Element {
+  const { t } = useI18n()
   return (
     <select
       value={exchange}
@@ -23,7 +27,7 @@ export function ExchangeSelect({ exchange, onSelect }: ExchangeSelectProps): Rea
     >
       {EXCHANGES.map((ex) => (
         <option key={ex.id} value={ex.id}>
-          {ex.name}
+          {tradeNotes && !canTradeOn(ex.id) ? t('{name} (data only)', { name: ex.name }) : ex.name}
         </option>
       ))}
     </select>

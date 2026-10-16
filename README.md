@@ -467,6 +467,15 @@ ten languages where a decision's reasons are shown, on Home among them; the fore
 recorded, and the gate opens again on its own as the day's outcomes come right. The outcomes are read back
 at a start, so the gate stands across a restart.
 
+**The words on Home and in the form** (since 16 October 2026; V7.1 Stage 14). Home's best-prediction card
+reads its call, the current price, the expected price and change at the best horizon, the ranges, the
+likely high and low, when the expected price is reached, the catalyst and the decision, with **VIEW WHY**
+(the drawer) and **PAPER TRADE** (the Position form filled in on paper, for a person to place) -- the
+buttons' old words, Details and TRADE THIS on the card, are gone; the drawer's TRADE THIS stays. The
+executor form's exchange selector names an exchange this app cannot trade on as "data only" (Upbit), and
+its mode is one selector -- Paper, the exchange's demo account where it has one, Live -- in place of two
+switches; every new word in the ten languages, the simulator's sounds unchanged.
+
 **Which way: the direction models** (since 16 October 2026; V7.1 Stage 2; `shared/forecast/models.ts`,
 `shared/forecast/ml/{logistic,gbt}.ts`, judged in `shared/forecast/runCalibration.ts`, measured in
 `research/direction.ts`). V6's forecast read its P(up) off its range's distribution, and on three walk

@@ -404,7 +404,6 @@
   "Trail %": "ระยะตาม %",
   "Best current prediction": "การทำนายที่ดีที่สุดตอนนี้",
   "The forecast has not made its first pass yet: it waits for its bars, its first fit and its walk forward, a few minutes after a first start.": "การคาดการณ์ยังไม่ได้ทำรอบแรก มันรอข้อมูลแท่งราคา การฝึกครั้งแรก และการทดสอบแบบเดินหน้า ราวไม่กี่นาทีหลังเริ่มครั้งแรก",
-  "Details": "รายละเอียด",
   "Fills in the Position form, on paper; a person places it.": "กรอกแบบฟอร์มโพซิชันแบบจำลอง ผู้ใช้ส่งคำสั่งเอง",
   "TRADE THIS": "เทรดอันนี้",
   "A range, not a point: half the moves are meant to land inside the likely range, eight in ten between the bear and bull cases. It is a forecast, not a trade; nothing was placed.": "เป็นช่วง ไม่ใช่จุดเดียว ครึ่งหนึ่งของการเคลื่อนไหวควรอยู่ในช่วงที่น่าจะเป็น และแปดในสิบครั้งอยู่ระหว่างกรณีลงกับกรณีขึ้น นี่คือการคาดการณ์ ไม่ใช่การเทรด ไม่มีการส่งคำสั่งใดๆ",
@@ -1849,5 +1848,10 @@
   "Bitcoin's last fifteen minutes ran {move} against the fifteen before": "สิบห้านาทีล่าสุดของบิตคอยน์เทียบกับสิบห้านาทีก่อนหน้า {move}",
   "{share} of the coins rose over the last fifteen minutes": "เหรียญ {share} ปรับขึ้นในสิบห้านาทีล่าสุด",
   "the market's volume in the last fifteen minutes is {share} its usual": "ปริมาณซื้อขายของตลาดในสิบห้านาทีล่าสุดเท่ากับ {share} ของปกติ",
-  "The {horizon} forecasts of the last day held {share} of their 80% ranges, under {line}: the engine has drifted, and nothing is traded at this horizon.": "การคาดการณ์{horizon}ในวันที่ผ่านมาอยู่ในช่วง 80% เพียง {share} ต่ำกว่า {line}: เครื่องยนต์เบี่ยงเบนแล้ว และจะไม่เทรดอะไรในกรอบเวลานี้"
+  "The {horizon} forecasts of the last day held {share} of their 80% ranges, under {line}: the engine has drifted, and nothing is traded at this horizon.": "การคาดการณ์{horizon}ในวันที่ผ่านมาอยู่ในช่วง 80% เพียง {share} ต่ำกว่า {line}: เครื่องยนต์เบี่ยงเบนแล้ว และจะไม่เทรดอะไรในกรอบเวลานี้",
+  "VIEW WHY": "ดูเหตุผล",
+  "PAPER TRADE": "เทรดจำลอง",
+  "{name} (data only)": "{name} (ข้อมูลเท่านั้น)",
+  "{exchange} demo": "เดโม {exchange}",
+  "Mode@@of an executor": "โหมด"
 }

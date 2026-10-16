@@ -830,7 +830,7 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
               <div style={{ display: 'flex', gap: '0.7rem' }}>
                 <div style={{ flex: 1 }}>
                   <label style={fieldLabelStyle()}>{t('Exchange')}</label>
-                  <ExchangeSelect exchange={exchange} onSelect={handleExchangeChange} />
+                  <ExchangeSelect exchange={exchange} onSelect={handleExchangeChange} tradeNotes />
                 </div>
                 <div style={{ flex: 1 }}>
                   <label style={fieldLabelStyle()}>{t('Symbol')}</label>
@@ -964,27 +964,52 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
                 background: mode === 'live' ? 'color-mix(in srgb, var(--down) 8%, transparent)' : 'transparent'
               }}
             >
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  fontSize: '0.82rem',
-                  fontWeight: 700,
-                  color: canGoLive ? 'var(--down)' : 'var(--text-muted)',
-                  cursor: canGoLive ? 'pointer' : 'not-allowed'
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={mode === 'live'}
-                  disabled={!canGoLive}
-                  onChange={(e) => {
-                    setMode(e.target.checked ? 'live' : 'paper')
-                    setLiveConfirmText('')
-                  }}
-                />
-                <AlertTriangle size={14} />
+              {/* The mode selector (V7.1 Stage 14): paper, the exchange's demo account where it has one, or live. */}
+              <div role="radiogroup" aria-label={t('Mode@@of an executor')} style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', fontSize: '0.82rem', fontWeight: 700 }}>
+                <span style={{ color: 'var(--text-muted)' }}>{t('Mode@@of an executor')}</span>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer', color: 'var(--text-primary)' }}>
+                  <input
+                    type="radio"
+                    name="executor-mode"
+                    checked={mode === 'paper'}
+                    onChange={() => {
+                      setMode('paper')
+                      setLiveConfirmText('')
+                    }}
+                  />
+                  {t('Paper')}
+                </label>
+                {(type === 'order' || type === 'position') && canTradeDemoOn(exchange) && (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: canGoDemo ? 'var(--accent)' : 'var(--text-muted)', cursor: canGoDemo ? 'pointer' : 'not-allowed' }}>
+                    <input
+                      type="radio"
+                      name="executor-mode"
+                      checked={mode === 'demo'}
+                      disabled={!canGoDemo}
+                      onChange={() => {
+                        setMode('demo')
+                        setLiveConfirmText('')
+                      }}
+                    />
+                    {t('{exchange} demo', { exchange: exchangeName })}
+                  </label>
+                )}
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: canGoLive ? 'var(--down)' : 'var(--text-muted)', cursor: canGoLive ? 'pointer' : 'not-allowed' }}>
+                  <input
+                    type="radio"
+                    name="executor-mode"
+                    checked={mode === 'live'}
+                    disabled={!canGoLive}
+                    onChange={() => {
+                      setMode('live')
+                      setLiveConfirmText('')
+                    }}
+                  />
+                  <AlertTriangle size={14} />
+                  {t('Live')}
+                </label>
+              </div>
+              <p style={{ fontSize: '0.72rem', color: canGoLive ? 'var(--down)' : 'var(--text-muted)', margin: 0, fontWeight: 600 }}>
                 {type === 'position'
                   ? t('Live Trading — enters and watches a real position')
                   : type === 'dca'
@@ -994,7 +1019,7 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
                       : type === 'grid'
                         ? 'Live Trading — places a real bounded ladder of resting orders'
                         : 'Live Trading — places a real order with real money'}
-              </label>
+              </p>
 
               {!canGoLive && (
                 <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
@@ -1030,28 +1055,9 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
 
               {(type === 'order' || type === 'position') && canTradeDemoOn(exchange) && (
                 <>
-                  <label
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                      fontSize: '0.82rem',
-                      fontWeight: 700,
-                      color: canGoDemo ? 'var(--accent)' : 'var(--text-muted)',
-                      cursor: canGoDemo ? 'pointer' : 'not-allowed'
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={mode === 'demo'}
-                      disabled={!canGoDemo}
-                      onChange={(e) => {
-                        setMode(e.target.checked ? 'demo' : 'paper')
-                        setLiveConfirmText('')
-                      }}
-                    />
+                  <p style={{ fontSize: '0.72rem', color: canGoDemo ? 'var(--accent)' : 'var(--text-muted)', margin: 0, fontWeight: 600 }}>
                     {type === 'position' ? t('Demo account — enters and watches a position with play money') : t('Demo account — places an order with play money')}
-                  </label>
+                  </p>
                   {!canGoDemo && (
                     <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
                       {!demoKeyConfigured ? t('Add a verified Bitget demo key on Connections first.') : t('A demo order keeps the rules a live one keeps: a market or limit order, or a buy-only 1x Position with an exit.')}

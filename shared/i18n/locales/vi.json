@@ -404,7 +404,6 @@
   "Trail %": "Khoảng bám %",
   "Best current prediction": "Dự đoán tốt nhất hiện tại",
   "The forecast has not made its first pass yet: it waits for its bars, its first fit and its walk forward, a few minutes after a first start.": "Dự báo chưa chạy lượt đầu tiên: nó chờ dữ liệu nến, lần khớp đầu tiên và kiểm định tiến dần, vài phút sau lần khởi động đầu.",
-  "Details": "Chi tiết",
   "Fills in the Position form, on paper; a person places it.": "Điền sẵn phiếu Vị thế, dạng mô phỏng; người dùng tự đặt lệnh.",
   "TRADE THIS": "GIAO DỊCH NÀY",
   "A range, not a point: half the moves are meant to land inside the likely range, eight in ten between the bear and bull cases. It is a forecast, not a trade; nothing was placed.": "Một khoảng, không phải một điểm: một nửa số biến chuyển được kỳ vọng nằm trong khoảng khả dĩ, tám trên mười nằm giữa kịch bản giảm và kịch bản tăng. Đây là dự báo, không phải giao dịch; không có gì được đặt.",
@@ -1849,5 +1848,10 @@
   "Bitcoin's last fifteen minutes ran {move} against the fifteen before": "mười lăm phút gần nhất của Bitcoin so với mười lăm phút trước {move}",
   "{share} of the coins rose over the last fifteen minutes": "{share} số coin tăng trong mười lăm phút gần nhất",
   "the market's volume in the last fifteen minutes is {share} its usual": "khối lượng của thị trường trong mười lăm phút gần nhất bằng {share} mức thường lệ",
-  "The {horizon} forecasts of the last day held {share} of their 80% ranges, under {line}: the engine has drifted, and nothing is traded at this horizon.": "Các dự báo {horizon} của ngày qua chỉ đúng {share} trong khoảng 80% của chúng, dưới {line}: động cơ đã lệch, và không giao dịch gì ở khung thời gian này."
+  "The {horizon} forecasts of the last day held {share} of their 80% ranges, under {line}: the engine has drifted, and nothing is traded at this horizon.": "Các dự báo {horizon} của ngày qua chỉ đúng {share} trong khoảng 80% của chúng, dưới {line}: động cơ đã lệch, và không giao dịch gì ở khung thời gian này.",
+  "VIEW WHY": "XEM LÝ DO",
+  "PAPER TRADE": "GIAO DỊCH MÔ PHỎNG",
+  "{name} (data only)": "{name} (chỉ dữ liệu)",
+  "{exchange} demo": "Demo {exchange}",
+  "Mode@@of an executor": "Chế độ"
 }
