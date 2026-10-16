@@ -1786,5 +1786,18 @@
   "Which way: P(up) {pUp} from {source}, whose skill on weeks it was not fitted on is {skill}.": "方向：P(上昇) {pUp} は{source}によるもので、学習に使っていない週でのスキルは {skill} です。",
   "the range's own distribution": "レンジ自身の分布",
   "the news": "ニュース",
-  "its chance of up knew less than the base rate ({skill} of skill)": "上昇確率が基準確率より劣っていた（スキル {skill}）"
+  "its chance of up knew less than the base rate ({skill} of skill)": "上昇確率が基準確率より劣っていた（スキル {skill}）",
+  "Expected price": "予想価格",
+  "Likely high": "高値の目安",
+  "Likely low": "安値の目安",
+  "Reached within": "到達まで",
+  "{price} ({move})": "{price}（{move}）",
+  "{share} within {horizon}, typically in {minutes} min": "{horizon}以内に {share}、通常は約 {minutes} 分",
+  "{share} within {horizon}": "{horizon}以内に {share}",
+  "unlikely within {horizon} ({share})": "{horizon}以内は見込み薄（{share}）",
+  "Price and time": "価格と時間",
+  "Expected {price} ({move}) at {horizon}; the path likely stays under {high} ({highPct}) and above {low} ({lowPct}), eight times in ten.": "{horizon}の予想価格は {price}（{move}）。値動きは十中八九 {high}（{highPct}）を超えず、{low}（{lowPct}）を割りません。",
+  "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}; when it is, typically in {minutes} min.": "予想価格に 5 分以内に到達する確率は {m5}、15 分以内 {m15}、1 時間以内 {h1}、4 時間以内 {h4}。到達する場合は通常 {minutes} 分ほどです。",
+  "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}.": "予想価格に 5 分以内に到達する確率は {m5}、15 分以内 {m15}、1 時間以内 {h1}、4 時間以内 {h4} です。",
+  "Reaching it within {horizon} is unlikely ({share}): no time is said.": "{horizon}以内の到達は見込み薄です（{share}）。時間は示しません。"
 }

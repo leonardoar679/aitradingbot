@@ -39,9 +39,19 @@ import { usualMove } from './targets'
 // Each learns from the rows whose move cleared a materiality floor either way; what each reading means
 // is settled on the walk forward (shared/forecast/runCalibration.ts), never here.
 
-/** models-v2 (V7.1 Stage 2): every horizon's file carries its direction models; a v1 file is refused and
- * the run fitted again. */
-export const MODELS_VERSION = 'models-v2'
+// THE EXCURSION MODELS (V7.1 Stage 3, 16 October 2026) forecast how far the path goes on the way, not where
+// it ends: boosted trees at each level's own pinball loss on the path's highest high and lowest low over
+// the horizon, in usual moves (shared/forecast/targets.ts) -- the levels the high stays under and the low
+// stays above half the time, eight times in ten and nine. What each level means out of sample is settled
+// on the walk forward (shared/forecast/firstTouch.ts, excursionCalibrationOf), never here.
+
+/** models-v3 (V7.1 Stage 3): every horizon's file carries its direction and excursion models; an older
+ * file is refused and the run fitted again. */
+export const MODELS_VERSION = 'models-v3'
+
+/** The shares of outcomes the excursion levels are meant to hold: the high stays under the level, the low
+ * above it, this often. */
+export const EXCURSION_LEVELS = [0.5, 0.8, 0.9] as const
 
 export const FORECAST_MODELS = ['persistence', 'volatility', 'technical', 'random-forest', 'gbt', 'quantile-gbt', 'gbt-price'] as const
 export type ForecastModelId = (typeof FORECAST_MODELS)[number]
@@ -82,6 +92,8 @@ export const TRAINING = {
   /** The direction models (V7.1 Stage 2): the boosting's budget on the log loss, the logistic
    * regression's penalty, and the floor a move must clear, in usual moves, to teach a way. */
   direction: { trees: 150, learningRate: 0.05, logisticLambda: 10, floor: 0.1 },
+  /** The excursion models (V7.1 Stage 3): the boosting's budget at each level's pinball loss. */
+  excursion: { trees: 150, learningRate: 0.1 },
   /** A size is held within these multiples of the usual move. */
   scaleFloor: 0.05,
   scaleCeiling: 20,
@@ -128,6 +140,13 @@ export interface DirectionFits {
   gbtPrice: GbtModel
 }
 
+/** The excursion models of a horizon (V7.1 Stage 3): boosted trees at each of EXCURSION_LEVELS, on the
+ * path's highest high and on its lowest low, in usual moves. */
+export interface ExcursionFits {
+  high: GbtModel[]
+  low: GbtModel[]
+}
+
 export interface FittedHorizon {
   version: string
   horizon: Horizon
@@ -139,12 +158,21 @@ export interface FittedHorizon {
   quantileGbt: { levels: GbtModel[] }
   gbtPrice: { center: GbtModel; size: GbtModel; residual: number[] }
   direction: DirectionFits
+  excursion: ExcursionFits
 }
 
 /** A row's move at a horizon in units of its usual move; NaN where it has no outcome. */
 export function normalizedTarget(panel: Panel, row: number, horizon: Horizon): number {
   const usual = usualMove(panel.rv24h[row], HORIZON_BARS[horizon])
   return usual > 0 ? panel.y[horizon][row] / usual : Number.NaN
+}
+
+/** A row's path at a horizon in units of its usual move: its highest high (zero or more) and its lowest
+ * low (zero or less); NaN where it has no outcome. */
+export function normalizedExcursion(panel: Panel, row: number, horizon: Horizon): { best: number; worst: number } {
+  const usual = usualMove(panel.rv24h[row], HORIZON_BARS[horizon])
+  if (!(usual > 0)) return { best: Number.NaN, worst: Number.NaN }
+  return { best: panel.best[horizon][row] / usual, worst: panel.worst[horizon][row] / usual }
 }
 
 const sizeOf = (logSize: number): number => Math.min(TRAINING.scaleCeiling, Math.max(TRAINING.scaleFloor, Math.exp(logSize)))
@@ -229,10 +257,22 @@ export function fitHorizon(panel: Panel, train: Uint32Array, valid: Uint32Array,
     gbtTech: fitGbt(tech.train, wayTrain.y, tech.valid, wayValid.y, { kind: 'logloss' }, { ...dirParams, seed: seed + 21 }),
     gbtPrice: fitGbt(price.train, wayTrain.y, price.valid, wayValid.y, { kind: 'logloss' }, { ...dirParams, seed: seed + 22 })
   }
+  // The excursion models (V7.1 Stage 3): the path's highest high and lowest low, each at its own levels --
+  // the low's levels mirrored, so that each is the one the low stays above that often.
+  const best = Float64Array.from(train, (row) => normalizedExcursion(panel, row, horizon).best)
+  const worst = Float64Array.from(train, (row) => normalizedExcursion(panel, row, horizon).worst)
+  const bestValid = Float64Array.from(valid, (row) => normalizedExcursion(panel, row, horizon).best)
+  const worstValid = Float64Array.from(valid, (row) => normalizedExcursion(panel, row, horizon).worst)
+  const exParams = { ...GBT_BASE, ...TRAINING.excursion }
+  const excursion: ExcursionFits = {
+    high: EXCURSION_LEVELS.map((level, index) => fitGbt(binned, best, binnedValid, bestValid, { kind: 'pinball', tau: level }, { ...exParams, seed: seed + 30 + index })),
+    low: EXCURSION_LEVELS.map((level, index) => fitGbt(binned, worst, binnedValid, worstValid, { kind: 'pinball', tau: 1 - level }, { ...exParams, seed: seed + 40 + index }))
+  }
   return {
     version: MODELS_VERSION,
     horizon,
     direction,
+    excursion,
     persistence: { residual: quantilesOf(z) },
     volatility: { size, residual: residualOf(() => 0, (row) => volSize[row]) },
     technical: {
@@ -267,6 +307,14 @@ export function predictDirection(fitted: FittedHorizon, x: ArrayLike<number>, of
     'dir-gbt-tech': inside(sigmoid(predictGbt(fitted.direction.gbtTech, x, offset))),
     'dir-gbt-price': inside(sigmoid(predictGbt(fitted.direction.gbtPrice, x, offset)))
   }
+}
+
+/** The excursion models' levels for one row of figures (V7.1 Stage 3), in usual moves: the highs the path
+ * stays under, zero or more and rising with the level; the lows it stays above, zero or less and falling. */
+export function predictExcursion(fitted: FittedHorizon, x: ArrayLike<number>, offset = 0): { high: number[]; low: number[] } {
+  const high = fitted.excursion.high.map((model) => Math.max(0, predictGbt(model, x, offset))).sort((a, b) => a - b)
+  const low = fitted.excursion.low.map((model) => Math.min(0, predictGbt(model, x, offset))).sort((a, b) => b - a)
+  return { high, low }
 }
 
 /** Every model's five quantiles of z for one row of figures, each in order. */

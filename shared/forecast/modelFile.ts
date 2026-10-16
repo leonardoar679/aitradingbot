@@ -6,7 +6,7 @@ import { QUANTILE_LEVELS } from './ml/quantile'
 import type { RidgeModel } from './ml/ridge'
 import { canonicalJson } from './ml/serialize'
 import type { FlatTree } from './ml/tree'
-import { MODELS_VERSION, type DirectionFits, type FittedHorizon } from './models'
+import { EXCURSION_LEVELS, MODELS_VERSION, type DirectionFits, type ExcursionFits, type FittedHorizon } from './models'
 
 // A HORIZON'S MODELS ON FILE (V6 Stage 5, 13 October 2026): forecastModels/<run>/<horizon>.json, one
 // line of canonical JSON. What inference needs and nothing else -- a tree's splits, children, values
@@ -48,6 +48,7 @@ export function serializeFitted(fitted: FittedHorizon): string {
     version: fitted.version,
     horizon: fitted.horizon,
     direction: { logistic: compactLogistic(fitted.direction.logistic), gbt: compactGbt(fitted.direction.gbt), gbtTech: compactGbt(fitted.direction.gbtTech), gbtPrice: compactGbt(fitted.direction.gbtPrice) },
+    excursion: { high: fitted.excursion.high.map(compactGbt), low: fitted.excursion.low.map(compactGbt) },
     persistence: { residual: roundAll(fitted.persistence.residual) },
     volatility: { size: compactRidge(fitted.volatility.size), residual: roundAll(fitted.volatility.residual) },
     technical: { center: compactRidge(fitted.technical.center), residual: roundAll(fitted.technical.residual) },
@@ -94,6 +95,19 @@ function readLogistic(value: unknown): LogisticModel | null {
   const d = (model.columns as number[]).length
   if (!numbers(model.mean, d) || !numbers(model.scale, d) || !numbers(model.coef, d)) return null
   return { kind: 'logistic', mean: model.mean, scale: model.scale, coef: model.coef, intercept: model.intercept, columns: model.columns as number[], iterations: model.iterations }
+}
+
+/** A horizon's excursion models (V7.1 Stage 3): one boosted model a level, each at its level's own pinball
+ * loss, the low's mirrored. */
+function readExcursion(value: unknown): ExcursionFits | null {
+  const part = value as Record<string, unknown> | null
+  if (typeof part !== 'object' || part === null || !Array.isArray(part.high) || !Array.isArray(part.low)) return null
+  const high = part.high.map(readGbt)
+  const low = part.low.map(readGbt)
+  if (high.length !== EXCURSION_LEVELS.length || low.length !== EXCURSION_LEVELS.length || high.some((model) => model === null) || low.some((model) => model === null)) return null
+  const at = (model: GbtModel, tau: number): boolean => model.loss.kind === 'pinball' && Math.abs(model.loss.tau - tau) < 1e-9
+  if (!high.every((model, index) => at(model!, EXCURSION_LEVELS[index])) || !low.every((model, index) => at(model!, 1 - EXCURSION_LEVELS[index]))) return null
+  return { high: high as GbtModel[], low: low as GbtModel[] }
 }
 
 /** A horizon's direction models (V7.1 Stage 2): the boosted ones on the log loss, the logistic whole. */
@@ -148,13 +162,15 @@ export function parseFitted(text: string): FittedHorizon | null {
   const levels = Array.isArray(levelsRaw) ? levelsRaw.map(readGbt) : []
   const residuals = ['persistence', 'volatility', 'technical', 'forest', 'gbt', 'gbtPrice'].map(residual)
   const direction = readDirection(raw.direction)
-  if (volatility === null || technical === null || forest === null || gbtCenter === null || gbtSize === null || priceCenter === null || priceSize === null || direction === null) return null
+  const excursion = readExcursion(raw.excursion)
+  if (volatility === null || technical === null || forest === null || gbtCenter === null || gbtSize === null || priceCenter === null || priceSize === null || direction === null || excursion === null) return null
   if (levels.length !== QUANTILE_LEVELS.length || levels.some((model) => model === null) || residuals.some((value) => value === null)) return null
   const [persistence, vol, tech, forestResidual, gbtResidual, priceResidual] = residuals as number[][]
   return {
     version: MODELS_VERSION,
     horizon: raw.horizon as Horizon,
     direction,
+    excursion,
     persistence: { residual: persistence },
     volatility: { size: volatility, residual: vol },
     technical: { center: technical, residual: tech },

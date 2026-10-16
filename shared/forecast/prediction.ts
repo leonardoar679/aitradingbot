@@ -12,6 +12,8 @@ import { reliabilityOf, type Reliability, type ReliabilityReason } from './relia
 import { forecastPrice, HORIZON_ADJECTIVE } from './words'
 import { ENGLISH, type I18n } from '../i18n/translate'
 import { RUN_CALIBRATION_VERSION, VARIANTS, cellOf, directionSourceOf, type ForecastVariant, type PUpSource, type RunCalibration } from './runCalibration'
+import { FIRST_TOUCH, arrivalOf, type TouchWindow } from './firstTouch'
+import { EXCURSION_LEVELS } from './models'
 import { shockFor, stretchShock } from './shock'
 import { usualMove } from './targets'
 
@@ -52,8 +54,16 @@ import { usualMove } from './targets'
 //   mapped by its own map -- and the base rate where none is skilled; the news's own where its skill has
 //   been shown. The call's lines are unchanged: only the reading they are applied to may be a model's.
 
-/** prediction-v3 (V7.1 Stage 2): each horizon says where its P(up) came from. */
-export const PREDICTION_VERSION = 'prediction-v3'
+// - THE PATH (V7.1 Stage 3; shared/forecast/firstTouch.ts): each horizon's likely high and low -- the
+//   levels the path's highest high stays under and its lowest low above, half the time, eight times in
+//   ten and nine, read by the excursion models and scaled by what the walk forward's paths did -- and
+//   when the expected price (the median) is reached: the chance within five minutes, fifteen, an hour and
+//   four, and the typical time when it is, from the first-touch table; UNLIKELY under a fixed chance
+//   within the horizon, and then no time is said.
+
+/** prediction-v4 (V7.1 Stage 3): each horizon carries its likely high and low and when its expected price
+ * is reached. */
+export const PREDICTION_VERSION = 'prediction-v4'
 
 export const PREDICTION_LINES = {
   /** The half-spread, in percent, the training closes already carry. */
@@ -124,6 +134,16 @@ export interface ForecastRange {
    * outer and inner factors, and the share of the walk forward's moments past the line whose 80% range held,
    * as forecast and widened (cross-fitted); null where it did not, absent on a forecast made before. */
   shock?: { btc15: number; k80: number; k50: number; held: { before: number; after: number } | null } | null
+  /** The path's likely high and low (V7.1 Stage 3): at each of EXCURSION_LEVELS, the move from the close
+   * the highest high stays under and the lowest low stays above that often, in percent, scaled by the
+   * walk forward's calibration; and how often the tested paths stayed inside the scaled levels, on weeks
+   * the factors were not fitted on. Absent where the run holds no excursion calibration. */
+  excursion?: { highPct: number[]; lowPct: number[]; held: { high: number[]; low: number[] } | null }
+  /** When the expected price -- the median -- is reached (V7.1 Stage 3): its distance in usual hourly
+   * moves, the chance it is first touched within each window, the typical minutes when it is, and
+   * whether it is UNLIKELY within the horizon (under FIRST_TOUCH.unlikely). Absent where the run holds no
+   * first-touch table. */
+  arrival?: { targetPct: number; k: number; pWithin: Record<TouchWindow, number>; medianMinutes: number | null; unlikely: boolean }
   /** The three figures that moved its size reading most (§36; shared/forecast/rangeDrivers.ts). */
   rangeDrivers: RangeDriver[]
   variants: Partial<Record<ForecastVariant, { medianPct: number; lowPct: number; highPct: number; quantilesPct: number[]; pUp: number; pUpMapped: number }>>
@@ -201,9 +221,14 @@ export interface PredictionInput {
   btc15?: number | null
   /** Each horizon's direction models' raw chances of up at the close (V7.1 Stage 2, predictDirection). */
   direction?: Partial<Record<Horizon, Partial<Record<DirectionModelId, number>>>>
+  /** Each horizon's excursion levels at the close, in usual moves (V7.1 Stage 3, predictExcursion). */
+  excursion?: Partial<Record<Horizon, { high: readonly number[]; low: readonly number[] }>>
   runId: string
   foldsRunId: string
 }
+
+/** The windows the first-touch table answers for, by horizon: a day's forecast is read at four hours. */
+const TOUCH_WINDOW_OF: Record<Horizon, TouchWindow> = { minutes5: 'minutes5', minutes15: 'minutes15', hour1: 'hour1', hours4: 'hours4', hours24: 'hours4' }
 
 const pctOf = (logReturn: number): number => (Math.exp(logReturn) - 1) * 100
 
@@ -326,7 +351,39 @@ function rangeOf(input: PredictionInput, horizon: Horizon): ForecastRange | null
   })
   const contributions = v2.combined.members.map((member) => ({ model: member.model, weight: member.weight, medianLogPct: member.median * usual * 100 }))
   const combinedMedianLogPct = contributions.reduce((sum, member) => sum + member.weight * member.medianLogPct, 0)
+  // The path (V7.1 Stage 3): the likely high and low from the excursion models' levels, scaled by the
+  // walk forward's factors; and when the median is reached, from the first-touch table at its distance.
+  const read = input.excursion?.[horizon]
+  const scale = calibration.excursion
+  const excursion: ForecastRange['excursion'] =
+    read === undefined || scale === undefined || read.high.length !== EXCURSION_LEVELS.length || read.low.length !== EXCURSION_LEVELS.length
+      ? undefined
+      : {
+          highPct: read.high.map((level, at) => pctOf(Math.max(0, level * scale.high[at]) * usual)),
+          lowPct: read.low.map((level, at) => pctOf(Math.min(0, level * scale.low[at]) * usual)),
+          held: scale.honest.n > 0 ? { high: scale.honest.high, low: scale.honest.low } : null
+        }
+  const table = input.calibration.touch
+  const hourly = usualMove(input.rv24h, 12)
+  const arrival: ForecastRange['arrival'] =
+    table === undefined || !(hourly > 0) || !Number.isFinite(logs[P50])
+      ? undefined
+      : ((): ForecastRange['arrival'] => {
+          const k = Math.abs(logs[P50]) / hourly
+          const reached = arrivalOf(table, k, logs[P50] >= 0 ? 'up' : 'down', input.regime)
+          const window = TOUCH_WINDOW_OF[horizon]
+          const within = reached.pWithin[window]
+          return {
+            targetPct: quantilesPct[P50],
+            k,
+            pWithin: reached.pWithin,
+            medianMinutes: reached.medianBars === null ? null : reached.medianBars * 5,
+            unlikely: !(within >= FIRST_TOUCH.unlikely)
+          }
+        })()
   return {
+    ...(excursion === undefined ? {} : { excursion }),
+    ...(arrival === undefined ? {} : { arrival }),
     lowPct: quantilesPct[P25],
     highPct: quantilesPct[P75],
     lowerPrice: quantilePrices[P25],

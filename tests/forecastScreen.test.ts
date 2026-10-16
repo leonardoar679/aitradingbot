@@ -167,18 +167,24 @@ describe('the best prediction card (§3, §118)', () => {
     const sol = prediction('SOLUSDT', { mainCatalyst: 'Exchange lists SOL perpetuals', newsImpact: 82 })
     const fromClose = predictionCardRows(sol, forecastView(sol, null, T * 1000 + 600_000), '3 / 3 bullish')
     const shown = (rows: { name: string; value: string }[]): { name: string; value: string }[] => rows.map(({ name, value }) => ({ name, value }))
+    // Since V7.1 Stage 3 the expected price (the median, as a price from the close), the likely high and low
+    // and when the expected price is reached: a dash each where the forecast carries no path figures.
     expect(shown(fromClose.left)).toEqual([
       { name: 'Current', value: '$180 (last close)' },
       { name: 'Next 15 min', value: '-0.50% ~ +0.70%' },
       { name: 'Next 1 hour', value: '-1.00% ~ +2.00%' },
       { name: 'Next 4 hours', value: '-2.00% ~ +3.00%' },
+      { name: 'Expected price', value: '$180.9 (+0.50%)' },
       { name: 'Bull case', value: '+3.00%' },
-      { name: 'Bear case', value: '-2.00%' }
+      { name: 'Bear case', value: '-2.00%' },
+      { name: 'Likely high', value: '—' },
+      { name: 'Likely low', value: '—' }
     ])
     expect(shown(fromClose.right)).toEqual([
       { name: 'Forecast quality', value: '55 / 100' },
       { name: 'Reliability', value: 'HIGH' },
       { name: 'Best horizon', value: '1 hour' },
+      { name: 'Reached within', value: '—' },
       { name: 'News catalyst', value: 'HIGH IMPACT · Exchange lists SOL perpetuals' },
       { name: 'Volume', value: '3.7× its usual hour' },
       { name: 'Momentum', value: 'UP' },
@@ -189,7 +195,15 @@ describe('the best prediction card (§3, §118)', () => {
     expect(shown(live.left)[0]).toEqual({ name: 'Current', value: '$183.6' })
     expect(live.left[1].value).toBe('-2.45% ~ -1.27% (expired)')
     expect(live.left[2].value).toBe('-2.94% ~ 0.00%')
-    expect(shown(live.right)[6]).toEqual({ name: 'AI consensus', value: 'not asked' })
+    // The expected price stays where the forecast fixed it; its move is from the live price.
+    expect(live.left[4].value).toBe('$180.9 (-1.47%)')
+    expect(shown(live.right)[7]).toEqual({ name: 'AI consensus', value: 'not asked' })
+    // With the path's figures (V7.1 Stage 3): the 80% levels as prices from the close, and when the median is reached.
+    const pathed = prediction('SOLUSDT', {}, { excursion: { highPct: [0.8, 1.5, 2.2], lowPct: [-0.7, -1.3, -1.9], held: null }, arrival: { targetPct: 0.5, k: 0.6, pWithin: { minutes5: 0.1, minutes15: 0.25, hour1: 0.55, hours4: 0.8 }, medianMinutes: 25, unlikely: false } })
+    const rows = predictionCardRows(pathed, forecastView(pathed, null, T * 1000), null)
+    expect(rows.left[7].value).toBe('$182.7 (+1.50%)')
+    expect(rows.left[8].value).toBe('$177.66 (-1.30%)')
+    expect(rows.right[3].value).toBe('55% within 1 hour, typically in 25 min')
     // No best horizon: the hour leads, and says none beat a plain range.
     expect(predictionCardRows(prediction('SOLUSDT', { bestHorizon: null }), forecastView(sol, null, T * 1000), null).right[2].value).toBe('none beat a plain range')
   })

@@ -4,6 +4,7 @@ import { HORIZONS, PAIR_CLASSES, type Horizon, type PairClass } from './features
 import { QUANTILE_LEVELS } from './ml/quantile'
 import { FORECAST_MODELS, type ForecastModelId } from './models'
 import type { ErrorKind, ForecastOutcome } from './outcome'
+import { TOUCH_WINDOWS } from './firstTouch'
 import type { PricePrediction } from './prediction'
 import type { RefreshReason } from './refresh'
 import type { PUpSource } from './runCalibration'
@@ -76,6 +77,12 @@ export interface HorizonLine {
   shock?: [number, number, number]
   /** Where its P(up) came from (V7.1 Stage 2); absent on a forecast recorded before. */
   src?: PUpSource
+  /** The path's likely high and low (V7.1 Stage 3): the highs at each of EXCURSION_LEVELS, then the lows,
+   * in percent from the close; absent where the run held no excursion calibration. */
+  ex?: number[]
+  /** When the median is reached (V7.1 Stage 3): its distance in usual hourly moves, the chance within each
+   * window (TOUCH_WINDOWS' order), the typical minutes, and whether it is unlikely within the horizon. */
+  arr?: { k: number; p: number[]; med: number | null; unlikely: boolean }
 }
 
 export interface NewsLine {
@@ -140,6 +147,10 @@ export function predictionLine(prediction: PricePrediction, horizons: readonly H
       parts: range.contributions.map((member) => [member.model, p3(member.weight), pct4(member.medianLogPct)]),
       qual: range.quality.score,
       ...(range.pUpSource === undefined ? {} : { src: range.pUpSource }),
+      ...(range.excursion === undefined ? {} : { ex: [...range.excursion.highPct, ...range.excursion.lowPct].map(pct4) }),
+      ...(range.arrival === undefined
+        ? {}
+        : { arr: { k: Math.round(range.arrival.k * 1000) / 1000, p: TOUCH_WINDOWS.map((window) => p3(range.arrival!.pWithin[window])), med: range.arrival.medianMinutes === null ? null : Math.round(range.arrival.medianMinutes), unlikely: range.arrival.unlikely } }),
       ...ownLevelsOf(range)
     }
   }
@@ -254,6 +265,9 @@ export interface OutcomeLine {
   /** Where the shown levels were not V2's own (V6.1): where the close fell against V2's, what the
    * adaptive V2 levels learn from. */
   v2below?: string
+  /** When the path first reached the median, the P90 and the P10 (V7.1 Stage 3), in seconds after the
+   * close; null where it never did within the horizon. Absent on an outcome written before. */
+  touch?: [number | null, number | null, number | null]
 }
 
 /** A horizon whose outcome could not be read. */
@@ -296,6 +310,7 @@ export function outcomeLine(recorded: PredictionLine, horizon: Horizon, outcome:
     cell: line.cell,
     cls: recorded.cls,
     errors: outcome.errors,
+    touch: [outcome.touch.target, outcome.touch.upper, outcome.touch.lower],
     ...(line.v2 === undefined ? {} : { v2below: flags(line.v2.map((level) => outcome.movePct <= level)) }),
     ...(line.news?.v3 === undefined ? {} : { v3below: flags(line.news.v3.q.map((level) => outcome.movePct <= level)) }),
     ...(line.news?.v4 === undefined ? {} : { v4below: flags(line.news.v4.q.map((level) => outcome.movePct <= level)), newsPUp: line.news.v4.pUpMapped, newsShift: line.news.v4.shift })

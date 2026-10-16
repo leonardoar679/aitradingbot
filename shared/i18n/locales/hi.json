@@ -1786,5 +1786,18 @@
   "Which way: P(up) {pUp} from {source}, whose skill on weeks it was not fitted on is {skill}.": "दिशा: P(ऊपर) {pUp} {source} से है, जिसका उन हफ़्तों पर कौशल, जिन पर इसे फ़िट नहीं किया गया, {skill} है।",
   "the range's own distribution": "रेंज के अपने वितरण",
   "the news": "समाचार",
-  "its chance of up knew less than the base rate ({skill} of skill)": "इसकी ऊपर जाने की संभावना आधार दर से कम जानती थी (कौशल {skill})"
+  "its chance of up knew less than the base rate ({skill} of skill)": "इसकी ऊपर जाने की संभावना आधार दर से कम जानती थी (कौशल {skill})",
+  "Expected price": "अपेक्षित कीमत",
+  "Likely high": "संभावित उच्चतम",
+  "Likely low": "संभावित न्यूनतम",
+  "Reached within": "इतने समय में पहुँच",
+  "{price} ({move})": "{price} ({move})",
+  "{share} within {horizon}, typically in {minutes} min": "{horizon} के भीतर {share}, आमतौर पर लगभग {minutes} मिनट में",
+  "{share} within {horizon}": "{horizon} के भीतर {share}",
+  "unlikely within {horizon} ({share})": "{horizon} के भीतर संभावना कम ({share})",
+  "Price and time": "कीमत और समय",
+  "Expected {price} ({move}) at {horizon}; the path likely stays under {high} ({highPct}) and above {low} ({lowPct}), eight times in ten.": "{horizon} पर अपेक्षित कीमत {price} ({move}); भाव का रास्ता दस में आठ बार {high} ({highPct}) के नीचे और {low} ({lowPct}) के ऊपर रहता है।",
+  "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}; when it is, typically in {minutes} min.": "अपेक्षित कीमत 5 मिनट के भीतर {m5} बार, 15 मिनट में {m15}, 1 घंटे में {h1}, 4 घंटे में {h4} बार पहुँचती है; जब पहुँचती है, तो आमतौर पर लगभग {minutes} मिनट में।",
+  "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}.": "अपेक्षित कीमत 5 मिनट के भीतर {m5} बार, 15 मिनट में {m15}, 1 घंटे में {h1}, 4 घंटे में {h4} बार पहुँचती है।",
+  "Reaching it within {horizon} is unlikely ({share}): no time is said.": "{horizon} के भीतर पहुँचने की संभावना कम है ({share}): समय नहीं बताया जाता।"
 }

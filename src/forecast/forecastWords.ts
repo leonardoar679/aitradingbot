@@ -185,14 +185,41 @@ export function reliabilityWord(reliability: string | undefined, { t }: I18n = E
   return name === undefined ? reliability : t(name)
 }
 
+/** The level the path's highest high stays under eight times in ten, and the lowest low above, as prices
+ * from the close the forecast was read at (V7.1 Stage 3); null where the forecast carries none. */
+export function likelyLevels(prediction: Pick<PricePrediction, 'currentPrice'>, range: Pick<ForecastRange, 'excursion'>): { high: number; highPct: number; low: number; lowPct: number } | null {
+  const excursion = range.excursion
+  if (excursion === undefined || excursion.highPct.length < 2 || excursion.lowPct.length < 2) return null
+  const highPct = excursion.highPct[1]
+  const lowPct = excursion.lowPct[1]
+  return { high: prediction.currentPrice * (1 + highPct / 100), highPct, low: prediction.currentPrice * (1 + lowPct / 100), lowPct }
+}
+
+/** When the expected price is reached, in a few words (V7.1 Stage 3): the chance within the horizon and
+ * the typical minutes, or that it is unlikely. '—' where the forecast carries no arrival. */
+export function arrivalWord(range: Pick<ForecastRange, 'arrival'>, horizon: Horizon, i18n: I18n = ENGLISH): string {
+  const { t, pctPlain, num } = i18n
+  const arrival = range.arrival
+  if (arrival === undefined) return '—'
+  const window = horizon === 'hours24' ? 'hours4' : horizon
+  const share = pctPlain(Math.round(arrival.pWithin[window] * 100), 0)
+  const span = t(HORIZON_NAME[window])
+  if (arrival.unlikely) return t('unlikely within {horizon} ({share})', { horizon: span, share })
+  if (arrival.medianMinutes === null) return t('{share} within {horizon}', { share, horizon: span })
+  return t('{share} within {horizon}, typically in {minutes} min', { share, horizon: span, minutes: num(Math.round(arrival.medianMinutes), 0, 0) })
+}
+
 /** The best prediction's card, row by row (§3 and §118): the price and the likely ranges, the bull and
- * bear cases, then what the forecast is worth and what moves it. Percentages from the view's price. */
+ * bear cases, then what the forecast is worth and what moves it. Percentages from the view's price. Since
+ * V7.1 Stage 3 the expected price, the likely high and low, and when the expected price is reached. */
 export function predictionCardRows(prediction: PricePrediction, view: PredictionView, consensus: string | null, i18n: I18n = ENGLISH): { left: CardRow[]; right: CardRow[] } {
   const { t } = i18n
   const lead = leadHorizon(prediction)
   const leadRange = lead === null ? undefined : prediction.horizons[lead]
   const leadView = lead === null ? undefined : view.horizons[lead]
   const current = dollarText(view.price, i18n)
+  const levels = leadRange === undefined ? null : likelyLevels(prediction, leadRange)
+  const priceAndMove = (price: number, pct: number): string => t('{price} ({move})', { price: dollarText(price, i18n), move: signedPct(pct, 2, i18n) })
   const left: CardRow[] = [
     { id: 'current', name: t('Current'), value: view.priceFrom === 'close' ? t('{price} (last close)', { price: current }) : current },
     ...CARD_HORIZONS.map((horizon) => {
@@ -200,13 +227,17 @@ export function predictionCardRows(prediction: PricePrediction, view: Prediction
       const text = range === undefined ? '—' : rangeText(range.lowPct, range.highPct, i18n)
       return { id: horizon, name: t(HORIZON_NEXT[horizon]), value: range !== undefined && range.expired ? t('{range} (expired)', { range: text }) : text }
     }),
+    { id: 'expected', name: t('Expected price'), value: leadRange === undefined || leadView === undefined ? '—' : priceAndMove(leadRange.quantilePrices[2], leadView.medianPct) },
     { id: 'bull', name: t('Bull case'), value: leadView === undefined ? '—' : signedPct(leadView.bullPct, 2, i18n) },
-    { id: 'bear', name: t('Bear case'), value: leadView === undefined ? '—' : signedPct(leadView.bearPct, 2, i18n) }
+    { id: 'bear', name: t('Bear case'), value: leadView === undefined ? '—' : signedPct(leadView.bearPct, 2, i18n) },
+    { id: 'high', name: t('Likely high'), value: levels === null ? '—' : priceAndMove(levels.high, levels.highPct) },
+    { id: 'low', name: t('Likely low'), value: levels === null ? '—' : priceAndMove(levels.low, levels.lowPct) }
   ]
   const right: CardRow[] = [
     { id: 'quality', name: t('Forecast quality'), value: leadRange === undefined ? '—' : t('{score} / 100', { score: leadRange.quality.score }) },
     { id: 'reliability', name: t('Reliability'), value: reliabilityWord(leadRange?.reliability, i18n) },
     { id: 'best', name: t('Best horizon'), value: lead === null ? '—' : prediction.bestHorizon === null ? t('none beat a plain range') : t(HORIZON_NAME[lead]) },
+    { id: 'arrival', name: t('Reached within'), value: leadRange === undefined || lead === null ? '—' : arrivalWord(leadRange, lead, i18n) },
     { id: 'news', name: t('News catalyst'), value: newsWord(prediction, i18n) },
     { id: 'volume', name: t('Volume'), value: volumeWord(prediction.market?.volRatio1h, i18n) },
     { id: 'momentum', name: t('Momentum'), value: momentumWord(prediction.market?.z1h, i18n) },

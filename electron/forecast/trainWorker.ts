@@ -5,7 +5,8 @@ import { barFromLine, coarseBars, mergeBars, type ForecastBar } from '../../shar
 import { HORIZONS, PAIR_CLASSES, type Horizon, type PairClass, type PairSeries } from '../../shared/forecast/features'
 import { binMatrix, fitCuts, rngOf, type Matrix } from '../../shared/forecast/ml/bins'
 import { fitGbt, lossOf, predictGbt } from '../../shared/forecast/ml/gbt'
-import { DIRECTION_MODELS, FORECAST_MODELS, fitHorizon, normalizedTarget, predictDirection, predictHorizon, type DirectionModelId, type FittedHorizon, type ForecastModelId } from '../../shared/forecast/models'
+import { DIRECTION_MODELS, FORECAST_MODELS, fitHorizon, normalizedTarget, predictDirection, predictExcursion, predictHorizon, type DirectionModelId, type FittedHorizon, type ForecastModelId } from '../../shared/forecast/models'
+import { firstTouchTable, type FirstTouchTable } from '../../shared/forecast/firstTouch'
 import { serializeRunCalibration } from '../../shared/forecast/calibrationFile'
 import { serializeFitted } from '../../shared/forecast/modelFile'
 import { LAB_VERSION, type TraderRule } from '../../shared/forecast/lab'
@@ -146,12 +147,13 @@ async function loadMarket(dataDir: string): Promise<Map<string, PairSeries>> {
   return market
 }
 
-/** The rows on the quarter-hour grid, from when the first rows can be read to the moment given. */
-async function panelOf(dataDir: string, nowSec: number): Promise<Panel> {
+/** The rows on the quarter-hour grid, from when the first rows can be read to the moment given, and the
+ * market they were read from. */
+async function panelOf(dataDir: string, nowSec: number): Promise<{ panel: Panel; market: Map<string, PairSeries> }> {
   const market = await loadMarket(dataDir)
   const btc = market.get('BTCUSDT')
   if (btc === undefined || btc.m5.length === 0) throw new Error('no Bitcoin bars on file to train on')
-  return buildPanel(market, { stepSec: 900, fromSec: btc.m5[0].time + WARMUP_DAYS * 86_400, toSec: nowSec })
+  return { panel: buildPanel(market, { stepSec: 900, fromSec: btc.m5[0].time + WARMUP_DAYS * 86_400, toSec: nowSec }), market }
 }
 
 function treeCounts(fitted: FittedHorizon): Record<string, number> {
@@ -168,7 +170,7 @@ function treeCounts(fitted: FittedHorizon): Record<string, number> {
 async function fit(request: Extract<WorkerRequest, { task: 'fit' }>): Promise<FitResult> {
   const started = Date.now()
   progress(request.id, 'reading the bars', 0, HORIZONS.length + 1)
-  const panel = await panelOf(request.dataDir, request.nowSec)
+  const { panel } = await panelOf(request.dataDir, request.nowSec)
   const dir = join(request.outDir, request.runId)
   await mkdir(dir, { recursive: true })
   const horizons: FitResult['horizons'] = []
@@ -186,7 +188,7 @@ async function fit(request: Extract<WorkerRequest, { task: 'fit' }>): Promise<Fi
 
 async function folds(request: Extract<WorkerRequest, { task: 'folds' }>): Promise<FoldsResult> {
   const started = Date.now()
-  const panel = await panelOf(request.dataDir, request.nowSec)
+  const { panel, market } = await panelOf(request.dataDir, request.nowSec)
   const dir = join(request.outDir, request.runId)
   await mkdir(dir, { recursive: true })
   const first = panel.time[0] ?? 0
@@ -200,7 +202,7 @@ async function folds(request: Extract<WorkerRequest, { task: 'folds' }>): Promis
   let step = 0
   for (const [hIndex, horizon] of HORIZONS.entries()) {
     const rows = rowsFor(panel, horizon)
-    const tested: { row: number; fold: number; quantiles: Record<ForecastModelId, number[]>; direction: Record<DirectionModelId, number> }[] = []
+    const tested: { row: number; fold: number; quantiles: Record<ForecastModelId, number[]>; direction: Record<DirectionModelId, number>; excursion: { high: number[]; low: number[] } }[] = []
     for (const fold of plan) {
       progress(request.id, `testing ${horizon} on week ${fold.index + 1} of ${plan.length}`, step++, HORIZONS.length * plan.length)
       // Fitted on the rows whose outcomes were known before the week, the boosting stopped on the week
@@ -211,7 +213,7 @@ async function folds(request: Extract<WorkerRequest, { task: 'folds' }>): Promis
       const row64 = new Float64Array(panel.cols)
       for (const row of test) {
         for (let col = 0; col < panel.cols; col++) row64[col] = panel.x[row * panel.cols + col]
-        tested.push({ row, fold: fold.index, quantiles: predictHorizon(fitted, row64), direction: predictDirection(fitted, row64) })
+        tested.push({ row, fold: fold.index, quantiles: predictHorizon(fitted, row64), direction: predictDirection(fitted, row64), excursion: predictExcursion(fitted, row64) })
       }
     }
     const z = tested.map((entry) => normalizedTarget(panel, entry.row, horizon))
@@ -246,20 +248,26 @@ async function folds(request: Extract<WorkerRequest, { task: 'folds' }>): Promis
       btc15: Float32Array.from(kept, ({ entry }) => btc15.get(panel.time[entry.row]) ?? Number.NaN),
       // Each direction model's raw chance of up at the row (V7.1 Stage 2), for the calibration to judge.
       directionModels: DIRECTION_MODELS,
-      direction: Float32Array.from(kept.flatMap(({ entry }) => DIRECTION_MODELS.map((model) => entry.direction[model])))
+      direction: Float32Array.from(kept.flatMap(({ entry }) => DIRECTION_MODELS.map((model) => entry.direction[model]))),
+      // The excursion models' levels at the row (V7.1 Stage 3): the highs, then the lows.
+      excursion: Float32Array.from(kept.flatMap(({ entry }) => [...entry.excursion.high, ...entry.excursion.low]))
     }
     await writeFile(join(dir, `oos-${horizon}.bin`), encodeOos(record))
     records.set(horizon, record)
     horizons.push({ horizon, tested: tested.length, kept: kept.length, scores, lastWeek })
   }
   progress(request.id, 'calibrating', step, HORIZONS.length * plan.length)
-  const calibration = await writeCalibration(dir, records, promotionsOf(horizons), request.runId)
+  // When a target is reached (V7.1 Stage 3): the first-touch table from the bars about every row of the grid.
+  const touch = firstTouchTable(market, panel)
+  const calibration = await writeCalibration(dir, records, promotionsOf(horizons), request.runId, touch)
   return { task: 'folds', runId: request.runId, folds: plan, horizons, calibration, ms: Date.now() - started }
 }
 
-/** The calibration from a walk forward's records, written beside them; what it made of each horizon. */
-async function writeCalibration(dir: string, records: ReadonlyMap<Horizon, OosRecord>, promotions: readonly Promotion[], runId: string): Promise<CalibrationSummary[]> {
-  const calibration = buildRunCalibration(records, promotions, runId)
+/** The calibration from a walk forward's records, written beside them; what it made of each horizon. With
+ * the first-touch table where the walk forward read its bars; a calibration made again from the record
+ * alone has none. */
+async function writeCalibration(dir: string, records: ReadonlyMap<Horizon, OosRecord>, promotions: readonly Promotion[], runId: string, touch?: FirstTouchTable): Promise<CalibrationSummary[]> {
+  const calibration = buildRunCalibration(records, promotions, runId, touch)
   await writeFile(join(dir, 'calibration.json'), serializeRunCalibration(calibration), 'utf-8')
   return summaryOf(calibration)
 }

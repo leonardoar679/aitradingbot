@@ -1786,5 +1786,18 @@
   "Which way: P(up) {pUp} from {source}, whose skill on weeks it was not fitted on is {skill}.": "Arah: P(naik) {pUp} dari {source}, yang keterampilannya pada minggu-minggu yang tidak dipakai untuk melatih adalah {skill}.",
   "the range's own distribution": "distribusi rentang itu sendiri",
   "the news": "berita",
-  "its chance of up knew less than the base rate ({skill} of skill)": "peluang naiknya lebih buruk dari tingkat dasar (keterampilan {skill})"
+  "its chance of up knew less than the base rate ({skill} of skill)": "peluang naiknya lebih buruk dari tingkat dasar (keterampilan {skill})",
+  "Expected price": "Harga yang diharapkan",
+  "Likely high": "Kemungkinan tertinggi",
+  "Likely low": "Kemungkinan terendah",
+  "Reached within": "Tercapai dalam",
+  "{price} ({move})": "{price} ({move})",
+  "{share} within {horizon}, typically in {minutes} min": "{share} dalam {horizon}, biasanya sekitar {minutes} menit",
+  "{share} within {horizon}": "{share} dalam {horizon}",
+  "unlikely within {horizon} ({share})": "kecil kemungkinannya dalam {horizon} ({share})",
+  "Price and time": "Harga dan waktu",
+  "Expected {price} ({move}) at {horizon}; the path likely stays under {high} ({highPct}) and above {low} ({lowPct}), eight times in ten.": "Harga yang diharapkan {price} ({move}) pada {horizon}; jalur harga kemungkinan tetap di bawah {high} ({highPct}) dan di atas {low} ({lowPct}), delapan dari sepuluh kali.",
+  "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}; when it is, typically in {minutes} min.": "Harga yang diharapkan tercapai dalam 5 menit dengan peluang {m5}, 15 menit {m15}, 1 jam {h1}, 4 jam {h4}; bila tercapai, biasanya dalam sekitar {minutes} menit.",
+  "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}.": "Harga yang diharapkan tercapai dalam 5 menit dengan peluang {m5}, 15 menit {m15}, 1 jam {h1}, 4 jam {h4}.",
+  "Reaching it within {horizon} is unlikely ({share}): no time is said.": "Tercapai dalam {horizon} kecil kemungkinannya ({share}): waktu tidak disebutkan."
 }

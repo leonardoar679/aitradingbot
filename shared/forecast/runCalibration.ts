@@ -5,8 +5,9 @@ import type { MarketRegime } from '../marketResearch'
 import { HORIZONS, HORIZON_BARS, MARKET_REGIMES, PAIR_CLASSES, type Horizon, type PairClass } from './features'
 import type { IsotonicModel } from './ml/isotonic'
 import { QUANTILE_LEVELS, meanPinball } from './ml/quantile'
+import { excursionCalibrationOf, type ExcursionCalibration, type ExcursionRow, type FirstTouchTable } from './firstTouch'
 import { DIRECTION_MODELS, type DirectionModelId, type ForecastModelId } from './models'
-import { oosDirection, oosQuantiles, type OosRecord } from './oosRecord'
+import { oosDirection, oosExcursion, oosQuantiles, type OosRecord } from './oosRecord'
 import { DEGRADATION_LINES, directionChecklist, type CheckLine } from './promotion'
 import { noShockRecord, shockRuleOf, type ShockRule } from './shock'
 import { usualMove } from './targets'
@@ -45,9 +46,14 @@ import type { Promotion } from './training'
 // highest honest skill, the distribution's or a promoted model's, and the base rate where none is skilled:
 // the call's lines (shared/forecast/direction.ts) are unchanged, only where P(up) comes from may be.
 
-/** run-calibration-v4 (V7.1 Stage 2): each horizon carries its direction models' verdicts. A v3 file is
- * made again from its record at the next start (without them, on a record from before them). */
-export const RUN_CALIBRATION_VERSION = 'run-calibration-v4'
+// AND THE PATH (V7.1 Stage 3; shared/forecast/firstTouch.ts): each horizon's excursion levels scaled by
+// what the tested paths did, and the first-touch table from the walk forward's bars -- when a target is
+// reached, read at a target's distance.
+
+/** run-calibration-v5 (V7.1 Stage 3): each horizon carries its excursion calibration and the run its
+ * first-touch table. An older file is made again from its record at the next start (without what the
+ * record does not hold). */
+export const RUN_CALIBRATION_VERSION = 'run-calibration-v5'
 
 /** Where a horizon's P(up) comes from: the base rate, the distribution's mapped reading, a direction
  * model's, or the news's own (shared/forecast/newsEffect.ts). */
@@ -139,12 +145,18 @@ export interface HorizonCalibration {
   shock?: ShockRule
   /** The direction models' verdicts (V7.1 Stage 2); absent on a record holding no readings of theirs. */
   direction?: DirectionReport
+  /** The excursion levels' calibration (V7.1 Stage 3); absent on a record holding no readings of theirs,
+   * or too few. */
+  excursion?: ExcursionCalibration
 }
 
 export interface RunCalibration {
   version: string
   runId: string
   horizons: Partial<Record<Horizon, HorizonCalibration>>
+  /** The first-touch table from the walk forward's bars (V7.1 Stage 3); absent on a calibration made
+   * again from the record alone. */
+  touch?: FirstTouchTable
 }
 
 /** One hour of one pair from the walk forward's record. */
@@ -159,6 +171,9 @@ export interface Row {
   usual: number
   /** Each direction model's raw chance of up at the row (V7.1 Stage 2), where the record holds it. */
   direction?: Partial<Record<DirectionModelId, number>>
+  /** The path's highest high and lowest low in usual moves, and the excursion models' levels for it
+   * (V7.1 Stage 3), where the record holds them. */
+  excursion?: ExcursionRow
 }
 
 export function rowsOf(record: OosRecord): Row[] {
@@ -178,6 +193,10 @@ export function rowsOf(record: OosRecord): Row[] {
         if (reading !== undefined) direction[model] = reading
       }
       entry.direction = direction
+    }
+    const excursion = oosExcursion(record, row)
+    if (excursion !== undefined && Number.isFinite(record.best[row]) && Number.isFinite(record.worst[row])) {
+      entry.excursion = { best: record.best[row] / usual, worst: record.worst[row] / usual, high: excursion.high, low: excursion.low, week: record.fold[row] }
     }
     out.push(entry)
   }
@@ -469,8 +488,9 @@ export function directionReportOf(rows: readonly Row[], shown: readonly ScoredRo
   return report
 }
 
-/** A run's calibration from its walk forward's records and the verdicts on them. */
-export function buildRunCalibration(records: ReadonlyMap<Horizon, OosRecord>, promotions: readonly Promotion[], runId: string): RunCalibration {
+/** A run's calibration from its walk forward's records and the verdicts on them; with the first-touch
+ * table where the walk forward read one from its bars (V7.1 Stage 3). */
+export function buildRunCalibration(records: ReadonlyMap<Horizon, OosRecord>, promotions: readonly Promotion[], runId: string, touch?: FirstTouchTable): RunCalibration {
   const horizons: Partial<Record<Horizon, HorizonCalibration>> = {}
   for (const horizon of HORIZONS) {
     const record = records.get(horizon)
@@ -489,9 +509,10 @@ export function buildRunCalibration(records: ReadonlyMap<Horizon, OosRecord>, pr
     const shock =
       btc15 === undefined ? noShockRecord() : shockRuleOf(shown.map((entry) => ({ z: entry.z, q: entry.quantiles, week: entry.week, t: record.time[entry.at!], btc15: btc15[entry.at!] })))
     const direction = directionReportOf(rows, shown)
-    horizons[horizon] = { horizon, rows: rows.length, variants, shock, ...(direction === null ? {} : { direction }) }
+    const excursion = excursionCalibrationOf(rows.filter((row) => row.excursion !== undefined).map((row) => row.excursion!))
+    horizons[horizon] = { horizon, rows: rows.length, variants, shock, ...(direction === null ? {} : { direction }), ...(excursion === null ? {} : { excursion }) }
   }
-  return { version: RUN_CALIBRATION_VERSION, runId, horizons }
+  return { version: RUN_CALIBRATION_VERSION, runId, horizons, ...(touch === undefined ? {} : { touch }) }
 }
 
 /** Where a pair of a class reads its P(up) from at a horizon (V7.1 Stage 2): the skilled reading with the

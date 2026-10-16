@@ -1786,5 +1786,18 @@
   "Which way: P(up) {pUp} from {source}, whose skill on weeks it was not fitted on is {skill}.": "Chiều hướng: P(tăng) {pUp} từ {source}, với kỹ năng {skill} trong các tuần không dùng để khớp mô hình.",
   "the range's own distribution": "phân phối của chính khoảng dự báo",
   "the news": "tin tức",
-  "its chance of up knew less than the base rate ({skill} of skill)": "xác suất tăng của nó kém hơn tỷ lệ cơ sở (kỹ năng {skill})"
+  "its chance of up knew less than the base rate ({skill} of skill)": "xác suất tăng của nó kém hơn tỷ lệ cơ sở (kỹ năng {skill})",
+  "Expected price": "Giá kỳ vọng",
+  "Likely high": "Đỉnh có thể",
+  "Likely low": "Đáy có thể",
+  "Reached within": "Đạt tới trong",
+  "{price} ({move})": "{price} ({move})",
+  "{share} within {horizon}, typically in {minutes} min": "{share} trong {horizon}, thường khoảng {minutes} phút",
+  "{share} within {horizon}": "{share} trong {horizon}",
+  "unlikely within {horizon} ({share})": "khó xảy ra trong {horizon} ({share})",
+  "Price and time": "Giá và thời gian",
+  "Expected {price} ({move}) at {horizon}; the path likely stays under {high} ({highPct}) and above {low} ({lowPct}), eight times in ten.": "Giá kỳ vọng {price} ({move}) ở {horizon}; đường giá có lẽ ở dưới {high} ({highPct}) và trên {low} ({lowPct}), tám trong mười lần.",
+  "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}; when it is, typically in {minutes} min.": "Giá kỳ vọng được đạt tới trong 5 phút với xác suất {m5}, 15 phút {m15}, 1 giờ {h1}, 4 giờ {h4}; khi đạt tới, thường sau khoảng {minutes} phút.",
+  "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}.": "Giá kỳ vọng được đạt tới trong 5 phút với xác suất {m5}, 15 phút {m15}, 1 giờ {h1}, 4 giờ {h4}.",
+  "Reaching it within {horizon} is unlikely ({share}): no time is said.": "Đạt tới trong {horizon} là khó xảy ra ({share}): không nêu thời gian."
 }

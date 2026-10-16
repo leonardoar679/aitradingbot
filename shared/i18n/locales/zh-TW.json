@@ -1786,5 +1786,18 @@
   "Which way: P(up) {pUp} from {source}, whose skill on weeks it was not fitted on is {skill}.": "方向：P(漲) {pUp} 來自{source}，其在未用於擬合的週裡的技巧值為 {skill}。",
   "the range's own distribution": "區間自身的分佈",
   "the news": "新聞",
-  "its chance of up knew less than the base rate ({skill} of skill)": "其上漲機率比基準機率知道得更少（技巧值 {skill}）"
+  "its chance of up knew less than the base rate ({skill} of skill)": "其上漲機率比基準機率知道得更少（技巧值 {skill}）",
+  "Expected price": "預期價格",
+  "Likely high": "可能的高點",
+  "Likely low": "可能的低點",
+  "Reached within": "到達時間",
+  "{price} ({move})": "{price}（{move}）",
+  "{share} within {horizon}, typically in {minutes} min": "{horizon}內 {share}，通常約 {minutes} 分鐘",
+  "{share} within {horizon}": "{horizon}內 {share}",
+  "unlikely within {horizon} ({share})": "{horizon}內不太可能（{share}）",
+  "Price and time": "價格與時間",
+  "Expected {price} ({move}) at {horizon}; the path likely stays under {high} ({highPct}) and above {low} ({lowPct}), eight times in ten.": "{horizon}的預期價格 {price}（{move}）；走勢十有八九停留在 {high}（{highPct}）之下、{low}（{lowPct}）之上。",
+  "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}; when it is, typically in {minutes} min.": "預期價格在 5 分鐘內到達的機率為 {m5}，15 分鐘內 {m15}，1 小時內 {h1}，4 小時內 {h4}；到達時通常約需 {minutes} 分鐘。",
+  "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}.": "預期價格在 5 分鐘內到達的機率為 {m5}，15 分鐘內 {m15}，1 小時內 {h1}，4 小時內 {h4}。",
+  "Reaching it within {horizon} is unlikely ({share}): no time is said.": "在{horizon}內到達不太可能（{share}）：不給出時間。"
 }

@@ -3,6 +3,7 @@ import { Card } from '../components/Card'
 import { PageHeader } from '../components/PageHeader'
 import { buttonStyle, cellStyle, headCellStyle, inputStyle, noteStyle } from '../agents/agentStyles'
 import { HORIZONS, type Horizon, type PairClass } from '../../shared/forecast/features'
+import { FIRST_TOUCH } from '../../shared/forecast/firstTouch'
 import { LAB_EVENTS, type LabEvent } from '../../shared/forecast/lab'
 import { CLASS_LINES } from '../../shared/forecast/opportunityClass'
 import type { ForecastLabView } from '../../shared/forecast/labView'
@@ -27,6 +28,7 @@ import {
   pUpCurveTable,
   shockTable,
   tableCsv,
+  timingTable,
   traderCells,
   traderTable,
   type LabTableData
@@ -263,6 +265,15 @@ export function ForecastLabPage(): React.JSX.Element {
             Where Bitcoin's last fifteen minutes reach {view.shock.hour1?.line ?? 2.5} of its usual moves, a horizon's ranges are widened about their median -- the 80% range by one factor, the 50% by another -- fitted on the walk forward's moments past the line, and only at a horizon where, each week widened by factors from the other weeks alone, the 80% range came nearer 80% and the pinball loss was no worse. Calm moments are never touched. Live: the forecasts it widened, and how their 80% ranges held widened and by V2's own levels.
           </p>
           <LabTable table={shockTable(view.shock, view.live)} name="shock" onNote={setNote} />
+        </Card>
+      )}
+
+      {view !== null && HORIZONS.some((horizon) => view.live.horizons[horizon]?.timing !== undefined) && (
+        <Card title="Price and time: the path's figures on the live record">
+          <p style={{ ...noteStyle, marginTop: 0 }}>
+            Since V7.1 each forecast also says how far the path may go on the way -- the levels its highest high stays under and its lowest low above, half the time, eight times in ten and nine, read by the excursion models and scaled by what the walk forward's paths did -- and when its expected price, the median, is reached: the chance within five minutes, fifteen, an hour and four from the first-touch table of the walk forward's bars, UNLIKELY under {Math.round(FIRST_TOUCH.unlikely * 100)}% within the horizon, and the typical minutes when it is. Judged here on the live record: the chance said against the share reached within the horizon's window (four hours at most), whether UNLIKELY was right, the minutes said against the minutes seen, and whether the 80% levels held.
+          </p>
+          <LabTable table={timingTable(view.live)} name="timing" onNote={setNote} />
         </Card>
       )}
 

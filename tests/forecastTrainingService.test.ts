@@ -52,7 +52,9 @@ function tinyFitted(horizon: Horizon): FittedHorizon {
     quantileGbt: { levels: QUANTILE_LEVELS.map((tau, index) => constantGbt(RESIDUAL[index], { kind: 'pinball', tau })) },
     gbtPrice: { center: constantGbt(0), size: constantGbt(0), residual: RESIDUAL },
     // The direction models (V7.1 Stage 2), each an even chance here.
-    direction: { logistic: { ...ridge, kind: 'logistic', intercept: 0, iterations: 1 }, gbt: constantGbt(0, { kind: 'logloss' }), gbtTech: constantGbt(0, { kind: 'logloss' }), gbtPrice: constantGbt(0, { kind: 'logloss' }) }
+    direction: { logistic: { ...ridge, kind: 'logistic', intercept: 0, iterations: 1 }, gbt: constantGbt(0, { kind: 'logloss' }), gbtTech: constantGbt(0, { kind: 'logloss' }), gbtPrice: constantGbt(0, { kind: 'logloss' }) },
+    // The excursion models (V7.1 Stage 3): the highs one usual move up at every level, the lows one down.
+    excursion: { high: [0.5, 0.8, 0.9].map((tau) => constantGbt(1, { kind: 'pinball', tau })), low: [0.5, 0.8, 0.9].map((tau) => constantGbt(-1, { kind: 'pinball', tau: 1 - tau })) }
   }
 }
 

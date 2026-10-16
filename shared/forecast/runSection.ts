@@ -2,7 +2,7 @@ import { FEE_RATE, positionSlippageRate } from '../fees'
 import type { ExecutorConfig } from '../ipc'
 import { HORIZON_BARS, type Horizon } from './features'
 import type { MissingOutcomeLine, OutcomeLine, PredictionLine } from './forecastRecord'
-import { liveLab, type LabMetrics, type LiveVariant } from './lab'
+import { liveLab, type LabMetrics, type LiveVariant, type TimingMetrics } from './lab'
 
 // THE PRICE FORECAST IN A RUN'S REPORT (the V6 document, §45-50 and §113-114; V6 Stages 15-16, 13
 // October 2026): what the engine forecast over a run's span and how it came out, read from its own
@@ -57,6 +57,9 @@ export interface RunHorizon {
   news: { moved: LabMetrics; unmoved: LabMetrics }
   /** The forecasts Bitcoin's sharp move widened, and the same by V2's own levels (V6.1); absent where none. */
   shock?: { widened: LabMetrics; unwidened: LabMetrics }
+  /** The path's figures (V7.1 Stage 3): when the median was said to be reached against when it was, and
+   * whether the likely high and low held; absent where no forecast carried them. */
+  timing?: TimingMetrics
 }
 
 /** One forecast at its lead horizon, and how it came out where it has. */
@@ -196,7 +199,8 @@ export function forecastRunSectionOf(input: ForecastRunInput): ForecastRunSectio
       bull: { calls: bull.length, right: bull.filter((line) => line.move > 0).length },
       bear: { calls: bear.length, right: bear.filter((line) => line.move < 0).length },
       news: read.news,
-      ...(read.shock === undefined ? {} : { shock: read.shock })
+      ...(read.shock === undefined ? {} : { shock: read.shock }),
+      ...(read.timing === undefined ? {} : { timing: read.timing })
     }
   }
 

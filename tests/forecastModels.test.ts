@@ -3,7 +3,7 @@ import { FORECAST_BAR_SECONDS, coarseBars, type ForecastBar } from '../shared/fo
 import { FEATURE_NAMES, HORIZON_BARS, PRICE_FEATURES, crossSectionAt, featuresAt, quickAt, type PairQuick, type PairSeries } from '../shared/forecast/features'
 import { QUANTILE_LEVELS, quantileOfSorted } from '../shared/forecast/ml/quantile'
 import { MODEL_FILE_VERSION, parseFitted, serializeFitted } from '../shared/forecast/modelFile'
-import { DIRECTION_MODELS, FORECAST_MODELS, TECH_FEATURES, fitHorizon, normalizedTarget, predictDirection, predictHorizon, volatilityInputs, type FittedHorizon } from '../shared/forecast/models'
+import { DIRECTION_MODELS, EXCURSION_LEVELS, FORECAST_MODELS, TECH_FEATURES, fitHorizon, normalizedExcursion, normalizedTarget, predictDirection, predictExcursion, predictHorizon, volatilityInputs, type FittedHorizon } from '../shared/forecast/models'
 import { buildPanel, type Panel } from '../shared/forecast/panel'
 import { outcomeAt, usualMove } from '../shared/forecast/targets'
 import { finalSplit, rowsFor } from '../shared/forecast/walkForward'
@@ -202,6 +202,37 @@ describe('the direction models', () => {
     const wrongLoss = JSON.parse(text)
     wrongLoss.direction.gbt.loss = { kind: 'l2' }
     expect(parseFitted(JSON.stringify(wrongLoss))).toBeNull()
+  })
+
+  it('read how far the path goes each way at each level, the highs rising and the lows falling, kept on file (V7.1 Stage 3)', () => {
+    for (const row of [ROWS[0], ROWS[500], ROWS[ROWS.length - 1]]) {
+      const out = predictExcursion(FITTED, rowOf(row))
+      expect(out.high).toHaveLength(EXCURSION_LEVELS.length)
+      expect(out.low).toHaveLength(EXCURSION_LEVELS.length)
+      expect(out.high.every((value, index) => value >= 0 && (index === 0 || value >= out.high[index - 1]))).toBe(true)
+      expect(out.low.every((value, index) => value <= 0 && (index === 0 || value <= out.low[index - 1]))).toBe(true)
+    }
+    // Over the training rows, each level holds about its share of the paths: the median high under half.
+    const share = (pick: (row: number) => boolean): number => [...SPLIT.train].filter(pick).length / SPLIT.train.length
+    const highHeld = share((row) => normalizedExcursion(PANEL, row, 'hour1').best <= predictExcursion(FITTED, rowOf(row)).high[1])
+    const lowHeld = share((row) => normalizedExcursion(PANEL, row, 'hour1').worst >= predictExcursion(FITTED, rowOf(row)).low[1])
+    expect(highHeld).toBeGreaterThan(0.7)
+    expect(highHeld).toBeLessThan(0.9)
+    expect(lowHeld).toBeGreaterThan(0.7)
+    expect(lowHeld).toBeLessThan(0.9)
+    expect(FITTED.excursion.high.map((model) => model.loss)).toEqual(EXCURSION_LEVELS.map((tau) => ({ kind: 'pinball', tau })))
+    expect(FITTED.excursion.low.map((model) => model.loss)).toEqual(EXCURSION_LEVELS.map((tau) => ({ kind: 'pinball', tau: 1 - tau })))
+    const back = parseFitted(serializeFitted(FITTED))!
+    const before = predictExcursion(FITTED, rowOf(ROWS[7]))
+    const after = predictExcursion(back, rowOf(ROWS[7]))
+    before.high.forEach((value, index) => expect(Math.abs(after.high[index] - value)).toBeLessThan(1e-4 * (1 + Math.abs(value))))
+    const raw = JSON.parse(serializeFitted(FITTED))
+    delete raw.excursion
+    expect(parseFitted(JSON.stringify(raw))).toBeNull()
+    const mirrored = JSON.parse(serializeFitted(FITTED))
+    mirrored.excursion.low[0].loss = { kind: 'pinball', tau: 0.5 }
+    mirrored.excursion.low[1].loss = { kind: 'pinball', tau: 0.8 }
+    expect(parseFitted(JSON.stringify(mirrored))).toBeNull()
   })
 
   it('learn which way where the row says it -- a drift by the hour of the day -- and know nothing where nothing does', () => {

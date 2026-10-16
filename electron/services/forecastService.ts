@@ -19,7 +19,7 @@ import {
   type OutcomeLine,
   type PredictionLine
 } from '../../shared/forecast/forecastRecord'
-import { predictDirection, predictHorizon, type DirectionModelId, type ForecastModelId } from '../../shared/forecast/models'
+import { predictDirection, predictExcursion, predictHorizon, type DirectionModelId, type ForecastModelId } from '../../shared/forecast/models'
 import { rangeDriversFor, type RangeDriver } from '../../shared/forecast/rangeDrivers'
 import { dueAt, outcomeOf } from '../../shared/forecast/outcome'
 import { NEWS_EFFECT_LINES, newsSkillOf, type AnalystReadingInput, type KindReactions, type NewsStoryInput } from '../../shared/forecast/newsEffect'
@@ -104,6 +104,8 @@ interface PairInput {
   models: Partial<Record<Horizon, Record<ForecastModelId, number[]>>>
   /** Each horizon's direction models' raw chances of up at the close (V7.1 Stage 2). */
   direction: Partial<Record<Horizon, Record<DirectionModelId, number>>>
+  /** Each horizon's excursion levels at the close, in usual moves (V7.1 Stage 3). */
+  excursion: Partial<Record<Horizon, { high: number[]; low: number[] }>>
   rv24h: number
   rvRatio: number
   cls: PairClass
@@ -263,6 +265,7 @@ function predictionFor(symbol: string, nowMs: number): PricePrediction | null {
     drivers: input.drivers,
     models: input.models,
     direction: input.direction,
+    excursion: input.excursion,
     calibration,
     levels: (horizon, variant, cell) => levelsOf(aci, cellKey(horizon, variant, cell)),
     news: newsFor(symbol),
@@ -451,6 +454,7 @@ async function pass(closedAt: number): Promise<void> {
     const bar = series.m5[at - 1]
     const models: PairInput['models'] = {}
     const direction: PairInput['direction'] = {}
+    const excursion: PairInput['excursion'] = {}
     const drivers: PairInput['drivers'] = {}
     const cls = cross.classes.get(symbol)!
     for (const horizon of HORIZONS) {
@@ -458,6 +462,7 @@ async function pass(closedAt: number): Promise<void> {
       if (model === undefined) continue
       models[horizon] = predictHorizon(model, row)
       direction[horizon] = predictDirection(model, row)
+      excursion[horizon] = predictExcursion(model, row)
       const variant = calibration?.horizons[horizon]?.variants.v2
       drivers[horizon] = rangeDriversFor(model, variant === undefined ? [] : cellOf(variant, cls).weights, row)
     }
@@ -466,6 +471,7 @@ async function pass(closedAt: number): Promise<void> {
     inputs.set(symbol, {
       models,
       direction,
+      excursion,
       rv24h: row[RV24],
       rvRatio: row[RATIO],
       cls,

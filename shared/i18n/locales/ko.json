@@ -1786,5 +1786,18 @@
   "Which way: P(up) {pUp} from {source}, whose skill on weeks it was not fitted on is {skill}.": "방향: P(상승) {pUp}은(는) {source}에서 온 것으로, 학습에 쓰이지 않은 주에서의 스킬은 {skill}입니다.",
   "the range's own distribution": "레인지 자체의 분포",
   "the news": "뉴스",
-  "its chance of up knew less than the base rate ({skill} of skill)": "상승 확률이 기준 확률보다 못했습니다(스킬 {skill})"
+  "its chance of up knew less than the base rate ({skill} of skill)": "상승 확률이 기준 확률보다 못했습니다(스킬 {skill})",
+  "Expected price": "예상 가격",
+  "Likely high": "예상 고점",
+  "Likely low": "예상 저점",
+  "Reached within": "도달 시간",
+  "{price} ({move})": "{price}({move})",
+  "{share} within {horizon}, typically in {minutes} min": "{horizon} 이내 {share}, 보통 약 {minutes}분",
+  "{share} within {horizon}": "{horizon} 이내 {share}",
+  "unlikely within {horizon} ({share})": "{horizon} 이내는 가능성 낮음({share})",
+  "Price and time": "가격과 시간",
+  "Expected {price} ({move}) at {horizon}; the path likely stays under {high} ({highPct}) and above {low} ({lowPct}), eight times in ten.": "{horizon} 예상 가격 {price}({move}); 가격 경로는 열에 여덟은 {high}({highPct}) 아래, {low}({lowPct}) 위에 머뭅니다.",
+  "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}; when it is, typically in {minutes} min.": "예상 가격에 5분 이내 도달할 확률 {m5}, 15분 이내 {m15}, 1시간 이내 {h1}, 4시간 이내 {h4}; 도달할 때는 보통 약 {minutes}분 걸립니다.",
+  "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}.": "예상 가격에 5분 이내 도달할 확률 {m5}, 15분 이내 {m15}, 1시간 이내 {h1}, 4시간 이내 {h4}.",
+  "Reaching it within {horizon} is unlikely ({share}): no time is said.": "{horizon} 이내 도달은 가능성이 낮습니다({share}): 시간을 말하지 않습니다."
 }

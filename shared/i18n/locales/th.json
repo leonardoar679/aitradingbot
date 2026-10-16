@@ -1786,5 +1786,18 @@
   "Which way: P(up) {pUp} from {source}, whose skill on weeks it was not fitted on is {skill}.": "ทิศทาง: P(ขึ้น) {pUp} มาจาก{source} ซึ่งมีทักษะ {skill} ในสัปดาห์ที่ไม่ได้ใช้ฝึก",
   "the range's own distribution": "การแจกแจงของช่วงคาดการณ์เอง",
   "the news": "ข่าว",
-  "its chance of up knew less than the base rate ({skill} of skill)": "โอกาสขึ้นของมันรู้น้อยกว่าอัตราพื้นฐาน (ทักษะ {skill})"
+  "its chance of up knew less than the base rate ({skill} of skill)": "โอกาสขึ้นของมันรู้น้อยกว่าอัตราพื้นฐาน (ทักษะ {skill})",
+  "Expected price": "ราคาที่คาด",
+  "Likely high": "จุดสูงที่น่าจะถึง",
+  "Likely low": "จุดต่ำที่น่าจะถึง",
+  "Reached within": "ถึงภายใน",
+  "{price} ({move})": "{price} ({move})",
+  "{share} within {horizon}, typically in {minutes} min": "{share} ภายใน {horizon} โดยปกติราว {minutes} นาที",
+  "{share} within {horizon}": "{share} ภายใน {horizon}",
+  "unlikely within {horizon} ({share})": "ไม่น่าถึงภายใน {horizon} ({share})",
+  "Price and time": "ราคาและเวลา",
+  "Expected {price} ({move}) at {horizon}; the path likely stays under {high} ({highPct}) and above {low} ({lowPct}), eight times in ten.": "ราคาที่คาด {price} ({move}) ที่ {horizon} เส้นทางราคาน่าจะอยู่ต่ำกว่า {high} ({highPct}) และสูงกว่า {low} ({lowPct}) แปดในสิบครั้ง",
+  "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}; when it is, typically in {minutes} min.": "โอกาสที่ราคาถึงราคาที่คาดภายใน 5 นาทีคือ {m5}, 15 นาที {m15}, 1 ชั่วโมง {h1}, 4 ชั่วโมง {h4} เมื่อถึง โดยปกติใช้เวลาราว {minutes} นาที",
+  "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}.": "โอกาสที่ราคาถึงราคาที่คาดภายใน 5 นาทีคือ {m5}, 15 นาที {m15}, 1 ชั่วโมง {h1}, 4 ชั่วโมง {h4}",
+  "Reaching it within {horizon} is unlikely ({share}): no time is said.": "การถึงภายใน {horizon} ไม่น่าเกิดขึ้น ({share}) จึงไม่ระบุเวลา"
 }

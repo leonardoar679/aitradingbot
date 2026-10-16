@@ -56,6 +56,20 @@ export interface ForecastOutcome {
   inside50: boolean
   wentUp: boolean
   errors: ErrorKind[]
+  /** When the path first reached the forecast's median, its P90 and its P10, in seconds after the close
+   * it was read at -- the end of the first bar that did (V7.1 Stage 3); null where it never did within
+   * the horizon. */
+  touch: { target: number | null; upper: number | null; lower: number | null }
+}
+
+/** Seconds after the close until the first bar whose range reached `level` (a move in percent from the
+ * close): a level at or above zero is reached by a high, one below by a low; null where none did. */
+export function firstTouchSec(levelPct: number, price: number, path: readonly { high: number; low: number }[]): number | null {
+  const target = price * (1 + levelPct / 100)
+  for (let at = 0; at < path.length; at++) {
+    if (levelPct >= 0 ? path[at].high >= target : path[at].low <= target) return (at + 1) * 300
+  }
+  return null
 }
 
 /** When a forecast read at `barTime` reaches its horizon, in Unix seconds. */
@@ -100,6 +114,7 @@ export function outcomeOf(forecast: ForecastedHorizon, barTime: number, price: n
   const movePct = pct(path[path.length - 1].close)
   const bestPct = pct(Math.max(...path.map((bar) => bar.high)))
   const worstPct = pct(Math.min(...path.map((bar) => bar.low)))
+  const q = forecast.quantilesPct
   return {
     barTime,
     dueAt: dueAt(barTime, forecast.horizon),
@@ -109,6 +124,7 @@ export function outcomeOf(forecast: ForecastedHorizon, barTime: number, price: n
     below: forecast.quantilesPct.map((level) => movePct <= level),
     ...insideOf(forecast.quantilesPct, movePct),
     wentUp: movePct > 0,
-    errors: errorsOf(forecast, movePct, bestPct, worstPct)
+    errors: errorsOf(forecast, movePct, bestPct, worstPct),
+    touch: { target: firstTouchSec(q[P50], price, path), upper: firstTouchSec(q[P90], price, path), lower: firstTouchSec(q[P10], price, path) }
   }
 }

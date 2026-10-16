@@ -4,8 +4,11 @@ import { HORIZONS, PAIR_CLASSES, type Horizon, type PairClass } from './features
 import type { IsotonicModel } from './ml/isotonic'
 import { QUANTILE_LEVELS } from './ml/quantile'
 import { canonicalJson } from './ml/serialize'
-import { DIRECTION_MODELS, FORECAST_MODELS, type DirectionModelId, type ForecastModelId } from './models'
+import { FIRST_TOUCH, TOUCH_WINDOWS, type ExcursionCalibration, type FirstTouchTable, type TouchCurve } from './firstTouch'
+import { DIRECTION_MODELS, EXCURSION_LEVELS, FORECAST_MODELS, type DirectionModelId, type ForecastModelId } from './models'
 import type { CheckLine } from './promotion'
+import { MARKET_REGIMES } from './features'
+import type { MarketRegime } from '../marketResearch'
 import { RUN_CALIBRATION_VERSION, VARIANTS, type CurveBin, type DirectionCalibration, type DirectionReport, type DirectionScore, type HonestScore, type HorizonCalibration, type RunCalibration, type VariantCalibration } from './runCalibration'
 import type { ShockRefusal, ShockRule, ShockScore } from './shock'
 
@@ -196,6 +199,74 @@ function readDirectionReport(value: unknown): DirectionReport | null | undefined
   return { baseline: { pooled, byClass: baselineByClass as Partial<Record<PairClass, DirectionScore>> }, models }
 }
 
+/** A list of one figure a level, measured or not (null read as NaN); null for anything else. */
+function readLevels(value: unknown): number[] | null {
+  if (!Array.isArray(value) || value.length !== EXCURSION_LEVELS.length) return null
+  const out: number[] = []
+  for (const entry of value) {
+    const figure = measured(entry)
+    if (figure === undefined) return null
+    out.push(figure)
+  }
+  return out
+}
+
+/** A horizon's excursion calibration (V7.1 Stage 3): undefined where none was written, null where one
+ * was and is not whole -- its factors finite and inside their bounds. */
+function readExcursion(value: unknown): ExcursionCalibration | null | undefined {
+  if (value === undefined) return undefined
+  if (!isObject(value) || typeof value.version !== 'string' || !isObject(value.honest) || !finite(value.honest.n)) return null
+  const high = readLevels(value.high)
+  const low = readLevels(value.low)
+  const honestHigh = readLevels(value.honest.high)
+  const honestLow = readLevels(value.honest.low)
+  const rawHigh = readLevels(value.honest.rawHigh)
+  const rawLow = readLevels(value.honest.rawLow)
+  if (high === null || low === null || honestHigh === null || honestLow === null || rawHigh === null || rawLow === null) return null
+  if (![...high, ...low].every((factor) => Number.isFinite(factor) && factor > 0)) return null
+  return { version: value.version, high, low, honest: { high: honestHigh, low: honestLow, rawHigh, rawLow, n: value.honest.n } }
+}
+
+function readTouchCurve(value: unknown): TouchCurve | null {
+  if (!isObject(value) || !Array.isArray(value.within) || value.within.length !== FIRST_TOUCH.levels.length || !Array.isArray(value.medianBars) || value.medianBars.length !== FIRST_TOUCH.levels.length) return null
+  const within: number[][] = []
+  for (const row of value.within) {
+    if (!Array.isArray(row) || row.length !== TOUCH_WINDOWS.length) return null
+    const figures: number[] = []
+    for (const entry of row) {
+      const figure = measured(entry)
+      if (figure === undefined) return null
+      figures.push(figure)
+    }
+    within.push(figures)
+  }
+  const medianBars: (number | null)[] = []
+  for (const entry of value.medianBars) {
+    if (entry !== null && !finite(entry)) return null
+    medianBars.push(entry as number | null)
+  }
+  return { within, medianBars }
+}
+
+/** The run's first-touch table (V7.1 Stage 3): undefined where none was written, null where one was and
+ * is not whole. */
+function readTouch(value: unknown): FirstTouchTable | null | undefined {
+  if (value === undefined) return undefined
+  if (!isObject(value) || typeof value.version !== 'string' || !finite(value.n) || !isObject(value.byRegime)) return null
+  const up = readTouchCurve(value.up)
+  const down = readTouchCurve(value.down)
+  if (up === null || down === null) return null
+  const byRegime: FirstTouchTable['byRegime'] = {}
+  for (const [key, entry] of Object.entries(value.byRegime)) {
+    if (!(MARKET_REGIMES as readonly string[]).includes(key) || !isObject(entry) || !finite(entry.n)) return null
+    const ownUp = readTouchCurve(entry.up)
+    const ownDown = readTouchCurve(entry.down)
+    if (ownUp === null || ownDown === null) return null
+    byRegime[key as MarketRegime] = { n: entry.n, up: ownUp, down: ownDown }
+  }
+  return { version: value.version, n: value.n, up, down, byRegime }
+}
+
 /** A run's calibration read back; null for a file that is not one, from another version, or damaged
  * anywhere. */
 export function parseRunCalibration(text: string): RunCalibration | null {
@@ -217,8 +288,11 @@ export function parseRunCalibration(text: string): RunCalibration | null {
     }
     const shock = readShock(entry.shock)
     const direction = readDirectionReport(entry.direction)
-    if (shock === null || direction === null) return null
-    horizons[key as Horizon] = { horizon: key as Horizon, rows: entry.rows, variants, ...(shock === undefined ? {} : { shock }), ...(direction === undefined ? {} : { direction }) }
+    const excursion = readExcursion(entry.excursion)
+    if (shock === null || direction === null || excursion === null) return null
+    horizons[key as Horizon] = { horizon: key as Horizon, rows: entry.rows, variants, ...(shock === undefined ? {} : { shock }), ...(direction === undefined ? {} : { direction }), ...(excursion === undefined ? {} : { excursion }) }
   }
-  return { version: RUN_CALIBRATION_VERSION, runId: raw.runId, horizons }
+  const touch = readTouch(raw.touch)
+  if (touch === null) return null
+  return { version: RUN_CALIBRATION_VERSION, runId: raw.runId, horizons, ...(touch === undefined ? {} : { touch }) }
 }

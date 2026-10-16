@@ -72,7 +72,8 @@ import { SHOCK_LINES, SHOCK_VERSION } from './forecast/shock'
 import { RUN_CALIBRATION_VERSION } from './forecast/runCalibration'
 import { DEGRADATION_LINES, DEGRADED_THREAD_SECONDS, DIRECTION_PROMOTION_LINES, PROMOTION_LINES } from './forecast/promotion'
 import { LOGISTIC_FIT } from './forecast/ml/logistic'
-import { DIRECTION_MODELS } from './forecast/models'
+import { DIRECTION_MODELS, EXCURSION_LEVELS } from './forecast/models'
+import { EXCURSION_CALIBRATION_VERSION, EXCURSION_MIN_ROWS, FIRST_TOUCH, FIRST_TOUCH_VERSION } from './forecast/firstTouch'
 import { MIN_READY_PAIRS, healForecastSettings } from './forecast/training'
 import { FOLDS } from './forecast/walkForward'
 
@@ -167,6 +168,8 @@ export const ENGINE_CONSTANTS = {
     degradation: DEGRADATION_LINES,
     // The direction models (V7.1 Stage 2): which there are, their checklist's lines, the logistic fit's.
     directionModels: { models: DIRECTION_MODELS, promotion: DIRECTION_PROMOTION_LINES, logistic: LOGISTIC_FIT },
+    // The path (V7.1 Stage 3): the excursion levels and their calibration's lines, and the first-touch table's.
+    path: { excursion: { levels: EXCURSION_LEVELS, version: EXCURSION_CALIBRATION_VERSION, minRows: EXCURSION_MIN_ROWS }, touch: { version: FIRST_TOUCH_VERSION, ...FIRST_TOUCH } },
     ensemble: { version: ENSEMBLE_VERSION, ...ENSEMBLE_LINES },
     calibration: { version: CALIBRATION_VERSION, run: RUN_CALIBRATION_VERSION, ...CALIBRATION_LINES },
     direction: DIRECTION_LINES,

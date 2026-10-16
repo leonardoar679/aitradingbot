@@ -28,8 +28,10 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 // prediction's chime (V6 Stage 13) from b1d829b1f829; the rule on Bitcoin's sharp moves, its record and
 // the prediction's version (V6.1) from 9fbd5ea2297a. 16 October 2026: the direction models -- their list,
 // training budget and floor, their checklist's lines, the logistic fit's, the models', calibration's and
-// prediction's versions (V7.1 Stage 2) -- from d2b9e695247f.
-const PINNED_ENGINE_VERSION = '847feb643cef'
+// prediction's versions (V7.1 Stage 2) -- from d2b9e695247f; the path's figures -- the excursion levels and
+// their calibration's lines, the first-touch table's levels, windows and lines, the models', record's,
+// calibration's and prediction's versions (V7.1 Stage 3) -- from 847feb643cef.
+const PINNED_ENGINE_VERSION = '6e0cea776232'
 
 describe('the engine version', () => {
   it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {

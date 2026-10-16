@@ -17,7 +17,7 @@ import { ForecastHistoryChart } from './ForecastHistoryChart'
 import type { AiOrderProposal } from '../../shared/aiProposal'
 import { tradeThisOf } from './tradeThis'
 import { useRiskTarget } from './useRiskTarget'
-import { callColor, callLabel, decisionWords, dollarText, leadHorizon, momentumWord, pairText, rangeText, signedPct, timeLeftText, volumeWord, HORIZON_NEXT, HORIZON_SHORT, reliabilityWord } from './forecastWords'
+import { callColor, callLabel, decisionWords, dollarText, leadHorizon, likelyLevels, momentumWord, pairText, rangeText, signedPct, timeLeftText, volumeWord, HORIZON_NEXT, HORIZON_SHORT, reliabilityWord } from './forecastWords'
 import { invalidationConditionsOf } from '../../shared/forecast/prediction'
 import { driverText } from '../../shared/forecast/rangeDrivers'
 import { reliabilityReasonText } from '../../shared/forecast/reliability'
@@ -103,6 +103,8 @@ export function PredictionDrawer({
   const undone = leadRange === undefined ? prediction.invalidationConditions : invalidationConditionsOf(prediction.direction, lead, leadRange, i18n)
   const price = dollarText(view.price, i18n)
   const horizonShort = t(HORIZON_SHORT[lead])
+  // The likely high and low of the lead horizon, as prices (V7.1 Stage 3); null where the forecast carries none.
+  const likely = leadRange === undefined ? null : likelyLevels(prediction, leadRange)
 
   return (
     <aside
@@ -282,6 +284,45 @@ export function PredictionDrawer({
               </li>
             )}
           </ol>
+        </div>
+      )}
+
+      {leadRange !== undefined && (leadRange.excursion !== undefined || leadRange.arrival !== undefined) && (
+        <div style={section}>
+          <h3 style={heading}>{t('Price and time')}</h3>
+          {likely !== null && (
+            <p style={line}>
+              {t('Expected {price} ({move}) at {horizon}; the path likely stays under {high} ({highPct}) and above {low} ({lowPct}), eight times in ten.', {
+                price: dollarText(leadRange.quantilePrices[2], i18n),
+                move: pct(leadRange.medianPct),
+                horizon: horizonShort,
+                high: dollarText(likely.high, i18n),
+                highPct: pct(likely.highPct),
+                low: dollarText(likely.low, i18n),
+                lowPct: pct(likely.lowPct)
+              })}
+            </p>
+          )}
+          {leadRange.arrival !== undefined && (
+            <p style={line}>
+              {leadRange.arrival.unlikely
+                ? t('Reaching it within {horizon} is unlikely ({share}): no time is said.', { horizon: horizonShort, share: pctPlain(Math.round(leadRange.arrival.pWithin[lead === 'hours24' ? 'hours4' : lead] * 100), 0) })
+                : leadRange.arrival.medianMinutes === null
+                  ? t('The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}.', {
+                      m5: pctPlain(Math.round(leadRange.arrival.pWithin.minutes5 * 100), 0),
+                      m15: pctPlain(Math.round(leadRange.arrival.pWithin.minutes15 * 100), 0),
+                      h1: pctPlain(Math.round(leadRange.arrival.pWithin.hour1 * 100), 0),
+                      h4: pctPlain(Math.round(leadRange.arrival.pWithin.hours4 * 100), 0)
+                    })
+                  : t('The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}; when it is, typically in {minutes} min.', {
+                      m5: pctPlain(Math.round(leadRange.arrival.pWithin.minutes5 * 100), 0),
+                      m15: pctPlain(Math.round(leadRange.arrival.pWithin.minutes15 * 100), 0),
+                      h1: pctPlain(Math.round(leadRange.arrival.pWithin.hour1 * 100), 0),
+                      h4: pctPlain(Math.round(leadRange.arrival.pWithin.hours4 * 100), 0),
+                      minutes: num(Math.round(leadRange.arrival.medianMinutes), 0, 0)
+                    })}
+            </p>
+          )}
         </div>
       )}
 

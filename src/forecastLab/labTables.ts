@@ -218,6 +218,20 @@ export function directionTable(views: Partial<Record<Horizon, DirectionView>>): 
   return { headers: ['Horizon', 'Source of P(up)', 'Outcomes', 'Brier skill over the base rate', 'Calls at the lines', 'Calls right', 'Verdict', 'Last week', 'P(up) of'], rows }
 }
 
+/** The path's figures on the live record (V7.1 Stage 3), by horizon: when the median was said to be reached
+ * against when it was, whether UNLIKELY was right, the typical minutes said and seen, and whether the
+ * likely high and low held. */
+export function timingTable(live: LiveLab): LabTableData {
+  const minutes = (value: number | null): string => (value === null ? '—' : `${Math.round(value)} min`)
+  return {
+    headers: ['Horizon', 'Forecasts', 'Said: median reached within the window', 'Seen: reached', 'Said UNLIKELY', 'Of those, reached', 'Typical minutes said', 'Minutes seen', 'With likely levels', 'High stayed under the 80% level', 'Low stayed above'],
+    rows: HORIZONS.filter((horizon) => live.horizons[horizon]?.timing !== undefined).map((horizon) => {
+      const timing = live.horizons[horizon]!.timing!
+      return [HORIZON_NAME[horizon], timing.n, share(timing.predicted), share(timing.reached), timing.unlikely, share(timing.unlikelyReached), minutes(timing.saidMinutes), minutes(timing.seenMinutes), timing.excursion.n, share(timing.excursion.high80), share(timing.excursion.low80)]
+    })
+  }
+}
+
 export function leaderTable(rows: readonly LeaderRow[]): LabTableData {
   return {
     headers: ['Horizon', 'Model', 'Outcomes', 'Pinball', 'Skill over persistence', 'In the 80% range', 'Median\'s way right', 'Weight', 'Promoted', 'Last week'],

@@ -376,6 +376,26 @@ export function variantLevels(line: HorizonLine): Record<LiveVariant, readonly n
   return { v1: line.v1, v2, v3: line.news?.v3?.q ?? v2, v4: line.q }
 }
 
+/** How the path's figures came out (V7.1 Stage 3): when the median was said to be reached against when it
+ * was, and whether the likely high and low held. */
+export interface TimingMetrics {
+  /** Forecasts with an arrival on record whose target touch was judged. */
+  n: number
+  /** The mean chance said of the median's touch within the window (the horizon's, four hours at most), and
+   * the share of those forecasts whose median was reached within it. */
+  predicted: number | null
+  reached: number | null
+  /** Of them, said UNLIKELY, and of those the share reached: whether the word was right. */
+  unlikely: number
+  unlikelyReached: number | null
+  /** The median of the typical minutes said, and of the minutes seen, over the forecasts reached. */
+  saidMinutes: number | null
+  seenMinutes: number | null
+  /** Forecasts with likely levels on record, and how often the path's high stayed under the 80% level and
+   * its low above it. */
+  excursion: { n: number; high80: number | null; low80: number | null }
+}
+
 export interface LiveLabHorizon {
   outcomes: number
   variants: Record<LiveVariant, LabMetrics>
@@ -384,6 +404,71 @@ export interface LiveLabHorizon {
   /** The forecasts Bitcoin's sharp move widened (V6.1): as shown, and by V2's own levels beside them --
    * what the widening changed. Absent where it widened none. */
   shock?: { widened: LabMetrics; unwidened: LabMetrics }
+  /** The path's figures (V7.1 Stage 3); absent where no forecast of the horizon carried them. */
+  timing?: TimingMetrics
+}
+
+/** The window a horizon's arrival is judged over: its own, four hours at most (the table's longest). */
+export const TIMING_WINDOW_SEC: Record<Horizon, number> = { minutes5: 300, minutes15: 900, hour1: 3600, hours4: 14_400, hours24: 14_400 }
+const TIMING_WINDOW_INDEX: Record<Horizon, number> = { minutes5: 0, minutes15: 1, hour1: 2, hours4: 3, hours24: 3 }
+
+function medianOf(values: readonly number[]): number | null {
+  if (values.length === 0) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  const middle = sorted.length >> 1
+  return sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2
+}
+
+/** The path's figures of a horizon over the record: each outcome with its forecast's arrival and levels. */
+export function timingOf(predictions: ReadonlyMap<string, PredictionLine>, outcomes: readonly OutcomeLine[], horizon: Horizon): TimingMetrics | null {
+  const windowSec = TIMING_WINDOW_SEC[horizon]
+  const at = TIMING_WINDOW_INDEX[horizon]
+  let n = 0
+  let predicted = 0
+  let reached = 0
+  let unlikely = 0
+  let unlikelyReached = 0
+  const said: number[] = []
+  const seen: number[] = []
+  let exN = 0
+  let high80 = 0
+  let low80 = 0
+  for (const outcome of outcomes) {
+    if (outcome.h !== horizon) continue
+    const line = predictions.get(outcome.id)?.h[horizon]
+    if (line === undefined) continue
+    if (line.arr !== undefined && outcome.touch !== undefined) {
+      n++
+      predicted += line.arr.p[at] ?? 0
+      const touched = outcome.touch[0] !== null && outcome.touch[0] <= windowSec
+      if (touched) reached++
+      if (line.arr.unlikely) {
+        unlikely++
+        if (touched) unlikelyReached++
+      }
+      if (touched) {
+        seen.push(outcome.touch[0]! / 60)
+        if (line.arr.med !== null) said.push(line.arr.med)
+      }
+    }
+    if (line.ex !== undefined && line.ex.length === 6) {
+      exN++
+      if (outcome.best <= line.ex[1]) high80++
+      if (outcome.worst >= line.ex[4]) low80++
+    }
+  }
+  if (n === 0 && exN === 0) return null
+  const share = (value: number, over: number): number | null => (over === 0 ? null : value / over)
+  return {
+    n,
+    predicted: share(predicted, n),
+    reached: share(reached, n),
+    unlikely,
+    unlikelyReached: share(unlikelyReached, unlikely),
+    saidMinutes: medianOf(said),
+    seenMinutes: medianOf(seen),
+    excursion: { n: exN, high80: share(high80, exN), low80: share(low80, exN) }
+  }
 }
 
 export interface LiveLab {
@@ -441,11 +526,13 @@ export function liveLab(predictionLines: readonly PredictionLine[], outcomes: re
     const pick = (variant: LiveVariant): LabCase[] => byVariant[variant].filter((entry) => entry.horizon === horizon)
     const shown = pick('v4')
     const widened = shown.filter((entry) => entry.shock === true)
+    const timing = timingOf(predictions, outcomes, horizon)
     horizons[horizon] = {
       outcomes: shown.length,
       variants: Object.fromEntries(LIVE_VARIANTS.map((variant) => [variant, labMetrics(pick(variant))])) as Record<LiveVariant, LabMetrics>,
       news: { moved: labMetrics(shown.filter((entry) => (entry.kinds ?? []).length > 0)), unmoved: labMetrics(shown.filter((entry) => (entry.kinds ?? []).length === 0)) },
-      ...(widened.length === 0 ? {} : { shock: { widened: labMetrics(widened), unwidened: labMetrics(pick('v2').filter((entry) => entry.shock === true)) } })
+      ...(widened.length === 0 ? {} : { shock: { widened: labMetrics(widened), unwidened: labMetrics(pick('v2').filter((entry) => entry.shock === true)) } }),
+      ...(timing === null ? {} : { timing })
     }
   }
   const events: LiveLab['events'] = {}

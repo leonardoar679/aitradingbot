@@ -420,6 +420,26 @@ model's), and which classes read from it. A run fitted before (`models-v1`) is r
 and fitted again, which takes a few minutes; its walk forward's record reads back without readings, and
 judges no model until the refit writes them.
 
+**Price and time** (since 16 October 2026; V7.1 Stage 3; `shared/forecast/firstTouch.ts`, the models in
+`shared/forecast/models.ts`). A forecast said where the price may close a horizon on; it now also says how
+far the path may go on the way and when its expected price is reached. **The likely high and low:** each
+fit also fits boosted trees at their own pinball loss on the path's highest high and lowest low over the
+horizon, in usual moves, at three levels -- the level the high stays under, and the low above, half the
+time, eight times in ten and nine. The walk forward keeps each row's readings (`forecast-oos-v4`), and the
+calibration scales each level by the factor that would have had the tested paths stay inside it that often,
+scored honestly on weeks whose factors came from the weeks before. **When the expected price is reached:**
+the walk forward also reads, from the bars about every moment of its grid, whether a level above or below
+the close -- a quarter to three of the usual hourly move -- was first touched within five minutes, fifteen,
+an hour or four, and when; a regime has a curve of its own with rows enough. Read at the median's distance,
+that table gives the chance the expected price is reached within each window and the typical minutes when
+it is; under 25% within the horizon it is UNLIKELY, and no time is said. Home's card shows the expected
+price, the likely high and low (the 80% levels, as prices from the close) and "Reached within"; the drawer's
+**Price and time** says it in full, in every language. Every outcome stamps when the path first reached the
+median, the P90 and the P10, and the Lab's **Price and time** card judges the record: the chance said
+against the share reached, whether UNLIKELY was right, the minutes said against the minutes seen, and whether
+the 80% levels held; a run's report carries the same per horizon. A calibration made again from a record
+alone has no table, so no arrival, until the next walk forward.
+
 **The forecast, live** (since 13 October 2026; the V6 document's §38-43; V6 Stage 7;
 `electron/services/forecastService.ts`, the rules in `shared/forecast/{view,outcome,refresh,aciTable,
 forecastRecord}.ts`). At every five-minute close, once the bars are in, every pair of the research is

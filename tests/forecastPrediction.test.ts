@@ -272,7 +272,7 @@ describe('the prediction', () => {
     const withRule: RunCalibration = { ...FLAT, horizons: { ...FLAT.horizons, hour1: { ...FLAT.horizons.hour1!, shock: rule } } }
     const plain = makePrediction(input(withRule, 0, { btc15: 1 }))!.horizons.hour1!
     const shocked = makePrediction(input(withRule, 0, { btc15: -2.8 }))!.horizons.hour1!
-    expect(PREDICTION_VERSION).toBe('prediction-v3')
+    expect(PREDICTION_VERSION).toBe('prediction-v4')
     expect(plain.shock).toBeNull()
     expect(plain.quantilesPct).toEqual(makePrediction(input(FLAT, 0))!.horizons.hour1!.quantilesPct)
     expect(shocked.shock).toEqual({ btc15: -2.8, k80: 1.5, k50: 1.25, held: { before: 0.6, after: 0.79 } })

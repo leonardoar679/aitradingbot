@@ -1786,5 +1786,18 @@
   "Which way: P(up) {pUp} from {source}, whose skill on weeks it was not fitted on is {skill}.": "الاتجاه: P(صعود) {pUp} من {source}، ومهارته في الأسابيع التي لم يُدرَّب عليها {skill}.",
   "the range's own distribution": "توزيع النطاق نفسه",
   "the news": "الأخبار",
-  "its chance of up knew less than the base rate ({skill} of skill)": "احتمال الصعود لديه عرف أقل من المعدل الأساسي (مهارة {skill})"
+  "its chance of up knew less than the base rate ({skill} of skill)": "احتمال الصعود لديه عرف أقل من المعدل الأساسي (مهارة {skill})",
+  "Expected price": "السعر المتوقع",
+  "Likely high": "الأعلى المرجح",
+  "Likely low": "الأدنى المرجح",
+  "Reached within": "يُبلغ خلال",
+  "{price} ({move})": "{price} ({move})",
+  "{share} within {horizon}, typically in {minutes} min": "{share} خلال {horizon}، وعادة في نحو {minutes} دقيقة",
+  "{share} within {horizon}": "{share} خلال {horizon}",
+  "unlikely within {horizon} ({share})": "مستبعد خلال {horizon} ({share})",
+  "Price and time": "السعر والوقت",
+  "Expected {price} ({move}) at {horizon}; the path likely stays under {high} ({highPct}) and above {low} ({lowPct}), eight times in ten.": "السعر المتوقع {price} ({move}) عند {horizon}؛ يرجح أن يبقى المسار تحت {high} ({highPct}) وفوق {low} ({lowPct})، ثماني مرات من عشر.",
+  "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}; when it is, typically in {minutes} min.": "يُبلغ السعر المتوقع خلال 5 دقائق بنسبة {m5} من المرات، وخلال 15 دقيقة {m15}، وساعة {h1}، وأربع ساعات {h4}؛ وعندما يُبلغ، يكون ذلك عادة في نحو {minutes} دقيقة.",
+  "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}.": "يُبلغ السعر المتوقع خلال 5 دقائق بنسبة {m5} من المرات، وخلال 15 دقيقة {m15}، وساعة {h1}، وأربع ساعات {h4}.",
+  "Reaching it within {horizon} is unlikely ({share}): no time is said.": "بلوغه خلال {horizon} مستبعد ({share}): لا يُذكر وقت."
 }
