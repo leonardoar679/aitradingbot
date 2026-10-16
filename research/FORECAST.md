@@ -406,6 +406,28 @@ forward: the hour before the 14 October CPI held 16-23%, the hour after 77-94%; 
 October jobs report 68-90% and the hour after 74-97%; the 15 October PPI 13-94% before and 14-100% after (the
 4-hour ranges on both sides of the PPI held 13% and 14%).
 
+**What the figures are worth.** None of the figures above carried an interval, and the record keeps one row
+an hour for every pair, the 31 pairs moving together: `research/uncertainty.ts` (16 October 2026) resamples the
+HOURS of the same walk forward -- every pair's row of an hour together, in circular blocks as long as the
+horizon -- a thousand times, and prints each figure with its 95% interval, the effective sample behind the 80%
+coverage, and the smallest direction skill the record could tell from zero (2.8 bootstrap standard deviations).
+The forecast knows more than persistence about the size of the move at every horizon but the day, and nothing
+about its way at any:
+
+| horizon | 80% held | 50% held | pinball skill over persistence | effective sample | detectable direction skill |
+|---|---|---|---|---|---|
+| 5 min | 79.7% [77.9, 81.6] | 49.9% [47.9, 52.0] | +1.45% [+0.90, +2.08] | 1,772 of 15,582 | 0.7-1.2% |
+| 15 min | 80.7% [78.9, 82.3] | 51.3% [49.5, 53.0] | +1.51% [+0.99, +2.07] | 2,036 of 15,579 | 0.4-0.9% |
+| 1 hour | 78.1% [76.3, 79.9] | 49.3% [47.5, 51.2] | +1.27% [+0.89, +1.66] | 2,020 of 15,551 | 0.6-1.1% |
+| 4 hours | 77.7% [74.3, 80.7] | 48.1% [45.0, 51.3] | +0.77% [+0.16, +1.40] | 652 of 15,458 | 1.6-2.8% |
+| 24 hours | 79.5% [71.2, 86.7] | 49.1% [40.2, 57.3] | -0.01% [-0.72, +0.62] | 101 of 14,838 | 10-21% |
+
+No direction source's Brier skill interval excludes zero on the positive side at any horizon; three exclude it on
+the negative side (dir-gbt at 5 minutes, -2.26% [-4.18, -0.46]; dir-gbt-tech and dir-gbt-price at 4 hours, -1.92%
+[-3.45, -0.81] and -2.18% [-3.59, -1.09]). The calls' precision intervals are 20 to 40 points wide (dir-logistic at
+5 minutes: 60.3% right of 365 calls, [45.1%, 74.6%]). The 24-hour figures rest on about a hundred effective
+observations: three weeks cannot judge that horizon, which the V7.2 draft's archive stages take up.
+
 **The multi-day run** (multiday2, dist/multiday2 at 22241b0, from 12:36 UTC on 16 October, the lab's four
 strategies on paper, the forecast trader on, two days and an hour of settling) is what this section still
 owes: every gate per hour, the direction and timing tables from the live record, each strategy's trades
