@@ -428,6 +428,20 @@ the negative side (dir-gbt at 5 minutes, -2.26% [-4.18, -0.46]; dir-gbt-tech and
 5 minutes: 60.3% right of 365 calls, [45.1%, 74.6%]). The 24-hour figures rest on about a hundred effective
 observations: three weeks cannot judge that horizon, which the V7.2 draft's archive stages take up.
 
+**What the promotion rule lets through.** `research/directionNull.ts` (16 October 2026) keeps every forecast where
+it is and shifts the outcomes by a random whole number of days -- each pair's outcome taken from the same pair that
+many days later, around the span's end, so each hour's cross-section stays intact -- 200 times, scores each shifted
+record as the app scores it and puts it to the checklist as it stands (5,000 outcomes, a skill above zero, calls no
+less often right than the distribution's where both made 30) and to the lines the V7.2 draft proposes (a skill of at
+least 1%, at least 200 calls, calls right more than half the time, a skill above zero in both halves of the weeks).
+Readings that have nothing to do with the outcomes are "promoted" by the checklist as it stands in 3% to 26% of the
+shifts per model and horizon (dir-gbt-tech 23% at 5 minutes and 26% at 15; dir-gbt-price 26% at 15 minutes;
+dir-logistic 23% at an hour; 0% to 19% at 4 and 24 hours), and by the proposed lines in none, except one 5% cell at
+24 hours (dir-logistic, where the null's own skills reach +2.8%: the day horizon cannot be judged on three weeks).
+The real promotions at 5 minutes (+0.02%, +0.04%) sit inside the null's range; the two at 15 minutes (+0.19%,
++0.24%) sit above its largest shifted skill (+0.04%, +0.06%) -- a relation too small to use (the calls were right 42%
+and 20% of the time; the breakeven precision at 15 minutes is 0.77) and the kind a bid-ask bounce would leave.
+
 **The multi-day run** (multiday2, dist/multiday2 at 22241b0, from 12:36 UTC on 16 October, the lab's four
 strategies on paper, the forecast trader on, two days and an hour of settling) is what this section still
 owes: every gate per hour, the direction and timing tables from the live record, each strategy's trades
