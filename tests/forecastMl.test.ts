@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { MAX_BINS, binMatrix, binOf, fitCuts, rngOf, type Matrix } from '../shared/forecast/ml/bins'
 import { aciStep, conformalAdjustment, conformityScore } from '../shared/forecast/ml/conformal'
 import { fitForest, predictForest } from '../shared/forecast/ml/forest'
-import { fitGbt, gbtContributions, gradientOf, lossOf, predictGbt, type GbtParams } from '../shared/forecast/ml/gbt'
+import { fitGbt, gbtContributions, gradientOf, hessianOf, logit, lossOf, predictGbt, sigmoid, type GbtParams } from '../shared/forecast/ml/gbt'
 import { fitIsotonic, predictIsotonic } from '../shared/forecast/ml/isotonic'
+import { LOGISTIC_FIT, fitLogistic, logisticLogit, predictLogistic } from '../shared/forecast/ml/logistic'
 import { QUANTILE_LEVELS, cdfAt, meanPinball, pinball, quantileOfSorted, rearrange, vincentize } from '../shared/forecast/ml/quantile'
 import { fitRidge, predictRidge, ridgeContributions, solveSpd } from '../shared/forecast/ml/ridge'
 import { canonicalJson, parseModel, serializeModel } from '../shared/forecast/ml/serialize'
@@ -375,5 +376,137 @@ describe('a model on file', () => {
     expect(parseModel('{"kind":"forest","features":1,"trees":[{"feature":[]}]}')).toBeNull()
     expect(parseModel('{"kind":"other"}')).toBeNull()
     expect(() => serializeModel({ kind: 'ridge', mean: [Number.NaN], scale: [1], coef: [1], columns: [0], intercept: 0 })).toThrow()
+  })
+
+  it('reads a boosted model on the log loss and a logistic regression back, and refuses either half-made (V7.1 Stage 1)', () => {
+    const one = '{"bin":[0],"cover":[1],"feature":[-1],"gain":[0],"left":[-1],"right":[-1],"threshold":[0],"value":[0]}'
+    expect(parseModel(`{"kind":"gbt","loss":{"kind":"logloss"},"base":0,"features":1,"grown":1,"trees":[${one}]}`)).not.toBeNull()
+    expect(parseModel(`{"kind":"gbt","loss":{"kind":"probit"},"base":0,"features":1,"grown":1,"trees":[${one}]}`)).toBeNull()
+    const logistic = '{"kind":"logistic","mean":[0,1],"scale":[1,2],"coef":[0.5,-0.5],"columns":[0,1],"intercept":0.1,"iterations":3}'
+    expect(parseModel(logistic)).toEqual(JSON.parse(logistic))
+    expect(parseModel('{"kind":"logistic","mean":[0,1],"scale":[1,2],"coef":[0.5],"columns":[0,1],"intercept":0.1,"iterations":3}')).toBeNull()
+    expect(parseModel('{"kind":"logistic","mean":[0],"scale":[1],"coef":[0.5],"columns":[0],"intercept":0.1}')).toBeNull()
+  })
+})
+
+// THE CLASSIFIERS (V7.1 Stage 1, 16 October 2026): the chance of a 0-or-1 outcome, by boosted trees on
+// the log loss and by a logistic regression, each checked on rows whose chance is known.
+describe('the log loss', () => {
+  /** The chance of a one from two figures, and rows drawn from it. */
+  const chanceOf = (x: ArrayLike<number>, at: number): number => sigmoid(2 * x[at] - x[at + 1])
+  const bernoulli = (x: Float64Array, at: number, random: () => number): number => (random() < chanceOf(x, at) ? 1 : 0)
+
+  /** The mean log loss of chances `p` against outcomes `y`. */
+  const meanLogLoss = (p: readonly number[], y: ArrayLike<number>): number => p.reduce((sum, value, row) => sum + lossOf({ kind: 'logloss' }, y[row], logit(value)), 0) / p.length
+
+  /** Chances against the share that came, by tenth of the chances sorted. */
+  const calibrationGaps = (p: readonly number[], y: ArrayLike<number>): number[] => {
+    const order = p.map((value, row) => ({ value, y: y[row] })).sort((a, b) => a.value - b.value)
+    const gaps: number[] = []
+    for (let tenth = 0; tenth < 10; tenth++) {
+      const slice = order.slice(Math.floor((tenth * order.length) / 10), Math.floor(((tenth + 1) * order.length) / 10))
+      const mean = (values: number[]): number => values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length)
+      gaps.push(Math.abs(mean(slice.map((entry) => entry.value)) - mean(slice.map((entry) => entry.y))))
+    }
+    return gaps
+  }
+
+  it('has the gradient, the curvature and the loss of a chance, and a base at the logit of the share', () => {
+    expect(sigmoid(0)).toBe(0.5)
+    expect(sigmoid(logit(0.3))).toBeCloseTo(0.3, 12)
+    expect(logit(0)).toBeLessThan(-13)
+    expect(logit(1)).toBeGreaterThan(13)
+    expect(gradientOf({ kind: 'logloss' }, 1, 0)).toBeCloseTo(-0.5, 12)
+    expect(gradientOf({ kind: 'logloss' }, 0, 0)).toBeCloseTo(0.5, 12)
+    expect(hessianOf({ kind: 'logloss' }, 0)).toBeCloseTo(0.25, 12)
+    expect(hessianOf({ kind: 'logloss' }, 4)).toBeLessThan(0.02)
+    expect(hessianOf({ kind: 'l2' }, 4)).toBe(1)
+    expect(hessianOf({ kind: 'pinball', tau: 0.1 }, 4)).toBe(1)
+    expect(lossOf({ kind: 'logloss' }, 1, 0)).toBeCloseTo(Math.log(2), 12)
+    expect(lossOf({ kind: 'logloss' }, 0, 0)).toBeCloseTo(Math.log(2), 12)
+    expect(lossOf({ kind: 'logloss' }, 1, 40)).toBeLessThan(1e-5)
+    // A sure wrong answer costs a finite amount: the chance is held inside (0, 1).
+    expect(Number.isFinite(lossOf({ kind: 'logloss' }, 0, 40))).toBe(true)
+  })
+
+  it('boosts trees to a chance that beats the share, is calibrated by tenths, and is the same by its seed', () => {
+    const train = rowsOf(6000, 3, 21, bernoulli)
+    const valid = rowsOf(3000, 3, 22, bernoulli)
+    const cuts = fitCuts(train.matrix)
+    const binnedTrain = binMatrix(train.matrix, cuts)
+    const binnedValid = binMatrix(valid.matrix, cuts)
+    const model = fitGbt(binnedTrain, train.y, binnedValid, valid.y, { kind: 'logloss' }, GBT)
+    const share = train.y.reduce((sum, value) => sum + value, 0) / train.y.length
+    expect(model.loss.kind).toBe('logloss')
+    expect(model.base).toBeCloseTo(logit(share), 12)
+    expect(model.grown).toBeLessThan(GBT.trees)
+    const chances = Array.from({ length: valid.matrix.rows }, (_, row) => sigmoid(predictGbt(model, valid.matrix.data, row * 3)))
+    const truth = Array.from({ length: valid.matrix.rows }, (_, row) => chanceOf(valid.matrix.data, row * 3))
+    const fitted = meanLogLoss(chances, valid.y)
+    const base = meanLogLoss(chances.map(() => share), valid.y)
+    const best = meanLogLoss(truth, valid.y)
+    // Well under the share's loss, and within a tenth of what the true chance scores.
+    expect(fitted).toBeLessThan(base - 0.1)
+    expect(fitted).toBeLessThan(best + 0.05)
+    expect(Math.max(...calibrationGaps(chances, valid.y))).toBeLessThan(0.1)
+    // Every chance is a chance, and a row the figures favour reads higher.
+    expect(chances.every((p) => p > 0 && p < 1)).toBe(true)
+    expect(sigmoid(predictGbt(model, Float64Array.from([1.5, -1.5, 0])))).toBeGreaterThan(0.9)
+    expect(sigmoid(predictGbt(model, Float64Array.from([-1.5, 1.5, 0])))).toBeLessThan(0.1)
+    const again = fitGbt(binnedTrain, train.y, binnedValid, valid.y, { kind: 'logloss' }, GBT)
+    expect(canonicalJson(again)).toBe(canonicalJson(model))
+    expect(parseModel(serializeModel(model))).toEqual(JSON.parse(serializeModel(model)))
+  })
+})
+
+describe('logistic regression', () => {
+  const chanceOf = (x: ArrayLike<number>, at: number): number => sigmoid(1.5 * x[at] - 1.0 * x[at + 1] + 0.3)
+  const bernoulli = (x: Float64Array, at: number, random: () => number): number => (random() < chanceOf(x, at) ? 1 : 0)
+  /** The figures are uniform on [-2, 2]: their spread, which the standardized weights carry. */
+  const SPREAD = 4 / Math.sqrt(12)
+
+  it('recovers the line a chance was drawn from, in standardized units, and converges', () => {
+    const { matrix, y } = rowsOf(8000, 3, 31, bernoulli)
+    const model = fitLogistic(matrix, y, 1e-3)
+    expect(model.kind).toBe('logistic')
+    expect(model.iterations).toBeLessThan(LOGISTIC_FIT.iterations)
+    expect(model.coef[0]).toBeCloseTo(1.5 * SPREAD, 0)
+    expect(model.coef[1]).toBeCloseTo(-1.0 * SPREAD, 0)
+    expect(Math.abs(model.coef[2])).toBeLessThan(0.15)
+    expect(model.intercept).toBeCloseTo(0.3, 0)
+    expect(predictLogistic(model, Float64Array.from([1.5, -1.5, 0]))).toBeGreaterThan(0.95)
+    expect(predictLogistic(model, Float64Array.from([-1.5, 1.5, 0]))).toBeLessThan(0.05)
+    expect(predictLogistic(model, Float64Array.from([0, 0, 0]))).toBeCloseTo(sigmoid(logisticLogit(model, Float64Array.from([0, 0, 0]))), 12)
+  })
+
+  it('gives a figure that does not vary no weight, reads chosen columns only, and goes to file and back', () => {
+    const { matrix, y } = rowsOf(3000, 3, 32, bernoulli)
+    for (let row = 0; row < matrix.rows; row++) matrix.data[row * 3 + 2] = 7
+    const model = fitLogistic(matrix, y, 1)
+    expect(model.scale[2]).toBe(0)
+    expect(model.coef[2]).toBeCloseTo(0, 12)
+    const first = fitLogistic(matrix, y, 1, [0])
+    expect(first.columns).toEqual([0])
+    expect(first.coef.length).toBe(1)
+    expect(first.coef[0]).toBeGreaterThan(0.5)
+    expect(parseModel(serializeModel(model))).toEqual(JSON.parse(serializeModel(model)))
+    expect(serializeModel(fitLogistic(matrix, y, 1))).toBe(serializeModel(model))
+  })
+
+  it('is calibrated by tenths on rows it never saw, and a stronger penalty pulls its weights in', () => {
+    const train = rowsOf(6000, 3, 33, bernoulli)
+    const valid = rowsOf(3000, 3, 34, bernoulli)
+    const model = fitLogistic(train.matrix, train.y, 1e-3)
+    const chances = Array.from({ length: valid.matrix.rows }, (_, row) => predictLogistic(model, valid.matrix.data, row * 3))
+    const order = chances.map((value, row) => ({ value, y: valid.y[row] })).sort((a, b) => a.value - b.value)
+    for (let tenth = 0; tenth < 10; tenth++) {
+      const slice = order.slice(Math.floor((tenth * order.length) / 10), Math.floor(((tenth + 1) * order.length) / 10))
+      const predicted = slice.reduce((sum, entry) => sum + entry.value, 0) / slice.length
+      const came = slice.reduce((sum, entry) => sum + entry.y, 0) / slice.length
+      expect(Math.abs(predicted - came)).toBeLessThan(0.1)
+    }
+    const shrunk = fitLogistic(train.matrix, train.y, 5000)
+    expect(Math.abs(shrunk.coef[0])).toBeLessThan(Math.abs(model.coef[0]))
+    expect(Math.abs(shrunk.coef[1])).toBeLessThan(Math.abs(model.coef[1]))
   })
 })

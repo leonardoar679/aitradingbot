@@ -1,13 +1,15 @@
 import type { ForestModel } from './forest'
 import type { GbtModel } from './gbt'
+import type { LogisticModel } from './logistic'
 import type { RidgeModel } from './ridge'
 import type { FlatTree } from './tree'
 
 // A MODEL ON FILE (V6 Stage 4, 13 October 2026): one line of JSON with every object's keys in order,
 // so that the same model is the same bytes and its content hash names it. Read back, it is checked
-// shape by shape, and anything else is refused rather than half-read.
+// shape by shape, and anything else is refused rather than half-read. Since V7.1 Stage 1 a boosted
+// model may carry the log loss, and a logistic regression is a model of its own.
 
-export type MlModel = GbtModel | ForestModel | RidgeModel
+export type MlModel = GbtModel | ForestModel | RidgeModel | LogisticModel
 
 /** JSON with every object's keys sorted. */
 export function canonicalJson(value: unknown): string {
@@ -50,9 +52,15 @@ export function parseModel(text: string): MlModel | null {
   if (typeof model !== 'object' || model === null) return null
   if (model.kind === 'gbt') {
     const loss = model.loss as { kind?: unknown; tau?: unknown } | null
-    const lossOk = loss !== null && typeof loss === 'object' && (loss.kind === 'l2' || (loss.kind === 'pinball' && typeof loss.tau === 'number' && loss.tau > 0 && loss.tau < 1))
+    const lossOk = loss !== null && typeof loss === 'object' && (loss.kind === 'l2' || loss.kind === 'logloss' || (loss.kind === 'pinball' && typeof loss.tau === 'number' && loss.tau > 0 && loss.tau < 1))
     if (!lossOk || typeof model.base !== 'number' || typeof model.features !== 'number' || typeof model.grown !== 'number' || !Array.isArray(model.trees) || !model.trees.every(isTree)) return null
     return model as unknown as GbtModel
+  }
+  if (model.kind === 'logistic') {
+    if (!numbers(model.mean) || !numbers(model.scale) || !numbers(model.coef) || !numbers(model.columns) || typeof model.intercept !== 'number' || typeof model.iterations !== 'number') return null
+    const d = (model.columns as number[]).length
+    if ((model.mean as number[]).length !== d || (model.scale as number[]).length !== d || (model.coef as number[]).length !== d) return null
+    return model as unknown as LogisticModel
   }
   if (model.kind === 'forest') {
     if (typeof model.features !== 'number' || !Array.isArray(model.trees) || !model.trees.every(isTree)) return null
