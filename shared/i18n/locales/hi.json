@@ -1836,5 +1836,17 @@
   "Live trading is only available on Binance and Bitget.": "लाइव ट्रेडिंग केवल Binance और Bitget पर उपलब्ध है।",
   "A live ladder or series (DCA, TWAP, Grid) is Binance-only; on Bitget an Order or a Position can go live.": "लाइव लैडर या सीरीज़ (DCA, TWAP, ग्रिड) केवल Binance पर है; Bitget पर एक ऑर्डर या पोज़िशन लाइव हो सकती है।",
   "Add a verified {exchange} API key on Connections first.": "पहले कनेक्शन पर एक सत्यापित {exchange} API कुंजी जोड़ें।",
-  "This will immediately place a real BUY market order for {amount} {asset} of {pair} on {exchange}, then watch it for take-profit/stop-loss/trailing-stop/time-limit and exit automatically with a real sell — no per-exit confirmation. Stop on Strategies › Execution force-exits it manually at any time.": "यह तुरंत {exchange} पर {pair} के लिए {amount} {asset} का असली मार्केट खरीद ऑर्डर लगाएगा, फिर टेक प्रॉफ़िट/स्टॉप लॉस/ट्रेलिंग स्टॉप/समय-सीमा पर नज़र रखेगा और असली बिक्री के साथ अपने आप निकलेगा — हर निकास पर पुष्टि नहीं। रणनीतियाँ › निष्पादन पर रोकें से कभी भी हाथ से ज़बरदस्ती निकला जा सकता है।"
+  "This will immediately place a real BUY market order for {amount} {asset} of {pair} on {exchange}, then watch it for take-profit/stop-loss/trailing-stop/time-limit and exit automatically with a real sell — no per-exit confirmation. Stop on Strategies › Execution force-exits it manually at any time.": "यह तुरंत {exchange} पर {pair} के लिए {amount} {asset} का असली मार्केट खरीद ऑर्डर लगाएगा, फिर टेक प्रॉफ़िट/स्टॉप लॉस/ट्रेलिंग स्टॉप/समय-सीमा पर नज़र रखेगा और असली बिक्री के साथ अपने आप निकलेगा — हर निकास पर पुष्टि नहीं। रणनीतियाँ › निष्पादन पर रोकें से कभी भी हाथ से ज़बरदस्ती निकला जा सकता है।",
+  "the market's state ({state}) widened it ×{factor}: on the weeks tested, in that state it held {before} of the time, widened {after}": "बाज़ार की स्थिति ({state}) ने रेंज ×{factor} चौड़ी की: परखे गए हफ़्तों में उस स्थिति में रेंज {before} बार सही रही, चौड़ी करने पर {after}",
+  "normal@@market state": "सामान्य",
+  "before a scheduled release": "निर्धारित रिलीज़ से पहले",
+  "after a sharp move of Bitcoin's": "बिटकॉइन की तेज़ चाल के बाद",
+  "in a trending move of Bitcoin's": "बिटकॉइन की रुझान वाली चाल में",
+  "in a liquidation cascade": "लिक्विडेशन की शृंखला में",
+  "recovering from a shock": "झटके से उबरते हुए",
+  "Bitcoin's last fifteen minutes moved {move}": "बिटकॉइन के पिछले पंद्रह मिनट में {move} की चाल",
+  "ether's last fifteen minutes moved {move}": "ईथर के पिछले पंद्रह मिनट में {move} की चाल",
+  "Bitcoin's last fifteen minutes ran {move} against the fifteen before": "बिटकॉइन के पिछले पंद्रह मिनट उससे पहले के पंद्रह की तुलना में {move}",
+  "{share} of the coins rose over the last fifteen minutes": "पिछले पंद्रह मिनट में {share} कॉइन चढ़े",
+  "the market's volume in the last fifteen minutes is {share} its usual": "पिछले पंद्रह मिनट में बाज़ार का वॉल्यूम सामान्य का {share} है"
 }

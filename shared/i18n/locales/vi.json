@@ -1836,5 +1836,17 @@
   "Live trading is only available on Binance and Bitget.": "Giao dịch thật chỉ có trên Binance và Bitget.",
   "A live ladder or series (DCA, TWAP, Grid) is Binance-only; on Bitget an Order or a Position can go live.": "Bậc thang hoặc chuỗi lệnh thật (DCA, TWAP, Lưới) chỉ có trên Binance; trên Bitget, một lệnh hoặc một vị thế có thể giao dịch thật.",
   "Add a verified {exchange} API key on Connections first.": "Hãy thêm một khóa API {exchange} đã xác minh trong Kết nối trước.",
-  "This will immediately place a real BUY market order for {amount} {asset} of {pair} on {exchange}, then watch it for take-profit/stop-loss/trailing-stop/time-limit and exit automatically with a real sell — no per-exit confirmation. Stop on Strategies › Execution force-exits it manually at any time.": "Thao tác này sẽ đặt ngay một lệnh MUA thật theo giá thị trường {amount} {asset} cho {pair} trên {exchange}, sau đó theo dõi chốt lời/cắt lỗ/cắt lỗ động/giới hạn thời gian và tự động thoát bằng một lệnh bán thật — không xác nhận cho từng lần thoát. Nút Dừng trong Chiến lược › Thực thi cưỡng chế thoát thủ công bất cứ lúc nào."
+  "This will immediately place a real BUY market order for {amount} {asset} of {pair} on {exchange}, then watch it for take-profit/stop-loss/trailing-stop/time-limit and exit automatically with a real sell — no per-exit confirmation. Stop on Strategies › Execution force-exits it manually at any time.": "Thao tác này sẽ đặt ngay một lệnh MUA thật theo giá thị trường {amount} {asset} cho {pair} trên {exchange}, sau đó theo dõi chốt lời/cắt lỗ/cắt lỗ động/giới hạn thời gian và tự động thoát bằng một lệnh bán thật — không xác nhận cho từng lần thoát. Nút Dừng trong Chiến lược › Thực thi cưỡng chế thoát thủ công bất cứ lúc nào.",
+  "the market's state ({state}) widened it ×{factor}: on the weeks tested, in that state it held {before} of the time, widened {after}": "trạng thái thị trường ({state}) đã nới rộng khoảng ×{factor}: trong các tuần được kiểm tra, ở trạng thái đó khoảng này đúng {before} số lần, khi nới rộng là {after}",
+  "normal@@market state": "bình thường",
+  "before a scheduled release": "trước một đợt công bố theo lịch",
+  "after a sharp move of Bitcoin's": "sau một biến động mạnh của Bitcoin",
+  "in a trending move of Bitcoin's": "trong một biến động theo xu hướng của Bitcoin",
+  "in a liquidation cascade": "trong một đợt thanh lý dây chuyền",
+  "recovering from a shock": "đang hồi phục sau một cú sốc",
+  "Bitcoin's last fifteen minutes moved {move}": "mười lăm phút gần nhất của Bitcoin biến chuyển {move}",
+  "ether's last fifteen minutes moved {move}": "mười lăm phút gần nhất của ether biến chuyển {move}",
+  "Bitcoin's last fifteen minutes ran {move} against the fifteen before": "mười lăm phút gần nhất của Bitcoin so với mười lăm phút trước {move}",
+  "{share} of the coins rose over the last fifteen minutes": "{share} số coin tăng trong mười lăm phút gần nhất",
+  "the market's volume in the last fifteen minutes is {share} its usual": "khối lượng của thị trường trong mười lăm phút gần nhất bằng {share} mức thường lệ"
 }

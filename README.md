@@ -397,6 +397,35 @@ Forecast Lab's **After Bitcoin's sharp moves** card says which horizons each ref
 how the forecasts it widened held live; a run's report says the same of its span. A walk forward made
 before keeps its ranges until the next refit writes Bitcoin's moves.
 
+**The market's shock states** (since 16 October 2026; V7.1 Stage 11; `shared/forecast/marketShock.ts`).
+A market has more states than calm and a sharp move of Bitcoin's. Every forecast now carries the
+market's state at its moment, read from what was known then and nothing after: NORMAL; PRE_EVENT (within
+the hour before a scheduled release, once Stage 12's calendar is in; none before it); POST_EVENT_SHOCK
+(Bitcoin's last fifteen minutes at or past 2.5 of its usual moves, V6.1's moment, a break from forty-five
+minutes that were not themselves a trend); TRENDING_SHOCK (the same sharp fifteen minutes with the forty-five
+before them already at or past 2.5 of their usual moves the same way, read from the hour's and the fifteen
+minutes' figures); LIQUIDATION_SHOCK (a sharp fall with the breadth of the last fifteen minutes at
+or under a fifth and the market's volume at three times its usual fifteen minutes or more); RECOVERY (within
+four hours after any shock, Bitcoin's hour at least one usual move against it). The lines were fixed before
+anything was measured by them and are pinned under the engine's constants. A shock moment is Bitcoin's
+fifteen minutes past the line, read from its bars alone at every five-minute close, so the recovery window is
+the same in training and live;
+live, the state is read at each close from Bitcoin's row and the cross-section, and between closes from its
+minutes (its hour now read too), a change of state making every pair's forecast again where a state's rule
+is in use (reason `market`). The rows the models learn from gained five figures for it (`features-v2`:
+Bitcoin's and ether's last fifteen minutes, Bitcoin's fifteen minutes against the fifteen before, the
+breadth of the last fifteen minutes, the market's volume against its usual), so every model is refitted and
+sees a shock as it begins. Each walk forward's record keeps the state of every hour (`forecast-oos-v5`), and
+each calibration fits, per state, a widening of its own exactly as V6.1's -- the V6.1 rule becoming
+POST_EVENT_SHOCK's -- adopted by the same cross-fitted test; the horizon then chooses, on every row either
+would touch, between V6.1's one rule and the states' rules by the lower pinball loss, or neither where
+neither passed. A forecast widened by a state's rule says which state under **Why this range?**. Two more
+reasons make a forecast again between closes: `spread` (the live spread at three times the pair's usual, the
+median of its spreads at the last closes) and `direction` (the live price crossed the lead horizon's expected
+price against the call, once per crossing). The Forecast Lab's **The market's shock states** card shows each
+state's rule by horizon, the horizon's choice, and the live record's forecasts in each state; a run's report
+says the same of its span; `research/rangeLag.ts` reads a record to the same figures beside V6.1's.
+
 **Which way: the direction models** (since 16 October 2026; V7.1 Stage 2; `shared/forecast/models.ts`,
 `shared/forecast/ml/{logistic,gbt}.ts`, judged in `shared/forecast/runCalibration.ts`, measured in
 `research/direction.ts`). V6's forecast read its P(up) off its range's distribution, and on three walk

@@ -4,6 +4,7 @@ import type { ClassRecord } from './opportunityClass'
 import type { LabFile } from './labFile'
 import type { ReplayRow } from './labWalkForward'
 import type { DirectionReport, PUpSource } from './runCalibration'
+import type { MarketShockRules } from './marketShock'
 import type { ShockRule } from './shock'
 import type { WorkerProgress } from './status'
 
@@ -39,6 +40,9 @@ export interface ForecastLabView {
   refit: { on: boolean; nextAt: number | null; trainingStatus: string; lastFitAt: number | null }
   /** The rule on Bitcoin's sharp moves of the calibration in use, by horizon (V6.1); empty before one. */
   shock: Partial<Record<Horizon, ShockRule>>
+  /** The rules by market shock state of the calibration in use, by horizon (V7.1 Stage 11), with the
+   * horizon's choice among the widenings; empty before a walk forward that read the states. */
+  marketShock: Partial<Record<Horizon, MarketShockRules>>
   /** The direction models of the calibration in use, by horizon (V7.1 Stage 2); empty before a walk
    * forward that read them. */
   direction: Partial<Record<Horizon, DirectionView>>

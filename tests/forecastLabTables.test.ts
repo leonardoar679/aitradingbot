@@ -6,7 +6,7 @@ import type { LabFile } from '../shared/forecast/labFile'
 import type { LabHorizon } from '../shared/forecast/labWalkForward'
 import type { Candle } from '../shared/ipc'
 import { QUANTS } from '../src/agents/quantState'
-import { calibrationTable, classesOf, leaderTable, performanceTable, shockTable, tableCsv, traderTable } from '../src/forecastLab/labTables'
+import { calibrationTable, classesOf, leaderTable, marketShockTable, performanceTable, shockTable, tableCsv, traderTable } from '../src/forecastLab/labTables'
 import { noShockRecord } from '../shared/forecast/shock'
 import { buyAndHold, hybridTrades, runComparison } from '../src/forecastLab/strategyComparison'
 
@@ -71,6 +71,37 @@ describe('the tables', () => {
     expect(table.rows[0][9]).toBe(0)
     expect(table.rows[2].slice(3, 9)).toEqual(['—', '—', '—', '—', '—', 'no: too few moments past the line to fit from'])
     expect(table.rows[3][8]).toMatch(/^no: no record of Bitcoin's moves/)
+  })
+
+  // V7.1 Stage 11: the rules by market state at each horizon, the horizon's choice, and the live record's
+  // forecasts in each state.
+  it("says each market state's rule, whether the horizon widens by the states' rules, and the live forecasts in each state", () => {
+    const adopted = { ...noShockRecord(), adopted: true, refusal: null, k80: 1.3, k50: 1.1, moments: 20, rows: 400, before: { in80: 0.7, in50: 0.4, pinball: 0.45 }, after: { in80: 0.81, in50: 0.5, pinball: 0.44 } }
+    const rules = { version: 'market-shock-v1', byState: { RECOVERY: adopted, POST_EVENT_SHOCK: { ...adopted, adopted: false, refusal: 'pinball' as const } }, compared: { rows: 900, before: { in80: 0.62, in50: 0.36, pinball: 0.49 }, line: { in80: 0.78, in50: 0.48, pinball: 0.47 }, states: { in80: 0.8, in50: 0.5, pinball: 0.46 } }, chosen: 'states' as const }
+    const inState = labMetrics([entry(1), entry(-3)])
+    const live = { from: T, to: T, horizons: { hour1: { outcomes: 2, variants: { v1: inState, v2: inState, v3: inState, v4: inState }, news: { moved: inState, unmoved: inState }, byState: { RECOVERY: inState } } }, events: {}, drift: { shocks: 0, overReacting: 0, underReacting: 0, refreshes: 0, byReason: {}, meanChangePct: null } }
+    const table = marketShockTable({ hour1: rules, hours4: { ...rules, byState: {}, compared: null, chosen: 'none' as const } }, live)
+    expect(table.rows.map((row) => `${row[0]} ${row[1]}`)).toEqual([
+      '1h Before a scheduled release',
+      "1h After a sharp move of Bitcoin's",
+      "1h In a trending move of Bitcoin's",
+      '1h In a liquidation cascade',
+      '1h Recovering from a shock',
+      '4h Before a scheduled release',
+      "4h After a sharp move of Bitcoin's",
+      "4h In a trending move of Bitcoin's",
+      '4h In a liquidation cascade',
+      '4h Recovering from a shock'
+    ])
+    expect(table.rows[4]).toEqual(['1h', 'Recovering from a shock', 20, 400, '70.0%', '81.0%', '0.4500', '0.4400', 'x1.30 / x1.10', 'yes', "the states' rules (on 900 rows: as forecast 62.0% in 80%, pinball 0.4900; by the line 78.0%, 0.4700; by the states 80.0%, 0.4600)", 2, '50.0%'])
+    expect(table.rows[1][9]).toBe('no: widening made the pinball loss worse')
+    expect(table.rows[0].slice(2, 10)).toEqual([0, 0, '—', '—', '—', '—', '—', 'no: no moment in this state'])
+    expect(table.rows[5][10]).toBe('none: the models alone')
+    expect(table.rows[5][11]).toBe(0)
+    // A state's rule fitted at a horizon that widens by the line: said so.
+    const lined = marketShockTable({ hour1: { ...rules, chosen: 'line' as const } }, live)
+    expect(lined.rows[4][9]).toBe('fitted, the horizon widens otherwise')
+    expect(lined.rows[4][10]).toMatch(/^V6\.1's one rule past the line/)
   })
 
   it('saves a table as CSV, quoting what needs it', () => {

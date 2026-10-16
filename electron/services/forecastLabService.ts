@@ -262,8 +262,20 @@ export async function getForecastLab(): Promise<ForecastLabView> {
     classes: Date.now() - classes.at < CLASSES_MS ? classes.records : await readClasses(),
     refit: { on: settings.refitNightly, nextAt: training.nextRefitAt, trainingStatus: training.status, lastFitAt: training.current?.fittedAt ?? null },
     shock: shockRulesInUse(),
+    marketShock: marketShockRulesInUse(),
     direction: directionInUse()
   }
+}
+
+/** The calibration in use's rules by market shock state, by horizon (V7.1 Stage 11). */
+function marketShockRulesInUse(): ForecastLabView['marketShock'] {
+  const calibration = currentForecastCalibration()
+  const out: ForecastLabView['marketShock'] = {}
+  for (const horizon of HORIZONS) {
+    const rules = calibration?.horizons[horizon]?.marketShock
+    if (rules !== undefined) out[horizon] = rules
+  }
+  return out
 }
 
 /** The calibration in use's direction models, by horizon (V7.1 Stage 2), and which source each pair class

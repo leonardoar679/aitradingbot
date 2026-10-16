@@ -14,23 +14,35 @@
 // its median by a factor fitted on the weeks before each week alone, so that those weeks' such hours held
 // 80%; scored on the week itself. Calm hours are left as they are.
 //
+// SINCE V7.1 STAGE 11 (16 October 2026) a record keeps the market's shock state at each hour (shared/forecast/
+// marketShock.ts, forecast-oos-v5), and this prints, per horizon, the same figures by state: how the hours in
+// each state held as forecast, each state's rule as the app fits it (cross-fitted), V6.1's one rule against
+// the states' rules on every hour either would widen, and which the app's calibration would choose. With
+// RUN_BEFORE naming an older run (features-v1, before the market's fifteen minutes were in the rows), the
+// three ways are set beside each other on the hours both runs tested: V6.1 (the old run's ranges and its
+// line rule), shock-aware (the new run's ranges alone) and hybrid (the new run's ranges with its chosen
+// rules).
+//
 //   npx esbuild research/rangeLag.ts --bundle --platform=node --format=esm --outfile=research/.rangeLag.mjs
-//   PROFILE=<a scratch profile with a walk forward> node research/.rangeLag.mjs
+//   PROFILE=<a scratch profile with a walk forward> [RUN_BEFORE=<an older run>] node research/.rangeLag.mjs
 //
 // It reads the profile's forecastModels/<run>/oos-*.bin and calibration.json and forecastData/; it writes
 // nothing and asks nothing.
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { HORIZON_BARS, type Horizon } from '../shared/forecast/features'
+import { WIDENED_STATES, marketShockRulesOf, marketWidening, type MarketShockRow } from '../shared/forecast/marketShock'
 import { meanPinball } from '../shared/forecast/ml/quantile'
 import type { ForecastModelId } from '../shared/forecast/models'
-import { decodeOos } from '../shared/forecast/oosRecord'
+import { decodeOos, oosState, type OosRecord } from '../shared/forecast/oosRecord'
 import { rowsOf, scoreOutOfSample, type ScoredRow } from '../shared/forecast/runCalibration'
+import { pastShockLine, scoreShock, shockRuleOf, stretchShock, type ShockRule } from '../shared/forecast/shock'
 
 const PROFILE = process.env.PROFILE ?? ''
 if (PROFILE === '') throw new Error('PROFILE is the scratch profile to read')
 const MODELS = join(PROFILE, 'forecastModels')
 const RUN = process.env.RUN ?? (JSON.parse(readFileSync(join(MODELS, 'current.json'), 'utf-8')) as { runId: string }).runId
+const RUN_BEFORE = process.env.RUN_BEFORE ?? ''
 const HORIZONS: Horizon[] = ['minutes5', 'minutes15', 'hour1', 'hours4']
 const BAR = 300
 const DAY_BARS = 288
@@ -171,10 +183,48 @@ const calibration = JSON.parse(readFileSync(join(MODELS, RUN, 'calibration.json'
   horizons: Partial<Record<Horizon, { variants: { v2: { weights: { pooled: { model: ForecastModelId; weight: number }[] } } } }>>
 }
 
+/** A run's record at a horizon, or null. */
+function recordOf(run: string, horizon: Horizon): OosRecord | null {
+  let bytes: Buffer
+  try {
+    bytes = readFileSync(join(MODELS, run, `oos-${horizon}.bin`))
+  } catch {
+    return null
+  }
+  return decodeOos(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength))
+}
+
+/** A run's forecast shown (V2), scored out of sample, with the promoted models its calibration names. */
+function shownOf(run: string, record: OosRecord): ScoredRow[] {
+  const file = JSON.parse(readFileSync(join(MODELS, run, 'calibration.json'), 'utf-8')) as typeof calibration
+  const promoted = new Set((file.horizons[record.horizon]?.variants.v2.weights.pooled ?? []).filter((entry) => entry.weight > 0).map((entry) => entry.model))
+  return scoreOutOfSample(rowsOf(record), 'v2', promoted)
+}
+
+/** The rows as the app's rules read them: V6.1's row with the market's state (forecast-oos-v5). */
+function stateRowsOf(record: OosRecord, scored: readonly ScoredRow[]): MarketShockRow[] {
+  const out: MarketShockRow[] = []
+  if (record.btc15 === undefined) return out
+  for (const row of scored) {
+    const state = oosState(record, row.at!)
+    if (state !== undefined) out.push({ z: row.z, q: row.quantiles, week: row.week, t: record.time[row.at!], btc15: record.btc15[row.at!], state })
+  }
+  return out
+}
+
+/** Each row widened as the app would widen it live with these rules at its moment: by its state's rule
+ * where the states' were chosen, by the line's where the line was, as forecast otherwise. Fitted on every
+ * week, not cross-fitted: what the app would do, not an honest score. */
+function widenedBy(rows: readonly MarketShockRow[], line: ShockRule, rules: ReturnType<typeof marketShockRulesOf>): { z: number; q: readonly number[] }[] {
+  return rows.map((row) => {
+    const widening = marketWidening({ shock: line, marketShock: rules }, row.btc15, row.state)
+    return widening === null ? row : { z: row.z, q: stretchShock(row.q, widening.k80, widening.k50) }
+  })
+}
+
 console.log(`walk forward ${RUN} in ${PROFILE}; the rule's line |mkt15| >= ${SHOCK_LINE}`)
 for (const horizon of HORIZONS) {
-  const bytes = readFileSync(join(MODELS, RUN, `oos-${horizon}.bin`))
-  const record = decodeOos(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength))
+  const record = recordOf(RUN, horizon)
   if (record === null) {
     console.log(`${horizon}: no record`)
     continue
@@ -275,4 +325,62 @@ for (const horizon of HORIZONS) {
       console.log(`  cross-fitted |${signal}| >= ${line}, split: 80% held ${pct(b.in80)} -> ${pct(a.in80)}, 50% ${pct(b.in50)} -> ${pct(a.in50)}, pinball ${b.pinball.toFixed(4)} -> ${a.pinball.toFixed(4)} (factors by week ${ks.join(', ')})`)
     }
   }
+
+  // THE MARKET'S SHOCK STATES (V7.1 Stage 11): the hours in each state as forecast, each state's rule as the
+  // app fits it, and V6.1's rule against the states' on every hour either would widen -- the app's own
+  // arithmetic (shared/forecast/marketShock.ts), so that calibration.json can be set against it.
+  const stateRows = stateRowsOf(record, scored)
+  if (stateRows.length === 0) {
+    console.log('  states: none on record (a walk forward from before V7.1 Stage 11)')
+    continue
+  }
+  const lineRule = shockRuleOf(stateRows)
+  const rules = marketShockRulesOf(stateRows, lineRule)
+  const inState = (state: string): MarketShockRow[] => stateRows.filter((row) => row.state === state)
+  console.log(`  by state: ${['NORMAL', ...WIDENED_STATES].map((state) => `${state} n ${inState(state).length}${inState(state).length > 0 ? ` 80% ${pct(coverage(inState(state)).in80)}` : ''}`).join(' | ')}`)
+  for (const state of WIDENED_STATES) {
+    const rule = rules.byState[state]
+    if (rule === undefined) continue
+    const verdict = rule.adopted ? 'adopted' : `refused: ${rule.refusal}`
+    console.log(`  rule for ${state} (${rule.moments} moments, ${rule.rows} hours): ${rule.before === null ? 'not fitted' : `80% held ${pct(rule.before.in80)} -> ${pct(rule.after!.in80)}, pinball ${rule.before.pinball.toFixed(4)} -> ${rule.after!.pinball.toFixed(4)}, x${rule.k80.toFixed(2)} / x${rule.k50.toFixed(2)}`}; ${verdict}`)
+  }
+  console.log(`  V6.1's line rule on the same rows: ${lineRule.adopted ? 'adopted' : `refused: ${lineRule.refusal}`} (${lineRule.rows} hours, x${lineRule.k80.toFixed(2)} / x${lineRule.k50.toFixed(2)})`)
+  if (rules.compared !== null) {
+    const c = rules.compared
+    console.log(`  on the ${c.rows} hours either would widen, cross-fitted: as forecast 80% ${pct(c.before.in80)} pinball ${c.before.pinball.toFixed(4)}; by the line ${pct(c.line.in80)} ${c.line.pinball.toFixed(4)}; by the states ${pct(c.states.in80)} ${c.states.pinball.toFixed(4)} -> chosen: ${rules.chosen}`)
+  }
+
+  // V6.1 vs SHOCK-AWARE vs HYBRID: an older run's ranges with its line rule, this run's ranges alone, and
+  // this run's with its chosen rules, on the hours both runs tested.
+  if (RUN_BEFORE === '') continue
+  const older = recordOf(RUN_BEFORE, horizon)
+  if (older === null) {
+    console.log(`  ${RUN_BEFORE}: no record at ${horizon}`)
+    continue
+  }
+  const olderShown = shownOf(RUN_BEFORE, older)
+  const olderRows = new Map<string, ScoredRow & { btc15: number }>()
+  for (const row of olderShown) if (older.btc15 !== undefined) olderRows.set(`${older.time[row.at!]}|${older.symbols[older.pair[row.at!]]}`, { ...row, btc15: older.btc15[row.at!] })
+  const both = stateRows.map((row) => ({ now: row, before: olderRows.get(`${row.t}|${record.symbols[record.pair[scored.find((entry) => entry.at !== undefined && record.time[entry.at] === row.t && entry.z === row.z)?.at ?? 0]]}`) })).filter((pair): pair is { now: MarketShockRow; before: ScoredRow & { btc15: number } } => pair.before !== undefined)
+  if (both.length === 0) {
+    console.log(`  ${RUN_BEFORE}: no hour in common at ${horizon}`)
+    continue
+  }
+  const olderLine = shockRuleOf(both.map((pair) => ({ z: pair.before.z, q: pair.before.quantiles, week: pair.before.week, t: pair.now.t, btc15: pair.before.btc15 })))
+  const v61 = both.map((pair) => {
+    const widening = marketWidening({ shock: olderLine }, pair.before.btc15, null)
+    return widening === null ? { z: pair.before.z, q: pair.before.quantiles } : { z: pair.before.z, q: stretchShock(pair.before.quantiles, widening.k80, widening.k50) }
+  })
+  const aware = both.map((pair) => ({ z: pair.now.z, q: pair.now.q }))
+  const hybrid = widenedBy(both.map((pair) => pair.now), lineRule, rules)
+  const touched = both.map((_, index) => index).filter((index) => pastShockLine(both[index].now) || both[index].now.state !== 'NORMAL')
+  const on = (rows: { z: number; q: readonly number[] }[], indices: number[]): string => {
+    const score = scoreShock(indices.map((index) => rows[index]))
+    return `80% ${pct(score.in80)} pinball ${score.pinball.toFixed(4)}`
+  }
+  const all = both.map((_, index) => index)
+  console.log(`  against ${RUN_BEFORE} on ${both.length} hours in common (${touched.length} in a state or past the line), fitted on every week:`)
+  console.log(`    V6.1 (old ranges + its line rule):      all ${on(v61, all)}; shock hours ${on(v61, touched)}`)
+  console.log(`    shock-aware (new ranges alone):         all ${on(aware, all)}; shock hours ${on(aware, touched)}`)
+  console.log(`    hybrid (new ranges + chosen rules):     all ${on(hybrid, all)}; shock hours ${on(hybrid, touched)}`)
 }

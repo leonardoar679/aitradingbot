@@ -1836,5 +1836,17 @@
   "Live trading is only available on Binance and Bitget.": "การเทรดจริงใช้ได้เฉพาะบน Binance และ Bitget เท่านั้น",
   "A live ladder or series (DCA, TWAP, Grid) is Binance-only; on Bitget an Order or a Position can go live.": "บันไดหรือชุดคำสั่งจริง (DCA, TWAP, กริด) ใช้ได้เฉพาะ Binance ส่วนบน Bitget คำสั่งหรือโพซิชันสามารถเทรดจริงได้",
   "Add a verified {exchange} API key on Connections first.": "เพิ่มคีย์ API ของ {exchange} ที่ตรวจสอบแล้วที่ การเชื่อมต่อ ก่อน",
-  "This will immediately place a real BUY market order for {amount} {asset} of {pair} on {exchange}, then watch it for take-profit/stop-loss/trailing-stop/time-limit and exit automatically with a real sell — no per-exit confirmation. Stop on Strategies › Execution force-exits it manually at any time.": "การนี้จะส่งคำสั่งซื้อจริงที่ราคาตลาด {amount} {asset} ของ {pair} บน {exchange} ทันที แล้วเฝ้าดูจุดทำกำไร/จุดตัดขาดทุน/จุดตัดขาดทุนแบบเลื่อน/เวลาจำกัด และออกอัตโนมัติด้วยการขายจริง โดยไม่ต้องยืนยันการออกแต่ละครั้ง ปุ่มหยุดที่ กลยุทธ์ › การดำเนินการ บังคับออกเองได้ทุกเมื่อ"
+  "This will immediately place a real BUY market order for {amount} {asset} of {pair} on {exchange}, then watch it for take-profit/stop-loss/trailing-stop/time-limit and exit automatically with a real sell — no per-exit confirmation. Stop on Strategies › Execution force-exits it manually at any time.": "การนี้จะส่งคำสั่งซื้อจริงที่ราคาตลาด {amount} {asset} ของ {pair} บน {exchange} ทันที แล้วเฝ้าดูจุดทำกำไร/จุดตัดขาดทุน/จุดตัดขาดทุนแบบเลื่อน/เวลาจำกัด และออกอัตโนมัติด้วยการขายจริง โดยไม่ต้องยืนยันการออกแต่ละครั้ง ปุ่มหยุดที่ กลยุทธ์ › การดำเนินการ บังคับออกเองได้ทุกเมื่อ",
+  "the market's state ({state}) widened it ×{factor}: on the weeks tested, in that state it held {before} of the time, widened {after}": "สถานะตลาด ({state}) ทำให้ช่วงกว้างขึ้น ×{factor}: ในสัปดาห์ที่ทดสอบ ในสถานะนั้นช่วงครอบคลุม {before} ของครั้ง และ {after} เมื่อขยายแล้ว",
+  "normal@@market state": "ปกติ",
+  "before a scheduled release": "ก่อนการประกาศตามกำหนด",
+  "after a sharp move of Bitcoin's": "หลังการเคลื่อนไหวรุนแรงของบิตคอยน์",
+  "in a trending move of Bitcoin's": "ในการเคลื่อนไหวตามแนวโน้มของบิตคอยน์",
+  "in a liquidation cascade": "ในช่วงการบังคับขายต่อเนื่อง",
+  "recovering from a shock": "กำลังฟื้นตัวจากช็อก",
+  "Bitcoin's last fifteen minutes moved {move}": "สิบห้านาทีล่าสุดของบิตคอยน์เคลื่อนไหว {move}",
+  "ether's last fifteen minutes moved {move}": "สิบห้านาทีล่าสุดของอีเธอร์เคลื่อนไหว {move}",
+  "Bitcoin's last fifteen minutes ran {move} against the fifteen before": "สิบห้านาทีล่าสุดของบิตคอยน์เทียบกับสิบห้านาทีก่อนหน้า {move}",
+  "{share} of the coins rose over the last fifteen minutes": "เหรียญ {share} ปรับขึ้นในสิบห้านาทีล่าสุด",
+  "the market's volume in the last fifteen minutes is {share} its usual": "ปริมาณซื้อขายของตลาดในสิบห้านาทีล่าสุดเท่ากับ {share} ของปกติ"
 }

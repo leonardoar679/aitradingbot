@@ -17,7 +17,7 @@ import { ForecastHistoryChart } from './ForecastHistoryChart'
 import type { AiOrderProposal } from '../../shared/aiProposal'
 import { tradeThisOf } from './tradeThis'
 import { useRiskTarget } from './useRiskTarget'
-import { callColor, callLabel, decisionWords, dollarText, leadHorizon, likelyLevels, momentumWord, pairText, rangeText, signedPct, timeLeftText, volumeWord, HORIZON_NEXT, HORIZON_SHORT, reliabilityWord } from './forecastWords'
+import { callColor, callLabel, decisionWords, dollarText, leadHorizon, likelyLevels, marketStateWord, momentumWord, pairText, rangeText, signedPct, timeLeftText, volumeWord, HORIZON_NEXT, HORIZON_SHORT, reliabilityWord } from './forecastWords'
 import { invalidationConditionsOf } from '../../shared/forecast/prediction'
 import { driverText } from '../../shared/forecast/rangeDrivers'
 import { reliabilityReasonText } from '../../shared/forecast/reliability'
@@ -275,12 +275,19 @@ export function PredictionDrawer({
             {leadRange.spreadStretch > 1 && <li style={line}>{t('a thin book: its spread widened it {share}', { share: pctPlain(Math.round((leadRange.spreadStretch - 1) * 100), 0) })}</li>}
             {leadRange.shock !== null && leadRange.shock !== undefined && leadRange.shock.held !== null && (
               <li style={line}>
-                {t("Bitcoin's sharp move ({moves} usual moves in fifteen minutes) widened it ×{factor}: on the weeks tested, after such moves it held {before} of the time, widened {after}", {
-                  moves: num(Math.abs(leadRange.shock.btc15), 1, 1),
-                  factor: num(leadRange.shock.k80, 2, 2),
-                  before: pctPlain(Math.round(leadRange.shock.held.before * 100), 0),
-                  after: pctPlain(Math.round(leadRange.shock.held.after * 100), 0)
-                })}
+                {leadRange.shock.state === undefined || leadRange.shock.state === null
+                  ? t("Bitcoin's sharp move ({moves} usual moves in fifteen minutes) widened it ×{factor}: on the weeks tested, after such moves it held {before} of the time, widened {after}", {
+                      moves: num(Math.abs(leadRange.shock.btc15), 1, 1),
+                      factor: num(leadRange.shock.k80, 2, 2),
+                      before: pctPlain(Math.round(leadRange.shock.held.before * 100), 0),
+                      after: pctPlain(Math.round(leadRange.shock.held.after * 100), 0)
+                    })
+                  : t("the market's state ({state}) widened it ×{factor}: on the weeks tested, in that state it held {before} of the time, widened {after}", {
+                      state: marketStateWord(leadRange.shock.state, i18n),
+                      factor: num(leadRange.shock.k80, 2, 2),
+                      before: pctPlain(Math.round(leadRange.shock.held.before * 100), 0),
+                      after: pctPlain(Math.round(leadRange.shock.held.after * 100), 0)
+                    })}
               </li>
             )}
           </ol>

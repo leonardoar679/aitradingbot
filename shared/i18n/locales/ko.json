@@ -1836,5 +1836,17 @@
   "Live trading is only available on Binance and Bitget.": "실거래는 Binance와 Bitget에서만 가능합니다.",
   "A live ladder or series (DCA, TWAP, Grid) is Binance-only; on Bitget an Order or a Position can go live.": "실거래 사다리나 연속 주문(DCA, TWAP, 그리드)은 Binance 전용입니다. Bitget에서는 주문 또는 포지션을 실거래할 수 있습니다.",
   "Add a verified {exchange} API key on Connections first.": "먼저 연결에서 확인된 {exchange} API 키를 추가하세요.",
-  "This will immediately place a real BUY market order for {amount} {asset} of {pair} on {exchange}, then watch it for take-profit/stop-loss/trailing-stop/time-limit and exit automatically with a real sell — no per-exit confirmation. Stop on Strategies › Execution force-exits it manually at any time.": "{exchange}에서 {pair}을(를) {amount} {asset}만큼 실제 시장가 매수 주문을 바로 넣고, 이후 익절/손절/트레일링 스탑/시간 제한을 지켜보다가 실제 매도로 자동 청산합니다. 청산할 때마다 확인하지 않습니다. 전략 › 실행의 '중지'로 언제든 수동 강제 청산할 수 있습니다."
+  "This will immediately place a real BUY market order for {amount} {asset} of {pair} on {exchange}, then watch it for take-profit/stop-loss/trailing-stop/time-limit and exit automatically with a real sell — no per-exit confirmation. Stop on Strategies › Execution force-exits it manually at any time.": "{exchange}에서 {pair}을(를) {amount} {asset}만큼 실제 시장가 매수 주문을 바로 넣고, 이후 익절/손절/트레일링 스탑/시간 제한을 지켜보다가 실제 매도로 자동 청산합니다. 청산할 때마다 확인하지 않습니다. 전략 › 실행의 '중지'로 언제든 수동 강제 청산할 수 있습니다.",
+  "the market's state ({state}) widened it ×{factor}: on the weeks tested, in that state it held {before} of the time, widened {after}": "시장 상태({state})로 범위가 ×{factor} 넓어짐: 검증한 몇 주 동안 그 상태에서 범위 안에 든 경우는 {before}, 넓힌 뒤에는 {after}",
+  "normal@@market state": "정상",
+  "before a scheduled release": "예정된 발표 전",
+  "after a sharp move of Bitcoin's": "비트코인의 급격한 움직임 뒤",
+  "in a trending move of Bitcoin's": "비트코인의 추세적 움직임 속",
+  "in a liquidation cascade": "연쇄 청산 속",
+  "recovering from a shock": "충격에서 회복 중",
+  "Bitcoin's last fifteen minutes moved {move}": "비트코인 최근 15분 {move} 움직임",
+  "ether's last fifteen minutes moved {move}": "이더 최근 15분 {move} 움직임",
+  "Bitcoin's last fifteen minutes ran {move} against the fifteen before": "비트코인 최근 15분이 그 전 15분 대비 {move}",
+  "{share} of the coins rose over the last fifteen minutes": "최근 15분 동안 코인의 {share}가 상승",
+  "the market's volume in the last fifteen minutes is {share} its usual": "시장의 최근 15분 거래량은 평소의 {share}"
 }

@@ -3,6 +3,7 @@ import type { Direction } from './direction'
 import { HORIZONS, PAIR_CLASSES, type Horizon, type PairClass } from './features'
 import { QUANTILE_LEVELS } from './ml/quantile'
 import { FORECAST_MODELS, type ForecastModelId } from './models'
+import { MARKET_SHOCK_STATES, type MarketShockState } from './marketShock'
 import type { ErrorKind, ForecastOutcome } from './outcome'
 import { TOUCH_WINDOWS } from './firstTouch'
 import type { PricePrediction } from './prediction'
@@ -121,6 +122,9 @@ export interface PredictionLine {
   trade?: { h: Horizon; side: 'BUY' | 'SELL' | null; ok: boolean; why: string[]; edge: number | null; pProfit: number | null }
   /** The coin's last hour in its usual moves at the close (V6 Stage 11): what the Lab reads a shock by. */
   z1h?: number
+  /** The market's shock state at the forecast's moment (V7.1 Stage 11); absent where it could not be read,
+   * or on a forecast recorded before. */
+  state?: MarketShockState
 }
 
 /** A forecast's line, carrying the horizons given. */
@@ -171,6 +175,7 @@ export function predictionLine(prediction: PricePrediction, horizons: readonly H
     ...(refresh === undefined ? {} : { reasons: refresh.reasons, ...(refresh.previous === null ? {} : { previous: refresh.previous }) }),
     h,
     ...(z1h === undefined || !Number.isFinite(z1h) ? {} : { z1h: Math.round(z1h * 1000) / 1000 }),
+    ...(prediction.marketState === undefined || prediction.marketState === null ? {} : { state: prediction.marketState }),
     ...(decision === undefined
       ? {}
       : {
@@ -230,6 +235,7 @@ export function parsePredictionLine(value: unknown): PredictionLine | null {
     if (entry.dir !== 'BULLISH' && entry.dir !== 'BEARISH' && entry.dir !== 'NEUTRAL') return null
     if (typeof entry.cell !== 'string' || !Array.isArray(entry.parts) || !entry.parts.every((part) => Array.isArray(part) && FORECAST_MODELS.includes(part[0] as ForecastModelId))) return null
   }
+  if (raw.state !== undefined && !MARKET_SHOCK_STATES.includes(raw.state)) return null
   return raw as PredictionLine
 }
 

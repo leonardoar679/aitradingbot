@@ -26,8 +26,9 @@ import { NEWS_EFFECT_LINES, newsSkillOf, type AnalystReadingInput, type KindReac
 import { makePrediction, type PredictionNews, type PricePrediction } from '../../shared/forecast/prediction'
 import { predictionChangedNotice, stepCall, type CallTrack } from '../../shared/forecast/predictionChange'
 import { funnel, rankOf, type ForecastRanking, type RankedForecast } from '../../shared/forecast/ranking'
-import { refreshReasons, type RefreshReason } from '../../shared/forecast/refresh'
-import { SHOCK_LINES, liveBtc15 } from '../../shared/forecast/shock'
+import { acrossMedian, refreshReasons, type RefreshReason } from '../../shared/forecast/refresh'
+import { SHOCK_LINES, liveBtcMove } from '../../shared/forecast/shock'
+import { MARKET_SHOCK_LINES, btcTimelineOf, marketShockStateOf, shockMomentsOf, type MarketShockState, type ShockMoment } from '../../shared/forecast/marketShock'
 import { cellOf } from '../../shared/forecast/runCalibration'
 import { decideTrade, liveOfBook, type TradeDecision } from '../../shared/forecast/tradeDecision'
 import { breakoutAt, classKeyOf, setupOf, type ClassVerdict } from '../../shared/forecast/opportunityClass'
@@ -54,7 +55,15 @@ import { getSettings } from './settingsService'
 // BETWEEN CLOSES a pair is forecast again -- from the same bars, with what has changed -- when a story
 // of impact 70 names it, the scanner raises an event on it, the live price leaves its 80% range or a
 // volume shock hits it, at most once a minute (shared/forecast/refresh.ts); the new forecast names the
-// one it replaced.
+// one it replaced. Since V7.1 Stage 11 also when its live spread reaches three times its usual, when the
+// live price crosses its expected price against its call, and, for every pair, when the market's shock
+// state changes as Bitcoin's minutes read it (shared/forecast/marketShock.ts) where a state's rule is in
+// use.
+//
+// THE MARKET'S STATE (V7.1 Stage 11) is read at every close from Bitcoin's row and the cross-section --
+// its fifteen minutes and its hour in usual moves, the breadth of the last fifteen minutes, the market's
+// volume against its usual -- with the shock moments of the four hours before from Bitcoin's bars, and
+// between closes from its live minutes; it goes on every forecast and every record line.
 //
 // THE TRADE (V6 Stage 9), kept apart from the forecast: after every pass and every forecast made again,
 // each pair's TradeDecision at its lead horizon (shared/forecast/tradeDecision.ts) and the ranking of
@@ -122,7 +131,7 @@ interface PairInput {
   drivers: Partial<Record<Horizon, RangeDriver[]>>
 }
 
-const blank = (): EngineState => ({ status: 'waiting', waitingFor: 'models', lastPassAt: null, lastPassMs: null, predictions: 0, recorded: 0, outcomes: 0, missing: 0, refreshes: 0, pending: 0, lastError: null })
+const blank = (): EngineState => ({ status: 'waiting', waitingFor: 'models', lastPassAt: null, lastPassMs: null, predictions: 0, recorded: 0, outcomes: 0, missing: 0, refreshes: 0, pending: 0, lastError: null, market: null })
 
 const state: EngineState = blank()
 const latest = new Map<string, PricePrediction>()
@@ -156,6 +165,13 @@ const Z1H = FEATURE_NAMES.indexOf('z_1h')
 const BREADTH1H = FEATURE_NAMES.indexOf('breadth_1h')
 const Z15 = FEATURE_NAMES.indexOf('z_15m')
 const VOL1H = FEATURE_NAMES.indexOf('vol_ratio_1h')
+/** The closes a pair's usual spread is the median of, and the fewest it is read from (V7.1 Stage 11). */
+const SPREAD_CLOSES = 24
+const SPREAD_MIN_CLOSES = 6
+/** A pair's spread at the last closes, in percent, where the live book held it then. */
+const spreads = new Map<string, number[]>()
+/** Whether a pair's live price stood across its expected price against its call at the last reading. */
+const acrossBefore = new Map<string, boolean>()
 /** The stake an execution's quality is read for, in the quote. */
 const RANKING_STAKE = 100
 const NEWS_SKILL_DAYS = NEWS_EFFECT_LINES.skillDays
@@ -229,10 +245,14 @@ function newsFor(symbol: string): PredictionNews | undefined {
   return { ticker, stories, library: feed.impact ?? [], readings, skill: newsSkill }
 }
 
-/** Bitcoin's last fifteen minutes in its usual moves (V6.1, shared/forecast/shock.ts): its z_15m at the
- * last close, with the day's volatility it is measured by; and, read from its live minutes, the latest. */
-let closeBtc: { btc15: number | null; rv24h: number | null } = { btc15: null, rv24h: null }
-let liveBtc: { btc15: number; atMs: number } | null = null
+/** Bitcoin's last fifteen minutes and its hour in its usual moves (V6.1, shared/forecast/shock.ts; V7.1
+ * Stage 11): its z_15m and z_1h at the last close, with the day's volatility they are measured by; and,
+ * read from its live minutes, the latest. */
+let closeBtc: { t: number; btc15: number | null; btc1h: number | null; rv24h: number | null } = { t: 0, btc15: null, btc1h: null, rv24h: null }
+let liveBtc: { btc15: number; btc1h: number | null; atMs: number } | null = null
+/** The market at the last close (V7.1 Stage 11): the breadth of its last fifteen minutes, its volume
+ * against its usual, and the shock moments of the four hours before, from Bitcoin's bars. */
+let closeMarket: { breadth15: number; volAcc15: number; moments: ShockMoment[] } | null = null
 /** How long the live reading stands for the close's: the stream reads it every five seconds. */
 const LIVE_BTC_MS = 15_000
 
@@ -240,10 +260,49 @@ function currentBtc15(nowMs: number): number | null {
   return liveBtc !== null && nowMs - liveBtc.atMs <= LIVE_BTC_MS ? liveBtc.btc15 : closeBtc.btc15
 }
 
+/** The market's state from Bitcoin's figures given, with the close's breadth, volume and shock moments;
+ * null before a close read them. */
+function marketStateOf(btc15: number | null, btc1h: number | null, tSec: number): MarketShockState | null {
+  if (closeMarket === null || btc15 === null || btc1h === null) return null
+  return marketShockStateOf({ t: tSec, btc15, btc1h, breadth15: closeMarket.breadth15, volAcc15: closeMarket.volAcc15 }, closeMarket.moments)
+}
+
+/** The market's state now: from the stream's reading while it is fresh, at the moment it was read; the
+ * close's otherwise, at the close. */
+function currentMarketState(nowMs: number): MarketShockState | null {
+  const fresh = liveBtc !== null && nowMs - liveBtc.atMs <= LIVE_BTC_MS
+  return fresh ? marketStateOf(liveBtc!.btc15, liveBtc!.btc1h ?? closeBtc.btc1h, Math.floor(liveBtc!.atMs / 1000)) : marketStateOf(closeBtc.btc15, closeBtc.btc1h, closeBtc.t)
+}
+
+/** What the status shows of the market: its state and figures as last read, at the moment they were. */
+function tellMarket(btc15: number | null, btc1h: number | null, atSec: number): void {
+  const marketState = marketStateOf(btc15, btc1h, atSec)
+  state.market = marketState === null || closeMarket === null ? null : { state: marketState, btc15: btc15 as number, btc1h: btc1h as number, breadth15: closeMarket.breadth15, volAcc15: closeMarket.volAcc15, readAt: atSec }
+}
+
 /** Whether any horizon's rule on Bitcoin's sharp moves is in use: without one, its crossing changes nothing. */
 function shockRuleInUse(): boolean {
   const calibration = currentForecastCalibration()
-  return calibration !== null && HORIZONS.some((horizon) => calibration.horizons[horizon]?.shock?.adopted === true)
+  return calibration !== null && HORIZONS.some((horizon) => calibration.horizons[horizon]?.shock?.adopted === true && calibration.horizons[horizon]?.marketShock?.chosen !== 'states' && calibration.horizons[horizon]?.marketShock?.chosen !== 'none')
+}
+
+/** Whether any horizon widens by the market's states (V7.1 Stage 11): without one, a change of state
+ * changes nothing. */
+function stateRulesInUse(): boolean {
+  const calibration = currentForecastCalibration()
+  return calibration !== null && HORIZONS.some((horizon) => {
+    const rules = calibration.horizons[horizon]?.marketShock
+    return rules !== undefined && rules.chosen === 'states' && Object.values(rules.byState).some((rule) => rule.adopted)
+  })
+}
+
+/** A pair's usual spread, in percent: the median of its spreads at the last closes, from at least six. */
+function usualSpreadOf(symbol: string): number | null {
+  const held = spreads.get(symbol) ?? []
+  if (held.length < SPREAD_MIN_CLOSES) return null
+  const sorted = [...held].sort((a, b) => a - b)
+  const middle = sorted.length >> 1
+  return sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2
 }
 
 function predictionFor(symbol: string, nowMs: number): PricePrediction | null {
@@ -270,6 +329,7 @@ function predictionFor(symbol: string, nowMs: number): PricePrediction | null {
     levels: (horizon, variant, cell) => levelsOf(aci, cellKey(horizon, variant, cell)),
     news: newsFor(symbol),
     btc15: currentBtc15(nowMs),
+    marketState: currentMarketState(nowMs),
     runId: current.runId,
     foldsRunId: calibration.runId
   })
@@ -444,12 +504,19 @@ async function pass(closedAt: number): Promise<void> {
     return
   }
   inputs.clear()
-  closeBtc = { btc15: null, rv24h: null }
+  closeBtc = { t: closedAt, btc15: null, btc1h: null, rv24h: null }
+  // The market at the close (V7.1 Stage 11): its breadth and volume over the last fifteen minutes, and the
+  // shock moments of the four hours before, read from Bitcoin's bars at every five-minute close.
+  closeMarket = { breadth15: cross.breadth15m, volAcc15: cross.volAcc15m, moments: shockMomentsOf(btcTimelineOf(btc, closedAt - MARKET_SHOCK_LINES.recoveryHours * 3600 - FORECAST_BAR_SECONDS, closedAt - FORECAST_BAR_SECONDS)) }
+  const bookAt = Date.now()
   for (const [symbol, series] of market) {
     // A row needs the bar that closed at the close (featuresAt); its close is the forecast's price.
     const row = featuresAt({ symbol, series, btcH1: btc.h1, cross, tSec: closedAt })
     if (row === null) continue
-    if (symbol === 'BTCUSDT') closeBtc = { btc15: row[Z15], rv24h: row[RV24] }
+    if (symbol === 'BTCUSDT') closeBtc = { t: closedAt, btc15: row[Z15], btc1h: row[Z1H], rv24h: row[RV24] }
+    // The pair's spread at the close, for its usual spread (refresh reason `spread`).
+    const spread = liveBook(symbol, bookAt)?.spreadPct
+    if (spread !== null && spread !== undefined && Number.isFinite(spread)) spreads.set(symbol, [...(spreads.get(symbol) ?? []), spread].slice(-SPREAD_CLOSES))
     const at = endsAt(series, closedAt).m5
     const bar = series.m5[at - 1]
     const models: PairInput['models'] = {}
@@ -491,6 +558,8 @@ async function pass(closedAt: number): Promise<void> {
   // A close reads Bitcoin's sharp move from its own bars, as the walk forward did (V6.1); the stream's reading
   // starts again from it, so that a crossing after the close makes the forecasts again.
   liveBtc = null
+  acrossBefore.clear()
+  tellMarket(closeBtc.btc15, closeBtc.btc1h, closedAt)
   for (const symbol of inputs.keys()) {
     const prediction = predictionFor(symbol, nowMs)
     if (prediction !== null) latest.set(symbol, prediction)
@@ -578,17 +647,28 @@ async function consider(symbol: string, signals: { newsImpact?: number | null; n
   const latestClose = lastClosedBarTime(Math.floor(nowMs / 1000)) + FORECAST_BAR_SECONDS
   if (prediction.barTime < latestClose - FORECAST_BAR_SECONDS) return []
   const lead = prediction.horizons[prediction.bestHorizon ?? 'hour1'] ?? Object.values(prediction.horizons)[0]
-  const reasons = refreshReasons({
+  const book = liveBook(symbol, nowMs)
+  const check = {
     nowMs,
     lastRefreshAt: lastRefreshAt.get(symbol) ?? null,
     newsImpact: signals.newsImpact,
     newEvent: signals.newEvent,
-    livePrice: liveBook(symbol, nowMs)?.mid ?? null,
-    band: lead === undefined ? null : [lead.quantilePrices[0], lead.quantilePrices[4]],
+    livePrice: book?.mid ?? null,
+    band: lead === undefined ? null : ([lead.quantilePrices[0], lead.quantilePrices[4]] as [number, number]),
     minuteVolume: signals.minuteVolume,
     usualMinuteVolume: input.usualMinuteVolume,
-    marketShock: signals.marketShock
-  })
+    marketShock: signals.marketShock,
+    // V7.1 Stage 11: the live spread against the pair's usual, and the live price against the call.
+    spreadPct: book?.spreadPct ?? null,
+    usualSpreadPct: usualSpreadOf(symbol),
+    call: lead?.direction,
+    median: lead === undefined ? null : lead.quantilePrices[2],
+    wasAcross: acrossBefore.get(symbol) ?? false
+  }
+  const reasons = refreshReasons(check)
+  // Where the price stood against the call is kept from one reading to the next, so that a crossing is told
+  // once; a reading within the minute's gap is not one.
+  if (check.lastRefreshAt === null || nowMs - check.lastRefreshAt >= 60_000) acrossBefore.set(symbol, acrossMedian(check))
   if (reasons.length > 0) await refresh(symbol, reasons, nowMs)
   return reasons
 }
@@ -634,12 +714,19 @@ export async function forecastScannerSignal(scanner: ScannerSignal, nowMs: numbe
 export async function forecastLiveSignal(live: LiveState, nowMs: number = Date.now()): Promise<void> {
   // Bitcoin's sharp move (V6.1): read from its minutes, which are always streamed; its crossing the line
   // since the last reading -- the stream's, however old, or the close's before any -- makes every pair's
-  // forecast again, where a horizon's rule is in use to widen them.
+  // forecast again, where a horizon's rule is in use to widen them. Since V7.1 Stage 11 the market's state
+  // is read from the same minutes (its hour too), and a change of it does the same where a state's rule is
+  // in use.
   const before = liveBtc !== null ? liveBtc.btc15 : closeBtc.btc15
-  const btc15 = closeBtc.rv24h === null ? null : liveBtc15(live.btcMinutes, closeBtc.rv24h)
-  if (btc15 !== null) liveBtc = { btc15, atMs: nowMs }
+  const stateBefore = liveBtc !== null ? marketStateOf(liveBtc.btc15, liveBtc.btc1h ?? closeBtc.btc1h, Math.floor(liveBtc.atMs / 1000)) : marketStateOf(closeBtc.btc15, closeBtc.btc1h, closeBtc.t)
+  const btc15 = closeBtc.rv24h === null ? null : liveBtcMove(live.btcMinutes, closeBtc.rv24h, 3)
+  const btc1h = closeBtc.rv24h === null ? null : liveBtcMove(live.btcMinutes, closeBtc.rv24h, 12)
+  if (btc15 !== null) liveBtc = { btc15, btc1h, atMs: nowMs }
   const crossed = btc15 !== null && Math.abs(btc15) >= SHOCK_LINES.line && (before === null || Math.abs(before) < SHOCK_LINES.line)
-  if (crossed && shockRuleInUse()) for (const symbol of [...latest.keys()]) await consider(symbol, { marketShock: true }, nowMs)
+  const stateAfter = btc15 === null ? stateBefore : marketStateOf(btc15, btc1h ?? closeBtc.btc1h, Math.floor(nowMs / 1000))
+  if (btc15 !== null) tellMarket(btc15, btc1h ?? closeBtc.btc1h, Math.floor(nowMs / 1000))
+  const changed = stateAfter !== null && stateBefore !== null && stateAfter !== stateBefore
+  if ((crossed && shockRuleInUse()) || (changed && stateRulesInUse())) for (const symbol of [...latest.keys()]) await consider(symbol, { marketShock: true }, nowMs)
   for (const symbol of Object.keys(live.books)) {
     if (!latest.has(symbol)) continue
     const minutes = live.minutes[symbol] ?? []
@@ -807,6 +894,14 @@ export const forecastForTest = {
   aci: (): AciTable | null => aci,
   /** A forecast's decision now, as a pass makes it. */
   decide: decisionFor,
+  /** A held forecast's call at a horizon set, for the refresh on a crossing of its median to be exercised
+   * where no market of the tests calls a way. */
+  setCall(symbol: string, horizon: Horizon, direction: 'BULLISH' | 'BEARISH' | 'NEUTRAL'): void {
+    const held = latest.get(symbol)
+    const range = held?.horizons[horizon]
+    if (held === undefined || range === undefined) return
+    latest.set(symbol, { ...held, bestHorizon: horizon, horizons: { ...held.horizons, [horizon]: { ...range, direction } } })
+  },
   /** A close's calls followed on these forecasts, with this top ten. */
   async follow(predictions: readonly PricePrediction[], top10: readonly string[]): Promise<void> {
     latest.clear()
@@ -834,8 +929,11 @@ export const forecastForTest = {
     lastClosedAt = null
     started = false
     passing = null
-    closeBtc = { btc15: null, rv24h: null }
+    closeBtc = { t: 0, btc15: null, btc1h: null, rv24h: null }
     liveBtc = null
+    closeMarket = null
+    spreads.clear()
+    acrossBefore.clear()
     liveState = (): LiveState | null => null
     listeners.clear()
   }

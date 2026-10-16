@@ -26,8 +26,14 @@ import { usualMove } from './targets'
 // 3. A ROW OR NONE. Without the history a figure needs, there is no row: a figure is never guessed.
 //
 // IT IS ARITHMETIC. No key, no model, no order, nothing read from anywhere.
+//
+// features-v2 (V7.1 Stage 11, 16 October 2026) adds five market figures at the moment, all of them known at
+// it: Bitcoin's and ether's last fifteen minutes, Bitcoin's fifteen minutes against the fifteen before, the
+// share of pairs up over the last fifteen minutes, and the market's fifteen minutes' volume against its
+// usual -- what the market's shock states are read from (shared/forecast/marketShock.ts), so that the
+// models fitted on them see a shock as it begins. Every row changed shape, so every model is refitted.
 
-export const FEATURES_VERSION = 'features-v1'
+export const FEATURES_VERSION = 'features-v2'
 
 /** The five horizons the forecast is made at, in five-minute bars. */
 export const HORIZON_BARS = { minutes5: 1, minutes15: 3, hour1: 12, hours4: 48, hours24: 288 } as const
@@ -111,6 +117,12 @@ export const FEATURE_NAMES = [
   'alt_strength',
   'beta_btc',
   'idio_1h',
+  // The market's last fifteen minutes (V7.1 Stage 11): what a shock is read from as it begins.
+  'btc_r_15m',
+  'eth_r_15m',
+  'btc_acc_15m',
+  'breadth_15m',
+  'market_vol_acc',
   // The market's regime (§17), the pair's class (§100), and the clock.
   ...MARKET_REGIMES.map((regime) => `regime_${regime}`),
   ...PAIR_CLASSES.map((cls) => `class_${cls}`),
@@ -132,11 +144,16 @@ export interface PairSeries {
 
 /** The market at T, across the universe (§16): read from every pair's row inputs at T. */
 export interface CrossSection {
-  btc: { r1h: number; r4h: number; r24h: number }
-  eth: { r1h: number; r4h: number }
-  /** Shares of the pairs that rose over the hour and over the day. */
+  /** Bitcoin's moves, and its last fifteen minutes against the fifteen before (V7.1 Stage 11). */
+  btc: { r15m: number; acc15m: number; r1h: number; r4h: number; r24h: number }
+  eth: { r15m: number; r1h: number; r4h: number }
+  /** Shares of the pairs that rose over the last fifteen minutes, the hour and the day. */
+  breadth15m: number
   breadth1h: number
   breadth24h: number
+  /** The market's last fifteen minutes' quote volume, every pair's together, against its usual fifteen
+   * minutes (a ninety-sixth of its day's). */
+  volAcc15m: number
   /** The other pairs' median day, less Bitcoin's. */
   altStrength: number
   regime: MarketRegime
@@ -181,9 +198,14 @@ export function endsAt(series: PairSeries, tSec: number): { m5: number; h1: numb
  * realized volatility at T. Null without the history. */
 export interface PairQuick {
   close: number
+  /** Its last fifteen minutes, and the fifteen before them (V7.1 Stage 11). */
+  r15m: number
+  r15mBefore: number
   r1h: number
   r4h: number
   r24h: number
+  /** Its quote volume over the last fifteen minutes and over the day. */
+  quoteVolume15m: number
   quoteVolume24h: number
   rv24h: number
 }
@@ -197,17 +219,22 @@ export function quickAt(series: PairSeries, tSec: number): PairQuick | null {
   if (isPegged(series, tSec)) return null
   const close = m5[n - 1].close
   let quoteVolume24h = 0
+  let quoteVolume15m = 0
   let squares = 0
   for (let index = n - DAY_BARS; index < n; index++) {
     quoteVolume24h += m5[index].quoteVolume
+    if (index >= n - 3) quoteVolume15m += m5[index].quoteVolume
     const move = ln(m5[index].close / m5[index - 1].close)
     squares += move * move
   }
   return {
     close,
+    r15m: ln(close / m5[n - 4].close),
+    r15mBefore: ln(m5[n - 4].close / m5[n - 7].close),
     r1h: ln(close / m5[n - 1 - HOUR_BARS].close),
     r4h: ln(close / m5[n - 1 - 4 * HOUR_BARS].close),
     r24h: ln(close / m5[n - 1 - DAY_BARS].close),
+    quoteVolume15m,
     quoteVolume24h,
     rv24h: Math.sqrt(squares)
   }
@@ -267,11 +294,20 @@ export function crossSectionAt(quick: ReadonlyMap<string, PairQuick>): CrossSect
   const alts = [...quick.entries()].filter(([symbol]) => symbol !== 'BTCUSDT' && symbol !== 'ETHUSDT').map(([, read]) => read.r24h)
   const pct = (value: number): number => (Math.exp(value) - 1) * 100
   const regime = marketRegimeOf({ h1: pct(btc.r1h), h4: pct(btc.r4h), h24: pct(btc.r24h) }) ?? 'sideways'
+  // The market's fifteen minutes' volume against its usual: a ninety-sixth of its day's (V7.1 Stage 11).
+  let volume15m = 0
+  let volume24h = 0
+  for (const read of all) {
+    volume15m += read.quoteVolume15m
+    volume24h += read.quoteVolume24h
+  }
   return {
-    btc: { r1h: btc.r1h, r4h: btc.r4h, r24h: btc.r24h },
-    eth: { r1h: eth.r1h, r4h: eth.r4h },
+    btc: { r15m: btc.r15m, acc15m: btc.r15m - btc.r15mBefore, r1h: btc.r1h, r4h: btc.r4h, r24h: btc.r24h },
+    eth: { r15m: eth.r15m, r1h: eth.r1h, r4h: eth.r4h },
+    breadth15m: all.filter((read) => read.r15m > 0).length / all.length,
     breadth1h: all.filter((read) => read.r1h > 0).length / all.length,
     breadth24h: all.filter((read) => read.r24h > 0).length / all.length,
+    volAcc15m: volume24h > 0 ? volume15m / (volume24h / 96) : 1,
     altStrength: alts.length === 0 ? 0 : median(alts) - btc.r24h,
     regime,
     classes: pairClasses(quick)
@@ -477,6 +513,11 @@ export function featuresAt(input: { symbol: string; series: PairSeries; btcH1: r
     input.cross.altStrength,
     beta,
     r1h - beta * input.cross.btc.r1h,
+    input.cross.btc.r15m,
+    input.cross.eth.r15m,
+    input.cross.btc.acc15m,
+    input.cross.breadth15m,
+    input.cross.volAcc15m,
     ...MARKET_REGIMES.map((regime) => (input.cross.regime === regime ? 1 : 0)),
     ...PAIR_CLASSES.map((one) => (cls === one ? 1 : 0)),
     Math.sin((2 * Math.PI * hour) / 24),

@@ -216,7 +216,9 @@ describe('what the page is shown', () => {
     fake.training = { ...fake.training, promotions: [{ horizon: 'hour1', model: 'gbt', promoted: true, lines: [] }] }
     // With the rule on Bitcoin's sharp moves the calibration fitted at the hour (V6.1).
     const rule = { version: 'shock-v1', line: 2.5, k80: 1.43, k50: 1.41, moments: 14, rows: 561, before: { in80: 0.633, in50: 0.33, pinball: 0.42 }, after: { in80: 0.793, in50: 0.49, pinball: 0.41 }, adopted: true, refusal: null }
-    fake.calibration = { horizons: { hour1: { variants: { v2: { weights: { pooled: [{ model: 'gbt', weight: 1 }] } } }, shock: rule } } }
+    // And the rules by market state (V7.1 Stage 11) at the hour alone.
+    const rules = { version: 'market-shock-v1', byState: { RECOVERY: rule }, compared: null, chosen: 'states' }
+    fake.calibration = { horizons: { hour1: { variants: { v2: { weights: { pooled: [{ model: 'gbt', weight: 1 }] } } }, shock: rule, marketShock: rules }, hours4: { variants: { v2: { weights: { pooled: [] } } } } } }
     fake.settings = { forecast: { refitNightly: false } }
     mkdirSync(records(), { recursive: true })
     const t = Math.floor(now / 3600) * 3600 - 7200
@@ -236,6 +238,7 @@ describe('what the page is shown', () => {
     expect(view.live.horizons.hour1?.outcomes).toBe(1)
     expect(view.refit).toMatchObject({ on: false, nextAt: 1_800_000_000, trainingStatus: 'ready' })
     expect(view.shock).toEqual({ hour1: rule })
+    expect(view.marketShock).toEqual({ hour1: rules })
   })
 
   it('replays a tested hour with its path and its coin\'s stories and readings, and serves a pair\'s bars at a width', async () => {

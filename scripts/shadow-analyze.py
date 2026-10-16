@@ -144,6 +144,10 @@ def forecast_of(section, title):
         shock = row.get('shock')
         if shock is not None:
             print(f'  {h:10} widened for Bitcoin\'s move {shock["widened"]["n"]} ({share(shock["widened"]["coverage80"])} in 80%; by V2\'s own levels {share(shock["unwidened"]["coverage80"])})')
+        # The forecasts by the market's shock state at them (V7.1 Stage 11).
+        by_state = row.get('byState')
+        if by_state:
+            print(f'  {h:10} by state: ' + '; '.join(f'{s} {m["n"]} ({share(m["coverage80"])} in 80%, pinball {pct(m["pinball"])})' for s, m in by_state.items()))
     for h, row in section['horizons'].items():
         for variant, m in (row.get('variants') or {}).items():
             print(f'  {h:10} {variant.upper()}  n {m["n"]:5}  way right {share(m["direction"]):7} in 80% {share(m["coverage80"]):7} median error {pct(m["mae"]):9} bias {pct(m["bias"]):9} pinball {pct(m["pinball"])}')

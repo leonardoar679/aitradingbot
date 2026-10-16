@@ -4,6 +4,7 @@ import { CALIBRATION_FILE_VERSION, parseRunCalibration, serializeRunCalibration 
 import { DIRECTION_LINES, calibratedPUp, fitPUp, mergeSmallSteps, rawPUp } from '../shared/forecast/direction'
 import { ENSEMBLE_LINES, combine, halfWidth, lossesOf, weightsFromLosses, widenAround } from '../shared/forecast/ensemble'
 import { PAIR_CLASSES } from '../shared/forecast/features'
+import { MARKET_SHOCK_STATES, MARKET_SHOCK_VERSION, STATE_UNKNOWN } from '../shared/forecast/marketShock'
 import { QUANTILE_LEVELS, meanPinball } from '../shared/forecast/ml/quantile'
 import { RUN_CALIBRATION_VERSION, buildRunCalibration, cellOf, honestScore, rowsOf, scoreOutOfSample, type ScoredRow } from '../shared/forecast/runCalibration'
 import { N, gaussOf, promoted, recordOf, rng, scaled } from './forecastRecords'
@@ -348,6 +349,20 @@ describe('the run\'s calibration', () => {
     expect(damage((copy) => (copy.horizons.hour1.shock.adopted = true))).toBeNull()
     expect(damage((copy) => (copy.horizons.hour1.shock.before = { in80: 0.5 }))).toBeNull()
     expect((damage((copy) => delete copy.horizons.hour1.shock) as ReturnType<typeof parseRunCalibration>)!.horizons.hour1!.shock).toBeUndefined()
+    // The rules by market state (V7.1 Stage 11): absent on a record without the states; read back whole
+    // where written, refused part-made.
+    expect(back!.horizons.hour1!.marketShock).toBeUndefined()
+    const rule = { version: 'shock-v1', line: 2.5, k80: 1.3, k50: 1.1, moments: 20, rows: 400, before: { in80: 0.7, in50: 0.4, pinball: 0.45 }, after: { in80: 0.81, in50: 0.5, pinball: 0.44 }, adopted: true, refusal: null }
+    const rules = { version: 'market-shock-v1', byState: { RECOVERY: rule, POST_EVENT_SHOCK: { ...rule, adopted: false, refusal: 'pinball' } }, compared: { rows: 900, before: { in80: 0.62, in50: 0.36, pinball: 0.49 }, line: { in80: 0.78, in50: 0.48, pinball: 0.47 }, states: { in80: 0.8, in50: 0.5, pinball: 0.46 } }, chosen: 'states' }
+    const withStates = damage((copy) => (copy.horizons.hour1.marketShock = rules)) as ReturnType<typeof parseRunCalibration>
+    expect(withStates!.horizons.hour1!.marketShock).toEqual(rules)
+    expect(serializeRunCalibration(withStates!)).toBe(serializeRunCalibration(parseRunCalibration(serializeRunCalibration(withStates!))!))
+    expect((damage((copy) => (copy.horizons.hour1.marketShock = { ...rules, compared: null })) as ReturnType<typeof parseRunCalibration>)!.horizons.hour1!.marketShock!.compared).toBeNull()
+    expect(damage((copy) => (copy.horizons.hour1.marketShock = { ...rules, chosen: 'always' }))).toBeNull()
+    expect(damage((copy) => (copy.horizons.hour1.marketShock = { ...rules, byState: { ...rules.byState, SIDEWAYS: rule } }))).toBeNull()
+    expect(damage((copy) => (copy.horizons.hour1.marketShock = { ...rules, byState: { RECOVERY: { ...rule, k50: 0.9 } } }))).toBeNull()
+    expect(damage((copy) => (copy.horizons.hour1.marketShock = { ...rules, compared: { rows: 900, before: rules.compared.before } }))).toBeNull()
+    expect(damage((copy) => (copy.horizons.hour1.marketShock = { ...rules, version: 7 }))).toBeNull()
   })
 
   // V6.1: the rule on Bitcoin's sharp moves, fitted on the forecast shown as it was scored out of sample.
@@ -362,12 +377,59 @@ describe('the run\'s calibration', () => {
         record.z[row] *= 2.5
       } else btc15[row] = 0.3
     }
-    const shock = buildRunCalibration(new Map([['hour1', { ...record, btc15 }]]), PROMOTIONS, 'run-test').horizons.hour1!.shock!
+    const made = buildRunCalibration(new Map([['hour1', { ...record, btc15 }]]), PROMOTIONS, 'run-test').horizons.hour1!
+    const shock = made.shock!
     expect(shock).toMatchObject({ adopted: true, refusal: null })
     expect(shock.moments).toBeGreaterThanOrEqual(200)
     expect(shock.k80).toBeGreaterThan(1.8)
     expect(shock.k80).toBeLessThan(3.2)
     expect(shock.before!.in80).toBeLessThan(0.6)
     expect(shock.after!.in80).toBeGreaterThan(shock.before!.in80)
+    // Without the states on record, no rules by state: the line's rule decides, as before Stage 11.
+    expect(made.marketShock).toBeUndefined()
+  })
+
+  // V7.1 Stage 11: the rules by market state, fitted where the record keeps each row's state, and the
+  // horizon's choice between them and the line's rule.
+  it('fits a rule per market state where the record keeps the states, and chooses the widening with the lower loss', { timeout: 60_000 }, () => {
+    const record = recordOf({ rows: 14_000, seed: 22 })
+    const btc15 = new Float32Array(record.rows).fill(0.3)
+    const state = new Uint8Array(record.rows).fill(MARKET_SHOCK_STATES.indexOf('NORMAL'))
+    for (let row = 0; row < record.rows; row++) {
+      // Every thirtieth hour a sharp move, its outcome two and a half times as wide: after an event, or, every
+      // other one, in a trend; every thirtieth hour from the fifteenth a recovery, calm Bitcoin, twice as wide.
+      // (The first week is never scored: each state keeps over 150 rows of the three after it.)
+      if (row % 30 === 0) {
+        btc15[row] = row % 60 === 0 ? 3 : -2.6
+        state[row] = MARKET_SHOCK_STATES.indexOf(row % 60 === 0 ? 'POST_EVENT_SHOCK' : 'TRENDING_SHOCK')
+        record.z[row] *= 2.5
+      } else if (row % 30 === 15) {
+        state[row] = MARKET_SHOCK_STATES.indexOf('RECOVERY')
+        record.z[row] *= 2
+      }
+    }
+    const made = buildRunCalibration(new Map([['hour1', { ...record, btc15, state }]]), PROMOTIONS, 'run-test').horizons.hour1!
+    const rules = made.marketShock!
+    expect(rules.version).toBe(MARKET_SHOCK_VERSION)
+    expect(Object.keys(rules.byState).sort()).toEqual(['POST_EVENT_SHOCK', 'RECOVERY', 'TRENDING_SHOCK'])
+    for (const state of ['POST_EVENT_SHOCK', 'TRENDING_SHOCK', 'RECOVERY'] as const) {
+      const rule = rules.byState[state]!
+      expect(rule, state).toMatchObject({ adopted: true, refusal: null })
+      expect(rule.k80, state).toBeGreaterThan(1.5)
+    }
+    // The recovery rows, which the line never touches, make the states' widening the better on every row.
+    expect(rules.compared!.rows).toBeGreaterThan(600)
+    expect(rules.compared!.states.pinball).toBeLessThan(rules.compared!.line.pinball)
+    expect(rules.compared!.line.pinball).toBeLessThan(rules.compared!.before.pinball)
+    expect(rules.chosen).toBe('states')
+    expect(made.shock!.adopted).toBe(true)
+    // A row whose state could not be read is left out of the states' rows, the line's rule reading it still.
+    const unknown = Uint8Array.from(state, (value, row) => (row % 60 === 0 ? STATE_UNKNOWN : value))
+    const partial = buildRunCalibration(new Map([['hour1', { ...record, btc15, state: unknown }]]), PROMOTIONS, 'run-test').horizons.hour1!
+    expect(partial.marketShock!.byState.POST_EVENT_SHOCK).toBeUndefined()
+    expect(partial.marketShock!.byState.TRENDING_SHOCK!.adopted).toBe(true)
+    expect(partial.shock!.rows).toBe(made.shock!.rows)
+    // Left out of the comparison too, not read as NORMAL rows past the line.
+    expect(partial.marketShock!.compared!.rows).toBeLessThan(made.marketShock!.compared!.rows)
   })
 })

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { FORECAST_MODELS } from '../shared/forecast/models'
-import { OOS_VERSION, decodeOos, encodeOos, oosQuantiles, type OosRecord } from '../shared/forecast/oosRecord'
+import { STATE_UNKNOWN } from '../shared/forecast/marketShock'
+import { EXCURSION_WIDTH, OOS_VERSION, decodeOos, encodeOos, oosQuantiles, oosState, type OosRecord } from '../shared/forecast/oosRecord'
 import { DEGRADATION_LINES, PROMOTION_LINES, degradationOf, degradedForecastNotice, promotionChecklist } from '../shared/forecast/promotion'
 import { RUNS_KEPT, fitDueAtStart, healForecastSettings, nextNightlyAt, promotionsOf, runIdAt, runsToSweep } from '../shared/forecast/training'
 import { FOLDS, HORIZON_STEP_SEC, MAX_VALIDATION_SHARE, finalSplit, foldRows, knownBefore, lastFoldScores, planFolds, rowsFor, scoreRows, type ModelScore } from '../shared/forecast/walkForward'
@@ -287,17 +288,36 @@ describe('the out-of-sample record', () => {
     best: Float32Array.from([0.006, 0.001, 0.02]),
     worst: Float32Array.from([-0.002, -0.012, -0.001]),
     quantiles: Float32Array.from({ length: 3 * FORECAST_MODELS.length * 5 }, (_, index) => index / 8),
-    btc15: Float32Array.from([0.4, -2.75, Number.NaN])
+    btc15: Float32Array.from([0.4, -2.75, Number.NaN]),
+    // The market's state at each row (V7.1 Stage 11): NORMAL, POST_EVENT_SHOCK, and one not read.
+    state: Uint8Array.from([0, 2, STATE_UNKNOWN])
   }
 
   it('reads back as written, column by column', () => {
     const back = decodeOos(encodeOos(record))
     expect(back).not.toBeNull()
-    for (const key of ['time', 'pair', 'cls', 'regime', 'fold', 'z', 'rv24h', 'y', 'best', 'worst', 'quantiles', 'btc15'] as const) expect([...back![key]!], key).toEqual([...record[key]!])
-    // Without Bitcoin's moves to write, NaN.
+    for (const key of ['time', 'pair', 'cls', 'regime', 'fold', 'z', 'rv24h', 'y', 'best', 'worst', 'quantiles', 'btc15', 'state'] as const) expect([...back![key]!], key).toEqual([...record[key]!])
+    // Without Bitcoin's moves to write, NaN; without the states, unknown.
     expect([...decodeOos(encodeOos({ ...record, btc15: undefined }))!.btc15!].every(Number.isNaN)).toBe(true)
+    expect([...decodeOos(encodeOos({ ...record, state: undefined }))!.state!]).toEqual([STATE_UNKNOWN, STATE_UNKNOWN, STATE_UNKNOWN])
     expect(back!.symbols).toEqual(record.symbols)
     expect(oosQuantiles(back!, 1, 'gbt')).toEqual([...record.quantiles.subarray((1 * FORECAST_MODELS.length + FORECAST_MODELS.indexOf('gbt')) * 5, (1 * FORECAST_MODELS.length + FORECAST_MODELS.indexOf('gbt')) * 5 + 5)])
+    expect([0, 1, 2].map((row) => oosState(back!, row))).toEqual(['NORMAL', 'POST_EVENT_SHOCK', undefined])
+    expect(oosState(decodeOos(encodeOos({ ...record, state: undefined }))!, 0)).toBeUndefined()
+  })
+
+  it('reads a v4 record, written before the states were kept, without them (V7.1 Stage 11)', () => {
+    const bytes = encodeOos(record)
+    const headerLength = new DataView(bytes.buffer, bytes.byteOffset).getUint32(0, true)
+    const header = new TextDecoder().decode(bytes.subarray(4, 4 + headerLength))
+    bytes.set(new TextEncoder().encode(header.replace(OOS_VERSION, 'forecast-oos-v4')), 4)
+    const back = decodeOos(bytes)!
+    expect(back.version).toBe('forecast-oos-v4')
+    expect(back.state).toBeUndefined()
+    expect(oosState(back, 1)).toBeUndefined()
+    expect([...back.btc15!]).toEqual([...record.btc15!])
+    // A v4 record holds the excursion column before the states': read as written.
+    expect(back.excursion).toHaveLength(3 * EXCURSION_WIDTH)
   })
 
   it('is refused cut short, or with a header that is not its own', () => {

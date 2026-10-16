@@ -3,6 +3,7 @@ import { edgeOf, ROUND_TRIP_PCT } from './edge'
 import type { MemberWeight } from './ensemble'
 import { HORIZON_BARS, type Horizon, type PairClass } from './features'
 import type { HorizonLine, OutcomeLine, PredictionLine } from './forecastRecord'
+import { MARKET_SHOCK_STATES, type MarketShockState } from './marketShock'
 import { QUANTILE_LEVELS, meanPinball } from './ml/quantile'
 import type { ForecastModelId } from './models'
 import { errorsOf, insideOf, type ErrorKind } from './outcome'
@@ -92,6 +93,8 @@ export interface LabCase {
   regime?: MarketRegime | null
   /** Whether Bitcoin's sharp move widened the forecast shown (V6.1). */
   shock?: boolean
+  /** The market's shock state at the forecast (V7.1 Stage 11), where its line carried one. */
+  state?: MarketShockState
   /** Its pinball loss in usual moves, and persistence's on the same outcome (the walk forward). */
   pinballZ?: number
   floorPinballZ?: number
@@ -404,6 +407,8 @@ export interface LiveLabHorizon {
   /** The forecasts Bitcoin's sharp move widened (V6.1): as shown, and by V2's own levels beside them --
    * what the widening changed. Absent where it widened none. */
   shock?: { widened: LabMetrics; unwidened: LabMetrics }
+  /** The shown forecasts by the market's shock state at them (V7.1 Stage 11); absent where none carried one. */
+  byState?: Partial<Record<MarketShockState, LabMetrics>>
   /** The path's figures (V7.1 Stage 3); absent where no forecast of the horizon carried them. */
   timing?: TimingMetrics
 }
@@ -512,8 +517,19 @@ export function liveCases(predictions: ReadonlyMap<string, PredictionLine>, outc
       prior: line.z1h ?? null,
       newsShift: variant === 'v3' || variant === 'v4' ? (story?.shift ?? 0) : 0,
       kinds: story === undefined ? [] : [story.kind],
-      shock: horizon.shock !== undefined
+      shock: horizon.shock !== undefined,
+      ...(line.state === undefined ? {} : { state: line.state })
     })
+  }
+  return out
+}
+
+/** The shown forecasts by the market's state at them (V7.1 Stage 11), for the states any carried. */
+export function metricsByState(shown: readonly LabCase[]): Partial<Record<MarketShockState, LabMetrics>> {
+  const out: Partial<Record<MarketShockState, LabMetrics>> = {}
+  for (const state of MARKET_SHOCK_STATES) {
+    const mine = shown.filter((entry) => entry.state === state)
+    if (mine.length > 0) out[state] = labMetrics(mine)
   }
   return out
 }
@@ -527,11 +543,13 @@ export function liveLab(predictionLines: readonly PredictionLine[], outcomes: re
     const shown = pick('v4')
     const widened = shown.filter((entry) => entry.shock === true)
     const timing = timingOf(predictions, outcomes, horizon)
+    const byState = metricsByState(shown)
     horizons[horizon] = {
       outcomes: shown.length,
       variants: Object.fromEntries(LIVE_VARIANTS.map((variant) => [variant, labMetrics(pick(variant))])) as Record<LiveVariant, LabMetrics>,
       news: { moved: labMetrics(shown.filter((entry) => (entry.kinds ?? []).length > 0)), unmoved: labMetrics(shown.filter((entry) => (entry.kinds ?? []).length === 0)) },
       ...(widened.length === 0 ? {} : { shock: { widened: labMetrics(widened), unwidened: labMetrics(pick('v2').filter((entry) => entry.shock === true)) } }),
+      ...(Object.keys(byState).length === 0 ? {} : { byState }),
       ...(timing === null ? {} : { timing })
     }
   }

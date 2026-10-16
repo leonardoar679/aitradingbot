@@ -6,6 +6,7 @@ import { DIRECTION_MODELS } from '../../shared/forecast/models'
 import { CLASS_LINES, type ClassRecord } from '../../shared/forecast/opportunityClass'
 import type { DirectionScore, PUpSource } from '../../shared/forecast/runCalibration'
 import type { ShockRefusal, ShockRule } from '../../shared/forecast/shock'
+import { WIDENED_STATES, type MarketShockRules, type MarketShockState, type ShockWidening } from '../../shared/forecast/marketShock'
 
 // THE FORECAST LAB'S TABLES (V6 Stage 11, 13 October 2026): each card's headers and rows, from the Lab's
 // figures, the same for the page and its CSV. A share is said in percent, a move in percent with its
@@ -176,6 +177,50 @@ export function shockTable(rules: Partial<Record<Horizon, ShockRule>>, live: Liv
       ]
     })
   }
+}
+
+export const STATE_NAME: Record<MarketShockState, string> = {
+  NORMAL: 'Normal',
+  PRE_EVENT: 'Before a scheduled release',
+  POST_EVENT_SHOCK: "After a sharp move of Bitcoin's",
+  TRENDING_SHOCK: "In a trending move of Bitcoin's",
+  LIQUIDATION_SHOCK: 'In a liquidation cascade',
+  RECOVERY: 'Recovering from a shock'
+}
+
+const WIDENING_NAME: Record<ShockWidening, string> = { none: 'none: the models alone', line: "V6.1's one rule past the line", states: "the states' rules" }
+
+/** The rules by market shock state at each horizon (V7.1 Stage 11): each state's rule as the walk forward
+ * found it, cross-fitted, whether it is in use, and the horizon's choice among the widenings; and the live
+ * record's forecasts in each state. */
+export function marketShockTable(rules: Partial<Record<Horizon, MarketShockRules>>, live: LiveLab): LabTableData {
+  const rows: (string | number)[][] = []
+  for (const horizon of HORIZONS) {
+    const mine = rules[horizon]
+    if (mine === undefined) continue
+    const compared = mine.compared
+    const choice = `${WIDENING_NAME[mine.chosen]}${compared === null ? '' : ` (on ${compared.rows} rows: as forecast ${share(compared.before.in80)} in 80%, pinball ${plain(compared.before.pinball, 4)}; by the line ${share(compared.line.in80)}, ${plain(compared.line.pinball, 4)}; by the states ${share(compared.states.in80)}, ${plain(compared.states.pinball, 4)})`}`
+    for (const state of WIDENED_STATES) {
+      const rule = mine.byState[state]
+      const widened = live.horizons[horizon]?.byState?.[state]
+      rows.push([
+        HORIZON_NAME[horizon],
+        STATE_NAME[state],
+        rule?.moments ?? 0,
+        rule?.rows ?? 0,
+        share(rule?.before?.in80),
+        share(rule?.after?.in80),
+        plain(rule?.before?.pinball, 4),
+        plain(rule?.after?.pinball, 4),
+        rule === undefined || rule.refusal === 'too_few' || rule.refusal === 'no_record' ? '—' : `x${rule.k80.toFixed(2)} / x${rule.k50.toFixed(2)}`,
+        rule === undefined ? 'no: no moment in this state' : rule.adopted ? (mine.chosen === 'states' ? 'yes' : 'fitted, the horizon widens otherwise') : `no: ${SHOCK_REFUSAL[rule.refusal ?? 'too_few']}`,
+        choice,
+        widened?.n ?? 0,
+        share(widened?.coverage80)
+      ])
+    }
+  }
+  return { headers: ['Horizon', 'State', 'Moments', 'Hours', 'In the 80% range, as forecast', 'Widened', 'Pinball, as forecast', 'Widened', 'Factors (80% / 50%)', 'In use', 'The horizon widens by', 'Live: forecasts in the state', 'In the 80% range'], rows }
 }
 
 const DIRECTION_MODEL_NAME: Record<(typeof DIRECTION_MODELS)[number], string> = {

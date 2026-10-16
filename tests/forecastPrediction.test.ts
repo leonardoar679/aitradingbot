@@ -5,6 +5,7 @@ import { FORECAST_MODELS, type ForecastModelId } from '../shared/forecast/models
 import { PREDICTION_VERSION, bestHorizonOf, makePrediction, type ForecastRange, type PredictionInput } from '../shared/forecast/prediction'
 import { RELIABILITY_LINES, reliabilityOf, type ReliabilityInput } from '../shared/forecast/reliability'
 import { buildRunCalibration, cellOf, type HonestScore, type RunCalibration } from '../shared/forecast/runCalibration'
+import { MARKET_SHOCK_VERSION, type MarketShockRules } from '../shared/forecast/marketShock'
 import { noShockRecord, stretchShock } from '../shared/forecast/shock'
 import { usualMove } from '../shared/forecast/targets'
 import { promoted, recordOf, scaled } from './forecastRecords'
@@ -272,10 +273,10 @@ describe('the prediction', () => {
     const withRule: RunCalibration = { ...FLAT, horizons: { ...FLAT.horizons, hour1: { ...FLAT.horizons.hour1!, shock: rule } } }
     const plain = makePrediction(input(withRule, 0, { btc15: 1 }))!.horizons.hour1!
     const shocked = makePrediction(input(withRule, 0, { btc15: -2.8 }))!.horizons.hour1!
-    expect(PREDICTION_VERSION).toBe('prediction-v4')
+    expect(PREDICTION_VERSION).toBe('prediction-v5')
     expect(plain.shock).toBeNull()
     expect(plain.quantilesPct).toEqual(makePrediction(input(FLAT, 0))!.horizons.hour1!.quantilesPct)
-    expect(shocked.shock).toEqual({ btc15: -2.8, k80: 1.5, k50: 1.25, held: { before: 0.6, after: 0.79 } })
+    expect(shocked.shock).toEqual({ btc15: -2.8, k80: 1.5, k50: 1.25, held: { before: 0.6, after: 0.79 }, state: null })
     // The levels in usual moves stretched about the median: the outer pair by 1.5, the inner by 1.25.
     const usual = usualMove(0.04, 12)
     const asMoves = (range: ForecastRange): number[] => range.quantilesPct.map((value) => Math.log(1 + value / 100) / usual)
@@ -287,6 +288,39 @@ describe('the prediction', () => {
     expect(makePrediction(input(refused, 0, { btc15: 4 }))!.horizons.hour1!.shock).toBeNull()
     expect(makePrediction(input(FLAT, 0, { btc15: 4 }))!.horizons.hour1!.quantilesPct).toEqual(plain.quantilesPct)
     expect(makePrediction(input(withRule, 0))!.horizons.hour1!.shock).toBeNull()
+    // The line's rule says no state widened it; the market's state goes on the forecast either way.
+    expect(shocked.shock!.state).toBeNull()
+    expect(makePrediction(input(withRule, 0, { btc15: -2.8, marketState: 'POST_EVENT_SHOCK' }))!.marketState).toBe('POST_EVENT_SHOCK')
+    expect(makePrediction(input(withRule, 0))!.marketState).toBeNull()
+  })
+
+  // V7.1 Stage 11: a horizon that chose the states' rules widens by the state's own, wherever Bitcoin's
+  // fifteen minutes stand; one that chose none widens by nothing, whatever the line's rule says.
+  it("widens by the market state's rule where the horizon chose the states', and by nothing where it chose none", () => {
+    const line = { ...noShockRecord(), adopted: true, refusal: null, k80: 1.5, k50: 1.25, moments: 12, rows: 400, before: { in80: 0.6, in50: 0.35, pinball: 0.5 }, after: { in80: 0.79, in50: 0.49, pinball: 0.47 } }
+    const recovery = { ...line, k80: 1.3, k50: 1.1, before: { in80: 0.7, in50: 0.4, pinball: 0.45 }, after: { in80: 0.81, in50: 0.5, pinball: 0.44 } }
+    const refused = { ...line, adopted: false, refusal: 'pinball' as const }
+    const rules: MarketShockRules = { version: MARKET_SHOCK_VERSION, byState: { RECOVERY: recovery, POST_EVENT_SHOCK: refused }, compared: { rows: 900, before: { in80: 0.62, in50: 0.36, pinball: 0.49 }, line: { in80: 0.78, in50: 0.48, pinball: 0.47 }, states: { in80: 0.8, in50: 0.5, pinball: 0.46 } }, chosen: 'states' }
+    const states: RunCalibration = { ...FLAT, horizons: { ...FLAT.horizons, hour1: { ...FLAT.horizons.hour1!, shock: line, marketShock: rules } } }
+    const plain = makePrediction(input(FLAT, 0))!.horizons.hour1!
+    // In RECOVERY, Bitcoin calm: the state's factors, and the state named.
+    const recovering = makePrediction(input(states, 0, { btc15: 0.3, marketState: 'RECOVERY' }))!.horizons.hour1!
+    expect(recovering.shock).toEqual({ btc15: 0.3, k80: 1.3, k50: 1.1, held: { before: 0.7, after: 0.81 }, state: 'RECOVERY' })
+    const usual = usualMove(0.04, 12)
+    const asMoves = (range: ForecastRange): number[] => range.quantilesPct.map((value) => Math.log(1 + value / 100) / usual)
+    stretchShock(asMoves(plain), 1.3, 1.1).forEach((value, level) => expect(asMoves(recovering)[level]).toBeCloseTo(value, 9))
+    // Past the line in a state whose rule was refused: nothing, though the line's rule would have widened it.
+    expect(makePrediction(input(states, 0, { btc15: -3, marketState: 'POST_EVENT_SHOCK' }))!.horizons.hour1!.shock).toBeNull()
+    expect(makePrediction(input(states, 0, { btc15: -3, marketState: 'NORMAL' }))!.horizons.hour1!.shock).toBeNull()
+    expect(makePrediction(input(states, 0, { btc15: -3 }))!.horizons.hour1!.shock).toBeNull()
+    // The horizon chose none: the models alone, whatever the state and the line.
+    const none: RunCalibration = { ...FLAT, horizons: { ...FLAT.horizons, hour1: { ...FLAT.horizons.hour1!, shock: line, marketShock: { ...rules, chosen: 'none' } } } }
+    expect(makePrediction(input(none, 0, { btc15: -3, marketState: 'RECOVERY' }))!.horizons.hour1!.shock).toBeNull()
+    // The horizon chose the line: V6.1 as before, the state only recorded.
+    const chosenLine: RunCalibration = { ...FLAT, horizons: { ...FLAT.horizons, hour1: { ...FLAT.horizons.hour1!, shock: line, marketShock: { ...rules, chosen: 'line' } } } }
+    const lined = makePrediction(input(chosenLine, 0, { btc15: -3, marketState: 'RECOVERY' }))!
+    expect(lined.horizons.hour1!.shock).toMatchObject({ k80: 1.5, k50: 1.25, state: null })
+    expect(lined.marketState).toBe('RECOVERY')
   })
 
   it('leaves out a horizon with no calibration, and is none without any', () => {

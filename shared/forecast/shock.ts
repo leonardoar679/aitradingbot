@@ -118,7 +118,8 @@ export function stretchShock(q: readonly number[], k80: number, k50: number): nu
   return out
 }
 
-function scoreOf(rows: readonly { z: number; q: readonly number[] }[]): ShockScore {
+/** How a set of rows held: the shares inside the 80% and the 50% ranges, and the mean pinball loss. */
+export function scoreShock(rows: readonly { z: number; q: readonly number[] }[]): ShockScore {
   let in80 = 0
   let in50 = 0
   let loss = 0
@@ -131,29 +132,41 @@ function scoreOf(rows: readonly { z: number; q: readonly number[] }[]): ShockSco
   return { in80: in80 / n, in50: in50 / n, pinball: loss / n }
 }
 
-/** A horizon's rule from its walk forward's rows (the forecast shown, V2, scored out of sample). */
-export function shockRuleOf(rows: readonly ShockRow[]): ShockRule {
-  const past = rows.filter((row) => Number.isFinite(row.btc15) && Math.abs(row.btc15) >= SHOCK_LINES.line)
+/** Each week's factors fitted on the other weeks' rows alone -- 1 where those hold fewer than minFitRows. */
+export function crossFittedFactors(rows: readonly ShockRow[]): Map<number, { k80: number; k50: number }> {
+  const out = new Map<number, { k80: number; k50: number }>()
+  for (const week of [...new Set(rows.map((row) => row.week))].sort((a, b) => a - b)) {
+    const others = rows.filter((row) => row.week !== week)
+    out.set(week, others.length >= SHOCK_LINES.minFitRows ? shockFactors(others) : { k80: 1, k50: 1 })
+  }
+  return out
+}
+
+/** Whether a row is past the line: Bitcoin's last fifteen minutes at or past it, either way. */
+export const pastShockLine = (row: Pick<ShockRow, 'btc15'>): boolean => Number.isFinite(row.btc15) && Math.abs(row.btc15) >= SHOCK_LINES.line
+
+/** A rule fitted on the rows given -- those past the line, or since V7.1 Stage 11 those in one market state
+ * (shared/forecast/marketShock.ts) -- and judged cross-fitted on them. */
+export function shockRuleFrom(past: readonly ShockRow[]): ShockRule {
   const moments = new Set(past.map((row) => row.t)).size
   const unfitted = { version: SHOCK_VERSION, line: SHOCK_LINES.line, k80: 1, k50: 1, moments, rows: past.length, before: null, after: null, adopted: false }
   if (moments < SHOCK_LINES.minMoments || past.length < SHOCK_LINES.minRows) return { ...unfitted, refusal: 'too_few' }
   const { k80, k50 } = shockFactors(past)
-  const asForecast: ShockRow[] = []
-  const widened: { z: number; q: readonly number[] }[] = []
-  for (const week of [...new Set(past.map((row) => row.week))].sort((a, b) => a - b)) {
-    const others = past.filter((row) => row.week !== week)
-    const factors = others.length >= SHOCK_LINES.minFitRows ? shockFactors(others) : { k80: 1, k50: 1 }
-    for (const row of past) {
-      if (row.week !== week) continue
-      asForecast.push(row)
-      widened.push({ z: row.z, q: stretchShock(row.q, factors.k80, factors.k50) })
-    }
-  }
-  const before = scoreOf(asForecast)
-  const after = scoreOf(widened)
+  const byWeek = crossFittedFactors(past)
+  const widened = past.map((row) => {
+    const factors = byWeek.get(row.week)!
+    return { z: row.z, q: stretchShock(row.q, factors.k80, factors.k50) }
+  })
+  const before = scoreShock(past)
+  const after = scoreShock(widened)
   const nearer = Math.abs(after.in80 - SHOCK_LINES.outer) < Math.abs(before.in80 - SHOCK_LINES.outer)
   const refusal: ShockRefusal | null = !nearer ? 'coverage' : after.pinball > before.pinball ? 'pinball' : null
   return { version: SHOCK_VERSION, line: SHOCK_LINES.line, k80, k50, moments, rows: past.length, before, after, adopted: refusal === null, refusal }
+}
+
+/** A horizon's rule from its walk forward's rows (the forecast shown, V2, scored out of sample). */
+export function shockRuleOf(rows: readonly ShockRow[]): ShockRule {
+  return shockRuleFrom(rows.filter(pastShockLine))
 }
 
 /** A walk forward without Bitcoin's moves on record: no rule until the next refit writes them. */
@@ -167,14 +180,20 @@ export function shockFor(rule: ShockRule | null | undefined, btc15: number | nul
   return { k80: rule.k80, k50: rule.k50 }
 }
 
-/** Bitcoin's last fifteen minutes read live from the stream's minutes, in its usual moves (as the close's
- * z_15m, by the day's volatility at the last close): the minute forming against the close of the minute
- * that ended fifteen minutes before it began. Null without both, or without a volatility to measure by. */
-export function liveBtc15(minutes: readonly { time: number; close: number }[], rv24h: number): number | null {
+/** Bitcoin's last `bars` five-minute bars' worth read live from the stream's minutes, in its usual moves (as
+ * the close's z figure, by the day's volatility at the last close): the minute forming against the close of
+ * the minute that ended that long before it began. Null without both, or without a volatility to measure by. */
+export function liveBtcMove(minutes: readonly { time: number; close: number }[], rv24h: number, bars: number): number | null {
   const last = minutes[minutes.length - 1]
   if (last === undefined) return null
-  const before = minutes.find((minute) => minute.time === last.time - 960)
-  const usual = usualMove(rv24h, 3)
+  const before = minutes.find((minute) => minute.time === last.time - bars * 300 - 60)
+  const usual = usualMove(rv24h, bars)
   if (before === undefined || !(before.close > 0) || !(last.close > 0) || !(usual > 0)) return null
   return Math.log(last.close / before.close) / usual
+}
+
+/** Bitcoin's last fifteen minutes read live (V6.1): the minute forming against the close of the minute that
+ * ended fifteen minutes before it began. */
+export function liveBtc15(minutes: readonly { time: number; close: number }[], rv24h: number): number | null {
+  return liveBtcMove(minutes, rv24h, 3)
 }

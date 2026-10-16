@@ -11,6 +11,7 @@ import { MARKET_REGIMES } from './features'
 import type { MarketRegime } from '../marketResearch'
 import { RUN_CALIBRATION_VERSION, VARIANTS, type CurveBin, type DirectionCalibration, type DirectionReport, type DirectionScore, type HonestScore, type HorizonCalibration, type RunCalibration, type VariantCalibration } from './runCalibration'
 import type { ShockRefusal, ShockRule, ShockScore } from './shock'
+import { MARKET_SHOCK_STATES, type MarketShockRules, type MarketShockState, type ShockWidening } from './marketShock'
 
 // A RUN'S CALIBRATION ON FILE (V6 Stage 6, 13 October 2026): forecastModels/<run>/calibration.json,
 // one line of canonical JSON, every number at seven significant digits and a figure that could not be
@@ -131,6 +132,31 @@ function readShock(value: unknown): ShockRule | null | undefined {
   const after = readShockScore(value.after)
   if (refusal === undefined || before === undefined || after === undefined || value.adopted !== (refusal === null)) return null
   return { version: value.version, line: value.line, k80: value.k80, k50: value.k50, moments: value.moments, rows: value.rows, before, after, adopted: value.adopted, refusal }
+}
+
+const WIDENINGS: readonly ShockWidening[] = ['none', 'line', 'states']
+
+/** A horizon's rules by market state and its choice (V7.1 Stage 11): undefined where none was written, null
+ * where one was and is not whole -- every state a known one with a whole rule, the choice a known one. */
+function readMarketShock(value: unknown): MarketShockRules | null | undefined {
+  if (value === undefined) return undefined
+  if (!isObject(value) || typeof value.version !== 'string' || !isObject(value.byState) || !WIDENINGS.includes(value.chosen as ShockWidening)) return null
+  const byState: MarketShockRules['byState'] = {}
+  for (const [key, entry] of Object.entries(value.byState)) {
+    const rule = readShock(entry)
+    if (!(MARKET_SHOCK_STATES as readonly string[]).includes(key) || rule === null || rule === undefined) return null
+    byState[key as MarketShockState] = rule
+  }
+  let compared: MarketShockRules['compared'] = null
+  if (value.compared !== null) {
+    if (!isObject(value.compared) || !finite(value.compared.rows)) return null
+    const before = readShockScore(value.compared.before)
+    const line = readShockScore(value.compared.line)
+    const states = readShockScore(value.compared.states)
+    if (!before || !line || !states) return null
+    compared = { rows: value.compared.rows, before, line, states }
+  }
+  return { version: value.version, byState, compared, chosen: value.chosen as ShockWidening }
 }
 
 function readCurve(value: unknown): CurveBin[] | null {
@@ -287,10 +313,19 @@ export function parseRunCalibration(text: string): RunCalibration | null {
       variants[variant] = read
     }
     const shock = readShock(entry.shock)
+    const marketShock = readMarketShock(entry.marketShock)
     const direction = readDirectionReport(entry.direction)
     const excursion = readExcursion(entry.excursion)
-    if (shock === null || direction === null || excursion === null) return null
-    horizons[key as Horizon] = { horizon: key as Horizon, rows: entry.rows, variants, ...(shock === undefined ? {} : { shock }), ...(direction === undefined ? {} : { direction }), ...(excursion === undefined ? {} : { excursion }) }
+    if (shock === null || marketShock === null || direction === null || excursion === null) return null
+    horizons[key as Horizon] = {
+      horizon: key as Horizon,
+      rows: entry.rows,
+      variants,
+      ...(shock === undefined ? {} : { shock }),
+      ...(marketShock === undefined ? {} : { marketShock }),
+      ...(direction === undefined ? {} : { direction }),
+      ...(excursion === undefined ? {} : { excursion })
+    }
   }
   const touch = readTouch(raw.touch)
   if (touch === null) return null

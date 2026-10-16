@@ -1836,5 +1836,17 @@
   "Live trading is only available on Binance and Bitget.": "實盤交易僅在幣安和 Bitget 上可用。",
   "A live ladder or series (DCA, TWAP, Grid) is Binance-only; on Bitget an Order or a Position can go live.": "實盤階梯或序列（DCA、TWAP、網格）僅限幣安；在 Bitget 上可實盤的是訂單或倉位。",
   "Add a verified {exchange} API key on Connections first.": "請先在「連線」中新增已驗證的{exchange} API 金鑰。",
-  "This will immediately place a real BUY market order for {amount} {asset} of {pair} on {exchange}, then watch it for take-profit/stop-loss/trailing-stop/time-limit and exit automatically with a real sell — no per-exit confirmation. Stop on Strategies › Execution force-exits it manually at any time.": "這會立即在{exchange}上為 {pair} 下一筆 {amount} {asset} 的真實市價買進單，然後監控其停利/停損/追蹤停損/時限，並自動以真實賣出出場——每次出場無需確認。在「策略 › 執行」中按「停止」可隨時手動強制出場。"
+  "This will immediately place a real BUY market order for {amount} {asset} of {pair} on {exchange}, then watch it for take-profit/stop-loss/trailing-stop/time-limit and exit automatically with a real sell — no per-exit confirmation. Stop on Strategies › Execution force-exits it manually at any time.": "這會立即在{exchange}上為 {pair} 下一筆 {amount} {asset} 的真實市價買進單，然後監控其停利/停損/追蹤停損/時限，並自動以真實賣出出場——每次出場無需確認。在「策略 › 執行」中按「停止」可隨時手動強制出場。",
+  "the market's state ({state}) widened it ×{factor}: on the weeks tested, in that state it held {before} of the time, widened {after}": "市場狀態（{state}）使區間變寬 ×{factor}：在測試的幾週裡，處於該狀態時區間涵蓋了 {before} 的情況，變寬後為 {after}",
+  "normal@@market state": "正常",
+  "before a scheduled release": "定期數據發布前",
+  "after a sharp move of Bitcoin's": "比特幣急劇波動後",
+  "in a trending move of Bitcoin's": "比特幣趨勢性波動中",
+  "in a liquidation cascade": "連環清算中",
+  "recovering from a shock": "衝擊後回升中",
+  "Bitcoin's last fifteen minutes moved {move}": "比特幣最近十五分鐘變動 {move}",
+  "ether's last fifteen minutes moved {move}": "以太坊最近十五分鐘變動 {move}",
+  "Bitcoin's last fifteen minutes ran {move} against the fifteen before": "比特幣最近十五分鐘相對之前十五分鐘變動 {move}",
+  "{share} of the coins rose over the last fifteen minutes": "最近十五分鐘有 {share} 的幣種上漲",
+  "the market's volume in the last fifteen minutes is {share} its usual": "市場最近十五分鐘的成交量為平常的 {share}"
 }

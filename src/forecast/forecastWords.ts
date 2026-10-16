@@ -1,5 +1,6 @@
 import type { Direction } from '../../shared/forecast/direction'
 import type { Horizon } from '../../shared/forecast/features'
+import type { MarketShockState } from '../../shared/forecast/marketShock'
 import type { ForecastRange, PricePrediction } from '../../shared/forecast/prediction'
 import { reasonText, type TradeDecision } from '../../shared/forecast/tradeDecision'
 import type { PredictionView } from '../../shared/forecast/view'
@@ -183,6 +184,23 @@ export function reliabilityWord(reliability: string | undefined, { t }: I18n = E
   if (reliability === undefined) return '—'
   const name = RELIABILITY_NAMES[reliability]
   return name === undefined ? reliability : t(name)
+}
+
+/** The market's shock state in words (V7.1 Stage 11; shared/forecast/marketShock.ts), as a phrase inside a
+ * sentence. */
+const STATE_NAMES: Record<MarketShockState, string> = {
+  NORMAL: msg('normal@@market state'),
+  PRE_EVENT: msg('before a scheduled release'),
+  POST_EVENT_SHOCK: msg("after a sharp move of Bitcoin's"),
+  TRENDING_SHOCK: msg("in a trending move of Bitcoin's"),
+  LIQUIDATION_SHOCK: msg('in a liquidation cascade'),
+  RECOVERY: msg('recovering from a shock')
+}
+
+export function marketStateWord(state: MarketShockState | null | undefined, { t }: I18n = ENGLISH): string {
+  if (state === null || state === undefined) return '—'
+  const name = STATE_NAMES[state]
+  return name === undefined ? state : t(name)
 }
 
 /** The level the path's highest high stays under eight times in ten, and the lowest low above, as prices

@@ -274,6 +274,17 @@ describe("the twelve-hour run's report (§48-49, §114)", () => {
     expect(hour.shock!.widened.coverage80).toBe(1)
     // 0.4 is over V2's own P90 of 0.35: outside.
     expect(hour.shock!.unwidened.coverage80).toBe(0)
+    // None carried the market's state: no part by state.
+    expect(hour.byState).toBeUndefined()
+  })
+
+  it("carries the forecasts by the market's shock state at them (V7.1 Stage 11)", () => {
+    const run = hourRun()
+    const stated = run.predictions.map((line, index) => ({ ...line, state: index < 2 ? ('RECOVERY' as const) : ('NORMAL' as const) }))
+    const hour = forecastRunSectionOf({ ...run, predictions: stated }).horizons.minutes5!
+    expect(hour.byState!.RECOVERY!.n).toBe(2)
+    expect(hour.byState!.NORMAL!.n).toBe(hour.metrics.n - 2)
+    expect(Object.keys(hour.byState!).sort()).toEqual(['NORMAL', 'RECOVERY'])
   })
 
   it("counts the forecast trades' fees and slippage, their best and worst", () => {

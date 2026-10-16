@@ -5,7 +5,7 @@ import { FORECAST_RECORD_VERSION, isMissing, missingOutcomeLine, outcomeLine, pa
 import { QUANTILE_LEVELS } from '../shared/forecast/ml/quantile'
 import { OUTCOME_LINES, dueAt, errorsOf, outcomeOf, type ForecastedHorizon } from '../shared/forecast/outcome'
 import type { ForecastRange, PricePrediction } from '../shared/forecast/prediction'
-import { REFRESH_LINES, refreshReasons } from '../shared/forecast/refresh'
+import { REFRESH_LINES, acrossMedian, refreshReasons } from '../shared/forecast/refresh'
 import { forecastView } from '../shared/forecast/view'
 
 // THE FORECAST LIVE, RULE BY RULE (shared/forecast/{view,outcome,refresh,aciTable,forecastRecord}.ts;
@@ -192,6 +192,31 @@ describe('a forecast made again before the next close', () => {
     expect(refreshReasons({ ...base, marketShock: true })).toEqual(['market'])
     expect(refreshReasons({ ...base, marketShock: false })).toEqual([])
     expect(refreshReasons({ ...base, marketShock: true, newEvent: true })).toEqual(['event', 'market'])
+  })
+
+  // V7.1 Stage 11: a spread shock, and the call flipped by the live price's crossing of the median.
+  it('is made for a spread at three times the usual, and once when the live price crosses the median against the call', () => {
+    expect(REFRESH_LINES.spreadShock).toBe(3)
+    expect(refreshReasons({ ...base, spreadPct: 0.75, usualSpreadPct: 0.25 })).toEqual(['spread'])
+    expect(refreshReasons({ ...base, spreadPct: 0.74, usualSpreadPct: 0.25 })).toEqual([])
+    expect(refreshReasons({ ...base, spreadPct: 0.75, usualSpreadPct: 0 })).toEqual([])
+    expect(refreshReasons({ ...base, spreadPct: 0.75, usualSpreadPct: null })).toEqual([])
+    expect(refreshReasons({ ...base, spreadPct: null, usualSpreadPct: 0.25 })).toEqual([])
+    // BULLISH: past the median; BEARISH: under it; NEUTRAL: never; exactly at it: not across.
+    expect(refreshReasons({ ...base, call: 'BULLISH', median: 100, livePrice: 100.5 })).toEqual(['direction'])
+    expect(refreshReasons({ ...base, call: 'BULLISH', median: 100, livePrice: 100 })).toEqual([])
+    expect(refreshReasons({ ...base, call: 'BULLISH', median: 100, livePrice: 99 })).toEqual([])
+    expect(refreshReasons({ ...base, call: 'BEARISH', median: 100, livePrice: 99 })).toEqual(['direction'])
+    expect(refreshReasons({ ...base, call: 'BEARISH', median: 100, livePrice: 101 })).toEqual([])
+    expect(refreshReasons({ ...base, call: 'NEUTRAL', median: 100, livePrice: 120 })).toEqual([])
+    expect(refreshReasons({ ...base, call: 'BULLISH', median: null, livePrice: 120 })).toEqual([])
+    // Already across at the last reading: a crossing is told once.
+    expect(refreshReasons({ ...base, call: 'BULLISH', median: 100, livePrice: 100.5, wasAcross: true })).toEqual([])
+    expect(acrossMedian({ call: 'BULLISH', median: 100, livePrice: 100.5 })).toBe(true)
+    expect(acrossMedian({ call: 'BEARISH', median: 100, livePrice: 100.5 })).toBe(false)
+    expect(acrossMedian({ call: 'BULLISH', median: 0, livePrice: 100.5 })).toBe(false)
+    // Together, in the order the reasons are read: band first, then the market, the spread, the direction.
+    expect(refreshReasons({ ...base, livePrice: 111, band: [100, 110], call: 'BULLISH', median: 105, spreadPct: 1, usualSpreadPct: 0.2, marketShock: true })).toEqual(['band', 'market', 'spread', 'direction'])
   })
 
   it('at most once a minute', () => {

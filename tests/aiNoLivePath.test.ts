@@ -332,6 +332,7 @@ describe('AI code has no route to a real order', () => {
       'liveMarket',
       'marketResearch',
       'marketResearchService',
+      'marketShock',
       'models',
       'newsEffect',
       'noticeService',

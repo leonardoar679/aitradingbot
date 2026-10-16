@@ -9,6 +9,7 @@ import type { GbtModel } from '../shared/forecast/ml/gbt'
 import { QUANTILE_LEVELS } from '../shared/forecast/ml/quantile'
 import type { FlatTree } from '../shared/forecast/ml/tree'
 import { MODELS_VERSION, type FittedHorizon } from '../shared/forecast/models'
+import { MARKET_SHOCK_VERSION } from '../shared/forecast/marketShock'
 import { buildRunCalibration, type RunCalibration } from '../shared/forecast/runCalibration'
 import { noShockRecord } from '../shared/forecast/shock'
 import { emptyLiveState, type LiveState } from '../shared/liveMarket'
@@ -236,6 +237,183 @@ describe('a close', () => {
     // Held, and not forecast: what a run's history gate calls a skipped close (V6 Stage 16).
     expect(lines(`passes-${month}.jsonl`)).toEqual([{ v: 'forecast-record-v1', t: HOUR, held: [...SYMBOLS].sort() }])
     expect(lines(`predictions-${month}.jsonl`).map((line) => line.pair)).not.toContain('XRPUSDT')
+  })
+})
+
+// V7.1 Stage 11: the market's shock state, read at every close from Bitcoin's row and the cross-section with
+// the shock moments of the four hours before, goes on every forecast and every record line; the stream reads
+// it again between closes, and a change of it makes every forecast again where a state's rule is in use.
+describe("the market's state", () => {
+  // The clock near the close, as the refresh tests below keep it: a forecast whose bars are a close behind is
+  // never made again.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime((HOUR + 10) * 1000)
+  })
+
+  /** The calibration widening by the states' rules at the hour: RECOVERY's adopted, the line's chosen away. */
+  function withStateRules(): RunCalibration {
+    const rule = { ...noShockRecord(), adopted: true, refusal: null, k80: 1.3, k50: 1.1, moments: 20, rows: 400, before: { in80: 0.7, in50: 0.4, pinball: 0.45 }, after: { in80: 0.81, in50: 0.5, pinball: 0.44 } }
+    const marketShock = { version: MARKET_SHOCK_VERSION, byState: { RECOVERY: rule, POST_EVENT_SHOCK: rule, TRENDING_SHOCK: rule }, compared: null, chosen: 'states' as const }
+    return { ...CALIBRATION, horizons: Object.fromEntries(Object.entries(CALIBRATION.horizons).map(([horizon, entry]) => [horizon, horizon === 'hour1' ? { ...entry, shock: rule, marketShock } : entry])) }
+  }
+
+  it('is NORMAL on a calm close and on every forecast and line of it, POST_EVENT_SHOCK on a sharp fall of Bitcoin', async () => {
+    const calm = await engine()
+    await closeAt(calm, HOUR)
+    expect(calm.forecastOf('SOLUSDT')!.marketState).toBe('NORMAL')
+    expect(calm.getForecastEngineState().market).toMatchObject({ state: 'NORMAL', readAt: HOUR })
+    expect(lines(`predictions-${month}.jsonl`).every((line) => line.state === 'NORMAL')).toBe(true)
+    // Bitcoin's bars falling 3% over the fifteen minutes to HOUR and staying there: a lasting drop, not a dip
+    // whose rebound would be a shock of its own the other way.
+    const lasting = MARKET.get('BTCUSDT')!.map((bar) => {
+      const k = bar.time < HOUR - 900 ? 1 : bar.time === HOUR - 900 ? 0.99 : bar.time === HOUR - 600 ? 0.98 : 0.97
+      return k === 1 ? bar : { ...bar, open: bar.open * k, high: bar.high * k, low: bar.low * k, close: bar.close * k }
+    })
+    fake.market = new Map([...MARKET, ['BTCUSDT', lasting]])
+    process.env.AI_TEST_USER_DATA = mkdtempSync(join(tmpdir(), 'forecast-live-'))
+    const fallen = await engine()
+    await closeAt(fallen, HOUR)
+    for (const symbol of SYMBOLS) expect(fallen.forecastOf(symbol)!.marketState).toBe('POST_EVENT_SHOCK')
+    const market = fallen.getForecastEngineState().market!
+    expect(market.state).toBe('POST_EVENT_SHOCK')
+    expect(market.btc15).toBeLessThan(-2.5)
+    expect(lines(`predictions-${month}.jsonl`).every((line) => line.state === 'POST_EVENT_SHOCK')).toBe(true)
+    // Three hours on, Bitcoin's hour back up by more than a usual move: RECOVERY, from the shock on its bars.
+    const recovered = fake.market.get('BTCUSDT')!.map((bar) => {
+      if (bar.time < HOUR + 2 * 3600 || bar.time >= HOUR + 3 * 3600) return bar
+      // The hour before HOUR + 3h rising a quarter of a percent a bar: twelve bars, 3%, past one usual hourly
+      // move however the walk went, its last fifteen minutes under the sharp-move line.
+      const k = 1 + 0.0025 * ((bar.time - (HOUR + 2 * 3600)) / 300 + 1)
+      return { ...bar, open: bar.open * k, high: bar.high * k, low: bar.low * k, close: bar.close * k }
+    })
+    fake.market = new Map([...fake.market, ['BTCUSDT', recovered.map((bar) => (bar.time >= HOUR + 3 * 3600 ? { ...bar, open: bar.open * 1.03, high: bar.high * 1.03, low: bar.low * 1.03, close: bar.close * 1.03 } : bar))]])
+    // The hour's rise is no shock of its own: its fifteen minutes stay under the line.
+    await closeAt(fallen, HOUR + 3 * 3600)
+    expect(Math.abs(fallen.getForecastEngineState().market!.btc15)).toBeLessThan(2.5)
+    expect(fallen.getForecastEngineState().market!.btc1h).toBeGreaterThan(1)
+    expect(fallen.forecastOf('SOLUSDT')!.marketState).toBe('RECOVERY')
+    // Five hours on, the window past: NORMAL again.
+    await closeAt(fallen, HOUR + 5 * 3600)
+    expect(fallen.forecastOf('SOLUSDT')!.marketState).toBe('NORMAL')
+  })
+
+  it("widens by the state's rule where the horizon chose the states', and records which state", async () => {
+    fake.calibration = withStateRules()
+    fake.market = btcFalling(HOUR)
+    const live = await engine()
+    await closeAt(live, HOUR)
+    const hour1 = live.forecastOf('SOLUSDT')!.horizons.hour1!
+    expect(hour1.shock).toMatchObject({ k80: 1.3, k50: 1.1, state: 'POST_EVENT_SHOCK' })
+    expect(live.forecastOf('SOLUSDT')!.horizons.minutes15!.shock).toBeNull()
+    const recorded = lines(`predictions-${month}.jsonl`).find((line) => line.pair === 'SOLUSDT')!
+    expect(recorded.state).toBe('POST_EVENT_SHOCK')
+    expect((recorded.h as Record<string, { shock?: number[] }>).hour1.shock).toHaveLength(3)
+  })
+
+  it("forecasts every pair again when the market's state changes on Bitcoin's live minutes, where a state's rule is in use", async () => {
+    const minutes = (nowMs: number, lastClose: number, hourAgoClose = 60_000): LiveState['btcMinutes'] => {
+      const last = Math.floor(nowMs / 60_000) * 60
+      return Array.from({ length: 80 }, (_, k) => ({ time: last - (79 - k) * 60, open: 60_000, high: 60_000, low: 60_000, close: k === 79 ? lastClose : k < 19 ? hourAgoClose : 60_000, volume: 1, closed: k < 79 }))
+    }
+    const marketRefreshes = (): number => lines(`predictions-${month}.jsonl`).filter((line) => line.why === 'refresh' && (line.reasons as string[]).includes('market')).length
+    // Without a state's rule in use (the line's chosen): a trending hour read live changes nothing.
+    const live = emptyLiveState()
+    const plain = await engine({ live })
+    await closeAt(plain, HOUR)
+    const at = plain.forecastOf('SOLUSDT')!.generatedAt + 1000
+    live.btcMinutes = minutes(at, 61_000, 58_500)
+    await plain.forecastLiveSignal(live, at)
+    expect(marketRefreshes()).toBe(0)
+    // With the states' rules in use: Bitcoin's hour up 2.5 usual moves on the stream, its minutes the same
+    // way -- TRENDING_SHOCK from NORMAL -- makes every forecast again, with the state on each; the same
+    // reading again, no change, nothing; back to calm, a change again.
+    fake.calibration = withStateRules()
+    process.env.AI_TEST_USER_DATA = mkdtempSync(join(tmpdir(), 'forecast-live-'))
+    const stream = emptyLiveState()
+    const mod = await engine({ live: stream })
+    await closeAt(mod, HOUR)
+    const now = mod.forecastOf('SOLUSDT')!.generatedAt + 1000
+    expect(mod.forecastOf('SOLUSDT')!.marketState).toBe('NORMAL')
+    stream.btcMinutes = minutes(now, 61_000, 58_500)
+    await mod.forecastLiveSignal(stream, now)
+    expect(marketRefreshes()).toBe(SYMBOLS.length)
+    expect(mod.forecastOf('SOLUSDT')!.marketState).toBe('TRENDING_SHOCK')
+    expect(mod.forecastOf('SOLUSDT')!.horizons.hour1!.shock).toMatchObject({ k80: 1.3, state: 'TRENDING_SHOCK' })
+    expect(mod.getForecastEngineState().market!.state).toBe('TRENDING_SHOCK')
+    await mod.forecastLiveSignal(stream, now + 61_000)
+    expect(marketRefreshes()).toBe(SYMBOLS.length)
+    stream.btcMinutes = minutes(now + 122_000, 60_000, 60_000)
+    await mod.forecastLiveSignal(stream, now + 122_000)
+    expect(marketRefreshes()).toBe(2 * SYMBOLS.length)
+    expect(mod.forecastOf('SOLUSDT')!.marketState).toBe('NORMAL')
+    // The states' rules chosen but none of them adopted: nothing is in use, and a change makes nothing again.
+    const chosen = withStateRules()
+    const hour1 = chosen.horizons.hour1!
+    fake.calibration = { ...chosen, horizons: { ...chosen.horizons, hour1: { ...hour1, marketShock: { ...hour1.marketShock!, byState: Object.fromEntries(Object.entries(hour1.marketShock!.byState).map(([state, rule]) => [state, { ...rule, adopted: false, refusal: 'coverage' }])) } } } }
+    process.env.AI_TEST_USER_DATA = mkdtempSync(join(tmpdir(), 'forecast-live-'))
+    const idle = emptyLiveState()
+    const none = await engine({ live: idle })
+    await closeAt(none, HOUR)
+    const later = none.forecastOf('SOLUSDT')!.generatedAt + 1000
+    idle.btcMinutes = minutes(later, 61_000, 58_500)
+    await none.forecastLiveSignal(idle, later)
+    expect(marketRefreshes()).toBe(0)
+    expect(none.forecastOf('SOLUSDT')!.marketState).toBe('NORMAL')
+  })
+
+  it("forecasts a pair again on a spread shock, and once when the live price crosses the median against its call", async () => {
+    const live: LiveState = emptyLiveState()
+    const mod = await engine({ live })
+    const book = (symbol: string, mid: number, spreadPct: number, nowMs: number): LiveState['books'][string] => ({ symbol, bid: mid * (1 - spreadPct / 200), bidQty: 1, ask: mid * (1 + spreadPct / 200), askQty: 1, updatedAt: nowMs, source: 'stream' })
+    const refreshes = (): unknown[] => lines(`predictions-${month}.jsonl`).filter((line) => line.why === 'refresh' && line.pair === 'SOLUSDT').map((line) => line.reasons)
+    // Six closes with the book at a tenth of a percent: the pair's usual spread. After five, a spread at
+    // three times that is no shock yet: the usual is not known from fewer than six closes.
+    for (let k = 0; k < 6; k++) {
+      const close = HOUR - (5 - k) * 300
+      if (k === 5) {
+        const early = mod.forecastOf('SOLUSDT')!
+        const at = early.generatedAt + 1000
+        live.books.SOLUSDT = book('SOLUSDT', early.horizons[early.bestHorizon ?? 'hour1']!.quantilePrices[2] * 0.999, 0.31, at)
+        await mod.forecastLiveSignal(live, at)
+        expect(refreshes()).toEqual([])
+      }
+      live.books.SOLUSDT = book('SOLUSDT', MARKET.get('SOLUSDT')!.find((bar) => bar.time === close - 300)!.close, 0.1, Date.now())
+      await closeAt(mod, close)
+    }
+    const sol = mod.forecastOf('SOLUSDT')!
+    const median = sol.horizons[sol.bestHorizon ?? 'hour1']!.quantilePrices[2]
+    // The spread at three times the usual: made again; at under, not.
+    let now = sol.generatedAt + 1000
+    live.books.SOLUSDT = book('SOLUSDT', median * 0.999, 0.29, now)
+    await mod.forecastLiveSignal(live, now)
+    expect(refreshes()).toEqual([])
+    now += 61_000
+    live.books.SOLUSDT = book('SOLUSDT', median * 0.999, 0.31, now)
+    await mod.forecastLiveSignal(live, now)
+    expect(refreshes()).toEqual([['spread']])
+    // The live price past the median: a crossing against a BULLISH call, told once; the next minute, still
+    // across, nothing; back under and past again, told again. The call is set on the forecast the engine holds.
+    const held = mod.forecastOf('SOLUSDT')!
+    const lead = held.bestHorizon ?? 'hour1'
+    mod.forecastForTest.setCall('SOLUSDT', lead, 'BULLISH')
+    now += 61_000
+    live.books.SOLUSDT = book('SOLUSDT', median * 1.001, 0.1, now)
+    await mod.forecastLiveSignal(live, now)
+    expect(refreshes()).toEqual([['spread'], ['direction']])
+    now += 61_000
+    mod.forecastForTest.setCall('SOLUSDT', lead, 'BULLISH')
+    live.books.SOLUSDT = book('SOLUSDT', median * 1.002, 0.1, now)
+    await mod.forecastLiveSignal(live, now)
+    expect(refreshes()).toEqual([['spread'], ['direction']])
+    now += 61_000
+    live.books.SOLUSDT = book('SOLUSDT', median * 0.999, 0.1, now)
+    await mod.forecastLiveSignal(live, now)
+    now += 61_000
+    mod.forecastForTest.setCall('SOLUSDT', lead, 'BULLISH')
+    live.books.SOLUSDT = book('SOLUSDT', median * 1.001, 0.1, now)
+    await mod.forecastLiveSignal(live, now)
+    expect(refreshes()).toEqual([['spread'], ['direction'], ['direction']])
   })
 })
 

@@ -289,6 +289,20 @@ describe('the live record (§49)', () => {
     expect(hour.shock!.widened.coverage80).toBe(1)
     expect(hour.shock!.unwidened.n).toBe(2)
     expect(hour.shock!.unwidened.coverage80).toBe(0.5)
+    // No forecast carried the market's state: no part by state.
+    expect(hour.byState).toBeUndefined()
+  })
+
+  // V7.1 Stage 11: the shown forecasts by the market's shock state at them.
+  it("reads the shown forecasts by the market's state at them, where their lines carry one", () => {
+    const lines = [prediction('a', T, horizonLine(), { state: 'RECOVERY' }), prediction('b', T + 900, horizonLine(), { state: 'RECOVERY' }), prediction('c', T + 1800, horizonLine(), { state: 'NORMAL' }), prediction('d', T + 2700, horizonLine())]
+    // -3 is outside the 80% range (-2..3); 1 and 0.3 inside.
+    const hour = liveLab(lines, [outcome('a', T, -3), outcome('b', T + 900, 1), outcome('c', T + 1800, 0.3), outcome('d', T + 2700, 0.3)]).horizons.hour1!
+    expect(hour.outcomes).toBe(4)
+    expect(Object.keys(hour.byState!)).toEqual(['NORMAL', 'RECOVERY'])
+    expect(hour.byState!.RECOVERY!.n).toBe(2)
+    expect(hour.byState!.RECOVERY!.coverage80).toBe(0.5)
+    expect(hour.byState!.NORMAL!.n).toBe(1)
   })
 })
 

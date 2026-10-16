@@ -731,6 +731,16 @@ describe("the forecast's cards with a forecast in them, in every language", () =
           live: null,
           onClose: none
         })
+      },
+      // Its range widened by the market's state (V7.1 Stage 11).
+      {
+        name: "the drawer, widened by the market's state",
+        element: createElement(PredictionDrawer, {
+          prediction: { ...PREDICTION, marketState: 'RECOVERY', horizons: { ...PREDICTION.horizons, hour1: { ...PREDICTION.horizons.hour1!, shock: { btc15: 0.3, k80: 1.3, k50: 1.1, held: { before: 0.7, after: 0.81 }, state: 'RECOVERY' } } } },
+          decision: NO_TRADE,
+          live: null,
+          onClose: none
+        })
       }
     ]
     for (const language of LANGUAGES) {
@@ -757,6 +767,11 @@ describe("the drawer's range widened for Bitcoin's sharp move", () => {
     // Not widened: not said.
     const plain = await render(createElement(PredictionDrawer, { prediction: PREDICTION, decision: NO_TRADE, live: null, onClose: none }), 'en')
     expect(plain).not.toContain('sharp move')
+    // Widened by a market state's rule (V7.1 Stage 11): the state named, Bitcoin's move not.
+    const byState = { ...PREDICTION, horizons: { ...PREDICTION.horizons, hour1: { ...PREDICTION.horizons.hour1!, shock: { btc15: 0.3, k80: 1.3, k50: 1.1, held: { before: 0.7, after: 0.81 }, state: 'RECOVERY' as const } } } }
+    const stated = await render(createElement(PredictionDrawer, { prediction: byState, decision: NO_TRADE, live: null, onClose: none }), 'en')
+    expect(stated).toContain('state (recovering from a shock) widened it ×1.30: on the weeks tested, in that state it held 70% of the time, widened 81%')
+    expect(stated).not.toContain('sharp move')
   }, 60_000)
 })
 

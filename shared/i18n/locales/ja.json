@@ -1836,5 +1836,17 @@
   "Live trading is only available on Binance and Bitget.": "リアル取引は Binance と Bitget でのみ利用できます。",
   "A live ladder or series (DCA, TWAP, Grid) is Binance-only; on Bitget an Order or a Position can go live.": "リアルのラダーや連続注文（DCA、TWAP、グリッド）は Binance のみです。Bitget では注文またはポジションをリアルにできます。",
   "Add a verified {exchange} API key on Connections first.": "まず「接続」で確認済みの {exchange} API キーを追加してください。",
-  "This will immediately place a real BUY market order for {amount} {asset} of {pair} on {exchange}, then watch it for take-profit/stop-loss/trailing-stop/time-limit and exit automatically with a real sell — no per-exit confirmation. Stop on Strategies › Execution force-exits it manually at any time.": "{exchange} で {pair} の {amount} {asset} 分の実際の成行買い注文をすぐに出し、その後は利確・損切り・トレーリングストップ・時間制限を見守り、実際の売りで自動的に決済します。決済のたびの確認はありません。「戦略 › 執行」の「停止」でいつでも手動で強制決済できます。"
+  "This will immediately place a real BUY market order for {amount} {asset} of {pair} on {exchange}, then watch it for take-profit/stop-loss/trailing-stop/time-limit and exit automatically with a real sell — no per-exit confirmation. Stop on Strategies › Execution force-exits it manually at any time.": "{exchange} で {pair} の {amount} {asset} 分の実際の成行買い注文をすぐに出し、その後は利確・損切り・トレーリングストップ・時間制限を見守り、実際の売りで自動的に決済します。決済のたびの確認はありません。「戦略 › 執行」の「停止」でいつでも手動で強制決済できます。",
+  "the market's state ({state}) widened it ×{factor}: on the weeks tested, in that state it held {before} of the time, widened {after}": "市場の状態（{state}）でレンジが ×{factor} 広がりました：検証した数週間では、その状態でレンジに収まったのは {before}、広げた後は {after} でした",
+  "normal@@market state": "通常",
+  "before a scheduled release": "定例発表の前",
+  "after a sharp move of Bitcoin's": "ビットコインの急変の後",
+  "in a trending move of Bitcoin's": "ビットコインのトレンド的な変動の中",
+  "in a liquidation cascade": "清算の連鎖の中",
+  "recovering from a shock": "ショックからの回復中",
+  "Bitcoin's last fifteen minutes moved {move}": "ビットコインの直近15分の値動きは {move}",
+  "ether's last fifteen minutes moved {move}": "イーサの直近15分の値動きは {move}",
+  "Bitcoin's last fifteen minutes ran {move} against the fifteen before": "ビットコインの直近15分はその前の15分に対して {move}",
+  "{share} of the coins rose over the last fifteen minutes": "直近15分でコインの {share} が上昇",
+  "the market's volume in the last fifteen minutes is {share} its usual": "市場の直近15分の出来高は通常の {share}"
 }

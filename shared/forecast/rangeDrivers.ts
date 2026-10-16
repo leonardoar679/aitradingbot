@@ -110,7 +110,13 @@ const WORDS: Record<string, Say> = {
   breadth_24h: (v, i) => i.t('{share} of the coins rose over the day', { share: whole(v, i) }),
   alt_strength: moved(msg("the other coins' median day ran {move} against Bitcoin's")),
   beta_btc: (v, i) => i.t('its beta to Bitcoin is {value}', { value: i.num(v, 0, 2) }),
-  idio_1h: moved(msg("its own last hour, beyond what Bitcoin's explains, was {move}"))
+  idio_1h: moved(msg("its own last hour, beyond what Bitcoin's explains, was {move}")),
+  // The market's last fifteen minutes (V7.1 Stage 11).
+  btc_r_15m: moved(msg("Bitcoin's last fifteen minutes moved {move}")),
+  eth_r_15m: moved(msg("ether's last fifteen minutes moved {move}")),
+  btc_acc_15m: moved(msg("Bitcoin's last fifteen minutes ran {move} against the fifteen before")),
+  breadth_15m: (v, i) => i.t('{share} of the coins rose over the last fifteen minutes', { share: whole(v, i) }),
+  market_vol_acc: (v, i) => i.t("the market's volume in the last fifteen minutes is {share} its usual", { share: share(v, i) })
 }
 
 /** A figure in words, with its value, in a language: English unless handed another. */

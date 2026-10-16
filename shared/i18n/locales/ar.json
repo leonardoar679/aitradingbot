@@ -1836,5 +1836,17 @@
   "Live trading is only available on Binance and Bitget.": "التداول الحقيقي متاح فقط على Binance و Bitget.",
   "A live ladder or series (DCA, TWAP, Grid) is Binance-only; on Bitget an Order or a Position can go live.": "السلّم أو السلسلة الحقيقية (DCA، TWAP، الشبكة) على Binance فقط؛ على Bitget يمكن أن يصبح الأمر أو المركز حقيقياً.",
   "Add a verified {exchange} API key on Connections first.": "أضف أولًا مفتاح {exchange} API مُتحقَّقًا منه في الاتصالات.",
-  "This will immediately place a real BUY market order for {amount} {asset} of {pair} on {exchange}, then watch it for take-profit/stop-loss/trailing-stop/time-limit and exit automatically with a real sell — no per-exit confirmation. Stop on Strategies › Execution force-exits it manually at any time.": "سيضع هذا فورًا أمر شراء حقيقيًا بسعر السوق بمبلغ {amount} {asset} على {pair} في {exchange}، ثم يراقب جني الأرباح/وقف الخسارة/وقف الخسارة المتحرك/الحد الزمني ويخرج تلقائيًا ببيع حقيقي — دون تأكيد لكل خروج. ويفرض زر الإيقاف في الاستراتيجيات › التنفيذ الخروجَ يدويًا في أي وقت."
+  "This will immediately place a real BUY market order for {amount} {asset} of {pair} on {exchange}, then watch it for take-profit/stop-loss/trailing-stop/time-limit and exit automatically with a real sell — no per-exit confirmation. Stop on Strategies › Execution force-exits it manually at any time.": "سيضع هذا فورًا أمر شراء حقيقيًا بسعر السوق بمبلغ {amount} {asset} على {pair} في {exchange}، ثم يراقب جني الأرباح/وقف الخسارة/وقف الخسارة المتحرك/الحد الزمني ويخرج تلقائيًا ببيع حقيقي — دون تأكيد لكل خروج. ويفرض زر الإيقاف في الاستراتيجيات › التنفيذ الخروجَ يدويًا في أي وقت.",
+  "the market's state ({state}) widened it ×{factor}: on the weeks tested, in that state it held {before} of the time, widened {after}": "حالة السوق ({state}) وسّعت النطاق ×{factor}: في الأسابيع المختبرة، في تلك الحالة صدق النطاق في {before} من المرات، وبعد التوسيع {after}",
+  "normal@@market state": "طبيعية",
+  "before a scheduled release": "قبل إصدار مجدول",
+  "after a sharp move of Bitcoin's": "بعد حركة حادة لبيتكوين",
+  "in a trending move of Bitcoin's": "في حركة اتجاهية لبيتكوين",
+  "in a liquidation cascade": "في سلسلة تصفيات",
+  "recovering from a shock": "في طور التعافي من صدمة",
+  "Bitcoin's last fifteen minutes moved {move}": "تحركت الدقائق الخمس عشرة الأخيرة لبيتكوين {move}",
+  "ether's last fifteen minutes moved {move}": "تحركت الدقائق الخمس عشرة الأخيرة لإيثر {move}",
+  "Bitcoin's last fifteen minutes ran {move} against the fifteen before": "الدقائق الخمس عشرة الأخيرة لبيتكوين مقابل الخمس عشرة السابقة {move}",
+  "{share} of the coins rose over the last fifteen minutes": "ارتفع {share} من العملات في الدقائق الخمس عشرة الأخيرة",
+  "the market's volume in the last fifteen minutes is {share} its usual": "حجم السوق في الدقائق الخمس عشرة الأخيرة {share} من معتاده"
 }

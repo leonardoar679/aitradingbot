@@ -166,6 +166,26 @@ describe('a row', () => {
     expect(btc[FEATURE_NAMES.indexOf('beta_btc')]).toBe(1)
     expect(btc[FEATURE_NAMES.indexOf('idio_1h')]).toBe(0)
     expect(btc[FEATURE_NAMES.indexOf('class_btc')]).toBe(1)
+    // The market's last fifteen minutes on every row (V7.1 Stage 11): Bitcoin's own r_15m is the market's
+    // btc_r_15m, on its row and on any other's; the breadth a share; the volume against a ninety-sixth of
+    // the market's day.
+    expect(btc[FEATURE_NAMES.indexOf('btc_r_15m')]).toBe(btc[FEATURE_NAMES.indexOf('r_15m')])
+    expect(row[FEATURE_NAMES.indexOf('btc_r_15m')]).toBe(btc[FEATURE_NAMES.indexOf('r_15m')])
+    const btcBars = MARKET.get('BTCUSDT')!.m5
+    expect(btc[FEATURE_NAMES.indexOf('btc_acc_15m')]).toBeCloseTo(Math.log(btcBars[index].close / btcBars[index - 3].close) - Math.log(btcBars[index - 3].close / btcBars[index - 6].close), 12)
+    expect(row[FEATURE_NAMES.indexOf('eth_r_15m')]).toBe(rowAt(MARKET, 'ETHUSDT', t)![FEATURE_NAMES.indexOf('r_15m')])
+    const breadth = row[FEATURE_NAMES.indexOf('breadth_15m')]
+    expect(breadth * SYMBOLS.length).toBeCloseTo(Math.round(breadth * SYMBOLS.length), 12)
+    let market15 = 0
+    let marketDay = 0
+    for (const symbol of SYMBOLS) {
+      const bars = MARKET.get(symbol)!.m5
+      for (let k = index - 287; k <= index; k++) {
+        marketDay += bars[k].quoteVolume
+        if (k > index - 3) market15 += bars[k].quoteVolume
+      }
+    }
+    expect(row[FEATURE_NAMES.indexOf('market_vol_acc')]).toBeCloseTo(market15 / (marketDay / 96), 10)
   })
 
   it('needs the day before T whole, and bears a gap further back', () => {
@@ -247,7 +267,7 @@ describe('a row', () => {
 })
 
 describe('the cross-section (§16)', () => {
-  const quick = (r1h: number, r24h: number, quoteVolume24h = 1e8, rv24h = 0.03, r4h = r1h): PairQuick => ({ close: 1, r1h, r4h, r24h, quoteVolume24h, rv24h })
+  const quick = (r1h: number, r24h: number, quoteVolume24h = 1e8, rv24h = 0.03, r4h = r1h, r15m = r1h / 4, quoteVolume15m = quoteVolume24h / 96): PairQuick => ({ close: 1, r15m, r15mBefore: r15m / 2, r1h, r4h, r24h, quoteVolume15m, quoteVolume24h, rv24h })
 
   it('reads the breadth, the alts against Bitcoin, and the regime by the research rule', () => {
     const market = new Map<string, PairQuick>([
@@ -256,7 +276,8 @@ describe('the cross-section (§16)', () => {
       ['ETHUSDT', quick(-0.002, 0.02, 1e8, 0.03, -0.03)],
       ['SOLUSDT', quick(0.003, 0.05)],
       ['XRPUSDT', quick(-0.001, -0.01)],
-      ['ADAUSDT', quick(0.002, 0.03)]
+      // Up over the hour, down over its last fifteen minutes.
+      ['ADAUSDT', quick(0.002, 0.03, 1e8, 0.03, 0.002, -0.001)]
     ])
     const cross = crossSectionAt(market)!
     expect(cross.breadth1h).toBeCloseTo(3 / 5)
@@ -267,6 +288,17 @@ describe('the cross-section (§16)', () => {
     expect(cross.regime).toBe(marketRegimeOf({ h1: pct(0.001), h4: pct(0.02), h24: pct(0.01) }))
     expect(cross.regime).toBe('bull')
     expect(crossSectionAt(new Map([['SOLUSDT', quick(0, 0)]]))).toBeNull()
+    // The market's last fifteen minutes (V7.1 Stage 11): Bitcoin's and ether's, Bitcoin's against the
+    // fifteen before, the breadth, and the market's volume against a ninety-sixth of its day.
+    expect(cross.btc.r15m).toBeCloseTo(0.001 / 4, 12)
+    expect(cross.btc.acc15m).toBeCloseTo(0.001 / 4 - 0.001 / 8, 12)
+    expect(cross.eth.r15m).toBeCloseTo(-0.002 / 4, 12)
+    expect(cross.breadth15m).toBeCloseTo(2 / 5)
+    expect(cross.volAcc15m).toBeCloseTo(1, 12)
+    const busy = new Map(market)
+    busy.set('SOLUSDT', quick(0.003, 0.05, 1e8, 0.03, 0.003, 0.001, (1e8 / 96) * 11))
+    // One pair's fifteen minutes at eleven times its usual among five: the market's at three times.
+    expect(crossSectionAt(busy)!.volAcc15m).toBeCloseTo(3, 12)
   })
 
   it('classes the pairs by their day\'s volume and their volatility, Bitcoin and ether their own (§100)', () => {

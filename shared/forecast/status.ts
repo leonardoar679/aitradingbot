@@ -44,4 +44,7 @@ export interface EngineState {
   /** Horizons of recorded forecasts still owed an outcome. */
   pending: number
   lastError: string | null
+  /** The market's shock state as last read (V7.1 Stage 11; shared/forecast/marketShock.ts): at the last
+   * close, or from Bitcoin's live minutes since; null before a pass. Absent on a state from before. */
+  market?: { state: string; btc15: number; btc1h: number; breadth15: number; volAcc15: number; readAt: number } | null
 }

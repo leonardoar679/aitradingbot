@@ -7,8 +7,9 @@ import type { IsotonicModel } from './ml/isotonic'
 import { QUANTILE_LEVELS, meanPinball } from './ml/quantile'
 import { excursionCalibrationOf, type ExcursionCalibration, type ExcursionRow, type FirstTouchTable } from './firstTouch'
 import { DIRECTION_MODELS, type DirectionModelId, type ForecastModelId } from './models'
-import { oosDirection, oosExcursion, oosQuantiles, type OosRecord } from './oosRecord'
+import { oosDirection, oosExcursion, oosQuantiles, oosState, type OosRecord } from './oosRecord'
 import { DEGRADATION_LINES, directionChecklist, type CheckLine } from './promotion'
+import { marketShockRulesOf, type MarketShockRow, type MarketShockRules } from './marketShock'
 import { noShockRecord, shockRuleOf, type ShockRule } from './shock'
 import { usualMove } from './targets'
 import type { Promotion } from './training'
@@ -49,6 +50,11 @@ import type { Promotion } from './training'
 // AND THE PATH (V7.1 Stage 3; shared/forecast/firstTouch.ts): each horizon's excursion levels scaled by
 // what the tested paths did, and the first-touch table from the walk forward's bars -- when a target is
 // reached, read at a target's distance.
+//
+// AND THE MARKET'S SHOCK STATES (V7.1 Stage 11; shared/forecast/marketShock.ts): where the record keeps
+// each row's state, a widening fitted per state the way V6.1's was, and the horizon's choice between V6.1's
+// one rule and the states' rules by the pinball loss on every row either would touch. A record from before
+// the states holds none: the line's rule decides, as before.
 
 /** run-calibration-v5 (V7.1 Stage 3): each horizon carries its excursion calibration and the run its
  * first-touch table. An older file is made again from its record at the next start (without what the
@@ -143,6 +149,9 @@ export interface HorizonCalibration {
   variants: Record<VariantId, VariantCalibration>
   /** The rule on Bitcoin's sharp moves (V6.1); absent on a calibration made before it. */
   shock?: ShockRule
+  /** The rules by market shock state and the horizon's choice among the widenings (V7.1 Stage 11); absent
+   * on a record holding no states, where the line's rule decides. */
+  marketShock?: MarketShockRules
   /** The direction models' verdicts (V7.1 Stage 2); absent on a record holding no readings of theirs. */
   direction?: DirectionReport
   /** The excursion levels' calibration (V7.1 Stage 3); absent on a record holding no readings of theirs,
@@ -506,11 +515,18 @@ export function buildRunCalibration(records: ReadonlyMap<Horizon, OosRecord>, pr
       if (variant === 'v2') shown = made.scored
     }
     const btc15 = record.btc15
-    const shock =
-      btc15 === undefined ? noShockRecord() : shockRuleOf(shown.map((entry) => ({ z: entry.z, q: entry.quantiles, week: entry.week, t: record.time[entry.at!], btc15: btc15[entry.at!] })))
+    const shockRows = btc15 === undefined ? [] : shown.map((entry) => ({ z: entry.z, q: entry.quantiles, week: entry.week, t: record.time[entry.at!], btc15: btc15[entry.at!], at: entry.at! }))
+    const shock = btc15 === undefined ? noShockRecord() : shockRuleOf(shockRows)
+    // The rules by market state (V7.1 Stage 11), from the rows whose state the record read.
+    const stateRows: MarketShockRow[] = []
+    for (const row of shockRows) {
+      const state = oosState(record, row.at)
+      if (state !== undefined) stateRows.push({ ...row, state })
+    }
+    const marketShock = record.state === undefined || stateRows.length === 0 ? undefined : marketShockRulesOf(stateRows, shock)
     const direction = directionReportOf(rows, shown)
     const excursion = excursionCalibrationOf(rows.filter((row) => row.excursion !== undefined).map((row) => row.excursion!))
-    horizons[horizon] = { horizon, rows: rows.length, variants, shock, ...(direction === null ? {} : { direction }), ...(excursion === null ? {} : { excursion }) }
+    horizons[horizon] = { horizon, rows: rows.length, variants, shock, ...(marketShock === undefined ? {} : { marketShock }), ...(direction === null ? {} : { direction }), ...(excursion === null ? {} : { excursion }) }
   }
   return { version: RUN_CALIBRATION_VERSION, runId, horizons, ...(touch === undefined ? {} : { touch }) }
 }

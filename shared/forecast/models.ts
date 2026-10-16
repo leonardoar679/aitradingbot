@@ -45,9 +45,10 @@ import { usualMove } from './targets'
 // stays above half the time, eight times in ten and nine. What each level means out of sample is settled
 // on the walk forward (shared/forecast/firstTouch.ts, excursionCalibrationOf), never here.
 
-/** models-v3 (V7.1 Stage 3): every horizon's file carries its direction and excursion models; an older
- * file is refused and the run fitted again. */
-export const MODELS_VERSION = 'models-v3'
+/** models-v4 (V7.1 Stage 11): every model fitted on the features-v2 rows, which carry the market's last
+ * fifteen minutes (shared/forecast/features.ts); a file from before is refused and the run fitted again.
+ * models-v3 (V7.1 Stage 3) brought the direction and excursion models. */
+export const MODELS_VERSION = 'models-v4'
 
 /** The shares of outcomes the excursion levels are meant to hold: the high stays under the level, the low
  * above it, this often. */

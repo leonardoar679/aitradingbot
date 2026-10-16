@@ -15,6 +15,7 @@ import { walkForwardLab, type StoryMarkInput } from '../../shared/forecast/labWa
 import { decodeOos, encodeOos, OOS_VERSION, type OosRecord } from '../../shared/forecast/oosRecord'
 import { buildPanel, type Panel } from '../../shared/forecast/panel'
 import { buildRunCalibration, type RunCalibration } from '../../shared/forecast/runCalibration'
+import { btcTimelineOf, marketShockByTime, shockMomentsOf, STATE_UNKNOWN, MARKET_SHOCK_STATES } from '../../shared/forecast/marketShock'
 import { btc15ByTime } from '../../shared/forecast/shock'
 import { promotionsOf, type Promotion } from '../../shared/forecast/training'
 import { finalSplit, foldRows, lastFoldScores, planFolds, rowsFor, scoreRows, type Fold, type ModelScore } from '../../shared/forecast/walkForward'
@@ -199,6 +200,10 @@ async function folds(request: Extract<WorkerRequest, { task: 'folds' }>): Promis
   // Bitcoin's last fifteen minutes at each moment, kept with every row (V6.1): what the calibration's rule
   // on Bitcoin's sharp moves is fitted on (shared/forecast/shock.ts).
   const btc15 = btc15ByTime(panel)
+  // The market's shock state at each moment (V7.1 Stage 11): the shock moments read from Bitcoin's bars at
+  // every five-minute close over the span, the state from its row at each moment of the grid.
+  const btc = market.get('BTCUSDT')!
+  const states = marketShockByTime(panel, shockMomentsOf(btcTimelineOf(btc, first - 5 * 3600, last)))
   let step = 0
   for (const [hIndex, horizon] of HORIZONS.entries()) {
     const rows = rowsFor(panel, horizon)
@@ -250,7 +255,12 @@ async function folds(request: Extract<WorkerRequest, { task: 'folds' }>): Promis
       directionModels: DIRECTION_MODELS,
       direction: Float32Array.from(kept.flatMap(({ entry }) => DIRECTION_MODELS.map((model) => entry.direction[model]))),
       // The excursion models' levels at the row (V7.1 Stage 3): the highs, then the lows.
-      excursion: Float32Array.from(kept.flatMap(({ entry }) => [...entry.excursion.high, ...entry.excursion.low]))
+      excursion: Float32Array.from(kept.flatMap(({ entry }) => [...entry.excursion.high, ...entry.excursion.low])),
+      // The market's state at the row's moment (V7.1 Stage 11), by its index; unknown where Bitcoin had no row.
+      state: Uint8Array.from(kept, ({ entry }) => {
+        const state = states.get(panel.time[entry.row])
+        return state === undefined ? STATE_UNKNOWN : MARKET_SHOCK_STATES.indexOf(state)
+      })
     }
     await writeFile(join(dir, `oos-${horizon}.bin`), encodeOos(record))
     records.set(horizon, record)

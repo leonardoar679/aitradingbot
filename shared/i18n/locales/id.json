@@ -1836,5 +1836,17 @@
   "Live trading is only available on Binance and Bitget.": "Perdagangan nyata hanya tersedia di Binance dan Bitget.",
   "A live ladder or series (DCA, TWAP, Grid) is Binance-only; on Bitget an Order or a Position can go live.": "Tangga atau rangkaian nyata (DCA, TWAP, Grid) hanya untuk Binance; di Bitget sebuah Order atau Posisi bisa nyata.",
   "Add a verified {exchange} API key on Connections first.": "Tambahkan kunci API {exchange} terverifikasi di Koneksi lebih dulu.",
-  "This will immediately place a real BUY market order for {amount} {asset} of {pair} on {exchange}, then watch it for take-profit/stop-loss/trailing-stop/time-limit and exit automatically with a real sell — no per-exit confirmation. Stop on Strategies › Execution force-exits it manually at any time.": "Ini akan segera menempatkan order BELI pasar nyata sebesar {amount} {asset} untuk {pair} di {exchange}, lalu memantau take profit/stop loss/trailing stop/batas waktu dan keluar otomatis dengan penjualan nyata — tanpa konfirmasi per keluar. Hentikan di Strategi › Eksekusi untuk memaksa keluar secara manual kapan saja."
+  "This will immediately place a real BUY market order for {amount} {asset} of {pair} on {exchange}, then watch it for take-profit/stop-loss/trailing-stop/time-limit and exit automatically with a real sell — no per-exit confirmation. Stop on Strategies › Execution force-exits it manually at any time.": "Ini akan segera menempatkan order BELI pasar nyata sebesar {amount} {asset} untuk {pair} di {exchange}, lalu memantau take profit/stop loss/trailing stop/batas waktu dan keluar otomatis dengan penjualan nyata — tanpa konfirmasi per keluar. Hentikan di Strategi › Eksekusi untuk memaksa keluar secara manual kapan saja.",
+  "the market's state ({state}) widened it ×{factor}: on the weeks tested, in that state it held {before} of the time, widened {after}": "keadaan pasar ({state}) melebarkannya ×{factor}: pada minggu-minggu yang diuji, dalam keadaan itu rentang ini tepat {before} dari waktu, setelah dilebarkan {after}",
+  "normal@@market state": "normal",
+  "before a scheduled release": "sebelum rilis terjadwal",
+  "after a sharp move of Bitcoin's": "setelah pergerakan tajam Bitcoin",
+  "in a trending move of Bitcoin's": "dalam pergerakan tren Bitcoin",
+  "in a liquidation cascade": "dalam kaskade likuidasi",
+  "recovering from a shock": "pulih dari guncangan",
+  "Bitcoin's last fifteen minutes moved {move}": "lima belas menit terakhir Bitcoin bergerak {move}",
+  "ether's last fifteen minutes moved {move}": "lima belas menit terakhir ether bergerak {move}",
+  "Bitcoin's last fifteen minutes ran {move} against the fifteen before": "lima belas menit terakhir Bitcoin terhadap lima belas menit sebelumnya {move}",
+  "{share} of the coins rose over the last fifteen minutes": "{share} dari koin naik dalam lima belas menit terakhir",
+  "the market's volume in the last fifteen minutes is {share} its usual": "volume pasar dalam lima belas menit terakhir {share} dari biasanya"
 }

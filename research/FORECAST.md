@@ -274,6 +274,39 @@ now turned on 0.0002-0.0004 of pinball at three fits in a row (refused, adopted,
 should carry a tolerance there is the user's call. The 4-hour and 24-hour outcomes were not due before the
 run closed.
 
+## The market's shock states (V7.1 Stage 11, 16 October 2026)
+
+V6.1 widens every range after one thing, Bitcoin's last fifteen minutes past 2.5 of its usual moves. The
+rehearsal of 15 October showed its limit: a range sized for a usual hour does not hold an hour in which
+Bitcoin rises 2%, and the forecasts made into the rise held 10-18% even widened, those made once it was
+under way 43-72%. A market has more states than calm and that one moment. Stage 11 tells six apart from
+what is known at the moment (`shared/forecast/marketShock.ts`), with lines fixed before anything was
+measured by them: NORMAL; PRE_EVENT (within the hour before a scheduled release, Stage 12's calendar);
+POST_EVENT_SHOCK (the sharp fifteen minutes, a break from forty-five minutes that were not a trend);
+TRENDING_SHOCK (the same sharp fifteen minutes with the forty-five before them already at or past 2.5 of
+their usual moves the same way); LIQUIDATION_SHOCK (a sharp fall, the breadth of the last fifteen minutes at
+or under a fifth, the market's volume at three times its usual or more); RECOVERY (within four hours after a
+shock, Bitcoin's hour at least one usual move against it). The state goes on every forecast and every record
+line, and each walk forward's record keeps it for every hour (`forecast-oos-v5`).
+
+Three things are then measured, all by the same cross-fitted test as V6.1's and by `research/rangeLag.ts`
+on the same record:
+
+- **the models alone, shock-aware**: the rows gained five figures (`features-v2`: Bitcoin's and ether's last
+  fifteen minutes, Bitcoin's fifteen against the fifteen before, the breadth of the last fifteen minutes, the
+  market's volume against its usual), so a refit's models see a shock as it begins -- "none" in the
+  calibration's choice;
+- **V6.1's one rule** on top of them, as before;
+- **the states' rules**: a widening fitted per state exactly as V6.1's, the V6.1 rule becoming
+  POST_EVENT_SHOCK's, each adopted by its own test; the horizon takes the states' rules or the line's by the
+  lower pinball loss on every hour either would touch, or neither where neither passed.
+
+Two more reasons make a forecast again between closes: `spread` (the live spread at three times the pair's
+usual) and `direction` (the live price crossed the lead horizon's expected price against the call, once per
+crossing). What each refit chose, and how the forecasts in each state held live, is on the Forecast Lab's
+**The market's shock states** card and in a run's report; the figures of the first fits and runs on the new
+rows are Stage 15's to report.
+
 ## The models' calls and their cost
 
 | Run | calls | answered | valid | latency, median / 95th | spent |

@@ -14,7 +14,8 @@ import { ENGLISH, type I18n } from '../i18n/translate'
 import { RUN_CALIBRATION_VERSION, VARIANTS, cellOf, directionSourceOf, type ForecastVariant, type PUpSource, type RunCalibration } from './runCalibration'
 import { FIRST_TOUCH, arrivalOf, type TouchWindow } from './firstTouch'
 import { EXCURSION_LEVELS } from './models'
-import { shockFor, stretchShock } from './shock'
+import { marketWidening, type MarketShockState } from './marketShock'
+import { stretchShock } from './shock'
 import { usualMove } from './targets'
 
 // THE PREDICTION (the V6 document, §5-10, §14, §25 and §59-61; V6 Stage 6, 13 October 2026): what may
@@ -49,6 +50,8 @@ import { usualMove } from './targets'
 // - BITCOIN'S SHARP MOVE widens it (V6.1, shared/forecast/shock.ts): at a horizon whose rule the walk
 //   forward adopted, with Bitcoin's last fifteen minutes at or past 2.5 usual moves, the outer and inner
 //   pairs of levels are stretched about the median by the rule's factors. Calm moments are untouched.
+//   Since V7.1 Stage 11 (shared/forecast/marketShock.ts) a horizon that chose the states' rules widens by
+//   the rule of the market's state at the moment instead, where that state's rule was adopted.
 // - WHERE P(UP) COMES FROM (V7.1 Stage 2; shared/forecast/runCalibration.ts, directionSourceOf): the cell's
 //   skilled reading with the highest honest skill -- the distribution's, or a promoted direction model's
 //   mapped by its own map -- and the base rate where none is skilled; the news's own where its skill has
@@ -61,9 +64,10 @@ import { usualMove } from './targets'
 //   four, and the typical time when it is, from the first-touch table; UNLIKELY under a fixed chance
 //   within the horizon, and then no time is said.
 
-/** prediction-v4 (V7.1 Stage 3): each horizon carries its likely high and low and when its expected price
- * is reached. */
-export const PREDICTION_VERSION = 'prediction-v4'
+/** prediction-v5 (V7.1 Stage 11): the market's shock state at the forecast's moment, and a widening that
+ * says which state's rule made it. prediction-v4 (V7.1 Stage 3): each horizon carries its likely high and
+ * low and when its expected price is reached. */
+export const PREDICTION_VERSION = 'prediction-v5'
 
 export const PREDICTION_LINES = {
   /** The half-spread, in percent, the training closes already carry. */
@@ -132,8 +136,9 @@ export interface ForecastRange {
   spreadStretch: number
   /** Where Bitcoin's sharp move widened it (V6.1): Bitcoin's last fifteen minutes in its usual moves, the
    * outer and inner factors, and the share of the walk forward's moments past the line whose 80% range held,
-   * as forecast and widened (cross-fitted); null where it did not, absent on a forecast made before. */
-  shock?: { btc15: number; k80: number; k50: number; held: { before: number; after: number } | null } | null
+   * as forecast and widened (cross-fitted); null where it did not, absent on a forecast made before. Since
+   * V7.1 Stage 11, with the market state whose rule widened it where a state's did (null where the line's). */
+  shock?: { btc15: number; k80: number; k50: number; held: { before: number; after: number } | null; state?: MarketShockState | null } | null
   /** The path's likely high and low (V7.1 Stage 3): at each of EXCURSION_LEVELS, the move from the close
    * the highest high stays under and the lowest low stays above that often, in percent, scaled by the
    * walk forward's calibration; and how often the tested paths stayed inside the scaled levels, on weeks
@@ -177,6 +182,9 @@ export interface PricePrediction {
   /** The coin's last hour in units of its usual move, its volume against its usual hour, and the share
    * of coins that rose in the hour, at that close; null where not read. */
   market: { z1h: number; breadth1h: number; volRatio1h: number | null; atr5mPct?: number | null } | null
+  /** The market's shock state at the forecast's moment (V7.1 Stage 11); null where it could not be read,
+   * absent on a forecast made before. */
+  marketState?: MarketShockState | null
   versions: { prediction: string; models: string; features: string; ensemble: string; calibration: string; runCalibration: string; news: string; quality: string; run: string; foldsRun: string }
 }
 
@@ -219,6 +227,8 @@ export interface PredictionInput {
   drivers?: Partial<Record<Horizon, RangeDriver[]>>
   /** Bitcoin's last fifteen minutes in its usual moves: the close's, or the stream's where fresher (V6.1). */
   btc15?: number | null
+  /** The market's shock state at the moment (V7.1 Stage 11): the close's, or the stream's where fresher. */
+  marketState?: MarketShockState | null
   /** Each horizon's direction models' raw chances of up at the close (V7.1 Stage 2, predictDirection). */
   direction?: Partial<Record<Horizon, Partial<Record<DirectionModelId, number>>>>
   /** Each horizon's excursion levels at the close, in usual moves (V7.1 Stage 3, predictExcursion). */
@@ -313,8 +323,8 @@ function rangeOf(input: PredictionInput, horizon: Horizon): ForecastRange | null
   const excessLog = Math.max(0, (input.spreadPct ?? 0) / 2 - PREDICTION_LINES.usualHalfSpreadPct) / 100
   const widened = widenAround(shown.quantiles, excessLog / usual)
   const spreadStretch = halfWidth(widened) / halfWidth(shown.quantiles)
-  // Bitcoin's sharp move (V6.1): an adopted horizon past the line, stretched about its median.
-  const shock = shockFor(calibration.shock, input.btc15)
+  // Bitcoin's sharp move (V6.1), or the market's state (V7.1 Stage 11): an adopted rule, stretched about its median.
+  const shock = marketWidening(calibration, input.btc15, input.marketState)
   const final = shock === null ? widened : stretchShock(widened, shock.k80, shock.k50)
   const logs = final.map((q) => q * usual)
   const quantilesPct = logs.map(pctOf)
@@ -416,15 +426,7 @@ function rangeOf(input: PredictionInput, horizon: Horizon): ForecastRange | null
     newsShiftLogPct: (logs[P50] - v2.quantiles[P50] * usual) * 100,
     news,
     spreadStretch,
-    shock:
-      shock === null
-        ? null
-        : {
-            btc15: input.btc15 as number,
-            k80: shock.k80,
-            k50: shock.k50,
-            held: calibration.shock?.before && calibration.shock.after ? { before: calibration.shock.before.in80, after: calibration.shock.after.in80 } : null
-          },
+    shock: shock === null ? null : { btc15: input.btc15 ?? Number.NaN, k80: shock.k80, k50: shock.k50, held: shock.held, state: shock.state },
     rangeDrivers: input.drivers?.[horizon] ?? [],
     variants
   }
@@ -477,6 +479,7 @@ export function makePrediction(input: PredictionInput): PricePrediction | null {
     regime: input.regime,
     barTime: input.barTime,
     market: input.market === undefined ? null : { z1h: input.market.z1h, breadth1h: input.market.breadth1h, volRatio1h: input.market.volRatio1h ?? null, atr5mPct: input.market.atr5mPct ?? null },
+    marketState: input.marketState ?? null,
     versions: {
       prediction: PREDICTION_VERSION,
       models: MODELS_VERSION,

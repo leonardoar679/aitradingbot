@@ -1,4 +1,5 @@
 import { HORIZONS, type Horizon } from './features'
+import { MARKET_SHOCK_STATES, STATE_UNKNOWN, type MarketShockState } from './marketShock'
 import { QUANTILE_LEVELS } from './ml/quantile'
 import { DIRECTION_MODELS, EXCURSION_LEVELS, FORECAST_MODELS, type DirectionModelId, type ForecastModelId } from './models'
 
@@ -23,8 +24,13 @@ import { DIRECTION_MODELS, EXCURSION_LEVELS, FORECAST_MODELS, type DirectionMode
 // highs the path stays under and the lows it stays above at each of EXCURSION_LEVELS, in usual moves, for
 // the calibration to scale and judge against the path's own best and worst. A v3 record still reads,
 // without them.
+//
+// forecast-oos-v5 (V7.1 Stage 11) adds the market's shock state at each row's moment (shared/forecast/
+// marketShock.ts), a byte, for the calibration's rules by state. A v4 record still reads, without it: the
+// line's rule alone decides from it, as before.
 
-export const OOS_VERSION = 'forecast-oos-v4'
+export const OOS_VERSION = 'forecast-oos-v5'
+const OOS_V4 = 'forecast-oos-v4'
 const OOS_V3 = 'forecast-oos-v3'
 const OOS_V2 = 'forecast-oos-v2'
 const OOS_V1 = 'forecast-oos-v1'
@@ -61,9 +67,12 @@ export interface OosRecord {
   /** rows x EXCURSION_WIDTH: the excursion models' highs then lows at each level, in usual moves (V7.1
    * Stage 3). Absent on a record from before them. */
   excursion?: Float32Array
+  /** The market's shock state at each row's moment, by its index in MARKET_SHOCK_STATES, STATE_UNKNOWN where
+   * it could not be read (V7.1 Stage 11). Absent on a record from before it. */
+  state?: Uint8Array
 }
 
-type Column = 'time' | 'pair' | 'cls' | 'regime' | 'fold' | 'z' | 'rv24h' | 'y' | 'best' | 'worst' | 'quantiles' | 'btc15' | 'direction' | 'excursion'
+type Column = 'time' | 'pair' | 'cls' | 'regime' | 'fold' | 'z' | 'rv24h' | 'y' | 'best' | 'worst' | 'quantiles' | 'btc15' | 'direction' | 'excursion' | 'state'
 interface Shape {
   models: readonly unknown[]
   directionModels: readonly unknown[]
@@ -84,7 +93,8 @@ const COLUMNS_V1: ColumnSpec[] = [
 ]
 const COLUMNS_V2: ColumnSpec[] = [...COLUMNS_V1, { name: 'btc15', type: 'f32', width: () => 1 }]
 const COLUMNS_V3: ColumnSpec[] = [...COLUMNS_V2, { name: 'direction', type: 'f32', width: (shape) => shape.directionModels.length }]
-const COLUMNS: ColumnSpec[] = [...COLUMNS_V3, { name: 'excursion', type: 'f32', width: () => EXCURSION_WIDTH }]
+const COLUMNS_V4: ColumnSpec[] = [...COLUMNS_V3, { name: 'excursion', type: 'f32', width: () => EXCURSION_WIDTH }]
+const COLUMNS: ColumnSpec[] = [...COLUMNS_V4, { name: 'state', type: 'u8', width: () => 1 }]
 const BYTES = { u32: 4, u16: 2, u8: 1, f32: 4 } as const
 const align = (offset: number): number => Math.ceil(offset / 8) * 8
 
@@ -110,7 +120,9 @@ export function encodeOos(record: OosRecord): Uint8Array {
           ? (record.direction ?? new Float32Array(length).fill(Number.NaN))
           : column.name === 'excursion'
             ? (record.excursion ?? new Float32Array(length).fill(Number.NaN))
-            : record[column.name]
+            : column.name === 'state'
+              ? (record.state ?? new Uint8Array(record.rows).fill(STATE_UNKNOWN))
+              : record[column.name]
     bytes.set(new Uint8Array(values.buffer, values.byteOffset, length * BYTES[column.type]), at)
   }
   return bytes
@@ -128,8 +140,8 @@ export function decodeOos(bytes: Uint8Array): OosRecord | null {
     return null
   }
   const models = header.models
-  const columns = header.version === OOS_VERSION ? COLUMNS : header.version === OOS_V3 ? COLUMNS_V3 : header.version === OOS_V2 ? COLUMNS_V2 : header.version === OOS_V1 ? COLUMNS_V1 : null
-  const directionModels = header.version === OOS_VERSION || header.version === OOS_V3 ? header.directionModels : []
+  const columns = header.version === OOS_VERSION ? COLUMNS : header.version === OOS_V4 ? COLUMNS_V4 : header.version === OOS_V3 ? COLUMNS_V3 : header.version === OOS_V2 ? COLUMNS_V2 : header.version === OOS_V1 ? COLUMNS_V1 : null
+  const directionModels = header.version === OOS_VERSION || header.version === OOS_V4 || header.version === OOS_V3 ? header.directionModels : []
   if (
     columns === null ||
     !HORIZONS.includes(header.horizon as Horizon) ||
@@ -173,8 +185,16 @@ export function decodeOos(bytes: Uint8Array): OosRecord | null {
     quantiles: out.quantiles as Float32Array,
     ...(out.btc15 === undefined ? {} : { btc15: out.btc15 as Float32Array }),
     ...(out.direction === undefined || shape.directionModels.length === 0 ? {} : { directionModels: shape.directionModels as DirectionModelId[], direction: out.direction as Float32Array }),
-    ...(out.excursion === undefined ? {} : { excursion: out.excursion as Float32Array })
+    ...(out.excursion === undefined ? {} : { excursion: out.excursion as Float32Array }),
+    ...(out.state === undefined ? {} : { state: out.state as Uint8Array })
   }
+}
+
+/** One row's market shock state (V7.1 Stage 11); undefined where the record holds none, or the row's could
+ * not be read. */
+export function oosState(record: OosRecord, row: number): MarketShockState | undefined {
+  if (record.state === undefined) return undefined
+  return MARKET_SHOCK_STATES[record.state[row]]
 }
 
 /** One row's excursion levels, in usual moves: the highs at each level, then the lows; undefined where the

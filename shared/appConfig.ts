@@ -69,6 +69,7 @@ import { NEWS_FEED_VERSION } from './newsFeed'
 import { PREDICTION_LINES, PREDICTION_VERSION } from './forecast/prediction'
 import { RELIABILITY_LINES } from './forecast/reliability'
 import { SHOCK_LINES, SHOCK_VERSION } from './forecast/shock'
+import { MARKET_SHOCK_LINES, MARKET_SHOCK_STATES, MARKET_SHOCK_VERSION } from './forecast/marketShock'
 import { RUN_CALIBRATION_VERSION } from './forecast/runCalibration'
 import { DEGRADATION_LINES, DEGRADED_THREAD_SECONDS, DIRECTION_PROMOTION_LINES, PROMOTION_LINES } from './forecast/promotion'
 import { LOGISTIC_FIT } from './forecast/ml/logistic'
@@ -177,6 +178,8 @@ export const ENGINE_CONSTANTS = {
     reliability: RELIABILITY_LINES,
     prediction: { version: PREDICTION_VERSION, ...PREDICTION_LINES },
     shock: { version: SHOCK_VERSION, ...SHOCK_LINES },
+    // The market's shock states (V7.1 Stage 11): their lines, fixed before anything was measured by them.
+    marketShock: { version: MARKET_SHOCK_VERSION, states: MARKET_SHOCK_STATES, ...MARKET_SHOCK_LINES },
     refresh: REFRESH_LINES,
     outcome: { version: OUTCOME_VERSION, ...OUTCOME_LINES },
     record: { version: FORECAST_RECORD_VERSION, days: FORECAST_RECORD_DAYS },

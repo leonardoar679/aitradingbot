@@ -5,6 +5,7 @@ import { buttonStyle, cellStyle, headCellStyle, inputStyle, noteStyle } from '..
 import { HORIZONS, type Horizon, type PairClass } from '../../shared/forecast/features'
 import { FIRST_TOUCH } from '../../shared/forecast/firstTouch'
 import { LAB_EVENTS, type LabEvent } from '../../shared/forecast/lab'
+import { MARKET_SHOCK_LINES } from '../../shared/forecast/marketShock'
 import { CLASS_LINES } from '../../shared/forecast/opportunityClass'
 import type { ForecastLabView } from '../../shared/forecast/labView'
 import { describeError } from '../utils/ipcError'
@@ -24,6 +25,7 @@ import {
   eventsTable,
   leaderTable,
   liveTable,
+  marketShockTable,
   performanceTable,
   pUpCurveTable,
   shockTable,
@@ -266,6 +268,15 @@ export function ForecastLabPage(): React.JSX.Element {
             Where Bitcoin's last fifteen minutes reach {view.shock.hour1?.line ?? 2.5} of its usual moves, a horizon's ranges are widened about their median -- the 80% range by one factor, the 50% by another -- fitted on the walk forward's moments past the line, and only at a horizon where, each week widened by factors from the other weeks alone, the 80% range came nearer 80% and the pinball loss was no worse. Calm moments are never touched. Live: the forecasts it widened, and how their 80% ranges held widened and by V2's own levels.
           </p>
           <LabTable table={shockTable(view.shock, view.live)} name="shock" onNote={setNote} />
+        </Card>
+      )}
+
+      {view !== null && Object.keys(view.marketShock).length > 0 && (
+        <Card title="The market's shock states">
+          <p style={{ ...noteStyle, marginTop: 0 }}>
+            Since V7.1 Stage 11 every forecast carries the market's state at its moment, read from what was known then: after a sharp move of Bitcoin's (its last fifteen minutes at or past {MARKET_SHOCK_LINES.line} usual moves), in a trending move (the same sharp fifteen minutes with the forty-five before them already at or past {MARKET_SHOCK_LINES.trendLine} of their usual moves the same way), in a liquidation cascade (a sharp fall with the breadth of the last fifteen minutes at or under {Math.round(MARKET_SHOCK_LINES.liquidationBreadth * 100)}% and the market's volume at {MARKET_SHOCK_LINES.liquidationVolume} times its usual or more), recovering (within {MARKET_SHOCK_LINES.recoveryHours} hours after a shock, Bitcoin's hour at least {MARKET_SHOCK_LINES.recoveryLine} usual move against it), before a scheduled release (once the calendar is in), or normal. Each state's widening is fitted and judged as the sharp-move rule above is, on the walk forward's moments in the state; the horizon then widens by the states' rules or by the one rule past the line, whichever had the lower pinball loss on every moment either would touch -- or by neither where neither passed its own test, the models having been fitted on the same figures. Live: the forecasts made in each state, and how their 80% ranges held.
+          </p>
+          <LabTable table={marketShockTable(view.marketShock, view.live)} name="market-shock" onNote={setNote} />
         </Card>
       )}
 
