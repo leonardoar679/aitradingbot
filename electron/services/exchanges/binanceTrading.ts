@@ -101,7 +101,8 @@ export async function fetchAccountBalance(apiKey: string, apiSecret: string): Pr
 }
 
 export interface LiveOrderResult {
-  orderId: number
+  /** Binance numbers its orders; Bitget names them with a string too long for a number (V7.1 Stage 8). */
+  orderId: number | string
   status: string
   filledQty: number
   avgFillPrice: number

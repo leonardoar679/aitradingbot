@@ -40,12 +40,21 @@ export function LiveOrderScheduler(): null {
 
     async function poll(): Promise<void> {
       try {
-        const [orderResolutions, watcherEvents, twapEvents] = await Promise.all([
+        // The demo book (V7.1 Stage 8) is polled beside the real one: its resolutions and exits
+        // patch demo executors by the same ids, through the demo bridge; a demo poll that fails
+        // leaves the real one whole.
+        const [realResolutions, realWatcherEvents, twapEvents, demo] = await Promise.all([
           window.api.liveTrading.pollOpenOrders(),
           window.api.liveTrading.drainWatcherEvents(),
-          window.api.liveTrading.drainTwapEvents()
+          window.api.liveTrading.drainTwapEvents(),
+          window.api.demoTrading.poll().catch((error: unknown) => {
+            console.error('Failed to poll demo orders/watchers:', error)
+            return { orderResolutions: [], watcherEvents: [] }
+          })
         ])
         if (cancelled) return
+        const orderResolutions = [...realResolutions, ...demo.orderResolutions]
+        const watcherEvents = [...realWatcherEvents, ...demo.watcherEvents]
 
         const settings = await window.api.settings.get()
         if (cancelled) return

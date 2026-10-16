@@ -996,7 +996,17 @@ async function forecastSection(fromSec, toSec) {
   const { forecastRunSectionOf } = await import(`file:///${bundle.replace(/\\/g, '/')}?${Date.now()}`)
   const read = await page.evaluate(
     async ([from, to]) => {
-      const [feed, symbols] = await Promise.all([window.api.feed.getState(), window.api.market.listSymbols('binance')])
+      // The pair list is one public request that can drop (16 October 2026: "TypeError: terminated"
+      // at the end of a run cost the whole section): tried again once, then done without, since it
+      // only says which stories were about a tradable coin.
+      const listSymbols = async () => {
+        try {
+          return await window.api.market.listSymbols('binance')
+        } catch {
+          return window.api.market.listSymbols('binance').catch(() => [])
+        }
+      }
+      const [feed, symbols] = await Promise.all([window.api.feed.getState(), listSymbols()])
       const bases = new Set(symbols.filter((symbol) => symbol.quoteAsset === 'USDT').map((symbol) => symbol.baseAsset))
       return {
         record: await window.api.forecast.record(from, to),

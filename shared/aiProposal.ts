@@ -1,5 +1,5 @@
 import { ENGLISH, msg, type I18n } from './i18n/translate'
-import { INTERVAL_SECONDS, type Exchange, type ExecutorSide, type Interval, type PositionExecutorParams, type SymbolInfo } from './ipc'
+import { INTERVAL_SECONDS, type Exchange, type ExecutorMode, type ExecutorSide, type Interval, type PositionExecutorParams, type SymbolInfo } from './ipc'
 import { GPT_FLAT, GPT_MIN_CONFIDENCE, gptActionFor, type AiSignalDecision } from './aiSignal'
 import { isActionableOpportunity, opportunitySide, opportunityWindow } from './aiOpportunity'
 import { describeDecider } from './aiPanel'
@@ -375,7 +375,7 @@ export function describeSuggestedLiveAmount(
  * follows the recommendation carries that expiry (PositionExecutorParams.entryExpiresAt). A
  * signal's proposal has none. And never for a live one: nothing in this app cancels a resting
  * real order on a clock, and a field saying otherwise would be a promise it does not keep. */
-export function aiProposalEntryExpiry(proposal: AiOrderProposal, mode: 'paper' | 'live'): number | null {
+export function aiProposalEntryExpiry(proposal: AiOrderProposal, mode: ExecutorMode): number | null {
   return mode === 'paper' && proposal.expiresAt !== undefined ? proposal.expiresAt : null
 }
 
@@ -386,7 +386,7 @@ export function aiProposalEntryExpiry(proposal: AiOrderProposal, mode: 'paper' |
  * their own order, and waits as a limit like any other. Never for a live one: an exchange has no
  * order that means "when the price trades in this range", so a live order is what the form shows
  * and nothing else. */
-export function aiProposalEntryRange(proposal: AiOrderProposal, mode: 'paper' | 'live', formEntryPrice: number | null): { min: number; max: number } | null {
+export function aiProposalEntryRange(proposal: AiOrderProposal, mode: ExecutorMode, formEntryPrice: number | null): { min: number; max: number } | null {
   if (mode !== 'paper' || proposal.entryRange === undefined) return null
   return formEntryPrice === (proposal.entryPrice ?? null) ? proposal.entryRange : null
 }

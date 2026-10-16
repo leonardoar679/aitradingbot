@@ -13,10 +13,12 @@ import { liveSubjects, paperSubjects } from './thesisMeasure'
 import { useThesisReadings } from './useThesisReadings'
 import { emptyAccount, settle } from '../account/paperAccount'
 import type { Bot } from '../bots/types'
-import type { ExecutorConfig, HeldPosition, LivePosition, LiveWatcherSummary } from '../../shared/ipc'
+import type { ExecutorConfig, HeldPosition, LivePosition, LiveWatcherSummary, TradingBook } from '../../shared/ipc'
 import { useI18n } from '../i18n'
 
 const LIVE_POLL_MS = 15_000
+/** The demo book's rows (V7.1 Stage 8): closed through the demo bridge, said to hold play money. */
+const DEMO_BOOK: TradingBook = 'demo'
 
 const headerCellStyle: React.CSSProperties = {
   padding: '0 0.9rem 0.6rem',
@@ -36,6 +38,10 @@ export function PositionsPage(): React.JSX.Element {
   const [livePositions, setLivePositions] = useState<LivePosition[]>([])
   const [watchers, setWatchers] = useState<LiveWatcherSummary[]>([])
   const [liveHistory, setLiveHistory] = useState<LivePosition[]>([])
+  /** The demo book (V7.1 Stage 8): an exchange's demo account, play money, shown apart. */
+  const [demoPositions, setDemoPositions] = useState<LivePosition[]>([])
+  const [demoWatchers, setDemoWatchers] = useState<LiveWatcherSummary[]>([])
+  const [demoHistory, setDemoHistory] = useState<LivePosition[]>([])
   const [loaded, setLoaded] = useState(false)
   const [liveError, setLiveError] = useState<string | null>(null)
   /** Closing a held position is a click that either removes the row or does nothing at all --
@@ -67,6 +73,19 @@ export function PositionsPage(): React.JSX.Element {
       .listActiveWatchers()
       .then(setWatchers)
       .catch((error) => console.error('Failed to load live watchers:', error))
+    // The demo book, read beside: a failure here leaves the real rows whole.
+    window.api.demoTrading
+      .listPositions()
+      .then(setDemoPositions)
+      .catch((error) => console.error('Failed to load demo positions:', error))
+    window.api.demoTrading
+      .listClosedPositions()
+      .then(setDemoHistory)
+      .catch((error) => console.error('Failed to load demo trade history:', error))
+    window.api.demoTrading
+      .listActiveWatchers()
+      .then(setDemoWatchers)
+      .catch((error) => console.error('Failed to load demo watchers:', error))
   }
 
   useEffect(() => {
@@ -247,6 +266,57 @@ export function PositionsPage(): React.JSX.Element {
           </div>
         )}
       </Card>
+
+      {(demoPositions.length > 0 || demoHistory.length > 0) && (
+        <Card title={t('Demo Positions — play money')}>
+          <p style={{ color: 'var(--text-secondary)', margin: '0 0 0.7rem', fontSize: '0.8rem' }}>
+            {t("Positions on an exchange's demo account, opened over your demo key by a demo executor or the paper laboratory. Play money the exchange gives: closing one places a demo sell, never a real one.")}
+          </p>
+          {demoPositions.length === 0 && <p style={{ color: 'var(--text-secondary)', margin: 0 }}>{t('No open demo positions.')}</p>}
+          {demoPositions.length > 0 && (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr>
+                    <th style={headerCellStyle}>{t('Symbol')}</th>
+                    <th style={headerCellStyle}>{t('Qty')}</th>
+                    <th style={headerCellStyle}>{t('Avg Cost')}</th>
+                    <th style={headerCellStyle}>{t('Mark')}</th>
+                    <th style={headerCellStyle}>{t('Unrealized P&L')}</th>
+                    <th style={headerCellStyle}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {demoPositions.map((position) => {
+                    const watcher = demoWatchers.find((entry) => entry.livePositionId === position.id) ?? null
+                    return <LivePositionRow key={position.id} position={position} onClosed={refreshLivePositions} book={DEMO_BOOK} thesis={watcher === null ? null : { watcher, reading: null }} />
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {demoHistory.length > 0 && (
+            <div style={{ overflowX: 'auto', marginTop: '0.8rem' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr>
+                    <th style={headerCellStyle}>{t('Symbol')}</th>
+                    <th style={headerCellStyle}>{t('Entry')}</th>
+                    <th style={headerCellStyle}>{t('Exit')}</th>
+                    <th style={headerCellStyle}>{t('Realized P&L')}</th>
+                    <th style={headerCellStyle}>{t('Closed@@a column')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {demoHistory.map((position) => (
+                    <LiveHistoryRow key={position.id} position={position} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      )}
 
       <Card title={t('Inventory (Handed-Over Positions)')}>
         {loaded && heldPositions.length === 0 && (

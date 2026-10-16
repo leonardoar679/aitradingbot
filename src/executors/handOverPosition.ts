@@ -1,4 +1,4 @@
-import type { ExecutorConfig, HeldPosition } from '../../shared/ipc'
+import { onExchange, type ExecutorConfig, type HeldPosition } from '../../shared/ipc'
 import { computeExecutorStopSnapshot } from './computeSnapshot'
 import { settingsWrites } from '../utils/settingsWrites'
 
@@ -29,7 +29,7 @@ export interface PositionHandover {
 }
 
 export async function handOverPositionOnStop(executor: ExecutorConfig): Promise<PositionHandover> {
-  if (executor.mode === 'live' || !executor.keepPosition) return { held: null, realizedPnl: 0 }
+  if (onExchange(executor.mode) || !executor.keepPosition) return { held: null, realizedPnl: 0 }
 
   const { position, realizedPnl } = await computeExecutorStopSnapshot(executor)
   if (!position) return { held: null, realizedPnl: 0 }

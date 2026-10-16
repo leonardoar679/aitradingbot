@@ -1,5 +1,5 @@
 import { ENGLISH, type I18n } from '../../shared/i18n/translate'
-import type { ExecutorConfig, PaperAccount } from '../../shared/ipc'
+import { onExchange, type ExecutorConfig, type ExecutorMode, type PaperAccount } from '../../shared/ipc'
 import { committedByAsset } from './accountCommitments'
 import { describeInsufficientFunds } from './paperAccount'
 
@@ -73,12 +73,13 @@ export function describeExecutorFunding(
   }: {
     account: PaperAccount | null
     executors: ExecutorConfig[]
-    mode: 'paper' | 'live'
+    mode: ExecutorMode
     quoteAsset: string
     amountQuote: number
   },
   i18n: I18n = ENGLISH
 ): string | null {
-  if (mode === 'live') return null
+  // Live and demo orders are funded on the exchange, not on the paper account.
+  if (onExchange(mode)) return null
   return describeBatchFunding({ account, executors, requests: [{ quoteAsset, amountQuote }] }, i18n)
 }

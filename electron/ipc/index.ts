@@ -10,6 +10,7 @@ import { registerForecastHandlers } from './handlers/forecastHandlers'
 import { registerNewsHandlers } from './handlers/newsHandlers'
 import { registerCredentialsHandlers } from './handlers/credentialsHandlers'
 import { registerLiveTradingHandlers } from './handlers/liveTradingHandlers'
+import { registerDemoTradingHandlers } from './handlers/demoTradingHandlers'
 import { registerBacktestHandlers } from './handlers/backtestHandlers'
 import { registerAiHandlers } from './handlers/aiHandlers'
 import { registerRecordHandlers } from './handlers/recordHandlers'
@@ -32,5 +33,6 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerCredentialsHandlers()
   registerAiHandlers(mainWindow)
   registerLiveTradingHandlers()
+  registerDemoTradingHandlers()
   registerBacktestHandlers(mainWindow)
 }

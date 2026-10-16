@@ -1,7 +1,7 @@
 import { ENGLISH, msg, type I18n } from '../../shared/i18n/translate'
 import { HORIZON_NAME } from '../../shared/forecast/words'
 import { noticeI18n } from '../i18n/current'
-import type { AppSettings, Candle, ExecutorConfig, PositionExecutorParams } from '../../shared/ipc'
+import type { AppSettings, Candle, ExecutorConfig, LiveOrderRecord, PositionExecutorParams } from '../../shared/ipc'
 import { riskModeOf, targetLevelOf } from '../../shared/appDefaults'
 import { SLIPPAGE_RATE } from '../../shared/fees'
 import { LAB_RISK, LAB_STRATEGIES, classOnly, labDailyNet, labDayOf, labPaperExecutors, labStopReached, labStrategiesOf, sensitivityCounts, type LabStrategy, type LabTradeMark } from '../../shared/forecast/labTrader'
@@ -31,11 +31,27 @@ import { settingsWrites } from '../utils/settingsWrites'
 // 1.5% of the equity, told once. A trade that has closed is stopped and settled into the paper account, as
 // the forecast trader's are. FUND fills the paper account to 10,000 USDT on a click, never by itself.
 //
-// PAPER IS WRITTEN HERE AS A LITERAL. labPaperExecutor takes no mode and has no way to be given one.
-// Nothing in this file mentions the bridge a real order travels over, nor hands anything to an order form;
-// tests/aiNoLivePath.test.ts reads this file to make sure of both.
+// THE DEMO ACCOUNT (V7.1 Stage 8; the user's answer of 16 October 2026). Set to it on the Lab's card, the
+// laboratory sends each BUY it would have opened on paper to Bitget's demo account instead, over the demo
+// bridge alone (window.api.demoTrading: play money the exchange gives, in ledgers of its own, through the
+// one module whose requests Bitget refuses with a real key) -- the entry filled at the demo book's price
+// and watched there by the demo watcher, which closes it by the plan's stop, target or time; what it made
+// is read back from the demo ledger and written on the trade's mark, as a paper trade's is from the
+// candles. A SELL stays paper whatever the setting: spot has no short. The caps are the same.
+//
+// PAPER AND DEMO ARE WRITTEN HERE AS LITERALS, each once, and the live mode nowhere: labPaperExecutor can
+// make nothing else. Nothing in this file mentions the bridge a real order travels over, nor hands anything
+// to an order form; tests/aiNoLivePath.test.ts reads this file to make sure of all of it.
 //
 // EVERY WRITE GOES THROUGH THE ONE QUEUE (src/utils/settingsWrites.ts), on settings read inside it.
+
+/** What the demo account's bridge gives the laboratory: an entry, a watcher, and whether a demo key is
+ * stored at all. */
+export interface LabDemoDeps {
+  keyStored: () => Promise<boolean>
+  place: (symbol: string, side: 'buy', quoteAmount: number) => Promise<LiveOrderRecord>
+  watch: (executorId: string, symbol: string, entryPrice: number, takeProfitPct: number | null, stopLossPct: number | null, timeLimitSec: number | null) => Promise<{ id: string }>
+}
 
 export interface LabTraderDeps {
   getSettings: () => Promise<Pick<AppSettings, 'executors' | 'paperAccount' | 'paperRisk' | 'paperPause' | 'forecast'>>
@@ -58,6 +74,8 @@ export interface LabTraderDeps {
   queue: <T>(work: () => Promise<T>) => Promise<T>
   /** The language its notices are in (V6 Stage 14); English where absent. */
   i18n?: () => I18n
+  /** The demo account's bridge (V7.1 Stage 8); absent where the laboratory can only trade on paper. */
+  demo?: LabDemoDeps
 }
 
 export const LAB_STRATEGY_NAME: Record<LabStrategy, string> = { strict: msg('STRICT'), direction: msg('DIRECTION'), news: msg('NEWS EVENT'), hybrid: msg('HYBRID') }
@@ -76,8 +94,9 @@ const mid = (book: LiveBook): number => (book.bid + book.ask) / 2
 const QUOTE = 'USDT'
 
 /** The executor a plan becomes under the laboratory. Paper, unlevered, entered at market inside the plan's
- * zone until its next close, with its stop, target and horizon, and its position not kept when it stops. */
-export function labPaperExecutor(input: { id: string; plan: TradePlan; mark: LabTradeMark; amountQuote: number; nowSec: number }): ExecutorConfig {
+ * zone until its next close, with its stop, target and horizon, and its position not kept when it stops;
+ * or, on the demo account (V7.1 Stage 8), the same trade with its mode and exchange the demo's. */
+export function labPaperExecutor(input: { id: string; plan: TradePlan; mark: LabTradeMark; amountQuote: number; nowSec: number }, demo = false): ExecutorConfig {
   const { plan } = input
   const params: PositionExecutorParams = {
     side: plan.side === 'BUY' ? 'buy' : 'sell',
@@ -93,9 +112,8 @@ export function labPaperExecutor(input: { id: string; plan: TradePlan; mark: Lab
   }
   return {
     id: input.id,
-    name: `Lab ${input.mark.strategy} ${plan.side} ${plan.pair}`,
+    name: `Lab ${input.mark.strategy} ${plan.side} ${plan.pair}${demo ? ' (demo)' : ''}`,
     type: 'position',
-    exchange: 'binance',
     symbol: plan.pair,
     baseAsset: plan.pair.replace(/USDT$/, ''),
     quoteAsset: QUOTE,
@@ -103,7 +121,7 @@ export function labPaperExecutor(input: { id: string; plan: TradePlan; mark: Lab
     status: 'active',
     stoppedAt: null,
     keepPosition: false,
-    mode: 'paper',
+    ...(demo ? { mode: 'demo' as const, exchange: 'bitget' as const } : { mode: 'paper' as const, exchange: 'binance' as const }),
     lab: input.mark,
     liveOrder: null,
     pendingLiveOrderIds: [],
@@ -133,6 +151,14 @@ export async function openLabTrades(deps: LabTraderDeps): Promise<LabPassResult>
   const equity = paperEquity(settings.paperAccount, settings.executors, QUOTE)
   if (equity === null) {
     result.held = t('The laboratory has no paper account funded in USDT: fund it on the Forecast Lab.')
+    return result
+  }
+  // The demo account (V7.1 Stage 8): wanted by the setting, had only with a demo key stored; set to it
+  // without one, the laboratory opens nothing and says why, rather than trading paper unasked.
+  const demoWanted = forecast.lab.execution === 'demo'
+  const demo = demoWanted && deps.demo !== undefined && (await deps.demo.keyStored()) ? deps.demo : null
+  if (demoWanted && demo === null) {
+    result.held = t('The laboratory is set to the demo account, but no Bitget demo key is stored: add one on Connections, or set it back to paper.')
     return result
   }
   // The daily stop: written down once reached, and held to until the next UTC day.
@@ -236,8 +262,43 @@ export async function openLabTrades(deps: LabTraderDeps): Promise<LabPassResult>
         ...(spread === null ? {} : { book: { bid: book.bid, ask: book.ask, spreadPct: spread } }),
         btcCorrelation: correlation
       }
-      const executor = labPaperExecutor({ id: deps.newId(), plan, mark, amountQuote: size.amountQuote, nowSec })
-      await deps.setSettings({ executors: [...fresh.executors, executor] })
+      // A BUY goes to the demo account where the laboratory is set to it; a SELL stays paper: spot has
+      // no short. The demo entry is placed here, inside the queue the caps were read in.
+      const onDemo = demo !== null && plan.side === 'BUY'
+      if (!onDemo) {
+        const executor = labPaperExecutor({ id: deps.newId(), plan, mark, amountQuote: size.amountQuote, nowSec })
+        await deps.setSettings({ executors: [...fresh.executors, executor] })
+        return null
+      }
+      let fill: LiveOrderRecord
+      try {
+        fill = await demo.place(entry.pair, 'buy', size.amountQuote)
+      } catch (failure) {
+        return t('The demo order was refused: {reason}', { reason: failure instanceof Error ? failure.message : String(failure) })
+      }
+      const executor = labPaperExecutor({ id: deps.newId(), plan, mark, amountQuote: size.amountQuote, nowSec }, true)
+      const params = executor.params as PositionExecutorParams
+      let watcherId: string | null = null
+      let watcherError: string | null = null
+      try {
+        watcherId = (await demo.watch(executor.id, entry.pair, fill.avgFillPrice, params.takeProfitPct, params.stopLossPct, params.timeLimitSec)).id
+      } catch (failure) {
+        // The demo buy filled and nothing watches it: said on the trade, never hidden; a person closes it.
+        watcherError = failure instanceof Error ? failure.message : String(failure)
+      }
+      await deps.setSettings({
+        executors: [
+          ...fresh.executors,
+          {
+            ...executor,
+            name: watcherError === null ? executor.name : `${executor.name} (filled, but unwatched: ${watcherError})`,
+            params: { ...params, entryPrice: fill.avgFillPrice, entryExpiresAt: null, entryRange: null },
+            liveOrder: fill,
+            liveWatcherId: watcherId,
+            liveWatcherError: watcherError
+          }
+        ]
+      })
       return null
     })
     if (opened !== null) {
@@ -255,9 +316,12 @@ export async function openLabTrades(deps: LabTraderDeps): Promise<LabPassResult>
         target: say.pctPlain(plan.targetPct, 2),
         minutes: Math.round(plan.holdSec / 60)
       }
+      const onDemo = demo !== null && plan.side === 'BUY'
       deps.notify(
-        plan.side === 'BUY' ? t('Laboratory paper trade: BUY {pair}', values) : t('Laboratory paper trade: SELL {pair}', values),
-        t('The {strategy} strategy traded the {horizon} forecast, on paper: in around {price}, stop {stop} away, target {target}, held at most {minutes} minutes. Nothing real was placed.', values),
+        onDemo ? t('Laboratory demo trade: BUY {pair}', values) : plan.side === 'BUY' ? t('Laboratory paper trade: BUY {pair}', values) : t('Laboratory paper trade: SELL {pair}', values),
+        onDemo
+          ? t("The {strategy} strategy traded the {horizon} forecast on Bitget's demo account, play money: in at about {price}, stop {stop} away, target {target}, held at most {minutes} minutes. A demo order was placed, not a real one.", values)
+          : t('The {strategy} strategy traded the {horizon} forecast, on paper: in around {price}, stop {stop} away, target {target}, held at most {minutes} minutes. Nothing real was placed.', values),
         { kind: 'TRADE_EXECUTED', severity: 'watch', thread: `lab-trade:${entry.pair}` }
       )
     } catch {
@@ -267,11 +331,27 @@ export async function openLabTrades(deps: LabTraderDeps): Promise<LabPassResult>
   return result
 }
 
-/** Every open trade of the laboratory's that has closed, stopped and settled; what it made on its mark. */
+/** Every open trade of the laboratory's that has closed, stopped and settled; what it made on its mark. A
+ * demo trade (V7.1 Stage 8) is closed by the demo watcher and stopped by the live scheduler, which writes
+ * its exit on it: here that exit is read onto the laboratory's mark, once, and nothing is settled into
+ * the paper account. */
 export async function settleLabTrades(deps: LabTraderDeps): Promise<string[]> {
   const settled: string[] = []
   const { executors } = await deps.getSettings()
-  for (const executor of labPaperExecutors(executors).filter((entry) => entry.status === 'active')) {
+  for (const executor of labPaperExecutors(executors).filter((entry) => entry.mode === 'demo' && entry.liveExitResult !== null && entry.lab?.result === undefined)) {
+    const exit = executor.liveExitResult!
+    const ended = { exit: exit.exitReason, pnlQuote: exit.realizedPnl, closedAt: exit.closedAt }
+    const written = await deps.queue(async (): Promise<boolean> => {
+      const fresh = await deps.getSettings()
+      const current = fresh.executors.find((entry) => entry.id === executor.id)
+      if (current === undefined || current.lab === undefined || current.lab.result !== undefined) return false
+      const done: ExecutorConfig = { ...current, status: 'stopped', stoppedAt: current.stoppedAt ?? exit.closedAt, lab: { ...current.lab, result: ended } }
+      await deps.setSettings({ executors: fresh.executors.map((entry) => (entry.id === executor.id ? done : entry)) })
+      return true
+    })
+    if (written) settled.push(executor.name)
+  }
+  for (const executor of labPaperExecutors(executors).filter((entry) => entry.mode === 'paper' && entry.status === 'active')) {
     try {
       const nowSec = deps.nowSec()
       const candles = (await deps.fetchCandles(executor.symbol, executor.createdAt, nowSec)).filter((bar) => bar.time + 60 <= nowSec)
@@ -355,6 +435,12 @@ export const labTraderBrowserDeps: LabTraderDeps = {
       Math.floor(Date.now() / 1000)
     ),
   quantSide: quantSideOf,
+  // The demo account's bridge, and nothing of the real one's (tests/aiNoLivePath.test.ts).
+  demo: {
+    keyStored: async () => (await window.api.credentials.list()).some((key) => key.exchange === 'bitget' && key.slot === 'demo' && key.configured),
+    place: (symbol, side, quoteAmount) => window.api.demoTrading.placeOrder('bitget', symbol, symbol.replace(/USDT$/, ''), QUOTE, side, quoteAmount),
+    watch: (executorId, symbol, entryPrice, takeProfitPct, stopLossPct, timeLimitSec) => window.api.demoTrading.createWatcher(executorId, 'bitget', symbol, entryPrice, takeProfitPct, stopLossPct, timeLimitSec, null)
+  },
   fetchCandles: async (symbol, startSec, endSec) => (await window.api.market.fetchHistoricalRange('binance', symbol, '1m', startSec, endSec)).candles,
   // Not kept in Inventory (keepPosition is false), so nothing was handed over and the whole result is cash.
   settle: (executor, nowSec) => settleExecutorOnStop({ executor, handedOver: { held: null, realizedPnl: 0 }, now: nowSec }),

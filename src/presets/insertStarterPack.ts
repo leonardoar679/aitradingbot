@@ -1,6 +1,6 @@
 import { settingsWrites } from '../utils/settingsWrites'
 import { buildPresetExecutor, buildStarterPack, type StarterPack, type StarterPreset } from './starterPresets'
-import type { ExecutorConfig } from '../../shared/ipc'
+import { onExchange, type ExecutorConfig } from '../../shared/ipc'
 import { describeBatchFunding } from '../account/executorFunding'
 import { executorAllocatedQuote } from '../executors/computeSnapshot'
 
@@ -17,7 +17,7 @@ function assertAffordable(
     account: settings.paperAccount,
     executors: settings.executors,
     requests: additions
-      .filter((e) => e.mode !== 'live')
+      .filter((e) => !onExchange(e.mode))
       .map((e) => ({ quoteAsset: e.quoteAsset, amountQuote: executorAllocatedQuote(e) }))
   })
   if (problem !== null) throw new Error(problem)

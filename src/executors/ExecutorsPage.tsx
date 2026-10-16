@@ -18,8 +18,11 @@ import { describeExecutorDeletionBlock, describeExecutorDeletionEffects, detachE
 import { dcaLevelPrice, twapNumOrders, buildGridLevels } from './engine'
 import {
   EXCHANGES,
+  canTradeDemoOn,
+  onExchange,
   type ControllerConfig,
   type ExecutorConfig,
+  type ExecutorMode,
   type PaperAccount,
   type Exchange,
   type ExecutorType,
@@ -179,17 +182,27 @@ export function ExecutorsPage({
     exchange: Exchange
     pair: SymbolInfo
     keepPosition: boolean
-    mode: 'paper' | 'live'
+    mode: ExecutorMode
     params: GridExecutorParams | DcaExecutorParams | TwapExecutorParams | PositionExecutorParams | OrderExecutorParams | XemmExecutorParams | ArbitrageExecutorParams | MarketMakingExecutorParams
     proposedBy?: AiProposalOrigin
   }): Promise<void> {
     // Defense in depth — the UI only ever offers 'live' for type 'order', 'position', 'dca',
-    // 'twap', or 'grid', but this is the last line of defense before anything real could happen.
-    const mode =
+    // 'twap', or 'grid', and 'demo' (V7.1 Stage 8) for 'order' and 'position' on an exchange with a
+    // demo account, but this is the last line of defense before anything real could happen.
+    const mode: ExecutorMode =
       input.mode === 'live' &&
       (input.type === 'order' || input.type === 'position' || input.type === 'dca' || input.type === 'twap' || input.type === 'grid')
         ? 'live'
-        : 'paper'
+        : input.mode === 'demo' && (input.type === 'order' || input.type === 'position') && canTradeDemoOn(input.exchange)
+          ? 'demo'
+          : 'paper'
+    // The demo book has a bridge of its own: a demo order never goes through the real one.
+    const demo = mode === 'demo'
+    const placeMarket = (side: 'buy' | 'sell', quoteAmount: number): Promise<LiveOrderRecord> =>
+      demo
+        ? window.api.demoTrading.placeOrder(input.exchange, input.pair.symbol, input.pair.baseAsset, input.pair.quoteAsset, side, quoteAmount)
+        : window.api.executors.placeLiveOrder(input.exchange, input.pair.symbol, input.pair.baseAsset, input.pair.quoteAsset, side, quoteAmount)
+    const watchers = demo ? window.api.demoTrading : window.api.liveTrading
 
     const base: ExecutorConfig = {
       id: crypto.randomUUID(),
@@ -229,19 +242,12 @@ export function ExecutorsPage({
       const positionParams = input.params as PositionExecutorParams
       let entryResult: LiveOrderRecord | null = null
       try {
-        const activeWatchers = await window.api.liveTrading.listActiveWatchers()
+        const activeWatchers = await watchers.listActiveWatchers()
         if (activeWatchers.some((w) => w.exchange === input.exchange && w.symbol === input.pair.symbol)) {
-          throw new Error(`Already watching a live position on ${input.pair.symbol} — only one at a time is supported`)
+          throw new Error(`Already watching a ${demo ? 'demo' : 'live'} position on ${input.pair.symbol} — only one at a time is supported`)
         }
-        entryResult = await window.api.executors.placeLiveOrder(
-          input.exchange,
-          input.pair.symbol,
-          input.pair.baseAsset,
-          input.pair.quoteAsset,
-          'buy',
-          positionParams.amountQuote
-        )
-        const watcher = await window.api.liveTrading.createWatcher(
+        entryResult = await placeMarket('buy', positionParams.amountQuote)
+        const watcher = await watchers.createWatcher(
           base.id,
           input.exchange,
           input.pair.symbol,
@@ -514,16 +520,18 @@ export function ExecutorsPage({
       // pendingLiveOrderId set, and LiveOrderScheduler picks up its resolution later.
       const limitPrice = orderParams.limitPrice as number
       try {
-        const result = await window.api.executors.placeLiveLimitOrder(
-          base.id,
-          input.exchange,
-          input.pair.symbol,
-          input.pair.baseAsset,
-          input.pair.quoteAsset,
-          orderParams.side,
-          orderParams.amountQuote,
-          limitPrice
-        )
+        const result = demo
+          ? await window.api.demoTrading.placeLimitOrder(base.id, input.exchange, input.pair.symbol, input.pair.baseAsset, input.pair.quoteAsset, orderParams.side, orderParams.amountQuote, limitPrice)
+          : await window.api.executors.placeLiveLimitOrder(
+              base.id,
+              input.exchange,
+              input.pair.symbol,
+              input.pair.baseAsset,
+              input.pair.quoteAsset,
+              orderParams.side,
+              orderParams.amountQuote,
+              limitPrice
+            )
         if (result.resolved) {
           setExecutors((prev) => [...prev, { ...base, status: 'stopped', stoppedAt, liveOrder: result.liveOrder }])
         } else {
@@ -537,17 +545,10 @@ export function ExecutorsPage({
       return
     }
 
-    // Live market order: place the one real order now — resolves synchronously, so the
+    // Live (or demo) market order: place the one order now — resolves synchronously, so the
     // executor is created already 'stopped'.
     try {
-      const result = await window.api.executors.placeLiveOrder(
-        input.exchange,
-        input.pair.symbol,
-        input.pair.baseAsset,
-        input.pair.quoteAsset,
-        orderParams.side,
-        orderParams.amountQuote
-      )
+      const result = await placeMarket(orderParams.side, orderParams.amountQuote)
       setExecutors((prev) => [...prev, { ...base, status: 'stopped', stoppedAt, liveOrder: result }])
     } catch (error) {
       console.error('Live order failed:', error)
@@ -604,8 +605,10 @@ export function ExecutorsPage({
     // live Order limit, up to one per unfilled level for a live DCA ladder) and/or an active
     // watcher on an open position (Position, or a DCA ladder with at least one fill) — a DCA
     // executor can have BOTH at once, unlike Order/Position, so these aren't mutually exclusive.
-    if (executor && executor.mode === 'live' && (executor.pendingLiveOrderIds.length > 0 || executor.liveWatcherId)) {
+    if (executor && onExchange(executor.mode) && (executor.pendingLiveOrderIds.length > 0 || executor.liveWatcherId)) {
       const stoppedAt = Math.floor(Date.now() / 1000)
+      // A demo executor's orders and watcher are in the demo book, torn down through its own bridge.
+      const bridge = executor.mode === 'demo' ? window.api.demoTrading : window.api.liveTrading
 
       // Cancelling is ungated (it only ever reduces risk) — always attempted first, regardless
       // of whether a watcher also needs stopping. Best-effort per order: one that already
@@ -617,7 +620,7 @@ export function ExecutorsPage({
       let watcherFailure: string | null = null
       for (const orderId of executor.pendingLiveOrderIds) {
         try {
-          lastCancelledOrder = await window.api.liveTrading.cancelOrder(orderId)
+          lastCancelledOrder = await bridge.cancelOrder(orderId)
         } catch (error) {
           console.error(`Failed to cancel live order ${orderId}:`, error)
           cancelFailure = describeError(error)
@@ -637,7 +640,7 @@ export function ExecutorsPage({
         try {
           // The main process reads the real result back from the ledger after closing — never
           // fabricated client-side.
-          liveExitResult = await window.api.liveTrading.stopWatcher(executor.liveWatcherId)
+          liveExitResult = await bridge.stopWatcher(executor.liveWatcherId)
         } catch (error) {
           console.error('Failed to force-close watched live position:', error)
           watcherFailure = describeError(error)

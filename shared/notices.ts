@@ -144,6 +144,28 @@ const LIVE_CLOSED: Record<'take_profit' | 'stop_loss' | 'trailing_stop' | 'time_
   stop_loss: msg('{pair}: real position hit its stop')
 }
 
+const DEMO_CLOSED = {
+  take_profit: msg('{pair}: demo position reached its target'),
+  time_limit: msg('{pair}: demo position ran out of time'),
+  trailing_stop: msg('{pair}: demo position hit its trailing stop'),
+  manual: msg('{pair}: demo position was closed by hand'),
+  stop_loss: msg('{pair}: demo position hit its stop')
+}
+
+/** A DEMO position closed by its watcher (V7.1 Stage 8): the same kinds, said to be play money. */
+export function demoExitNotice(
+  exit: { executorId: string; symbol: string; exitReason: 'take_profit' | 'stop_loss' | 'trailing_stop' | 'time_limit' | 'manual'; exitPrice: number; realizedPnl: number; quoteAsset: string },
+  i18n: I18n = ENGLISH
+): Notice {
+  const { t } = i18n
+  const kind: AlertKind = exit.exitReason === 'take_profit' ? 'TARGET_REACHED' : exit.exitReason === 'time_limit' || exit.exitReason === 'manual' ? 'TRADE_EXECUTED' : 'STOP_TRIGGERED'
+  return {
+    title: t(DEMO_CLOSED[exit.exitReason] ?? DEMO_CLOSED.stop_loss, { pair: exit.symbol }),
+    body: t('Closed by its watcher at {price}: {pnl} realized on the demo account, play money. A demo sell was placed, not a real one.', { price: String(exit.exitPrice), pnl: moneyIn(exit.realizedPnl, exit.quoteAsset, i18n) }),
+    extra: { kind, thread: exit.executorId, severity: 'watch' }
+  }
+}
+
 /** A real position closed by its watcher: by its target, its stop, or its time limit. */
 export function liveExitNotice(
   exit: { executorId: string; symbol: string; exitReason: 'take_profit' | 'stop_loss' | 'trailing_stop' | 'time_limit' | 'manual'; exitPrice: number; realizedPnl: number; quoteAsset: string },

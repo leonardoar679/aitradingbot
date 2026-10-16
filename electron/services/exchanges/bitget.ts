@@ -355,6 +355,57 @@ export async function fetchBitgetFills(symbol: string, limit = 50): Promise<Bitg
   return rows.map((row) => ({ price: Number(row.price), size: Number(row.size), side: row.side === 'sell' ? 'sell' : 'buy', ts: Number(row.ts) }))
 }
 
+/** What an order on a pair must keep to, from the pair's instrument (V7.1 Stage 8): the smallest
+ * order in the quote currency, the quantity's and the price's decimals as steps. Read once in ten
+ * minutes a pair. */
+export interface BitgetSymbolRules {
+  minNotional: number
+  minQty: number
+  stepSize: string
+  tickSize: string
+  /** The pair as Bitget lists it; refused when it does not. */
+  status: string
+}
+
+const RULES_TTL_MS = 10 * 60_000
+const rulesCache = new Map<string, { at: number; rules: BitgetSymbolRules }>()
+
+interface InstrumentRules extends Instrument {
+  pricePrecision?: string
+  quantityPrecision?: string
+  minOrderAmount?: string
+  minOrderQty?: string
+}
+
+/** A step of so many decimals, as the exchange writes it: "0.000001" for six. */
+export function stepOfDecimals(decimals: number): string {
+  const places = Math.max(0, Math.min(18, Math.floor(decimals)))
+  return places === 0 ? '1' : `0.${'0'.repeat(places - 1)}1`
+}
+
+export async function fetchBitgetSymbolRules(symbol: string): Promise<BitgetSymbolRules> {
+  const upper = symbol.toUpperCase()
+  const cached = rulesCache.get(upper)
+  if (cached !== undefined && Date.now() - cached.at < RULES_TTL_MS) return cached.rules
+  const rows = await ask<InstrumentRules[]>(`${BITGET.paths.instruments}&symbol=${symbolParam(upper)}`, `instrument ${upper}`)
+  const row = rows.find((entry) => entry.symbol === upper)
+  if (row === undefined) throw new Error(`Bitget does not list ${upper}`)
+  const rules: BitgetSymbolRules = {
+    minNotional: Number(row.minOrderAmount ?? 0),
+    minQty: Number(row.minOrderQty ?? 0),
+    stepSize: stepOfDecimals(Number(row.quantityPrecision ?? 8)),
+    tickSize: stepOfDecimals(Number(row.pricePrecision ?? 8)),
+    status: row.status
+  }
+  rulesCache.set(upper, { at: Date.now(), rules })
+  return rules
+}
+
+/** Test seam. */
+export function resetBitgetRules(): void {
+  rulesCache.clear()
+}
+
 /** Bitget's clock, ms, and how long the request took: the health probe's figures for this host. */
 export async function fetchBitgetTime(): Promise<{ serverTime: number; latencyMs: number }> {
   const sentAt = Date.now()

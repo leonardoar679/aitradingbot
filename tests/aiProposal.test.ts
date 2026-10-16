@@ -187,15 +187,20 @@ describe('a proposal opens a form, and a person submits it', () => {
   const page = readFileSync(join(ROOT, 'src', 'executors', 'ExecutorsPage.tsx'), 'utf-8')
 
   it('the form opens on paper however it was opened', () => {
-    // The mode starts as the literal 'paper', and is set in exactly three places: the checkbox a
-    // person ticks, the effect that forces it BACK to paper, and -- since 8 October 2026, CONFIRM --
+    // The mode starts as the literal 'paper', and is set in exactly five places: the checkbox a
+    // person ticks, the effect that forces it BACK to paper, -- since 8 October 2026, CONFIRM --
     // the effect that ticks it for a call confirmed from Opportunities, which runs once and only
     // where the checkbox itself could be ticked (canGoLive: a verified key, the session armed by a
-    // person, no kill switch). The phrase is still typed and the button still pressed by a person.
-    expect(modal).toContain("useState<'paper' | 'live'>('paper')")
-    expect(modal.match(/setMode\(/g)).toHaveLength(3)
+    // person, no kill switch), and -- since V7.1 Stage 8 -- the demo checkbox a person ticks and the
+    // effect that forces demo back to paper. Nothing ever sets 'live' but the person's checkbox and
+    // the confirmed call. The phrase is still typed and the button still pressed by a person.
+    expect(modal).toContain("useState<ExecutorMode>('paper')")
+    expect(modal.match(/setMode\(/g)).toHaveLength(5)
     expect(modal).toContain("setMode(e.target.checked ? 'live' : 'paper')")
+    expect(modal).toContain("setMode(e.target.checked ? 'demo' : 'paper')")
+    expect(modal).toContain("if (!canGoDemo && mode === 'demo') setMode('paper')")
     expect(modal).toContain("setMode('paper')")
+    expect(modal.match(/setMode\('live'\)/g)).toHaveLength(1)
     expect(modal).toMatch(/if \(!proposalLive \|\| liveAsked\.current \|\| !canGoLive\) return\r?\n\s+liveAsked\.current = true\r?\n\s+setMode\('live'\)/)
   })
 

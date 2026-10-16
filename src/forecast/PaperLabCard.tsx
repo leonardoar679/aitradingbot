@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Card } from '../components/Card'
 import { buttonStyle, cellStyle, headCellStyle, noteStyle } from '../agents/agentStyles'
-import { LAB_RISK, LAB_STRATEGIES, labDailyNet, labDayOf, labStatsOf, type LabStrategy } from '../../shared/forecast/labTrader'
+import { LAB_RISK, LAB_STRATEGIES, labDailyNet, labDayOf, labStatsOf, type LabExecution, type LabSettings, type LabStrategy } from '../../shared/forecast/labTrader'
 import { healForecastSettings } from '../../shared/forecast/training'
 import type { AppSettings } from '../../shared/ipc'
 import { paperEquity } from '../../shared/paperRisk'
@@ -55,6 +55,8 @@ export function PaperLabCard(): React.JSX.Element {
   const [problem, setProblem] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  /** Whether a Bitget demo key is stored (V7.1 Stage 8): what the demo account needs. Read only. */
+  const [demoKeyStored, setDemoKeyStored] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -66,6 +68,12 @@ export function PaperLabCard(): React.JSX.Element {
         (failure) => {
           if (!cancelled) setProblem(describeError(failure))
         }
+      )
+      void window.api.credentials.list().then(
+        (keys) => {
+          if (!cancelled) setDemoKeyStored(keys.some((key) => key.exchange === 'bitget' && key.slot === 'demo' && key.configured))
+        },
+        () => undefined
       )
     }
     read()
@@ -80,18 +88,24 @@ export function PaperLabCard(): React.JSX.Element {
   }, [])
 
   // The forecast's settings are written whole (a patch replaces them): the refit's and the trader's are kept.
-  const setStrategy = (strategy: LabStrategy, on: boolean): void => {
+  // The one write of this card: a strategy's switch, or where the trades go.
+  const writeLab = (patch: Partial<LabSettings>): void => {
     setBusy(true)
     setProblem(null)
     void settingsWrites(async () => {
       const fresh = await window.api.settings.get()
       const forecast = healForecastSettings(fresh.forecast)
-      await window.api.settings.set({ forecast: { ...forecast, lab: { ...forecast.lab, strategies: { ...forecast.lab.strategies, [strategy]: on } } } })
+      await window.api.settings.set({ forecast: { ...forecast, lab: { ...forecast.lab, ...patch } } })
       return window.api.settings.get()
     })
       .then(setSettings, (failure) => setProblem(describeError(failure)))
       .finally(() => setBusy(false))
   }
+  const setStrategy = (strategy: LabStrategy, on: boolean): void => {
+    const current = settings === null ? healForecastSettings(undefined).lab.strategies : healForecastSettings(settings.forecast).lab.strategies
+    writeLab({ strategies: { ...current, [strategy]: on } })
+  }
+  const setExecution = (execution: LabExecution): void => writeLab({ execution })
 
   const fundNow = (): void => {
     setBusy(true)
@@ -148,6 +162,18 @@ export function PaperLabCard(): React.JSX.Element {
         The paper account holds {held.toFixed(2)} USDT{equity === null ? '' : `; the laboratory's equity is ${equity.toFixed(2)} USDT`}. Today its closed trades made {today.netQuote.toFixed(2)} USDT over {today.closed}.{' '}
         {stoppedToday && lab.stopped !== null ? `STOPPED for the day at ${new Date(lab.stopped.at * 1000).toISOString().slice(11, 16)} UTC: ${lab.stopped.lossQuote.toFixed(2)} USDT lost of ${lab.stopped.equityQuote.toFixed(2)}.` : ''}
       </p>
+      <div style={{ display: 'flex', gap: '1rem', alignItems: 'baseline', margin: '0.5rem 0 0.2rem', fontSize: '0.84rem', flexWrap: 'wrap' }}>
+        <span style={{ fontWeight: 600 }}>Trades go to</span>
+        <label style={{ display: 'flex', gap: '0.4rem', alignItems: 'baseline' }}>
+          <input type="radio" name="lab-execution" checked={lab.execution === 'paper'} disabled={busy} onChange={() => setExecution('paper')} />
+          the paper account
+        </label>
+        <label style={{ display: 'flex', gap: '0.4rem', alignItems: 'baseline', opacity: demoKeyStored ? 1 : 0.6 }} title={demoKeyStored ? undefined : 'Add a Bitget demo key on Connections first.'}>
+          <input type="radio" name="lab-execution" checked={lab.execution === 'demo'} disabled={busy || !demoKeyStored} onChange={() => setExecution('demo')} />
+          Bitget's demo account (play money; a SELL stays paper)
+        </label>
+        {lab.execution === 'demo' && !demoKeyStored && <span style={{ ...noteStyle, color: 'var(--down)' }}>Set to the demo account, but no Bitget demo key is stored: the laboratory opens nothing until one is added or it is set back to paper.</span>}
+      </div>
       <div style={{ display: 'grid', gap: '0.3rem', margin: '0.5rem 0' }}>
         {LAB_STRATEGIES.map((strategy) => (
           <label key={strategy} style={{ display: 'flex', gap: '0.6rem', alignItems: 'baseline', fontSize: '0.84rem' }}>

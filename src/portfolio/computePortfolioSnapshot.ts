@@ -1,4 +1,4 @@
-import type { Exchange, HeldPosition } from '../../shared/ipc'
+import { onExchange, type Exchange, type HeldPosition } from '../../shared/ipc'
 import { computeExecutorPosition } from '../executors/computeSnapshot'
 import { fetchBotDryRunResult, summarizePaperTrades } from '../bots/useDryRun'
 import { announceBotAiCall } from '../bots/aiCallNotifier'
@@ -86,7 +86,7 @@ function paperPositionValue(
 export async function computePortfolioSnapshot(): Promise<PortfolioSnapshotData> {
   const settings = await window.api.settings.get()
   const activeExecutors = settings.executors.filter((e) => e.status === 'active')
-  const paperExecutors = activeExecutors.filter((e) => e.mode !== 'live')
+  const paperExecutors = activeExecutors.filter((e) => !onExchange(e.mode))
   const enabledBots = settings.bots.filter((b) => b.enabled)
 
   const [livePositions, paperExecutorPositions, botDryRuns] = await Promise.all([

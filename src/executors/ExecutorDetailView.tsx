@@ -12,6 +12,7 @@ import {
 import { ArrowLeft } from 'lucide-react'
 import {
   EXCHANGES,
+  onExchange,
   type ExecutorConfig,
   type GridExecutorParams,
   type OrderExecutorParams,
@@ -289,9 +290,9 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
         )
       }
     }
-    } else if (executor.mode === 'live') {
-      // Live executors draw from real state (liveOrder/liveWatcherId/liveExitResult), never a
-      // simulated replay -- sim.state is always null here (see useExecutorSimulation).
+    } else if (onExchange(executor.mode)) {
+      // Live and demo executors draw from real state (liveOrder/liveWatcherId/liveExitResult), never
+      // a simulated replay -- sim.state is always null here (see useExecutorSimulation).
       if (executor.type === 'position') {
         const params = executor.params as PositionExecutorParams
         // params.entryPrice is patched to the real fill price when a live Position is created
@@ -479,19 +480,19 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <span style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)' }}>{executor.name}</span>
-            {executor.mode === 'live' && (
+            {onExchange(executor.mode) && (
               <span
                 style={{
                   padding: '0.15rem 0.45rem',
                   borderRadius: 999,
-                  background: 'var(--down)',
+                  background: executor.mode === 'live' ? 'var(--down)' : 'var(--accent)',
                   color: '#fff',
                   fontSize: '0.6rem',
                   fontWeight: 800,
                   letterSpacing: '0.04em'
                 }}
               >
-                LIVE
+                {executor.mode === 'live' ? 'LIVE' : 'DEMO'}
               </span>
             )}
           </div>
@@ -501,7 +502,7 @@ export function ExecutorDetailView({ executor, onBack }: { executor: ExecutorCon
         </div>
       </div>
 
-      {executor.mode === 'live' && (
+      {onExchange(executor.mode) && (
         <div
           style={{
             background: 'var(--bg-surface)',

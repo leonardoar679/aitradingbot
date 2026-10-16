@@ -375,6 +375,46 @@ const api = {
     stopTwapRun: (runId: string): Promise<LiveTwapResolution | null> => ipcRenderer.invoke(IpcChannel.LiveTradingStopTwapRun, runId),
     drainTwapEvents: (): Promise<LiveTwapResolution[]> => ipcRenderer.invoke(IpcChannel.LiveTradingDrainTwapEvents)
   },
+  // The demo book (V7.1 Stage 8): an exchange's demo account over its demo key, in ledgers of its
+  // own, with no live gate -- play money. A bridge of its own, so that the paper laboratory, allowed
+  // this one, is held off the real one by test (tests/aiNoLivePath.test.ts).
+  demoTrading: {
+    placeOrder: (exchange: Exchange, symbol: string, baseAsset: string, quoteAsset: string, side: 'buy' | 'sell', quoteAmount: number): Promise<LiveOrderRecord> =>
+      ipcRenderer.invoke(IpcChannel.DemoTradingPlaceOrder, exchange, symbol, baseAsset, quoteAsset, side, quoteAmount),
+    placeLimitOrder: (
+      executorId: string,
+      exchange: Exchange,
+      symbol: string,
+      baseAsset: string,
+      quoteAsset: string,
+      side: 'buy' | 'sell',
+      amountQuote: number,
+      limitPrice: number
+    ): Promise<{ resolved: true; liveOrder: LiveOrderRecord } | { resolved: false; pendingLiveOrderId: string }> =>
+      ipcRenderer.invoke(IpcChannel.DemoTradingPlaceLimitOrder, executorId, exchange, symbol, baseAsset, quoteAsset, side, amountQuote, limitPrice),
+    closePosition: (positionId: string, quantity: number): Promise<LiveOrderRecord> => ipcRenderer.invoke(IpcChannel.DemoTradingClosePosition, positionId, quantity),
+    cancelOrder: (liveOrderId: string): Promise<LiveOrderRecord> => ipcRenderer.invoke(IpcChannel.DemoTradingCancelOrder, liveOrderId),
+    listPositions: (): Promise<LivePosition[]> => ipcRenderer.invoke(IpcChannel.DemoTradingListPositions),
+    listClosedPositions: (): Promise<LivePosition[]> => ipcRenderer.invoke(IpcChannel.DemoTradingListClosedPositions),
+    reconciliation: (): Promise<ReconciliationReadout> => ipcRenderer.invoke(IpcChannel.DemoTradingReconciliation),
+    createWatcher: (
+      executorId: string,
+      exchange: Exchange,
+      symbol: string,
+      entryPrice: number,
+      takeProfitPct: number | null,
+      stopLossPct: number | null,
+      timeLimitSec: number | null,
+      trailingStop: { activationPct: number; trailPct: number } | null
+    ): Promise<{ id: string }> =>
+      ipcRenderer.invoke(IpcChannel.DemoTradingCreateWatcher, executorId, exchange, symbol, entryPrice, takeProfitPct, stopLossPct, timeLimitSec, trailingStop),
+    listActiveWatchers: (): Promise<LiveWatcherSummary[]> => ipcRenderer.invoke(IpcChannel.DemoTradingListActiveWatchers),
+    stopWatcher: (watcherId: string): Promise<LiveExitResult | null> => ipcRenderer.invoke(IpcChannel.DemoTradingStopWatcher, watcherId),
+    poll: (): Promise<{
+      orderResolutions: { executorId: string; liveOrderId: string; liveOrder: LiveOrderRecord; status: 'filled' | 'cancelled' | 'expired' }[]
+      watcherEvents: { executorId: string; liveExitResult: LiveExitResult }[]
+    }> => ipcRenderer.invoke(IpcChannel.DemoTradingPoll)
+  },
   executors: {
     placeLiveOrder: (
       exchange: Exchange,

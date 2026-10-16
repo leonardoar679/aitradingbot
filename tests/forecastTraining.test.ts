@@ -259,11 +259,11 @@ describe('the schedule', () => {
     // The forecast trader beside it (V6 Stage 12): off until switched on, healed as its own.
     const off = { enabled: false, stakeQuote: 100, maxOpen: 2, maxSameSide: 1 }
     // And the paper laboratory (V7.1 Stage 4): every strategy off, no daily stop reached.
-    const lab = { strategies: { strict: false, direction: false, news: false, hybrid: false }, stopped: null }
+    const lab = { strategies: { strict: false, direction: false, news: false, hybrid: false }, stopped: null, execution: 'paper' }
     expect(healForecastSettings(undefined)).toEqual({ refitNightly: true, trader: off, lab })
     expect(healForecastSettings({ refitNightly: 'no' })).toEqual({ refitNightly: true, trader: off, lab })
     expect(healForecastSettings({ refitNightly: false, trader: { enabled: 'yes', maxOpen: 4 } })).toEqual({ refitNightly: false, trader: { ...off, maxOpen: 4 }, lab })
-    expect(healForecastSettings({ lab: { strategies: { direction: true, news: 'yes' }, stopped: { day: '2026-10-16', at: 1, lossQuote: 150, equityQuote: 10_000 } } }).lab).toEqual({ strategies: { ...lab.strategies, direction: true }, stopped: { day: '2026-10-16', at: 1, lossQuote: 150, equityQuote: 10_000 } })
+    expect(healForecastSettings({ lab: { strategies: { direction: true, news: 'yes' }, stopped: { day: '2026-10-16', at: 1, lossQuote: 150, equityQuote: 10_000 } } }).lab).toEqual({ strategies: { ...lab.strategies, direction: true }, stopped: { day: '2026-10-16', at: 1, lossQuote: 150, equityQuote: 10_000 }, execution: 'paper' })
     expect(healForecastSettings({ trader: { enabled: true, stakeQuote: 250, maxOpen: 6, maxSameSide: 3 } }).trader).toEqual({ enabled: true, stakeQuote: 250, maxOpen: 6, maxSameSide: 3 })
     expect(healForecastSettings({ trader: { enabled: true, stakeQuote: 99, maxOpen: 5, maxSameSide: 0 } }).trader).toEqual({ ...off, enabled: true })
   })

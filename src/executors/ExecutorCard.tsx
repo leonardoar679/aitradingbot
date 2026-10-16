@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { AlertTriangle, Trash2 } from 'lucide-react'
 import {
   EXCHANGES,
+  onExchange,
   type ExecutorConfig,
   type OrderExecutorParams,
   type PositionExecutorParams,
@@ -56,8 +57,10 @@ function useLiveWatcherInfo(executor: ExecutorConfig): LiveWatcherInfo {
   const [info, setInfo] = useState<LiveWatcherInfo>(EMPTY_WATCHER_INFO)
   const watching =
     (executor.type === 'position' || executor.type === 'dca' || executor.type === 'grid') &&
-    executor.mode === 'live' &&
+    onExchange(executor.mode) &&
     executor.liveWatcherId !== null
+  // A demo executor's watcher lives in the demo book (V7.1 Stage 8), read through its own bridge.
+  const demo = executor.mode === 'demo'
 
   useEffect(() => {
     if (!watching) {
@@ -67,7 +70,7 @@ function useLiveWatcherInfo(executor: ExecutorConfig): LiveWatcherInfo {
     let cancelled = false
     async function poll(): Promise<void> {
       try {
-        const watchers = await window.api.liveTrading.listActiveWatchers()
+        const watchers = await (demo ? window.api.demoTrading.listActiveWatchers() : window.api.liveTrading.listActiveWatchers())
         if (cancelled) return
         const match = watchers.find((w) => w.executorId === executor.id)
         setInfo(
@@ -90,7 +93,7 @@ function useLiveWatcherInfo(executor: ExecutorConfig): LiveWatcherInfo {
       cancelled = true
       clearInterval(timer)
     }
-  }, [watching, executor.id])
+  }, [watching, demo, executor.id])
 
   return info
 }
@@ -150,7 +153,9 @@ function ClosedLiveMetrics({ executor }: { executor: ExecutorConfig }): React.JS
   const { entryPrice, exitPrice, exitReason, realizedPnl, closedAt } = executor.liveExitResult!
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
-      <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Closed — real exit ({EXIT_REASON_LABEL[exitReason]})</span>
+      <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+        Closed — {executor.mode === 'demo' ? 'demo exit' : 'real exit'} ({EXIT_REASON_LABEL[exitReason]})
+      </span>
       <span style={{ color: 'var(--text-secondary)' }}>
         {formatQuotePrice(entryPrice, executor.quoteAsset)} → {formatQuotePrice(exitPrice, executor.quoteAsset)}
       </span>
@@ -163,7 +168,7 @@ function ClosedLiveMetrics({ executor }: { executor: ExecutorConfig }): React.JS
 }
 
 function MetricsPanel({ executor }: { executor: ExecutorConfig }): React.JSX.Element {
-  if (executor.mode === 'live') {
+  if (onExchange(executor.mode)) {
     return <LiveOrderMetrics executor={executor} />
   }
   if (executor.type === 'xemm' || executor.type === 'arbitrage') {
@@ -195,9 +200,10 @@ export function LiveOrderMetrics({ executor }: { executor: ExecutorConfig }): Re
       const activationTarget = trailingStop !== null ? entryPrice * (1 + trailingStop.activationPct / 100) : null
       const trailingActive = trailingStop !== null && trailingPeak !== null && activationTarget !== null && trailingPeak >= activationTarget
       const trailTarget = trailingActive && trailingStop !== null && trailingPeak !== null ? trailingPeak * (1 - trailingStop.trailPct / 100) : null
+      const demo = executor.mode === 'demo'
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.78rem' }}>
-          <span style={{ color: 'var(--down)', fontWeight: 600 }}>Watching — real position open</span>
+          <span style={{ color: demo ? 'var(--accent)' : 'var(--down)', fontWeight: 600 }}>{demo ? 'Watching — demo position open (play money)' : 'Watching — real position open'}</span>
           <WatcherHealth info={watcherInfo} />
           <span style={{ color: 'var(--text-secondary)' }}>
             {params.amountQuote} {executor.quoteAsset} @ {formatQuotePrice(entryPrice, executor.quoteAsset)} (entry)
@@ -211,7 +217,7 @@ export function LiveOrderMetrics({ executor }: { executor: ExecutorConfig }): Re
                 : ' · trailing not yet activated'}
             </span>
           )}
-          <span style={{ color: 'var(--text-muted)' }}>Stop force-exits this position on Binance</span>
+          <span style={{ color: 'var(--text-muted)' }}>{demo ? "Stop force-exits this position on Bitget's demo account" : 'Stop force-exits this position on Binance'}</span>
         </div>
       )
     }
@@ -679,19 +685,19 @@ export function ExecutorCard({
           {meta.label}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-          {executor.mode === 'live' && (
+          {onExchange(executor.mode) && (
             <span
               style={{
                 padding: '0.2rem 0.5rem',
                 borderRadius: 999,
-                background: 'var(--down)',
+                background: executor.mode === 'live' ? 'var(--down)' : 'var(--accent)',
                 color: '#fff',
                 fontSize: '0.65rem',
                 fontWeight: 800,
                 letterSpacing: '0.04em'
               }}
             >
-              LIVE
+              {executor.mode === 'live' ? 'LIVE' : 'DEMO'}
             </span>
           )}
           <span

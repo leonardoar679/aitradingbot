@@ -3051,6 +3051,29 @@ module that sends it (`bitgetDemoTrading.ts`) never sends a real request, as the
 sends a demo one -- `tests/bitgetAuth.test.ts` pins both. The demo key is for the paper laboratory's
 demo orders (Stage 8); a real Bitget order is Stage 9, through the same gates as Binance's.
 
+### The demo book — Bitget's demo account
+
+Since 16 October 2026 (V7.1 Stage 8; `electron/services/exchanges/venues.ts`, `bitgetOrders.ts`,
+`bitgetDemoTrading.ts`, `electron/ipc/handlers/demoTradingHandlers.ts`). An Order or a Position can be
+created in a third mode, **demo**: placed on Bitget's demo account over the demo key, play money the
+exchange gives, which no order can turn into real money. The live machinery is written once and takes
+the **book** it acts on as a parameter — the real account's ledgers, watchers, poll and reconciliation
+as they always were, and a demo book of its own: `demoPositions.json`, `demoOrders.json`,
+`demoPositionWatchers.json`, polled and reconciled apart, with no live gate (a demo loss is no loss)
+and no way to the real venue, since the venue is chosen by the book. A demo market order is a limit
+order a fifth of a percent through the book, immediate or cancel, sized in the base coin by the pair's
+steps: it fills at the book's price like a market order and can never fill further from it than the
+cap; what did not fill is cancelled by the exchange. A placement that timed out is asked about by its
+client id before the attempt is given up, so one order is never placed twice. The renderer reaches the
+demo book through a bridge of its own (`window.api.demoTrading`), so that the paper laboratory, allowed
+that bridge, is held off the real one by `tests/aiNoLivePath.test.ts`; the Positions page shows demo
+positions and their history apart from paper and real, each row saying it holds play money, and a
+demo exit is told as one. The **Paper laboratory** card gained the setting "Trades go to": the paper
+account, or Bitget's demo account once a demo key is stored — then each BUY the laboratory would have
+opened on paper is placed on the demo account instead, under the same caps, watched there by the demo
+watcher and read back from the demo ledger onto the trade's mark; a SELL stays paper, since spot has
+no short. Set to the demo account without a demo key, the laboratory opens nothing and says why.
+
 ## Live Trading — Real Money
 
 **The path to live** (since 8 October 2026; the second V3 document's §56). Live Trading opens with a

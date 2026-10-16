@@ -134,7 +134,7 @@ export function describeDiscrepancy(discrepancy: LiveDiscrepancy, exchangeLabel:
 
 /** An order resting on the exchange, as the reconciliation reads it (GET /openOrders). */
 export interface OpenOrderOnExchange {
-  orderId: number
+  orderId: number | string
   symbol: string
   side: 'buy' | 'sell'
   status: string

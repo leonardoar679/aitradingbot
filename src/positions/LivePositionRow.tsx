@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { describeDuration } from '../../shared/aiCost'
-import { EXCHANGES, type LivePosition, type LiveWatcherSummary } from '../../shared/ipc'
+import { EXCHANGES, type LivePosition, type LiveWatcherSummary, type TradingBook } from '../../shared/ipc'
 import { useLastPrice } from '../hooks/useLastPrice'
 import { formatQuotePrice } from '../utils/formatCurrency'
 import { netRealizedPnl } from '../../shared/fees'
@@ -29,13 +29,17 @@ export function describeWatcherBarriers(watcher: Pick<LiveWatcherSummary, 'stopL
 export function LivePositionRow({
   position,
   onClosed,
-  thesis = null
+  thesis = null,
+  book = 'real'
 }: {
   position: LivePosition
   onClosed: () => void
   /** Its watcher and its thesis status (src/positions/thesisMeasure.ts), where it has a watcher;
    * null for a position nothing watches. Shown only: the watcher closes it by its own barriers. */
   thesis?: { watcher: LiveWatcherSummary; reading: ThesisReading | null } | null
+  /** The demo book's row (V7.1 Stage 8) closes on the demo account through the demo bridge, and
+   * says it holds play money. */
+  book?: TradingBook
 }): React.JSX.Element {
   const i18n = useI18n()
   const { t } = i18n
@@ -76,7 +80,7 @@ export function LivePositionRow({
     setClosing(true)
     setError(null)
     try {
-      await window.api.liveTrading.closePosition(position.id, closeQty)
+      await (book === 'demo' ? window.api.demoTrading.closePosition(position.id, closeQty) : window.api.liveTrading.closePosition(position.id, closeQty))
       onClosed()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -90,7 +94,9 @@ export function LivePositionRow({
     <tr style={{ borderBottom: '1px solid var(--border)' }}>
       <td style={{ ...cellStyle, fontWeight: 600, color: 'var(--text-primary)' }}>
         {position.symbol}
-        <div style={{ fontSize: '0.7rem', fontWeight: 400, color: 'var(--text-muted)' }}>{t('{exchange} · real holdings', { exchange: exchangeName })}</div>
+        <div style={{ fontSize: '0.7rem', fontWeight: 400, color: 'var(--text-muted)' }}>
+          {book === 'demo' ? t('{exchange} · demo holdings, play money', { exchange: exchangeName }) : t('{exchange} · real holdings', { exchange: exchangeName })}
+        </div>
         {thesis !== null && (
           <div style={{ fontSize: '0.7rem', fontWeight: 400, color: 'var(--text-muted)', marginTop: '0.3rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
             <span>{describeWatcherBarriers(thesis.watcher, i18n)}</span>

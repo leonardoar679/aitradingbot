@@ -18,8 +18,9 @@ import {
   executeLiveClose,
   cancelLiveOrderById,
   cancelSiblingLiveOrders,
+  placeLiveLimitOrderOn,
   placeLiveMarketOrder,
-  resolveOrderFromExchange,
+  pollLiveOrder,
   type LiveOrderResolution
 } from '../../services/liveExecutionService'
 import { drainStreamResolutions, getUserStreamState } from '../../services/liveUserStreamService'
@@ -32,9 +33,10 @@ import {
   updateWatcherEntryPrice
 } from '../../services/livePositionWatchersService'
 import { createTwapRun, listActiveTwapRuns, stopTwapRun, drainResolvedTwapEvents } from '../../services/liveTwapService'
-import { getDecryptedCredential } from '../../services/credentialsService'
-import { placeLimitOrder, queryOrder } from '../../services/exchanges/binanceTrading'
 
+// THE REAL BOOK'S BRIDGE. Every call here is the real account's: the ledgers, the watchers and the
+// orders of book 'real', which every service takes by default. The other book has a bridge in a file
+// of its own, so that a renderer file allowed the one is not thereby allowed the other.
 export function registerLiveTradingHandlers(): void {
   ipcMain.handle(IpcChannel.LiveTradingGetStatus, () => getLiveTradingStatus())
   ipcMain.handle(
@@ -99,8 +101,7 @@ export function registerLiveTradingHandlers(): void {
       await assertLiveOrderAffordable(exchange, quoteAsset, side, amountQuote)
 
       const quantity = amountQuote / limitPrice
-      const { apiKey, apiSecret } = await getDecryptedCredential(exchange)
-      const result = await placeLimitOrder(apiKey, apiSecret, symbol, side === 'buy' ? 'BUY' : 'SELL', quantity, limitPrice)
+      const result = await placeLiveLimitOrderOn(exchange, symbol, side, quantity, limitPrice)
 
       if (result.status === 'FILLED') {
         await recordLiveOrderUsage(result.cummulativeQuoteQty)
@@ -135,9 +136,7 @@ export function registerLiveTradingHandlers(): void {
         const resolutions: LiveOrderResolution[] = []
         for (const order of open) {
           try {
-            const { apiKey, apiSecret } = await getDecryptedCredential(order.exchange)
-            const result = await queryOrder(apiKey, apiSecret, order.symbol, order.orderId)
-            const resolution = await resolveOrderFromExchange(order, result)
+            const resolution = await pollLiveOrder(order)
             if (resolution !== null) resolutions.push(resolution)
           } catch (error) {
             console.error(`Failed to poll live order ${order.id}:`, error)

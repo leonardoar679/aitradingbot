@@ -2,54 +2,65 @@ import { app } from 'electron'
 import { join } from 'path'
 import { readFile, mkdir } from 'fs/promises'
 import { writeJsonAtomic } from './atomicWrite'
-import type { Exchange, ExecutorSide, LiveOrder } from '../../shared/ipc'
+import type { Exchange, ExecutorSide, LiveOrder, TradingBook } from '../../shared/ipc'
 
 // The live-order ledger — separate from liveTrading.json (safety gates) and livePositions.json
 // (net holdings). This is the source of truth for every resting live order: it survives app
 // restarts independent of any renderer state, so an order still open when the app closes is
 // picked up correctly next launch just by polling every 'open' record, no reconciliation logic
 // needed beyond that.
+//
+// Two books since V7.1 Stage 8: the real account's, liveOrders.json, and the demo book's,
+// demoOrders.json (shared/ipc.ts TradingBook); every call names its book, the real one by default.
 
 interface LiveOrdersState {
   orders: LiveOrder[]
 }
 
-const DEFAULT_STATE: LiveOrdersState = { orders: [] }
+/** A fresh state each time: two books must never share an array. */
+const emptyState = (): LiveOrdersState => ({ orders: [] })
+const FILE_OF: Record<TradingBook, string> = { real: 'liveOrders.json', demo: 'demoOrders.json' }
 
-let cache: LiveOrdersState | null = null
+const caches: Record<TradingBook, LiveOrdersState | null> = { real: null, demo: null }
 
-function liveOrdersPath(): string {
-  return join(app.getPath('userData'), 'liveOrders.json')
+function liveOrdersPath(book: TradingBook): string {
+  return join(app.getPath('userData'), FILE_OF[book])
 }
 
-async function load(): Promise<LiveOrdersState> {
-  if (cache) return cache
+async function load(book: TradingBook): Promise<LiveOrdersState> {
+  const cached = caches[book]
+  if (cached) return cached
+  let state: LiveOrdersState
   try {
-    const raw = await readFile(liveOrdersPath(), 'utf-8')
-    cache = { ...DEFAULT_STATE, ...(JSON.parse(raw) as Partial<LiveOrdersState>) }
+    const raw = await readFile(liveOrdersPath(book), 'utf-8')
+    state = { ...emptyState(), ...(JSON.parse(raw) as Partial<LiveOrdersState>) }
   } catch {
-    cache = { ...DEFAULT_STATE }
+    state = emptyState()
   }
-  return cache
+  caches[book] = state
+  return state
 }
 
-async function persist(): Promise<void> {
+async function persist(book: TradingBook): Promise<void> {
   await mkdir(app.getPath('userData'), { recursive: true })
-  await writeJsonAtomic(liveOrdersPath(), cache)
+  await writeJsonAtomic(liveOrdersPath(book), caches[book])
 }
 
-export async function createLiveOrder(input: {
-  executorId: string
-  exchange: Exchange
-  symbol: string
-  baseAsset: string
-  quoteAsset: string
-  side: ExecutorSide
-  orderId: number
-  limitPrice: number
-  quantity: number
-}): Promise<LiveOrder> {
-  const state = await load()
+export async function createLiveOrder(
+  input: {
+    executorId: string
+    exchange: Exchange
+    symbol: string
+    baseAsset: string
+    quoteAsset: string
+    side: ExecutorSide
+    orderId: number | string
+    limitPrice: number
+    quantity: number
+  },
+  book: TradingBook = 'real'
+): Promise<LiveOrder> {
+  const state = await load(book)
   const order: LiveOrder = {
     id: crypto.randomUUID(),
     executorId: input.executorId,
@@ -68,17 +79,17 @@ export async function createLiveOrder(input: {
     resolvedAt: null
   }
   state.orders.push(order)
-  await persist()
+  await persist(book)
   return order
 }
 
-export async function listOpenLiveOrders(): Promise<LiveOrder[]> {
-  const state = await load()
+export async function listOpenLiveOrders(book: TradingBook = 'real'): Promise<LiveOrder[]> {
+  const state = await load(book)
   return state.orders.filter((o) => o.status === 'open')
 }
 
-export async function getLiveOrder(id: string): Promise<LiveOrder | null> {
-  const state = await load()
+export async function getLiveOrder(id: string, book: TradingBook = 'real'): Promise<LiveOrder | null> {
+  const state = await load(book)
   return state.orders.find((o) => o.id === id) ?? null
 }
 
@@ -86,15 +97,16 @@ export async function resolveLiveOrder(
   id: string,
   status: 'filled' | 'cancelled' | 'expired',
   filledQty: number,
-  avgFillPrice: number | null
+  avgFillPrice: number | null,
+  book: TradingBook = 'real'
 ): Promise<LiveOrder | null> {
-  const state = await load()
+  const state = await load(book)
   const order = state.orders.find((o) => o.id === id)
   if (!order) return null
   order.status = status
   order.filledQty = filledQty
   order.avgFillPrice = avgFillPrice
   order.resolvedAt = Math.floor(Date.now() / 1000)
-  await persist()
+  await persist(book)
   return order
 }

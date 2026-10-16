@@ -52,13 +52,18 @@ export const LAB_RISK = {
   sensitivity: [0.55, 0.52] as readonly number[]
 } as const
 
+/** Where the laboratory's trades go (V7.1 Stage 8): the paper account, or an exchange's DEMO
+ * account over its demo key -- play money, through the one module that can reach nothing real. */
+export type LabExecution = 'paper' | 'demo'
+
 export interface LabSettings {
   strategies: Record<LabStrategy, boolean>
   /** The day the stop was reached, and what was lost against what equity; null while it was not. */
   stopped: { day: string; at: number; lossQuote: number; equityQuote: number } | null
+  execution: LabExecution
 }
 
-export const DEFAULT_LAB_SETTINGS: LabSettings = { strategies: { strict: false, direction: false, news: false, hybrid: false }, stopped: null }
+export const DEFAULT_LAB_SETTINGS: LabSettings = { strategies: { strict: false, direction: false, news: false, hybrid: false }, stopped: null, execution: 'paper' }
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 
@@ -71,7 +76,9 @@ export function healLabSettings(value: unknown): LabSettings {
   const whole = isObject(stopped) && typeof stopped.day === 'string' && typeof stopped.at === 'number' && typeof stopped.lossQuote === 'number' && typeof stopped.equityQuote === 'number'
   return {
     strategies: Object.fromEntries(LAB_STRATEGIES.map((strategy) => [strategy, strategies[strategy] === true])) as Record<LabStrategy, boolean>,
-    stopped: whole ? { day: stopped.day as string, at: stopped.at as number, lossQuote: stopped.lossQuote as number, equityQuote: stopped.equityQuote as number } : null
+    stopped: whole ? { day: stopped.day as string, at: stopped.at as number, lossQuote: stopped.lossQuote as number, equityQuote: stopped.equityQuote as number } : null,
+    // Only a stored 'demo' sends the laboratory's trades to a demo account; anything else is paper.
+    execution: raw.execution === 'demo' ? 'demo' : 'paper'
   }
 }
 
@@ -85,7 +92,8 @@ export interface LabTradeMark extends ForecastTradeMark {
 /** The laboratory's trades among the executors: paper Positions carrying its mark; one strategy's where
  * named. */
 export function labPaperExecutors(executors: readonly ExecutorConfig[], strategy?: LabStrategy): ExecutorConfig[] {
-  return executors.filter((executor) => executor.mode === 'paper' && executor.type === 'position' && executor.lab !== undefined && (strategy === undefined || executor.lab.strategy === strategy))
+  // On paper, or on a demo account (V7.1 Stage 8): never live, which the laboratory cannot make.
+  return executors.filter((executor) => executor.mode !== 'live' && executor.type === 'position' && executor.lab !== undefined && (strategy === undefined || executor.lab.strategy === strategy))
 }
 
 /** The UTC day a moment falls in, as the stop names it. */

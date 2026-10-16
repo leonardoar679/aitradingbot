@@ -5,11 +5,11 @@ import type { ForecastRanking, RankedForecast } from '../shared/forecast/ranking
 import { forecastRunSectionOf } from '../shared/forecast/runSection'
 import type { TradeDecision } from '../shared/forecast/tradeDecision'
 import { healForecastSettings } from '../shared/forecast/training'
-import type { Candle, ExecutorConfig, PaperAccount, PositionExecutorParams } from '../shared/ipc'
+import type { Candle, ExecutorConfig, LiveOrderRecord, PaperAccount, PositionExecutorParams } from '../shared/ipc'
 import type { LiveBook } from '../shared/liveMarket'
 import { DEFAULT_PAPER_PAUSE } from '../shared/paperPause'
 import { DEFAULT_PAPER_RISK, ownOpenPaperTrades } from '../shared/paperRisk'
-import { fundLab, labPaperExecutor, openLabTrades, settleLabTrades, type LabTraderDeps } from '../src/forecast/labTrader'
+import { fundLab, labPaperExecutor, openLabTrades, settleLabTrades, type LabDemoDeps, type LabTraderDeps } from '../src/forecast/labTrader'
 
 // THE PAPER LABORATORY (shared/forecast/labTrader.ts, src/forecast/labTrader.ts; V7.1 Stage 4): four
 // candidate strategies on a $10,000 paper account, each a paper trader off until switched on -- which
@@ -108,7 +108,11 @@ describe('the rules', () => {
   it('read the settings as stored, every strategy off unless a stored true, and a stop only whole', () => {
     expect(healLabSettings(undefined)).toEqual(DEFAULT_LAB_SETTINGS)
     expect(DEFAULT_LAB_SETTINGS.strategies).toEqual({ strict: false, direction: false, news: false, hybrid: false })
-    expect(healLabSettings({ strategies: { strict: true, news: 'yes' }, stopped: { day: '2026-10-16', at: T, lossQuote: 150, equityQuote: 10_000 } })).toEqual({ strategies: { strict: true, direction: false, news: false, hybrid: false }, stopped: { day: '2026-10-16', at: T, lossQuote: 150, equityQuote: 10_000 } })
+    expect(healLabSettings({ strategies: { strict: true, news: 'yes' }, stopped: { day: '2026-10-16', at: T, lossQuote: 150, equityQuote: 10_000 } })).toEqual({ strategies: { strict: true, direction: false, news: false, hybrid: false }, stopped: { day: '2026-10-16', at: T, lossQuote: 150, equityQuote: 10_000 }, execution: 'paper' })
+    // Only a stored 'demo' sends the trades to the demo account (V7.1 Stage 8).
+    expect(healLabSettings({ execution: 'demo' }).execution).toBe('demo')
+    expect(healLabSettings({ execution: 'live' }).execution).toBe('paper')
+    expect(DEFAULT_LAB_SETTINGS.execution).toBe('paper')
     expect(healLabSettings({ stopped: { day: '2026-10-16' } }).stopped).toBeNull()
     // The forecast's settings carry it, so every writer that spreads the healed whole keeps it.
     expect(healForecastSettings({ lab: { strategies: { hybrid: true } } }).lab.strategies.hybrid).toBe(true)
@@ -207,18 +211,53 @@ describe('the laboratory', () => {
   })
   const funded = (usdt: number): PaperAccount => ({ balances: { USDT: usdt }, initialBalances: { USDT: usdt }, createdAt: T - 86_400, ledger: [] })
 
-  function world(patch: { strategies?: Partial<Record<'strict' | 'direction' | 'news' | 'hybrid', boolean>>; executors?: ExecutorConfig[]; ranked?: RankedForecast[]; predictions?: PricePrediction[]; account?: PaperAccount | null; quant?: 'long' | 'short' | null; stopped?: { day: string; at: number; lossQuote: number; equityQuote: number } | null; book?: Partial<LiveBook> | null } = {}) {
+  function world(
+    patch: {
+      strategies?: Partial<Record<'strict' | 'direction' | 'news' | 'hybrid', boolean>>
+      executors?: ExecutorConfig[]
+      ranked?: RankedForecast[]
+      predictions?: PricePrediction[]
+      account?: PaperAccount | null
+      quant?: 'long' | 'short' | null
+      stopped?: { day: string; at: number; lossQuote: number; equityQuote: number } | null
+      book?: Partial<LiveBook> | null
+      /** The demo account (V7.1 Stage 8): the setting, and a faked bridge -- whether a key is stored,
+       * what a placement answers (or throws), what a watcher answers (or throws). */
+      execution?: 'paper' | 'demo'
+      demo?: { keyStored?: boolean; fill?: LiveOrderRecord | Error; watcher?: { id: string } | Error }
+    } = {}
+  ) {
     const nowSec = T + 60
     const store = {
       executors: patch.executors ?? [],
       paperAccount: patch.account === undefined ? funded(10_000) : patch.account,
       paperRisk: { ...DEFAULT_PAPER_RISK, maxOutQuote: null },
       paperPause: DEFAULT_PAPER_PAUSE,
-      forecast: { refitNightly: true, trader: { enabled: false, stakeQuote: 100, maxOpen: 2, maxSameSide: 1 }, lab: { strategies: { strict: true, ...patch.strategies }, stopped: patch.stopped ?? null } }
+      forecast: { refitNightly: true, trader: { enabled: false, stakeQuote: 100, maxOpen: 2, maxSameSide: 1 }, lab: { strategies: { strict: true, ...patch.strategies }, stopped: patch.stopped ?? null, execution: patch.execution ?? 'paper' } }
     }
     const told: string[] = []
     const settled: string[] = []
     const asked: string[] = []
+    const placed: { symbol: string; side: string; quoteAmount: number }[] = []
+    const watched: { executorId: string; symbol: string; entryPrice: number; takeProfitPct: number | null; stopLossPct: number | null; timeLimitSec: number | null }[] = []
+    const demo: LabDemoDeps | undefined =
+      patch.demo === undefined
+        ? undefined
+        : {
+            keyStored: async () => patch.demo?.keyStored ?? true,
+            place: async (symbol, side, quoteAmount) => {
+              placed.push({ symbol, side, quoteAmount })
+              const fill = patch.demo?.fill ?? { orderId: '1494849323637915648', status: 'FILLED', filledQty: 9.98, avgFillPrice: 100.01, cummulativeQuoteQty: 998.1, placedAt: nowSec }
+              if (fill instanceof Error) throw fill
+              return fill
+            },
+            watch: async (executorId, symbol, entryPrice, takeProfitPct, stopLossPct, timeLimitSec) => {
+              watched.push({ executorId, symbol, entryPrice, takeProfitPct, stopLossPct, timeLimitSec })
+              const watcher = patch.demo?.watcher ?? { id: 'w1' }
+              if (watcher instanceof Error) throw watcher
+              return watcher
+            }
+          }
     const ranking: ForecastRanking = { at: T, ranked: patch.ranked ?? [ranked('SOLUSDT')], top10: [], top3: [] }
     const predictions = patch.predictions ?? ranking.ranked.map((entry) => prediction(entry.pair))
     const deps: LabTraderDeps = {
@@ -239,9 +278,10 @@ describe('the laboratory', () => {
       notify: (title) => void told.push(title),
       nowSec: () => nowSec,
       newId: () => `lab-${store.executors.length + 1}`,
-      queue: (work) => work()
+      queue: (work) => work(),
+      ...(demo === undefined ? {} : { demo })
     }
-    return { store, deps, told, settled, asked, nowSec }
+    return { store, deps, told, settled, asked, placed, watched, nowSec }
   }
 
   it('opens nothing while every strategy is off, which they are until a person switches one on', async () => {
@@ -391,5 +431,87 @@ describe('the laboratory', () => {
     const before = plenty.store.paperAccount
     expect(await fundLab(plenty.deps)).toEqual({ added: 0, balance: 12_000 })
     expect(plenty.store.paperAccount).toBe(before)
+  })
+
+  describe('the demo account (V7.1 Stage 8)', () => {
+  it('sends a BUY to the demo account over the demo bridge, under the same caps, filled and watched there, and told as a demo trade', async () => {
+    const { deps, store, told, placed, watched } = world({ execution: 'demo', demo: {} })
+    const result = await openLabTrades(deps)
+    expect(result.opened).toEqual([{ pair: 'SOLUSDT', strategy: 'strict' }])
+    expect(result.held).toBeNull()
+    expect(placed).toEqual([{ symbol: 'SOLUSDT', side: 'buy', quoteAmount: 1000 }])
+    const [trade] = store.executors
+    expect(trade).toMatchObject({ mode: 'demo', exchange: 'bitget', type: 'position', status: 'active', name: 'Lab strict BUY SOLUSDT (demo)', liveWatcherId: 'w1', liveWatcherError: null })
+    expect(trade.liveOrder).toMatchObject({ orderId: '1494849323637915648', filledQty: 9.98, avgFillPrice: 100.01 })
+    expect(trade.lab).toMatchObject({ strategy: 'strict', qualified: ['strict'], side: 'BUY' })
+    const params = trade.params as PositionExecutorParams
+    expect(params).toMatchObject({ side: 'buy', entryPrice: 100.01, amountQuote: 1000, entryExpiresAt: null, entryRange: null, timeLimitSec: 3600 })
+    expect(watched).toEqual([{ executorId: trade.id, symbol: 'SOLUSDT', entryPrice: 100.01, takeProfitPct: params.takeProfitPct, stopLossPct: params.stopLossPct, timeLimitSec: 3600 }])
+    expect(told).toEqual(['Laboratory demo trade: BUY SOLUSDT'])
+  })
+
+  it('keeps a SELL on paper whatever the setting: spot has no short', async () => {
+    const { deps, store, placed } = world({ execution: 'demo', demo: {}, ranked: [ranked('SOLUSDT', decision('SOLUSDT', { side: 'SELL' }))], predictions: [prediction('SOLUSDT', { direction: 'BEARISH', medianPct: -1.5, quantilesPct: [-4, -2.5, -1.5, -0.5, 1], quantilePrices: [96, 97.5, 98.5, 99.5, 101], bearPct: -4, bullPct: 1, pUp: 0.3 })] })
+    await openLabTrades(deps)
+    expect(placed).toEqual([])
+    expect(store.executors).toHaveLength(1)
+    expect(store.executors[0]).toMatchObject({ mode: 'paper', exchange: 'binance' })
+  })
+
+  it('opens nothing and says why where it is set to the demo account without a demo key, or without the bridge', async () => {
+    const noKey = world({ execution: 'demo', demo: { keyStored: false } })
+    const held = await openLabTrades(noKey.deps)
+    expect(held.held).toBe('The laboratory is set to the demo account, but no Bitget demo key is stored: add one on Connections, or set it back to paper.')
+    expect(held.opened).toEqual([])
+    expect(noKey.store.executors).toEqual([])
+    const noBridge = world({ execution: 'demo' })
+    expect((await openLabTrades(noBridge.deps)).held).toBe('The laboratory is set to the demo account, but no Bitget demo key is stored: add one on Connections, or set it back to paper.')
+    // Set to paper, the bridge is not asked at all.
+    const paper = world({ execution: 'paper', demo: {} })
+    await openLabTrades(paper.deps)
+    expect(paper.placed).toEqual([])
+    expect(paper.store.executors[0]).toMatchObject({ mode: 'paper' })
+  })
+
+  it('refuses the trade, writing nothing, where the demo order is refused; and keeps a filled but unwatched entry, saying so on it', async () => {
+    const refused = world({ execution: 'demo', demo: { fill: new Error('Bitget place buy SOLUSDT failed: 43012 Insufficient balance') } })
+    const result = await openLabTrades(refused.deps)
+    expect(result.opened).toEqual([])
+    expect(result.refused).toEqual([{ pair: 'SOLUSDT', why: 'The demo order was refused: Bitget place buy SOLUSDT failed: 43012 Insufficient balance' }])
+    expect(refused.store.executors).toEqual([])
+    const unwatched = world({ execution: 'demo', demo: { watcher: new Error('Already watching a demo position on SOLUSDT') } })
+    await openLabTrades(unwatched.deps)
+    expect(unwatched.store.executors[0]).toMatchObject({ mode: 'demo', liveWatcherId: null, liveWatcherError: 'Already watching a demo position on SOLUSDT', name: 'Lab strict BUY SOLUSDT (demo) (filled, but unwatched: Already watching a demo position on SOLUSDT)' })
+  })
+
+  it("reads a demo trade's exit off its mark once the demo watcher has closed it and the scheduler has written it, settling nothing into the paper account", async () => {
+    const { deps, store, settled } = world({ execution: 'demo', demo: {} })
+    await openLabTrades(deps)
+    const open = store.executors[0]
+    // Still watched: nothing to read.
+    expect(await settleLabTrades(deps)).toEqual([])
+    expect(settled).toEqual([])
+    // The scheduler wrote the exit the demo watcher reported.
+    store.executors = [{ ...open, status: 'stopped', stoppedAt: T + 900, liveWatcherId: null, liveExitResult: { entryPrice: 100.01, exitReason: 'take_profit', exitPrice: 102.4, realizedPnl: 21.9, closedAt: T + 900 } }]
+    expect(await settleLabTrades(deps)).toEqual([open.name])
+    expect(store.executors[0].lab?.result).toEqual({ exit: 'take_profit', pnlQuote: 21.9, closedAt: T + 900 })
+    expect(settled).toEqual([])
+    // Read once.
+    expect(await settleLabTrades(deps)).toEqual([])
+    expect(labStatsOf(store.executors, 'strict', 10_000)).toMatchObject({ opened: 1, closed: 1, wins: 1, netQuote: 21.9 })
+    // And once only even where another pass wrote the mark between the read and the write: the
+    // check inside the queue, on the settings read there.
+    const written = { exit: 'manual', pnlQuote: 5, closedAt: T + 800 }
+    store.executors = [{ ...store.executors[0], lab: { ...store.executors[0].lab!, result: undefined } }]
+    const racing: LabTraderDeps = {
+      ...deps,
+      queue: async (work) => {
+        store.executors = [{ ...store.executors[0], lab: { ...store.executors[0].lab!, result: written } }]
+        return work()
+      }
+    }
+    expect(await settleLabTrades(racing)).toEqual([])
+    expect(store.executors[0].lab?.result).toEqual(written)
+  })
   })
 })

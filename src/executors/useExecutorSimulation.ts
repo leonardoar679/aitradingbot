@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { Candle, ExecutorConfig } from '../../shared/ipc'
+import { onExchange, type Candle, type ExecutorConfig } from '../../shared/ipc'
 import { runExecutorSimulation } from './engine'
 import type { SingleMarketExecutorState } from './types'
 
@@ -72,11 +72,11 @@ export function useExecutorSimulation(config: ExecutorConfig): ExecutorSimResult
             candles: [],
             waitingForFirstCandle: tooYoung
           })
-        } else if (config.mode === 'live') {
-          // Live executors never get a simulated state -- the real outcome already happened (or,
-          // for a resting limit order / watched position, is really in progress on Binance) and
-          // lives on the executor's own liveOrder/liveWatcherId/liveExitResult fields, not a
-          // paper replay of these same candles. Candles are still fetched so the chart has real
+        } else if (onExchange(config.mode)) {
+          // Live and demo executors never get a simulated state -- the real outcome already happened
+          // (or, for a resting limit order / watched position, is really in progress on the
+          // exchange) and lives on the executor's own liveOrder/liveWatcherId/liveExitResult fields,
+          // not a paper replay of these same candles. Candles are still fetched so the chart has real
           // market context to draw against.
           setResult({
             status: 'running',

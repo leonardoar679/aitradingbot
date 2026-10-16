@@ -135,7 +135,20 @@ export const IpcChannel = {
   LiveTradingUserStream: 'liveTrading:userStream',
   LiveTradingReconciliation: 'liveTrading:reconciliation',
   ExecutorPlaceLiveOrder: 'executor:placeLiveOrder',
-  ExecutorPlaceLiveLimitOrder: 'executor:placeLiveLimitOrder'
+  ExecutorPlaceLiveLimitOrder: 'executor:placeLiveLimitOrder',
+  // The demo book (V7.1 Stage 8): an exchange's demo account, its own ledgers, no live gate -- and a
+  // bridge of its own, so that nothing that may reach it can reach a real order.
+  DemoTradingPlaceOrder: 'demoTrading:placeOrder',
+  DemoTradingPlaceLimitOrder: 'demoTrading:placeLimitOrder',
+  DemoTradingClosePosition: 'demoTrading:closePosition',
+  DemoTradingCancelOrder: 'demoTrading:cancelOrder',
+  DemoTradingCreateWatcher: 'demoTrading:createWatcher',
+  DemoTradingListActiveWatchers: 'demoTrading:listActiveWatchers',
+  DemoTradingStopWatcher: 'demoTrading:stopWatcher',
+  DemoTradingListPositions: 'demoTrading:listPositions',
+  DemoTradingListClosedPositions: 'demoTrading:listClosedPositions',
+  DemoTradingPoll: 'demoTrading:poll',
+  DemoTradingReconciliation: 'demoTrading:reconciliation'
 } as const
 
 export type IpcChannel = (typeof IpcChannel)[keyof typeof IpcChannel]
@@ -339,6 +352,36 @@ export function canTradeOn(exchange: Exchange): boolean {
   return TRADING_EXCHANGES.includes(exchange)
 }
 
+/** Exchanges with a DEMO account of their own that this app can place demo orders on, over a demo
+ * key (V7.1 Stage 8): play money the exchange gives, which no order can turn into real money. Kept
+ * apart from TRADING_EXCHANGES as that is kept apart from the balance readers: a demo venue is not
+ * thereby a real one. */
+export const DEMO_EXCHANGES: Exchange[] = ['bitget']
+
+export function canTradeDemoOn(exchange: Exchange): boolean {
+  return DEMO_EXCHANGES.includes(exchange)
+}
+
+/** The two books an order on an exchange is kept in: the REAL account's, under every live gate, or
+ * an exchange's DEMO account's, in ledgers of its own. Paper is neither: it reaches no exchange. */
+export type TradingBook = 'real' | 'demo'
+
+/** An executor's mode: simulated on the paper account; real, on the exchange, through the live
+ * gates; or on an exchange's demo account (V7.1 Stage 8). */
+export type ExecutorMode = 'paper' | 'live' | 'demo'
+
+/** The book an executor's orders go to; null for paper, which places none. */
+export function bookOfMode(mode: ExecutorMode): TradingBook | null {
+  return mode === 'live' ? 'real' : mode === 'demo' ? 'demo' : null
+}
+
+/** Whether an executor's orders go to an exchange, real or demo. An executor from before executors
+ * had a mode has none, and is paper: so this asks for the two exchange modes by name, never for
+ * 'paper'. */
+export function onExchange(mode: ExecutorMode | undefined): boolean {
+  return mode === 'live' || mode === 'demo'
+}
+
 /** What one exchange says the user actually holds, as read over their own API key.
  *
  * Read-only in every sense: nothing in the app writes to it, and it is never mixed into the paper
@@ -385,7 +428,8 @@ export interface LiveTradingStatus {
 /** The result of one real order fill. `avgFillPrice` is notional-weighted across a market
  * order's fills, since a market order can cross multiple price levels. */
 export interface LiveOrderRecord {
-  orderId: number
+  /** Binance numbers its orders; Bitget names them with a string too long for a number. */
+  orderId: number | string
   status: string
   filledQty: number
   avgFillPrice: number
@@ -426,7 +470,7 @@ export interface LiveOrder {
   baseAsset: string
   quoteAsset: string
   side: ExecutorSide
-  orderId: number
+  orderId: number | string
   limitPrice: number
   quantity: number
   status: 'open' | 'filled' | 'cancelled' | 'expired'
@@ -908,8 +952,9 @@ export interface ExecutorConfig {
   /** 'live' only ever means anything for type 'order' with executionStrategy 'market' or
    * 'limit' on Binance — every other combination is always 'paper'. See liveTradingService.ts
    * for the gates a live order must pass, ExecutorPlaceLiveOrder/ExecutorPlaceLiveLimitOrder for
-   * where it's actually placed. */
-  mode: 'paper' | 'live'
+   * where it's actually placed. 'demo' (V7.1 Stage 8) is an Order or Position on an exchange's demo
+   * account (DEMO_EXCHANGES), placed through the demo bridge alone, in ledgers of its own. */
+  mode: ExecutorMode
   /** Set when the form this executor was created from was filled in from a model's call
    * (shared/aiProposal.ts). It records where the idea came from and nothing reads it in order to
    * act: the executor was submitted by a person, like every other one. Absent on every executor

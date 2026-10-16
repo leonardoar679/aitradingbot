@@ -1,5 +1,5 @@
 import type { PositionHandover } from '../executors/handOverPosition'
-import type { ExecutorConfig } from '../../shared/ipc'
+import { onExchange, type ExecutorConfig } from '../../shared/ipc'
 import { computeExecutorPnl } from '../executors/computeSnapshot'
 import { settle } from './paperAccount'
 import { updateAccount } from './persistAccount'
@@ -37,7 +37,8 @@ export async function settleExecutorOnStop({
   handedOver: PositionHandover
   now: number
 }): Promise<number | null> {
-  if (executor.mode === 'live') return null
+  // On an exchange, real or demo: nothing of it is on the paper account.
+  if (onExchange(executor.mode)) return null
 
   const settings = await window.api.settings.get()
   if (!settings.paperAccount) return null

@@ -355,7 +355,11 @@ describe('AI code has no route to a real order', () => {
     // Since V7.1 Stage 4 the paper laboratory's writer, scheduler and card are held to the same: its writer
     // writes PAPER executors, the laboratory's stop and the paper account's funding, spelling paper as a
     // literal; its card writes the laboratory's switches and the funding and nothing else.
-    const allowed: Record<string, string[]> = { 'forecastTrader.ts': ['forecast', 'market', 'notify', 'settings'], 'ForecastTraderCard.tsx': ['settings'], 'useRiskTarget.ts': ['settings'], 'labTrader.ts': ['forecast', 'market', 'notify', 'settings'], 'PaperLabCard.tsx': ['backtest', 'settings'] }
+    // Since V7.1 Stage 8 the laboratory's writer may reach the DEMO bridge (demoTrading: an exchange's
+    // demo account, play money, through the one module Bitget refuses a real key) and read whether a
+    // demo key is stored (credentials.list, read-only); never the real bridge, which the checks below
+    // refuse by name in every file here.
+    const allowed: Record<string, string[]> = { 'forecastTrader.ts': ['forecast', 'market', 'notify', 'settings'], 'ForecastTraderCard.tsx': ['settings'], 'useRiskTarget.ts': ['settings'], 'labTrader.ts': ['credentials', 'demoTrading', 'forecast', 'market', 'notify', 'settings'], 'PaperLabCard.tsx': ['backtest', 'credentials', 'settings'] }
     for (const name of screen) {
       const source = readFileSync(join(ROOT, 'src', 'forecast', name), 'utf-8')
       expect(bridgesOf(source).filter((bridge) => !(allowed[name] ?? ['forecast']).includes(bridge)), name).toEqual([])
@@ -369,15 +373,31 @@ describe('AI code has no route to a real order', () => {
     expect(writer.match(/window\.api\.settings\.set\(/g)).toHaveLength(1)
     expect(writer).toContain('await window.api.settings.set({ executors })')
     const laboratory = readFileSync(join(ROOT, 'src', 'forecast', 'labTrader.ts'), 'utf-8')
-    expect(laboratory).toMatch(/^ {4}mode: 'paper',\r?$/m)
+    // Paper and demo are written as literals, each once, and 'live' nowhere: the one factory can make
+    // nothing else, and the only key the file reads is whether a demo key exists.
     expect(laboratory.match(/mode: 'paper'/g)).toHaveLength(1)
-    expect(laboratory).not.toMatch(/mode: (?!'paper')|onPrepareOrder|prepareOrder|aiProposal|forecastProposal|credentials|apiKey/)
+    expect(laboratory.match(/mode: 'demo'/g)).toHaveLength(1)
+    expect(laboratory).not.toMatch(/mode: (?!'paper'|'demo')|'live'|onPrepareOrder|prepareOrder|aiProposal|forecastProposal|apiKey|apiSecret|passphrase/)
+    expect([...laboratory.matchAll(/window\.api\.credentials\.(\w+)/g)].map((match) => match[1])).toEqual(['list'])
+    expect([...laboratory.matchAll(/window\.api\.demoTrading\.(\w+)/g)].map((match) => match[1]).sort()).toEqual(['createWatcher', 'placeOrder'])
     expect(laboratory.match(/window\.api\.settings\.set\(/g)).toHaveLength(1)
     expect(laboratory).toContain('await window.api.settings.set(patch)')
     const labCard = readFileSync(join(ROOT, 'src', 'forecast', 'PaperLabCard.tsx'), 'utf-8')
     expect(labCard.match(/window\.api\.settings\.set\(/g)).toHaveLength(1)
-    expect(labCard).toContain("await window.api.settings.set({ forecast: { ...forecast, lab: { ...forecast.lab, strategies: { ...forecast.lab.strategies, [strategy]: on } } } })")
+    expect(labCard).toContain('await window.api.settings.set({ forecast: { ...forecast, lab: { ...forecast.lab, ...patch } } })')
+    expect([...labCard.matchAll(/window\.api\.credentials\.(\w+)/g)].map((match) => match[1])).toEqual(['list'])
     expect(labCard).toContain('fundLab(labTraderBrowserDeps)')
+    // The two bridges in the main process: the demo one names its book once and uses no other; the
+    // real one never names the demo book; and the demo module is reached only through the venues and
+    // the key store, never from a forecast or AI file.
+    const demoHandlers = readFileSync(join(ROOT, 'electron', 'ipc', 'handlers', 'demoTradingHandlers.ts'), 'utf-8')
+    expect(demoHandlers.match(/const BOOK = 'demo' as const/g)).toHaveLength(1)
+    expect(demoHandlers).not.toMatch(/'real'|canPlaceLiveOrder|recordLiveOrderUsage|bitgetTrading|binanceTrading/)
+    expect(readFileSync(join(ROOT, 'electron', 'ipc', 'handlers', 'liveTradingHandlers.ts'), 'utf-8')).not.toMatch(/'demo'|demoTrading|bitgetDemo/)
+    const sources = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? sources(join(dir, entry.name)) : /\.tsx?$/.test(entry.name) ? [join(dir, entry.name)] : []))
+    const importers = ['electron', 'shared', 'src'].flatMap((top) => sources(join(ROOT, top))).filter((file) => /from '[./]*(exchanges\/)?bitgetDemoTrading'/.test(readFileSync(file, 'utf-8')))
+    expect(importers.map((file) => file.slice(ROOT.length + 1).split(/[\\/]/).join('/')).sort()).toEqual(['electron/services/credentialsService.ts', 'electron/services/exchanges/venues.ts'])
     // The backtest bridge it reaches is the CSV save dialog alone, as the Lab's own tables do.
     expect([...labCard.matchAll(/window\.api\.backtest\.(\w+)/g)].map((match) => match[1])).toEqual(['exportSave'])
     expect(readFileSync(join(ROOT, 'src', 'forecast', 'LabTraderScheduler.tsx'), 'utf-8')).not.toMatch(/settings\.set|placeLive|liveTrading/)
@@ -861,7 +881,8 @@ describe('AI code has no route to a real order', () => {
       'settleExecutor',
       'translate'
     ])
-    expect(readFileSync(join(ROOT, 'src', 'account', 'settleExecutor.ts'), 'utf-8')).toContain("if (executor.mode === 'live') return null")
+    // Since V7.1 Stage 8 a demo executor is no paper trade either: nothing of it is on the paper account.
+    expect(readFileSync(join(ROOT, 'src', 'account', 'settleExecutor.ts'), 'utf-8')).toContain('if (onExchange(executor.mode)) return null')
     // It only ever looks at its own: a paper Position carrying the watch's mark.
     expect(writer).toContain('watchPaperExecutors(executors).filter((entry) => entry.status === \'active\')')
     expect(readFileSync(join(ROOT, 'shared', 'aiWatchPaper.ts'), 'utf-8')).toContain("executor.watch !== undefined && executor.mode === 'paper' && executor.type === 'position'")
@@ -1024,9 +1045,9 @@ describe('AI code has no route to a real order', () => {
       expect(readFileSync(path, 'utf-8'), path).not.toMatch(/liveTrading|LiveTrading|placeLive|settings\.set|setExecutors|settingsWrites|onPrepareOrder|aiProposal|closePosition|exitCheck|askOpportunity/)
     }
     // The page hands the live row its watcher's copy; the row's one real action, Close, is the
-    // person's two clicks it was before.
+    // person's two clicks it was before -- and on a demo row (V7.1 Stage 8) a demo close, by the book.
     const row = join(ROOT, 'src', 'positions', 'LivePositionRow.tsx')
-    expect(calls(row)).toEqual(['liveTrading.closePosition'])
+    expect(calls(row)).toEqual(['demoTrading.closePosition', 'liveTrading.closePosition'])
     expect(readFileSync(row, 'utf-8')).toContain('thesis?: { watcher: LiveWatcherSummary; reading: ThesisReading | null } | null')
   })
 

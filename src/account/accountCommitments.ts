@@ -1,4 +1,4 @@
-import type { ExecutorConfig, HeldPosition } from '../../shared/ipc'
+import { onExchange, type ExecutorConfig, type HeldPosition } from '../../shared/ipc'
 import { executorAllocatedQuote } from '../executors/computeSnapshot'
 
 /** How much of each asset is currently out working, i.e. committed to running paper strategies.
@@ -13,7 +13,7 @@ export function committedByAsset(executors: ExecutorConfig[]): Record<string, nu
   const committed: Record<string, number> = {}
   for (const executor of executors) {
     if (executor.status !== 'active') continue
-    if (executor.mode === 'live') continue
+    if (onExchange(executor.mode)) continue
     const amount = executorAllocatedQuote(executor)
     // A malformed executor must not poison the whole total with NaN -- one bad row would make
     // every figure on the Account page unreadable rather than just its own.

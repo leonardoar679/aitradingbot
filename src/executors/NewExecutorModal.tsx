@@ -39,7 +39,9 @@ import { fieldLabelStyle, textInputStyle } from './formStyles'
 import { twapNumOrders, buildGridLevels } from './engine'
 import {
   EXCHANGES,
+  canTradeDemoOn,
   type Exchange,
+  type ExecutorMode,
   type SymbolInfo,
   type ExecutorType,
   type GridExecutorParams,
@@ -84,7 +86,7 @@ interface NewExecutorModalProps {
     exchange: Exchange
     pair: SymbolInfo
     keepPosition: boolean
-    mode: 'paper' | 'live'
+    mode: ExecutorMode
     params: AnyExecutorParams
     /** Present when the form was filled in from a call and is still the trade that call named. */
     proposedBy?: AiProposalOrigin
@@ -237,13 +239,15 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
     )
   )
   const [marketMakingParams, setMarketMakingParams] = useState<MarketMakingExecutorParams>(defaultMarketMakingParams())
-  const [mode, setMode] = useState<'paper' | 'live'>('paper')
+  const [mode, setMode] = useState<ExecutorMode>('paper')
   const [liveConfirmText, setLiveConfirmText] = useState('')
   /** The amount a real order from this call would stake, by the risk setting (shared/aiProposal.ts):
    * filled in once the limits are known, until the amount is changed by hand. */
   const [suggested, setSuggested] = useState<SuggestedLiveAmount | null>(null)
   const [amountTouched, setAmountTouched] = useState(false)
   const [binanceCredentialConfigured, setBinanceCredentialConfigured] = useState(false)
+  /** A demo key stored for the chosen exchange (V7.1 Stage 8): what a demo order needs. */
+  const [demoKeyConfigured, setDemoKeyConfigured] = useState(false)
   const [liveTradingStatus, setLiveTradingStatus] = useState<LiveTradingStatus | null>(null)
   // A call belongs to one candle. The form can be left open past it, so the banner is told the
   // time rather than trusting the moment it was opened.
@@ -291,7 +295,10 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
     window.api.credentials
       .list()
       .then((list) => {
-        if (!cancelled) setBinanceCredentialConfigured(list.some((c) => c.exchange === 'binance' && c.configured))
+        if (!cancelled) {
+          setBinanceCredentialConfigured(list.some((c) => c.exchange === 'binance' && (c.slot ?? 'real') === 'real' && c.configured))
+          setDemoKeyConfigured(list.some((c) => c.exchange === exchange && c.slot === 'demo' && c.configured))
+        }
       })
       .catch((error) => console.error('Failed to load credential status:', error))
     window.api.liveTrading
@@ -415,6 +422,14 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
       setLiveConfirmText('')
     }
   }, [canGoLive, mode])
+
+  // A demo order (V7.1 Stage 8): an Order or a Position on an exchange with a demo account, over a
+  // stored demo key, under the same form rules a live one keeps (market or limit; a buy-only, 1x
+  // Position with an exit) -- and back to paper the instant any of that stops being true.
+  const canGoDemo = canTradeDemoOn(exchange) && demoKeyConfigured && ((type === 'order' && canGoLiveOrder) || (type === 'position' && canGoLivePosition))
+  useEffect(() => {
+    if (!canGoDemo && mode === 'demo') setMode('paper')
+  }, [canGoDemo, mode])
 
   useEffect(() => {
     if (isSpreadType) return
@@ -688,6 +703,8 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
     // A paper position that still follows a recommendation gives up waiting when the
     // recommendation's entry does. Stamped here, at the click, because it belongs to the
     // recommendation and not to anything the form's fields hold.
+    // A demo entry is a market order on an exchange, as a live one is: a call's expiry and range are
+    // the paper form's alone (shared/aiProposal.ts asks for paper by name).
     const entryExpiresAt = type === 'position' && proposal !== null && followsProposal ? aiProposalEntryExpiry(proposal, mode) : null
     // And it enters by the recommendation's own range, while the entry is still the one the
     // recommendation filled in: a price typed over it is the user's order, and waits as a limit.
@@ -888,7 +905,7 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
             )}
           </div>
 
-          {mode !== 'live' && (
+          {mode === 'paper' && (
             <>
               <label
                 style={{
@@ -921,6 +938,11 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
           {mode === 'live' && (
             <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
               {t("Position Handover doesn't apply to live orders — a real fill is always tracked on the Positions page regardless of this setting.")}
+            </p>
+          )}
+          {mode === 'demo' && (
+            <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
+              {t("Position Handover doesn't apply to demo orders — a demo fill is tracked on the Positions page, apart from paper and real.")}
             </p>
           )}
 
@@ -996,6 +1018,43 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
                                   ? t('The kill switch is engaged — release it from the live trading bar first.')
                                   : t('Arm live trading for this session from the live trading bar first.')}
                 </p>
+              )}
+
+              {(type === 'order' || type === 'position') && canTradeDemoOn(exchange) && (
+                <>
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      fontSize: '0.82rem',
+                      fontWeight: 700,
+                      color: canGoDemo ? 'var(--accent)' : 'var(--text-muted)',
+                      cursor: canGoDemo ? 'pointer' : 'not-allowed'
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={mode === 'demo'}
+                      disabled={!canGoDemo}
+                      onChange={(e) => {
+                        setMode(e.target.checked ? 'demo' : 'paper')
+                        setLiveConfirmText('')
+                      }}
+                    />
+                    {type === 'position' ? t('Demo account — enters and watches a position with play money') : t('Demo account — places an order with play money')}
+                  </label>
+                  {!canGoDemo && (
+                    <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
+                      {!demoKeyConfigured ? t('Add a verified Bitget demo key on Connections first.') : t('A demo order keeps the rules a live one keeps: a market or limit order, or a buy-only 1x Position with an exit.')}
+                    </p>
+                  )}
+                  {mode === 'demo' && (
+                    <p style={{ fontSize: '0.75rem', color: 'var(--accent)', margin: 0, fontWeight: 600 }}>
+                      {t("This goes to Bitget's demo account over your demo key: play money the exchange gives, which no order here can turn into real money. A demo Position is watched and exited on the demo account as a live one would be.")}
+                    </p>
+                  )}
+                </>
               )}
 
               {mode === 'live' && (
@@ -1076,7 +1135,7 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
             title={gridBlocked ? (gridBounds.blocking ?? undefined) : (fundingProblem ?? liveOrderShortfall ?? allocationOrderBreach ?? undefined)}
             style={{
               flex: 1,
-              background: mode === 'live' ? 'var(--down)' : 'linear-gradient(135deg, #7c86ff, #6366f1)',
+              background: mode === 'live' ? 'var(--down)' : mode === 'demo' ? 'var(--accent)' : 'linear-gradient(135deg, #7c86ff, #6366f1)',
               border: 'none',
               borderRadius: 'var(--radius-sm)',
               padding: '0.7rem',
@@ -1090,7 +1149,7 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
               opacity: name.trim() && canSubmitLive && !spreadAssetsMismatched && !gridBlocked && !blockedByExpiry ? 1 : 0.6
             }}
           >
-            {mode === 'live' ? (type === 'position' ? t('Enter Real Position') : t('Place Real Order')) : t('Create Executor')}
+            {mode === 'live' ? (type === 'position' ? t('Enter Real Position') : t('Place Real Order')) : mode === 'demo' ? (type === 'position' ? t('Enter Demo Position') : t('Place Demo Order')) : t('Create Executor')}
           </button>
         </div>
       </div>

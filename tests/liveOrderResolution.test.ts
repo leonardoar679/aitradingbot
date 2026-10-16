@@ -94,10 +94,11 @@ describe('resolveOrderFromExchange', () => {
   it('books a fill once: the order resolved, the reservation settled against what executed, the fill on the position', async () => {
     const filled = result('FILLED', 1, 3990, 3990)
     expect(await resolveOrderFromExchange(order(), filled)).toEqual({ executorId: 'ex1', liveOrderId: 'lo1', liveOrder: { ...filled, placedAt: T }, status: 'filled' })
-    expect(rig.resolved).toEqual([['lo1', 'filled', 1, 3990]])
+    // The book named last, the real one (V7.1 Stage 8).
+    expect(rig.resolved).toEqual([['lo1', 'filled', 1, 3990, 'real']])
     // Reserved 1 x 4000 at placement; executed for 3990: ten back to the day's cap, dated at the placement.
     expect(rig.usage).toEqual([[-10, T]])
-    expect(rig.fills).toEqual([['binance', 'ETHUSDT', 'ETH', 'USDT', 'buy', 1, 3990, { ETH: 0.001 }]])
+    expect(rig.fills).toEqual([['binance', 'ETHUSDT', 'ETH', 'USDT', 'buy', 1, 3990, { ETH: 0.001 }, undefined, 'real']])
     expect(rig.lossChecks).toBe(0)
   })
 
@@ -120,16 +121,16 @@ describe('resolveOrderFromExchange', () => {
 
   it('books the part of a cancelled order that filled, and no fill for one that expired empty', async () => {
     expect((await resolveOrderFromExchange(order(), result('CANCELED', 0.4, 4000, 1600)))?.status).toBe('cancelled')
-    expect(rig.resolved).toEqual([['lo1', 'cancelled', 0.4, 4000]])
+    expect(rig.resolved).toEqual([['lo1', 'cancelled', 0.4, 4000, 'real']])
     expect(rig.usage).toEqual([[-2400, T]])
-    expect(rig.fills).toEqual([['binance', 'ETHUSDT', 'ETH', 'USDT', 'buy', 0.4, 4000, { ETH: 0.001 }]])
+    expect(rig.fills).toEqual([['binance', 'ETHUSDT', 'ETH', 'USDT', 'buy', 0.4, 4000, { ETH: 0.001 }, undefined, 'real']])
 
     rig.current = order()
     rig.resolved = []
     rig.usage = []
     rig.fills = []
     expect((await resolveOrderFromExchange(order(), result('EXPIRED', 0, 0, 0)))?.status).toBe('expired')
-    expect(rig.resolved).toEqual([['lo1', 'expired', 0, null]])
+    expect(rig.resolved).toEqual([['lo1', 'expired', 0, null, 'real']])
     expect(rig.usage).toEqual([[-4000, T]])
     expect(rig.fills).toEqual([])
   })

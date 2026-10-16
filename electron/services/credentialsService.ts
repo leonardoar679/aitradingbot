@@ -297,9 +297,9 @@ export function updateBalanceCache(exchange: Exchange, raw: readonly ExchangeBal
  *
  * Answers null -- not known -- rather than throwing when the balance cannot be read, and the
  * caller treats that as no reason to block. See describeLiveShortfall. */
-export async function freeBalanceFor(exchange: Exchange, asset: string): Promise<number | null> {
+export async function freeBalanceFor(exchange: Exchange, asset: string, slot: CredentialSlot = 'real'): Promise<number | null> {
   try {
-    return freeBalance(await readLiveBalances(exchange, true), asset)
+    return freeBalance(await readLiveBalances(exchange, true, slot), asset)
   } catch {
     // Swallowed on purpose, and reported as "not known" rather than as zero. An exchange that
     // cannot be reached must not look like an account holding nothing, which would block every

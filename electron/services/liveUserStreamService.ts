@@ -1,4 +1,5 @@
 import type { Commissions } from '../../shared/observedFee'
+import type { TradingBook } from '../../shared/ipc'
 import { USER_STREAM_KEEPALIVE_MS, USER_STREAM_LOOK_MS, emptyUserStreamState, parseUserStreamFrame, userStreamWanted, type UserStreamState } from '../../shared/userStream'
 import { getDecryptedCredential, listCredentialStatus, updateBalanceCache } from './credentialsService'
 import { closeListenKey, createListenKey, keepAliveListenKey, userStreamAddress } from './exchanges/binanceUserStream'
@@ -32,14 +33,18 @@ export function getUserStreamState(): UserStreamState {
   return { ...state }
 }
 
+/** The demo book's, queued by its reconciliation alone (the stream is Binance's, real): drained by
+ * the demo poll, never by the real one (V7.1 Stage 8). */
+const demoResolutions: LiveOrderResolution[] = []
+
 /** The resolutions made since the last poll, handed to it: the renderer patches its executors from
  * them as it does from the poll's own. */
-export function drainStreamResolutions(): LiveOrderResolution[] {
-  return resolutions.splice(0)
+export function drainStreamResolutions(book: TradingBook = 'real'): LiveOrderResolution[] {
+  return (book === 'demo' ? demoResolutions : resolutions).splice(0)
 }
 
-export function queueStreamResolution(resolution: LiveOrderResolution): void {
-  resolutions.push(resolution)
+export function queueStreamResolution(resolution: LiveOrderResolution, book: TradingBook = 'real'): void {
+  ;(book === 'demo' ? demoResolutions : resolutions).push(resolution)
 }
 
 async function wanted(): Promise<boolean> {

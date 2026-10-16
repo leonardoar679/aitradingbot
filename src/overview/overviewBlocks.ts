@@ -1,6 +1,6 @@
 import type { NewsReading } from '../../shared/aiAdditions'
 import { opportunitySide } from '../../shared/aiOpportunity'
-import type { ExecutorConfig, PositionExecutorParams } from '../../shared/ipc'
+import { onExchange, type ExecutorConfig, type PositionExecutorParams } from '../../shared/ipc'
 import { isAtLeast } from '../../shared/marketEvent'
 import type { ReadStory, StoryReaction } from '../../shared/newsFeed'
 import { rMultiple } from '../../shared/paperRisk'
@@ -135,7 +135,7 @@ const UTC_DAY = 86_400
  * useExecutorSimulation.ts), so it is counted as one: a rehearsal of a profile from then counted four
  * of its five (15 October 2026). */
 export function paperRunning(executors: readonly ExecutorConfig[]): ExecutorConfig[] {
-  return executors.filter((executor) => executor.mode !== 'live' && executor.status === 'active')
+  return executors.filter((executor) => !onExchange(executor.mode) && executor.status === 'active')
 }
 
 /** What the app's own paper trades did today, by the UTC day, from the executors on file. */
