@@ -309,5 +309,6 @@ describe('the direction models', () => {
     const flatFitted = fitHorizon(PANEL, flatSplit.train, flatSplit.valid, 'hour1', 9)
     const flat = judge(flatFitted, ROWS.filter((row) => PANEL.time[row] >= cut), PANEL)
     for (const name of DIRECTION_MODELS) expect(flat[name].logLoss, name).toBeGreaterThan(flat[name].entropy - 0.025)
-  })
+    // Two fits of four models each: six seconds on a machine running a shadow run beside the tests.
+  }, 30_000)
 })

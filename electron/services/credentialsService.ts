@@ -4,11 +4,14 @@ import { readFile, mkdir } from 'fs/promises'
 import { writeJsonAtomic } from './atomicWrite'
 import { fetchAccountBalance, type AccountBalance } from './exchanges/binanceTrading'
 import { fetchUpbitBalances } from './exchanges/upbitTrading'
+import { bitgetAccountTypeOf, fetchBitgetAccountSettings, fetchBitgetAssets, type BitgetAccountSettings } from './exchanges/bitgetTrading'
+import { fetchBitgetDemoAccountSettings, fetchBitgetDemoAssets } from './exchanges/bitgetDemoTrading'
+import type { BitgetCredentials } from './exchanges/bitgetAuth'
 import { fetchFuturesPositions, fetchOpenFuturesOrders } from './exchanges/binanceFutures'
 import { cancelProtectiveStop, closeFuturesPosition, placeProtectiveStop } from './exchanges/binanceFuturesTrading'
 import { canCloseLivePosition } from './liveTradingService'
 import { freeBalance, readableBalances, type ExchangeBalance } from '../../shared/liveBalances'
-import type { CredentialStatus, Exchange, LiveBalanceSnapshot } from '../../shared/ipc'
+import type { CredentialAccountType, CredentialSetOptions, CredentialSlot, CredentialStatus, Exchange, LiveBalanceSnapshot } from '../../shared/ipc'
 import type { FuturesCloseResult, FuturesReadout } from '../../shared/futuresPositions'
 import { describeStopPlacementError, readableProtectiveStops, type ProtectiveStop } from '../../shared/futuresStops'
 
@@ -20,12 +23,33 @@ import { describeStopPlacementError, readableProtectiveStops, type ProtectiveSto
 interface StoredCredential {
   apiKeyEnc: string
   apiSecretEnc: string
+  /** The passphrase an exchange set with the key (Bitget), encrypted as the secret is (V7.1 Stage 7). */
+  apiPassphraseEnc?: string
   addedAt: number
   lastTestedAt: number | null
   lastTestOk: boolean | null
+  /** What the account said it was at the last test (Bitget's UNION, ISOLATED or CLASSIC); absent
+   * where the exchange has no such thing. */
+  accountMode?: string | null
 }
 
-type StoredCredentialsFile = Partial<Record<Exchange, StoredCredential>>
+/** Keyed by the slot's name: an exchange's real key under the exchange's name, as always, and a demo
+ * key under `<exchange>:demo` (V7.1 Stage 7). */
+type StoredCredentialsFile = Partial<Record<string, StoredCredential>>
+
+/** The file's key for a slot. Exported for the test. */
+export function slotKeyOf(exchange: Exchange, slot: CredentialSlot): string {
+  return slot === 'demo' ? `${exchange}:demo` : exchange
+}
+
+/** The slot a file's key names, or null for a key this app did not write. */
+export function slotOfKey(key: string): { exchange: Exchange; slot: CredentialSlot } | null {
+  const match = /^([a-z]+)(?::(demo))?$/.exec(key)
+  if (match === null) return null
+  return { exchange: match[1] as Exchange, slot: match[2] === 'demo' ? 'demo' : 'real' }
+}
+
+type BalanceReader = (apiKey: string, apiSecret: string, passphrase: string) => Promise<AccountBalance[]>
 
 // Exchanges whose account this app can read. The single point that grows as more exchanges gain
 // authenticated adapters — storage itself stays generic per-exchange, so expansion needs no
@@ -39,9 +63,50 @@ type StoredCredentialsFile = Partial<Record<Exchange, StoredCredential>>
 // shared/ipc.ts, and it is shorter. Being able to see a balance is not permission to spend it,
 // and keeping one list for both is how an exchange becomes tradable as a side effect of someone
 // adding a balance reader.
-const BALANCE_READERS: Partial<Record<Exchange, (apiKey: string, apiSecret: string) => Promise<AccountBalance[]>>> = {
-  binance: fetchAccountBalance,
-  upbit: fetchUpbitBalances
+const BALANCE_READERS: Partial<Record<Exchange, BalanceReader>> = {
+  binance: (apiKey, apiSecret) => fetchAccountBalance(apiKey, apiSecret),
+  upbit: (apiKey, apiSecret) => fetchUpbitBalances(apiKey, apiSecret),
+  bitget: (apiKey, apiSecret, passphrase) => fetchBitgetAssets({ apiKey, apiSecret, passphrase })
+}
+
+/** Exchanges with a demo account of their own, read over a second, demo key through the one module
+ * that may send a demo request (bitgetDemoTrading.ts). A demo key can reach nothing real. */
+const DEMO_READERS: Partial<Record<Exchange, BalanceReader>> = {
+  bitget: (apiKey, apiSecret, passphrase) => fetchBitgetDemoAssets({ apiKey, apiSecret, passphrase })
+}
+
+/** Exchanges whose key has a passphrase: asked for with the key, kept beside it, sent with every
+ * signed request. */
+export const PASSPHRASE_EXCHANGES: ReadonlySet<Exchange> = new Set<Exchange>(['bitget'])
+
+/** What an exchange's account says it is, read beside the balance at each test. */
+const ACCOUNT_MODE_READERS: Partial<Record<Exchange, Record<CredentialSlot, (credentials: BitgetCredentials) => Promise<BitgetAccountSettings>>>> = {
+  bitget: { real: fetchBitgetAccountSettings, demo: fetchBitgetDemoAccountSettings }
+}
+
+function readerFor(exchange: Exchange, slot: CredentialSlot): BalanceReader | undefined {
+  return slot === 'demo' ? DEMO_READERS[exchange] : BALANCE_READERS[exchange]
+}
+
+function slotWord(exchange: Exchange, slot: CredentialSlot): string {
+  return slot === 'demo' ? `${exchange}'s demo account` : exchange
+}
+
+/** The account's mode, read where the exchange has one; a read that fails leaves it unknown rather
+ * than refusing a key the balance read has just proved. */
+async function accountModeOf(exchange: Exchange, slot: CredentialSlot, credentials: BitgetCredentials): Promise<string | null> {
+  const reader = ACCOUNT_MODE_READERS[exchange]?.[slot]
+  if (reader === undefined) return null
+  try {
+    return (await reader(credentials)).accountMode
+  } catch {
+    return null
+  }
+}
+
+function accountTypeOf(exchange: Exchange, entry: StoredCredential | undefined): CredentialAccountType {
+  if (entry === undefined || ACCOUNT_MODE_READERS[exchange] === undefined) return null
+  return bitgetAccountTypeOf(entry.accountMode)
 }
 
 /** How long a balance read is reused before the exchange is asked again.
@@ -53,7 +118,8 @@ const BALANCE_READERS: Partial<Record<Exchange, (apiKey: string, apiSecret: stri
  * and Refresh bypasses this entirely. */
 const BALANCE_TTL_MS = 15_000
 
-const balanceCache = new Map<Exchange, LiveBalanceSnapshot>()
+/** Keyed by the slot's name (slotKeyOf). */
+const balanceCache = new Map<string, LiveBalanceSnapshot>()
 
 let cache: StoredCredentialsFile | null = null
 
@@ -88,56 +154,79 @@ function decrypt(value: string): string {
   return safeStorage.decryptString(Buffer.from(value, 'base64'))
 }
 
-function toStatus(exchange: Exchange, entry: StoredCredential | undefined): CredentialStatus {
+function toStatus(exchange: Exchange, slot: CredentialSlot, entry: StoredCredential | undefined): CredentialStatus {
   return {
     exchange,
+    slot,
     configured: entry !== undefined,
     addedAt: entry?.addedAt ?? null,
     lastTestedAt: entry?.lastTestedAt ?? null,
-    lastTestOk: entry?.lastTestOk ?? null
+    lastTestOk: entry?.lastTestOk ?? null,
+    accountType: accountTypeOf(exchange, entry)
   }
+}
+
+/** The passphrase as the entry holds it: none for an exchange without one. */
+function passphraseOf(entry: StoredCredential): string {
+  return entry.apiPassphraseEnc === undefined ? '' : decrypt(entry.apiPassphraseEnc)
 }
 
 export async function listCredentialStatus(): Promise<CredentialStatus[]> {
   const store = await load()
-  return (Object.keys(store) as Exchange[]).map((exchange) => toStatus(exchange, store[exchange]))
+  const statuses: CredentialStatus[] = []
+  for (const key of Object.keys(store)) {
+    const named = slotOfKey(key)
+    if (named !== null) statuses.push(toStatus(named.exchange, named.slot, store[key]))
+  }
+  return statuses
 }
 
 /** Tests and persists a new key/secret in one step — a key that fails verification is never
  * saved, per the live-trading design plan's "no key, no live mode, ever" principle.
  *
  * Storing a key does not make an exchange tradable. It makes its account readable; whether an
- * order can be placed is TRADING_EXCHANGES, checked separately at the point an order is placed. */
-export async function setCredential(exchange: Exchange, apiKey: string, apiSecret: string): Promise<CredentialStatus> {
-  const reader = BALANCE_READERS[exchange]
-  if (!reader) throw new Error(`This app cannot connect to ${exchange} yet`)
-  await reader(apiKey, apiSecret)
+ * order can be placed is TRADING_EXCHANGES, checked separately at the point an order is placed.
+ * A key with a passphrase (Bitget) is refused without one; a demo key goes in its own slot, read
+ * through the demo module alone. */
+export async function setCredential(exchange: Exchange, apiKey: string, apiSecret: string, options: CredentialSetOptions = {}): Promise<CredentialStatus> {
+  const slot = options.slot ?? 'real'
+  const reader = readerFor(exchange, slot)
+  if (!reader) throw new Error(`This app cannot connect to ${slotWord(exchange, slot)} yet`)
+  const passphrase = (options.passphrase ?? '').trim()
+  if (PASSPHRASE_EXCHANGES.has(exchange) && passphrase === '') throw new Error(`A ${exchange} key needs the passphrase set when the key was made`)
+  await reader(apiKey, apiSecret, passphrase)
+  const accountMode = await accountModeOf(exchange, slot, { apiKey, apiSecret, passphrase })
 
   const store = await load()
   const now = Date.now()
-  store[exchange] = {
+  const key = slotKeyOf(exchange, slot)
+  store[key] = {
     apiKeyEnc: encrypt(apiKey),
     apiSecretEnc: encrypt(apiSecret),
+    ...(passphrase === '' ? {} : { apiPassphraseEnc: encrypt(passphrase) }),
     addedAt: now,
     lastTestedAt: now,
-    lastTestOk: true
+    lastTestOk: true,
+    ...(ACCOUNT_MODE_READERS[exchange] === undefined ? {} : { accountMode })
   }
-  balanceCache.delete(exchange)
+  balanceCache.delete(key)
   await persist()
-  return toStatus(exchange, store[exchange])
+  return toStatus(exchange, slot, store[key])
 }
 
 /** Re-tests an already-stored key (e.g. a "Test" action in the UI, independent of adding one). */
-export async function testCredential(exchange: Exchange): Promise<{ ok: boolean; message: string }> {
-  const reader = BALANCE_READERS[exchange]
-  if (!reader) return { ok: false, message: `This app cannot connect to ${exchange} yet` }
+export async function testCredential(exchange: Exchange, slot: CredentialSlot = 'real'): Promise<{ ok: boolean; message: string }> {
+  const reader = readerFor(exchange, slot)
+  if (!reader) return { ok: false, message: `This app cannot connect to ${slotWord(exchange, slot)} yet` }
 
   const store = await load()
-  const entry = store[exchange]
-  if (!entry) return { ok: false, message: 'No credential configured for this exchange' }
+  const entry = store[slotKeyOf(exchange, slot)]
+  if (!entry) return { ok: false, message: slot === 'demo' ? 'No demo key configured for this exchange' : 'No credential configured for this exchange' }
 
   try {
-    await reader(decrypt(entry.apiKeyEnc), decrypt(entry.apiSecretEnc))
+    const credentials = { apiKey: decrypt(entry.apiKeyEnc), apiSecret: decrypt(entry.apiSecretEnc), passphrase: passphraseOf(entry) }
+    await reader(credentials.apiKey, credentials.apiSecret, credentials.passphrase)
+    if (ACCOUNT_MODE_READERS[exchange] !== undefined) entry.accountMode = await accountModeOf(exchange, slot, credentials)
     entry.lastTestedAt = Date.now()
     entry.lastTestOk = true
     await persist()
@@ -150,13 +239,14 @@ export async function testCredential(exchange: Exchange): Promise<{ ok: boolean;
   }
 }
 
-export async function removeCredential(exchange: Exchange): Promise<void> {
+export async function removeCredential(exchange: Exchange, slot: CredentialSlot = 'real'): Promise<void> {
   const store = await load()
-  delete store[exchange]
+  const key = slotKeyOf(exchange, slot)
+  delete store[key]
   // Dropped with the key, not left to expire. Disconnecting an exchange and still being shown its
   // balances for the next fifteen seconds would suggest the app kept something it was told to
   // forget.
-  balanceCache.delete(exchange)
+  balanceCache.delete(key)
   await persist()
 }
 
@@ -169,21 +259,22 @@ export async function removeCredential(exchange: Exchange): Promise<void> {
  * Errors are thrown rather than folded into an empty snapshot. An exchange that is unreachable,
  * a key that has been revoked, and an account holding nothing are three different situations, and
  * reporting the first two as "you have no money" would be a lie about someone's balance. */
-export async function readLiveBalances(exchange: Exchange, force = false): Promise<LiveBalanceSnapshot> {
-  const reader = BALANCE_READERS[exchange]
-  if (!reader) throw new Error(`Reading balances is not supported for ${exchange} yet`)
+export async function readLiveBalances(exchange: Exchange, force = false, slot: CredentialSlot = 'real'): Promise<LiveBalanceSnapshot> {
+  const reader = readerFor(exchange, slot)
+  if (!reader) throw new Error(`Reading balances is not supported for ${slotWord(exchange, slot)} yet`)
 
-  const cached = balanceCache.get(exchange)
+  const key = slotKeyOf(exchange, slot)
+  const cached = balanceCache.get(key)
   if (!force && cached && Date.now() - cached.fetchedAt < BALANCE_TTL_MS) return cached
 
   const store = await load()
-  const entry = store[exchange]
-  if (!entry) throw new Error(`No API key is connected for ${exchange}`)
+  const entry = store[key]
+  if (!entry) throw new Error(`No API key is connected for ${slotWord(exchange, slot)}`)
 
-  const raw = await reader(decrypt(entry.apiKeyEnc), decrypt(entry.apiSecretEnc))
+  const raw = await reader(decrypt(entry.apiKeyEnc), decrypt(entry.apiSecretEnc), passphraseOf(entry))
   const { rows, unreadable } = readableBalances(raw)
   const snapshot: LiveBalanceSnapshot = { exchange, rows, unreadable, fetchedAt: Date.now() }
-  balanceCache.set(exchange, snapshot)
+  balanceCache.set(key, snapshot)
   return snapshot
 }
 
@@ -218,12 +309,12 @@ export async function freeBalanceFor(exchange: Exchange, asset: string): Promise
 }
 
 /** Main-process-internal only — never wire this to an IPC handler. The only function in this
- * module that returns a decrypted secret. */
-export async function getDecryptedCredential(exchange: Exchange): Promise<{ apiKey: string; apiSecret: string }> {
+ * module that returns a decrypted secret. The passphrase is empty for an exchange without one. */
+export async function getDecryptedCredential(exchange: Exchange, slot: CredentialSlot = 'real'): Promise<{ apiKey: string; apiSecret: string; passphrase: string }> {
   const store = await load()
-  const entry = store[exchange]
-  if (!entry) throw new Error(`No credential configured for ${exchange}`)
-  return { apiKey: decrypt(entry.apiKeyEnc), apiSecret: decrypt(entry.apiSecretEnc) }
+  const entry = store[slotKeyOf(exchange, slot)]
+  if (!entry) throw new Error(`No credential configured for ${slotWord(exchange, slot)}`)
+  return { apiKey: decrypt(entry.apiKeyEnc), apiSecret: decrypt(entry.apiSecretEnc), passphrase: passphraseOf(entry) }
 }
 
 /** Real perpetual-futures positions on an exchange, read over the user's own key.

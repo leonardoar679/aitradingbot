@@ -36,9 +36,9 @@ export function LiveAccountSection(): React.JSX.Element {
   return (
     <>
       {connected.map((credential) => (
-        <LiveBalancesCard key={credential.exchange} exchange={credential.exchange} />
+        <LiveBalancesCard key={`${credential.exchange}:${credential.slot ?? 'real'}`} exchange={credential.exchange} slot={credential.slot ?? 'real'} />
       ))}
-      {connected.some((c) => c.exchange === 'binance') && <FuturesPositionsCard />}
+      {connected.some((c) => c.exchange === 'binance' && (c.slot ?? 'real') === 'real') && <FuturesPositionsCard />}
     </>
   )
 }

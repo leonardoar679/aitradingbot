@@ -42,6 +42,8 @@ import {
   IpcChannel,
   type AppSettings,
   type Candle,
+  type CredentialSetOptions,
+  type CredentialSlot,
   type CredentialStatus,
   type Exchange,
   type ForecastHistory,
@@ -222,13 +224,15 @@ const api = {
   },
   credentials: {
     list: (): Promise<CredentialStatus[]> => ipcRenderer.invoke(IpcChannel.CredentialsList),
-    set: (exchange: Exchange, apiKey: string, apiSecret: string): Promise<CredentialStatus> =>
-      ipcRenderer.invoke(IpcChannel.CredentialsSet, exchange, apiKey, apiSecret),
-    test: (exchange: Exchange): Promise<{ ok: boolean; message: string }> =>
-      ipcRenderer.invoke(IpcChannel.CredentialsTest, exchange),
-    remove: (exchange: Exchange): Promise<void> => ipcRenderer.invoke(IpcChannel.CredentialsRemove, exchange),
-    balances: (exchange: Exchange, force = false): Promise<LiveBalanceSnapshot> =>
-      ipcRenderer.invoke(IpcChannel.CredentialsBalances, exchange, force),
+    // A key's passphrase and its slot (real or demo) since V7.1 Stage 7: both optional, a demo slot
+    // only on an exchange with a demo account of its own.
+    set: (exchange: Exchange, apiKey: string, apiSecret: string, options: CredentialSetOptions = {}): Promise<CredentialStatus> =>
+      ipcRenderer.invoke(IpcChannel.CredentialsSet, exchange, apiKey, apiSecret, options),
+    test: (exchange: Exchange, slot: CredentialSlot = 'real'): Promise<{ ok: boolean; message: string }> =>
+      ipcRenderer.invoke(IpcChannel.CredentialsTest, exchange, slot),
+    remove: (exchange: Exchange, slot: CredentialSlot = 'real'): Promise<void> => ipcRenderer.invoke(IpcChannel.CredentialsRemove, exchange, slot),
+    balances: (exchange: Exchange, force = false, slot: CredentialSlot = 'real'): Promise<LiveBalanceSnapshot> =>
+      ipcRenderer.invoke(IpcChannel.CredentialsBalances, exchange, force, slot),
     futuresPositions: (exchange: Exchange): Promise<FuturesReadout> =>
       ipcRenderer.invoke(IpcChannel.CredentialsFuturesPositions, exchange),
     closeFuturesPosition: (exchange: Exchange, symbol: string): Promise<FuturesCloseResult> =>

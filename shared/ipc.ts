@@ -300,12 +300,30 @@ export interface PaperRiskSettings {
 
 /** Status of a stored exchange API credential. Crosses IPC — never the raw key/secret, which
  * stay encrypted at rest and are only ever decrypted inside the main process. */
+/** A key's slot on an exchange: its real account, or a demo account of the exchange's own that a
+ * second, demo key reaches (Bitget, V7.1 Stage 7). A demo key is made in the exchange's demo mode and
+ * can reach nothing real. */
+export type CredentialSlot = 'real' | 'demo'
+
+/** What an exchange said its account was at the last test: a unified account (UTA), a classic one
+ * (read-only in this app), or a mode the app does not know; null where the exchange has no such thing. */
+export type CredentialAccountType = 'uta' | 'classic' | 'unknown' | null
+
 export interface CredentialStatus {
   exchange: Exchange
+  slot: CredentialSlot
   configured: boolean
   addedAt: number | null
   lastTestedAt: number | null
   lastTestOk: boolean | null
+  accountType: CredentialAccountType
+}
+
+/** What goes with a key when it is stored: the passphrase an exchange set with it (Bitget), and
+ * which slot it is for. */
+export interface CredentialSetOptions {
+  passphrase?: string
+  slot?: CredentialSlot
 }
 
 /** Exchanges this app can place a real order on.

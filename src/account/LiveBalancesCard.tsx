@@ -3,7 +3,7 @@ import { RefreshCw, ShieldCheck, TriangleAlert } from 'lucide-react'
 import { Card } from '../components/Card'
 import { formatAssetNumber } from '../utils/formatCurrency'
 import { describeError } from '../utils/ipcError'
-import { EXCHANGES, canTradeOn, type Exchange, type LiveBalanceSnapshot } from '../../shared/ipc'
+import { EXCHANGES, canTradeOn, type CredentialSlot, type Exchange, type LiveBalanceSnapshot } from '../../shared/ipc'
 
 /** What the user really holds on an exchange, read over their own API key.
  *
@@ -15,18 +15,20 @@ import { EXCHANGES, canTradeOn, type Exchange, type LiveBalanceSnapshot } from '
  * Kept strictly apart from the paper account above it, in its own card with its own wording. The
  * two are different money, and a beginner reading one as the other is the specific confusion this
  * page must not create. */
-export function LiveBalancesCard({ exchange }: { exchange: Exchange }): React.JSX.Element {
+export function LiveBalancesCard({ exchange, slot = 'real' }: { exchange: Exchange; slot?: CredentialSlot }): React.JSX.Element {
   const [snapshot, setSnapshot] = useState<LiveBalanceSnapshot | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const exchangeName = EXCHANGES.find((e) => e.id === exchange)?.name ?? exchange
+  // A demo slot (V7.1 Stage 7) is the exchange's own demo account, read over the demo key: not real
+  // money, and the card says so in its title.
+  const exchangeName = `${EXCHANGES.find((e) => e.id === exchange)?.name ?? exchange}${slot === 'demo' ? ' demo account' : ''}`
 
   const read = useCallback(
     async (force: boolean) => {
       setBusy(true)
       try {
-        setSnapshot(await window.api.credentials.balances(exchange, force))
+        setSnapshot(await window.api.credentials.balances(exchange, force, slot))
         // Cleared only on success. Clearing it up front would blank a real failure for as long as
         // the retry takes, so a key that keeps failing would flicker rather than say so.
         setError(null)
@@ -36,7 +38,7 @@ export function LiveBalancesCard({ exchange }: { exchange: Exchange }): React.JS
         setBusy(false)
       }
     },
-    [exchange]
+    [exchange, slot]
   )
 
   useEffect(() => {
@@ -47,7 +49,7 @@ export function LiveBalancesCard({ exchange }: { exchange: Exchange }): React.JS
 
   return (
     <Card
-      title={`${exchangeName} — your real balance`}
+      title={slot === 'demo' ? `${exchangeName} — its demo balance, not real money` : `${exchangeName} — your real balance`}
       actions={
         <button
           onClick={() => void read(true)}
@@ -76,9 +78,11 @@ export function LiveBalancesCard({ exchange }: { exchange: Exchange }): React.JS
         {/* Said per exchange rather than once, because it stopped being true everywhere the moment a
             second exchange could be connected. An exchange this app can only read must not be
             described as one an executor could spend from. */}
-        {canTradeOn(exchange)
-          ? 'A live executor you start yourself can, under the limits on Risk & Safety.'
-          : `This app cannot place orders on ${exchangeName} at all — it only reads the balance, so a key with lookup permission alone is enough.`}
+        {slot === 'demo'
+          ? "The exchange's own demo account, read over the demo key: play money the exchange gives, which no order here can turn into real money."
+          : canTradeOn(exchange)
+            ? 'A live executor you start yourself can, under the limits on Risk & Safety.'
+            : `This app cannot place orders on ${exchangeName} at all — it only reads the balance, so a key with lookup permission alone is enough.`}
       </p>
 
       {error !== null && (

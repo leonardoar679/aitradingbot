@@ -3038,6 +3038,19 @@ separate `credentials.json`, isolated from `settings.json` so a bug in general s
 persistence can never touch a secret. "No key, no live mode, ever": every live-trading code path
 in this app requires a verified credential first.
 
+**Bitget keys** (since 16 October 2026; V7.1 Stage 7; `electron/services/exchanges/bitgetAuth.ts`,
+`bitgetTrading.ts`, `bitgetDemoTrading.ts`). A Bitget key carries the passphrase set when it was
+made, asked for with the key and kept beside it, encrypted as the secret is; every signed request
+sends `ACCESS-KEY`, `ACCESS-SIGN` (HMAC-SHA256 of the timestamp, the method, the path, the query and
+the body, in base64), `ACCESS-TIMESTAMP` (by Bitget's own clock, read once in five minutes) and
+`ACCESS-PASSPHRASE`. Verification reads the Unified Trading Account's assets and its settings: a
+unified account (UNION or ISOLATED) is said so, a Classic account is read-only here. The card holds a
+second, **demo key** for Bitget's demo account, made in its Demo mode: a demo request carries the
+header `paptrading: 1`, Bitget refuses a real key with it and a demo key without it, and the one
+module that sends it (`bitgetDemoTrading.ts`) never sends a real request, as the real module never
+sends a demo one -- `tests/bitgetAuth.test.ts` pins both. The demo key is for the paper laboratory's
+demo orders (Stage 8); a real Bitget order is Stage 9, through the same gates as Binance's.
+
 ## Live Trading — Real Money
 
 **The path to live** (since 8 October 2026; the second V3 document's §56). Live Trading opens with a
