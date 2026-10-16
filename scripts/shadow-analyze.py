@@ -155,6 +155,17 @@ def forecast_of(section, title):
             print(f'  {name:5} {row["pair"]:12} {clock(row["t"])} {row["horizon"]:10} {row["call"]:15} quality {row["quality"]} median {pct(row["medianPct"])} moved {pct(row["movePct"])} in80 {row["in80"]}')
     t = section['trades']
     print(f'  forecast trader: {t["opened"]} opened, {t["closed"]} closed, {t["wins"]} ahead, net {t["netQuote"]:.2f}, fees {t.get("feesQuote", 0):.2f}, slippage {t.get("slippageQuote", 0):.3f}, best {json.dumps(t.get("best"))}, worst {json.dumps(t.get("worst"))}' + (f'  -- {section["sampleNote"]}' if section.get('sampleNote') else ''))
+    # The paper laboratory's trades in the span, by strategy (V7.1 Stage 4), and the path's figures (Stage 3).
+    lab = section.get('lab')
+    if lab:
+        print('  paper laboratory: ' + '; '.join(f'{s.upper()} {v["opened"]} opened, {v["closed"]} closed, net {v["netQuote"]:.2f}' for s, v in lab.items()))
+    else:
+        print('  paper laboratory: no trade opened in the span')
+    for h, row in section['horizons'].items():
+        t = row.get('timing')
+        if t is not None:
+            ex = t['excursion']
+            print(f'  {h:10} arrival: {t["n"]} judged, chance said {share(t["predicted"])} reached {share(t["reached"])}, UNLIKELY {t["unlikely"]} (reached {share(t["unlikelyReached"])}), minutes said {t["saidMinutes"]} seen {t["seenMinutes"]}; likely levels on {ex["n"]}: high held {share(ex["high80"])} low held {share(ex["low80"])}')
     for g in section['gates']:
         print(f'  {g["id"]:18} {g["status"]:13} {g["detail"]}')
 

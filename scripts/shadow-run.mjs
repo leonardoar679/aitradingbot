@@ -27,6 +27,8 @@
 //   FIRST_GATES    1 asks the first model alone and the others only when it calls a trade          [0]
 //   WATCH_PAPER    0 leaves the watch's paper trades off: a SHADOW run                                [1]
 //   FORECAST_TRADER  1 switches the price forecast's paper trader on (V6 Stage 12)                   [0]
+//   LAB            1 funds the paper account to 10,000 USDT through the Forecast Lab's own card and
+//                  switches on the paper laboratory's four strategies (V7.1 Stage 4)                  [0]
 //   FORECAST_DATA_FROM  a profile whose forecastData/ (public 5-minute bars) is copied in, so the
 //                  forecast's ninety days need not all be read again                                 [none]
 //   WAIT_FORECAST  1 starts the run's clock only once the forecast engine has fitted, calibrated and
@@ -87,6 +89,7 @@ if (WATCH_MODELS.length === 0 || WATCH_MODELS.length > 6) throw new Error(`WATCH
 const FIRST_GATES = process.env.FIRST_GATES === '1'
 const WATCH_PAPER = process.env.WATCH_PAPER !== '0'
 const FORECAST_TRADER = process.env.FORECAST_TRADER === '1'
+const LAB = process.env.LAB === '1'
 const FORECAST_DATA_FROM = process.env.FORECAST_DATA_FROM ?? ''
 const WAIT_FORECAST = process.env.WAIT_FORECAST === '1'
 const SETTLE_MINUTES = Number(process.env.SETTLE_MINUTES ?? 0)
@@ -594,6 +597,34 @@ async function main() {
     })
     say(`forecast trader: ${JSON.stringify(trader)}`)
   }
+  // The paper laboratory (V7.1 Stage 4): funded through its own card -- the click a person would make,
+  // which a funded account answers "already" -- and its four strategies switched on as the card's
+  // switches write them. Paper only: the laboratory's files reach no order path (tests/aiNoLivePath).
+  if (LAB) {
+    await nav('Forecast Lab')
+    const funded = await page.evaluate(async () => {
+      const find = () => [...document.querySelectorAll('main button')].find((b) => /^(Fund to [\d,]+ USDT|Funded)$/.test(b.textContent?.trim() ?? ''))
+      const until = Date.now() + 120_000
+      while (Date.now() < until && find() === undefined) await new Promise((r) => setTimeout(r, 1000))
+      const button = find()
+      if (button === undefined) return 'no fund button'
+      const before = button.textContent.trim()
+      if (before !== 'Funded') {
+        button.click()
+        await new Promise((r) => setTimeout(r, 2000))
+      }
+      const settings = await window.api.settings.get()
+      return `${before} -> ${find()?.textContent?.trim() ?? 'gone'}; the paper account holds ${settings.paperAccount?.balances?.USDT ?? 'nothing'} USDT`
+    })
+    say(`paper laboratory: ${funded}`)
+    const strategies = await page.evaluate(async () => {
+      const settings = await window.api.settings.get()
+      const forecast = settings.forecast ?? {}
+      const next = await window.api.settings.set({ forecast: { ...forecast, lab: { ...(forecast.lab ?? {}), strategies: { strict: true, direction: true, news: true, hybrid: true } } } })
+      return next.forecast?.lab ?? null
+    })
+    say(`paper laboratory strategies: ${JSON.stringify(strategies)}`)
+  }
   // One of the app's own runs (shared/experimentRun.ts), started once the watch is on so that its
   // record says so; a resumed segment finds it still running on file and starts none.
   if (EXPERIMENT !== '') {
@@ -735,6 +766,12 @@ async function main() {
     say(`forecast lab comparison: ${compared}`)
     fs.writeFileSync(path.join(OUT, 'forecast-lab-page.txt'), await page.evaluate(() => document.querySelector('main')?.innerText ?? ''))
     await shot(`s${SEGMENT}-94-forecast-lab`)
+    // The paper laboratory's card (V7.1 Stage 4), scrolled to: its switches, record and last pass.
+    await page.evaluate(() => {
+      const heading = [...document.querySelectorAll('main *')].find((e) => e.children.length === 0 && e.textContent?.trim() === 'Paper laboratory')
+      heading?.scrollIntoView({ block: 'start' })
+    })
+    await shot(`s${SEGMENT}-95-paper-laboratory`)
     say('forecast lab: saved')
   } catch (failure) {
     say(`the forecast lab could not be saved: ${failure}`)
