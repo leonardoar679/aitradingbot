@@ -39,6 +39,7 @@ export const IpcChannel = {
   MarketCancelHistoricalRange: 'market:cancelHistoricalRange',
   MarketFetchTicker24h: 'market:fetchTicker24h',
   MarketSymbolRules: 'market:symbolRules',
+  MarketCompare: 'market:compare',
   MarketLiveInterest: 'market:liveInterest',
   MarketLiveState: 'market:liveState',
   MarketLiveBook: 'market:liveBook',
@@ -524,7 +525,36 @@ export interface Ticker24h {
   quoteVolume: number
 }
 
-export type Exchange = 'binance' | 'coinbase' | 'kraken' | 'bithumb' | 'upbit' | 'coinone' | 'korbit' | 'gopax'
+/** One exchange's quote of a pair, read now for the comparison of exchanges (V7.1 Stage 6; the rule in
+ * shared/marketCompare.ts). Every figure is null where the exchange does not list the pair or did not
+ * answer, and `problem` says which. */
+export interface ExchangeQuote {
+  exchange: Exchange
+  symbol: string
+  price: number | null
+  bid: number | null
+  ask: number | null
+  /** The spread as a share of the mid, in percent. */
+  spreadPct: number | null
+  /** What rests within half a percent of the mid on each side, in the quote currency. */
+  bidDepthQuote: number | null
+  askDepthQuote: number | null
+  quoteVolume24h: number | null
+  /** How old the book was by the exchange's own stamp, ms; null where it gives none. */
+  bookAgeMs: number | null
+  /** How long the reads took together, ms. */
+  roundTripMs: number | null
+  problem: string | null
+}
+
+export interface MarketComparison {
+  symbol: string
+  /** When it was read, ms. */
+  at: number
+  quotes: ExchangeQuote[]
+}
+
+export type Exchange = 'binance' | 'bitget' | 'coinbase' | 'kraken' | 'bithumb' | 'upbit' | 'coinone' | 'korbit' | 'gopax'
 
 export type Interval = '1m' | '15m' | '1h' | '4h' | '1d' | '1w'
 
@@ -575,6 +605,12 @@ export const EXCHANGES: ExchangeInfo[] = [
   {
     id: 'binance',
     name: 'Binance',
+    defaultSymbol: { symbol: 'BTCUSDT', baseAsset: 'BTC', quoteAsset: 'USDT' }
+  },
+  {
+    // Public market data since V7.1 Stage 6 (16 October 2026); its account and orders come after.
+    id: 'bitget',
+    name: 'Bitget',
     defaultSymbol: { symbol: 'BTCUSDT', baseAsset: 'BTC', quoteAsset: 'USDT' }
   },
   {

@@ -7,6 +7,7 @@ import { formatQuotePrice } from '../utils/formatCurrency'
 import { useLastPrice } from '../hooks/useLastPrice'
 import { EXCHANGES, type Exchange, type SymbolInfo } from '../../shared/ipc'
 import { classifyPaperOrder, paperOrderStatusNote, type PaperOrderStatus } from './paperOrderStatus'
+import { ExchangeCompareCard } from './ExchangeCompareCard'
 
 type Side = 'buy' | 'sell'
 type OrderType = 'market' | 'limit'
@@ -267,6 +268,8 @@ export function TradePage({ embedded = false }: { embedded?: boolean } = {}): Re
           </Card>
         </div>
       </div>
+
+      <ExchangeCompareCard baseAsset={pair.baseAsset} quoteAsset={pair.quoteAsset} />
     </>
   )
 }

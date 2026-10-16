@@ -6,6 +6,7 @@ import {
   type Exchange,
   type HistoricalRangeResult,
   type Interval,
+  type MarketComparison,
   type SymbolInfo,
   type Ticker24h
 } from '../../../shared/ipc'
@@ -23,6 +24,7 @@ import {
   cancelHistoricalRangeFetch
 } from '../../services/marketService'
 import { fetchSymbolRules } from '../../services/exchanges/binanceTrading'
+import { compareMarkets } from '../../services/marketCompareService'
 import type { SymbolTradingRules } from '../../../shared/exchangeMinimums'
 
 export function registerMarketHandlers(mainWindow: BrowserWindow): void {
@@ -87,6 +89,10 @@ export function registerMarketHandlers(mainWindow: BrowserWindow): void {
       return fetchSymbolRules(symbol)
     }
   )
+
+  // Binance's and Bitget's quote of one pair side by side (V7.1 Stage 6): public market data, read
+  // once on request, nothing placed.
+  ipcMain.handle(IpcChannel.MarketCompare, async (_event, symbol: string): Promise<MarketComparison> => compareMarkets(symbol))
 
   ipcMain.handle(
     IpcChannel.MarketFetchHistoricalRange,

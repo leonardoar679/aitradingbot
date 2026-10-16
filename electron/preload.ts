@@ -59,6 +59,7 @@ import {
   type LiveWatcherSummary,
   type BacktestExportRequest,
   type BacktestExportResult,
+  type MarketComparison,
   type SymbolInfo,
   type Ticker24h
 } from '../shared/ipc'
@@ -134,7 +135,9 @@ const api = {
     fetchTicker24h: (exchange: Exchange, symbol: string): Promise<Ticker24h> =>
       ipcRenderer.invoke(IpcChannel.MarketFetchTicker24h, exchange, symbol),
     symbolRules: (exchange: Exchange, symbol: string): Promise<SymbolTradingRules> =>
-      ipcRenderer.invoke(IpcChannel.MarketSymbolRules, exchange, symbol)
+      ipcRenderer.invoke(IpcChannel.MarketSymbolRules, exchange, symbol),
+    // Binance's and Bitget's quote of one pair side by side (V7.1 Stage 6): public data, read once.
+    compare: (symbol: string): Promise<MarketComparison> => ipcRenderer.invoke(IpcChannel.MarketCompare, symbol)
   },
   // The market scanner. Everything here reads public market data or a file the scanner wrote:
   // none of it reaches a model, a key or an order.

@@ -172,7 +172,7 @@ const LOANWORDS: Partial<Record<TranslatedLanguage, ReadonlySet<string>>> = {
 }
 
 /** Names, units and conventions a translation writes in Latin letters. */
-const LATIN_NAMES = new Set(['OpenAI', 'OpenRouter', 'Binance', 'CoinGecko', 'Coinbase', 'Kraken', 'Bithumb', 'Upbit', 'Coinone', 'Korbit', 'Bollinger', 'TraderSpider', 'ms', 's', 'h', 'x'])
+const LATIN_NAMES = new Set(['OpenAI', 'OpenRouter', 'Binance', 'Bitget', 'CoinGecko', 'Coinbase', 'Kraken', 'Bithumb', 'Upbit', 'Coinone', 'Korbit', 'Bollinger', 'TraderSpider', 'ms', 's', 'h', 'x'])
 const LATIN_BY_LANGUAGE: Partial<Record<TranslatedLanguage, ReadonlySet<string>>> = { 'zh-CN': new Set(['token']), 'zh-TW': new Set(['token']) }
 /** The label of a button on an English page, which a notice quotes as the button reads. */
 const ENGLISH_LABELS = ['Prepare an order from this call']

@@ -7,7 +7,7 @@ import { fieldLabelStyle, formButtonStyle, textInputStyle } from '../settings/fo
 
 // Live trading is Binance-only for now (see the live-trading design plan) — this card only
 // offers credential management for exchanges that actually have a trading adapter, rather than
-// implying live support that doesn't exist yet for the other 7.
+// implying live support that doesn't exist yet for the others.
 // Exchanges a key can be stored for. Mirrors BALANCE_READERS in credentialsService -- the main
 // process refuses anything not listed there, so the worst a drift here can do is offer a row that
 // then says it cannot connect, never the reverse.

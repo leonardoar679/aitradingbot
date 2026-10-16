@@ -1,5 +1,6 @@
 import type { Candle, Exchange, Interval, SymbolInfo, Ticker24h } from '../../shared/ipc'
 import { binanceAdapter } from './exchanges/binance'
+import { bitgetAdapter } from './exchanges/bitget'
 import { coinbaseAdapter } from './exchanges/coinbase'
 import { krakenAdapter } from './exchanges/kraken'
 import { bithumbAdapter } from './exchanges/bithumb'
@@ -12,6 +13,7 @@ import { createStreamSlot } from './streamSlot'
 
 const ADAPTERS: Record<Exchange, ExchangeAdapter> = {
   binance: binanceAdapter,
+  bitget: bitgetAdapter,
   coinbase: coinbaseAdapter,
   kraken: krakenAdapter,
   bithumb: bithumbAdapter,

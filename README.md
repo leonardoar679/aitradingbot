@@ -4270,11 +4270,25 @@ already-running executors and enforce risk limits against it.
 
 ## Supported Exchanges
 
-Binance, Coinbase, Kraken, Bithumb, Upbit, Coinone, Korbit, GOPAX — see
-`electron/services/exchanges/`. All eight have market-data adapters for paper trading. Binance
+Binance, Bitget, Coinbase, Kraken, Bithumb, Upbit, Coinone, Korbit, GOPAX — see
+`electron/services/exchanges/`. All nine have market-data adapters for paper trading. Binance
 alone has a trading adapter (`binanceTrading.ts`) — balance verification, market/limit order
 placement, order query/cancel — and it's the only exchange the live-mode Order Executor can use;
 every other exchange stays paper-only.
+
+**Bitget** (since 16 October 2026; V7.1 Stage 6; `electron/services/exchanges/bitget.ts`) reads its
+spot pairs, candles, tickers, book and trades from its unified (UTA, v3) market endpoints and its v3
+public stream, every host, path and spelling pinned from the live answers of that day and held by
+`tests/bitgetAdapter.test.ts`: a candle window is `(startTime, endTime]` and answers its newest
+thousand bars, so a range is read in windows a page holds whole, each asked from the millisecond
+before its first bar; the whole-market ticker list goes to v2's path, which answered in two seconds
+where v3's took up to forty; two in three of its spot instruments are tokenized stocks, marked as
+Binance's are so the scanner and the forecast leave them out; the stream's candle topic is `kline`
+and the word `ping` is sent every thirty seconds. The Market page's **Binance vs Bitget** card
+(`src/trade/ExchangeCompareCard.tsx`, the rule in `shared/marketCompare.ts`) reads the shown pair's
+price, best bid and ask, spread, depth within half a percent of the mid, day's volume, book age and
+read time on both at the same moment, from public data: a comparison, not a recommendation, and
+nothing it reads places an order. Bitget's account and its orders are later stages.
 
 ## Project Structure
 
