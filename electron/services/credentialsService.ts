@@ -4,8 +4,9 @@ import { readFile, mkdir } from 'fs/promises'
 import { writeJsonAtomic } from './atomicWrite'
 import { fetchAccountBalance, type AccountBalance } from './exchanges/binanceTrading'
 import { fetchUpbitBalances } from './exchanges/upbitTrading'
-import { bitgetAccountTypeOf, fetchBitgetAccountSettings, fetchBitgetAssets, type BitgetAccountSettings } from './exchanges/bitgetTrading'
-import { fetchBitgetDemoAccountSettings, fetchBitgetDemoAssets } from './exchanges/bitgetDemoTrading'
+import { fetchBitgetAccount, fetchBitgetAccountSettings } from './exchanges/bitgetTrading'
+import { bitgetAccountTypeOf, CLASSIC_MODE, type BitgetAccountSettings } from './exchanges/bitgetAccount'
+import { fetchBitgetDemoAccount, fetchBitgetDemoAccountSettings } from './exchanges/bitgetDemoTrading'
 import type { BitgetCredentials } from './exchanges/bitgetAuth'
 import { fetchFuturesPositions, fetchOpenFuturesOrders } from './exchanges/binanceFutures'
 import { cancelProtectiveStop, closeFuturesPosition, placeProtectiveStop } from './exchanges/binanceFuturesTrading'
@@ -49,7 +50,15 @@ export function slotOfKey(key: string): { exchange: Exchange; slot: CredentialSl
   return { exchange: match[1] as Exchange, slot: match[2] === 'demo' ? 'demo' : 'real' }
 }
 
-type BalanceReader = (apiKey: string, apiSecret: string, passphrase: string) => Promise<AccountBalance[]>
+/** One read of an account: its balances, and -- on an exchange with account modes -- whether the read
+ * itself proved the account Classic (Bitget's Classic endpoint answered where the unified one refused;
+ * exchanges/bitgetAccount.ts). */
+interface AccountRead {
+  balances: AccountBalance[]
+  classic?: boolean
+}
+
+type BalanceReader = (apiKey: string, apiSecret: string, passphrase: string) => Promise<AccountRead>
 
 // Exchanges whose account this app can read. The single point that grows as more exchanges gain
 // authenticated adapters — storage itself stays generic per-exchange, so expansion needs no
@@ -64,22 +73,26 @@ type BalanceReader = (apiKey: string, apiSecret: string, passphrase: string) => 
 // and keeping one list for both is how an exchange becomes tradable as a side effect of someone
 // adding a balance reader.
 const BALANCE_READERS: Partial<Record<Exchange, BalanceReader>> = {
-  binance: (apiKey, apiSecret) => fetchAccountBalance(apiKey, apiSecret),
-  upbit: (apiKey, apiSecret) => fetchUpbitBalances(apiKey, apiSecret),
-  bitget: (apiKey, apiSecret, passphrase) => fetchBitgetAssets({ apiKey, apiSecret, passphrase })
+  binance: async (apiKey, apiSecret) => ({ balances: await fetchAccountBalance(apiKey, apiSecret) }),
+  upbit: async (apiKey, apiSecret) => ({ balances: await fetchUpbitBalances(apiKey, apiSecret) }),
+  bitget: (apiKey, apiSecret, passphrase) => fetchBitgetAccount({ apiKey, apiSecret, passphrase })
 }
 
 /** Exchanges with a demo account of their own, read over a second, demo key through the one module
  * that may send a demo request (bitgetDemoTrading.ts). A demo key can reach nothing real. */
 const DEMO_READERS: Partial<Record<Exchange, BalanceReader>> = {
-  bitget: (apiKey, apiSecret, passphrase) => fetchBitgetDemoAssets({ apiKey, apiSecret, passphrase })
+  bitget: (apiKey, apiSecret, passphrase) => fetchBitgetDemoAccount({ apiKey, apiSecret, passphrase })
 }
 
 /** Exchanges whose key has a passphrase: asked for with the key, kept beside it, sent with every
  * signed request. */
 export const PASSPHRASE_EXCHANGES: ReadonlySet<Exchange> = new Set<Exchange>(['bitget'])
 
-/** What an exchange's account says it is, read beside the balance at each test. */
+/** What an exchange's account says it is, read beside the balance at each test of an account the
+ * unified read answered. A Bitget key made on a Classic account (not upgraded to the unified account)
+ * verifies and reads its balance over the Classic endpoint (exchanges/bitgetAccount.ts), which is the
+ * proof: it is stored as CLASSIC from that read alone (modeOfRead), and is refused a real order before
+ * anything is sent (liveExecutionService.ts assertAccountCanTrade). */
 const ACCOUNT_MODE_READERS: Partial<Record<Exchange, Record<CredentialSlot, (credentials: BitgetCredentials) => Promise<BitgetAccountSettings>>>> = {
   bitget: { real: fetchBitgetAccountSettings, demo: fetchBitgetDemoAccountSettings }
 }
@@ -102,6 +115,14 @@ async function accountModeOf(exchange: Exchange, slot: CredentialSlot, credentia
   } catch {
     return null
   }
+}
+
+/** The mode a key's account is stored with: CLASSIC where the balance read proved it so, else what
+ * the account's settings say (null where they could not be read, which the unified read has already
+ * shown is not a Classic account). */
+async function modeOfRead(exchange: Exchange, slot: CredentialSlot, read: AccountRead, credentials: BitgetCredentials): Promise<string | null> {
+  if (read.classic === true) return CLASSIC_MODE
+  return accountModeOf(exchange, slot, credentials)
 }
 
 function accountTypeOf(exchange: Exchange, entry: StoredCredential | undefined): CredentialAccountType {
@@ -171,6 +192,14 @@ function passphraseOf(entry: StoredCredential): string {
   return entry.apiPassphraseEnc === undefined ? '' : decrypt(entry.apiPassphraseEnc)
 }
 
+/** What a stored key's account said it was at its last test -- for the order path, which refuses a
+ * real order on a Classic Bitget account before the exchange does, with the way said. Null where the
+ * exchange has no account modes or no key is stored in the slot. */
+export async function credentialAccountType(exchange: Exchange, slot: CredentialSlot = 'real'): Promise<CredentialAccountType> {
+  const store = await load()
+  return accountTypeOf(exchange, store[slotKeyOf(exchange, slot)])
+}
+
 export async function listCredentialStatus(): Promise<CredentialStatus[]> {
   const store = await load()
   const statuses: CredentialStatus[] = []
@@ -194,8 +223,8 @@ export async function setCredential(exchange: Exchange, apiKey: string, apiSecre
   if (!reader) throw new Error(`This app cannot connect to ${slotWord(exchange, slot)} yet`)
   const passphrase = (options.passphrase ?? '').trim()
   if (PASSPHRASE_EXCHANGES.has(exchange) && passphrase === '') throw new Error(`A ${exchange} key needs the passphrase set when the key was made`)
-  await reader(apiKey, apiSecret, passphrase)
-  const accountMode = await accountModeOf(exchange, slot, { apiKey, apiSecret, passphrase })
+  const read = await reader(apiKey, apiSecret, passphrase)
+  const accountMode = await modeOfRead(exchange, slot, read, { apiKey, apiSecret, passphrase })
 
   const store = await load()
   const now = Date.now()
@@ -225,8 +254,8 @@ export async function testCredential(exchange: Exchange, slot: CredentialSlot = 
 
   try {
     const credentials = { apiKey: decrypt(entry.apiKeyEnc), apiSecret: decrypt(entry.apiSecretEnc), passphrase: passphraseOf(entry) }
-    await reader(credentials.apiKey, credentials.apiSecret, credentials.passphrase)
-    if (ACCOUNT_MODE_READERS[exchange] !== undefined) entry.accountMode = await accountModeOf(exchange, slot, credentials)
+    const read = await reader(credentials.apiKey, credentials.apiSecret, credentials.passphrase)
+    if (ACCOUNT_MODE_READERS[exchange] !== undefined) entry.accountMode = await modeOfRead(exchange, slot, read, credentials)
     entry.lastTestedAt = Date.now()
     entry.lastTestOk = true
     await persist()
@@ -271,8 +300,14 @@ export async function readLiveBalances(exchange: Exchange, force = false, slot: 
   const entry = store[key]
   if (!entry) throw new Error(`No API key is connected for ${slotWord(exchange, slot)}`)
 
-  const raw = await reader(decrypt(entry.apiKeyEnc), decrypt(entry.apiSecretEnc), passphraseOf(entry))
-  const { rows, unreadable } = readableBalances(raw)
+  const read = await reader(decrypt(entry.apiKeyEnc), decrypt(entry.apiSecretEnc), passphraseOf(entry))
+  // A read that took the Classic endpoint proves the account Classic now -- an account switched back
+  // to Classic since its key was tested is learned here, before any order path asks (16 October 2026).
+  if (ACCOUNT_MODE_READERS[exchange] !== undefined && read.classic === true && entry.accountMode !== CLASSIC_MODE) {
+    entry.accountMode = CLASSIC_MODE
+    await persist()
+  }
+  const { rows, unreadable } = readableBalances(read.balances)
   const snapshot: LiveBalanceSnapshot = { exchange, rows, unreadable, fetchedAt: Date.now() }
   balanceCache.set(key, snapshot)
   return snapshot

@@ -1,6 +1,6 @@
 import { reconciliationNotice } from '../../shared/notices'
 import { describeDiscrepancy, describeUnknownOrder, reconcileLivePositions, type ReconciliationReadout } from '../../shared/reconcileLive'
-import type { TradingBook } from '../../shared/ipc'
+import type { CredentialStatus, TradingBook } from '../../shared/ipc'
 import { getDecryptedCredential, listCredentialStatus, readLiveBalances } from './credentialsService'
 import { venuesOf, type TradingVenue } from './exchanges/venues'
 import { resolveOrderFromExchange } from './liveExecutionService'
@@ -21,6 +21,12 @@ import { tell } from './noticeService'
 // and its own key (exchanges/venues.ts): Binance's real account as before, and an exchange's demo
 // account while its demo key is stored, its notices named for the demo. A demo discrepancy is told
 // on a thread of its own, so it never stands in for a real one.
+//
+// Since 16 October 2026 each venue's look is its own: a venue that fails leaves its message as the
+// book's error and the other venues' findings still reach the state; and a key on Bitget's Classic
+// account (credentialsService.ts), which no unified order read can answer, has its orders left unasked
+// -- none can have been placed on it, since a placement is refused -- and its balances, read over the
+// Classic endpoint, checked against the positions as any.
 
 export const RECONCILE_EVERY_MS = 60_000
 
@@ -36,10 +42,10 @@ export function getReconciliationState(book: TradingBook = 'real'): Reconciliati
   return { ...state, unknownOrders: [...state.unknownOrders], discrepancies: [...state.discrepancies], unchecked: [...state.unchecked] }
 }
 
-/** The one key of a venue, where it is stored. */
-async function keyStoredFor(venue: TradingVenue): Promise<boolean> {
+/** The one key of a venue, where it is stored: its status, which says what the account is. */
+async function storedKeyOf(venue: TradingVenue): Promise<CredentialStatus | null> {
   const keys = await listCredentialStatus()
-  return keys.some((key) => key.exchange === venue.exchange && (key.slot ?? 'real') === venue.slot && key.configured)
+  return keys.find((key) => key.exchange === venue.exchange && (key.slot ?? 'real') === venue.slot && key.configured) ?? null
 }
 
 /** One look at one book. Exported for its test and the check. */
@@ -50,8 +56,11 @@ export async function reconcileOnce(book: TradingBook = 'real'): Promise<Reconci
   const thread = (name: string): string => (book === 'demo' ? `demo:${name}` : name)
   try {
     const venues = venuesOf(book)
-    const stored: TradingVenue[] = []
-    for (const venue of venues) if (await keyStoredFor(venue)) stored.push(venue)
+    const stored: { venue: TradingVenue; key: CredentialStatus }[] = []
+    for (const venue of venues) {
+      const key = await storedKeyOf(venue)
+      if (key !== null) stored.push({ venue, key })
+    }
     if (stored.length === 0) {
       states[book] = { ...states[book], at: nowSec, unknownOrders: [], discrepancies: [], unchecked: [], keyStored: false, error: null }
       return getReconciliationState(book)
@@ -61,41 +70,57 @@ export async function reconcileOnce(book: TradingBook = 'real'): Promise<Reconci
     const discrepanciesAll: ReconciliationState['discrepancies'] = []
     const uncheckedAll: string[] = []
     let resolved = 0
-    for (const venue of stored) {
-      const credentials = await getDecryptedCredential(venue.exchange, venue.slot)
-      const [onExchange, ledger] = await Promise.all([venue.fetchOpenOrders(credentials), listOpenLiveOrders(book)])
-      const keyOf = (order: { symbol: string; orderId: number | string }): string => `${order.symbol}:${order.orderId}`
-      const known = new Set(ledger.filter((order) => order.exchange === venue.exchange).map(keyOf))
-      const unknown = onExchange.filter((order) => !known.has(keyOf(order)))
-      for (const order of unknown) {
-        tell((i18n) => reconciliationNotice('order', describeUnknownOrder(order, venue.label, i18n), thread(`order:${keyOf(order)}`), i18n))
-      }
-      unknownAll.push(...unknown)
-      // A ledger order the exchange no longer rests: filled, cancelled or expired while nothing heard
-      // it. Asked about one by one and resolved as the poll resolves it.
-      const resting = new Set(onExchange.map(keyOf))
-      for (const order of ledger) {
-        if (order.exchange !== venue.exchange || resting.has(keyOf(order))) continue
-        try {
-          const resolution = await resolveOrderFromExchange(order, await venue.queryOrder(credentials, order.symbol, order.orderId), book)
-          if (resolution !== null) {
-            queueStreamResolution(resolution, book)
-            resolved++
-          }
-        } catch (error) {
-          console.error(`The reconciliation could not ask about ${book} order ${order.id}:`, error)
+    const failed: string[] = []
+    for (const { venue, key } of stored) {
+      try {
+        const credentials = await getDecryptedCredential(venue.exchange, venue.slot)
+        // A Classic account answers no unified order read: its orders are not asked about.
+        const ordersReadable = key.accountType !== 'classic'
+        const [onExchange, ledger] = await Promise.all([ordersReadable ? venue.fetchOpenOrders(credentials) : Promise.resolve([]), listOpenLiveOrders(book)])
+        const orderKey = (order: { symbol: string; orderId: number | string }): string => `${order.symbol}:${order.orderId}`
+        const known = new Set(ledger.filter((order) => order.exchange === venue.exchange).map(orderKey))
+        const unknown = onExchange.filter((order) => !known.has(orderKey(order)))
+        for (const order of unknown) {
+          tell((i18n) => reconciliationNotice('order', describeUnknownOrder(order, venue.label, i18n), thread(`order:${orderKey(order)}`), i18n))
         }
+        unknownAll.push(...unknown)
+        // A ledger order the exchange no longer rests: filled, cancelled or expired while nothing heard
+        // it. Asked about one by one and resolved as the poll resolves it.
+        const resting = new Set(onExchange.map(orderKey))
+        for (const order of ledger) {
+          if (!ordersReadable || order.exchange !== venue.exchange || resting.has(orderKey(order))) continue
+          try {
+            const resolution = await resolveOrderFromExchange(order, await venue.queryOrder(credentials, order.symbol, order.orderId), book)
+            if (resolution !== null) {
+              queueStreamResolution(resolution, book)
+              resolved++
+            }
+          } catch (error) {
+            console.error(`The reconciliation could not ask about ${book} order ${order.id}:`, error)
+          }
+        }
+        const [positions, balances] = await Promise.all([listOpenLivePositions(book), readLiveBalances(venue.exchange, true, venue.slot)])
+        const reconciled = reconcileLivePositions(
+          positions.filter((position) => position.exchange === venue.exchange),
+          balances
+        )
+        for (const discrepancy of reconciled.discrepancies) tell((i18n) => reconciliationNotice('asset', describeDiscrepancy(discrepancy, venue.label, i18n), thread(`asset:${discrepancy.asset}`), i18n))
+        discrepanciesAll.push(...reconciled.discrepancies)
+        uncheckedAll.push(...reconciled.unchecked)
+      } catch (error) {
+        // This venue's look failed; the others' findings still stand. The exchange's own words name it.
+        failed.push(error instanceof Error ? error.message : String(error))
       }
-      const [positions, balances] = await Promise.all([listOpenLivePositions(book), readLiveBalances(venue.exchange, true, venue.slot)])
-      const reconciled = reconcileLivePositions(
-        positions.filter((position) => position.exchange === venue.exchange),
-        balances
-      )
-      for (const discrepancy of reconciled.discrepancies) tell((i18n) => reconciliationNotice('asset', describeDiscrepancy(discrepancy, venue.label, i18n), thread(`asset:${discrepancy.asset}`), i18n))
-      discrepanciesAll.push(...reconciled.discrepancies)
-      uncheckedAll.push(...reconciled.unchecked)
     }
-    states[book] = { at: nowSec, unknownOrders: unknownAll, discrepancies: discrepanciesAll, unchecked: uncheckedAll, resolvedByCheck: states[book].resolvedByCheck + resolved, keyStored: true, error: null }
+    states[book] = {
+      at: nowSec,
+      unknownOrders: unknownAll,
+      discrepancies: discrepanciesAll,
+      unchecked: uncheckedAll,
+      resolvedByCheck: states[book].resolvedByCheck + resolved,
+      keyStored: true,
+      error: failed.length === 0 ? null : failed.join('; ')
+    }
   } catch (error) {
     states[book] = { ...states[book], at: nowSec, error: error instanceof Error ? error.message : String(error) }
   } finally {

@@ -1853,5 +1853,7 @@
   "PAPER TRADE": "पेपर ट्रेड",
   "{name} (data only)": "{name} (केवल डेटा)",
   "{exchange} demo": "{exchange} डेमो",
-  "Mode@@of an executor": "मोड"
+  "Mode@@of an executor": "मोड",
+  "the {exchange} key is for a Classic account": "{exchange} कुंजी क्लासिक खाते की है",
+  "This {exchange} key is for a Classic account: its balance is read, and a real order needs the Unified Trading Account. Switch the account on Bitget, then test the key again on Connections.": "यह {exchange} कुंजी क्लासिक खाते की है: इसका बैलेंस पढ़ा जाता है, लेकिन असली ऑर्डर के लिए यूनिफ़ाइड ट्रेडिंग खाता चाहिए। Bitget पर खाता बदलें, फिर कनेक्शन पेज पर कुंजी फिर से टेस्ट करें।"
 }

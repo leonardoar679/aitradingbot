@@ -3122,9 +3122,22 @@ in this app requires a verified credential first.
 made, asked for with the key and kept beside it, encrypted as the secret is; every signed request
 sends `ACCESS-KEY`, `ACCESS-SIGN` (HMAC-SHA256 of the timestamp, the method, the path, the query and
 the body, in base64), `ACCESS-TIMESTAMP` (by Bitget's own clock, read once in five minutes) and
-`ACCESS-PASSPHRASE`. Verification reads the Unified Trading Account's assets and its settings: a
-unified account (UNION or ISOLATED) is said so, a Classic account is read-only here. The card holds a
-second, **demo key** for Bitget's demo account, made in its Demo mode: a demo request carries the
+`ACCESS-PASSPHRASE`. Verification reads the account's assets and its settings: a unified account
+(UNION or ISOLATED) is said so. A **Classic account** -- one not upgraded to the Unified Trading
+Account -- refuses every unified (v3) request with Bitget's code 40084, "You are in Classic Account
+mode, and the Unified Account API is not supported at this time"; since 16 October 2026 such a key is
+then read over the Classic spot account's own endpoint (`GET /api/v2/spot/account/assets`;
+`electron/services/exchanges/bitgetAccount.ts`, the account's reads written once for the real and
+the demo module), stored as CLASSIC -- from that read alone, which is the proof; the settings are not
+asked of it -- shown as such on the Connections card and as the reason live is out of reach in the
+executor form (its balances still appear on Live Trading), and refused a real order before anything is
+sent (`liveExecutionService.ts` `assertAccountCanTrade`), since the order paths are the unified
+account's: the way is to switch the account to the Unified Trading Account on Bitget (a main account can
+switch back) and test the key again. A balance read that takes the Classic endpoint on a key stored as
+unified stores it as CLASSIC there and then, so an account switched back is learned before any order
+path asks; the once-a-minute reconciliation asks a Classic key no unified order read (its balances are
+still checked against the positions), and one venue's failure no longer discards another's findings. The card
+holds a second, **demo key** for Bitget's demo account, made in its Demo mode: a demo request carries the
 header `paptrading: 1`, Bitget refuses a real key with it and a demo key without it, and the one
 module that sends it (`bitgetDemoTrading.ts`) never sends a real request, as the real module never
 sends a demo one -- `tests/bitgetAuth.test.ts` pins both. The demo key is for the paper laboratory's

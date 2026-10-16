@@ -1853,5 +1853,7 @@
   "PAPER TRADE": "모의 거래",
   "{name} (data only)": "{name} (데이터만)",
   "{exchange} demo": "{exchange} 데모",
-  "Mode@@of an executor": "모드"
+  "Mode@@of an executor": "모드",
+  "the {exchange} key is for a Classic account": "{exchange} 키가 클래식 계정용임",
+  "This {exchange} key is for a Classic account: its balance is read, and a real order needs the Unified Trading Account. Switch the account on Bitget, then test the key again on Connections.": "이 {exchange} 키는 클래식 계정용입니다. 잔고는 읽을 수 있지만 실거래 주문에는 통합 거래 계정이 필요합니다. Bitget에서 계정을 전환한 뒤 연결 페이지에서 키를 다시 테스트하세요."
 }

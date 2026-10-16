@@ -1853,5 +1853,7 @@
   "PAPER TRADE": "模拟交易",
   "{name} (data only)": "{name}（仅数据）",
   "{exchange} demo": "{exchange} 模拟盘",
-  "Mode@@of an executor": "模式"
+  "Mode@@of an executor": "模式",
+  "the {exchange} key is for a Classic account": "{exchange} 密钥属于经典账户",
+  "This {exchange} key is for a Classic account: its balance is read, and a real order needs the Unified Trading Account. Switch the account on Bitget, then test the key again on Connections.": "此 {exchange} 密钥属于经典账户：可读取其余额，但真实订单需要统一交易账户。请在 Bitget 上切换账户模式，然后在“连接”页面重新测试密钥。"
 }

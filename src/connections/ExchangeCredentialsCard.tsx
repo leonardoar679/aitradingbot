@@ -40,7 +40,7 @@ const SUPPORTED_KEYS: KeyRowSpec[] = [
     slot: 'real',
     name: 'Bitget',
     note:
-      "Reads your Unified Trading Account's balance over a key, its secret and the passphrase set with it; a Classic account (not upgraded to UTA) is read-only here. A verified key can place a real Order or Position on Bitget, through the same gates as Binance's orders (the live trading bar's arm, the kill switch, every cap) and only from an executor you create in live mode; a ladder or a series (DCA, TWAP, Grid) stays Binance-only.",
+      "Reads your account's balance over a key, its secret and the passphrase set with it — a Unified Trading Account's, or a Classic account's (not upgraded) over its own endpoint. A verified key on a Unified Trading Account can place a real Order or Position on Bitget, through the same gates as Binance's orders (the live trading bar's arm, the kill switch, every cap) and only from an executor you create in live mode; a Classic account is read here and cannot place an order until it is switched to the Unified Trading Account on Bitget (then test the key again); a ladder or a series (DCA, TWAP, Grid) stays Binance-only.",
     passphrase: true
   },
   {
@@ -61,7 +61,7 @@ const SUPPORTED_KEYS: KeyRowSpec[] = [
   }
 ]
 
-const ACCOUNT_WORDS = { uta: 'Unified Trading Account', classic: 'Classic account — read-only in this app', unknown: 'account mode not known' } as const
+const ACCOUNT_WORDS = { uta: 'Unified Trading Account', classic: 'Classic account — balance read; an order needs the Unified Trading Account', unknown: 'account mode not known' } as const
 
 function CredentialRow({
   spec,

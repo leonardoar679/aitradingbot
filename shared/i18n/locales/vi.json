@@ -1853,5 +1853,7 @@
   "PAPER TRADE": "GIAO DỊCH MÔ PHỎNG",
   "{name} (data only)": "{name} (chỉ dữ liệu)",
   "{exchange} demo": "Demo {exchange}",
-  "Mode@@of an executor": "Chế độ"
+  "Mode@@of an executor": "Chế độ",
+  "the {exchange} key is for a Classic account": "khóa {exchange} thuộc tài khoản Cổ điển",
+  "This {exchange} key is for a Classic account: its balance is read, and a real order needs the Unified Trading Account. Switch the account on Bitget, then test the key again on Connections.": "Khóa {exchange} này thuộc tài khoản Cổ điển: số dư được đọc, nhưng lệnh thật cần Tài khoản Giao dịch Hợp nhất. Hãy chuyển đổi tài khoản trên Bitget, rồi kiểm tra lại khóa trong trang Kết nối."
 }

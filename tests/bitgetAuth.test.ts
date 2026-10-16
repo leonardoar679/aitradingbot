@@ -2,13 +2,16 @@ import { createHmac } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { BITGET_DEMO_HEADER, bitgetHeaders, bitgetPreHash, bitgetSignature, bitgetSigned, describeBitgetRefusal, resetBitgetClock } from '../electron/services/exchanges/bitgetAuth'
-import { balancesOf, bitgetAccountTypeOf, fetchBitgetAccountSettings, fetchBitgetAssets } from '../electron/services/exchanges/bitgetTrading'
-import { fetchBitgetDemoAssets } from '../electron/services/exchanges/bitgetDemoTrading'
+import { BITGET_DEMO_HEADER, BitgetRefusal, CLASSIC_ACCOUNT_CODE, bitgetHeaders, bitgetPreHash, bitgetSignature, bitgetSigned, describeBitgetRefusal, isClassicRefusal, resetBitgetClock } from '../electron/services/exchanges/bitgetAuth'
+import { fetchBitgetAccount, fetchBitgetAccountSettings, fetchBitgetAssets } from '../electron/services/exchanges/bitgetTrading'
+import { BITGET_ACCOUNT_PATHS, CLASSIC_MODE, balancesOf, bitgetAccountTypeOf, classicBalancesOf } from '../electron/services/exchanges/bitgetAccount'
+import { fetchBitgetDemoAccount, fetchBitgetDemoAccountSettings, fetchBitgetDemoAssets } from '../electron/services/exchanges/bitgetDemoTrading'
 
-// BITGET'S SIGNED REQUESTS (electron/services/exchanges/bitgetAuth.ts, bitgetTrading.ts,
-// bitgetDemoTrading.ts; V7.1 Stage 7): the string signed, the headers, the demo header on a demo
-// request and on nothing else, the real account's reads, and the two modules kept apart.
+// BITGET'S SIGNED REQUESTS (electron/services/exchanges/bitgetAuth.ts, bitgetAccount.ts,
+// bitgetTrading.ts, bitgetDemoTrading.ts; V7.1 Stage 7): the string signed, the headers, the demo
+// header on a demo request and on nothing else, the real account's reads, a CLASSIC account's reads
+// over its own endpoint after the unified ones refuse it (16 October 2026), and the two modules kept
+// apart.
 
 const ROOT = join(__dirname, '..')
 const CREDENTIALS = { apiKey: 'bg_key', apiSecret: 'bg_secret', passphrase: 'bg_pass' }
@@ -86,6 +89,14 @@ describe('a signed request', () => {
     expect(await fetchBitgetAccountSettings(CREDENTIALS)).toEqual({ accountMode: 'UNION', assetMode: 'single', holdMode: 'one_way_mode' })
     // The clock is read once in five minutes, not for every request.
     expect(asked.filter((entry) => entry.url.includes('/market/time'))).toHaveLength(1)
+    // The read whole: a unified account's balances, not the Classic endpoint's.
+    expect(await fetchBitgetAccount(CREDENTIALS)).toEqual({
+      balances: [
+        { asset: 'USDT', free: 1000.5, locked: 200 },
+        { asset: 'BTC', free: 0.01, locked: 0 }
+      ],
+      classic: false
+    })
   })
 
   it('reads the demo account through the demo module alone, which sends the demo header', async () => {
@@ -133,6 +144,124 @@ describe('a signed request', () => {
   })
 })
 
+describe('a Classic account, which refuses the unified reads', () => {
+  const asked: { url: string; init: RequestInit }[] = []
+  const CLASSIC_MSG = 'You are in Classic Account mode, and the Unified Account API is not supported at this time'
+  const classicRefusal = (): Promise<Response> => Promise.resolve({ ok: false, status: 400, json: () => Promise.resolve({ code: CLASSIC_ACCOUNT_CODE, msg: CLASSIC_MSG, requestTime: 1, data: null }) } as Response)
+  /** The Classic spot account's rows, as its documentation gives them; the envelope's text key is `message` there. */
+  const classicRows = (): Promise<Response> =>
+    Promise.resolve({
+      ok: true,
+      status: 200,
+      json: () =>
+        Promise.resolve({
+          code: '00000',
+          message: 'success',
+          requestTime: 1,
+          data: [
+            { coin: 'USDT', available: '150.5', frozen: '20', locked: '5', limitAvailable: '0', uTime: '1' },
+            { coin: 'BTC', available: '0.01', frozen: '0', locked: '0', limitAvailable: '0', uTime: '1' }
+          ]
+        })
+    } as Response)
+
+  beforeEach(() => {
+    asked.length = 0
+    resetBitgetClock()
+    vi.unstubAllGlobals()
+    vi.stubGlobal('fetch', (url: string, init: RequestInit) => {
+      asked.push({ url: String(url), init })
+      const u = String(url)
+      if (u.includes('/api/v3/market/time')) return ok({ serverTime: String(Date.now()) })
+      if (u.includes('/api/v3/account/') || u.includes('/api/v3/trade/')) return classicRefusal()
+      if (u.includes('/api/v2/spot/account/assets')) return classicRows()
+      return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({ code: '40404', msg: 'not found', data: null }) })
+    })
+  })
+
+  it("reads the balances over the Classic spot account's endpoint once the unified read refuses with 40084, signed as any request and with no demo header", async () => {
+    expect(await fetchBitgetAssets(CREDENTIALS)).toEqual([
+      { asset: 'USDT', free: 150.5, locked: 25 },
+      { asset: 'BTC', free: 0.01, locked: 0 }
+    ])
+    expect(asked.map((entry) => entry.url)).toEqual(['https://api.bitget.com/api/v3/market/time', 'https://api.bitget.com/api/v3/account/assets', 'https://api.bitget.com/api/v2/spot/account/assets'])
+    const headers = asked[2].init.headers as Record<string, string>
+    expect(headers['ACCESS-KEY']).toBe('bg_key')
+    expect(headers['ACCESS-PASSPHRASE']).toBe('bg_pass')
+    expect(headers['ACCESS-SIGN']).toBe(bitgetSignature('bg_secret', `${headers['ACCESS-TIMESTAMP']}GET/api/v2/spot/account/assets`))
+    expect(headers).not.toHaveProperty('paptrading')
+    expect(asked[2].init.method).toBe('GET')
+    expect(asked[2].init.body).toBeUndefined()
+    expect(BITGET_ACCOUNT_PATHS).toEqual({ assets: '/api/v3/account/assets', settings: '/api/v3/account/settings', classicAssets: '/api/v2/spot/account/assets' })
+    // The read whole says the balances came from the Classic endpoint: the proof the key store keeps.
+    expect(await fetchBitgetAccount(CREDENTIALS)).toEqual({
+      balances: [
+        { asset: 'USDT', free: 150.5, locked: 25 },
+        { asset: 'BTC', free: 0.01, locked: 0 }
+      ],
+      classic: true
+    })
+  })
+
+  it('is said to be CLASSIC where its settings are refused as such, which the app reads as a classic account', async () => {
+    expect(await fetchBitgetAccountSettings(CREDENTIALS)).toEqual({ accountMode: 'CLASSIC' })
+    expect(CLASSIC_MODE).toBe('CLASSIC')
+    expect(bitgetAccountTypeOf((await fetchBitgetAccountSettings(CREDENTIALS)).accountMode)).toBe('classic')
+    expect(asked.filter((entry) => entry.url.includes('/api/v2/'))).toEqual([])
+  })
+
+  it('is read through the demo module the same way, every request with the demo header', async () => {
+    expect(await fetchBitgetDemoAssets(CREDENTIALS)).toEqual([
+      { asset: 'USDT', free: 150.5, locked: 25 },
+      { asset: 'BTC', free: 0.01, locked: 0 }
+    ])
+    expect(asked.slice(1).map((entry) => (entry.init.headers as Record<string, string>).paptrading)).toEqual(['1', '1'])
+    expect(await fetchBitgetDemoAccountSettings(CREDENTIALS)).toEqual({ accountMode: 'CLASSIC' })
+    expect((await fetchBitgetDemoAccount(CREDENTIALS)).classic).toBe(true)
+  })
+
+  it('falls back on the Classic code alone: any other refusal of a unified read is thrown as it is and the Classic endpoint is not asked, and a Classic read that fails is refused in its own words', async () => {
+    vi.stubGlobal('fetch', (url: string) => {
+      asked.push({ url: String(url), init: {} })
+      if (String(url).includes('/market/time')) return ok({ serverTime: String(Date.now()) })
+      return Promise.resolve({ ok: false, status: 400, json: () => Promise.resolve({ code: '40037', msg: 'Apikey does not exist', data: null }) })
+    })
+    await expect(fetchBitgetAssets(CREDENTIALS)).rejects.toThrow('Bitget account read failed: 40037 Apikey does not exist')
+    await expect(fetchBitgetAccountSettings(CREDENTIALS)).rejects.toThrow('Bitget account settings failed: 40037 Apikey does not exist')
+    expect(asked.some((entry) => entry.url.includes('/api/v2/'))).toBe(false)
+    vi.stubGlobal('fetch', (url: string) => {
+      if (String(url).includes('/market/time')) return ok({ serverTime: String(Date.now()) })
+      if (String(url).includes('/api/v3/')) return classicRefusal()
+      return Promise.resolve({ ok: false, status: 400, json: () => Promise.resolve({ code: '40014', msg: 'Incorrect permissions', data: null }) })
+    })
+    await expect(fetchBitgetAssets(CREDENTIALS)).rejects.toThrow('Bitget Classic account read failed: 40014 Incorrect permissions')
+  })
+
+  it("carries Bitget's code on every refusal, knows the Classic one by it, and says the way to the unified account in its words", async () => {
+    const error = await bitgetSigned(CREDENTIALS, { method: 'POST', path: '/api/v3/trade/place-order', body: { category: 'SPOT' }, what: 'place buy BTCUSDT' }, false).then(
+      () => null,
+      (refusal: unknown) => refusal
+    )
+    expect(error).toBeInstanceOf(BitgetRefusal)
+    expect(error).toMatchObject({ name: 'BitgetRefusal', code: '40084', status: 400 })
+    expect(CLASSIC_ACCOUNT_CODE).toBe('40084')
+    expect(isClassicRefusal(error)).toBe(true)
+    expect(isClassicRefusal(new BitgetRefusal('x', '40037', 400))).toBe(false)
+    expect(isClassicRefusal(new Error('40084'))).toBe(false)
+    expect((error as Error).message).toBe(
+      `Bitget place buy BTCUSDT failed: 40084 ${CLASSIC_MSG}. This key's account is in Classic mode: its balance is read, and an order needs the Unified Trading Account. Switch the account on Bitget (Assets, Upgrade to Unified Account), then test the key again on Connections.`
+    )
+    // A refusal of a key is still read as one, with its code beside the words.
+    const other = await bitgetSigned(CREDENTIALS, { method: 'GET', path: '/api/v3/market/nothing', what: 'x' }, false).then(
+      () => null,
+      (refusal: unknown) => refusal
+    )
+    expect(other).toMatchObject({ name: 'BitgetRefusal', code: '40404', status: 404, message: 'Bitget x failed: 40404 not found' })
+    // The words are read from `message` too, as the Classic documentation spells the key.
+    expect(describeBitgetRefusal('x', 400, { code: '40014', message: 'Incorrect permissions' }, false)).toBe('Bitget x failed: 40014 Incorrect permissions')
+  })
+})
+
 describe("the account's rows and its mode", () => {
   it('reads a coin\'s spendable amount and what its orders hold, a row that cannot be read becoming NaN by name, and refuses a response without the list', () => {
     expect(balancesOf({ assets: [{ coin: 'ETH', available: '2', locked: '0.5' }, { coin: 'X', available: 'n/a', locked: '0' }] })).toEqual([
@@ -141,6 +270,15 @@ describe("the account's rows and its mode", () => {
     ])
     expect(() => balancesOf({})).toThrow('Bitget returned an account response without an asset list')
     expect(() => balancesOf(null)).toThrow('Bitget returned an account response without an asset list')
+  })
+
+  it("reads the Classic account's rows: available as spendable, frozen and locked together as held, a row that cannot be read becoming NaN by name, and refuses a response that is not a list", () => {
+    expect(classicBalancesOf([{ coin: 'ETH', available: '2', frozen: '0.5', locked: '0.25' }, { coin: 'X', available: 'n/a', frozen: '0', locked: '0' }])).toEqual([
+      { asset: 'ETH', free: 2, locked: 0.75 },
+      { asset: 'X', free: Number.NaN, locked: 0 }
+    ])
+    expect(() => classicBalancesOf({ assets: [] } as unknown as never)).toThrow('Bitget returned a Classic account response without an asset list')
+    expect(() => classicBalancesOf(null)).toThrow('Bitget returned a Classic account response without an asset list')
   })
 
   it('tells a unified account in either mode from a classic one, and knows neither from a word it has not seen', () => {
@@ -167,5 +305,8 @@ describe('the real and the demo modules, kept apart', () => {
     // The demo header is spelled in one place, and only the signer sends it.
     expect(source('bitgetAuth.ts').match(/'paptrading'/g)).toHaveLength(1)
     expect(source('bitget.ts')).not.toMatch(/paptrading|ACCESS-KEY|createHmac/)
+    // The account's reads sign nothing and choose no account: each module brings its own signer.
+    expect(source('bitgetAccount.ts')).not.toMatch(/paptrading|ACCESS-KEY|createHmac|bitgetSigned|, true\)|, false\)/)
+    expect(source('bitgetAccount.ts')).toContain("classicAssets: '/api/v2/spot/account/assets'")
   })
 })

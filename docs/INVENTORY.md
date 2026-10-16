@@ -136,7 +136,7 @@ under Settings › Advanced › Effective configuration.
 | `scanner.json` | `enabled` (on by default since 8 October 2026; only `false` switches it off), `universeSize` (20, 40, 60 or 100) | Explorer › Scanner | Settings › Market |
 | `marketEvents/` | since 8 October 2026 an event may be a market-wide move (`type: 'market_move'`, on BTCUSDT, with `live.members`), and its members carry `live.marketMove`; detector version `events-v2`; since V5 Stage 4 each event carries a `fingerprint` and a `cause`, and `status-YYYY-MM.jsonl` holds each event's life (DETECTED → CONFIRMED → ACTIVE → WEAKENING → EXPIRED), one line a change, read back at start | — | Opportunities, Explorer |
 | `news.json` | `enabled`; for `delisting` and for `monitoringTag`, each: `notifyHeld`, `paperShort` (on, stake), `askModels` (added with the news reader, V3 Stage 7) | — | Settings › Market |
-| `credentials.json` (encrypted) | Binance and Upbit keys; when added, last tested, result (Bitget's, with its passphrase and a demo slot, from V7.1 Stage 7) | Settings | Connections |
+| `credentials.json` (encrypted) | Binance and Upbit keys; when added, last tested, result (Bitget's, with its passphrase and a demo slot, from V7.1 Stage 7; a Bitget key on a Classic account is stored as CLASSIC, read over the Classic endpoint and refused a real order, 16 October 2026) | Settings | Connections |
 | `aiCredentials.json` (encrypted) | The OpenRouter key | Agents | Connections |
 | `liveTrading.json` | Session armed, kill switch | Live trading bar | The bar (stays); detail on Live Trading |
 | | Max order size, daily cap, daily loss limit, allocation; and, added 8 October 2026, the share of the allocation a real order filled in from a call is sized to risk | Settings | Risk & Safety |

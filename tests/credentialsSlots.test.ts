@@ -16,7 +16,7 @@ vi.mock('electron', () => ({
 }))
 vi.mock('../electron/services/liveTradingService', () => ({ canCloseLivePosition: async () => ({ allowed: false, reason: 'not here' }) }))
 
-const { getDecryptedCredential, listCredentialStatus, PASSPHRASE_EXCHANGES, readLiveBalances, removeCredential, setCredential, slotKeyOf, slotOfKey, testCredential } = await import('../electron/services/credentialsService')
+const { credentialAccountType, getDecryptedCredential, listCredentialStatus, PASSPHRASE_EXCHANGES, readLiveBalances, removeCredential, setCredential, slotKeyOf, slotOfKey, testCredential } = await import('../electron/services/credentialsService')
 
 const asked: { url: string; headers: Record<string, string> }[] = []
 const ok = (data: unknown): Promise<Response> => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ code: '00000', msg: 'success', data }) } as Response)
@@ -101,5 +101,99 @@ describe('a Bitget key', () => {
   it('has no demo slot on an exchange without a demo account', async () => {
     await expect(setCredential('binance', 'k', 's', { slot: 'demo' })).rejects.toThrow("This app cannot connect to binance's demo account yet")
     expect(await testCredential('upbit', 'demo')).toEqual({ ok: false, message: "This app cannot connect to upbit's demo account yet" })
+  })
+})
+
+describe('a Bitget key made on a Classic account (16 October 2026)', () => {
+  it("verifies over the Classic endpoint once the unified reads refuse it, is stored as CLASSIC and listed as a classic account, reads its balances so, and answers the order path's question", async () => {
+    vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+      const u = String(url)
+      asked.push({ url: u, headers: (init?.headers as Record<string, string>) ?? {} })
+      if (u.includes('/api/v3/market/time')) return ok({ serverTime: String(Date.now()) })
+      if (u.includes('/api/v3/account/')) {
+        return Promise.resolve({ ok: false, status: 400, json: () => Promise.resolve({ code: '40084', msg: 'You are in Classic Account mode, and the Unified Account API is not supported at this time', data: null }) })
+      }
+      if (u.includes('/api/v2/spot/account/assets')) return ok([{ coin: 'USDT', available: '120', frozen: '30', locked: '0', limitAvailable: '0', uTime: '1' }])
+      return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({ code: '40404', msg: 'not found', data: null }) })
+    })
+    const status = await setCredential('bitget', 'ck', 'cs', { passphrase: 'cp' })
+    expect(status).toMatchObject({ exchange: 'bitget', slot: 'real', configured: true, lastTestOk: true, accountType: 'classic' })
+    // The Classic read is the proof: the settings are not asked.
+    expect(asked.filter((entry) => entry.url.includes('/account/')).map((entry) => entry.url.replace('https://api.bitget.com', ''))).toEqual(['/api/v3/account/assets', '/api/v2/spot/account/assets'])
+    for (const read of asked.filter((entry) => entry.url.includes('/account/'))) {
+      expect(read.headers['ACCESS-PASSPHRASE']).toBe('cp')
+      expect(read.headers).not.toHaveProperty('paptrading')
+    }
+    const file = JSON.parse(readFileSync(join(dir, 'credentials.json'), 'utf-8')) as Record<string, Record<string, unknown>>
+    expect(file.bitget).toMatchObject({ apiPassphraseEnc: Buffer.from('enc:cp').toString('base64'), accountMode: 'CLASSIC' })
+    expect(await credentialAccountType('bitget')).toBe('classic')
+    expect(await credentialAccountType('bitget', 'demo')).toBeNull()
+    expect(await credentialAccountType('binance')).toBeNull()
+    expect((await readLiveBalances('bitget', true)).rows).toEqual([{ asset: 'USDT', free: 120, locked: 30 }])
+    expect(await testCredential('bitget')).toEqual({ ok: true, message: 'Key verified successfully' })
+    expect((await listCredentialStatus()).map((entry) => `${entry.exchange}:${entry.slot}:${entry.accountType}`)).toEqual(['bitget:real:classic'])
+    await removeCredential('bitget')
+    expect(await credentialAccountType('bitget')).toBeNull()
+    expect(await listCredentialStatus()).toEqual([])
+  })
+
+  it("is stored as CLASSIC even where its settings read would fail for another reason, while a unified account whose settings cannot be read is stored with its mode unknown", async () => {
+    const settingsFail = (): Promise<Response> => Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({ code: '50000', msg: 'internal error', data: null }) } as Response)
+    // A unified account: the balance read answers, the settings do not.
+    vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+      const u = String(url)
+      asked.push({ url: u, headers: (init?.headers as Record<string, string>) ?? {} })
+      if (u.includes('/api/v3/market/time')) return ok({ serverTime: String(Date.now()) })
+      if (u.includes('/api/v3/account/assets')) return ok({ assets: [{ coin: 'USDT', available: '10000', locked: '0' }] })
+      if (u.includes('/api/v3/account/settings')) return settingsFail()
+      return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({ code: '40404', msg: 'not found', data: null }) })
+    })
+    const unified = await setCredential('bitget', 'uk', 'us', { passphrase: 'up' })
+    expect(unified).toMatchObject({ configured: true, lastTestOk: true, accountType: 'unknown' })
+    expect((JSON.parse(readFileSync(join(dir, 'credentials.json'), 'utf-8')) as Record<string, Record<string, unknown>>).bitget).toMatchObject({ accountMode: null })
+    expect(await credentialAccountType('bitget')).toBe('unknown')
+    expect(asked.some((entry) => entry.url.includes('/api/v2/'))).toBe(false)
+    await removeCredential('bitget')
+    // A Classic account: the balance read took the Classic endpoint, which is the proof; the settings are not asked.
+    asked.length = 0
+    vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+      const u = String(url)
+      asked.push({ url: u, headers: (init?.headers as Record<string, string>) ?? {} })
+      if (u.includes('/api/v3/market/time')) return ok({ serverTime: String(Date.now()) })
+      if (u.includes('/api/v3/account/assets')) {
+        return Promise.resolve({ ok: false, status: 400, json: () => Promise.resolve({ code: '40084', msg: 'You are in Classic Account mode, and the Unified Account API is not supported at this time', data: null }) })
+      }
+      if (u.includes('/api/v3/account/settings')) return settingsFail()
+      if (u.includes('/api/v2/spot/account/assets')) return ok([{ coin: 'USDT', available: '7', frozen: '0', locked: '0', limitAvailable: '0', uTime: '1' }])
+      return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({ code: '40404', msg: 'not found', data: null }) })
+    })
+    const classic = await setCredential('bitget', 'ck', 'cs', { passphrase: 'cp' })
+    expect(classic).toMatchObject({ configured: true, lastTestOk: true, accountType: 'classic' })
+    expect(asked.some((entry) => entry.url.includes('/api/v3/account/settings'))).toBe(false)
+    expect(await testCredential('bitget')).toEqual({ ok: true, message: 'Key verified successfully' })
+    expect(await credentialAccountType('bitget')).toBe('classic')
+    await removeCredential('bitget')
+  })
+
+  it('is learned by a balance read too: a key stored as unified whose account was switched back to Classic is stored as CLASSIC the moment its balances come from the Classic endpoint', async () => {
+    const status = await setCredential('bitget', 'k', 's', { passphrase: 'p' })
+    expect(status).toMatchObject({ accountType: 'uta' })
+    // The account switched back to Classic: the unified read is refused, the Classic endpoint answers.
+    vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+      const u = String(url)
+      asked.push({ url: u, headers: (init?.headers as Record<string, string>) ?? {} })
+      if (u.includes('/api/v3/market/time')) return ok({ serverTime: String(Date.now()) })
+      if (u.includes('/api/v3/account/')) {
+        return Promise.resolve({ ok: false, status: 400, json: () => Promise.resolve({ code: '40084', msg: 'You are in Classic Account mode, and the Unified Account API is not supported at this time', data: null }) })
+      }
+      if (u.includes('/api/v2/spot/account/assets')) return ok([{ coin: 'USDT', available: '42', frozen: '0', locked: '0', limitAvailable: '0', uTime: '1' }])
+      return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({ code: '40404', msg: 'not found', data: null }) })
+    })
+    expect(await credentialAccountType('bitget')).toBe('uta')
+    expect((await readLiveBalances('bitget', true)).rows).toEqual([{ asset: 'USDT', free: 42, locked: 0 }])
+    expect(await credentialAccountType('bitget')).toBe('classic')
+    expect((JSON.parse(readFileSync(join(dir, 'credentials.json'), 'utf-8')) as Record<string, Record<string, unknown>>).bitget).toMatchObject({ accountMode: 'CLASSIC' })
+    expect((await listCredentialStatus()).map((entry) => entry.accountType)).toEqual(['classic'])
+    await removeCredential('bitget')
   })
 })

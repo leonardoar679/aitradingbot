@@ -61,9 +61,11 @@ const LIVE_MODULES = new Set([
   'binanceTrading',
   'binanceFuturesTrading',
   'upbitTrading',
-  // Added 16 October 2026 (V7.1 Stages 7-9): Bitget's signer, its order shapes, its real and demo
-  // modules, and the venues that choose among them. None reads a model.
+  // Added 16 October 2026 (V7.1 Stages 7-9): Bitget's signer, its order shapes, its account reads (a
+  // Classic account's too), its real and demo modules, and the venues that choose among them. None
+  // reads a model.
   'bitgetAuth',
+  'bitgetAccount',
   'bitgetOrders',
   'bitgetTrading',
   'bitgetDemoTrading',

@@ -3,7 +3,7 @@ import { describeLiveShortfall } from '../../shared/liveBalances'
 import { resolvedOrderStatus } from '../../shared/userStream'
 import { canCloseLivePosition, canPlaceLiveOrder, recordLiveOrderUsage, checkLossLimitAndAutoDisarm } from './liveTradingService'
 import { recordLiveFill } from './livePositionsService'
-import { freeBalanceFor, getDecryptedCredential } from './credentialsService'
+import { credentialAccountType, freeBalanceFor, getDecryptedCredential } from './credentialsService'
 import type { LiveOrderResult } from './exchanges/binanceTrading'
 import { venueFor, type TradingVenue, type VenueCredentials } from './exchanges/venues'
 import { listOpenLiveOrders, getLiveOrder, resolveLiveOrder } from './liveOrdersService'
@@ -24,6 +24,19 @@ export function venueOrRefuse(exchange: Exchange, book: TradingBook): TradingVen
 
 async function credentialsOf(venue: TradingVenue): Promise<VenueCredentials> {
   return getDecryptedCredential(venue.exchange, venue.slot)
+}
+
+/** Refuses a real order on an account the stored key cannot place one on -- a Bitget key made on a
+ * Classic account, which Bitget would refuse with 40084 -- before anything is sent, in words that say
+ * the way: the exchange's own words name the mode and nothing else. A placement alone is refused here;
+ * a close, a cancel or a query is never held back by this app (the exchange answers those itself), so
+ * that no one is trapped inside a position by a check meant to bound new exposure. */
+export async function assertAccountCanTrade(venue: TradingVenue): Promise<void> {
+  if (venue.book !== 'real') return
+  if ((await credentialAccountType(venue.exchange, venue.slot)) !== 'classic') return
+  throw new Error(
+    `This ${venue.label} key is for a Classic account, which this app reads but cannot place an order on: switch the account to the Unified Trading Account on ${venue.label}, then test the key again on Connections.`
+  )
 }
 
 /** Refuses a buy the account cannot pay for, in words that say what is wrong.
@@ -77,6 +90,7 @@ export async function placeLiveMarketOrder(
     const gate = await canPlaceLiveOrder(quoteAmount)
     if (!gate.allowed) throw new Error(gate.reason ?? 'Live order blocked')
   }
+  await assertAccountCanTrade(venue)
   await assertLiveOrderAffordable(exchange, quoteAsset, side, quoteAmount, book)
 
   const result = await venue.placeMarketOrder(await credentialsOf(venue), symbol, side === 'buy' ? 'BUY' : 'SELL', quoteAmount)
@@ -97,6 +111,7 @@ export async function placeLiveLimitOrderOn(
   book: TradingBook = 'real'
 ): Promise<LiveOrderResult> {
   const venue = venueOrRefuse(exchange, book)
+  await assertAccountCanTrade(venue)
   return venue.placeLimitOrder(await credentialsOf(venue), symbol, side === 'buy' ? 'BUY' : 'SELL', quantity, limitPrice)
 }
 

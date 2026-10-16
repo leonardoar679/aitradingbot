@@ -1853,5 +1853,7 @@
   "PAPER TRADE": "تداول تجريبي",
   "{name} (data only)": "{name} (بيانات فقط)",
   "{exchange} demo": "حساب {exchange} التجريبي",
-  "Mode@@of an executor": "الوضع"
+  "Mode@@of an executor": "الوضع",
+  "the {exchange} key is for a Classic account": "مفتاح {exchange} يخص حسابًا كلاسيكيًا",
+  "This {exchange} key is for a Classic account: its balance is read, and a real order needs the Unified Trading Account. Switch the account on Bitget, then test the key again on Connections.": "مفتاح {exchange} هذا يخص حسابًا كلاسيكيًا: يُقرأ رصيده، لكن الأمر الحقيقي يحتاج إلى حساب التداول الموحّد. بدّل الحساب على Bitget، ثم اختبر المفتاح مجددًا في صفحة الاتصالات."
 }

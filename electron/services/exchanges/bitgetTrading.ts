@@ -2,6 +2,7 @@ import type { AccountBalance, LiveOrderResult } from './binanceTrading'
 import type { OpenOrderOnExchange } from '../../../shared/reconcileLive'
 import type { SymbolTradingRules } from '../../../shared/exchangeMinimums'
 import { bitgetSigned, type BitgetCredentials, type BitgetRequest } from './bitgetAuth'
+import { readBitgetAccount, readBitgetAccountSettings, readBitgetAssets, type BitgetAccountRead, type BitgetAccountSettings } from './bitgetAccount'
 import * as orders from './bitgetOrders'
 
 // BITGET, THE REAL ACCOUNT (V7.1 Stages 7 and 9, 16 October 2026): reading it over the user's own
@@ -10,7 +11,10 @@ import * as orders from './bitgetOrders'
 // that. Nothing in this file checks a safety gate: every caller goes through liveTradingService
 // first, as Binance's do (liveExecutionService.ts, the real book's venue in exchanges/venues.ts),
 // and an order is placed only by a person from the form -- the paper laboratory and every AI path
-// are held off this file by tests/aiNoLivePath.test.ts. The order's shape is bitgetOrders.ts's.
+// are held off this file by tests/aiNoLivePath.test.ts. The order's shape is bitgetOrders.ts's, the
+// account's reads bitgetAccount.ts's -- which read a CLASSIC account (one not upgraded to the unified
+// account) over its own endpoint, while the orders below are the unified account's alone: a real order
+// on a Classic account is refused before it is sent (liveExecutionService.ts assertAccountCanTrade).
 //
 // Never log a key, a secret or a passphrase.
 
@@ -20,58 +24,23 @@ const realSend =
   <T,>(request: BitgetRequest): Promise<T> =>
     bitgetSigned<T>(credentials, request, false)
 
-/** One coin's row in the unified account, as /api/v3/account/assets gives it. */
-interface CoinAsset {
-  coin: string
-  available: string
-  locked: string
-  equity?: string
-  usdValue?: string
-}
-
-interface AccountAssets {
-  accountEquity?: string
-  usdtEquity?: string
-  assets?: CoinAsset[]
-}
-
-/** The unified account's settings; `accountMode` is UNION or ISOLATED on a unified account and
- * CLASSIC on one not upgraded. */
-export interface BitgetAccountSettings {
-  accountMode: string
-  assetMode?: string
-  holdMode?: string
-}
-
-export type BitgetAccountType = 'uta' | 'classic' | 'unknown'
-
-/** What an account's mode says it is: a unified account in either of its modes, a classic one, or
- * a mode this app does not know. A classic account is read-only in this app: its orders would go to
- * another API. */
-export function bitgetAccountTypeOf(accountMode: string | null | undefined): BitgetAccountType {
-  const mode = (accountMode ?? '').toUpperCase()
-  if (mode === 'UNION' || mode === 'ISOLATED') return 'uta'
-  if (mode === 'CLASSIC') return 'classic'
-  return 'unknown'
-}
-
-/** The balances as the app shows them: a coin's spendable amount and what its resting orders hold.
- * A row that cannot be read becomes NaN and is reported by name (readableBalances), never as nought. */
-export function balancesOf(data: AccountAssets | null | undefined): AccountBalance[] {
-  if (!Array.isArray(data?.assets)) throw new Error('Bitget returned an account response without an asset list')
-  return data.assets.map((row) => ({ asset: row.coin, free: Number(row.available), locked: Number(row.locked) }))
-}
-
 /** Reads the real account: proves a key, its secret and its passphrase, and is what Live Trading
- * shows for Bitget. Places no order. */
+ * shows for Bitget. The unified account's balances, or a Classic account's over its own endpoint
+ * (bitgetAccount.ts). Places no order. */
 export async function fetchBitgetAssets(credentials: BitgetCredentials): Promise<AccountBalance[]> {
-  return balancesOf(await realSend(credentials)<AccountAssets>({ method: 'GET', path: '/api/v3/account/assets', what: 'account read' }))
+  return readBitgetAssets(realSend(credentials), 'account read')
 }
 
-/** The real account's settings: its mode, which says whether it is a unified account at all. */
+/** The same read, saying whether the balances came from the Classic endpoint: what the key store
+ * keeps of the account. */
+export async function fetchBitgetAccount(credentials: BitgetCredentials): Promise<BitgetAccountRead> {
+  return readBitgetAccount(realSend(credentials), 'account read')
+}
+
+/** The real account's settings: its mode, which says whether it is a unified account at all; a
+ * Classic account, which refuses the read as such, is said to be CLASSIC. */
 export async function fetchBitgetAccountSettings(credentials: BitgetCredentials): Promise<BitgetAccountSettings> {
-  const data = await realSend(credentials)<BitgetAccountSettings>({ method: 'GET', path: '/api/v3/account/settings', what: 'account settings' })
-  return { accountMode: String(data?.accountMode ?? ''), ...(data?.assetMode === undefined ? {} : { assetMode: data.assetMode }), ...(data?.holdMode === undefined ? {} : { holdMode: data.holdMode }) }
+  return readBitgetAccountSettings(realSend(credentials), 'account settings')
 }
 
 // REAL SPOT ORDERS (V7.1 Stage 9). Real money: every one of these is reached through the live gates

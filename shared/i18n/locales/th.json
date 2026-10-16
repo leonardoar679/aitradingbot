@@ -1853,5 +1853,7 @@
   "PAPER TRADE": "เทรดจำลอง",
   "{name} (data only)": "{name} (ข้อมูลเท่านั้น)",
   "{exchange} demo": "เดโม {exchange}",
-  "Mode@@of an executor": "โหมด"
+  "Mode@@of an executor": "โหมด",
+  "the {exchange} key is for a Classic account": "คีย์ {exchange} เป็นของบัญชีคลาสสิก",
+  "This {exchange} key is for a Classic account: its balance is read, and a real order needs the Unified Trading Account. Switch the account on Bitget, then test the key again on Connections.": "คีย์ {exchange} นี้เป็นของบัญชีคลาสสิก: อ่านยอดคงเหลือได้ แต่คำสั่งซื้อขายจริงต้องใช้บัญชีเทรดแบบรวม โปรดเปลี่ยนบัญชีบน Bitget แล้วทดสอบคีย์อีกครั้งในหน้าการเชื่อมต่อ"
 }

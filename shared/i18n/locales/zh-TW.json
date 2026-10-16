@@ -1853,5 +1853,7 @@
   "PAPER TRADE": "模擬交易",
   "{name} (data only)": "{name}（僅資料）",
   "{exchange} demo": "{exchange} 模擬盤",
-  "Mode@@of an executor": "模式"
+  "Mode@@of an executor": "模式",
+  "the {exchange} key is for a Classic account": "{exchange} 金鑰屬於經典帳戶",
+  "This {exchange} key is for a Classic account: its balance is read, and a real order needs the Unified Trading Account. Switch the account on Bitget, then test the key again on Connections.": "此 {exchange} 金鑰屬於經典帳戶：可讀取其餘額，但真實訂單需要統一交易帳戶。請在 Bitget 上切換帳戶模式，然後在「連線」頁面重新測試金鑰。"
 }

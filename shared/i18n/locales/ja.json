@@ -1853,5 +1853,7 @@
   "PAPER TRADE": "ペーパートレード",
   "{name} (data only)": "{name}（データのみ）",
   "{exchange} demo": "{exchange} デモ",
-  "Mode@@of an executor": "モード"
+  "Mode@@of an executor": "モード",
+  "the {exchange} key is for a Classic account": "{exchange} キーがクラシックアカウント用",
+  "This {exchange} key is for a Classic account: its balance is read, and a real order needs the Unified Trading Account. Switch the account on Bitget, then test the key again on Connections.": "この {exchange} キーはクラシックアカウントのものです。残高は読み取れますが、リアル注文には統合取引アカウントが必要です。Bitget でアカウントを切り替えてから、「接続」ページでキーを再テストしてください。"
 }

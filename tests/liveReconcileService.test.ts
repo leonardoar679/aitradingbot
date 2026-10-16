@@ -20,17 +20,38 @@ const rig = vi.hoisted(() => ({
   resolved: [] as { order: LiveOrder; result: unknown }[],
   resolution: null as null | { executorId: string; liveOrderId: string; liveOrder: unknown; status: string },
   queued: [] as unknown[],
-  fetches: 0
+  fetches: 0,
+  /** A second, Bitget key beside Binance's: on a Classic account, or a unified one (16 October 2026). */
+  bitgetKey: null as null | 'classic' | 'uta',
+  balanceReads: [] as string[],
+  bitgetOrderReads: 0
 }))
 
 const told = vi.hoisted(() => [] as { title: string; body: string; extra: Record<string, unknown> }[])
 
 vi.mock('../electron/services/credentialsService', () => ({
-  listCredentialStatus: async () => [{ exchange: 'binance', configured: rig.keyStored, lastTestOk: true }],
-  getDecryptedCredential: async () => ({ apiKey: 'key', apiSecret: 'secret' }),
-  readLiveBalances: async () => {
+  listCredentialStatus: async () => [
+    { exchange: 'binance', configured: rig.keyStored, lastTestOk: true },
+    ...(rig.bitgetKey === null ? [] : [{ exchange: 'bitget', slot: 'real', configured: true, lastTestOk: true, accountType: rig.bitgetKey }])
+  ],
+  getDecryptedCredential: async () => ({ apiKey: 'key', apiSecret: 'secret', passphrase: 'pass' }),
+  readLiveBalances: async (exchange: string, _force: boolean, slot?: string) => {
+    rig.balanceReads.push(`${exchange}:${slot ?? 'real'}`)
+    if (exchange === 'bitget') return { exchange: 'bitget', rows: [], unreadable: [], fetchedAt: Date.now() }
     if (rig.balances.fail) throw new Error('Binance account request failed: 503')
     return { exchange: 'binance', rows: rig.balances.rows, unreadable: rig.balances.unreadable, fetchedAt: Date.now() }
+  }
+}))
+// Bitget's real account refuses every unified order read as a Classic account would: whether the
+// reconciliation asks at all is the point.
+vi.mock('../electron/services/exchanges/bitgetTrading', () => ({
+  fetchBitgetOpenOrders: async () => {
+    rig.bitgetOrderReads += 1
+    throw new Error('Bitget open orders failed: 40084 You are in Classic Account mode, and the Unified Account API is not supported at this time')
+  },
+  queryBitgetOrder: async () => {
+    rig.bitgetOrderReads += 1
+    throw new Error('Bitget order failed: 40084 You are in Classic Account mode, and the Unified Account API is not supported at this time')
   }
 }))
 vi.mock('../electron/services/exchanges/binanceTrading', () => ({
@@ -117,6 +138,9 @@ beforeEach(() => {
   rig.resolution = null
   rig.queued = []
   rig.fetches = 0
+  rig.bitgetKey = null
+  rig.balanceReads = []
+  rig.bitgetOrderReads = 0
   told.length = 0
 })
 
@@ -223,5 +247,29 @@ describe('the reconciliation', () => {
     expect(rig.fetches).toBe(1)
     expect(a.at).toBe(T)
     expect(b).toEqual(a.at === null ? b : expect.objectContaining({}))
+  })
+
+  it("asks a key on Bitget's Classic account no unified order read, and still checks its balances against the positions, beside Binance's findings (16 October 2026)", async () => {
+    rig.bitgetKey = 'classic'
+    rig.onExchange = [resting(777)]
+    // A ledger order on Bitget is not asked about either: no unified read answers on a Classic account.
+    rig.ledger = [{ ...ledgerOrder(5), exchange: 'bitget', symbol: 'BTCUSDT', baseAsset: 'BTC' }]
+    const readout = await reconcileOnce()
+    expect(rig.bitgetOrderReads).toBe(0)
+    expect(rig.queried).toEqual([])
+    expect(rig.balanceReads).toEqual(['binance:real', 'bitget:real'])
+    expect(readout).toMatchObject({ keyStored: true, error: null, unknownOrders: [resting(777)], discrepancies: [], resolvedByCheck: 0 })
+    expect(told).toHaveLength(1)
+  })
+
+  it("keeps one venue's failure its own: the other venue's findings reach the state, and the failure is the error", async () => {
+    rig.bitgetKey = 'uta'
+    rig.onExchange = [resting(777)]
+    const readout = await reconcileOnce()
+    expect(rig.bitgetOrderReads).toBe(1)
+    expect(rig.balanceReads).toEqual(['binance:real'])
+    expect(readout.unknownOrders).toEqual([resting(777)])
+    expect(readout.error).toBe('Bitget open orders failed: 40084 You are in Classic Account mode, and the Unified Account API is not supported at this time')
+    expect(readout.keyStored).toBe(true)
   })
 })

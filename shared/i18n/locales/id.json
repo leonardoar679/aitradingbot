@@ -1853,5 +1853,7 @@
   "PAPER TRADE": "DAGANG SIMULASI",
   "{name} (data only)": "{name} (hanya data)",
   "{exchange} demo": "Demo {exchange}",
-  "Mode@@of an executor": "Modus"
+  "Mode@@of an executor": "Modus",
+  "the {exchange} key is for a Classic account": "kunci {exchange} milik akun Klasik",
+  "This {exchange} key is for a Classic account: its balance is read, and a real order needs the Unified Trading Account. Switch the account on Bitget, then test the key again on Connections.": "Kunci {exchange} ini milik akun Klasik: saldonya dibaca, tetapi order nyata memerlukan Akun Trading Terpadu. Alihkan akun di Bitget, lalu uji kunci lagi di halaman Koneksi."
 }

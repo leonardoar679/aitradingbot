@@ -251,6 +251,8 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
   const [liveKeyConfigured, setLiveKeyConfigured] = useState(false)
   /** A demo key stored for the chosen exchange (V7.1 Stage 8): what a demo order needs. */
   const [demoKeyConfigured, setDemoKeyConfigured] = useState(false)
+  /** The real key's account is Bitget's Classic one: read here, refused an order (assertAccountCanTrade). */
+  const [liveKeyClassic, setLiveKeyClassic] = useState(false)
   const exchangeName = EXCHANGES.find((entry) => entry.id === exchange)?.name ?? exchange
   const [liveTradingStatus, setLiveTradingStatus] = useState<LiveTradingStatus | null>(null)
   // A call belongs to one candle. The form can be left open past it, so the banner is told the
@@ -301,6 +303,7 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
       .then((list) => {
         if (!cancelled) {
           setLiveKeyConfigured(list.some((c) => c.exchange === exchange && (c.slot ?? 'real') === 'real' && c.configured))
+          setLiveKeyClassic(list.some((c) => c.exchange === exchange && (c.slot ?? 'real') === 'real' && c.configured && c.accountType === 'classic'))
           setDemoKeyConfigured(list.some((c) => c.exchange === exchange && c.slot === 'demo' && c.configured))
         }
       })
@@ -356,6 +359,7 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
     (canGoLiveOrder || canGoLivePosition || ((canGoLiveDca || canGoLiveTwap || canGoLiveGrid) && exchange === 'binance')) &&
     canTradeOn(exchange) &&
     liveKeyConfigured &&
+    !liveKeyClassic &&
     liveTradingStatus !== null &&
     liveTradingStatus.sessionArmed &&
     !liveTradingStatus.killSwitchEngaged
@@ -411,6 +415,8 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
   }, [proposalLive, canGoLive])
   const liveBlockedReason = !liveKeyConfigured
     ? t('no verified {exchange} key', { exchange: exchangeName })
+    : liveKeyClassic
+      ? t('the {exchange} key is for a Classic account', { exchange: exchangeName })
     : liveTradingStatus?.killSwitchEngaged
       ? t('the kill switch is engaged')
       : liveTradingStatus !== null && !liveTradingStatus.sessionArmed
@@ -1047,6 +1053,8 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
                               ? 'Live Grid is buy-only — spot trading can’t open a short.'
                               : !liveKeyConfigured
                                 ? t('Add a verified {exchange} API key on Connections first.', { exchange: exchangeName })
+                                : liveKeyClassic
+                                  ? t('This {exchange} key is for a Classic account: its balance is read, and a real order needs the Unified Trading Account. Switch the account on Bitget, then test the key again on Connections.', { exchange: exchangeName })
                                 : liveTradingStatus?.killSwitchEngaged
                                   ? t('The kill switch is engaged — release it from the live trading bar first.')
                                   : t('Arm live trading for this session from the live trading bar first.')}

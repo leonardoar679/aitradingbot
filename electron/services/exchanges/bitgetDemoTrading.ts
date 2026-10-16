@@ -2,7 +2,7 @@ import type { AccountBalance, LiveOrderResult } from './binanceTrading'
 import type { OpenOrderOnExchange } from '../../../shared/reconcileLive'
 import type { SymbolTradingRules } from '../../../shared/exchangeMinimums'
 import { bitgetSigned, type BitgetCredentials, type BitgetRequest } from './bitgetAuth'
-import { balancesOf, type BitgetAccountSettings } from './bitgetTrading'
+import { readBitgetAccount, readBitgetAccountSettings, readBitgetAssets, type BitgetAccountRead, type BitgetAccountSettings } from './bitgetAccount'
 import * as orders from './bitgetOrders'
 
 // BITGET, THE DEMO ACCOUNT (V7.1 Stages 7-8, 16 October 2026): the only module whose requests carry
@@ -21,19 +21,20 @@ const demoSend =
   <T,>(request: BitgetRequest): Promise<T> =>
     bitgetSigned<T>(credentials, request, true)
 
-interface AccountAssets {
-  assets?: { coin: string; available: string; locked: string }[]
+/** Reads the demo account: proves a demo key, its secret and its passphrase (bitgetAccount.ts, over
+ * the demo signer). Places no order. */
+export async function fetchBitgetDemoAssets(credentials: BitgetCredentials): Promise<AccountBalance[]> {
+  return readBitgetAssets(demoSend(credentials), 'demo account read')
 }
 
-/** Reads the demo account: proves a demo key, its secret and its passphrase. Places no order. */
-export async function fetchBitgetDemoAssets(credentials: BitgetCredentials): Promise<AccountBalance[]> {
-  return balancesOf(await demoSend(credentials)<AccountAssets>({ method: 'GET', path: '/api/v3/account/assets', what: 'demo account read' }))
+/** The same read, saying whether the balances came from the Classic endpoint. */
+export async function fetchBitgetDemoAccount(credentials: BitgetCredentials): Promise<BitgetAccountRead> {
+  return readBitgetAccount(demoSend(credentials), 'demo account read')
 }
 
 /** The demo account's settings: its mode. */
 export async function fetchBitgetDemoAccountSettings(credentials: BitgetCredentials): Promise<BitgetAccountSettings> {
-  const data = await demoSend(credentials)<BitgetAccountSettings>({ method: 'GET', path: '/api/v3/account/settings', what: 'demo account settings' })
-  return { accountMode: String(data?.accountMode ?? '') }
+  return readBitgetAccountSettings(demoSend(credentials), 'demo account settings')
 }
 
 /** A demo buy of about `quoteAmount` in the quote currency, or a demo sell worth about it. */

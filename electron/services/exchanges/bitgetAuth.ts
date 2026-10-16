@@ -13,6 +13,11 @@ import { BITGET, fetchBitgetTime } from './bitget'
 // never passes `demo: true`; bitgetDemoTrading.ts is the only module that does, and never passes
 // `demo: false`: a test pins both. Nothing here checks a safety gate, and nothing here logs a key,
 // a secret, a passphrase or a signature.
+//
+// A CLASSIC ACCOUNT. The same signing serves Bitget's Classic (v2) endpoints, which is how a key made
+// on an account not upgraded to the unified account is read (bitgetAccount.ts): Bitget refuses every
+// unified request on such an account with code 40084, carried on the refusal so the reader can tell it
+// from every other refusal without reading the words.
 
 export interface BitgetCredentials {
   apiKey: string
@@ -52,11 +57,35 @@ export function bitgetHeaders(credentials: BitgetCredentials, timestampMs: strin
 
 interface Envelope<T> {
   code: string
-  msg: string
+  /** Bitget's words; its Classic (v2) documentation spells the key `message` in one example. */
+  msg?: string
+  message?: string
   data: T
 }
 
 const SUCCESS = '00000'
+/** Bitget's code for a unified (v3) request on a Classic account: "You are in Classic Account mode,
+ * and the Unified Account API is not supported at this time". */
+export const CLASSIC_ACCOUNT_CODE = '40084'
+
+/** A refusal with Bitget's own code and the HTTP status beside the words, so a caller can act on the
+ * code -- a Classic account's 40084 -- without parsing the message. */
+export class BitgetRefusal extends Error {
+  readonly code: string
+  readonly status: number
+
+  constructor(message: string, code: string, status: number) {
+    super(message)
+    this.name = 'BitgetRefusal'
+    this.code = code
+    this.status = status
+  }
+}
+
+/** Whether a refusal is Bitget's for a unified request on a Classic account. */
+export function isClassicRefusal(error: unknown): boolean {
+  return error instanceof BitgetRefusal && error.code === CLASSIC_ACCOUNT_CODE
+}
 const REQUEST_TIMEOUT_MS = 15_000
 const SERVER_TIME_TTL_MS = 5 * 60_000
 let serverOffsetMs = 0
@@ -107,17 +136,20 @@ export async function bitgetSigned<T>(credentials: BitgetCredentials, request: B
   })
   const envelope = (await response.json().catch(() => null)) as Envelope<T> | null
   if (!response.ok || envelope === null || envelope.code !== SUCCESS) {
-    throw new Error(describeBitgetRefusal(request.what, response.status, envelope, demo))
+    throw new BitgetRefusal(describeBitgetRefusal(request.what, response.status, envelope, demo), envelope?.code ?? '', response.status)
   }
   return envelope.data
 }
 
 /** Bitget's own words, with what they usually mean for a key typed into this app. */
-export function describeBitgetRefusal(what: string, status: number, envelope: { code?: string; msg?: string } | null, demo: boolean): string {
+export function describeBitgetRefusal(what: string, status: number, envelope: { code?: string; msg?: string; message?: string } | null, demo: boolean): string {
   const code = envelope?.code ?? ''
-  const msg = envelope?.msg ?? ''
+  const msg = envelope?.msg ?? envelope?.message ?? ''
   const said = envelope === null ? `${status}` : `${code} ${msg}`.trim()
   if (status === 429) return `Bitget ${what} failed: too many requests (${said}).`
+  if (code === CLASSIC_ACCOUNT_CODE) {
+    return `Bitget ${what} failed: ${said}. This key's account is in Classic mode: its balance is read, and an order needs the Unified Trading Account. Switch the account on Bitget (Assets, Upgrade to Unified Account), then test the key again on Connections.`
+  }
   if (/passphrase/i.test(msg)) return `Bitget ${what} failed: ${said}. The passphrase is the one set when the key was made.`
   if (/sign|signature|timestamp/i.test(msg)) return `Bitget ${what} failed: ${said}. The secret, or this machine's clock, does not match the key.`
   if (/apikey|api key|access-key|does not exist|invalid key/i.test(msg) || status === 401) {
