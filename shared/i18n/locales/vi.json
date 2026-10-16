@@ -1781,5 +1781,10 @@
   "{read} read, {missed} could not be, {count} candidates": "đã đọc {read}, {missed} không đọc được, {count} ứng viên",
   "{read} read, {count} candidates": "đã đọc {read}, {count} ứng viên",
   "{count} coins, {matched} with a USDT pair on Binance": "{count} coin, {matched} có cặp USDT trên Binance",
-  "CoinGecko's trending list could not be read: {error}": "Không đọc được danh sách xu hướng của CoinGecko: {error}"
+  "CoinGecko's trending list could not be read: {error}": "Không đọc được danh sách xu hướng của CoinGecko: {error}",
+  "Which way: P(up) {pUp} is the base rate, since no reading beat it on weeks it was not fitted on (the best skill: {skill}).": "Chiều hướng: P(tăng) {pUp} là tỷ lệ cơ sở, vì không có chỉ số nào vượt qua nó trong các tuần không dùng để khớp mô hình (kỹ năng tốt nhất: {skill}).",
+  "Which way: P(up) {pUp} from {source}, whose skill on weeks it was not fitted on is {skill}.": "Chiều hướng: P(tăng) {pUp} từ {source}, với kỹ năng {skill} trong các tuần không dùng để khớp mô hình.",
+  "the range's own distribution": "phân phối của chính khoảng dự báo",
+  "the news": "tin tức",
+  "its chance of up knew less than the base rate ({skill} of skill)": "xác suất tăng của nó kém hơn tỷ lệ cơ sở (kỹ năng {skill})"
 }

@@ -1781,5 +1781,10 @@
   "{read} read, {missed} could not be, {count} candidates": "已讀取 {read} 個，{missed} 個無法讀取，{count} 個候選",
   "{read} read, {count} candidates": "已讀取 {read} 個，{count} 個候選",
   "{count} coins, {matched} with a USDT pair on Binance": "{count} 個幣，其中 {matched} 個在幣安有 USDT 交易對",
-  "CoinGecko's trending list could not be read: {error}": "無法讀取 CoinGecko 的熱門列表：{error}"
+  "CoinGecko's trending list could not be read: {error}": "無法讀取 CoinGecko 的熱門列表：{error}",
+  "Which way: P(up) {pUp} is the base rate, since no reading beat it on weeks it was not fitted on (the best skill: {skill}).": "方向：P(漲) {pUp} 為基準機率，因為在未用於擬合的週裡沒有任何讀數勝過它（最佳技巧值：{skill}）。",
+  "Which way: P(up) {pUp} from {source}, whose skill on weeks it was not fitted on is {skill}.": "方向：P(漲) {pUp} 來自{source}，其在未用於擬合的週裡的技巧值為 {skill}。",
+  "the range's own distribution": "區間自身的分佈",
+  "the news": "新聞",
+  "its chance of up knew less than the base rate ({skill} of skill)": "其上漲機率比基準機率知道得更少（技巧值 {skill}）"
 }

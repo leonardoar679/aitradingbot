@@ -1,5 +1,6 @@
 import type { Horizon } from './features'
-import type { ForecastModelId } from './models'
+import type { DirectionModelId, ForecastModelId } from './models'
+import type { DirectionScore } from './runCalibration'
 import type { ModelScore } from './walkForward'
 import { HORIZON_SPAN } from './words'
 import { ENGLISH, type I18n } from '../i18n/translate'
@@ -20,11 +21,32 @@ import { ENGLISH, type I18n } from '../i18n/translate'
 
 export const PROMOTION_LINES = { minOutcomes: 5000, coverageTolerance: 0.05, minTrades: 30 } as const
 export const DEGRADATION_LINES = { coverageTolerance: 0.1, biasLimit: 0.25, minOutcomes: 200, trades: 30 } as const
+/** A direction model's lines (V7.1 Stage 2): the outcomes it needs, and the calls both it and the
+ * distribution's P(up) need before their calls are set against each other. */
+export const DIRECTION_PROMOTION_LINES = { minOutcomes: 5000, minCalls: 30 } as const
 
 export interface CheckLine {
-  id: 'outcomes' | 'coverage' | 'pinball' | 'trades'
+  id: 'outcomes' | 'coverage' | 'pinball' | 'trades' | 'skill' | 'calls'
   ok: boolean | null
   text: string
+}
+
+/** The checklist for one direction model at one horizon (V7.1 Stage 2), every line written before any
+ * result was looked at: enough outcomes scored out of sample; a Brier skill above zero -- it knew more than
+ * the better of an even chance and the weeks-before base rate; and, where both it and the distribution's
+ * P(up) called a way often enough, its calls at the forecast's lines not less often right than the
+ * distribution's on the same weeks. A line not yet measured does not block; one measured and failed does. */
+export function directionChecklist(score: DirectionScore | null, baseline: DirectionScore | null): { promoted: boolean; lines: CheckLine[] } {
+  if (score === null) return { promoted: false, lines: [{ id: 'outcomes', ok: false, text: `no outcomes scored out of sample (${DIRECTION_PROMOTION_LINES.minOutcomes} needed)` }] }
+  const enoughCalls = score.calls >= DIRECTION_PROMOTION_LINES.minCalls && baseline !== null && baseline.calls >= DIRECTION_PROMOTION_LINES.minCalls
+  const lines: CheckLine[] = [
+    { id: 'outcomes', ok: score.n >= DIRECTION_PROMOTION_LINES.minOutcomes, text: `${score.n} outcomes out of sample (${DIRECTION_PROMOTION_LINES.minOutcomes} needed)` },
+    { id: 'skill', ok: score.directionSkill > 0, text: `a Brier skill of ${(score.directionSkill * 100).toFixed(2)}% over the base rate (above zero needed)` },
+    enoughCalls
+      ? { id: 'calls', ok: score.precision >= baseline.precision, text: `${score.calls} calls at the lines, ${(score.precision * 100).toFixed(1)}% right, against the distribution's ${baseline.calls} at ${(baseline.precision * 100).toFixed(1)}%` }
+      : { id: 'calls', ok: null, text: `${score.calls} calls at the lines, the distribution's ${baseline?.calls ?? 0} (${DIRECTION_PROMOTION_LINES.minCalls} each needed to set them against each other)` }
+  ]
+  return { promoted: lines.every((line) => line.ok !== false), lines }
 }
 
 const pct = (share: number): string => `${(share * 100).toFixed(1)}%`
@@ -59,6 +81,7 @@ export type DegradationReason =
   | { code: 'pinball'; pinball: number; persistence: number }
   | { code: 'bias'; bias: number }
   | { code: 'trades'; lostPct: number }
+  | { code: 'direction'; skill: number }
 
 export function degradationText(reason: DegradationReason, { t, num, pctPlain }: I18n = ENGLISH): string {
   switch (reason.code) {
@@ -70,6 +93,8 @@ export function degradationText(reason: DegradationReason, { t, num, pctPlain }:
       return t('its median was off by {bias} of the usual move on average', { bias: num(reason.bias, 2, 2) })
     case 'trades':
       return t("the trader's last {count} trades on it lost {loss}", { count: DEGRADATION_LINES.trades, loss: pctPlain(reason.lostPct, 2) })
+    case 'direction':
+      return t('its chance of up knew less than the base rate ({skill} of skill)', { skill: pctPlain(reason.skill * 100, 2) })
   }
 }
 
@@ -88,7 +113,7 @@ export const DEGRADED_THREAD_SECONDS = 86_400
 
 /** What the desktop is told of a degraded model, once a day on its thread. */
 export function degradedForecastNotice(
-  model: ForecastModelId,
+  model: ForecastModelId | DirectionModelId,
   horizon: Horizon,
   reasons: readonly (string | DegradationReason)[],
   i18n: I18n = ENGLISH

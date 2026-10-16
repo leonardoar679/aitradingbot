@@ -4,14 +4,14 @@ import { DIRECTION_LINES, calibratedPUp, classify, confidenceOf, rawPUp, type Di
 import { ENSEMBLE_VERSION, combine, halfWidth, sigmaOf, widenAround } from './ensemble'
 import { FEATURES_VERSION, HORIZONS, HORIZON_BARS, type Horizon, type PairClass } from './features'
 import { QUANTILE_LEVELS } from './ml/quantile'
-import { MODELS_VERSION, type ForecastModelId } from './models'
+import { MODELS_VERSION, type DirectionModelId, type ForecastModelId } from './models'
 import { NEWS_EFFECT_VERSION, newsEffectOf, type AnalystReadingInput, type KindReactions, type NewsEffect, type NewsStoryInput } from './newsEffect'
 import { QUALITY_VERSION, qualityOf, type PredictionQuality } from './quality'
 import type { RangeDriver } from './rangeDrivers'
 import { reliabilityOf, type Reliability, type ReliabilityReason } from './reliability'
 import { forecastPrice, HORIZON_ADJECTIVE } from './words'
 import { ENGLISH, type I18n } from '../i18n/translate'
-import { RUN_CALIBRATION_VERSION, VARIANTS, cellOf, type ForecastVariant, type RunCalibration } from './runCalibration'
+import { RUN_CALIBRATION_VERSION, VARIANTS, cellOf, directionSourceOf, type ForecastVariant, type PUpSource, type RunCalibration } from './runCalibration'
 import { shockFor, stretchShock } from './shock'
 import { usualMove } from './targets'
 
@@ -47,9 +47,13 @@ import { usualMove } from './targets'
 // - BITCOIN'S SHARP MOVE widens it (V6.1, shared/forecast/shock.ts): at a horizon whose rule the walk
 //   forward adopted, with Bitcoin's last fifteen minutes at or past 2.5 usual moves, the outer and inner
 //   pairs of levels are stretched about the median by the rule's factors. Calm moments are untouched.
+// - WHERE P(UP) COMES FROM (V7.1 Stage 2; shared/forecast/runCalibration.ts, directionSourceOf): the cell's
+//   skilled reading with the highest honest skill -- the distribution's, or a promoted direction model's
+//   mapped by its own map -- and the base rate where none is skilled; the news's own where its skill has
+//   been shown. The call's lines are unchanged: only the reading they are applied to may be a model's.
 
-/** prediction-v2 (V6.1): a range may be widened for Bitcoin's sharp move. */
-export const PREDICTION_VERSION = 'prediction-v2'
+/** prediction-v3 (V7.1 Stage 2): each horizon says where its P(up) came from. */
+export const PREDICTION_VERSION = 'prediction-v3'
 
 export const PREDICTION_LINES = {
   /** The half-spread, in percent, the training closes already carry. */
@@ -81,6 +85,8 @@ export interface ForecastRange {
    * direction was skilful, the base rate where it was not; and the map's reading, for the Lab. */
   pUp: number
   pUpMapped: number
+  /** Where P(up) came from (V7.1 Stage 2); absent on a forecast made before. */
+  pUpSource?: PUpSource
   direction: Direction
   strong: boolean
   uncertain: boolean
@@ -193,6 +199,8 @@ export interface PredictionInput {
   drivers?: Partial<Record<Horizon, RangeDriver[]>>
   /** Bitcoin's last fifteen minutes in its usual moves: the close's, or the stream's where fresher (V6.1). */
   btc15?: number | null
+  /** Each horizon's direction models' raw chances of up at the close (V7.1 Stage 2, predictDirection). */
+  direction?: Partial<Record<Horizon, Partial<Record<DirectionModelId, number>>>>
   runId: string
   foldsRunId: string
 }
@@ -246,11 +254,19 @@ function rangeOf(input: PredictionInput, horizon: Horizon): ForecastRange | null
     if (variant === 'v2') v2 = { quantiles, pUp, pUpMapped, combined, read }
   }
   if (v2 === null) return null
+  // Where P(up) comes from (V7.1 Stage 2): a promoted direction model's reading, mapped by its own map,
+  // where its honest skill is the highest skilled one; else the distribution's as read above.
+  const chosen = directionSourceOf(calibration, input.pairClass)
+  const rawDirection = chosen.map === null ? undefined : input.direction?.[horizon]?.[chosen.source as DirectionModelId]
+  const base: { pUp: number; pUpMapped: number; directionSkill: number | null; source: PUpSource } =
+    chosen.map !== null && rawDirection !== undefined
+      ? { pUp: calibratedPUp(chosen.map, rawDirection), pUpMapped: calibratedPUp(chosen.map, rawDirection), directionSkill: chosen.skill, source: chosen.source }
+      : { pUp: v2.pUp, pUpMapped: v2.pUpMapped, directionSkill: v2.read.honest?.directionSkill ?? null, source: chosen.source === 'distribution' ? 'distribution' : 'base' }
   // The news (V3) and the AI (V4): V2's combination read at the variant's own levels, its median moved
   // and its range widened by the story that moves it most.
   const cell = v2.read.ownClass ? input.pairClass : 'pooled'
   const news: ForecastRange['news'] = { v3: null, v4: null }
-  let shown = { quantiles: v2.quantiles, pUp: v2.pUp, pUpMapped: v2.pUpMapped, directionSkill: v2.read.honest?.directionSkill ?? null }
+  let shown = { quantiles: v2.quantiles, pUp: base.pUp, pUpMapped: base.pUpMapped, directionSkill: base.directionSkill, source: base.source }
   for (const variant of ['v3', 'v4'] as const) {
     const effect = input.news === undefined ? null : newsEffectOf({ variant, ...input.news, horizon, nowSec: Math.floor(input.generatedAt / 1000) })
     news[variant] = effect
@@ -265,9 +281,9 @@ function rangeOf(input: PredictionInput, horizon: Horizon): ForecastRange | null
     const pUpMapped = calibratedPUp(calibration.variants.v2.pUp, rawPUp(quantiles))
     const live = input.news?.skill?.[horizon] ?? null
     const skilful = live !== null && live >= DIRECTION_LINES.minDirectionSkill
-    const pUp = skilful ? pUpMapped : v2.pUp
+    const pUp = skilful ? pUpMapped : base.pUp
     variants[variant] = { medianPct: pctOf(quantiles[P50] * usual), lowPct: pctOf(quantiles[P25] * usual), highPct: pctOf(quantiles[P75] * usual), quantilesPct: quantiles.map((q) => pctOf(q * usual)), pUp, pUpMapped }
-    if (variant === 'v4') shown = { quantiles, pUp, pUpMapped, directionSkill: skilful ? live : (v2.read.honest?.directionSkill ?? null) }
+    if (variant === 'v4') shown = { quantiles, pUp, pUpMapped, directionSkill: skilful ? live : base.directionSkill, source: skilful ? 'news' : base.source }
   }
   const excessLog = Math.max(0, (input.spreadPct ?? 0) / 2 - PREDICTION_LINES.usualHalfSpreadPct) / 100
   const widened = widenAround(shown.quantiles, excessLog / usual)
@@ -323,6 +339,7 @@ function rangeOf(input: PredictionInput, horizon: Horizon): ForecastRange | null
     bullPct: quantilesPct[P90],
     pUp: shown.pUp,
     pUpMapped: shown.pUpMapped,
+    pUpSource: shown.source,
     direction: call.direction,
     strong: call.strong,
     uncertain: call.uncertain,

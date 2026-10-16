@@ -1,6 +1,6 @@
 import { PAIR_CLASSES, type Horizon } from '../shared/forecast/features'
 import { QUANTILE_LEVELS } from '../shared/forecast/ml/quantile'
-import { FORECAST_MODELS, type ForecastModelId } from '../shared/forecast/models'
+import { FORECAST_MODELS, type DirectionModelId, type ForecastModelId } from '../shared/forecast/models'
 import { OOS_VERSION, type OosRecord } from '../shared/forecast/oosRecord'
 import type { Promotion } from '../shared/forecast/training'
 
@@ -25,14 +25,27 @@ export function gaussOf(random: () => number): () => number {
 
 /** A walk forward's record of four weeks: each row's move is sigma x a normal draw (plus a drift the
  * row knows, with `drift`); persistence knows neither, gbt knows the scale (and the drift), the rest
- * are persistence again. */
-export function recordOf(options: { rows: number; seed: number; drift?: number; horizon?: Horizon; tooNarrow?: number }): OosRecord {
+ * are persistence again. With `direction`, the record holds each direction model's raw chance of up
+ * (V7.1 Stage 2): a model given a `knows` share reads the move's way right that often and is noise
+ * the rest of the time; one given 0 is noise throughout. */
+export function recordOf(options: { rows: number; seed: number; drift?: number; horizon?: Horizon; tooNarrow?: number; direction?: Partial<Record<DirectionModelId, number>> }): OosRecord {
   const random = rng(options.seed)
   const gauss = gaussOf(random)
   const rows = options.rows
   const sigmas = Float64Array.from({ length: rows }, () => 0.5 + 1.5 * random())
   const mus = Float64Array.from({ length: rows }, () => (options.drift ?? 0) * (random() < 0.5 ? -1 : 1))
   const z = Float32Array.from({ length: rows }, (_, row) => mus[row] + sigmas[row] * gauss())
+  const directionModels = options.direction === undefined ? undefined : (Object.keys(options.direction) as DirectionModelId[])
+  const direction =
+    directionModels === undefined
+      ? undefined
+      : Float32Array.from({ length: rows * directionModels.length }, (_, at) => {
+          const knows = options.direction![directionModels[at % directionModels.length]] ?? 0
+          const row = Math.floor(at / directionModels.length)
+          // A reading that leans the move's way, by a margin that knows draws; a coin's otherwise.
+          const lean = random() < knows ? (z[row] > 0 ? 1 : -1) : random() < 0.5 ? 1 : -1
+          return 0.5 + lean * (0.05 + 0.3 * random())
+        })
   // Persistence: the quantiles of every move together, which are about those of 1.2 x a normal.
   const sorted = Float64Array.from(z).sort()
   const floor = QUANTILE_LEVELS.map((tau) => sorted[Math.floor(tau * (rows - 1))])
@@ -59,7 +72,8 @@ export function recordOf(options: { rows: number; seed: number; drift?: number; 
     y: Float32Array.from(z, (value) => value * 0.03 * Math.sqrt(12 / 288)),
     best: new Float32Array(rows),
     worst: new Float32Array(rows),
-    quantiles
+    quantiles,
+    ...(directionModels === undefined || direction === undefined ? {} : { directionModels, direction })
   }
 }
 

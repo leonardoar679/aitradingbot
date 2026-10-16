@@ -397,6 +397,9 @@ describe('AI code has no route to a real order', () => {
       'opportunityClass',
       'path',
       'promises',
+      // runCalibration (V7.1 Stage 2): which source each class reads its P(up) from, arithmetic on the
+      // calibration in use.
+      'runCalibration',
       'settingsService',
       'training',
       'walkForward'

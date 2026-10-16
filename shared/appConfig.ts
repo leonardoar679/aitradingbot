@@ -70,7 +70,9 @@ import { PREDICTION_LINES, PREDICTION_VERSION } from './forecast/prediction'
 import { RELIABILITY_LINES } from './forecast/reliability'
 import { SHOCK_LINES, SHOCK_VERSION } from './forecast/shock'
 import { RUN_CALIBRATION_VERSION } from './forecast/runCalibration'
-import { DEGRADATION_LINES, DEGRADED_THREAD_SECONDS, PROMOTION_LINES } from './forecast/promotion'
+import { DEGRADATION_LINES, DEGRADED_THREAD_SECONDS, DIRECTION_PROMOTION_LINES, PROMOTION_LINES } from './forecast/promotion'
+import { LOGISTIC_FIT } from './forecast/ml/logistic'
+import { DIRECTION_MODELS } from './forecast/models'
 import { MIN_READY_PAIRS, healForecastSettings } from './forecast/training'
 import { FOLDS } from './forecast/walkForward'
 
@@ -163,6 +165,8 @@ export const ENGINE_CONSTANTS = {
     minReadyPairs: MIN_READY_PAIRS,
     promotion: PROMOTION_LINES,
     degradation: DEGRADATION_LINES,
+    // The direction models (V7.1 Stage 2): which there are, their checklist's lines, the logistic fit's.
+    directionModels: { models: DIRECTION_MODELS, promotion: DIRECTION_PROMOTION_LINES, logistic: LOGISTIC_FIT },
     ensemble: { version: ENSEMBLE_VERSION, ...ENSEMBLE_LINES },
     calibration: { version: CALIBRATION_VERSION, run: RUN_CALIBRATION_VERSION, ...CALIBRATION_LINES },
     direction: DIRECTION_LINES,

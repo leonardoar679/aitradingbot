@@ -397,6 +397,29 @@ Forecast Lab's **After Bitcoin's sharp moves** card says which horizons each ref
 how the forecasts it widened held live; a run's report says the same of its span. A walk forward made
 before keeps its ranges until the next refit writes Bitcoin's moves.
 
+**Which way: the direction models** (since 16 October 2026; V7.1 Stage 2; `shared/forecast/models.ts`,
+`shared/forecast/ml/{logistic,gbt}.ts`, judged in `shared/forecast/runCalibration.ts`, measured in
+`research/direction.ts`). V6's forecast read its P(up) off its range's distribution, and on three walk
+forwards that never beat the base rate on weeks it was not fitted on, so no way was ever called. Each fit
+now also fits four classifiers of which way, from the same row: a logistic regression on every figure, the
+plain baseline; boosted trees on the log loss on every figure; the same on the price and technical figures
+before the market's; and the same on the price figures alone. Each learns from the rows whose move cleared
+a tenth of a usual move either way. The walk forward keeps each model's raw chance of up for every tested
+hour (`forecast-oos-v3`), and the calibration gives it the same honest treatment as the distribution's
+P(up): mapped by the readings of the weeks before its own, scored against the better of an even chance and
+the weeks-before base rate, on the same weeks -- its Brier skill, and its calls at the forecast's lines
+(P(up) at or past 58%, or at or under 42%) with the share right. A model is promoted by its checklist
+alone: 5,000 outcomes, a skill above zero, and, where both it and the distribution's reading call often
+enough, calls no less often right than the distribution's. A pair class then reads its P(up) from the
+promoted source with the highest skill where any reaches the 1% line, and from the base rate where none
+does; the news's own reading still comes first where its live skill has been shown. **The call's lines
+are unchanged**: only the reading they are applied to may be a model's, and every forecast records where
+its P(up) came from (`src`). The Forecast Lab's **Which way** card shows the distribution and each model
+on the same weeks, each verdict, its last week (DEGRADED below zero, told once a day like a range
+model's), and which classes read from it. A run fitted before (`models-v1`) is refused at the next start
+and fitted again, which takes a few minutes; its walk forward's record reads back without readings, and
+judges no model until the refit writes them.
+
 **The forecast, live** (since 13 October 2026; the V6 document's §38-43; V6 Stage 7;
 `electron/services/forecastService.ts`, the rules in `shared/forecast/{view,outcome,refresh,aciTable,
 forecastRecord}.ts`). At every five-minute close, once the bars are in, every pair of the research is

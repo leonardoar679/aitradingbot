@@ -6,6 +6,7 @@ import { FORECAST_MODELS, type ForecastModelId } from './models'
 import type { ErrorKind, ForecastOutcome } from './outcome'
 import type { PricePrediction } from './prediction'
 import type { RefreshReason } from './refresh'
+import type { PUpSource } from './runCalibration'
 import type { TradeDecision } from './tradeDecision'
 
 // THE FORECAST ON RECORD (the V6 document, §26-28, §42, §49 and §94; V6 Stage 7, 13 October 2026):
@@ -73,6 +74,8 @@ export interface HorizonLine {
   /** Where Bitcoin's sharp move widened it (V6.1): Bitcoin's last fifteen minutes in its usual moves, and
    * the outer and inner factors. */
   shock?: [number, number, number]
+  /** Where its P(up) came from (V7.1 Stage 2); absent on a forecast recorded before. */
+  src?: PUpSource
 }
 
 export interface NewsLine {
@@ -136,6 +139,7 @@ export function predictionLine(prediction: PricePrediction, horizons: readonly H
       v1pUp: p3(v1?.pUp ?? Number.NaN),
       parts: range.contributions.map((member) => [member.model, p3(member.weight), pct4(member.medianLogPct)]),
       qual: range.quality.score,
+      ...(range.pUpSource === undefined ? {} : { src: range.pUpSource }),
       ...ownLevelsOf(range)
     }
   }

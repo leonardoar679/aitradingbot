@@ -1781,5 +1781,10 @@
   "{read} read, {missed} could not be, {count} candidates": "อ่านได้ {read} อ่านไม่ได้ {missed} ตัวเลือก {count}",
   "{read} read, {count} candidates": "อ่านได้ {read} ตัวเลือก {count}",
   "{count} coins, {matched} with a USDT pair on Binance": "เหรียญ {count} เหรียญ มี {matched} เหรียญที่มีคู่ USDT บน Binance",
-  "CoinGecko's trending list could not be read: {error}": "อ่านรายการยอดนิยมของ CoinGecko ไม่ได้: {error}"
+  "CoinGecko's trending list could not be read: {error}": "อ่านรายการยอดนิยมของ CoinGecko ไม่ได้: {error}",
+  "Which way: P(up) {pUp} is the base rate, since no reading beat it on weeks it was not fitted on (the best skill: {skill}).": "ทิศทาง: P(ขึ้น) {pUp} คืออัตราพื้นฐาน เพราะไม่มีค่าอ่านใดชนะมันในสัปดาห์ที่ไม่ได้ใช้ฝึก (ทักษะที่ดีที่สุด: {skill})",
+  "Which way: P(up) {pUp} from {source}, whose skill on weeks it was not fitted on is {skill}.": "ทิศทาง: P(ขึ้น) {pUp} มาจาก{source} ซึ่งมีทักษะ {skill} ในสัปดาห์ที่ไม่ได้ใช้ฝึก",
+  "the range's own distribution": "การแจกแจงของช่วงคาดการณ์เอง",
+  "the news": "ข่าว",
+  "its chance of up knew less than the base rate ({skill} of skill)": "โอกาสขึ้นของมันรู้น้อยกว่าอัตราพื้นฐาน (ทักษะ {skill})"
 }

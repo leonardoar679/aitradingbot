@@ -4,8 +4,9 @@ import { HORIZONS, PAIR_CLASSES, type Horizon, type PairClass } from './features
 import type { IsotonicModel } from './ml/isotonic'
 import { QUANTILE_LEVELS } from './ml/quantile'
 import { canonicalJson } from './ml/serialize'
-import { FORECAST_MODELS, type ForecastModelId } from './models'
-import { RUN_CALIBRATION_VERSION, VARIANTS, type CurveBin, type HonestScore, type HorizonCalibration, type RunCalibration, type VariantCalibration } from './runCalibration'
+import { DIRECTION_MODELS, FORECAST_MODELS, type DirectionModelId, type ForecastModelId } from './models'
+import type { CheckLine } from './promotion'
+import { RUN_CALIBRATION_VERSION, VARIANTS, type CurveBin, type DirectionCalibration, type DirectionReport, type DirectionScore, type HonestScore, type HorizonCalibration, type RunCalibration, type VariantCalibration } from './runCalibration'
 import type { ShockRefusal, ShockRule, ShockScore } from './shock'
 
 // A RUN'S CALIBRATION ON FILE (V6 Stage 6, 13 October 2026): forecastModels/<run>/calibration.json,
@@ -129,6 +130,72 @@ function readShock(value: unknown): ShockRule | null | undefined {
   return { version: value.version, line: value.line, k80: value.k80, k50: value.k50, moments: value.moments, rows: value.rows, before, after, adopted: value.adopted, refusal }
 }
 
+function readCurve(value: unknown): CurveBin[] | null {
+  if (!Array.isArray(value)) return null
+  const curve: CurveBin[] = []
+  for (const bin of value) {
+    if (!isObject(bin) || !finite(bin.predicted) || !finite(bin.observed) || !finite(bin.n)) return null
+    curve.push({ predicted: bin.predicted, observed: bin.observed, n: bin.n })
+  }
+  return curve
+}
+
+function readDirectionScore(value: unknown): DirectionScore | null | undefined {
+  if (value === null) return null
+  if (!isObject(value)) return undefined
+  const keys = ['n', 'brier', 'directionSkill', 'upShare', 'calls', 'precision'] as const
+  const figures: Partial<Record<(typeof keys)[number], number>> = {}
+  for (const key of keys) {
+    const figure = measured(value[key])
+    if (figure === undefined) return undefined
+    figures[key] = figure
+  }
+  const curve = readCurve(value.curve)
+  if (curve === null) return undefined
+  return { ...(figures as Record<(typeof keys)[number], number>), curve }
+}
+
+const CHECK_IDS: readonly CheckLine['id'][] = ['outcomes', 'coverage', 'pinball', 'trades', 'skill', 'calls']
+
+function readLines(value: unknown): CheckLine[] | null {
+  if (!Array.isArray(value)) return null
+  const out: CheckLine[] = []
+  for (const line of value) {
+    if (!isObject(line) || !CHECK_IDS.includes(line.id as CheckLine['id']) || (line.ok !== null && typeof line.ok !== 'boolean') || typeof line.text !== 'string') return null
+    out.push({ id: line.id as CheckLine['id'], ok: line.ok as boolean | null, text: line.text })
+  }
+  return out
+}
+
+function readDirectionCalibration(value: unknown): DirectionCalibration | null {
+  if (!isObject(value) || !isObject(value.honest) || typeof value.promoted !== 'boolean' || typeof value.degraded !== 'boolean') return null
+  const map = readIsotonic(value.map)
+  const pooled = readDirectionScore(value.honest.pooled)
+  const byClassScores = byClass(value.honest.byClass, readDirectionScore)
+  const weeks = value.honest.weeks
+  const lastWeekSkill = value.lastWeekSkill === null ? null : finite(value.lastWeekSkill) ? value.lastWeekSkill : undefined
+  const lines = readLines(value.lines)
+  if (map === null || pooled === undefined || byClassScores === null || !finiteList(weeks) || lastWeekSkill === undefined || lines === null) return null
+  return { map, honest: { pooled, byClass: byClassScores as Partial<Record<PairClass, DirectionScore>>, weeks }, lastWeekSkill, degraded: value.degraded, promoted: value.promoted, lines }
+}
+
+/** A horizon's direction report (V7.1 Stage 2): undefined where none was written, null where one was and
+ * is not whole. */
+function readDirectionReport(value: unknown): DirectionReport | null | undefined {
+  if (value === undefined) return undefined
+  if (!isObject(value) || !isObject(value.baseline) || !isObject(value.models)) return null
+  const pooled = readDirectionScore(value.baseline.pooled)
+  const baselineByClass = byClass(value.baseline.byClass, readDirectionScore)
+  if (pooled === undefined || baselineByClass === null) return null
+  const models: DirectionReport['models'] = {}
+  for (const [key, entry] of Object.entries(value.models)) {
+    const read = readDirectionCalibration(entry)
+    if (!(DIRECTION_MODELS as readonly string[]).includes(key) || read === null) return null
+    models[key as DirectionModelId] = read
+  }
+  return { baseline: { pooled, byClass: baselineByClass as Partial<Record<PairClass, DirectionScore>> }, models }
+}
+
 /** A run's calibration read back; null for a file that is not one, from another version, or damaged
  * anywhere. */
 export function parseRunCalibration(text: string): RunCalibration | null {
@@ -149,8 +216,9 @@ export function parseRunCalibration(text: string): RunCalibration | null {
       variants[variant] = read
     }
     const shock = readShock(entry.shock)
-    if (shock === null) return null
-    horizons[key as Horizon] = { horizon: key as Horizon, rows: entry.rows, variants, ...(shock === undefined ? {} : { shock }) }
+    const direction = readDirectionReport(entry.direction)
+    if (shock === null || direction === null) return null
+    horizons[key as Horizon] = { horizon: key as Horizon, rows: entry.rows, variants, ...(shock === undefined ? {} : { shock }), ...(direction === undefined ? {} : { direction }) }
   }
   return { version: RUN_CALIBRATION_VERSION, runId: raw.runId, horizons }
 }

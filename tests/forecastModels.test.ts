@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { FORECAST_BAR_SECONDS, coarseBars, type ForecastBar } from '../shared/forecast/bars'
-import { FEATURE_NAMES, HORIZON_BARS, crossSectionAt, featuresAt, quickAt, type PairQuick, type PairSeries } from '../shared/forecast/features'
+import { FEATURE_NAMES, HORIZON_BARS, PRICE_FEATURES, crossSectionAt, featuresAt, quickAt, type PairQuick, type PairSeries } from '../shared/forecast/features'
 import { QUANTILE_LEVELS, quantileOfSorted } from '../shared/forecast/ml/quantile'
 import { MODEL_FILE_VERSION, parseFitted, serializeFitted } from '../shared/forecast/modelFile'
-import { FORECAST_MODELS, fitHorizon, normalizedTarget, predictHorizon, volatilityInputs, type FittedHorizon } from '../shared/forecast/models'
+import { DIRECTION_MODELS, FORECAST_MODELS, TECH_FEATURES, fitHorizon, normalizedTarget, predictDirection, predictHorizon, volatilityInputs, type FittedHorizon } from '../shared/forecast/models'
 import { buildPanel, type Panel } from '../shared/forecast/panel'
 import { outcomeAt, usualMove } from '../shared/forecast/targets'
 import { finalSplit, rowsFor } from '../shared/forecast/walkForward'
@@ -173,5 +173,110 @@ describe('a model file', () => {
     const fewer = structuredClone(raw)
     fewer.quantileGbt.levels.pop()
     expect(parseFitted(JSON.stringify(fewer))).toBeNull()
+  })
+})
+
+// THE DIRECTION MODELS (V7.1 Stage 2; shared/forecast/models.ts): which way, by classifiers of their own,
+// on a market that says nothing about it and on one that does.
+describe('the direction models', () => {
+  it('give each a chance of up inside (0, 1) for any row, kept on file and read back, each on its own figures', () => {
+    for (const row of [ROWS[0], ROWS[500], ROWS[ROWS.length - 1]]) {
+      const out = predictDirection(FITTED, rowOf(row))
+      expect(Object.keys(out).sort()).toEqual([...DIRECTION_MODELS].sort())
+      for (const model of DIRECTION_MODELS) expect(out[model] > 0 && out[model] < 1, model).toBe(true)
+    }
+    expect(FITTED.direction.gbt.loss.kind).toBe('logloss')
+    expect(FITTED.direction.gbt.features).toBe(PANEL.cols)
+    expect(FITTED.direction.gbtTech.features).toBe(TECH_FEATURES)
+    expect(FITTED.direction.gbtPrice.features).toBe(PRICE_FEATURES)
+    expect(FITTED.direction.logistic.columns).toHaveLength(PANEL.cols)
+    const text = serializeFitted(FITTED)
+    const back = parseFitted(text)!
+    const before = predictDirection(FITTED, rowOf(ROWS[7]))
+    const after = predictDirection(back, rowOf(ROWS[7]))
+    for (const model of DIRECTION_MODELS) expect(Math.abs(after[model] - before[model]), model).toBeLessThan(1e-4)
+    // A file without them -- a v1 file -- is refused, and the run fitted again.
+    const raw = JSON.parse(text)
+    delete raw.direction
+    expect(parseFitted(JSON.stringify(raw))).toBeNull()
+    const wrongLoss = JSON.parse(text)
+    wrongLoss.direction.gbt.loss = { kind: 'l2' }
+    expect(parseFitted(JSON.stringify(wrongLoss))).toBeNull()
+  })
+
+  it('learn which way where the row says it -- a drift by the hour of the day -- and know nothing where nothing does', () => {
+    // A market like MARKET's, with a drift that is up in the first half of the UTC day and down in the second.
+    const drifting = (seed: number, base: number): ForecastBar[] => {
+      let state = seed >>> 0
+      const next = (): number => {
+        state = (Math.imul(state, 1664525) + 1013904223) >>> 0
+        return state / 2 ** 32
+      }
+      const gauss = (): number => Math.sqrt(-2 * Math.log(next() + 1e-12)) * Math.cos(2 * Math.PI * next())
+      const bars: ForecastBar[] = []
+      let price = base
+      let logSigma = Math.log(0.002)
+      for (let index = 0; index < DAYS * 288; index++) {
+        logSigma += 0.02 * (Math.log(0.002) - logSigma) + 0.08 * gauss()
+        const sigma = Math.exp(logSigma)
+        const time = T0 + index * FORECAST_BAR_SECONDS
+        const drift = (time % 86_400 < 43_200 ? 0.2 : -0.2) * sigma
+        const open = price
+        price = price * Math.exp(drift + sigma * gauss())
+        const volume = 100 * (1 + 50 * sigma) * (0.5 + next())
+        bars.push({ time, open, high: Math.max(open, price) * (1 + sigma * next()), low: Math.min(open, price) * (1 - sigma * next()), close: price, volume, quoteVolume: volume * price, takerBuyVolume: volume * next(), trades: 10 + Math.floor(100 * next()) })
+      }
+      return bars
+    }
+    const market = new Map<string, PairSeries>(
+      SYMBOLS.map((symbol, index) => {
+        const m5 = drifting(101 + index * 17, [60_000, 2_500, 150, 0.6][index])
+        return [symbol, { m5, h1: coarseBars(m5, '1h', Number.POSITIVE_INFINITY) }]
+      })
+    )
+    const panel = buildPanel(market, { stepSec: 900, fromSec: T0 + 26 * 86_400, toSec: T0 + DAYS * 86_400 })
+    const rows = rowsFor(panel, 'hour1')
+    const cut = T0 + 31 * 86_400
+    const split = finalSplit(panel, rows.filter((row) => panel.time[row] < cut - 3600), 'hour1')
+    const fitted = fitHorizon(panel, split.train, split.valid, 'hour1', 9)
+    const held = rows.filter((row) => panel.time[row] >= cut)
+    expect(held.length).toBeGreaterThan(800)
+    const judge = (model: FittedHorizon, test: Uint32Array, source: Panel): Record<(typeof DIRECTION_MODELS)[number], { calls: number; precision: number; logLoss: number; entropy: number }> => {
+      const out = {} as Record<(typeof DIRECTION_MODELS)[number], { calls: number; precision: number; logLoss: number; entropy: number }>
+      const ups = Array.from(test, (row) => (normalizedTarget(source, row, 'hour1') > 0 ? 1 : 0))
+      const share = ups.reduce((sum, value) => sum + value, 0) / ups.length
+      const entropy = -(share * Math.log(share) + (1 - share) * Math.log(1 - share))
+      for (const name of DIRECTION_MODELS) {
+        let calls = 0
+        let right = 0
+        let logLoss = 0
+        test.forEach((row, at) => {
+          const p = predictDirection(model, Float64Array.from(source.x.subarray(row * source.cols, (row + 1) * source.cols)))[name]
+          logLoss -= ups[at] * Math.log(p) + (1 - ups[at]) * Math.log(1 - p)
+          if (p >= 0.58 || p <= 0.42) {
+            calls++
+            if (p >= 0.58 === (ups[at] === 1)) right++
+          }
+        })
+        out[name] = { calls, precision: calls === 0 ? Number.NaN : right / calls, logLoss: logLoss / test.length, entropy }
+      }
+      return out
+    }
+    const drifted = judge(fitted, held, panel)
+    for (const name of DIRECTION_MODELS) {
+      expect(drifted[name].calls, name).toBeGreaterThan(100)
+      expect(drifted[name].precision, name).toBeGreaterThan(0.6)
+      // The trees on every figure read the clock, and their raw chances beat the share on rows they never
+      // saw. The others read the way right from the moves alone, but on two thousand rows their raw
+      // chances are overconfident: what a raw reading means is the walk forward's map to settle
+      // (shared/forecast/runCalibration.ts), never the raw reading itself.
+      if (name === 'dir-gbt') expect(drifted[name].logLoss, name).toBeLessThan(drifted[name].entropy - 0.03)
+    }
+    // On the market that says nothing, nothing is known: fitted on the days before the cut alone, no model
+    // beats the share on the days after it by more than the noise of a thousand overlapping rows allows.
+    const flatSplit = finalSplit(PANEL, ROWS.filter((row) => PANEL.time[row] < cut - 3600), 'hour1')
+    const flatFitted = fitHorizon(PANEL, flatSplit.train, flatSplit.valid, 'hour1', 9)
+    const flat = judge(flatFitted, ROWS.filter((row) => PANEL.time[row] >= cut), PANEL)
+    for (const name of DIRECTION_MODELS) expect(flat[name].logLoss, name).toBeGreaterThan(flat[name].entropy - 0.025)
   })
 })

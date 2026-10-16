@@ -17,6 +17,7 @@ import {
   calibrationTable,
   classesOf,
   classesTable,
+  directionTable,
   driftTable,
   errorsTable,
   eventsTable,
@@ -262,6 +263,15 @@ export function ForecastLabPage(): React.JSX.Element {
             Where Bitcoin's last fifteen minutes reach {view.shock.hour1?.line ?? 2.5} of its usual moves, a horizon's ranges are widened about their median -- the 80% range by one factor, the 50% by another -- fitted on the walk forward's moments past the line, and only at a horizon where, each week widened by factors from the other weeks alone, the 80% range came nearer 80% and the pinball loss was no worse. Calm moments are never touched. Live: the forecasts it widened, and how their 80% ranges held widened and by V2's own levels.
           </p>
           <LabTable table={shockTable(view.shock, view.live)} name="shock" onNote={setNote} />
+        </Card>
+      )}
+
+      {view !== null && Object.keys(view.direction).length > 0 && (
+        <Card title="Which way: the direction models">
+          <p style={{ ...noteStyle, marginTop: 0 }}>
+            The forecast's P(up) was read off its range's distribution, and on the walk forward it never beat the base rate, so no way was ever called. Since V7.1 four classifiers forecast which way from the same row -- a line and boosted trees on every figure, trees on the price and technical figures, trees on the price figures alone -- each mapped by the readings of the weeks before its own and scored on the same weeks as the distribution's reading: its Brier skill over the better of an even chance and the weeks-before base rate, and its calls at the forecast's lines (P(up) at or past 58%, or at or under 42%). A model is promoted by its checklist alone, and a class reads its P(up) from the promoted source with the highest skill where any is skilled, from the base rate where none is. The call's lines are unchanged; a model that calls more and does worse is never promoted.
+          </p>
+          <LabTable table={directionTable(view.direction)} name="direction" onNote={setNote} />
         </Card>
       )}
 

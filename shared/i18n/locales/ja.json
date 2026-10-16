@@ -1781,5 +1781,10 @@
   "{read} read, {missed} could not be, {count} candidates": "{read} 件を読み込み、{missed} 件は読めず、候補 {count} 件",
   "{read} read, {count} candidates": "{read} 件を読み込み、候補 {count} 件",
   "{count} coins, {matched} with a USDT pair on Binance": "コイン {count} 件、うち {matched} 件は Binance に USDT ペアあり",
-  "CoinGecko's trending list could not be read: {error}": "CoinGecko の注目リストを読み込めませんでした：{error}"
+  "CoinGecko's trending list could not be read: {error}": "CoinGecko の注目リストを読み込めませんでした：{error}",
+  "Which way: P(up) {pUp} is the base rate, since no reading beat it on weeks it was not fitted on (the best skill: {skill}).": "方向：P(上昇) {pUp} は基準確率です。学習に使っていない週でこれを上回る読みがなかったためです（最良のスキル：{skill}）。",
+  "Which way: P(up) {pUp} from {source}, whose skill on weeks it was not fitted on is {skill}.": "方向：P(上昇) {pUp} は{source}によるもので、学習に使っていない週でのスキルは {skill} です。",
+  "the range's own distribution": "レンジ自身の分布",
+  "the news": "ニュース",
+  "its chance of up knew less than the base rate ({skill} of skill)": "上昇確率が基準確率より劣っていた（スキル {skill}）"
 }

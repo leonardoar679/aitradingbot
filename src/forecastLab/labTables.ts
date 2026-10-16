@@ -1,7 +1,10 @@
 import { HORIZONS, PAIR_CLASSES, type Horizon, type PairClass } from '../../shared/forecast/features'
 import { LIVE_VARIANTS, type LabErrorKind, type LabEvent, type LabMetrics, type LeaderRow, type LiveLab, type TraderStats } from '../../shared/forecast/lab'
 import type { LabFile } from '../../shared/forecast/labFile'
+import type { DirectionView } from '../../shared/forecast/labView'
+import { DIRECTION_MODELS } from '../../shared/forecast/models'
 import { CLASS_LINES, type ClassRecord } from '../../shared/forecast/opportunityClass'
+import type { DirectionScore, PUpSource } from '../../shared/forecast/runCalibration'
 import type { ShockRefusal, ShockRule } from '../../shared/forecast/shock'
 
 // THE FORECAST LAB'S TABLES (V6 Stage 11, 13 October 2026): each card's headers and rows, from the Lab's
@@ -173,6 +176,46 @@ export function shockTable(rules: Partial<Record<Horizon, ShockRule>>, live: Liv
       ]
     })
   }
+}
+
+const DIRECTION_MODEL_NAME: Record<(typeof DIRECTION_MODELS)[number], string> = {
+  'dir-logistic': 'dir-logistic (every figure, a line)',
+  'dir-gbt': 'dir-gbt (every figure, trees)',
+  'dir-gbt-tech': 'dir-gbt-tech (price and technical figures)',
+  'dir-gbt-price': 'dir-gbt-price (price figures alone)'
+}
+
+/** The direction experiments (V7.1 Stage 2): at each horizon, the distribution's P(up) and every direction
+ * model, scored on the same weeks of the walk forward -- outcomes, Brier skill over the base rate, calls at
+ * the forecast's lines and the share right -- each model's verdict and its last week, and which pair
+ * classes read their P(up) from it now. */
+export function directionTable(views: Partial<Record<Horizon, DirectionView>>): LabTableData {
+  const rows: (string | number)[][] = []
+  const cells = (score: DirectionScore | null | undefined): (string | number)[] => (score === null || score === undefined ? ['—', '—', '—', '—'] : [score.n, share(score.directionSkill, 2), score.calls, share(score.precision)])
+  const classesOf = (view: DirectionView, source: PUpSource): string => {
+    const classes = view.inUse[source]
+    return classes === undefined || classes.length === 0 ? '—' : classes.length === PAIR_CLASSES.length ? 'every class' : classes.join(', ')
+  }
+  for (const horizon of HORIZONS) {
+    const view = views[horizon]
+    if (view === undefined) continue
+    rows.push([HORIZON_NAME[horizon], "the distribution's P(up)", ...cells(view.report.baseline.pooled), 'the floor', '—', classesOf(view, 'distribution')])
+    for (const model of DIRECTION_MODELS) {
+      const made = view.report.models[model]
+      if (made === undefined) continue
+      const failed = made.lines.filter((line) => line.ok === false).map((line) => line.id)
+      rows.push([
+        HORIZON_NAME[horizon],
+        DIRECTION_MODEL_NAME[model],
+        ...cells(made.honest.pooled),
+        made.promoted ? 'promoted' : `not promoted: ${failed.join(', ') || 'not measured'}`,
+        made.lastWeekSkill === null ? '—' : made.degraded ? `DEGRADED (${share(made.lastWeekSkill, 2)})` : share(made.lastWeekSkill, 2),
+        classesOf(view, model)
+      ])
+    }
+    rows.push([HORIZON_NAME[horizon], 'the base rate', '—', '—', '—', '—', '—', '—', classesOf(view, 'base')])
+  }
+  return { headers: ['Horizon', 'Source of P(up)', 'Outcomes', 'Brier skill over the base rate', 'Calls at the lines', 'Calls right', 'Verdict', 'Last week', 'P(up) of'], rows }
 }
 
 export function leaderTable(rows: readonly LeaderRow[]): LabTableData {

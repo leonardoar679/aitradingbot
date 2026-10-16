@@ -2,14 +2,15 @@ import { app } from 'electron'
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { coarseBars, type CoarseWidth, type ForecastBar } from '../../shared/forecast/bars'
-import { HORIZONS, type Horizon } from '../../shared/forecast/features'
+import { HORIZONS, PAIR_CLASSES, type Horizon } from '../../shared/forecast/features'
 import { FORECAST_RECORD_DAYS, isMissing, parseOutcomeLine, parsePassLine, parsePredictionLine, recordMonth, type OutcomeLine, type PassLine, type PredictionLine } from '../../shared/forecast/forecastRecord'
 import { LAB_LINES, LAB_VERSION, leaderboardOf, liveLab, type LeaderRow, type LiveLab } from '../../shared/forecast/lab'
 import { parseLab, parseReplay, type LabFile } from '../../shared/forecast/labFile'
 import type { ReplayRow } from '../../shared/forecast/labWalkForward'
 import type { MemberWeight } from '../../shared/forecast/ensemble'
 import type { ForecastModelId } from '../../shared/forecast/models'
-import type { ForecastLabStatus, ForecastLabView, ForecastReplay } from '../../shared/forecast/labView'
+import type { DirectionView, ForecastLabStatus, ForecastLabView, ForecastReplay } from '../../shared/forecast/labView'
+import { directionSourceOf } from '../../shared/forecast/runCalibration'
 import { healForecastSettings } from '../../shared/forecast/training'
 import type { ModelScore } from '../../shared/forecast/walkForward'
 import { classTable, type ClassRecord, type ClassVerdict } from '../../shared/forecast/opportunityClass'
@@ -260,8 +261,27 @@ export async function getForecastLab(): Promise<ForecastLabView> {
     liveDays: LAB_LINES.liveDays,
     classes: Date.now() - classes.at < CLASSES_MS ? classes.records : await readClasses(),
     refit: { on: settings.refitNightly, nextAt: training.nextRefitAt, trainingStatus: training.status, lastFitAt: training.current?.fittedAt ?? null },
-    shock: shockRulesInUse()
+    shock: shockRulesInUse(),
+    direction: directionInUse()
   }
+}
+
+/** The calibration in use's direction models, by horizon (V7.1 Stage 2), and which source each pair class
+ * reads its P(up) from. */
+function directionInUse(): ForecastLabView['direction'] {
+  const calibration = currentForecastCalibration()
+  const out: ForecastLabView['direction'] = {}
+  for (const horizon of HORIZONS) {
+    const entry = calibration?.horizons[horizon]
+    if (entry?.direction === undefined) continue
+    const view: DirectionView = { report: entry.direction, inUse: {} }
+    for (const cls of PAIR_CLASSES) {
+      const { source } = directionSourceOf(entry, cls)
+      ;(view.inUse[source] ??= []).push(cls)
+    }
+    out[horizon] = view
+  }
+  return out
 }
 
 /** The calibration in use's rule on Bitcoin's sharp moves, by horizon (V6.1). */

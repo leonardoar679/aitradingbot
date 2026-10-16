@@ -1,7 +1,8 @@
 import { FEATURE_NAMES, HORIZON_BARS, PRICE_FEATURES, type Horizon } from './features'
 import { binMatrix, fitCuts, type Binned, type Matrix } from './ml/bins'
 import { fitForest, predictForest, type ForestModel } from './ml/forest'
-import { fitGbt, predictGbt, type GbtModel, type GbtParams } from './ml/gbt'
+import { fitGbt, predictGbt, sigmoid, type GbtModel, type GbtParams } from './ml/gbt'
+import { fitLogistic, predictLogistic, type LogisticModel } from './ml/logistic'
 import { QUANTILE_LEVELS, quantileOfSorted, rearrange } from './ml/quantile'
 import { fitRidge, predictRidge, type RidgeModel } from './ml/ridge'
 import type { Panel } from './panel'
@@ -27,11 +28,37 @@ import { usualMove } from './targets'
 // - gbt-price: gbt on the PRICE figures alone (§49's "price only").
 // For the four with a centre and a size, the quantiles are centre + size x the quantiles of the
 // standardized residuals over the training rows, so a fat tail the training saw is kept.
+//
+// THE DIRECTION MODELS (V7.1 Stage 2, 16 October 2026) forecast WHICH WAY, not how far: the chance that
+// the move is up, from the same row, by classifiers of their own rather than from the sign of a range's
+// median (which on V6's walk forward was a coin toss, so the forecast never called a way):
+// - dir-logistic: a logistic regression on every figure -- the plain baseline the trees must beat;
+// - dir-gbt: boosted trees on the log loss, on every figure;
+// - dir-gbt-tech: the same on the PRICE and TECH figures, before the market's (§49's experiments);
+// - dir-gbt-price: the same on the PRICE figures alone.
+// Each learns from the rows whose move cleared a materiality floor either way; what each reading means
+// is settled on the walk forward (shared/forecast/runCalibration.ts), never here.
 
-export const MODELS_VERSION = 'models-v1'
+/** models-v2 (V7.1 Stage 2): every horizon's file carries its direction models; a v1 file is refused and
+ * the run fitted again. */
+export const MODELS_VERSION = 'models-v2'
 
 export const FORECAST_MODELS = ['persistence', 'volatility', 'technical', 'random-forest', 'gbt', 'quantile-gbt', 'gbt-price'] as const
 export type ForecastModelId = (typeof FORECAST_MODELS)[number]
+
+export const DIRECTION_MODELS = ['dir-logistic', 'dir-gbt', 'dir-gbt-tech', 'dir-gbt-price'] as const
+export type DirectionModelId = (typeof DIRECTION_MODELS)[number]
+
+/** The PRICE and TECH figures: the first this many, before Bitcoin's, ether's and the market's. */
+export const TECH_FEATURES = FEATURE_NAMES.indexOf('btc_r_1h')
+
+/** The figures each direction model reads: the first this many of the row. */
+export const DIRECTION_FEATURES: Record<DirectionModelId, number> = {
+  'dir-logistic': FEATURE_NAMES.length,
+  'dir-gbt': FEATURE_NAMES.length,
+  'dir-gbt-tech': TECH_FEATURES,
+  'dir-gbt-price': PRICE_FEATURES
+}
 
 const GBT_BASE: Omit<GbtParams, 'trees' | 'learningRate' | 'seed'> = {
   maxDepth: 4,
@@ -52,6 +79,9 @@ export const TRAINING = {
   quantile: { trees: 150, learningRate: 0.1 },
   forest: { trees: 40, maxDepth: 8, minLeafRows: 50, minLeafHessian: 0, minGain: 0, featureFraction: 0.33, sampleFraction: 0.25 },
   ridgeLambda: 10,
+  /** The direction models (V7.1 Stage 2): the boosting's budget on the log loss, the logistic
+   * regression's penalty, and the floor a move must clear, in usual moves, to teach a way. */
+  direction: { trees: 150, learningRate: 0.05, logisticLambda: 10, floor: 0.1 },
   /** A size is held within these multiples of the usual move. */
   scaleFloor: 0.05,
   scaleCeiling: 20,
@@ -90,6 +120,14 @@ export function volatilityInputs(x: ArrayLike<number>, offset = 0): number[] {
   ]
 }
 
+/** The direction models of a horizon (V7.1 Stage 2), each a chance of up from the row. */
+export interface DirectionFits {
+  logistic: LogisticModel
+  gbt: GbtModel
+  gbtTech: GbtModel
+  gbtPrice: GbtModel
+}
+
 export interface FittedHorizon {
   version: string
   horizon: Horizon
@@ -100,6 +138,7 @@ export interface FittedHorizon {
   gbt: { center: GbtModel; size: GbtModel; residual: number[] }
   quantileGbt: { levels: GbtModel[] }
   gbtPrice: { center: GbtModel; size: GbtModel; residual: number[] }
+  direction: DirectionFits
 }
 
 /** A row's move at a horizon in units of its usual move; NaN where it has no outcome. */
@@ -167,9 +206,33 @@ export function fitHorizon(panel: Panel, train: Uint32Array, valid: Uint32Array,
   const priceCuts = cuts.slice(0, PRICE_FEATURES)
   const priceMatrix = gather(panel, train, PRICE_FEATURES)
   const priceValid = gather(panel, valid, PRICE_FEATURES)
+  // The direction models (V7.1 Stage 2): which way, from the rows whose move cleared the floor either way.
+  const way = (rows: Uint32Array, values: Float64Array): { rows: Uint32Array; y: Float64Array } => {
+    const kept: number[] = []
+    for (let k = 0; k < rows.length; k++) if (Math.abs(values[k]) > TRAINING.direction.floor) kept.push(k)
+    return { rows: Uint32Array.from(kept, (k) => rows[k]), y: Float64Array.from(kept, (k) => (values[k] > 0 ? 1 : 0)) }
+  }
+  const wayTrain = way(train, z)
+  const wayValid = way(valid, zValid)
+  const dirParams = { ...GBT_BASE, trees: TRAINING.direction.trees, learningRate: TRAINING.direction.learningRate }
+  const wayMatrix = gather(panel, wayTrain.rows)
+  const wayBinned = (features: number, own: Float64Array[]): { train: Binned; valid: Binned } => ({
+    train: binMatrix(gather(panel, wayTrain.rows, features), own),
+    valid: binMatrix(gather(panel, wayValid.rows, features), own)
+  })
+  const full = wayBinned(panel.cols, cuts)
+  const tech = wayBinned(TECH_FEATURES, cuts.slice(0, TECH_FEATURES))
+  const price = wayBinned(PRICE_FEATURES, priceCuts)
+  const direction: DirectionFits = {
+    logistic: fitLogistic(wayMatrix, wayTrain.y, TRAINING.direction.logisticLambda),
+    gbt: fitGbt(full.train, wayTrain.y, full.valid, wayValid.y, { kind: 'logloss' }, { ...dirParams, seed: seed + 20 }),
+    gbtTech: fitGbt(tech.train, wayTrain.y, tech.valid, wayValid.y, { kind: 'logloss' }, { ...dirParams, seed: seed + 21 }),
+    gbtPrice: fitGbt(price.train, wayTrain.y, price.valid, wayValid.y, { kind: 'logloss' }, { ...dirParams, seed: seed + 22 })
+  }
   return {
     version: MODELS_VERSION,
     horizon,
+    direction,
     persistence: { residual: quantilesOf(z) },
     volatility: { size, residual: residualOf(() => 0, (row) => volSize[row]) },
     technical: {
@@ -191,6 +254,18 @@ export function fitHorizon(panel: Panel, train: Uint32Array, valid: Uint32Array,
       levels: QUANTILE_LEVELS.map((tau, index) => fitGbt(binned, z, binnedValid, zValid, { kind: 'pinball', tau }, { ...GBT_BASE, ...TRAINING.quantile, seed: seed + 10 + index }))
     },
     gbtPrice: boosted(binMatrix(priceMatrix, priceCuts), binMatrix(priceValid, priceCuts), 4)
+  }
+}
+
+/** Each direction model's raw chance of up for one row of figures (V7.1 Stage 2), each inside (0, 1).
+ * What a reading means is the calibration's to say (shared/forecast/runCalibration.ts). */
+export function predictDirection(fitted: FittedHorizon, x: ArrayLike<number>, offset = 0): Record<DirectionModelId, number> {
+  const inside = (chance: number): number => Math.min(1 - 1e-6, Math.max(1e-6, chance))
+  return {
+    'dir-logistic': inside(predictLogistic(fitted.direction.logistic, x, offset)),
+    'dir-gbt': inside(sigmoid(predictGbt(fitted.direction.gbt, x, offset))),
+    'dir-gbt-tech': inside(sigmoid(predictGbt(fitted.direction.gbtTech, x, offset))),
+    'dir-gbt-price': inside(sigmoid(predictGbt(fitted.direction.gbtPrice, x, offset)))
   }
 }
 

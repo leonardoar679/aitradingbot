@@ -5,7 +5,7 @@ import { barFromLine, coarseBars, mergeBars, type ForecastBar } from '../../shar
 import { HORIZONS, PAIR_CLASSES, type Horizon, type PairClass, type PairSeries } from '../../shared/forecast/features'
 import { binMatrix, fitCuts, rngOf, type Matrix } from '../../shared/forecast/ml/bins'
 import { fitGbt, lossOf, predictGbt } from '../../shared/forecast/ml/gbt'
-import { FORECAST_MODELS, fitHorizon, normalizedTarget, predictHorizon, type FittedHorizon, type ForecastModelId } from '../../shared/forecast/models'
+import { DIRECTION_MODELS, FORECAST_MODELS, fitHorizon, normalizedTarget, predictDirection, predictHorizon, type DirectionModelId, type FittedHorizon, type ForecastModelId } from '../../shared/forecast/models'
 import { serializeRunCalibration } from '../../shared/forecast/calibrationFile'
 import { serializeFitted } from '../../shared/forecast/modelFile'
 import { LAB_VERSION, type TraderRule } from '../../shared/forecast/lab'
@@ -200,7 +200,7 @@ async function folds(request: Extract<WorkerRequest, { task: 'folds' }>): Promis
   let step = 0
   for (const [hIndex, horizon] of HORIZONS.entries()) {
     const rows = rowsFor(panel, horizon)
-    const tested: { row: number; fold: number; quantiles: Record<ForecastModelId, number[]> }[] = []
+    const tested: { row: number; fold: number; quantiles: Record<ForecastModelId, number[]>; direction: Record<DirectionModelId, number> }[] = []
     for (const fold of plan) {
       progress(request.id, `testing ${horizon} on week ${fold.index + 1} of ${plan.length}`, step++, HORIZONS.length * plan.length)
       // Fitted on the rows whose outcomes were known before the week, the boosting stopped on the week
@@ -211,7 +211,7 @@ async function folds(request: Extract<WorkerRequest, { task: 'folds' }>): Promis
       const row64 = new Float64Array(panel.cols)
       for (const row of test) {
         for (let col = 0; col < panel.cols; col++) row64[col] = panel.x[row * panel.cols + col]
-        tested.push({ row, fold: fold.index, quantiles: predictHorizon(fitted, row64) })
+        tested.push({ row, fold: fold.index, quantiles: predictHorizon(fitted, row64), direction: predictDirection(fitted, row64) })
       }
     }
     const z = tested.map((entry) => normalizedTarget(panel, entry.row, horizon))
@@ -243,7 +243,10 @@ async function folds(request: Extract<WorkerRequest, { task: 'folds' }>): Promis
       best: Float32Array.from(kept, ({ entry }) => panel.best[horizon][entry.row]),
       worst: Float32Array.from(kept, ({ entry }) => panel.worst[horizon][entry.row]),
       quantiles: Float32Array.from(kept.flatMap(({ entry }) => FORECAST_MODELS.flatMap((model) => entry.quantiles[model]))),
-      btc15: Float32Array.from(kept, ({ entry }) => btc15.get(panel.time[entry.row]) ?? Number.NaN)
+      btc15: Float32Array.from(kept, ({ entry }) => btc15.get(panel.time[entry.row]) ?? Number.NaN),
+      // Each direction model's raw chance of up at the row (V7.1 Stage 2), for the calibration to judge.
+      directionModels: DIRECTION_MODELS,
+      direction: Float32Array.from(kept.flatMap(({ entry }) => DIRECTION_MODELS.map((model) => entry.direction[model])))
     }
     await writeFile(join(dir, `oos-${horizon}.bin`), encodeOos(record))
     records.set(horizon, record)

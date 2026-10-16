@@ -5,9 +5,10 @@ import { solveSpd } from './ridge'
 // LOGISTIC REGRESSION (V7.1 Stage 1, 16 October 2026): the chance of a 0-or-1 outcome as a straight
 // line through standardized figures, squashed by the sigmoid, with an L2 penalty on the weights as the
 // ridge has. Fitted by iteratively reweighted least squares (Newton's method on the log loss): each
-// step solves (Z' W Z + lambda I) d = Z' (y - p) by the ridge's Cholesky, and stops when the step is
-// small or after ITERATIONS. A column that does not vary gets no weight. The direction models' plain
-// baseline: what the boosted trees must beat to be worth their trees.
+// step solves (Z' W Z + lambda I) d = Z' (y - p) by the ridge's Cholesky, is halved while it does not
+// lower the penalized loss (a full Newton step overshoots where the rows are nearly separable), and the
+// fit stops when the step is small or after ITERATIONS. A column that does not vary gets no weight. The
+// direction models' plain baseline: what the boosted trees must beat to be worth their trees.
 
 export interface LogisticModel {
   kind: 'logistic'
@@ -21,7 +22,7 @@ export interface LogisticModel {
   iterations: number
 }
 
-export const LOGISTIC_FIT = { iterations: 25, tolerance: 1e-6 } as const
+export const LOGISTIC_FIT = { iterations: 25, tolerance: 1e-6, halvings: 12 } as const
 
 /** Fits on the rows' `columns` (all when absent), y in {0, 1}. */
 export function fitLogistic(matrix: Matrix, y: Float64Array, lambda: number, columns: number[] = Array.from({ length: matrix.cols }, (_, index) => index)): LogisticModel {
@@ -43,6 +44,20 @@ export function fitLogistic(matrix: Matrix, y: Float64Array, lambda: number, col
   const m = d + 1
   const a = new Float64Array(m * m)
   const b = new Float64Array(m)
+  /** The penalized log loss at weights `at`, summed over the rows. */
+  const lossAt = (at: Float64Array): number => {
+    let total = 0
+    for (let row = 0; row < n; row++) {
+      let f = at[d]
+      for (let k = 0; k < d; k++) f += at[k] * z[row * d + k]
+      // log(1 + e^f) - y f, written to stay finite for any f.
+      total += Math.max(f, 0) + Math.log(1 + Math.exp(-Math.abs(f))) - y[row] * f
+    }
+    for (let k = 0; k < d; k++) total += (lambda / 2) * at[k] * at[k]
+    return total
+  }
+  let loss = lossAt(w)
+  const tried = new Float64Array(m)
   let iterations = 0
   for (; iterations < LOGISTIC_FIT.iterations; iterations++) {
     a.fill(0)
@@ -67,11 +82,26 @@ export function fitLogistic(matrix: Matrix, y: Float64Array, lambda: number, col
       }
     }
     const step = solveSpd(a, b, m)
+    // The step, halved while it does not lower the penalized loss.
+    let scale = 1
+    let next = Number.POSITIVE_INFINITY
+    for (let halving = 0; halving <= LOGISTIC_FIT.halvings; halving++) {
+      for (let i = 0; i < m; i++) tried[i] = w[i] + scale * step[i]
+      next = lossAt(tried)
+      if (next <= loss) break
+      scale /= 2
+    }
+    if (next > loss) {
+      // No fraction of the step helps: the weights are as good as this will make them.
+      iterations++
+      break
+    }
     let largest = 0
     for (let i = 0; i < m; i++) {
-      w[i] += step[i]
-      largest = Math.max(largest, Math.abs(step[i]))
+      largest = Math.max(largest, Math.abs(tried[i] - w[i]))
+      w[i] = tried[i]
     }
+    loss = next
     if (largest < LOGISTIC_FIT.tolerance) {
       iterations++
       break

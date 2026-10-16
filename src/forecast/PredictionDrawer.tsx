@@ -8,7 +8,8 @@ import { useNowSec } from '../utils/useNowSec'
 import { describeNewsReading } from '../../shared/aiAdditions'
 import { HORIZONS, type Horizon } from '../../shared/forecast/features'
 import type { PredictionLine } from '../../shared/forecast/forecastRecord'
-import type { PricePrediction } from '../../shared/forecast/prediction'
+import type { ForecastRange, PricePrediction } from '../../shared/forecast/prediction'
+import type { I18n } from '../../shared/i18n/translate'
 import { decideOnBook, type TradeDecision } from '../../shared/forecast/tradeDecision'
 import { forecastView } from '../../shared/forecast/view'
 import type { LiveState } from '../../shared/liveMarket'
@@ -27,6 +28,18 @@ import { msg, useI18n } from '../i18n'
 const section: React.CSSProperties = { borderTop: '1px solid var(--border)', paddingTop: '0.7rem', marginTop: '0.7rem' }
 const heading: React.CSSProperties = { margin: '0 0 0.4rem', fontSize: '0.7rem', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-secondary)' }
 const line: React.CSSProperties = { margin: '0.15rem 0', fontSize: '0.8rem', color: 'var(--text-primary)' }
+
+/** Where the lead horizon's P(up) came from (V7.1 Stage 2), and the skill of that source on weeks it
+ * was not fitted on; nothing for a forecast made before sources were recorded. */
+function whichWayText(range: ForecastRange, i18n: I18n): string | null {
+  const { t, pctPlain } = i18n
+  if (range.pUpSource === undefined) return null
+  const pUp = pctPlain(Math.round(range.pUp * 100), 0)
+  const skill = range.directionSkill === null || !Number.isFinite(range.directionSkill) ? '—' : pctPlain(range.directionSkill * 100, 2)
+  if (range.pUpSource === 'base') return t('Which way: P(up) {pUp} is the base rate, since no reading beat it on weeks it was not fitted on (the best skill: {skill}).', { pUp, skill })
+  const source = range.pUpSource === 'distribution' ? t("the range's own distribution") : range.pUpSource === 'news' ? t('the news') : range.pUpSource
+  return t('Which way: P(up) {pUp} from {source}, whose skill on weeks it was not fitted on is {skill}.', { pUp, source, skill })
+}
 
 /** One pair's forecast in full (the V6 document, §35-37, §58 and §94): its timeline, WHY? -- the
  * evidence behind it -- WHY THIS RANGE?, its history against the price, and the decision. Everything
@@ -168,6 +181,7 @@ export function PredictionDrawer({
             regime: t(REGIME_NAME[prediction.regime] ?? prediction.regime)
           })}
         </p>
+        {leadRange !== undefined && whichWayText(leadRange, i18n) !== null && <p style={line}>{whichWayText(leadRange, i18n)}</p>}
         <p style={line}>
           {story === null
             ? t('News: no story about the coin in the last four hours')

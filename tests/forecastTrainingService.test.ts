@@ -50,7 +50,9 @@ function tinyFitted(horizon: Horizon): FittedHorizon {
     forest: { center: { kind: 'forest', features: 63, trees: [leaf(0)] }, residual: RESIDUAL },
     gbt: { center: constantGbt(0), size: constantGbt(0), residual: RESIDUAL },
     quantileGbt: { levels: QUANTILE_LEVELS.map((tau, index) => constantGbt(RESIDUAL[index], { kind: 'pinball', tau })) },
-    gbtPrice: { center: constantGbt(0), size: constantGbt(0), residual: RESIDUAL }
+    gbtPrice: { center: constantGbt(0), size: constantGbt(0), residual: RESIDUAL },
+    // The direction models (V7.1 Stage 2), each an even chance here.
+    direction: { logistic: { ...ridge, kind: 'logistic', intercept: 0, iterations: 1 }, gbt: constantGbt(0, { kind: 'logloss' }), gbtTech: constantGbt(0, { kind: 'logloss' }), gbtPrice: constantGbt(0, { kind: 'logloss' }) }
   }
 }
 

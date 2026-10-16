@@ -1,12 +1,13 @@
 import { buildCell, calibrate, type CalibrationCell } from './calibration'
-import { calibratedPUp, fitPUp, rawPUp } from './direction'
+import { DIRECTION_LINES, calibratedPUp, fitPUp, rawPUp } from './direction'
 import { ENSEMBLE_LINES, combine, lossesOf, weightsFromLosses, type MemberWeight } from './ensemble'
 import type { MarketRegime } from '../marketResearch'
 import { HORIZONS, HORIZON_BARS, MARKET_REGIMES, PAIR_CLASSES, type Horizon, type PairClass } from './features'
 import type { IsotonicModel } from './ml/isotonic'
 import { QUANTILE_LEVELS, meanPinball } from './ml/quantile'
-import type { ForecastModelId } from './models'
-import { oosQuantiles, type OosRecord } from './oosRecord'
+import { DIRECTION_MODELS, type DirectionModelId, type ForecastModelId } from './models'
+import { oosDirection, oosQuantiles, type OosRecord } from './oosRecord'
+import { DEGRADATION_LINES, directionChecklist, type CheckLine } from './promotion'
 import { noShockRecord, shockRuleOf, type ShockRule } from './shock'
 import { usualMove } from './targets'
 import type { Promotion } from './training'
@@ -35,10 +36,53 @@ import type { Promotion } from './training'
 //
 // AND THE RULE ON BITCOIN'S SHARP MOVES (V6.1, shared/forecast/shock.ts): fitted on the forecast shown (V2)
 // as it was scored out of sample, and adopted per horizon only where it held cross-fitted.
+//
+// AND THE DIRECTION MODELS (V7.1 Stage 2, 16 October 2026; shared/forecast/models.ts): each model's raw
+// chance of up, read for every tested hour, is given the same honest treatment as the distribution's P(up)
+// -- mapped by what the readings of the weeks before did, scored against the better of an even chance and
+// the weeks-before base rate, on the same weeks the distribution's is scored on -- and promoted only by the
+// checklist (shared/forecast/promotion.ts). A cell's P(UP) SOURCE is then the skilled reading with the
+// highest honest skill, the distribution's or a promoted model's, and the base rate where none is skilled:
+// the call's lines (shared/forecast/direction.ts) are unchanged, only where P(up) comes from may be.
 
-/** run-calibration-v3 (V6.1): each horizon carries its rule on Bitcoin's sharp moves. A v2 file is made
- * again from its record at the next start. */
-export const RUN_CALIBRATION_VERSION = 'run-calibration-v3'
+/** run-calibration-v4 (V7.1 Stage 2): each horizon carries its direction models' verdicts. A v3 file is
+ * made again from its record at the next start (without them, on a record from before them). */
+export const RUN_CALIBRATION_VERSION = 'run-calibration-v4'
+
+/** Where a horizon's P(up) comes from: the base rate, the distribution's mapped reading, a direction
+ * model's, or the news's own (shared/forecast/newsEffect.ts). */
+export type PUpSource = 'base' | 'distribution' | 'news' | DirectionModelId
+
+/** How a chance of up did on outcomes it never saw: its Brier skill over the better of an even chance
+ * and the weeks-before base rate, and its calls at the forecast's lines. */
+export interface DirectionScore {
+  n: number
+  brier: number
+  directionSkill: number
+  upShare: number
+  /** Calls at the forecast's lines (P(up) at or past the bullish line, or at or under its mirror), and
+   * of those that moved, the share called right. */
+  calls: number
+  precision: number
+  curve: CurveBin[]
+}
+
+export interface DirectionCalibration {
+  /** The map from the model's raw chance to the share that went up, fitted on every scored reading. */
+  map: IsotonicModel
+  honest: { pooled: DirectionScore | null; byClass: Partial<Record<PairClass, DirectionScore>>; weeks: number[] }
+  /** Its skill on the last week scored alone, and whether that week found it degraded. */
+  lastWeekSkill: number | null
+  degraded: boolean
+  promoted: boolean
+  lines: CheckLine[]
+}
+
+export interface DirectionReport {
+  /** The distribution's P(up) scored the same way: what every model is set against. */
+  baseline: { pooled: DirectionScore | null; byClass: Partial<Record<PairClass, DirectionScore>> }
+  models: Partial<Record<DirectionModelId, DirectionCalibration>>
+}
 export const VARIANTS = ['v1', 'v2'] as const
 export type VariantId = (typeof VARIANTS)[number]
 /** The four of §49: V3 (+news) and V4 (+news +AI) are made live from V2 (shared/forecast/newsEffect.ts). */
@@ -93,6 +137,8 @@ export interface HorizonCalibration {
   variants: Record<VariantId, VariantCalibration>
   /** The rule on Bitcoin's sharp moves (V6.1); absent on a calibration made before it. */
   shock?: ShockRule
+  /** The direction models' verdicts (V7.1 Stage 2); absent on a record holding no readings of theirs. */
+  direction?: DirectionReport
 }
 
 export interface RunCalibration {
@@ -111,6 +157,8 @@ export interface Row {
   regime: MarketRegime
   fold: number
   usual: number
+  /** Each direction model's raw chance of up at the row (V7.1 Stage 2), where the record holds it. */
+  direction?: Partial<Record<DirectionModelId, number>>
 }
 
 export function rowsOf(record: OosRecord): Row[] {
@@ -122,7 +170,16 @@ export function rowsOf(record: OosRecord): Row[] {
     if (!Number.isFinite(z) || !(usual > 0)) continue
     const quantiles: Partial<Record<ForecastModelId, number[]>> = {}
     for (const model of record.models) quantiles[model] = oosQuantiles(record, row, model)
-    out.push({ at: row, quantiles, z, cls: PAIR_CLASSES[record.cls[row]], regime: MARKET_REGIMES[record.regime[row]], fold: record.fold[row], usual })
+    const entry: Row = { at: row, quantiles, z, cls: PAIR_CLASSES[record.cls[row]], regime: MARKET_REGIMES[record.regime[row]], fold: record.fold[row], usual }
+    if (record.directionModels !== undefined) {
+      const direction: Partial<Record<DirectionModelId, number>> = {}
+      for (const model of record.directionModels) {
+        const reading = oosDirection(record, row, model)
+        if (reading !== undefined) direction[model] = reading
+      }
+      entry.direction = direction
+    }
+    out.push(entry)
   }
   return out
 }
@@ -304,6 +361,114 @@ function variantOf(rows: readonly Row[], members: VariantId, promoted: ReadonlyS
   return { calibration, scored }
 }
 
+/** One chance of up scored out of sample: its cell, its week, the mapped chance, the base rate of the
+ * weeks before, and what came. */
+interface DirectionEntry {
+  cls: PairClass
+  week: number
+  pUp: number
+  base: number
+  z: number
+}
+
+/** The direction score of entries scored out of sample; null without any. */
+export function directionScore(entries: readonly DirectionEntry[]): DirectionScore | null {
+  if (entries.length === 0) return null
+  let brier = 0
+  let even = 0
+  let reference = 0
+  let up = 0
+  let calls = 0
+  let called = 0
+  const bins = Array.from({ length: 10 }, () => ({ predicted: 0, observed: 0, n: 0 }))
+  for (const entry of entries) {
+    const wentUp = entry.z > 0 ? 1 : 0
+    brier += (entry.pUp - wentUp) ** 2
+    even += 0.25
+    reference += (entry.base - wentUp) ** 2
+    up += wentUp
+    const bull = entry.pUp >= DIRECTION_LINES.bullish
+    const bear = entry.pUp <= 1 - DIRECTION_LINES.bullish
+    if ((bull || bear) && entry.z !== 0) {
+      calls++
+      if (bull === entry.z > 0) called++
+    }
+    const bin = bins[Math.min(9, Math.max(0, Math.floor(entry.pUp * 10)))]
+    bin.predicted += entry.pUp
+    bin.observed += wentUp
+    bin.n++
+  }
+  const n = entries.length
+  return {
+    n,
+    brier: brier / n,
+    directionSkill: 1 - brier / Math.min(even, reference),
+    upShare: up / n,
+    calls,
+    precision: calls > 0 ? called / calls : Number.NaN,
+    curve: bins.filter((bin) => bin.n > 0).map((bin) => ({ predicted: bin.predicted / bin.n, observed: bin.observed / bin.n, n: bin.n }))
+  }
+}
+
+/** The distribution's P(up) as the honest score read it, as direction entries: the baseline. */
+function baselineEntries(shown: readonly ScoredRow[]): DirectionEntry[] {
+  const out: DirectionEntry[] = []
+  for (const entry of shown) if (entry.pUp !== null && entry.base !== null) out.push({ cls: entry.cls, week: entry.week, pUp: entry.pUp, base: entry.base, z: entry.z })
+  return out
+}
+
+/** A direction model's readings scored out of sample on the weeks given: each week's readings mapped by
+ * the readings of the weeks before it (their own map), against the base rate of those weeks. */
+function directionEntriesOf(rows: readonly Row[], model: DirectionModelId, weeks: readonly number[]): DirectionEntry[] {
+  const out: DirectionEntry[] = []
+  for (const week of weeks) {
+    const earlier = rows.filter((row) => row.fold < week && row.direction?.[model] !== undefined)
+    if (earlier.length < ENSEMBLE_LINES.minCellRows) continue
+    const map = fitPUp(earlier.map((row) => ({ raw: row.direction![model]!, up: row.z > 0 })))
+    const base = earlier.filter((row) => row.z > 0).length / earlier.length
+    for (const row of rows) {
+      const raw = row.direction?.[model]
+      if (row.fold !== week || raw === undefined) continue
+      out.push({ cls: row.cls, week, pUp: calibratedPUp(map, raw), base, z: row.z })
+    }
+  }
+  return out
+}
+
+function scoresByClass(entries: readonly DirectionEntry[]): Partial<Record<PairClass, DirectionScore>> {
+  const out: Partial<Record<PairClass, DirectionScore>> = {}
+  for (const [cls, mine] of byClassOf(entries)) {
+    const score = directionScore(mine)
+    if (score !== null) out[cls] = score
+  }
+  return out
+}
+
+/** The direction models' verdicts from a horizon's rows, set against the distribution's P(up) on the same
+ * weeks; null where the record holds no readings of theirs. */
+export function directionReportOf(rows: readonly Row[], shown: readonly ScoredRow[]): DirectionReport | null {
+  if (!rows.some((row) => row.direction !== undefined)) return null
+  const baseline = baselineEntries(shown)
+  const weeks = [...new Set(baseline.map((entry) => entry.week))].sort((a, b) => a - b)
+  const report: DirectionReport = { baseline: { pooled: directionScore(baseline), byClass: scoresByClass(baseline) }, models: {} }
+  for (const model of DIRECTION_MODELS) {
+    if (!rows.some((row) => row.direction?.[model] !== undefined)) continue
+    const entries = directionEntriesOf(rows, model, weeks)
+    const pooled = directionScore(entries)
+    const lastWeek = entries.length === 0 ? null : directionScore(entries.filter((entry) => entry.week === entries[entries.length - 1].week))
+    const verdict = directionChecklist(pooled, report.baseline.pooled)
+    report.models[model] = {
+      map: fitPUp(rows.filter((row) => row.direction?.[model] !== undefined).map((row) => ({ raw: row.direction![model]!, up: row.z > 0 }))),
+      honest: { pooled, byClass: scoresByClass(entries), weeks: [...new Set(entries.map((entry) => entry.week))].sort((a, b) => a - b) },
+      lastWeekSkill: lastWeek === null ? null : lastWeek.directionSkill,
+      degraded: lastWeek !== null && lastWeek.n >= DEGRADATION_LINES.minOutcomes && lastWeek.directionSkill < 0,
+      promoted: verdict.promoted,
+      lines: verdict.lines
+    }
+  }
+  return report
+}
+
 /** A run's calibration from its walk forward's records and the verdicts on them. */
 export function buildRunCalibration(records: ReadonlyMap<Horizon, OosRecord>, promotions: readonly Promotion[], runId: string): RunCalibration {
   const horizons: Partial<Record<Horizon, HorizonCalibration>> = {}
@@ -323,9 +488,29 @@ export function buildRunCalibration(records: ReadonlyMap<Horizon, OosRecord>, pr
     const btc15 = record.btc15
     const shock =
       btc15 === undefined ? noShockRecord() : shockRuleOf(shown.map((entry) => ({ z: entry.z, q: entry.quantiles, week: entry.week, t: record.time[entry.at!], btc15: btc15[entry.at!] })))
-    horizons[horizon] = { horizon, rows: rows.length, variants, shock }
+    const direction = directionReportOf(rows, shown)
+    horizons[horizon] = { horizon, rows: rows.length, variants, shock, ...(direction === null ? {} : { direction }) }
   }
   return { version: RUN_CALIBRATION_VERSION, runId, horizons }
+}
+
+/** Where a pair of a class reads its P(up) from at a horizon (V7.1 Stage 2): the skilled reading with the
+ * highest honest skill -- the distribution's, or a promoted direction model's for the class where it has
+ * a score of its own, the horizon's otherwise -- and the base rate where none is skilled. With the
+ * distribution's skill either way, for the forecast to show what was measured. */
+export function directionSourceOf(entry: HorizonCalibration, cls: PairClass): { source: PUpSource; skill: number | null; map: IsotonicModel | null } {
+  const v2 = cellOf(entry.variants.v2, cls)
+  const distribution = v2.honest?.directionSkill ?? null
+  let best: { source: PUpSource; skill: number | null; map: IsotonicModel | null } = { source: 'base', skill: distribution, map: null }
+  if (distribution !== null && distribution >= DIRECTION_LINES.minDirectionSkill) best = { source: 'distribution', skill: distribution, map: null }
+  for (const model of DIRECTION_MODELS) {
+    const made = entry.direction?.models[model]
+    if (made === undefined || !made.promoted) continue
+    const score = (v2.ownClass ? made.honest.byClass[cls] : undefined) ?? made.honest.pooled
+    if (score === null || score === undefined || !(score.directionSkill >= DIRECTION_LINES.minDirectionSkill)) continue
+    if (best.source === 'base' || best.skill === null || score.directionSkill > best.skill) best = { source: model, skill: score.directionSkill, map: made.map }
+  }
+  return best
 }
 
 /** What a pair of a class reads of a variant's calibration: its class's own where it had enough

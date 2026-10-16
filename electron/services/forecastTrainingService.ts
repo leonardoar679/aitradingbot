@@ -4,7 +4,7 @@ import { join } from 'path'
 import { parseRunCalibration } from '../../shared/forecast/calibrationFile'
 import { HORIZONS, type Horizon } from '../../shared/forecast/features'
 import { parseFitted } from '../../shared/forecast/modelFile'
-import type { FittedHorizon } from '../../shared/forecast/models'
+import type { DirectionModelId, FittedHorizon } from '../../shared/forecast/models'
 import type { RunCalibration } from '../../shared/forecast/runCalibration'
 import type { TrainingState } from '../../shared/forecast/status'
 import { degradationOf, degradedForecastNotice } from '../../shared/forecast/promotion'
@@ -136,6 +136,29 @@ function tellDegraded(horizons: FoldsResult['horizons'], promotions: readonly Pr
   return degraded
 }
 
+/** Each promoted direction model whose last week found it degraded (V7.1 Stage 2; its skill below zero
+ * on enough outcomes), told once a day on its thread as a range model is; nothing is switched off. */
+function tellDegradedDirection(made: RunCalibration): string[] {
+  const degraded: string[] = []
+  for (const horizon of HORIZONS) {
+    const report = made.horizons[horizon]?.direction
+    if (report === undefined) continue
+    for (const [model, entry] of Object.entries(report.models)) {
+      if (entry === undefined || !entry.promoted || !entry.degraded) continue
+      degraded.push(`${model}:${horizon}`)
+      try {
+        tellNotice((i18n) => {
+          const notice = degradedForecastNotice(model as DirectionModelId, horizon, [{ code: 'direction', skill: entry.lastWeekSkill ?? 0 }], i18n)
+          return { title: notice.title, body: notice.body, extra: notice.extra }
+        })
+      } catch (error) {
+        console.error('A degraded direction model could not be told:', error)
+      }
+    }
+  }
+  return degraded
+}
+
 async function writeCurrent(file: CurrentFile): Promise<void> {
   await mkdir(modelsDir(), { recursive: true })
   await writeJsonAtomic(join(modelsDir(), 'current.json'), file)
@@ -213,7 +236,7 @@ function runTraining(why: 'first' | 'nightly' | 'stale'): Promise<void> {
         horizons: folds.horizons.map((entry) => ({ horizon: entry.horizon, tested: entry.tested, kept: entry.kept, scores: entry.scores })),
         promotions,
         calibration: folds.calibration,
-        degraded: tellDegraded(folds.horizons, promotions)
+        degraded: [...tellDegraded(folds.horizons, promotions), ...tellDegradedDirection(made)]
       })
       await sweepRuns([runId])
       state.status = 'ready'
