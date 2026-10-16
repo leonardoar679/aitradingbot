@@ -828,7 +828,7 @@ const ENGLISH_BY_DESIGN: Readonly<Record<string, { why: string; texts: readonly 
       ' each. Once any level fills',
       '% from the SHARED average fill',
       'This will place a real resting LIMIT ',
-      ' on Binance — it may not fill immediately',
+      ' — it may not fill immediately',
       'This will immediately place a real ',
       ' market order for ',
       'The largest level',

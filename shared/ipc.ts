@@ -346,7 +346,7 @@ export interface CredentialSetOptions {
  * permissions with different consequences, and a single list serving both is how an exchange
  * quietly becomes tradable because someone added a balance reader for it. Anything not named here
  * is read-only in this app however good the key is. */
-export const TRADING_EXCHANGES: Exchange[] = ['binance']
+export const TRADING_EXCHANGES: Exchange[] = ['binance', 'bitget']
 
 export function canTradeOn(exchange: Exchange): boolean {
   return TRADING_EXCHANGES.includes(exchange)

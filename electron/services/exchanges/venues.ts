@@ -2,12 +2,13 @@ import type { CredentialSlot, Exchange, TradingBook } from '../../../shared/ipc'
 import type { SymbolTradingRules } from '../../../shared/exchangeMinimums'
 import type { OpenOrderOnExchange } from '../../../shared/reconcileLive'
 import * as binance from './binanceTrading'
+import * as bitget from './bitgetTrading'
 import * as bitgetDemo from './bitgetDemoTrading'
 import type { LiveOrderResult } from './binanceTrading'
 
-// THE VENUES (V7.1 Stage 8, 16 October 2026): where an order on an exchange goes, by the exchange
-// and the book -- Binance's real account, Bitget's demo account, and from Stage 9 Bitget's real
-// one -- each with the same handful of calls, so that the ledgers, the watchers, the poll and the
+// THE VENUES (V7.1 Stages 8-9, 16 October 2026): where an order on an exchange goes, by the exchange
+// and the book -- Binance's real account, Bitget's real account (Stage 9), Bitget's demo account --
+// each with the same handful of calls, so that the ledgers, the watchers, the poll and the
 // reconciliation (liveExecutionService.ts and its neighbours) are written once and the book they
 // act on is a parameter. A venue does not check a gate: the real book's callers do, before the
 // call, as they always have; the demo book has none, being play money.
@@ -49,6 +50,21 @@ const binanceReal: TradingVenue = {
   fetchSymbolRules: (symbol) => binance.fetchSymbolRules(symbol)
 }
 
+/** Bitget's real account (Stage 9): real money, under every live gate, as Binance's. */
+const bitgetReal: TradingVenue = {
+  exchange: 'bitget',
+  book: 'real',
+  slot: 'real',
+  label: 'Bitget',
+  placeMarketOrder: (c, symbol, side, quoteAmount) => bitget.placeBitgetMarketOrder(c, symbol, side, quoteAmount),
+  placeMarketSellByQuantity: (c, symbol, quantity) => bitget.placeBitgetMarketSellByQuantity(c, symbol, quantity),
+  placeLimitOrder: (c, symbol, side, quantity, price) => bitget.placeBitgetLimitOrder(c, symbol, side, quantity, price),
+  queryOrder: (c, _symbol, orderId) => bitget.queryBitgetOrder(c, orderId),
+  cancelOrder: (c, symbol, orderId) => bitget.cancelBitgetOrder(c, symbol, orderId),
+  fetchOpenOrders: (c) => bitget.fetchBitgetOpenOrders(c),
+  fetchSymbolRules: (symbol) => bitget.fetchBitgetTradingRules(symbol)
+}
+
 const bitgetDemoVenue: TradingVenue = {
   exchange: 'bitget',
   book: 'demo',
@@ -63,10 +79,10 @@ const bitgetDemoVenue: TradingVenue = {
   fetchSymbolRules: (symbol) => bitgetDemo.fetchDemoSymbolRules(symbol)
 }
 
-const VENUES: TradingVenue[] = [binanceReal, bitgetDemoVenue]
+const VENUES: TradingVenue[] = [binanceReal, bitgetReal, bitgetDemoVenue]
 
 /** The venue for an exchange and a book, or null where this app has none: Binance's demo (it has
- * no demo account), Bitget's real (Stage 9), every other exchange. */
+ * no demo account), every other exchange. */
 export function venueFor(exchange: Exchange, book: TradingBook): TradingVenue | null {
   return VENUES.find((venue) => venue.exchange === exchange && venue.book === book) ?? null
 }

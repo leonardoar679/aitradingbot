@@ -61,6 +61,13 @@ const LIVE_MODULES = new Set([
   'binanceTrading',
   'binanceFuturesTrading',
   'upbitTrading',
+  // Added 16 October 2026 (V7.1 Stages 7-9): Bitget's signer, its order shapes, its real and demo
+  // modules, and the venues that choose among them. None reads a model.
+  'bitgetAuth',
+  'bitgetOrders',
+  'bitgetTrading',
+  'bitgetDemoTrading',
+  'venues',
   'credentialsService',
   // Added 8 October 2026 (the V5 document, S101-102): the account's own stream books fills, and the
   // reconciliation resolves orders the exchange no longer rests. Neither reads a model.

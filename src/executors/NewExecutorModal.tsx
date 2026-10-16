@@ -40,6 +40,7 @@ import { twapNumOrders, buildGridLevels } from './engine'
 import {
   EXCHANGES,
   canTradeDemoOn,
+  canTradeOn,
   type Exchange,
   type ExecutorMode,
   type SymbolInfo,
@@ -245,9 +246,12 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
    * filled in once the limits are known, until the amount is changed by hand. */
   const [suggested, setSuggested] = useState<SuggestedLiveAmount | null>(null)
   const [amountTouched, setAmountTouched] = useState(false)
-  const [binanceCredentialConfigured, setBinanceCredentialConfigured] = useState(false)
+  /** A verified real key stored for the chosen exchange: what a live order needs (Binance; Bitget
+   * since V7.1 Stage 9, through the same gates). */
+  const [liveKeyConfigured, setLiveKeyConfigured] = useState(false)
   /** A demo key stored for the chosen exchange (V7.1 Stage 8): what a demo order needs. */
   const [demoKeyConfigured, setDemoKeyConfigured] = useState(false)
+  const exchangeName = EXCHANGES.find((entry) => entry.id === exchange)?.name ?? exchange
   const [liveTradingStatus, setLiveTradingStatus] = useState<LiveTradingStatus | null>(null)
   // A call belongs to one candle. The form can be left open past it, so the banner is told the
   // time rather than trusting the moment it was opened.
@@ -296,7 +300,7 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
       .list()
       .then((list) => {
         if (!cancelled) {
-          setBinanceCredentialConfigured(list.some((c) => c.exchange === 'binance' && (c.slot ?? 'real') === 'real' && c.configured))
+          setLiveKeyConfigured(list.some((c) => c.exchange === exchange && (c.slot ?? 'real') === 'real' && c.configured))
           setDemoKeyConfigured(list.some((c) => c.exchange === exchange && c.slot === 'demo' && c.configured))
         }
       })
@@ -310,7 +314,7 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
     return (): void => {
       cancelled = true
     }
-  }, [])
+  }, [exchange])
 
   const canGoLiveOrder =
     type === 'order' &&
@@ -346,10 +350,12 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
   // the Phase 6 plan.
   const canGoLiveGrid = type === 'grid' && gridParams.side === 'buy'
 
+  // A ladder or a series (DCA, TWAP, Grid) goes live on Binance alone; an Order or a Position on any
+  // exchange this app can trade on (TRADING_EXCHANGES: Binance, and Bitget since V7.1 Stage 9).
   const canGoLive =
-    (canGoLiveOrder || canGoLivePosition || canGoLiveDca || canGoLiveTwap || canGoLiveGrid) &&
-    exchange === 'binance' &&
-    binanceCredentialConfigured &&
+    (canGoLiveOrder || canGoLivePosition || ((canGoLiveDca || canGoLiveTwap || canGoLiveGrid) && exchange === 'binance')) &&
+    canTradeOn(exchange) &&
+    liveKeyConfigured &&
     liveTradingStatus !== null &&
     liveTradingStatus.sessionArmed &&
     !liveTradingStatus.killSwitchEngaged
@@ -403,14 +409,14 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
     liveAsked.current = true
     setMode('live')
   }, [proposalLive, canGoLive])
-  const liveBlockedReason = !binanceCredentialConfigured
-    ? t('no verified Binance key')
+  const liveBlockedReason = !liveKeyConfigured
+    ? t('no verified {exchange} key', { exchange: exchangeName })
     : liveTradingStatus?.killSwitchEngaged
       ? t('the kill switch is engaged')
       : liveTradingStatus !== null && !liveTradingStatus.sessionArmed
         ? t('the session is not armed')
-        : exchange !== 'binance'
-          ? t('it is not on Binance')
+        : !canTradeOn(exchange)
+          ? t('it is not on an exchange this app can trade on')
           : t('this form cannot go live as it stands')
 
   // Force back to paper the instant anything that made 'live' valid stops being true — switching
@@ -507,7 +513,7 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
   // block anything, the same rule the main-process check follows.
   const [liveFree, setLiveFree] = useState<number | null>(null)
   useEffect(() => {
-    if (mode !== 'live' || exchange !== 'binance') {
+    if (mode !== 'live' || !canTradeOn(exchange)) {
       setLiveFree(null)
       return
     }
@@ -532,7 +538,7 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
   // exchange gets a say, and paper mode has no minimum at all.
   const [symbolRules, setSymbolRules] = useState<SymbolTradingRules | null>(null)
   useEffect(() => {
-    if (mode !== 'live' || exchange !== 'binance') {
+    if (mode !== 'live' || !canTradeOn(exchange)) {
       setSymbolRules(null)
       return
     }
@@ -992,8 +998,10 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
 
               {!canGoLive && (
                 <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
-                  {exchange !== 'binance'
-                    ? t('Live trading is only available on Binance.')
+                  {!canTradeOn(exchange)
+                    ? t('Live trading is only available on Binance and Bitget.')
+                    : (type === 'dca' || type === 'twap' || type === 'grid') && exchange !== 'binance'
+                      ? t('A live ladder or series (DCA, TWAP, Grid) is Binance-only; on Bitget an Order or a Position can go live.')
                     : type === 'order' && !canGoLiveOrder
                       ? orderParams.executionStrategy !== 'market' && orderParams.executionStrategy !== 'limit'
                         ? 'Live trading only supports market and limit orders so far.'
@@ -1012,8 +1020,8 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
                             ? 'Live TWAP is buy-only — spot trading can’t open a short.'
                             : type === 'grid' && !canGoLiveGrid
                               ? 'Live Grid is buy-only — spot trading can’t open a short.'
-                              : !binanceCredentialConfigured
-                                ? t('Add a verified Binance API key on Connections first.')
+                              : !liveKeyConfigured
+                                ? t('Add a verified {exchange} API key on Connections first.', { exchange: exchangeName })
                                 : liveTradingStatus?.killSwitchEngaged
                                   ? t('The kill switch is engaged — release it from the live trading bar first.')
                                   : t('Arm live trading for this session from the live trading bar first.')}
@@ -1062,8 +1070,8 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
                   <p style={{ fontSize: '0.75rem', color: 'var(--down)', margin: 0, fontWeight: 600 }}>
                     {type === 'position'
                       ? t(
-                          'This will immediately place a real BUY market order for {amount} {asset} of {pair} on Binance, then watch it for take-profit/stop-loss/trailing-stop/time-limit and exit automatically with a real sell — no per-exit confirmation. Stop on Strategies › Execution force-exits it manually at any time.',
-                          { amount: i18n.language === 'en' ? String(positionParams.amountQuote) : i18n.num(positionParams.amountQuote, 0, 8), asset: pair.quoteAsset, pair: pair.symbol }
+                          'This will immediately place a real BUY market order for {amount} {asset} of {pair} on {exchange}, then watch it for take-profit/stop-loss/trailing-stop/time-limit and exit automatically with a real sell — no per-exit confirmation. Stop on Strategies › Execution force-exits it manually at any time.',
+                          { amount: i18n.language === 'en' ? String(positionParams.amountQuote) : i18n.num(positionParams.amountQuote, 0, 8), asset: pair.quoteAsset, pair: pair.symbol, exchange: exchangeName }
                         )
                       : type === 'dca'
                         ? `This will place ${dcaParams.levels.length} real resting BUY limit order${dcaParams.levels.length === 1 ? '' : 's'} for ${pair.symbol} on Binance, one per level (may fill immediately if a level is already at or above the current price). Once any level fills, the resulting position is watched for take-profit/stop-loss/time-limit and exits automatically with a real sell — no per-exit confirmation. Stop cancels every remaining resting level and force-exits any filled position, all at once.`
@@ -1077,8 +1085,8 @@ function ExecutorFormModal({ onCreate, onClose, account, existingExecutors, prop
                                 return `This is NOT full Grid — it's a bounded ladder that shares ONE exit, not the perpetual per-level cycling paper Grid does. It will place ${placedCount} real resting BUY limit order${placedCount === 1 ? '' : 's'} for ${pair.symbol} on Binance (the ${placedCount} of ${allLevels.length} configured levels closest to the current price — "Max Open Orders" bounds how many real orders get placed, not how many can be open during cycling), ${perLevel.toFixed(2)} ${pair.quoteAsset} each. Once any level fills, the resulting position takes profit at +${gridParams.takeProfitPct}% from the SHARED average fill (not per-level) and exits automatically with a real sell — no per-exit confirmation. Stop Price is not enforced live (unlike paper mode, where it now closes the position and freezes the grid). Once the shared position exits, this executor stops for good — it does not re-place the level and keep cycling. Stop cancels every remaining resting level and force-exits any filled position, all at once.`
                               })()
                             : orderParams.executionStrategy === 'limit'
-                              ? `This will place a real resting LIMIT ${orderParams.side.toUpperCase()} order for ${orderParams.amountQuote} ${pair.quoteAsset} of ${pair.symbol} at ${orderParams.limitPrice} on Binance — it may not fill immediately, and can be cancelled from Strategies › Execution (Stop) while open.`
-                              : `This will immediately place a real ${orderParams.side.toUpperCase()} market order for ${orderParams.amountQuote} ${pair.quoteAsset} of ${pair.symbol} on Binance.`}
+                              ? `This will place a real resting LIMIT ${orderParams.side.toUpperCase()} order for ${orderParams.amountQuote} ${pair.quoteAsset} of ${pair.symbol} at ${orderParams.limitPrice} on ${exchangeName} — it may not fill immediately, and can be cancelled from Strategies › Execution (Stop) while open.`
+                              : `This will immediately place a real ${orderParams.side.toUpperCase()} market order for ${orderParams.amountQuote} ${pair.quoteAsset} of ${pair.symbol} on ${exchangeName}.`}
                   </p>
                   {!liveAmountOk && liveTradingStatus && (
                     <p style={{ fontSize: '0.75rem', color: 'var(--down)', margin: 0 }}>

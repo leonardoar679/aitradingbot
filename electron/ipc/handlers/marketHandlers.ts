@@ -24,6 +24,7 @@ import {
   cancelHistoricalRangeFetch
 } from '../../services/marketService'
 import { fetchSymbolRules } from '../../services/exchanges/binanceTrading'
+import { fetchBitgetTradingRules } from '../../services/exchanges/bitgetTrading'
 import { compareMarkets } from '../../services/marketCompareService'
 import type { SymbolTradingRules } from '../../../shared/exchangeMinimums'
 
@@ -80,13 +81,14 @@ export function registerMarketHandlers(mainWindow: BrowserWindow): void {
   )
 
   // Public, unsigned and read-only -- reading what an exchange will accept is not trading, so
-  // this needs no key and no gate. Binance only, because live orders are Binance only; asking
-  // any other exchange would answer with rules nothing in this app can act on.
+  // this needs no key and no gate. The exchanges live orders go to (Binance; Bitget since V7.1
+  // Stage 9); asking any other exchange would answer with rules nothing in this app can act on.
   ipcMain.handle(
     IpcChannel.MarketSymbolRules,
     async (_event, exchange: Exchange, symbol: string): Promise<SymbolTradingRules> => {
-      if (exchange !== 'binance') throw new Error(`Trading rules are not available for ${exchange}`)
-      return fetchSymbolRules(symbol)
+      if (exchange === 'binance') return fetchSymbolRules(symbol)
+      if (exchange === 'bitget') return fetchBitgetTradingRules(symbol)
+      throw new Error(`Trading rules are not available for ${exchange}`)
     }
   )
 

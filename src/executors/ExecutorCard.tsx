@@ -217,7 +217,7 @@ export function LiveOrderMetrics({ executor }: { executor: ExecutorConfig }): Re
                 : ' · trailing not yet activated'}
             </span>
           )}
-          <span style={{ color: 'var(--text-muted)' }}>{demo ? "Stop force-exits this position on Bitget's demo account" : 'Stop force-exits this position on Binance'}</span>
+          <span style={{ color: 'var(--text-muted)' }}>{demo ? "Stop force-exits this position on Bitget's demo account" : `Stop force-exits this position on ${EXCHANGES.find((entry) => entry.id === executor.exchange)?.name ?? executor.exchange}`}</span>
         </div>
       )
     }
@@ -358,7 +358,7 @@ export function LiveOrderMetrics({ executor }: { executor: ExecutorConfig }): Re
         <span style={{ color: 'var(--text-secondary)' }}>
           {params.side.toUpperCase()} {params.amountQuote} {executor.quoteAsset} @ {formatQuotePrice(params.limitPrice ?? 0, executor.quoteAsset)}
         </span>
-        <span style={{ color: 'var(--text-muted)' }}>Stop cancels this order on Binance</span>
+        <span style={{ color: 'var(--text-muted)' }}>Stop cancels this order on {EXCHANGES.find((entry) => entry.id === executor.exchange)?.name ?? executor.exchange}</span>
       </div>
     )
   }

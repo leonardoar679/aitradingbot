@@ -5,9 +5,9 @@ import type { CredentialSlot, CredentialStatus, Exchange } from '../../shared/ip
 import { cleanIpcErrorMessage } from '../utils/ipcError'
 import { fieldLabelStyle, formButtonStyle, textInputStyle } from '../settings/formStyles'
 
-// Live trading is Binance-only for now (see the live-trading design plan) — this card only
-// offers credential management for exchanges that actually have a trading adapter, rather than
-// implying live support that doesn't exist yet for the others.
+// Live trading is Binance's and, since V7.1 Stage 9, Bitget's (an Order or a Position) — this card
+// only offers credential management for exchanges that actually have a trading adapter or a
+// balance reader, rather than implying live support that doesn't exist yet for the others.
 // Exchanges a key can be stored for. Mirrors BALANCE_READERS in credentialsService -- the main
 // process refuses anything not listed there, so the worst a drift here can do is offer a row that
 // then says it cannot connect, never the reverse.
@@ -40,7 +40,7 @@ const SUPPORTED_KEYS: KeyRowSpec[] = [
     slot: 'real',
     name: 'Bitget',
     note:
-      "Reads your Unified Trading Account's balance over a key, its secret and the passphrase set with it; a Classic account (not upgraded to UTA) is read-only here. This app places no real order on Bitget yet: that is a later stage, and it will go through the same gates as Binance's orders.",
+      "Reads your Unified Trading Account's balance over a key, its secret and the passphrase set with it; a Classic account (not upgraded to UTA) is read-only here. A verified key can place a real Order or Position on Bitget, through the same gates as Binance's orders (the live trading bar's arm, the kill switch, every cap) and only from an executor you create in live mode; a ladder or a series (DCA, TWAP, Grid) stays Binance-only.",
     passphrase: true
   },
   {
@@ -233,9 +233,10 @@ export function ExchangeCredentialsCard(): React.JSX.Element {
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.9rem' }}>
         <ShieldCheck size={15} color="var(--text-secondary)" style={{ flexShrink: 0, marginTop: 2 }} />
         <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
-          A verified key here can place real orders — only on Binance, only from an executor you explicitly created
-          in live mode, and only once armed from the live trading bar at the top of the app. Five executor types can
-          be created live: <strong>Order, Position, DCA, TWAP and Grid</strong>. DCA and Grid place a real resting
+          A verified key here can place real orders — on Binance, and since 16 October 2026 an Order or a Position on
+          Bitget — only from an executor you explicitly created in live mode, and only once armed from the live
+          trading bar at the top of the app. Five executor types can be created live on Binance:{' '}
+          <strong>Order, Position, DCA, TWAP and Grid</strong>. DCA and Grid place a real resting
           order per ladder level, and TWAP keeps placing timed market buys on its own schedule — those three keep
           working <strong>while this app is open</strong>, without you watching it. Closing the app stops them: TWAP
           places no further slices and automatic exits stop being checked, but any resting order already on Binance

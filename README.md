@@ -3085,6 +3085,19 @@ as the form names it, or carrying the recommendation's entry range on paper); an
 It says how many are done and which is next, and opens and arms nothing: the key is on Connections,
 the report on Performance, arming on the bar.
 
+**Bitget, real** (since 16 October 2026; V7.1 Stage 9; `electron/services/exchanges/bitgetTrading.ts`,
+the venue in `venues.ts`). A verified Bitget key unlocks live mode for an **Order or a Position** on
+Bitget, through the very same path as Binance's: `TRADING_EXCHANGES` names it, the live gates (the
+session armed by a person, the kill switch, the hard ceiling, the largest order, the day's cap, the
+loss limit, the exchange health) are read before every call, the fill lands in the real ledger, the
+watcher guards a Position and exits it with a real sell, the poll and the reconciliation ask Bitget
+about resting orders, placed only by a person from the form -- never by the laboratory, the forecast
+trader or a model, which `tests/aiNoLivePath.test.ts` holds off the real modules by name. A real
+market order on Bitget is the marketable limit order the demo book uses, a fifth of a percent through
+the book, immediate or cancel. A ladder or a series (DCA, TWAP, Grid) stays Binance-only, and Bitget's
+account stream is not opened: its resting orders are polled every five seconds alone. The one live
+check is a tiny order placed by hand, never by this app's author.
+
 A verified Binance key unlocks live mode for five of the eight executor types. Each shipped as its
 own reviewed, tested pass rather than as one big switch:
 
