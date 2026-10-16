@@ -262,7 +262,15 @@ export async function getForecastLab(): Promise<ForecastLabView> {
     live: await readLive(nowSec),
     liveDays: LAB_LINES.liveDays,
     classes: Date.now() - classes.at < CLASSES_MS ? classes.records : await readClasses(),
-    refit: { on: settings.refitNightly, nextAt: training.nextRefitAt, trainingStatus: training.status, lastFitAt: training.current?.fittedAt ?? null },
+    refit: {
+      on: settings.refitNightly,
+      nextAt: training.nextRefitAt,
+      trainingStatus: training.status,
+      lastFitAt: training.current?.fittedAt ?? null,
+      champion: training.current === null ? null : { runId: training.current.runId, foldsRunId: training.current.foldsRunId },
+      previousRunId: training.previousRunId ?? null,
+      challenge: training.challenge ?? null
+    },
     shock: shockRulesInUse(),
     marketShock: marketShockRulesInUse(),
     direction: directionInUse(),

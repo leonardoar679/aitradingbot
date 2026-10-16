@@ -189,6 +189,8 @@ const api = {
     decision: (symbol: string): Promise<TradeDecision | null> => ipcRenderer.invoke(IpcChannel.ForecastDecision, symbol),
     lab: (): Promise<ForecastLabView> => ipcRenderer.invoke(IpcChannel.ForecastLab),
     replay: (pair: string, t: number): Promise<ForecastReplay | null> => ipcRenderer.invoke(IpcChannel.ForecastReplay, pair, t),
+    /** The run before the one in use put back in use (V7.1 Stage 13): models and verdicts, nothing else. */
+    rollback: (): Promise<{ ok: boolean; error: string | null }> => ipcRenderer.invoke(IpcChannel.ForecastRollback),
     bars: (pair: string, width: '15m' | '1h' | '4h', fromSec: number, toSec: number): Promise<Candle[]> => ipcRenderer.invoke(IpcChannel.ForecastBars, pair, width, fromSec, toSec),
     /** Every pair's forecasts made in a span, and their outcomes on file: what a run's report judges. */
     record: (fromSec: number, toSec: number): Promise<ForecastHistory> => ipcRenderer.invoke(IpcChannel.ForecastRecord, fromSec, toSec),

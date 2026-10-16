@@ -1,3 +1,5 @@
+import type { ChallengeRecord } from './challenger'
+import type { DriftReading } from './drift'
 import type { Promotion } from './training'
 
 // WHAT THE PRICE FORECAST STANDS AT (the V6 document; V6 Stages 5-7, 13 October 2026): its training
@@ -24,6 +26,11 @@ export interface TrainingState {
   /** Seconds: the next nightly refit, when it is on. */
   nextRefitAt: number | null
   promotions: Promotion[]
+  /** The run before the one in use, to roll back to (V7.1 Stage 13); null where there is none on file. */
+  previousRunId?: string | null
+  /** The last refit judged as a challenger against the run in use (V7.1 Stage 13), adopted or not; null
+   * before any. */
+  challenge?: ChallengeRecord | null
 }
 
 export interface EngineState {
@@ -47,4 +54,7 @@ export interface EngineState {
   /** The market's shock state as last read (V7.1 Stage 11; shared/forecast/marketShock.ts): at the last
    * close, or from Bitcoin's live minutes since; null before a pass. Absent on a state from before. */
   market?: { state: string; btc15: number; btc1h: number; breadth15: number; volAcc15: number; readAt: number } | null
+  /** Each horizon's live drift (V7.1 Stage 13; shared/forecast/drift.ts): the last day's outcomes, the share
+   * inside their 80% range, and whether the gate is closed. Absent on a state from before. */
+  drift?: Partial<Record<string, DriftReading>>
 }

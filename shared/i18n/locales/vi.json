@@ -1848,5 +1848,6 @@
   "ether's last fifteen minutes moved {move}": "mười lăm phút gần nhất của ether biến chuyển {move}",
   "Bitcoin's last fifteen minutes ran {move} against the fifteen before": "mười lăm phút gần nhất của Bitcoin so với mười lăm phút trước {move}",
   "{share} of the coins rose over the last fifteen minutes": "{share} số coin tăng trong mười lăm phút gần nhất",
-  "the market's volume in the last fifteen minutes is {share} its usual": "khối lượng của thị trường trong mười lăm phút gần nhất bằng {share} mức thường lệ"
+  "the market's volume in the last fifteen minutes is {share} its usual": "khối lượng của thị trường trong mười lăm phút gần nhất bằng {share} mức thường lệ",
+  "The {horizon} forecasts of the last day held {share} of their 80% ranges, under {line}: the engine has drifted, and nothing is traded at this horizon.": "Các dự báo {horizon} của ngày qua chỉ đúng {share} trong khoảng 80% của chúng, dưới {line}: động cơ đã lệch, và không giao dịch gì ở khung thời gian này."
 }

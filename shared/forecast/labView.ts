@@ -1,4 +1,5 @@
 import type { EventImpactFile } from '../calendar/eventImpact'
+import type { ChallengeRecord } from './challenger'
 import type { MacroEvent } from '../calendar/macro'
 import type { Horizon, PairClass } from './features'
 import type { LeaderRow, LiveLab } from './lab'
@@ -39,7 +40,17 @@ export interface ForecastLabView {
   liveDays: number
   /** Every opportunity class the replay or the trader's live paper holds, judged (V6 Stage 12). */
   classes: ClassRecord[]
-  refit: { on: boolean; nextAt: number | null; trainingStatus: string; lastFitAt: number | null }
+  refit: {
+    on: boolean
+    nextAt: number | null
+    trainingStatus: string
+    lastFitAt: number | null
+    /** Champion and challenger (V7.1 Stage 13): the run in use, the run before it to roll back to, and the
+     * last refit judged against the run in use with its verdict; absent on a view from before. */
+    champion?: { runId: string; foldsRunId: string | null } | null
+    previousRunId?: string | null
+    challenge?: ChallengeRecord | null
+  }
   /** The rule on Bitcoin's sharp moves of the calibration in use, by horizon (V6.1); empty before one. */
   shock: Partial<Record<Horizon, ShockRule>>
   /** The rules by market shock state of the calibration in use, by horizon (V7.1 Stage 11), with the

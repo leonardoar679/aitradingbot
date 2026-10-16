@@ -344,6 +344,25 @@ and judged like any state's at the next refit (each state needs eight moments an
 before a rule is fitted, so a few releases' hours will not carry it on their own until the record holds
 them); the shock-aware figures on the features-v2 rows are Stage 15's to report.
 
+## Champion and challenger (V7.1 Stage 13, 16 October 2026)
+
+Every refit until now replaced the run in use the moment it was read back. V6's own report showed why
+that is not safe: the 15-minute sharp-move verdict turned on 0.0002 of pinball between two fits six hours
+apart, and the degraded-model notices of 13 October came from refits that fitted worse at 4 and 24 hours.
+Since Stage 13 a refit is a challenger (`shared/forecast/challenger.ts`): it is adopted only where its
+walk forward's honest figures are no worse than the run in use's beyond three lines at every horizon
+(pooled pinball loss at most 1% above, the 80% range at most two points farther from 80%, direction skill
+at most one point lower); a refit that loses is logged with the comparison and kept, and the champion stays.
+The run before the champion is kept to roll back to from the Lab. The lines are a tolerance for two walk
+forwards a day apart covering much the same weeks, not the same rows; Stage 15's model-improvement test
+makes a fit on a truncated history so that it is rejected, and rolls back.
+
+The live drift gate (`shared/forecast/drift.ts`) is the other half: a horizon whose outcomes of the last
+day, fifty or more, held under 60% of their 80% ranges gets every decision NO TRADE (`ENGINE_DRIFT`) until
+the day's outcomes come right -- the forecasts are still made and recorded. On the 12-hour run of 14
+October the hour's ranges held 25.6% over the live afternoon of the CPI (160 forecasts): the gate would
+have closed the hour to the paper traders that day.
+
 ## The models' calls and their cost
 
 | Run | calls | answered | valid | latency, median / 95th | spent |

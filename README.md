@@ -447,6 +447,26 @@ weeks replayed: the record's hour before it and the first hour at or after it, e
 forecast (V6), widened by the sharp-move rule (V6.1) and by the states' rules, with the market's state there,
 Bitcoin's fifteen minutes and the calls -- the 14 October 2026 CPI (12:30 UTC) first among them.
 
+**Champion and challenger, and the drift gate** (since 16 October 2026; V7.1 Stage 13;
+`shared/forecast/challenger.ts`, `shared/forecast/drift.ts`). Until now the newest fit's models went in
+use as soon as they were read back and the newest walk forward's verdicts the moment it ended. Now the run
+in use is the champion and a refit the challenger: its models wait on disk until its walk forward's honest
+figures -- the forecast shown (V2), every class together, each week scored by a calibration made only from
+the weeks before it -- are set beside the champion's, horizon by horizon, and it is adopted only where at
+no horizon it is worse beyond the lines: pooled pinball loss at most 1% above the champion's, the 80%
+range at most two points farther from 80%, direction skill at most one point lower; a horizon the champion
+has no figures for is nothing to beat, one the challenger lost is a failure. A refit that loses is written
+to the training log (`kind: rejected`, with the comparison) and kept on file; the champion's models and
+verdicts stay as they were. On adoption the champion is kept as the run before, and the Forecast Lab's
+**Roll back to …** button puts it back in use -- models and verdicts and nothing else (no key, no cap, no
+kill switch, no strategy), logged as a rollback, and reversible. Three runs are kept on file: the one in
+use, the one before it and the newest challenger. The first fit, with nothing to beat, goes in use at once
+as it always has. The **live drift gate**: a horizon whose outcomes of the last day -- fifty or more --
+held under 60% of their 80% ranges gets every decision NO TRADE with the reason `ENGINE_DRIFT`, worded in
+ten languages where a decision's reasons are shown, on Home among them; the forecasts are still made and
+recorded, and the gate opens again on its own as the day's outcomes come right. The outcomes are read back
+at a start, so the gate stands across a restart.
+
 **Which way: the direction models** (since 16 October 2026; V7.1 Stage 2; `shared/forecast/models.ts`,
 `shared/forecast/ml/{logistic,gbt}.ts`, judged in `shared/forecast/runCalibration.ts`, measured in
 `research/direction.ts`). V6's forecast read its P(up) off its range's distribution, and on three walk

@@ -253,10 +253,12 @@ describe('the schedule', () => {
     expect(fitDueAtStart(now - 27 * 3600, now, { refitNightly: false })).toBe(false)
   })
 
-  it('names a run by its minute, keeps the two newest and the one in use, and reads the setting as on unless off', () => {
+  it('names a run by its minute, keeps the three newest and the ones in use, and reads the setting as on unless off', () => {
     expect(runIdAt(Date.parse('2026-10-13T02:31:59Z') / 1000)).toBe('run-20261013-0231')
-    expect(RUNS_KEPT).toBe(2)
-    expect(runsToSweep(['run-20261010-0030', 'run-20261011-0030', 'run-20261012-0030', 'run-20261013-0030', 'current.json'], ['run-20261010-0030'])).toEqual(['run-20261011-0030'])
+    // Three (V7.1 Stage 13): the run in use, the one before it to roll back to, and the newest challenger.
+    expect(RUNS_KEPT).toBe(3)
+    expect(runsToSweep(['run-20261009-0030', 'run-20261010-0030', 'run-20261011-0030', 'run-20261012-0030', 'run-20261013-0030', 'current.json'], ['run-20261009-0030'])).toEqual(['run-20261010-0030'])
+    expect(runsToSweep(['run-20261010-0030', 'run-20261011-0030', 'run-20261012-0030', 'run-20261013-0030'], ['run-20261010-0030'])).toEqual([])
     // The forecast trader beside it (V6 Stage 12): off until switched on, healed as its own.
     const off = { enabled: false, stakeQuote: 100, maxOpen: 2, maxSameSide: 1 }
     // And the paper laboratory (V7.1 Stage 4): every strategy off, no daily stop reached.

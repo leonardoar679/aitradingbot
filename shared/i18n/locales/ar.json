@@ -1848,5 +1848,6 @@
   "ether's last fifteen minutes moved {move}": "تحركت الدقائق الخمس عشرة الأخيرة لإيثر {move}",
   "Bitcoin's last fifteen minutes ran {move} against the fifteen before": "الدقائق الخمس عشرة الأخيرة لبيتكوين مقابل الخمس عشرة السابقة {move}",
   "{share} of the coins rose over the last fifteen minutes": "ارتفع {share} من العملات في الدقائق الخمس عشرة الأخيرة",
-  "the market's volume in the last fifteen minutes is {share} its usual": "حجم السوق في الدقائق الخمس عشرة الأخيرة {share} من معتاده"
+  "the market's volume in the last fifteen minutes is {share} its usual": "حجم السوق في الدقائق الخمس عشرة الأخيرة {share} من معتاده",
+  "The {horizon} forecasts of the last day held {share} of their 80% ranges, under {line}: the engine has drifted, and nothing is traded at this horizon.": "توقعات {horizon} في اليوم الماضي صدقت ضمن نطاقاتها 80% بنسبة {share} فقط، دون {line}: المحرك انحرف، ولا يُتداول شيء على هذا الأفق."
 }

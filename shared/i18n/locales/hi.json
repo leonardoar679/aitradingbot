@@ -1848,5 +1848,6 @@
   "ether's last fifteen minutes moved {move}": "ईथर के पिछले पंद्रह मिनट में {move} की चाल",
   "Bitcoin's last fifteen minutes ran {move} against the fifteen before": "बिटकॉइन के पिछले पंद्रह मिनट उससे पहले के पंद्रह की तुलना में {move}",
   "{share} of the coins rose over the last fifteen minutes": "पिछले पंद्रह मिनट में {share} कॉइन चढ़े",
-  "the market's volume in the last fifteen minutes is {share} its usual": "पिछले पंद्रह मिनट में बाज़ार का वॉल्यूम सामान्य का {share} है"
+  "the market's volume in the last fifteen minutes is {share} its usual": "पिछले पंद्रह मिनट में बाज़ार का वॉल्यूम सामान्य का {share} है",
+  "The {horizon} forecasts of the last day held {share} of their 80% ranges, under {line}: the engine has drifted, and nothing is traded at this horizon.": "पिछले दिन के {horizon} पूर्वानुमान अपनी 80% रेंज में केवल {share} बार सही रहे, {line} से कम: इंजन भटक गया है, और इस अवधि पर कुछ भी ट्रेड नहीं किया जाता।"
 }

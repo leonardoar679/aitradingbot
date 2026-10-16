@@ -1848,5 +1848,6 @@
   "ether's last fifteen minutes moved {move}": "イーサの直近15分の値動きは {move}",
   "Bitcoin's last fifteen minutes ran {move} against the fifteen before": "ビットコインの直近15分はその前の15分に対して {move}",
   "{share} of the coins rose over the last fifteen minutes": "直近15分でコインの {share} が上昇",
-  "the market's volume in the last fifteen minutes is {share} its usual": "市場の直近15分の出来高は通常の {share}"
+  "the market's volume in the last fifteen minutes is {share} its usual": "市場の直近15分の出来高は通常の {share}",
+  "The {horizon} forecasts of the last day held {share} of their 80% ranges, under {line}: the engine has drifted, and nothing is traded at this horizon.": "過去1日の{horizon}予測のうち80%レンジに収まったのは {share} で、{line} を下回りました。エンジンがずれており、この期間では何も取引しません。"
 }

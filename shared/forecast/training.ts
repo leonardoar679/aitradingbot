@@ -21,8 +21,9 @@ export const MIN_READY_PAIRS = 20
 export const NIGHTLY_UTC = { hour: 0, minute: 30 } as const
 /** A fit older than this at a start is made again, when the nightly refit is on. */
 export const STALE_FIT_SECONDS = 26 * 3600
-/** The runs kept on file: the one in use and the one before it. */
-export const RUNS_KEPT = 2
+/** The runs kept on file: the one in use, the one before it to roll back to, and the newest challenger
+ * (V7.1 Stage 13; shared/forecast/challenger.ts). */
+export const RUNS_KEPT = 3
 
 export interface ForecastSettings {
   refitNightly: boolean

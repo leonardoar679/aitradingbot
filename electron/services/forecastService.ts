@@ -30,6 +30,7 @@ import { acrossMedian, refreshReasons, type RefreshReason } from '../../shared/f
 import { SHOCK_LINES, liveBtcMove } from '../../shared/forecast/shock'
 import { MARKET_SHOCK_LINES, btcTimelineOf, marketShockStateOf, shockMomentsOf, type MarketShockState, type ShockMoment } from '../../shared/forecast/marketShock'
 import { preEventAt } from '../../shared/calendar/macro'
+import { driftOf, pruneDrift, type DriftReading } from '../../shared/forecast/drift'
 import { cellOf } from '../../shared/forecast/runCalibration'
 import { decideTrade, liveOfBook, type TradeDecision } from '../../shared/forecast/tradeDecision'
 import { breakoutAt, classKeyOf, setupOf, type ClassVerdict } from '../../shared/forecast/opportunityClass'
@@ -132,7 +133,7 @@ interface PairInput {
   drivers: Partial<Record<Horizon, RangeDriver[]>>
 }
 
-const blank = (): EngineState => ({ status: 'waiting', waitingFor: 'models', lastPassAt: null, lastPassMs: null, predictions: 0, recorded: 0, outcomes: 0, missing: 0, refreshes: 0, pending: 0, lastError: null, market: null })
+const blank = (): EngineState => ({ status: 'waiting', waitingFor: 'models', lastPassAt: null, lastPassMs: null, predictions: 0, recorded: 0, outcomes: 0, missing: 0, refreshes: 0, pending: 0, lastError: null, market: null, drift: {} })
 
 const state: EngineState = blank()
 const latest = new Map<string, PricePrediction>()
@@ -171,6 +172,8 @@ const SPREAD_CLOSES = 24
 const SPREAD_MIN_CLOSES = 6
 /** A pair's spread at the last closes, in percent, where the live book held it then. */
 const spreads = new Map<string, number[]>()
+/** Each horizon's outcomes of the last day, for the live drift gate (V7.1 Stage 13; shared/forecast/drift.ts). */
+const driftOutcomes = new Map<Horizon, { due: number; in80: boolean }[]>()
 /** Whether a pair's live price stood across its expected price against its call at the last reading. */
 const acrossBefore = new Map<string, boolean>()
 /** The stake an execution's quality is read for, in the quote. */
@@ -337,6 +340,24 @@ function predictionFor(symbol: string, nowMs: number): PricePrediction | null {
   })
 }
 
+/** Each horizon's live drift from the last day's outcomes (V7.1 Stage 13). */
+function driftAt(horizon: Horizon, nowSec: number): DriftReading {
+  return driftOf(driftOutcomes.get(horizon) ?? [], nowSec)
+}
+
+/** What the status shows of the drift: every horizon with an outcome in the window. */
+function tellDrift(nowSec: number): void {
+  const out: NonNullable<EngineState['drift']> = {}
+  for (const horizon of HORIZONS) {
+    const held = driftOutcomes.get(horizon)
+    if (held === undefined) continue
+    const pruned = pruneDrift(held, nowSec)
+    driftOutcomes.set(horizon, pruned)
+    if (pruned.length > 0) out[horizon] = driftAt(horizon, nowSec)
+  }
+  state.drift = out
+}
+
 /** A pair's trade decision at its lead horizon -- its best, or the hour's -- from its forecast and the
  * live book. */
 function decisionFor(prediction: PricePrediction, nowMs: number): TradeDecision {
@@ -354,7 +375,8 @@ function decisionFor(prediction: PricePrediction, nowMs: number): TradeDecision 
           const key = classKeyOf(prediction.pairClass, horizon, setup)
           return { key, verdict: judge(key) }
         }
-  return decideTrade({ prediction, horizon, nowMs, live, classOf })
+  // The live drift gate (V7.1 Stage 13): the horizon's last day of outcomes, as the forecast's own record holds them.
+  return decideTrade({ prediction, horizon, nowMs, live, classOf, drift: driftAt(horizon, Math.floor(nowMs / 1000)) })
 }
 
 /** How each opportunity class stands, as electron/main.ts hands it in (forecastLabService.ts); null
@@ -452,6 +474,9 @@ async function settle(closedAt: number): Promise<void> {
   const measured = lines.filter((line): line is OutcomeLine => !isMissing(line))
   state.outcomes += lines.length
   state.missing += lines.length - measured.length
+  // The last day's outcomes by horizon, for the drift gate (V7.1 Stage 13).
+  for (const line of measured) driftOutcomes.set(line.h, [...(driftOutcomes.get(line.h) ?? []), { due: line.due, in80: line.in80 }])
+  tellDrift(closedAt)
   const calibration = currentForecastCalibration()
   if (calibration === null || measured.length === 0) return
   if (aci === null || aci.calibrationRun !== calibration.runId) aci = emptyAciTable(calibration.runId)
@@ -759,8 +784,12 @@ async function readOwed(nowSec: number): Promise<void> {
   const done = new Set<string>()
   for (const raw of await read('outcomes')) {
     const line = parseOutcomeLine(raw)
-    if (line !== null) done.add(`${line.id}/${line.h}`)
+    if (line === null) continue
+    done.add(`${line.id}/${line.h}`)
+    // The outcomes for the drift gate (V7.1 Stage 13), pruned to the last day below: the gate stands across a restart.
+    if (!isMissing(line)) driftOutcomes.set(line.h, [...(driftOutcomes.get(line.h) ?? []), { due: line.due, in80: line.in80 }])
   }
+  tellDrift(nowSec)
   for (const raw of await read('predictions')) {
     const line = parsePredictionLine(raw)
     if (line === null || line.t < nowSec - OWED_LOOKBACK_SEC) continue
@@ -936,6 +965,7 @@ export const forecastForTest = {
     closeMarket = null
     spreads.clear()
     acrossBefore.clear()
+    driftOutcomes.clear()
     liveState = (): LiveState | null => null
     listeners.clear()
   }

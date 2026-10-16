@@ -71,6 +71,9 @@ import { RELIABILITY_LINES } from './forecast/reliability'
 import { SHOCK_LINES, SHOCK_VERSION } from './forecast/shock'
 import { MARKET_SHOCK_LINES, MARKET_SHOCK_STATES, MARKET_SHOCK_VERSION } from './forecast/marketShock'
 import { MACRO_CALENDAR_VERSION, MACRO_KINDS, PRE_EVENT_SEC } from './calendar/macro'
+import { CHALLENGER_LINES, CHALLENGER_VERSION } from './forecast/challenger'
+import { DRIFT_LINES, DRIFT_VERSION } from './forecast/drift'
+import { RUNS_KEPT } from './forecast/training'
 import { RUN_CALIBRATION_VERSION } from './forecast/runCalibration'
 import { DEGRADATION_LINES, DEGRADED_THREAD_SECONDS, DIRECTION_PROMOTION_LINES, PROMOTION_LINES } from './forecast/promotion'
 import { LOGISTIC_FIT } from './forecast/ml/logistic'
@@ -183,6 +186,10 @@ export const ENGINE_CONSTANTS = {
     marketShock: { version: MARKET_SHOCK_VERSION, states: MARKET_SHOCK_STATES, ...MARKET_SHOCK_LINES },
     // The macro calendar (V7.1 Stage 12): its version and what it holds; the dates themselves are data.
     calendar: { version: MACRO_CALENDAR_VERSION, kinds: MACRO_KINDS, preEventSec: PRE_EVENT_SEC },
+    // Champion and challenger (V7.1 Stage 13): the lines a refit must hold to replace the run in use; and the
+    // live drift gate's.
+    challenger: { version: CHALLENGER_VERSION, ...CHALLENGER_LINES, runsKept: RUNS_KEPT },
+    drift: { version: DRIFT_VERSION, ...DRIFT_LINES },
     refresh: REFRESH_LINES,
     outcome: { version: OUTCOME_VERSION, ...OUTCOME_LINES },
     record: { version: FORECAST_RECORD_VERSION, days: FORECAST_RECORD_DAYS },

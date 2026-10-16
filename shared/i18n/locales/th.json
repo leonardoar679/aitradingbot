@@ -1848,5 +1848,6 @@
   "ether's last fifteen minutes moved {move}": "สิบห้านาทีล่าสุดของอีเธอร์เคลื่อนไหว {move}",
   "Bitcoin's last fifteen minutes ran {move} against the fifteen before": "สิบห้านาทีล่าสุดของบิตคอยน์เทียบกับสิบห้านาทีก่อนหน้า {move}",
   "{share} of the coins rose over the last fifteen minutes": "เหรียญ {share} ปรับขึ้นในสิบห้านาทีล่าสุด",
-  "the market's volume in the last fifteen minutes is {share} its usual": "ปริมาณซื้อขายของตลาดในสิบห้านาทีล่าสุดเท่ากับ {share} ของปกติ"
+  "the market's volume in the last fifteen minutes is {share} its usual": "ปริมาณซื้อขายของตลาดในสิบห้านาทีล่าสุดเท่ากับ {share} ของปกติ",
+  "The {horizon} forecasts of the last day held {share} of their 80% ranges, under {line}: the engine has drifted, and nothing is traded at this horizon.": "การคาดการณ์{horizon}ในวันที่ผ่านมาอยู่ในช่วง 80% เพียง {share} ต่ำกว่า {line}: เครื่องยนต์เบี่ยงเบนแล้ว และจะไม่เทรดอะไรในกรอบเวลานี้"
 }

@@ -1,4 +1,5 @@
 import { bookSpreadPct, MAX_SPREAD_PCT, STALE_PRICE_MS, type LiveBook } from '../liveMarket'
+import { DRIFT_LINES, type DriftReading } from './drift'
 import { edgeOf, type Edge } from './edge'
 import type { Horizon } from './features'
 import { classTradable, type ClassVerdict } from './opportunityClass'
@@ -22,9 +23,11 @@ import type { MarketRegime } from '../marketResearch'
 // - CLASS_NOT_APPROVED: its opportunity class (shared/forecast/opportunityClass.ts, V6 Stage 12) is
 //   not APPROVED or on PROBATION: not traded enough on the replayed weeks to be judged, or it lost.
 //   Where no class is read, it is not judged.
+// - ENGINE_DRIFT (V7.1 Stage 13; shared/forecast/drift.ts): the horizon's forecasts of the last day held
+//   under three in five of their 80% ranges: the engine has drifted, and nothing is traded at the horizon.
 // TRADE where none holds. A SELL is a paper trade only, as every short in the app is.
 
-export const DECISION_VERSION = 'decision-v2'
+export const DECISION_VERSION = 'decision-v3'
 
 export const DECISION_LINES = {
   minProfitChance: 0.55,
@@ -45,12 +48,16 @@ export type NoTradeReason =
   | 'RELIABILITY_LOW'
   | 'QUALITY_LOW'
   | 'CLASS_NOT_APPROVED'
+  | 'ENGINE_DRIFT'
 
 /** What a reason was read from, so the window can word it in the person's language (V6 Stage 14):
  * absent on a decision made before. */
 export interface ReasonValues {
   /** NO_CALL: there was no forecast at the horizon at all. */
   missing?: boolean
+  /** ENGINE_DRIFT: the last day's outcomes at the horizon and the share inside their 80% range. */
+  outcomes?: number
+  coverage80?: number
   expectedPct?: number
   costPct?: number
   pProfit?: number
@@ -95,6 +102,8 @@ export interface DecisionInput {
   /** The opportunity class a trade on its side falls in, and how the class stands; null where none is
    * read, and then it is not judged. */
   classOf: ((side: 'BUY' | 'SELL') => { key: string; verdict: ClassVerdict }) | null
+  /** The horizon's live drift (V7.1 Stage 13); absent or null where not read. */
+  drift?: DriftReading | null
 }
 
 const VERDICT_SENTENCES: Record<ClassVerdict, string> = {
@@ -143,6 +152,12 @@ export function reasonText(reason: DecisionReason, horizon: Horizon, i18n: I18n 
       return t('The bars it was read from are more than two closes old.')
     case 'CLASS_NOT_APPROVED':
       return t(VERDICT_SENTENCES[values.verdict ?? 'NOT_ENOUGH'], { kind: classKeyWords(values.classKey ?? '', i18n) })
+    case 'ENGINE_DRIFT':
+      return t('The {horizon} forecasts of the last day held {share} of their 80% ranges, under {line}: the engine has drifted, and nothing is traded at this horizon.', {
+        horizon: words,
+        share: pctPlain(Math.round((values.coverage80 ?? 0) * 100), 0),
+        line: pctPlain(Math.round(DRIFT_LINES.minCoverage80 * 100), 0)
+      })
   }
 }
 
@@ -180,6 +195,8 @@ export function decideTrade(input: DecisionInput): TradeDecision {
   if (input.nowMs / 1000 - prediction.barTime > DECISION_LINES.staleBarsSec) add('STALE_BARS')
   const opportunity = side === null || input.classOf === null ? null : input.classOf(side)
   if (opportunity !== null && !classTradable(opportunity.verdict)) add('CLASS_NOT_APPROVED', { classKey: opportunity.key, verdict: opportunity.verdict })
+  // The live drift gate (V7.1 Stage 13): the horizon's last day of outcomes missing, nothing is traded at it.
+  if (input.drift !== undefined && input.drift !== null && input.drift.drifted) add('ENGINE_DRIFT', { outcomes: input.drift.outcomes, coverage80: input.drift.coverage80 })
   return {
     version: DECISION_VERSION,
     pair: prediction.pair,
@@ -219,5 +236,8 @@ export function decideOnBook(decision: TradeDecision, prediction: PricePredictio
   const live = liveOfBook(book)
   if (live === null || prediction.pair !== decision.pair) return decision
   const judged = decision.classKey === null || decision.classVerdict === null ? null : { key: decision.classKey, verdict: decision.classVerdict }
-  return decideTrade({ prediction, horizon: decision.horizon, nowMs, live, classOf: judged === null ? null : (): { key: string; verdict: ClassVerdict } => judged })
+  // The drift gate as the pass read it (V7.1 Stage 13): a book read since changes nothing of the last day.
+  const drifted = decision.reasons.find((reason) => reason.code === 'ENGINE_DRIFT')?.values
+  const drift: DriftReading | null = drifted === undefined ? null : { outcomes: drifted.outcomes ?? 0, coverage80: drifted.coverage80 ?? Number.NaN, drifted: true }
+  return decideTrade({ prediction, horizon: decision.horizon, nowMs, live, classOf: judged === null ? null : (): { key: string; verdict: ClassVerdict } => judged, drift })
 }

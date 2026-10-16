@@ -323,6 +323,7 @@ describe('AI code has no route to a real order', () => {
       'atomicWrite',
       'atr',
       'bars',
+      'drift',
       'electron',
       'features',
       'forecastDataService',

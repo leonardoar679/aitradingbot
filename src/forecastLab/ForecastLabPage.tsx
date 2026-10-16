@@ -7,6 +7,7 @@ import { FIRST_TOUCH } from '../../shared/forecast/firstTouch'
 import { LAB_EVENTS, type LabEvent } from '../../shared/forecast/lab'
 import { MARKET_SHOCK_LINES } from '../../shared/forecast/marketShock'
 import { EVENT_IMPACT_LINES } from '../../shared/calendar/eventImpact'
+import { CHALLENGER_LINES, challengeRefusals } from '../../shared/forecast/challenger'
 import { CLASS_LINES } from '../../shared/forecast/opportunityClass'
 import type { ForecastLabView } from '../../shared/forecast/labView'
 import { describeError } from '../utils/ipcError'
@@ -143,6 +144,22 @@ export function ForecastLabPage(): React.JSX.Element {
     )
   }
 
+  // Champion and challenger (V7.1 Stage 13): the run before the one in use put back, models and verdicts
+  // and nothing else; the Lab read again after.
+  const [rollingBack, setRollingBack] = useState(false)
+  const rollBack = (): void => {
+    setRollingBack(true)
+    setNote(null)
+    void window.api.forecast
+      .rollback()
+      .then(async (answer) => {
+        if (!answer.ok) setNote(answer.error ?? 'The run could not be rolled back.')
+        setView(await window.api.forecast.lab())
+      })
+      .catch((failure) => setNote(describeError(failure)))
+      .finally(() => setRollingBack(false))
+  }
+
   const compare = (): void => {
     if (lab === null || lab.span === null) return
     const trades = lab.horizons[compareHorizon]?.trades ?? { rules: [], medians: [] }
@@ -193,6 +210,16 @@ export function ForecastLabPage(): React.JSX.Element {
               {view.refit.lastFitAt === null ? '' : `; last fit ${day(view.refit.lastFitAt)} UTC`}
               {view.refit.on && view.refit.nextAt !== null ? `; next refit ${day(view.refit.nextAt)} UTC` : ''}. A refit's models are put in use only where they pass the promotion checklist.
             </p>
+            <p style={noteStyle}>
+              Champion and challenger: a refit replaces the run in use only where its walk forward is no worse beyond the lines at any horizon -- pinball loss at most {Math.round(CHALLENGER_LINES.pinballTolerance * 100)}% above, the 80% range at most {Math.round(CHALLENGER_LINES.coverageTolerance * 100)} points farther from 80%, direction skill at most {Math.round(CHALLENGER_LINES.directionTolerance * 100)} point lower; a refit that loses is logged and kept, the run in use stays.{' '}
+              {view.refit.champion === null || view.refit.champion === undefined ? 'No run is in use yet.' : `In use: ${view.refit.champion.runId}${view.refit.champion.foldsRunId !== null && view.refit.champion.foldsRunId !== view.refit.champion.runId ? ` (verdicts of ${view.refit.champion.foldsRunId})` : ''}.`}{' '}
+              {view.refit.challenge === null || view.refit.challenge === undefined ? 'No refit has challenged it yet.' : `Last challenge: ${view.refit.challenge.runId} against ${view.refit.challenge.championRunId} at ${day(view.refit.challenge.at)} UTC, ${view.refit.challenge.adopted ? 'adopted' : `refused (${challengeRefusals(view.refit.challenge.verdict).join('; ')})`}.`}
+            </p>
+            {view.refit.previousRunId !== null && view.refit.previousRunId !== undefined && (
+              <button type="button" style={buttonStyle('secondary', rollingBack)} onClick={rollBack} disabled={rollingBack}>
+                {rollingBack ? 'Rolling back…' : `Roll back to ${view.refit.previousRunId}`}
+              </button>
+            )}
           </>
         )}
       </Card>

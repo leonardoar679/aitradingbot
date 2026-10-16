@@ -1848,5 +1848,6 @@
   "ether's last fifteen minutes moved {move}": "이더 최근 15분 {move} 움직임",
   "Bitcoin's last fifteen minutes ran {move} against the fifteen before": "비트코인 최근 15분이 그 전 15분 대비 {move}",
   "{share} of the coins rose over the last fifteen minutes": "최근 15분 동안 코인의 {share}가 상승",
-  "the market's volume in the last fifteen minutes is {share} its usual": "시장의 최근 15분 거래량은 평소의 {share}"
+  "the market's volume in the last fifteen minutes is {share} its usual": "시장의 최근 15분 거래량은 평소의 {share}",
+  "The {horizon} forecasts of the last day held {share} of their 80% ranges, under {line}: the engine has drifted, and nothing is traded at this horizon.": "지난 하루의 {horizon} 예측 가운데 80% 범위 안에 든 것은 {share}로, {line}에 못 미칩니다. 엔진이 어긋나 있어 이 기간에는 아무것도 거래하지 않습니다."
 }

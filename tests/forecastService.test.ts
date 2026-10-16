@@ -454,6 +454,73 @@ describe("the market's state", () => {
   })
 })
 
+// V7.1 Stage 13: the live drift gate. The last day's outcomes at a horizon, read back at a start and added as
+// they are written, close the horizon to trading where under three in five held their 80% range.
+describe('the live drift gate', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime((HOUR + 10) * 1000)
+  })
+
+  const outcome = (index: number, h: string, in80: boolean): Record<string, unknown> => ({ v: 'forecast-record-v1', id: `p${index}`, pair: 'SOLUSDT', h, t: HOUR - 7200 - index * 60, due: HOUR - 3600 - index * 60, move: 1, best: 1.2, worst: -0.2, below: '00011', v1below: '00011', in80, in50: false, up: true, dir: 'NEUTRAL', pUp: 0.5, cell: 'large', cls: 'large', errors: [] })
+
+  it('closes a horizon whose last day of outcomes missed, on every decision at it, and leaves the others open', async () => {
+    mkdirSync(dir(), { recursive: true })
+    // Sixty outcomes of the last day at every horizon but the quarter-hour, half of them missing their range:
+    // 50%, under the line; forty of the 15-minute horizon all held; and thirty more of the 5-minute horizon
+    // that all missed would be too few on their own.
+    const drifted: Horizon[] = ['minutes5', 'hour1', 'hours4']
+    const written = [
+      ...drifted.flatMap((horizon, at) => Array.from({ length: 60 }, (_, k) => outcome(at * 100 + k, horizon, k % 2 === 0))),
+      ...Array.from({ length: 40 }, (_, k) => outcome(500 + k, 'minutes15', true)),
+      // The day's only outcomes older than a day: not read, and the day's horizon not in the state at all.
+      { ...outcome(600, 'hours24', false), due: HOUR - 86_400 - 7200 },
+      { ...outcome(601, 'hour1', false), due: HOUR - 86_400 - 7200 }
+    ]
+    writeFileSync(join(dir(), `outcomes-${month}.jsonl`), written.map((line) => JSON.stringify(line)).join('\n') + '\n')
+    const live = await engine()
+    await vi.waitFor(() => expect(live.getForecastEngineState().drift?.hour1?.outcomes).toBe(60))
+    expect(live.getForecastEngineState().drift).toEqual({
+      minutes5: { outcomes: 60, coverage80: 0.5, drifted: true },
+      minutes15: { outcomes: 40, coverage80: 1, drifted: false },
+      hour1: { outcomes: 60, coverage80: 0.5, drifted: true },
+      hours4: { outcomes: 60, coverage80: 0.5, drifted: true }
+    })
+    await closeAt(live, HOUR)
+    // Every decision at a drifted horizon is NO TRADE for the drift, said so; one at the quarter-hour or the
+    // day is not.
+    for (const symbol of SYMBOLS) {
+      const decision = live.forecastDecision(symbol)!
+      const codes = decision.reasons.map((reason) => reason.code)
+      if (decision.horizon === 'minutes15' || decision.horizon === 'hours24') expect(codes).not.toContain('ENGINE_DRIFT')
+      else {
+        expect(decision.decision).toBe('NO_TRADE')
+        expect(codes).toContain('ENGINE_DRIFT')
+        expect(decision.reasons.find((reason) => reason.code === 'ENGINE_DRIFT')!.values).toEqual({ outcomes: 60, coverage80: 0.5 })
+      }
+    }
+    expect(SYMBOLS.some((symbol) => drifted.includes(live.forecastDecision(symbol)!.horizon))).toBe(true)
+    // On the record line with the decision.
+    const recorded = lines(`predictions-${month}.jsonl`) as { trade?: { h: Horizon; why: string[] } }[]
+    expect(recorded.length).toBe(SYMBOLS.length)
+    expect(recorded.every((line) => line.trade?.why.includes('ENGINE_DRIFT') === drifted.includes(line.trade!.h))).toBe(true)
+    // The gate does not touch the forecasts: every pair forecast at every horizon.
+    expect(live.getForecastEngineState().predictions).toBe(SYMBOLS.length)
+  })
+
+  it('opens again as the day turns over, and reads the outcomes it writes itself', async () => {
+    const live = await engine()
+    await closeAt(live, HOUR)
+    expect(live.getForecastEngineState().drift).toEqual({})
+    // The 5-minute outcomes written at the next close join the window.
+    await closeAt(live, HOUR + 300)
+    const drift = live.getForecastEngineState().drift!
+    expect(drift.minutes5?.outcomes).toBe(SYMBOLS.length)
+    expect(drift.minutes5?.drifted).toBe(false)
+    expect(live.forecastDecision('SOLUSDT')!.reasons.map((reason) => reason.code)).not.toContain('ENGINE_DRIFT')
+  })
+})
+
 describe('the trade', () => {
   it("is decided for every pair at its lead horizon after a pass, ranked, and kept apart from the forecast", async () => {
     const live = await engine()

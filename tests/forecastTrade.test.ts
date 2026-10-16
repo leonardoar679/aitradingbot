@@ -259,6 +259,13 @@ describe('the trade decision', () => {
     // Several at once, every one said.
     expect(codes(decide(range({ direction: 'NEUTRAL', reliability: 'LOW' }), { live: null }))).toEqual(['NO_CALL', 'RELIABILITY_LOW', 'STALE_PRICE'])
     expect(decide(range({ uncertain: true })).reasons[0].text).toMatch(/does not know enough/)
+    // The live drift gate (V7.1 Stage 13): the horizon's last day of outcomes missing, nothing is traded at it.
+    const drifted = decide(range(), { drift: { outcomes: 60, coverage80: 0.5, drifted: true } })
+    expect(codes(drifted)).toEqual(['ENGINE_DRIFT'])
+    expect(drifted.reasons[0].text).toBe('The 1-hour forecasts of the last day held 50% of their 80% ranges, under 60%: the engine has drifted, and nothing is traded at this horizon.')
+    expect(drifted.reasons[0].values).toEqual({ outcomes: 60, coverage80: 0.5 })
+    expect(codes(decide(range(), { drift: { outcomes: 60, coverage80: 0.9, drifted: false } }))).toEqual([])
+    expect(codes(decide(range(), { drift: null }))).toEqual([])
   })
 
   // Found by V6 Stage 16's 12-hour run: the pass decides on the books the stream holds, those of the
@@ -290,6 +297,15 @@ describe('the trade decision', () => {
     expect(codes(decideOnBook(unearned, p, book, nowMs))).toEqual(['CLASS_NOT_APPROVED'])
     // Not judged at the pass: not judged now.
     expect(decideOnBook(decide(range(), { live: null }), p, book, nowMs)).toMatchObject({ decision: 'TRADE', classKey: null, classVerdict: null })
+    // The drift gate as the pass read it (V7.1 Stage 13) stands on a book read since; a decision made without
+    // the gate closed stays open.
+    const drifted = decide(range(), { live: null, drift: { outcomes: 60, coverage80: 0.5, drifted: true } })
+    expect(codes(drifted)).toEqual(['STALE_PRICE', 'ENGINE_DRIFT'])
+    expect(heldBackByPrice(drifted)).toBe(false)
+    const onBook = decideOnBook(drifted, p, book, nowMs)
+    expect(codes(onBook)).toEqual(['ENGINE_DRIFT'])
+    expect(onBook.reasons[0].values).toEqual({ outcomes: 60, coverage80: 0.5 })
+    expect(codes(decideOnBook(decide(range(), { live: null, drift: { outcomes: 60, coverage80: 0.9, drifted: false } }), p, book, nowMs))).toEqual([])
     // No way called is no call, whatever the price; and a TRADE is not held back.
     const neutral = decide(range({ direction: 'NEUTRAL' }), { live: null })
     expect(heldBackByPrice(neutral)).toBe(false)

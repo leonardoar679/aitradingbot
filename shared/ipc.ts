@@ -64,6 +64,8 @@ export const IpcChannel = {
   ForecastDecision: 'forecast:decision',
   ForecastLab: 'forecast:lab',
   ForecastReplay: 'forecast:replay',
+  /** The run before the one in use put back in use (V7.1 Stage 13), by a person from the Lab. */
+  ForecastRollback: 'forecast:rollback',
   ForecastBars: 'forecast:bars',
   ForecastRecord: 'forecast:record',
   ForecastUpdate: 'forecast:update',

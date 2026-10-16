@@ -272,7 +272,9 @@ describe('a refit', () => {
     expect(fake.asked.map((entry) => entry.task)).toEqual(['fit', 'folds'])
   })
 
-  it('puts its models in use at once, and keeps the walk forward before it until its own is done', async () => {
+  // V7.1 Stage 13: with a run in use, a refit is a challenger -- its models wait on disk for its walk forward's
+  // verdict, so one whose walk forward fails leaves the champion as it was.
+  it("keeps the champion's models and verdicts when the challenger's walk forward fails", async () => {
     const runId = 'run-20261010-0030'
     writeRun(dir(), runId)
     writeCalibration(dir(), runId)
@@ -286,11 +288,94 @@ describe('a refit', () => {
     await vi.waitFor(() => expect(training.getForecastTrainingState().lastError).toBe('the walk forward was cut short'))
     vi.mocked(askWorker).mockImplementation(real)
     const current = JSON.parse(readFileSync(join(dir(), 'current.json'), 'utf-8'))
-    expect(current.runId).not.toBe(runId)
+    expect(current.runId).toBe(runId)
     expect(current.foldsRunId).toBe(runId)
     expect(current.promotions).toEqual(promotions)
-    expect(training.getForecastTrainingState()).toMatchObject({ status: 'ready', promotions, calibratedRunId: runId })
+    expect(training.getForecastTrainingState()).toMatchObject({ status: 'ready', promotions, calibratedRunId: runId, current: { runId } })
     expect(training.currentForecastCalibration()?.runId).toBe(runId)
+    // The fit was written as a challenger's.
+    const records = readdirSync(dir()).filter((name) => name.startsWith('training-'))
+    const lines = readFileSync(join(dir(), records[0]), 'utf-8').trim().split('\n').map((line) => JSON.parse(line))
+    expect(lines.find((line) => line.kind === 'fit')).toMatchObject({ challenger: true, why: 'stale' })
+  })
+
+  it('is adopted as the challenger where its walk forward is no worse, the champion kept to roll back to, and rolled back by a person', async () => {
+    const runId = 'run-20261010-0030'
+    writeRun(dir(), runId)
+    writeCalibration(dir(), runId)
+    writeFileSync(join(dir(), 'current.json'), JSON.stringify({ runId, fittedAt: Math.floor(Date.now() / 1000) - 30 * 3600, foldsRunId: runId, promotions: [] }))
+    const training = await service()
+    training.startForecastTraining()
+    await vi.waitFor(() => expect(fake.asked.map((entry) => entry.task)).toEqual(['fit', 'folds']))
+    await vi.waitFor(() => expect(training.getForecastTrainingState().status).toBe('ready'))
+    const state = training.getForecastTrainingState()
+    const challenger = fake.asked[0].runId
+    // The same figures as the champion's: no worse, adopted; the champion is the run before.
+    expect(state.current?.runId).toBe(challenger)
+    expect(state.previousRunId).toBe(runId)
+    expect(state.challenge).toMatchObject({ runId: challenger, championRunId: runId, adopted: true })
+    expect(training.currentForecastCalibration()?.runId).toBe(challenger)
+    const current = JSON.parse(readFileSync(join(dir(), 'current.json'), 'utf-8'))
+    expect(current).toMatchObject({ runId: challenger, foldsRunId: challenger, previous: { runId, foldsRunId: runId } })
+    const records = readdirSync(dir()).filter((name) => name.startsWith('training-'))
+    const lines = (): Record<string, unknown>[] => readFileSync(join(dir(), records[0]), 'utf-8').trim().split('\n').map((line) => JSON.parse(line))
+    expect(lines().find((line) => line.kind === 'folds')).toMatchObject({ championRunId: runId, challenge: { adopted: true } })
+    // Both runs on file.
+    expect(existsSync(join(dir(), runId))).toBe(true)
+    expect(existsSync(join(dir(), challenger))).toBe(true)
+    // Rolled back: the champion's models and calibration in use again, the challenger the run before now.
+    expect(await training.rollbackForecastRun()).toEqual({ ok: true, error: null })
+    expect(training.getForecastTrainingState()).toMatchObject({ current: { runId, foldsRunId: runId }, previousRunId: challenger, calibratedRunId: runId })
+    expect(training.currentForecastCalibration()?.runId).toBe(runId)
+    expect(training.currentForecastModels().size).toBe(HORIZONS.length)
+    expect(JSON.parse(readFileSync(join(dir(), 'current.json'), 'utf-8'))).toMatchObject({ runId, previous: { runId: challenger } })
+    expect(lines().find((line) => line.kind === 'rollback')).toMatchObject({ ok: true, from: challenger, to: runId })
+    // And forward again.
+    expect(await training.rollbackForecastRun()).toEqual({ ok: true, error: null })
+    expect(training.getForecastTrainingState().current?.runId).toBe(challenger)
+    expect(training.getForecastTrainingState().previousRunId).toBe(runId)
+  })
+
+  it('is refused where its walk forward is worse beyond the lines: logged with the comparison, kept on file, the champion untouched', async () => {
+    const runId = 'run-20261010-0030'
+    writeRun(dir(), runId)
+    writeCalibration(dir(), runId)
+    const promotions = [{ horizon: 'hour1', model: 'gbt', promoted: true, lines: [] }]
+    writeFileSync(join(dir(), 'current.json'), JSON.stringify({ runId, fittedAt: Math.floor(Date.now() / 1000) - 30 * 3600, foldsRunId: runId, promotions }))
+    const training = await service()
+    const { askWorker } = await import('../electron/services/forecastWorkerService')
+    const real = vi.mocked(askWorker).getMockImplementation()!
+    vi.mocked(askWorker).mockImplementation(async (request, onProgress) => {
+      const answer = await real(request, onProgress)
+      const { outDir, runId: asked } = request as { outDir: string; runId: string }
+      // The challenger's hour: a pinball loss a tenth above the champion's.
+      if (request.task === 'folds') {
+        const hour = CALIBRATION.horizons.hour1!
+        const pooled = hour.variants.v2.honest.pooled!
+        const worse = { ...CALIBRATION, runId: asked, horizons: { hour1: { ...hour, variants: { ...hour.variants, v2: { ...hour.variants.v2, honest: { ...hour.variants.v2.honest, pooled: { ...pooled, pinball: pooled.pinball * 1.1 } } } } } } }
+        writeFileSync(join(outDir, asked, 'calibration.json'), serializeRunCalibration(worse))
+      }
+      return answer
+    })
+    training.startForecastTraining()
+    await vi.waitFor(() => expect(training.getForecastTrainingState().challenge).not.toBeNull())
+    vi.mocked(askWorker).mockImplementation(real)
+    const challenger = fake.asked[0].runId
+    const state = training.getForecastTrainingState()
+    expect(state.challenge).toMatchObject({ runId: challenger, championRunId: runId, adopted: false })
+    expect(state).toMatchObject({ status: 'ready', current: { runId, foldsRunId: runId }, promotions, calibratedRunId: runId, previousRunId: null, lastError: null })
+    expect(training.currentForecastCalibration()?.runId).toBe(runId)
+    expect(JSON.parse(readFileSync(join(dir(), 'current.json'), 'utf-8'))).toMatchObject({ runId, promotions })
+    const records = readdirSync(dir()).filter((name) => name.startsWith('training-'))
+    const lines = readFileSync(join(dir(), records[0]), 'utf-8').trim().split('\n').map((line) => JSON.parse(line))
+    expect(lines.map((line) => line.kind)).toEqual(['fit', 'rejected'])
+    expect(lines[1]).toMatchObject({ runId: challenger, championRunId: runId, ok: true })
+    expect(lines[1].refusals).toEqual([expect.stringMatching(/^hour1: pinball /)])
+    // Kept on file for the Lab, beside the champion.
+    expect(existsSync(join(dir(), challenger))).toBe(true)
+    expect(existsSync(join(dir(), runId))).toBe(true)
+    // Nothing to roll back to.
+    expect(await training.rollbackForecastRun()).toEqual({ ok: false, error: 'no run before this one is on file' })
   })
 
   it('keeps the verdicts and the calibration before it when its own calibration cannot be read back', async () => {
@@ -326,12 +411,12 @@ describe('a refit', () => {
 })
 
 describe('the runs on file', () => {
-  it('are swept after a walk forward to the two newest', async () => {
+  it('are swept after a walk forward to the three newest', async () => {
     for (const old of ['run-20261001-0030', 'run-20261002-0030', 'run-20261003-0030']) writeRun(dir(), old)
     const training = await service()
     await training.forecastTrainingForTest.run('first')
     const runs = readdirSync(dir()).filter((name) => name.startsWith('run-')).sort()
-    expect(runs).toEqual(['run-20261003-0030', runIdAt(Math.floor(Date.now() / 1000))].sort())
+    expect(runs).toEqual(['run-20261002-0030', 'run-20261003-0030', runIdAt(Math.floor(Date.now() / 1000))].sort())
     expect(existsSync(join(dir(), 'run-20261001-0030'))).toBe(false)
   })
 

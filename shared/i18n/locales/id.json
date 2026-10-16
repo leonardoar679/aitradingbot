@@ -1848,5 +1848,6 @@
   "ether's last fifteen minutes moved {move}": "lima belas menit terakhir ether bergerak {move}",
   "Bitcoin's last fifteen minutes ran {move} against the fifteen before": "lima belas menit terakhir Bitcoin terhadap lima belas menit sebelumnya {move}",
   "{share} of the coins rose over the last fifteen minutes": "{share} dari koin naik dalam lima belas menit terakhir",
-  "the market's volume in the last fifteen minutes is {share} its usual": "volume pasar dalam lima belas menit terakhir {share} dari biasanya"
+  "the market's volume in the last fifteen minutes is {share} its usual": "volume pasar dalam lima belas menit terakhir {share} dari biasanya",
+  "The {horizon} forecasts of the last day held {share} of their 80% ranges, under {line}: the engine has drifted, and nothing is traded at this horizon.": "Prakiraan {horizon} sehari terakhir hanya tepat {share} dalam rentang 80%-nya, di bawah {line}: mesin telah melenceng, dan tidak ada yang diperdagangkan pada horizon ini."
 }

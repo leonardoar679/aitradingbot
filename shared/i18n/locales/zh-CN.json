@@ -1848,5 +1848,6 @@
   "ether's last fifteen minutes moved {move}": "以太坊最近十五分钟变动 {move}",
   "Bitcoin's last fifteen minutes ran {move} against the fifteen before": "比特币最近十五分钟相对之前十五分钟变动 {move}",
   "{share} of the coins rose over the last fifteen minutes": "最近十五分钟有 {share} 的币种上涨",
-  "the market's volume in the last fifteen minutes is {share} its usual": "市场最近十五分钟的成交量为平常的 {share}"
+  "the market's volume in the last fifteen minutes is {share} its usual": "市场最近十五分钟的成交量为平常的 {share}",
+  "The {horizon} forecasts of the last day held {share} of their 80% ranges, under {line}: the engine has drifted, and nothing is traded at this horizon.": "过去一天的{horizon}预测只有 {share} 落在其 80% 区间内，低于 {line}：引擎已偏移，此期限内不进行任何交易。"
 }
