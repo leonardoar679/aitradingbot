@@ -29,6 +29,13 @@
 //   FORECAST_TRADER  1 switches the price forecast's paper trader on (V6 Stage 12)                   [0]
 //   LAB            1 funds the paper account to 10,000 USDT through the Forecast Lab's own card and
 //                  switches on the paper laboratory's four strategies (V7.1 Stage 4)                  [0]
+//   DEMO_KEY       1 copies the real profile's encrypted credentials.json and the Local State that
+//                  unlocks it into the scratch profile -- never read here, deleted at the end -- so the
+//                  DEMO book can be exercised with the user's Bitget demo key (V7.1 Stage 10); with LAB=1
+//                  the laboratory is set to the demo account. Never with FROM_PROFILE.               [0]
+//   DEMO_CHECK     1 runs the demo book's check once the forecast is ready (needs DEMO_KEY): a demo
+//                  market buy, a resting demo limit order polled and cancelled, the reconciliation
+//                  read, the demo position closed; each step and its answer in demo-check.json     [0]
 //   FORECAST_DATA_FROM  a profile whose forecastData/ (public 5-minute bars) is copied in, so the
 //                  forecast's ninety days need not all be read again                                 [none]
 //   WAIT_FORECAST  1 starts the run's clock only once the forecast engine has fitted, calibrated and
@@ -90,6 +97,11 @@ const FIRST_GATES = process.env.FIRST_GATES === '1'
 const WATCH_PAPER = process.env.WATCH_PAPER !== '0'
 const FORECAST_TRADER = process.env.FORECAST_TRADER === '1'
 const LAB = process.env.LAB === '1'
+const DEMO_KEY = process.env.DEMO_KEY === '1'
+const DEMO_CHECK = process.env.DEMO_CHECK === '1'
+if (DEMO_CHECK && !DEMO_KEY) throw new Error('DEMO_CHECK needs DEMO_KEY=1: the demo book is reached with the demo key alone')
+/** The exchange keys' files, copied for the demo book alone (DEMO_KEY) and deleted after. */
+const EXCHANGE_KEY_FILES = ['credentials.json', 'Local State']
 const FORECAST_DATA_FROM = process.env.FORECAST_DATA_FROM ?? ''
 const WAIT_FORECAST = process.env.WAIT_FORECAST === '1'
 const SETTLE_MINUTES = Number(process.env.SETTLE_MINUTES ?? 0)
@@ -104,6 +116,7 @@ const KEY_FILES = ['aiCredentials.json', 'Local State']
 const FROM_PROFILE = process.env.FROM_PROFILE === undefined || process.env.FROM_PROFILE === '' ? '' : path.resolve(process.env.FROM_PROFILE)
 if (FROM_PROFILE !== '' && !fs.existsSync(path.join(FROM_PROFILE, 'settings.json'))) throw new Error(`FROM_PROFILE: no settings.json in ${FROM_PROFILE}`)
 if (FROM_PROFILE !== '' && REAL_AI) throw new Error('FROM_PROFILE is a rehearsal, with OpenRouter faked: not with REAL_AI')
+if (FROM_PROFILE !== '' && DEMO_KEY) throw new Error('FROM_PROFILE is a rehearsal without keys: not with DEMO_KEY')
 /** A profile's own files (FROM_PROFILE), as the app writes them: its JSON files at the top and its
  * camelCase folders, with the page's local storage (three conveniences of the screen). Never a key --
  * no name with "credentials" in it, nor Local State -- and nothing of the browser's: its cookies
@@ -244,6 +257,15 @@ if (REAL_AI) {
   if (spent >= CEILING_USD - CEILING_MARGIN_USD) throw new Error(`REAL_AI: the runs have spent $${spent.toFixed(4)} of the $${CEILING_USD} ceiling: nothing is left to ask with`)
   // Copied, byte for byte, never read here: the key stays encrypted to this Windows account.
   for (const name of KEY_FILES) fs.copyFileSync(path.join(REAL_PROFILE, name), path.join(PROFILE, name))
+}
+/** The exchange key files copied for the demo book: the same way, the same promise. */
+let demoKeyCopied = false
+if (DEMO_KEY) {
+  for (const name of EXCHANGE_KEY_FILES) {
+    if (!fs.existsSync(path.join(REAL_PROFILE, name))) throw new Error(`DEMO_KEY: the real profile holds no ${name} to copy -- add a Bitget demo key on Connections first`)
+  }
+  for (const name of EXCHANGE_KEY_FILES) fs.copyFileSync(path.join(REAL_PROFILE, name), path.join(PROFILE, name))
+  demoKeyCopied = true
 }
 
 // --- the segments ------------------------------------------------------------------------------
@@ -617,14 +639,23 @@ async function main() {
       return `${before} -> ${find()?.textContent?.trim() ?? 'gone'}; the paper account holds ${settings.paperAccount?.balances?.USDT ?? 'nothing'} USDT`
     })
     say(`paper laboratory: ${funded}`)
-    const strategies = await page.evaluate(async () => {
+    // With the demo key copied in, the laboratory's trades go to the demo account (V7.1 Stage 8).
+    const strategies = await page.evaluate(async (demo) => {
       const settings = await window.api.settings.get()
       const forecast = settings.forecast ?? {}
-      const next = await window.api.settings.set({ forecast: { ...forecast, lab: { ...(forecast.lab ?? {}), strategies: { strict: true, direction: true, news: true, hybrid: true } } } })
+      const next = await window.api.settings.set({ forecast: { ...forecast, lab: { ...(forecast.lab ?? {}), strategies: { strict: true, direction: true, news: true, hybrid: true }, execution: demo ? 'demo' : 'paper' } } })
       return next.forecast?.lab ?? null
-    })
+    }, DEMO_KEY)
     say(`paper laboratory strategies: ${JSON.stringify(strategies)}`)
   }
+  // The exchange keys the scratch profile can read, by exchange and slot alone: nothing of a key is
+  // ever shown. With DEMO_KEY the Bitget demo slot has to be among them.
+  if (DEMO_KEY) {
+    const keys = await page.evaluate(async () => (await window.api.credentials.list()).map((key) => `${key.exchange}:${key.slot ?? 'real'}:${key.configured ? 'stored' : 'none'}:${key.accountType ?? '-'}`))
+    say(`exchange keys read by the scratch profile: ${keys.join(', ') || 'none'}`)
+    if (!keys.some((key) => key.startsWith('bitget:demo:stored'))) throw new Error('DEMO_KEY: the copied credentials hold no Bitget demo key -- add one on Connections first')
+  }
+  if (DEMO_CHECK) await demoCheck()
   // One of the app's own runs (shared/experimentRun.ts), started once the watch is on so that its
   // record says so; a resumed segment finds it still running on file and starts none.
   if (EXPERIMENT !== '') {
@@ -988,6 +1019,47 @@ async function hourReport(n) {
   }
 }
 
+/** THE DEMO BOOK'S CHECK (V7.1 Stage 10), through the demo bridge alone, on Bitget's demo account with
+ * the user's demo key: a demo market buy of a little BTC, a resting demo limit order far under the
+ * market polled and then cancelled, the demo reconciliation read, the demo position closed with a
+ * demo sell. Every step's answer is kept in demo-check.json; a step that fails is written as such
+ * and the next is tried. Play money throughout: Bitget refuses a real key with the demo header. */
+async function demoCheck() {
+  const steps = []
+  const step = async (name, work) => {
+    const startedAt = Date.now()
+    try {
+      const result = await work()
+      steps.push({ name, ok: true, ms: Date.now() - startedAt, result })
+      say(`demo check: ${name}: ${JSON.stringify(result).slice(0, 300)}`)
+      return result
+    } catch (failure) {
+      const message = failure?.message ?? String(failure)
+      steps.push({ name, ok: false, ms: Date.now() - startedAt, error: message })
+      say(`demo check: ${name} FAILED: ${message}`)
+      return null
+    }
+  }
+  const symbol = 'BTCUSDT'
+  await step('balance before', () => page.evaluate(async () => (await window.api.credentials.balances('bitget', true, 'demo')).rows.filter((row) => row.asset === 'USDT' || row.asset === 'BTC')))
+  const buy = await step('demo market buy, 10 USDT of BTC', () => page.evaluate(async (pair) => window.api.demoTrading.placeOrder('bitget', pair, 'BTC', 'USDT', 'buy', 10), symbol))
+  const ticker = await step('the last price', () => page.evaluate(async (pair) => (await window.api.market.fetchTicker24h('bitget', pair)).lastPrice, symbol))
+  const resting = ticker === null ? null : await step('demo limit buy far under the market, resting', () => page.evaluate(async ([pair, price]) => window.api.demoTrading.placeLimitOrder('demo-check', 'bitget', pair, 'BTC', 'USDT', 'buy', 10, price), [symbol, Math.round(ticker * 0.5)]))
+  await step('the demo poll sees it resting', () => page.evaluate(() => window.api.demoTrading.poll()))
+  if (resting !== null && resting.resolved === false) {
+    await step('cancel the resting demo order', () => page.evaluate(async (id) => window.api.demoTrading.cancelOrder(id), resting.pendingLiveOrderId))
+  }
+  await step('the demo reconciliation', () => page.evaluate(() => window.api.demoTrading.reconciliation()))
+  const positions = await step('the demo positions', () => page.evaluate(() => window.api.demoTrading.listPositions()))
+  const held = positions?.find((position) => position.symbol === symbol) ?? null
+  if (buy !== null && held !== null) await step('close the demo position with a demo sell', () => page.evaluate(async ([id, qty]) => window.api.demoTrading.closePosition(id, qty), [held.id, held.qty]))
+  await step('the demo positions after', () => page.evaluate(() => window.api.demoTrading.listPositions()))
+  await step('the demo history', () => page.evaluate(() => window.api.demoTrading.listClosedPositions()))
+  await step('balance after', () => page.evaluate(async () => (await window.api.credentials.balances('bitget', true, 'demo')).rows.filter((row) => row.asset === 'USDT' || row.asset === 'BTC')))
+  fs.writeFileSync(path.join(OUT, 'demo-check.json'), JSON.stringify({ at: new Date().toISOString(), steps }, null, 2))
+  say(`demo check: ${steps.filter((entry) => entry.ok).length} of ${steps.length} steps passed; demo-check.json saved`)
+}
+
 /** The forecast's section over a span, from the record read in the window and the app's own rule. */
 async function forecastSection(fromSec, toSec) {
   const { execFileSync } = await import('node:child_process')
@@ -1120,6 +1192,20 @@ async function shutDown() {
   }
   if (app) await app.close().catch((failure) => say(`close failed: ${failure}`))
   say('closed')
+  if (demoKeyCopied) {
+    // The exchange keys' copies go, whatever happened; Local State too, unless REAL_AI copied it as well
+    // and removes it below.
+    await new Promise((r) => setTimeout(r, 2000))
+    for (const name of REAL_AI ? ['credentials.json'] : EXCHANGE_KEY_FILES) {
+      try {
+        fs.rmSync(path.join(PROFILE, name), { force: true })
+      } catch (failure) {
+        say(`DELETE BY HAND from ${PROFILE}: ${name} (${failure})`)
+      }
+    }
+    const still = EXCHANGE_KEY_FILES.filter((name) => fs.existsSync(path.join(PROFILE, name)) && (name !== 'Local State' || !REAL_AI))
+    say(still.length === 0 ? 'the exchange key copies are deleted from the scratch profile' : `DELETE BY HAND from ${PROFILE}: ${still.join(', ')}`)
+  }
   if (REAL_AI) {
     await new Promise((r) => setTimeout(r, 2000))
     const left = removeKeyCopies()
