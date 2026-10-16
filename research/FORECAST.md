@@ -363,6 +363,55 @@ the day's outcomes come right -- the forecasts are still made and recorded. On t
 October the hour's ranges held 25.6% over the live afternoon of the CPI (160 forecasts): the gate would
 have closed the hour to the paper traders that day.
 
+## Extended validation (V7.1 Stage 15, 16 October 2026, in progress)
+
+**The model-improvement test passed 14 of 14 steps** on a scratch profile with the 12-hour run's bars
+(`scratchpad/check_v7_stage15.mjs`, dist/multiday at 170ff3d): the first fit went in use at once with
+nothing to beat (run-20261016-0900, 1,425 s); a refit 44 minutes later was judged as a challenger and
+adopted (pinball within 0.03% at every horizon, hours4 and hours24 identical -- two fits on much the same
+weeks), the Lab offered "Roll back to run-20261016-0900", the click put the champion back in use with the
+challenger as the run before, the rollback is on the log and the engine forecast on the champion again;
+then a fit on a history cut to 33 days was refused as the challenger with "no figures" at every horizon
+(a walk forward needs 4 weeks), the run in use untouched, the refusal on the log and on the Lab, the
+refused run kept on file.
+
+**The 12-hour run of 16 October (lab12h, dist/verify at e50c170, from 06:40 UTC) was cut at 321 minutes**:
+at about 12:25 UTC every Electron app on the machine was closed, the check apps' TEST-marked windows among
+them, so the run ended without its session report. Its five hourly reports all passed every gate; the
+scanner raised 8 events (2 urgent), the faked models were asked 5 times, one watch paper trade (WLD, a
+breakout at 08:37) took its profit at +2.47 USDT; the stream moved data host 168 times in five hours (the
+Binance hosts flapping, as in every run since V3). The 40084 Bitget refusal the user met that morning was
+typed into this run's window at 06:46 UTC (the README's Classic-account note).
+
+**Direction on the run's walk forward (run-20261016-0640, 31 pairs, weeks 1-3 tested out of sample,
+features-v1):** every model is at or below zero skill from the hour on; the table is
+`research/direction.ts`'s.
+
+| horizon | the distribution | dir-logistic | dir-gbt | dir-gbt-tech | dir-gbt-price |
+|---|---|---|---|---|---|
+| 5 min | -0.03% (338 calls, 58.0% right) | +0.02% (365, 60.3%) promoted | -2.26% | +0.04% (147, 59.2%) promoted | -0.05% |
+| 15 min | -0.05% (no calls) | +0.19% (188, 42.0%) promoted | +0.09% (146, 52.7%) promoted | +0.24% (10 calls) promoted | +0.14% (no calls) promoted |
+| 1 hour | -0.02% | -0.13% | -0.43% | -0.42% | -0.22% |
+| 4 hours | -0.27% (570, 54.2%) | -0.90% | -0.75% | -1.92% | -2.18% |
+| 24 hours | -2.20% (4,902, 53.8%) | -5.42% | -7.40% | -4.91% | -6.57% |
+
+Every pair class reads its P(up) from the base rate. The "promoted" verdicts at 5 and 15 minutes rest on
+skills of a few hundredths of a percent with calls at the lines right 42-60% of the time: the checklist's
+line "a Brier skill above zero" is too permissive, which the next cycle's plan takes up (a minimum skill, a
+minimum number of calls, both halves of the weeks). The ranges held as calibrated: the 80% range held
+79.7% (5 min), 80.7% (15 min), 78.1% (1 hour) and 77.7% (4 hours) over 15,500 tested hours each, under-held
+after Bitcoin's sharpest fifteen minutes (|btc15| >= 3: 70.5%, 65.4%, 52.5%, 85.7%) and brought back to
+77-85% by the cross-fitted widening after |btc15| >= 2.5. The replay of the three releases inside the walk
+forward: the hour before the 14 October CPI held 16-23%, the hour after 77-94%; the hour before the 2
+October jobs report 68-90% and the hour after 74-97%; the 15 October PPI 13-94% before and 14-100% after (the
+4-hour ranges on both sides of the PPI held 13% and 14%).
+
+**The multi-day run** (multiday2, dist/multiday2 at 22241b0, from 12:36 UTC on 16 October, the lab's four
+strategies on paper, the forecast trader on, two days and an hour of settling) is what this section still
+owes: every gate per hour, the direction and timing tables from the live record, each strategy's trades
+and the sensitivity counts. Its first start (multiday, 11:27 UTC) died with the other apps an hour into its
+session, after its fit and the lab's funding.
+
 ## The models' calls and their cost
 
 | Run | calls | answered | valid | latency, median / 95th | spent |
