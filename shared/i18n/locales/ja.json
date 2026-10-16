@@ -1799,5 +1799,19 @@
   "Expected {price} ({move}) at {horizon}; the path likely stays under {high} ({highPct}) and above {low} ({lowPct}), eight times in ten.": "{horizon}の予想価格は {price}（{move}）。値動きは十中八九 {high}（{highPct}）を超えず、{low}（{lowPct}）を割りません。",
   "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}; when it is, typically in {minutes} min.": "予想価格に 5 分以内に到達する確率は {m5}、15 分以内 {m15}、1 時間以内 {h1}、4 時間以内 {h4}。到達する場合は通常 {minutes} 分ほどです。",
   "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}.": "予想価格に 5 分以内に到達する確率は {m5}、15 分以内 {m15}、1 時間以内 {h1}、4 時間以内 {h4} です。",
-  "Reaching it within {horizon} is unlikely ({share}): no time is said.": "{horizon}以内の到達は見込み薄です（{share}）。時間は示しません。"
+  "Reaching it within {horizon} is unlikely ({share}): no time is said.": "{horizon}以内の到達は見込み薄です（{share}）。時間は示しません。",
+  "STRICT": "厳格",
+  "DIRECTION": "方向",
+  "NEWS EVENT": "ニュースイベント",
+  "HYBRID": "ハイブリッド",
+  "The laboratory has no paper account funded in USDT: fund it on the Forecast Lab.": "ラボには USDT で入金されたペーパー口座がありません：予測ラボで入金してください。",
+  "The laboratory stopped for the day.": "ラボは本日停止しました。",
+  "The paper laboratory stopped for the day": "ペーパーラボは本日停止しました",
+  "Its trades closed today lost {loss} USDT together, {share} of its {equity} USDT: it opens none until tomorrow (UTC). Nothing real was placed or closed.": "本日決済した取引の合計損失は {loss} USDT で、{equity} USDT の {share} にあたります。明日（UTC）まで新規に建てません。実際の注文や決済は一切ありません。",
+  "The strategy was switched off.": "この戦略はオフにされました。",
+  "The laboratory already has a paper trade open on the pair.": "ラボはこのペアにすでにペーパー取引を建てています。",
+  "The laboratory has {count} paper trades open, the most it keeps.": "ラボは {count} 件のペーパー取引を建てており、上限です。",
+  "Laboratory paper trade: BUY {pair}": "ラボのペーパー取引：{pair} を買い",
+  "Laboratory paper trade: SELL {pair}": "ラボのペーパー取引：{pair} を売り",
+  "The {strategy} strategy traded the {horizon} forecast, on paper: in around {price}, stop {stop} away, target {target}, held at most {minutes} minutes. Nothing real was placed.": "{strategy}戦略が{horizon}予測をペーパーで取引しました：約 {price} で建て、損切りは {stop} 離れ、目標は {target}、保有は最長 {minutes} 分。実際の注文はありません。"
 }

@@ -30,8 +30,9 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 // training budget and floor, their checklist's lines, the logistic fit's, the models', calibration's and
 // prediction's versions (V7.1 Stage 2) -- from d2b9e695247f; the path's figures -- the excursion levels and
 // their calibration's lines, the first-touch table's levels, windows and lines, the models', record's,
-// calibration's and prediction's versions (V7.1 Stage 3) -- from 847feb643cef.
-const PINNED_ENGINE_VERSION = '6e0cea776232'
+// calibration's and prediction's versions (V7.1 Stage 3) -- from 847feb643cef; the paper laboratory's
+// strategies and the risk lines they keep (V7.1 Stage 4) -- from 6e0cea776232.
+const PINNED_ENGINE_VERSION = '8c5c561a845c'
 
 describe('the engine version', () => {
   it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {

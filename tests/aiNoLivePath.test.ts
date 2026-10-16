@@ -352,7 +352,10 @@ describe('AI code has no route to a real order', () => {
     const screen = readdirSync(join(ROOT, 'src', 'forecast')).filter((name) => /\.tsx?$/.test(name))
     expect(screen.length).toBeGreaterThan(0)
     const bridgesOf = (source: string): string[] => [...new Set([...source.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))].sort()
-    const allowed: Record<string, string[]> = { 'forecastTrader.ts': ['forecast', 'market', 'notify', 'settings'], 'ForecastTraderCard.tsx': ['settings'], 'useRiskTarget.ts': ['settings'] }
+    // Since V7.1 Stage 4 the paper laboratory's writer, scheduler and card are held to the same: its writer
+    // writes PAPER executors, the laboratory's stop and the paper account's funding, spelling paper as a
+    // literal; its card writes the laboratory's switches and the funding and nothing else.
+    const allowed: Record<string, string[]> = { 'forecastTrader.ts': ['forecast', 'market', 'notify', 'settings'], 'ForecastTraderCard.tsx': ['settings'], 'useRiskTarget.ts': ['settings'], 'labTrader.ts': ['forecast', 'market', 'notify', 'settings'], 'PaperLabCard.tsx': ['backtest', 'settings'] }
     for (const name of screen) {
       const source = readFileSync(join(ROOT, 'src', 'forecast', name), 'utf-8')
       expect(bridgesOf(source).filter((bridge) => !(allowed[name] ?? ['forecast']).includes(bridge)), name).toEqual([])
@@ -365,6 +368,19 @@ describe('AI code has no route to a real order', () => {
     expect(writer).not.toMatch(/mode: (?!'paper')|onPrepareOrder|prepareOrder|aiProposal|forecastProposal/)
     expect(writer.match(/window\.api\.settings\.set\(/g)).toHaveLength(1)
     expect(writer).toContain('await window.api.settings.set({ executors })')
+    const laboratory = readFileSync(join(ROOT, 'src', 'forecast', 'labTrader.ts'), 'utf-8')
+    expect(laboratory).toMatch(/^ {4}mode: 'paper',\r?$/m)
+    expect(laboratory.match(/mode: 'paper'/g)).toHaveLength(1)
+    expect(laboratory).not.toMatch(/mode: (?!'paper')|onPrepareOrder|prepareOrder|aiProposal|forecastProposal|credentials|apiKey/)
+    expect(laboratory.match(/window\.api\.settings\.set\(/g)).toHaveLength(1)
+    expect(laboratory).toContain('await window.api.settings.set(patch)')
+    const labCard = readFileSync(join(ROOT, 'src', 'forecast', 'PaperLabCard.tsx'), 'utf-8')
+    expect(labCard.match(/window\.api\.settings\.set\(/g)).toHaveLength(1)
+    expect(labCard).toContain("await window.api.settings.set({ forecast: { ...forecast, lab: { ...forecast.lab, strategies: { ...forecast.lab.strategies, [strategy]: on } } } })")
+    expect(labCard).toContain('fundLab(labTraderBrowserDeps)')
+    // The backtest bridge it reaches is the CSV save dialog alone, as the Lab's own tables do.
+    expect([...labCard.matchAll(/window\.api\.backtest\.(\w+)/g)].map((match) => match[1])).toEqual(['exportSave'])
+    expect(readFileSync(join(ROOT, 'src', 'forecast', 'LabTraderScheduler.tsx'), 'utf-8')).not.toMatch(/settings\.set|placeLive|liveTrading/)
     const card = readFileSync(join(ROOT, 'src', 'forecast', 'ForecastTraderCard.tsx'), 'utf-8')
     expect(card.match(/window\.api\.settings\.set\(/g)).toHaveLength(1)
     expect(card).toContain('await window.api.settings.set({ forecast: { ...forecast, trader: { ...forecast.trader, enabled: on } } })')

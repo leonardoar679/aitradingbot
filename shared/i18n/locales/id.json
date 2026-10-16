@@ -1799,5 +1799,19 @@
   "Expected {price} ({move}) at {horizon}; the path likely stays under {high} ({highPct}) and above {low} ({lowPct}), eight times in ten.": "Harga yang diharapkan {price} ({move}) pada {horizon}; jalur harga kemungkinan tetap di bawah {high} ({highPct}) dan di atas {low} ({lowPct}), delapan dari sepuluh kali.",
   "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}; when it is, typically in {minutes} min.": "Harga yang diharapkan tercapai dalam 5 menit dengan peluang {m5}, 15 menit {m15}, 1 jam {h1}, 4 jam {h4}; bila tercapai, biasanya dalam sekitar {minutes} menit.",
   "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}.": "Harga yang diharapkan tercapai dalam 5 menit dengan peluang {m5}, 15 menit {m15}, 1 jam {h1}, 4 jam {h4}.",
-  "Reaching it within {horizon} is unlikely ({share}): no time is said.": "Tercapai dalam {horizon} kecil kemungkinannya ({share}): waktu tidak disebutkan."
+  "Reaching it within {horizon} is unlikely ({share}): no time is said.": "Tercapai dalam {horizon} kecil kemungkinannya ({share}): waktu tidak disebutkan.",
+  "STRICT": "KETAT",
+  "DIRECTION": "ARAH",
+  "NEWS EVENT": "PERISTIWA BERITA",
+  "HYBRID": "HIBRIDA",
+  "The laboratory has no paper account funded in USDT: fund it on the Forecast Lab.": "Laboratorium tidak punya akun simulasi yang didanai USDT: danai di Lab Prakiraan.",
+  "The laboratory stopped for the day.": "Laboratorium berhenti untuk hari ini.",
+  "The paper laboratory stopped for the day": "Laboratorium simulasi berhenti untuk hari ini",
+  "Its trades closed today lost {loss} USDT together, {share} of its {equity} USDT: it opens none until tomorrow (UTC). Nothing real was placed or closed.": "Transaksi yang ditutup hari ini rugi total {loss} USDT, {share} dari {equity} USDT: tidak membuka lagi sampai besok (UTC). Tidak ada order nyata yang dipasang atau ditutup.",
+  "The strategy was switched off.": "Strategi ini dimatikan.",
+  "The laboratory already has a paper trade open on the pair.": "Laboratorium sudah punya transaksi simulasi terbuka pada pasangan ini.",
+  "The laboratory has {count} paper trades open, the most it keeps.": "Laboratorium punya {count} transaksi simulasi terbuka, batas maksimalnya.",
+  "Laboratory paper trade: BUY {pair}": "Transaksi simulasi laboratorium: BELI {pair}",
+  "Laboratory paper trade: SELL {pair}": "Transaksi simulasi laboratorium: JUAL {pair}",
+  "The {strategy} strategy traded the {horizon} forecast, on paper: in around {price}, stop {stop} away, target {target}, held at most {minutes} minutes. Nothing real was placed.": "Strategi {strategy} memperdagangkan prakiraan {horizon} secara simulasi: masuk sekitar {price}, stop loss berjarak {stop}, target {target}, ditahan paling lama {minutes} menit. Tidak ada order nyata yang dipasang."
 }

@@ -75,6 +75,7 @@ import { LOGISTIC_FIT } from './forecast/ml/logistic'
 import { DIRECTION_MODELS, EXCURSION_LEVELS } from './forecast/models'
 import { EXCURSION_CALIBRATION_VERSION, EXCURSION_MIN_ROWS, FIRST_TOUCH, FIRST_TOUCH_VERSION } from './forecast/firstTouch'
 import { MIN_READY_PAIRS, healForecastSettings } from './forecast/training'
+import { LAB_RISK, LAB_STRATEGIES } from './forecast/labTrader'
 import { FOLDS } from './forecast/walkForward'
 
 export type { EffectiveStores } from './appDefaults'
@@ -187,6 +188,8 @@ export const ENGINE_CONSTANTS = {
     change: CHANGE_LINES,
     degradedThreadSeconds: DEGRADED_THREAD_SECONDS,
     lab: { version: LAB_VERSION, ...LAB_LINES },
+    // The $10,000 paper laboratory (V7.1 Stage 4): its strategies and the risk lines every one of them keeps.
+    paperLab: { strategies: LAB_STRATEGIES, ...LAB_RISK },
     plan: { version: PLAN_VERSION, ...PLAN_LINES },
     classes: OPPORTUNITY_CLASS_LINES
   }

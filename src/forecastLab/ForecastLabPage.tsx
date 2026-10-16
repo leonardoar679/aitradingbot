@@ -35,6 +35,7 @@ import {
 } from './labTables'
 import { ReplayCard } from './ReplayCard'
 import { runComparison, type ComparisonResult } from './strategyComparison'
+import { PaperLabCard } from '../forecast/PaperLabCard'
 
 const day = (sec: number): string => new Date(sec * 1000).toISOString().slice(0, 16).replace('T', ' ')
 
@@ -303,6 +304,8 @@ export function ForecastLabPage(): React.JSX.Element {
       )}
 
       {lab !== null && lab.span !== null && <ReplayCard pairs={lab.pairs} span={lab.span} />}
+
+      <PaperLabCard />
 
       {lab !== null && (
         <Card title="The forecast trader">

@@ -1799,5 +1799,19 @@
   "Expected {price} ({move}) at {horizon}; the path likely stays under {high} ({highPct}) and above {low} ({lowPct}), eight times in ten.": "{horizon} पर अपेक्षित कीमत {price} ({move}); भाव का रास्ता दस में आठ बार {high} ({highPct}) के नीचे और {low} ({lowPct}) के ऊपर रहता है।",
   "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}; when it is, typically in {minutes} min.": "अपेक्षित कीमत 5 मिनट के भीतर {m5} बार, 15 मिनट में {m15}, 1 घंटे में {h1}, 4 घंटे में {h4} बार पहुँचती है; जब पहुँचती है, तो आमतौर पर लगभग {minutes} मिनट में।",
   "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}.": "अपेक्षित कीमत 5 मिनट के भीतर {m5} बार, 15 मिनट में {m15}, 1 घंटे में {h1}, 4 घंटे में {h4} बार पहुँचती है।",
-  "Reaching it within {horizon} is unlikely ({share}): no time is said.": "{horizon} के भीतर पहुँचने की संभावना कम है ({share}): समय नहीं बताया जाता।"
+  "Reaching it within {horizon} is unlikely ({share}): no time is said.": "{horizon} के भीतर पहुँचने की संभावना कम है ({share}): समय नहीं बताया जाता।",
+  "STRICT": "सख़्त",
+  "DIRECTION": "दिशा",
+  "NEWS EVENT": "समाचार घटना",
+  "HYBRID": "हाइब्रिड",
+  "The laboratory has no paper account funded in USDT: fund it on the Forecast Lab.": "प्रयोगशाला के पास USDT से वित्तपोषित कोई पेपर खाता नहीं है: पूर्वानुमान प्रयोगशाला पर इसे वित्तपोषित करें।",
+  "The laboratory stopped for the day.": "प्रयोगशाला आज के लिए रुक गई।",
+  "The paper laboratory stopped for the day": "पेपर प्रयोगशाला आज के लिए रुक गई",
+  "Its trades closed today lost {loss} USDT together, {share} of its {equity} USDT: it opens none until tomorrow (UTC). Nothing real was placed or closed.": "आज बंद हुए इसके सौदों ने कुल {loss} USDT खोए, जो इसके {equity} USDT का {share} है: यह कल (UTC) तक कोई नया नहीं खोलेगी। कोई वास्तविक ऑर्डर न लगाया गया, न बंद किया गया।",
+  "The strategy was switched off.": "यह रणनीति बंद कर दी गई।",
+  "The laboratory already has a paper trade open on the pair.": "प्रयोगशाला के पास इस पेयर पर पहले से एक पेपर सौदा खुला है।",
+  "The laboratory has {count} paper trades open, the most it keeps.": "प्रयोगशाला के {count} पेपर सौदे खुले हैं, जो इसकी अधिकतम सीमा है।",
+  "Laboratory paper trade: BUY {pair}": "प्रयोगशाला पेपर सौदा: {pair} खरीदें",
+  "Laboratory paper trade: SELL {pair}": "प्रयोगशाला पेपर सौदा: {pair} बेचें",
+  "The {strategy} strategy traded the {horizon} forecast, on paper: in around {price}, stop {stop} away, target {target}, held at most {minutes} minutes. Nothing real was placed.": "{strategy} रणनीति ने {horizon} पूर्वानुमान पर पेपर सौदा किया: लगभग {price} पर प्रवेश, स्टॉप {stop} दूर, लक्ष्य {target}, अधिकतम {minutes} मिनट तक रखा। कोई वास्तविक ऑर्डर नहीं लगाया गया।"
 }

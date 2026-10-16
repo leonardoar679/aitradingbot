@@ -440,6 +440,30 @@ against the share reached, whether UNLIKELY was right, the minutes said against 
 the 80% levels held; a run's report carries the same per horizon. A calibration made again from a record
 alone has no table, so no arrival, until the next walk forward.
 
+**The paper laboratory** (since 16 October 2026; V7.1 Stage 4; `shared/forecast/labTrader.ts`, the one
+writing file `src/forecast/labTrader.ts`, the card `src/forecast/PaperLabCard.tsx`). V6's runs found zero
+forecast trades under the production gates, and a gate that approves nothing says nothing about what it
+holds back. The Lab's **Paper laboratory** card funds the app's paper account to 10,000 USDT at a click
+(made where there is none, topped up where there is one, never by itself) and offers four strategies,
+each off until a person switches it on, each a paper trader like the forecast trader reading the same
+ranked forecasts: **STRICT** is the forecast trader's own rule -- a TRADE decision in an approved or
+probation class -- traded again under the laboratory's lines so that its record is read beside the
+others'; **DIRECTION** takes a call whose P(up) came from a promoted direction model and was held back by
+nothing but its opportunity class; **NEWS EVENT** a call a library story moved its way, held back by its
+class alone; **HYBRID** such a call where Trend Regime 4h stood on its side at the moment. A pair is
+opened once a pass, under the first of those it qualifies for; the others it qualified for are written
+on the trade. The lines were pinned before any result was looked at: a quarter of a percent of the paper
+equity risked at the stop, a tenth of the equity staked at most, three open at once, no leverage, a SELL a
+paper short, and a **daily stop** -- once the laboratory's trades closed in a UTC day have lost 1.5% of
+the equity together it opens none until the next day and says so once -- beside the money-out and
+correlated-side caps every paper trade of the app keeps. The card gives each strategy its record (trades
+opened, closed and open, net, profit factor, win rate, expectancy, drawdown, fees and slippage,
+utilization; CSV), what the last pass opened or refused, and the predeclared **sensitivity**: how many
+forecasts a direction model's P(up) would have called at 55% and at 52% instead of the 58% line, counted
+and never traded, so that a laboratory with no trade still says where the line binds. A run's report
+carries each strategy's trades. It is paper: the file that writes a laboratory trade spells paper as a
+literal and reaches no bridge to a real order, which a test pins.
+
 **The forecast, live** (since 13 October 2026; the V6 document's §38-43; V6 Stage 7;
 `electron/services/forecastService.ts`, the rules in `shared/forecast/{view,outcome,refresh,aciTable,
 forecastRecord}.ts`). At every five-minute close, once the bars are in, every pair of the research is

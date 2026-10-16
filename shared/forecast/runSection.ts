@@ -3,6 +3,7 @@ import type { ExecutorConfig } from '../ipc'
 import { HORIZON_BARS, type Horizon } from './features'
 import type { MissingOutcomeLine, OutcomeLine, PredictionLine } from './forecastRecord'
 import { liveLab, type LabMetrics, type LiveVariant, type TimingMetrics } from './lab'
+import { LAB_STRATEGIES, type LabStrategy } from './labTrader'
 
 // THE PRICE FORECAST IN A RUN'S REPORT (the V6 document, §45-50 and §113-114; V6 Stages 15-16, 13
 // October 2026): what the engine forecast over a run's span and how it came out, read from its own
@@ -124,6 +125,9 @@ export interface ForecastRunSection {
   best: RunForecastRow[]
   worst: RunForecastRow[]
   trades: ForecastRunTrades
+  /** The paper laboratory's trades opened in the span, by strategy (V7.1 Stage 4): opened, closed in the
+   * span, and their net after the engine's fees; absent where the laboratory opened none. */
+  lab?: Partial<Record<LabStrategy, { opened: number; closed: number; netQuote: number }>>
   /** SAMPLE_NOTE where fewer trades closed than a conclusion needs. */
   sampleNote: string | null
   gates: ForecastRunGate[]
@@ -239,6 +243,15 @@ export function forecastRunSectionOf(input: ForecastRunInput): ForecastRunSectio
   // The forecast trader's paper trades opened in the span, and those of them that closed in it.
   const trades = input.executors.filter((executor) => executor.forecast !== undefined && within(executor.forecast.openedAt, span))
   const closed = trades.filter((executor) => executor.forecast?.result !== undefined && within(executor.forecast.result.closedAt, span))
+  // The paper laboratory's (V7.1 Stage 4), by strategy, where it opened any.
+  const labTrades = input.executors.filter((executor) => executor.lab !== undefined && within(executor.lab.openedAt, span))
+  const laboratory: NonNullable<ForecastRunSection['lab']> = {}
+  for (const strategy of LAB_STRATEGIES) {
+    const mine = labTrades.filter((executor) => executor.lab!.strategy === strategy)
+    if (mine.length === 0) continue
+    const done = mine.filter((executor) => executor.lab!.result !== undefined && executor.lab!.result.exit !== 'entry_expired' && within(executor.lab!.result.closedAt, span))
+    laboratory[strategy] = { opened: mine.length, closed: done.length, netQuote: done.reduce((sum, executor) => sum + executor.lab!.result!.pnlQuote, 0) }
+  }
 
   const gates = [
     madeGate(lines.length, gridCloses, expectedGridCloses),
@@ -263,6 +276,7 @@ export function forecastRunSectionOf(input: ForecastRunInput): ForecastRunSectio
     best,
     worst,
     trades: tradesOf(trades, closed),
+    ...(Object.keys(laboratory).length === 0 ? {} : { lab: laboratory }),
     sampleNote: closed.length < RUN_LINES.minTrades ? SAMPLE_NOTE : null,
     gates,
     passed: gates.every((gate) => gate.status !== 'fail')

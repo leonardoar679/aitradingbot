@@ -164,16 +164,16 @@ export function describeR(r: number, { signed }: I18n = ENGLISH): string {
   return `${signed(r, 2)} R`
 }
 
-/** The app's own open paper trades: the watch's, the news rules' and, since V6 Stage 12, the forecast
- * trader's, each a paper Position carrying its mark. An executor that is not paper is never one of
- * them, whatever it carries. */
+/** The app's own open paper trades: the watch's, the news rules', since V6 Stage 12 the forecast trader's
+ * and since V7.1 Stage 4 the paper laboratory's, each a paper Position carrying its mark. An executor that
+ * is not paper is never one of them, whatever it carries. */
 export function ownOpenPaperTrades(executors: ExecutorConfig[]): ExecutorConfig[] {
   return executors.filter(
     (executor) =>
       executor.status === 'active' &&
       executor.mode === 'paper' &&
       executor.type === 'position' &&
-      (executor.watch !== undefined || executor.newsRule !== undefined || executor.forecast !== undefined)
+      (executor.watch !== undefined || executor.newsRule !== undefined || executor.forecast !== undefined || executor.lab !== undefined)
   )
 }
 

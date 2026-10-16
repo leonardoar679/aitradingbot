@@ -1799,5 +1799,19 @@
   "Expected {price} ({move}) at {horizon}; the path likely stays under {high} ({highPct}) and above {low} ({lowPct}), eight times in ten.": "Giá kỳ vọng {price} ({move}) ở {horizon}; đường giá có lẽ ở dưới {high} ({highPct}) và trên {low} ({lowPct}), tám trong mười lần.",
   "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}; when it is, typically in {minutes} min.": "Giá kỳ vọng được đạt tới trong 5 phút với xác suất {m5}, 15 phút {m15}, 1 giờ {h1}, 4 giờ {h4}; khi đạt tới, thường sau khoảng {minutes} phút.",
   "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}.": "Giá kỳ vọng được đạt tới trong 5 phút với xác suất {m5}, 15 phút {m15}, 1 giờ {h1}, 4 giờ {h4}.",
-  "Reaching it within {horizon} is unlikely ({share}): no time is said.": "Đạt tới trong {horizon} là khó xảy ra ({share}): không nêu thời gian."
+  "Reaching it within {horizon} is unlikely ({share}): no time is said.": "Đạt tới trong {horizon} là khó xảy ra ({share}): không nêu thời gian.",
+  "STRICT": "NGHIÊM NGẶT",
+  "DIRECTION": "CHIỀU HƯỚNG",
+  "NEWS EVENT": "SỰ KIỆN TIN TỨC",
+  "HYBRID": "KẾT HỢP",
+  "The laboratory has no paper account funded in USDT: fund it on the Forecast Lab.": "Phòng thí nghiệm không có tài khoản mô phỏng được nạp USDT: hãy nạp trên Phòng thí nghiệm dự báo.",
+  "The laboratory stopped for the day.": "Phòng thí nghiệm đã dừng trong ngày.",
+  "The paper laboratory stopped for the day": "Phòng thí nghiệm mô phỏng đã dừng trong ngày",
+  "Its trades closed today lost {loss} USDT together, {share} of its {equity} USDT: it opens none until tomorrow (UTC). Nothing real was placed or closed.": "Các giao dịch đóng hôm nay của nó lỗ tổng cộng {loss} USDT, bằng {share} của {equity} USDT: nó không mở thêm cho đến ngày mai (UTC). Không có lệnh thật nào được đặt hay đóng.",
+  "The strategy was switched off.": "Chiến lược đã bị tắt.",
+  "The laboratory already has a paper trade open on the pair.": "Phòng thí nghiệm đã có một giao dịch mô phỏng mở trên cặp này.",
+  "The laboratory has {count} paper trades open, the most it keeps.": "Phòng thí nghiệm đang mở {count} giao dịch mô phỏng, mức tối đa.",
+  "Laboratory paper trade: BUY {pair}": "Giao dịch mô phỏng của phòng thí nghiệm: MUA {pair}",
+  "Laboratory paper trade: SELL {pair}": "Giao dịch mô phỏng của phòng thí nghiệm: BÁN {pair}",
+  "The {strategy} strategy traded the {horizon} forecast, on paper: in around {price}, stop {stop} away, target {target}, held at most {minutes} minutes. Nothing real was placed.": "Chiến lược {strategy} đã giao dịch mô phỏng dự báo {horizon}: vào khoảng {price}, cắt lỗ cách {stop}, chốt lời {target}, giữ tối đa {minutes} phút. Không có lệnh thật nào được đặt."
 }

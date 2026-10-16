@@ -1799,5 +1799,19 @@
   "Expected {price} ({move}) at {horizon}; the path likely stays under {high} ({highPct}) and above {low} ({lowPct}), eight times in ten.": "{horizon} 예상 가격 {price}({move}); 가격 경로는 열에 여덟은 {high}({highPct}) 아래, {low}({lowPct}) 위에 머뭅니다.",
   "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}; when it is, typically in {minutes} min.": "예상 가격에 5분 이내 도달할 확률 {m5}, 15분 이내 {m15}, 1시간 이내 {h1}, 4시간 이내 {h4}; 도달할 때는 보통 약 {minutes}분 걸립니다.",
   "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}.": "예상 가격에 5분 이내 도달할 확률 {m5}, 15분 이내 {m15}, 1시간 이내 {h1}, 4시간 이내 {h4}.",
-  "Reaching it within {horizon} is unlikely ({share}): no time is said.": "{horizon} 이내 도달은 가능성이 낮습니다({share}): 시간을 말하지 않습니다."
+  "Reaching it within {horizon} is unlikely ({share}): no time is said.": "{horizon} 이내 도달은 가능성이 낮습니다({share}): 시간을 말하지 않습니다.",
+  "STRICT": "엄격",
+  "DIRECTION": "방향",
+  "NEWS EVENT": "뉴스 이벤트",
+  "HYBRID": "하이브리드",
+  "The laboratory has no paper account funded in USDT: fund it on the Forecast Lab.": "실험실에 USDT로 입금된 모의 계좌가 없습니다: 예측 실험실에서 입금하세요.",
+  "The laboratory stopped for the day.": "실험실이 오늘은 중지되었습니다.",
+  "The paper laboratory stopped for the day": "모의 실험실이 오늘 중지되었습니다",
+  "Its trades closed today lost {loss} USDT together, {share} of its {equity} USDT: it opens none until tomorrow (UTC). Nothing real was placed or closed.": "오늘 청산한 거래가 합계 {loss} USDT를 잃었습니다. {equity} USDT의 {share}입니다: 내일(UTC)까지 새로 열지 않습니다. 실제 주문이나 청산은 없었습니다.",
+  "The strategy was switched off.": "이 전략은 꺼졌습니다.",
+  "The laboratory already has a paper trade open on the pair.": "실험실에 이 거래쌍의 모의 거래가 이미 열려 있습니다.",
+  "The laboratory has {count} paper trades open, the most it keeps.": "실험실에 모의 거래 {count}건이 열려 있어 상한입니다.",
+  "Laboratory paper trade: BUY {pair}": "실험실 모의 거래: {pair} 매수",
+  "Laboratory paper trade: SELL {pair}": "실험실 모의 거래: {pair} 매도",
+  "The {strategy} strategy traded the {horizon} forecast, on paper: in around {price}, stop {stop} away, target {target}, held at most {minutes} minutes. Nothing real was placed.": "{strategy} 전략이 {horizon} 예측을 모의로 거래했습니다: 약 {price}에 진입, 손절 {stop} 거리, 목표 {target}, 최대 {minutes}분 보유. 실제 주문은 없었습니다."
 }

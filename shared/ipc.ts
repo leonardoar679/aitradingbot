@@ -233,7 +233,7 @@ export interface AppSettings {
   /** The price forecast's nightly refit, on unless switched off (shared/forecast/training.ts), and the
    * forecast trader (shared/forecast/trader.ts), off until switched on. Absent until first written, and
    * healed on every read. Written whole: a patch replaces it. */
-  forecast?: { refitNightly?: boolean; trader?: Partial<import('./forecast/trader').ForecastTraderSettings> }
+  forecast?: { refitNightly?: boolean; trader?: Partial<import('./forecast/trader').ForecastTraderSettings>; lab?: Partial<import('./forecast/labTrader').LabSettings> }
   /** How the four sounds play (shared/sounds.ts; V6 Stage 13): the volume, kinds muted, the cooldown,
    * quiet hours. Absent until first written, and healed on every read. */
   sounds?: Partial<import('./sounds').SoundSettings>
@@ -924,6 +924,10 @@ export interface ExecutorConfig {
    * forecast, the decision and the plan it followed, and how it ended once stopped. Never on a live
    * executor: src/forecast/forecastTrader.ts, the one file that makes one, spells paper as a literal. */
   forecast?: import('./forecast/trader').ForecastTradeMark
+  /** Set on a PAPER Position the paper laboratory opened (shared/forecast/labTrader.ts; V7.1 Stage 4): the
+   * strategy it was opened under, and the forecast, decision and plan it followed. Never on a live
+   * executor: src/forecast/labTrader.ts, the one file that makes one, spells paper as a literal. */
+  lab?: import('./forecast/labTrader').LabTradeMark
   newsRule?: {
     articleId: number
     ticker: string

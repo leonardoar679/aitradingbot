@@ -1799,5 +1799,19 @@
   "Expected {price} ({move}) at {horizon}; the path likely stays under {high} ({highPct}) and above {low} ({lowPct}), eight times in ten.": "{horizon}的预期价格 {price}（{move}）；走势十有八九停留在 {high}（{highPct}）之下、{low}（{lowPct}）之上。",
   "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}; when it is, typically in {minutes} min.": "预期价格在 5 分钟内到达的概率为 {m5}，15 分钟内 {m15}，1 小时内 {h1}，4 小时内 {h4}；到达时通常约需 {minutes} 分钟。",
   "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}.": "预期价格在 5 分钟内到达的概率为 {m5}，15 分钟内 {m15}，1 小时内 {h1}，4 小时内 {h4}。",
-  "Reaching it within {horizon} is unlikely ({share}): no time is said.": "在{horizon}内到达不太可能（{share}）：不给出时间。"
+  "Reaching it within {horizon} is unlikely ({share}): no time is said.": "在{horizon}内到达不太可能（{share}）：不给出时间。",
+  "STRICT": "严格",
+  "DIRECTION": "方向",
+  "NEWS EVENT": "新闻事件",
+  "HYBRID": "混合",
+  "The laboratory has no paper account funded in USDT: fund it on the Forecast Lab.": "实验室没有以 USDT 注资的模拟账户：请在预测实验室中注资。",
+  "The laboratory stopped for the day.": "实验室今日已停止。",
+  "The paper laboratory stopped for the day": "模拟实验室今日已停止",
+  "Its trades closed today lost {loss} USDT together, {share} of its {equity} USDT: it opens none until tomorrow (UTC). Nothing real was placed or closed.": "它今天平仓的交易合计亏损 {loss} USDT，占其 {equity} USDT 的 {share}：在明天（UTC）之前不再开仓。没有任何真实下单或平仓。",
+  "The strategy was switched off.": "该策略已被关闭。",
+  "The laboratory already has a paper trade open on the pair.": "实验室在该交易对上已有一笔模拟交易持仓。",
+  "The laboratory has {count} paper trades open, the most it keeps.": "实验室已有 {count} 笔模拟交易持仓，达到其上限。",
+  "Laboratory paper trade: BUY {pair}": "实验室模拟交易：买入 {pair}",
+  "Laboratory paper trade: SELL {pair}": "实验室模拟交易：卖出 {pair}",
+  "The {strategy} strategy traded the {horizon} forecast, on paper: in around {price}, stop {stop} away, target {target}, held at most {minutes} minutes. Nothing real was placed.": "{strategy}策略按{horizon}预测进行了模拟交易：约在 {price} 入场，止损距离 {stop}，目标 {target}，最多持有 {minutes} 分钟。没有任何真实下单。"
 }

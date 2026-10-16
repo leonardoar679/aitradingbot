@@ -84,6 +84,7 @@ Taken on 5 October 2026, at commit `aef376d`.
 | | Ranked forecasts, and a row's drawer | Every pair's forecast best first, with filters; the drawer's timeline to 24 hours, Why?, Why this range?, its recorded forecasts against the price, the decision, and since V6 Stage 12 its trade plan and TRADE THIS | Predictions |
 | | Start AI trading (added 13 October 2026, V6 Stage 12) | The forecast trader on paper, off until switched on: what the risk mode holds it to, its open and closed paper trades, what its last pass did | Predictions |
 | | The Forecast Lab (added 13 October 2026, V6 Stage 11) | How the forecast did on the walk forward's weeks and on the live record: performance by horizon, variant and class, calibration, kinds of error and drift, by event, V1 to V4 on the same moments, the leaderboard with promotion and DEGRADED, a tested hour replayed, the forecast trader and its comparison with the strategies, buy and hold and the hybrid; the nightly refit's switch; since V6 Stage 12 the opportunity classes, each APPROVED, PROBATION, DISABLED or NOT ENOUGH DATA; since V6.1 the rule on Bitcoin's sharp moves by horizon -- in use or why not -- and the forecasts it widened live; since V7.1 Stage 2 (16 October 2026) the direction models beside the distribution's P(up) on the same weeks, each verdict, its last week and the classes that read from it; since V7.1 Stage 3 the path's figures on the live record -- the chance said of the expected price's touch against the share reached, UNLIKELY's record, the minutes said and seen, and whether the 80% levels held; CSV each | Forecast Lab |
+| | The paper laboratory (added 16 October 2026, V7.1 Stage 4) | The paper account funded to 10,000 USDT at a click; four strategies -- STRICT, DIRECTION, NEWS EVENT, HYBRID -- each off until switched on, each trading on paper from the ranked forecasts under the laboratory's lines (0.25% of the equity risked, a tenth staked, 3 open, a 1.5% daily stop, no leverage); each strategy's record, what the last pass did, and the sensitivity counts at 55% and 52% beside the 58% line | Forecast Lab |
 
 Duplicates, all intentional and kept:
 - **The live board** appears on Opportunities and again in the event benchmark, beside the same
@@ -122,6 +123,7 @@ under Settings › Advanced › Effective configuration.
 | | `language` (added 13 October 2026, V6 Stage 14): the language of the normal-user pages and of every notice, one of ten; absent until chosen, when the first launch asks, offering the computer's (`shared/i18n/languages.ts`) | — | Settings › Language; the first launch's chooser |
 | | `forecast.refitNightly` (added 13 October 2026, V6 Stage 5): the price forecast refitted every night at 00:30 UTC on the newest ninety days, and at a start when the last fit is over 26 hours old (on unless `false`; `shared/forecast/training.ts`) | — | Forecast Lab (V6 Stage 11); until then `settings.json` and the effective-config card |
 | | `forecast.trader` (added 13 October 2026, V6 Stage 12): START AI TRADING, the forecast trader opening paper Positions on TRADE decisions by itself (off until switched on), its stake, and how many it keeps open and on one side, which the risk mode sets (`shared/forecast/trader.ts`) | — | Predictions (Start AI trading); the caps by the risk mode on Settings › Essentials |
+| | `forecast.lab` (added 16 October 2026, V7.1 Stage 4): the paper laboratory's four strategies, each on only where `true` is stored, and the UTC day its daily stop was reached with what was lost against what equity, or null (`shared/forecast/labTrader.ts`) | — | Forecast Lab (Paper laboratory) |
 | `aiConfig.json` | `defaultModel`, `enabledModels`, `route` | Agents › Models | Settings › AI |
 | | `dailyCapUsd`, `callsPerMinute` | Agents › Usage | Settings › AI |
 | | `watch` (on, models, events a day, lowest band, first model gates; and, added 8 October 2026, CONFIRM: a paper BUY it opens is told as ready to confirm as a real order a person places; added with V5 Stage 4, `askAt`: at the raise, or once the event is confirmed a pass later; and since V5 Stage 5 three models offered by default with the first gating, and the paper trade following their vote when two or more are asked) | Agents › Opportunities › Watch | Opportunities (stays with its results) |
@@ -186,6 +188,13 @@ And since 13 October 2026 (V6 Stage 12):
   of the forecast's passes, while switched on, it opens a paper Position on each TRADE decision in an
   approved or probation opportunity class, and every minute it settles those that have closed.
   Switched off, a pass reads one setting and opens nothing.
+
+And since 16 October 2026 (V7.1 Stage 4):
+- **`LabTraderScheduler`** is the paper laboratory (`src/forecast/labTrader.ts`): after each of the
+  forecast's passes it opens a paper Position on each ranked forecast that qualifies for a strategy
+  switched on -- STRICT, DIRECTION, NEWS EVENT or HYBRID -- under the laboratory's lines and its daily
+  stop, and every minute it settles those that have closed. With every strategy off, a pass reads the
+  settings and opens nothing.
 
 A sixth was added after, in V3 Stage 7:
 - **`NewsScheduler`** acts on a delisting, or a coin added to the Monitoring Tag, that the news

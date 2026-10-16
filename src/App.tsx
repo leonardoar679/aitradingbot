@@ -22,6 +22,7 @@ import { SettingsPanel } from './settings/SettingsPanel'
 import { ControllerScheduler } from './controllers/ControllerScheduler'
 import { OpportunityScheduler } from './agents/OpportunityScheduler'
 import { ForecastTraderScheduler } from './forecast/ForecastTraderScheduler'
+import { LabTraderScheduler } from './forecast/LabTraderScheduler'
 import { ExitCheckScheduler } from './agents/ExitCheckScheduler'
 import { ModelHealthScheduler } from './agents/ModelHealthScheduler'
 import { StrategyHealthScheduler } from './bots/StrategyHealthScheduler'
@@ -189,6 +190,7 @@ function App(): React.JSX.Element {
       <ErrorBoundary label={msg("The opportunity watch")}>
         <OpportunityScheduler />
         <ForecastTraderScheduler />
+        <LabTraderScheduler />
       </ErrorBoundary>
       {/* The exit check: only while the watch is on, and only the app's own paper trades. Its EXIT
           closes one at the next minute, on paper; it never moves a stop or touches a live one. */}

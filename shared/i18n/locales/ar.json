@@ -1799,5 +1799,19 @@
   "Expected {price} ({move}) at {horizon}; the path likely stays under {high} ({highPct}) and above {low} ({lowPct}), eight times in ten.": "السعر المتوقع {price} ({move}) عند {horizon}؛ يرجح أن يبقى المسار تحت {high} ({highPct}) وفوق {low} ({lowPct})، ثماني مرات من عشر.",
   "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}; when it is, typically in {minutes} min.": "يُبلغ السعر المتوقع خلال 5 دقائق بنسبة {m5} من المرات، وخلال 15 دقيقة {m15}، وساعة {h1}، وأربع ساعات {h4}؛ وعندما يُبلغ، يكون ذلك عادة في نحو {minutes} دقيقة.",
   "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}.": "يُبلغ السعر المتوقع خلال 5 دقائق بنسبة {m5} من المرات، وخلال 15 دقيقة {m15}، وساعة {h1}، وأربع ساعات {h4}.",
-  "Reaching it within {horizon} is unlikely ({share}): no time is said.": "بلوغه خلال {horizon} مستبعد ({share}): لا يُذكر وقت."
+  "Reaching it within {horizon} is unlikely ({share}): no time is said.": "بلوغه خلال {horizon} مستبعد ({share}): لا يُذكر وقت.",
+  "STRICT": "صارم",
+  "DIRECTION": "الاتجاه",
+  "NEWS EVENT": "حدث إخباري",
+  "HYBRID": "هجين",
+  "The laboratory has no paper account funded in USDT: fund it on the Forecast Lab.": "لا يملك المختبر حساباً تجريبياً ممولاً بـ USDT: موّله من مختبر التوقعات.",
+  "The laboratory stopped for the day.": "توقف المختبر لهذا اليوم.",
+  "The paper laboratory stopped for the day": "توقف المختبر التجريبي لهذا اليوم",
+  "Its trades closed today lost {loss} USDT together, {share} of its {equity} USDT: it opens none until tomorrow (UTC). Nothing real was placed or closed.": "خسرت صفقاته المغلقة اليوم معاً {loss} USDT، أي {share} من {equity} USDT: لن يفتح أي صفقة حتى الغد (بتوقيت UTC). لم يُنفَّذ ولم يُغلَق أي أمر حقيقي.",
+  "The strategy was switched off.": "أُوقفت هذه الاستراتيجية.",
+  "The laboratory already has a paper trade open on the pair.": "لدى المختبر صفقة تجريبية مفتوحة على هذا الزوج بالفعل.",
+  "The laboratory has {count} paper trades open, the most it keeps.": "لدى المختبر {count} صفقات تجريبية مفتوحة، وهو الحد الأقصى.",
+  "Laboratory paper trade: BUY {pair}": "صفقة تجريبية في المختبر: شراء {pair}",
+  "Laboratory paper trade: SELL {pair}": "صفقة تجريبية في المختبر: بيع {pair}",
+  "The {strategy} strategy traded the {horizon} forecast, on paper: in around {price}, stop {stop} away, target {target}, held at most {minutes} minutes. Nothing real was placed.": "تداولت استراتيجية {strategy} توقع {horizon} تجريبياً: دخول قرب {price}، وقف الخسارة على بعد {stop}، الهدف {target}، احتفاظ لا يتجاوز {minutes} دقيقة. لم يُنفَّذ أي أمر حقيقي."
 }

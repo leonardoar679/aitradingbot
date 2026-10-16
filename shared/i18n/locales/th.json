@@ -1799,5 +1799,19 @@
   "Expected {price} ({move}) at {horizon}; the path likely stays under {high} ({highPct}) and above {low} ({lowPct}), eight times in ten.": "ราคาที่คาด {price} ({move}) ที่ {horizon} เส้นทางราคาน่าจะอยู่ต่ำกว่า {high} ({highPct}) และสูงกว่า {low} ({lowPct}) แปดในสิบครั้ง",
   "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}; when it is, typically in {minutes} min.": "โอกาสที่ราคาถึงราคาที่คาดภายใน 5 นาทีคือ {m5}, 15 นาที {m15}, 1 ชั่วโมง {h1}, 4 ชั่วโมง {h4} เมื่อถึง โดยปกติใช้เวลาราว {minutes} นาที",
   "The expected price is reached within 5 min {m5} of the time, 15 min {m15}, 1 hour {h1}, 4 hours {h4}.": "โอกาสที่ราคาถึงราคาที่คาดภายใน 5 นาทีคือ {m5}, 15 นาที {m15}, 1 ชั่วโมง {h1}, 4 ชั่วโมง {h4}",
-  "Reaching it within {horizon} is unlikely ({share}): no time is said.": "การถึงภายใน {horizon} ไม่น่าเกิดขึ้น ({share}) จึงไม่ระบุเวลา"
+  "Reaching it within {horizon} is unlikely ({share}): no time is said.": "การถึงภายใน {horizon} ไม่น่าเกิดขึ้น ({share}) จึงไม่ระบุเวลา",
+  "STRICT": "เข้มงวด",
+  "DIRECTION": "ทิศทาง",
+  "NEWS EVENT": "เหตุการณ์ข่าว",
+  "HYBRID": "ผสม",
+  "The laboratory has no paper account funded in USDT: fund it on the Forecast Lab.": "ห้องทดลองไม่มีบัญชีจำลองที่เติม USDT ไว้ โปรดเติมในห้องทดลองการคาดการณ์",
+  "The laboratory stopped for the day.": "ห้องทดลองหยุดสำหรับวันนี้แล้ว",
+  "The paper laboratory stopped for the day": "ห้องทดลองจำลองหยุดสำหรับวันนี้แล้ว",
+  "Its trades closed today lost {loss} USDT together, {share} of its {equity} USDT: it opens none until tomorrow (UTC). Nothing real was placed or closed.": "การเทรดที่ปิดวันนี้ขาดทุนรวม {loss} USDT คิดเป็น {share} ของ {equity} USDT จึงไม่เปิดเพิ่มจนถึงพรุ่งนี้ (UTC) ไม่มีคำสั่งจริงถูกส่งหรือปิด",
+  "The strategy was switched off.": "กลยุทธ์นี้ถูกปิดแล้ว",
+  "The laboratory already has a paper trade open on the pair.": "ห้องทดลองมีการเทรดจำลองเปิดอยู่ในคู่นี้แล้ว",
+  "The laboratory has {count} paper trades open, the most it keeps.": "ห้องทดลองเปิดการเทรดจำลองอยู่ {count} รายการ ซึ่งเป็นจำนวนสูงสุด",
+  "Laboratory paper trade: BUY {pair}": "การเทรดจำลองของห้องทดลอง: ซื้อ {pair}",
+  "Laboratory paper trade: SELL {pair}": "การเทรดจำลองของห้องทดลอง: ขาย {pair}",
+  "The {strategy} strategy traded the {horizon} forecast, on paper: in around {price}, stop {stop} away, target {target}, held at most {minutes} minutes. Nothing real was placed.": "กลยุทธ์{strategy}เทรดจำลองตามการคาดการณ์{horizon}: เข้าที่ราว {price} หยุดขาดทุนห่าง {stop} เป้าหมาย {target} ถือไม่เกิน {minutes} นาที ไม่มีคำสั่งจริงถูกส่ง"
 }

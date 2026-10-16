@@ -1,4 +1,5 @@
 import type { Horizon, PairClass } from './features'
+import { DEFAULT_LAB_SETTINGS, healLabSettings, type LabSettings } from './labTrader'
 import { DEFAULT_FORECAST_TRADER, healForecastTrader, type ForecastTraderSettings } from './trader'
 import type { ForecastModelId } from './models'
 import { promotionChecklist, type CheckLine } from './promotion'
@@ -27,15 +28,17 @@ export interface ForecastSettings {
   refitNightly: boolean
   /** The forecast trader (V6 Stage 12; shared/forecast/trader.ts): off until switched on. */
   trader: ForecastTraderSettings
+  /** The paper laboratory (V7.1 Stage 4; shared/forecast/labTrader.ts): every strategy off until switched on. */
+  lab: LabSettings
 }
 
-export const DEFAULT_FORECAST_SETTINGS: ForecastSettings = { refitNightly: true, trader: DEFAULT_FORECAST_TRADER }
+export const DEFAULT_FORECAST_SETTINGS: ForecastSettings = { refitNightly: true, trader: DEFAULT_FORECAST_TRADER, lab: DEFAULT_LAB_SETTINGS }
 
-/** A stored setting, read as one: only `false` switches the nightly refit off, and the trader is healed
- * as its own. */
+/** A stored setting, read as one: only `false` switches the nightly refit off, and the trader and the
+ * laboratory are healed as their own. Every writer spreads the healed whole, so each part keeps the others. */
 export function healForecastSettings(value: unknown): ForecastSettings {
   const raw = (typeof value === 'object' && value !== null && !Array.isArray(value) ? value : {}) as Record<string, unknown>
-  return { refitNightly: raw.refitNightly !== false, trader: healForecastTrader(raw.trader) }
+  return { refitNightly: raw.refitNightly !== false, trader: healForecastTrader(raw.trader), lab: healLabSettings(raw.lab) }
 }
 
 /** The next half past midnight UTC after `nowSec`. */
