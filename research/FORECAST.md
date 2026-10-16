@@ -201,6 +201,9 @@ the data's; SOL was left out, not forecast from stale bars; each of its 6 stalle
 | 12-hour run | the sidebar, collapsed by hand mid-run, hid the pages' names from the harness, so the Lab's comparison did not run (it was run afterwards on a copy of the run's profile) | `d6d4cdc` (harness) |
 | check run | the analysis stopped at a coin with a Chinese name, its output's code page unable to hold it | `c514d80` |
 | check run | a faked run left its emptied key file in its scratch profile (only ever a placeholder key) | the harness deletes it at the end |
+| rehearsal | Home counted four of the profile's five paper strategies: its grid of 13 August, from before executors had a mode, has none and runs as paper | `770f0f0` |
+| rehearsal | the watch's paper trade was refused on a price 17 seconds old: the book was read beside a request for thirty days of candles that timed out after ten seconds, and judged after it; the book is read after the slower reads now | `c88b418` |
+| rehearsal | the harness never marked its window as a test, as the check windows are | `fa6a99b` (harness) |
 
 The first model's BUY or SELL was told as a TRADE OPPORTUNITY notice even when the vote then refused
 the trade. Since 15 October the notice rings only for a side the vote takes, in the name of the surest
@@ -242,6 +245,34 @@ closes from its minutes, a crossing making every pair's forecast again.
 
 The 15-minute verdict changed between two fits six hours apart, which is why the rule is judged again
 at every refit rather than fixed. Its evidence is still thin: 14 moments in three weeks.
+
+### The rule in a live afternoon (the rehearsal of 15 October 2026)
+
+A three-hour rehearsal of the user's own profile's next launch (its settings, bots and executors copied
+to a scratch profile, never its keys; OpenRouter faked; `FROM_PROFILE` in `scripts/shadow-run.mjs`) ran
+from 13:12 to 16:14 UTC, and Bitcoin moved while it did: down 1.0% in fifteen minutes at 13:54, up 1.35%
+at 14:10, and up 2.4% between 13:45 and 15:15, NEAR up 9% in an hour. The fit at launch
+(`run-20261015-1317`, 27 pairs, 155,438 rows, three minutes, the walk forward seven) adopted the rule at
+5 minutes (73.1% to 79.4% held, pinball 0.7035 to 0.7023), at an hour (58.9% to 79.1%, 0.4569 to 0.4424)
+and at a day (75.7% to 80.3%), and refused it at 15 minutes (pinball worse by 0.0003) and at four hours
+(82.3% held already). Bitcoin's figure was past the line from 13:40 to 14:20 and again at 14:45, up to
+6.96, so 260 forecasts were made again for it and 293 of the run's 563 forecasts were widened. Judged by
+their outcomes, the Lab's live count and `shared/forecast/forecastRecord.ts`'s record agreeing:
+
+| Horizon | widened, judged | 80% range held, widened | the same, unwidened | 50% held, widened | unwidened | calm forecasts, 80% held |
+|---|---|---|---|---|---|---|
+| 5 minutes | 293 | 75.8% | 65.9% | 35.5% | 30.4% | 75.2% of 270 |
+| 15 minutes (refused) | 0 | | | | | 54.2% of 535 |
+| 1 hour | 293 | 39.6% | 15.4% | 10.9% | 6.8% | 25.6% of 160 |
+
+The widening helped wherever it applied and more than doubled the hour's coverage, but a range sized for a
+usual hour does not hold an hour in which Bitcoin rises 2%: the 1-hour forecasts made from 13:50 to 14:05,
+into the rise, held 10-18% even widened; those made at 14:15, 14:20 and 14:45, once the rise was under way,
+held 43%, 62% and 72% against 14%, 8% and 28% unwidened. This is one episode, not a verdict on the rule:
+its walk forward's fourteen moments held 79% widened at an hour, this one 40%. The 15-minute verdict has
+now turned on 0.0002-0.0004 of pinball at three fits in a row (refused, adopted, refused); whether the rule
+should carry a tolerance there is the user's call. The 4-hour and 24-hour outcomes were not due before the
+run closed.
 
 ## The models' calls and their cost
 
