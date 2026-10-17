@@ -6,6 +6,7 @@ import { DIRECTION_MODELS } from '../../shared/forecast/models'
 import { CLASS_LINES, type ClassRecord } from '../../shared/forecast/opportunityClass'
 import type { DirectionScore, PUpSource } from '../../shared/forecast/runCalibration'
 import type { ShockRefusal, ShockRule } from '../../shared/forecast/shock'
+import type { Interval } from '../../shared/forecast/uncertainty'
 import { WIDENED_STATES, type MarketShockRules, type MarketShockState, type ShockWidening } from '../../shared/forecast/marketShock'
 import type { EventImpactFile } from '../../shared/calendar/eventImpact'
 import { MACRO_KINDS, type MacroEvent, type MacroKind } from '../../shared/calendar/macro'
@@ -27,23 +28,28 @@ export const ERROR_KINDS: LabErrorKind[] = ['CORRECT_DIRECTION', 'WRONG_DIRECTIO
 export const share = (value: number | null | undefined, digits = 1): string => (value === null || value === undefined || !Number.isFinite(value) ? '—' : `${(value * 100).toFixed(digits)}%`)
 export const pct = (value: number | null | undefined, digits = 2): string => (value === null || value === undefined || !Number.isFinite(value) ? '—' : `${value > 0 ? '+' : ''}${value.toFixed(digits)}%`)
 export const plain = (value: number | null | undefined, digits = 3): string => (value === null || value === undefined || !Number.isFinite(value) ? '—' : value.toFixed(digits))
+/** A share or a skill with its 95% interval beside it, where one was read (V7.2 Stage 1). */
+export const withInterval = (text: string, interval: Interval | null | undefined, digits = 1): string => (interval === null || interval === undefined ? text : `${text} (${(interval.low * 100).toFixed(digits)}–${(interval.high * 100).toFixed(digits)})`)
+export const count = (value: number | null | undefined): string => (value === null || value === undefined || !Number.isFinite(value) ? '—' : Math.round(value).toLocaleString('en-US'))
 
-const METRIC_HEADERS = ['Outcomes', 'Median\'s way right', 'Calls', 'Calls right', 'In the 50% range', 'In the 80% range', 'MAE', 'RMSE', 'Bias', 'Pinball', 'Skill over persistence', '80% width']
+const METRIC_HEADERS = ['Outcomes', 'Independent outcomes', 'Blocks resampled', 'Median\'s way right', 'Calls', 'Calls right', 'In the 50% range', 'In the 80% range', 'MAE', 'RMSE', 'Bias', 'Pinball', 'Skill over persistence', '80% width']
 
 function metricCells(metrics: LabMetrics | undefined): (string | number)[] {
   if (metrics === undefined) return METRIC_HEADERS.map(() => '—')
   return [
     metrics.n,
+    count(metrics.nEff),
+    metrics.blocks ?? '—',
     share(metrics.direction),
     metrics.calls,
-    share(metrics.callsRight),
-    share(metrics.coverage50),
-    share(metrics.coverage80),
+    withInterval(share(metrics.callsRight), metrics.ci?.callsRight),
+    withInterval(share(metrics.coverage50), metrics.ci?.coverage50),
+    withInterval(share(metrics.coverage80), metrics.ci?.coverage80),
     `${plain(metrics.mae, 2)}%`,
     `${plain(metrics.rmse, 2)}%`,
     pct(metrics.bias, 3),
     plain(metrics.pinball, 4),
-    share(metrics.skill, 2),
+    withInterval(share(metrics.skill, 2), metrics.ci?.skill, 2),
     `${plain(metrics.width80, 2)}%`
   ]
 }
@@ -310,7 +316,7 @@ const DIRECTION_MODEL_NAME: Record<(typeof DIRECTION_MODELS)[number], string> = 
  * classes read their P(up) from it now. */
 export function directionTable(views: Partial<Record<Horizon, DirectionView>>): LabTableData {
   const rows: (string | number)[][] = []
-  const cells = (score: DirectionScore | null | undefined): (string | number)[] => (score === null || score === undefined ? ['—', '—', '—', '—'] : [score.n, share(score.directionSkill, 2), score.calls, share(score.precision)])
+  const cells = (score: DirectionScore | null | undefined): (string | number)[] => (score === null || score === undefined ? ['—', '—', '—', '—', '—'] : [score.n, withInterval(share(score.directionSkill, 2), score.ci?.directionSkill, 2), share(score.detectable, 2), score.calls, withInterval(share(score.precision), score.ci?.precision)])
   const classesOf = (view: DirectionView, source: PUpSource): string => {
     const classes = view.inUse[source]
     return classes === undefined || classes.length === 0 ? '—' : classes.length === PAIR_CLASSES.length ? 'every class' : classes.join(', ')
@@ -332,9 +338,9 @@ export function directionTable(views: Partial<Record<Horizon, DirectionView>>): 
         classesOf(view, model)
       ])
     }
-    rows.push([HORIZON_NAME[horizon], 'the base rate', '—', '—', '—', '—', '—', '—', classesOf(view, 'base')])
+    rows.push([HORIZON_NAME[horizon], 'the base rate', '—', '—', '—', '—', '—', '—', '—', classesOf(view, 'base')])
   }
-  return { headers: ['Horizon', 'Source of P(up)', 'Outcomes', 'Brier skill over the base rate', 'Calls at the lines', 'Calls right', 'Verdict', 'Last week', 'P(up) of'], rows }
+  return { headers: ['Horizon', 'Source of P(up)', 'Outcomes', 'Brier skill over the base rate', 'Detectable skill', 'Calls at the lines', 'Calls right', 'Verdict', 'Last week', 'P(up) of'], rows }
 }
 
 /** The path's figures on the live record (V7.1 Stage 3), by horizon: when the median was said to be reached

@@ -75,6 +75,7 @@ import { CHALLENGER_LINES, CHALLENGER_VERSION } from './forecast/challenger'
 import { DRIFT_LINES, DRIFT_VERSION } from './forecast/drift'
 import { RUNS_KEPT } from './forecast/training'
 import { RUN_CALIBRATION_VERSION } from './forecast/runCalibration'
+import { UNCERTAINTY_LINES, UNCERTAINTY_VERSION } from './forecast/uncertainty'
 import { DEGRADATION_LINES, DEGRADED_THREAD_SECONDS, DIRECTION_PROMOTION_LINES, PROMOTION_LINES } from './forecast/promotion'
 import { LOGISTIC_FIT } from './forecast/ml/logistic'
 import { DIRECTION_MODELS, EXCURSION_LEVELS } from './forecast/models'
@@ -178,6 +179,9 @@ export const ENGINE_CONSTANTS = {
     path: { excursion: { levels: EXCURSION_LEVELS, version: EXCURSION_CALIBRATION_VERSION, minRows: EXCURSION_MIN_ROWS }, touch: { version: FIRST_TOUCH_VERSION, ...FIRST_TOUCH } },
     ensemble: { version: ENSEMBLE_VERSION, ...ENSEMBLE_LINES },
     calibration: { version: CALIBRATION_VERSION, run: RUN_CALIBRATION_VERSION, ...CALIBRATION_LINES },
+    // What the figures are worth (V7.2 Stage 1): the intervals' draws, seed, blocks by horizon, level, and the
+    // standard deviations a skill must reach to be told from zero.
+    uncertainty: { version: UNCERTAINTY_VERSION, ...UNCERTAINTY_LINES },
     direction: DIRECTION_LINES,
     reliability: RELIABILITY_LINES,
     prediction: { version: PREDICTION_VERSION, ...PREDICTION_LINES },

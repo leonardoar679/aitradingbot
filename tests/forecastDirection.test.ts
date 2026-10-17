@@ -242,15 +242,25 @@ describe('the Lab\'s table', () => {
     const view: DirectionView = { report: REPORT, inUse: { 'dir-gbt': ['mid', 'large'], base: ['btc'] } }
     const table = directionTable({ hour1: view })
     expect(table.headers[1]).toBe('Source of P(up)')
+    expect(table.headers[4]).toBe('Detectable skill')
     expect(table.rows[0][1]).toBe("the distribution's P(up)")
-    expect(table.rows[0][8]).toBe('—')
+    expect(table.rows[0][9]).toBe('—')
     const knowing = table.rows.find((row) => String(row[1]).startsWith('dir-gbt ('))!
-    expect(knowing[6]).toBe('promoted')
-    expect(knowing[8]).toBe('mid, large')
+    expect(knowing[7]).toBe('promoted')
+    expect(knowing[9]).toBe('mid, large')
+    // A report made without the horizon carries no interval and no detectable skill: the points alone.
+    expect(knowing[4]).toBe('—')
+    expect(String(knowing[3])).toMatch(/^\d+\.\d\d%$/)
     const noise = table.rows.find((row) => String(row[1]).startsWith('dir-logistic'))!
-    expect(String(noise[6])).toMatch(/^not promoted: skill/)
+    expect(String(noise[7])).toMatch(/^not promoted: skill/)
     expect(table.rows[table.rows.length - 1][1]).toBe('the base rate')
-    expect(table.rows[table.rows.length - 1][8]).toBe('btc')
+    expect(table.rows[table.rows.length - 1][9]).toBe('btc')
+    // With the horizon, the skill carries its interval and the model its detectable skill (V7.2 Stage 1).
+    const worth = directionTable({ hour1: { report: directionReportOf(ROWS, SHOWN, 'hour1')!, inUse: {} } })
+    const measured = worth.rows.find((row) => String(row[1]).startsWith('dir-gbt ('))!
+    expect(String(measured[3])).toMatch(/^\d+\.\d\d% \(-?\d+\.\d\d–\d+\.\d\d\)$/)
+    expect(String(measured[4])).toMatch(/^\d+\.\d\d%$/)
+    expect(String(measured[6])).toMatch(/^\d+\.\d% \(\d+\.\d–\d+\.\d\)$/)
     expect(table.rows.some((row) => String(row[1]).startsWith('dir-gbt-price'))).toBe(false)
     expect(directionTable({}).rows).toEqual([])
     expect(DIRECTION_MODELS.length).toBe(4)

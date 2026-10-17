@@ -356,7 +356,9 @@ describe('the walk forward', () => {
     expect(kindsAt(undefined, T)).toEqual([])
   })
 
-  it('calls each tested hour from the weeks before it alone: its own week\'s outcomes change none of its calls', () => {
+  // Unhurried: the fixture's rows are hours of their own, so every figure's interval resamples thousands of
+  // hours (V7.2 Stage 1), which the real record's five hundred never ask.
+  it('calls each tested hour from the weeks before it alone: its own week\'s outcomes change none of its calls', { timeout: 60_000 }, () => {
     const record = recordOf({ rows: 12_000, seed: 31, drift: 0.8 })
     const promotions = promoted('hour1', ['persistence', 'gbt'])
     const made = walkForwardLab(record, promotions, new Map(), [])

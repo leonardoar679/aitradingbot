@@ -426,7 +426,9 @@ No direction source's Brier skill interval excludes zero on the positive side at
 the negative side (dir-gbt at 5 minutes, -2.26% [-4.18, -0.46]; dir-gbt-tech and dir-gbt-price at 4 hours, -1.92%
 [-3.45, -0.81] and -2.18% [-3.59, -1.09]). The calls' precision intervals are 20 to 40 points wide (dir-logistic at
 5 minutes: 60.3% right of 365 calls, [45.1%, 74.6%]). The 24-hour figures rest on about a hundred effective
-observations: three weeks cannot judge that horizon, which the V7.2 draft's archive stages take up.
+observations: three weeks cannot judge that horizon, which the V7.2 draft's archive stages take up. (The 4-hour
+and 24-hour intervals in this table are the uncorrected ones of 16 October; V7.2 Stage 1's corrected intervals
+are in its section below.)
 
 **What the promotion rule lets through.** `research/directionNull.ts` (16 October 2026) keeps every forecast where
 it is and shifts the outcomes by a random whole number of days -- each pair's outcome taken from the same pair that
@@ -447,6 +449,50 @@ strategies on paper, the forecast trader on, two days and an hour of settling) i
 owes: every gate per hour, the direction and timing tables from the live record, each strategy's trades
 and the sensitivity counts. Its first start (multiday, 11:27 UTC) died with the other apps an hour into its
 session, after its fit and the lab's funding.
+
+## V7.2 Stage 1 -- what the figures are worth (17 October 2026)
+
+Every figure the Lab's tables and the run report show now carries its 95% interval, the independent outcomes
+it rests on and the blocks a resample drew (`shared/forecast/uncertainty.ts`; `HonestScore` and
+`DirectionScore` gain `ci`, `nEff` and `blocks`, a direction score its `detectable` skill, under
+run-calibration-v6; the Lab's `LabMetrics` the same on the walk forward and the live record;
+`research/uncertainty.ts`, `research/direction.ts`, `research/rangeLag.ts` and `scripts/shadow-analyze.py`
+print them). The arithmetic is the 16 October tool's -- the hours resampled, every pair's row of an hour together,
+in circular blocks as long as the horizon, a thousand seeded draws -- with two corrections fixed on simulated
+panels before the record was read: outcomes that overlap are the sums of their hours' moves, so blocks as long as
+the overlap lose the dependence across their edges and the draws' spread is widened by the root of the long-run
+variance over the part a block captures (1.21 at four hours, 1.22 at a day); and the few blocks a long horizon
+leaves make the spread itself uncertain, so the interval is widened by Student's t over the normal's quantile for
+the blocks drawn. On a thousand panels of ten pairs whose truth was known (a market factor and each pair's own
+noise, moving sums over the horizon, 336 or 504 hours):
+
+| overlap, block | 95% interval held the truth, uncorrected | corrected (the app's) |
+|---|---|---|
+| 1 hour (5 min, 15 min, 1 hour) | 96.1% | 96.1% |
+| 4 hours, blocks of 4 | 91.4% | 96.9% |
+| 24 hours, blocks of 24 (21 blocks) | 85.7% | 94.0% |
+
+The registered line -- the interval holds the truth in 93-97% of panels at every horizon -- is held, and pinned
+in `tests/forecastUncertainty.test.ts` with the panels themselves. A block of an hour on a day's overlap holds
+the truth under 85% of the time, which is why the block is the horizon's length; and no block length reaches the
+line at a day without the corrections (86% at 24, 36, 48 or 72 hours), since three weeks hold only 7-21 blocks of
+a day. An interval that is a share is held inside 0-100%.
+
+**On run-20261016-0640, the app's own intervals** (`research/uncertainty.ts`): at 5 minutes, 15 minutes and an
+hour the figures are the 16 October table's to the digit, the corrections being 1 there. At four hours and a
+day they are wider than that table said:
+
+| horizon | 80% held | 50% held | pinball skill over persistence | independent outcomes (blocks) | detectable direction skill |
+|---|---|---|---|---|---|
+| 4 hours | 77.7% [73.6, 81.3] | 48.1% [44.3, 52.0] | +0.77% [+0.03, +1.54] | 440 of 15,458 (125 of 4 h) | 2.0-3.4% |
+| 24 hours | 79.5% [68.6, 88.9] | 49.1% [37.5, 59.8] | -0.01% [-0.94, +0.81] | 59 of 14,838 (20 of 24 h) | 14-28% |
+
+So the 4-hour pinball skill now only just excludes zero, and the day's figures rest on fifty-nine independent
+outcomes: its direction skills' intervals are twenty to forty points wide (the distribution's -2.2% [-19.0,
++12.6], dir-gbt -7.4% [-29.8, +9.1]) and nothing about that horizon can be read from three weeks, as the draft
+said. The direction findings stand at every horizon: no model's skill interval excludes zero on the positive
+side; dir-gbt at 5 minutes and dir-gbt-tech and dir-gbt-price at 4 hours exclude it on the negative side. What
+Stage 1 changes is not a figure but what each figure is worth, which every later stage reads first.
 
 ## The models' calls and their cost
 

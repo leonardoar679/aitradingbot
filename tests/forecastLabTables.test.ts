@@ -39,7 +39,9 @@ describe('the tables', () => {
   it('reads each horizon\'s two variants, for every coin or one class', () => {
     const table = performanceTable(lab, 'pooled')
     expect(table.rows.map((row) => `${row[0]} ${row[1]}`)).toEqual(['1h V1 price only', '1h V2 + technical (shown)', '4h V1 price only', '4h V2 + technical (shown)'])
-    expect(table.rows[0].slice(2, 8)).toEqual([2, '50.0%', 0, '—', '50.0%', '50.0%'])
+    // Two cases of one hour: a point without an interval, no independent outcomes or blocks to say (V7.2 Stage 1).
+    expect(table.rows[0].slice(2, 10)).toEqual([2, '—', '—', '50.0%', 0, '—', '50.0%', '50.0%'])
+    expect(table.headers.slice(2, 5)).toEqual(['Outcomes', 'Independent outcomes', 'Blocks resampled'])
     // A class without outcomes at a variant reads as dashes.
     expect(performanceTable(lab, 'mid').rows[0].slice(2)).toEqual(table.headers.slice(2).map(() => '—'))
     expect(classesOf(lab)).toEqual(['pooled', 'large', 'mid'])

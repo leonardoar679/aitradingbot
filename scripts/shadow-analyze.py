@@ -133,6 +133,20 @@ def pct(value):
     return '-' if value is None else f'{value:.3f}%'
 
 
+def interval(made, digits=1):
+    """A figure's 95% interval (V7.2 Stage 1), where the section carries one."""
+    return '-' if not made else f'[{made["low"] * 100:.{digits}f}%, {made["high"] * 100:.{digits}f}%]'
+
+
+def worth(m):
+    """What a horizon's figures are worth (V7.2 Stage 1): the intervals, the independent outcomes, the blocks."""
+    ci = m.get('ci')
+    if not ci:
+        return ''
+    n_eff = m.get('nEff')
+    return f' | 95%: in 50% {interval(ci.get("coverage50"))} in 80% {interval(ci.get("coverage80"))} skill {interval(ci.get("skill"), 2)} calls right {interval(ci.get("callsRight"))}; independent outcomes {"-" if n_eff is None else round(n_eff)} of {m["n"]}, {m.get("blocks")} blocks'
+
+
 def forecast_of(section, title):
     p = section['predictions']
     print(f'===== {title}: {clock(section["fromSec"])} to {clock(section["toSec"])}  passed={section["passed"]}')
@@ -140,7 +154,7 @@ def forecast_of(section, title):
     for h, row in section['horizons'].items():
         m = row['metrics']
         moved, unmoved = row['news']['moved'], row['news']['unmoved']
-        print(f'  {h:10} judged {row["outcomes"]:5}  way right {share(m["direction"]):7} calls {m["calls"]} right {share(m["callsRight"]):7} in 50% {share(m["coverage50"]):7} in 80% {share(m["coverage80"]):7} median error {pct(m["mae"]):9} bias {pct(m["bias"]):9} bull {row["bull"]["right"]}/{row["bull"]["calls"]} bear {row["bear"]["right"]}/{row["bear"]["calls"]}  story-moved {moved["n"]} ({share(moved["coverage80"])} in 80%)  the rest {unmoved["n"]} ({share(unmoved["coverage80"])} in 80%)')
+        print(f'  {h:10} judged {row["outcomes"]:5}  way right {share(m["direction"]):7} calls {m["calls"]} right {share(m["callsRight"]):7} in 50% {share(m["coverage50"]):7} in 80% {share(m["coverage80"]):7} median error {pct(m["mae"]):9} bias {pct(m["bias"]):9} bull {row["bull"]["right"]}/{row["bull"]["calls"]} bear {row["bear"]["right"]}/{row["bear"]["calls"]}  story-moved {moved["n"]} ({share(moved["coverage80"])} in 80%)  the rest {unmoved["n"]} ({share(unmoved["coverage80"])} in 80%)' + worth(m))
         shock = row.get('shock')
         if shock is not None:
             print(f'  {h:10} widened for Bitcoin\'s move {shock["widened"]["n"]} ({share(shock["widened"]["coverage80"])} in 80%; by V2\'s own levels {share(shock["unwidened"]["coverage80"])})')
@@ -150,7 +164,7 @@ def forecast_of(section, title):
             print(f'  {h:10} by state: ' + '; '.join(f'{s} {m["n"]} ({share(m["coverage80"])} in 80%, pinball {pct(m["pinball"])})' for s, m in by_state.items()))
     for h, row in section['horizons'].items():
         for variant, m in (row.get('variants') or {}).items():
-            print(f'  {h:10} {variant.upper()}  n {m["n"]:5}  way right {share(m["direction"]):7} in 80% {share(m["coverage80"]):7} median error {pct(m["mae"]):9} bias {pct(m["bias"]):9} pinball {pct(m["pinball"])}')
+            print(f'  {h:10} {variant.upper()}  n {m["n"]:5}  way right {share(m["direction"]):7} in 80% {share(m["coverage80"]):7} median error {pct(m["mae"]):9} bias {pct(m["bias"]):9} pinball {pct(m["pinball"])}' + worth(m))
     classes = section.get('classes')
     if classes:
         print(f'  calls at the lead horizon: {json.dumps(classes["calls"])}; coin classes: {json.dumps(classes["pairClasses"])}')

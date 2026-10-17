@@ -39,6 +39,7 @@ import type { ForecastModelId } from '../shared/forecast/models'
 import { decodeOos, oosState, type OosRecord } from '../shared/forecast/oosRecord'
 import { rowsOf, scoreOutOfSample, type ScoredRow } from '../shared/forecast/runCalibration'
 import { pastShockLine, scoreShock, shockRuleOf, stretchShock, type ShockRule } from '../shared/forecast/shock'
+import { blockHoursOf, bootstrapOverHours, hourOf } from '../shared/forecast/uncertainty'
 
 const PROFILE = process.env.PROFILE ?? ''
 if (PROFILE === '') throw new Error('PROFILE is the scratch profile to read')
@@ -255,7 +256,14 @@ for (const horizon of HORIZONS) {
   for (const entry of rows) entry.mkt15 = mktAt.get(entry.t) ?? null
 
   const all = coverage(rows.map((entry) => ({ z: entry.row.z, q: entry.row.quantiles })))
-  console.log(`\n${horizon}: ${all.n} tested hours over weeks ${[...new Set(rows.map((entry) => entry.week))].join(', ')}; 80% held ${pct(all.in80)}, 50% held ${pct(all.in50)}`)
+  // The headline's intervals (V7.2 Stage 1): the hours resampled in blocks as long as the horizon.
+  const worth = bootstrapOverHours(
+    rows.map((entry) => ({ hour: hourOf(entry.t), sample: [entry.row.z >= entry.row.quantiles[P10] && entry.row.z <= entry.row.quantiles[P90] ? 1 : 0, entry.row.z >= entry.row.quantiles[P25] && entry.row.z <= entry.row.quantiles[P75] ? 1 : 0] })),
+    [(sums, n) => sums[0] / n, (sums, n) => sums[1] / n],
+    blockHoursOf(horizon)
+  )
+  const interval = (at: number): string => (worth === null ? '' : ` [${pct(worth.figures[at].low)}, ${pct(worth.figures[at].high)}]`)
+  console.log(`\n${horizon}: ${all.n} tested hours over weeks ${[...new Set(rows.map((entry) => entry.week))].join(', ')}; 80% held ${pct(all.in80)}${interval(0)}, 50% held ${pct(all.in50)}${interval(1)}${worth === null ? '' : ` (95%; ${worth.blocks} blocks of ${blockHoursOf(horizon)} h)`}`)
   for (const [name, read] of [
     ['btc15', (entry: Scored) => entry.btc15],
     ['btc60', (entry: Scored) => entry.btc60],

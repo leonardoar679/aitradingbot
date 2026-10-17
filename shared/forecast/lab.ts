@@ -12,6 +12,7 @@ import type { CheckLine } from './promotion'
 import type { MarketRegime } from '../marketResearch'
 import type { Promotion } from './training'
 import { DECISION_LINES } from './tradeDecision'
+import { SHARE, blockHoursOf, bootstrapOverHours, effectiveSampleSize, hourOf, intervalOf, shareVariance, type HourSample, type Interval, type Statistic } from './uncertainty'
 import type { ModelScore } from './walkForward'
 
 // THE FORECAST LAB'S ARITHMETIC (the V6 document, §27-28, §42-43, §49-50, §90-98 and §100-105; V6 Stage 11,
@@ -125,6 +126,19 @@ export interface LabMetrics {
   tailLow: number | null
   tailHigh: number | null
   errors: Partial<Record<LabErrorKind, number>>
+  /** The 95% intervals of the coverage, the skill and the calls right (V7.2 Stage 1), resampled by the hour
+   * the cases were read at in blocks as long as their horizon; the independent outcomes the 80% coverage
+   * rests on; the blocks a resample drew. Absent on cases of one block, or none. */
+  ci?: LabInterval
+  nEff?: number | null
+  blocks?: number
+}
+
+export interface LabInterval {
+  coverage80: Interval | null
+  coverage50: Interval | null
+  skill: Interval | null
+  callsRight: Interval | null
 }
 
 /** EARLY: a call whose move had not come by the horizon's close and came by twice the horizon. */
@@ -170,19 +184,27 @@ export function labMetrics(cases: readonly LabCase[]): LabMetrics {
   let high = 0
   const below = QUANTILE_LEVELS.map(() => 0)
   const errors: Partial<Record<LabErrorKind, number>> = {}
+  const samples: HourSample[] = []
+  let block = 1
   for (const entry of cases) {
     const median = entry.q[P50]
     if (entry.move !== 0 && median !== 0) {
       moved++
       if (Math.sign(entry.move) === Math.sign(median)) called++
     }
+    let call = 0
+    let callRight = 0
     if (entry.dir !== 'NEUTRAL' && entry.move !== 0) {
-      calls++
-      if ((entry.dir === 'BULLISH') === entry.move > 0) right++
+      call = 1
+      if ((entry.dir === 'BULLISH') === entry.move > 0) callRight = 1
     }
+    calls += call
+    right += callRight
     const inside = insideOf(entry.q, entry.move)
     if (inside.inside50) in50++
     if (inside.inside80) in80++
+    samples.push({ hour: hourOf(entry.t), sample: [inside.inside80 ? 1 : 0, inside.inside50 ? 1 : 0, entry.pinballZ ?? 0, entry.floorPinballZ ?? 0, call, callRight] })
+    block = Math.max(block, blockHoursOf(entry.horizon))
     absolute += Math.abs(entry.move - median)
     squared += (entry.move - median) ** 2
     bias += entry.move - median
@@ -198,7 +220,7 @@ export function labMetrics(cases: readonly LabCase[]): LabMetrics {
     for (let level = 0; level < QUANTILE_LEVELS.length; level++) if (entry.move <= entry.q[level]) below[level]++
     for (const kind of errorsOfCase(entry)) errors[kind] = (errors[kind] ?? 0) + 1
   }
-  return {
+  const metrics: LabMetrics = {
     n,
     direction: share(called, moved),
     calls,
@@ -216,7 +238,28 @@ export function labMetrics(cases: readonly LabCase[]): LabMetrics {
     tailHigh: share(high, n),
     errors
   }
+  // What the figures are worth (V7.2 Stage 1): the cases resampled by hour, in blocks as long as the
+  // longest horizon among them.
+  const made = bootstrapOverHours(samples, LAB_STATISTICS, block)
+  if (made !== null) {
+    const [coverage80, coverage50, skill, callsRight] = made.figures
+    metrics.ci = { coverage80: intervalOf(coverage80, SHARE), coverage50: intervalOf(coverage50, SHARE), skill: metrics.skill === null ? null : intervalOf(skill), callsRight: intervalOf(callsRight, SHARE) }
+    const nEff = effectiveSampleSize(shareVariance(coverage80.value), coverage80.sd)
+    metrics.nEff = Number.isFinite(nEff) ? nEff : null
+    metrics.blocks = made.blocks
+  }
+  return metrics
 }
+
+/** The figures as statistics of the cases' sums -- inside the 80% range, inside the 50%, the pinball loss
+ * in usual moves, persistence's, the calls and those right: the shares inside, the skill over persistence,
+ * and the share of calls right. */
+const LAB_STATISTICS: readonly Statistic[] = [
+  (sums, n): number => sums[0] / n,
+  (sums, n): number => sums[1] / n,
+  (sums): number => (sums[3] > 0 ? 1 - sums[2] / sums[3] : Number.NaN),
+  (sums): number => (sums[4] > 0 ? sums[5] / sums[4] : Number.NaN)
+]
 
 /** The events a case falls under (§92-93): a shock the hour before, a break of the day's range, a
  * story about its coin, and the story's kind. Every case is under 'all'. */

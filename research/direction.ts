@@ -9,7 +9,9 @@
 // weeks -- outcomes, Brier skill over the better of an even chance and the weeks-before base rate, calls at
 // the forecast's lines and the share right -- each model's checklist, and which source each pair class
 // would read its P(up) from (shared/forecast/runCalibration.ts). The same arithmetic as the app's, on the
-// same record: the app's calibration.json is not read, so the two can be set against each other.
+// same record: the app's calibration.json is not read, so the two can be set against each other. Since V7.2
+// Stage 1 (17 October 2026) each skill and each share right carries its 95% interval in brackets, and each
+// source the smallest skill its sample could tell from zero (shared/forecast/uncertainty.ts).
 //
 //   npx esbuild research/direction.ts --bundle --platform=node --format=esm --outfile=research/.direction.mjs
 //   PROFILE=<a scratch profile with a walk forward> node research/.direction.mjs
@@ -30,10 +32,14 @@ const RUN = process.env.RUN ?? (JSON.parse(readFileSync(join(MODELS, 'current.js
 if (RUN === '') throw new Error('no walk forward in current.json; name one with RUN')
 
 const pct = (value: number | null | undefined, digits = 2): string => (value === null || value === undefined || !Number.isFinite(value) ? '   -  ' : `${(100 * value).toFixed(digits)}%`.padStart(7))
-const cells = (score: DirectionScore | null): string => (score === null ? `${'-'.padStart(7)} ${'-'.padStart(7)} ${'-'.padStart(6)} ${'-'.padStart(7)}` : `${String(score.n).padStart(7)} ${pct(score.directionSkill)} ${String(score.calls).padStart(6)} ${pct(score.precision, 1)}`)
+const interval = (made: { low: number; high: number } | null | undefined, digits = 2): string => (made === null || made === undefined ? '' : ` [${(100 * made.low).toFixed(digits)}, ${(100 * made.high).toFixed(digits)}]`)
+const cells = (score: DirectionScore | null): string =>
+  score === null
+    ? `${'-'.padStart(7)} ${'-'.padEnd(26)} ${'-'.padStart(9)} ${'-'.padStart(6)} ${'-'.padEnd(24)}`
+    : `${String(score.n).padStart(7)} ${(pct(score.directionSkill).trim() + interval(score.ci?.directionSkill)).padEnd(26)} ${pct(score.detectable ?? null)} ${String(score.calls).padStart(6)} ${(pct(score.precision, 1).trim() + interval(score.ci?.precision, 1)).padEnd(24)}`
 
 console.log(`walk forward ${RUN} of ${PROFILE}`)
-console.log('horizon    source                 outcomes   skill  calls   right  verdict                      P(up) of')
+console.log('horizon    source                 outcomes skill [95%]                detectable calls  right [95%]              verdict                      P(up) of')
 for (const horizon of HORIZONS as Horizon[]) {
   let bytes: Buffer
   try {
@@ -55,7 +61,7 @@ for (const horizon of HORIZONS as Horizon[]) {
   // would have it, so the baseline is the ensemble's own reading.
   const promoted = new Set(record.models)
   const shown = scoreOutOfSample(rows, 'v2', promoted)
-  const report = directionReportOf(rows, shown)
+  const report = directionReportOf(rows, shown, horizon)
   if (report === null) continue
   // The source each class would read from, judged as the app judges it: through a calibration built the
   // same way, so that the choice is the app's own function on the same figures.

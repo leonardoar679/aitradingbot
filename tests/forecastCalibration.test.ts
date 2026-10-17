@@ -300,7 +300,9 @@ describe('the run\'s calibration', () => {
     expect(honest.direction).toBeGreaterThan(0.6)
   })
 
-  it('falls back from a class with too few outcomes to the horizon\'s', () => {
+  // Unhurried too: a calibration's every score now resamples the fixture's rows, each an hour of its own
+  // (V7.2 Stage 1), which the real record's five hundred hours never ask.
+  it('falls back from a class with too few outcomes to the horizon\'s', { timeout: 60_000 }, () => {
     const record = recordOf({ rows: 14_000, seed: 24 })
     // Every row a mid-cap but a few hundred BTC rows.
     for (let row = 0; row < record.rows; row++) record.cls[row] = row % 40 === 0 ? 0 : 3

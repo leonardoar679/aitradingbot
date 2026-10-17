@@ -10,6 +10,7 @@ import type { CheckLine } from './promotion'
 import { MARKET_REGIMES } from './features'
 import type { MarketRegime } from '../marketResearch'
 import { RUN_CALIBRATION_VERSION, VARIANTS, type CurveBin, type DirectionCalibration, type DirectionReport, type DirectionScore, type HonestScore, type HorizonCalibration, type RunCalibration, type VariantCalibration } from './runCalibration'
+import type { Interval } from './uncertainty'
 import type { ShockRefusal, ShockRule, ShockScore } from './shock'
 import { MARKET_SHOCK_STATES, type MarketShockRules, type MarketShockState, type ShockWidening } from './marketShock'
 
@@ -60,6 +61,34 @@ function readIsotonic(value: unknown): IsotonicModel | null {
   return { x: value.x, y: value.y as number[], n: value.n as number[] }
 }
 
+/** An interval (V7.2 Stage 1): null where none could be read, undefined where the shape is not one. */
+function readInterval(value: unknown): Interval | null | undefined {
+  if (value === null) return null
+  if (!isObject(value) || !finite(value.low) || !finite(value.high) || value.low > value.high) return undefined
+  return { low: value.low, high: value.high }
+}
+
+function readIntervals<K extends string>(value: unknown, keys: readonly K[]): Record<K, Interval | null> | undefined {
+  if (!isObject(value)) return undefined
+  const out = {} as Record<K, Interval | null>
+  for (const key of keys) {
+    const made = readInterval(value[key])
+    if (made === undefined) return undefined
+    out[key] = made
+  }
+  return out
+}
+
+/** What a score's figures are worth (V7.2 Stage 1), where the score carries it: the intervals, the effective
+ * sample and the blocks together, refused part-made; a score from before carries none. */
+function readWorth<K extends string>(value: Raw, keys: readonly K[]): { ci?: Record<K, Interval | null>; nEff?: number; blocks?: number } | undefined {
+  if (value.ci === undefined && value.nEff === undefined && value.blocks === undefined) return {}
+  const ci = readIntervals(value.ci, keys)
+  const nEff = measured(value.nEff)
+  if (ci === undefined || nEff === undefined || !finite(value.blocks)) return undefined
+  return { ci, nEff, blocks: value.blocks }
+}
+
 function readScore(value: unknown): HonestScore | null | undefined {
   if (value === null) return null
   if (!isObject(value) || !Array.isArray(value.curve)) return undefined
@@ -75,7 +104,9 @@ function readScore(value: unknown): HonestScore | null | undefined {
     if (!isObject(bin) || !finite(bin.predicted) || !finite(bin.observed) || !finite(bin.n)) return undefined
     curve.push({ predicted: bin.predicted, observed: bin.observed, n: bin.n })
   }
-  return { ...(figures as Record<(typeof keys)[number], number>), curve }
+  const worth = readWorth(value, ['coverage80', 'coverage50', 'skill', 'directionSkill'] as const)
+  if (worth === undefined) return undefined
+  return { ...(figures as Record<(typeof keys)[number], number>), curve, ...worth }
 }
 
 /** A map by pair class, every value read by `read`; null when any key or value is not one. */
@@ -181,7 +212,11 @@ function readDirectionScore(value: unknown): DirectionScore | null | undefined {
   }
   const curve = readCurve(value.curve)
   if (curve === null) return undefined
-  return { ...(figures as Record<(typeof keys)[number], number>), curve }
+  const worth = readWorth(value, ['directionSkill', 'precision'] as const)
+  if (worth === undefined) return undefined
+  const detectable = value.detectable === undefined ? undefined : measured(value.detectable)
+  if (value.detectable !== undefined && detectable === undefined) return undefined
+  return { ...(figures as Record<(typeof keys)[number], number>), curve, ...worth, ...(detectable === undefined ? {} : { detectable }) }
 }
 
 const CHECK_IDS: readonly CheckLine['id'][] = ['outcomes', 'coverage', 'pinball', 'trades', 'skill', 'calls']
