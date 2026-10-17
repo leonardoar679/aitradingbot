@@ -366,6 +366,11 @@ describe('the walk forward', () => {
     expect(made.lab.rows).toBe(shown.length)
     expect(made.replay).toHaveLength(shown.length)
     expect(made.lab.weeks).toEqual([1, 2, 3])
+    // The forecast shown by the hour it was made at (V7.2 Stage 4): twenty-four bands over the scored rows.
+    expect(made.lab.byHour).toMatchObject({ version: 'by-hour-v1', horizon: 'hour1', preEventOut: 0, firstWeeks: [1, 2] })
+    expect(made.lab.byHour!.rows).toBe(shown.length)
+    expect(made.lab.byHour!.hours).toHaveLength(24)
+    expect(made.lab.byHour!.hours.reduce((sum, band) => sum + band.pooled.n, 0)).toBe(shown.length)
     // Week 1 has no P(up) map, week 2 no skill read from a week before it: only week 3 calls.
     const lastWeek = record.time[Math.floor((3 * record.rows) / 4)]
     expect(shown.filter((entry) => entry.dir !== 'NEUTRAL').every((entry) => entry.t >= lastWeek)).toBe(true)

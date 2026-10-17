@@ -425,6 +425,7 @@ describe('AI code has no route to a real order', () => {
     const labService = join(SERVICES, 'forecastLabService.ts')
     expect(importsOf(labService).filter((name) => LIVE_MODULES.has(name) || aiModuleNames.has(name))).toEqual([])
     expect(importsOf(labService).sort()).toEqual([
+      'ablation',
       'bars',
       'electron',
       'ensemble',

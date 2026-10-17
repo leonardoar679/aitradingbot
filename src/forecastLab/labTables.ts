@@ -9,6 +9,8 @@ import type { DirectionScore, PUpSource } from '../../shared/forecast/runCalibra
 import type { ShockRefusal, ShockRule } from '../../shared/forecast/shock'
 import type { Interval } from '../../shared/forecast/uncertainty'
 import type { RegistryRow } from '../../shared/forecast/preregistration'
+import type { AblationFile } from '../../shared/forecast/ablation'
+import type { PairedFigure } from '../../shared/forecast/challenger'
 import { WIDENED_STATES, type MarketShockRules, type MarketShockState, type ShockWidening } from '../../shared/forecast/marketShock'
 import type { EventImpactFile } from '../../shared/calendar/eventImpact'
 import { MACRO_KINDS, type MacroEvent, type MacroKind } from '../../shared/calendar/macro'
@@ -439,6 +441,62 @@ export function classesTable(classes: readonly ClassRecord[]): LabTableData {
 }
 
 const utcText = (iso: string): string => iso.replace('T', ' ').replace(/Z$/, '')
+
+/** The forecast shown by the UTC hour it was made at (V7.2 Stage 4): each band's outcomes, how the 80% and 50%
+ * ranges held, the pinball loss, the dispersion the coverage implies, the misses in a shock state, the four
+ * halves, and whether the band fails the line (under 70% or over 90% in all four halves with 500 each). */
+export function byHourTable(lab: LabFile): LabTableData {
+  const rows: (string | number)[][] = []
+  for (const horizon of HORIZONS) {
+    const report = lab.horizons[horizon]?.byHour
+    if (report === undefined) continue
+    for (const band of report.hours) {
+      if (band.pooled.n === 0) continue
+      rows.push([
+        HORIZON_NAME[horizon],
+        `${String(band.hour).padStart(2, '0')}:00`,
+        band.pooled.n,
+        share(band.pooled.coverage80),
+        share(band.pooled.coverage50),
+        plain(band.pooled.pinball, 4),
+        plain(band.pooled.dispersion, 2),
+        share(band.pooled.missesInShock),
+        ...band.halves.map((cell) => (cell === null ? '—' : `${share(cell.coverage80, 0)} of ${cell.n}`)),
+        band.failing ? 'FAILING' : 'within the line'
+      ])
+    }
+  }
+  return { headers: ['Horizon', 'UTC hour', 'Outcomes', 'In the 80% range', 'In the 50% range', 'Pinball', 'Implied dispersion', 'Misses in a shock state', 'Pairs A, first weeks', 'A, last weeks', 'B, first weeks', 'B, last weeks', 'Band'], rows }
+}
+
+/** A paired figure as what the block saved (a loss, turned round) or added (a skill, as it is), with its interval, in the unit given. */
+const saved = (figure: PairedFigure | null, digits: number, scale: number, sign = -1): string => {
+  if (figure === null) return '—'
+  const say = (value: number): string => `${value >= 0 ? '+' : ''}${(value * scale).toFixed(digits)}`
+  return sign < 0 ? `${say(-figure.difference)} (${say(-figure.high)}–${say(-figure.low)})` : `${say(figure.difference)} (${say(figure.low)}–${say(figure.high)})`
+}
+
+/** What a block of figures added (V7.2 Stage 4; research/ablation.ts): the full fit against the fit without
+ * the block, paired on the tested hours -- the pinball loss the block saved, the 80% range's distance from
+ * 80% it saved, the direction skill it added, each with its 90% interval -- and the control with the block
+ * permuted. */
+export function ablationTable(ablations: readonly AblationFile[]): LabTableData {
+  return {
+    headers: ['Horizon', 'Block held out', 'Made (UTC)', 'Rows', 'Shared hours (blocks)', 'Pinball the block saved (x1)', 'Distance from 80% the block saved (points)', 'Direction skill the block added (points)', 'Control: pinball saved against the block permuted (x1)', 'Verdict'],
+    rows: ablations.map((file) => [
+      HORIZON_NAME[file.horizon],
+      file.block,
+      utc(file.madeAt),
+      file.rows,
+      file.paired === null ? '—' : `${file.paired.hours} (${file.paired.blocks})`,
+      saved(file.paired?.pinball ?? null, 4, 1),
+      saved(file.paired?.coverageDistance ?? null, 2, 100),
+      saved(file.paired?.directionSkill ?? null, 2, 100, 1),
+      saved(file.control?.pinball ?? null, 4, 1),
+      file.paired === null ? 'nothing to pair' : file.paired.pinball.better ? 'the block helped beyond noise and the floor' : file.paired.pinball.worse ? 'the block hurt beyond noise and the floor' : 'within noise or under the floor'
+    ])
+  }
+}
 
 /** The pre-registered lines (V7.2 Stage 3): each registration with its last result. */
 export function registrationsTable(rows: readonly RegistryRow[]): LabTableData {

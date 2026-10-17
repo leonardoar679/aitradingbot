@@ -5,6 +5,7 @@ import { eventReplayOf, type EventReplayInput, type EventReplayRow } from './eve
 import { ENSEMBLE_LINES } from './ensemble'
 import { HORIZON_BARS, MARKET_REGIMES, PAIR_CLASSES, type Horizon, type PairClass } from './features'
 import { LAB_EVENTS, LAB_LINES, eventsOf, labDrift, labMetrics, replayTrades, traderStats, type LabCase, type LabDrift, type LabEvent, type LabMetrics, type LabTrade, type TraderRule, type TraderStats } from './lab'
+import { byHourOf, type ByHourReport } from './byHour'
 import { QUANTILE_LEVELS, meanPinball } from './ml/quantile'
 import type { ForecastModelId } from './models'
 import { oosState, type OosRecord } from './oosRecord'
@@ -50,6 +51,9 @@ export interface LabHorizon {
   /** The macro calendar's releases inside the tested weeks, replayed (V7.1 Stage 12; shared/forecast/
    * eventReplay.ts); absent on a Lab made before. */
   releases?: EventReplayRow[]
+  /** The forecast shown by the UTC hour it was made at (V7.2 Stage 4; shared/forecast/byHour.ts); absent on a
+   * Lab made before. */
+  byHour?: ByHourReport
 }
 
 /** One tested hour of a pair as the replay shows it: V2's five levels in percent, its P(up) and call,
@@ -245,7 +249,9 @@ export function walkForwardLab(
       drift: labDrift(shown),
       trader: { rules: traderStats(trades.rules), medians: traderStats(trades.medians) },
       trades: { rules: trades.rules.slice(0, LAB_LINES.tradesKept), medians: trades.medians.slice(0, LAB_LINES.tradesKept) },
-      releases: eventReplayOf(replayRows, releases)
+      releases: eventReplayOf(replayRows, releases),
+      // The forecast shown by the hour it was made at (V7.2 Stage 4).
+      byHour: byHourOf(scoredShown, horizon, (entry) => (entry.at === undefined ? undefined : oosState(record, entry.at)))
     },
     replay: shown.map((entry) => ({ t: entry.t, pair: entry.pair, q: [...entry.q], pUp: entry.pUp, dir: entry.dir, move: entry.move, best: entry.best, worst: entry.worst })),
     cases

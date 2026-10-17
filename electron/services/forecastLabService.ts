@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { readFile } from 'fs/promises'
+import { readFile, readdir } from 'fs/promises'
 import { join } from 'path'
 import { coarseBars, type CoarseWidth, type ForecastBar } from '../../shared/forecast/bars'
 import { HORIZONS, PAIR_CLASSES, type Horizon } from '../../shared/forecast/features'
@@ -15,6 +15,7 @@ import { healForecastSettings } from '../../shared/forecast/training'
 import type { ModelScore } from '../../shared/forecast/walkForward'
 import { classTable, type ClassRecord, type ClassVerdict } from '../../shared/forecast/opportunityClass'
 import { EVENT_IMPACT } from '../../shared/calendar/eventImpact'
+import { parseAblationFile, type AblationFile } from '../../shared/forecast/ablation'
 import { MACRO_CALENDAR_READ_AT, nextReleases } from '../../shared/calendar/macro'
 import type { Candle, ExecutorConfig, ForecastHistory, PositionExecutorParams } from '../../shared/ipc'
 import { readForecastBars } from './forecastDataService'
@@ -275,8 +276,24 @@ export async function getForecastLab(): Promise<ForecastLabView> {
     marketShock: marketShockRulesInUse(),
     direction: directionInUse(),
     // The macro calendar (V7.1 Stage 12): the next releases, and what past ones did.
-    calendar: { readAt: MACRO_CALENDAR_READ_AT, next: nextReleases(nowSec, NEXT_RELEASES), impact: EVENT_IMPACT }
+    calendar: { readAt: MACRO_CALENDAR_READ_AT, next: nextReleases(nowSec, NEXT_RELEASES), impact: EVENT_IMPACT },
+    // What a block of figures added (V7.2 Stage 4): the ablation files on this profile, newest first.
+    ablations: await readAblations()
   }
+}
+
+/** The ablation files research/ablation.ts wrote into the models folder, newest first; a file that does not
+ * read is left out. */
+async function readAblations(): Promise<AblationFile[]> {
+  const names = await readdir(modelsDir()).catch(() => [] as string[])
+  const out: AblationFile[] = []
+  for (const name of names) {
+    if (!/^ablation-[a-z0-9]+-[a-z]+\.json$/.test(name)) continue
+    const text = await readFile(join(modelsDir(), name), 'utf-8').catch(() => null)
+    const file = text === null ? null : parseAblationFile(text)
+    if (file !== null) out.push(file)
+  }
+  return out.sort((a, b) => b.madeAt - a.madeAt)
 }
 
 /** How many of the calendar's coming releases the page lists. */

@@ -36,8 +36,10 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 // needs -- and the run calibration's version (V7.2 Stage 1) from c05bb1dfdc07; the direction bar's lines -- the skill,
 // calls, precision bound, halves, class floor and edge a direction model must hold -- and the run calibration's
 // version again (V7.2 Stage 2) from 8ccc65988f1f; the challenger's version and its two new lines -- the newer days a
-// refit within noise needs and the paired intervals' level (V7.2 Stage 3) -- from 704b82f0f396.
-const PINNED_ENGINE_VERSION = '51e30db269e8'
+// refit within noise needs and the paired intervals' level (V7.2 Stage 3) -- from 704b82f0f396; the by-hour
+// lines (the outcomes a half needs, the coverage a band fails under or over) and the ablation's blocks (V7.2 Stage
+// 4) from 51e30db269e8.
+const PINNED_ENGINE_VERSION = '637d47de9dc8'
 
 describe('the engine version', () => {
   it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {

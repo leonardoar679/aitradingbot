@@ -6,7 +6,9 @@ import type { LabFile } from '../shared/forecast/labFile'
 import type { LabHorizon } from '../shared/forecast/labWalkForward'
 import type { Candle } from '../shared/ipc'
 import { QUANTS } from '../src/agents/quantState'
-import { calibrationTable, classesOf, impactTable, leaderTable, marketShockTable, nextReleasesTable, performanceTable, releasesTable, shockTable, tableCsv, traderTable } from '../src/forecastLab/labTables'
+import { ablationTable, byHourTable, calibrationTable, classesOf, impactTable, leaderTable, marketShockTable, nextReleasesTable, performanceTable, releasesTable, shockTable, tableCsv, traderTable } from '../src/forecastLab/labTables'
+import type { AblationFile } from '../shared/forecast/ablation'
+import type { ByHourReport } from '../shared/forecast/byHour'
 import { EVENT_IMPACT } from '../shared/calendar/eventImpact'
 import { noShockRecord } from '../shared/forecast/shock'
 import { buyAndHold, hybridTrades, runComparison } from '../src/forecastLab/strategyComparison'
@@ -36,6 +38,31 @@ function horizonLab(): LabHorizon {
 const lab: LabFile = { version: LAB_VERSION, runId: 'run-x', madeAt: T, span: { from: T, to: T + 86_400 }, pairs: ['SOLUSDT'], horizons: { hour1: horizonLab(), hours4: horizonLab() } }
 
 describe('the tables', () => {
+  it('reads the forecast by the hour it was made at, and what a block of figures added (V7.2 Stage 4)', () => {
+    const cell = (n: number, coverage80: number): ByHourReport['hours'][number]['pooled'] => ({ n, coverage80, coverage50: 0.5, pinball: 0.25, dispersion: 1, missesInShock: null })
+    const band = (hour: number, failing: boolean): ByHourReport['hours'][number] => ({ hour, pooled: cell(40, failing ? 0.6 : 0.8), halves: [cell(10, 0.6), cell(10, 0.6), null, cell(10, 0.6)], failing })
+    const report: ByHourReport = { version: 'by-hour-v1', horizon: 'hour1', rows: 80, preEventOut: 0, firstWeeks: [1, 2], hours: [band(0, false), band(14, true), { ...band(23, false), pooled: cell(0, Number.NaN) }], weekdays: [], failing: [14] }
+    const withHours: LabFile = { ...lab, horizons: { hour1: { ...horizonLab(), byHour: report } } }
+    const table = byHourTable(withHours)
+    expect(table.headers.slice(0, 3)).toEqual(['Horizon', 'UTC hour', 'Outcomes'])
+    expect(table.rows.map((row) => row[1])).toEqual(['00:00', '14:00'])
+    expect(table.rows[1].slice(2, 8)).toEqual([40, '60.0%', '50.0%', '0.2500', '1.00', '—'])
+    expect(table.rows[1].slice(8)).toEqual(['60% of 10', '60% of 10', '—', '60% of 10', 'FAILING'])
+    expect(table.rows[0][12]).toBe('within the line')
+    expect(byHourTable(lab).rows).toEqual([])
+    const figure = { difference: -0.0021, low: -0.003, high: -0.001, better: true, worse: false }
+    const file: AblationFile = { version: 'ablation-v1', horizon: 'hour1', block: 'clock', madeAt: T, rows: 1000, paired: { hours: 400, blocks: 400, pinball: figure, coverageDistance: { ...figure, better: false }, directionSkill: null }, control: { hours: 400, blocks: 400, pinball: { difference: 0.0001, low: -0.0005, high: 0.0007, better: false, worse: false }, coverageDistance: figure, directionSkill: null }, seconds: 300 }
+    const ablations = ablationTable([file, { ...file, block: 'market', paired: null, control: null }])
+    expect(ablations.rows[0].slice(0, 2)).toEqual(['1h', 'clock'])
+    expect(ablations.rows[0][4]).toBe('400 (400)')
+    expect(ablations.rows[0][5]).toBe('+0.0021 (+0.0010–+0.0030)')
+    expect(ablations.rows[0][6]).toBe('+0.21 (+0.10–+0.30)')
+    expect(ablations.rows[0][7]).toBe('—')
+    expect(ablations.rows[0][8]).toBe('-0.0001 (-0.0007–+0.0005)')
+    expect(ablations.rows[0][9]).toBe('the block helped beyond noise and the floor')
+    expect(ablations.rows[1].slice(4)).toEqual(['—', '—', '—', '—', '—', 'nothing to pair'])
+  })
+
   it('reads each horizon\'s two variants, for every coin or one class', () => {
     const table = performanceTable(lab, 'pooled')
     expect(table.rows.map((row) => `${row[0]} ${row[1]}`)).toEqual(['1h V1 price only', '1h V2 + technical (shown)', '4h V1 price only', '4h V2 + technical (shown)'])

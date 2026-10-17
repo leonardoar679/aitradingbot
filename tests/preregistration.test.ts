@@ -26,7 +26,9 @@ const ADDED_SINCE_16_OCTOBER = [
   'forecast.directionModels.promotion.classFloor',
   'forecast.directionModels.promotion.edgeAbovePct',
   'forecast.challenger.newerDays',
-  'forecast.challenger.level'
+  'forecast.challenger.level',
+  'forecast.byHour',
+  'forecast.ablation'
 ]
 const INFRASTRUCTURE = ['forecast.uncertainty']
 

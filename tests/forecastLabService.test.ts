@@ -200,6 +200,12 @@ describe('what the page is shown', () => {
 
   it('the leaderboard from the walk forward\'s own record, the live record of the last week, and the refit', async () => {
     mkdirSync(models(), { recursive: true })
+    // What a block of figures added (V7.2 Stage 4): the ablation files on the profile, newest first, a damaged one left out.
+    const figure = { difference: -0.002, low: -0.003, high: -0.001, better: true, worse: false }
+    const ablation = (block: string, madeAt: number): string => JSON.stringify({ version: 'ablation-v1', horizon: 'hour1', block, madeAt, rows: 500, paired: { hours: 100, blocks: 100, pinball: figure, coverageDistance: figure, directionSkill: null }, control: null, seconds: 60 })
+    writeFileSync(join(models(), 'ablation-hour1-clock.json'), ablation('clock', 1000))
+    writeFileSync(join(models(), 'ablation-hour1-market.json'), ablation('market', 2000))
+    writeFileSync(join(models(), 'ablation-hour1-volume.json'), '{"version":"ablation-v1","horizon":"hour1","block":"volume"}')
     const now = Math.floor(Date.now() / 1000)
     const month = new Date(now * 1000).toISOString().slice(0, 7)
     const score = (pinball: number) => ({ n: 9000, pinball, coverage80: 0.8, coverage50: 0.5, direction: 0.5, bias: 0, width80: 2 })
@@ -238,6 +244,8 @@ describe('what the page is shown', () => {
     expect(view.live.horizons.hour1?.outcomes).toBe(1)
     expect(view.refit).toMatchObject({ on: false, nextAt: 1_800_000_000, trainingStatus: 'ready' })
     expect(view.shock).toEqual({ hour1: rule })
+    // The ablation files, newest first, the damaged one left out (V7.2 Stage 4).
+    expect(view.ablations?.map((file) => [file.block, file.madeAt])).toEqual([['market', 2000], ['clock', 1000]])
     expect(view.marketShock).toEqual({ hour1: rules })
     // The macro calendar (V7.1 Stage 12): the next six releases from now, and the shipped impact history.
     expect(view.calendar.readAt).toBe('2026-10-16')

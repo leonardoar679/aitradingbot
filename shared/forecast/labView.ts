@@ -1,4 +1,5 @@
 import type { EventImpactFile } from '../calendar/eventImpact'
+import type { AblationFile } from './ablation'
 import type { ChallengeRecord } from './challenger'
 import type { MacroEvent } from '../calendar/macro'
 import type { Horizon, PairClass } from './features'
@@ -62,6 +63,9 @@ export interface ForecastLabView {
   /** The macro calendar (V7.1 Stage 12): when it was read, the next releases from now, and the shipped
    * history of what Bitcoin did after past releases. */
   calendar: { readAt: string; next: MacroEvent[]; impact: EventImpactFile | null }
+  /** What a block of figures added (V7.2 Stage 4): every ablation file research/ablation.ts wrote into the
+   * profile's forecastModels/, newest first; empty before one. */
+  ablations?: AblationFile[]
 }
 
 export interface ForecastReplay {

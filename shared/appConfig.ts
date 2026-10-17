@@ -76,6 +76,8 @@ import { DRIFT_LINES, DRIFT_VERSION } from './forecast/drift'
 import { RUNS_KEPT } from './forecast/training'
 import { RUN_CALIBRATION_VERSION } from './forecast/runCalibration'
 import { UNCERTAINTY_LINES, UNCERTAINTY_VERSION } from './forecast/uncertainty'
+import { BY_HOUR_LINES, BY_HOUR_VERSION } from './forecast/byHour'
+import { ABLATION_VERSION, FEATURE_BLOCKS } from './forecast/ablation'
 import { DEGRADATION_LINES, DEGRADED_THREAD_SECONDS, DIRECTION_PROMOTION_LINES, PROMOTION_LINES } from './forecast/promotion'
 import { LOGISTIC_FIT } from './forecast/ml/logistic'
 import { DIRECTION_MODELS, EXCURSION_LEVELS } from './forecast/models'
@@ -182,6 +184,10 @@ export const ENGINE_CONSTANTS = {
     // What the figures are worth (V7.2 Stage 1): the intervals' draws, seed, blocks by horizon, level, and the
     // standard deviations a skill must reach to be told from zero.
     uncertainty: { version: UNCERTAINTY_VERSION, ...UNCERTAINTY_LINES },
+    // The clock as a diagnostic (V7.2 Stage 4): the lines an hour band fails by; and the blocks of figures an
+    // ablation holds out.
+    byHour: { version: BY_HOUR_VERSION, ...BY_HOUR_LINES },
+    ablation: { version: ABLATION_VERSION, blocks: FEATURE_BLOCKS },
     direction: DIRECTION_LINES,
     reliability: RELIABILITY_LINES,
     prediction: { version: PREDICTION_VERSION, ...PREDICTION_LINES },

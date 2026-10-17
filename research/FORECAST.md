@@ -600,6 +600,52 @@ own hour-1 skill (+0.13%) is under the 1% line a source needs, so a refusal on d
 losing something nothing trades on; whether the challenger's direction line should weigh only sources in use is a
 question for Stage 8, with the year's fits.
 
+## V7.2 Stage 4 -- the clock as a diagnostic, and what a block of figures added (17 October 2026)
+
+**By hour** (`shared/forecast/byHour.ts`, made with every Lab and shown on its By hour card; `research/byHour.ts`).
+The rows carry the hour of the day and the day of the week as figures, and the usual move a forecast is scaled by
+knows nothing of the clock. The forecast shown, scored out of sample as the app scores it, read by the UTC hour it
+was made at, on run-20261016-0640 (the lab12h profile) and on run-20261016-1236 (the two-day run's first fit, whose
+record carries the market's states):
+
+| hour1, UTC hour | 80% held (0640) | 80% held (1236) | implied dispersion | the misses in a shock state (1236) | 5-min range vs the day's median | quote volume share |
+|---|---|---|---|---|---|---|
+| 14 | 61.1% | 61.5% | 1.49 | 18% | 1.40 | 7.4% |
+| 15 | 70.8% | 70.7% | 1.22 | 6% | 1.33 | 6.6% |
+| 1 | 68.4% | 68.7% | 1.28 | 6% | 1.08 | 3.7% |
+| 4 | 71.8% | 71.0% | 1.19 | 31% | 0.92 | 3.4% |
+| 13 | 85.6% | 85.1% | 0.88 | 26% | 1.29 | 6.4% |
+| 23 | 87.2% | 88.2% | 0.84 | 20% | 0.82 | 3.0% |
+
+At an hour the 80% range held from 61% (14:00 UTC, the hour after the New York open and the 13:30 releases: the
+true spread one and a half times the forecast's) to 87-88% (23:00 UTC, the range a sixth too wide); at five
+minutes from 67% to 87%, at fifteen from 70-72% to 88%, at four hours from 62-66% to 86%, at a day from 76% to 85%.
+The 14:00 band is under 70% in all four halves on both records (60-63%), and the 23:00 band at or over 90% in
+two. The weekday reads 72-83% and is not acted on. **The registered line** (V72-S4-CLOCK: a band fails only under
+70% or over 90% in all four halves with at least 500 outcomes each) **cannot be read on three weeks**: the largest
+half of a band holds 252 outcomes, the smallest 56. By its letter no band fails and Stage 9 would carry no CLOCK
+block; in substance the pattern is as large as any this cycle has found and the same on two records twelve
+hours apart. The line stands as registered and is recorded NOT MEASURED, to be read on Stage 8's year of bars
+(where a half holds thousands); the shock states explain a minority of the misses in the failing hour (18%), so
+the band is not the releases alone.
+
+**What a block of figures added** (`shared/forecast/ablation.ts`, `research/ablation.ts`; the Lab's What a block
+of figures added card reads the files the tool writes). The walk forward fitted twice on identical folds and
+seeds -- once with every block, once with one block's columns held at their training mean -- and the two
+forecasts paired on the tested hours with Stage 1's paired bootstrap; and a control with the block's columns
+permuted across the tested rows. On the lab12h profile's bars at an hour (85,882 tested rows, 504 shared hours,
+the clock block of four columns, 512 s): two full fits differ at zero figures (the registered line V72-S4-ABLATION,
+determinism); the clock block saved +0.0003 of a pinball loss of 0.27 [-0.0000, +0.0006], a tenth of a percent and
+within noise; the 80% range's distance from 80% it cost 0.36 points [0.14, 0.52], real and under the 2-point
+floor; the direction skill it added -0.14 points [-0.33, +0.05]; the permuted control saved the same +0.0003
+[+0.0001, +0.0006], 0.11% of the loss and under the 0.2% line. The direction models read the clock as noise:
+dir-logistic made 404 calls with it (45.3% right) against 53 without (54.7% right), at the same skill. The clock
+as four columns of sines adds nothing the trees can use at an hour, while the by-hour bands say the range is a
+third too narrow at the open: the clock is in the rows and not learned, which is what Stage 9's CLOCK block (a
+diurnal scale of the usual move, read where Stage 4 found a failing band) is built to try -- on the year, once a
+band can fail. `FEATURE_BLOCKS` lives in `shared/forecast/ablation.ts` rather than `features.ts`, and the mask is
+on the rows the models are handed, never on the models: the engine's fit is unchanged.
+
 ## The models' calls and their cost
 
 | Run | calls | answered | valid | latency, median / 95th | spent |

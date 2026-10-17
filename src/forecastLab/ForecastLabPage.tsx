@@ -36,6 +36,8 @@ import {
   pUpCurveTable,
   registrationsTable,
   releasesTable,
+  ablationTable,
+  byHourTable,
   shockTable,
   tableCsv,
   timingTable,
@@ -263,6 +265,24 @@ export function ForecastLabPage(): React.JSX.Element {
           <LabTable table={calibrationTable(lab)} name="calibration" onNote={setNote} />
           <p style={{ ...noteStyle, marginTop: '0.8rem' }}>P(up) against the share that went up, where a map from the weeks before could be read:</p>
           <LabTable table={pUpCurveTable(lab)} name="p-up" onNote={setNote} />
+        </Card>
+      )}
+
+      {lab !== null && Object.values(lab.horizons).some((entry) => entry?.byHour !== undefined) && (
+        <Card title="By hour">
+          <p style={{ ...noteStyle, marginTop: 0 }}>
+            The forecast shown by the UTC hour it was made at (V7.2 Stage 4): how the 80% and 50% ranges held, the pinball loss, the dispersion the coverage implies (the true spread over the forecast's: 1 where 80% held, more where the range ran too narrow), the share of the misses forecast in a shock state, and each band in four halves -- the pairs' two halves by the first weeks against the last. A band FAILS the registered line only under 70% or over 90% in all four halves with 500 outcomes each; three weeks seldom give a half 500, and the weekday is reported, never acted on. Rows forecast before a scheduled release are left out.
+          </p>
+          <LabTable table={byHourTable(lab)} name="by-hour" onNote={setNote} />
+        </Card>
+      )}
+
+      {view !== null && (view.ablations ?? []).length > 0 && (
+        <Card title="What a block of figures added">
+          <p style={{ ...noteStyle, marginTop: 0 }}>
+            The walk forward fitted twice on identical folds and seeds (research/ablation.ts, V7.2 Stage 4) -- once with every block of figures, once with one block's columns held at their training mean -- and the two forecasts paired on the tested hours: the pinball loss the block saved, the 80% range's distance from 80% it saved and the direction skill it added, each with its 90% interval, and a control with the block's columns permuted across the tested rows, which must read near zero. A positive figure means the block helped.
+          </p>
+          <LabTable table={ablationTable(view.ablations ?? [])} name="ablation" onNote={setNote} />
         </Card>
       )}
 
