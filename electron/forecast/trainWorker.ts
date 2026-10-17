@@ -7,14 +7,15 @@ import { binMatrix, fitCuts, rngOf, type Matrix } from '../../shared/forecast/ml
 import { fitGbt, lossOf, predictGbt } from '../../shared/forecast/ml/gbt'
 import { DIRECTION_MODELS, FORECAST_MODELS, fitHorizon, normalizedTarget, predictDirection, predictExcursion, predictHorizon, type DirectionModelId, type FittedHorizon, type ForecastModelId } from '../../shared/forecast/models'
 import { firstTouchTable, type FirstTouchTable } from '../../shared/forecast/firstTouch'
-import { serializeRunCalibration } from '../../shared/forecast/calibrationFile'
+import { parseRunCalibration, serializeRunCalibration } from '../../shared/forecast/calibrationFile'
+import { pairedChallengeOf, type PairedChallenge } from '../../shared/forecast/challenger'
 import { serializeFitted } from '../../shared/forecast/modelFile'
 import { LAB_VERSION, type TraderRule } from '../../shared/forecast/lab'
 import { serializeLab, serializeReplay, type LabFile } from '../../shared/forecast/labFile'
 import { walkForwardLab, type StoryMarkInput } from '../../shared/forecast/labWalkForward'
 import { decodeOos, encodeOos, OOS_VERSION, type OosRecord } from '../../shared/forecast/oosRecord'
 import { buildPanel, type Panel } from '../../shared/forecast/panel'
-import { buildRunCalibration, type RunCalibration, type TradeableBefore } from '../../shared/forecast/runCalibration'
+import { buildRunCalibration, rowsOf, scoreOutOfSample, type RunCalibration, type ScoredRow, type TradeableBefore } from '../../shared/forecast/runCalibration'
 import { preEventAt } from '../../shared/calendar/macro'
 import { btcTimelineOf, marketShockByTime, shockMomentsOf, STATE_UNKNOWN, MARKET_SHOCK_STATES } from '../../shared/forecast/marketShock'
 import { btc15ByTime } from '../../shared/forecast/shock'
@@ -50,7 +51,7 @@ const SEED = 20261013
 export type WorkerRequest =
   | { id: number; task: 'selftest'; rows: number; cols: number; seed: number }
   | { id: number; task: 'fit'; dataDir: string; outDir: string; runId: string; nowSec: number }
-  | { id: number; task: 'folds'; dataDir: string; outDir: string; runId: string; nowSec: number; heldBefore?: TradeableBefore }
+  | { id: number; task: 'folds'; dataDir: string; outDir: string; runId: string; nowSec: number; heldBefore?: TradeableBefore; championRunId?: string }
   | { id: number; task: 'calibrate'; outDir: string; runId: string; promotions: Promotion[] }
   | { id: number; task: 'lab'; dataDir: string; outDir: string; runId: string; promotions: Promotion[]; stories: StoryMarkInput[]; nowSec: number }
 
@@ -77,6 +78,11 @@ export interface FoldsResult {
     lastWeek: { model: ForecastModelId; score: ModelScore }[]
   }[]
   calibration: CalibrationSummary[]
+  /** Paired with the champion's walk forward on the hours both tested (V7.2 Stage 3), and the days the
+   * challenger's rows reach past the champion's; absent where no champion was named or its record could not
+   * be read. */
+  paired?: PairedChallenge
+  newerDays?: number | null
   ms: number
 }
 
@@ -270,8 +276,39 @@ async function folds(request: Extract<WorkerRequest, { task: 'folds' }>): Promis
   progress(request.id, 'calibrating', step, HORIZONS.length * plan.length)
   // When a target is reached (V7.1 Stage 3): the first-touch table from the bars about every row of the grid.
   const touch = firstTouchTable(market, panel)
-  const calibration = await writeCalibration(dir, records, promotionsOf(horizons), request.runId, touch, request.heldBefore)
-  return { task: 'folds', runId: request.runId, folds: plan, horizons, calibration, ms: Date.now() - started }
+  const promotions = promotionsOf(horizons)
+  const calibration = await writeCalibration(dir, records, promotions, request.runId, touch, request.heldBefore)
+  // Paired with the champion's walk forward on the hours both tested (V7.2 Stage 3), where its record is on file.
+  const paired = request.championRunId === undefined ? undefined : await pairWithChampion(request.outDir, request.championRunId, records, promotions)
+  return { task: 'folds', runId: request.runId, folds: plan, horizons, calibration, ...(paired === undefined ? {} : { paired: paired.figures, newerDays: paired.newerDays }), ms: Date.now() - started }
+}
+
+/** The champion's and the challenger's shown forecasts (V2, each with the models its calibration weighs)
+ * paired on the hours both tested, and how many days the challenger's rows reach past the champion's;
+ * undefined where the champion's calibration or every record of it could not be read. */
+async function pairWithChampion(outDir: string, championRunId: string, records: ReadonlyMap<Horizon, OosRecord>, promotions: readonly Promotion[]): Promise<{ figures: PairedChallenge; newerDays: number | null } | undefined> {
+  const text = await readFile(join(outDir, championRunId, 'calibration.json'), 'utf-8').catch(() => null)
+  const calibration = text === null ? null : parseRunCalibration(text)
+  if (calibration === null) return undefined
+  const champion = new Map<Horizon, ScoredRow[]>()
+  const challenger = new Map<Horizon, ScoredRow[]>()
+  let championLast = 0
+  let challengerLast = 0
+  for (const horizon of HORIZONS) {
+    const mine = records.get(horizon)
+    if (mine === undefined) continue
+    const bytes = await readFile(join(outDir, championRunId, `oos-${horizon}.bin`)).catch(() => null)
+    if (bytes === null) continue
+    const theirs = decodeOos(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength))
+    if (theirs === null) continue
+    const weighed = (calibration.horizons[horizon]?.variants.v2.weights.pooled ?? []).filter((entry) => entry.weight > 0).map((entry) => entry.model)
+    champion.set(horizon, scoreOutOfSample(rowsOf(theirs), 'v2', new Set<ForecastModelId>(weighed.length > 0 ? weighed : theirs.models)))
+    challenger.set(horizon, scoreOutOfSample(rowsOf(mine), 'v2', new Set<ForecastModelId>(promotions.filter((entry) => entry.horizon === horizon && entry.promoted).map((entry) => entry.model))))
+    for (let row = 0; row < theirs.rows; row++) if (theirs.time[row] > championLast) championLast = theirs.time[row]
+    for (let row = 0; row < mine.rows; row++) if (mine.time[row] > challengerLast) challengerLast = mine.time[row]
+  }
+  if (champion.size === 0) return undefined
+  return { figures: pairedChallengeOf(champion, challenger), newerDays: championLast > 0 && challengerLast > 0 ? (challengerLast - championLast) / 86_400 : null }
 }
 
 /** The calibration from a walk forward's records, written beside them; what it made of each horizon. With

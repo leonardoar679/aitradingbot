@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { mkdir, readFile, readdir, rm } from 'fs/promises'
 import { join } from 'path'
 import { parseRunCalibration } from '../../shared/forecast/calibrationFile'
-import { challengeRefusals, compareRuns, type ChallengeVerdict } from '../../shared/forecast/challenger'
+import { challengeRefusals, challengeSummary, compareRuns, type ChallengeVerdict } from '../../shared/forecast/challenger'
 import { HORIZONS, type Horizon } from '../../shared/forecast/features'
 import { parseFitted } from '../../shared/forecast/modelFile'
 import type { DirectionModelId, FittedHorizon } from '../../shared/forecast/models'
@@ -236,11 +236,15 @@ function runTraining(why: 'first' | 'nightly' | 'stale'): Promise<void> {
       state.status = 'testing'
       tell()
       // The run in use's tradeable verdicts go with the walk forward (V7.2 Stage 2): a direction model is a
-      // P(up) source only where two walk forwards in a row found it tradeable.
-      const foldsAnswer = await askWorker({ task: 'folds', dataDir, outDir: modelsDir(), runId, nowSec, ...(champion === null ? {} : { heldBefore: tradeableVerdictsOf(champion.calibration) }) }, (progress) => {
-        state.progress = progress
-        tell()
-      })
+      // P(up) source only where two walk forwards in a row found it tradeable. And the champion's walk forward
+      // is named (V7.2 Stage 3), for the worker to pair the two on the hours both tested.
+      const foldsAnswer = await askWorker(
+        { task: 'folds', dataDir, outDir: modelsDir(), runId, nowSec, ...(champion === null ? {} : { heldBefore: tradeableVerdictsOf(champion.calibration), championRunId: champion.file.foldsRunId ?? champion.file.runId }) },
+        (progress) => {
+          state.progress = progress
+          tell()
+        }
+      )
       if (!foldsAnswer.ok) throw new Error(foldsAnswer.error)
       const folds = foldsAnswer.result as FoldsResult
       const promotions = promotionsOf(folds.horizons)
@@ -250,11 +254,13 @@ function runTraining(why: 'first' | 'nightly' | 'stale'): Promise<void> {
       const horizons = folds.horizons.map((entry) => ({ horizon: entry.horizon, tested: entry.tested, kept: entry.kept, scores: entry.scores }))
       let verdict: ChallengeVerdict | null = null
       if (champion !== null) {
-        verdict = compareRuns(champion.calibration, made)
+        // Beyond noise (V7.2 Stage 3): the paired figures where the worker could pair the two, the tolerances
+        // alone where it could not.
+        verdict = compareRuns(champion.calibration, made, folds.paired ?? null, folds.newerDays ?? null)
         state.challenge = { at: nowSec, runId, championRunId: champion.file.runId, adopted: verdict.adopted, verdict }
         if (!verdict.adopted) {
-          // The challenger loses: on the log with the comparison, on file for the Lab, in use nowhere.
-          await record({ kind: 'rejected', why, runId, ok: true, ms: folds.ms, championRunId: champion.file.runId, refusals: challengeRefusals(verdict), challenge: verdict, folds: folds.folds, horizons, promotions, calibration: folds.calibration, degraded })
+          // The challenger loses, or is within noise: on the log with the comparison, on file for the Lab, in use nowhere.
+          await record({ kind: 'rejected', why, runId, ok: true, ms: folds.ms, championRunId: champion.file.runId, verdictWhy: verdict.why, summary: challengeSummary(verdict), refusals: challengeRefusals(verdict), challenge: verdict, folds: folds.folds, horizons, promotions, calibration: folds.calibration, degraded })
           await sweepRuns([champion.file.runId, ...(champion.file.previous === null || champion.file.previous === undefined ? [] : [champion.file.previous.runId])])
           state.status = 'ready'
           return
@@ -283,7 +289,7 @@ function runTraining(why: 'first' | 'nightly' | 'stale'): Promise<void> {
         promotions,
         calibration: folds.calibration,
         degraded,
-        ...(verdict === null ? {} : { championRunId: champion!.file.runId, challenge: verdict })
+        ...(verdict === null ? {} : { championRunId: champion!.file.runId, verdictWhy: verdict.why, summary: challengeSummary(verdict), challenge: verdict })
       })
       await sweepRuns([runId, ...(current.previous === null || current.previous === undefined ? [] : [current.previous.runId])])
       state.status = 'ready'

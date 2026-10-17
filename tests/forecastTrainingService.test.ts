@@ -23,7 +23,7 @@ import { promoted, recordOf } from './forecastRecords'
 vi.mock('electron', () => ({ app: { getPath: () => process.env.AI_TEST_USER_DATA } }))
 
 const fake = vi.hoisted(() => ({
-  asked: [] as { task: string; runId: string; heldBefore: boolean }[],
+  asked: [] as { task: string; runId: string; heldBefore: boolean; championRunId: string | undefined }[],
   failFit: false,
   data: { ready: 25, pairs: 30 },
   listeners: [] as (() => void)[],
@@ -32,6 +32,9 @@ const fake = vi.hoisted(() => ({
    * before V6 Stage 10), at every horizon. */
   scores: null as { model: string; overall: Record<string, number>; byClass: Record<string, never> }[] | null,
   lastWeek: null as { model: string; score: Record<string, number> }[] | null,
+  /** The paired figures the worker returns with a walk forward (V7.2 Stage 3), and the newer days; none by default. */
+  paired: null as Record<string, unknown> | null,
+  newerDays: null as number | null,
   told: [] as { title: string; body: string; extra?: Record<string, unknown> }[]
 }))
 
@@ -75,7 +78,7 @@ const score = (pinball: number): Record<string, number> => ({ n: 9000, pinball, 
 
 vi.mock('../electron/services/forecastWorkerService', () => ({
   askWorker: vi.fn(async (request: { task: string; outDir: string; runId: string }) => {
-    fake.asked.push({ task: request.task, runId: request.runId, heldBefore: (request as { heldBefore?: unknown }).heldBefore !== undefined })
+    fake.asked.push({ task: request.task, runId: request.runId, heldBefore: (request as { heldBefore?: unknown }).heldBefore !== undefined, championRunId: (request as { championRunId?: string }).championRunId })
     if (request.task === 'fit') {
       if (fake.failFit) return { id: 1, ok: false, error: 'the worker ran out of rows' }
       writeRun(request.outDir, request.runId)
@@ -102,6 +105,7 @@ vi.mock('../electron/services/forecastWorkerService', () => ({
           ...(fake.lastWeek === null ? {} : { lastWeek: fake.lastWeek })
         })),
         calibration: [],
+        ...(fake.paired === null ? {} : { paired: fake.paired, newerDays: fake.newerDays }),
         ms: 7
       }
     }
@@ -149,6 +153,8 @@ beforeEach(() => {
   fake.settings = {}
   fake.scores = null
   fake.lastWeek = null
+  fake.paired = null
+  fake.newerDays = null
   fake.told.length = 0
 })
 
@@ -163,8 +169,9 @@ describe('the first fit', () => {
     fake.listeners[0]()
     await vi.waitFor(() => expect(training.getForecastTrainingState().status).toBe('ready'))
     expect(fake.asked.map((entry) => entry.task)).toEqual(['fit', 'folds'])
-    // A first fit has no run before: the walk forward is handed no verdicts (V7.2 Stage 2).
+    // A first fit has no run before: the walk forward is handed no verdicts (V7.2 Stage 2) and no champion to pair with (Stage 3).
     expect(fake.asked[1].heldBefore).toBe(false)
+    expect(fake.asked[1].championRunId).toBeUndefined()
     const state = training.getForecastTrainingState()
     expect(state.current?.runId).toBe(fake.asked[0].runId)
     expect(state.current?.foldsRunId).toBe(fake.asked[0].runId)
@@ -301,6 +308,51 @@ describe('a refit', () => {
     expect(lines.find((line) => line.kind === 'fit')).toMatchObject({ challenger: true, why: 'stale' })
   })
 
+  it('keeps the champion where the pair reads within noise and the refit is under a week newer, and adopts it a week newer (V7.2 Stage 3)', async () => {
+    const runId = 'run-20261010-0030'
+    writeRun(dir(), runId)
+    writeCalibration(dir(), runId)
+    writeFileSync(join(dir(), 'current.json'), JSON.stringify({ runId, fittedAt: Math.floor(Date.now() / 1000) - 30 * 3600, foldsRunId: runId, promotions: [] }))
+    const figure = { difference: 0.0001, low: -0.001, high: 0.0012, better: false, worse: false }
+    fake.paired = { hour1: { hours: 400, blocks: 400, pinball: figure, coverageDistance: figure, directionSkill: null } }
+    fake.newerDays = 0.5
+    const training = await service()
+    training.startForecastTraining()
+    await vi.waitFor(() => expect(fake.asked.map((entry) => entry.task)).toEqual(['fit', 'folds']))
+    await vi.waitFor(() => expect(training.getForecastTrainingState().status).toBe('ready'))
+    const state = training.getForecastTrainingState()
+    const challenger = fake.asked[0].runId
+    // Within noise and half a day newer: the champion stays, the refit on file, the log says why.
+    expect(state.current?.runId).toBe(runId)
+    expect(state.challenge).toMatchObject({ runId: challenger, championRunId: runId, adopted: false, verdict: { why: 'within-noise', newerDays: 0.5 } })
+    const records = readdirSync(dir()).filter((name) => name.startsWith('training-'))
+    const lines = readFileSync(join(dir(), records[0]), 'utf-8').trim().split('\n').map((line) => JSON.parse(line) as Record<string, unknown>)
+    expect(lines.find((line) => line.kind === 'rejected')).toMatchObject({ runId: challenger, championRunId: runId, verdictWhy: 'within-noise', refusals: ['within noise at every horizon, 0.5 days newer (7 needed)'] })
+    expect(String(lines.find((line) => line.kind === 'rejected')!.summary)).toMatch(/^kept the champion: within noise/)
+    expect(existsSync(join(dir(), challenger))).toBe(true)
+  })
+
+  it("adopts a refit within noise where its rows reach a week past the champion's (V7.2 Stage 3)", async () => {
+    const runId = 'run-20261010-0030'
+    writeRun(dir(), runId)
+    writeCalibration(dir(), runId)
+    writeFileSync(join(dir(), 'current.json'), JSON.stringify({ runId, fittedAt: Math.floor(Date.now() / 1000) - 30 * 3600, foldsRunId: runId, promotions: [] }))
+    const figure = { difference: 0.0001, low: -0.001, high: 0.0012, better: false, worse: false }
+    fake.paired = { hour1: { hours: 400, blocks: 400, pinball: figure, coverageDistance: figure, directionSkill: null } }
+    fake.newerDays = 7
+    const training = await service()
+    training.startForecastTraining()
+    await vi.waitFor(() => expect(fake.asked.map((entry) => entry.task)).toEqual(['fit', 'folds']))
+    await vi.waitFor(() => expect(training.getForecastTrainingState().status).toBe('ready'))
+    const adopted = training.getForecastTrainingState()
+    expect(adopted.current?.runId).toBe(fake.asked[0].runId)
+    expect(adopted.challenge).toMatchObject({ adopted: true, verdict: { why: 'newer', newerDays: 7 } })
+    const records = readdirSync(dir()).filter((name) => name.startsWith('training-'))
+    const lines = readFileSync(join(dir(), records[0]), 'utf-8').trim().split('\n').map((line) => JSON.parse(line) as Record<string, unknown>)
+    expect(lines.find((line) => line.kind === 'folds')).toMatchObject({ championRunId: runId, verdictWhy: 'newer' })
+    expect(String(lines.find((line) => line.kind === 'folds')!.summary)).toMatch(/^adopted: within noise and 7.0 days newer/)
+  })
+
   it('is adopted as the challenger where its walk forward is no worse, the champion kept to roll back to, and rolled back by a person', async () => {
     const runId = 'run-20261010-0030'
     writeRun(dir(), runId)
@@ -310,8 +362,10 @@ describe('a refit', () => {
     training.startForecastTraining()
     await vi.waitFor(() => expect(fake.asked.map((entry) => entry.task)).toEqual(['fit', 'folds']))
     await vi.waitFor(() => expect(training.getForecastTrainingState().status).toBe('ready'))
-    // The champion's tradeable verdicts went with the walk forward (V7.2 Stage 2).
+    // The champion's tradeable verdicts went with the walk forward (V7.2 Stage 2), and its walk forward's name
+    // for the pairing (Stage 3); the fake worker pairs nothing, so the tolerances alone adopted it.
     expect(fake.asked[1].heldBefore).toBe(true)
+    expect(fake.asked[1].championRunId).toBe(runId)
     const state = training.getForecastTrainingState()
     const challenger = fake.asked[0].runId
     // The same figures as the champion's: no worse, adopted; the champion is the run before.

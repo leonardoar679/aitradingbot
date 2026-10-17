@@ -8,6 +8,7 @@ import { CLASS_LINES, type ClassRecord } from '../../shared/forecast/opportunity
 import type { DirectionScore, PUpSource } from '../../shared/forecast/runCalibration'
 import type { ShockRefusal, ShockRule } from '../../shared/forecast/shock'
 import type { Interval } from '../../shared/forecast/uncertainty'
+import type { RegistryRow } from '../../shared/forecast/preregistration'
 import { WIDENED_STATES, type MarketShockRules, type MarketShockState, type ShockWidening } from '../../shared/forecast/marketShock'
 import type { EventImpactFile } from '../../shared/calendar/eventImpact'
 import { MACRO_KINDS, type MacroEvent, type MacroKind } from '../../shared/calendar/macro'
@@ -434,6 +435,28 @@ export function classesTable(classes: readonly ClassRecord[]): LabTableData {
   return {
     headers: ['Class (coin / horizon / setup)', 'Replayed trades', 'Replayed net', 'Live paper trades', 'Live paper net', 'Verdict'],
     rows: sorted.map((record) => [record.key, `${record.history.trades} of ${CLASS_LINES.minHistoryTrades}`, pct(record.history.netPct), record.live.trades, pct(record.live.netPct), VERDICT_NAME[record.verdict]])
+  }
+}
+
+const utcText = (iso: string): string => iso.replace('T', ' ').replace(/Z$/, '')
+
+/** The pre-registered lines (V7.2 Stage 3): each registration with its last result. */
+export function registrationsTable(rows: readonly RegistryRow[]): LabTableData {
+  return {
+    headers: ['Id', 'Kind', 'Registered (UTC)', 'Engine', 'Hypothesis', 'Success line', 'Judged on', 'Measured (UTC)', 'Figure', 'Verdict', 'Commit'],
+    rows: rows.map((row) => [
+      row.id,
+      row.kind,
+      utcText(row.registeredAt),
+      row.engineVersion,
+      row.hypothesis,
+      row.successLine,
+      row.judgedOn,
+      row.measuredAt === null ? '—' : utcText(row.measuredAt),
+      row.figure === null ? '—' : row.ci === null || row.ci === undefined ? row.figure : `${row.figure} (${row.ci})`,
+      row.verdict ?? 'not yet',
+      row.commit ?? '—'
+    ])
   }
 }
 

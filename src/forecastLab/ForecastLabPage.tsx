@@ -7,12 +7,14 @@ import { FIRST_TOUCH } from '../../shared/forecast/firstTouch'
 import { LAB_EVENTS, type LabEvent } from '../../shared/forecast/lab'
 import { MARKET_SHOCK_LINES } from '../../shared/forecast/marketShock'
 import { EVENT_IMPACT_LINES } from '../../shared/calendar/eventImpact'
-import { CHALLENGER_LINES, challengeRefusals } from '../../shared/forecast/challenger'
+import { CHALLENGER_LINES, challengeSummary } from '../../shared/forecast/challenger'
 import { CLASS_LINES } from '../../shared/forecast/opportunityClass'
 import type { ForecastLabView } from '../../shared/forecast/labView'
 import { describeError } from '../utils/ipcError'
 import { settingsWrites } from '../utils/settingsWrites'
 import { healForecastSettings } from '../../shared/forecast/training'
+import { parseRegistry, registryRows } from '../../shared/forecast/preregistration'
+import registryText from '../../research/preregistered.jsonl?raw'
 import {
   CLASS_NAME,
   COMPARISON_HEADERS,
@@ -32,6 +34,7 @@ import {
   nextReleasesTable,
   performanceTable,
   pUpCurveTable,
+  registrationsTable,
   releasesTable,
   shockTable,
   tableCsv,
@@ -95,6 +98,9 @@ function LabTable({ table, name, onNote }: { table: LabTableData; name: string; 
  * weeks, which it had not seen, and on the live record; its models side by side; a tested hour replayed;
  * and its trades against the app's strategies. Every figure is out of sample, and each says which record
  * it is from. Reading it asks no model and places nothing. */
+/** The registry as shipped with this build, read once. */
+const REGISTRY = registryRows(parseRegistry(registryText))
+
 export function ForecastLabPage(): React.JSX.Element {
   const [view, setView] = useState<ForecastLabView | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
@@ -211,9 +217,9 @@ export function ForecastLabPage(): React.JSX.Element {
               {view.refit.on && view.refit.nextAt !== null ? `; next refit ${day(view.refit.nextAt)} UTC` : ''}. A refit's models are put in use only where they pass the promotion checklist.
             </p>
             <p style={noteStyle}>
-              Champion and challenger: a refit replaces the run in use only where its walk forward is no worse beyond the lines at any horizon -- pinball loss at most {Math.round(CHALLENGER_LINES.pinballTolerance * 100)}% above, the 80% range at most {Math.round(CHALLENGER_LINES.coverageTolerance * 100)} points farther from 80%, direction skill at most {Math.round(CHALLENGER_LINES.directionTolerance * 100)} point lower; a refit that loses is logged and kept, the run in use stays.{' '}
+              Champion and challenger: a refit's walk forward is paired with the run in use's on the hours both tested (since V7.2 Stage 3, with {Math.round(CHALLENGER_LINES.level * 100)}% intervals), and it replaces the run in use only where it is better beyond noise at some horizon and worse beyond noise at none, or where its rows reach at least {CHALLENGER_LINES.newerDays} days past the champion's and it is worse beyond noise at none; a difference under the floors -- {Math.round(CHALLENGER_LINES.pinballTolerance * 100)}% of the pinball loss, {Math.round(CHALLENGER_LINES.coverageTolerance * 100)} points of coverage, {Math.round(CHALLENGER_LINES.directionTolerance * 100)} point of skill -- is neither. A refit within noise, or worse, is logged and kept, the run in use stays.{' '}
               {view.refit.champion === null || view.refit.champion === undefined ? 'No run is in use yet.' : `In use: ${view.refit.champion.runId}${view.refit.champion.foldsRunId !== null && view.refit.champion.foldsRunId !== view.refit.champion.runId ? ` (verdicts of ${view.refit.champion.foldsRunId})` : ''}.`}{' '}
-              {view.refit.challenge === null || view.refit.challenge === undefined ? 'No refit has challenged it yet.' : `Last challenge: ${view.refit.challenge.runId} against ${view.refit.challenge.championRunId} at ${day(view.refit.challenge.at)} UTC, ${view.refit.challenge.adopted ? 'adopted' : `refused (${challengeRefusals(view.refit.challenge.verdict).join('; ')})`}.`}
+              {view.refit.challenge === null || view.refit.challenge === undefined ? 'No refit has challenged it yet.' : `Last challenge: ${view.refit.challenge.runId} against ${view.refit.challenge.championRunId} at ${day(view.refit.challenge.at)} UTC, ${challengeSummary(view.refit.challenge.verdict)}.`}
             </p>
             {view.refit.previousRunId !== null && view.refit.previousRunId !== undefined && (
               <button type="button" style={buttonStyle('secondary', rollingBack)} onClick={rollBack} disabled={rollingBack}>
@@ -222,6 +228,13 @@ export function ForecastLabPage(): React.JSX.Element {
             )}
           </>
         )}
+      </Card>
+
+      <Card title="Registered lines">
+        <p style={{ ...noteStyle, marginTop: 0 }}>
+          Since V7.2 Stage 3 every line the forecast is judged by is registered before it is measured -- what will be judged, on which record, by which line, under which engine version -- in research/preregistered.jsonl, and a result is locked to its registration by a hash the tests check: a line moved after its figure was seen no longer passes. Stages 1 and 2 were measured before the file existed and are entered with the engine version they were measured under. A confirmatory line is one cell a horizon a cycle; an exploratory pass is a null until it repeats.
+        </p>
+        <LabTable table={registrationsTable(REGISTRY)} name="registered" onNote={setNote} />
       </Card>
 
       {lab !== null && (

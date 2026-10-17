@@ -492,7 +492,8 @@ outcomes: its direction skills' intervals are twenty to forty points wide (the d
 +12.6], dir-gbt -7.4% [-29.8, +9.1]) and nothing about that horizon can be read from three weeks, as the draft
 said. The direction findings stand at every horizon: no model's skill interval excludes zero on the positive
 side; dir-gbt at 5 minutes and dir-gbt-tech and dir-gbt-price at 4 hours exclude it on the negative side. What
-Stage 1 changes is not a figure but what each figure is worth, which every later stage reads first.
+Stage 1 changes is not a figure but what each figure is worth, which every later stage reads first. Registered as
+V72-S1-INTERVALS and V72-S1-NODIRECTION in `research/preregistered.jsonl` (Stage 3), their results locked to them.
 
 ## V7.2 Stage 2 -- the direction bar (17 October 2026)
 
@@ -540,7 +541,64 @@ five minutes (positive in 58% of the hours), -0.019 [-0.038, -0.001] at fifteen,
 hour, +0.018 [-0.009, +0.048] at four, +0.074 [-0.001, +0.161] at a day. A rank correlation of 0.035 at five
 minutes that turns negative at fifteen is the bid-ask bounce a median read off a last price carries, not a
 tradeable ordering; the day's +0.074 rests on twenty blocks and sits on zero. The cross-section is the one place
-this record shows an ordering at all, which Stage 9's `xs_rank` features are built to ask properly.
+this record shows an ordering at all, which Stage 9's `xs_rank` features are built to ask properly. Registered as
+V72-S2-DIRECTIONBAR and V72-S2-EXPLORATORY in `research/preregistered.jsonl` (Stage 3), their results locked to them.
+
+## V7.2 Stage 3 -- pre-registration, and a challenger judged beyond noise (17 October 2026)
+
+**The registry.** Every line the engine judges by has been a pinned constant under the engine version since V4,
+and every stage has written its success line before measuring; nothing bound a hypothesis to the record it would
+be judged on, or a result to the line it answers. `research/preregistered.jsonl` now does (`shared/forecast/
+preregistration.ts`): an append-only file of registration lines -- id, when and under which engine version,
+hypothesis, metric, success line, the record judged on, confirmatory or exploratory, the engine constants named
+-- and result lines, each carrying the hash of its registration's locked fields, the figure, its interval, the
+verdict and the commit. The hash is the lock: `tests/preregistration.test.ts` refuses a registration edited after
+its result, a duplicate id, a result without a registration, a malformed line, and an engine constant added since
+16 October 2026 that no registration names and the infrastructure list (the intervals' lines) does not hold. The
+twenty-one lines of the V7.2 plan are registered (V72-S1-INTERVALS to V72-S13-BUNDLE), Stages 1 and 2 with the
+engine version they were measured under and their results locked; the Lab's Registered lines card shows the file
+with each line's last result. The run report does not carry the registry: it reads a profile's records, and the
+registry is the repository's, shipped with the build.
+
+**The challenger beyond noise** (challenger-v2). Two walk forwards a day apart test much the same hours with much
+the same rows, and V7.1's tolerances compared that noise. Now the worker pairs a refit's walk forward with the run
+in use's on the hours both tested (every pair's row of an hour together, blocks as long as the horizon, as every
+interval since Stage 1): the difference of the pinball loss, of the 80% range's distance from 80% and of the
+direction skill, each with its 90% interval. The refit is adopted where it is better beyond the interval at some
+horizon and worse beyond it at none, or where its rows reach at least seven days past the champion's
+(`CHALLENGER_LINES.newerDays`) and it is worse beyond the interval at none; otherwise the champion stays and the
+log says "within noise". The tolerances stay as the floor of materiality: a difference beyond a narrow interval but
+under 1% of the pinball loss, 2 points of coverage or 1 point of skill is neither better nor worse. Where the
+champion's record cannot be read, the tolerances alone judge, and the verdict says "unpaired". The training log
+keeps the verdict's why and a summary line; the Lab's champion card words it.
+
+**On the two-day run's own refit** (`research/pairedChallenge.ts`; run-20261017-0030, the nightly refit of 17
+October at 00:30 UTC, against run-20261016-1236, twelve hours apart, the refit's rows reaching 0.50 days past the
+champion's; both calibrations built again from their records, the run's files being of the version before):
+
+| horizon | shared hours (blocks) | pinball difference | 80% range's distance from 80%, points | direction skill, points |
+|---|---|---|---|---|
+| 5 min | 492 (492) | +0.0006 [+0.0003, +0.0009] | +0.06 [-0.13, +0.22] | -0.93 [-1.54, -0.37] |
+| 15 min | 492 (492) | +0.0002 [-0.0000, +0.0005] | +0.29 [-0.36, +0.43] | -0.25 [-0.69, +0.09] |
+| 1 hour | 491 (491) | -0.0003 [-0.0005, -0.0000] | -0.51 [-0.68, -0.29] | -1.66 [-2.58, -0.69] WORSE |
+| 4 hours | 488 (122) | -0.0004 [-0.0012, +0.0003] | +0.20 [-0.26, +0.53] | +0.26 [-0.40, +0.90] |
+| 24 hours | 468 (20) | -0.0004 [-0.0017, +0.0008] | +0.56 [-1.02, +1.04] | +0.37 [-2.70, +3.16] |
+
+V7.1 refused the refit on "hour1: direction skill -1.47% against +0.13%"; V7.2 refuses it too, on the same
+ground read properly: the hour's direction skill fell 1.66 points, beyond the interval and beyond the floor. The
+pinball differences are real at three horizons (their intervals exclude zero) and immaterial at every one (under
+the 1% floor: the refit forecast the size of the move the same); the 80% range's distance from 80% is within noise
+at every horizon but the hour, where the refit was nearer 80% (-0.51 points [-0.68, -0.29]). The registered line
+V72-S3-CHALLENGER asked the pair to read within noise at every horizon: it FAILED at one, and the failure is the
+finding. The direction skill of a fit is not a stable property of the data: twelve hours of new rows moved the
+hour's P(up) map by 1.7 points, beyond what the hours' sampling noise allows, on a record where no direction skill
+is distinguishable from zero (Stage 1). Fit-to-fit variability larger than sampling noise is what a figure made
+of noise looks like; Stage 8's cadence study measures it over a year of fits. The line's second clause -- zero
+adoptions of a refit within noise and under seven days newer -- held. One design note, recorded and not acted on
+(the line was registered as it stands): since Stage 2 no direction model is a P(up) source, and the champion's
+own hour-1 skill (+0.13%) is under the 1% line a source needs, so a refusal on direction skill refuses a refit for
+losing something nothing trades on; whether the challenger's direction line should weigh only sources in use is a
+question for Stage 8, with the year's fits.
 
 ## The models' calls and their cost
 
