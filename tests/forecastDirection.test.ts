@@ -6,17 +6,24 @@ import { DIRECTION_MODELS, FORECAST_MODELS, type DirectionModelId, type Forecast
 import { OOS_VERSION, decodeOos, encodeOos, oosDirection } from '../shared/forecast/oosRecord'
 import { makePrediction, type PredictionInput } from '../shared/forecast/prediction'
 import { DIRECTION_PROMOTION_LINES, directionChecklist } from '../shared/forecast/promotion'
-import { buildRunCalibration, cellOf, directionReportOf, directionScore, directionSourceOf, rowsOf, scoreOutOfSample, type DirectionScore, type RunCalibration } from '../shared/forecast/runCalibration'
-import { directionTable } from '../src/forecastLab/labTables'
+import { ROUND_TRIP_PCT } from '../shared/forecast/edge'
+import { buildRunCalibration, cellOf, directionReportOf, directionScore, directionSourceOf, pairHalfOf, rowsOf, scoreOutOfSample, tradeableVerdictsOf, type DirectionScore, type RunCalibration } from '../shared/forecast/runCalibration'
+import { breakevenPrecision, directionTable } from '../src/forecastLab/labTables'
 import { promoted, recordOf, scaled } from './forecastRecords'
 
 // WHICH WAY, JUDGED (V7.1 Stage 2; shared/forecast/{oosRecord,runCalibration,promotion,prediction}.ts):
 // the direction models' readings kept with the walk forward's record, each mapped by the weeks before
 // its own and scored on the same weeks as the distribution's P(up), promoted by the checklist alone, and
 // the prediction reading its P(up) from the skilled source with the highest skill -- on records whose
-// right answers are known: one model that knows the move's way most of the time, one that is noise.
+// right answers are known: one model that knows the move's way most of the time, one that is noise. Since
+// V7.2 Stage 2 the checklist's lines are the direction bar's (a skill of 1%, 200 calls whose precision's lower
+// bound clears an even chance, both halves of the weeks and of the pairs above zero, the class floor), a
+// model is tradeable by its calls' edge after costs, and it is a source only where two walk forwards in a
+// row found it tradeable.
 
 const KNOWS: Partial<Record<DirectionModelId, number>> = { 'dir-gbt': 0.85, 'dir-logistic': 0 }
+/** Eight pairs, so that both halves of the pairs (by the fixed hash of their names) hold outcomes. */
+const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT', 'LINKUSDT', 'AVAXUSDT']
 
 describe('the record', () => {
   it('keeps each direction model\'s reading a row, reads it back, and reads a record from before them without', () => {
@@ -75,11 +82,12 @@ describe('the score', () => {
   })
 })
 
-const RECORD = recordOf({ rows: 12_000, seed: 43, horizon: 'hour1', direction: KNOWS })
+const RECORD = recordOf({ rows: 12_000, seed: 43, horizon: 'hour1', direction: KNOWS, symbols: SYMBOLS })
 const ROWS = rowsOf(RECORD)
 const SHOWN = scoreOutOfSample(ROWS, 'v2', new Set<ForecastModelId>(['persistence', 'gbt']))
-const REPORT = directionReportOf(ROWS, SHOWN)!
-const CALIBRATION: RunCalibration = buildRunCalibration(new Map([['hour1', RECORD]]), promoted('hour1', ['persistence', 'gbt']), 'run-way')
+const REPORT = directionReportOf(ROWS, SHOWN, 'hour1')!
+/** The calibration as a second walk forward makes it: the run before found both models tradeable. */
+const CALIBRATION: RunCalibration = buildRunCalibration(new Map([['hour1', RECORD]]), promoted('hour1', ['persistence', 'gbt']), 'run-way', undefined, { hour1: { 'dir-gbt': true, 'dir-logistic': true } })
 const FLAT: RunCalibration = buildRunCalibration(new Map([['hour1', recordOf({ rows: 12_000, seed: 44, horizon: 'hour1' })]]), promoted('hour1', ['persistence', 'gbt']), 'run-flat')
 
 describe('the report', () => {
@@ -91,12 +99,24 @@ describe('the report', () => {
     expect(knowing.honest.pooled!.directionSkill).toBeGreaterThan(0.2)
     expect(knowing.honest.pooled!.precision).toBeGreaterThan(0.75)
     expect(knowing.promoted).toBe(true)
-    // The distribution's P(up) hugs the base rate here, so it calls too seldom to be set against: the
-    // calls line is not measured, and does not block.
-    expect(knowing.lines.map((line) => line.ok)).toEqual([true, true, null])
+    // Every line of the bar measured and held, the edge's too: tradeable here, the run before unknown.
+    expect(knowing.lines.map((line) => line.id)).toEqual(['outcomes', 'skill', 'calls', 'precision', 'halves', 'classes', 'edge'])
+    expect(knowing.lines.map((line) => line.ok)).toEqual([true, true, true, true, true, true, true])
+    expect(knowing.tradeable).toBe(true)
+    expect(knowing.tradeableBefore).toBeNull()
+    expect(knowing.honest.pooled!.edge!.meanPct).toBeGreaterThan(0)
+    expect(knowing.honest.pooled!.edge!.ci!.low).toBeGreaterThan(0)
+    expect(knowing.honest.pooled!.halves!.weeks.every((skill) => skill !== null && skill > 0.1)).toBe(true)
+    expect(knowing.honest.pooled!.halves!.pairs.every((skill) => skill !== null && skill > 0.1)).toBe(true)
+    expect(new Set(SYMBOLS.map(pairHalfOf)).size).toBe(2)
     expect(noise.honest.pooled!.directionSkill).toBeLessThan(0.01)
     expect(noise.promoted).toBe(false)
+    expect(noise.tradeable).toBe(false)
     expect(noise.lines.find((line) => line.id === 'skill')!.ok).toBe(false)
+    // Without the horizon no interval is read, and the precision's and the edge's lines hold the model back.
+    const unread = directionReportOf(ROWS, SHOWN)!.models['dir-gbt']!
+    expect(unread.promoted).toBe(false)
+    expect(unread.lines.filter((line) => line.ok === null).map((line) => line.id)).toEqual(['precision', 'edge'])
     // Scored on the same weeks as the distribution's P(up): the baseline knows nothing here.
     expect(knowing.honest.weeks).toEqual([...new Set(SHOWN.filter((entry) => entry.pUp !== null).map((entry) => entry.week))].sort())
     expect(Math.abs(REPORT.baseline.pooled!.directionSkill)).toBeLessThan(0.02)
@@ -121,9 +141,21 @@ describe('the source', () => {
     expect(chosen.source).toBe('dir-gbt')
     expect(chosen.map).not.toBeNull()
     expect(chosen.skill).toBeGreaterThan(0.2)
+    expect(CALIBRATION.horizons.hour1!.direction!.models['dir-gbt']).toMatchObject({ promoted: true, tradeable: true, tradeableBefore: true })
+    expect(tradeableVerdictsOf(CALIBRATION)).toEqual({ hour1: { 'dir-gbt': true, 'dir-logistic': false } })
     const flat = directionSourceOf(FLAT.horizons.hour1!, 'mid')
     expect(flat.source).toBe('base')
     expect(flat.map).toBeNull()
+    // A verdict held once is not a source (V7.2 Stage 2): without the run before's, or with it against, or
+    // not tradeable here.
+    const once: RunCalibration = JSON.parse(JSON.stringify(CALIBRATION))
+    once.horizons.hour1!.direction!.models['dir-gbt']!.tradeableBefore = null
+    expect(directionSourceOf(once.horizons.hour1!, 'mid').source).toBe('base')
+    once.horizons.hour1!.direction!.models['dir-gbt']!.tradeableBefore = false
+    expect(directionSourceOf(once.horizons.hour1!, 'mid').source).toBe('base')
+    const untradeable: RunCalibration = JSON.parse(JSON.stringify(CALIBRATION))
+    untradeable.horizons.hour1!.direction!.models['dir-gbt']!.tradeable = false
+    expect(directionSourceOf(untradeable.horizons.hour1!, 'mid').source).toBe('base')
     // Unpromoted, a model is never the source, whatever its skill reads.
     const unpromoted: RunCalibration = JSON.parse(JSON.stringify(CALIBRATION))
     unpromoted.horizons.hour1!.direction!.models['dir-gbt']!.promoted = false
@@ -148,7 +180,12 @@ describe('on file', () => {
     const made = back.horizons.hour1!.direction!.models['dir-gbt']!
     const original = CALIBRATION.horizons.hour1!.direction!.models['dir-gbt']!
     expect(made.promoted).toBe(true)
+    expect(made.tradeable).toBe(true)
+    expect(made.tradeableBefore).toBe(true)
     expect(made.lines).toEqual(original.lines)
+    for (const half of ['weeks', 'pairs'] as const) for (const at of [0, 1]) expect(made.honest.pooled!.halves![half][at]).toBeCloseTo(original.honest.pooled!.halves![half][at]!, 5)
+    expect(made.honest.pooled!.edge!.meanPct).toBeCloseTo(original.honest.pooled!.edge!.meanPct, 5)
+    expect(made.honest.pooled!.edge!.ci!.low).toBeCloseTo(original.honest.pooled!.edge!.ci!.low, 5)
     expect(made.honest.pooled!.directionSkill).toBeCloseTo(original.honest.pooled!.directionSkill, 5)
     expect(made.honest.weeks).toEqual(original.honest.weeks)
     expect(made.map.x.length).toBe(original.map.x.length)
@@ -159,6 +196,18 @@ describe('on file', () => {
     const raw = JSON.parse(text)
     raw.horizons.hour1.direction.models['dir-gbt'].promoted = 'yes'
     expect(parseRunCalibration(JSON.stringify(raw))).toBeNull()
+    // The two verdicts, the halves and the edge of V7.2 Stage 2: refused part-made.
+    const damage = (edit: (copy: typeof raw) => void): unknown => {
+      const copy = JSON.parse(text)
+      edit(copy)
+      return parseRunCalibration(JSON.stringify(copy))
+    }
+    expect(damage((copy) => delete copy.horizons.hour1.direction.models['dir-gbt'].tradeable)).toBeNull()
+    expect(damage((copy) => (copy.horizons.hour1.direction.models['dir-gbt'].tradeableBefore = 'maybe'))).toBeNull()
+    expect(damage((copy) => (copy.horizons.hour1.direction.models['dir-gbt'].honest.pooled.halves = { weeks: [0.1] }))).toBeNull()
+    expect(damage((copy) => (copy.horizons.hour1.direction.models['dir-gbt'].honest.pooled.edge = { calls: 'many' }))).toBeNull()
+    expect(damage((copy) => (copy.horizons.hour1.direction.models['dir-gbt'].honest.pooled.edge.ci = { low: 0.2, high: 0.1 }))).toBeNull()
+    expect(damage((copy) => (copy.horizons.hour1.direction.models['dir-gbt'].tradeableBefore = null))).not.toBeNull()
     const stranger = JSON.parse(text)
     stranger.horizons.hour1.direction.models['dir-other'] = stranger.horizons.hour1.direction.models['dir-gbt']
     expect(parseRunCalibration(JSON.stringify(stranger))).toBeNull()
@@ -218,22 +267,75 @@ describe('the prediction', () => {
   })
 })
 
-describe('the checklist', () => {
-  const score = (patch: Partial<DirectionScore> = {}): DirectionScore => ({ n: 6000, brier: 0.23, directionSkill: 0.05, upShare: 0.5, calls: 100, precision: 0.6, curve: [], ...patch })
+describe('the score (V7.2 Stage 2)', () => {
+  it("reads the calls' edge after the round trip, its interval holding the point, and the halves of the weeks and the pairs", () => {
+    // Every entry a call up on a move of +1%: the edge is 1% less the round trip, and every draw the same.
+    const entries = Array.from({ length: 48 }, (_, at) => ({ cls: 'mid' as const, week: 2 + (at % 2), pUp: 0.7, base: 0.5, z: 1, t: Math.floor(at / 4) * 3600, pair: SYMBOLS[at % 8], movePct: 1 }))
+    const score = directionScore(entries, 'hour1')!
+    expect(score.edge!.calls).toBe(48)
+    expect(score.edge!.meanPct).toBeCloseTo(1 - ROUND_TRIP_PCT, 9)
+    expect(score.edge!.ci!.low).toBeCloseTo(1 - ROUND_TRIP_PCT, 9)
+    expect(score.edge!.ci!.high).toBeCloseTo(1 - ROUND_TRIP_PCT, 9)
+    expect(score.halves!.weeks.every((skill) => skill !== null)).toBe(true)
+    expect(score.halves!.pairs.every((skill) => skill !== null)).toBe(true)
+    // A call down on the same move loses it; a call made without a move carries no edge.
+    expect(directionScore(entries.map((entry) => ({ ...entry, pUp: 0.3 })), 'hour1')!.edge!.meanPct).toBeCloseTo(-1 - ROUND_TRIP_PCT, 9)
+    expect(directionScore(entries.map((entry) => ({ ...entry, movePct: undefined })), 'hour1')!.edge).toBeUndefined()
+    // Without a pair the pairs' halves are not read; the weeks' are.
+    const unpaired = directionScore(entries.map((entry) => ({ ...entry, pair: undefined })), 'hour1')!
+    expect(unpaired.halves!.pairs).toEqual([null, null])
+    expect(unpaired.halves!.weeks.every((skill) => skill !== null)).toBe(true)
+  })
+})
 
-  it('needs the outcomes, a skill above zero and, where both call enough, calls no less often right than the distribution\'s', () => {
-    const baseline = score({ directionSkill: 0.001, precision: 0.55 })
-    expect(directionChecklist(score(), baseline)).toMatchObject({ promoted: true })
-    expect(directionChecklist(score(), baseline).lines.map((line) => line.ok)).toEqual([true, true, true])
-    expect(directionChecklist(score({ n: 4999 }), baseline).lines[0].ok).toBe(false)
-    expect(directionChecklist(score({ directionSkill: 0 }), baseline).lines[1].ok).toBe(false)
-    expect(directionChecklist(score({ precision: 0.54 }), baseline).promoted).toBe(false)
-    expect(directionChecklist(score({ precision: 0.55 }), baseline).promoted).toBe(true)
-    // Too few calls on either side to set them against each other: not measured, not blocking.
-    expect(directionChecklist(score({ calls: DIRECTION_PROMOTION_LINES.minCalls - 1, precision: 0.1 }), baseline)).toMatchObject({ promoted: true })
-    expect(directionChecklist(score({ precision: 0.1 }), score({ calls: 5 })).lines[2].ok).toBeNull()
-    expect(directionChecklist(score({ precision: 0.1 }), null).lines[2].ok).toBeNull()
-    expect(directionChecklist(null, baseline)).toMatchObject({ promoted: false })
+describe('the checklist', () => {
+  const score = (patch: Partial<DirectionScore> = {}): DirectionScore => ({
+    n: 6000,
+    brier: 0.23,
+    directionSkill: 0.05,
+    upShare: 0.5,
+    calls: 300,
+    precision: 0.6,
+    curve: [],
+    ci: { directionSkill: { low: 0.03, high: 0.07 }, precision: { low: 0.55, high: 0.65 } },
+    halves: { weeks: [0.04, 0.06], pairs: [0.05, 0.05] },
+    edge: { calls: 300, meanPct: 0.1, ci: { low: 0.02, high: 0.18 } },
+    ...patch
+  })
+
+  it('promotes by every line measured and held, calls a model tradeable by its calls\' edge, and holds back what it cannot read', () => {
+    const made = directionChecklist(score())
+    expect(made).toMatchObject({ promoted: true, tradeable: true })
+    expect(made.lines.map((line) => line.id)).toEqual(['outcomes', 'skill', 'calls', 'precision', 'halves', 'classes', 'edge'])
+    expect(made.lines.every((line) => line.ok === true)).toBe(true)
+    expect(directionChecklist(score({ n: DIRECTION_PROMOTION_LINES.minOutcomes - 1 })).lines[0].ok).toBe(false)
+    expect(directionChecklist(score({ directionSkill: DIRECTION_PROMOTION_LINES.minSkill - 0.0001 })).promoted).toBe(false)
+    expect(directionChecklist(score({ directionSkill: DIRECTION_PROMOTION_LINES.minSkill })).promoted).toBe(true)
+    expect(directionChecklist(score({ calls: DIRECTION_PROMOTION_LINES.minCalls - 1 })).promoted).toBe(false)
+    // The precision's lower bound must be above an even chance, not at it.
+    expect(directionChecklist(score({ ci: { directionSkill: { low: 0.03, high: 0.07 }, precision: { low: 0.5, high: 0.7 } } })).promoted).toBe(false)
+    expect(directionChecklist(score({ ci: { directionSkill: { low: 0.03, high: 0.07 }, precision: { low: 0.501, high: 0.7 } } })).promoted).toBe(true)
+    // Both halves of the weeks and both halves of the pairs above zero.
+    expect(directionChecklist(score({ halves: { weeks: [0.04, 0], pairs: [0.05, 0.05] } })).promoted).toBe(false)
+    expect(directionChecklist(score({ halves: { weeks: [0.04, 0.06], pairs: [-0.01, 0.05] } })).promoted).toBe(false)
+    // The class floor: a class with two thousand outcomes under -1% blocks; a smaller one, or one at -1%, does not.
+    const poor = score({ n: 2000, directionSkill: -0.02 })
+    expect(directionChecklist(score(), { btc: poor }).promoted).toBe(false)
+    expect(directionChecklist(score(), { btc: poor }).lines[5].text).toMatch(/^btc under/)
+    expect(directionChecklist(score(), { btc: { ...poor, n: 1999 } }).promoted).toBe(true)
+    expect(directionChecklist(score(), { btc: { ...poor, directionSkill: -0.01 } }).promoted).toBe(true)
+    // Tradeable needs the edge above zero with its lower bound; promoted stands without it.
+    expect(directionChecklist(score({ edge: { calls: 300, meanPct: 0.1, ci: { low: 0, high: 0.2 } } }))).toMatchObject({ promoted: true, tradeable: false })
+    expect(directionChecklist(score({ edge: { calls: 300, meanPct: -0.1, ci: { low: -0.2, high: 0.01 } } }))).toMatchObject({ promoted: true, tradeable: false })
+    // A line that cannot be read holds the model back: no precision interval, a half with nothing in it, no
+    // edge or no interval on it.
+    expect(directionChecklist(score({ ci: undefined }))).toMatchObject({ promoted: false, tradeable: false })
+    expect(directionChecklist(score({ ci: undefined })).lines[3].ok).toBeNull()
+    expect(directionChecklist(score({ halves: { weeks: [0.04, null], pairs: [0.05, 0.05] } })).promoted).toBe(false)
+    expect(directionChecklist(score({ halves: undefined })).lines[4].ok).toBeNull()
+    expect(directionChecklist(score({ edge: { calls: 300, meanPct: 0.1, ci: null } }))).toMatchObject({ promoted: true, tradeable: false })
+    expect(directionChecklist(score({ edge: undefined })).lines[6].ok).toBeNull()
+    expect(directionChecklist(null)).toMatchObject({ promoted: false, tradeable: false })
   })
 })
 
@@ -241,26 +343,36 @@ describe('the Lab\'s table', () => {
   it('sets the distribution, each model and the base rate in rows, with its verdict and the classes it serves', () => {
     const view: DirectionView = { report: REPORT, inUse: { 'dir-gbt': ['mid', 'large'], base: ['btc'] } }
     const table = directionTable({ hour1: view })
-    expect(table.headers[1]).toBe('Source of P(up)')
-    expect(table.headers[4]).toBe('Detectable skill')
+    expect(table.headers.slice(1)).toEqual(['Source of P(up)', 'Outcomes', 'Brier skill over the base rate', 'Detectable skill', 'Calls at the lines', 'Calls right', 'Breakeven precision', "The calls' edge after costs", 'Verdict', 'Tradeable twice', 'Last week', 'P(up) of'])
     expect(table.rows[0][1]).toBe("the distribution's P(up)")
-    expect(table.rows[0][9]).toBe('—')
+    expect(table.rows[0][12]).toBe('—')
     const knowing = table.rows.find((row) => String(row[1]).startsWith('dir-gbt ('))!
-    expect(knowing[7]).toBe('promoted')
-    expect(knowing[9]).toBe('mid, large')
-    // A report made without the horizon carries no interval and no detectable skill: the points alone.
-    expect(knowing[4]).toBe('—')
-    expect(String(knowing[3])).toMatch(/^\d+\.\d\d%$/)
+    // The skill with its interval, the detectable skill, the calls right with theirs (V7.2 Stage 1); no Lab
+    // given, no breakeven; the calls' edge with its interval, the verdict, the run before unknown.
+    expect(String(knowing[3])).toMatch(/^\d+\.\d\d% \(-?\d+\.\d\d–\d+\.\d\d\)$/)
+    expect(String(knowing[4])).toMatch(/^\d+\.\d\d%$/)
+    expect(String(knowing[6])).toMatch(/^\d+\.\d% \(\d+\.\d–\d+\.\d\)$/)
+    expect(knowing[7]).toBe('—')
+    expect(String(knowing[8])).toMatch(/^[+-]\d+\.\d{3}% \([+-]\d+\.\d{3}%–[+-]\d+\.\d{3}%\)$/)
+    expect(knowing[9]).toBe('promoted, tradeable')
+    expect(knowing[10]).toBe('no run before')
+    expect(knowing[12]).toBe('mid, large')
     const noise = table.rows.find((row) => String(row[1]).startsWith('dir-logistic'))!
-    expect(String(noise[7])).toMatch(/^not promoted: skill/)
+    expect(String(noise[9])).toMatch(/^not promoted: skill/)
     expect(table.rows[table.rows.length - 1][1]).toBe('the base rate')
-    expect(table.rows[table.rows.length - 1][9]).toBe('btc')
-    // With the horizon, the skill carries its interval and the model its detectable skill (V7.2 Stage 1).
-    const worth = directionTable({ hour1: { report: directionReportOf(ROWS, SHOWN, 'hour1')!, inUse: {} } })
-    const measured = worth.rows.find((row) => String(row[1]).startsWith('dir-gbt ('))!
-    expect(String(measured[3])).toMatch(/^\d+\.\d\d% \(-?\d+\.\d\d–\d+\.\d\d\)$/)
-    expect(String(measured[4])).toMatch(/^\d+\.\d\d%$/)
-    expect(String(measured[6])).toMatch(/^\d+\.\d% \(\d+\.\d–\d+\.\d\)$/)
+    expect(table.rows[table.rows.length - 1][12]).toBe('btc')
+    // The breakeven precision from the Lab's error: half plus the round trip over twice the error.
+    expect(breakevenPrecision(0.3)).toBeCloseTo(0.5 + ROUND_TRIP_PCT / 0.6, 12)
+    expect(breakevenPrecision(null)).toBeNull()
+    expect(breakevenPrecision(0)).toBeNull()
+    // Tradeable twice, as a calibration built with the run before's verdicts says.
+    const held = directionTable({ hour1: { report: CALIBRATION.horizons.hour1!.direction!, inUse: {} } })
+    expect(held.rows.find((row) => String(row[1]).startsWith('dir-gbt ('))![10]).toBe('yes: a P(up) source')
+    // A report made without the horizon: no interval, no detectable skill, held back as unread.
+    const unread = directionTable({ hour1: { report: directionReportOf(ROWS, SHOWN)!, inUse: {} } })
+    const point = unread.rows.find((row) => String(row[1]).startsWith('dir-gbt ('))!
+    expect(point[4]).toBe('—')
+    expect(String(point[9])).toMatch(/^not promoted: ; not read: precision, edge$|^not promoted: not read: precision, edge$/)
     expect(table.rows.some((row) => String(row[1]).startsWith('dir-gbt-price'))).toBe(false)
     expect(directionTable({}).rows).toEqual([])
     expect(DIRECTION_MODELS.length).toBe(4)

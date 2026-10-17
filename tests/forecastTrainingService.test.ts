@@ -23,7 +23,7 @@ import { promoted, recordOf } from './forecastRecords'
 vi.mock('electron', () => ({ app: { getPath: () => process.env.AI_TEST_USER_DATA } }))
 
 const fake = vi.hoisted(() => ({
-  asked: [] as { task: string; runId: string }[],
+  asked: [] as { task: string; runId: string; heldBefore: boolean }[],
   failFit: false,
   data: { ready: 25, pairs: 30 },
   listeners: [] as (() => void)[],
@@ -75,7 +75,7 @@ const score = (pinball: number): Record<string, number> => ({ n: 9000, pinball, 
 
 vi.mock('../electron/services/forecastWorkerService', () => ({
   askWorker: vi.fn(async (request: { task: string; outDir: string; runId: string }) => {
-    fake.asked.push({ task: request.task, runId: request.runId })
+    fake.asked.push({ task: request.task, runId: request.runId, heldBefore: (request as { heldBefore?: unknown }).heldBefore !== undefined })
     if (request.task === 'fit') {
       if (fake.failFit) return { id: 1, ok: false, error: 'the worker ran out of rows' }
       writeRun(request.outDir, request.runId)
@@ -163,6 +163,8 @@ describe('the first fit', () => {
     fake.listeners[0]()
     await vi.waitFor(() => expect(training.getForecastTrainingState().status).toBe('ready'))
     expect(fake.asked.map((entry) => entry.task)).toEqual(['fit', 'folds'])
+    // A first fit has no run before: the walk forward is handed no verdicts (V7.2 Stage 2).
+    expect(fake.asked[1].heldBefore).toBe(false)
     const state = training.getForecastTrainingState()
     expect(state.current?.runId).toBe(fake.asked[0].runId)
     expect(state.current?.foldsRunId).toBe(fake.asked[0].runId)
@@ -212,7 +214,7 @@ describe('a start with models in use', () => {
     const training = await service()
     training.startForecastTraining()
     await vi.waitFor(() => expect(training.currentForecastCalibration()?.runId).toBe(runId))
-    expect(fake.asked).toEqual([{ task: 'calibrate', runId }])
+    expect(fake.asked).toEqual([{ task: 'calibrate', runId, heldBefore: false }])
     expect(training.getForecastTrainingState().calibratedRunId).toBe(runId)
     const records = readdirSync(dir()).filter((name) => name.startsWith('training-'))
     expect(JSON.parse(readFileSync(join(dir(), records[0]), 'utf-8').trim())).toMatchObject({ kind: 'calibrate', runId, ok: true })
@@ -227,7 +229,7 @@ describe('a start with models in use', () => {
     const training = await service()
     training.startForecastTraining()
     await vi.waitFor(() => expect(training.currentForecastCalibration()?.runId).toBe(runId))
-    expect(fake.asked).toEqual([{ task: 'calibrate', runId }])
+    expect(fake.asked).toEqual([{ task: 'calibrate', runId, heldBefore: false }])
   })
 
   it('refits stale ones, and keeps them in use when the fit fails, saying why', async () => {
@@ -308,6 +310,8 @@ describe('a refit', () => {
     training.startForecastTraining()
     await vi.waitFor(() => expect(fake.asked.map((entry) => entry.task)).toEqual(['fit', 'folds']))
     await vi.waitFor(() => expect(training.getForecastTrainingState().status).toBe('ready'))
+    // The champion's tradeable verdicts went with the walk forward (V7.2 Stage 2).
+    expect(fake.asked[1].heldBefore).toBe(true)
     const state = training.getForecastTrainingState()
     const challenger = fake.asked[0].runId
     // The same figures as the champion's: no worse, adopted; the champion is the run before.

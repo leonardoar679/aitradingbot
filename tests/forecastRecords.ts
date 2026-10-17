@@ -28,10 +28,12 @@ export function gaussOf(random: () => number): () => number {
  * are persistence again. With `direction`, the record holds each direction model's raw chance of up
  * (V7.1 Stage 2): a model given a `knows` share reads the move's way right that often and is noise
  * the rest of the time; one given 0 is noise throughout. */
-export function recordOf(options: { rows: number; seed: number; drift?: number; horizon?: Horizon; tooNarrow?: number; direction?: Partial<Record<DirectionModelId, number>> }): OosRecord {
+export function recordOf(options: { rows: number; seed: number; drift?: number; horizon?: Horizon; tooNarrow?: number; direction?: Partial<Record<DirectionModelId, number>>; symbols?: string[] }): OosRecord {
   const random = rng(options.seed)
   const gauss = gaussOf(random)
   const rows = options.rows
+  // The pairs, round robin over the rows: one by default, several where a test splits them in halves.
+  const symbols = options.symbols ?? ['BTCUSDT']
   const sigmas = Float64Array.from({ length: rows }, () => 0.5 + 1.5 * random())
   const mus = Float64Array.from({ length: rows }, () => (options.drift ?? 0) * (random() < 0.5 ? -1 : 1))
   const z = Float32Array.from({ length: rows }, (_, row) => mus[row] + sigmas[row] * gauss())
@@ -59,11 +61,11 @@ export function recordOf(options: { rows: number; seed: number; drift?: number; 
   return {
     version: OOS_VERSION,
     horizon: options.horizon ?? 'hour1',
-    symbols: ['BTCUSDT'],
+    symbols,
     models: FORECAST_MODELS,
     rows,
     time: Uint32Array.from({ length: rows }, (_, row) => row * 3600),
-    pair: new Uint16Array(rows),
+    pair: Uint16Array.from({ length: rows }, (_, row) => row % symbols.length),
     cls: Uint8Array.from({ length: rows }, (_, row) => row % PAIR_CLASSES.length),
     regime: new Uint8Array(rows).fill(5),
     fold: Uint8Array.from({ length: rows }, (_, row) => Math.floor((row * 4) / rows)),

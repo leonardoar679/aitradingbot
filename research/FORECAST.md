@@ -494,6 +494,54 @@ said. The direction findings stand at every horizon: no model's skill interval e
 side; dir-gbt at 5 minutes and dir-gbt-tech and dir-gbt-price at 4 hours exclude it on the negative side. What
 Stage 1 changes is not a figure but what each figure is worth, which every later stage reads first.
 
+## V7.2 Stage 2 -- the direction bar (17 October 2026)
+
+V7.1's checklist promoted a direction model on 5,000 outcomes, a Brier skill above zero and, where both it and
+the distribution's P(up) made thirty calls, calls no less often right: on the record of 16 October it promoted
+skills of a few hundredths of a percent, and under the day-shift null (`research/directionNull.ts`) it promoted
+noise in 3-26% of shifts per model and horizon. Stage 2 replaces it (`shared/forecast/promotion.ts`,
+`DIRECTION_PROMOTION_LINES`, fixed before the null was run again): a skill of at least the hundredth a P(up)
+source needs, so "promoted" and "a source" agree; at least 200 calls, whose precision's lower 95% bound (Stage
+1's) clears an even chance; a skill above zero in both halves of the weeks and both halves of the pairs (the
+pairs split by a fixed hash of their names); no class with 2,000 outcomes under -1%; and, for the model to be
+TRADEABLE, the mean realized move in the way its calls called, less the round trip's 0.24%, above zero with its
+interval's lower bound above zero. A line the record cannot read holds a direction model back. A direction score
+now carries its halves and its calls' edge (run-calibration-v7); a model is a P(up) source only where two walk
+forwards in a row found it tradeable -- the run in use's verdicts travel with the walk forward that follows it
+(`forecastTrainingService.ts` to `trainWorker.ts`), so the first fit after an install can never make a source,
+and a rebuilt calibration (no run before) cannot either. The lab's DIRECTION strategy follows the source. The Lab's
+Which way table prints each model's breakeven precision (half plus the round trip over twice the median's error:
+0.90 at five minutes, 0.77 at fifteen, 0.64 at an hour, 0.565 at four, 0.525 at a day on this record), its calls'
+edge after costs with its interval, both verdicts and whether the run before held.
+
+**On run-20261016-0640 nothing is promoted at any horizon**, which the draft predicted. The calls' edges after costs
+are negative at every horizon where enough calls were made, several beyond noise: at five minutes dir-logistic
+-0.300% [-0.606, -0.086] on 365 calls, dir-gbt -0.237% [-0.319, -0.166] on 1,748, dir-gbt-tech -0.232%
+[-0.437, -0.088], dir-gbt-price -0.386% [-0.799, -0.085]; at fifteen minutes dir-logistic -0.526% [-0.928, -0.166];
+at four hours dir-gbt-tech -0.477% [-1.115, +0.106] and dir-gbt-price -0.575% [-1.311, +0.011]; at a day every
+interval spans two percent either way. The outcomes a true 1% skill would need to clear the record's interval
+(Stage 1's detectable skill scaled by the root of the sample) run from 5,000-15,000 at five minutes and 3,000-12,000
+at an hour to 40,000-116,000 at four hours and 1.9-7.8 million at a day: three weeks hold 10,000.
+
+**Under the null** (200 day shifts, each hour's cross-section intact, the intervals at 200 draws, the class floor
+not read): V7.1's lines promote noise in 4-23% of shifts at five minutes, 5-26% at fifteen, 5-23% at an hour,
+3-13% at four hours and 0-19% at a day; the new lines promote noise in 0% at every model and horizon but one --
+dir-logistic at a day, 5% -- and call noise tradeable in 0% everywhere. The registered line (a false-pass rate
+of at most 5% per model-horizon) holds, at its edge in that one cell, where twenty blocks of a day leave the
+precision's interval wide enough to clear an even chance by chance.
+
+**The exploratory readings** (record-only, each mapped by the weeks before and judged by the same lines, in
+cells by market state, regime and class): the distribution's skew, its median in half-widths, the excursion
+asymmetry at the 80% level and, at four hours and a day, the shorter horizons' agreement -- 15-20 cells a horizon,
+85 in all, none promoted, none tradeable. The best cell is the median in half-widths for the mid class at five
+minutes, +0.60% with a lower bound of +0.02%: under the 1% line, a null until it repeats. **The per-hour Spearman
+rank correlation** of the shown medians with the realized moves across the 31 pairs: +0.035 [+0.017, +0.051] at
+five minutes (positive in 58% of the hours), -0.019 [-0.038, -0.001] at fifteen, +0.011 [-0.005, +0.030] at an
+hour, +0.018 [-0.009, +0.048] at four, +0.074 [-0.001, +0.161] at a day. A rank correlation of 0.035 at five
+minutes that turns negative at fifteen is the bid-ask bounce a median read off a last price carries, not a
+tradeable ordering; the day's +0.074 rests on twenty blocks and sits on zero. The cross-section is the one place
+this record shows an ordering at all, which Stage 9's `xs_rank` features are built to ask properly.
+
 ## The models' calls and their cost
 
 | Run | calls | answered | valid | latency, median / 95th | spent |

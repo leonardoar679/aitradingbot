@@ -216,10 +216,33 @@ function readDirectionScore(value: unknown): DirectionScore | null | undefined {
   if (worth === undefined) return undefined
   const detectable = value.detectable === undefined ? undefined : measured(value.detectable)
   if (value.detectable !== undefined && detectable === undefined) return undefined
-  return { ...(figures as Record<(typeof keys)[number], number>), curve, ...worth, ...(detectable === undefined ? {} : { detectable }) }
+  // The halves and the calls' edge (V7.2 Stage 2), where the score carries them: refused part-made.
+  const halves = value.halves === undefined ? undefined : readHalves(value.halves)
+  if (value.halves !== undefined && halves === undefined) return undefined
+  const edge = value.edge === undefined ? undefined : readEdge(value.edge)
+  if (value.edge !== undefined && edge === undefined) return undefined
+  return { ...(figures as Record<(typeof keys)[number], number>), curve, ...worth, ...(detectable === undefined ? {} : { detectable }), ...(halves === undefined ? {} : { halves }), ...(edge === undefined ? {} : { edge }) }
 }
 
-const CHECK_IDS: readonly CheckLine['id'][] = ['outcomes', 'coverage', 'pinball', 'trades', 'skill', 'calls']
+const skillOrNull = (value: unknown): number | null | undefined => (value === null ? null : finite(value) ? value : undefined)
+
+function readHalves(value: unknown): DirectionScore['halves'] | undefined {
+  if (!isObject(value) || !Array.isArray(value.weeks) || value.weeks.length !== 2 || !Array.isArray(value.pairs) || value.pairs.length !== 2) return undefined
+  const weeks = value.weeks.map(skillOrNull)
+  const pairs = value.pairs.map(skillOrNull)
+  if (weeks.includes(undefined) || pairs.includes(undefined)) return undefined
+  return { weeks: weeks as [number | null, number | null], pairs: pairs as [number | null, number | null] }
+}
+
+function readEdge(value: unknown): DirectionScore['edge'] | undefined {
+  if (!isObject(value) || !finite(value.calls)) return undefined
+  const meanPct = measured(value.meanPct)
+  const ci = readInterval(value.ci)
+  if (meanPct === undefined || ci === undefined) return undefined
+  return { calls: value.calls, meanPct, ci }
+}
+
+const CHECK_IDS: readonly CheckLine['id'][] = ['outcomes', 'coverage', 'pinball', 'trades', 'skill', 'calls', 'precision', 'halves', 'classes', 'edge']
 
 function readLines(value: unknown): CheckLine[] | null {
   if (!Array.isArray(value)) return null
@@ -233,6 +256,8 @@ function readLines(value: unknown): CheckLine[] | null {
 
 function readDirectionCalibration(value: unknown): DirectionCalibration | null {
   if (!isObject(value) || !isObject(value.honest) || typeof value.promoted !== 'boolean' || typeof value.degraded !== 'boolean') return null
+  // The two verdicts of V7.2 Stage 2: tradeable here, and on the run before (null without one).
+  if (typeof value.tradeable !== 'boolean' || (value.tradeableBefore !== null && typeof value.tradeableBefore !== 'boolean')) return null
   const map = readIsotonic(value.map)
   const pooled = readDirectionScore(value.honest.pooled)
   const byClassScores = byClass(value.honest.byClass, readDirectionScore)
@@ -240,7 +265,7 @@ function readDirectionCalibration(value: unknown): DirectionCalibration | null {
   const lastWeekSkill = value.lastWeekSkill === null ? null : finite(value.lastWeekSkill) ? value.lastWeekSkill : undefined
   const lines = readLines(value.lines)
   if (map === null || pooled === undefined || byClassScores === null || !finiteList(weeks) || lastWeekSkill === undefined || lines === null) return null
-  return { map, honest: { pooled, byClass: byClassScores as Partial<Record<PairClass, DirectionScore>>, weeks }, lastWeekSkill, degraded: value.degraded, promoted: value.promoted, lines }
+  return { map, honest: { pooled, byClass: byClassScores as Partial<Record<PairClass, DirectionScore>>, weeks }, lastWeekSkill, degraded: value.degraded, promoted: value.promoted, tradeable: value.tradeable, tradeableBefore: value.tradeableBefore as boolean | null, lines }
 }
 
 /** A horizon's direction report (V7.1 Stage 2): undefined where none was written, null where one was and

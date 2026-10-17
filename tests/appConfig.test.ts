@@ -33,8 +33,10 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 // calibration's and prediction's versions (V7.1 Stage 3) -- from 847feb643cef; the paper laboratory's
 // strategies and the risk lines they keep (V7.1 Stage 4) -- from 6e0cea776232. 17 October 2026: the intervals'
 // lines -- draws, seed, blocks by horizon, level, the detectable standard deviations, the blocks an interval
-// needs -- and the run calibration's version (V7.2 Stage 1) from c05bb1dfdc07.
-const PINNED_ENGINE_VERSION = '8ccc65988f1f'
+// needs -- and the run calibration's version (V7.2 Stage 1) from c05bb1dfdc07; the direction bar's lines -- the skill,
+// calls, precision bound, halves, class floor and edge a direction model must hold -- and the run calibration's
+// version again (V7.2 Stage 2) from 8ccc65988f1f.
+const PINNED_ENGINE_VERSION = '704b82f0f396'
 
 describe('the engine version', () => {
   it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {

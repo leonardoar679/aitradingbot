@@ -14,7 +14,7 @@ import { serializeLab, serializeReplay, type LabFile } from '../../shared/foreca
 import { walkForwardLab, type StoryMarkInput } from '../../shared/forecast/labWalkForward'
 import { decodeOos, encodeOos, OOS_VERSION, type OosRecord } from '../../shared/forecast/oosRecord'
 import { buildPanel, type Panel } from '../../shared/forecast/panel'
-import { buildRunCalibration, type RunCalibration } from '../../shared/forecast/runCalibration'
+import { buildRunCalibration, type RunCalibration, type TradeableBefore } from '../../shared/forecast/runCalibration'
 import { preEventAt } from '../../shared/calendar/macro'
 import { btcTimelineOf, marketShockByTime, shockMomentsOf, STATE_UNKNOWN, MARKET_SHOCK_STATES } from '../../shared/forecast/marketShock'
 import { btc15ByTime } from '../../shared/forecast/shock'
@@ -50,7 +50,7 @@ const SEED = 20261013
 export type WorkerRequest =
   | { id: number; task: 'selftest'; rows: number; cols: number; seed: number }
   | { id: number; task: 'fit'; dataDir: string; outDir: string; runId: string; nowSec: number }
-  | { id: number; task: 'folds'; dataDir: string; outDir: string; runId: string; nowSec: number }
+  | { id: number; task: 'folds'; dataDir: string; outDir: string; runId: string; nowSec: number; heldBefore?: TradeableBefore }
   | { id: number; task: 'calibrate'; outDir: string; runId: string; promotions: Promotion[] }
   | { id: number; task: 'lab'; dataDir: string; outDir: string; runId: string; promotions: Promotion[]; stories: StoryMarkInput[]; nowSec: number }
 
@@ -270,15 +270,15 @@ async function folds(request: Extract<WorkerRequest, { task: 'folds' }>): Promis
   progress(request.id, 'calibrating', step, HORIZONS.length * plan.length)
   // When a target is reached (V7.1 Stage 3): the first-touch table from the bars about every row of the grid.
   const touch = firstTouchTable(market, panel)
-  const calibration = await writeCalibration(dir, records, promotionsOf(horizons), request.runId, touch)
+  const calibration = await writeCalibration(dir, records, promotionsOf(horizons), request.runId, touch, request.heldBefore)
   return { task: 'folds', runId: request.runId, folds: plan, horizons, calibration, ms: Date.now() - started }
 }
 
 /** The calibration from a walk forward's records, written beside them; what it made of each horizon. With
- * the first-touch table where the walk forward read its bars; a calibration made again from the record
- * alone has none. */
-async function writeCalibration(dir: string, records: ReadonlyMap<Horizon, OosRecord>, promotions: readonly Promotion[], runId: string, touch?: FirstTouchTable): Promise<CalibrationSummary[]> {
-  const calibration = buildRunCalibration(records, promotions, runId, touch)
+ * the first-touch table where the walk forward read its bars, and the run before's tradeable verdicts where
+ * the service handed them on (V7.2 Stage 2); a calibration made again from the record alone has neither. */
+async function writeCalibration(dir: string, records: ReadonlyMap<Horizon, OosRecord>, promotions: readonly Promotion[], runId: string, touch?: FirstTouchTable, heldBefore?: TradeableBefore): Promise<CalibrationSummary[]> {
+  const calibration = buildRunCalibration(records, promotions, runId, touch, heldBefore)
   await writeFile(join(dir, 'calibration.json'), serializeRunCalibration(calibration), 'utf-8')
   return summaryOf(calibration)
 }

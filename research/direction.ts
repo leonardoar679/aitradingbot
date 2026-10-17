@@ -81,7 +81,10 @@ for (const horizon of HORIZONS as Horizon[]) {
     const made = report.models[model]
     if (made === undefined) continue
     const failed = made.lines.filter((line) => line.ok === false).map((line) => line.id)
-    const verdict = made.promoted ? 'promoted' : `not promoted: ${failed.join(',') || 'not measured'}`
+    const unread = made.lines.filter((line) => line.ok === null).map((line) => line.id)
+    const edge = made.honest.pooled?.edge
+    const edgeText = edge === undefined ? '' : ` edge ${edge.meanPct >= 0 ? '+' : ''}${edge.meanPct.toFixed(3)}%${edge.ci === null ? '' : ` [${edge.ci.low.toFixed(3)}, ${edge.ci.high.toFixed(3)}]`}`
+    const verdict = (made.tradeable ? 'tradeable' : made.promoted ? `promoted, not tradeable: ${failed.concat(unread).join(',')}` : `no: ${failed.join(',')}${unread.length === 0 ? '' : ` unread ${unread.join(',')}`}`) + (made.tradeableBefore === null ? '' : made.tradeableBefore ? ' (held before)' : ' (not held before)') + edgeText
     console.log(`${''.padEnd(10)} ${model.padEnd(22)} ${cells(made.honest.pooled)}  ${verdict.padEnd(28)} ${classesOf(model)}`)
   }
   console.log(`${''.padEnd(10)} ${'the base rate'.padEnd(22)} ${cells(null)}  ${''.padEnd(28)} ${classesOf('base')}`)

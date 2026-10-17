@@ -6,7 +6,7 @@ import { challengeRefusals, compareRuns, type ChallengeVerdict } from '../../sha
 import { HORIZONS, type Horizon } from '../../shared/forecast/features'
 import { parseFitted } from '../../shared/forecast/modelFile'
 import type { DirectionModelId, FittedHorizon } from '../../shared/forecast/models'
-import type { RunCalibration } from '../../shared/forecast/runCalibration'
+import { tradeableVerdictsOf, type RunCalibration } from '../../shared/forecast/runCalibration'
 import type { TrainingState } from '../../shared/forecast/status'
 import { degradationOf, degradedForecastNotice } from '../../shared/forecast/promotion'
 import { MIN_READY_PAIRS, fitDueAtStart, healForecastSettings, nextNightlyAt, promotionsOf, runIdAt, runsToSweep, type Promotion } from '../../shared/forecast/training'
@@ -235,7 +235,9 @@ function runTraining(why: 'first' | 'nightly' | 'stale'): Promise<void> {
 
       state.status = 'testing'
       tell()
-      const foldsAnswer = await askWorker({ task: 'folds', dataDir, outDir: modelsDir(), runId, nowSec }, (progress) => {
+      // The run in use's tradeable verdicts go with the walk forward (V7.2 Stage 2): a direction model is a
+      // P(up) source only where two walk forwards in a row found it tradeable.
+      const foldsAnswer = await askWorker({ task: 'folds', dataDir, outDir: modelsDir(), runId, nowSec, ...(champion === null ? {} : { heldBefore: tradeableVerdictsOf(champion.calibration) }) }, (progress) => {
         state.progress = progress
         tell()
       })

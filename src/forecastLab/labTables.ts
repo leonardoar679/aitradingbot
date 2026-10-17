@@ -3,6 +3,7 @@ import { LIVE_VARIANTS, type LabErrorKind, type LabEvent, type LabMetrics, type 
 import type { LabFile } from '../../shared/forecast/labFile'
 import type { DirectionView } from '../../shared/forecast/labView'
 import { DIRECTION_MODELS } from '../../shared/forecast/models'
+import { ROUND_TRIP_PCT } from '../../shared/forecast/edge'
 import { CLASS_LINES, type ClassRecord } from '../../shared/forecast/opportunityClass'
 import type { DirectionScore, PUpSource } from '../../shared/forecast/runCalibration'
 import type { ShockRefusal, ShockRule } from '../../shared/forecast/shock'
@@ -310,13 +311,39 @@ const DIRECTION_MODEL_NAME: Record<(typeof DIRECTION_MODELS)[number], string> = 
   'dir-gbt-price': 'dir-gbt-price (price figures alone)'
 }
 
+/** The precision a call must reach to pay its round trip at a horizon (V7.2 Stage 2): half plus the round
+ * trip's cost over twice the median's error -- 0.90 at five minutes, 0.77 at fifteen, 0.64 at an hour, 0.565
+ * at four and 0.525 at a day on the walk forward of 16 October 2026. Null without the Lab's error. */
+export function breakevenPrecision(mae: number | null | undefined): number | null {
+  return mae === null || mae === undefined || !(mae > 0) ? null : 0.5 + ROUND_TRIP_PCT / (2 * mae)
+}
+
+const edgeCell = (edge: DirectionScore['edge']): string => {
+  if (edge === undefined) return '—'
+  const text = pct(edge.meanPct, 3)
+  return edge.ci === null ? text : `${text} (${pct(edge.ci.low, 3)}–${pct(edge.ci.high, 3)})`
+}
+
 /** The direction experiments (V7.1 Stage 2): at each horizon, the distribution's P(up) and every direction
- * model, scored on the same weeks of the walk forward -- outcomes, Brier skill over the base rate, calls at
- * the forecast's lines and the share right -- each model's verdict and its last week, and which pair
- * classes read their P(up) from it now. */
-export function directionTable(views: Partial<Record<Horizon, DirectionView>>): LabTableData {
+ * model, scored on the same weeks of the walk forward -- outcomes, Brier skill over the base rate with its
+ * interval and the skill its sample could tell from zero, calls at the forecast's lines and the share right,
+ * the precision a call must reach to pay at the horizon, the calls' edge after the round trip (V7.2 Stage
+ * 2) -- each model's verdict, whether it held on the run before too, its last week, and which pair classes
+ * read their P(up) from it now. `lab` gives the median's error the breakeven is read from. */
+export function directionTable(views: Partial<Record<Horizon, DirectionView>>, lab: LabFile | null = null): LabTableData {
   const rows: (string | number)[][] = []
-  const cells = (score: DirectionScore | null | undefined): (string | number)[] => (score === null || score === undefined ? ['—', '—', '—', '—', '—'] : [score.n, withInterval(share(score.directionSkill, 2), score.ci?.directionSkill, 2), share(score.detectable, 2), score.calls, withInterval(share(score.precision), score.ci?.precision)])
+  const cells = (score: DirectionScore | null | undefined, horizon: Horizon): (string | number)[] =>
+    score === null || score === undefined
+      ? ['—', '—', '—', '—', '—', '—', '—']
+      : [
+          score.n,
+          withInterval(share(score.directionSkill, 2), score.ci?.directionSkill, 2),
+          share(score.detectable, 2),
+          score.calls,
+          withInterval(share(score.precision), score.ci?.precision),
+          share(breakevenPrecision(lab?.horizons[horizon]?.variants.v2.pooled.mae)),
+          edgeCell(score.edge)
+        ]
   const classesOf = (view: DirectionView, source: PUpSource): string => {
     const classes = view.inUse[source]
     return classes === undefined || classes.length === 0 ? '—' : classes.length === PAIR_CLASSES.length ? 'every class' : classes.join(', ')
@@ -324,23 +351,26 @@ export function directionTable(views: Partial<Record<Horizon, DirectionView>>): 
   for (const horizon of HORIZONS) {
     const view = views[horizon]
     if (view === undefined) continue
-    rows.push([HORIZON_NAME[horizon], "the distribution's P(up)", ...cells(view.report.baseline.pooled), 'the floor', '—', classesOf(view, 'distribution')])
+    rows.push([HORIZON_NAME[horizon], "the distribution's P(up)", ...cells(view.report.baseline.pooled, horizon), 'the floor', '—', '—', classesOf(view, 'distribution')])
     for (const model of DIRECTION_MODELS) {
       const made = view.report.models[model]
       if (made === undefined) continue
       const failed = made.lines.filter((line) => line.ok === false).map((line) => line.id)
+      const unread = made.lines.filter((line) => line.ok === null).map((line) => line.id)
+      const verdict = made.tradeable ? 'promoted, tradeable' : made.promoted ? `promoted, not tradeable: ${failed.concat(unread).join(', ')}` : `not promoted: ${failed.join(', ')}${unread.length === 0 ? '' : `${failed.length === 0 ? '' : '; '}not read: ${unread.join(', ')}`}`
       rows.push([
         HORIZON_NAME[horizon],
         DIRECTION_MODEL_NAME[model],
-        ...cells(made.honest.pooled),
-        made.promoted ? 'promoted' : `not promoted: ${failed.join(', ') || 'not measured'}`,
+        ...cells(made.honest.pooled, horizon),
+        verdict,
+        made.tradeableBefore === null ? 'no run before' : made.tradeable && made.tradeableBefore ? 'yes: a P(up) source' : made.tradeableBefore ? 'the run before only' : made.tradeable ? 'this run only' : 'no',
         made.lastWeekSkill === null ? '—' : made.degraded ? `DEGRADED (${share(made.lastWeekSkill, 2)})` : share(made.lastWeekSkill, 2),
         classesOf(view, model)
       ])
     }
-    rows.push([HORIZON_NAME[horizon], 'the base rate', '—', '—', '—', '—', '—', '—', '—', classesOf(view, 'base')])
+    rows.push([HORIZON_NAME[horizon], 'the base rate', '—', '—', '—', '—', '—', '—', '—', '—', '—', '—', classesOf(view, 'base')])
   }
-  return { headers: ['Horizon', 'Source of P(up)', 'Outcomes', 'Brier skill over the base rate', 'Detectable skill', 'Calls at the lines', 'Calls right', 'Verdict', 'Last week', 'P(up) of'], rows }
+  return { headers: ['Horizon', 'Source of P(up)', 'Outcomes', 'Brier skill over the base rate', 'Detectable skill', 'Calls at the lines', 'Calls right', 'Breakeven precision', "The calls' edge after costs", 'Verdict', 'Tradeable twice', 'Last week', 'P(up) of'], rows }
 }
 
 /** The path's figures on the live record (V7.1 Stage 3), by horizon: when the median was said to be reached
