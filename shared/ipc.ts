@@ -203,6 +203,9 @@ export interface ForecastHistory {
   outcomes: (import('./forecast/forecastRecord').OutcomeLine | import('./forecast/forecastRecord').MissingOutcomeLine)[]
   /** A span's passes (forecast:record only, since V6 Stage 16): the pairs each recorded close held bars for. */
   passes?: import('./forecast/forecastRecord').PassLine[]
+  /** The tape's lines in the span (forecast:record only, since V7.2 Stage 5): the books written, the pairs
+   * they cover, and Bitcoin's minutes. */
+  tape?: { lines: number; pairs: number; minutes: number }
 }
 
 export interface AppSettings {

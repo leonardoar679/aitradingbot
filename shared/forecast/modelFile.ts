@@ -16,6 +16,12 @@ import { EXCURSION_LEVELS, MODELS_VERSION, type DirectionFits, type ExcursionFit
 
 export const MODEL_FILE_VERSION = 'forecast-models-file-v1'
 
+/** A fold's models of the walk forward, saved beside its record (V7.2 Stage 5): fold-<k>-<horizon>.json, k
+ * the fold's index as the record's `fold` column counts it, so that the tested weeks can be replayed out of
+ * sample at every five-minute close, not only the hourly rows the record keeps. Swept with the run. */
+export const foldModelName = (fold: number, horizon: Horizon): string => `fold-${fold}-${horizon}.json`
+export const FOLD_MODEL_PATTERN = /^fold-(\d+)-([a-z0-9]+)\.json$/
+
 interface CompactTree {
   f: number[]
   t: number[]

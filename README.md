@@ -565,6 +565,18 @@ pairs the pass held bars for, in `passes-YYYY-MM.jsonl` (so that a pair skipped 
 had left the research's pairs); and the adaptive levels in `aci.json`. A restart
 picks up the outcomes still owed; month files older than 180 days are deleted at start. The window
 reads it all through `window.api.forecast` (state, the latest forecasts, one pair's, a pair's record).
+Since V7.2 Stage 5 (18 October 2026) every decision of the live forecast is made by
+`shared/forecast/pass.ts`, pure functions the service hands its sources (the bars as held, the models and
+the calibration in use, the live book, the news, the calendar, the class verdicts, the moment) and one
+state, the service writing what they return; a record can be replayed through them and compared on V2's
+own levels (`shared/forecast/fidelity.ts`, `research/replayFidelity.ts`: on the two-day run's record
+the five-minute levels, P(up) and the market's state replay, the longer horizons' levels differ by a few
+ten-thousandths because the record did not say at which close each outcome was settled). The record now
+says it (`at` on an outcome line) and the day's volatility each forecast was scaled by (`rv`); the
+**tape** (`tape-YYYY-MM-DD.jsonl`, one line a minute per streamed pair's book and each of Bitcoin's
+minutes, deleted with the month files, counted on a run's report) begins with the next run; and each
+fold's models of a walk forward are saved beside its record (`fold-<k>-<horizon>.json`), for the replay
+out of sample Stage 6 builds.
 
 **The news in the forecast** (since 13 October 2026; the V6 document's §18-24, §43, §49, §54-55 and
 §58; V6 Stage 8; `shared/forecast/newsEffect.ts`). The models forecast from the market alone; a story

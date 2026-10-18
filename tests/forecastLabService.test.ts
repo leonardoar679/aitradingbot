@@ -196,6 +196,20 @@ describe('what the page is shown', () => {
     expect(span.predictions.map((entry) => entry.id)).toEqual(['in'])
     expect(span.outcomes.map((entry) => entry.id)).toEqual(['in'])
     expect(span.passes).toEqual([{ v: 'forecast-record-v1', t, held: ['ETHUSDT', 'SOLUSDT'] }])
+    expect(span.tape).toEqual({ lines: 0, pairs: 0, minutes: 0 })
+  })
+
+  it("counts the tape's lines in a span for a run's report: the books, their pairs, Bitcoin's minutes (V7.2 Stage 5)", async () => {
+    mkdirSync(records(), { recursive: true })
+    const now = Math.floor(Date.now() / 1000)
+    const t = Math.floor(now / 900) * 900 - 1800
+    const book = (pair: string, at: number): Record<string, unknown> => ({ v: 'tape-v1', kind: 'book', t: at, pair, bid: 100, ask: 100.1, bidQty: 1, askQty: 2, at: at * 1000 })
+    const minute = (at: number): Record<string, unknown> => ({ v: 'tape-v1', kind: 'minute', t: at, pair: 'BTCUSDT', open: 1, high: 2, low: 0.5, close: 1.5, volume: 3 })
+    const lines = [book('SOLUSDT', t - 60), book('SOLUSDT', t + 60), book('SOLUSDT', t + 120), book('ETHUSDT', t + 120), minute(t + 60), minute(t + 1200), { ...book('XRPUSDT', t + 60), v: 'tape-v0' }]
+    const { tapeFileName } = await import('../shared/forecast/tape')
+    writeFileSync(join(records(), tapeFileName(t + 60)), lines.map((entry) => JSON.stringify(entry)).join('\n') + '\n{torn\n')
+    const lab = await service()
+    expect((await lab.forecastRecordSpan(t, t + 600)).tape).toEqual({ lines: 3, pairs: 2, minutes: 1 })
   })
 
   it('the leaderboard from the walk forward\'s own record, the live record of the last week, and the refit', async () => {

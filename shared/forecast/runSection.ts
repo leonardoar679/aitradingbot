@@ -131,6 +131,9 @@ export interface ForecastRunSection {
   /** The paper laboratory's trades opened in the span, by strategy (V7.1 Stage 4): opened, closed in the
    * span, and their net after the engine's fees; absent where the laboratory opened none. */
   lab?: Partial<Record<LabStrategy, { opened: number; closed: number; netQuote: number }>>
+  /** The tape's lines in the span (V7.2 Stage 5): the books written, the pairs they cover, Bitcoin's
+   * minutes; absent on a record without a tape. */
+  tape?: { lines: number; pairs: number; minutes: number }
   /** SAMPLE_NOTE where fewer trades closed than a conclusion needs. */
   sampleNote: string | null
   gates: ForecastRunGate[]
@@ -159,6 +162,8 @@ export interface ForecastRunInput {
   /** The pairs each recorded close's pass held bars for (forecasts/passes-*.jsonl, since V6 Stage 16).
    * Absent on an older record: a pair is then wanted at every close from its first to its last. */
   passes?: readonly { t: number; held: readonly string[] }[]
+  /** The tape's lines in the span (V7.2 Stage 5), where the record counted them. */
+  tape?: { lines: number; pairs: number; minutes: number }
 }
 
 const isMissing = (line: OutcomeLine | MissingOutcomeLine): line is MissingOutcomeLine => 'missing' in line
@@ -281,6 +286,7 @@ export function forecastRunSectionOf(input: ForecastRunInput): ForecastRunSectio
     worst,
     trades: tradesOf(trades, closed),
     ...(Object.keys(laboratory).length === 0 ? {} : { lab: laboratory }),
+    ...(input.tape === undefined ? {} : { tape: input.tape }),
     sampleNote: closed.length < RUN_LINES.minTrades ? SAMPLE_NOTE : null,
     gates,
     passed: gates.every((gate) => gate.status !== 'fail')

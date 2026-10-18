@@ -1,43 +1,21 @@
 import { app } from 'electron'
 import { mkdir, readFile, readdir, unlink } from 'fs/promises'
 import { join } from 'path'
-import { FORECAST_BAR_SECONDS, lastClosedBarTime, staleMonth, type ForecastBar } from '../../shared/forecast/bars'
-import { cellKey, emptyAciTable, levelsOf, parseAciTable, stepAciTable, type AciTable, type CellKey } from '../../shared/forecast/aciTable'
-import { FEATURE_NAMES, HORIZONS, crossSectionAt, endsAt, featuresAt, quickAt, type Horizon, type PairClass, type PairQuick, type PairSeries } from '../../shared/forecast/features'
-import {
-  FORECAST_RECORD_DAYS,
-  isMissing,
-  missingOutcomeLine,
-  outcomeLine,
-  parseOutcomeLine,
-  parsePredictionLine,
-  passLine,
-  predictionLine,
-  recordMonth,
-  recordedHorizons,
-  type MissingOutcomeLine,
-  type OutcomeLine,
-  type PredictionLine
-} from '../../shared/forecast/forecastRecord'
-import { predictDirection, predictExcursion, predictHorizon, type DirectionModelId, type ForecastModelId } from '../../shared/forecast/models'
-import { rangeDriversFor, type RangeDriver } from '../../shared/forecast/rangeDrivers'
-import { dueAt, outcomeOf } from '../../shared/forecast/outcome'
-import { NEWS_EFFECT_LINES, newsSkillOf, type AnalystReadingInput, type KindReactions, type NewsStoryInput } from '../../shared/forecast/newsEffect'
-import { makePrediction, type PredictionNews, type PricePrediction } from '../../shared/forecast/prediction'
-import { predictionChangedNotice, stepCall, type CallTrack } from '../../shared/forecast/predictionChange'
-import { funnel, rankOf, type ForecastRanking, type RankedForecast } from '../../shared/forecast/ranking'
-import { acrossMedian, refreshReasons, type RefreshReason } from '../../shared/forecast/refresh'
-import { SHOCK_LINES, liveBtcMove } from '../../shared/forecast/shock'
-import { MARKET_SHOCK_LINES, btcTimelineOf, marketShockStateOf, shockMomentsOf, type MarketShockState, type ShockMoment } from '../../shared/forecast/marketShock'
 import { preEventAt } from '../../shared/calendar/macro'
-import { driftOf, pruneDrift, type DriftReading } from '../../shared/forecast/drift'
-import { cellOf } from '../../shared/forecast/runCalibration'
-import { decideTrade, liveOfBook, type TradeDecision } from '../../shared/forecast/tradeDecision'
-import { breakoutAt, classKeyOf, setupOf, type ClassVerdict } from '../../shared/forecast/opportunityClass'
-import { computeAtr } from '../../shared/atr'
+import { parseAciTable, type AciTable } from '../../shared/forecast/aciTable'
+import { staleMonth } from '../../shared/forecast/bars'
+import { HORIZONS, type Horizon, type PairSeries } from '../../shared/forecast/features'
+import { FORECAST_RECORD_DAYS, isMissing, parseOutcomeLine, parsePredictionLine, recordMonth, type MissingOutcomeLine, type OutcomeLine, type PredictionLine } from '../../shared/forecast/forecastRecord'
+import { NEWS_EFFECT_LINES, newsSkillOf, type AnalystReadingInput, type KindReactions, type NewsStoryInput } from '../../shared/forecast/newsEffect'
+import type { ClassVerdict } from '../../shared/forecast/opportunityClass'
+import { consider, decisionFor, driftReadings, liveSignal, newPassState, owe, owedPairs, pass, pendingCount, recorded, settle, type PassSources, type PassState, type Refreshed, type Settled } from '../../shared/forecast/pass'
+import type { PredictionNews, PricePrediction } from '../../shared/forecast/prediction'
+import { predictionChangedNotice, stepCall, type CallTrack } from '../../shared/forecast/predictionChange'
+import type { ForecastRanking } from '../../shared/forecast/ranking'
 import type { EngineState } from '../../shared/forecast/status'
-import { bookSpreadPct, executionQuality, isStale, type LiveState } from '../../shared/liveMarket'
-import type { MarketRegime } from '../../shared/marketResearch'
+import { newTapeState, staleDay, tapeFileName, tapeLinesOf, type TapeLine } from '../../shared/forecast/tape'
+import type { TradeDecision } from '../../shared/forecast/tradeDecision'
+import type { LiveState } from '../../shared/liveMarket'
 import { writeJsonAtomic } from './atomicWrite'
 import { forecastSeries, forecastUniverse, onForecastBars, setOwedPairs } from './forecastDataService'
 import { currentForecastCalibration, currentForecastModels, getForecastTrainingState, onForecastTraining } from './forecastTrainingService'
@@ -83,9 +61,16 @@ import { getSettings } from './settingsService'
 //
 // ON RECORD (forecasts/): every pair's forecast at every quarter-hour and every forecast made again
 // (predictions-YYYY-MM.jsonl); an outcome for each of their horizons once it is due, never before
-// (outcomes-YYYY-MM.jsonl; shared/forecast/forecastRecord.ts); and the adaptive levels (aci.json),
-// moved once a moment by the outcomes due at it. A restart picks up the outcomes still owed from the
-// record. Month files older than 180 days are deleted at start.
+// (outcomes-YYYY-MM.jsonl; shared/forecast/forecastRecord.ts); the adaptive levels (aci.json), moved
+// once a moment by the outcomes due at it; and, since V7.2 Stage 5, the tape (tape-YYYY-MM-DD.jsonl;
+// shared/forecast/tape.ts): one line a minute per streamed pair's book and each of Bitcoin's minutes. A
+// restart picks up the outcomes still owed from the record. Month and day files older than 180 days are
+// deleted at start.
+//
+// SINCE V7.2 STAGE 5 (18 October 2026) every decision here is made by shared/forecast/pass.ts, pure
+// functions handed the sources below and one state: this service reads the files, writes what they return,
+// and tells the window and the notices. A replay hands the same functions a record's bars and a run's
+// models and must get the same forecasts (shared/forecast/fidelity.ts).
 //
 // IT FORECASTS FROM PUBLIC MARKET DATA AND NOTHING ELSE. No key, no model of anyone else's, no order.
 
@@ -110,77 +95,29 @@ export interface ScannerSignal {
   recentEvents: readonly { id: string; symbol: string }[]
 }
 
-/** What a close gave a pair, kept for forecasting it again before the next. */
-interface PairInput {
-  models: Partial<Record<Horizon, Record<ForecastModelId, number[]>>>
-  /** Each horizon's direction models' raw chances of up at the close (V7.1 Stage 2). */
-  direction: Partial<Record<Horizon, Record<DirectionModelId, number>>>
-  /** Each horizon's excursion levels at the close, in usual moves (V7.1 Stage 3). */
-  excursion: Partial<Record<Horizon, { high: number[]; low: number[] }>>
-  rv24h: number
-  rvRatio: number
-  cls: PairClass
-  regime: MarketRegime
-  price: number
-  barTime: number
-  usualMinuteVolume: number | null
-  /** The coin's last hour in its usual moves, the market's breadth over it, and its volume against its
-   * usual hour. */
-  market: { z1h: number; breadth1h: number; volRatio1h: number; atr5mPct: number | null }
-  /** Whether the close broke the day before's range: an opportunity's setup (V6 Stage 12). */
-  breakout: boolean
-  /** What moved each horizon's size reading most (§36). */
-  drivers: Partial<Record<Horizon, RangeDriver[]>>
-}
-
 const blank = (): EngineState => ({ status: 'waiting', waitingFor: 'models', lastPassAt: null, lastPassMs: null, predictions: 0, recorded: 0, outcomes: 0, missing: 0, refreshes: 0, pending: 0, lastError: null, market: null, drift: {} })
 
 const state: EngineState = blank()
-const latest = new Map<string, PricePrediction>()
-const decisions = new Map<string, TradeDecision>()
+/** Everything the pass keeps from one moment to the next (shared/forecast/pass.ts). */
+const engine: PassState = newPassState()
+const tape = newTapeState()
 const calls = new Map<string, CallTrack>()
-let ranking: ForecastRanking = { at: null, ranked: [], top10: [], top3: [] }
-const inputs = new Map<string, PairInput>()
-const lastRefreshAt = new Map<string, number>()
-/** Recorded forecasts with horizons still owed an outcome, by id. */
-const owed = new Map<string, { line: PredictionLine; horizons: Set<Horizon> }>()
 /** Stories and events already looked at, so that each moves a pair's forecast once. */
 const seenStories = new Set<string>()
 const seenEvents = new Set<string>()
 /** The news as last told: the feed's stories, reactions and library; the analyst's readings. */
 let feed: NewsSignal | null = null
 let readings: Record<string, AnalystReadingInput> = {}
-/** The news-moved forecasts' outcomes, for their own skill: forecasts/news-outcomes.jsonl. */
-const newsOutcomes: { h: Horizon; due: number; pUp: number; up: boolean }[] = []
-let newsSkill: Partial<Record<Horizon, number | null>> = {}
-let aci: AciTable | null = null
-let lastRecordedAt = 0
 let lastClosedAt: number | null = null
 let started = false
 let passing: Promise<void> | null = null
 let liveState: () => LiveState | null = () => null
+/** How each opportunity class stands, as electron/main.ts hands it in (forecastLabService.ts); null
+ * until it is, and then no class is judged. */
+let classVerdicts: ((key: string) => ClassVerdict) | null = null
 const listeners = new Set<() => void>()
 
-const RV24 = FEATURE_NAMES.indexOf('rv_24h')
-const RATIO = FEATURE_NAMES.indexOf('rv_ratio')
-const Z1H = FEATURE_NAMES.indexOf('z_1h')
-const BREADTH1H = FEATURE_NAMES.indexOf('breadth_1h')
-const Z15 = FEATURE_NAMES.indexOf('z_15m')
-const VOL1H = FEATURE_NAMES.indexOf('vol_ratio_1h')
-/** The closes a pair's usual spread is the median of, and the fewest it is read from (V7.1 Stage 11). */
-const SPREAD_CLOSES = 24
-const SPREAD_MIN_CLOSES = 6
-/** A pair's spread at the last closes, in percent, where the live book held it then. */
-const spreads = new Map<string, number[]>()
-/** Each horizon's outcomes of the last day, for the live drift gate (V7.1 Stage 13; shared/forecast/drift.ts). */
-const driftOutcomes = new Map<Horizon, { due: number; in80: boolean }[]>()
-/** Whether a pair's live price stood across its expected price against its call at the last reading. */
-const acrossBefore = new Map<string, boolean>()
-/** The stake an execution's quality is read for, in the quote. */
-const RANKING_STAKE = 100
 const NEWS_SKILL_DAYS = NEWS_EFFECT_LINES.skillDays
-/** How long past due an outcome waits for its bars before it is written as missing. */
-const MISSING_AFTER_SEC = 3600
 /** How far back a restart reads the record for outcomes still owed: the longest horizon and two
  * hours. */
 const OWED_LOOKBACK_SEC = 26 * 3600
@@ -214,13 +151,6 @@ function seriesOf(symbol: string): PairSeries | null {
   return held === null ? null : { m5: held.m5 as PairSeries['m5'], h1: held.h1 as PairSeries['h1'] }
 }
 
-/** The live book of a pair the stream holds, while it is fresh: its mid and its spread. */
-function liveBook(symbol: string, nowMs: number): { mid: number; spreadPct: number | null } | null {
-  const book = liveState()?.books[symbol]
-  if (book === undefined || isStale(book, nowMs) || !(book.bid > 0) || !(book.ask > 0)) return null
-  return { mid: (book.bid + book.ask) / 2, spreadPct: bookSpreadPct(book) }
-}
-
 /** A coin's news as the forecast reads it: the stories naming it, as their subject or not (which of
  * them count is shared/forecast/newsEffect.ts's to say), with their reactions' priced-in. Undefined
  * where there are none. */
@@ -246,178 +176,26 @@ function newsFor(symbol: string): PredictionNews | undefined {
     })
   }
   if (stories.length === 0) return undefined
-  return { ticker, stories, library: feed.impact ?? [], readings, skill: newsSkill }
+  return { ticker, stories, library: feed.impact ?? [], readings, skill: engine.newsSkill }
 }
 
-/** Bitcoin's last fifteen minutes and its hour in its usual moves (V6.1, shared/forecast/shock.ts; V7.1
- * Stage 11): its z_15m and z_1h at the last close, with the day's volatility they are measured by; and,
- * read from its live minutes, the latest. */
-let closeBtc: { t: number; btc15: number | null; btc1h: number | null; rv24h: number | null } = { t: 0, btc15: null, btc1h: null, rv24h: null }
-let liveBtc: { btc15: number; btc1h: number | null; atMs: number } | null = null
-/** The market at the last close (V7.1 Stage 11): the breadth of its last fifteen minutes, its volume
- * against its usual, and the shock moments of the four hours before, from Bitcoin's bars. */
-let closeMarket: { breadth15: number; volAcc15: number; moments: ShockMoment[] } | null = null
-/** How long the live reading stands for the close's: the stream reads it every five seconds. */
-const LIVE_BTC_MS = 15_000
-
-function currentBtc15(nowMs: number): number | null {
-  return liveBtc !== null && nowMs - liveBtc.atMs <= LIVE_BTC_MS ? liveBtc.btc15 : closeBtc.btc15
+/** What the pass reads, from the services around it. */
+const sources: PassSources = {
+  universe: forecastUniverse,
+  seriesOf,
+  models: currentForecastModels,
+  calibration: currentForecastCalibration,
+  runId: () => getForecastTrainingState().current?.runId ?? null,
+  book: (symbol) => liveState()?.books[symbol],
+  depth: (symbol) => liveState()?.depth[symbol],
+  volumes: () => new Map(getResearchState().pairs.map((pair) => [pair.symbol, pair.quoteVolume24h])),
+  news: newsFor,
+  preEvent: preEventAt,
+  classVerdict: () => classVerdicts
 }
-
-/** The market's state from Bitcoin's figures given, with the close's breadth, volume and shock moments;
- * null before a close read them. */
-function marketStateOf(btc15: number | null, btc1h: number | null, tSec: number): MarketShockState | null {
-  if (closeMarket === null || btc15 === null || btc1h === null) return null
-  // Before a scheduled release (V7.1 Stage 12): the calendar's word, within the hour before it.
-  return marketShockStateOf({ t: tSec, btc15, btc1h, breadth15: closeMarket.breadth15, volAcc15: closeMarket.volAcc15 }, closeMarket.moments, { preEvent: preEventAt(tSec) })
-}
-
-/** The market's state now: from the stream's reading while it is fresh, at the moment it was read; the
- * close's otherwise, at the close. */
-function currentMarketState(nowMs: number): MarketShockState | null {
-  const fresh = liveBtc !== null && nowMs - liveBtc.atMs <= LIVE_BTC_MS
-  return fresh ? marketStateOf(liveBtc!.btc15, liveBtc!.btc1h ?? closeBtc.btc1h, Math.floor(liveBtc!.atMs / 1000)) : marketStateOf(closeBtc.btc15, closeBtc.btc1h, closeBtc.t)
-}
-
-/** What the status shows of the market: its state and figures as last read, at the moment they were. */
-function tellMarket(btc15: number | null, btc1h: number | null, atSec: number): void {
-  const marketState = marketStateOf(btc15, btc1h, atSec)
-  state.market = marketState === null || closeMarket === null ? null : { state: marketState, btc15: btc15 as number, btc1h: btc1h as number, breadth15: closeMarket.breadth15, volAcc15: closeMarket.volAcc15, readAt: atSec }
-}
-
-/** Whether any horizon's rule on Bitcoin's sharp moves is in use: without one, its crossing changes nothing. */
-function shockRuleInUse(): boolean {
-  const calibration = currentForecastCalibration()
-  return calibration !== null && HORIZONS.some((horizon) => calibration.horizons[horizon]?.shock?.adopted === true && calibration.horizons[horizon]?.marketShock?.chosen !== 'states' && calibration.horizons[horizon]?.marketShock?.chosen !== 'none')
-}
-
-/** Whether any horizon widens by the market's states (V7.1 Stage 11): without one, a change of state
- * changes nothing. */
-function stateRulesInUse(): boolean {
-  const calibration = currentForecastCalibration()
-  return calibration !== null && HORIZONS.some((horizon) => {
-    const rules = calibration.horizons[horizon]?.marketShock
-    return rules !== undefined && rules.chosen === 'states' && Object.values(rules.byState).some((rule) => rule.adopted)
-  })
-}
-
-/** A pair's usual spread, in percent: the median of its spreads at the last closes, from at least six. */
-function usualSpreadOf(symbol: string): number | null {
-  const held = spreads.get(symbol) ?? []
-  if (held.length < SPREAD_MIN_CLOSES) return null
-  const sorted = [...held].sort((a, b) => a - b)
-  const middle = sorted.length >> 1
-  return sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2
-}
-
-function predictionFor(symbol: string, nowMs: number): PricePrediction | null {
-  const input = inputs.get(symbol)
-  const calibration = currentForecastCalibration()
-  const current = getForecastTrainingState().current
-  if (input === undefined || calibration === null || current === null) return null
-  return makePrediction({
-    pair: symbol,
-    pairClass: input.cls,
-    regime: input.regime,
-    barTime: input.barTime,
-    price: input.price,
-    generatedAt: nowMs,
-    rv24h: input.rv24h,
-    rvRatio: input.rvRatio,
-    spreadPct: liveBook(symbol, nowMs)?.spreadPct ?? null,
-    market: input.market,
-    drivers: input.drivers,
-    models: input.models,
-    direction: input.direction,
-    excursion: input.excursion,
-    calibration,
-    levels: (horizon, variant, cell) => levelsOf(aci, cellKey(horizon, variant, cell)),
-    news: newsFor(symbol),
-    btc15: currentBtc15(nowMs),
-    marketState: currentMarketState(nowMs),
-    runId: current.runId,
-    foldsRunId: calibration.runId
-  })
-}
-
-/** Each horizon's live drift from the last day's outcomes (V7.1 Stage 13). */
-function driftAt(horizon: Horizon, nowSec: number): DriftReading {
-  return driftOf(driftOutcomes.get(horizon) ?? [], nowSec)
-}
-
-/** What the status shows of the drift: every horizon with an outcome in the window. */
-function tellDrift(nowSec: number): void {
-  const out: NonNullable<EngineState['drift']> = {}
-  for (const horizon of HORIZONS) {
-    const held = driftOutcomes.get(horizon)
-    if (held === undefined) continue
-    const pruned = pruneDrift(held, nowSec)
-    driftOutcomes.set(horizon, pruned)
-    if (pruned.length > 0) out[horizon] = driftAt(horizon, nowSec)
-  }
-  state.drift = out
-}
-
-/** A pair's trade decision at its lead horizon -- its best, or the hour's -- from its forecast and the
- * live book. */
-function decisionFor(prediction: PricePrediction, nowMs: number): TradeDecision {
-  const horizon = prediction.bestHorizon ?? (prediction.horizons.hour1 !== undefined ? 'hour1' : (Object.keys(prediction.horizons)[0] as keyof PricePrediction['horizons']))
-  const live = liveOfBook(liveState()?.books[prediction.pair])
-  const range = prediction.horizons[horizon]
-  const judge = classVerdicts
-  // The class a trade on its side falls in (shared/forecast/opportunityClass.ts), judged by the Lab's
-  // record and the trader's own, as electron/main.ts hands them in; not judged before they are.
-  const classOf =
-    judge === null || range === undefined
-      ? null
-      : (side: 'BUY' | 'SELL'): { key: string; verdict: ClassVerdict } => {
-          const setup = setupOf({ side, story: range.news.v4 !== null || range.news.v3 !== null, breakout: inputs.get(prediction.pair)?.breakout === true, prior: prediction.market?.z1h ?? null, regime: prediction.regime })
-          const key = classKeyOf(prediction.pairClass, horizon, setup)
-          return { key, verdict: judge(key) }
-        }
-  // The live drift gate (V7.1 Stage 13): the horizon's last day of outcomes, as the forecast's own record holds them.
-  return decideTrade({ prediction, horizon, nowMs, live, classOf, drift: driftAt(horizon, Math.floor(nowMs / 1000)) })
-}
-
-/** How each opportunity class stands, as electron/main.ts hands it in (forecastLabService.ts); null
- * until it is, and then no class is judged. */
-let classVerdicts: ((key: string) => ClassVerdict) | null = null
 
 export function setForecastClassVerdicts(judge: ((key: string) => ClassVerdict) | null): void {
   classVerdicts = judge
-}
-
-/** The five-minute bars the ATR is read over (shared/atr.ts), and the ATR of the last of them in percent
- * of the close: what a trade plan's entry zone and nearest stop are measured in (V6 Stage 12). */
-const ATR_BARS = 14
-
-function atr5mPctAt(bars: readonly ForecastBar[]): number | null {
-  if (bars.length < ATR_BARS + 1) return null
-  const atr = computeAtr([...bars], ATR_BARS)
-  const last = atr[atr.length - 1]
-  const close = bars[bars.length - 1].close
-  return Number.isFinite(last) && last > 0 && close > 0 ? (last / close) * 100 : null
-}
-
-/** Every pair's decision, and the ranking of them all. */
-function rankAll(nowMs: number): void {
-  const volumes = new Map(getResearchState().pairs.map((pair) => [pair.symbol, pair.quoteVolume24h]))
-  const state = liveState()
-  const ranked: RankedForecast[] = []
-  for (const prediction of latest.values()) {
-    const decision = decisionFor(prediction, nowMs)
-    decisions.set(prediction.pair, decision)
-    const book = state?.books[prediction.pair] ?? null
-    const execution = book === null ? null : executionQuality({ book, depth: state?.depth[prediction.pair] ?? null, side: decision.side === 'SELL' ? 'sell' : 'buy', stakeQuote: RANKING_STAKE, nowMs }).score
-    ranked.push({ ...rankOf({ prediction, horizon: decision.horizon, edge: decision.edge, quoteVolume24h: volumes.get(prediction.pair) ?? null, execution }), decision })
-  }
-  const ordered = funnel(ranked)
-  ranking = {
-    at: latest.values().next().value?.barTime ?? null,
-    ranked: ordered.ranked as RankedForecast[],
-    top10: ordered.top10.map((entry) => entry.pair),
-    top3: ordered.top3.map((entry) => entry.pair)
-  }
 }
 
 async function writeLines(kind: 'predictions' | 'outcomes', lines: readonly (PredictionLine | OutcomeLine | MissingOutcomeLine)[]): Promise<void> {
@@ -433,185 +211,50 @@ async function writeLines(kind: 'predictions' | 'outcomes', lines: readonly (Pre
   for (const [month, mine] of byMonth) await appendJsonLines(join(recordsDir(), `${kind}-${month}.jsonl`), mine)
 }
 
-function owe(line: PredictionLine): void {
-  const horizons = new Set(Object.keys(line.h) as Horizon[])
-  if (horizons.size > 0) owed.set(line.id, { line, horizons })
-}
-
-const pendingCount = (): number => [...owed.values()].reduce((sum, entry) => sum + entry.horizons.size, 0)
-
 /** The pairs outcomes are still owed for: the data keeps their bars coming until they are judged. */
 export function owedForecastPairs(): string[] {
-  return [...new Set([...owed.values()].map((entry) => entry.line.pair))]
+  return owedPairs(engine)
 }
 
-/** The outcomes due by the close `closedAt` written, each once; the adaptive levels moved by them,
- * once for the moment. */
-async function settle(closedAt: number): Promise<void> {
-  const lines: (OutcomeLine | MissingOutcomeLine)[] = []
-  for (const [id, entry] of owed) {
-    for (const horizon of [...entry.horizons]) {
-      const due = dueAt(entry.line.t, horizon)
-      if (due > closedAt) continue
-      const recorded = entry.line.h[horizon]!
-      const series = seriesOf(entry.line.pair)
-      const path = series === null ? [] : series.m5.filter((bar) => bar.time >= entry.line.t && bar.time < due)
-      const outcome = outcomeOf(
-        { horizon, quantilesPct: recorded.q, pUp: recorded.pUp, direction: recorded.dir, width80Pct: recorded.width, usualWidth80Pct: recorded.usualWidth, newsShiftPct: recorded.news?.v4?.shift ?? 0 },
-        entry.line.t,
-        entry.line.price,
-        path
-      )
-      if (outcome !== null) lines.push(outcomeLine(entry.line, horizon, outcome))
-      else if (closedAt - due >= MISSING_AFTER_SEC) lines.push(missingOutcomeLine(entry.line, horizon, due, path.length === 0 ? 'no bars' : `${path.length} of its bars`))
-      else continue
-      entry.horizons.delete(horizon)
-    }
-    if (entry.horizons.size === 0) owed.delete(id)
-  }
-  if (lines.length === 0) return
-  await writeLines('outcomes', lines)
-  const measured = lines.filter((line): line is OutcomeLine => !isMissing(line))
-  state.outcomes += lines.length
-  state.missing += lines.length - measured.length
-  // The last day's outcomes by horizon, for the drift gate (V7.1 Stage 13).
-  for (const line of measured) driftOutcomes.set(line.h, [...(driftOutcomes.get(line.h) ?? []), { due: line.due, in80: line.in80 }])
-  tellDrift(closedAt)
-  const calibration = currentForecastCalibration()
-  if (calibration === null || measured.length === 0) return
-  if (aci === null || aci.calibrationRun !== calibration.runId) aci = emptyAciTable(calibration.runId)
-  const steps: { key: CellKey; below: boolean[] }[] = []
-  for (const line of measured) {
-    // V2's levels learn from V2's own, where the shown were moved off them (V6.1): a story's, a thin book's
-    // or Bitcoin's sharp move's widening teaches them nothing.
-    steps.push({ key: cellKey(line.h, 'v2', line.cell), below: [...(line.v2below ?? line.below)].map((flag) => flag === '1') })
-    if (line.v1below.length === 5) steps.push({ key: cellKey(line.h, 'v1', line.cell), below: [...line.v1below].map((flag) => flag === '1') })
-    // The news-moved forecasts' levels learn only from the outcomes a story moved.
-    if (line.v3below !== undefined) steps.push({ key: cellKey(line.h, 'v3', line.cell), below: [...line.v3below].map((flag) => flag === '1') })
-    if (line.v4below !== undefined) steps.push({ key: cellKey(line.h, 'v4', line.cell), below: [...line.v4below].map((flag) => flag === '1') })
-  }
-  const touched = measured.filter((line) => line.newsPUp !== undefined).map((line) => ({ h: line.h, due: line.due, pUp: line.newsPUp!, up: line.up }))
-  if (touched.length > 0) {
-    newsOutcomes.push(...touched)
-    await appendJsonLines(join(recordsDir(), 'news-outcomes.jsonl'), touched)
-    newsSkill = newsSkillOf(newsOutcomes, closedAt)
-  }
-  aci = stepAciTable(aci, steps, closedAt)
-  await writeJsonAtomic(join(recordsDir(), 'aci.json'), aci)
+/** What a close's settling left, written: the outcomes, the news-moved ones to their own file, the levels. */
+async function applySettled(settled: Settled): Promise<void> {
+  if (settled.lines.length === 0) return
+  await writeLines('outcomes', settled.lines)
+  state.outcomes += settled.lines.length
+  state.missing += settled.lines.length - settled.measured
+  if (settled.drift !== null) state.drift = settled.drift
+  if (settled.newsTouched.length > 0) await appendJsonLines(join(recordsDir(), 'news-outcomes.jsonl'), settled.newsTouched)
+  if (settled.aciMoved && engine.aci !== null) await writeJsonAtomic(join(recordsDir(), 'aci.json'), engine.aci)
 }
 
-/** Every pair forecast at a close. */
-async function pass(closedAt: number): Promise<void> {
+/** Every pair forecast at a close: what the pure pass made, written and told. */
+async function runPass(closedAt: number): Promise<void> {
   const startedAt = Date.now()
   lastClosedAt = closedAt
-  const fitted = currentForecastModels()
-  const calibration = currentForecastCalibration()
-  state.waitingFor = fitted.size === 0 ? 'models' : calibration === null ? 'calibration' : null
-  if (state.waitingFor !== null) {
+  const made = pass(engine, sources, closedAt, Date.now())
+  if (made.status === 'waiting') {
     state.status = 'waiting'
+    state.waitingFor = made.waitingFor
     told()
     return
   }
-  const market = new Map<string, PairSeries>()
-  for (const symbol of forecastUniverse()) {
-    const series = seriesOf(symbol)
-    if (series !== null) market.set(symbol, series)
-  }
-  const btc = market.get('BTCUSDT')
-  const quick = new Map<string, PairQuick>()
-  for (const [symbol, series] of market) {
-    const read = quickAt(series, closedAt)
-    if (read !== null) quick.set(symbol, read)
-  }
-  const cross = btc === undefined ? null : crossSectionAt(quick)
-  if (btc === undefined || cross === null) {
-    state.status = 'waiting'
-    state.waitingFor = 'bars'
-    told()
-    return
-  }
-  inputs.clear()
-  closeBtc = { t: closedAt, btc15: null, btc1h: null, rv24h: null }
-  // The market at the close (V7.1 Stage 11): its breadth and volume over the last fifteen minutes, and the
-  // shock moments of the four hours before, read from Bitcoin's bars at every five-minute close.
-  closeMarket = { breadth15: cross.breadth15m, volAcc15: cross.volAcc15m, moments: shockMomentsOf(btcTimelineOf(btc, closedAt - MARKET_SHOCK_LINES.recoveryHours * 3600 - FORECAST_BAR_SECONDS, closedAt - FORECAST_BAR_SECONDS)) }
-  const bookAt = Date.now()
-  for (const [symbol, series] of market) {
-    // A row needs the bar that closed at the close (featuresAt); its close is the forecast's price.
-    const row = featuresAt({ symbol, series, btcH1: btc.h1, cross, tSec: closedAt })
-    if (row === null) continue
-    if (symbol === 'BTCUSDT') closeBtc = { t: closedAt, btc15: row[Z15], btc1h: row[Z1H], rv24h: row[RV24] }
-    // The pair's spread at the close, for its usual spread (refresh reason `spread`).
-    const spread = liveBook(symbol, bookAt)?.spreadPct
-    if (spread !== null && spread !== undefined && Number.isFinite(spread)) spreads.set(symbol, [...(spreads.get(symbol) ?? []), spread].slice(-SPREAD_CLOSES))
-    const at = endsAt(series, closedAt).m5
-    const bar = series.m5[at - 1]
-    const models: PairInput['models'] = {}
-    const direction: PairInput['direction'] = {}
-    const excursion: PairInput['excursion'] = {}
-    const drivers: PairInput['drivers'] = {}
-    const cls = cross.classes.get(symbol)!
-    for (const horizon of HORIZONS) {
-      const model = fitted.get(horizon)
-      if (model === undefined) continue
-      models[horizon] = predictHorizon(model, row)
-      direction[horizon] = predictDirection(model, row)
-      excursion[horizon] = predictExcursion(model, row)
-      const variant = calibration?.horizons[horizon]?.variants.v2
-      drivers[horizon] = rangeDriversFor(model, variant === undefined ? [] : cellOf(variant, cls).weights, row)
-    }
-    const hour = series.m5.slice(Math.max(0, at - 12), at)
-    const usualMinuteVolume = hour.length === 12 ? hour.reduce((sum, entry) => sum + entry.volume, 0) / 60 : null
-    inputs.set(symbol, {
-      models,
-      direction,
-      excursion,
-      rv24h: row[RV24],
-      rvRatio: row[RATIO],
-      cls,
-      regime: cross.regime,
-      price: bar.close,
-      barTime: closedAt,
-      usualMinuteVolume,
-      market: { z1h: row[Z1H], breadth1h: row[BREADTH1H], volRatio1h: row[VOL1H], atr5mPct: atr5mPctAt(series.m5.slice(Math.max(0, at - ATR_BARS - 1), at)) },
-      breakout: breakoutAt(series.m5.slice(Math.max(0, at - 290), at), closedAt),
-      drivers
-    })
-  }
-  await settle(closedAt)
-  const nowMs = Date.now()
-  latest.clear()
-  lastRefreshAt.clear()
-  // A close reads Bitcoin's sharp move from its own bars, as the walk forward did (V6.1); the stream's reading
-  // starts again from it, so that a crossing after the close makes the forecasts again.
-  liveBtc = null
-  acrossBefore.clear()
-  tellMarket(closeBtc.btc15, closeBtc.btc1h, closedAt)
-  for (const symbol of inputs.keys()) {
-    const prediction = predictionFor(symbol, nowMs)
-    if (prediction !== null) latest.set(symbol, prediction)
-  }
-  decisions.clear()
-  rankAll(nowMs)
-  const horizons = recordedHorizons(closedAt)
-  if (horizons.length > 0 && closedAt > lastRecordedAt) {
-    const lines = [...latest.values()].map((prediction) => predictionLine(prediction, horizons, 'grid', undefined, decisions.get(prediction.pair)))
-    await writeLines('predictions', lines)
-    // The pairs this pass held bars for: one of them not forecast at the close was skipped, as one that
-    // had left the research's pairs was not (shared/forecast/forecastRecord.ts, PassLine).
-    await appendJsonLines(join(recordsDir(), `passes-${recordMonth(closedAt)}.jsonl`), [passLine(closedAt, market.keys())])
-    for (const line of lines) owe(line)
-    state.recorded += lines.length
-    lastRecordedAt = closedAt
+  state.waitingFor = null
+  await applySettled(made.settled)
+  state.market = made.market
+  if (made.pass !== null) {
+    await writeLines('predictions', made.predictions)
+    await appendJsonLines(join(recordsDir(), `passes-${recordMonth(closedAt)}.jsonl`), [made.pass])
+    recorded(engine, closedAt, made.predictions)
+    state.recorded += made.predictions.length
   }
   await followCalls()
-  Object.assign(state, { status: 'running', predictions: latest.size, pending: pendingCount(), lastPassAt: closedAt, lastPassMs: Date.now() - startedAt, lastError: null })
+  Object.assign(state, { status: 'running', predictions: engine.latest.size, pending: pendingCount(engine), lastPassAt: closedAt, lastPassMs: Date.now() - startedAt, lastError: null })
   told()
 }
 
 /** The pairs the person watches: the top ten, those held, and those a paper executor of theirs trades. */
 async function watchedPairs(): Promise<Set<string>> {
-  const watched = new Set(ranking.top10)
+  const watched = new Set(engine.ranking.top10)
   try {
     const settings = await getSettings()
     for (const held of settings.heldPositions ?? []) watched.add(held.symbol)
@@ -625,7 +268,7 @@ async function watchedPairs(): Promise<Set<string>> {
 /** Every pair's call followed for a close; a watched one that turned, told. */
 async function followCalls(): Promise<void> {
   const watched = await watchedPairs()
-  for (const prediction of latest.values()) {
+  for (const prediction of engine.latest.values()) {
     const { track, change } = stepCall(calls.get(prediction.pair), prediction)
     calls.set(prediction.pair, track)
     if (change !== null && watched.has(prediction.pair)) tellNotice((i18n) => predictionChangedNotice(change, i18n))
@@ -635,7 +278,7 @@ async function followCalls(): Promise<void> {
 /** A pass at a close, one at a time; a close that comes while one runs is left to the next. */
 function passAt(closedAt: number): Promise<void> {
   if (passing !== null) return passing
-  passing = pass(closedAt)
+  passing = runPass(closedAt)
     .catch((error) => {
       state.lastError = describe(error)
       console.error('A forecast pass failed:', error)
@@ -646,58 +289,31 @@ function passAt(closedAt: number): Promise<void> {
   return passing
 }
 
-/** A pair forecast again between closes, for the reasons given; recorded, naming the one it replaced. */
-async function refresh(symbol: string, reasons: RefreshReason[], nowMs: number): Promise<void> {
-  const previous = latest.get(symbol)
-  const prediction = predictionFor(symbol, nowMs)
-  if (prediction === null) return
-  latest.set(symbol, prediction)
-  lastRefreshAt.set(symbol, nowMs)
-  rankAll(nowMs)
-  const line = predictionLine(prediction, HORIZONS, 'refresh', { reasons, previous: previous?.id ?? null }, decisions.get(symbol))
-  await writeLines('predictions', [line])
-  owe(line)
-  state.recorded++
-  state.refreshes++
-  state.pending = pendingCount()
-  told()
+/** The forecasts made again between closes, recorded in order, each owed its outcomes. */
+async function recordRefreshed(refreshed: readonly Refreshed[]): Promise<void> {
+  for (const made of refreshed) {
+    await writeLines('predictions', [made.line])
+    owe(engine, made.line)
+    state.recorded++
+    state.refreshes++
+    state.pending = pendingCount(engine)
+    told()
+  }
 }
 
-/** Whether a pair's forecast should be made again now, and if so made again. */
-async function consider(symbol: string, signals: { newsImpact?: number | null; newEvent?: boolean; minuteVolume?: number | null; marketShock?: boolean }, nowMs: number): Promise<RefreshReason[]> {
-  const prediction = latest.get(symbol)
-  const input = inputs.get(symbol)
-  if (prediction === undefined || input === undefined || passing !== null) return []
-  // A forecast more than a close behind -- its bars not read since, as in an outage -- is not made again
-  // from them: a refresh would restate stale bars as new. Found by V6 Stage 16's run: one made ten minutes
-  // after its close while the data could not be read.
-  const latestClose = lastClosedBarTime(Math.floor(nowMs / 1000)) + FORECAST_BAR_SECONDS
-  if (prediction.barTime < latestClose - FORECAST_BAR_SECONDS) return []
-  const lead = prediction.horizons[prediction.bestHorizon ?? 'hour1'] ?? Object.values(prediction.horizons)[0]
-  const book = liveBook(symbol, nowMs)
-  const check = {
-    nowMs,
-    lastRefreshAt: lastRefreshAt.get(symbol) ?? null,
-    newsImpact: signals.newsImpact,
-    newEvent: signals.newEvent,
-    livePrice: book?.mid ?? null,
-    band: lead === undefined ? null : ([lead.quantilePrices[0], lead.quantilePrices[4]] as [number, number]),
-    minuteVolume: signals.minuteVolume,
-    usualMinuteVolume: input.usualMinuteVolume,
-    marketShock: signals.marketShock,
-    // V7.1 Stage 11: the live spread against the pair's usual, and the live price against the call.
-    spreadPct: book?.spreadPct ?? null,
-    usualSpreadPct: usualSpreadOf(symbol),
-    call: lead?.direction,
-    median: lead === undefined ? null : lead.quantilePrices[2],
-    wasAcross: acrossBefore.get(symbol) ?? false
+/** The tape's lines for the moment, appended to the day's file (V7.2 Stage 5). */
+async function writeTape(live: LiveState, nowMs: number): Promise<void> {
+  const lines = tapeLinesOf(tape, live, nowMs)
+  if (lines.length === 0) return
+  const byFile = new Map<string, TapeLine[]>()
+  for (const line of lines) {
+    const name = tapeFileName(line.t)
+    const mine = byFile.get(name)
+    if (mine === undefined) byFile.set(name, [line])
+    else mine.push(line)
   }
-  const reasons = refreshReasons(check)
-  // Where the price stood against the call is kept from one reading to the next, so that a crossing is told
-  // once; a reading within the minute's gap is not one.
-  if (check.lastRefreshAt === null || nowMs - check.lastRefreshAt >= 60_000) acrossBefore.set(symbol, acrossMedian(check))
-  if (reasons.length > 0) await refresh(symbol, reasons, nowMs)
-  return reasons
+  await mkdir(recordsDir(), { recursive: true })
+  for (const [name, mine] of byFile) await appendJsonLines(join(recordsDir(), name), mine)
 }
 
 /** The analyst's readings on file, by story id, each with when it was answered (electron/main.ts
@@ -720,9 +336,10 @@ export async function forecastNewsSignal(next: NewsSignal, nowMs: number = Date.
     for (const asset of story.assets) {
       if (asset.relationship !== 'DIRECT') continue
       const symbol = `${asset.ticker}USDT`
-      const prediction = latest.get(symbol)
+      const prediction = engine.latest.get(symbol)
       if (prediction === undefined || story.seenAt * 1000 < prediction.generatedAt) continue
-      await consider(symbol, { newsImpact: story.impact }, nowMs)
+      const made = consider(engine, sources, symbol, { newsImpact: story.impact }, nowMs, passing !== null)
+      if (made.line !== null) await recordRefreshed([{ symbol, reasons: made.reasons, line: made.line }])
     }
   }
 }
@@ -732,34 +349,20 @@ export async function forecastScannerSignal(scanner: ScannerSignal, nowMs: numbe
   for (const event of scanner.recentEvents) {
     if (seenEvents.has(event.id)) continue
     seenEvents.add(event.id)
-    if (latest.has(event.symbol)) await consider(event.symbol, { newEvent: true }, nowMs)
+    if (!engine.latest.has(event.symbol)) continue
+    const made = consider(engine, sources, event.symbol, { newEvent: true }, nowMs, passing !== null)
+    if (made.line !== null) await recordRefreshed([{ symbol: event.symbol, reasons: made.reasons, line: made.line }])
   }
 }
 
-/** The live stream: a pair whose price left its forecast's 80% range, or whose minute forming has
- * traded three times its usual minute, has its forecast made again. */
+/** The live stream: Bitcoin's sharp move or a change of the market's state makes every pair's forecast
+ * again where a rule is in use; a pair whose price left its forecast's 80% range, or whose minute forming
+ * has traded three times its usual minute, has its forecast made again; and the tape takes its lines. */
 export async function forecastLiveSignal(live: LiveState, nowMs: number = Date.now()): Promise<void> {
-  // Bitcoin's sharp move (V6.1): read from its minutes, which are always streamed; its crossing the line
-  // since the last reading -- the stream's, however old, or the close's before any -- makes every pair's
-  // forecast again, where a horizon's rule is in use to widen them. Since V7.1 Stage 11 the market's state
-  // is read from the same minutes (its hour too), and a change of it does the same where a state's rule is
-  // in use.
-  const before = liveBtc !== null ? liveBtc.btc15 : closeBtc.btc15
-  const stateBefore = liveBtc !== null ? marketStateOf(liveBtc.btc15, liveBtc.btc1h ?? closeBtc.btc1h, Math.floor(liveBtc.atMs / 1000)) : marketStateOf(closeBtc.btc15, closeBtc.btc1h, closeBtc.t)
-  const btc15 = closeBtc.rv24h === null ? null : liveBtcMove(live.btcMinutes, closeBtc.rv24h, 3)
-  const btc1h = closeBtc.rv24h === null ? null : liveBtcMove(live.btcMinutes, closeBtc.rv24h, 12)
-  if (btc15 !== null) liveBtc = { btc15, btc1h, atMs: nowMs }
-  const crossed = btc15 !== null && Math.abs(btc15) >= SHOCK_LINES.line && (before === null || Math.abs(before) < SHOCK_LINES.line)
-  const stateAfter = btc15 === null ? stateBefore : marketStateOf(btc15, btc1h ?? closeBtc.btc1h, Math.floor(nowMs / 1000))
-  if (btc15 !== null) tellMarket(btc15, btc1h ?? closeBtc.btc1h, Math.floor(nowMs / 1000))
-  const changed = stateAfter !== null && stateBefore !== null && stateAfter !== stateBefore
-  if ((crossed && shockRuleInUse()) || (changed && stateRulesInUse())) for (const symbol of [...latest.keys()]) await consider(symbol, { marketShock: true }, nowMs)
-  for (const symbol of Object.keys(live.books)) {
-    if (!latest.has(symbol)) continue
-    const minutes = live.minutes[symbol] ?? []
-    const forming = minutes[minutes.length - 1]
-    await consider(symbol, { minuteVolume: forming !== undefined && !forming.closed ? forming.volume : null }, nowMs)
-  }
+  const made = liveSignal(engine, sources, live, nowMs, passing !== null)
+  if (made.market !== undefined) state.market = made.market
+  await recordRefreshed(made.refreshed)
+  await writeTape(live, nowMs)
 }
 
 /** The outcomes still owed, read back from the last day and a bit of the record: those recorded and
@@ -787,41 +390,44 @@ async function readOwed(nowSec: number): Promise<void> {
     if (line === null) continue
     done.add(`${line.id}/${line.h}`)
     // The outcomes for the drift gate (V7.1 Stage 13), pruned to the last day below: the gate stands across a restart.
-    if (!isMissing(line)) driftOutcomes.set(line.h, [...(driftOutcomes.get(line.h) ?? []), { due: line.due, in80: line.in80 }])
+    if (!isMissing(line)) engine.driftOutcomes.set(line.h, [...(engine.driftOutcomes.get(line.h) ?? []), { due: line.due, in80: line.in80 }])
   }
-  tellDrift(nowSec)
+  state.drift = driftReadings(engine, nowSec)
   for (const raw of await read('predictions')) {
     const line = parsePredictionLine(raw)
     if (line === null || line.t < nowSec - OWED_LOOKBACK_SEC) continue
-    lastRecordedAt = Math.max(lastRecordedAt, line.why === 'grid' ? line.t : 0)
+    engine.lastRecordedAt = Math.max(engine.lastRecordedAt, line.why === 'grid' ? line.t : 0)
     const horizons = (Object.keys(line.h) as Horizon[]).filter((horizon) => !done.has(`${line.id}/${horizon}`))
-    if (horizons.length > 0) owed.set(line.id, { line, horizons: new Set(horizons) })
+    if (horizons.length > 0) engine.owed.set(line.id, { line, horizons: new Set(horizons) })
   }
-  state.pending = pendingCount()
+  state.pending = pendingCount(engine)
 }
 
 /** The news-moved forecasts' outcomes of the last days, for their own skill. */
 async function readNewsOutcomes(nowSec: number): Promise<void> {
   const text = await readFile(join(recordsDir(), 'news-outcomes.jsonl'), 'utf-8').catch(() => '')
   const since = nowSec - NEWS_SKILL_DAYS * 86_400
-  newsOutcomes.length = 0
+  engine.newsOutcomes = []
   for (const line of text.split('\n')) {
     if (line.trim() === '') continue
     try {
       const row = JSON.parse(line) as { h?: unknown; due?: unknown; pUp?: unknown; up?: unknown }
-      if (HORIZONS.includes(row.h as Horizon) && typeof row.due === 'number' && row.due >= since && typeof row.pUp === 'number' && typeof row.up === 'boolean') newsOutcomes.push({ h: row.h as Horizon, due: row.due, pUp: row.pUp, up: row.up })
+      if (HORIZONS.includes(row.h as Horizon) && typeof row.due === 'number' && row.due >= since && typeof row.pUp === 'number' && typeof row.up === 'boolean') engine.newsOutcomes.push({ h: row.h as Horizon, due: row.due, pUp: row.pUp, up: row.up })
     } catch {
       // A torn line: skipped.
     }
   }
-  newsSkill = newsSkillOf(newsOutcomes, nowSec)
+  engine.newsSkill = newsSkillOf(engine.newsOutcomes, nowSec)
 }
 
+/** The record's month files, and the tape's day files, older than the record keeps: deleted. */
 async function sweepOldRecords(nowSec: number): Promise<void> {
   const names = await readdir(recordsDir()).catch(() => [] as string[])
   for (const name of names) {
     const month = /^(?:predictions|outcomes|passes)-(\d{4}-\d{2})\.jsonl$/.exec(name)?.[1]
     if (month !== undefined && staleMonth(month, nowSec, FORECAST_RECORD_DAYS)) await unlink(join(recordsDir(), name)).catch(() => undefined)
+    const day = /^tape-(\d{4}-\d{2}-\d{2})\.jsonl$/.exec(name)?.[1]
+    if (day !== undefined && staleDay(day, nowSec, FORECAST_RECORD_DAYS)) await unlink(join(recordsDir(), name)).catch(() => undefined)
   }
 }
 
@@ -839,9 +445,9 @@ export function startForecast(live: () => LiveState | null): void {
     const text = await readFile(join(recordsDir(), 'aci.json'), 'utf-8').catch(() => null)
     if (text !== null) {
       try {
-        aci = parseAciTable(JSON.parse(text))
+        engine.aci = parseAciTable(JSON.parse(text))
       } catch {
-        aci = null
+        engine.aci = null
       }
     }
     await readOwed(nowSec)
@@ -861,21 +467,21 @@ export function getForecastEngineState(): EngineState {
 
 /** The latest forecast of every pair, by pair. */
 export function latestForecasts(): PricePrediction[] {
-  return [...latest.values()].sort((a, b) => a.pair.localeCompare(b.pair))
+  return [...engine.latest.values()].sort((a, b) => a.pair.localeCompare(b.pair))
 }
 
 export function forecastOf(symbol: unknown): PricePrediction | null {
-  return typeof symbol === 'string' ? (latest.get(symbol) ?? null) : null
+  return typeof symbol === 'string' ? (engine.latest.get(symbol) ?? null) : null
 }
 
 /** Every pair's place, best first, with its decision; the top ten and three. */
 export function forecastRanking(): ForecastRanking {
-  return ranking
+  return engine.ranking
 }
 
 /** A pair's trade decision at its lead horizon; null before it is forecast. */
 export function forecastDecision(symbol: unknown): TradeDecision | null {
-  return typeof symbol === 'string' ? (decisions.get(symbol) ?? null) : null
+  return typeof symbol === 'string' ? (engine.decisions.get(symbol) ?? null) : null
 }
 
 /** A pair's record since `fromSec`: its forecasts and their outcomes. */
@@ -916,56 +522,52 @@ export function onForecastUpdate(listener: () => void): () => void {
 /** Test seams. */
 export const forecastForTest = {
   pass: passAt,
-  settle,
+  /** The outcomes due by a close, written. */
+  settle: async (closedAt: number): Promise<void> => applySettled(settle(engine, sources, closedAt)),
   readOwed,
-  owed,
+  owed: engine.owed,
   setAci(table: AciTable | null): void {
-    aci = table
+    engine.aci = table
   },
-  aci: (): AciTable | null => aci,
+  aci: (): AciTable | null => engine.aci,
   /** A forecast's decision now, as a pass makes it. */
-  decide: decisionFor,
+  decide: (prediction: PricePrediction, nowMs: number): TradeDecision => decisionFor(engine, sources, prediction, nowMs),
+  /** The pass's state and sources, as the service holds them. */
+  engine,
+  sources,
   /** A held forecast's call at a horizon set, for the refresh on a crossing of its median to be exercised
    * where no market of the tests calls a way. */
   setCall(symbol: string, horizon: Horizon, direction: 'BULLISH' | 'BEARISH' | 'NEUTRAL'): void {
-    const held = latest.get(symbol)
+    const held = engine.latest.get(symbol)
     const range = held?.horizons[horizon]
     if (held === undefined || range === undefined) return
-    latest.set(symbol, { ...held, bestHorizon: horizon, horizons: { ...held.horizons, [horizon]: { ...range, direction } } })
+    engine.latest.set(symbol, { ...held, bestHorizon: horizon, horizons: { ...held.horizons, [horizon]: { ...range, direction } } })
   },
   /** A close's calls followed on these forecasts, with this top ten. */
   async follow(predictions: readonly PricePrediction[], top10: readonly string[]): Promise<void> {
-    latest.clear()
-    for (const prediction of predictions) latest.set(prediction.pair, prediction)
-    ranking = { ...ranking, top10: [...top10] }
+    engine.latest.clear()
+    for (const prediction of predictions) engine.latest.set(prediction.pair, prediction)
+    engine.ranking = { ...engine.ranking, top10: [...top10] }
     await followCalls()
   },
   reset(): void {
     Object.assign(state, blank())
-    latest.clear()
-    decisions.clear()
+    const fresh = newPassState()
+    for (const key of Object.keys(fresh) as (keyof PassState)[]) {
+      const held = engine[key]
+      if (held instanceof Map) held.clear()
+      else (engine as unknown as Record<string, unknown>)[key] = fresh[key]
+    }
+    tape.minutes.clear()
+    tape.btcMinute = 0
     calls.clear()
-    ranking = { at: null, ranked: [], top10: [], top3: [] }
-    inputs.clear()
-    lastRefreshAt.clear()
-    owed.clear()
     seenStories.clear()
     seenEvents.clear()
     feed = null
     readings = {}
-    newsOutcomes.length = 0
-    newsSkill = {}
-    aci = null
-    lastRecordedAt = 0
     lastClosedAt = null
     started = false
     passing = null
-    closeBtc = { t: 0, btc15: null, btc1h: null, rv24h: null }
-    liveBtc = null
-    closeMarket = null
-    spreads.clear()
-    acrossBefore.clear()
-    driftOutcomes.clear()
     liveState = (): LiveState | null => null
     listeners.clear()
   }

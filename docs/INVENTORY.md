@@ -152,7 +152,7 @@ days (`recordRetentionService`), and the size of each record directory is on the
 card. Since 13 October 2026 `forecastData/` holds the price forecast's five-minute bars, a file per
 pair and UTC month (`forecastDataService`, V6 Stage 2), and a month file whose month ended before the
 ninety days the forecast keeps is deleted at start; and `forecastModels/` holds the forecast's fitted
-models, a folder a run (`<horizon>.json`, the walk forward's `oos-<horizon>.bin` -- since V6.1 with
+models, a folder a run (`<horizon>.json`, the walk forward's `oos-<horizon>.bin` and, since V7.2 Stage 5, each fold's models `fold-<k>-<horizon>.json` -- since V6.1 with
 Bitcoin's last fifteen minutes at each hour, since V7.1 Stage 11 with the market's shock state at each hour -- and, since V6 Stage 6, the calibration made from it,
 `calibration.json`, since V6.1 with each horizon's rule on Bitcoin's sharp moves, since V7.1 Stage 2 with its direction models' verdicts, the record itself holding their readings; since V7.1 Stage 3 with each horizon's excursion calibration and the run's first-touch table, the record holding the excursion models' levels; since V7.1 Stage 11 with each horizon's rules by market shock state and its choice among the widenings; since V7.2 Stage 1 with every score's intervals, effective sample and blocks, run-calibration-v6), `current.json` (the run in use, the walk
 forward whose verdicts and calibration hold, the verdicts) and `training-YYYY-MM.jsonl` (a line for
@@ -161,9 +161,12 @@ the run in use and the one before it and deletes older runs after a walk forward
 holds the live forecast's record (V6 Stage 7): every pair's forecast at each quarter-hour and each made
 again between closes (`predictions-YYYY-MM.jsonl`), each horizon's outcome when due
 (`outcomes-YYYY-MM.jsonl`), since V6 Stage 16 the pairs each recorded quarter-hour's pass held bars for
-(`passes-YYYY-MM.jsonl`), the adaptive levels (`aci.json`) and, since V6 Stage 8, the outcomes of the
-forecasts a story moved (`news-outcomes.jsonl`), its month files deleted at start once their month
-ended over 180 days before. Nothing else is ever deleted.
+(`passes-YYYY-MM.jsonl`), the adaptive levels (`aci.json`), since V7.2 Stage 5 the tape
+(`tape-YYYY-MM-DD.jsonl`: one line a minute per streamed pair's book and each of Bitcoin's minutes, its
+day files deleted with the month files) and, since V6 Stage 8, the outcomes of the forecasts a story
+moved (`news-outcomes.jsonl`), its month files deleted at start once their month ended over 180 days
+before; since V7.2 Stage 5 an outcome line says the close it was settled at and a forecast line the day's
+volatility it was scaled by, for a replay. Nothing else is ever deleted.
 
 ## What runs without a page open
 
@@ -336,7 +339,7 @@ left. Its Phase 0, taken 17 October 2026 before Stage 1 was built:
 | Challenger beyond noise | **BUILT in Stage 3** (was NEEDS EXTENSION) | challenger-v2: `pairedHorizonOf`/`pairedChallengeOf` (the two walk forwards paired on the hours both tested, 90% intervals of the pinball, coverage-distance and direction-skill differences, the tolerances as floors), `compareRuns` adopting beyond noise or a week newer and no worse, the why and a summary on the training log; the worker pairs a refit with the champion's record (`championRunId`); `research/pairedChallenge.ts` prints a pair |
 | The clock | **MEASURED in Stage 4** (was NEEDS MEASURING) | `shared/forecast/byHour.ts` (the forecast shown by UTC hour and weekday, in four halves, the implied dispersion, the misses in a shock state, the failing-band line `BY_HOUR_LINES`), made with every Lab (`LabHorizon.byHour`) and shown on the Lab's By hour card; `research/byHour.ts` with the bars' range and volume by hour; the registered line V72-S4-CLOCK cannot be read on three weeks (no half holds 500) and is recorded not measured |
 | Feature ablation | **BUILT in Stage 4** (was NEW) | `shared/forecast/ablation.ts` (`FEATURE_BLOCKS`, `BLOCK_COLUMNS`, a block held at its training mean in a copy of the rows, a block permuted for the control, the ablation file's reader); `research/ablation.ts` fits the walk forward twice on identical folds and seeds and pairs the two (deterministic: zero differing figures); the Lab's What a block of figures added card reads the files the tool writes into `forecastModels/` |
-| Replay harness | **NEW; parts exist** | `labWalkForward.ts` (hourly, `tradeOf`); `openLabTrades(deps)` injected; `forecastService.ts` holding the pass; `runExecutorSimulation` |
+| Replay harness | **BUILT in part in Stage 5** (was NEW; parts exist) | `shared/forecast/pass.ts` (the live forecast's every decision as pure functions handed `PassSources` and one `PassState`, the service writing what they return); `fidelity.ts` (a record replayed through them and compared on V2's own levels to four decimals, every remainder with its reason) and `research/replayFidelity.ts`; each fold's models saved beside a walk forward's record (`fold-<k>-<horizon>.json`); the tape (`tape.ts`, `forecasts/tape-YYYY-MM-DD.jsonl`) counted on a run's report; the record carrying the close each outcome was settled at (`OutcomeLine.at`) and the day's volatility each forecast was scaled by (`PredictionLine.rv`), which the registered line V72-S5-FIDELITY found missing (60% of the two-day record replayed to four decimals, the arithmetic reproduced and the adaptive steps' timing not); the replay out of sample itself is Stage 6 (`labWalkForward.ts`, `openLabTrades(deps)`, `runExecutorSimulation` as before) |
 | A year of bars | **NEW** | `fetch-positioning.mjs`'s zip and SHA-256 reader; `bars.ts barToLine`; `trainWorker`'s `panelOf/foldRows/fitHorizon`; the `forecast-oos-v5` readers |
 | Cross-section, taker size | **NEEDS EXTENSION** | `idio_1h`, `beta_btc`, `taker_1h/4h`, `crossSectionAt`'s reads |
 | Positioning | **NEW in the app; studied** | `research/fetch-positioning.mjs`, `positioning-live.mjs`, `POSITIONING.md` |

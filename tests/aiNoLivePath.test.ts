@@ -317,15 +317,14 @@ describe('AI code has no route to a real order', () => {
       expect(importsOf(path).filter((name) => LIVE_MODULES.has(name) || aiModuleNames.has(name)), path).toEqual([])
       expect(readFileSync(path, 'utf-8'), path).not.toMatch(/fetch\(|https?:\/\/|credentials|apiKey|liveTrading|placeLive|openRouter|prepareOrder/)
     }
-    // noticeService, settingsService, predictionChange and rangeDrivers (V6 Stage 10): a watched coin's
-    // turned call is told, the pairs held and traded read from the settings; a notice places nothing.
-    // shock (V6.1): Bitcoin's last fifteen minutes read from its minutes, which the live book already gave.
+    // noticeService, settingsService and predictionChange (V6 Stage 10): a watched coin's turned call is
+    // told, the pairs held and traded read from the settings; a notice places nothing. Since V7.2 Stage 5
+    // (18 October 2026) every decision is shared/forecast/pass.ts's, pure functions handed the sources the
+    // service reads, and the tape (shared/forecast/tape.ts) is arithmetic on what the stream already holds.
     expect(importsOf(engine).sort()).toEqual([
       'aciTable',
       'atomicWrite',
-      'atr',
       'bars',
-      'drift',
       'electron',
       'features',
       'forecastDataService',
@@ -334,27 +333,24 @@ describe('AI code has no route to a real order', () => {
       'jsonlStore',
       'liveMarket',
       'macro',
-      'marketResearch',
       'marketResearchService',
-      'marketShock',
-      'models',
       'newsEffect',
       'noticeService',
       'opportunityClass',
-      'outcome',
+      'pass',
       'path',
       'prediction',
       'predictionChange',
       'promises',
-      'rangeDrivers',
       'ranking',
-      'refresh',
-      'runCalibration',
       'settingsService',
-      'shock',
       'status',
+      'tape',
       'tradeDecision'
     ])
+    // The pass itself reads no file, no clock and nothing that trades: its sources are handed in.
+    const pure = join(ROOT, 'shared', 'forecast', 'pass.ts')
+    expect(readFileSync(pure, 'utf-8')).not.toMatch(/Date\.now\(|readFile|writeFile|require\(|fs\//)
     expect(readFileSync(engine, 'utf-8')).not.toMatch(/setSettings|settings\.set/)
     // What shows the forecast (V6 Stage 10) reads the forecast's bridge; since V6 Stage 12 TRADE THIS fills
     // in the Position form (onPrepareOrder, a proposal of shared/aiProposal.ts) and a person places it. No
@@ -453,6 +449,8 @@ describe('AI code has no route to a real order', () => {
       // calibration in use.
       'runCalibration',
       'settingsService',
+      // tape (V7.2 Stage 5): the tape's lines counted for a run's report, read from the record's own files.
+      'tape',
       'training',
       'walkForward'
     ])

@@ -28,9 +28,13 @@ const ADDED_SINCE_16_OCTOBER = [
   'forecast.challenger.newerDays',
   'forecast.challenger.level',
   'forecast.byHour',
-  'forecast.ablation'
+  'forecast.ablation',
+  'forecast.pass',
+  'forecast.tape',
+  'forecast.fidelity'
 ]
-const INFRASTRUCTURE = ['forecast.uncertainty']
+// The intervals' lines, the pass's version and the tape's: plumbing with no line to hold or fail.
+const INFRASTRUCTURE = ['forecast.uncertainty', 'forecast.pass', 'forecast.tape']
 
 describe('the registry on file', () => {
   const registry = parseRegistry(TEXT)

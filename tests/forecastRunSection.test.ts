@@ -213,6 +213,16 @@ describe("the experiment's report", () => {
     expect(section?.gates.find((entry) => entry.id === 'forecast_history')?.status).toBe('pass')
   })
 
+  it("carries the tape's count where the record has one (V7.2 Stage 5)", async () => {
+    const { forecastOver } = await import('../src/ai-benchmark/experimentReport')
+    const lines = [prediction('s0', T)]
+    const tape = { lines: 120, pairs: 2, minutes: 60 }
+    const deps = { forecastRecord: async () => ({ predictions: lines, outcomes: [], tape }), alertsOnFile: async () => [], storyReactions: async () => null } as never
+    expect((await forecastOver({ fromSec: T, toSec: T + 3600 }, [], deps))?.tape).toEqual(tape)
+    const without = { forecastRecord: async () => ({ predictions: lines, outcomes: [] }), alertsOnFile: async () => [], storyReactions: async () => null } as never
+    expect((await forecastOver({ fromSec: T, toSec: T + 3600 }, [], without))?.tape).toBeUndefined()
+  })
+
   it('carries the forecast and fails on its gates, and stays as it was without it', () => {
     const session = { passed: true, paper: { fees: [] }, calls: { costUsd: 0 } } as never
     const sessionInput = { fromSec: T, toSec: T + 3600, calls: [], executors: [], connection: null } as never

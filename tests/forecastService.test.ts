@@ -2,18 +2,17 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { FORECAST_BAR_SECONDS, coarseBars, type ForecastBar } from '../shared/forecast/bars'
+import { coarseBars, type ForecastBar } from '../shared/forecast/bars'
 import { aciUpdate } from '../shared/forecast/calibration'
 import { FEATURE_NAMES, HORIZONS, type Horizon } from '../shared/forecast/features'
-import type { GbtModel } from '../shared/forecast/ml/gbt'
-import { QUANTILE_LEVELS } from '../shared/forecast/ml/quantile'
 import type { FlatTree } from '../shared/forecast/ml/tree'
-import { MODELS_VERSION, type FittedHorizon } from '../shared/forecast/models'
+import type { FittedHorizon } from '../shared/forecast/models'
 import { MARKET_SHOCK_VERSION } from '../shared/forecast/marketShock'
 import { buildRunCalibration, type RunCalibration } from '../shared/forecast/runCalibration'
 import { noShockRecord } from '../shared/forecast/shock'
 import { emptyLiveState, type LiveState } from '../shared/liveMarket'
 import { promoted, recordOf } from './forecastRecords'
+import { CALIBRATION, HOUR, MARKET, SYMBOLS, constantGbt, tinyFitted } from './forecastServiceFixture'
 
 // THE FORECAST, LIVE (electron/services/forecastService.ts; the V6 document, §38-43): every pair
 // forecast at every close once there are models and a calibration; the quarter-hour's forecasts on
@@ -23,28 +22,6 @@ import { promoted, recordOf } from './forecastRecords'
 // models and the calibration are faked; the forecasting is the app's own.
 
 vi.mock('electron', () => ({ app: { getPath: () => process.env.AI_TEST_USER_DATA } }))
-
-const T0 = Date.parse('2026-08-01T00:00:00Z') / 1000
-const DAYS = 34
-const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT']
-
-function walk(seed: number, base: number): ForecastBar[] {
-  let state = seed >>> 0
-  const next = (): number => {
-    state = (Math.imul(state, 1664525) + 1013904223) >>> 0
-    return state / 2 ** 32
-  }
-  const gauss = (): number => Math.sqrt(-2 * Math.log(next() + 1e-12)) * Math.cos(2 * Math.PI * next())
-  const bars: ForecastBar[] = []
-  let price = base
-  for (let index = 0; index < DAYS * 288; index++) {
-    const open = price
-    price = price * Math.exp(0.002 * gauss())
-    const volume = 100 * (0.5 + next())
-    bars.push({ time: T0 + index * FORECAST_BAR_SECONDS, open, high: Math.max(open, price) * 1.0005, low: Math.min(open, price) * 0.9995, close: price, volume, quoteVolume: volume * price, takerBuyVolume: volume * next(), trades: 50 })
-  }
-  return bars
-}
 
 const fake = vi.hoisted(() => ({
   market: new Map<string, ForecastBar[]>(),
@@ -113,37 +90,6 @@ vi.mock('../electron/services/forecastTrainingService', () => ({
   getForecastTrainingState: () => ({ status: 'ready', current: fake.current, calibratedRunId: null, progress: null, lastError: null, nextRefitAt: null, promotions: [] }),
   onForecastTraining: () => () => undefined
 }))
-
-const leaf = (value: number): FlatTree => ({ feature: [-1], threshold: [0], bin: [0], left: [-1], right: [-1], value: [value], cover: [0], gain: [0] })
-const constantGbt = (base: number, loss: GbtModel['loss'] = { kind: 'l2' }): GbtModel => ({ kind: 'gbt', loss, base, features: 63, grown: 1, trees: [leaf(0)] })
-const ridge = { kind: 'ridge' as const, mean: [0], scale: [1], coef: [0], intercept: 0, columns: [0] }
-const RESIDUAL = [-1.28, -0.67, 0, 0.67, 1.28]
-function tinyFitted(horizon: Horizon): FittedHorizon {
-  return {
-    version: MODELS_VERSION,
-    horizon,
-    persistence: { residual: RESIDUAL },
-    volatility: { size: ridge, residual: RESIDUAL },
-    technical: { center: ridge, residual: RESIDUAL },
-    forest: { center: { kind: 'forest', features: 63, trees: [leaf(0)] }, residual: RESIDUAL },
-    gbt: { center: constantGbt(0), size: constantGbt(0), residual: RESIDUAL },
-    quantileGbt: { levels: QUANTILE_LEVELS.map((tau, index) => constantGbt(RESIDUAL[index], { kind: 'pinball', tau })) },
-    gbtPrice: { center: constantGbt(0), size: constantGbt(0), residual: RESIDUAL },
-    // The direction models (V7.1 Stage 2), each an even chance here.
-    direction: { logistic: { ...ridge, kind: 'logistic', iterations: 1 }, gbt: constantGbt(0, { kind: 'logloss' }), gbtTech: constantGbt(0, { kind: 'logloss' }), gbtPrice: constantGbt(0, { kind: 'logloss' }) },
-    // The excursion models (V7.1 Stage 3): the highs one usual move up at every level, the lows one down.
-    excursion: { high: [0.5, 0.8, 0.9].map((tau) => constantGbt(1, { kind: 'pinball', tau })), low: [0.5, 0.8, 0.9].map((tau) => constantGbt(-1, { kind: 'pinball', tau: 1 - tau })) }
-  }
-}
-
-const CALIBRATION: RunCalibration = buildRunCalibration(
-  new Map(HORIZONS.map((horizon, index) => [horizon, recordOf({ rows: 6000, seed: 50 + index, horizon })])),
-  HORIZONS.flatMap((horizon) => promoted(horizon, ['persistence', 'gbt'])),
-  'run-folds'
-)
-const MARKET = new Map(SYMBOLS.map((symbol, index) => [symbol, walk(11 + index * 17, [60_000, 2_500, 150, 0.6][index])]))
-/** A close on the hour, thirty days in. */
-const HOUR = T0 + 30 * 86_400
 
 /** The calibration with an adopted rule on Bitcoin's sharp moves at the horizons given (V6.1). */
 function withShockRule(horizons: Horizon[], k80 = 1.5, k50 = 1.25): RunCalibration {
@@ -642,9 +588,12 @@ describe('the record', () => {
     fake.gaps.set('SOLUSDT', [HOUR, HOUR + 7200])
     await closeAt(live, HOUR + 300)
     expect(lines(`outcomes-${month}.jsonl`).some((line) => line.pair === 'SOLUSDT')).toBe(false)
+    // Fifty-five minutes after the 5-minute horizon was due: still waited for.
+    const missingOf = (): unknown[] => lines(`outcomes-${month}.jsonl`).filter((line) => line.pair === 'SOLUSDT' && typeof line.missing === 'string').map((line) => line.h)
+    await closeAt(live, HOUR + 300 + 3300)
+    expect(missingOf()).toEqual([])
     // An hour after the 5-minute horizon was due it is written missing; the others wait their hour.
     await closeAt(live, HOUR + 300 + 3600)
-    const missingOf = (): unknown[] => lines(`outcomes-${month}.jsonl`).filter((line) => line.pair === 'SOLUSDT' && typeof line.missing === 'string').map((line) => line.h)
     expect(missingOf()).toEqual(['minutes5'])
     await closeAt(live, HOUR + 7200)
     expect((missingOf() as string[]).sort()).toEqual(['hour1', 'minutes15', 'minutes5'])
@@ -730,6 +679,18 @@ describe('between closes', () => {
     // One close on, its pass not yet run: made again.
     await live.forecastNewsSignal({ stories: [story('soon', HOUR + 320)] }, (HOUR + 320) * 1000)
     expect(live.getForecastEngineState().refreshes).toBe(1)
+  })
+
+  it('makes no forecast again while a pass runs: the pure pass is told so (V7.2 Stage 5)', async () => {
+    const { consider } = await import('../shared/forecast/pass')
+    const live = await engine()
+    await closeAt(live, HOUR)
+    const now = live.forecastOf('ETHUSDT')!.generatedAt + 1000
+    const { engine: state, sources } = live.forecastForTest
+    expect(consider(state, sources, 'ETHUSDT', { newEvent: true }, now, true)).toEqual({ reasons: [], line: null })
+    const made = consider(state, sources, 'ETHUSDT', { newEvent: true }, now, false)
+    expect(made.reasons).toEqual(['event'])
+    expect(made.line).toMatchObject({ pair: 'ETHUSDT', why: 'refresh', reasons: ['event'] })
   })
 
   it('forecasts a coin again for an event the scanner raised, and for a live price out of its range', async () => {

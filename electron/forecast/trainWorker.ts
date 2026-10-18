@@ -9,7 +9,7 @@ import { DIRECTION_MODELS, FORECAST_MODELS, fitHorizon, normalizedTarget, predic
 import { firstTouchTable, type FirstTouchTable } from '../../shared/forecast/firstTouch'
 import { parseRunCalibration, serializeRunCalibration } from '../../shared/forecast/calibrationFile'
 import { pairedChallengeOf, type PairedChallenge } from '../../shared/forecast/challenger'
-import { serializeFitted } from '../../shared/forecast/modelFile'
+import { foldModelName, serializeFitted } from '../../shared/forecast/modelFile'
 import { LAB_VERSION, type TraderRule } from '../../shared/forecast/lab'
 import { serializeLab, serializeReplay, type LabFile } from '../../shared/forecast/labFile'
 import { walkForwardLab, type StoryMarkInput } from '../../shared/forecast/labWalkForward'
@@ -34,7 +34,9 @@ import { finalSplit, foldRows, lastFoldScores, planFolds, rowsFor, scoreRows, ty
 // - FOLDS: the walk forward -- each of the last weeks forecast by models fitted only on the rows before
 //   it (shared/forecast/walkForward.ts) -- every model scored on outcomes it never saw, by class, and
 //   the hourly forecasts kept in forecastModels/<run>/oos-<horizon>.bin for the calibration and the Lab;
-//   then the calibration made from them (shared/forecast/runCalibration.ts), in calibration.json.
+//   then the calibration made from them (shared/forecast/runCalibration.ts), in calibration.json. Since
+//   V7.2 Stage 5 each fold's models are saved beside them (fold-<k>-<horizon>.json), so that the tested
+//   weeks can be replayed out of sample at every five-minute close; they go with the run when it is swept.
 // - CALIBRATE: the calibration made again from the hourly forecasts on file, for a run walked forward
 //   before the calibration's version changed.
 // - LAB (V6 Stage 11): what the Forecast Lab shows of a walk forward -- its forecasts scored, called,
@@ -83,6 +85,8 @@ export interface FoldsResult {
    * be read. */
   paired?: PairedChallenge
   newerDays?: number | null
+  /** The fold models saved beside the record (V7.2 Stage 5): one a fold a horizon. */
+  foldModels?: number
   ms: number
 }
 
@@ -212,6 +216,7 @@ async function folds(request: Extract<WorkerRequest, { task: 'folds' }>): Promis
   const btc = market.get('BTCUSDT')!
   const states = marketShockByTime(panel, shockMomentsOf(btcTimelineOf(btc, first - 5 * 3600, last)), preEventAt)
   let step = 0
+  let foldModels = 0
   for (const [hIndex, horizon] of HORIZONS.entries()) {
     const rows = rowsFor(panel, horizon)
     const tested: { row: number; fold: number; quantiles: Record<ForecastModelId, number[]>; direction: Record<DirectionModelId, number>; excursion: { high: number[]; low: number[] } }[] = []
@@ -222,6 +227,9 @@ async function folds(request: Extract<WorkerRequest, { task: 'folds' }>): Promis
       const { train, valid, test } = foldRows(panel, rows, horizon, fold)
       if (train.length === 0) continue
       const fitted = fitHorizon(panel, train, valid, horizon, SEED + hIndex * 100 + fold.index + 1)
+      // The fold's models, saved for the replay out of sample (V7.2 Stage 5).
+      await writeFile(join(dir, foldModelName(fold.index, horizon)), serializeFitted(fitted), 'utf-8')
+      foldModels++
       const row64 = new Float64Array(panel.cols)
       for (const row of test) {
         for (let col = 0; col < panel.cols; col++) row64[col] = panel.x[row * panel.cols + col]
@@ -280,7 +288,7 @@ async function folds(request: Extract<WorkerRequest, { task: 'folds' }>): Promis
   const calibration = await writeCalibration(dir, records, promotions, request.runId, touch, request.heldBefore)
   // Paired with the champion's walk forward on the hours both tested (V7.2 Stage 3), where its record is on file.
   const paired = request.championRunId === undefined ? undefined : await pairWithChampion(request.outDir, request.championRunId, records, promotions)
-  return { task: 'folds', runId: request.runId, folds: plan, horizons, calibration, ...(paired === undefined ? {} : { paired: paired.figures, newerDays: paired.newerDays }), ms: Date.now() - started }
+  return { task: 'folds', runId: request.runId, folds: plan, horizons, calibration, ...(paired === undefined ? {} : { paired: paired.figures, newerDays: paired.newerDays }), foldModels, ms: Date.now() - started }
 }
 
 /** The champion's and the challenger's shown forecasts (V2, each with the models its calibration weighs)

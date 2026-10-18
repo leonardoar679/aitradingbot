@@ -125,10 +125,14 @@ export interface PredictionLine {
   /** The market's shock state at the forecast's moment (V7.1 Stage 11); absent where it could not be read,
    * or on a forecast recorded before. */
   state?: MarketShockState
+  /** The day's realized volatility the row was read at (V7.2 Stage 5), to six significant digits: what every
+   * level is scaled by, so that a replay from other bars can be told from other arithmetic. Absent on a
+   * forecast recorded before. */
+  rv?: number
 }
 
 /** A forecast's line, carrying the horizons given. */
-export function predictionLine(prediction: PricePrediction, horizons: readonly Horizon[], why: PredictionLine['why'], refresh?: { reasons: RefreshReason[]; previous: string | null }, decision?: TradeDecision): PredictionLine {
+export function predictionLine(prediction: PricePrediction, horizons: readonly Horizon[], why: PredictionLine['why'], refresh?: { reasons: RefreshReason[]; previous: string | null }, decision?: TradeDecision, row?: { rv24h?: number }): PredictionLine {
   const h: PredictionLine['h'] = {}
   for (const horizon of horizons) {
     const range = prediction.horizons[horizon]
@@ -176,6 +180,7 @@ export function predictionLine(prediction: PricePrediction, horizons: readonly H
     h,
     ...(z1h === undefined || !Number.isFinite(z1h) ? {} : { z1h: Math.round(z1h * 1000) / 1000 }),
     ...(prediction.marketState === undefined || prediction.marketState === null ? {} : { state: prediction.marketState }),
+    ...(row?.rv24h === undefined || !Number.isFinite(row.rv24h) ? {} : { rv: Number(row.rv24h.toPrecision(6)) }),
     ...(decision === undefined
       ? {}
       : {
@@ -274,6 +279,10 @@ export interface OutcomeLine {
   /** When the path first reached the median, the P90 and the P10 (V7.1 Stage 3), in seconds after the
    * close; null where it never did within the horizon. Absent on an outcome written before. */
   touch?: [number | null, number | null, number | null]
+  /** The close the outcome was settled at (V7.2 Stage 5): its due moment, or a later close where its bars
+   * came late. The adaptive levels step once a close by the outcomes settled at it, so a replay needs the
+   * moment, not the due. Absent on an outcome written before. */
+  at?: number
 }
 
 /** A horizon whose outcome could not be read. */
@@ -293,8 +302,9 @@ export function missingOutcomeLine(recorded: PredictionLine, horizon: Horizon, d
 
 const flags = (values: readonly boolean[]): string => values.map((value) => (value ? '1' : '0')).join('')
 
-/** An outcome's line from the recorded forecast's horizon and what happened. */
-export function outcomeLine(recorded: PredictionLine, horizon: Horizon, outcome: ForecastOutcome): OutcomeLine {
+/** An outcome's line from the recorded forecast's horizon and what happened, with the close it was settled at
+ * where the engine says it. */
+export function outcomeLine(recorded: PredictionLine, horizon: Horizon, outcome: ForecastOutcome, settledAt?: number): OutcomeLine {
   const line = recorded.h[horizon]!
   return {
     v: FORECAST_RECORD_VERSION,
@@ -303,6 +313,7 @@ export function outcomeLine(recorded: PredictionLine, horizon: Horizon, outcome:
     h: horizon,
     t: outcome.barTime,
     due: outcome.dueAt,
+    ...(settledAt === undefined ? {} : { at: settledAt }),
     move: pct4(outcome.movePct),
     best: pct4(outcome.bestPct),
     worst: pct4(outcome.worstPct),

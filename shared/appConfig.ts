@@ -78,6 +78,9 @@ import { RUN_CALIBRATION_VERSION } from './forecast/runCalibration'
 import { UNCERTAINTY_LINES, UNCERTAINTY_VERSION } from './forecast/uncertainty'
 import { BY_HOUR_LINES, BY_HOUR_VERSION } from './forecast/byHour'
 import { ABLATION_VERSION, FEATURE_BLOCKS } from './forecast/ablation'
+import { PASS_VERSION } from './forecast/pass'
+import { TAPE_VERSION } from './forecast/tape'
+import { FIDELITY_LINES, FIDELITY_VERSION } from './forecast/fidelity'
 import { DEGRADATION_LINES, DEGRADED_THREAD_SECONDS, DIRECTION_PROMOTION_LINES, PROMOTION_LINES } from './forecast/promotion'
 import { LOGISTIC_FIT } from './forecast/ml/logistic'
 import { DIRECTION_MODELS, EXCURSION_LEVELS } from './forecast/models'
@@ -188,6 +191,11 @@ export const ENGINE_CONSTANTS = {
     // ablation holds out.
     byHour: { version: BY_HOUR_VERSION, ...BY_HOUR_LINES },
     ablation: { version: ABLATION_VERSION, blocks: FEATURE_BLOCKS },
+    // The pass as pure functions, the tape and the replay's fidelity line (V7.2 Stage 5): the decimals a replayed
+    // level must agree to and the share of a record's forecasts that must.
+    pass: { version: PASS_VERSION },
+    tape: { version: TAPE_VERSION },
+    fidelity: { version: FIDELITY_VERSION, ...FIDELITY_LINES },
     direction: DIRECTION_LINES,
     reliability: RELIABILITY_LINES,
     prediction: { version: PREDICTION_VERSION, ...PREDICTION_LINES },

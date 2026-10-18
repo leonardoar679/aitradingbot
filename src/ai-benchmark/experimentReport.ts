@@ -62,6 +62,7 @@ export async function forecastOver(span: { fromSec: number; toSec: number }, exe
       predictions: record.predictions,
       outcomes: record.outcomes,
       ...(record.passes === undefined ? {} : { passes: record.passes }),
+      ...(record.tape === undefined ? {} : { tape: record.tape }),
       executors,
       alerts,
       ...(news === null ? {} : { stories: news.stories, reactions: news.reactions })

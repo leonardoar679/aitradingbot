@@ -151,6 +151,9 @@ def forecast_of(section, title):
     p = section['predictions']
     print(f'===== {title}: {clock(section["fromSec"])} to {clock(section["toSec"])}  passed={section["passed"]}')
     print(f'  {p["lines"]} forecasts of {p["pairs"]} pairs, at {p["gridCloses"]} of {p["expectedGridCloses"]} quarter-hour closes; {p["refreshes"]} refreshes {json.dumps(p["byReason"])}')
+    # The tape (V7.2 Stage 5): one line a minute per streamed pair's book, and Bitcoin's minutes.
+    tape = section.get('tape')
+    print('  tape: ' + (f'{tape["lines"]} book lines of {tape["pairs"]} pairs, {tape["minutes"]} Bitcoin minutes' if tape else 'none in the span'))
     for h, row in section['horizons'].items():
         m = row['metrics']
         moved, unmoved = row['news']['moved'], row['news']['unmoved']

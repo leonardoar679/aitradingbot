@@ -646,6 +646,59 @@ diurnal scale of the usual move, read where Stage 4 found a failing band) is bui
 band can fail. `FEATURE_BLOCKS` lives in `shared/forecast/ablation.ts` rather than `features.ts`, and the mask is
 on the rows the models are handed, never on the models: the engine's fit is unchanged.
 
+## V7.2 Stage 5 -- the pass as pure functions, the fold models, the tape, and a record replayed (18 October 2026)
+
+**The pass as pure functions** (`shared/forecast/pass.ts`; the service keeps the files, the window and the
+notices). Everything the live forecast decides at a close and between closes -- every pair's forecast, the
+outcomes due and the adaptive levels' step, the trade decision and the ranking, a forecast made again -- is now
+a function of what it is handed (the bars as held, the models and the calibration in use, the live book, the
+news, the calendar, the class verdicts, the moment) and one state; no clock is read. The service's 29 tests
+pass unchanged on the move, and a record the service made before the move (tests/fixtures/forecastReplay: 37
+closes of the fixture pairs, 52 grid forecasts and 6 refreshes) replays through the pure pass to four decimals
+on every line, the regression anchor of the move. **Each fold's models** of a walk forward are saved beside its
+record (`fold-<k>-<horizon>.json`, about a megabyte each, swept with the run), so that Stage 6 can replay the
+tested weeks at every five-minute close, not only the hourly rows the record keeps. **The tape**
+(`forecasts/tape-YYYY-MM-DD.jsonl`; `shared/forecast/tape.ts`): one line a minute per streamed pair's book
+(bid, ask, their sizes, when received) and each of Bitcoin's minutes as it closes; swept with the record;
+counted on a run's report. Its clock begins with the next run.
+
+**A record replayed** (`shared/forecast/fidelity.ts`, `research/replayFidelity.ts`). The two-day run's record
+(run-20261016-1236 on the multiday2 profile: 3,428 forecasts, 139 passes, 12,528 outcomes, 36 hours to 01:05 UTC
+on 18 October) replayed through the pure pass from the profile's bars, the run's model files and its calibration
+(made again from its record: the file is run-calibration-v5 and the engine reads v7; the V2 weights and maps are
+the same arithmetic), with no live book, no news and no class verdicts, in 14 s:
+
+| horizon | grid horizon lines | replayed to four decimals on V2's own levels | P(up) to three decimals |
+|---|---|---|---|
+| minutes5 | 2,481 | 99.0% | 100% |
+| minutes15 | 2,481 | 26.1% | 100% |
+| hour1 | 2,481 | 46.2% | 100% |
+| hours4 | 661 | 72.6% | 100% |
+| hours24 | 661 | 79.6% | 100% |
+| all | 8,765 | 60.0% | 100% |
+
+The market's state agrees on every line. Every remainder is a level difference of 0.0002 to 0.0011 points: the
+bars have not changed (every recorded outcome's move recomputes from the bars on file exactly, 12,528 of
+12,528), the prices and the cells agree, and the outer levels (P10, P90) agree while the inner ones (P25, P50)
+drift, in groups of pairs that share a calibration cell, from 14:00 UTC on the first day on. At the end the
+replay's adaptive levels differ from the profile's own in 30 of 80 cells, by multiples of one outcome's share
+of a step (gamma 0.005 over a batch of a few outcomes). The cause: the adaptive levels step once a close by the
+outcomes settled at it, and an outcome is settled a close late whenever its bars reached the app after the
+close's pass -- which they did often while the data host flapped (binance.com and data-api.binance.vision
+answering by turns every minute or two around 14:00 on 16 October; 126 switches over the run). The update has
+no decay, so one late outcome shifts its cell's levels for the rest of the run. The record did not say when an
+outcome was settled, and its write order cannot tell a close passed from a close skipped (a batch of newer
+forecasts alone reads the same either way; inferring the moments from the order made the agreement worse,
+10%). **The registered line V72-S5-FIDELITY FAILED** on this record (60.0% against the 99% asked), and the
+failure is the finding: the arithmetic replays, the timing of the adaptive steps does not, because the record
+did not carry it. Since this stage every outcome line says the close it was settled at (`at`) and every
+forecast line the day's volatility it was scaled by (`rv`), so that the next run's record can be replayed
+exactly and a difference from other bars told from one of arithmetic; the line is read again on Stage 13's
+run. The lab12h record the registration named cannot be replayed at all: its models are models-v3 on 63 figures,
+from before V7.1 Stage 11 added the fifteen-minute figures, and the engine reads models-v4 on 68 -- a recorded
+run is replayable only by the engine version that made it, which Stage 6's replay respects by reading the fold
+models' version beside them.
+
 ## The models' calls and their cost
 
 | Run | calls | answered | valid | latency, median / 95th | spent |

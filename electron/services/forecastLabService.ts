@@ -16,6 +16,7 @@ import type { ModelScore } from '../../shared/forecast/walkForward'
 import { classTable, type ClassRecord, type ClassVerdict } from '../../shared/forecast/opportunityClass'
 import { EVENT_IMPACT } from '../../shared/calendar/eventImpact'
 import { parseAblationFile, type AblationFile } from '../../shared/forecast/ablation'
+import { parseTapeLine, tapeFileName } from '../../shared/forecast/tape'
 import { MACRO_CALENDAR_READ_AT, nextReleases } from '../../shared/calendar/macro'
 import type { Candle, ExecutorConfig, ForecastHistory, PositionExecutorParams } from '../../shared/ipc'
 import { readForecastBars } from './forecastDataService'
@@ -195,7 +196,33 @@ export async function forecastRecordSpan(fromSec: unknown, toSec: unknown): Prom
   const outcomes = (await readRecord('outcomes', fromSec)).map(parseOutcomeLine).filter((line): line is NonNullable<ReturnType<typeof parseOutcomeLine>> => line !== null && ids.has(line.id))
   // The pairs each close's pass held bars for (since V6 Stage 16): what the history gate wants forecast.
   const passes = (await readRecord('passes', fromSec)).map(parsePassLine).filter((line): line is PassLine => line !== null && line.t >= fromSec && line.t <= toSec)
-  return { predictions, outcomes, passes }
+  return { predictions, outcomes, passes, tape: await tapeCount(fromSec, toSec) }
+}
+
+/** The tape's lines in a span (V7.2 Stage 5): the books written, the pairs they cover, Bitcoin's minutes;
+ * read from the day files the span touches, a line that does not read left out. */
+async function tapeCount(fromSec: number, toSec: number): Promise<NonNullable<ForecastHistory['tape']>> {
+  const out = { lines: 0, pairs: 0, minutes: 0 }
+  const pairs = new Set<string>()
+  for (let day = Math.floor(fromSec / 86_400) * 86_400; day <= toSec; day += 86_400) {
+    const text = await readFile(join(recordsDir(), tapeFileName(day)), 'utf-8').catch(() => '')
+    for (const raw of text.split('\n')) {
+      if (raw.trim() === '') continue
+      let line: ReturnType<typeof parseTapeLine> = null
+      try {
+        line = parseTapeLine(JSON.parse(raw))
+      } catch {
+        line = null
+      }
+      if (line === null || line.t < fromSec || line.t > toSec) continue
+      if (line.kind === 'book') {
+        out.lines++
+        pairs.add(line.pair)
+      } else out.minutes++
+    }
+  }
+  out.pairs = pairs.size
+  return out
 }
 
 async function readLive(nowSec: number): Promise<LiveLab> {
