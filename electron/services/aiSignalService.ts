@@ -1052,7 +1052,7 @@ export async function generateAiSignalTape(
     const cached = await readCached(key, GPT_PROMPT_VERSION)
     if (cached) return { decision: { ...cached, candleTime, cached: true }, calls: 0, costUsd: 0 }
     const answered = await Promise.race([
-      decideOnce(key, () => askModel({ key, apiKey, model: asked, context, candleTime, source, escalatedFrom, ...(request.botId !== undefined ? { botId: request.botId } : {}) })),
+      decideOnce(key, () => askModel({ key, apiKey, model: asked, context, candleTime, source, escalatedFrom, ...(request.botId !== undefined ? { botId: request.botId, role: 'decide' as const } : {}) })),
       whenCancelled
     ])
     // An answer joined from another caller's request was not this run's spend.

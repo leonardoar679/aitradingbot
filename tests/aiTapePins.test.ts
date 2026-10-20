@@ -89,6 +89,8 @@ describe('a bot moved to another model', () => {
     // The new model's calls carry the bot; the old model was never asked again.
     const rows = (await listAiCalls({ limit: 20 })).rows
     expect(rows.filter((row) => row.model === NEW).every((row) => row.botId === 'gpt')).toBe(true)
+    // A paid bot decides: its rows say so, as the watch's say gate or decide.
+    expect(rows.filter((row) => row.model === NEW).every((row) => row.role === 'decide')).toBe(true)
     expect(rows.filter((row) => row.model === OLD)).toHaveLength(2)
   })
 
