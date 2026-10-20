@@ -56,7 +56,9 @@ function DryRunPanel({ bot, onPrepareOrder }: { bot: Bot; onPrepareOrder?: (prop
     bot.aiModel,
     bot.aiConfirm,
     bot.aiEveryBars,
-    gptRouteOf(bot) ?? undefined
+    gptRouteOf(bot) ?? undefined,
+    bot.aiModelHistory,
+    bot.id
   )
   // The offer ends when the call's candle closes, which is a moment on the clock and not a new
   // poll, so the card keeps time while there is a call to offer.

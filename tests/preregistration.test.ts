@@ -31,7 +31,8 @@ const ADDED_SINCE_16_OCTOBER = [
   'forecast.ablation',
   'forecast.pass',
   'forecast.tape',
-  'forecast.fidelity'
+  'forecast.fidelity',
+  'aiRouting'
 ]
 // The intervals' lines, the pass's version and the tape's: plumbing with no line to hold or fail.
 const INFRASTRUCTURE = ['forecast.uncertainty', 'forecast.pass', 'forecast.tape']

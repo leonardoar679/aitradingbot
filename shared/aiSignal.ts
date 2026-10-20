@@ -225,6 +225,10 @@ export interface AiSignalDecision {
   rejected?: string | null
   /** Absent on a safety hold and on a rejected answer. */
   detail?: AiSignalDetail | null
+  /** Set on a bar a bot's dry run did not ask and found no answer for (V7.2-R Stage 1): missed while the
+   * app was closed, past BOT_CATCHUP_HOURS, or decided before the bot moved to another model. It acts as
+   * a hold, is never cached and is not an error: no model was asked. */
+  gap?: string
   /** What the call that produced this decision cost. Kept on a cached decision too, where it
    * describes the original call rather than a new one -- `cached` says which. */
   usage?: AiCallUsage | null
@@ -264,6 +268,14 @@ export interface AiSignalTapeRequest {
    * routes existed, the chart and the Analyze tab name none, and go on asking one model. */
   route?: AiRoute | null
   source?: AiCallSource
+  /** A bot's earlier pins, each with when it stopped (Bot.aiModelHistory; V7.2-R Stage 1): a bar decided
+   * before a pin stopped is read from that model's answers on file and never asked again. */
+  modelHistory?: { model: string; untilSec: number }[]
+  /** The first bar that may be bought (V7.2-R Stage 1): a bar before it is read from the cache alone, and a
+   * gap where nothing is held. A bot's dry run sets it BOT_CATCHUP_HOURS back; absent asks every bar. */
+  askFromSec?: number
+  /** The bot asking, for its ledger rows. */
+  botId?: string
 }
 
 /** How a tape's route was used. */
@@ -301,6 +313,8 @@ export interface AiSignalTape {
   rejectedCount: number
   /** What the calls made for THIS tape cost. Cached decisions contribute nothing. */
   costUsd: number
+  /** Bars not asked and with no answer on file (V7.2-R Stage 1): held as they stood. */
+  gapCount?: number
 }
 
 export interface AiSignalProgress {

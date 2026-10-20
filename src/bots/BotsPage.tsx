@@ -170,7 +170,12 @@ export function BotsPage({
     const turningOff = bot.enabled
     const nowSec = Math.floor(Date.now() / 1000)
     setBots((prev) =>
-      prev.map((b) => (b.id === bot.id ? withAiPins({ ...b, enabled: !b.enabled, enabledAt: turningOff ? null : nowSec }, pin) : b))
+      prev.map((b) => {
+        if (b.id !== bot.id) return b
+        // A bot switched on starts a run of its own: no earlier pin reaches into it (V7.2-R Stage 1).
+        const { aiModelHistory: _history, ...rest } = b
+        return withAiPins({ ...(turningOff ? b : rest), enabled: !b.enabled, enabledAt: turningOff ? null : nowSec }, pin)
+      })
     )
     if (turningOff) recordRun(bot, nowSec)
   }

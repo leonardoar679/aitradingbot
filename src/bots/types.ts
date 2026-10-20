@@ -178,6 +178,9 @@ export interface AiCallCount {
   vetoed?: number
   /** Present only on a routed bot: how many of `total` were passed on to its second model. */
   escalated?: number
+  /** Bars held without asking (V7.2-R Stage 1): missed while the app was closed longer than a bot catches
+   * up, or decided before the bot moved to another model and not on file. */
+  gaps?: number
 }
 
 /** One line describing a refresh's AI usage, and whether it is bad news.
@@ -201,9 +204,10 @@ export function describeAiCalls(calls: AiCallCount): { text: string; bad: boolea
     return { text: `${calls.errors} of ${calls.total} AI calls failed`, bad: true }
   }
   const passedOn = calls.escalated !== undefined ? ` · ${calls.escalated} passed on to the second model` : ''
+  const held = calls.gaps !== undefined && calls.gaps > 0 ? ` · ${calls.gaps === 1 ? '1 bar' : `${calls.gaps} bars`} held without asking (missed while the app was closed)` : ''
   // A bot in its first hour has made exactly one, and "1 decisions" is what it showed for it.
   const decisions = calls.total === 1 ? '1 decision' : `${calls.total} decisions`
-  return { text: `${decisions} · ${calls.cached} cached · ${fresh} last refresh${passedOn}`, bad: false }
+  return { text: `${decisions} · ${calls.cached} cached · ${fresh} last refresh${passedOn}${held}`, bad: false }
 }
 
 /** Whether running this strategy spends the user's money by itself, for as long as it is on.

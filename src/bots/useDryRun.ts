@@ -23,6 +23,7 @@ import {
 } from '../backtest/aiConfirmation'
 import { isBarSettled } from '../../shared/aiConfirm'
 import type { AiRoute } from '../../shared/aiRoute'
+import { botAskFromSec } from '../../shared/aiRouting'
 import {
   GPT_INTRADAY_STRATEGY_ID,
   GPT_LOOKBACK_BARS,
@@ -100,6 +101,10 @@ interface DryRunBot {
   aiEveryBars?: number
   /** The second model a GPT Intraday bot was switched on with. See Bot.aiRoute. */
   aiRoute?: AiRoute
+  /** The models it was pinned to before aiModel (V7.2-R Stage 1). See Bot.aiModelHistory. */
+  aiModelHistory?: { model: string; untilSec: number }[]
+  /** Its id, for its ledger rows. */
+  id?: string
 }
 
 /** The stretch a GPT Intraday bot replays at once, in bars: the decision ceiling at its cadence.
@@ -160,7 +165,12 @@ function botTapeRequest(bot: DryRunBot, candles: Candle[], interval: Interval): 
     // The bot's own pin or nothing. Never the setting under Settings › AI: that one is copied onto a
     // bot when it is switched on, after the confirmation has said so.
     route: bot.aiRoute ?? null,
-    source: 'bot'
+    source: 'bot',
+    // V7.2-R Stage 1: a bar decided before the bot moved is read from that model's answers alone, and a running
+    // bot buys only the last BOT_CATCHUP_HOURS of bars it missed; older ones are held as they stood.
+    ...(bot.aiModelHistory !== undefined && bot.aiModelHistory.length > 0 ? { modelHistory: bot.aiModelHistory } : {}),
+    ...(bot.enabledAt !== null ? { askFromSec: botAskFromSec(Math.floor(Date.now() / 1000)) } : {}),
+    ...(bot.id !== undefined ? { botId: bot.id } : {})
   }
 }
 
@@ -227,7 +237,8 @@ export async function fetchBotDryRunResult(
         // Calls, not decisions: under a route one decision can be two of them.
         generated: tape.callCount,
         errors: tape.errorCount,
-        ...(tape.route ? { escalated: tape.route.escalated } : {})
+        ...(tape.route ? { escalated: tape.route.escalated } : {}),
+        ...(tape.gapCount !== undefined && tape.gapCount > 0 ? { gaps: tape.gapCount } : {})
       },
       aiCall: latestBotAiCall(candles, tape.decisions, signals.entries, interval)
     }
@@ -331,13 +342,17 @@ export function useDryRun(
   aiModel?: string,
   aiConfirm?: boolean,
   aiEveryBars?: number,
-  aiRoute?: AiRoute
+  aiRoute?: AiRoute,
+  aiModelHistory?: { model: string; untilSec: number }[],
+  botId?: string
 ): DryRunState {
   const [state, setState] = useState<DryRunState>(LOADING_STATE)
   // Read as two plain values so the effect below re-runs when the route CHANGES, not every time a
   // caller hands over a new object describing the same one.
   const routeModel = aiRoute?.model
   const routeWhen = aiRoute?.when
+  // The same for the pin history: re-run when it changes, not when an equal one arrives.
+  const historyKey = JSON.stringify(aiModelHistory ?? [])
 
   useEffect(() => {
     // A STOPPED BOT STILL HAS A CHART. What the strategy is doing on that symbol is a fact about
@@ -367,7 +382,9 @@ export function useDryRun(
           aiModel,
           aiConfirm,
           aiEveryBars,
-          aiRoute: route
+          aiRoute: route,
+          ...(historyKey === '[]' ? {} : { aiModelHistory: JSON.parse(historyKey) as { model: string; untilSec: number }[] }),
+          ...(botId !== undefined ? { id: botId } : {})
         })
         if (cancelled) return
         if (fetched === null) {
@@ -396,7 +413,7 @@ export function useDryRun(
       cancelled = true
       if (timer) clearTimeout(timer)
     }
-  }, [exchange, symbol, running, enabledAt, strategyId, aiModel, aiConfirm, aiEveryBars, routeModel, routeWhen])
+  }, [exchange, symbol, running, enabledAt, strategyId, aiModel, aiConfirm, aiEveryBars, routeModel, routeWhen, historyKey, botId])
 
   return state
 }

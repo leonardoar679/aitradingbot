@@ -127,6 +127,14 @@ describe('describeAiCalls', () => {
     expect(describeAiCalls({ total: 672, cached: 0, generated: 672, errors: 0 }).text).toContain('672 new calls')
     expect(describeAiCalls({ total: 672, cached: 672, generated: 0, errors: 0 }).text).toContain('0 new calls')
   })
+
+  // V7.2-R Stage 1: bars older than the catch-up window are held without asking, and the card says so.
+  it('names the bars held without asking after the app was closed, and is not bad news for them', () => {
+    const described = describeAiCalls({ total: 300, cached: 24, generated: 1, errors: 0, gaps: 275 })
+    expect(described).toEqual({ text: '300 decisions · 24 cached · 1 new call last refresh · 275 bars held without asking (missed while the app was closed)', bad: false })
+    expect(describeAiCalls({ total: 2, cached: 0, generated: 1, errors: 0, gaps: 1 }).text).toContain('· 1 bar held without asking')
+    expect(describeAiCalls({ total: 2, cached: 1, generated: 1, errors: 0, gaps: 0 }).text).not.toContain('held without asking')
+  })
 })
 
 // The confirmation shown before a paid bot is switched on. It is the only consent that bot ever

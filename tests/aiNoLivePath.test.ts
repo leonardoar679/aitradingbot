@@ -934,6 +934,8 @@ describe('AI code has no route to a real order', () => {
       'aiLedgerService',
       // The reviewer reads the other models' calls on the event under the live prompts.
       'aiOpportunity',
+      // aiRouting (V7.2-R Stage 1): which model answered, against the model asked -- arithmetic on two names.
+      'aiRouting',
       'aiSignalService',
       'alerts',
       'atomicWrite',

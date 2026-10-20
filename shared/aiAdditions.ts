@@ -97,8 +97,12 @@ export type AiAdditionOutcome<T> =
 
 /** What Settings › AI shows of the additions (the main process's aiAdditionsService.ts). */
 export interface AiAdditionsStatus {
-  /** The model they ask. */
+  /** The model they ask (the news analyst's, which before roles every addition shares). */
   model: string
+  /** The model each asks: two of them once roles are applied (V7.2-R Stage 1). */
+  models: Record<AiAdditionKind, string>
+  /** Whether the models follow roles (shared/aiRouting.ts) rather than the watch's paper-trade model. */
+  byRole: boolean
   watchOn: boolean
   additions: AiAdditionsConfig
   limits: Record<AiAdditionKind, number>
@@ -116,9 +120,18 @@ export function healAiAdditions(value: unknown): AiAdditionsConfig {
   return out
 }
 
-/** The model the additions ask: the one the watch's paper trades follow, else the first the watch
- * asks, else the default -- the watch's own model, which the user chose and priced. */
-export function additionsModelOf(config: Pick<AiConfig, 'defaultModel' | 'watch' | 'watchPaper'>): string {
+/** The role each addition plays once roles are applied (shared/aiRouting.ts; V7.2-R Stage 1): the two
+ * that judge one of the app's trades decide; the three that read or write summarize. */
+export const AI_ADDITION_ROLES: Record<AiAdditionKind, 'decide' | 'summarize'> = { news: 'summarize', why: 'summarize', exit: 'decide', review: 'decide', daily: 'summarize' }
+
+/** The model an addition asks. Once roles are applied (V7.2-R Stage 1): the summarizing model for the
+ * three that read or write, else the decider; the decider (the default model) for the exit check and the
+ * reviewer. Before: the one the watch's paper trades follow, else the first the watch asks, else the
+ * default -- the watch's own model, which the user chose and priced. */
+export function additionsModelOf(config: Pick<AiConfig, 'defaultModel' | 'watch' | 'watchPaper'> & { roles?: AiConfig['roles'] }, kind: AiAdditionKind = 'news'): string {
+  if (config.roles !== null && config.roles !== undefined) {
+    return AI_ADDITION_ROLES[kind] === 'summarize' ? (config.roles.summarize ?? config.defaultModel) : config.defaultModel
+  }
   return config.watchPaper.model ?? config.watch.models[0] ?? config.defaultModel
 }
 

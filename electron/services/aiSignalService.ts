@@ -71,6 +71,7 @@ import {
 import { averageCallCostUsd, averageCallLatencyMs, budgetProblem, estimateCallCostUsd } from '../../shared/aiCost'
 import { escalates, routedDecision } from '../../shared/aiRoute'
 import { splitAiModelId } from '../../shared/aiEffort'
+import { servedFamilyOf, tapeModelAt } from '../../shared/aiRouting'
 import type { AiCallRecord } from '../../shared/aiLedger'
 import { INTERVAL_SECONDS, type Candle } from '../../shared/ipc'
 import { writeJsonAtomic } from './atomicWrite'
@@ -256,6 +257,21 @@ export async function requestWithRetry(
   throw lastError
 }
 
+/** A bar a bot's dry run did not ask and found no answer for (V7.2-R Stage 1): held as it stood, never
+ * cached, and not an error -- no model was asked. */
+function gapHold(candleTime: number, model: string, why: string): AiSignalDecision {
+  return { candleTime, recommendation: 'hold', confidence: 0, rationale: '', model, cached: false, error: null, rejected: null, gap: why }
+}
+
+/** Which model answers a bar of a tape, and whether the bar may be bought (V7.2-R Stage 1): the model pinned at
+ * its time (an earlier pin's bars are read from that model's answers alone), and only from askFromSec on. */
+function barPlan(request: AiSignalTapeRequest, current: string, candleTime: number): { model: string; buy: boolean; why: string | null } {
+  const model = tapeModelAt(request.modelHistory, current, candleTime)
+  if (model !== current) return { model, buy: false, why: `decided before the bot moved to ${current}` }
+  if (request.askFromSec !== undefined && candleTime < request.askFromSec) return { model, buy: false, why: 'missed while the app was closed, longer ago than a bot catches up' }
+  return { model, buy: true, why: null }
+}
+
 function safeHold(candleTime: number, model: string, error: unknown): AiSignalDecision {
   return {
     candleTime,
@@ -322,6 +338,9 @@ interface AskInput {
   escalatedFrom?: string
   /** Set when the call is a panel's decision, the fourth of its four (shared/aiPanel.ts). */
   agent?: 'decision'
+  /** The bot whose dry run asks, and the role the call plays (V7.2-R Stage 1): marks on its ledger row. */
+  botId?: string
+  role?: 'decide' | 'gate' | 'summarize'
 }
 
 /** The paid path: one decision that is not in the cache. */
@@ -365,7 +384,9 @@ async function askModel(input: AskInput): Promise<AiSignalDecision> {
         }
       : {}),
     ...(input.escalatedFrom !== undefined ? { escalatedFrom: input.escalatedFrom } : {}),
-    ...(input.agent !== undefined ? { agent: input.agent } : {})
+    ...(input.agent !== undefined ? { agent: input.agent } : {}),
+    ...(input.botId !== undefined ? { botId: input.botId } : {}),
+    ...(input.role !== undefined ? { role: input.role } : {})
   }
   const finishedAt = (): number => Math.floor(Date.now() / 1000)
 
@@ -410,7 +431,9 @@ async function askModel(input: AskInput): Promise<AiSignalDecision> {
   const usage = await withCost(result.usage, input.model)
   await record('spend record', recordAiSpend(usage.costUsd ?? 0))
 
-  const verdict = interpret(result, input.context)
+  // What was asked is what may answer (V7.2-R Stage 1): another provider's model is refused, billed or not.
+  const family = servedFamilyOf(input.model, result.servedModel)
+  const verdict: ReturnType<typeof interpret> = family === 'other' ? { ok: false, reason: `The answer came from ${result.servedModel}, not from ${input.model}, the model asked.` } : interpret(result, input.context)
   const decision: AiSignalDecision = verdict.ok
     ? {
         candleTime: input.candleTime,
@@ -456,6 +479,7 @@ async function askModel(input: AskInput): Promise<AiSignalDecision> {
       status: verdict.ok ? 'ok' : 'rejected',
       provider: result.provider,
       ...(result.servedModel !== null ? { servedModel: result.servedModel } : {}),
+      ...(family === 'variant' || family === 'other' ? { servedMismatch: family } : {}),
       usage,
       error: verdict.ok ? null : verdict.reason,
       ...(verdict.ok ? {} : { answerExcerpt: result.content.slice(0, ANSWER_EXCERPT_CHARS) }),
@@ -877,6 +901,8 @@ export async function estimateAiSignalTape(request: AiSignalTapeRequest): Promis
   const atrSeries = gptAtrSeries(request.candles)
   let position = GPT_FLAT
   let cached = 0
+  // Bars it will never buy and holds no answer for (V7.2-R Stage 1): held as they stood.
+  let notBought = 0
   // Set where the walk stops: what the decision it stopped at still needs from each step. It is
   // the one open decision whose calls can be counted exactly -- its first answer may be held and
   // its second not, and a panel may hold some of its reports.
@@ -888,6 +914,25 @@ export async function estimateAiSignalTape(request: AiSignalTapeRequest): Promis
     if (!isDecisionCandle(request.candles[index].time, every, request.interval)) continue
     const context = contextAt(request, index, position.long ? 'long' : 'flat')
     sample = context
+    const bar = barPlan(request, model, request.candles[index].time)
+    if (!bar.buy) {
+      // Never bought: read from the answers on file, or held as it stood. The position path stays known.
+      const held = await peekDecider(bar.model, context)
+      let decision = held.decision
+      if (decision !== null && route && escalates(decision, position, route.when)) {
+        const second = await peekDecider(route.model, context)
+        decision = second.decision === null ? null : routedDecision(decision, second.decision)
+      }
+      if (decision === null) {
+        notBought++
+        continue
+      }
+      cached++
+      const action = gptActionFor(decision, position)
+      if (action === 'enter') position = { long: true, stop: gptStopFor(request.candles, atrSeries, index) }
+      else if (action === 'exit') position = GPT_FLAT
+      continue
+    }
     const first = await peekDecider(model, context)
     // Position is part of later cache keys. Once one decision is missing, later keys cannot be
     // predicted safely, so the remainder is reported as a conservative maximum API-call count.
@@ -909,7 +954,7 @@ export async function estimateAiSignalTape(request: AiSignalTapeRequest): Promis
     if (action === 'enter') position = { long: true, stop: gptStopFor(request.candles, atrSeries, index) }
     else if (action === 'exit') position = GPT_FLAT
   }
-  const open = total - cached
+  const open = total - cached - notBought
   // Every open decision after the one the walk stopped at is counted at its ceiling. Which of them
   // the first step will pass on is not known until it has answered, so for the second step the
   // ceiling is all of them.
@@ -979,6 +1024,7 @@ export async function generateAiSignalTape(
   let errorCount = 0
   let rejectedCount = 0
   let costUsd = 0
+  let gapCount = 0
   let consecutiveFailures = 0
   // Refused answers in a row, held or new, and what the last of them was refused for.
   let consecutiveRefusals = 0
@@ -1006,7 +1052,7 @@ export async function generateAiSignalTape(
     const cached = await readCached(key, GPT_PROMPT_VERSION)
     if (cached) return { decision: { ...cached, candleTime, cached: true }, calls: 0, costUsd: 0 }
     const answered = await Promise.race([
-      decideOnce(key, () => askModel({ key, apiKey, model: asked, context, candleTime, source, escalatedFrom })),
+      decideOnce(key, () => askModel({ key, apiKey, model: asked, context, candleTime, source, escalatedFrom, ...(request.botId !== undefined ? { botId: request.botId } : {}) })),
       whenCancelled
     ])
     // An answer joined from another caller's request was not this run's spend.
@@ -1025,6 +1071,27 @@ export async function generateAiSignalTape(
       if (!isDecisionCandle(request.candles[index].time, every, request.interval)) continue
       const context = contextAt(request, index, position.long ? 'long' : 'flat')
       const candleTime = request.candles[index].time
+      // A bar a bot's dry run may not buy (V7.2-R Stage 1): an earlier pin's, or one past the catch-up window.
+      // Read from the answers on file, or held as it stood; no model is asked, and it is not an error.
+      const bar = barPlan(request, model, candleTime)
+      if (!bar.buy) {
+        const held = await peekDecider(bar.model, context)
+        let decision: AiSignalDecision | null = held.decision === null ? null : { ...held.decision, candleTime, cached: true }
+        if (decision !== null && route && escalates(decision, position, route.when)) {
+          const second = await peekDecider(route.model, context)
+          decision = second.decision === null ? null : { ...routedDecision(decision, second.decision), candleTime, cached: true }
+        }
+        if (decision === null) {
+          decision = gapHold(candleTime, bar.model, bar.why ?? 'not asked')
+          gapCount++
+        } else cachedCount++
+        decisions.push(decision)
+        const action = gptActionFor(decision, position)
+        if (action === 'enter') position = { long: true, stop: gptStopFor(request.candles, atrSeries, index) }
+        else if (action === 'exit') position = GPT_FLAT
+        onProgress?.({ requestId: request.requestId, completed: decisions.length, total, cached: cachedCount })
+        continue
+      }
       // Checked BEFORE asking, and only an answer that would have to be bought stops the run:
       // decisions already held are free to replay, refused or not. So a rerun after this has
       // stopped a run stops again at the same place without spending anything.
@@ -1099,11 +1166,12 @@ export async function generateAiSignalTape(
     ...(route ? { route: { ...route, escalated } } : {}),
     decisions,
     cachedCount,
-    generatedCount: decisions.length - cachedCount,
+    generatedCount: decisions.length - cachedCount - gapCount,
     callCount,
     errorCount,
     rejectedCount,
-    costUsd
+    costUsd,
+    ...(gapCount > 0 ? { gapCount } : {})
   }
 }
 
@@ -1479,9 +1547,11 @@ export async function askAiOpportunity(request: AiOpportunityAskRequest): Promis
   // Where a call came from is a label on its row, with one exception: a call the watch asks for
   // was agreed to by nobody at the moment it is made, so it is held to the watch's own limits.
   const source: AiCallSource = request.source === 'watch' || request.source === 'benchmark' ? request.source : 'opportunity'
+  const roles = source === 'watch' ? (await getAiConfig()).roles : null
+  const role = roles === null ? undefined : roles.gate === model ? ('gate' as const) : ('decide' as const)
   const ask = async (): Promise<AiSignalDecision> => {
     const { apiKey } = await getDecryptedAiCredential()
-    const asked = await decideOnce(key, () => askModel({ key, apiKey, model, context, candleTime: event.time, source }))
+    const asked = await decideOnce(key, () => askModel({ key, apiKey, model, context, candleTime: event.time, source, ...(role === undefined ? {} : { role }) }))
     return asked.joined ? { ...asked.decision, candleTime: event.time, cached: true } : asked.decision
   }
   if (source !== 'watch') return ask()

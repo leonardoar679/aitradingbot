@@ -73,7 +73,9 @@ export function BotDetailView({ bot, onBack, onToggle, onPrepareOrder }: BotDeta
     bot.aiModel,
     bot.aiConfirm,
     bot.aiEveryBars,
-    gptRouteOf(bot) ?? undefined
+    gptRouteOf(bot) ?? undefined,
+    bot.aiModelHistory,
+    bot.id
   )
   const nowSec = useNowSec(dryRun.aiCall !== null && dryRun.aiCall.entered)
   const proposal = botAiProposal(bot, dryRun.aiCall, nowSec)

@@ -117,6 +117,14 @@ const FROM_PROFILE = process.env.FROM_PROFILE === undefined || process.env.FROM_
 if (FROM_PROFILE !== '' && !fs.existsSync(path.join(FROM_PROFILE, 'settings.json'))) throw new Error(`FROM_PROFILE: no settings.json in ${FROM_PROFILE}`)
 if (FROM_PROFILE !== '' && REAL_AI) throw new Error('FROM_PROFILE is a rehearsal, with OpenRouter faked: not with REAL_AI')
 if (FROM_PROFILE !== '' && DEMO_KEY) throw new Error('FROM_PROFILE is a rehearsal without keys: not with DEMO_KEY')
+/** A move to roles at the start (V7.2-R Stage 1): {"decide":…,"gate":…,"summarize":…}, applied through the
+ * app's own preview and apply right after launch, as the button on Settings › AI does after its confirmation;
+ * MOVE_DISABLE a model to disable once the move has freed it. Both saved into OUT/routing-move.json. */
+const MOVE_ROLES = process.env.MOVE_ROLES === undefined || process.env.MOVE_ROLES === '' ? null : JSON.parse(process.env.MOVE_ROLES)
+const MOVE_DISABLE = process.env.MOVE_DISABLE ?? ''
+if (MOVE_ROLES !== null && (typeof MOVE_ROLES.decide !== 'string' || !('gate' in MOVE_ROLES) || !('summarize' in MOVE_ROLES))) throw new Error('MOVE_ROLES names decide, gate and summarize')
+/** Fields of settings.json that held a key in an old version: never copied into a run's profile. */
+const SETTINGS_KEY_FIELDS = ['apiKey', 'apiSecret', 'secretKey', 'apiPassphrase', 'passphrase', 'password', 'token']
 /** A profile's own files (FROM_PROFILE), as the app writes them: its JSON files at the top and its
  * camelCase folders, with the page's local storage (three conveniences of the screen). Never a key --
  * no name with "credentials" in it, nor Local State -- and nothing of the browser's: its cookies
@@ -180,7 +188,11 @@ if (RESUME) {
   if (FROM_PROFILE !== '') {
     const copied = ownFilesOf(FROM_PROFILE)
     for (const name of copied) fs.cpSync(path.join(FROM_PROFILE, name), path.join(PROFILE, name), { recursive: true })
+    // A key an old version kept in settings.json in plain text is not copied (V7.2-R Stage 1, 20 October 2026):
+    // the field is dropped from the copy, unread, before the run reads the file. Nothing in the app reads it.
     const settings = JSON.parse(fs.readFileSync(path.join(PROFILE, 'settings.json'), 'utf8'))
+    for (const field of SETTINGS_KEY_FIELDS) delete settings[field]
+    fs.writeFileSync(path.join(PROFILE, 'settings.json'), JSON.stringify(settings, null, 2))
     languageAsked = typeof settings.language !== 'string'
     fs.writeFileSync(path.join(OUT, 'from-profile.json'), JSON.stringify({ from: FROM_PROFILE, copied, languageAsked }, null, 2))
   } else {
@@ -536,6 +548,32 @@ async function main() {
     }, FAKE_KEY)
     say(`the profile's own setup, kept: ${JSON.stringify(own)}`)
     if (languageAsked) await answerLanguage()
+  }
+
+  // The move to roles (V7.2-R Stage 1), once, on a fresh run: priced, applied with the preview's token, and the
+  // model it frees disabled.
+  if (MOVE_ROLES !== null && !RESUME) {
+    const moved = await page.evaluate(
+      async ([choice, disable]) => {
+        const before = await window.api.ai.getConfig()
+        const preview = await window.api.ai.routingPreview(choice)
+        const done = await window.api.ai.routingApply({ choice, token: preview.token })
+        let disabled = null
+        if (disable !== '') {
+          try {
+            const after = await window.api.ai.setConfig({ enabledModels: done.config.enabledModels.filter((model) => model !== disable) })
+            disabled = { ok: true, enabledModels: after.enabledModels, watch: after.watch }
+          } catch (failure) {
+            disabled = { ok: false, error: String(failure) }
+          }
+        }
+        const bots = (await window.api.settings.get()).bots.map((bot) => ({ id: bot.id, name: bot.name, enabled: bot.enabled, aiModel: bot.aiModel, aiModelHistory: bot.aiModelHistory }))
+        return { before: { defaultModel: before.defaultModel, watch: before.watch, watchPaper: before.watchPaper, roles: before.roles }, preview: { text: preview.text, expectedDailyUsd: preview.expectedDailyUsd, mostDailyUsd: preview.mostDailyUsd, costs: preview.costs }, after: done.config, movedBots: done.movedBots, disabled, bots }
+      },
+      [MOVE_ROLES, MOVE_DISABLE]
+    )
+    fs.writeFileSync(path.join(OUT, 'routing-move.json'), JSON.stringify(moved, null, 2))
+    say(`moved to roles: watch ${JSON.stringify(moved.after.watch.models)}, paper ${moved.after.watchPaper.model}, bots ${JSON.stringify(moved.movedBots.map((bot) => bot.name))}; ${MOVE_DISABLE === '' ? 'nothing disabled' : `${MOVE_DISABLE} disabled: ${moved.disabled?.ok}`}`)
   }
 
   // A one-second heartbeat in the page: how late the page's own timers ran, all run.
@@ -1118,9 +1156,12 @@ async function status() {
     const fake = await app.evaluate(() => {
       const byName = {}
       for (const call of globalThis.__asked) byName[`${call.name}:${call.status}`] = (byName[`${call.name}:${call.status}`] ?? 0) + 1
+      // Which models were asked (V7.2-R Stage 1): what the routing gate counts.
+      const byModel = {}
+      for (const call of globalThis.__asked) byModel[call.model] = (byModel[call.model] ?? 0) + 1
       const bySeverity = {}
       for (const notice of globalThis.__notices) bySeverity[notice.severity ?? 'none'] = (bySeverity[notice.severity ?? 'none'] ?? 0) + 1
-      return { asked: globalThis.__asked.length, byName, notices: bySeverity, other: globalThis.__other.length }
+      return { asked: globalThis.__asked.length, byName, byModel, notices: bySeverity, other: globalThis.__other.length }
     })
     const seen = await page.evaluate(async (since) => {
       const events = (await window.api.scanner.listEvents({ sinceSec: since })).rows

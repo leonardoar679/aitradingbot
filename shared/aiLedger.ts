@@ -85,6 +85,13 @@ export interface AiCallRecord {
   addition?: AiAdditionKind
   subjectId?: string
   additionAnswer?: unknown
+  /** The role the call played once roles were applied (shared/aiRouting.ts; V7.2-R Stage 1). */
+  role?: 'decide' | 'gate' | 'summarize'
+  /** The bot whose dry run made the call (V7.2-R Stage 1). */
+  botId?: string
+  /** Where the model that answered is not the model asked (V7.2-R Stage 1, servedFamilyOf): 'variant', a
+   * name of the same provider, shown and accepted; 'other', another provider's, refused. */
+  servedMismatch?: 'variant' | 'other'
 }
 
 export interface AiCallFilter {

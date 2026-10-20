@@ -3,6 +3,7 @@ import { electronAPI } from '@electron-toolkit/preload'
 import type { FuturesCloseResult, FuturesReadout } from '../shared/futuresPositions'
 import type { ProtectiveStop } from '../shared/futuresStops'
 import type { PricePrediction } from '../shared/forecast/prediction'
+import type { RoleChoice, RoutingPreview } from '../shared/aiRouting'
 import type { TradeDecision } from '../shared/forecast/tradeDecision'
 import type { ForecastLabView, ForecastReplay } from '../shared/forecast/labView'
 import type { ForecastRanking as ForecastRankingView } from '../shared/forecast/ranking'
@@ -285,6 +286,12 @@ const api = {
       ipcRenderer.invoke(IpcChannel.AiRecordExperiment, input),
     // Free: the additions' switches, what they have asked today and what a call costs.
     additionsStatus: (): Promise<AiAdditionsStatus> => ipcRenderer.invoke(IpcChannel.AiAdditionsStatus),
+    // Free: who asks which model, and what a move to these roles would change and cost (V7.2-R Stage 1).
+    routingPreview: (choice: RoleChoice): Promise<RoutingPreview> => ipcRenderer.invoke(IpcChannel.AiRoutingPreview, choice),
+    // Changes what asks by itself -- the watch, its paper trades, the additions, running paid bots -- and only
+    // with the token of the preview its confirmation was written from.
+    routingApply: (request: { choice: RoleChoice; token: string }): Promise<{ config: AiConfig; movedBots: { id: string; name: string; from: string; to: string }[] }> =>
+      ipcRenderer.invoke(IpcChannel.AiRoutingApply, request),
     // Billed unless held: one conclusion to "Why did it move?", asked from a click at the price shown.
     concludeMove: (symbol: string): Promise<MoveConclusion> => ipcRenderer.invoke(IpcChannel.AiConcludeMove, symbol),
     // Billed unless held, and only when something about the trade stands out: the reviewer's second

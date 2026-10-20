@@ -39,7 +39,7 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 // refit within noise needs and the paired intervals' level (V7.2 Stage 3) -- from 704b82f0f396; the by-hour
 // lines (the outcomes a half needs, the coverage a band fails under or over) and the ablation's blocks (V7.2 Stage
 // 4) from 51e30db269e8.
-const PINNED_ENGINE_VERSION = '214afc904bb8'
+const PINNED_ENGINE_VERSION = '2e0f11aeec10'
 
 describe('the engine version', () => {
   it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {

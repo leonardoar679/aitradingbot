@@ -1222,6 +1222,40 @@ thirty closed trades, or ten in a slice, is not printed. Nothing is stored and n
 the document's promotion rule is not built, since no model has shown an edge to promote and a rule
 would be fitted to noise. The watch's models are still chosen on Opportunities.
 
+### Who asks which model
+
+Since 20 October 2026 (V7.2-R Stage 1; `shared/aiRouting.ts`). The default model under Settings › AI
+is what a person starts: a backtest, the chart, a bot being switched on. Everything that asks by itself
+keeps the model it was switched on with, because the model is part of what it was agreed to cost: the
+watch its own list, its paper trades one model of that list, the AI additions the model those paper
+trades follow, and each running bot the model it was pinned to. On the user's profile of 20 October the
+default was Claude Opus 5.5 and every one of 367 calls since 16 October had gone to GPT-5 Mini, which
+could not be disabled while the running watch asked it.
+
+The **Who asks which model** card lists each such caller with the model it asks now, where that model
+comes from, its calls and cost today and the model OpenRouter says answered. Three roles are chosen
+there: the model that **decides** (the default model: the watch's deciding model, the model its paper
+trades follow, every paid bot, the reviewer and the exit check), the model that takes the watch's
+**first look** at each event (the decider asked only when it sees a trade) and the model that writes the
+**summaries** (the news analyst, the "why did it move?" conclusion and the daily summary). **Move every
+caller to these** shows, before anything changes, what each caller will ask and what that costs a day at
+its recent rate and at its limits (each caller priced from that model's own calls where it has some, else
+from the price list at the token counts its question takes here), and the daily budget; once confirmed,
+the move is applied with that preview's token, so a setting or a price that changed in between refuses
+it. The watch and its paper trades stay on or off as they were, with their limits, stake and caps. A
+running bot moved keeps its earlier decisions as the model that made them: a bar decided before the move
+is read from that model's answers alone, and only the bars from the move on are asked of the new one.
+Until a move is applied nothing changes.
+
+A model that something still asks cannot be disabled, as before; the refusal now names every caller that
+asks it and the way out. A role's model is refused the same way. A paid bot's dry run buys at most the
+last two hours of the bars it missed (`BOT_CATCHUP_HOURS`, the user's choice of 20 October 2026); an older
+bar with no answer on file is held as it stood and shown as such on the bot's card, where until now a
+restart bought every missed bar at once (275 answers about candles up to eleven days old on 16 October).
+An answer from another provider's model than the one asked is refused, billed or not, and a dated or
+renamed version of the same provider's model is shown on its ledger row; every call's row carries the
+model asked, the model that answered and its provider, the role it played and the bot that asked.
+
 
 ### Model and strategy health
 
@@ -2115,7 +2149,7 @@ AI pages:
 | **Performance** | A leaderboard of what the watch's recommendations earned; the watch's and the news rules' paper trades as a running total in R, one line each; and a journal that lists every recommendation, saves as a spreadsheet, and opens any line's whole story on one timeline. |
 | **AI Decisions › Signals** | Every answered call, scored against the candles that followed: the move after 1h, 4h and 1d, which of the model's own levels was touched first, and whether the call was right. Per model: act rate, hit rate, and hit rate by confidence. |
 | **AI Benchmark** | The same questions put to every model you tick, with the answers scored side by side. Two kinds: one market asked on a clock, with a panel of agents beside its own model and what a route between two of them would have done; and events across the market, where each recommendation is followed through its own entry, stop and target — both described below. |
-| **Settings › AI** | OpenRouter's catalogue with prices. Only models that can be held to a strict JSON schema can be enabled, and one that reasons can be enabled again at a lower reasoning effort. Also where a route to a second model, or to a panel, is set — described below. Below it: calls, tokens, dollars and latency per model, the daily budget, and the pace, the most calls a minute to one model. |
+| **Settings › AI** | OpenRouter's catalogue with prices. Only models that can be held to a strict JSON schema can be enabled, and one that reasons can be enabled again at a lower reasoning effort. Also where a route to a second model, or to a panel, is set — described below. Since 20 October 2026 **Who asks which model**: every caller that asks by itself, the model it asks now, its calls and cost today and the model that answered, and one move that puts them all on three roles (described below). Below it: calls, tokens, dollars and latency per model, the daily budget, and the pace, the most calls a minute to one model. |
 
 **The key.** An OpenRouter key — made at openrouter.ai/keys, and starting `sk-or-` — is entered on
 Connections, beside the exchange keys, where it can be replaced, tested or removed. Until one is

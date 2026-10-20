@@ -6,6 +6,7 @@ import type { AiOpportunityAskRequest, AiOpportunityPeekRequest } from '../../..
 import type { AiSignalTapeRequest } from '../../../shared/aiSignal'
 import type { AiConfigPatch } from '../../../shared/aiCost'
 import type { AiCallFilter } from '../../../shared/aiLedger'
+import type { RoleChoice } from '../../../shared/aiRouting'
 import {
   getAiCredentialStatus,
   getAiKeyInfo,
@@ -14,7 +15,7 @@ import {
   testAiCredential
 } from '../../services/aiCredentialsService'
 import { concludeMove, exitCheck, getAiAdditionsStatus, reviewTrade, summarizeDay } from '../../services/aiAdditionsService'
-import { getAiConfig, listAiModels, setAiConfig } from '../../services/aiConfigService'
+import { applyAiRoles, getAiConfig, listAiModels, previewAiRoles, setAiConfig } from '../../services/aiConfigService'
 import { getAiExperiment, listAiExperiments, recordAiExperiment } from '../../services/aiExperimentService'
 import { getAiUsageSummary, listAiCalls } from '../../services/aiLedgerService'
 import {
@@ -62,6 +63,9 @@ export function registerAiHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(IpcChannel.AiListModels, (_event, refresh: boolean) => listAiModels(refresh === true))
   ipcMain.handle(IpcChannel.AiGetConfig, () => getAiConfig())
   ipcMain.handle(IpcChannel.AiSetConfig, (_event, patch: AiConfigPatch) => setAiConfig(patch ?? {}))
+  // Who asks which model (V7.2-R Stage 1): the preview reads and prices; the move needs the preview's token.
+  ipcMain.handle(IpcChannel.AiRoutingPreview, (_event, choice: RoleChoice) => previewAiRoles(choice))
+  ipcMain.handle(IpcChannel.AiRoutingApply, (_event, request: { choice: RoleChoice; token: string }) => applyAiRoles(request))
   ipcMain.handle(IpcChannel.AiListCalls, (_event, filter: AiCallFilter) => listAiCalls(filter ?? {}))
   ipcMain.handle(IpcChannel.AiUsageSummary, () => getAiUsageSummary())
   ipcMain.handle(IpcChannel.AiPeekEntryConfirmation, (_event, request: AiEntryConfirmRequest) =>

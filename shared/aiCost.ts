@@ -66,6 +66,17 @@ export interface AiConfig {
   callsPerMinute: number
   /** The AI additions, on or off each (shared/aiAdditions.ts). On unless switched off. */
   additions: AiAdditionsConfig
+  /** The models the user gave the gate and the summaries (shared/aiRouting.ts; V7.2-R Stage 1); the
+   * decider is `defaultModel`. Null until a move to roles was applied: every caller then asks what it
+   * asked before. Set only by applyAiRoles, after its confirmation. */
+  roles: AiRoles | null
+}
+
+/** The gate (the watch's first look) and the summaries (the news analyst, "why did it move?", the daily
+ * summary); null where the decider takes the role (shared/aiRouting.ts). */
+export interface AiRoles {
+  gate: string | null
+  summarize: string | null
 }
 
 export interface AiConfigPatch {

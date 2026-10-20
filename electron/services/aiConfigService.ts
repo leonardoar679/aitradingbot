@@ -1,22 +1,42 @@
 import { app } from 'electron'
+import { createHash } from 'node:crypto'
 import { mkdir, readFile } from 'fs/promises'
 import { join } from 'path'
-import { DEFAULT_AI_ADDITIONS, healAiAdditions, type AiAdditionsConfig } from '../../shared/aiAdditions'
-import { DEFAULT_AI_DAILY_CAP_USD, DEFAULT_AI_MODEL, DEFAULT_ENABLED_MODELS } from '../../shared/aiSignal'
+import { AI_ADDITION_DAILY_LIMITS, AI_ADDITION_KINDS, AI_ADDITION_PROMPT_VERSIONS, DEFAULT_AI_ADDITIONS, healAiAdditions, type AiAdditionsConfig } from '../../shared/aiAdditions'
+import { DEFAULT_AI_DAILY_CAP_USD, DEFAULT_AI_MODEL, DEFAULT_ENABLED_MODELS, GPT_INTRADAY_STRATEGY_ID, GPT_PROMPT_VERSION } from '../../shared/aiSignal'
+import {
+  healAiRoles,
+  medianTokensOf,
+  modelsInUse,
+  paidBot,
+  priceOfCall,
+  repinBot,
+  roleChoiceProblem,
+  rolesPlanOf,
+  routingPreviewText,
+  type RoleChoice,
+  type RoutedBot,
+  type RoutingCost,
+  type RoutingPreview
+} from '../../shared/aiRouting'
+import type { AiCallRecord } from '../../shared/aiLedger'
+import type { Bot } from '../../shared/ipc'
 import { aiModelSlugOf, isAiModelId, splitAiModelId } from '../../shared/aiEffort'
 import { deciderModel, isPanelId, panelModelOf } from '../../shared/aiPanel'
 import { parseAiRoute, type AiRoute } from '../../shared/aiRoute'
 import { aiWatchProblem, healAiWatch, sameWatchTerms, type AiWatchConfig } from '../../shared/aiWatch'
 import { DEFAULT_AI_WATCH_PAPER, aiWatchPaperProblem, healAiWatchPaper, type AiWatchPaperConfig } from '../../shared/aiWatchPaper'
 import { AI_CALLS_PER_MINUTE_CHOICES, DEFAULT_AI_CALLS_PER_MINUTE, isCallsPerMinute } from '../../shared/aiPace'
-import { budgetProblem, type AiConfig, type AiConfigPatch, type AiModelCatalogue, type AiModelInfo } from '../../shared/aiCost'
+import { budgetProblem, type AiConfig, type AiConfigPatch, type AiModelCatalogue, type AiModelInfo, type AiRoles } from '../../shared/aiCost'
 import { writeJsonAtomic } from './atomicWrite'
 import { stampedConfig } from '../../shared/configMigration'
 import { HARD_LIMITS, hardLimitProblem } from '../../shared/hardLimits'
 import { readConfigFile } from './configFiles'
 import { getDecryptedAiCredential } from './aiCredentialsService'
 import { nextDailyUsage, usageForDay, utcDayKey, type DailyUsageBucket } from './dailyUsage'
+import { listAiCalls } from './aiLedgerService'
 import { fetchModelCatalogue } from './openRouterClient'
+import { getSettings, setSettings } from './settingsService'
 
 // Which model is asked, and how much may be spent asking.
 //
@@ -47,6 +67,8 @@ interface AiConfigState {
   /** See AiConfig.additions. Here, not in settings.json, for the reason the watch is: each lets a
    * model be asked, and is changed only through setAiConfig. */
   additions: AiAdditionsConfig
+  /** See AiConfig.roles (V7.2-R Stage 1). Set only by applyAiRoles, after its confirmation. */
+  roles: AiRoles | null
 }
 
 interface StoredCatalogue {
@@ -148,7 +170,9 @@ async function load(): Promise<AiConfigState> {
     watchPaper: DEFAULT_AI_WATCH_PAPER,
     callsPerMinute: isCallsPerMinute(raw.callsPerMinute) ? raw.callsPerMinute : DEFAULT_AI_CALLS_PER_MINUTE,
     // On unless switched off: the user chose them on (6 October 2026), within the daily budget.
-    additions: raw.additions === undefined ? { ...DEFAULT_AI_ADDITIONS } : healAiAdditions(raw.additions)
+    additions: raw.additions === undefined ? { ...DEFAULT_AI_ADDITIONS } : healAiAdditions(raw.additions),
+    // Healed like the watch: a role whose model is no longer enabled is no role, and its callers ask the decider.
+    roles: healAiRoles(raw.roles, enabledModels)
   }
   // Healed against the watch as it was just healed: paper trades follow one of ITS models.
   cache.watchPaper = healAiWatchPaper(raw.watchPaper, cache.watch.models)
@@ -192,7 +216,8 @@ function statusFor(state: AiConfigState): AiConfig {
     watch: { ...state.watch, models: [...state.watch.models] },
     watchPaper: { ...state.watchPaper },
     callsPerMinute: state.callsPerMinute,
-    additions: { ...state.additions }
+    additions: { ...state.additions },
+    roles: state.roles === null ? null : { ...state.roles }
   }
 }
 
@@ -243,6 +268,16 @@ export async function setAiConfig(patch: AiConfigPatch): Promise<AiConfig> {
   // The default is always enabled. Otherwise disabling it would leave every run that names no
   // model pointing at one the user had just switched off.
   if (!enabledModels.includes(defaultModel)) enabledModels = [defaultModel, ...enabledModels]
+  // A role's model, like the watch's, is not quietly dropped: its callers would move to the decider, at its
+  // price, with nothing having said so (V7.2-R Stage 1).
+  for (const [role, model] of [
+    ['first look', state.roles?.gate ?? null],
+    ['summaries', state.roles?.summarize ?? null]
+  ] as const) {
+    if (model !== null && !enabledModels.includes(model)) {
+      throw new Error(`${model} takes the watch's ${role} under "Who asks which model". Choose another model for it there before disabling this one.`)
+    }
+  }
 
   let route = state.route
   if (patch.route !== undefined) {
@@ -310,7 +345,11 @@ export async function setAiConfig(patch: AiConfigPatch): Promise<AiConfig> {
     // repaired. Taking a model off its list could leave a dearer one asked about every event.
     const stranded = state.watch.models.find((model) => !enabledModels.includes(model))
     if (stranded !== undefined && state.watch.enabled) {
-      throw new Error(`${stranded} is one of the models the watch asks. Switch the watch off before disabling it.`)
+      // What else asks it, so that the way out is named (V7.2-R Stage 1).
+      const users = modelsInUse(statusFor(state), ((await getSettings()).bots ?? []) as RoutedBot[]).get(stranded) ?? ['the watch']
+      throw new Error(
+        `${stranded} is one of the models the watch asks (asked by: ${users.join(', ')}). Move them to your choices under Settings › AI, "Who asks which model", or switch the watch off before disabling it.`
+      )
     }
     if (stranded !== undefined) watch = { ...state.watch, models: state.watch.models.filter((model) => enabledModels.includes(model)) }
   }
@@ -367,9 +406,130 @@ export async function setAiConfig(patch: AiConfigPatch): Promise<AiConfig> {
     additions = healAiAdditions({ ...state.additions, ...Object.fromEntries(Object.entries(asked).filter(([, value]) => typeof value === 'boolean')) })
   }
 
-  cache = { ...state, defaultModel, enabledModels, route, dailyCapUsd, watch, watchPaper, callsPerMinute, additions }
+  cache = { ...state, defaultModel, enabledModels, route, dailyCapUsd, watch, watchPaper, callsPerMinute, additions, roles: state.roles }
   await persist()
   return statusFor(cache)
+}
+
+// WHO ASKS WHICH MODEL, AND ONE MOVE TO THE ROLES CHOSEN (V7.2-R Stage 1, 20 October 2026; shared/aiRouting.ts).
+// The preview is free: it reads the settings, the bots, the ledger and the price list. The move changes what
+// asks by itself -- the watch's list and gate, the model its paper trades follow, the additions' models, every
+// running paid bot -- and is applied only with the token of the preview its confirmation was written from: a
+// setting or a price that changed in between refuses it, and the next preview says the new figures.
+
+const DAY_SEC = 86_400
+/** The days of the ledger a caller's recent rate and token counts are read from. */
+const RECENT_DAYS = 7
+
+/** A caller's recent calls a day and the token counts its question takes, from the ledger's last week. */
+function recentOf(rows: readonly AiCallRecord[], match: (row: AiCallRecord) => boolean): { callsADay: number; tokens: { prompt: number; completion: number } | null } {
+  const mine = rows.filter(match)
+  const days = new Set(mine.map((row) => Math.floor(row.at / DAY_SEC))).size
+  return { callsADay: days === 0 ? 0 : mine.length / Math.max(1, Math.min(RECENT_DAYS, days)), tokens: medianTokensOf(mine) }
+}
+
+/** One call of `model` for a caller: its own calls under the caller's question, else the price list at the
+ * caller's token counts. */
+async function perCallOf(model: string, match: (row: AiCallRecord) => boolean, tokens: { prompt: number; completion: number } | null): Promise<{ usd: number | null; basis: 'history' | 'pricing' | 'unknown' }> {
+  const history = (await listAiCalls({ model, limit: 400 })).rows.filter((row) => match(row) && row.status !== 'failed' && row.usage.costUsd !== null)
+  if (history.length > 0) return { usd: history.reduce((sum, row) => sum + (row.usage.costUsd ?? 0), 0) / history.length, basis: 'history' }
+  const priced = priceOfCall(await findAiModel(model), tokens)
+  return priced === null ? { usd: null, basis: 'unknown' } : { usd: priced, basis: 'pricing' }
+}
+
+/** The bots on file, as routing reads them. */
+async function botsOnFile(): Promise<Bot[]> {
+  return ((await getSettings()).bots ?? []) as Bot[]
+}
+
+/** What a move to these roles would change and cost. Free. */
+export async function previewAiRoles(choice: RoleChoice): Promise<RoutingPreview> {
+  const state = await load()
+  const problem = roleChoiceProblem(choice, state.enabledModels)
+  if (problem !== null) throw new Error(problem)
+  const bots = await botsOnFile()
+  const plan = rolesPlanOf(statusFor(state), bots as RoutedBot[], choice)
+  const nowSec = Math.floor(Date.now() / 1000)
+  const recent = (await listAiCalls({ sinceSec: nowSec - RECENT_DAYS * DAY_SEC, limit: 5000 })).rows
+  const costs: RoutingCost[] = []
+  // A caller that has not asked yet is priced at the token counts of its kind of call, else of any call here.
+  const anyTokens = medianTokensOf(recent)
+  const priced = async (id: string, label: string, models: string[], match: (row: AiCallRecord) => boolean, on: boolean, mostCallsADay: number | null, callsADay?: number, kindOf?: (row: AiCallRecord) => boolean): Promise<void> => {
+    const rate = recentOf(recent, match)
+    const tokens = rate.tokens ?? (kindOf === undefined ? null : medianTokensOf(recent.filter(kindOf))) ?? anyTokens
+    const each = await Promise.all(models.map((model) => perCallOf(model, match, tokens)))
+    const perEvent = each.every((entry) => entry.usd !== null) ? each.reduce((sum, entry) => sum + (entry.usd ?? 0), 0) : null
+    const calls = callsADay ?? rate.callsADay
+    costs.push({
+      id,
+      label,
+      models,
+      perCallUsd: each.map((entry) => entry.usd),
+      basis: each.map((entry) => entry.basis),
+      callsADay: calls,
+      mostCallsADay,
+      // A caller that asks nothing a day costs nothing a day, whatever its price.
+      expectedUsd: calls === 0 ? 0 : perEvent === null ? null : perEvent * calls,
+      mostUsd: mostCallsADay === null ? null : mostCallsADay === 0 ? 0 : perEvent === null ? null : perEvent * mostCallsADay,
+      on
+    })
+  }
+  // The watch: each event put to its list, at its recent events a day; at most its own limit of events.
+  const watchEvents = new Set(recent.filter((row) => row.source === 'watch' && row.eventId !== undefined).map((row) => `${Math.floor(row.at / DAY_SEC)}:${row.eventId}`)).size
+  const watchDays = new Set(recent.filter((row) => row.source === 'watch').map((row) => Math.floor(row.at / DAY_SEC))).size
+  await priced('watch', 'The watch', plan.watch.models, (row) => row.source === 'watch', plan.watch.enabled, plan.watch.maxEventsPerDay, watchDays === 0 ? 0 : watchEvents / Math.max(1, watchDays))
+  for (const kind of AI_ADDITION_KINDS) {
+    const model = kind === 'exit' || kind === 'review' ? plan.defaultModel : (plan.roles.summarize ?? plan.defaultModel)
+    await priced(`addition:${kind}`, kind, [model], (row) => row.source === 'addition' && row.promptVersion === AI_ADDITION_PROMPT_VERSIONS[kind], state.additions[kind] && plan.watch.enabled, AI_ADDITION_DAILY_LIMITS[kind], undefined, (row) => row.source === 'addition')
+  }
+  for (const bot of bots) {
+    if (bot.archived || !paidBot(bot)) continue
+    const model = plan.bots.some((entry) => entry.id === bot.id) ? plan.defaultModel : (bot.aiModel ?? plan.defaultModel)
+    // GPT Intraday asks once a decision bar, 96 fifteen-minute bars a day over its cadence; a reviewed strategy at its recent rate.
+    const intraday = bot.strategyId === GPT_INTRADAY_STRATEGY_ID
+    const decisions = intraday ? 96 / Math.max(1, bot.aiEveryBars ?? 1) : undefined
+    await priced(`bot:${bot.id}`, `Bot ${bot.name}`, [model], (row) => row.source === 'bot' && (intraday ? row.promptVersion === GPT_PROMPT_VERSION : row.strategyId === bot.strategyId), bot.enabled, decisions ?? null, decisions)
+  }
+  const on = costs.filter((entry) => entry.on)
+  // A total is known only where every caller that is on has its figure: a caller without a limit of its own
+  // counts at its expected rate in the most.
+  const sum = (key: 'expectedUsd' | 'mostUsd'): number | null => {
+    const figures = on.map((entry) => (key === 'mostUsd' && entry.mostCallsADay === null ? entry.expectedUsd : entry[key]))
+    return figures.some((figure) => figure === null) ? null : figures.reduce<number>((total, figure) => total + (figure ?? 0), 0)
+  }
+  const body = { plan, costs, expectedDailyUsd: sum('expectedUsd'), mostDailyUsd: sum('mostUsd'), capUsd: state.dailyCapUsd }
+  const round = (value: number | null): number | null => (value === null ? null : Math.round(value * 10_000) / 10_000)
+  const token = createHash('sha256')
+    .update(JSON.stringify({ plan, costs: costs.map((entry) => ({ ...entry, perCallUsd: entry.perCallUsd.map(round), expectedUsd: round(entry.expectedUsd), mostUsd: round(entry.mostUsd), callsADay: round(entry.callsADay) })), cap: state.dailyCapUsd }))
+    .digest('hex')
+    .slice(0, 16)
+  return { ...body, token, text: routingPreviewText(body) }
+}
+
+/** The move to roles, with the token of the preview its confirmation stated. What it changes, it changes
+ * together: the default model, the roles, the watch's list and gate (on or off as it was, its limit and band
+ * kept), the model its paper trades follow (their stake and caps kept), and every running paid bot re-pinned
+ * from now on, its earlier decisions kept as the model that made them. */
+export async function applyAiRoles(request: { choice: RoleChoice; token: string }): Promise<{ config: AiConfig; movedBots: { id: string; name: string; from: string; to: string }[] }> {
+  const preview = await previewAiRoles(request.choice)
+  if (typeof request.token !== 'string' || request.token !== preview.token) {
+    throw new Error('Something changed since this move was priced: a setting, a bot or a price. Look at the move again; nothing was changed.')
+  }
+  const state = await load()
+  const { plan } = preview
+  const watchProblem = aiWatchProblem(plan.watch, state.enabledModels)
+  if (watchProblem !== null) throw new Error(watchProblem)
+  const paperProblem = aiWatchPaperProblem(plan.watchPaper, plan.watch.models)
+  if (paperProblem !== null) throw new Error(paperProblem)
+  const nowSec = Math.floor(Date.now() / 1000)
+  if (plan.bots.length > 0) {
+    const moving = new Set(plan.bots.map((entry) => entry.id))
+    const bots = await botsOnFile()
+    await setSettings({ bots: bots.map((bot) => (moving.has(bot.id) ? repinBot(bot, plan.defaultModel, state.defaultModel, nowSec) : bot)) })
+  }
+  cache = { ...state, defaultModel: plan.defaultModel, roles: plan.roles, watch: { ...plan.watch, models: [...plan.watch.models] }, watchPaper: { ...plan.watchPaper } }
+  await persist()
+  return { config: statusFor(cache), movedBots: plan.bots }
 }
 
 /** The model a request will be asked of. A named model has to be one the user enabled: the

@@ -118,15 +118,16 @@ export function ModelsTab(): React.JSX.Element {
         <p style={{ ...noteStyle, marginBottom: '0.9rem' }}>
           Every model {AI_PROVIDER_LABEL} offers is reachable with the one key. Enable the ones you want to compare; the
           default is what a backtest, the chart and a newly enabled bot ask. Only models that can be held to a strict JSON
-          schema can be enabled, since an answer that is not in the agreed shape is refused. A running bot keeps the model
-          it was switched on with until it is switched off and on again.
+          schema can be enabled, since an answer that is not in the agreed shape is refused. What asks by itself -- the
+          watch, its paper trades, the AI additions and each running bot -- keeps the model it was switched on with: &quot;Who
+          asks which model&quot; below shows each of them and moves them all to your choices at once.
         </p>
         <p style={{ ...noteStyle, marginBottom: '0.9rem' }}>
           A model that reasons before it answers can also be enabled at a lower reasoning effort. Most of what a call
           costs, and most of the wait, is that reasoning, so the same model told to think less is cheaper and faster. It
           is listed as a second model, with the effort after an @, and can be made the default, benchmarked and routed to
-          like any other. Whether it answers as well is not assumed: tick both on AI Benchmark and it puts the same
-          questions to each.
+          like any other. It is asked only where something names it: a role below, a bot, a benchmark or a route. Whether
+          it answers as well is not assumed: tick both on AI Benchmark and it puts the same questions to each.
         </p>
         {error !== null && <p style={{ ...noteStyle, color: 'var(--down)', marginBottom: '0.7rem' }}>{error}</p>}
 

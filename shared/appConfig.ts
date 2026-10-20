@@ -1,5 +1,6 @@
 import { CACHE_RETENTION_DAYS, type RecordSizes } from './retention'
-import { AI_ADDITION_DAILY_LIMITS, AI_ADDITION_PROMPT_VERSIONS, AI_ADDITION_SCHEMA_VERSIONS, healAiAdditions } from './aiAdditions'
+import { AI_ADDITION_DAILY_LIMITS, AI_ADDITION_PROMPT_VERSIONS, AI_ADDITION_ROLES, AI_ADDITION_SCHEMA_VERSIONS, healAiAdditions } from './aiAdditions'
+import { AI_ROUTING_VERSION, BOT_CATCHUP_HOURS } from './aiRouting'
 import { AI_CONFIRM_PROMPT_VERSION } from './aiConfirm'
 import { AI_CONTEXT_VERSION } from './aiContext'
 import {
@@ -145,6 +146,9 @@ export const ENGINE_CONSTANTS = {
   sounds: { scores: SOUND_SCORES, topChangeChimeSeconds: TOP_CHANGE_CHIME_SECONDS },
   aiWatch: { freshSeconds: AI_WATCH_FRESH_SECONDS, breakerCalls: AI_WATCH_BREAKER_CALLS, minConfidence: GPT_MIN_CONFIDENCE },
   aiAdditions: { dailyLimits: AI_ADDITION_DAILY_LIMITS, prompts: AI_ADDITION_PROMPT_VERSIONS, schemas: AI_ADDITION_SCHEMA_VERSIONS },
+  /** Who asks which model (V7.2-R Stage 1, 20 October 2026): the additions' roles, and how far back a paid bot
+   * buys the bars it missed. */
+  aiRouting: { version: AI_ROUTING_VERSION, additionRoles: AI_ADDITION_ROLES, botCatchupHours: BOT_CATCHUP_HOURS },
   prompts: {
     opportunity: AI_OPPORTUNITY_PROMPT_VERSION,
     opportunityMarket: AI_OPPORTUNITY_MARKET_PROMPT_VERSION,

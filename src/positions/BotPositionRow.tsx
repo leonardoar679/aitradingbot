@@ -23,7 +23,9 @@ export function BotPositionRow({ bot }: { bot: Bot }): React.JSX.Element {
     bot.aiModel,
     bot.aiConfirm,
     bot.aiEveryBars,
-    gptRouteOf(bot) ?? undefined
+    gptRouteOf(bot) ?? undefined,
+    bot.aiModelHistory,
+    bot.id
   )
   const exchangeName = EXCHANGES.find((e) => e.id === bot.exchange)?.name ?? bot.exchange
   // Only a position this bot actually entered is shown as the bot's -- see

@@ -5,6 +5,7 @@ import { join } from 'path'
 import {
   AI_ADDITION_DAILY_LIMITS,
   AI_ADDITION_KINDS,
+  AI_ADDITION_ROLES,
   dailySubjectId,
   parseDailySummaryRequest,
   validateDailySummary,
@@ -41,6 +42,7 @@ import {
   type ReviewOther,
   type TradeReview
 } from '../../shared/aiAdditions'
+import { servedFamilyOf } from '../../shared/aiRouting'
 import { AI_OPPORTUNITY_LIVE_PROMPT_VERSIONS } from '../../shared/aiOpportunity'
 import { averageCallCostUsd, budgetProblem, estimateCallCostUsd } from '../../shared/aiCost'
 import { HIGH_IMPACT } from '../../shared/alerts'
@@ -148,7 +150,8 @@ export async function askAddition<T>(input: {
   validate: (value: unknown) => Verdict<T>
 }): Promise<AdditionOutcome<T>> {
   const config = await getAiConfig()
-  const model = additionsModelOf(config)
+  // By role once roles are applied (V7.2-R Stage 1): the summaries' model, or the decider's.
+  const model = additionsModelOf(config, input.kind)
   const key = additionCacheKey(input.kind, model, input.payload)
   const held = await readCached(key, input.kind)
   if (held !== null) {
@@ -168,7 +171,7 @@ export async function askAddition<T>(input: {
   })
   if (problem !== null) return { status: 'skipped', reason: problem }
   try {
-    return await paid(input, model, key)
+    return await paid(input, model, key, config.roles === null ? undefined : AI_ADDITION_ROLES[input.kind])
   } finally {
     await inTurn(async () => {
       const left = (inFlight.get(input.kind) ?? 1) - 1
@@ -178,7 +181,7 @@ export async function askAddition<T>(input: {
   }
 }
 
-async function paid<T>(input: Parameters<typeof askAddition<T>>[0], model: string, key: string): Promise<AdditionOutcome<T>> {
+async function paid<T>(input: Parameters<typeof askAddition<T>>[0], model: string, key: string, role?: 'decide' | 'summarize'): Promise<AdditionOutcome<T>> {
   try {
     await assertAiBudget()
   } catch (error) {
@@ -220,7 +223,8 @@ async function paid<T>(input: Parameters<typeof askAddition<T>>[0], model: strin
     referencePrice: input.referencePrice ?? 0,
     // An addition makes no call on the market: there is nothing here to score as one.
     recommendation: null,
-    detail: null
+    detail: null,
+    ...(role === undefined ? {} : { role })
   }
   const finishedAt = (): number => Math.floor(Date.now() / 1000)
 
@@ -250,7 +254,10 @@ async function paid<T>(input: Parameters<typeof askAddition<T>>[0], model: strin
   const usage = await withCost(result.usage, model)
   await record('spend record', recordAiSpend(usage.costUsd ?? 0))
   let verdict: Verdict<T>
-  if (result.finishReason === 'length') verdict = { ok: false, reason: 'The answer was cut off at the output limit before it finished.' }
+  // Another provider's model answering is refused (V7.2-R Stage 1): what was asked is what may answer.
+  const family = servedFamilyOf(model, result.servedModel)
+  if (family === 'other') verdict = { ok: false, reason: `The answer came from ${result.servedModel}, not from ${model}, the model asked.` }
+  else if (result.finishReason === 'length') verdict = { ok: false, reason: 'The answer was cut off at the output limit before it finished.' }
   else {
     let parsed: unknown
     try {
@@ -279,6 +286,7 @@ async function paid<T>(input: Parameters<typeof askAddition<T>>[0], model: strin
       status: verdict.ok ? 'ok' : 'rejected',
       provider: result.provider,
       ...(result.servedModel !== null ? { servedModel: result.servedModel } : {}),
+      ...(family === 'variant' || family === 'other' ? { servedMismatch: family } : {}),
       usage,
       error: verdict.ok ? null : verdict.reason,
       ...(verdict.ok ? {} : { answerExcerpt: result.content.slice(0, ANSWER_EXCERPT_CHARS) }),
@@ -599,18 +607,22 @@ const SAMPLE_PAYLOAD: Record<AiAdditionKind, unknown> = {
  * it reads the setting, the ledger and the price list. */
 export async function getAiAdditionsStatus(): Promise<AiAdditionsStatus> {
   const config = await getAiConfig()
-  const model = additionsModelOf(config)
+  const model = additionsModelOf(config, 'news')
   const nowSec = Math.floor(Date.now() / 1000)
   const page = await listAiCalls({ source: 'addition', sinceSec: Math.floor(nowSec / DAY) * DAY, limit: LEDGER_ROWS_READ })
-  const info = await findAiModel(model)
   const perCall = {} as AiAdditionsStatus['perCall']
   const today = {} as AiAdditionsStatus['today']
+  const models = {} as AiAdditionsStatus['models']
   for (const kind of AI_ADDITION_KINDS) {
+    // Each addition's own model: two of them once roles are applied (V7.2-R Stage 1).
+    const mine = additionsModelOf(config, kind)
+    models[kind] = mine
+    const info = await findAiModel(mine)
     today[kind] = additionCallsToday(page.rows, kind, nowSec)
-    const history = await listAiCalls({ model, promptVersion: AI_ADDITION_PROMPT_VERSIONS[kind], limit: COST_HISTORY_ROWS })
+    const history = await listAiCalls({ model: mine, promptVersion: AI_ADDITION_PROMPT_VERSIONS[kind], limit: COST_HISTORY_ROWS })
     const measured = averageCallCostUsd(history.rows)
     const priced = info === null ? null : estimateCallCostUsd(info, additionPromptChars(kind, SAMPLE_PAYLOAD[kind]))
     perCall[kind] = measured !== null ? { usd: measured, basis: 'history' } : priced !== null ? { usd: priced, basis: 'pricing' } : { usd: null, basis: 'unknown' }
   }
-  return { model, watchOn: config.watch.enabled, additions: config.additions, limits: { ...AI_ADDITION_DAILY_LIMITS }, today, perCall }
+  return { model, models, byRole: config.roles !== null, watchOn: config.watch.enabled, additions: config.additions, limits: { ...AI_ADDITION_DAILY_LIMITS }, today, perCall }
 }

@@ -9,6 +9,7 @@ import { ModelsTab } from '../agents/ModelsTab'
 import { ModelRegistryCard } from '../agents/ModelRegistryCard'
 import { UsageTab } from '../agents/UsageTab'
 import { AiAdditionsCard } from '../agents/AiAdditionsCard'
+import { RoutingCard } from '../agents/RoutingCard'
 import { EffectiveConfigCard } from './EffectiveConfigCard'
 import type { Page } from '../navigation/pages'
 import type { UiMode } from '../../shared/uiMode'
@@ -121,6 +122,8 @@ export function SettingsPanel({
  * notifications are in the window's language (V6 Stage 14); the rest is for an expert, in English. */
 function AdvancedSettings({ theme, setTheme, onNavigate }: { theme: Theme; setTheme: (theme: Theme) => void; onNavigate: (page: Page) => void }): React.JSX.Element {
   const { t } = useI18n()
+  // A move to roles changes what the models and additions cards show: they are read again after one.
+  const [routingVersion, setRoutingVersion] = useState(0)
   return (
     <>
       <SectionHeading title={t('Notifications')} note={t('What each notice sounds like, how loud, and when it is quiet. The switch for notices themselves is on Essentials.')} />
@@ -166,10 +169,11 @@ function AdvancedSettings({ theme, setTheme, onNavigate }: { theme: Theme; setTh
         title="AI"
         note="Which models may be asked, the default and the route, what each model is and has done, the daily budget, the pace, the AI additions, and what asking has cost. The watch is switched on and off on Opportunities, beside what it has asked."
       />
-      <ModelsTab />
+      <ModelsTab key={`models-${routingVersion}`} />
+      <RoutingCard onMoved={() => setRoutingVersion((version) => version + 1)} />
       <ModelRegistryCard />
       <UsageTab />
-      <AiAdditionsCard />
+      <AiAdditionsCard key={`additions-${routingVersion}`} />
 
       <SectionHeading
         title="Effective configuration"

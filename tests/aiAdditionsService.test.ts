@@ -702,6 +702,9 @@ describe('what Settings › AI shows', () => {
     await setAiConfig({ watch: ON })
     expect(await getAiAdditionsStatus()).toEqual({
       model: A,
+      // Before roles (V7.2-R Stage 1) every addition asks the model the watch's paper trades follow, here its first.
+      models: { news: A, why: A, exit: A, review: A, daily: A },
+      byRole: false,
       watchOn: true,
       additions: { news: true, why: true, exit: true, review: true, daily: true },
       limits: { news: 40, why: 20, exit: 30, review: 20, daily: 1 },

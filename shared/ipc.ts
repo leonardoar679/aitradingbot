@@ -110,6 +110,10 @@ export const IpcChannel = {
   AiGetExperiment: 'ai:getExperiment',
   AiRecordExperiment: 'ai:recordExperiment',
   AiAdditionsStatus: 'ai:additionsStatus',
+  // Who asks which model, and one move to the roles chosen (V7.2-R Stage 1): the preview is free; the move
+  // changes what asks by itself and is applied only with the preview's token, after its confirmation.
+  AiRoutingPreview: 'ai:routingPreview',
+  AiRoutingApply: 'ai:routingApply',
   AiConcludeMove: 'ai:concludeMove',
   AiReviewTrade: 'ai:reviewTrade',
   AiExitCheck: 'ai:exitCheck',
@@ -766,6 +770,10 @@ export interface Bot {
    * part of which model made each decision. It is also written ONLY there, after the confirmation
    * that states it, so a bot never starts asking a second model because a setting changed. */
   aiRoute?: AiRoute
+  /** The models this bot was pinned to before `aiModel`, each with when it stopped (V7.2-R Stage 1): a bar
+   * decided before is read from that model's answers and never asked again; only the bars from the move
+   * on are asked of the new model. Absent on a bot never moved. */
+  aiModelHistory?: { model: string; untilSec: number }[]
 }
 
 /** A completed dry-run session, recorded when a bot is disabled — one row per enable/disable
