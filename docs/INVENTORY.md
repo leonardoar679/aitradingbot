@@ -59,6 +59,7 @@ Taken on 5 October 2026, at commit `aef376d`.
 | | Benchmark | Models on the same questions, routes, the event benchmark, experiments; since 6 October 2026 the quant, hybrid and buy-and-hold rows and "Does AI help?" | AI Benchmark |
 | | Models | Which models may be asked, the default, routing to a second model | Settings › AI |
 | | Who asks which model (added 20 October 2026, V7.2-R Stage 1) | Every caller that asks a model by itself (the watch, its paper trades, the five additions, each paid bot), the model it asks now and where that comes from, its calls and cost today and the model that answered; three roles (decides, first look, summaries) and one move that puts every caller on them, priced and confirmed before it is applied; the models nothing asks, which can be disabled | Settings › AI |
+| | Research record (added 20 October 2026, V7.2-R Stage 2) | The folder kept for analysis on another machine (`trader-spider-research/`: the configuration with every secret field left out, the errors and warnings, every AI call with the model asked and the one that answered, each paper trade's opening and end, the hour's and the day's reports), its exports (a ZIP every day at 00:05 UTC and on Export now, the newest fourteen kept: the folder and the fortnight's records with a manifest of every file's size and SHA-256, never a key file), Open folder | Settings › Advanced |
 | | Model registry (added 8 October 2026, not an old card) | Each model the app may ask: the catalogue's entry, thirty days of the ledger, its health by the daily look at its last thirty closed trades (DEGRADED, told once a day), its leaderboard row by event type and Bitcoin's regime, and the promotion checklist under it; shown, never stored, promoted or switched off | Settings › AI |
 | | Strategy health (added 8 October 2026, not an old card) | On each bot's card: its last thirty closed paper trades against what its strategy made a trade where it was measured (profit factor, win rate, hold); a flag and one notice a day, and the bot keeps running | Strategies › Active Runs |
 | | Usage | Daily budget, pace, spend by model today and over 30 days | Settings › AI |
@@ -236,6 +237,11 @@ And a ninth on 6 October 2026:
   call, pair, cap tier, regime, model, kind, news, vote, and the pair's move over each window
   against the exit -- read from the records on a click, with a CSV. The market's regime is written
   on each paper trade's mark when it opens, as a record.
+- **`ResearchReportScheduler`** (20 October 2026, V7.2-R Stage 2; `src/performance/researchReports.ts`)
+  looks every five minutes and, once an hour has closed, builds the hour's report -- the session report
+  over it, the forecast's section over it, the paper laboratory's and the forecast trader's standing --
+  and after 00:10 UTC the day's, each once, and hands them to the main process to keep in the research
+  folder's `reports/`. It reads the records, asks nothing and opens nothing.
 - **`ExperimentScheduler`** (8 October 2026; `shared/experimentRun.ts`) builds the report of one of
   the app's own runs once it has ended -- the session report over its span, the document's five
   further gates, "Does AI help?" over its events, the costs and the verdict -- from the records, and
@@ -262,7 +268,13 @@ The main process also runs loops that need no window at all:
 - `forecastDataService` (added 13 October 2026, V6 Stage 2) keeps ninety days of five-minute bars
   for the research's pairs and Bitcoin and ether in `forecastData/`, read from the public data host
   a few minutes after the research first names its pairs and a page a pair after every five-minute
-  close. Public data only.
+  close. Since 20 October 2026 a usual pass stops taking pairs after sixty seconds, so that a slow host
+  cannot carry it past the next close; the pairs not reached are read by the next pass. Public data only.
+- `researchFolderService` (added 20 October 2026, V7.2-R Stage 2) keeps `trader-spider-research/`: the
+  configuration's snapshots at start and hourly, the main process's errors and warnings and every AI call
+  as the ledger appends it (`onAiCallAppended`), each paper order's life as the settings are written
+  (`onSettingsWritten`), the reports the window hands it, and the daily export at 00:05 UTC. It reads the
+  app's own files through an allowlist that names no key file, asks no model and places nothing.
 - `forecastTrainingService` (added 13 October 2026, V6 Stage 5) fits the forecast's models in a
   worker thread of their own (`electron/forecast/trainWorker.ts`, through `forecastWorkerService`):
   a first fit once the bars are there for twenty pairs, the walk forward after it, and a refit every
@@ -321,6 +333,7 @@ reaches it. A call may span lines. The `news` channels were added after: four in
 | `ai` | 28: key, signal tapes, config, calls, usage, entry confirmation, benchmark, opportunities, experiments; since 20 October 2026 who asks which model (the routing preview, free, and the move to roles, applied only with the preview's token); and since 6 October 2026 the AI additions' status, the conclusion to "Why did it move?" (paid, on a click), the reviewer (paid, before a paper trade of the watch's, only when something stands out) and the exit check (paid, on one of the app's own open paper trades, only when something about it has changed) | Agents' tabs, Backtest, Bots, the watch and its paper writer; the exit check's look; the additions' card under Settings › AI, the news analyst's readings and the reviewer's verdicts read from the ledger, the Why window's conclusion, and the exit check's card on Performance |
 | `liveTrading` | 19: status, limits, kill switch, arm, positions, orders, watchers, TWAP | The live trading bar, Settings, Executors, Positions, `LiveOrderScheduler`, Portfolio |
 | `executors` | `placeLiveOrder`, `placeLiveLimitOrder` | Executors only |
+| `researchFolder` | 4 (added 20 October 2026, V7.2-R Stage 2): status, export now, open the folder, keep a report | Settings › Advanced › Research record, and `ResearchReportScheduler` (the hour's and the day's reports) |
 | `forecast` | 11 (added 13 October 2026, V6 Stages 7-15): state, every pair's forecast, a pair's, its history, the ranking, a pair's decision, the Lab, a tested hour's replay, bars, the record over a span (V6 Stage 15), updates | Home, Predictions and the drawer, TRADE THIS, the forecast trader, the Forecast Lab, the top prediction's chime, and an experiment's report |
 
 **Nothing in `src/` calls `app:ping` or `app:getVersion`.** Both are left from the project template.

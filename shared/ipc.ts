@@ -114,6 +114,12 @@ export const IpcChannel = {
   // changes what asks by itself and is applied only with the preview's token, after its confirmation.
   AiRoutingPreview: 'ai:routingPreview',
   AiRoutingApply: 'ai:routingApply',
+  // The research folder (V7.2-R Stage 2): its status, an export on a click, the folder opened, the window's
+  // reports written into it. Nothing on these reads a key, asks a model or places an order.
+  ResearchFolderStatus: 'researchFolder:status',
+  ResearchFolderExport: 'researchFolder:export',
+  ResearchFolderOpen: 'researchFolder:open',
+  ResearchFolderWriteReport: 'researchFolder:writeReport',
   AiConcludeMove: 'ai:concludeMove',
   AiReviewTrade: 'ai:reviewTrade',
   AiExitCheck: 'ai:exitCheck',

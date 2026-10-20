@@ -4,6 +4,7 @@ import type { FuturesCloseResult, FuturesReadout } from '../shared/futuresPositi
 import type { ProtectiveStop } from '../shared/futuresStops'
 import type { PricePrediction } from '../shared/forecast/prediction'
 import type { RoleChoice, RoutingPreview } from '../shared/aiRouting'
+import type { ResearchExport, ResearchStatus } from '../shared/research'
 import type { TradeDecision } from '../shared/forecast/tradeDecision'
 import type { ForecastLabView, ForecastReplay } from '../shared/forecast/labView'
 import type { ForecastRanking as ForecastRankingView } from '../shared/forecast/ranking'
@@ -485,6 +486,14 @@ const api = {
       ipcRenderer.on(IpcChannel.ExperimentUpdate, handler)
       return () => ipcRenderer.removeListener(IpcChannel.ExperimentUpdate, handler)
     }
+  },
+  // The research folder (V7.2-R Stage 2): free to read and to export; nothing here reads a key or places anything.
+  researchFolder: {
+    status: (): Promise<ResearchStatus> => ipcRenderer.invoke(IpcChannel.ResearchFolderStatus),
+    exportNow: (): Promise<ResearchExport> => ipcRenderer.invoke(IpcChannel.ResearchFolderExport),
+    open: (): Promise<{ ok: boolean; problem: string | null }> => ipcRenderer.invoke(IpcChannel.ResearchFolderOpen),
+    writeReport: (request: { kind: 'hour' | 'day'; stamp: string; report: unknown }): Promise<{ ok: boolean; path: string }> =>
+      ipcRenderer.invoke(IpcChannel.ResearchFolderWriteReport, request)
   },
   records: {
     refusal: (record: PaperRefusalRecord): Promise<PaperRefusalRecord | null> => ipcRenderer.invoke(IpcChannel.RecordsRefusal, record),

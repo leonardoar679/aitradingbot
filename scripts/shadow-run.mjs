@@ -75,6 +75,7 @@
 // and once an hour as the last hour's report (hour-reports/), so a day is whole across segments.
 
 import { createRequire } from 'node:module'
+import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -855,6 +856,28 @@ async function main() {
     await new Promise((r) => setTimeout(r, 2000))
   })
   await shot(`s${SEGMENT}-92-news`)
+
+  // The research record (V7.2-R Stage 2): the folder's export made as a person's Export now makes it, copied into
+  // the run's output, and read back by scripts/research-analyze.py, which exits 1 where one of its checks failed;
+  // and the Research record card, for the record.
+  try {
+    const made = await page.evaluate(() => window.api.researchFolder.exportNow())
+    const copy = path.join(OUT, `s${SEGMENT}-${made.name}`)
+    fs.copyFileSync(made.path, copy)
+    say(`research export: ${made.files} files, ${(made.bytes / 1e6).toFixed(1)} MB${made.skipped.length > 0 ? `, ${made.skipped.length} could not be read` : ''}, copied to ${copy}`)
+    const analyzed = spawnSync('python', ['scripts/research-analyze.py', copy, '--json', path.join(OUT, `s${SEGMENT}-research-analysis.json`)], { cwd: APP_DIR, encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024 })
+    fs.writeFileSync(path.join(OUT, `s${SEGMENT}-research-analysis.txt`), `${analyzed.stdout ?? ''}${analyzed.stderr ?? ''}`)
+    const checks = (analyzed.stdout ?? '').split('===== the checks')[1] ?? ''
+    say(`research analysis: exit ${analyzed.status}; ${checks.trim().split('\n').map((line) => line.trim()).join(' | ')}`)
+    await nav('Settings')
+    await page.evaluate(() => {
+      const heading = [...document.querySelectorAll('main *')].find((e) => e.children.length === 0 && e.textContent?.trim() === 'Research record')
+      heading?.scrollIntoView({ block: 'start' })
+    })
+    await shot(`s${SEGMENT}-96-research-record`)
+  } catch (failure) {
+    say(`the research export could not be made: ${failure?.stack ?? failure}`)
+  }
   segments[segments.length - 1].endedAt = Date.now()
   fs.writeFileSync(SEGMENTS_FILE, JSON.stringify(segments, null, 2))
 }

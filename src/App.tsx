@@ -36,6 +36,7 @@ import { WhyItMovedHost } from './news/WhyItMovedHost'
 import { subscribeAlerts, unseenCount } from './news/alertStore'
 import { PaperDigestScheduler } from './risk/PaperDigestScheduler'
 import { DailySummaryScheduler } from './performance/DailySummaryScheduler'
+import { ResearchReportScheduler } from './performance/ResearchReportScheduler'
 import { PaperPauseScheduler } from './risk/PaperPauseScheduler'
 import { RoutineScheduler } from './routines/RoutineScheduler'
 import { LiveTradingBar } from './livetrading/LiveTradingBar'
@@ -226,6 +227,11 @@ function App(): React.JSX.Element {
           for one paragraph, the fifth AI addition. It reads, builds and asks; it writes nothing. */}
       <ErrorBoundary label={msg("The daily summary")}>
         <DailySummaryScheduler />
+      </ErrorBoundary>
+      {/* The research folder's reports (V7.2-R Stage 2): the last completed hour's and the day before's, built
+          from the records and kept in <userData>/trader-spider-research/reports/. It reads and asks no model. */}
+      <ErrorBoundary label={msg("The research folder's reports")}>
+        <ResearchReportScheduler />
       </ErrorBoundary>
       {/* After a losing run, the watch's or the news rules' paper trades are paused until resumed
           on Risk & Safety. It writes the pause and says so; it opens and closes nothing. */}

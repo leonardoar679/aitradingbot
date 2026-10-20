@@ -195,6 +195,74 @@ describe('a page that does not come', () => {
   })
 })
 
+// V7.2-R Stage 2: a usual pass stops taking pairs at its deadline, so that the close is told in time to be
+// forecast and recorded; the pairs not reached are left for the next pass.
+describe('a slow data host', () => {
+  it('holds a first pass, which reads ninety days a pair, to no deadline', async () => {
+    const data = await service()
+    const binance = await import('../electron/services/exchanges/binance')
+    const symbols = ['BTCUSDT', 'ETHUSDT', 'AAAUSDT', 'BBBUSDT', 'CCCUSDT', 'DDDUSDT']
+    data.forecastDataForTest.setUniverse(symbols)
+    const real = vi.mocked(binance.fetchMarketData).getMockImplementation()!
+    vi.mocked(binance.fetchMarketData).mockImplementation(async (path, timeout) => {
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      return real(path, timeout)
+    })
+    try {
+      data.forecastDataForTest.setPassDeadline(50)
+      asked.length = 0
+      await data.forecastDataForTest.pass()
+      expect(new Set(asked.map((entry) => entry.symbol)).size).toBe(symbols.length)
+      expect(data.getForecastDataStatus().lastError ?? '').not.toMatch(/deadline/)
+    } finally {
+      vi.mocked(binance.fetchMarketData).mockImplementation(real)
+    }
+  })
+
+  it('stops a usual pass at its deadline and tells the close, the pairs not reached left for the next pass', async () => {
+    // A clock that moves on its own, set where a new bar has closed before each pass.
+    vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true })
+    const start = Math.floor(Date.now() / 300_000) * 300_000 + 20_000
+    vi.setSystemTime(start)
+    try {
+      const data = await service()
+      const binance = await import('../electron/services/exchanges/binance')
+      const symbols = ['BTCUSDT', 'ETHUSDT', 'AAAUSDT', 'BBBUSDT', 'CCCUSDT', 'DDDUSDT', 'EEEUSDT', 'FFFUSDT', 'GGGUSDT']
+      data.forecastDataForTest.setUniverse(symbols)
+      // A first pass reads every pair whole; it is not held to the deadline.
+      await data.forecastDataForTest.pass()
+      for (const symbol of symbols) data.forecastDataForTest.markReady(symbol)
+      const told: number[] = []
+      data.onForecastBars((closedAt) => told.push(closedAt))
+      // A bar closes; the host now takes 40 ms a page, and the deadline is 50 ms: three lanes reach a few pairs.
+      vi.setSystemTime(start + 300_000)
+      const real = vi.mocked(binance.fetchMarketData).getMockImplementation()!
+      vi.mocked(binance.fetchMarketData).mockImplementation(async (path, timeout) => {
+        await new Promise((resolve) => setTimeout(resolve, 40))
+        return real(path, timeout)
+      })
+      data.forecastDataForTest.setPassDeadline(50)
+      asked.length = 0
+      await data.forecastDataForTest.pass()
+      const reached = new Set(asked.map((entry) => entry.symbol))
+      expect(reached.size).toBeGreaterThan(0)
+      expect(reached.size).toBeLessThan(symbols.length)
+      // Bitcoin and ether lead the universe: read first.
+      expect(reached.has('BTCUSDT') && reached.has('ETHUSDT')).toBe(true)
+      expect(told).toEqual([lastClosedBarTime(Math.floor(Date.now() / 1000)) + FORECAST_BAR_SECONDS])
+      expect(data.getForecastDataStatus().lastError).toMatch(/stopped at its deadline with \d+ pairs left for the next/)
+      // The next pass, with time, reaches every pair.
+      vi.setSystemTime(start + 600_000)
+      data.forecastDataForTest.setPassDeadline(60_000)
+      asked.length = 0
+      await data.forecastDataForTest.pass()
+      expect(new Set(asked.map((entry) => entry.symbol)).size).toBe(symbols.length)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
 describe('a pair that left the research', () => {
   it("is brought up to date while the forecast owes it outcomes, and left once it owes none; the forecast's universe stays the research's", async () => {
     const data = await service()

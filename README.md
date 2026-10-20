@@ -237,7 +237,11 @@ A first start reads about 1,300 pages from the public data host the app already 
 second, a few minutes in all and under a sixth of Binance's per-minute budget; after that, one page a
 pair a few seconds after every five-minute close. A rate limit is obeyed: while its wait lasts no
 request is made, and the next pass carries on. A gap the exchange left is asked for again once a
-session. A page from a data host that serves another market than binance.com's (binance.us) is
+session. Since 20 October 2026 (V7.2-R Stage 2) a usual pass stops taking pairs after sixty seconds, so
+that a slow data host cannot carry it past the next close: the two-day run of 16-18 October lost six of
+192 quarter-hour forecasts to passes that waited on flapping Binance hosts until the close's moment to be
+recorded had gone. The pairs not reached keep their bars for the next pass, and the close is forecast
+without them; the first pass, which reads ninety days, is not held to it. A page from a data host that serves another market than binance.com's (binance.us) is
 refused and the pass ends there, so another exchange's prices never enter the forecast's history;
 its status names the host while that lasts. The files weigh about 100 MB for fifty pairs, and a month
 file whose month ended before the ninety days is deleted at start. It holds no key, asks no model and places nothing;
@@ -1682,6 +1686,56 @@ Since 8 October 2026 (the V5 document's §4–7 and §107; V5 Stage 1):
   migrated, and every value the heal changed — missing (it took its default), repaired, or clamped
   to a hard limit — with the file it came from.
 
+### The research record you can hand over
+
+Since 20 October 2026 (V7.2-R Stage 2; `electron/services/researchFolderService.ts`, `shared/research.ts`).
+For a run on another machine whose record is handed over for analysis, the app keeps a folder of its own,
+`<userData>/trader-spider-research/` (on Windows `%APPDATA%\newtradingbot\trader-spider-research`),
+written as it runs:
+
+- `config/`: the effective configuration, the AI config, who asks which model, and the settings, as JSON
+  with every secret field left out at any depth (a field named `apiKey`, `secret`, `passphrase`,
+  `password`, `token` and their kin; the old plain `apiKey` a settings file from before the encrypted
+  store may still hold among them). Written at start, hourly and before every export.
+- `logs/`: the main process's errors and warnings (`application.jsonl`, `errors.jsonl`), and every AI call
+  as the ledger appends it (`ai-requests.jsonl`: who asked, the role it played, the model asked, the model
+  that answered and its provider, the time it took, the tokens, the cost and how it came back; no fallback
+  model is ever asked). Each log is rotated past 20 MB into gzip'd numbered files, five kept.
+- `trades/`: each paper or demo order's opening (its parameters, and the mark it was opened under: the
+  forecast, its plan, the event or the story), its end with its result or its stop, and the paper account's
+  money, as the settings are written, a month file each. A real order is the live ledger's, not here.
+- `reports/`: the hour's report (the session report over the hour, the forecast's section over it, the
+  paper laboratory's and the forecast trader's standing) once each hour has closed, and the day's (the
+  daily report beside the same) after 00:10 UTC, built by the window from what the Performance page builds;
+  the latest also under a fixed name (`daily-summary.json`, `forecast-accuracy.json`,
+  `paper-performance.json`). An hour the app was closed for is not built later: the records hold it.
+- `exports/`: every day at 00:05 UTC and on **Export now** (Settings › Advanced › Research record, beside
+  **Open folder**), one ZIP, `trader-spider-report-<day>-<time>.zip`, the newest fourteen kept. It holds the
+  folder and the records the folder does not copy, from the last fortnight: the forecasts, their outcomes
+  and the passes, the adaptive levels, the tape, the five-minute bars, the market events, the news and its
+  reactions, the AI ledger, the alerts, the refused paper trades, the training log and the model in use with
+  its calibration -- laid out as `config/`, `logs/`, `market/`, `forecasts/`, `trades/`, `reports/`, with
+  `logs/ai-requests.csv` and `trades/paper-trades.csv` for a spreadsheet, and `manifest.json`: every
+  file with its size and SHA-256, and the app's, the engine's and the configuration's versions.
+
+What goes in is an allowlist: a file is packed only where a source names its folder and its pattern
+(`EXPORT_SOURCES`), and the key files (`credentials.json`, `aiCredentials.json`, their backups, the
+browser's Local State) match none; the settings and the AI config are packed only as the folder's redacted
+copies. `tests/researchFolderService.test.ts` seeds a profile with key files and a settings file holding
+an old key and finds none of them, nor any secret, in the ZIP. The archive is written by the app itself
+(`shared/zip.ts`: deflate with CRC-32, no new dependency) and read back by any ZIP tool.
+
+`python scripts/research-analyze.py <the ZIP>` reads an export, or the folder it was unpacked to, and
+prints what an analysis checks first: the manifest against the files; any secret (its file and field
+name, never its value); the configuration and who asks which model; the AI requests by caller and model,
+the model that answered against the model asked, the cost by day; the forecasts by horizon (the 80% and
+50% ranges held with 95% intervals by hour blocks, the moves of 1%, 2% and 5%, the direction called and
+how it went), every quarter-hour forecast made where the app ran and every due horizon judged; the trade
+decisions; the paper trades and the account; the reports and their gates; the errors and warnings; the
+market records; then its checks, exiting 1 where one failed. `--csv DIR` writes the forecasts and their
+outcomes as tables. A run of `scripts/shadow-run.mjs` makes an export at the end of each segment and
+reads it back the same way.
+
 ### Alive while minimized, and after the window is closed
 
 Since 8 October 2026 (the V5 document's §98–99; V5 Stage 2). Everything that runs by itself is
@@ -2150,6 +2204,7 @@ AI pages:
 | **AI Decisions › Signals** | Every answered call, scored against the candles that followed: the move after 1h, 4h and 1d, which of the model's own levels was touched first, and whether the call was right. Per model: act rate, hit rate, and hit rate by confidence. |
 | **AI Benchmark** | The same questions put to every model you tick, with the answers scored side by side. Two kinds: one market asked on a clock, with a panel of agents beside its own model and what a route between two of them would have done; and events across the market, where each recommendation is followed through its own entry, stop and target — both described below. |
 | **Settings › AI** | OpenRouter's catalogue with prices. Only models that can be held to a strict JSON schema can be enabled, and one that reasons can be enabled again at a lower reasoning effort. Also where a route to a second model, or to a panel, is set — described below. Since 20 October 2026 **Who asks which model**: every caller that asks by itself, the model it asks now, its calls and cost today and the model that answered, and one move that puts them all on three roles (described below). Below it: calls, tokens, dollars and latency per model, the daily budget, and the pace, the most calls a minute to one model. |
+| **Settings › Advanced › Research record** | Since 20 October 2026: the folder the app keeps for analysis on another machine (its configuration without secrets, its errors and AI calls, its paper trades and its hour's and day's reports), the daily ZIP of it with the fortnight's records and a manifest, **Export now** and **Open folder**. No key is ever in it. |
 
 **The key.** An OpenRouter key — made at openrouter.ai/keys, and starting `sk-or-` — is entered on
 Connections, beside the exchange keys, where it can be replaced, tested or removed. Until one is

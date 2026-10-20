@@ -2,6 +2,7 @@ import { app, shell, BrowserWindow, Menu, Tray, nativeImage } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc'
+import { startResearchFolder } from './services/researchFolderService'
 import { startLivePositionWatcherLoop } from './services/livePositionWatchersService'
 import { startLiveTwapLoop } from './services/liveTwapService'
 import { startMarketScanner } from './services/marketScannerService'
@@ -180,6 +181,11 @@ if (!gotSingleInstanceLock) {
       optimizer.watchWindowShortcuts(window)
     })
 
+    // The research folder (V7.2-R Stage 2): the configuration, the errors and warnings, each paper trade's life
+    // and the window's reports, written into <userData>/trader-spider-research/ as the app runs, and packed into
+    // a ZIP every day at 00:05 UTC and on a click. Reads no key, asks no model, places nothing. Started first,
+    // so that its log holds what the start logs. See researchFolderService.ts.
+    startResearchFolder()
     const mainWindow = createWindow()
     registerIpcHandlers(mainWindow)
     createTray()

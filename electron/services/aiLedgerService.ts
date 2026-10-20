@@ -25,10 +25,26 @@ function ledgerDir(): string {
   return join(app.getPath('userData'), 'aiLedger')
 }
 
+/** Told after each row is appended (V7.2-R Stage 2): what the research folder's AI request log is written
+ * from. A listener that throws is logged and skipped; the row stands. */
+const appendListeners = new Set<(record: AiCallRecord) => void>()
+
+export function onAiCallAppended(listener: (record: AiCallRecord) => void): () => void {
+  appendListeners.add(listener)
+  return () => void appendListeners.delete(listener)
+}
+
 /** Appends one row. Rows land in the order they were appended, which is what lets the reader
  * return newest-first by walking each file backwards. */
 export async function appendAiCall(record: AiCallRecord): Promise<void> {
-  return appendJsonLine(join(ledgerDir(), `calls-${ledgerMonthKey(record.at)}.jsonl`), record)
+  await appendJsonLine(join(ledgerDir(), `calls-${ledgerMonthKey(record.at)}.jsonl`), record)
+  for (const listener of appendListeners) {
+    try {
+      listener(record)
+    } catch (error) {
+      console.error('An AI ledger listener failed:', error)
+    }
+  }
 }
 
 /** Newest rows first, reading month files backwards and stopping as soon as enough are found. */

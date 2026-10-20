@@ -10,6 +10,7 @@ import { ModelRegistryCard } from '../agents/ModelRegistryCard'
 import { UsageTab } from '../agents/UsageTab'
 import { AiAdditionsCard } from '../agents/AiAdditionsCard'
 import { RoutingCard } from '../agents/RoutingCard'
+import { ResearchFolderCard } from './ResearchFolderCard'
 import { EffectiveConfigCard } from './EffectiveConfigCard'
 import type { Page } from '../navigation/pages'
 import type { UiMode } from '../../shared/uiMode'
@@ -174,6 +175,12 @@ function AdvancedSettings({ theme, setTheme, onNavigate }: { theme: Theme; setTh
       <ModelRegistryCard />
       <UsageTab />
       <AiAdditionsCard key={`additions-${routingVersion}`} />
+
+      <SectionHeading
+        title="Research record"
+        note="What the app keeps for analysis on another machine, and the daily ZIP of it, with no key in it."
+      />
+      <ResearchFolderCard />
 
       <SectionHeading
         title="Effective configuration"

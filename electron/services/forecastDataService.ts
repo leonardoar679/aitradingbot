@@ -53,6 +53,13 @@ const BACKFILL_LANES = 3
 const MIN_REQUEST_GAP_MS = 125
 /** After the five-minute close, how long to wait for the exchange to have the bar. */
 const SETTLE_MS = 5_000
+/** How long a usual pass may take before it stops taking pairs (V7.2-R Stage 2, 20 October 2026). A close's
+ * forecast is made from the bars when the pass tells it, and a quarter-hour's is recorded only within two
+ * minutes of its close; a pass that waited on a slow data host past the next close told the later close, and
+ * the quarter-hour's record was lost (the two-day run of 16-18 October: 6 of 192). The pairs not reached keep
+ * their bars for the next pass, and the close is forecast without them. Not during the backfill, whose pages
+ * take as long as they take. */
+const PASS_DEADLINE_MS = 60_000
 /** A rate limit without a Retry-After waits this long; a ban (418), this. */
 const RATE_LIMIT_WAIT_MS = 60_000
 const BAN_WAIT_MS = 30 * 60_000
@@ -298,8 +305,16 @@ async function pass(): Promise<void> {
   const pairs = [...new Set([...universe, ...owed])]
   let next = 0
   let limited = false
+  // A usual pass, every pair of the universe read already: held to the deadline.
+  const usual = universe.length > 0 && universe.every((symbol) => series.get(symbol)?.ready === true)
+  const deadline = usual ? Date.now() + passDeadlineMs : Number.POSITIVE_INFINITY
+  let cut = false
   const lane = async (): Promise<void> => {
     while (next < pairs.length && !limited) {
+      if (Date.now() >= deadline) {
+        cut = true
+        break
+      }
       const symbol = pairs[next++]
       try {
         await catchUp(symbol)
@@ -311,6 +326,10 @@ async function pass(): Promise<void> {
     }
   }
   await Promise.all(Array.from({ length: Math.min(BACKFILL_LANES, pairs.length) }, lane))
+  if (cut) {
+    status.lastError = `the pass stopped at its deadline with ${pairs.length - next} pairs left for the next: the data host was slow`
+    console.warn(`The forecast data pass stopped at its ${passDeadlineMs / 1000}-second deadline with ${pairs.length - next} pairs left for the next pass.`)
+  }
   status.pairs = universe.length
   status.ready = universe.filter((symbol) => series.get(symbol)?.ready === true).length
   status.lastPassAt = Math.floor(Date.now() / 1000)
@@ -324,6 +343,9 @@ async function pass(): Promise<void> {
     }
   }
 }
+
+/** PASS_DEADLINE_MS, lowered by a test. */
+let passDeadlineMs = PASS_DEADLINE_MS
 
 let passing: Promise<void> | null = null
 function runPass(): Promise<void> {
@@ -448,6 +470,7 @@ export const forecastDataForTest = {
     waitUntil = 0
     limitedBecause = ''
     requestGapMs = MIN_REQUEST_GAP_MS
+    passDeadlineMs = PASS_DEADLINE_MS
     Object.assign(status, { pairs: 0, ready: 0, requests: 0, weight: 0, failures: 0, barsWritten: 0, lastPassAt: null, lastError: null, rateLimitedUntil: null, refusedHost: null, monthsSwept: 0 })
   },
   setUniverse(symbols: string[]): void {
@@ -455,6 +478,14 @@ export const forecastDataForTest = {
   },
   setPacing(ms: number): void {
     requestGapMs = ms
+  },
+  setPassDeadline(ms: number): void {
+    passDeadlineMs = ms
+  },
+  /** A pair marked read, as a first pass leaves it. */
+  markReady(symbol: string): void {
+    const entry = series.get(symbol)
+    if (entry !== undefined) entry.ready = true
   },
   pass: runPass,
   sweepOldMonths

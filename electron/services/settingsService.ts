@@ -18,6 +18,15 @@ const DEFAULT_SETTINGS: AppSettings = {
 }
 
 let cache: AppSettings | null = null
+/** Told after every write with the settings before and after it (V7.2-R Stage 2): what the research folder's
+ * trade log reads each paper order's opening, end and the paper account's money from. A listener that throws
+ * is logged and skipped; the write stands. */
+const writeListeners = new Set<(before: AppSettings, after: AppSettings) => void>()
+
+export function onSettingsWritten(listener: (before: AppSettings, after: AppSettings) => void): () => void {
+  writeListeners.add(listener)
+  return () => void writeListeners.delete(listener)
+}
 
 function settingsPath(): string {
   return join(app.getPath('userData'), 'settings.json')
@@ -40,5 +49,13 @@ export async function setSettings(patch: Partial<AppSettings>): Promise<AppSetti
   cache = { ...current, ...patch }
   await mkdir(app.getPath('userData'), { recursive: true })
   await writeJsonAtomic(settingsPath(), stampedConfig(cache))
+  const written = cache
+  for (const listener of writeListeners) {
+    try {
+      listener(current, written)
+    } catch (error) {
+      console.error('A settings listener failed:', error)
+    }
+  }
   return cache
 }
