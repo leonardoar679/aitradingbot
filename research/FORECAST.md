@@ -363,7 +363,7 @@ the day's outcomes come right -- the forecasts are still made and recorded. On t
 October the hour's ranges held 25.6% over the live afternoon of the CPI (160 forecasts): the gate would
 have closed the hour to the paper traders that day.
 
-## Extended validation (V7.1 Stage 15, 16 October 2026, in progress)
+## Extended validation (V7.1 Stage 15, 16-18 October 2026)
 
 **The model-improvement test passed 14 of 14 steps** on a scratch profile with the 12-hour run's bars
 (`scratchpad/check_v7_stage15.mjs`, dist/multiday at 170ff3d): the first fit went in use at once with
@@ -444,11 +444,51 @@ The real promotions at 5 minutes (+0.02%, +0.04%) sit inside the null's range; t
 +0.24%) sit above its largest shifted skill (+0.04%, +0.06%) -- a relation too small to use (the calls were right 42%
 and 20% of the time; the breakeven precision at 15 minutes is 0.77) and the kind a bid-ask bounce would leave.
 
-**The multi-day run** (multiday2, dist/multiday2 at 22241b0, from 12:36 UTC on 16 October, the lab's four
-strategies on paper, the forecast trader on, two days and an hour of settling) is what this section still
-owes: every gate per hour, the direction and timing tables from the live record, each strategy's trades
-and the sensitivity counts. Its first start (multiday, 11:27 UTC) died with the other apps an hour into its
-session, after its fit and the lab's funding.
+**The multi-day run** (multiday2, dist/multiday2 at 22241b0, one segment of 49 hours from 12:36 UTC on 16
+October to 14:02 UTC on 18 October, the lab's four strategies on paper, the forecast trader on, OpenRouter
+faked; `RUN_NAME=multiday2 python scripts/shadow-analyze.py`). Its first start (multiday, 11:27 UTC) had died
+with the other apps an hour into its session, after its fit and the lab's funding. **Every one of the 47
+hourly reports passed every gate that applies**, and so did the 12-hour, day and session reports (fees,
+slippage, tracing and outcomes not measured, with no trade). The two Binance data hosts answered by turns the
+whole run: the stream connected 26 times, had 14 gaps (the longest 263 s) and moved its data host 143 times.
+
+The forecast once every horizon came due: 4,369 forecasts of 25 pairs at the quarter-hours and 1,229 made again
+between closes (market 724, volume 389, band 118, spread 17); every one of the 16,064 due horizons has its
+outcome.
+
+| horizon | judged | 80% held [95%] | 50% held | median error | bias | calls |
+|---|---|---|---|---|---|---|
+| 5 min | 4,369 | 81.0% [76.9, 85.3] | 53.1% | 0.21% | -0.02% | 0 |
+| 15 min | 4,354 | 79.8% [74.8, 85.0] | 51.2% | 0.35% | -0.04% | 0 |
+| 1 hour | 4,300 | 80.1% [72.2, 86.8] | 52.6% | 0.63% | -0.16% | 0 |
+| 4 hours | 1,858 | 77.9% [56.6, 95.4] | 47.4% | 1.25% | -0.45% | 0 |
+| 24 hours | 1,183 | 96.1% [90.3, 100.0] | 76.2% | 2.74% | -2.67% | 0 |
+
+The ranges held at every horizon but the day, which ran wide over two falling days (its interval rests on two
+independent blocks). Bitcoin's sharp moves widened 891 forecasts, which held 79.0%, 72.6% and 80.6% of their 80%
+ranges at 5 minutes, 15 and an hour, against 71.7%, 62.7% and 69.1% on their own unwidened levels: the V6.1 rule
+earned its place live. By the market's state, NORMAL held 82.0% / 81.6% / 79.4% / 80.7% / 94.0% by horizon and
+POST_EVENT_SHOCK (890 forecasts) 79.0% / 72.6% / 80.6% / 73.0% / 98.5%; RECOVERY's 144 forecasts held 71.5% at 5
+minutes and 93.8% at an hour.
+
+**Direction:** every forecast read its P(up) from the base rate (no direction model was a source at any horizon
+under V7.1's checklist on this run's fit), the lead horizon called NEUTRAL 4,304 times and UNCERTAIN 65 times, and
+the median's sign was right 51.0%, 49.3%, 46.6%, 43.0% and 46.4% of the time by horizon, in a market that fell.
+**Trades:** the forecast trader and the four laboratory strategies opened nothing in 49 hours, and the predeclared
+sensitivity counts (a direction model's P(up) at or past 0.58, 0.55 and 0.52 with the median on its side) are zero
+at every line, since no direction model was a source. **Timing:** the expected price was reached far more often
+than said -- at 5 minutes said 31% and reached 86%, at an hour 74% and 92%, at four hours 88% and 91% -- because a
+median near zero is the current price, which the path touches at once; the arrival line says nothing while the
+forecast calls no way (V7.2-R Stage 3 replaces it with the odds of reaching +-1% and +-2%). The likely high held
+85% / 85% / 83% / 86% / 99% and the likely low 82% / 79% / 76% / 72% / 63% by horizon, the lows falling short as
+prices fell. **The challenger:** both nightly refits were refused and the first fit stayed in use -- on 17 October
+for the hour's direction skill (-1.47% against +0.13%), on 18 October for the day's pinball (0.3036 against
+0.2978) and direction skill (-15.12% against -3.40%).
+
+**One forecast gate failed:** forecasts were made at 186 of the run's 192 quarter-hour closes, where the gate
+allows one missed. The six misses (19:30 on 16 October; 03:45, 09:30, 10:45, 16:15 and 21:45 on the 17th) fell
+where a data pass did not finish while the hosts flapped, and no pass ran for the close; V7.2-R Stage 2 makes a
+close whose data pass failed be passed again within the close. V7.1's validation is complete with this run.
 
 ## V7.2 Stage 1 -- what the figures are worth (17 October 2026)
 
