@@ -38,8 +38,11 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 // version again (V7.2 Stage 2) from 8ccc65988f1f; the challenger's version and its two new lines -- the newer days a
 // refit within noise needs and the paired intervals' level (V7.2 Stage 3) -- from 704b82f0f396; the by-hour
 // lines (the outcomes a half needs, the coverage a band fails under or over) and the ablation's blocks (V7.2 Stage
-// 4) from 51e30db269e8.
-const PINNED_ENGINE_VERSION = '2e0f11aeec10'
+// 4) from 51e30db269e8. 18 October 2026: the pass's and the tape's versions and the fidelity line (V7.2 Stage 5)
+// from 637d47de9dc8. 20 October 2026: the AI routing's version, the additions' roles and the bot catch-up (V7.2-R
+// Stage 1) from 214afc904bb8; the move odds' version and the moves a close and a path are asked about (V7.2-R Stage
+// 3) from 2e0f11aeec10.
+const PINNED_ENGINE_VERSION = '08ce74aa7ac4'
 
 describe('the engine version', () => {
   it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {

@@ -82,6 +82,7 @@ import { ABLATION_VERSION, FEATURE_BLOCKS } from './forecast/ablation'
 import { PASS_VERSION } from './forecast/pass'
 import { TAPE_VERSION } from './forecast/tape'
 import { FIDELITY_LINES, FIDELITY_VERSION } from './forecast/fidelity'
+import { MOVE_ODDS_LINES, MOVE_ODDS_VERSION } from './forecast/moveOdds'
 import { DEGRADATION_LINES, DEGRADED_THREAD_SECONDS, DIRECTION_PROMOTION_LINES, PROMOTION_LINES } from './forecast/promotion'
 import { LOGISTIC_FIT } from './forecast/ml/logistic'
 import { DIRECTION_MODELS, EXCURSION_LEVELS } from './forecast/models'
@@ -200,6 +201,8 @@ export const ENGINE_CONSTANTS = {
     pass: { version: PASS_VERSION },
     tape: { version: TAPE_VERSION },
     fidelity: { version: FIDELITY_VERSION, ...FIDELITY_LINES },
+    // The odds of a move that clears its costs (V7.2-R Stage 3): the moves a close and a path are asked about.
+    moveOdds: { version: MOVE_ODDS_VERSION, ...MOVE_ODDS_LINES },
     direction: DIRECTION_LINES,
     reliability: RELIABILITY_LINES,
     prediction: { version: PREDICTION_VERSION, ...PREDICTION_LINES },
