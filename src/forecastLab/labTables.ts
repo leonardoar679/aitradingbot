@@ -7,7 +7,8 @@ import { ROUND_TRIP_PCT } from '../../shared/forecast/edge'
 import { CLASS_LINES, type ClassRecord } from '../../shared/forecast/opportunityClass'
 import type { DirectionScore, PUpSource } from '../../shared/forecast/runCalibration'
 import type { ShockRefusal, ShockRule } from '../../shared/forecast/shock'
-import type { Interval } from '../../shared/forecast/uncertainty'
+import type { Figure, Interval } from '../../shared/forecast/uncertainty'
+import type { CellFigures } from '../../shared/forecast/replay'
 import type { RegistryRow } from '../../shared/forecast/preregistration'
 import type { AblationFile } from '../../shared/forecast/ablation'
 import type { PairedFigure } from '../../shared/forecast/challenger'
@@ -494,6 +495,35 @@ export function ablationTable(ablations: readonly AblationFile[]): LabTableData 
       saved(file.paired?.directionSkill ?? null, 2, 100, 1),
       saved(file.control?.pinball ?? null, 4, 1),
       file.paired === null ? 'nothing to pair' : file.paired.pinball.better ? 'the block helped beyond noise and the floor' : file.paired.pinball.worse ? 'the block hurt beyond noise and the floor' : 'within noise or under the floor'
+    ])
+  }
+}
+
+export const STRATEGY_NAME: Record<CellFigures['strategy'], string> = { band: 'Band reversion', grid: 'Range grid', strict: 'Laboratory: strict', direction: 'Laboratory: direction', news: 'Laboratory: news event', hybrid: 'Laboratory: hybrid' }
+
+/** A mean with its 95% interval, in percent. */
+const meanWithInterval = (figure: Figure | null, digits = 3): string => (figure === null ? '—' : `${pct(figure.value, digits)} (${pct(figure.low, digits)} to ${pct(figure.high, digits)})`)
+
+/** The replay out of sample's cells (V7.2-R Stage 5): each strategy's orders, its trades and what a trade netted after
+ * costs with its interval, beside the long held over the same lives; every P&L figure "—" in sample. */
+export function outOfSampleTable(cells: readonly CellFigures[]): LabTableData {
+  return {
+    headers: ['Strategy', 'Horizon', 'Sample', 'Orders', 'Trades', 'Filled', 'Net a trade (95%)', 'Won', 'Profit factor', 'Mean cost', 'Deepest fall', 'Best 5% of hours', 'Held long (95%)', 'Line'],
+    rows: cells.map((cell) => [
+      STRATEGY_NAME[cell.strategy],
+      cell.strategy === 'band' || cell.strategy === 'grid' ? HORIZON_NAME[cell.horizon] : '—',
+      cell.sample === 'out' ? 'out of sample' : 'in sample',
+      cell.orders,
+      cell.trades,
+      cell.strategy === 'band' && cell.orders > 0 ? share(cell.trades / cell.orders) : '—',
+      meanWithInterval(cell.net),
+      share(cell.winRate),
+      plain(cell.profitFactor, 2),
+      pct(cell.meanCostPct, 3),
+      cell.maxDrawdownPct === null ? '—' : pct(-cell.maxDrawdownPct, 1),
+      share(cell.bestHoursShare, 0),
+      meanWithInterval(cell.baseline),
+      cell.verdict
     ])
   }
 }

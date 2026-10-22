@@ -12,6 +12,7 @@ import { setForecastMovers, startForecastData } from './services/forecastDataSer
 import { scannerMovers } from '../shared/forecast/universe'
 import { startForecastTraining } from './services/forecastTrainingService'
 import { forecastClassVerdict, startForecastLab } from './services/forecastLabService'
+import { startForecastReplay } from './services/forecastReplayService'
 import { forecastLiveSignal, forecastNewsSignal, forecastScannerSignal, setForecastClassVerdicts, setForecastReadings, startForecast } from './services/forecastService'
 import { listAiCalls } from './services/aiLedgerService'
 import { AI_ADDITION_PROMPT_VERSIONS, newsReadingsAt } from '../shared/aiAdditions'
@@ -230,6 +231,10 @@ if (!gotSingleInstanceLock) {
     // Makes the Forecast Lab of each walk forward once it is in use, in the same worker: its record
     // scored, called and replayed as trades (V6 Stage 11). See forecastLabService.ts.
     startForecastLab()
+    // Replays the newest walk forward that kept its weeks' models, in the same worker once the training is idle:
+    // its weeks after the first forecast again with each week's own models and a calibration from the weeks before,
+    // and the paper strategies played on the bars after them (V7.2-R Stage 5). See forecastReplayService.ts.
+    startForecastReplay()
     // The decisions are judged by each opportunity class's record: the Lab's replay and the forecast
     // trader's own paper (V6 Stage 12).
     setForecastClassVerdicts(forecastClassVerdict)

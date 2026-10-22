@@ -85,6 +85,8 @@ import { FIDELITY_LINES, FIDELITY_VERSION } from './forecast/fidelity'
 import { MOVE_ODDS_LINES, MOVE_ODDS_VERSION } from './forecast/moveOdds'
 import { MOVE_RATES_LINES, MOVE_RATES_VERSION } from './forecast/moveRates'
 import { UNIVERSE_LINES, UNIVERSE_VERSION } from './forecast/universe'
+import { REPLAY_LINES, REPLAY_VERSION } from './forecast/replay'
+import { RANGE_LINES, RANGE_STRATEGIES, RANGE_STRATEGIES_VERSION } from './forecast/rangeStrategies'
 import { VENUE_COSTS_VERSION, VENUE_FEES } from './venueCosts'
 import { DEGRADATION_LINES, DEGRADED_THREAD_SECONDS, DIRECTION_PROMOTION_LINES, PROMOTION_LINES } from './forecast/promotion'
 import { LOGISTIC_FIT } from './forecast/ml/logistic'
@@ -213,6 +215,11 @@ export const ENGINE_CONSTANTS = {
     moveRates: { version: MOVE_RATES_VERSION, ...MOVE_RATES_LINES },
     // The pairs the forecast reads (V7.2-R Stage 4): the research's and the scanner's movers, at most a cap.
     universe: { version: UNIVERSE_VERSION, ...UNIVERSE_LINES },
+    // The replay out of sample (V7.2-R Stage 5): the book a replayed decision is made again on, the laboratory's
+    // target, the trades a cell's line is read on, the day it settles on after its last week; and the two paper
+    // strategies that need no way, their lines fixed before any trade of theirs was replayed.
+    replay: { version: REPLAY_VERSION, ...REPLAY_LINES },
+    rangeStrategies: { version: RANGE_STRATEGIES_VERSION, strategies: RANGE_STRATEGIES, ...RANGE_LINES },
     direction: DIRECTION_LINES,
     reliability: RELIABILITY_LINES,
     prediction: { version: PREDICTION_VERSION, ...PREDICTION_LINES },

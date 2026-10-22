@@ -66,6 +66,8 @@ export const IpcChannel = {
   ForecastVenueCosts: 'forecast:venueCosts',
   ForecastLab: 'forecast:lab',
   ForecastReplay: 'forecast:replay',
+  /** The replay out of sample of the newest walk forward that kept its weeks' models (V7.2-R Stage 5). Read-only. */
+  ForecastOutOfSample: 'forecast:outOfSample',
   /** The run before the one in use put back in use (V7.1 Stage 13), by a person from the Lab. */
   ForecastRollback: 'forecast:rollback',
   ForecastBars: 'forecast:bars',
@@ -207,6 +209,16 @@ export interface ForecastState {
   engine: import('./forecast/status').EngineState
   training: import('./forecast/status').TrainingState
   data: import('./forecast/bars').ForecastDataStatus
+}
+
+/** The replay out of sample as the app keeps it (V7.2-R Stage 5; electron/services/forecastReplayService.ts): what it
+ * is doing, the walk forward it is of, how far it has got, why it failed, and the replay kept on file. */
+export interface ForecastReplayState {
+  status: 'waiting' | 'replaying' | 'ready' | 'failed'
+  runId: string | null
+  progress: { step: string; done: number; total: number } | null
+  lastError: string | null
+  file: import('./forecast/replay').ReplayFile | null
 }
 
 /** A pair's forecasts on record and their outcomes. */

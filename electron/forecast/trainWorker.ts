@@ -9,7 +9,8 @@ import { DIRECTION_MODELS, FORECAST_MODELS, fitHorizon, normalizedTarget, predic
 import { firstTouchTable, type FirstTouchTable } from '../../shared/forecast/firstTouch'
 import { parseRunCalibration, serializeRunCalibration } from '../../shared/forecast/calibrationFile'
 import { pairedChallengeOf, type PairedChallenge } from '../../shared/forecast/challenger'
-import { foldModelName, serializeFitted } from '../../shared/forecast/modelFile'
+import { foldModelName, parseFitted, serializeFitted } from '../../shared/forecast/modelFile'
+import { REPLAY_FILE_VERSION, forwardCalibrations, runReplay, type ReplayFile, type ReplaySegment } from '../../shared/forecast/replay'
 import { LAB_VERSION, type TraderRule } from '../../shared/forecast/lab'
 import { serializeLab, serializeReplay, type LabFile } from '../../shared/forecast/labFile'
 import { walkForwardLab, type StoryMarkInput } from '../../shared/forecast/labWalkForward'
@@ -42,6 +43,10 @@ import { finalSplit, foldRows, lastFoldScores, planFolds, rowsFor, scoreRows, ty
 // - LAB (V6 Stage 11): what the Forecast Lab shows of a walk forward -- its forecasts scored, called,
 //   replayed as trades and set beside the bars around them (shared/forecast/labWalkForward.ts) -- in
 //   forecastModels/<run>/lab.json, and each horizon's forecasts for the replay in lab-replay-<horizon>.json.
+// - REPLAY (V7.2-R Stage 5; shared/forecast/replay.ts): a walk forward's weeks after the first forecast again at every
+//   five-minute close with each week's own models and a calibration from the weeks before it alone, and the paper
+//   strategies played on the bars after them; the summary kept in forecastModels/replay.json and the filled trades in
+//   forecastModels/replay-trades.jsonl, the newest replay's alone.
 //
 // IT TRAINS ON PUBLIC MARKET DATA AND NOTHING ELSE. No key, no model of anyone else's, no order, no
 // network: it reads the bars on file and writes the models it fitted beside them.
@@ -56,6 +61,7 @@ export type WorkerRequest =
   | { id: number; task: 'folds'; dataDir: string; outDir: string; runId: string; nowSec: number; heldBefore?: TradeableBefore; championRunId?: string }
   | { id: number; task: 'calibrate'; outDir: string; runId: string; promotions: Promotion[] }
   | { id: number; task: 'lab'; dataDir: string; outDir: string; runId: string; promotions: Promotion[]; stories: StoryMarkInput[]; nowSec: number }
+  | { id: number; task: 'replay'; dataDir: string; outDir: string; runId: string; folds: Fold[]; promotions: Promotion[]; nowSec: number }
 
 export interface FitResult {
   task: 'fit'
@@ -117,6 +123,16 @@ export interface LabResult {
   ms: number
 }
 
+export interface ReplayResult {
+  task: 'replay'
+  runId: string
+  /** The weeks replayed, the closes walked, and the trades kept (the filled ones). */
+  weeks: number
+  closes: number
+  trades: number
+  ms: number
+}
+
 export interface SelftestResult {
   task: 'selftest'
   trees: number
@@ -126,7 +142,7 @@ export interface SelftestResult {
 }
 
 export type WorkerReply =
-  | { id: number; ok: true; result: SelftestResult | FitResult | FoldsResult | CalibrateResult | LabResult }
+  | { id: number; ok: true; result: SelftestResult | FitResult | FoldsResult | CalibrateResult | LabResult | ReplayResult }
   | { id: number; ok: false; error: string }
   | { id: number; progress: { step: string; done: number; total: number } }
 
@@ -395,6 +411,55 @@ async function lab(request: Extract<WorkerRequest, { task: 'lab' }>): Promise<La
   return { task: 'lab', runId: request.runId, horizons: results, ms: Date.now() - started }
 }
 
+/** The replay out of sample of a walk forward's weeks after the first (shared/forecast/replay.ts): the newest one's
+ * summary and filled trades written over the last's. */
+async function replay(request: Extract<WorkerRequest, { task: 'replay' }>): Promise<ReplayResult> {
+  const started = Date.now()
+  const dir = join(request.outDir, request.runId)
+  progress(request.id, 'reading the bars', 0, 1)
+  const market = await loadMarket(request.dataDir)
+  const bars = new Map([...market].map(([symbol, series]) => [symbol, series.m5]))
+  const records = new Map<Horizon, OosRecord>()
+  for (const horizon of HORIZONS) {
+    const bytes = await readFile(join(dir, `oos-${horizon}.bin`)).catch(() => null)
+    const record = bytes === null ? null : decodeOos(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength))
+    if (record !== null && record.horizon === horizon) records.set(horizon, record)
+  }
+  const calibrations = forwardCalibrations(records, request.promotions, request.runId, request.folds.map((fold) => fold.index))
+  const segments: ReplaySegment[] = []
+  for (const fold of request.folds) {
+    const calibration = calibrations.get(fold.index)
+    if (calibration === undefined) continue
+    const models = new Map<Horizon, FittedHorizon>()
+    for (const horizon of HORIZONS) {
+      const text = await readFile(join(dir, foldModelName(fold.index, horizon)), 'utf-8').catch(() => null)
+      const fitted = text === null ? null : parseFitted(text)
+      if (fitted !== null) models.set(horizon, fitted)
+    }
+    if (models.size !== HORIZONS.length) continue
+    segments.push({ sample: 'out', label: `week ${fold.index + 1} of ${request.folds.length}`, from: fold.from, to: fold.to, models, calibration, runId: `${request.runId}/fold-${fold.index}` })
+  }
+  if (segments.length === 0) throw new Error(`no week of ${request.runId} can be replayed: its weeks' models or its record are not on file`)
+  const trades: string[] = []
+  const summary = runReplay(
+    {
+      bars,
+      segments,
+      preEvent: preEventAt,
+      onClose: (closedAt, done, total) => {
+        if (done % 288 === 0 || done === total) progress(request.id, `replaying ${new Date(closedAt * 1000).toISOString().slice(0, 10)}`, done, total)
+      }
+    },
+    { trade: (trade) => void (trade.exit !== 'unfilled' && trades.push(JSON.stringify(trade))) }
+  )
+  const ms = Date.now() - started
+  const file: ReplayFile = { version: REPLAY_FILE_VERSION, runId: request.runId, madeAt: request.nowSec, ms, summary }
+  // The trades first, so that a summary on file always has its trades whole beside it.
+  await writeFile(join(request.outDir, 'replay-trades.jsonl'), trades.map((line) => `${line}\n`).join(''), 'utf-8')
+  await writeFile(join(request.outDir, 'replay.json'), JSON.stringify(file), 'utf-8')
+  return { task: 'replay', runId: request.runId, weeks: segments.length, closes: summary.closes, trades: trades.length, ms }
+}
+
 /** A fit on a made-up problem, to show that the worker runs, and how fast: y = sin(x0) + noise growing
  * with x1, the L2 boosting's loss on held-back rows against predicting the mean. */
 function selftest(rows: number, cols: number, seed: number): SelftestResult {
@@ -437,7 +502,7 @@ function selftest(rows: number, cols: number, seed: number): SelftestResult {
 }
 
 parentPort?.on('message', (request: WorkerRequest) => {
-  const reply = (result: SelftestResult | FitResult | FoldsResult | CalibrateResult | LabResult): void => void parentPort?.postMessage({ id: request.id, ok: true, result } satisfies WorkerReply)
+  const reply = (result: SelftestResult | FitResult | FoldsResult | CalibrateResult | LabResult | ReplayResult): void => void parentPort?.postMessage({ id: request.id, ok: true, result } satisfies WorkerReply)
   const fail = (error: unknown): void => void parentPort?.postMessage({ id: request.id, ok: false, error: error instanceof Error ? error.message : String(error) } satisfies WorkerReply)
   try {
     if (request.task === 'selftest') reply(selftest(request.rows, Math.max(2, request.cols), request.seed))
@@ -445,6 +510,7 @@ parentPort?.on('message', (request: WorkerRequest) => {
     else if (request.task === 'folds') folds(request).then(reply, fail)
     else if (request.task === 'calibrate') calibrate(request).then(reply, fail)
     else if (request.task === 'lab') lab(request).then(reply, fail)
+    else if (request.task === 'replay') replay(request).then(reply, fail)
     else fail(new Error('unknown task'))
   } catch (error) {
     fail(error)

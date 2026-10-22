@@ -10,6 +10,7 @@ import { EVENT_IMPACT_LINES } from '../../shared/calendar/eventImpact'
 import { CHALLENGER_LINES, challengeSummary } from '../../shared/forecast/challenger'
 import { CLASS_LINES } from '../../shared/forecast/opportunityClass'
 import type { ForecastLabView } from '../../shared/forecast/labView'
+import type { ForecastReplayState } from '../../shared/ipc'
 import { describeError } from '../utils/ipcError'
 import { settingsWrites } from '../utils/settingsWrites'
 import { healForecastSettings } from '../../shared/forecast/training'
@@ -32,6 +33,7 @@ import {
   liveTable,
   marketShockTable,
   nextReleasesTable,
+  outOfSampleTable,
   performanceTable,
   pUpCurveTable,
   registrationsTable,
@@ -102,6 +104,66 @@ function LabTable({ table, name, onNote }: { table: LabTableData; name: string; 
  * it is from. Reading it asks no model and places nothing. */
 /** The registry as shipped with this build, read once. */
 const REGISTRY = registryRows(parseRegistry(registryText))
+
+/** The registered lines BAND_REVERSION and RANGE_GRID are offered on paper by (V7.2-R Stage 5). */
+const PAPER_LINES = ['V72R-S5-BAND', 'V72R-S5-GRID'] as const
+
+/** The replay out of sample (V7.2-R Stage 5): the newest walk forward that kept its weeks' models replayed through the
+ * forecast's own pass, and what the strategies made on the bars after; read from the app, again while it runs. */
+function OutOfSampleCard({ onNote }: { onNote: (note: string | null) => void }): React.JSX.Element {
+  const [state, setState] = useState<ForecastReplayState | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const load = (): void => {
+      void window.api.forecast.outOfSample().then(
+        (next) => {
+          if (cancelled) return
+          setState(next)
+          timer = setTimeout(load, next.status === 'replaying' ? 5_000 : 60_000)
+        },
+        () => {
+          if (!cancelled) timer = setTimeout(load, 60_000)
+        }
+      )
+    }
+    load()
+    return (): void => {
+      cancelled = true
+      if (timer !== null) clearTimeout(timer)
+    }
+  }, [])
+  const file = state?.file ?? null
+  const lines = PAPER_LINES.map((id) => ({ id, verdict: REGISTRY.find((row) => row.id === id)?.verdict ?? null }))
+  const held = lines.filter((line) => line.verdict === 'held')
+  return (
+    <Card title="Out of sample: the strategies on weeks the models never saw">
+      <p style={{ ...noteStyle, marginTop: 0 }}>
+        Since V7.2-R Stage 5 the newest walk forward that kept its weeks' models is replayed once the training is idle: each week after the first forecast again at every five-minute close with that week's own models and a calibration made only from the weeks before it, through the same pass the live forecast runs; then band reversion (a bid at P10, sold at the median), the range grid (a day's bids between P10 and P90) and the laboratory's four played on the bars after each quarter-hour. A trade's net is after costs, in percent of its stake, with its 95% interval resampled by the hour it was bought in; held long is the coin bought and held over the same lives. A line holds on at least 100 trades with its interval wholly above zero.
+      </p>
+      {state === null && <p style={noteStyle}>Reading the replay...</p>}
+      {state !== null && state.status === 'waiting' && file === null && <p style={noteStyle}>No walk forward on file kept its weeks' models yet: the next one does.</p>}
+      {state !== null && state.status === 'replaying' && (
+        <p style={noteStyle}>
+          Replaying {state.runId}: {state.progress === null ? 'starting' : `${state.progress.step}, ${state.progress.done} of ${state.progress.total} closes`}.
+        </p>
+      )}
+      {state !== null && state.status === 'failed' && <p style={{ ...noteStyle, color: 'var(--down)' }}>The replay of {state.runId} failed: {state.lastError}</p>}
+      {file !== null && (
+        <>
+          <p style={noteStyle}>
+            {file.runId}: {file.summary.segments.map((segment) => `${segment.label} (${day(segment.from)} to ${day(segment.to)} UTC)`).join(', ')}; {file.summary.closes.toLocaleString('en-US')} closes, {file.summary.forecasts.toLocaleString('en-US')} forecasts, replayed {day(file.madeAt)} UTC in {Math.round(file.ms / 1000)} s.
+          </p>
+          <LabTable table={outOfSampleTable(file.summary.cells)} name="out-of-sample" onNote={onNote} />
+          <p style={noteStyle}>What the replay cannot know: {file.summary.assumptions.join('; ')}.</p>
+        </>
+      )}
+      <p style={noteStyle}>
+        Band reversion and the range grid are offered on paper only where their registered line held: {lines.map((line) => `${line.id} ${line.verdict ?? 'not yet judged'}`).join(', ')}. {held.length === 0 ? 'Neither is offered.' : `Held: ${held.map((line) => line.id).join(', ')}.`}
+      </p>
+    </Card>
+  )
+}
 
 export function ForecastLabPage(): React.JSX.Element {
   const [view, setView] = useState<ForecastLabView | null>(null)
@@ -238,6 +300,8 @@ export function ForecastLabPage(): React.JSX.Element {
         </p>
         <LabTable table={registrationsTable(REGISTRY)} name="registered" onNote={setNote} />
       </Card>
+
+      <OutOfSampleCard onNote={setNote} />
 
       {lab !== null && (
         <Card

@@ -648,6 +648,41 @@ def market_of(bundle, tape):
     return {'tape': len(tape), 'bars': sum(bars.values()), 'pairs': len(bars)}
 
 
+def replay_of(bundle):
+    """The replay out of sample the app keeps (V7.2-R Stage 5): the newest walk forward that kept its weeks' models,
+    replayed with each week's own models and a calibration from the weeks before it, and each strategy's figures."""
+    print('\n===== the replay out of sample')
+    kept = bundle.json('forecasts/models/replay.json') if 'forecasts/models/replay.json' in bundle.files else None
+    if not kept:
+        print('  none in the export (no walk forward kept its weeks\' models yet, or the replay has not run)')
+        return {'replayed': False}
+    summary = kept.get('summary') or {}
+    print(f'  {kept.get("runId")}, replayed {utc(kept.get("madeAt"))[:16]} in {round((kept.get("ms") or 0) / 1000)} s: '
+          f'{summary.get("closes")} closes, {summary.get("forecasts")} forecasts, {summary.get("outcomes")} outcomes')
+    for segment in summary.get('segments') or []:
+        print(f'    {segment.get("label")} [{segment.get("sample")}] {utc(segment.get("from"))[:16]} to {utc(segment.get("to"))[:16]}')
+
+    def mean(figure):
+        if not figure:
+            return '-'
+        return f'{figure["value"]:+.3f}% ({figure["low"]:+.3f} to {figure["high"]:+.3f})'
+
+    for cell in summary.get('cells') or []:
+        if cell.get('sample') == 'in':
+            print(f'  {cell.get("cell"):14} [in sample] {cell.get("orders")} orders, {cell.get("trades")} trades: no P&L is read')
+            continue
+        win = cell.get('winRate')
+        print(f'  {cell.get("cell"):14} {cell.get("orders"):6} orders {cell.get("trades"):6} trades  net a trade {mean(cell.get("net"))}  '
+              f'won {"-" if win is None else f"{100 * win:.1f}%"}  held long {mean(cell.get("baseline"))}  -> {cell.get("verdict")}')
+    for line in summary.get('assumptions') or []:
+        print(f'    assumed: {line}')
+    trades, _ = bundle.lines('forecasts/models/replay-trades.jsonl') if 'forecasts/models/replay-trades.jsonl' in bundle.files else ([], None)
+    filled = sum(cell.get('trades') or 0 for cell in summary.get('cells') or [] if cell.get('sample') == 'out')
+    print(f'  replay-trades.jsonl: {len(trades)} trades (the cells count {filled})')
+    check('replay trades whole', 'PASS' if len(trades) == filled else 'WARN', f'{len(trades)} trades on file against {filled} in the summary')
+    return {'replayed': True, 'runId': kept.get('runId'), 'cells': {cell.get('cell'): cell.get('verdict') for cell in summary.get('cells') or [] if cell.get('sample') == 'out'}}
+
+
 def main():
     parser = argparse.ArgumentParser(description='What a TraderSpider research export holds, and whether it holds up.')
     parser.add_argument('export', help='trader-spider-report-....zip, or the folder it was unpacked to')
@@ -677,6 +712,7 @@ def main():
         'reports': reports_of(bundle),
         'logs': logs_of(bundle, made_sec),
         'market': market_of(bundle, tape),
+        'replay': replay_of(bundle),
     }
     print('\n===== the checks')
     for entry in CHECKS:

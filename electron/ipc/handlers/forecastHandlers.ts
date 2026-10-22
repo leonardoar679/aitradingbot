@@ -1,5 +1,5 @@
 import { ipcMain, type BrowserWindow } from 'electron'
-import { IpcChannel, type ForecastHistory, type ForecastState } from '../../../shared/ipc'
+import { IpcChannel, type ForecastHistory, type ForecastReplayState, type ForecastState } from '../../../shared/ipc'
 import type { PricePrediction } from '../../../shared/forecast/prediction'
 import { getForecastDataStatus } from '../../services/forecastDataService'
 import { forecastDecision, forecastHistory, forecastOf, forecastRanking, getForecastEngineState, latestForecasts, onForecastUpdate } from '../../services/forecastService'
@@ -11,6 +11,7 @@ import type { ForecastLabView, ForecastReplay } from '../../../shared/forecast/l
 import type { Candle } from '../../../shared/ipc'
 import type { RoundTrip } from '../../../shared/venueCosts'
 import { venueCostOf } from '../../services/venueQuotesService'
+import { getForecastReplayState } from '../../services/forecastReplayService'
 
 // The price forecast (the V6 document; V6 Stage 7): what it stands at, every pair's latest forecast,
 // one pair's, and a pair's record; and the Forecast Lab (V6 Stage 11): the walk forward's and the live
@@ -36,6 +37,7 @@ export function registerForecastHandlers(mainWindow: BrowserWindow): void {
   )
   ipcMain.handle(IpcChannel.ForecastLab, (): Promise<ForecastLabView> => getForecastLab())
   ipcMain.handle(IpcChannel.ForecastReplay, (_event, pair: unknown, t: unknown): Promise<ForecastReplay | null> => forecastReplay(pair, t))
+  ipcMain.handle(IpcChannel.ForecastOutOfSample, (): ForecastReplayState => getForecastReplayState())
   ipcMain.handle(IpcChannel.ForecastBars, (_event, pair: unknown, width: unknown, fromSec: unknown, toSec: unknown): Promise<Candle[]> => forecastBars(pair, width, fromSec, toSec))
   ipcMain.handle(IpcChannel.ForecastRecord, (_event, fromSec: unknown, toSec: unknown): Promise<ForecastHistory> => forecastRecordSpan(fromSec, toSec))
   // Champion and challenger (V7.1 Stage 13): the run before the one in use put back, by a person; it moves

@@ -97,7 +97,10 @@ export const EXPORT_SOURCES: readonly ExportSource[] = [
   { from: 'alerts', match: /^alerts-(\d{4}-\d{2})\.jsonl$/, to: 'logs/alerts', window: 'month' },
   { from: 'paperRefusals', match: /^refusals-(\d{4}-\d{2})\.jsonl$/, to: 'trades/refusals', window: 'month' },
   { from: 'forecastModels', match: /^training-(\d{4}-\d{2})\.jsonl$/, to: 'forecasts/models', window: 'month' },
-  { from: 'forecastModels', match: /^current\.json$/, to: 'forecasts/models', window: 'all' }
+  { from: 'forecastModels', match: /^current\.json$/, to: 'forecasts/models', window: 'all' },
+  // The replay out of sample of the newest walk forward that kept its weeks' models (V7.2-R Stage 5): its summary and
+  // its filled trades, the newest replay's alone.
+  { from: 'forecastModels', match: /^(?:replay\.json|replay-trades\.jsonl)$/, to: 'forecasts/models', window: 'all' }
 ]
 
 const dayOf = (sec: number): string => new Date(sec * 1000).toISOString().slice(0, 10)

@@ -65,6 +65,9 @@ function seed(): void {
   put('forecastModels/training-2026-10.jsonl', '{"kind":"fit"}\n')
   put('forecastModels/run-20261017-0030/calibration.json', '{"file":"calibration"}')
   put('forecastModels/run-20261017-0030/hour1.json', '{"file":"models"}')
+  put('forecastModels/replay.json', '{"version":"replay-file-v1","runId":"run-20261017-0030"}')
+  put('forecastModels/replay-trades.jsonl', '{"cell":"band:hour1"}\n')
+  put('forecastModels/run-20261017-0030/fold-1-hour1.json', '{"file":"a week\'s models"}')
   put('marketEvents/events-2026-10.jsonl', '{"e":1}\n')
   put('news/feed-2026-10.jsonl', '{"n":1}\n')
   put('alerts/alerts-2026-10.jsonl', '{"a":1}\n')
@@ -157,6 +160,8 @@ describe('the export', () => {
         'forecasts/aci.json',
         'forecasts/models/calibration.json',
         'forecasts/models/current.json',
+        'forecasts/models/replay-trades.jsonl',
+        'forecasts/models/replay.json',
         'forecasts/models/training-2026-10.jsonl',
         'forecasts/outcomes-2026-10.jsonl',
         'forecasts/passes-2026-10.jsonl',

@@ -6,7 +6,8 @@ import type { LabFile } from '../shared/forecast/labFile'
 import type { LabHorizon } from '../shared/forecast/labWalkForward'
 import type { Candle } from '../shared/ipc'
 import { QUANTS } from '../src/agents/quantState'
-import { ablationTable, byHourTable, calibrationTable, classesOf, impactTable, leaderTable, marketShockTable, nextReleasesTable, performanceTable, releasesTable, shockTable, tableCsv, traderTable } from '../src/forecastLab/labTables'
+import { ablationTable, byHourTable, calibrationTable, classesOf, impactTable, leaderTable, marketShockTable, nextReleasesTable, outOfSampleTable, performanceTable, releasesTable, shockTable, tableCsv, traderTable } from '../src/forecastLab/labTables'
+import { cellFiguresOf, type ReplayTrade } from '../shared/forecast/replay'
 import type { AblationFile } from '../shared/forecast/ablation'
 import type { ByHourReport } from '../shared/forecast/byHour'
 import { EVENT_IMPACT } from '../shared/calendar/eventImpact'
@@ -247,5 +248,27 @@ describe('the comparison', () => {
     // The median trader's trade before the window is cut; the one in it is kept.
     expect(result.rows[4].stats.trades).toBe(1)
     expect(result.rows[2].stats.trades).toBe(1)
+  })
+})
+
+describe('the replay out of sample, as a table (V7.2-R Stage 5)', () => {
+  const trade = (k: number, net: number, sample: 'in' | 'out' = 'out', overrides: Partial<ReplayTrade> = {}): ReplayTrade => ({ cell: 'band:hour1', strategy: 'band', sample, pair: 'SOLUSDT', predictionId: `p${k}`, t: T + k * 3600, horizon: 'hour1', side: 'BUY', exit: 'target', filledAt: T + k * 3600 + 300, fillPrice: 1, exitAt: T + k * 3600 + 900, exitPrice: 1, grossPct: net + 0.2, costPct: 0.2, netPct: net, endedAt: T + k * 3600 + 1200, state: null, baselinePct: 0.1, ...overrides })
+
+  it("says each cell's orders, trades, share filled and net with its interval, and nothing of P&L in sample", () => {
+    const out = cellFiguresOf('band:hour1', 'band', 'hour1', 'out', [...Array.from({ length: 120 }, (_, k) => trade(k, 0.5 + 0.01 * (k % 5))), ...Array.from({ length: 30 }, (_, k) => trade(200 + k, 0, 'out', { exit: 'unfilled', filledAt: null }))])
+    const grid = cellFiguresOf('grid:hours24', 'grid', 'hours24', 'out', [trade(1, -1, 'out', { cell: 'grid:hours24', strategy: 'grid', horizon: 'hours24', exit: 'time' })])
+    const inside = cellFiguresOf('band:hour1', 'band', 'hour1', 'in', [trade(1, 2, 'in')])
+    const table = outOfSampleTable([out, grid, inside])
+    expect(table.headers).toEqual(['Strategy', 'Horizon', 'Sample', 'Orders', 'Trades', 'Filled', 'Net a trade (95%)', 'Won', 'Profit factor', 'Mean cost', 'Deepest fall', 'Best 5% of hours', 'Held long (95%)', 'Line'])
+    const [band, day, held] = table.rows
+    expect(band.slice(0, 6)).toEqual(['Band reversion', '1h', 'out of sample', 150, 120, '80.0%'])
+    expect(band[6]).toMatch(/^\+0\.520% \(\+0\.\d{3}% to \+0\.\d{3}%\)$/)
+    expect(band[7]).toBe('100.0%')
+    expect(band[13]).toBe('held')
+    expect(day.slice(0, 6)).toEqual(['Range grid', '24h', 'out of sample', 1, 1, '—'])
+    expect(day[13]).toBe('not measured')
+    expect(held.slice(2, 5)).toEqual(['in sample', 1, 1])
+    expect(held.slice(6, 13)).toEqual(['—', '—', '—', '—', '—', '—', '—'])
+    expect(held[13]).toBe('in sample')
   })
 })

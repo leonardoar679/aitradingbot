@@ -462,6 +462,17 @@ describe('AI code has no route to a real order', () => {
       'walkForward'
     ])
     expect(readFileSync(labService, 'utf-8')).not.toMatch(/fetch\(|https?:\/\/|credentials|apiKey|liveTrading|placeLive|openRouter|prepareOrder|setSettings|settings\.set/)
+    // The replay out of sample (V7.2-R Stage 5) reads the bars and a walk forward's models on file and asks the same
+    // worker; the replay and its two strategies are arithmetic on what they are handed: no clock, no file, nothing that
+    // trades, nothing drawn at random.
+    const replayService = join(SERVICES, 'forecastReplayService.ts')
+    expect(importsOf(replayService).sort()).toEqual(['electron', 'features', 'forecastTrainingService', 'forecastWorkerService', 'ipc', 'modelFile', 'path', 'promises', 'replay', 'training', 'walkForward'])
+    expect(readFileSync(replayService, 'utf-8')).not.toMatch(/fetch\(|https?:\/\/|credentials|apiKey|liveTrading|placeLive|openRouter|prepareOrder|setSettings|settings\.set/)
+    for (const rules of ['replay.ts', 'rangeStrategies.ts']) {
+      const path = join(ROOT, 'shared', 'forecast', rules)
+      expect(importsOf(path).filter((name) => LIVE_MODULES.has(name) || aiModuleNames.has(name)), rules).toEqual([])
+      expect(readFileSync(path, 'utf-8'), rules).not.toMatch(/Date\.now\(|Math\.random\(|readFile|writeFile|require\(|fetch\(/)
+    }
     const labPage = readdirSync(join(ROOT, 'src', 'forecastLab')).filter((name) => /\.tsx?$/.test(name))
     expect(labPage.length).toBeGreaterThan(0)
     for (const name of labPage) {

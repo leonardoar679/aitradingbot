@@ -45,7 +45,8 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 // (V7.2-R Stage 3) from 08ce74aa7ac4, and the move rates' version and lines from bfa7312e4b88. 22 October 2026: the
 // venues' fees with their dates and sources, the universe's movers and cap, and the decision's version (V7.2-R Stage
 // 4) from d44335342657; the pass's version and its line on late outcomes, which move no adaptive level, from 312d3d024ba1.
-const PINNED_ENGINE_VERSION = '3ffc1762b2e8'
+// The replay out of sample's lines and the two paper strategies that need no way (V7.2-R Stage 5) from 3ffc1762b2e8.
+const PINNED_ENGINE_VERSION = '2fc505d8429c'
 
 describe('the engine version', () => {
   it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {

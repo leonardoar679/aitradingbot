@@ -50,6 +50,7 @@ import {
   type CredentialStatus,
   type Exchange,
   type ForecastHistory,
+  type ForecastReplayState,
   type ForecastState,
   type HistoricalRangeProgress,
   type HistoricalRangeResult,
@@ -194,6 +195,8 @@ const api = {
     venueCosts: (symbol: string): Promise<{ trips: RoundTrip[]; cheapest: RoundTrip | null; at: number } | null> => ipcRenderer.invoke(IpcChannel.ForecastVenueCosts, symbol),
     lab: (): Promise<ForecastLabView> => ipcRenderer.invoke(IpcChannel.ForecastLab),
     replay: (pair: string, t: number): Promise<ForecastReplay | null> => ipcRenderer.invoke(IpcChannel.ForecastReplay, pair, t),
+    /** The replay out of sample of the newest walk forward that kept its weeks' models (V7.2-R Stage 5). */
+    outOfSample: (): Promise<ForecastReplayState> => ipcRenderer.invoke(IpcChannel.ForecastOutOfSample),
     /** The run before the one in use put back in use (V7.1 Stage 13): models and verdicts, nothing else. */
     rollback: (): Promise<{ ok: boolean; error: string | null }> => ipcRenderer.invoke(IpcChannel.ForecastRollback),
     bars: (pair: string, width: '15m' | '1h' | '4h', fromSec: number, toSec: number): Promise<Candle[]> => ipcRenderer.invoke(IpcChannel.ForecastBars, pair, width, fromSec, toSec),
