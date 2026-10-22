@@ -7,7 +7,8 @@
 //
 // THE PAIRS OF EACH MONTH, READ FROM THE ARCHIVE ITSELF, so that a coin delisted since or listed late is in the months
 // it was large in, and today's winners are not chosen with hindsight: every USDT spot pair Binance has ever archived
-// (the bucket's listing), less the stable and fiat coins and the leveraged tokens, ranked at each month's start by its
+// (the bucket's listing), less the stable, fiat, wrapped and pegged coins, the leveraged tokens and the tokens that track a
+// stock (as the app's scanner leaves them out), ranked at each month's start by its
 // quote volume over the month before (its daily klines, a few kilobytes a month); the TOP of them, with Bitcoin and ether
 // always, are the month's universe (universe.json, with the pairs that entered and left). Then the five-minute klines of
 // every pair for every month it is in the universe and the month before it (the features' warm-up), each zip checked
@@ -33,9 +34,13 @@ const STEP = process.env.STEP || 'all'
 const WORKERS = 6
 /** Bitcoin and ether are in every month: the market's figures are read from them. */
 const ALWAYS = ['BTCUSDT', 'ETHUSDT']
-/** Bases that are a currency or a stable coin, not a coin whose price is forecast (shared/marketResearch.ts reads the
- * same kinds out). */
-const NOT_COINS = new Set(['USDC', 'FDUSD', 'TUSD', 'BUSD', 'DAI', 'USDP', 'PAX', 'USDS', 'USDSB', 'SUSD', 'UST', 'USTC', 'EUR', 'EURI', 'AEUR', 'GBP', 'AUD', 'TRY', 'BRL', 'RUB', 'UAH', 'NGN', 'ZAR', 'BIDR', 'IDRT', 'BVND', 'VAI', 'XUSD', 'USD1', 'RLUSD', 'BFUSD', 'PYUSD', 'USDE', 'PAXG', 'WBTC', 'WBETH', 'BETH', 'XAUT'])
+/** Bases that are a currency, a stable coin or a wrapped or pegged one, not a coin whose price is forecast: the
+ * scanner's own (shared/marketEvent.ts SCAN_EXCLUDED_BASES, BNSOL and U among them) and the older ones the archive
+ * still lists. */
+const NOT_COINS = new Set(['USDC', 'FDUSD', 'TUSD', 'BUSD', 'DAI', 'USDP', 'PAX', 'USDS', 'USDSB', 'SUSD', 'UST', 'USTC', 'EUR', 'EURI', 'AEUR', 'GBP', 'AUD', 'TRY', 'BRL', 'RUB', 'UAH', 'NGN', 'ZAR', 'BIDR', 'IDRT', 'BVND', 'VAI', 'XUSD', 'USD1', 'RLUSD', 'BFUSD', 'PYUSD', 'USDE', 'PAXG', 'WBTC', 'WBETH', 'BETH', 'BNSOL', 'XAUT', 'U'])
+/** The trading group Binance keeps its tokens that track a US stock or fund in (electron/services/exchanges/binance.ts
+ * STOCK_TOKEN_GROUP): read from today's public listing, so a stock token delisted before today is not known as one. */
+const STOCK_TOKEN_GROUP = 'TRD_GRP_261'
 const LEVERAGED = /(UP|DOWN|BULL|BEAR)USDT$/
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -152,7 +157,17 @@ async function listedPairs() {
     if (!/<IsTruncated>true<\/IsTruncated>/.test(page) || next === undefined) break
     marker = next
   }
-  return out.filter((pair) => pair.endsWith('USDT') && !LEVERAGED.test(pair) && !NOT_COINS.has(pair.slice(0, -4)))
+  const stock = await stockTokens()
+  return out.filter((pair) => pair.endsWith('USDT') && !LEVERAGED.test(pair) && !NOT_COINS.has(pair.slice(0, -4)) && !stock.has(pair))
+}
+
+/** The pairs Binance lists today in its stock tokens' trading group: a stock token's moves are its stock's, as the
+ * scanner found (shared/marketEvent.ts isScannablePair). */
+async function stockTokens() {
+  const body = await get('https://data-api.binance.vision/api/v3/exchangeInfo?permissions=SPOT')
+  if (body === null) throw new Error("Binance's listing could not be read for its stock tokens")
+  const symbols = JSON.parse(body.toString('utf-8')).symbols ?? []
+  return new Set(symbols.filter((s) => (s.permissionSets ?? []).some((set) => Array.isArray(set) && set.includes(STOCK_TOKEN_GROUP))).map((s) => s.symbol))
 }
 
 function readJson(file, fallback) {

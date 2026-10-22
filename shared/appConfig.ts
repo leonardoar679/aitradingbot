@@ -87,6 +87,7 @@ import { MOVE_RATES_LINES, MOVE_RATES_VERSION } from './forecast/moveRates'
 import { UNIVERSE_LINES, UNIVERSE_VERSION } from './forecast/universe'
 import { REPLAY_LINES, REPLAY_VERSION } from './forecast/replay'
 import { RANGE_LINES, RANGE_STRATEGIES, RANGE_STRATEGIES_VERSION } from './forecast/rangeStrategies'
+import { HYPOTHESES, HYPOTHESES_VERSION, HYPOTHESIS_HORIZONS, HYPOTHESIS_LINES } from './forecast/hypotheses'
 import { VENUE_COSTS_VERSION, VENUE_FEES } from './venueCosts'
 import { DEGRADATION_LINES, DEGRADED_THREAD_SECONDS, DIRECTION_PROMOTION_LINES, PROMOTION_LINES } from './forecast/promotion'
 import { LOGISTIC_FIT } from './forecast/ml/logistic'
@@ -220,6 +221,9 @@ export const ENGINE_CONSTANTS = {
     // strategies that need no way, their lines fixed before any trade of theirs was replayed.
     replay: { version: REPLAY_VERSION, ...REPLAY_LINES },
     rangeStrategies: { version: RANGE_STRATEGIES_VERSION, strategies: RANGE_STRATEGIES, ...RANGE_LINES },
+    // The user's direction hypotheses as rules (V7.2-R Stage 6), each line fixed before it was measured on a year of bars,
+    // and the bar their calls are judged by at each horizon.
+    hypotheses: { version: HYPOTHESES_VERSION, hypotheses: HYPOTHESES, horizons: HYPOTHESIS_HORIZONS, ...HYPOTHESIS_LINES },
     direction: DIRECTION_LINES,
     reliability: RELIABILITY_LINES,
     prediction: { version: PREDICTION_VERSION, ...PREDICTION_LINES },

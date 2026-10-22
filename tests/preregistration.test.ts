@@ -18,6 +18,7 @@ const TEXT = readFileSync(FILE, 'utf-8')
 /** The paths under ENGINE_CONSTANTS added since 16 October 2026 (V7.2): each must be named by a registration's
  * constants (the path or a prefix of it) or be infrastructure -- arithmetic every line rests on, not a line. */
 const ADDED_SINCE_16_OCTOBER = [
+  'forecast.hypotheses',
   'forecast.replay',
   'forecast.rangeStrategies',
   'venueCosts',
