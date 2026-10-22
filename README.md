@@ -476,6 +476,22 @@ ten languages where a decision's reasons are shown, on Home among them; the fore
 recorded, and the gate opens again on its own as the day's outcomes come right. The outcomes are read back
 at a start, so the gate stands across a restart.
 
+**A challenger proven forward** (since 22 October 2026; V7.2-R Stage 8; challenger-v3,
+`shared/forecast/shadow.ts`). A refit whose walk forward clears the run in use is no longer put in use at once. It is
+the shadow: `current.json` names it beside the run in use, its models and calibration are read back, and for seven days
+the forecast service forecasts every close a second time with them, from the same bars, books and news, into its own
+files (`forecasts/shadow-predictions-YYYY-MM.jsonl`, `shadow-outcomes-YYYY-MM.jsonl`, its adaptive levels in
+`shadow-aci.json`) -- shown nowhere, ranked for nothing, traded on by nothing. When the week is over the two records are
+paired on the same pairs and closes at every horizon -- the pinball loss, the 80% range's distance from 80% and the
+P(up)'s skill, each difference with its 90% interval by hour blocks and the challenger's floors -- and the shadow is put
+in use only where no horizon read (200 paired outcomes or more) is worse beyond noise, the run in use kept as the run
+before to roll back to. Worse at any horizon, or with too few paired outcomes at every one, it is dropped and the run in
+use stays. While a shadow is in its week no refit is made, nightly or at a start: once the run in use is a week old
+every refit no worse than it would clear it and the week would never end. A shadow whose files cannot be read back at a
+start is dropped and said so. The training log says each step (`shadow`, `skipped`, `shadow-adopted`,
+`shadow-dropped`), the Forecast Lab's champion card the shadow and how the last week ended, and the research ZIP
+carries the shadow's files.
+
 **The words on Home and in the form** (since 16 October 2026; V7.1 Stage 14). Home's best-prediction card
 reads its call, the current price, the expected price and change at the best horizon, the ranges, the
 likely high and low, when the expected price is reached, the catalyst and the decision, with **VIEW WHY**

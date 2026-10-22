@@ -862,3 +862,19 @@ launch of the year had its spot candles on file. That is the way research/NEWS.m
 the app's paper shorts on both kinds already trade; spot cannot sell what it does not hold, so on the user's account it
 says what to step out of, not what to buy. The Forecast Lab's **Your direction hypotheses on a year** card shows the
 table, each horizon apart, beside the registered verdicts.
+
+## A challenger proven forward (V7.2-R Stage 8, 22 October 2026)
+
+A walk forward says how a refit would have done on the weeks it was tested on, much the same weeks as the run in use's;
+it does not say how the refit does now, on the market the run in use faces. Since challenger-v3 a refit that clears the
+run in use beyond noise (or is a week newer and no worse) is its shadow for seven days (`shared/forecast/shadow.ts`,
+shadow-v1): every close is forecast a second time with its models and calibration from the same bars, books and news,
+into its own record, shown and traded on nowhere. At the week's end each horizon's grid forecasts of the two are paired
+on the same pair and close, the realized move scored against each one's levels (pinball loss, the share inside the 80%
+range) and P(up) (the Brier score against an even chance), and the differences read with 90% intervals by hour blocks
+and the challenger's floors (1% of the pinball, two points of coverage, a point of skill), as the walk forward pairs two
+runs. The shadow is put in use where no horizon with 200 paired outcomes or more is worse beyond noise; otherwise it is
+dropped, unread where no horizon had 200. No refit is made while a shadow is in its week, or a week-old run in use would
+be cleared by every refit and no week would end. Registered before any shadow ran: V72R-S8-SHADOW, judged on Stage 9's
+runs (the shadow forecasting the closes the run in use forecasts, its owed outcomes settled, nothing of the run in use's
+record or paper trades naming it, a verdict read again equal to the logged one).

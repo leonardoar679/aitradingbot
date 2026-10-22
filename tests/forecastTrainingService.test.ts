@@ -11,6 +11,7 @@ import { serializeFitted } from '../shared/forecast/modelFile'
 import { MODELS_VERSION, type FittedHorizon } from '../shared/forecast/models'
 import { buildRunCalibration } from '../shared/forecast/runCalibration'
 import { nextNightlyAt, runIdAt } from '../shared/forecast/training'
+import { SHADOW_LINES, type ShadowVerdict } from '../shared/forecast/shadow'
 import { promoted, recordOf } from './forecastRecords'
 
 // THE FORECAST'S FITS, KEPT AND RUN (electron/services/forecastTrainingService.ts; the V6 document, §13,
@@ -332,7 +333,7 @@ describe('a refit', () => {
     expect(existsSync(join(dir(), challenger))).toBe(true)
   })
 
-  it("adopts a refit within noise where its rows reach a week past the champion's (V7.2 Stage 3)", async () => {
+  it("puts a refit within noise whose rows reach a week past the champion's in its shadow week (V7.2 Stage 3; V7.2-R Stage 8)", async () => {
     const runId = 'run-20261010-0030'
     writeRun(dir(), runId)
     writeCalibration(dir(), runId)
@@ -344,13 +345,18 @@ describe('a refit', () => {
     training.startForecastTraining()
     await vi.waitFor(() => expect(fake.asked.map((entry) => entry.task)).toEqual(['fit', 'folds']))
     await vi.waitFor(() => expect(training.getForecastTrainingState().status).toBe('ready'))
-    const adopted = training.getForecastTrainingState()
-    expect(adopted.current?.runId).toBe(fake.asked[0].runId)
-    expect(adopted.challenge).toMatchObject({ adopted: true, verdict: { why: 'newer', newerDays: 7 } })
+    const held = training.getForecastTrainingState()
+    const challenger = fake.asked[0].runId
+    // The champion stays in use; the refit forecasts beside it for a week.
+    expect(held.current?.runId).toBe(runId)
+    expect(held.shadow).toMatchObject({ runId: challenger, championRunId: runId })
+    expect(held.shadow!.until - held.shadow!.since).toBe(SHADOW_LINES.days * 86_400)
+    expect(held.challenge).toMatchObject({ adopted: true, verdict: { why: 'newer', newerDays: 7 } })
     const records = readdirSync(dir()).filter((name) => name.startsWith('training-'))
     const lines = readFileSync(join(dir(), records[0]), 'utf-8').trim().split('\n').map((line) => JSON.parse(line) as Record<string, unknown>)
-    expect(lines.find((line) => line.kind === 'folds')).toMatchObject({ championRunId: runId, verdictWhy: 'newer' })
-    expect(String(lines.find((line) => line.kind === 'folds')!.summary)).toMatch(/^adopted: within noise and 7.0 days newer/)
+    expect(lines.find((line) => line.kind === 'shadow')).toMatchObject({ runId: challenger, championRunId: runId, verdictWhy: 'newer', until: held.shadow!.until })
+    expect(String(lines.find((line) => line.kind === 'shadow')!.summary)).toMatch(/^cleared the champion: within noise and 7.0 days newer/)
+    expect(lines.some((line) => line.kind === 'folds')).toBe(false)
   })
 
   it('is adopted as the challenger where its walk forward is no worse, the champion kept to roll back to, and rolled back by a person', async () => {
@@ -366,18 +372,34 @@ describe('a refit', () => {
     // for the pairing (Stage 3); the fake worker pairs nothing, so the tolerances alone adopted it.
     expect(fake.asked[1].heldBefore).toBe(true)
     expect(fake.asked[1].championRunId).toBe(runId)
-    const state = training.getForecastTrainingState()
     const challenger = fake.asked[0].runId
-    // The same figures as the champion's: no worse, adopted; the champion is the run before.
+    // The same figures as the champion's: no worse, so its shadow week (V7.2-R Stage 8): the champion in use, the
+    // challenger's models and calibration read back beside it, current.json naming it.
+    const shadowed = training.getForecastTrainingState()
+    expect(shadowed.current?.runId).toBe(runId)
+    expect(shadowed.shadow).toMatchObject({ runId: challenger, championRunId: runId })
+    expect(training.currentForecastCalibration()?.runId).toBe(runId)
+    expect(training.currentForecastShadow()?.models.size).toBe(HORIZONS.length)
+    expect(training.currentForecastShadow()?.calibration.runId).toBe(challenger)
+    expect(JSON.parse(readFileSync(join(dir(), 'current.json'), 'utf-8'))).toMatchObject({ runId, shadow: { runId: challenger, championRunId: runId, foldsRunId: challenger } })
+    // The week over and no worse live: adopted, the champion the run before.
+    const notWorse: ShadowVerdict = { version: 'shadow-v1', adopted: true, why: 'not-worse', horizons: {}, summary: 'no worse live than the run in use at 5 horizons read' }
+    await vi.waitFor(async () => expect(await training.concludeForecastShadow(notWorse)).toBe(true))
+    expect(await training.concludeForecastShadow(notWorse)).toBe(false)
+    const state = training.getForecastTrainingState()
+    expect(state.shadow).toBeNull()
+    expect(state.shadowVerdict).toMatchObject({ runId: challenger, championRunId: runId, adopted: true, why: 'not-worse' })
+    expect(training.currentForecastShadow()).toBeNull()
     expect(state.current?.runId).toBe(challenger)
     expect(state.previousRunId).toBe(runId)
     expect(state.challenge).toMatchObject({ runId: challenger, championRunId: runId, adopted: true })
     expect(training.currentForecastCalibration()?.runId).toBe(challenger)
     const current = JSON.parse(readFileSync(join(dir(), 'current.json'), 'utf-8'))
-    expect(current).toMatchObject({ runId: challenger, foldsRunId: challenger, previous: { runId, foldsRunId: runId } })
+    expect(current).toMatchObject({ runId: challenger, foldsRunId: challenger, previous: { runId, foldsRunId: runId }, shadow: null })
     const records = readdirSync(dir()).filter((name) => name.startsWith('training-'))
     const lines = (): Record<string, unknown>[] => readFileSync(join(dir(), records[0]), 'utf-8').trim().split('\n').map((line) => JSON.parse(line))
-    expect(lines().find((line) => line.kind === 'folds')).toMatchObject({ championRunId: runId, challenge: { adopted: true } })
+    expect(lines().find((line) => line.kind === 'shadow')).toMatchObject({ championRunId: runId, challenge: { adopted: true } })
+    expect(lines().find((line) => line.kind === 'shadow-adopted')).toMatchObject({ runId: challenger, championRunId: runId, why: 'not-worse' })
     // Both runs on file.
     expect(existsSync(join(dir(), runId))).toBe(true)
     expect(existsSync(join(dir(), challenger))).toBe(true)
@@ -392,6 +414,107 @@ describe('a refit', () => {
     expect(await training.rollbackForecastRun()).toEqual({ ok: true, error: null })
     expect(training.getForecastTrainingState().current?.runId).toBe(challenger)
     expect(training.getForecastTrainingState().previousRunId).toBe(runId)
+  })
+
+  it('is dropped after its shadow week where it was worse live, the champion untouched (V7.2-R Stage 8)', async () => {
+    const runId = 'run-20261010-0030'
+    writeRun(dir(), runId)
+    writeCalibration(dir(), runId)
+    writeFileSync(join(dir(), 'current.json'), JSON.stringify({ runId, fittedAt: Math.floor(Date.now() / 1000) - 30 * 3600, foldsRunId: runId, promotions: [] }))
+    const training = await service()
+    training.startForecastTraining()
+    await vi.waitFor(() => expect(fake.asked.map((entry) => entry.task)).toEqual(['fit', 'folds']))
+    await vi.waitFor(() => expect(training.getForecastTrainingState()).toMatchObject({ status: 'ready', shadow: { runId: fake.asked[0].runId } }))
+    const challenger = fake.asked[0].runId
+    const worse: ShadowVerdict = { version: 'shadow-v1', adopted: false, why: 'worse', horizons: {}, summary: 'worse live than the run in use beyond noise at hour1' }
+    // Handed while the refit is still ending, it is refused and handed again at the next close: here, until taken.
+    await vi.waitFor(async () => expect(await training.concludeForecastShadow(worse)).toBe(true))
+    const state = training.getForecastTrainingState()
+    expect(state).toMatchObject({ current: { runId }, shadow: null, shadowVerdict: { runId: challenger, adopted: false, why: 'worse' } })
+    expect(training.currentForecastCalibration()?.runId).toBe(runId)
+    expect(JSON.parse(readFileSync(join(dir(), 'current.json'), 'utf-8'))).toMatchObject({ runId, shadow: null })
+    const records = readdirSync(dir()).filter((name) => name.startsWith('training-'))
+    const lines = readFileSync(join(dir(), records[0]), 'utf-8').trim().split('\n').map((line) => JSON.parse(line) as Record<string, unknown>)
+    expect(lines.find((line) => line.kind === 'shadow-dropped')).toMatchObject({ runId: challenger, championRunId: runId, why: 'worse', summary: worse.summary })
+  })
+
+  it('goes on with a shadow week at a start, and drops one whose files cannot be read back (V7.2-R Stage 8)', async () => {
+    const runId = 'run-20261010-0030'
+    const challenger = 'run-20261011-0030'
+    for (const id of [runId, challenger]) {
+      writeRun(dir(), id)
+      writeCalibration(dir(), id)
+    }
+    const now = Math.floor(Date.now() / 1000)
+    const shadow = { runId: challenger, foldsRunId: challenger, promotions: [], since: now - 86_400, until: now + 6 * 86_400, championRunId: runId, summary: 'cleared the champion' }
+    writeFileSync(join(dir(), 'current.json'), JSON.stringify({ runId, fittedAt: now - 3600, foldsRunId: runId, promotions: [], shadow }))
+    const training = await service()
+    training.startForecastTraining()
+    await vi.waitFor(() => expect(training.getForecastTrainingState().shadow).toMatchObject({ runId: challenger, since: shadow.since, until: shadow.until }))
+    expect(training.currentForecastShadow()?.calibration.runId).toBe(challenger)
+    expect(fake.asked).toEqual([])
+    // Its models gone from disk: dropped at the next start, and said so.
+    const { rmSync } = await import('node:fs')
+    rmSync(join(dir(), challenger), { recursive: true, force: true })
+    const again = await service()
+    again.startForecastTraining()
+    await vi.waitFor(() => expect(again.getForecastTrainingState().current?.runId).toBe(runId))
+    await vi.waitFor(() => expect(JSON.parse(readFileSync(join(dir(), 'current.json'), 'utf-8')).shadow).toBeNull())
+    expect(again.getForecastTrainingState().shadow).toBeNull()
+    const lines = (): Record<string, unknown>[] =>
+      readdirSync(dir())
+        .filter((name) => name.startsWith('training-'))
+        .flatMap((name) => readFileSync(join(dir(), name), 'utf-8').trim().split('\n'))
+        .filter((line) => line !== '')
+        .map((line) => JSON.parse(line) as Record<string, unknown>)
+    await vi.waitFor(() => expect(lines().find((line) => line.kind === 'shadow-dropped')).toMatchObject({ runId: challenger, why: 'unreadable' }))
+  })
+
+  it('drops a challenger in its shadow week when the run in use is rolled back (V7.2-R Stage 8)', async () => {
+    const before = 'run-20261009-0030'
+    const runId = 'run-20261010-0030'
+    const challenger = 'run-20261011-0030'
+    for (const id of [before, runId, challenger]) {
+      writeRun(dir(), id)
+      writeCalibration(dir(), id)
+    }
+    const now = Math.floor(Date.now() / 1000)
+    const shadow = { runId: challenger, foldsRunId: challenger, promotions: [], since: now - 86_400, until: now + 6 * 86_400, championRunId: runId, summary: 'cleared the champion' }
+    writeFileSync(join(dir(), 'current.json'), JSON.stringify({ runId, fittedAt: now - 3600, foldsRunId: runId, promotions: [], previous: { runId: before, fittedAt: now - 90_000, foldsRunId: before, promotions: [] }, shadow }))
+    const training = await service()
+    training.startForecastTraining()
+    await vi.waitFor(() => expect(training.getForecastTrainingState().shadow?.runId).toBe(challenger))
+    expect(await training.rollbackForecastRun()).toEqual({ ok: true, error: null })
+    expect(training.getForecastTrainingState()).toMatchObject({ current: { runId: before }, shadow: null })
+    expect(training.currentForecastShadow()).toBeNull()
+    expect(JSON.parse(readFileSync(join(dir(), 'current.json'), 'utf-8'))).toMatchObject({ runId: before, previous: { runId }, shadow: null })
+    const records = readdirSync(dir()).filter((name) => name.startsWith('training-'))
+    const lines = readFileSync(join(dir(), records[0]), 'utf-8').trim().split('\n').map((line) => JSON.parse(line) as Record<string, unknown>)
+    expect(lines.find((line) => line.kind === 'shadow-dropped')).toMatchObject({ runId: challenger, championRunId: runId, why: 'rollback' })
+  })
+
+  it('makes no refit while a challenger is in its shadow week, and says so on the log (V7.2-R Stage 8)', async () => {
+    const runId = 'run-20261010-0030'
+    const challenger = 'run-20261011-0030'
+    for (const id of [runId, challenger]) {
+      writeRun(dir(), id)
+      writeCalibration(dir(), id)
+    }
+    const now = Math.floor(Date.now() / 1000)
+    const shadow = { runId: challenger, foldsRunId: challenger, promotions: [], since: now - 86_400, until: now + 6 * 86_400, championRunId: runId, summary: 'cleared the champion' }
+    // The run in use thirty hours old: a fit due at a start, but not while a challenger is in its week.
+    writeFileSync(join(dir(), 'current.json'), JSON.stringify({ runId, fittedAt: now - 30 * 3600, foldsRunId: runId, promotions: [], shadow }))
+    const training = await service()
+    training.startForecastTraining()
+    const lines = (): Record<string, unknown>[] =>
+      readdirSync(dir())
+        .filter((name) => name.startsWith('training-'))
+        .flatMap((name) => readFileSync(join(dir(), name), 'utf-8').trim().split('\n'))
+        .filter((line) => line !== '')
+        .map((line) => JSON.parse(line) as Record<string, unknown>)
+    await vi.waitFor(() => expect(lines().find((line) => line.kind === 'skipped')).toMatchObject({ why: 'stale', ok: true, shadowRunId: challenger, until: shadow.until }))
+    expect(fake.asked).toEqual([])
+    expect(training.getForecastTrainingState()).toMatchObject({ current: { runId }, shadow: { runId: challenger } })
   })
 
   it('is refused where its walk forward is worse beyond the lines: logged with the comparison, kept on file, the champion untouched', async () => {

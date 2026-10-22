@@ -8,6 +8,7 @@ import { LAB_EVENTS, type LabEvent } from '../../shared/forecast/lab'
 import { MARKET_SHOCK_LINES } from '../../shared/forecast/marketShock'
 import { EVENT_IMPACT_LINES } from '../../shared/calendar/eventImpact'
 import { CHALLENGER_LINES, challengeSummary } from '../../shared/forecast/challenger'
+import { SHADOW_LINES } from '../../shared/forecast/shadow'
 import { CLASS_LINES } from '../../shared/forecast/opportunityClass'
 import type { ForecastLabView } from '../../shared/forecast/labView'
 import type { ForecastReplayState } from '../../shared/ipc'
@@ -42,6 +43,7 @@ import {
   releasesTable,
   ablationTable,
   byHourTable,
+  shadowSentence,
   shockTable,
   tableCsv,
   timingTable,
@@ -283,9 +285,10 @@ export function ForecastLabPage(): React.JSX.Element {
               {view.refit.on && view.refit.nextAt !== null ? `; next refit ${day(view.refit.nextAt)} UTC` : ''}. A refit's models are put in use only where they pass the promotion checklist.
             </p>
             <p style={noteStyle}>
-              Champion and challenger: a refit's walk forward is paired with the run in use's on the hours both tested (since V7.2 Stage 3, with {Math.round(CHALLENGER_LINES.level * 100)}% intervals), and it replaces the run in use only where it is better beyond noise at some horizon and worse beyond noise at none, or where its rows reach at least {CHALLENGER_LINES.newerDays} days past the champion's and it is worse beyond noise at none; a difference under the floors -- {Math.round(CHALLENGER_LINES.pinballTolerance * 100)}% of the pinball loss, {Math.round(CHALLENGER_LINES.coverageTolerance * 100)} points of coverage, {Math.round(CHALLENGER_LINES.directionTolerance * 100)} point of skill -- is neither. A refit within noise, or worse, is logged and kept, the run in use stays.{' '}
+              Champion and challenger: a refit's walk forward is paired with the run in use's on the hours both tested (since V7.2 Stage 3, with {Math.round(CHALLENGER_LINES.level * 100)}% intervals), and it replaces the run in use only where it is better beyond noise at some horizon and worse beyond noise at none, or where its rows reach at least {CHALLENGER_LINES.newerDays} days past the champion's and it is worse beyond noise at none; a difference under the floors -- {Math.round(CHALLENGER_LINES.pinballTolerance * 100)}% of the pinball loss, {Math.round(CHALLENGER_LINES.coverageTolerance * 100)} points of coverage, {Math.round(CHALLENGER_LINES.directionTolerance * 100)} point of skill -- is neither. A refit within noise, or worse, is logged and kept, the run in use stays. Since V7.2-R Stage 8 a refit that clears these lines is not put in use at once: for {SHADOW_LINES.days} days it forecasts beside the run in use at every close, recorded in its own files, shown nowhere and traded on by nothing, and it replaces the run in use only where its forecasts, paired with the run in use's on the same pairs and closes, are worse beyond noise at no horizon (at least {SHADOW_LINES.minPairs} paired outcomes a horizon to be read).{' '}
               {view.refit.champion === null || view.refit.champion === undefined ? 'No run is in use yet.' : `In use: ${view.refit.champion.runId}${view.refit.champion.foldsRunId !== null && view.refit.champion.foldsRunId !== view.refit.champion.runId ? ` (verdicts of ${view.refit.champion.foldsRunId})` : ''}.`}{' '}
-              {view.refit.challenge === null || view.refit.challenge === undefined ? 'No refit has challenged it yet.' : `Last challenge: ${view.refit.challenge.runId} against ${view.refit.challenge.championRunId} at ${day(view.refit.challenge.at)} UTC, ${challengeSummary(view.refit.challenge.verdict)}.`}
+              {view.refit.challenge === null || view.refit.challenge === undefined ? 'No refit has challenged it yet.' : `Last challenge: ${view.refit.challenge.runId} against ${view.refit.challenge.championRunId} at ${day(view.refit.challenge.at)} UTC, ${challengeSummary(view.refit.challenge.verdict)}.`}{' '}
+              {shadowSentence(view.refit.shadow, view.refit.shadowVerdict, day)}
             </p>
             {view.refit.previousRunId !== null && view.refit.previousRunId !== undefined && (
               <button type="button" style={buttonStyle('secondary', rollingBack)} onClick={rollBack} disabled={rollingBack}>

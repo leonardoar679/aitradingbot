@@ -31,6 +31,11 @@ export interface TrainingState {
   /** The last refit judged as a challenger against the run in use (V7.1 Stage 13), adopted or not; null
    * before any. */
   challenge?: ChallengeRecord | null
+  /** The challenger in its shadow week (V7.2-R Stage 8): the run, when its week began and ends, the run in use it
+   * was set against and the walk forward's verdict in a line; null where none is. */
+  shadow?: { runId: string; since: number; until: number; championRunId: string; summary: string } | null
+  /** The last shadow week's verdict: adopted, or dropped and why; null before any. */
+  shadowVerdict?: { at: number; runId: string; championRunId: string; adopted: boolean; why: string; summary: string } | null
 }
 
 export interface EngineState {

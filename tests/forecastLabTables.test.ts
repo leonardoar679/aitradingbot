@@ -9,7 +9,7 @@ import { QUANTS } from '../src/agents/quantState'
 import { ablationTable, byHourTable, calibrationTable, classesOf, impactTable, leaderTable, marketShockTable, nextReleasesTable, outOfSampleTable, performanceTable, releasesTable, shockTable, tableCsv, traderTable } from '../src/forecastLab/labTables'
 import { cellFiguresOf, type ReplayTrade } from '../shared/forecast/replay'
 import { HYPOTHESES_MEASURED, parseHypothesesFile } from '../shared/forecast/hypothesesMeasured'
-import { hypothesesTable } from '../src/forecastLab/labTables'
+import { hypothesesTable, shadowSentence } from '../src/forecastLab/labTables'
 import type { AblationFile } from '../shared/forecast/ablation'
 import type { ByHourReport } from '../shared/forecast/byHour'
 import { EVENT_IMPACT } from '../shared/calendar/eventImpact'
@@ -299,5 +299,20 @@ describe('the direction hypotheses as measured on a year (V7.2-R Stage 6)', () =
     expect(first[5]).toMatch(/^-0\.286% \(-0\.313% to -0\.258%\)$/)
     expect(first[7]).toBe('held back')
     expect(table.rows.map((row) => row[0])).toContain("A news catalyst's way")
+  })
+})
+
+describe("the champion card's shadow week (V7.2-R Stage 8)", () => {
+  const day = (sec: number): string => new Date(sec * 1000).toISOString().slice(0, 16).replace('T', ' ')
+  const since = Date.parse('2026-10-22T00:30:00Z') / 1000
+
+  it('says the challenger forecasting beside the run in use, and how the last week ended', () => {
+    const shadow = { runId: 'run-20261022-0030', since, until: since + 7 * 86_400, championRunId: 'run-20261015-0030', summary: 'cleared the champion: better beyond noise at hour1' }
+    expect(shadowSentence(shadow, null, day)).toBe('In its shadow week: run-20261022-0030, set against run-20261015-0030, forecasting beside it from 2026-10-22 00:30 to 2026-10-29 00:30 UTC, recorded and shown nowhere (cleared the champion: better beyond noise at hour1).')
+    const dropped = { at: since + 7 * 86_400, runId: 'run-20261022-0030', championRunId: 'run-20261015-0030', adopted: false, why: 'worse', summary: 'worse live than the run in use beyond noise at hour1' }
+    expect(shadowSentence(null, dropped, day)).toBe('Last shadow week: run-20261022-0030 dropped, the run in use kept at 2026-10-29 00:30 UTC: worse live than the run in use beyond noise at hour1.')
+    expect(shadowSentence(shadow, { ...dropped, adopted: true, why: 'not-worse', summary: 'no worse live than the run in use at 5 horizons read' }, day)).toMatch(/\(cleared the champion: better beyond noise at hour1\)\. Last shadow week: run-20261022-0030 put in use at 2026-10-29 00:30 UTC: no worse live/)
+    expect(shadowSentence(null, null, day)).toBe('')
+    expect(shadowSentence(undefined, undefined, day)).toBe('')
   })
 })

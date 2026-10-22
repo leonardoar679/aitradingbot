@@ -321,7 +321,8 @@ describe('AI code has no route to a real order', () => {
     // noticeService, settingsService and predictionChange (V6 Stage 10): a watched coin's turned call is
     // told, the pairs held and traded read from the settings; a notice places nothing. Since V7.2 Stage 5
     // (18 October 2026) every decision is shared/forecast/pass.ts's, pure functions handed the sources the
-    // service reads, and the tape (shared/forecast/tape.ts) is arithmetic on what the stream already holds.
+    // service reads, and the tape (shared/forecast/tape.ts) is arithmetic on what the stream already holds. Since
+    // V7.2-R Stage 8 the shadow week's verdict (shared/forecast/shadow.ts), arithmetic on the two records.
     expect(importsOf(engine).sort()).toEqual([
       'aciTable',
       'atomicWrite',
@@ -345,6 +346,7 @@ describe('AI code has no route to a real order', () => {
       'promises',
       'ranking',
       'settingsService',
+      'shadow',
       'status',
       'tape',
       'tradeDecision',

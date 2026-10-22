@@ -28,7 +28,10 @@ import { UNCERTAINTY_LINES, blockHoursOf, hourOf, pairedBootstrap, type HourSamp
 //
 // IT IS ARITHMETIC on two calibrations and two records. No key, no model, no order.
 
-export const CHALLENGER_VERSION = 'challenger-v2'
+/** challenger-v3 (V7.2-R Stage 8): a refit that clears the champion's walk forward is not put in use at once but
+ * forecasts beside it for a week, judged live (shared/forecast/shadow.ts); its verdict here says it cleared the walk
+ * forward, no more. */
+export const CHALLENGER_VERSION = 'challenger-v3'
 
 export const CHALLENGER_LINES = {
   /** The challenger's pooled honest pinball loss may be at most this share above the champion's; the floor
@@ -254,16 +257,16 @@ export function challengeSummary(verdict: ChallengeVerdict): string {
   const figures = paired.map(([horizon, entry]) => `${horizon} pinball ${interval(entry.paired!.pinball, 4, 1)}${entry.paired!.directionSkill === null ? '' : `, skill ${interval(entry.paired!.directionSkill)}`} on ${entry.paired!.blocks} blocks`).join('; ')
   switch (verdict.why) {
     case 'better':
-      return `adopted: better beyond noise (${figures})`
+      return `cleared the champion: better beyond noise (${figures})`
     case 'newer':
-      return `adopted: within noise and ${verdict.newerDays?.toFixed(1) ?? '?'} days newer (${figures})`
+      return `cleared the champion: within noise and ${verdict.newerDays?.toFixed(1) ?? '?'} days newer (${figures})`
     case 'within-noise':
       return `kept the champion: within noise (${figures})`
     case 'worse':
       return `refused: ${challengeRefusals(verdict).join('; ')}`
     case 'unpaired':
-      return 'adopted by the tolerances alone: no record of the champion to pair with'
+      return 'cleared the champion by the tolerances alone: no record of the champion to pair with'
     default:
-      return verdict.adopted ? 'adopted' : `refused: ${challengeRefusals(verdict).join('; ')}`
+      return verdict.adopted ? 'cleared the champion' : `refused: ${challengeRefusals(verdict).join('; ')}`
   }
 }

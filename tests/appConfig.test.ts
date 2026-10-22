@@ -48,8 +48,9 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 // The replay out of sample's lines and the two paper strategies that need no way (V7.2-R Stage 5) from 3ffc1762b2e8;
 // the replay's intervals resampled by calendar hour (replay-v2) from 2fc505d8429c, under which V72R-S5-* were judged.
 // The user's direction hypotheses as rules and their bar (V7.2-R Stage 6) from e4f3e915ddb4; the new blocks of figures
-// for the way, research-only (V7.2-R Stage 7), from 3f556fa5a9de.
-const PINNED_ENGINE_VERSION = '93ed694aeeb0'
+// for the way, research-only (V7.2-R Stage 7), from 3f556fa5a9de. The challenger's shadow week before it is put in use
+// (challenger-v3, shadow-v1; V7.2-R Stage 8) from 93ed694aeeb0.
+const PINNED_ENGINE_VERSION = '1142c98ef19f'
 
 describe('the engine version', () => {
   it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {

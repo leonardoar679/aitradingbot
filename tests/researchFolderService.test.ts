@@ -56,6 +56,11 @@ function seed(): void {
   put('forecasts/tape-2026-10-19.jsonl', '{"v":"tape-v1"}\n')
   put('forecasts/tape-2026-09-01.jsonl', '{"v":"tape-v1","old":true}\n')
   put('forecasts/aci.json', '{"calibrationRun":"run-20261017-0030","levels":{},"updatedAt":0}')
+  // A challenger's shadow week (V7.2-R Stage 8), and a month of it too old for the fortnight.
+  put('forecasts/shadow-predictions-2026-10.jsonl', '{"v":"forecast-record-v1","id":"s","run":"run-20261019-0030"}\n')
+  put('forecasts/shadow-outcomes-2026-10.jsonl', '{"v":"forecast-record-v1","id":"s","h":"hour1"}\n')
+  put('forecasts/shadow-predictions-2026-08.jsonl', '{"old":true}\n')
+  put('forecasts/shadow-aci.json', '{"calibrationRun":"run-20261019-0030","levels":{},"updatedAt":0}')
   const row = (at: number, model: string): string =>
     JSON.stringify({ id: `r${at}`, at, source: 'watch', status: 'ok', model, provider: 'Test', servedModel: model, promptVersion: 'p', contextVersion: 'c', schemaVersion: 's', exchange: 'binance', symbol: 'SOLUSDT', interval: '1m', candleTime: at, position: 'flat', referencePrice: 1, usage: { promptTokens: 10, completionTokens: 5, costUsd: 0.001, latencyMs: 100 }, error: null, recommendation: 'hold', confidence: 0.5, rationale: 'x', detail: null })
   put('aiLedger/calls-2026-10.jsonl', [row(NOW - 3600, 'anthropic/claude-opus-5.5'), row(Date.parse('2026-10-01T00:00:00Z') / 1000, 'openai/gpt-5-mini')].join('\n') + '\n')
@@ -166,6 +171,9 @@ describe('the export', () => {
         'forecasts/outcomes-2026-10.jsonl',
         'forecasts/passes-2026-10.jsonl',
         'forecasts/predictions-2026-10.jsonl',
+        'forecasts/shadow-aci.json',
+        'forecasts/shadow-outcomes-2026-10.jsonl',
+        'forecasts/shadow-predictions-2026-10.jsonl',
         'logs/ai-ledger/calls-2026-10.jsonl',
         'logs/ai-requests.csv',
         'logs/ai-requests.jsonl',

@@ -10,7 +10,7 @@ import type { ReplayRow } from './labWalkForward'
 import type { DirectionReport, PUpSource } from './runCalibration'
 import type { MarketShockRules } from './marketShock'
 import type { ShockRule } from './shock'
-import type { WorkerProgress } from './status'
+import type { TrainingState, WorkerProgress } from './status'
 
 /** A horizon's direction models as the Lab shows them (V7.1 Stage 2): the calibration in use's report,
  * and which source each pair class reads its P(up) from. */
@@ -51,6 +51,9 @@ export interface ForecastLabView {
     champion?: { runId: string; foldsRunId: string | null } | null
     previousRunId?: string | null
     challenge?: ChallengeRecord | null
+    /** The challenger in its shadow week and the last shadow week's verdict (V7.2-R Stage 8); absent on a view from before. */
+    shadow?: TrainingState['shadow']
+    shadowVerdict?: TrainingState['shadowVerdict']
   }
   /** The rule on Bitcoin's sharp moves of the calibration in use, by horizon (V6.1); empty before one. */
   shock: Partial<Record<Horizon, ShockRule>>

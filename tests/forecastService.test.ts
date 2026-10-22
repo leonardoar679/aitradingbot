@@ -39,7 +39,10 @@ const fake = vi.hoisted(() => ({
   /** What the engine handed the data, to read the pairs it still owes outcomes for. */
   owedReader: null as null | (() => readonly string[]),
   /** A scheduled release's moment (V7.1 Stage 12), or none. */
-  releaseAt: null as number | null
+  releaseAt: null as number | null,
+  /** The challenger in its shadow week the training holds (V7.2-R Stage 8), and the verdicts handed back. */
+  shadow: null as null | { run: Record<string, unknown> & { runId: string; until: number }; models: Map<string, unknown>; calibration: unknown },
+  concluded: [] as Record<string, unknown>[]
 }))
 
 // A notice the main process builds in the person's language (V6 Stage 14) is handed as a builder: built
@@ -94,7 +97,13 @@ vi.mock('../electron/services/forecastTrainingService', () => ({
   currentForecastModels: () => fake.models,
   currentForecastCalibration: () => fake.calibration,
   getForecastTrainingState: () => ({ status: 'ready', current: fake.current, calibratedRunId: null, progress: null, lastError: null, nextRefitAt: null, promotions: [] }),
-  onForecastTraining: () => () => undefined
+  onForecastTraining: () => () => undefined,
+  currentForecastShadow: () => fake.shadow,
+  concludeForecastShadow: async (verdict: Record<string, unknown>): Promise<boolean> => {
+    fake.concluded.push(verdict)
+    fake.shadow = null
+    return true
+  }
 }))
 
 /** The calibration with an adopted rule on Bitcoin's sharp moves at the horizons given (V6.1). */
@@ -153,6 +162,8 @@ beforeEach(() => {
   fake.told = []
   fake.settings = {}
   fake.releaseAt = null
+  fake.shadow = null
+  fake.concluded = []
 })
 
 describe('a close', () => {
@@ -652,6 +663,63 @@ describe('the record', () => {
     const keys = Object.keys(live.forecastForTest.aci()?.levels ?? {})
     expect(keys.length).toBeGreaterThan(0)
     expect(keys.every((key) => key.startsWith('hours4/'))).toBe(true)
+  })
+})
+
+describe("the challenger's shadow week (V7.2-R Stage 8)", () => {
+  const shadowOf = (until: number): NonNullable<typeof fake.shadow> => ({
+    run: { runId: 'run-shadow', foldsRunId: 'run-shadow-folds', promotions: [], since: HOUR - 3600, until, championRunId: 'run-models', summary: 'cleared the champion' },
+    models: new Map(HORIZONS.map((horizon) => [horizon, tinyFitted(horizon)])),
+    calibration: { ...CALIBRATION, runId: 'run-shadow-folds' }
+  })
+
+  it("forecasts every close a second time with the shadow's models, into its own files, shown nowhere", async () => {
+    fake.shadow = shadowOf(HOUR + 7 * 86_400)
+    const live = await engine()
+    await closeAt(live, HOUR)
+    await closeAt(live, HOUR + 300)
+    await closeAt(live, HOUR + 900)
+    // The run in use's record as without a shadow; the shadow's in its own files, named by its run.
+    expect(lines(`predictions-${month}.jsonl`)).toHaveLength(8)
+    const shadowed = lines(`shadow-predictions-${month}.jsonl`)
+    expect(shadowed).toHaveLength(8)
+    expect(shadowed.every((line) => line.run === 'run-shadow' && line.foldsRun === 'run-shadow-folds' && line.why === 'grid')).toBe(true)
+    expect(lines(`shadow-outcomes-${month}.jsonl`).map((line) => line.h)).toEqual([...Array(4).fill('minutes5'), ...Array(4).fill('minutes15')])
+    expect(JSON.parse(readFileSync(join(dir(), 'shadow-aci.json'), 'utf-8')).calibrationRun).toBe('run-shadow-folds')
+    expect(JSON.parse(readFileSync(join(dir(), 'aci.json'), 'utf-8')).calibrationRun).toBe('run-folds')
+    // What the window is shown is the run in use's alone.
+    expect(live.latestForecasts().every((prediction) => prediction.versions.run === 'run-models')).toBe(true)
+    expect(fake.concluded).toEqual([])
+  })
+
+  it('is judged when its week is over: the two records paired, the verdict handed to the training', async () => {
+    fake.shadow = shadowOf(HOUR + 900)
+    const live = await engine()
+    await closeAt(live, HOUR)
+    await closeAt(live, HOUR + 300)
+    expect(fake.concluded).toEqual([])
+    await closeAt(live, HOUR + 900)
+    expect(fake.concluded).toHaveLength(1)
+    // A quarter-hour of forecasts is far under the pairs a verdict reads: unread, not adopted.
+    expect(fake.concluded[0]).toMatchObject({ version: 'shadow-v1', adopted: false, why: 'unread' })
+    expect((fake.concluded[0].horizons as Record<string, { pairs: number }>).minutes5.pairs).toBe(4)
+    // Over: the next close writes nothing of it.
+    await closeAt(live, HOUR + 1200)
+    expect(lines(`shadow-predictions-${month}.jsonl`)).toHaveLength(8)
+  })
+
+  it('reads back at a restart the outcomes its forecasts still owe, and not those settled', async () => {
+    fake.shadow = shadowOf(HOUR + 7 * 86_400)
+    const first = await engine()
+    await closeAt(first, HOUR)
+    await closeAt(first, HOUR + 300)
+    // The first close's minutes5 outcomes settled before the restart.
+    expect(lines(`shadow-outcomes-${month}.jsonl`).map((line) => line.h)).toEqual(Array(4).fill('minutes5'))
+    const again = await engine()
+    await closeAt(again, HOUR + 900)
+    // After it: the minutes15 the first close still owed settled once, its minutes5 not again.
+    const ofFirst = lines(`shadow-outcomes-${month}.jsonl`).filter((line) => line.t === HOUR)
+    expect(ofFirst.map((line) => line.h)).toEqual([...Array(4).fill('minutes5'), ...Array(4).fill('minutes15')])
   })
 })
 

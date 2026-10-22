@@ -10,6 +10,7 @@ import { tradeableVerdictsOf, type RunCalibration } from '../../shared/forecast/
 import type { TrainingState } from '../../shared/forecast/status'
 import { degradationOf, degradedForecastNotice } from '../../shared/forecast/promotion'
 import { MIN_READY_PAIRS, fitDueAtStart, healForecastSettings, nextNightlyAt, promotionsOf, runIdAt, runsToSweep, type Promotion } from '../../shared/forecast/training'
+import { SHADOW_LINES, healShadowRun, type ShadowRun, type ShadowVerdict } from '../../shared/forecast/shadow'
 import type { CalibrateResult, FitResult, FoldsResult } from '../forecast/trainWorker'
 import { writeJsonAtomic } from './atomicWrite'
 import { getForecastDataStatus, onForecastBars } from './forecastDataService'
@@ -41,6 +42,14 @@ import { getSettings } from './settingsService'
 // written to the training log with the comparison and kept on file; the champion stays as it was. The
 // first fit, with nothing to beat, goes in use at once as it always has.
 //
+// A CHALLENGER PROVEN FORWARD (V7.2-R Stage 8; shared/forecast/shadow.ts): since challenger-v3 a refit whose walk
+// forward clears the champion is not put in use at once. It is the SHADOW: current.json names it beside the run in use,
+// its models and calibration are read back, and for SHADOW_LINES.days the forecast service forecasts with it too at
+// every close, recorded in its own files and shown nowhere; then the two records are paired live, and the forecast
+// service hands the verdict here (concludeForecastShadow): adopted where no horizon is worse beyond noise -- the
+// champion kept as the run before -- dropped otherwise. While a shadow is in its week no refit is made (nightly or at a
+// start): every refit no worse than a week-old champion would clear it, and the week would never end.
+//
 // IT FITS ON PUBLIC MARKET DATA AND NOTHING ELSE. No key, no model of anyone else's, no order.
 
 interface RunInUse {
@@ -53,11 +62,15 @@ interface RunInUse {
 interface CurrentFile extends RunInUse {
   /** The run in use before this one (V7.1 Stage 13), to roll back to; null where none. */
   previous?: RunInUse | null
+  /** The challenger in its shadow week (V7.2-R Stage 8); null or absent where none. */
+  shadow?: ShadowRun | null
 }
 
 const state: TrainingState = { status: 'waiting', current: null, calibratedRunId: null, progress: null, lastError: null, nextRefitAt: null, promotions: [], previousRunId: null, challenge: null }
 let models: Map<Horizon, FittedHorizon> = new Map()
 let calibration: RunCalibration | null = null
+/** The challenger in its shadow week, its models and its calibration read back (V7.2-R Stage 8). */
+let shadow: { run: ShadowRun; models: Map<Horizon, FittedHorizon>; calibration: RunCalibration } | null = null
 let started = false
 let running: Promise<void> | null = null
 let timer: ReturnType<typeof setTimeout> | null = null
@@ -185,7 +198,7 @@ async function readCurrent(): Promise<CurrentFile | null> {
     const read = (entry: Partial<RunInUse> | null | undefined): RunInUse | null =>
       typeof entry?.runId !== 'string' || typeof entry.fittedAt !== 'number' ? null : { runId: entry.runId, fittedAt: entry.fittedAt, foldsRunId: typeof entry.foldsRunId === 'string' ? entry.foldsRunId : null, promotions: Array.isArray(entry.promotions) ? entry.promotions : [] }
     const current = read(raw)
-    return current === null ? null : { ...current, previous: read(raw.previous) }
+    return current === null ? null : { ...current, previous: read(raw.previous), shadow: healShadowRun(raw.shadow) }
   } catch {
     return null
   }
@@ -198,10 +211,23 @@ async function sweepRuns(inUse: string[]): Promise<void> {
   for (const runId of runsToSweep(names, inUse)) await rm(join(modelsDir(), runId), { recursive: true, force: true }).catch(() => undefined)
 }
 
+const shadowOf = (run: ShadowRun): NonNullable<TrainingState['shadow']> => ({ runId: run.runId, since: run.since, until: run.until, championRunId: run.championRunId, summary: run.summary })
+
+/** A challenger's models and calibration read back for its shadow week; null where either cannot be. */
+async function loadShadow(run: ShadowRun): Promise<{ run: ShadowRun; models: Map<Horizon, FittedHorizon>; calibration: RunCalibration } | null> {
+  const loaded = await loadRun(run.runId)
+  const made = await loadCalibration(run.foldsRunId)
+  return loaded === null || made === null ? null : { run, models: loaded, calibration: made }
+}
+
 /** A fit, then its walk forward: the models put in use as soon as the fit is read back, the verdicts
  * when the walk forward ends. One at a time. */
 function runTraining(why: 'first' | 'nightly' | 'stale'): Promise<void> {
   if (running !== null) return running
+  // A challenger in its shadow week is not displaced by the next refit (V7.2-R Stage 8): once the run in use is a week
+  // old every refit no worse than it would clear it, start the week again, and no shadow would finish. The refit waits
+  // for the week's verdict, on the training log.
+  if (shadow !== null) return record({ kind: 'skipped', why, ok: true, shadowRunId: shadow.run.runId, until: shadow.run.until, summary: 'a challenger is in its shadow week: the refit waits for its verdict' })
   running = (async (): Promise<void> => {
     const nowSec = Math.floor(Date.now() / 1000)
     const runId = runIdAt(nowSec)
@@ -265,11 +291,21 @@ function runTraining(why: 'first' | 'nightly' | 'stale'): Promise<void> {
           state.status = 'ready'
           return
         }
+        // It cleared the champion's walk forward (challenger-v3, V7.2-R Stage 8): its shadow week, not the run in use.
         const loaded = await loadRun(runId)
         if (loaded === null) throw new Error(`the models of ${runId} could not be read back`)
-        models = loaded
-        current = { runId, fittedAt: nowSec, foldsRunId: runId, promotions, previous: inUseOf(champion.file) }
-        state.previousRunId = champion.file.runId
+        const since = Math.floor(Date.now() / 1000)
+        const run: ShadowRun = { runId, foldsRunId: runId, promotions, since, until: since + SHADOW_LINES.days * 86_400, championRunId: champion.file.runId, summary: challengeSummary(verdict) }
+        await writeCurrent({ ...champion.file, shadow: run })
+        await record({ kind: 'shadow', why, runId, ok: true, ms: folds.ms, championRunId: champion.file.runId, verdictWhy: verdict.why, summary: challengeSummary(verdict), challenge: verdict, until: run.until, folds: folds.folds, horizons, promotions, calibration: folds.calibration, degraded })
+        // The challenger is in use too, beside the run in use: its forecasts are still being made.
+        await sweepRuns([champion.file.runId, runId, ...(champion.file.previous === null || champion.file.previous === undefined ? [] : [champion.file.previous.runId])])
+        // Held only once all of it is written: from here to the fit's end nothing waits, so the week's verdict is never
+        // handed while the fit that began it is still ending.
+        shadow = { run, models: loaded, calibration: made }
+        state.shadow = shadowOf(run)
+        state.status = 'ready'
+        return
       } else {
         current = { ...current, foldsRunId: runId, promotions }
       }
@@ -288,8 +324,7 @@ function runTraining(why: 'first' | 'nightly' | 'stale'): Promise<void> {
         horizons,
         promotions,
         calibration: folds.calibration,
-        degraded,
-        ...(verdict === null ? {} : { championRunId: champion!.file.runId, verdictWhy: verdict.why, summary: challengeSummary(verdict), challenge: verdict })
+        degraded
       })
       await sweepRuns([runId, ...(current.previous === null || current.previous === undefined ? [] : [current.previous.runId])])
       state.status = 'ready'
@@ -343,6 +378,15 @@ export function startForecastTraining(): void {
         state.promotions = current.promotions
         state.previousRunId = current.previous?.runId ?? null
         state.status = 'ready'
+        // A challenger in its shadow week goes on with it (V7.2-R Stage 8); one whose files cannot be read back is dropped.
+        if (current.shadow !== null && current.shadow !== undefined) {
+          shadow = await loadShadow(current.shadow)
+          state.shadow = shadow === null ? null : shadowOf(shadow.run)
+          if (shadow === null) {
+            await writeCurrent({ ...current, shadow: null })
+            await record({ kind: 'shadow-dropped', runId: current.shadow.runId, ok: false, why: 'unreadable', summary: 'its models or calibration could not be read back' })
+          }
+        }
         tell()
         // The walk forward's calibration with its verdicts; a run whose models could not be read back
         // is fitted again, and walked forward again, below.
@@ -397,15 +441,56 @@ export async function rollbackForecastRun(): Promise<{ ok: boolean; error: strin
   models = loaded
   calibration = made
   state.calibratedRunId = made === null ? null : previous.foldsRunId
-  const next: CurrentFile = { ...inUseOf(previous), previous: inUseOf(current) }
+  const next: CurrentFile = { ...inUseOf(previous), previous: inUseOf(current), shadow: null }
   await writeCurrent(next)
   state.current = { runId: next.runId, fittedAt: next.fittedAt, foldsRunId: next.foldsRunId }
   state.promotions = next.promotions
   state.previousRunId = current.runId
   state.lastError = null
   await record({ kind: 'rollback', ok: true, from: current.runId, to: previous.runId })
+  // A challenger in its shadow week was set against the run rolled back from (V7.2-R Stage 8): its week is over.
+  if (shadow !== null) {
+    await record({ kind: 'shadow-dropped', ok: true, runId: shadow.run.runId, championRunId: current.runId, why: 'rollback', summary: `the run in use was rolled back to ${previous.runId}` })
+    shadow = null
+    state.shadow = null
+  }
   tell()
   return { ok: true, error: null }
+}
+
+/** The shadow week's end (V7.2-R Stage 8): the verdict the forecast service read from the two live records, handed
+ * here. Adopted, the challenger is the run in use and the champion the run before; dropped, the champion stays. Either
+ * way it is on the training log and the shadow is over. Nothing where none is held. No fit runs while one is (runTraining
+ * waits for the verdict), so none is changing the run in use meanwhile. */
+export async function concludeForecastShadow(verdict: ShadowVerdict): Promise<boolean> {
+  if (shadow === null) return false
+  const run = shadow.run
+  const current = await readCurrent()
+  if (current === null) return false
+  const nowSec = Math.floor(Date.now() / 1000)
+  if (verdict.adopted) {
+    models = shadow.models
+    calibration = shadow.calibration
+    state.calibratedRunId = run.foldsRunId
+    const next: CurrentFile = { runId: run.runId, fittedAt: run.since, foldsRunId: run.foldsRunId, promotions: run.promotions, previous: inUseOf(current), shadow: null }
+    await writeCurrent(next)
+    state.current = { runId: next.runId, fittedAt: next.fittedAt, foldsRunId: next.foldsRunId }
+    state.promotions = next.promotions
+    state.previousRunId = current.runId
+  } else {
+    await writeCurrent({ ...current, shadow: null })
+  }
+  await record({ kind: verdict.adopted ? 'shadow-adopted' : 'shadow-dropped', ok: true, runId: run.runId, championRunId: current.runId, why: verdict.why, summary: verdict.summary, since: run.since, until: run.until, horizons: verdict.horizons })
+  state.shadowVerdict = { at: nowSec, runId: run.runId, championRunId: current.runId, adopted: verdict.adopted, why: verdict.why, summary: verdict.summary }
+  shadow = null
+  state.shadow = null
+  tell()
+  return true
+}
+
+/** The challenger in its shadow week, its models and its calibration; null where none is (V7.2-R Stage 8). */
+export function currentForecastShadow(): { run: ShadowRun; models: ReadonlyMap<Horizon, FittedHorizon>; calibration: RunCalibration } | null {
+  return shadow
 }
 
 /** The models in use, by horizon; empty before the first fit is read back. */
@@ -429,9 +514,10 @@ export const forecastTrainingForTest = {
   run: runTraining,
   nightly: nightlyRefit,
   reset(): void {
-    Object.assign(state, { status: 'waiting', current: null, calibratedRunId: null, progress: null, lastError: null, nextRefitAt: null, promotions: [], previousRunId: null, challenge: null })
+    Object.assign(state, { status: 'waiting', current: null, calibratedRunId: null, progress: null, lastError: null, nextRefitAt: null, promotions: [], previousRunId: null, challenge: null, shadow: null, shadowVerdict: null })
     models = new Map()
     calibration = null
+    shadow = null
     started = false
     running = null
     if (timer !== null) clearTimeout(timer)

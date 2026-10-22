@@ -157,11 +157,11 @@ describe('beyond noise (V7.2 Stage 3)', () => {
     expect(challengeSummary(within)).toMatch(/^kept the champion: within noise \(hour1 pinball/)
     const newer = compareRuns(BASE, challenger, paired(shown), CHALLENGER_LINES.newerDays)
     expect(newer).toMatchObject({ adopted: true, why: 'newer' })
-    expect(challengeSummary(newer)).toMatch(/^adopted: within noise and 7.0 days newer/)
+    expect(challengeSummary(newer)).toMatch(/^cleared the champion: within noise and 7.0 days newer/)
     expect(compareRuns(BASE, challenger, paired(shown), CHALLENGER_LINES.newerDays - 0.1).why).toBe('within-noise')
     const better = compareRuns(BASE, challenger, paired(towards(shown, 0.5)), 0.5)
     expect(better).toMatchObject({ adopted: true, why: 'better' })
-    expect(challengeSummary(better)).toMatch(/^adopted: better beyond noise/)
+    expect(challengeSummary(better)).toMatch(/^cleared the champion: better beyond noise/)
     const worse = compareRuns(BASE, challenger, paired(towards(shown, -0.5)), 30)
     expect(worse).toMatchObject({ adopted: false, why: 'worse' })
     expect(challengeRefusals(worse)[0]).toMatch(/^hour1: pinball .* worse beyond noise/)
@@ -170,7 +170,7 @@ describe('beyond noise (V7.2 Stage 3)', () => {
     expect(compareRuns(BASE, challenger, {}, 30)).toMatchObject({ adopted: true, why: 'newer' })
     expect(compareRuns(BASE, challenger, {}, 1)).toMatchObject({ adopted: false, why: 'within-noise' })
     expect(compareRuns(BASE, challenger)).toMatchObject({ adopted: true, why: 'unpaired' })
-    expect(challengeSummary(compareRuns(BASE, challenger))).toMatch(/^adopted by the tolerances alone/)
+    expect(challengeSummary(compareRuns(BASE, challenger))).toMatch(/^cleared the champion by the tolerances alone/)
     // A horizon dropped, or worse by the tolerances where it could not be paired, is a loss whatever the pairs say.
     const narrow: RunCalibration = { ...BASE, runId: 'run-challenger', horizons: { hour1: BASE.horizons.hour1! } }
     expect(compareRuns(BASE, narrow, paired(towards(shown, 0.5)), 30)).toMatchObject({ adopted: false, why: 'worse' })

@@ -297,7 +297,9 @@ export async function getForecastLab(): Promise<ForecastLabView> {
       lastFitAt: training.current?.fittedAt ?? null,
       champion: training.current === null ? null : { runId: training.current.runId, foldsRunId: training.current.foldsRunId },
       previousRunId: training.previousRunId ?? null,
-      challenge: training.challenge ?? null
+      challenge: training.challenge ?? null,
+      shadow: training.shadow ?? null,
+      shadowVerdict: training.shadowVerdict ?? null
     },
     shock: shockRulesInUse(),
     marketShock: marketShockRulesInUse(),

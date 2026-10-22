@@ -18,7 +18,8 @@ import type { TradeDecision } from '../../shared/forecast/tradeDecision'
 import type { LiveState } from '../../shared/liveMarket'
 import { writeJsonAtomic } from './atomicWrite'
 import { forecastSeries, forecastUniverse, onForecastBars, setOwedPairs } from './forecastDataService'
-import { currentForecastCalibration, currentForecastModels, getForecastTrainingState, onForecastTraining } from './forecastTrainingService'
+import { concludeForecastShadow, currentForecastCalibration, currentForecastModels, currentForecastShadow, getForecastTrainingState, onForecastTraining } from './forecastTrainingService'
+import { shadowVerdictOf, type ShadowRun, type ShadowVerdict } from '../../shared/forecast/shadow'
 import { appendJsonLines } from './jsonlStore'
 import { getResearchState } from './marketResearchService'
 import { tell } from './noticeService'
@@ -199,6 +200,108 @@ const sources: PassSources = {
   venueCost: (pair, side, nowMs) => venueCostOf(pair, side, nowMs)?.cheapest ?? null
 }
 
+// THE CHALLENGER'S SHADOW WEEK (V7.2-R Stage 8; shared/forecast/shadow.ts). While the training service holds a
+// challenger in its shadow week, every close is forecast a second time with its models and calibration, from the same
+// bars, books and news: its forecasts and outcomes written to their own files (shadow-predictions-, shadow-outcomes-
+// YYYY-MM.jsonl, its adaptive levels to shadow-aci.json), shown nowhere, ranked for nothing, traded on by nothing. When
+// its week is over the two records are paired and the verdict handed back (concludeForecastShadow).
+let shadowEngine: PassState = newPassState()
+let shadowRunId: string | null = null
+const shadowSources: PassSources = {
+  ...sources,
+  models: () => currentForecastShadow()?.models ?? new Map(),
+  calibration: () => currentForecastShadow()?.calibration ?? null,
+  runId: () => currentForecastShadow()?.run.runId ?? null
+}
+
+/** A record's lines of a kind over the months named, each parsed; a torn line skipped. */
+async function readRecordLines(name: string, months: readonly string[]): Promise<unknown[]> {
+  const out: unknown[] = []
+  for (const month of months) {
+    const text = await readFile(join(recordsDir(), `${name}-${month}.jsonl`), 'utf-8').catch(() => '')
+    for (const line of text.split('\n')) {
+      if (line.trim() === '') continue
+      try {
+        out.push(JSON.parse(line))
+      } catch {
+        // A torn line: skipped.
+      }
+    }
+  }
+  return out
+}
+
+const monthsOver = (from: number, to: number): string[] => {
+  const out: string[] = []
+  for (let t = from; t <= to + 31 * 86_400 && recordMonth(t) <= recordMonth(to); t += 28 * 86_400) if (!out.includes(recordMonth(t))) out.push(recordMonth(t))
+  if (!out.includes(recordMonth(to))) out.push(recordMonth(to))
+  return out
+}
+
+/** A shadow begun or read back at a start: its own state, its adaptive levels, and the outcomes its forecasts still owe. */
+async function startShadow(run: ShadowRun, nowSec: number): Promise<void> {
+  shadowEngine = newPassState()
+  shadowRunId = run.runId
+  const text = await readFile(join(recordsDir(), 'shadow-aci.json'), 'utf-8').catch(() => null)
+  if (text !== null) {
+    try {
+      const table = parseAciTable(JSON.parse(text))
+      if (table !== null && table.calibrationRun === run.foldsRunId) shadowEngine.aci = table
+    } catch {
+      // Unreadable: the levels begin again.
+    }
+  }
+  const months = monthsOver(Math.max(run.since, nowSec - OWED_LOOKBACK_SEC), nowSec)
+  const done = new Set<string>()
+  for (const raw of await readRecordLines('shadow-outcomes', months)) {
+    const line = parseOutcomeLine(raw)
+    if (line !== null) done.add(`${line.id}/${line.h}`)
+  }
+  for (const raw of await readRecordLines('shadow-predictions', months)) {
+    const line = parsePredictionLine(raw)
+    if (line === null || line.run !== run.runId || line.t < nowSec - OWED_LOOKBACK_SEC) continue
+    shadowEngine.lastRecordedAt = Math.max(shadowEngine.lastRecordedAt, line.why === 'grid' ? line.t : 0)
+    const horizons = (Object.keys(line.h) as Horizon[]).filter((horizon) => !done.has(`${line.id}/${horizon}`))
+    if (horizons.length > 0) shadowEngine.owed.set(line.id, { line, horizons: new Set(horizons) })
+  }
+}
+
+async function writeShadowLines(kind: 'predictions' | 'outcomes', lines: readonly (PredictionLine | OutcomeLine | MissingOutcomeLine)[]): Promise<void> {
+  if (lines.length === 0) return
+  const byMonth = new Map<string, (PredictionLine | OutcomeLine | MissingOutcomeLine)[]>()
+  for (const line of lines) byMonth.set(recordMonth(line.t), [...(byMonth.get(recordMonth(line.t)) ?? []), line])
+  await mkdir(recordsDir(), { recursive: true })
+  for (const [month, mine] of byMonth) await appendJsonLines(join(recordsDir(), `shadow-${kind}-${month}.jsonl`), mine)
+}
+
+/** The shadow week's verdict from the two records over its week: the run in use's grid forecasts and the shadow's. */
+export async function forecastShadowVerdict(run: ShadowRun, to: number = run.until): Promise<ShadowVerdict> {
+  const months = monthsOver(run.since, to + 86_400)
+  const parse = <T>(rows: unknown[], read: (raw: unknown) => T | null): T[] => rows.map(read).filter((line): line is T => line !== null)
+  const champion = { predictions: parse(await readRecordLines('predictions', months), parsePredictionLine), outcomes: parse(await readRecordLines('outcomes', months), parseOutcomeLine) }
+  const shadowRecord = { predictions: parse(await readRecordLines('shadow-predictions', months), parsePredictionLine).filter((line) => line.run === run.runId), outcomes: parse(await readRecordLines('shadow-outcomes', months), parseOutcomeLine) }
+  return shadowVerdictOf(champion, shadowRecord, run.since, to)
+}
+
+/** A close forecast with the shadow too; its week over, judged. */
+async function shadowPass(closedAt: number): Promise<void> {
+  const held = currentForecastShadow()
+  if (held === null) {
+    shadowRunId = null
+    return
+  }
+  if (held.run.runId !== shadowRunId) await startShadow(held.run, closedAt)
+  const made = pass(shadowEngine, shadowSources, closedAt, Date.now())
+  if (made.status !== 'passed') return
+  await writeShadowLines('outcomes', made.settled.lines)
+  if (made.settled.aciMoved && shadowEngine.aci !== null) await writeJsonAtomic(join(recordsDir(), 'shadow-aci.json'), shadowEngine.aci)
+  if (made.pass !== null && made.predictions.length > 0) {
+    await writeShadowLines('predictions', made.predictions)
+    recorded(shadowEngine, closedAt, made.predictions)
+  }
+  if (closedAt >= held.run.until) await concludeForecastShadow(await forecastShadowVerdict(held.run))
+}
+
 export function setForecastClassVerdicts(judge: ((key: string) => ClassVerdict) | null): void {
   classVerdicts = judge
 }
@@ -257,6 +360,8 @@ async function runPass(closedAt: number): Promise<void> {
   setVenuePairs(await venuePairs())
   Object.assign(state, { status: 'running', predictions: engine.latest.size, pending: pendingCount(engine), lastPassAt: closedAt, lastPassMs: Date.now() - startedAt, lastError: null })
   told()
+  // The challenger in its shadow week, forecast after the run in use's pass is told (V7.2-R Stage 8).
+  await shadowPass(closedAt).catch((error) => console.error("The shadow's pass failed:", error))
 }
 
 /** The pairs the person watches: the top ten, those held, and those a paper executor of theirs trades. */
@@ -443,7 +548,7 @@ async function readNewsOutcomes(nowSec: number): Promise<void> {
 async function sweepOldRecords(nowSec: number): Promise<void> {
   const names = await readdir(recordsDir()).catch(() => [] as string[])
   for (const name of names) {
-    const month = /^(?:predictions|outcomes|passes)-(\d{4}-\d{2})\.jsonl$/.exec(name)?.[1]
+    const month = /^(?:shadow-)?(?:predictions|outcomes|passes)-(\d{4}-\d{2})\.jsonl$/.exec(name)?.[1]
     if (month !== undefined && staleMonth(month, nowSec, FORECAST_RECORD_DAYS)) await unlink(join(recordsDir(), name)).catch(() => undefined)
     const day = /^tape-(\d{4}-\d{2}-\d{2})\.jsonl$/.exec(name)?.[1]
     if (day !== undefined && staleDay(day, nowSec, FORECAST_RECORD_DAYS)) await unlink(join(recordsDir(), name)).catch(() => undefined)
@@ -587,6 +692,8 @@ export const forecastForTest = {
     lastClosedAt = null
     started = false
     passing = null
+    shadowEngine = newPassState()
+    shadowRunId = null
     liveState = (): LiveState | null => null
     listeners.clear()
   }

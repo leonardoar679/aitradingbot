@@ -87,8 +87,9 @@ export const EXPORT_SOURCES: readonly ExportSource[] = [
   { from: `${RESEARCH_FOLDER}/trades`, match: /^paper-(?:orders|account)-(\d{4}-\d{2})\.jsonl$/, to: 'trades', window: 'month' },
   { from: `${RESEARCH_FOLDER}/reports`, match: /^(?:hour|day)-(\d{4}-\d{2}-\d{2})(?:-\d{2})?\.json$/, to: 'reports', window: 'day' },
   { from: `${RESEARCH_FOLDER}/reports`, match: /^(?:daily-summary|forecast-accuracy|paper-performance)\.json$/, to: 'reports', window: 'all' },
-  { from: 'forecasts', match: /^(?:predictions|outcomes|passes)-(\d{4}-\d{2})\.jsonl$/, to: 'forecasts', window: 'month' },
-  { from: 'forecasts', match: /^(?:aci\.json|news-outcomes\.jsonl)$/, to: 'forecasts', window: 'all' },
+  // The challenger's shadow week's record beside the run in use's (V7.2-R Stage 8).
+  { from: 'forecasts', match: /^(?:shadow-)?(?:predictions|outcomes|passes)-(\d{4}-\d{2})\.jsonl$/, to: 'forecasts', window: 'month' },
+  { from: 'forecasts', match: /^(?:(?:shadow-)?aci\.json|news-outcomes\.jsonl)$/, to: 'forecasts', window: 'all' },
   { from: 'forecasts', match: /^tape-(\d{4}-\d{2}-\d{2})\.jsonl$/, to: 'market/tape', window: 'day' },
   { from: 'forecastData', match: /^[A-Z0-9]+-(\d{4}-\d{2})\.jsonl$/, to: 'market/price-history', window: 'month' },
   { from: 'marketEvents', match: /^(?:events|status)-(\d{4}-\d{2})\.jsonl$/, to: 'market/events', window: 'month' },

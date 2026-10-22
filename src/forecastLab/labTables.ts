@@ -14,6 +14,7 @@ import type { HypothesesFile } from '../../shared/forecast/hypothesesMeasured'
 import type { RegistryRow } from '../../shared/forecast/preregistration'
 import type { AblationFile } from '../../shared/forecast/ablation'
 import type { PairedFigure } from '../../shared/forecast/challenger'
+import type { TrainingState } from '../../shared/forecast/status'
 import { WIDENED_STATES, type MarketShockRules, type MarketShockState, type ShockWidening } from '../../shared/forecast/marketShock'
 import type { EventImpactFile } from '../../shared/calendar/eventImpact'
 import { MACRO_KINDS, type MacroEvent, type MacroKind } from '../../shared/calendar/macro'
@@ -559,6 +560,15 @@ export function hypothesesTable(file: HypothesesFile): LabTableData {
 }
 
 /** The pre-registered lines (V7.2 Stage 3): each registration with its last result. */
+/** The champion card's word on the shadow week (V7.2-R Stage 8): the challenger forecasting beside the run in use,
+ * and how the last week ended; empty where neither is. */
+export function shadowSentence(shadow: TrainingState['shadow'] | undefined, verdict: TrainingState['shadowVerdict'] | undefined, day: (sec: number) => string): string {
+  const parts: string[] = []
+  if (shadow !== null && shadow !== undefined) parts.push(`In its shadow week: ${shadow.runId}, set against ${shadow.championRunId}, forecasting beside it from ${day(shadow.since)} to ${day(shadow.until)} UTC, recorded and shown nowhere (${shadow.summary}).`)
+  if (verdict !== null && verdict !== undefined) parts.push(`Last shadow week: ${verdict.runId} ${verdict.adopted ? 'put in use' : 'dropped, the run in use kept'} at ${day(verdict.at)} UTC: ${verdict.summary}.`)
+  return parts.join(' ')
+}
+
 export function registrationsTable(rows: readonly RegistryRow[]): LabTableData {
   return {
     headers: ['Id', 'Kind', 'Registered (UTC)', 'Engine', 'Hypothesis', 'Success line', 'Judged on', 'Measured (UTC)', 'Figure', 'Verdict', 'Commit'],
