@@ -9,6 +9,8 @@ import type { DirectionScore, PUpSource } from '../../shared/forecast/runCalibra
 import type { ShockRefusal, ShockRule } from '../../shared/forecast/shock'
 import type { Figure, Interval } from '../../shared/forecast/uncertainty'
 import type { CellFigures } from '../../shared/forecast/replay'
+import type { HypothesisId } from '../../shared/forecast/hypotheses'
+import type { HypothesesFile } from '../../shared/forecast/hypothesesMeasured'
 import type { RegistryRow } from '../../shared/forecast/preregistration'
 import type { AblationFile } from '../../shared/forecast/ablation'
 import type { PairedFigure } from '../../shared/forecast/challenger'
@@ -524,6 +526,34 @@ export function outOfSampleTable(cells: readonly CellFigures[]): LabTableData {
       share(cell.bestHoursShare, 0),
       meanWithInterval(cell.baseline),
       cell.verdict
+    ])
+  }
+}
+
+export const HYPOTHESIS_NAME: Record<HypothesisId, string> = {
+  gainers: "A day's top gainer keeps rising",
+  leaders: "Bitcoin and ether set the alts' way",
+  catalyst: "A news catalyst's way",
+  breakout: 'A confirmed breakout goes on',
+  recovery: 'A fall comes back'
+}
+
+/** The user's direction hypotheses as measured on a year (V7.2-R Stage 6): each rule at each horizon against the bar. */
+export function hypothesesTable(file: HypothesesFile): LabTableData {
+  const signed = (figure: Figure | null, digits: number): string => (figure === null ? '—' : `${pct(figure.value, digits)} (${pct(figure.low, digits)} to ${pct(figure.high, digits)})`)
+  const share95 = (figure: Figure | null): string => (figure === null ? '—' : `${share(figure.value)} (${share(figure.low)}–${share(figure.high)})`)
+  const points = (figure: Figure | null): string => (figure === null ? '—' : `${pct(figure.value * 100, 1)} (${pct(figure.low * 100, 1)} to ${pct(figure.high * 100, 1)})`.replace(/%/g, ' pts'))
+  return {
+    headers: ['Rule', 'Horizon', 'Calls', 'Right (95%)', 'Skill over the base rate (95%)', 'Move its way less the round trip (95%)', 'Skill in the halves (year, pairs)', 'Verdict'],
+    rows: file.figures.map((entry) => [
+      HYPOTHESIS_NAME[entry.hypothesis],
+      HORIZON_NAME[entry.horizon],
+      entry.calls,
+      share95(entry.precision),
+      points(entry.skill),
+      signed(entry.edgePct, 3),
+      [...entry.halves.year, ...entry.halves.pairs].map((value) => (value === null ? '—' : pct(value * 100, 1).replace('%', ''))).join(' / '),
+      entry.tradeable ? 'promoted and tradeable' : entry.promoted ? 'promoted, not tradeable' : 'held back'
     ])
   }
 }

@@ -8,6 +8,8 @@ import type { Candle } from '../shared/ipc'
 import { QUANTS } from '../src/agents/quantState'
 import { ablationTable, byHourTable, calibrationTable, classesOf, impactTable, leaderTable, marketShockTable, nextReleasesTable, outOfSampleTable, performanceTable, releasesTable, shockTable, tableCsv, traderTable } from '../src/forecastLab/labTables'
 import { cellFiguresOf, type ReplayTrade } from '../shared/forecast/replay'
+import { HYPOTHESES_MEASURED, parseHypothesesFile } from '../shared/forecast/hypothesesMeasured'
+import { hypothesesTable } from '../src/forecastLab/labTables'
 import type { AblationFile } from '../shared/forecast/ablation'
 import type { ByHourReport } from '../shared/forecast/byHour'
 import { EVENT_IMPACT } from '../shared/calendar/eventImpact'
@@ -270,5 +272,32 @@ describe('the replay out of sample, as a table (V7.2-R Stage 5)', () => {
     expect(held.slice(2, 5)).toEqual(['in sample', 1, 1])
     expect(held.slice(6, 13)).toEqual(['—', '—', '—', '—', '—', '—', '—'])
     expect(held[13]).toBe('in sample')
+  })
+})
+
+describe('the direction hypotheses as measured on a year (V7.2-R Stage 6)', () => {
+  it('ships whole: every rule at every horizon, none promoted', () => {
+    expect(HYPOTHESES_MEASURED).not.toBeNull()
+    const file = HYPOTHESES_MEASURED!
+    expect(file.months[0]).toBe('2025-10')
+    expect(file.months[file.months.length - 1]).toBe('2026-09')
+    expect(file.figures).toHaveLength(15)
+    expect(file.figures.every((entry) => entry.promoted === false && entry.tradeable === false)).toBe(true)
+    expect(parseHypothesesFile({ ...file, version: 'hypotheses-v0' })).toBeNull()
+    expect(parseHypothesesFile({ ...file, figures: [{ hypothesis: 'astrology', horizon: 'hour1', calls: 1, lines: [] }] })).toBeNull()
+    expect(parseHypothesesFile(null)).toBeNull()
+  })
+
+  it('says each rule and horizon with its calls, its share right, its skill, its move less the round trip and its verdict', () => {
+    const table = hypothesesTable(HYPOTHESES_MEASURED!)
+    expect(table.headers).toEqual(['Rule', 'Horizon', 'Calls', 'Right (95%)', 'Skill over the base rate (95%)', 'Move its way less the round trip (95%)', 'Skill in the halves (year, pairs)', 'Verdict'])
+    expect(table.rows).toHaveLength(15)
+    const first = table.rows[0]
+    expect(first.slice(0, 3)).toEqual(["A day's top gainer keeps rising", '1h', 28043])
+    expect(first[3]).toMatch(/^44\.6% \(43\.8%–45\.3%\)$/)
+    expect(first[4]).toMatch(/^-2\.8 pts \(-3\.6 pts to -2\.1 pts\)$/)
+    expect(first[5]).toMatch(/^-0\.286% \(-0\.313% to -0\.258%\)$/)
+    expect(first[7]).toBe('held back')
+    expect(table.rows.map((row) => row[0])).toContain("A news catalyst's way")
   })
 })

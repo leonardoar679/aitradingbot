@@ -11,6 +11,7 @@ import { CHALLENGER_LINES, challengeSummary } from '../../shared/forecast/challe
 import { CLASS_LINES } from '../../shared/forecast/opportunityClass'
 import type { ForecastLabView } from '../../shared/forecast/labView'
 import type { ForecastReplayState } from '../../shared/ipc'
+import { HYPOTHESES_MEASURED } from '../../shared/forecast/hypothesesMeasured'
 import { describeError } from '../utils/ipcError'
 import { settingsWrites } from '../utils/settingsWrites'
 import { healForecastSettings } from '../../shared/forecast/training'
@@ -34,6 +35,7 @@ import {
   marketShockTable,
   nextReleasesTable,
   outOfSampleTable,
+  hypothesesTable,
   performanceTable,
   pUpCurveTable,
   registrationsTable,
@@ -302,6 +304,18 @@ export function ForecastLabPage(): React.JSX.Element {
       </Card>
 
       <OutOfSampleCard onNote={setNote} />
+
+      <Card title="Your direction hypotheses on a year">
+        <p style={{ ...noteStyle, marginTop: 0 }}>
+          Since V7.2-R Stage 6 five ideas of where the way comes from are rules, each fixed before it was measured (shared/forecast/hypotheses.ts) and judged at an hour, four hours and a day on a year of five-minute bars (October 2025 to September 2026, each month's 40 pairs by the month before's volume, so the pairs are the ones that were large then): at least 200 calls, the share right above an even chance by its lower bound, a skill of a point over the month's base rate of the way called and above zero in both halves of the year and of the pairs, and, to trade, the move its way less the 0.24% round trip above zero by its lower bound. None passed: the forecast's way stays NEUTRAL. The news catalyst called right most often but had 119 calls, all of them down (delistings and Monitoring Tags), which the paper shorts on those kinds already read.
+        </p>
+        {HYPOTHESES_MEASURED === null ? (
+          <p style={noteStyle}>The measured figures shipped with this build cannot be read.</p>
+        ) : (
+          <LabTable table={hypothesesTable(HYPOTHESES_MEASURED)} name="hypotheses" onNote={setNote} />
+        )}
+        <p style={noteStyle}>The registered verdicts: {REGISTRY.filter((row) => /^V72R-S6-(GAINERS|LEADERS|CATALYST|BREAKOUT|RECOVERY)$/.test(row.id)).map((row) => `${row.id.slice(8)} ${row.verdict ?? 'not yet judged'}`).join(', ')}.</p>
+      </Card>
 
       {lab !== null && (
         <Card

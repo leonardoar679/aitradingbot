@@ -583,6 +583,18 @@ its weeks' models is replayed in the forecast's worker once the training is idle
 sample** card shows each strategy's trades and net with its interval beside the long held over the same lives, and the
 research export carries `forecastModels/replay.json` and its trades.
 
+**The user's direction hypotheses on a year** (since 22 October 2026; V7.2-R Stage 6; `shared/forecast/hypotheses.ts`,
+`research/hypotheses.ts`, `research/fetch-forecast-archive.mjs`). Five ideas of where the way comes from -- a day's top
+gainer keeps rising, Bitcoin and ether set the alts' way, a news catalyst's way, a breakout confirmed by volume and
+acceleration goes on, a fall comes back -- were written as rules, registered, and judged at an hour, four hours and a day
+by the direction bar on a year of public five-minute bars (October 2025 to September 2026, each month's 40 pairs by the
+month before's volume, delisted coins included, so nothing was chosen with hindsight). None passed, so the forecast's way
+stays NEUTRAL: top gainers fell more often than the coins around them; the leaders did not lead; breakouts did not go
+on; falls came back, by less than a round trip costs. Only the news catalyst called right beyond noise, on too few calls
+to judge (119, all of them delistings and Monitoring Tags going down, the kinds the paper shorts already trade). The
+Forecast Lab's **Your direction hypotheses on a year** card shows every figure with its interval
+(`shared/forecast/hypotheses-2026.json`, shipped as data).
+
 **The paper laboratory** (since 16 October 2026; V7.1 Stage 4; `shared/forecast/labTrader.ts`, the one
 writing file `src/forecast/labTrader.ts`, the card `src/forecast/PaperLabCard.tsx`). V6's runs found zero
 forecast trades under the production gates, and a gate that approves nothing says nothing about what it

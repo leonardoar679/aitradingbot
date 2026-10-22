@@ -830,3 +830,35 @@ up a day and still lost: what it bought in a fall it held into the day's end, in
 four made no trade: all 72,036 replayed forecasts on the primary record and 57,584 on the user's were NO_CALL, P(up) read
 from the base rate. Neither strategy is offered on paper; the Lab's card says so beside the replay the app now makes of
 its newest walk forward. Two replays of the primary record wrote the same bytes (V72R-S5-REPLAY held).
+
+## The user's direction hypotheses on a year (V7.2-R Stage 6, 22 October 2026)
+
+No model of the way has beaten the base rate, so the user's own ideas of where the way comes from were written as rules
+(`shared/forecast/hypotheses.ts`, hypotheses-v1), registered (V72R-S6-GAINERS, -LEADERS, -CATALYST, -BREAKOUT, -RECOVERY)
+and measured on a year of Binance's public five-minute bars (`research/fetch-forecast-archive.mjs`, October 2025 to
+September 2026). Each month's pairs were the 40 largest by the month before's quote volume among every USDT pair the
+archive has held, delisted ones included and stock tokens and pegged coins left out, so the pairs are the ones that were
+large then; 130 pairs in all, 10 to 15 of the 40 changing each month; all 653 month files matched Binance's published
+checksums (V72R-S6-ARCHIVE held). Each rule was judged at each horizon by the direction bar's lines for calls: 200 calls,
+the share right above 50% by its lower bound, a skill of a point over the month's base rate of the way called and above
+zero in both halves of the year and of the pairs, and, to trade, the move its way less the 0.24% round trip above zero.
+
+| rule | calls (1 h) | right at 1 h / 4 h / 24 h | skill over the base rate, 1 h / 4 h / 24 h | move its way less the round trip, 1 h / 4 h / 24 h |
+|---|---|---|---|---|
+| a day's top gainer keeps rising | 28,043 | 44.6% / 42.7% / 39.4% | -2.8 / -4.6 / -6.1 pts | -0.29% / -0.40% / -0.93% |
+| Bitcoin and ether set the alts' way | 53,848 | 46.4% / 47.7% / 47.1% | -2.1 / -1.7 / -3.0 pts | -0.25% / -0.19% / -0.31% |
+| a news catalyst's way | 119 | 73.1% / 69.7% / 67.8% | +23.9 / +18.5 / +14.5 pts | +1.78% / +3.64% / +1.87% |
+| a confirmed breakout goes on | 4,997 | 46.1% / 45.9% / 46.3% | -2.3 / -3.2 / -3.6 pts | -0.06% / -0.06% / -0.30% |
+| a fall comes back | 8,137 | 52.4% / 50.5% / 48.7% | +5.1 / +3.3 / +3.7 pts | -0.31% / -0.32% / -0.40% |
+
+**No rule passed: the forecast's way stays NEUTRAL.** A day's top gainer fell more often than the coins around it, and more
+so the longer it was held; the leaders' four hours did not set the alts' next move; a breakout confirmed by volume and
+acceleration did not go on (its year's second half much worse than its first). A fall does come back more often than the
+base rate, in both halves and both pair halves, but by less than a round trip costs -- what research/EVENTS.md found on
+its held-out pairs. The news catalyst called right most often, beyond noise at an hour and four hours, but on 119 calls,
+under the 200 the line reads, so it is not measured; all 119 were down calls on coins Binance named for a spot delisting
+(52, right 40 at an hour, +3.00% a call after costs) or a Monitoring Tag (67, right 47, +0.84%) -- no listing or perpetual
+launch of the year had its spot candles on file. That is the way research/NEWS.md found on its held-out half and the way
+the app's paper shorts on both kinds already trade; spot cannot sell what it does not hold, so on the user's account it
+says what to step out of, not what to buy. The Forecast Lab's **Your direction hypotheses on a year** card shows the
+table, each horizon apart, beside the registered verdicts.

@@ -1,0 +1,1689 @@
+{
+ "version": "hypotheses-v1",
+ "months": [
+  "2025-10",
+  "2025-11",
+  "2025-12",
+  "2026-01",
+  "2026-02",
+  "2026-03",
+  "2026-04",
+  "2026-05",
+  "2026-06",
+  "2026-07",
+  "2026-08",
+  "2026-09"
+ ],
+ "split": 1775001600,
+ "catalyst": "225 coin-announcements of the year planned, 119 with their spot candles read and a call made",
+ "figures": [
+  {
+   "hypothesis": "gainers",
+   "horizon": "hour1",
+   "calls": 28043,
+   "precision": {
+    "value": 0.4456370573761723,
+    "low": 0.4383355963228239,
+    "high": 0.4534436669390507,
+    "sd": 0.0037644131533762473
+   },
+   "skill": {
+    "value": -0.02826355974104076,
+    "low": -0.035623589651097715,
+    "high": -0.02056849880199352,
+    "sd": 0.0037552744020746738
+   },
+   "edgePct": {
+    "value": -0.28566374922143256,
+    "low": -0.31291286822017833,
+    "high": -0.258201513660912,
+    "sd": 0.013997312501504976
+   },
+   "halves": {
+    "year": [
+     -0.029189013603639756,
+     -0.027508587375444187
+    ],
+    "pairs": [
+     -0.03328390472544043,
+     -0.025140834889306612
+    ]
+   },
+   "lines": [
+    {
+     "id": "calls",
+     "ok": true,
+     "text": "28043 calls (200 needed)"
+    },
+    {
+     "id": "precision",
+     "ok": false,
+     "text": "44.6% of the calls right, at least 43.8% (above 50% needed)"
+    },
+    {
+     "id": "skill",
+     "ok": false,
+     "text": "a skill of -2.83% over the month's base rate (1.00% needed)"
+    },
+    {
+     "id": "halves",
+     "ok": false,
+     "text": "skill -2.92% and -2.75% in the year's two halves, -3.33% and -2.51% in the pairs' (each above zero needed)"
+    },
+    {
+     "id": "edge",
+     "ok": false,
+     "text": "the calls' mean move in the way called, less the round trip, -0.286% [-0.313%, -0.258%] (above zero with its lower bound needed)"
+    }
+   ],
+   "promoted": false,
+   "tradeable": false,
+   "byMonth": {
+    "2025-10": {
+     "calls": 2400,
+     "meanMovePct": -0.09702200690542971
+    },
+    "2025-11": {
+     "calls": 2388,
+     "meanMovePct": -0.10012589707086574
+    },
+    "2025-12": {
+     "calls": 2019,
+     "meanMovePct": -0.06084425621643997
+    },
+    "2026-01": {
+     "calls": 1846,
+     "meanMovePct": -0.020641200994201987
+    },
+    "2026-02": {
+     "calls": 1740,
+     "meanMovePct": -0.07273649541194423
+    },
+    "2026-03": {
+     "calls": 2206,
+     "meanMovePct": -0.022517221928606713
+    },
+    "2026-04": {
+     "calls": 2112,
+     "meanMovePct": -0.0451519622780336
+    },
+    "2026-05": {
+     "calls": 2652,
+     "meanMovePct": 0.0015563713352805084
+    },
+    "2026-06": {
+     "calls": 2578,
+     "meanMovePct": -0.04043506205018484
+    },
+    "2026-07": {
+     "calls": 2580,
+     "meanMovePct": -0.08687915311512251
+    },
+    "2026-08": {
+     "calls": 2553,
+     "meanMovePct": -0.014476916365720979
+    },
+    "2026-09": {
+     "calls": 2969,
+     "meanMovePct": -0.004994791740210882
+    }
+   }
+  },
+  {
+   "hypothesis": "gainers",
+   "horizon": "hours4",
+   "calls": 28005,
+   "precision": {
+    "value": 0.42699517943224424,
+    "low": 0.4129932901273005,
+    "high": 0.4404329683713661,
+    "sd": 0.00677983157503474
+   },
+   "skill": {
+    "value": -0.04577429844219879,
+    "low": -0.059836476241514044,
+    "high": -0.032407422731995386,
+    "sd": 0.0067645666460720705
+   },
+   "edgePct": {
+    "value": -0.40171035597062027,
+    "low": -0.5032925822667053,
+    "high": -0.292568372338307,
+    "sd": 0.05419721596459193
+   },
+   "halves": {
+    "year": [
+     -0.05277775437130286,
+     -0.040056792943449465
+    ],
+    "pairs": [
+     -0.06118210891857819,
+     -0.03619972515347486
+    ]
+   },
+   "lines": [
+    {
+     "id": "calls",
+     "ok": true,
+     "text": "28005 calls (200 needed)"
+    },
+    {
+     "id": "precision",
+     "ok": false,
+     "text": "42.7% of the calls right, at least 41.3% (above 50% needed)"
+    },
+    {
+     "id": "skill",
+     "ok": false,
+     "text": "a skill of -4.58% over the month's base rate (1.00% needed)"
+    },
+    {
+     "id": "halves",
+     "ok": false,
+     "text": "skill -5.28% and -4.01% in the year's two halves, -6.12% and -3.62% in the pairs' (each above zero needed)"
+    },
+    {
+     "id": "edge",
+     "ok": false,
+     "text": "the calls' mean move in the way called, less the round trip, -0.402% [-0.503%, -0.293%] (above zero with its lower bound needed)"
+    }
+   ],
+   "promoted": false,
+   "tradeable": false,
+   "byMonth": {
+    "2025-10": {
+     "calls": 2394,
+     "meanMovePct": -0.38140385159642876
+    },
+    "2025-11": {
+     "calls": 2385,
+     "meanMovePct": -0.3573837798357614
+    },
+    "2025-12": {
+     "calls": 2019,
+     "meanMovePct": -0.18649932011708276
+    },
+    "2026-01": {
+     "calls": 1846,
+     "meanMovePct": 0.01180167518298039
+    },
+    "2026-02": {
+     "calls": 1737,
+     "meanMovePct": -0.4163528476844495
+    },
+    "2026-03": {
+     "calls": 2206,
+     "meanMovePct": -0.09500663999563032
+    },
+    "2026-04": {
+     "calls": 2112,
+     "meanMovePct": -0.22718960945209432
+    },
+    "2026-05": {
+     "calls": 2646,
+     "meanMovePct": 0.07300448736056346
+    },
+    "2026-06": {
+     "calls": 2578,
+     "meanMovePct": -0.08945595846432959
+    },
+    "2026-07": {
+     "calls": 2577,
+     "meanMovePct": -0.30393806022834857
+    },
+    "2026-08": {
+     "calls": 2551,
+     "meanMovePct": -0.056408660141102906
+    },
+    "2026-09": {
+     "calls": 2954,
+     "meanMovePct": -0.010593327144223655
+    }
+   }
+  },
+  {
+   "hypothesis": "gainers",
+   "horizon": "hours24",
+   "calls": 27791,
+   "precision": {
+    "value": 0.3943003130509877,
+    "low": 0.3664780734694604,
+    "high": 0.42574541984191205,
+    "sd": 0.015508821329593006
+   },
+   "skill": {
+    "value": -0.06104257264169601,
+    "low": -0.08927401993307807,
+    "high": -0.030290011380874622,
+    "sd": 0.015438842542952703
+   },
+   "edgePct": {
+    "value": -0.9340100532383824,
+    "low": -1.4338182156113195,
+    "high": -0.34159013606832145,
+    "sd": 0.2780027383360253
+   },
+   "halves": {
+    "year": [
+     -0.05407135419900878,
+     -0.06677292974089334
+    ],
+    "pairs": [
+     -0.07343492040229321,
+     -0.05335002294996061
+    ]
+   },
+   "lines": [
+    {
+     "id": "calls",
+     "ok": true,
+     "text": "27791 calls (200 needed)"
+    },
+    {
+     "id": "precision",
+     "ok": false,
+     "text": "39.4% of the calls right, at least 36.6% (above 50% needed)"
+    },
+    {
+     "id": "skill",
+     "ok": false,
+     "text": "a skill of -6.10% over the month's base rate (1.00% needed)"
+    },
+    {
+     "id": "halves",
+     "ok": false,
+     "text": "skill -5.41% and -6.68% in the year's two halves, -7.34% and -5.34% in the pairs' (each above zero needed)"
+    },
+    {
+     "id": "edge",
+     "ok": false,
+     "text": "the calls' mean move in the way called, less the round trip, -0.934% [-1.434%, -0.342%] (above zero with its lower bound needed)"
+    }
+   ],
+   "promoted": false,
+   "tradeable": false,
+   "byMonth": {
+    "2025-10": {
+     "calls": 2371,
+     "meanMovePct": -2.1910958435069823
+    },
+    "2025-11": {
+     "calls": 2370,
+     "meanMovePct": -2.113562719797874
+    },
+    "2025-12": {
+     "calls": 2018,
+     "meanMovePct": -0.49239563440169737
+    },
+    "2026-01": {
+     "calls": 1836,
+     "meanMovePct": 0.39456960870529195
+    },
+    "2026-02": {
+     "calls": 1737,
+     "meanMovePct": -1.7387891543298717
+    },
+    "2026-03": {
+     "calls": 2206,
+     "meanMovePct": -0.2925722214864536
+    },
+    "2026-04": {
+     "calls": 2104,
+     "meanMovePct": -0.32865548414079576
+    },
+    "2026-05": {
+     "calls": 2638,
+     "meanMovePct": 0.3564258538644642
+    },
+    "2026-06": {
+     "calls": 2551,
+     "meanMovePct": -0.3626195324975633
+    },
+    "2026-07": {
+     "calls": 2551,
+     "meanMovePct": -1.6523325143983993
+    },
+    "2026-08": {
+     "calls": 2550,
+     "meanMovePct": -0.03292348125565934
+    },
+    "2026-09": {
+     "calls": 2859,
+     "meanMovePct": -0.06042271542178076
+    }
+   }
+  },
+  {
+   "hypothesis": "leaders",
+   "horizon": "hour1",
+   "calls": 53848,
+   "precision": {
+    "value": 0.4640469469618185,
+    "low": 0.4477320693076218,
+    "high": 0.48168917137301603,
+    "sd": 0.008624841834811884
+   },
+   "skill": {
+    "value": -0.02136710491379562,
+    "low": -0.037492380954608336,
+    "high": -0.0037949647967263425,
+    "sd": 0.00863516776962122
+   },
+   "edgePct": {
+    "value": -0.24489447635953426,
+    "low": -0.2932148605341904,
+    "high": -0.1873995754586643,
+    "sd": 0.027140706515299505
+   },
+   "halves": {
+    "year": [
+     -0.007225529128941597,
+     -0.04617073308041
+    ],
+    "pairs": [
+     -0.02106767838562017,
+     -0.021573863664537753
+    ]
+   },
+   "lines": [
+    {
+     "id": "calls",
+     "ok": true,
+     "text": "53848 calls (200 needed)"
+    },
+    {
+     "id": "precision",
+     "ok": false,
+     "text": "46.4% of the calls right, at least 44.8% (above 50% needed)"
+    },
+    {
+     "id": "skill",
+     "ok": false,
+     "text": "a skill of -2.14% over the month's base rate (1.00% needed)"
+    },
+    {
+     "id": "halves",
+     "ok": false,
+     "text": "skill -0.72% and -4.62% in the year's two halves, -2.11% and -2.16% in the pairs' (each above zero needed)"
+    },
+    {
+     "id": "edge",
+     "ok": false,
+     "text": "the calls' mean move in the way called, less the round trip, -0.245% [-0.293%, -0.187%] (above zero with its lower bound needed)"
+    }
+   ],
+   "promoted": false,
+   "tradeable": false,
+   "byMonth": {
+    "2025-10": {
+     "calls": 5016,
+     "meanMovePct": 0.22985694276905344
+    },
+    "2025-11": {
+     "calls": 6384,
+     "meanMovePct": -0.01265182246873711
+    },
+    "2025-12": {
+     "calls": 4700,
+     "meanMovePct": 0.12646206317588513
+    },
+    "2026-01": {
+     "calls": 3914,
+     "meanMovePct": -0.11482222066711986
+    },
+    "2026-02": {
+     "calls": 7669,
+     "meanMovePct": 0.03325497664792754
+    },
+    "2026-03": {
+     "calls": 6612,
+     "meanMovePct": -0.016545255095606098
+    },
+    "2026-04": {
+     "calls": 3800,
+     "meanMovePct": 0.09151155311746594
+    },
+    "2026-05": {
+     "calls": 2356,
+     "meanMovePct": -0.053003644105041985
+    },
+    "2026-06": {
+     "calls": 5544,
+     "meanMovePct": -0.24646148045202843
+    },
+    "2026-07": {
+     "calls": 2627,
+     "meanMovePct": -0.15231111130600616
+    },
+    "2026-08": {
+     "calls": 2604,
+     "meanMovePct": 0.020656837913451093
+    },
+    "2026-09": {
+     "calls": 2622,
+     "meanMovePct": -0.052058601444809866
+    }
+   }
+  },
+  {
+   "hypothesis": "leaders",
+   "horizon": "hours4",
+   "calls": 53811,
+   "precision": {
+    "value": 0.4770028432848302,
+    "low": 0.4532043887903222,
+    "high": 0.5016157138457626,
+    "sd": 0.012667005444364448
+   },
+   "skill": {
+    "value": -0.016639668570089063,
+    "low": -0.041158437943172935,
+    "high": 0.008253903772069835,
+    "sd": 0.012697157227242779
+   },
+   "edgePct": {
+    "value": -0.18797781521578838,
+    "low": -0.3455595185270006,
+    "high": 0.0020004003758028466,
+    "sd": 0.08831043233299299
+   },
+   "halves": {
+    "year": [
+     -0.008417406708789446,
+     -0.031045552416297317
+    ],
+    "pairs": [
+     -0.01849215131790898,
+     -0.015360980657571506
+    ]
+   },
+   "lines": [
+    {
+     "id": "calls",
+     "ok": true,
+     "text": "53811 calls (200 needed)"
+    },
+    {
+     "id": "precision",
+     "ok": false,
+     "text": "47.7% of the calls right, at least 45.3% (above 50% needed)"
+    },
+    {
+     "id": "skill",
+     "ok": false,
+     "text": "a skill of -1.66% over the month's base rate (1.00% needed)"
+    },
+    {
+     "id": "halves",
+     "ok": false,
+     "text": "skill -0.84% and -3.10% in the year's two halves, -1.85% and -1.54% in the pairs' (each above zero needed)"
+    },
+    {
+     "id": "edge",
+     "ok": false,
+     "text": "the calls' mean move in the way called, less the round trip, -0.188% [-0.346%, +0.002%] (above zero with its lower bound needed)"
+    }
+   ],
+   "promoted": false,
+   "tradeable": false,
+   "byMonth": {
+    "2025-10": {
+     "calls": 5016,
+     "meanMovePct": 0.9440420379104588
+    },
+    "2025-11": {
+     "calls": 6384,
+     "meanMovePct": -0.11830431262959179
+    },
+    "2025-12": {
+     "calls": 4700,
+     "meanMovePct": -0.05323272309837848
+    },
+    "2026-01": {
+     "calls": 3907,
+     "meanMovePct": -0.24113647975083968
+    },
+    "2026-02": {
+     "calls": 7639,
+     "meanMovePct": 0.27807607159409803
+    },
+    "2026-03": {
+     "calls": 6612,
+     "meanMovePct": -0.06450692664718308
+    },
+    "2026-04": {
+     "calls": 3800,
+     "meanMovePct": 0.18255759957745843
+    },
+    "2026-05": {
+     "calls": 2356,
+     "meanMovePct": -0.12951898962742706
+    },
+    "2026-06": {
+     "calls": 5544,
+     "meanMovePct": -0.5329705485970975
+    },
+    "2026-07": {
+     "calls": 2627,
+     "meanMovePct": -0.2377168341811654
+    },
+    "2026-08": {
+     "calls": 2604,
+     "meanMovePct": 0.3058124447789288
+    },
+    "2026-09": {
+     "calls": 2622,
+     "meanMovePct": 0.2701294690710071
+    }
+   }
+  },
+  {
+   "hypothesis": "leaders",
+   "horizon": "hours24",
+   "calls": 53310,
+   "precision": {
+    "value": 0.4712436691052335,
+    "low": 0.43578597660307683,
+    "high": 0.5053746731342993,
+    "sd": 0.01730060261726271
+   },
+   "skill": {
+    "value": -0.030440603920139107,
+    "low": -0.0649591062991654,
+    "high": 0.00364531392834698,
+    "sd": 0.017302203586601155
+   },
+   "edgePct": {
+    "value": -0.3132712412943796,
+    "low": -0.7319388633240489,
+    "high": 0.139597068784664,
+    "sd": 0.2194521047235984
+   },
+   "halves": {
+    "year": [
+     -0.027986147133468198,
+     -0.03476087485934446
+    ],
+    "pairs": [
+     -0.037527566946534426,
+     -0.025570545743983576
+    ]
+   },
+   "lines": [
+    {
+     "id": "calls",
+     "ok": true,
+     "text": "53310 calls (200 needed)"
+    },
+    {
+     "id": "precision",
+     "ok": false,
+     "text": "47.1% of the calls right, at least 43.6% (above 50% needed)"
+    },
+    {
+     "id": "skill",
+     "ok": false,
+     "text": "a skill of -3.04% over the month's base rate (1.00% needed)"
+    },
+    {
+     "id": "halves",
+     "ok": false,
+     "text": "skill -2.80% and -3.48% in the year's two halves, -3.75% and -2.56% in the pairs' (each above zero needed)"
+    },
+    {
+     "id": "edge",
+     "ok": false,
+     "text": "the calls' mean move in the way called, less the round trip, -0.313% [-0.732%, +0.140%] (above zero with its lower bound needed)"
+    }
+   ],
+   "promoted": false,
+   "tradeable": false,
+   "byMonth": {
+    "2025-10": {
+     "calls": 4990,
+     "meanMovePct": 0.9438291315761652
+    },
+    "2025-11": {
+     "calls": 6384,
+     "meanMovePct": -1.16176024097486
+    },
+    "2025-12": {
+     "calls": 4700,
+     "meanMovePct": -0.23510167700914886
+    },
+    "2026-01": {
+     "calls": 3851,
+     "meanMovePct": -0.06147561320527351
+    },
+    "2026-02": {
+     "calls": 7539,
+     "meanMovePct": 0.33732130821787903
+    },
+    "2026-03": {
+     "calls": 6532,
+     "meanMovePct": 0.021208718573296842
+    },
+    "2026-04": {
+     "calls": 3800,
+     "meanMovePct": -1.1460621566570226
+    },
+    "2026-05": {
+     "calls": 2356,
+     "meanMovePct": -0.9837596978081163
+    },
+    "2026-06": {
+     "calls": 5501,
+     "meanMovePct": -0.3986560049083675
+    },
+    "2026-07": {
+     "calls": 2597,
+     "meanMovePct": 0.601582009115565
+    },
+    "2026-08": {
+     "calls": 2552,
+     "meanMovePct": 1.7091423115677702
+    },
+    "2026-09": {
+     "calls": 2508,
+     "meanMovePct": 0.16058252949589427
+    }
+   }
+  },
+  {
+   "hypothesis": "catalyst",
+   "horizon": "hour1",
+   "calls": 119,
+   "precision": {
+    "value": 0.7310924369747899,
+    "low": 0.6124818872506484,
+    "high": 0.8480178554167568,
+    "sd": 0.05693713330619858
+   },
+   "skill": {
+    "value": 0.23882003356205506,
+    "low": 0.12039210290850623,
+    "high": 0.35366802906883144,
+    "sd": 0.056768670810847355
+   },
+   "edgePct": {
+    "value": 1.7837800390428349,
+    "low": 0.8413375746375492,
+    "high": 2.7235546147116816,
+    "sd": 0.4778278994035952
+   },
+   "halves": {
+    "year": [
+     0.162608438261734,
+     0.2885692693830983
+    ],
+    "pairs": [
+     0.3396941278881753,
+     0.1706234627500302
+    ]
+   },
+   "lines": [
+    {
+     "id": "calls",
+     "ok": false,
+     "text": "119 calls (200 needed)"
+    },
+    {
+     "id": "precision",
+     "ok": true,
+     "text": "73.1% of the calls right, at least 61.2% (above 50% needed)"
+    },
+    {
+     "id": "skill",
+     "ok": true,
+     "text": "a skill of 23.88% over the month's base rate (1.00% needed)"
+    },
+    {
+     "id": "halves",
+     "ok": true,
+     "text": "skill 16.26% and 28.86% in the year's two halves, 33.97% and 17.06% in the pairs' (each above zero needed)"
+    },
+    {
+     "id": "edge",
+     "ok": true,
+     "text": "the calls' mean move in the way called, less the round trip, +1.784% [+0.841%, +2.724%] (above zero with its lower bound needed)"
+    }
+   ],
+   "promoted": false,
+   "tradeable": false,
+   "byMonth": {
+    "2025-10": {
+     "calls": 4,
+     "meanMovePct": 4.609179535893807
+    },
+    "2025-12": {
+     "calls": 8,
+     "meanMovePct": 2.103142136583849
+    },
+    "2026-02": {
+     "calls": 6,
+     "meanMovePct": 1.039735150673913
+    },
+    "2026-03": {
+     "calls": 25,
+     "meanMovePct": 2.255395660172273
+    },
+    "2026-04": {
+     "calls": 22,
+     "meanMovePct": 3.7112241465838194
+    },
+    "2026-05": {
+     "calls": 14,
+     "meanMovePct": 3.3678917263941393
+    },
+    "2026-06": {
+     "calls": 12,
+     "meanMovePct": 1.4404635196054032
+    },
+    "2026-08": {
+     "calls": 14,
+     "meanMovePct": 0.08541342375235304
+    },
+    "2026-01": {
+     "calls": 4,
+     "meanMovePct": -2.952947560659469
+    },
+    "2026-07": {
+     "calls": 6,
+     "meanMovePct": 1.0179860195076476
+    },
+    "2026-09": {
+     "calls": 4,
+     "meanMovePct": 0.3424438912333211
+    }
+   }
+  },
+  {
+   "hypothesis": "catalyst",
+   "horizon": "hours4",
+   "calls": 119,
+   "precision": {
+    "value": 0.6974789915966386,
+    "low": 0.5248806506987254,
+    "high": 0.8614256607625159,
+    "sd": 0.08608610209068196
+   },
+   "skill": {
+    "value": 0.18541400558926951,
+    "low": 0.008613705386652681,
+    "high": 0.3495811003608861,
+    "sd": 0.08684992149861177
+   },
+   "edgePct": {
+    "value": 3.639478293128329,
+    "low": 1.4724631769258232,
+    "high": 5.862638980020782,
+    "sd": 1.1265016921905502
+   },
+   "halves": {
+    "year": [
+     0.07804436925146888,
+     0.25550251819866726
+    ],
+    "pairs": [
+     0.2768302880949299,
+     0.12361144840234417
+    ]
+   },
+   "lines": [
+    {
+     "id": "calls",
+     "ok": false,
+     "text": "119 calls (200 needed)"
+    },
+    {
+     "id": "precision",
+     "ok": true,
+     "text": "69.7% of the calls right, at least 52.5% (above 50% needed)"
+    },
+    {
+     "id": "skill",
+     "ok": true,
+     "text": "a skill of 18.54% over the month's base rate (1.00% needed)"
+    },
+    {
+     "id": "halves",
+     "ok": true,
+     "text": "skill 7.80% and 25.55% in the year's two halves, 27.68% and 12.36% in the pairs' (each above zero needed)"
+    },
+    {
+     "id": "edge",
+     "ok": true,
+     "text": "the calls' mean move in the way called, less the round trip, +3.639% [+1.472%, +5.863%] (above zero with its lower bound needed)"
+    }
+   ],
+   "promoted": false,
+   "tradeable": false,
+   "byMonth": {
+    "2025-10": {
+     "calls": 4,
+     "meanMovePct": 14.720854728865596
+    },
+    "2025-12": {
+     "calls": 8,
+     "meanMovePct": 1.7625023477352424
+    },
+    "2026-02": {
+     "calls": 6,
+     "meanMovePct": 0.5414776228914473
+    },
+    "2026-03": {
+     "calls": 25,
+     "meanMovePct": 2.0956505105712084
+    },
+    "2026-04": {
+     "calls": 22,
+     "meanMovePct": 7.8617847662766644
+    },
+    "2026-05": {
+     "calls": 14,
+     "meanMovePct": 4.0319473544690485
+    },
+    "2026-06": {
+     "calls": 12,
+     "meanMovePct": 3.8631362556624684
+    },
+    "2026-08": {
+     "calls": 14,
+     "meanMovePct": 3.044757184455333
+    },
+    "2026-01": {
+     "calls": 4,
+     "meanMovePct": -1.9092739049181406
+    },
+    "2026-07": {
+     "calls": 6,
+     "meanMovePct": 0.512626028086514
+    },
+    "2026-09": {
+     "calls": 4,
+     "meanMovePct": 4.801231665868494
+    }
+   }
+  },
+  {
+   "hypothesis": "catalyst",
+   "horizon": "hours24",
+   "calls": 118,
+   "precision": {
+    "value": 0.6779661016949152,
+    "low": 0.5325678851965783,
+    "high": 0.8167414129309399,
+    "sd": 0.0704389094517099
+   },
+   "skill": {
+    "value": 0.14502487901139804,
+    "low": -0.004942680607860461,
+    "high": 0.2847780198840679,
+    "sd": 0.07084341380060027
+   },
+   "edgePct": {
+    "value": 1.8731023659722483,
+    "low": -3.9671639511005,
+    "high": 5.973240995238501,
+    "sd": 2.5551710068039277
+   },
+   "halves": {
+    "year": [
+     0.13665058945668787,
+     0.1505684228011361
+    ],
+    "pairs": [
+     0.25812313168440876,
+     0.067471791464191
+    ]
+   },
+   "lines": [
+    {
+     "id": "calls",
+     "ok": false,
+     "text": "118 calls (200 needed)"
+    },
+    {
+     "id": "precision",
+     "ok": true,
+     "text": "67.8% of the calls right, at least 53.3% (above 50% needed)"
+    },
+    {
+     "id": "skill",
+     "ok": true,
+     "text": "a skill of 14.50% over the month's base rate (1.00% needed)"
+    },
+    {
+     "id": "halves",
+     "ok": true,
+     "text": "skill 13.67% and 15.06% in the year's two halves, 25.81% and 6.75% in the pairs' (each above zero needed)"
+    },
+    {
+     "id": "edge",
+     "ok": false,
+     "text": "the calls' mean move in the way called, less the round trip, +1.873% [-3.967%, +5.973%] (above zero with its lower bound needed)"
+    }
+   ],
+   "promoted": false,
+   "tradeable": false,
+   "byMonth": {
+    "2025-10": {
+     "calls": 4,
+     "meanMovePct": 16.36395120803468
+    },
+    "2025-12": {
+     "calls": 8,
+     "meanMovePct": 4.626190748844186
+    },
+    "2026-02": {
+     "calls": 6,
+     "meanMovePct": -1.9909832074185474
+    },
+    "2026-03": {
+     "calls": 25,
+     "meanMovePct": 5.981830651071315
+    },
+    "2026-04": {
+     "calls": 21,
+     "meanMovePct": 4.671640438146771
+    },
+    "2026-05": {
+     "calls": 14,
+     "meanMovePct": 5.218568993564732
+    },
+    "2026-06": {
+     "calls": 12,
+     "meanMovePct": 4.054474875293837
+    },
+    "2026-08": {
+     "calls": 14,
+     "meanMovePct": -12.095634627445893
+    },
+    "2026-01": {
+     "calls": 4,
+     "meanMovePct": -12.465095898255363
+    },
+    "2026-07": {
+     "calls": 6,
+     "meanMovePct": 0.7296991874473582
+    },
+    "2026-09": {
+     "calls": 4,
+     "meanMovePct": 1.0709602419066822
+    }
+   }
+  },
+  {
+   "hypothesis": "breakout",
+   "horizon": "hour1",
+   "calls": 4997,
+   "precision": {
+    "value": 0.4612767660596358,
+    "low": 0.4342119004538027,
+    "high": 0.49339203599847126,
+    "sd": 0.014706816153806795
+   },
+   "skill": {
+    "value": -0.023055437183432136,
+    "low": -0.0504397203399566,
+    "high": 0.008717847050561021,
+    "sd": 0.01467718272852774
+   },
+   "edgePct": {
+    "value": -0.05875666352785197,
+    "low": -0.2486680832205074,
+    "high": 0.2241682776966314,
+    "sd": 0.12281321390597054
+   },
+   "halves": {
+    "year": [
+     0.0013407272286340085,
+     -0.047073742019628106
+    ],
+    "pairs": [
+     -0.01239052488644699,
+     -0.031102802536750504
+    ]
+   },
+   "lines": [
+    {
+     "id": "calls",
+     "ok": true,
+     "text": "4997 calls (200 needed)"
+    },
+    {
+     "id": "precision",
+     "ok": false,
+     "text": "46.1% of the calls right, at least 43.4% (above 50% needed)"
+    },
+    {
+     "id": "skill",
+     "ok": false,
+     "text": "a skill of -2.31% over the month's base rate (1.00% needed)"
+    },
+    {
+     "id": "halves",
+     "ok": false,
+     "text": "skill 0.13% and -4.71% in the year's two halves, -1.24% and -3.11% in the pairs' (each above zero needed)"
+    },
+    {
+     "id": "edge",
+     "ok": false,
+     "text": "the calls' mean move in the way called, less the round trip, -0.059% [-0.249%, +0.224%] (above zero with its lower bound needed)"
+    }
+   ],
+   "promoted": false,
+   "tradeable": false,
+   "byMonth": {
+    "2025-10": {
+     "calls": 453,
+     "meanMovePct": 1.5176925855403685
+    },
+    "2025-11": {
+     "calls": 412,
+     "meanMovePct": 0.09070853851245081
+    },
+    "2025-12": {
+     "calls": 360,
+     "meanMovePct": 0.2797181634711652
+    },
+    "2026-01": {
+     "calls": 471,
+     "meanMovePct": 0.24467706789442925
+    },
+    "2026-02": {
+     "calls": 380,
+     "meanMovePct": -0.1224235006243352
+    },
+    "2026-03": {
+     "calls": 403,
+     "meanMovePct": 0.07699176582155208
+    },
+    "2026-04": {
+     "calls": 323,
+     "meanMovePct": 0.2153931394489765
+    },
+    "2026-05": {
+     "calls": 505,
+     "meanMovePct": 0.10864892785334865
+    },
+    "2026-06": {
+     "calls": 435,
+     "meanMovePct": -0.3606235742508824
+    },
+    "2026-07": {
+     "calls": 403,
+     "meanMovePct": -0.05412352059839428
+    },
+    "2026-08": {
+     "calls": 417,
+     "meanMovePct": 0.10105164692039868
+    },
+    "2026-09": {
+     "calls": 435,
+     "meanMovePct": -0.017372624725989803
+    }
+   }
+  },
+  {
+   "hypothesis": "breakout",
+   "horizon": "hours4",
+   "calls": 4997,
+   "precision": {
+    "value": 0.4594756854112467,
+    "low": 0.4243973191880727,
+    "high": 0.49705691886804093,
+    "sd": 0.01853717054303377
+   },
+   "skill": {
+    "value": -0.03218136143154114,
+    "low": -0.06685494145052301,
+    "high": 0.005107584439018396,
+    "sd": 0.018654750450621496
+   },
+   "edgePct": {
+    "value": -0.05654010391709111,
+    "low": -0.3666468174286288,
+    "high": 0.3490610007063262,
+    "sd": 0.18487708788497417
+   },
+   "halves": {
+    "year": [
+     0.00799891720498811,
+     -0.0717393085085659
+    ],
+    "pairs": [
+     -0.029247598218712475,
+     -0.03439507531649976
+    ]
+   },
+   "lines": [
+    {
+     "id": "calls",
+     "ok": true,
+     "text": "4997 calls (200 needed)"
+    },
+    {
+     "id": "precision",
+     "ok": false,
+     "text": "45.9% of the calls right, at least 42.4% (above 50% needed)"
+    },
+    {
+     "id": "skill",
+     "ok": false,
+     "text": "a skill of -3.22% over the month's base rate (1.00% needed)"
+    },
+    {
+     "id": "halves",
+     "ok": false,
+     "text": "skill 0.80% and -7.17% in the year's two halves, -2.92% and -3.44% in the pairs' (each above zero needed)"
+    },
+    {
+     "id": "edge",
+     "ok": false,
+     "text": "the calls' mean move in the way called, less the round trip, -0.057% [-0.367%, +0.349%] (above zero with its lower bound needed)"
+    }
+   ],
+   "promoted": false,
+   "tradeable": false,
+   "byMonth": {
+    "2025-10": {
+     "calls": 453,
+     "meanMovePct": 1.9131059949960043
+    },
+    "2025-11": {
+     "calls": 412,
+     "meanMovePct": 0.25191198438456536
+    },
+    "2025-12": {
+     "calls": 360,
+     "meanMovePct": 0.04331181836099664
+    },
+    "2026-01": {
+     "calls": 471,
+     "meanMovePct": 0.44133211389761856
+    },
+    "2026-02": {
+     "calls": 380,
+     "meanMovePct": 0.7481735757186876
+    },
+    "2026-03": {
+     "calls": 403,
+     "meanMovePct": -0.19641718263529095
+    },
+    "2026-04": {
+     "calls": 323,
+     "meanMovePct": -0.2499830423624357
+    },
+    "2026-05": {
+     "calls": 505,
+     "meanMovePct": 0.05147299738472537
+    },
+    "2026-06": {
+     "calls": 435,
+     "meanMovePct": -0.6953937046279847
+    },
+    "2026-07": {
+     "calls": 403,
+     "meanMovePct": -0.04725484347496854
+    },
+    "2026-08": {
+     "calls": 417,
+     "meanMovePct": -0.013357714118923695
+    },
+    "2026-09": {
+     "calls": 435,
+     "meanMovePct": -0.2308606385636648
+    }
+   }
+  },
+  {
+   "hypothesis": "breakout",
+   "horizon": "hours24",
+   "calls": 4961,
+   "precision": {
+    "value": 0.4626083450917154,
+    "low": 0.41625706578943317,
+    "high": 0.5078373586937092,
+    "sd": 0.02391074142033689
+   },
+   "skill": {
+    "value": -0.03602668050832103,
+    "low": -0.08307910066711732,
+    "high": 0.011112871338777516,
+    "sd": 0.024075092015396468
+   },
+   "edgePct": {
+    "value": -0.29460123914869696,
+    "low": -0.9943464722952831,
+    "high": 0.54507396358646,
+    "sd": 0.39382236424854994
+   },
+   "halves": {
+    "year": [
+     -0.014711189091306946,
+     -0.057009650259250234
+    ],
+    "pairs": [
+     -0.04275664905798874,
+     -0.03095899040963012
+    ]
+   },
+   "lines": [
+    {
+     "id": "calls",
+     "ok": true,
+     "text": "4961 calls (200 needed)"
+    },
+    {
+     "id": "precision",
+     "ok": false,
+     "text": "46.3% of the calls right, at least 41.6% (above 50% needed)"
+    },
+    {
+     "id": "skill",
+     "ok": false,
+     "text": "a skill of -3.60% over the month's base rate (1.00% needed)"
+    },
+    {
+     "id": "halves",
+     "ok": false,
+     "text": "skill -1.47% and -5.70% in the year's two halves, -4.28% and -3.10% in the pairs' (each above zero needed)"
+    },
+    {
+     "id": "edge",
+     "ok": false,
+     "text": "the calls' mean move in the way called, less the round trip, -0.295% [-0.994%, +0.545%] (above zero with its lower bound needed)"
+    }
+   ],
+   "promoted": false,
+   "tradeable": false,
+   "byMonth": {
+    "2025-10": {
+     "calls": 448,
+     "meanMovePct": 2.1837583938919143
+    },
+    "2025-11": {
+     "calls": 409,
+     "meanMovePct": -0.5047217779923932
+    },
+    "2025-12": {
+     "calls": 359,
+     "meanMovePct": -0.4149313301394485
+    },
+    "2026-01": {
+     "calls": 470,
+     "meanMovePct": 1.3308000321711713
+    },
+    "2026-02": {
+     "calls": 372,
+     "meanMovePct": -2.2751130369279386
+    },
+    "2026-03": {
+     "calls": 403,
+     "meanMovePct": -0.4014156800018199
+    },
+    "2026-04": {
+     "calls": 323,
+     "meanMovePct": -1.1515720141492372
+    },
+    "2026-05": {
+     "calls": 501,
+     "meanMovePct": -0.5338717557028947
+    },
+    "2026-06": {
+     "calls": 431,
+     "meanMovePct": -0.1492733779067697
+    },
+    "2026-07": {
+     "calls": 403,
+     "meanMovePct": -0.43501238644702006
+    },
+    "2026-08": {
+     "calls": 416,
+     "meanMovePct": 1.318936443426066
+    },
+    "2026-09": {
+     "calls": 426,
+     "meanMovePct": -0.4243559440745434
+    }
+   }
+  },
+  {
+   "hypothesis": "recovery",
+   "horizon": "hour1",
+   "calls": 8137,
+   "precision": {
+    "value": 0.5242718446601942,
+    "low": 0.4904411817800292,
+    "high": 0.5548175365044691,
+    "sd": 0.016460175695210653
+   },
+   "skill": {
+    "value": 0.050783290156915385,
+    "low": 0.017004613619211288,
+    "high": 0.08159847936120579,
+    "sd": 0.016471134650904294
+   },
+   "edgePct": {
+    "value": -0.3045586273446228,
+    "low": -0.49821511348414516,
+    "high": -0.14845551965160556,
+    "sd": 0.09054710217123443
+   },
+   "halves": {
+    "year": [
+     0.026871886540064692,
+     0.07690199485334044
+    ],
+    "pairs": [
+     0.05875048585238431,
+     0.04439506703617511
+    ]
+   },
+   "lines": [
+    {
+     "id": "calls",
+     "ok": true,
+     "text": "8137 calls (200 needed)"
+    },
+    {
+     "id": "precision",
+     "ok": false,
+     "text": "52.4% of the calls right, at least 49.0% (above 50% needed)"
+    },
+    {
+     "id": "skill",
+     "ok": true,
+     "text": "a skill of 5.08% over the month's base rate (1.00% needed)"
+    },
+    {
+     "id": "halves",
+     "ok": true,
+     "text": "skill 2.69% and 7.69% in the year's two halves, 5.88% and 4.44% in the pairs' (each above zero needed)"
+    },
+    {
+     "id": "edge",
+     "ok": false,
+     "text": "the calls' mean move in the way called, less the round trip, -0.305% [-0.498%, -0.148%] (above zero with its lower bound needed)"
+    }
+   ],
+   "promoted": false,
+   "tradeable": false,
+   "byMonth": {
+    "2025-10": {
+     "calls": 726,
+     "meanMovePct": -0.861226490835938
+    },
+    "2025-11": {
+     "calls": 796,
+     "meanMovePct": -0.0733411980656481
+    },
+    "2025-12": {
+     "calls": 792,
+     "meanMovePct": -0.31257912916277975
+    },
+    "2026-01": {
+     "calls": 798,
+     "meanMovePct": -0.09886460518099087
+    },
+    "2026-02": {
+     "calls": 599,
+     "meanMovePct": 0.10497560475319531
+    },
+    "2026-03": {
+     "calls": 537,
+     "meanMovePct": -0.05100108290647549
+    },
+    "2026-04": {
+     "calls": 579,
+     "meanMovePct": -0.13287454778378172
+    },
+    "2026-05": {
+     "calls": 695,
+     "meanMovePct": 0.04655078911512018
+    },
+    "2026-06": {
+     "calls": 712,
+     "meanMovePct": 0.35433454399257713
+    },
+    "2026-07": {
+     "calls": 619,
+     "meanMovePct": -0.027916259862871017
+    },
+    "2026-08": {
+     "calls": 654,
+     "meanMovePct": 0.14470224741188947
+    },
+    "2026-09": {
+     "calls": 630,
+     "meanMovePct": 0.2606675543900572
+    }
+   }
+  },
+  {
+   "hypothesis": "recovery",
+   "horizon": "hours4",
+   "calls": 8137,
+   "precision": {
+    "value": 0.5048543689320388,
+    "low": 0.46404670349373156,
+    "high": 0.5438904775918019,
+    "sd": 0.020513646326969077
+   },
+   "skill": {
+    "value": 0.03291497642508657,
+    "low": -0.007728367360022116,
+    "high": 0.07291747126034132,
+    "sd": 0.020516489702134225
+   },
+   "edgePct": {
+    "value": -0.3195171596094929,
+    "low": -0.5874756504769159,
+    "high": -0.06615921772592731,
+    "sd": 0.1330388741038062
+   },
+   "halves": {
+    "year": [
+     0.005408899439412448,
+     0.06296018471389633
+    ],
+    "pairs": [
+     0.027115347702197624,
+     0.03756521017300976
+    ]
+   },
+   "lines": [
+    {
+     "id": "calls",
+     "ok": true,
+     "text": "8137 calls (200 needed)"
+    },
+    {
+     "id": "precision",
+     "ok": false,
+     "text": "50.5% of the calls right, at least 46.4% (above 50% needed)"
+    },
+    {
+     "id": "skill",
+     "ok": true,
+     "text": "a skill of 3.29% over the month's base rate (1.00% needed)"
+    },
+    {
+     "id": "halves",
+     "ok": true,
+     "text": "skill 0.54% and 6.30% in the year's two halves, 2.71% and 3.76% in the pairs' (each above zero needed)"
+    },
+    {
+     "id": "edge",
+     "ok": false,
+     "text": "the calls' mean move in the way called, less the round trip, -0.320% [-0.587%, -0.066%] (above zero with its lower bound needed)"
+    }
+   ],
+   "promoted": false,
+   "tradeable": false,
+   "byMonth": {
+    "2025-10": {
+     "calls": 726,
+     "meanMovePct": -0.7134037759698743
+    },
+    "2025-11": {
+     "calls": 796,
+     "meanMovePct": -0.6159511823730476
+    },
+    "2025-12": {
+     "calls": 792,
+     "meanMovePct": -0.20139229315772633
+    },
+    "2026-01": {
+     "calls": 798,
+     "meanMovePct": 0.0032168839888176643
+    },
+    "2026-02": {
+     "calls": 599,
+     "meanMovePct": 0.13901255340031785
+    },
+    "2026-03": {
+     "calls": 537,
+     "meanMovePct": -0.2079007757756211
+    },
+    "2026-04": {
+     "calls": 579,
+     "meanMovePct": -0.4331863155861922
+    },
+    "2026-05": {
+     "calls": 695,
+     "meanMovePct": 0.11859209140979322
+    },
+    "2026-06": {
+     "calls": 712,
+     "meanMovePct": 0.5060715172868153
+    },
+    "2026-07": {
+     "calls": 619,
+     "meanMovePct": 0.048793599403760636
+    },
+    "2026-08": {
+     "calls": 654,
+     "meanMovePct": 0.2297268397626121
+    },
+    "2026-09": {
+     "calls": 630,
+     "meanMovePct": 0.27640132745062984
+    }
+   }
+  },
+  {
+   "hypothesis": "recovery",
+   "horizon": "hours24",
+   "calls": 8053,
+   "precision": {
+    "value": 0.4871476468396871,
+    "low": 0.44609250435033326,
+    "high": 0.5365044112231694,
+    "sd": 0.023678167016025525
+   },
+   "skill": {
+    "value": 0.03707212389846384,
+    "low": -0.0051387381902104345,
+    "high": 0.08497183081165711,
+    "sd": 0.02332837552658504
+   },
+   "edgePct": {
+    "value": -0.40026323977468375,
+    "low": -1.0722394323069406,
+    "high": 0.19543713751871367,
+    "sd": 0.322760603707526
+   },
+   "halves": {
+    "year": [
+     0.03958442228382889,
+     0.03432811184024086
+    ],
+    "pairs": [
+     0.04484799241418679,
+     0.030851776688404775
+    ]
+   },
+   "lines": [
+    {
+     "id": "calls",
+     "ok": true,
+     "text": "8053 calls (200 needed)"
+    },
+    {
+     "id": "precision",
+     "ok": false,
+     "text": "48.7% of the calls right, at least 44.6% (above 50% needed)"
+    },
+    {
+     "id": "skill",
+     "ok": true,
+     "text": "a skill of 3.71% over the month's base rate (1.00% needed)"
+    },
+    {
+     "id": "halves",
+     "ok": true,
+     "text": "skill 3.96% and 3.43% in the year's two halves, 4.48% and 3.09% in the pairs' (each above zero needed)"
+    },
+    {
+     "id": "edge",
+     "ok": false,
+     "text": "the calls' mean move in the way called, less the round trip, -0.400% [-1.072%, +0.195%] (above zero with its lower bound needed)"
+    }
+   ],
+   "promoted": false,
+   "tradeable": false,
+   "byMonth": {
+    "2025-10": {
+     "calls": 716,
+     "meanMovePct": -2.531263721093067
+    },
+    "2025-11": {
+     "calls": 791,
+     "meanMovePct": -0.8099378262464451
+    },
+    "2025-12": {
+     "calls": 786,
+     "meanMovePct": 0.634534629845465
+    },
+    "2026-01": {
+     "calls": 786,
+     "meanMovePct": 0.07844154758747997
+    },
+    "2026-02": {
+     "calls": 589,
+     "meanMovePct": 0.2982271169061591
+    },
+    "2026-03": {
+     "calls": 536,
+     "meanMovePct": -0.5820826624222305
+    },
+    "2026-04": {
+     "calls": 576,
+     "meanMovePct": -0.07544803583671832
+    },
+    "2026-05": {
+     "calls": 691,
+     "meanMovePct": 0.07012928603734263
+    },
+    "2026-06": {
+     "calls": 700,
+     "meanMovePct": -0.028982428100873855
+    },
+    "2026-07": {
+     "calls": 616,
+     "meanMovePct": -0.12283441843961984
+    },
+    "2026-08": {
+     "calls": 652,
+     "meanMovePct": 0.43395595438862417
+    },
+    "2026-09": {
+     "calls": 614,
+     "meanMovePct": 0.889902582824942
+    }
+   }
+  }
+ ]
+}
