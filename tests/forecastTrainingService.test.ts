@@ -416,7 +416,8 @@ describe('a refit', () => {
       return answer
     })
     training.startForecastTraining()
-    await vi.waitFor(() => expect(training.getForecastTrainingState().challenge).not.toBeNull())
+    // The verdict is recorded before the service is ready again: waited for both, as a loaded suite can look between.
+    await vi.waitFor(() => expect(training.getForecastTrainingState()).toMatchObject({ challenge: expect.anything(), status: 'ready' }))
     vi.mocked(askWorker).mockImplementation(real)
     const challenger = fake.asked[0].runId
     const state = training.getForecastTrainingState()

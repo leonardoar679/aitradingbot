@@ -315,9 +315,14 @@ function say(line) {
 const env = { ...process.env }
 // Claude Code and VS Code export this to their children; with it set electron.exe runs as plain Node.
 delete env.ELECTRON_RUN_AS_NODE
+// The tray icon says TEST too (electron/main.ts), so that a person can tell the check from their own TraderSpider.
+env.TRADERSPIDER_TEST_LABEL = `TEST ${RUN_NAME}: automated check, closes by itself`
 
 let app = null
 let page = null
+/** Set where this script closes the app itself; the app gone otherwise ends the segment at once (appGone). */
+let closing = false
+let appGone = null
 let startSec = Math.floor(segments[0].startedAt / 1000)
 /** When the run's minutes started: at launch, or once the forecast was ready (WAIT_FORECAST). */
 let clockStart = t0
@@ -328,10 +333,18 @@ async function main() {
   if (stale > 0) say(`cleared ${stale} stale Electron process(es) of an earlier segment`)
   app = await electron.launch({ executablePath: ELECTRON_BIN, args: [ENTRY, `--user-data-dir=${PROFILE}`], cwd: APP_DIR, env, timeout: 60_000 })
   const proc = app.process()
+  // The app gone before the run's end -- closed by a person, the OS, or a crash -- ends the segment at once with its end
+  // left open, so that scripts/shadow-supervise.mjs resumes it with the minutes not yet run.
+  proc.on('exit', (code, signal) => {
+    if (closing) return
+    appGone = { at: Date.now(), code, signal }
+    say(`the app is gone (exit ${code ?? signal}) before the run's end`)
+  })
   proc.stdout?.on('data', (chunk) => mainLog.write(`[${new Date().toISOString()}] ${chunk}`))
   proc.stderr?.on('data', (chunk) => mainLog.write(`[${new Date().toISOString()}] ERR ${chunk}`))
   const actual = await app.evaluate(({ app: electronApp }) => electronApp.getPath('userData'))
   if (!samePath(actual, PROFILE)) {
+    closing = true
     await app.close().catch(() => {})
     throw new Error(`asked for ${PROFILE}, the app opened ${actual}`)
   }
@@ -537,6 +550,10 @@ async function main() {
   await page.waitForFunction(() => [...document.querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Home'), null, { timeout: 60_000 })
   await banner()
   say('launched')
+  // Closing the check's window hides it to the tray and the run goes on (since 22 October 2026: the Stage 2 check's app
+  // was closed twice by hand, by its window or its tray, while the user's own app restarted). The tray says TEST.
+  const kept = await page.evaluate(async () => (await window.api.settings.set({ keepRunningWhenClosed: true })).keepRunningWhenClosed).catch((failure) => `not set: ${failure}`)
+  say(`a closed window hides to the tray: ${kept}`)
 
   // A profile copied in (FROM_PROFILE): the made-up key at once, as its own was there from the start,
   // and nothing else of its setup changed; then its language question, when it is asked, answered on
@@ -735,6 +752,7 @@ async function main() {
   let nextCeiling = Date.now() + 60_000
   while (Date.now() < endAt) {
     await new Promise((r) => setTimeout(r, 5000))
+    if (appGone !== null) throw new Error(`the app was gone at ${new Date(appGone.at).toISOString()}, before the run's end: the segment ends here`)
     if (Date.now() >= nextCeiling) {
       await holdCeiling()
       nextCeiling += 60_000
@@ -1168,6 +1186,10 @@ async function forecastSection(fromSec, toSec) {
 
 async function shot(name) {
   try {
+    // A window closed by hand is hidden, not gone: shown again for the picture.
+    await app.evaluate(({ BrowserWindow }) => {
+      for (const win of BrowserWindow.getAllWindows()) if (!win.isVisible()) win.showInactive()
+    }).catch(() => undefined)
     await page.screenshot({ path: path.join(OUT, `${name}.png`) })
   } catch (failure) {
     say(`screenshot ${name} failed: ${failure}`)
@@ -1255,6 +1277,7 @@ async function shutDown() {
       say(`switching off failed: ${failure}`)
     }
   }
+  closing = true
   if (app) await app.close().catch((failure) => say(`close failed: ${failure}`))
   say('closed')
   if (demoKeyCopied) {

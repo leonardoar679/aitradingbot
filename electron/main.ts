@@ -40,6 +40,10 @@ const TRAY_REFRESH_MS = 30_000
 let quitting = false
 let tray: Tray | null = null
 let lastTooltip = ''
+/** A check run's label (scripts/shadow-run.mjs sets TRADERSPIDER_TEST_LABEL): its tray icon says so beside the app's
+ * own words, as its window's title and banner do, so that a person can tell it from their TraderSpider. Unset, nothing
+ * changes. */
+const TEST_LABEL = process.env.TRADERSPIDER_TEST_LABEL?.trim() || null
 
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -127,7 +131,7 @@ async function refreshTray(): Promise<void> {
     ownOpen: settings.executors.filter((executor) => executor.watch !== undefined && executor.status === 'active').length,
     keepRunning: healKeepRunning(settings.keepRunningWhenClosed)
   })
-  tray.setToolTip(lastTooltip)
+  tray.setToolTip(TEST_LABEL === null ? lastTooltip : `${TEST_LABEL} -- ${lastTooltip}`.slice(0, 127))
 }
 
 /** The tray icon (the V5 document, §98-99): always there, so a hidden window has a way back, with
