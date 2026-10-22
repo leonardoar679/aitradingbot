@@ -12,6 +12,8 @@ import datetime
 import glob
 import json
 import os
+import re
+import subprocess
 import sys
 import tempfile
 
@@ -206,6 +208,142 @@ if settled:
 spend = load(os.path.join(ROOT, 'real-ai-spend.json'))
 if spend:
     print(f'\n===== real models: runs {", ".join(spend["runs"])}; retired profiles ${spend["retiredUsd"]:.4f}; ceiling ${spend["ceilingUsd"]}')
+
+# --- the V7.2-R gates (Stage 9, 22 October 2026) ---------------------------------------------------
+# Read from the profile's own records over the run: the models asked against the roles applied and the model that
+# answered (V72R-S1-ROUTING's lines), every paper or demo order opened with its record and, once stopped, how it ended,
+# the research ZIP read back by scripts/research-analyze.py, and the challenger's shadow week (V72R-S8-SHADOW). The
+# forecast's own gates (every due forecast judged, every notice's sound on file) are the forecast section's above.
+SAME_SUFFIX = re.compile(r'^-(\d{4}-?\d{2}-?\d{2}|\d{4}|v\d+(\.\d+)*|latest|preview)$')
+EFFORTS = ('low', 'minimal')
+
+
+def slug_of(model):
+    at = model.rfind('@')
+    return model[:at] if at >= 0 and model[at + 1:] in EFFORTS else model
+
+
+def served_family(asked, served):
+    """shared/aiRouting.ts servedFamilyOf, read the same way."""
+    if not served or not served.strip():
+        return 'unknown'
+    slug = slug_of(asked).lower()
+    name = served.strip().lower()
+    if name == slug or (name.startswith(slug + '-') and SAME_SUFFIX.match(name[len(slug):])):
+        return 'same'
+    if '/' not in name:
+        return 'same' if slug.endswith('/' + name) or name.startswith(slug[slug.find('/') + 1:]) else 'variant'
+    provider = lambda text: text[:text.find('/')] if '/' in text else ''
+    return 'variant' if provider(name) == provider(slug) else 'other'
+
+
+def gate_line(gid, status, detail):
+    print(f'  {gid:15} {status:13} {detail}')
+
+
+run_start = segments[0]['startedAt'] / 1000 if segments else 0
+print(f'\n===== V7.2-R gates over the run, from {clock(run_start)}')
+
+# Routing: every call since the run began asked a model of the roles applied, and was answered by it.
+ai_config = load(os.path.join(PROFILE, 'aiConfig.json')) or {}
+roles = ai_config.get('roles') or None
+role_models = set()
+if roles is not None:
+    role_models = {m for m in (ai_config.get('defaultModel'), roles.get('gate'), roles.get('summarize')) if isinstance(m, str) and m}
+run_calls = [c for c in jsonl(os.path.join(PROFILE, 'aiLedger', '*.jsonl')) if c.get('at', 0) >= run_start]
+if roles is None:
+    gate_line('roles', 'not measured', 'No roles were applied on this profile.')
+elif not run_calls:
+    gate_line('roles', 'not measured', f'No model was asked in the run; the roles: {sorted(role_models)}.')
+else:
+    outside = [c for c in run_calls if c.get('model') not in role_models]
+    by_model = {}
+    for c in run_calls:
+        key = f'{c.get("model")} ({c.get("role") or "-"}, {c.get("addition") or c.get("source")})'
+        by_model[key] = by_model.get(key, 0) + 1
+    gate_line('roles', 'pass' if not outside else 'fail', f'{len(run_calls)} calls, {len(outside)} outside the roles {sorted(role_models)}; ' + '; '.join(f'{k}: {v}' for k, v in sorted(by_model.items())))
+answered = [c for c in run_calls if c.get('status') in ('ok', 'rejected')]
+if not answered:
+    gate_line('served', 'not measured', 'No call was answered in the run.')
+else:
+    families = {}
+    for c in answered:
+        fam = served_family(c.get('model') or '', c.get('servedModel'))
+        families[fam] = families.get(fam, 0) + 1
+    others = [c for c in answered if served_family(c.get('model') or '', c.get('servedModel')) == 'other']
+    gate_line('served', 'pass' if not others else 'fail', f'{len(answered)} answered: ' + ', '.join(f'{k} {v}' for k, v in sorted(families.items())) + ('' if not others else f'; another provider\'s model answered {others[0].get("model")} with {others[0].get("servedModel")}'))
+spent = sum((c.get('usage') or {}).get('costUsd') or 0 for c in run_calls)
+print(f'  the run\'s calls cost ${spent:.4f}')
+
+# Paper and demo orders: each opened in the run is on the research folder's record, and each stopped says how it ended.
+settings_now = load(os.path.join(PROFILE, 'settings.json')) or {}
+orders = [e for e in settings_now.get('executors', []) if e.get('mode') in ('paper', 'demo') and (e.get('createdAt') or 0) >= run_start]
+events_on_file = jsonl(os.path.join(PROFILE, 'trader-spider-research', 'trades', 'paper-orders-*.jsonl'))
+opened_on_file = {e['id'] for e in events_on_file if e.get('kind') == 'opened'}
+ended_on_file = {e['id'] for e in events_on_file if e.get('kind') in ('closed', 'stopped')}
+if not orders:
+    gate_line('orders_whole', 'not measured', 'No paper or demo order was opened in the run.')
+else:
+    def mark_of(e):
+        return e.get('lab') or e.get('forecast') or e.get('watch') or e.get('newsRule') or {}
+    no_open = [e for e in orders if e['id'] not in opened_on_file]
+    unended = [e for e in orders if e.get('status') == 'stopped' and mark_of(e).get('result') is None]
+    unrecorded_end = [e for e in orders if e.get('status') == 'stopped' and e['id'] not in ended_on_file]
+    by_origin = {}
+    for e in orders:
+        origin = 'lab' if e.get('lab') else 'forecast' if e.get('forecast') else 'watch' if e.get('watch') else 'news' if e.get('newsRule') else 'person'
+        by_origin[f'{origin}/{e.get("mode")}'] = by_origin.get(f'{origin}/{e.get("mode")}', 0) + 1
+    ok = not no_open and not unended and not unrecorded_end
+    gate_line('orders_whole', 'pass' if ok else 'fail', f'{len(orders)} opened ({", ".join(f"{k} {v}" for k, v in sorted(by_origin.items()))}), {sum(1 for e in orders if e.get("status") == "stopped")} ended; without their opening on file {len(no_open)}, stopped without how it ended {len(unended)}, ended off the record {len(unrecorded_end)}')
+
+# The research ZIP: the newest export read back by the analyzer, its manifest's checksums holding.
+zips = sorted(glob.glob(os.path.join(PROFILE, 'trader-spider-research', 'exports', 'trader-spider-report-*.zip')))
+if not zips:
+    gate_line('zip_read', 'not measured', 'No export was made in the run.')
+else:
+    analyzer = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'research-analyze.py')
+    made = subprocess.run([sys.executable, analyzer, zips[-1]], capture_output=True, text=True, encoding='utf-8', errors='replace')
+    text = made.stdout or ''
+    # Read back whole: its manifest's sizes and checksums hold and nothing secret is in it. The analyzer's other checks
+    # are about the record it carries, said beside.
+    held = 'PASS  manifest' in text and 'PASS  no secret' in text
+    others = [line.strip() for line in text.splitlines() if line.strip().startswith('FAIL')]
+    gate_line('zip_read', 'pass' if held else 'fail', f'{os.path.basename(zips[-1])} ({len(zips)} on file): {"read back, its manifest and no secret held" if held else "not read back: " + (made.stderr or text)[-200:]}' + (f'; the record in it: {"; ".join(others)}' if others else ''))
+
+# The challenger's shadow week (V72R-S8-SHADOW): the closes it forecast beside the run in use, its owed outcomes, and
+# no line of the run in use's naming it.
+current_file = load(os.path.join(PROFILE, 'forecastModels', 'current.json')) or {}
+training_log = jsonl(os.path.join(PROFILE, 'forecastModels', 'training-*.jsonl'))
+shadows = [line for line in training_log if line.get('kind') in ('shadow', 'shadow-adopted', 'shadow-dropped', 'skipped')]
+seed = load(os.path.join(OUT, 'shadow-seed.json'))
+held_shadow = current_file.get('shadow') or (seed or {}).get('shadow')
+shadow_lines = jsonl(os.path.join(PROFILE, 'forecasts', 'shadow-predictions-*.jsonl'))
+if held_shadow is None and not shadow_lines:
+    gate_line('shadow', 'not measured', 'No challenger was in its shadow week in the run.')
+else:
+    run_id = (held_shadow or {}).get('runId') or (shadow_lines[0]['run'] if shadow_lines else None)
+    since = (held_shadow or {}).get('since') or run_start
+    until = (held_shadow or {}).get('until') or 1e12
+    mine = [p for p in shadow_lines if p.get('run') == run_id and p.get('why') == 'grid']
+    champion = [p for p in jsonl(os.path.join(PROFILE, 'forecasts', 'predictions-*.jsonl')) if p.get('why') == 'grid' and since <= p['t'] < until]
+    last_close = max([p['t'] for p in champion], default=since)
+    champion_keys = {(p['pair'], p['t']) for p in champion}
+    shadow_keys = {(p['pair'], p['t']) for p in mine}
+    paired = len(champion_keys & shadow_keys) / len(champion_keys) if champion_keys else None
+    shadow_outcomes = {(o['id'], o['h']) for o in jsonl(os.path.join(PROFILE, 'forecasts', 'shadow-outcomes-*.jsonl'))}
+    seconds = {'minutes5': 300, 'minutes15': 900, 'hour1': 3600, 'hours4': 14400, 'hours24': 86400}
+    due = [(p['id'], h) for p in mine for h in p.get('h', {}) if p['t'] + seconds[h] + 600 + 3600 <= last_close]
+    settled = sum(1 for key in due if key in shadow_outcomes)
+    # Within its week: adopted at its end, the run in use's lines after it name it, as they should.
+    named = 0
+    if run_id:
+        for pattern in ('predictions-*.jsonl', 'passes-*.jsonl'):
+            named += sum(1 for line in jsonl(os.path.join(PROFILE, 'forecasts', pattern)) if since <= line.get('t', 0) < until and run_id in json.dumps(line))
+        named += sum(1 for e in settings_now.get('executors', []) if since <= (e.get('createdAt') or 0) < until and run_id in json.dumps(e))
+    ok = paired is not None and paired >= 0.99 and (not due or settled / len(due) >= 0.99) and named == 0
+    gate_line('shadow', 'pass' if ok else 'fail', f'{run_id} since {clock(since)}: {len(mine)} grid forecasts; the run in use\'s {len(champion_keys)} paired {share(paired)}; due horizons settled {settled} of {len(due)}; lines of the run in use\'s naming it {named}')
+    for line in shadows:
+        print(f'  training log {clock(line["at"])} {line["kind"]:15} {line.get("runId")} {line.get("why") or ""} {line.get("summary") or ""}')
 
 # --- the records on file, over every segment -----------------------------------------------------
 print('\n===== raw records')

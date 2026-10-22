@@ -19,6 +19,10 @@
 //   npx esbuild research/moveOdds.ts --bundle --platform=node --format=esm --outfile=research/.moveOdds.mjs
 //   PROFILES=<profile>[,<profile>...] [OUT=<file.json>] node research/.moveOdds.mjs
 //
+// Since V7.2-R Stage 9 (V72R-S3-EITHER) the close's chance either way -- at least t% up plus at least t% down, the move
+// whose size the levels know where its way is not -- is read beside the two sides, by the same line on its own; SINCE
+// (Unix seconds) reads only the forecasts made from then on.
+//
 // It reads each profile's forecasts/predictions-*.jsonl and outcomes-*.jsonl; it writes nothing but OUT, reads no
 // key and asks nothing.
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
@@ -30,6 +34,7 @@ import { BLOCK_HOURS, dependenceFactor, smallSampleFactor } from '../shared/fore
 const PROFILES = (process.env.PROFILES ?? '').split(',').map((path) => path.trim()).filter((path) => path !== '')
 if (PROFILES.length === 0) throw new Error('PROFILES names the profiles whose forecasts/ to read, comma-separated')
 const OUT = process.env.OUT ?? ''
+const SINCE = Number(process.env.SINCE ?? 0)
 
 /** The horizons judged, and the one read beside them. */
 const JUDGED: Horizon[] = ['hour1', 'hours4', 'hours24']
@@ -38,7 +43,7 @@ const MIN_TENTH = 100
 const Z = 1.959964
 
 type Kind = 'close' | 'touch'
-type Side = 'up' | 'down'
+type Side = 'up' | 'down' | 'either'
 
 interface Sample {
   /** The forecast's close, in seconds. */
@@ -178,6 +183,8 @@ interface RecordReport {
   cells: Cell[]
   /** Per horizon, move and kind: whether the line holds on both sides. */
   passes: { horizon: Horizon; kind: Kind; pct: number; passes: boolean; judged: boolean }[]
+  /** Per horizon and move: whether the line holds on the close's chance either way (V72R-S3-EITHER). */
+  either: { horizon: Horizon; pct: number; passes: boolean; judged: boolean }[]
 }
 
 function reportOf(profile: string): RecordReport {
@@ -192,7 +199,7 @@ function reportOf(profile: string): RecordReport {
     else list.push(sample)
   }
   for (const outcome of outcomes) {
-    if (outcome.missing !== undefined || typeof outcome.move !== 'number') continue
+    if (outcome.missing !== undefined || typeof outcome.move !== 'number' || outcome.t < SINCE) continue
     const line = byId.get(outcome.id)?.h?.[outcome.h]
     if (line === undefined || !Array.isArray(line.q)) continue
     for (const pct of MOVE_ODDS_LINES.closeMovesPct) {
@@ -200,6 +207,7 @@ function reportOf(profile: string): RecordReport {
       if (odds === null) continue
       push(`${outcome.h}|close|${pct}|up`, { t: outcome.t, stated: odds.up, hit: outcome.move >= pct ? 1 : 0, tail: odds.upTail })
       push(`${outcome.h}|close|${pct}|down`, { t: outcome.t, stated: odds.down, hit: outcome.move <= -pct ? 1 : 0, tail: odds.downTail })
+      push(`${outcome.h}|close|${pct}|either`, { t: outcome.t, stated: Math.min(1, odds.up + odds.down), hit: Math.abs(outcome.move) >= pct ? 1 : 0, tail: odds.upTail || odds.downTail })
     }
     if (Array.isArray(line.ex) && line.ex.length === 6 && typeof outcome.best === 'number' && typeof outcome.worst === 'number') {
       for (const pct of MOVE_ODDS_LINES.touchMovesPct) {
@@ -214,7 +222,7 @@ function reportOf(profile: string): RecordReport {
   for (const horizon of [...EXPLORED, ...JUDGED]) {
     for (const kind of ['close', 'touch'] as const) {
       for (const pct of kind === 'close' ? MOVE_ODDS_LINES.closeMovesPct : MOVE_ODDS_LINES.touchMovesPct) {
-        for (const side of ['up', 'down'] as const) {
+        for (const side of kind === 'close' ? (['up', 'down', 'either'] as const) : (['up', 'down'] as const)) {
           const list = samples.get(`${horizon}|${kind}|${pct}|${side}`)
           if (list !== undefined && list.length > 0) cells.push(cellOf(horizon, kind, pct, side, list))
         }
@@ -225,12 +233,19 @@ function reportOf(profile: string): RecordReport {
   for (const horizon of JUDGED) {
     for (const kind of ['close', 'touch'] as const) {
       for (const pct of [1, 2]) {
-        const sides = cells.filter((cell) => cell.horizon === horizon && cell.kind === kind && cell.pct === pct)
+        const sides = cells.filter((cell) => cell.horizon === horizon && cell.kind === kind && cell.pct === pct && cell.side !== 'either')
         passes.push({ horizon, kind, pct, judged: sides.length === 2, passes: sides.length === 2 && sides.every((cell) => cell.holds) })
       }
     }
   }
-  const times = predictions.map((line) => line.t).filter(Number.isFinite)
+  const either: RecordReport['either'] = []
+  for (const horizon of JUDGED) {
+    for (const pct of [1, 2]) {
+      const cell = cells.find((entry) => entry.horizon === horizon && entry.kind === 'close' && entry.pct === pct && entry.side === 'either')
+      either.push({ horizon, pct, judged: cell !== undefined, passes: cell?.holds === true })
+    }
+  }
+  const times = predictions.map((line) => line.t).filter((t) => Number.isFinite(t) && t >= SINCE)
   return {
     profile,
     forecasts: predictions.length,
@@ -238,7 +253,8 @@ function reportOf(profile: string): RecordReport {
     from: times.length === 0 ? '-' : new Date(Math.min(...times) * 1000).toISOString().slice(0, 16),
     to: times.length === 0 ? '-' : new Date(Math.max(...times) * 1000).toISOString().slice(0, 16),
     cells,
-    passes
+    passes,
+    either
   }
 }
 
@@ -257,6 +273,8 @@ for (const report of reports) {
   }
   console.log('  the registered line, per horizon, move and kind (both sides):')
   for (const pass of report.passes) console.log(`    ${pass.horizon.padEnd(8)} ${pass.kind.padEnd(5)} ${pass.pct}%  ${pass.judged ? (pass.passes ? 'passes' : 'fails') : 'not judged'}`)
+  console.log('  V72R-S3-EITHER, the close either way:')
+  for (const pass of report.either) console.log(`    ${pass.horizon.padEnd(8)} ${pass.pct}%  ${pass.judged ? (pass.passes ? 'passes' : 'fails') : 'not judged'}`)
 }
 
 console.log('\n===== shown where it passes on every record')

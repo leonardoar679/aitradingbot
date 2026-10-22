@@ -58,6 +58,12 @@
 //                  unlocks them -- its cookies or the browser's caches; it is read, never written to.
 //                  The made-up key the fake answers is added, and the first launch's language question,
 //                  when it is asked, is answered English on the screen                             [none]
+//   SEED_SHADOW    1 on a resumed segment puts the profile's newest refit that its walk forward left on file, beside
+//                  the run in use, in its shadow week (V7.2-R Stage 8; V72R-S8-SHADOW) before the app is launched:
+//                  current.json names it, so the second pass, its record and its verdict are exercised, since a
+//                  refit that clears the run in use may not come within a run. Said in OUT/shadow-seed.json; never
+//                  where a shadow is held                                                              [0]
+//   SEED_SHADOW_DAYS  the seeded week's length in days, so that it can end within a run               [7]
 //
 // IT NEVER TOUCHES THE REAL PROFILE OR out/. The profile has to be inside SHADOW_ROOT and is never
 // the real profile or Electron's default; on a resume it has to carry the marker this script leaves;
@@ -124,6 +130,13 @@ if (FROM_PROFILE !== '' && DEMO_KEY) throw new Error('FROM_PROFILE is a rehearsa
 const MOVE_ROLES = process.env.MOVE_ROLES === undefined || process.env.MOVE_ROLES === '' ? null : JSON.parse(process.env.MOVE_ROLES)
 const MOVE_DISABLE = process.env.MOVE_DISABLE ?? ''
 if (MOVE_ROLES !== null && (typeof MOVE_ROLES.decide !== 'string' || !('gate' in MOVE_ROLES) || !('summarize' in MOVE_ROLES))) throw new Error('MOVE_ROLES names decide, gate and summarize')
+const SEED_SHADOW = process.env.SEED_SHADOW === '1'
+const SEED_SHADOW_DAYS = Number(process.env.SEED_SHADOW_DAYS ?? 7)
+if (SEED_SHADOW && process.env.RESUME !== '1') throw new Error('SEED_SHADOW seeds a resumed segment, once the profile has fitted a refit beside its run in use')
+if (!Number.isFinite(SEED_SHADOW_DAYS) || SEED_SHADOW_DAYS <= 0 || SEED_SHADOW_DAYS > 7) throw new Error(`SEED_SHADOW_DAYS is above nought and at most a week: ${process.env.SEED_SHADOW_DAYS}`)
+/** A fitted run's folder and a month of the training log, as the app names them (shared/forecast/training.ts). */
+const RUN_PATTERN = /^run-\d{8}-\d{4}$/
+const TRAINING_LOG_PATTERN = /^training-\d{4}-\d{2}\.jsonl$/
 /** Fields of settings.json that held a key in an old version: never copied into a run's profile. */
 const SETTINGS_KEY_FIELDS = ['apiKey', 'apiSecret', 'secretKey', 'apiPassphrase', 'passphrase', 'password', 'token']
 /** A profile's own files (FROM_PROFILE), as the app writes them: its JSON files at the top and its
@@ -327,8 +340,46 @@ let startSec = Math.floor(segments[0].startedAt / 1000)
 /** When the run's minutes started: at launch, or once the forecast was ready (WAIT_FORECAST). */
 let clockStart = t0
 
+/** The shadow seeded before a resumed segment's launch (SEED_SHADOW): the newest run on file that is neither in use nor
+ * the run before, whose walk forward left its calibration, with the promotions its training line gave it. */
+function seedShadow() {
+  const modelsDir = path.join(PROFILE, 'forecastModels')
+  const currentFile = path.join(modelsDir, 'current.json')
+  if (!fs.existsSync(currentFile)) throw new Error('SEED_SHADOW: the profile has no run in use yet')
+  const current = JSON.parse(fs.readFileSync(currentFile, 'utf8'))
+  if (current.shadow !== null && current.shadow !== undefined) {
+    say(`SEED_SHADOW: ${current.shadow.runId} is in its shadow week already, until ${new Date(current.shadow.until * 1000).toISOString()}`)
+    return
+  }
+  const inUse = new Set([current.runId, current.previous?.runId].filter((id) => typeof id === 'string'))
+  const runs = fs
+    .readdirSync(modelsDir)
+    .filter((name) => RUN_PATTERN.test(name) && !inUse.has(name) && fs.existsSync(path.join(modelsDir, name, 'calibration.json')))
+    .sort()
+  const runId = runs.at(-1)
+  if (runId === undefined) throw new Error('SEED_SHADOW: no refit with its walk forward on file beside the run in use')
+  let promotions = []
+  for (const name of fs.readdirSync(modelsDir).filter((file) => TRAINING_LOG_PATTERN.test(file))) {
+    for (const line of fs.readFileSync(path.join(modelsDir, name), 'utf8').split('\n')) {
+      if (line.trim() === '') continue
+      try {
+        const row = JSON.parse(line)
+        if (row.runId === runId && Array.isArray(row.promotions) && (row.kind === 'rejected' || row.kind === 'folds')) promotions = row.promotions
+      } catch {
+        // A torn line.
+      }
+    }
+  }
+  const since = Math.floor(Date.now() / 1000)
+  const shadow = { runId, foldsRunId: runId, promotions, since, until: since + Math.round(SEED_SHADOW_DAYS * 86_400), championRunId: current.runId, summary: `seeded by the run harness for V72R-S8-SHADOW: a refit its walk forward left on file, for ${SEED_SHADOW_DAYS} days` }
+  fs.writeFileSync(currentFile, JSON.stringify({ ...current, shadow }))
+  fs.writeFileSync(path.join(OUT, 'shadow-seed.json'), JSON.stringify({ at: new Date().toISOString(), shadow }, null, 2))
+  say(`SEED_SHADOW: ${runId} in its shadow week beside ${current.runId}, until ${new Date(shadow.until * 1000).toISOString()}`)
+}
+
 async function main() {
   say(`run ${RUN_NAME}: segment ${SEGMENT}, ${Math.round(remainingMs / 60_000)} of ${RUN_MINUTES} minutes left${RESUME ? ' (resumed)' : ''}`)
+  if (SEED_SHADOW) seedShadow()
   const stale = await reapStaleApps(PROFILE)
   if (stale > 0) say(`cleared ${stale} stale Electron process(es) of an earlier segment`)
   app = await electron.launch({ executablePath: ELECTRON_BIN, args: [ENTRY, `--user-data-dir=${PROFILE}`], cwd: APP_DIR, env, timeout: 60_000 })
@@ -574,6 +625,10 @@ async function main() {
     const moved = await page.evaluate(
       async ([choice, disable]) => {
         const before = await window.api.ai.getConfig()
+        // A fresh profile enables the app's three defaults alone: the roles' models are enabled first, as a person
+        // ticks them on Settings › AI before choosing them (V7.2-R Stage 9).
+        const wanted = [choice.decide, choice.gate, choice.summarize].filter((model) => typeof model === 'string' && model !== '')
+        if (wanted.some((model) => !before.enabledModels.includes(model))) await window.api.ai.setConfig({ enabledModels: [...new Set([...before.enabledModels, ...wanted])] })
         const preview = await window.api.ai.routingPreview(choice)
         const done = await window.api.ai.routingApply({ choice, token: preview.token })
         let disabled = null
@@ -649,19 +704,23 @@ async function main() {
   // others, and a daily cap the ceiling sets. Setting it again on a resumed segment changes nothing.
   // A profile copied in keeps its own (above).
   if (FROM_PROFILE === '') {
-    const watchModels = REAL_AI && process.env.WATCH_MODELS === undefined ? await page.evaluate(async () => (await window.api.ai.getConfig()).watch.models) : WATCH_MODELS
-    const firstGates = REAL_AI && process.env.FIRST_GATES === undefined ? true : FIRST_GATES
+    // Moved to roles (MOVE_ROLES), the watch keeps what the move set -- the gate first, then the deciding model, the gate
+    // asked alone first -- and its paper trades the deciding model, unless WATCH_MODELS names others.
+    const keepMoved = MOVE_ROLES !== null && process.env.WATCH_MODELS === undefined
+    const moved = keepMoved ? await page.evaluate(async () => (await window.api.ai.getConfig()).watchPaper.model) : null
+    const watchModels = (REAL_AI || keepMoved) && process.env.WATCH_MODELS === undefined ? await page.evaluate(async () => (await window.api.ai.getConfig()).watch.models) : WATCH_MODELS
+    const firstGates = (REAL_AI || keepMoved) && process.env.FIRST_GATES === undefined ? true : FIRST_GATES
     const setup = await page.evaluate(
-      async ([minBand, fakeKey, models, gates, paperOn, realAi, cap]) => {
+      async ([minBand, fakeKey, models, gates, paperOn, realAi, cap, paperModel]) => {
         const key = realAi ? await window.api.ai.credentialsStatus() : await window.api.ai.setCredentials(fakeKey)
         await window.api.ai.setConfig({ dailyCapUsd: cap, callsPerMinute: 30 })
         const watch = await window.api.ai.setConfig({
           watch: { enabled: true, models, maxEventsPerDay: 10, minBand, firstModelGates: gates }
         })
-        const paper = await window.api.ai.setConfig({ watchPaper: { enabled: paperOn, model: models[0], stakeQuote: 100, maxOpen: 3 } })
-        return { key: key.configured, watch: watch.watch, watchPaper: paper.watchPaper, additions: paper.additions, cap: paper.dailyCapUsd }
+        const paper = await window.api.ai.setConfig({ watchPaper: { enabled: paperOn, model: paperModel ?? models[0], stakeQuote: 100, maxOpen: 3 } })
+        return { key: key.configured, watch: watch.watch, watchPaper: paper.watchPaper, additions: paper.additions, cap: paper.dailyCapUsd, roles: paper.roles ?? null, defaultModel: paper.defaultModel }
       },
-      [MIN_BAND, FAKE_KEY, watchModels, firstGates, WATCH_PAPER, REAL_AI, REAL_AI ? capForCeiling() : 5]
+      [MIN_BAND, FAKE_KEY, watchModels, firstGates, WATCH_PAPER, REAL_AI, REAL_AI ? capForCeiling() : 5, moved]
     )
     say(`setup: ${JSON.stringify(setup)}`)
     if (REAL_AI && !setup.key) throw new Error('REAL_AI: the copied key could not be read by the scratch profile')
