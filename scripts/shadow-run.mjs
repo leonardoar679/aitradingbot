@@ -356,9 +356,17 @@ let clockStart = t0
 /** The shadow seeded before a resumed segment's launch (SEED_SHADOW): the newest run on file that is neither in use nor
  * the run before, whose walk forward left its calibration, with the promotions its training line gave it. */
 function seedShadow() {
+  // Once a run: a later segment -- the app gone and resumed after the seeded week ended -- seeds no second one.
+  if (fs.existsSync(path.join(OUT, 'shadow-seed.json'))) {
+    say('SEED_SHADOW: seeded once already in this run (shadow-seed.json)')
+    return
+  }
   const modelsDir = path.join(PROFILE, 'forecastModels')
   const currentFile = path.join(modelsDir, 'current.json')
-  if (!fs.existsSync(currentFile)) throw new Error('SEED_SHADOW: the profile has no run in use yet')
+  if (!fs.existsSync(currentFile)) {
+    say('SEED_SHADOW: the profile has no run in use yet; none seeded')
+    return
+  }
   const current = JSON.parse(fs.readFileSync(currentFile, 'utf8'))
   if (current.shadow !== null && current.shadow !== undefined) {
     say(`SEED_SHADOW: ${current.shadow.runId} is in its shadow week already, until ${new Date(current.shadow.until * 1000).toISOString()}`)
@@ -370,7 +378,11 @@ function seedShadow() {
     .filter((name) => RUN_PATTERN.test(name) && !inUse.has(name) && fs.existsSync(path.join(modelsDir, name, 'calibration.json')))
     .sort()
   const runId = runs.at(-1)
-  if (runId === undefined) throw new Error('SEED_SHADOW: no refit with its walk forward on file beside the run in use')
+  if (runId === undefined) {
+    // Said, not refused: the run goes on, and V72R-S8-SHADOW is not measured on it.
+    say('SEED_SHADOW: no refit with its walk forward on file beside the run in use; none seeded')
+    return
+  }
   let promotions = []
   for (const name of fs.readdirSync(modelsDir).filter((file) => TRAINING_LOG_PATTERN.test(file))) {
     for (const line of fs.readFileSync(path.join(modelsDir, name), 'utf8').split('\n')) {
