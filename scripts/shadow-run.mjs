@@ -309,6 +309,19 @@ function ranBefore() {
   }
   return ms
 }
+/** When the run's minutes ran out: in the segment where they did -- an earlier one, where a resumed segment had none
+ * left to run -- or at this segment's end. */
+function runEndMs(thisEnd) {
+  const ticks = fs.existsSync(STATUS_FILE) ? fs.readFileSync(STATUS_FILE, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line)) : []
+  let ran = 0
+  for (const segment of segments) {
+    const end = segment.n === SEGMENT ? thisEnd : segment.endedAt ?? Math.max(segment.startedAt, ...ticks.filter((tick) => tick.segment === segment.n).map((tick) => tick.at))
+    const ms = Math.max(0, end - segment.startedAt)
+    if (ran + ms >= RUN_MINUTES * 60_000) return segment.startedAt + (RUN_MINUTES * 60_000 - ran)
+    ran += ms
+  }
+  return thisEnd
+}
 const SEGMENT = segments.length + 1
 const t0 = Date.now()
 const remainingMs = Math.max(0, RUN_MINUTES * 60_000 - ranBefore())
@@ -883,7 +896,9 @@ async function main() {
       }
     }
     try {
-      const section = await forecastSection(Math.floor(clockStart / 1000), Math.floor(endAt / 1000))
+      // Over the whole run, from its first segment's start to when its minutes ran out (22 October 2026: a resumed
+      // segment's own start, with no minutes left to run, made the section's span empty).
+      const section = await forecastSection(startSec, Math.max(startSec, Math.floor(runEndMs(endAt) / 1000)))
       fs.writeFileSync(path.join(OUT, 'forecast-section.json'), JSON.stringify(section, null, 2))
       say(`forecast section: ${section.predictions.lines} forecasts, ${Object.entries(section.horizons).map(([h, row]) => `${h} ${row.outcomes} judged, in 80% ${row.metrics.coverage80 === null ? '—' : (row.metrics.coverage80 * 100).toFixed(1) + '%'}`).join('; ')}; gates ${section.gates.map((gate) => `${gate.id} ${gate.status}`).join(', ')}`)
     } catch (failure) {
