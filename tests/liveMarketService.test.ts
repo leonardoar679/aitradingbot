@@ -80,7 +80,7 @@ vi.mock('../electron/services/marketService', () => ({
 }))
 vi.mock('../electron/services/settingsService', () => ({ getSettings: async () => rig.settings }))
 
-import { getLiveState, liveBook, onLiveUpdate, setLiveInterest, startLiveMarket } from '../electron/services/liveMarketService'
+import { getLiveState, heldBook, liveBook, onLiveUpdate, readPassBooks, setLiveInterest, startLiveMarket } from '../electron/services/liveMarketService'
 
 const NOW_MS = Date.parse('2026-10-06T12:00:00Z')
 const message = (stream: string, data: unknown): Buffer => Buffer.from(JSON.stringify({ stream, data }))
@@ -179,6 +179,44 @@ describe('the live market', () => {
     rig.rest.ok = false
     expect(await liveBook('SOLUSDT')).toBeNull()
     expect(await liveBook('not a pair')).toBeNull()
+  })
+
+  it("reads in one request the books a forecast pass decides on that the stream does not hold fresh, and gives each pair's freshest (V7.2-R Stage 9)", async () => {
+    rig.rest.ok = true
+    rig.fetched.length = 0
+    rig.handlers?.onMessage(message('solusdt@bookTicker', { s: 'SOLUSDT', b: '99.99', B: '50', a: '100.01', A: '40' }))
+    rig.rest.row = [
+      { symbol: 'XRPUSDT', bidPrice: '0.5', bidQty: '100', askPrice: '0.5001', askQty: '90' },
+      { symbol: 'ADAUSDT', bidPrice: 'x', bidQty: '1', askPrice: '1', askQty: '1' },
+      { symbol: 'DOGEUSDT', bidPrice: '0.1', bidQty: '1', askPrice: '0.1', askQty: '1' }
+    ] as unknown as Record<string, unknown>
+    // The streamed pair is not asked for, nor what is not a pair, nor a pair twice.
+    expect(await readPassBooks(['SOLUSDT', 'XRPUSDT', 'ADAUSDT', 'not a pair', 'XRPUSDT'])).toBe(1)
+    expect(rig.fetched).toEqual([`https://data-api.binance.vision/api/v3/ticker/bookTicker?symbols=${encodeURIComponent('["XRPUSDT","ADAUSDT"]')}`])
+    expect(heldBook('SOLUSDT')?.source).toBe('stream')
+    expect(heldBook('XRPUSDT')).toEqual({ symbol: 'XRPUSDT', bid: 0.5, bidQty: 100, ask: 0.5001, askQty: 90, updatedAt: Date.now(), source: 'rest' })
+    // A pair the host answered nothing whole for, and one it was not asked about, have none.
+    expect(heldBook('ADAUSDT')).toBeUndefined()
+    expect(heldBook('DOGEUSDT')).toBeUndefined()
+    // Ten seconds on, the read book is past its use as the stream's is: the stream's own is what is held, stale.
+    await vi.advanceTimersByTimeAsync(11_000)
+    expect(heldBook('XRPUSDT')).toBeUndefined()
+    expect(heldBook('SOLUSDT')).toMatchObject({ source: 'stream', updatedAt: Date.now() - 11_000 })
+    // A refused request -- a pair the host no longer lists refuses them all -- is read pair by pair.
+    rig.fetched.length = 0
+    const stubbed = globalThis.fetch
+    vi.stubGlobal('fetch', async (url: string) => {
+      rig.fetched.push(url)
+      return url.includes('symbols=') ? { ok: false, json: async () => ({ code: -1121, msg: 'Invalid symbol.' }) } : { ok: true, json: async () => ({ symbol: 'XRPUSDT', bidPrice: '0.6', bidQty: '1', askPrice: '0.61', askQty: '1' }) }
+    })
+    try {
+      expect(await readPassBooks(['XRPUSDT'])).toBe(1)
+      expect(rig.fetched).toEqual([`https://data-api.binance.vision/api/v3/ticker/bookTicker?symbols=${encodeURIComponent('["XRPUSDT"]')}`, 'https://data-api.binance.vision/api/v3/ticker/bookTicker?symbol=XRPUSDT'])
+      expect(heldBook('XRPUSDT')).toMatchObject({ bid: 0.6, ask: 0.61, source: 'rest' })
+    } finally {
+      vi.stubGlobal('fetch', stubbed)
+    }
+    expect(await readPassBooks([])).toBe(0)
   })
 
   // THE HOST RULE: a healthy socket stays where it is, whatever REST does; a socket that cannot

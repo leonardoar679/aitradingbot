@@ -20,7 +20,7 @@ import { onScannerUpdate } from './services/marketScannerService'
 import { onNewsFeedUpdate } from './services/newsFeedService'
 import { onLiveUpdate } from './services/liveMarketService'
 import { stopForecastWorker } from './services/forecastWorkerService'
-import { getLiveState, startLiveMarket } from './services/liveMarketService'
+import { getLiveState, heldBook, readPassBooks, startLiveMarket } from './services/liveMarketService'
 import { startExchangeHealth } from './services/exchangeHealthService'
 import { startNewsReader } from './services/newsService'
 import { startNewsFeed } from './services/newsFeedService'
@@ -243,7 +243,9 @@ if (!gotSingleInstanceLock) {
     // a story of high impact names it, the scanner raises an event on it, its live price leaves its
     // range or a volume shock hits it; records the forecasts and, when due, what happened. Public
     // data only: no key, no model of anyone else's, no order. See forecastService.ts.
-    startForecast(getLiveState)
+    // Its decisions read a pair's freshest book: the stream's, or one read before the pass for a pair the stream does
+    // not carry (V7.2-R Stage 9).
+    startForecast(getLiveState, { held: heldBook, read: readPassBooks })
     // The news analyst's readings on file go with the stories, each with when it was answered; reading
     // them costs nothing.
     onNewsFeedUpdate((state) => {

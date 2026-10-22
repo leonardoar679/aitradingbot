@@ -389,6 +389,68 @@ export async function liveBook(symbol: unknown): Promise<LiveBook | null> {
   }
 }
 
+// THE BOOKS A FORECAST PASS DECIDES ON (V7.2-R Stage 9, 22 October 2026). The stream carries the books of the pairs the
+// window shows a recommendation on, at most LIVE_MAX_INTEREST, and of the app's own open trades -- and a forecast
+// decision on a price older than STALE_PRICE_MS is refused (STALE_PRICE). In a run of 22 October every one of the
+// forecast's pairs was refused at its first pass for a price the stream had never been asked for, and on a two-day
+// record 4,016 of 4,527 decisions. So before each pass the pairs it decides on whose book the stream does not hold fresh
+// are read in one request from the data host's REST route, and a pair's freshest book is the stream's or that read.
+// A refused request (a pair the host no longer lists refuses them all) is read pair by pair. Public data only.
+let passBooks: Record<string, LiveBook> = {}
+
+const restBookOf = (symbol: string, row: Record<string, unknown>, at: number): LiveBook | null => {
+  const book: LiveBook = { symbol, bid: asNumber(row.bidPrice), bidQty: asNumber(row.bidQty), ask: asNumber(row.askPrice), askQty: asNumber(row.askQty), updatedAt: at, source: 'rest' }
+  return [book.bid, book.ask, book.bidQty, book.askQty].every(Number.isFinite) ? book : null
+}
+
+/** Reads the books of the pairs named whose book the stream does not hold fresh; how many were read. */
+export async function readPassBooks(symbols: readonly string[]): Promise<number> {
+  const nowMs = Date.now()
+  const wanted = [...new Set(symbols.filter((symbol) => typeof symbol === 'string' && SYMBOL.test(symbol)))].filter((symbol) => {
+    const streamed = state.books[symbol]
+    return streamed === undefined || isStale(streamed, nowMs)
+  })
+  // What was read for an earlier pass is not kept past its use.
+  passBooks = Object.fromEntries(Object.entries(passBooks).filter(([, book]) => !isStale(book, nowMs)))
+  if (wanted.length === 0) return 0
+  const next: Record<string, LiveBook> = { ...passBooks }
+  let read = 0
+  try {
+    const { response } = await fetchMarketData(`/ticker/bookTicker?symbols=${encodeURIComponent(JSON.stringify(wanted))}`, REST_TIMEOUT_MS)
+    if (response.ok) {
+      const rows = (await response.json()) as unknown
+      const at = Date.now()
+      for (const row of Array.isArray(rows) ? (rows as Record<string, unknown>[]) : []) {
+        const symbol = typeof row.symbol === 'string' ? row.symbol : ''
+        const book = wanted.includes(symbol) ? restBookOf(symbol, row, at) : null
+        if (book === null) continue
+        next[symbol] = book
+        read++
+      }
+      passBooks = next
+      return read
+    }
+  } catch {
+    // Read pair by pair below.
+  }
+  for (const book of await Promise.all(wanted.map((symbol) => liveBook(symbol)))) {
+    if (book === null) continue
+    next[book.symbol] = book
+    read++
+  }
+  passBooks = next
+  return read
+}
+
+/** A pair's freshest book held: the stream's while it is fresh, else the one read for a pass while it is, else the
+ * stream's own, stale or none. */
+export function heldBook(symbol: string, nowMs: number = Date.now()): LiveBook | undefined {
+  const streamed = state.books[symbol]
+  if (streamed !== undefined && !isStale(streamed, nowMs)) return streamed
+  const read = passBooks[symbol]
+  return read !== undefined && !isStale(read, nowMs) ? read : streamed
+}
+
 /** Opens the socket and its clocks. Called once, from electron/main.ts. */
 export function startLiveMarket(): void {
   if (started) return

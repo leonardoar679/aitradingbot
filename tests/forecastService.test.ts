@@ -494,6 +494,26 @@ describe('the live drift gate', () => {
 })
 
 describe('the trade', () => {
+  it("is decided on the freshest book a pair has, read before the pass for the pairs the stream does not carry (V7.2-R Stage 9)", async () => {
+    const asked: string[][] = []
+    const books = {
+      held: (symbol: string) => (symbol === 'SOLUSDT' ? { symbol, bid: 99.99, bidQty: 50, ask: 100.01, askQty: 40, updatedAt: Date.now(), source: 'rest' as const } : undefined),
+      read: async (symbols: readonly string[]): Promise<number> => {
+        asked.push([...symbols])
+        return 1
+      }
+    }
+    const mod = await import('../electron/services/forecastService')
+    mod.forecastForTest.reset()
+    mod.startForecast(() => null, books)
+    await closeAt(mod, HOUR)
+    // One read before the pass, of every pair it decides on.
+    expect(asked).toHaveLength(1)
+    expect([...asked[0]].sort()).toEqual([...SYMBOLS].sort())
+    expect(mod.forecastDecision('SOLUSDT')!.reasons.map((reason) => reason.code)).not.toContain('STALE_PRICE')
+    expect(mod.forecastDecision('XRPUSDT')!.reasons.map((reason) => reason.code)).toContain('STALE_PRICE')
+  })
+
   it("is decided for every pair at its lead horizon after a pass, ranked, and kept apart from the forecast", async () => {
     const live = await engine()
     await closeAt(live, HOUR)

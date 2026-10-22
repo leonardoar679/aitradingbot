@@ -15,7 +15,7 @@ import type { ForecastRanking } from '../../shared/forecast/ranking'
 import type { EngineState } from '../../shared/forecast/status'
 import { newTapeState, staleDay, tapeFileName, tapeLinesOf, type TapeLine } from '../../shared/forecast/tape'
 import type { TradeDecision } from '../../shared/forecast/tradeDecision'
-import type { LiveState } from '../../shared/liveMarket'
+import type { LiveBook, LiveState } from '../../shared/liveMarket'
 import { writeJsonAtomic } from './atomicWrite'
 import { forecastSeries, forecastUniverse, onForecastBars, setOwedPairs } from './forecastDataService'
 import { concludeForecastShadow, currentForecastCalibration, currentForecastModels, currentForecastShadow, getForecastTrainingState, onForecastTraining } from './forecastTrainingService'
@@ -114,6 +114,14 @@ let lastClosedAt: number | null = null
 let started = false
 let passing: Promise<void> | null = null
 let liveState: () => LiveState | null = () => null
+/** The books a pass decides on (V7.2-R Stage 9; liveMarketService.ts): a pair's freshest, and a read of those the stream
+ * does not hold before each pass. Handed in by electron/main.ts; none, the stream's alone. */
+let passBooks: ForecastBooks | null = null
+
+export interface ForecastBooks {
+  held(symbol: string): LiveBook | undefined
+  read(symbols: readonly string[]): Promise<number>
+}
 /** How each opportunity class stands, as electron/main.ts hands it in (forecastLabService.ts); null
  * until it is, and then no class is judged. */
 let classVerdicts: ((key: string) => ClassVerdict) | null = null
@@ -190,7 +198,7 @@ const sources: PassSources = {
   models: currentForecastModels,
   calibration: currentForecastCalibration,
   runId: () => getForecastTrainingState().current?.runId ?? null,
-  book: (symbol) => liveState()?.books[symbol],
+  book: (symbol) => passBooks?.held(symbol) ?? liveState()?.books[symbol],
   depth: (symbol) => liveState()?.depth[symbol],
   volumes: () => new Map(getResearchState().pairs.map((pair) => [pair.symbol, pair.quoteVolume24h])),
   news: newsFor,
@@ -339,6 +347,8 @@ async function applySettled(settled: Settled): Promise<void> {
 async function runPass(closedAt: number): Promise<void> {
   const startedAt = Date.now()
   lastClosedAt = closedAt
+  // The books the stream does not carry, read once for the pass's decisions (V7.2-R Stage 9).
+  if (passBooks !== null) await passBooks.read(sources.universe()).catch(() => 0)
   const made = pass(engine, sources, closedAt, Date.now())
   if (made.status === 'waiting') {
     state.status = 'waiting'
@@ -557,11 +567,12 @@ async function sweepOldRecords(nowSec: number): Promise<void> {
 
 /** Starts the live forecast: the record's owed outcomes and adaptive levels read back, a pass after
  * every data pass, and the signals that make a pair's forecast again. Called once, from
- * electron/main.ts, with the live stream's state. */
-export function startForecast(live: () => LiveState | null): void {
+ * electron/main.ts, with the live stream's state and, since V7.2-R Stage 9, the books a pass decides on. */
+export function startForecast(live: () => LiveState | null, books: ForecastBooks | null = null): void {
   if (started) return
   started = true
   liveState = live
+  passBooks = books
   setOwedPairs(owedForecastPairs)
   const nowSec = Math.floor(Date.now() / 1000)
   void (async (): Promise<void> => {
@@ -695,6 +706,7 @@ export const forecastForTest = {
     shadowEngine = newPassState()
     shadowRunId = null
     liveState = (): LiveState | null => null
+    passBooks = null
     listeners.clear()
   }
 }
