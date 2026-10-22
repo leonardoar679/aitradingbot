@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
-import { NAV_GROUPS, foldedCount, groupOf, isGroupOpen, type NavGroupId, type NavId, type NavItem, type Page } from '../navigation/pages'
+import { NAV_GROUPS, NORMAL_NAV_GROUPS, foldedCount, groupOf, isGroupOpen, navGroupsFor, type NavGroupId, type NavId, type NavItem, type Page } from '../navigation/pages'
 import type { UiMode } from '../../shared/uiMode'
 import appIcon from '../../build/icon.png'
 import { useI18n } from '../i18n'
@@ -22,7 +22,7 @@ const OPEN_GROUPS_KEY = 'nav.openGroups'
 function readOpenGroups(): Set<NavGroupId> {
   try {
     const stored: unknown = JSON.parse(window.localStorage.getItem(OPEN_GROUPS_KEY) ?? '[]')
-    return new Set(Array.isArray(stored) ? (stored.filter((id) => NAV_GROUPS.some((group) => group.id === id)) as NavGroupId[]) : [])
+    return new Set(Array.isArray(stored) ? (stored.filter((id) => [...NAV_GROUPS, ...NORMAL_NAV_GROUPS].some((group) => group.id === id)) as NavGroupId[]) : [])
   } catch {
     return new Set()
   }
@@ -41,7 +41,7 @@ export function Sidebar({ activeId, onChoose, collapsed, onToggleCollapsed, uiMo
   // Right to left the sidebar is on the right: its arrows point the other way.
   const rtl = dir === 'rtl'
   const [opened, setOpened] = useState<Set<NavGroupId>>(readOpenGroups)
-  const activeGroup = activeId === null ? null : groupOf(activeId)
+  const activeGroup = activeId === null ? null : groupOf(activeId, uiMode)
 
   function toggleGroup(id: NavGroupId): void {
     setOpened((current) => {
@@ -135,7 +135,7 @@ export function Sidebar({ activeId, onChoose, collapsed, onToggleCollapsed, uiMo
           overflowY: 'auto'
         }}
       >
-        {NAV_GROUPS.map((group, index) => {
+        {navGroupsFor(uiMode).map((group, index) => {
           const open = isGroupOpen(group, uiMode, opened, activeGroup)
           const folds = group.foldable && uiMode !== 'expert'
           const GroupIcon = group.icon

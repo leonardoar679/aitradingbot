@@ -5,7 +5,7 @@ import type { NewsEffect } from '../shared/forecast/newsEffect'
 import type { ForecastRange, PricePrediction } from '../shared/forecast/prediction'
 import { QUALITY_LINES, qualityOf, type QualityInput } from '../shared/forecast/quality'
 import { RANK_LINES, funnel, rankOf } from '../shared/forecast/ranking'
-import { DECISION_LINES, decideOnBook, decideTrade, heldBackByPrice, liveOfBook, type DecisionInput } from '../shared/forecast/tradeDecision'
+import { DECISION_LINES, OPPORTUNITY_LINES, decideOnBook, decideTrade, heldBackByPrice, likelyMovePct, liveOfBook, reasonText, type DecisionInput } from '../shared/forecast/tradeDecision'
 import type { LiveBook } from '../shared/liveMarket'
 
 // THE FORECAST AGAINST THE TRADE (shared/forecast/{quality,edge,ranking,tradeDecision}.ts; the V6
@@ -227,13 +227,36 @@ describe('the trade decision', () => {
     expect(decide(bear)).toMatchObject({ decision: 'TRADE', side: 'SELL' })
   })
 
+  it('is NO TRADE where the likely move is under the line of a move worth its costs: 1% up to four hours, 2% at a day', () => {
+    expect(OPPORTUNITY_LINES.minMovePct).toEqual({ minutes5: 1, minutes15: 1, hour1: 1, hours4: 1, hours24: 2 })
+    // A buy's likely move is its P75; a sell's, its P25 as a fall.
+    expect(likelyMovePct([-1, 0.5, 2, 3.5, 5], 'BUY')).toBe(3.5)
+    expect(likelyMovePct([-5, -3.5, -2, -0.5, 1], 'SELL')).toBe(3.5)
+    const at = (p75: number, horizon: 'hour1' | 'hours24' = 'hour1'): string[] => {
+      const levels = range({ quantilesPct: [-2, 0.4, p75 - 0.3, p75, p75 + 3] })
+      const made = prediction('SOLUSDT', levels)
+      return codes(decideTrade({ prediction: { ...made, horizons: { [horizon]: levels } }, horizon, nowMs: T * 1000 + 5000, live, classOf: null }))
+    }
+    expect(at(0.99)).toContain('MOVE_UNDER_LINE')
+    expect(at(1)).not.toContain('MOVE_UNDER_LINE')
+    expect(at(1.5, 'hours24')).toContain('MOVE_UNDER_LINE')
+    expect(at(2, 'hours24')).not.toContain('MOVE_UNDER_LINE')
+    // A sell's line is read on its own side.
+    const sell = decide(range({ direction: 'BEARISH', quantilesPct: [-3, -0.9, -0.5, 0.2, 1] }))
+    expect(codes(sell)).toContain('MOVE_UNDER_LINE')
+    const reason = sell.reasons.find((entry) => entry.code === 'MOVE_UNDER_LINE')!
+    expect(reason.values).toEqual({ movePct: 0.9, linePct: 1 })
+    expect(reasonText(reason, 'hour1')).toBe('Its likely move (0.90%) is under the 1% a 1-hour trade needs: no move worth its costs is forecast now.')
+  })
+
   it('is NO TRADE for each thing that holds it back, saying each', () => {
     expect(codes(decide(range({ direction: 'NEUTRAL' })))).toEqual(['NO_CALL'])
     // One reason is enough to be NO TRADE.
     expect(decide(range({ reliability: 'LOW' })).decision).toBe('NO_TRADE')
     expect(decide(range(), { classOf: () => ({ key: 'mid/hour1/other', verdict: 'NOT_ENOUGH' }) }).decision).toBe('NO_TRADE')
     expect(codes(decide(range({ uncertain: true })))).toEqual(['UNCERTAIN'])
-    expect(codes(decide(range({ quantilesPct: [-1, -0.5, 0.2, 0.6, 1] })))).toEqual(['EDGE_UNDER_COSTS'])
+    // A likely move of 0.6% is under the hour's 1% too.
+    expect(codes(decide(range({ quantilesPct: [-1, -0.5, 0.2, 0.6, 1] })))).toEqual(['MOVE_UNDER_LINE', 'EDGE_UNDER_COSTS'])
     expect(codes(decide(range({ quantilesPct: [-4, -1, 0.1, 2, 6] })))).toEqual(['UNLIKELY_PROFIT'])
     expect(codes(decide(range(), {}, { regime: 'bear' }))).toEqual(['REGIME_AGAINST'])
     expect(codes(decide(range(), {}, { regime: 'panic' }))).toEqual(['REGIME_AGAINST'])

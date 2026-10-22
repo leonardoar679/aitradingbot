@@ -2,7 +2,7 @@ import { ROUND_TRIP_PCT } from './edge'
 import { HORIZON_BARS, type Horizon } from './features'
 import { QUANTILE_LEVELS } from './ml/quantile'
 import type { PricePrediction } from './prediction'
-import type { TradeDecision } from './tradeDecision'
+import { OPPORTUNITY_LINES, type TradeDecision } from './tradeDecision'
 
 // FROM A FORECAST TO A TRADE PLAN (the V6 document, §29-30, §62 and §107; V6 Stage 12, 13 October 2026).
 // Only a TRADE decision has a plan. From the live price:
@@ -14,6 +14,8 @@ import type { TradeDecision } from './tradeDecision'
 //   P80 read between P75 and P90 -- where it clears a round trip from the entry; otherwise there is no
 //   plan;
 // - THE HOLDING TIME: the horizon. The size is the risk mode's (shared/paperRisk.ts), from the stop.
+// Since V7.2-R Stage 3 the target, from the live price, must also reach the horizon's line of a move worth its
+// costs (OPPORTUNITY_LINES: 1% up to four hours, 2% at a day): a price that has run toward it leaves no plan.
 // The forecast's levels are prices fixed at its close (§41): the plan's percentages are from the live
 // price.
 
@@ -81,8 +83,8 @@ export function tradePlanOf(input: { decision: TradeDecision; prediction: PriceP
   const stopPct = Math.max(side === 'BUY' ? (1 - stopLevel / livePrice) * 100 : (stopLevel / livePrice - 1) * 100, nearest)
   const targetPrice = priceOf(levelPct(range.quantilesPct, input.targetLevel, side))
   const targetPct = side === 'BUY' ? (targetPrice / livePrice - 1) * 100 : (1 - targetPrice / livePrice) * 100
-  // A target that does not clear a round trip from here is no plan.
-  if (!(targetPct > ROUND_TRIP_PCT)) return null
+  // A target that does not clear a round trip from here, or is under the line of a move worth its costs, is no plan.
+  if (!(targetPct > ROUND_TRIP_PCT) || !(targetPct >= OPPORTUNITY_LINES.minMovePct[decision.horizon])) return null
   return {
     version: PLAN_VERSION,
     pair: prediction.pair,

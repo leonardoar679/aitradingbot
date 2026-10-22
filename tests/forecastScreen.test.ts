@@ -167,14 +167,15 @@ describe('the best prediction card (§3, §118)', () => {
     const sol = prediction('SOLUSDT', { mainCatalyst: 'Exchange lists SOL perpetuals', newsImpact: 82 })
     const fromClose = predictionCardRows(sol, forecastView(sol, null, T * 1000 + 600_000), '3 / 3 bullish')
     const shown = (rows: { name: string; value: string }[]): { name: string; value: string }[] => rows.map(({ name, value }) => ({ name, value }))
-    // Since V7.1 Stage 3 the expected price (the median, as a price from the close), the likely high and low
-    // and when the expected price is reached: a dash each where the forecast carries no path figures.
+    // Since V7.2-R Stage 3 an hour, four hours and a day (a day's forecast this one has not: a dash); an expected price
+    // only where a source of the way is in use (none here: no expected price, and no time to reach it); and the coin's
+    // own ninety days of moves (none on this forecast: a dash each).
     expect(shown(fromClose.left)).toEqual([
       { name: 'Current', value: '$180 (last close)' },
-      { name: 'Next 15 min', value: '-0.50% ~ +0.70%' },
       { name: 'Next 1 hour', value: '-1.00% ~ +2.00%' },
       { name: 'Next 4 hours', value: '-2.00% ~ +3.00%' },
-      { name: 'Expected price', value: '$180.9 (+0.50%)' },
+      { name: 'Next 24 hours', value: '—' },
+      { name: 'Expected price', value: 'not forecast: no way is known' },
       { name: 'Bull case', value: '+3.00%' },
       { name: 'Bear case', value: '-2.00%' },
       { name: 'Likely high', value: '—' },
@@ -184,26 +185,54 @@ describe('the best prediction card (§3, §118)', () => {
       { name: 'Forecast quality', value: '55 / 100' },
       { name: 'Reliability', value: 'HIGH' },
       { name: 'Best horizon', value: '1 hour' },
-      { name: 'Reached within', value: '—' },
+      { name: 'Moved 1% or more, last 90 days', value: '—' },
+      { name: 'Moved 2% or more, last 90 days', value: '—' },
+      { name: 'Touched 1% either way, last 90 days', value: '—' },
       { name: 'News catalyst', value: 'HIGH IMPACT · Exchange lists SOL perpetuals' },
       { name: 'Volume', value: '3.7× its usual hour' },
       { name: 'Momentum', value: 'UP' },
       { name: 'AI consensus', value: '3 / 3 bullish' }
     ])
-    // From a live $183.60 the same levels read lower (§41); the 15 minutes past its close have expired.
+    // From a live $183.60 the same levels read lower (§41).
     const live = predictionCardRows(sol, forecastView(sol, 183.6, (T + 1200) * 1000), null)
     expect(shown(live.left)[0]).toEqual({ name: 'Current', value: '$183.6' })
-    expect(live.left[1].value).toBe('-2.45% ~ -1.27% (expired)')
-    expect(live.left[2].value).toBe('-2.94% ~ 0.00%')
-    // The expected price stays where the forecast fixed it; its move is from the live price.
-    expect(live.left[4].value).toBe('$180.9 (-1.47%)')
-    expect(shown(live.right)[7]).toEqual({ name: 'AI consensus', value: 'not asked' })
-    // With the path's figures (V7.1 Stage 3): the 80% levels as prices from the close, and when the median is reached.
-    const pathed = prediction('SOLUSDT', {}, { excursion: { highPct: [0.8, 1.5, 2.2], lowPct: [-0.7, -1.3, -1.9], held: null }, arrival: { targetPct: 0.5, k: 0.6, pWithin: { minutes5: 0.1, minutes15: 0.25, hour1: 0.55, hours4: 0.8 }, medianMinutes: 25, unlikely: false } })
-    const rows = predictionCardRows(pathed, forecastView(pathed, null, T * 1000), null)
+    expect(live.left[1].value).toBe('-2.94% ~ 0.00%')
+    expect(live.left[2].value).toBe('-3.92% ~ +0.98%')
+    expect(shown(live.right).find((row) => row.name === 'AI consensus')).toEqual({ name: 'AI consensus', value: 'not asked' })
+    // A way from a source that beat the base rate: the expected price, fixed where the forecast fixed it, its move from
+    // the price; and, with the path's figures (V7.1 Stage 3), when it is reached.
+    const known = prediction('SOLUSDT', {}, { pUpSource: 'dir-logistic', excursion: { highPct: [0.8, 1.5, 2.2], lowPct: [-0.7, -1.3, -1.9], held: null }, arrival: { targetPct: 0.5, k: 0.6, pWithin: { minutes5: 0.1, minutes15: 0.25, hour1: 0.55, hours4: 0.8 }, medianMinutes: 25, unlikely: false } })
+    const rows = predictionCardRows(known, forecastView(known, null, T * 1000), null)
+    expect(rows.left[4].value).toBe('$180.9 (+0.50%)')
+    expect(predictionCardRows(known, forecastView(known, 183.6, (T + 1200) * 1000), null).left[4].value).toBe('$180.9 (-1.47%)')
     expect(rows.left[7].value).toBe('$182.7 (+1.50%)')
     expect(rows.left[8].value).toBe('$177.66 (-1.30%)')
-    expect(rows.right[3].value).toBe('55% within 1 hour, typically in 25 min')
+    expect(rows.right[3]).toMatchObject({ name: 'Reached within', value: '55% within 1 hour, typically in 25 min' })
+    // The base rate is no source of a way: no expected price, no time.
+    const base = prediction('SOLUSDT', {}, { pUpSource: 'base', arrival: known.horizons.hour1!.arrival })
+    expect(predictionCardRows(base, forecastView(base, null, T * 1000), null).left[4].value).toBe('not forecast: no way is known')
+    expect(predictionCardRows(base, forecastView(base, null, T * 1000), null).right.some((row) => row.name === 'Reached within')).toBe(false)
+    // The coin's ninety days: how often its close moved 1% and 2% either way an hour, four hours and a day on, and how
+    // often its path touched 1% within four hours, and when.
+    const side = (pct: number, either: number): { pct: number; up: number; down: number; either: number } => ({ pct, up: either / 2, down: either / 2, either })
+    const touch = (pct: number, either: number, medianMinutes: number | null): { pct: number; up: number; down: number; either: number; medianMinutes: number | null } => ({ pct, up: either * 0.6, down: either * 0.6, either, medianMinutes })
+    const moved = prediction('SOLUSDT', {
+      moveRates: {
+        version: 'move-rates-v1',
+        fromSec: T - 90 * 86_400,
+        toSec: T,
+        days: 90,
+        horizons: [
+          { horizon: 'hour1', moments: 2159, close: [side(1, 0.19), side(2, 0.05), side(5, 0.004)], touch: [touch(1, 0.33, 35), touch(2, 0.09, 40)] },
+          { horizon: 'hours4', moments: 2156, close: [side(1, 0.41), side(2, 0.17), side(5, 0.02)], touch: [touch(1, 0.62, 70), touch(2, 0.3, 110)] },
+          { horizon: 'hours24', moments: 2136, close: [side(1, 0.66), side(2, 0.4), side(5, 0.12)], touch: [touch(1, 0.9, 150), touch(2, 0.66, 300)] }
+        ]
+      }
+    })
+    const rated = predictionCardRows(moved, forecastView(moved, null, T * 1000), null).right
+    expect(rated.find((row) => row.id === 'moved1')!.value).toBe('1h: 19% · 4h: 41% · 24h: 66%')
+    expect(rated.find((row) => row.id === 'moved2')!.value).toBe('1h: 5% · 4h: 17% · 24h: 40%')
+    expect(rated.find((row) => row.id === 'touched1')!.value).toBe('62% within 4 hours, typically in 70 min')
     // No best horizon: the hour leads, and says none beat a plain range.
     expect(predictionCardRows(prediction('SOLUSDT', { bestHorizon: null }), forecastView(sol, null, T * 1000), null).right[2].value).toBe('none beat a plain range')
   })

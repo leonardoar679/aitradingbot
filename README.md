@@ -30,6 +30,11 @@ exchange.
 
 ## Features
 
+**Since 20 October 2026 (V7.2-R Stage 3; the user's plan of that day)** the **normal** layout is the user's own:
+**Home, AI Predictions, Paper Trading, Performance, News**, then **More Features** -- every other entry, by its own
+name, folded until opened -- and System as it was (`NORMAL_NAV_GROUPS` in `src/navigation/pages.ts`). The
+**expert** layout below is unchanged, and nothing is removed from either.
+
 The sidebar has two personalities (since 13 October 2026, the V6 document's §64-65). Five groups:
 AI TRADER and TRADING are the normal path -- the prediction, the opportunity, the position, paper or
 live; RESEARCH and ALL FEATURES hold everything else, folded away in the **normal** layout (one click
@@ -523,6 +528,29 @@ against the share reached, whether UNLIKELY was right, the minutes said against 
 the 80% levels held; a run's report carries the same per horizon. A calibration made again from a record
 alone has no table, so no arrival, until the next walk forward.
 
+**How often a coin moves enough to pay for a trade** (since 20 October 2026; V7.2-R Stage 3;
+`shared/forecast/moveOdds.ts`, `shared/forecast/moveRates.ts`, `research/moveOdds.ts`). A forecast's middle lies near
+the price when no way is known, so its "expected change" of a tenth of a percent says nothing a trade can use; what
+matters after costs is how likely a move of 1% or 2% is, and when. The chances read off each forecast's shown levels
+(the close at least 1% or 2% up or down) and off its path's likely high and low (touching 1% or 2%) were set, before
+any card showed them, against every outcome of two records -- the user's (5,135 forecasts, 16-20 October) and the
+two-day run's (4,392, 16-18 October) -- under a registered line (V72R-S3-ODDS: every tenth of stated chance holding
+100 outcomes inside its observed share's 95% interval, and a Brier score under a base rate read on the records'
+other days). **It failed** at every horizon and move but one, on both records, and always the same way: the
+forecast calls no way, both records cover falling days, and so the rises came less often than said (at four hours
++1% said 17.5%, came 9.1%) and the falls more often (-1% said 20.4%, came 30.3%). The size of the move, both sides
+together, came out close at an hour and four hours (a 1% close either way said 20.8% / 37.9%, came 19.1% / 39.4%) and
+too high at a day (said 72.1%, came 58.2%) -- read after the line was judged, so it is registered as its own line
+(V72R-S3-EITHER) for records not yet read. So, by the registered rule, **no chance is shown**; the card says instead
+how often this coin's own price moved, over its last ninety days at every hour: its close an hour, four hours and a
+day on 1%, 2% and 5% up and down, and its path touching 1% and 2% and how long the first touch typically took -- a
+frequency of the past, said as such ("Moved 1% or more, last 90 days: 1h 19% · 4h 41% · 24h 66%"). Home's card now
+shows the hour's, four hours' and day's ranges (a quarter-hour's moves rarely pay for a round trip), and an
+expected price, a change and a time to it only where a source of the way that beat the base rate is in use --
+otherwise "not forecast: no way is known"; the drawer's **How often it moved** table has every figure, and its
+**Price and time** says the likely high and low without an expected price where no way is known. The rates are
+read by the forecast pass from the bars it already holds, once an hour a pair (`moveRatesOf`, prediction-v6).
+
 **The paper laboratory** (since 16 October 2026; V7.1 Stage 4; `shared/forecast/labTrader.ts`, the one
 writing file `src/forecast/labTrader.ts`, the card `src/forecast/PaperLabCard.tsx`). V6's runs found zero
 forecast trades under the production gates, and a gate that approves nothing says nothing about what it
@@ -614,7 +642,10 @@ fresh its bars are -- a reading that cannot be had left out, so that no forecast
 direction reaches the 75 a STRONG call needs. Its **edge** (§29, §62) is the move it expects (three
 tenths of each tail and four of the median) less a round trip's 0.24% and the live spread, and the
 chance it clears them. A **TradeDecision**, kept apart from the forecast (§63), is TRADE or NO TRADE
-with every reason that holds: no way called, a range too wide, an edge under costs or a profit less
+with every reason that holds: no way called, a likely move under the line of a move worth its costs (since
+V7.2-R Stage 3: P75 for a buy, P25 for a sell, from the close, at least 1% up to four hours and 2% at a day --
+the user's line, a swap costing them 0.5-0.8% and 1% on some DEXs; `OPPORTUNITY_LINES`, and a plan's target from
+the live price holds the same line), a range too wide, an edge under costs or a profit less
 likely than 55 in a hundred, a spread over 0.1%, no live price newer than ten seconds, bars more than
 two closes old, a market going the other way, a LOW reliability, a quality under 60, or (from V6
 Stage 12) an opportunity class that has not earned trading; a SELL is paper only, as every short in

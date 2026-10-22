@@ -1,6 +1,7 @@
 import type { Direction } from '../../shared/forecast/direction'
 import type { Horizon } from '../../shared/forecast/features'
 import type { MarketShockState } from '../../shared/forecast/marketShock'
+import { ratesAt } from '../../shared/forecast/moveRates'
 import type { ForecastRange, PricePrediction } from '../../shared/forecast/prediction'
 import { reasonText, type TradeDecision } from '../../shared/forecast/tradeDecision'
 import type { PredictionView } from '../../shared/forecast/view'
@@ -168,7 +169,36 @@ export function forecastStatusText(state: ForecastState | null, i18n: I18n = ENG
 }
 
 /** The horizons the best prediction's card shows, as §3 has them. */
-export const CARD_HORIZONS: Horizon[] = ['minutes15', 'hour1', 'hours4']
+/** Since V7.2-R Stage 3 an hour, four hours and a day: a quarter-hour's moves rarely pay for a round trip. */
+export const CARD_HORIZONS: Horizon[] = ['hour1', 'hours4', 'hours24']
+
+/** Whether a horizon's way comes from a source that beat the base rate (V7.2-R Stage 3): only then is an expected
+ * price, a change and a time to it shown. A forecast made before its source was recorded says none. */
+export function wayKnown(range: Pick<ForecastRange, 'pUpSource'> | undefined): boolean {
+  return range !== undefined && range.pUpSource !== undefined && range.pUpSource !== 'base'
+}
+
+/** How often the coin's close a horizon on moved at least `pct` either way over its last ninety days, at each of
+ * the card's horizons (shared/forecast/moveRates.ts): a frequency of the past; '—' where the coin has none. */
+export function moveRatesWord(prediction: Pick<PricePrediction, 'moveRates'>, pct: number, i18n: I18n = ENGLISH): string {
+  const { t, pctPlain } = i18n
+  const parts = CARD_HORIZONS.flatMap((horizon) => {
+    const rate = ratesAt(prediction.moveRates, horizon)?.close.find((entry) => entry.pct === pct)
+    return rate === undefined ? [] : [t('{horizon}: {range}', { horizon: t(HORIZON_SHORT[horizon]), range: pctPlain(Math.round(rate.either * 100), 0) })]
+  })
+  return parts.length === 0 ? '—' : parts.join(' · ')
+}
+
+/** How often the coin's path touched 1% either way within four hours over its last ninety days, and the typical
+ * minutes to the first touch; '—' where the coin has no rates. */
+export function touchRateWord(prediction: Pick<PricePrediction, 'moveRates'>, i18n: I18n = ENGLISH): string {
+  const { t, pctPlain, num } = i18n
+  const rate = ratesAt(prediction.moveRates, 'hours4')?.touch.find((entry) => entry.pct === 1)
+  if (rate === undefined) return '—'
+  const share = pctPlain(Math.round(rate.either * 100), 0)
+  const span = t(HORIZON_NAME.hours4)
+  return rate.medianMinutes === null ? t('{share} within {horizon}', { share, horizon: span }) : t('{share} within {horizon}, typically in {minutes} min', { share, horizon: span, minutes: num(Math.round(rate.medianMinutes), 0, 0) })
+}
 
 export interface CardRow {
   /** What the row is, as a key: the same in every language, for React. */
@@ -245,7 +275,13 @@ export function predictionCardRows(prediction: PricePrediction, view: Prediction
       const text = range === undefined ? '—' : rangeText(range.lowPct, range.highPct, i18n)
       return { id: horizon, name: t(HORIZON_NEXT[horizon]), value: range !== undefined && range.expired ? t('{range} (expired)', { range: text }) : text }
     }),
-    { id: 'expected', name: t('Expected price'), value: leadRange === undefined || leadView === undefined ? '—' : priceAndMove(leadRange.quantilePrices[2], leadView.medianPct) },
+    // An expected price only where a source of the way is in use: with none, the median is the price give or take
+    // noise, and a change of a tenth of a percent is no forecast of anything (V7.2-R Stage 3).
+    {
+      id: 'expected',
+      name: t('Expected price'),
+      value: leadRange === undefined || leadView === undefined ? '—' : wayKnown(leadRange) ? priceAndMove(leadRange.quantilePrices[2], leadView.medianPct) : t('not forecast: no way is known')
+    },
     { id: 'bull', name: t('Bull case'), value: leadView === undefined ? '—' : signedPct(leadView.bullPct, 2, i18n) },
     { id: 'bear', name: t('Bear case'), value: leadView === undefined ? '—' : signedPct(leadView.bearPct, 2, i18n) },
     { id: 'high', name: t('Likely high'), value: levels === null ? '—' : priceAndMove(levels.high, levels.highPct) },
@@ -255,7 +291,10 @@ export function predictionCardRows(prediction: PricePrediction, view: Prediction
     { id: 'quality', name: t('Forecast quality'), value: leadRange === undefined ? '—' : t('{score} / 100', { score: leadRange.quality.score }) },
     { id: 'reliability', name: t('Reliability'), value: reliabilityWord(leadRange?.reliability, i18n) },
     { id: 'best', name: t('Best horizon'), value: lead === null ? '—' : prediction.bestHorizon === null ? t('none beat a plain range') : t(HORIZON_NAME[lead]) },
-    { id: 'arrival', name: t('Reached within'), value: leadRange === undefined || lead === null ? '—' : arrivalWord(leadRange, lead, i18n) },
+    ...(wayKnown(leadRange) ? [{ id: 'arrival', name: t('Reached within'), value: leadRange === undefined || lead === null ? '—' : arrivalWord(leadRange, lead, i18n) }] : []),
+    { id: 'moved1', name: t('Moved 1% or more, last 90 days'), value: moveRatesWord(prediction, 1, i18n) },
+    { id: 'moved2', name: t('Moved 2% or more, last 90 days'), value: moveRatesWord(prediction, 2, i18n) },
+    { id: 'touched1', name: t('Touched 1% either way, last 90 days'), value: touchRateWord(prediction, i18n) },
     { id: 'news', name: t('News catalyst'), value: newsWord(prediction, i18n) },
     { id: 'volume', name: t('Volume'), value: volumeWord(prediction.market?.volRatio1h, i18n) },
     { id: 'momentum', name: t('Momentum'), value: momentumWord(prediction.market?.z1h, i18n) },

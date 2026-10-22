@@ -19,6 +19,8 @@ const TEXT = readFileSync(FILE, 'utf-8')
  * constants (the path or a prefix of it) or be infrastructure -- arithmetic every line rests on, not a line. */
 const ADDED_SINCE_16_OCTOBER = [
   'forecast.moveOdds',
+  'forecast.moveRates',
+  'forecast.opportunity',
   'forecast.uncertainty',
   'forecast.directionModels.promotion.minSkill',
   'forecast.directionModels.promotion.minCalls',
@@ -36,7 +38,7 @@ const ADDED_SINCE_16_OCTOBER = [
   'aiRouting'
 ]
 // The intervals' lines, the pass's version and the tape's: plumbing with no line to hold or fail.
-const INFRASTRUCTURE = ['forecast.uncertainty', 'forecast.pass', 'forecast.tape']
+const INFRASTRUCTURE = ['forecast.uncertainty', 'forecast.pass', 'forecast.tape', 'forecast.moveRates']
 
 describe('the registry on file', () => {
   const registry = parseRegistry(TEXT)

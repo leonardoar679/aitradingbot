@@ -171,6 +171,13 @@ describe('a close', () => {
     expect(live.latestForecasts().map((prediction) => prediction.pair)).toEqual([...SYMBOLS].sort())
     // It is told on the onForecastBars listener it set at start.
     expect(fake.barListeners).toHaveLength(1)
+    // How often the coin moved over its last ninety days (V7.2-R Stage 3): a horizon needs thirty days of hours, which
+    // this close is an hour short of; a day later every horizon has them, read from the bars the pass holds.
+    expect(sol.moveRates).toBeNull()
+    await closeAt(live, HOUR + 86_400)
+    const rated = live.forecastOf('SOLUSDT')!.moveRates!
+    expect(rated.horizons.map((entry) => entry.horizon)).toEqual(['hour1', 'hours4', 'hours24'])
+    expect(rated.toSec).toBe(HOUR + 86_400 - 3600)
   })
 
   it('forecasts from the close it is told, whatever later bars are held, and writes no outcome early', async () => {
@@ -915,7 +922,8 @@ describe('why the range (§36)', () => {
     return { ...fitted, gbt: { ...fitted.gbt, size: { ...constantGbt(0), trees: [split] } } }
   }
 
-  it('gives the drivers of the boosted size model the calibration weighs, and none where it weighs no boosted model', async () => {
+  // It builds a calibration of 30,000 rows: two seconds alone, more in a loaded suite.
+  it('gives the drivers of the boosted size model the calibration weighs, and none where it weighs no boosted model', { timeout: 20_000 }, async () => {
     fake.models = new Map(HORIZONS.map((horizon) => [horizon, sized(horizon)]))
     const live = await engine()
     await closeAt(live, HOUR)

@@ -751,3 +751,40 @@ The scanner raised two events in twelve hours; the one in the watch's band (TIA'
 call was the daily summary. **$0.0899 of the $3 ceiling** for both runs together; the check run asked
 nothing real. The encrypted key and the Local State that unlocks it were copied into each real run's
 scratch profile and deleted after it closed; no scratch profile holds a key file now.
+
+## The odds of a move that clears its costs (V7.2-R Stage 3, 20 October 2026)
+
+The user's question after the V7.1 runs: a forecast whose middle is a tenth of a percent from the price is no use when
+a swap costs 0.5-1%; say instead how likely a move of 1% or 2% is, and when. Two readings of a forecast already made
+need no model: the chance its close is at least t% up or down (read off its five shown levels by straight lines,
+past P10 and P90 by an exponential tail), and the chance its path touches t% either way (read off its likely highs and
+lows). `research/moveOdds.ts` set both against every outcome of two records under a line registered first
+(V72R-S3-ODDS, engine 08ce74aa7ac4): a horizon, move and kind passes where every tenth of stated chance holding 100
+outcomes has its mean inside the observed share's 95% interval (hour blocks as long as the horizon) and the Brier score
+is under a base rate read on the record's other UTC days.
+
+| | user's record, 16-20 Oct | two-day run, 16-18 Oct |
+|---|---|---|
+| forecasts (outcomes at 1 h / 4 h / 24 h) | 5,135 (5,057 / 2,331 / 1,468) | 4,392 (4,323 / 1,881 / 1,206) |
+| close +1% at 4 h: said / came | 17.5% / 9.1% | 18.4% / 11.1% |
+| close -1% at 4 h: said / came | 20.4% / 30.3% | 20.5% / 26.5% |
+| touch +1% at 24 h: said / came | 74.2% / 46.6% | 76.8% / 41.2% |
+| touch -1% at 24 h: said / came | 67.5% / 84.5% | 68.6% / 85.2% |
+| close 1% either way at 1 h: said / came | 20.8% / 19.1% | 21.4% / 20.5% |
+| close 1% either way at 4 h: said / came | 37.9% / 39.4% | 38.9% / 37.6% |
+| close 1% either way at 24 h: said / came | 72.1% / 58.2% | 76.2% / 63.3% |
+
+**The line failed** at every judged horizon, move and kind on both records but one (the hour's 2% touch on the
+user's, which failed on the run's). The failure has one shape: each side's chance is the forecast's, which calls no way,
+and both records cover falling days, so rises came less often than said and falls more often, and the base rate read
+on the other (also falling) days beat it. The size of the move, both sides together, is close at an hour and at four
+hours and too high at a day, as the day's 80% range held 93-96% on these records; that reading came after the line was
+judged and is registered as V72R-S3-EITHER for the Stage 9 runs' records and the user's from 20 October 08:25 UTC on.
+The intervals at a day rest on four or five day blocks (two on the run's record), so they are wide.
+
+By the registered rule nothing is shown as a chance. The card says, as a frequency of the past, how often the coin's
+own price moved 1%, 2% and 5% and touched 1% and 2% over its last ninety days (`shared/forecast/moveRates.ts`), and
+shows an expected price only where a source of the way that beat the base rate is in use. The trade decision gains the
+user's line of a move worth its costs (MOVE_UNDER_LINE: the likely move, P75 for a buy and P25 for a sell, at least 1%
+up to four hours and 2% at a day), registered as exploratory (V72R-S3-LINES) for the Stage 9 runs.
+

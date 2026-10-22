@@ -65,7 +65,7 @@ import { CHANGE_LINES } from './forecast/predictionChange'
 import { LAB_LINES, LAB_VERSION } from './forecast/lab'
 import { PLAN_LINES, PLAN_VERSION } from './forecast/tradePlan'
 import { CLASS_LINES as OPPORTUNITY_CLASS_LINES } from './forecast/opportunityClass'
-import { DECISION_LINES, DECISION_VERSION } from './forecast/tradeDecision'
+import { DECISION_LINES, DECISION_VERSION, OPPORTUNITY_LINES } from './forecast/tradeDecision'
 import { NEWS_FEED_VERSION } from './newsFeed'
 import { PREDICTION_LINES, PREDICTION_VERSION } from './forecast/prediction'
 import { RELIABILITY_LINES } from './forecast/reliability'
@@ -83,6 +83,7 @@ import { PASS_VERSION } from './forecast/pass'
 import { TAPE_VERSION } from './forecast/tape'
 import { FIDELITY_LINES, FIDELITY_VERSION } from './forecast/fidelity'
 import { MOVE_ODDS_LINES, MOVE_ODDS_VERSION } from './forecast/moveOdds'
+import { MOVE_RATES_LINES, MOVE_RATES_VERSION } from './forecast/moveRates'
 import { DEGRADATION_LINES, DEGRADED_THREAD_SECONDS, DIRECTION_PROMOTION_LINES, PROMOTION_LINES } from './forecast/promotion'
 import { LOGISTIC_FIT } from './forecast/ml/logistic'
 import { DIRECTION_MODELS, EXCURSION_LEVELS } from './forecast/models'
@@ -203,6 +204,8 @@ export const ENGINE_CONSTANTS = {
     fidelity: { version: FIDELITY_VERSION, ...FIDELITY_LINES },
     // The odds of a move that clears its costs (V7.2-R Stage 3): the moves a close and a path are asked about.
     moveOdds: { version: MOVE_ODDS_VERSION, ...MOVE_ODDS_LINES },
+    // How often a coin moved over its own last ninety days, said beside the forecast (V7.2-R Stage 3).
+    moveRates: { version: MOVE_RATES_VERSION, ...MOVE_RATES_LINES },
     direction: DIRECTION_LINES,
     reliability: RELIABILITY_LINES,
     prediction: { version: PREDICTION_VERSION, ...PREDICTION_LINES },
@@ -223,6 +226,8 @@ export const ENGINE_CONSTANTS = {
     edge: { version: EDGE_VERSION, roundTripPct: ROUND_TRIP_PCT },
     rank: { version: RANK_VERSION, ...RANK_LINES },
     decision: { version: DECISION_VERSION, ...DECISION_LINES },
+    // A move worth its costs (V7.2-R Stage 3): the likely move a horizon's trade needs.
+    opportunity: OPPORTUNITY_LINES,
     change: CHANGE_LINES,
     degradedThreadSeconds: DEGRADED_THREAD_SECONDS,
     lab: { version: LAB_VERSION, ...LAB_LINES },

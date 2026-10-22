@@ -22,6 +22,7 @@ import {
   KeyRound,
   Settings,
   Telescope,
+  Newspaper,
   type LucideIcon
 } from 'lucide-react'
 import type { UiMode } from '../../shared/uiMode'
@@ -35,6 +36,11 @@ import { msg } from '../../shared/i18n/translate'
 // what this app keeps together -- Bots and Executors are Strategies' two views, Controllers sits on
 // Risk & Safety, Routines on Backtest's Automation, Portfolio on Performance -- open the page where
 // that part lives. docs/INVENTORY.md says where every card of the old pages went.
+//
+// Since V7.2-R Stage 3 (20 October 2026; the user's plan of that day, its seventh priority) the normal mode has a
+// layout of its own (NORMAL_NAV_GROUPS): the five pages a trader opens -- Home, AI Predictions, Paper Trading,
+// Performance and News -- then every other entry under More Features, folded until opened, and System as it was.
+// The expert mode keeps the layout above (NAV_GROUPS). Nothing is removed from either.
 
 export type Page =
   | 'home'
@@ -115,6 +121,7 @@ export type NavId =
   | 'risk'
   | 'connections'
   | 'settings'
+  | 'news'
 
 export interface NavItem {
   id: NavId
@@ -123,7 +130,7 @@ export interface NavItem {
   target: NavTarget
 }
 
-export type NavGroupId = 'ai-trader' | 'trading' | 'research' | 'all-features' | 'system'
+export type NavGroupId = 'ai-trader' | 'trading' | 'research' | 'all-features' | 'system' | 'main' | 'more'
 
 export interface NavGroup {
   id: NavGroupId
@@ -203,9 +210,45 @@ export const NAV_GROUPS: NavGroup[] = [
 
 export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items)
 
+const itemById = (id: NavId): NavItem => {
+  const item = NAV_ITEMS.find((entry) => entry.id === id)
+  if (item === undefined) throw new Error(`No sidebar entry ${id}`)
+  return item
+}
+
+/** The normal mode's own entry: Explorer's news, opened from the main group. */
+const NEWS_ITEM: NavItem = { id: 'news', label: msg('News'), icon: Newspaper, target: { page: 'discovery', tab: 'news' } }
+
+/** The entries More Features holds in the normal mode, in the expert layout's order: every one not in the main
+ * group or System. */
+const MORE_FEATURES: NavId[] = ['opportunities', 'positions', 'live', 'backtest', 'forecast-lab', 'ai-benchmark', 'strategies', 'bots', 'executors', 'controllers', 'routines', 'market', 'portfolio', 'explorer', 'overview', 'ai-decisions']
+
+/** The normal mode's sidebar (V7.2-R Stage 3). */
+export const NORMAL_NAV_GROUPS: NavGroup[] = [
+  {
+    id: 'main',
+    title: msg('AI Trader'),
+    foldable: false,
+    icon: House,
+    items: [itemById('home'), { ...itemById('predictions'), label: msg('AI Predictions') }, { ...itemById('paper'), label: msg('Paper Trading') }, itemById('performance'), NEWS_ITEM]
+  },
+  { id: 'more', title: msg('More Features'), foldable: true, icon: Layers, items: MORE_FEATURES.map(itemById) },
+  NAV_GROUPS.find((group) => group.id === 'system')!
+]
+
+/** The sidebar's groups in a mode. */
+export function navGroupsFor(mode: UiMode): NavGroup[] {
+  return mode === 'expert' ? NAV_GROUPS : NORMAL_NAV_GROUPS
+}
+
+/** The entries a mode's sidebar shows. */
+function itemsFor(mode: UiMode): NavItem[] {
+  return mode === 'expert' ? NAV_ITEMS : NORMAL_NAV_GROUPS.flatMap((group) => group.items)
+}
+
 /** The first entry that opens a page plainly, or the first that opens it at all. */
-function firstItemFor(page: Page): NavItem | undefined {
-  const items = NAV_ITEMS.filter((item) => item.target.page === page)
+function firstItemFor(page: Page, all: readonly NavItem[] = NAV_ITEMS): NavItem | undefined {
+  const items = all.filter((item) => item.target.page === page)
   return items.find((item) => !('tab' in item.target && item.target.tab !== undefined) && item.target.anchor === undefined) ?? items[0]
 }
 
@@ -227,18 +270,19 @@ function currentTab(page: Page, tabs: PageTabs): string | undefined {
 /** The entry shown as the current one. The one last chosen, while it still describes where the app
  * is; otherwise the entry for the page's current view, then the page's plain entry. A hand-off that
  * opens Strategies on Execution lights Executors, and choosing Strategies lights Strategies. */
-export function activeNavId(page: Page, tabs: PageTabs, chosen: NavId | null): NavId | null {
+export function activeNavId(page: Page, tabs: PageTabs, chosen: NavId | null, mode: UiMode = 'expert'): NavId | null {
+  const items = itemsFor(mode)
   const tab = currentTab(page, tabs)
   const fits = (item: NavItem): boolean => item.target.page === page && (tabOf(item.target) === undefined || tabOf(item.target) === tab)
-  const last = chosen === null ? undefined : NAV_ITEMS.find((item) => item.id === chosen)
+  const last = chosen === null ? undefined : items.find((item) => item.id === chosen)
   if (last !== undefined && fits(last)) return last.id
-  const byView = NAV_ITEMS.find((item) => item.target.page === page && tab !== undefined && tabOf(item.target) === tab)
-  return byView?.id ?? firstItemFor(page)?.id ?? null
+  const byView = items.find((item) => item.target.page === page && tab !== undefined && tabOf(item.target) === tab)
+  return byView?.id ?? firstItemFor(page, items)?.id ?? null
 }
 
-/** The group an entry is in. */
-export function groupOf(id: NavId): NavGroupId | null {
-  return NAV_GROUPS.find((group) => group.items.some((item) => item.id === id))?.id ?? null
+/** The group an entry is in, in a mode's sidebar. */
+export function groupOf(id: NavId, mode: UiMode = 'expert'): NavGroupId | null {
+  return navGroupsFor(mode).find((group) => group.items.some((item) => item.id === id))?.id ?? null
 }
 
 /** Whether a group is shown open: always when it does not fold or the mode is expert; otherwise when

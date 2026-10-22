@@ -6,6 +6,8 @@ import {
   DEFAULT_TABS,
   NAV_GROUPS,
   NAV_ITEMS,
+  NORMAL_NAV_GROUPS,
+  navGroupsFor,
   activeNavId,
   anchorElementId,
   foldedCount,
@@ -100,6 +102,43 @@ describe('the sidebar', () => {
     expect(pageLabel('performance')).toBe('Performance')
     expect(pageLabel('research')).toBe('Backtest')
     expect(pageLabel('discovery')).toBe('Explorer')
+  })
+})
+
+// V7.2-R Stage 3 (20 October 2026; the user's plan, its seventh priority): the normal mode's own layout.
+describe("the normal mode's sidebar", () => {
+  it('leads with the five pages a trader opens, folds every other entry under More Features, and keeps System', () => {
+    expect(navGroupsFor('normal')).toBe(NORMAL_NAV_GROUPS)
+    expect(navGroupsFor('expert')).toBe(NAV_GROUPS)
+    expect(NORMAL_NAV_GROUPS.map((group) => [group.id, group.title, group.foldable])).toEqual([
+      ['main', 'AI Trader', false],
+      ['more', 'More Features', true],
+      ['system', 'System', false]
+    ])
+    expect(NORMAL_NAV_GROUPS[0].items.map((item) => item.label)).toEqual(['Home', 'AI Predictions', 'Paper Trading', 'Performance', 'News'])
+    expect(NORMAL_NAV_GROUPS[0].items.map((item) => item.target)).toEqual([{ page: 'home' }, { page: 'predictions' }, { page: 'paper-trading' }, { page: 'performance' }, { page: 'discovery', tab: 'news' }])
+  })
+
+  it('removes nothing: every entry of the expert layout is in it, once, under its own label but two renamed', () => {
+    const normal = NORMAL_NAV_GROUPS.flatMap((group) => group.items)
+    for (const item of NAV_ITEMS) expect(normal.filter((entry) => entry.id === item.id), item.id).toHaveLength(1)
+    expect(new Set(normal.map((item) => item.id)).size).toBe(normal.length)
+    expect([...new Set(normal.map((item) => item.target.page))].sort()).toEqual([...ALL_PAGES].sort())
+    expect(normal.filter((item) => NAV_ITEMS.some((entry) => entry.id === item.id && entry.label !== item.label)).map((item) => item.label)).toEqual(['AI Predictions', 'Paper Trading'])
+  })
+
+  it('lights the entry and opens the group the app is at in its own layout', () => {
+    expect(activeNavId('discovery', { ...DEFAULT_TABS, discovery: 'news' }, null, 'normal')).toBe('news')
+    expect(activeNavId('discovery', { ...DEFAULT_TABS, discovery: 'scanner' }, null, 'normal')).toBe('explorer')
+    // The expert layout has no News entry: Explorer stays lit on its news tab.
+    expect(activeNavId('discovery', { ...DEFAULT_TABS, discovery: 'news' }, null)).toBe('explorer')
+    expect(groupOf('forecast-lab', 'normal')).toBe('more')
+    expect(groupOf('forecast-lab')).toBe('research')
+    expect(groupOf('paper', 'normal')).toBe('main')
+    const more = NORMAL_NAV_GROUPS[1]
+    expect(isGroupOpen(more, 'normal', new Set<NavGroupId>(), null)).toBe(false)
+    expect(isGroupOpen(more, 'normal', new Set<NavGroupId>(), 'more')).toBe(true)
+    expect(foldedCount(more, false, { discovery: 2 })).toBe(2)
   })
 })
 

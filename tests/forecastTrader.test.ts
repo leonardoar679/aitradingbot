@@ -144,6 +144,9 @@ describe('the trade plan', () => {
     expect(levelPct([-4, -2.5, -1.5, -0.5, 1], 'P80', 'SELL')).toBeCloseTo(-3, 12)
     // A live price at 102.4: the P75 target of 102.5 is 0.1% away, under a round trip's 0.24%.
     expect(tradePlanOf({ decision: decision(), prediction: prediction(), livePrice: 102.4, atr5mPct: 0.2, targetLevel: 'P75' })).toBeNull()
+    // At 101.8 it is 0.69% away: over a round trip, under the hour's line of a move worth its costs (V7.2-R Stage 3).
+    expect(tradePlanOf({ decision: decision(), prediction: prediction(), livePrice: 101.8, atr5mPct: 0.2, targetLevel: 'P75' })).toBeNull()
+    expect(tradePlanOf({ decision: decision(), prediction: prediction(), livePrice: 101.4, atr5mPct: 0.2, targetLevel: 'P75' })!.targetPct).toBeGreaterThanOrEqual(1)
     expect(tradePlanOf({ decision: decision('SOLUSDT', { decision: 'NO_TRADE' }), prediction: prediction(), livePrice: 100, atr5mPct: 0.2, targetLevel: 'P75' })).toBeNull()
     expect(ROUND_TRIP_PCT).toBeCloseTo(0.24, 12)
   })

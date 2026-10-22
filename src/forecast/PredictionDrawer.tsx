@@ -17,11 +17,12 @@ import { ForecastHistoryChart } from './ForecastHistoryChart'
 import type { AiOrderProposal } from '../../shared/aiProposal'
 import { tradeThisOf } from './tradeThis'
 import { useRiskTarget } from './useRiskTarget'
-import { callColor, callLabel, decisionWords, dollarText, leadHorizon, likelyLevels, marketStateWord, momentumWord, pairText, rangeText, signedPct, timeLeftText, volumeWord, HORIZON_NEXT, HORIZON_SHORT, reliabilityWord } from './forecastWords'
+import { callColor, callLabel, decisionWords, dollarText, leadHorizon, likelyLevels, marketStateWord, momentumWord, pairText, rangeText, signedPct, timeLeftText, volumeWord, wayKnown, HORIZON_NEXT, HORIZON_SHORT, reliabilityWord } from './forecastWords'
+import type { MoveRates } from '../../shared/forecast/moveRates'
 import { invalidationConditionsOf } from '../../shared/forecast/prediction'
 import { driverText } from '../../shared/forecast/rangeDrivers'
 import { reliabilityReasonText } from '../../shared/forecast/reliability'
-import { REGIME_NAME, forecastModelName } from '../../shared/forecast/words'
+import { HORIZON_NAME, REGIME_NAME, forecastModelName } from '../../shared/forecast/words'
 import { storyKindWord, type NewsEventType } from '../../shared/newsFeed'
 import { msg, useI18n } from '../i18n'
 
@@ -39,6 +40,48 @@ function whichWayText(range: ForecastRange, i18n: I18n): string | null {
   if (range.pUpSource === 'base') return t('Which way: P(up) {pUp} is the base rate, since no reading beat it on weeks it was not fitted on (the best skill: {skill}).', { pUp, skill })
   const source = range.pUpSource === 'distribution' ? t("the range's own distribution") : range.pUpSource === 'news' ? t('the news') : range.pUpSource
   return t('Which way: P(up) {pUp} from {source}, whose skill on weeks it was not fitted on is {skill}.', { pUp, source, skill })
+}
+
+const cell: React.CSSProperties = { padding: '0.2rem 0.6rem 0.2rem 0', textAlign: 'start', whiteSpace: 'nowrap' }
+
+/** How often the coin moved over its last ninety days (V7.2-R Stage 3; shared/forecast/moveRates.ts): by horizon,
+ * the share of hours whose close a horizon on was 1% up, 1% down, 2% and 5% either way, whose path touched 1%, and
+ * the typical time to that touch. A frequency of the past, said as such. */
+function MoveRatesTable({ rates, i18n }: { rates: MoveRates; i18n: I18n }): React.JSX.Element {
+  const { t, pctPlain, num } = i18n
+  const share = (value: number | undefined): string => (value === undefined ? '—' : pctPlain(Math.round(value * 100), 0))
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ borderCollapse: 'collapse', fontSize: '0.78rem', fontVariantNumeric: 'tabular-nums', marginTop: '0.3rem' }}>
+        <thead>
+          <tr style={{ color: 'var(--text-secondary)' }}>
+            {[t('Within'), t('Up 1%+'), t('Down 1%+'), t('2%+ either way'), t('5%+ either way'), t('Touched 1%'), t('Typically after')].map((label) => (
+              <th key={label} style={{ ...cell, fontWeight: 600 }}>
+                {label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rates.horizons.map((entry) => {
+            const at = (pct: number): { up: number; down: number; either: number } | undefined => entry.close.find((rate) => rate.pct === pct)
+            const touch = entry.touch.find((rate) => rate.pct === 1)
+            return (
+              <tr key={entry.horizon}>
+                <td style={cell}>{t(HORIZON_NAME[entry.horizon])}</td>
+                <td style={cell}>{share(at(1)?.up)}</td>
+                <td style={cell}>{share(at(1)?.down)}</td>
+                <td style={cell}>{share(at(2)?.either)}</td>
+                <td style={cell}>{share(at(5)?.either)}</td>
+                <td style={cell}>{share(touch?.either)}</td>
+                <td style={cell}>{touch === undefined || touch.medianMinutes === null ? '—' : t('{minutes} min', { minutes: num(Math.round(touch.medianMinutes), 0, 0) })}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
 }
 
 /** One pair's forecast in full (the V6 document, §35-37, §58 and §94): its timeline, WHY? -- the
@@ -294,10 +337,29 @@ export function PredictionDrawer({
         </div>
       )}
 
+      {prediction.moveRates !== undefined && prediction.moveRates !== null && (
+        <div style={section}>
+          <h3 style={heading}>{t('How often it moved, its last 90 days')}</h3>
+          <p style={line}>{t("At every hour of the coin's last 90 days, how far its own price had moved a horizon on: a frequency of the past, not a forecast. Which way it goes next is not known.")}</p>
+          <MoveRatesTable rates={prediction.moveRates} i18n={i18n} />
+        </div>
+      )}
+
       {leadRange !== undefined && (leadRange.excursion !== undefined || leadRange.arrival !== undefined) && (
         <div style={section}>
           <h3 style={heading}>{t('Price and time')}</h3>
-          {likely !== null && (
+          {likely !== null && !wayKnown(leadRange) && (
+            <p style={line}>
+              {t('The path likely stays under {high} ({highPct}) and above {low} ({lowPct}) within {horizon}, eight times in ten; no expected price is forecast, since no way is known.', {
+                horizon: horizonShort,
+                high: dollarText(likely.high, i18n),
+                highPct: pct(likely.highPct),
+                low: dollarText(likely.low, i18n),
+                lowPct: pct(likely.lowPct)
+              })}
+            </p>
+          )}
+          {likely !== null && wayKnown(leadRange) && (
             <p style={line}>
               {t('Expected {price} ({move}) at {horizon}; the path likely stays under {high} ({highPct}) and above {low} ({lowPct}), eight times in ten.', {
                 price: dollarText(leadRange.quantilePrices[2], i18n),
@@ -310,7 +372,7 @@ export function PredictionDrawer({
               })}
             </p>
           )}
-          {leadRange.arrival !== undefined && (
+          {leadRange.arrival !== undefined && wayKnown(leadRange) && (
             <p style={line}>
               {leadRange.arrival.unlikely
                 ? t('Reaching it within {horizon} is unlikely ({share}): no time is said.', { horizon: horizonShort, share: pctPlain(Math.round(leadRange.arrival.pWithin[lead === 'hours24' ? 'hours4' : lead] * 100), 0) })

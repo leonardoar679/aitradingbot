@@ -2,6 +2,7 @@ import { bookSpreadPct, MAX_SPREAD_PCT, STALE_PRICE_MS, type LiveBook } from '..
 import { DRIFT_LINES, type DriftReading } from './drift'
 import { edgeOf, type Edge } from './edge'
 import type { Horizon } from './features'
+import { QUANTILE_LEVELS } from './ml/quantile'
 import { classTradable, type ClassVerdict } from './opportunityClass'
 import type { PricePrediction } from './prediction'
 import { reliabilityReasonText, type ReliabilityReason } from './reliability'
@@ -25,9 +26,13 @@ import type { MarketRegime } from '../marketResearch'
 //   Where no class is read, it is not judged.
 // - ENGINE_DRIFT (V7.1 Stage 13; shared/forecast/drift.ts): the horizon's forecasts of the last day held
 //   under three in five of their 80% ranges: the engine has drifted, and nothing is traded at the horizon.
+// - MOVE_UNDER_LINE (V7.2-R Stage 3, 20 October 2026; OPPORTUNITY_LINES): the likely move on its side -- P75
+//   for a buy, P25 for a sell, from the close: the nearest target any risk mode sets -- is under 1% at a
+//   horizon up to four hours, or 2% at a day. A swap costs a person 0.5-0.8%, 1% on some DEXs, and a move
+//   that small is not worth one; it stays in the record, as every forecast does.
 // TRADE where none holds. A SELL is a paper trade only, as every short in the app is.
 
-export const DECISION_VERSION = 'decision-v3'
+export const DECISION_VERSION = 'decision-v4'
 
 export const DECISION_LINES = {
   minProfitChance: 0.55,
@@ -49,7 +54,21 @@ export type NoTradeReason =
   | 'QUALITY_LOW'
   | 'CLASS_NOT_APPROVED'
   | 'ENGINE_DRIFT'
+  | 'MOVE_UNDER_LINE'
 
+/** A move worth its costs (V7.2-R Stage 3; the user's line of 20 October 2026: "at least 1%~2% or more"): the
+ * least likely move, in percent on the trade's side, a horizon's trade needs. */
+export const OPPORTUNITY_LINES = {
+  minMovePct: { minutes5: 1, minutes15: 1, hour1: 1, hours4: 1, hours24: 2 } as Readonly<Record<Horizon, number>>
+} as const
+
+const P25 = QUANTILE_LEVELS.indexOf(0.25)
+const P75 = QUANTILE_LEVELS.indexOf(0.75)
+
+/** The likely move on a side, in percent from the close: P75 for a buy, P25 (as a fall) for a sell. */
+export function likelyMovePct(quantilesPct: readonly number[], side: 'BUY' | 'SELL'): number {
+  return side === 'BUY' ? quantilesPct[P75] : -quantilesPct[P25]
+}
 /** What a reason was read from, so the window can word it in the person's language (V6 Stage 14):
  * absent on a decision made before. */
 export interface ReasonValues {
@@ -68,6 +87,9 @@ export interface ReasonValues {
   spreadPct?: number
   classKey?: string
   verdict?: ClassVerdict
+  /** MOVE_UNDER_LINE: the likely move on the trade's side and the line it is under, in percent. */
+  movePct?: number
+  linePct?: number
 }
 
 export interface DecisionReason {
@@ -152,6 +174,12 @@ export function reasonText(reason: DecisionReason, horizon: Horizon, i18n: I18n 
       return t('The bars it was read from are more than two closes old.')
     case 'CLASS_NOT_APPROVED':
       return t(VERDICT_SENTENCES[values.verdict ?? 'NOT_ENOUGH'], { kind: classKeyWords(values.classKey ?? '', i18n) })
+    case 'MOVE_UNDER_LINE':
+      return t('Its likely move ({move}) is under the {line} a {horizon} trade needs: no move worth its costs is forecast now.', {
+        move: pctPlain(values.movePct ?? Number.NaN, 2),
+        line: pctPlain(values.linePct ?? Number.NaN, 0),
+        horizon: words
+      })
     case 'ENGINE_DRIFT':
       return t('The {horizon} forecasts of the last day held {share} of their 80% ranges, under {line}: the engine has drifted, and nothing is traded at this horizon.', {
         horizon: words,
@@ -178,6 +206,9 @@ export function decideTrade(input: DecisionInput): TradeDecision {
     if (side === null) add('NO_CALL')
     else {
       edge = edgeOf(range.quantilesPct, side, input.live?.spreadPct ?? null)
+      const likely = likelyMovePct(range.quantilesPct, side)
+      const line = OPPORTUNITY_LINES.minMovePct[horizon]
+      if (!(likely >= line)) add('MOVE_UNDER_LINE', { movePct: likely, linePct: line })
       if (edge.edgePct <= 0) add('EDGE_UNDER_COSTS', { expectedPct: edge.expectedPct, costPct: edge.costPct })
       else if (edge.pProfit < DECISION_LINES.minProfitChance) add('UNLIKELY_PROFIT', { pProfit: edge.pProfit })
       const regime = prediction.regime

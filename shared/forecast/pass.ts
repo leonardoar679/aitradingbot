@@ -19,6 +19,7 @@ import { cellOf, type RunCalibration } from './runCalibration'
 import { SHOCK_LINES, liveBtcMove } from './shock'
 import type { EngineState } from './status'
 import { decideTrade, liveOfBook, type TradeDecision } from './tradeDecision'
+import { moveRatesOf, type MoveRates } from './moveRates'
 
 // THE FORECAST PASS AS PURE FUNCTIONS (V7.2 Stage 5, 18 October 2026). Everything the live forecast
 // decides -- every pair forecast at a close, the outcomes due written and the adaptive levels moved, a
@@ -105,6 +106,8 @@ export interface PairInput {
   breakout: boolean
   /** What moved each horizon's size reading most (§36). */
   drivers: Partial<Record<Horizon, RangeDriver[]>>
+  /** How often the coin moved over its last ninety days (V7.2-R Stage 3), read once an hour. */
+  moveRates: MoveRates | null
 }
 
 export interface OwedForecast {
@@ -149,6 +152,8 @@ export interface PassState {
   /** The news-moved forecasts' outcomes, for their own skill. */
   newsOutcomes: NewsOutcome[]
   newsSkill: Partial<Record<Horizon, number | null>>
+  /** Each pair's move rates and the hour they were read at (V7.2-R Stage 3): read again the next hour. */
+  moveRates: Map<string, { hour: number; rates: MoveRates | null }>
 }
 
 export function newPassState(): PassState {
@@ -168,7 +173,8 @@ export function newPassState(): PassState {
     closeMarket: null,
     lastRecordedAt: 0,
     newsOutcomes: [],
-    newsSkill: {}
+    newsSkill: {},
+    moveRates: new Map()
   }
 }
 
@@ -252,6 +258,7 @@ export function predictionFor(state: PassState, sources: PassSources, symbol: st
     models: input.models,
     direction: input.direction,
     excursion: input.excursion,
+    moveRates: input.moveRates,
     calibration,
     levels: (horizon, variant, cell) => levelsOf(state.aci, cellKey(horizon, variant, cell)),
     news: sources.news(symbol),
@@ -469,6 +476,11 @@ export function pass(state: PassState, sources: PassSources, closedAt: number, n
       drivers[horizon] = rangeDriversFor(model, variant === undefined ? [] : cellOf(variant, cls).weights, row)
     }
     const hour = series.m5.slice(Math.max(0, at - 12), at)
+    // How often the coin moved enough to pay for a trade, over its last ninety days: once an hour a pair.
+    const rateHour = Math.floor(closedAt / 3600)
+    const heldRates = state.moveRates.get(symbol)
+    const moveRates = heldRates !== undefined && heldRates.hour === rateHour ? heldRates.rates : moveRatesOf(series.m5, closedAt)
+    state.moveRates.set(symbol, { hour: rateHour, rates: moveRates })
     const usualMinuteVolume = hour.length === 12 ? hour.reduce((sum, entry) => sum + entry.volume, 0) / 60 : null
     state.inputs.set(symbol, {
       models,
@@ -483,7 +495,8 @@ export function pass(state: PassState, sources: PassSources, closedAt: number, n
       usualMinuteVolume,
       market: { z1h: row[Z1H], breadth1h: row[BREADTH1H], volRatio1h: row[VOL1H], atr5mPct: atr5mPctAt(series.m5.slice(Math.max(0, at - ATR_BARS - 1), at)) },
       breakout: breakoutAt(series.m5.slice(Math.max(0, at - 290), at), closedAt),
-      drivers
+      drivers,
+      moveRates
     })
   }
   const settled = settle(state, sources, closedAt)

@@ -4,6 +4,7 @@ import { DIRECTION_LINES, calibratedPUp, classify, confidenceOf, rawPUp, type Di
 import { ENSEMBLE_VERSION, combine, halfWidth, sigmaOf, widenAround } from './ensemble'
 import { FEATURES_VERSION, HORIZONS, HORIZON_BARS, type Horizon, type PairClass } from './features'
 import { QUANTILE_LEVELS } from './ml/quantile'
+import type { MoveRates } from './moveRates'
 import { MODELS_VERSION, type DirectionModelId, type ForecastModelId } from './models'
 import { NEWS_EFFECT_VERSION, newsEffectOf, type AnalystReadingInput, type KindReactions, type NewsEffect, type NewsStoryInput } from './newsEffect'
 import { QUALITY_VERSION, qualityOf, type PredictionQuality } from './quality'
@@ -64,10 +65,12 @@ import { usualMove } from './targets'
 //   four, and the typical time when it is, from the first-touch table; UNLIKELY under a fixed chance
 //   within the horizon, and then no time is said.
 
-/** prediction-v5 (V7.1 Stage 11): the market's shock state at the forecast's moment, and a widening that
+/** prediction-v6 (V7.2-R Stage 3): how often the coin moved 1%, 2% and 5%, and touched 1% and 2%, over its own
+ * last ninety days (shared/forecast/moveRates.ts), beside the forecast and said as a frequency of the past.
+ * prediction-v5 (V7.1 Stage 11): the market's shock state at the forecast's moment, and a widening that
  * says which state's rule made it. prediction-v4 (V7.1 Stage 3): each horizon carries its likely high and
  * low and when its expected price is reached. */
-export const PREDICTION_VERSION = 'prediction-v5'
+export const PREDICTION_VERSION = 'prediction-v6'
 
 export const PREDICTION_LINES = {
   /** The half-spread, in percent, the training closes already carry. */
@@ -185,6 +188,9 @@ export interface PricePrediction {
   /** The market's shock state at the forecast's moment (V7.1 Stage 11); null where it could not be read,
    * absent on a forecast made before. */
   marketState?: MarketShockState | null
+  /** How often the coin moved enough to pay for a trade over its last ninety days (V7.2-R Stage 3): null where
+   * its bars hold too few days, absent on a forecast made before. A frequency of the past, not a forecast. */
+  moveRates?: MoveRates | null
   versions: { prediction: string; models: string; features: string; ensemble: string; calibration: string; runCalibration: string; news: string; quality: string; run: string; foldsRun: string }
 }
 
@@ -233,6 +239,8 @@ export interface PredictionInput {
   direction?: Partial<Record<Horizon, Partial<Record<DirectionModelId, number>>>>
   /** Each horizon's excursion levels at the close, in usual moves (V7.1 Stage 3, predictExcursion). */
   excursion?: Partial<Record<Horizon, { high: readonly number[]; low: readonly number[] }>>
+  /** How often the coin moved over its last ninety days (V7.2-R Stage 3), as the pass read it from its bars. */
+  moveRates?: MoveRates | null
   runId: string
   foldsRunId: string
 }
@@ -480,6 +488,7 @@ export function makePrediction(input: PredictionInput): PricePrediction | null {
     barTime: input.barTime,
     market: input.market === undefined ? null : { z1h: input.market.z1h, breadth1h: input.market.breadth1h, volRatio1h: input.market.volRatio1h ?? null, atr5mPct: input.market.atr5mPct ?? null },
     marketState: input.marketState ?? null,
+    ...(input.moveRates === undefined ? {} : { moveRates: input.moveRates }),
     versions: {
       prediction: PREDICTION_VERSION,
       models: MODELS_VERSION,

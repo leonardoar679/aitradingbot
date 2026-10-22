@@ -260,7 +260,7 @@ function App(): React.JSX.Element {
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <ErrorBoundary label={msg("The sidebar")}>
           <Sidebar
-            activeId={activeNavId(page, tabs, chosenNav)}
+            activeId={activeNavId(page, tabs, chosenNav, uiMode)}
             onChoose={choose}
             collapsed={collapsed}
             onToggleCollapsed={() => setCollapsed((c) => !c)}
