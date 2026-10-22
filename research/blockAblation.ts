@@ -34,6 +34,9 @@ const PERMUTE = process.env.PERMUTE === '1'
 const COMPARE = process.env.COMPARE === '1'
 const OUT = process.env.OUT ?? join(ARCHIVE, 'longWalkForward')
 const NAME = `block-${BLOCKS.join('-')}${PERMUTE ? '-permuted' : ''}`
+/** HORIZONS fits those horizons alone (22 October 2026: a run stopped by the two-hour limit on a background command is
+ * finished horizon by horizon; each horizon's record is its own file, and COMPARE=1 reads them all). */
+const FIT = process.env.HORIZONS === undefined ? HORIZONS : (process.env.HORIZONS.split(',') as Horizon[])
 // The long walk forward's own lines (research/longWalkForward.ts): its seed, folds and window.
 const SEED = 20261013
 const LONG_FOLDS = { folds: 8, foldDays: 28, minTrainDays: 90 }
@@ -133,7 +136,7 @@ const read = (folder: string, horizon: Horizon): OosRecord | null => {
 
 mkdirSync(join(OUT, NAME), { recursive: true })
 if (!COMPARE) {
-  for (const horizon of HORIZONS) {
+  for (const horizon of FIT) {
     const hIndex = HORIZONS.indexOf(horizon)
     const rows = rowsFor(panel, horizon)
     const tested: Parameters<typeof recordOf>[1][number][] = []

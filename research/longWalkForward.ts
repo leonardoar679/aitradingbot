@@ -18,7 +18,7 @@
 //   ARCHIVE=<scratch>/archive-profile [OUT=<folder>] [HORIZONS=hour1,hours4] node --max-old-space-size=8192 research/.longWalkForward.mjs
 //
 // Hours of one core: run it beside nothing it would slow. It reads the archive and writes only into OUT.
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { preEventAt } from '../shared/calendar/macro'
 import { barFromLine, coarseBars, mergeBars, type ForecastBar } from '../shared/forecast/bars'
@@ -27,7 +27,7 @@ import { HORIZONS, PAIR_CLASSES, type Horizon, type PairClass, type PairSeries }
 import { MARKET_SHOCK_STATES, STATE_UNKNOWN, btcTimelineOf, marketShockByTime, shockMomentsOf } from '../shared/forecast/marketShock'
 import { DIRECTION_MODELS, FORECAST_MODELS, fitHorizon, normalizedTarget, predictDirection, predictExcursion, predictHorizon, type DirectionModelId, type ForecastModelId } from '../shared/forecast/models'
 import { QUANTILE_LEVELS } from '../shared/forecast/ml/quantile'
-import { OOS_VERSION, encodeOos, type OosRecord } from '../shared/forecast/oosRecord'
+import { OOS_VERSION, decodeOos, encodeOos, oosQuantiles, type OosRecord } from '../shared/forecast/oosRecord'
 import { buildPanel, type Panel } from '../shared/forecast/panel'
 import { buildRunCalibration, honestScore, rowsOf, scoreOutOfSample, type RunCalibration, type ScoredRow } from '../shared/forecast/runCalibration'
 import { btc15ByTime } from '../shared/forecast/shock'
@@ -39,6 +39,14 @@ const ARCHIVE = process.env.ARCHIVE ?? ''
 if (ARCHIVE === '') throw new Error('ARCHIVE is the folder research/fetch-forecast-archive.mjs wrote into')
 const OUT = process.env.OUT ?? join(ARCHIVE, 'longWalkForward')
 const ONLY = process.env.HORIZONS === undefined ? HORIZONS : (process.env.HORIZONS.split(',') as Horizon[])
+/** REUSE=1 reads a horizon's record back where a run before wrote it (OUT/long-<mode>/oos-<horizon>.bin) instead of fitting
+ * it again: the record holds every model's levels and the outcome of each tested row, so its scores, calibration and
+ * figures are read from it as the comparison of blocks reads its own (research/blockAblation.ts). A run stopped part way
+ * (22 October 2026: the two-hour limit on a background command) is finished horizon by horizon. */
+const REUSE = process.env.REUSE === '1'
+/** The figures' file: the whole run's, or, with HORIZONS, those horizons' own, so that runs of different horizons do not
+ * write over one another. */
+const RESULT = process.env.HORIZONS === undefined ? 'long-walk-forward.json' : `long-walk-forward-${ONLY.join('-')}.json`
 /** The worker's seed (electron/forecast/trainWorker.ts SEED), so that each fit is the one the app would make. */
 const SEED = 20261013
 /** Eight tested folds of 28 days, each with at least ninety days of rows before it. */
@@ -138,10 +146,34 @@ mkdirSync(OUT, { recursive: true })
 const records: Record<Mode, Map<Horizon, OosRecord>> = { expanding: new Map(), rolling: new Map() }
 const scores: Record<Mode, { horizon: Horizon; scores: { model: ForecastModelId; overall: ModelScore; byClass: Partial<Record<PairClass, ModelScore>> }[] }[]> = { expanding: [], rolling: [] }
 const fitMinutes: Record<Mode, number[]> = { expanding: [], rolling: [] }
+/** A saved record's scores, each model's over its tested rows as the fit's are (blockAblation.ts promotionsFrom). */
+function scoresOfRecord(record: OosRecord): { model: ForecastModelId; overall: ModelScore; byClass: Partial<Record<PairClass, ModelScore>> }[] {
+  const z = Array.from(record.z)
+  return FORECAST_MODELS.filter((model) => record.models.includes(model)).map((model) => {
+    const quantiles = Array.from({ length: record.rows }, (_, row) => oosQuantiles(record, row, model))
+    const byClass: Partial<Record<PairClass, ModelScore>> = {}
+    for (const [index, cls] of PAIR_CLASSES.entries()) {
+      const mine = [...Array(record.rows).keys()].filter((row) => record.cls[row] === index)
+      if (mine.length > 0) byClass[cls] = scoreRows(mine.map((row) => quantiles[row]), mine.map((row) => z[row]))
+    }
+    return { model, overall: scoreRows(quantiles, z), byClass }
+  })
+}
+
 for (const horizon of ONLY) {
   const hIndex = HORIZONS.indexOf(horizon)
   const rows = rowsFor(panel, horizon)
   for (const mode of MODES) {
+    const saved = join(OUT, `long-${mode}`, `oos-${horizon}.bin`)
+    if (REUSE && existsSync(saved)) {
+      const bytes = readFileSync(saved)
+      const record = decodeOos(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength))
+      if (record === null || record.horizon !== horizon) throw new Error(`${saved} could not be read back`)
+      records[mode].set(horizon, record)
+      scores[mode].push({ horizon, scores: scoresOfRecord(record) })
+      process.stderr.write(`  ${horizon} ${mode}: read back, ${record.rows} rows (${elapsed()})\n`)
+      continue
+    }
     const tested: Tested[] = []
     for (const fold of plan) {
       const { train, valid } = foldRowsIn(rows, horizon, fold, mode)
@@ -247,5 +279,5 @@ for (const fold of plan.slice(-3)) {
   }
 }
 result.cadence = cadence
-writeFileSync(join(OUT, 'long-walk-forward.json'), JSON.stringify(result, null, 1))
-console.log(`\nwrote ${join(OUT, 'long-walk-forward.json')} in ${elapsed()}; fits took ${fitMinutes.expanding.reduce((a, b) => a + b, 0).toFixed(0)} min expanding, ${fitMinutes.rolling.reduce((a, b) => a + b, 0).toFixed(0)} min rolling`)
+writeFileSync(join(OUT, RESULT), JSON.stringify(result, null, 1))
+console.log(`\nwrote ${join(OUT, RESULT)} in ${elapsed()}; fits took ${fitMinutes.expanding.reduce((a, b) => a + b, 0).toFixed(0)} min expanding, ${fitMinutes.rolling.reduce((a, b) => a + b, 0).toFixed(0)} min rolling`)

@@ -721,7 +721,11 @@ since**, by the same lines and with its class as judged: Home's card, the drawer
 table on the book the window holds, and the forecast trader on the one it reads for a call the pass held
 back by the live price alone (the 12-hour run found Home saying there was no live price beside the live
 price it showed, and the trader blind to every pair off screen). The forecast trader's own pairs are
-streamed whatever is shown, as the watch's and the news rules' are.
+streamed whatever is shown, as the watch's and the news rules' are. Since V7.2-R Stage 9 (22 October 2026) the pass
+itself reads, in one request before it decides, the books of every pair it decides on that the stream does not hold
+fresh (`liveMarketService` readPassBooks), and decides on each pair's freshest book, so the record's decisions and the
+ranking are made on a live price for every pair: a run's first pass that day had refused every one of its pairs for a
+price the stream had never been asked for, and a two-day record 4,016 of its 4,527 decisions.
 
 **The forecast on screen** (since 13 October 2026; the V6 document's §3, §34-37, §70-71, §94, §105 and
 §118; V6 Stage 10; `src/forecast/`). Home leads with the **best current prediction**, the ranking's

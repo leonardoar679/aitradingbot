@@ -267,7 +267,10 @@ The main process also runs loops that need no window at all:
   Binance's 24-hour cut (a second socket opened before the first is closed; counted apart from
   drops), the minutes missed in a drop or a gap are read again over REST, refused requests are
   counted, the chart's own sockets follow the data host by the same rule, and the bar shows the
-  socket's state (`src/status/liveMarketChip.ts`). Public data only.
+  socket's state (`src/status/liveMarketChip.ts`). Since V7.2-R Stage 9 (22 October 2026) it reads, in one REST
+  request before each forecast pass, the books of the pairs the pass decides on that the socket does not carry fresh
+  (readPassBooks; a refused request pair by pair), and a pair's freshest book is the socket's or that read (heldBook),
+  which the forecast's decisions use. Public data only.
 - `newsService` reads Binance's two announcement lists once a minute while it is on (added in V3
   Stage 7).
 - `forecastDataService` (added 13 October 2026, V6 Stage 2) keeps ninety days of five-minute bars
