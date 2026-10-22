@@ -50,7 +50,10 @@ import { BLOCK_HOURS, bootstrapOverHours, hourOf, type Figure } from './uncertai
 //
 // Two replays of the same inputs write the same bytes: no clock is read and nothing is drawn at random.
 
-export const REPLAY_VERSION = 'replay-v1'
+/** replay-v2 (22 October 2026): a cell's intervals are resampled by calendar hour, an hour with no trade counting nothing,
+ * so that a block is as long as the horizon in time. replay-v1 counted its blocks in the hours that held a trade: a day's
+ * grids, all begun in one hour, made one block of their 21 days, and no interval was read (V72R-S5-GRID, judged under v1). */
+export const REPLAY_VERSION = 'replay-v2'
 
 export const REPLAY_LINES = {
   /** The spread of the book a replayed decision is made again on, in percent of the price: the replay holds none. */
@@ -595,14 +598,20 @@ export function parseReplayFile(text: string): ReplayFile | null {
 
 const meanOf = (values: readonly number[]): number | null => (values.length === 0 ? null : values.reduce((sum, value) => sum + value, 0) / values.length)
 
-/** The mean of a figure over trades, with its interval resampled by the hour each began in, in blocks as long as the horizon. */
+/** The mean of a figure over trades, with its interval resampled by the hour each began in, in blocks of calendar hours
+ * as long as the horizon: every hour from the first trade's to the last's is an entry, one with no trade counting nothing,
+ * and a draw that holds no trade is no figure. */
 function meanFigure(entries: readonly { hour: number; value: number }[], horizon: Horizon): Figure | null {
   if (entries.length === 0) return null
-  const made = bootstrapOverHours(
-    entries.map((entry) => ({ hour: entry.hour, sample: [entry.value, 1] })),
-    [(sums): number => sums[0] / sums[1]],
-    BLOCK_HOURS[horizon]
-  )
+  let first = Number.POSITIVE_INFINITY
+  let last = Number.NEGATIVE_INFINITY
+  for (const entry of entries) {
+    first = Math.min(first, entry.hour)
+    last = Math.max(last, entry.hour)
+  }
+  const samples = entries.map((entry) => ({ hour: entry.hour, sample: [entry.value, 1] }))
+  for (let hour = first; hour <= last; hour++) samples.push({ hour, sample: [0, 0] })
+  const made = bootstrapOverHours(samples, [(sums): number => (sums[1] > 0 ? sums[0] / sums[1] : Number.NaN)], BLOCK_HOURS[horizon])
   return made === null ? null : made.figures[0]
 }
 

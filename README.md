@@ -568,6 +568,21 @@ over the research's $20 million floor, join the forecast's pairs after the resea
 (`shared/forecast/universe.ts`). The cost line is registered (V72R-S4-COSTS) to be judged on the Stage 9 runs' demo
 trades, a paper trade's cost being the model's own.
 
+**The replay out of sample** (since 22 October 2026; V7.2-R Stage 5; `shared/forecast/replay.ts`,
+`shared/forecast/rangeStrategies.ts`, `electron/services/forecastReplayService.ts`, `research/replay.ts`). The laboratory
+made no trade because nothing calls a way, so whether the forecast is tradable is answered on weeks its models never saw:
+a walk forward's weeks after the first are forecast again at every five-minute close through the forecast's own pass,
+with each week's own models and a calibration made only from the weeks before it, and the strategies are played on the
+bars after each quarter-hour -- the laboratory's four through the live decision, and two that need no way: **band
+reversion** (a resting bid at a horizon's P10 price, sold at the median, stopped at the path's likely low) and the **range
+grid** (a day's bids between P10 and P90, each sold a step up). Their lines were registered before any of their figures
+was read, and every one failed (research/FORECAST.md): on 1-22 October 2026 a bid at P10 lost 0.22% a fill at an hour and
+0.35% at four hours after costs, beyond noise, and nothing at a day; the grid lost 0.42% a grid; the laboratory made no
+trade, every replayed forecast being NO_CALL. Neither is offered on paper. In the app the newest walk forward that kept
+its weeks' models is replayed in the forecast's worker once the training is idle, once a run; the Forecast Lab's **Out of
+sample** card shows each strategy's trades and net with its interval beside the long held over the same lives, and the
+research export carries `forecastModels/replay.json` and its trades.
+
 **The paper laboratory** (since 16 October 2026; V7.1 Stage 4; `shared/forecast/labTrader.ts`, the one
 writing file `src/forecast/labTrader.ts`, the card `src/forecast/PaperLabCard.tsx`). V6's runs found zero
 forecast trades under the production gates, and a gate that approves nothing says nothing about what it

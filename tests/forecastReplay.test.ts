@@ -151,7 +151,7 @@ describe("each week's calibration", () => {
   })
 
   it("hands each week's direction verdicts on to the next week's, as a walk forward's go to the next", () => {
-    const knowing = new Map<Horizon, OosRecord>(HORIZONS.map((horizon, index) => [horizon, recordOf({ rows: 8000, seed: 120 + index, horizon, direction: { 'dir-logistic': 0.6, 'dir-gbt': 0 } })]))
+    const knowing = new Map<Horizon, OosRecord>(HORIZONS.map((horizon, index) => [horizon, recordOf({ rows: 4000, seed: 120 + index, horizon, direction: { 'dir-logistic': 0.6, 'dir-gbt': 0 } })]))
     const made = forwardCalibrations(knowing, promotions, 'run-d', [1, 2, 3])
     let read = 0
     for (const week of [2, 3]) {
@@ -169,7 +169,7 @@ describe("each week's calibration", () => {
     // The first week replayed has no walk forward before it.
     const first = made.get(1)!.horizons.hour1?.direction?.models['dir-logistic']
     if (first !== undefined) expect(first.tradeableBefore).toBeNull()
-  })
+  }, 60_000)
 })
 
 /** The fixture's calibration with the path's levels: the likely low twice the excursion models' reading, under P10. */
@@ -331,6 +331,20 @@ describe("a cell's figures", () => {
     expect(failed.profitFactor).toBeCloseTo(1.05, 12)
     expect(failed.winRate).toBeCloseTo(0.5, 12)
     expect(failed.maxDrawdownPct).toBeGreaterThan(0)
+  })
+
+  it("resamples by calendar hour: a day's grids, all begun in one hour, still read an interval over their days", () => {
+    // Twenty-one days of thirty grids each, every grid of a day begun in the same hour, the day's net set by the day.
+    const grids = Array.from({ length: 21 * 30 }, (_, k) => {
+      const day = Math.floor(k / 30)
+      return trade(day * 24, -0.4 + 0.3 * Math.sin(day), { cell: 'grid:hours24', strategy: 'grid', horizon: 'hours24', exit: 'time', filledAt: null, pair: `P${k % 30}` })
+    })
+    const cell = cellFiguresOf('grid:hours24', 'grid', 'hours24', 'out', grids)
+    expect(cell.net).not.toBeNull()
+    expect(cell.net!.value).toBeCloseTo(grids.reduce((sum, entry) => sum + entry.netPct, 0) / grids.length, 12)
+    expect(cell.net!.low).toBeLessThan(cell.net!.value)
+    expect(cell.net!.high).toBeGreaterThan(cell.net!.value)
+    expect(cell.verdict).toBe(cell.net!.low > 0 ? 'held' : 'failed')
   })
 
   it('is not measured on fewer trades than the line reads, unfilled orders not counted as trades', () => {

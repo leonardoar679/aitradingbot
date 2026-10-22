@@ -788,3 +788,45 @@ shows an expected price only where a source of the way that beat the base rate i
 user's line of a move worth its costs (MOVE_UNDER_LINE: the likely move, P75 for a buy and P25 for a sell, at least 1%
 up to four hours and 2% at a day), registered as exploratory (V72R-S3-LINES) for the Stage 9 runs.
 
+## Two strategies that need no way, out of sample (V7.2-R Stage 5, 22 October 2026)
+
+The ranges held and the way did not, so the question left after Stage 4 was whether a calibrated range can earn without
+a call, and the live laboratory, funded since 16 October, had made no trade to say. `shared/forecast/replay.ts` answers it
+on weeks the models never saw: a walk forward's weeks after the first, each forecast again at every five-minute close
+through the forecast's own pass with that week's models (kept since V7.2 Stage 5) and a calibration made only from the
+weeks before it, the outcomes settled and the adaptive levels moved as live. At every quarter-hour two paper strategies
+were played on the bars after it, their rules fixed before any trade was replayed
+(`shared/forecast/rangeStrategies.ts`): **band reversion**, a resting bid at a horizon's P10 price, sold at the median,
+stopped at the excursion's likely low at the nine-in-ten level, sold at the horizon's end otherwise; and the **range
+grid**, a day's bids between P10 and P90 a step apart (at least twice the 0.24% round trip), each sold a step up and bid
+again, what is held sold at the day's end. Fills flatter less: a resting order fills only where a later bar trades
+through it by 0.02%, at its own price; a stop at the stop or a gap's open, with slippage; a bar that reaches both is a
+stop. The laboratory's four were taken through the live decision too. The lines were registered (V72R-S5-BAND, -GRID,
+-LAB, -REPLAY, engine 2fc505d8429c) after a blind run that printed counts and times only.
+
+| | band, an hour | band, four hours | band, a day | grid, a day |
+|---|---|---|---|---|
+| orders / trades (primary record) | 17,862 / 3,894 | 4,792 / 1,162 | 811 / 246 | 744 grids |
+| net a trade after costs, primary | -0.223% [-0.259, -0.182] | -0.348% [-0.502, -0.162] | +0.054% [-1.435, +1.756] | -0.423% [-0.807, -0.070]* |
+| won / profit factor | 28.6% / 0.45 | 26.9% / 0.49 | 37.4% / 1.04 | 52.2% / 0.29 |
+| net a trade, the user's profile | -0.229% [-0.269, -0.189] | -0.283% [-0.473, -0.088] | +0.381% [-4.258, +4.635] | -0.310% [-0.642, -0.014]* |
+| the long held over the same lives, primary | -0.228% | -0.162% | +0.479% | +0.128%* |
+| verdict | failed | failed | failed | failed |
+
+The primary record is research2-profile's run-20261022-1033 (1-22 October 2026, 40 pairs); the user's profile is a copy of
+its run-20261020-0828 (29 September to 20 October, 30 pairs), overlapping weeks, so a second universe and fit rather than
+a second sample. Intervals are 95%, resampled by the hour bought in. * The grid's interval under the registered code
+(replay-v1) could not be read: it counted its 24-hour blocks in hours that held a grid, and a day's grids all begin in
+one hour, so 21 days made one block. The figures marked are the calendar-block reading made after the judgement
+(replay-v2, now the app's); the verdict stands on the registered line either way, since a mean below zero leaves no
+interval wholly above it.
+
+**Every line failed.** Bought at P10, the price went on down more often than it came back: at an hour 1,838 of 3,894 fills
+were stopped and 468 reached the median; at four hours 641 stopped and 102 reached it. That is what the V7.2 draft's
+arithmetic expected (under a martingale about a fifth of bids fill, the expected close after a fill is the bid, and the
+reversion needed to pay 0.2-0.24% is more than these horizons have shown), and the fills here were 22-30%. A day's band is
+noise around zero, its little net made in a handful of hours (748% of it from the best 5%). The grid sold 35 rungs a step
+up a day and still lost: what it bought in a fall it held into the day's end, in weeks the coins fell. The laboratory's
+four made no trade: all 72,036 replayed forecasts on the primary record and 57,584 on the user's were NO_CALL, P(up) read
+from the base rate. Neither strategy is offered on paper; the Lab's card says so beside the replay the app now makes of
+its newest walk forward. Two replays of the primary record wrote the same bytes (V72R-S5-REPLAY held).
