@@ -88,6 +88,7 @@ import { UNIVERSE_LINES, UNIVERSE_VERSION } from './forecast/universe'
 import { REPLAY_LINES, REPLAY_VERSION } from './forecast/replay'
 import { RANGE_LINES, RANGE_STRATEGIES, RANGE_STRATEGIES_VERSION } from './forecast/rangeStrategies'
 import { HYPOTHESES, HYPOTHESES_VERSION, HYPOTHESIS_HORIZONS, HYPOTHESIS_LINES } from './forecast/hypotheses'
+import { BLOCKS_V3_LINES, BLOCKS_V3_VERSION, BLOCK_NAMES } from './forecast/blocksV3'
 import { VENUE_COSTS_VERSION, VENUE_FEES } from './venueCosts'
 import { DEGRADATION_LINES, DEGRADED_THREAD_SECONDS, DIRECTION_PROMOTION_LINES, PROMOTION_LINES } from './forecast/promotion'
 import { LOGISTIC_FIT } from './forecast/ml/logistic'
@@ -224,6 +225,9 @@ export const ENGINE_CONSTANTS = {
     // The user's direction hypotheses as rules (V7.2-R Stage 6), each line fixed before it was measured on a year of bars,
     // and the bar their calls are judged by at each horizon.
     hypotheses: { version: HYPOTHESES_VERSION, hypotheses: HYPOTHESES, horizons: HYPOTHESIS_HORIZONS, ...HYPOTHESIS_LINES },
+    // New information for the way as blocks of figures (V7.2-R Stage 7): their columns and lines, research-only until one
+    // passes its registered line.
+    blocksV3: { version: BLOCKS_V3_VERSION, names: BLOCK_NAMES, ...BLOCKS_V3_LINES },
     direction: DIRECTION_LINES,
     reliability: RELIABILITY_LINES,
     prediction: { version: PREDICTION_VERSION, ...PREDICTION_LINES },
