@@ -863,6 +863,60 @@ the app's paper shorts on both kinds already trade; spot cannot sell what it doe
 says what to step out of, not what to buy. The Forecast Lab's **Your direction hypotheses on a year** card shows the
 table, each horizon apart, beside the registered verdicts.
 
+## Eight months out of sample (V7.2-R Stage 6, 22 October 2026)
+
+The forecast's own fits (the worker's fitHorizon and seeds, rows purged and embargoed as the app purges them) were
+walked forward over eight folds of 28 days of the year archive, February to September 2026, each with at least ninety
+days of rows before it, in two modes on identical tested folds: EXPANDING, fitted on every row before the fold, and
+ROLLING, fitted on the ninety days before it alone -- the live fit's window (`research/longWalkForward.ts`). Each mode's
+record was scored as a walk forward's is: the shown forecast with weights and a calibration from the folds before, so
+seven months (March to September) are scored. Registered before it ran (V72R-S6-LONGWF, -DIRYEAR, -COVERAGE, -CADENCE).
+
+| horizon | pinball, expanding less rolling | 80% range covered (expanding) | months within 5 points | the distribution's direction skill |
+|---|---|---|---|---|
+| 5 min | -0.14% [beyond noise] | 80.2% [79.8, 80.7] | 7 of 7 (78-82%) | +0.08% [-0.08, +0.22] |
+| 15 min | -0.08% [beyond noise] | 80.4% [79.9, 80.9] | 7 of 7 (79-81%) | +0.05% [-0.02, +0.12] |
+| 1 hour | -0.12% [beyond noise] | 79.4% [78.9, 80.0] | 7 of 7 (78-82%) | +0.02% [-0.07, +0.11] |
+| 4 hours | -0.16% [beyond noise] | 80.2% [79.3, 81.2] | 7 of 7 (79-82%) | -0.10% [-0.35, +0.10] |
+| 24 hours | -0.71% [beyond noise] | 80.7% [78.4, 82.8] | 7 of 7 (76-83%) | -0.32% [-1.37, +0.37] |
+
+**The ranges hold over a year (V72R-S6-COVERAGE held):** the 80% range covered 79.4-80.7% pooled at every horizon and
+stayed within five points of 80% in every month tested. **More data is not the fix (V72R-S6-LONGWF failed):** a year of
+rows lowers the loss beyond noise at every horizon, but by a tenth of a percent up to four hours and 0.7% at a day,
+under the 1% the line asks; the live fit stays ninety days. **There is no direction (V72R-S6-DIRYEAR failed):** no
+horizon's direction skill is above zero beyond noise, and of the direction models the few above zero are a fifth of a
+point at most (dir-logistic at five minutes +0.21%, dir-gbt-price at an hour +0.20%), none promoted or tradeable by the
+direction bar. Over eight months out of sample the forecast knows how far a coin may move and not which way; the
+settled finding takes direction-model work out of the plan. **The refit cadence (V72R-S6-CADENCE, exploratory):** a fit
+on one more day of rows, the same seeds, scored on the week after, differs from the day before's within noise in 14 of
+15 readings (the one beyond noise a quarter of a percent): a weekly refit with the calibration made again nightly would
+lose about nothing. The cadence changes only with the user's yes.
+
+## New information for the way, measured (V7.2-R Stage 7, 22 October 2026)
+
+Two blocks of figures the forecast's rows do not hold were appended to every row of the year's long walk forward
+(`shared/forecast/blocksV3.ts`) and fitted again on the same folds, seeds and rows, each beside a control with the same
+columns shuffled across the rows (`research/blockAblation.ts`): CROSS and FLOW together -- the coin's moves less
+Bitcoin's share of them over fifteen minutes, four hours and a day, its rank among the pairs, the pairs' spread and the
+share that shocked, the buyers' share and its change, the trades' pace and size, Bitcoin's and the market's buyers --
+and POSITIONING -- the funding rate, the premium, the open interest's change and its way with the price, the long/short
+ratios against their week and the perpetual's buyers, read from Binance's futures archive for the 27 pairs with a year
+of it, ten minutes or more before each moment. Registered before either was fitted (V72R-S7-CROSSFLOW, -POSITIONING).
+
+| block | 5 min | 15 min | 1 hour | 4 hours | 24 hours |
+|---|---|---|---|---|---|
+| cross and flow | +0.03% | +0.05% | -0.05%* | -0.06% | -0.01% |
+| its shuffled control | -0.02% | +0.02% | +0.01% | -0.05%* | +0.04% |
+| positioning | +0.00% | +0.00% | +0.02% | -0.07%* | +0.02% |
+| its shuffled control | -0.00% | -0.00% | +0.02% | -0.06%* | +0.06% |
+
+The shown forecast's mean pinball loss with the block less without (* beyond noise). **Neither block passed.** No
+difference reached the 1% the lines ask, the controls -- the same columns with their information shuffled away --
+moved the loss as much as the blocks did, and no direction model was promoted or tradeable with either (the best,
+dir-logistic at five minutes, +0.25% of skill with cross and flow against +0.21% without). Where a coin stands among the
+others, who pressed its trades and what the futures crowd holds tell the forecast nothing its own figures do not, on a
+year of bars out of sample. Both blocks stay measured in research and out of the forecast's rows.
+
 ## A challenger proven forward (V7.2-R Stage 8, 22 October 2026)
 
 A walk forward says how a refit would have done on the weeks it was tested on, much the same weeks as the run in use's;
