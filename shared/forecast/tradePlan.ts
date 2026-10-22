@@ -3,6 +3,7 @@ import { HORIZON_BARS, type Horizon } from './features'
 import { QUANTILE_LEVELS } from './ml/quantile'
 import type { PricePrediction } from './prediction'
 import { OPPORTUNITY_LINES, type TradeDecision } from './tradeDecision'
+import type { RoundTrip } from '../venueCosts'
 
 // FROM A FORECAST TO A TRADE PLAN (the V6 document, §29-30, §62 and §107; V6 Stage 12, 13 October 2026).
 // Only a TRADE decision has a plan. From the live price:
@@ -48,6 +49,8 @@ export interface TradePlan {
   targetPct: number
   targetPrice: number
   targetLevel: TargetLevel
+  /** The round trip its decision was costed at (V7.2-R Stage 4): the venue it is traded on; absent where none was read. */
+  cost?: RoundTrip | null
   holdSec: number
   /** Unix seconds: the next five-minute close. */
   validUntil: number
@@ -98,6 +101,7 @@ export function tradePlanOf(input: { decision: TradeDecision; prediction: PriceP
     targetPct,
     targetPrice,
     targetLevel: input.targetLevel,
+    ...(decision.cost === undefined || decision.cost === null ? {} : { cost: decision.cost }),
     holdSec: HORIZON_BARS[decision.horizon] * 300,
     validUntil: prediction.barTime + 300
   }

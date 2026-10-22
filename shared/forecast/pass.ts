@@ -20,6 +20,7 @@ import { SHOCK_LINES, liveBtcMove } from './shock'
 import type { EngineState } from './status'
 import { decideTrade, liveOfBook, type TradeDecision } from './tradeDecision'
 import { moveRatesOf, type MoveRates } from './moveRates'
+import type { RoundTrip } from '../venueCosts'
 
 // THE FORECAST PASS AS PURE FUNCTIONS (V7.2 Stage 5, 18 October 2026). Everything the live forecast
 // decides -- every pair forecast at a close, the outcomes due written and the adaptive levels moved, a
@@ -36,7 +37,15 @@ import { moveRatesOf, type MoveRates } from './moveRates'
 //
 // IT FORECASTS FROM PUBLIC MARKET DATA AND NOTHING ELSE. No key, no model of anyone else's, no order.
 
-export const PASS_VERSION = 'pass-v1'
+/** pass-v2 (22 October 2026): an outcome settled more than PASS_LINES.staleStepSec after its due moves no adaptive
+ * level. */
+export const PASS_VERSION = 'pass-v2'
+
+export const PASS_LINES = {
+  /** An outcome settled this long after its due is written, told and counted for the drift gate, and moves no adaptive
+   * level: the levels learn the market now, and a burst of outcomes from a closure would step them on days gone. */
+  staleStepSec: 6 * 3600
+} as const
 
 /** The closes a pair's usual spread is the median of, and the fewest it is read from (V7.1 Stage 11). */
 export const SPREAD_CLOSES = 24
@@ -79,6 +88,9 @@ export interface PassSources {
   preEvent(tSec: number): boolean
   /** How each opportunity class stands; null until judged, and then no class is. */
   classVerdict(): ((key: string) => ClassVerdict) | null
+  /** A pair's round trip on a side at the cheaper venue, from the venues' books at the reference stake (V7.2-R Stage 4);
+   * null where none is held. Absent on a replay, which costs every trade at the flat round trip. */
+  venueCost?(pair: string, side: 'BUY' | 'SELL', nowMs: number): RoundTrip | null
   /** The close an owed horizon is settled at: its due moment, unless the source names a later one -- a
    * replay following a record whose bars came late, so that the levels take the steps the live run's took.
    * Absent on the live service. */
@@ -290,7 +302,7 @@ export function driftReadings(state: Pick<PassState, 'driftOutcomes'>, nowSec: n
 /** A pair's trade decision at its lead horizon -- its best, or the hour's -- from its forecast and the
  * live book. The class a trade on its side falls in (shared/forecast/opportunityClass.ts) is judged by the
  * verdicts handed in; not judged before they are. */
-export function decisionFor(state: Pick<PassState, 'inputs' | 'driftOutcomes'>, sources: Pick<PassSources, 'book' | 'classVerdict'>, prediction: PricePrediction, nowMs: number): TradeDecision {
+export function decisionFor(state: Pick<PassState, 'inputs' | 'driftOutcomes'>, sources: Pick<PassSources, 'book' | 'classVerdict' | 'venueCost'>, prediction: PricePrediction, nowMs: number): TradeDecision {
   const horizon = prediction.bestHorizon ?? (prediction.horizons.hour1 !== undefined ? 'hour1' : (Object.keys(prediction.horizons)[0] as keyof PricePrediction['horizons']))
   const live = liveOfBook(sources.book(prediction.pair))
   const range = prediction.horizons[horizon]
@@ -304,7 +316,9 @@ export function decisionFor(state: Pick<PassState, 'inputs' | 'driftOutcomes'>, 
           return { key, verdict: judge(key) }
         }
   // The live drift gate (V7.1 Stage 13): the horizon's last day of outcomes, as the forecast's own record holds them.
-  return decideTrade({ prediction, horizon, nowMs, live, classOf, drift: driftAt(state, horizon, Math.floor(nowMs / 1000)) })
+  const venueCost = sources.venueCost
+  const costOf = venueCost === undefined ? null : (side: 'BUY' | 'SELL'): RoundTrip | null => venueCost(prediction.pair, side, nowMs)
+  return decideTrade({ prediction, horizon, nowMs, live, classOf, drift: driftAt(state, horizon, Math.floor(nowMs / 1000)), costOf })
 }
 
 export function atr5mPctAt(bars: readonly ForecastBar[]): number | null {
@@ -394,6 +408,7 @@ export function settle(state: PassState, sources: Pick<PassSources, 'seriesOf' |
   if (state.aci === null || state.aci.calibrationRun !== calibration.runId) state.aci = emptyAciTable(calibration.runId)
   const steps: { key: CellKey; below: boolean[] }[] = []
   for (const line of measured) {
+    if (closedAt - line.due > PASS_LINES.staleStepSec) continue
     // V2's levels learn from V2's own, where the shown were moved off them (V6.1): a story's, a thin book's
     // or Bitcoin's sharp move's widening teaches them nothing.
     steps.push({ key: cellKey(line.h, 'v2', line.cell), below: [...(line.v2below ?? line.below)].map((flag) => flag === '1') })

@@ -46,6 +46,13 @@ export const SLIPPAGE_RATE = 0.0002
  * trades carry the rate their recommendation is scored at; a position a person makes, and every
  * one stored before a rate was set on any, carries none and fills as it always did. A rate that is
  * not a fraction from 0 to under 1 is no rate. */
+/** The fee a position's fills pay (V7.2-R Stage 4): its venue's rate where it carries one, FEE_RATE otherwise. A rate
+ * that is no fraction of a fill is not read. */
+export function positionFeeRate(params: { feeRate?: number | null }): number {
+  const rate = params.feeRate
+  return typeof rate === 'number' && Number.isFinite(rate) && rate >= 0 && rate < 0.05 ? rate : FEE_RATE
+}
+
 export function positionSlippageRate(params: { slippageRate?: number | null }): number {
   const rate = params.slippageRate
   return typeof rate === 'number' && rate >= 0 && rate < 1 ? rate : 0

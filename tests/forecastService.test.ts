@@ -55,6 +55,12 @@ vi.mock('../electron/services/noticeService', async () => {
 })
 
 vi.mock('../electron/services/settingsService', () => ({ getSettings: async () => fake.settings }))
+/** The pairs whose venues' books the service asks for after each pass (V7.2-R Stage 4). */
+const venuePairsAsked: string[][] = []
+vi.mock('../electron/services/venueQuotesService', () => ({
+  setVenuePairs: (pairs: readonly string[]): void => void venuePairsAsked.push([...pairs]),
+  venueCostOf: (): null => null
+}))
 
 // The macro calendar (V7.1 Stage 12) as the test sets it: a release at `fake.releaseAt`, or none.
 vi.mock('../shared/calendar/macro', async (importOriginal) => {
@@ -171,6 +177,8 @@ describe('a close', () => {
     expect(live.latestForecasts().map((prediction) => prediction.pair)).toEqual([...SYMBOLS].sort())
     // It is told on the onForecastBars listener it set at start.
     expect(fake.barListeners).toHaveLength(1)
+    // After the pass the venues' books are asked for the pairs that matter: the top ten, there being no open trade.
+    expect(venuePairsAsked.at(-1)).toEqual([...live.forecastRanking().top10])
     // How often the coin moved over its last ninety days (V7.2-R Stage 3): a horizon needs thirty days of hours, which
     // this close is an hour short of; a day later every horizon has them, read from the bars the pass holds.
     expect(sol.moveRates).toBeNull()
@@ -622,10 +630,28 @@ describe('the record', () => {
     expect(owed.size).toBe(4)
     expect([...owed.values()].every((entry) => !entry.horizons.has('minutes5') && entry.horizons.has('hours24'))).toBe(true)
     expect(again.getForecastEngineState().pending).toBe(16)
-    // A day and more later, what was recorded then is no longer owed.
+    // A day and more later, what was recorded then is still owed: the app was closed when it came due, and it is judged
+    // from the bars when the app is back (since 22 October 2026). Eight days and more later, it is no longer read.
     again.forecastForTest.reset()
     await again.forecastForTest.readOwed(HOUR + 27 * 3600)
+    expect(again.forecastForTest.owed.size).toBe(4)
+    again.forecastForTest.reset()
+    await again.forecastForTest.readOwed(HOUR + 8 * 86_400 + 3600)
     expect(again.forecastForTest.owed.size).toBe(0)
+  })
+
+  it('judges a horizon that came due while the app was closed, and moves the adaptive levels by the timely outcomes only', async () => {
+    const live = await engine()
+    await closeAt(live, HOUR)
+    live.forecastForTest.setAci(null)
+    // Seven hours and five minutes on: the quarter-hour's and the hour's horizons are over six hours late, the four
+    // hours' three hours late.
+    await closeAt(live, HOUR + 7 * 3600 + 300)
+    const outcomes = lines(`outcomes-${month}.jsonl`).filter((line) => line.t === HOUR && !('missing' in line))
+    expect(new Set(outcomes.map((line) => line.h))).toEqual(new Set(['minutes5', 'minutes15', 'hour1', 'hours4']))
+    const keys = Object.keys(live.forecastForTest.aci()?.levels ?? {})
+    expect(keys.length).toBeGreaterThan(0)
+    expect(keys.every((key) => key.startsWith('hours4/'))).toBe(true)
   })
 })
 

@@ -197,6 +197,22 @@ describe('a page that does not come', () => {
 
 // V7.2-R Stage 2: a usual pass stops taking pairs at its deadline, so that the close is told in time to be
 // forecast and recorded; the pairs not reached are left for the next pass.
+// V7.2-R Stage 4: the scanner's movers join the universe, after the research's pairs, once the universe has begun.
+describe("the scanner's movers", () => {
+  it('join the universe once it has begun, after the pairs it holds, each once', async () => {
+    const data = await service()
+    data.setForecastMovers(['PEPEUSDT'])
+    expect(data.forecastUniverse()).toEqual([])
+    data.forecastDataForTest.setUniverse(['BTCUSDT', 'ETHUSDT'])
+    data.setForecastMovers(['PEPEUSDT', 'BTCUSDT'])
+    expect(data.forecastUniverse()).toEqual(['BTCUSDT', 'ETHUSDT', 'PEPEUSDT'])
+    expect(data.getForecastDataStatus().pairs).toBe(3)
+    // A mover no longer moving leaves the universe; its files stay.
+    data.setForecastMovers([])
+    expect(data.forecastUniverse()).toEqual(['BTCUSDT', 'ETHUSDT'])
+  })
+})
+
 describe('a slow data host', () => {
   it('holds a first pass, which reads ninety days a pair, to no deadline', async () => {
     const data = await service()

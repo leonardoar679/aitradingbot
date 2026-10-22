@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { cellKey, emptyAciTable, levelsOf, parseAciTable, stepAciTable } from '../shared/forecast/aciTable'
 import { CALIBRATION_LINES } from '../shared/forecast/calibration'
 import { FORECAST_RECORD_VERSION, isMissing, missingOutcomeLine, outcomeLine, parseOutcomeLine, parsePredictionLine, predictionLine, recordMonth, recordedHorizons } from '../shared/forecast/forecastRecord'
+import type { TradeDecision } from '../shared/forecast/tradeDecision'
 import { QUANTILE_LEVELS } from '../shared/forecast/ml/quantile'
 import { OUTCOME_LINES, dueAt, errorsOf, outcomeOf, type ForecastedHorizon } from '../shared/forecast/outcome'
 import type { ForecastRange, PricePrediction } from '../shared/forecast/prediction'
@@ -274,6 +275,23 @@ describe('the record', () => {
     expect(grid.previous).toBeUndefined()
     // A class without a cell of its own was read in the horizon's.
     expect(predictionLine(prediction({ hour1: range({ ownClass: false }) }), ['hour1'], 'grid').h.hour1!.cell).toBe('pooled')
+    // A decision costed at a venue (V7.2-R Stage 4) keeps the venue and its round trip; one costed flat keeps neither.
+    const costed = {
+      version: 'decision-v5',
+      pair: 'SOLUSDT',
+      horizon: 'hour1',
+      side: 'BUY',
+      decision: 'NO_TRADE',
+      reasons: [{ code: 'EDGE_UNDER_COSTS', text: 'x' }],
+      edge: { side: 'BUY', costPct: 0.31, expectedPct: 0.1, edgePct: -0.21, pProfit: 0.4 },
+      quality: 55,
+      classKey: null,
+      classVerdict: null,
+      cost: { venue: 'bitget', feePct: 0.1, spreadPct: 0.05, impactPct: 0.06, totalPct: 0.31, basis: 'book' },
+      at: T * 1000
+    } as unknown as TradeDecision
+    expect(predictionLine(prediction(), ['hour1'], 'grid', undefined, costed).trade).toMatchObject({ venue: 'bitget', cost: 0.31, edge: -0.21 })
+    expect(predictionLine(prediction(), ['hour1'], 'grid', undefined, { ...costed, cost: undefined }).trade).not.toHaveProperty('venue')
 
     // A move of 1.95%: under the shown P75 (2%), over the price-only one (1.9%).
     const outcome = outcomeOf({ horizon: 'hour1', quantilesPct: line.h.hour1!.q, pUp: 0.55, direction: 'NEUTRAL', width80Pct: 5, usualWidth80Pct: 4 }, T, 180, Array.from({ length: 12 }, () => ({ high: 184, low: 179, close: 180 * 1.0195 })))!

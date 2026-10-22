@@ -3,11 +3,13 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc'
 import { startResearchFolder } from './services/researchFolderService'
+import { startVenueQuotes } from './services/venueQuotesService'
 import { startLivePositionWatcherLoop } from './services/livePositionWatchersService'
 import { startLiveTwapLoop } from './services/liveTwapService'
 import { startMarketScanner } from './services/marketScannerService'
 import { startMarketResearch } from './services/marketResearchService'
-import { startForecastData } from './services/forecastDataService'
+import { setForecastMovers, startForecastData } from './services/forecastDataService'
+import { scannerMovers } from '../shared/forecast/universe'
 import { startForecastTraining } from './services/forecastTrainingService'
 import { forecastClassVerdict, startForecastLab } from './services/forecastLabService'
 import { forecastLiveSignal, forecastNewsSignal, forecastScannerSignal, setForecastClassVerdicts, setForecastReadings, startForecast } from './services/forecastService'
@@ -190,6 +192,8 @@ if (!gotSingleInstanceLock) {
     // a ZIP every day at 00:05 UTC and on a click. Reads no key, asks no model, places nothing. Started first,
     // so that its log holds what the start logs. See researchFolderService.ts.
     startResearchFolder()
+    // Binance's and Bitget's public books for the pairs that matter, and Bitget's per-pair fees (V7.2-R Stage 4).
+    startVenueQuotes()
     const mainWindow = createWindow()
     registerIpcHandlers(mainWindow)
     createTray()
@@ -246,6 +250,8 @@ if (!gotSingleInstanceLock) {
       })().catch((error) => console.error('A forecast news signal failed:', error))
     })
     onScannerUpdate((state) => void forecastScannerSignal(state).catch((error) => console.error('A forecast scanner signal failed:', error)))
+    // The scanner's movers over the liquidity floor join the forecast's pairs (V7.2-R Stage 4).
+    onScannerUpdate((state) => setForecastMovers(scannerMovers(state.pairs)))
     let liveCheckedAt = 0
     onLiveUpdate((state) => {
       // Four pushes a second: the stream is looked at for the forecast every five seconds.

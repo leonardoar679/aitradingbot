@@ -1,7 +1,8 @@
 import { ENGLISH, type I18n } from '../../shared/i18n/translate'
 import { classKeyWords, HORIZON_NAME } from '../../shared/forecast/words'
 import { noticeI18n } from '../i18n/current'
-import type { AppSettings, Candle, ExecutorConfig, PositionExecutorParams } from '../../shared/ipc'
+import type { AppSettings, Candle, Exchange, ExecutorConfig, PositionExecutorParams } from '../../shared/ipc'
+import { paperFillOf } from '../../shared/venueCosts'
 import { riskModeOf, targetLevelOf } from '../../shared/appDefaults'
 import { SLIPPAGE_RATE } from '../../shared/fees'
 import { classTradable } from '../../shared/forecast/opportunityClass'
@@ -53,7 +54,8 @@ export interface ForecastTraderDeps {
   /** The pair's hourly moves over the last week against Bitcoin's (shared/paperExposure.ts), or null. */
   btcCorrelation: (symbol: string) => Promise<number | null>
   /** One-minute candles of [startSec, endSec], for settling. */
-  fetchCandles: (symbol: string, startSec: number, endSec: number) => Promise<Candle[]>
+  /** A trade's minute candles on the venue it is traded on (V7.2-R Stage 4: Binance or Bitget). */
+  fetchCandles: (exchange: Exchange, symbol: string, startSec: number, endSec: number) => Promise<Candle[]>
   settle: (executor: ExecutorConfig, nowSec: number) => Promise<unknown>
   notify: (title: string, body: string, extra?: NoticeExtra) => void
   nowSec: () => number
@@ -79,6 +81,7 @@ export function forecastPaperExecutor(input: {
   nowSec: number
 }): ExecutorConfig {
   const { plan } = input
+  const fill = paperFillOf(plan.cost)
   const params: PositionExecutorParams = {
     side: plan.side === 'BUY' ? 'buy' : 'sell',
     entryPrice: null,
@@ -89,13 +92,15 @@ export function forecastPaperExecutor(input: {
     trailingStop: null,
     entryExpiresAt: plan.validUntil,
     entryRange: { min: plan.entryMin, max: plan.entryMax },
-    slippageRate: SLIPPAGE_RATE
+    // On the venue its decision was costed on, at its fee and its half spread and impact (V7.2-R Stage 4).
+    slippageRate: fill.slippageRate,
+    feeRate: fill.feeRate
   }
   return {
     id: input.id,
-    name: `Forecast ${plan.side} ${plan.pair}`,
+    name: `Forecast ${plan.side} ${plan.pair}${fill.exchange === 'bitget' ? ' (Bitget)' : ''}`,
     type: 'position',
-    exchange: 'binance',
+    exchange: fill.exchange,
     symbol: plan.pair,
     baseAsset: plan.pair.replace(/USDT$/, ''),
     quoteAsset: 'USDT',
@@ -254,7 +259,7 @@ export async function settleForecastTrades(deps: ForecastTraderDeps): Promise<st
   for (const executor of forecastPaperExecutors(executors).filter((entry) => entry.status === 'active')) {
     try {
       const nowSec = deps.nowSec()
-      const candles = (await deps.fetchCandles(executor.symbol, executor.createdAt, nowSec)).filter((bar) => bar.time + 60 <= nowSec)
+      const candles = (await deps.fetchCandles(executor.exchange, executor.symbol, executor.createdAt, nowSec)).filter((bar) => bar.time + 60 <= nowSec)
       if (candles.length === 0) continue
       const state = runExecutorSimulation(candles, executor, candles[0].close)
       if (state.kind !== 'position' || state.status !== 'closed' || state.exitReason === null) continue
@@ -306,7 +311,7 @@ export const forecastTraderBrowserDeps: ForecastTraderDeps = {
       symbol,
       Math.floor(Date.now() / 1000)
     ),
-  fetchCandles: async (symbol, startSec, endSec) => (await window.api.market.fetchHistoricalRange('binance', symbol, '1m', startSec, endSec)).candles,
+  fetchCandles: async (exchange, symbol, startSec, endSec) => (await window.api.market.fetchHistoricalRange(exchange, symbol, '1m', startSec, endSec)).candles,
   // Not kept in Inventory (keepPosition is false), so nothing was handed over and the whole result is cash.
   settle: (executor, nowSec) => settleExecutorOnStop({ executor, handedOver: { held: null, realizedPnl: 0 }, now: nowSec }),
   notify: (title, body, extra) => void window.api.notify(title, body, extra?.severity, extra).catch(() => undefined),

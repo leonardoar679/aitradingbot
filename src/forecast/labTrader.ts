@@ -1,7 +1,8 @@
 import { ENGLISH, msg, type I18n } from '../../shared/i18n/translate'
 import { HORIZON_NAME } from '../../shared/forecast/words'
 import { noticeI18n } from '../i18n/current'
-import type { AppSettings, Candle, ExecutorConfig, LiveOrderRecord, PositionExecutorParams } from '../../shared/ipc'
+import type { AppSettings, Candle, Exchange, ExecutorConfig, LiveOrderRecord, PositionExecutorParams } from '../../shared/ipc'
+import { paperFillOf } from '../../shared/venueCosts'
 import { riskModeOf, targetLevelOf } from '../../shared/appDefaults'
 import { SLIPPAGE_RATE } from '../../shared/fees'
 import { LAB_RISK, LAB_STRATEGIES, classOnly, labDailyNet, labDayOf, labPaperExecutors, labStopReached, labStrategiesOf, sensitivityCounts, type LabStrategy, type LabTradeMark } from '../../shared/forecast/labTrader'
@@ -66,7 +67,8 @@ export interface LabTraderDeps {
    * be read: the hybrid's reading. */
   quantSide: (symbol: string, nowSec: number) => Promise<'long' | 'short' | null>
   /** One-minute candles of [startSec, endSec], for settling. */
-  fetchCandles: (symbol: string, startSec: number, endSec: number) => Promise<Candle[]>
+  /** A trade's minute candles on the venue it is traded on (V7.2-R Stage 4: Binance or Bitget). */
+  fetchCandles: (exchange: Exchange, symbol: string, startSec: number, endSec: number) => Promise<Candle[]>
   settle: (executor: ExecutorConfig, nowSec: number) => Promise<unknown>
   notify: (title: string, body: string, extra?: NoticeExtra) => void
   nowSec: () => number
@@ -98,6 +100,7 @@ const QUOTE = 'USDT'
  * or, on the demo account (V7.1 Stage 8), the same trade with its mode and exchange the demo's. */
 export function labPaperExecutor(input: { id: string; plan: TradePlan; mark: LabTradeMark; amountQuote: number; nowSec: number }, demo = false): ExecutorConfig {
   const { plan } = input
+  const fill = paperFillOf(plan.cost)
   const params: PositionExecutorParams = {
     side: plan.side === 'BUY' ? 'buy' : 'sell',
     entryPrice: null,
@@ -108,11 +111,14 @@ export function labPaperExecutor(input: { id: string; plan: TradePlan; mark: Lab
     trailingStop: null,
     entryExpiresAt: plan.validUntil,
     entryRange: { min: plan.entryMin, max: plan.entryMax },
-    slippageRate: SLIPPAGE_RATE
+    // On the venue its decision was costed on, at its fee, each market fill a half spread and an impact worse
+    // (V7.2-R Stage 4); on Binance at the flat lines where no venue's book was read.
+    slippageRate: fill.slippageRate,
+    feeRate: fill.feeRate
   }
   return {
     id: input.id,
-    name: `Lab ${input.mark.strategy} ${plan.side} ${plan.pair}${demo ? ' (demo)' : ''}`,
+    name: `Lab ${input.mark.strategy} ${plan.side} ${plan.pair}${demo ? ' (demo)' : fill.exchange === 'bitget' ? ' (Bitget)' : ''}`,
     type: 'position',
     symbol: plan.pair,
     baseAsset: plan.pair.replace(/USDT$/, ''),
@@ -121,7 +127,7 @@ export function labPaperExecutor(input: { id: string; plan: TradePlan; mark: Lab
     status: 'active',
     stoppedAt: null,
     keepPosition: false,
-    ...(demo ? { mode: 'demo' as const, exchange: 'bitget' as const } : { mode: 'paper' as const, exchange: 'binance' as const }),
+    ...(demo ? { mode: 'demo' as const, exchange: 'bitget' as const } : { mode: 'paper' as const, exchange: fill.exchange }),
     lab: input.mark,
     liveOrder: null,
     pendingLiveOrderIds: [],
@@ -354,7 +360,7 @@ export async function settleLabTrades(deps: LabTraderDeps): Promise<string[]> {
   for (const executor of labPaperExecutors(executors).filter((entry) => entry.mode === 'paper' && entry.status === 'active')) {
     try {
       const nowSec = deps.nowSec()
-      const candles = (await deps.fetchCandles(executor.symbol, executor.createdAt, nowSec)).filter((bar) => bar.time + 60 <= nowSec)
+      const candles = (await deps.fetchCandles(executor.exchange, executor.symbol, executor.createdAt, nowSec)).filter((bar) => bar.time + 60 <= nowSec)
       if (candles.length === 0) continue
       const state = runExecutorSimulation(candles, executor, candles[0].close)
       if (state.kind !== 'position' || state.status !== 'closed' || state.exitReason === null) continue
@@ -441,7 +447,7 @@ export const labTraderBrowserDeps: LabTraderDeps = {
     place: (symbol, side, quoteAmount) => window.api.demoTrading.placeOrder('bitget', symbol, symbol.replace(/USDT$/, ''), QUOTE, side, quoteAmount),
     watch: (executorId, symbol, entryPrice, takeProfitPct, stopLossPct, timeLimitSec) => window.api.demoTrading.createWatcher(executorId, 'bitget', symbol, entryPrice, takeProfitPct, stopLossPct, timeLimitSec, null)
   },
-  fetchCandles: async (symbol, startSec, endSec) => (await window.api.market.fetchHistoricalRange('binance', symbol, '1m', startSec, endSec)).candles,
+  fetchCandles: async (exchange, symbol, startSec, endSec) => (await window.api.market.fetchHistoricalRange(exchange, symbol, '1m', startSec, endSec)).candles,
   // Not kept in Inventory (keepPosition is false), so nothing was handed over and the whole result is cash.
   settle: (executor, nowSec) => settleExecutorOnStop({ executor, handedOver: { held: null, realizedPnl: 0 }, now: nowSec }),
   notify: (title, body, extra) => void window.api.notify(title, body, extra?.severity, extra).catch(() => undefined),

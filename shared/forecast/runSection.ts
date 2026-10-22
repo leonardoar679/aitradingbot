@@ -1,4 +1,4 @@
-import { FEE_RATE, positionSlippageRate } from '../fees'
+import { positionFeeRate, positionSlippageRate } from '../fees'
 import type { ExecutorConfig } from '../ipc'
 import { HORIZON_BARS, type Horizon } from './features'
 import type { MissingOutcomeLine, OutcomeLine, PredictionLine } from './forecastRecord'
@@ -310,9 +310,9 @@ function tradesOf(trades: readonly ExecutorConfig[], closed: readonly ExecutorCo
     if (worst === null || result.pnlQuote < worst.pnlQuote) worst = { pair: executor.symbol, pnlQuote: result.pnlQuote }
     if (result.exit === 'entry_expired' || result.exit === 'btc_moved') continue
     // A record without its stake adds no cost rather than breaking the report.
-    const params = (executor.params ?? {}) as { amountQuote?: number; slippageRate?: number | null }
+    const params = (executor.params ?? {}) as { amountQuote?: number; slippageRate?: number | null; feeRate?: number | null }
     const stake = typeof params.amountQuote === 'number' && Number.isFinite(params.amountQuote) ? params.amountQuote : 0
-    feesQuote += stake * FEE_RATE * 2
+    feesQuote += stake * positionFeeRate(params) * 2
     slippageQuote += stake * 2 * positionSlippageRate(params)
   }
   return { opened: trades.length, closed: closed.length, wins, netQuote, feesQuote, slippageQuote, best, worst }

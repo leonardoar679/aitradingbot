@@ -24,6 +24,7 @@ import {
 import { fetchMarketData, servesBinanceComMarket } from './exchanges/binance'
 import { appendJsonLines } from './jsonlStore'
 import { getResearchState, onResearchUpdate } from './marketResearchService'
+import { forecastUniverseOf } from '../../shared/forecast/universe'
 
 // THE FORECAST'S BARS, KEPT (the V6 document, §15 and §40; V6 Stage 2, 13 October 2026; the
 // arithmetic is shared/forecast/bars.ts).
@@ -357,10 +358,23 @@ function runPass(): Promise<void> {
   return passing
 }
 
-/** The research's pairs, most traded first, and Bitcoin and ether. */
+/** The scanner's movers as main last handed them (V7.2-R Stage 4; shared/forecast/universe.ts scannerMovers). */
+let movers: string[] = []
+
+/** Bitcoin and ether, the research's pairs, most traded first, then the scanner's movers, at most UNIVERSE_LINES.maxPairs
+ * (shared/forecast/universe.ts). */
 function universeOf(): string[] {
   const pairs = [...getResearchState().pairs].sort((a, b) => b.quoteVolume24h - a.quoteVolume24h).map((pair) => pair.symbol)
-  return [...new Set([...ALWAYS, ...pairs])]
+  return forecastUniverseOf(ALWAYS, pairs, movers)
+}
+
+/** The scanner's movers, handed in by main at each of the scanner's passes: a mover new to the universe is read at the
+ * next pass, as a pair new to the research is; one that stopped moving keeps its files. */
+export function setForecastMovers(symbols: readonly string[]): void {
+  movers = [...symbols]
+  if (universe.length === 0) return
+  universe = universeOf()
+  status.pairs = universe.length
 }
 
 /** Month files whose month ended before the history kept: deleted at start. */
@@ -471,6 +485,7 @@ export const forecastDataForTest = {
     limitedBecause = ''
     requestGapMs = MIN_REQUEST_GAP_MS
     passDeadlineMs = PASS_DEADLINE_MS
+    movers = []
     Object.assign(status, { pairs: 0, ready: 0, requests: 0, weight: 0, failures: 0, barsWritten: 0, lastPassAt: null, lastError: null, rateLimitedUntil: null, refusedHost: null, monthsSwept: 0 })
   },
   setUniverse(symbols: string[]): void {

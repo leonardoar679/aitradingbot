@@ -1875,5 +1875,10 @@
   "The path likely stays under {high} ({highPct}) and above {low} ({lowPct}) within {horizon}, eight times in ten; no expected price is forecast, since no way is known.": "Dalam {horizon}, jalur harga kemungkinan tetap di bawah {high} ({highPct}) dan di atas {low} ({lowPct}), delapan dari sepuluh kali; tidak ada prakiraan harga yang diharapkan karena arahnya tidak diketahui.",
   "AI Predictions": "Prediksi AI",
   "Paper Trading": "Trading simulasi",
-  "More Features": "Fitur lainnya"
+  "More Features": "Fitur lainnya",
+  "What a round trip costs now": "Biaya transaksi pulang-pergi saat ini",
+  "No venue book is held for this pair yet: the forecast reads them for its top ten and its open trades.": "Belum ada buku pesanan bursa untuk pasangan ini: prakiraan hanya membacanya untuk sepuluh teratas dan transaksi yang terbuka.",
+  "{venue}: {total} in all ({fee} fee each way, {spread} spread, {impact} for the stake)": "{venue}: total {total} (biaya {fee} tiap arah, spread {spread}, dampak ukuran {impact})",
+  "{venue} is the cheaper venue for this pair now.": "Saat ini {venue} adalah bursa yang lebih murah untuk pasangan ini.",
+  "From each venue's public book in the last three minutes, for a buy of {stake}: what a trade would pay, not a forecast.": "Dari buku pesanan publik tiap bursa dalam tiga menit terakhir, untuk pembelian {stake}: biaya yang dibayar sebuah transaksi, bukan prakiraan."
 }

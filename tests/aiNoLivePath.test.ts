@@ -288,7 +288,8 @@ describe('AI code has no route to a real order', () => {
     const service = join(SERVICES, 'forecastDataService.ts')
     expect(importsOf(service).filter((name) => LIVE_MODULES.has(name))).toEqual([])
     expect(importsOf(service).filter((name) => aiModuleNames.has(name))).toEqual([])
-    expect(importsOf(service).sort()).toEqual(['bars', 'binance', 'electron', 'jsonlStore', 'marketResearchService', 'path', 'promises'])
+    // Since V7.2-R Stage 4 the universe's rule (shared/forecast/universe.ts), arithmetic like the rest of shared/forecast.
+    expect(importsOf(service).sort()).toEqual(['bars', 'binance', 'electron', 'jsonlStore', 'marketResearchService', 'path', 'promises', 'universe'])
     const source = readFileSync(service, 'utf-8')
     expect(source).not.toMatch(/resolveTradingEndpoint|credentials|apiKey|signed|placeLive|liveTrading/)
     expect(source).toContain("import { fetchMarketData, servesBinanceComMarket } from './exchanges/binance'")
@@ -346,8 +347,14 @@ describe('AI code has no route to a real order', () => {
       'settingsService',
       'status',
       'tape',
-      'tradeDecision'
+      'tradeDecision',
+      'venueQuotesService'
     ])
+    // The venues' books (V7.2-R Stage 4): public data read for the pairs that matter, through the comparison's reads and
+    // Bitget's public fee list; nothing that trades, holds a key or asks a model.
+    const venues = join(SERVICES, 'venueQuotesService.ts')
+    expect(importsOf(venues).filter((name) => LIVE_MODULES.has(name) || aiModuleNames.has(name))).toEqual([])
+    expect(readFileSync(venues, 'utf-8')).not.toMatch(/credentials|apiKey|signed|placeLive|liveTrading/)
     // The pass itself reads no file, no clock and nothing that trades: its sources are handed in.
     const pure = join(ROOT, 'shared', 'forecast', 'pass.ts')
     expect(readFileSync(pure, 'utf-8')).not.toMatch(/Date\.now\(|readFile|writeFile|require\(|fs\//)

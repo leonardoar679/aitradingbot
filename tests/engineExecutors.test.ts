@@ -91,6 +91,16 @@ describe('simulatePosition barriers', () => {
     expect(s.exitReason).toBe('time_limit')
   })
 
+  it("pays its venue's fee where it carries one, FEE_RATE otherwise (V7.2-R Stage 4)", () => {
+    const candles = [c(1, 100, 101, 99, 100), c(500, 100, 101, 99, 100)]
+    // A flat round trip at 100: what is lost is the fee, on 1,000 in and 1,000 out.
+    const flat = simulatePosition(candles, { ...p, timeLimitSec: 10 })
+    expect(flat.realizedPnl).toBeCloseTo(-2000 * FEE_RATE, 9)
+    expect(simulatePosition(candles, { ...p, timeLimitSec: 10, feeRate: 0.002 }).realizedPnl).toBeCloseTo(-2000 * 0.002, 9)
+    // A rate that is no fraction of a fill is not read.
+    expect(simulatePosition(candles, { ...p, timeLimitSec: 10, feeRate: 2 }).realizedPnl).toBeCloseTo(-2000 * FEE_RATE, 9)
+  })
+
   it('only trails after the activation threshold is cleared', () => {
     const trailing: PositionExecutorParams = { ...p, trailingStop: { activationPct: 10, trailPct: 5 } }
     // Rises to 105 (below the 110 activation) then falls back -- must NOT have trailed out.

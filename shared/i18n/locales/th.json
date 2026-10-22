@@ -1875,5 +1875,10 @@
   "The path likely stays under {high} ({highPct}) and above {low} ({lowPct}) within {horizon}, eight times in ten; no expected price is forecast, since no way is known.": "ภายใน {horizon} เส้นทางราคามีแนวโน้มอยู่ต่ำกว่า {high} ({highPct}) และสูงกว่า {low} ({lowPct}) แปดในสิบครั้ง ไม่มีการคาดการณ์ราคาที่คาดหวัง เนื่องจากไม่ทราบทิศทาง",
   "AI Predictions": "การทำนายด้วย AI",
   "Paper Trading": "เทรดจำลอง",
-  "More Features": "ฟีเจอร์เพิ่มเติม"
+  "More Features": "ฟีเจอร์เพิ่มเติม",
+  "What a round trip costs now": "ต้นทุนการซื้อขายไปกลับตอนนี้",
+  "No venue book is held for this pair yet: the forecast reads them for its top ten and its open trades.": "ยังไม่มีสมุดคำสั่งของตลาดสำหรับคู่นี้: การคาดการณ์อ่านเฉพาะของสิบอันดับแรกและการเทรดที่เปิดอยู่",
+  "{venue}: {total} in all ({fee} fee each way, {spread} spread, {impact} for the stake)": "{venue}: รวม {total} (ค่าธรรมเนียมเที่ยวละ {fee}, สเปรด {spread}, ผลกระทบตามขนาด {impact})",
+  "{venue} is the cheaper venue for this pair now.": "ตอนนี้ {venue} ถูกกว่าสำหรับคู่นี้",
+  "From each venue's public book in the last three minutes, for a buy of {stake}: what a trade would pay, not a forecast.": "จากสมุดคำสั่งสาธารณะของแต่ละตลาดในสามนาทีล่าสุด สำหรับการซื้อ {stake}: เป็นต้นทุนที่การเทรดต้องจ่าย ไม่ใช่การคาดการณ์"
 }

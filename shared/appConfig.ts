@@ -79,11 +79,13 @@ import { RUN_CALIBRATION_VERSION } from './forecast/runCalibration'
 import { UNCERTAINTY_LINES, UNCERTAINTY_VERSION } from './forecast/uncertainty'
 import { BY_HOUR_LINES, BY_HOUR_VERSION } from './forecast/byHour'
 import { ABLATION_VERSION, FEATURE_BLOCKS } from './forecast/ablation'
-import { PASS_VERSION } from './forecast/pass'
+import { PASS_LINES, PASS_VERSION } from './forecast/pass'
 import { TAPE_VERSION } from './forecast/tape'
 import { FIDELITY_LINES, FIDELITY_VERSION } from './forecast/fidelity'
 import { MOVE_ODDS_LINES, MOVE_ODDS_VERSION } from './forecast/moveOdds'
 import { MOVE_RATES_LINES, MOVE_RATES_VERSION } from './forecast/moveRates'
+import { UNIVERSE_LINES, UNIVERSE_VERSION } from './forecast/universe'
+import { VENUE_COSTS_VERSION, VENUE_FEES } from './venueCosts'
 import { DEGRADATION_LINES, DEGRADED_THREAD_SECONDS, DIRECTION_PROMOTION_LINES, PROMOTION_LINES } from './forecast/promotion'
 import { LOGISTIC_FIT } from './forecast/ml/logistic'
 import { DIRECTION_MODELS, EXCURSION_LEVELS } from './forecast/models'
@@ -151,6 +153,9 @@ export const ENGINE_CONSTANTS = {
   /** Who asks which model (V7.2-R Stage 1, 20 October 2026): the additions' roles, and how far back a paid bot
    * buys the bars it missed. */
   aiRouting: { version: AI_ROUTING_VERSION, additionRoles: AI_ADDITION_ROLES, botCatchupHours: BOT_CATCHUP_HOURS },
+  /** What a round trip costs, venue by venue (V7.2-R Stage 4): each venue's base-tier fees, read with their date and
+   * source; Bitget's per-pair rates are read from its public list at run time. */
+  venueCosts: { version: VENUE_COSTS_VERSION, fees: VENUE_FEES },
   prompts: {
     opportunity: AI_OPPORTUNITY_PROMPT_VERSION,
     opportunityMarket: AI_OPPORTUNITY_MARKET_PROMPT_VERSION,
@@ -199,13 +204,15 @@ export const ENGINE_CONSTANTS = {
     ablation: { version: ABLATION_VERSION, blocks: FEATURE_BLOCKS },
     // The pass as pure functions, the tape and the replay's fidelity line (V7.2 Stage 5): the decimals a replayed
     // level must agree to and the share of a record's forecasts that must.
-    pass: { version: PASS_VERSION },
+    pass: { version: PASS_VERSION, ...PASS_LINES },
     tape: { version: TAPE_VERSION },
     fidelity: { version: FIDELITY_VERSION, ...FIDELITY_LINES },
     // The odds of a move that clears its costs (V7.2-R Stage 3): the moves a close and a path are asked about.
     moveOdds: { version: MOVE_ODDS_VERSION, ...MOVE_ODDS_LINES },
     // How often a coin moved over its own last ninety days, said beside the forecast (V7.2-R Stage 3).
     moveRates: { version: MOVE_RATES_VERSION, ...MOVE_RATES_LINES },
+    // The pairs the forecast reads (V7.2-R Stage 4): the research's and the scanner's movers, at most a cap.
+    universe: { version: UNIVERSE_VERSION, ...UNIVERSE_LINES },
     direction: DIRECTION_LINES,
     reliability: RELIABILITY_LINES,
     prediction: { version: PREDICTION_VERSION, ...PREDICTION_LINES },

@@ -119,7 +119,17 @@ export interface PredictionLine {
   previous?: string
   h: Partial<Record<Horizon, HorizonLine>>
   /** The trade decision at the lead horizon (V6 Stage 9): its side, whether to trade, and why not. */
-  trade?: { h: Horizon; side: 'BUY' | 'SELL' | null; ok: boolean; why: string[]; edge: number | null; pProfit: number | null }
+  trade?: {
+    h: Horizon
+    side: 'BUY' | 'SELL' | null
+    ok: boolean
+    why: string[]
+    edge: number | null
+    pProfit: number | null
+    /** The venue and the round trip, in percent, its edge was costed at (V7.2-R Stage 4); absent where the flat round trip was. */
+    venue?: string
+    cost?: number
+  }
   /** The coin's last hour in its usual moves at the close (V6 Stage 11): what the Lab reads a shock by. */
   z1h?: number
   /** The market's shock state at the forecast's moment (V7.1 Stage 11); absent where it could not be read,
@@ -190,7 +200,8 @@ export function predictionLine(prediction: PricePrediction, horizons: readonly H
             ok: decision.decision === 'TRADE',
             why: decision.reasons.map((reason) => reason.code),
             edge: decision.edge === null ? null : pct4(decision.edge.edgePct),
-            pProfit: decision.edge === null ? null : p3(decision.edge.pProfit)
+            pProfit: decision.edge === null ? null : p3(decision.edge.pProfit),
+            ...(decision.cost === undefined || decision.cost === null ? {} : { venue: decision.cost.venue, cost: pct4(decision.cost.totalPct) })
           }
         })
   }

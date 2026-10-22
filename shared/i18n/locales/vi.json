@@ -1875,5 +1875,10 @@
   "The path likely stays under {high} ({highPct}) and above {low} ({lowPct}) within {horizon}, eight times in ten; no expected price is forecast, since no way is known.": "Trong {horizon}, đường giá nhiều khả năng ở dưới {high} ({highPct}) và trên {low} ({lowPct}), tám lần trong mười; không dự báo giá kỳ vọng vì chưa biết hướng.",
   "AI Predictions": "Dự đoán AI",
   "Paper Trading": "Giao dịch mô phỏng",
-  "More Features": "Thêm tính năng"
+  "More Features": "Thêm tính năng",
+  "What a round trip costs now": "Chi phí một giao dịch khứ hồi lúc này",
+  "No venue book is held for this pair yet: the forecast reads them for its top ten and its open trades.": "Chưa có sổ lệnh của sàn cho cặp này: dự báo chỉ đọc sổ lệnh của mười cặp đứng đầu và các giao dịch đang mở.",
+  "{venue}: {total} in all ({fee} fee each way, {spread} spread, {impact} for the stake)": "{venue}: tổng cộng {total} (phí mỗi chiều {fee}, chênh lệch giá {spread}, tác động theo khoản cược {impact})",
+  "{venue} is the cheaper venue for this pair now.": "Lúc này {venue} là sàn rẻ hơn cho cặp này.",
+  "From each venue's public book in the last three minutes, for a buy of {stake}: what a trade would pay, not a forecast.": "Từ sổ lệnh công khai của mỗi sàn trong ba phút gần nhất, cho lệnh mua {stake}: chi phí một giao dịch phải trả, không phải dự báo."
 }

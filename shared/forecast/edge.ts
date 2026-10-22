@@ -32,9 +32,10 @@ export function roundTripCostPct(spreadPct: number | null): number {
   return ROUND_TRIP_PCT + (spreadPct !== null && Number.isFinite(spreadPct) && spreadPct > 0 ? spreadPct : 0)
 }
 
-/** The edge of trading a horizon's forecast (its five levels of the move, in percent) on a side. */
-export function edgeOf(quantilesPct: readonly number[], side: 'BUY' | 'SELL', spreadPct: number | null): Edge {
-  const costPct = roundTripCostPct(spreadPct)
+/** The edge of trading a horizon's forecast (its five levels of the move, in percent) on a side; at a round trip
+ * read from a venue's book where one is given (shared/venueCosts.ts, V7.2-R Stage 4), the flat one otherwise. */
+export function edgeOf(quantilesPct: readonly number[], side: 'BUY' | 'SELL', spreadPct: number | null, roundTripPct?: number | null): Edge {
+  const costPct = typeof roundTripPct === 'number' && Number.isFinite(roundTripPct) && roundTripPct >= 0 ? roundTripPct : roundTripCostPct(spreadPct)
   const expectedPct = 0.3 * quantilesPct[P10] + 0.4 * quantilesPct[P50] + 0.3 * quantilesPct[P90]
   const edgePct = (side === 'BUY' ? expectedPct : -expectedPct) - costPct
   const pProfit = side === 'BUY' ? 1 - cdfAt(quantilesPct, QUANTILE_LEVELS, costPct) : cdfAt(quantilesPct, QUANTILE_LEVELS, -costPct)

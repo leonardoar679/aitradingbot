@@ -1875,5 +1875,10 @@
   "The path likely stays under {high} ({highPct}) and above {low} ({lowPct}) within {horizon}, eight times in ten; no expected price is forecast, since no way is known.": "{horizon}内，价格路径十次中有八次可能保持在{high}（{highPct}）以下、{low}（{lowPct}）以上；由于方向未知，不预测预期价格。",
   "AI Predictions": "AI 预测",
   "Paper Trading": "模拟交易",
-  "More Features": "更多功能"
+  "More Features": "更多功能",
+  "What a round trip costs now": "现在一次往返交易的成本",
+  "No venue book is held for this pair yet: the forecast reads them for its top ten and its open trades.": "尚未持有该交易对的交易所订单簿：预测只读取其前十名和未平仓交易的订单簿。",
+  "{venue}: {total} in all ({fee} fee each way, {spread} spread, {impact} for the stake)": "{venue}：合计 {total}（单边手续费 {fee}，价差 {spread}，按仓位的冲击 {impact}）",
+  "{venue} is the cheaper venue for this pair now.": "{venue} 是该交易对现在更便宜的交易所。",
+  "From each venue's public book in the last three minutes, for a buy of {stake}: what a trade would pay, not a forecast.": "来自各交易所最近三分钟的公开订单簿，按买入 {stake} 计算：这是一笔交易需要支付的成本，不是预测。"
 }

@@ -42,8 +42,10 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 // from 637d47de9dc8. 20 October 2026: the AI routing's version, the additions' roles and the bot catch-up (V7.2-R
 // Stage 1) from 214afc904bb8; the move odds' version and the moves a close and a path are asked about (V7.2-R Stage
 // 3) from 2e0f11aeec10; the decision's version and its line of a move worth its costs, and the prediction's version
-// (V7.2-R Stage 3) from 08ce74aa7ac4, and the move rates' version and lines from bfa7312e4b88.
-const PINNED_ENGINE_VERSION = 'd44335342657'
+// (V7.2-R Stage 3) from 08ce74aa7ac4, and the move rates' version and lines from bfa7312e4b88. 22 October 2026: the
+// venues' fees with their dates and sources, the universe's movers and cap, and the decision's version (V7.2-R Stage
+// 4) from d44335342657; the pass's version and its line on late outcomes, which move no adaptive level, from 312d3d024ba1.
+const PINNED_ENGINE_VERSION = '3ffc1762b2e8'
 
 describe('the engine version', () => {
   it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {

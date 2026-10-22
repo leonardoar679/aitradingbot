@@ -551,6 +551,23 @@ otherwise "not forecast: no way is known"; the drawer's **How often it moved** t
 **Price and time** says the likely high and low without an expected price where no way is known. The rates are
 read by the forecast pass from the bars it already holds, once an hour a pair (`moveRatesOf`, prediction-v6).
 
+**What a round trip costs, venue by venue** (since 22 October 2026; V7.2-R Stage 4; `shared/venueCosts.ts`,
+`electron/services/venueQuotesService.ts`). The forecast charged every trade the same 0.24%: a 0.1% fee and 2 bps of
+slippage each way. A trade pays its venue's fee, the spread it crosses and the depth its stake takes, and the venues
+differ: Bitget's own public list asks 0.2% a side of 53 older pairs -- Bitcoin, ether, SOL, XRP, DOGE and BNB among
+them -- and 0.1% of the other 3,472 USDT pairs (read 22 October 2026), and Binance's published schedule is 0.1% a side at
+the base tier (it has no public per-pair list). So the main process reads Binance's and Bitget's public books, a hundred
+levels, every minute for the pairs of the app's open paper trades and the forecast's top ten (at most twelve), and
+Bitget's per-pair fees every six hours; a pair's round trip on each venue is its fee each way, the spread, and each leg's
+impact at a 1,000 USDT stake (the most the laboratory puts in one trade) from the levels. A decision with a side is
+costed at the cheaper venue (decision-v5, its round trip on the decision and the venue and cost in the record), its plan
+carries the round trip, and the laboratory's and the forecast trader's paper trades are opened on that venue -- Bitget
+or Binance -- at its fee, each market fill a half spread and a leg of impact worse, settled from that venue's candles. The
+drawer's **What a round trip costs now** shows both venues for the pair. The scanner's movers at candidate or urgent,
+over the research's $20 million floor, join the forecast's pairs after the research's own, at most sixty in all
+(`shared/forecast/universe.ts`). The cost line is registered (V72R-S4-COSTS) to be judged on the Stage 9 runs' demo
+trades, a paper trade's cost being the model's own.
+
 **The paper laboratory** (since 16 October 2026; V7.1 Stage 4; `shared/forecast/labTrader.ts`, the one
 writing file `src/forecast/labTrader.ts`, the card `src/forecast/PaperLabCard.tsx`). V6's runs found zero
 forecast trades under the production gates, and a gate that approves nothing says nothing about what it

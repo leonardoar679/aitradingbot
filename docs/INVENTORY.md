@@ -59,6 +59,7 @@ Taken on 5 October 2026, at commit `aef376d`.
 | | Benchmark | Models on the same questions, routes, the event benchmark, experiments; since 6 October 2026 the quant, hybrid and buy-and-hold rows and "Does AI help?" | AI Benchmark |
 | | Models | Which models may be asked, the default, routing to a second model | Settings › AI |
 | | Who asks which model (added 20 October 2026, V7.2-R Stage 1) | Every caller that asks a model by itself (the watch, its paper trades, the five additions, each paid bot), the model it asks now and where that comes from, its calls and cost today and the model that answered; three roles (decides, first look, summaries) and one move that puts every caller on them, priced and confirmed before it is applied; the models nothing asks, which can be disabled | Settings › AI |
+| | What a round trip costs now (added 22 October 2026, V7.2-R Stage 4) | The pair's round trip on Binance and on Bitget from their public books at a 1,000 USDT stake -- each venue's fee each way, the spread, the impact -- and which is cheaper; said where the books are held (the forecast's top ten and the app's open trades) | Predictions' drawer |
 | | Best current prediction, since 20 October 2026 (V7.2-R Stage 3) | The hour's, four hours' and day's ranges; an expected price only where a source of the way that beat the base rate is in use ("not forecast: no way is known" otherwise); how often the coin moved 1% and 2% either way at an hour, four hours and a day, and touched 1% within four hours, over its last ninety days; the drawer's How often it moved table | Home, Predictions' drawer |
 | | Research record (added 20 October 2026, V7.2-R Stage 2) | The folder kept for analysis on another machine (`trader-spider-research/`: the configuration with every secret field left out, the errors and warnings, every AI call with the model asked and the one that answered, each paper trade's opening and end, the hour's and the day's reports), its exports (a ZIP every day at 00:05 UTC and on Export now, the newest fourteen kept: the folder and the fortnight's records with a manifest of every file's size and SHA-256, never a key file), Open folder | Settings › Advanced |
 | | Model registry (added 8 October 2026, not an old card) | Each model the app may ask: the catalogue's entry, thirty days of the ledger, its health by the daily look at its last thirty closed trades (DEGRADED, told once a day), its leaderboard row by event type and Bitcoin's regime, and the promotion checklist under it; shown, never stored, promoted or switched off | Settings › AI |
@@ -271,6 +272,10 @@ The main process also runs loops that need no window at all:
   a few minutes after the research first names its pairs and a page a pair after every five-minute
   close. Since 20 October 2026 a usual pass stops taking pairs after sixty seconds, so that a slow host
   cannot carry it past the next close; the pairs not reached are read by the next pass. Public data only.
+- `venueQuotesService` (added 22 October 2026, V7.2-R Stage 4) reads Binance's and Bitget's public books, a hundred
+  levels, every minute for the pairs of the app's open paper and demo trades and the forecast's top ten (at most twelve),
+  and Bitget's per-pair fees every six hours; the forecast's decisions are costed at the cheaper venue from them. Public
+  data only: nothing signed, nothing placed.
 - `researchFolderService` (added 20 October 2026, V7.2-R Stage 2) keeps `trader-spider-research/`: the
   configuration's snapshots at start and hourly, the main process's errors and warnings and every AI call
   as the ledger appends it (`onAiCallAppended`), each paper order's life as the settings are written
@@ -335,7 +340,7 @@ reaches it. A call may span lines. The `news` channels were added after: four in
 | `liveTrading` | 19: status, limits, kill switch, arm, positions, orders, watchers, TWAP | The live trading bar, Settings, Executors, Positions, `LiveOrderScheduler`, Portfolio |
 | `executors` | `placeLiveOrder`, `placeLiveLimitOrder` | Executors only |
 | `researchFolder` | 4 (added 20 October 2026, V7.2-R Stage 2): status, export now, open the folder, keep a report | Settings › Advanced › Research record, and `ResearchReportScheduler` (the hour's and the day's reports) |
-| `forecast` | 11 (added 13 October 2026, V6 Stages 7-15): state, every pair's forecast, a pair's, its history, the ranking, a pair's decision, the Lab, a tested hour's replay, bars, the record over a span (V6 Stage 15), updates | Home, Predictions and the drawer, TRADE THIS, the forecast trader, the Forecast Lab, the top prediction's chime, and an experiment's report |
+| `forecast` | 12 (added 13 October 2026, V6 Stages 7-15; since 22 October 2026 a pair's round trips on both venues, read-only): state, every pair's forecast, a pair's, its history, the ranking, a pair's decision, the Lab, a tested hour's replay, bars, the record over a span (V6 Stage 15), updates | Home, Predictions and the drawer, TRADE THIS, the forecast trader, the Forecast Lab, the top prediction's chime, and an experiment's report |
 
 **Nothing in `src/` calls `app:ping` or `app:getVersion`.** Both are left from the project template.
 They are flagged here and not removed, since they cost nothing and something outside `src/` may

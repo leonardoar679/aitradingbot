@@ -6,6 +6,7 @@ import type { PricePrediction } from '../shared/forecast/prediction'
 import type { RoleChoice, RoutingPreview } from '../shared/aiRouting'
 import type { ResearchExport, ResearchStatus } from '../shared/research'
 import type { TradeDecision } from '../shared/forecast/tradeDecision'
+import type { RoundTrip } from '../shared/venueCosts'
 import type { ForecastLabView, ForecastReplay } from '../shared/forecast/labView'
 import type { ForecastRanking as ForecastRankingView } from '../shared/forecast/ranking'
 import type { SymbolTradingRules } from '../shared/exchangeMinimums'
@@ -189,6 +190,8 @@ const api = {
     history: (symbol: string, fromSec: number): Promise<ForecastHistory> => ipcRenderer.invoke(IpcChannel.ForecastHistory, symbol, fromSec),
     ranking: (): Promise<ForecastRankingView> => ipcRenderer.invoke(IpcChannel.ForecastRanking),
     decision: (symbol: string): Promise<TradeDecision | null> => ipcRenderer.invoke(IpcChannel.ForecastDecision, symbol),
+    /** A pair's round trip now on Binance and Bitget, from their public books at the reference stake (V7.2-R Stage 4). */
+    venueCosts: (symbol: string): Promise<{ trips: RoundTrip[]; cheapest: RoundTrip | null; at: number } | null> => ipcRenderer.invoke(IpcChannel.ForecastVenueCosts, symbol),
     lab: (): Promise<ForecastLabView> => ipcRenderer.invoke(IpcChannel.ForecastLab),
     replay: (pair: string, t: number): Promise<ForecastReplay | null> => ipcRenderer.invoke(IpcChannel.ForecastReplay, pair, t),
     /** The run before the one in use put back in use (V7.1 Stage 13): models and verdicts, nothing else. */

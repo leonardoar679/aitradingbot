@@ -9,6 +9,8 @@ import { getForecastTrainingState, rollbackForecastRun } from '../../services/fo
 import { forecastBars, forecastRecordSpan, forecastReplay, getForecastLab } from '../../services/forecastLabService'
 import type { ForecastLabView, ForecastReplay } from '../../../shared/forecast/labView'
 import type { Candle } from '../../../shared/ipc'
+import type { RoundTrip } from '../../../shared/venueCosts'
+import { venueCostOf } from '../../services/venueQuotesService'
 
 // The price forecast (the V6 document; V6 Stage 7): what it stands at, every pair's latest forecast,
 // one pair's, and a pair's record; and the Forecast Lab (V6 Stage 11): the walk forward's and the live
@@ -28,6 +30,10 @@ export function registerForecastHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(IpcChannel.ForecastHistory, (_event, symbol: unknown, fromSec: unknown): Promise<ForecastHistory> => forecastHistory(symbol, fromSec))
   ipcMain.handle(IpcChannel.ForecastRanking, (): ForecastRanking => forecastRanking())
   ipcMain.handle(IpcChannel.ForecastDecision, (_event, symbol: unknown): TradeDecision | null => forecastDecision(symbol))
+  // A pair's round trip on each venue now, a buy at the reference stake (V7.2-R Stage 4): null where no book is held.
+  ipcMain.handle(IpcChannel.ForecastVenueCosts, (_event, symbol: unknown): { trips: RoundTrip[]; cheapest: RoundTrip | null; at: number } | null =>
+    typeof symbol === 'string' ? venueCostOf(symbol, 'BUY') : null
+  )
   ipcMain.handle(IpcChannel.ForecastLab, (): Promise<ForecastLabView> => getForecastLab())
   ipcMain.handle(IpcChannel.ForecastReplay, (_event, pair: unknown, t: unknown): Promise<ForecastReplay | null> => forecastReplay(pair, t))
   ipcMain.handle(IpcChannel.ForecastBars, (_event, pair: unknown, width: unknown, fromSec: unknown, toSec: unknown): Promise<Candle[]> => forecastBars(pair, width, fromSec, toSec))

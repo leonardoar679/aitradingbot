@@ -7,6 +7,7 @@ import { QUALITY_LINES, qualityOf, type QualityInput } from '../shared/forecast/
 import { RANK_LINES, funnel, rankOf } from '../shared/forecast/ranking'
 import { DECISION_LINES, OPPORTUNITY_LINES, decideOnBook, decideTrade, heldBackByPrice, likelyMovePct, liveOfBook, reasonText, type DecisionInput } from '../shared/forecast/tradeDecision'
 import type { LiveBook } from '../shared/liveMarket'
+import { decisionFor } from '../shared/forecast/pass'
 
 // THE FORECAST AGAINST THE TRADE (shared/forecast/{quality,edge,ranking,tradeDecision}.ts; the V6
 // document, §29-33, §62-63 and §69): how good a forecast is, what it is worth after costs, where it
@@ -225,6 +226,31 @@ describe('the trade decision', () => {
     expect(buy.edge!.edgePct).toBeGreaterThan(0)
     const bear = range({ direction: 'BEARISH', quantilesPct: [-5, -3.5, -2, -0.5, 1] })
     expect(decide(bear)).toMatchObject({ decision: 'TRADE', side: 'SELL' })
+  })
+
+  it('costs a trade at the cheaper venue where its books are held, and keeps the round trip on the decision (V7.2-R Stage 4)', () => {
+    const trip = { venue: 'bitget' as const, feePct: 0.1, spreadPct: 0.02, impactPct: 0.03, totalPct: 0.25, basis: 'book' as const }
+    const made = decide(range(), { costOf: (side) => (side === 'BUY' ? trip : null) })
+    expect(made.edge!.costPct).toBe(0.25)
+    expect(made.cost).toEqual(trip)
+    // Where no venue's book is held: the flat round trip and the live spread, and no cost on the decision.
+    const flat = decide(range())
+    expect(flat.cost).toBeUndefined()
+    expect(flat.edge!.costPct).toBeCloseTo(roundTripCostPct(0.02), 12)
+    // No way called: no side, so nothing is costed.
+    expect(decide(range({ direction: 'NEUTRAL' }), { costOf: () => trip }).cost).toBeUndefined()
+    // Made again on a book read since: the round trip as the pass read it.
+    const book: LiveBook = { symbol: 'SOLUSDT', bid: 99.99, ask: 100.01, bidQty: 50, askQty: 50, updatedAt: T * 1000 + 6000, source: 'stream' }
+    expect(decideOnBook(made, prediction('SOLUSDT', range()), book, T * 1000 + 7000).cost).toEqual(trip)
+  })
+
+  it('is costed by the pass at the venue its sources name for the pair and the side (V7.2-R Stage 4)', () => {
+    const trip = { venue: 'bitget' as const, feePct: 0.1, spreadPct: 0.02, impactPct: 0.03, totalPct: 0.25, basis: 'book' as const }
+    const sources = { book: (): undefined => undefined, classVerdict: (): null => null, venueCost: (pair: string, side: 'BUY' | 'SELL') => (pair === 'SOLUSDT' && side === 'BUY' ? trip : null) }
+    const made = decisionFor({ inputs: new Map(), driftOutcomes: new Map() }, sources, prediction('SOLUSDT', range()), T * 1000 + 5000)
+    expect(made.cost).toEqual(trip)
+    expect(made.edge!.costPct).toBe(0.25)
+    expect(decisionFor({ inputs: new Map(), driftOutcomes: new Map() }, { ...sources, venueCost: undefined }, prediction('SOLUSDT', range()), T * 1000 + 5000).cost).toBeUndefined()
   })
 
   it('is NO TRADE where the likely move is under the line of a move worth its costs: 1% up to four hours, 2% at a day', () => {

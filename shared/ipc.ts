@@ -62,6 +62,8 @@ export const IpcChannel = {
   ForecastHistory: 'forecast:history',
   ForecastRanking: 'forecast:ranking',
   ForecastDecision: 'forecast:decision',
+  /** A pair's round trip now on each venue costed, from their public books (V7.2-R Stage 4). Read-only. */
+  ForecastVenueCosts: 'forecast:venueCosts',
   ForecastLab: 'forecast:lab',
   ForecastReplay: 'forecast:replay',
   /** The run before the one in use put back in use (V7.1 Stage 13), by a person from the Lab. */
@@ -869,6 +871,9 @@ export interface PositionExecutorParams {
    * a paper trade and its score agree on what it cost. Absent or null, a position fills at its
    * prices, as every one a person makes, and every one stored before this existed, still does. */
   slippageRate?: number | null
+  /** Simulation only (V7.2-R Stage 4). The fee each fill pays, a fraction of its notional: the venue's taker rate where
+   * the trade was costed on a venue (Bitget's list asks 0.2% of some pairs); absent or null, FEE_RATE. */
+  feeRate?: number | null
   /** Simulation only. A fill already taken when the executor was made: the streamed ask (for a buy)
    * or bid (for a sell) at the second the recommendation was enterable (shared/liveMarket.ts
    * streamedEntry), in Unix seconds. The position is in the market from the minute containing

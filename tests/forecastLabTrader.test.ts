@@ -192,9 +192,44 @@ describe('the rules', () => {
     expect(strict.feesQuote).toBeCloseTo(4 * 2 * 1000 * 0.001, 9)
     expect(strict.slippageQuote).toBeCloseTo(4 * 2 * 1000 * 0.0002, 9)
     expect(strict.utilizationPct).toBeCloseTo(8, 9)
+    // A trade on a venue that asks 0.2% a side (V7.2-R Stage 4) is charged its own rate.
+    const dear = trade('h', 'hybrid', { exit: 'take_profit', pnlQuote: 5, closedAt: T })
+    ;(dear.params as PositionExecutorParams).feeRate = 0.002
+    expect(labStatsOf([dear], 'hybrid', 10_000).feesQuote).toBeCloseTo(2 * 1000 * 0.002, 9)
     expect(labStatsOf(executors, 'news', 10_000)).toMatchObject({ opened: 0, closed: 0, open: 0, netQuote: 0, profitFactor: null, winRate: null, expectancyQuote: null, utilizationPct: 0 })
     expect(labStatsOf(executors, 'direction', null).utilizationPct).toBeNull()
     expect(LAB_STRATEGIES).toEqual(['strict', 'direction', 'news', 'hybrid'])
+  })
+})
+
+describe("the laboratory's venue (V7.2-R Stage 4)", () => {
+  it('opens a paper trade on the venue its decision was costed on, at that venue\'s fee', () => {
+    const plan = {
+      version: 'trade-plan-v1',
+      pair: 'PEPEUSDT',
+      side: 'BUY',
+      horizon: 'hour1',
+      entryPrice: 1,
+      entryMin: 0.99,
+      entryMax: 1.01,
+      stopPct: 1,
+      stopPrice: 0.99,
+      targetPct: 2.5,
+      targetPrice: 1.025,
+      targetLevel: 'P75',
+      holdSec: 3600,
+      validUntil: T + 300,
+      cost: { venue: 'bitget', feePct: 0.1, spreadPct: 0.02, impactPct: 0.02, totalPct: 0.24, basis: 'book' }
+    } as const
+    const mark = { strategy: 'strict', qualified: ['strict'], predictionId: 'x', barTime: T, openedAt: T, horizon: 'hour1', side: 'BUY', classKey: 'k', verdict: 'PROBATION', quantilesPct: [], pUp: 0.6, edgePct: 1, pProfit: 0.6, plan: { entryMin: 0.99, entryMax: 1.01, stopPct: 1, targetPct: 2.5, targetLevel: 'P75', holdSec: 3600, validUntil: T + 300 } } as unknown as LabTradeMark
+    const executor = labPaperExecutor({ id: 'x', plan: plan as never, mark, amountQuote: 500, nowSec: T })
+    expect(executor).toMatchObject({ exchange: 'bitget', mode: 'paper' })
+    expect(executor.name).toMatch(/\(Bitget\)$/)
+    expect((executor.params as PositionExecutorParams).feeRate).toBeCloseTo(0.001, 12)
+    expect((executor.params as PositionExecutorParams).slippageRate).toBeCloseTo(0.0002, 12)
+    // Without a round trip: Binance.
+    const { cost: _cost, ...flat } = plan
+    expect(labPaperExecutor({ id: 'y', plan: flat as never, mark, amountQuote: 500, nowSec: T }).exchange).toBe('binance')
   })
 })
 

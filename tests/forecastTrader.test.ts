@@ -13,7 +13,9 @@ import { DEFAULT_PAPER_RISK, paperOut } from '../shared/paperRisk'
 import { DEFAULT_FORECAST_TRADER } from '../shared/forecast/trader'
 import type { Candle, ExecutorConfig, PositionExecutorParams } from '../shared/ipc'
 import type { LiveBook } from '../shared/liveMarket'
-import { forecastPaperExecutors, openForecastTrades, settleForecastTrades, type ForecastTraderDeps } from '../src/forecast/forecastTrader'
+import { forecastPaperExecutor, forecastPaperExecutors, openForecastTrades, settleForecastTrades, type ForecastTraderDeps } from '../src/forecast/forecastTrader'
+import type { ForecastTradeMark } from '../shared/forecast/trader'
+import { FEE_RATE, SLIPPAGE_RATE } from '../shared/fees'
 import { tradeThisOf } from '../src/forecast/tradeThis'
 
 // FROM A FORECAST TO A TRADE (shared/forecast/{tradePlan,opportunityClass,trader}.ts, shared/aiProposal.ts,
@@ -132,6 +134,22 @@ describe('the trade plan', () => {
     expect(tradePlanOf({ decision: decision(), prediction: prediction(), livePrice: 100, atr5mPct: 0.2, targetLevel: 'P90' })!.targetPct).toBeCloseTo(4, 12)
     // From a live price above the close, the levels are the close's: the move left is less.
     expect(tradePlanOf({ decision: decision(), prediction: prediction(), livePrice: 101, atr5mPct: 0.2, targetLevel: 'P75' })!.targetPct).toBeCloseTo((102.5 / 101 - 1) * 100, 12)
+  })
+
+  it("carries its decision's round trip, and its paper trade is on that venue at its fee and its half spread and impact (V7.2-R Stage 4)", () => {
+    const trip = { venue: 'bitget' as const, feePct: 0.2, spreadPct: 0.04, impactPct: 0.02, totalPct: 0.46, basis: 'book' as const }
+    const plan = tradePlanOf({ decision: decision('SOLUSDT', { cost: trip }), prediction: prediction(), livePrice: 100, atr5mPct: 0.2, targetLevel: 'P75' })!
+    expect(plan.cost).toEqual(trip)
+    const mark = { predictionId: 'p', barTime: T, openedAt: T, horizon: 'hour1', side: 'BUY', classKey: 'k', verdict: 'APPROVED', quantilesPct: [], pUp: 0.7, edgePct: 1, pProfit: 0.7, plan: { entryMin: 99.9, entryMax: 100.1, stopPct: 1, targetPct: 2.5, targetLevel: 'P75', holdSec: 3600, validUntil: T + 300 } } as unknown as ForecastTradeMark
+    const executor = forecastPaperExecutor({ id: 'f1', plan, prediction: prediction(), mark, amountQuote: 100, nowSec: T })
+    expect(executor.exchange).toBe('bitget')
+    expect(executor.name).toMatch(/\(Bitget\)$/)
+    expect((executor.params as PositionExecutorParams).feeRate).toBeCloseTo(0.002, 12)
+    expect((executor.params as PositionExecutorParams).slippageRate).toBeCloseTo((0.02 + 0.01) / 100, 12)
+    // A plan with no round trip: Binance at the flat lines.
+    const flat = forecastPaperExecutor({ id: 'f2', plan: tradePlanOf({ decision: decision(), prediction: prediction(), livePrice: 100, atr5mPct: 0.2, targetLevel: 'P75' })!, prediction: prediction(), mark, amountQuote: 100, nowSec: T })
+    expect(flat.exchange).toBe('binance')
+    expect(flat.params).toMatchObject({ feeRate: FEE_RATE, slippageRate: SLIPPAGE_RATE })
   })
 
   it('mirrors a sell, and has no plan where the target does not clear a round trip or there is no TRADE', () => {
@@ -392,6 +410,30 @@ describe('the forecast trader (§66-68)', () => {
     expect(told.at(-1)).toMatch(/SOLUSDT/)
     // Stopped, it is not settled again.
     expect(await settleForecastTrades(later)).toEqual([])
+  })
+
+  it("settles a trade from its own venue's candles (V7.2-R Stage 4)", async () => {
+    const { deps, store } = world()
+    await openForecastTrades(deps)
+    store.executors[0] = { ...store.executors[0], exchange: 'bitget' }
+    const params = store.executors[0].params as PositionExecutorParams
+    const at = T + 120
+    const target = 100.01 * (1 + (params.takeProfitPct as number) / 100)
+    const candles: Candle[] = [
+      { time: at, open: 100, high: 100.05, low: 99.95, close: 100, volume: 10 },
+      { time: at + 60, open: 100, high: target * 1.001, low: 99.99, close: target, volume: 10 }
+    ]
+    const asked: string[] = []
+    const later: ForecastTraderDeps = {
+      ...deps,
+      fetchCandles: async (exchange) => {
+        asked.push(exchange)
+        return exchange === 'bitget' ? candles : []
+      },
+      nowSec: () => at + 180
+    }
+    expect(await settleForecastTrades(later)).toEqual([store.executors[0].name])
+    expect(asked).toEqual(['bitget'])
   })
 
   it('leaves a trade stopped by hand between its read and its settling as it was', async () => {

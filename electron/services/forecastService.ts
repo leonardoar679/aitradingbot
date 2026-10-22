@@ -23,6 +23,7 @@ import { appendJsonLines } from './jsonlStore'
 import { getResearchState } from './marketResearchService'
 import { tell } from './noticeService'
 import { getSettings } from './settingsService'
+import { setVenuePairs, venueCostOf } from './venueQuotesService'
 
 // THE FORECAST, LIVE (the V6 document, §38-43; V6 Stage 7, 13 October 2026).
 //
@@ -118,9 +119,11 @@ let classVerdicts: ((key: string) => ClassVerdict) | null = null
 const listeners = new Set<() => void>()
 
 const NEWS_SKILL_DAYS = NEWS_EFFECT_LINES.skillDays
-/** How far back a restart reads the record for outcomes still owed: the longest horizon and two
- * hours. */
-const OWED_LOOKBACK_SEC = 26 * 3600
+/** How far back a restart reads the record for outcomes still owed: eight days (since 22 October 2026; it was the
+ * longest horizon and two hours). A horizon that came due while the app was closed is judged from the bars the data
+ * keeps when it is back -- the Stage 2 check's record held 1,253 due horizons never judged across two closures of two
+ * days -- and its outcome, settled late, moves no adaptive level (shared/forecast/pass.ts PASS_LINES). */
+const OWED_LOOKBACK_SEC = 8 * 86_400
 
 function recordsDir(): string {
   return join(app.getPath('userData'), 'forecasts')
@@ -191,7 +194,9 @@ const sources: PassSources = {
   volumes: () => new Map(getResearchState().pairs.map((pair) => [pair.symbol, pair.quoteVolume24h])),
   news: newsFor,
   preEvent: preEventAt,
-  classVerdict: () => classVerdicts
+  classVerdict: () => classVerdicts,
+  // The cheaper venue's round trip, from the books venueQuotesService reads for the pairs that matter (V7.2-R Stage 4).
+  venueCost: (pair, side, nowMs) => venueCostOf(pair, side, nowMs)?.cheapest ?? null
 }
 
 export function setForecastClassVerdicts(judge: ((key: string) => ClassVerdict) | null): void {
@@ -248,6 +253,8 @@ async function runPass(closedAt: number): Promise<void> {
     state.recorded += made.predictions.length
   }
   await followCalls()
+  // The venues' books are read for the pairs of open trades first, then the top ten (V7.2-R Stage 4).
+  setVenuePairs(await venuePairs())
   Object.assign(state, { status: 'running', predictions: engine.latest.size, pending: pendingCount(engine), lastPassAt: closedAt, lastPassMs: Date.now() - startedAt, lastError: null })
   told()
 }
@@ -263,6 +270,18 @@ async function watchedPairs(): Promise<Set<string>> {
     // Settings unreadable: the top ten alone.
   }
   return watched
+}
+
+/** The pairs whose venues' books are read: those an open paper or demo trade of the app's is on, then the top ten. */
+async function venuePairs(): Promise<string[]> {
+  const pairs: string[] = []
+  try {
+    const settings = await getSettings()
+    for (const executor of settings.executors ?? []) if (executor.status === 'active' && executor.mode !== 'live') pairs.push(executor.symbol)
+  } catch {
+    // Settings unreadable: the top ten alone.
+  }
+  return [...new Set([...pairs, ...engine.ranking.top10])]
 }
 
 /** Every pair's call followed for a close; a watched one that turned, told. */

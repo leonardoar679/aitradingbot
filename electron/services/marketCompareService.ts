@@ -50,6 +50,17 @@ const READERS: Partial<Record<Exchange, (symbol: string) => Promise<QuoteReads>>
 /** The exchanges compared, in the order shown. */
 export const COMPARED_EXCHANGES: Exchange[] = ['binance', 'bitget']
 
+/** A pair's book on each venue costed (V7.2-R Stage 4; shared/venueCosts.ts), read at the same moment as the comparison
+ * reads them, with why a venue's could not be read. */
+export async function readVenueBooks(symbol: string): Promise<{ at: number; books: Record<'binance' | 'bitget', BookLevels | null>; problems: Partial<Record<'binance' | 'bitget', string>> }> {
+  const upper = symbol.toUpperCase()
+  const [binance, bitget] = await Promise.all([readBinance(upper), readBitget(upper)])
+  const problems: Partial<Record<'binance' | 'bitget', string>> = {}
+  if (binance.problem !== null) problems.binance = binance.problem
+  if (bitget.problem !== null) problems.bitget = bitget.problem
+  return { at: Date.now(), books: { binance: binance.book, bitget: bitget.book }, problems }
+}
+
 export async function compareMarkets(symbol: string): Promise<MarketComparison> {
   const upper = symbol.toUpperCase()
   const quotes: ExchangeQuote[] = await Promise.all(

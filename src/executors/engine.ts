@@ -19,7 +19,7 @@ import type {
   SingleMarketExecutorState,
   GridLevelState
 } from './types'
-import { positionSlippageRate, roundTripFee } from '../../shared/fees'
+import { positionFeeRate, positionSlippageRate, roundTripFee } from '../../shared/fees'
 import {
   ASSUMED_FUNDING_RATE,
   fundingCost,
@@ -490,7 +490,8 @@ export function simulatePosition(candles: Candle[], params: PositionExecutorPara
               periods: fundingPeriodsBetween(enteredAt, candle.time),
               side: params.side
             })
-      realizedPnl = grossPos - roundTripFee(posQty, entryPrice, exitPrice) - fundingPaid
+      // Its venue's fee where it carries one (V7.2-R Stage 4), FEE_RATE otherwise: each fill on its notional.
+      realizedPnl = grossPos - (posQty * entryPrice + posQty * exitPrice) * positionFeeRate(params) - fundingPaid
       break
     }
   }

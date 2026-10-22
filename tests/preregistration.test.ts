@@ -18,6 +18,8 @@ const TEXT = readFileSync(FILE, 'utf-8')
 /** The paths under ENGINE_CONSTANTS added since 16 October 2026 (V7.2): each must be named by a registration's
  * constants (the path or a prefix of it) or be infrastructure -- arithmetic every line rests on, not a line. */
 const ADDED_SINCE_16_OCTOBER = [
+  'venueCosts',
+  'forecast.universe',
   'forecast.moveOdds',
   'forecast.moveRates',
   'forecast.opportunity',
@@ -38,7 +40,7 @@ const ADDED_SINCE_16_OCTOBER = [
   'aiRouting'
 ]
 // The intervals' lines, the pass's version and the tape's: plumbing with no line to hold or fail.
-const INFRASTRUCTURE = ['forecast.uncertainty', 'forecast.pass', 'forecast.tape', 'forecast.moveRates']
+const INFRASTRUCTURE = ['forecast.uncertainty', 'forecast.pass', 'forecast.tape', 'forecast.moveRates', 'forecast.universe']
 
 describe('the registry on file', () => {
   const registry = parseRegistry(TEXT)

@@ -1875,5 +1875,10 @@
   "The path likely stays under {high} ({highPct}) and above {low} ({lowPct}) within {horizon}, eight times in ten; no expected price is forecast, since no way is known.": "خلال {horizon}، يُرجَّح أن يبقى مسار السعر دون {high} ({highPct}) وفوق {low} ({lowPct}) ثماني مرات من عشر؛ لا توقع لسعر متوقع لأن الاتجاه غير معروف.",
   "AI Predictions": "التنبؤات بالذكاء الاصطناعي",
   "Paper Trading": "تداول تجريبي",
-  "More Features": "ميزات إضافية"
+  "More Features": "ميزات إضافية",
+  "What a round trip costs now": "تكلفة صفقة ذهاب وإياب الآن",
+  "No venue book is held for this pair yet: the forecast reads them for its top ten and its open trades.": "لا يوجد بعد دفتر أوامر من منصة لهذا الزوج: التوقع يقرأ دفاتر أعلى عشرة أزواج والصفقات المفتوحة فقط.",
+  "{venue}: {total} in all ({fee} fee each way, {spread} spread, {impact} for the stake)": "{venue}: المجموع {total} (رسوم {fee} لكل اتجاه، فارق {spread}، أثر حجم الصفقة {impact})",
+  "{venue} is the cheaper venue for this pair now.": "{venue} هي المنصة الأرخص لهذا الزوج الآن.",
+  "From each venue's public book in the last three minutes, for a buy of {stake}: what a trade would pay, not a forecast.": "من دفتر الأوامر العام لكل منصة خلال آخر ثلاث دقائق، لشراء بقيمة {stake}: هذا ما تدفعه الصفقة، وليس توقعًا."
 }

@@ -97,7 +97,9 @@ describe("Bitget's pins", () => {
       candles: '/api/v3/market/candles?category=SPOT',
       orderbook: '/api/v3/market/orderbook?category=SPOT',
       fills: '/api/v3/market/fills?category=SPOT',
-      marketTickers: '/api/v2/spot/market/tickers'
+      marketTickers: '/api/v2/spot/market/tickers',
+      // Since V7.2-R Stage 4: v2's symbol list, the one that carries each pair's fee rates.
+      feeRates: '/api/v2/spot/public/symbols'
     })
     expect(BITGET_INTERVAL).toEqual({ '1m': '1m', '15m': '15m', '1h': '1H', '4h': '4H', '1d': '1D', '1w': '1W' })
     expect(BITGET_PAGE).toBe(1000)

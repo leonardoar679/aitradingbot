@@ -473,9 +473,14 @@ describe('the runs on file', () => {
   it('are swept after a walk forward to the three newest', async () => {
     for (const old of ['run-20261001-0030', 'run-20261002-0030', 'run-20261003-0030']) writeRun(dir(), old)
     const training = await service()
+    const before = runIdAt(Math.floor(Date.now() / 1000))
     await training.forecastTrainingForTest.run('first')
+    const after = runIdAt(Math.floor(Date.now() / 1000))
     const runs = readdirSync(dir()).filter((name) => name.startsWith('run-')).sort()
-    expect(runs).toEqual(['run-20261002-0030', 'run-20261003-0030', runIdAt(Math.floor(Date.now() / 1000))].sort())
+    expect(runs).toHaveLength(3)
+    expect(runs.slice(0, 2)).toEqual(['run-20261002-0030', 'run-20261003-0030'])
+    // The new run is named by the minute it began: a loaded suite can end it a minute later.
+    expect(runs[2] >= before && runs[2] <= after).toBe(true)
     expect(existsSync(join(dir(), 'run-20261001-0030'))).toBe(false)
   })
 

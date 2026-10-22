@@ -61,6 +61,8 @@ OVERLAP_HOURS = {'minutes5': 1, 'minutes15': 1, 'hour1': 1, 'hours4': 4, 'hours2
 AUTOMATIC = re.compile(r'^(watch|addition:|bot:)')
 
 CHECKS = []
+# The spans the app ran in, from --spans (ISO start/end pairs): the quarter-hour check reads only inside them.
+SPANS = []
 
 
 def check(name, status, detail):
@@ -401,16 +403,20 @@ def forecasts_of(bundle, made_sec, csv_dir, tape):
     # ten minutes of it, or where the quarter-hours either side of it were recorded.
     passed = sorted({line['t'] for line in passes if isinstance(line.get('t'), (int, float))})
     made = {p['t'] for p in grid}
-    seen = sorted({int(t / 1000 if t > 1e11 else t) for t in (line.get('t') for line in tape) if isinstance(t, (int, float))})
+    # Only the tape's book lines say when the app ran: each is the minute it was written. A minute line is a candle
+    # Bitcoin closed, and the stream fills an hour or two of them back when it starts (22 October 2026).
+    seen = sorted({int(t / 1000 if t > 1e11 else t) for t in (line.get('t') for line in tape if line.get('kind') == 'book') if isinstance(t, (int, float))})
 
     def near(times, q, within):
         i = bisect.bisect_left(times, q - within)
         return i < len(times) and times[i] <= q + within
 
     expected = []
+    # The spans the app ran in, if the caller names them (--spans): only quarter-hours inside them are expected.
+    inside = (lambda q: any(start <= q <= end for start, end in SPANS)) if SPANS else (lambda q: True)
     if passed:
         for q in range(int(passed[0]), int(min(passed[-1] + 4 * 3600, made_sec - BAR_SEC)) + 1, QUARTER_SEC):
-            if q in made or near(passed, q, 0) or near(seen, q, 600) or (near(passed, q - QUARTER_SEC, 0) and near(passed, q + QUARTER_SEC, 0)):
+            if inside(q) and (q in made or near(passed, q, 0) or near(seen, q, 600) or (near(passed, q - QUARTER_SEC, 0) and near(passed, q + QUARTER_SEC, 0))):
                 expected.append(q)
     missed = [q for q in expected if q not in made]
     print(f'  quarter-hours the app ran at: {len(expected)}; forecast at {len(expected) - len(missed)}; missed {len(missed)}'
@@ -647,7 +653,13 @@ def main():
     parser.add_argument('export', help='trader-spider-report-....zip, or the folder it was unpacked to')
     parser.add_argument('--csv', help='write forecasts.csv and outcomes.csv here')
     parser.add_argument('--json', help='write the summary and the checks here')
+    parser.add_argument('--spans', help='the spans the app ran in, start/end ISO pairs joined by commas (2026-10-22T10:32Z/2026-10-22T11:11Z,...): the quarter-hour check reads only inside them')
     args = parser.parse_args()
+    for span in (args.spans or '').split(','):
+        if span.strip() == '':
+            continue
+        start, end = span.split('/')
+        SPANS.append((datetime.fromisoformat(start.replace('Z', '+00:00')).timestamp(), datetime.fromisoformat(end.replace('Z', '+00:00')).timestamp()))
     bundle = Bundle(args.export)
     print(f'{args.export}: {len(bundle.files)} files')
     manifest = manifest_of(bundle)

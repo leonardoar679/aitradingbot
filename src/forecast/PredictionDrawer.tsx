@@ -19,6 +19,51 @@ import { tradeThisOf } from './tradeThis'
 import { useRiskTarget } from './useRiskTarget'
 import { callColor, callLabel, decisionWords, dollarText, leadHorizon, likelyLevels, marketStateWord, momentumWord, pairText, rangeText, signedPct, timeLeftText, volumeWord, wayKnown, HORIZON_NEXT, HORIZON_SHORT, reliabilityWord } from './forecastWords'
 import type { MoveRates } from '../../shared/forecast/moveRates'
+import { VENUE_STAKE_QUOTE, type RoundTrip } from '../../shared/venueCosts'
+
+const VENUE_NAMES: Record<RoundTrip['venue'], string> = { binance: 'Binance', bitget: 'Bitget' }
+
+/** What a round trip on the pair costs now on each venue (V7.2-R Stage 4; shared/venueCosts.ts), from the public books
+ * the main process reads for the forecast's top ten and its open trades; said as what a trade would pay. */
+function VenueCosts({ pair, i18n }: { pair: string; i18n: I18n }): React.JSX.Element {
+  const { t, pctPlain, num } = i18n
+  const [costs, setCosts] = useState<{ trips: RoundTrip[]; cheapest: RoundTrip | null; at: number } | null | undefined>(undefined)
+  useEffect(() => {
+    let live = true
+    setCosts(undefined)
+    window.api.forecast
+      .venueCosts(pair)
+      .then((read) => {
+        if (live) setCosts(read)
+      })
+      .catch(() => {
+        if (live) setCosts(null)
+      })
+    return (): void => {
+      live = false
+    }
+  }, [pair])
+  if (costs === undefined) return <p style={line}>…</p>
+  if (costs === null) return <p style={line}>{t('No venue book is held for this pair yet: the forecast reads them for its top ten and its open trades.')}</p>
+  const share = (value: number | null): string => (value === null ? '—' : pctPlain(value, 2))
+  return (
+    <>
+      {costs.trips.map((trip) => (
+        <p key={trip.venue} style={line}>
+          {t('{venue}: {total} in all ({fee} fee each way, {spread} spread, {impact} for the stake)', {
+            venue: VENUE_NAMES[trip.venue],
+            total: share(trip.totalPct),
+            fee: share(trip.feePct),
+            spread: share(trip.spreadPct),
+            impact: share(trip.impactPct)
+          })}
+        </p>
+      ))}
+      {costs.cheapest !== null && costs.trips.length > 1 && <p style={line}>{t('{venue} is the cheaper venue for this pair now.', { venue: VENUE_NAMES[costs.cheapest.venue] })}</p>}
+      <p style={{ ...line, color: 'var(--text-secondary)' }}>{t("From each venue's public book in the last three minutes, for a buy of {stake}: what a trade would pay, not a forecast.", { stake: `$${num(VENUE_STAKE_QUOTE, 0, 0)}` })}</p>
+    </>
+  )
+}
 import { invalidationConditionsOf } from '../../shared/forecast/prediction'
 import { driverText } from '../../shared/forecast/rangeDrivers'
 import { reliabilityReasonText } from '../../shared/forecast/reliability'
@@ -344,6 +389,11 @@ export function PredictionDrawer({
           <MoveRatesTable rates={prediction.moveRates} i18n={i18n} />
         </div>
       )}
+
+      <div style={section}>
+        <h3 style={heading}>{t('What a round trip costs now')}</h3>
+        <VenueCosts pair={prediction.pair} i18n={i18n} />
+      </div>
 
       {leadRange !== undefined && (leadRange.excursion !== undefined || leadRange.arrival !== undefined) && (
         <div style={section}>

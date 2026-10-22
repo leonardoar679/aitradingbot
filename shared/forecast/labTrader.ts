@@ -1,4 +1,4 @@
-import { FEE_RATE, positionSlippageRate } from '../fees'
+import { positionFeeRate, positionSlippageRate } from '../fees'
 import type { ExecutorConfig, PositionExecutorParams } from '../ipc'
 import { DIRECTION_MODELS, type DirectionModelId } from './models'
 import { classTradable } from './opportunityClass'
@@ -208,7 +208,7 @@ export function labStatsOf(executors: readonly ExecutorConfig[], strategy: LabSt
     peak = Math.max(peak, sum)
     drawdown = Math.max(drawdown, peak - sum)
     const params = executor.params as PositionExecutorParams
-    fees += 2 * params.amountQuote * FEE_RATE
+    fees += 2 * params.amountQuote * positionFeeRate(params)
     slippage += 2 * params.amountQuote * positionSlippageRate(params)
   }
   const staked = open.reduce((total, executor) => total + (executor.params as PositionExecutorParams).amountQuote, 0)

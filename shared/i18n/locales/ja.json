@@ -1875,5 +1875,10 @@
   "The path likely stays under {high} ({highPct}) and above {low} ({lowPct}) within {horizon}, eight times in ten; no expected price is forecast, since no way is known.": "{horizon}以内、価格の経路は10回中8回、{high}（{highPct}）を下回り{low}（{lowPct}）を上回る見込みです。方向が不明なため、予想価格は予測しません。",
   "AI Predictions": "AI予測",
   "Paper Trading": "ペーパートレード",
-  "More Features": "その他の機能"
+  "More Features": "その他の機能",
+  "What a round trip costs now": "今の往復取引のコスト",
+  "No venue book is held for this pair yet: the forecast reads them for its top ten and its open trades.": "このペアの取引所の板はまだ取得していません。予測は上位10ペアと保有中の取引の板だけを読みます。",
+  "{venue}: {total} in all ({fee} fee each way, {spread} spread, {impact} for the stake)": "{venue}：合計 {total}（片道手数料 {fee}、スプレッド {spread}、取引額によるインパクト {impact}）",
+  "{venue} is the cheaper venue for this pair now.": "このペアは今 {venue} の方が安く取引できます。",
+  "From each venue's public book in the last three minutes, for a buy of {stake}: what a trade would pay, not a forecast.": "各取引所の直近3分の公開板から、{stake} の買いで計算：取引が支払う費用であり、予測ではありません。"
 }

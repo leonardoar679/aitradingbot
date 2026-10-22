@@ -3,6 +3,7 @@ import { DRIFT_LINES, type DriftReading } from './drift'
 import { edgeOf, type Edge } from './edge'
 import type { Horizon } from './features'
 import { QUANTILE_LEVELS } from './ml/quantile'
+import type { RoundTrip } from '../venueCosts'
 import { classTradable, type ClassVerdict } from './opportunityClass'
 import type { PricePrediction } from './prediction'
 import { reliabilityReasonText, type ReliabilityReason } from './reliability'
@@ -32,7 +33,9 @@ import type { MarketRegime } from '../marketResearch'
 //   that small is not worth one; it stays in the record, as every forecast does.
 // TRADE where none holds. A SELL is a paper trade only, as every short in the app is.
 
-export const DECISION_VERSION = 'decision-v4'
+/** decision-v5 (V7.2-R Stage 4): the edge at the cheaper venue's round trip where both venues' books are held, and
+ * the round trip on the decision. decision-v4 (V7.2-R Stage 3): the line of a move worth its costs. */
+export const DECISION_VERSION = 'decision-v5'
 
 export const DECISION_LINES = {
   minProfitChance: 0.55,
@@ -111,6 +114,9 @@ export interface TradeDecision {
   /** Its opportunity class and the class's verdict (V6 Stage 12); null where none was read. */
   classKey: string | null
   classVerdict: ClassVerdict | null
+  /** The round trip its edge was costed at (V7.2-R Stage 4): the cheaper venue's, from its book at the reference
+   * stake, where a venue's book was held; absent where none was, and the edge took the flat round trip. */
+  cost?: RoundTrip | null
   /** Unix milliseconds. */
   at: number
 }
@@ -126,6 +132,9 @@ export interface DecisionInput {
   classOf: ((side: 'BUY' | 'SELL') => { key: string; verdict: ClassVerdict }) | null
   /** The horizon's live drift (V7.1 Stage 13); absent or null where not read. */
   drift?: DriftReading | null
+  /** The round trip on a side at the cheaper venue (V7.2-R Stage 4), where the venues' books are held; absent or null
+   * where none is, and the edge takes the flat round trip. */
+  costOf?: ((side: 'BUY' | 'SELL') => RoundTrip | null) | null
 }
 
 const VERDICT_SENTENCES: Record<ClassVerdict, string> = {
@@ -200,12 +209,14 @@ export function decideTrade(input: DecisionInput): TradeDecision {
   const addWorded = (code: NoTradeReason, text: string): void => void reasons.push({ code, text })
   const side = range === undefined ? null : range.direction === 'BULLISH' ? 'BUY' : range.direction === 'BEARISH' ? 'SELL' : null
   let edge: Edge | null = null
+  let cost: RoundTrip | null = null
   if (range === undefined) add('NO_CALL', { missing: true })
   else {
     if (range.uncertain) add('UNCERTAIN')
     if (side === null) add('NO_CALL')
     else {
-      edge = edgeOf(range.quantilesPct, side, input.live?.spreadPct ?? null)
+      cost = input.costOf?.(side) ?? null
+      edge = edgeOf(range.quantilesPct, side, input.live?.spreadPct ?? null, cost?.totalPct)
       const likely = likelyMovePct(range.quantilesPct, side)
       const line = OPPORTUNITY_LINES.minMovePct[horizon]
       if (!(likely >= line)) add('MOVE_UNDER_LINE', { movePct: likely, linePct: line })
@@ -239,6 +250,7 @@ export function decideTrade(input: DecisionInput): TradeDecision {
     quality: range?.quality.score ?? 0,
     classKey: opportunity?.key ?? null,
     classVerdict: opportunity?.verdict ?? null,
+    ...(cost === null ? {} : { cost }),
     at: input.nowMs
   }
 }
@@ -270,5 +282,7 @@ export function decideOnBook(decision: TradeDecision, prediction: PricePredictio
   // The drift gate as the pass read it (V7.1 Stage 13): a book read since changes nothing of the last day.
   const drifted = decision.reasons.find((reason) => reason.code === 'ENGINE_DRIFT')?.values
   const drift: DriftReading | null = drifted === undefined ? null : { outcomes: drifted.outcomes ?? 0, coverage80: drifted.coverage80 ?? Number.NaN, drifted: true }
-  return decideTrade({ prediction, horizon: decision.horizon, nowMs, live, classOf: judged === null ? null : (): { key: string; verdict: ClassVerdict } => judged, drift })
+  // The venues' round trip as the pass read it: a book read since is the stream's, of one venue.
+  const cost = decision.cost ?? null
+  return decideTrade({ prediction, horizon: decision.horizon, nowMs, live, classOf: judged === null ? null : (): { key: string; verdict: ClassVerdict } => judged, drift, costOf: cost === null ? null : (side): RoundTrip | null => (side === decision.side ? cost : null) })
 }

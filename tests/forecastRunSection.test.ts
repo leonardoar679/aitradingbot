@@ -311,6 +311,9 @@ describe("the twelve-hour run's report (§48-49, §114)", () => {
     // Two that entered: a fee of 0.1% on each fill, and the slippage the engine charges each.
     expect(section.trades.feesQuote).toBeCloseTo(2 * 100 * 0.001 * 2, 10)
     expect(section.trades.slippageQuote).toBeCloseTo(2 * 100 * 2 * 0.0005, 10)
+    // A trade on a venue that asks 0.2% a side (V7.2-R Stage 4) is charged its own rate.
+    const dear = { ...trade('d', 'BTCUSDT', 1), params: { amountQuote: 100, slippageRate: 0.0005, feeRate: 0.002 } } as unknown as ExecutorConfig
+    expect(forecastRunSectionOf(hourRun({ executors: [dear] })).trades.feesQuote).toBeCloseTo(100 * 0.002 * 2, 10)
     expect(gate(hourRun({ executors: [trade('a', 'SOLUSDT', 2)] }), 'trades_whole').status).toBe('pass')
   })
 

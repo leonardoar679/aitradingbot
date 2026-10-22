@@ -35,7 +35,9 @@ export const BITGET = {
     orderbook: '/api/v3/market/orderbook?category=SPOT',
     fills: '/api/v3/market/fills?category=SPOT',
     /** Every spot pair's ticker, with its best bid and ask: v2's, for the time it takes (above). */
-    marketTickers: '/api/v2/spot/market/tickers'
+    marketTickers: '/api/v2/spot/market/tickers',
+    /** Every spot pair with its maker and taker fee rates: v2's, since v3's instruments carry none (22 October 2026). */
+    feeRates: '/api/v2/spot/public/symbols'
   }
 } as const
 
@@ -399,6 +401,19 @@ export async function fetchBitgetSymbolRules(symbol: string): Promise<BitgetSymb
   }
   rulesCache.set(upper, { at: Date.now(), rules })
   return rules
+}
+
+/** Every online spot pair's taker fee as Bitget lists it, a fraction (0.001 is 0.1%), from its public v2 symbol list
+ * (V7.2-R Stage 4): on 22 October 2026, 0.1% on 3,472 USDT pairs and 0.2% on 53 older ones. A row without a rate is
+ * left out. Public data: no key. */
+export async function fetchBitgetFeeRates(): Promise<Map<string, number>> {
+  const rows = await ask<{ symbol: string; takerFeeRate?: string; status?: string }[]>(BITGET.paths.feeRates, 'fee rates')
+  const rates = new Map<string, number>()
+  for (const row of rows) {
+    const rate = Number(row.takerFeeRate)
+    if (row.status === 'online' && row.takerFeeRate !== undefined && Number.isFinite(rate) && rate >= 0) rates.set(row.symbol, rate)
+  }
+  return rates
 }
 
 /** Test seam. */
