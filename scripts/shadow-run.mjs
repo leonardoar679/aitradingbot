@@ -735,17 +735,21 @@ async function main() {
     const moved = keepMoved ? await page.evaluate(async () => (await window.api.ai.getConfig()).watchPaper.model) : null
     const watchModels = (REAL_AI || keepMoved) && process.env.WATCH_MODELS === undefined ? await page.evaluate(async () => (await window.api.ai.getConfig()).watch.models) : WATCH_MODELS
     const firstGates = (REAL_AI || keepMoved) && process.env.FIRST_GATES === undefined ? true : FIRST_GATES
+    // A resumed segment switches the additions on again as they were before the last segment's end switched them off.
+    const offFile = path.join(OUT, 'additions-before-off.json')
+    const restore = RESUME && fs.existsSync(offFile) ? JSON.parse(fs.readFileSync(offFile, 'utf8')).additions ?? null : null
     const setup = await page.evaluate(
-      async ([minBand, fakeKey, models, gates, paperOn, realAi, cap, paperModel]) => {
+      async ([minBand, fakeKey, models, gates, paperOn, realAi, cap, paperModel, additions]) => {
         const key = realAi ? await window.api.ai.credentialsStatus() : await window.api.ai.setCredentials(fakeKey)
         await window.api.ai.setConfig({ dailyCapUsd: cap, callsPerMinute: 30 })
+        if (additions !== null) await window.api.ai.setConfig({ additions })
         const watch = await window.api.ai.setConfig({
           watch: { enabled: true, models, maxEventsPerDay: 10, minBand, firstModelGates: gates }
         })
         const paper = await window.api.ai.setConfig({ watchPaper: { enabled: paperOn, model: paperModel ?? models[0], stakeQuote: 100, maxOpen: 3 } })
         return { key: key.configured, watch: watch.watch, watchPaper: paper.watchPaper, additions: paper.additions, cap: paper.dailyCapUsd, roles: paper.roles ?? null, defaultModel: paper.defaultModel }
       },
-      [MIN_BAND, FAKE_KEY, watchModels, firstGates, WATCH_PAPER, REAL_AI, REAL_AI ? capForCeiling() : 5, moved]
+      [MIN_BAND, FAKE_KEY, watchModels, firstGates, WATCH_PAPER, REAL_AI, REAL_AI ? capForCeiling() : 5, moved, restore]
     )
     say(`setup: ${JSON.stringify(setup)}`)
     if (REAL_AI && !setup.key) throw new Error('REAL_AI: the copied key could not be read by the scratch profile')
@@ -1015,6 +1019,10 @@ async function holdCeiling() {
  * from the scratch profile. */
 async function aiOff(why) {
   try {
+    // What the additions were before they are switched off, so that a resumed segment switches them on again as they
+    // were (23 October 2026: the 12-hour run's end left them off, and its resumption ran the watch alone).
+    const before = await page.evaluate(async () => (await window.api.ai.getConfig()).additions).catch(() => null)
+    if (before !== null) fs.writeFileSync(path.join(OUT, 'additions-before-off.json'), JSON.stringify({ at: new Date().toISOString(), why, additions: before }, null, 2))
     const off = await page.evaluate(async () => {
       const watch = await window.api.ai.setConfig({ watch: { enabled: false } })
       const paper = await window.api.ai.setConfig({ watchPaper: { enabled: false } })
