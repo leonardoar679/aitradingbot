@@ -135,7 +135,8 @@ export function PaperRiskCard(): React.JSX.Element {
     return <Card title="Paper trades the app opens by itself">{problem ?? 'Loading…'}</Card>
   }
 
-  // The equity a share is taken of, as it stands now: the USDT balance and what is out.
+  // The equity a share is taken of, as it stands now: the USDT balance as settled, which holds what is out
+  // (paper-equity-v2; V8 Stage 2).
   const equity = paperEquity(account, 'USDT')
   const examples = EXAMPLE_STOPS.map((stopPct) => `${amount(paperStake({ risk: draft, stakeQuote: Number.POSITIVE_INFINITY, stopPct, equityQuote: equity }))} at a stop ${stopPct}% away`)
   const changed =
@@ -225,7 +226,7 @@ export function PaperRiskCard(): React.JSX.Element {
         {draft.sizing === 'risk'
           ? `A trade with a stop stakes what would lose about ${draft.riskQuote} there after a round trip's fees: ${examples.join(', ')}. Never more than its own stake, the watch's or a Monitoring Tag short's, so a near stop is held to that; one that would stake under ${PAPER_MIN_STAKE} is not opened, being less than the smallest order on Binance. A delisting's short has no stop, and stakes its own.`
           : draft.sizing === 'equity'
-            ? `A trade with a stop stakes what would lose about ${draft.riskPct}% of the paper account's equity there after a round trip's fees${equity === null ? ` -- with no paper account in USDT, about ${draft.riskQuote}, as sized by risk` : `: ${amount((equity * draft.riskPct) / 100)} on ${amount(equity)} USDT now, its balance and what its own trades have out`}: ${examples.join(', ')}. Never more than its own stake, so a near stop is held to that; one that would stake under ${PAPER_MIN_STAKE} is not opened. A delisting's short has no stop, and stakes its own.`
+            ? `A trade with a stop stakes what would lose about ${draft.riskPct}% of the paper account's equity there after a round trip's fees${equity === null ? ` -- with no paper account in USDT, about ${draft.riskQuote}, as sized by risk` : `: ${amount((equity * draft.riskPct) / 100)} on ${amount(equity)} USDT now, its balance as settled (what its open trades stake has never left it)`}: ${examples.join(', ')}. Never more than its own stake, so a near stop is held to that; one that would stake under ${PAPER_MIN_STAKE} is not opened. A delisting's short has no stop, and stakes its own.`
             : "Each trade stakes its own stake: the watch's, or a news rule's."}{' '}
         {draft.maxOutQuote === null
           ? 'Nothing caps what they stake together.'
