@@ -186,13 +186,27 @@ describe('a stake sized by a share of the paper account (8 October 2026)', () =>
     expect(paperRiskProblem({ ...EQUITY, riskPct: 3 })).toMatch(/risks 0.1, 0.25, 0.5, 1, 2% of the paper account/)
   })
 
-  it("measures the account's equity in a quote asset: its balance and what its own trades have out", () => {
-    expect(paperEquity(account(900), [position('a', 100, { watch: WATCH })], 'USDT')).toBe(1000)
-    expect(paperEquity(account(900), [position('a', 100)], 'USDT')).toBe(900)
-    expect(paperEquity(account(0), [], 'USDT')).toBeNull()
-    expect(paperEquity(null, [position('a', 100, { watch: WATCH })], 'USDT')).toBeNull()
-    expect(paperEquity(undefined, [], 'USDT')).toBeNull()
-    expect(paperEquity({ balances: { BTC: 1 } }, [], 'USDT')).toBeNull()
+  it("measures the account's equity in a quote asset as its balance as settled, which already holds what its trades stake (paper-equity-v2)", () => {
+    // The balance is the account's total: a trade's stake never leaves it (src/account/paperAccount.ts), so
+    // 1,000 funded with 100 out in a trade is 1,000 -- before 26 October 2026 it read 1,100.
+    expect(paperEquity(account(1000), 'USDT')).toBe(1000)
+    expect(paperEquity(account(0), 'USDT')).toBeNull()
+    expect(paperEquity(account(-5), 'USDT')).toBeNull()
+    expect(paperEquity(null, 'USDT')).toBeNull()
+    expect(paperEquity(undefined, 'USDT')).toBeNull()
+    expect(paperEquity({ balances: { BTC: 1 } }, 'USDT')).toBeNull()
+    expect(paperEquity({ balances: { USDT: Number.NaN } }, 'USDT')).toBeNull()
+    expect(paperEquity({ balances: { USDT: Number.POSITIVE_INFINITY } }, 'USDT')).toBeNull()
+  })
+
+  it('sizes a trade at the share of the settled balance, however much the open trades stake', () => {
+    const settled = account(10_000)
+    const risk = { ...EQUITY, riskPct: 1 }
+    // 1% of 10,000 at a 2% stop is about 100 of risk: the same stake with nothing open as with 3,000 out.
+    expect(riskPerTrade(risk, paperEquity(settled, 'USDT'))).toBe(100)
+    const stake = paperStake({ risk, stakeQuote: 10_000, stopPct: 2, equityQuote: paperEquity(settled, 'USDT') })
+    expect(stake).toBeLessThan(5000)
+    expect(stake).toBeGreaterThan(4000)
   })
 
   it('risks the share of the equity at the stop, and the fixed risk without an account', () => {

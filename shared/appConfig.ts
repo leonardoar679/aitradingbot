@@ -47,7 +47,7 @@ import { healNewsConfig } from './news'
 import { OPPORTUNITY_SCORE_VERSION } from './opportunityScore'
 import { healPaperDigest } from './paperDigest'
 import { healPaperPause } from './paperPause'
-import { PAPER_MIN_STAKE, healPaperRisk } from './paperRisk'
+import { PAPER_EQUITY_VERSION, PAPER_MIN_STAKE, healPaperRisk } from './paperRisk'
 import { RISK_LINES } from './dynamicRisk'
 import { SESSION_REPORT_VERSION } from './shadowReport'
 import { healUiMode } from './uiMode'
@@ -151,7 +151,8 @@ export const ENGINE_CONSTANTS = {
   opportunityScore: { version: OPPORTUNITY_SCORE_VERSION },
   liveMarket: { version: LIVE_MARKET_VERSION, maxSpreadPct: MAX_SPREAD_PCT, stalePriceMs: STALE_PRICE_MS, gapSeconds: LIVE_GAP_SECONDS },
   fees: { feeRate: FEE_RATE, slippageRate: SLIPPAGE_RATE },
-  paperRisk: { minStake: PAPER_MIN_STAKE },
+  // The equity a trade is sized against: the balance as settled (paper-equity-v2; V8 Stage 2).
+  paperRisk: { minStake: PAPER_MIN_STAKE, equity: PAPER_EQUITY_VERSION },
   /** Risk by the conditions (the V5 document, §46-47; since 8 October 2026). */
   dynamicRisk: RISK_LINES,
   alerts: { highImpact: HIGH_IMPACT, watchImpact: WATCH_IMPACT, btcCrashPct: BTC_CRASH_PCT },

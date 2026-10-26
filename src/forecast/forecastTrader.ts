@@ -196,7 +196,7 @@ export async function openForecastTrades(deps: ForecastTraderDeps): Promise<Fore
           : t('It has {count} paper SELLs open, the most the risk mode keeps on one side.', { count: sameSide })
       }
       const freshRisk = healPaperRisk(fresh.paperRisk)
-      const size = sizePaperTrade({ risk: freshRisk, stakeQuote: trader.stakeQuote, stopPct: plan.stopPct, quoteAsset: 'USDT', slippageRate: SLIPPAGE_RATE, equityQuote: paperEquity(fresh.paperAccount, fresh.executors, 'USDT') }, say)
+      const size = sizePaperTrade({ risk: freshRisk, stakeQuote: trader.stakeQuote, stopPct: plan.stopPct, quoteAsset: 'USDT', slippageRate: SLIPPAGE_RATE, equityQuote: paperEquity(fresh.paperAccount, 'USDT') }, say)
       if (!size.ok) return size.reason
       const out = paperOutBlock({ risk: freshRisk, executors: fresh.executors, quoteAsset: 'USDT', amountQuote: size.amountQuote }, say)
       if (out !== null) return out

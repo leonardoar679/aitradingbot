@@ -136,7 +136,7 @@ export function PaperRiskCard(): React.JSX.Element {
   }
 
   // The equity a share is taken of, as it stands now: the USDT balance and what is out.
-  const equity = paperEquity(account, executors, 'USDT')
+  const equity = paperEquity(account, 'USDT')
   const examples = EXAMPLE_STOPS.map((stopPct) => `${amount(paperStake({ risk: draft, stakeQuote: Number.POSITIVE_INFINITY, stopPct, equityQuote: equity }))} at a stop ${stopPct}% away`)
   const changed =
     draft.sizing !== saved.sizing ||

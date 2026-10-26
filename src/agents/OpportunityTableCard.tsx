@@ -142,7 +142,7 @@ function LevelsSection({
   const read = levelReadings({ event: row.item.event, side: way, entryMin: offer.entryMin, entryMax: offer.entryMax, stopLoss: detail.stopLoss, takeProfit: detail.takeProfit, livePrice: row.price }, i18n)
   // The model's answers' cost a trade, as a share of what the app would stake on it: part of the
   // costs the value is net of (the V5 document, §73).
-  const stake = risk === null ? null : paperStake({ risk: healPaperRisk(risk.paperRisk), stakeQuote: risk.stakeQuote, stopPct: read.stopPct, equityQuote: paperEquity(risk.account, risk.executors, row.item.event.quoteAsset) })
+  const stake = risk === null ? null : paperStake({ risk: healPaperRisk(risk.paperRisk), stakeQuote: risk.stakeQuote, stopPct: read.stopPct, equityQuote: paperEquity(risk.account, row.item.event.quoteAsset) })
   const ev = tradeExpectedValue({
     confidence: answer.decision.confidence,
     calibrated: calibratedWinRate(outcomes, { model: answer.model, eventType: row.item.event.type, side: way }, nowSec),
@@ -217,7 +217,7 @@ function RiskSection({ row, risk }: { row: OpportunityTableRow; risk: TableRisk 
   const stopPct = detail.stopLoss === null || !(mid > 0) ? null : (Math.abs(mid - detail.stopLoss) / mid) * 100
   const way = offer.side === 'long' ? 'buy' : 'sell'
   const quote = row.item.event.quoteAsset
-  const sized = paperStake({ risk: healPaperRisk(risk.paperRisk), stakeQuote: risk.stakeQuote, stopPct, equityQuote: paperEquity(risk.account, risk.executors, quote) })
+  const sized = paperStake({ risk: healPaperRisk(risk.paperRisk), stakeQuote: risk.stakeQuote, stopPct, equityQuote: paperEquity(risk.account, quote) })
   const lost = stopPct === null ? null : riskedAtStop({ amountQuote: sized, stopLossPct: stopPct })
   const cap = correlatedCap({ account: risk.account, risk: healPaperRisk(risk.paperRisk), quoteAsset: quote })
   const out = correlatedOut(risk.executors, way, quote)

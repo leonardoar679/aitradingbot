@@ -51,7 +51,9 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 // for the way, research-only (V7.2-R Stage 7), from 3f556fa5a9de. The challenger's shadow week before it is put in use
 // (challenger-v3, shadow-v1; V7.2-R Stage 8) from 93ed694aeeb0. 26 October 2026: one budget per host for every public
 // read, the hosts' limits, and the limits a task in a worker of its own runs under (V8 Stage 1), from 1142c98ef19f.
-const PINNED_ENGINE_VERSION = '140df05699f0'
+// The paper account's equity read as its balance as settled, open stakes no longer counted twice (paper-equity-v2;
+// V8 Stage 2), from 140df05699f0.
+const PINNED_ENGINE_VERSION = '1098a37acac9'
 
 describe('the engine version', () => {
   it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {

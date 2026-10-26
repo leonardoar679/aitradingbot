@@ -20,9 +20,13 @@ import { ENGLISH, type I18n } from './i18n/translate'
 //   run is a replay of its strategy, measured in percent, and holds no paper money.
 //
 // - SIZED BY A SHARE OF THE PAPER ACCOUNT (since 8 October 2026; the V4 document, §35-36): as by
-//   risk, with the risk per trade a share of the paper account's equity in the trade's quote -- its
-//   balance and what the app's own open paper trades have out. With no paper account, or none in
-//   that quote, the fixed risk per trade stands, so a fresh install sizes as before.
+//   risk, with the risk per trade a share of the paper account's equity in the trade's quote. With no
+//   paper account, or none in that quote, the fixed risk per trade stands, so a fresh install sizes as
+//   before. THE EQUITY IS THE ACCOUNT'S BALANCE AS SETTLED (paper-equity-v2, 26 October 2026, V8 Stage
+//   2): the balance is the account's total -- what its open trades stake has never left it
+//   (src/account/paperAccount.ts) -- and until then the open stakes were added to it again, so every
+//   trade sized by a share was up to half as large again as it should have been while others were open.
+//   Open results move no stake: a price not yet settled cannot size a trade.
 //
 // BOTH ONLY EVER OPEN LESS. A trade sized by risk stakes at most what its feature was switched on
 // with, and the cap only refuses. So neither is a term the watch's confirmation names again, and
@@ -88,15 +92,17 @@ export function paperRiskProblem(settings: PaperRiskSettings): string | null {
 
 const shown = (amount: number): string => Number(amount.toFixed(2)).toLocaleString('en-US')
 
-/** The paper account's equity in one quote asset: its balance in it, and what the app's own open
- * paper trades have out in it (their stakes left the balance when they opened). Null with no
- * account, or nothing in that asset: then there is no equity to take a share of. */
-export function paperEquity(account: Pick<PaperAccount, 'balances'> | null | undefined, executors: ExecutorConfig[], quoteAsset: string): number | null {
+/** How the equity a trade is sized against is read (pinned: ENGINE_CONSTANTS.paperRisk.equity). */
+export const PAPER_EQUITY_VERSION = 'paper-equity-v2'
+
+/** The paper account's equity in one quote asset: its balance in it as settled, which holds what its
+ * open trades stake (paper-equity-v2). Null with no account, or nothing in that asset: then there is no
+ * equity to take a share of. */
+export function paperEquity(account: Pick<PaperAccount, 'balances'> | null | undefined, quoteAsset: string): number | null {
   if (account === null || account === undefined) return null
   const balance = account.balances[quoteAsset]
-  const held = Number.isFinite(balance) ? Math.max(0, balance) : 0
-  const equity = held + paperOut(executors, quoteAsset)
-  return equity > 0 ? equity : null
+  // One test holds every case: no balance, nothing in it, a debt, or a figure that is not one.
+  return typeof balance === 'number' && balance > 0 && Number.isFinite(balance) ? balance : null
 }
 
 /** What one trade risks at its stop: the fixed risk, or, sized by a share of the paper account, that

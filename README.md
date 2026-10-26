@@ -2515,7 +2515,11 @@ it is paper.
     a bot's run is a replay, measured in percent.
   - **Sized by a share of the paper account** (chosen 8 October 2026; the V4 document, §35-36): as
     by risk, with the risk per trade 0.1, 0.25, 0.5, 1 or 2% of the paper account's equity in the
-    trade's quote -- its balance and what the app's own open paper trades have out. With no paper
+    trade's quote -- its balance as settled, which already holds what its open trades stake (since 26
+    October 2026, V8 Stage 2, `paper-equity-v2`: before then the open stakes were added to it again, and
+    every trade sized by a share was up to half as large again as it should have been while others were
+    open, the laboratory's stake cap and daily-stop line with them; a dollar figure from before the fix is
+    not comparable with one after, a percent or an R is). With no paper
     account, or none in that quote, the fixed risk per trade stands, so a fresh install sizes as
     before. The same share, set on Risk & Safety beside the live limits, sizes the amount an order
     form filled in from a call opens with: that share of the managed allocation (or of the day's cap,

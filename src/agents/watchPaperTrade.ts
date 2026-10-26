@@ -318,7 +318,7 @@ export async function openWatchPaperTrade(
       decision,
       nowSec: deps.nowSec(),
       lastPrice,
-      equityQuote: paperEquity(before.paperAccount ?? null, before.executors, event.quoteAsset),
+      equityQuote: paperEquity(before.paperAccount ?? null, event.quoteAsset),
       regime,
       conditions: conditionsOf({
         book: first,

@@ -172,7 +172,7 @@ export async function openNewsShorts(item: NewsItem, actions: Pick<NewsKindActio
         stopPct: drafted.stopLossPct,
         quoteAsset: pair.quoteAsset,
         slippageRate,
-        equityQuote: paperEquity(fresh.paperAccount ?? null, fresh.executors, pair.quoteAsset)
+        equityQuote: paperEquity(fresh.paperAccount ?? null, pair.quoteAsset)
       })
       if (!size.ok) return { refused: size.reason }
       const params: PositionExecutorParams = { ...drafted, amountQuote: size.amountQuote }

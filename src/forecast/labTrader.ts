@@ -154,7 +154,7 @@ export async function openLabTrades(deps: LabTraderDeps): Promise<LabPassResult>
   const predictions = await deps.predictions()
   result.sensitivity = sensitivityCounts(predictions)
   const nowSec = deps.nowSec()
-  const equity = paperEquity(settings.paperAccount, settings.executors, QUOTE)
+  const equity = paperEquity(settings.paperAccount, QUOTE)
   if (equity === null) {
     result.held = t('The laboratory has no paper account funded in USDT: fund it on the Forecast Lab.')
     return result
@@ -236,7 +236,7 @@ export async function openLabTrades(deps: LabTraderDeps): Promise<LabPassResult>
       const open = labPaperExecutors(fresh.executors).filter((executor) => executor.status === 'active')
       if (open.some((executor) => executor.symbol === entry.pair)) return t('The laboratory already has a paper trade open on the pair.')
       if (open.length >= LAB_RISK.maxOpen) return t('The laboratory has {count} paper trades open, the most it keeps.', { count: open.length })
-      const freshEquity = paperEquity(fresh.paperAccount, fresh.executors, QUOTE)
+      const freshEquity = paperEquity(fresh.paperAccount, QUOTE)
       if (freshEquity === null) return t('The laboratory has no paper account funded in USDT: fund it on the Forecast Lab.')
       const stored = healPaperRisk(fresh.paperRisk)
       const risk = { ...stored, sizing: 'equity' as const, riskPct: LAB_RISK.riskPct }

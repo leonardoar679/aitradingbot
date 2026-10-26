@@ -140,7 +140,7 @@ export function PaperLabCard(): React.JSX.Element {
     )
   }
   const lab = healForecastSettings(settings.forecast).lab
-  const equity = paperEquity(settings.paperAccount, settings.executors, 'USDT')
+  const equity = paperEquity(settings.paperAccount, 'USDT')
   const held = settings.paperAccount === null ? 0 : (settings.paperAccount.balances.USDT ?? 0)
   const nowSec = Math.floor(Date.now() / 1000)
   const today = labDailyNet(settings.executors, nowSec, 'USDT')

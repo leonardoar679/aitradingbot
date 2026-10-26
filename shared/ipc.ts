@@ -191,10 +191,12 @@ export interface AccountLedgerEntry {
  *
  * Before this existed, every paper executor invented its own money: two executors could each
  * commit 10,000 USDT with nothing anywhere recording that you only ever had 10,000. Balances here
- * are FREE funds only. Money committed to a running executor has left the balance, exactly as it
- * would if you had moved it into a strategy, and comes back when that executor stops. */
+ * are TOTAL holdings: money committed to a running executor is derived from the executors that exist
+ * (src/account/accountCommitments.ts) and never leaves the balance; a stopped executor settles only its
+ * result into it (src/account/paperAccount.ts). Corrected 26 October 2026 (V8 Stage 2): this comment
+ * said "free funds", and shared/paperRisk.ts's equity, read from it, counted open stakes twice. */
 export interface PaperAccount {
-  /** asset -> free amount. Absent means zero. */
+  /** asset -> total amount, committed money included. Absent means zero. */
   balances: Record<string, number>
   /** What was funded, kept separately so performance can be measured against the starting point
    * rather than against a number that moves every time an executor opens. */
