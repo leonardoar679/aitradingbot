@@ -267,11 +267,12 @@ async function weighOnce(): Promise<PrimaryCallState> {
       })
     }
   }
-  // Each coin's card state, once at each whole hour.
+  // Each coin's card state, once at each whole hour -- from the first weighing of the hour that has coins to write: one
+  // at a start, before the forecast's first pass, has none, and the hour is not spent on it.
   const hour = Math.floor(nowSec / 3600) * 3600
-  if (statesHour !== hour) {
+  const pairs = statesHour === hour ? [] : [...new Set([...primaryCallSeam.forecasts().map((prediction) => prediction.pair), ...candidates.map((candidate) => candidate.pair)])]
+  if (pairs.length > 0) {
     statesHour = hour
-    const pairs = [...new Set([...primaryCallSeam.forecasts().map((prediction) => prediction.pair), ...candidates.map((candidate) => candidate.pair)])]
     await primaryCallSeam.recordStates(hour, cardStatesOf(hour, state, pairs)).catch((error) => console.error("The hour's card states could not be recorded:", error))
   }
   for (const listener of listeners) {

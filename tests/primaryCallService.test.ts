@@ -157,3 +157,17 @@ describe('a direction model', () => {
     expect(state.refused).toEqual([{ refused: 'no-evidence', source: 'direction-model', pair: 'BTCUSDT', eventAt: null, expectedNet: null }])
   })
 })
+
+describe("each coin's card state, at a start", () => {
+  it('is not spent on a weighing before the forecast has any pair, and is written once it has', async () => {
+    let forecasts: PricePrediction[] = []
+    const calls = await service([], { forecasts: () => forecasts })
+    await calls.weighPrimaryCall()
+    expect(states).toEqual([])
+    forecasts = [{ pair: 'BTCUSDT', horizons: {} }] as unknown as PricePrediction[]
+    await calls.weighPrimaryCall()
+    await calls.weighPrimaryCall()
+    expect(states).toHaveLength(1)
+    expect(states[0].lines.map((line) => line.pair)).toEqual(['BTCUSDT'])
+  })
+})
