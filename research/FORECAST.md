@@ -955,4 +955,5 @@ the hourly gates read; the models answered as routed; the forecast called no way
 year's walk forward said it would do. The card keeps the ninety-day move rates: the either-way odds are not shown, and
 V8 reads them again on seven months of saved records (V8-R1-EITHER). The run's scratch profile held copies of the
 user's encrypted AI key after the power loss, with the watch switched on; they were deleted by hand on 26 October and
-the profile's AI switched off, and from V8 every harness start and session start sweeps such copies.
+the profile's AI switched off. The harness deletes such copies when a run ends, which a power loss skips; V8's runs
+will also sweep them at every start, and a gate will fail a run whose copies outlive it (V8 Stage 12).
