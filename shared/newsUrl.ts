@@ -34,7 +34,7 @@ export const NEWS_URL_LINES = {
 export type UrlOrigin = 'manual' | 'automatic'
 export type Retrieval = 'fetched' | 'feed' | 'announcement' | 'supplied' | 'x-post' | 'none'
 
-export type UrlStatus = 'refused' | 'read' | 'not-read' | 'extracted' | 'timed' | 'coins' | 'priced' | 'final' | 'pasted-again' | 'view' | 'discovered'
+export type UrlStatus = 'refused' | 'read' | 'not-read' | 'extracted' | 'timed' | 'coins' | 'priced' | 'final' | 'pasted-again' | 'view' | 'discovered' | 'looked-up'
 
 export interface TrailEntry {
   at: number
@@ -101,7 +101,31 @@ export interface UrlRecord {
   executorIds: string[]
   /** A reading of it by a model (V8 Stage 5), by id. */
   analysisId: string | null
+  /** The lookups made after the paste (V8 Stage 5): the Internet Archive's first capture of the link, an upper bound on
+   * its publication; and a post on X's author from X's own embed endpoint. Absent on a record made before them. */
+  lookups?: UrlLookups
   trail: TrailEntry[]
+}
+
+export interface UrlLookups {
+  archive: { status: 'found' | 'none' | 'off' | 'failed'; firstSec: number | null; note: string | null } | null
+  x: { status: 'found' | 'failed'; name: string | null; url: string | null } | null
+}
+
+/** An Internet Archive capture's timestamp, YYYYMMDDhhmmss in UTC, as Unix seconds; null where it is not one. */
+export function archiveStampSec(stamp: string): number | null {
+  const match = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/.exec(stamp)
+  if (match === null) return null
+  const [, y, mo, d, h, mi, s] = match.map(Number)
+  const ms = Date.UTC(y, mo - 1, d, h, mi, s)
+  return Number.isFinite(ms) ? Math.floor(ms / 1000) : null
+}
+
+/** What the Archive's first capture says of a stated publication time: none to say, or that the page was there an hour
+ * or more before the time it states (its stated time a later edit's, or wrong). */
+export function archiveNote(firstSec: number | null, publishedSec: number | null): string | null {
+  if (firstSec === null || publishedSec === null) return null
+  return firstSec < publishedSec - 3600 ? "The Internet Archive captured the page before the time it states: its stated time may be a later edit's." : null
 }
 
 /** A record's id: the first sixteen hex characters of its link's SHA-256, so that the same link is one record. */

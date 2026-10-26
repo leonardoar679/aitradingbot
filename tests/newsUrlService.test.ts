@@ -32,6 +32,10 @@ let lanes: string[][] = []
 let feed: ReadStory[] = []
 let list: ListedArticle[] = []
 let quotes: Record<string, number> = {}
+let archiveOn = true
+let archiveFails = false
+let archiveFirst: number | null = null
+let archived: string[] = []
 
 const page = (title: string, body: string, published = '2026-10-26T14:00:00Z'): string =>
   `<html><head><title>${title}</title><script type="application/ld+json">{"@type":"NewsArticle","headline":"${title}","datePublished":"${published}"}</script></head><body><article><p>${body}</p></article></body></html>`
@@ -56,6 +60,10 @@ beforeEach(() => {
   feed = []
   list = []
   quotes = { ABCUSDT: 5_000_000, BTCUSDT: 1e9, THINUSDT: 10_000 }
+  archiveOn = true
+  archiveFails = false
+  archiveFirst = null
+  archived = []
 })
 
 async function service(pages: Record<string, string> = {}) {
@@ -88,7 +96,15 @@ async function service(pages: Record<string, string> = {}) {
     cardsFor: () => [],
     pastedDelisting: (item: NewsItem) => void delistings.push(item),
     pastedCoins: (pairs: readonly string[]) => void lanes.push([...pairs]),
-    autoAnalyze: async () => false
+    autoAnalyze: async () => false,
+    lookUpAfterPaste: false,
+    archiveOn: async () => archiveOn,
+    archiveFirst: async (url: string) => {
+      archived.push(url)
+      if (archiveFails) throw new Error('the Internet Archive answered 503')
+      return archiveFirst
+    },
+    xAuthor: async () => ({ name: 'ABC Project', url: 'https://x.com/abc_project' })
   })
   return module
 }
@@ -259,5 +275,35 @@ describe('discovered news', () => {
     expect(await urls.discoverFromFeed(true)).toBe(1)
     expect(fetched).toEqual(['https://www.coindesk.com/hot'])
     expect((await urls.urlRecords())[0]).toMatchObject({ origin: 'automatic', retrieval: 'fetched' })
+  })
+})
+
+describe('the lookups (V8 Stage 5)', () => {
+  it("ask the Internet Archive for a pasted link's first capture, and say when the page was there before the time it states", async () => {
+    const urls = await service({ 'https://www.coindesk.com/l': page('ABC news', 'A body long enough to be read as the text of the page about ABC.') })
+    const record = await urls.analyzeUrl({ raw: 'https://www.coindesk.com/l' })
+    if ('refused' in record) throw new Error('refused')
+    archiveFirst = PUBLISHED - 7200
+    const looked = await urls.lookUp(record.id)
+    expect(archived).toEqual(['https://www.coindesk.com/l'])
+    expect(looked?.lookups).toEqual({ archive: { status: 'found', firstSec: PUBLISHED - 7200, note: "The Internet Archive captured the page before the time it states: its stated time may be a later edit's." }, x: null })
+    expect(looked?.trail.at(-1)).toMatchObject({ status: 'looked-up' })
+    archiveFirst = PUBLISHED + 600
+    expect((await urls.lookUp(record.id))?.lookups?.archive).toEqual({ status: 'found', firstSec: PUBLISHED + 600, note: null })
+    archiveFirst = null
+    expect((await urls.lookUp(record.id))?.lookups?.archive).toMatchObject({ status: 'none' })
+    archiveFails = true
+    expect((await urls.lookUp(record.id))?.lookups?.archive).toMatchObject({ status: 'failed', note: 'the Internet Archive answered 503' })
+  })
+  it("ask nothing of the Archive where it is switched off, and read a post on X its author from X's embed", async () => {
+    archiveOn = false
+    const urls = await service()
+    const ms = BigInt(PUBLISHED * 1000) - 1_288_834_974_657n
+    const record = await urls.analyzeUrl({ raw: `https://x.com/abc_project/status/${ms << 22n}` })
+    if ('refused' in record) throw new Error('refused')
+    const looked = await urls.lookUp(record.id)
+    expect(archived).toEqual([])
+    expect(looked?.lookups).toEqual({ archive: { status: 'off', firstSec: null, note: null }, x: { status: 'found', name: 'ABC Project', url: 'https://x.com/abc_project' } })
+    expect(await urls.lookUp('0000000000000000')).toBeNull()
   })
 })

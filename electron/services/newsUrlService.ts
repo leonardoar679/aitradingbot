@@ -9,7 +9,7 @@ import type { Candle, Exchange, SymbolInfo } from '../../shared/ipc'
 import { NEWS_CATALOGS, newsListUrl, parseArticleList, type ListedArticle } from '../../shared/news'
 import { COIN_NAMES, assetDictionary, eventTypeOf, storyAssets, titleSimilarity, SAME_STORY_SIMILARITY, SAME_STORY_SECONDS, type ReadStory } from '../../shared/newsFeed'
 import { classifyTitle } from '../../shared/newsTitles'
-import { NEWS_URL_LINES, URL_RECORD_VERSION, foldUrlRecords, reactionOf, urlRecordId, type Retrieval, type TrailEntry, type UrlCoin, type UrlReaction, type UrlRecord, type UrlRejectedCoin } from '../../shared/newsUrl'
+import { NEWS_URL_LINES, URL_RECORD_VERSION, archiveNote, archiveStampSec, foldUrlRecords, reactionOf, urlRecordId, type Retrieval, type TrailEntry, type UrlCoin, type UrlLookups, type UrlReaction, type UrlRecord, type UrlRejectedCoin } from '../../shared/newsUrl'
 import { sanitizeUrl } from '../../shared/urlSafety'
 import { appendJsonLine, listMonthFiles } from './jsonlStore'
 import { fetchHistoricalRange, fetchTicker24h, listSymbols } from './marketService'
@@ -60,7 +60,30 @@ export const newsUrlSeam = {
   pastedDelisting: notePastedDelisting,
   pastedCoins: notePastedCoins,
   /** "Analyze discovered news automatically": off unless a person switched it on. */
-  autoAnalyze: async (): Promise<boolean> => (await getSettings()).newsUrls?.autoAnalyze === true
+  autoAnalyze: async (): Promise<boolean> => (await getSettings()).newsUrls?.autoAnalyze === true,
+  /** Whether the lookups follow a paste of themselves (a test runs them by hand). */
+  lookUpAfterPaste: true,
+  /** Whether a pasted link is put to the Internet Archive: on unless a person switched it off (V8 Stage 5). */
+  archiveOn: async (): Promise<boolean> => (await getSettings()).newsUrls?.archive !== false,
+  /** The Internet Archive's first capture of a link with a 200 answer, in seconds; null where it holds none. */
+  archiveFirst: async (url: string): Promise<number | null> => {
+    const api = `https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(url)}&output=json&limit=1&fl=timestamp&filter=statuscode:200`
+    const response = await fetch(api, { signal: AbortSignal.timeout(10_000) })
+    if (!response.ok) throw new Error(`the Internet Archive answered ${response.status}`)
+    const rows = (await response.json()) as unknown
+    const stamp = Array.isArray(rows) && Array.isArray(rows[1]) ? String(rows[1][0]) : null
+    return stamp === null ? null : archiveStampSec(stamp)
+  },
+  /** A post on X's author from X's own embed endpoint: the post itself is never fetched. */
+  xAuthor: async (url: string): Promise<{ name: string | null; url: string | null }> => {
+    const response = await fetch(`https://publish.twitter.com/oembed?url=${encodeURIComponent(url)}&omit_script=1&dnt=true`, { signal: AbortSignal.timeout(10_000) })
+    if (!response.ok) throw new Error(`X answered ${response.status}`)
+    const body = (await response.json()) as { author_name?: unknown; author_url?: unknown }
+    return {
+      name: typeof body.author_name === 'string' ? body.author_name.slice(0, 120) : null,
+      url: typeof body.author_url === 'string' && body.author_url.startsWith('https://') ? body.author_url.slice(0, 300) : null
+    }
+  }
 }
 
 const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex')
@@ -307,7 +330,50 @@ export async function analyzeUrl(input: { raw: string; origin?: 'manual' | 'auto
   // Its kind is read as the feed reads a story's: from its title and its summary, not from every word of its body.
   const summary = article?.description ?? article?.snippets[0]?.text ?? sameInFeed?.summary ?? (retrieval === 'supplied' ? supplied.slice(0, 400) : '')
   await complete(record, { title, body, summary, sameInFeed, feed, now })
-  return save(record)
+  const saved = await save(record)
+  if (newsUrlSeam.lookUpAfterPaste) void lookUp(saved.id).catch((error) => console.error("A news link's lookups failed:", error))
+  return saved
+}
+
+/** THE LOOKUPS (V8 Stage 5), made once a pasted link's record is kept, each named on its page: the Internet Archive's
+ * first capture of the link -- an upper bound on its publication, said where the page was there an hour or more before
+ * the time it states -- unless switched off; and a post on X's author from X's own embed endpoint. */
+export async function lookUp(id: string): Promise<UrlRecord | null> {
+  const held = (await loaded()).get(id)
+  if (held === undefined) return null
+  const next = { ...held, trail: [...held.trail] }
+  const lookups: UrlLookups = { archive: null, x: null }
+  if (await newsUrlSeam.archiveOn().catch(() => true)) {
+    try {
+      const firstSec = await newsUrlSeam.archiveFirst(next.url)
+      lookups.archive = { status: firstSec === null ? 'none' : 'found', firstSec, note: archiveNote(firstSec, next.time?.sec ?? null) }
+    } catch (error) {
+      lookups.archive = { status: 'failed', firstSec: null, note: error instanceof Error ? error.message : String(error) }
+    }
+  } else {
+    lookups.archive = { status: 'off', firstSec: null, note: null }
+  }
+  if (xPostOf(next.url) !== null) {
+    try {
+      lookups.x = { status: 'found', ...(await newsUrlSeam.xAuthor(next.url)) }
+    } catch {
+      lookups.x = { status: 'failed', name: null, url: null }
+    }
+  }
+  next.lookups = lookups
+  const archive = lookups.archive
+  step(
+    next,
+    'looked-up',
+    archive.status === 'found'
+      ? `The Internet Archive first captured it ${new Date((archive.firstSec as number) * 1000).toISOString().slice(0, 16).replace('T', ' ')} UTC.${archive.note === null ? '' : ` ${archive.note}`}`
+      : archive.status === 'none'
+        ? 'The Internet Archive holds no capture of it.'
+        : archive.status === 'off'
+          ? 'The Internet Archive was not asked: switched off.'
+          : `The Internet Archive could not be asked: ${archive.note}.`
+  )
+  return save(next)
 }
 
 /** What every record is given once its text and time are had: its kind, who else told it, its coins and its source's

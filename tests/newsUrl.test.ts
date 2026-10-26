@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Candle } from '../shared/ipc'
-import { NEWS_URL_LINES, URL_RECORD_VERSION, closeBefore, foldUrlRecords, reactionOf, readUrlRecord, urlRecordId } from '../shared/newsUrl'
+import { NEWS_URL_LINES, URL_RECORD_VERSION, archiveNote, archiveStampSec, closeBefore, foldUrlRecords, reactionOf, readUrlRecord, urlRecordId } from '../shared/newsUrl'
 
 // A PASTED NEWS LINK'S PRICE AND RECORD (shared/newsUrl.ts; V8 Stage 4): the price at a moment is the close of the
 // last one-minute bar before it, no more than five minutes stale; the reaction from a day before publication to each
@@ -65,5 +65,20 @@ describe('the record', () => {
       ['a', 'second']
     ])
     expect(readUrlRecord(record({ trail: 'none' }))).toBeNull()
+  })
+})
+
+describe("the Internet Archive's first capture (V8 Stage 5)", () => {
+  it('reads its timestamp as a moment in UTC, and nothing else', () => {
+    expect(archiveStampSec('20261026221700')).toBe(Date.parse('2026-10-26T22:17:00Z') / 1000)
+    expect(archiveStampSec('2026102622170')).toBeNull()
+    expect(archiveStampSec('2026-10-26T22:17')).toBeNull()
+  })
+  it('says the page was there before the time it states only an hour or more before it', () => {
+    expect(archiveNote(PUBLISHED - 3601, PUBLISHED)).toMatch(/before the time it states/)
+    expect(archiveNote(PUBLISHED - 3600, PUBLISHED)).toBeNull()
+    expect(archiveNote(PUBLISHED + 600, PUBLISHED)).toBeNull()
+    expect(archiveNote(null, PUBLISHED)).toBeNull()
+    expect(archiveNote(PUBLISHED, null)).toBeNull()
   })
 })

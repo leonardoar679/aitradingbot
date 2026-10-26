@@ -53,6 +53,26 @@ function Line({ name, children }: { name: string; children: React.ReactNode }): 
 
 const pct = (x: number | null): string => (x === null ? '—' : signed(x))
 
+/** The lookups made after the paste, each named: the Internet Archive's first capture, and a post on X's author. */
+function lookupsText(record: UrlRecord): string {
+  const lookups = record.lookups
+  if (lookups === undefined) return record.origin === 'automatic' ? 'none: a discovered story is recorded from the feed alone' : 'being made…'
+  const archive = lookups.archive
+  const parts = [
+    archive === null
+      ? 'the Internet Archive: not asked'
+      : archive.status === 'found'
+        ? `the Internet Archive first captured it ${new Date((archive.firstSec as number) * 1000).toISOString().slice(0, 16).replace('T', ' ')} UTC, so it was published by then${archive.note === null ? '' : ` — ${archive.note}`}`
+        : archive.status === 'none'
+          ? 'the Internet Archive holds no capture of it'
+          : archive.status === 'off'
+            ? 'the Internet Archive: switched off'
+            : `the Internet Archive could not be asked (${archive.note ?? 'no answer'})`
+  ]
+  if (lookups.x !== null) parts.push(lookups.x.status === 'found' ? `X's embed names its author ${lookups.x.name ?? 'unnamed'}` : "X's embed could not be read")
+  return parts.join(' · ')
+}
+
 /** One record: what was read, when it was published, who says it, its coins and their prices, and the verdict. */
 function RecordView({ record }: { record: UrlRecord }): React.JSX.Element {
   const time = record.time
@@ -79,6 +99,7 @@ function RecordView({ record }: { record: UrlRecord }): React.JSX.Element {
             : `${new Date(time.sec * 1000).toISOString().slice(0, 16).replace('T', ' ')} UTC, from ${time.source}${time.field !== null ? ` (${time.field})` : ''}${time.disagree ? ' · the page gives times more than an hour apart' : ''}${time.future.length > 0 ? ` · ${time.future.length} time(s) after the page was read refused` : ''}${time.check !== null ? ` · the ${time.check.source === 'announcement' ? "announcement's" : "feed's"} own time ${time.check.agrees ? 'agrees' : 'disagrees'}` : ''}`}
         </Line>
         <Line name="Kind">{record.kind.toLowerCase().replace(/_/g, ' ')}</Line>
+        <Line name="Lookups">{lookupsText(record)}</Line>
         <Line name="Coins">
           {record.coins.length === 0 ? 'none it names can be weighed here' : record.coins.map((coin) => `${coin.ticker} (${coin.relationship === 'DIRECT' ? 'in its title' : 'in its body'}, ${coin.venue})`).join(', ')}
           {record.rejected.length > 0
@@ -260,6 +281,7 @@ export function NewsUrlsPage({ onPrepareOrder }: { onPrepareOrder: (proposal: Ai
   const [records, setRecords] = useState<UrlRecord[]>([])
   const [open, setOpen] = useState<string | null>(null)
   const [autoAnalyze, setAutoAnalyze] = useState(false)
+  const [archive, setArchive] = useState(true)
 
   useEffect(() => {
     let live = true
@@ -272,7 +294,9 @@ export function NewsUrlsPage({ onPrepareOrder }: { onPrepareOrder: (proposal: Ai
     void window.api.settings
       .get()
       .then((settings) => {
-        if (live) setAutoAnalyze(settings.newsUrls?.autoAnalyze === true)
+        if (!live) return
+        setAutoAnalyze(settings.newsUrls?.autoAnalyze === true)
+        setArchive(settings.newsUrls?.archive !== false)
       })
       .catch(() => undefined)
     const stop = window.api.urls.onUpdate((record) => setRecords((current) => [record, ...current.filter((entry) => entry.id !== record.id)].sort((a, b) => b.at - a.at)))
@@ -304,7 +328,12 @@ export function NewsUrlsPage({ onPrepareOrder }: { onPrepareOrder: (proposal: Ai
 
   const switchAuto = async (on: boolean): Promise<void> => {
     setAutoAnalyze(on)
-    await window.api.settings.set({ newsUrls: { autoAnalyze: on } }).catch(() => setAutoAnalyze(!on))
+    await window.api.settings.set({ newsUrls: { autoAnalyze: on, archive } }).catch(() => setAutoAnalyze(!on))
+  }
+
+  const switchArchive = async (on: boolean): Promise<void> => {
+    setArchive(on)
+    await window.api.settings.set({ newsUrls: { autoAnalyze, archive: on } }).catch(() => setArchive(!on))
   }
 
   return (
@@ -370,6 +399,10 @@ export function NewsUrlsPage({ onPrepareOrder }: { onPrepareOrder: (proposal: Ai
           <input type="checkbox" checked={autoAnalyze} onChange={(change) => void switchAuto(change.target.checked)} />
           Analyze discovered news automatically: read the page of each announcement and each feed story of impact 70 or more that names a coin directly. Off, they
           are recorded from the feed alone, and nothing is fetched.
+        </label>
+        <label style={{ ...noteStyle, display: 'inline-flex', gap: '0.4rem', alignItems: 'center', marginTop: '0.4rem' }}>
+          <input type="checkbox" checked={archive} onChange={(change) => void switchArchive(change.target.checked)} />
+          Ask the Internet Archive when it first captured each link you paste (the link is sent to web.archive.org): an upper bound on when it was published.
         </label>
       </Card>
     </>

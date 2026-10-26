@@ -286,7 +286,11 @@ export interface AppSettings {
   /** News URLs (V8 Stage 4): whether a story the app discovers -- an announcement, or a feed story of impact 70 or more
    * naming a coin directly -- is read as a pasted link would be (its page fetched), or only recorded from the feed.
    * Absent or false: recorded only, nothing fetched. */
-  newsUrls?: { autoAnalyze?: boolean }
+  newsUrls?: {
+    autoAnalyze?: boolean
+    /** Whether a pasted link is put to the Internet Archive for its first capture (V8 Stage 5). Absent or true: asked. */
+    archive?: boolean
+  }
   /** Whether the app raises desktop notices at all, and with sound (shared/alerts.ts). Absent until
    * first written, and healed on every read: on, with sound. */
   alerts?: AlertSettings
