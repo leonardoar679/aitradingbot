@@ -597,6 +597,7 @@
   "Research": "リサーチ",
   "Backtest": "バックテスト",
   "Forecast Lab": "予測ラボ",
+  "News URLs": "ニュースURL",
   "AI Benchmark": "AI ベンチマーク",
   "All Features": "すべての機能",
   "Strategies": "戦略",
@@ -1881,5 +1882,7 @@
   "No venue book is held for this pair yet: the forecast reads them for its top ten and its open trades.": "このペアの取引所の板はまだ取得していません。予測は上位10ペアと保有中の取引の板だけを読みます。",
   "{venue}: {total} in all ({fee} fee each way, {spread} spread, {impact} for the stake)": "{venue}：合計 {total}（片道手数料 {fee}、スプレッド {spread}、取引額によるインパクト {impact}）",
   "{venue} is the cheaper venue for this pair now.": "このペアは今 {venue} の方が安く取引できます。",
-  "From each venue's public book in the last three minutes, for a buy and for a sell of {stake}: what a trade would pay, not a forecast.": "各取引所の直近3分の公開板から、{stake} の買いと売りそれぞれで計算：取引が支払う費用であり、予測ではありません。"
+  "From each venue's public book in the last three minutes, for a buy and for a sell of {stake}: what a trade would pay, not a forecast.": "各取引所の直近3分の公開板から、{stake} の買いと売りそれぞれで計算：取引が支払う費用であり、予測ではありません。",
+  "Filled in from your own view on a news link: {side} {pair}, a target {target} away, over {duration}.": "ニュースリンクについてのあなた自身の見方から入力：{side} {pair}、目標は {target} 先、期間は {duration}。",
+  "Nothing here is a call of the app's: it is recorded as your own prediction and scored like every source.": "これはアプリの判断ではありません。あなた自身の予測として記録され、すべての情報源と同じように採点されます。"
 }

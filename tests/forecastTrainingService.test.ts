@@ -452,6 +452,9 @@ describe('a refit', () => {
     training.startForecastTraining()
     await vi.waitFor(() => expect(training.getForecastTrainingState().shadow).toMatchObject({ runId: challenger, since: shadow.since, until: shadow.until }))
     expect(training.currentForecastShadow()?.calibration.runId).toBe(challenger)
+    // The first start done whole -- its calibration read and its nightly refit scheduled -- before the module is reset:
+    // a start still under way when it is would find no run in use and fit one with the real clock.
+    await vi.waitFor(() => expect(training.getForecastTrainingState().nextRefitAt).not.toBeNull())
     expect(fake.asked).toEqual([])
     // Its models gone from disk: dropped at the next start, and said so.
     const { rmSync } = await import('node:fs')

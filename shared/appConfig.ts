@@ -27,6 +27,11 @@ import { LIQUIDITY_LINES } from './liquidityGate'
 import { SOURCE_RECORD_LINES } from './evaluation/predictionRecord'
 import { MOVE_LINES } from './evaluation/moves'
 import { DELISTING_CARD_LINES, DELIST_LIVE_LINES, PRIMARY_CALL_LINES } from './forecast/primaryCall'
+import { URL_FETCH_LINES } from './urlSafety'
+import { EXTRACT_LINES } from './articleExtract'
+import { ARTICLE_TIME_LINES } from './articleTime'
+import { CREDIBILITY_VERSION } from './articleCredibility'
+import { NEWS_URL_LINES } from './newsUrl'
 import { CONFIG_FILE_VERSION, type ConfigFileName, type ConfigFileNote } from './configMigration'
 import { FEE_RATE, SLIPPAGE_RATE } from './fees'
 import { HARD_LIMITS } from './hardLimits'
@@ -285,7 +290,10 @@ export const ENGINE_CONSTANTS = {
   // rests on, and the live check that can withdraw it.
   primaryCall: { lines: PRIMARY_CALL_LINES, delisting: DELISTING_CARD_LINES, delistLive: DELIST_LIVE_LINES },
   // The large moves of the forecast's pairs and who called them (V8 Stage 3; shared/evaluation/moves.ts).
-  moves: MOVE_LINES
+  moves: MOVE_LINES,
+  // A pasted news link read and kept (V8 Stage 4): the safe fetch's limits, the page read as text, its time, who says
+  // it, and the record's lines (shared/urlSafety.ts, articleExtract.ts, articleTime.ts, articleCredibility.ts, newsUrl.ts).
+  newsUrls: { fetch: URL_FETCH_LINES, extract: EXTRACT_LINES, time: ARTICLE_TIME_LINES, credibility: CREDIBILITY_VERSION, record: NEWS_URL_LINES }
 } as const
 
 /** One value the heal changed on the way from a file to the store the app runs on. */

@@ -19,6 +19,7 @@ import { registerExperimentHandlers } from './handlers/experimentHandlers'
 import { registerResearchFolderHandlers } from './handlers/researchFolderHandlers'
 import { registerBooksHandlers } from './handlers/booksHandlers'
 import { registerCallsHandlers } from './handlers/callsHandlers'
+import { registerUrlsHandlers } from './handlers/urlsHandlers'
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerAppHandlers()
@@ -35,6 +36,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerNewsFeedHandlers(mainWindow)
   registerForecastHandlers(mainWindow)
   registerCallsHandlers(mainWindow)
+  registerUrlsHandlers(mainWindow)
   registerNewsHandlers(mainWindow)
   registerCredentialsHandlers()
   registerAiHandlers(mainWindow)

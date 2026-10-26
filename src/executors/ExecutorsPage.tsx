@@ -229,6 +229,8 @@ export function ExecutorsPage({
       ...(input.proposedBy !== undefined ? { proposedBy: input.proposedBy } : {})
     }
     closeNew()
+    // A trade from a person's own view on a news link is linked back to the link's record (V8 Stage 4).
+    if (input.proposedBy?.newsUrlId !== undefined) void window.api.urls.link(input.proposedBy.newsUrlId, { executorId: base.id }).catch(() => undefined)
 
     if (mode === 'paper') {
       setExecutors((prev) => [...prev, base])

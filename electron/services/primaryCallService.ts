@@ -91,6 +91,20 @@ let weighing: Promise<PrimaryCallState> | null = null
 let timer: ReturnType<typeof setInterval> | null = null
 let stopNews: (() => void) | null = null
 const listeners = new Set<(state: PrimaryCallState) => void>()
+/** Delistings a person pasted (V8 Stage 4): a Binance announcement verified in Binance's own list, weighed as the
+ * reader's are until its hold ends, the reader on or off. And the coins of other pasted links, in the event lane for an
+ * hour so that their books are read. */
+const pastedDelistings = new Map<number, NewsItem>()
+const pastedCoins = new Map<string, number>()
+
+export function notePastedDelisting(item: NewsItem): void {
+  pastedDelistings.set(item.id, item)
+  void weighPrimaryCall().catch((error) => console.error('Weighing the primary call failed:', error))
+}
+
+export function notePastedCoins(pairs: readonly string[], untilSec: number): void {
+  for (const pair of pairs) pastedCoins.set(pair.toUpperCase(), untilSec)
+}
 
 /** Tells a listener each state as it is weighed. */
 export function onPrimaryCall(listener: (state: PrimaryCallState) => void): () => void {
@@ -180,7 +194,10 @@ async function weighOnce(): Promise<PrimaryCallState> {
   const holdSec = DELISTING_CARD_LINES.exitBars * 60
   const refused: CardRefusal[] = []
   const candidates: DelistingCandidate[] = []
-  for (const item of news.items) {
+  for (const [id, item] of pastedDelistings) if (nowSec - item.releaseSec > holdSec) pastedDelistings.delete(id)
+  for (const [pair, until] of pastedCoins) if (until <= nowSec) pastedCoins.delete(pair)
+  const items = [...news.items, ...[...pastedDelistings.values()].filter((pasted) => !news.items.some((item) => item.id === pasted.id))]
+  for (const item of items) {
     if (item.category !== 'DELISTING' || item.releaseSec > nowSec || nowSec - item.releaseSec > holdSec) continue
     for (const ticker of item.tickers) {
       const pair = byBase.get(ticker)
@@ -189,7 +206,7 @@ async function weighOnce(): Promise<PrimaryCallState> {
     }
   }
   candidates.sort((a, b) => b.releaseSec - a.releaseSec)
-  primaryCallSeam.setLane(candidates.map((candidate) => candidate.pair).slice(0, EVENT_PAIRS_MAX))
+  primaryCallSeam.setLane([...new Set([...candidates.map((candidate) => candidate.pair), ...pastedCoins.keys()])].slice(0, EVENT_PAIRS_MAX))
   const inWindow = (candidate: DelistingCandidate): boolean => nowSec - candidate.releaseSec <= DELISTING_CARD_LINES.windowSec
   const reading = candidates.some(inWindow) ? await delistLive(nowSec) : (live?.reading ?? null)
   const cards: PrimaryCard[] = []
@@ -306,6 +323,8 @@ export function startPrimaryCall(): void {
 /** Test seam: as a new session finds it. */
 export function resetPrimaryCall(): void {
   state = EMPTY
+  pastedDelistings.clear()
+  pastedCoins.clear()
   live = null
   symbols = null
   opens.clear()

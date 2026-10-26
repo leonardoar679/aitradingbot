@@ -367,6 +367,15 @@ describe('AI code has no route to a real order', () => {
       expect(importsOf(path).filter((name) => LIVE_MODULES.has(name) || aiModuleNames.has(name)), path).toEqual([])
       expect(readFileSync(path, 'utf-8'), path).not.toMatch(/setSettings|settings\.set|placeLive|liveTrading|credentials|apiKey|openRouter|setNewsConfig/)
     }
+    // News URLs (V8 Stage 4): a pasted link read safely -- a GET of a public page, its addresses vetted -- and kept, and
+    // its channels. Nothing that trades, holds a key or asks a model; no setting written but its own switch, from its page.
+    for (const path of [join(SERVICES, 'newsUrlService.ts'), join(SERVICES, 'urlFetchService.ts'), join(ROOT, 'electron', 'ipc', 'handlers', 'urlsHandlers.ts')]) {
+      expect(importsOf(path).filter((name) => LIVE_MODULES.has(name) || aiModuleNames.has(name)), path).toEqual([])
+      expect(readFileSync(path, 'utf-8'), path).not.toMatch(/setSettings|settings\.set|placeLive|liveTrading|credentials|apiKey|openRouter|setNewsConfig|method: 'POST'/)
+    }
+    const urlsPage = readFileSync(join(ROOT, 'src', 'articles', 'NewsUrlsPage.tsx'), 'utf-8')
+    expect([...new Set([...urlsPage.matchAll(/window\.api\.(\w+)/g)].map((match) => match[1]))].sort()).toEqual(['effectiveConfig', 'predictions', 'settings', 'urls'])
+    expect(urlsPage).not.toMatch(/placeLive|liveTrading|mode: 'live'|window\.api\.ai\b/)
     // The prediction record's service reads public bars and its own files, and nothing that trades.
     const ledger = join(SERVICES, 'predictionLedgerService.ts')
     expect(importsOf(ledger).filter((name) => LIVE_MODULES.has(name) || aiModuleNames.has(name))).toEqual([])
@@ -618,6 +627,9 @@ describe('AI code has no route to a real order', () => {
       // Upbit's lists and the coins' candles, scored.
       'electron/services/newsRecordService.ts',
       'electron/services/newsService.ts',
+      // News URLs (V8 Stage 4): a pasted link read and kept; it reads Binance's lists to verify a pasted announcement
+      // and the titles' patterns to know a delisting, records, and places nothing.
+      'electron/services/newsUrlService.ts',
       // The primary call (V8 Stage 3): a delisting the reader has read, weighed into a card from the study's coins; it
       // reads the reader's state and the record of the rules since the study, records a prediction, and places nothing.
       'electron/services/primaryCallService.ts',

@@ -597,6 +597,7 @@
   "Research": "Nghiên cứu",
   "Backtest": "Kiểm thử lại",
   "Forecast Lab": "Phòng thử nghiệm dự báo",
+  "News URLs": "URL tin tức",
   "AI Benchmark": "Đánh giá AI",
   "All Features": "Tất cả tính năng",
   "Strategies": "Chiến lược",
@@ -1881,5 +1882,7 @@
   "No venue book is held for this pair yet: the forecast reads them for its top ten and its open trades.": "Chưa có sổ lệnh của sàn cho cặp này: dự báo chỉ đọc sổ lệnh của mười cặp đứng đầu và các giao dịch đang mở.",
   "{venue}: {total} in all ({fee} fee each way, {spread} spread, {impact} for the stake)": "{venue}: tổng cộng {total} (phí mỗi chiều {fee}, chênh lệch giá {spread}, tác động theo khoản cược {impact})",
   "{venue} is the cheaper venue for this pair now.": "Lúc này {venue} là sàn rẻ hơn cho cặp này.",
-  "From each venue's public book in the last three minutes, for a buy and for a sell of {stake}: what a trade would pay, not a forecast.": "Từ sổ lệnh công khai của mỗi sàn trong ba phút gần nhất, cho lệnh mua và lệnh bán {stake}: chi phí một giao dịch phải trả, không phải dự báo."
+  "From each venue's public book in the last three minutes, for a buy and for a sell of {stake}: what a trade would pay, not a forecast.": "Từ sổ lệnh công khai của mỗi sàn trong ba phút gần nhất, cho lệnh mua và lệnh bán {stake}: chi phí một giao dịch phải trả, không phải dự báo.",
+  "Filled in from your own view on a news link: {side} {pair}, a target {target} away, over {duration}.": "Điền từ nhận định của chính bạn về một liên kết tin tức: {side} {pair}, mục tiêu cách {target}, trong {duration}.",
+  "Nothing here is a call of the app's: it is recorded as your own prediction and scored like every source.": "Đây không phải nhận định của ứng dụng: nó được ghi lại là dự đoán của chính bạn và được chấm điểm như mọi nguồn."
 }

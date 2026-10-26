@@ -58,8 +58,9 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 // record of large moves (V8 Stage 3), from 4895559f5f13; the study figures the delisting card's coins reproduce, to
 // the digits research/news.ts printed them rather than NEWS.md's rounding of them (V8 Stage 3), from 764e875f8492.
 // The trade plan's target held to the route's round trip rather than the flat one (trade-plan-v2; V8 Stage 3), from
-// bee219d57858.
-const PINNED_ENGINE_VERSION = 'bfd2b18115d7'
+// bee219d57858. A pasted news link's safe fetch, the page read as text, its time and source, and the record's lines (V8
+// Stage 4; infrastructure), from bfd2b18115d7.
+const PINNED_ENGINE_VERSION = '00c7fa00aefc'
 
 describe('the engine version', () => {
   it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {

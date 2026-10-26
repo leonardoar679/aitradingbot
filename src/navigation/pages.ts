@@ -23,6 +23,7 @@ import {
   Settings,
   Telescope,
   Newspaper,
+  Link2,
   type LucideIcon
 } from 'lucide-react'
 import type { UiMode } from '../../shared/uiMode'
@@ -58,6 +59,7 @@ export type Page =
   | 'ai-benchmark'
   | 'forecast-lab'
   | 'discovery'
+  | 'news-urls'
   | 'risk'
   | 'connections'
   | 'settings'
@@ -122,6 +124,7 @@ export type NavId =
   | 'connections'
   | 'settings'
   | 'news'
+  | 'news-urls'
 
 export interface NavItem {
   id: NavId
@@ -174,7 +177,9 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { id: 'backtest', label: msg('Backtest'), icon: History, target: { page: 'research', tab: 'backtest' } },
       { id: 'forecast-lab', label: msg('Forecast Lab'), icon: ChartSpline, target: { page: 'forecast-lab' } },
-      { id: 'ai-benchmark', label: msg('AI Benchmark'), icon: Scale, target: { page: 'ai-benchmark' } }
+      { id: 'ai-benchmark', label: msg('AI Benchmark'), icon: Scale, target: { page: 'ai-benchmark' } },
+      // A pasted news link read safely and kept (V8 Stage 4); English until V8 Stage 5.
+      { id: 'news-urls', label: msg('News URLs'), icon: Link2, target: { page: 'news-urls' } }
     ]
   },
   {
@@ -221,7 +226,7 @@ const NEWS_ITEM: NavItem = { id: 'news', label: msg('News'), icon: Newspaper, ta
 
 /** The entries More Features holds in the normal mode, in the expert layout's order: every one not in the main
  * group or System. */
-const MORE_FEATURES: NavId[] = ['opportunities', 'positions', 'live', 'backtest', 'forecast-lab', 'ai-benchmark', 'strategies', 'bots', 'executors', 'controllers', 'routines', 'market', 'portfolio', 'explorer', 'overview', 'ai-decisions']
+const MORE_FEATURES: NavId[] = ['opportunities', 'positions', 'live', 'backtest', 'forecast-lab', 'ai-benchmark', 'news-urls', 'strategies', 'bots', 'executors', 'controllers', 'routines', 'market', 'portfolio', 'explorer', 'overview', 'ai-decisions']
 
 /** The normal mode's sidebar (V7.2-R Stage 3). */
 export const NORMAL_NAV_GROUPS: NavGroup[] = [

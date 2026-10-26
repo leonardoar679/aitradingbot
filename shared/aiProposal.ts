@@ -77,6 +77,10 @@ export interface AiOrderProposal {
   /** Set on a proposal from the price forecast's plan (V8 Stage 3): what its paper fills pay on the venue its decision
    * was costed on -- that venue's fee, and its half spread and impact -- as the forecast's own paper trades fill. */
   fill?: { feeRate: number; slippageRate: number }
+  /** Set on a proposal from a person's own view (V8 Stage 4): the stake they chose, which the form opens with, and the
+   * news link's record it came from. */
+  amountQuote?: number
+  newsUrlId?: string
 }
 
 /** What a created executor keeps of the call its form was filled in from. A record of where the
@@ -85,6 +89,8 @@ export interface AiProposalOrigin {
   model: string
   candleTime: number
   confidence: number
+  /** The news link's record a person's own view came from (V8 Stage 4), so the paper trade is linked back to it. */
+  newsUrlId?: string
 }
 
 export function isAiCallStale(candleTime: number, interval: Interval, nowSec: number): boolean {
@@ -274,7 +280,7 @@ export function aiProposalPositionParams(proposal: AiOrderProposal, defaults: Po
   return {
     side: proposal.side ?? 'buy',
     entryPrice: proposal.entryPrice ?? null,
-    amountQuote: defaults.amountQuote,
+    amountQuote: proposal.amountQuote !== undefined && proposal.amountQuote > 0 ? proposal.amountQuote : defaults.amountQuote,
     takeProfitPct: proposal.takeProfitPct ?? defaults.takeProfitPct,
     stopLossPct: proposal.stopLossPct ?? defaults.stopLossPct,
     timeLimitSec: proposal.timeLimitSec,
@@ -401,7 +407,7 @@ export function aiProposalName(proposal: AiOrderProposal): string {
 }
 
 export function aiProposalOrigin(proposal: AiOrderProposal): AiProposalOrigin {
-  return { model: proposal.model, candleTime: proposal.candleTime, confidence: proposal.confidence }
+  return { model: proposal.model, candleTime: proposal.candleTime, confidence: proposal.confidence, ...(proposal.newsUrlId === undefined ? {} : { newsUrlId: proposal.newsUrlId }) }
 }
 
 /** `01:15`, in UTC, which is how every candle time in this app is said. */
@@ -492,6 +498,44 @@ function describeOpportunityProposal(proposal: AiOrderProposal, i18n: I18n): str
 
 /** Who a form filled in from the price forecast says it is from (V6 Stage 12). */
 export const FORECAST_PROPOSAL_MODEL = 'price-forecast'
+/** A proposal made from a person's own view of a pasted news link (V8 Stage 4): no model's and no rule's. */
+export const USER_VIEW_MODEL = 'user-view'
+
+/** The Position form a person's own view fills in (V8 Stage 4, "Paper trade my own view"): the side, the stake, the
+ * target and the horizon they chose, nothing of the app's own; no stop of its own, so the form's usual one shows. Paper
+ * until a person ticks Live Trading and types its phrase, as every proposal. */
+export function userViewProposal(input: { pair: string; side: 'up' | 'down'; stakeQuote: number; targetPct: number; horizonSec: number; refPrice: number; nowSec: number; newsUrlId?: string }): AiOrderProposal {
+  return {
+    exchange: 'binance',
+    pair: { symbol: input.pair, baseAsset: input.pair.replace(/USDT$/, ''), quoteAsset: 'USDT' },
+    model: USER_VIEW_MODEL,
+    candleTime: input.nowSec - (input.nowSec % 60),
+    interval: '1m',
+    confidence: 0,
+    referencePrice: input.refPrice,
+    stopLossPct: null,
+    takeProfitPct: round2(input.targetPct),
+    timeLimitSec: input.horizonSec,
+    side: input.side === 'up' ? 'buy' : 'sell',
+    entryPrice: null,
+    amountQuote: input.stakeQuote,
+    ...(input.newsUrlId === undefined ? {} : { newsUrlId: input.newsUrlId })
+  }
+}
+
+function describeUserViewProposal(proposal: AiOrderProposal, i18n: I18n): string[] {
+  const { t } = i18n
+  const values = {
+    side: proposal.side === 'sell' ? t('SELL') : t('BUY'),
+    pair: proposal.pair.symbol,
+    target: percentIn(proposal.takeProfitPct ?? 0, i18n),
+    duration: durationLabel(proposal.timeLimitSec, i18n)
+  }
+  return [
+    t('Filled in from your own view on a news link: {side} {pair}, a target {target} away, over {duration}.', values),
+    t("Nothing here is a call of the app's: it is recorded as your own prediction and scored like every source.")
+  ]
+}
 
 const round2 = (value: number): number => Math.round(value * 100) / 100
 
@@ -561,6 +605,7 @@ function describeForecastProposal(proposal: AiOrderProposal, i18n: I18n): string
  * of the form (V6 Stage 14). */
 export function describeAiProposal(proposal: AiOrderProposal, i18n: I18n = ENGLISH): string[] {
   if (proposal.model === FORECAST_PROPOSAL_MODEL) return describeForecastProposal(proposal, i18n)
+  if (proposal.model === USER_VIEW_MODEL) return describeUserViewProposal(proposal, i18n)
   if (proposal.expiresAt !== undefined) return describeOpportunityProposal(proposal, i18n)
   const { t } = i18n
   const values = {
@@ -611,5 +656,6 @@ export function aiCallNotice(botName: string, proposal: AiOrderProposal, i18n: I
 
 /** What an executor's card says about a call its form was filled in from. */
 export function describeAiProposalOrigin(origin: AiProposalOrigin): string {
+  if (origin.model === USER_VIEW_MODEL) return 'Filled in from your own view on a news link. Placed by you.'
   return `Filled in from a call by ${describeDecider(origin.model)} (${Math.round(origin.confidence * 100)}% confidence, ${utcClock(origin.candleTime)} UTC candle). Placed by you.`
 }

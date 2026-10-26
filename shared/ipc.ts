@@ -136,6 +136,12 @@ export const IpcChannel = {
   // The primary call (V8 Stage 3): the cards weighed, the late list and the refusals; pushed as each weighing ends.
   CallsState: 'calls:state',
   CallsUpdate: 'calls:update',
+  // News URLs (V8 Stage 4): a pasted link read and kept, the links on file, a person's own view linked to one, and each
+  // record pushed as it changes. Public pages and data only; nothing here places anything.
+  UrlsAnalyze: 'urls:analyze',
+  UrlsList: 'urls:list',
+  UrlsLink: 'urls:link',
+  UrlsUpdate: 'urls:update',
   AiConcludeMove: 'ai:concludeMove',
   AiReviewTrade: 'ai:reviewTrade',
   AiExitCheck: 'ai:exitCheck',
@@ -277,6 +283,10 @@ export interface AppSettings {
    * (shared/paperBooks.ts; V8 Stage 2). Absent until first written, and healed on every read: nothing
    * running, each 10,000 USDT. */
   paperBooks?: import('./paperBooks').PaperBooksSettings
+  /** News URLs (V8 Stage 4): whether a story the app discovers -- an announcement, or a feed story of impact 70 or more
+   * naming a coin directly -- is read as a pasted link would be (its page fetched), or only recorded from the feed.
+   * Absent or false: recorded only, nothing fetched. */
+  newsUrls?: { autoAnalyze?: boolean }
   /** Whether the app raises desktop notices at all, and with sound (shared/alerts.ts). Absent until
    * first written, and healed on every read: on, with sound. */
   alerts?: AlertSettings

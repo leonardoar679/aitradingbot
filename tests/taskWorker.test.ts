@@ -30,7 +30,8 @@ describe('the tasks', () => {
     expect(runTask({ id: 1, task: 'echo', payload: { a: 1 } })).toEqual({ id: 1, ok: true, result: { a: 1 } })
     expect(runTask({ id: 2, task: 'toString', payload: null })).toEqual({ id: 2, ok: false, message: 'No task is named toString' })
     expect(runTask({ id: 3, task: '__proto__', payload: null }).ok).toBe(false)
-    expect(Object.keys(TASKS)).toEqual(['echo'])
+    // Since V8 Stage 4 a pasted article's page is read in the worker too.
+    expect(Object.keys(TASKS)).toEqual(['echo', 'extractArticle'])
   })
 
   it('says what failed when a task throws', () => {

@@ -99,7 +99,16 @@ describe('an answer from a list', () => {
         ]
       }
     }
-    expect(parseArticleList(body)).toEqual([{ id: 301, title: 'Binance Will Delist ICX, SCRT, STORJ on 2026-09-03', releaseSec: T / 1000 }])
+    expect(parseArticleList(body)).toEqual([{ id: 301, title: 'Binance Will Delist ICX, SCRT, STORJ on 2026-09-03', releaseSec: T / 1000, code: 'code301' }])
+  })
+
+  it("keeps an article's code where the list gives one, for a pasted link to be checked by (V8 Stage 4)", () => {
+    const code = '0123456789abcdef0123456789abcdef'
+    const body = { data: { catalogs: [{ articles: [{ id: 5, code, title: 'Binance Will Delist ABC on 2026-11-02', releaseDate: T }, { id: 6, code: 'bad code!', title: 'A title', releaseDate: T }] }] } }
+    expect(parseArticleList(body)).toEqual([
+      { id: 5, title: 'Binance Will Delist ABC on 2026-11-02', releaseSec: T / 1000, code },
+      { id: 6, title: 'A title', releaseSec: T / 1000 }
+    ])
   })
 
   it('is an error when there is no list in it at all', () => {

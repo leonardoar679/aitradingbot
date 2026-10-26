@@ -597,6 +597,7 @@
   "Research": "리서치",
   "Backtest": "백테스트",
   "Forecast Lab": "예측 랩",
+  "News URLs": "뉴스 URL",
   "AI Benchmark": "AI 벤치마크",
   "All Features": "모든 기능",
   "Strategies": "전략",
@@ -1881,5 +1882,7 @@
   "No venue book is held for this pair yet: the forecast reads them for its top ten and its open trades.": "이 거래쌍의 거래소 호가창은 아직 없습니다. 예측은 상위 10개와 진행 중인 거래의 호가창만 읽습니다.",
   "{venue}: {total} in all ({fee} fee each way, {spread} spread, {impact} for the stake)": "{venue}: 합계 {total} (편도 수수료 {fee}, 스프레드 {spread}, 거래 규모에 따른 충격 {impact})",
   "{venue} is the cheaper venue for this pair now.": "지금 이 거래쌍은 {venue}에서 더 저렴합니다.",
-  "From each venue's public book in the last three minutes, for a buy and for a sell of {stake}: what a trade would pay, not a forecast.": "각 거래소의 최근 3분 공개 호가창으로 {stake} 매수와 매도 기준: 거래가 내는 비용이며 예측이 아닙니다."
+  "From each venue's public book in the last three minutes, for a buy and for a sell of {stake}: what a trade would pay, not a forecast.": "각 거래소의 최근 3분 공개 호가창으로 {stake} 매수와 매도 기준: 거래가 내는 비용이며 예측이 아닙니다.",
+  "Filled in from your own view on a news link: {side} {pair}, a target {target} away, over {duration}.": "뉴스 링크에 대한 본인의 견해로 채웠습니다: {side} {pair}, 목표는 {target} 떨어진 곳, 기간 {duration}.",
+  "Nothing here is a call of the app's: it is recorded as your own prediction and scored like every source.": "앱의 판단이 아닙니다. 본인의 예측으로 기록되며 모든 출처와 똑같이 채점됩니다."
 }

@@ -597,6 +597,7 @@
   "Research": "研究",
   "Backtest": "回測",
   "Forecast Lab": "預測實驗室",
+  "News URLs": "新聞連結",
   "AI Benchmark": "AI 基準測試",
   "All Features": "全部功能",
   "Strategies": "策略",
@@ -1881,5 +1882,7 @@
   "No venue book is held for this pair yet: the forecast reads them for its top ten and its open trades.": "尚未持有該交易對的交易所訂單簿：預測只讀取其前十名和未平倉交易的訂單簿。",
   "{venue}: {total} in all ({fee} fee each way, {spread} spread, {impact} for the stake)": "{venue}：合計 {total}（單邊手續費 {fee}，價差 {spread}，按倉位的衝擊 {impact}）",
   "{venue} is the cheaper venue for this pair now.": "{venue} 是該交易對現在更便宜的交易所。",
-  "From each venue's public book in the last three minutes, for a buy and for a sell of {stake}: what a trade would pay, not a forecast.": "來自各交易所最近三分鐘的公開訂單簿，按買進和賣出各 {stake} 計算：這是一筆交易需要支付的成本，不是預測。"
+  "From each venue's public book in the last three minutes, for a buy and for a sell of {stake}: what a trade would pay, not a forecast.": "來自各交易所最近三分鐘的公開訂單簿，按買進和賣出各 {stake} 計算：這是一筆交易需要支付的成本，不是預測。",
+  "Filled in from your own view on a news link: {side} {pair}, a target {target} away, over {duration}.": "根據您對一則新聞連結的看法填寫：{side} {pair}，目標距目前 {target}，期限 {duration}。",
+  "Nothing here is a call of the app's: it is recorded as your own prediction and scored like every source.": "這不是應用程式的判斷：它被記錄為您自己的預測，並像所有來源一樣計分。"
 }

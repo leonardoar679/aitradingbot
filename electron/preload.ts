@@ -10,6 +10,7 @@ import type { SourceOutcome, SourcePrediction } from '../shared/evaluation/predi
 import type { BookEquityMark, BookId, BookStanding } from '../shared/paperBooks'
 import type { MissRecord } from '../shared/misses'
 import type { PrimaryCallState } from '../shared/forecast/primaryCall'
+import type { UrlRecord } from '../shared/newsUrl'
 import type { ForecastLabView, ForecastReplay } from '../shared/forecast/labView'
 import type { ForecastRanking as ForecastRankingView } from '../shared/forecast/ranking'
 import type { SymbolTradingRules } from '../shared/exchangeMinimums'
@@ -512,6 +513,18 @@ const api = {
       const handler = (_event: IpcRendererEvent, state: PrimaryCallState): void => listener(state)
       ipcRenderer.on(IpcChannel.CallsUpdate, handler)
       return () => ipcRenderer.removeListener(IpcChannel.CallsUpdate, handler)
+    }
+  },
+  // News URLs (V8 Stage 4): a pasted link read and kept -- with text a person supplies where its page cannot be read --
+  // the links on file, a person's own view linked to one, and each record as it changes. Nothing here places anything.
+  urls: {
+    analyze: (raw: string, supplied: string | null = null): Promise<UrlRecord | { refused: string }> => ipcRenderer.invoke(IpcChannel.UrlsAnalyze, raw, supplied),
+    list: (): Promise<UrlRecord[]> => ipcRenderer.invoke(IpcChannel.UrlsList),
+    link: (id: string, link: { predictionId?: string; executorId?: string }): Promise<UrlRecord | null> => ipcRenderer.invoke(IpcChannel.UrlsLink, id, link),
+    onUpdate: (listener: (record: UrlRecord) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, record: UrlRecord): void => listener(record)
+      ipcRenderer.on(IpcChannel.UrlsUpdate, handler)
+      return () => ipcRenderer.removeListener(IpcChannel.UrlsUpdate, handler)
     }
   },
   // V8's three paper books (V8 Stage 2): each book's standing and equity marks, and the opportunities not taken.

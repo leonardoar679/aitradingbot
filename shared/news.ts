@@ -207,6 +207,8 @@ export interface ListedArticle {
   id: number
   title: string
   releaseSec: number
+  /** The code its page's link ends in, where the list gives one (V8 Stage 4: a pasted Binance link is checked by it). */
+  code?: string
 }
 
 /** The articles in one answer from a list. A row it cannot read is left out rather than guessed
@@ -223,7 +225,8 @@ export function parseArticleList(body: unknown): ListedArticle[] {
     const id = Number(row.id)
     const release = Number(row.releaseDate)
     if (!Number.isSafeInteger(id) || id <= 0 || typeof row.title !== 'string' || row.title.trim() === '' || !Number.isFinite(release) || release <= 0) continue
-    out.push({ id, title: row.title.replace(/\s+/g, ' ').trim(), releaseSec: Math.floor(release / 1000) })
+    const code = typeof row.code === 'string' && /^[A-Za-z0-9-]{4,200}$/.test(row.code) ? row.code : undefined
+    out.push({ id, title: row.title.replace(/\s+/g, ' ').trim(), releaseSec: Math.floor(release / 1000), ...(code === undefined ? {} : { code }) })
   }
   return out
 }

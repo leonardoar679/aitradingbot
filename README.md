@@ -787,6 +787,33 @@ lines are English until V8 Stage 5. The drawer's round trip shows a sell beside 
 forecast's plan is on the venue its decision was costed on at that venue's fills, and the plan's target must clear that
 route's round trip rather than the flat 0.24% (trade-plan-v2).
 
+**News URLs** (since 26 October 2026; V8 Stage 4; More Features, English until V8 Stage 5; `electron/services/
+newsUrlService.ts`, `urlFetchService.ts`, `shared/urlSafety.ts`, `articleExtract.ts`, `articleTime.ts`,
+`articleCredibility.ts`, `newsUrl.ts`). Paste a news link: the link is cut down -- https on its usual port, no user name
+or password, no fragment, only the query fields that select an article -- and refused where its host is an address, a
+name of one label or a private name; its name is resolved and every address it resolves to is vetted (no private,
+loopback, link-local, shared or reserved address, nor one carried inside IPv6), the request made to the vetted address
+alone, three redirects at most and each checked the same way, fifteen seconds from the paste to the last byte, gzip only
+and two megabytes once decoded, no cookie, one start a host in ten seconds. The page is read as text in a worker of its
+own: its title, every time it says it was published and changed with where each was read, its canonical address, its
+author, and its main text in numbered snippets, the characters that reorder or hide text dropped. Where it cannot be
+read, its text is the news feed's own copy, then Binance's list, then text you paste ("supplied, not retrieved"). Its
+publication time is read from the structured data, then the Open Graph tags, a dated byline, another meta tag -- never
+Last-Modified -- a time after the page was read refused, times more than an hour apart said to disagree; a Binance
+announcement counts only on www.binance.com with its code in Binance's own list, which also gives its time; a post on X
+is never fetched, its time read from its id. Who says it is classed by host (an exchange, a regulator, a news outlet, a
+project's own site, a social network, unknown) with the feed's other stories of it. Its coins are read from its title
+(direct) and its body (indirect) against Binance's and Bitget's USDT pairs, those trading under 1M USDT a day refused,
+five at most, and each one's price read on its one-minute bars from a day before publication to four hours after, read
+again until final. The verdict is the primary call's: a pasted Binance delisting within its rule's window is weighed as
+the reader's would be; otherwise "No profitable opportunity identified" with why. **Paper trade my own view** records a
+view of yours -- the coin, side, stake, horizon and target you choose, nothing filled in -- as a prediction of your own,
+scored like every source, and opens the Position form with it on paper. Each link is one record in
+`news/urls-YYYY-MM.jsonl`, however often it is pasted. The app's own feed's stories of impact 70 or more naming a coin
+directly -- Binance's announcements among them -- are recorded passively, nothing fetched; "Analyze discovered news
+automatically" (off by default) reads their pages too. No model reads an article here; a reading by a model is a click of
+its own in V8 Stage 5.
+
 **The Forecast Lab** (since 13 October 2026; the V6 document's §27-28, §42-43, §49-50 and §90-105; V6 Stage
 11; `shared/forecast/{lab,labWalkForward,labFile}.ts`, `electron/services/forecastLabService.ts`,
 `src/forecastLab/`). What it and V6's two test runs measured -- calibrated ranges, no direction, no

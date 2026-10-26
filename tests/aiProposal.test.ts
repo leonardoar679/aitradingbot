@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { aiProposalEntryExpiry, aiProposalEntryRange, aiProposalName, aiProposalOrigin, aiProposalPositionParams, aiProposalProblem, buildAiProposal, buildOpportunityProposal, describeAiProposal, describeAiProposalOrigin, describeSuggestedLiveAmount, isAiCallStale, isAiProposalExpired, opportunityProposalProblem, suggestedLiveAmount } from '../shared/aiProposal'
+import { USER_VIEW_MODEL, userViewProposal, aiProposalEntryExpiry, aiProposalEntryRange, aiProposalName, aiProposalOrigin, aiProposalPositionParams, aiProposalProblem, buildAiProposal, buildOpportunityProposal, describeAiProposal, describeAiProposalOrigin, describeSuggestedLiveAmount, isAiCallStale, isAiProposalExpired, opportunityProposalProblem, suggestedLiveAmount } from '../shared/aiProposal'
 import { validateOpportunityAnswer } from '../shared/aiOpportunity'
 import type { AiSignalDecision } from '../shared/aiSignal'
 import type { PositionExecutorParams } from '../shared/ipc'
@@ -530,5 +530,23 @@ describe('the amount a real order from a call is suggested to stake (8 October 2
     )
     const held = suggestedLiveAmount({ ...limits, maxOrderQuote: 1000, stopLossPct: 1.5, dailyUsedQuote: 45 })
     expect(describeSuggestedLiveAmount(held!, { riskPct: 0.25, stopLossPct: 1.5, quoteAsset: 'USDT' })).toContain("after fees and slippage. Held to what is left of the day's cap.")
+  })
+})
+
+describe("a person's own view on a news link (V8 Stage 4)", () => {
+  const view = userViewProposal({ pair: 'ABCUSDT', side: 'down', stakeQuote: 250, targetPct: 3.456, horizonSec: 4 * 3600, refPrice: 2, nowSec: 1_793_030_410, newsUrlId: '0123456789abcdef' })
+  it('fills in the form with what the person chose, nothing of the app, paper until they tick Live Trading', () => {
+    expect(view).toMatchObject({ model: USER_VIEW_MODEL, exchange: 'binance', side: 'sell', takeProfitPct: 3.46, stopLossPct: null, timeLimitSec: 4 * 3600, confidence: 0, amountQuote: 250, candleTime: 1_793_030_400 })
+    const defaults: PositionExecutorParams = { side: 'buy', entryPrice: null, amountQuote: 100, takeProfitPct: 2, stopLossPct: 1, timeLimitSec: 3600, trailingStop: null }
+    expect(aiProposalPositionParams(view, defaults)).toMatchObject({ side: 'sell', amountQuote: 250, takeProfitPct: 3.46, stopLossPct: 1 })
+    expect(aiProposalPositionParams({ ...view, amountQuote: undefined }, defaults).amountQuote).toBe(100)
+  })
+  it("says it is the person's own view, not a call of the app's, and carries its record to the trade", () => {
+    const words = describeAiProposal(view).join(' ')
+    expect(words).toMatch(/your own view on a news link: SELL ABCUSDT/)
+    expect(words).toMatch(/Nothing here is a call of the app's/)
+    expect(words).not.toMatch(/AI call|confidence/)
+    expect(aiProposalOrigin(view)).toEqual({ model: USER_VIEW_MODEL, candleTime: 1_793_030_400, confidence: 0, newsUrlId: '0123456789abcdef' })
+    expect(describeAiProposalOrigin(aiProposalOrigin(view))).toBe('Filled in from your own view on a news link. Placed by you.')
   })
 })

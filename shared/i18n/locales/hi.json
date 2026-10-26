@@ -597,6 +597,7 @@
   "Research": "रिसर्च",
   "Backtest": "बैकटेस्ट",
   "Forecast Lab": "पूर्वानुमान लैब",
+  "News URLs": "समाचार URL",
   "AI Benchmark": "AI बेंचमार्क",
   "All Features": "सभी सुविधाएँ",
   "Strategies": "रणनीतियाँ",
@@ -1881,5 +1882,7 @@
   "No venue book is held for this pair yet: the forecast reads them for its top ten and its open trades.": "इस पेयर के लिए अभी किसी एक्सचेंज की ऑर्डर बुक नहीं है: पूर्वानुमान केवल शीर्ष दस और खुले ट्रेडों की बुक पढ़ता है।",
   "{venue}: {total} in all ({fee} fee each way, {spread} spread, {impact} for the stake)": "{venue}: कुल {total} (हर तरफ़ शुल्क {fee}, स्प्रेड {spread}, राशि का प्रभाव {impact})",
   "{venue} is the cheaper venue for this pair now.": "इस पेयर के लिए अभी {venue} सस्ता एक्सचेंज है।",
-  "From each venue's public book in the last three minutes, for a buy and for a sell of {stake}: what a trade would pay, not a forecast.": "हर एक्सचेंज की पिछले तीन मिनट की सार्वजनिक बुक से, {stake} की खरीद और बिक्री के लिए: यह एक ट्रेड की लागत है, पूर्वानुमान नहीं।"
+  "From each venue's public book in the last three minutes, for a buy and for a sell of {stake}: what a trade would pay, not a forecast.": "हर एक्सचेंज की पिछले तीन मिनट की सार्वजनिक बुक से, {stake} की खरीद और बिक्री के लिए: यह एक ट्रेड की लागत है, पूर्वानुमान नहीं।",
+  "Filled in from your own view on a news link: {side} {pair}, a target {target} away, over {duration}.": "एक समाचार लिंक पर आपके अपने नज़रिए से भरा गया: {side} {pair}, लक्ष्य {target} दूर, {duration} में।",
+  "Nothing here is a call of the app's: it is recorded as your own prediction and scored like every source.": "यह ऐप का आकलन नहीं है: इसे आपकी अपनी भविष्यवाणी के रूप में दर्ज किया जाता है और हर स्रोत की तरह आँका जाता है।"
 }

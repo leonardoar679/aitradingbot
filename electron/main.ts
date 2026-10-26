@@ -10,6 +10,7 @@ import { startVenueQuotes } from './services/venueQuotesService'
 import { startPredictionLedger } from './services/predictionLedgerService'
 import { startBookMarks } from './services/booksService'
 import { startPrimaryCall } from './services/primaryCallService'
+import { startNewsUrls } from './services/newsUrlService'
 import { startLivePositionWatcherLoop } from './services/livePositionWatchersService'
 import { startLiveTwapLoop } from './services/liveTwapService'
 import { startMarketScanner } from './services/marketScannerService'
@@ -221,6 +222,9 @@ if (!gotSingleInstanceLock) {
     // The primary call weighed every minute and as the announcements are read (V8 Stage 3; primaryCallService.ts): a
     // card only from a measured source and only where its expected net after costs clears its lines. Places nothing.
     startPrimaryCall()
+    // Pasted news links' prices read again until final, and discovered news recorded, every five minutes (V8 Stage 4;
+    // newsUrlService.ts): public data; a page is fetched only for a link a person pasted, or with its switch on.
+    startNewsUrls()
     const mainWindow = createWindow()
     registerIpcHandlers(mainWindow)
     createTray()
