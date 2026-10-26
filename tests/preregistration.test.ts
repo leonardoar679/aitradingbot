@@ -46,8 +46,9 @@ const ADDED_SINCE_16_OCTOBER = [
 ]
 // The intervals' lines, the pass's version and the tape's: plumbing with no line to hold or fail.
 // httpPacing (V8 Stage 1): the hosts' budgets, which keep every reader within the limits each host sets; tasks: the
-// limits a worker's task runs under; paperRisk.equity: how the paper account's equity is read (a fix, not a line).
-const INFRASTRUCTURE = ['forecast.uncertainty', 'forecast.pass', 'forecast.tape', 'forecast.moveRates', 'forecast.universe', 'httpPacing', 'tasks', 'paperRisk.equity']
+// limits a worker's task runs under; paperRisk.equity: how the paper account's equity is read (a fix, not a line); paperBooks: how
+// a book's money is read from its executors (arithmetic, its comparison rules registered as V8-S9-BOOKS).
+const INFRASTRUCTURE = ['forecast.uncertainty', 'forecast.pass', 'forecast.tape', 'forecast.moveRates', 'forecast.universe', 'httpPacing', 'tasks', 'paperRisk.equity', 'paperBooks']
 
 describe('the registry on file', () => {
   const registry = parseRegistry(TEXT)

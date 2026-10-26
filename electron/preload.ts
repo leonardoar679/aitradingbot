@@ -6,6 +6,9 @@ import type { RoleChoice, RoutingPreview } from '../shared/aiRouting'
 import type { ResearchExport, ResearchStatus } from '../shared/research'
 import type { TradeDecision } from '../shared/forecast/tradeDecision'
 import type { RoundTrip } from '../shared/venueCosts'
+import type { SourceOutcome, SourcePrediction } from '../shared/evaluation/predictionRecord'
+import type { BookEquityMark, BookId, BookStanding } from '../shared/paperBooks'
+import type { MissRecord } from '../shared/misses'
 import type { ForecastLabView, ForecastReplay } from '../shared/forecast/labView'
 import type { ForecastRanking as ForecastRankingView } from '../shared/forecast/ranking'
 import type { SymbolTradingRules } from '../shared/exchangeMinimums'
@@ -491,6 +494,19 @@ const api = {
       ipcRenderer.on(IpcChannel.ExperimentUpdate, handler)
       return () => ipcRenderer.removeListener(IpcChannel.ExperimentUpdate, handler)
     }
+  },
+  // The record of predictions that are not the forecast's own (V8 Stage 2): a person's own call recorded, the
+  // record read with each one's outcome. Nothing here reads a key or places anything.
+  predictions: {
+    record: (prediction: SourcePrediction): Promise<{ ok: boolean; id: string }> => ipcRenderer.invoke(IpcChannel.PredictionsRecord, prediction),
+    list: (filter: { source?: string; sinceSec?: number } = {}): Promise<{ prediction: SourcePrediction; outcome: SourceOutcome | null }[]> => ipcRenderer.invoke(IpcChannel.PredictionsList, filter)
+  },
+  // V8's three paper books (V8 Stage 2): each book's standing and equity marks, and the opportunities not taken.
+  books: {
+    state: (): Promise<{ running: boolean; startedAt: number | null; standings: BookStanding[] }> => ipcRenderer.invoke(IpcChannel.BooksState),
+    marks: (book: BookId, startedAt: number): Promise<BookEquityMark[]> => ipcRenderer.invoke(IpcChannel.BooksMarks, { book, startedAt }),
+    miss: (miss: MissRecord): Promise<MissRecord> => ipcRenderer.invoke(IpcChannel.BooksMiss, miss),
+    misses: (sinceSec = 0): Promise<MissRecord[]> => ipcRenderer.invoke(IpcChannel.BooksMisses, sinceSec)
   },
   // The research folder (V7.2-R Stage 2): free to read and to export; nothing here reads a key or places anything.
   researchFolder: {

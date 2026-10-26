@@ -323,10 +323,13 @@ describe('AI code has no route to a real order', () => {
     // (18 October 2026) every decision is shared/forecast/pass.ts's, pure functions handed the sources the
     // service reads, and the tape (shared/forecast/tape.ts) is arithmetic on what the stream already holds. Since
     // V7.2-R Stage 8 the shadow week's verdict (shared/forecast/shadow.ts), arithmetic on the two records.
+    // Since V8 Stage 2 the liquidity gate in shadow over its TRADE decisions: the venues' books it already reads,
+    // the venue costs' stake, and a miss written to the paper books' file (booksService, misses) -- a record, no trade.
     expect(importsOf(engine).sort()).toEqual([
       'aciTable',
       'atomicWrite',
       'bars',
+      'booksService',
       'electron',
       'features',
       'forecastDataService',
@@ -336,6 +339,7 @@ describe('AI code has no route to a real order', () => {
       'liveMarket',
       'macro',
       'marketResearchService',
+      'misses',
       'newsEffect',
       'noticeService',
       'opportunityClass',
@@ -350,8 +354,13 @@ describe('AI code has no route to a real order', () => {
       'status',
       'tape',
       'tradeDecision',
+      'venueCosts',
       'venueQuotesService'
     ])
+    // The books' service it writes a miss through reads the settings and its own files, and nothing that trades.
+    const booksService = join(SERVICES, 'booksService.ts')
+    expect(importsOf(booksService).filter((name) => LIVE_MODULES.has(name) || aiModuleNames.has(name))).toEqual([])
+    expect(readFileSync(booksService, 'utf-8')).not.toMatch(/setSettings|settings\.set|placeLive|liveTrading|credentials/)
     // The venues' books (V7.2-R Stage 4): public data read for the pairs that matter, through the comparison's reads and
     // Bitget's public fee list; nothing that trades, holds a key or asks a model.
     const venues = join(SERVICES, 'venueQuotesService.ts')

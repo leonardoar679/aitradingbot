@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { forecastTraderBrowserDeps, openForecastTrades, settleForecastTrades, type ForecastTraderResult } from './forecastTrader'
+import { recordRefusals } from '../books/recordRefusals'
 
 /** How often the trader's own paper trades are looked at for one that has closed: a minute, as a
  * position is judged on minutes that have closed. */
@@ -32,6 +33,8 @@ export function ForecastTraderScheduler(): null {
         .then((result) => {
           last = { at: Math.floor(Date.now() / 1000), result }
           for (const listener of listeners) listener()
+          // Each TRADE decision it did not open, on file (V8 Stage 2).
+          void recordRefusals('forecast-trader', result.refused, last.at)
         })
         .catch((error: unknown) => console.error('The forecast trader could not look at the decisions:', error))
         .finally(() => {

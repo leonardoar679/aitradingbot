@@ -124,6 +124,15 @@ export const IpcChannel = {
   ResearchFolderExport: 'researchFolder:export',
   ResearchFolderOpen: 'researchFolder:open',
   ResearchFolderWriteReport: 'researchFolder:writeReport',
+  // The record of predictions that are not the forecast's own, and V8's paper books (V8 Stage 2): a person's own
+  // call recorded, the record read, each book's standing and equity marks, a missed opportunity written and read.
+  // Nothing on these reads a key, asks a model or places an order.
+  PredictionsRecord: 'predictions:record',
+  PredictionsList: 'predictions:list',
+  BooksState: 'books:state',
+  BooksMarks: 'books:marks',
+  BooksMiss: 'books:miss',
+  BooksMisses: 'books:misses',
   AiConcludeMove: 'ai:concludeMove',
   AiReviewTrade: 'ai:reviewTrade',
   AiExitCheck: 'ai:exitCheck',
@@ -261,6 +270,10 @@ export interface AppSettings {
    * the two that open them is paused (shared/paperPause.ts). Absent until first written, and healed
    * on every read: its defaults apply. */
   paperPause?: PaperPauseSettings
+  /** V8's three tested paper books, each its own start and caps, and whether they are running
+   * (shared/paperBooks.ts; V8 Stage 2). Absent until first written, and healed on every read: nothing
+   * running, each 10,000 USDT. */
+  paperBooks?: import('./paperBooks').PaperBooksSettings
   /** Whether the app raises desktop notices at all, and with sound (shared/alerts.ts). Absent until
    * first written, and healed on every read: on, with sound. */
   alerts?: AlertSettings
@@ -1065,6 +1078,10 @@ export interface ExecutorConfig {
    * strategy it was opened under, and the forecast, decision and plan it followed. Never on a live
    * executor: src/forecast/labTrader.ts, the one file that makes one, spells paper as a literal. */
   lab?: import('./forecast/labTrader').LabTradeMark
+  /** Set on a PAPER Position one of V8's three tested books opened (shared/paperBooks.ts; V8 Stage 2): the
+   * book, when it was started, the ledger inside it, and, once stopped, what it made. A book counts only the
+   * executors its own writer stamped. Never on a live executor. */
+  book?: import('./paperBooks').BookMark
   newsRule?: {
     articleId: number
     ticker: string

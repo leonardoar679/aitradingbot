@@ -22,6 +22,9 @@ import type { AiRoles } from './aiCost'
 import type { AiRoute } from './aiRoute'
 import { HTTP_PACING_LINES } from './httpPacing'
 import { TASK_LINES } from './tasks'
+import { PAPER_BOOKS_VERSION } from './paperBooks'
+import { LIQUIDITY_LINES } from './liquidityGate'
+import { SOURCE_RECORD_LINES } from './evaluation/predictionRecord'
 import { CONFIG_FILE_VERSION, type ConfigFileName, type ConfigFileNote } from './configMigration'
 import { FEE_RATE, SLIPPAGE_RATE } from './fees'
 import { HARD_LIMITS } from './hardLimits'
@@ -269,7 +272,13 @@ export const ENGINE_CONSTANTS = {
   // One budget per host for every public read (V8 Stage 1; shared/httpPacing.ts).
   httpPacing: HTTP_PACING_LINES,
   // The limits a task in a worker of its own runs under (V8 Stage 1; shared/tasks.ts).
-  tasks: TASK_LINES
+  tasks: TASK_LINES,
+  // How V8's three paper books are read from their executors (V8 Stage 2; shared/paperBooks.ts).
+  paperBooks: { version: PAPER_BOOKS_VERSION },
+  // The gate on a trade whose move is large only because its book is thin (V8 Stage 2; shared/liquidityGate.ts).
+  liquidity: LIQUIDITY_LINES,
+  // The record of every prediction that is not the forecast's own (V8 Stage 2; shared/evaluation/predictionRecord.ts).
+  sourceRecord: SOURCE_RECORD_LINES
 } as const
 
 /** One value the heal changed on the way from a file to the store the app runs on. */

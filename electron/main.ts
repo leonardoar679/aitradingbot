@@ -7,6 +7,8 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc'
 import { startResearchFolder } from './services/researchFolderService'
 import { startVenueQuotes } from './services/venueQuotesService'
+import { startPredictionLedger } from './services/predictionLedgerService'
+import { startBookMarks } from './services/booksService'
 import { startLivePositionWatcherLoop } from './services/livePositionWatchersService'
 import { startLiveTwapLoop } from './services/liveTwapService'
 import { startMarketScanner } from './services/marketScannerService'
@@ -210,6 +212,11 @@ if (!gotSingleInstanceLock) {
     startResearchFolder()
     // Binance's and Bitget's public books for the pairs that matter, and Bitget's per-pair fees (V7.2-R Stage 4).
     startVenueQuotes()
+    // The record of every prediction that is not the forecast's own, each settled from its venue's bars once its
+    // horizon has passed; owed ones read back (V8 Stage 2; predictionLedgerService.ts). Public data only.
+    void startPredictionLedger().catch((error) => console.error('The prediction record could not start:', error))
+    // V8's three paper books marked once an hour while they run (V8 Stage 2; booksService.ts): nothing while stopped.
+    startBookMarks()
     const mainWindow = createWindow()
     registerIpcHandlers(mainWindow)
     createTray()

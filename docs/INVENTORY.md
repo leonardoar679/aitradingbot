@@ -124,6 +124,7 @@ under Settings › Advanced › Effective configuration.
 | | `paperRisk` (added 5 October 2026): how the paper trades the app opens by itself are sized, by what their stop would lose, by a share of the paper account's equity (added 8 October 2026), or at their stake, and what they may stake together; and, added 13 October 2026 (V6 Stage 12), `correlatedShare`, the share they may stake on one side on coins that move with Bitcoin (0.15 as it was fixed) | — | Risk & Safety; the risk mode on Settings › Essentials |
 | | `paperDigest` (added 5 October 2026): the daily notice of what those trades did, on or off, and the last day it told | — | Risk & Safety |
 | | `paperPause` (added 5 October 2026): the losing run in R that pauses those trades, or never; and for the watch, the news rules and, since V6 Stage 12, the forecast trader, each, whether a run has paused it and when it was last resumed | — | Risk & Safety |
+| | `paperBooks` (added 26 October 2026, V8 Stage 2; `shared/paperBooks.ts`): V8's three tested paper books -- news, copy, baseline -- each its own start (10,000 USDT unless set), most open, a trade's share of its equity and its daily stop, and whether they run and since when (nothing runs until Start paper testing, V8 Stage 9); a book counts only the executors its writer stamped with its mark (`executors[].book`), its money derived from them as the account's is | — | Paper Trading (V8 Stage 9) |
 | | `alerts` (added 6 October 2026): desktop notices on or off, and with sound or silent; obeyed where every notice is raised (`appHandlers.ts`); since 13 October 2026 (V6 Stage 13) `desktop`, whether the operating system's notices are shown at all (they are always silent: the window plays the sound) | — | Settings › Essentials; the desktop's under Settings › Advanced › Notifications |
 | | `sounds` (added 13 October 2026, V6 Stage 13): the four sounds' volume, the kinds muted, the cooldown between two of one sound, quiet hours (`shared/sounds.ts`) | — | Settings › Advanced › Notifications |
 | | `keepRunningWhenClosed` (added 8 October 2026, V5 Stage 2): closing the window hides it to the tray and everything runs on, or quits the app (off by default; `shared/keepRunning.ts`) | — | Settings › Essentials |
@@ -147,7 +148,15 @@ under Settings › Advanced › Effective configuration.
 
 These files are records, not settings, and stay where they are: `livePositions.json`,
 `liveOrders.json`, `livePositionWatchers.json`, `liveTwapRuns.json`, `aiLedger/`, `aiSignalCache/`,
-`aiExperiments/`, `marketEvents/`, `news/` and `aiModels.json`; and, since 8 October 2026,
+`aiExperiments/`, `marketEvents/`, `news/` and `aiModels.json`; since 26 October 2026 (V8 Stage 2) `predictions/`
+(every prediction that is not the forecast's own -- a rule's card, an article's reading, a trader's trade, a person's
+own call -- when it is made, `sources-YYYY-MM.jsonl`, and its outcome settled from its venue's one-minute bars once its
+horizon has passed, `source-outcomes-YYYY-MM.jsonl`; owed ones read back for eight days; never swept;
+`electron/services/predictionLedgerService.ts`) and `paperBooks/` (each paper book's equity marked once an hour while
+they run, `equity-YYYY-MM.jsonl`, and every missed opportunity -- a candidate its source called and its writer did not
+open, with the stage that stopped it -- `misses-YYYY-MM.jsonl`; the laboratory's and the forecast trader's refusals
+among them, and the liquidity gate's in shadow over the forecast's TRADE decisions; `electron/services/booksService.ts`);
+and, since 8 October 2026,
 `paperRefusals/` (the app's own paper trades refused, and why) and `alerts/` (the alerts told), one
 JSON line each in a file per UTC month (`shared/records.ts`), written by the main process as the
 renderer tells them and read back by the session report, a trade's timeline and Overview. Since
@@ -282,6 +291,11 @@ The main process also runs loops that need no window at all:
   levels, every minute for the pairs of the app's open paper and demo trades and the forecast's top ten (at most twelve),
   and Bitget's per-pair fees every six hours; the forecast's decisions are costed at the cheaper venue from them. Public
   data only: nothing signed, nothing placed.
+- `predictionLedgerService` (added 26 October 2026, V8 Stage 2) settles each owed prediction once a minute from its
+  venue's one-minute bars once its horizon has passed, reads the owed ones of the last eight days back at a start and
+  writes missing, with its reason, one older or whose bars could not be read for six hours. Public data only.
+- `booksService` (added 26 October 2026, V8 Stage 2) marks each paper book's equity at every UTC hour while the books
+  run, and nothing while they are stopped. It opens, closes and places nothing.
 - `researchFolderService` (added 20 October 2026, V7.2-R Stage 2) keeps `trader-spider-research/`: the
   configuration's snapshots at start and hourly, the main process's errors and warnings and every AI call
   as the ledger appends it (`onAiCallAppended`), each paper order's life as the settings are written
@@ -356,6 +370,8 @@ reaches it. A call may span lines. The `news` channels were added after: four in
 | `liveTrading` | 19: status, limits, kill switch, arm, positions, orders, watchers, TWAP | The live trading bar, Settings, Executors, Positions, `LiveOrderScheduler`, Portfolio |
 | `executors` | `placeLiveOrder`, `placeLiveLimitOrder` | Executors only |
 | `researchFolder` | 4 (added 20 October 2026, V7.2-R Stage 2): status, export now, open the folder, keep a report | Settings › Advanced › Research record, and `ResearchReportScheduler` (the hour's and the day's reports) |
+| `predictions` | 2 (added 26 October 2026, V8 Stage 2): a person's own call recorded (the window may record no other source's), the record read with each one's outcome | V8's pages from Stage 3 on |
+| `books` | 4 (added 26 October 2026, V8 Stage 2): each paper book's standing, a book's equity marks, a missed opportunity written, the misses read | `LabTraderScheduler` and `ForecastTraderScheduler` (their refusals, as misses); V8's pages from Stage 3 on |
 | `forecast` | 13 (added 13 October 2026, V6 Stages 7-15; since 22 October 2026 a pair's round trips on both venues, read-only, and the replay out of sample's state and kept file, read-only): state, every pair's forecast, a pair's, its history, the ranking, a pair's decision, the Lab, a tested hour's replay, the replay out of sample, bars, the record over a span (V6 Stage 15), updates | Home, Predictions and the drawer, TRADE THIS, the forecast trader, the Forecast Lab, the top prediction's chime, and an experiment's report |
 
 **Nothing in `src/` calls `app:ping` or `app:getVersion`.** Both are left from the project template.

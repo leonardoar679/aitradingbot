@@ -24,7 +24,10 @@ import { appendJsonLines } from './jsonlStore'
 import { getResearchState } from './marketResearchService'
 import { tell } from './noticeService'
 import { getSettings } from './settingsService'
-import { setVenuePairs, venueCostOf } from './venueQuotesService'
+import { setVenuePairs, venueCostOf, venueGateOf } from './venueQuotesService'
+import { recordMiss } from './booksService'
+import { MISS_VERSION } from '../../shared/misses'
+import { VENUE_STAKE_QUOTE } from '../../shared/venueCosts'
 
 // THE FORECAST, LIVE (the V6 document, §38-43; V6 Stage 7, 13 October 2026).
 //
@@ -366,12 +369,45 @@ async function runPass(closedAt: number): Promise<void> {
     state.recorded += made.predictions.length
   }
   await followCalls()
+  await shadowLiquidity(Date.now()).catch((error) => console.error('The liquidity gate could not be read over the decisions:', error))
   // The venues' books are read for the pairs of open trades first, then the top ten (V7.2-R Stage 4).
   setVenuePairs(await venuePairs())
   Object.assign(state, { status: 'running', predictions: engine.latest.size, pending: pendingCount(engine), lastPassAt: closedAt, lastPassMs: Date.now() - startedAt, lastError: null })
   told()
   // The challenger in its shadow week, forecast after the run in use's pass is told (V7.2-R Stage 8).
   await shadowPass(closedAt).catch((error) => console.error("The shadow's pass failed:", error))
+}
+
+/** THE LIQUIDITY GATE IN SHADOW (V8 Stage 2; shared/liquidityGate.ts): over every TRADE decision of a pass -- which
+ * the forecast trader and the laboratory, writers that were there before V8, act on -- the gate is read on the routed
+ * venue's book at the reference stake against the decision's expected move, and what it would have refused is
+ * written as a miss marked shadow. It stops nothing: those writers trade as they did until a registered line
+ * (V8-S2-LIQ) says otherwise. A pair is told once an hour at most, as a refusal stands while its decision does. */
+const shadowTold = new Map<string, number>()
+async function shadowLiquidity(nowMs: number): Promise<void> {
+  for (const decision of engine.decisions.values()) {
+    if (decision.decision !== 'TRADE' || decision.side === null) continue
+    const last = shadowTold.get(decision.pair)
+    if (last !== undefined && nowMs - last < 3_600_000) continue
+    const venue = decision.cost?.venue ?? 'binance'
+    const verdict = venueGateOf(decision.pair, venue, decision.side, VENUE_STAKE_QUOTE, decision.edge?.expectedPct ?? null, nowMs)
+    if (verdict.ok) continue
+    shadowTold.set(decision.pair, nowMs)
+    const price = engine.latest.get(decision.pair)?.currentPrice ?? null
+    await recordMiss({
+      v: MISS_VERSION,
+      at: Math.floor(nowMs / 1000),
+      book: 'other',
+      writer: 'forecast-decision',
+      pair: decision.pair,
+      side: decision.side === 'BUY' ? 'up' : 'down',
+      refPrice: price !== null && price > 0 ? price : null,
+      stage: 'liquidity',
+      reason: verdict.reason,
+      predictionId: null,
+      shadow: true
+    })
+  }
 }
 
 /** The pairs the person watches: the top ten, those held, and those a paper executor of theirs trades. */

@@ -97,3 +97,21 @@ describe("a pair's round trip", () => {
     expect(venues.venueCostOf('XYZUSDT', 'BUY', read)).toBeNull()
   })
 })
+
+describe('the liquidity gate on a held book (V8 Stage 2)', () => {
+  it("reads the routed venue's book as held, at the stake, against the move, and says when none is held or it is old", async () => {
+    const venues = await service()
+    // A deep book on Binance (a thousand units a level, two levels each side), none on Bitget.
+    books.set('BTCUSDT', { binance: deepBook(100, 0.01), bitget: null })
+    venues.setVenuePairs(['BTCUSDT'])
+    await venues.venueQuotesForTest.readOnce()
+    const now = Date.now()
+    // Two levels of a thousand within the band: deep enough for a stake of 1,000 against a 3% move.
+    expect(venues.venueGateOf('BTCUSDT', 'binance', 'BUY', 1000, 3, now)).toMatchObject({ ok: true })
+    expect(venues.venueGateOf('BTCUSDT', 'bitget', 'BUY', 1000, 3, now)).toMatchObject({ ok: false, code: 'no-book' })
+    expect(venues.venueGateOf('ETHUSDT', 'binance', 'BUY', 1000, 3, now)).toMatchObject({ ok: false, code: 'no-book' })
+    expect(venues.venueGateOf('BTCUSDT', 'binance', 'BUY', 1000, 3, now + 31_000)).toMatchObject({ ok: false, code: 'stale-book' })
+    // The same book cannot hold a stake of a quarter of a million.
+    expect(venues.venueGateOf('BTCUSDT', 'binance', 'BUY', 250_000, 3, now)).toMatchObject({ ok: false, code: 'cannot-hold' })
+  })
+})

@@ -17,11 +17,13 @@ import { registerRecordHandlers } from './handlers/recordHandlers'
 import { registerHealthHandlers } from './handlers/healthHandlers'
 import { registerExperimentHandlers } from './handlers/experimentHandlers'
 import { registerResearchFolderHandlers } from './handlers/researchFolderHandlers'
+import { registerBooksHandlers } from './handlers/booksHandlers'
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerAppHandlers()
   registerRecordHandlers()
   registerResearchFolderHandlers()
+  registerBooksHandlers()
   registerExperimentHandlers(mainWindow)
   registerSettingsHandlers()
   registerMarketHandlers(mainWindow)

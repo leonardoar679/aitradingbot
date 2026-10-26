@@ -2,6 +2,7 @@ import type { BookLevels } from '../../shared/marketCompare'
 import { COSTED_VENUES, VENUE_STAKE_QUOTE, cheapestOf, roundTripOf, venueFeeOf, type CostedVenue, type RoundTrip } from '../../shared/venueCosts'
 import { fetchBitgetFeeRates } from './exchanges/bitget'
 import { readVenueBooks } from './marketCompareService'
+import { liquidityVerdictOf, type LiquidityVerdict } from '../../shared/liquidityGate'
 
 // THE VENUES' BOOKS FOR THE PAIRS THAT MATTER (V7.2-R Stage 4, 22 October 2026). The forecast's decisions cost a trade
 // on the venue it would be cheapest on: so Binance's and Bitget's PUBLIC books, a hundred levels each, are read every
@@ -81,6 +82,22 @@ export function venueCostOf(pair: string, side: 'BUY' | 'SELL', nowMs: number = 
   }
   if (trips.length === 0) return null
   return { trips, cheapest: cheapestOf(trips), at: entry.at }
+}
+
+/** The liquidity gate on a trade (V8 Stage 2; shared/liquidityGate.ts), on a venue's book as held: no book held, a
+ * book too old, too thin, or too dear for the move, each said; the round trip where it passes. */
+export function venueGateOf(pair: string, venue: CostedVenue, side: 'BUY' | 'SELL', stakeQuote: number, predictedMovePct: number | null, nowMs: number = Date.now()): LiquidityVerdict {
+  const entry = held.get(pair.toUpperCase())
+  const levels = entry?.books[venue] ?? null
+  return liquidityVerdictOf({
+    venue,
+    feePct: venueFeeOf(venue, venue === 'bitget' ? bitgetFees.get(pair.toUpperCase()) : null),
+    side,
+    stakeQuote,
+    levels,
+    bookAgeMs: entry === undefined ? null : Math.max(0, nowMs - entry.at),
+    predictedMovePct
+  })
 }
 
 /** What the service holds, for the status. */

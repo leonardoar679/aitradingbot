@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { labTraderBrowserDeps, openLabTrades, settleLabTrades, type LabPassResult } from './labTrader'
+import { recordRefusals } from '../books/recordRefusals'
 
 /** How often the laboratory's own paper trades are looked at for one that has closed: a minute, as a
  * position is judged on minutes that have closed. */
@@ -33,6 +34,8 @@ export function LabTraderScheduler(): null {
         .then((result) => {
           last = { at: Math.floor(Date.now() / 1000), result }
           for (const listener of listeners) listener()
+          // Each candidate its strategies qualified and it did not open, on file (V8 Stage 2).
+          void recordRefusals('lab', result.refused, last.at)
         })
         .catch((error: unknown) => console.error('The paper laboratory could not look at the decisions:', error))
         .finally(() => {
