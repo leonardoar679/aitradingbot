@@ -110,10 +110,27 @@ describe('the stores, healed', () => {
     expect(healed.alerts).toEqual({ enabled: false, sound: true, desktop: true })
     expect(healed.sounds).toEqual({ volume: 0.7, mutedKinds: [], cooldownSec: 30, quietHours: null })
     expect(healed.app).toEqual({ keepRunningWhenClosed: true, uiMode: 'expert', language: null })
-    expect(healed.ai).toEqual({ defaultModel: 'openai/gpt-5-mini', enabledModels: ['a/model', 'openai/gpt-5-mini', 'z/model'], dailyCapUsd: 5, callsPerMinute: 60 })
+    // No roles or route handed in: none (V8 Stage 0).
+    expect(healed.ai).toEqual({ defaultModel: 'openai/gpt-5-mini', enabledModels: ['a/model', 'openai/gpt-5-mini', 'z/model'], dailyCapUsd: 5, callsPerMinute: 60, roles: null, route: null })
     expect(healed.watch.enabled).toBe(true)
     expect(healed.scanner).toEqual({ enabled: true, universeSize: 40 })
     expect(healed.live.allocationQuote).toBe(200)
+  })
+
+  it('carries the roles and the route, so the configuration version moves with the routing (V8 Stage 0)', () => {
+    const live = { maxOrderQuote: 10, hardMaxOrderQuote: 25, dailyCapQuote: 50, dailyLossLimitQuote: 15, allocationQuote: null, riskPct: 0.25 }
+    const ai = { defaultModel: 'anthropic/claude-opus-5.5', enabledModels: ['anthropic/claude-opus-5.5', 'openai/gpt-6-luna@minimal'], dailyCapUsd: 5, callsPerMinute: 30, watch: undefined, watchPaper: undefined, additions: undefined }
+    const storesOf = (extra: object) => healStores({ settings: {}, ai: { ...ai, ...extra }, scanner: { enabled: true, universeSize: 60 }, news: undefined, live })
+    const hash = (text: string): string => createHash('sha256').update(text).digest('hex')
+    const none = storesOf({})
+    const routed = storesOf({ roles: { gate: null, summarize: 'openai/gpt-6-luna@minimal' } })
+    const second = storesOf({ route: { model: 'openai/gpt-6-luna@minimal', when: 'acting' } })
+    expect(routed.ai.roles).toEqual({ gate: null, summarize: 'openai/gpt-6-luna@minimal' })
+    expect(second.ai.route).toEqual({ model: 'openai/gpt-6-luna@minimal', when: 'acting' })
+    const versions = [none, routed, second].map((stores) => effectiveConfig(stores, hash).configVersion)
+    expect(new Set(versions).size).toBe(3)
+    // The same routing reads the same whatever the order its fields were written in.
+    expect(effectiveConfig(storesOf({ roles: { summarize: 'openai/gpt-6-luna@minimal', gate: null } }), hash).configVersion).toBe(versions[1])
   })
 })
 

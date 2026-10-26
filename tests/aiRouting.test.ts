@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { additionsModelOf } from '../shared/aiAdditions'
+import { AI_ADDITION_INFO, additionsModelOf } from '../shared/aiAdditions'
 import type { AiConfig } from '../shared/aiCost'
 import {
   BOT_CATCHUP_HOURS,
+  additionAsksNow,
   botAskFromSec,
   healAiRoles,
   medianTokensOf,
@@ -63,6 +64,24 @@ describe('the routing table', () => {
     expect(used.has(OPUS)).toBe(false)
     // A watch switched off still lists its models (it heals off when one is disabled); a bot switched off strands nothing.
     expect(modelsInUse({ ...FOUND, watch: { ...FOUND.watch, enabled: false }, watchPaper: { ...FOUND.watchPaper, enabled: false } }, []).get(MINI)).toEqual(['The watch'])
+  })
+})
+
+describe('an addition asked only on a click (V8 Stage 0)', () => {
+  it('asks whenever it is switched on, whatever the watch, where one that asks by itself needs the watch on', () => {
+    const off = { ...FOUND, watch: { ...FOUND.watch, enabled: false } }
+    expect(additionAsksNow(FOUND, 'daily')).toBe(true)
+    expect(additionAsksNow(off, 'daily')).toBe(false)
+    expect(additionAsksNow({ ...FOUND, additions: { ...FOUND.additions, daily: false } }, 'daily')).toBe(false)
+    const was = AI_ADDITION_INFO.daily.automatic
+    try {
+      AI_ADDITION_INFO.daily.automatic = false
+      expect(additionAsksNow(off, 'daily')).toBe(true)
+      expect(additionAsksNow({ ...off, additions: { ...off.additions, daily: false } }, 'daily')).toBe(false)
+      expect(routingTableOf(off, []).find((row) => row.id === 'addition:daily')!.on).toBe(true)
+    } finally {
+      AI_ADDITION_INFO.daily.automatic = was
+    }
   })
 })
 

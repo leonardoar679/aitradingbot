@@ -1,4 +1,6 @@
 import { DEFAULT_AI_ADDITIONS, type AiAdditionsConfig } from './aiAdditions'
+import type { AiRoles } from './aiCost'
+import type { AiRoute } from './aiRoute'
 import { DEFAULT_AI_CALLS_PER_MINUTE } from './aiPace'
 import { DEFAULT_AI_DAILY_CAP_USD, DEFAULT_AI_MODEL, DEFAULT_ENABLED_MODELS } from './aiSignal'
 import { DEFAULT_AI_WATCH, type AiWatchConfig } from './aiWatch'
@@ -69,7 +71,10 @@ export interface EffectiveStores {
   watch: AiWatchConfig
   watchPaper: AiWatchPaperConfig
   additions: AiAdditionsConfig
-  ai: { defaultModel: string; enabledModels: string[]; dailyCapUsd: number; callsPerMinute: number }
+  /** The models and the budget, and since V8 Stage 0 who asks which: the roles (null until a move to roles is
+   * applied) and the route to a second model (null when none), so that the configuration's version moves with
+   * the routing as it does with every other setting. */
+  ai: { defaultModel: string; enabledModels: string[]; dailyCapUsd: number; callsPerMinute: number; roles: AiRoles | null; route: AiRoute | null }
   scanner: ScannerConfig
   news: NewsConfig
   live: { maxOrderQuote: number; hardMaxOrderQuote: number; dailyCapQuote: number; dailyLossLimitQuote: number; allocationQuote: number | null; riskPct: number }
@@ -90,7 +95,7 @@ export const DEFAULT_CONFIG: EffectiveStores = {
   watchPaper: DEFAULT_AI_WATCH_PAPER,
   additions: DEFAULT_AI_ADDITIONS,
   // The models sorted, as the effective configuration lists them.
-  ai: { defaultModel: DEFAULT_AI_MODEL, enabledModels: [...DEFAULT_ENABLED_MODELS].sort(), dailyCapUsd: DEFAULT_AI_DAILY_CAP_USD, callsPerMinute: DEFAULT_AI_CALLS_PER_MINUTE },
+  ai: { defaultModel: DEFAULT_AI_MODEL, enabledModels: [...DEFAULT_ENABLED_MODELS].sort(), dailyCapUsd: DEFAULT_AI_DAILY_CAP_USD, callsPerMinute: DEFAULT_AI_CALLS_PER_MINUTE, roles: null, route: null },
   scanner: DEFAULT_SCANNER_CONFIG,
   news: DEFAULT_NEWS_CONFIG,
   live: { ...DEFAULT_LIVE_LIMITS, hardMaxOrderQuote: HARD_LIMITS.liveMaxOrderQuote }

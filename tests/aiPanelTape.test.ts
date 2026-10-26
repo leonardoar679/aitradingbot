@@ -92,6 +92,8 @@ interface Reply {
   content?: string
   /** What the call is billed at; COST when the script does not say. */
   cost?: number
+  /** The model the reply says answered; none when the script does not say. */
+  served?: string
 }
 
 interface Sent {
@@ -130,10 +132,10 @@ function stubOpenRouter(script: (sent: Sent, nth: number) => Reply | Promise<Rep
     try {
       const scripted = await script(entry, sent.filter((other) => other.kind === entry.kind).length)
       const fallback = entry.kind === 'signal' || entry.kind === 'decision' ? signal() : JSON.stringify(REPORTS[entry.kind])
-      const { status = 200, content = fallback, cost = COST } = scripted ?? {}
+      const { status = 200, content = fallback, cost = COST, served } = scripted ?? {}
       const reply =
         status === 200
-          ? { provider: 'Test', choices: [{ finish_reason: 'stop', message: { content } }], usage: { prompt_tokens: 1500, completion_tokens: 400, cost } }
+          ? { provider: 'Test', ...(served !== undefined ? { model: served } : {}), choices: [{ finish_reason: 'stop', message: { content } }], usage: { prompt_tokens: 1500, completion_tokens: 400, cost } }
           : { error: { code: status, message: 'no provider' } }
       return { ok: status === 200, status, text: async () => JSON.stringify(reply) }
     } finally {
@@ -264,6 +266,26 @@ describe('one decision by a panel', () => {
 })
 
 describe('a panel that cannot hear from an analyst', () => {
+  it("refuses an analyst answered by another provider's model, and marks its row (V8 Stage 0)", async () => {
+    const { kinds } = stubOpenRouter((entry) => (entry.kind === 'trend' ? { served: OTHER } : undefined))
+    const { generateAiSignalTape, listAiCalls } = await services()
+
+    const tape = await generateAiSignalTape(request(1, { model: PANEL }))
+    expect(kinds()).toEqual(['trend'])
+    expect(tape).toMatchObject({ callCount: 1, rejectedCount: 1 })
+    expect(tape.decisions[0].rejected).toBe(`The trend analyst's answer was refused: The answer came from ${OTHER}, not from ${MODEL}, the model asked.`)
+    expect((await listAiCalls({ status: 'rejected' })).rows).toMatchObject([{ agent: 'trend', model: MODEL, servedModel: OTHER, servedMismatch: 'other', role: 'decide' }])
+  })
+
+  it('records the role of an analyst answered by the model asked', async () => {
+    stubOpenRouter((entry) => (entry.kind === 'decision' ? { content: BUY } : { served: MODEL }))
+    const { generateAiSignalTape, listAiCalls } = await services()
+    await generateAiSignalTape(request(1, { model: PANEL }))
+    const rows = (await listAiCalls({})).rows.filter((row) => row.agent !== undefined && row.agent !== 'decision')
+    expect(rows).toHaveLength(3)
+    expect(rows.every((row) => row.role === 'decide' && row.servedMismatch === undefined && row.status === 'ok')).toBe(true)
+  })
+
   it('does not decide when a report is refused, and does not pay to be told so twice', async () => {
     const { kinds } = stubOpenRouter((entry) => (entry.kind === 'momentum' ? { content: JSON.stringify({ ...REPORTS.momentum, momentum: 'sideways' }) } : undefined))
     const { generateAiSignalTape, listAiCalls } = await services()

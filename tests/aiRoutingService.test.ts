@@ -153,7 +153,7 @@ describe('the move to roles', () => {
     expect(cost('bot:gpt').expectedUsd).toBeCloseTo(24 * (3000 * 4e-6 + 1200 * 2e-5), 10)
     // The daily summary on Luna at minimal effort; an addition that never asked costs nothing a day at its recent rate.
     expect(cost('addition:daily').perCallUsd[0]).toBeCloseTo(700 * 1e-7 + 1500 * 5e-7, 10)
-    expect(cost('addition:news')).toMatchObject({ callsADay: 0, expectedUsd: 0 })
+    expect(cost('addition:news')).toMatchObject({ callsADay: 0, expectedUsd: 0, on: true })
     expect(cost('addition:news').mostUsd).toBeCloseTo(40 * (700 * 1e-7 + 1500 * 5e-7), 10)
     expect(preview.expectedDailyUsd).toBeCloseTo(preview.costs.filter((entry) => entry.on).reduce((sum, entry) => sum + (entry.expectedUsd ?? 0), 0), 10)
     expect(preview.capUsd).toBe(5)
@@ -161,6 +161,17 @@ describe('the move to roles', () => {
     expect(preview.text).toContain(`Bot GPT BTC hourly: ${MINI} -> ${OPUS}.`)
     // Nothing changed by looking.
     expect((await getAiConfig()).watch.models).toEqual([MINI])
+  })
+
+  it('counts an addition that asks by itself only while the watch is on (V8 Stage 0)', async () => {
+    writeFileSync(join(process.env.AI_TEST_USER_DATA as string, 'aiConfig.json'), JSON.stringify({ ...FOUND, watch: { ...FOUND.watch, enabled: false }, watchPaper: { ...FOUND.watchPaper, enabled: false } }))
+    const { previewAiRoles } = await services()
+    const preview = await previewAiRoles(CHOICE)
+    const additions = preview.costs.filter((entry) => entry.id.startsWith('addition:'))
+    expect(additions).toHaveLength(5)
+    expect(additions.every((entry) => !entry.on)).toBe(true)
+    // Off, they count in neither total.
+    expect(preview.mostDailyUsd).toBeCloseTo(preview.costs.filter((entry) => entry.on).reduce((sum, entry) => sum + (entry.mostCallsADay === null ? (entry.expectedUsd ?? 0) : (entry.mostUsd ?? 0)), 0), 10)
   })
 
   it('is refused with a stale token, and applied with the right one: every caller on the roles, the bot moved from now on', async () => {

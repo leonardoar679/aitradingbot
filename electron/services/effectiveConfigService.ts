@@ -29,7 +29,9 @@ export async function getEffectiveConfig(): Promise<EffectiveConfig> {
       callsPerMinute: ai.callsPerMinute,
       watch: ai.watch,
       watchPaper: ai.watchPaper,
-      additions: ai.additions
+      additions: ai.additions,
+      roles: ai.roles,
+      route: ai.route
     },
     scanner: scanner.config,
     news: news.config,

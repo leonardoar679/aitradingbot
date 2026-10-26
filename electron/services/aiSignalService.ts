@@ -626,6 +626,8 @@ async function askAgent(input: AskAgentInput): Promise<AgentAnswer> {
     position: input.context.position,
     referencePrice: input.context.lastClose,
     agent: input.role,
+    // A panel decides (V8 Stage 0): its analysts' rows carry the role their decision plays.
+    role: 'decide' as const,
     ...(input.escalatedFrom !== undefined ? { escalatedFrom: input.escalatedFrom } : {}),
     // An analyst makes no call on the market: there is nothing here to score.
     recommendation: null,
@@ -660,7 +662,10 @@ async function askAgent(input: AskAgentInput): Promise<AgentAnswer> {
   const usage = await withCost(result.usage, input.model)
   await record('spend record', recordAiSpend(usage.costUsd ?? 0))
 
-  const verdict = interpretReport(input.role, result)
+  // What was asked is what may answer, as askModel holds it (V8 Stage 0): another provider's model is refused.
+  const family = servedFamilyOf(input.model, result.servedModel)
+  const verdict: ReturnType<typeof interpretReport> =
+    family === 'other' ? { ok: false, reason: `The answer came from ${result.servedModel}, not from ${input.model}, the model asked.` } : interpretReport(input.role, result)
   const answer: AgentAnswer = verdict.ok
     ? { role: input.role, report: verdict.report, rejected: null, error: null, usage }
     : { role: input.role, report: null, rejected: verdict.reason, error: null, usage }
@@ -682,6 +687,7 @@ async function askAgent(input: AskAgentInput): Promise<AgentAnswer> {
       status: verdict.ok ? 'ok' : 'rejected',
       provider: result.provider,
       ...(result.servedModel !== null ? { servedModel: result.servedModel } : {}),
+      ...(family === 'variant' || family === 'other' ? { servedMismatch: family } : {}),
       usage,
       error: verdict.ok ? null : verdict.reason,
       ...(verdict.ok ? {} : { answerExcerpt: result.content.slice(0, ANSWER_EXCERPT_CHARS) }),

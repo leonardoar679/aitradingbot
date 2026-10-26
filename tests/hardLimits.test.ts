@@ -166,6 +166,13 @@ describe('the note of what the heal changed', () => {
     expect(healed.filter((entry) => entry.path.startsWith('ai.'))).toEqual([])
   })
 
+  it('reads no roles and no route as none, and every other value a file lacks as missing, null or not (V8 Stage 0)', () => {
+    const healed = healedOf({ aiConfig: { dailyCapUsd: 1, defaultModel: model, enabledModels: [model], callsPerMinute: 30 }, settings: { keepRunningWhenClosed: false, uiMode: 'normal' } })
+    expect(healed.filter((entry) => entry.path === 'ai.roles' || entry.path === 'ai.route')).toEqual([])
+    // The language is null too until one is chosen, but a settings file without it was healed, and says so.
+    expect(healed).toContainEqual({ file: 'settings', path: 'app.language', how: 'missing', stored: '—', effective: 'null' })
+  })
+
   it('reads a news file written before the Monitoring Tag as the delisting it was', () => {
     const healed = healedOf({ news: { enabled: true, notifyHeld: false, askModels: true, paperShort: { enabled: false, stakeQuote: 100 } } })
     expect(healed.filter((entry) => entry.path.startsWith('news.delisting'))).toEqual([])

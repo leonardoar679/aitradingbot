@@ -106,6 +106,12 @@ export interface RoutedCaller {
 
 type RoutingConfig = Pick<AiConfig, 'defaultModel' | 'watch' | 'watchPaper' | 'additions' | 'roles'>
 
+/** Whether an addition can be asked now (V8 Stage 0): switched on, and, for one that asks by itself, with the
+ * watch on; one asked only on a click is on whenever it is switched on, whatever the watch. */
+export function additionAsksNow(config: Pick<AiConfig, 'additions' | 'watch'>, kind: AiAdditionKind): boolean {
+  return config.additions[kind] && (config.watch.enabled || !AI_ADDITION_INFO[kind].automatic)
+}
+
 /** Every caller that asks a model by itself, with the model it asks now. */
 export function routingTableOf(config: RoutingConfig, bots: readonly RoutedBot[]): RoutedCaller[] {
   const rows: RoutedCaller[] = []
@@ -126,7 +132,7 @@ export function routingTableOf(config: RoutingConfig, bots: readonly RoutedBot[]
       kind: 'addition',
       label: AI_ADDITION_INFO[kind].name,
       asks: [additionsModelOf(config, kind)],
-      on: config.additions[kind] && config.watch.enabled,
+      on: additionAsksNow(config, kind),
       follows: rolesSet ? 'its role' : "the watch's paper-trade model",
       role: AI_ADDITION_ROLES[kind]
     })

@@ -2,9 +2,10 @@ import { app } from 'electron'
 import { createHash } from 'node:crypto'
 import { mkdir, readFile } from 'fs/promises'
 import { join } from 'path'
-import { AI_ADDITION_DAILY_LIMITS, AI_ADDITION_KINDS, AI_ADDITION_PROMPT_VERSIONS, DEFAULT_AI_ADDITIONS, healAiAdditions, type AiAdditionsConfig } from '../../shared/aiAdditions'
+import { AI_ADDITION_DAILY_LIMITS, AI_ADDITION_KINDS, AI_ADDITION_PROMPT_VERSIONS, AI_ADDITION_ROLES, DEFAULT_AI_ADDITIONS, healAiAdditions, type AiAdditionsConfig } from '../../shared/aiAdditions'
 import { DEFAULT_AI_DAILY_CAP_USD, DEFAULT_AI_MODEL, DEFAULT_ENABLED_MODELS, GPT_INTRADAY_STRATEGY_ID, GPT_PROMPT_VERSION } from '../../shared/aiSignal'
 import {
+  additionAsksNow,
   healAiRoles,
   medianTokensOf,
   modelsInUse,
@@ -479,8 +480,11 @@ export async function previewAiRoles(choice: RoleChoice): Promise<RoutingPreview
   const watchDays = new Set(recent.filter((row) => row.source === 'watch').map((row) => Math.floor(row.at / DAY_SEC))).size
   await priced('watch', 'The watch', plan.watch.models, (row) => row.source === 'watch', plan.watch.enabled, plan.watch.maxEventsPerDay, watchDays === 0 ? 0 : watchEvents / Math.max(1, watchDays))
   for (const kind of AI_ADDITION_KINDS) {
-    const model = kind === 'exit' || kind === 'review' ? plan.defaultModel : (plan.roles.summarize ?? plan.defaultModel)
-    await priced(`addition:${kind}`, kind, [model], (row) => row.source === 'addition' && row.promptVersion === AI_ADDITION_PROMPT_VERSIONS[kind], state.additions[kind] && plan.watch.enabled, AI_ADDITION_DAILY_LIMITS[kind], undefined, (row) => row.source === 'addition')
+    // Each addition on the model its role names (V8 Stage 0), and on wherever it can be asked now: one asked only
+    // on a click counts whenever it is switched on, at its daily limit in the most.
+    const model = AI_ADDITION_ROLES[kind] === 'decide' ? plan.defaultModel : (plan.roles.summarize ?? plan.defaultModel)
+    const on = additionAsksNow({ additions: state.additions, watch: plan.watch }, kind)
+    await priced(`addition:${kind}`, kind, [model], (row) => row.source === 'addition' && row.promptVersion === AI_ADDITION_PROMPT_VERSIONS[kind], on, AI_ADDITION_DAILY_LIMITS[kind], undefined, (row) => row.source === 'addition')
   }
   for (const bot of bots) {
     if (bot.archived || !paidBot(bot)) continue

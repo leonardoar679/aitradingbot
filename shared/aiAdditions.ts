@@ -112,11 +112,16 @@ export interface AiAdditionsStatus {
   perCall: Record<AiAdditionKind, { usd: number | null; basis: 'history' | 'pricing' | 'unknown' }>
 }
 
-/** A stored setting, read as one. */
+/** A stored setting, read as one. A stored true or false is obeyed; anything else -- a kind the file was
+ * written before, or a value that is not a switch -- takes the kind's own default (V8 Stage 0), so that an
+ * addition added later ships as its default says and not on by being absent. */
 export function healAiAdditions(value: unknown): AiAdditionsConfig {
   const raw = (typeof value === 'object' && value !== null && !Array.isArray(value) ? value : {}) as Record<string, unknown>
   const out = { ...DEFAULT_AI_ADDITIONS }
-  for (const kind of AI_ADDITION_KINDS) out[kind] = raw[kind] !== false
+  for (const kind of AI_ADDITION_KINDS) {
+    const stored = raw[kind]
+    out[kind] = typeof stored === 'boolean' ? stored : DEFAULT_AI_ADDITIONS[kind]
+  }
   return out
 }
 

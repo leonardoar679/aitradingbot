@@ -1340,7 +1340,10 @@ describe('AI code has no route to a real order', () => {
     // constant: each a module of constants and heals, none of them trading, holding a key or asking.
     expect(importsOf(join(ROOT, 'shared', 'appDefaults.ts')).sort()).toEqual([
       'aiAdditions',
+      // aiCost and aiRoute (V8 Stage 0): the types of the roles and the route the effective configuration carries.
+      'aiCost',
       'aiPace',
+      'aiRoute',
       'aiSignal',
       'aiWatch',
       'aiWatchPaper',

@@ -18,6 +18,8 @@ import { healAiWatchPaper } from './aiWatchPaper'
 import { BTC_CRASH_PCT, HIGH_IMPACT, WATCH_IMPACT, healAlerts } from './alerts'
 import { SOUND_SCORES, TOP_CHANGE_CHIME_SECONDS, healSoundSettings } from './sounds'
 import { DEFAULT_CONFIG, type EffectiveStores } from './appDefaults'
+import type { AiRoles } from './aiCost'
+import type { AiRoute } from './aiRoute'
 import { CONFIG_FILE_VERSION, type ConfigFileName, type ConfigFileNote } from './configMigration'
 import { FEE_RATE, SLIPPAGE_RATE } from './fees'
 import { HARD_LIMITS } from './hardLimits'
@@ -302,11 +304,15 @@ export function defaultStores(): EffectiveStores {
  * as each service hands them out. */
 export function healStores(input: {
   settings: { paperRisk?: unknown; paperPause?: unknown; paperDigest?: unknown; alerts?: unknown; sounds?: unknown; keepRunningWhenClosed?: unknown; uiMode?: unknown; language?: unknown; forecast?: unknown }
-  ai: { defaultModel: string; enabledModels: string[]; dailyCapUsd: number; callsPerMinute: number; watch: unknown; watchPaper: unknown; additions: unknown }
+  ai: { defaultModel: string; enabledModels: string[]; dailyCapUsd: number; callsPerMinute: number; watch: unknown; watchPaper: unknown; additions: unknown; roles?: AiRoles | null; route?: AiRoute | null }
   scanner: ScannerConfig
   news: unknown
   live: EffectiveStores['live']
 }): EffectiveStores {
+  // The roles and the route as the AI service hands them out, healed there; written whole, in a fixed shape, so
+  // the hash reads the same routing the same way.
+  const roles = input.ai.roles === null || input.ai.roles === undefined ? null : { gate: input.ai.roles.gate ?? null, summarize: input.ai.roles.summarize ?? null }
+  const route = input.ai.route === null || input.ai.route === undefined ? null : { model: input.ai.route.model, when: input.ai.route.when }
   const pause = healPaperPause(input.settings.paperPause)
   const watch = healAiWatch(input.ai.watch, input.ai.enabledModels)
   return {
@@ -320,7 +326,7 @@ export function healStores(input: {
     watch,
     watchPaper: healAiWatchPaper(input.ai.watchPaper, watch.models),
     additions: healAiAdditions(input.ai.additions),
-    ai: { defaultModel: input.ai.defaultModel, enabledModels: [...input.ai.enabledModels].sort(), dailyCapUsd: input.ai.dailyCapUsd, callsPerMinute: input.ai.callsPerMinute },
+    ai: { defaultModel: input.ai.defaultModel, enabledModels: [...input.ai.enabledModels].sort(), dailyCapUsd: input.ai.dailyCapUsd, callsPerMinute: input.ai.callsPerMinute, roles, route },
     scanner: { enabled: input.scanner.enabled, universeSize: input.scanner.universeSize },
     news: healNewsConfig(input.news),
     live: input.live
@@ -379,6 +385,10 @@ const STORE_FILES: Record<keyof EffectiveStores, { file: ConfigFileName; under: 
  * record, not a setting. */
 const NOT_STORED = new Set(['live.hardMaxOrderQuote', 'paperDigest.lastDay'])
 
+/** Values a file holds only once they are set (V8 Stage 0): no roles until a move to roles is applied, no route
+ * until one is chosen. Absent, they are none, and nothing was healed. */
+const ABSENT_IS_NONE = new Set(['ai.roles', 'ai.route'])
+
 /** The ceilings a clamped value lands on. */
 const CEILINGS = new Set<number>(Object.values(HARD_LIMITS))
 
@@ -429,6 +439,7 @@ export function healNote(raw: Partial<Record<ConfigFileName, Record<string, unkn
       if (NOT_STORED.has(path)) continue
       const stored = at(base, under === null ? leaf.path.slice(1) : [under, ...leaf.path.slice(1)])
       if (stored === undefined) {
+        if (leaf.value === null && ABSENT_IS_NONE.has(path)) continue
         out.push({ file, path, how: 'missing', stored: '—', effective: JSON.stringify(leaf.value) ?? 'null' })
         continue
       }
