@@ -932,3 +932,27 @@ dropped, unread where no horizon had 200. No refit is made while a shadow is in 
 be cleared by every refit and no week would end. Registered before any shadow ran: V72R-S8-SHADOW, judged on Stage 9's
 runs (the shadow forecasting the closes the run in use forecasts, its owed outcomes settled, nothing of the run in use's
 record or paper trades naming it, a verdict read again equal to the logged one).
+
+## The runs of V7.2-R (Stage 9, 22-25 October 2026; judged in V8 Stage 0, 26 October 2026)
+
+Three runs on scratch profiles were registered before they started (V72R-S9-GATES): an hour with OpenRouter faked
+(v72r-1h), then twelve hours with the real models resumed to three days in all (v72r-12h, the $3 ceiling for every run's
+real calls). The hour passed every gate. The twelve hours and their resumption ran 3,843 of their 5,040 minutes: the
+machine lost power at about 14:40 UTC on 25 October, and the run, its supervisor and its last reports went with it.
+It was judged as it stands, not resumed: a 21-hour hole cannot be filled, and the gate line had already failed by its
+letter before it.
+
+| line | verdict | what it rests on |
+|---|---|---|
+| V72R-S9-GATES | **failed** | 62 of 62 hourly reports passed; roles and served held (11 calls, all asked and answered by the roles' models, $0.09; the deciding role never asked); the shadow held; but 3 of 199 quarter-hours went without a forecast while the data hosts flapped (19:10-19:12 UTC 23 October; 343 host moves over the run), no final forecast section was made, and the hour and the twelve hours ran from two builds |
+| V72R-S8-SHADOW | **held** | the run in use's 4,059 grid forecasts paired 100% by the shadow's, its 13,350 due horizons settled, nothing of the run in use's naming it; its week ends 30 October, after the run, so its verdict is unread |
+| V72R-S3-EITHER | **failed** | the chance of a 1% or 2% close either way runs a fifth above what came at an hour on both legs (1%: 20.6% said, 17.1% seen); at four hours 1% held on both legs and 2% on one; the user's record (58 hourly outcomes) is too short to read; a day not measured |
+| V72R-S3-LINES | not measured | 6,178 decisions, all NO_CALL: the 1%/2% line never had a call to hold back |
+| V72R-S4-COSTS | not measured | no demo key, and no trade of any kind on the runs |
+
+What the runs show beyond the lines: the app ran unattended for 64 hours on the real market with nothing broken that
+the hourly gates read; the models answered as routed; the forecast called no way, so nothing traded, which is what the
+year's walk forward said it would do. The card keeps the ninety-day move rates: the either-way odds are not shown, and
+V8 reads them again on seven months of saved records (V8-R1-EITHER). The run's scratch profile held copies of the
+user's encrypted AI key after the power loss, with the watch switched on; they were deleted by hand on 26 October and
+the profile's AI switched off, and from V8 every harness start and session start sweeps such copies.

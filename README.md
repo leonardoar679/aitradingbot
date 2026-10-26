@@ -581,8 +581,10 @@ carries the round trip, and the laboratory's and the forecast trader's paper tra
 or Binance -- at its fee, each market fill a half spread and a leg of impact worse, settled from that venue's candles. The
 drawer's **What a round trip costs now** shows both venues for the pair. The scanner's movers at candidate or urgent,
 over the research's $20 million floor, join the forecast's pairs after the research's own, at most sixty in all
-(`shared/forecast/universe.ts`). The cost line is registered (V72R-S4-COSTS) to be judged on the Stage 9 runs' demo
-trades, a paper trade's cost being the model's own.
+(`shared/forecast/universe.ts`). The cost line was registered (V72R-S4-COSTS) to be judged on the Stage 9 runs' demo
+trades, a paper trade's cost being the model's own; with no demo key stored and no trade made on the runs, it was not
+measured (26 October 2026). The runs themselves, and what they found, are in `research/FORECAST.md` ("The runs of
+V7.2-R").
 
 **The replay out of sample** (since 22 October 2026; V7.2-R Stage 5; `shared/forecast/replay.ts`,
 `shared/forecast/rangeStrategies.ts`, `electron/services/forecastReplayService.ts`, `research/replay.ts`). The laboratory
