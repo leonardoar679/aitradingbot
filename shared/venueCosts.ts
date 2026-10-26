@@ -1,6 +1,7 @@
 import { SLIPPAGE_RATE } from './fees'
 import { LAB_RISK } from './forecast/labTrader'
 import type { Exchange } from './ipc'
+import { ASSUMED_FUNDING_RATE, FUNDING_INTERVAL_SEC } from './perp'
 
 // WHAT A ROUND TRIP COSTS, VENUE BY VENUE (V7.2-R Stage 3's sequel, Stage 4; 22 October 2026). The forecast's
 // decisions charged every trade the same 0.24% -- a 0.1% fee and 2 bps of slippage each way -- plus the spread where
@@ -40,6 +41,33 @@ export const VENUE_FEES: Readonly<Record<'binance' | 'bitget', VenueFees>> = {
 }
 
 export type CostedVenue = keyof typeof VENUE_FEES
+
+/** A venue's USDT-margined perpetual fees for its base tier, in percent of a fill's notional (V8 Stage 3). A short is
+ * costed on the perpetual, since spot sells only what is held: a taker fee each way, and the funding the hold crosses
+ * (fundingAgainstPct). */
+export const PERP_FEES: Readonly<Record<CostedVenue, VenueFees>> = {
+  binance: {
+    takerPct: 0.05,
+    makerPct: 0.02,
+    readOn: '2026-10-26',
+    source: "Binance's USDⓈ-M futures schedule for a regular user (VIP 0), without the BNB discount (Binance support article 360033544231)"
+  },
+  bitget: {
+    takerPct: 0.06,
+    makerPct: 0.02,
+    readOn: '2026-10-26',
+    source: "Bitget's standard USDT-M futures rate for a regular user (Bitget support article 12560603892733)"
+  }
+}
+
+/** The funding a perpetual held from `fromSec` to `toSec` pays, in percent of its notional, charged against the
+ * position: each funding time the hold crosses (every eight hours from 00:00 UTC) at the assumed rate (shared/perp.ts),
+ * since the rate's sign at a funding time to come is not known when the trade is weighed. */
+export function fundingAgainstPct(fromSec: number, toSec: number): number {
+  if (!Number.isFinite(fromSec) || !Number.isFinite(toSec) || toSec <= fromSec) return 0
+  const crossed = Math.floor(toSec / FUNDING_INTERVAL_SEC) - Math.floor(fromSec / FUNDING_INTERVAL_SEC)
+  return crossed * ASSUMED_FUNDING_RATE * 100
+}
 
 /** The stake a round trip is costed at: the most the paper laboratory puts in one trade of its account. */
 export const VENUE_STAKE_QUOTE = (LAB_RISK.fundQuote * LAB_RISK.maxPositionPct) / 100

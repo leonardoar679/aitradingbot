@@ -325,6 +325,8 @@ describe('AI code has no route to a real order', () => {
     // V7.2-R Stage 8 the shadow week's verdict (shared/forecast/shadow.ts), arithmetic on the two records.
     // Since V8 Stage 2 the liquidity gate in shadow over its TRADE decisions: the venues' books it already reads,
     // the venue costs' stake, and a miss written to the paper books' file (booksService, misses) -- a record, no trade.
+    // And at a whole hour the large moves of its pairs, written with who called them through the prediction record's
+    // service (predictionLedgerService) -- a record, no trade.
     expect(importsOf(engine).sort()).toEqual([
       'aciTable',
       'atomicWrite',
@@ -347,6 +349,7 @@ describe('AI code has no route to a real order', () => {
       'path',
       'prediction',
       'predictionChange',
+      'predictionLedgerService',
       'promises',
       'ranking',
       'settingsService',
@@ -357,6 +360,10 @@ describe('AI code has no route to a real order', () => {
       'venueCosts',
       'venueQuotesService'
     ])
+    // The prediction record's service reads public bars and its own files, and nothing that trades.
+    const ledger = join(SERVICES, 'predictionLedgerService.ts')
+    expect(importsOf(ledger).filter((name) => LIVE_MODULES.has(name) || aiModuleNames.has(name))).toEqual([])
+    expect(readFileSync(ledger, 'utf-8')).not.toMatch(/setSettings|settings\.set|placeLive|liveTrading|credentials/)
     // The books' service it writes a miss through reads the settings and its own files, and nothing that trades.
     const booksService = join(SERVICES, 'booksService.ts')
     expect(importsOf(booksService).filter((name) => LIVE_MODULES.has(name) || aiModuleNames.has(name))).toEqual([])

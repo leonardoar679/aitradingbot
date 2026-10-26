@@ -24,6 +24,10 @@ interface HeldBooks {
 }
 
 let wanted: string[] = []
+/** THE EVENT LANE (V8 Stage 3): coins an announcement or a pasted link names, outside the pairs ranked and traded, whose
+ * books are read on demand for a card's cost and gate, at most five at once, and let go when no card wants them. */
+export const EVENT_PAIRS_MAX = 5
+let eventPairs: string[] = []
 const held = new Map<string, HeldBooks>()
 let bitgetFees = new Map<string, number>()
 let feesAt = 0
@@ -54,8 +58,29 @@ async function readOnce(nowMs: number = Date.now()): Promise<void> {
     if (read === null) continue
     held.set(pair, { at: read.at, books: read.books })
   }
+  for (const pair of eventPairs) {
+    if (wanted.includes(pair)) continue
+    const read = await readVenueBooks(pair).catch(() => null)
+    if (read !== null) held.set(pair, { at: read.at, books: read.books })
+  }
   // A pair no longer wanted is let go.
-  for (const pair of [...held.keys()]) if (!wanted.includes(pair)) held.delete(pair)
+  for (const pair of [...held.keys()]) if (!wanted.includes(pair) && !eventPairs.includes(pair)) held.delete(pair)
+}
+
+/** The event lane's pairs, most recent first; those past the lane's five are not read. */
+export function setEventPairs(pairs: readonly string[]): void {
+  eventPairs = [...new Set(pairs.map((pair) => pair.toUpperCase()))].slice(0, EVENT_PAIRS_MAX)
+}
+
+/** Reads one event pair's books now, rather than at the next minute's read: a card is weighed within the minute an
+ * announcement is seen. True where a book was read. */
+export async function readEventBooksNow(pair: string): Promise<boolean> {
+  const symbol = pair.toUpperCase()
+  if (!eventPairs.includes(symbol) && !wanted.includes(symbol)) return false
+  const read = await readVenueBooks(symbol).catch(() => null)
+  if (read === null) return false
+  held.set(symbol, { at: read.at, books: read.books })
+  return true
 }
 
 function readNow(): Promise<void> {
@@ -101,8 +126,8 @@ export function venueGateOf(pair: string, venue: CostedVenue, side: 'BUY' | 'SEL
 }
 
 /** What the service holds, for the status. */
-export function venueQuotesState(): { pairs: string[]; held: number; bitgetFees: number; feesAt: number | null } {
-  return { pairs: [...wanted], held: held.size, bitgetFees: bitgetFees.size, feesAt: feesAt === 0 ? null : feesAt }
+export function venueQuotesState(): { pairs: string[]; events: string[]; held: number; bitgetFees: number; feesAt: number | null } {
+  return { pairs: [...wanted], events: [...eventPairs], held: held.size, bitgetFees: bitgetFees.size, feesAt: feesAt === 0 ? null : feesAt }
 }
 
 /** Starts the minute's reads. Called once, from electron/main.ts. */
@@ -121,6 +146,7 @@ export const venueQuotesForTest = {
   },
   reset(): void {
     wanted = []
+    eventPairs = []
     held.clear()
     bitgetFees = new Map()
     feesAt = 0

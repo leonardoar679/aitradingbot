@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'fs'
+import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import type { Candle } from '../shared/ipc'
 import { readEventAt } from '../shared/marketEvent'
@@ -153,6 +153,11 @@ interface Scored {
   /** The four-hour hold, and that less the same hold at the usual minutes. */
   holdNet: number | null
   holdExcess: number | null
+  /** The hold before any cost, entry open to exit open in the news's direction, and the best that move had been by
+   * each minute from the entry (the bar's low for a short, its high for a long): for the primary card's figures
+   * (V8 Stage 3), written by ROWS_OUT and never printed. */
+  holdGross: number | null
+  holdPath: number[] | null
 }
 
 function score(pair: StudyPair, symbol: string, bars: Candle[], kind: Kind): Scored | { skipped: string } {
@@ -194,7 +199,20 @@ function score(pair: StudyPair, symbol: string, bars: Candle[], kind: Kind): Sco
 
   const moves = HORIZONS.map((minutes) => move(bars, i, i + minutes, side))
   const heldNet = holdNet(bars, entryIndex, i + HOLD_EXIT_BARS, side, slippage)
+  const exitIndex = i + HOLD_EXIT_BARS
+  const held = heldNet !== null && exitIndex < bars.length
+  const holdPath: number[] = []
+  if (held) {
+    let best = -Infinity
+    for (let k = entryIndex; k < exitIndex; k++) {
+      const extreme = side === -1 ? bars[k].low : bars[k].high
+      best = Math.max(best, side * (extreme / bars[entryIndex].open - 1) * 100)
+      holdPath.push(Math.round(best * 10_000) / 10_000)
+    }
+  }
   return {
+    holdGross: held ? move(bars, entryIndex, exitIndex, side) : null,
+    holdPath: held ? holdPath : null,
     holdNet: heldNet,
     holdExcess: heldNet === null || usualHold.length < LEAST_USUAL_SAMPLES / 2 ? null : heldNet - mean(usualHold),
     pair,
@@ -295,6 +313,22 @@ export function checkOrStudy<C extends string>(options: {
       const near = offsets.filter((offset) => offset >= 0 && offset <= 2).length
       console.log(`${category.padEnd(15)} n=${offsets.length}  at 0 to +2: ${((near / offsets.length) * 100).toFixed(0)}% (by chance ${((3 / 21) * 100).toFixed(0)}%)   ${line}`)
     }
+  }
+
+  // ROWS_OUT=<file>: every coin scored, whole, for research/delistingCard.ts (V8 Stage 3). Nothing printed changes.
+  if (MODE === 'study' && process.env.ROWS_OUT !== undefined) {
+    const rows = scored.map((row) => ({
+      category: row.pair.category,
+      articleId: row.pair.articleId,
+      title: row.pair.title,
+      ticker: row.pair.ticker,
+      symbol: row.symbol,
+      releaseSec: row.pair.releaseSec,
+      holdGross: row.holdGross,
+      holdNet: row.holdNet,
+      holdPath: row.holdPath
+    }))
+    writeFileSync(process.env.ROWS_OUT, JSON.stringify({ set: SET, rows }))
   }
 
   if (MODE === 'study') {

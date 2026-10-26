@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ROUND_TRIP_PCT } from '../shared/forecast/edge'
 import { SLIPPAGE_RATE } from '../shared/fees'
-import { COSTED_VENUES, VENUE_FEES, VENUE_STAKE_QUOTE, cheapestOf, impactPct, isCostedVenue, paperFillOf, roundTripOf, venueFeeOf, type RoundTrip } from '../shared/venueCosts'
+import { COSTED_VENUES, PERP_FEES, VENUE_FEES, VENUE_STAKE_QUOTE, cheapestOf, fundingAgainstPct, impactPct, isCostedVenue, paperFillOf, roundTripOf, venueFeeOf, type RoundTrip } from '../shared/venueCosts'
 
 // WHAT A ROUND TRIP COSTS, VENUE BY VENUE (shared/venueCosts.ts; V7.2-R Stage 4): a taker fee each way, the spread
 // crossed, and each leg's impact at the stake from the book's levels; the flat slippage where only the best levels are
@@ -118,5 +118,27 @@ describe('a round trip', () => {
     expect(cheapestOf([at('binance', 0.25), at('bitget', 0.21)])!.venue).toBe('bitget')
     expect(cheapestOf([at('binance', 0.21), at('bitget', 0.21)])!.venue).toBe('binance')
     expect(cheapestOf([])).toBeNull()
+  })
+})
+
+describe("a perpetual's fees and funding (V8 Stage 3)", () => {
+  it('are each venue base tier for USDT-margined perpetuals, read with their date and source', () => {
+    expect(PERP_FEES.binance).toMatchObject({ takerPct: 0.05, makerPct: 0.02, readOn: '2026-10-26' })
+    expect(PERP_FEES.bitget).toMatchObject({ takerPct: 0.06, makerPct: 0.02, readOn: '2026-10-26' })
+    expect(PERP_FEES.binance.source).toMatch(/USD.-M futures/)
+    expect(Object.keys(PERP_FEES)).toEqual(COSTED_VENUES)
+  })
+  it('charge each funding time a hold crosses at the assumed rate, against the position', () => {
+    const midnight = 1_792_022_400 // 00:00 UTC, a funding time
+    expect(midnight % 28_800).toBe(0)
+    // Four hours from midnight cross no funding time; four hours to it cross one; a day crosses three.
+    expect(fundingAgainstPct(midnight, midnight + 4 * 3600)).toBe(0)
+    expect(fundingAgainstPct(midnight - 4 * 3600, midnight)).toBeCloseTo(0.01, 12)
+    expect(fundingAgainstPct(midnight - 1, midnight + 86_400 - 1)).toBeCloseTo(0.03, 12)
+    expect(fundingAgainstPct(midnight + 60, midnight + 8 * 3600 + 60)).toBeCloseTo(0.01, 12)
+    // No span, a span backwards, or no time at all costs nothing.
+    expect(fundingAgainstPct(midnight, midnight)).toBe(0)
+    expect(fundingAgainstPct(midnight + 10, midnight)).toBe(0)
+    expect(fundingAgainstPct(Number.NaN, midnight)).toBe(0)
   })
 })

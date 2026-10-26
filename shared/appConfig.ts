@@ -25,6 +25,8 @@ import { TASK_LINES } from './tasks'
 import { PAPER_BOOKS_VERSION } from './paperBooks'
 import { LIQUIDITY_LINES } from './liquidityGate'
 import { SOURCE_RECORD_LINES } from './evaluation/predictionRecord'
+import { MOVE_LINES } from './evaluation/moves'
+import { DELISTING_CARD_LINES, DELIST_LIVE_LINES, PRIMARY_CALL_LINES } from './forecast/primaryCall'
 import { CONFIG_FILE_VERSION, type ConfigFileName, type ConfigFileNote } from './configMigration'
 import { FEE_RATE, SLIPPAGE_RATE } from './fees'
 import { HARD_LIMITS } from './hardLimits'
@@ -278,7 +280,12 @@ export const ENGINE_CONSTANTS = {
   // The gate on a trade whose move is large only because its book is thin (V8 Stage 2; shared/liquidityGate.ts).
   liquidity: LIQUIDITY_LINES,
   // The record of every prediction that is not the forecast's own (V8 Stage 2; shared/evaluation/predictionRecord.ts).
-  sourceRecord: SOURCE_RECORD_LINES
+  sourceRecord: SOURCE_RECORD_LINES,
+  // The primary call (V8 Stage 3; shared/forecast/primaryCall.ts): the lines a card clears, the delisting study its card
+  // rests on, and the live check that can withdraw it.
+  primaryCall: { lines: PRIMARY_CALL_LINES, delisting: DELISTING_CARD_LINES, delistLive: DELIST_LIVE_LINES },
+  // The large moves of the forecast's pairs and who called them (V8 Stage 3; shared/evaluation/moves.ts).
+  moves: MOVE_LINES
 } as const
 
 /** One value the heal changed on the way from a file to the store the app runs on. */

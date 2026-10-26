@@ -1,7 +1,9 @@
 import { app } from 'electron'
 import { readFile } from 'fs/promises'
 import { join } from 'path'
+import type { ForecastBar } from '../../shared/forecast/bars'
 import type { Candle } from '../../shared/ipc'
+import { movesOf, readMoveLine, type MoveLine } from '../../shared/evaluation/moves'
 import {
   SOURCE_RECORD_LINES,
   dueAt,
@@ -12,7 +14,7 @@ import {
   type SourceOutcome,
   type SourcePrediction
 } from '../../shared/evaluation/predictionRecord'
-import { appendJsonLine, listMonthFiles } from './jsonlStore'
+import { appendJsonLine, appendJsonLines, listMonthFiles } from './jsonlStore'
 import { fetchHistoricalRange } from './marketService'
 
 // THE RECORD OF EVERY PREDICTION THAT IS NOT THE FORECAST'S OWN, KEPT AND SETTLED (shared/evaluation/
@@ -161,6 +163,44 @@ export async function sourceRecord(filter: { source?: string; sinceSec?: number 
   return predictions.sort((a, b) => a.madeAt - b.madeAt).map((prediction) => ({ prediction, outcome: outcomes.get(prediction.id) ?? null }))
 }
 
+/** MOVES NOBODY CALLED (shared/evaluation/moves.ts): at a whole hour, the large moves of the pairs whose bars are held
+ * over the hour and the day that ended, each with the predictions on file that called it, appended to
+ * predictions/moves-YYYY-MM.jsonl. An hour is written once: a pass made again at the same close (the models coming
+ * ready) and a start within the hour find it on file. */
+const movesWritten = new Set<number>()
+const movesFile = (seconds: number): string => join(predictionLedgerSeam.dir(), `moves-${monthOf(seconds)}.jsonl`)
+
+export async function recordHourMoves(atSec: number, pairs: readonly string[], barsOf: (pair: string) => readonly ForecastBar[] | null): Promise<number> {
+  if (atSec % 3600 !== 0 || movesWritten.has(atSec)) return 0
+  movesWritten.add(atSec)
+  for (const raw of await linesOf(movesFile(atSec))) {
+    const line = readMoveLine(raw)
+    if (line !== null && line.at === atSec) return 0
+  }
+  const predictions = (await sourceRecord({ sinceSec: atSec - SOURCE_RECORD_LINES.owedLookbackSec })).map((entry) => entry.prediction)
+  const lines: MoveLine[] = []
+  for (const pair of pairs) {
+    const bars = barsOf(pair)
+    if (bars === null || bars.length === 0) continue
+    lines.push(...movesOf(pair, 'binance', bars, atSec, predictions))
+  }
+  if (lines.length > 0) await appendJsonLines(movesFile(atSec), lines)
+  return lines.length
+}
+
+/** The large moves on file since a moment, oldest first; for the Performance page and a run's report. */
+export async function moveRecord(sinceSec = 0): Promise<MoveLine[]> {
+  const dir = predictionLedgerSeam.dir()
+  const out: MoveLine[] = []
+  for (const { name } of await listMonthFiles(dir, /^moves-(\d{4}-\d{2})\.jsonl$/)) {
+    for (const raw of await linesOf(join(dir, name))) {
+      const line = readMoveLine(raw)
+      if (line !== null && line.at >= sinceSec) out.push(line)
+    }
+  }
+  return out.sort((a, b) => a.at - b.at)
+}
+
 /** Reads back what is owed, writes missing what is past the look-back, and settles every minute. */
 export async function startPredictionLedger(): Promise<void> {
   const now = predictionLedgerSeam.now()
@@ -186,6 +226,7 @@ export function resetPredictionLedger(): void {
   owed.clear()
   settled.clear()
   listeners.clear()
+  movesWritten.clear()
   if (timer !== null) clearInterval(timer)
   timer = null
   ticking = false

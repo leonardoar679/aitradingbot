@@ -26,6 +26,7 @@ import { tell } from './noticeService'
 import { getSettings } from './settingsService'
 import { setVenuePairs, venueCostOf, venueGateOf } from './venueQuotesService'
 import { recordMiss } from './booksService'
+import { recordHourMoves } from './predictionLedgerService'
 import { MISS_VERSION } from '../../shared/misses'
 import { VENUE_STAKE_QUOTE } from '../../shared/venueCosts'
 
@@ -370,6 +371,8 @@ async function runPass(closedAt: number): Promise<void> {
   }
   await followCalls()
   await shadowLiquidity(Date.now()).catch((error) => console.error('The liquidity gate could not be read over the decisions:', error))
+  // At a whole hour, the large moves of the hour and the day and who called them (V8; shared/evaluation/moves.ts).
+  await recordHourMoves(closedAt, sources.universe(), (pair) => sources.seriesOf(pair)?.m5 ?? null).catch((error) => console.error("The hour's large moves could not be recorded:", error))
   // The venues' books are read for the pairs of open trades first, then the top ten (V7.2-R Stage 4).
   setVenuePairs(await venuePairs())
   Object.assign(state, { status: 'running', predictions: engine.latest.size, pending: pendingCount(engine), lastPassAt: closedAt, lastPassMs: Date.now() - startedAt, lastError: null })
