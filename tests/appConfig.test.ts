@@ -55,8 +55,9 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 // V8 Stage 2), from 140df05699f0.
 // The prediction record of every V8 source, the paper books' arithmetic and the liquidity gate (V8 Stage 2),
 // from 1098a37acac9. The primary call's lines, the delisting study its card rests on and its live check, and the
-// record of large moves (V8 Stage 3), from 4895559f5f13.
-const PINNED_ENGINE_VERSION = '764e875f8492'
+// record of large moves (V8 Stage 3), from 4895559f5f13; the study figures the delisting card's coins reproduce, to
+// the digits research/news.ts printed them rather than NEWS.md's rounding of them (V8 Stage 3), from 764e875f8492.
+const PINNED_ENGINE_VERSION = 'bee219d57858'
 
 describe('the engine version', () => {
   it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {

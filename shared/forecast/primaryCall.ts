@@ -33,7 +33,9 @@ export const PRIMARY_CALL_LINES = {
 /** The delisting card and the study it rests on (V8-S3-DELIST-CARD): the rule as research/NEWS.md measured it -- short
  * at the open of the second minute after the announcement's, out at the open 240 minutes after it, a 0.1% fee and
  * 0.1% slippage a side -- shown within the rule's five minutes, and what the study printed for the hold after its
- * costs, which the coins' rows the card shows must reproduce (shared/news/delistingStudy.ts). */
+ * costs, to the digits research/news.ts printed them, which the coins' rows the card shows must reproduce
+ * (shared/delistingStudy.ts). NEWS.md rounds them to +13.17 and -80.3, the second twice: the worst coin's hold is
+ * -80.247%, -80.2 at one decimal. */
 export const DELISTING_CARD_LINES = {
   version: 'delisting-card-v1',
   entryBars: 2,
@@ -41,7 +43,7 @@ export const DELISTING_CARD_LINES = {
   feePct: 0.1,
   slippagePct: 0.1,
   windowSec: 300,
-  published: { hourlyMeanPct: 13.17, ahead: 75, coins: 87, hours: 18, worstPct: -80.3 }
+  published: { hourlyMeanPct: 13.169, ahead: 75, coins: 87, hours: 18, worstPct: -80.25 }
 } as const
 
 /** The live check on the delisting rule (V8-S3-DELIST-LIVE): the delistings announced since 1 October 2026 as the app's

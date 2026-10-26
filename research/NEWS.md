@@ -225,6 +225,10 @@ spot listing had under a day of candles before it and is left out.
 | **Held four hours, net** | **+13.17 (t +4.8)**, 75 of 87 ahead, worst −80.3 | −0.94 (t −0.7), worst −21.9 | +2.39 (t +0.6), worst −45.1 |
 | **Held four hours, vs the usual** | **+13.37 (t +4.9)** | −3.25 (t −1.7) | +1.91 (t +0.5) |
 
+The delisting's worst, −80.3 above, is the study's printed −80.25 rounded a second time: the coin's hold is −80.247%,
+−80.2 at one decimal (found on 26 October 2026, when V8 Stage 3 ran the study again for its coins' rows; nothing else
+in the table moves).
+
 **Against the rule:**
 
 | | The bracket (t ≥ 2) | Held four hours (t ≥ 3) | |

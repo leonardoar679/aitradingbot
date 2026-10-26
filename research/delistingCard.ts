@@ -37,15 +37,15 @@ const coins: DelistingStudyCoin[] = held
   .sort((a, b) => a.hour - b.hour || a.ticker.localeCompare(b.ticker))
 const figures = delistingFiguresOf(coins)
 
-// What the study printed for the hold after its costs: the mean of hourly means to two decimals, the coins ahead of the
-// coins, the hours, and the worst to one decimal.
+// What the study printed for the hold after its costs, to the digits research/news.ts printed them: the mean of hourly
+// means to three decimals, the coins ahead of the coins, the hours, and the worst to two decimals.
 const published = DELISTING_CARD_LINES.published
 const reproduced =
-  figures.hourlyMeanNetPct.toFixed(2) === published.hourlyMeanPct.toFixed(2) &&
+  figures.hourlyMeanNetPct.toFixed(3) === published.hourlyMeanPct.toFixed(3) &&
   figures.ahead === published.ahead &&
   figures.coins === published.coins &&
   figures.hours === published.hours &&
-  figures.worstNetPct.toFixed(1) === published.worstPct.toFixed(1)
+  figures.worstNetPct.toFixed(2) === published.worstPct.toFixed(2)
 console.log(`coins ${figures.coins}, hours ${figures.hours}, hourly mean net ${figures.hourlyMeanNetPct.toFixed(3)}, ahead ${figures.ahead}, worst ${figures.worstNetPct.toFixed(2)}`)
 if (!reproduced) throw new Error(`the rows do not reproduce the study's printed figures (${JSON.stringify(published)}): nothing is written`)
 
