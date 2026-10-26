@@ -45,7 +45,9 @@ const ADDED_SINCE_16_OCTOBER = [
   'aiRouting'
 ]
 // The intervals' lines, the pass's version and the tape's: plumbing with no line to hold or fail.
-const INFRASTRUCTURE = ['forecast.uncertainty', 'forecast.pass', 'forecast.tape', 'forecast.moveRates', 'forecast.universe']
+// httpPacing (V8 Stage 1): the hosts' budgets, which keep every reader within the limits each host sets; tasks: the
+// limits a worker's task runs under.
+const INFRASTRUCTURE = ['forecast.uncertainty', 'forecast.pass', 'forecast.tape', 'forecast.moveRates', 'forecast.universe', 'httpPacing', 'tasks']
 
 describe('the registry on file', () => {
   const registry = parseRegistry(TEXT)
@@ -74,6 +76,18 @@ describe('the registry on file', () => {
     for (const name of named) expect(exists(name), name).toBe(true)
     const covered = (added: string): boolean => [...named, ...INFRASTRUCTURE].some((name) => added === name || added.startsWith(`${name}.`))
     for (const added of ADDED_SINCE_16_OCTOBER) expect(covered(added), added).toBe(true)
+  })
+
+  it('names every engine line added since V8 began, by a registration or as infrastructure, with no list to keep by hand (V8 Stage 1)', () => {
+    // The engine's every path as it stood when V8 began (26 October 2026, before Stage 1's lines).
+    const snapshot = new Set(JSON.parse(readFileSync(join(__dirname, 'fixtures', 'engine-paths-v8.json'), 'utf-8')) as string[])
+    const paths = flattenConfig(ENGINE_CONSTANTS).map((entry) => entry.path)
+    const named = registry.registrations.flatMap((entry) => entry.constants ?? [])
+    const covered = (path: string): boolean => [...named, ...INFRASTRUCTURE].some((name) => path === name || path.startsWith(`${name}.`))
+    const unnamed = paths.filter((path) => !snapshot.has(path) && !covered(path))
+    expect(unnamed).toEqual([])
+    // The snapshot is of the engine as it was: no path in it has gone missing without a word.
+    expect([...snapshot].filter((path) => !paths.includes(path))).toEqual([])
   })
 
   it('is shown as a table, each registration with its last result', () => {

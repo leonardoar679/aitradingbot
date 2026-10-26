@@ -20,6 +20,8 @@ import { SOUND_SCORES, TOP_CHANGE_CHIME_SECONDS, healSoundSettings } from './sou
 import { DEFAULT_CONFIG, type EffectiveStores } from './appDefaults'
 import type { AiRoles } from './aiCost'
 import type { AiRoute } from './aiRoute'
+import { HTTP_PACING_LINES } from './httpPacing'
+import { TASK_LINES } from './tasks'
 import { CONFIG_FILE_VERSION, type ConfigFileName, type ConfigFileNote } from './configMigration'
 import { FEE_RATE, SLIPPAGE_RATE } from './fees'
 import { HARD_LIMITS } from './hardLimits'
@@ -262,7 +264,11 @@ export const ENGINE_CONSTANTS = {
     paperLab: { strategies: LAB_STRATEGIES, ...LAB_RISK },
     plan: { version: PLAN_VERSION, ...PLAN_LINES },
     classes: OPPORTUNITY_CLASS_LINES
-  }
+  },
+  // One budget per host for every public read (V8 Stage 1; shared/httpPacing.ts).
+  httpPacing: HTTP_PACING_LINES,
+  // The limits a task in a worker of its own runs under (V8 Stage 1; shared/tasks.ts).
+  tasks: TASK_LINES
 } as const
 
 /** One value the heal changed on the way from a file to the store the app runs on. */

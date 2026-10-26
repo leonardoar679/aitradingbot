@@ -504,3 +504,20 @@ describe('the first resolution of a session', () => {
     expect(servesBinanceComMarket({ name: 'binance.us' })).toBe(false)
   })
 })
+
+describe('a range read (V8 Stage 1)', () => {
+  it("reads binance.com's market or nothing: a session on binance.us is refused, not scored as Binance's prices", async () => {
+    stubHosts(['api.binance.us'])
+    expect((await resolveEndpoint()).name).toBe('binance.us')
+    await expect(binanceAdapter.fetchHistoricalRange('BTCUSDT', '1m', 1_700_000_000, 1_700_003_600, () => undefined, () => false)).rejects.toThrow(
+      "binance.us serves another market's prices: a range is read from binance.com or its mirror only."
+    )
+  })
+
+  it('reads the mirror, page by page, behind the reads that cannot wait', async () => {
+    const tried = stubHosts(['data-api.binance.vision'])
+    const candles = await binanceAdapter.fetchHistoricalRange('BTCUSDT', '1m', 0, 60, () => undefined, () => false)
+    expect(candles).toHaveLength(1)
+    expect(tried.at(-1)).toMatch(/^https:\/\/data-api\.binance\.vision\/api\/v3\/klines\?symbol=BTCUSDT&interval=1m&startTime=0&endTime=60000&limit=1000$/)
+  })
+})

@@ -1,5 +1,8 @@
-import { app, shell, BrowserWindow, Menu, Tray, nativeImage } from 'electron'
+import { app, BrowserWindow, Menu, Tray, nativeImage } from 'electron'
 import { join } from 'path'
+import { pathToFileURL } from 'url'
+import { guardEveryWindow } from './windowGuard'
+import type { OwnPage } from '../shared/navigationGuard'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc'
 import { startResearchFolder } from './services/researchFolderService'
@@ -48,6 +51,17 @@ let lastTooltip = ''
  * changes. */
 const TEST_LABEL = process.env.TRADERSPIDER_TEST_LABEL?.trim() || null
 
+/** The built renderer's page. */
+function rendererIndex(): string {
+  return join(__dirname, '../renderer/index.html')
+}
+
+/** The app's own page, which the window may show and nothing else (V8 Stage 1). */
+function ownPage(): OwnPage {
+  const devUrl = is.dev && process.env['ELECTRON_RENDERER_URL'] ? process.env['ELECTRON_RENDERER_URL'] : null
+  return { devUrl, fileUrl: pathToFileURL(rendererIndex()).href }
+}
+
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
     width: 1280,
@@ -73,10 +87,9 @@ function createWindow(): BrowserWindow {
     mainWindow.show()
   })
 
-  mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
-    return { action: 'deny' }
-  })
+  // A new window opens nothing (V8 Stage 1): before V8 any window.open went to the system browser, whatever its
+  // URL. The guard installed before this window was made holds it to the app's own page (electron/windowGuard.ts).
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
 
   // Closing the window (the V5 document, §98-99; shared/keepRunning.ts): with "Keep running when
   // the window is closed" on (Settings › Essentials), the window hides to the tray and every loop
@@ -102,7 +115,7 @@ function createWindow(): BrowserWindow {
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    mainWindow.loadFile(rendererIndex())
   }
 
   return mainWindow
@@ -187,6 +200,8 @@ if (!gotSingleInstanceLock) {
     app.on('browser-window-created', (_, window) => {
       optimizer.watchWindowShortcuts(window)
     })
+    // Every web contents from here on is held to the app's own page (V8 Stage 1; shared/navigationGuard.ts).
+    guardEveryWindow(app, ownPage())
 
     // The research folder (V7.2-R Stage 2): the configuration, the errors and warnings, each paper trade's life
     // and the window's reports, written into <userData>/trader-spider-research/ as the app runs, and packed into

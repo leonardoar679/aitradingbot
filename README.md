@@ -3599,6 +3599,24 @@ electron/preload.ts  ── contextBridge ──▶  window.api.*  (renderer)
   `electron/services/recordRetentionService.ts`; a pinned constant under the engine's
   `retention`), the monthly files are kept whole, and what every record directory weighs is on the
   effective-config card under "What the start read" and in the start's log line.
+- **The window is held to its own page** (since 26 October 2026, V8 Stage 1; `shared/navigationGuard.ts`,
+  `electron/windowGuard.ts`): every web contents opens no new window, is kept from navigating or being redirected
+  anywhere but the app's own page, and attaches no `<webview>`; the renderer holds no link, `window.open` or raw
+  HTML (a test walks `src/`), and only `window.api` is exposed -- the toolkit's generic `window.electron`, which
+  nothing used, is gone. V8 brings pasted URLs and strangers' text on screen; a page the app means to open goes to
+  the system browser through the main process.
+- **One budget per host for every public read** (since 26 October 2026, V8 Stage 1; `shared/httpPacing.ts`,
+  `electron/services/httpPacing.ts`): every Binance market-data read passes `binanceBudget` in `fetchMarketData` --
+  the weight Binance says this address used in the minute is read from each answer, a read that can wait (a
+  range read) waits while it is above 2,400 of 6,000, and a 429 or a 418 holds every read until its Retry-After
+  (half an hour for a 418 that names none), failing a held read at once. A range read has a 15-second page
+  deadline and refuses binance.us. Hyperliquid's weight and OKX's endpoints (V8 Stages 6-7) have their budgets
+  beside it. Signed requests never pass a budget: an exit is never held.
+- **Tasks in a worker of their own** (since 26 October 2026, V8 Stage 1; `shared/tasks.ts`,
+  `electron/tasks/taskWorker.ts`, `electron/services/taskWorkerService.ts`): work on strangers' text or heavy
+  records -- a pasted article's HTML, a trader's fills -- runs in a worker thread started for it alone, under a
+  memory limit and a deadline (256 MB and 2 s unless given its own), killed when it overruns either, the caller
+  told which; the main thread, which carries the live exit watcher, never runs it.
 - **`backend/`** is a minimal, unused standalone Express service (one `/health` route). AI calls
   are made from the Electron main process, where the key can sit in the OS keychain; nothing in
   the app talks to `backend/`.

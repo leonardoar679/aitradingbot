@@ -1,6 +1,8 @@
 import { createReconnectingSocket } from './reconnectingSocket'
 import type { BookTicker, ExchangeAdapter } from './types'
 import { INTERVAL_SECONDS, type Candle, type Interval, type SymbolInfo, type Ticker24h } from '../../../shared/ipc'
+import type { Priority } from '../../../shared/httpPacing'
+import { binanceBudget } from '../httpPacing'
 
 export interface RestEndpoint {
   name: string
@@ -208,6 +210,8 @@ export function resetResolvedEndpoints(): void {
   partnerFailedAt = -Infinity
   dataHostSwitches = 0
   dataHostListeners.clear()
+  // The reads' budget is module-level as well (V8 Stage 1): one test's rate limit must not hold the next.
+  binanceBudget.reset()
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -281,12 +285,16 @@ function moveDataHost(from: RestEndpoint, to: RestEndpoint, why: string): void {
  * The partner is moved to only when it answers with data: the mirror's partner is binance.com, which
  * some regions refuse with a 451, and that is not a host to move to. A 4xx from the data host itself
  * is its answer and is not asked again elsewhere: a rate limit is not a reason to ask another host. */
-export async function fetchMarketData(path: string, timeoutMs: number | null = null): Promise<{ response: Response; endpoint: RestEndpoint }> {
+export async function fetchMarketData(path: string, timeoutMs: number | null = null, priority: Priority = 'normal'): Promise<{ response: Response; endpoint: RestEndpoint }> {
+  // One budget for every public read from this address (V8 Stage 1; shared/httpPacing.ts): a hold after a 429
+  // or a 418 fails the read at once, and a read that can wait waits while the minute's weight is high.
+  await binanceBudget.before(priority)
   const endpoint = await resolveEndpoint()
   let answered: Response | null = null
   let failure: unknown = null
   try {
     answered = await fetch(`${endpoint.restRoot}${path}`, timeoutMs === null ? undefined : { signal: AbortSignal.timeout(timeoutMs) })
+    binanceBudget.after(answered)
     if (answered.status < 500) return { response: answered, endpoint }
   } catch (error) {
     failure = error
@@ -295,6 +303,7 @@ export async function fetchMarketData(path: string, timeoutMs: number | null = n
   if (partner !== null && Date.now() - partnerFailedAt >= PARTNER_COOL_DOWN_MS) {
     try {
       const response = await fetch(`${partner.restRoot}${path}`, { signal: AbortSignal.timeout(timeoutMs ?? PARTNER_TIMEOUT_MS) })
+      binanceBudget.after(response)
       if (response.ok) {
         if (resolvedDataEndpoint === endpoint) moveDataHost(endpoint, partner, answered === null ? 'did not answer' : `answered ${answered.status}`)
         return { response, endpoint: partner }
@@ -359,6 +368,9 @@ async function fetchHistoricalCandles(symbol: string, interval: Interval, limit 
   }))
 }
 
+/** How long one page of a range read may take (V8 Stage 1). */
+const RANGE_PAGE_TIMEOUT_MS = 15_000
+
 async function fetchHistoricalRange(
   symbol: string,
   interval: Interval,
@@ -375,7 +387,12 @@ async function fetchHistoricalRange(
 
   while (cursorMs < endMs) {
     if (isCancelled()) break
-    const { response, endpoint } = await fetchMarketData(`/klines?symbol=${symbol.toUpperCase()}&interval=${interval}&startTime=${cursorMs}&endTime=${endMs}&limit=1000`)
+    // A range read can wait (V8 Stage 1): it is paced behind the reads that cannot, each page held to a deadline,
+    // and it reads binance.com's market or nothing -- binance.us is another exchange's prices.
+    const { response, endpoint } = await fetchMarketData(`/klines?symbol=${symbol.toUpperCase()}&interval=${interval}&startTime=${cursorMs}&endTime=${endMs}&limit=1000`, RANGE_PAGE_TIMEOUT_MS, 'background')
+    if (!servesBinanceComMarket(endpoint)) {
+      throw new Error(`${endpoint.name} serves another market's prices: a range is read from binance.com or its mirror only.`)
+    }
     if (!response.ok) {
       throw new Error(`${endpoint.name} klines request failed: ${response.status} ${response.statusText}`)
     }

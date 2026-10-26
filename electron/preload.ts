@@ -1,5 +1,4 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
-import { electronAPI } from '@electron-toolkit/preload'
 import type { FuturesCloseResult, FuturesReadout } from '../shared/futuresPositions'
 import type { ProtectiveStop } from '../shared/futuresStops'
 import type { PricePrediction } from '../shared/forecast/prediction'
@@ -515,8 +514,9 @@ const api = {
   }
 }
 
+// Only the app's own bridges reach the window (V8 Stage 1): the toolkit's generic ipcRenderer, once exposed as
+// window.electron and used by nothing, would let any script in the page invoke any channel by name.
 try {
-  contextBridge.exposeInMainWorld('electron', electronAPI)
   contextBridge.exposeInMainWorld('api', api)
 } catch (error) {
   console.error(error)
