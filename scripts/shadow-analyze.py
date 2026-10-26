@@ -365,7 +365,9 @@ for e in settings.get('executors', []):
     print(f'TRADE {e["id"][:8]} {e["symbol"] + tag(e["symbol"]):20} {p["side"]:4} {e["status"]:7} created {clock(e["createdAt"])} stopped {clock(e["stoppedAt"]) if e.get("stoppedAt") else "-"} stake {p["amountQuote"]} tp {p["takeProfitPct"]} sl {p["stopLossPct"]} limit {p["timeLimitSec"]} range {p.get("entryRange")} fill {p.get("entryFill")} expires {clock(p["entryExpiresAt"]) if p.get("entryExpiresAt") else "-"} book {json.dumps(w.get("book"))} result {json.dumps(w.get("result"))} aiExit {json.dumps(w.get("aiExit"))[:200] if w.get("aiExit") else "-"}')
 
 for f in sorted(glob.glob(os.path.join(OUT, 'main-fake-*.json'))):
-    fake = load(f)
+    # A segment that ended before its fake was read back (one of 0 minutes) leaves {}.
+    raw = load(f) or {}
+    fake = {'asked': raw.get('asked', []), 'other': raw.get('other', []), 'notices': raw.get('notices', [])}
     print(f'\n===== {os.path.basename(f)}: {len(fake["asked"])} calls, {len(fake["other"])} other openrouter requests, {len(fake["notices"])} notices')
     for a in fake['asked']:
         print(f'  {clock(a["at"] / 1000)} {a["name"]:20} {a["status"]} {a["ms"]} ms {a.get("said", "")} {a.get("error", "")}')

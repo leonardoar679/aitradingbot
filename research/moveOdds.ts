@@ -21,7 +21,8 @@
 //
 // Since V7.2-R Stage 9 (V72R-S3-EITHER) the close's chance either way -- at least t% up plus at least t% down, the move
 // whose size the levels know where its way is not -- is read beside the two sides, by the same line on its own; SINCE
-// (Unix seconds) reads only the forecasts made from then on.
+// (Unix seconds) reads only the forecasts made from then on, and UNTIL (Unix seconds; since V8 Stage 0) only those made
+// before it, so that one leg of a resumed run can be read on its own.
 //
 // It reads each profile's forecasts/predictions-*.jsonl and outcomes-*.jsonl; it writes nothing but OUT, reads no
 // key and asks nothing.
@@ -35,6 +36,7 @@ const PROFILES = (process.env.PROFILES ?? '').split(',').map((path) => path.trim
 if (PROFILES.length === 0) throw new Error('PROFILES names the profiles whose forecasts/ to read, comma-separated')
 const OUT = process.env.OUT ?? ''
 const SINCE = Number(process.env.SINCE ?? 0)
+const UNTIL = process.env.UNTIL === undefined || process.env.UNTIL === '' ? Number.POSITIVE_INFINITY : Number(process.env.UNTIL)
 
 /** The horizons judged, and the one read beside them. */
 const JUDGED: Horizon[] = ['hour1', 'hours4', 'hours24']
@@ -199,7 +201,7 @@ function reportOf(profile: string): RecordReport {
     else list.push(sample)
   }
   for (const outcome of outcomes) {
-    if (outcome.missing !== undefined || typeof outcome.move !== 'number' || outcome.t < SINCE) continue
+    if (outcome.missing !== undefined || typeof outcome.move !== 'number' || outcome.t < SINCE || !(outcome.t < UNTIL)) continue
     const line = byId.get(outcome.id)?.h?.[outcome.h]
     if (line === undefined || !Array.isArray(line.q)) continue
     for (const pct of MOVE_ODDS_LINES.closeMovesPct) {
@@ -245,7 +247,7 @@ function reportOf(profile: string): RecordReport {
       either.push({ horizon, pct, judged: cell !== undefined, passes: cell?.holds === true })
     }
   }
-  const times = predictions.map((line) => line.t).filter((t) => Number.isFinite(t) && t >= SINCE)
+  const times = predictions.map((line) => line.t).filter((t) => Number.isFinite(t) && t >= SINCE && t < UNTIL)
   return {
     profile,
     forecasts: predictions.length,
