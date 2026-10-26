@@ -48,8 +48,8 @@ other.
 
 | Group | Entry | What it does |
 |---|---|---|
-| AI Trader | **Home** | The landing page since 13 October 2026 (the V6 document, §3): the market in a line (the regime, Bitcoin, ether, the other pairs and the risk state, as on Overview), the forecast's **best current prediction** and its top three ([on screen](#the-price-forecasts-data)), the opportunity that can be acted on now, and what you hold. Opening it asks no model and places nothing. |
-|  | **Predictions** | Every pair's price forecast, ranked by its edge after costs (since 13 October 2026, V6 Stage 10), with filters by pair, horizon, call, kind of coin, tradable and news; a row opens its whole forecast: the timeline to 24 hours, Why?, Why this range?, its recorded forecasts against the price, the decision and, on a TRADE, its plan and TRADE THIS, which fills in the Position form for a person to place. **Start AI trading** (V6 Stage 12) switches on the forecast trader, on paper only and off until switched on. Reading it asks no model and places nothing. |
+| AI Trader | **Home** | The landing page since 13 October 2026 (the V6 document, §3): the market in a line (the regime, Bitcoin, ether, the other pairs and the risk state, as on Overview), since 26 October 2026 (V8 Stage 3) the **primary call** -- a card only from a measured source whose expected net after costs clears its lines, otherwise "No profitable opportunity identified" with why -- and the forecast's top three by their likely ranges ([on screen](#the-price-forecasts-data)), the opportunity that can be acted on now, and what you hold. The forecast's own best pair is on Predictions. Opening it asks no model and places nothing. |
+|  | **Predictions** | The primary call, then (since 26 October 2026, V8 Stage 3) one line per coin at an hour, four hours or a day -- its card, or none with the move it is likely to make and why -- in the normal layout; in the expert layout the forecast's best pair and every pair's price forecast, ranked by its edge after costs (since 13 October 2026, V6 Stage 10), with filters by pair, horizon, call, kind of coin, tradable and news; a row opens its whole forecast: the timeline to 24 hours, Why?, Why this range?, its recorded forecasts against the price, the decision and, on a TRADE, its plan and TRADE THIS, which fills in the Position form for a person to place. **Start AI trading** (V6 Stage 12) switches on the forecast trader, on paper only and off until switched on. Reading it asks no model and places nothing. |
 |  | **Opportunities** | What can be traded right now: the [watch](#ai-signals--paper-only) that puts events to models with no click, and [the table](#the-opportunity-table-and-the-markets-regime) of the recommendations still valid and the last hour's other events, ranked by a signal score with fixed weights ("No high-quality opportunity right now. Wait." when nothing is on offer), each entry checked against the [live price](#live-prices) — enterable now, waiting for its range, or invalidated, with an execution score — and a row opening the score, the plan and what ends it, the risk, the news and each model's reasoning. Below it, every event the scanner raised with each model's call, Ask and Paper trade — or **Confirm** on a BUY while CONFIRM is on (see [the watch's paper trades](#ai-signals--paper-only)), which fills in a real order from the call, sized by the risk setting on Risk & Safety, for a person to place. **Why?** beside a pair says what moved it, from the [news and Bitcoin](#news--market-events). A call fills in an order form at most; a person places it. |
 |  | **Positions** | Live paper positions for active bots; a **Live Positions** table of real Binance holdings from live-mode Order Executor fills, closable (fully or partially) for real; a **Live Trade History** table of realized P&L from closed live positions; an **Inventory** table of positions handed over from stopped paper executors (see [Position Handover](#position-handover--inventory)); **The App's Own Paper Trades**, the watch's and the news rules' open paper trades, each with where it stands on the last closed minute and a **THESIS STATUS** (VALID, WEAKENING or BROKEN) that is a reading and never a control; a live position with a watcher shows the watcher's barriers and the same status (see [the thesis status](#the-ai-additions)). |
 |  | **Performance** | Total value, active-bot count, bot P&L and system cards; the portfolio's value over time (value/composition, 1D/1W/1M/3M) and its largest holdings; what the watch's recommendations earned, in percent and in R, over the last 10/50/100 trades and 7/30 days, with and without the [reviewer](#the-ai-additions), and whether they beat the [quant strategies](#does-ai-help-the-models-against-the-quant-strategies) on the same events; the app's own paper trades, the watch's and the news rules', as a running total in R; the journal of every recommendation with its outcome, exportable as CSV, where any line opens [its whole story](#one-trades-whole-story) on one timeline. |
@@ -757,6 +757,35 @@ usual move, over at least 200 outcomes, told once a model and horizon a day; a m
 persistence weighs nothing and reads as not promoted, not as degraded (on the real record most models
 at 4 and 24 hours, which would otherwise be told every night). It stays computed and on record, and its
 weight falls with its own score.
+
+**The primary call** (since 26 October 2026; V8 Stage 3; `shared/forecast/primaryCall.ts`,
+`electron/services/primaryCallService.ts`, `src/calls/`). The V8 document asks for one card -- BULLISH +X% or BEARISH
+-X%, its reference price, target and window, its risk scenarios, the route's real cost, the net at the target and the
+reason -- shown only where its reliability and expected value after costs are measured, and otherwise "No profitable
+opportunity identified". A card's side comes from a registry of measured sources alone: a Binance spot delisting (the
+one way the research measured, research/NEWS.md: a delisted coin held short four hours, 87 coins in 18 announcement
+hours held out from January 2025 to September 2026), a direction model that cleared the direction bar on two walk
+forwards in a row (none has), and later a direction hypothesis a second year confirms. The forecast's own lean, P(up)
+and edge never make one, whichever way they lean; they are in a coin's drawer. A card is shown where its expected net
+-- its source's outcomes on its side less this route's round trip at the stake, read from a book of the venue no older
+than thirty seconds, and for a short the funding the hold crosses at the assumed 0.01% -- has a 90% interval whose lower
+end is above 0% and a mean of at least +1% (V8-S3-EV). The delisting card shows the study coin by coin
+(`shared/delistingStudy.ts`, written by research/delistingCard.ts from the study run again, which reproduced what it
+printed): the median four-hour move before costs as its target (+15.82%), 75 of 87 coins ahead after costs, the 10th
+and 90th percentiles (-0.61%, +34.79%) as its risk scenarios and the worst (-80.25%), and when the coins reached the
+target (55 of 87 did, the middle half between minutes 5.5 and 64). It is weighed at the delisting rule's own stake, only
+within the rule's five minutes -- after them the coin is on the late list with its move since -- and its live check on
+the delistings since 1 October withdraws it with six announcement hours whose 90% upper end is under +2%, or marks it
+weaker than its study with twelve under +7.4% (V8-S3-DELIST-LIVE). It says that no venue could take most of these shorts
+for real and offers an exit if the coin is held; the paper short stays the news rule's, off by default. A coin with no
+USDT pair on a venue the app reads (for a delisting, Binance) -- one traded only on a decentralised exchange among them --
+is refused with that reason.
+Each card is written once to the prediction record and settled like every source's; each coin's card state is written
+at every whole hour (`predictions/cards-YYYY-MM.jsonl`), and every move of 2% in an hour or 5% in a day of the
+forecast's pairs with the predictions that called it (`predictions/moves-YYYY-MM.jsonl`, V8-S3-MOVES). The card and the
+lines are English until V8 Stage 5. The drawer's round trip shows a sell beside a buy, a paper trade filled in from the
+forecast's plan is on the venue its decision was costed on at that venue's fills, and the plan's target must clear that
+route's round trip rather than the flat 0.24% (trade-plan-v2).
 
 **The Forecast Lab** (since 13 October 2026; the V6 document's §27-28, §42-43, §49-50 and §90-105; V6 Stage
 11; `shared/forecast/{lab,labWalkForward,labFile}.ts`, `electron/services/forecastLabService.ts`,

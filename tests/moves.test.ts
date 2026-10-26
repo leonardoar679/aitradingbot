@@ -124,6 +124,9 @@ describe('movesOf', () => {
     expect(calledMove(prediction({ madeAt: start + 6 * HOUR + 1, horizonSec: 24 * HOUR, side: 'up' }), move)).toBe(false)
     expect(calledMove(prediction({ madeAt: start, horizonSec: 18 * HOUR - 1, side: 'up' }), move)).toBe(false)
     expect(calledMove(prediction({ madeAt: start, horizonSec: 24 * HOUR, side: 'down' }), move)).toBe(false)
+    // A size alone calls a move at least as large as it said, its own size included.
+    expect(calledMove(prediction({ madeAt: start, horizonSec: 24 * HOUR, kind: 'size', side: null, movePct: 6 }), move)).toBe(true)
+    expect(calledMove(prediction({ madeAt: start, horizonSec: 24 * HOUR, kind: 'size', side: null, movePct: 6.01 }), move)).toBe(false)
     expect(MOVE_LINES.lead).toBe(0.25)
   })
 })
@@ -177,5 +180,23 @@ describe('recordHourMoves', () => {
     const again = await service()
     expect(await again.recordHourMoves(AT, ['ABCUSDT'], () => fall)).toBe(0)
     expect(await again.moveRecord()).toHaveLength(1)
+  })
+})
+
+describe('recordCardStates (V8 Stage 3)', () => {
+  it("writes each coin's card state once an hour, and an hour on file not again after a start", async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cards-'))
+    const module = await import('../electron/services/predictionLedgerService')
+    module.resetPredictionLedger()
+    module.predictionLedgerSeam.dir = () => dir
+    const line = { v: 'card-state-v1' as const, at: AT, pair: 'ABCUSDT', state: 'none' as const, source: null, predictionId: null, why: 'no-source' as const }
+    expect(await module.recordCardStates(AT + 60, [line])).toBe(0)
+    expect(await module.recordCardStates(AT, [line])).toBe(1)
+    expect(await module.recordCardStates(AT, [line])).toBe(0)
+    module.resetPredictionLedger()
+    module.predictionLedgerSeam.dir = () => dir
+    expect(await module.recordCardStates(AT, [line])).toBe(0)
+    const file = join(dir, `cards-${new Date(AT * 1000).toISOString().slice(0, 7)}.jsonl`)
+    expect(readFileSync(file, 'utf-8').trim().split('\n').map((text) => JSON.parse(text))).toEqual([line])
   })
 })

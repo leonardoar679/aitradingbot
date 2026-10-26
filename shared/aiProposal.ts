@@ -6,6 +6,7 @@ import { describeDecider } from './aiPanel'
 import { FEE_RATE, SLIPPAGE_RATE } from './fees'
 import { describeEventType, type MarketEvent, type MarketEventType } from './marketEvent'
 import type { TradePlan } from './forecast/tradePlan'
+import { paperFillOf } from './venueCosts'
 
 // FROM A CALL TO AN ORDER, BY HAND.
 //
@@ -73,6 +74,9 @@ export interface AiOrderProposal {
   expiresAt?: number
   /** Set with it: the kind of event the recommendation was about. */
   eventType?: MarketEventType
+  /** Set on a proposal from the price forecast's plan (V8 Stage 3): what its paper fills pay on the venue its decision
+   * was costed on -- that venue's fee, and its half spread and impact -- as the forecast's own paper trades fill. */
+  fill?: { feeRate: number; slippageRate: number }
 }
 
 /** What a created executor keeps of the call its form was filled in from. A record of where the
@@ -274,7 +278,8 @@ export function aiProposalPositionParams(proposal: AiOrderProposal, defaults: Po
     takeProfitPct: proposal.takeProfitPct ?? defaults.takeProfitPct,
     stopLossPct: proposal.stopLossPct ?? defaults.stopLossPct,
     timeLimitSec: proposal.timeLimitSec,
-    trailingStop: null
+    trailingStop: null,
+    ...(proposal.fill === undefined ? {} : { feeRate: proposal.fill.feeRate, slippageRate: proposal.fill.slippageRate })
   }
 }
 
@@ -496,8 +501,12 @@ const round2 = (value: number): number => Math.round(value * 100) / 100
  * Live Trading and types its phrase, and a sell is paper only. */
 export function forecastProposal(input: { plan: TradePlan; confidence: number; barTime: number }): AiOrderProposal {
   const { plan } = input
+  // On the venue its decision was costed on, at that venue's fills (V8 Stage 3): Binance at the flat lines where no
+  // book was read.
+  const fill = paperFillOf(plan.cost)
   return {
-    exchange: 'binance',
+    exchange: fill.exchange,
+    fill: { feeRate: fill.feeRate, slippageRate: fill.slippageRate },
     pair: { symbol: plan.pair, baseAsset: plan.pair.replace(/USDT$/, ''), quoteAsset: 'USDT' },
     model: FORECAST_PROPOSAL_MODEL,
     candleTime: input.barTime,

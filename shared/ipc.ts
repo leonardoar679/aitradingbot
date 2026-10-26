@@ -133,6 +133,9 @@ export const IpcChannel = {
   BooksMarks: 'books:marks',
   BooksMiss: 'books:miss',
   BooksMisses: 'books:misses',
+  // The primary call (V8 Stage 3): the cards weighed, the late list and the refusals; pushed as each weighing ends.
+  CallsState: 'calls:state',
+  CallsUpdate: 'calls:update',
   AiConcludeMove: 'ai:concludeMove',
   AiReviewTrade: 'ai:reviewTrade',
   AiExitCheck: 'ai:exitCheck',

@@ -177,8 +177,8 @@ describe('the delisting card', () => {
 })
 
 describe('the live check (V8-S3-DELIST-LIVE)', () => {
-  const hourRows = (count: number, netPct: number, from = DELIST_LIVE_LINES.sinceSec): { releaseSec: number; netPct: number }[] =>
-    Array.from({ length: count }, (_, k) => ({ releaseSec: from + k * 86_400 + 600, netPct: netPct + (k % 2 === 0 ? 0.5 : -0.5) }))
+  const hourRows = (count: number, netPct: number, spread = 0.5, from = DELIST_LIVE_LINES.sinceSec): { releaseSec: number; netPct: number }[] =>
+    Array.from({ length: count }, (_, k) => ({ releaseSec: from + k * 86_400 + 600, netPct: netPct + (k % 2 === 0 ? spread : -spread) }))
   it('reads only the delistings since its start, an hour once', () => {
     const reading = delistLiveOf([...hourRows(3, 10), { releaseSec: DELIST_LIVE_LINES.sinceSec - 60, netPct: -50 }, { releaseSec: DELIST_LIVE_LINES.sinceSec + 600, netPct: 10.5 }])
     expect(reading.hours).toBe(3)
@@ -190,11 +190,20 @@ describe('the live check (V8-S3-DELIST-LIVE)', () => {
     expect(delistLiveOf(hourRows(6, -3)).state).toBe('withdrawn')
     expect(delistLiveOf(hourRows(5, -3)).state).toBe('ok')
     expect(delistLiveOf(hourRows(6, 2.5)).state).toBe('ok')
+    // A mean under +2% whose interval still reaches past it is not enough: the upper end is what withdraws.
+    const wide = delistLiveOf(hourRows(6, 1.5, 2.5))
+    expect(wide.meanPct).toBeCloseTo(1.5, 12)
+    expect(wide.high).toBeGreaterThan(2)
+    expect(wide.state).toBe('ok')
   })
   it('marks it weaker than its study with 12 hours under +7.4%', () => {
     expect(delistLiveOf(hourRows(12, 6)).state).toBe('weaker')
     expect(delistLiveOf(hourRows(11, 6)).state).toBe('ok')
     expect(delistLiveOf(hourRows(12, 8)).state).toBe('ok')
+    // The mean is what marks it, even where the interval reaches past the line.
+    const wide = delistLiveOf(hourRows(12, 6.5, 3.5))
+    expect(wide.high).toBeGreaterThan(7.4)
+    expect(wide.state).toBe('weaker')
     expect(delistLiveOf([]).meanPct).toBeNull()
   })
 })

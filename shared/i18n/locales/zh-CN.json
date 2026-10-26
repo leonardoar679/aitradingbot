@@ -474,6 +474,7 @@
   "Other": "其他",
   "At": "时间",
   "Call": "方向",
+  "Lean": "倾向",
   "Likely": "可能区间",
   "Bear · bull": "下行 · 上行",
   "P(up)": "P(涨)",
@@ -1880,5 +1881,5 @@
   "No venue book is held for this pair yet: the forecast reads them for its top ten and its open trades.": "尚未持有该交易对的交易所订单簿：预测只读取其前十名和未平仓交易的订单簿。",
   "{venue}: {total} in all ({fee} fee each way, {spread} spread, {impact} for the stake)": "{venue}：合计 {total}（单边手续费 {fee}，价差 {spread}，按仓位的冲击 {impact}）",
   "{venue} is the cheaper venue for this pair now.": "{venue} 是该交易对现在更便宜的交易所。",
-  "From each venue's public book in the last three minutes, for a buy of {stake}: what a trade would pay, not a forecast.": "来自各交易所最近三分钟的公开订单簿，按买入 {stake} 计算：这是一笔交易需要支付的成本，不是预测。"
+  "From each venue's public book in the last three minutes, for a buy and for a sell of {stake}: what a trade would pay, not a forecast.": "来自各交易所最近三分钟的公开订单簿，按买入和卖出各 {stake} 计算：这是一笔交易需要支付的成本，不是预测。"
 }

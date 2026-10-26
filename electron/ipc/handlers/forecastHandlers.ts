@@ -31,9 +31,10 @@ export function registerForecastHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(IpcChannel.ForecastHistory, (_event, symbol: unknown, fromSec: unknown): Promise<ForecastHistory> => forecastHistory(symbol, fromSec))
   ipcMain.handle(IpcChannel.ForecastRanking, (): ForecastRanking => forecastRanking())
   ipcMain.handle(IpcChannel.ForecastDecision, (_event, symbol: unknown): TradeDecision | null => forecastDecision(symbol))
-  // A pair's round trip on each venue now, a buy at the reference stake (V7.2-R Stage 4): null where no book is held.
-  ipcMain.handle(IpcChannel.ForecastVenueCosts, (_event, symbol: unknown): { trips: RoundTrip[]; cheapest: RoundTrip | null; at: number } | null =>
-    typeof symbol === 'string' ? venueCostOf(symbol, 'BUY') : null
+  // A pair's round trip on each venue now, a buy or (V8 Stage 3) a sell at the reference stake (V7.2-R Stage 4): null
+  // where no book is held.
+  ipcMain.handle(IpcChannel.ForecastVenueCosts, (_event, symbol: unknown, side: unknown): { trips: RoundTrip[]; cheapest: RoundTrip | null; at: number } | null =>
+    typeof symbol === 'string' ? venueCostOf(symbol, side === 'SELL' ? 'SELL' : 'BUY') : null
   )
   ipcMain.handle(IpcChannel.ForecastLab, (): Promise<ForecastLabView> => getForecastLab())
   ipcMain.handle(IpcChannel.ForecastReplay, (_event, pair: unknown, t: unknown): Promise<ForecastReplay | null> => forecastReplay(pair, t))

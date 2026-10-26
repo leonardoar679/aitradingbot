@@ -130,7 +130,8 @@ export function BestPredictionCard({
   )
 }
 
-/** The top three predictions (§70), each in a line. */
+/** The top three predictions (§70), each in a line: the likely range at its lead horizon and its quality. The
+ * forecast's own lean is in its whole forecast (V8 Stage 3): no measured source stands behind it. */
 export function TopPredictions({ ranked, predictions, onDetails }: { ranked: RankedForecast[]; predictions: ReadonlyMap<string, PricePrediction>; onDetails: (pair: string) => void }): React.JSX.Element | null {
   const i18n = useI18n()
   const { t } = i18n
@@ -146,7 +147,6 @@ export function TopPredictions({ ranked, predictions, onDetails }: { ranked: Ran
             <li key={entry.pair} style={{ fontSize: '0.84rem' }}>
               <button type="button" onClick={() => onDetails(entry.pair)} style={{ all: 'unset', cursor: 'pointer', display: 'inline-flex', gap: '0.7rem', flexWrap: 'wrap' }}>
                 <strong dir="ltr">{pairText(entry.pair)}</strong>
-                {range !== undefined && <span style={{ color: callColor(range.direction), fontWeight: 600 }}>{callLabel(range, i18n)}</span>}
                 {range !== undefined && lead !== null && (
                   <span style={{ fontVariantNumeric: 'tabular-nums' }}>{t('{horizon}: {range}', { horizon: t(HORIZON_NAME[lead]), range: rangeText(range.lowPct, range.highPct, i18n) })}</span>
                 )}

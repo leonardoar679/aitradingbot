@@ -474,6 +474,7 @@
   "Other": "อื่นๆ",
   "At": "เวลา",
   "Call": "ทิศทาง",
+  "Lean": "ความเอนเอียง",
   "Likely": "ช่วงที่น่าจะเป็น",
   "Bear · bull": "กรณีลง · กรณีขึ้น",
   "P(up)": "P(ขึ้น)",
@@ -1880,5 +1881,5 @@
   "No venue book is held for this pair yet: the forecast reads them for its top ten and its open trades.": "ยังไม่มีสมุดคำสั่งของตลาดสำหรับคู่นี้: การคาดการณ์อ่านเฉพาะของสิบอันดับแรกและการเทรดที่เปิดอยู่",
   "{venue}: {total} in all ({fee} fee each way, {spread} spread, {impact} for the stake)": "{venue}: รวม {total} (ค่าธรรมเนียมเที่ยวละ {fee}, สเปรด {spread}, ผลกระทบตามขนาด {impact})",
   "{venue} is the cheaper venue for this pair now.": "ตอนนี้ {venue} ถูกกว่าสำหรับคู่นี้",
-  "From each venue's public book in the last three minutes, for a buy of {stake}: what a trade would pay, not a forecast.": "จากสมุดคำสั่งสาธารณะของแต่ละตลาดในสามนาทีล่าสุด สำหรับการซื้อ {stake}: เป็นต้นทุนที่การเทรดต้องจ่าย ไม่ใช่การคาดการณ์"
+  "From each venue's public book in the last three minutes, for a buy and for a sell of {stake}: what a trade would pay, not a forecast.": "จากสมุดคำสั่งสาธารณะของแต่ละตลาดในสามนาทีล่าสุด สำหรับการซื้อและการขาย {stake}: เป็นต้นทุนที่การเทรดต้องจ่าย ไม่ใช่การคาดการณ์"
 }

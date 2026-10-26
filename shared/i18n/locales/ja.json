@@ -474,6 +474,7 @@
   "Other": "その他",
   "At": "時刻",
   "Call": "判断",
+  "Lean": "傾き",
   "Likely": "想定レンジ",
   "Bear · bull": "下振れ · 上振れ",
   "P(up)": "P(上昇)",
@@ -1880,5 +1881,5 @@
   "No venue book is held for this pair yet: the forecast reads them for its top ten and its open trades.": "このペアの取引所の板はまだ取得していません。予測は上位10ペアと保有中の取引の板だけを読みます。",
   "{venue}: {total} in all ({fee} fee each way, {spread} spread, {impact} for the stake)": "{venue}：合計 {total}（片道手数料 {fee}、スプレッド {spread}、取引額によるインパクト {impact}）",
   "{venue} is the cheaper venue for this pair now.": "このペアは今 {venue} の方が安く取引できます。",
-  "From each venue's public book in the last three minutes, for a buy of {stake}: what a trade would pay, not a forecast.": "各取引所の直近3分の公開板から、{stake} の買いで計算：取引が支払う費用であり、予測ではありません。"
+  "From each venue's public book in the last three minutes, for a buy and for a sell of {stake}: what a trade would pay, not a forecast.": "各取引所の直近3分の公開板から、{stake} の買いと売りそれぞれで計算：取引が支払う費用であり、予測ではありません。"
 }

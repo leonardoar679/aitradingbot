@@ -152,6 +152,32 @@ describe('the trade plan', () => {
     expect(flat.params).toMatchObject({ feeRate: FEE_RATE, slippageRate: SLIPPAGE_RATE })
   })
 
+  it("holds its target to the route's round trip, not the flat one, where its decision was costed on a book (trade-plan-v2; V8 Stage 3)", () => {
+    // From 101.4 the P75 target of 102.5 is 1.08% away: over the flat 0.24% and the hour's 1% line.
+    const dear = { venue: 'binance' as const, feePct: 0.1, spreadPct: 0.6, impactPct: 0.4, totalPct: 1.2, basis: 'book' as const }
+    expect(tradePlanOf({ decision: decision('SOLUSDT', { cost: dear }), prediction: prediction(), livePrice: 101.4, atr5mPct: 0.2, targetLevel: 'P75' })).toBeNull()
+    const cheap = { ...dear, spreadPct: 0.4, impactPct: 0.4, totalPct: 1.0 }
+    const plan = tradePlanOf({ decision: decision('SOLUSDT', { cost: cheap }), prediction: prediction(), livePrice: 101.4, atr5mPct: 0.2, targetLevel: 'P75' })!
+    expect(plan.targetPct).toBeCloseTo((102.5 / 101.4 - 1) * 100, 12)
+    expect(plan.version).toBe('trade-plan-v2')
+  })
+
+  it("fills in the form on its decision's venue, at that venue's fills (V8 Stage 3)", () => {
+    const trip = { venue: 'bitget' as const, feePct: 0.2, spreadPct: 0.04, impactPct: 0.02, totalPct: 0.46, basis: 'book' as const }
+    const plan = tradePlanOf({ decision: decision('SOLUSDT', { cost: trip }), prediction: prediction(), livePrice: 100, atr5mPct: 0.2, targetLevel: 'P75' })!
+    const proposal = forecastProposal({ plan, confidence: 0.7, barTime: T })
+    expect(proposal.exchange).toBe('bitget')
+    expect(proposal.fill!.feeRate).toBeCloseTo(0.002, 12)
+    expect(proposal.fill!.slippageRate).toBeCloseTo((0.02 + 0.01) / 100, 12)
+    const params = aiProposalPositionParams(proposal, { side: 'buy', entryPrice: null, amountQuote: 100, takeProfitPct: 2, stopLossPct: 1, timeLimitSec: 3600, trailingStop: null })
+    expect(params.feeRate).toBeCloseTo(0.002, 12)
+    expect(params.slippageRate).toBeCloseTo(0.0003, 12)
+    // No round trip read: Binance at the flat lines, as before.
+    const flat = forecastProposal({ plan: tradePlanOf({ decision: decision(), prediction: prediction(), livePrice: 100, atr5mPct: 0.2, targetLevel: 'P75' })!, confidence: 0.7, barTime: T })
+    expect(flat.exchange).toBe('binance')
+    expect(flat.fill).toEqual({ feeRate: FEE_RATE, slippageRate: SLIPPAGE_RATE })
+  })
+
   it('mirrors a sell, and has no plan where the target does not clear a round trip or there is no TRADE', () => {
     const bear = prediction('SOLUSDT', { direction: 'BEARISH', quantilesPct: [-4, -2.5, -1.5, -0.5, 1] })
     const sell = tradePlanOf({ decision: decision('SOLUSDT', { side: 'SELL' }), prediction: bear, livePrice: 100, atr5mPct: 0.2, targetLevel: 'P75' })!

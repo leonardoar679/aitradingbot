@@ -474,6 +474,7 @@
   "Other": "Lainnya",
   "At": "Pada",
   "Call": "Arah",
+  "Lean": "Kecenderungan",
   "Likely": "Kemungkinan",
   "Bear · bull": "Turun · naik",
   "P(up)": "P(naik)",
@@ -1880,5 +1881,5 @@
   "No venue book is held for this pair yet: the forecast reads them for its top ten and its open trades.": "Belum ada buku pesanan bursa untuk pasangan ini: prakiraan hanya membacanya untuk sepuluh teratas dan transaksi yang terbuka.",
   "{venue}: {total} in all ({fee} fee each way, {spread} spread, {impact} for the stake)": "{venue}: total {total} (biaya {fee} tiap arah, spread {spread}, dampak ukuran {impact})",
   "{venue} is the cheaper venue for this pair now.": "Saat ini {venue} adalah bursa yang lebih murah untuk pasangan ini.",
-  "From each venue's public book in the last three minutes, for a buy of {stake}: what a trade would pay, not a forecast.": "Dari buku pesanan publik tiap bursa dalam tiga menit terakhir, untuk pembelian {stake}: biaya yang dibayar sebuah transaksi, bukan prakiraan."
+  "From each venue's public book in the last three minutes, for a buy and for a sell of {stake}: what a trade would pay, not a forecast.": "Dari buku pesanan publik tiap bursa dalam tiga menit terakhir, untuk pembelian dan penjualan {stake}: biaya yang dibayar sebuah transaksi, bukan prakiraan."
 }

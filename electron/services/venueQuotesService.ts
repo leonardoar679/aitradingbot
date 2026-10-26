@@ -109,6 +109,15 @@ export function venueCostOf(pair: string, side: 'BUY' | 'SELL', nowMs: number = 
   return { trips, cheapest: cheapestOf(trips), at: entry.at }
 }
 
+/** A pair's mid on a venue from its book as held, where that book is fresh; null otherwise. */
+export function venueMidOf(pair: string, venue: CostedVenue, nowMs: number = Date.now()): number | null {
+  const entry = held.get(pair.toUpperCase())
+  if (entry === undefined || nowMs - entry.at > VENUE_BOOK_FRESH_MS) return null
+  const bid = entry.books[venue]?.bids[0]?.[0]
+  const ask = entry.books[venue]?.asks[0]?.[0]
+  return bid !== undefined && ask !== undefined && bid > 0 && ask >= bid ? (bid + ask) / 2 : null
+}
+
 /** The liquidity gate on a trade (V8 Stage 2; shared/liquidityGate.ts), on a venue's book as held: no book held, a
  * book too old, too thin, or too dear for the move, each said; the round trip where it passes. */
 export function venueGateOf(pair: string, venue: CostedVenue, side: 'BUY' | 'SELL', stakeQuote: number, predictedMovePct: number | null, nowMs: number = Date.now()): LiquidityVerdict {

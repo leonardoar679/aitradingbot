@@ -151,8 +151,9 @@ export interface PrimaryCard {
   detail: { kind: 'delisting'; ticker: string; title: string; hours: number; coins: number; weaker: boolean } | { kind: 'model'; model: DirectionModelId; horizonSec: number }
 }
 
-/** Why a candidate is not a card. */
-export type RefusalCode = 'late' | 'withdrawn' | 'no-price' | 'no-book' | 'stale-book' | 'cannot-hold' | 'thin' | 'cost-share' | 'under-lines' | 'no-evidence'
+/** Why a candidate is not a card. `no-pair`: the coin has no USDT pair on a venue the app reads (a coin traded only on
+ * a decentralised exchange among them), so nothing about it can be costed or traded here. */
+export type RefusalCode = 'late' | 'withdrawn' | 'no-price' | 'no-pair' | 'no-book' | 'stale-book' | 'cannot-hold' | 'thin' | 'cost-share' | 'under-lines' | 'no-evidence'
 
 export interface CardRefusal {
   refused: RefusalCode
@@ -415,6 +416,30 @@ export interface PrimaryCallState {
   readerOn: boolean
   /** Promoted direction models in use at any horizon: none until one clears the bar twice. */
   modelSources: number
+}
+
+/** Each coin's card state at a whole hour (predictions/cards-YYYY-MM.jsonl): its card, or none and why -- `no-source`
+ * where no source that may set a side called it at all. */
+export const CARD_STATE_VERSION = 'card-state-v1'
+export interface CardStateLine {
+  v: typeof CARD_STATE_VERSION
+  at: number
+  pair: string
+  state: 'card' | 'none'
+  source: CardSource | null
+  predictionId: string | null
+  why: RefusalCode | 'no-source' | null
+}
+
+/** The hour's card state of each coin: the cards', the refused candidates', and `no-source` for every other coin read. */
+export function cardStatesOf(atSec: number, state: Pick<PrimaryCallState, 'cards' | 'refused'>, pairs: readonly string[]): CardStateLine[] {
+  const out = new Map<string, CardStateLine>()
+  for (const card of state.cards) out.set(card.pair, { v: CARD_STATE_VERSION, at: atSec, pair: card.pair, state: 'card', source: card.source, predictionId: card.predictionId, why: null })
+  for (const refusal of state.refused) {
+    if (!out.has(refusal.pair)) out.set(refusal.pair, { v: CARD_STATE_VERSION, at: atSec, pair: refusal.pair, state: 'none', source: refusal.source, predictionId: null, why: refusal.refused })
+  }
+  for (const pair of pairs) if (!out.has(pair)) out.set(pair, { v: CARD_STATE_VERSION, at: atSec, pair, state: 'none', source: null, predictionId: null, why: 'no-source' })
+  return [...out.values()].sort((a, b) => a.pair.localeCompare(b.pair))
 }
 
 /** Orders the cards: the largest expected net first, a tie to the earlier made. */

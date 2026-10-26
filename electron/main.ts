@@ -9,6 +9,7 @@ import { startResearchFolder } from './services/researchFolderService'
 import { startVenueQuotes } from './services/venueQuotesService'
 import { startPredictionLedger } from './services/predictionLedgerService'
 import { startBookMarks } from './services/booksService'
+import { startPrimaryCall } from './services/primaryCallService'
 import { startLivePositionWatcherLoop } from './services/livePositionWatchersService'
 import { startLiveTwapLoop } from './services/liveTwapService'
 import { startMarketScanner } from './services/marketScannerService'
@@ -217,6 +218,9 @@ if (!gotSingleInstanceLock) {
     void startPredictionLedger().catch((error) => console.error('The prediction record could not start:', error))
     // V8's three paper books marked once an hour while they run (V8 Stage 2; booksService.ts): nothing while stopped.
     startBookMarks()
+    // The primary call weighed every minute and as the announcements are read (V8 Stage 3; primaryCallService.ts): a
+    // card only from a measured source and only where its expected net after costs clears its lines. Places nothing.
+    startPrimaryCall()
     const mainWindow = createWindow()
     registerIpcHandlers(mainWindow)
     createTray()

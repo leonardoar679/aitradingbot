@@ -18,6 +18,7 @@ import { registerHealthHandlers } from './handlers/healthHandlers'
 import { registerExperimentHandlers } from './handlers/experimentHandlers'
 import { registerResearchFolderHandlers } from './handlers/researchFolderHandlers'
 import { registerBooksHandlers } from './handlers/booksHandlers'
+import { registerCallsHandlers } from './handlers/callsHandlers'
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerAppHandlers()
@@ -33,6 +34,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerHealthHandlers(mainWindow)
   registerNewsFeedHandlers(mainWindow)
   registerForecastHandlers(mainWindow)
+  registerCallsHandlers(mainWindow)
   registerNewsHandlers(mainWindow)
   registerCredentialsHandlers()
   registerAiHandlers(mainWindow)

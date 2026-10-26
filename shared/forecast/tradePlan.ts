@@ -18,9 +18,11 @@ import type { RoundTrip } from '../venueCosts'
 // Since V7.2-R Stage 3 the target, from the live price, must also reach the horizon's line of a move worth its
 // costs (OPPORTUNITY_LINES: 1% up to four hours, 2% at a day): a price that has run toward it leaves no plan.
 // The forecast's levels are prices fixed at its close (§41): the plan's percentages are from the live
-// price.
+// price. Since V8 Stage 3 (trade-plan-v2) the target must clear the round trip the decision was costed at on its
+// venue's book -- its fee, spread and impact at the stake -- rather than the flat 0.24%, which stays only where no
+// book was read.
 
-export const PLAN_VERSION = 'trade-plan-v1'
+export const PLAN_VERSION = 'trade-plan-v2'
 
 export const PLAN_LINES = {
   /** The entry zone, either side of the live price, in five-minute ATRs. */
@@ -86,8 +88,10 @@ export function tradePlanOf(input: { decision: TradeDecision; prediction: PriceP
   const stopPct = Math.max(side === 'BUY' ? (1 - stopLevel / livePrice) * 100 : (stopLevel / livePrice - 1) * 100, nearest)
   const targetPrice = priceOf(levelPct(range.quantilesPct, input.targetLevel, side))
   const targetPct = side === 'BUY' ? (targetPrice / livePrice - 1) * 100 : (1 - targetPrice / livePrice) * 100
-  // A target that does not clear a round trip from here, or is under the line of a move worth its costs, is no plan.
-  if (!(targetPct > ROUND_TRIP_PCT) || !(targetPct >= OPPORTUNITY_LINES.minMovePct[decision.horizon])) return null
+  // A target that does not clear the route's round trip from here (the flat one where no book was read), or is under the
+  // line of a move worth its costs, is no plan.
+  const roundTripPct = decision.cost?.totalPct ?? ROUND_TRIP_PCT
+  if (!(targetPct > roundTripPct) || !(targetPct >= OPPORTUNITY_LINES.minMovePct[decision.horizon])) return null
   return {
     version: PLAN_VERSION,
     pair: prediction.pair,

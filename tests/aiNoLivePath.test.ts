@@ -221,7 +221,8 @@ describe('AI code has no route to a real order', () => {
     // stake is what the person's risk share would lose at the call's stop after fees.
     // tradePlan (V6 Stage 12): the forecast's TRADE decision fills in the same form from its plan, a type.
     // translate (V6 Stage 14): its words said in a language, English unless handed another.
-    expect(importsOf(join(ROOT, 'shared', 'aiProposal.ts')).sort()).toEqual(['aiOpportunity', 'aiPanel', 'aiSignal', 'fees', 'ipc', 'marketEvent', 'tradePlan', 'translate'])
+    // venueCosts (V8 Stage 3): a plan's paper fills on the venue its decision was costed on, arithmetic on its round trip.
+    expect(importsOf(join(ROOT, 'shared', 'aiProposal.ts')).sort()).toEqual(['aiOpportunity', 'aiPanel', 'aiSignal', 'fees', 'ipc', 'marketEvent', 'tradePlan', 'translate', 'venueCosts'])
     expect(rules).not.toMatch(/window\.|ipcRenderer|electron/)
   })
 
@@ -360,6 +361,12 @@ describe('AI code has no route to a real order', () => {
       'venueCosts',
       'venueQuotesService'
     ])
+    // The primary call's service and its channels (V8 Stage 3) read the news reader's state, the venues' books and the
+    // forecast, and record a prediction: nothing that trades, holds a key or asks a model, and no setting written.
+    for (const path of [join(SERVICES, 'primaryCallService.ts'), join(ROOT, 'electron', 'ipc', 'handlers', 'callsHandlers.ts')]) {
+      expect(importsOf(path).filter((name) => LIVE_MODULES.has(name) || aiModuleNames.has(name)), path).toEqual([])
+      expect(readFileSync(path, 'utf-8'), path).not.toMatch(/setSettings|settings\.set|placeLive|liveTrading|credentials|apiKey|openRouter|setNewsConfig/)
+    }
     // The prediction record's service reads public bars and its own files, and nothing that trades.
     const ledger = join(SERVICES, 'predictionLedgerService.ts')
     expect(importsOf(ledger).filter((name) => LIVE_MODULES.has(name) || aiModuleNames.has(name))).toEqual([])
@@ -611,6 +618,9 @@ describe('AI code has no route to a real order', () => {
       // Upbit's lists and the coins' candles, scored.
       'electron/services/newsRecordService.ts',
       'electron/services/newsService.ts',
+      // The primary call (V8 Stage 3): a delisting the reader has read, weighed into a card from the study's coins; it
+      // reads the reader's state and the record of the rules since the study, records a prediction, and places nothing.
+      'electron/services/primaryCallService.ts',
       // The same, composed: the switches among every other store's, read-only.
       'shared/appConfig.ts',
       // Since 8 October 2026 (V5 Stage 1) the defaults composed, DEFAULT_CONFIG: the reader's

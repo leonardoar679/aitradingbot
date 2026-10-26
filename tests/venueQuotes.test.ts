@@ -115,3 +115,29 @@ describe('the liquidity gate on a held book (V8 Stage 2)', () => {
     expect(venues.venueGateOf('BTCUSDT', 'binance', 'BUY', 250_000, 3, now)).toMatchObject({ ok: false, code: 'cannot-hold' })
   })
 })
+
+describe('the event lane (V8 Stage 3)', () => {
+  it('reads at most five coins an announcement names beside the pairs ranked, on demand, and lets them go', async () => {
+    const venues = await service()
+    books.set('ABCUSDT', { binance: deepBook(2, 0.1), bitget: null })
+    venues.setVenuePairs(['BTCUSDT'])
+    venues.setEventPairs(['abcusdt', 'ABCUSDT', 'E1USDT', 'E2USDT', 'E3USDT', 'E4USDT', 'E5USDT'])
+    expect(venues.venueQuotesState().events).toEqual(['ABCUSDT', 'E1USDT', 'E2USDT', 'E3USDT', 'E4USDT'])
+    expect(venues.EVENT_PAIRS_MAX).toBe(5)
+    // On demand: one coin's books now, and none of a coin outside the lane and the pairs ranked.
+    expect(await venues.readEventBooksNow('abcusdt')).toBe(true)
+    expect(asked).toEqual(['ABCUSDT'])
+    expect(await venues.readEventBooksNow('ZZZUSDT')).toBe(false)
+    expect(asked).toEqual(['ABCUSDT'])
+    expect(venues.venueMidOf('ABCUSDT', 'binance')).toBeCloseTo(2, 12)
+    expect(venues.venueMidOf('ABCUSDT', 'bitget')).toBeNull()
+    expect(venues.venueMidOf('ABCUSDT', 'binance', Date.now() + venues.VENUE_BOOK_FRESH_MS + 1)).toBeNull()
+    // The minute's read takes the ranked pairs, then the lane's; a coin no longer in the lane is let go.
+    asked.length = 0
+    await venues.venueQuotesForTest.readOnce()
+    expect(asked).toEqual(['BTCUSDT', 'ABCUSDT', 'E1USDT', 'E2USDT', 'E3USDT', 'E4USDT'])
+    venues.setEventPairs([])
+    await venues.venueQuotesForTest.readOnce()
+    expect(venues.venueMidOf('ABCUSDT', 'binance')).toBeNull()
+  })
+})

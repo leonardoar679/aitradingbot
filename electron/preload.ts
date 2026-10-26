@@ -9,6 +9,7 @@ import type { RoundTrip } from '../shared/venueCosts'
 import type { SourceOutcome, SourcePrediction } from '../shared/evaluation/predictionRecord'
 import type { BookEquityMark, BookId, BookStanding } from '../shared/paperBooks'
 import type { MissRecord } from '../shared/misses'
+import type { PrimaryCallState } from '../shared/forecast/primaryCall'
 import type { ForecastLabView, ForecastReplay } from '../shared/forecast/labView'
 import type { ForecastRanking as ForecastRankingView } from '../shared/forecast/ranking'
 import type { SymbolTradingRules } from '../shared/exchangeMinimums'
@@ -193,8 +194,10 @@ const api = {
     history: (symbol: string, fromSec: number): Promise<ForecastHistory> => ipcRenderer.invoke(IpcChannel.ForecastHistory, symbol, fromSec),
     ranking: (): Promise<ForecastRankingView> => ipcRenderer.invoke(IpcChannel.ForecastRanking),
     decision: (symbol: string): Promise<TradeDecision | null> => ipcRenderer.invoke(IpcChannel.ForecastDecision, symbol),
-    /** A pair's round trip now on Binance and Bitget, from their public books at the reference stake (V7.2-R Stage 4). */
-    venueCosts: (symbol: string): Promise<{ trips: RoundTrip[]; cheapest: RoundTrip | null; at: number } | null> => ipcRenderer.invoke(IpcChannel.ForecastVenueCosts, symbol),
+    /** A pair's round trip now on Binance and Bitget, from their public books at the reference stake (V7.2-R Stage 4),
+     * for a buy or a sell (V8 Stage 3). */
+    venueCosts: (symbol: string, side: 'BUY' | 'SELL' = 'BUY'): Promise<{ trips: RoundTrip[]; cheapest: RoundTrip | null; at: number } | null> =>
+      ipcRenderer.invoke(IpcChannel.ForecastVenueCosts, symbol, side),
     lab: (): Promise<ForecastLabView> => ipcRenderer.invoke(IpcChannel.ForecastLab),
     replay: (pair: string, t: number): Promise<ForecastReplay | null> => ipcRenderer.invoke(IpcChannel.ForecastReplay, pair, t),
     /** The replay out of sample of the newest walk forward that kept its weeks' models (V7.2-R Stage 5). */
@@ -500,6 +503,16 @@ const api = {
   predictions: {
     record: (prediction: SourcePrediction): Promise<{ ok: boolean; id: string }> => ipcRenderer.invoke(IpcChannel.PredictionsRecord, prediction),
     list: (filter: { source?: string; sinceSec?: number } = {}): Promise<{ prediction: SourcePrediction; outcome: SourceOutcome | null }[]> => ipcRenderer.invoke(IpcChannel.PredictionsList, filter)
+  },
+  // The primary call (V8 Stage 3): the cards weighed, the delisted coins past the rule's window and the refusals, as
+  // last weighed; `onUpdate` is told each weighing. Reading it records, opens and places nothing.
+  calls: {
+    state: (): Promise<PrimaryCallState> => ipcRenderer.invoke(IpcChannel.CallsState),
+    onUpdate: (listener: (state: PrimaryCallState) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, state: PrimaryCallState): void => listener(state)
+      ipcRenderer.on(IpcChannel.CallsUpdate, handler)
+      return () => ipcRenderer.removeListener(IpcChannel.CallsUpdate, handler)
+    }
   },
   // V8's three paper books (V8 Stage 2): each book's standing and equity marks, and the opportunities not taken.
   books: {

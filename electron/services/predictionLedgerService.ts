@@ -4,6 +4,7 @@ import { join } from 'path'
 import type { ForecastBar } from '../../shared/forecast/bars'
 import type { Candle } from '../../shared/ipc'
 import { movesOf, readMoveLine, type MoveLine } from '../../shared/evaluation/moves'
+import { CARD_STATE_VERSION, type CardStateLine } from '../../shared/forecast/primaryCall'
 import {
   SOURCE_RECORD_LINES,
   dueAt,
@@ -166,13 +167,11 @@ export async function sourceRecord(filter: { source?: string; sinceSec?: number 
 /** MOVES NOBODY CALLED (shared/evaluation/moves.ts): at a whole hour, the large moves of the pairs whose bars are held
  * over the hour and the day that ended, each with the predictions on file that called it, appended to
  * predictions/moves-YYYY-MM.jsonl. An hour is written once: a pass made again at the same close (the models coming
- * ready) and a start within the hour find it on file. */
-const movesWritten = new Set<number>()
+ * ready) and a start within the hour find it on file; the passes run one at a time. */
 const movesFile = (seconds: number): string => join(predictionLedgerSeam.dir(), `moves-${monthOf(seconds)}.jsonl`)
 
 export async function recordHourMoves(atSec: number, pairs: readonly string[], barsOf: (pair: string) => readonly ForecastBar[] | null): Promise<number> {
-  if (atSec % 3600 !== 0 || movesWritten.has(atSec)) return 0
-  movesWritten.add(atSec)
+  if (atSec % 3600 !== 0) return 0
   for (const raw of await linesOf(movesFile(atSec))) {
     const line = readMoveLine(raw)
     if (line !== null && line.at === atSec) return 0
@@ -185,6 +184,19 @@ export async function recordHourMoves(atSec: number, pairs: readonly string[], b
     lines.push(...movesOf(pair, 'binance', bars, atSec, predictions))
   }
   if (lines.length > 0) await appendJsonLines(movesFile(atSec), lines)
+  return lines.length
+}
+
+/** EACH COIN'S CARD STATE AT A WHOLE HOUR (shared/forecast/primaryCall.ts cardStatesOf), appended to
+ * predictions/cards-YYYY-MM.jsonl: an hour written once, as the moves are. */
+const cardsFile = (seconds: number): string => join(predictionLedgerSeam.dir(), `cards-${monthOf(seconds)}.jsonl`)
+
+export async function recordCardStates(atSec: number, lines: readonly CardStateLine[]): Promise<number> {
+  if (atSec % 3600 !== 0) return 0
+  for (const raw of await linesOf(cardsFile(atSec))) {
+    if (typeof raw === 'object' && raw !== null && (raw as { v?: unknown; at?: unknown }).v === CARD_STATE_VERSION && (raw as { at?: unknown }).at === atSec) return 0
+  }
+  if (lines.length > 0) await appendJsonLines(cardsFile(atSec), lines)
   return lines.length
 }
 
@@ -226,7 +238,6 @@ export function resetPredictionLedger(): void {
   owed.clear()
   settled.clear()
   listeners.clear()
-  movesWritten.clear()
   if (timer !== null) clearInterval(timer)
   timer = null
   ticking = false

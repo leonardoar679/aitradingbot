@@ -152,7 +152,9 @@ These files are records, not settings, and stay where they are: `livePositions.j
 (every prediction that is not the forecast's own -- a rule's card, an article's reading, a trader's trade, a person's
 own call -- when it is made, `sources-YYYY-MM.jsonl`, and its outcome settled from its venue's one-minute bars once its
 horizon has passed, `source-outcomes-YYYY-MM.jsonl`; owed ones read back for eight days; never swept;
-`electron/services/predictionLedgerService.ts`) and `paperBooks/` (each paper book's equity marked once an hour while
+`electron/services/predictionLedgerService.ts`; since V8 Stage 3 also the large moves of the forecast's pairs -- 2% in
+an hour or 5% in a day -- with the predictions that called them, `moves-YYYY-MM.jsonl`, and each coin's card state at
+every whole hour, `cards-YYYY-MM.jsonl`) and `paperBooks/` (each paper book's equity marked once an hour while
 they run, `equity-YYYY-MM.jsonl`, and every missed opportunity -- a candidate its source called and its writer did not
 open, with the stage that stopped it -- `misses-YYYY-MM.jsonl`; the laboratory's and the forecast trader's refusals
 among them, and the liquidity gate's in shadow over the forecast's TRADE decisions; `electron/services/booksService.ts`);
@@ -296,6 +298,13 @@ The main process also runs loops that need no window at all:
   writes missing, with its reason, one older or whose bars could not be read for six hours. Public data only.
 - `booksService` (added 26 October 2026, V8 Stage 2) marks each paper book's equity at every UTC hour while the books
   run, and nothing while they are stopped. It opens, closes and places nothing.
+- `primaryCallService` (added 26 October 2026, V8 Stage 3) weighs the primary call every minute and whenever the
+  announcements reader has read: each coin a Binance delisting names, while its rule's hold lasts, goes in the venues'
+  event lane (at most five coins, books read on demand) and is weighed into a card within the rule's five minutes --
+  its expected net from the study's coins (`shared/delistingStudy.ts`) less this route's cost and funding, the rule's
+  live check read first -- or put on the late list; a direction model in use as a P(up) source is weighed the same way
+  (none is). Each card is written once to the prediction record, and each coin's card state at every whole hour. Public
+  data and the app's own records; it opens, closes and places nothing.
 - `researchFolderService` (added 20 October 2026, V7.2-R Stage 2) keeps `trader-spider-research/`: the
   configuration's snapshots at start and hourly, the main process's errors and warnings and every AI call
   as the ledger appends it (`onAiCallAppended`), each paper order's life as the settings are written
@@ -372,7 +381,8 @@ reaches it. A call may span lines. The `news` channels were added after: four in
 | `researchFolder` | 4 (added 20 October 2026, V7.2-R Stage 2): status, export now, open the folder, keep a report | Settings › Advanced › Research record, and `ResearchReportScheduler` (the hour's and the day's reports) |
 | `predictions` | 2 (added 26 October 2026, V8 Stage 2): a person's own call recorded (the window may record no other source's), the record read with each one's outcome | V8's pages from Stage 3 on |
 | `books` | 4 (added 26 October 2026, V8 Stage 2): each paper book's standing, a book's equity marks, a missed opportunity written, the misses read | `LabTraderScheduler` and `ForecastTraderScheduler` (their refusals, as misses); V8's pages from Stage 3 on |
-| `forecast` | 13 (added 13 October 2026, V6 Stages 7-15; since 22 October 2026 a pair's round trips on both venues, read-only, and the replay out of sample's state and kept file, read-only): state, every pair's forecast, a pair's, its history, the ranking, a pair's decision, the Lab, a tested hour's replay, the replay out of sample, bars, the record over a span (V6 Stage 15), updates | Home, Predictions and the drawer, TRADE THIS, the forecast trader, the Forecast Lab, the top prediction's chime, and an experiment's report |
+| `calls` | 2 (added 26 October 2026, V8 Stage 3): the primary call as last weighed -- its cards, the delisted coins past the rule's window, the refusals, the rule's live check -- and each new weighing pushed | Home's and Predictions' primary call card and Predictions' lines, through `usePrimaryCall`; read-only |
+| `forecast` | 13 (added 13 October 2026, V6 Stages 7-15; since 22 October 2026 a pair's round trips on both venues, read-only, for a buy or (since V8 Stage 3) a sell, and the replay out of sample's state and kept file, read-only): state, every pair's forecast, a pair's, its history, the ranking, a pair's decision, the Lab, a tested hour's replay, the replay out of sample, bars, the record over a span (V6 Stage 15), updates | Home, Predictions and the drawer, TRADE THIS, the forecast trader, the Forecast Lab, the top prediction's chime, and an experiment's report |
 
 **Nothing in `src/` calls `app:ping` or `app:getVersion`.** Both are left from the project template.
 They are flagged here and not removed, since they cost nothing and something outside `src/` may

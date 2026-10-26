@@ -283,7 +283,7 @@ function App(): React.JSX.Element {
               the boundary latching its error for the rest of the session. */}
           <ErrorBoundary key={page} label={msg('The {page} page')} page={pageLabel(page)}>
             {page === 'home' && <HomePage onPrepareOrder={prepareOrder} onNavigate={navigate} />}
-            {page === 'predictions' && <PredictionsPage onPrepareOrder={prepareOrder} />}
+            {page === 'predictions' && <PredictionsPage onPrepareOrder={prepareOrder} uiMode={uiMode} />}
             {page === 'opportunities' && <OpportunitiesPage onPrepareOrder={prepareOrder} />}
             {page === 'positions' && <PositionsPage />}
             {page === 'performance' && <PerformancePage />}
