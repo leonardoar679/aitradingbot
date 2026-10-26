@@ -128,6 +128,15 @@ describe('a pasted link', () => {
     expect(await urls.urlRecords()).toEqual([record])
   })
 
+  it("is of the kind its title and summary say, as the feed reads a story, not of a word deep in its body", async () => {
+    const urls = await service({
+      'https://www.coindesk.com/rules': page('Canada drafts stablecoin rules and a ban on yield', 'The regulator published draft rules for issuers of BTC-backed and other tokens.</p><p>A later paragraph recalls an exploit at an unrelated protocol last year, long enough to be read.')
+    })
+    const record = await urls.analyzeUrl({ raw: 'https://www.coindesk.com/rules' })
+    if ('refused' in record) throw new Error(record.refused)
+    expect(record.kind).toBe('REGULATION')
+  })
+
   it('is one record however often it is pasted', async () => {
     const urls = await service({ 'https://www.coindesk.com/a': page('BTC rises', 'Long enough body text about BTC for the record to have its snippet.') })
     const first = await urls.analyzeUrl({ raw: 'https://www.coindesk.com/a' })

@@ -97,6 +97,10 @@ describe('which coins a story names', () => {
     // A city's two letters: a story read in a one-hour run named Lagrange's LA for Los Angeles.
     expect(namedTickers('Adam Iza used off-duty LA deputies to pull warrants', DICTIONARY)).toEqual([])
     expect(namedTickers('$LA jumps after its listing', DICTIONARY)).toEqual(['LA'])
+    // The GENIUS Act, written in capitals: a pasted article named it as a coin in V8 Stage 4's check.
+    const genius = assetDictionary(['GENIUS', 'USDC'])
+    expect(namedTickers('Banks weigh the GENIUS Act as USDC grows', genius)).toEqual(['USDC'])
+    expect(namedTickers('$GENIUS trades after its listing', genius)).toEqual(['GENIUS'])
     // A coin not traded on Binance is not matched, nor a one-letter ticker.
     expect(namedTickers('DOGE and S rally', DICTIONARY)).toEqual([])
   })

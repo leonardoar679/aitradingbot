@@ -339,7 +339,9 @@ export const WORD_TICKERS: ReadonlySet<string> = new Set([
   // "OP-ED", an IP address: Optimism and Story are matched by name, or as $OP and $IP.
   'OP', 'IP', 'OK', 'NEW', 'ALL', 'ANY', 'HOME', 'JOE', 'TURBO',
   // Los Angeles: "off-duty LA deputies" named Lagrange's LA in a one-hour run of the app.
-  'LA'
+  'LA',
+  // The GENIUS Act, the U.S. stablecoin law, written in capitals: a pasted article named it as a coin (V8 Stage 4's check).
+  'GENIUS'
 ])
 
 export interface AssetDictionary {

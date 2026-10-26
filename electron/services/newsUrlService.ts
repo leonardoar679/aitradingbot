@@ -304,16 +304,18 @@ export async function analyzeUrl(input: { raw: string; origin?: 'manual' | 'auto
       : publicationTimeOf({ candidates: [...(article?.published ?? [])], readAt: record.readAt ?? now, check })
   step(record, 'timed', record.time.sec === null ? 'No publication time could be read.' : `Published ${new Date(record.time.sec * 1000).toISOString().slice(0, 16).replace('T', ' ')} UTC, read from ${record.time.source}${record.time.disagree ? '; the page\'s times disagree by more than an hour' : ''}${record.time.check !== null && !record.time.check.agrees ? `; the ${record.time.check.source}'s time disagrees` : ''}.`)
 
-  await complete(record, { title, body, sameInFeed, feed, now })
+  // Its kind is read as the feed reads a story's: from its title and its summary, not from every word of its body.
+  const summary = article?.description ?? article?.snippets[0]?.text ?? sameInFeed?.summary ?? (retrieval === 'supplied' ? supplied.slice(0, 400) : '')
+  await complete(record, { title, body, summary, sameInFeed, feed, now })
   return save(record)
 }
 
 /** What every record is given once its text and time are had: its kind, who else told it, its coins and its source's
  * class now that they are known, a pasted or discovered Binance delisting weighed as the reader's would be, the coins'
  * books read on demand, each coin's price, and the verdict. */
-async function complete(record: UrlRecord, input: { title: string | null; body: string; sameInFeed: ReadStory | null; feed: readonly ReadStory[]; now: number }): Promise<void> {
-  const { title, body, sameInFeed, feed, now } = input
-  record.kind = eventTypeOf({ title: title ?? '', summary: body, binanceCategory: record.binance !== null ? (classifyTitle(record.binance.title)?.category ?? null) : null })
+async function complete(record: UrlRecord, input: { title: string | null; body: string; summary: string; sameInFeed: ReadStory | null; feed: readonly ReadStory[]; now: number }): Promise<void> {
+  const { title, body, summary, sameInFeed, feed, now } = input
+  record.kind = eventTypeOf({ title: title ?? '', summary, binanceCategory: record.binance !== null ? (classifyTitle(record.binance.title)?.category ?? null) : null })
   if (title !== null && record.time?.sec != null) {
     const sec = record.time.sec
     const others = feed.filter((story) => story !== sameInFeed && Math.abs(story.publishedAt - sec) <= SAME_STORY_SECONDS && titleSimilarity(story.title, title) >= SAME_STORY_SIMILARITY)
@@ -401,7 +403,7 @@ export async function discoverFromFeed(autoAnalyze: boolean): Promise<number> {
       trail: []
     }
     step(record, 'discovered', `Discovered in the app's own feed (${story.sourceName}, impact ${story.impact}): nothing fetched, no model asked.`)
-    await complete(record, { title: story.title, body: story.summary, sameInFeed: story, feed, now })
+    await complete(record, { title: story.title, body: story.summary, summary: story.summary, sameInFeed: story, feed, now })
     await save(record)
     made++
   }
