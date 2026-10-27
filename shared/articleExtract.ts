@@ -8,7 +8,7 @@ import { decodeEntities } from './newsFeed'
 // function of the page's text, run in a worker of its own (shared/tasks.ts 'extractArticle') with a deadline and a
 // memory limit: no script on the page is run, no link on it followed, nothing fetched.
 
-export const ARTICLE_EXTRACT_VERSION = 'article-extract-v1'
+export const ARTICLE_EXTRACT_VERSION = 'article-extract-v2'
 
 export const EXTRACT_LINES = {
   version: ARTICLE_EXTRACT_VERSION,
@@ -16,7 +16,11 @@ export const EXTRACT_LINES = {
   maxTextChars: 8000,
   snippetChars: 400,
   /** A paragraph shorter than this is a caption or a menu, not text. */
-  minParagraphChars: 40
+  minParagraphChars: 40,
+  /** Where no <article> holds half the page's paragraphs, one holding less than this share of them, or whose text is at
+   * least this share its links, is a card of another story (article-extract-v2). */
+  cardShare: 0.1,
+  cardLinkShare: 0.5
 } as const
 
 /** Where a time was read: the page's structured data, its Open Graph tags, a dated byline, or another meta tag. */
@@ -146,7 +150,23 @@ function authorOf(value: unknown): string | null {
 const DROPPED_BLOCKS = ['script', 'style', 'noscript', 'svg', 'template', 'iframe', 'form', 'nav', 'footer', 'aside', 'button', 'select', 'figure']
 const BLOCK_ENDS = /<\/(p|div|li|h[1-6]|section|blockquote|tr|article|main|header|pre|dd|dt)>|<br\s*\/?>|<hr\s*\/?>/gi
 
-/** The page's main text, as lines: the largest <article>, else <main>, else the body, with what is not text dropped. */
+/** A part of a page's visible text, its tags dropped and its spaces folded. */
+const plainText = (part: string): string => part.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+
+/** How much paragraph text a part of a page holds, in characters. */
+const paragraphChars = (part: string): number => [...part.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)].reduce((sum, match) => sum + plainText(match[1]).length, 0)
+
+/** The share of a part's text that is the text of its links. */
+const linkShare = (part: string): number => {
+  const all = plainText(part).length
+  return all === 0 ? 0 : [...part.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/gi)].reduce((sum, match) => sum + plainText(match[1]).length, 0) / all
+}
+
+/** The page's main text, as lines, with what is not text dropped: the <article> that holds the most of the page's
+ * paragraphs where it holds at least half of them, else <main> on the same terms, else the body. Since V8 Stage 5
+ * (article-extract-v2): a page whose <article> elements are cards of other stories holds its own text outside them --
+ * Cointelegraph's did, and its largest card, another story's teaser, was read as the article. A page with no paragraph
+ * at all is read as before: the largest <article>, else <main>, else the body. */
 function mainLines(html: string): string[] {
   let body = html
   for (const name of DROPPED_BLOCKS) body = body.replace(new RegExp(`<${name}\\b[\\s\\S]*?<\\/${name}>`, 'gi'), '\n')
@@ -154,7 +174,21 @@ function mainLines(html: string): string[] {
   const articles = [...body.matchAll(/<article\b[^>]*>([\s\S]*?)<\/article>/gi)].map((match) => match[1])
   const main = /<main\b[^>]*>([\s\S]*?)<\/main>/i.exec(body)?.[1]
   const bodyPart = /<body\b[^>]*>([\s\S]*)<\/body>/i.exec(body)?.[1]
-  const chosen = articles.length > 0 ? articles.reduce((a, b) => (b.length > a.length ? b : a)) : (main ?? bodyPart ?? body)
+  const whole = paragraphChars(bodyPart ?? body)
+  let chosen: string
+  if (whole === 0) chosen = articles.length > 0 ? articles.reduce((a, b) => (b.length > a.length ? b : a)) : (main ?? bodyPart ?? body)
+  else {
+    const holds = (part: string | undefined): part is string => part !== undefined && paragraphChars(part) * 2 >= whole
+    const best = articles.length > 0 ? articles.reduce((a, b) => (paragraphChars(b) > paragraphChars(a) ? b : a)) : undefined
+    if (holds(best)) chosen = best
+    else {
+      // The story's text is outside its <article> elements, which are then cards of other stories: each one holding a
+      // small share of the page's paragraphs, or whose text is mostly its links, is left out of what is read.
+      const outer = holds(main) ? main : (bodyPart ?? body)
+      const card = (inner: string): boolean => paragraphChars(inner) < whole * EXTRACT_LINES.cardShare || linkShare(inner) >= EXTRACT_LINES.cardLinkShare
+      chosen = outer.replace(/<article\b[^>]*>([\s\S]*?)<\/article>/gi, (block, inner: string) => (card(inner) ? '\n' : block))
+    }
+  }
   const text = decodeEntities(chosen.replace(BLOCK_ENDS, '\n').replace(/<[^>]*>/g, ' '))
   return stripInvisible(text)
     .split('\n')

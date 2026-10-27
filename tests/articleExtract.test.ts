@@ -101,3 +101,47 @@ describe('the pieces', () => {
     expect((runTask({ id: 10, task: 'extractArticle', payload: 42 }).result as { snippets: unknown[] }).snippets).toEqual([])
   })
 })
+
+describe('a page whose <article> elements are cards of other stories (V8 Stage 5, article-extract-v2)', () => {
+  // As Cointelegraph's page was at Stage 5's check: the story in plain blocks, a price ticker above it, and the other
+  // stories' cards, each an <article>, below it. The largest card, another story's teaser, was read as the article.
+  const CARDS = `<html><head><title>Ripple wins final US approval</title></head><body>
+<div class="ticker"><p>BTC 80,000 0.31% ETH 2,326 0.16% XRP 1.30 1.18% and the rest of a price ticker line.</p></div>
+<div class="post">
+<h1>Ripple wins final US approval for national trust bank</h1>
+<p>Ripple announced Monday that its national trust bank has secured final approval from the Office of the Comptroller.</p>
+<p>The approval completes the chartering process for Ripple National Trust Bank, which received conditional approval earlier.</p>
+<p>The federally supervised trust bank is authorized to manage reserves backing Ripple USD and to act as a custodian.</p>
+</div>
+<section class="related">
+<article class="card"><a href="/x"><p>XRP 30-day exchange inflows pass 6B tokens as whales move to the sidelines</p></a></article>
+<article class="card"><a href="/y"><p>Another story's teaser, long enough to be read as a paragraph of text on its own.</p></a></article>
+<article class="promo"><p>Subscribe to the daily brief before markets open.</p></article>
+</section>
+</body></html>`
+  it("reads the story's own paragraphs, and none of the other stories' cards", () => {
+    const read = extractArticle(CARDS)
+    expect(read.version).toBe('article-extract-v2')
+    expect(read.text).toMatch(/Ripple announced Monday that its national trust bank/)
+    expect(read.text).toMatch(/The federally supervised trust bank/)
+    expect(read.text).not.toMatch(/XRP 30-day exchange inflows|Another story's teaser/)
+    // A box with no link holding a small share of the paragraphs is left out too.
+    expect(read.text).not.toMatch(/Subscribe to the daily brief/)
+  })
+  it('still reads an <article> holding the story where it holds half the paragraphs or more, cards and all around it', () => {
+    const read = extractArticle(CARDS.replace('<div class="post">', '<article class="story">').replace('</div>\n<section', '</article>\n<section'))
+    expect(read.text).toMatch(/^Ripple wins final US approval for national trust bank/)
+    expect(read.text).not.toMatch(/price ticker|XRP 30-day/)
+    // The story's <article> is the one with the most paragraphs, not the one with the most markup.
+    const heavy = CARDS.replace('<div class="post">', '<article class="story">')
+      .replace('</div>\n<section', '</article>\n<section')
+      .replace('<article class="card">', `<article class="card"><div data-tracking="${'x'.repeat(5000)}"></div>`)
+    expect(extractArticle(heavy).text).toMatch(/^Ripple wins final US approval for national trust bank/)
+  })
+  it('keeps an <article> holding a fair share of the paragraphs where the story is split, and reads a page with no paragraph as before', () => {
+    const split = CARDS.replace('<p>The approval completes', '<article class="part"><p>The approval completes').replace('act as a custodian.</p>', 'act as a custodian.</p></article>')
+    expect(extractArticle(split).text).toMatch(/The approval completes[\s\S]*The federally supervised/)
+    const bare = '<html><body><article><div>A story told in blocks rather than paragraphs, long enough to be read as text.</div></article><div>Elsewhere on the page, a line long enough to be read as text too.</div></body></html>'
+    expect(extractArticle(bare).text).toBe('A story told in blocks rather than paragraphs, long enough to be read as text.')
+  })
+})
