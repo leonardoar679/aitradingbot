@@ -176,7 +176,7 @@ const LOANWORDS: Partial<Record<TranslatedLanguage, ReadonlySet<string>>> = {
 }
 
 /** Names, units and conventions a translation writes in Latin letters. */
-const LATIN_NAMES = new Set(['OpenAI', 'OpenRouter', 'Binance', 'Bitget', 'CoinGecko', 'Coinbase', 'Kraken', 'Bithumb', 'Upbit', 'Coinone', 'Korbit', 'Bollinger', 'TraderSpider', 'ms', 's', 'h', 'x'])
+const LATIN_NAMES = new Set(['OpenAI', 'OpenRouter', 'Binance', 'Bitget', 'CoinGecko', 'Coinbase', 'Kraken', 'Bithumb', 'Upbit', 'Coinone', 'Korbit', 'Bollinger', 'TraderSpider', 'Hyperliquid', 'Bybit', 'ms', 's', 'h', 'x', 'bps'])
 const LATIN_BY_LANGUAGE: Partial<Record<TranslatedLanguage, ReadonlySet<string>>> = { 'zh-CN': new Set(['token']), 'zh-TW': new Set(['token']) }
 /** The label of a button on an English page, which a notice quotes as the button reads. */
 const ENGLISH_LABELS = ['Prepare an order from this call']
@@ -546,6 +546,7 @@ async function surfaces(): Promise<{ name: string; element: (language: Language)
   const { LanguageChooser } = await import('../src/i18n/LanguageChooser')
   const { NewExecutorModal } = await import('../src/executors/NewExecutorModal')
   const { NewsUrlsPage } = await import('../src/articles/NewsUrlsPage')
+  const { CopyTradersPage } = await import('../src/traders/CopyTradersPage')
   const none = (): undefined => undefined
   const proposal = forecastProposal({ plan: PLAN, confidence: 0.64, barTime: T })
   return [
@@ -560,7 +561,9 @@ async function surfaces(): Promise<{ name: string; element: (language: Language)
     { name: 'the language chooser', element: (language) => createElement(LanguageChooser, { offered: language, onChoose: async () => undefined }) },
     { name: 'the trade plan', element: () => createElement(NewExecutorModal, { account: null, existingExecutors: [], proposal, onCreate: none, onClose: none }) },
     // Translated, and in the normal sidebar, since V8 Stage 5.
-    { name: 'News URLs', element: () => createElement(NewsUrlsPage, { onPrepareOrder: none }) }
+    { name: 'News URLs', element: () => createElement(NewsUrlsPage, { onPrepareOrder: none }) },
+    // And since Stage 8.
+    { name: 'Copy Traders', element: () => createElement(CopyTradersPage) }
   ]
 }
 
@@ -951,6 +954,227 @@ describe('the primary call and a news link with data in them, in every language 
       }
     }
   }, 60_000)
+})
+
+// COPY TRADERS WITH A RECORD IN IT (V8 Stage 8): the page's views with a trader of each source in them -- every
+// verdict of the three tests and each of their reasons, every feature a clone's rule can read, each answer of the
+// Bitget check -- and the paper panel in each of its states.
+const TRADER_MS = Date.parse('2026-10-27T09:30:00Z')
+const HL_ID = `0x0b4b6bea${'0'.repeat(28)}1234`
+const traderMeta = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+  v: 'trader-store-v2',
+  ref: { venue: 'hyperliquid', id: HL_ID, key: `hyperliquid-${HL_ID}` },
+  importedAt: TRADER_MS / 1000,
+  source: 'hyperliquid',
+  label: 'VERIFIED',
+  records: 10_000,
+  firstMs: TRADER_MS - 90 * 86_400_000,
+  lastMs: TRADER_MS,
+  capped: true,
+  name: null,
+  fileKind: null,
+  fileRefused: null,
+  ...over
+})
+const OKX_META = traderMeta({ ref: { venue: 'okx', id: '35E22983F436F55B', key: 'okx-35E22983F436F55B' }, source: 'okx', label: 'REPORTED', records: 230, capped: false })
+const FILE_META = traderMeta({ ref: { venue: 'file', id: '0123456789abcdef', key: 'file-0123456789abcdef' }, source: 'file', label: 'UNVERIFIABLE', records: 310, capped: false, name: 'my trades.csv', fileKind: 'trips', fileRefused: { count: 3, reasons: ['line 4: no time', 'line 9: a size of 0'] } })
+const position = (coin: string, size: number, leverage: { type: string; value: number } | null): Record<string, unknown> => ({ coin, size, entryPx: 100, positionValue: Math.abs(size) * 102, unrealizedPnl: 2, leverage, liquidationPx: null, marginUsed: 10, fundingSinceOpen: null })
+const TRADER_FIGURES = {
+  trips: 412,
+  partial: 3,
+  spotFills: 2,
+  span: { fromMs: TRADER_MS - 88 * 86_400_000, toMs: TRADER_MS, calendarDays: 88.4, tradingDays: 61 },
+  money: { realized: 5230.5, fees: 812.25, rebates: 14.1, funding: -120.4, net: 4297.85 },
+  winRate: 0.553,
+  drawdown: { usdc: 1840.2, pctOfAccount: 12.4 },
+  holdMin: { p10: 0.5, median: 25, p90: 300, max: 4000 },
+  stake: { medianUsdc: 2150 },
+  leverage: { median: 1.8, max: 12.5, trips: 400 },
+  reportedLeverage: null,
+  ledger: { deposits: 20_000, withdrawals: 5000 },
+  coins: [
+    { coin: 'BTC', trips: 200, net: 3000 },
+    { coin: 'HYPE', trips: 150, net: 1500 },
+    { coin: 'kPEPE', trips: 62, net: -202.15 }
+  ],
+  open: { positions: [position('BTC', 0.5, { type: 'cross', value: 5 }), position('HYPE', -100, { type: 'isolated', value: 3 }), position('SOL', 10, null), position('ETH', -1, { type: 'other', value: 2 })], unrealized: 950.5, accountValue: 25_000 }
+}
+const SKILL = { version: 'trader-skill-v1', verdict: 'MARKET OR LUCK', reasons: ['in English'], trips: 412, withoutBars: 3, tradingDays: 61, spanDays: 88.4, edgePct: 0.021, interval: { low: -0.01, high: 0.05 }, halvesPct: [0.03, -0.01], pShift: 0.21, pFlip: 0.04, betaOfOne: 2, draws: 10_000 }
+const delayRow = (delayMin: number, costMultiplier: number, aboveZero: boolean, over: Record<string, unknown> = {}): Record<string, unknown> => ({ delayMin, costMultiplier, n: 120, missing: 0, meanNetPct: aboveZero ? 0.08 : -0.02, interval: aboveZero ? { low: 0.01, high: 0.15 } : { low: -0.06, high: 0.02 }, aboveZero, ...over })
+const DELAY = {
+  version: 'trader-delay-v1',
+  rows: [delayRow(2, 1, true), delayRow(2, 2, false), delayRow(5, 1, false, { missing: 4 }), delayRow(5, 2, false), delayRow(15, 1, false, { meanNetPct: null, interval: null }), delayRow(15, 2, false)],
+  trips: 120,
+  sinceMs: TRADER_MS - 30 * 86_400_000,
+  noVenue: 4,
+  impactAssumed: ['kPEPE'],
+  fundingAssumed: 7
+}
+const condition = (feature: string, op: '<=' | '>=', threshold: number): Record<string, unknown> => ({ feature, op, threshold })
+const CLONE = {
+  version: 'trader-clone-v1',
+  verdict: 'REPLICABLE',
+  reasons: [],
+  entries: 270,
+  withoutFeatures: 5,
+  trainEntries: 180,
+  testEntries: 90,
+  rule: { side: 'short', conditions: [condition('weekdayUtc', '>=', 4.6), condition('vol24h', '<=', 0.0042)], holdBars: 8 },
+  training: { tpr: 0.62, fpr: 0.21, positives: 180, negatives: 720 },
+  outOfTime: { tpr: 0.58, fpr: 0.22, auc: 0.71, interval: { low: 0.64, high: 0.78 }, positives: 90, negatives: 360 },
+  trades: { n: 44, meanNetPct: 0.12, interval: { low: 0.02, high: 0.2 }, coins: ['BTC', 'HYPE'] }
+}
+const TRADER_ANALYSIS = {
+  v: 'trader-analysis-v2',
+  key: `hyperliquid-${HL_ID}`,
+  ref: (traderMeta() as { ref: unknown }).ref,
+  at: TRADER_MS / 1000,
+  versions: { engine: 'f8ec0052263b', config: 'c0ffee' },
+  record: traderMeta(),
+  figures: TRADER_FIGURES,
+  okx: null,
+  mapping: [
+    { coin: 'BTC', venue: 'binance', symbol: 'BTCUSDT' },
+    { coin: 'HYPE', venue: 'bitget', symbol: 'HYPEUSDT' }
+  ],
+  unmapped: ['kPEPE'],
+  skill: SKILL,
+  delay: DELAY,
+  clone: CLONE,
+  problems: ['Binance answered 451 for kPEPEUSDT']
+}
+const OKX_ANALYSIS = {
+  ...TRADER_ANALYSIS,
+  key: 'okx-35E22983F436F55B',
+  ref: (OKX_META as { ref: unknown }).ref,
+  record: OKX_META,
+  figures: { ...TRADER_FIGURES, leverage: null, reportedLeverage: { median: 10, max: 20, trips: 200 }, open: { positions: [], unrealized: 0, accountValue: null } },
+  okx: {
+    positions: 230,
+    notPriced: 3,
+    reportedPnl: 1520.4,
+    estimate: { gross: 1700, fees: 150.2, funding: -20.5, net: 1529.3, fundingUnknown: 2 },
+    open: { atMs: TRADER_MS, positions: [position('ETH', 2, { type: 'cross', value: 10 })], hidden: 2, unrealized: 33.3 },
+    series: [
+      { timeMs: TRADER_MS - 300 * 86_400_000, pnl: -50, pnlRatio: null },
+      { timeMs: TRADER_MS - 150 * 86_400_000, pnl: 400, pnlRatio: null },
+      { timeMs: TRADER_MS, pnl: 1520.4, pnlRatio: null }
+    ],
+    stats: { winRatio: 0.61, profitDays: 200, lossDays: 120, investAmt: 50_000, avgSubPosNotional: 1200, curCopyTraderPnl: null }
+  },
+  problems: []
+}
+const FILE_ANALYSIS = {
+  ...TRADER_ANALYSIS,
+  key: 'file-0123456789abcdef',
+  ref: (FILE_META as { ref: unknown }).ref,
+  record: FILE_META,
+  figures: { ...TRADER_FIGURES, leverage: null, drawdown: { usdc: 300, pctOfAccount: null }, holdMin: { p10: 3000, median: 4000, p90: 9000, max: 9500 }, ledger: { deposits: 0, withdrawals: 0 }, open: { positions: [], unrealized: 0, accountValue: null } },
+  skill: { ...SKILL, verdict: 'TOO FEW', trips: 12, tradingDays: 5, spanDays: 9.5, pShift: null, pFlip: null },
+  delay: { ...DELAY, trips: 0, rows: [] },
+  clone: null,
+  problems: []
+}
+const BITGET = { at: TRADER_MS / 1000, configured: true, accountMode: 'uta', modeProblem: null, followerRead: { ok: true, endpoint: '/api/v2/copy/mix-follower/query-traders', traders: [{ id: 'b1a2', name: 'Ace' }, { id: 'c3d4', name: null }] } }
+const FOLLOW_STAMP = (over: Record<string, unknown> = {}): Record<string, unknown> => ({ traderKey: `hyperliquid-${HL_ID}`, positionId: 'BTC', coin: 'BTC', venue: 'binance', symbol: 'BTCUSDT', side: 'long', leaderSize: 0.5, size: 0.01, avgPx: 100_000, maxStakeQuote: 1000, legs: [], realizedQuote: 0, feesQuote: 0.5, openedOnKey: 'k', openedAtMs: TRADER_MS, delaySec: 45, maxHoldSec: 240_000, closeReason: null, ...over })
+const bookTrade = (id: string, stamp: Record<string, unknown>, closed: boolean): Record<string, unknown> => ({
+  id,
+  type: 'position',
+  mode: 'paper',
+  exchange: 'binance',
+  symbol: stamp.symbol,
+  createdAt: TRADER_MS / 1000,
+  status: closed ? 'stopped' : 'active',
+  params: {},
+  book: { id: 'copy', startedAt: TRADER_MS / 1000 - 3600, ledger: 'follow', ...(closed ? { result: { netQuote: 12.5, netPct: 1.25, feesQuote: 1, fundingQuote: -0.2, closedAt: TRADER_MS / 1000 + 600 } } : {}) },
+  ...('signalKey' in stamp ? { clone: stamp } : { follow: stamp })
+})
+const CLONE_STAMP = { traderKey: `hyperliquid-${HL_ID}`, coin: 'HYPE', venue: 'bitget', symbol: 'HYPEUSDT', side: 'short', signalKey: 's', openedAtMs: TRADER_MS, entryPx: 40, qty: 25, stakeQuote: 1000, holdSec: 7200, feesQuote: 0.5, closeReason: null }
+const HELD = {
+  copy: {
+    follows: { [`hyperliquid-${HL_ID}`]: { since: TRADER_MS - 3_600_000, maxHoldSec: 240_000 }, 'okx-35E22983F436F55B': { since: TRADER_MS - 3_600_000, maxHoldSec: 86_400 } },
+    clones: { [`hyperliquid-${HL_ID}`]: { since: TRADER_MS - 3_600_000, rule: CLONE.rule, coins: [{ coin: 'HYPE', venue: 'bitget', symbol: 'HYPEUSDT' }] } }
+  },
+  executors: [bookTrade('f1', FOLLOW_STAMP(), false), bookTrade('f2', FOLLOW_STAMP({ delaySec: 30 }), true), bookTrade('c1', CLONE_STAMP, false), bookTrade('c2', CLONE_STAMP, true)],
+  running: false,
+  stakeShare: 0.1
+}
+const FOLLOW_STATUS = { key: `hyperliquid-${HL_ID}`, venue: 'hyperliquid', mode: 'stream', since: TRADER_MS - 3_600_000, lastReadMs: TRADER_MS, missedReads: 0, lost: false, hidden: false, eventsToday: 14 }
+const COPY_MISSES = [
+  { v: 'miss-v1', at: TRADER_MS / 1000, book: 'copy', writer: 'follow', pair: 'BTCUSDT', side: 'up', refPrice: 100_000, stage: 'off', reason: 'the copy book is not running', predictionId: null, shadow: false },
+  { v: 'miss-v1', at: TRADER_MS / 1000, book: 'copy', writer: 'clone', pair: 'HYPEUSDT', side: 'down', refPrice: 40, stage: 'late', reason: '121 s after its close was read', predictionId: null, shadow: false }
+]
+
+describe('Copy Traders with a record in it, in every language (V8 Stage 8)', () => {
+  it('reads each from its catalog, with no English in what is read but what a venue, a file or a verdict holds as written', async () => {
+    const { TraderCards, TradersOnFile, PasteNote, SkillView, DelayView, CloneView, BitgetCheckView } = await import('../src/traders/CopyTradersPage')
+    const { PaperCopyView } = await import('../src/traders/PaperCopyPanel')
+    const { traderRefOf } = await import('../shared/traders/traderRef')
+    const none = (): undefined => undefined
+    const cards = (meta: unknown, analysis: unknown): ReactElement => createElement(TraderCards, { meta, analysis, analysed: 7 } as never)
+    const skill = (over: Record<string, unknown>, medianHoldMin: number | null = null): ReactElement => createElement(SkillView, { skill: { ...SKILL, ...over }, analysed: 1, medianHoldMin } as never)
+    const clone = (over: Record<string, unknown>): ReactElement => createElement(CloneView, { clone: { ...CLONE, ...over } } as never)
+    const rule = (side: string, ...conditions: Record<string, unknown>[]): Record<string, unknown> => ({ rule: { side, conditions, holdBars: 3 } })
+    const bitget = (check: unknown, busy = false, problem: string | null = null): ReactElement => createElement(BitgetCheckView, { check, busy, problem, onAsk: none } as never)
+    const panel = (over: Record<string, unknown>): ReactElement =>
+      createElement(PaperCopyView, { meta: traderMeta(), analysis: TRADER_ANALYSIS, held: HELD, status: FOLLOW_STATUS, misses: COPY_MISSES, busy: false, problem: null, onFollow: none, onClone: none, ...over } as never)
+    const views: { name: string; element: ReactElement }[] = [
+      { name: 'a Hyperliquid trader', element: cards(traderMeta(), TRADER_ANALYSIS) },
+      { name: 'an OKX lead trader', element: cards(OKX_META, OKX_ANALYSIS) },
+      { name: "an OKX lead trader's year without its figures", element: cards({ ...OKX_META, capped: true }, { ...OKX_ANALYSIS, okx: { ...OKX_ANALYSIS.okx, notPriced: 0, open: null, series: [], stats: { winRatio: null, profitDays: null, lossDays: null, investAmt: null, avgSubPosNotional: null, curCopyTraderPnl: null } } }) },
+      { name: 'a file of round trips', element: cards(FILE_META, FILE_ANALYSIS) },
+      { name: 'a file of fills, one row refused', element: cards(FILE_META, { ...FILE_ANALYSIS, record: { ...FILE_META, fileKind: 'fills', fileRefused: { count: 1, reasons: [] } }, skill: null, delay: null, figures: { ...FILE_ANALYSIS.figures, span: null, winRate: null, holdMin: null, stake: null } }) },
+      { name: 'the traders on file', element: createElement(TradersOnFile, { list: { traders: [{ meta: traderMeta(), latest: TRADER_ANALYSIS }, { meta: OKX_META, latest: null }, { meta: FILE_META, latest: FILE_ANALYSIS }], analysed: 3 }, open: `hyperliquid-${HL_ID}`, busy: false, onOpen: none, onAgain: none } as never) },
+      { name: 'one trader on file', element: createElement(TradersOnFile, { list: { traders: [{ meta: traderMeta({ records: 1 }), latest: null }], analysed: 1 }, open: null, busy: true, onOpen: none, onAgain: none } as never) },
+      { name: 'a pasted address', element: createElement(PasteNote, { parsed: traderRefOf(HL_ID) }) },
+      { name: "a pasted lead trader's code", element: createElement(PasteNote, { parsed: traderRefOf('35E22983F436F55B') }) },
+      ...['', 'x'.repeat(501), 'not a trader', 'ftp://okx.com/a', 'https://www.bitget.com/copy-trading/trader/x', 'https://www.binance.com/en/copy-trading', 'https://www.bybit.com/copyTrade', 'https://x.com/someone/status/1', 'https://app.hyperliquid.xyz/trade', 'https://www.okx.com/copy-trading', 'https://example.com/trader'].map((paste) => ({
+        name: `a refused paste: ${paste.slice(0, 40)}`,
+        element: createElement(PasteNote, { parsed: traderRefOf(paste) })
+      })),
+      { name: 'skill', element: skill({ verdict: 'SKILL', reasons: [], pShift: 0.005, pFlip: 0.002, interval: { low: 0.01, high: 0.05 }, halvesPct: [0.03, 0.01] }, 12) },
+      { name: 'market or luck, nothing measured', element: skill({ pShift: null, pFlip: null, interval: null, halvesPct: null, edgePct: null, withoutBars: 0, betaOfOne: 0 }) },
+      { name: 'too few', element: skill({ verdict: 'TOO FEW', trips: 3, tradingDays: 2, spanDays: 1.5, pShift: null, pFlip: null }) },
+      { name: 'the delay, nothing copied', element: createElement(DelayView, { analysis: { ...TRADER_ANALYSIS, delay: { ...DELAY, trips: 0, rows: [] } } } as never) },
+      { name: 'the delay, every cost known', element: createElement(DelayView, { analysis: { ...TRADER_ANALYSIS, delay: { ...DELAY, noVenue: 0, impactAssumed: [], fundingAssumed: 0 } } } as never) },
+      { name: 'partly, a long rule', element: clone({ verdict: 'PARTLY', ...rule('long', condition('ret4h', '<=', -0.04), condition('rangePos24h', '>=', 0.8)), outOfTime: { ...CLONE.outOfTime, interval: { low: 0.55, high: 0.7 } }, trades: { ...CLONE.trades, n: 12, interval: null } }) },
+      { name: 'not replicable', element: clone({ verdict: 'NOT REPLICABLE', ...rule('short', condition('ret1h', '>=', 0.01), condition('ret24h', '<=', -0.05)), outOfTime: { ...CLONE.outOfTime, interval: null }, trades: { ...CLONE.trades, interval: null } }) },
+      { name: 'not replicable, its net at 0', element: clone({ verdict: 'NOT REPLICABLE', ...rule('long', condition('volRatio', '>=', 1.4), condition('fromMean24h', '<=', -0.02)), outOfTime: { ...CLONE.outOfTime, interval: { low: 0.5, high: 0.62 } }, trades: { ...CLONE.trades, interval: { low: -0.05, high: 0.1 } } }) },
+      { name: "Bitcoin's moves", element: clone(rule('short', condition('btcRet1h', '<=', -0.01), condition('btcRet24h', '>=', 0.03))) },
+      { name: "the coin's day and the hour", element: clone({ ...rule('long', condition('relRet24h', '>=', 0.02), condition('hourUtc', '<=', 6.5)), withoutFeatures: 0, outOfTime: { ...CLONE.outOfTime, interval: null }, trades: { ...CLONE.trades, meanNetPct: null, interval: null } }) },
+      { name: 'too few to fit', element: clone({ verdict: 'TOO FEW', reasons: ['no side has 10 entries in the first two thirds to fit a rule on'], rule: null, training: null, outOfTime: null, trades: null }) },
+      { name: 'too few to test', element: clone({ verdict: 'TOO FEW', reasons: ['14 long entries in the last third, under 30'], outOfTime: null, trades: null }) },
+      { name: 'too few to test, short', element: clone({ verdict: 'TOO FEW', reasons: ['3 short entries in the last third, under 30'], outOfTime: null, trades: null }) },
+      { name: 'too few, its reason not read again', element: clone({ verdict: 'TOO FEW', reasons: ['a reason of another version'], outOfTime: null, trades: null }) },
+      { name: 'no clone', element: createElement(CloneView, { clone: null }) },
+      { name: 'the Bitget check, not asked', element: bitget(null) },
+      { name: 'the Bitget check, asking', element: bitget(null, true) },
+      { name: 'the Bitget check, failed', element: bitget(null, false, 'Bitget did not answer') },
+      { name: 'the Bitget check, no key', element: bitget({ ...BITGET, configured: false, accountMode: null, followerRead: null }) },
+      { name: 'the Bitget check, two traders', element: bitget(BITGET) },
+      { name: 'the Bitget check, no trader', element: bitget({ ...BITGET, accountMode: 'classic', followerRead: { ...BITGET.followerRead, traders: [] } }) },
+      { name: 'the Bitget check, refused', element: bitget({ ...BITGET, accountMode: 'unknown', modeProblem: 'mode not given', followerRead: { ok: false, endpoint: '/x', code: '40014', message: 'Incorrect permissions' } }) },
+      { name: 'the Bitget check, nothing read', element: bitget({ ...BITGET, accountMode: null, followerRead: { ok: false, endpoint: '/x', code: null, message: 'timeout' } }) },
+      { name: 'on paper, reading', element: panel({ held: null, status: null, misses: [] }) },
+      { name: 'on paper, following and cloning, the books stopped', element: panel({}) },
+      { name: 'on paper, the follow lost and polled', element: panel({ status: { ...FOLLOW_STATUS, mode: 'poll', lost: true, eventsToday: 1 }, held: { ...HELD, running: true } }) },
+      { name: 'on paper, followable', element: panel({ analysis: { ...TRADER_ANALYSIS, delay: { ...DELAY, rows: [delayRow(2, 1, true)] } } }) },
+      { name: 'on paper, no delay to read it at', element: panel({ analysis: { ...TRADER_ANALYSIS, delay: null } }) },
+      { name: 'on paper, an OKX trader hiding', element: panel({ meta: OKX_META, status: { ...FOLLOW_STATUS, key: 'okx-35E22983F436F55B', venue: 'okx', mode: 'poll', hidden: true }, problem: 'OKX answered 50011' }) },
+      { name: 'on paper, nothing switched on', element: panel({ held: { ...HELD, copy: { follows: {}, clones: {} }, executors: [] }, status: null, misses: [] }) },
+      { name: 'on paper, a file', element: panel({ meta: FILE_META, analysis: null, status: null }) }
+    ]
+    for (const language of LANGUAGES) {
+      for (const { name, element } of views) {
+        clearMissedKeys()
+        const html = await render(element, language)
+        expect({ language, name, rendered: html.length > 50 }).toEqual({ language, name, rendered: true })
+        if (language === 'en') continue
+        expect({ language, name, missed: missedKeys(language) }).toEqual({ language, name, missed: [] })
+        expect({ language, name, english: englishIn(language, textInLanguage(html, language)) }).toEqual({ language, name, english: [] })
+      }
+    }
+  }, 120_000)
 })
 
 describe("the forecast's cards on the book the window holds", () => {

@@ -13,6 +13,7 @@ import { DEFAULT_PAPER_DIGEST, healPaperDigest } from '../shared/paperDigest'
 import { DEFAULT_PAPER_PAUSE, healPaperPause } from '../shared/paperPause'
 import { DEFAULT_PAPER_RISK, healPaperRisk } from '../shared/paperRisk'
 import { DEFAULT_UI_MODE, healUiMode } from '../shared/uiMode'
+import { DEFAULT_COPY_TRADING, healCopyTrading } from '../shared/traders/copyTrading'
 import { tradingModeOf, watchModeOf } from '../src/status/statusModes'
 
 // shared/appDefaults.ts: what a fresh install starts with. The document's "ConfigResolver" is the
@@ -32,7 +33,9 @@ describe('a store read empty, or holding junk, heals to its default', () => {
     { name: 'watchPaper', heal: (value) => healAiWatchPaper(value, []), fallback: DEFAULT_AI_WATCH_PAPER },
     { name: 'news', heal: healNewsConfig, fallback: DEFAULT_NEWS_CONFIG },
     { name: 'keepRunningWhenClosed', heal: healKeepRunning, fallback: DEFAULT_KEEP_RUNNING },
-    { name: 'uiMode', heal: healUiMode, fallback: DEFAULT_UI_MODE }
+    { name: 'uiMode', heal: healUiMode, fallback: DEFAULT_UI_MODE },
+    // Following and cloning traders on paper (V8 Stage 8): no one, until a person presses a trader's button.
+    { name: 'copyTrading', heal: healCopyTrading, fallback: DEFAULT_COPY_TRADING }
   ]
   for (const store of stores) {
     it(store.name, () => {
@@ -54,6 +57,8 @@ describe('a store read empty, or holding junk, heals to its default', () => {
     expect(DEFAULT_AI_WATCH_PAPER.enabled).toBe(false)
     expect(DEFAULT_NEWS_CONFIG.delisting.paperShort.enabled).toBe(false)
     expect(DEFAULT_NEWS_CONFIG.monitoringTag.paperShort.enabled).toBe(false)
+    // No trader is followed or cloned on paper (V8 Stage 8).
+    expect(DEFAULT_COPY_TRADING).toEqual({ follows: {}, clones: {} })
     expect(DEFAULT_AI_DAILY_CAP_USD).toBe(1)
     // The scanner is free and on from the first launch (since 8 October 2026, the V5 document's
     // §130); the news reader is free too, and waits to be switched on.

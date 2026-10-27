@@ -199,3 +199,12 @@ describe('a null paper account with running executors', () => {
     }
   })
 })
+
+describe("a trade of one of V8's books (V8 Stage 8)", () => {
+  it("stakes its book's money, not the account's: it is not counted out of the account", () => {
+    const book = { id: 'copy' as const, startedAt: T, ledger: 'follow' as const }
+    expect(committedFor([position(600, { book }), position(400)], 'USDT')).toBe(400)
+    // A mark of no book is the account's own.
+    expect(committedFor([position(600, { book: { ...book, id: 'nowhere' as never } })], 'USDT')).toBe(600)
+  })
+})

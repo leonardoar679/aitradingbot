@@ -3,7 +3,7 @@ import { IpcChannel } from '../../../shared/ipc'
 import { BOOK_IDS, type BookId } from '../../../shared/paperBooks'
 import { readSourcePrediction } from '../../../shared/evaluation/predictionRecord'
 import { recordSourcePrediction, sourceRecord } from '../../services/predictionLedgerService'
-import { bookStandings, listEquityMarks, listMisses, recordMiss } from '../../services/booksService'
+import { archiveSettled, bookStandings, listEquityMarks, listMisses, recordMiss } from '../../services/booksService'
 
 // The record of predictions that are not the forecast's own, and V8's paper books (V8 Stage 2). The window may
 // record only predictions of the sources it makes itself -- a person's own call -- never a rule's, a reading's
@@ -34,4 +34,5 @@ export function registerBooksHandlers(): void {
   })
   ipcMain.handle(IpcChannel.BooksMiss, (_event, value: unknown) => recordMiss(value))
   ipcMain.handle(IpcChannel.BooksMisses, (_event, sinceSec: unknown) => listMisses(typeof sinceSec === 'number' && Number.isFinite(sinceSec) ? sinceSec : 0))
+  ipcMain.handle(IpcChannel.BooksArchive, (_event, executors: unknown) => archiveSettled(executors))
 }

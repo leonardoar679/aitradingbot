@@ -73,7 +73,11 @@ const INFRASTRUCTURE = [
   // How an OKX lead trader's record is read and its fees and funding estimated, and how a file of trades is read (V8
   // Stage 7): reading, its figures labelled REPORTED, ESTIMATED or UNVERIFIABLE, not a claim.
   'traders.okx',
-  'traders.file'
+  'traders.file',
+  // How a follow reads its trader and mirrors them in the copy book -- its caps, the price it must agree with, how late it
+  // may enter, how long it stays, when a trader is lost (V8 Stage 8): the book's mechanics, on paper, not a claim. What the
+  // book makes is judged by V8-S9-BOOKS, registered before its first Start.
+  'traders.follow'
 ]
 
 describe('the registry on file', () => {

@@ -1,4 +1,5 @@
 import { onExchange, type ExecutorConfig, type HeldPosition } from '../../shared/ipc'
+import { bookOf } from '../../shared/paperBooks'
 import { executorAllocatedQuote } from '../executors/computeSnapshot'
 
 /** How much of each asset is currently out working, i.e. committed to running paper strategies.
@@ -14,6 +15,8 @@ export function committedByAsset(executors: ExecutorConfig[]): Record<string, nu
   for (const executor of executors) {
     if (executor.status !== 'active') continue
     if (onExchange(executor.mode)) continue
+    // A trade of one of V8's books stakes its book's money, not the account's.
+    if (bookOf(executor) !== 'other') continue
     const amount = executorAllocatedQuote(executor)
     // A malformed executor must not poison the whole total with NaN -- one bad row would make
     // every figure on the Account page unreadable rather than just its own.

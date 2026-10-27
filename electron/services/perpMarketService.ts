@@ -154,6 +154,21 @@ export async function perpFunding(venue: PerpVenue, symbol: string, fromSec: num
   return [...out.entries()].map(([timeSec, rate]) => ({ timeSec, rate })).sort((a, b) => a.timeSec - b.timeSec)
 }
 
+/** A perpetual's last traded price now (V8 Stage 8: the price a paper follow enters and leaves at). */
+export async function perpPrice(venue: PerpVenue, symbol: string): Promise<number> {
+  let raw: unknown
+  if (venue === 'binance') {
+    await perpMarketSeam.spendBinance(1)
+    raw = (await json<{ price?: string }>(`${PERP_HOSTS.binance}/fapi/v1/ticker/price?${new URLSearchParams({ symbol })}`)).price
+  } else {
+    const rows = await bitget<{ lastPr?: string }[]>('ticker', '/api/v2/mix/market/ticker', { symbol, productType: 'usdt-futures' })
+    raw = rows[0]?.lastPr
+  }
+  const price = numberOf(raw)
+  if (!(price > 0)) throw new Error(`${venue === 'binance' ? 'Binance' : 'Bitget'} gave no price for ${symbol}`)
+  return price
+}
+
 /** What a market order of `stakeQuote` pays beyond the best price, the worse of buying and selling, in percent; null
  * where the book read does not hold the stake. */
 export async function perpBookImpact(venue: PerpVenue, symbol: string, stakeQuote: number): Promise<number | null> {

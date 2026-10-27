@@ -200,6 +200,17 @@ describe('computePortfolioSnapshot picks the right executors', () => {
     expect(snap.activeExecutorCount).toBe(1)
   })
 
+  it("does not value a trade of one of V8's books as the paper account's (V8 Stage 8)", async () => {
+    prices = { 'binance:BTCUSDT': 110 }
+    settings.executors = [executor('book', { book: { id: 'copy', startedAt: 1, ledger: 'follow' } })]
+    positions.set('book', { side: 'buy', entryPrice: 100, amountQuote: 1000 })
+
+    const snap = await computePortfolioSnapshot()
+
+    expect(snap.holdings).toHaveLength(0)
+    expect(snap.totalValue).toBe(0)
+  })
+
   it('ignores stopped executors entirely', async () => {
     prices = { 'binance:BTCUSDT': 110 }
     settings.executors = [executor('stopped', { status: 'stopped' })]

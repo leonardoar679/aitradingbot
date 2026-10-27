@@ -1,5 +1,6 @@
 import type { PositionHandover } from '../executors/handOverPosition'
 import { onExchange, type ExecutorConfig } from '../../shared/ipc'
+import { bookOf } from '../../shared/paperBooks'
 import { computeExecutorPnl } from '../executors/computeSnapshot'
 import { settle } from './paperAccount'
 import { updateAccount } from './persistAccount'
@@ -39,6 +40,9 @@ export async function settleExecutorOnStop({
 }): Promise<number | null> {
   // On an exchange, real or demo: nothing of it is on the paper account.
   if (onExchange(executor.mode)) return null
+  // A trade of one of V8's books settles in its book, from its own result (shared/paperBooks.ts): the paper account
+  // never held its money.
+  if (bookOf(executor) !== 'other') return null
 
   const settings = await window.api.settings.get()
   if (!settings.paperAccount) return null

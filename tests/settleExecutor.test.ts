@@ -193,3 +193,13 @@ describe('a strategy that banked a profit AND kept a position', () => {
     expect(setCalls).toBe(0)
   })
 })
+
+describe("a trade of one of V8's books (V8 Stage 8)", () => {
+  it('settles in its book, from its own result: the paper account is not touched', async () => {
+    pnl = 50
+    const settled = await settleExecutorOnStop({ executor: executor({ book: { id: 'copy', startedAt: T, ledger: 'follow' } }), handedOver: NOTHING, now: T + 60 })
+    expect(settled).toBeNull()
+    expect(setCalls).toBe(0)
+    expect(pnlCalls).toEqual([])
+  })
+})

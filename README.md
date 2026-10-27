@@ -827,9 +827,9 @@ a side and never a trade -- each recorded as the article source's prediction at 
 from the venue's bars. Nothing else reads a reading: not the alerts, the watch or the signal score. Its size calls are
 your own links' sample, so none is registered as a claim; they are reported for what they are.
 
-**Copy Traders** (since 27 October 2026; V8 Stages 6-7; under More Features, in English until Stage 8;
-`shared/traders/`, `electron/services/traderService.ts`, `hyperliquidClient.ts`, `okxClient.ts`, `perpMarketService.ts`,
-`exchanges/bitgetCopyRead.ts`, `src/traders/`). Paste a trader. A Hyperliquid address, bare or in a link of the app or
+**Copy Traders** (since 27 October 2026; V8 Stages 6-8; in the normal sidebar after News URLs, and in ten languages,
+since Stage 8; `shared/traders/`, `electron/services/traderService.ts`, `hyperliquidClient.ts`, `okxClient.ts`,
+`perpMarketService.ts`, `followService.ts`, `hyperliquidStream.ts`, `exchanges/bitgetCopyRead.ts`, `src/traders/`). Paste a trader. A Hyperliquid address, bare or in a link of the app or
 its explorers, is read as text and never opened, and so is an OKX lead trader's code or profile link; a Bitget,
 Binance or Bybit page, or a post on X, is refused with why -- none of them publishes a trader's trades without that
 trader's own key. The address's record is read from Hyperliquid's public info API without a key, each question
@@ -849,11 +849,11 @@ p 0.01 or less under both, with the edge's 95% interval by trading day above 0 a
 and counted, and where half the trips are held under 15 minutes the page says the shifted schedule sees little of them.
 **V8-S6-DELAY**: the last 90 days' trips, the most recent 500, copied 2, 5 and 15 minutes late at the next minute's open
 of the venue's perpetual, charged the taker fee, the larger of 2 bps and the book's impact at 1,000 USDT each way, and
-the funding crossed, once and at twice the costs; no trader is called followable until a follow has measured its delay
-live (Stage 8). The page says how many traders have been analysed, since at 1% about one in a hundred would pass by
+the funding crossed, once and at twice the costs; a trader is called followable only at a delay a follow has measured
+live (Stage 8, below). The page says how many traders have been analysed, since at 1% about one in a hundred would pass by
 chance alone. **Check my Bitget copy trading** asks Bitget, only on that click and only with GET requests, the
 account's mode, whether the key on Connections may read copy trading, and the traders it copies; nothing is
-subscribed, changed or placed. Nothing on the page follows a trader or places an order. Checked on 27 October 2026 on
+subscribed, changed or placed. Nothing on the page places an order. Checked on 27 October 2026 on
 a separate build and a scratch profile with two public addresses: one of 63 fills read TOO FEW in a minute and a half;
 one of 9,016 fills over 1,009 days -- 3,960 trips, a median hold of four seconds -- read MARKET OR LUCK in nine minutes,
 its copies two minutes late losing 0.14% a trip to costs.
@@ -871,6 +871,29 @@ in the day's range and how far from its mean, Bitcoin's hour and day, the coin's
 weekday) is fitted to tell the entries from null A's moved moments; the last third judges it: REPLICABLE where its AUC
 there is above 0.6 at the 95% interval's lower end and the rule traded on its own makes money after costs over at least
 30 trades, PARTLY where one holds, NOT REPLICABLE where neither, TOO FEW without 30 entries of its side to test.
+Since Stage 8 a trader can be **followed on paper**, or their **clone run on paper**, each by its own button on the page's
+On paper panel, each switched on only for the trader whose button is pressed (`copyTrading` in the settings; nothing is
+followed by default). A follow reads its trader as they trade: up to five Hyperliquid addresses on one WebSocket to
+Hyperliquid's public stream (subscribed again on each opening, pinged every 50 s), any more, and every OKX lead trader,
+read once a minute (OKX's open positions compared with the last read, the first read taken as it stands). Each change of
+a leader's position is written first, under its own key, to `traders/<key>/events-YYYY-MM.jsonl`, and only then handed
+to the window; a snapshot never opens a follow, and only a position opened after the follow began is followed. The
+window's writer (`src/traders/paperFollow.ts`) mirrors it in the **copy book** -- the opening, each add and partial close,
+the close, a flip -- on the coin's perpetual (Binance's, else Bitget's) at the perpetual's own price, charged the venue's
+taker fee on each leg and the funding its hold crossed (the published rates, or 0.01% against it each eight hours where
+none is published). Its stake is the leader's share of their account, of the book, where the venue gives the account's
+value (Hyperliquid), else the book's most for one trade (10% of its settled equity), never more; it enters only within
+120 s of the leader's trade and with its price within 2% of the leader's fill, at most 5 open for a trader, 15 in the
+book and 10 opened in an hour; it closes when the leader closes, at the leader's longest hold (at most 7 days), at the
+loss of its stake, or as "leader lost" after two reads of the trader missed in a row. Writing the executor with the
+event's key is the acknowledgement: an event handed on twice is entered once. A follow refused is written as a missed
+opportunity with its stage and why. A clone (`src/traders/paperClone.ts`) reads its rule at each 15-minute close on the
+coins its test traded, one trade a coin at a time, staking the book's most, held the rule's hold. Both write paper
+Positions stamped with the copy book: they settle in their book, apart from the paper account and its commitments, and
+one settled a day ago moves out of `settings.json` into `paperBooks/archive-YYYY-MM.jsonl`, which the book's standing
+reads too. The books run only once paper testing is started (Stage 9): until then a follow and a clone record what they
+would have done as missed opportunities. The panel shows each follow's measured delay, and the delay test's verdict at
+it.
 
 **The Forecast Lab** (since 13 October 2026; the V6 document's §27-28, §42-43, §49-50 and §90-105; V6 Stage
 11; `shared/forecast/{lab,labWalkForward,labFile}.ts`, `electron/services/forecastLabService.ts`,

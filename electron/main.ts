@@ -11,6 +11,7 @@ import { startPredictionLedger } from './services/predictionLedgerService'
 import { startBookMarks } from './services/booksService'
 import { startPrimaryCall } from './services/primaryCallService'
 import { startNewsUrls } from './services/newsUrlService'
+import { startFollowing, stopFollowing } from './services/followService'
 import { startLivePositionWatcherLoop } from './services/livePositionWatchersService'
 import { startLiveTwapLoop } from './services/liveTwapService'
 import { startMarketScanner } from './services/marketScannerService'
@@ -225,6 +226,10 @@ if (!gotSingleInstanceLock) {
     // Pasted news links' prices read again until final, and discovered news recorded, every five minutes (V8 Stage 4;
     // newsUrlService.ts): public data; a page is fetched only for a link a person pasted, or with its switch on.
     startNewsUrls()
+    // The traders a person follows or clones on paper, read as they trade and their clones' rules at each 15-minute
+    // close (V8 Stage 8; followService.ts): public data only; the writers that act are the window's, on paper.
+    void startFollowing().catch((error) => console.error('Following could not start:', error))
+    app.on('will-quit', stopFollowing)
     const mainWindow = createWindow()
     registerIpcHandlers(mainWindow)
     createTray()

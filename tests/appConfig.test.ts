@@ -67,8 +67,9 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 // trader's analysis fetches for the two tests, which read every trip as registered (V8 Stage 6's check;
 // infrastructure), from be7d42b9bae9. The lines of V8-S7-CLONE (V8 Stage 7), from 8c48f7ad7602. An analysis of three
 // sources (trader-analysis-v2), how an OKX lead trader's record is read and estimated, and how a file is read (V8 Stage 7;
-// infrastructure), from a3d171bc6249.
-const PINNED_ENGINE_VERSION = 'f8ec0052263b'
+// infrastructure), from a3d171bc6249. 27 October 2026: how a follow reads its trader and trades in the copy book (V8 Stage
+// 8; infrastructure), from f8ec0052263b.
+const PINNED_ENGINE_VERSION = 'ff3c16adfc9b'
 
 describe('the engine version', () => {
   it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {

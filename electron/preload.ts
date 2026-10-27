@@ -12,6 +12,10 @@ import type { MissRecord } from '../shared/misses'
 import type { PrimaryCallState } from '../shared/forecast/primaryCall'
 import type { UrlRecord } from '../shared/newsUrl'
 import type { BitgetCopyCheck, TraderAnalysis, TraderList, TraderMeta, TraderProgress } from '../shared/traders/traderAnalysis'
+import type { CopyTradingSettings } from '../shared/traders/copyTrading'
+import type { ExecutorConfig as BookExecutor } from '../shared/ipc'
+import type { FundingRate } from '../shared/traders/delay'
+import type { CloneSignal, FollowStatus, LeaderEvent } from '../shared/traders/follow'
 import type { ForecastLabView, ForecastReplay } from '../shared/forecast/labView'
 import type { ForecastRanking as ForecastRankingView } from '../shared/forecast/ranking'
 import type { SymbolTradingRules } from '../shared/exchangeMinimums'
@@ -540,6 +544,27 @@ const api = {
     analyze: (key: string): Promise<TraderAnalysis> => ipcRenderer.invoke(IpcChannel.TradersAnalyze, key),
     list: (): Promise<TraderList> => ipcRenderer.invoke(IpcChannel.TradersList),
     bitgetCheck: (): Promise<BitgetCopyCheck> => ipcRenderer.invoke(IpcChannel.TradersBitgetCheck),
+    follow: (key: string, on: boolean): Promise<FollowStatus[]> => ipcRenderer.invoke(IpcChannel.TradersFollow, { key, on }),
+    clone: (key: string, on: boolean): Promise<CopyTradingSettings['clones']> => ipcRenderer.invoke(IpcChannel.TradersClone, { key, on }),
+    followStatus: (): Promise<FollowStatus[]> => ipcRenderer.invoke(IpcChannel.TradersFollowStatus),
+    followRecords: (sinceMs: number): Promise<{ events: LeaderEvent[]; signals: CloneSignal[] }> => ipcRenderer.invoke(IpcChannel.TradersFollowRecords, sinceMs),
+    perpPrice: (venue: 'binance' | 'bitget', symbol: string): Promise<number> => ipcRenderer.invoke(IpcChannel.TradersPerpPrice, { venue, symbol }),
+    perpFunding: (venue: 'binance' | 'bitget', symbol: string, fromSec: number, toSec: number): Promise<FundingRate[]> => ipcRenderer.invoke(IpcChannel.TradersPerpFunding, { venue, symbol, fromSec, toSec }),
+    onLeaderEvent: (listener: (event: LeaderEvent) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, event: LeaderEvent): void => listener(event)
+      ipcRenderer.on(IpcChannel.TradersLeaderEvent, handler)
+      return () => ipcRenderer.removeListener(IpcChannel.TradersLeaderEvent, handler)
+    },
+    onCloneSignal: (listener: (signal: CloneSignal) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, signal: CloneSignal): void => listener(signal)
+      ipcRenderer.on(IpcChannel.TradersCloneSignal, handler)
+      return () => ipcRenderer.removeListener(IpcChannel.TradersCloneSignal, handler)
+    },
+    onFollowStatus: (listener: (statuses: FollowStatus[]) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, statuses: FollowStatus[]): void => listener(statuses)
+      ipcRenderer.on(IpcChannel.TradersFollowStatusChanged, handler)
+      return () => ipcRenderer.removeListener(IpcChannel.TradersFollowStatusChanged, handler)
+    },
     onProgress: (listener: (progress: TraderProgress) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, progress: TraderProgress): void => listener(progress)
       ipcRenderer.on(IpcChannel.TradersProgress, handler)
@@ -551,7 +576,8 @@ const api = {
     state: (): Promise<{ running: boolean; startedAt: number | null; standings: BookStanding[] }> => ipcRenderer.invoke(IpcChannel.BooksState),
     marks: (book: BookId, startedAt: number): Promise<BookEquityMark[]> => ipcRenderer.invoke(IpcChannel.BooksMarks, { book, startedAt }),
     miss: (miss: MissRecord): Promise<MissRecord> => ipcRenderer.invoke(IpcChannel.BooksMiss, miss),
-    misses: (sinceSec = 0): Promise<MissRecord[]> => ipcRenderer.invoke(IpcChannel.BooksMisses, sinceSec)
+    misses: (sinceSec = 0): Promise<MissRecord[]> => ipcRenderer.invoke(IpcChannel.BooksMisses, sinceSec),
+    archive: (executors: BookExecutor[]): Promise<number> => ipcRenderer.invoke(IpcChannel.BooksArchive, executors)
   },
   // The research folder (V7.2-R Stage 2): free to read and to export; nothing here reads a key or places anything.
   researchFolder: {

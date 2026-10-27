@@ -1126,6 +1126,68 @@ describe('AI code has no route to a real order', () => {
     expect(page).not.toMatch(/placeLive|liveTrading|onPrepareOrder|aiProposal|settings\.set|mode: 'live'/)
   })
 
+  it('a follow and a clone are paper trades in the copy book, by a literal they cannot be handed (V8 Stage 8)', () => {
+    const follow = join(ROOT, 'src', 'traders', 'paperFollow.ts')
+    const clone = join(ROOT, 'src', 'traders', 'paperClone.ts')
+    const scheduler = join(ROOT, 'src', 'traders', 'CopyTradingScheduler.tsx')
+    const logic = [join(ROOT, 'shared', 'traders', 'follow.ts'), join(ROOT, 'shared', 'traders', 'copyTrading.ts')]
+    for (const path of [follow, clone, scheduler, ...logic]) {
+      const source = readFileSync(path, 'utf-8')
+      expect(source, path).not.toMatch(/liveTrading|LiveTrading|liveOrders|placeLive|window\.api\.(executors|trade|paper|credentials|ai)\b/)
+      expect(source, path).not.toMatch(/['"`]live['"`]/)
+      expect(source, path).not.toMatch(/\bleverage\s*:/)
+    }
+    for (const path of logic) expect(readFileSync(path, 'utf-8'), path).not.toMatch(/window\.|ipcRenderer|from\s+'[^']*electron/)
+    const bridgesOf = (source: string): string[] => [...new Set([...source.matchAll(/window\.api\.(\w+)(?:\s*\.\s*(\w+))?/g)].map((match) => (match[2] === undefined ? match[1] : `${match[1]}.${match[2]}`)))].sort()
+    for (const [path, factory, ledger] of [
+      [follow, 'followPaperExecutor', 'follow'],
+      [clone, 'clonePaperExecutor', 'clone']
+    ] as const) {
+      const source = readFileSync(path, 'utf-8')
+      // Paper is written where the executor is made, and the function that makes it takes no mode.
+      expect(source.match(/mode: 'paper'/g), path).toHaveLength(1)
+      expect(source, path).not.toMatch(/mode:(?!\s*'paper')/)
+      const signature = new RegExp(`export function ${factory}\\(input: \\{([^}]*)\\}\\)`).exec(source)?.[1] ?? ''
+      expect(signature, path).toContain('book: BookMark')
+      expect(signature, path).not.toMatch(/mode/)
+      // It writes in the copy book, under its own ledger, and nowhere else.
+      expect([...new Set(source.match(/id: '\w+'/g))], path).toEqual(["id: 'copy'"])
+      expect(source.match(/ledger: '\w+'/g), path).toEqual([`ledger: '${ledger}'`])
+      expect(source, path).toContain('await window.api.settings.set({ executors })')
+      expect(source.match(/window\.api\.settings\.set\(/g), path).toHaveLength(1)
+    }
+    expect(bridgesOf(readFileSync(follow, 'utf-8'))).toEqual(['books.archive', 'books.miss', 'books.state', 'settings.get', 'settings.set', 'traders.perpFunding', 'traders.perpPrice'])
+    expect(bridgesOf(readFileSync(clone, 'utf-8'))).toEqual(['books.miss', 'books.state', 'settings.get', 'settings.set', 'traders.perpFunding', 'traders.perpPrice'])
+    expect(importsOf(follow).sort()).toEqual(['copyTrading', 'delay', 'follow', 'ipc', 'misses', 'paperBooks', 'settingsWrites', 'venueCosts'])
+    expect(importsOf(clone).sort()).toEqual(['clone', 'copyTrading', 'delay', 'follow', 'ipc', 'misses', 'paperBooks', 'paperFollow', 'settingsWrites', 'venueCosts'])
+    // The scheduler hands what the main process pushes to its writers, and writes nothing itself.
+    expect(bridgesOf(readFileSync(scheduler, 'utf-8'))).toEqual(['traders.followRecords', 'traders.followStatus', 'traders.onCloneSignal', 'traders.onFollowStatus', 'traders.onLeaderEvent'])
+    expect(importsOf(scheduler).sort()).toEqual(['follow', 'paperClone', 'paperFollow', 'react'])
+    // The panel on Copy Traders reads, and switches a follow or a clone on or off through its own channel: it writes no
+    // executor and no setting itself.
+    const panel = readFileSync(join(ROOT, 'src', 'traders', 'PaperCopyPanel.tsx'), 'utf-8')
+    expect(bridgesOf(panel)).toEqual(['books.misses', 'books.state', 'settings.get', 'traders.clone', 'traders.follow', 'traders.followStatus', 'traders.onFollowStatus'])
+    expect(panel).not.toMatch(/settings\.set|placeLive|liveTrading|onPrepareOrder|mode: 'live'/)
+    // The reading half writes no executor and no setting but which traders are followed or cloned.
+    const service = readFileSync(join(SERVICES, 'followService.ts'), 'utf-8')
+    expect(service, 'followService').not.toMatch(/executors|placeLive|liveTrading|credentials|apiKey|bitgetSigned/)
+    expect(service.match(/setSettings\(\{ \w+/g)).toEqual(['setSettings({ copyTrading'])
+    expect(importsOf(join(SERVICES, 'followService.ts')).filter((name) => LIVE_MODULES.has(name) || aiModuleNames.has(name))).toEqual([])
+    // The stream: Hyperliquid's one public host, subscriptions and pings, nothing else sent.
+    const stream = readFileSync(join(SERVICES, 'hyperliquidStream.ts'), 'utf-8')
+    expect(stream.match(/wss:\/\/[\w.-]+/g)).toEqual(['wss://api.hyperliquid.xyz'])
+    expect([...stream.matchAll(/method: '(\w+)'/g)].map((match) => match[1]).sort()).toEqual(['ping', 'subscribe'])
+    expect(stream.match(/\.send\(/g)).toHaveLength(2)
+    // A book's trade is its book's: the paper account neither settles it nor counts it out, nor the portfolio its value.
+    for (const [path, line] of [
+      [join(ROOT, 'src', 'account', 'settleExecutor.ts'), "if (bookOf(executor) !== 'other') return null"],
+      [join(ROOT, 'src', 'account', 'accountCommitments.ts'), "if (bookOf(executor) !== 'other') continue"],
+      [join(ROOT, 'src', 'portfolio', 'computePortfolioSnapshot.ts'), "!onExchange(e.mode) && bookOf(e) === 'other'"]
+    ] as const) {
+      expect(readFileSync(path, 'utf-8'), path).toContain(line)
+    }
+  })
+
   it("the exit check closes the app's own paper trades early, and does nothing else", () => {
     // Since 6 October 2026 (the V3 plan's Stage 7, switched on by the user within the $5 day): the
     // first answer a model gives that changes a trade already open, held to the narrowest form that

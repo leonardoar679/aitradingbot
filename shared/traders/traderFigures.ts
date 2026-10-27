@@ -19,8 +19,8 @@ export interface TraderFigures {
   /** The largest fall of the trips' cumulative net from a high, in USDC, and as a share of the account's value at that
    * high where the account's history gives it. */
   drawdown: { usdc: number; pctOfAccount: number | null }
-  /** Holding times in minutes: the median and the 10th and 90th percentiles. */
-  holdMin: { p10: number; median: number; p90: number } | null
+  /** Holding times in minutes: the median, the 10th and 90th percentiles, and the longest (a follow's time limit). */
+  holdMin: { p10: number; median: number; p90: number; max: number } | null
   /** What a trip put at stake at its entry price, the median: its size. */
   stake: { medianUsdc: number } | null
   /** What a trip put at stake over the account's value when it opened, where the account's history gives it: the median
@@ -103,7 +103,7 @@ export function traderFiguresOf(input: { roundTrips: RoundTrips; values: readonl
     money,
     winRate: trips.length === 0 ? null : trips.filter((trip) => trip.net > 0).length / trips.length,
     drawdown: { usdc: worst, pctOfAccount: worst > 0 && valueAtPeak !== null && valueAtPeak > 0 ? (worst / valueAtPeak) * 100 : null },
-    holdMin: holds.length === 0 ? null : { p10: quantile(holds, 0.1), median: quantile(holds, 0.5), p90: quantile(holds, 0.9) },
+    holdMin: holds.length === 0 ? null : { p10: quantile(holds, 0.1), median: quantile(holds, 0.5), p90: quantile(holds, 0.9), max: holds[holds.length - 1] },
     stake: trips.length === 0 ? null : { medianUsdc: median(trips.map((trip) => trip.entryNotional)) },
     leverage: known.length === 0 ? null : { median: median(known), max: Math.max(...known), trips: known.length },
     reportedLeverage: levers.length === 0 ? null : { median: median(levers), max: levers.reduce((most, lever) => Math.max(most, lever), 0), trips: levers.length },

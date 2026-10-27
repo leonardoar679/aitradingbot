@@ -219,7 +219,7 @@ describe("a trader's figures", () => {
     expect(figures.money.realized).toBeCloseTo(20.4, 9)
     // Up 10, down to 0: a fall of 10 from the high reached on the first day, when the account held 100.
     expect(figures.drawdown).toEqual({ usdc: 10, pctOfAccount: 10 })
-    expect(figures.holdMin).toEqual({ p10: 13, median: 25, p90: 37 })
+    expect(figures.holdMin).toEqual({ p10: 13, median: 25, p90: 37, max: 40 })
     expect(figures.stake).toEqual({ medianUsdc: 250 })
     // Stakes over the account's value when each opened: 100/100, 200/100, 300/200, 400/200.
     expect(figures.leverage).toEqual({ median: 1.75, max: 2, trips: 4 })

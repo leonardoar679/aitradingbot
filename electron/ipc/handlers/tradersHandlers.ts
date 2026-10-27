@@ -5,6 +5,8 @@ import { IpcChannel } from '../../../shared/ipc'
 import type { TraderAnalysis, TraderMeta } from '../../../shared/traders/traderAnalysis'
 import { TRADER_FILE_LINES } from '../../../shared/traders/traderFile'
 import { analyzeTrader, importTrader, importTraderFile, listTraders, onTraderProgress } from '../../services/traderService'
+import { followStatuses, onCloneSignal, onFollowStatus, onLeaderEvent, recentFollowRecords, setClone, setFollow } from '../../services/followService'
+import { perpFunding, perpPrice } from '../../services/perpMarketService'
 
 // COPY TRADERS (V8 Stages 6-7; electron/services/traderService.ts): a pasted trader read from its venue and kept, a file
 // of trades the person chooses in this process's own dialog -- the window never names a path -- read and kept, an
@@ -14,10 +16,16 @@ import { analyzeTrader, importTrader, importTraderFile, listTraders, onTraderPro
 const MAX_PASTE = 500
 
 export function registerTradersHandlers(mainWindow: BrowserWindow): void {
-  const stopForwarding = onTraderProgress((progress) => {
-    if (!mainWindow.isDestroyed()) mainWindow.webContents.send(IpcChannel.TradersProgress, progress)
-  })
-  mainWindow.on('closed', stopForwarding)
+  const forward = (channel: string, payload: unknown): void => {
+    if (!mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload)
+  }
+  const stops = [
+    onTraderProgress((progress) => forward(IpcChannel.TradersProgress, progress)),
+    onLeaderEvent((event) => forward(IpcChannel.TradersLeaderEvent, event)),
+    onCloneSignal((signal) => forward(IpcChannel.TradersCloneSignal, signal)),
+    onFollowStatus((statuses) => forward(IpcChannel.TradersFollowStatusChanged, statuses))
+  ]
+  mainWindow.on('closed', () => stops.forEach((stop) => stop()))
 
   ipcMain.handle(IpcChannel.TradersImport, async (_event, raw: unknown): Promise<TraderMeta | { refused: string }> => {
     if (typeof raw !== 'string' || raw.length > MAX_PASTE) return { refused: 'That is not an address or a link this app reads.' }
@@ -36,4 +44,25 @@ export function registerTradersHandlers(mainWindow: BrowserWindow): void {
   })
   ipcMain.handle(IpcChannel.TradersAnalyze, (_event, key: unknown): Promise<TraderAnalysis> => analyzeTrader(typeof key === 'string' ? key.slice(0, 80) : null))
   ipcMain.handle(IpcChannel.TradersList, () => listTraders())
+  // Following and cloning on paper (V8 Stage 8): each switched on or off only by its button; the perpetual's price and
+  // funding for the writers, its venue and symbol held to their shape.
+  ipcMain.handle(IpcChannel.TradersFollow, (_event, request: { key?: unknown; on?: unknown } | undefined) => setFollow(request?.key, request?.on === true))
+  ipcMain.handle(IpcChannel.TradersClone, (_event, request: { key?: unknown; on?: unknown } | undefined) => setClone(request?.key, request?.on === true))
+  ipcMain.handle(IpcChannel.TradersFollowStatus, () => followStatuses())
+  ipcMain.handle(IpcChannel.TradersFollowRecords, (_event, sinceMs: unknown) => recentFollowRecords(sinceMs))
+  const perpOf = (request: { venue?: unknown; symbol?: unknown } | undefined): { venue: 'binance' | 'bitget'; symbol: string } => {
+    if ((request?.venue !== 'binance' && request?.venue !== 'bitget') || typeof request.symbol !== 'string' || !/^[A-Z0-9]{2,30}$/.test(request.symbol)) throw new Error('Name a perpetual: Binance or Bitget, and its symbol.')
+    return { venue: request.venue, symbol: request.symbol }
+  }
+  ipcMain.handle(IpcChannel.TradersPerpPrice, (_event, request: { venue?: unknown; symbol?: unknown } | undefined) => {
+    const perp = perpOf(request)
+    return perpPrice(perp.venue, perp.symbol)
+  })
+  ipcMain.handle(IpcChannel.TradersPerpFunding, (_event, request: { venue?: unknown; symbol?: unknown; fromSec?: unknown; toSec?: unknown } | undefined) => {
+    const perp = perpOf(request)
+    const fromSec = Number(request?.fromSec)
+    const toSec = Number(request?.toSec)
+    if (!Number.isFinite(fromSec) || !Number.isFinite(toSec) || toSec < fromSec || toSec - fromSec > 30 * 86_400) throw new Error('Name a span of at most thirty days.')
+    return perpFunding(perp.venue, perp.symbol, fromSec, toSec)
+  })
 }

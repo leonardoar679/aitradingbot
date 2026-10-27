@@ -126,3 +126,32 @@ describe('the bridges', () => {
     expect(((await handlers.get('books:misses')!({}, 'soon')) as unknown[]).length).toBe(1)
   })
 })
+
+describe("the books' archive (V8 Stage 8)", () => {
+  const trade = (id: string, over: Record<string, unknown> = {}): Record<string, unknown> => ({
+    id,
+    type: 'position',
+    mode: 'paper',
+    status: 'stopped',
+    params: { amountQuote: 1000 },
+    book: { id: 'copy', startedAt: STARTED, ledger: 'follow', result: { netQuote: 25, netPct: 2.5, feesQuote: 1, fundingQuote: 0, closedAt: STARTED + 60 } },
+    ...over
+  })
+
+  it("keeps only a book's settled trades, and a book's standing counts them beside the settings, each once", async () => {
+    const books = await service()
+    const open = trade('open', { status: 'active', book: { id: 'copy', startedAt: STARTED, ledger: 'follow' } })
+    const person = trade('person', { book: undefined })
+    // A trade stopped with no result yet, or one still open that somehow carries one, stays.
+    const unsettled = trade('unsettled', { book: { id: 'copy', startedAt: STARTED, ledger: 'follow' } })
+    const running = trade('running', { status: 'active' })
+    expect(await books.archiveSettled([trade('a'), open, person, unsettled, running, trade('live', { mode: 'live' }), 'junk'])).toBe(1)
+    expect(await books.archiveSettled('nothing')).toBe(0)
+    settings = { paperBooks: { ...DEFAULT_PAPER_BOOKS, running: true, startedAt: STARTED }, executors: [trade('b'), trade('a')] }
+    const copy = (await books.bookStandings()).standings.find((standing) => standing.id === 'copy')
+    // "a" is in both the settings and the archive: counted once; "b" from the settings.
+    expect(copy).toMatchObject({ realizedQuote: 50, closed: 2, settledEquity: 10_050 })
+    settings = { paperBooks: { ...DEFAULT_PAPER_BOOKS, running: true, startedAt: STARTED }, executors: [] }
+    expect((await books.bookStandings()).standings.find((standing) => standing.id === 'copy')).toMatchObject({ realizedQuote: 25, closed: 1 })
+  })
+})

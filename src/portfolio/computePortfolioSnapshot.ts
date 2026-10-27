@@ -1,4 +1,5 @@
 import { onExchange, type Exchange, type HeldPosition } from '../../shared/ipc'
+import { bookOf } from '../../shared/paperBooks'
 import { computeExecutorPosition } from '../executors/computeSnapshot'
 import { fetchBotDryRunResult, summarizePaperTrades } from '../bots/useDryRun'
 import { announceBotAiCall } from '../bots/aiCallNotifier'
@@ -86,7 +87,8 @@ function paperPositionValue(
 export async function computePortfolioSnapshot(): Promise<PortfolioSnapshotData> {
   const settings = await window.api.settings.get()
   const activeExecutors = settings.executors.filter((e) => e.status === 'active')
-  const paperExecutors = activeExecutors.filter((e) => !onExchange(e.mode))
+  // A trade of one of V8's books is its book's, read on Paper Trading and Performance: not the account's value here.
+  const paperExecutors = activeExecutors.filter((e) => !onExchange(e.mode) && bookOf(e) === 'other')
   const enabledBots = settings.bots.filter((b) => b.enabled)
 
   const [livePositions, paperExecutorPositions, botDryRuns] = await Promise.all([

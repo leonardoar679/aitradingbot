@@ -231,16 +231,17 @@ const NEWS_ITEM: NavItem = { id: 'news', label: msg('News'), icon: Newspaper, ta
 
 /** The entries More Features holds in the normal mode, in the expert layout's order: every one not in the main
  * group or System. */
-const MORE_FEATURES: NavId[] = ['opportunities', 'positions', 'live', 'backtest', 'forecast-lab', 'ai-benchmark', 'copy-traders', 'strategies', 'bots', 'executors', 'controllers', 'routines', 'market', 'portfolio', 'explorer', 'overview', 'ai-decisions']
+const MORE_FEATURES: NavId[] = ['opportunities', 'positions', 'live', 'backtest', 'forecast-lab', 'ai-benchmark', 'strategies', 'bots', 'executors', 'controllers', 'routines', 'market', 'portfolio', 'explorer', 'overview', 'ai-decisions']
 
-/** The normal mode's sidebar (V7.2-R Stage 3); News URLs after Predictions since V8 Stage 5. */
+/** The normal mode's sidebar (V7.2-R Stage 3); News URLs after Predictions since V8 Stage 5, Copy Traders after it since
+ * Stage 8. */
 export const NORMAL_NAV_GROUPS: NavGroup[] = [
   {
     id: 'main',
     title: msg('AI Trader'),
     foldable: false,
     icon: House,
-    items: [itemById('home'), { ...itemById('predictions'), label: msg('AI Predictions') }, itemById('news-urls'), { ...itemById('paper'), label: msg('Paper Trading') }, itemById('performance'), NEWS_ITEM]
+    items: [itemById('home'), { ...itemById('predictions'), label: msg('AI Predictions') }, itemById('news-urls'), itemById('copy-traders'), { ...itemById('paper'), label: msg('Paper Trading') }, itemById('performance'), NEWS_ITEM]
   },
   { id: 'more', title: msg('More Features'), foldable: true, icon: Layers, items: MORE_FEATURES.map(itemById) },
   NAV_GROUPS.find((group) => group.id === 'system')!

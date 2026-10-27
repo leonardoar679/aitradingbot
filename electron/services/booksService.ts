@@ -6,19 +6,22 @@ import { readMiss, type MissRecord } from '../../shared/misses'
 import {
   BOOK_IDS,
   PAPER_BOOKS_VERSION,
+  bookOf,
   bookStandingOf,
   healPaperBooks,
   type BookEquityMark,
   type BookId,
   type BookStanding
 } from '../../shared/paperBooks'
-import { appendJsonLine, listMonthFiles } from './jsonlStore'
+import { appendJsonLine, appendJsonLines, listMonthFiles } from './jsonlStore'
 import { getSettings } from './settingsService'
 
 // THE PAPER BOOKS' FILES (shared/paperBooks.ts, shared/misses.ts; V8 Stage 2): each book's equity marked once an
 // hour while the books run -- so a drawdown and a daily stop survive a restart -- and every missed opportunity a
-// book's writer reports. Both are appended to paperBooks/, a file a UTC month, never swept. It reads the
-// settings and prices open trades; it opens, closes and places nothing.
+// book's writer reports. Both are appended to paperBooks/, a file a UTC month, never swept. Since V8 Stage 8 a book's
+// trades settled a day ago are moved out of the settings by their writer into paperBooks/archive-YYYY-MM.jsonl, and a
+// book's standing reads them there beside the settings. It reads the settings and prices open trades; it opens,
+// closes and places nothing.
 
 const HOUR_MS = 3_600_000
 
@@ -72,11 +75,38 @@ export async function listMisses(sinceSec = 0): Promise<MissRecord[]> {
   return out.sort((a, b) => a.at - b.at)
 }
 
-/** Every book's standing now, from the settings' executors. */
+/** A book's trades settled and moved out of the settings, kept whole: stopped, paper, a book's, with their result.
+ * Returns how many were kept. */
+export async function archiveSettled(value: unknown): Promise<number> {
+  const executors = (Array.isArray(value) ? value : []).filter(
+    (executor): executor is ExecutorConfig =>
+      typeof executor === 'object' && executor !== null && (executor as ExecutorConfig).status === 'stopped' && bookOf(executor as ExecutorConfig) !== 'other' && (executor as ExecutorConfig).book?.result !== undefined
+  )
+  if (executors.length === 0) return 0
+  await appendJsonLines(join(booksSeam.dir(), `archive-${monthOf(booksSeam.now())}.jsonl`), executors)
+  return executors.length
+}
+
+/** The books' settled trades moved out of the settings, each once. */
+async function archived(): Promise<ExecutorConfig[]> {
+  const dir = booksSeam.dir()
+  const out = new Map<string, ExecutorConfig>()
+  for (const { name } of await listMonthFiles(dir, /^archive-(\d{4}-\d{2})\.jsonl$/).catch(() => [])) {
+    for (const raw of await linesOf(join(dir, name))) {
+      const executor = raw as ExecutorConfig
+      if (typeof executor?.id === 'string' && bookOf(executor) !== 'other' && executor.book?.result !== undefined) out.set(executor.id, executor)
+    }
+  }
+  return [...out.values()]
+}
+
+/** Every book's standing now, from the settings' executors and the settled ones moved out of them. */
 export async function bookStandings(): Promise<{ running: boolean; startedAt: number | null; standings: BookStanding[] }> {
   const settings = await getSettings()
   const books = healPaperBooks(settings.paperBooks)
-  const executors = (settings.executors ?? []) as ExecutorConfig[]
+  const current = (settings.executors ?? []) as ExecutorConfig[]
+  const ids = new Set(current.map((executor) => executor.id))
+  const executors = [...current, ...(await archived()).filter((executor) => !ids.has(executor.id))]
   const startedAt = books.startedAt ?? 0
   return { running: books.running, startedAt: books.startedAt, standings: BOOK_IDS.map((id) => bookStandingOf(id, books.books[id], executors, startedAt, booksSeam.openResult)) }
 }

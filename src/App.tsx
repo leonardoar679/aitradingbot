@@ -44,6 +44,7 @@ import { RoutineScheduler } from './routines/RoutineScheduler'
 import { LiveTradingBar } from './livetrading/LiveTradingBar'
 import { LiveOrderScheduler } from './livetrading/LiveOrderScheduler'
 import { PortfolioScheduler } from './portfolio/PortfolioScheduler'
+import { CopyTradingScheduler } from './traders/CopyTradingScheduler'
 import { DEFAULT_PAGE, DEFAULT_TABS, activeNavId, anchorElementId, pageLabel, type NavAnchor, type NavId, type NavItem, type NavTarget, type Page, type PageTabs } from './navigation/pages'
 import type { AiOrderProposal } from '../shared/aiProposal'
 import { DEFAULT_UI_MODE, healUiMode, type UiMode } from '../shared/uiMode'
@@ -51,7 +52,7 @@ import { EnglishOnly, I18nProvider, healLanguage, languageForLocales, msg, type 
 import { LanguageChooser } from './i18n/LanguageChooser'
 
 /** The pages shown in the window's language (V6 Stage 14); every other stays English. */
-const TRANSLATED_PAGES: ReadonlySet<Page> = new Set<Page>(['home', 'predictions', 'opportunities', 'positions', 'performance', 'settings', 'news-urls'])
+const TRANSLATED_PAGES: ReadonlySet<Page> = new Set<Page>(['home', 'predictions', 'opportunities', 'positions', 'performance', 'settings', 'news-urls', 'copy-traders'])
 
 /** When an entry that opens at a part of a page scrolls to it, after the page is drawn. */
 const ANCHOR_SCROLL_MS = [0, 250, 700, 1500]
@@ -188,6 +189,11 @@ function App(): React.JSX.Element {
       <ErrorBoundary label={msg("The portfolio scheduler")}>
         <PortfolioScheduler />
       </ErrorBoundary>
+      {/* Following traders and running their clones on paper (V8 Stage 8): nothing runs unless a person followed or
+          cloned someone on Copy Traders, and what it opens is paper, in the copy book. */}
+      <ErrorBoundary label={msg("Copy trading on paper")}>
+        <CopyTradingScheduler />
+      </ErrorBoundary>
       {/* The watch: off unless switched on from Opportunities. It asks models; it has no way to
           place anything, and what it opens by itself is paper. */}
       <ErrorBoundary label={msg("The opportunity watch")}>
@@ -291,6 +297,7 @@ function App(): React.JSX.Element {
             {page === 'performance' && <PerformancePage />}
             {page === 'settings' && <SettingsPanel onNavigate={navigate} onUiModeChange={setUiMode} onLanguageChange={setLanguage} />}
             {page === 'news-urls' && <NewsUrlsPage onPrepareOrder={prepareOrder} />}
+            {page === 'copy-traders' && <CopyTradersPage />}
             {/* The pages not translated (the user's answer of 13 October 2026: the normal-user pages are)
                 stay English, left to right, inside any window. A translated part of one -- the Position
                 form -- brings the window's language back itself. */}
@@ -322,7 +329,6 @@ function App(): React.JSX.Element {
             {page === 'research' && <ResearchPage tab={tabs.research} onTab={(tab) => setTabs((current) => ({ ...current, research: tab }))} />}
             {page === 'ai-benchmark' && <AiBenchmarkPage />}
             {page === 'forecast-lab' && <ForecastLabPage />}
-            {page === 'copy-traders' && <CopyTradersPage />}
             {page === 'discovery' && (
               <ExplorerPage tab={tabs.discovery} onTab={(tab) => setTabs((current) => ({ ...current, discovery: tab }))} onNavigate={navigate} />
             )}

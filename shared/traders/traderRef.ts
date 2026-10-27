@@ -2,7 +2,9 @@
 // link -- is parsed here and never fetched: the paste names a trader whose record the app can read, or it is refused
 // with why. Hyperliquid publishes any address's fills, keyless; OKX a lead trader's positions, keyless; Bitget, Binance
 // and Bybit publish no trader's trades through their APIs, and a page of theirs is refused with that reason. Pure text
-// work: nothing here fetches anything.
+// work: nothing here fetches anything. Each refusal is a key (msg), shown in the person's language on Copy Traders.
+
+import { msg } from '../i18n/translate'
 
 /** Where a trader's record comes from: a venue, or a file a person brought (V8 Stage 7), named by its contents' hash. */
 export type TraderVenue = 'hyperliquid' | 'okx' | 'file'
@@ -34,11 +36,11 @@ const OKX_HOSTS = ['okx.com']
 const REFUSED_HOSTS: readonly { hosts: readonly string[]; reason: string }[] = [
   {
     hosts: ['bitget.com'],
-    reason: "Bitget publishes no lead trader's trades without your own key. The Bitget check below reads the traders you copy there, through your key, read-only."
+    reason: msg("Bitget publishes no lead trader's trades without your own key. The Bitget check below reads the traders you copy there, through your key, read-only.")
   },
-  { hosts: ['binance.com', 'binance.us'], reason: "Binance publishes no trader's positions or trades through its API, so a Binance trader cannot be read." },
-  { hosts: ['bybit.com'], reason: "Bybit publishes no trader's positions or trades through its API, so a Bybit trader cannot be read." },
-  { hosts: ['x.com', 'twitter.com'], reason: "A post is not a trader's record: paste the trader's Hyperliquid address or OKX profile instead." }
+  { hosts: ['binance.com', 'binance.us'], reason: msg("Binance publishes no trader's positions or trades through its API, so a Binance trader cannot be read.") },
+  { hosts: ['bybit.com'], reason: msg("Bybit publishes no trader's positions or trades through its API, so a Bybit trader cannot be read.") },
+  { hosts: ['x.com', 'twitter.com'], reason: msg("A post is not a trader's record: paste the trader's Hyperliquid address or OKX profile instead.") }
 ]
 
 const within = (host: string, domain: string): boolean => host === domain || host.endsWith(`.${domain}`)
@@ -51,29 +53,29 @@ export const refOf = (venue: TraderVenue, id: string): TraderRef => {
 /** What a paste names: a trader the app can read, or a refusal with why. */
 export function traderRefOf(raw: string): { ok: true; ref: TraderRef } | { ok: false; reason: string } {
   const text = raw.trim()
-  if (text === '') return { ok: false, reason: 'Paste a Hyperliquid address (0x and forty letters and digits) or an OKX lead trader\'s profile link.' }
-  if (text.length > TRADER_REF_LINES.maxChars) return { ok: false, reason: 'That is too long to be an address or a link.' }
+  if (text === '') return { ok: false, reason: msg('Paste a Hyperliquid address (0x and forty letters and digits) or an OKX lead trader\'s profile link.') }
+  if (text.length > TRADER_REF_LINES.maxChars) return { ok: false, reason: msg('That is too long to be an address or a link.') }
   if (HYPERLIQUID_ADDRESS.test(text)) return { ok: true, ref: refOf('hyperliquid', text) }
   if (OKX_CODE.test(text)) return { ok: true, ref: refOf('okx', text) }
   let url: URL
   try {
     url = new URL(text)
   } catch {
-    return { ok: false, reason: 'Not a Hyperliquid address, an OKX lead trader\'s code, or a link to either.' }
+    return { ok: false, reason: msg('Not a Hyperliquid address, an OKX lead trader\'s code, or a link to either.') }
   }
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') return { ok: false, reason: 'Only a web link is read.' }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return { ok: false, reason: msg('Only a web link is read.') }
   const host = url.hostname.toLowerCase()
   for (const refused of REFUSED_HOSTS) if (refused.hosts.some((domain) => within(host, domain))) return { ok: false, reason: refused.reason }
   const segments = url.pathname.split('/').filter((segment) => segment !== '')
   if (HYPERLIQUID_HOSTS.some((domain) => within(host, domain))) {
     const address = [...segments, ...url.searchParams.values()].find((part) => HYPERLIQUID_ADDRESS.test(part))
-    return address === undefined ? { ok: false, reason: 'That Hyperliquid link names no address (0x and forty letters and digits).' } : { ok: true, ref: refOf('hyperliquid', address) }
+    return address === undefined ? { ok: false, reason: msg('That Hyperliquid link names no address (0x and forty letters and digits).') } : { ok: true, ref: refOf('hyperliquid', address) }
   }
   if (OKX_HOSTS.some((domain) => within(host, domain))) {
     const code = [...segments, ...url.searchParams.values()].find((part) => OKX_CODE.test(part))
-    return code === undefined ? { ok: false, reason: "That OKX link names no lead trader's code (sixteen letters and digits, or eighteen digits)." } : { ok: true, ref: refOf('okx', code) }
+    return code === undefined ? { ok: false, reason: msg("That OKX link names no lead trader's code (sixteen letters and digits, or eighteen digits).") } : { ok: true, ref: refOf('okx', code) }
   }
-  return { ok: false, reason: 'Traders are read from Hyperliquid and OKX only: paste a Hyperliquid address or an OKX lead trader\'s profile link.' }
+  return { ok: false, reason: msg('Traders are read from Hyperliquid and OKX only: paste a Hyperliquid address or an OKX lead trader\'s profile link.') }
 }
 
 /** A key read back from a folder's name; null for one that is not a trader's. */

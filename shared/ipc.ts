@@ -133,6 +133,8 @@ export const IpcChannel = {
   BooksMarks: 'books:marks',
   BooksMiss: 'books:miss',
   BooksMisses: 'books:misses',
+  /** A book's trades settled a day ago, moved out of the settings by their writer (V8 Stage 8). */
+  BooksArchive: 'books:archive',
   // The primary call (V8 Stage 3): the cards weighed, the late list and the refusals; pushed as each weighing ends.
   CallsState: 'calls:state',
   CallsUpdate: 'calls:update',
@@ -150,6 +152,18 @@ export const IpcChannel = {
   TradersList: 'traders:list',
   TradersProgress: 'traders:progress',
   TradersBitgetCheck: 'traders:bitgetCheck',
+  /** Following and cloning on paper (V8 Stage 8): a follow or a clone switched on or off by its button, the follows'
+   * statuses, the events and signals kept since a moment, a perpetual's price and funding for the writers; and each
+   * leader event, clone signal and status change pushed as it happens. */
+  TradersFollow: 'traders:follow',
+  TradersClone: 'traders:clone',
+  TradersFollowStatus: 'traders:followStatus',
+  TradersFollowRecords: 'traders:followRecords',
+  TradersPerpPrice: 'traders:perpPrice',
+  TradersPerpFunding: 'traders:perpFunding',
+  TradersLeaderEvent: 'traders:leaderEvent',
+  TradersCloneSignal: 'traders:cloneSignal',
+  TradersFollowStatusChanged: 'traders:followStatusChanged',
   AiConcludeMove: 'ai:concludeMove',
   AiReviewTrade: 'ai:reviewTrade',
   AiExitCheck: 'ai:exitCheck',
@@ -293,6 +307,9 @@ export interface AppSettings {
    * (shared/paperBooks.ts; V8 Stage 2). Absent until first written, and healed on every read: nothing
    * running, each 10,000 USDT. */
   paperBooks?: import('./paperBooks').PaperBooksSettings
+  /** The traders followed or cloned on paper, each from its own button on Copy Traders (shared/traders/copyTrading.ts;
+   * V8 Stage 8). Absent until first written, and healed on every read: no one followed or cloned. */
+  copyTrading?: import('./traders/copyTrading').CopyTradingSettings
   /** News URLs (V8 Stage 4): whether a story the app discovers -- an announcement, or a feed story of impact 70 or more
    * naming a coin directly -- is read as a pasted link would be (its page fetched), or only recorded from the feed.
    * Absent or false: recorded only, nothing fetched. */
@@ -1109,6 +1126,13 @@ export interface ExecutorConfig {
    * book, when it was started, the ledger inside it, and, once stopped, what it made. A book counts only the
    * executors its own writer stamped. Never on a live executor. */
   book?: import('./paperBooks').BookMark
+  /** Set on a PAPER Position that follows a trader (V8 Stage 8; shared/traders/follow.ts): the leader's position it
+   * mirrors, its own legs at the perpetual's prices, fees, and why it closed. Never on a live executor:
+   * src/traders/paperFollow.ts, the one file that makes one, spells paper as a literal. */
+  follow?: import('./traders/follow').FollowStamp
+  /** Set on a PAPER Position a trader's clone opened (V8 Stage 8; shared/traders/copyTrading.ts): the signal, the
+   * perpetual, its stake and why it closed. Never on a live executor: src/traders/paperClone.ts makes it. */
+  clone?: import('./traders/copyTrading').CloneTradeStamp
   newsRule?: {
     articleId: number
     ticker: string

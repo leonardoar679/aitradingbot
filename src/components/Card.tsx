@@ -5,7 +5,8 @@ export function Card({
   actions,
   children
 }: PropsWithChildren<{
-  title: string
+  /** Text, or text with a value shown as written in it (V8 Stage 8: a trader's address on Copy Traders). */
+  title: React.ReactNode
   /** Optional control rendered on the header row, right-aligned -- a Refresh button and the
    * like. Optional so every existing Card is unchanged. */
   actions?: React.ReactNode
