@@ -117,6 +117,7 @@ import { ROUND_TRIP_VERSION } from './traders/roundTrips'
 import { SKILL_LINES } from './traders/skill'
 import { DELAY_LINES } from './traders/delay'
 import { TRADER_ANALYSIS_LINES } from './traders/traderAnalysis'
+import { CLONE_LINES } from './traders/clone'
 
 export type { EffectiveStores } from './appDefaults'
 
@@ -299,10 +300,10 @@ export const ENGINE_CONSTANTS = {
   // A pasted news link read and kept (V8 Stage 4): the safe fetch's limits, the page read as text, its time, who says
   // it, and the record's lines (shared/urlSafety.ts, articleExtract.ts, articleTime.ts, articleCredibility.ts, newsUrl.ts).
   newsUrls: { fetch: URL_FETCH_LINES, extract: EXTRACT_LINES, time: ARTICLE_TIME_LINES, credibility: CREDIBILITY_VERSION, record: NEWS_URL_LINES },
-  // A pasted trader read and judged (V8 Stage 6): how a paste is read, how fills become round trips, the lines of the
-  // two tests a trader's record is judged by, V8-S6-SKILL and V8-S6-DELAY, and what an analysis fetches for them
-  // (shared/traders/).
-  traders: { ref: TRADER_REF_LINES, roundTrips: ROUND_TRIP_VERSION, skill: SKILL_LINES, delay: DELAY_LINES, analysis: TRADER_ANALYSIS_LINES }
+  // A pasted trader read and judged (V8 Stages 6-7): how a paste is read, how fills become round trips, the lines of the
+  // two tests a trader's record is judged by, V8-S6-SKILL and V8-S6-DELAY, what an analysis fetches for them, and the
+  // lines of the clone, V8-S7-CLONE (shared/traders/).
+  traders: { ref: TRADER_REF_LINES, roundTrips: ROUND_TRIP_VERSION, skill: SKILL_LINES, delay: DELAY_LINES, analysis: TRADER_ANALYSIS_LINES, clone: CLONE_LINES }
 } as const
 
 /** One value the heal changed on the way from a file to the store the app runs on. */
