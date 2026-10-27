@@ -342,3 +342,56 @@ describe("a model's reading, noted on its record (V8 Stage 5)", () => {
     expect(await urls.noteArticleReading('0000000000000000', { analysisId: 'x', predictionIds: [], text: 'nothing' })).toBeNull()
   })
 })
+
+describe('changes that finish out of order (found by V8 Stage 5 in-app check)', () => {
+  it("keeps a reading noted while the Archive was still being asked: the lookups are applied to the record as it is then", async () => {
+    const urls = await service({ 'https://www.coindesk.com/o': page('ABC news', 'A body long enough to be read as the text of the page about ABC.') })
+    const record = await urls.analyzeUrl({ raw: 'https://www.coindesk.com/o' })
+    if ('refused' in record) throw new Error('refused')
+    let answer: (value: number | null) => void = () => undefined
+    urls.newsUrlSeam.archiveFirst = () => new Promise<number | null>((resolve) => (answer = resolve))
+    const looking = urls.lookUp(record.id)
+    // The reading is noted while the Archive has not answered yet.
+    await urls.noteArticleReading(record.id, { analysisId: 'row-1', predictionIds: ['article:ABCUSDT:1:2'], text: 'Read by m; one size call recorded.' })
+    answer(PUBLISHED - 7200)
+    const looked = await looking
+    expect(looked).toMatchObject({ analysisId: 'row-1', predictionIds: ['article:ABCUSDT:1:2'], lookups: { archive: { status: 'found', firstSec: PUBLISHED - 7200 } } })
+    expect(looked?.lookups?.archive?.note).toMatch(/before the time it states/)
+    expect(looked?.trail.slice(-2).map((entry) => entry.status)).toEqual(['reading', 'looked-up'])
+    // And on file so: a new session reads both.
+    urls.resetNewsUrls()
+    expect(await urls.urlRecordOf(record.id)).toMatchObject({ analysisId: 'row-1', lookups: { archive: { status: 'found' } } })
+  })
+  it("keeps a person's view linked while the prices were being read again", async () => {
+    const urls = await service({ 'https://www.coindesk.com/p': page('ABC news', 'A body long enough to be read as the text of the page about ABC.') })
+    const record = await urls.analyzeUrl({ raw: 'https://www.coindesk.com/p' })
+    if ('refused' in record) throw new Error('refused')
+    // Past the fourth hour and its grace: the prices read again are final, a change to write.
+    clock = PUBLISHED + 4 * 3600 + 180
+    let release: () => void = () => undefined
+    const held = new Promise<void>((resolve) => (release = resolve))
+    urls.newsUrlSeam.bars = async (_venue, _pair, fromSec, toSec) => {
+      await held
+      return bars(fromSec, toSec)
+    }
+    const refreshing = urls.refreshUrlPrices()
+    await urls.linkUrlRecord(record.id, { predictionId: 'user:ABCUSDT:1' })
+    release()
+    await refreshing
+    const after = await urls.urlRecordOf(record.id)
+    expect(after?.predictionIds).toEqual(['user:ABCUSDT:1'])
+    expect(after?.reactions.find((reaction) => reaction.pair === 'ABCUSDT')).toMatchObject({ final: true })
+    expect(after?.trail.slice(-2).map((entry) => entry.status)).toEqual(['view', 'final'])
+  })
+  it('keeps a link pasted twice at once as one record, the first', async () => {
+    const urls = await service({ 'https://www.coindesk.com/q': page('ABC news', 'A body long enough to be read as the text of the page about ABC.') })
+    const [first, second] = await Promise.all([urls.analyzeUrl({ raw: 'https://www.coindesk.com/q' }), urls.analyzeUrl({ raw: 'https://www.coindesk.com/q' })])
+    if ('refused' in first || 'refused' in second) throw new Error('refused')
+    expect(second.id).toBe(first.id)
+    expect((await urls.urlRecords()).filter((entry) => entry.id === first.id)).toHaveLength(1)
+    const lines = readFileSync(join(dir, `urls-${new Date(NOW * 1000).toISOString().slice(0, 7)}.jsonl`), 'utf-8').trim().split('\n').map((line) => JSON.parse(line) as { id: string; trail: { status: string }[] })
+    // One first reading of it on file; a paste that came after it was kept is noted as pasted again.
+    const own = lines.filter((line) => line.id === first.id)
+    expect(own.filter((line) => !line.trail.some((entry) => entry.status === 'pasted-again'))).toHaveLength(1)
+  })
+})

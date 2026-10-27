@@ -92,6 +92,9 @@ const monthOf = (seconds: number): string => new Date(seconds * 1000).toISOStrin
 const urlsFile = (seconds: number): string => join(newsUrlSeam.dir(), `urls-${monthOf(seconds)}.jsonl`)
 
 let records: Map<string, UrlRecord> | null = null
+/** The first read of the files, while it runs: two callers at a start share it, rather than each reading the files and
+ * the later one's map replacing a record the earlier had kept meanwhile (found with the writes' turn, V8 Stage 5). */
+let loading: Promise<Map<string, UrlRecord>> | null = null
 const listeners = new Set<(record: UrlRecord) => void>()
 let timer: ReturnType<typeof setInterval> | null = null
 
@@ -101,8 +104,15 @@ export function onUrlRecord(listener: (record: UrlRecord) => void): () => void {
   return () => void listeners.delete(listener)
 }
 
-async function loaded(): Promise<Map<string, UrlRecord>> {
-  if (records !== null) return records
+function loaded(): Promise<Map<string, UrlRecord>> {
+  if (records !== null) return Promise.resolve(records)
+  loading ??= readRecords().finally(() => {
+    loading = null
+  })
+  return loading
+}
+
+async function readRecords(): Promise<Map<string, UrlRecord>> {
   const lines: unknown[] = []
   for (const { name } of await listMonthFiles(newsUrlSeam.dir(), /^urls-(\d{4}-\d{2})\.jsonl$/)) {
     let text = ''
@@ -143,6 +153,33 @@ const step = (record: UrlRecord, status: TrailEntry['status'], note: string): vo
   record.trail = [...record.trail, { at: newsUrlSeam.now(), status, note }]
 }
 
+let writing: Promise<unknown> = Promise.resolve()
+
+/** One write at a time, in the order asked. */
+function inTurn<T>(work: () => Promise<T>): Promise<T> {
+  const run = writing.then(work, work)
+  writing = run.catch(() => undefined)
+  return run
+}
+
+/** A change to a record on file, made one at a time and to the record as it stands when it is made: what a slow step
+ * read before it -- the Archive, a venue's bars -- is applied to the newest state, so that two steps finishing out of
+ * order lose neither's change. Found by V8 Stage 5's in-app check: the Archive's answer, asked before an article
+ * reading was noted, was saved over the note. `apply` returns the record changed, or null to leave it as it is. */
+function change(id: string, apply: (record: UrlRecord) => UrlRecord | null): Promise<UrlRecord | null> {
+  return inTurn(async () => {
+    const held = (await loaded()).get(id)
+    if (held === undefined) return null
+    const next = apply({ ...held, trail: [...held.trail] })
+    return next === null ? held : save(next)
+  })
+}
+
+/** A new record kept, in turn with every change: a link recorded twice at once is kept once, the first. */
+function insert(record: UrlRecord): Promise<UrlRecord> {
+  return inTurn(async () => (await loaded()).get(record.id) ?? save(record))
+}
+
 /** Every record on file, newest paste first. */
 export async function urlRecords(): Promise<UrlRecord[]> {
   return [...(await loaded()).values()].sort((a, b) => b.at - a.at)
@@ -167,14 +204,13 @@ export async function livePriceOf(coin: Pick<UrlCoin, 'pair' | 'venue'>): Promis
 /** A model's reading of a record, noted on it (V8 Stage 5): its ledger row's id once answered, the size calls recorded
  * from it, and a step of the trail. */
 export async function noteArticleReading(id: string, note: { analysisId: string | null; predictionIds: readonly string[]; text: string }): Promise<UrlRecord | null> {
-  const held = (await loaded()).get(id)
-  if (held === undefined) return null
-  const next = { ...held, trail: [...held.trail] }
-  if (note.analysisId !== null) next.analysisId = note.analysisId
-  const added = note.predictionIds.filter((predictionId) => !next.predictionIds.includes(predictionId))
-  if (added.length > 0) next.predictionIds = [...next.predictionIds, ...added]
-  step(next, 'reading', note.text)
-  return save(next)
+  return change(id, (next) => {
+    if (note.analysisId !== null) next.analysisId = note.analysisId
+    const added = note.predictionIds.filter((predictionId) => !next.predictionIds.includes(predictionId))
+    if (added.length > 0) next.predictionIds = [...next.predictionIds, ...added]
+    step(next, 'reading', note.text)
+    return next
+  })
 }
 
 /** The coins a text names: direct in its title, indirect in its body, matched against Binance's and Bitget's USDT
@@ -246,9 +282,11 @@ export async function analyzeUrl(input: { raw: string; origin?: 'manual' | 'auto
   const id = urlRecordId(sanitized.url, sha256)
   const existing = held.get(id)
   if (existing !== undefined) {
-    const again = { ...existing, trail: [...existing.trail] }
-    step(again, 'pasted-again', 'The link was pasted again; its record is the one on file.')
-    return save(again)
+    const again = await change(id, (next) => {
+      step(next, 'pasted-again', 'The link was pasted again; its record is the one on file.')
+      return next
+    })
+    return again ?? existing
   }
   const now = newsUrlSeam.now()
   const record: UrlRecord = {
@@ -360,7 +398,7 @@ export async function analyzeUrl(input: { raw: string; origin?: 'manual' | 'auto
   // Its kind is read as the feed reads a story's: from its title and its summary, not from every word of its body.
   const summary = article?.description ?? article?.snippets[0]?.text ?? sameInFeed?.summary ?? (retrieval === 'supplied' ? supplied.slice(0, 400) : '')
   await complete(record, { title, body, summary, sameInFeed, feed, now })
-  const saved = await save(record)
+  const saved = await insert(record)
   if (newsUrlSeam.lookUpAfterPaste) void lookUp(saved.id).catch((error) => console.error("A news link's lookups failed:", error))
   return saved
 }
@@ -371,39 +409,43 @@ export async function analyzeUrl(input: { raw: string; origin?: 'manual' | 'auto
 export async function lookUp(id: string): Promise<UrlRecord | null> {
   const held = (await loaded()).get(id)
   if (held === undefined) return null
-  const next = { ...held, trail: [...held.trail] }
+  // Asked outside the turn, which a slow answer would hold up; applied in it, to the record as it is then.
   const lookups: UrlLookups = { archive: null, x: null }
+  let firstSec: number | null = null
   if (await newsUrlSeam.archiveOn().catch(() => true)) {
     try {
-      const firstSec = await newsUrlSeam.archiveFirst(next.url)
-      lookups.archive = { status: firstSec === null ? 'none' : 'found', firstSec, note: archiveNote(firstSec, next.time?.sec ?? null) }
+      firstSec = await newsUrlSeam.archiveFirst(held.url)
+      lookups.archive = { status: firstSec === null ? 'none' : 'found', firstSec, note: null }
     } catch (error) {
       lookups.archive = { status: 'failed', firstSec: null, note: error instanceof Error ? error.message : String(error) }
     }
   } else {
     lookups.archive = { status: 'off', firstSec: null, note: null }
   }
-  if (xPostOf(next.url) !== null) {
+  if (xPostOf(held.url) !== null) {
     try {
-      lookups.x = { status: 'found', ...(await newsUrlSeam.xAuthor(next.url)) }
+      lookups.x = { status: 'found', ...(await newsUrlSeam.xAuthor(held.url)) }
     } catch {
       lookups.x = { status: 'failed', name: null, url: null }
     }
   }
-  next.lookups = lookups
-  const archive = lookups.archive
-  step(
-    next,
-    'looked-up',
-    archive.status === 'found'
-      ? `The Internet Archive first captured it ${new Date((archive.firstSec as number) * 1000).toISOString().slice(0, 16).replace('T', ' ')} UTC.${archive.note === null ? '' : ` ${archive.note}`}`
-      : archive.status === 'none'
-        ? 'The Internet Archive holds no capture of it.'
-        : archive.status === 'off'
-          ? 'The Internet Archive was not asked: switched off.'
-          : `The Internet Archive could not be asked: ${archive.note}.`
-  )
-  return save(next)
+  return change(id, (next) => {
+    const archive = lookups.archive as NonNullable<UrlLookups['archive']>
+    if (archive.status === 'found') archive.note = archiveNote(firstSec, next.time?.sec ?? null)
+    next.lookups = lookups
+    step(
+      next,
+      'looked-up',
+      archive.status === 'found'
+        ? `The Internet Archive first captured it ${new Date((archive.firstSec as number) * 1000).toISOString().slice(0, 16).replace('T', ' ')} UTC.${archive.note === null ? '' : ` ${archive.note}`}`
+        : archive.status === 'none'
+          ? 'The Internet Archive holds no capture of it.'
+          : archive.status === 'off'
+            ? 'The Internet Archive was not asked: switched off.'
+            : `The Internet Archive could not be asked: ${archive.note}.`
+    )
+    return next
+  })
 }
 
 /** What every record is given once its text and time are had: its kind, who else told it, its coins and its source's
@@ -500,7 +542,7 @@ export async function discoverFromFeed(autoAnalyze: boolean): Promise<number> {
     }
     step(record, 'discovered', `Discovered in the app's own feed (${story.sourceName}, impact ${story.impact}): nothing fetched, no model asked.`)
     await complete(record, { title: story.title, body: story.summary, summary: story.summary, sameInFeed: story, feed, now })
-    await save(record)
+    await insert(record)
     made++
   }
   return made
@@ -508,24 +550,26 @@ export async function discoverFromFeed(autoAnalyze: boolean): Promise<number> {
 
 /** A person's own view, recorded from a record (V8 Stage 4): its prediction's id, and the paper trade's once placed. */
 export async function linkUrlRecord(id: string, link: { predictionId?: string; executorId?: string }): Promise<UrlRecord | null> {
-  const held = (await loaded()).get(id)
-  if (held === undefined) return null
-  const next = { ...held, trail: [...held.trail] }
-  if (typeof link.predictionId === 'string' && !next.predictionIds.includes(link.predictionId)) next.predictionIds = [...next.predictionIds, link.predictionId]
-  if (typeof link.executorId === 'string' && !next.executorIds.includes(link.executorId)) next.executorIds = [...next.executorIds, link.executorId]
-  step(next, 'view', `A view of the person's own recorded${link.predictionId ? ` (${link.predictionId})` : ''}.`)
-  return save(next)
+  return change(id, (next) => {
+    if (typeof link.predictionId === 'string' && !next.predictionIds.includes(link.predictionId)) next.predictionIds = [...next.predictionIds, link.predictionId]
+    if (typeof link.executorId === 'string' && !next.executorIds.includes(link.executorId)) next.executorIds = [...next.executorIds, link.executorId]
+    step(next, 'view', `A view of the person's own recorded${link.predictionId ? ` (${link.predictionId})` : ''}.`)
+    return next
+  })
 }
 
 /** Reads each record's price again until it is final: every five minutes. */
 export async function refreshUrlPrices(): Promise<void> {
   for (const record of await urlRecords()) {
     if (record.reactions.length === 0 || record.reactions.every((reaction) => reaction.final)) continue
-    const next = { ...record, trail: [...record.trail] }
-    if (await priced(next)) {
-      if (next.reactions.every((reaction) => reaction.final)) step(next, 'final', 'Each coin\'s price read to four hours after publication.')
-      await save(next)
-    }
+    // The bars read outside the turn, on a copy; the prices applied in it, to the record as it is then.
+    const read = { ...record, trail: [...record.trail] }
+    if (!(await priced(read))) continue
+    await change(record.id, (next) => {
+      next.reactions = read.reactions
+      if (next.reactions.every((reaction) => reaction.final)) step(next, 'final', "Each coin's price read to four hours after publication.")
+      return next
+    })
   }
 }
 
@@ -544,6 +588,8 @@ export function startNewsUrls(): void {
 /** Test seam: as a new session finds it. */
 export function resetNewsUrls(): void {
   records = null
+  loading = null
+  writing = Promise.resolve()
   listeners.clear()
   if (timer !== null) clearInterval(timer)
   timer = null

@@ -341,7 +341,12 @@ export const WORD_TICKERS: ReadonlySet<string> = new Set([
   // Los Angeles: "off-duty LA deputies" named Lagrange's LA in a one-hour run of the app.
   'LA',
   // The GENIUS Act, the U.S. stablecoin law, written in capitals: a pasted article named it as a coin (V8 Stage 4's check).
-  'GENIUS'
+  'GENIUS',
+  // The United States, an all-time high and real-world assets, as news writes them: Bitget lists a coin of each name, and
+  // "Ripple wins final US approval" named its US as a coin beside XRP (V8 Stage 5's check).
+  'US',
+  'ATH',
+  'RWA'
 ])
 
 export interface AssetDictionary {

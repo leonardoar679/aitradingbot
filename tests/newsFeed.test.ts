@@ -101,6 +101,10 @@ describe('which coins a story names', () => {
     const genius = assetDictionary(['GENIUS', 'USDC'])
     expect(namedTickers('Banks weigh the GENIUS Act as USDC grows', genius)).toEqual(['USDC'])
     expect(namedTickers('$GENIUS trades after its listing', genius)).toEqual(['GENIUS'])
+    // The United States, an all-time high, real-world assets: words in capitals, coins only as $US, $ATH, $RWA (V8 Stage 5).
+    const acronyms = assetDictionary(['US', 'ATH', 'RWA', 'XRP'])
+    expect(namedTickers('Ripple wins final US approval as XRP nears an ATH and RWA tokens rally', acronyms)).toEqual(['XRP'])
+    expect(namedTickers('$US, $ATH and $RWA listed', acronyms)).toEqual(['US', 'ATH', 'RWA'])
     // A coin not traded on Binance is not matched, nor a one-letter ticker.
     expect(namedTickers('DOGE and S rally', DICTIONARY)).toEqual([])
   })
