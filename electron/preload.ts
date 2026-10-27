@@ -11,6 +11,7 @@ import type { BookEquityMark, BookId, BookStanding } from '../shared/paperBooks'
 import type { MissRecord } from '../shared/misses'
 import type { PrimaryCallState } from '../shared/forecast/primaryCall'
 import type { UrlRecord } from '../shared/newsUrl'
+import type { BitgetCopyCheck, TraderAnalysis, TraderList, TraderMeta, TraderProgress } from '../shared/traders/traderAnalysis'
 import type { ForecastLabView, ForecastReplay } from '../shared/forecast/labView'
 import type { ForecastRanking as ForecastRankingView } from '../shared/forecast/ranking'
 import type { SymbolTradingRules } from '../shared/exchangeMinimums'
@@ -528,6 +529,19 @@ const api = {
       const handler = (_event: IpcRendererEvent, record: UrlRecord): void => listener(record)
       ipcRenderer.on(IpcChannel.UrlsUpdate, handler)
       return () => ipcRenderer.removeListener(IpcChannel.UrlsUpdate, handler)
+    }
+  },
+  // Copy Traders (V8 Stage 6): a pasted trader read from its venue and kept, analysed, the traders on file, each step as it
+  // goes; and the read-only Bitget copy-trading check, asked only from its button. Nothing here follows or places anything.
+  traders: {
+    import: (raw: string): Promise<TraderMeta | { refused: string }> => ipcRenderer.invoke(IpcChannel.TradersImport, raw),
+    analyze: (key: string): Promise<TraderAnalysis> => ipcRenderer.invoke(IpcChannel.TradersAnalyze, key),
+    list: (): Promise<TraderList> => ipcRenderer.invoke(IpcChannel.TradersList),
+    bitgetCheck: (): Promise<BitgetCopyCheck> => ipcRenderer.invoke(IpcChannel.TradersBitgetCheck),
+    onProgress: (listener: (progress: TraderProgress) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, progress: TraderProgress): void => listener(progress)
+      ipcRenderer.on(IpcChannel.TradersProgress, handler)
+      return () => ipcRenderer.removeListener(IpcChannel.TradersProgress, handler)
     }
   },
   // V8's three paper books (V8 Stage 2): each book's standing and equity marks, and the opportunities not taken.

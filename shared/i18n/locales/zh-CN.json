@@ -2105,5 +2105,6 @@
   "Primary call": "主要判断",
   "Weighing the sources that may call a way…": "正在权衡可能给出方向的来源…",
   "{count} more cards: {cards} — on Predictions.": "另有 {count} 张卡片：{cards}——在“预测”中。",
-  "No profitable opportunity identified": "未发现可盈利的机会"
+  "No profitable opportunity identified": "未发现可盈利的机会",
+  "Copy Traders": "跟单交易员"
 }

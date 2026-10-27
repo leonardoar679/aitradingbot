@@ -14,6 +14,10 @@
 //   before it is sent, against a share of its 1,200 a minute, so that two imports cannot use it up.
 // - OKX allows each public copy-trading endpoint 5 requests in 2 seconds: one request a half second per
 //   endpoint keeps under it.
+// - BINANCE'S FUTURES and BITGET'S PERPETUALS (V8 Stage 6), read for a trader's coins: Binance futures weighs each
+//   request against 2,400 a minute an IP, of which this app spends half, and its funding history shares 500 requests
+//   in five minutes, one a second keeping under; Bitget's public market data allows 20 requests a second, one a tenth
+//   of a second keeping under.
 // Signed requests -- an order, a cancel, a close -- never pass through here: a budget must not delay an exit.
 
 /** The lines, pinned (ENGINE_CONSTANTS.httpPacing). */
@@ -36,6 +40,16 @@ export const HTTP_PACING_LINES = {
   okx: {
     /** One request a half second per public endpoint (OKX allows 5 in 2 seconds). */
     minGapMs: 500
+  },
+  binanceFutures: {
+    /** The share of Binance futures' 2,400 a minute for one IP this app spends. */
+    weightPerMinute: 1200,
+    /** Its funding history: one request a second (500 in five minutes, shared with another endpoint). */
+    fundingGapMs: 1000
+  },
+  bitget: {
+    /** Bitget's public market data: one request a tenth of a second (20 a second for one IP). */
+    minGapMs: 100
   }
 } as const
 

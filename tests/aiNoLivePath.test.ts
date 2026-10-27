@@ -74,7 +74,10 @@ const LIVE_MODULES = new Set([
   // Added 8 October 2026 (the V5 document, S101-102): the account's own stream books fills, and the
   // reconciliation resolves orders the exchange no longer rests. Neither reads a model.
   'liveUserStreamService',
-  'liveReconcileService'
+  'liveReconcileService',
+  // Added 27 October 2026 (V8 Stage 6): the read-only Bitget copy-trading check reads the person's key, so it is held as
+  // a module that holds one. It reads no model, and every request it makes is a GET (held below).
+  'bitgetCopyRead'
 ])
 
 function isAiService(file: string): boolean {
@@ -1061,6 +1064,55 @@ describe('AI code has no route to a real order', () => {
     expect(panel).not.toMatch(/liveTrading|LiveTrading|placeLive|onPrepareOrder|aiProposal|settings\.set|setConfig/)
     // News URLs' service still asks no model, and imports nothing of the reading's.
     expect(importsOf(join(SERVICES, 'newsUrlService.ts')).filter((name) => aiModuleNames.has(name) || name === 'aiAdditions')).toEqual([])
+  })
+
+  it('a pasted trader is read, kept and judged, and nothing here follows, trades or reads a key but the Bitget check (V8 Stage 6)', () => {
+    // The trader's record is public data: Hyperliquid's info API (a POST of a question, to its one address), and the
+    // perpetuals' public market data. Nothing reads a key, asks a model, writes a setting or reaches an order path.
+    const reading = [
+      join(SERVICES, 'traderService.ts'),
+      join(SERVICES, 'hyperliquidClient.ts'),
+      join(SERVICES, 'perpMarketService.ts'),
+      join(ROOT, 'electron', 'ipc', 'handlers', 'tradersHandlers.ts')
+    ]
+    for (const path of reading) {
+      expect(importsOf(path).filter((name) => LIVE_MODULES.has(name) || aiModuleNames.has(name)), path).toEqual([])
+      expect(readFileSync(path, 'utf-8'), path).not.toMatch(/credentials|apiKey|placeLive|liveTrading|setSettings|settings\.set|bitgetSigned|executor/)
+    }
+    const hyperliquid = readFileSync(join(SERVICES, 'hyperliquidClient.ts'), 'utf-8')
+    expect(hyperliquid.match(/method: '\w+'/g)).toEqual(["method: 'POST'"])
+    expect(hyperliquid.match(/https:\/\/[\w.-]+/g) ?? []).toEqual([])
+    expect(readFileSync(join(ROOT, 'shared', 'traders', 'hyperliquid.ts'), 'utf-8').match(/https:\/\/[\w.-]+/g)).toEqual(['https://api.hyperliquid.xyz'])
+    const perps = readFileSync(join(SERVICES, 'perpMarketService.ts'), 'utf-8')
+    expect([...new Set(perps.match(/https:\/\/[\w.-]+/g))].sort()).toEqual(['https://api.bitget.com', 'https://fapi.binance.com'])
+    expect(perps).not.toMatch(/method:|POST/)
+    // The shared logic reads nothing and imports nothing of the main process.
+    for (const name of readdirSync(join(ROOT, 'shared', 'traders'))) {
+      const source = readFileSync(join(ROOT, 'shared', 'traders', name), 'utf-8')
+      expect(source, name).not.toMatch(/from\s+'[^']*electron|\bfetch\(|readFile|writeFile/)
+    }
+    // The Bitget check: every request a GET, signed for the real account and never the demo one, and reached only from
+    // its own channel.
+    const check = readFileSync(join(SERVICES, 'exchanges', 'bitgetCopyRead.ts'), 'utf-8')
+    expect([...new Set(check.match(/method: '\w+'/g))]).toEqual(["method: 'GET'"])
+    expect(check).not.toMatch(/POST|DELETE|PUT|paptrading|, true\)/)
+    expect(check).toMatch(/bitgetSigned<T>\(credentials, request, false\)/)
+    const callers = ['src', 'electron', 'shared'].flatMap((dir) => {
+      const walk = (folder: string): string[] =>
+        readdirSync(folder, { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? (entry.name === 'node_modules' ? [] : walk(join(folder, entry.name))) : /\.(ts|tsx)$/.test(entry.name) ? [join(folder, entry.name)] : []))
+      return walk(join(ROOT, dir))
+    }).filter((path) => importsOf(path).includes('bitgetCopyRead'))
+    expect(callers.map((path) => basename(path))).toEqual(['bitgetCopyHandlers.ts'])
+    // The page reaches the traders' bridge alone, and nothing that places, fills in or arms anything.
+    const page = readFileSync(join(ROOT, 'src', 'traders', 'CopyTradersPage.tsx'), 'utf-8')
+    expect([...new Set([...page.matchAll(/window\.api\.(\w+)(?:\s*\.\s*(\w+))?/g)].map((match) => `${match[1]}.${match[2]}`))].sort()).toEqual([
+      'traders.analyze',
+      'traders.bitgetCheck',
+      'traders.import',
+      'traders.list',
+      'traders.onProgress'
+    ])
+    expect(page).not.toMatch(/placeLive|liveTrading|onPrepareOrder|aiProposal|settings\.set|mode: 'live'/)
   })
 
   it("the exit check closes the app's own paper trades early, and does nothing else", () => {

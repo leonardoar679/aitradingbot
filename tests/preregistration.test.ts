@@ -65,9 +65,11 @@ const INFRASTRUCTURE = [
   'aiAdditions.dailyLimits.article',
   'aiAdditions.prompts.article',
   'aiAdditions.schemas.article',
-  // How a pasted trader is read and their fills become round trips (V8 Stage 6): reading, not a claim.
+  // How a pasted trader is read, their fills become round trips, and an analysis fetches the minutes the delay test
+  // reads (V8 Stage 6): reading, not a claim.
   'traders.ref',
-  'traders.roundTrips'
+  'traders.roundTrips',
+  'traders.analysis'
 ]
 
 describe('the registry on file', () => {

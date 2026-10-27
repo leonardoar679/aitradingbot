@@ -113,6 +113,53 @@ describe('round trips', () => {
     expect(result.trips[0]).toMatchObject({ maxSize: 3, realizedPnl: 3, fills: 4 })
   })
 
+  it('reads a close and the next opening in one millisecond in the order the position went, whichever id is the lower', () => {
+    // Long 1; then in one millisecond a sell closing it and a buy opening the next long, their ids either way round.
+    for (const [sellTid, buyTid] of [
+      [5, 6],
+      [6, 5]
+    ]) {
+      const fills = [
+        fill({ timeMs: T0, side: 'buy', sz: 1, px: 100, startPosition: 0, tid: 1 }),
+        fill({ timeMs: T0 + MIN, side: 'sell', sz: 1, px: 105, startPosition: 1, tid: sellTid, closedPnl: 5 }),
+        fill({ timeMs: T0 + MIN, side: 'buy', sz: 2, px: 105, startPosition: 0, tid: buyTid }),
+        fill({ timeMs: T0 + 2 * MIN, side: 'sell', sz: 2, px: 110, startPosition: 2, tid: 7, closedPnl: 10 })
+      ]
+      expect(orderedFills(fills).map((entry) => entry.tid)).toEqual([1, sellTid, buyTid, 7])
+      const result = roundTripsOf(fills)
+      expect(result.partial).toBe(0)
+      expect(result.trips.map((trip) => [trip.openedAtMs, trip.closedAtMs, trip.maxSize, trip.realizedPnl])).toEqual([
+        [T0, T0 + MIN, 1, 5],
+        [T0 + MIN, T0 + 2 * MIN, 2, 10]
+      ])
+    }
+  })
+
+  it('leaves out a trip the record says turned to the other side without the fills that turned it', () => {
+    const fills = [
+      fill({ timeMs: T0, side: 'buy', sz: 1, px: 100, startPosition: 0 }),
+      // Short 1 before this buy, says the record: what turned the long is not on file.
+      fill({ timeMs: T0 + MIN, side: 'buy', sz: 1, px: 105, startPosition: -1, closedPnl: -5 })
+    ]
+    const result = roundTripsOf(fills)
+    expect(result.trips).toEqual([])
+    expect(result.partial).toBe(2)
+    expect(result.open).toEqual([])
+  })
+
+  it('puts at stake the largest size a trip held, at its entry price -- not all it ever bought', () => {
+    const fills = [
+      fill({ timeMs: T0, side: 'buy', sz: 2, px: 100, startPosition: 0 }),
+      fill({ timeMs: T0 + MIN, side: 'sell', sz: 1, px: 101, startPosition: 2, closedPnl: 1 }),
+      fill({ timeMs: T0 + 2 * MIN, side: 'buy', sz: 2, px: 100, startPosition: 1 }),
+      fill({ timeMs: T0 + 3 * MIN, side: 'sell', sz: 3, px: 102, startPosition: 3, closedPnl: 6 })
+    ]
+    const [trip] = roundTripsOf(fills).trips
+    expect(trip).toMatchObject({ maxSize: 3, fills: 4, realizedPnl: 7 })
+    expect(trip.entryPx).toBeCloseTo(100, 9)
+    expect(trip.entryNotional).toBeCloseTo(300, 9)
+  })
+
   it("gives each funding payment to the trip of its coin open at its time, counts rebates, and counts spot fills apart", () => {
     const fills = [
       fill({ timeMs: T0, side: 'buy', sz: 1, px: 100, startPosition: 0, fee: -0.01 }),
@@ -185,6 +232,12 @@ describe("a trader's figures", () => {
     expect(figures.span).toMatchObject({ fromMs: T0, tradingDays: 4 })
     expect(figures.open).toMatchObject({ unrealized: -4.5, accountValue: 321 })
   })
+  it('counts a trip a win only where it made money after fees and funding', () => {
+    // Closed 0.05 ahead and paid 0.1 in fees: a loss.
+    const figures = traderFiguresOf({ roundTrips: { version: 'round-trips-v1', trips: [trip(0, -0.05), trip(1, 2)], open: [], partial: 0, spotFills: 0 }, values: [], ledger: [], state: null })
+    expect(figures.winRate).toBe(0.5)
+  })
+
   it('has nothing to say of a record without a completed trip', () => {
     const figures = traderFiguresOf({ roundTrips: { version: 'round-trips-v1', trips: [], open: [], partial: 0, spotFills: 0 }, values: [], ledger: [], state: null })
     expect(figures).toMatchObject({ trips: 0, span: null, winRate: null, holdMin: null, stake: null, leverage: null, drawdown: { usdc: 0, pctOfAccount: null } })

@@ -5,6 +5,7 @@ import { HomePage } from './home/HomePage'
 import { PredictionsPage } from './forecast/PredictionsPage'
 import { ForecastLabPage } from './forecastLab/ForecastLabPage'
 import { NewsUrlsPage } from './articles/NewsUrlsPage'
+import { CopyTradersPage } from './traders/CopyTradersPage'
 import { OverviewPage } from './overview/OverviewPage'
 import { OpportunitiesPage } from './opportunities/OpportunitiesPage'
 import { Dashboard } from './dashboard/Dashboard'
@@ -321,6 +322,7 @@ function App(): React.JSX.Element {
             {page === 'research' && <ResearchPage tab={tabs.research} onTab={(tab) => setTabs((current) => ({ ...current, research: tab }))} />}
             {page === 'ai-benchmark' && <AiBenchmarkPage />}
             {page === 'forecast-lab' && <ForecastLabPage />}
+            {page === 'copy-traders' && <CopyTradersPage />}
             {page === 'discovery' && (
               <ExplorerPage tab={tabs.discovery} onTab={(tab) => setTabs((current) => ({ ...current, discovery: tab }))} onNavigate={navigate} />
             )}

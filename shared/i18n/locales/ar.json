@@ -2105,5 +2105,6 @@
   "Primary call": "التوصية الرئيسية",
   "Weighing the sources that may call a way…": "جارٍ وزن المصادر التي قد تدعو إلى اتجاه…",
   "{count} more cards: {cards} — on Predictions.": { "one": "بطاقة أخرى: {cards} — في التنبؤات.", "two": "بطاقتان أخريان: {cards} — في التنبؤات.", "few": "{count} بطاقات أخرى: {cards} — في التنبؤات.", "many": "{count} بطاقة أخرى: {cards} — في التنبؤات.", "other": "{count} بطاقة أخرى: {cards} — في التنبؤات." },
-  "No profitable opportunity identified": "لم تُحدَّد أي فرصة مربحة"
+  "No profitable opportunity identified": "لم تُحدَّد أي فرصة مربحة",
+  "Copy Traders": "نسخ المتداولين"
 }

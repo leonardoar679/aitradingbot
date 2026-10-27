@@ -136,6 +136,9 @@ describe('V8-S6-DELAY', () => {
     expect(followableAt(result, null)).toBeNull()
     expect(followableAt(result, 90)).toEqual({ followable: result.rows[0].aboveZero, delayMin: 2 })
     expect(followableAt(result, 121)).toEqual({ followable: result.rows[2].aboveZero, delayMin: 5 })
+    // At a row's own delay, that row; and a row whose interval reaches 0 is not followable.
+    expect(followableAt(result, 120)).toEqual({ followable: result.rows[0].aboveZero, delayMin: 2 })
+    expect(followableAt({ ...result, rows: result.rows.map((row) => ({ ...row, aboveZero: false })) }, 90)).toEqual({ followable: false, delayMin: 2 })
     // Later than the latest row: not followable.
     expect(followableAt(result, 16 * MIN)).toEqual({ followable: false, delayMin: 15 })
   })

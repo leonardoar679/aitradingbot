@@ -142,6 +142,13 @@ export const IpcChannel = {
   UrlsList: 'urls:list',
   UrlsLink: 'urls:link',
   UrlsUpdate: 'urls:update',
+  /** Copy Traders (V8 Stage 6): a pasted trader read and kept, analysed, listed; each step pushed; and the read-only
+   * Bitget copy-trading check, on a click. */
+  TradersImport: 'traders:import',
+  TradersAnalyze: 'traders:analyze',
+  TradersList: 'traders:list',
+  TradersProgress: 'traders:progress',
+  TradersBitgetCheck: 'traders:bitgetCheck',
   AiConcludeMove: 'ai:concludeMove',
   AiReviewTrade: 'ai:reviewTrade',
   AiExitCheck: 'ai:exitCheck',

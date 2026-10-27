@@ -148,6 +148,24 @@ describe("OKX's endpoints", () => {
   })
 })
 
+describe("the perpetuals' hosts (V8 Stage 6)", () => {
+  it("spend half Binance futures' weight a minute, its funding history once a second, and Bitget's market once a tenth of a second", async () => {
+    expect(HTTP_PACING_LINES.binanceFutures).toEqual({ weightPerMinute: 1200, fundingGapMs: 1000 })
+    expect(HTTP_PACING_LINES.bitget).toEqual({ minGapMs: 100 })
+    const clock = fakeClock()
+    const futures = new WeightBudget('Binance futures', HTTP_PACING_LINES.binanceFutures.weightPerMinute, clock)
+    await futures.spend(1000)
+    await futures.spend(200)
+    expect(clock.slept).toEqual([])
+    await futures.spend(10)
+    expect(clock.slept).toEqual([50_000])
+    const bitget = new GapBudget('Bitget', HTTP_PACING_LINES.bitget.minGapMs, clock)
+    await bitget.take('candles')
+    await bitget.take('candles')
+    expect(clock.slept).toEqual([50_000, 100])
+  })
+})
+
 describe("Binance's reads, through the budget", () => {
   beforeEach(() => vi.resetModules())
   afterEach(() => vi.unstubAllGlobals())

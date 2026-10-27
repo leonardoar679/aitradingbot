@@ -8,6 +8,7 @@
 // caller told why. Each task is named here; the worker runs only these.
 
 import { extractArticle, type ExtractedArticle } from './articleExtract'
+import { traderTestsOf, type TraderTestsResult } from './traders/traderTests'
 
 export interface TaskTable {
   /** The host's own check: hands its input back. */
@@ -15,13 +16,17 @@ export interface TaskTable {
   /** A pasted article's page read: its title, times, canonical address, author and text (V8 Stage 4;
    * shared/articleExtract.ts). The payload is the page's text. */
   extractArticle: (payload: unknown) => ExtractedArticle
+  /** A trader's record judged by V8-S6-SKILL and V8-S6-DELAY (V8 Stage 6; shared/traders/traderTests.ts): the payload
+   * is the two tests' input, its maps and arrays copied whole. */
+  traderTests: (payload: unknown) => TraderTestsResult
 }
 
 export type TaskName = keyof TaskTable
 
 export const TASKS: TaskTable = {
   echo: (payload) => payload,
-  extractArticle: (payload) => extractArticle(typeof payload === 'string' ? payload : '')
+  extractArticle: (payload) => extractArticle(typeof payload === 'string' ? payload : ''),
+  traderTests: (payload) => traderTestsOf(payload)
 }
 
 /** What a task's run came to. */

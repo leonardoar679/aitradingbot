@@ -114,7 +114,36 @@ describe('V8-S6-SKILL', () => {
   it('calls a trader who picks sides by a coin toss MARKET OR LUCK', () => {
     const result = skillOf({ trips: trips(50, (_open, _move, rng) => (rng() < 0.5 ? 'long' : 'short'), 7), ...MARKET, key: 'toss' })
     expect(result.verdict).toBe('MARKET OR LUCK')
-    expect(result.reasons.length).toBeGreaterThan(0)
+    expect(result.pFlip as number).toBeGreaterThan(0.01)
+    expect(result.reasons).toEqual(expect.arrayContaining([expect.stringMatching(/^sides by a coin toss do as well \d+\.\d\d% of the time, over 1%$/), "the edge's 95% interval reaches 0 or below"]))
+  })
+
+  it('calls a trader right in the first half of the record and wrong in the second MARKET OR LUCK, naming the halves', () => {
+    const turned = trips(50, (open, move) => ((open < START + 25 * DAY) === move >= 0 ? 'long' : 'short'))
+    const result = skillOf({ trips: turned, ...MARKET, key: 'turned' })
+    expect(result.verdict).toBe('MARKET OR LUCK')
+    expect((result.halvesPct as [number, number])[0]).toBeGreaterThan(0)
+    expect((result.halvesPct as [number, number])[1]).toBeLessThan(0)
+    expect(result.reasons).toContain('the first half and the second half are not both positive')
+  })
+
+  it("takes the market's drift out of each trip: the coin's beta to Bitcoin times Bitcoin's mean hourly return over the hours before the trip's day, times its hours", () => {
+    // Bitcoin climbing about 0.08% an hour, the coin moving one and a half times Bitcoin, and a trader merely long.
+    const climb = noise(21, 0.003)
+    const btc = series(60, (k) => climb(k) + 0.0002)
+    const own = noise(22, 0.002)
+    const coin = series(60, (k) => 1.5 * (climb(k) + 0.0002) + own(k))
+    const market = { bars: new Map([['ABC', coin], ['BTC', btc]]), hourly: new Map([['ABC', hourly(coin)], ['BTC', hourly(btc)]]) }
+    const record = trips(40, () => 'long', 9, coin)
+    const result = skillOf({ trips: record, ...market, key: 'drift' })
+    const edges = record.map((entry) => {
+      const read = betaBefore(hourly(coin), hourly(btc), Math.floor(entry.openedAtMs / 1000 / DAY) * DAY) as { beta: number; drift: number }
+      return entry.exitPx / entry.entryPx - 1 - read.beta * read.drift * ((entry.closedAtMs - entry.openedAtMs) / 3_600_000)
+    })
+    expect(result.edgePct).toBeCloseTo((edges.reduce((a, b) => a + b, 0) / edges.length) * 100, 9)
+    // What is taken out is no rounding: about 1.5 x 0.08% an hour over four hours a trip.
+    const moved = record.reduce((total, entry) => total + entry.movePct, 0) / record.length
+    expect(moved - (result.edgePct as number)).toBeGreaterThan(0.3)
   })
 
   it('calls a trader merely long through a rise in the record MARKET OR LUCK: the shifted schedule does as well, though the coin toss alone would pass them', () => {
@@ -143,14 +172,16 @@ describe('V8-S6-SKILL', () => {
 
   it('leaves out a trip whose coin has no bars at its times, and draws the same for the same record', () => {
     const record = trips(40, (_open, move) => (move >= 0 ? 'long' : 'short'))
+    // A coin without bars, and a trip of a coin with bars, opened before they begin.
     const lost = { ...record[0], coin: 'XYZ' }
-    const once = skillOf({ trips: [...record, lost], ...MARKET, key: 'k' })
-    const again = skillOf({ trips: [...record, lost], ...MARKET, key: 'k' })
-    expect(once.withoutBars).toBe(1)
+    const early = { ...record[1], openedAtMs: (ABC.startSec - DAY) * 1000 }
+    const once = skillOf({ trips: [...record, lost, early], ...MARKET, key: 'k' })
+    const again = skillOf({ trips: [...record, lost, early], ...MARKET, key: 'k' })
+    expect(once.withoutBars).toBe(2)
     expect(once.trips).toBe(40)
     expect(again).toEqual(once)
-    // Another key draws other offsets and signs.
-    const other = skillOf({ trips: record, ...MARKET, key: 'another' })
-    expect(other.pFlip).not.toBeNull()
+    // Another key draws other signs: a coin-toss record's chance under flipped sides moves with it.
+    const toss = trips(40, (_open, _move, rng) => (rng() < 0.5 ? 'long' : 'short'), 7)
+    expect(skillOf({ trips: toss, ...MARKET, key: 'one' }).pFlip).not.toBe(skillOf({ trips: toss, ...MARKET, key: 'two' }).pFlip)
   })
 })

@@ -827,6 +827,37 @@ a side and never a trade -- each recorded as the article source's prediction at 
 from the venue's bars. Nothing else reads a reading: not the alerts, the watch or the signal score. Its size calls are
 your own links' sample, so none is registered as a claim; they are reported for what they are.
 
+**Copy Traders** (since 27 October 2026; V8 Stage 6; under More Features, in English until Stage 8;
+`shared/traders/`, `electron/services/traderService.ts`, `hyperliquidClient.ts`, `perpMarketService.ts`,
+`exchanges/bitgetCopyRead.ts`, `src/traders/`). Paste a trader. A Hyperliquid address, bare or in a link of the app or
+its explorers, is read as text and never opened; an OKX lead trader's code is recognised and waits for Stage 7; a
+Bitget, Binance or Bybit page, or a post on X, is refused with why -- none of them publishes a trader's trades without
+that trader's own key. The address's record is read from Hyperliquid's public info API without a key, each question
+costed against the app's share of Hyperliquid's weight: its fills (VERIFIED, the venue's own record, the most recent
+10,000 Hyperliquid gives), its funding payments, deposits and withdrawals, its account and open positions, and its
+value through time, kept in `traders/<key>/` with each new line added once. An analysis rebuilds the round trips --
+added to, reduced, closed, crossed through nothing, a millisecond's fills in the order the position went, a trip opened
+before the record or missing fills left out and counted -- and works out the net after fees and funding (maker rebates
+apart), the win rate, the fall of the trips' cumulative net from a high, holds, stakes, leverage over the account's
+value, money in and out, and what is open. It finds each coin's perpetual (Binance's USD-M first, Bitget's where Binance
+has none), reads its bars, funding and book, and runs the two registered tests on the worker over every completed trip
+of the record. **V8-S6-SKILL**: each trip at 1x less the market's drift -- the coin's beta to Bitcoin times Bitcoin's
+mean hourly return over the 720 hours before its day, times its hours -- against the same schedule moved in time on the
+venue's 15-minute closes and against the same trips with their sides by a coin toss, 10,000 draws each; SKILL only at
+p 0.01 or less under both, with the edge's 95% interval by trading day above 0 and both halves positive; TOO FEW under
+30 trips, 15 trading days or 30 days; otherwise MARKET OR LUCK. A trip with no bars of its coin at its times is left out
+and counted, and where half the trips are held under 15 minutes the page says the shifted schedule sees little of them.
+**V8-S6-DELAY**: the last 90 days' trips, the most recent 500, copied 2, 5 and 15 minutes late at the next minute's open
+of the venue's perpetual, charged the taker fee, the larger of 2 bps and the book's impact at 1,000 USDT each way, and
+the funding crossed, once and at twice the costs; no trader is called followable until a follow has measured its delay
+live (Stage 8). The page says how many traders have been analysed, since at 1% about one in a hundred would pass by
+chance alone. **Check my Bitget copy trading** asks Bitget, only on that click and only with GET requests, the
+account's mode, whether the key on Connections may read copy trading, and the traders it copies; nothing is
+subscribed, changed or placed. Nothing on the page follows a trader or places an order. Checked on 27 October 2026 on
+a separate build and a scratch profile with two public addresses: one of 63 fills read TOO FEW in a minute and a half;
+one of 9,016 fills over 1,009 days -- 3,960 trips, a median hold of four seconds -- read MARKET OR LUCK in nine minutes,
+its copies two minutes late losing 0.14% a trip to costs.
+
 **The Forecast Lab** (since 13 October 2026; the V6 document's §27-28, §42-43, §49-50 and §90-105; V6 Stage
 11; `shared/forecast/{lab,labWalkForward,labFile}.ts`, `electron/services/forecastLabService.ts`,
 `src/forecastLab/`). What it and V6's two test runs measured -- calibrated ranges, no direction, no

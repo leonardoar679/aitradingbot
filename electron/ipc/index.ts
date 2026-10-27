@@ -20,6 +20,8 @@ import { registerResearchFolderHandlers } from './handlers/researchFolderHandler
 import { registerBooksHandlers } from './handlers/booksHandlers'
 import { registerCallsHandlers } from './handlers/callsHandlers'
 import { registerUrlsHandlers } from './handlers/urlsHandlers'
+import { registerTradersHandlers } from './handlers/tradersHandlers'
+import { registerBitgetCopyHandlers } from './handlers/bitgetCopyHandlers'
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerAppHandlers()
@@ -37,6 +39,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerForecastHandlers(mainWindow)
   registerCallsHandlers(mainWindow)
   registerUrlsHandlers(mainWindow)
+  registerTradersHandlers(mainWindow)
+  registerBitgetCopyHandlers()
   registerNewsHandlers(mainWindow)
   registerCredentialsHandlers()
   registerAiHandlers(mainWindow)

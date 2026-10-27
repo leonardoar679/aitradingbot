@@ -2105,5 +2105,6 @@
   "Primary call": "主要な判断",
   "Weighing the sources that may call a way…": "方向を示しうる情報源を検討中…",
   "{count} more cards: {cards} — on Predictions.": "ほかのカード {count} 件：{cards} —「予測」にあります。",
-  "No profitable opportunity identified": "利益が見込めるチャンスは見つかりませんでした"
+  "No profitable opportunity identified": "利益が見込めるチャンスは見つかりませんでした",
+  "Copy Traders": "コピートレーダー"
 }

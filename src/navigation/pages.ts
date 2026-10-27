@@ -24,6 +24,7 @@ import {
   Telescope,
   Newspaper,
   Link2,
+  UserRoundSearch,
   type LucideIcon
 } from 'lucide-react'
 import type { UiMode } from '../../shared/uiMode'
@@ -60,6 +61,7 @@ export type Page =
   | 'forecast-lab'
   | 'discovery'
   | 'news-urls'
+  | 'copy-traders'
   | 'risk'
   | 'connections'
   | 'settings'
@@ -125,6 +127,7 @@ export type NavId =
   | 'settings'
   | 'news'
   | 'news-urls'
+  | 'copy-traders'
 
 export interface NavItem {
   id: NavId
@@ -179,7 +182,9 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'forecast-lab', label: msg('Forecast Lab'), icon: ChartSpline, target: { page: 'forecast-lab' } },
       { id: 'ai-benchmark', label: msg('AI Benchmark'), icon: Scale, target: { page: 'ai-benchmark' } },
       // A pasted news link read safely and kept (V8 Stage 4), translated and in the normal sidebar's main group since V8 Stage 5.
-      { id: 'news-urls', label: msg('News URLs'), icon: Link2, target: { page: 'news-urls' } }
+      { id: 'news-urls', label: msg('News URLs'), icon: Link2, target: { page: 'news-urls' } },
+      // A pasted trader read, kept and judged (V8 Stage 6); English until V8 Stage 8.
+      { id: 'copy-traders', label: msg('Copy Traders'), icon: UserRoundSearch, target: { page: 'copy-traders' } }
     ]
   },
   {
@@ -226,7 +231,7 @@ const NEWS_ITEM: NavItem = { id: 'news', label: msg('News'), icon: Newspaper, ta
 
 /** The entries More Features holds in the normal mode, in the expert layout's order: every one not in the main
  * group or System. */
-const MORE_FEATURES: NavId[] = ['opportunities', 'positions', 'live', 'backtest', 'forecast-lab', 'ai-benchmark', 'strategies', 'bots', 'executors', 'controllers', 'routines', 'market', 'portfolio', 'explorer', 'overview', 'ai-decisions']
+const MORE_FEATURES: NavId[] = ['opportunities', 'positions', 'live', 'backtest', 'forecast-lab', 'ai-benchmark', 'copy-traders', 'strategies', 'bots', 'executors', 'controllers', 'routines', 'market', 'portfolio', 'explorer', 'overview', 'ai-decisions']
 
 /** The normal mode's sidebar (V7.2-R Stage 3); News URLs after Predictions since V8 Stage 5. */
 export const NORMAL_NAV_GROUPS: NavGroup[] = [

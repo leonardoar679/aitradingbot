@@ -62,8 +62,11 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 // Stage 4; infrastructure), from bfd2b18115d7. The article reading's limit and versions (V8 Stage 5; infrastructure),
 // from 00c7fa00aefc. A page's main text read from the part holding most of its paragraphs, the cards of other stories
 // left out (article-extract-v2; V8 Stage 5's check; infrastructure), from a15fcdfe59b3. A pasted trader's reading, round
-// trips, and the lines of V8-S6-SKILL and V8-S6-DELAY (V8 Stage 6), from 033ef86fc980.
-const PINNED_ENGINE_VERSION = '24d43ffb4087'
+// trips, and the lines of V8-S6-SKILL and V8-S6-DELAY (V8 Stage 6), from 033ef86fc980. The perpetuals' hosts' budgets
+// (Binance futures, its funding history, Bitget's market; V8 Stage 6; infrastructure), from 24d43ffb4087. What a
+// trader's analysis fetches for the two tests, which read every trip as registered (V8 Stage 6's check;
+// infrastructure), from be7d42b9bae9.
+const PINNED_ENGINE_VERSION = '8c48f7ad7602'
 
 describe('the engine version', () => {
   it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {
