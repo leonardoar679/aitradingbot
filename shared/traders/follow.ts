@@ -64,6 +64,21 @@ export interface CloneSignal {
   receivedMs: number
 }
 
+/** What the window acts on of the events and signals kept in its last minutes, at its start (V8 Stage 8): not one a miss
+ * was written on -- it was acted on, refused with why -- nor a clone's signal past the time its trade could be entered,
+ * which could only be missed again. An event already entered is passed over by its writer, its key on a leg. */
+export function catchUpOf<E extends { key: string }, S extends { key: string; receivedMs: number }>(
+  records: { events: readonly E[]; signals: readonly S[] },
+  missedKeys: ReadonlySet<string>,
+  nowMs: number,
+  lines: typeof FOLLOW_LINES = FOLLOW_LINES
+): { events: E[]; signals: S[] } {
+  return {
+    events: records.events.filter((event) => !missedKeys.has(event.key)),
+    signals: records.signals.filter((signal) => !missedKeys.has(signal.key) && nowMs - signal.receivedMs <= lines.maxEntryLagSec * 1000)
+  }
+}
+
 /** One trade of a followed trader's, as the app read it. */
 export interface LeaderEvent {
   v: 'leader-event-v1'

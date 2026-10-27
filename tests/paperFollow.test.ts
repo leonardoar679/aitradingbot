@@ -185,7 +185,7 @@ describe('an entry the gates refuse', () => {
       await followEvent(leader, deps)
       expect(settings.executors, String(reason)).toEqual([])
       expect(misses, String(reason)).toHaveLength(1)
-      expect(misses[0]).toMatchObject({ v: 'miss-v1', book: 'copy', writer: 'follow', pair: leader.perp?.symbol ?? 'ETHUSDT', side: 'up', stage, shadow: false })
+      expect(misses[0]).toMatchObject({ v: 'miss-v1', book: 'copy', writer: 'follow', pair: leader.perp?.symbol ?? 'ETHUSDT', side: 'up', stage, shadow: false, eventKey: leader.key })
       expect(misses[0].reason).toMatch(reason)
     }
   })

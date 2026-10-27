@@ -153,6 +153,9 @@ describe('a missed opportunity', () => {
       expect(readMiss(bad), JSON.stringify(bad)?.slice(0, 60)).toBeNull()
     }
     expect(readMiss({ ...whole, reason: 'x'.repeat(1000) })!.reason).toHaveLength(400)
+    // Since V8 Stage 8 a follow's or a clone's miss carries the key of the event or signal it was missed on.
+    expect(readMiss({ ...whole, eventKey: 'hyperliquid-0x1:7' })).toEqual({ ...whole, eventKey: 'hyperliquid-0x1:7' })
+    for (const eventKey of [7, '', 'k'.repeat(201)]) expect(readMiss({ ...whole, eventKey }), String(eventKey).slice(0, 10)).toBeNull()
   })
 })
 

@@ -161,7 +161,8 @@ async function keepEvents(entry: Followed, events: readonly LeaderEvent[]): Prom
     entry.eventsDay = today
     entry.eventsToday = 0
   }
-  entry.eventsToday += fresh.length
+  // A snapshot's fills were made before the stream opened: not the trader's trades read today.
+  entry.eventsToday += fresh.filter((event) => event.via !== 'snapshot').length
   for (const event of [...fresh].sort((a, b) => a.timeMs - b.timeMs)) tellAll(eventListeners, event)
 }
 

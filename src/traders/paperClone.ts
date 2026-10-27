@@ -107,8 +107,13 @@ async function closedClone(executor: ExecutorConfig, px: number, reason: CloneTr
   }
 }
 
+/** A trade of a coin due to end within this long of a signal is ended by it: the clone's turn and the settlement each
+ * come once a minute, so a trade held one bar comes due as the next close's signal arrives. */
+const CLONE_DUE_WITHIN_MS = 60_000
+
 /** A clone's signal acted on: its trade entered, or a miss written. Once: a signal whose key a trade already carries is
- * passed over. Returns what came of it. */
+ * passed over. One trade a coin at a time: where the coin's trade of an earlier close is due by now, it is closed at
+ * this close, as the clone's test closes it, and the new one entered in the same write. Returns what came of it. */
 export async function cloneSignal(signal: CloneSignal, deps: CloneDeps): Promise<string> {
   const px = await deps.perpPrice(signal.venue, signal.symbol).catch(() => null)
   const standing = await deps.copyStanding().catch(() => null)
@@ -119,19 +124,32 @@ export async function cloneSignal(signal: CloneSignal, deps: CloneDeps): Promise
     if (healCopyTrading(fresh.copyTrading).clones[signal.traderKey] === undefined) return 'not running'
     const mine = cloneExecutors(fresh.executors)
     if (mine.some((executor) => executor.clone?.signalKey === signal.key)) return 'already acted on'
-    if (mine.some((executor) => executor.status === 'active' && executor.clone?.traderKey === signal.traderKey && executor.clone.coin === signal.coin)) return 'a trade of this coin is open'
     const nowMs = deps.nowMs()
-    const miss = (stage: MissRecord['stage'], reason: string): string => {
-      missed = followMiss({ event, nowMs, stage, reason, writer: 'clone' })
-      return `missed: ${reason}`
+    let executors = [...fresh.executors]
+    let closed = ''
+    const held = mine.find((executor) => executor.status === 'active' && executor.clone?.traderKey === signal.traderKey && executor.clone.coin === signal.coin)
+    if (held !== undefined) {
+      const due = (held.clone as CloneTradeStamp).openedAtMs + (held.clone as CloneTradeStamp).holdSec * 1000 <= nowMs + CLONE_DUE_WITHIN_MS
+      if (!due || px === null || !(px > 0)) return 'a trade of this coin is open'
+      const ended = await closedClone(held, px, 'time', deps)
+      executors = executors.map((executor) => (executor.id === held.id ? ended : executor))
+      closed = `closed ${signal.coin} at its hold; `
+    }
+    const write = async (): Promise<void> => {
+      if (executors !== fresh.executors) await deps.setExecutors(executors)
+    }
+    const miss = async (stage: MissRecord['stage'], reason: string): Promise<string> => {
+      missed = followMiss({ event, eventKey: signal.key, nowMs, stage, reason, writer: 'clone' })
+      await write()
+      return `${closed}missed: ${reason}`
     }
     const lagSec = (nowMs - signal.receivedMs) / 1000
     if (lagSec > FOLLOW_LINES.maxEntryLagSec) return miss('late', `acted on ${Math.round(lagSec)} s after its close was read, past ${FOLLOW_LINES.maxEntryLagSec} s`)
     if (px === null || !(px > 0)) return miss('gate', "the perpetual's price could not be read")
-    const opens = copyOpensLastHour(fresh.executors, nowMs)
+    const opens = copyOpensLastHour(executors, nowMs)
     if (opens >= FOLLOW_LINES.maxOpensPerHour) return miss('cap', `${opens} opened in the last hour, the most`)
     const books = healPaperBooks(fresh.paperBooks)
-    const open = bookExecutors(fresh.executors, 'copy', books.startedAt ?? 0).filter((executor) => executor.status === 'active')
+    const open = bookExecutors(executors, 'copy', books.startedAt ?? 0).filter((executor) => executor.status === 'active')
     if (standing === null) return miss('cap', "the copy book's standing could not be read")
     const room = { ...standing, open: open.length }
     const stakeQuote = books.books.copy.maxStakeShare * room.settledEquity
@@ -154,8 +172,9 @@ export async function cloneSignal(signal: CloneSignal, deps: CloneDeps): Promise
       closeReason: null
     }
     const book: BookMark = { id: 'copy', startedAt: books.startedAt as number, ledger: 'clone' }
-    await deps.setExecutors([...fresh.executors, clonePaperExecutor({ id: deps.newId(), stamp, book, nowSec: Math.floor(nowMs / 1000) })])
-    return `entered ${signal.side} ${signal.coin} at ${px}`
+    executors = [...executors, clonePaperExecutor({ id: deps.newId(), stamp, book, nowSec: Math.floor(nowMs / 1000) })]
+    await write()
+    return `${closed}entered ${signal.side} ${signal.coin} at ${px}`
   })
   if (missed !== null) await deps.miss(missed).catch((error) => console.error('A missed clone trade could not be recorded:', error))
   return outcome

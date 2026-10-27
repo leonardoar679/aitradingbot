@@ -887,8 +887,12 @@ value (Hyperliquid), else the book's most for one trade (10% of its settled equi
 book and 10 opened in an hour; it closes when the leader closes, at the leader's longest hold (at most 7 days), at the
 loss of its stake, or as "leader lost" after two reads of the trader missed in a row. Writing the executor with the
 event's key is the acknowledgement: an event handed on twice is entered once. A follow refused is written as a missed
-opportunity with its stage and why. A clone (`src/traders/paperClone.ts`) reads its rule at each 15-minute close on the
-coins its test traded, one trade a coin at a time, staking the book's most, held the rule's hold. Both write paper
+opportunity with its stage and why, carrying the event's key, so a window that reads its last ten minutes back at its
+start does not act on it again. A clone (`src/traders/paperClone.ts`) reads its rule at each 15-minute close on the
+coins its test traded, one trade a coin at a time -- the trade of an earlier close that is due ends at the signal of the
+close it is due at, and the next is entered, as its test trades bar after bar -- staking the book's most, held the
+rule's hold. A follow or a clone trade that comes due while the app is closed is closed when it next runs, at the price
+then, as a follower's own would be. Both write paper
 Positions stamped with the copy book: they settle in their book, apart from the paper account and its commitments, and
 one settled a day ago moves out of `settings.json` into `paperBooks/archive-YYYY-MM.jsonl`, which the book's standing
 reads too. The books run only once paper testing is started (Stage 9): until then a follow and a clone record what they

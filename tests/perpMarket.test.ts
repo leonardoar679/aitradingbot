@@ -138,3 +138,29 @@ describe('funding and the book', () => {
     await expect(down.module.perpSymbols('binance')).rejects.toThrow('fapi.binance.com answered 451')
   })
 })
+
+describe("a perpetual's price (V8 Stage 8)", () => {
+  it("is Binance's last price or Bitget's, asked once more a second later where the first asking fails", async () => {
+    let calls = 0
+    const { module, urls } = await market((url) => {
+      calls++
+      if (url.host === 'fapi.binance.com') return calls === 1 ? json({}, 503) : json({ price: '79621.5', symbol: 'BTCUSDT' })
+      return json({ code: '00000', data: [{ symbol: 'ABCUSDT', lastPr: '1.25' }] })
+    })
+    const slept: number[] = []
+    module.perpMarketSeam.sleep = async (ms: number) => void slept.push(ms)
+    expect(await module.perpPrice('binance', 'BTCUSDT')).toBe(79_621.5)
+    expect(slept).toEqual([module.PERP_PRICE_RETRY_MS])
+    expect(urls.map((url) => url.pathname)).toEqual(['/fapi/v1/ticker/price', '/fapi/v1/ticker/price'])
+    expect(await module.perpPrice('bitget', 'ABCUSDT')).toBe(1.25)
+    expect(slept).toHaveLength(1)
+  })
+
+  it('fails where the second asking fails too, or no price is given', async () => {
+    const { module } = await market(() => json({ price: '0' }))
+    const slept: number[] = []
+    module.perpMarketSeam.sleep = async (ms: number) => void slept.push(ms)
+    await expect(module.perpPrice('binance', 'BTCUSDT')).rejects.toThrow('Binance gave no price for BTCUSDT')
+    expect(slept).toEqual([module.PERP_PRICE_RETRY_MS])
+  })
+})

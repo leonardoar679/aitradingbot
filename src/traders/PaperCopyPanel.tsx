@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Card } from '../components/Card'
 import { buttonStyle, cellStyle, headCellStyle, noteStyle } from '../agents/agentStyles'
-import { useI18n, type I18n } from '../i18n'
+import { useI18n } from '../i18n'
 import { describeError } from '../utils/ipcError'
 import type { ExecutorConfig } from '../../shared/ipc'
 import type { MissRecord } from '../../shared/misses'
@@ -11,6 +11,7 @@ import { CLONE_LINES } from '../../shared/traders/clone'
 import { followableAt } from '../../shared/traders/delay'
 import type { FollowStatus } from '../../shared/traders/follow'
 import type { TraderAnalysis, TraderMeta } from '../../shared/traders/traderAnalysis'
+import { durationOf, utcWhen } from './traderText'
 
 // FOLLOWING AND CLONING ON PAPER, ON COPY TRADERS (V8 Stage 8, 27 October 2026). A trader's two buttons -- Follow on
 // paper, Run the clone on paper -- each switching on or off only what it names (electron/services/followService.ts);
@@ -21,8 +22,6 @@ import type { TraderAnalysis, TraderMeta } from '../../shared/traders/traderAnal
 
 const REFRESH_MS = 10_000
 
-/** A moment on the records' clock: its UTC day and time. */
-export const utcWhen = (i18n: I18n, ms: number): string => i18n.t('{time} UTC', { time: `${i18n.utcDay(ms)} ${i18n.utcTime(ms)}` })
 
 /** What the panel reads of the settings and the books. */
 export interface PaperCopyHeld {
@@ -157,7 +156,7 @@ export function PaperCopyView({
                 {status?.mode === 'stream'
                   ? t("Following since {time}: their trades read as they are made, on Hyperliquid's stream.", { time: utcWhen(i18n, following.since) })
                   : t('Following since {time}: their trades read once a minute.', { time: utcWhen(i18n, following.since) })}{' '}
-                {t('A follow stays open at most {hours} hours, the longest the trader held.', { hours: num(following.maxHoldSec / 3600, 0, 1) })}
+                {t('A follow stays open at most {hold}, the longest the trader held.', { hold: durationOf(i18n, following.maxHoldSec / 60) })}
               </p>
               {status?.lost === true && <p style={{ margin: '0.2rem 0 0', color: 'var(--down)' }}>{t('Lost: two reads of the trader missed in a row. Their follows close.')}</p>}
               {status?.hidden === true && <p style={{ margin: '0.2rem 0 0' }}>{t('The trader hides their positions on OKX: there is nothing to follow until they show them.')}</p>}
@@ -190,7 +189,7 @@ export function PaperCopyView({
           </button>
           {cloning !== null && (
             <p style={{ ...noteStyle, marginTop: '0.4rem' }}>
-              {t('Running since {time}: its rule read at each 15-minute close on {coins}, each trade held {hours} hours.', { time: utcWhen(i18n, cloning.since), coins: cloning.coins.map((coin) => coin.symbol).join(', '), hours: num((cloning.rule.holdBars * CLONE_LINES.barMinutes) / 60, 0, 2) })}
+              {t('Running since {time}: its rule read at each 15-minute close on {coins}, each trade held {hold}.', { time: utcWhen(i18n, cloning.since), coins: cloning.coins.map((coin) => coin.symbol).join(', '), hold: durationOf(i18n, cloning.rule.holdBars * CLONE_LINES.barMinutes) })}
             </p>
           )}
           <TradesTable trades={clones} />

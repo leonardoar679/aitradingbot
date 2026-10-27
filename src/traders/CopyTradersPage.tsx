@@ -13,7 +13,8 @@ import { DELAY_LINES } from '../../shared/traders/delay'
 import type { OkxPnlPoint } from '../../shared/traders/okx'
 import { SKILL_LINES, type SkillResult } from '../../shared/traders/skill'
 import type { BitgetCopyCheck, OkxSummary, TraderAnalysis, TraderList, TraderMeta, TraderProgress } from '../../shared/traders/traderAnalysis'
-import { PaperCopyPanel, utcWhen } from './PaperCopyPanel'
+import { PaperCopyPanel } from './PaperCopyPanel'
+import { durationOf, utcWhen } from './traderText'
 
 // COPY TRADERS (V8 Stages 6-8, 26-27 October 2026; electron/services/traderService.ts). A person pastes a trader -- a
 // Hyperliquid address or an explorer's link (VERIFIED: the venue's own fills), an OKX lead trader's code or profile link
@@ -37,15 +38,6 @@ function Written({ children }: { children: React.ReactNode }): React.JSX.Element
 /** A label or a verdict as the tests and the record name it -- VERIFIED, MARKET OR LUCK -- shown as written. */
 function Term({ name }: { name: string }): React.JSX.Element {
   return <bdi lang="en">{name}</bdi>
-}
-
-/** A span of time from minutes, in the language's numbers. */
-function durationOf(i18n: I18n, value: number): string {
-  const { t, num } = i18n
-  if (value < 1) return t('{seconds} s', { seconds: num(Math.round(value * 60), 0, 0) })
-  if (value < 90) return t('{minutes} min', { minutes: num(value, 0, 0) })
-  if (value < 48 * 60) return t('{hours} h', { hours: num(value / 60, 1, 1) })
-  return t('{days} days', { days: num(value / 1440, 1, 1) })
 }
 
 /** A multiple of the account: whole above ten, one decimal above a tenth, two significant figures below. */
@@ -112,7 +104,7 @@ function RecordLines({ analysis }: { analysis: TraderAnalysis }): React.JSX.Elem
   return (
     <Line name={t("Record@@where a trader's record comes from")}>
       <Interpolate text={t("{count} fills from Hyperliquid, {verified} (the venue's own record), {span}", { count: record.records, span })} values={{ verified: <Term name="VERIFIED" /> }} />
-      {record.capped ? `. ${t('The most recent 10,000 Hyperliquid gives: older fills are not read.')}` : ''}
+      {record.capped ? `. ${t('Hyperliquid gives only about its most recent 10,000 fills: older ones are not read.')}` : ''}
     </Line>
   )
 }

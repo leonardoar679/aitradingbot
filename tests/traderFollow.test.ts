@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   FOLLOW_LINES,
+  catchUpOf,
   followDecisionsOf,
   followDueOf,
   followFundingOf,
@@ -190,5 +191,18 @@ describe("the follow's own book", () => {
     expect(followMaxHoldSec(30 * 24 * 60)).toBe(7 * 86_400)
     expect(followMaxHoldSec(null)).toBe(7 * 86_400)
     expect(followMaxHoldSec(0)).toBe(7 * 86_400)
+  })
+})
+
+describe('what the window reads back at its start', () => {
+  it('is every event but one a miss was written on, and only the clone signals still young enough to enter', () => {
+    const events = [{ key: 'e1' }, { key: 'e2' }, { key: 'e3' }]
+    const signals = [
+      { key: 's1', receivedMs: T0 - 60_000 },
+      { key: 's2', receivedMs: T0 - (FOLLOW_LINES.maxEntryLagSec + 1) * 1000 },
+      { key: 's3', receivedMs: T0 - 10_000 }
+    ]
+    expect(catchUpOf({ events, signals }, new Set(['e2', 's3']), T0)).toEqual({ events: [{ key: 'e1' }, { key: 'e3' }], signals: [signals[0]] })
+    expect(catchUpOf({ events, signals: [{ key: 's4', receivedMs: T0 - FOLLOW_LINES.maxEntryLagSec * 1000 }] }, new Set(), T0).signals).toHaveLength(1)
   })
 })

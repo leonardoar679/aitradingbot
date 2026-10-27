@@ -23,8 +23,13 @@ export const perpMarketSeam = {
   now: (): number => Date.now(),
   spendBinance: (weight: number): Promise<void> => binanceFuturesBudget.spend(weight),
   takeBinanceFunding: (): Promise<void> => binanceFundingBudget.take('fundingRate'),
-  takeBitget: (endpoint: string): Promise<void> => bitgetMarketBudget.take(endpoint)
+  takeBitget: (endpoint: string): Promise<void> => bitgetMarketBudget.take(endpoint),
+  sleep: (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 }
+
+/** A price read that fails is asked once more after this long: a follow's entry has two minutes, and one dropped
+ * connection should not cost it (found by V8 Stage 8's in-app check, 27 October 2026). */
+export const PERP_PRICE_RETRY_MS = 1000
 
 async function json<T>(url: string): Promise<T> {
   const response = await perpMarketSeam.fetch(url)
@@ -156,6 +161,15 @@ export async function perpFunding(venue: PerpVenue, symbol: string, fromSec: num
 
 /** A perpetual's last traded price now (V8 Stage 8: the price a paper follow enters and leaves at). */
 export async function perpPrice(venue: PerpVenue, symbol: string): Promise<number> {
+  try {
+    return await perpPriceOnce(venue, symbol)
+  } catch {
+    await perpMarketSeam.sleep(PERP_PRICE_RETRY_MS)
+    return perpPriceOnce(venue, symbol)
+  }
+}
+
+async function perpPriceOnce(venue: PerpVenue, symbol: string): Promise<number> {
   let raw: unknown
   if (venue === 'binance') {
     await perpMarketSeam.spendBinance(1)

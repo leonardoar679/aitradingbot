@@ -165,7 +165,8 @@ describe('the follows read', () => {
     handlers.onFills(address(1), [fill(3)], false)
     await settle()
     expect(first.events.map((event) => event.key)).toEqual([`${keyOf(1)}:1`, `${keyOf(1)}:2`, `${keyOf(1)}:3`])
-    expect(first.module.followStatuses()[0].eventsToday).toBe(3)
+    // The snapshot's fill was made before: two of their trades read today.
+    expect(first.module.followStatuses()[0].eventsToday).toBe(2)
     // The app starts again: the stream's snapshot re-sends both; nothing is pushed twice.
     const again = await service()
     await again.module.startFollowing()

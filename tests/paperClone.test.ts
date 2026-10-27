@@ -91,6 +91,27 @@ describe("a clone's signal", () => {
     expect(settings.executors).toHaveLength(1)
   })
 
+  it("closes the coin's trade of the close before at this close and enters again, as its test trades bar after bar", async () => {
+    const { settings, state, deps } = harness()
+    await cloneSignal(signal({ holdBars: 1 }), deps)
+    // The next close's signal arrives as the first trade's one bar comes due.
+    state.now = T0 + 900_000 - 5_000
+    expect(await cloneSignal(signal({ key: 'next', holdBars: 1, receivedMs: state.now - 5_000 }), deps)).toBe('closed ETH at its hold; entered short ETH at 2000')
+    expect(settings.executors.map((executor) => [executor.status, executor.clone?.closeReason])).toEqual([
+      ['stopped', 'time'],
+      ['active', null]
+    ])
+    expect(settings.executors[0].book?.result).toBeDefined()
+    // A trade a minute or more from its end still holds its coin.
+    expect(await cloneSignal(signal({ key: 'third', receivedMs: state.now - 5_000 }), deps)).toBe('a trade of this coin is open')
+    // And where the new one is refused, the one it ended is still written.
+    const late = harness()
+    await cloneSignal(signal({ holdBars: 1 }), late.deps)
+    late.state.now = T0 + 900_000
+    expect(await cloneSignal(signal({ key: 'late', holdBars: 1, receivedMs: late.state.now - 200_000 }), late.deps)).toMatch(/^closed ETH at its hold; missed: acted on 200 s/)
+    expect(late.settings.executors.map((executor) => executor.status)).toEqual(['stopped'])
+  })
+
   it('is written as a miss where it is late, has no price, or the book has no room; and passed over where the clone is off', async () => {
     const cases: [ReturnType<typeof harness>, CloneSignal, MissRecord['stage'], RegExp][] = [
       [harness(), signal({ receivedMs: T0 - 121_000 }), 'late', /121 s after its close was read/],
@@ -101,7 +122,7 @@ describe("a clone's signal", () => {
     for (const [{ settings, misses, deps }, entry, stage, reason] of cases) {
       await cloneSignal(entry, deps)
       expect(settings.executors, String(reason)).toEqual([])
-      expect(misses[0], String(reason)).toMatchObject({ book: 'copy', writer: 'clone', pair: 'ETHUSDT', side: 'down', stage })
+      expect(misses[0], String(reason)).toMatchObject({ book: 'copy', writer: 'clone', pair: 'ETHUSDT', side: 'down', stage, eventKey: entry.key })
       expect(misses[0].reason).toMatch(reason)
     }
     const off = harness({ cloned: false })

@@ -96,8 +96,9 @@ export function followPaperExecutor(input: { id: string; stamp: FollowStamp; boo
   }
 }
 
-/** A missed entry, for the copy book's record of what it did not take. */
-export function followMiss(input: { event: Pick<LeaderEvent, 'px' | 'after' | 'perp' | 'coin'>; nowMs: number; stage: MissStage; reason: string; writer?: string }): MissRecord {
+/** A missed entry, for the copy book's record of what it did not take, carrying the key of the event or signal it was
+ * missed on. */
+export function followMiss(input: { event: Pick<LeaderEvent, 'px' | 'after' | 'perp' | 'coin'>; eventKey: string; nowMs: number; stage: MissStage; reason: string; writer?: string }): MissRecord {
   return {
     v: MISS_VERSION,
     at: Math.floor(input.nowMs / 1000),
@@ -109,7 +110,8 @@ export function followMiss(input: { event: Pick<LeaderEvent, 'px' | 'after' | 'p
     stage: input.stage,
     reason: input.reason,
     predictionId: null,
-    shadow: false
+    shadow: false,
+    eventKey: input.eventKey
   }
 }
 
@@ -193,13 +195,13 @@ export async function followEvent(event: LeaderEvent, deps: FollowDeps): Promise
       }
       // A new position: the gates, the book's room, then the entry.
       if (event.perp === null) {
-        misses.push(followMiss({ event, nowMs, stage: 'gate', reason: `${event.coin} has no USDT perpetual on Binance or Bitget` }))
+        misses.push(followMiss({ event, eventKey: event.key, nowMs, stage: 'gate', reason: `${event.coin} has no USDT perpetual on Binance or Bitget` }))
         continue
       }
       const openForTrader = followExecutors(executors).filter((executor) => executor.status === 'active' && executor.follow?.traderKey === event.traderKey).length
       const gate = followGateOf({ event, nowMs, venuePx: px, openForTrader, opensLastHour: copyOpensLastHour(executors, nowMs) })
       if (gate !== null) {
-        misses.push(followMiss({ event, nowMs, stage: gate.stage, reason: gate.reason }))
+        misses.push(followMiss({ event, eventKey: event.key, nowMs, stage: gate.stage, reason: gate.reason }))
         continue
       }
       const books = healPaperBooks(fresh.paperBooks)
@@ -209,7 +211,7 @@ export async function followEvent(event: LeaderEvent, deps: FollowDeps): Promise
       const stakeQuote = room === null ? 0 : followStakeOf({ leaderNotional: Math.abs(event.after) * event.px, accountValue: event.accountValue, bookEquity: room.settledEquity, bookStake })
       const problem = room === null ? "the copy book's standing could not be read" : bookRoomProblem({ books, id: 'copy', standing: room, stakeQuote, dayStartEquity: null })
       if (problem !== null) {
-        misses.push(followMiss({ event, nowMs, stage: books.running ? 'cap' : 'off', reason: problem }))
+        misses.push(followMiss({ event, eventKey: event.key, nowMs, stage: books.running ? 'cap' : 'off', reason: problem }))
         continue
       }
       const venuePx = px as number

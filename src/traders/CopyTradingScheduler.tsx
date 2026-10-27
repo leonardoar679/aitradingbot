@@ -1,12 +1,13 @@
 import { useEffect } from 'react'
-import type { FollowStatus } from '../../shared/traders/follow'
+import { catchUpOf, type FollowStatus } from '../../shared/traders/follow'
 import { cloneBrowserDeps, cloneSignal, settleClones } from './paperClone'
 import { followBrowserDeps, followEvent, settleFollows } from './paperFollow'
 
 // THE FOLLOWS' AND THE CLONES' WRITERS, RUNNING (V8 Stage 8, 27 October 2026). Mounted with the app's other
 // schedulers: each leader event and clone signal the main process pushes is acted on once, one at a time and in the
 // order it came (src/traders/paperFollow.ts, paperClone.ts); those kept in the last ten minutes are read at the start,
-// so that none pushed before this mounted is lost; and once a minute the follows and clones due to close are closed
+// so that none pushed before this mounted is lost -- but not one a miss was written on, nor a clone's signal too old to
+// enter (shared/traders/follow.ts catchUpOf); and once a minute the follows and clones due to close are closed
 // and the copy book's trades settled a day ago moved to its archive. Nothing runs unless a person followed or cloned
 // someone, and nothing it writes is anything but paper.
 
@@ -34,9 +35,11 @@ export function CopyTradingScheduler(): null {
         statuses = next
       })
       .catch(() => undefined)
-    void window.api.traders
-      .followRecords(Date.now() - CATCH_UP_MS)
-      .then(({ events, signals }) => {
+    const sinceMs = Date.now() - CATCH_UP_MS
+    void Promise.all([window.api.traders.followRecords(sinceMs), window.api.books.misses(Math.floor(sinceMs / 1000) - 60)])
+      .then(([records, misses]) => {
+        const missed = new Set(misses.map((miss) => miss.eventKey).filter((key): key is string => key !== undefined))
+        const { events, signals } = catchUpOf(records, missed, Date.now())
         for (const event of events) enqueue(event.key, () => followEvent(event, followBrowserDeps))
         for (const signal of signals) enqueue(signal.key, () => cloneSignal(signal, cloneBrowserDeps))
       })

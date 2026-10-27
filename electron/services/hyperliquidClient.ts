@@ -10,9 +10,13 @@ import { hyperliquidBudget } from './httpPacing'
 export const HYPERLIQUID_LINES = {
   /** The weight each question is costed at: Hyperliquid's own, with a full page's extra for the lists. */
   weights: { clearinghouseState: 2, portfolio: 20, userFillsByTime: 120, userFunding: 45, userNonFundingLedgerUpdates: 120 },
-  /** A page of fills is at most 2,000, and Hyperliquid gives the most recent 10,000 at most. */
+  /** A page of fills is at most 2,000. Hyperliquid's documents give its most recent 10,000 fills; it has given more
+   * (over 12,000 for a busy address on 27 October 2026), read oldest first from the window's start, so the pages run to
+   * the window's end -- the trader's newest fill -- up to fifteen. A record of the window's 10,000 or more is one
+   * Hyperliquid cut: older fills are not given. */
   fillsPage: 2000,
-  maxFillPages: 6,
+  maxFillPages: 15,
+  windowFills: 10_000,
   fundingPage: 500,
   maxFundingPages: 40,
   ledgerPage: 2000,
@@ -88,8 +92,8 @@ async function paged(type: Question, user: string, startMs: number, pageSize: nu
   return { rows: [...rows.values()], capped: true }
 }
 
-/** An address's whole record, as far as Hyperliquid gives it: its account now, its value through time, its fills (the
- * most recent 10,000 at most), and its funding and ledger from its first fill on. */
+/** An address's whole record, as far as Hyperliquid gives it: its account now, its value through time, its fills (those
+ * of Hyperliquid's window, to its newest), and its funding and ledger from its first fill on. */
 export async function fetchHyperliquidRecord(address: string, onStep: (step: string) => void = () => undefined): Promise<HyperliquidAnswers> {
   onStep('account')
   const state = await hyperliquidInfo<unknown>('clearinghouseState', { user: address })
@@ -102,5 +106,5 @@ export async function fetchHyperliquidRecord(address: string, onStep: (step: str
   const funding = await paged('userFunding', address, from, HYPERLIQUID_LINES.fundingPage, HYPERLIQUID_LINES.maxFundingPages, (row) => `${timeOf(row)}:${String((row as { delta?: { coin?: unknown } }).delta?.coin)}`)
   onStep('ledger')
   const ledger = await paged('userNonFundingLedgerUpdates', address, 0, HYPERLIQUID_LINES.ledgerPage, HYPERLIQUID_LINES.maxLedgerPages, (row) => `${timeOf(row)}:${String((row as { hash?: unknown }).hash)}:${JSON.stringify((row as { delta?: unknown }).delta)}`)
-  return { state, portfolio, fills: fills.rows, funding: funding.rows, ledger: ledger.rows, fillsCapped: fills.capped }
+  return { state, portfolio, fills: fills.rows, funding: funding.rows, ledger: ledger.rows, fillsCapped: fills.capped || fills.rows.length >= HYPERLIQUID_LINES.windowFills }
 }

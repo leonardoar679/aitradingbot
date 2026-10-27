@@ -96,11 +96,29 @@ describe("an address's record", () => {
       if (type !== 'userFillsByTime') return json([])
       page++
       // Every page full, every fill in the millisecond it was asked from.
-      return json(fills(body.startTime as number, 2000, 0).map((fill, k) => ({ ...(fill as object), tid: page * 10_000 + k })))
+      return json(fills(body.startTime as number, 2000, 0).map((fill, k) => ({ ...(fill as object), tid: page * 100_000 + k })))
     })
     const record = await module.fetchHyperliquidRecord(ADDRESS)
-    expect(page).toBe(6)
+    expect(page).toBe(15)
     expect(record.fillsCapped).toBe(true)
-    expect(record.fills).toHaveLength(12_000)
+    expect(record.fills).toHaveLength(30_000)
+  })
+
+  it("reads a busy address's window to its newest fill, past the 10,000 Hyperliquid's documents name, and calls it cut", async () => {
+    // Seven full pages and a short one: 14,500 fills, the window's start to its end.
+    const window = fills(1000, 14_500)
+    const { module, asked } = await client(({ type, body }) => {
+      if (type !== 'userFillsByTime') return json([])
+      const start = body.startTime as number
+      return json(window.filter((fill) => (fill as { time: number }).time >= start).slice(0, 2000))
+    })
+    const record = await module.fetchHyperliquidRecord(ADDRESS)
+    expect(asked.filter((entry) => entry.type === 'userFillsByTime')).toHaveLength(8)
+    expect(record.fills).toHaveLength(14_500)
+    expect(Math.max(...record.fills.map((fill) => (fill as { time: number }).time))).toBe(1000 + 14_499)
+    expect(record.fillsCapped).toBe(true)
+    // Under 10,000, a whole record: not cut.
+    const small = await client(({ type }) => json(type === 'userFillsByTime' ? fills(1000, 120) : []))
+    expect((await small.module.fetchHyperliquidRecord(ADDRESS)).fillsCapped).toBe(false)
   })
 })

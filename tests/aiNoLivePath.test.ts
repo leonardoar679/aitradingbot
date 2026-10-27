@@ -1161,7 +1161,7 @@ describe('AI code has no route to a real order', () => {
     expect(importsOf(follow).sort()).toEqual(['copyTrading', 'delay', 'follow', 'ipc', 'misses', 'paperBooks', 'settingsWrites', 'venueCosts'])
     expect(importsOf(clone).sort()).toEqual(['clone', 'copyTrading', 'delay', 'follow', 'ipc', 'misses', 'paperBooks', 'paperFollow', 'settingsWrites', 'venueCosts'])
     // The scheduler hands what the main process pushes to its writers, and writes nothing itself.
-    expect(bridgesOf(readFileSync(scheduler, 'utf-8'))).toEqual(['traders.followRecords', 'traders.followStatus', 'traders.onCloneSignal', 'traders.onFollowStatus', 'traders.onLeaderEvent'])
+    expect(bridgesOf(readFileSync(scheduler, 'utf-8'))).toEqual(['books.misses', 'traders.followRecords', 'traders.followStatus', 'traders.onCloneSignal', 'traders.onFollowStatus', 'traders.onLeaderEvent'])
     expect(importsOf(scheduler).sort()).toEqual(['follow', 'paperClone', 'paperFollow', 'react'])
     // The panel on Copy Traders reads, and switches a follow or a clone on or off through its own channel: it writes no
     // executor and no setting itself.

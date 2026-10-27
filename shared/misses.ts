@@ -32,6 +32,9 @@ export interface MissRecord {
   /** Written by a gate that only watches -- the liquidity gate over the writers that were there before V8 --
    * and stopped nothing. */
   shadow: boolean
+  /** The leader event's or clone signal's key it was missed on (V8 Stage 8): a miss acknowledges it as an entry does,
+   * so it is not acted on again when the window reads its last minutes back. */
+  eventKey?: string
 }
 
 /** A miss as written, or null where it is not a whole one. */
@@ -46,5 +49,7 @@ export function readMiss(value: unknown): MissRecord | null {
   if (miss.refPrice !== null && (typeof miss.refPrice !== 'number' || !(miss.refPrice > 0))) return null
   if (miss.predictionId !== null && typeof miss.predictionId !== 'string') return null
   if (typeof miss.shadow !== 'boolean') return null
-  return { v: MISS_VERSION, at: miss.at, book: miss.book, writer: miss.writer.slice(0, 40), pair: miss.pair.slice(0, 30), side: miss.side, refPrice: miss.refPrice, stage: miss.stage!, reason: miss.reason.slice(0, 400), predictionId: miss.predictionId, shadow: miss.shadow }
+  if (miss.eventKey !== undefined && (typeof miss.eventKey !== 'string' || miss.eventKey === '' || miss.eventKey.length > 200)) return null
+  const read: MissRecord = { v: MISS_VERSION, at: miss.at, book: miss.book, writer: miss.writer.slice(0, 40), pair: miss.pair.slice(0, 30), side: miss.side, refPrice: miss.refPrice, stage: miss.stage!, reason: miss.reason.slice(0, 400), predictionId: miss.predictionId, shadow: miss.shadow }
+  return miss.eventKey === undefined ? read : { ...read, eventKey: miss.eventKey }
 }
