@@ -14,7 +14,7 @@ import { ForecastTraderCard } from './ForecastTraderCard'
 import { NO_FILTERS, predictionRows, rowDecision, type PredictionFilters } from './predictionRows'
 import { takeWantedPrediction, useForecast } from './useForecast'
 import { callColor, callLabel, decisionWords, firstReason, forecastStatusText, pairText, rangeText, reliabilityWord, signedPct, timeLeftText, HORIZON_SHORT } from './forecastWords'
-import { EnglishOnly, msg, useI18n } from '../i18n'
+import { msg, useI18n } from '../i18n'
 import { BestPredictionCard } from './BestPredictionCard'
 import { CallLines } from '../calls/CallLines'
 import { PrimaryCallCard } from '../calls/PrimaryCallCard'
@@ -74,10 +74,8 @@ export function PredictionsPage({ onPrepareOrder, uiMode = 'normal' }: { onPrepa
     <>
       <PageHeader title={t('Predictions')} subtitle={t("Every pair's forecast, ranked by its edge after costs, its reliability, the news, liquidity and execution")} />
       <p style={{ ...noteStyle, margin: '0 0 0.9rem' }}>{forecastStatusText(state, i18n)}</p>
-      <EnglishOnly>
-        <PrimaryCallCard state={calls} predictions={forecasts} livePrice={cardPrice} />
-        {!expert && <CallLines state={calls} predictions={predictions} pairs={ranking?.ranked.map((entry) => entry.pair) ?? []} onOpen={setOpen} />}
-      </EnglishOnly>
+      <PrimaryCallCard state={calls} predictions={forecasts} livePrice={cardPrice} />
+      {!expert && <CallLines state={calls} predictions={predictions} pairs={ranking?.ranked.map((entry) => entry.pair) ?? []} onOpen={setOpen} />}
       {expert && (
         <BestPredictionCard prediction={best === null ? null : (predictions.get(best.pair) ?? null)} ranked={best} live={live} onDetails={setOpen} onPrepareOrder={onPrepareOrder} />
       )}

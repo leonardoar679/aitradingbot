@@ -534,6 +534,22 @@ async function main() {
           confidence: 0.5
         }
       },
+      // The article reading (V8 Stage 5), asked only on a click on News URLs: its first passage cited, each coin read as
+      // the rules found it, and a four-hour size call on a subject alone.
+      article_reading(question) {
+        const first = question.article.passages[0]
+        return {
+          summary: `Fake reading for the check: ${question.article.kind.toLowerCase()} news from ${question.article.host}.`.slice(0, 400),
+          cites: first ? [first.n] : [],
+          stance: question.article.credibility === 'exchange' ? 'official' : 'reported',
+          novelty: 'unclear',
+          coins: question.coins.map((coin) => ({ ticker: coin.ticker, about: coin.relationship === 'DIRECT' ? 'subject' : 'mentioned' })),
+          bigMove: { hour: false, fourHours: question.subject !== null, day: false },
+          instructions: false,
+          confidence: 0.5,
+          reasons: 'Fake reading for the check.'
+        }
+      },
       // A bot's signal and the panel's three analysts (FROM_PROFILE, 15 October 2026: a profile copied
       // in brings its AI bots), with no levels, which the validator allows.
       intraday_signal(question) {
@@ -1026,7 +1042,7 @@ async function aiOff(why) {
     const off = await page.evaluate(async () => {
       const watch = await window.api.ai.setConfig({ watch: { enabled: false } })
       const paper = await window.api.ai.setConfig({ watchPaper: { enabled: false } })
-      const additions = await window.api.ai.setConfig({ additions: { news: false, why: false, exit: false, review: false, daily: false } })
+      const additions = await window.api.ai.setConfig({ additions: { news: false, why: false, exit: false, review: false, daily: false, article: false } })
       await window.api.ai.removeCredentials()
       return { watch: watch.watch.enabled, paper: paper.watchPaper.enabled, additions: additions.additions, key: (await window.api.ai.credentialsStatus()).configured }
     })

@@ -1,15 +1,16 @@
 import { useMemo, useState } from 'react'
 import { Card } from '../components/Card'
 import { buttonStyle, cellStyle, headCellStyle, noteStyle } from '../agents/agentStyles'
+import { useI18n } from '../i18n'
+import { msg } from '../../shared/i18n/translate'
 import type { PrimaryCallState, PrimaryCard, RefusalCode } from '../../shared/forecast/primaryCall'
 import type { PricePrediction } from '../../shared/forecast/prediction'
-import { LINE_HORIZON_WORDS, LINE_SIZE_PCT, LINE_SPAN_WORDS, cardLabel, likelyText, pairWords, rateOf, refusalText, signed, sourceWords, utcTime } from './callText'
+import { LINE_HORIZON_WORDS, LINE_SIZE_PCT, LINE_SPAN_WORDS, cardLabel, likelyText, pairWords, rateOf, refusalText, sourceWords, utcText, type LineHorizon } from './callText'
 
-type LineHorizon = 'hour1' | 'hours4' | 'hours24'
 const HORIZON_CHOICES: readonly { horizon: LineHorizon; label: string }[] = [
-  { horizon: 'hour1', label: '1 hour' },
-  { horizon: 'hours4', label: '4 hours' },
-  { horizon: 'hours24', label: '1 day' }
+  { horizon: 'hour1', label: msg('1 hour') },
+  { horizon: 'hours4', label: msg('4 hours') },
+  { horizon: 'hours24', label: msg('1 day') }
 ]
 
 interface Line {
@@ -36,6 +37,8 @@ export function CallLines({
   pairs: readonly string[]
   onOpen: (pair: string) => void
 }): React.JSX.Element {
+  const i18n = useI18n()
+  const { t, pct, pctPlain } = i18n
   const [horizon, setHorizon] = useState<LineHorizon>('hours4')
   const lines = useMemo((): Line[] => {
     const cards = new Map((state?.cards ?? []).map((card) => [card.pair, card]))
@@ -53,28 +56,29 @@ export function CallLines({
       .sort((a, b) => (b.rate ?? -1) - (a.rate ?? -1))
     return [...out, ...rest]
   }, [state, predictions, pairs, horizon])
+  const size = pctPlain(LINE_SIZE_PCT[horizon], 0)
 
   return (
-    <Card title="Every coin's call">
+    <Card title={t("Every coin's call")}>
       <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.7rem' }}>
         {HORIZON_CHOICES.map((choice) => (
           <button key={choice.horizon} type="button" style={buttonStyle(choice.horizon === horizon ? 'primary' : 'secondary')} onClick={() => setHorizon(choice.horizon)}>
-            {choice.label}
+            {t(choice.label)}
           </button>
         ))}
       </div>
       {lines.length === 0 ? (
-        <p style={noteStyle}>No forecast yet: the lines come with the forecast's first pass.</p>
+        <p style={noteStyle}>{t("No forecast yet: the lines come with the forecast's first pass.")}</p>
       ) : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                <th style={headCellStyle}>Coin</th>
-                <th style={headCellStyle}>Call</th>
-                <th style={headCellStyle}>Likely move (80%)</th>
-                <th style={headCellStyle}>Moved {LINE_SIZE_PCT[horizon]}%+ in its last 90 days</th>
-                <th style={headCellStyle}>Why</th>
+                <th style={headCellStyle}>{t('Coin')}</th>
+                <th style={headCellStyle}>{t('Call')}</th>
+                <th style={headCellStyle}>{t('Likely move (80%)')}</th>
+                <th style={headCellStyle}>{t('Moved {size}+ in its last 90 days', { size })}</th>
+                <th style={headCellStyle}>{t('Why')}</th>
               </tr>
             </thead>
             <tbody>
@@ -84,18 +88,18 @@ export function CallLines({
                     {pairWords(line.pair)}
                   </td>
                   <td style={{ ...cellStyle, fontWeight: 600, color: line.card === null ? 'var(--text-secondary)' : line.card.side === 'down' ? 'var(--down)' : 'var(--up)' }}>
-                    {line.card === null ? 'none' : cardLabel(line.card)}
+                    {line.card === null ? t('none') : cardLabel(line.card, i18n)}
                   </td>
                   <td style={{ ...cellStyle, fontVariantNumeric: 'tabular-nums' }}>
                     {line.card !== null
-                      ? `to ${utcTime(line.card.exitAt)}; expected net ${signed(line.card.expectedNet.pct)}`
+                      ? t('to {time}; expected net {net}', { time: utcText(line.card.exitAt, i18n), net: pct(line.card.expectedNet.pct, 2) })
                       : line.prediction === null
                         ? '—'
-                        : (likelyText(line.prediction, horizon) ?? '—')}
+                        : (likelyText(line.prediction, horizon, i18n) ?? '—')}
                   </td>
-                  <td style={{ ...cellStyle, fontVariantNumeric: 'tabular-nums' }}>{line.rate === null ? '—' : `${Math.round(line.rate * 100)}% of ${LINE_SPAN_WORDS[horizon]} spans`}</td>
+                  <td style={{ ...cellStyle, fontVariantNumeric: 'tabular-nums' }}>{line.rate === null ? '—' : t(LINE_SPAN_WORDS[horizon], { share: pctPlain(Math.round(line.rate * 100), 0) })}</td>
                   <td style={{ ...cellStyle, whiteSpace: 'normal', minWidth: '14rem', color: 'var(--text-secondary)' }}>
-                    {line.card !== null ? sourceWords(line.card) : line.why !== null ? refusalText(line.why) : 'No measured source calls its way.'}
+                    {line.card !== null ? sourceWords(line.card, i18n) : line.why !== null ? refusalText(line.why, i18n) : t('No measured source calls its way.')}
                   </td>
                 </tr>
               ))}
@@ -104,9 +108,10 @@ export function CallLines({
         </div>
       )}
       <p style={{ ...noteStyle, marginTop: '0.7rem' }}>
-        The cards first; then each coin by how often its own close moved at least {LINE_SIZE_PCT[horizon]}% either way over {LINE_HORIZON_WORDS[horizon]} in its last
-        90 days — a frequency of the past, not a forecast. The likely move is the forecast's 80% range at the last close. A line opens the coin's whole
-        forecast, with its own lean, P(up) and edge. Nothing here places anything.
+        {t(
+          "The cards first; then each coin by how often its own close moved at least {size} either way over {span} in its last 90 days — a frequency of the past, not a forecast. The likely move is the forecast's 80% range at the last close. A line opens the coin's whole forecast, with its own lean, P(up) and edge. Nothing here places anything.",
+          { size, span: t(LINE_HORIZON_WORDS[horizon]) }
+        )}
       </p>
     </Card>
   )

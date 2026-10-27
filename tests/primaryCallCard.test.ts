@@ -3,13 +3,14 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { CallLines } from '../src/calls/CallLines'
 import { PrimaryCallCard } from '../src/calls/PrimaryCallCard'
-import { cardLabel, liveCheckText, noCardText, pairWords, priceText, refusalText, signed, sizeSpanText, sourcesText } from '../src/calls/callText'
+import { cardLabel, liveCheckText, noCardText, pairWords, refusalText, sizeSpanText, sourcesText, utcText } from '../src/calls/callText'
 import { DELISTING_STUDY } from '../shared/delistingStudy'
 import { PRIMARY_CALL_VERSION, delistingCardOf, type PrimaryCallState, type PrimaryCard, type RefusalCode } from '../shared/forecast/primaryCall'
 import type { PricePrediction } from '../shared/forecast/prediction'
 
 // THE PRIMARY CALL ON SCREEN (src/calls; V8 Stage 3): the card's words and figures, the no-opportunity state with why,
-// the measured size and where calls come from, and every coin's line -- English until V8 Stage 5 translates them.
+// the measured size and where calls come from, and every coin's line; in English here, every language in tests/i18n.test.ts
+// (V8 Stage 5).
 
 const RELEASE = 1_793_030_430
 const card = delistingCardOf({
@@ -33,15 +34,11 @@ const forecast = (pair: string, half: number, rate: number): PricePrediction =>
 
 describe('the words', () => {
   it('say the call, its sign and its price plainly', () => {
-    expect(cardLabel(card)).toMatch(/^BEARISH −15\.\d\d%$/)
+    // Its figures in the language's own form (V8 Stage 5): English writes a minus as a hyphen.
+    expect(cardLabel(card)).toMatch(/^BEARISH -15\.\d\d%$/)
     expect(cardLabel({ side: 'up', movePct: 1.2 })).toBe('BULLISH +1.20%')
-    expect(signed(-0.001)).toBe('+0.00%')
-    expect(signed(Number.NaN)).toBe('—')
-    expect(priceText(1.23456789)).toBe('1.23457')
-    expect(priceText(12345.678)).toBe('12345.68')
-    expect(priceText(2)).toBe('2')
-    expect(priceText(0)).toBe('—')
     expect(pairWords('ABCUSDT')).toBe('ABC/USDT')
+    expect(utcText(RELEASE)).toBe('16:00 UTC')
   })
   it('give every refusal a reason, and the cost not measured where no book holds the stake', () => {
     const codes: RefusalCode[] = ['late', 'withdrawn', 'no-price', 'no-pair', 'no-book', 'stale-book', 'cannot-hold', 'thin', 'cost-share', 'under-lines', 'no-evidence']
@@ -55,9 +52,15 @@ describe('the words', () => {
     expect(sourcesText({ readerOn: true, modelSources: 0 })).toMatch(/No direction model has cleared/)
     expect(noCardText({ refused: [], late: [] })).toBe('No measured source calls a way for any coin now.')
     expect(noCardText({ refused: [{ refused: 'thin', source: 'delisting-rule', pair: 'ABCUSDT', eventAt: RELEASE, expectedNet: null }], late: [] })).toMatch(/^ABC\/USDT: The book is too thin/)
+    // A coin late for the rule is said on its own line: the reason given is the first other refusal, else the late one.
+    const lateOne = { refused: 'late' as const, source: 'delisting-rule', pair: 'LATEUSDT', eventAt: RELEASE, expectedNet: null }
+    expect(noCardText({ refused: [lateOne, { refused: 'no-book', source: 'delisting-rule', pair: 'ABCUSDT', eventAt: RELEASE, expectedNet: null }], late: [] })).toMatch(/^ABC\/USDT: Cost not measured/)
+    expect(noCardText({ refused: [lateOne], late: [] })).toMatch(/^LATE\/USDT: Late for the rule/)
     expect(liveCheckText(null)).toBeNull()
     expect(liveCheckText({ hours: 0, coins: 0, meanPct: null, low: null, high: null, state: 'ok' })).toMatch(/no delisting since 1 October/)
-    expect(liveCheckText({ hours: 6, coins: 9, meanPct: -3, low: -5, high: -1, state: 'withdrawn' })).toMatch(/the card is withdrawn/)
+    expect(liveCheckText({ hours: 6, coins: 9, meanPct: -3, low: -5, high: -1, state: 'withdrawn' })).toBe("The rule's live check since 1 October: 9 coins in 6 announcement hours, -3.00% on hourly means. The card is withdrawn.")
+    expect(liveCheckText({ hours: 12, coins: 15, meanPct: 6, low: 2, high: 9, state: 'weaker' })).toMatch(/It is weaker than its study\.$/)
+    expect(liveCheckText({ hours: 3, coins: 4, meanPct: null, low: null, high: null, state: 'ok' })).toBe("The rule's live check since 1 October: 4 coins in 3 announcement hours.")
   })
   it('give the measured size from the smallest to the largest likely move at four hours', () => {
     expect(sizeSpanText([forecast('BTCUSDT', 1.2, 0.1), forecast('PEPEUSDT', 3.4, 0.4)])).toMatch(/about ±1\.2% \(BTC\/USDT\) to ±3\.4% \(PEPE\/USDT\)/)
@@ -69,7 +72,7 @@ describe('the card', () => {
   const render = (state: PrimaryCallState | null, predictions: PricePrediction[] = []): string => renderToStaticMarkup(createElement(PrimaryCallCard, { state, predictions, livePrice: 1.98 }))
   it('shows the best card with every part the V8 document asks for', () => {
     const html = render({ ...base, cards: [card] })
-    for (const part of ['ABC/USDT', 'BEARISH', 'Target and window', 'Arrival', 'Risk scenarios', 'Costs', 'Net at the target', 'Expected net', 'Why', 'What you can do', 'paper only', card.predictionId, 'now 1.98']) {
+    for (const part of ['ABC/USDT', 'BEARISH', 'Target and window', 'Arrival', 'Risk scenarios', 'Costs', 'Net at the target', 'Expected net', 'Why', 'What you can do', 'paper only', card.predictionId, 'now $1.98', 'a sell of $100']) {
       expect(html, part).toContain(part)
     }
     expect(html).not.toContain('No profitable opportunity identified')
@@ -81,7 +84,7 @@ describe('the card', () => {
     )
     expect(html).toContain('No profitable opportunity identified')
     expect(html).toContain('Late for the rule')
-    expect(html).toContain('it has moved −6.00% since')
+    expect(html).toContain('it has moved -6.00% since')
     expect(html).toContain('likely to move about ±1.2%')
     expect(html).toContain('A card comes only from a measured source')
   })

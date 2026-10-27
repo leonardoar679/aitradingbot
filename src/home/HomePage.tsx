@@ -10,7 +10,7 @@ import { PrimaryCallCard } from '../calls/PrimaryCallCard'
 import { usePrimaryCall } from '../calls/usePrimaryCall'
 import type { AiOrderProposal } from '../../shared/aiProposal'
 import type { Page } from '../navigation/pages'
-import { EnglishOnly, useI18n } from '../i18n'
+import { useI18n } from '../i18n'
 
 /** The first thing a person sees (the V6 document, §3, §70 and §118; V8 Stage 3): the market in a line, the primary
  * call -- a card only from a measured source whose expected net after costs clears its lines, or "No profitable
@@ -35,9 +35,7 @@ export function HomePage({ onPrepareOrder, onNavigate }: { onPrepareOrder: (prop
     <>
       <PageHeader title={t('Home')} subtitle={t('The market in a line, the best prediction now, what can be acted on, and what you hold')} />
       <MarketStatusStrip />
-      <EnglishOnly>
-        <PrimaryCallCard state={calls} predictions={forecasts} livePrice={livePrice} />
-      </EnglishOnly>
+      <PrimaryCallCard state={calls} predictions={forecasts} livePrice={livePrice} />
       <TopPredictions ranked={top3} predictions={predictions} onDetails={details} />
       <TopOpportunityCard onPrepareOrder={onPrepareOrder} onNavigate={onNavigate} />
       <HoldingsSummary onNavigate={onNavigate} />

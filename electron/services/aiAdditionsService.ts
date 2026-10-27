@@ -600,7 +600,27 @@ const SAMPLE_PAYLOAD: Record<AiAdditionKind, unknown> = {
     news: [{ title: 'A headline of the usual length about a coin and what happened to it', source: 'CoinDesk', kind: 'LISTING', impact: 72 }],
     triggers: ['models_disagree', 'major_news']
   },
-  daily: DAILY_SAMPLE
+  daily: DAILY_SAMPLE,
+  // An article read to the extract's cap: twenty passages of 400 characters (V8 Stage 5).
+  article: {
+    article: {
+      host: 'www.coindesk.com',
+      credibility: 'outlet',
+      retrieval: 'fetched',
+      title: 'A headline of the usual length about a coin and what happened to it',
+      publishedAt: 0,
+      timeSource: 'jsonld',
+      kind: 'LISTING',
+      passages: Array.from({ length: 20 }, (_, k) => ({ n: k + 1, text: 'x'.repeat(400) }))
+    },
+    coins: [
+      { ticker: 'SOL', relationship: 'DIRECT' },
+      { ticker: 'ETH', relationship: 'INDIRECT' },
+      { ticker: 'BTC', relationship: 'INDIRECT' }
+    ],
+    subject: 'SOL',
+    askedAt: 0
+  }
 }
 
 /** Each addition's switch, what it has asked today and what one more call is expected to cost. Free:

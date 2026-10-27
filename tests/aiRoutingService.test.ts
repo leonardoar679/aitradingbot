@@ -168,10 +168,24 @@ describe('the move to roles', () => {
     const { previewAiRoles } = await services()
     const preview = await previewAiRoles(CHOICE)
     const additions = preview.costs.filter((entry) => entry.id.startsWith('addition:'))
-    expect(additions).toHaveLength(5)
+    // Six since V8 Stage 5: the article reading, healed off in a file written before it.
+    expect(additions).toHaveLength(6)
     expect(additions.every((entry) => !entry.on)).toBe(true)
     // Off, they count in neither total.
     expect(preview.mostDailyUsd).toBeCloseTo(preview.costs.filter((entry) => entry.on).reduce((sum, entry) => sum + (entry.mostCallsADay === null ? (entry.expectedUsd ?? 0) : (entry.mostUsd ?? 0)), 0), 10)
+  })
+
+  it('counts the article reading, asked on a click, whenever it is switched on, at its twenty a day on the decider (V8 Stage 5)', async () => {
+    writeFileSync(
+      join(process.env.AI_TEST_USER_DATA as string, 'aiConfig.json'),
+      JSON.stringify({ ...FOUND, watch: { ...FOUND.watch, enabled: false }, watchPaper: { ...FOUND.watchPaper, enabled: false }, additions: { ...FOUND.additions, article: true } })
+    )
+    const { previewAiRoles } = await services()
+    const preview = await previewAiRoles(CHOICE)
+    const article = preview.costs.find((entry) => entry.id === 'addition:article')
+    expect(article).toMatchObject({ on: true, mostCallsADay: 20 })
+    expect(preview.costs.filter((entry) => entry.id.startsWith('addition:') && entry.on).map((entry) => entry.id)).toEqual(['addition:article'])
+    expect(preview.plan.callers.find((row) => row.id === 'addition:article')?.to).toEqual([OPUS])
   })
 
   it('is refused with a stale token, and applied with the right one: every caller on the roles, the bot moved from now on', async () => {
@@ -210,7 +224,7 @@ describe('the move to roles', () => {
     expect(await getAiConfig()).toMatchObject({ defaultModel: OPUS, roles: { gate: ARGON, summarize: LUNA }, watch: { enabled: true, models: [ARGON, OPUS] }, watchPaper: { enabled: true, model: OPUS } })
     const status = await getAiAdditionsStatus()
     expect(status.byRole).toBe(true)
-    expect(status.models).toEqual({ news: LUNA, why: LUNA, exit: OPUS, review: OPUS, daily: LUNA })
+    expect(status.models).toEqual({ news: LUNA, why: LUNA, exit: OPUS, review: OPUS, daily: LUNA, article: OPUS })
   })
 })
 

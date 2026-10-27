@@ -41,7 +41,7 @@ import type {
 import type { ResearchState } from '../shared/marketResearch'
 import type { LiveBook, LiveState } from '../shared/liveMarket'
 import type { NewsFeedState, StoryMark } from '../shared/newsFeed'
-import type { AiAdditionsStatus, DailySummary, DailySummaryRequest, ExitCheck, ExitCheckRequest, MoveConclusion, TradeReview } from '../shared/aiAdditions'
+import type { AiAdditionsStatus, ArticleReadingResult, DailySummary, DailySummaryRequest, ExitCheck, ExitCheckRequest, MoveConclusion, TradeReview } from '../shared/aiAdditions'
 import type { MarketEvent } from '../shared/marketEvent'
 import type { NewsConfigPatch, NewsFilter, NewsPage, NewsState } from '../shared/news'
 import type { NewsRecord } from '../shared/newsRecord'
@@ -317,6 +317,9 @@ const api = {
     // Billed unless held, once a day: the fifth addition's paragraph about one UTC day's report
     // (shared/dailyReport.ts), by itself after 00:05 UTC while the watch is on, or on a click.
     summarizeDay: (request: DailySummaryRequest, automatic: boolean): Promise<DailySummary> => ipcRenderer.invoke(IpcChannel.AiSummarizeDay, request, automatic),
+    // Billed unless held, and only on a click on News URLs at the price shown: the article reading of a news link on
+    // file (V8 Stage 5), at most twenty a day. Its record is read in the main process by its id; nothing is handed in.
+    readArticle: (id: string): Promise<ArticleReadingResult> => ipcRenderer.invoke(IpcChannel.AiReadArticle, id),
     // The two calls below the "free" line that are not free: each is billed unless its answer is
     // already cached.
     confirmEntry: (request: AiEntryConfirmRequest): Promise<AiSignalDecision> =>

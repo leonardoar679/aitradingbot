@@ -34,7 +34,7 @@ export const NEWS_URL_LINES = {
 export type UrlOrigin = 'manual' | 'automatic'
 export type Retrieval = 'fetched' | 'feed' | 'announcement' | 'supplied' | 'x-post' | 'none'
 
-export type UrlStatus = 'refused' | 'read' | 'not-read' | 'extracted' | 'timed' | 'coins' | 'priced' | 'final' | 'pasted-again' | 'view' | 'discovered' | 'looked-up'
+export type UrlStatus = 'refused' | 'read' | 'not-read' | 'extracted' | 'timed' | 'coins' | 'priced' | 'final' | 'pasted-again' | 'view' | 'discovered' | 'looked-up' | 'reading'
 
 export interface TrailEntry {
   at: number
@@ -99,7 +99,7 @@ export interface UrlRecord {
   /** The predictions and paper trades a person made from it. */
   predictionIds: string[]
   executorIds: string[]
-  /** A reading of it by a model (V8 Stage 5), by id. */
+  /** A model's reading of it (V8 Stage 5): the ledger row of its newest answer, by id (electron/services/aiArticleService.ts). */
   analysisId: string | null
   /** The lookups made after the paste (V8 Stage 5): the Internet Archive's first capture of the link, an upper bound on
    * its publication; and a post on X's author from X's own embed endpoint. Absent on a record made before them. */

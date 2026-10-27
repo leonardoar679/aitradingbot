@@ -38,10 +38,11 @@ export function AiAdditionsCard(): React.JSX.Element {
         Small questions put to a model beside the watch&apos;s, each inside the daily budget above and with a daily limit of its own, so that none can starve the
         watch.{' '}
         {status !== null && status.byRole
-          ? `They ask by role: the news analyst, the conclusion and the daily summary ask ${describeDecider(status.models.news)}; the exit check and the reviewer ask ${describeDecider(status.models.exit)}, the model that decides.`
+          ? `They ask by role: the news analyst, the conclusion and the daily summary ask ${describeDecider(status.models.news)}; the exit check, the reviewer and the article reading ask ${describeDecider(status.models.exit)}, the model that decides.`
           : `They ask ${status === null ? 'the model the watch follows' : describeDecider(status.model)}, the model the watch's paper trades follow, until "Who asks which model" above moves them to roles.`}{' '}
         One that asks
-        by itself does so only while the watch is on{status !== null && !status.watchOn ? ', and the watch is off now' : ''}. None of them places, sizes or arms
+        by itself does so only while the watch is on{status !== null && !status.watchOn ? ', and the watch is off now' : ''}; the article reading never asks by itself,
+        only on a click on News URLs. None of them places, sizes or arms
         anything; the exit check can only close one of the app&apos;s own paper trades sooner than its plan would, never a live one.
       </p>
       {status === null ? (

@@ -3,39 +3,64 @@ import { Card } from '../components/Card'
 import { PageHeader } from '../components/PageHeader'
 import { buttonStyle, cellStyle, headCellStyle, inputStyle, noteStyle } from '../agents/agentStyles'
 import { useLiveMarket } from '../hooks/useLiveMarket'
+import { Interpolate } from '../i18n/Interpolate'
+import { useI18n } from '../i18n'
+import { msg, type I18n } from '../../shared/i18n/translate'
 import { userViewProposal, type AiOrderProposal } from '../../shared/aiProposal'
 import { SOURCE_RECORD_VERSION, dayUnitOf, sourcePredictionId, type SourcePrediction } from '../../shared/evaluation/predictionRecord'
+import { describeEventType, storyKindWord } from '../../shared/newsFeed'
 import type { UrlRecord } from '../../shared/newsUrl'
-import { pairWords, signed, utcTime } from '../calls/callText'
+import type { PublicationTime } from '../../shared/articleTime'
+import { pairWords } from '../calls/callText'
+import { ArticleReading } from './ArticleReading'
 
 // NEWS URLS (V8 Stage 4, 26 October 2026; electron/services/newsUrlService.ts). A person pastes a news link; the app
 // reads it safely and keeps what it found: its text and where that came from, when it was published, who says it, the
 // coins it names and what their prices did, and the verdict -- a card where a measured source has one, otherwise "No
-// profitable opportunity identified". "Paper trade my own view" records a view of the person's own, nothing filled in
-// by the app, and opens the Position form with it for them to place on paper. English until V8 Stage 5.
+// profitable opportunity identified". Since V8 Stage 5 a model's reading of it on a click (ArticleReading.tsx, the one
+// file of the page that reaches the AI bridge), and the page in the person's language; what the record keeps in its own
+// words -- the steps it took, why a page could not be read -- is shown as written. "Paper trade my own view" records a
+// view of the person's own, nothing filled in by the app, and opens the Position form with it for them to place on
+// paper.
 
 const CREDIBILITY_WORDS: Record<UrlRecord['credibility'], string> = {
-  exchange: 'an exchange speaking of its own markets',
-  regulator: 'a regulator',
-  outlet: 'a news outlet',
-  project: "a project's own site",
-  social: 'a social network, where anyone posts',
-  unknown: 'a site the app does not know'
+  exchange: msg('an exchange speaking of its own markets'),
+  regulator: msg('a regulator'),
+  outlet: msg('a news outlet'),
+  project: msg("a project's own site"),
+  social: msg('a social network, where anyone posts'),
+  unknown: msg('a site the app does not know')
 }
 
 const RETRIEVAL_WORDS: Record<UrlRecord['retrieval'], string> = {
-  fetched: 'read from the page',
-  feed: "the news feed's own copy",
-  announcement: "Binance's own list",
-  supplied: 'supplied by you, not retrieved',
-  'x-post': 'a post on X: not fetched',
-  none: 'no text could be had'
+  fetched: msg('read from the page'),
+  feed: msg("the news feed's own copy"),
+  announcement: msg("Binance's own list"),
+  supplied: msg('supplied by you, not retrieved'),
+  'x-post': msg('a post on X: not fetched'),
+  none: msg('no text could be had')
+}
+
+const TIME_SOURCE_WORDS: Record<NonNullable<PublicationTime['source']>, string> = {
+  jsonld: msg("the page's structured data"),
+  og: msg("the page's Open Graph tags"),
+  byline: msg('its dated byline'),
+  meta: msg("another of the page's meta tags"),
+  announcement: msg("Binance's own list"),
+  'x-id': msg("the post's id"),
+  feed: msg("the news feed's copy")
+}
+
+const REJECTED_WORDS: Record<UrlRecord['rejected'][number]['why'], string> = {
+  'no-pair': msg('{coin} (no USDT pair here)'),
+  thin: msg('{coin} (under 1M USDT traded a day)'),
+  'over-cap': msg('{coin} (past the five kept)')
 }
 
 const HORIZONS: { sec: number; label: string }[] = [
-  { sec: 3600, label: '1 hour' },
-  { sec: 4 * 3600, label: '4 hours' },
-  { sec: 86_400, label: '1 day' }
+  { sec: 3600, label: msg('1 hour') },
+  { sec: 4 * 3600, label: msg('4 hours') },
+  { sec: 86_400, label: msg('1 day') }
 ]
 
 const row: React.CSSProperties = { display: 'flex', gap: '1rem', padding: '0.22rem 0', alignItems: 'baseline', flexWrap: 'wrap' }
@@ -51,60 +76,131 @@ function Line({ name, children }: { name: string; children: React.ReactNode }): 
   )
 }
 
-const pct = (x: number | null): string => (x === null ? '—' : signed(x))
+/** A moment in UTC with its day: "14:05 UTC on 26 Oct". */
+const momentText = (seconds: number, { t, utcTime, utcDay }: I18n): string => t('{time} UTC on {day}', { time: utcTime(seconds * 1000), day: utcDay(seconds * 1000) })
 
-/** The lookups made after the paste, each named: the Internet Archive's first capture, and a post on X's author. */
-function lookupsText(record: UrlRecord): string {
-  const lookups = record.lookups
-  if (lookups === undefined) return record.origin === 'automatic' ? 'none: a discovered story is recorded from the feed alone' : 'being made…'
-  const archive = lookups.archive
-  const parts = [
-    archive === null
-      ? 'the Internet Archive: not asked'
-      : archive.status === 'found'
-        ? `the Internet Archive first captured it ${new Date((archive.firstSec as number) * 1000).toISOString().slice(0, 16).replace('T', ' ')} UTC, so it was published by then${archive.note === null ? '' : ` — ${archive.note}`}`
-        : archive.status === 'none'
-          ? 'the Internet Archive holds no capture of it'
-          : archive.status === 'off'
-            ? 'the Internet Archive: switched off'
-            : `the Internet Archive could not be asked (${archive.note ?? 'no answer'})`
-  ]
-  if (lookups.x !== null) parts.push(lookups.x.status === 'found' ? `X's embed names its author ${lookups.x.name ?? 'unnamed'}` : "X's embed could not be read")
+/** When it was published, how that was read, and what checks it. */
+function publishedText(time: PublicationTime | null, i18n: I18n): string {
+  const { t } = i18n
+  if (time === null || time.sec === null) return t('Not read: the price is not measured from it.')
+  const parts = [t('{moment}, from {where}', { moment: momentText(time.sec, i18n), where: time.source === null ? '—' : t(TIME_SOURCE_WORDS[time.source]) })]
+  if (time.disagree) parts.push(t('the page gives times more than an hour apart'))
+  if (time.future.length > 0) parts.push(t('{count} times after the page was read refused', { count: time.future.length }))
+  if (time.check !== null) {
+    parts.push(
+      time.check.source === 'announcement'
+        ? time.check.agrees
+          ? t("the announcement's own time agrees")
+          : t("the announcement's own time disagrees")
+        : time.check.agrees
+          ? t("the feed's own time agrees")
+          : t("the feed's own time disagrees")
+    )
+  }
   return parts.join(' · ')
 }
 
+/** Parts of a line, a dot between each. */
+function Dotted({ parts }: { parts: React.ReactNode[] }): React.JSX.Element {
+  return (
+    <>
+      {parts.map((part, index) => (
+        <span key={index}>
+          {index > 0 ? ' · ' : ''}
+          {part}
+        </span>
+      ))}
+    </>
+  )
+}
+
+/** The lookups made after the paste, each named: the Internet Archive's first capture, and a post on X's author, whose
+ * name is shown as X gives it. */
+function lookupParts(record: UrlRecord, i18n: I18n): React.ReactNode[] {
+  const { t } = i18n
+  const lookups = record.lookups
+  if (lookups === undefined) return [record.origin === 'automatic' ? t('none: a discovered story is recorded from the feed alone') : t('being made…')]
+  const archive = lookups.archive
+  const parts: React.ReactNode[] = [
+    archive === null
+      ? t('the Internet Archive: not asked')
+      : archive.status === 'found' && archive.firstSec !== null
+        ? archive.note === null
+          ? t('the Internet Archive first captured it at {moment}, so it was published by then', { moment: momentText(archive.firstSec, i18n) })
+          : t("the Internet Archive first captured it at {moment}, before the time it states: its stated time may be a later edit's", { moment: momentText(archive.firstSec, i18n) })
+        : archive.status === 'none'
+          ? t('the Internet Archive holds no capture of it')
+          : archive.status === 'off'
+            ? t('the Internet Archive: switched off')
+            : t('the Internet Archive could not be asked')
+  ]
+  if (lookups.x !== null) {
+    parts.push(lookups.x.status === 'found' ? <Interpolate text={t("X's embed names its author {name}")} values={{ name: <bdi dir="auto">{lookups.x.name ?? '—'}</bdi> }} /> : t("X's embed could not be read"))
+  }
+  return parts
+}
+
+/** Why there is no card, from the record: no coin to weigh, a delisting outside its rule's window, or no measured source
+ * for news of its kind (as electron/services/newsUrlService.ts wrote it, in the person's language). */
+function noCardText(record: UrlRecord, i18n: I18n): string {
+  const { t } = i18n
+  if (record.coins.length === 0) return t('No coin it names can be weighed here.')
+  if (record.binance?.delisting === true) return t("A Binance delisting is a card only within its rule's five minutes, on a fresh book that holds the stake.")
+  return t('No measured source calls a way for news of this kind ({kind}).', { kind: storyKindWord(record.kind, i18n) })
+}
+
 /** One record: what was read, when it was published, who says it, its coins and their prices, and the verdict. */
-function RecordView({ record }: { record: UrlRecord }): React.JSX.Element {
-  const time = record.time
+export function RecordView({ record }: { record: UrlRecord }): React.JSX.Element {
+  const i18n = useI18n()
+  const { t, pct, utcTime, dollars } = i18n
+  const signed = (x: number | null): string => (x === null ? '—' : pct(x, 2))
+  // What the record holds as it was written -- its host, a title, the feed's sources, an author -- is shown as written.
+  const source: React.ReactNode[] = [
+    <>
+      <bdi dir="ltr">{record.host}</bdi>: {t(CREDIBILITY_WORDS[record.credibility])}
+    </>
+  ]
+  if (record.binance !== null) source.push(<Interpolate text={t("a Binance announcement verified in Binance's own list ({title})")} values={{ title: <bdi dir="auto">{record.binance.title}</bdi> }} />)
+  if (record.corroboration.stories > 0) {
+    source.push(<Interpolate text={t('told too by {count} other stories of the feed ({sources})', { count: record.corroboration.stories })} values={{ sources: <bdi dir="auto">{record.corroboration.sources.join(', ')}</bdi> }} />)
+  }
+  const text: React.ReactNode[] = [t(RETRIEVAL_WORDS[record.retrieval])]
+  if (record.author !== null) text.push(<Interpolate text={t('by {author}')} values={{ author: <bdi dir="auto">{record.author}</bdi> }} />)
+  if (record.readFailure !== null) {
+    text.push(
+      <>
+        {t('the page could not be read:')}{' '}
+        <span lang="en" dir="auto">
+          {record.readFailure}
+        </span>
+      </>
+    )
+  }
   return (
     <div>
-      <p style={{ margin: 0, fontWeight: 700, fontSize: '1.02rem' }}>{record.title ?? record.url}</p>
-      <p style={{ ...noteStyle, marginTop: '0.2rem' }} dir="ltr">
+      <p lang="en" dir="auto" style={{ margin: 0, fontWeight: 700, fontSize: '1.02rem' }}>
+        {record.title ?? record.url}
+      </p>
+      <p lang="en" dir="ltr" style={{ ...noteStyle, marginTop: '0.2rem' }}>
         {record.url}
       </p>
       <div style={{ marginTop: '0.5rem' }}>
-        <Line name="Source">
-          {record.host}: {CREDIBILITY_WORDS[record.credibility]}
-          {record.binance !== null ? ` · a Binance announcement verified in Binance's own list (${record.binance.title})` : ''}
-          {record.corroboration.stories > 0 ? ` · told too by ${record.corroboration.stories} other stor${record.corroboration.stories === 1 ? 'y' : 'ies'} of the feed (${record.corroboration.sources.join(', ')})` : ''}
+        <Line name={t('Source')}>
+          <Dotted parts={source} />
         </Line>
-        <Line name="Text">
-          {RETRIEVAL_WORDS[record.retrieval]}
-          {record.readFailure !== null ? ` · the page: ${record.readFailure}` : ''}
-          {record.author !== null ? ` · by ${record.author}` : ''}
+        <Line name={t('Text')}>
+          <Dotted parts={text} />
         </Line>
-        <Line name="Published">
-          {time === null || time.sec === null
-            ? 'Not read: the price is not measured from it.'
-            : `${new Date(time.sec * 1000).toISOString().slice(0, 16).replace('T', ' ')} UTC, from ${time.source}${time.field !== null ? ` (${time.field})` : ''}${time.disagree ? ' · the page gives times more than an hour apart' : ''}${time.future.length > 0 ? ` · ${time.future.length} time(s) after the page was read refused` : ''}${time.check !== null ? ` · the ${time.check.source === 'announcement' ? "announcement's" : "feed's"} own time ${time.check.agrees ? 'agrees' : 'disagrees'}` : ''}`}
+        <Line name={t('Published')}>{publishedText(record.time, i18n)}</Line>
+        <Line name={t('Kind')}>{describeEventType(record.kind, i18n)}</Line>
+        <Line name={t('Lookups')}>
+          <Dotted parts={lookupParts(record, i18n)} />
         </Line>
-        <Line name="Kind">{record.kind.toLowerCase().replace(/_/g, ' ')}</Line>
-        <Line name="Lookups">{lookupsText(record)}</Line>
-        <Line name="Coins">
-          {record.coins.length === 0 ? 'none it names can be weighed here' : record.coins.map((coin) => `${coin.ticker} (${coin.relationship === 'DIRECT' ? 'in its title' : 'in its body'}, ${coin.venue})`).join(', ')}
-          {record.rejected.length > 0
-            ? ` · left out: ${record.rejected.map((coin) => `${coin.ticker} (${coin.why === 'no-pair' ? 'no USDT pair here' : coin.why === 'thin' ? 'under a day of 1M USDT traded' : 'past the five kept'})`).join(', ')}`
-            : ''}
+        <Line name={t('Coins')}>
+          {record.coins.length === 0
+            ? t('none it names can be weighed here')
+            : record.coins.map((coin) => (coin.relationship === 'DIRECT' ? t('{coin} (in its title, {venue})', { coin: coin.ticker, venue: coin.venue === 'binance' ? 'Binance' : 'Bitget' }) : t('{coin} (in its body, {venue})', { coin: coin.ticker, venue: coin.venue === 'binance' ? 'Binance' : 'Bitget' }))).join(', ')}
+          {record.rejected.length > 0 ? ` · ${t('left out: {coins}', { coins: record.rejected.map((coin) => t(REJECTED_WORDS[coin.why], { coin: coin.ticker })).join(', ') })}` : ''}
         </Line>
       </div>
       {record.reactions.length > 0 && (
@@ -112,9 +208,9 @@ function RecordView({ record }: { record: UrlRecord }): React.JSX.Element {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                {['Coin', 'At publication', 'The day before', '+5 min', '+15 min', '+1 hour', '+4 hours', ''].map((name) => (
+                {[msg('Coin'), msg('At publication'), msg('The day before'), msg('+5 min'), msg('+15 min'), msg('+1 hour'), msg('+4 hours'), ''].map((name) => (
                   <th key={name} style={headCellStyle}>
-                    {name}
+                    {name === '' ? '' : t(name)}
                   </th>
                 ))}
               </tr>
@@ -125,13 +221,13 @@ function RecordView({ record }: { record: UrlRecord }): React.JSX.Element {
                   <td dir="ltr" style={{ ...cellStyle, fontWeight: 600 }}>
                     {pairWords(reaction.pair)}
                   </td>
-                  <td style={cellStyle}>{reaction.refPrice === null ? '—' : reaction.refPrice.toPrecision(6)}</td>
-                  <td style={cellStyle}>{pct(reaction.beforePct)}</td>
-                  <td style={cellStyle}>{pct(reaction.afterPct.m5)}</td>
-                  <td style={cellStyle}>{pct(reaction.afterPct.m15)}</td>
-                  <td style={cellStyle}>{pct(reaction.afterPct.h1)}</td>
-                  <td style={cellStyle}>{pct(reaction.afterPct.h4)}</td>
-                  <td style={{ ...cellStyle, color: 'var(--text-muted)' }}>{reaction.final ? 'final' : 'measured until four hours after'}</td>
+                  <td style={cellStyle}>{reaction.refPrice === null ? '—' : dollars(reaction.refPrice)}</td>
+                  <td style={cellStyle}>{signed(reaction.beforePct)}</td>
+                  <td style={cellStyle}>{signed(reaction.afterPct.m5)}</td>
+                  <td style={cellStyle}>{signed(reaction.afterPct.m15)}</td>
+                  <td style={cellStyle}>{signed(reaction.afterPct.h1)}</td>
+                  <td style={cellStyle}>{signed(reaction.afterPct.h4)}</td>
+                  <td style={{ ...cellStyle, color: 'var(--text-muted)' }}>{reaction.final ? t('final') : t('measured until four hours after')}</td>
                 </tr>
               ))}
             </tbody>
@@ -141,22 +237,22 @@ function RecordView({ record }: { record: UrlRecord }): React.JSX.Element {
       <div style={{ marginTop: '0.7rem', padding: '0.6rem 0.75rem', borderRadius: 'var(--radius-sm)', background: 'var(--bg-app)', border: '1px solid var(--border)' }}>
         {record.verdict.cards.length > 0 ? (
           <span>
-            <strong>A card: </strong>
-            {record.verdict.cards.join(', ')} — on Home and Predictions, with its figures.
+            <strong>{t('A card:')} </strong>
+            <Interpolate text={t('{cards} — on Home and Predictions, with its figures.')} values={{ cards: <code>{record.verdict.cards.join(', ')}</code> }} />
           </span>
         ) : (
           <span>
-            <strong>No profitable opportunity identified. </strong>
-            {record.verdict.none}
+            <strong>{t('No profitable opportunity identified.')} </strong>
+            {noCardText(record, i18n)}
           </span>
         )}
       </div>
       {record.snippets.length > 0 && (
         <details style={{ marginTop: '0.6rem' }}>
-          <summary style={{ cursor: 'pointer', fontSize: '0.82rem' }}>The text read, in {record.snippets.length} numbered snippets</summary>
-          <ol style={{ margin: '0.4rem 0 0', paddingInlineStart: '1.4rem', display: 'grid', gap: '0.3rem' }}>
+          <summary style={{ cursor: 'pointer', fontSize: '0.82rem' }}>{t('The text read, in {count} numbered passages', { count: record.snippets.length })}</summary>
+          <ol lang="en" dir="auto" style={{ margin: '0.4rem 0 0', paddingInlineStart: '1.4rem', display: 'grid', gap: '0.3rem' }}>
             {record.snippets.map((snippet) => (
-              <li key={snippet.n} style={{ fontSize: '0.8rem' }}>
+              <li key={snippet.n} value={snippet.n} style={{ fontSize: '0.8rem' }}>
                 {snippet.text}
               </li>
             ))}
@@ -164,11 +260,14 @@ function RecordView({ record }: { record: UrlRecord }): React.JSX.Element {
         </details>
       )}
       <details style={{ marginTop: '0.4rem' }}>
-        <summary style={{ cursor: 'pointer', fontSize: '0.82rem' }}>What was done, step by step</summary>
+        <summary style={{ cursor: 'pointer', fontSize: '0.82rem' }}>{t('What was done, step by step')}</summary>
         <ul style={{ margin: '0.4rem 0 0', paddingInlineStart: '1.2rem' }}>
           {record.trail.map((entry, index) => (
             <li key={index} style={{ fontSize: '0.8rem' }}>
-              {utcTime(entry.at)} · {entry.status}: {entry.note}
+              {t('{time} UTC', { time: utcTime(entry.at * 1000) })} ·{' '}
+              <span lang="en" dir="auto">
+                {entry.note}
+              </span>
             </li>
           ))}
         </ul>
@@ -179,7 +278,8 @@ function RecordView({ record }: { record: UrlRecord }): React.JSX.Element {
 
 /** "Paper trade my own view": the person's side, stake, horizon and target, nothing filled in; recorded as their own
  * prediction and handed to the Position form for them to place on paper. */
-function OwnView({ record, onPrepareOrder }: { record: UrlRecord; onPrepareOrder: (proposal: AiOrderProposal) => void }): React.JSX.Element | null {
+export function OwnView({ record, onPrepareOrder }: { record: UrlRecord; onPrepareOrder: (proposal: AiOrderProposal) => void }): React.JSX.Element | null {
+  const { t, dollars } = useI18n()
   const [pair, setPair] = useState('')
   const [side, setSide] = useState<'' | 'up' | 'down'>('')
   const [stake, setStake] = useState('')
@@ -194,8 +294,8 @@ function OwnView({ record, onPrepareOrder }: { record: UrlRecord; onPrepareOrder
     const stakeQuote = Number(stake)
     const targetPct = Number(target)
     const horizonSec = Number(horizon)
-    if (pair === '' || side === '' || !(stakeQuote > 0) || !(targetPct > 0) || !(horizonSec > 0)) return setProblem('Choose the coin, the side, the stake, the horizon and the target: nothing is filled in for you.')
-    if (price === null) return setProblem('No live price of the coin is read yet; try again in a moment.')
+    if (pair === '' || side === '' || !(stakeQuote > 0) || !(targetPct > 0) || !(horizonSec > 0)) return setProblem(t('Choose the coin, the side, the stake, the horizon and the target: nothing is filled in for you.'))
+    if (price === null) return setProblem(t('No live price of the coin is read yet; try again in a moment.'))
     const nowSec = Math.floor(Date.now() / 1000)
     const config = await window.api.effectiveConfig().catch(() => null)
     const coin = record.coins.find((entry) => entry.pair === pair)
@@ -219,6 +319,7 @@ function OwnView({ record, onPrepareOrder }: { record: UrlRecord; onPrepareOrder
       scenarios: null,
       cost: null,
       expectedNet: null,
+      // The record's reason stays in English, as every record's does.
       reason: `My own view on ${record.url}`,
       evidence: [record.id],
       unit: dayUnitOf(nowSec),
@@ -228,52 +329,51 @@ function OwnView({ record, onPrepareOrder }: { record: UrlRecord; onPrepareOrder
       await window.api.predictions.record(prediction)
       await window.api.urls.link(record.id, { predictionId: prediction.id })
     } catch (error) {
-      return setProblem(`Your view could not be recorded: ${error instanceof Error ? error.message : String(error)}`)
+      return setProblem(t('Your view could not be recorded: {reason}', { reason: error instanceof Error ? error.message : String(error) }))
     }
     setProblem(null)
     onPrepareOrder(userViewProposal({ pair, side, stakeQuote, targetPct, horizonSec, refPrice: price, nowSec, newsUrlId: record.id }))
   }
   return (
-    <Card title="Paper trade my own view">
-      <p style={{ ...noteStyle, marginTop: 0 }}>
-        Your own view, nothing filled in by the app: it is recorded as your prediction, scored like every source, and opens the Position form on paper for you
-        to place.
-      </p>
+    <Card title={t('Paper trade my own view')}>
+      <p style={{ ...noteStyle, marginTop: 0 }}>{t('Your own view, nothing filled in by the app: it is recorded as your prediction, scored like every source, and opens the Position form on paper for you to place.')}</p>
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-        <select value={pair} onChange={(change) => setPair(change.target.value)} style={inputStyle()} aria-label="Coin">
-          <option value="">Coin…</option>
+        <select value={pair} onChange={(change) => setPair(change.target.value)} style={inputStyle()} aria-label={t('Coin')}>
+          <option value="">{t('Coin…')}</option>
           {record.coins.map((coin) => (
             <option key={coin.pair} value={coin.pair}>
               {pairWords(coin.pair)}
             </option>
           ))}
         </select>
-        <select value={side} onChange={(change) => setSide(change.target.value as '' | 'up' | 'down')} style={inputStyle()} aria-label="Side">
-          <option value="">Side…</option>
-          <option value="up">Up (buy)</option>
-          <option value="down">Down (sell, paper only)</option>
+        <select value={side} onChange={(change) => setSide(change.target.value as '' | 'up' | 'down')} style={inputStyle()} aria-label={t('Side')}>
+          <option value="">{t('Side…')}</option>
+          <option value="up">{t('Up (buy)')}</option>
+          <option value="down">{t('Down (sell, paper only)')}</option>
         </select>
-        <input value={stake} onChange={(change) => setStake(change.target.value)} placeholder="Stake, USDT" inputMode="decimal" style={{ ...inputStyle(), width: '8rem' }} aria-label="Stake in USDT" />
-        <select value={horizon} onChange={(change) => setHorizon(change.target.value)} style={inputStyle()} aria-label="Horizon">
-          <option value="">Horizon…</option>
+        <input value={stake} onChange={(change) => setStake(change.target.value)} placeholder={t('Stake, USDT')} inputMode="decimal" style={{ ...inputStyle(), width: '8rem' }} aria-label={t('Stake in USDT')} />
+        <select value={horizon} onChange={(change) => setHorizon(change.target.value)} style={inputStyle()} aria-label={t('Horizon')}>
+          <option value="">{t('Horizon…')}</option>
           {HORIZONS.map((entry) => (
             <option key={entry.sec} value={entry.sec}>
-              {entry.label}
+              {t(entry.label)}
             </option>
           ))}
         </select>
-        <input value={target} onChange={(change) => setTarget(change.target.value)} placeholder="Target, %" inputMode="decimal" style={{ ...inputStyle(), width: '7rem' }} aria-label="Target in percent" />
+        <input value={target} onChange={(change) => setTarget(change.target.value)} placeholder={t('Target, %')} inputMode="decimal" style={{ ...inputStyle(), width: '7rem' }} aria-label={t('Target in percent')} />
         <button type="button" style={buttonStyle('primary')} onClick={() => void submit()}>
-          Record it and open the form
+          {t('Record it and open the form')}
         </button>
       </div>
-      {price !== null && <p style={{ ...noteStyle, marginTop: '0.4rem' }}>Now {price.toPrecision(6)}.</p>}
+      {price !== null && <p style={{ ...noteStyle, marginTop: '0.4rem' }}>{t('Now {price}.', { price: dollars(price) })}</p>}
       {problem !== null && <p style={{ ...noteStyle, marginTop: '0.4rem', color: 'var(--down)' }}>{problem}</p>}
     </Card>
   )
 }
 
 export function NewsUrlsPage({ onPrepareOrder }: { onPrepareOrder: (proposal: AiOrderProposal) => void }): React.JSX.Element {
+  const i18n = useI18n()
+  const { t, utcTime, utcDay } = i18n
   const [link, setLink] = useState('')
   const [supplied, setSupplied] = useState('')
   const [busy, setBusy] = useState(false)
@@ -338,44 +438,51 @@ export function NewsUrlsPage({ onPrepareOrder }: { onPrepareOrder: (proposal: Ai
 
   return (
     <>
-      <PageHeader title="News URLs" subtitle="Paste a news link: the app reads it safely, says when it was published and who says it, which coins it names, what their prices did, and whether any measured source calls a way" />
-      <Card title="Analyze a link">
+      <PageHeader
+        title={t('News URLs')}
+        subtitle={t('Paste a news link: the app reads it safely, says when it was published and who says it, which coins it names, what their prices did, and whether any measured source calls a way')}
+      />
+      <Card title={t('Analyze a link')}>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <input value={link} onChange={(change) => setLink(change.target.value)} placeholder="https://…" style={{ ...inputStyle(), flex: '1 1 26rem' }} aria-label="News link" dir="ltr" />
+          <input value={link} onChange={(change) => setLink(change.target.value)} placeholder="https://…" style={{ ...inputStyle(), flex: '1 1 26rem' }} aria-label={t('News link')} dir="ltr" />
           <button type="button" style={buttonStyle('primary', busy || link.trim() === '')} disabled={busy || link.trim() === ''} onClick={() => void analyze()}>
-            {busy ? 'Reading…' : 'Analyze'}
+            {busy ? t('Reading…') : t('Analyze')}
           </button>
         </div>
         <textarea
           value={supplied}
           onChange={(change) => setSupplied(change.target.value)}
-          placeholder="Optional: the article's text, if its page cannot be read (kept as supplied by you, not retrieved)"
+          placeholder={t("Optional: the article's text, if its page cannot be read (kept as supplied by you, not retrieved)")}
           style={{ ...inputStyle(), width: '100%', minHeight: '4rem', marginTop: '0.5rem', resize: 'vertical' }}
-          aria-label="The article's text"
+          aria-label={t("The article's text")}
         />
-        {refused !== null && <p style={{ ...noteStyle, color: 'var(--down)', marginTop: '0.4rem' }}>{refused}</p>}
+        {refused !== null && (
+          <p lang="en" dir="auto" style={{ ...noteStyle, color: 'var(--down)', marginTop: '0.4rem' }}>
+            {refused}
+          </p>
+        )}
         <p style={{ ...noteStyle, marginTop: '0.5rem' }}>
-          Only https links on their usual port are read; the link's tracking fields are dropped; its host's addresses are checked, and nothing on this machine or
-          its network can be reached through it. Fifteen seconds, three redirects and two megabytes at most. A post on X is not fetched. No model reads it here.
+          {t("Only https links on their usual port are read; the link's tracking fields are dropped; its host's addresses are checked, and nothing on this machine or its network can be reached through it. Fifteen seconds, three redirects and two megabytes at most. A post on X is not fetched. A model reads it only when you ask, below.")}
         </p>
       </Card>
       {selected !== null && (
-        <Card title="What the link says">
+        <Card title={t('What the link says')}>
           <RecordView record={selected} />
         </Card>
       )}
+      {selected !== null && <ArticleReading record={selected} />}
       {selected !== null && <OwnView record={selected} onPrepareOrder={onPrepareOrder} />}
-      <Card title="Links on file">
+      <Card title={t('Links on file')}>
         {records.length === 0 ? (
-          <p style={noteStyle}>None yet.</p>
+          <p style={noteStyle}>{t('None yet.')}</p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  {['When', 'Origin', 'Source', 'Title', 'Coins', 'Verdict'].map((name) => (
+                  {[msg('When'), msg('Origin'), msg('Source'), msg('Title'), msg('Coins'), msg('Verdict')].map((name) => (
                     <th key={name} style={headCellStyle}>
-                      {name}
+                      {t(name)}
                     </th>
                   ))}
                 </tr>
@@ -383,12 +490,16 @@ export function NewsUrlsPage({ onPrepareOrder }: { onPrepareOrder: (proposal: Ai
               <tbody>
                 {records.map((record) => (
                   <tr key={record.id} onClick={() => setOpen(record.id)} style={{ cursor: 'pointer', background: open === record.id ? 'var(--bg-app)' : undefined }}>
-                    <td style={cellStyle}>{new Date(record.at * 1000).toISOString().slice(0, 16).replace('T', ' ')}</td>
-                    <td style={cellStyle}>{record.origin === 'manual' ? 'pasted' : 'discovered'}</td>
-                    <td style={cellStyle}>{record.host}</td>
-                    <td style={{ ...cellStyle, whiteSpace: 'normal', minWidth: '16rem' }}>{record.title ?? '—'}</td>
+                    <td style={cellStyle}>{t('{time} UTC on {day}', { time: utcTime(record.at * 1000), day: utcDay(record.at * 1000) })}</td>
+                    <td style={cellStyle}>{record.origin === 'manual' ? t('pasted') : t('discovered')}</td>
+                    <td style={cellStyle}>
+                      <bdi dir="ltr">{record.host}</bdi>
+                    </td>
+                    <td lang="en" dir="auto" style={{ ...cellStyle, whiteSpace: 'normal', minWidth: '16rem' }}>
+                      {record.title ?? '—'}
+                    </td>
                     <td style={cellStyle}>{record.coins.map((coin) => coin.ticker).join(', ') || '—'}</td>
-                    <td style={cellStyle}>{record.verdict.cards.length > 0 ? 'a card' : 'none'}</td>
+                    <td style={cellStyle}>{record.verdict.cards.length > 0 ? t('a card') : t('none')}</td>
                   </tr>
                 ))}
               </tbody>
@@ -397,12 +508,16 @@ export function NewsUrlsPage({ onPrepareOrder }: { onPrepareOrder: (proposal: Ai
         )}
         <label style={{ ...noteStyle, display: 'inline-flex', gap: '0.4rem', alignItems: 'center', marginTop: '0.6rem' }}>
           <input type="checkbox" checked={autoAnalyze} onChange={(change) => void switchAuto(change.target.checked)} />
-          Analyze discovered news automatically: read the page of each announcement and each feed story of impact 70 or more that names a coin directly. Off, they
-          are recorded from the feed alone, and nothing is fetched.
+          {t('Analyze discovered news automatically: read the page of each announcement and each feed story of impact 70 or more that names a coin directly. Off, they are recorded from the feed alone, and nothing is fetched.')}
         </label>
         <label style={{ ...noteStyle, display: 'inline-flex', gap: '0.4rem', alignItems: 'center', marginTop: '0.4rem' }}>
           <input type="checkbox" checked={archive} onChange={(change) => void switchArchive(change.target.checked)} />
-          Ask the Internet Archive when it first captured each link you paste (the link is sent to web.archive.org): an upper bound on when it was published.
+          <span>
+            <Interpolate
+              text={t('Ask the Internet Archive when it first captured each link you paste (the link is sent to {host}): an upper bound on when it was published.')}
+              values={{ host: <bdi dir="ltr">web.archive.org</bdi> }}
+            />
+          </span>
         </label>
       </Card>
     </>

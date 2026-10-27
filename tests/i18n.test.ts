@@ -31,6 +31,10 @@ import { paperPauseNotice } from '../shared/paperPause'
 import { describeReconciliation, describeUnknownOrder } from '../shared/reconcileLive'
 import { SIMULATED_EVENTS } from '../shared/sounds'
 import { reviewNote, scopeNote } from '../src/i18n/languageNotes'
+import { DELISTING_STUDY } from '../shared/delistingStudy'
+import { PRIMARY_CALL_VERSION, delistingCardOf, type PrimaryCallState, type PrimaryCard } from '../shared/forecast/primaryCall'
+import type { UrlRecord } from '../shared/newsUrl'
+import type { ArticleReading as ArticleReadingAnswer } from '../shared/aiAdditions'
 
 // TEN LANGUAGES ON THE NORMAL-USER PAGES (the V6 document, §81-89 and §111; V6 Stage 14, 13 October
 // 2026). Every text the app translates is a key in the code (shared/i18n/keys.ts); these tests hold the
@@ -541,6 +545,7 @@ async function surfaces(): Promise<{ name: string; element: (language: Language)
   const { Sidebar } = await import('../src/components/Sidebar')
   const { LanguageChooser } = await import('../src/i18n/LanguageChooser')
   const { NewExecutorModal } = await import('../src/executors/NewExecutorModal')
+  const { NewsUrlsPage } = await import('../src/articles/NewsUrlsPage')
   const none = (): undefined => undefined
   const proposal = forecastProposal({ plan: PLAN, confidence: 0.64, barTime: T })
   return [
@@ -553,7 +558,9 @@ async function surfaces(): Promise<{ name: string; element: (language: Language)
     { name: 'the sidebar', element: () => createElement(Sidebar, { activeId: 'home', onChoose: none, collapsed: false, onToggleCollapsed: none, uiMode: 'normal' } as never) },
     { name: 'the expert sidebar', element: () => createElement(Sidebar, { activeId: 'home', onChoose: none, collapsed: false, onToggleCollapsed: none, uiMode: 'expert' } as never) },
     { name: 'the language chooser', element: (language) => createElement(LanguageChooser, { offered: language, onChoose: async () => undefined }) },
-    { name: 'the trade plan', element: () => createElement(NewExecutorModal, { account: null, existingExecutors: [], proposal, onCreate: none, onClose: none }) }
+    { name: 'the trade plan', element: () => createElement(NewExecutorModal, { account: null, existingExecutors: [], proposal, onCreate: none, onClose: none }) },
+    // Translated, and in the normal sidebar, since V8 Stage 5.
+    { name: 'News URLs', element: () => createElement(NewsUrlsPage, { onPrepareOrder: none }) }
   ]
 }
 
@@ -777,6 +784,175 @@ describe("the drawer's range widened for Bitcoin's sharp move", () => {
 
 // Found by V6 Stage 16's 12-hour run: Home said there was no live price newer than ten seconds beside the
 // live price it showed. The decision was the pass's, made on the books the stream held then.
+// THE PRIMARY CALL AND A NEWS LINK WITH DATA IN THEM (V8 Stage 5): the card of a Binance delisting and the
+// no-opportunity state with every reason, every coin's line, a pasted link's record with each lookup, its own view's
+// form, and an article reading -- in every language, from its catalog alone, with what the record holds as written.
+
+const RELEASE = 1_793_030_430
+const CALL_CARD = delistingCardOf({
+  candidate: { articleId: 4242, title: 'Binance Will Delist ABC on 2026-11-02', releaseSec: RELEASE, ticker: 'ABC', pair: 'ABCUSDT' },
+  nowSec: RELEASE + 60,
+  livePrice: 2,
+  gate: { ok: true, trip: { venue: 'binance', feePct: 0.1, spreadPct: 0.3, impactPct: 0.2, totalPct: 0.7, basis: 'book' }, depthQuote: 5000 },
+  stakeQuote: 100,
+  study: DELISTING_STUDY,
+  live: { hours: 12, coins: 15, meanPct: 6, low: 2, high: 9, state: 'weaker' },
+  predictionId: 'delisting-rule:ABCUSDT:1793030430'
+}) as PrimaryCard
+const CALLS: PrimaryCallState = { v: PRIMARY_CALL_VERSION, at: RELEASE + 60, cards: [], late: [], refused: [], delistLive: null, readerOn: true, modelSources: 0 }
+const REFUSAL_CODES = ['withdrawn', 'no-price', 'no-pair', 'no-book', 'thin', 'cost-share', 'under-lines', 'no-evidence'] as const
+const LINE_FORECAST = (pair: string): PricePrediction =>
+  ({
+    ...PREDICTION,
+    pair,
+    moveRates: { version: 'v', fromSec: 0, toSec: 0, days: 90, horizons: [{ horizon: 'hours4', moments: 2000, close: [{ pct: 2, up: 0.1, down: 0.1, either: 0.2 }], touch: [] }] }
+  }) as unknown as PricePrediction
+
+const URL_RECORD = {
+  v: 'url-record-v1',
+  id: 'abcdefabcdef0123',
+  origin: 'manual',
+  at: RELEASE,
+  url: 'https://www.coindesk.com/markets/abc-listing',
+  originalHash: 'h',
+  host: 'www.coindesk.com',
+  credibility: 'outlet',
+  binance: { code: 'c0de', articleId: 4242, title: 'Binance Will List ABC', releaseSec: RELEASE, delisting: false },
+  retrieval: 'fetched',
+  readFailure: 'the page answered 403',
+  finalUrl: null,
+  readAt: RELEASE,
+  title: 'Binance will list ABC on Monday',
+  siteName: 'CoinDesk',
+  author: 'Jane Doe',
+  canonical: null,
+  bodyHash: 'b',
+  snippets: [
+    { n: 1, text: 'Binance said it will list ABC on Monday.' },
+    { n: 2, text: 'Trading opens at noon.' }
+  ],
+  time: {
+    sec: RELEASE - 600,
+    source: 'jsonld',
+    field: 'datePublished',
+    candidates: [],
+    future: [{ sec: RELEASE + 9000, source: 'meta', field: 'article:modified_time' }],
+    disagree: true,
+    check: { source: 'feed', sec: RELEASE - 500, agrees: false }
+  },
+  kind: 'LISTING',
+  corroboration: { stories: 2, sources: ['CoinDesk', 'The Block'] },
+  coins: [
+    { ticker: 'ABC', relationship: 'DIRECT', pair: 'ABCUSDT', venue: 'binance' },
+    { ticker: 'ETH', relationship: 'INDIRECT', pair: 'ETHUSDT', venue: 'bitget' }
+  ],
+  rejected: [
+    { ticker: 'XYZ', why: 'no-pair' },
+    { ticker: 'QRS', why: 'thin' },
+    { ticker: 'TUV', why: 'over-cap' }
+  ],
+  reactions: [
+    { pair: 'ABCUSDT', refPrice: 2, beforePct: 1.5, afterPct: { m5: 3.1, m15: 4.2, h1: null, h4: null }, final: false },
+    { pair: 'ETHUSDT', refPrice: 2500, beforePct: -0.4, afterPct: { m5: 0.1, m15: 0.2, h1: 0.3, h4: 0.5 }, final: true }
+  ],
+  verdict: { cards: [], none: 'No measured source calls a way for news of this kind (listing).' },
+  predictionIds: [],
+  executorIds: [],
+  analysisId: null,
+  lookups: { archive: { status: 'found', firstSec: RELEASE - 7200, note: 'The Internet Archive captured the page before the time it states.' }, x: { status: 'found', name: 'Jane Doe', url: 'https://x.com/jane' } },
+  trail: [{ at: RELEASE, status: 'read', note: 'The page was read: 768,915 bytes.' }]
+} as unknown as UrlRecord
+
+const ARTICLE_ANSWER: ArticleReadingAnswer = {
+  summary: 'Binance says it will list ABC on Monday.',
+  cites: [1, 2],
+  stance: 'official',
+  novelty: 'new',
+  coins: [
+    { ticker: 'ABC', about: 'subject' },
+    { ticker: 'ETH', about: 'mentioned' }
+  ],
+  bigMove: { hour: false, fourHours: true, day: false },
+  instructions: true,
+  confidence: 0.55,
+  reasons: 'An exchange announcement of a listing.'
+}
+
+describe('the primary call and a news link with data in them, in every language (V8 Stage 5)', () => {
+  it('reads each from its catalog, with no English in what is read but what the record holds as written', async () => {
+    const { PrimaryCallCard } = await import('../src/calls/PrimaryCallCard')
+    const { CallLines } = await import('../src/calls/CallLines')
+    const { RecordView, OwnView } = await import('../src/articles/NewsUrlsPage')
+    const { ArticleReading, ReadingView } = await import('../src/articles/ArticleReading')
+    const none = (): undefined => undefined
+    const pairs = ['BTCUSDT', 'SOLUSDT', ...REFUSAL_CODES.map((_, k) => `C${k}USDT`)]
+    const forecasts = new Map(pairs.map((pair) => [pair, LINE_FORECAST(pair)]))
+    const refusals = REFUSAL_CODES.map((code, k) => ({ refused: code, source: 'delisting-rule', pair: `C${k}USDT`, eventAt: RELEASE, expectedNet: null }))
+    const late = [
+      { pair: 'LATEUSDT', ticker: 'LATE', eventAt: RELEASE, exitAt: RELEASE + 14_400, movedSincePct: -6 },
+      { pair: 'NONEUSDT', ticker: 'NONE', eventAt: RELEASE, exitAt: RELEASE + 14_400, movedSincePct: null }
+    ]
+    const views: { name: string; element: ReactElement }[] = [
+      { name: 'the card, with one more', element: createElement(PrimaryCallCard, { state: { ...CALLS, cards: [CALL_CARD, { ...CALL_CARD, pair: 'DEFUSDT' }] }, predictions: [PREDICTION], livePrice: 1.98 }) },
+      {
+        name: 'no opportunity, with why',
+        element: createElement(PrimaryCallCard, {
+          state: { ...CALLS, late, refused: refusals, readerOn: false, modelSources: 2, delistLive: { hours: 6, coins: 9, meanPct: -3, low: -5, high: -1, state: 'withdrawn' } },
+          predictions: [PREDICTION, { ...PREDICTION, pair: 'BTCUSDT' }]
+        })
+      },
+      { name: 'no opportunity, nothing called', element: createElement(PrimaryCallCard, { state: { ...CALLS, delistLive: { hours: 0, coins: 0, meanPct: null, low: null, high: null, state: 'ok' } }, predictions: [] }) },
+      { name: 'weighing', element: createElement(PrimaryCallCard, { state: null, predictions: [] }) },
+      { name: "every coin's call", element: createElement(CallLines, { state: { ...CALLS, cards: [CALL_CARD], late, refused: refusals }, predictions: forecasts, pairs, onOpen: none }) },
+      { name: "every coin's call, before a forecast", element: createElement(CallLines, { state: null, predictions: new Map(), pairs: [], onOpen: none }) },
+      { name: "a link's record", element: createElement(RecordView, { record: URL_RECORD }) },
+      {
+        name: 'a delisting with no card, its lookups not yet made',
+        element: createElement(RecordView, { record: { ...URL_RECORD, binance: { ...URL_RECORD.binance!, delisting: true }, lookups: undefined, reactions: [], verdict: { cards: ['delisting-rule:ABCUSDT:1793030430'], none: null } } })
+      },
+      {
+        name: 'a discovered story, nothing read',
+        element: createElement(RecordView, {
+          record: { ...URL_RECORD, origin: 'automatic', lookups: undefined, coins: [], rejected: [], time: null, author: null, readFailure: null, snippets: [], binance: null, corroboration: { stories: 0, sources: [] }, retrieval: 'none' }
+        })
+      },
+      {
+        name: 'each other lookup',
+        element: createElement(RecordView, { record: { ...URL_RECORD, lookups: { archive: { status: 'off', firstSec: null, note: null }, x: { status: 'failed', name: null, url: null } }, time: { ...URL_RECORD.time!, check: { source: 'announcement', sec: RELEASE, agrees: true } } } })
+      },
+      { name: 'no capture', element: createElement(RecordView, { record: { ...URL_RECORD, lookups: { archive: { status: 'none', firstSec: null, note: null }, x: null }, time: { ...URL_RECORD.time!, check: { source: 'feed', sec: RELEASE, agrees: true } } } }) },
+      { name: 'not asked', element: createElement(RecordView, { record: { ...URL_RECORD, lookups: { archive: null, x: null }, time: { ...URL_RECORD.time!, check: { source: 'announcement', sec: RELEASE, agrees: false } } } }) },
+      { name: 'the archive failed', element: createElement(RecordView, { record: { ...URL_RECORD, lookups: { archive: { status: 'failed', firstSec: null, note: 'timeout' }, x: null } } }) },
+      { name: 'the archive found it, the time agreeing', element: createElement(RecordView, { record: { ...URL_RECORD, lookups: { archive: { status: 'found', firstSec: RELEASE - 60, note: null }, x: null } } }) },
+      { name: 'your own view', element: createElement(OwnView, { record: URL_RECORD, onPrepareOrder: none }) },
+      { name: 'the article reading, before its status', element: createElement(ArticleReading, { record: URL_RECORD }) },
+      { name: 'the article reading, no coin in its title', element: createElement(ArticleReading, { record: { ...URL_RECORD, coins: [URL_RECORD.coins[1]] } }) },
+      { name: 'the article reading, nothing read', element: createElement(ArticleReading, { record: { ...URL_RECORD, snippets: [] } }) },
+      { name: 'a reading', element: createElement(ReadingView, { reading: ARTICLE_ANSWER, subject: 'ABC', passage: (n: number) => URL_RECORD.snippets.find((snippet) => snippet.n === n)?.text ?? null }) },
+      {
+        name: 'each other reading',
+        element: createElement(ReadingView, {
+          reading: { ...ARTICLE_ANSWER, stance: 'unconfirmed', novelty: 'unclear', instructions: false, coins: [{ ticker: 'ABC', about: 'unrelated' }], bigMove: { hour: true, fourHours: false, day: true } },
+          subject: 'ABC',
+          passage: () => null
+        })
+      },
+      { name: 'a reported reading', element: createElement(ReadingView, { reading: { ...ARTICLE_ANSWER, stance: 'reported', novelty: 'known' }, subject: null, passage: () => null }) },
+      { name: 'an opinion', element: createElement(ReadingView, { reading: { ...ARTICLE_ANSWER, stance: 'opinion' }, subject: null, passage: () => null }) }
+    ]
+    for (const language of LANGUAGES) {
+      for (const { name, element } of views) {
+        clearMissedKeys()
+        const html = await render(element, language)
+        expect({ language, name, rendered: html.length > 100 }).toEqual({ language, name, rendered: true })
+        if (language === 'en') continue
+        expect({ language, name, missed: missedKeys(language) }).toEqual({ language, name, missed: [] })
+        expect({ language, name, english: englishIn(language, textInLanguage(html, language)) }).toEqual({ language, name, english: [] })
+      }
+    }
+  }, 60_000)
+})
+
 describe("the forecast's cards on the book the window holds", () => {
   it("decide on it where the window holds one, and show the pass's decision where it holds none", async () => {
     const { BestPredictionCard } = await import('../src/forecast/BestPredictionCard')
@@ -819,6 +995,9 @@ const WALK_ROOTS: readonly [string, string][] = [
 /** What stays English on a translated page, and why: each component's English, by the start of each text. */
 const ENGLISH_BY_DESIGN: Readonly<Record<string, { why: string; texts: readonly string[] }>> = {
   'src/components/Sidebar.tsx#Sidebar': { why: "the app's name", texts: ['TraderSpider'] },
+  // News URLs (V8 Stage 5): the form a link is written in, and the host a pasted link is sent to when the Archive is asked.
+  'src/articles/NewsUrlsPage.tsx#NewsUrlsPage': { why: "a link's own form, and the Internet Archive's host", texts: ['https://…', 'web.archive.org'] },
+  'src/articles/NewsUrlsPage.tsx#OwnView': { why: "the prediction record's own reason, kept in English as every record's is", texts: ['My own view on '] },
   'src/livetrading/LiveOrderScheduler.tsx#LiveOrderScheduler': {
     why: "an executor's own record of what went wrong, shown only on Strategies › Execution",
     texts: ['filled, but no open ', ' position was found to arm an exit watcher against']

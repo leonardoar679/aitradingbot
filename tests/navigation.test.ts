@@ -108,7 +108,7 @@ describe('the sidebar', () => {
 
 // V7.2-R Stage 3 (20 October 2026; the user's plan, its seventh priority): the normal mode's own layout.
 describe("the normal mode's sidebar", () => {
-  it('leads with the five pages a trader opens, folds every other entry under More Features, and keeps System', () => {
+  it('leads with the six pages a trader opens, folds every other entry under More Features, and keeps System', () => {
     expect(navGroupsFor('normal')).toBe(NORMAL_NAV_GROUPS)
     expect(navGroupsFor('expert')).toBe(NAV_GROUPS)
     expect(NORMAL_NAV_GROUPS.map((group) => [group.id, group.title, group.foldable])).toEqual([
@@ -116,8 +116,10 @@ describe("the normal mode's sidebar", () => {
       ['more', 'More Features', true],
       ['system', 'System', false]
     ])
-    expect(NORMAL_NAV_GROUPS[0].items.map((item) => item.label)).toEqual(['Home', 'AI Predictions', 'Paper Trading', 'Performance', 'News'])
-    expect(NORMAL_NAV_GROUPS[0].items.map((item) => item.target)).toEqual([{ page: 'home' }, { page: 'predictions' }, { page: 'paper-trading' }, { page: 'performance' }, { page: 'discovery', tab: 'news' }])
+    // News URLs after Predictions since V8 Stage 5, translated.
+    expect(NORMAL_NAV_GROUPS[0].items.map((item) => item.label)).toEqual(['Home', 'AI Predictions', 'News URLs', 'Paper Trading', 'Performance', 'News'])
+    expect(NORMAL_NAV_GROUPS[0].items.map((item) => item.target)).toEqual([{ page: 'home' }, { page: 'predictions' }, { page: 'news-urls' }, { page: 'paper-trading' }, { page: 'performance' }, { page: 'discovery', tab: 'news' }])
+    expect(groupOf('news-urls', 'normal')).toBe('main')
   })
 
   it('removes nothing: every entry of the expert layout is in it, once, under its own label but two renamed', () => {

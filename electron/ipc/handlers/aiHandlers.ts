@@ -15,6 +15,7 @@ import {
   testAiCredential
 } from '../../services/aiCredentialsService'
 import { concludeMove, exitCheck, getAiAdditionsStatus, reviewTrade, summarizeDay } from '../../services/aiAdditionsService'
+import { readArticle } from '../../services/aiArticleService'
 import { applyAiRoles, getAiConfig, listAiModels, previewAiRoles, setAiConfig } from '../../services/aiConfigService'
 import { getAiExperiment, listAiExperiments, recordAiExperiment } from '../../services/aiExperimentService'
 import { getAiUsageSummary, listAiCalls } from '../../services/aiLedgerService'
@@ -44,7 +45,10 @@ import {
 // recording an experiment (shared/aiExperiment.ts): it writes down what a run that has already
 // ended asked, and counts its cost from the ledger. Nor do the AI additions (shared/aiAdditions.ts):
 // the news analyst asks by itself in the main process, within its own limit and the budget, and
-// AiAdditionsStatus only reads its switch, the ledger and the price list.
+// AiAdditionsStatus only reads its switch, the ledger and the price list. The additions' channels
+// that ask are each held to their own limit and the budget: AiExitCheck and AiSummarizeDay as the
+// two above, and since V8 Stage 5 (26 October 2026) AiReadArticle, one reading of a news link on
+// file from a click on News URLs at the price shown, at most twenty a day, never by itself.
 export function registerAiHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(IpcChannel.AiCredentialsStatus, () => getAiCredentialStatus())
   ipcMain.handle(IpcChannel.AiCredentialsSet, (_event, apiKey: string) => setAiCredential(apiKey))
@@ -83,4 +87,5 @@ export function registerAiHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(IpcChannel.AiReviewTrade, (_event, request: unknown) => reviewTrade(request))
   ipcMain.handle(IpcChannel.AiExitCheck, (_event, request: unknown) => exitCheck(request))
   ipcMain.handle(IpcChannel.AiSummarizeDay, (_event, request: unknown, automatic: unknown) => summarizeDay(request, automatic === true))
+  ipcMain.handle(IpcChannel.AiReadArticle, (_event, id: unknown) => readArticle(id))
 }

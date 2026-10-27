@@ -1,5 +1,7 @@
 import { Card } from '../components/Card'
 import { noteStyle } from '../agents/agentStyles'
+import { useI18n } from '../i18n'
+import { Interpolate } from '../i18n/Interpolate'
 import type { PrimaryCallState, PrimaryCard } from '../../shared/forecast/primaryCall'
 import type { PricePrediction } from '../../shared/forecast/prediction'
 import {
@@ -12,13 +14,11 @@ import {
   liveCheckText,
   noCardText,
   pairWords,
-  priceText,
   reasonText,
-  signed,
   sizeSpanText,
   sourceWords,
   sourcesText,
-  utcTime
+  utcText
 } from './callText'
 
 const label: React.CSSProperties = { fontSize: '0.66rem', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-muted)', flex: '0 0 9.5rem' }
@@ -36,40 +36,43 @@ function Row({ name, children }: { name: string; children: React.ReactNode }): R
 /** One card: the pair and the call, the reference price, target and window, the arrival, the risk scenarios, the
  * route's cost, the net at the target and the expected net, and the reason. */
 export function CallCardBody({ card, livePrice }: { card: PrimaryCard; livePrice: number | null }): React.JSX.Element {
+  const i18n = useI18n()
+  const { t, pct, dollars } = i18n
+  const tags = [sourceWords(card, i18n), t('paper only')]
+  if (card.detail.kind === 'delisting' && card.detail.weaker) tags.push(t('weaker than its study'))
+  const price = t('reference {price} at {time}', { price: dollars(card.refPrice), time: utcText(card.madeAt, i18n) })
+  const target = t('{price} ({move} before costs), by {time}', { price: dollars(card.targetPrice), move: pct(card.side === 'down' ? -card.movePct : card.movePct, 2), time: utcText(card.exitAt, i18n) })
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.9rem', flexWrap: 'wrap' }}>
         <span dir="ltr" style={{ fontSize: '1.25rem', fontWeight: 700 }}>
           {pairWords(card.pair)}
         </span>
-        <span style={{ fontSize: '1rem', fontWeight: 700, color: card.side === 'down' ? 'var(--down)' : 'var(--up)' }}>{cardLabel(card)}</span>
-        <span style={{ ...noteStyle, marginInlineStart: 'auto' }}>
-          {sourceWords(card)} · paper only{card.detail.kind === 'delisting' && card.detail.weaker ? ' · weaker than its study' : ''}
-        </span>
+        <span style={{ fontSize: '1rem', fontWeight: 700, color: card.side === 'down' ? 'var(--down)' : 'var(--up)' }}>{cardLabel(card, i18n)}</span>
+        <span style={{ ...noteStyle, marginInlineStart: 'auto' }}>{tags.join(' · ')}</span>
       </div>
       <div style={{ marginTop: '0.6rem' }}>
-        <Row name="Price">
-          reference {priceText(card.refPrice)} at {utcTime(card.madeAt)}
-          {livePrice !== null ? ` · now ${priceText(livePrice)}` : ''}
+        <Row name={t('Price')}>{livePrice !== null ? `${price} · ${t('now {price}', { price: dollars(livePrice) })}` : price}</Row>
+        <Row name={t('Target and window')}>{card.detail.kind === 'delisting' ? `${target}, ${t("the rule's exit four hours after the announcement")}` : target}</Row>
+        <Row name={t('Arrival')}>{arrivalText(card, i18n)}</Row>
+        <Row name={t('Risk scenarios')}>
+          {t('in its favour {for} (one call in ten did better); against it {against} (one in ten did worse); the worst on file {worst} after costs', {
+            for: pct(card.scenarios.forPct, 2),
+            against: pct(card.scenarios.againstPct, 2),
+            worst: pct(card.scenarios.worstPct, 2)
+          })}
         </Row>
-        <Row name="Target and window">
-          {priceText(card.targetPrice)} ({signed(card.side === 'down' ? -card.movePct : card.movePct)} before costs), by {utcTime(card.exitAt)}
-          {card.detail.kind === 'delisting' ? ", the rule's exit four hours after the announcement" : ''}
-        </Row>
-        <Row name="Arrival">{arrivalText(card)}</Row>
-        <Row name="Risk scenarios">
-          in its favour {signed(card.scenarios.forPct)} (one call in ten did better); against it {signed(card.scenarios.againstPct)} (one in ten did worse); the worst
-          on file {signed(card.scenarios.worstPct)} after costs
-        </Row>
-        <Row name="Costs">{costText(card)}</Row>
-        <Row name="Net at the target">{signed(card.netAtTargetPct)} after the round trip</Row>
-        <Row name="Expected net">{expectedNetText(card)}</Row>
-        <Row name="Why">{reasonText(card)}</Row>
-        <Row name="What you can do">{actionText(card)}</Row>
+        <Row name={t('Costs')}>{costText(card, i18n)}</Row>
+        <Row name={t('Net at the target')}>{t('{net} after the round trip', { net: pct(card.netAtTargetPct, 2) })}</Row>
+        <Row name={t('Expected net')}>{expectedNetText(card, i18n)}</Row>
+        <Row name={t('Why')}>{reasonText(card, i18n)}</Row>
+        <Row name={t('What you can do')}>{actionText(card, i18n)}</Row>
       </div>
       <p style={{ ...noteStyle, marginTop: '0.5rem' }}>
-        Risk scenarios are what its source's calls did, not limits: a squeeze can go past them. Recorded as {card.predictionId}; its outcome is settled from the
-        venue's bars when its window ends.
+        <Interpolate
+          text={t("Risk scenarios are what its source's calls did, not limits: a squeeze can go past them. Recorded as {id}; its outcome is settled from the venue's bars when its window ends.")}
+          values={{ id: <code>{card.predictionId}</code> }}
+        />
       </p>
     </div>
   )
@@ -87,39 +90,41 @@ export function PrimaryCallCard({
   /** The best card's pair's live mid, where the stream holds it. */
   livePrice?: number | null
 }): React.JSX.Element {
+  const i18n = useI18n()
+  const { t } = i18n
   if (state === null) {
     return (
-      <Card title="Primary call">
-        <p style={noteStyle}>Weighing the sources that may call a way…</p>
+      <Card title={t('Primary call')}>
+        <p style={noteStyle}>{t('Weighing the sources that may call a way…')}</p>
       </Card>
     )
   }
   const [best, ...others] = state.cards
   if (best !== undefined) {
     return (
-      <Card title="Primary call">
+      <Card title={t('Primary call')}>
         <CallCardBody card={best} livePrice={livePrice ?? null} />
         {others.length > 0 && (
           <p style={{ ...noteStyle, marginTop: '0.4rem' }}>
-            {others.length === 1 ? 'One more card' : `${others.length} more cards`}: {others.map((card) => `${pairWords(card.pair)} ${cardLabel(card)}`).join(', ')} — on Predictions.
+            {t('{count} more cards: {cards} — on Predictions.', { count: others.length, cards: others.map((card) => `${pairWords(card.pair)} ${cardLabel(card, i18n)}`).join(', ') })}
           </p>
         )}
       </Card>
     )
   }
-  const size = sizeSpanText(predictions)
-  const live = liveCheckText(state.delistLive)
+  const size = sizeSpanText(predictions, i18n)
+  const live = liveCheckText(state.delistLive, i18n)
   return (
-    <Card title="Primary call">
-      <p style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700 }}>No profitable opportunity identified</p>
-      <p style={{ ...noteStyle, marginTop: '0.45rem' }}>{noCardText(state)}</p>
+    <Card title={t('Primary call')}>
+      <p style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700 }}>{t('No profitable opportunity identified')}</p>
+      <p style={{ ...noteStyle, marginTop: '0.45rem' }}>{noCardText(state, i18n)}</p>
       {state.late.map((late) => (
         <p key={`${late.pair}:${late.eventAt}`} style={{ ...noteStyle, marginTop: '0.3rem' }}>
-          {lateText(late)}
+          {lateText(late, i18n)}
         </p>
       ))}
       {size !== null && <p style={{ ...noteStyle, marginTop: '0.45rem' }}>{size}</p>}
-      <p style={{ ...noteStyle, marginTop: '0.45rem' }}>{sourcesText(state)}</p>
+      <p style={{ ...noteStyle, marginTop: '0.45rem' }}>{sourcesText(state, i18n)}</p>
       {live !== null && <p style={{ ...noteStyle, marginTop: '0.3rem' }}>{live}</p>}
     </Card>
   )

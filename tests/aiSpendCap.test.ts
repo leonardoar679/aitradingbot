@@ -141,8 +141,8 @@ describe('the budget in the main process', () => {
       watchPaper: { enabled: false, model: null, stakeQuote: 100, maxOpen: 3, maxSameSide: 2, pauseAfterLosses: 3, dropOnBtcMovePct: 1 },
       callsPerMinute: 30,
       // The AI additions are on, as the user chose on 6 October 2026; the ones that ask by themselves
-      // still wait for the watch, which is off.
-      additions: { news: true, why: true, exit: true, review: true, daily: true },
+      // still wait for the watch, which is off. The article reading, asked on a click, ships off (V8 Stage 5).
+      additions: { news: true, why: true, exit: true, review: true, daily: true, article: false },
       // No roles until a move to them is applied (V7.2-R Stage 1): every caller asks what it asked before.
       roles: null
     })

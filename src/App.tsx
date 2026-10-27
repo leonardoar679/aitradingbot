@@ -50,7 +50,7 @@ import { EnglishOnly, I18nProvider, healLanguage, languageForLocales, msg, type 
 import { LanguageChooser } from './i18n/LanguageChooser'
 
 /** The pages shown in the window's language (V6 Stage 14); every other stays English. */
-const TRANSLATED_PAGES: ReadonlySet<Page> = new Set<Page>(['home', 'predictions', 'opportunities', 'positions', 'performance', 'settings'])
+const TRANSLATED_PAGES: ReadonlySet<Page> = new Set<Page>(['home', 'predictions', 'opportunities', 'positions', 'performance', 'settings', 'news-urls'])
 
 /** When an entry that opens at a part of a page scrolls to it, after the page is drawn. */
 const ANCHOR_SCROLL_MS = [0, 250, 700, 1500]
@@ -289,6 +289,7 @@ function App(): React.JSX.Element {
             {page === 'positions' && <PositionsPage />}
             {page === 'performance' && <PerformancePage />}
             {page === 'settings' && <SettingsPanel onNavigate={navigate} onUiModeChange={setUiMode} onLanguageChange={setLanguage} />}
+            {page === 'news-urls' && <NewsUrlsPage onPrepareOrder={prepareOrder} />}
             {/* The pages not translated (the user's answer of 13 October 2026: the normal-user pages are)
                 stay English, left to right, inside any window. A translated part of one -- the Position
                 form -- brings the window's language back itself. */}
@@ -320,7 +321,6 @@ function App(): React.JSX.Element {
             {page === 'research' && <ResearchPage tab={tabs.research} onTab={(tab) => setTabs((current) => ({ ...current, research: tab }))} />}
             {page === 'ai-benchmark' && <AiBenchmarkPage />}
             {page === 'forecast-lab' && <ForecastLabPage />}
-            {page === 'news-urls' && <NewsUrlsPage onPrepareOrder={prepareOrder} />}
             {page === 'discovery' && (
               <ExplorerPage tab={tabs.discovery} onTab={(tab) => setTabs((current) => ({ ...current, discovery: tab }))} onNavigate={navigate} />
             )}

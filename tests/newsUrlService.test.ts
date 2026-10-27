@@ -307,3 +307,38 @@ describe('the lookups (V8 Stage 5)', () => {
     expect(await urls.lookUp('0000000000000000')).toBeNull()
   })
 })
+
+describe("a model's reading, noted on its record (V8 Stage 5)", () => {
+  it('reads a record by its id, and a coin price as the close of its last bar no more than five minutes stale', async () => {
+    const urls = await service({ 'https://www.coindesk.com/r': page('ABC news', 'A body long enough to be read as the text of the page about ABC.') })
+    const record = await urls.analyzeUrl({ raw: 'https://www.coindesk.com/r' })
+    if ('refused' in record) throw new Error('refused')
+    expect((await urls.urlRecordOf(record.id))?.id).toBe(record.id)
+    expect(await urls.urlRecordOf('0000000000000000')).toBeNull()
+    expect(await urls.livePriceOf({ pair: 'ABCUSDT', venue: 'binance' })).toBe(1.8)
+    // Bars that stop more than five minutes before now: no price.
+    urls.newsUrlSeam.bars = async (_venue, _pair, fromSec) => bars(fromSec, clock - 420)
+    expect(await urls.livePriceOf({ pair: 'ABCUSDT', venue: 'binance' })).toBeNull()
+    urls.newsUrlSeam.bars = async () => {
+      throw new Error('the venue answered 429')
+    }
+    expect(await urls.livePriceOf({ pair: 'ABCUSDT', venue: 'binance' })).toBeNull()
+  })
+  it('notes the reading: its ledger row once answered, the size calls made from it once each, and a step of the trail', async () => {
+    const urls = await service({ 'https://www.coindesk.com/n': page('ABC news', 'A body long enough to be read as the text of the page about ABC.') })
+    const record = await urls.analyzeUrl({ raw: 'https://www.coindesk.com/n' })
+    if ('refused' in record) throw new Error('refused')
+    clock = NOW + 60
+    const noted = await urls.noteArticleReading(record.id, { analysisId: 'row-1', predictionIds: ['article:ABCUSDT:1:2'], text: 'Read by m; one size call recorded.' })
+    expect(noted).toMatchObject({ analysisId: 'row-1', predictionIds: ['article:ABCUSDT:1:2'] })
+    expect(noted?.trail.at(-1)).toEqual({ at: NOW + 60, status: 'reading', note: 'Read by m; one size call recorded.' })
+    // A refusal keeps the row of the answer before it, and a call noted twice is kept once.
+    const again = await urls.noteArticleReading(record.id, { analysisId: null, predictionIds: ['article:ABCUSDT:1:2'], text: 'A reading by m was refused: it cites 9.' })
+    expect(again).toMatchObject({ analysisId: 'row-1', predictionIds: ['article:ABCUSDT:1:2'] })
+    expect(again?.trail.filter((entry) => entry.status === 'reading')).toHaveLength(2)
+    // Kept on file: a new session reads it back as noted.
+    urls.resetNewsUrls()
+    expect((await urls.urlRecordOf(record.id))?.analysisId).toBe('row-1')
+    expect(await urls.noteArticleReading('0000000000000000', { analysisId: 'x', predictionIds: [], text: 'nothing' })).toBeNull()
+  })
+})

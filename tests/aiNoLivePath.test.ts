@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs'
-import { basename, join } from 'node:path'
+import { basename, join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 // NO MODEL PLACES AN ORDER, AND THAT IS A PROPERTY OF THE IMPORT GRAPH.
@@ -1032,6 +1032,35 @@ describe('AI code has no route to a real order', () => {
     for (const path of [join(ROOT, 'src', 'agents', 'AiAdditionsCard.tsx'), join(ROOT, 'src', 'news', 'useNewsReadings.ts'), join(ROOT, 'src', 'agents', 'WhyConclusion.tsx')]) {
       expect(readFileSync(path, 'utf-8'), path).not.toMatch(/liveTrading|LiveTrading|placeLive|onPrepareOrder|aiProposal|settings\.set/)
     }
+  })
+
+  it('the article reading is asked on a click, records its size calls, and nothing else reads it (V8 Stage 5)', () => {
+    // The user's answer of 26 October 2026: on a click, with Opus 5.5, priced at the click, twenty a day inside the $5
+    // day. Its service reads the record, asks through the additions' own path and writes the prediction record and the
+    // record's note: nothing that trades, holds a key itself or writes a setting.
+    const sourcesIn = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+        entry.isDirectory() ? (entry.name === 'node_modules' ? [] : sourcesIn(join(dir, entry.name))) : /\.(ts|tsx)$/.test(entry.name) && !entry.name.endsWith('.d.ts') ? [join(dir, entry.name)] : []
+      )
+    const named = (paths: string[]): string[] => paths.map((path) => relative(ROOT, path).replace(/\\/g, '/')).sort()
+    const service = join(SERVICES, 'aiArticleService.ts')
+    expect(importsOf(service).sort()).toEqual(['aiAdditions', 'aiAdditionsService', 'effectiveConfigService', 'newsUrlService', 'predictionLedgerService', 'predictionRecord'])
+    const source = readFileSync(service, 'utf-8')
+    expect(source).toContain('automatic: false')
+    expect(source).not.toMatch(/automatic: true|liveTrading|placeLive|setExecutors|settings\.set|setSettings|credentials|apiKey/)
+    const everything = ['src', 'electron', 'shared'].flatMap((dir) => sourcesIn(join(ROOT, dir)))
+    // It asks only from its channel, from a click: nothing starts it by itself.
+    expect(named(everything.filter((path) => /\breadArticle\s*\(/.test(readFileSync(path, 'utf-8'))))).toEqual(['electron/ipc/handlers/aiHandlers.ts', 'electron/services/aiArticleService.ts', 'src/articles/ArticleReading.tsx'])
+    // Nothing but its own panel and its service reads a reading: not the alerts, the watch, the signal score or the forecast.
+    const reads = /AI_ADDITION_PROMPT_VERSIONS\.article|article-reader-v1|latestArticleReadingOf|ArticleReadingOnFile|validateArticleReading|articleCallsOf/
+    expect(named(everything.filter((path) => reads.test(readFileSync(path, 'utf-8'))))).toEqual(['electron/services/aiArticleService.ts', 'shared/aiAdditions.ts', 'src/articles/ArticleReading.tsx'])
+    // The panel reads the reading on file, the switch and the price, and asks on its click; the rest of News URLs
+    // reaches no AI channel at all (held above).
+    const panel = readFileSync(join(ROOT, 'src', 'articles', 'ArticleReading.tsx'), 'utf-8')
+    expect([...new Set([...panel.matchAll(/window\.api\.(\w+)(?:\s*\.\s*(\w+))?/g)].map((match) => `${match[1]}.${match[2]}`))].sort()).toEqual(['ai.additionsStatus', 'ai.listCalls', 'ai.readArticle'])
+    expect(panel).not.toMatch(/liveTrading|LiveTrading|placeLive|onPrepareOrder|aiProposal|settings\.set|setConfig/)
+    // News URLs' service still asks no model, and imports nothing of the reading's.
+    expect(importsOf(join(SERVICES, 'newsUrlService.ts')).filter((name) => aiModuleNames.has(name) || name === 'aiAdditions')).toEqual([])
   })
 
   it("the exit check closes the app's own paper trades early, and does nothing else", () => {

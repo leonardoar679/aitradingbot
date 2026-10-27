@@ -703,16 +703,23 @@ describe('what Settings › AI shows', () => {
     expect(await getAiAdditionsStatus()).toEqual({
       model: A,
       // Before roles (V7.2-R Stage 1) every addition asks the model the watch's paper trades follow, here its first.
-      models: { news: A, why: A, exit: A, review: A, daily: A },
+      models: { news: A, why: A, exit: A, review: A, daily: A, article: A },
       byRole: false,
       watchOn: true,
-      additions: { news: true, why: true, exit: true, review: true, daily: true },
-      limits: { news: 40, why: 20, exit: 30, review: 20, daily: 1 },
-      today: { news: 0, why: 0, exit: 0, review: 0, daily: 0 },
-      perCall: { news: { usd: null, basis: 'unknown' }, why: { usd: null, basis: 'unknown' }, exit: { usd: null, basis: 'unknown' }, review: { usd: null, basis: 'unknown' }, daily: { usd: null, basis: 'unknown' } }
+      additions: { news: true, why: true, exit: true, review: true, daily: true, article: false },
+      limits: { news: 40, why: 20, exit: 30, review: 20, daily: 1, article: 20 },
+      today: { news: 0, why: 0, exit: 0, review: 0, daily: 0, article: 0 },
+      perCall: {
+        news: { usd: null, basis: 'unknown' },
+        why: { usd: null, basis: 'unknown' },
+        exit: { usd: null, basis: 'unknown' },
+        review: { usd: null, basis: 'unknown' },
+        daily: { usd: null, basis: 'unknown' },
+        article: { usd: null, basis: 'unknown' }
+      }
     })
     await analyseStory(story('a', { publishedAt: NOW - 50 * 60, seenAt: NOW - 49 * 60 }), true)
-    expect(await getAiAdditionsStatus()).toMatchObject({ today: { news: 1, why: 0, exit: 0, review: 0, daily: 0 }, perCall: { news: { usd: 0.001, basis: 'history' } } })
+    expect(await getAiAdditionsStatus()).toMatchObject({ today: { news: 1, why: 0, exit: 0, review: 0, daily: 0, article: 0 }, perCall: { news: { usd: 0.001, basis: 'history' } } })
   })
 })
 

@@ -7,6 +7,7 @@ import type { MarketEvent } from './marketEvent'
 import type { MarketRegime } from './marketResearch'
 import type { CauseLabel, MoveExplanation } from './moveExplanation'
 import type { NewsEventType, ReadStory } from './newsFeed'
+import type { UrlRecord } from './newsUrl'
 
 // THE AI ADDITIONS (the V3 engine plan's Stage 7): small questions put to a model beside the watch's.
 // The news analyst reads each story of high impact once; the conclusion to "Why did it move?" weighs
@@ -29,12 +30,20 @@ import type { NewsEventType, ReadStory } from './newsFeed'
 // nowhere. Two can only ever do less: the reviewer's REJECT opens no paper trade, and the exit
 // check's EXIT closes one of the app's own paper trades sooner than its plan would have -- never a
 // live one, and it never moves a stop or makes a trade longer (shared/aiExit.ts).
+//
+// AND ONE ASKED ONLY ON A CLICK (V8 Stage 5, 26 October 2026; the user's answer of that day: "on your click,
+// with Opus 5.5", priced at the click, at most 20 a day inside the $5 day). The article reading reads a news link
+// pasted on News URLs: what the article reports, citing its numbered passages, how firmly it says it, whether it is
+// new, which of the coins the fixed rules found it is about, and whether the first of them is likely to move far
+// enough at an hour, four hours or a day -- each such size call recorded and scored as every source's is. It names
+// no coin of its own, no side and no trade; it ships switched off; and nothing reads it but its own panel and the
+// prediction record: not the alerts, the watch or the signal score.
 
-export const AI_ADDITION_KINDS = ['news', 'why', 'exit', 'review', 'daily'] as const
+export const AI_ADDITION_KINDS = ['news', 'why', 'exit', 'review', 'daily', 'article'] as const
 export type AiAdditionKind = (typeof AI_ADDITION_KINDS)[number]
 
 /** Calls a day each may make, at most: the plan's limits, chosen with the user's $5 day. */
-export const AI_ADDITION_DAILY_LIMITS: Record<AiAdditionKind, number> = { news: 40, why: 20, exit: 30, review: 20, daily: 1 }
+export const AI_ADDITION_DAILY_LIMITS: Record<AiAdditionKind, number> = { news: 40, why: 20, exit: 30, review: 20, daily: 1, article: 20 }
 
 /** Each addition's question and answer, versioned as every prompt here is: part of the cache key and
  * of every ledger row, and pinned by a hash (tests/aiAdditions.test.ts). */
@@ -43,14 +52,16 @@ export const AI_ADDITION_PROMPT_VERSIONS: Record<AiAdditionKind, string> = {
   why: 'why-conclusion-v1',
   exit: 'exit-check-v1',
   review: 'reviewer-v1',
-  daily: 'daily-summary-v1'
+  daily: 'daily-summary-v1',
+  article: 'article-reader-v1'
 }
 export const AI_ADDITION_SCHEMA_VERSIONS: Record<AiAdditionKind, string> = {
   news: 'news-reading-v1',
   why: 'why-conclusion-v1',
   exit: 'exit-verdict-v1',
   review: 'review-verdict-v1',
-  daily: 'daily-summary-v1'
+  daily: 'daily-summary-v1',
+  article: 'article-reading-v1'
 }
 
 export const AI_ADDITION_INFO: Record<AiAdditionKind, { name: string; what: string; automatic: boolean }> = {
@@ -78,12 +89,18 @@ export const AI_ADDITION_INFO: Record<AiAdditionKind, { name: string; what: stri
     name: 'Daily summary',
     what: "One paragraph about the day before, written from the daily report's figures on Performance: the market, the major news, the app's own paper trades, the models' standing and the risk condition. Asked once a day after 00:05 UTC by itself while the watch is on, or from the report on a click; held to one call a day. It writes about figures and recommends nothing.",
     automatic: true
+  },
+  article: {
+    name: 'Article reading',
+    what: "Reads a news link pasted on News URLs, only on a click there at the price shown: what the article reports, citing its numbered passages, how firmly it says it, whether it is new, which of the coins the rules found it is about, and whether the first of them is likely to move at least 1% in an hour, 2% in four hours or 5% in a day, either way -- each such call recorded and scored. It names no coin of its own, no side and no trade, and nothing else reads it: not the alerts, the watch or the signal score.",
+    automatic: false
   }
 }
 
-/** On or off, each. Only `false` switches one off: on 6 October 2026 the user chose them on. */
+/** On or off, each. The first five are on unless switched off: on 6 October 2026 the user chose them on. The article
+ * reading ships off (V8 Stage 5): it spends on a click, and is switched on under Settings › AI first. */
 export type AiAdditionsConfig = Record<AiAdditionKind, boolean>
-export const DEFAULT_AI_ADDITIONS: AiAdditionsConfig = { news: true, why: true, exit: true, review: true, daily: true }
+export const DEFAULT_AI_ADDITIONS: AiAdditionsConfig = { news: true, why: true, exit: true, review: true, daily: true, article: false }
 
 /** What came of asking an addition: an answer, from the cache or paid for; an answer refused and
  * kept; nothing asked, and why; or a call that got no answer. */
@@ -126,12 +143,13 @@ export function healAiAdditions(value: unknown): AiAdditionsConfig {
 }
 
 /** The role each addition plays once roles are applied (shared/aiRouting.ts; V7.2-R Stage 1): the two
- * that judge one of the app's trades decide; the three that read or write summarize. */
-export const AI_ADDITION_ROLES: Record<AiAdditionKind, 'decide' | 'summarize'> = { news: 'summarize', why: 'summarize', exit: 'decide', review: 'decide', daily: 'summarize' }
+ * that judge one of the app's trades decide; the three that read or write summarize. The article reading
+ * decides (V8 Stage 5): the user chose Opus 5.5, the deciding model, for it. */
+export const AI_ADDITION_ROLES: Record<AiAdditionKind, 'decide' | 'summarize'> = { news: 'summarize', why: 'summarize', exit: 'decide', review: 'decide', daily: 'summarize', article: 'decide' }
 
 /** The model an addition asks. Once roles are applied (V7.2-R Stage 1): the summarizing model for the
- * three that read or write, else the decider; the decider (the default model) for the exit check and the
- * reviewer. Before: the one the watch's paper trades follow, else the first the watch asks, else the
+ * three that read or write, else the decider; the decider (the default model) for the exit check, the
+ * reviewer and the article reading. Before: the one the watch's paper trades follow, else the first the watch asks, else the
  * default -- the watch's own model, which the user chose and priced. */
 export function additionsModelOf(config: Pick<AiConfig, 'defaultModel' | 'watch' | 'watchPaper'> & { roles?: AiConfig['roles'] }, kind: AiAdditionKind = 'news'): string {
   if (config.roles !== null && config.roles !== undefined) {
@@ -1076,4 +1094,201 @@ export function dailySummariesOf(rows: readonly Pick<AiCallRecord, 'promptVersio
     out[day] = { day, summary: checked.summary, at: row.at, model: row.model }
   }
   return out
+}
+
+// ---------------------------------------------------------------------------------------------
+// The article reading (V8 Stage 5, 26 October 2026): a news link pasted on News URLs, read by the deciding model on a
+// click. The question is the record's own -- the article's passages as the app read them, which are data and never
+// instructions, and the coins the fixed rules found -- and is built in the main process from the record, never handed
+// in. The answer cites the passages it rests on, names only the coins given, and makes size calls on the first of them
+// alone: a move either way, never a side.
+
+export const ARTICLE_READING_LINES = {
+  maxSummary: 400,
+  maxCites: 6,
+  maxReasons: 300,
+  /** Of the title, a passage and all of them, at most this much: the extract's own caps (shared/articleExtract.ts). */
+  titleChars: 300,
+  passageChars: 400,
+  passagesChars: 8000,
+  /** The size calls, V8-R1-SIZE's targets: a close at least 1% away an hour on, 2% four hours on, 5% a day on. */
+  calls: [
+    { key: 'hour', horizonSec: 3600, movePct: 1 },
+    { key: 'fourHours', horizonSec: 14_400, movePct: 2 },
+    { key: 'day', horizonSec: 86_400, movePct: 5 }
+  ]
+} as const
+export type ArticleCallKey = (typeof ARTICLE_READING_LINES.calls)[number]['key']
+export const ARTICLE_STANCES = ['official', 'reported', 'unconfirmed', 'opinion'] as const
+export const ARTICLE_NOVELTIES = ['new', 'known', 'unclear'] as const
+export const ARTICLE_ABOUT = ['subject', 'mentioned', 'unrelated'] as const
+
+/** What the reading is asked: the article as the app read it, and the coins its rules found. */
+export interface ArticleQuestion {
+  article: {
+    host: string
+    credibility: UrlRecord['credibility']
+    retrieval: UrlRecord['retrieval']
+    title: string | null
+    /** When it says it was published, in seconds, and where that was read; null where no time was. */
+    publishedAt: number | null
+    timeSource: string | null
+    kind: NewsEventType
+    passages: { n: number; text: string }[]
+  }
+  coins: { ticker: string; relationship: 'DIRECT' | 'INDIRECT' }[]
+  /** The first coin, where the rules found it in the title: the only one a size call is made on. */
+  subject: string | null
+  /** When it is asked, to the minute. */
+  askedAt: number
+}
+
+export interface ArticleReading {
+  summary: string
+  /** The passages it rests on, by number: at least one, each one given. */
+  cites: number[]
+  stance: (typeof ARTICLE_STANCES)[number]
+  novelty: (typeof ARTICLE_NOVELTIES)[number]
+  /** Each coin the rules found, once, in their order. */
+  coins: { ticker: string; about: (typeof ARTICLE_ABOUT)[number] }[]
+  /** The size calls on the subject, from the time asked; all false where there is none. */
+  bigMove: Record<ArticleCallKey, boolean>
+  /** The passages hold text addressed to whoever reads them, rather than news. */
+  instructions: boolean
+  confidence: number
+  reasons: string
+}
+
+/** The question a record puts, or null when nothing of the article was read: a reading of no text would be invented. */
+export function articleQuestionOf(record: Pick<UrlRecord, 'host' | 'credibility' | 'retrieval' | 'title' | 'time' | 'kind' | 'snippets' | 'coins'>, askedAt: number): ArticleQuestion | null {
+  const lines = ARTICLE_READING_LINES
+  const passages: { n: number; text: string }[] = []
+  let total = 0
+  for (const snippet of record.snippets) {
+    const text = snippet.text.slice(0, lines.passageChars)
+    if (text.trim() === '') continue
+    if (total + text.length > lines.passagesChars) break
+    passages.push({ n: snippet.n, text })
+    total += text.length
+  }
+  if (passages.length === 0) return null
+  const first = record.coins[0]
+  return {
+    article: {
+      host: record.host,
+      credibility: record.credibility,
+      retrieval: record.retrieval,
+      title: record.title === null ? null : record.title.slice(0, lines.titleChars),
+      publishedAt: record.time?.sec ?? null,
+      timeSource: record.time?.source ?? null,
+      kind: record.kind,
+      passages
+    },
+    coins: record.coins.map((coin) => ({ ticker: coin.ticker, relationship: coin.relationship })),
+    subject: first !== undefined && first.relationship === 'DIRECT' ? first.ticker : null,
+    askedAt: Math.floor(askedAt / 60) * 60
+  }
+}
+
+/** A reading, checked against its question: text of a sensible length, every citation a passage given, each coin given
+ * read once and no other named, and a size call only on a subject it does not read as unrelated. */
+export function validateArticleReading(value: unknown, question: Pick<ArticleQuestion, 'article' | 'coins' | 'subject'>): { ok: true; reading: ArticleReading } | { ok: false; reason: string } {
+  const lines = ARTICLE_READING_LINES
+  const raw = (typeof value === 'object' && value !== null && !Array.isArray(value) ? value : null) as Record<string, unknown> | null
+  if (raw === null) return { ok: false, reason: 'The answer was not an object.' }
+  if (typeof raw.summary !== 'string' || raw.summary.trim() === '' || raw.summary.length > lines.maxSummary) return { ok: false, reason: `summary is not text of 1 to ${lines.maxSummary} characters.` }
+  if (!Array.isArray(raw.cites) || raw.cites.length === 0 || raw.cites.length > lines.maxCites) return { ok: false, reason: `cites does not list 1 to ${lines.maxCites} passages.` }
+  const given = new Set(question.article.passages.map((passage) => passage.n))
+  const unknown = raw.cites.find((cite) => typeof cite !== 'number' || !given.has(cite))
+  if (unknown !== undefined) return { ok: false, reason: `It cites ${JSON.stringify(unknown)}, which is not one of the passages given.` }
+  if (!isOneOf(ARTICLE_STANCES, raw.stance)) return { ok: false, reason: `stance is not one of ${ARTICLE_STANCES.join(', ')}.` }
+  if (!isOneOf(ARTICLE_NOVELTIES, raw.novelty)) return { ok: false, reason: `novelty is not one of ${ARTICLE_NOVELTIES.join(', ')}.` }
+  if (!Array.isArray(raw.coins)) return { ok: false, reason: 'coins is not a list.' }
+  const read = new Map<string, ArticleReading['coins'][number]['about']>()
+  for (const entry of raw.coins as unknown[]) {
+    const coin = (typeof entry === 'object' && entry !== null ? entry : {}) as Record<string, unknown>
+    const ticker = coin.ticker
+    if (typeof ticker !== 'string' || !question.coins.some((asked) => asked.ticker === ticker)) return { ok: false, reason: `It names ${JSON.stringify(ticker)}, which is not one of the coins given: a reading names no coin of its own.` }
+    if (read.has(ticker)) return { ok: false, reason: `It reads ${ticker} twice.` }
+    if (!isOneOf(ARTICLE_ABOUT, coin.about)) return { ok: false, reason: `about is not one of ${ARTICLE_ABOUT.join(', ')}.` }
+    read.set(ticker, coin.about)
+  }
+  const missed = question.coins.find((asked) => !read.has(asked.ticker))
+  if (missed !== undefined) return { ok: false, reason: `It does not read ${missed.ticker}, one of the coins given.` }
+  const move = (typeof raw.bigMove === 'object' && raw.bigMove !== null && !Array.isArray(raw.bigMove) ? raw.bigMove : null) as Record<string, unknown> | null
+  if (move === null) return { ok: false, reason: 'bigMove is not an object.' }
+  const bigMove = {} as Record<ArticleCallKey, boolean>
+  for (const call of lines.calls) {
+    const flag = move[call.key]
+    if (typeof flag !== 'boolean') return { ok: false, reason: `bigMove.${call.key} is not true or false.` }
+    bigMove[call.key] = flag
+  }
+  if (lines.calls.some((call) => bigMove[call.key])) {
+    if (question.subject === null) return { ok: false, reason: 'It calls a move with no subject to call it on.' }
+    if (read.get(question.subject) === 'unrelated') return { ok: false, reason: `It calls a move on ${question.subject}, which it reads the article as unrelated to.` }
+  }
+  if (typeof raw.instructions !== 'boolean') return { ok: false, reason: 'instructions is not true or false.' }
+  if (typeof raw.confidence !== 'number' || !(raw.confidence >= 0 && raw.confidence <= 1)) return { ok: false, reason: 'confidence is not from 0 to 1.' }
+  if (typeof raw.reasons !== 'string' || raw.reasons.length > lines.maxReasons) return { ok: false, reason: `reasons is not text of at most ${lines.maxReasons} characters.` }
+  return {
+    ok: true,
+    reading: {
+      summary: raw.summary.trim(),
+      cites: [...new Set(raw.cites as number[])],
+      stance: raw.stance,
+      novelty: raw.novelty,
+      coins: question.coins.map((asked) => ({ ticker: asked.ticker, about: read.get(asked.ticker) as ArticleReading['coins'][number]['about'] })),
+      bigMove,
+      instructions: raw.instructions,
+      confidence: raw.confidence,
+      reasons: raw.reasons
+    }
+  }
+}
+
+/** The size calls a reading makes, to be recorded: one for each target it says the subject is likely to reach. */
+export function articleCallsOf(reading: Pick<ArticleReading, 'bigMove'>, question: Pick<ArticleQuestion, 'subject'>): { key: ArticleCallKey; horizonSec: number; movePct: number }[] {
+  if (question.subject === null) return []
+  return ARTICLE_READING_LINES.calls.filter((call) => reading.bigMove[call.key]).map((call) => ({ key: call.key, horizonSec: call.horizonSec, movePct: call.movePct }))
+}
+
+/** A reading on file, read back by its shape: its question is not on the ledger's row, and was checked when answered. */
+function articleReadingShapeOf(value: unknown): ArticleReading | null {
+  const raw = (typeof value === 'object' && value !== null && !Array.isArray(value) ? value : null) as Partial<ArticleReading> | null
+  if (raw === null || typeof raw.summary !== 'string' || !Array.isArray(raw.cites) || !isOneOf(ARTICLE_STANCES, raw.stance) || !isOneOf(ARTICLE_NOVELTIES, raw.novelty)) return null
+  if (!Array.isArray(raw.coins) || typeof raw.bigMove !== 'object' || raw.bigMove === null || typeof raw.instructions !== 'boolean' || typeof raw.confidence !== 'number' || typeof raw.reasons !== 'string') return null
+  const bigMove = raw.bigMove as Record<string, unknown>
+  if (ARTICLE_READING_LINES.calls.some((call) => typeof bigMove[call.key] !== 'boolean')) return null
+  return raw as ArticleReading
+}
+
+/** A reading on file, as News URLs shows it: what it said, when, who was asked and who answered, and its ledger row. */
+export interface ArticleReadingOnFile {
+  id: string
+  at: number
+  model: string
+  servedModel: string | null
+  reading: ArticleReading
+}
+
+/** The newest reading on file of a record, from the ledger rows of its prompt; null for none. */
+export function latestArticleReadingOf(rows: readonly Pick<AiCallRecord, 'id' | 'promptVersion' | 'status' | 'subjectId' | 'at' | 'model' | 'servedModel' | 'additionAnswer'>[], recordId: string): ArticleReadingOnFile | null {
+  let newest: ArticleReadingOnFile | null = null
+  for (const row of rows) {
+    if (row.promptVersion !== AI_ADDITION_PROMPT_VERSIONS.article || row.status !== 'ok' || row.subjectId !== recordId) continue
+    const reading = articleReadingShapeOf(row.additionAnswer)
+    if (reading !== null && (newest === null || row.at > newest.at)) newest = { id: row.id, at: row.at, model: row.model, servedModel: row.servedModel ?? null, reading }
+  }
+  return newest
+}
+
+/** The article reading over the bridge (the main process's readArticle). */
+export interface ArticleReadingResult {
+  /** False when nothing of the article was read to put to a model. */
+  asked: boolean
+  outcome: AiAdditionOutcome<ArticleReading> | null
+  /** The size calls recorded from a fresh answer, by prediction id. */
+  predictionIds: string[]
+  /** Why a call it made was not recorded, where one was not. */
+  note: string | null
 }

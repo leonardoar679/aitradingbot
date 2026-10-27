@@ -156,7 +156,7 @@ export function RoutingCard({ onMoved }: { onMoved?: () => void }): React.JSX.El
         </table>
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.8rem', alignItems: 'flex-end', marginBottom: '0.6rem' }}>
-        {selectFor('decide', 'Decides: the watch, its paper trades, bots, reviews, exits', false)}
+        {selectFor('decide', 'Decides: the watch, its paper trades, bots, reviews, exits, article readings', false)}
         {selectFor('gate', "Takes the watch's first look", true)}
         {selectFor('summarize', 'Writes the summaries: news, why, the daily summary', true)}
         <button onClick={() => void move()} disabled={busy || choice === null} style={buttonStyle('primary', busy || choice === null)}>

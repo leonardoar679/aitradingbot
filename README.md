@@ -782,13 +782,13 @@ USDT pair on a venue the app reads (for a delisting, Binance) -- one traded only
 is refused with that reason.
 Each card is written once to the prediction record and settled like every source's; each coin's card state is written
 at every whole hour (`predictions/cards-YYYY-MM.jsonl`), and every move of 2% in an hour or 5% in a day of the
-forecast's pairs with the predictions that called it (`predictions/moves-YYYY-MM.jsonl`, V8-S3-MOVES). The card and the
-lines are English until V8 Stage 5. The drawer's round trip shows a sell beside a buy, a paper trade filled in from the
+forecast's pairs with the predictions that called it (`predictions/moves-YYYY-MM.jsonl`, V8-S3-MOVES). Since V8 Stage 5
+the card and the lines are in your language. The drawer's round trip shows a sell beside a buy, a paper trade filled in from the
 forecast's plan is on the venue its decision was costed on at that venue's fills, and the plan's target must clear that
 route's round trip rather than the flat 0.24% (trade-plan-v2).
 
-**News URLs** (since 26 October 2026; V8 Stage 4; More Features, English until V8 Stage 5; `electron/services/
-newsUrlService.ts`, `urlFetchService.ts`, `shared/urlSafety.ts`, `articleExtract.ts`, `articleTime.ts`,
+**News URLs** (since 26 October 2026; V8 Stages 4-5; since Stage 5 in the normal sidebar after Predictions, and in
+your language; `electron/services/newsUrlService.ts`, `urlFetchService.ts`, `shared/urlSafety.ts`, `articleExtract.ts`, `articleTime.ts`,
 `articleCredibility.ts`, `newsUrl.ts`). Paste a news link: the link is cut down -- https on its usual port, no user name
 or password, no fragment, only the query fields that select an article -- and refused where its host is an address, a
 name of one label or a private name; its name is resolved and every address it resolves to is vetted (no private,
@@ -811,8 +811,21 @@ view of yours -- the coin, side, stake, horizon and target you choose, nothing f
 scored like every source, and opens the Position form with it on paper. Each link is one record in
 `news/urls-YYYY-MM.jsonl`, however often it is pasted. The app's own feed's stories of impact 70 or more naming a coin
 directly -- Binance's announcements among them -- are recorded passively, nothing fetched; "Analyze discovered news
-automatically" (off by default) reads their pages too. No model reads an article here; a reading by a model is a click of
-its own in V8 Stage 5.
+automatically" (off by default) reads their pages too.
+Since V8 Stage 5 a pasted link is also looked up: the Internet Archive's first capture of it, an upper bound on when it
+was published, said where the page was there an hour or more before the time it states (a switch on the page turns it
+off, since the link is sent to web.archive.org); and for a post on X, X's own embed for its author's name -- the post
+itself is still never fetched. **The article reading** (`electron/services/aiArticleService.ts`; your answer of 26
+October 2026) is a model's reading of the article, asked only when you click, at the price shown, of the deciding model
+(Opus 5.5 once roles are applied), at most twenty a day inside the day's AI budget; it ships switched off (Settings ›
+AI). Its question is built in the main process from the record: the article's numbered passages as the app read them --
+data, never instructions -- and the coins the rules found. The answer cites the passages it rests on, says how firmly
+the article says it and whether it is new, reads each of the rules' coins (the subject, mentioned, or a word the rules
+misread) and names no other, flags text in the article addressed to whoever reads it, and makes size calls on the first
+coin where it is in the title -- a close at least 1% away in an hour, 2% in four hours or 5% in a day, either way, never
+a side and never a trade -- each recorded as the article source's prediction at the price once it answered and settled
+from the venue's bars. Nothing else reads a reading: not the alerts, the watch or the signal score. Its size calls are
+your own links' sample, so none is registered as a claim; they are reported for what they are.
 
 **The Forecast Lab** (since 13 October 2026; the V6 document's §27-28, §42-43, §49-50 and §90-105; V6 Stage
 11; `shared/forecast/{lab,labWalkForward,labFile}.ts`, `electron/services/forecastLabService.ts`,

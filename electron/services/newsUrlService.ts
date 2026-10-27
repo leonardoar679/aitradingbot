@@ -9,7 +9,7 @@ import type { Candle, Exchange, SymbolInfo } from '../../shared/ipc'
 import { NEWS_CATALOGS, newsListUrl, parseArticleList, type ListedArticle } from '../../shared/news'
 import { COIN_NAMES, assetDictionary, eventTypeOf, storyAssets, titleSimilarity, SAME_STORY_SIMILARITY, SAME_STORY_SECONDS, type ReadStory } from '../../shared/newsFeed'
 import { classifyTitle } from '../../shared/newsTitles'
-import { NEWS_URL_LINES, URL_RECORD_VERSION, archiveNote, archiveStampSec, foldUrlRecords, reactionOf, urlRecordId, type Retrieval, type TrailEntry, type UrlCoin, type UrlLookups, type UrlReaction, type UrlRecord, type UrlRejectedCoin } from '../../shared/newsUrl'
+import { NEWS_URL_LINES, URL_RECORD_VERSION, archiveNote, archiveStampSec, closeBefore, foldUrlRecords, reactionOf, urlRecordId, type Retrieval, type TrailEntry, type UrlCoin, type UrlLookups, type UrlReaction, type UrlRecord, type UrlRejectedCoin } from '../../shared/newsUrl'
 import { sanitizeUrl } from '../../shared/urlSafety'
 import { appendJsonLine, listMonthFiles } from './jsonlStore'
 import { fetchHistoricalRange, fetchTicker24h, listSymbols } from './marketService'
@@ -29,7 +29,8 @@ import { fetchPage } from './urlFetchService'
 // four hours after, and read again until that span has passed; and the verdict is the primary call's -- a pasted
 // Binance delisting within its rule's window is weighed as the reader's would be -- or none, with why. Everything is
 // measured from the paste and kept in news/urls-YYYY-MM.jsonl, one line a change. Public data only: no key, no model,
-// no order. A model's reading of the article is a click of its own (V8 Stage 5).
+// no order. A model's reading of the article is a click of its own (V8 Stage 5): asked by aiArticleService.ts, which reads
+// a record here and notes its reading on it; this file imports nothing of it.
 
 /** What the service reads the world through: a test hands in its own. */
 export const newsUrlSeam = {
@@ -145,6 +146,35 @@ const step = (record: UrlRecord, status: TrailEntry['status'], note: string): vo
 /** Every record on file, newest paste first. */
 export async function urlRecords(): Promise<UrlRecord[]> {
   return [...(await loaded()).values()].sort((a, b) => b.at - a.at)
+}
+
+/** A record on file by its id; null for none. */
+export async function urlRecordOf(id: string): Promise<UrlRecord | null> {
+  return (await loaded()).get(id) ?? null
+}
+
+/** A coin's price now on its venue: the close of its last one-minute bar, no more than five minutes stale; null where
+ * none is read. */
+export async function livePriceOf(coin: Pick<UrlCoin, 'pair' | 'venue'>): Promise<number | null> {
+  const now = newsUrlSeam.now()
+  try {
+    return closeBefore(await newsUrlSeam.bars(coin.venue, coin.pair, now - 900, now), now)
+  } catch {
+    return null
+  }
+}
+
+/** A model's reading of a record, noted on it (V8 Stage 5): its ledger row's id once answered, the size calls recorded
+ * from it, and a step of the trail. */
+export async function noteArticleReading(id: string, note: { analysisId: string | null; predictionIds: readonly string[]; text: string }): Promise<UrlRecord | null> {
+  const held = (await loaded()).get(id)
+  if (held === undefined) return null
+  const next = { ...held, trail: [...held.trail] }
+  if (note.analysisId !== null) next.analysisId = note.analysisId
+  const added = note.predictionIds.filter((predictionId) => !next.predictionIds.includes(predictionId))
+  if (added.length > 0) next.predictionIds = [...next.predictionIds, ...added]
+  step(next, 'reading', note.text)
+  return save(next)
 }
 
 /** The coins a text names: direct in its title, indirect in its body, matched against Binance's and Bitget's USDT

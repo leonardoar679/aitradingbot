@@ -146,6 +146,8 @@ export const IpcChannel = {
   AiReviewTrade: 'ai:reviewTrade',
   AiExitCheck: 'ai:exitCheck',
   AiSummarizeDay: 'ai:summarizeDay',
+  /** The article reading (V8 Stage 5): a news link on file read by the deciding model, on a click on News URLs. */
+  AiReadArticle: 'ai:readArticle',
   LiveTradingGetStatus: 'liveTrading:getStatus',
   LiveTradingSetConfig: 'liveTrading:setConfig',
   LiveTradingEngageKillSwitch: 'liveTrading:engageKillSwitch',
