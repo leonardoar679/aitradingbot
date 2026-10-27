@@ -901,7 +901,7 @@ it. Since Stage 9 an entry passes the liquidity gate on its perpetual's book at 
 V8's writers): a book that cannot hold the stake, or holds under five stakes within half a percent of the mid, is a miss.
 
 **The three paper books** (V8 Stages 2 and 9; `shared/paperBooks.ts`, `shared/bookValuation.ts`, `shared/newsBook.ts`,
-`electron/services/booksService.ts`, `src/news/newsBookShort.ts`). V8 tests three ideas side by side, each on its own
+`shared/baseline.ts`, `electron/services/booksService.ts`, `src/news/newsBookShort.ts`, `src/baseline/`). V8 tests three ideas side by side, each on its own
 10,000 USDT -- the news book, the copy book, the baseline -- apart from the paper account, which keeps the watch's, the
 forecast trader's, the laboratory's and a person's own trades. A book's money is read from the trades its writers
 stamped: its start, what its closed trades made, and since Stage 9 what its open ones stand at, each valued from its own
@@ -914,8 +914,16 @@ liquidity gate; a delisting's leaves at the open four hours after the announceme
 a tag's at its bracket (read from the perpetual's own usual move) or its sixtieth minute, either at the loss of its
 stake; its result is the move, both taker fees and the funding the perpetual published over its hold. A coin no venue
 lists a perpetual of is a missed opportunity, "no venue could take this", scored apart. Every refusal is a miss carrying
-its event's key. Outside paper testing the rule's shorts are the paper account's, as before. What the books are judged
-by is V8-S9-BOOKS, registered before the first Start.
+its event's key. Outside paper testing the rule's shorts are the paper account's, as before. **The baseline**: while
+paper testing runs, Trend Regime Ensemble is read on the eight symbols its backtests were read on at each of its 4-hour
+closes, thirty seconds on, and traded as the backtest engine trades it -- long on Binance's spot at a close where all
+four of its lookbacks agree, its disaster stop fixed there, out at a bar reaching the stop or at the close of a bar
+where at most one lookback still agrees -- each close's exits read before its entries, one trade a symbol, an eighth
+of the book each, through the book's room and the liquidity gate on Binance's book, at the taker fee each way. It takes
+only the run's own entries: at a bar that closed after the Start, and never on a regime already standing at the Start
+until that regime has broken. An entry read more than five minutes after its close is missed as late, and the
+strategy's position joined at the next close it still holds at. What the books are judged by is V8-S9-BOOKS,
+registered before the first Start.
 
 **The Forecast Lab** (since 13 October 2026; the V6 document's §27-28, §42-43, §49-50 and §90-105; V6 Stage
 11; `shared/forecast/{lab,labWalkForward,labFile}.ts`, `electron/services/forecastLabService.ts`,

@@ -45,6 +45,7 @@ import { LiveTradingBar } from './livetrading/LiveTradingBar'
 import { LiveOrderScheduler } from './livetrading/LiveOrderScheduler'
 import { PortfolioScheduler } from './portfolio/PortfolioScheduler'
 import { CopyTradingScheduler } from './traders/CopyTradingScheduler'
+import { BaselineScheduler } from './baseline/BaselineScheduler'
 import { DEFAULT_PAGE, DEFAULT_TABS, activeNavId, anchorElementId, pageLabel, type NavAnchor, type NavId, type NavItem, type NavTarget, type Page, type PageTabs } from './navigation/pages'
 import type { AiOrderProposal } from '../shared/aiProposal'
 import { DEFAULT_UI_MODE, healUiMode, type UiMode } from '../shared/uiMode'
@@ -193,6 +194,11 @@ function App(): React.JSX.Element {
           cloned someone on Copy Traders, and what it opens is paper, in the copy book. */}
       <ErrorBoundary label={msg("Copy trading on paper")}>
         <CopyTradingScheduler />
+      </ErrorBoundary>
+      {/* The baseline book's strategy (V8 Stage 9): nothing runs unless paper testing was started, and what it opens is
+          paper, in the baseline book. */}
+      <ErrorBoundary label={msg("The baseline on paper")}>
+        <BaselineScheduler />
       </ErrorBoundary>
       {/* The watch: off unless switched on from Opportunities. It asks models; it has no way to
           place anything, and what it opens by itself is paper. */}

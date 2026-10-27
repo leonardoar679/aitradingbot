@@ -2323,5 +2323,6 @@
   "Only a web link is read.": "웹 링크만 읽습니다.",
   "That Hyperliquid link names no address (0x and forty letters and digits).": "그 Hyperliquid 링크에는 주소(0x와 문자·숫자 40자)가 없습니다.",
   "That OKX link names no lead trader's code (sixteen letters and digits, or eighteen digits).": "그 OKX 링크에는 리드 트레이더 코드(문자·숫자 16자 또는 숫자 18자리)가 없습니다.",
-  "Traders are read from Hyperliquid and OKX only: paste a Hyperliquid address or an OKX lead trader's profile link.": "트레이더는 Hyperliquid와 OKX에서만 읽습니다: Hyperliquid 주소나 OKX 리드 트레이더의 프로필 링크를 붙여 넣으세요."
+  "Traders are read from Hyperliquid and OKX only: paste a Hyperliquid address or an OKX lead trader's profile link.": "트레이더는 Hyperliquid와 OKX에서만 읽습니다: Hyperliquid 주소나 OKX 리드 트레이더의 프로필 링크를 붙여 넣으세요.",
+  "The baseline on paper": "모의 기준 전략"
 }

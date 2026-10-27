@@ -2323,5 +2323,6 @@
   "Only a web link is read.": "لا يُقرأ إلا رابط ويب.",
   "That Hyperliquid link names no address (0x and forty letters and digits).": "لا يذكر رابط Hyperliquid هذا أي عنوان (0x متبوعًا بأربعين حرفًا ورقمًا).",
   "That OKX link names no lead trader's code (sixteen letters and digits, or eighteen digits).": "لا يذكر رابط OKX هذا رمز أي متداول رئيسي (ستة عشر حرفًا ورقمًا، أو ثمانية عشر رقمًا).",
-  "Traders are read from Hyperliquid and OKX only: paste a Hyperliquid address or an OKX lead trader's profile link.": "لا يُقرأ المتداولون إلا من Hyperliquid و OKX: الصق عنوان Hyperliquid أو رابط الملف الشخصي لمتداول رئيسي على OKX."
+  "Traders are read from Hyperliquid and OKX only: paste a Hyperliquid address or an OKX lead trader's profile link.": "لا يُقرأ المتداولون إلا من Hyperliquid و OKX: الصق عنوان Hyperliquid أو رابط الملف الشخصي لمتداول رئيسي على OKX.",
+  "The baseline on paper": "الاستراتيجية المرجعية تجريبيًا"
 }

@@ -2323,5 +2323,6 @@
   "Only a web link is read.": "อ่านได้เฉพาะลิงก์เว็บ",
   "That Hyperliquid link names no address (0x and forty letters and digits).": "ลิงก์ Hyperliquid นี้ไม่มีที่อยู่ (0x ตามด้วยตัวอักษรและตัวเลขสี่สิบตัว)",
   "That OKX link names no lead trader's code (sixteen letters and digits, or eighteen digits).": "ลิงก์ OKX นี้ไม่มีรหัสเทรดเดอร์ผู้นำ (ตัวอักษรและตัวเลขสิบหกตัว หรือตัวเลขสิบแปดหลัก)",
-  "Traders are read from Hyperliquid and OKX only: paste a Hyperliquid address or an OKX lead trader's profile link.": "อ่านเทรดเดอร์ได้จาก Hyperliquid และ OKX เท่านั้น: โปรดวางที่อยู่ Hyperliquid หรือลิงก์โปรไฟล์ของเทรดเดอร์ผู้นำ OKX"
+  "Traders are read from Hyperliquid and OKX only: paste a Hyperliquid address or an OKX lead trader's profile link.": "อ่านเทรดเดอร์ได้จาก Hyperliquid และ OKX เท่านั้น: โปรดวางที่อยู่ Hyperliquid หรือลิงก์โปรไฟล์ของเทรดเดอร์ผู้นำ OKX",
+  "The baseline on paper": "กลยุทธ์อ้างอิงแบบจำลอง"
 }

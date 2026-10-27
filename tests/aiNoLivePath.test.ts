@@ -1131,6 +1131,43 @@ describe('AI code has no route to a real order', () => {
     expect(page).not.toMatch(/placeLive|liveTrading|onPrepareOrder|aiProposal|settings\.set|mode: 'live'/)
   })
 
+  it("the baseline's trades are paper trades in the baseline book, by a literal they cannot be handed (V8 Stage 9)", () => {
+    const writer = join(ROOT, 'src', 'baseline', 'baselineTrade.ts')
+    const scheduler = join(ROOT, 'src', 'baseline', 'BaselineScheduler.tsx')
+    const logic = join(ROOT, 'shared', 'baseline.ts')
+    for (const path of [writer, scheduler, logic]) {
+      const source = readFileSync(path, 'utf-8')
+      expect(source, path).not.toMatch(/liveTrading|LiveTrading|liveOrders|placeLive|window\.api\.(executors|trade|paper|credentials|ai)\b/)
+      expect(source, path).not.toMatch(/['"`]live['"`]/)
+      expect(source, path).not.toMatch(/\bleverage\s*:/)
+    }
+    expect(readFileSync(logic, 'utf-8')).not.toMatch(/window\.|ipcRenderer|from\s+'[^']*electron/)
+    const source = readFileSync(writer, 'utf-8')
+    // Paper is written where the executor is made, and the function that makes it takes no mode.
+    expect(source.match(/mode: 'paper'/g)).toHaveLength(1)
+    expect(source).not.toMatch(/mode:(?!\s*'paper')/)
+    const signature = /export function baselinePaperExecutor\(input: \{([^}]*)\}\)/.exec(source)?.[1] ?? ''
+    expect(signature).toContain('book: BookMark')
+    expect(signature).not.toMatch(/mode/)
+    // Long on spot, in the baseline book, under its one ledger, and nowhere else; one write a change, through the queue.
+    expect(source.match(/side: '\w+'/g)).toEqual(["side: 'buy'", "side: 'up'", "side: 'BUY'"])
+    expect([...new Set(source.match(/id: '\w+'/g))]).toEqual(["id: 'baseline'"])
+    expect(source.match(/ledger: '\w+'/g)).toEqual(["ledger: 'baseline'"])
+    expect(source).toContain('await window.api.settings.set({ executors })')
+    expect(source.match(/window\.api\.settings\.set\(/g)).toHaveLength(1)
+    const bridgesOf = (text: string): string[] => [...new Set([...text.matchAll(/window\.api\.(\w+)(?:\s*\.\s*(\w+))?/g)].map((match) => (match[2] === undefined ? match[1] : `${match[1]}.${match[2]}`)))].sort()
+    // It reads the settings, the books, Binance's spot bars, price and book, and records its misses.
+    expect(bridgesOf(source)).toEqual(['books.miss', 'books.misses', 'books.spotBook', 'books.state', 'market.fetchHistoricalRange', 'market.fetchTicker24h', 'settings.get', 'settings.set'])
+    expect(importsOf(writer).sort()).toEqual(['baseline', 'ipc', 'liquidityGate', 'misses', 'paperBooks', 'settingsWrites', 'trendRegimeEnsemble'])
+    // The scheduler only says when a close is due: it reads and writes nothing itself.
+    expect(bridgesOf(readFileSync(scheduler, 'utf-8'))).toEqual([])
+    expect(importsOf(scheduler).sort()).toEqual(['baseline', 'baselineTrade', 'react'])
+    // The main process reads a spot book for the baseline's eight symbols and no other.
+    expect(readFileSync(join(ROOT, 'electron', 'ipc', 'handlers', 'booksHandlers.ts'), 'utf-8')).toContain(
+      "if (!(BASELINE_LINES.symbols as readonly unknown[]).includes(symbol)) throw new Error(\"Not one of the baseline's symbols.\")"
+    )
+  })
+
   it("the news book's shorts are paper trades in the news book, by a literal they cannot be handed (V8 Stage 9)", () => {
     const writer = join(ROOT, 'src', 'news', 'newsBookShort.ts')
     const logic = join(ROOT, 'shared', 'newsBook.ts')

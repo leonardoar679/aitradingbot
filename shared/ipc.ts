@@ -135,6 +135,8 @@ export const IpcChannel = {
   BooksMisses: 'books:misses',
   /** A book's trades settled a day ago, moved out of the settings by their writer (V8 Stage 8). */
   BooksArchive: 'books:archive',
+  /** Binance's spot book now for one of the baseline's eight symbols, for its liquidity gate (V8 Stage 9). */
+  BooksSpotBook: 'books:spotBook',
   // The primary call (V8 Stage 3): the cards weighed, the late list and the refusals; pushed as each weighing ends.
   CallsState: 'calls:state',
   CallsUpdate: 'calls:update',
@@ -1141,6 +1143,10 @@ export interface ExecutorConfig {
    * shared/newsBook.ts): the announcement, the perpetual, its stake, its bracket or hold, and why it closed. Never on a
    * live executor: src/news/newsBookShort.ts, the one file that makes one, spells paper as a literal. */
   newsBook?: import('./newsBook').NewsBookStamp
+  /** Set on a PAPER Position the baseline opened in the baseline book while paper testing runs (V8 Stage 9;
+   * shared/baseline.ts): Trend Regime Ensemble's entry signal, the fill, its stake and stop, and why it closed. Never
+   * on a live executor: src/baseline/baselineTrade.ts, the one file that makes one, spells paper as a literal. */
+  baseline?: import('./baseline').BaselineStamp
   newsRule?: {
     articleId: number
     ticker: string

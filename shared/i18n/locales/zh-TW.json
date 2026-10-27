@@ -2323,5 +2323,6 @@
   "Only a web link is read.": "只會讀取網頁連結。",
   "That Hyperliquid link names no address (0x and forty letters and digits).": "該 Hyperliquid 連結中沒有地址（0x 加上四十個字母與數字）。",
   "That OKX link names no lead trader's code (sixteen letters and digits, or eighteen digits).": "該 OKX 連結中沒有帶單員代碼（十六個字母與數字，或十八位數字）。",
-  "Traders are read from Hyperliquid and OKX only: paste a Hyperliquid address or an OKX lead trader's profile link.": "只從 Hyperliquid 與 OKX 讀取交易員：請貼上 Hyperliquid 地址或 OKX 帶單員的個人頁面連結。"
+  "Traders are read from Hyperliquid and OKX only: paste a Hyperliquid address or an OKX lead trader's profile link.": "只從 Hyperliquid 與 OKX 讀取交易員：請貼上 Hyperliquid 地址或 OKX 帶單員的個人頁面連結。",
+  "The baseline on paper": "模擬基準策略"
 }

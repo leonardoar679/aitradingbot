@@ -35,6 +35,16 @@ async function readBinance(symbol: string): Promise<QuoteReads> {
   }
 }
 
+/** Binance's spot book of one pair now, a hundred levels, and when it was read: what the baseline book's liquidity gate
+ * reads before an entry (V8 Stage 9). Public data. */
+export async function readBinanceSpotBook(symbol: string): Promise<{ bids: [number, number][]; asks: [number, number][]; atMs: number }> {
+  const { response, endpoint } = await fetchMarketData(`/depth?symbol=${encodeURIComponent(symbol.toUpperCase())}&limit=${BOOK_LEVELS}`, READ_TIMEOUT_MS)
+  if (!response.ok) throw new Error(`${endpoint.name} depth request failed: ${response.status}`)
+  const depth = (await response.json()) as BinanceDepth
+  const level = (row: [string, string]): [number, number] => [Number(row[0]), Number(row[1])]
+  return { bids: depth.bids.map(level), asks: depth.asks.map(level), atMs: Date.now() }
+}
+
 async function readBitget(symbol: string): Promise<QuoteReads> {
   const sentAt = Date.now()
   try {

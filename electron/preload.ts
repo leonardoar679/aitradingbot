@@ -580,7 +580,9 @@ const api = {
     marks: (book: BookId, startedAt: number): Promise<BookEquityMark[]> => ipcRenderer.invoke(IpcChannel.BooksMarks, { book, startedAt }),
     miss: (miss: MissRecord): Promise<MissRecord> => ipcRenderer.invoke(IpcChannel.BooksMiss, miss),
     misses: (sinceSec = 0): Promise<MissRecord[]> => ipcRenderer.invoke(IpcChannel.BooksMisses, sinceSec),
-    archive: (executors: BookExecutor[]): Promise<number> => ipcRenderer.invoke(IpcChannel.BooksArchive, executors)
+    archive: (executors: BookExecutor[]): Promise<number> => ipcRenderer.invoke(IpcChannel.BooksArchive, executors),
+    /** Binance's spot book now, for one of the baseline's eight symbols (V8 Stage 9). */
+    spotBook: (symbol: string): Promise<{ bids: [number, number][]; asks: [number, number][]; atMs: number }> => ipcRenderer.invoke(IpcChannel.BooksSpotBook, symbol)
   },
   // The research folder (V7.2-R Stage 2): free to read and to export; nothing here reads a key or places anything.
   researchFolder: {

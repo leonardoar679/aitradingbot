@@ -1,3 +1,4 @@
+import { baselineOpenNetOf } from './baseline'
 import type { ExecutorConfig } from './ipc'
 import { assumedFundingAgainst, newsBookOpenNetOf } from './newsBook'
 import { PERP_FEES } from './venueCosts'
@@ -7,8 +8,8 @@ import { PERP_FEES } from './venueCosts'
 // open trade, so a book with one open had no equity. Each of the books' writers keeps its trade's own fills on its
 // stamp -- a follow's legs, a clone's entry, a news short's -- so an open trade is valued from its stamp and one price:
 // its move on its size, what it has already realized, its fees with the exit's at that price, and funding assumed
-// against it for each funding time crossed (the published rates are read when it closes). Pure: the main process reads
-// the prices (electron/services/booksService.ts).
+// against it for each funding time crossed (the published rates are read when it closes); a baseline trade, on spot,
+// pays none. Pure: the main process reads the prices (electron/services/booksService.ts).
 
 /** The price an open book trade is valued at: its perpetual's last price, or a spot pair's. */
 export type BookPriceRef = { kind: 'perp'; venue: 'binance' | 'bitget'; symbol: string } | { kind: 'spot'; venue: 'binance'; symbol: string }
@@ -20,6 +21,7 @@ export function bookPriceRefOf(executor: ExecutorConfig): BookPriceRef | null {
   if (executor.follow !== undefined) return { kind: 'perp', venue: executor.follow.venue, symbol: executor.follow.symbol }
   if (executor.clone !== undefined) return { kind: 'perp', venue: executor.clone.venue, symbol: executor.clone.symbol }
   if (executor.newsBook !== undefined) return { kind: 'perp', venue: executor.newsBook.venue, symbol: executor.newsBook.symbol }
+  if (executor.baseline !== undefined) return { kind: 'spot', venue: 'binance', symbol: executor.baseline.symbol }
   return null
 }
 
@@ -39,5 +41,6 @@ export function bookOpenNetOf(executor: ExecutorConfig, px: number, nowMs: numbe
     return sign * (px - clone.entryPx) * clone.qty - clone.feesQuote - exitFee + assumedFundingAgainst(clone.stakeQuote, clone.openedAtMs, nowMs)
   }
   if (executor.newsBook !== undefined) return newsBookOpenNetOf(executor.newsBook, px, nowMs)
+  if (executor.baseline !== undefined) return baselineOpenNetOf(executor.baseline, px)
   return null
 }

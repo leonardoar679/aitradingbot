@@ -147,12 +147,13 @@ export function nextDailyExportAt(nowSec: number): number {
 }
 
 /** Where a paper trade came from. */
-export type TradeOrigin = 'lab' | 'forecast' | 'watch' | 'news' | 'follow' | 'clone' | 'person'
+export type TradeOrigin = 'lab' | 'forecast' | 'watch' | 'news' | 'follow' | 'clone' | 'baseline' | 'person'
 
-export function originOf(executor: Pick<ExecutorConfig, 'lab' | 'forecast' | 'watch' | 'newsRule' | 'follow' | 'clone' | 'newsBook'>): TradeOrigin {
+export function originOf(executor: Pick<ExecutorConfig, 'lab' | 'forecast' | 'watch' | 'newsRule' | 'follow' | 'clone' | 'newsBook' | 'baseline'>): TradeOrigin {
   if (executor.follow !== undefined) return 'follow'
   if (executor.clone !== undefined) return 'clone'
   if (executor.newsBook !== undefined) return 'news'
+  if (executor.baseline !== undefined) return 'baseline'
   if (executor.lab !== undefined) return 'lab'
   if (executor.forecast !== undefined) return 'forecast'
   if (executor.watch !== undefined) return 'watch'
@@ -170,7 +171,7 @@ function resultOf(executor: ExecutorConfig): Record<string, unknown> | null {
 /** The mark an order was opened under (the laboratory's, the forecast trader's, the watch's, a news rule's),
  * without its result, every secret field left out; null on a person's own. */
 function markOf(executor: ExecutorConfig): Record<string, unknown> | null {
-  const mark = (executor.follow ?? executor.clone ?? executor.newsBook ?? executor.lab ?? executor.forecast ?? executor.watch ?? executor.newsRule) as Record<string, unknown> | undefined
+  const mark = (executor.follow ?? executor.clone ?? executor.newsBook ?? executor.baseline ?? executor.lab ?? executor.forecast ?? executor.watch ?? executor.newsRule) as Record<string, unknown> | undefined
   if (mark === undefined || typeof mark !== 'object' || mark === null) return null
   return redactSecrets(Object.fromEntries(Object.entries(mark).filter(([key]) => key !== 'result')))
 }
