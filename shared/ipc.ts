@@ -161,6 +161,10 @@ export const IpcChannel = {
   TradersFollowRecords: 'traders:followRecords',
   TradersPerpPrice: 'traders:perpPrice',
   TradersPerpFunding: 'traders:perpFunding',
+  /** V8 Stage 9: a coin's perpetual, a perpetual's book now and its 1-minute bars -- reads for the books' writers. */
+  TradersPerpOf: 'traders:perpOf',
+  TradersPerpBook: 'traders:perpBook',
+  TradersPerpBars: 'traders:perpBars',
   TradersLeaderEvent: 'traders:leaderEvent',
   TradersCloneSignal: 'traders:cloneSignal',
   TradersFollowStatusChanged: 'traders:followStatusChanged',
@@ -1133,6 +1137,10 @@ export interface ExecutorConfig {
   /** Set on a PAPER Position a trader's clone opened (V8 Stage 8; shared/traders/copyTrading.ts): the signal, the
    * perpetual, its stake and why it closed. Never on a live executor: src/traders/paperClone.ts makes it. */
   clone?: import('./traders/copyTrading').CloneTradeStamp
+  /** Set on a PAPER Position the news rule opened in the news book while paper testing runs (V8 Stage 9;
+   * shared/newsBook.ts): the announcement, the perpetual, its stake, its bracket or hold, and why it closed. Never on a
+   * live executor: src/news/newsBookShort.ts, the one file that makes one, spells paper as a literal. */
+  newsBook?: import('./newsBook').NewsBookStamp
   newsRule?: {
     articleId: number
     ticker: string

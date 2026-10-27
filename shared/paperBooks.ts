@@ -137,6 +137,9 @@ export interface BookStanding {
   open: number
   openStakeQuote: number
   closed: number
+  /** What the book began the UTC day with -- its first mark of the day, else its last before it, else its start: what
+   * its daily stop reads (V8 Stage 9); null where its marks were not read. */
+  dayStartEquity: number | null
 }
 
 /** A book's standing from its executors; `openResult` prices an open one now (null where it cannot). */
@@ -165,7 +168,7 @@ export function bookStandingOf(
     }
   }
   const settledEquity = settings.startQuote + realized
-  return { id, startQuote: settings.startQuote, realizedQuote: realized, unrealizedQuote: unrealized, settledEquity, equity: unrealized === null ? null : settledEquity + unrealized, open, openStakeQuote: openStake, closed }
+  return { id, startQuote: settings.startQuote, realizedQuote: realized, unrealizedQuote: unrealized, settledEquity, equity: unrealized === null ? null : settledEquity + unrealized, open, openStakeQuote: openStake, closed, dayStartEquity: null }
 }
 
 /** One line of a book's equity marks. */
@@ -198,6 +201,15 @@ export function drawdownOf(marks: readonly Pick<BookEquityMark, 'equity' | 'at'>
 
 /** Why a book cannot open one more trade of `stakeQuote` now, or null when it can. `dayStartEquity` is the
  * equity of the book's first mark of the UTC day (its settled equity where it has none yet). */
+/** What a book began the UTC day of `nowSec` with: its first mark at or after the day's start, else its last mark
+ * before it, else its start; a mark with no equity read at its settled equity. */
+export function dayStartEquityOf(marks: readonly Pick<BookEquityMark, 'at' | 'equity' | 'settledEquity'>[], nowSec: number, startQuote: number): number {
+  const dayStart = Math.floor(nowSec / 86_400) * 86_400
+  const sorted = [...marks].sort((a, b) => a.at - b.at)
+  const mark = sorted.find((entry) => entry.at >= dayStart && entry.at <= nowSec) ?? [...sorted].reverse().find((entry) => entry.at < dayStart)
+  return mark === undefined ? startQuote : (mark.equity ?? mark.settledEquity)
+}
+
 export function bookRoomProblem(input: {
   books: PaperBooksSettings
   id: BookId

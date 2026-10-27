@@ -1,4 +1,5 @@
 import type { AppSettings, ExecutorConfig, PositionExecutorParams } from '../../shared/ipc'
+import { liquidityVerdictOf } from '../../shared/liquidityGate'
 import type { MissRecord } from '../../shared/misses'
 import { bookExecutors, bookRoomProblem, healPaperBooks, type BookMark, type BookStanding } from '../../shared/paperBooks'
 import { CLONE_LINES } from '../../shared/traders/clone'
@@ -30,6 +31,8 @@ export interface CloneDeps {
   queue: <T>(work: () => Promise<T>) => Promise<T>
   copyStanding: () => Promise<BookStanding | null>
   perpPrice: (venue: 'binance' | 'bitget', symbol: string) => Promise<number>
+  /** The perpetual's book now, for the liquidity gate on an entry (V8 Stage 9). */
+  perpBook: (venue: 'binance' | 'bitget', symbol: string) => Promise<{ bids: [number, number][]; asks: [number, number][]; atMs: number }>
   perpFunding: (venue: 'binance' | 'bitget', symbol: string, fromSec: number, toSec: number) => Promise<FundingRate[]>
   miss: (miss: MissRecord) => Promise<unknown>
   nowMs: () => number
@@ -117,6 +120,7 @@ const CLONE_DUE_WITHIN_MS = 60_000
 export async function cloneSignal(signal: CloneSignal, deps: CloneDeps): Promise<string> {
   const px = await deps.perpPrice(signal.venue, signal.symbol).catch(() => null)
   const standing = await deps.copyStanding().catch(() => null)
+  const bookLevels = await deps.perpBook(signal.venue, signal.symbol).catch(() => null)
   const event = { px: signal.px, after: signal.side === 'long' ? 1 : -1, perp: { venue: signal.venue, symbol: signal.symbol }, coin: signal.coin }
   let missed: MissRecord | null = null
   const outcome = await deps.queue(async (): Promise<string> => {
@@ -153,8 +157,11 @@ export async function cloneSignal(signal: CloneSignal, deps: CloneDeps): Promise
     if (standing === null) return miss('cap', "the copy book's standing could not be read")
     const room = { ...standing, open: open.length }
     const stakeQuote = books.books.copy.maxStakeShare * room.settledEquity
-    const problem = bookRoomProblem({ books, id: 'copy', standing: room, stakeQuote, dayStartEquity: null })
+    const problem = bookRoomProblem({ books, id: 'copy', standing: room, stakeQuote, dayStartEquity: room.dayStartEquity })
     if (problem !== null) return miss(books.running ? 'cap' : 'off', problem)
+    // The liquidity gate on the perpetual's book at the stake (V8-S2-LIQ): it refuses for V8's writers.
+    const liquidity = liquidityVerdictOf({ venue: signal.venue, feePct: PERP_FEES[signal.venue].takerPct, side: signal.side === 'long' ? 'BUY' : 'SELL', stakeQuote, levels: bookLevels, bookAgeMs: bookLevels === null ? null : nowMs - bookLevels.atMs, predictedMovePct: null })
+    if (!liquidity.ok) return miss('liquidity', liquidity.reason)
     const qty = stakeQuote / px
     const stamp: CloneTradeStamp = {
       traderKey: signal.traderKey,
@@ -218,6 +225,7 @@ export const cloneBrowserDeps: CloneDeps = {
   queue: (work) => settingsWrites(work),
   copyStanding: async () => (await window.api.books.state()).standings.find((standing) => standing.id === 'copy') ?? null,
   perpPrice: (venue, symbol) => window.api.traders.perpPrice(venue, symbol),
+  perpBook: (venue, symbol) => window.api.traders.perpBook(venue, symbol),
   perpFunding: (venue, symbol, fromSec, toSec) => window.api.traders.perpFunding(venue, symbol, fromSec, toSec),
   miss: (miss) => window.api.books.miss(miss),
   nowMs: () => Date.now(),

@@ -1,4 +1,5 @@
 import type { AppSettings, ExecutorConfig, PositionExecutorParams } from '../../shared/ipc'
+import { liquidityVerdictOf } from '../../shared/liquidityGate'
 import { MISS_VERSION, type MissRecord, type MissStage } from '../../shared/misses'
 import { bookExecutors, bookRoomProblem, healPaperBooks, type BookMark, type BookStanding } from '../../shared/paperBooks'
 import { healCopyTrading } from '../../shared/traders/copyTrading'
@@ -44,6 +45,8 @@ export interface FollowDeps {
   /** The copy book's standing as the books keep it, its settled trades moved out of the settings counted. */
   copyStanding: () => Promise<BookStanding | null>
   perpPrice: (venue: 'binance' | 'bitget', symbol: string) => Promise<number>
+  /** The perpetual's book now, for the liquidity gate on an entry (V8 Stage 9). */
+  perpBook: (venue: 'binance' | 'bitget', symbol: string) => Promise<{ bids: [number, number][]; asks: [number, number][]; atMs: number }>
   perpFunding: (venue: 'binance' | 'bitget', symbol: string, fromSec: number, toSec: number) => Promise<FundingRate[]>
   miss: (miss: MissRecord) => Promise<unknown>
   archive: (executors: ExecutorConfig[]) => Promise<number>
@@ -152,6 +155,9 @@ export async function followEvent(event: LeaderEvent, deps: FollowDeps): Promise
   // The perpetual's price, read before the queue: what the follow would enter, resize or close at.
   let px: number | null = null
   if (event.perp !== null) px = await deps.perpPrice(event.perp.venue, event.perp.symbol).catch(() => null)
+  // The perpetual's book, where the event may open a follow: what the liquidity gate reads (V8 Stage 9).
+  const mayOpen = Math.abs(event.before) <= 1e-12 || Math.sign(event.after) !== Math.sign(event.before)
+  const bookLevels = event.perp !== null && mayOpen ? await deps.perpBook(event.perp.venue, event.perp.symbol).catch(() => null) : null
   const standing = await deps.copyStanding().catch(() => null)
   const misses: MissRecord[] = []
   const outcome = await deps.queue(async (): Promise<string> => {
@@ -209,13 +215,19 @@ export async function followEvent(event: LeaderEvent, deps: FollowDeps): Promise
       const room = standing === null ? null : { ...standing, open: open.length }
       const bookStake = room === null ? 0 : books.books.copy.maxStakeShare * room.settledEquity
       const stakeQuote = room === null ? 0 : followStakeOf({ leaderNotional: Math.abs(event.after) * event.px, accountValue: event.accountValue, bookEquity: room.settledEquity, bookStake })
-      const problem = room === null ? "the copy book's standing could not be read" : bookRoomProblem({ books, id: 'copy', standing: room, stakeQuote, dayStartEquity: null })
+      const problem = room === null ? "the copy book's standing could not be read" : bookRoomProblem({ books, id: 'copy', standing: room, stakeQuote, dayStartEquity: room.dayStartEquity })
       if (problem !== null) {
         misses.push(followMiss({ event, eventKey: event.key, nowMs, stage: books.running ? 'cap' : 'off', reason: problem }))
         continue
       }
       const venuePx = px as number
       const side = decision.side
+      // The liquidity gate on the perpetual's book at the stake (V8-S2-LIQ): it refuses for V8's writers.
+      const liquidity = liquidityVerdictOf({ venue: event.perp.venue, feePct: PERP_FEES[event.perp.venue].takerPct, side: side === 'long' ? 'BUY' : 'SELL', stakeQuote, levels: bookLevels, bookAgeMs: bookLevels === null ? null : nowMs - bookLevels.atMs, predictedMovePct: null })
+      if (!liquidity.ok) {
+        misses.push(followMiss({ event, eventKey: event.key, nowMs, stage: 'liquidity', reason: liquidity.reason }))
+        continue
+      }
       const empty: FollowStamp = {
         traderKey: event.traderKey,
         positionId: event.positionId,
@@ -309,6 +321,7 @@ export const followBrowserDeps: FollowDeps = {
   queue: (work) => settingsWrites(work),
   copyStanding: async () => (await window.api.books.state()).standings.find((standing) => standing.id === 'copy') ?? null,
   perpPrice: (venue, symbol) => window.api.traders.perpPrice(venue, symbol),
+  perpBook: (venue, symbol) => window.api.traders.perpBook(venue, symbol),
   perpFunding: (venue, symbol, fromSec, toSec) => window.api.traders.perpFunding(venue, symbol, fromSec, toSec),
   miss: (miss) => window.api.books.miss(miss),
   archive: (executors) => window.api.books.archive(executors),

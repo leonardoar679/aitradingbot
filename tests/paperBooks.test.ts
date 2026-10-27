@@ -7,6 +7,7 @@ import {
   bookOf,
   bookRoomProblem,
   bookStandingOf,
+  dayStartEquityOf,
   drawdownOf,
   healPaperBooks,
   type BookMark,
@@ -84,7 +85,7 @@ describe("a book's standing", () => {
 
   it('is its start and its own results, open ones priced now, and nothing of another book', () => {
     const standing = bookStandingOf('news', DEFAULT_PAPER_BOOKS.books.news, list, STARTED, (entry) => (entry.id === 'open' ? 15 : null))
-    expect(standing).toEqual({ id: 'news', startQuote: 10_000, realizedQuote: 80, unrealizedQuote: 15, settledEquity: 10_080, equity: 10_095, open: 1, openStakeQuote: 500, closed: 2 })
+    expect(standing).toEqual({ id: 'news', startQuote: 10_000, realizedQuote: 80, unrealizedQuote: 15, settledEquity: 10_080, equity: 10_095, open: 1, openStakeQuote: 500, closed: 2, dayStartEquity: null })
   })
 
   it('has no equity where an open trade cannot be priced, and keeps its settled equity for sizing', () => {
@@ -174,5 +175,23 @@ describe("the refusals of the writers that were there before V8", () => {
     expect(refusalsAsMisses('forecast-trader', [{ pair: 'SOLUSDT', why: 'x' }], STARTED + 300, told)).toHaveLength(1)
     // An hour on, told again.
     expect(refusalsAsMisses('lab', [{ pair: 'SOLUSDT', why: 'No live price.' }], STARTED + 3600, told)).toHaveLength(1)
+  })
+})
+
+describe("the equity a book began its UTC day with (V8 Stage 9)", () => {
+  it("is its first mark of the day, else its last before it, else its start; a mark with no equity at its settled equity", () => {
+    const day = 1_793_059_200 // 27 October 2026, 00:00 UTC
+    const marks = [
+      { at: day - 7200, equity: 9_900, settledEquity: 9_950 },
+      { at: day - 3600, equity: null, settledEquity: 9_980 },
+      { at: day + 1, equity: 10_020, settledEquity: 10_000 },
+      { at: day + 3601, equity: 10_200, settledEquity: 10_100 }
+    ]
+    expect(dayStartEquityOf(marks, day + 7200, 10_000)).toBe(10_020)
+    expect(dayStartEquityOf(marks.slice(0, 2), day + 7200, 10_000)).toBe(9_980)
+    expect(dayStartEquityOf(marks.slice(0, 1), day + 7200, 10_000)).toBe(9_900)
+    expect(dayStartEquityOf([], day + 7200, 10_000)).toBe(10_000)
+    // A mark later than now is not read.
+    expect(dayStartEquityOf(marks.slice(2), day, 10_000)).toBe(10_000)
   })
 })

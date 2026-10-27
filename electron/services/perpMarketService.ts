@@ -183,21 +183,22 @@ async function perpPriceOnce(venue: PerpVenue, symbol: string): Promise<number> 
   return price
 }
 
-/** What a market order of `stakeQuote` pays beyond the best price, the worse of buying and selling, in percent; null
- * where the book read does not hold the stake. */
-export async function perpBookImpact(venue: PerpVenue, symbol: string, stakeQuote: number): Promise<number | null> {
-  let bids: [number, number][]
-  let asks: [number, number][]
+/** A perpetual's book now, its best fifty levels a side, and when it was read (V8 Stage 9: the book the liquidity gate
+ * reads for V8's writers, and the impact the delay test charges). */
+export async function perpBook(venue: PerpVenue, symbol: string): Promise<{ bids: [number, number][]; asks: [number, number][]; atMs: number }> {
   if (venue === 'binance') {
     await perpMarketSeam.spendBinance(2)
     const book = await json<{ bids?: unknown[][]; asks?: unknown[][] }>(`${PERP_HOSTS.binance}/fapi/v1/depth?${new URLSearchParams({ symbol, limit: '50' })}`)
-    bids = levelsOf(book.bids)
-    asks = levelsOf(book.asks)
-  } else {
-    const book = await bitget<{ bids?: unknown[][]; asks?: unknown[][] }>('merge-depth', '/api/v2/mix/market/merge-depth', { symbol, productType: 'usdt-futures', limit: '50' })
-    bids = levelsOf(book.bids)
-    asks = levelsOf(book.asks)
+    return { bids: levelsOf(book.bids), asks: levelsOf(book.asks), atMs: perpMarketSeam.now() }
   }
+  const book = await bitget<{ bids?: unknown[][]; asks?: unknown[][] }>('merge-depth', '/api/v2/mix/market/merge-depth', { symbol, productType: 'usdt-futures', limit: '50' })
+  return { bids: levelsOf(book.bids), asks: levelsOf(book.asks), atMs: perpMarketSeam.now() }
+}
+
+/** What a market order of `stakeQuote` pays beyond the best price, the worse of buying and selling, in percent; null
+ * where the book read does not hold the stake. */
+export async function perpBookImpact(venue: PerpVenue, symbol: string, stakeQuote: number): Promise<number | null> {
+  const { bids, asks } = await perpBook(venue, symbol)
   const buying = impactPct(asks, stakeQuote)
   const selling = impactPct(bids, stakeQuote)
   return buying === null || selling === null ? null : Math.max(buying, selling)

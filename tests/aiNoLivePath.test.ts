@@ -657,6 +657,9 @@ describe('AI code has no route to a real order', () => {
       // The feed's alerts: whether a coin a story names is held, by the holder notice's own rule.
       'src/news/NewsAlertScheduler.tsx',
       'src/news/NewsScheduler.tsx',
+      // The news book's shorts while paper testing runs (V8 Stage 9): the announcement, the rule's timing and bracket,
+      // on the coin's perpetual; paper by a literal (held below).
+      'src/news/newsBookShort.ts',
       'src/news/newsPaperShort.ts',
       'src/settings/NewsSettingsCard.tsx'
     ])
@@ -756,7 +759,9 @@ describe('AI code has no route to a real order', () => {
     // The scheduler reads -- the news, the settings, the balances a key can read -- and notifies.
     // Every write goes through the writer above.
     const watching = readFileSync(scheduler, 'utf-8')
+    // Since V8 Stage 9 it reads whether paper testing runs: the rule's shorts are the news book's then.
     expect([...new Set([...watching.matchAll(/window\.api\.(\w+)(?:\s*\.\s*(\w+))?/g)].map((match) => (match[2] === undefined ? match[1] : `${match[1]}.${match[2]}`)))].sort()).toEqual([
+      'books.state',
       'credentials.balances',
       'credentials.list',
       'news.getState',
@@ -769,7 +774,7 @@ describe('AI code has no route to a real order', () => {
     // 2026 each is written to the file as well: a record, read by nothing that decides anything
     // (held below).
     // current (V6 Stage 14): the window's language, read for the notices it tells.
-    expect(importsOf(scheduler).sort()).toEqual(['current', 'news', 'newsActions', 'newsPaperShort', 'paperRefusals', 'react'])
+    expect(importsOf(scheduler).sort()).toEqual(['current', 'news', 'newsActions', 'newsBookShort', 'newsPaperShort', 'paperRefusals', 'react'])
   })
 
   it('the watch asks and notifies, and all but one of its files has nothing to write with', () => {
@@ -1126,6 +1131,43 @@ describe('AI code has no route to a real order', () => {
     expect(page).not.toMatch(/placeLive|liveTrading|onPrepareOrder|aiProposal|settings\.set|mode: 'live'/)
   })
 
+  it("the news book's shorts are paper trades in the news book, by a literal they cannot be handed (V8 Stage 9)", () => {
+    const writer = join(ROOT, 'src', 'news', 'newsBookShort.ts')
+    const logic = join(ROOT, 'shared', 'newsBook.ts')
+    for (const path of [writer, logic, join(ROOT, 'shared', 'bookValuation.ts')]) {
+      const source = readFileSync(path, 'utf-8')
+      expect(source, path).not.toMatch(/liveTrading|LiveTrading|liveOrders|placeLive|window\.api\.(executors|trade|paper|credentials|ai)\b/)
+      expect(source, path).not.toMatch(/['"`]live['"`]/)
+      expect(source, path).not.toMatch(/\bleverage\s*:/)
+    }
+    expect(readFileSync(logic, 'utf-8')).not.toMatch(/window\.|ipcRenderer|from\s+'[^']*electron/)
+    const source = readFileSync(writer, 'utf-8')
+    // Paper is written where the executor is made, and the function that makes it takes no mode.
+    expect(source.match(/mode: 'paper'/g)).toHaveLength(1)
+    expect(source).not.toMatch(/mode:(?!\s*'paper')/)
+    const signature = /export function newsBookPaperExecutor\(input: \{([^}]*)\}\)/.exec(source)?.[1] ?? ''
+    expect(signature).toContain('book: BookMark')
+    expect(signature).not.toMatch(/mode/)
+    // It writes in the news book, under the rule's ledger, and nowhere else; one write a change, through the queue.
+    expect([...new Set(source.match(/id: '\w+'/g))]).toEqual(["id: 'news'"])
+    expect(source.match(/ledger: '\w+'/g)).toEqual(["ledger: 'rule'"])
+    expect(source).toContain('await window.api.settings.set({ executors })')
+    expect(source.match(/window\.api\.settings\.set\(/g)).toHaveLength(1)
+    // It reads the settings, the books and the perpetual's public data, and records its misses.
+    expect([...new Set([...source.matchAll(/window\.api\.(\w+)(?:\s*\.\s*(\w+))?/g)].map((match) => (match[2] === undefined ? match[1] : `${match[1]}.${match[2]}`)))].sort()).toEqual([
+      'books.miss',
+      'books.state',
+      'settings.get',
+      'settings.set',
+      'traders.perpBars',
+      'traders.perpBook',
+      'traders.perpFunding',
+      'traders.perpOf',
+      'traders.perpPrice'
+    ])
+    expect(importsOf(writer).sort()).toEqual(['delay', 'delistingStudy', 'ipc', 'liquidityGate', 'misses', 'news', 'newsActions', 'newsBook', 'paperBooks', 'primaryCall', 'settingsWrites'])
+  })
+
   it('a follow and a clone are paper trades in the copy book, by a literal they cannot be handed (V8 Stage 8)', () => {
     const follow = join(ROOT, 'src', 'traders', 'paperFollow.ts')
     const clone = join(ROOT, 'src', 'traders', 'paperClone.ts')
@@ -1156,10 +1198,11 @@ describe('AI code has no route to a real order', () => {
       expect(source, path).toContain('await window.api.settings.set({ executors })')
       expect(source.match(/window\.api\.settings\.set\(/g), path).toHaveLength(1)
     }
-    expect(bridgesOf(readFileSync(follow, 'utf-8'))).toEqual(['books.archive', 'books.miss', 'books.state', 'settings.get', 'settings.set', 'traders.perpFunding', 'traders.perpPrice'])
-    expect(bridgesOf(readFileSync(clone, 'utf-8'))).toEqual(['books.miss', 'books.state', 'settings.get', 'settings.set', 'traders.perpFunding', 'traders.perpPrice'])
-    expect(importsOf(follow).sort()).toEqual(['copyTrading', 'delay', 'follow', 'ipc', 'misses', 'paperBooks', 'settingsWrites', 'venueCosts'])
-    expect(importsOf(clone).sort()).toEqual(['clone', 'copyTrading', 'delay', 'follow', 'ipc', 'misses', 'paperBooks', 'paperFollow', 'settingsWrites', 'venueCosts'])
+    // Since V8 Stage 9 each reads its perpetual's book for the liquidity gate on an entry.
+    expect(bridgesOf(readFileSync(follow, 'utf-8'))).toEqual(['books.archive', 'books.miss', 'books.state', 'settings.get', 'settings.set', 'traders.perpBook', 'traders.perpFunding', 'traders.perpPrice'])
+    expect(bridgesOf(readFileSync(clone, 'utf-8'))).toEqual(['books.miss', 'books.state', 'settings.get', 'settings.set', 'traders.perpBook', 'traders.perpFunding', 'traders.perpPrice'])
+    expect(importsOf(follow).sort()).toEqual(['copyTrading', 'delay', 'follow', 'ipc', 'liquidityGate', 'misses', 'paperBooks', 'settingsWrites', 'venueCosts'])
+    expect(importsOf(clone).sort()).toEqual(['clone', 'copyTrading', 'delay', 'follow', 'ipc', 'liquidityGate', 'misses', 'paperBooks', 'paperFollow', 'settingsWrites', 'venueCosts'])
     // The scheduler hands what the main process pushes to its writers, and writes nothing itself.
     expect(bridgesOf(readFileSync(scheduler, 'utf-8'))).toEqual(['books.misses', 'traders.followRecords', 'traders.followStatus', 'traders.onCloneSignal', 'traders.onFollowStatus', 'traders.onLeaderEvent'])
     expect(importsOf(scheduler).sort()).toEqual(['follow', 'paperClone', 'paperFollow', 'react'])

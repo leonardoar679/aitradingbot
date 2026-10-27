@@ -16,6 +16,7 @@ const WRITERS: Record<string, string> = {
   'src/forecast/forecastTrader.ts': 'the forecast trader (automatic; pinned paper in aiNoLivePath)',
   'src/forecast/labTrader.ts': 'the paper laboratory (automatic; pinned paper in aiNoLivePath)',
   'src/news/newsPaperShort.ts': "the news rules' paper shorts (automatic; pinned paper in aiNoLivePath)",
+  'src/news/newsBookShort.ts': "the news book's shorts while paper testing runs (automatic once started; pinned paper in aiNoLivePath)",
   'src/traders/paperFollow.ts': "a followed trader's follows, in the copy book (automatic once a person follows; pinned paper in aiNoLivePath)",
   'src/traders/paperClone.ts': "a trader's clone's trades, in the copy book (automatic once a person runs it; pinned paper in aiNoLivePath)",
   'src/controllers/ControllerScheduler.tsx': "a controller stopping its executors on a breach: it changes their status, never opens one",

@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import { readFile } from 'fs/promises'
 import { join } from 'path'
+import { bookOpenNetOf, bookPriceRefOf, priceRefKey, type BookPriceRef } from '../../shared/bookValuation'
 import type { ExecutorConfig } from '../../shared/ipc'
 import { readMiss, type MissRecord } from '../../shared/misses'
 import {
@@ -8,12 +9,15 @@ import {
   PAPER_BOOKS_VERSION,
   bookOf,
   bookStandingOf,
+  dayStartEquityOf,
   healPaperBooks,
   type BookEquityMark,
   type BookId,
   type BookStanding
 } from '../../shared/paperBooks'
 import { appendJsonLine, appendJsonLines, listMonthFiles } from './jsonlStore'
+import { fetchTicker24h } from './marketService'
+import { perpPrice } from './perpMarketService'
 import { getSettings } from './settingsService'
 
 // THE PAPER BOOKS' FILES (shared/paperBooks.ts, shared/misses.ts; V8 Stage 2): each book's equity marked once an
@@ -28,9 +32,15 @@ const HOUR_MS = 3_600_000
 export const booksSeam = {
   dir: (): string => join(app.getPath('userData'), 'paperBooks'),
   now: (): number => Math.floor(Date.now() / 1000),
-  /** An open paper trade's result now, in its quote; null where it cannot be priced. Until a book's first
-   * writer exists (V8 Stage 3 on), every open trade of a book is priced by it. */
-  openResult: (_executor: ExecutorConfig): number | null => null
+  /** A book trade's price now (V8 Stage 9): its perpetual's last, or its spot pair's; null where it cannot be read. */
+  price: async (ref: BookPriceRef): Promise<number | null> => {
+    try {
+      const price = ref.kind === 'perp' ? await perpPrice(ref.venue, ref.symbol) : Number((await fetchTicker24h(ref.venue, ref.symbol)).lastPrice)
+      return Number.isFinite(price) && price > 0 ? price : null
+    } catch {
+      return null
+    }
+  }
 }
 
 const monthOf = (seconds: number): string => new Date(seconds * 1000).toISOString().slice(0, 7)
@@ -108,7 +118,28 @@ export async function bookStandings(): Promise<{ running: boolean; startedAt: nu
   const ids = new Set(current.map((executor) => executor.id))
   const executors = [...current, ...(await archived()).filter((executor) => !ids.has(executor.id))]
   const startedAt = books.startedAt ?? 0
-  return { running: books.running, startedAt: books.startedAt, standings: BOOK_IDS.map((id) => bookStandingOf(id, books.books[id], executors, startedAt, booksSeam.openResult)) }
+  // Each open trade of a book's run priced once, its result from its own stamp (shared/bookValuation.ts).
+  const open = executors.filter((executor) => executor.status === 'active' && bookOf(executor) !== 'other' && executor.book?.startedAt === startedAt)
+  const refs = new Map<string, BookPriceRef>()
+  for (const executor of open) {
+    const ref = bookPriceRefOf(executor)
+    if (ref !== null) refs.set(priceRefKey(ref), ref)
+  }
+  const prices = new Map(await Promise.all([...refs].map(async ([key, ref]) => [key, await booksSeam.price(ref)] as const)))
+  const nowMs = booksSeam.now() * 1000
+  const openResult = (executor: ExecutorConfig): number | null => {
+    const ref = bookPriceRefOf(executor)
+    const px = ref === null ? null : (prices.get(priceRefKey(ref)) ?? null)
+    return px === null ? null : bookOpenNetOf(executor, px, nowMs)
+  }
+  const standings: BookStanding[] = []
+  for (const id of BOOK_IDS) {
+    const standing = bookStandingOf(id, books.books[id], executors, startedAt, openResult)
+    // The day's start, from the run's marks: what the daily stop reads.
+    const marks = books.startedAt === null ? [] : await listEquityMarks(id, books.startedAt).catch(() => [])
+    standings.push({ ...standing, dayStartEquity: books.startedAt === null ? null : dayStartEquityOf(marks, booksSeam.now(), standing.startQuote) })
+  }
+  return { running: books.running, startedAt: books.startedAt, standings }
 }
 
 /** Marks each book's equity now, while the books run: one line a book. */

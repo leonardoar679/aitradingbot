@@ -155,3 +155,43 @@ describe("the books' archive (V8 Stage 8)", () => {
     expect((await books.bookStandings()).standings.find((standing) => standing.id === 'copy')).toMatchObject({ realizedQuote: 25, closed: 1 })
   })
 })
+
+describe("a book's standing, its open trades valued (V8 Stage 9)", () => {
+  it("values each open trade from its stamp at its price now, and reads the day's start from the run's marks", async () => {
+    const books = await service()
+    const now = STARTED + 3600
+    const prices: string[] = []
+    books.booksSeam.price = async (ref) => {
+      prices.push(`${ref.kind}:${ref.symbol}`)
+      return ref.symbol === 'ETHUSDT' ? 1900 : null
+    }
+    const follow = {
+      id: 'f',
+      type: 'position',
+      mode: 'paper',
+      status: 'active',
+      params: { amountQuote: 1000 },
+      book: { id: 'copy', startedAt: STARTED, ledger: 'follow' },
+      follow: { venue: 'binance', symbol: 'ETHUSDT', side: 'short', size: 0.5, avgPx: 2000, realizedQuote: 0, feesQuote: 0.5, maxStakeQuote: 1000, openedAtMs: (now - 60) * 1000 }
+    }
+    // A trade of an earlier run is not this run's: not priced.
+    const earlier = { ...follow, id: 'old', book: { ...follow.book, startedAt: STARTED - 86_400 }, follow: { ...follow.follow, symbol: 'OLDUSDT' } }
+    settings = { paperBooks: { ...DEFAULT_PAPER_BOOKS, running: true, startedAt: STARTED }, executors: [follow, earlier] }
+    let copy = (await books.bookStandings()).standings.find((standing) => standing.id === 'copy')!
+    // Short 0.5 from 2,000 at 1,900: 50, less 0.5 in and 0.475 out.
+    expect(copy.unrealizedQuote).toBeCloseTo(50 - 0.5 - 0.475, 9)
+    expect(copy.equity).toBeCloseTo(10_000 + 50 - 0.975, 9)
+    expect(prices).toEqual(['perp:ETHUSDT'])
+    // With no mark yet the day began at the book's start; the day's first mark once there is one.
+    expect(copy.dayStartEquity).toBe(10_000)
+    await books.markBookEquity()
+    copy = (await books.bookStandings()).standings.find((standing) => standing.id === 'copy')!
+    expect(copy.dayStartEquity).toBeCloseTo(10_000 + 50 - 0.975, 9)
+    // A trade whose price cannot be read leaves its book's equity unknown, as before.
+    settings = { ...settings, executors: [{ ...follow, follow: { ...follow.follow, symbol: 'XYZUSDT' } }] }
+    expect((await books.bookStandings()).standings.find((standing) => standing.id === 'copy')!.equity).toBeNull()
+    // Stopped books read no marks.
+    settings = { paperBooks: { ...DEFAULT_PAPER_BOOKS, running: false, startedAt: null }, executors: [] }
+    expect((await books.bookStandings()).standings.every((standing) => standing.dayStartEquity === null)).toBe(true)
+  })
+})

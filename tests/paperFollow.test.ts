@@ -24,9 +24,9 @@ function harness(over: { running?: boolean; price?: number | null; standing?: Pa
   }
   const misses: MissRecord[] = []
   const archived: ExecutorConfig[] = []
-  const state = { now: T0, price: over.price === undefined ? 2000 : over.price, rates: [] as FundingRate[], id: 0 }
+  const state = { now: T0, price: over.price === undefined ? 2000 : over.price, rates: [] as FundingRate[], id: 0, book: null as { bids: [number, number][]; asks: [number, number][]; atMs: number } | null }
   const standing: BookStanding | null =
-    over.standing === null ? null : { id: 'copy', startQuote: 10_000, realizedQuote: 0, unrealizedQuote: 0, settledEquity: 10_000, equity: 10_000, open: 0, openStakeQuote: 0, closed: 0, ...over.standing }
+    over.standing === null ? null : { id: 'copy', startQuote: 10_000, realizedQuote: 0, unrealizedQuote: 0, settledEquity: 10_000, equity: 10_000, open: 0, openStakeQuote: 0, closed: 0, dayStartEquity: null, ...over.standing }
   const deps: FollowDeps = {
     getSettings: async () => settings,
     setExecutors: async (executors) => {
@@ -39,6 +39,11 @@ function harness(over: { running?: boolean; price?: number | null; standing?: Pa
       return state.price
     },
     perpFunding: async () => state.rates,
+    // A deep book at the price: the liquidity gate passes unless a test thins it.
+    perpBook: async () => {
+      const px = state.price ?? 2000
+      return state.book ?? { bids: [[px * 0.9999, 1000]], asks: [[px * 1.0001, 1000]], atMs: state.now }
+    },
     miss: async (miss) => void misses.push(miss),
     archive: async (executors) => {
       archived.push(...executors)
@@ -171,8 +176,12 @@ describe('a leader event', () => {
 })
 
 describe('an entry the gates refuse', () => {
-  it('is written as a miss with its stage: late, a price apart, a cap, no perpetual, no room in the book', async () => {
+  it('is written as a miss with its stage: late, a price apart, a cap, no perpetual, no room in the book, a thin book', async () => {
+    // A book that cannot hold the stake: the liquidity gate refuses for V8's writers (V8 Stage 9).
+    const thin = harness()
+    thin.state.book = { bids: [[1999, 0.01]], asks: [[2001, 0.01]], atMs: T0 }
     const cases: [ReturnType<typeof harness>, LeaderEvent, MissRecord['stage'], RegExp][] = [
+      [thin, event(0, 2), 'liquidity', /hold/],
       // Followed for an hour, a trade seen 200 s after it was made.
       [harness({ follows: { follows: { [KEY]: { since: T0 - 3_600_000, maxHoldSec: 3600 } }, clones: {} } }), event(0, 2, { timeMs: T0 - 200_000 }), 'late', /seen 200 s after the leader traded, past 120 s/],
       [harness({ price: 2100 }), event(0, 2), 'gate', /5\.00% from the leader's fill/],

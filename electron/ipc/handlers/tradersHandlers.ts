@@ -5,8 +5,8 @@ import { IpcChannel } from '../../../shared/ipc'
 import type { TraderAnalysis, TraderMeta } from '../../../shared/traders/traderAnalysis'
 import { TRADER_FILE_LINES } from '../../../shared/traders/traderFile'
 import { analyzeTrader, importTrader, importTraderFile, listTraders, onTraderProgress } from '../../services/traderService'
-import { followStatuses, onCloneSignal, onFollowStatus, onLeaderEvent, recentFollowRecords, setClone, setFollow } from '../../services/followService'
-import { perpFunding, perpPrice } from '../../services/perpMarketService'
+import { followPerpOf, followStatuses, onCloneSignal, onFollowStatus, onLeaderEvent, recentFollowRecords, setClone, setFollow } from '../../services/followService'
+import { perpBars, perpBook, perpFunding, perpPrice } from '../../services/perpMarketService'
 
 // COPY TRADERS (V8 Stages 6-7; electron/services/traderService.ts): a pasted trader read from its venue and kept, a file
 // of trades the person chooses in this process's own dialog -- the window never names a path -- read and kept, an
@@ -64,5 +64,22 @@ export function registerTradersHandlers(mainWindow: BrowserWindow): void {
     const toSec = Number(request?.toSec)
     if (!Number.isFinite(fromSec) || !Number.isFinite(toSec) || toSec < fromSec || toSec - fromSec > 30 * 86_400) throw new Error('Name a span of at most thirty days.')
     return perpFunding(perp.venue, perp.symbol, fromSec, toSec)
+  })
+  // The books' writers (V8 Stage 9): a coin's perpetual, Binance's first; a perpetual's book, for the liquidity gate; and
+  // its 1-minute bars, a day at most, for a short's exits.
+  ipcMain.handle(IpcChannel.TradersPerpOf, (_event, coin: unknown) => {
+    if (typeof coin !== 'string' || !/^[A-Z0-9]{1,20}$/.test(coin)) throw new Error('Name a coin by its ticker.')
+    return followPerpOf(coin)
+  })
+  ipcMain.handle(IpcChannel.TradersPerpBook, (_event, request: { venue?: unknown; symbol?: unknown } | undefined) => {
+    const perp = perpOf(request)
+    return perpBook(perp.venue, perp.symbol)
+  })
+  ipcMain.handle(IpcChannel.TradersPerpBars, (_event, request: { venue?: unknown; symbol?: unknown; fromSec?: unknown; toSec?: unknown } | undefined) => {
+    const perp = perpOf(request)
+    const fromSec = Number(request?.fromSec)
+    const toSec = Number(request?.toSec)
+    if (!Number.isFinite(fromSec) || !Number.isFinite(toSec) || toSec < fromSec || toSec - fromSec > 86_400) throw new Error('Name a span of at most a day.')
+    return perpBars(perp.venue, perp.symbol, '1m', fromSec, toSec)
   })
 }

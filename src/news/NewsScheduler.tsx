@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { newsActionsFor, type NewsItem, type NewsState } from '../../shared/news'
 import { DELISTING_SHORT_LATEST_SECONDS, NEWS_NOTICE_LATEST_SECONDS, isFreshNews, newsHolderNotice, tagShortWindow, type Holdings } from '../../shared/newsActions'
 import { newsShortBrowserDeps, openNewsShorts, settleNewsShorts } from './newsPaperShort'
+import { newsBookBrowserDeps, openNewsBookShorts, settleNewsBookShorts } from './newsBookShort'
 import { recordPaperRefusal } from '../agents/paperRefusals'
 
 /** How often the rules' paper shorts are looked at for one that has closed. */
@@ -25,6 +26,20 @@ async function readHoldings(): Promise<Holdings> {
 async function openShorts(item: NewsItem, config: NewsState['config']): Promise<void> {
   const actions = newsActionsFor(config, item.category)
   if (actions === null) return
+  // While paper testing runs, the rule's shorts are the news book's, on the coin's perpetual (V8 Stage 9); otherwise
+  // the app's own paper trades, as before.
+  const testing = await window.api.books
+    .state()
+    .then((state) => state.running)
+    .catch(() => false)
+  if (testing) {
+    try {
+      for (const line of await openNewsBookShorts(item, newsBookBrowserDeps)) console.info(`Announcement ${item.id}, the news book: ${line}`)
+    } catch (failure) {
+      console.error('The news reader could not open its short in the news book:', failure)
+    }
+    return
+  }
   try {
     for (const line of await openNewsShorts(item, actions, newsShortBrowserDeps)) {
       console.info(`Announcement ${item.id}: ${line}`)
@@ -113,6 +128,7 @@ export function NewsScheduler(): null {
     const settle = (): void => {
       if (cancelled) return
       void settleNewsShorts(newsShortBrowserDeps).catch((failure: unknown) => console.error('The news reader could not look at its paper shorts:', failure))
+      void settleNewsBookShorts(newsBookBrowserDeps).catch((failure: unknown) => console.error("The news reader could not look at the news book's shorts:", failure))
     }
     settle()
     const timer = setInterval(settle, SETTLE_MS)

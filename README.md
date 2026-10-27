@@ -897,7 +897,25 @@ Positions stamped with the copy book: they settle in their book, apart from the 
 one settled a day ago moves out of `settings.json` into `paperBooks/archive-YYYY-MM.jsonl`, which the book's standing
 reads too. The books run only once paper testing is started (Stage 9): until then a follow and a clone record what they
 would have done as missed opportunities. The panel shows each follow's measured delay, and the delay test's verdict at
-it.
+it. Since Stage 9 an entry passes the liquidity gate on its perpetual's book at its stake first (V8-S2-LIQ refuses for
+V8's writers): a book that cannot hold the stake, or holds under five stakes within half a percent of the mid, is a miss.
+
+**The three paper books** (V8 Stages 2 and 9; `shared/paperBooks.ts`, `shared/bookValuation.ts`, `shared/newsBook.ts`,
+`electron/services/booksService.ts`, `src/news/newsBookShort.ts`). V8 tests three ideas side by side, each on its own
+10,000 USDT -- the news book, the copy book, the baseline -- apart from the paper account, which keeps the watch's, the
+forecast trader's, the laboratory's and a person's own trades. A book's money is read from the trades its writers
+stamped: its start, what its closed trades made, and since Stage 9 what its open ones stand at, each valued from its own
+stamp and its perpetual's or pair's price now (funding assumed against it until it closes), so its equity, its drawdown
+and its daily stop are known while a trade is open; the stop reads the equity the book began the UTC day with, from its
+hourly marks. **The news book**: while paper testing runs, the news rule's shorts -- a Binance delisting within its five
+minutes, a Monitoring Tag in its second minute where its short is switched on -- are the news book's, on each coin's
+USDT perpetual (Binance's, else Bitget's) at its price, staking a tenth of the book, through the book's room and the
+liquidity gate; a delisting's leaves at the open four hours after the announcement's minute, as the study measured it,
+a tag's at its bracket (read from the perpetual's own usual move) or its sixtieth minute, either at the loss of its
+stake; its result is the move, both taker fees and the funding the perpetual published over its hold. A coin no venue
+lists a perpetual of is a missed opportunity, "no venue could take this", scored apart. Every refusal is a miss carrying
+its event's key. Outside paper testing the rule's shorts are the paper account's, as before. What the books are judged
+by is V8-S9-BOOKS, registered before the first Start.
 
 **The Forecast Lab** (since 13 October 2026; the V6 document's §27-28, §42-43, §49-50 and §90-105; V6 Stage
 11; `shared/forecast/{lab,labWalkForward,labFile}.ts`, `electron/services/forecastLabService.ts`,

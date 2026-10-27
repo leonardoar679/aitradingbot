@@ -550,6 +550,9 @@ const api = {
     followRecords: (sinceMs: number): Promise<{ events: LeaderEvent[]; signals: CloneSignal[] }> => ipcRenderer.invoke(IpcChannel.TradersFollowRecords, sinceMs),
     perpPrice: (venue: 'binance' | 'bitget', symbol: string): Promise<number> => ipcRenderer.invoke(IpcChannel.TradersPerpPrice, { venue, symbol }),
     perpFunding: (venue: 'binance' | 'bitget', symbol: string, fromSec: number, toSec: number): Promise<FundingRate[]> => ipcRenderer.invoke(IpcChannel.TradersPerpFunding, { venue, symbol, fromSec, toSec }),
+    perpOf: (coin: string): Promise<{ venue: 'binance' | 'bitget'; symbol: string } | null> => ipcRenderer.invoke(IpcChannel.TradersPerpOf, coin),
+    perpBook: (venue: 'binance' | 'bitget', symbol: string): Promise<{ bids: [number, number][]; asks: [number, number][]; atMs: number }> => ipcRenderer.invoke(IpcChannel.TradersPerpBook, { venue, symbol }),
+    perpBars: (venue: 'binance' | 'bitget', symbol: string, fromSec: number, toSec: number): Promise<Candle[]> => ipcRenderer.invoke(IpcChannel.TradersPerpBars, { venue, symbol, fromSec, toSec }),
     onLeaderEvent: (listener: (event: LeaderEvent) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, event: LeaderEvent): void => listener(event)
       ipcRenderer.on(IpcChannel.TradersLeaderEvent, handler)
