@@ -2324,5 +2324,7 @@
   "That Hyperliquid link names no address (0x and forty letters and digits).": "لا يذكر رابط Hyperliquid هذا أي عنوان (0x متبوعًا بأربعين حرفًا ورقمًا).",
   "That OKX link names no lead trader's code (sixteen letters and digits, or eighteen digits).": "لا يذكر رابط OKX هذا رمز أي متداول رئيسي (ستة عشر حرفًا ورقمًا، أو ثمانية عشر رقمًا).",
   "Traders are read from Hyperliquid and OKX only: paste a Hyperliquid address or an OKX lead trader's profile link.": "لا يُقرأ المتداولون إلا من Hyperliquid و OKX: الصق عنوان Hyperliquid أو رابط الملف الشخصي لمتداول رئيسي على OKX.",
-  "The baseline on paper": "الاستراتيجية المرجعية تجريبيًا"
+  "The baseline on paper": "الاستراتيجية المرجعية تجريبيًا",
+  "The announcement reader stopped": "توقف قارئ الإعلانات",
+  "Three reads in a row of Binance's announcement lists failed ({error}): the reader is switched off until it is switched on again under Settings › Market.": "فشلت ثلاث قراءات متتالية لقوائم إعلانات Binance ({error})، فأُوقف القارئ إلى أن يُشغَّل من جديد من الإعدادات › السوق."
 }

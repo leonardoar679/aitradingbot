@@ -181,6 +181,17 @@ export function applyNewsConfigPatch(current: NewsConfig, patch: NewsConfigPatch
   return next
 }
 
+/** Reads in a row that read none of Binance's lists, after which the reader is switched off with a notice (V8 Stage 9:
+ * the reader's health is shown, and three failures stop it). */
+export const NEWS_READER_FAILURES_TO_STOP = 3
+
+/** How the reader has been reading: the reads in a row that read nothing, and when and why it stopped itself. */
+export interface NewsReaderHealth {
+  failuresInRow: number
+  stoppedAt: number | null
+  stoppedReason: string | null
+}
+
 export interface NewsState {
   config: NewsConfig
   lastReadAt: number | null
@@ -188,6 +199,7 @@ export interface NewsState {
   error: string | null
   /** Newest release first. */
   recent: NewsItem[]
+  health: NewsReaderHealth
 }
 
 export interface NewsFilter {

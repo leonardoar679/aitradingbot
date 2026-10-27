@@ -2324,5 +2324,7 @@
   "That Hyperliquid link names no address (0x and forty letters and digits).": "Liên kết Hyperliquid đó không chứa địa chỉ nào (0x cùng bốn mươi chữ cái và chữ số).",
   "That OKX link names no lead trader's code (sixteen letters and digits, or eighteen digits).": "Liên kết OKX đó không chứa mã nhà giao dịch dẫn dắt nào (mười sáu chữ cái và chữ số, hoặc mười tám chữ số).",
   "Traders are read from Hyperliquid and OKX only: paste a Hyperliquid address or an OKX lead trader's profile link.": "Chỉ đọc nhà giao dịch từ Hyperliquid và OKX: hãy dán một địa chỉ Hyperliquid hoặc liên kết trang hồ sơ của một nhà giao dịch dẫn dắt OKX.",
-  "The baseline on paper": "Chiến lược đối chứng mô phỏng"
+  "The baseline on paper": "Chiến lược đối chứng mô phỏng",
+  "The announcement reader stopped": "Trình đọc thông báo đã dừng",
+  "Three reads in a row of Binance's announcement lists failed ({error}): the reader is switched off until it is switched on again under Settings › Market.": "Ba lần đọc liên tiếp danh sách thông báo của Binance đều thất bại ({error}): trình đọc bị tắt cho đến khi được bật lại trong Cài đặt › Thị trường."
 }

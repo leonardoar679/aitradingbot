@@ -2324,5 +2324,7 @@
   "That Hyperliquid link names no address (0x and forty letters and digits).": "ลิงก์ Hyperliquid นี้ไม่มีที่อยู่ (0x ตามด้วยตัวอักษรและตัวเลขสี่สิบตัว)",
   "That OKX link names no lead trader's code (sixteen letters and digits, or eighteen digits).": "ลิงก์ OKX นี้ไม่มีรหัสเทรดเดอร์ผู้นำ (ตัวอักษรและตัวเลขสิบหกตัว หรือตัวเลขสิบแปดหลัก)",
   "Traders are read from Hyperliquid and OKX only: paste a Hyperliquid address or an OKX lead trader's profile link.": "อ่านเทรดเดอร์ได้จาก Hyperliquid และ OKX เท่านั้น: โปรดวางที่อยู่ Hyperliquid หรือลิงก์โปรไฟล์ของเทรดเดอร์ผู้นำ OKX",
-  "The baseline on paper": "กลยุทธ์อ้างอิงแบบจำลอง"
+  "The baseline on paper": "กลยุทธ์อ้างอิงแบบจำลอง",
+  "The announcement reader stopped": "ตัวอ่านประกาศหยุดทำงานแล้ว",
+  "Three reads in a row of Binance's announcement lists failed ({error}): the reader is switched off until it is switched on again under Settings › Market.": "การอ่านรายการประกาศของ Binance ล้มเหลวติดกันสามครั้ง ({error}) ตัวอ่านจึงถูกปิดไว้จนกว่าจะเปิดอีกครั้งที่ การตั้งค่า › ตลาด"
 }

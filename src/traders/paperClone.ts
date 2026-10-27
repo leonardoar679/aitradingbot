@@ -216,6 +216,28 @@ export async function settleClones(deps: CloneDeps): Promise<string[]> {
   return done
 }
 
+/** Every open clone trade closed now at its perpetual's price, as stopped: paper testing was stopped. Returns the names
+ * of those it closed. */
+export async function closeClones(deps: CloneDeps): Promise<string[]> {
+  const { executors } = await deps.getSettings()
+  const done: string[] = []
+  for (const executor of cloneExecutors(executors).filter((entry) => entry.status === 'active')) {
+    const stamp = executor.clone as CloneTradeStamp
+    const px = await deps.perpPrice(stamp.venue, stamp.symbol).catch(() => null)
+    if (px === null) continue
+    const wrote = await deps.queue(async (): Promise<boolean> => {
+      const fresh = await deps.getSettings()
+      const current = fresh.executors.find((entry) => entry.id === executor.id)
+      if (current?.clone === undefined || current.status !== 'active' || current.book?.result !== undefined) return false
+      const ended = await closedClone(current, px, 'stopped', deps)
+      await deps.setExecutors(fresh.executors.map((entry) => (entry.id === executor.id ? ended : entry)))
+      return true
+    })
+    if (wrote) done.push(executor.name)
+  }
+  return done
+}
+
 /** The same, against the running app. */
 export const cloneBrowserDeps: CloneDeps = {
   getSettings: () => window.api.settings.get(),

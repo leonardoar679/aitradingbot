@@ -21,6 +21,17 @@ vi.mock('../electron/services/marketScannerService', () => ({
   }
 }))
 
+// The notices, at the one function the reader tells them through (V8 Stage 9: when it stops itself).
+const told = vi.hoisted(() => [] as { title: string; body: string }[])
+vi.mock('../electron/services/noticeService', async () => {
+  const { ENGLISH } = await import('../shared/i18n/translate')
+  return {
+    tell: (notice: unknown) => {
+      told.push((typeof notice === 'function' ? (notice as (i18n: unknown) => { title: string; body: string })(ENGLISH) : notice) as { title: string; body: string })
+    }
+  }
+})
+
 const T = Date.parse('2026-10-05T06:00:00Z')
 
 const lists = vi.hoisted(() => ({
@@ -74,6 +85,7 @@ beforeEach(() => {
   lists.calls = []
   raised.calls = []
   raised.fail = false
+  told.length = 0
   vi.stubGlobal('fetch', vi.fn(fakeFetch))
 })
 
@@ -306,6 +318,48 @@ describe('a delisting, or a tag, put to the models', () => {
       { id: 410, ticker: 'LSK' }
     ])
     await setNewsConfig({ enabled: false })
+  })
+})
+
+describe('its health', () => {
+  it('switches itself off after three reads in a row that read nothing, says so, and counts again once switched on', async () => {
+    // Its own minute's read never comes between the reads made here.
+    vi.useFakeTimers()
+    lists.failing = new Set([161, 48, 49])
+    const { setNewsConfig, whenNewsSettled, readNewsOnce, getNewsState } = await reader()
+    await setNewsConfig({ enabled: true })
+    await whenNewsSettled()
+    await readNewsOnce(T + 60_000)
+    expect((await getNewsState()).health).toEqual({ failuresInRow: 2, stoppedAt: null, stoppedReason: null })
+    expect(told).toEqual([])
+    await readNewsOnce(T + 120_000)
+    const state = await getNewsState()
+    expect(state.config.enabled).toBe(false)
+    expect(state.nextReadAt).toBeNull()
+    expect(state.health).toMatchObject({ failuresInRow: 3, stoppedReason: expect.stringMatching(/^Binance's announcement lists could not be read: /) })
+    expect(state.health.stoppedAt).not.toBeNull()
+    expect(JSON.parse(readFileSync(join(dir, 'news.json'), 'utf-8')).enabled).toBe(false)
+    expect(told).toHaveLength(1)
+    expect(told[0].title).toBe('The announcement reader stopped')
+    expect(told[0].body).toMatch(/^Three reads in a row of Binance's announcement lists failed \(Binance's announcement lists could not be read: .+\): the reader is switched off until it is switched on again under Settings › Market\. Nothing was placed; what is open keeps its stops\.$/)
+    // Switched on again, it counts from nothing; and a read of part of the lists is not one that read nothing.
+    lists.failing = new Set([48])
+    expect((await setNewsConfig({ enabled: true })).health).toEqual({ failuresInRow: 0, stoppedAt: null, stoppedReason: null })
+    await whenNewsSettled()
+    expect((await getNewsState()).health).toEqual({ failuresInRow: 0, stoppedAt: null, stoppedReason: null })
+    await setNewsConfig({ enabled: false })
+  })
+
+  it('stops nothing while it is off, however often a read reads nothing', async () => {
+    lists.failing = new Set([161, 48, 49])
+    const { readNewsOnce, getNewsState } = await reader()
+    for (const at of [T, T + 60_000, T + 120_000, T + 180_000]) await readNewsOnce(at)
+    expect((await getNewsState()).health).toEqual({ failuresInRow: 4, stoppedAt: null, stoppedReason: null })
+    expect(told).toEqual([])
+    // A read of any list is not one that read nothing: the count starts again.
+    lists.failing = new Set([48])
+    await readNewsOnce(T + 240_000)
+    expect((await getNewsState()).health.failuresInRow).toBe(0)
   })
 })
 

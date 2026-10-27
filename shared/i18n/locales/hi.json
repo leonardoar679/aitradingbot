@@ -2324,5 +2324,7 @@
   "That Hyperliquid link names no address (0x and forty letters and digits).": "उस Hyperliquid लिंक में कोई पता नहीं है (0x और चालीस अक्षर व अंक)।",
   "That OKX link names no lead trader's code (sixteen letters and digits, or eighteen digits).": "उस OKX लिंक में किसी लीड ट्रेडर का कोड नहीं है (सोलह अक्षर व अंक, या अठारह अंक)।",
   "Traders are read from Hyperliquid and OKX only: paste a Hyperliquid address or an OKX lead trader's profile link.": "ट्रेडर केवल Hyperliquid और OKX से पढ़े जाते हैं: एक Hyperliquid पता या किसी OKX लीड ट्रेडर का प्रोफ़ाइल लिंक चिपकाएँ।",
-  "The baseline on paper": "पेपर पर बेसलाइन रणनीति"
+  "The baseline on paper": "पेपर पर बेसलाइन रणनीति",
+  "The announcement reader stopped": "घोषणा रीडर रुक गया",
+  "Three reads in a row of Binance's announcement lists failed ({error}): the reader is switched off until it is switched on again under Settings › Market.": "Binance की घोषणा सूचियों को लगातार तीन बार पढ़ना विफल रहा ({error}): रीडर बंद कर दिया गया है, जब तक इसे सेटिंग्स › बाज़ार में फिर से चालू न किया जाए।"
 }

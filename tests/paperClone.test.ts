@@ -5,7 +5,7 @@ import { DEFAULT_PAPER_BOOKS, type BookStanding } from '../shared/paperBooks'
 import type { CloneTradeStamp } from '../shared/traders/copyTrading'
 import type { FundingRate } from '../shared/traders/delay'
 import type { CloneSignal } from '../shared/traders/follow'
-import { cloneExecutors, cloneSignal, settleClones, type CloneDeps } from '../src/traders/paperClone'
+import { cloneExecutors, cloneSignal, closeClones, settleClones, type CloneDeps } from '../src/traders/paperClone'
 
 // A TRADER'S CLONE ON PAPER (src/traders/paperClone.ts; V8 Stage 8): each signal of a running clone entered once, on
 // the rule's side, staking the most the copy book lets one trade stake, one trade a coin at a time; an entry refused
@@ -192,6 +192,27 @@ describe("a clone's open trade", () => {
     const [first, second] = await Promise.all([settleClones(deps), settleClones(deps)])
     expect([...first, ...second]).toEqual(['Clone · ETH short'])
     expect(settings.executors[0].book?.result?.fundingQuote).toBeCloseTo(-0.1, 12)
+  })
+
+  it('is closed at the price then when paper testing is stopped, once, and not where its price cannot be read (V8 Stage 9)', async () => {
+    const { settings, state, deps } = harness()
+    let chain: Promise<unknown> = Promise.resolve()
+    deps.queue = <T>(work: () => Promise<T>): Promise<T> => {
+      const run = chain.then(work)
+      chain = run.catch(() => undefined)
+      return run
+    }
+    await cloneSignal(signal(), deps)
+    state.price = null
+    expect(await closeClones(deps)).toEqual([])
+    state.price = 1900
+    const [first, second] = await Promise.all([closeClones(deps), closeClones(deps)])
+    expect([...first, ...second]).toEqual(['Clone · ETH short'])
+    const [ended] = cloneExecutors(settings.executors)
+    expect(ended).toMatchObject({ status: 'stopped', clone: { closeReason: 'stopped' } })
+    // Short 0.5 ETH from 2,000 to 1,900: 50, less the taker fee each way.
+    expect(ended.book?.result?.netQuote).toBeCloseTo(50 - 0.0005 * 1000 - 0.0005 * 950, 9)
+    expect(await closeClones(deps)).toEqual([])
   })
 
   it('closes at the loss of its stake, when its clone is switched off, and is given its result when stopped elsewhere', async () => {

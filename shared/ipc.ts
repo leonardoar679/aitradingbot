@@ -137,6 +137,10 @@ export const IpcChannel = {
   BooksArchive: 'books:archive',
   /** Binance's spot book now for one of the baseline's eight symbols, for its liquidity gate (V8 Stage 9). */
   BooksSpotBook: 'books:spotBook',
+  /** Paper testing (V8 Stage 9): its state, its Start and its Stop -- the one way the books are started and stopped. */
+  BooksTesting: 'books:testing',
+  BooksStart: 'books:start',
+  BooksStop: 'books:stop',
   // The primary call (V8 Stage 3): the cards weighed, the late list and the refusals; pushed as each weighing ends.
   CallsState: 'calls:state',
   CallsUpdate: 'calls:update',

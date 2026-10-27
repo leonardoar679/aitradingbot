@@ -9,6 +9,7 @@ import type { RoundTrip } from '../shared/venueCosts'
 import type { SourceOutcome, SourcePrediction } from '../shared/evaluation/predictionRecord'
 import type { BookEquityMark, BookId, BookStanding } from '../shared/paperBooks'
 import type { MissRecord } from '../shared/misses'
+import type { PaperTestingState } from '../shared/paperTesting'
 import type { PrimaryCallState } from '../shared/forecast/primaryCall'
 import type { UrlRecord } from '../shared/newsUrl'
 import type { BitgetCopyCheck, TraderAnalysis, TraderList, TraderMeta, TraderProgress } from '../shared/traders/traderAnalysis'
@@ -582,7 +583,11 @@ const api = {
     misses: (sinceSec = 0): Promise<MissRecord[]> => ipcRenderer.invoke(IpcChannel.BooksMisses, sinceSec),
     archive: (executors: BookExecutor[]): Promise<number> => ipcRenderer.invoke(IpcChannel.BooksArchive, executors),
     /** Binance's spot book now, for one of the baseline's eight symbols (V8 Stage 9). */
-    spotBook: (symbol: string): Promise<{ bids: [number, number][]; asks: [number, number][]; atMs: number }> => ipcRenderer.invoke(IpcChannel.BooksSpotBook, symbol)
+    spotBook: (symbol: string): Promise<{ bids: [number, number][]; asks: [number, number][]; atMs: number }> => ipcRenderer.invoke(IpcChannel.BooksSpotBook, symbol),
+    /** Paper testing (V8 Stage 9): its state, its Start, its Stop. */
+    testing: (): Promise<PaperTestingState> => ipcRenderer.invoke(IpcChannel.BooksTesting),
+    start: (): Promise<PaperTestingState> => ipcRenderer.invoke(IpcChannel.BooksStart),
+    stop: (): Promise<PaperTestingState> => ipcRenderer.invoke(IpcChannel.BooksStop)
   },
   // The research folder (V7.2-R Stage 2): free to read and to export; nothing here reads a key or places anything.
   researchFolder: {

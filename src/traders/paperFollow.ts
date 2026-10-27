@@ -296,6 +296,28 @@ export async function settleFollows(statuses: readonly FollowStatus[], deps: Fol
   return done
 }
 
+/** Every open follow closed now at its perpetual's price, as stopped: paper testing was stopped. Returns the names of
+ * those it closed. */
+export async function closeFollows(deps: FollowDeps): Promise<string[]> {
+  const { executors } = await deps.getSettings()
+  const done: string[] = []
+  for (const executor of followExecutors(executors).filter((entry) => entry.status === 'active')) {
+    const stamp = executor.follow as FollowStamp
+    const px = await deps.perpPrice(stamp.venue, stamp.symbol).catch(() => null)
+    if (px === null) continue
+    const wrote = await deps.queue(async (): Promise<boolean> => {
+      const fresh = await deps.getSettings()
+      const current = fresh.executors.find((entry) => entry.id === executor.id)
+      if (current?.follow === undefined || current.status !== 'active' || current.book?.result !== undefined) return false
+      const ended = await closed(current, px, 'stopped', `${executor.id}:stopped`, deps)
+      await deps.setExecutors(fresh.executors.map((entry) => (entry.id === executor.id ? ended : entry)))
+      return true
+    })
+    if (wrote) done.push(executor.name)
+  }
+  return done
+}
+
 const DAY_MS = 86_400_000
 
 /** The copy book's trades settled a day ago moved from the settings to the books' archive, in one write. */

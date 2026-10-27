@@ -35,6 +35,7 @@ Taken on 5 October 2026, at commit `aef376d`.
 | | Active Bots, Bot PNL, System | How many bots run, their combined P&L, assets and executors | Performance |
 | | Portfolio evolution chart | Value or composition over 1D/1W/1M/3M | Performance (Portfolio) |
 | | Top holdings | The largest holdings | Performance |
+| **Paper testing** (added 27 October 2026, V8 Stage 9; English until Stage 10) | Start and Stop with their confirmations, each book's money, the announcement reader's health, what Start turned on | Starts V8's three paper books, each on its own 10,000 USDT, turning on and later putting back what they read; shows how each stands | Paper Trading |
 | **Account** | Get started, Add funds, Balances, Movements | The paper account: set up, fund, balances, ledger | Paper Trading |
 | | Live balances (one card per connected exchange) | Real balances read over the user's key | Live Trading |
 | | Futures positions | Real Binance futures positions, closable, exchange-held stops | Live Trading |
@@ -312,6 +313,10 @@ The main process also runs loops that need no window at all:
   writes missing, with its reason, one older or whose bars could not be read for six hours. Public data only.
 - `booksService` (added 26 October 2026, V8 Stage 2) marks each paper book's equity at every UTC hour while the books
   run, and nothing while they are stopped. It opens, closes and places nothing.
+- `paperTestingService` (added 27 October 2026, V8 Stage 9) starts and stops the paper books on the person's click:
+  Start writes `paperBooks/started.json` -- each switch it turns on and its earlier value -- before it starts the books
+  and turns the announcement reader and the delisting's short on; Stop puts each back exactly, stops the books and
+  files the run in `paperBooks/runs-YYYY-MM.jsonl`. It asks no model and places nothing.
 - `primaryCallService` (added 26 October 2026, V8 Stage 3) weighs the primary call every minute and whenever the
   announcements reader has read: each coin a Binance delisting names, while its rule's hold lasts, goes in the venues'
   event lane (at most five coins, books read on demand) and is weighed into a card within the rule's five minutes --
@@ -399,7 +404,7 @@ reaches it. A call may span lines. The `news` channels were added after: four in
 | `executors` | `placeLiveOrder`, `placeLiveLimitOrder` | Executors only |
 | `researchFolder` | 4 (added 20 October 2026, V7.2-R Stage 2): status, export now, open the folder, keep a report | Settings › Advanced › Research record, and `ResearchReportScheduler` (the hour's and the day's reports) |
 | `predictions` | 2 (added 26 October 2026, V8 Stage 2): a person's own call recorded (the window may record no other source's), the record read with each one's outcome | V8's pages from Stage 3 on |
-| `books` | 6 (added 26 October 2026, V8 Stage 2): each paper book's standing, a book's equity marks, a missed opportunity written, the misses read; since Stage 8 a book's settled trades archived; and since Stage 9 Binance's spot book now for one of the baseline's eight symbols | `LabTraderScheduler` and `ForecastTraderScheduler` (their refusals, as misses); V8's pages from Stage 3 on |
+| `books` | 9 (added 26 October 2026, V8 Stage 2): each paper book's standing, a book's equity marks, a missed opportunity written, the misses read; since Stage 8 a book's settled trades archived; and since Stage 9 Binance's spot book now for one of the baseline's eight symbols, and paper testing's state, Start and Stop -- the one way the books start and stop | `LabTraderScheduler` and `ForecastTraderScheduler` (their refusals, as misses); V8's pages from Stage 3 on |
 | `calls` | 2 (added 26 October 2026, V8 Stage 3): the primary call as last weighed -- its cards, the delisted coins past the rule's window, the refusals, the rule's live check -- and each new weighing pushed | Home's and Predictions' primary call card and Predictions' lines, through `usePrimaryCall`; read-only |
 | `urls` | 4 (added 26 October 2026, V8 Stage 4): a pasted link read and kept (with text a person supplies where its page cannot be read), the links on file, a person's own view linked to one, and each record pushed | News URLs; the window's link and text held to their shape and length |
 | `traders` | 18 (added 27 October 2026, V8 Stages 6-9): a pasted trader read from its venue and kept, a file of trades chosen in the main process's own dialog read and kept (the window never names a path), an analysis of one on file, the traders on file with their last analysis, each step pushed, and the read-only Bitget copy-trading check on its button; since Stage 8 a follow and a clone switched on or off, how each follow is read, the last day's leader events and clone signals read back, a perpetual's price and its funding rates, and the leader events, clone signals and follow statuses pushed; since Stage 9 a coin's perpetual, a perpetual's book now and its 1-minute bars, for the books' writers | Copy Traders; the paste held to its length, the key never crossing the bridge |

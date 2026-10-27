@@ -184,12 +184,14 @@ const FAILURE_TITLES = {
   scanner: msg('The scanner is failing'),
   stream: msg('The live stream is dead'),
   feed: msg('The news feeds cannot be read'),
-  'ai-key': msg('The OpenRouter key was rejected')
+  'ai-key': msg('The OpenRouter key was rejected'),
+  announcements: msg('The announcement reader stopped')
 }
 
-/** Something the app runs on has failed: the scanner, the stream, the feeds, the AI key. `detail` is said
- * in the notice's language by its caller. */
-export function systemFailureNotice(what: 'scanner' | 'stream' | 'feed' | 'ai-key', detail: string, { t }: I18n = ENGLISH): Notice {
+/** Something the app runs on has failed: the scanner, the stream, the feeds, the AI key; and since V8 Stage 9 the
+ * reader of Binance's announcements, stopped after reads in a row that read nothing. `detail` is said in the notice's
+ * language by its caller. */
+export function systemFailureNotice(what: 'scanner' | 'stream' | 'feed' | 'ai-key' | 'announcements', detail: string, { t }: I18n = ENGLISH): Notice {
   return {
     title: t(FAILURE_TITLES[what]),
     body: t('{detail} Nothing was placed; what is open keeps its stops.', { detail }),

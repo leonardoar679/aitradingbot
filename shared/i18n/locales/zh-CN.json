@@ -2324,5 +2324,7 @@
   "That Hyperliquid link names no address (0x and forty letters and digits).": "该 Hyperliquid 链接中没有地址（0x 后接四十位字母和数字）。",
   "That OKX link names no lead trader's code (sixteen letters and digits, or eighteen digits).": "该 OKX 链接中没有带单员代码（十六位字母和数字，或十八位数字）。",
   "Traders are read from Hyperliquid and OKX only: paste a Hyperliquid address or an OKX lead trader's profile link.": "只从 Hyperliquid 和 OKX 读取交易员：请粘贴 Hyperliquid 地址或 OKX 带单员的主页链接。",
-  "The baseline on paper": "模拟基准策略"
+  "The baseline on paper": "模拟基准策略",
+  "The announcement reader stopped": "公告读取器已停止",
+  "Three reads in a row of Binance's announcement lists failed ({error}): the reader is switched off until it is switched on again under Settings › Market.": "连续三次读取币安公告列表失败（{error}）：读取器已关闭，直到在“设置 › 市场”中重新打开。"
 }

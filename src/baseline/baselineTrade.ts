@@ -146,12 +146,13 @@ interface SymbolRead {
   signals: ReturnType<typeof trendRegimeEnsemble.generateSignals>
 }
 
-/** One read of the baseline at a close: each symbol's bars, its open trades' exits, then its entry. `complete` is false
- * where a symbol's bars, price or book could not be read, so the read is worth making again. One line a symbol. */
-export async function readBaseline(deps: BaselineDeps): Promise<{ lines: string[]; complete: boolean }> {
+/** One read of the baseline at a close: each symbol's bars, its open trades' exits, then its entry. `running` is false
+ * where paper testing was not running and nothing was read; `complete` is false where a symbol's bars, price or book
+ * could not be read, so the read is worth making again. One line a symbol. */
+export async function readBaseline(deps: BaselineDeps): Promise<{ running: boolean; lines: string[]; complete: boolean }> {
   const settings = await deps.getSettings()
   const books = healPaperBooks(settings.paperBooks)
-  if (!books.running || books.startedAt === null) return { lines: [], complete: true }
+  if (!books.running || books.startedAt === null) return { running: false, lines: [], complete: true }
   const startedAt = books.startedAt
   const nowSec = Math.floor(deps.nowMs() / 1000)
   const due = baselineDueBarOf(nowSec)
@@ -316,7 +317,7 @@ export async function readBaseline(deps: BaselineDeps): Promise<{ lines: string[
     if (miss !== null) await missOnce(miss)
     say(symbol, outcome)
   }
-  return { lines: BASELINE_LINES.symbols.filter((symbol) => lines.has(symbol)).map((symbol) => `${symbol}: ${(lines.get(symbol) as string[]).join(', ')}`), complete }
+  return { running: true, lines: BASELINE_LINES.symbols.filter((symbol) => lines.has(symbol)).map((symbol) => `${symbol}: ${(lines.get(symbol) as string[]).join(', ')}`), complete }
 }
 
 /** Every open baseline trade closed now at its spot price, as stopped: paper testing was stopped. */

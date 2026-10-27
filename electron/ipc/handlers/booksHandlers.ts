@@ -5,6 +5,7 @@ import { readSourcePrediction } from '../../../shared/evaluation/predictionRecor
 import { recordSourcePrediction, sourceRecord } from '../../services/predictionLedgerService'
 import { archiveSettled, bookStandings, listEquityMarks, listMisses, recordMiss } from '../../services/booksService'
 import { readBinanceSpotBook } from '../../services/marketCompareService'
+import { paperTestingState, startPaperTesting, stopPaperTesting } from '../../services/paperTestingService'
 import { BASELINE_LINES } from '../../../shared/baseline'
 
 // The record of predictions that are not the forecast's own, and V8's paper books (V8 Stage 2). The window may
@@ -37,6 +38,11 @@ export function registerBooksHandlers(): void {
   ipcMain.handle(IpcChannel.BooksMiss, (_event, value: unknown) => recordMiss(value))
   ipcMain.handle(IpcChannel.BooksMisses, (_event, sinceSec: unknown) => listMisses(typeof sinceSec === 'number' && Number.isFinite(sinceSec) ? sinceSec : 0))
   ipcMain.handle(IpcChannel.BooksArchive, (_event, executors: unknown) => archiveSettled(executors))
+  // Start and Stop paper testing (V8 Stage 9): the books run, and the switches they read are turned on and put back,
+  // only here.
+  ipcMain.handle(IpcChannel.BooksTesting, () => paperTestingState())
+  ipcMain.handle(IpcChannel.BooksStart, () => startPaperTesting())
+  ipcMain.handle(IpcChannel.BooksStop, () => stopPaperTesting())
   // The baseline's eight symbols' spot books and nothing else (V8 Stage 9).
   ipcMain.handle(IpcChannel.BooksSpotBook, (_event, symbol: unknown) => {
     if (!(BASELINE_LINES.symbols as readonly unknown[]).includes(symbol)) throw new Error("Not one of the baseline's symbols.")

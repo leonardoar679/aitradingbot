@@ -2324,5 +2324,7 @@
   "That Hyperliquid link names no address (0x and forty letters and digits).": "その Hyperliquid のリンクにはアドレス（0x と英数字40文字）が含まれていません。",
   "That OKX link names no lead trader's code (sixteen letters and digits, or eighteen digits).": "その OKX のリンクにはリードトレーダーのコード（英数字16文字、または数字18桁）が含まれていません。",
   "Traders are read from Hyperliquid and OKX only: paste a Hyperliquid address or an OKX lead trader's profile link.": "トレーダーは Hyperliquid と OKX からのみ読み取ります：Hyperliquid のアドレスか、OKX のリードトレーダーのプロフィールリンクを貼り付けてください。",
-  "The baseline on paper": "ペーパーでのベースライン戦略"
+  "The baseline on paper": "ペーパーでのベースライン戦略",
+  "The announcement reader stopped": "発表リーダーが停止しました",
+  "Three reads in a row of Binance's announcement lists failed ({error}): the reader is switched off until it is switched on again under Settings › Market.": "Binance の発表一覧の読み込みが3回続けて失敗しました（{error}）。「設定 › マーケット」で再びオンにするまで、リーダーはオフになります。"
 }

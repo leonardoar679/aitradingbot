@@ -4,7 +4,7 @@ import type { MissRecord } from '../shared/misses'
 import { DEFAULT_PAPER_BOOKS, type BookStanding } from '../shared/paperBooks'
 import type { FundingRate } from '../shared/traders/delay'
 import type { FollowStamp, LeaderEvent } from '../shared/traders/follow'
-import { archiveSettled, followEvent, followExecutors, settleFollows, type FollowDeps } from '../src/traders/paperFollow'
+import { archiveSettled, closeFollows, followEvent, followExecutors, settleFollows, type FollowDeps } from '../src/traders/paperFollow'
 
 // FOLLOWING A TRADER ON PAPER, THE WRITING HALF (src/traders/paperFollow.ts; V8 Stage 8): each leader event acted on
 // once -- a new position entered in the copy book at the leader's share of their account, an add or a partial close
@@ -273,6 +273,29 @@ describe('an open follow', () => {
     h.state.now = T0 + 3_600_000
     const [first, second] = await Promise.all([settleFollows([], h.deps), settleFollows([], h.deps)])
     expect([...first, ...second]).toHaveLength(1)
+  })
+
+  it('is closed at the price then when paper testing is stopped, once, and none whose price cannot be read (V8 Stage 9)', async () => {
+    const h = harness()
+    let chain: Promise<unknown> = Promise.resolve()
+    h.deps.queue = <T>(work: () => Promise<T>): Promise<T> => {
+      const run = chain.then(work)
+      chain = run.catch(() => undefined)
+      return run
+    }
+    await followEvent(event(0, 2), h.deps)
+    await followEvent(event(0, 1, { key: 'btc', positionId: 'BTC', coin: 'BTC', perp: { venue: 'binance', symbol: 'BTCUSDT' } }), h.deps)
+    await followEvent(event(1, 0, { key: 'btc-closed', positionId: 'BTC', coin: 'BTC', perp: { venue: 'binance', symbol: 'BTCUSDT' } }), h.deps)
+    h.state.price = null
+    expect(await closeFollows(h.deps)).toEqual([])
+    h.state.price = 1900
+    const [first, second] = await Promise.all([closeFollows(h.deps), closeFollows(h.deps)])
+    expect([...first, ...second]).toHaveLength(1)
+    const ended = followExecutors(h.settings.executors).find((executor) => executor.follow?.positionId === 'ETH')
+    expect(ended).toMatchObject({ status: 'stopped', follow: { closeReason: 'stopped', size: 0 } })
+    expect(ended?.book?.result?.netQuote).toBeLessThan(0)
+    // The one the leader closed keeps its own reason.
+    expect(followExecutors(h.settings.executors).find((executor) => executor.follow?.positionId === 'BTC')?.follow?.closeReason).toBe('leader closed')
   })
 
   it('stopped elsewhere -- the Executors page -- is given its result, at the price then', async () => {

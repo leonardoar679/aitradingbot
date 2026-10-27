@@ -573,6 +573,7 @@ describe('AI code has no route to a real order', () => {
     // the whole of what it reaches beyond its own files.
     // Since 8 October 2026 (V5 Stage 1) its settings file is read through the one reader that
     // stamps each file with its version (configFiles.ts, shared/configMigration.ts): no new reach.
+    // Since V8 Stage 9 it tells a notice when it switches itself off after three reads in a row that read nothing.
     expect(importsOf(join(SERVICES, 'newsService.ts')).sort()).toEqual([
       'atomicWrite',
       'configFiles',
@@ -582,6 +583,8 @@ describe('AI code has no route to a real order', () => {
       'marketScannerService',
       'news',
       'newsActions',
+      'noticeService',
+      'notices',
       'path',
       'promises'
     ])
@@ -633,6 +636,9 @@ describe('AI code has no route to a real order', () => {
       // News URLs (V8 Stage 4): a pasted link read and kept; it reads Binance's lists to verify a pasted announcement
       // and the titles' patterns to know a delisting, records, and places nothing.
       'electron/services/newsUrlService.ts',
+      // Paper testing (V8 Stage 9): Start turns the reader and the delisting's short on, Stop puts them back as they were;
+      // it reads the reader's state and health, and places nothing (held below).
+      'electron/services/paperTestingService.ts',
       // The primary call (V8 Stage 3): a delisting the reader has read, weighed into a card from the study's coins; it
       // reads the reader's state and the record of the rules since the study, records a prediction, and places nothing.
       'electron/services/primaryCallService.ts',
@@ -644,6 +650,8 @@ describe('AI code has no route to a real order', () => {
       'shared/news.ts',
       'shared/newsActions.ts',
       'shared/newsRecord.ts',
+      // Which of the reader's switches Start turns on and Stop puts back (V8 Stage 9): arithmetic on the setting.
+      'shared/paperTesting.ts',
       // Upbit's patterns, for the near miss on record: they drop the pegged coins Binance's do.
       'shared/upbitTitles.ts',
       'src/App.tsx',
@@ -661,7 +669,9 @@ describe('AI code has no route to a real order', () => {
       // on the coin's perpetual; paper by a literal (held below).
       'src/news/newsBookShort.ts',
       'src/news/newsPaperShort.ts',
-      'src/settings/NewsSettingsCard.tsx'
+      'src/settings/NewsSettingsCard.tsx',
+      // The Paper testing card (V8 Stage 9): how many failed reads stop the reader, for its health's line.
+      'src/trading/PaperTestingCard.tsx'
     ])
     // The news's own files offer no model a question and no form a call.
     for (const file of readers.filter((name) => /\/news|News/.test(name))) {
@@ -1129,6 +1139,40 @@ describe('AI code has no route to a real order', () => {
       'traders.onProgress'
     ])
     expect(page).not.toMatch(/placeLive|liveTrading|onPrepareOrder|aiProposal|settings\.set|mode: 'live'/)
+  })
+
+  it('paper testing starts and stops the books, turns on what they read and puts it back; it opens and places nothing (V8 Stage 9)', () => {
+    const service = join(SERVICES, 'paperTestingService.ts')
+    const logic = join(ROOT, 'shared', 'paperTesting.ts')
+    const window = join(ROOT, 'src', 'trading', 'paperTesting.ts')
+    const card = join(ROOT, 'src', 'trading', 'PaperTestingCard.tsx')
+    const sweep = join(ROOT, 'src', 'trading', 'PaperTestingScheduler.tsx')
+    for (const path of [service, logic, window, card, sweep]) {
+      const source = readFileSync(path, 'utf-8')
+      expect(source, path).not.toMatch(/liveTrading|LiveTrading|liveOrders|placeLive|credentials|apiKey|window\.api\.(executors|trade|paper|ai)\b/)
+      expect(source, path).not.toMatch(/mode: '/)
+    }
+    expect(readFileSync(logic, 'utf-8')).not.toMatch(/window\.|ipcRenderer|from\s+'[^']*electron/)
+    // The main half reaches no live module and no model; it writes the books' setting, and the reader's setting only
+    // through the two patches -- Start's and Stop's.
+    expect(importsOf(service).filter((name) => LIVE_MODULES.has(name) || aiModuleNames.has(name))).toEqual([])
+    expect(importsOf(service).sort()).toEqual(['atomicWrite', 'booksService', 'copyTrading', 'jsonlStore', 'newsService', 'paperBooks', 'paperTesting', 'path', 'promises', 'settingsService'])
+    const main = readFileSync(service, 'utf-8')
+    expect(main.match(/setSettings\(\{ \w+/g)).toEqual(['setSettings({ paperBooks', 'setSettings({ paperBooks'])
+    expect(main.match(/setNewsConfig\([^)]*\)/g)).toEqual(['setNewsConfig(startPatchOf(switched)', 'setNewsConfig(restorePatchOf(started.switched)'])
+    // What Start writes first: started.json; then the books run, and only then is the reader on, so that what it reads
+    // first is the news book's. At Stop the reader is put back before the books stop.
+    expect(main.indexOf('await writeJsonAtomic(startedPath(), record)')).toBeLessThan(main.indexOf('running: true, startedAt'))
+    expect(main.indexOf('running: true, startedAt')).toBeLessThan(main.indexOf('await setNewsConfig(startPatchOf(switched))'))
+    expect(main.indexOf('await setNewsConfig(restorePatchOf(started.switched))')).toBeLessThan(main.indexOf('running: false'))
+    // The window cannot start or stop the books by a setting.
+    expect(readFileSync(join(ROOT, 'electron', 'ipc', 'handlers', 'settingsHandlers.ts'), 'utf-8')).toContain('setSettings(await windowSettingsPatch(patch))')
+    const bridgesOf = (text: string): string[] => [...new Set([...text.matchAll(/window\.api\.(\w+)(?:\s*\.\s*(\w+))?/g)].map((match) => (match[2] === undefined ? match[1] : `${match[1]}.${match[2]}`)))].sort()
+    // The window's half stops through its channel and closes through the books' own writers: it writes nothing itself.
+    expect(bridgesOf(readFileSync(window, 'utf-8'))).toEqual(['books.state', 'books.stop', 'books.testing', 'settings.get'])
+    expect(importsOf(window).sort()).toEqual(['baselineTrade', 'ipc', 'newsBookShort', 'paperBooks', 'paperClone', 'paperFollow', 'paperTesting'])
+    expect(bridgesOf(readFileSync(card, 'utf-8'))).toEqual(['books.start', 'books.testing'])
+    expect(bridgesOf(readFileSync(sweep, 'utf-8'))).toEqual([])
   })
 
   it("the baseline's trades are paper trades in the baseline book, by a literal they cannot be handed (V8 Stage 9)", () => {

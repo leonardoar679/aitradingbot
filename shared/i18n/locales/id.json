@@ -2324,5 +2324,7 @@
   "That Hyperliquid link names no address (0x and forty letters and digits).": "Tautan Hyperliquid itu tidak menyebut alamat (0x diikuti empat puluh huruf dan angka).",
   "That OKX link names no lead trader's code (sixteen letters and digits, or eighteen digits).": "Tautan OKX itu tidak menyebut kode lead trader (enam belas huruf dan angka, atau delapan belas angka).",
   "Traders are read from Hyperliquid and OKX only: paste a Hyperliquid address or an OKX lead trader's profile link.": "Trader hanya dibaca dari Hyperliquid dan OKX: tempel alamat Hyperliquid atau tautan profil lead trader OKX.",
-  "The baseline on paper": "Strategi pembanding simulasi"
+  "The baseline on paper": "Strategi pembanding simulasi",
+  "The announcement reader stopped": "Pembaca pengumuman berhenti",
+  "Three reads in a row of Binance's announcement lists failed ({error}): the reader is switched off until it is switched on again under Settings › Market.": "Tiga kali berturut-turut daftar pengumuman Binance gagal dibaca ({error}): pembaca dimatikan sampai dinyalakan lagi di Pengaturan › Pasar."
 }

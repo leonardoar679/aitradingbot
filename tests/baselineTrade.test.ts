@@ -257,7 +257,7 @@ describe('an entry', () => {
     expect((await readBaseline(deps)).lines[0]).toBe('BTCUSDT: no entry signal')
     plan.signalOf = btcFrom(B08)
     world.settings.paperBooks = { ...DEFAULT_PAPER_BOOKS, running: false, startedAt: START }
-    expect(await readBaseline(deps)).toEqual({ lines: [], complete: true })
+    expect(await readBaseline(deps)).toEqual({ running: false, lines: [], complete: true })
     expect(open()).toEqual([])
   })
 })

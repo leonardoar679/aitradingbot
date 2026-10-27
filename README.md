@@ -901,7 +901,8 @@ it. Since Stage 9 an entry passes the liquidity gate on its perpetual's book at 
 V8's writers): a book that cannot hold the stake, or holds under five stakes within half a percent of the mid, is a miss.
 
 **The three paper books** (V8 Stages 2 and 9; `shared/paperBooks.ts`, `shared/bookValuation.ts`, `shared/newsBook.ts`,
-`shared/baseline.ts`, `electron/services/booksService.ts`, `src/news/newsBookShort.ts`, `src/baseline/`). V8 tests three ideas side by side, each on its own
+`shared/baseline.ts`, `shared/paperTesting.ts`, `electron/services/booksService.ts`,
+`electron/services/paperTestingService.ts`, `src/news/newsBookShort.ts`, `src/baseline/`, `src/trading/`). V8 tests three ideas side by side, each on its own
 10,000 USDT -- the news book, the copy book, the baseline -- apart from the paper account, which keeps the watch's, the
 forecast trader's, the laboratory's and a person's own trades. A book's money is read from the trades its writers
 stamped: its start, what its closed trades made, and since Stage 9 what its open ones stand at, each valued from its own
@@ -922,8 +923,18 @@ where at most one lookback still agrees -- each close's exits read before its en
 of the book each, through the book's room and the liquidity gate on Binance's book, at the taker fee each way. It takes
 only the run's own entries: at a bar that closed after the Start, and never on a regime already standing at the Start
 until that regime has broken. An entry read more than five minutes after its close is missed as late, and the
-strategy's position joined at the next close it still holds at. What the books are judged by is V8-S9-BOOKS,
-registered before the first Start.
+strategy's position joined at the next close it still holds at. **Start and Stop** (the Paper testing card on Paper
+Trading, English until Stage 10): the books run only between them. Start names in its confirmation everything it does
+-- Binance's announcements read every minute, the delisting rule's short, delistings put to the watch's models (which
+asks only while the watch is on, within its $5 day), each switched on or found on; the Monitoring Tag's bracket short
+used as it is; the traders followed and the clones run; the baseline -- then writes `paperBooks/started.json` with every
+switch it is about to turn on and its earlier value, starts the books, turns the switches on and marks the books'
+equity. Stop names the trades it closes and every switch it puts back, marks the books, puts each switch back exactly,
+stops the books, files the run in `paperBooks/runs-YYYY-MM.jsonl`, and closes their open trades at the price then by
+the writers that opened them; a book's trade left open by a Stop cut short is closed when the app next runs. A window
+cannot start or stop the books by a setting. **The announcement reader's health** is shown on the card, and three
+reads in a row that read none of Binance's lists switch the reader off with a notice. What the books are judged by is
+V8-S9-BOOKS, registered before the first Start.
 
 **The Forecast Lab** (since 13 October 2026; the V6 document's §27-28, §42-43, §49-50 and §90-105; V6 Stage
 11; `shared/forecast/{lab,labWalkForward,labFile}.ts`, `electron/services/forecastLabService.ts`,

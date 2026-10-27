@@ -5,6 +5,7 @@ import { stampedConfig } from '../../shared/configMigration'
 import { readConfigFile } from './configFiles'
 import {
   NEWS_CATALOGS,
+  NEWS_READER_FAILURES_TO_STOP,
   applyNewsConfigPatch,
   byNewestRelease,
   copyNewsConfig,
@@ -25,9 +26,11 @@ import {
   type NewsState
 } from '../../shared/news'
 import { shouldRaiseNewsEvent } from '../../shared/newsActions'
+import { systemFailureNotice } from '../../shared/notices'
 import { writeJsonAtomic } from './atomicWrite'
 import { appendJsonLine, listMonthFiles } from './jsonlStore'
 import { raiseNewsEvent } from './marketScannerService'
+import { tell } from './noticeService'
 
 // Binance's own announcements, read once a minute while the reader is on (research/NEWS.md says
 // what they did to prices, and why they are read).
@@ -43,6 +46,10 @@ import { raiseNewsEvent } from './marketScannerService'
 //
 // It is off until it is switched on under Settings › Market, and stays as it was left across
 // restarts. One read at a time, as the scanner: the next is scheduled when this one ends.
+//
+// ITS HEALTH IS KEPT (V8 Stage 9): the reads in a row that read none of the lists. Three, and the reader switches
+// itself off and says so in a notice, rather than go on reading nothing every minute while it is relied on -- paper
+// testing's news book reads it. Switched on again, it starts counting again.
 
 const READ_TIMEOUT_MS = 15_000
 const RECENT_KEPT = 200
@@ -62,6 +69,8 @@ let nextReadAt: number | null = null
 let error: string | null = null
 let timer: ReturnType<typeof setTimeout> | null = null
 let readInFlight = false
+let failuresInRow = 0
+let stopped: { at: number; reason: string } | null = null
 /** The read started by switching the reader on, which nothing waits for. */
 let background: Promise<unknown> = Promise.resolve()
 const listeners = new Set<(state: NewsState) => void>()
@@ -88,7 +97,7 @@ async function persistConfig(): Promise<void> {
 }
 
 function snapshot(current: NewsConfig): NewsState {
-  return { config: copyNewsConfig(current), lastReadAt, nextReadAt, error, recent: [...recent] }
+  return { config: copyNewsConfig(current), lastReadAt, nextReadAt, error, recent: [...recent], health: { failuresInRow, stoppedAt: stopped?.at ?? null, stoppedReason: stopped?.reason ?? null } }
 }
 
 function notify(current: NewsConfig): void {
@@ -137,6 +146,7 @@ export async function readNewsOnce(nowMs: number = Date.now()): Promise<NewsStat
   const current = await loadConfig()
   if (readInFlight) return snapshot(current)
   readInFlight = true
+  let readNothing = false
   try {
     await loadKnown()
     const seenAt = Math.floor(nowMs / 1000)
@@ -174,22 +184,42 @@ export async function readNewsOnce(nowMs: number = Date.now()): Promise<NewsStat
         }
       }
     }
+    readNothing = failures.length === NEWS_CATALOGS.length
     error =
       failures.length === 0
         ? null
-        : failures.length === NEWS_CATALOGS.length
+        : readNothing
           ? `Binance's announcement lists could not be read: ${failures[0]}`
           : `${failures.length} of Binance's ${NEWS_CATALOGS.length} announcement lists could not be read: ${failures[0]}`
   } catch (failure) {
+    readNothing = true
     error = failure instanceof Error ? failure.message : String(failure)
   } finally {
     readInFlight = false
     lastReadAt = Math.floor(Date.now() / 1000)
   }
+  failuresInRow = readNothing ? failuresInRow + 1 : 0
+  // Three reads in a row of nothing, while it is on: it switches itself off and says why.
+  if (readNothing && failuresInRow >= NEWS_READER_FAILURES_TO_STOP && (config ?? current).enabled) await stopForFailures(error ?? 'nothing could be read')
   // The setting as it is now: it may have been changed while the lists were being read.
   const latest = config ?? current
   notify(latest)
   return snapshot(latest)
+}
+
+/** The reader switched off after reads in a row that read nothing, with a notice that says so. */
+async function stopForFailures(reason: string): Promise<void> {
+  config = { ...copyNewsConfig(await loadConfig()), enabled: false }
+  await persistConfig()
+  unschedule()
+  stopped = { at: Math.floor(Date.now() / 1000), reason }
+  tell((i18n) =>
+    systemFailureNotice(
+      'announcements',
+      i18n.t("Three reads in a row of Binance's announcement lists failed ({error}): the reader is switched off until it is switched on again under Settings › Market.", { error: reason }),
+      i18n
+    )
+  )
 }
 
 function schedule(): void {
@@ -233,6 +263,11 @@ export async function setNewsConfig(patch: NewsConfigPatch): Promise<NewsState> 
   config = next
   const current = next
   const switchedOn = current.enabled && timer === null
+  // Switched on again, it counts its failures from nothing.
+  if (current.enabled) {
+    failuresInRow = 0
+    stopped = null
+  }
   await persistConfig()
   if (current.enabled) schedule()
   else unschedule()
