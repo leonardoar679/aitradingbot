@@ -64,7 +64,10 @@ const INFRASTRUCTURE = [
   'newsUrls',
   'aiAdditions.dailyLimits.article',
   'aiAdditions.prompts.article',
-  'aiAdditions.schemas.article'
+  'aiAdditions.schemas.article',
+  // How a pasted trader is read and their fills become round trips (V8 Stage 6): reading, not a claim.
+  'traders.ref',
+  'traders.roundTrips'
 ]
 
 describe('the registry on file', () => {
