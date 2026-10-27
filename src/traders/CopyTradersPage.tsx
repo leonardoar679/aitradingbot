@@ -3,16 +3,21 @@ import { Card } from '../components/Card'
 import { PageHeader } from '../components/PageHeader'
 import { buttonStyle, cellStyle, headCellStyle, inputStyle, noteStyle } from '../agents/agentStyles'
 import { traderRefOf } from '../../shared/traders/traderRef'
+import { describeError } from '../utils/ipcError'
+import { CLONE_LINES, type CloneFeature, type CloneResult, type CloneVerdict } from '../../shared/traders/clone'
 import { DELAY_LINES } from '../../shared/traders/delay'
+import type { OkxPnlPoint } from '../../shared/traders/okx'
 import { SKILL_LINES, type SkillResult } from '../../shared/traders/skill'
-import type { BitgetCopyCheck, TraderAnalysis, TraderList, TraderProgress } from '../../shared/traders/traderAnalysis'
+import type { BitgetCopyCheck, OkxSummary, TraderAnalysis, TraderList, TraderMeta, TraderProgress } from '../../shared/traders/traderAnalysis'
 
-// COPY TRADERS (V8 Stage 6, 26 October 2026; electron/services/traderService.ts). A person pastes a trader -- a
-// Hyperliquid address, an explorer's link -- and the app reads their record from the venue (VERIFIED: the venue's own
-// fills), keeps it, rebuilds their round trips, works out what they made after fees and funding, and judges the record
-// by two registered tests: is it skill beyond the market and chance (V8-S6-SKILL), and could it be followed late
-// (V8-S6-DELAY). And, on its own button, the read-only Bitget copy-trading check with the person's own key. Nothing here
-// follows a trader or places anything. English until V8 Stage 8.
+// COPY TRADERS (V8 Stages 6-7, 26-27 October 2026; electron/services/traderService.ts). A person pastes a trader -- a
+// Hyperliquid address or an explorer's link (VERIFIED: the venue's own fills), an OKX lead trader's code or profile link
+// (REPORTED: OKX's positions and profit, the app's fees and funding ESTIMATED beside them) -- or opens a file of trades
+// (UNVERIFIABLE). The app keeps the record, rebuilds the round trips, works out what they made after fees and funding,
+// and judges the record by three registered tests: is it skill beyond the market and chance (V8-S6-SKILL), could it be
+// followed late (V8-S6-DELAY), and can a simple rule of the market's state do what the trader does (V8-S7-CLONE). And,
+// on its own button, the read-only Bitget copy-trading check with the person's own key. Nothing here follows a trader or
+// places anything. English until V8 Stage 8.
 
 const usd = (value: number, digits = 2): string => `${value < 0 ? '−' : ''}$${Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })}`
 const pct = (value: number | null | undefined, digits = 2): string => (value === null || value === undefined || !Number.isFinite(value) ? '—' : `${value > 0 ? '+' : value < 0 ? '−' : ''}${Math.abs(value).toFixed(digits)}%`)
@@ -38,16 +43,181 @@ function Line({ name, children }: { name: string; children: React.ReactNode }): 
   )
 }
 
+/** What a record's count is of. */
+const unitOf = (meta: Pick<TraderMeta, 'source' | 'fileKind'>): string => (meta.source === 'okx' ? 'positions' : meta.source === 'file' && meta.fileKind === 'trips' ? 'round trips' : 'fills')
+const plural = (n: number, one: string, many: string): string => `${count(n)} ${n === 1 ? one : many}`
+
+/** Where the record comes from, and how far it can be trusted. */
+function RecordLines({ analysis }: { analysis: TraderAnalysis }): React.JSX.Element {
+  const { record } = analysis
+  const span = `${day(record.firstMs)} to ${day(record.lastMs)}`
+  if (record.source === 'okx') {
+    return (
+      <Line name="Record">
+        {count(record.records)} positions from OKX's public copy-trading record, REPORTED (OKX's own prices and profit; OKX gives no fee), {span}
+        {record.capped ? ' -- more than the app reads; the oldest are left out' : ' -- OKX keeps three months'}; fees and funding ESTIMATED by the app
+      </Line>
+    )
+  }
+  if (record.source === 'file') {
+    const refused = record.fileRefused
+    return (
+      <>
+        <Line name="Record">
+          {count(record.records)} {unitOf(record)} from the file <bdi>{record.name}</bdi>, UNVERIFIABLE (nobody can check a file), {span}; times without a zone read as UTC
+          {refused !== null && refused.count > 0 ? `; ${plural(refused.count, 'row', 'rows')} refused` : ''}
+        </Line>
+        {refused !== null && refused.reasons.length > 0 && (
+          <ul style={{ ...noteStyle, margin: '0 0 0.3rem', paddingInlineStart: '1.1rem' }}>
+            {refused.reasons.map((reason) => (
+              <li key={reason}>{reason}</li>
+            ))}
+          </ul>
+        )}
+      </>
+    )
+  }
+  return (
+    <Line name="Record">
+      {count(record.records)} fills from Hyperliquid, VERIFIED (the venue's own record), {span}
+      {record.capped ? ' -- the most recent 10,000 Hyperliquid gives; older fills are not read' : ''}
+    </Line>
+  )
+}
+
+/** A year's cumulative profit as a line, its zero marked. */
+function Sparkline({ points }: { points: readonly OkxPnlPoint[] }): React.JSX.Element {
+  const width = 240
+  const height = 40
+  const values = points.map((point) => point.pnl)
+  const low = Math.min(0, ...values)
+  const high = Math.max(0, ...values)
+  const spanX = Math.max(1, points[points.length - 1].timeMs - points[0].timeMs)
+  const y = (amount: number): number => (high === low ? height / 2 : height - 2 - ((amount - low) / (high - low)) * (height - 4))
+  const path = points.map((point) => `${(((point.timeMs - points[0].timeMs) / spanX) * width).toFixed(1)},${y(point.pnl).toFixed(1)}`).join(' ')
+  const last = values[values.length - 1]
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Profit over the year" style={{ verticalAlign: 'middle', marginInlineEnd: '0.5rem' }}>
+      <line x1={0} x2={width} y1={y(0)} y2={y(0)} stroke="var(--border)" strokeWidth={1} />
+      <polyline points={path} fill="none" stroke={last >= 0 ? 'var(--up)' : 'var(--down)'} strokeWidth={1.5} />
+    </svg>
+  )
+}
+
+/** OKX's own figure beside the app's estimate of the same positions, and the trader's year as OKX reports it. */
+function OkxView({ okx }: { okx: OkxSummary }): React.JSX.Element {
+  const stats = okx.stats
+  return (
+    <>
+      <Line name="OKX's figure and the app's">
+        OKX reports {usd(okx.reportedPnl)} over these {count(okx.positions)} positions. The app's estimate of the same from their prices: moved {usd(okx.estimate.gross)}, fees{' '}
+        {usd(-okx.estimate.fees)} at OKX's taker rate each way, funding {usd(okx.estimate.funding)} at the rates OKX published, net {usd(okx.estimate.net)}
+        {okx.estimate.fundingUnknown > 0 ? `; funding not known for ${count(okx.estimate.fundingUnknown)}` : ''}
+        {okx.notPriced > 0 ? `; ${plural(okx.notPriced, 'position', 'positions')} OKX gave left out: still open in part, on another kind of instrument, or without a contract value` : ''}
+      </Line>
+      {stats !== null && (
+        <Line name="The year, as OKX reports it">
+          {stats.winRatio === null ? 'win ratio not given' : `win ratio ${(stats.winRatio * 100).toFixed(1)}%`}
+          {stats.profitDays !== null && stats.lossDays !== null ? `, ${count(stats.profitDays)} days up and ${count(stats.lossDays)} down` : ''}
+          {stats.investAmt !== null ? `, ${usd(stats.investAmt, 0)} invested` : ''}
+          {stats.avgSubPosNotional !== null ? `, an average position of ${usd(stats.avgSubPosNotional, 0)}` : ''}
+        </Line>
+      )}
+      {okx.series.length > 1 && (
+        <Line name="Profit over the year">
+          <Sparkline points={okx.series} />
+          {usd(okx.series[okx.series.length - 1].pnl, 0)} from {day(okx.series[0].timeMs)} to {day(okx.series[okx.series.length - 1].timeMs)}, as OKX reports it
+        </Line>
+      )}
+    </>
+  )
+}
+
+const CLONE_COLOR: Record<CloneVerdict, string> = { REPLICABLE: 'var(--up)', PARTLY: 'var(--text-secondary)', 'NOT REPLICABLE': 'var(--text-secondary)', 'TOO FEW': 'var(--text-muted)' }
+
+const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+const returnPct = (logReturn: number): string => pct((Math.exp(logReturn) - 1) * 100)
+
+/** A condition's feature in words, and its threshold as the feature is read: returns and distances in percent. */
+const FEATURE_WORDS: Record<CloneFeature, { name: string; show: (threshold: number) => string }> = {
+  ret1h: { name: "the coin's last hour", show: returnPct },
+  ret4h: { name: "the coin's last four hours", show: returnPct },
+  ret24h: { name: "the coin's last day", show: returnPct },
+  vol24h: { name: "the coin's 15-minute volatility over the day", show: (threshold) => `${(threshold * 100).toFixed(2)}% a bar` },
+  volRatio: { name: "the last four hours' volatility over the day's", show: (threshold) => threshold.toFixed(2) },
+  rangePos24h: { name: "where the coin stands in the day's range (0 its low, 1 its high)", show: (threshold) => threshold.toFixed(2) },
+  fromMean24h: { name: "the coin's distance from the day's mean", show: (threshold) => pct(threshold * 100) },
+  btcRet1h: { name: "Bitcoin's last hour", show: returnPct },
+  btcRet24h: { name: "Bitcoin's last day", show: returnPct },
+  relRet24h: { name: "the coin's day less Bitcoin's", show: (threshold) => pct(threshold * 100) },
+  hourUtc: { name: 'the hour of the day (UTC)', show: (threshold) => threshold.toFixed(1) },
+  weekdayUtc: { name: 'the day of the week (Monday 0)', show: (threshold) => `${threshold.toFixed(1)} (${WEEKDAYS[Math.min(6, Math.max(0, Math.round(threshold)))]})` }
+}
+
+/** V8-S7-CLONE's result. */
+function CloneView({ clone }: { clone: CloneResult | null }): React.JSX.Element {
+  if (clone === null) return <p style={noteStyle}>The clone could not be fitted: see what could not be read, below.</p>
+  const rule = clone.rule
+  return (
+    <div>
+      <p style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: CLONE_COLOR[clone.verdict] }}>{clone.verdict}</p>
+      {clone.reasons.length > 0 && (
+        <ul style={{ ...noteStyle, margin: '0.3rem 0 0', paddingInlineStart: '1.1rem' }}>
+          {clone.reasons.map((reason) => (
+            <li key={reason}>{reason}</li>
+          ))}
+        </ul>
+      )}
+      <div style={{ marginTop: '0.5rem' }}>
+        {rule !== null && (
+          <Line name="The rule">
+            {rule.side} where {rule.conditions.map((condition) => `${FEATURE_WORDS[condition.feature].name} is at or ${condition.op === '<=' ? 'below' : 'above'} ${FEATURE_WORDS[condition.feature].show(condition.threshold)}`).join(' and ')}, held{' '}
+            {minutes(rule.holdBars * CLONE_LINES.barMinutes)}
+          </Line>
+        )}
+        {clone.training !== null && (
+          <Line name="Fitted on">
+            the first two thirds: {count(clone.training.positives)} entries against {count(clone.training.negatives)} moved moments; it holds at{' '}
+            {(clone.training.tpr * 100).toFixed(0)}% of the entries and {(clone.training.fpr * 100).toFixed(0)}% of the moved moments
+          </Line>
+        )}
+        {clone.outOfTime !== null && (
+          <Line name="The last third">
+            {count(clone.outOfTime.positives)} entries against {count(clone.outOfTime.negatives)} moved moments: it holds at {(clone.outOfTime.tpr * 100).toFixed(0)}% and{' '}
+            {(clone.outOfTime.fpr * 100).toFixed(0)}% -- an AUC of {clone.outOfTime.auc.toFixed(3)}
+            {clone.outOfTime.interval !== null ? ` (95%: ${clone.outOfTime.interval.low.toFixed(3)} to ${clone.outOfTime.interval.high.toFixed(3)}, by day)` : ''}
+          </Line>
+        )}
+        {clone.trades !== null && (
+          <Line name="Traded on its own">
+            {count(clone.trades.n)} trades in the last third on {clone.trades.coins.join(', ')}, a mean net of {pct(clone.trades.meanNetPct, 3)} a trade
+            {clone.trades.interval !== null ? ` (95%: ${pct(clone.trades.interval.low, 3)} to ${pct(clone.trades.interval.high, 3)}, by day)` : ''} after the taker fee, the larger of 2 bps
+            and the book's impact each way, and funding
+          </Line>
+        )}
+        <Line name="Read on">
+          {count(clone.entries)} entries with every feature, {count(clone.trainEntries)} to fit and {count(clone.testEntries)} to test
+          {clone.withoutFeatures > 0 ? `; ${count(clone.withoutFeatures)} without a venue's bars the day before them, left out` : ''}
+        </Line>
+      </div>
+      <p style={{ ...noteStyle, marginTop: '0.5rem' }}>
+        REPLICABLE needs the last third's AUC above {CLONE_LINES.minAucLow} at its interval's lower end, and at least {CLONE_LINES.minTrades} trades of the rule on its own
+        there whose mean net is above 0 at its lower end; PARTLY, one of the two. The rule is chosen freely among at most 21,600 a side on the first two thirds: only
+        the last third judges it. A clone runs on paper only.
+      </p>
+    </div>
+  )
+}
+
 /** What the record says: the figures of the completed round trips, and what is open now. */
 function FiguresView({ analysis }: { analysis: TraderAnalysis }): React.JSX.Element {
-  const { figures, record } = analysis
+  const { figures } = analysis
   const mapped = new Map(analysis.mapping.map((entry) => [entry.coin, entry]))
   return (
     <div>
-      <Line name="Record">
-        {record.fills.toLocaleString('en-US')} fills from Hyperliquid, VERIFIED (the venue's own record), {day(record.firstMs)} to {day(record.lastMs)}
-        {record.fillsCapped ? ' -- the most recent 10,000 Hyperliquid gives; older fills are not read' : ''}
-      </Line>
+      <RecordLines analysis={analysis} />
+      {analysis.okx !== null && <OkxView okx={analysis.okx} />}
       <Line name="Round trips">
         {count(figures.trips)} completed
         {figures.span !== null ? ` over ${count(Number(figures.span.calendarDays.toFixed(1)))} days, on ${count(figures.span.tradingDays)} trading days` : ''}
@@ -66,14 +236,20 @@ function FiguresView({ analysis }: { analysis: TraderAnalysis }): React.JSX.Elem
       <Line name="Holding time">{figures.holdMin === null ? '—' : `median ${minutes(figures.holdMin.median)}; one in ten under ${minutes(figures.holdMin.p10)}, one in ten over ${minutes(figures.holdMin.p90)}`}</Line>
       <Line name="Stake and leverage">
         {figures.stake === null ? '—' : `median ${usd(figures.stake.medianUsdc, 0)} at entry`}
-        {figures.leverage !== null ? `; ${times(figures.leverage.median)} the account's value at the median, ${times(figures.leverage.max)} at most (${count(figures.leverage.trips)} trips)` : '; leverage not known: no account history'}
+        {figures.leverage !== null
+          ? `; ${times(figures.leverage.median)} the account's value at the median, ${times(figures.leverage.max)} at most (${count(figures.leverage.trips)} trips)`
+          : figures.reportedLeverage !== null
+            ? `; leverage as the venue reports it ${times(figures.reportedLeverage.median)} at the median, ${times(figures.reportedLeverage.max)} at most (${count(figures.reportedLeverage.trips)} trips)`
+            : '; leverage not known: no account history'}
       </Line>
       <Line name="Money in and out">
         deposits {usd(figures.ledger.deposits)}, withdrawals {usd(figures.ledger.withdrawals)} over the trips' span
       </Line>
-      {figures.open.positions.length > 0 && (
+      {(figures.open.positions.length > 0 || (analysis.okx?.open?.hidden ?? 0) > 0) && (
         <Line name="Open now">
-          {figures.open.positions.map((position) => `${position.coin} ${position.size > 0 ? 'long' : 'short'} ${usd(position.positionValue, 0)}${position.leverage ? ` at ${position.leverage.value}x ${position.leverage.type}` : ''}`).join(', ')}; unrealized {usd(figures.open.unrealized)}
+          {figures.open.positions.map((position) => `${position.coin} ${position.size > 0 ? 'long' : 'short'} ${usd(position.positionValue, 0)}${position.leverage ? ` at ${position.leverage.value}x ${position.leverage.type}` : ''}`).join(', ')}
+          {(analysis.okx?.open?.hidden ?? 0) > 0 ? `${figures.open.positions.length > 0 ? '; ' : ''}${count(analysis.okx?.open?.hidden ?? 0)} whose coin and size the trader hides` : ''}; unrealized{' '}
+          {usd(analysis.okx?.open !== null && analysis.okx !== null ? (analysis.okx.open?.unrealized ?? 0) : figures.open.unrealized)}
         </Line>
       )}
       <div style={{ overflowX: 'auto', marginTop: '0.5rem' }}>
@@ -210,7 +386,7 @@ function BitgetCheck(): React.JSX.Element {
     try {
       setCheck(await window.api.traders.bitgetCheck())
     } catch (error) {
-      setProblem(error instanceof Error ? error.message : String(error))
+      setProblem(describeError(error))
     } finally {
       setBusy(false)
     }
@@ -264,11 +440,14 @@ export function CopyTradersPage(): React.JSX.Element {
 
   const selected = list.traders.find((entry) => entry.meta.ref.key === open) ?? null
 
-  const read = async (raw: string): Promise<void> => {
+  /** Keeps what `fetch` brings and analyses it: a pasted trader read from its venue, a file chosen in the main process's
+   * dialog, or a trader on file analysed again. */
+  const run = async (fetch: () => Promise<TraderMeta | { refused: string } | { canceled: true }>): Promise<void> => {
     setBusy(true)
     setProblem(null)
     try {
-      const kept = await window.api.traders.import(raw)
+      const kept = await fetch()
+      if ('canceled' in kept) return
       if ('refused' in kept) {
         setProblem(kept.refused)
         return
@@ -278,21 +457,28 @@ export function CopyTradersPage(): React.JSX.Element {
       await refresh()
       setPaste('')
     } catch (error) {
-      setProblem(error instanceof Error ? error.message : String(error))
+      setProblem(describeError(error))
     } finally {
       setBusy(false)
       setProgress(null)
     }
   }
+  const read = (raw: string): Promise<void> => run(() => window.api.traders.import(raw))
+  const readFile = (): Promise<void> => run(() => window.api.traders.importFile())
+  /** A venue's trader is read from it again; a file's is analysed again, its file not opened twice. */
+  const again = (meta: TraderMeta): Promise<void> => (meta.source === 'file' ? run(async () => meta) : read(meta.ref.id))
 
   return (
     <>
-      <PageHeader title="Copy Traders" subtitle="Paste a trader: the app reads their record from the venue, works out what they made after fees and funding, and tests whether it is skill and whether it could be followed late" />
+      <PageHeader title="Copy Traders" subtitle="Paste a trader or open a file of trades: the app reads the record, works out what it made after fees and funding, and tests whether it is skill, whether it could be followed late, and whether a simple rule can do it" />
       <Card title="Read a trader">
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <input value={paste} onChange={(change) => setPaste(change.target.value)} placeholder="0x… or a Hyperliquid explorer link" style={{ ...inputStyle(), flex: '1 1 26rem' }} aria-label="Trader" dir="ltr" />
+          <input value={paste} onChange={(change) => setPaste(change.target.value)} placeholder="0x…, a Hyperliquid explorer link, or an OKX lead trader's code or link" style={{ ...inputStyle(), flex: '1 1 26rem' }} aria-label="Trader" dir="ltr" />
           <button type="button" style={buttonStyle('primary', busy || parsed === null || !parsed.ok)} disabled={busy || parsed === null || !parsed.ok} onClick={() => void read(paste)}>
             {busy ? 'Reading…' : 'Read and analyse'}
+          </button>
+          <button type="button" style={buttonStyle('secondary', busy)} disabled={busy} onClick={() => void readFile()}>
+            Open a file of trades…
           </button>
         </div>
         {parsed !== null && (
@@ -304,13 +490,15 @@ export function CopyTradersPage(): React.JSX.Element {
         {problem !== null && <p style={{ ...noteStyle, marginTop: '0.4rem', color: 'var(--down)' }}>{problem}</p>}
         <p style={{ ...noteStyle, marginTop: '0.5rem' }}>
           A paste is read as text and never opened. A Hyperliquid address's fills, funding, deposits and withdrawals and its open positions are read from Hyperliquid's
-          public API, without a key, and kept; the perpetual bars, funding and books the tests need are read from Binance, or Bitget where Binance lists none. A
-          record of years on several coins takes ten minutes or so, its steps shown as it goes. Nothing is followed or placed here.
+          public API, without a key (VERIFIED); an OKX lead trader's last three months of positions, those open now and the year's profit from OKX's (REPORTED, the
+          app's fees and funding ESTIMATED beside OKX's figure); a file of trades -- CSV or JSON, at most 5 MB, fills or round trips -- is opened through this app's
+          own window and read as it is (UNVERIFIABLE). The perpetual bars, funding and books the tests need are read from Binance, or Bitget where Binance lists
+          none. A record of years on several coins takes ten minutes or so, its steps shown as it goes. Nothing is followed or placed here.
         </p>
       </Card>
       {selected !== null && selected.latest !== null && (
         <>
-          <Card title={`What the record says -- ${shortId(selected.meta.ref.id)}`}>
+          <Card title={`What the record says -- ${selected.meta.source === 'file' ? (selected.meta.name ?? 'a file') : shortId(selected.meta.ref.id)}`}>
             <FiguresView analysis={selected.latest} />
           </Card>
           <Card title="Is it skill?">
@@ -318,6 +506,9 @@ export function CopyTradersPage(): React.JSX.Element {
           </Card>
           <Card title="Could it be followed?">
             <DelayView analysis={selected.latest} />
+          </Card>
+          <Card title="Can a rule do it?">
+            <CloneView clone={selected.latest.clone} />
           </Card>
           {selected.latest.problems.length > 0 && (
             <Card title="What could not be read">
@@ -338,7 +529,7 @@ export function CopyTradersPage(): React.JSX.Element {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  {['Trader', 'Fills', 'Read', 'Trips', 'Net', 'Skill', ''].map((name) => (
+                  {['Trader', 'Record', 'Read', 'Trips', 'Net', 'Skill', 'Clone', ''].map((name) => (
                     <th key={name} style={headCellStyle}>
                       {name}
                     </th>
@@ -349,13 +540,16 @@ export function CopyTradersPage(): React.JSX.Element {
                 {list.traders.map((entry) => (
                   <tr key={entry.meta.ref.key} onClick={() => setOpen(entry.meta.ref.key)} style={{ cursor: 'pointer', background: open === entry.meta.ref.key ? 'var(--bg-app)' : undefined }}>
                     <td dir="ltr" style={{ ...cellStyle, fontWeight: 600 }}>
-                      {shortId(entry.meta.ref.id)}
+                      {entry.meta.source === 'file' ? <bdi>{entry.meta.name}</bdi> : shortId(entry.meta.ref.id)}
                     </td>
-                    <td style={cellStyle}>{entry.meta.fills.toLocaleString('en-US')}</td>
+                    <td style={cellStyle}>
+                      {count(entry.meta.records)} {unitOf(entry.meta)}, {entry.meta.label}
+                    </td>
                     <td style={cellStyle}>{new Date(entry.meta.importedAt * 1000).toISOString().slice(0, 16).replace('T', ' ')} UTC</td>
                     <td style={cellStyle}>{entry.latest === null ? '—' : count(entry.latest.figures.trips)}</td>
                     <td style={cellStyle}>{entry.latest === null ? '—' : usd(entry.latest.figures.money.net)}</td>
                     <td style={{ ...cellStyle, color: entry.latest?.skill ? VERDICT_COLOR[entry.latest.skill.verdict] : 'var(--text-muted)' }}>{entry.latest?.skill?.verdict ?? 'not analysed'}</td>
+                    <td style={{ ...cellStyle, color: entry.latest?.clone ? CLONE_COLOR[entry.latest.clone.verdict] : 'var(--text-muted)' }}>{entry.latest?.clone?.verdict ?? '—'}</td>
                     <td style={cellStyle}>
                       <button
                         type="button"
@@ -363,10 +557,10 @@ export function CopyTradersPage(): React.JSX.Element {
                         disabled={busy}
                         onClick={(event) => {
                           event.stopPropagation()
-                          void read(entry.meta.ref.id)
+                          void again(entry.meta)
                         }}
                       >
-                        Read again
+                        {entry.meta.source === 'file' ? 'Analyse again' : 'Read again'}
                       </button>
                     </td>
                   </tr>

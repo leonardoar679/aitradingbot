@@ -26,6 +26,8 @@ export interface TraderFigures {
   /** What a trip put at stake over the account's value when it opened, where the account's history gives it: the median
    * trip's leverage and the largest. */
   leverage: { median: number; max: number; trips: number } | null
+  /** The leverage each trip held at as the venue reports it, where it does (OKX): the median and the largest. */
+  reportedLeverage: { median: number; max: number; trips: number } | null
   /** Money in and out of the account over the record's span: deposits, withdrawals. */
   ledger: { deposits: number; withdrawals: number }
   coins: { coin: string; trips: number; net: number }[]
@@ -76,6 +78,7 @@ export function traderFiguresOf(input: { roundTrips: RoundTrips; values: readonl
     return value !== null && value > 0 ? trip.entryNotional / value : null
   })
   const known = shares.filter((share): share is number => share !== null)
+  const levers = trips.map((trip) => trip.lever).filter((lever): lever is number => lever !== undefined && Number.isFinite(lever) && lever > 0)
 
   const coins = new Map<string, { coin: string; trips: number; net: number }>()
   for (const trip of trips) {
@@ -103,6 +106,7 @@ export function traderFiguresOf(input: { roundTrips: RoundTrips; values: readonl
     holdMin: holds.length === 0 ? null : { p10: quantile(holds, 0.1), median: quantile(holds, 0.5), p90: quantile(holds, 0.9) },
     stake: trips.length === 0 ? null : { medianUsdc: median(trips.map((trip) => trip.entryNotional)) },
     leverage: known.length === 0 ? null : { median: median(known), max: Math.max(...known), trips: known.length },
+    reportedLeverage: levers.length === 0 ? null : { median: median(levers), max: levers.reduce((most, lever) => Math.max(most, lever), 0), trips: levers.length },
     ledger: {
       deposits: ledger.filter((update) => inSpan(update) && update.type === 'deposit').reduce((total, update) => total + (update.usdc ?? 0), 0),
       withdrawals: -ledger.filter((update) => inSpan(update) && update.type === 'withdraw').reduce((total, update) => total + (update.usdc ?? 0), 0)

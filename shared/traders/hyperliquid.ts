@@ -30,7 +30,8 @@ export interface TraderFill {
   crossed: boolean
   tid: number
   oid: number
-  label: 'VERIFIED'
+  /** VERIFIED from the venue; UNVERIFIABLE from a file a person brought (V8 Stage 7). */
+  label: 'VERIFIED' | 'UNVERIFIABLE'
 }
 
 /** A funding payment: negative where the trader paid. */
@@ -66,7 +67,8 @@ export interface OpenPosition {
 
 export interface AccountState {
   atMs: number
-  accountValue: number
+  /** Null where the venue gives none: OKX's lead traders (V8 Stage 7). */
+  accountValue: number | null
   positions: OpenPosition[]
 }
 

@@ -1066,12 +1066,14 @@ describe('AI code has no route to a real order', () => {
     expect(importsOf(join(SERVICES, 'newsUrlService.ts')).filter((name) => aiModuleNames.has(name) || name === 'aiAdditions')).toEqual([])
   })
 
-  it('a pasted trader is read, kept and judged, and nothing here follows, trades or reads a key but the Bitget check (V8 Stage 6)', () => {
-    // The trader's record is public data: Hyperliquid's info API (a POST of a question, to its one address), and the
-    // perpetuals' public market data. Nothing reads a key, asks a model, writes a setting or reaches an order path.
+  it('a pasted trader is read, kept and judged, and nothing here follows, trades or reads a key but the Bitget check (V8 Stages 6-7)', () => {
+    // The trader's record is public data -- Hyperliquid's info API (a POST of a question, to its one address), OKX's
+    // public copy-trading endpoints (GETs to www.okx.com), and the perpetuals' public market data -- or a file the person
+    // chose in the main process's own dialog. Nothing reads a key, asks a model, writes a setting or reaches an order path.
     const reading = [
       join(SERVICES, 'traderService.ts'),
       join(SERVICES, 'hyperliquidClient.ts'),
+      join(SERVICES, 'okxClient.ts'),
       join(SERVICES, 'perpMarketService.ts'),
       join(ROOT, 'electron', 'ipc', 'handlers', 'tradersHandlers.ts')
     ]
@@ -1083,6 +1085,14 @@ describe('AI code has no route to a real order', () => {
     expect(hyperliquid.match(/method: '\w+'/g)).toEqual(["method: 'POST'"])
     expect(hyperliquid.match(/https:\/\/[\w.-]+/g) ?? []).toEqual([])
     expect(readFileSync(join(ROOT, 'shared', 'traders', 'hyperliquid.ts'), 'utf-8').match(/https:\/\/[\w.-]+/g)).toEqual(['https://api.hyperliquid.xyz'])
+    const okx = readFileSync(join(SERVICES, 'okxClient.ts'), 'utf-8')
+    expect(okx).not.toMatch(/method:|POST|DELETE|PUT|https:\/\//)
+    expect(readFileSync(join(ROOT, 'shared', 'traders', 'okx.ts'), 'utf-8').match(/https:\/\/[\w.-]+/g)).toEqual(['https://www.okx.com'])
+    // A file is opened only through the main process's dialog, from its own channel: the window never names a path.
+    const handlers = readFileSync(join(ROOT, 'electron', 'ipc', 'handlers', 'tradersHandlers.ts'), 'utf-8')
+    expect(handlers).toMatch(/dialog\.showOpenDialog\(mainWindow/)
+    expect(handlers.match(/readFile\(\w+\)/g)).toEqual(['readFile(path)'])
+    expect(handlers).toMatch(/const path = picked\.filePaths\[0\]/)
     const perps = readFileSync(join(SERVICES, 'perpMarketService.ts'), 'utf-8')
     expect([...new Set(perps.match(/https:\/\/[\w.-]+/g))].sort()).toEqual(['https://api.bitget.com', 'https://fapi.binance.com'])
     expect(perps).not.toMatch(/method:|POST/)
@@ -1109,6 +1119,7 @@ describe('AI code has no route to a real order', () => {
       'traders.analyze',
       'traders.bitgetCheck',
       'traders.import',
+      'traders.importFile',
       'traders.list',
       'traders.onProgress'
     ])

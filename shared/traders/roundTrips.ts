@@ -32,6 +32,10 @@ export interface RoundTrip {
   /** Its move in its favour from the average entry to the average exit, before fees, in percent: its result at 1x. */
   movePct: number
   fills: number
+  /** A venue's own figure of its profit where the venue states one and the app's figures above are an estimate (OKX's,
+   * V8 Stage 7); and the leverage the venue reports it held at. */
+  reportedPnl?: number
+  lever?: number
 }
 
 /** A position still open at the end of the record: what of a trip is known so far. */

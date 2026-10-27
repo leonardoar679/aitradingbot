@@ -8,6 +8,7 @@
 // caller told why. Each task is named here; the worker runs only these.
 
 import { extractArticle, type ExtractedArticle } from './articleExtract'
+import { traderFileOf, type TraderFileRead } from './traders/traderFile'
 import { traderTestsOf, type TraderTestsResult } from './traders/traderTests'
 
 export interface TaskTable {
@@ -16,9 +17,12 @@ export interface TaskTable {
   /** A pasted article's page read: its title, times, canonical address, author and text (V8 Stage 4;
    * shared/articleExtract.ts). The payload is the page's text. */
   extractArticle: (payload: unknown) => ExtractedArticle
-  /** A trader's record judged by V8-S6-SKILL and V8-S6-DELAY (V8 Stage 6; shared/traders/traderTests.ts): the payload
-   * is the two tests' input, its maps and arrays copied whole. */
+  /** A trader's record judged by V8-S6-SKILL, V8-S6-DELAY and V8-S7-CLONE (V8 Stages 6-7; shared/traders/traderTests.ts):
+   * the payload is the tests' input, its maps and arrays copied whole. */
   traderTests: (payload: unknown) => TraderTestsResult
+  /** A file of a trader's trades read (V8 Stage 7; shared/traders/traderFile.ts): the payload is its text and the time
+   * it is read at. */
+  traderFile: (payload: unknown) => TraderFileRead | { refused: string }
 }
 
 export type TaskName = keyof TaskTable
@@ -26,7 +30,12 @@ export type TaskName = keyof TaskTable
 export const TASKS: TaskTable = {
   echo: (payload) => payload,
   extractArticle: (payload) => extractArticle(typeof payload === 'string' ? payload : ''),
-  traderTests: (payload) => traderTestsOf(payload)
+  traderTests: (payload) => traderTestsOf(payload),
+  traderFile: (payload) => {
+    const input = payload as { text?: unknown; nowMs?: unknown } | null
+    if (typeof input?.text !== 'string' || typeof input.nowMs !== 'number') throw new Error('A file is read from its text and the time it is read at.')
+    return traderFileOf(input.text, input.nowMs)
+  }
 }
 
 /** What a task's run came to. */

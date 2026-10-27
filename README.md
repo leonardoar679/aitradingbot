@@ -827,12 +827,12 @@ a side and never a trade -- each recorded as the article source's prediction at 
 from the venue's bars. Nothing else reads a reading: not the alerts, the watch or the signal score. Its size calls are
 your own links' sample, so none is registered as a claim; they are reported for what they are.
 
-**Copy Traders** (since 27 October 2026; V8 Stage 6; under More Features, in English until Stage 8;
-`shared/traders/`, `electron/services/traderService.ts`, `hyperliquidClient.ts`, `perpMarketService.ts`,
+**Copy Traders** (since 27 October 2026; V8 Stages 6-7; under More Features, in English until Stage 8;
+`shared/traders/`, `electron/services/traderService.ts`, `hyperliquidClient.ts`, `okxClient.ts`, `perpMarketService.ts`,
 `exchanges/bitgetCopyRead.ts`, `src/traders/`). Paste a trader. A Hyperliquid address, bare or in a link of the app or
-its explorers, is read as text and never opened; an OKX lead trader's code is recognised and waits for Stage 7; a
-Bitget, Binance or Bybit page, or a post on X, is refused with why -- none of them publishes a trader's trades without
-that trader's own key. The address's record is read from Hyperliquid's public info API without a key, each question
+its explorers, is read as text and never opened, and so is an OKX lead trader's code or profile link; a Bitget,
+Binance or Bybit page, or a post on X, is refused with why -- none of them publishes a trader's trades without that
+trader's own key. The address's record is read from Hyperliquid's public info API without a key, each question
 costed against the app's share of Hyperliquid's weight: its fills (VERIFIED, the venue's own record, the most recent
 10,000 Hyperliquid gives), its funding payments, deposits and withdrawals, its account and open positions, and its
 value through time, kept in `traders/<key>/` with each new line added once. An analysis rebuilds the round trips --
@@ -857,6 +857,20 @@ subscribed, changed or placed. Nothing on the page follows a trader or places an
 a separate build and a scratch profile with two public addresses: one of 63 fills read TOO FEW in a minute and a half;
 one of 9,016 fills over 1,009 days -- 3,960 trips, a median hold of four seconds -- read MARKET OR LUCK in nine minutes,
 its copies two minutes late losing 0.14% a trip to costs.
+Since Stage 7 an **OKX lead trader** is read from OKX's public copy-trading endpoints, keyless GET requests to
+www.okx.com: three months of closed positions on USDT-margined perpetuals -- OKX's averages, times, leverage and its
+own profit, REPORTED, since OKX gives no fee -- the positions open now (a trader may hide them: counted), and the year's
+daily profit and figures as OKX reports them. Beside OKX's figure the app ESTIMATES each position's own: its move on
+its size, OKX's regular taker fee (0.05%) each way, and the funding OKX published over its hold. **Open a file of
+trades** reads a CSV or JSON file of at most 5 MB, chosen in the app's own window, as fills or round trips, each row
+checked and a refused row counted with why; it is UNVERIFIABLE, and said so. Every source's trips are judged the same
+way, and since Stage 7 by a third registered test, **V8-S7-CLONE**: can a simple rule do what the trader does? On the
+first two thirds of the entries a rule of at most two conditions over twelve fixed features of the market at a
+moment (the coin's 1-, 4- and 24-hour returns, its volatility and the last four hours' over the day's, where it stands
+in the day's range and how far from its mean, Bitcoin's hour and day, the coin's day less Bitcoin's, the hour and the
+weekday) is fitted to tell the entries from null A's moved moments; the last third judges it: REPLICABLE where its AUC
+there is above 0.6 at the 95% interval's lower end and the rule traded on its own makes money after costs over at least
+30 trades, PARTLY where one holds, NOT REPLICABLE where neither, TOO FEW without 30 entries of its side to test.
 
 **The Forecast Lab** (since 13 October 2026; the V6 document's §27-28, §42-43, §49-50 and §90-105; V6 Stage
 11; `shared/forecast/{lab,labWalkForward,labFile}.ts`, `electron/services/forecastLabService.ts`,

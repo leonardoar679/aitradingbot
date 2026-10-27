@@ -69,7 +69,11 @@ const INFRASTRUCTURE = [
   // reads (V8 Stage 6): reading, not a claim.
   'traders.ref',
   'traders.roundTrips',
-  'traders.analysis'
+  'traders.analysis',
+  // How an OKX lead trader's record is read and its fees and funding estimated, and how a file of trades is read (V8
+  // Stage 7): reading, its figures labelled REPORTED, ESTIMATED or UNVERIFIABLE, not a claim.
+  'traders.okx',
+  'traders.file'
 ]
 
 describe('the registry on file', () => {

@@ -65,8 +65,10 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 // trips, and the lines of V8-S6-SKILL and V8-S6-DELAY (V8 Stage 6), from 033ef86fc980. The perpetuals' hosts' budgets
 // (Binance futures, its funding history, Bitget's market; V8 Stage 6; infrastructure), from 24d43ffb4087. What a
 // trader's analysis fetches for the two tests, which read every trip as registered (V8 Stage 6's check;
-// infrastructure), from be7d42b9bae9. The lines of V8-S7-CLONE (V8 Stage 7), from 8c48f7ad7602.
-const PINNED_ENGINE_VERSION = 'a3d171bc6249'
+// infrastructure), from be7d42b9bae9. The lines of V8-S7-CLONE (V8 Stage 7), from 8c48f7ad7602. An analysis of three
+// sources (trader-analysis-v2), how an OKX lead trader's record is read and estimated, and how a file is read (V8 Stage 7;
+// infrastructure), from a3d171bc6249.
+const PINNED_ENGINE_VERSION = 'f8ec0052263b'
 
 describe('the engine version', () => {
   it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {

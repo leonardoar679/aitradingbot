@@ -232,6 +232,12 @@ describe("a trader's figures", () => {
     expect(figures.span).toMatchObject({ fromMs: T0, tradingDays: 4 })
     expect(figures.open).toMatchObject({ unrealized: -4.5, accountValue: 321 })
   })
+  it('reads the leverage a venue reports each trip at, where it does: the median and the largest', () => {
+    const figures = traderFiguresOf({ roundTrips: { version: 'round-trips-v1', trips: [trip(0, 1, { lever: 10 }), trip(1, 1, { lever: 2 }), trip(2, 1, { lever: 4 }), trip(3, 1)], open: [], partial: 0, spotFills: 0 }, values: [], ledger: [], state: null })
+    expect(figures.reportedLeverage).toEqual({ median: 4, max: 10, trips: 3 })
+    expect(figures.leverage).toBeNull()
+  })
+
   it('counts a trip a win only where it made money after fees and funding', () => {
     // Closed 0.05 ahead and paid 0.1 in fees: a loss.
     const figures = traderFiguresOf({ roundTrips: { version: 'round-trips-v1', trips: [trip(0, -0.05), trip(1, 2)], open: [], partial: 0, spotFills: 0 }, values: [], ledger: [], state: null })

@@ -1,6 +1,8 @@
 import type { Candle } from '../ipc'
+import type { CloneResult } from './clone'
 import type { DelayResult } from './delay'
 import { perpCandidatesOf } from './hyperliquid'
+import type { OkxOpen, OkxPnlPoint, OkxStats } from './okx'
 import type { TraderRef } from './traderRef'
 import type { CloseSeries, SkillResult } from './skill'
 import type { TraderFigures } from './traderFigures'
@@ -11,7 +13,7 @@ import type { TraderFigures } from './traderFigures'
 // configuration's versions, so that any figure can be traced to the lines it was made under. And the pure helpers the
 // main process's analysis uses to make it: bars into close series, the minutes a delay test reads, a coin's perpetual.
 
-export const TRADER_ANALYSIS_VERSION = 'trader-analysis-v1'
+export const TRADER_ANALYSIS_VERSION = 'trader-analysis-v2'
 
 /** The tests read every completed trip of the record, on every coin a venue's perpetual covers, as their registrations
  * say (V8-S6-SKILL, V8-S6-DELAY): nothing here narrows them. These lines are what the analysis fetches to that end. */
@@ -24,15 +26,47 @@ export const TRADER_ANALYSIS_LINES = {
 
 /** What is kept of a trader, as read back (traders/<key>/meta.json). */
 export interface TraderMeta {
-  v: 'trader-store-v1'
+  v: typeof TRADER_STORE_VERSION
   ref: TraderRef
-  /** When the record was last read from its venue, in seconds. */
+  /** When the record was last read, in seconds. */
   importedAt: number
-  fills: number
+  /** What the record is made of, and how far it can be trusted: Hyperliquid's fills (VERIFIED), OKX's reported positions
+   * (REPORTED, the app's figures ESTIMATED beside them), or a file a person brought (UNVERIFIABLE). */
+  source: 'hyperliquid' | 'okx' | 'file'
+  label: 'VERIFIED' | 'REPORTED' | 'UNVERIFIABLE'
+  /** Fills, positions or a file's rows on file, and what they span. */
+  records: number
   firstMs: number | null
   lastMs: number | null
-  /** The venue gives more fills than were read: its most recent 10,000 at most. */
-  fillsCapped: boolean
+  /** The venue gives more than was read: Hyperliquid's most recent 10,000 fills, OKX's three months of positions. */
+  capped: boolean
+  /** A file's name as it was opened, what its rows are, and its rows refused with why, the first few; null for a
+   * venue's record. */
+  name: string | null
+  fileKind: 'fills' | 'trips' | null
+  fileRefused: { count: number; reasons: string[] } | null
+}
+
+export const TRADER_STORE_VERSION = 'trader-store-v2'
+
+/** A kept meta.json read back; null for one this version does not know. */
+export function readTraderMeta(value: unknown): TraderMeta | null {
+  const meta = value as Partial<TraderMeta> | null
+  if (meta === null || typeof meta !== 'object' || meta.v !== TRADER_STORE_VERSION || typeof meta.records !== 'number' || typeof meta.ref?.key !== 'string') return null
+  return meta as TraderMeta
+}
+
+/** OKX's own figures beside the app's estimate, for a trader read from OKX. */
+export interface OkxSummary {
+  positions: number
+  /** Positions the app could not price: no contract value for their instrument. */
+  notPriced: number
+  /** OKX's own profit over the positions (REPORTED), and the app's estimate of the same positions (ESTIMATED). */
+  reportedPnl: number
+  estimate: { gross: number; fees: number; funding: number; net: number; fundingUnknown: number }
+  open: OkxOpen | null
+  series: OkxPnlPoint[]
+  stats: OkxStats | null
 }
 
 /** What a trader's page is told as an import or an analysis goes: the step it is at. */
@@ -79,13 +113,17 @@ export interface TraderAnalysis {
   /** When it was made, in seconds. */
   at: number
   versions: { engine: string; config: string }
-  record: { fills: number; firstMs: number | null; lastMs: number | null; fillsCapped: boolean; importedAt: number }
+  record: Pick<TraderMeta, 'source' | 'label' | 'records' | 'firstMs' | 'lastMs' | 'capped' | 'importedAt' | 'name' | 'fileKind' | 'fileRefused'>
   figures: TraderFigures
+  /** OKX's own figures beside the app's estimate; null for another source. */
+  okx: OkxSummary | null
   /** The coins a venue's perpetual was found for, and those none was: their trips are without bars in the tests. */
   mapping: CoinVenue[]
   unmapped: string[]
   skill: SkillResult | null
   delay: DelayResult | null
+  /** V8-S7-CLONE: can a rule of the market's state do what the trader does? */
+  clone: CloneResult | null
   /** What could not be read, in words. */
   problems: string[]
 }

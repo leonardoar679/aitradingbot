@@ -531,10 +531,12 @@ const api = {
       return () => ipcRenderer.removeListener(IpcChannel.UrlsUpdate, handler)
     }
   },
-  // Copy Traders (V8 Stage 6): a pasted trader read from its venue and kept, analysed, the traders on file, each step as it
-  // goes; and the read-only Bitget copy-trading check, asked only from its button. Nothing here follows or places anything.
+  // Copy Traders (V8 Stages 6-7): a pasted trader read from its venue and kept, a file of trades chosen in the main
+  // process's dialog, analysed, the traders on file, each step as it goes; and the read-only Bitget copy-trading check,
+  // asked only from its button. Nothing here follows or places anything.
   traders: {
     import: (raw: string): Promise<TraderMeta | { refused: string }> => ipcRenderer.invoke(IpcChannel.TradersImport, raw),
+    importFile: (): Promise<TraderMeta | { refused: string } | { canceled: true }> => ipcRenderer.invoke(IpcChannel.TradersImportFile),
     analyze: (key: string): Promise<TraderAnalysis> => ipcRenderer.invoke(IpcChannel.TradersAnalyze, key),
     list: (): Promise<TraderList> => ipcRenderer.invoke(IpcChannel.TradersList),
     bitgetCheck: (): Promise<BitgetCopyCheck> => ipcRenderer.invoke(IpcChannel.TradersBitgetCheck),

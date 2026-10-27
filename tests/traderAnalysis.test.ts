@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Candle } from '../shared/ipc'
-import { coinVenueOf, minuteSpansOf, readTraderAnalysis, seriesOf } from '../shared/traders/traderAnalysis'
+import { coinVenueOf, minuteSpansOf, readTraderAnalysis, readTraderMeta, seriesOf } from '../shared/traders/traderAnalysis'
 import { traderTestsOf } from '../shared/traders/traderTests'
 
 // THE ANALYSIS'S HELPERS (shared/traders/traderAnalysis.ts; V8 Stage 6): a coin's perpetual, Binance's first; bars as
@@ -49,24 +49,33 @@ describe('the minutes a delay test reads', () => {
 
 describe('a stored analysis', () => {
   it('is read back only in its own version', () => {
-    expect(readTraderAnalysis({ v: 'trader-analysis-v1', key: 'k', at: 1, figures: {} })).not.toBeNull()
-    expect(readTraderAnalysis({ v: 'trader-analysis-v0', key: 'k', at: 1, figures: {} })).toBeNull()
-    expect(readTraderAnalysis({ v: 'trader-analysis-v1', key: 'k', at: 'now', figures: {} })).toBeNull()
+    expect(readTraderAnalysis({ v: 'trader-analysis-v2', key: 'k', at: 1, figures: {} })).not.toBeNull()
+    expect(readTraderAnalysis({ v: 'trader-analysis-v1', key: 'k', at: 1, figures: {} })).toBeNull()
+    expect(readTraderAnalysis({ v: 'trader-analysis-v2', key: 'k', at: 'now', figures: {} })).toBeNull()
+    // A trader's meta.json likewise: only in its own version, with its count and its key.
+    const meta = { v: 'trader-store-v2', ref: { venue: 'okx', id: 'AB12CD34EF56GH78', key: 'okx-AB12CD34EF56GH78' }, records: 3 }
+    expect(readTraderMeta(meta)).not.toBeNull()
+    expect(readTraderMeta({ ...meta, v: 'trader-store-v1' })).toBeNull()
+    expect(readTraderMeta({ ...meta, records: '3' })).toBeNull()
+    expect(readTraderMeta({ ...meta, ref: null })).toBeNull()
     expect(readTraderAnalysis(null)).toBeNull()
   })
 })
 
-describe("the two tests' task", () => {
-  it('runs both tests on an input in its shape, and says which test an input is not shaped for', () => {
+describe("the tests' task", () => {
+  it('runs the three tests on an input in its shape, and says which test an input is not shaped for', () => {
     const skill = { trips: [], bars: new Map(), hourly: new Map(), key: 'k' }
     const delay = { trips: [], costs: new Map(), bars: new Map(), funding: new Map(), nowMs: 1 }
-    expect(traderTestsOf({ skill, delay })).toMatchObject({ skill: { verdict: 'TOO FEW', trips: 0 }, delay: { trips: 0 } })
+    const clone = { trips: [], bars: new Map(), hourly: new Map(), costs: new Map(), key: 'k' }
+    expect(traderTestsOf({ skill, delay, clone })).toMatchObject({ skill: { verdict: 'TOO FEW', trips: 0 }, delay: { trips: 0 }, clone: { verdict: 'TOO FEW', entries: 0 } })
     // A payload sent through JSON has lost its maps.
-    expect(() => traderTestsOf(JSON.parse(JSON.stringify({ skill, delay })))).toThrow("The skill test's input is not in its shape.")
-    expect(() => traderTestsOf({ skill: { ...skill, key: 7 }, delay })).toThrow("The skill test's input is not in its shape.")
-    expect(() => traderTestsOf({ skill: { ...skill, trips: 'none' }, delay })).toThrow("The skill test's input is not in its shape.")
-    expect(() => traderTestsOf({ skill, delay: { ...delay, funding: {} } })).toThrow("The delay test's input is not in its shape.")
-    expect(() => traderTestsOf({ skill, delay: { ...delay, nowMs: '1' } })).toThrow("The delay test's input is not in its shape.")
+    expect(() => traderTestsOf(JSON.parse(JSON.stringify({ skill, delay, clone })))).toThrow("The skill test's input is not in its shape.")
+    expect(() => traderTestsOf({ skill: { ...skill, key: 7 }, delay, clone })).toThrow("The skill test's input is not in its shape.")
+    expect(() => traderTestsOf({ skill: { ...skill, trips: 'none' }, delay, clone })).toThrow("The skill test's input is not in its shape.")
+    expect(() => traderTestsOf({ skill, delay: { ...delay, funding: {} }, clone })).toThrow("The delay test's input is not in its shape.")
+    expect(() => traderTestsOf({ skill, delay: { ...delay, nowMs: '1' }, clone })).toThrow("The delay test's input is not in its shape.")
+    expect(() => traderTestsOf({ skill, delay, clone: { ...clone, costs: {} } })).toThrow("The clone's input is not in its shape.")
+    expect(() => traderTestsOf({ skill, delay })).toThrow("The clone's input is not in its shape.")
     expect(() => traderTestsOf(null)).toThrow("The skill test's input is not in its shape.")
   })
 })

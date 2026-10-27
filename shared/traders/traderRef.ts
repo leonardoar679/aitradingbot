@@ -4,13 +4,14 @@
 // and Bybit publish no trader's trades through their APIs, and a page of theirs is refused with that reason. Pure text
 // work: nothing here fetches anything.
 
-export type TraderVenue = 'hyperliquid' | 'okx'
+/** Where a trader's record comes from: a venue, or a file a person brought (V8 Stage 7), named by its contents' hash. */
+export type TraderVenue = 'hyperliquid' | 'okx' | 'file'
 
 /** A trader the app can read: the venue, the id as the venue writes it, and the key its files are kept under. */
 export interface TraderRef {
   venue: TraderVenue
   id: string
-  /** `hyperliquid-0x…` or `okx-…`: a folder name, letters, digits and one hyphen only. */
+  /** `hyperliquid-0x…`, `okx-…` or `file-…`: a folder name, letters, digits and one hyphen only. */
   key: string
 }
 
@@ -22,6 +23,8 @@ export const TRADER_REF_LINES = {
 const HYPERLIQUID_ADDRESS = /^0x[0-9a-fA-F]{40}$/
 /** An OKX lead trader's unique code: sixteen letters and digits, or eighteen digits. */
 const OKX_CODE = /^(?:[0-9A-Za-z]{16}|\d{18})$/
+/** A file's id: the first sixteen hex digits of its contents' SHA-256. */
+const FILE_ID = /^[0-9a-f]{16}$/
 
 /** Hosts whose pages name a Hyperliquid address in their path: the app itself, its explorers. */
 const HYPERLIQUID_HOSTS = ['hyperliquid.xyz', 'hypurrscan.io', 'hyperdash.info']
@@ -40,7 +43,7 @@ const REFUSED_HOSTS: readonly { hosts: readonly string[]; reason: string }[] = [
 
 const within = (host: string, domain: string): boolean => host === domain || host.endsWith(`.${domain}`)
 
-const refOf = (venue: TraderVenue, id: string): TraderRef => {
+export const refOf = (venue: TraderVenue, id: string): TraderRef => {
   const normal = venue === 'hyperliquid' ? id.toLowerCase() : id
   return { venue, id: normal, key: `${venue}-${normal}` }
 }
@@ -81,5 +84,6 @@ export function traderRefOfKey(key: string): TraderRef | null {
   const id = key.slice(at + 1)
   if (venue === 'hyperliquid' && HYPERLIQUID_ADDRESS.test(id) && id === id.toLowerCase()) return refOf('hyperliquid', id)
   if (venue === 'okx' && OKX_CODE.test(id)) return refOf('okx', id)
+  if (venue === 'file' && FILE_ID.test(id)) return refOf('file', id)
   return null
 }
