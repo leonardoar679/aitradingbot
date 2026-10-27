@@ -29,6 +29,24 @@ export const BOOK_LEDGERS: Record<BookId, readonly BookLedger[]> = {
   baseline: ['baseline']
 }
 
+/** How a book's run is read and judged (V8-S9-BOOKS, registered before the first Start): its closed trades' net in
+ * percent of their stake and in R, each with an interval resampled by UTC day, beside its benchmark; and the counts
+ * short of which no book is called profitable, or better than its benchmark, whatever its figures. */
+export const BOOKS_REPORT_LINES = {
+  version: 'books-report-v1',
+  /** Closed trades a book needs before it is called anything. */
+  minTrades: 30,
+  /** Independent events it needs too: the occasions its trades came from -- an announcement, a leader's position or a
+   * clone's close, a symbol's entry signal -- the trades of one occasion counting once. */
+  minEvents: 10,
+  level: 0.95,
+  draws: 10_000,
+  seed: 20_261_027,
+  /** Each book's benchmark over the same span: cash for news, the followed leaders' own trades for copy, holding the
+   * eight symbols from the Start for the baseline. Bitcoin is shown beside them as context, never as a benchmark. */
+  benchmarks: { news: 'cash', copy: 'leader', baseline: 'hold' }
+} as const
+
 /** The mark a book's writer stamps on each paper trade it opens. */
 export interface BookMark {
   id: BookId

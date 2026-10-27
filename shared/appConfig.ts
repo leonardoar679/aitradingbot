@@ -22,7 +22,9 @@ import type { AiRoles } from './aiCost'
 import type { AiRoute } from './aiRoute'
 import { HTTP_PACING_LINES } from './httpPacing'
 import { TASK_LINES } from './tasks'
-import { PAPER_BOOKS_VERSION } from './paperBooks'
+import { PAPER_BOOKS_VERSION, BOOKS_REPORT_LINES } from './paperBooks'
+import { NEWS_BOOK_LINES } from './newsBook'
+import { BASELINE_LINES } from './baseline'
 import { LIQUIDITY_LINES } from './liquidityGate'
 import { SOURCE_RECORD_LINES } from './evaluation/predictionRecord'
 import { MOVE_LINES } from './evaluation/moves'
@@ -290,7 +292,11 @@ export const ENGINE_CONSTANTS = {
   // The limits a task in a worker of its own runs under (V8 Stage 1; shared/tasks.ts).
   tasks: TASK_LINES,
   // How V8's three paper books are read from their executors (V8 Stage 2; shared/paperBooks.ts).
-  paperBooks: { version: PAPER_BOOKS_VERSION },
+  paperBooks: { version: PAPER_BOOKS_VERSION, report: BOOKS_REPORT_LINES },
+  // The news book's shorts and the baseline book's strategy, as V8-S9-BOOKS judges them (V8 Stage 9; shared/newsBook.ts,
+  // shared/baseline.ts).
+  newsBook: NEWS_BOOK_LINES,
+  baseline: BASELINE_LINES,
   // The gate on a trade whose move is large only because its book is thin (V8 Stage 2; shared/liquidityGate.ts).
   liquidity: LIQUIDITY_LINES,
   // The record of every prediction that is not the forecast's own (V8 Stage 2; shared/evaluation/predictionRecord.ts).
