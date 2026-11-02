@@ -19,7 +19,7 @@ export function BigMoversView({ predictions, onOpen }: { predictions: readonly P
   return (
     <Card title={t('Big movers')}>
       <p style={noteStyle}>
-        {t('The coins most likely to move a size worth trading, either way, ranked by how often each moved that much over its last 90 days -- none of the registered rankers has been measured yet. Size, not direction: no side is called.')}
+        {t("The coins most likely to move a size worth trading, either way, ranked by how often each moved that much over its last 90 days. Measured on March to September 2026, the forecast's ranges ranked such moves better, but their chances were not accurate enough to be adopted. Size, not direction: no side is called.")}
       </p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(12rem, 1fr))', gap: '1rem', marginTop: '0.6rem' }}>
         {BIG_MOVER_HORIZONS.map((horizon) => (

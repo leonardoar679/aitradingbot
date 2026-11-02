@@ -960,3 +960,26 @@ V8 reads them again on seven months of saved records (V8-R1-EITHER). The run's s
 user's encrypted AI key after the power loss, with the watch switched on; they were deleted by hand on 26 October and
 the profile's AI switched off. The harness deletes such copies when a run ends, which a power loss skips; V8's runs
 will also sweep them at every start, and a gate will fail a run whose copies outlive it (V8 Stage 12).
+
+## Where a coin may move a lot, measured (V8 Stage 11, 2 November 2026)
+
+V8 asked two questions of the saved records of the long walk forward's expanding mode (March to September 2026, 98
+pairs), registered on 26 October before either was measured (V8-R1-SIZE, V8-R1-EITHER; research/v8R1.ts, the
+arithmetic shared/forecast/r1.ts).
+
+**Does the forecast know where the big moves are?** Ranked by its shown P10-P90 width, or by its either-way odds, the
+coin-hours whose close moved at least 1% at an hour, 2% at four hours and 5% at a day were found far better than by the
+coin's own ninety-day rate of such moves: a Brier skill over that rate of +14.0% at an hour [+13.2, +14.7], +11.0% at
+four hours and +9.5% at a day, and a top tenth that moved 1.50, 1.42 and 1.30 times as often as the rate's own top
+tenth. But the line asked for probabilities within two points of what came in every tenth with at least 100 effective
+outcomes, mapped each month on the months before, and they are not: at an hour one tenth stated 75.3% against 73.0%
+seen, at a day five tenths miss by 2.6 to 6.1 points. No horizon passes, so the big-mover list keeps the ninety-day
+rates, and its card says the ranges ranked better but were not accurate enough to be adopted. Beside them, judging
+nothing, rv24h ranked almost as well as the width (+10.4% at an hour), momentum a little, and the volume's expansion,
+the 15-minute move, Binance's announcements and Bitcoin's 15 minutes worse than the rate. A close 1%, 2% and 5% away
+came in 20.4%, 6.1% and 0.7% of these coin-hours at an hour, 43.7%, 20.3% and 3.5% at four hours, 73.5%, 53.3% and
+20.6% at a day (shared/forecast/move-base-rates-2026.json).
+
+**Are its either-way odds honest?** At an hour for 1%, yes: every judged tenth within two points and a Brier score below
+the rate's. At an hour for 2%, and at four hours for both, they are stated two to four points high in several tenths.
+Since V72R-S3-EITHER failed at an hour, no either-way chance is shown anywhere.

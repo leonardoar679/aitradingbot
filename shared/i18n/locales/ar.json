@@ -2332,7 +2332,7 @@
   "24h volume ({asset})": "حجم التداول في 24 ساعة ({asset})",
   "Live price for {symbol} is unavailable ({error}). The chart below uses a separate connection and may keep updating, so ignore it for the current price. Retrying automatically.": "السعر المباشر لـ{symbol} غير متاح ({error}). يستخدم الرسم البياني أدناه اتصالًا منفصلًا وقد يواصل التحديث، لذا تجاهله فيما يخص السعر الحالي. تُعاد المحاولة تلقائيًا.",
   "Big movers": "الأكثر تحركًا",
-  "The coins most likely to move a size worth trading, either way, ranked by how often each moved that much over its last 90 days -- none of the registered rankers has been measured yet. Size, not direction: no side is called.": "العملات الأرجح أن تتحرك بحجم يستحق التداول، في أي من الاتجاهين، مرتبة بحسب عدد المرات التي تحرك فيها كل منها بهذا القدر خلال آخر 90 يومًا — ولم يُقَس بعد أي من طرق الترتيب المسجّلة. الحجم لا الاتجاه: لا يُحدَّد أي جانب.",
+  "The coins most likely to move a size worth trading, either way, ranked by how often each moved that much over its last 90 days. Measured on March to September 2026, the forecast's ranges ranked such moves better, but their chances were not accurate enough to be adopted. Size, not direction: no side is called.": "العملات الأرجح أن تتحرك بحجم يستحق التداول، في أي من الاتجاهين، مرتبة بحسب عدد المرات التي تحرك فيها كل منها بهذا القدر خلال آخر 90 يومًا. عند القياس على الفترة من مارس إلى سبتمبر 2026، رتّبت نطاقات التوقع تحركات بهذا الحجم ترتيبًا أفضل، لكن احتمالاتها لم تكن دقيقة بما يكفي لاعتمادها. الحجم لا الاتجاه: لا يُحدَّد أي جانب.",
   "{size} or more within {span}": "{size} أو أكثر خلال {span}",
   "News book": "محفظة الأخبار",
   "Copy book": "محفظة النسخ",

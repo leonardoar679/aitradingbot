@@ -2332,7 +2332,7 @@
   "24h volume ({asset})": "24 小时成交量（{asset}）",
   "Live price for {symbol} is unavailable ({error}). The chart below uses a separate connection and may keep updating, so ignore it for the current price. Retrying automatically.": "{symbol} 的实时价格不可用（{error}）。下方图表使用另一条独立连接，可能仍在更新，因此看当前价格时不要以它为准。正在自动重试。",
   "Big movers": "大幅波动币",
-  "The coins most likely to move a size worth trading, either way, ranked by how often each moved that much over its last 90 days -- none of the registered rankers has been measured yet. Size, not direction: no side is called.": "最有可能出现值得交易的变动幅度（涨跌皆可）的币，按各自在最近 90 天内出现这么大变动的频率排序——已登记的排序方法还没有一个经过测量。看的是幅度，不是方向：不给出任何方向。",
+  "The coins most likely to move a size worth trading, either way, ranked by how often each moved that much over its last 90 days. Measured on March to September 2026, the forecast's ranges ranked such moves better, but their chances were not accurate enough to be adopted. Size, not direction: no side is called.": "最有可能出现值得交易的变动幅度（涨跌皆可）的币，按各自在最近 90 天内出现这么大变动的频率排序。在 2026 年 3 月至 9 月的测量中，预测区间对这类变动的排序更好，但其概率的准确度不足以采用。看的是幅度，不是方向：不给出任何方向。",
   "{size} or more within {span}": "{span}内变动 {size} 或以上",
   "News book": "新闻账簿",
   "Copy book": "跟单账簿",

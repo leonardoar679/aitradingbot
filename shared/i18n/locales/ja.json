@@ -2332,7 +2332,7 @@
   "24h volume ({asset})": "24時間出来高（{asset}）",
   "Live price for {symbol} is unavailable ({error}). The chart below uses a separate connection and may keep updating, so ignore it for the current price. Retrying automatically.": "{symbol} のリアルタイム価格を取得できません（{error}）。下のチャートは別の接続を使っていて更新が続くことがありますが、現在価格の目安にはしないでください。自動で再試行しています。",
   "Big movers": "大きく動くコイン",
-  "The coins most likely to move a size worth trading, either way, ranked by how often each moved that much over its last 90 days -- none of the registered rankers has been measured yet. Size, not direction: no side is called.": "上下どちらでも、取引に見合う値幅で動く可能性が最も高いコインを、直近90日間にそれぞれがその値幅だけ動いた頻度の順に並べています。登録済みのランキング手法は、まだどれも測定されていません。値幅であって方向ではありません：どちらの方向も示しません。",
+  "The coins most likely to move a size worth trading, either way, ranked by how often each moved that much over its last 90 days. Measured on March to September 2026, the forecast's ranges ranked such moves better, but their chances were not accurate enough to be adopted. Size, not direction: no side is called.": "上下どちらでも、取引に見合う値幅で動く可能性が最も高いコインを、直近90日間にそれぞれがその値幅だけ動いた頻度の順に並べています。2026年3月から9月までを対象に測定したところ、こうした動きの順位付けでは予測のレンジのほうが優れていましたが、レンジが示す確率は採用できるほど正確ではありませんでした。値幅であって方向ではありません：どちらの方向も示しません。",
   "{size} or more within {span}": "{span}以内に {size} 以上",
   "News book": "ニュース用口座",
   "Copy book": "コピー用口座",

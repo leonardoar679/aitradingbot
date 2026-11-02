@@ -1,0 +1,35 @@
+{
+ "version": "move-base-rates-2026",
+ "what": "The share of the long walk forward's scored coin-hours (its expanding mode) whose close a horizon later was at least 1%, 2% and 5% away, either way: descriptive, from research/v8R1.ts.",
+ "from": "2026-03",
+ "to": "2026-09",
+ "horizons": {
+  "hour1": {
+   "rows": 208608,
+   "close": {
+    "1": 0.20377454364166284,
+    "2": 0.06115297591655162,
+    "5": 0.006610484736922841
+   },
+   "seconds": 3600
+  },
+  "hours4": {
+   "rows": 208293,
+   "close": {
+    "1": 0.4370718171037913,
+    "2": 0.20288727897720998,
+    "5": 0.03501797948082749
+   },
+   "seconds": 14400
+  },
+  "hours24": {
+   "rows": 206193,
+   "close": {
+    "1": 0.7346127172115445,
+    "2": 0.5330103349774241,
+    "5": 0.205574389043275
+   },
+   "seconds": 86400
+  }
+ }
+}

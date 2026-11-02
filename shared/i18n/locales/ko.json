@@ -2332,7 +2332,7 @@
   "24h volume ({asset})": "24시간 거래량 ({asset})",
   "Live price for {symbol} is unavailable ({error}). The chart below uses a separate connection and may keep updating, so ignore it for the current price. Retrying automatically.": "{symbol}의 실시간 가격을 사용할 수 없습니다({error}). 아래 차트는 별도 연결을 쓰므로 계속 갱신될 수 있지만, 현재 가격으로는 참고하지 마세요. 자동으로 다시 시도합니다.",
   "Big movers": "변동폭이 큰 코인",
-  "The coins most likely to move a size worth trading, either way, ranked by how often each moved that much over its last 90 days -- none of the registered rankers has been measured yet. Size, not direction: no side is called.": "거래할 만한 크기로 어느 쪽으로든 움직일 가능성이 가장 높은 코인을, 각 코인이 최근 90일 동안 그만큼 움직인 빈도순으로 보여 줍니다. 등록된 순위 산정 방식 중 아직 측정된 것은 없습니다. 방향이 아니라 크기입니다: 어느 쪽인지는 제시하지 않습니다.",
+  "The coins most likely to move a size worth trading, either way, ranked by how often each moved that much over its last 90 days. Measured on March to September 2026, the forecast's ranges ranked such moves better, but their chances were not accurate enough to be adopted. Size, not direction: no side is called.": "거래할 만한 크기로 어느 쪽으로든 움직일 가능성이 가장 높은 코인을, 각 코인이 최근 90일 동안 그만큼 움직인 빈도순으로 보여 줍니다. 2026년 3월부터 9월까지를 대상으로 측정한 결과, 예측의 범위는 그런 움직임의 순위를 더 잘 매겼지만 그 확률은 채택할 만큼 정확하지 않았습니다. 방향이 아니라 크기입니다: 어느 쪽인지는 제시하지 않습니다.",
   "{size} or more within {span}": "{span} 안에 {size} 이상",
   "News book": "뉴스 계좌",
   "Copy book": "카피 계좌",

@@ -2332,7 +2332,7 @@
   "24h volume ({asset})": "ปริมาณซื้อขาย 24 ชม. ({asset})",
   "Live price for {symbol} is unavailable ({error}). The chart below uses a separate connection and may keep updating, so ignore it for the current price. Retrying automatically.": "ไม่มีราคาสดของ {symbol} ({error}) กราฟด้านล่างใช้การเชื่อมต่อแยกต่างหากและอาจรีเฟรชต่อไป จึงอย่าใช้กราฟดูราคาปัจจุบัน กำลังลองใหม่โดยอัตโนมัติ",
   "Big movers": "เหรียญที่ขยับแรง",
-  "The coins most likely to move a size worth trading, either way, ranked by how often each moved that much over its last 90 days -- none of the registered rankers has been measured yet. Size, not direction: no side is called.": "เหรียญที่น่าจะขยับในขนาดที่คุ้มค่าแก่การเทรดมากที่สุด ไม่ว่าจะขึ้นหรือลง จัดอันดับตามความถี่ที่แต่ละเหรียญเคยขยับได้ขนาดนั้นใน 90 วันล่าสุด — ยังไม่ได้วัดผลตัวจัดอันดับที่ลงทะเบียนไว้ตัวใดเลย ขนาด ไม่ใช่ทิศทาง: ไม่ชี้ฝั่งใด",
+  "The coins most likely to move a size worth trading, either way, ranked by how often each moved that much over its last 90 days. Measured on March to September 2026, the forecast's ranges ranked such moves better, but their chances were not accurate enough to be adopted. Size, not direction: no side is called.": "เหรียญที่น่าจะขยับในขนาดที่คุ้มค่าแก่การเทรดมากที่สุด ไม่ว่าจะขึ้นหรือลง จัดอันดับตามความถี่ที่แต่ละเหรียญเคยขยับได้ขนาดนั้นใน 90 วันล่าสุด เมื่อวัดผลตั้งแต่มีนาคมถึงกันยายน 2026 ช่วงของการคาดการณ์จัดอันดับการขยับขนาดนั้นได้ดีกว่า แต่ความน่าจะเป็นของช่วงเหล่านั้นไม่แม่นยำพอที่จะนำมาใช้ ขนาด ไม่ใช่ทิศทาง: ไม่ชี้ฝั่งใด",
   "{size} or more within {span}": "{size} ขึ้นไปภายใน{span}",
   "News book": "พอร์ตข่าว",
   "Copy book": "พอร์ตคัดลอก",
