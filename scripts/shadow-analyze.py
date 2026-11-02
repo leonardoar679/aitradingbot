@@ -357,6 +357,8 @@ for t in ticks:
         spans.append([t, t])
 print(f'\n===== V8 gates, read over {len(spans)} span(s): ' + '; '.join(f'{clock(a)} to {clock(b)}' for a, b in spans))
 in_span = lambda t: any(a <= t <= b for a, b in spans)
+# A book trade's stamp is {id, startedAt, ledger, result}: its book is its id.
+book_of = lambda e: (e.get('book') or {}).get('id') if isinstance(e.get('book'), dict) else e.get('book')
 
 # The prediction record (V8-S2-RECORD): every source prediction made in a span whose outcome was due before the span's
 # end, its grace and the record's settling allowed, answered -- settled, late, or missing with its reason -- and the
@@ -388,6 +390,16 @@ else:
     for r in book_runs:
         if r.get('restored') is not True:
             problems.append(f'the run of {clock(r.get("startedAt") or 0)} did not put every switch back ({json.dumps(r.get("restored"))[:120]})')
+    # After the last Stop, with paper testing not running again, each switch it turned on reads as it was before.
+    switch_paths = {'news.enabled': ('enabled',), 'news.delisting.paperShort': ('delisting', 'paperShort', 'enabled'), 'news.delisting.askModels': ('delisting', 'askModels')}
+    news_now = load(os.path.join(PROFILE, 'news.json')) or {}
+    if book_runs and not books_cfg.get('running') and started_file is None:
+        for entry in book_runs[-1].get('switched') or []:
+            value = news_now
+            for key in switch_paths.get(entry.get('switch'), ('?',)):
+                value = value.get(key) if isinstance(value, dict) else None
+            if value != entry.get('was'):
+                problems.append(f'{entry.get("switch")} reads {value} after Stop, not {entry.get("was")} as before Start')
     running_from = books_cfg.get('startedAt') if books_cfg.get('running') else None
     hours_owed = 0
     hours_marked = 0
@@ -403,7 +415,7 @@ else:
                     hours_marked += 1 if (book, hour) in marked else 0
                 hour += 1
     archived = jsonl(os.path.join(PROFILE, 'paperBooks', 'archive-*.jsonl'))
-    book_trades = [e for e in settings_now.get('executors', []) + archived if e.get('book') in ('news', 'copy', 'baseline')]
+    book_trades = [e for e in settings_now.get('executors', []) + archived if book_of(e) in ('news', 'copy', 'baseline')]
     not_paper = [e for e in book_trades if e.get('mode') != 'paper']
     if not_paper:
         problems.append(f'{len(not_paper)} book trade(s) not on paper')
@@ -411,7 +423,7 @@ else:
         problems.append(f'{hours_owed - hours_marked} of {hours_owed} book-hours without their mark')
     by_book = {}
     for e in book_trades:
-        by_book[e.get('book')] = by_book.get(e.get('book'), 0) + 1
+        by_book[book_of(e)] = by_book.get(book_of(e), 0) + 1
     gate_line('books', 'pass' if not problems else 'fail', f'{len(book_runs)} run(s) stopped, {"running since " + clock(running_from) if running_from else "not running"}; marks {hours_marked} of {hours_owed} book-hours; trades {", ".join(f"{k} {v}" for k, v in sorted(by_book.items())) or "none"}' + (f'; {"; ".join(problems)}' if problems else ''))
 
 # Follows (V8 Stage 8): each leader event on file before the trade made on it, and no event acted on twice.
@@ -419,7 +431,7 @@ events_by_key = {}
 for f in glob.glob(os.path.join(PROFILE, 'traders', '*', 'events-*.jsonl')):
     for e in jsonl(f):
         events_by_key[e.get('key')] = e
-copy_trades = [e for e in settings_now.get('executors', []) + jsonl(os.path.join(PROFILE, 'paperBooks', 'archive-*.jsonl')) if e.get('book') == 'copy' and (e.get('follow') or {}).get('legs')]
+copy_trades = [e for e in settings_now.get('executors', []) + jsonl(os.path.join(PROFILE, 'paperBooks', 'archive-*.jsonl')) if book_of(e) == 'copy' and (e.get('follow') or {}).get('legs')]
 if not copy_trades and not events_by_key:
     gate_line('follows', 'not measured', 'No leader event was read and no follow traded in the run.')
 else:
