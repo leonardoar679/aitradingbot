@@ -284,14 +284,15 @@ ended_on_file = {e['id'] for e in events_on_file if e.get('kind') in ('closed', 
 if not orders:
     gate_line('orders_whole', 'not measured', 'No paper or demo order was opened in the run.')
 else:
+    # A V8 book's trade keeps how it ended on its book stamp ({id, startedAt, ledger, result}).
     def mark_of(e):
-        return e.get('lab') or e.get('forecast') or e.get('watch') or e.get('newsRule') or {}
+        return e.get('lab') or e.get('forecast') or e.get('watch') or e.get('newsRule') or (e.get('book') if isinstance(e.get('book'), dict) else None) or {}
     no_open = [e for e in orders if e['id'] not in opened_on_file]
     unended = [e for e in orders if e.get('status') == 'stopped' and mark_of(e).get('result') is None]
     unrecorded_end = [e for e in orders if e.get('status') == 'stopped' and e['id'] not in ended_on_file]
     by_origin = {}
     for e in orders:
-        origin = 'lab' if e.get('lab') else 'forecast' if e.get('forecast') else 'watch' if e.get('watch') else 'news' if e.get('newsRule') else 'person'
+        origin = 'lab' if e.get('lab') else 'forecast' if e.get('forecast') else 'watch' if e.get('watch') else 'news' if e.get('newsRule') else f'book {e["book"].get("id")}' if isinstance(e.get('book'), dict) else 'person'
         by_origin[f'{origin}/{e.get("mode")}'] = by_origin.get(f'{origin}/{e.get("mode")}', 0) + 1
     ok = not no_open and not unended and not unrecorded_end
     gate_line('orders_whole', 'pass' if ok else 'fail', f'{len(orders)} opened ({", ".join(f"{k} {v}" for k, v in sorted(by_origin.items()))}), {sum(1 for e in orders if e.get("status") == "stopped")} ended; without their opening on file {len(no_open)}, stopped without how it ended {len(unended)}, ended off the record {len(unrecorded_end)}')
