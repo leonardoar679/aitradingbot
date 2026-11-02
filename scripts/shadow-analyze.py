@@ -345,6 +345,126 @@ else:
     for line in shadows:
         print(f'  training log {clock(line["at"])} {line["kind"]:15} {line.get("runId")} {line.get("why") or ""} {line.get("summary") or ""}')
 
+# --- V8's gates (V8-S12-GATES), each read per span ----------------------------------------------
+# A span is a stretch of the harness's status ticks (every ten minutes) with no gap of more than 30 minutes: an outage,
+# a power loss or a restart ends one, and a gate that needs an hour inside a span reads only whole spans.
+ticks = sorted(t['at'] / 1000 for t in jsonl(os.path.join(OUT, 'status.jsonl')) if isinstance(t.get('at'), (int, float)))
+spans = []
+for t in ticks:
+    if spans and t - spans[-1][1] <= 30 * 60:
+        spans[-1][1] = t
+    else:
+        spans.append([t, t])
+print(f'\n===== V8 gates, read over {len(spans)} span(s): ' + '; '.join(f'{clock(a)} to {clock(b)}' for a, b in spans))
+in_span = lambda t: any(a <= t <= b for a, b in spans)
+
+# The prediction record (V8-S2-RECORD): every source prediction made in a span whose outcome was due before the span's
+# end, its grace and the record's settling allowed, answered -- settled, late, or missing with its reason -- and the
+# missing ones at most 1% outside outages.
+sources = jsonl(os.path.join(PROFILE, 'predictions', 'sources-*.jsonl'))
+outcomes = {o['id']: o for o in jsonl(os.path.join(PROFILE, 'predictions', 'source-outcomes-*.jsonl'))}
+due = [p for p in sources if p.get('madeAt', 0) >= run_start and any(a <= p['madeAt'] and p['madeAt'] + p['horizonSec'] + 600 + 1800 <= b for a, b in spans)]
+if not due:
+    gate_line('record_whole', 'not measured', f'No source prediction came due inside a span ({len(sources)} on file).')
+else:
+    unanswered = [p for p in due if p['id'] not in outcomes]
+    missing = [p for p in due if outcomes.get(p['id'], {}).get('status') == 'missing']
+    by_source = {}
+    for p in due:
+        by_source[p['source']] = by_source.get(p['source'], 0) + 1
+    ok = not unanswered and len(missing) <= 0.01 * len(due)
+    gate_line('record_whole', 'pass' if ok else 'fail', f'{len(due)} due ({", ".join(f"{k} {v}" for k, v in sorted(by_source.items()))}): unanswered {len(unanswered)}, missing {len(missing)}' + (f'; first unanswered {unanswered[0]["id"]}' if unanswered else ''))
+
+# The books (V8 Stage 9): Stop putting back exactly what Start turned on, each running book's equity marked every whole
+# hour inside a span, and every book trade a paper one.
+started_file = load(os.path.join(PROFILE, 'paperBooks', 'started.json'))
+book_runs = jsonl(os.path.join(PROFILE, 'paperBooks', 'runs-*.jsonl'))
+marks = jsonl(os.path.join(PROFILE, 'paperBooks', 'equity-*.jsonl'))
+books_cfg = settings_now.get('paperBooks') or {}
+if not book_runs and not started_file and not books_cfg.get('running'):
+    gate_line('books', 'not measured', 'Paper testing was not started in the run.')
+else:
+    problems = []
+    for r in book_runs:
+        if r.get('restored') is not True:
+            problems.append(f'the run of {clock(r.get("startedAt") or 0)} did not put every switch back ({json.dumps(r.get("restored"))[:120]})')
+    running_from = books_cfg.get('startedAt') if books_cfg.get('running') else None
+    hours_owed = 0
+    hours_marked = 0
+    marked = {(m.get('book'), int(m.get('at', 0)) // 3600) for m in marks}
+    for a, b in spans:
+        for r in book_runs + ([{'startedAt': running_from, 'stoppedAt': None}] if running_from else []):
+            s0 = max(a, r.get('startedAt') or a)
+            s1 = min(b, r.get('stoppedAt') or b)
+            hour = int(s0 // 3600) + 1
+            while hour * 3600 + 120 <= s1:
+                for book in ('news', 'copy', 'baseline'):
+                    hours_owed += 1
+                    hours_marked += 1 if (book, hour) in marked else 0
+                hour += 1
+    archived = jsonl(os.path.join(PROFILE, 'paperBooks', 'archive-*.jsonl'))
+    book_trades = [e for e in settings_now.get('executors', []) + archived if e.get('book') in ('news', 'copy', 'baseline')]
+    not_paper = [e for e in book_trades if e.get('mode') != 'paper']
+    if not_paper:
+        problems.append(f'{len(not_paper)} book trade(s) not on paper')
+    if hours_owed and hours_marked < hours_owed:
+        problems.append(f'{hours_owed - hours_marked} of {hours_owed} book-hours without their mark')
+    by_book = {}
+    for e in book_trades:
+        by_book[e.get('book')] = by_book.get(e.get('book'), 0) + 1
+    gate_line('books', 'pass' if not problems else 'fail', f'{len(book_runs)} run(s) stopped, {"running since " + clock(running_from) if running_from else "not running"}; marks {hours_marked} of {hours_owed} book-hours; trades {", ".join(f"{k} {v}" for k, v in sorted(by_book.items())) or "none"}' + (f'; {"; ".join(problems)}' if problems else ''))
+
+# Follows (V8 Stage 8): each leader event on file before the trade made on it, and no event acted on twice.
+events_by_key = {}
+for f in glob.glob(os.path.join(PROFILE, 'traders', '*', 'events-*.jsonl')):
+    for e in jsonl(f):
+        events_by_key[e.get('key')] = e
+copy_trades = [e for e in settings_now.get('executors', []) + jsonl(os.path.join(PROFILE, 'paperBooks', 'archive-*.jsonl')) if e.get('book') == 'copy' and (e.get('follow') or {}).get('legs')]
+if not copy_trades and not events_by_key:
+    gate_line('follows', 'not measured', 'No leader event was read and no follow traded in the run.')
+else:
+    acted = set()
+    opened_by = {}
+    before_file = []
+    twice = []
+    for e in copy_trades:
+        mine = {}
+        for at, leg in enumerate((e.get('follow') or {}).get('legs', [])):
+            key = leg.get('eventKey') or ''
+            # A leg a leader's event made; a close of the follow's own (its time, its stake, a lost leader) is keyed by
+            # the trade's id.
+            if not key.startswith(('hyperliquid-', 'okx-')):
+                continue
+            acted.add(key)
+            mine[key] = mine.get(key, 0) + 1
+            if at == 0:
+                opened_by[key] = opened_by.get(key, 0) + 1
+            event = events_by_key.get(key)
+            if event is None or (event.get('receivedMs') or 0) > (leg.get('atMs') or 0) + 1000:
+                before_file.append(key)
+        # Twice: one event applied twice to one trade, or one event opening two trades (a flip closes one and opens one).
+        twice += [k for k, n in mine.items() if n > 1]
+    twice += [k for k, n in opened_by.items() if n > 1]
+    gate_line('follows', 'pass' if not before_file and not twice else 'fail', f'{len(events_by_key)} leader events on file, {len(copy_trades)} follows traded on {len(acted)} of them; acted on before on file {len(before_file)}, acted on twice {len(twice)}')
+
+# The key copies (the user's answer of 26 October 2026): swept at every start, and none outliving the run.
+sweeps = [load(f) or {} for f in sorted(glob.glob(os.path.join(OUT, 'key-sweep-*.json')))]
+real_ai_run = any(s.get('realAi') for s in sweeps)
+left = [name for name in ('aiCredentials.json', 'credentials.json') + (('Local State',) if real_ai_run else ()) if os.path.exists(os.path.join(PROFILE, name))]
+ended = bool(segments) and all(seg.get('endedAt') for seg in segments)
+if not sweeps:
+    gate_line('keys', 'fail', 'No sweep of key copies was recorded at a start.')
+else:
+    gate_line('keys', ('pass' if not left else 'fail') if ended else 'not measured', f'{len(sweeps)} start(s) swept ({sum(len(s.get("removed", [])) for s in sweeps)} file(s) removed then); after the run {"the profile holds " + ", ".join(left) if left else "no copy is left"}' + ('' if ended else ' -- the run has not ended'))
+
+# Real spend within the ceiling (the user's answer of 26 October 2026: up to $3 for the real run).
+if real_ai_run:
+    book = load(os.path.join(ROOT, 'real-ai-spend.json')) or {}
+    total = (book.get('retiredUsd') or 0) + sum(sum((c.get('usage') or {}).get('costUsd') or 0 for c in jsonl(os.path.join(ROOT, f'{r}-profile', 'aiLedger', '*.jsonl'))) for r in book.get('runs', []))
+    gate_line('spend', 'pass' if total <= 3 else 'fail', f'${total:.4f} spent by every real run together, of the $3.00 ceiling')
+else:
+    gate_line('spend', 'not measured', 'OpenRouter was faked: nothing could be spent.')
+
 # --- the records on file, over every segment -----------------------------------------------------
 print('\n===== raw records')
 events = jsonl(os.path.join(PROFILE, 'marketEvents', '*.jsonl'))

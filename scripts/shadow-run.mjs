@@ -64,6 +64,15 @@
 //                  refit that clears the run in use may not come within a run. Said in OUT/shadow-seed.json; never
 //                  where a shadow is held                                                              [0]
 //   SEED_SHADOW_DAYS  the seeded week's length in days, so that it can end within a run               [7]
+//   TRADERS        pastes -- Hyperliquid addresses, OKX lead traders' codes -- read, analysed and followed on paper
+//                  once the run is set up, each one's clone run where its analysis fitted a rule (V8 Stage 12)  [none]
+//   PAPER_TESTING  1 starts paper testing once the run is set up -- the three books, Binance's announcements read
+//                  every minute, the delisting rule's short, the baseline -- and stops it at the run's end, so that
+//                  what Stop puts back is on file (V8 Stage 9)                                                [0]
+//
+// AT EVERY START every key file -- aiCredentials.json, credentials.json, the Local State that unlocks them -- is
+// removed from every scratch profile under SHADOW_ROOT, by name, unread, before anything is copied (V8 Stage 12); the
+// names removed are kept in OUT/key-sweep-<ms>.json.
 //
 // IT NEVER TOUCHES THE REAL PROFILE OR out/. The profile has to be inside SHADOW_ROOT and is never
 // the real profile or Electron's default; on a resume it has to carry the marker this script leaves;
@@ -104,6 +113,11 @@ const FIRST_GATES = process.env.FIRST_GATES === '1'
 const WATCH_PAPER = process.env.WATCH_PAPER !== '0'
 const FORECAST_TRADER = process.env.FORECAST_TRADER === '1'
 const LAB = process.env.LAB === '1'
+const PAPER_TESTING = process.env.PAPER_TESTING === '1'
+const TRADERS = (process.env.TRADERS ?? '')
+  .split(',')
+  .map((paste) => paste.trim())
+  .filter(Boolean)
 const DEMO_KEY = process.env.DEMO_KEY === '1'
 const DEMO_CHECK = process.env.DEMO_CHECK === '1'
 if (DEMO_CHECK && !DEMO_KEY) throw new Error('DEMO_CHECK needs DEMO_KEY=1: the demo book is reached with the demo key alone')
@@ -226,6 +240,27 @@ if (RESUME) {
   fs.writeFileSync(MARKER, JSON.stringify({ createdBy: 'scripts/shadow-run.mjs', runName: RUN_NAME, createdAt: new Date().toISOString(), key: 'fake' }, null, 2))
 }
 fs.mkdirSync(path.join(OUT, 'hour-reports'), { recursive: true })
+
+// --- the key copies swept at every start (V8 Stage 12; the user's answer of 26 October 2026) --------------------------
+// A run killed before its end (a power loss, as on 25 October) leaves its copies of the user's encrypted keys in its
+// scratch profile. So at every start, before anything is copied, every key file is removed from every scratch profile
+// under SHADOW_ROOT -- this run's own too, which a REAL_AI or DEMO_KEY start then copies afresh -- by name, never read;
+// the names removed are kept in OUT/key-sweep-<ms>.json, which the analyzer's keys gate reads.
+{
+  const removed = []
+  for (const entry of fs.readdirSync(SHADOW_ROOT, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !entry.name.endsWith('-profile')) continue
+    const dir = path.join(SHADOW_ROOT, entry.name)
+    if (!samePath(path.dirname(dir), SHADOW_ROOT)) continue
+    for (const name of [...new Set([...KEY_FILES, ...EXCHANGE_KEY_FILES])]) {
+      const file = path.join(dir, name)
+      if (!fs.existsSync(file)) continue
+      fs.rmSync(file, { force: true })
+      removed.push(`${entry.name}/${name}`)
+    }
+  }
+  fs.writeFileSync(path.join(OUT, `key-sweep-${Date.now()}.json`), JSON.stringify({ at: new Date().toISOString(), realAi: REAL_AI, demoKey: DEMO_KEY, removed }, null, 2))
+}
 
 // --- the real models' spend (REAL_AI) --------------------------------------------------------------
 /** What a profile's own ledger says it spent, in dollars, from `sinceSec` on: every call on file. */
@@ -816,6 +851,37 @@ async function main() {
     if (!keys.some((key) => key.startsWith('bitget:demo:stored'))) throw new Error('DEMO_KEY: the copied credentials hold no Bitget demo key -- add one on Connections first')
   }
   if (DEMO_CHECK) await demoCheck()
+  // The traders the run follows (V8-S12-GATES: picked before the run by a fixed rule, not by how they did), each read,
+  // analysed and followed on paper, and its clone run where its analysis fitted a rule; a resumed segment finds them
+  // followed already. An analysis of a long record takes minutes.
+  for (const raw of TRADERS) {
+    const read = await page
+      .evaluate(async (paste) => {
+        const meta = await window.api.traders.import(paste)
+        if ('refused' in meta) return { paste, refused: meta.refused }
+        const key = meta.ref.key
+        const following = (await window.api.traders.followStatus()).some((status) => status.key === key)
+        if (following) return { key, kept: 'already followed' }
+        const analysis = await window.api.traders.analyze(key)
+        const follows = await window.api.traders.follow(key, true)
+        const rule = analysis.clone?.rule ?? null
+        const clones = rule === null ? null : await window.api.traders.clone(key, true)
+        return { key, verdict: analysis.skill?.verdict ?? null, records: analysis.record?.records ?? null, followed: follows.some((status) => status.key === key), clone: rule === null ? 'no rule fitted' : Object.keys(clones ?? {}).includes(key) }
+      }, raw)
+      .catch((failure) => ({ paste: raw, failed: String(failure).slice(0, 300) }))
+    say(`trader: ${JSON.stringify(read)}`)
+  }
+  // Paper testing started (V8 Stage 9): the three books, Binance's announcements read every minute, the delisting rule's
+  // short and the baseline; a resumed segment finds it running.
+  if (PAPER_TESTING) {
+    const testing = await page.evaluate(async () => {
+      const before = await window.api.books.testing()
+      if (before.running) return { kept: 'running since ' + before.startedAt }
+      const after = await window.api.books.start()
+      return { running: after.running, startedAt: after.startedAt, switched: after.started?.switched ?? null }
+    })
+    say(`paper testing: ${JSON.stringify(testing)}`)
+  }
   // One of the app's own runs (shared/experimentRun.ts), started once the watch is on so that its
   // record says so; a resumed segment finds it still running on file and starts none.
   if (EXPERIMENT !== '') {
@@ -909,6 +975,18 @@ async function main() {
       fs.writeFileSync(path.join(OUT, `experiment-${reported.id}.json`), JSON.stringify(reported, null, 2))
       say(`experiment ${reported.id}: ${reported.report.passed ? 'every gate that applies passed' : 'a gate failed'}; ${reported.report.verdict}; saved to ${path.join(OUT, `experiment-${reported.id}.json`)}`)
     }
+  }
+
+  // Paper testing stopped at the run's end, so that Stop's putting back what Start turned on is on file for the books
+  // gate (V8-S12-GATES); the window closes the books' open trades at the price then.
+  if (PAPER_TESTING) {
+    const stopped = await page
+      .evaluate(async () => {
+        const state = await window.api.books.stop()
+        return { running: state.running, startedAt: state.startedAt }
+      })
+      .catch((failure) => `not stopped: ${failure}`)
+    say(`paper testing stopped: ${JSON.stringify(stopped)}`)
   }
 
   // The AI off before anything waits: nothing more is asked or spent.
