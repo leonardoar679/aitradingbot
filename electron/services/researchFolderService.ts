@@ -289,11 +289,23 @@ async function tradedSpans(events: readonly PaperOrderEvent[], fromSec: number, 
     }
   }
   for (const start of opened.values()) spans.push({ symbol: start.symbol, fromSec: start.at, toSec: nowSec })
-  return spans
+  const padded = spans
     .filter((span) => /^[A-Z0-9]{2,30}$/.test(span.symbol) && span.toSec >= fromSec && span.fromSec <= nowSec)
+    .map((span) => ({ symbol: span.symbol, fromSec: Math.max(span.fromSec, span.toSec - BITGET_SPAN_MAX_SEC) - BITGET_SPAN_MARGIN_SEC, toSec: Math.min(nowSec, span.toSec + BITGET_SPAN_MARGIN_SEC) }))
+    .sort((a, b) => (a.symbol < b.symbol ? -1 : a.symbol > b.symbol ? 1 : a.fromSec - b.fromSec))
+  // A pair traded more than once at a time, or again within the margins, is one span: one file of its bars (found by
+  // V8 Stage 12's rehearsal, two of the copy book's trades of SOL opening in one minute named one file twice and the
+  // archive refused the export).
+  const merged: { symbol: string; fromSec: number; toSec: number }[] = []
+  for (const span of padded) {
+    const last = merged[merged.length - 1]
+    if (last !== undefined && last.symbol === span.symbol && span.fromSec <= last.toSec) last.toSec = Math.max(last.toSec, span.toSec)
+    else merged.push({ ...span })
+  }
+  return merged
+    .map((span) => ({ ...span, fromSec: Math.max(span.fromSec, span.toSec - BITGET_SPAN_MAX_SEC - 2 * BITGET_SPAN_MARGIN_SEC) }))
     .sort((a, b) => b.toSec - a.toSec)
     .slice(0, BITGET_SPANS_MAX)
-    .map((span) => ({ symbol: span.symbol, fromSec: Math.max(span.fromSec, span.toSec - BITGET_SPAN_MAX_SEC) - BITGET_SPAN_MARGIN_SEC, toSec: Math.min(nowSec, span.toSec + BITGET_SPAN_MARGIN_SEC) }))
 }
 
 async function makeExport(reason: 'daily' | 'manual'): Promise<ResearchExport> {

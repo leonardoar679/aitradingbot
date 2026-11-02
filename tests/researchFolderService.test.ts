@@ -264,7 +264,15 @@ describe("the export's V8 records (V8 Stage 10)", () => {
     put('paperBooks/started.json', '{"v":"paper-testing-v1","startedAt":1,"switched":[]}')
     // A follow of the trader, closed in the window: its pair's minutes are read from Bitget.
     const follow = { id: 'f1', type: 'position', mode: 'paper', status: 'stopped', symbol: 'ETHUSDT', createdAt: NOW - 7200, params: {}, follow: { traderKey: KEY, positionId: 'ETH' }, book: { id: 'copy', startedAt: NOW - 86_400, ledger: 'follow', result: { netQuote: 1, netPct: 0.1, feesQuote: 0, fundingQuote: 0, closedAt: NOW - 3600 } } }
-    put('paperBooks/archive-2026-10.jsonl', `${JSON.stringify(follow)}\n`)
+    // Found by V8 Stage 12's rehearsal: two trades of a pair opened in one minute named one file twice and the archive
+    // refused the export. A second follow of ETH opened in the same minute, and a clone of it inside the first's
+    // margins: the pair's one span, one file.
+    const same = { ...follow, id: 'f2', createdAt: NOW - 7200 + 20, book: { ...follow.book, result: { ...follow.book.result, closedAt: NOW - 5400 } } }
+    const later = { ...follow, id: 'c1', createdAt: NOW - 3500, book: { ...follow.book, ledger: 'clone', result: { ...follow.book.result, closedAt: NOW - 3000 } } }
+    // Another pair over the same hours: its own span.
+    const sol = { ...follow, id: 'f3', symbol: 'SOLUSDT', createdAt: NOW - 6000, book: { ...follow.book, result: { ...follow.book.result, closedAt: NOW - 4000 } } }
+    // On file out of time order, as an archive and the settings together may be.
+    put('paperBooks/archive-2026-10.jsonl', [later, sol, follow, same].map((line) => JSON.stringify(line)).join('\n') + '\n')
     put(`traders/${KEY}/trades-2026-10.jsonl`, `${JSON.stringify({ user: ADDRESS.toUpperCase(), coin: 'ETH' })}\n`)
     put(`traders/${KEY}/trades-2026-08.jsonl`, '{"old":true}\n')
     put(`traders/${KEY}/meta.json`, JSON.stringify({ ref: { key: KEY, id: ADDRESS } }))
@@ -296,9 +304,12 @@ describe("the export's V8 records (V8 Stage 10)", () => {
     }
     expect(names.some((name) => name.includes('2026-08') && name.startsWith('traders/'))).toBe(false)
     expect(names.some((name) => name.endsWith('.csv') && name.startsWith('traders/'))).toBe(false)
-    // Bitget's minutes of the pair the follow traded, over its trade and five minutes each side.
-    expect(bitget.asked).toEqual([{ exchange: 'bitget', symbol: 'ETHUSDT', interval: '1m', fromSec: NOW - 7200 - 300, toSec: NOW - 3600 + 300 }])
-    expect(names.filter((name) => name.startsWith('market/bitget-1m/'))).toEqual(['market/bitget-1m/ETHUSDT-20261020T0455.jsonl'])
+    // Bitget's minutes of the pair the follows traded, over its trades and five minutes each side, in one span.
+    expect(bitget.asked).toEqual([
+      { exchange: 'bitget', symbol: 'ETHUSDT', interval: '1m', fromSec: NOW - 7200 - 300, toSec: NOW - 3000 + 300 },
+      { exchange: 'bitget', symbol: 'SOLUSDT', interval: '1m', fromSec: NOW - 6000 - 300, toSec: NOW - 4000 + 300 }
+    ])
+    expect(names.filter((name) => name.startsWith('market/bitget-1m/'))).toEqual(['market/bitget-1m/ETHUSDT-20261020T0455.jsonl', 'market/bitget-1m/SOLUSDT-20261020T0515.jsonl'])
     // No file holds the trader's key or address, in any case; nor the key-shaped value.
     for (const entry of entries) {
       const body = new TextDecoder().decode(entry.data)

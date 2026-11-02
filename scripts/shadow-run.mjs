@@ -200,11 +200,12 @@ if (RESUME) {
   if (!fs.existsSync(MARKER)) throw new Error(`nothing to resume: ${MARKER} is not there, so this profile was not made by this script`)
 } else {
   if (fs.existsSync(PROFILE) && !fs.existsSync(MARKER)) throw new Error(`refusing to delete ${PROFILE}: it was not made by this script`)
-  // What a REAL_AI profile spent stays counted against the ceiling once the profile is gone.
+  // What a REAL_AI profile spent stays counted against the ceiling once the profile is gone -- a run the book names; a
+  // faked run's ledger holds the fake's made-up costs, which are no spend (found by V8 Stage 12's rehearsal).
   if (fs.existsSync(PROFILE)) {
     const spent = ledgerSpendUsd(PROFILE)
-    if (spent > 0) {
-      const book = readSpendBook()
+    const book = readSpendBook()
+    if (spent > 0 && book.runs.includes(RUN_NAME)) {
       book.retiredUsd += spent
       writeSpendBook(book)
     }
