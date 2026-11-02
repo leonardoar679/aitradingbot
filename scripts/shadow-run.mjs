@@ -261,6 +261,12 @@ fs.mkdirSync(path.join(OUT, 'hour-reports'), { recursive: true })
   }
   fs.writeFileSync(path.join(OUT, `key-sweep-${Date.now()}.json`), JSON.stringify({ at: new Date().toISOString(), realAi: REAL_AI, demoKey: DEMO_KEY, removed }, null, 2))
 }
+// The run's own settings, kept at its first start (OUT/run-env.json) so that a run cut by a power loss, which takes the
+// supervisor down with it, is resumed as it began: every knob of this script's that was set, none of them a key.
+if (!RESUME) {
+  const KNOBS = ['RUN_NAME', 'RUN_MINUTES', 'MIN_BAND', 'EXPERIMENT', 'UNIVERSE_SIZE', 'SHADOW_ROOT', 'APP_ENTRY', 'MODELS_FROM', 'HOUR_REPORT_MINUTES', 'WATCH_MODELS', 'FIRST_GATES', 'WATCH_PAPER', 'FORECAST_TRADER', 'LAB', 'PAPER_TESTING', 'TRADERS', 'DEMO_KEY', 'DEMO_CHECK', 'FORECAST_DATA_FROM', 'WAIT_FORECAST', 'SETTLE_MINUTES', 'REAL_AI', 'CEILING_USD', 'FROM_PROFILE', 'MOVE_ROLES', 'MOVE_DISABLE', 'SEED_SHADOW', 'SEED_SHADOW_DAYS', 'MAX_RESUMES']
+  fs.writeFileSync(path.join(OUT, 'run-env.json'), JSON.stringify(Object.fromEntries(KNOBS.filter((name) => process.env[name] !== undefined).map((name) => [name, process.env[name]])), null, 2))
+}
 
 // --- the real models' spend (REAL_AI) --------------------------------------------------------------
 /** What a profile's own ledger says it spent, in dollars, from `sinceSec` on: every call on file. */

@@ -11,8 +11,11 @@
 //                 other confirmatory cell is "not shown", with the smallest effect the year could detect.
 //
 //   npx esbuild research/v8R2.ts --bundle --platform=node --format=esm --outfile=research/.v8R2.mjs
-//   ARCHIVE=<archive> YEAR=current|second [DISCOVERY=<figures.json>] [CELLS=width,analog,tail] [OUT=<figures.json>]
+//   ARCHIVE=<archive> YEAR=current|second [DISCOVERY=<figures.json>] [CELLS=width,analog,tail] [HORIZONS=hour1,hours4]
+//     [OUT=<figures.json>]
 //     node --max-old-space-size=8192 research/.v8R2.mjs
+// HORIZONS reads those horizons alone: the confirmatory hour and four hours before the exploratory day's walk forward is
+// done.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import type { OosRecord } from '../shared/forecast/oosRecord'
 import { R2_CONFIRM_LEVEL, R2_LINES, analogCallsOf, r2FiguresOf, tailCallsOf, widthCallsOf, type R2Call, type R2Figures, type R2Row, type TailKind } from '../shared/forecast/r2'
@@ -23,6 +26,7 @@ if (ARCHIVE === '') throw new Error('ARCHIVE is the folder the year was fetched 
 const YEAR = process.env.YEAR
 if (YEAR !== 'current' && YEAR !== 'second') throw new Error('YEAR is current (discovery) or second (confirmation)')
 const CELLS = new Set((process.env.CELLS ?? 'width,analog,tail').split(','))
+const HORIZONS = (process.env.HORIZONS ?? V8_HORIZONS.join(',')).split(',').filter((horizon): horizon is V8Horizon => (V8_HORIZONS as readonly string[]).includes(horizon))
 const OUT = process.env.OUT ?? ''
 const DISCOVERY = process.env.DISCOVERY ?? ''
 /** The halves of the year: March to May and June to September 2026; October 2024 to March 2025 and April to September. */
@@ -32,7 +36,7 @@ const started = Date.now()
 const elapsed = (): string => `${((Date.now() - started) / 60_000).toFixed(1)} min`
 
 const records = new Map<V8Horizon, OosRecord>()
-for (const horizon of V8_HORIZONS) {
+for (const horizon of HORIZONS) {
   const record = readRecord(ARCHIVE, horizon)
   if (record === null) throw new Error(`no record at ${horizon} in ${ARCHIVE}`)
   records.set(horizon, record)
@@ -75,7 +79,7 @@ interface Cell {
 }
 const cells: Cell[] = []
 const confirmatory = (horizon: V8Horizon): boolean => horizon !== 'hours24'
-for (const horizon of V8_HORIZONS) {
+for (const horizon of HORIZONS) {
   const rows = r2RowsOf(horizon)
   console.log(`${horizon}: ${rows.length} scored coin-hours, ${new Set(rows.map((row) => row.pair)).size} pairs (${elapsed()})`)
   if (CELLS.has('width')) cells.push({ id: `WIDTH:${horizon}`, hypothesis: 'WIDTH', horizon, confirmatory: confirmatory(horizon), calls: widthCallsOf(rows, HORIZON_SEC[horizon]) })
