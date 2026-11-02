@@ -26,7 +26,10 @@ import { tell } from './noticeService'
 import { getSettings } from './settingsService'
 import { setVenuePairs, venueCostOf, venueGateOf } from './venueQuotesService'
 import { recordMiss } from './booksService'
-import { recordHourMoves } from './predictionLedgerService'
+import { recordBigMovers, recordHourMoves } from './predictionLedgerService'
+import { heldPairRates, refreshPairRates } from './pairRatesService'
+import { BIG_MOVERS_LINES } from '../../shared/forecast/bigMovers'
+import { getEffectiveConfig } from './effectiveConfigService'
 import { MISS_VERSION } from '../../shared/misses'
 import { VENUE_STAKE_QUOTE } from '../../shared/venueCosts'
 
@@ -209,7 +212,9 @@ const sources: PassSources = {
   preEvent: preEventAt,
   classVerdict: () => classVerdicts,
   // The cheaper venue's round trip, from the books venueQuotesService reads for the pairs that matter (V7.2-R Stage 4).
-  venueCost: (pair, side, nowMs) => venueCostOf(pair, side, nowMs)?.cheapest ?? null
+  venueCost: (pair, side, nowMs) => venueCostOf(pair, side, nowMs)?.cheapest ?? null,
+  // The ninety-day move rates, read from the bars on file once an hour (V8 Stage 10; pairRatesService.ts).
+  moveRates: (symbol) => heldPairRates(symbol)?.moveRates ?? null
 }
 
 // THE CHALLENGER'S SHADOW WEEK (V7.2-R Stage 8; shared/forecast/shadow.ts). While the training service holds a
@@ -373,6 +378,12 @@ async function runPass(closedAt: number): Promise<void> {
   await shadowLiquidity(Date.now()).catch((error) => console.error('The liquidity gate could not be read over the decisions:', error))
   // At a whole hour, the large moves of the hour and the day and who called them (V8; shared/evaluation/moves.ts).
   await recordHourMoves(closedAt, sources.universe(), (pair) => sources.seriesOf(pair)?.m5 ?? null).catch((error) => console.error("The hour's large moves could not be recorded:", error))
+  // At a whole hour, the big-mover list's entries as size calls (V8 Stage 10; shared/forecast/bigMovers.ts).
+  if (closedAt % 3600 === 0) {
+    const effective = await getEffectiveConfig().catch(() => null)
+    const versions = { engine: effective?.engineVersion ?? 'unknown', config: effective?.configVersion ?? 'unknown' }
+    await recordBigMovers(closedAt, [...engine.latest.values()], versions).catch((error) => console.error("The hour's big movers could not be recorded:", error))
+  }
   // The venues' books are read for the pairs of open trades first, then the top ten (V7.2-R Stage 4).
   setVenuePairs(await venuePairs())
   Object.assign(state, { status: 'running', predictions: engine.latest.size, pending: pendingCount(engine), lastPassAt: closedAt, lastPassMs: Date.now() - startedAt, lastError: null })
@@ -627,7 +638,11 @@ export function startForecast(live: () => LiveState | null, books: ForecastBooks
     await readOwed(nowSec)
     await readNewsOutcomes(nowSec)
   })().catch((error) => console.error('The forecast record could not be read back:', error))
-  onForecastBars((closedAt) => void passAt(closedAt))
+  onForecastBars((closedAt) => {
+    // At the first close of an hour, every pair's ninety days are read again in workers, beside the pass.
+    void refreshPairRates(sources.universe(), closedAt).catch((error) => console.error("The pairs' ninety-day rates could not be read:", error))
+    void passAt(closedAt)
+  })
   // New models or a new calibration put in use: the close already in is forecast with them.
   onForecastTraining(() => {
     if (lastClosedAt !== null && state.waitingFor !== null && currentForecastCalibration() !== null && currentForecastModels().size > 0) void passAt(lastClosedAt)
@@ -748,4 +763,28 @@ export const forecastForTest = {
     passBooks = null
     listeners.clear()
   }
+}
+
+/** THE DAY MOVES STUDIED APART (V8 Stage 10; shared/forecast/bigMovers.ts): for each pair the forecast reads, the
+ * share of hours over its last ninety days whose close a day later was 5% and 10% away, either way, the most 10%
+ * first; read once an hour from the bars on file, with the move rates (pairRatesService.ts), and `at` the latest
+ * hour read. A frequency of the past, for the Forecast Lab. */
+export interface DayMoveRow {
+  pair: string
+  moments: number
+  rates: Record<number, number>
+}
+
+export function forecastDayMoves(nowSec: number = Math.floor(Date.now() / 1000)): { at: number; sizes: readonly number[]; rows: DayMoveRow[] } {
+  const rows: DayMoveRow[] = []
+  let at = 0
+  for (const pair of sources.universe()) {
+    const read = heldPairRates(pair)
+    if (read === undefined || read.dayMoves === null) continue
+    rows.push({ pair, moments: read.dayMoves.moments, rates: read.dayMoves.rates })
+    at = Math.max(at, read.atSec)
+  }
+  const [small, large] = BIG_MOVERS_LINES.dayMovesPct
+  rows.sort((a, b) => (b.rates[large] ?? 0) - (a.rates[large] ?? 0) || (b.rates[small] ?? 0) - (a.rates[small] ?? 0) || a.pair.localeCompare(b.pair))
+  return { at: at > 0 ? at : nowSec, sizes: BIG_MOVERS_LINES.dayMovesPct, rows }
 }

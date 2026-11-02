@@ -2,7 +2,7 @@ import { ipcMain, type BrowserWindow } from 'electron'
 import { IpcChannel, type ForecastHistory, type ForecastReplayState, type ForecastState } from '../../../shared/ipc'
 import type { PricePrediction } from '../../../shared/forecast/prediction'
 import { getForecastDataStatus } from '../../services/forecastDataService'
-import { forecastDecision, forecastHistory, forecastOf, forecastRanking, getForecastEngineState, latestForecasts, onForecastUpdate } from '../../services/forecastService'
+import { forecastDecision, forecastHistory, forecastOf, forecastRanking, getForecastEngineState, latestForecasts, onForecastUpdate, forecastDayMoves } from '../../services/forecastService'
 import type { ForecastRanking } from '../../../shared/forecast/ranking'
 import type { TradeDecision } from '../../../shared/forecast/tradeDecision'
 import { getForecastTrainingState, rollbackForecastRun } from '../../services/forecastTrainingService'
@@ -40,6 +40,7 @@ export function registerForecastHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(IpcChannel.ForecastReplay, (_event, pair: unknown, t: unknown): Promise<ForecastReplay | null> => forecastReplay(pair, t))
   ipcMain.handle(IpcChannel.ForecastOutOfSample, (): ForecastReplayState => getForecastReplayState())
   ipcMain.handle(IpcChannel.ForecastBars, (_event, pair: unknown, width: unknown, fromSec: unknown, toSec: unknown): Promise<Candle[]> => forecastBars(pair, width, fromSec, toSec))
+  ipcMain.handle(IpcChannel.ForecastDayMoves, () => forecastDayMoves())
   ipcMain.handle(IpcChannel.ForecastRecord, (_event, fromSec: unknown, toSec: unknown): Promise<ForecastHistory> => forecastRecordSpan(fromSec, toSec))
   // Champion and challenger (V7.1 Stage 13): the run before the one in use put back, by a person; it moves
   // models and verdicts and nothing else -- no key, no cap, no kill switch, no strategy.

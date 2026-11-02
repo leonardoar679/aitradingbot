@@ -9,9 +9,9 @@ import {
   KLINES_WEIGHT,
   nextPageStart,
   barFromKline,
-  barFromLine,
   barMonthKey,
   barToLine,
+  barsOfText,
   coarseBars,
   lastClosedBarTime,
   mergeBars,
@@ -182,30 +182,30 @@ async function store(symbol: string, bars: readonly ForecastBar[]): Promise<void
   status.barsWritten += bars.length
 }
 
-/** Every bar on file for a pair, oldest first, each time once. */
-async function readPair(symbol: string): Promise<ForecastBar[]> {
+/** A pair's files as they are kept, oldest month first; none where the folder cannot be read. */
+async function readPairTexts(symbol: string): Promise<string[]> {
   let names: string[]
   try {
     names = await readdir(dataDir())
   } catch {
     return []
   }
+  const texts: string[] = []
+  for (const name of names.filter((entry) => FILE_PATTERN.exec(entry)?.[1] === symbol).sort()) texts.push(await readFile(join(dataDir(), name), 'utf-8').catch(() => ''))
+  return texts
+}
+
+/** Every bar on file for a pair, oldest first, each time once. */
+async function readPair(symbol: string): Promise<ForecastBar[]> {
   let bars: ForecastBar[] = []
-  for (const name of names.filter((entry) => FILE_PATTERN.exec(entry)?.[1] === symbol).sort()) {
-    const text = await readFile(join(dataDir(), name), 'utf-8').catch(() => '')
-    const read: ForecastBar[] = []
-    for (const line of text.split('\n')) {
-      if (line.trim() === '') continue
-      try {
-        const bar = barFromLine(JSON.parse(line))
-        if (bar !== null) read.push(bar)
-      } catch {
-        // A torn line: skipped.
-      }
-    }
-    bars = mergeBars(bars, read)
-  }
+  for (const text of await readPairTexts(symbol)) bars = mergeBars(bars, barsOfText(text))
   return bars
+}
+
+/** A pair's files as text, unread: what the worker reads its ninety days' rates from (V8 Stage 10;
+ * shared/forecast/pairRates.ts), so that the bars are parsed away from the main thread. */
+export function readForecastTexts(symbol: string): Promise<string[]> {
+  return readPairTexts(symbol)
 }
 
 /** Every bar of a pair on file, oldest first: the whole history kept, not the days held for the live

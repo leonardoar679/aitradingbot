@@ -1,3 +1,5 @@
+import { ENGLISH, type I18n } from '../../shared/i18n/translate'
+
 /** What to tell the user when the Market header has no price to show.
  *
  * The header subscribes to one ticker websocket. When that subscription fails, every stat in the
@@ -10,16 +12,19 @@
  * `hasTicker` is false only while there is genuinely nothing to show. Once a price has arrived
  * from either the socket or the REST fallback, a later failure keeps the last known figures
  * rather than blanking them -- same call `useLastPrice` makes for position rows. */
-export function describeTickerProblem({
-  hasTicker,
-  lastError,
-  symbol
-}: {
-  hasTicker: boolean
-  lastError: string | null
-  symbol: string
-}): string | null {
+export function describeTickerProblem(
+  {
+    hasTicker,
+    lastError,
+    symbol
+  }: {
+    hasTicker: boolean
+    lastError: string | null
+    symbol: string
+  },
+  { t }: Pick<I18n, 't'> = ENGLISH
+): string | null {
   if (hasTicker) return null
   if (lastError === null) return null
-  return `Live price for ${symbol} is unavailable (${lastError}). The chart below uses a separate connection and may keep updating, so ignore it for the current price. Retrying automatically.`
+  return t('Live price for {symbol} is unavailable ({error}). The chart below uses a separate connection and may keep updating, so ignore it for the current price. Retrying automatically.', { symbol, error: lastError })
 }

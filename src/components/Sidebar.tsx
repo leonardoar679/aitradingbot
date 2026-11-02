@@ -244,6 +244,8 @@ function NavButton({ item, active, collapsed, badge, onChoose }: { item: NavItem
     <button
       onClick={() => onChoose(item)}
       title={t(item.label)}
+      // The page it opens: which entries can carry a badge, for the labels' measurement (V8 Stage 10).
+      data-page={item.target.page}
       className={`nav-item${active ? ' nav-item-active' : ''}`}
       style={{
         display: 'flex',

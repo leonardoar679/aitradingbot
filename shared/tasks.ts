@@ -8,6 +8,7 @@
 // caller told why. Each task is named here; the worker runs only these.
 
 import { extractArticle, type ExtractedArticle } from './articleExtract'
+import { pairRatesOf, type PairRates } from './forecast/pairRates'
 import { traderFileOf, type TraderFileRead } from './traders/traderFile'
 import { traderTestsOf, type TraderTestsResult } from './traders/traderTests'
 
@@ -23,6 +24,9 @@ export interface TaskTable {
   /** A file of a trader's trades read (V8 Stage 7; shared/traders/traderFile.ts): the payload is its text and the time
    * it is read at. */
   traderFile: (payload: unknown) => TraderFileRead | { refused: string }
+  /** A pair's ninety-day move rates and day moves (V8 Stage 10; shared/forecast/pairRates.ts): the payload is its files'
+   * texts, oldest month first, and the hour's close they are read at. */
+  pairRates: (payload: unknown) => PairRates
 }
 
 export type TaskName = keyof TaskTable
@@ -35,6 +39,12 @@ export const TASKS: TaskTable = {
     const input = payload as { text?: unknown; nowMs?: unknown } | null
     if (typeof input?.text !== 'string' || typeof input.nowMs !== 'number') throw new Error('A file is read from its text and the time it is read at.')
     return traderFileOf(input.text, input.nowMs)
+  },
+  pairRates: (payload) => {
+    const input = payload as { texts?: unknown; atSec?: unknown } | null
+    const texts = input?.texts
+    if (!Array.isArray(texts) || !texts.every((text) => typeof text === 'string') || typeof input?.atSec !== 'number') throw new Error("A pair's rates are read from its files' texts and the moment they are read at.")
+    return pairRatesOf(texts as string[], input.atSec)
   }
 }
 

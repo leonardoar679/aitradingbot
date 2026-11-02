@@ -34,6 +34,16 @@ vi.mock('../electron/services/aiConfigService', () => ({
   })
 }))
 
+// Binance's and Bitget's bars at the market service (V8 Stage 10): Bitget's minutes of each pair traded, asked for.
+const bitget = vi.hoisted(() => ({ asked: [] as { exchange: string; symbol: string; interval: string; fromSec: number; toSec: number }[] }))
+vi.mock('../electron/services/marketService', () => ({
+  fetchHistoricalRange: async (exchange: string, symbol: string, interval: string, fromSec: number, toSec: number) => {
+    bitget.asked.push({ exchange, symbol, interval, fromSec, toSec })
+    return { candles: [{ time: fromSec - (fromSec % 60) + 60, open: 1, high: 1, low: 1, close: 1, volume: 1 }], cancelled: false }
+  },
+  fetchTicker24h: async () => ({ lastPrice: 1 })
+}))
+
 const NOW = Date.parse('2026-10-20T07:00:00Z') / 1000
 const SECRETS = ['SECRET-ENC', 'SECRET-AI', 'sk-or-SECRET', 'SECRET-LS', 'LEGACY-SECRET', 'NESTED-SECRET', 'PARAM-SECRET', 'REPORT-SECRET', 'AI-CONFIG-SECRET']
 
@@ -234,6 +244,78 @@ describe('the export', () => {
     expect(kept).toHaveLength(14)
     expect(kept[kept.length - 1]).toBe('trader-spider-report-2026-10-20-0700.zip')
     expect(kept[0]).toBe('trader-spider-report-2026-10-03-0005.zip')
+  })
+})
+
+describe("the export's V8 records (V8 Stage 10)", () => {
+  const KEY = 'hyperliquid-0x0b4b6beaca45fce66ca818fbd867ec3761ed2143'
+  const ADDRESS = '0x0b4b6beaca45fce66ca818fbd867ec3761ed2143'
+  const TOKEN = `trader-${createHash('sha256').update(KEY).digest('hex').slice(0, 12)}`
+  const OPENROUTER = `sk-or-v1-${'ab12'.repeat(16)}`
+
+  it('packs them whole, each trader under a token with its key and id hashed everywhere, keys removed, formulas guarded, and Bitget\'s bars of each pair traded', async () => {
+    put('predictions/sources-2026-10.jsonl', `${JSON.stringify({ v: 'source-record-v1', id: 'user:ETHUSDT:1', reason: `pasted with ${OPENROUTER} by mistake` })}\n`)
+    put('predictions/source-outcomes-2026-10.jsonl', '{"v":"source-record-v1","id":"user:ETHUSDT:1"}\n')
+    put('news/urls-2026-10.jsonl', '{"v":"news-url-v1","id":"u1"}\n')
+    put('news/news-2026-10.jsonl', '{"id":1,"title":"Binance Will Delist ABC"}\n')
+    put('paperBooks/equity-2026-10.jsonl', '{"v":"paper-books-v1","book":"copy"}\n')
+    put('paperBooks/misses-2026-10.jsonl', `${JSON.stringify({ v: 'miss-v1', book: 'copy', eventKey: `${KEY}:123` })}\n`)
+    put('paperBooks/runs-2026-10.jsonl', '{"v":"paper-testing-v1","startedAt":1}\n')
+    put('paperBooks/started.json', '{"v":"paper-testing-v1","startedAt":1,"switched":[]}')
+    // A follow of the trader, closed in the window: its pair's minutes are read from Bitget.
+    const follow = { id: 'f1', type: 'position', mode: 'paper', status: 'stopped', symbol: 'ETHUSDT', createdAt: NOW - 7200, params: {}, follow: { traderKey: KEY, positionId: 'ETH' }, book: { id: 'copy', startedAt: NOW - 86_400, ledger: 'follow', result: { netQuote: 1, netPct: 0.1, feesQuote: 0, fundingQuote: 0, closedAt: NOW - 3600 } } }
+    put('paperBooks/archive-2026-10.jsonl', `${JSON.stringify(follow)}\n`)
+    put(`traders/${KEY}/trades-2026-10.jsonl`, `${JSON.stringify({ user: ADDRESS.toUpperCase(), coin: 'ETH' })}\n`)
+    put(`traders/${KEY}/trades-2026-08.jsonl`, '{"old":true}\n')
+    put(`traders/${KEY}/meta.json`, JSON.stringify({ ref: { key: KEY, id: ADDRESS } }))
+    put(`traders/${KEY}/file-abc.csv`, 'a person,s file\n')
+    // A paper trade whose symbol a spreadsheet would run as a formula.
+    put('trader-spider-research/trades/paper-orders-2026-10.jsonl', [
+      JSON.stringify({ v: 'research-v1', at: NOW - 600, kind: 'opened', id: 'x1', type: 'position', mode: 'paper', exchange: 'binance', symbol: '=SUM(1)', origin: 'person' }),
+      JSON.stringify({ v: 'research-v1', at: NOW - 60, kind: 'stopped', id: 'x1', type: 'position', mode: 'paper', exchange: 'binance', symbol: '=SUM(1)', origin: 'person' })
+    ].join('\n') + '\n')
+    bitget.asked = []
+    const { exportResearchBundle } = await services()
+    const made = await exportResearchBundle('manual')
+    const entries = readZip(new Uint8Array(readFileSync(made.path)), (data) => new Uint8Array(inflateRawSync(data)))
+    const names = entries.map((entry) => entry.name)
+    for (const name of [
+      'predictions/sources-2026-10.jsonl',
+      'predictions/source-outcomes-2026-10.jsonl',
+      'news/urls/urls-2026-10.jsonl',
+      'news/announcements/news-2026-10.jsonl',
+      'paper-books/equity-2026-10.jsonl',
+      'paper-books/misses-2026-10.jsonl',
+      'paper-books/archive-2026-10.jsonl',
+      'paper-books/runs-2026-10.jsonl',
+      'paper-books/started.json',
+      `traders/${TOKEN}/trades-2026-10.jsonl`,
+      `traders/${TOKEN}/meta.json`
+    ]) {
+      expect(names, name).toContain(name)
+    }
+    expect(names.some((name) => name.includes('2026-08') && name.startsWith('traders/'))).toBe(false)
+    expect(names.some((name) => name.endsWith('.csv') && name.startsWith('traders/'))).toBe(false)
+    // Bitget's minutes of the pair the follow traded, over its trade and five minutes each side.
+    expect(bitget.asked).toEqual([{ exchange: 'bitget', symbol: 'ETHUSDT', interval: '1m', fromSec: NOW - 7200 - 300, toSec: NOW - 3600 + 300 }])
+    expect(names.filter((name) => name.startsWith('market/bitget-1m/'))).toEqual(['market/bitget-1m/ETHUSDT-20261020T0455.jsonl'])
+    // No file holds the trader's key or address, in any case; nor the key-shaped value.
+    for (const entry of entries) {
+      const body = new TextDecoder().decode(entry.data)
+      expect(body.toLowerCase(), entry.name).not.toContain(ADDRESS.toLowerCase())
+      expect(body, entry.name).not.toContain(OPENROUTER)
+    }
+    const text = (name: string): string => new TextDecoder().decode(entries.find((entry) => entry.name === name)!.data)
+    expect(text('paper-books/misses-2026-10.jsonl')).toContain(`${TOKEN}:123`)
+    expect(text('predictions/sources-2026-10.jsonl')).toContain('pasted with [redacted] by mistake')
+    expect(text('trades/paper-trades.csv')).toContain(",'=SUM(1),")
+    const manifest = JSON.parse(text('manifest.json'))
+    expect(manifest).toMatchObject({ traders: 1 })
+    expect(manifest.scrubbed).toBeGreaterThanOrEqual(1)
+    for (const file of manifest.files as { path: string; sha256: string }[]) {
+      const entry = entries.find((candidate) => candidate.name === file.path)!
+      expect(createHash('sha256').update(entry.data).digest('hex'), file.path).toBe(file.sha256)
+    }
   })
 })
 

@@ -54,6 +54,7 @@ import {
 import { ReplayCard } from './ReplayCard'
 import { runComparison, type ComparisonResult } from './strategyComparison'
 import { PaperLabCard } from '../forecast/PaperLabCard'
+import { DayMovesCard } from './DayMovesCard'
 
 const day = (sec: number): string => new Date(sec * 1000).toISOString().slice(0, 16).replace('T', ' ')
 
@@ -298,6 +299,7 @@ export function ForecastLabPage(): React.JSX.Element {
           </>
         )}
       </Card>
+      <DayMovesCard />
 
       <Card title="Registered lines">
         <p style={{ ...noteStyle, marginTop: 0 }}>

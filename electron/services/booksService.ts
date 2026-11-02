@@ -110,6 +110,13 @@ async function archived(): Promise<ExecutorConfig[]> {
   return [...out.values()]
 }
 
+/** Every executor on file: the settings' and the books' settled ones moved out of them, each once. */
+export async function executorsWithArchive(): Promise<ExecutorConfig[]> {
+  const current = ((await getSettings()).executors ?? []) as ExecutorConfig[]
+  const ids = new Set(current.map((executor) => executor.id))
+  return [...current, ...(await archived()).filter((executor) => !ids.has(executor.id))]
+}
+
 /** Every book's standing now, from the settings' executors and the settled ones moved out of them. */
 export async function bookStandings(): Promise<{ running: boolean; startedAt: number | null; standings: BookStanding[] }> {
   const settings = await getSettings()

@@ -711,7 +711,7 @@ export function TradersOnFile({ list, open, busy, onOpen, onAgain }: { list: Tra
   )
 }
 
-export function CopyTradersPage(): React.JSX.Element {
+export function CopyTradersPage({ handoff = null, onHandoffTaken }: { handoff?: string | null; onHandoffTaken?: () => void } = {}): React.JSX.Element {
   const { t } = useI18n()
   const [paste, setPaste] = useState('')
   const [busy, setBusy] = useState(false)
@@ -755,6 +755,16 @@ export function CopyTradersPage(): React.JSX.Element {
     }
   }
   const read = (raw: string): Promise<void> => run(() => window.api.traders.import(raw))
+  // A trader pasted on Home (V8 Stage 10): shown in the box -- with why, where it is not one -- and read as one pasted
+  // here, once.
+  useEffect(() => {
+    if (handoff === null) return
+    onHandoffTaken?.()
+    setPaste(handoff)
+    if (traderRefOf(handoff).ok) void read(handoff)
+    // Taken once, as it comes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handoff])
   const readFile = (): Promise<void> => run(() => window.api.traders.importFile())
   /** A venue's trader is read from it again; a file's is analysed again, its file not opened twice. */
   const again = (meta: TraderMeta): Promise<void> => (meta.source === 'file' ? run(async () => meta) : read(meta.ref.id))

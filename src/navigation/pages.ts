@@ -40,8 +40,9 @@ import { msg } from '../../shared/i18n/translate'
 // that part lives. docs/INVENTORY.md says where every card of the old pages went.
 //
 // Since V7.2-R Stage 3 (20 October 2026; the user's plan of that day, its seventh priority) the normal mode has a
-// layout of its own (NORMAL_NAV_GROUPS): the five pages a trader opens -- Home, AI Predictions, Paper Trading,
-// Performance and News -- then every other entry under More Features, folded until opened, and System as it was.
+// layout of its own (NORMAL_NAV_GROUPS): the pages a trader opens -- since V8 Stage 10 Home, Predictions, News URLs,
+// Copy Traders, Paper Trading and Performance -- then every other entry under Advanced, Explorer's News among them,
+// folded until opened, and System as it was.
 // The expert mode keeps the layout above (NAV_GROUPS). Nothing is removed from either.
 
 export type Page =
@@ -226,24 +227,32 @@ const itemById = (id: NavId): NavItem => {
   return item
 }
 
-/** The normal mode's own entry: Explorer's news, opened from the main group. */
+/** The normal mode's own entry: Explorer's news, under Advanced since V8 Stage 10. */
 const NEWS_ITEM: NavItem = { id: 'news', label: msg('News'), icon: Newspaper, target: { page: 'discovery', tab: 'news' } }
 
-/** The entries More Features holds in the normal mode, in the expert layout's order: every one not in the main
- * group or System. */
+/** The entries Advanced holds in the normal mode, in the expert layout's order: every one not in the main group or
+ * System; Explorer's News after Explorer. */
 const MORE_FEATURES: NavId[] = ['opportunities', 'positions', 'live', 'backtest', 'forecast-lab', 'ai-benchmark', 'strategies', 'bots', 'executors', 'controllers', 'routines', 'market', 'portfolio', 'explorer', 'overview', 'ai-decisions']
 
 /** The normal mode's sidebar (V7.2-R Stage 3); News URLs after Predictions since V8 Stage 5, Copy Traders after it since
- * Stage 8. */
+ * Stage 8; since Stage 10 the six pages of the plan's sidebar -- Home, Predictions, News URLs, Copy Traders, Paper
+ * Trading, Performance -- then Advanced: every other entry, Explorer's News among them. Advanced is a key of its own
+ * (`Advanced@@...`): the Settings page's Advanced is its advanced settings, a different word in most languages. */
 export const NORMAL_NAV_GROUPS: NavGroup[] = [
   {
     id: 'main',
     title: msg('AI Trader'),
     foldable: false,
     icon: House,
-    items: [itemById('home'), { ...itemById('predictions'), label: msg('AI Predictions') }, itemById('news-urls'), itemById('copy-traders'), { ...itemById('paper'), label: msg('Paper Trading') }, itemById('performance'), NEWS_ITEM]
+    items: [itemById('home'), itemById('predictions'), itemById('news-urls'), itemById('copy-traders'), { ...itemById('paper'), label: msg('Paper Trading') }, itemById('performance')]
   },
-  { id: 'more', title: msg('More Features'), foldable: true, icon: Layers, items: MORE_FEATURES.map(itemById) },
+  {
+    id: 'more',
+    title: msg('Advanced@@the sidebar group of every other page'),
+    foldable: true,
+    icon: Layers,
+    items: MORE_FEATURES.flatMap((id) => (id === 'explorer' ? [itemById(id), NEWS_ITEM] : [itemById(id)]))
+  },
   NAV_GROUPS.find((group) => group.id === 'system')!
 ]
 
@@ -307,5 +316,6 @@ export function isGroupOpen(group: Pick<NavGroup, 'id' | 'foldable'>, mode: UiMo
  * never out of sight; nothing while it is open, where each entry shows its own. */
 export function foldedCount(group: Pick<NavGroup, 'items'>, open: boolean, badges: Partial<Record<Page, number>>): number {
   if (open) return 0
-  return group.items.reduce((sum, item) => sum + (badges[item.target.page] ?? 0), 0)
+  // Each page once: Explorer and its News open one page (V8 Stage 10), whose badge is not two.
+  return [...new Set(group.items.map((item) => item.target.page))].reduce((sum, page) => sum + (badges[page] ?? 0), 0)
 }

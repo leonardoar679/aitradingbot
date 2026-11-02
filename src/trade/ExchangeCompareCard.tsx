@@ -4,6 +4,7 @@ import { buttonStyle, cellStyle, headCellStyle, noteStyle } from '../agents/agen
 import { EXCHANGES, type MarketComparison, type ExchangeQuote } from '../../shared/ipc'
 import { commonSymbol, DEPTH_BAND } from '../../shared/marketCompare'
 import { describeError } from '../utils/ipcError'
+import { useI18n } from '../i18n'
 
 // BINANCE AGAINST BITGET (V7.1 Stage 6, 16 October 2026): the shown pair's price, spread, depth and
 // freshness on the two exchanges, read at the same moment from their public market data when the
@@ -14,6 +15,7 @@ const price = (value: number | null): string => (value === null || !Number.isFin
 const nameOf = (quote: ExchangeQuote): string => EXCHANGES.find((entry) => entry.id === quote.exchange)?.name ?? quote.exchange
 
 export function ExchangeCompareCard({ baseAsset, quoteAsset }: { baseAsset: string; quoteAsset: string }): React.JSX.Element {
+  const { t, utcTime } = useI18n()
   const symbol = commonSymbol(baseAsset, quoteAsset)
   const [comparison, setComparison] = useState<MarketComparison | null>(null)
   const [busy, setBusy] = useState(false)
@@ -29,37 +31,37 @@ export function ExchangeCompareCard({ baseAsset, quoteAsset }: { baseAsset: stri
   }
   useEffect(read, [symbol])
 
+  const band = `${(DEPTH_BAND * 100).toFixed(1)}%`
   const rows: { label: string; cell: (quote: ExchangeQuote) => string }[] = [
-    { label: `Last price (${quoteAsset})`, cell: (quote) => price(quote.price) },
-    { label: 'Best bid', cell: (quote) => price(quote.bid) },
-    { label: 'Best ask', cell: (quote) => price(quote.ask) },
-    { label: 'Spread', cell: (quote) => (quote.spreadPct === null ? '—' : `${quote.spreadPct.toFixed(3)}%`) },
-    { label: `Bids within ${(DEPTH_BAND * 100).toFixed(1)}% (${quoteAsset})`, cell: (quote) => money(quote.bidDepthQuote, 0) },
-    { label: `Asks within ${(DEPTH_BAND * 100).toFixed(1)}% (${quoteAsset})`, cell: (quote) => money(quote.askDepthQuote, 0) },
-    { label: `24h volume (${quoteAsset})`, cell: (quote) => money(quote.quoteVolume24h, 0) },
-    { label: "Book's age", cell: (quote) => (quote.bookAgeMs === null ? 'not stamped' : `${(quote.bookAgeMs / 1000).toFixed(1)} s`) },
-    { label: 'Read in', cell: (quote) => (quote.roundTripMs === null ? '—' : `${quote.roundTripMs} ms`) }
+    { label: t('Last price ({asset})', { asset: quoteAsset }), cell: (quote) => price(quote.price) },
+    { label: t('Best bid'), cell: (quote) => price(quote.bid) },
+    { label: t('Best ask'), cell: (quote) => price(quote.ask) },
+    { label: t('Spread'), cell: (quote) => (quote.spreadPct === null ? '—' : `${quote.spreadPct.toFixed(3)}%`) },
+    { label: t('Bids within {band} ({asset})', { band, asset: quoteAsset }), cell: (quote) => money(quote.bidDepthQuote, 0) },
+    { label: t('Asks within {band} ({asset})', { band, asset: quoteAsset }), cell: (quote) => money(quote.askDepthQuote, 0) },
+    { label: t('24h volume ({asset})', { asset: quoteAsset }), cell: (quote) => money(quote.quoteVolume24h, 0) },
+    { label: t("Book's age"), cell: (quote) => (quote.bookAgeMs === null ? t('not stamped') : t('{seconds} s', { seconds: (quote.bookAgeMs / 1000).toFixed(1) })) },
+    { label: t('Read in'), cell: (quote) => (quote.roundTripMs === null ? '—' : t('{ms} ms', { ms: String(quote.roundTripMs) })) }
   ]
 
   return (
     <Card
-      title="Binance vs Bitget"
+      title={t('Binance vs Bitget')}
       actions={
         <button type="button" style={buttonStyle('secondary', busy)} disabled={busy} onClick={read}>
-          {busy ? 'Reading…' : 'Refresh'}
+          {busy ? t('Reading…') : t('Refresh')}
         </button>
       }
     >
       <p style={{ ...noteStyle, marginTop: 0 }}>
-        {symbol} on both exchanges, read at the same moment from their public market data. Depth is what rests within {(DEPTH_BAND * 100).toFixed(1)}% of the mid, in {quoteAsset}. A comparison, not a
-        recommendation: nothing here places an order.
+        {t('{symbol} on both exchanges, read at the same moment from their public market data. Depth is what rests within {band} of the mid, in {asset}. A comparison, not a recommendation: nothing here places an order.', { symbol, band, asset: quoteAsset })}
       </p>
       {comparison !== null && (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                <th style={headCellStyle}>{new Date(comparison.at).toISOString().slice(11, 19)} UTC</th>
+                <th style={headCellStyle}>{t('{time} UTC', { time: utcTime(comparison.at) })}</th>
                 {comparison.quotes.map((quote) => (
                   <th key={quote.exchange} style={headCellStyle}>
                     {nameOf(quote)}
@@ -84,7 +86,7 @@ export function ExchangeCompareCard({ baseAsset, quoteAsset }: { baseAsset: stri
             .filter((quote) => quote.problem !== null)
             .map((quote) => (
               <p key={quote.exchange} style={noteStyle}>
-                {nameOf(quote)}: {quote.problem}
+                {nameOf(quote)}: <bdi lang="en">{quote.problem}</bdi>
               </p>
             ))}
         </div>

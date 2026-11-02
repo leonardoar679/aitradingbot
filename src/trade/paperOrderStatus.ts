@@ -1,3 +1,5 @@
+import { ENGLISH, type I18n } from '../../shared/i18n/translate'
+
 export type PaperOrderType = 'market' | 'limit'
 export type PaperOrderSide = 'buy' | 'sell'
 
@@ -28,12 +30,12 @@ export function classifyPaperOrder(
   return marketable ? 'filled' : 'resting'
 }
 
-export function paperOrderStatusNote(status: PaperOrderStatus): string | null {
+export function paperOrderStatusNote(status: PaperOrderStatus, { t }: Pick<I18n, 't'> = ENGLISH): string | null {
   switch (status) {
     case 'resting':
-      return 'resting — not marketable at submit, would not have filled'
+      return t('resting — not marketable at submit, would not have filled')
     case 'unpriced':
-      return 'no live price at submit — whether this would have filled is unknown'
+      return t('no live price at submit — whether this would have filled is unknown')
     case 'filled':
       return null
   }

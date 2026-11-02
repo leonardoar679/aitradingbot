@@ -6,10 +6,11 @@ import type { RoleChoice, RoutingPreview } from '../shared/aiRouting'
 import type { ResearchExport, ResearchStatus } from '../shared/research'
 import type { TradeDecision } from '../shared/forecast/tradeDecision'
 import type { RoundTrip } from '../shared/venueCosts'
-import type { SourceOutcome, SourcePrediction } from '../shared/evaluation/predictionRecord'
+import type { SourceFiguresRow, SourceOutcome, SourcePrediction } from '../shared/evaluation/predictionRecord'
 import type { BookEquityMark, BookId, BookStanding } from '../shared/paperBooks'
 import type { MissRecord } from '../shared/misses'
 import type { PaperTestingState } from '../shared/paperTesting'
+import type { BooksReport } from '../shared/paperBooksReport'
 import type { PrimaryCallState } from '../shared/forecast/primaryCall'
 import type { UrlRecord } from '../shared/newsUrl'
 import type { BitgetCopyCheck, TraderAnalysis, TraderList, TraderMeta, TraderProgress } from '../shared/traders/traderAnalysis'
@@ -212,6 +213,8 @@ const api = {
     /** The run before the one in use put back in use (V7.1 Stage 13): models and verdicts, nothing else. */
     rollback: (): Promise<{ ok: boolean; error: string | null }> => ipcRenderer.invoke(IpcChannel.ForecastRollback),
     bars: (pair: string, width: '15m' | '1h' | '4h', fromSec: number, toSec: number): Promise<Candle[]> => ipcRenderer.invoke(IpcChannel.ForecastBars, pair, width, fromSec, toSec),
+    /** Each pair's share of days that closed 5% and 10% away over its ninety days (V8 Stage 10). */
+    dayMoves: (): Promise<{ at: number; sizes: readonly number[]; rows: { pair: string; moments: number; rates: Record<number, number> }[] }> => ipcRenderer.invoke(IpcChannel.ForecastDayMoves),
     /** Every pair's forecasts made in a span, and their outcomes on file: what a run's report judges. */
     record: (fromSec: number, toSec: number): Promise<ForecastHistory> => ipcRenderer.invoke(IpcChannel.ForecastRecord, fromSec, toSec),
     onUpdate: (listener: (closedAt: number | null) => void): (() => void) => {
@@ -512,7 +515,9 @@ const api = {
   // record read with each one's outcome. Nothing here reads a key or places anything.
   predictions: {
     record: (prediction: SourcePrediction): Promise<{ ok: boolean; id: string }> => ipcRenderer.invoke(IpcChannel.PredictionsRecord, prediction),
-    list: (filter: { source?: string; sinceSec?: number } = {}): Promise<{ prediction: SourcePrediction; outcome: SourceOutcome | null }[]> => ipcRenderer.invoke(IpcChannel.PredictionsList, filter)
+    list: (filter: { source?: string; sinceSec?: number } = {}): Promise<{ prediction: SourcePrediction; outcome: SourceOutcome | null }[]> => ipcRenderer.invoke(IpcChannel.PredictionsList, filter),
+    /** The record's figures a source and kind (V8 Stage 10). */
+    figures: (): Promise<SourceFiguresRow[]> => ipcRenderer.invoke(IpcChannel.PredictionsFigures)
   },
   // The primary call (V8 Stage 3): the cards weighed, the delisted coins past the rule's window and the refusals, as
   // last weighed; `onUpdate` is told each weighing. Reading it records, opens and places nothing.
@@ -587,7 +592,9 @@ const api = {
     /** Paper testing (V8 Stage 9): its state, its Start, its Stop. */
     testing: (): Promise<PaperTestingState> => ipcRenderer.invoke(IpcChannel.BooksTesting),
     start: (): Promise<PaperTestingState> => ipcRenderer.invoke(IpcChannel.BooksStart),
-    stop: (): Promise<PaperTestingState> => ipcRenderer.invoke(IpcChannel.BooksStop)
+    stop: (): Promise<PaperTestingState> => ipcRenderer.invoke(IpcChannel.BooksStop),
+    /** The run that runs or ran last, each book as V8-S9-BOOKS reads it (V8 Stage 10). */
+    report: (): Promise<BooksReport> => ipcRenderer.invoke(IpcChannel.BooksReport)
   },
   // The research folder (V7.2-R Stage 2): free to read and to export; nothing here reads a key or places anything.
   researchFolder: {

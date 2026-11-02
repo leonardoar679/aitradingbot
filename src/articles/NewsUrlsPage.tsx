@@ -371,7 +371,7 @@ export function OwnView({ record, onPrepareOrder }: { record: UrlRecord; onPrepa
   )
 }
 
-export function NewsUrlsPage({ onPrepareOrder }: { onPrepareOrder: (proposal: AiOrderProposal) => void }): React.JSX.Element {
+export function NewsUrlsPage({ onPrepareOrder, handoff = null, onHandoffTaken }: { onPrepareOrder: (proposal: AiOrderProposal) => void; handoff?: string | null; onHandoffTaken?: () => void }): React.JSX.Element {
   const i18n = useI18n()
   const { t, utcTime, utcDay } = i18n
   const [link, setLink] = useState('')
@@ -408,11 +408,11 @@ export function NewsUrlsPage({ onPrepareOrder }: { onPrepareOrder: (proposal: Ai
 
   const selected = useMemo(() => records.find((record) => record.id === open) ?? null, [records, open])
 
-  const analyze = async (): Promise<void> => {
+  const analyze = async (target: string = link): Promise<void> => {
     setBusy(true)
     setRefused(null)
     try {
-      const done = await window.api.urls.analyze(link, supplied.trim() === '' ? null : supplied)
+      const done = await window.api.urls.analyze(target, supplied.trim() === '' ? null : supplied)
       if ('refused' in done) setRefused(done.refused)
       else {
         setOpen(done.id)
@@ -425,6 +425,16 @@ export function NewsUrlsPage({ onPrepareOrder }: { onPrepareOrder: (proposal: Ai
       setBusy(false)
     }
   }
+
+  // A link pasted on Home (V8 Stage 10): shown in the box and analysed as one pasted here, once.
+  useEffect(() => {
+    if (handoff === null) return
+    onHandoffTaken?.()
+    setLink(handoff)
+    void analyze(handoff)
+    // Taken once, as it comes: analyse reads nothing else of this render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handoff])
 
   const switchAuto = async (on: boolean): Promise<void> => {
     setAutoAnalyze(on)

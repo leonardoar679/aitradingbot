@@ -109,31 +109,35 @@ describe('the sidebar', () => {
 
 // V7.2-R Stage 3 (20 October 2026; the user's plan, its seventh priority): the normal mode's own layout.
 describe("the normal mode's sidebar", () => {
-  it('leads with the pages a trader opens, folds every other entry under More Features, and keeps System', () => {
+  it('leads with the pages a trader opens, folds every other entry under Advanced, and keeps System', () => {
     expect(navGroupsFor('normal')).toBe(NORMAL_NAV_GROUPS)
     expect(navGroupsFor('expert')).toBe(NAV_GROUPS)
+    // Advanced is its own key, not the Settings page's advanced settings (V8 Stage 10).
     expect(NORMAL_NAV_GROUPS.map((group) => [group.id, group.title, group.foldable])).toEqual([
       ['main', 'AI Trader', false],
-      ['more', 'More Features', true],
+      ['more', 'Advanced@@the sidebar group of every other page', true],
       ['system', 'System', false]
     ])
-    // News URLs after Predictions since V8 Stage 5, Copy Traders after it since Stage 8, each translated.
-    expect(NORMAL_NAV_GROUPS[0].items.map((item) => item.label)).toEqual(['Home', 'AI Predictions', 'News URLs', 'Copy Traders', 'Paper Trading', 'Performance', 'News'])
-    expect(NORMAL_NAV_GROUPS[0].items.map((item) => item.target)).toEqual([{ page: 'home' }, { page: 'predictions' }, { page: 'news-urls' }, { page: 'copy-traders' }, { page: 'paper-trading' }, { page: 'performance' }, { page: 'discovery', tab: 'news' }])
+    // The plan's sidebar since V8 Stage 10: News URLs after Predictions since Stage 5, Copy Traders after it since
+    // Stage 8, and Explorer's News under Advanced.
+    expect(NORMAL_NAV_GROUPS[0].items.map((item) => item.label)).toEqual(['Home', 'Predictions', 'News URLs', 'Copy Traders', 'Paper Trading', 'Performance'])
+    expect(NORMAL_NAV_GROUPS[0].items.map((item) => item.target)).toEqual([{ page: 'home' }, { page: 'predictions' }, { page: 'news-urls' }, { page: 'copy-traders' }, { page: 'paper-trading' }, { page: 'performance' }])
+    expect(NORMAL_NAV_GROUPS[1].items.map((item) => item.id).slice(13, 15)).toEqual(['explorer', 'news'])
     expect(groupOf('news-urls', 'normal')).toBe('main')
     expect(groupOf('copy-traders', 'normal')).toBe('main')
   })
 
-  it('removes nothing: every entry of the expert layout is in it, once, under its own label but two renamed', () => {
+  it('removes nothing: every entry of the expert layout is in it, once, under its own label but one renamed', () => {
     const normal = NORMAL_NAV_GROUPS.flatMap((group) => group.items)
     for (const item of NAV_ITEMS) expect(normal.filter((entry) => entry.id === item.id), item.id).toHaveLength(1)
     expect(new Set(normal.map((item) => item.id)).size).toBe(normal.length)
     expect([...new Set(normal.map((item) => item.target.page))].sort()).toEqual([...ALL_PAGES].sort())
-    expect(normal.filter((item) => NAV_ITEMS.some((entry) => entry.id === item.id && entry.label !== item.label)).map((item) => item.label)).toEqual(['AI Predictions', 'Paper Trading'])
+    expect(normal.filter((item) => NAV_ITEMS.some((entry) => entry.id === item.id && entry.label !== item.label)).map((item) => item.label)).toEqual(['Paper Trading'])
   })
 
   it('lights the entry and opens the group the app is at in its own layout', () => {
     expect(activeNavId('discovery', { ...DEFAULT_TABS, discovery: 'news' }, null, 'normal')).toBe('news')
+    expect(groupOf('news', 'normal')).toBe('more')
     expect(activeNavId('discovery', { ...DEFAULT_TABS, discovery: 'scanner' }, null, 'normal')).toBe('explorer')
     // The expert layout has no News entry: Explorer stays lit on its news tab.
     expect(activeNavId('discovery', { ...DEFAULT_TABS, discovery: 'news' }, null)).toBe('explorer')

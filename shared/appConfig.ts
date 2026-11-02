@@ -101,6 +101,7 @@ import { TAPE_VERSION } from './forecast/tape'
 import { FIDELITY_LINES, FIDELITY_VERSION } from './forecast/fidelity'
 import { MOVE_ODDS_LINES, MOVE_ODDS_VERSION } from './forecast/moveOdds'
 import { MOVE_RATES_LINES, MOVE_RATES_VERSION } from './forecast/moveRates'
+import { BIG_MOVERS_LINES } from './forecast/bigMovers'
 import { UNIVERSE_LINES, UNIVERSE_VERSION } from './forecast/universe'
 import { REPLAY_LINES, REPLAY_VERSION } from './forecast/replay'
 import { RANGE_LINES, RANGE_STRATEGIES, RANGE_STRATEGIES_VERSION } from './forecast/rangeStrategies'
@@ -242,6 +243,9 @@ export const ENGINE_CONSTANTS = {
     moveOdds: { version: MOVE_ODDS_VERSION, ...MOVE_ODDS_LINES },
     // How often a coin moved over its own last ninety days, said beside the forecast (V7.2-R Stage 3).
     moveRates: { version: MOVE_RATES_VERSION, ...MOVE_RATES_LINES },
+    // The big-mover list and the Forecast Lab's 5-10% list (V8 Stage 10): ranked by the ninety-day rates until one of
+    // V8-R1-SIZE's rankers passes, its length, its sizes, and the day moves studied apart.
+    bigMovers: BIG_MOVERS_LINES,
     // The pairs the forecast reads (V7.2-R Stage 4): the research's and the scanner's movers, at most a cap.
     universe: { version: UNIVERSE_VERSION, ...UNIVERSE_LINES },
     // The replay out of sample (V7.2-R Stage 5): the book a replayed decision is made again on, the laboratory's

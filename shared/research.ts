@@ -101,8 +101,55 @@ export const EXPORT_SOURCES: readonly ExportSource[] = [
   { from: 'forecastModels', match: /^current\.json$/, to: 'forecasts/models', window: 'all' },
   // The replay out of sample of the newest walk forward that kept its weeks' models (V7.2-R Stage 5): its summary and
   // its filled trades, the newest replay's alone.
-  { from: 'forecastModels', match: /^(?:replay\.json|replay-trades\.jsonl)$/, to: 'forecasts/models', window: 'all' }
+  { from: 'forecastModels', match: /^(?:replay\.json|replay-trades\.jsonl)$/, to: 'forecasts/models', window: 'all' },
+  // V8's records, kept whole (V8 Stage 10): every prediction that is not the forecast's own and its outcome, the moves
+  // nobody called and the cards of each hour; the news links pasted or discovered; Binance's announcements as the
+  // reader kept them; and the paper books' marks, misses, settled trades, runs and the run under way. The traders are
+  // packed by the service, their ids hashed.
+  { from: 'predictions', match: /^(?:sources|source-outcomes|moves|cards)-(\d{4}-\d{2})\.jsonl$/, to: 'predictions', window: 'month' },
+  { from: 'news', match: /^urls-(\d{4}-\d{2})\.jsonl$/, to: 'news/urls', window: 'month' },
+  { from: 'news', match: /^news-(\d{4}-\d{2})\.jsonl$/, to: 'news/announcements', window: 'month' },
+  { from: 'paperBooks', match: /^(?:equity|misses|archive|runs)-(\d{4}-\d{2})\.jsonl$/, to: 'paper-books', window: 'month' },
+  { from: 'paperBooks', match: /^started\.json$/, to: 'paper-books', window: 'all' }
 ]
+
+/** A trader's files the export packs (V8 Stage 10): its month files in the window, and its state as kept. A file a
+ * person opened is not packed: only what the app read and wrote. */
+export const TRADER_EXPORT_FILES = { month: /^[a-z-]+-(\d{4}-\d{2})\.jsonl$/, whole: /^(?:meta|state|values|okx)\.json$/ } as const
+
+/** Values shaped like a key, whatever field holds them (V8 Stage 10): OpenRouter's, any `sk-` key, Bitget's `bg_`, and
+ * a 64-character key of mixed-case letters and digits as Binance's are -- not a SHA-256, which is lower-case hex. An
+ * `sk-` key holds a capital letter and a digit, as every such key's random part does; a link's words after "sk-" (a
+ * story on SK Hynix) hold no capital, and are kept. */
+export const KEY_PATTERNS: readonly RegExp[] = [
+  /\bsk-or-v1-[0-9a-f]{64}\b/gi,
+  /\bsk-(?=[A-Za-z0-9_-]*[A-Z])(?=[A-Za-z0-9_-]*[0-9])[A-Za-z0-9_-]{20,}/g,
+  /\bbg_[0-9a-f]{32}\b/gi,
+  /\b(?=[A-Za-z0-9]{64}\b)(?=[A-Za-z0-9]*[A-Z])(?=[A-Za-z0-9]*[a-z])[A-Za-z0-9]{64}\b/g
+]
+
+/** A text with every value shaped like a key replaced, and how many were. */
+export function scrubKeyPatterns(text: string): { text: string; scrubbed: number } {
+  let scrubbed = 0
+  let out = text
+  for (const pattern of KEY_PATTERNS) {
+    out = out.replace(pattern, () => {
+      scrubbed++
+      return '[redacted]'
+    })
+  }
+  return { text: out, scrubbed }
+}
+
+/** A text with each trader's key and id replaced by its token, letters of either case alike (V8 Stage 10). */
+export function hashTraderIds(text: string, tokens: readonly { id: string; token: string }[]): string {
+  let out = text
+  for (const { id, token } of [...tokens].sort((a, b) => b.id.length - a.id.length)) {
+    if (id.length < 6) continue
+    out = out.replace(new RegExp(id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), token)
+  }
+  return out
+}
 
 const dayOf = (sec: number): string => new Date(sec * 1000).toISOString().slice(0, 10)
 const monthOf = (sec: number): string => dayOf(sec).slice(0, 7)
@@ -278,10 +325,13 @@ export function aiRequestLine(row: AiCallRecord): AiRequestLine {
 // THE TABLES: the AI requests and the paper trades as CSV, beside their JSONL, for a spreadsheet.
 
 /** A CSV field (RFC 4180): quoted where it holds a comma, a quote or a line break, a quote doubled; empty for
- * null; an object as its JSON. */
+ * null; an object as its JSON. Since V8 Stage 10 a text that a spreadsheet would run as a formula -- one starting with
+ * =, +, -, @, a tab or a carriage return -- starts with an apostrophe, which the cell does not show; a number, written
+ * by the app, never does. */
 export function csvField(value: unknown): string {
   if (value === null || value === undefined) return ''
-  const text = typeof value === 'object' ? JSON.stringify(value) : String(value)
+  let text = typeof value === 'object' ? JSON.stringify(value) : String(value)
+  if (typeof value !== 'number' && /^[=+\-@\t\r]/.test(text)) text = `'${text}`
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
 }
 
@@ -364,6 +414,9 @@ export interface ExportManifest {
   files: ManifestFile[]
   /** What was left out, and why: a file that could not be read. */
   skipped: { path: string; why: string }[]
+  /** Since V8 Stage 10: the traders packed, each under its token, and the values shaped like a key replaced. */
+  traders?: number
+  scrubbed?: number
 }
 
 /** An export made (electron/services/researchFolderService.ts). */

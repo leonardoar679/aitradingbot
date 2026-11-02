@@ -86,6 +86,15 @@ async function service() {
 }
 
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 20))
+/** Waits for what the service pushes rather than a fixed time: on a loaded machine a write can take longer than one
+ * settle. */
+const until = async (holds: () => boolean): Promise<void> => {
+  const end = Date.now() + 5000
+  while (!holds()) {
+    if (Date.now() > end) throw new Error('The service pushed nothing in 5 s.')
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+}
 const turn = async (): Promise<void> => {
   tick?.()
   await settle()
@@ -150,8 +159,9 @@ describe('the follows read', () => {
     const { handlers } = streams[0]
     handlers.onOpen()
     handlers.onFills(address(1), [fill(1, { time: T0 - 3_600_000 })], true)
-    await settle()
+    await until(() => first.events.length === 1)
     handlers.onFills(address(1), [fill(2), fill(1, { time: T0 - 3_600_000 })], false)
+    await until(() => first.events.length === 2)
     await settle()
     expect(first.events.map((event) => [event.key, event.via, event.perp?.symbol])).toEqual([
       [`${keyOf(1)}:1`, 'snapshot', 'ETHUSDT'],
@@ -163,6 +173,7 @@ describe('the follows read', () => {
     // Two messages of the stream carrying the same fill at once: one event.
     handlers.onFills(address(1), [fill(3)], false)
     handlers.onFills(address(1), [fill(3)], false)
+    await until(() => first.events.length === 3)
     await settle()
     expect(first.events.map((event) => event.key)).toEqual([`${keyOf(1)}:1`, `${keyOf(1)}:2`, `${keyOf(1)}:3`])
     // The snapshot's fill was made before: two of their trades read today.
@@ -180,13 +191,13 @@ describe('the follows read', () => {
     const DAY = 86_400_000
     copy = { follows: { [keyOf(1)]: { since: T0 - 3 * DAY, maxHoldSec: 3600 } }, clones: {} }
     now = T0 - 2 * DAY
-    const { module } = await service()
+    const { module, events } = await service()
     await module.startFollowing()
     streams[0].handlers.onFills(address(1), [fill(1)], false)
-    await settle()
+    await until(() => events.length === 1)
     now = T0
     streams[0].handlers.onFills(address(1), [fill(2)], false)
-    await settle()
+    await until(() => events.length === 2)
     expect((await module.recentFollowRecords(T0 - 3 * DAY)).events.map((event) => event.key)).toEqual([`${keyOf(1)}:2`])
   })
 

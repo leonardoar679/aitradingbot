@@ -201,6 +201,38 @@ export function sourceFiguresOf(pairs: readonly { prediction: SourcePrediction; 
   }
 }
 
+/** One source's line on Performance (V8 Stage 10): its predictions of a kind, those still owed an outcome, when the
+ * first and the last were made, and its figures over those scored. */
+export interface SourceFiguresRow {
+  source: string
+  kind: SourceKind
+  total: number
+  owed: number
+  firstAt: number
+  lastAt: number
+  figures: SourceFigures
+}
+
+/** The record's figures, a line a source and kind, the sources in the order of their first prediction. */
+export function sourceFiguresRows(pairs: readonly { prediction: SourcePrediction; outcome: SourceOutcome | null }[]): SourceFiguresRow[] {
+  const groups = new Map<string, { prediction: SourcePrediction; outcome: SourceOutcome | null }[]>()
+  for (const pair of pairs) {
+    const key = `${pair.prediction.source}|${pair.prediction.kind}`
+    groups.set(key, [...(groups.get(key) ?? []), pair])
+  }
+  return [...groups.values()]
+    .map((rows) => ({
+      source: rows[0].prediction.source,
+      kind: rows[0].prediction.kind,
+      total: rows.length,
+      owed: rows.filter((row) => row.outcome === null).length,
+      firstAt: Math.min(...rows.map((row) => row.prediction.madeAt)),
+      lastAt: Math.max(...rows.map((row) => row.prediction.madeAt)),
+      figures: sourceFiguresOf(rows)
+    }))
+    .sort((a, b) => a.firstAt - b.firstAt || a.source.localeCompare(b.source))
+}
+
 /** The unit of evidence by default: the UTC day a prediction was made on. */
 export const dayUnitOf = (madeAt: number): number => Math.floor(madeAt / 86_400)
 

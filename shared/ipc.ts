@@ -71,6 +71,8 @@ export const IpcChannel = {
   /** The run before the one in use put back in use (V7.1 Stage 13), by a person from the Lab. */
   ForecastRollback: 'forecast:rollback',
   ForecastBars: 'forecast:bars',
+  /** Each pair's share of days that closed 5% and 10% away over its ninety days, for the Forecast Lab (V8 Stage 10). */
+  ForecastDayMoves: 'forecast:dayMoves',
   ForecastRecord: 'forecast:record',
   ForecastUpdate: 'forecast:update',
   FeedUpdate: 'feed:update',
@@ -129,6 +131,8 @@ export const IpcChannel = {
   // Nothing on these reads a key, asks a model or places an order.
   PredictionsRecord: 'predictions:record',
   PredictionsList: 'predictions:list',
+  /** The record's figures a source and kind, for Performance's "Did it come true?" (V8 Stage 10). */
+  PredictionsFigures: 'predictions:figures',
   BooksState: 'books:state',
   BooksMarks: 'books:marks',
   BooksMiss: 'books:miss',
@@ -141,6 +145,8 @@ export const IpcChannel = {
   BooksTesting: 'books:testing',
   BooksStart: 'books:start',
   BooksStop: 'books:stop',
+  /** The run that runs or ran last, each book read as V8-S9-BOOKS reads it (V8 Stage 10). */
+  BooksReport: 'books:report',
   // The primary call (V8 Stage 3): the cards weighed, the late list and the refusals; pushed as each weighing ends.
   CallsState: 'calls:state',
   CallsUpdate: 'calls:update',

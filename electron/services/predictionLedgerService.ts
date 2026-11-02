@@ -5,6 +5,8 @@ import type { ForecastBar } from '../../shared/forecast/bars'
 import type { Candle } from '../../shared/ipc'
 import { movesOf, readMoveLine, type MoveLine } from '../../shared/evaluation/moves'
 import { CARD_STATE_VERSION, type CardStateLine } from '../../shared/forecast/primaryCall'
+import { bigMoverPredictionsOf, bigMoversOf } from '../../shared/forecast/bigMovers'
+import type { PricePrediction } from '../../shared/forecast/prediction'
 import {
   SOURCE_RECORD_LINES,
   dueAt,
@@ -198,6 +200,20 @@ export async function recordCardStates(atSec: number, lines: readonly CardStateL
   }
   if (lines.length > 0) await appendJsonLines(cardsFile(atSec), lines)
   return lines.length
+}
+
+/** THE BIG MOVERS (V8 Stage 10; shared/forecast/bigMovers.ts): at a whole hour, the list's entries recorded as size
+ * calls of the source 'big-movers', each once -- a pass made again at the same close, or a start within the hour, finds
+ * them on file. Returns how many were written. */
+export async function recordBigMovers(atSec: number, predictions: readonly PricePrediction[], versions: { engine: string; config: string }): Promise<number> {
+  if (atSec % 3600 !== 0) return 0
+  let written = 0
+  for (const prediction of bigMoverPredictionsOf(bigMoversOf(predictions), atSec, versions)) {
+    if (owed.has(prediction.id) || settled.has(prediction.id)) continue
+    await recordSourcePrediction(prediction)
+    written++
+  }
+  return written
 }
 
 /** The large moves on file since a moment, oldest first; for the Performance page and a run's report. */

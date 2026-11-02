@@ -80,6 +80,21 @@ export function barFromLine(value: unknown): ForecastBar | null {
   return Array.isArray(value) ? barOf(value) : null
 }
 
+/** A month's file as its bars, in the file's order: a torn or short line skipped. */
+export function barsOfText(text: string): ForecastBar[] {
+  const read: ForecastBar[] = []
+  for (const line of text.split('\n')) {
+    if (line.trim() === '') continue
+    try {
+      const bar = barFromLine(JSON.parse(line))
+      if (bar !== null) read.push(bar)
+    } catch {
+      // A torn line: skipped.
+    }
+  }
+  return read
+}
+
 /** The month a bar's file is named for, `YYYY-MM`, in UTC. */
 export function barMonthKey(timeSec: number): string {
   return new Date(timeSec * 1000).toISOString().slice(0, 7)

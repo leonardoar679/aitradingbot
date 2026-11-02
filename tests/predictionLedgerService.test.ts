@@ -165,3 +165,30 @@ describe('a restart', () => {
     expect(await ledger.sourceRecord({ source: 'trader' })).toEqual([])
   })
 })
+
+// THE BIG MOVERS (V8 Stage 10; shared/forecast/bigMovers.ts): at a whole hour the list's entries recorded as size calls,
+// once -- a pass made again at the same close finds them on file -- and nothing between the hours.
+describe("the big-mover list's entries", () => {
+  it('are recorded at a whole hour as size calls, each once', async () => {
+    const ledger = await service()
+    const HOUR = Math.floor(MADE / 3600) * 3600 + 3600
+    const moveRates = {
+      version: 'move-rates-v1',
+      horizons: [
+        { horizon: 'hour1', moments: 2000, close: [{ pct: 1, up: 0.1, down: 0.1, either: 0.2 }], touch: [] },
+        { horizon: 'hours4', moments: 2000, close: [{ pct: 2, up: 0.1, down: 0.1, either: 0.2 }], touch: [] },
+        { horizon: 'hours24', moments: 2000, close: [{ pct: 5, up: 0.1, down: 0.1, either: 0.2 }], touch: [] }
+      ]
+    }
+    const predictions = [{ pair: 'BTCUSDT', currentPrice: 70_000, moveRates }, { pair: 'ETHUSDT', currentPrice: 2_500, moveRates: null }] as never
+    expect(await ledger.recordBigMovers(HOUR + 300, predictions, { engine: 'e', config: 'c' })).toBe(0)
+    expect(await ledger.recordBigMovers(HOUR, predictions, { engine: 'e', config: 'c' })).toBe(3)
+    expect(await ledger.recordBigMovers(HOUR, predictions, { engine: 'e', config: 'c' })).toBe(0)
+    const lines = linesIn(`sources-${new Date(HOUR * 1000).toISOString().slice(0, 7)}.jsonl`) as { source: string; kind: string; pair: string; horizonSec: number }[]
+    expect(lines.map((line) => [line.source, line.kind, line.pair, line.horizonSec])).toEqual([
+      ['big-movers', 'size', 'BTCUSDT', 3600],
+      ['big-movers', 'size', 'BTCUSDT', 14_400],
+      ['big-movers', 'size', 'BTCUSDT', 86_400]
+    ])
+  })
+})

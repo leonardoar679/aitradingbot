@@ -42,8 +42,29 @@ const fake = vi.hoisted(() => ({
   releaseAt: null as number | null,
   /** The challenger in its shadow week the training holds (V7.2-R Stage 8), and the verdicts handed back. */
   shadow: null as null | { run: Record<string, unknown> & { runId: string; until: number }; models: Map<string, unknown>; calibration: unknown },
-  concluded: [] as Record<string, unknown>[]
+  concluded: [] as Record<string, unknown>[],
+  /** The pairs' ninety-day rates as the pair-rates service holds them (V8 Stage 10), and the closes it was told. */
+  rates: new Map<string, unknown>(),
+  ratesAsked: [] as number[]
 }))
+
+// The ninety-day rates read once an hour from the bars on file (V8 Stage 10; pairRatesService.ts, whose worker is its
+// own test's): here worked out at the close's hour from the faked bars, by the same arithmetic.
+vi.mock('../electron/services/pairRatesService', async () => {
+  const { pairRatesOf } = await import('../shared/forecast/pairRates')
+  const { barToLine } = await import('../shared/forecast/bars')
+  return {
+    refreshPairRates: async (pairs: readonly string[], closedAt: number): Promise<void> => {
+      fake.ratesAsked.push(closedAt)
+      const atSec = Math.floor(closedAt / 3600) * 3600
+      for (const pair of pairs) {
+        const text = (fake.market.get(pair) ?? []).map((bar) => JSON.stringify(barToLine(bar))).join('\n')
+        fake.rates.set(pair, { ...pairRatesOf([text], atSec), atSec })
+      }
+    },
+    heldPairRates: (pair: string) => fake.rates.get(pair)
+  }
+})
 
 // A notice the main process builds in the person's language (V6 Stage 14) is handed as a builder: built
 // here in English, as the language of a profile that chose none.
@@ -164,6 +185,8 @@ beforeEach(() => {
   fake.releaseAt = null
   fake.shadow = null
   fake.concluded = []
+  fake.rates = new Map()
+  fake.ratesAsked = []
 })
 
 describe('a close', () => {
@@ -190,13 +213,36 @@ describe('a close', () => {
     expect(fake.barListeners).toHaveLength(1)
     // After the pass the venues' books are asked for the pairs that matter: the top ten, there being no open trade.
     expect(venuePairsAsked.at(-1)).toEqual([...live.forecastRanking().top10])
-    // How often the coin moved over its last ninety days (V7.2-R Stage 3): a horizon needs thirty days of hours, which
-    // this close is an hour short of; a day later every horizon has them, read from the bars the pass holds.
+    // How often the coin moved over its last ninety days (V7.2-R Stage 3): read from the bars on file by the pair-rates
+    // service (V8 Stage 10), never from the days the pass holds, so none before the service has read them. The bars'
+    // listener has it read them at the close's hour beside the pass; a day on every horizon has its thirty days.
     expect(sol.moveRates).toBeNull()
-    await closeAt(live, HOUR + 86_400)
+    fake.now = HOUR + 86_400
+    fake.barListeners[0](HOUR + 86_400)
+    await vi.waitFor(() => expect(live.getForecastEngineState().lastPassAt).toBe(HOUR + 86_400))
+    expect(fake.ratesAsked).toEqual([HOUR + 86_400])
     const rated = live.forecastOf('SOLUSDT')!.moveRates!
     expect(rated.horizons.map((entry) => entry.horizon)).toEqual(['hour1', 'hours4', 'hours24'])
     expect(rated.toSec).toBe(HOUR + 86_400 - 3600)
+    // The very rates the service holds, not the pass's own reading of its bars.
+    expect(rated).toBe((fake.rates.get('SOLUSDT') as { moveRates: unknown }).moveRates)
+  })
+
+  it("lists each pair's day moves of 5% and 10% as the pair-rates service read them, the most 10% first", async () => {
+    const live = await engine()
+    expect(live.forecastDayMoves(HOUR).rows).toEqual([])
+    fake.now = HOUR + 2 * 86_400
+    fake.barListeners[0](HOUR + 2 * 86_400)
+    await vi.waitFor(() => expect(live.getForecastEngineState().lastPassAt).toBe(HOUR + 2 * 86_400))
+    const read = live.forecastDayMoves(HOUR + 2 * 86_400 + 600)
+    expect(read.at).toBe(HOUR + 2 * 86_400)
+    expect(read.rows.map((row) => row.pair).sort()).toEqual([...SYMBOLS].sort())
+    for (const row of read.rows) expect(row.moments).toBe(31 * 24)
+    const tens = read.rows.map((row) => row.rates[10])
+    expect(tens).toEqual([...tens].sort((a, b) => b - a))
+    // A pair short of thirty days of hours has none, and is left out.
+    fake.rates.set('XRPUSDT', { ...(fake.rates.get('XRPUSDT') as object), dayMoves: null })
+    expect(live.forecastDayMoves(HOUR + 2 * 86_400 + 600).rows.map((row) => row.pair)).not.toContain('XRPUSDT')
   })
 
   it('forecasts from the close it is told, whatever later bars are held, and writes no outcome early', async () => {

@@ -547,10 +547,11 @@ async function surfaces(): Promise<{ name: string; element: (language: Language)
   const { NewExecutorModal } = await import('../src/executors/NewExecutorModal')
   const { NewsUrlsPage } = await import('../src/articles/NewsUrlsPage')
   const { CopyTradersPage } = await import('../src/traders/CopyTradersPage')
+  const { PaperTradingPage } = await import('../src/trading/PaperTradingPage')
   const none = (): undefined => undefined
   const proposal = forecastProposal({ plan: PLAN, confidence: 0.64, barTime: T })
   return [
-    { name: 'Home', element: () => createElement(HomePage, { onPrepareOrder: none, onNavigate: none }) },
+    { name: 'Home', element: () => createElement(HomePage, { onPrepareOrder: none, onNavigate: none, onHandoff: none }) },
     { name: 'Predictions', element: () => createElement(PredictionsPage, {}) },
     { name: 'Opportunities', element: () => createElement(OpportunitiesPage, { onPrepareOrder: none } as never) },
     { name: 'Positions', element: () => createElement(PositionsPage) },
@@ -563,7 +564,9 @@ async function surfaces(): Promise<{ name: string; element: (language: Language)
     // Translated, and in the normal sidebar, since V8 Stage 5.
     { name: 'News URLs', element: () => createElement(NewsUrlsPage, { onPrepareOrder: none }) },
     // And since Stage 8.
-    { name: 'Copy Traders', element: () => createElement(CopyTradersPage) }
+    { name: 'Copy Traders', element: () => createElement(CopyTradersPage) },
+    // Since V8 Stage 10, but the paper account's section, which stays English.
+    { name: 'Paper Trading', element: () => createElement(PaperTradingPage) }
   ]
 }
 
@@ -1222,6 +1225,8 @@ const ENGLISH_BY_DESIGN: Readonly<Record<string, { why: string; texts: readonly 
   // News URLs (V8 Stage 5): the form a link is written in, and the host a pasted link is sent to when the Archive is asked.
   'src/articles/NewsUrlsPage.tsx#NewsUrlsPage': { why: "a link's own form, and the Internet Archive's host", texts: ['https://…', 'web.archive.org'] },
   'src/articles/NewsUrlsPage.tsx#OwnView': { why: "the prediction record's own reason, kept in English as every record's is", texts: ['My own view on '] },
+  // Home's tile for a news link (V8 Stage 10): the form a link is written in.
+  'src/home/HomeTiles.tsx#NewsPasteTile': { why: "a link's own form", texts: ['https://…'] },
   'src/livetrading/LiveOrderScheduler.tsx#LiveOrderScheduler': {
     why: "an executor's own record of what went wrong, shown only on Strategies › Execution",
     texts: ['filled, but no open ', ' position was found to arm an exit watcher against']

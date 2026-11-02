@@ -77,7 +77,11 @@ const INFRASTRUCTURE = [
   // How a follow reads its trader and mirrors them in the copy book -- its caps, the price it must agree with, how late it
   // may enter, how long it stays, when a trader is lost (V8 Stage 8): the book's mechanics, on paper, not a claim. What the
   // book makes is judged by V8-S9-BOOKS, registered before its first Start.
-  'traders.follow'
+  'traders.follow',
+  // How the big-mover list is made and recorded, and the Forecast Lab's day moves (V8 Stage 10): the ranker
+  // V8-R1-SIZE's registration falls back on until one of its rankers passes, the list's length and its sizes -- that
+  // registration's targets. What the list is worth is V8-R1-SIZE's to judge, and the record scores its entries.
+  'forecast.bigMovers'
 ]
 
 describe('the registry on file', () => {

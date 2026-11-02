@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { DEFAULT_NEWS_CONFIG, applyNewsConfigPatch, copyNewsConfig, type NewsConfig } from '../shared/news'
 import type { BookStanding } from '../shared/paperBooks'
 import { PAPER_TESTING_VERSION, readStartedRecord, restorePatchOf, startPatchOf, switchStateOf, switchesToTurnOn, type PaperTestingState } from '../shared/paperTesting'
+import { ENGLISH } from '../shared/i18n/translate'
 import { PaperTestingView, readerLine, startItems, stopItems } from '../src/trading/PaperTestingCard'
 
 // START AND STOP PAPER TESTING, THE ARITHMETIC AND THE CARD (shared/paperTesting.ts, src/trading/PaperTestingCard.tsx;
@@ -85,13 +86,13 @@ const draw = (props: Partial<Parameters<typeof PaperTestingView>[0]> & { state: 
 
 describe('the Paper testing card', () => {
   it("names, before Start, every switch it turns on or finds on, and what it uses as it is", () => {
-    expect(startItems(state())).toEqual([
+    expect(startItems(state(), ENGLISH)).toEqual([
       "Binance's announcements, read every minute: switched on.",
       "The delisting rule's short, in the news book: switched on.",
       "Delistings put to the watch's models, while the watch is on, within its $5 a day: already on.",
       "The Monitoring Tag's bracket short: off, and left off (Settings › Market switches it).",
       'Follows of the traders you follow on Copy Traders: 2; clones run: 1. They enter only positions opened from now.',
-      "The baseline: Trend Regime Ensemble on BTC, ETH, SOL, ADA, BNB, LINK, LTC and XRP, long on Binance's spot, at its 4-hour closes from the next one, on signals of its own after Start."
+      "The baseline: Trend Regime Ensemble on BTC, ETH, SOL, ADA, BNB, LINK, LTC, and XRP, long on Binance's spot, at its 4-hour closes from the next one, on signals of its own after Start."
     ])
     const html = draw({ state: state(), confirming: 'start' })
     expect(html).toContain('Start paper testing?')
@@ -110,19 +111,18 @@ describe('the Paper testing card', () => {
       reader: { lastReadAt: NOW - 20, error: null, health: { failuresInRow: 0, stoppedAt: null, stoppedReason: null } }
     })
     const html = draw({ state: running })
-    expect(html).toContain('Running since 2026-10-26 08:20 UTC')
-    expect(html).toContain('(2 h 0 min)')
+    expect(html).toContain('Running since 26 Oct 08:20 UTC (2.0 h).')
     expect(html).toContain('$10,012.50')
     expect(html).toContain('not priced')
-    expect(html).toContain("Binance&#x27;s announcements: last read 0 min ago.")
+    expect(html).toContain("Binance&#x27;s announcements: last read 20 s ago.")
     expect(html).toContain('Start turned on: Binance&#x27;s announcements, read every minute.')
-    expect(stopItems(running)).toEqual(["Binance's announcements, read every minute: back off."])
-    expect(stopItems({ started: { v: PAPER_TESTING_VERSION, startedAt: 1, switched: [{ switch: 'news.delisting.askModels', was: true }] } })).toEqual([
+    expect(stopItems(running, ENGLISH)).toEqual(["Binance's announcements, read every minute: back off."])
+    expect(stopItems({ started: { v: PAPER_TESTING_VERSION, startedAt: 1, switched: [{ switch: 'news.delisting.askModels', was: true }] } }, ENGLISH)).toEqual([
       "Delistings put to the watch's models, while the watch is on, within its $5 a day: back on."
     ])
     const stop = draw({ state: running, confirming: 'stop' })
     expect(stop).toContain('The books&#x27; 3 open trades close at the price then.')
-    expect(stopItems(state({ started: { v: PAPER_TESTING_VERSION, startedAt: 1, switched: [] } }))).toEqual(['No switch to put back: everything paper testing reads was already on at Start, and stays on.'])
+    expect(stopItems(state({ started: { v: PAPER_TESTING_VERSION, startedAt: 1, switched: [] } }), ENGLISH)).toEqual(['No switch to put back: everything paper testing reads was already on at Start, and stays on.'])
     // A Stop that could not put a switch back: Stop again.
     const pending = draw({ state: state({ startedAt: NOW - 60, started: running.started }) })
     expect(pending).toContain('Stop paper testing again')
@@ -131,15 +131,15 @@ describe('the Paper testing card', () => {
 
   it("says the reader's health: reading, reading nothing so many times in a row, or stopped by itself", () => {
     const on = { 'news.enabled': true, 'news.delisting.paperShort': true, 'news.delisting.askModels': true }
-    expect(readerLine(state({ switches: on, reader: { lastReadAt: NOW - 125, error: 'busy', health: { failuresInRow: 2, stoppedAt: null, stoppedReason: null } } }), NOW)).toBe(
+    expect(readerLine(state({ switches: on, reader: { lastReadAt: NOW - 125, error: 'busy', health: { failuresInRow: 2, stoppedAt: null, stoppedReason: null } } }), NOW, ENGLISH)).toBe(
       "Binance's announcements: last read 2 min ago, reading nothing 2 times in a row (busy); at 3 it stops itself."
     )
-    expect(readerLine(state({ switches: on, reader: { lastReadAt: NOW - 65, error: 'busy', health: { failuresInRow: 1, stoppedAt: null, stoppedReason: null } } }), NOW)).toBe(
+    expect(readerLine(state({ switches: on, reader: { lastReadAt: NOW - 65, error: 'busy', health: { failuresInRow: 1, stoppedAt: null, stoppedReason: null } } }), NOW, ENGLISH)).toBe(
       "Binance's announcements: last read 1 min ago, reading nothing 1 time in a row (busy); at 3 it stops itself."
     )
-    expect(readerLine(state({ switches: on, reader: { lastReadAt: NOW - 5, error: '1 of 3 lists', health: { failuresInRow: 0, stoppedAt: null, stoppedReason: null } } }), NOW)).toBe("Binance's announcements: last read 0 min ago, in part (1 of 3 lists).")
-    expect(readerLine(state({ reader: { lastReadAt: NOW - 5, error: 'x', health: { failuresInRow: 3, stoppedAt: NOW - 60, stoppedReason: 'answered 451' } } }), NOW)).toMatch(/stopped itself at .* after 3 reads in a row read nothing \(answered 451\)/)
-    expect(readerLine(state(), NOW)).toBe("Binance's announcements: not being read.")
-    expect(readerLine(state({ switches: on }), NOW)).toBe("Binance's announcements: not read yet.")
+    expect(readerLine(state({ switches: on, reader: { lastReadAt: NOW - 5, error: '1 of 3 lists', health: { failuresInRow: 0, stoppedAt: null, stoppedReason: null } } }), NOW, ENGLISH)).toBe("Binance's announcements: last read 5 s ago, in part (1 of 3 lists).")
+    expect(readerLine(state({ reader: { lastReadAt: NOW - 5, error: 'x', health: { failuresInRow: 3, stoppedAt: NOW - 60, stoppedReason: 'answered 451' } } }), NOW, ENGLISH)).toMatch(/stopped itself at .* after 3 reads in a row read nothing \(answered 451\)/)
+    expect(readerLine(state(), NOW, ENGLISH)).toBe("Binance's announcements: not being read.")
+    expect(readerLine(state({ switches: on }), NOW, ENGLISH)).toBe("Binance's announcements: not read yet.")
   })
 })

@@ -13,15 +13,21 @@ import { AiCostPerTradeCard } from './AiCostPerTradeCard'
 import { AttributionCard } from './AttributionCard'
 import { SessionReportCard } from './SessionReportCard'
 import { DailyReportCard } from './DailyReportCard'
+import { CameTrueCard } from './CameTrueCard'
+import { BooksReportCard } from './BooksReportCard'
+import { ExportCard } from './ExportCard'
+import { ChampionCard } from './ChampionCard'
 import { EnglishOnly, useI18n } from '../i18n'
 
 /** How often the executors on file are read again: for which journal rows the watch paper traded,
  * and for the running total in R of the app's own paper trades. */
 const PAPER_REFRESH_MS = 30_000
 
-/** What has happened: the portfolio's value and what it is made of, what the watch's
- * recommendations went on to earn, and what the app's own paper trades came to, trade by trade. Everything here reads; nothing asks a model,
- * and every result is worked out again from candles rather than stored. */
+/** What has happened: the portfolio's value and what it is made of; since V8 Stage 10 whether the recorded calls came
+ * true, source by source, the three paper books beside their benchmarks, and the records exported in one click; what
+ * the watch's recommendations went on to earn, and what the app's own paper trades came to, trade by trade, with the
+ * price forecast's champion and challenger. Everything here reads; nothing asks a model, and every result is worked
+ * out again from candles rather than stored. */
 export function PerformancePage(): React.JSX.Element {
   const { t } = useI18n()
   const [models, setModels] = useState<string[] | null>(null)
@@ -82,8 +88,12 @@ export function PerformancePage(): React.JSX.Element {
           <PortfolioHistory />
         </EnglishOnly>
       </div>
+      <CameTrueCard />
+      <BooksReportCard />
       <PaperRCurveCard executors={executors} />
+      <ExportCard />
       <EnglishOnly>
+        <ChampionCard />
         {models !== null && <LiveBoardCard title="What the watch's recommendations earned" models={models} refreshKey={answered} />}
         <ExitCheckCard executors={executors} />
         <AiCostPerTradeCard executors={executors} />

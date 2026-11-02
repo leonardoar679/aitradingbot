@@ -8,6 +8,7 @@ import { useLastPrice } from '../hooks/useLastPrice'
 import { EXCHANGES, type Exchange, type SymbolInfo } from '../../shared/ipc'
 import { classifyPaperOrder, paperOrderStatusNote, type PaperOrderStatus } from './paperOrderStatus'
 import { ExchangeCompareCard } from './ExchangeCompareCard'
+import { useI18n } from '../i18n'
 
 type Side = 'buy' | 'sell'
 type OrderType = 'market' | 'limit'
@@ -75,6 +76,8 @@ const labelStyle: React.CSSProperties = {
 
 /** `embedded` leaves the title to the page this sits on (Paper Trading). */
 export function TradePage({ embedded = false }: { embedded?: boolean } = {}): React.JSX.Element {
+  const i18n = useI18n()
+  const { t, time } = i18n
   const [exchange, setExchange] = useState<Exchange>(EXCHANGES[0].id)
   const [pair, setPair] = useState<SymbolInfo>(EXCHANGES[0].defaultSymbol)
   const [side, setSide] = useState<Side>('buy')
@@ -96,7 +99,7 @@ export function TradePage({ embedded = false }: { embedded?: boolean } = {}): Re
   const estValue = execPrice && amountNum > 0 && Number.isFinite(amountNum) ? execPrice * amountNum : null
   // A bare boolean left an unfillable ticket as a greyed-out button with no reason -- and let
   // Number('1e999') through as a positive amount. See describeTicketProblem.
-  const ticketProblem = describeTicketProblem({ amountRaw: amount, type, limitPriceRaw: limitPrice, lastPrice })
+  const ticketProblem = describeTicketProblem({ amountRaw: amount, type, limitPriceRaw: limitPrice, lastPrice }, i18n)
   const canSubmit = ticketProblem === null
 
   function handleSubmit(): void {
@@ -122,34 +125,34 @@ export function TradePage({ embedded = false }: { embedded?: boolean } = {}): Re
 
   return (
     <>
-      {!embedded && <PageHeader title="Trade" subtitle="Manual paper trading — orders are simulated, not sent to any exchange" />}
+      {!embedded && <PageHeader title={t('Trade')} subtitle={t('Manual paper trading — orders are simulated, not sent to any exchange')} />}
 
       <MarketTicker exchange={exchange} pair={pair} onExchangeChange={handleExchangeChange} onPairChange={setPair} />
 
       <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
         <div style={{ flex: '0 0 320px', minWidth: 280 }}>
-          <Card title="Order Ticket">
+          <Card title={t('Order ticket')}>
             <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.9rem' }}>
               <button style={sideButtonStyle(side === 'buy', 'buy')} onClick={() => setSide('buy')}>
-                Buy
+                {t('Buy')}
               </button>
               <button style={sideButtonStyle(side === 'sell', 'sell')} onClick={() => setSide('sell')}>
-                Sell
+                {t('Sell')}
               </button>
             </div>
 
             <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '0.9rem' }}>
               <button style={typeButtonStyle(type === 'market')} onClick={() => setType('market')}>
-                Market
+                {t('Market@@an order at the price now')}
               </button>
               <button style={typeButtonStyle(type === 'limit')} onClick={() => setType('limit')}>
-                Limit
+                {t('Limit@@an order at a set price')}
               </button>
             </div>
 
             {type === 'limit' && (
               <div style={{ marginBottom: '0.75rem' }}>
-                <label style={labelStyle}>Limit Price ({pair.quoteAsset})</label>
+                <label style={labelStyle}>{t('Limit price ({asset})', { asset: pair.quoteAsset })}</label>
                 <input
                   value={limitPrice}
                   onChange={(e) => setLimitPrice(e.target.value)}
@@ -161,7 +164,7 @@ export function TradePage({ embedded = false }: { embedded?: boolean } = {}): Re
             )}
 
             <div style={{ marginBottom: '0.9rem' }}>
-              <label style={labelStyle}>Amount ({pair.baseAsset})</label>
+              <label style={labelStyle}>{t('Amount ({asset})', { asset: pair.baseAsset })}</label>
               <input
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
@@ -172,7 +175,7 @@ export function TradePage({ embedded = false }: { embedded?: boolean } = {}): Re
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: '1rem' }}>
-              <span style={{ color: 'var(--text-muted)' }}>Est. Value</span>
+              <span style={{ color: 'var(--text-muted)' }}>{t('Estimated value')}</span>
               <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
                 {estValue !== null ? formatQuotePrice(estValue, pair.quoteAsset) : '—'}
               </span>
@@ -202,19 +205,19 @@ export function TradePage({ embedded = false }: { embedded?: boolean } = {}): Re
                 opacity: canSubmit ? 1 : 0.5
               }}
             >
-              {side} {pair.baseAsset} (paper)
+              {side === 'buy' ? t('Buy {asset} on paper', { asset: pair.baseAsset }) : t('Sell {asset} on paper', { asset: pair.baseAsset })}
             </button>
           </Card>
         </div>
 
         <div style={{ flex: '1 1 400px', minWidth: 320 }}>
-          <Card title="Session Orders">
+          <Card title={t('Session orders')}>
             {/* This warning used to live only in the empty state -- shown when there was nothing
                 to lose, and hidden the moment there was. */}
             <p style={{ color: 'var(--text-muted)', fontSize: '0.74rem', margin: '0 0 0.7rem', lineHeight: 1.45 }}>
               {orders.length === 0
-                ? "No paper orders placed yet this session. Orders here aren't persisted or sent to your exchange."
-                : "This list is cleared when you leave the page — it isn't saved, isn't sent to any exchange, and doesn't feed your Portfolio or Positions."}
+                ? t("No paper orders placed yet this session. Orders here aren't persisted or sent to your exchange.")
+                : t("This list is cleared when you leave the page — it isn't saved, isn't sent to any exchange, and doesn't feed your Portfolio or Positions.")}
             </p>
             {orders.length === 0 ? null : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -238,22 +241,22 @@ export function TradePage({ embedded = false }: { embedded?: boolean } = {}): Re
                           fontWeight: 700,
                           textTransform: 'uppercase',
                           color: o.side === 'buy' ? 'var(--up)' : 'var(--down)',
-                          marginRight: '0.5rem'
+                          marginInlineEnd: '0.5rem'
                         }}
                       >
-                        {o.side}
+                        {o.side === 'buy' ? t('Buy') : t('Sell')}
                       </span>
                       <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{o.symbol}</span>
-                      <span style={{ color: 'var(--text-muted)', marginLeft: '0.5rem' }}>
-                        {o.type} • {new Date(o.time).toLocaleTimeString()}
+                      <span style={{ color: 'var(--text-muted)', marginInlineStart: '0.5rem' }}>
+                        {o.type === 'market' ? t('Market@@an order at the price now') : t('Limit@@an order at a set price')} • {time(o.time)}
                       </span>
-                      {paperOrderStatusNote(o.status) !== null && (
-                        <span style={{ color: 'var(--text-muted)', marginLeft: '0.5rem', fontStyle: 'italic' }}>
-                          {paperOrderStatusNote(o.status)}
+                      {paperOrderStatusNote(o.status, i18n) !== null && (
+                        <span style={{ color: 'var(--text-muted)', marginInlineStart: '0.5rem', fontStyle: 'italic' }}>
+                          {paperOrderStatusNote(o.status, i18n)}
                         </span>
                       )}
                     </div>
-                    <div style={{ textAlign: 'right' }}>
+                    <div style={{ textAlign: 'end' }}>
                       <div style={{ color: o.status === 'filled' ? 'var(--text-primary)' : 'var(--text-muted)' }}>
                         {o.amount} @ {formatQuotePrice(o.price, o.quoteAsset)}
                       </div>

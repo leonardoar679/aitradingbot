@@ -406,6 +406,14 @@ export async function recentFollowRecords(sinceMs: unknown): Promise<{ events: L
   return { events: events.sort((a, b) => a.timeMs - b.timeMs), signals: signals.sort((a, b) => a.barCloseSec - b.barCloseSec) }
 }
 
+/** A trader's leader events kept since a moment, by their key: what the copy book's report sets each follow against
+ * (V8 Stage 10). */
+export async function leaderEventsOf(traderKey: string, sinceMs: number): Promise<Map<string, LeaderEvent>> {
+  if (traderRefOfKey(traderKey) === null) return new Map()
+  const kept = (await readLines(folderOf(traderKey), /^events-(\d{4}-\d{2})\.jsonl$/, sinceMs)).map(readLeaderEvent).filter((event): event is LeaderEvent => event !== null)
+  return new Map(kept.map((event) => [event.key, event]))
+}
+
 /** Test seam. */
 export function resetFollowing(): void {
   stopFollowing()

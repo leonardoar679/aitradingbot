@@ -91,6 +91,10 @@ export interface PassSources {
   /** A pair's round trip on a side at the cheaper venue, from the venues' books at the reference stake (V7.2-R Stage 4);
    * null where none is held. Absent on a replay, which costs every trade at the flat round trip. */
   venueCost?(pair: string, side: 'BUY' | 'SELL', nowMs: number): RoundTrip | null
+  /** A pair's ninety-day move rates as read from its bars on file at the last whole hour, null before they are (V8
+   * Stage 10): the live service holds three days of bars, too few to read them from. Absent on a replay, whose bars
+   * are the whole record's and are read here. */
+  moveRates?(symbol: string): MoveRates | null
   /** The close an owed horizon is settled at: its due moment, unless the source names a later one -- a
    * replay following a record whose bars came late, so that the levels take the steps the live run's took.
    * Absent on the live service. */
@@ -491,10 +495,12 @@ export function pass(state: PassState, sources: PassSources, closedAt: number, n
       drivers[horizon] = rangeDriversFor(model, variant === undefined ? [] : cellOf(variant, cls).weights, row)
     }
     const hour = series.m5.slice(Math.max(0, at - 12), at)
-    // How often the coin moved enough to pay for a trade, over its last ninety days: once an hour a pair.
+    // How often the coin moved enough to pay for a trade, over its last ninety days: once an hour a pair, read by the
+    // live service from the bars on file, and here from a replay's.
     const rateHour = Math.floor(closedAt / 3600)
     const heldRates = state.moveRates.get(symbol)
-    const moveRates = heldRates !== undefined && heldRates.hour === rateHour ? heldRates.rates : moveRatesOf(series.m5, closedAt)
+    const moveRates =
+      sources.moveRates !== undefined ? sources.moveRates(symbol) : heldRates !== undefined && heldRates.hour === rateHour ? heldRates.rates : moveRatesOf(series.m5, closedAt)
     state.moveRates.set(symbol, { hour: rateHour, rates: moveRates })
     const usualMinuteVolume = hour.length === 12 ? hour.reduce((sum, entry) => sum + entry.volume, 0) / 60 : null
     state.inputs.set(symbol, {

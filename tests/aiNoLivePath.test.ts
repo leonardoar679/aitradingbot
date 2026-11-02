@@ -330,12 +330,17 @@ describe('AI code has no route to a real order', () => {
     // Since V8 Stage 2 the liquidity gate in shadow over its TRADE decisions: the venues' books it already reads,
     // the venue costs' stake, and a miss written to the paper books' file (booksService, misses) -- a record, no trade.
     // And at a whole hour the large moves of its pairs, written with who called them through the prediction record's
-    // service (predictionLedgerService) -- a record, no trade.
+    // service (predictionLedgerService) -- a record, no trade. Since V8 Stage 10 the hour's big-mover list too, as
+    // size calls with the engine's and configuration's versions (bigMovers, effectiveConfigService), and the day moves
+    // of its pairs for the Forecast Lab: arithmetic on the bars it keeps, a record, no trade. Its pairs' ninety-day
+    // rates are read from the bars on file once an hour, in workers (pairRatesService) -- arithmetic, no trade.
     expect(importsOf(engine).sort()).toEqual([
       'aciTable',
       'atomicWrite',
       'bars',
+      'bigMovers',
       'booksService',
+      'effectiveConfigService',
       'electron',
       'features',
       'forecastDataService',
@@ -349,6 +354,7 @@ describe('AI code has no route to a real order', () => {
       'newsEffect',
       'noticeService',
       'opportunityClass',
+      'pairRatesService',
       'pass',
       'path',
       'prediction',
@@ -364,6 +370,8 @@ describe('AI code has no route to a real order', () => {
       'venueCosts',
       'venueQuotesService'
     ])
+    // The pairs' ninety-day rates (V8 Stage 10): the bars' files read as text and handed to a worker, nothing else.
+    expect(importsOf(join(SERVICES, 'pairRatesService.ts')).sort()).toEqual(['forecastDataService', 'pairRates', 'taskWorkerService'])
     // The primary call's service and its channels (V8 Stage 3) read the news reader's state, the venues' books and the
     // forecast, and record a prediction: nothing that trades, holds a key or asks a model, and no setting written.
     for (const path of [join(SERVICES, 'primaryCallService.ts'), join(ROOT, 'electron', 'ipc', 'handlers', 'callsHandlers.ts')]) {
@@ -1139,6 +1147,37 @@ describe('AI code has no route to a real order', () => {
       'traders.onProgress'
     ])
     expect(page).not.toMatch(/placeLive|liveTrading|onPrepareOrder|aiProposal|settings\.set|mode: 'live'/)
+  })
+
+  it("Stage 10's pages read: Home's tiles, Performance's cards, the lists, the export -- and place nothing (V8 Stage 10)", () => {
+    const bridgesOf = (text: string): string[] => [...new Set([...text.matchAll(/window\.api\.(\w+)(?:\s*\.\s*(\w+))?/g)].map((match) => (match[2] === undefined ? match[1] : `${match[1]}.${match[2]}`)))].sort()
+    const read = (...parts: string[]): string => readFileSync(join(ROOT, ...parts), 'utf-8')
+    // Each reads its own channel and no other; none writes a setting or an executor, asks a model or places anything.
+    for (const [path, bridges] of [
+      [['src', 'home', 'HomeTiles.tsx'], ['books.testing', 'predictions.figures']],
+      [['src', 'performance', 'CameTrueCard.tsx'], ['predictions.figures']],
+      [['src', 'performance', 'BooksReportCard.tsx'], ['books.report']],
+      [['src', 'performance', 'ChampionCard.tsx'], ['forecast.getState']],
+      [['src', 'performance', 'ExportCard.tsx'], ['researchFolder.exportNow', 'researchFolder.open']],
+      [['src', 'forecast', 'BigMoversCard.tsx'], []],
+      [['src', 'forecastLab', 'DayMovesCard.tsx'], ['forecast.dayMoves']]
+    ] as const) {
+      const source = read(...path)
+      expect(bridgesOf(source), path.join('/')).toEqual(bridges)
+      expect(source, path.join('/')).not.toMatch(/settings\.set|placeLive|liveTrading|credentials|apiKey|mode: '/)
+    }
+    // The books' report in the main process reads files and public bars: no live module, no model, no setting written.
+    const report = join(SERVICES, 'booksReportService.ts')
+    expect(importsOf(report).filter((name) => LIVE_MODULES.has(name) || aiModuleNames.has(name))).toEqual([])
+    expect(importsOf(report).sort()).toEqual(['baseline', 'booksService', 'follow', 'followService', 'ipc', 'jsonlStore', 'marketService', 'node:crypto', 'paperBooks', 'paperBooksReport', 'paperTesting', 'path', 'promises', 'settingsService'].sort())
+    expect(readFileSync(report, 'utf-8')).not.toMatch(/setSettings|appendJsonLine|writeJsonAtomic|placeLive/)
+    // The export packs files and public bars -- and, as since V7.2-R Stage 2, reads the AI configuration and ledger for its
+    // snapshot and its log of calls, asking nothing: no live module. Its trader tokens, scrubbing and formula guard are
+    // pure (shared/research.ts).
+    const exporter = join(SERVICES, 'researchFolderService.ts')
+    expect(importsOf(exporter).filter((name) => LIVE_MODULES.has(name))).toEqual([])
+    expect(importsOf(exporter).filter((name) => aiModuleNames.has(name)).sort()).toEqual(['aiConfigService', 'aiLedgerService'])
+    expect(readFileSync(exporter, 'utf-8')).toContain('scrubKeyPatterns(hashTraderIds(new TextDecoder().decode(entry.data), tokens))')
   })
 
   it('paper testing starts and stops the books, turns on what they read and puts it back; it opens and places nothing (V8 Stage 9)', () => {

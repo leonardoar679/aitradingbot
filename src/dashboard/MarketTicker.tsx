@@ -5,6 +5,7 @@ import { SymbolSearch } from '../components/SymbolSearch'
 import { formatAssetNumber, formatQuotePrice } from '../utils/formatCurrency'
 import { describeTickerProblem } from './tickerStatus'
 import type { Exchange, SymbolInfo, Ticker24h } from '../../shared/ipc'
+import { useI18n } from '../i18n'
 
 /** How often the header re-reads the full 24h ticker over REST when the socket isn't feeding it. */
 const REST_REFRESH_MS = 15_000
@@ -26,6 +27,8 @@ export function MarketTicker({
   onExchangeChange,
   onPairChange
 }: MarketTickerProps): React.JSX.Element {
+  const i18n = useI18n()
+  const { t } = i18n
   const [ticker, setTicker] = useState<Ticker24h | null>(null)
   const [iconFailed, setIconFailed] = useState(false)
   const [lastError, setLastError] = useState<string | null>(null)
@@ -98,11 +101,14 @@ export function MarketTicker({
   // over a row that had failed to load anything.
   const direction = ticker === null ? null : ticker.priceChangePercent >= 0
   const changeColor = direction === null ? 'var(--text-muted)' : direction ? 'var(--up)' : 'var(--down)'
-  const problem = describeTickerProblem({
-    hasTicker: ticker !== null,
-    lastError,
-    symbol: pair.symbol
-  })
+  const problem = describeTickerProblem(
+    {
+      hasTicker: ticker !== null,
+      lastError,
+      symbol: pair.symbol
+    },
+    i18n
+  )
 
   return (
     <div
@@ -123,8 +129,8 @@ export function MarketTicker({
           display: 'flex',
           alignItems: 'center',
           gap: '0.6rem',
-          paddingRight: '1.4rem',
-          borderRight: '1px solid var(--border)'
+          paddingInlineEnd: '1.4rem',
+          borderInlineEnd: '1px solid var(--border)'
         }}
       >
         {iconFailed ? (
@@ -170,19 +176,19 @@ export function MarketTicker({
               marginTop: '0.15rem'
             }}
           >
-            {pair.baseAsset} Price
+            {t('{asset} price', { asset: pair.baseAsset })}
             {direction === null ? null : direction ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
           </div>
         </div>
       </div>
 
-      <div style={{ paddingRight: '1.4rem', borderRight: '1px solid var(--border)' }}>
+      <div style={{ paddingInlineEnd: '1.4rem', borderInlineEnd: '1px solid var(--border)' }}>
         <ExchangeSelect exchange={exchange} onSelect={onExchangeChange} />
       </div>
 
       <Stat value={ticker ? formatQuotePrice(ticker.lastPrice, pair.quoteAsset) : '—'} big divider />
       <Stat
-        label="24h Chg"
+        label={t('24h change')}
         value={
           ticker
             ? `${formatQuotePrice(ticker.priceChange, pair.quoteAsset)} ${ticker.priceChangePercent >= 0 ? '+' : ''}${ticker.priceChangePercent.toFixed(2)}%`
@@ -192,22 +198,22 @@ export function MarketTicker({
         divider
       />
       <Stat
-        label="24h High"
+        label={t('24h high')}
         value={ticker ? formatQuotePrice(ticker.highPrice, pair.quoteAsset) : '—'}
         divider
       />
       <Stat
-        label="24h Low"
+        label={t('24h low')}
         value={ticker ? formatQuotePrice(ticker.lowPrice, pair.quoteAsset) : '—'}
         divider
       />
       <Stat
-        label={`24h Vol(${pair.baseAsset})`}
+        label={t('24h volume ({asset})', { asset: pair.baseAsset })}
         value={ticker ? formatAssetNumber(ticker.volume, pair.baseAsset) : '—'}
         divider
       />
       <Stat
-        label={`24h Vol(${pair.quoteAsset})`}
+        label={t('24h volume ({asset})', { asset: pair.quoteAsset })}
         value={ticker ? formatAssetNumber(ticker.quoteVolume, pair.quoteAsset) : '—'}
       />
       {problem && (
@@ -247,8 +253,8 @@ function Stat({
     <div
       style={{
         flexShrink: 0,
-        paddingRight: divider ? '1.4rem' : 0,
-        borderRight: divider ? '1px solid var(--border)' : 'none'
+        paddingInlineEnd: divider ? '1.4rem' : 0,
+        borderInlineEnd: divider ? '1px solid var(--border)' : 'none'
       }}
     >
       {label && (

@@ -19,6 +19,7 @@ import {
   paperOrderEvents,
   paperTradeRows,
   redactSecrets,
+  scrubKeyPatterns,
   type PaperOrderEvent
 } from '../shared/research'
 import { crc32, readZip, zipArchive } from '../shared/zip'
@@ -135,6 +136,15 @@ describe('the redactor', () => {
     expect(holdsSecretField(redacted)).toBe(false)
     // The original is untouched.
     expect(settings.apiKey).toBe('K')
+  })
+
+  it('replaces every value shaped like a key wherever it stands, and keeps a SHA-256 and the words of a link (V8 Stage 10)', () => {
+    const keys = [`sk-or-v1-${'0a'.repeat(32)}`, `sk-${'Ab3'.repeat(16)}`, `sk-proj-${'xY9_'.repeat(20)}`, `bg_${'c4'.repeat(16)}`, `${'aB1'.repeat(21)}c`]
+    // Found by the in-app check: a story on SK Hynix had its link cut by the sk- pattern.
+    const kept = ['f0'.repeat(32), 'https://decrypt.co/382114/chip-maker-sk-hynix-posts-record-quarter-as-ai-memory-demand-overwhelms-supply', 'https://example.com/sk-telecom-q3-2026-earnings-beat-estimates', 'https://example.com/news/sk-Hynix-Raises-Its-Memory-Outlook']
+    const { text: out, scrubbed } = scrubKeyPatterns([...keys, ...kept].join(' '))
+    expect(out).toBe([...keys.map(() => '[redacted]'), ...kept].join(' '))
+    expect(scrubbed).toBe(keys.length)
   })
 })
 

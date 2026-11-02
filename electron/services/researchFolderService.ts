@@ -15,17 +15,20 @@ import {
   RESEARCH_LINES,
   PAPER_TRADE_COLUMNS,
   RESEARCH_VERSION,
+  TRADER_EXPORT_FILES,
   aiRequestCsvRow,
   aiRequestLine,
   csvOf,
   exportFileName,
   exportsToSweep,
+  hashTraderIds,
   inExportWindow,
   nextDailyExportAt,
   paperAccountEvents,
   paperOrderEvents,
   paperTradeRows,
   redactSecrets,
+  scrubKeyPatterns,
   type AiRequestLine,
   type ExportManifest,
   type ManifestFile,
@@ -34,6 +37,9 @@ import {
   type ResearchStatus
 } from '../../shared/research'
 import { zipArchive, type ZipEntry } from '../../shared/zip'
+import { traderRefOfKey } from '../../shared/traders/traderRef'
+import { executorsWithArchive } from './booksService'
+import { fetchHistoricalRange } from './marketService'
 import { getAiConfig } from './aiConfigService'
 import { onAiCallAppended } from './aiLedgerService'
 import { getEffectiveConfig } from './effectiveConfigService'
@@ -257,6 +263,39 @@ async function paperEventsOf(nowSec: number): Promise<PaperOrderEvent[]> {
 
 const encoded = (body: string): Uint8Array => new TextEncoder().encode(body)
 
+/** A trader's token in an export (V8 Stage 10): its key hashed, so that an export shows how a trader did and not who. */
+export const traderTokenOf = (key: string): string => `trader-${createHash('sha256').update(key).digest('hex').slice(0, 12)}`
+
+/** Bitget's spans read at most, the newest first, and the longest one may be (V8 Stage 10). */
+const BITGET_SPANS_MAX = 30
+const BITGET_SPAN_MAX_SEC = 86_400
+const BITGET_SPAN_MARGIN_SEC = 300
+
+/** The pairs traded in the window and when: the books' trades and the paper orders', each a span, the newest first. */
+async function tradedSpans(events: readonly PaperOrderEvent[], fromSec: number, nowSec: number): Promise<{ symbol: string; fromSec: number; toSec: number }[]> {
+  const spans: { symbol: string; fromSec: number; toSec: number }[] = []
+  for (const executor of await executorsWithArchive().catch(() => [])) {
+    if (executor.book === undefined || executor.mode !== 'paper') continue
+    const end = executor.book.result?.closedAt ?? (executor.status === 'active' ? nowSec : executor.stoppedAt ?? nowSec)
+    spans.push({ symbol: executor.symbol, fromSec: executor.createdAt ?? end, toSec: end })
+  }
+  const opened = new Map<string, PaperOrderEvent>()
+  for (const event of events) {
+    if (event.kind === 'opened') opened.set(event.id, event)
+    else if (opened.has(event.id)) {
+      const start = opened.get(event.id) as PaperOrderEvent
+      spans.push({ symbol: start.symbol, fromSec: start.at, toSec: event.at })
+      opened.delete(event.id)
+    }
+  }
+  for (const start of opened.values()) spans.push({ symbol: start.symbol, fromSec: start.at, toSec: nowSec })
+  return spans
+    .filter((span) => /^[A-Z0-9]{2,30}$/.test(span.symbol) && span.toSec >= fromSec && span.fromSec <= nowSec)
+    .sort((a, b) => b.toSec - a.toSec)
+    .slice(0, BITGET_SPANS_MAX)
+    .map((span) => ({ symbol: span.symbol, fromSec: Math.max(span.fromSec, span.toSec - BITGET_SPAN_MAX_SEC) - BITGET_SPAN_MARGIN_SEC, toSec: Math.min(nowSec, span.toSec + BITGET_SPAN_MARGIN_SEC) }))
+}
+
 async function makeExport(reason: 'daily' | 'manual'): Promise<ResearchExport> {
   const userData = app.getPath('userData')
   const nowSec = Math.floor(Date.now() / 1000)
@@ -290,8 +329,42 @@ async function makeExport(reason: 'daily' | 'manual'): Promise<ResearchExport> {
   const requests = await aiRequestsOf(nowSec - RESEARCH_LINES.exportWindowDays * 86_400)
   entries.push({ name: 'logs/ai-requests.jsonl', data: encoded(requests.map((line) => `${JSON.stringify(line)}\n`).join('')), mtime: made })
   entries.push({ name: 'logs/ai-requests.csv', data: encoded(csvOf(AI_REQUEST_COLUMNS, requests.map(aiRequestCsvRow))), mtime: made })
-  const trades = paperTradeRows(await paperEventsOf(nowSec)).map((row) => ({ ...row }) as Record<string, unknown>)
+  const paperEvents = await paperEventsOf(nowSec)
+  const trades = paperTradeRows(paperEvents).map((row) => ({ ...row }) as Record<string, unknown>)
   entries.push({ name: 'trades/paper-trades.csv', data: encoded(csvOf(PAPER_TRADE_COLUMNS, trades)), mtime: made })
+  // The traders on file (V8 Stage 10): each one's month files in the window and its state, under a token in place of
+  // its key; and Bitget's one-minute bars of each pair traded in the window, over its trade, a second venue's prices
+  // to check the first's by.
+  const tokens: { id: string; token: string }[] = []
+  const tradersDir = join(userData, 'traders')
+  for (const key of (await readdir(tradersDir).catch(() => [] as string[])).sort()) {
+    const ref = traderRefOfKey(key)
+    if (ref === null) continue
+    const token = traderTokenOf(key)
+    tokens.push({ id: key, token }, { id: ref.id, token })
+    const source = { from: `traders/${key}`, match: TRADER_EXPORT_FILES.month, to: `traders/${token}`, window: 'month' as const }
+    for (const name of (await readdir(join(tradersDir, key)).catch(() => [] as string[])).sort()) {
+      if (inExportWindow(source, name, nowSec) || TRADER_EXPORT_FILES.whole.test(name)) await add(join(tradersDir, key, name), `traders/${token}/${name}`)
+    }
+  }
+  for (const span of await tradedSpans(paperEvents, nowSec - RESEARCH_LINES.exportWindowDays * 86_400, nowSec)) {
+    const name = `market/bitget-1m/${span.symbol}-${new Date(span.fromSec * 1000).toISOString().slice(0, 16).replace(/[-:]/g, '')}.jsonl`
+    try {
+      const read = await fetchHistoricalRange('bitget', span.symbol, '1m', span.fromSec, span.toSec, `export-${name}`, () => undefined)
+      if (read.candles.length === 0) throw new Error('Bitget returned no bars')
+      entries.push({ name, data: encoded(read.candles.map((bar) => `${JSON.stringify(bar)}\n`).join('')), mtime: made })
+    } catch (failure) {
+      skipped.push({ path: name, why: failure instanceof Error ? failure.message : String(failure) })
+    }
+  }
+  // Every text file: each trader's key and id as its token, and every value shaped like a key replaced.
+  let scrubbed = 0
+  for (const entry of entries) {
+    if (!/\.(?:jsonl|json|csv)$/.test(entry.name)) continue
+    const cleaned = scrubKeyPatterns(hashTraderIds(new TextDecoder().decode(entry.data), tokens))
+    scrubbed += cleaned.scrubbed
+    entry.data = encoded(cleaned.text)
+  }
   const effective = await getEffectiveConfig().catch(() => null)
   const manifest: ExportManifest = {
     version: RESEARCH_VERSION,
@@ -300,7 +373,9 @@ async function makeExport(reason: 'daily' | 'manual'): Promise<ResearchExport> {
     windowDays: RESEARCH_LINES.exportWindowDays,
     app: { version: app.getVersion(), engineVersion: effective?.engineVersion ?? '?', configVersion: effective?.configVersion ?? '?' },
     files: entries.map((entry): ManifestFile => ({ path: entry.name, bytes: entry.data.length, sha256: sha256(entry.data) })),
-    skipped
+    skipped,
+    traders: tokens.length / 2,
+    scrubbed
   }
   entries.push({ name: 'manifest.json', data: new TextEncoder().encode(json(manifest)), mtime: new Date(nowSec * 1000) })
   // Deflated off the main thread, a file at a time.

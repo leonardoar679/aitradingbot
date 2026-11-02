@@ -1,3 +1,4 @@
+import { msg } from './i18n/translate'
 import type { NewsConfig, NewsConfigPatch, NewsReaderHealth } from './news'
 import type { BookStanding } from './paperBooks'
 
@@ -16,11 +17,11 @@ export const PAPER_TESTING_VERSION = 'paper-testing-v1'
 export const PAPER_TESTING_SWITCHES = ['news.enabled', 'news.delisting.paperShort', 'news.delisting.askModels'] as const
 export type PaperTestingSwitch = (typeof PAPER_TESTING_SWITCHES)[number]
 
-/** Each switch as a person reads it in Start's confirmation and in Stop's. */
+/** Each switch as a person reads it in Start's confirmation and in Stop's: keys, said in a language. */
 export const PAPER_TESTING_SWITCH_NAMES: Record<PaperTestingSwitch, string> = {
-  'news.enabled': "Binance's announcements, read every minute",
-  'news.delisting.paperShort': "The delisting rule's short, in the news book",
-  'news.delisting.askModels': "Delistings put to the watch's models, while the watch is on, within its $5 a day"
+  'news.enabled': msg("Binance's announcements, read every minute"),
+  'news.delisting.paperShort': msg("The delisting rule's short, in the news book"),
+  'news.delisting.askModels': msg("Delistings put to the watch's models, while the watch is on, within its $5 a day")
 }
 
 /** One switch Start turned on, and what it was before. */

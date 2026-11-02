@@ -784,7 +784,10 @@ The intervals at a day rest on four or five day blocks (two on the run's record)
 
 By the registered rule nothing is shown as a chance. The card says, as a frequency of the past, how often the coin's
 own price moved 1%, 2% and 5% and touched 1% and 2% over its last ninety days (`shared/forecast/moveRates.ts`), and
-shows an expected price only where a source of the way that beat the base rate is in use. The trade decision gains the
+shows an expected price only where a source of the way that beat the base rate is in use. (Found on 2 November 2026,
+V8 Stage 10: live, the rates were read from the three days of five-minute bars the forecast holds, too few for any
+horizon's thirty days of hours, so the card showed none and the records hold none until then. They are read from the
+bars on file once an hour since, in a worker; no figure of this report came from the records' rates.) The trade decision gains the
 user's line of a move worth its costs (MOVE_UNDER_LINE: the likely move, P75 for a buy and P25 for a sell, at least 1%
 up to four hours and 2% at a day), registered as exploratory (V72R-S3-LINES) for the Stage 9 runs.
 

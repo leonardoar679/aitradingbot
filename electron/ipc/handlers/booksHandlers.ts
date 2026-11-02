@@ -1,11 +1,12 @@
 import { ipcMain } from 'electron'
 import { IpcChannel } from '../../../shared/ipc'
 import { BOOK_IDS, type BookId } from '../../../shared/paperBooks'
-import { readSourcePrediction } from '../../../shared/evaluation/predictionRecord'
+import { readSourcePrediction, sourceFiguresRows } from '../../../shared/evaluation/predictionRecord'
 import { recordSourcePrediction, sourceRecord } from '../../services/predictionLedgerService'
 import { archiveSettled, bookStandings, listEquityMarks, listMisses, recordMiss } from '../../services/booksService'
 import { readBinanceSpotBook } from '../../services/marketCompareService'
 import { paperTestingState, startPaperTesting, stopPaperTesting } from '../../services/paperTestingService'
+import { booksReport } from '../../services/booksReportService'
 import { BASELINE_LINES } from '../../../shared/baseline'
 
 // The record of predictions that are not the forecast's own, and V8's paper books (V8 Stage 2). The window may
@@ -30,7 +31,9 @@ export function registerBooksHandlers(): void {
       ...(typeof filter?.sinceSec === 'number' && Number.isFinite(filter.sinceSec) ? { sinceSec: filter.sinceSec } : {})
     })
   )
+  ipcMain.handle(IpcChannel.PredictionsFigures, async () => sourceFiguresRows(await sourceRecord({})))
   ipcMain.handle(IpcChannel.BooksState, () => bookStandings())
+  ipcMain.handle(IpcChannel.BooksReport, () => booksReport())
   ipcMain.handle(IpcChannel.BooksMarks, async (_event, request: { book?: unknown; startedAt?: unknown } | undefined) => {
     if (!(BOOK_IDS as readonly unknown[]).includes(request?.book) || typeof request?.startedAt !== 'number') throw new Error('Name a book and the start of its run.')
     return listEquityMarks(request.book as BookId, request.startedAt)

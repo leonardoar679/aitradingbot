@@ -46,6 +46,7 @@ import { LiveOrderScheduler } from './livetrading/LiveOrderScheduler'
 import { PortfolioScheduler } from './portfolio/PortfolioScheduler'
 import { CopyTradingScheduler } from './traders/CopyTradingScheduler'
 import { BaselineScheduler } from './baseline/BaselineScheduler'
+import type { Handoff } from './navigation/handoff'
 import { PaperTestingScheduler } from './trading/PaperTestingScheduler'
 import { DEFAULT_PAGE, DEFAULT_TABS, activeNavId, anchorElementId, pageLabel, type NavAnchor, type NavId, type NavItem, type NavTarget, type Page, type PageTabs } from './navigation/pages'
 import type { AiOrderProposal } from '../shared/aiProposal'
@@ -54,7 +55,7 @@ import { EnglishOnly, I18nProvider, healLanguage, languageForLocales, msg, type 
 import { LanguageChooser } from './i18n/LanguageChooser'
 
 /** The pages shown in the window's language (V6 Stage 14); every other stays English. */
-const TRANSLATED_PAGES: ReadonlySet<Page> = new Set<Page>(['home', 'predictions', 'opportunities', 'positions', 'performance', 'settings', 'news-urls', 'copy-traders'])
+const TRANSLATED_PAGES: ReadonlySet<Page> = new Set<Page>(['home', 'predictions', 'opportunities', 'positions', 'performance', 'settings', 'news-urls', 'copy-traders', 'paper-trading'])
 
 /** When an entry that opens at a part of a page scrolls to it, after the page is drawn. */
 const ANCHOR_SCROLL_MS = [0, 250, 700, 1500]
@@ -70,6 +71,8 @@ function App(): React.JSX.Element {
   // A part of a page an entry opens at, scrolled to once the page has drawn.
   const [pendingAnchor, setPendingAnchor] = useState<NavAnchor | null>(null)
   const [uiMode, setUiMode] = useState<UiMode>(DEFAULT_UI_MODE)
+  // What Home's tiles hand a page (V8 Stage 10): a pasted link or trader, or Start paper testing; taken once.
+  const [handoff, setHandoff] = useState<Handoff | null>(null)
   // The language of the normal-user pages and the notices (V6 Stage 14): English until settings are
   // read; none on file, and the first launch asks, offering the computer's (the V6 document, §87).
   const [language, setLanguage] = useState<Language>('en')
@@ -129,6 +132,11 @@ function App(): React.JSX.Element {
   // is waiting.
   const [unseenAlerts, setUnseenAlerts] = useState(0)
   useEffect(() => subscribeAlerts((alerts) => setUnseenAlerts(unseenCount(alerts))), [])
+
+  function handOff(next: Handoff): void {
+    setHandoff(next)
+    navigate(next.page)
+  }
 
   function navigate(target: NavTarget | Page): void {
     if (typeof target === 'string') {
@@ -298,14 +306,16 @@ function App(): React.JSX.Element {
           {/* Keyed by page so navigating away from a broken page and back retries it, rather than
               the boundary latching its error for the rest of the session. */}
           <ErrorBoundary key={page} label={msg('The {page} page')} page={pageLabel(page)}>
-            {page === 'home' && <HomePage onPrepareOrder={prepareOrder} onNavigate={navigate} />}
+            {page === 'home' && <HomePage onPrepareOrder={prepareOrder} onNavigate={navigate} onHandoff={handOff} />}
             {page === 'predictions' && <PredictionsPage onPrepareOrder={prepareOrder} uiMode={uiMode} />}
             {page === 'opportunities' && <OpportunitiesPage onPrepareOrder={prepareOrder} />}
             {page === 'positions' && <PositionsPage />}
             {page === 'performance' && <PerformancePage />}
             {page === 'settings' && <SettingsPanel onNavigate={navigate} onUiModeChange={setUiMode} onLanguageChange={setLanguage} />}
-            {page === 'news-urls' && <NewsUrlsPage onPrepareOrder={prepareOrder} />}
-            {page === 'copy-traders' && <CopyTradersPage />}
+            {page === 'news-urls' && <NewsUrlsPage onPrepareOrder={prepareOrder} handoff={handoff?.page === 'news-urls' ? handoff.link : null} onHandoffTaken={() => setHandoff(null)} />}
+            {page === 'copy-traders' && <CopyTradersPage handoff={handoff?.page === 'copy-traders' ? handoff.trader : null} onHandoffTaken={() => setHandoff(null)} />}
+            {/* Translated since V8 Stage 10, but the paper account's section, which stays English. */}
+            {page === 'paper-trading' && <PaperTradingPage askStart={handoff?.page === 'paper-trading'} onHandoffTaken={() => setHandoff(null)} />}
             {/* The pages not translated (the user's answer of 13 October 2026: the normal-user pages are)
                 stay English, left to right, inside any window. A translated part of one -- the Position
                 form -- brings the window's language back itself. */}
@@ -320,7 +330,6 @@ function App(): React.JSX.Element {
                 onPrepareOrder={prepareOrder}
               />
             )}
-            {page === 'paper-trading' && <PaperTradingPage />}
             {page === 'live-trading' && <LiveTradingPage onNavigate={navigate} />}
             {page === 'strategies' && (
               <StrategiesPage

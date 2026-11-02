@@ -20,6 +20,7 @@ import { CallLines } from '../calls/CallLines'
 import { PrimaryCallCard } from '../calls/PrimaryCallCard'
 import { usePrimaryCall } from '../calls/usePrimaryCall'
 import type { UiMode } from '../../shared/uiMode'
+import { BigMoversView } from './BigMoversCard'
 
 const CLASS_NAMES: Record<PairClass, string> = { btc: msg('Bitcoin'), eth: msg('Ether'), large: msg('Large'), mid: msg('Mid'), 'high-vol': msg('High volatility'), other: msg('Other') }
 
@@ -76,6 +77,7 @@ export function PredictionsPage({ onPrepareOrder, uiMode = 'normal' }: { onPrepa
       <p style={{ ...noteStyle, margin: '0 0 0.9rem' }}>{forecastStatusText(state, i18n)}</p>
       <PrimaryCallCard state={calls} predictions={forecasts} livePrice={cardPrice} />
       {!expert && <CallLines state={calls} predictions={predictions} pairs={ranking?.ranked.map((entry) => entry.pair) ?? []} onOpen={setOpen} />}
+      <BigMoversView predictions={forecasts} onOpen={setOpen} />
       {expert && (
         <BestPredictionCard prediction={best === null ? null : (predictions.get(best.pair) ?? null)} ranked={best} live={live} onDetails={setOpen} onPrepareOrder={onPrepareOrder} />
       )}
