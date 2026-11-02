@@ -49,8 +49,9 @@ const REUSE = process.env.REUSE === '1'
 const RESULT = process.env.HORIZONS === undefined ? 'long-walk-forward.json' : `long-walk-forward-${ONLY.join('-')}.json`
 /** The worker's seed (electron/forecast/trainWorker.ts SEED), so that each fit is the one the app would make. */
 const SEED = 20261013
-/** Eight tested folds of 28 days, each with at least ninety days of rows before it. */
-const LONG_FOLDS = { folds: 8, foldDays: 28, minTrainDays: 90 }
+/** Eight tested folds of 28 days, each with at least ninety days of rows before it; FOLDS another count of the same folds
+ * (V8 Stage 11: thirteen over the second year, October 2024 to September 2025, for V8-R2's confirmation). */
+const LONG_FOLDS = { folds: Number(process.env.FOLDS ?? 8), foldDays: 28, minTrainDays: 90 }
 const ROLLING_DAYS = 90
 const WARMUP_DAYS = 26
 const MODES = ['expanding', 'rolling'] as const
