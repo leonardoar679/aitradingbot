@@ -983,3 +983,33 @@ came in 20.4%, 6.1% and 0.7% of these coin-hours at an hour, 43.7%, 20.3% and 3.
 **Are its either-way odds honest?** At an hour for 1%, yes: every judged tenth within two points and a Brier score below
 the rate's. At an hour for 2%, and at four hours for both, they are stated two to four points high in several tenths.
 Since V72R-S3-EITHER failed at an hour, no either-way chance is shown anywhere.
+
+## A way where big moves happen, confirmed on a second year (V8 Stage 11, 2 November 2026)
+
+Three ideas of a direction where the big moves are, registered on 26 October with their call rules, halves and twelve
+confirmatory cells fixed (V8-R2-WIDTH, V8-R2-ANALOG, V8-R2-TAIL; research/v8R2.ts, shared/forecast/r2.ts): found on the
+current year's saved records and confirmed only on a year none of them had seen, October 2024 to September 2025, fetched
+apart and walked forward on its own (13 folds of 28 days, the models' seeds and figures the same), with the precision's
+lower bound read at 1 - 0.05/12. None passes.
+
+- **WIDTH** (the forecast's widest tenth, called its median's way where P(up) agrees) made no call at all at an hour or
+  four hours on the current year: its shown P(up) never left 0.451-0.527 and 0.426-0.498. On the second year it called
+  1,035 and 899 times, 65.9% and 54.5% right, but with intervals that reach below an even chance and a half of the year
+  far below zero at an hour.
+- **ANALOG** (the way 60% of the 50 most similar earlier situations went) called often and was right half the time:
+  50.3% and 51.0% on the current year, 50.8% and 49.6% on the second, its calls losing the round trip every time.
+- **TAIL** (after a 5% or 10% hour): continuing the move was wrong more often than right on the current year (39.9% at
+  an hour after 5%), which is why reversal was judged on the second year alone. There, reversing a 5% hour was right
+  50.9% of the time at an hour and 48.0% at four hours, losing after costs; after a 10% hour, 209 calls at four hours
+  were 60.3% right but with an interval from 44.9% and an edge of +0.03% between -2.4% and +1.8%.
+
+Every confirmatory cell reads "not shown". The smallest skill the second year could have told from zero: about 1% for
+ANALOG, 5% for WIDTH at four hours and 23% at an hour, 8-9% for TAIL after a 5% hour and 15-16% after a 10% one. So a
+small edge after the rarer, larger moves is not ruled out; it is not seen. At a day (exploratory), reversing a big hour
+read 56.8% right after 5% and 66.2% after 10% on the second year, each short of its line: a lead for a registration of
+its own, not a source. The card's sources stay as they were: a Binance delisting, and a direction model once one
+clears the direction bar on two walk forwards in a row (none has; on the second year none was promoted at an hour
+or four hours either, the best a skill of +0.36% at an hour).
+
+The second year's ranges held up: its 80% range held 80-87% in each month from October 2024 to September 2025 at an
+hour, and 80.3% [79.4, 81.2] pooled at four hours, as on the current year.
