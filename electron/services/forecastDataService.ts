@@ -61,6 +61,12 @@ const SETTLE_MS = 5_000
  * their bars for the next pass, and the close is forecast without them. Not during the backfill, whose pages
  * take as long as they take. */
 const PASS_DEADLINE_MS = 60_000
+/** How long a pass waits on one pair before it goes on without it (V8 Stage 12, 5 November 2026). The pass's deadline
+ * only stops a lane from taking another pair; it cannot end a request under way. In V8's three-day run, at 15:40 UTC
+ * on 4 November, a pair new to the universe had read twelve pages of its ninety days when its thirteenth request never
+ * settled, neither answering nor failing at its timeout. The pass waited on it from then on, and the forecast, which a
+ * pass tells, was made for no close again. A page whose host and partner both time out takes thirty seconds. */
+const PAIR_WAIT_MS = 45_000
 /** A rate limit without a Retry-After waits this long; a ban (418), this. */
 const RATE_LIMIT_WAIT_MS = 60_000
 const BAN_WAIT_MS = 30 * 60_000
@@ -89,6 +95,10 @@ let lastRequestAt = 0
 let waitUntil = 0
 /** The pacing in force: MIN_REQUEST_GAP_MS, but for a test. */
 let requestGapMs = MIN_REQUEST_GAP_MS
+/** The wait on a pair in force: PAIR_WAIT_MS, but for a test. */
+let pairWaitMs = PAIR_WAIT_MS
+/** Pairs whose catch-up outlived the wait and has not ended: left out of every pass until it does. */
+const stalled = new Set<string>()
 const status: ForecastDataStatus = {
   version: FORECAST_DATA_VERSION,
   pairs: 0,
@@ -284,6 +294,28 @@ async function catchUp(symbol: string): Promise<void> {
   entry.ready = true
 }
 
+/** A pair's catch-up, waited for at most the pair's wait. One still under way then goes on by itself, its pair left out
+ * of the passes until it ends, so that a request that never ends costs its own pair and not the forecast. */
+async function caughtUp(symbol: string): Promise<void> {
+  const work = catchUp(symbol)
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const outlived = new Promise<true>((resolve) => {
+    timer = setTimeout(() => resolve(true), pairWaitMs)
+  })
+  try {
+    if ((await Promise.race([work.then(() => false as const), outlived])) === false) return
+  } finally {
+    clearTimeout(timer)
+  }
+  stalled.add(symbol)
+  void work.catch(() => undefined).then(() => {
+    stalled.delete(symbol)
+  })
+  const since = new Date().toISOString().slice(11, 16)
+  console.warn(`The forecast data pass went on without ${symbol}: a request for it has not ended in ${pairWaitMs / 1000} s. The pair is left out until it does.`)
+  throw new Error(`a request has not ended in ${pairWaitMs / 1000} s (${since} UTC); the pair is left out until it does`)
+}
+
 /** The pairs the forecast still owes outcomes for, as the engine tells them (forecastService.ts): one
  * that left the research is brought up to date until it owes none, so that its forecasts are judged
  * rather than written as missing an hour on. Found by V6 Stage 15's run: a pair that fell under the
@@ -306,8 +338,9 @@ async function pass(): Promise<void> {
   const pairs = [...new Set([...universe, ...owed])]
   let next = 0
   let limited = false
-  // A usual pass, every pair of the universe read already: held to the deadline.
-  const usual = universe.length > 0 && universe.every((symbol) => series.get(symbol)?.ready === true)
+  // A usual pass, every pair of the universe read already, or left out while a request of its own is under way: held to
+  // the deadline.
+  const usual = universe.length > 0 && universe.every((symbol) => stalled.has(symbol) || series.get(symbol)?.ready === true)
   const deadline = usual ? Date.now() + passDeadlineMs : Number.POSITIVE_INFINITY
   let cut = false
   const lane = async (): Promise<void> => {
@@ -317,8 +350,9 @@ async function pass(): Promise<void> {
         break
       }
       const symbol = pairs[next++]
+      if (stalled.has(symbol)) continue
       try {
-        await catchUp(symbol)
+        await caughtUp(symbol)
       } catch (error) {
         status.failures++
         status.lastError = `${symbol}: ${describe(error)}`
@@ -485,6 +519,8 @@ export const forecastDataForTest = {
     limitedBecause = ''
     requestGapMs = MIN_REQUEST_GAP_MS
     passDeadlineMs = PASS_DEADLINE_MS
+    pairWaitMs = PAIR_WAIT_MS
+    stalled.clear()
     movers = []
     Object.assign(status, { pairs: 0, ready: 0, requests: 0, weight: 0, failures: 0, barsWritten: 0, lastPassAt: null, lastError: null, rateLimitedUntil: null, refusedHost: null, monthsSwept: 0 })
   },
@@ -496,6 +532,12 @@ export const forecastDataForTest = {
   },
   setPassDeadline(ms: number): void {
     passDeadlineMs = ms
+  },
+  setPairWait(ms: number): void {
+    pairWaitMs = ms
+  },
+  stalled(): string[] {
+    return [...stalled]
   },
   /** A pair marked read, as a first pass leaves it. */
   markReady(symbol: string): void {

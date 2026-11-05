@@ -279,6 +279,74 @@ describe('a slow data host', () => {
   })
 })
 
+// V8 Stage 12: in the three-day run a pair new to the universe had a request that never ended, and the pass, waiting on
+// it, told no close again from 15:40 UTC on 4 November. A pass now waits on a pair at most its wait.
+describe('a request that never ends', () => {
+  it('costs its own pair: the pass goes on and tells the close, the pair is left out until the request ends, then read again', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true })
+    const start = Math.floor(Date.now() / 300_000) * 300_000 + 20_000
+    vi.setSystemTime(start)
+    try {
+      const data = await service()
+      const binance = await import('../electron/services/exchanges/binance')
+      data.forecastDataForTest.setUniverse(['BTCUSDT', 'ETHUSDT'])
+      await data.forecastDataForTest.pass()
+      // A mover joins, and its first request does not end until it is let go.
+      data.forecastDataForTest.setUniverse(['BTCUSDT', 'ETHUSDT', 'ADAUSDT'])
+      let letGo = (): void => undefined
+      const hung = new Promise<void>((resolve) => {
+        letGo = resolve
+      })
+      const real = vi.mocked(binance.fetchMarketData).getMockImplementation()!
+      vi.mocked(binance.fetchMarketData).mockImplementation(async (path, timeout) => {
+        if (path.includes('symbol=ADAUSDT')) await hung
+        return real(path, timeout)
+      })
+      const adaAsked = (): number => vi.mocked(binance.fetchMarketData).mock.calls.filter(([path]) => path.includes('symbol=ADAUSDT')).length
+      const told: number[] = []
+      data.onForecastBars((closedAt) => told.push(closedAt))
+      data.forecastDataForTest.setPairWait(300)
+
+      vi.setSystemTime(start + 300_000)
+      asked.length = 0
+      await data.forecastDataForTest.pass()
+      expect(told).toHaveLength(1)
+      expect(asked.map((entry) => entry.symbol).sort()).toEqual(['BTCUSDT', 'ETHUSDT'])
+      expect(adaAsked()).toBe(1)
+      expect(data.getForecastDataStatus().lastError).toMatch(/^ADAUSDT: a request has not ended in 0\.3 s/)
+      expect(data.forecastDataForTest.stalled()).toEqual(['ADAUSDT'])
+
+      // The next close: the pair is left out, not asked again while its request is under way.
+      vi.setSystemTime(start + 600_000)
+      asked.length = 0
+      await data.forecastDataForTest.pass()
+      expect(told).toHaveLength(2)
+      expect(asked.map((entry) => entry.symbol).sort()).toEqual(['BTCUSDT', 'ETHUSDT'])
+      expect(adaAsked()).toBe(1)
+      // And the pass is a usual one, held to its deadline, though the pair was never read whole.
+      data.forecastDataForTest.setPassDeadline(0)
+      vi.setSystemTime(start + 900_000)
+      await data.forecastDataForTest.pass()
+      expect(told).toHaveLength(3)
+      expect(data.getForecastDataStatus().lastError).toMatch(/stopped at its deadline/)
+      data.forecastDataForTest.setPassDeadline(60_000)
+
+      // The request ends: the pair's reading finishes by itself, and the next pass reads it again.
+      letGo()
+      await vi.waitFor(() => expect(data.forecastDataForTest.stalled()).toEqual([]), { timeout: 10_000 })
+      expect(linesIn('ADAUSDT').length).toBeGreaterThan(0)
+      expect(data.forecastSeries('ADAUSDT')).not.toBeNull()
+      vi.setSystemTime(start + 1_200_000)
+      asked.length = 0
+      await data.forecastDataForTest.pass()
+      expect(told).toHaveLength(4)
+      expect(asked.map((entry) => entry.symbol).sort()).toEqual(['ADAUSDT', 'BTCUSDT', 'ETHUSDT'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
 describe('a pair that left the research', () => {
   it("is brought up to date while the forecast owes it outcomes, and left once it owes none; the forecast's universe stays the research's", async () => {
     const data = await service()
