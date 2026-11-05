@@ -1042,7 +1042,8 @@ more than three closes behind (e35ec16): for the rest of the run Home listed the
 beside them. And the research ZIP's quarter-hour check, which read when the app ran from the forecast's own passes and
 tape, and so saw an app that had stopped with its forecast, now also fails a last pass more than an hour before the
 app's hourly card states and book marks end (c39b92e; at the run's end it read "last pass 15:30 UTC on 4 November,
-hourly records to 21:00 UTC on 5 November").
+hourly records to 21:00 UTC on 5 November"). Since 2f4d0dc a pair left out also names the step it waits on, and the
+forecast's own pass, which reads the books it decides on from the same host, waits for them at most 30 seconds.
 
 | line | verdict | what it rests on |
 |---|---|---|
@@ -1090,7 +1091,8 @@ known at the row's moment. The second year carries no hour-before-a-release stat
 releases only. V8-R1 left out its first scored month, which had no month before it to be mapped on. The hour's run was
 its third try, after the fixes above. The three-day run's forecast stopped at 15:40 UTC on 4 November, so V8-S12-GATES
 fails by its letter in the forecast section's gates; its fixes are in later commits than the runs' build. The export
-skipped Bitget's minutes of 1000PEPEUSDT, a name only Binance's perpetual has, and said so. A followed trader's trade,
+skipped Bitget's minutes of 1000PEPEUSDT, a name only Binance's perpetual has, and said so (read since 8b97ce6 as
+Bitget's PEPEUSDT at a thousand). A followed trader's trade,
 which V8-S2-RECORD's hypothesis names, was never written to the prediction record. The equity fix (dd62e64, 26 October,
 engine line paper-equity-v2) came before every V8 book, and no dollar figure is compared across it.
 
