@@ -279,8 +279,9 @@ describe('a slow data host', () => {
   })
 })
 
-// V8 Stage 12: in the three-day run a pair new to the universe had a request that never ended, and the pass, waiting on
-// it, told no close again from 15:40 UTC on 4 November. A pass now waits on a pair at most its wait.
+// V8 Stage 12: in the three-day run a pass reading a pair new to the universe never ended, and no close was told again
+// from 15:40 UTC on 4 November. A pass now waits on a pair at most its wait; here a request that never ends stands for
+// whatever that wait was.
 describe('a request that never ends', () => {
   it('costs its own pair: the pass goes on and tells the close, the pair is left out until the request ends, then read again', async () => {
     vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true })

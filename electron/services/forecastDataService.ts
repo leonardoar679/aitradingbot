@@ -63,8 +63,9 @@ const SETTLE_MS = 5_000
 const PASS_DEADLINE_MS = 60_000
 /** How long a pass waits on one pair before it goes on without it (V8 Stage 12, 5 November 2026). The pass's deadline
  * only stops a lane from taking another pair; it cannot end a request under way. In V8's three-day run, at 15:40 UTC
- * on 4 November, a pair new to the universe had read twelve pages of its ninety days when its thirteenth request never
- * settled, neither answering nor failing at its timeout. The pass waited on it from then on, and the forecast, which a
+ * on 4 November, a pair new to the universe had stored twelve pages of its ninety days, and the pass never ended: no
+ * bar was written again, though the thirteenth page's request should have ended by its timeouts within thirty seconds
+ * (which wait never ended is not known; four stalls made on purpose were each cut at the timeout). The forecast, which a
  * pass tells, was made for no close again. A page whose host and partner both time out takes thirty seconds. */
 const PAIR_WAIT_MS = 45_000
 /** A rate limit without a Retry-After waits this long; a ban (418), this. */
