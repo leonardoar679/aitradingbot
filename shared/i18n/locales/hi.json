@@ -2476,5 +2476,6 @@
   "Simulated money against real prices: the three paper books, the paper account, and a manual paper order ticket. Nothing here reaches an exchange.": "असली कीमतों के सामने सिम्युलेटेड धन: तीन पेपर बुक, पेपर खाता और मैन्युअल पेपर ऑर्डर टिकट। यहाँ का कुछ भी किसी एक्सचेंज तक नहीं पहुँचता।",
   "Binance's announcements, read every minute": "Binance की घोषणाएँ, हर मिनट पढ़ी जाती हैं",
   "The delisting rule's short, in the news book": "न्यूज़ बुक में डीलिस्टिंग नियम का शॉर्ट",
-  "Delistings put to the watch's models, while the watch is on, within its $5 a day": "वॉच के मॉडलों के सामने रखी गई डीलिस्टिंग, जब वॉच चालू हो, इसके $5 प्रतिदिन के भीतर"
+  "Delistings put to the watch's models, while the watch is on, within its $5 a day": "वॉच के मॉडलों के सामने रखी गई डीलिस्टिंग, जब वॉच चालू हो, इसके $5 प्रतिदिन के भीतर",
+  "Behind: the last forecast read the {time} close, {ago} ago. No close has been read since, so these ranges are not current.": "पीछे: आख़िरी पूर्वानुमान ने {time} का क्लोज़ {ago} पहले पढ़ा था। तब से कोई क्लोज़ नहीं पढ़ा गया, इसलिए ये दायरे मौजूदा नहीं हैं।"
 }

@@ -2476,5 +2476,6 @@
   "Simulated money against real prices: the three paper books, the paper account, and a manual paper order ticket. Nothing here reaches an exchange.": "เงินจำลองกับราคาจริง: พอร์ตจำลองสามพอร์ต บัญชีจำลอง และแบบฟอร์มคำสั่งจำลองแบบทำเอง ไม่มีสิ่งใดที่นี่ไปถึงกระดานเทรด",
   "Binance's announcements, read every minute": "ประกาศของ Binance ที่อ่านทุกนาที",
   "The delisting rule's short, in the news book": "การชอร์ตของกฎการเพิกถอน ในพอร์ตข่าว",
-  "Delistings put to the watch's models, while the watch is on, within its $5 a day": "การเพิกถอนที่ส่งให้โมเดลของระบบเฝ้าตลาด ขณะที่ระบบเฝ้าตลาดเปิดอยู่ ภายในงบ $5 ต่อวัน"
+  "Delistings put to the watch's models, while the watch is on, within its $5 a day": "การเพิกถอนที่ส่งให้โมเดลของระบบเฝ้าตลาด ขณะที่ระบบเฝ้าตลาดเปิดอยู่ ภายในงบ $5 ต่อวัน",
+  "Behind: the last forecast read the {time} close, {ago} ago. No close has been read since, so these ranges are not current.": "ล่าช้า: การคาดการณ์ล่าสุดอ่านราคาปิด {time} เมื่อ {ago}ที่แล้ว ตั้งแต่นั้นยังไม่ได้อ่านราคาปิดอีก ช่วงเหล่านี้จึงไม่เป็นปัจจุบัน"
 }

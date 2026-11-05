@@ -132,12 +132,28 @@ export function BestPredictionCard({
 
 /** The top three predictions (§70), each in a line: the likely range at its lead horizon and its quality. The
  * forecast's own lean is in its whole forecast (V8 Stage 3): no measured source stands behind it. */
-export function TopPredictions({ ranked, predictions, onDetails }: { ranked: RankedForecast[]; predictions: ReadonlyMap<string, PricePrediction>; onDetails: (pair: string) => void }): React.JSX.Element | null {
+export function TopPredictions({
+  ranked,
+  predictions,
+  behind = null,
+  onDetails
+}: {
+  ranked: RankedForecast[]
+  predictions: ReadonlyMap<string, PricePrediction>
+  /** forecastBehindText's sentence, when the forecast has fallen behind the closes. */
+  behind?: string | null
+  onDetails: (pair: string) => void
+}): React.JSX.Element | null {
   const i18n = useI18n()
   const { t } = i18n
   if (ranked.length === 0) return null
   return (
     <Card title={t('Top predictions')}>
+      {behind !== null && (
+        <p role="status" style={{ ...noteStyle, margin: '0 0 0.6rem', color: 'var(--gold)' }}>
+          {behind}
+        </p>
+      )}
       <ol style={{ margin: 0, paddingInlineStart: '1.2rem', display: 'grid', gap: '0.35rem' }}>
         {ranked.map((entry) => {
           const prediction = predictions.get(entry.pair)

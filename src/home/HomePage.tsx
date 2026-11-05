@@ -1,7 +1,9 @@
 import { useMemo } from 'react'
 import { PageHeader } from '../components/PageHeader'
 import { TopPredictions } from '../forecast/BestPredictionCard'
+import { forecastBehindText } from '../forecast/forecastWords'
 import { openPredictionOf, useForecast } from '../forecast/useForecast'
+import { useNowSec } from '../utils/useNowSec'
 import { useLiveMarket } from '../hooks/useLiveMarket'
 import { HoldingsSummary } from '../overview/HoldingsSummary'
 import { MarketStatusStrip } from '../overview/MarketStatusStrip'
@@ -20,8 +22,10 @@ import { NewsPasteTile, PerformanceTile, PortfolioTile, TraderPasteTile } from '
  * or "No profitable opportunity identified" with why -- the watch's best opportunity, and what is held. The forecast's
  * own best pair, with its lean, is on Predictions. Opening it asks no model and places nothing. */
 export function HomePage({ onPrepareOrder, onNavigate, onHandoff }: { onPrepareOrder: (proposal: AiOrderProposal) => void; onNavigate: (page: Page) => void; onHandoff: (handoff: Handoff) => void }): React.JSX.Element {
-  const { t } = useI18n()
-  const { predictions, ranking } = useForecast()
+  const i18n = useI18n()
+  const { t } = i18n
+  const { state, predictions, ranking } = useForecast()
+  const nowSec = useNowSec(true, 30_000)
   const calls = usePrimaryCall()
   const best = calls?.cards[0] ?? null
   const live = useLiveMarket(best === null ? [] : [best.pair])
@@ -43,7 +47,7 @@ export function HomePage({ onPrepareOrder, onNavigate, onHandoff }: { onPrepareO
         <PerformanceTile onOpen={() => onNavigate('performance')} />
         <PortfolioTile onStart={() => onHandoff({ page: 'paper-trading', askStart: true })} onOpen={() => onNavigate('paper-trading')} />
       </div>
-      <TopPredictions ranked={top3} predictions={predictions} onDetails={details} />
+      <TopPredictions ranked={top3} predictions={predictions} behind={forecastBehindText(state, nowSec, i18n)} onDetails={details} />
       <PrimaryCallCard state={calls} predictions={forecasts} livePrice={livePrice} />
       <TopOpportunityCard onPrepareOrder={onPrepareOrder} onNavigate={onNavigate} />
       <HoldingsSummary onNavigate={onNavigate} />

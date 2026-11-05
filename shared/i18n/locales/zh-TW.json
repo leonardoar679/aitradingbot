@@ -2476,5 +2476,6 @@
   "Simulated money against real prices: the three paper books, the paper account, and a manual paper order ticket. Nothing here reaches an exchange.": "模擬資金，真實價格：三個模擬帳本、模擬帳戶，以及手動模擬下單面板。這裡的任何操作都不會送到交易所。",
   "Binance's announcements, read every minute": "每分鐘讀取一次的幣安公告",
   "The delisting rule's short, in the news book": "新聞帳本中的下架規則做空",
-  "Delistings put to the watch's models, while the watch is on, within its $5 a day": "下架公告交給盯盤的模型（盯盤開啟時，在其每天 $5 的預算內）"
+  "Delistings put to the watch's models, while the watch is on, within its $5 a day": "下架公告交給盯盤的模型（盯盤開啟時，在其每天 $5 的預算內）",
+  "Behind: the last forecast read the {time} close, {ago} ago. No close has been read since, so these ranges are not current.": "已落後：最近一次預測讀取的是 {time} 的收盤，在 {ago}前。此後沒有讀取任何收盤，因此這些區間不是目前的。"
 }

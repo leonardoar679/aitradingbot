@@ -13,7 +13,7 @@ import type { AiOrderProposal } from '../../shared/aiProposal'
 import { ForecastTraderCard } from './ForecastTraderCard'
 import { NO_FILTERS, predictionRows, rowDecision, type PredictionFilters } from './predictionRows'
 import { takeWantedPrediction, useForecast } from './useForecast'
-import { callColor, callLabel, decisionWords, firstReason, forecastStatusText, pairText, rangeText, reliabilityWord, signedPct, timeLeftText, HORIZON_SHORT } from './forecastWords'
+import { callColor, callLabel, decisionWords, firstReason, forecastBehindText, forecastStatusText, pairText, rangeText, reliabilityWord, signedPct, timeLeftText, HORIZON_SHORT } from './forecastWords'
 import { msg, useI18n } from '../i18n'
 import { BestPredictionCard } from './BestPredictionCard'
 import { CallLines } from '../calls/CallLines'
@@ -71,9 +71,16 @@ export function PredictionsPage({ onPrepareOrder, uiMode = 'normal' }: { onPrepa
   const openPrediction = open === null ? undefined : predictions.get(open)
   const openDecision = open === null ? null : (ranking?.ranked.find((entry) => entry.pair === open)?.decision ?? null)
 
+  const behind = forecastBehindText(state, nowSec, i18n)
+
   return (
     <>
       <PageHeader title={t('Predictions')} subtitle={t("Every pair's forecast, ranked by its edge after costs, its reliability, the news, liquidity and execution")} />
+      {behind !== null && (
+        <p role="status" style={{ ...noteStyle, margin: '0 0 0.4rem', color: 'var(--gold)' }}>
+          {behind}
+        </p>
+      )}
       <p style={{ ...noteStyle, margin: '0 0 0.9rem' }}>{forecastStatusText(state, i18n)}</p>
       <PrimaryCallCard state={calls} predictions={forecasts} livePrice={cardPrice} />
       {!expert && <CallLines state={calls} predictions={predictions} pairs={ranking?.ranked.map((entry) => entry.pair) ?? []} onOpen={setOpen} />}

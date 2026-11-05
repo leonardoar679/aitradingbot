@@ -2476,5 +2476,6 @@
   "Simulated money against real prices: the three paper books, the paper account, and a manual paper order ticket. Nothing here reaches an exchange.": "مال مُحاكى مقابل أسعار حقيقية: المحافظ التجريبية الثلاث، والحساب التجريبي، ونموذج أمر تجريبي يدوي. لا شيء هنا يصل إلى أي منصة.",
   "Binance's announcements, read every minute": "قراءة إعلانات Binance كل دقيقة",
   "The delisting rule's short, in the news book": "صفقة البيع على المكشوف لقاعدة الشطب، في محفظة الأخبار",
-  "Delistings put to the watch's models, while the watch is on, within its $5 a day": "حالات الشطب المعروضة على نماذج الرصد، ما دام الرصد مُشغَّلًا، ضمن حدّه البالغ 5 دولارات في اليوم"
+  "Delistings put to the watch's models, while the watch is on, within its $5 a day": "حالات الشطب المعروضة على نماذج الرصد، ما دام الرصد مُشغَّلًا، ضمن حدّه البالغ 5 دولارات في اليوم",
+  "Behind: the last forecast read the {time} close, {ago} ago. No close has been read since, so these ranges are not current.": "متأخر: قرأ آخر توقع إغلاق {time} منذ {ago}. لم يُقرأ أي إغلاق منذ ذلك الحين، لذا هذه النطاقات ليست حالية."
 }

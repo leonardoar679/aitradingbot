@@ -2476,5 +2476,6 @@
   "Simulated money against real prices: the three paper books, the paper account, and a manual paper order ticket. Nothing here reaches an exchange.": "Tiền mô phỏng giao dịch theo giá thật: ba sổ mô phỏng, tài khoản mô phỏng và một phiếu lệnh mô phỏng thủ công. Không có gì ở đây được gửi tới sàn giao dịch.",
   "Binance's announcements, read every minute": "Thông báo của Binance, được đọc mỗi phút",
   "The delisting rule's short, in the news book": "Lệnh bán khống của quy tắc hủy niêm yết, trong sổ tin tức",
-  "Delistings put to the watch's models, while the watch is on, within its $5 a day": "Các đợt hủy niêm yết được đưa cho các mô hình của chế độ theo dõi, khi chế độ theo dõi đang bật, trong giới hạn 5 USD mỗi ngày của nó"
+  "Delistings put to the watch's models, while the watch is on, within its $5 a day": "Các đợt hủy niêm yết được đưa cho các mô hình của chế độ theo dõi, khi chế độ theo dõi đang bật, trong giới hạn 5 USD mỗi ngày của nó",
+  "Behind: the last forecast read the {time} close, {ago} ago. No close has been read since, so these ranges are not current.": "Bị chậm: dự báo gần nhất đã đọc lần đóng {time}, cách đây {ago}. Từ đó chưa đọc lần đóng nào, nên các khoảng này không còn là hiện tại."
 }

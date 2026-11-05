@@ -8,6 +8,7 @@ import type { PredictionView } from '../../shared/forecast/view'
 import { forecastPrice, HORIZON_NAME, HORIZON_NEXT, HORIZON_SHORT } from '../../shared/forecast/words'
 import type { ForecastState } from '../../shared/ipc'
 import { ENGLISH, msg, type I18n } from '../../shared/i18n/translate'
+import { durationOf, utcWhen } from '../traders/traderText'
 
 // HOW THE FORECAST READS ON SCREEN (the V6 document, §3, §34-37, §70 and §118; V6 Stage 10, 13 October
 // 2026): the same words on Home, the Predictions page and the drawer, so that a call, a range or a
@@ -122,6 +123,21 @@ export function leadHorizon(prediction: PricePrediction): Horizon | null {
   if (prediction.bestHorizon !== null) return prediction.bestHorizon
   if (prediction.horizons.hour1 !== undefined) return 'hour1'
   return (Object.keys(prediction.horizons)[0] as Horizon | undefined) ?? null
+}
+
+/** How far the forecast's last pass may be behind before the pages say so (V8 Stage 12): three closes. In V8's three-day
+ * run the forecast stopped at the 15:30 UTC close on 4 November, and Home went on listing that close's ranges as its top
+ * predictions, with no time beside them, for the rest of the run. */
+export const FORECAST_BEHIND_SEC = 15 * 60
+
+/** A sentence when the forecast's last pass is more than FORECAST_BEHIND_SEC behind `nowSec`; null while it keeps up. */
+export function forecastBehindText(state: ForecastState | null, nowSec: number, i18n: I18n = ENGLISH): string | null {
+  const at = state?.engine.lastPassAt ?? null
+  if (at === null || nowSec - at <= FORECAST_BEHIND_SEC) return null
+  return i18n.t('Behind: the last forecast read the {time} close, {ago} ago. No close has been read since, so these ranges are not current.', {
+    time: utcWhen(i18n, at * 1000),
+    ago: durationOf(i18n, (nowSec - at) / 60)
+  })
 }
 
 /** Where the forecast stands, in a line (the Predictions page's status line). An error is the

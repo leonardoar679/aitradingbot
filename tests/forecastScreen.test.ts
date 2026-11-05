@@ -13,6 +13,7 @@ import {
   aiConsensusWord,
   callLabel,
   decisionWords,
+  forecastBehindText,
   forecastStatusText,
   leadHorizon,
   momentumWord,
@@ -489,5 +490,16 @@ describe("the forecast's status line", () => {
     )
     expect(forecastStatusText(state({ status: 'waiting', waitingFor: 'calibration' }))).toBe('No forecast yet. Its models are fitted; the walk forward its ranges are calibrated on is running.')
     expect(forecastStatusText(state({ status: 'waiting', waitingFor: 'bars' }))).toBe('No forecast yet. It waits for the bars of the close.')
+  })
+
+  // V8 Stage 12: the three-day run's forecast stopped at a close, and Home listed that close's ranges for the rest of it.
+  it('says so once the last pass is more than three closes behind, with its close and how long ago', () => {
+    expect(forecastBehindText(null, T + 86_400)).toBeNull()
+    expect(forecastBehindText(state({ lastPassAt: null }), T + 86_400)).toBeNull()
+    expect(forecastBehindText(state({}), T + 15 * 60)).toBeNull()
+    expect(forecastBehindText(state({}), T + 15 * 60 + 1)).toBe(
+      'Behind: the last forecast read the 13 Oct 15:00 UTC close, 15 min ago. No close has been read since, so these ranges are not current.'
+    )
+    expect(forecastBehindText(state({}), T + 19 * 3600)).toMatch(/the 13 Oct 15:00 UTC close, 19\.0 h ago\./)
   })
 })

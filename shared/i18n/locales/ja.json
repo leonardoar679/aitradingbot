@@ -2476,5 +2476,6 @@
   "Simulated money against real prices: the three paper books, the paper account, and a manual paper order ticket. Nothing here reaches an exchange.": "実際の価格に対して、シミュレーションの資金で取引します：3つのペーパー口座、ペーパーの口座、手動のペーパー注文入力。ここから取引所に届くものはありません。",
   "Binance's announcements, read every minute": "1分ごとに読み取る Binance の発表",
   "The delisting rule's short, in the news book": "ニュース用口座での上場廃止ルールのショート",
-  "Delistings put to the watch's models, while the watch is on, within its $5 a day": "ウォッチのモデルに尋ねる上場廃止（ウォッチがオンの間、1日 $5 の範囲で）"
+  "Delistings put to the watch's models, while the watch is on, within its $5 a day": "ウォッチのモデルに尋ねる上場廃止（ウォッチがオンの間、1日 $5 の範囲で）",
+  "Behind: the last forecast read the {time} close, {ago} ago. No close has been read since, so these ranges are not current.": "遅れています：最後の予測が {time} の確定を読んだのは {ago}前です。それ以降は確定を読んでいないため、これらの範囲は最新ではありません。"
 }

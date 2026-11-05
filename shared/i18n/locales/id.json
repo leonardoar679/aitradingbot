@@ -2476,5 +2476,6 @@
   "Simulated money against real prices: the three paper books, the paper account, and a manual paper order ticket. Nothing here reaches an exchange.": "Uang simulasi pada harga nyata: tiga buku simulasi, akun simulasi, dan formulir order simulasi manual. Tidak ada yang sampai ke bursa dari sini.",
   "Binance's announcements, read every minute": "Pengumuman Binance, dibaca setiap menit",
   "The delisting rule's short, in the news book": "Short dari aturan delisting, di buku berita",
-  "Delistings put to the watch's models, while the watch is on, within its $5 a day": "Delisting yang diajukan ke model pantauan, selama pantauan menyala, dalam batas $5 sehari"
+  "Delistings put to the watch's models, while the watch is on, within its $5 a day": "Delisting yang diajukan ke model pantauan, selama pantauan menyala, dalam batas $5 sehari",
+  "Behind: the last forecast read the {time} close, {ago} ago. No close has been read since, so these ranges are not current.": "Tertinggal: prakiraan terakhir membaca penutupan {time}, {ago} yang lalu. Sejak itu tidak ada penutupan yang dibaca, jadi rentang ini tidak terkini."
 }

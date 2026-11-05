@@ -2476,5 +2476,6 @@
   "Simulated money against real prices: the three paper books, the paper account, and a manual paper order ticket. Nothing here reaches an exchange.": "실제 가격으로 거래하는 모의 자금: 모의 테스트 계좌 세 개, 모의 계좌, 수동 모의 주문서. 여기서는 어떤 것도 거래소로 전송되지 않습니다.",
   "Binance's announcements, read every minute": "바이낸스 공지를 1분마다 읽기",
   "The delisting rule's short, in the news book": "뉴스 계좌에서 상장 폐지 규칙이 여는 숏",
-  "Delistings put to the watch's models, while the watch is on, within its $5 a day": "상장 폐지를 워치의 모델에 묻기(워치가 켜져 있는 동안, 하루 $5 이내)"
+  "Delistings put to the watch's models, while the watch is on, within its $5 a day": "상장 폐지를 워치의 모델에 묻기(워치가 켜져 있는 동안, 하루 $5 이내)",
+  "Behind: the last forecast read the {time} close, {ago} ago. No close has been read since, so these ranges are not current.": "지연됨: 마지막 예측은 {ago} 전에 {time} 마감을 읽었습니다. 그 이후로 읽은 마감이 없어 이 범위는 최신이 아닙니다."
 }
