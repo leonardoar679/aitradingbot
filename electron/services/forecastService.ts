@@ -124,6 +124,23 @@ let liveState: () => LiveState | null = () => null
 /** The books a pass decides on (V7.2-R Stage 9; liveMarketService.ts): a pair's freshest, and a read of those the stream
  * does not hold before each pass. Handed in by electron/main.ts; none, the stream's alone. */
 let passBooks: ForecastBooks | null = null
+/** How long a pass waits for the books it decides on (V8 Stage 12). Their reads end by their own timeouts in about
+ * 24 seconds; a wait that never ended, as one in the forecast's data pass did in V8's three-day run, would hold this
+ * pass, and every pass after it, as that one held the data. Past it the pass decides on the books the stream holds. */
+const PASS_BOOKS_WAIT_MS = 30_000
+let passBooksWaitMs = PASS_BOOKS_WAIT_MS
+
+/** A promise's value, or `fallback` once `ms` have passed without one; `late` is told then. */
+function atMost<T>(promise: Promise<T>, ms: number, fallback: T, late: () => void): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const outlived = new Promise<T>((resolve) => {
+    timer = setTimeout(() => {
+      late()
+      resolve(fallback)
+    }, ms)
+  })
+  return Promise.race([promise, outlived]).finally(() => clearTimeout(timer))
+}
 
 export interface ForecastBooks {
   held(symbol: string): LiveBook | undefined
@@ -356,8 +373,13 @@ async function applySettled(settled: Settled): Promise<void> {
 async function runPass(closedAt: number): Promise<void> {
   const startedAt = Date.now()
   lastClosedAt = closedAt
-  // The books the stream does not carry, read once for the pass's decisions (V7.2-R Stage 9).
-  if (passBooks !== null) await passBooks.read(sources.universe()).catch(() => 0)
+  // The books the stream does not carry, read once for the pass's decisions (V7.2-R Stage 9), waited for at most
+  // passBooksWaitMs (V8 Stage 12).
+  if (passBooks !== null) {
+    await atMost(passBooks.read(sources.universe()).catch(() => 0), passBooksWaitMs, 0, () =>
+      console.warn(`The forecast pass of the ${new Date(closedAt * 1000).toISOString().slice(11, 16)} UTC close went on without the books it read: the read had not ended in ${passBooksWaitMs / 1000} s.`)
+    )
+  }
   const made = pass(engine, sources, closedAt, Date.now())
   if (made.status === 'waiting') {
     state.status = 'waiting'
@@ -761,7 +783,11 @@ export const forecastForTest = {
     shadowRunId = null
     liveState = (): LiveState | null => null
     passBooks = null
+    passBooksWaitMs = PASS_BOOKS_WAIT_MS
     listeners.clear()
+  },
+  setPassBooksWait(ms: number): void {
+    passBooksWaitMs = ms
   }
 }
 

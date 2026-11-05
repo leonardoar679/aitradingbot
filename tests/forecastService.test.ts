@@ -560,6 +560,29 @@ describe('the trade', () => {
     expect(mod.forecastDecision('XRPUSDT')!.reasons.map((reason) => reason.code)).toContain('STALE_PRICE')
   })
 
+  // V8 Stage 12: in the three-day run a wait in the forecast's data pass never ended and held every pass after it. The
+  // forecast's own pass waits for the books it reads at most its wait, then decides on the books it holds.
+  it('goes on without the books a read that never ends was to bring, deciding on those the pair holds', async () => {
+    const asked: number[] = []
+    const books = {
+      held: (symbol: string) => (symbol === 'SOLUSDT' ? { symbol, bid: 99.99, bidQty: 50, ask: 100.01, askQty: 40, updatedAt: Date.now(), source: 'rest' as const } : undefined),
+      read: (symbols: readonly string[]): Promise<number> => {
+        asked.push(symbols.length)
+        return new Promise<number>(() => undefined)
+      }
+    }
+    const mod = await import('../electron/services/forecastService')
+    mod.forecastForTest.reset()
+    mod.forecastForTest.setPassBooksWait(50)
+    mod.startForecast(() => null, books)
+    await closeAt(mod, HOUR)
+    expect(mod.forecastDecision('SOLUSDT')!.reasons.map((reason) => reason.code)).not.toContain('STALE_PRICE')
+    // The next close is passed too: the first read, still under way, holds nothing.
+    await closeAt(mod, HOUR + 900)
+    expect(asked).toEqual([SYMBOLS.length, SYMBOLS.length])
+    expect(lines(`predictions-${month}.jsonl`).map((line) => line.t)).toEqual([...Array(SYMBOLS.length).fill(HOUR), ...Array(SYMBOLS.length).fill(HOUR + 900)])
+  })
+
   it("is decided for every pair at its lead horizon after a pass, ranked, and kept apart from the forecast", async () => {
     const live = await engine()
     await closeAt(live, HOUR)

@@ -100,6 +100,11 @@ let requestGapMs = MIN_REQUEST_GAP_MS
 let pairWaitMs = PAIR_WAIT_MS
 /** Pairs whose catch-up outlived the wait and has not ended: left out of every pass until it does. */
 const stalled = new Set<string>()
+/** The step each pair's catch-up is at, which a stalled pair's warning names: V8's three-day run could not tell which
+ * wait never ended. */
+const steps = new Map<string, string>()
+const step = (symbol: string, what: string): void => void steps.set(symbol, what)
+const pageName = (startSec: number): string => `the page from ${new Date(startSec * 1000).toISOString().slice(0, 16).replace('T', ' ')} UTC`
 const status: ForecastDataStatus = {
   version: FORECAST_DATA_VERSION,
   pairs: 0,
@@ -154,6 +159,7 @@ const PAGE_TIMEOUT_MS = 15_000
 
 /** One page of a pair's five-minute bars from `startSec`, the closed ones only. */
 async function fetchPage(symbol: string, startSec: number): Promise<ForecastBar[]> {
+  step(symbol, `asking for ${pageName(startSec)}`)
   await paced()
   status.requests++
   status.weight += KLINES_WEIGHT
@@ -174,6 +180,7 @@ async function fetchPage(symbol: string, startSec: number): Promise<ForecastBar[
     throw new OtherMarket(`the data host is ${endpoint.name}, another market than binance.com's: its bars are not kept`)
   }
   status.refusedHost = null
+  step(symbol, `reading the answer for ${pageName(startSec)}`)
   const rows: unknown = await response.json()
   if (!Array.isArray(rows)) throw new Error(`${endpoint.name} klines for ${symbol} were not a list`)
   const closedBy = Math.floor(Date.now() / 1000)
@@ -182,6 +189,7 @@ async function fetchPage(symbol: string, startSec: number): Promise<ForecastBar[
 
 /** Writes bars to their month files. */
 async function store(symbol: string, bars: readonly ForecastBar[]): Promise<void> {
+  step(symbol, `writing ${bars.length} bars to its files`)
   const byMonth = new Map<string, ForecastBar[]>()
   for (const bar of bars) {
     const month = barMonthKey(bar.time)
@@ -245,6 +253,7 @@ function hold(entry: PairSeries, incoming: readonly ForecastBar[], nowSec: numbe
 /** A pair read from its files, once a session: the gaps left in its last ninety days asked for once
  * each, and its windows built from all of it. */
 async function loadPair(symbol: string, nowSec: number): Promise<PairSeries> {
+  step(symbol, 'reading its files')
   let bars = await readPair(symbol)
   const entry: PairSeries = { m5: [], h1: [], lastStored: bars.length === 0 ? null : bars[bars.length - 1].time, ready: false }
   if (bars.length > 0) {
@@ -290,8 +299,10 @@ async function catchUp(symbol: string): Promise<void> {
     if (page.length < KLINES_PAGE) break
   }
   const now = Math.floor(Date.now() / 1000)
-  if (pages > 1) rebuild(entry, await readPair(symbol), now)
-  else if (pages === 1) hold(entry, fetched, now)
+  if (pages > 1) {
+    step(symbol, 'reading its files again')
+    rebuild(entry, await readPair(symbol), now)
+  } else if (pages === 1) hold(entry, fetched, now)
   entry.ready = true
 }
 
@@ -313,8 +324,9 @@ async function caughtUp(symbol: string): Promise<void> {
     stalled.delete(symbol)
   })
   const since = new Date().toISOString().slice(11, 16)
-  console.warn(`The forecast data pass went on without ${symbol}: a request for it has not ended in ${pairWaitMs / 1000} s. The pair is left out until it does.`)
-  throw new Error(`a request has not ended in ${pairWaitMs / 1000} s (${since} UTC); the pair is left out until it does`)
+  const what = steps.get(symbol) ?? 'its catch-up'
+  console.warn(`The forecast data pass went on without ${symbol}: ${what} has not ended in ${pairWaitMs / 1000} s. The pair is left out until it does.`)
+  throw new Error(`${what} has not ended in ${pairWaitMs / 1000} s (${since} UTC); the pair is left out until it does`)
 }
 
 /** The pairs the forecast still owes outcomes for, as the engine tells them (forecastService.ts): one
@@ -522,6 +534,7 @@ export const forecastDataForTest = {
     passDeadlineMs = PASS_DEADLINE_MS
     pairWaitMs = PAIR_WAIT_MS
     stalled.clear()
+    steps.clear()
     movers = []
     Object.assign(status, { pairs: 0, ready: 0, requests: 0, weight: 0, failures: 0, barsWritten: 0, lastPassAt: null, lastError: null, rateLimitedUntil: null, refusedHost: null, monthsSwept: 0 })
   },

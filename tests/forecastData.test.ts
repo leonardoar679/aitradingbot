@@ -314,7 +314,8 @@ describe('a request that never ends', () => {
       expect(told).toHaveLength(1)
       expect(asked.map((entry) => entry.symbol).sort()).toEqual(['BTCUSDT', 'ETHUSDT'])
       expect(adaAsked()).toBe(1)
-      expect(data.getForecastDataStatus().lastError).toMatch(/^ADAUSDT: a request has not ended in 0\.3 s/)
+      // It says which step never ended: here the first page of its ninety days, asked for and not answered.
+      expect(data.getForecastDataStatus().lastError).toMatch(/^ADAUSDT: asking for the page from \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC has not ended in 0\.3 s/)
       expect(data.forecastDataForTest.stalled()).toEqual(['ADAUSDT'])
 
       // The next close: the pair is left out, not asked again while its request is under way.
