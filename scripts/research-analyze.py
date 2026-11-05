@@ -424,6 +424,20 @@ def forecasts_of(bundle, made_sec, csv_dir, tape):
     check('every quarter-hour forecast made', 'FAIL' if missed else 'PASS',
           f'{len(missed)} of {len(expected)} quarter-hours the app ran at had no forecast' if missed else f'{len(expected)} quarter-hours')
 
+    # The forecast kept up with the app (V8 Stage 12). The check above reads when the app ran from the forecast's own
+    # passes and tape; in V8's three-day run the forecast stopped at 15:30 UTC on 4 November and wrote neither from then
+    # on, so the check saw an app that was not running. The hourly card states and the books' hourly marks are written
+    # whatever the forecast does: the last of them more than an hour after the last pass is a forecast that stopped.
+    cards, _ = bundle.all_lines(r'^predictions/cards-\d{4}-\d{2}\.jsonl$')
+    marks, _ = bundle.all_lines(r'^paper-books/equity-\d{4}-\d{2}\.jsonl$')
+    hourly = [int(t) for t in (line.get('at') for line in cards + marks) if isinstance(t, (int, float))]
+    if passed and hourly:
+        last = max(hourly)
+        behind = last - passed[-1] > 3600
+        check('the forecast kept up with the app', 'FAIL' if behind else 'PASS',
+              f"its last pass read {utc(passed[-1])}, while the app's hourly records run to {utc(last)}" if behind
+              else f"its last pass ({utc(passed[-1])}) within an hour of the app's last hourly record ({utc(last)})")
+
     # Every due horizon judged.
     judged = {(o.get('id'), o.get('h')) for o in outcomes}
     missing_lines = [o for o in outcomes if 'missing' in o]
