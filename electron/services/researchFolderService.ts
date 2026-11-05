@@ -266,6 +266,15 @@ const encoded = (body: string): Uint8Array => new TextEncoder().encode(body)
 /** A trader's token in an export (V8 Stage 10): its key hashed, so that an export shows how a trader did and not who. */
 export const traderTokenOf = (key: string): string => `trader-${createHash('sha256').update(key).digest('hex').slice(0, 12)}`
 
+/** A contract named for a multiple of its coin -- Binance's perpetuals write a thousand PEPE as 1000PEPEUSDT, a million
+ * MOG as 1000000MOGUSDT and a million BABYDOGE as 1MBABYDOGEUSDT -- read on Bitget's spot market, which may list only
+ * the coin's own pair (V8 Stage 12: the three-day run's export asked Bitget for 1000PEPEUSDT and was told it does not
+ * exist): that pair and the multiple its prices are read at; null for any other name. */
+export function multipleOf(symbol: string): { symbol: string; multiple: number } | null {
+  const match = /^(1000000|1000|1M)([A-Z][A-Z0-9]*USDT)$/.exec(symbol)
+  return match === null ? null : { symbol: match[2], multiple: match[1] === '1000' ? 1_000 : 1_000_000 }
+}
+
 /** Bitget's spans read at most, the newest first, and the longest one may be (V8 Stage 10). */
 const BITGET_SPANS_MAX = 30
 const BITGET_SPAN_MAX_SEC = 86_400
@@ -361,13 +370,28 @@ async function makeExport(reason: 'daily' | 'manual'): Promise<ResearchExport> {
   }
   for (const span of await tradedSpans(paperEvents, nowSec - RESEARCH_LINES.exportWindowDays * 86_400, nowSec)) {
     const name = `market/bitget-1m/${span.symbol}-${new Date(span.fromSec * 1000).toISOString().slice(0, 16).replace(/[-:]/g, '')}.jsonl`
-    try {
-      const read = await fetchHistoricalRange('bitget', span.symbol, '1m', span.fromSec, span.toSec, `export-${name}`, () => undefined)
-      if (read.candles.length === 0) throw new Error('Bitget returned no bars')
-      entries.push({ name, data: encoded(read.candles.map((bar) => `${JSON.stringify(bar)}\n`).join('')), mtime: made })
-    } catch (failure) {
-      skipped.push({ path: name, why: failure instanceof Error ? failure.message : String(failure) })
+    // The pair as traded, then, for a contract named for a multiple of its coin, the coin's own pair at that multiple:
+    // its prices times the multiple and its volume in the contract's units, each bar naming the pair it was read from.
+    const multiple = multipleOf(span.symbol)
+    const reads = [{ symbol: span.symbol, multiple: 1 }, ...(multiple === null ? [] : [multiple])]
+    const failures: string[] = []
+    for (const { symbol, multiple: times } of reads) {
+      try {
+        const read = await fetchHistoricalRange('bitget', symbol, '1m', span.fromSec, span.toSec, `export-${name}`, () => undefined)
+        if (read.candles.length === 0) throw new Error(`Bitget returned no bars of ${symbol}`)
+        // Twelve figures, past which a product is the float's noise (0.0047339999999999995).
+        const at = (value: number): number => Number(value.toPrecision(12))
+        const bars =
+          times === 1
+            ? read.candles
+            : read.candles.map((bar) => ({ time: bar.time, open: at(bar.open * times), high: at(bar.high * times), low: at(bar.low * times), close: at(bar.close * times), volume: at(bar.volume / times), bitgetSymbol: symbol, multiple: times }))
+        entries.push({ name, data: encoded(bars.map((bar) => `${JSON.stringify(bar)}\n`).join('')), mtime: made })
+        break
+      } catch (failure) {
+        failures.push(failure instanceof Error ? failure.message : String(failure))
+      }
     }
+    if (failures.length === reads.length) skipped.push({ path: name, why: failures.join('; ') })
   }
   // Every text file: each trader's key and id as its token, and every value shaped like a key replaced.
   let scrubbed = 0

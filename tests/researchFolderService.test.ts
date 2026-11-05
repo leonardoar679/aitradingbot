@@ -39,7 +39,10 @@ const bitget = vi.hoisted(() => ({ asked: [] as { exchange: string; symbol: stri
 vi.mock('../electron/services/marketService', () => ({
   fetchHistoricalRange: async (exchange: string, symbol: string, interval: string, fromSec: number, toSec: number) => {
     bitget.asked.push({ exchange, symbol, interval, fromSec, toSec })
-    return { candles: [{ time: fromSec - (fromSec % 60) + 60, open: 1, high: 1, low: 1, close: 1, volume: 1 }], cancelled: false }
+    // Bitget's spot market lists PEPE by the coin, as the three-day run of V8 Stage 12 found, priced per coin.
+    if (symbol.startsWith('1000')) throw new Error(`Bitget candles ${symbol} failed: 400 40034 Parameter ${symbol} does not exist`)
+    const price = symbol === 'PEPEUSDT' ? 0.00001 : 1
+    return { candles: [{ time: fromSec - (fromSec % 60) + 60, open: price, high: price, low: price, close: price, volume: symbol === 'PEPEUSDT' ? 5_000_000 : 1 }], cancelled: false }
   },
   fetchTicker24h: async () => ({ lastPrice: 1 })
 }))
@@ -327,6 +330,29 @@ describe("the export's V8 records (V8 Stage 10)", () => {
       const entry = entries.find((candidate) => candidate.name === file.path)!
       expect(createHash('sha256').update(entry.data).digest('hex'), file.path).toBe(file.sha256)
     }
+  })
+
+  // V8 Stage 12: the three-day run's export asked Bitget for 1000PEPEUSDT, Binance's perpetual of a thousand PEPE, and was
+  // told it does not exist; Bitget's spot market lists the coin's own pair.
+  it("reads a contract named for a thousand of its coin on Bitget's pair of the coin, at the thousand, saying so on each bar", async () => {
+    const pepe = { id: 'p1', type: 'position', mode: 'paper', status: 'stopped', symbol: '1000PEPEUSDT', createdAt: NOW - 7200, params: {}, follow: { traderKey: KEY, positionId: 'kPEPE' }, book: { id: 'copy', startedAt: NOW - 86_400, ledger: 'follow', result: { netQuote: -1, netPct: -0.1, feesQuote: 0, fundingQuote: 0, closedAt: NOW - 3600 } } }
+    put('paperBooks/archive-2026-10.jsonl', `${JSON.stringify(pepe)}\n`)
+    bitget.asked = []
+    const { exportResearchBundle, multipleOf } = await services()
+    const made = await exportResearchBundle('manual')
+    const entries = readZip(new Uint8Array(readFileSync(made.path)), (data) => new Uint8Array(inflateRawSync(data)))
+    expect(bitget.asked.map((ask) => ask.symbol)).toEqual(['1000PEPEUSDT', 'PEPEUSDT'])
+    const file = entries.find((entry) => entry.name === 'market/bitget-1m/1000PEPEUSDT-20261020T0455.jsonl')
+    expect(file).toBeDefined()
+    const bar = JSON.parse(new TextDecoder().decode(file!.data).trim()) as Record<string, number | string>
+    expect(bar).toMatchObject({ bitgetSymbol: 'PEPEUSDT', multiple: 1000, volume: 5000 })
+    expect(bar.close).toBe(0.01)
+    expect(JSON.parse(new TextDecoder().decode(entries.find((entry) => entry.name === 'manifest.json')!.data)).skipped).toEqual([])
+    // The names Binance gives such contracts; any other name is read as it is.
+    expect(multipleOf('1000000MOGUSDT')).toEqual({ symbol: 'MOGUSDT', multiple: 1_000_000 })
+    expect(multipleOf('1MBABYDOGEUSDT')).toEqual({ symbol: 'BABYDOGEUSDT', multiple: 1_000_000 })
+    expect(multipleOf('1INCHUSDT')).toBeNull()
+    expect(multipleOf('ETHUSDT')).toBeNull()
   })
 })
 
