@@ -1013,3 +1013,98 @@ or four hours either, the best a skill of +0.36% at an hour).
 
 The second year's ranges held up: its 80% range held 80-87% in each month from October 2024 to September 2025 at an
 hour, and 80.3% [79.4, 81.2] pooled at four hours, as on the current year.
+
+## The runs of V8, and what V8 can say (Stage 12, 2-5 November 2026)
+
+Two runs were registered before either started (V8-S12-GATES, 2 November): an hour with OpenRouter faked (v8-1h,
+18:02-20:08 UTC on 2 November, the third of three tries: the first two found a missing setting, an export that wrote
+one Bitget file twice, two analyzer faults and a harness that retired a fake run's spend into the real book, all fixed
+before it), then three days with the real models within $3 (v8-3d, its 4,320 minutes from 20:15 UTC on 2 November to
+20:15 UTC on 5 November, the app closed at 21:21 UTC once its last forecasts had come due). Both ran the build of
+16c8366 on scratch profiles, paper testing started by its own switch, and the four traders the V8 checks had read
+followed by the fixed rule -- Hyperliquid's 0x0b4b...2143, 0xaf68...3561 and 0x1534...909f, and OKX's lead trader
+35E22983F436F55B -- each one's clone run where its analysis fitted a rule (all four did).
+
+**The forecast stopped for the last 29 hours of the three days.** At 15:40 UTC on 4 November ADAUSDT joined the
+forecast's universe as one of the scanner's movers, and the data pass read its ninety days: twelve pages were stored by
+15:40:36, and the pass never ended. A pass waits for all its lanes, and its 60-second deadline only stops a lane from
+taking another pair, so from then on no bar was written, no close was told, and the forecast, the big-mover list and
+the hour's large moves were recorded for no close again; the cards, the books, the follows, the news and the scanner
+went on, and the hourly reports, which do not read the forecast, passed throughout. Which wait never ended is not
+known: the page's request should have ended by its timeouts within thirty seconds, and four stalls made on purpose
+under Electron's Node (no headers, a body that stops, a gzip body that stops, each with and without forced garbage
+collection) were each cut at the timeout. It is the second time a wait has held this pass: in V6's twelve-hour run a
+request without a timeout did, and 856170b gave each page fifteen seconds. Three fixes came after the run and are not
+in its build. The pass now waits on a pair at most 45 seconds and leaves it out until its own wait ends (93cb094; an
+in-app check with every forecast-data request of ETHUSDT made never to end went on without it after 45 seconds and
+passed at every close after, 16 of 17 pairs). Home's top predictions and Predictions now say when the forecast is
+more than three closes behind (e35ec16): for the rest of the run Home listed the 15:30 close's ranges with no time
+beside them. And the research ZIP's quarter-hour check, which read when the app ran from the forecast's own passes and
+tape, and so saw an app that had stopped with its forecast, now also fails a last pass more than an hour before the
+app's hourly card states and book marks end (c39b92e; at the run's end it read "last pass 15:30 UTC on 4 November,
+hourly records to 21:00 UTC on 5 November").
+
+| line | verdict | what it rests on |
+|---|---|---|
+| V8-S12-GATES | **failed** | the hour passed every gate; the three days passed every hourly, session, V7.2-R and V8 gate (roles and served over 21 calls, 212 book trades whole, the ZIP read back, 645 source lines answered, 216 of 216 book-hours marked, 39,895 leader events before any follow, no key copy left, $0.0219), but its forecast section failed forecast_made (171 of 288 quarter-hour closes: 2 lost on 3 November to a slow data host, 115 after the stall), forecast_history (LINK and PEPE late at one close in a host failover) and forecast_outcomes (494 horizons due after the stall) |
+| V8-S0-ROUTING | **held** | every call asked of its role's model and answered by it: 4 faked in the hour; 21 in the three days ($0.0219: Argon at low effort once, Luna at minimal effort 20 times, the deciding role never asked); 66 on the user's record from 26 October to 3 November ($1.18 of the user's own: Opus 5.5 to decide 51, Argon 3, Luna 12) |
+| V8-S2-RECORD | **held** | every due line answered once, none missing, every outcome re-scored from Binance's minute bars equal to six decimals: 645 of 645 in the three days and 55 of 55 on the user's record, all of them the big-mover list's size calls; a followed trader's trade, named in the hypothesis, was never written to the record (its outcome is the copy book's) |
+| V8-S2-LIQ | not measured | the liquidity gate refused nothing on any record; the copy book's 656 venue refusals were positions in a market with no USDT perpetual (654 in Hyperliquid's xyz:INTC) or no readable price |
+| V8-S3-EV | not measured | no card was shown on any record: 1,176 hourly card states in the run and 731 on the user's, every one "no source" |
+| V8-S3-DELIST-LIVE | not measured | one delisting hour since 1 October (14 October 06:00 UTC: EPIC +5.86%, QUICK +16.28% net), under the six its first clause needs; none during the run; the card stands |
+| V8-S3-MOVES | held (descriptive) | 134 large moves in the run until the forecast stopped (27 hours of 2%, 107 days of 5%), 61 named by the big-mover list at a size they reached no later than a quarter into the move, 73 by no source, none called with a way; on the user's record 126, 2 named (the list ran there for eight hours) |
+| V8-S6-SKILL | **failed** | two records judged, both MARKET OR LUCK (0x0b4b over 3,534 round trips, OKX's over 32); two TOO FEW (482 trips in 2 trading days, 105 in 11) |
+| V8-S6-DELAY | **failed** | the follows' live delay was seconds (a median 5.7 over 268), so the two-minute row judges, and it reaches below zero for every trader with an interval (0x0b4b -0.14% a trade [-0.14, -0.13]); no trader is followable |
+| V8-S7-CLONE | **failed** | none REPLICABLE: 0x0b4b's rule told its entries out of time (AUC 0.651 [0.632, 0.667]) but lost: PARTLY; 0xaf68 NOT REPLICABLE; two TOO FEW |
+| V8-S9-BOOKS | **failed** | the copy book, judged (638 trades, 472 events): mean R -0.00086 [-0.00173, -0.00011], equity -5.04%, -0.116% a trade against its leaders on the same positions [-0.122, -0.110]: not profitable, not better; the news book and the baseline made no trade, too few to call |
+
+**Each source, as V8 leaves it.**
+
+| source | unit | count | bar | registered | met |
+|---|---|---|---|---|---|
+| A Binance delisting, short four hours | an announcement hour | 18 held out (January 2025 to September 2026); 1 live since 1 October | +13.17% mean net held out (t 4.8); live, withdrawn under +2% with six hours | V8-S3-DELIST-CARD, V8-S3-DELIST-LIVE | held out, yes; live, not yet measurable |
+| A Monitoring Tag | an announcement hour | the study's | its four-hour hold failed; the 60-minute bracket passed narrowly, +0.35% a trade | NEWS.md, 5 October | no card |
+| The forecast's direction | a coin-hour | seven months, and a second year | the direction bar on two walk forwards; R2's twelve cells at 1 - 0.05/12 | V7.2-R's lines; V8-R2-WIDTH, -ANALOG, -TAIL | no |
+| The forecast's size (big movers) | a coin-hour | 208,608 at an hour over seven months | Brier skill above the 90-day rate, every tenth within two points, the top tenth 1.25 times | V8-R1-SIZE | ranks, yes; tenths, no: failed |
+| A link pasted | the user's paste | 1, the user's (35 more passive records) | a card only from a measured source | V8-S3-EV | no card: not measured |
+| A trader's record | a round trip | 4 traders analysed | p at most 0.01 under both nulls, the interval above 0, both halves | V8-S6-SKILL, V8-S6-DELAY, V8-S7-CLONE | no skill, none followable, none replicable |
+| The three books | a closed trade; an independent event | copy 638 and 472; news 0; baseline 0 | 30 trades and 10 events, the interval above 0 | V8-S9-BOOKS | copy judged: lost; the others too few |
+
+The pasted link is the user's own sample of one: a Chainlink partnership story on coinpaprika.com, read on 27 October
+to "No measured source calls a way for news of this kind". The traders were picked by rule, not for skill: every one
+the V8 checks had read, three Hyperliquid addresses whose fills carry their fees (VERIFIED) and one OKX lead trader whose
+positions OKX reports without a fee field (REPORTED); with four analysed, a pass by chance (about one in a hundred at
+0.01) would not yet be expected. The copy book's 638 trades were 292 follows, entered a median 5.7 seconds after their leader, and
+346 clone trades; it traded on paper only, at 1x on the venues' perpetual prices with fees and funding, and its loss
+is in line with the delay tables, where copies two minutes late lost 0.09-0.28% a trade on the leaders' own records.
+
+**What the cells could tell.** R2 judged twelve confirmatory cells at 1 - 0.05/12, and every one reads "not shown"; the
+smallest skill the second year could have told from zero was about 1% for ANALOG, 5% for WIDTH at four hours and 23%
+at an hour, 8-9% for TAIL after a 5% hour and 15-16% after a 10% one. R1 judged three horizons for each of two rankers.
+In big moves the ranges still run narrow: the 80% range held 26-41% when Bitcoin moved three or more of its usual moves
+during the horizon (V6.1), and in the three days, while the forecast ran, 82.3%, 79.8%, 75.8%, 73.1% and 71.8% from
+five minutes to a day.
+
+**Deviations.** From V8-R2-ANALOG: the 50 nearest rows were found on the figures one horizon earlier, which is what was
+known at the row's moment. The second year carries no hour-before-a-release state, since the macro calendar holds 2026's
+releases only. V8-R1 left out its first scored month, which had no month before it to be mapped on. The hour's run was
+its third try, after the fixes above. The three-day run's forecast stopped at 15:40 UTC on 4 November, so V8-S12-GATES
+fails by its letter in the forecast section's gates; its fixes are in later commits than the runs' build. The export
+skipped Bitget's minutes of 1000PEPEUSDT, a name only Binance's perpetual has, and said so. A followed trader's trade,
+which V8-S2-RECORD's hypothesis names, was never written to the prediction record. The equity fix (dd62e64, 26 October,
+engine line paper-equity-v2) came before every V8 book, and no dollar figure is compared across it.
+
+**The models asked.** The roles: Opus 5.5 decides, Argon at low effort looks first, Luna at minimal effort summarizes.
+In the three days 21 calls, each answered by the model asked: Argon once for the watch's first look, Luna 20 times for
+the daily summary, the news and the why; the deciding role was never asked. In the hour 4, faked, one to each role. On
+the user's own record from 26 October to 3 November 66, 51 of them Opus 5.5's to decide (the bot's 50, the watch's 1),
+every one asked of the role's model and answered by it. The runs together spent $0.0219 of their $3.
+
+**What V8 can say.** The app ran three days unattended on the real market and everything it records was recorded whole,
+except the forecast after one data pass that never ended, now bounded. The forecast still ranks where coins move a lot
+(R1), and its list named 61 of the run's 134 large moves at a size they reached, no later than a quarter of the way into them, but it gives no way, on either year. The one
+measured way is a Binance delisting, held out on 18 announcement hours; the live record has one, and no venue could take
+most of the study's shorts. Neither a pasted link nor a pasted trader has a measured way: the one link read "no
+opportunity", no trader read as skill, none can be followed two minutes late at a profit, and the copy book, judged on
+638 trades, lost 5% of its paper equity in three days. The news book and the baseline await their first trades: one
+delisting a month, and about five months for thirty Trend Regime entries.
