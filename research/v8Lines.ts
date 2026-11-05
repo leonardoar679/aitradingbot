@@ -163,10 +163,17 @@ async function binanceMinutes(pair: string, fromSec: number, toSec: number): Pro
 // V8-S6-SKILL, V8-S6-DELAY, V8-S7-CLONE: each trader's last analysis.
 {
   const tradersDir = join(PROFILE, 'traders')
+  type Analysis = {
+    at?: number
+    record?: { source?: string; label?: string; records?: number }
+    skill?: { verdict?: string; trips?: number; n?: number; reasons?: unknown } | null
+    delay?: { followable?: boolean | null; rows?: unknown[] } | null
+    clone?: { verdict?: string; outOfTime?: { auc?: number; interval?: unknown }; reasons?: unknown } | null
+  }
   const traders: Record<string, unknown>[] = []
   for (const key of existsSync(tradersDir) ? readdirSync(tradersDir).sort() : []) {
-    const analyses = lines(join(tradersDir, key), /^analyses-.*\.jsonl$/) as Record<string, unknown>[]
-    const last = analyses[analyses.length - 1] as Record<string, any> | undefined
+    const analyses = lines(join(tradersDir, key), /^analyses-.*\.jsonl$/) as Analysis[]
+    const last = analyses[analyses.length - 1] as Analysis | undefined
     if (last === undefined) continue
     traders.push({
       key,
