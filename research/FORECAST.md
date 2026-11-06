@@ -1175,6 +1175,14 @@ estimate of their positions. A clone runs on paper where a rule fitted (thank yo
 REPLICABLE. Following leaders by profit picks up traders of markets the copy book cannot trade: two of the five
 Hyperliquid names trade only its stock and commodity markets.
 
+**Two of Stage 2's lines, late or left.** The feeds were to be read every minute, from three, and a story's severity
+worked out in the main process. The first was built only after the run's build (b0c57ee), so the run reads them every
+three minutes: each feed is now asked only for what changed since its last answer, and on 6 November The Block (by its
+ETag) and Cointelegraph (by its date) answered 304 with nothing, while CoinDesk gives neither and Decrypt answered in
+full, about 72 KB a minute in all; the prices around the stories are still measured every three minutes. The second
+was left: severity is still worked out in the window, which runs on, its timers unthrottled, while the window is hidden
+(backgroundThrottling off), so a notice is not held back by the window being closed to the tray.
+
 **What V9 can say so far.** The forecast knows how far coins move, and since V9 Home shows it at the sizes the user
 asked about, with how soon such moves came. No source measured on past cases gives the way after a hack or a U.S.
 release: the hacked token's short was a coin toss after costs, and Bitcoin's first fifteen minutes did not carry over
