@@ -1127,7 +1127,8 @@ unknown), and critical news: the first reports of large thefts of the last two d
 nearly all told follow-ups (laundering, refunds, roundups, opinion), named the coins an attacker took, or read "Mercado
 Bitcoin" as BTC. A hack is now read from its headline for its first report, its victim, the victim's own token and its
 sum (shared/incidents.ts; feed-v3); one loud notice is told per victim a day; and a HIGH notice says when the market
-enters a shock, which on 29 October came 30 to 120 minutes before the first story of Binance's theft. Read again by the
+enters a shock -- on 29 October BNB fell about 7% and Bitcoin 2.5% between 19:30 and 21:00 UTC, before the first story
+of Binance's theft at 21:36; whether the notice comes first is measured in the run (V9-SHOCK). Read again by the
 new rules, the archives' loud notices are Binance's $5.5B drain (BNB), Initia's halt (INIT) and a $106M theft, each a
 first report. Its precision is registered as V9-NEWS-CLASS and judged by hand on the run's stories.
 
