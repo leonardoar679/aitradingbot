@@ -9,6 +9,7 @@
 
 import { extractArticle, type ExtractedArticle } from './articleExtract'
 import { pairRatesOf, type PairRates } from './forecast/pairRates'
+import { hyperliquidBoardRead, type HyperliquidBoardRead } from './traders/discovery'
 import { traderFileOf, type TraderFileRead } from './traders/traderFile'
 import { traderTestsOf, type TraderTestsResult } from './traders/traderTests'
 
@@ -27,6 +28,9 @@ export interface TaskTable {
   /** A pair's ninety-day move rates and day moves (V8 Stage 10; shared/forecast/pairRates.ts): the payload is its files'
    * texts, oldest month first, and the hour's close they are read at. */
   pairRates: (payload: unknown) => PairRates
+  /** Hyperliquid's leaderboard read (V9 Stage 3; shared/traders/discovery.ts): the payload is its text, about 39 MB; the
+   * answer is how many rows it held and those who pass the finding rule. */
+  traderBoard: (payload: unknown) => HyperliquidBoardRead
 }
 
 export type TaskName = keyof TaskTable
@@ -45,6 +49,11 @@ export const TASKS: TaskTable = {
     const texts = input?.texts
     if (!Array.isArray(texts) || !texts.every((text) => typeof text === 'string') || typeof input?.atSec !== 'number') throw new Error("A pair's rates are read from its files' texts and the moment they are read at.")
     return pairRatesOf(texts as string[], input.atSec)
+  },
+  traderBoard: (payload) => {
+    const input = payload as { text?: unknown } | null
+    if (typeof input?.text !== 'string') throw new Error("Hyperliquid's leaderboard is read from its text.")
+    return hyperliquidBoardRead(input.text)
   }
 }
 

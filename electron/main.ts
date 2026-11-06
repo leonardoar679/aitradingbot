@@ -12,6 +12,7 @@ import { startBookMarks } from './services/booksService'
 import { startPrimaryCall } from './services/primaryCallService'
 import { startNewsUrls } from './services/newsUrlService'
 import { startFollowing, stopFollowing } from './services/followService'
+import { startDiscovery, stopDiscovery } from './services/discoveryService'
 import { startLivePositionWatcherLoop } from './services/livePositionWatchersService'
 import { startLiveTwapLoop } from './services/liveTwapService'
 import { startMarketScanner } from './services/marketScannerService'
@@ -230,6 +231,10 @@ if (!gotSingleInstanceLock) {
     // close (V8 Stage 8; followService.ts): public data only; the writers that act are the window's, on paper.
     void startFollowing().catch((error) => console.error('Following could not start:', error))
     app.on('will-quit', stopFollowing)
+    // The traders the app finds (V9 Stage 3; discoveryService.ts): two public rankings read once a day and up to ten
+    // traders a day analysed, half an hour apart, behind every follow's reads. Off with its switch; it places nothing.
+    startDiscovery()
+    app.on('will-quit', stopDiscovery)
     const mainWindow = createWindow()
     registerIpcHandlers(mainWindow)
     createTray()

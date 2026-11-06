@@ -13,6 +13,7 @@ import { DELAY_LINES } from '../../shared/traders/delay'
 import type { OkxPnlPoint } from '../../shared/traders/okx'
 import { SKILL_LINES, type SkillResult } from '../../shared/traders/skill'
 import type { BitgetCopyCheck, OkxSummary, TraderAnalysis, TraderList, TraderMeta, TraderProgress } from '../../shared/traders/traderAnalysis'
+import { FoundTradersCard } from './FoundTradersCard'
 import { PaperCopyPanel } from './PaperCopyPanel'
 import { durationOf, utcWhen } from './traderText'
 
@@ -800,6 +801,8 @@ export function CopyTradersPage({ handoff = null, onHandoffTaken }: { handoff?: 
           />
         </p>
       </Card>
+      {/* The traders the app found (V9 Stage 3): one opened is read from the list again, since it was analysed apart. */}
+      <FoundTradersCard onOpen={(key) => void refresh().then(() => setOpen(key), () => undefined)} />
       {selected !== null && selected.latest !== null && <TraderCards meta={selected.meta} analysis={selected.latest} analysed={list.analysed} />}
       <TradersOnFile list={list} open={open} busy={busy} onOpen={setOpen} onAgain={(meta) => void again(meta)} />
       <BitgetCheck />

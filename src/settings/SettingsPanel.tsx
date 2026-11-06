@@ -17,6 +17,7 @@ import type { UiMode } from '../../shared/uiMode'
 import { EssentialsCard } from './EssentialsCard'
 import { NotificationsCard } from './NotificationsCard'
 import { NewsSettingsCard } from './NewsSettingsCard'
+import { DiscoverySettingsCard } from './DiscoverySettingsCard'
 import { ScannerSettingsCard } from './ScannerSettingsCard'
 import { LanguageCard } from './LanguageCard'
 import { EnglishOnly, useI18n, type Language } from '../i18n'
@@ -165,6 +166,9 @@ function AdvancedSettings({ theme, setTheme, onNavigate }: { theme: Theme; setTh
       <SectionHeading title="Market" note="What the scanner watches, and whether Binance's announcements are read. Both are shown on Explorer." />
       <ScannerSettingsCard />
       <NewsSettingsCard />
+
+      <SectionHeading title="Traders" note="Whether the app finds traders on OKX's and Hyperliquid's public rankings by itself. What it found, and following on paper, are on Copy Traders." />
+      <DiscoverySettingsCard />
 
       <SectionHeading
         title="AI"

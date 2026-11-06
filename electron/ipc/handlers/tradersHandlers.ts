@@ -5,6 +5,7 @@ import { IpcChannel } from '../../../shared/ipc'
 import type { TraderAnalysis, TraderMeta } from '../../../shared/traders/traderAnalysis'
 import { TRADER_FILE_LINES } from '../../../shared/traders/traderFile'
 import { analyzeTrader, importTrader, importTraderFile, listTraders, onTraderProgress } from '../../services/traderService'
+import { discoveryState, onDiscovery, setDiscovery } from '../../services/discoveryService'
 import { followPerpOf, followStatuses, onCloneSignal, onFollowStatus, onLeaderEvent, recentFollowRecords, setClone, setFollow } from '../../services/followService'
 import { perpBars, perpBook, perpFunding, perpPrice } from '../../services/perpMarketService'
 
@@ -23,7 +24,8 @@ export function registerTradersHandlers(mainWindow: BrowserWindow): void {
     onTraderProgress((progress) => forward(IpcChannel.TradersProgress, progress)),
     onLeaderEvent((event) => forward(IpcChannel.TradersLeaderEvent, event)),
     onCloneSignal((signal) => forward(IpcChannel.TradersCloneSignal, signal)),
-    onFollowStatus((statuses) => forward(IpcChannel.TradersFollowStatusChanged, statuses))
+    onFollowStatus((statuses) => forward(IpcChannel.TradersFollowStatusChanged, statuses)),
+    onDiscovery((state) => forward(IpcChannel.TradersDiscoveryChanged, state))
   ]
   mainWindow.on('closed', () => stops.forEach((stop) => stop()))
 
@@ -44,6 +46,10 @@ export function registerTradersHandlers(mainWindow: BrowserWindow): void {
   })
   ipcMain.handle(IpcChannel.TradersAnalyze, (_event, key: unknown): Promise<TraderAnalysis> => analyzeTrader(typeof key === 'string' ? key.slice(0, 80) : null))
   ipcMain.handle(IpcChannel.TradersList, () => listTraders())
+  // The traders the app found (V9 Stage 3; discoveryService.ts): what it found, and its one switch -- on or off, nothing
+  // else -- which reads or stops reading two public rankings and places nothing.
+  ipcMain.handle(IpcChannel.TradersDiscovery, () => discoveryState())
+  ipcMain.handle(IpcChannel.TradersDiscoverySet, (_event, on: unknown) => setDiscovery(on === true))
   // Following and cloning on paper (V8 Stage 8): each switched on or off only by its button; the perpetual's price and
   // funding for the writers, its venue and symbol held to their shape.
   ipcMain.handle(IpcChannel.TradersFollow, (_event, request: { key?: unknown; on?: unknown } | undefined) => setFollow(request?.key, request?.on === true))

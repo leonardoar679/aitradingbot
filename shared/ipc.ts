@@ -182,6 +182,10 @@ export const IpcChannel = {
   TradersLeaderEvent: 'traders:leaderEvent',
   TradersCloneSignal: 'traders:cloneSignal',
   TradersFollowStatusChanged: 'traders:followStatusChanged',
+  /** The traders the app found (V9 Stage 3): their state, its switch, and each change pushed. */
+  TradersDiscovery: 'traders:discovery',
+  TradersDiscoverySet: 'traders:discoverySet',
+  TradersDiscoveryChanged: 'traders:discoveryChanged',
   AiConcludeMove: 'ai:concludeMove',
   AiReviewTrade: 'ai:reviewTrade',
   AiExitCheck: 'ai:exitCheck',
@@ -328,6 +332,9 @@ export interface AppSettings {
   /** The traders followed or cloned on paper, each from its own button on Copy Traders (shared/traders/copyTrading.ts;
    * V8 Stage 8). Absent until first written, and healed on every read: no one followed or cloned. */
   copyTrading?: import('./traders/copyTrading').CopyTradingSettings
+  /** Finding traders (V9 Stage 3; shared/traders/discovery.ts): once a day OKX's and Hyperliquid's public rankings read,
+   * up to ten traders picked by a fixed rule, and each analysed. It reads and places nothing. Absent or true: on. */
+  discovery?: { enabled?: boolean }
   /** News URLs (V8 Stage 4): whether a story the app discovers -- an announcement, or a feed story of impact 70 or more
    * naming a coin directly -- is read as a pasted link would be (its page fetched), or only recorded from the feed.
    * Absent or false: recorded only, nothing fetched. */

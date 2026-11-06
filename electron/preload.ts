@@ -19,6 +19,7 @@ import type { CopyTradingSettings } from '../shared/traders/copyTrading'
 import type { ExecutorConfig as BookExecutor } from '../shared/ipc'
 import type { FundingRate } from '../shared/traders/delay'
 import type { CloneSignal, FollowStatus, LeaderEvent } from '../shared/traders/follow'
+import type { DiscoveryState } from '../shared/traders/discovery'
 import type { ForecastLabView, ForecastReplay } from '../shared/forecast/labView'
 import type { ForecastRanking as ForecastRankingView } from '../shared/forecast/ranking'
 import type { SymbolTradingRules } from '../shared/exchangeMinimums'
@@ -581,6 +582,14 @@ const api = {
       const handler = (_event: IpcRendererEvent, progress: TraderProgress): void => listener(progress)
       ipcRenderer.on(IpcChannel.TradersProgress, handler)
       return () => ipcRenderer.removeListener(IpcChannel.TradersProgress, handler)
+    },
+    /** The traders the app found (V9 Stage 3): what it found and analysed, and its switch. */
+    discovery: (): Promise<DiscoveryState> => ipcRenderer.invoke(IpcChannel.TradersDiscovery),
+    setDiscovery: (on: boolean): Promise<DiscoveryState> => ipcRenderer.invoke(IpcChannel.TradersDiscoverySet, on),
+    onDiscovery: (listener: (state: DiscoveryState) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, state: DiscoveryState): void => listener(state)
+      ipcRenderer.on(IpcChannel.TradersDiscoveryChanged, handler)
+      return () => ipcRenderer.removeListener(IpcChannel.TradersDiscoveryChanged, handler)
     }
   },
   // V8's three paper books (V8 Stage 2): each book's standing and equity marks, and the opportunities not taken.

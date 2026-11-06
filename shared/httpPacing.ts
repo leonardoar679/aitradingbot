@@ -19,6 +19,12 @@
 //   in five minutes, one a second keeping under; Bitget's public market data allows 20 requests a second, one a tenth
 //   of a second keeping under.
 // Signed requests -- an order, a cancel, a close -- never pass through here: a budget must not delay an exit.
+//
+// TWO LANES (V9 Stage 3, 6 November 2026). From V9 the app finds traders by itself and analyses them, which reads
+// the same hosts a paper follow reads its leader on. A follow read late is a follow copied late, so the reads that
+// can wait -- finding traders, analysing them -- go in a BACKGROUND lane: on Hyperliquid's and Binance futures'
+// weight they spend at most half the minute, on a gap budget they wait twice the gap since the last read of either
+// lane, and in both they queue apart, so a background read waiting its turn never holds a follow's read behind it.
 
 /** The lines, pinned (ENGINE_CONSTANTS.httpPacing). */
 export const HTTP_PACING_LINES = {
@@ -50,6 +56,12 @@ export const HTTP_PACING_LINES = {
   bitget: {
     /** Bitget's public market data: one request a tenth of a second (20 a second for one IP). */
     minGapMs: 100
+  },
+  /** The background lane (V9 Stage 3): the share of a weight budget's minute it may spend, and how many gaps it waits
+   * since the last read of either lane. */
+  background: {
+    weightShare: 0.5,
+    gapFactor: 2
   }
 } as const
 
@@ -155,23 +167,33 @@ export class BinanceBudget {
   }
 }
 
+/** The lane a request runs in, where nothing says otherwise: the main process reads it from the work it is part of
+ * (electron/services/httpPacing.ts inBackground). */
+export type LaneOf = () => Priority
+const normalLane: LaneOf = () => 'normal'
+
 /** A budget of weight a minute, spent before each request: Hyperliquid's. A request that would go over the
- * minute's share waits for the next minute; one that alone weighs more than the share is refused. */
+ * minute's share waits for the next minute; one that alone weighs more than the share is refused. A background
+ * request spends only up to its lane's share of the minute, in a queue of its own. */
 export class WeightBudget {
   private spent = 0
   private minute = -Infinity
-  private chain: Promise<void> = Promise.resolve()
+  private chains: Record<Priority, Promise<void>> = { normal: Promise.resolve(), background: Promise.resolve() }
 
   constructor(
     readonly host: string,
     private readonly perMinute: number,
-    private readonly clock: PacingClock = realClock
+    private readonly clock: PacingClock = realClock,
+    private readonly laneOf: LaneOf = normalLane
   ) {}
 
-  /** Waits until `weight` fits in the minute, then counts it. One at a time, in the order asked. */
+  /** Waits until `weight` fits in the minute -- in its lane's share of it -- then counts it. One at a time per lane,
+   * in the order asked. */
   spend(weight: number): Promise<void> {
-    if (!(weight > 0) || weight > this.perMinute) return Promise.reject(new Error(`A request of weight ${weight} cannot be sent to ${this.host} within ${this.perMinute} a minute`))
-    const turn = this.chain.then(async () => {
+    const lane = this.laneOf()
+    const room = lane === 'background' ? Math.floor(this.perMinute * HTTP_PACING_LINES.background.weightShare) : this.perMinute
+    if (!(weight > 0) || weight > room) return Promise.reject(new Error(`A request of weight ${weight} cannot be sent to ${this.host} within ${room} a minute`))
+    const turn = this.chains[lane].then(async () => {
       for (;;) {
         const now = this.clock.now()
         const minute = minuteOf(now)
@@ -179,19 +201,20 @@ export class WeightBudget {
           this.minute = minute
           this.spent = 0
         }
-        if (this.spent + weight <= this.perMinute) {
+        if (this.spent + weight <= room) {
           this.spent += weight
           return
         }
         await this.clock.sleep(minute + 60_000 - now)
       }
     })
-    this.chain = turn.catch(() => undefined)
+    this.chains[lane] = turn.catch(() => undefined)
     return turn
   }
 }
 
-/** One request at a time per key, at least `gapMs` apart: OKX's public endpoints, one key each. */
+/** One request at a time per key, at least `gapMs` apart: OKX's public endpoints, one key each. A background request
+ * waits its lane's number of gaps since the last request of either lane, in a queue of its own. */
 export class GapBudget {
   private last = new Map<string, number>()
   private chains = new Map<string, Promise<void>>()
@@ -199,21 +222,27 @@ export class GapBudget {
   constructor(
     readonly host: string,
     private readonly gapMs: number,
-    private readonly clock: PacingClock = realClock
+    private readonly clock: PacingClock = realClock,
+    private readonly laneOf: LaneOf = normalLane
   ) {}
 
-  /** Waits until `key` was last asked at least the gap ago, then marks it asked. */
+  /** Waits until `key` was last asked at least its lane's gap ago, then marks it asked. */
   take(key: string): Promise<void> {
-    const before = this.chains.get(key) ?? Promise.resolve()
+    const lane = this.laneOf()
+    const gap = lane === 'background' ? this.gapMs * HTTP_PACING_LINES.background.gapFactor : this.gapMs
+    const chain = `${lane}:${key}`
+    const before = this.chains.get(chain) ?? Promise.resolve()
     const turn = before.then(async () => {
-      const last = this.last.get(key)
-      if (last !== undefined) {
-        const wait = last + this.gapMs - this.clock.now()
-        if (wait > 0) await this.clock.sleep(wait)
+      // Asked again after each wait: the other lane may have taken the key meanwhile.
+      for (;;) {
+        const last = this.last.get(key)
+        const wait = last === undefined ? 0 : last + gap - this.clock.now()
+        if (wait <= 0) break
+        await this.clock.sleep(wait)
       }
       this.last.set(key, this.clock.now())
     })
-    this.chains.set(key, turn.catch(() => undefined))
+    this.chains.set(chain, turn.catch(() => undefined))
     return turn
   }
 }
