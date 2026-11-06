@@ -1175,12 +1175,17 @@ estimate of their positions. A clone runs on paper where a rule fitted (thank yo
 REPLICABLE. Following leaders by profit picks up traders of markets the copy book cannot trade: two of the five
 Hyperliquid names trade only its stock and commodity markets.
 
-**Two of Stage 2's lines, late or left.** The feeds were to be read every minute, from three, and a story's severity
-worked out in the main process. The first was built only after the run's build (b0c57ee), so the run reads them every
-three minutes: each feed is now asked only for what changed since its last answer, and on 6 November The Block (by its
-ETag) and Cointelegraph (by its date) answered 304 with nothing, while CoinDesk gives neither and Decrypt answered in
-full, about 72 KB a minute in all; the prices around the stories are still measured every three minutes. The second
-was left: severity is still worked out in the window, which runs on, its timers unthrottled, while the window is hidden
+**Three of Stage 2's lines, late or left.** The feeds were to be read every minute, from three; the victims' names read
+again from DefiLlama every week; and a story's severity worked out in the main process. The first two were built only
+after the run's build, so the run reads the feeds every three minutes and names victims by the table of 6 November
+throughout. The feeds (b0c57ee): each is now asked only for what changed since its last answer, and on 6 November The
+Block (by its ETag) and Cointelegraph (by its date) answered 304 with nothing, while CoinDesk gives neither and Decrypt
+answered in full, about 72 KB a minute in all; the prices around the stories are still measured every three minutes.
+The victims (6ce3ee3): once the table in use is a week old, DefiLlama's two lists are read again in the background lane
+and the table made again in the worker by the rules now kept in one place (shared/incidentVictimsBuild.ts, by which
+research/fetch-incident-victims.ts compiles the committed table too, byte for byte the same on 6 November's lists), used
+where it holds 150 names or more and keeps 60% of those in use, else the table in use stays. The third was left:
+severity is still worked out in the window, which runs on, its timers unthrottled, while the window is hidden
 (backgroundThrottling off), so a notice is not held back by the window being closed to the tray.
 
 **What V9 can say so far.** The forecast knows how far coins move, and since V9 Home shows it at the sizes the user
