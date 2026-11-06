@@ -478,6 +478,115 @@ if real_ai_run:
 else:
     gate_line('spend', 'not measured', 'OpenRouter was faked: nothing could be spent.')
 
+# --- V9's gates (V9-S8-GATES), each read per span ----------------------------------------------
+print('\n===== V9 gates')
+DAY = 86400
+whole_days = sorted({d for a, b in spans for d in range(int(a // DAY + 1) * DAY, int(b), DAY) if d + DAY <= b})
+found_lines = jsonl(os.path.join(PROFILE, 'discovery', 'discovery-*.jsonl'))
+boards = [l for l in found_lines if l.get('kind') == 'boards' and l.get('at', 0) >= run_start]
+founds = [l for l in found_lines if l.get('kind') == 'found' and l.get('at', 0) >= run_start]
+skips = [l for l in found_lines if l.get('kind') == 'skipped' and l.get('at', 0) >= run_start]
+holdings = [l for l in found_lines if l.get('kind') == 'holdings' and l.get('at', 0) >= run_start]
+
+
+def passes_rule(row):
+    """The finding rule (shared/traders/discovery.ts passesRule), as recorded on the day."""
+    if not (row.get('pnlAllTime', 0) > 0 and row.get('last30d', 0) > 0 and row.get('accountUsd', 0) >= 50000):
+        return False
+    if row.get('volume30d') is not None and not row['volume30d'] <= 100 * row['accountUsd']:
+        return False
+    if row.get('venue') == 'okx' and not (row.get('leadDays') or 0) >= 90:
+        return False
+    return True
+
+
+# Discovery: a read of the rankings on each whole UTC day, a venue read, at most ten found a read, each passing the rule.
+problems = []
+for d in whole_days:
+    reads = [b for b in boards if d <= b['at'] < d + DAY]
+    if not reads:
+        problems.append(f'no read on {clock(d)[:5]}')
+    elif not any(any(src.get('ok') for src in b.get('sources', [])) for b in reads):
+        problems.append(f'no venue read on {clock(d)[:5]}')
+for b in boards:
+    if len(b.get('picked') or []) > 10:
+        problems.append(f'{len(b["picked"])} found at {clock(b["at"])}')
+failing = [f['key'] for f in founds if not passes_rule(f.get('board') or {})]
+if failing:
+    problems.append(f'{len(failing)} found not passing the rule ({failing[0]})')
+if not whole_days and not boards:
+    gate_line('discovery', 'not measured', 'No whole UTC day inside a span, and no read of the rankings.')
+else:
+    gate_line('discovery', 'pass' if not problems else 'fail', f'{len(boards)} read(s) on {len(whole_days)} whole day(s); {len(founds)} found, {len(skips)} set aside' + (f'; {"; ".join(problems[:4])}' if problems else ''))
+
+# Analyses: each found trader analysed or set aside after it was found, once, the analyses at least 30 minutes apart.
+analyses = []
+problems = []
+for f in founds:
+    lines = jsonl(os.path.join(PROFILE, 'traders', f['key'], 'analyses-*.jsonl'))
+    after = [l for l in lines if l.get('at', 0) >= f['at']]
+    if len(after) > 1:
+        problems.append(f'{f["key"]} analysed {len(after)} times')
+    analyses += [(l['at'], f['key']) for l in after[:1]]
+analyses.sort()
+close = [(a, b) for a, b in zip(analyses, analyses[1:]) if b[0] - a[0] < 30 * 60]
+if close:
+    problems.append(f'{len(close)} analyses under 30 minutes after the one before (first {close[0][1][1]} at {clock(close[0][1][0])})')
+skipped_keys = {sk['key'] for sk in skips}
+waiting = [f['key'] for f in founds if f['key'] not in skipped_keys and not any(k == f['key'] for _, k in analyses)]
+if not founds:
+    gate_line('analyses', 'not measured', 'No trader was found in the run.')
+else:
+    gate_line('analyses', 'pass' if not problems else 'fail', f'{len(analyses)} analysed, {len(skipped_keys)} set aside, {len(waiting)} still waiting of {len(founds)} found' + (f'; {"; ".join(problems[:3])}' if problems else ''))
+
+# Holdings: a holdings line on each UTC day whose first two hours a span covers with an analysed found trader before,
+# and each day's 'top-traders' calls on file in the record.
+problems = []
+owed = 0
+calls_on_file = [p for p in sources if p.get('source') == 'top-traders']
+for d in sorted({int(a // DAY) * DAY for a, b in spans} | {int(a // DAY + 1) * DAY for a, b in spans}):
+    if not any(a <= d and d + 7200 <= b for a, b in spans):
+        continue
+    if not any(at < d + 7200 for at, _ in analyses):
+        continue
+    owed += 1
+    lines = [h for h in holdings if h.get('day') == d]
+    if len(lines) != 1:
+        problems.append(f'{len(lines)} holdings line(s) on {clock(d)[:5]}')
+        continue
+    made = [p for p in calls_on_file if d <= p.get('madeAt', 0) < d + 7200]
+    if len(made) != lines[0].get('calls', 0):
+        problems.append(f'{clock(d)[:5]}: {lines[0].get("calls")} calls said, {len(made)} on file')
+if owed == 0:
+    gate_line('holdings', 'not measured', 'No UTC day began inside a span with an analysed found trader.')
+else:
+    gate_line('holdings', 'pass' if not problems else 'fail', f'{len(holdings)} holdings line(s) for {owed} day(s) owed; {len(calls_on_file)} top-traders call(s) on file' + (f'; {"; ".join(problems[:3])}' if problems else ''))
+
+# Feed: every loud hack or exploit notice a first report by its incident (research/v9FeedCheck.ts, the app's own rules).
+bundle = os.path.join(os.path.dirname(__file__), '..', 'research', '.v9FeedCheck.mjs')
+try:
+    subprocess.run(['npx.cmd' if os.name == 'nt' else 'npx', 'esbuild', 'research/v9FeedCheck.ts', '--bundle', '--platform=node', '--format=esm', '--outfile=research/.v9FeedCheck.mjs', '--log-level=error'], cwd=os.path.join(os.path.dirname(__file__), '..'), check=True)
+    out = subprocess.run(['node', bundle], cwd=os.path.join(os.path.dirname(__file__), '..'), env={**os.environ, 'PROFILE': PROFILE, 'FROM_SEC': str(int(run_start))}, capture_output=True, text=True, encoding='utf-8', check=True).stdout
+    feed = json.loads(out.strip().splitlines()[-1])
+    ok = feed['version'] == 'feed-v3' and not feed['notFirst']
+    gate_line('feed', 'pass' if ok else 'fail', f'{feed["stories"]} stories read again under {feed["version"]}; {feed["loudHacks"]} loud hack or exploit notice(s) of {feed["loudNews"]} loud news notices; not first reports {len(feed["notFirst"])}' + (f' (first: {feed["notFirst"][0]["title"]} -- {feed["notFirst"][0]["why"]})' if feed['notFirst'] else ''))
+except Exception as failure:  # noqa: BLE001 -- a check that could not run says why
+    gate_line('feed', 'not measured', f'the feed check could not run: {failure}')
+
+# Summaries: a day summary for each whole day of the run's clock.
+summaries = sorted(glob.glob(os.path.join(OUT, 'day-summaries', 'day-*.json')))
+run_minutes = int(os.environ.get('RUN_MINUTES_EXPECTED', '10080'))
+owed_days = run_minutes // 1440
+gate_line('summaries', ('pass' if len(summaries) >= owed_days else 'fail') if ended else 'not measured', f'{len(summaries)} day summaries of the {owed_days} the run\'s clock owes' + ('' if ended else ' -- the run has not ended'))
+
+# AI: nothing reached OpenRouter -- the harness's fake answered every request, and the ledger spent nothing.
+fakes = [load(f) or {} for f in sorted(glob.glob(os.path.join(OUT, 'main-fake-*.json')))]
+spent = sum((c.get('usage') or {}).get('costUsd') or 0 for c in jsonl(os.path.join(PROFILE, 'aiLedger', '*.jsonl')) if c.get('at', 0) >= run_start)
+if real_ai_run:
+    gate_line('ai', 'not measured', 'This run asked the real models.')
+else:
+    gate_line('ai', 'pass' if fakes and spent == 0 else 'fail', f'{len(fakes)} segment fake(s) on file, {sum(len(f.get("asked", [])) for f in fakes)} request(s) answered by it; ${spent:.4f} spent')
+
 # --- the records on file, over every segment -----------------------------------------------------
 print('\n===== raw records')
 events = jsonl(os.path.join(PROFILE, 'marketEvents', '*.jsonl'))
