@@ -1110,3 +1110,49 @@ most of the study's shorts. Neither a pasted link nor a pasted trader has a meas
 opportunity", no trader read as skill, none can be followed two minutes late at a profit, and the copy book, judged on
 638 trades, lost 5% of its paper equity in three days. The news book and the baseline await their first trades: one
 delisting a month, and about five months for thirty Trend Regime entries.
+
+## V9: big moves you can see, critical news, and traders found (Stages 0-7, 5-6 November 2026)
+
+On 5 November the user asked for big moves rather than ranges of a few hundredths of a percent, for calls after
+critical news such as hacks, and for good and famous traders found online and referred to. Their three answers: found
+traders are listed and following on paper stays their click; a way only from a measured source, else "unknown"; and a
+seven-day paper run, OpenRouter faked, with a daily summary. Every claim below was registered before it was measured.
+
+**What Home shows now.** The big movers at four hours and a day (a 2% or 5% move either way, each coin's 90-day
+frequency of it and, when it came, how soon: the median time to its first touch), Bitcoin's day (its move since the
+00:00 UTC open, how many of its last 90 days were big, the next U.S. release, the market's state, and its way said as
+unknown), and critical news: the first reports of large thefts of the last two days and the market's last shock.
+
+**The news, read for its incident.** On the two alert archives on file the old reading had made 24 loud news notices;
+nearly all told follow-ups (laundering, refunds, roundups, opinion), named the coins an attacker took, or read "Mercado
+Bitcoin" as BTC. A hack is now read from its headline for its first report, its victim, the victim's own token and its
+sum (shared/incidents.ts; feed-v3); one loud notice is told per victim a day; and a HIGH notice says when the market
+enters a shock, which on 29 October came 30 to 120 minutes before the first story of Binance's theft. Read again by the
+new rules, the archives' loud notices are Binance's $5.5B drain (BNB), Initia's halt (INIT) and a $106M theft, each a
+first report. Its precision is registered as V9-NEWS-CLASS and judged by hand on the run's stories.
+
+**Traders found.** Once a day the app reads OKX's lead-trader ranking (about 205 leaders, 13 passing the rule on
+6 November) and Hyperliquid's leaderboard (48,227 accounts, about 4,750 passing): profit all time and over 30 days, an
+account of $50,000 or more, 30 days' volume at most 100 times the account, on OKX 90 days leading; a public name first,
+then the larger profit, at most ten a day, the venues in turn. Each is read and analysed half an hour apart, in a
+background lane of the request budgets that a paper follow's reads go before. Hyperliquid gives an address's most
+recent fills only, and half of the ten largest named accounts traded too fast for the tests to read (BobbyBigSize's
+17,892 fills spanned a day): they are set aside with why. What the analysed ones hold is read once a UTC day and,
+where three or more agree two to one, recorded as a call of the source 'top-traders', judged after 60 days
+(V9-TOP-TRADERS-2); until then it is context on Copy Traders, never on Home.
+
+| line | verdict | what it rests on |
+|---|---|---|
+| V9-BTC-DAY | **failed** | the thirds of Bitcoin's trailing volatility ranked its big days the right way from 2024 on, but stated their chances too high (731 of 970 held-out days in the calm third); Home shows the 90-day frequencies instead |
+| V9-SIZE-RANK | **held at an hour only** | on October 2024 to September 2025, never read for size before, the shown P10-P90 width against the 90-day rate: Brier skill +8.58% [7.93%, 9.22%] at an hour, its top tenth moving 59.6% against the rate's top tenth's 44.9% (1.33 times); at four hours +6.37% but 1.22 times; at a day +2.05% [0.82%, 3.28%] and 1.06 times. The hour's big movers are ranked by the width, the chance shown staying the rate |
+| V9-HACK-2 | **failed** | 35 hacks of $5M or more from 2020 whose victim's own token had a perpetual listed before the day; on the 24 held out (2024 to October 2026) a short from the second day's open, held the day the discovery half chose, netted +1.52% a week cluster after costs, t 0.90, 90% [-0.95%, +4.43%]; 12 made money and 12 lost. Bitcoin after the 19 largest exchange, bridge and chain hacks went no consistent way |
+| V9-MACRO-2 | **failed** | 377 releases from 2018 to August 2026; from 2023 on, following Bitcoin's first fifteen minutes for a day after CPI, PPI and jobs was right 47.6% of the time (lower bound 38.7%) and netted -0.30%; after FOMC statements 13 of 19 went on that way (+1.33%, lower bound +0.25%) but the share's lower bound was 49.6%, under the 50% line |
+| V9-COPY-FORWARD, V9-TOP-TRADERS-2 | not yet measurable | judged on the forward record once 100 copied round trips over 28 days, and 60 days of calls, are on file |
+| V9-NEWS-CLASS, V9-SHOCK, V9-S8-GATES | under way | the seven-day run, v9-7d, from 6 November |
+
+**What V9 can say so far.** The forecast knows how far coins move, and since V9 Home shows it at the sizes the user
+asked about, with how soon such moves came. No source measured on past cases gives the way after a hack or a U.S.
+release: the hacked token's short was a coin toss after costs, and Bitcoin's first fifteen minutes did not carry over
+the day. The one measured way is still a Binance delisting. Critical news is now told once, for its first report, by
+its victim; the traders the rankings name are found and analysed every day, and what following them on paper makes is
+the run's to show.
