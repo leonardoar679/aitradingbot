@@ -71,6 +71,7 @@ let answers = { fills: rawFills(), funding: [] as unknown[], ledger: [] as unkno
 let okx = okxAnswers()
 let binanceListed = ['BTCUSDT']
 let barsFail = false
+let okxFigures: boolean | Error = false
 
 /** Bars of a flat-then-rising coin at any step: what the tests read. */
 function bars(fromSec: number, toSec: number, stepSec: number): Candle[] {
@@ -98,6 +99,10 @@ async function service() {
       fillsCapped: answers.fillsCapped
     }),
     okx: async () => okx,
+    okxFigures: async () => {
+      if (okxFigures instanceof Error) throw okxFigures
+      return okxFigures
+    },
     symbols: async (venue: string) => new Set(venue === 'binance' ? binanceListed : []),
     bars: async (_venue: string, _symbol: string, interval: string, fromSec: number, toSec: number) => {
       if (barsFail) throw new Error('the venue answered 418')
@@ -117,6 +122,7 @@ beforeEach(() => {
   okx = okxAnswers()
   binanceListed = ['BTCUSDT']
   barsFail = false
+  okxFigures = false
 })
 
 describe('a pasted trader', () => {
@@ -205,13 +211,18 @@ describe('an OKX lead trader', () => {
     expect(analysis.clone).not.toBeNull()
   })
 
-  it('is refused where OKX has nothing of the code, or says it knows no such trader', async () => {
+  it("is refused where OKX has nothing of the code, knows no such trader, or gives the trader's figures but not their positions", async () => {
     const traders = await service()
     okx = { ...okxAnswers(), history: [], pnl: [] }
     expect(await traders.importTrader(CODE)).toEqual({ refused: 'OKX has no lead trader with that code, or none with a perpetual position in the last three months.' })
     traders.traderSeam.okx = async () => {
       throw new Error("OKX answered 60004: Trader doesn't exist")
     }
+    expect(await traders.importTrader(CODE)).toEqual({ refused: 'OKX has no lead trader with that code: they may have stopped leading.' })
+    // OKX still gives the trader's figures, only not their positions: a lead trader whose positions are not public.
+    okxFigures = true
+    expect(await traders.importTrader(CODE)).toEqual({ refused: "OKX gives this lead trader's figures but not their positions, so their trades cannot be read or followed." })
+    okxFigures = new Error("OKX answered 60004: Trader doesn't exist")
     expect(await traders.importTrader(CODE)).toEqual({ refused: 'OKX has no lead trader with that code: they may have stopped leading.' })
     // Any other failure is said as it is.
     traders.traderSeam.okx = async () => {

@@ -46,7 +46,7 @@ import { getEffectiveConfig } from './effectiveConfigService'
 import { laneNow } from './httpPacing'
 import { fetchHyperliquidRecord } from './hyperliquidClient'
 import { appendJsonLines, listMonthFiles } from './jsonlStore'
-import { fetchOkxRecord } from './okxClient'
+import { OKX_PATHS, fetchOkxRecord, okxGet } from './okxClient'
 import { perpBars, perpBookImpact, perpFunding, perpSymbols, type PerpVenue } from './perpMarketService'
 import { runInWorker } from './taskWorkerService'
 
@@ -67,6 +67,8 @@ export const traderSeam = {
   nowMs: (): number => Date.now(),
   hyperliquid: fetchHyperliquidRecord,
   okx: fetchOkxRecord,
+  /** Whether OKX gives a lead trader's figures: asked only where it refuses their positions. */
+  okxFigures: async (code: string): Promise<boolean> => (await okxGet(OKX_PATHS.stats, { instType: 'SWAP', uniqueCode: code, lastDays: '4' })).length > 0,
   symbols: (venue: PerpVenue): Promise<Set<string>> => perpSymbols(venue),
   bars: perpBars,
   funding: perpFunding,
@@ -247,8 +249,12 @@ async function importOkx(ref: TraderRef): Promise<{ refused: string } | TraderMe
   try {
     answers = await traderSeam.okx(ref.id, (step) => tell({ key: ref.key, step: `reading OKX: ${step}`, done: false }))
   } catch (error) {
-    // OKX's own refusal of a code it does not know (60004, "Trader doesn't exist"): a lead trader who stopped leading.
-    if (error instanceof Error && /\b60004\b/.test(error.message)) return { refused: 'OKX has no lead trader with that code: they may have stopped leading.' }
+    // OKX's own refusal of a code's positions (60004, "Trader doesn't exist"): a lead trader who stopped leading, or one
+    // it still ranks, with their figures, whose positions it does not give (Trader KS on 6 November, 497 copiers).
+    if (error instanceof Error && /\b60004\b/.test(error.message)) {
+      const ranked = await traderSeam.okxFigures(ref.id).catch(() => false)
+      return { refused: ranked ? "OKX gives this lead trader's figures but not their positions, so their trades cannot be read or followed." : 'OKX has no lead trader with that code: they may have stopped leading.' }
+    }
     throw error
   }
   const dir = folderOf(ref.key)
