@@ -765,6 +765,13 @@ async function main() {
 
   // With the real key in the profile, nothing may be spent before the run is set up: the cap at nought.
   if (REAL_AI) await page.evaluate(() => window.api.ai.setConfig({ dailyCapUsd: 0 }))
+  // The app finds traders by itself from its start (V9 Stage 3): with a panel to follow, finding is off until the panel
+  // is read and followed, so that the first reading of the rankings finds the panel on file and does not read and
+  // analyse the same traders a second time (V9-S8-GATES's analyses gate; seen on the first try of v9-7d).
+  if (TRADERS.length > 0) {
+    const off = await page.evaluate(async () => (await window.api.traders.setDiscovery(false)).enabled).catch((failure) => `not switched: ${failure}`)
+    say(`finding traders: off until the panel is followed (${off})`)
+  }
 
   // The forecast fitted, calibrated and forecasting before the clock starts -- and before the watch is
   // switched on, so that nothing is asked while it waits. The run's clock starts when it is ready.
@@ -883,6 +890,10 @@ async function main() {
       }, raw)
       .catch((failure) => ({ paste: raw, failed: String(failure).slice(0, 300) }))
     say(`trader: ${JSON.stringify(read)}`)
+  }
+  if (TRADERS.length > 0) {
+    const on = await page.evaluate(async () => (await window.api.traders.setDiscovery(true)).enabled).catch((failure) => `not switched: ${failure}`)
+    say(`finding traders: on, the panel on file (${on})`)
   }
   // Paper testing started (V8 Stage 9): the three books, Binance's announcements read every minute, the delisting rule's
   // short and the baseline; a resumed segment finds it running.
