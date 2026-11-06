@@ -56,7 +56,7 @@ describe("Home's critical news", () => {
     expect(html).toContain('Binance Drained of $5.5 Billion in Suspected Hack')
     expect(html).toContain('<strong>Victim not named</strong> · $106M · 17:21 UTC')
     expect(html).toContain('Last market shock: 19:45 UTC. HIGH: market shock · in a liquidation cascade')
-    expect(html).toContain('Which way: unknown. What prices do after a hack is not measured yet.')
+    expect(html).toContain('Which way: unknown. On 24 hacks of 2024 to 2026, a short of the victim\'s own token from the second day made money in 12 and lost in 12: no way to trade it.')
     expect(html).not.toContain('No first report')
   })
 

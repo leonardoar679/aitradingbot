@@ -2494,7 +2494,6 @@
   "First report of a theft from {victim}.": "Laporan pertama tentang pencurian dari {victim}.",
   "The sum named: {sum}.": "Jumlah yang disebut: {sum}.",
   "The victim's own token: {token}.": "Token milik korban: {token}.",
-  "Which way: unknown. What prices do after a hack is not measured yet.": "Arah: tidak diketahui. Apa yang dilakukan harga setelah peretasan belum diukur.",
   "{victim} ({token})": "{victim} ({token})",
   "HIGH: market shock · {state}": "TINGGI: guncangan pasar · {state}",
   "Bitcoin's last fifteen minutes moved {times} times its usual fifteen minutes.": "Dalam lima belas menit terakhir Bitcoin bergerak {times} kali gerak lima belas menitnya yang biasa.",
@@ -2533,5 +2532,6 @@
   "To follow one on paper, open them and press Follow on paper there; until paper testing is started, a follow only records what it would have done. Hyperliquid's leaderboard is the site's own data, not part of its documented API.": "Untuk mengikuti seseorang secara simulasi, buka dia lalu tekan «Ikuti secara simulasi» di sana; sampai pengujian simulasi dimulai, sebuah follow hanya mencatat apa yang akan dilakukannya. Papan peringkat Hyperliquid adalah data situs itu sendiri, bukan bagian dari API yang didokumentasikannya.",
   "What they held when read, {when}:": "Yang mereka pegang saat dibaca, {when}:",
   "{coin}: {longs} long, {shorts} short": "{coin}: {longs} long, {shorts} short",
-  "Context, not a call. Where three or more hold a coin and two thirds of them one way, that way is recorded once a day as a call of its own, judged after 60 days against the share of coins that moved that way; until then it is never shown on Home or taken as a side.": "Konteks, bukan sinyal. Jika tiga orang atau lebih memegang sebuah koin dan dua pertiganya ke satu arah, arah itu dicatat sekali sehari sebagai sinyal tersendiri, dinilai setelah 60 hari terhadap porsi koin yang bergerak ke arah itu; sampai saat itu ia tidak pernah ditampilkan di Beranda atau dipakai sebagai arah."
+  "Context, not a call. Where three or more hold a coin and two thirds of them one way, that way is recorded once a day as a call of its own, judged after 60 days against the share of coins that moved that way; until then it is never shown on Home or taken as a side.": "Konteks, bukan sinyal. Jika tiga orang atau lebih memegang sebuah koin dan dua pertiganya ke satu arah, arah itu dicatat sekali sehari sebagai sinyal tersendiri, dinilai setelah 60 hari terhadap porsi koin yang bergerak ke arah itu; sampai saat itu ia tidak pernah ditampilkan di Beranda atau dipakai sebagai arah.",
+  "Which way: unknown. On 24 hacks of 2024 to 2026, a short of the victim's own token from the second day made money in 12 and lost in 12: no way to trade it.": "Arah: tidak diketahui. Pada 24 peretasan tahun 2024 hingga 2026, short atas token milik korban sejak hari kedua untung di 12 dan rugi di 12: tidak ada arah yang andal."
 }

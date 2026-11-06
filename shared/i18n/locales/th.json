@@ -2494,7 +2494,6 @@
   "First report of a theft from {victim}.": "รายงานแรกของการโจรกรรมจาก {victim}",
   "The sum named: {sum}.": "จำนวนเงินที่ระบุ: {sum}",
   "The victim's own token: {token}.": "โทเคนของผู้เสียหายเอง: {token}",
-  "Which way: unknown. What prices do after a hack is not measured yet.": "ทิศทาง: ไม่ทราบ ราคาจะเป็นอย่างไรหลังการแฮ็กยังไม่ได้วัดผล",
   "{victim} ({token})": "{victim} ({token})",
   "HIGH: market shock · {state}": "สูง: ตลาดช็อก · {state}",
   "Bitcoin's last fifteen minutes moved {times} times its usual fifteen minutes.": "ใน 15 นาทีล่าสุด บิตคอยน์เคลื่อนไหว {times} เท่าของการเคลื่อนไหวปกติใน 15 นาที",
@@ -2533,5 +2532,6 @@
   "To follow one on paper, open them and press Follow on paper there; until paper testing is started, a follow only records what it would have done. Hyperliquid's leaderboard is the site's own data, not part of its documented API.": "หากต้องการติดตามใครแบบจำลอง ให้เปิดเทรดเดอร์คนนั้นแล้วกด «เทรดตามแบบจำลอง» ที่นั่น จนกว่าจะเริ่มการทดสอบจำลอง การติดตามจะบันทึกเพียงสิ่งที่มันจะทำ กระดานผู้นำของ Hyperliquid เป็นข้อมูลของเว็บไซต์เอง ไม่ได้เป็นส่วนหนึ่งของ API ที่มีเอกสารกำกับ",
   "What they held when read, {when}:": "สิ่งที่พวกเขาถืออยู่ ณ เวลาที่อ่าน {when}:",
   "{coin}: {longs} long, {shorts} short": "{coin}: ลอง {longs} ช็อต {shorts}",
-  "Context, not a call. Where three or more hold a coin and two thirds of them one way, that way is recorded once a day as a call of its own, judged after 60 days against the share of coins that moved that way; until then it is never shown on Home or taken as a side.": "เป็นบริบท ไม่ใช่สัญญาณ เมื่อมีสามคนขึ้นไปถือเหรียญเดียวกันและสองในสามถือไปทางเดียวกัน ทิศทางนั้นจะถูกบันทึกวันละครั้งเป็นสัญญาณของตัวเอง และตัดสินหลัง 60 วันเทียบกับสัดส่วนของเหรียญที่ขยับไปทางนั้น จนกว่าจะถึงตอนนั้นจะไม่แสดงในหน้าแรกและไม่ถูกใช้เป็นทิศทาง"
+  "Context, not a call. Where three or more hold a coin and two thirds of them one way, that way is recorded once a day as a call of its own, judged after 60 days against the share of coins that moved that way; until then it is never shown on Home or taken as a side.": "เป็นบริบท ไม่ใช่สัญญาณ เมื่อมีสามคนขึ้นไปถือเหรียญเดียวกันและสองในสามถือไปทางเดียวกัน ทิศทางนั้นจะถูกบันทึกวันละครั้งเป็นสัญญาณของตัวเอง และตัดสินหลัง 60 วันเทียบกับสัดส่วนของเหรียญที่ขยับไปทางนั้น จนกว่าจะถึงตอนนั้นจะไม่แสดงในหน้าแรกและไม่ถูกใช้เป็นทิศทาง",
+  "Which way: unknown. On 24 hacks of 2024 to 2026, a short of the victim's own token from the second day made money in 12 and lost in 12: no way to trade it.": "ทิศทาง: ไม่ทราบ จากการแฮ็ก 24 ครั้งในปี 2024 ถึง 2026 การชอร์ตโทเคนของผู้เสียหายเองตั้งแต่วันที่สองได้กำไร 12 ครั้งและขาดทุน 12 ครั้ง: ไม่มีทิศทางที่เชื่อถือได้"
 }

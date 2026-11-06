@@ -72,7 +72,7 @@ describe('a hack told by its incident', () => {
     const told = storyNotice({ ...story(first()), sourceName: 'Decrypt' }, 'high')
     expect(told.title).toBe('HIGH: Binance (BNB) · Hack')
     expect(told.body).toBe(
-      "Binance Drained of $5.5 Billion in Suspected Hack (Decrypt; impact 40). First report of a theft from Binance. The sum named: $5.5B. The victim's own token: BNB. Which way: unknown. What prices do after a hack is not measured yet. Nothing was placed or sold."
+      "Binance Drained of $5.5 Billion in Suspected Hack (Decrypt; impact 40). First report of a theft from Binance. The sum named: $5.5B. The victim's own token: BNB. Which way: unknown. On 24 hacks of 2024 to 2026, a short of the victim's own token from the second day made money in 12 and lost in 12: no way to trade it. Nothing was placed or sold."
     )
     const unnamed = storyNotice({ ...story(first({ victim: null, victimToken: null, topExchange: false, amountUsd: 106e6 })), title: 'EU entity suspected of losing $106 million', sourceName: 'CoinDesk' }, 'high')
     expect(unnamed.title).toBe('HIGH: Hack')

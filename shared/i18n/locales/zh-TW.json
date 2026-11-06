@@ -2494,7 +2494,6 @@
   "First report of a theft from {victim}.": "{victim} 被盜的首次報導。",
   "The sum named: {sum}.": "報導的金額：{sum}。",
   "The victim's own token: {token}.": "受害方自己的代幣：{token}。",
-  "Which way: unknown. What prices do after a hack is not measured yet.": "方向：未知。駭客攻擊之後價格如何變動，尚未經過測量。",
   "{victim} ({token})": "{victim}（{token}）",
   "HIGH: market shock · {state}": "高：市場衝擊 · {state}",
   "Bitcoin's last fifteen minutes moved {times} times its usual fifteen minutes.": "比特幣最近十五分鐘的波動是平常十五分鐘的 {times} 倍。",
@@ -2533,5 +2532,6 @@
   "To follow one on paper, open them and press Follow on paper there; until paper testing is started, a follow only records what it would have done. Hyperliquid's leaderboard is the site's own data, not part of its documented API.": "要模擬跟單某人，請打開該交易員並在那裡點「模擬跟單」；在開始模擬測試之前，跟單只會記錄它本會做的交易。Hyperliquid 的排行榜是該網站自己的資料，不屬於其公開文件中的 API。",
   "What they held when read, {when}:": "讀取時（{when}）他們持有的：",
   "{coin}: {longs} long, {shorts} short": "{coin}：多頭 {longs}，空頭 {shorts}",
-  "Context, not a call. Where three or more hold a coin and two thirds of them one way, that way is recorded once a day as a call of its own, judged after 60 days against the share of coins that moved that way; until then it is never shown on Home or taken as a side.": "僅供參考，不是判斷。當三人或以上持有同一幣種、且其中三分之二方向一致時，這個方向每天記錄一次，作為一個獨立的判斷，並在 60 天後與同向變動的幣種比例對比評判；在此之前，它不會顯示在首頁，也不會被當作方向使用。"
+  "Context, not a call. Where three or more hold a coin and two thirds of them one way, that way is recorded once a day as a call of its own, judged after 60 days against the share of coins that moved that way; until then it is never shown on Home or taken as a side.": "僅供參考，不是判斷。當三人或以上持有同一幣種、且其中三分之二方向一致時，這個方向每天記錄一次，作為一個獨立的判斷，並在 60 天後與同向變動的幣種比例對比評判；在此之前，它不會顯示在首頁，也不會被當作方向使用。",
+  "Which way: unknown. On 24 hacks of 2024 to 2026, a short of the victim's own token from the second day made money in 12 and lost in 12: no way to trade it.": "方向：未知。在 2024 至 2026 年的 24 起駭客攻擊中，從第二天起做空受害方自己的代幣，12 次獲利、12 次虧損：沒有可靠的方向。"
 }

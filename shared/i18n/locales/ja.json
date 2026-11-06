@@ -2494,7 +2494,6 @@
   "First report of a theft from {victim}.": "{victim} からの盗難の第一報です。",
   "The sum named: {sum}.": "記載された金額：{sum}。",
   "The victim's own token: {token}.": "被害者自身のトークン：{token}。",
-  "Which way: unknown. What prices do after a hack is not measured yet.": "方向：不明。ハッキングの後に価格がどう動くかは、まだ測定されていません。",
   "{victim} ({token})": "{victim}（{token}）",
   "HIGH: market shock · {state}": "高：相場の急変 · {state}",
   "Bitcoin's last fifteen minutes moved {times} times its usual fifteen minutes.": "ビットコインの直近15分の値動きは、通常の15分の {times} 倍でした。",
@@ -2533,5 +2532,6 @@
   "To follow one on paper, open them and press Follow on paper there; until paper testing is started, a follow only records what it would have done. Hyperliquid's leaderboard is the site's own data, not part of its documented API.": "ペーパーでフォローするには、そのトレーダーを開いて「ペーパーでフォロー」を押します。ペーパー検証を開始するまでは、フォローは行ったはずの取引を記録するだけです。Hyperliquidのリーダーボードはサイト独自のデータで、文書化されたAPIの一部ではありません。",
   "What they held when read, {when}:": "読み込んだ時点（{when}）の保有：",
   "{coin}: {longs} long, {shorts} short": "{coin}：ロング {longs}、ショート {shorts}",
-  "Context, not a call. Where three or more hold a coin and two thirds of them one way, that way is recorded once a day as a call of its own, judged after 60 days against the share of coins that moved that way; until then it is never shown on Home or taken as a side.": "これは参考情報で、売買判断ではありません。3人以上が同じコインを保有し、その3分の2が同じ方向なら、その方向が1日1回独立した判断として記録され、60日後にその方向へ動いたコインの割合と比べて評価されます。それまではホームに表示されず、方向として使われることもありません。"
+  "Context, not a call. Where three or more hold a coin and two thirds of them one way, that way is recorded once a day as a call of its own, judged after 60 days against the share of coins that moved that way; until then it is never shown on Home or taken as a side.": "これは参考情報で、売買判断ではありません。3人以上が同じコインを保有し、その3分の2が同じ方向なら、その方向が1日1回独立した判断として記録され、60日後にその方向へ動いたコインの割合と比べて評価されます。それまではホームに表示されず、方向として使われることもありません。",
+  "Which way: unknown. On 24 hacks of 2024 to 2026, a short of the victim's own token from the second day made money in 12 and lost in 12: no way to trade it.": "方向：不明。2024〜2026年の24件のハッキングでは、2日目から被害者自身のトークンをショートすると12件で利益、12件で損失でした。信頼できる方向はありません。"
 }

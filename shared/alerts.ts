@@ -177,15 +177,15 @@ export function sumWords(value: number, i18n: I18n = ENGLISH): string {
   return new Intl.NumberFormat(`${i18n.language}-u-nu-latn`, { style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol', notation: 'compact', minimumFractionDigits: 0, maximumFractionDigits: 1 }).format(value)
 }
 
-/** What a notice says of an incident's first report: who lost the funds, the sum, the victim's own token, and that
- * which way a hack moves anything is not measured. Nothing for a follow-up or a story that is no incident. */
+/** What a notice says of an incident's first report: who lost the funds, the sum, the victim's own token, and what
+ * V9-HACK-2 measured of the way after a hack: none to rely on. Nothing for a follow-up or a story that is no incident. */
 export function incidentLines(incident: StoryIncident | null | undefined, i18n: I18n = ENGLISH): string[] {
   const { t } = i18n
   if (incident == null || incident.report !== 'first') return []
   const lines = [incident.victim === null ? t('First report of a theft; who lost the funds is not named.') : t('First report of a theft from {victim}.', { victim: incident.victim })]
   if (incident.amountUsd !== null) lines.push(t('The sum named: {sum}.', { sum: sumWords(incident.amountUsd, i18n) }))
   if (incident.victimToken !== null) lines.push(t("The victim's own token: {token}.", { token: incident.victimToken }))
-  lines.push(t('Which way: unknown. What prices do after a hack is not measured yet.'))
+  lines.push(t("Which way: unknown. On 24 hacks of 2024 to 2026, a short of the victim's own token from the second day made money in 12 and lost in 12: no way to trade it."))
   return lines
 }
 

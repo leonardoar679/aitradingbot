@@ -2494,7 +2494,6 @@
   "First report of a theft from {victim}.": "أول خبر عن سرقة من {victim}.",
   "The sum named: {sum}.": "المبلغ المذكور: {sum}.",
   "The victim's own token: {token}.": "الرمز الخاص بالجهة المتضررة: {token}.",
-  "Which way: unknown. What prices do after a hack is not measured yet.": "الاتجاه: غير معروف. ما تفعله الأسعار بعد الاختراق لم يُقَس بعد.",
   "{victim} ({token})": "{victim} ({token})",
   "HIGH: market shock · {state}": "مرتفعة: صدمة في السوق · {state}",
   "Bitcoin's last fifteen minutes moved {times} times its usual fifteen minutes.": "تحرّك بيتكوين في آخر خمس عشرة دقيقة {times} ضعف حركته المعتادة في خمس عشرة دقيقة.",
@@ -2533,5 +2532,6 @@
   "To follow one on paper, open them and press Follow on paper there; until paper testing is started, a follow only records what it would have done. Hyperliquid's leaderboard is the site's own data, not part of its documented API.": "لمتابعة أحدهم بشكل تجريبي، افتحه واضغط «تابِع تجريبيًا» هناك؛ وإلى أن يبدأ الاختبار التجريبي، تكتفي المتابعة بتسجيل ما كانت ستفعله. لوحة صدارة Hyperliquid بيانات الموقع نفسه، وليست جزءًا من واجهته البرمجية الموثقة (API).",
   "What they held when read, {when}:": "ما كانوا يحتفظون به عند القراءة، {when}:",
   "{coin}: {longs} long, {shorts} short": "{coin}: {longs} شراء، {shorts} بيع",
-  "Context, not a call. Where three or more hold a coin and two thirds of them one way, that way is recorded once a day as a call of its own, judged after 60 days against the share of coins that moved that way; until then it is never shown on Home or taken as a side.": "سياق لا توقع. حين يحتفظ ثلاثة أو أكثر بعملة ويكون ثلثاهم في اتجاه واحد، يُسجَّل ذلك الاتجاه مرة كل يوم كتوقع قائم بذاته، ويُحكم عليه بعد 60 يومًا مقارنة بنسبة العملات التي تحركت في ذلك الاتجاه؛ وحتى ذلك الحين لا يظهر أبدًا في الصفحة الرئيسية ولا يُعتمد كاتجاه."
+  "Context, not a call. Where three or more hold a coin and two thirds of them one way, that way is recorded once a day as a call of its own, judged after 60 days against the share of coins that moved that way; until then it is never shown on Home or taken as a side.": "سياق لا توقع. حين يحتفظ ثلاثة أو أكثر بعملة ويكون ثلثاهم في اتجاه واحد، يُسجَّل ذلك الاتجاه مرة كل يوم كتوقع قائم بذاته، ويُحكم عليه بعد 60 يومًا مقارنة بنسبة العملات التي تحركت في ذلك الاتجاه؛ وحتى ذلك الحين لا يظهر أبدًا في الصفحة الرئيسية ولا يُعتمد كاتجاه.",
+  "Which way: unknown. On 24 hacks of 2024 to 2026, a short of the victim's own token from the second day made money in 12 and lost in 12: no way to trade it.": "الاتجاه: غير معروف. في 24 اختراقًا بين 2024 و2026، ربح البيع على المكشوف لرمز الجهة المتضررة من اليوم الثاني في 12 وخسر في 12: لا اتجاه يُعتمد عليه."
 }

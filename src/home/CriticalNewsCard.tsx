@@ -12,7 +12,8 @@ import { useI18n } from '../i18n'
 // CRITICAL NEWS, ON HOME (V9 Stage 2, 6 November 2026): the first reports of the last two days of a theft that a
 // notice tells HIGH whatever is held -- from a victim whose own token trades, from a top exchange, or of $100 million
 // or more (shared/incidents.ts) -- each with its victim, its token and its sum; and the last shock of the market told,
-// which can come before any story. Which way prices go after a hack is not measured, said once. It reads.
+// which can come before any story. Which way prices go after a hack: none to rely on, as V9-HACK-2 measured, said
+// once. It reads.
 
 /** First reports shown at most. */
 const SHOWN = 3
@@ -61,7 +62,7 @@ export function CriticalNewsView({ reports, shock }: { reports: readonly ReadSto
         {shock !== null && <span>{t('Last market shock: {time}.', { time: clock(shock.at) })} {shock.title}</span>}
         <p style={noteStyle}>
           {t('First reports of a theft in the last two days: of a victim whose own token trades, of a top exchange, or of $100 million or more.')}{' '}
-          {t('Which way: unknown. What prices do after a hack is not measured yet.')}
+          {t("Which way: unknown. On 24 hacks of 2024 to 2026, a short of the victim's own token from the second day made money in 12 and lost in 12: no way to trade it.")}
         </p>
       </div>
     </Card>
