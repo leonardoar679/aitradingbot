@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dayBarsOf, hitOf, thirdOf, trailingVolOf, wilsonInterval, type DayBar } from '../shared/forecast/btcDay'
+import { bigDaysOf, dayBarsOf, hitOf, thirdOf, todayOf, trailingVolOf, wilsonInterval, type DayBar } from '../shared/forecast/btcDay'
 import type { ForecastBar } from '../shared/forecast/bars'
 
 // BITCOIN'S DAY (shared/forecast/btcDay.ts; V9-BTC-DAY): a big day by its close or its fall from the open, the
@@ -60,5 +60,29 @@ describe("a share's Wilson interval", () => {
     expect(large.high - large.low).toBeLessThan(small.high - small.low)
     expect(wilsonInterval(30, 100).low).toBeCloseTo(0.2189, 3)
     expect(wilsonInterval(0, 0)).toEqual({ low: 0, high: 1 })
+  })
+})
+
+describe('the big days of the last 90 (V9 Stage 1)', () => {
+  it('counts each whole day once, the days before the window and the day under way left out', () => {
+    // Day 0 (left out: 91 days before), days 1..90 inside, day 91 under way (left out).
+    const days: DayBar[] = [bar(0, 100, 110, 90, 110)]
+    for (let index = 1; index <= 90; index++) days.push(index % 10 === 0 ? bar(index, 100, 101, 95, 96.5) : bar(index, 100, 102.5, 99, 102.1))
+    days.push(bar(91, 100, 110, 90, 110))
+    const nowSec = 91 * DAY + 3600
+    expect(bigDaysOf(days, nowSec)).toEqual({ days: 90, close2: 90, close4: 0, fall4: 9 })
+    // A wider close: counted at 4% as well.
+    days[45] = bar(45, 100, 106, 99, 105)
+    expect(bigDaysOf(days, nowSec)).toMatchObject({ close2: 90, close4: 1 })
+    expect(bigDaysOf([], nowSec)).toBeNull()
+  })
+
+  it("reads the day under way from its bars: the first open, the last close and the move between", () => {
+    const bars: ForecastBar[] = [0, 1, 2].map((k) => ({ time: DAY + k * 300, open: 100 + k, high: 101 + k, low: 99 + k, close: 100.5 + k, volume: 1, quoteVolume: 1, takerBuyVolume: 1, trades: 1 }))
+    const yesterday: ForecastBar = { time: DAY - 300, open: 90, high: 91, low: 89, close: 90, volume: 1, quoteVolume: 1, takerBuyVolume: 1, trades: 1 }
+    const today = todayOf([yesterday, ...bars], DAY + 1000)!
+    expect(today).toMatchObject({ day: DAY, open: 100, high: 103, low: 99, last: 102.5, lastSec: DAY + 900 })
+    expect(today.movePct).toBeCloseTo(2.5, 12)
+    expect(todayOf([yesterday], DAY + 10)).toBeNull()
   })
 })

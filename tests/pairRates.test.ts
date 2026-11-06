@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { barToLine, type ForecastBar } from '../shared/forecast/bars'
 import { dayMoveRatesOf } from '../shared/forecast/bigMovers'
+import { bigDaysOf, dayBarsOf } from '../shared/forecast/btcDay'
 import { moveRatesOf } from '../shared/forecast/moveRates'
 import { pairRatesOf } from '../shared/forecast/pairRates'
 import { runTask } from '../shared/tasks'
@@ -43,8 +44,12 @@ describe("a pair's files read", () => {
     expect(read.moveRates).toEqual(moveRatesOf(all, atSec))
     expect(read.dayMoves).toEqual(dayMoveRatesOf(all, atSec))
     expect(read.dayMoves!.rates[5]).toBeCloseTo(1, 9)
-    // Under thirty days of hours: neither is said.
-    expect(pairRatesOf([textOf(all.slice(0, 20 * DAY_BARS))], atSec)).toEqual({ bars: 20 * DAY_BARS, moveRates: null, dayMoves: null })
+    // Its big days over the last 90 (V9 Stage 1): each whole UTC day read once, as shared/forecast/btcDay.ts reads them.
+    expect(read.bigDays).toEqual(bigDaysOf(dayBarsOf(all), atSec))
+    expect(read.bigDays!.days).toBe(40)
+    // Under thirty days of hours: neither rate is said; the big days are the days there are.
+    const short = pairRatesOf([textOf(all.slice(0, 20 * DAY_BARS))], atSec)
+    expect(short).toEqual({ bars: 20 * DAY_BARS, moveRates: null, dayMoves: null, bigDays: bigDaysOf(dayBarsOf(all.slice(0, 20 * DAY_BARS)), atSec) })
   })
 
   it('is a task of the worker, which refuses a payload that is not texts and a moment', () => {

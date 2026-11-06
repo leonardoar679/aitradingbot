@@ -38,7 +38,7 @@ export function NoticeSounds(): null {
           // Not a desktop notice: a chime and a toast, as the document has it (§72), in the person's language.
           const { t } = noticeI18n()
           hearNotice({ sound: 'information', kind: null, severity: 'watch' } as never)
-          showToast({ id: `top:${top}:${Date.now()}`, title: t('Top prediction: {pair}', { pair: top.replace(/USDT$/, '/USDT') }), body: t('The best-ranked forecast is now on another pair. Home shows it.'), sound: 'information' })
+          showToast({ id: `top:${top}:${Date.now()}`, title: t('Top prediction: {pair}', { pair: top.replace(/USDT$/, '/USDT') }), body: t('The best-ranked forecast is now on another pair. Predictions shows it.'), sound: 'information' })
         },
         () => undefined
       )

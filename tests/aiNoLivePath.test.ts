@@ -333,13 +333,15 @@ describe('AI code has no route to a real order', () => {
     // service (predictionLedgerService) -- a record, no trade. Since V8 Stage 10 the hour's big-mover list too, as
     // size calls with the engine's and configuration's versions (bigMovers, effectiveConfigService), and the day moves
     // of its pairs for the Forecast Lab: arithmetic on the bars it keeps, a record, no trade. Its pairs' ninety-day
-    // rates are read from the bars on file once an hour, in workers (pairRatesService) -- arithmetic, no trade.
+    // rates are read from the bars on file once an hour, in workers (pairRatesService) -- arithmetic, no trade. Since V9
+    // Stage 1 Bitcoin's day so far for Home (btcDay): arithmetic on the bars it holds, no trade.
     expect(importsOf(engine).sort()).toEqual([
       'aciTable',
       'atomicWrite',
       'bars',
       'bigMovers',
       'booksService',
+      'btcDay',
       'effectiveConfigService',
       'electron',
       'features',

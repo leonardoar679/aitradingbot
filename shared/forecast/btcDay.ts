@@ -71,6 +71,58 @@ export function dayBarsOf(bars: readonly ForecastBar[]): DayBar[] {
   return out
 }
 
+/** How many of a run of whole days were big: the days read, and those that met each target. */
+export interface BigDays {
+  days: number
+  close2: number
+  close4: number
+  fall4: number
+}
+
+/** The big days among the whole days of the last `spanDays` before `nowSec` (V9-BTC-DAY failed, 6 November 2026, so
+ * Home says how often big days came lately rather than a chance for today); null without any whole day. */
+export function bigDaysOf(days: readonly DayBar[], nowSec: number, spanDays = 90): BigDays | null {
+  const from = Math.floor(nowSec / 86_400) * 86_400 - spanDays * 86_400
+  const within = days.filter((day) => day.day >= from && day.day + 86_400 <= nowSec)
+  if (within.length === 0) return null
+  return {
+    days: within.length,
+    close2: within.filter((day) => hitOf(day, 'close2')).length,
+    close4: within.filter((day) => hitOf(day, 'close4')).length,
+    fall4: within.filter((day) => hitOf(day, 'fall4')).length
+  }
+}
+
+/** The UTC day under way: its open, high and low so far, its last close and when, and its move from the open. */
+export interface DaySoFar {
+  day: number
+  open: number
+  high: number
+  low: number
+  last: number
+  lastSec: number
+  movePct: number
+}
+
+/** What Home's Bitcoin tile reads (V9 Stage 1): Bitcoin's day so far and its big days over the last 90. */
+export interface BtcTodayView {
+  at: number
+  today: DaySoFar | null
+  bigDays: BigDays | null
+}
+
+/** The UTC day under way, from five-minute bars: its open (the first bar of the day), its high and low so far, and its
+ * last close; null before the day's first bar has closed. */
+export function todayOf(bars: readonly ForecastBar[], nowSec: number): DaySoFar | null {
+  const day = Math.floor(nowSec / 86_400) * 86_400
+  const today = bars.filter((bar) => bar.time >= day && bar.time < day + 86_400)
+  if (today.length === 0) return null
+  const sorted = [...today].sort((a, b) => a.time - b.time)
+  const open = sorted[0].open
+  const last = sorted[sorted.length - 1].close
+  return { day, open, high: Math.max(...sorted.map((bar) => bar.high)), low: Math.min(...sorted.map((bar) => bar.low)), last, lastSec: sorted[sorted.length - 1].time + FORECAST_BAR_SECONDS, movePct: (last / open - 1) * 100 }
+}
+
 /** A share's Wilson interval at a two-sided level. */
 export function wilsonInterval(hits: number, n: number, level = 0.95): { low: number; high: number } {
   if (n === 0) return { low: 0, high: 1 }

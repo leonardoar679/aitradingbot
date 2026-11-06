@@ -609,6 +609,19 @@ describe('the trade', () => {
   })
 })
 
+// V9 Stage 1: Bitcoin's day so far for Home, from the bars the forecast holds; its big days come with the pair rates.
+describe("Bitcoin's day for Home", () => {
+  it('reads the UTC day under way from the bars held: the first open, the last close and the move between', async () => {
+    const live = await engine()
+    fake.now = HOUR + 3 * 3600
+    const view = live.btcToday(HOUR + 3 * 3600)
+    const bars = MARKET.get('BTCUSDT')!.filter((bar) => bar.time >= HOUR && bar.time < HOUR + 3 * 3600)
+    expect(view.today).toMatchObject({ day: HOUR, open: bars[0].open, last: bars[bars.length - 1].close, lastSec: HOUR + 3 * 3600 })
+    expect(view.today!.movePct).toBeCloseTo((bars[bars.length - 1].close / bars[0].open - 1) * 100, 9)
+    expect(view.bigDays).toBeNull()
+  })
+})
+
 describe('the record', () => {
   it('holds every pair at the quarter-hours -- the short horizons, all five on the hour -- and nothing between', async () => {
     const live = await engine()

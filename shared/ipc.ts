@@ -73,6 +73,8 @@ export const IpcChannel = {
   ForecastBars: 'forecast:bars',
   /** Each pair's share of days that closed 5% and 10% away over its ninety days, for the Forecast Lab (V8 Stage 10). */
   ForecastDayMoves: 'forecast:dayMoves',
+  /** Bitcoin's day so far and its big days over the last 90, for Home (V9 Stage 1). */
+  ForecastBtcToday: 'forecast:btcToday',
   ForecastRecord: 'forecast:record',
   ForecastUpdate: 'forecast:update',
   FeedUpdate: 'feed:update',

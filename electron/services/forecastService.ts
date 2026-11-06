@@ -28,6 +28,7 @@ import { setVenuePairs, venueCostOf, venueGateOf } from './venueQuotesService'
 import { recordMiss } from './booksService'
 import { recordBigMovers, recordHourMoves } from './predictionLedgerService'
 import { heldPairRates, refreshPairRates } from './pairRatesService'
+import { todayOf, type BtcTodayView } from '../../shared/forecast/btcDay'
 import { BIG_MOVERS_LINES } from '../../shared/forecast/bigMovers'
 import { getEffectiveConfig } from './effectiveConfigService'
 import { MISS_VERSION } from '../../shared/misses'
@@ -813,4 +814,11 @@ export function forecastDayMoves(nowSec: number = Math.floor(Date.now() / 1000))
   const [small, large] = BIG_MOVERS_LINES.dayMovesPct
   rows.sort((a, b) => (b.rates[large] ?? 0) - (a.rates[large] ?? 0) || (b.rates[small] ?? 0) - (a.rates[small] ?? 0) || a.pair.localeCompare(b.pair))
   return { at: at > 0 ? at : nowSec, sizes: BIG_MOVERS_LINES.dayMovesPct, rows }
+}
+
+/** Bitcoin's day so far, from the five-minute bars the forecast holds, and its big days over the last 90, from its
+ * files as the hourly rates read them (V9 Stage 1): Home's Bitcoin tile. Arithmetic on the bars: no key, no model. */
+export function btcToday(nowSec: number = Math.floor(Date.now() / 1000)): BtcTodayView {
+  const series = sources.seriesOf('BTCUSDT')
+  return { at: nowSec, today: series === null ? null : todayOf(series.m5, nowSec), bigDays: heldPairRates('BTCUSDT')?.bigDays ?? null }
 }

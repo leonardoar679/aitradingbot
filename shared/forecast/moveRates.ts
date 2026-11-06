@@ -13,13 +13,14 @@ import type { ForecastBar } from './bars'
 // (so a day weighs twenty-four moments), where the bars a horizon on are all on file. Arithmetic on the bars: no
 // key, no model, no order.
 
-export const MOVE_RATES_VERSION = 'move-rates-v1'
+export const MOVE_RATES_VERSION = 'move-rates-v2'
 
 export const MOVE_RATES_LINES = {
   horizons: ['hour1', 'hours4', 'hours24'] as readonly Horizon[],
-  /** The moves a close is counted at, and the moves a touch is, in percent. */
+  /** The moves a close is counted at, and the moves a touch is, in percent: 3%, 4% and 5% touches since V9 Stage 1 (6
+   * November 2026), so Home can say how soon a big mover's move came, and Bitcoin's 4%. */
   closeMovesPct: [1, 2, 5] as readonly number[],
-  touchMovesPct: [1, 2] as readonly number[],
+  touchMovesPct: [1, 2, 3, 4, 5] as readonly number[],
   /** The days of bars read, back from the moment. */
   days: 90,
   /** A moment every this many five-minute bars: every hour's close. */

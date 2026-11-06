@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import type { FuturesCloseResult, FuturesReadout } from '../shared/futuresPositions'
 import type { ProtectiveStop } from '../shared/futuresStops'
 import type { PricePrediction } from '../shared/forecast/prediction'
+import type { BtcTodayView } from '../shared/forecast/btcDay'
 import type { RoleChoice, RoutingPreview } from '../shared/aiRouting'
 import type { ResearchExport, ResearchStatus } from '../shared/research'
 import type { TradeDecision } from '../shared/forecast/tradeDecision'
@@ -215,6 +216,8 @@ const api = {
     bars: (pair: string, width: '15m' | '1h' | '4h', fromSec: number, toSec: number): Promise<Candle[]> => ipcRenderer.invoke(IpcChannel.ForecastBars, pair, width, fromSec, toSec),
     /** Each pair's share of days that closed 5% and 10% away over its ninety days (V8 Stage 10). */
     dayMoves: (): Promise<{ at: number; sizes: readonly number[]; rows: { pair: string; moments: number; rates: Record<number, number> }[] }> => ipcRenderer.invoke(IpcChannel.ForecastDayMoves),
+    /** Bitcoin's day so far and its big days over the last 90, for Home (V9 Stage 1). */
+    btcToday: (): Promise<BtcTodayView> => ipcRenderer.invoke(IpcChannel.ForecastBtcToday),
     /** Every pair's forecasts made in a span, and their outcomes on file: what a run's report judges. */
     record: (fromSec: number, toSec: number): Promise<ForecastHistory> => ipcRenderer.invoke(IpcChannel.ForecastRecord, fromSec, toSec),
     onUpdate: (listener: (closedAt: number | null) => void): (() => void) => {

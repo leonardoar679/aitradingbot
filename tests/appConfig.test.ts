@@ -70,8 +70,9 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 // infrastructure), from a3d171bc6249. 27 October 2026: how a follow reads its trader and trades in the copy book (V8 Stage
 // 8; infrastructure), from f8ec0052263b. The books' report lines, the news book's and the baseline's, named by
 // V8-S9-BOOKS before the first Start (V8 Stage 9), from ff3c16adfc9b. The big-mover list's lines and the Forecast
-// Lab's day moves (V8 Stage 10; infrastructure), from 252036aa0bd4.
-const PINNED_ENGINE_VERSION = '343e001c658d'
+// Lab's day moves (V8 Stage 10; infrastructure), from 252036aa0bd4. 6 November 2026: the move rates' 3%, 4% and 5% touches
+// (move-rates-v2; V9 Stage 1; infrastructure), from 343e001c658d.
+const PINNED_ENGINE_VERSION = '666e77f3b281'
 
 describe('the engine version', () => {
   it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {

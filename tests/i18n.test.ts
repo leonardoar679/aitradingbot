@@ -714,25 +714,37 @@ const RANKED: RankedForecast = { pair: 'SOLUSDT', horizon: 'hour1', score: 0.42,
 
 describe("the forecast's cards with a forecast in them, in every language", () => {
   it('reads each from its catalog, with no English in what is read', async () => {
-    const { BestPredictionCard, TopPredictions } = await import('../src/forecast/BestPredictionCard')
+    const { BestPredictionCard } = await import('../src/forecast/BestPredictionCard')
+    const { BigMoversView } = await import('../src/forecast/BigMoversCard')
+    const { BitcoinTodayCard } = await import('../src/home/BitcoinTodayTile')
     const { PredictionDrawer } = await import('../src/forecast/PredictionDrawer')
     const none = (): undefined => undefined
-    const btc = { ...PREDICTION, pair: 'BTCUSDT', id: `BTCUSDT:${BAR}` }
+    // Home's big movers (V9 Stage 1): four hours and a day, each with how soon its move came; one with a measured way.
+    const rates = (either: number): PricePrediction['moveRates'] => ({
+      version: 'v',
+      fromSec: 0,
+      toSec: 0,
+      days: 90,
+      horizons: (['hours4', 'hours24'] as const).map((horizon) => ({
+        horizon,
+        moments: 2000,
+        close: [{ pct: horizon === 'hours4' ? 2 : 5, up: either / 2, down: either / 2, either }],
+        touch: [{ pct: horizon === 'hours4' ? 2 : 5, up: either / 2, down: either / 2, either: either * 1.5, medianMinutes: horizon === 'hours4' ? 95 : 400 }]
+      }))
+    })
+    const movers = [
+      { ...PREDICTION, moveRates: rates(0.3) },
+      { ...PREDICTION, pair: 'BTCUSDT', id: `BTCUSDT:${BAR}`, moveRates: rates(0.12) }
+    ]
+    const calls = { cards: [{ pair: 'SOLUSDT', side: 'down', source: 'delisting-rule' }] } as unknown as PrimaryCallState
+    const btcDay = { at: BAR, today: { day: BAR - (BAR % 86_400), open: 80_000, high: 81_000, low: 79_000, last: 80_800, lastSec: BAR, movePct: 1 }, bigDays: { days: 90, close2: 27, close4: 8, fall4: 9 } }
     const cards: { name: string; element: ReactElement }[] = [
       { name: 'the best prediction, to trade', element: createElement(BestPredictionCard, { prediction: PREDICTION, ranked: RANKED, live: null, onDetails: none, onPrepareOrder: none }) },
       { name: 'the best prediction, not to', element: createElement(BestPredictionCard, { prediction: PREDICTION, ranked: { ...RANKED, decision: NO_TRADE }, live: null, onDetails: none }) },
       { name: 'no prediction yet', element: createElement(BestPredictionCard, { prediction: null, ranked: null, live: null, onDetails: none }) },
-      {
-        name: 'the top three',
-        element: createElement(TopPredictions, {
-          ranked: [RANKED, { ...RANKED, pair: 'BTCUSDT', decision: { ...NO_TRADE, pair: 'BTCUSDT' } }],
-          predictions: new Map([
-            ['SOLUSDT', PREDICTION],
-            ['BTCUSDT', btc]
-          ]),
-          onDetails: none
-        })
-      },
+      { name: "Home's big movers", element: createElement(BigMoversView, { predictions: movers, onOpen: none, horizons: ['hours4', 'hours24'], times: true, calls }) },
+      { name: "Home's big movers, no way", element: createElement(BigMoversView, { predictions: movers, onOpen: none, horizons: ['hours4', 'hours24'], times: true, calls: { cards: [] } as unknown as PrimaryCallState }) },
+      { name: 'Bitcoin today', element: createElement(BitcoinTodayCard, { view: btcDay, marketState: 'PRE_EVENT' }) },
       { name: 'the drawer, to trade', element: createElement(PredictionDrawer, { prediction: PREDICTION, decision: TRADE, live: null, onClose: none, onPrepareOrder: none }) },
       { name: 'the drawer, not to', element: createElement(PredictionDrawer, { prediction: PREDICTION, decision: NO_TRADE, live: null, onClose: none }) },
       // Its range widened for Bitcoin's sharp move (V6.1).
