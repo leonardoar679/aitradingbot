@@ -86,12 +86,18 @@ export async function perpBars(venue: PerpVenue, symbol: string, interval: PerpI
       const limit = Math.min(1500, Math.max(1, left))
       await perpMarketSeam.spendBinance(binanceKlinesWeight(limit))
       const rows = await json<unknown[][]>(`${PERP_HOSTS.binance}/fapi/v1/klines?${new URLSearchParams({ symbol, interval, startTime: String(cursor * 1000), endTime: String(end * 1000 - 1), limit: String(limit) })}`)
+      let last = cursor - step
       for (const row of rows) {
         const candle = binanceRowOf(row)
-        if (candle !== null && candle.time >= cursor && candle.time < end) out.set(candle.time, candle)
+        if (candle !== null && candle.time >= cursor && candle.time < end) {
+          out.set(candle.time, candle)
+          last = Math.max(last, candle.time)
+        }
       }
       if (rows.length < limit) break
-      cursor += limit * step
+      // The next page starts past the last bar given: for a span begun before a perpetual's listing Binance gives the
+      // bars from the listing on, which a cursor moved by the page's length alone asked for again, page after page.
+      cursor = Math.max(cursor + limit * step, last + step)
     } else {
       const limit = Math.min(200, Math.max(1, left))
       const rows = await bitget<unknown[][]>('history-candles', '/api/v2/mix/market/history-candles', {

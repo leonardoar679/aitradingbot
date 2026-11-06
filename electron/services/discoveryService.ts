@@ -286,13 +286,18 @@ async function analyseNext(): Promise<void> {
     analysing = null
     lastAnalysisEndMs = discoverySeam.nowMs()
   }
+  await publish()
 }
 
 /** One turn: switched on, the rankings read where a day has passed since the last read (an hour after a read that found
- * neither), then the next analysis where it is due. In the background lane, one turn at a time. */
+ * neither), what the analysed found traders hold where the day's read is due, then the next analysis where it is due.
+ * In the background lane, one turn at a time. An analysis is not the turn's: a long record's can read bars for an hour
+ * and more, and the turns after go on meanwhile, so the day's holdings are read in its first two hours whatever is
+ * being analysed (V9 Stage 8). The promise ends with the analysis the turn started. */
 export async function discoveryTurn(): Promise<void> {
   if (busy) return
   busy = true
+  let started: Promise<void> = Promise.resolve()
   try {
     await load()
     if (!(await discoverySeam.enabled())) {
@@ -307,7 +312,7 @@ export async function discoveryTurn(): Promise<void> {
       if (nowMs / 1000 >= dueSec && (lastAttemptMs === null || nowMs - lastAttemptMs >= DISCOVERY_LINES.retrySeconds * 1000)) await readBoards()
       await publish()
       await readHoldings().catch((error) => console.warn("Discovery: the found traders' holdings could not be read:", describe(error)))
-      await analyseNext()
+      started = analyseNext()
     })
     await publish()
   } catch (error) {
@@ -315,6 +320,7 @@ export async function discoveryTurn(): Promise<void> {
   } finally {
     busy = false
   }
+  await started.catch((error) => console.error('Discovery failed an analysis:', error))
 }
 
 /** Switches finding traders on or off, and tells the page. */

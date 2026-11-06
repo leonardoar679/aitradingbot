@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { createHash } from 'crypto'
 import { mkdir, readdir, readFile } from 'fs/promises'
 import { join } from 'path'
+import type { Priority } from '../../shared/httpPacing'
 import type { Candle } from '../../shared/ipc'
 import type { CloneCosts } from '../../shared/traders/clone'
 import { DELAY_LINES, type DelayCosts, type FundingRate } from '../../shared/traders/delay'
@@ -42,6 +43,7 @@ import type { TraderTestsInput, TraderTestsResult } from '../../shared/traders/t
 import { PERP_FEES } from '../../shared/venueCosts'
 import { writeJsonAtomic } from './atomicWrite'
 import { getEffectiveConfig } from './effectiveConfigService'
+import { laneNow } from './httpPacing'
 import { fetchHyperliquidRecord } from './hyperliquidClient'
 import { appendJsonLines, listMonthFiles } from './jsonlStore'
 import { fetchOkxRecord } from './okxClient'
@@ -347,13 +349,17 @@ function okxSummaryOf(record: TraderRecord): OkxSummary {
   }
 }
 
-let analysing: Promise<unknown> = Promise.resolve()
+// The analyses asked for, a chain for each lane of the request budgets: one asked for on the page never waits behind a
+// found trader's in the background lane (discoveryService.ts), which can read a long record's bars for an hour.
+const idleChains = (): Record<Priority, Promise<unknown>> => ({ normal: Promise.resolve(), background: Promise.resolve() })
+let analysing = idleChains()
 
-/** Analyses a trader on file, one analysis at a time: the figures, each coin's perpetual, the tests, and one line kept
- * of it all. */
+/** Analyses a trader on file, one analysis at a time in its lane: the figures, each coin's perpetual, the tests, and one
+ * line kept of it all. */
 export function analyzeTrader(key: unknown): Promise<TraderAnalysis> {
-  const run = analysing.then(() => analyze(key))
-  analysing = run.catch(() => undefined)
+  const lane = laneNow()
+  const run = analysing[lane].then(() => analyze(key))
+  analysing[lane] = run.catch(() => undefined)
   return run
 }
 
@@ -513,5 +519,5 @@ export async function listTraders(): Promise<TraderList> {
 /** Test seam. */
 export function resetTraders(): void {
   listeners.clear()
-  analysing = Promise.resolve()
+  analysing = idleChains()
 }

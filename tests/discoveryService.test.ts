@@ -242,6 +242,35 @@ describe('finding traders', () => {
     expect(calls.some((call) => call.what.startsWith('positions'))).toBe(false)
   })
 
+  it("reads the day's holdings while a long analysis runs, and starts no second analysis meanwhile", async () => {
+    const { service, calls, clock, held } = await setup()
+    await service.discoveryTurn()
+    // The next found trader's analysis reads bars past the turn of the UTC day.
+    let release = (): void => undefined
+    const holding = new Promise<void>((resolve) => (release = resolve))
+    let reached = (): void => undefined
+    const inside = new Promise<void>((resolve) => (reached = resolve))
+    const analyze = service.discoverySeam.analyze
+    service.discoverySeam.analyze = async (key) => {
+      reached()
+      await holding
+      return analyze(key)
+    }
+    clock.now = T0 + 30 * 60_000
+    const long = service.discoveryTurn()
+    await inside
+    expect(service.discoveryState().analysing).toBe('okx-AAAAAAAAAAAAAAA1')
+    held.set(address(2), [{ coin: 'BTC', size: 1 }])
+    calls.length = 0
+    clock.now = Date.UTC(2026, 10, 7, 0, 4)
+    await service.discoveryTurn()
+    expect(calls.map((call) => call.what)).toEqual([`positions ${address(2)}`])
+    expect(service.discoveryState().holdings).toMatchObject({ day: Date.UTC(2026, 10, 7) / 1000, traders: 1, failed: 0 })
+    release()
+    await long
+    expect(service.discoveryState()).toMatchObject({ analysing: null, analysed: 2 })
+  })
+
   it('counts a found trader whose positions cannot be read as failed, and goes on', async () => {
     const { service, clock, held } = await setup()
     await service.discoveryTurn()

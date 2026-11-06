@@ -78,6 +78,26 @@ describe('bars', () => {
     expect(module.binanceKlinesWeight(1000)).toBe(5)
   })
 
+  it("are read from Binance once from a perpetual's listing where the span begins before it", async () => {
+    const step = 60
+    const from = 1_790_000_000 - (1_790_000_000 % 60)
+    const listed = from + 4000 * step
+    const { module, urls } = await market((url) => {
+      const start = Number(url.searchParams.get('startTime')) / 1000
+      const limit = Number(url.searchParams.get('limit'))
+      const end = Number(url.searchParams.get('endTime')) / 1000
+      // Binance gives the first bars at or after the start: from before the listing, those from the listing on.
+      const rows: unknown[][] = []
+      for (let t = Math.max(start, listed); t <= end && t < listed + 2000 * step && rows.length < limit; t += step) rows.push(kline(t, t))
+      return json(rows)
+    })
+    const bars = await module.perpBars('binance', 'BTCUSDT', '1m', from, from + 9000 * step)
+    expect(bars).toHaveLength(2000)
+    expect(bars[0].time).toBe(listed)
+    // The first page gives the listing's first 1,500 minutes, and the next starts past them.
+    expect(urls.map((url) => Number(url.searchParams.get('startTime')) / 1000)).toEqual([from, listed + 1500 * step])
+  })
+
   it('are read from Bitget 200 at a time over the whole span, in its granularity', async () => {
     const from = 1_790_000_000 - (1_790_000_000 % 3600)
     const { module, urls } = await market((url) => {

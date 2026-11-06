@@ -376,6 +376,33 @@ describe('an analysis', () => {
     expect(started).toBe(2)
   })
 
+  it("analyses one at a time in each lane: one asked on the page does not wait behind a found trader's in the background", async () => {
+    const traders = await service()
+    const { inBackground } = await import('../electron/services/httpPacing')
+    await traders.importTrader(ADDRESS)
+    let release = (): void => undefined
+    const held = new Promise<void>((resolve) => (release = resolve))
+    let reached = (): void => undefined
+    const firstReached = new Promise<void>((resolve) => (reached = resolve))
+    let started = 0
+    traders.traderSeam.runTests = async (input) => {
+      started++
+      if (started === 1) {
+        reached()
+        await held
+      }
+      return traderTestsOf(input)
+    }
+    const background = inBackground(() => traders.analyzeTrader(KEY))
+    await firstReached
+    // Asked on the page while the background one waits: it runs through and is kept first.
+    const page = await traders.analyzeTrader(KEY)
+    expect(started).toBe(2)
+    expect(page.key).toBe(KEY)
+    release()
+    expect((await background).key).toBe(KEY)
+  })
+
   it('refuses a key that names no trader, and one not on file', async () => {
     const traders = await service()
     await expect(traders.analyzeTrader('../etc')).rejects.toThrow('A trader on file is named by its key.')
