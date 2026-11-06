@@ -1,0 +1,3061 @@
+{
+ "version": "v9-macro-calendar-v1",
+ "readAt": "2026-11-06T04:52:26.854Z",
+ "barsEnd": 1787925600,
+ "counts": {
+  "2018 JOBS": 12,
+  "2018 PPI": 12,
+  "2018 CPI": 12,
+  "2018 FOMC": 8,
+  "2019 JOBS": 12,
+  "2019 CPI": 12,
+  "2019 PPI": 12,
+  "2019 FOMC": 8,
+  "2020 JOBS": 12,
+  "2020 CPI": 12,
+  "2020 PPI": 12,
+  "2020 FOMC": 7,
+  "2021 JOBS": 12,
+  "2021 CPI": 12,
+  "2021 PPI": 12,
+  "2021 FOMC": 8,
+  "2022 JOBS": 12,
+  "2022 CPI": 12,
+  "2022 PPI": 12,
+  "2022 FOMC": 8,
+  "2023 JOBS": 12,
+  "2023 CPI": 12,
+  "2023 PPI": 12,
+  "2023 FOMC": 8,
+  "2024 JOBS": 12,
+  "2024 CPI": 12,
+  "2024 PPI": 12,
+  "2024 FOMC": 8,
+  "2025 JOBS": 11,
+  "2025 PPI": 10,
+  "2025 CPI": 11,
+  "2025 FOMC": 8,
+  "2026 JOBS": 8,
+  "2026 CPI": 8,
+  "2026 PPI": 9,
+  "2026 FOMC": 5
+ },
+ "events": [
+  {
+   "kind": "JOBS",
+   "date": "2018-01-05",
+   "timeEt": "08:30",
+   "at": 1515159000,
+   "reference": "December 2017",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "PPI",
+   "date": "2018-01-11",
+   "timeEt": "08:30",
+   "at": 1515677400,
+   "reference": "December 2017",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "CPI",
+   "date": "2018-01-12",
+   "timeEt": "08:30",
+   "at": 1515763800,
+   "reference": "December 2017",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2018-01-31",
+   "timeEt": "14:00",
+   "at": 1517425200,
+   "reference": null,
+   "source": "fed-historical-2018"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2018-02-02",
+   "timeEt": "08:30",
+   "at": 1517578200,
+   "reference": "January 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "CPI",
+   "date": "2018-02-14",
+   "timeEt": "08:30",
+   "at": 1518615000,
+   "reference": "January 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "PPI",
+   "date": "2018-02-15",
+   "timeEt": "08:30",
+   "at": 1518701400,
+   "reference": "January 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2018-03-09",
+   "timeEt": "08:30",
+   "at": 1520602200,
+   "reference": "February 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "CPI",
+   "date": "2018-03-13",
+   "timeEt": "08:30",
+   "at": 1520944200,
+   "reference": "February 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "PPI",
+   "date": "2018-03-14",
+   "timeEt": "08:30",
+   "at": 1521030600,
+   "reference": "February 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2018-03-21",
+   "timeEt": "14:00",
+   "at": 1521655200,
+   "reference": null,
+   "source": "fed-historical-2018"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2018-04-06",
+   "timeEt": "08:30",
+   "at": 1523017800,
+   "reference": "March 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "PPI",
+   "date": "2018-04-10",
+   "timeEt": "08:30",
+   "at": 1523363400,
+   "reference": "March 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "CPI",
+   "date": "2018-04-11",
+   "timeEt": "08:30",
+   "at": 1523449800,
+   "reference": "March 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2018-05-02",
+   "timeEt": "14:00",
+   "at": 1525284000,
+   "reference": null,
+   "source": "fed-historical-2018"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2018-05-04",
+   "timeEt": "08:30",
+   "at": 1525437000,
+   "reference": "April 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "PPI",
+   "date": "2018-05-09",
+   "timeEt": "08:30",
+   "at": 1525869000,
+   "reference": "April 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "CPI",
+   "date": "2018-05-10",
+   "timeEt": "08:30",
+   "at": 1525955400,
+   "reference": "April 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2018-06-01",
+   "timeEt": "08:30",
+   "at": 1527856200,
+   "reference": "May 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "CPI",
+   "date": "2018-06-12",
+   "timeEt": "08:30",
+   "at": 1528806600,
+   "reference": "May 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "PPI",
+   "date": "2018-06-13",
+   "timeEt": "08:30",
+   "at": 1528893000,
+   "reference": "May 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2018-06-13",
+   "timeEt": "14:00",
+   "at": 1528912800,
+   "reference": null,
+   "source": "fed-historical-2018"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2018-07-06",
+   "timeEt": "08:30",
+   "at": 1530880200,
+   "reference": "June 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "PPI",
+   "date": "2018-07-11",
+   "timeEt": "08:30",
+   "at": 1531312200,
+   "reference": "June 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "CPI",
+   "date": "2018-07-12",
+   "timeEt": "08:30",
+   "at": 1531398600,
+   "reference": "June 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2018-08-01",
+   "timeEt": "14:00",
+   "at": 1533146400,
+   "reference": null,
+   "source": "fed-historical-2018"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2018-08-03",
+   "timeEt": "08:30",
+   "at": 1533299400,
+   "reference": "July 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "PPI",
+   "date": "2018-08-09",
+   "timeEt": "08:30",
+   "at": 1533817800,
+   "reference": "July 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "CPI",
+   "date": "2018-08-10",
+   "timeEt": "08:30",
+   "at": 1533904200,
+   "reference": "July 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2018-09-07",
+   "timeEt": "08:30",
+   "at": 1536323400,
+   "reference": "August 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "PPI",
+   "date": "2018-09-12",
+   "timeEt": "08:30",
+   "at": 1536755400,
+   "reference": "August 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "CPI",
+   "date": "2018-09-13",
+   "timeEt": "08:30",
+   "at": 1536841800,
+   "reference": "August 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2018-09-26",
+   "timeEt": "14:00",
+   "at": 1537984800,
+   "reference": null,
+   "source": "fed-historical-2018"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2018-10-05",
+   "timeEt": "08:30",
+   "at": 1538742600,
+   "reference": "September 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "PPI",
+   "date": "2018-10-10",
+   "timeEt": "08:30",
+   "at": 1539174600,
+   "reference": "September 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "CPI",
+   "date": "2018-10-11",
+   "timeEt": "08:30",
+   "at": 1539261000,
+   "reference": "September 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2018-11-02",
+   "timeEt": "08:30",
+   "at": 1541161800,
+   "reference": "October 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2018-11-08",
+   "timeEt": "14:00",
+   "at": 1541703600,
+   "reference": null,
+   "source": "fed-historical-2018"
+  },
+  {
+   "kind": "PPI",
+   "date": "2018-11-09",
+   "timeEt": "08:30",
+   "at": 1541770200,
+   "reference": "October 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "CPI",
+   "date": "2018-11-14",
+   "timeEt": "08:30",
+   "at": 1542202200,
+   "reference": "October 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2018-12-07",
+   "timeEt": "08:30",
+   "at": 1544189400,
+   "reference": "November 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "PPI",
+   "date": "2018-12-11",
+   "timeEt": "08:30",
+   "at": 1544535000,
+   "reference": "November 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "CPI",
+   "date": "2018-12-12",
+   "timeEt": "08:30",
+   "at": 1544621400,
+   "reference": "November 2018",
+   "source": "bls-2018@20181203192447"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2018-12-19",
+   "timeEt": "14:00",
+   "at": 1545246000,
+   "reference": null,
+   "source": "fed-historical-2018"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2019-01-04",
+   "timeEt": "08:30",
+   "at": 1546608600,
+   "reference": "December 2018",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "CPI",
+   "date": "2019-01-11",
+   "timeEt": "08:30",
+   "at": 1547213400,
+   "reference": "December 2018",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "PPI",
+   "date": "2019-01-15",
+   "timeEt": "08:30",
+   "at": 1547559000,
+   "reference": "December 2018",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2019-01-30",
+   "timeEt": "14:00",
+   "at": 1548874800,
+   "reference": null,
+   "source": "fed-historical-2019"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2019-02-01",
+   "timeEt": "08:30",
+   "at": 1549027800,
+   "reference": "January 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "CPI",
+   "date": "2019-02-13",
+   "timeEt": "08:30",
+   "at": 1550064600,
+   "reference": "January 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "PPI",
+   "date": "2019-02-14",
+   "timeEt": "08:30",
+   "at": 1550151000,
+   "reference": "January 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2019-03-08",
+   "timeEt": "08:30",
+   "at": 1552051800,
+   "reference": "February 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "CPI",
+   "date": "2019-03-12",
+   "timeEt": "08:30",
+   "at": 1552393800,
+   "reference": "February 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "PPI",
+   "date": "2019-03-13",
+   "timeEt": "08:30",
+   "at": 1552480200,
+   "reference": "February 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2019-03-20",
+   "timeEt": "14:00",
+   "at": 1553104800,
+   "reference": null,
+   "source": "fed-historical-2019"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2019-04-05",
+   "timeEt": "08:30",
+   "at": 1554467400,
+   "reference": "March 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "CPI",
+   "date": "2019-04-10",
+   "timeEt": "08:30",
+   "at": 1554899400,
+   "reference": "March 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "PPI",
+   "date": "2019-04-11",
+   "timeEt": "08:30",
+   "at": 1554985800,
+   "reference": "March 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2019-05-01",
+   "timeEt": "14:00",
+   "at": 1556733600,
+   "reference": null,
+   "source": "fed-historical-2019"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2019-05-03",
+   "timeEt": "08:30",
+   "at": 1556886600,
+   "reference": "April 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "PPI",
+   "date": "2019-05-09",
+   "timeEt": "08:30",
+   "at": 1557405000,
+   "reference": "April 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "CPI",
+   "date": "2019-05-10",
+   "timeEt": "08:30",
+   "at": 1557491400,
+   "reference": "April 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2019-06-07",
+   "timeEt": "08:30",
+   "at": 1559910600,
+   "reference": "May 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "PPI",
+   "date": "2019-06-11",
+   "timeEt": "08:30",
+   "at": 1560256200,
+   "reference": "May 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "CPI",
+   "date": "2019-06-12",
+   "timeEt": "08:30",
+   "at": 1560342600,
+   "reference": "May 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2019-06-19",
+   "timeEt": "14:00",
+   "at": 1560967200,
+   "reference": null,
+   "source": "fed-historical-2019"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2019-07-05",
+   "timeEt": "08:30",
+   "at": 1562329800,
+   "reference": "June 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "CPI",
+   "date": "2019-07-11",
+   "timeEt": "08:30",
+   "at": 1562848200,
+   "reference": "June 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "PPI",
+   "date": "2019-07-12",
+   "timeEt": "08:30",
+   "at": 1562934600,
+   "reference": "June 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2019-07-31",
+   "timeEt": "14:00",
+   "at": 1564596000,
+   "reference": null,
+   "source": "fed-historical-2019"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2019-08-02",
+   "timeEt": "08:30",
+   "at": 1564749000,
+   "reference": "July 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "PPI",
+   "date": "2019-08-09",
+   "timeEt": "08:30",
+   "at": 1565353800,
+   "reference": "July 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "CPI",
+   "date": "2019-08-13",
+   "timeEt": "08:30",
+   "at": 1565699400,
+   "reference": "July 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2019-09-06",
+   "timeEt": "08:30",
+   "at": 1567773000,
+   "reference": "August 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "PPI",
+   "date": "2019-09-11",
+   "timeEt": "08:30",
+   "at": 1568205000,
+   "reference": "August 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "CPI",
+   "date": "2019-09-12",
+   "timeEt": "08:30",
+   "at": 1568291400,
+   "reference": "August 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2019-09-18",
+   "timeEt": "14:00",
+   "at": 1568829600,
+   "reference": null,
+   "source": "fed-historical-2019"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2019-10-04",
+   "timeEt": "08:30",
+   "at": 1570192200,
+   "reference": "September 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "PPI",
+   "date": "2019-10-08",
+   "timeEt": "08:30",
+   "at": 1570537800,
+   "reference": "September 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "CPI",
+   "date": "2019-10-10",
+   "timeEt": "08:30",
+   "at": 1570710600,
+   "reference": "September 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2019-10-30",
+   "timeEt": "14:00",
+   "at": 1572458400,
+   "reference": null,
+   "source": "fed-historical-2019"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2019-11-01",
+   "timeEt": "08:30",
+   "at": 1572611400,
+   "reference": "October 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "CPI",
+   "date": "2019-11-13",
+   "timeEt": "08:30",
+   "at": 1573651800,
+   "reference": "October 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "PPI",
+   "date": "2019-11-14",
+   "timeEt": "08:30",
+   "at": 1573738200,
+   "reference": "October 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2019-12-06",
+   "timeEt": "08:30",
+   "at": 1575639000,
+   "reference": "November 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "CPI",
+   "date": "2019-12-11",
+   "timeEt": "08:30",
+   "at": 1576071000,
+   "reference": "November 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2019-12-11",
+   "timeEt": "14:00",
+   "at": 1576090800,
+   "reference": null,
+   "source": "fed-historical-2019"
+  },
+  {
+   "kind": "PPI",
+   "date": "2019-12-12",
+   "timeEt": "08:30",
+   "at": 1576157400,
+   "reference": "November 2019",
+   "source": "bls-2019@20200404073844"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2020-01-10",
+   "timeEt": "08:30",
+   "at": 1578663000,
+   "reference": "December 2019",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "CPI",
+   "date": "2020-01-14",
+   "timeEt": "08:30",
+   "at": 1579008600,
+   "reference": "December 2019",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "PPI",
+   "date": "2020-01-15",
+   "timeEt": "08:30",
+   "at": 1579095000,
+   "reference": "December 2019",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2020-01-29",
+   "timeEt": "14:00",
+   "at": 1580324400,
+   "reference": null,
+   "source": "fed-historical-2020"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2020-02-07",
+   "timeEt": "08:30",
+   "at": 1581082200,
+   "reference": "January 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "CPI",
+   "date": "2020-02-13",
+   "timeEt": "08:30",
+   "at": 1581600600,
+   "reference": "January 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "PPI",
+   "date": "2020-02-19",
+   "timeEt": "08:30",
+   "at": 1582119000,
+   "reference": "January 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2020-03-06",
+   "timeEt": "08:30",
+   "at": 1583501400,
+   "reference": "February 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "CPI",
+   "date": "2020-03-11",
+   "timeEt": "08:30",
+   "at": 1583929800,
+   "reference": "February 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "PPI",
+   "date": "2020-03-12",
+   "timeEt": "08:30",
+   "at": 1584016200,
+   "reference": "February 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2020-04-03",
+   "timeEt": "08:30",
+   "at": 1585917000,
+   "reference": "March 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "PPI",
+   "date": "2020-04-09",
+   "timeEt": "08:30",
+   "at": 1586435400,
+   "reference": "March 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "CPI",
+   "date": "2020-04-10",
+   "timeEt": "08:30",
+   "at": 1586521800,
+   "reference": "March 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2020-04-29",
+   "timeEt": "14:00",
+   "at": 1588183200,
+   "reference": null,
+   "source": "fed-historical-2020"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2020-05-08",
+   "timeEt": "08:30",
+   "at": 1588941000,
+   "reference": "April 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "CPI",
+   "date": "2020-05-12",
+   "timeEt": "08:30",
+   "at": 1589286600,
+   "reference": "April 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "PPI",
+   "date": "2020-05-13",
+   "timeEt": "08:30",
+   "at": 1589373000,
+   "reference": "April 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2020-06-05",
+   "timeEt": "08:30",
+   "at": 1591360200,
+   "reference": "May 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "CPI",
+   "date": "2020-06-10",
+   "timeEt": "08:30",
+   "at": 1591792200,
+   "reference": "May 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2020-06-10",
+   "timeEt": "14:00",
+   "at": 1591812000,
+   "reference": null,
+   "source": "fed-historical-2020"
+  },
+  {
+   "kind": "PPI",
+   "date": "2020-06-11",
+   "timeEt": "08:30",
+   "at": 1591878600,
+   "reference": "May 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2020-07-02",
+   "timeEt": "08:30",
+   "at": 1593693000,
+   "reference": "June 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "PPI",
+   "date": "2020-07-10",
+   "timeEt": "08:30",
+   "at": 1594384200,
+   "reference": "June 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "CPI",
+   "date": "2020-07-14",
+   "timeEt": "08:30",
+   "at": 1594729800,
+   "reference": "June 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2020-07-29",
+   "timeEt": "14:00",
+   "at": 1596045600,
+   "reference": null,
+   "source": "fed-historical-2020"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2020-08-07",
+   "timeEt": "08:30",
+   "at": 1596803400,
+   "reference": "July 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "PPI",
+   "date": "2020-08-11",
+   "timeEt": "08:30",
+   "at": 1597149000,
+   "reference": "July 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "CPI",
+   "date": "2020-08-12",
+   "timeEt": "08:30",
+   "at": 1597235400,
+   "reference": "July 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2020-09-04",
+   "timeEt": "08:30",
+   "at": 1599222600,
+   "reference": "August 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "PPI",
+   "date": "2020-09-10",
+   "timeEt": "08:30",
+   "at": 1599741000,
+   "reference": "August 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "CPI",
+   "date": "2020-09-11",
+   "timeEt": "08:30",
+   "at": 1599827400,
+   "reference": "August 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2020-09-16",
+   "timeEt": "14:00",
+   "at": 1600279200,
+   "reference": null,
+   "source": "fed-historical-2020"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2020-10-02",
+   "timeEt": "08:30",
+   "at": 1601641800,
+   "reference": "September 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "CPI",
+   "date": "2020-10-13",
+   "timeEt": "08:30",
+   "at": 1602592200,
+   "reference": "September 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "PPI",
+   "date": "2020-10-14",
+   "timeEt": "08:30",
+   "at": 1602678600,
+   "reference": "September 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2020-11-05",
+   "timeEt": "14:00",
+   "at": 1604602800,
+   "reference": null,
+   "source": "fed-historical-2020"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2020-11-06",
+   "timeEt": "08:30",
+   "at": 1604669400,
+   "reference": "October 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "CPI",
+   "date": "2020-11-12",
+   "timeEt": "08:30",
+   "at": 1605187800,
+   "reference": "October 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "PPI",
+   "date": "2020-11-13",
+   "timeEt": "08:30",
+   "at": 1605274200,
+   "reference": "October 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2020-12-04",
+   "timeEt": "08:30",
+   "at": 1607088600,
+   "reference": "November 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "CPI",
+   "date": "2020-12-10",
+   "timeEt": "08:30",
+   "at": 1607607000,
+   "reference": "November 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "PPI",
+   "date": "2020-12-11",
+   "timeEt": "08:30",
+   "at": 1607693400,
+   "reference": "November 2020",
+   "source": "bls-2020@20210416190556"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2020-12-16",
+   "timeEt": "14:00",
+   "at": 1608145200,
+   "reference": null,
+   "source": "fed-historical-2020"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2021-01-08",
+   "timeEt": "08:30",
+   "at": 1610112600,
+   "reference": "December 2020",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "CPI",
+   "date": "2021-01-13",
+   "timeEt": "08:30",
+   "at": 1610544600,
+   "reference": "December 2020",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "PPI",
+   "date": "2021-01-15",
+   "timeEt": "08:30",
+   "at": 1610717400,
+   "reference": "December 2020",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2021-01-27",
+   "timeEt": "14:00",
+   "at": 1611774000,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2021-02-05",
+   "timeEt": "08:30",
+   "at": 1612531800,
+   "reference": "January 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "CPI",
+   "date": "2021-02-10",
+   "timeEt": "08:30",
+   "at": 1612963800,
+   "reference": "January 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "PPI",
+   "date": "2021-02-17",
+   "timeEt": "08:30",
+   "at": 1613568600,
+   "reference": "January 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2021-03-05",
+   "timeEt": "08:30",
+   "at": 1614951000,
+   "reference": "February 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "CPI",
+   "date": "2021-03-10",
+   "timeEt": "08:30",
+   "at": 1615383000,
+   "reference": "February 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "PPI",
+   "date": "2021-03-12",
+   "timeEt": "08:30",
+   "at": 1615555800,
+   "reference": "February 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2021-03-17",
+   "timeEt": "14:00",
+   "at": 1616004000,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2021-04-02",
+   "timeEt": "08:30",
+   "at": 1617366600,
+   "reference": "March 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "PPI",
+   "date": "2021-04-09",
+   "timeEt": "08:30",
+   "at": 1617971400,
+   "reference": "March 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "CPI",
+   "date": "2021-04-13",
+   "timeEt": "08:30",
+   "at": 1618317000,
+   "reference": "March 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2021-04-28",
+   "timeEt": "14:00",
+   "at": 1619632800,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2021-05-07",
+   "timeEt": "08:30",
+   "at": 1620390600,
+   "reference": "April 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "CPI",
+   "date": "2021-05-12",
+   "timeEt": "08:30",
+   "at": 1620822600,
+   "reference": "April 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "PPI",
+   "date": "2021-05-13",
+   "timeEt": "08:30",
+   "at": 1620909000,
+   "reference": "April 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2021-06-04",
+   "timeEt": "08:30",
+   "at": 1622809800,
+   "reference": "May 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "CPI",
+   "date": "2021-06-10",
+   "timeEt": "08:30",
+   "at": 1623328200,
+   "reference": "May 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "PPI",
+   "date": "2021-06-15",
+   "timeEt": "08:30",
+   "at": 1623760200,
+   "reference": "May 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2021-06-16",
+   "timeEt": "14:00",
+   "at": 1623866400,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2021-07-02",
+   "timeEt": "08:30",
+   "at": 1625229000,
+   "reference": "June 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "CPI",
+   "date": "2021-07-13",
+   "timeEt": "08:30",
+   "at": 1626179400,
+   "reference": "June 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "PPI",
+   "date": "2021-07-14",
+   "timeEt": "08:30",
+   "at": 1626265800,
+   "reference": "June 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2021-07-28",
+   "timeEt": "14:00",
+   "at": 1627495200,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2021-08-06",
+   "timeEt": "08:30",
+   "at": 1628253000,
+   "reference": "July 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "CPI",
+   "date": "2021-08-11",
+   "timeEt": "08:30",
+   "at": 1628685000,
+   "reference": "July 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "PPI",
+   "date": "2021-08-12",
+   "timeEt": "08:30",
+   "at": 1628771400,
+   "reference": "July 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2021-09-03",
+   "timeEt": "08:30",
+   "at": 1630672200,
+   "reference": "August 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "PPI",
+   "date": "2021-09-10",
+   "timeEt": "08:30",
+   "at": 1631277000,
+   "reference": "August 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "CPI",
+   "date": "2021-09-14",
+   "timeEt": "08:30",
+   "at": 1631622600,
+   "reference": "August 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2021-09-22",
+   "timeEt": "14:00",
+   "at": 1632333600,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2021-10-08",
+   "timeEt": "08:30",
+   "at": 1633696200,
+   "reference": "September 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "CPI",
+   "date": "2021-10-13",
+   "timeEt": "08:30",
+   "at": 1634128200,
+   "reference": "September 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "PPI",
+   "date": "2021-10-14",
+   "timeEt": "08:30",
+   "at": 1634214600,
+   "reference": "September 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2021-11-03",
+   "timeEt": "14:00",
+   "at": 1635962400,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2021-11-05",
+   "timeEt": "08:30",
+   "at": 1636115400,
+   "reference": "October 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "PPI",
+   "date": "2021-11-09",
+   "timeEt": "08:30",
+   "at": 1636464600,
+   "reference": "October 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "CPI",
+   "date": "2021-11-10",
+   "timeEt": "08:30",
+   "at": 1636551000,
+   "reference": "October 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2021-12-03",
+   "timeEt": "08:30",
+   "at": 1638538200,
+   "reference": "November 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "CPI",
+   "date": "2021-12-10",
+   "timeEt": "08:30",
+   "at": 1639143000,
+   "reference": "November 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "PPI",
+   "date": "2021-12-14",
+   "timeEt": "08:30",
+   "at": 1639488600,
+   "reference": "November 2021",
+   "source": "bls-2021@20220315042744"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2021-12-15",
+   "timeEt": "14:00",
+   "at": 1639594800,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2022-01-07",
+   "timeEt": "08:30",
+   "at": 1641562200,
+   "reference": "December 2021",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "CPI",
+   "date": "2022-01-12",
+   "timeEt": "08:30",
+   "at": 1641994200,
+   "reference": "December 2021",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "PPI",
+   "date": "2022-01-13",
+   "timeEt": "08:30",
+   "at": 1642080600,
+   "reference": "December 2021",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2022-01-26",
+   "timeEt": "14:00",
+   "at": 1643223600,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2022-02-04",
+   "timeEt": "08:30",
+   "at": 1643981400,
+   "reference": "January 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "CPI",
+   "date": "2022-02-10",
+   "timeEt": "08:30",
+   "at": 1644499800,
+   "reference": "January 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "PPI",
+   "date": "2022-02-15",
+   "timeEt": "08:30",
+   "at": 1644931800,
+   "reference": "January 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2022-03-04",
+   "timeEt": "08:30",
+   "at": 1646400600,
+   "reference": "February 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "CPI",
+   "date": "2022-03-10",
+   "timeEt": "08:30",
+   "at": 1646919000,
+   "reference": "February 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "PPI",
+   "date": "2022-03-15",
+   "timeEt": "08:30",
+   "at": 1647347400,
+   "reference": "February 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2022-03-16",
+   "timeEt": "14:00",
+   "at": 1647453600,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2022-04-01",
+   "timeEt": "08:30",
+   "at": 1648816200,
+   "reference": "March 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "CPI",
+   "date": "2022-04-12",
+   "timeEt": "08:30",
+   "at": 1649766600,
+   "reference": "March 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "PPI",
+   "date": "2022-04-13",
+   "timeEt": "08:30",
+   "at": 1649853000,
+   "reference": "March 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2022-05-04",
+   "timeEt": "14:00",
+   "at": 1651687200,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2022-05-06",
+   "timeEt": "08:30",
+   "at": 1651840200,
+   "reference": "April 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "CPI",
+   "date": "2022-05-11",
+   "timeEt": "08:30",
+   "at": 1652272200,
+   "reference": "April 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "PPI",
+   "date": "2022-05-12",
+   "timeEt": "08:30",
+   "at": 1652358600,
+   "reference": "April 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2022-06-03",
+   "timeEt": "08:30",
+   "at": 1654259400,
+   "reference": "May 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "CPI",
+   "date": "2022-06-10",
+   "timeEt": "08:30",
+   "at": 1654864200,
+   "reference": "May 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "PPI",
+   "date": "2022-06-14",
+   "timeEt": "08:30",
+   "at": 1655209800,
+   "reference": "May 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2022-06-15",
+   "timeEt": "14:00",
+   "at": 1655316000,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2022-07-08",
+   "timeEt": "08:30",
+   "at": 1657283400,
+   "reference": "June 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "CPI",
+   "date": "2022-07-13",
+   "timeEt": "08:30",
+   "at": 1657715400,
+   "reference": "June 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "PPI",
+   "date": "2022-07-14",
+   "timeEt": "08:30",
+   "at": 1657801800,
+   "reference": "June 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2022-07-27",
+   "timeEt": "14:00",
+   "at": 1658944800,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2022-08-05",
+   "timeEt": "08:30",
+   "at": 1659702600,
+   "reference": "July 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "CPI",
+   "date": "2022-08-10",
+   "timeEt": "08:30",
+   "at": 1660134600,
+   "reference": "July 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "PPI",
+   "date": "2022-08-11",
+   "timeEt": "08:30",
+   "at": 1660221000,
+   "reference": "July 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2022-09-02",
+   "timeEt": "08:30",
+   "at": 1662121800,
+   "reference": "August 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "CPI",
+   "date": "2022-09-13",
+   "timeEt": "08:30",
+   "at": 1663072200,
+   "reference": "August 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "PPI",
+   "date": "2022-09-14",
+   "timeEt": "08:30",
+   "at": 1663158600,
+   "reference": "August 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2022-09-21",
+   "timeEt": "14:00",
+   "at": 1663783200,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2022-10-07",
+   "timeEt": "08:30",
+   "at": 1665145800,
+   "reference": "September 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "PPI",
+   "date": "2022-10-12",
+   "timeEt": "08:30",
+   "at": 1665577800,
+   "reference": "September 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "CPI",
+   "date": "2022-10-13",
+   "timeEt": "08:30",
+   "at": 1665664200,
+   "reference": "September 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2022-11-02",
+   "timeEt": "14:00",
+   "at": 1667412000,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2022-11-04",
+   "timeEt": "08:30",
+   "at": 1667565000,
+   "reference": "October 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "CPI",
+   "date": "2022-11-10",
+   "timeEt": "08:30",
+   "at": 1668087000,
+   "reference": "October 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "PPI",
+   "date": "2022-11-15",
+   "timeEt": "08:30",
+   "at": 1668519000,
+   "reference": "October 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2022-12-02",
+   "timeEt": "08:30",
+   "at": 1669987800,
+   "reference": "November 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "PPI",
+   "date": "2022-12-09",
+   "timeEt": "08:30",
+   "at": 1670592600,
+   "reference": "November 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "CPI",
+   "date": "2022-12-13",
+   "timeEt": "08:30",
+   "at": 1670938200,
+   "reference": "November 2022",
+   "source": "bls-2022@20221220043602"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2022-12-14",
+   "timeEt": "14:00",
+   "at": 1671044400,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2023-01-06",
+   "timeEt": "08:30",
+   "at": 1673011800,
+   "reference": "December 2022",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "CPI",
+   "date": "2023-01-12",
+   "timeEt": "08:30",
+   "at": 1673530200,
+   "reference": "December 2022",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "PPI",
+   "date": "2023-01-18",
+   "timeEt": "08:30",
+   "at": 1674048600,
+   "reference": "December 2022",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2023-02-01",
+   "timeEt": "14:00",
+   "at": 1675278000,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2023-02-03",
+   "timeEt": "08:30",
+   "at": 1675431000,
+   "reference": "January 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "CPI",
+   "date": "2023-02-14",
+   "timeEt": "08:30",
+   "at": 1676381400,
+   "reference": "January 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "PPI",
+   "date": "2023-02-16",
+   "timeEt": "08:30",
+   "at": 1676554200,
+   "reference": "January 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2023-03-10",
+   "timeEt": "08:30",
+   "at": 1678455000,
+   "reference": "February 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "CPI",
+   "date": "2023-03-14",
+   "timeEt": "08:30",
+   "at": 1678797000,
+   "reference": "February 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "PPI",
+   "date": "2023-03-15",
+   "timeEt": "08:30",
+   "at": 1678883400,
+   "reference": "February 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2023-03-22",
+   "timeEt": "14:00",
+   "at": 1679508000,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2023-04-07",
+   "timeEt": "08:30",
+   "at": 1680870600,
+   "reference": "March 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "CPI",
+   "date": "2023-04-12",
+   "timeEt": "08:30",
+   "at": 1681302600,
+   "reference": "March 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "PPI",
+   "date": "2023-04-13",
+   "timeEt": "08:30",
+   "at": 1681389000,
+   "reference": "March 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2023-05-03",
+   "timeEt": "14:00",
+   "at": 1683136800,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2023-05-05",
+   "timeEt": "08:30",
+   "at": 1683289800,
+   "reference": "April 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "CPI",
+   "date": "2023-05-10",
+   "timeEt": "08:30",
+   "at": 1683721800,
+   "reference": "April 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "PPI",
+   "date": "2023-05-11",
+   "timeEt": "08:30",
+   "at": 1683808200,
+   "reference": "April 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2023-06-02",
+   "timeEt": "08:30",
+   "at": 1685709000,
+   "reference": "May 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "CPI",
+   "date": "2023-06-13",
+   "timeEt": "08:30",
+   "at": 1686659400,
+   "reference": "May 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "PPI",
+   "date": "2023-06-14",
+   "timeEt": "08:30",
+   "at": 1686745800,
+   "reference": "May 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2023-06-14",
+   "timeEt": "14:00",
+   "at": 1686765600,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2023-07-07",
+   "timeEt": "08:30",
+   "at": 1688733000,
+   "reference": "June 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "CPI",
+   "date": "2023-07-12",
+   "timeEt": "08:30",
+   "at": 1689165000,
+   "reference": "June 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "PPI",
+   "date": "2023-07-13",
+   "timeEt": "08:30",
+   "at": 1689251400,
+   "reference": "June 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2023-07-26",
+   "timeEt": "14:00",
+   "at": 1690394400,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2023-08-04",
+   "timeEt": "08:30",
+   "at": 1691152200,
+   "reference": "July 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "CPI",
+   "date": "2023-08-10",
+   "timeEt": "08:30",
+   "at": 1691670600,
+   "reference": "July 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "PPI",
+   "date": "2023-08-11",
+   "timeEt": "08:30",
+   "at": 1691757000,
+   "reference": "July 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2023-09-01",
+   "timeEt": "08:30",
+   "at": 1693571400,
+   "reference": "August 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "CPI",
+   "date": "2023-09-13",
+   "timeEt": "08:30",
+   "at": 1694608200,
+   "reference": "August 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "PPI",
+   "date": "2023-09-14",
+   "timeEt": "08:30",
+   "at": 1694694600,
+   "reference": "August 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2023-09-20",
+   "timeEt": "14:00",
+   "at": 1695232800,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2023-10-06",
+   "timeEt": "08:30",
+   "at": 1696595400,
+   "reference": "September 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "PPI",
+   "date": "2023-10-11",
+   "timeEt": "08:30",
+   "at": 1697027400,
+   "reference": "September 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "CPI",
+   "date": "2023-10-12",
+   "timeEt": "08:30",
+   "at": 1697113800,
+   "reference": "September 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2023-11-01",
+   "timeEt": "14:00",
+   "at": 1698861600,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2023-11-03",
+   "timeEt": "08:30",
+   "at": 1699014600,
+   "reference": "October 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "CPI",
+   "date": "2023-11-14",
+   "timeEt": "08:30",
+   "at": 1699968600,
+   "reference": "October 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "PPI",
+   "date": "2023-11-15",
+   "timeEt": "08:30",
+   "at": 1700055000,
+   "reference": "October 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2023-12-08",
+   "timeEt": "08:30",
+   "at": 1702042200,
+   "reference": "November 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "CPI",
+   "date": "2023-12-12",
+   "timeEt": "08:30",
+   "at": 1702387800,
+   "reference": "November 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "PPI",
+   "date": "2023-12-13",
+   "timeEt": "08:30",
+   "at": 1702474200,
+   "reference": "November 2023",
+   "source": "bls-2023@20240327094954"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2023-12-13",
+   "timeEt": "14:00",
+   "at": 1702494000,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2024-01-05",
+   "timeEt": "08:30",
+   "at": 1704461400,
+   "reference": "December 2023",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "CPI",
+   "date": "2024-01-11",
+   "timeEt": "08:30",
+   "at": 1704979800,
+   "reference": "December 2023",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "PPI",
+   "date": "2024-01-12",
+   "timeEt": "08:30",
+   "at": 1705066200,
+   "reference": "December 2023",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2024-01-31",
+   "timeEt": "14:00",
+   "at": 1706727600,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2024-02-02",
+   "timeEt": "08:30",
+   "at": 1706880600,
+   "reference": "January 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "CPI",
+   "date": "2024-02-13",
+   "timeEt": "08:30",
+   "at": 1707831000,
+   "reference": "January 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "PPI",
+   "date": "2024-02-16",
+   "timeEt": "08:30",
+   "at": 1708090200,
+   "reference": "January 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2024-03-08",
+   "timeEt": "08:30",
+   "at": 1709904600,
+   "reference": "February 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "CPI",
+   "date": "2024-03-12",
+   "timeEt": "08:30",
+   "at": 1710246600,
+   "reference": "February 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "PPI",
+   "date": "2024-03-14",
+   "timeEt": "08:30",
+   "at": 1710419400,
+   "reference": "February 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2024-03-20",
+   "timeEt": "14:00",
+   "at": 1710957600,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2024-04-05",
+   "timeEt": "08:30",
+   "at": 1712320200,
+   "reference": "March 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "CPI",
+   "date": "2024-04-10",
+   "timeEt": "08:30",
+   "at": 1712752200,
+   "reference": "March 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "PPI",
+   "date": "2024-04-11",
+   "timeEt": "08:30",
+   "at": 1712838600,
+   "reference": "March 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2024-05-01",
+   "timeEt": "14:00",
+   "at": 1714586400,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2024-05-03",
+   "timeEt": "08:30",
+   "at": 1714739400,
+   "reference": "April 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "PPI",
+   "date": "2024-05-14",
+   "timeEt": "08:30",
+   "at": 1715689800,
+   "reference": "April 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "CPI",
+   "date": "2024-05-15",
+   "timeEt": "08:30",
+   "at": 1715776200,
+   "reference": "April 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2024-06-07",
+   "timeEt": "08:30",
+   "at": 1717763400,
+   "reference": "May 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "CPI",
+   "date": "2024-06-12",
+   "timeEt": "08:30",
+   "at": 1718195400,
+   "reference": "May 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2024-06-12",
+   "timeEt": "14:00",
+   "at": 1718215200,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "PPI",
+   "date": "2024-06-13",
+   "timeEt": "08:30",
+   "at": 1718281800,
+   "reference": "May 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2024-07-05",
+   "timeEt": "08:30",
+   "at": 1720182600,
+   "reference": "June 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "CPI",
+   "date": "2024-07-11",
+   "timeEt": "08:30",
+   "at": 1720701000,
+   "reference": "June 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "PPI",
+   "date": "2024-07-12",
+   "timeEt": "08:30",
+   "at": 1720787400,
+   "reference": "June 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2024-07-31",
+   "timeEt": "14:00",
+   "at": 1722448800,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2024-08-02",
+   "timeEt": "08:30",
+   "at": 1722601800,
+   "reference": "July 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "PPI",
+   "date": "2024-08-13",
+   "timeEt": "08:30",
+   "at": 1723552200,
+   "reference": "July 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "CPI",
+   "date": "2024-08-14",
+   "timeEt": "08:30",
+   "at": 1723638600,
+   "reference": "July 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2024-09-06",
+   "timeEt": "08:30",
+   "at": 1725625800,
+   "reference": "August 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "CPI",
+   "date": "2024-09-11",
+   "timeEt": "08:30",
+   "at": 1726057800,
+   "reference": "August 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "PPI",
+   "date": "2024-09-12",
+   "timeEt": "08:30",
+   "at": 1726144200,
+   "reference": "August 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2024-09-18",
+   "timeEt": "14:00",
+   "at": 1726682400,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2024-10-04",
+   "timeEt": "08:30",
+   "at": 1728045000,
+   "reference": "September 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "CPI",
+   "date": "2024-10-10",
+   "timeEt": "08:30",
+   "at": 1728563400,
+   "reference": "September 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "PPI",
+   "date": "2024-10-11",
+   "timeEt": "08:30",
+   "at": 1728649800,
+   "reference": "September 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2024-11-01",
+   "timeEt": "08:30",
+   "at": 1730464200,
+   "reference": "October 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2024-11-07",
+   "timeEt": "14:00",
+   "at": 1731006000,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "CPI",
+   "date": "2024-11-13",
+   "timeEt": "08:30",
+   "at": 1731504600,
+   "reference": "October 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "PPI",
+   "date": "2024-11-14",
+   "timeEt": "08:30",
+   "at": 1731591000,
+   "reference": "October 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2024-12-06",
+   "timeEt": "08:30",
+   "at": 1733491800,
+   "reference": "November 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "CPI",
+   "date": "2024-12-11",
+   "timeEt": "08:30",
+   "at": 1733923800,
+   "reference": "November 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "PPI",
+   "date": "2024-12-12",
+   "timeEt": "08:30",
+   "at": 1734010200,
+   "reference": "November 2024",
+   "source": "bls-2024@20250315051743"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2024-12-18",
+   "timeEt": "14:00",
+   "at": 1734548400,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2025-01-10",
+   "timeEt": "08:30",
+   "at": 1736515800,
+   "reference": "December 2024",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "PPI",
+   "date": "2025-01-14",
+   "timeEt": "08:30",
+   "at": 1736861400,
+   "reference": "December 2024",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "CPI",
+   "date": "2025-01-15",
+   "timeEt": "08:30",
+   "at": 1736947800,
+   "reference": "December 2024",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2025-01-29",
+   "timeEt": "14:00",
+   "at": 1738177200,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2025-02-07",
+   "timeEt": "08:30",
+   "at": 1738935000,
+   "reference": "January 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "CPI",
+   "date": "2025-02-12",
+   "timeEt": "08:30",
+   "at": 1739367000,
+   "reference": "January 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "PPI",
+   "date": "2025-02-13",
+   "timeEt": "08:30",
+   "at": 1739453400,
+   "reference": "January 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2025-03-07",
+   "timeEt": "08:30",
+   "at": 1741354200,
+   "reference": "February 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "CPI",
+   "date": "2025-03-12",
+   "timeEt": "08:30",
+   "at": 1741782600,
+   "reference": "February 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "PPI",
+   "date": "2025-03-13",
+   "timeEt": "08:30",
+   "at": 1741869000,
+   "reference": "February 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2025-03-19",
+   "timeEt": "14:00",
+   "at": 1742407200,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2025-04-04",
+   "timeEt": "08:30",
+   "at": 1743769800,
+   "reference": "March 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "CPI",
+   "date": "2025-04-10",
+   "timeEt": "08:30",
+   "at": 1744288200,
+   "reference": "March 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "PPI",
+   "date": "2025-04-11",
+   "timeEt": "08:30",
+   "at": 1744374600,
+   "reference": "March 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2025-05-02",
+   "timeEt": "08:30",
+   "at": 1746189000,
+   "reference": "April 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2025-05-07",
+   "timeEt": "14:00",
+   "at": 1746640800,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "CPI",
+   "date": "2025-05-13",
+   "timeEt": "08:30",
+   "at": 1747139400,
+   "reference": "April 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "PPI",
+   "date": "2025-05-15",
+   "timeEt": "08:30",
+   "at": 1747312200,
+   "reference": "April 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2025-06-06",
+   "timeEt": "08:30",
+   "at": 1749213000,
+   "reference": "May 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "CPI",
+   "date": "2025-06-11",
+   "timeEt": "08:30",
+   "at": 1749645000,
+   "reference": "May 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "PPI",
+   "date": "2025-06-12",
+   "timeEt": "08:30",
+   "at": 1749731400,
+   "reference": "May 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2025-06-18",
+   "timeEt": "14:00",
+   "at": 1750269600,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2025-07-03",
+   "timeEt": "08:30",
+   "at": 1751545800,
+   "reference": "June 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "CPI",
+   "date": "2025-07-15",
+   "timeEt": "08:30",
+   "at": 1752582600,
+   "reference": "June 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "PPI",
+   "date": "2025-07-16",
+   "timeEt": "08:30",
+   "at": 1752669000,
+   "reference": "June 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2025-07-30",
+   "timeEt": "14:00",
+   "at": 1753898400,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2025-08-01",
+   "timeEt": "08:30",
+   "at": 1754051400,
+   "reference": "July 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "CPI",
+   "date": "2025-08-12",
+   "timeEt": "08:30",
+   "at": 1755001800,
+   "reference": "July 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "PPI",
+   "date": "2025-08-14",
+   "timeEt": "08:30",
+   "at": 1755174600,
+   "reference": "July 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2025-09-05",
+   "timeEt": "08:30",
+   "at": 1757075400,
+   "reference": "August 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "PPI",
+   "date": "2025-09-10",
+   "timeEt": "08:30",
+   "at": 1757507400,
+   "reference": "August 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "CPI",
+   "date": "2025-09-11",
+   "timeEt": "08:30",
+   "at": 1757593800,
+   "reference": "August 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2025-09-17",
+   "timeEt": "14:00",
+   "at": 1758132000,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "CPI",
+   "date": "2025-10-24",
+   "timeEt": "08:30",
+   "at": 1761309000,
+   "reference": "September 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2025-10-29",
+   "timeEt": "14:00",
+   "at": 1761760800,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2025-11-20",
+   "timeEt": "08:30",
+   "at": 1763645400,
+   "reference": "September 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "PPI",
+   "date": "2025-11-25",
+   "timeEt": "08:30",
+   "at": 1764077400,
+   "reference": "September 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2025-12-10",
+   "timeEt": "14:00",
+   "at": 1765393200,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2025-12-16",
+   "timeEt": "08:30",
+   "at": 1765891800,
+   "reference": "November 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "CPI",
+   "date": "2025-12-18",
+   "timeEt": "08:30",
+   "at": 1766064600,
+   "reference": "November 2025",
+   "source": "bls-2025@20251219183941"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2026-01-09",
+   "timeEt": "08:30",
+   "at": 1767965400,
+   "reference": null,
+   "source": "shared/calendar/macro-2026.json"
+  },
+  {
+   "kind": "CPI",
+   "date": "2026-01-13",
+   "timeEt": "08:30",
+   "at": 1768311000,
+   "reference": null,
+   "source": "shared/calendar/macro-2026.json"
+  },
+  {
+   "kind": "PPI",
+   "date": "2026-01-14",
+   "timeEt": "08:30",
+   "at": 1768397400,
+   "reference": null,
+   "source": "shared/calendar/macro-2026.json"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2026-01-28",
+   "timeEt": "14:00",
+   "at": 1769626800,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "PPI",
+   "date": "2026-01-30",
+   "timeEt": "08:30",
+   "at": 1769779800,
+   "reference": null,
+   "source": "shared/calendar/macro-2026.json"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2026-02-11",
+   "timeEt": "08:30",
+   "at": 1770816600,
+   "reference": null,
+   "source": "shared/calendar/macro-2026.json"
+  },
+  {
+   "kind": "CPI",
+   "date": "2026-02-13",
+   "timeEt": "08:30",
+   "at": 1770989400,
+   "reference": null,
+   "source": "shared/calendar/macro-2026.json"
+  },
+  {
+   "kind": "PPI",
+   "date": "2026-02-27",
+   "timeEt": "08:30",
+   "at": 1772199000,
+   "reference": null,
+   "source": "shared/calendar/macro-2026.json"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2026-03-06",
+   "timeEt": "08:30",
+   "at": 1772803800,
+   "reference": null,
+   "source": "shared/calendar/macro-2026.json"
+  },
+  {
+   "kind": "CPI",
+   "date": "2026-03-11",
+   "timeEt": "08:30",
+   "at": 1773232200,
+   "reference": null,
+   "source": "shared/calendar/macro-2026.json"
+  },
+  {
+   "kind": "PPI",
+   "date": "2026-03-18",
+   "timeEt": "08:30",
+   "at": 1773837000,
+   "reference": null,
+   "source": "shared/calendar/macro-2026.json"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2026-03-18",
+   "timeEt": "14:00",
+   "at": 1773856800,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2026-04-03",
+   "timeEt": "08:30",
+   "at": 1775219400,
+   "reference": null,
+   "source": "shared/calendar/macro-2026.json"
+  },
+  {
+   "kind": "CPI",
+   "date": "2026-04-10",
+   "timeEt": "08:30",
+   "at": 1775824200,
+   "reference": null,
+   "source": "shared/calendar/macro-2026.json"
+  },
+  {
+   "kind": "PPI",
+   "date": "2026-04-14",
+   "timeEt": "08:30",
+   "at": 1776169800,
+   "reference": null,
+   "source": "shared/calendar/macro-2026.json"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2026-04-29",
+   "timeEt": "14:00",
+   "at": 1777485600,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2026-05-08",
+   "timeEt": "08:30",
+   "at": 1778243400,
+   "reference": null,
+   "source": "shared/calendar/macro-2026.json"
+  },
+  {
+   "kind": "CPI",
+   "date": "2026-05-12",
+   "timeEt": "08:30",
+   "at": 1778589000,
+   "reference": null,
+   "source": "shared/calendar/macro-2026.json"
+  },
+  {
+   "kind": "PPI",
+   "date": "2026-05-13",
+   "timeEt": "08:30",
+   "at": 1778675400,
+   "reference": null,
+   "source": "shared/calendar/macro-2026.json"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2026-06-05",
+   "timeEt": "08:30",
+   "at": 1780662600,
+   "reference": null,
+   "source": "shared/calendar/macro-2026.json"
+  },
+  {
+   "kind": "CPI",
+   "date": "2026-06-10",
+   "timeEt": "08:30",
+   "at": 1781094600,
+   "reference": null,
+   "source": "shared/calendar/macro-2026.json"
+  },
+  {
+   "kind": "PPI",
+   "date": "2026-06-11",
+   "timeEt": "08:30",
+   "at": 1781181000,
+   "reference": null,
+   "source": "shared/calendar/macro-2026.json"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2026-06-17",
+   "timeEt": "14:00",
+   "at": 1781719200,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2026-07-02",
+   "timeEt": "08:30",
+   "at": 1782995400,
+   "reference": null,
+   "source": "shared/calendar/macro-2026.json"
+  },
+  {
+   "kind": "CPI",
+   "date": "2026-07-14",
+   "timeEt": "08:30",
+   "at": 1784032200,
+   "reference": null,
+   "source": "shared/calendar/macro-2026.json"
+  },
+  {
+   "kind": "PPI",
+   "date": "2026-07-15",
+   "timeEt": "08:30",
+   "at": 1784118600,
+   "reference": null,
+   "source": "shared/calendar/macro-2026.json"
+  },
+  {
+   "kind": "FOMC",
+   "date": "2026-07-29",
+   "timeEt": "14:00",
+   "at": 1785348000,
+   "reference": null,
+   "source": "fed-fomccalendars"
+  },
+  {
+   "kind": "JOBS",
+   "date": "2026-08-07",
+   "timeEt": "08:30",
+   "at": 1786105800,
+   "reference": null,
+   "source": "shared/calendar/macro-2026.json"
+  },
+  {
+   "kind": "CPI",
+   "date": "2026-08-12",
+   "timeEt": "08:30",
+   "at": 1786537800,
+   "reference": null,
+   "source": "shared/calendar/macro-2026.json"
+  },
+  {
+   "kind": "PPI",
+   "date": "2026-08-13",
+   "timeEt": "08:30",
+   "at": 1786624200,
+   "reference": null,
+   "source": "shared/calendar/macro-2026.json"
+  }
+ ]
+}
