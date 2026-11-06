@@ -2490,5 +2490,21 @@
   "Market now: {state}": "السوق الآن: {state}",
   "Which way: unknown. No measured source calls Bitcoin's way now.": "الاتجاه: غير معروف. لا يحدد أي مصدر مُقاس اتجاه بيتكوين الآن.",
   "A frequency of the past, not a chance for today: chances read from Bitcoin's volatility ran too high from 2024 on.": "هذا تكرار من الماضي، لا احتمال لليوم: الاحتمالات المستخلصة من تقلب بيتكوين جاءت أعلى من اللازم منذ 2024.",
-  "The best-ranked forecast is now on another pair. Predictions shows it.": "صار التوقع الأعلى ترتيبًا على زوج آخر. تعرضه صفحة التنبؤات."
+  "The best-ranked forecast is now on another pair. Predictions shows it.": "صار التوقع الأعلى ترتيبًا على زوج آخر. تعرضه صفحة التنبؤات.",
+  "First report of a theft; who lost the funds is not named.": "أول خبر عن سرقة؛ لم يُذكر من خسر الأموال.",
+  "First report of a theft from {victim}.": "أول خبر عن سرقة من {victim}.",
+  "The sum named: {sum}.": "المبلغ المذكور: {sum}.",
+  "The victim's own token: {token}.": "الرمز الخاص بالجهة المتضررة: {token}.",
+  "Which way: unknown. What prices do after a hack is not measured yet.": "الاتجاه: غير معروف. ما تفعله الأسعار بعد الاختراق لم يُقَس بعد.",
+  "{victim} ({token})": "{victim} ({token})",
+  "HIGH: market shock · {state}": "مرتفعة: صدمة في السوق · {state}",
+  "Bitcoin's last fifteen minutes moved {times} times its usual fifteen minutes.": "تحرّك بيتكوين في آخر خمس عشرة دقيقة {times} ضعف حركته المعتادة في خمس عشرة دقيقة.",
+  "Bitcoin moved {move} in fifteen minutes, {times} times its usual fifteen minutes.": "تحرّك بيتكوين {move} خلال خمس عشرة دقيقة، أي {times} ضعف حركته المعتادة في خمس عشرة دقيقة.",
+  "No story on file explains it yet; a loud story in the next two hours is told with it.": "لا يوجد خبر مسجّل يفسّره بعد؛ أي خبر مهم في الساعتين التاليتين سيُبلَّغ مرتبطًا به.",
+  "It came {count} minutes after the market shock told at {time} UTC.": { "one": "جاء بعد دقيقة واحدة من صدمة السوق التي أُبلغ عنها في {time} UTC.", "two": "جاء بعد دقيقتين من صدمة السوق التي أُبلغ عنها في {time} UTC.", "few": "جاء بعد {count} دقائق من صدمة السوق التي أُبلغ عنها في {time} UTC.", "many": "جاء بعد {count} دقيقة من صدمة السوق التي أُبلغ عنها في {time} UTC.", "other": "جاء بعد {count} دقيقة من صدمة السوق التي أُبلغ عنها في {time} UTC." },
+  "Critical news": "أخبار حرجة",
+  "No first report of a large theft in the last two days.": "لا يوجد خبر أول عن سرقة كبيرة في اليومين الماضيين.",
+  "Victim not named": "الجهة المتضررة غير مذكورة",
+  "Last market shock: {time}.": "آخر صدمة في السوق: {time}.",
+  "First reports of a theft in the last two days: of a victim whose own token trades, of a top exchange, or of $100 million or more.": "أول الأخبار عن سرقات في اليومين الماضيين: من جهة يُتداول رمزها الخاص، أو من إحدى أكبر المنصات، أو بمبلغ 100 مليون دولار أو أكثر."
 }

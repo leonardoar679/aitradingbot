@@ -2490,5 +2490,21 @@
   "Market now: {state}": "当前市场：{state}",
   "Which way: unknown. No measured source calls Bitcoin's way now.": "方向：未知。目前没有经过检验的来源给出比特币的方向。",
   "A frequency of the past, not a chance for today: chances read from Bitcoin's volatility ran too high from 2024 on.": "这是过去的频率，不是今天的概率：从比特币波动读出的概率自 2024 年起偏高。",
-  "The best-ranked forecast is now on another pair. Predictions shows it.": "排名第一的预测现在换成了另一个交易对。预测页面上可以看到。"
+  "The best-ranked forecast is now on another pair. Predictions shows it.": "排名第一的预测现在换成了另一个交易对。预测页面上可以看到。",
+  "First report of a theft; who lost the funds is not named.": "一起盗窃的首次报道；未说明谁损失了资金。",
+  "First report of a theft from {victim}.": "{victim} 被盗的首次报道。",
+  "The sum named: {sum}.": "报道的金额：{sum}。",
+  "The victim's own token: {token}.": "受害方自己的代币：{token}。",
+  "Which way: unknown. What prices do after a hack is not measured yet.": "方向：未知。黑客攻击之后价格如何变动，尚未经过测量。",
+  "{victim} ({token})": "{victim}（{token}）",
+  "HIGH: market shock · {state}": "高：市场冲击 · {state}",
+  "Bitcoin's last fifteen minutes moved {times} times its usual fifteen minutes.": "比特币最近十五分钟的波动是平常十五分钟的 {times} 倍。",
+  "Bitcoin moved {move} in fifteen minutes, {times} times its usual fifteen minutes.": "比特币在十五分钟内变动 {move}，是平常十五分钟的 {times} 倍。",
+  "No story on file explains it yet; a loud story in the next two hours is told with it.": "目前还没有新闻能解释它；接下来两小时内的重要新闻会与它一并通知。",
+  "It came {count} minutes after the market shock told at {time} UTC.": "这条新闻出现在 {time} UTC 通知的市场冲击之后 {count} 分钟。",
+  "Critical news": "重大新闻",
+  "No first report of a large theft in the last two days.": "过去两天没有大额盗窃的首次报道。",
+  "Victim not named": "受害方未披露",
+  "Last market shock: {time}.": "最近一次市场冲击：{time}。",
+  "First reports of a theft in the last two days: of a victim whose own token trades, of a top exchange, or of $100 million or more.": "过去两天的盗窃首次报道：受害方自己的代币有交易、属于大型交易所，或金额达 1 亿美元及以上。"
 }

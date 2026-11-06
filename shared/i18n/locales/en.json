@@ -86,5 +86,6 @@
   "{count} trades no venue could take, counted apart and called nothing.": { "one": "{count} trade no venue could take, counted apart and called nothing.", "other": "{count} trades no venue could take, counted apart and called nothing." },
   "{count} follows not set against their leader: the leader's position had not closed when the follow did, or its fills were not read.": { "one": "{count} follow not set against its leader: the leader's position had not closed when the follow did, or its fills were not read.", "other": "{count} follows not set against their leader: the leader's position had not closed when the follow did, or its fills were not read." },
   "{count} could not be read and are listed in its manifest.": { "one": "{count} could not be read and is listed in its manifest.", "other": "{count} could not be read and are listed in its manifest." },
-  "the leaders' own trades: {pct} on {count} follows": { "one": "the leaders' own trades: {pct} on {count} follow", "other": "the leaders' own trades: {pct} on {count} follows" }
+  "the leaders' own trades: {pct} on {count} follows": { "one": "the leaders' own trades: {pct} on {count} follow", "other": "the leaders' own trades: {pct} on {count} follows" },
+  "It came {count} minutes after the market shock told at {time} UTC.": { "one": "It came {count} minute after the market shock told at {time} UTC.", "other": "It came {count} minutes after the market shock told at {time} UTC." }
 }

@@ -2490,5 +2490,21 @@
   "Market now: {state}": "ตลาดตอนนี้: {state}",
   "Which way: unknown. No measured source calls Bitcoin's way now.": "ทิศทาง: ไม่ทราบ ตอนนี้ไม่มีแหล่งที่ผ่านการวัดผลใดบอกทิศทางของบิตคอยน์",
   "A frequency of the past, not a chance for today: chances read from Bitcoin's volatility ran too high from 2024 on.": "นี่คือความถี่ในอดีต ไม่ใช่โอกาสของวันนี้: โอกาสที่อ่านจากความผันผวนของบิตคอยน์สูงเกินไปตั้งแต่ปี 2024",
-  "The best-ranked forecast is now on another pair. Predictions shows it.": "การคาดการณ์อันดับหนึ่งย้ายไปอยู่ที่คู่อื่นแล้ว ดูได้ที่หน้าการทำนาย"
+  "The best-ranked forecast is now on another pair. Predictions shows it.": "การคาดการณ์อันดับหนึ่งย้ายไปอยู่ที่คู่อื่นแล้ว ดูได้ที่หน้าการทำนาย",
+  "First report of a theft; who lost the funds is not named.": "รายงานแรกของการโจรกรรม ไม่ระบุว่าใครสูญเสียเงิน",
+  "First report of a theft from {victim}.": "รายงานแรกของการโจรกรรมจาก {victim}",
+  "The sum named: {sum}.": "จำนวนเงินที่ระบุ: {sum}",
+  "The victim's own token: {token}.": "โทเคนของผู้เสียหายเอง: {token}",
+  "Which way: unknown. What prices do after a hack is not measured yet.": "ทิศทาง: ไม่ทราบ ราคาจะเป็นอย่างไรหลังการแฮ็กยังไม่ได้วัดผล",
+  "{victim} ({token})": "{victim} ({token})",
+  "HIGH: market shock · {state}": "สูง: ตลาดช็อก · {state}",
+  "Bitcoin's last fifteen minutes moved {times} times its usual fifteen minutes.": "ใน 15 นาทีล่าสุด บิตคอยน์เคลื่อนไหว {times} เท่าของการเคลื่อนไหวปกติใน 15 นาที",
+  "Bitcoin moved {move} in fifteen minutes, {times} times its usual fifteen minutes.": "บิตคอยน์เคลื่อนไหว {move} ใน 15 นาที เป็น {times} เท่าของการเคลื่อนไหวปกติใน 15 นาที",
+  "No story on file explains it yet; a loud story in the next two hours is told with it.": "ยังไม่มีข่าวที่อธิบายเรื่องนี้ ข่าวสำคัญที่เข้ามาในสองชั่วโมงข้างหน้าจะแจ้งพร้อมกับเหตุการณ์นี้",
+  "It came {count} minutes after the market shock told at {time} UTC.": "ข่าวนี้มาหลังจากตลาดช็อกที่แจ้งเมื่อ {time} UTC เป็นเวลา {count} นาที",
+  "Critical news": "ข่าวสำคัญ",
+  "No first report of a large theft in the last two days.": "ไม่มีรายงานแรกของการโจรกรรมครั้งใหญ่ในสองวันที่ผ่านมา",
+  "Victim not named": "ไม่ระบุผู้เสียหาย",
+  "Last market shock: {time}.": "ตลาดช็อกครั้งล่าสุด: {time}",
+  "First reports of a theft in the last two days: of a victim whose own token trades, of a top exchange, or of $100 million or more.": "รายงานแรกของการโจรกรรมในสองวันที่ผ่านมา: ของผู้เสียหายที่มีโทเคนของตนเองซื้อขายอยู่ ของกระดานเทรดรายใหญ่ หรือมูลค่า 100 ล้านดอลลาร์ขึ้นไป"
 }

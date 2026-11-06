@@ -23,7 +23,7 @@ import { ENGLISH, msg, type I18n } from './i18n/translate'
 //
 // IT READS. Nothing here asks a model, places anything or holds a key.
 
-export const NEWS_FEED_VERSION = 'feed-v2'
+export const NEWS_FEED_VERSION = 'feed-v3'
 export const FEED_READ_MS = 3 * 60_000
 /** Stories kept on screen and in memory: a week of them. */
 export const FEED_KEEP_SECONDS = 7 * 86_400
@@ -68,7 +68,8 @@ export const FEED_HOSTS: readonly string[] = ['www.coindesk.com', 'coindesk.com'
 
 /** The kinds of news (the V6 document, §19). Since 13 October 2026 (feed-v2, V6 Stage 8) an exploit is
  * told apart from a hack, a mainnet from an upgrade, and airdrops, funding, liquidations and exchange
- * outages have kinds of their own. */
+ * outages have kinds of their own. Since 6 November 2026 (feed-v3, V9 Stage 2) a hack or an exploit is read
+ * from the headline alone, and its victim and whether it is the first report from shared/incidents.ts. */
 export type NewsEventType =
   | 'HACK'
   | 'EXPLOIT'
@@ -158,6 +159,30 @@ export interface StoryAsset {
   relationship: Relationship
 }
 
+/** What a hack or exploit story says of its incident (V9 Stage 2, 6 November 2026; read by shared/incidents.ts).
+ * Of the 24 loud news notices of the two archives on file -- the user's profile and V8's three-day run -- only a
+ * few told a new theft: the rest told laundering, refunds, roundups and opinion of one already told, named the coins
+ * an attacker took as the story's coins ("Binance hackers move 81% of stolen Solana" as SOL), or read a company's
+ * name as a coin's ("Mercado Bitcoin" as BTC). So a hack is read for its first report, its victim and its sum. */
+export interface StoryIncident {
+  /** 'first': the first report on file of a theft of this victim, or of this sum where no victim is named, in the
+   * week kept, with no word of its aftermath. 'follow-up': all else -- told before, or told as laundering, a refund,
+   * a recovery, a roundup, an opinion, a denial, its attribution or its trial. */
+  report: 'first' | 'follow-up'
+  /** Why a follow-up is one: the words, or the report before it. Null for a first report. */
+  why: string | null
+  /** Who lost the funds, by the name the tables give it (shared/incidents.ts); null where the headline names none
+   * they know. */
+  victim: string | null
+  /** The victim's own token where it has one traded on Binance against USDT and the headline names the victim at
+   * its loss, not only somewhere in it. */
+  victimToken: string | null
+  /** A hack of one of the largest exchanges, named at its loss: it concerns the whole market. */
+  topExchange: boolean
+  /** The largest sum the headline names, in dollars; null where it names none. */
+  amountUsd: number | null
+}
+
 export interface ReadStory extends FeedStory {
   assets: StoryAsset[]
   /** No coin named, but about the whole market: macro, regulation, an ETF. */
@@ -173,6 +198,9 @@ export interface ReadStory extends FeedStory {
   alsoIn: string[]
   /** The sources recorded with it (StorySource), since 8 October 2026. */
   sources: StorySource[]
+  /** A hack or exploit story's incident (shared/incidents.ts, since 6 November 2026); null for a story that reports
+   * no theft; absent where it was not read for one. */
+  incident?: StoryIncident | null
 }
 
 export interface FeedSourceStatus {
@@ -330,6 +358,25 @@ export const COIN_NAMES: Readonly<Record<string, readonly string[]>> = {
   HYPE: ['hyperliquid']
 }
 
+/** Companies whose names hold a coin's name and are not about the coin (V9 Stage 2, 6 November 2026): "Mercado
+ * Bitcoin", Brazil's largest exchange, named BTC in its hack of 2 November and raised a CRITICAL notice for whoever
+ * held bitcoin. Their stretch of a text names no coin, by name or by ticker. */
+export const COMPANY_NAMES: readonly string[] = [
+  'mercado bitcoin',
+  'dmm bitcoin',
+  'bitcoin depot',
+  'bitcoin suisse',
+  'bitcoin.com',
+  'bitcoin magazine',
+  'swan bitcoin',
+  'bitcoin well',
+  'bitcoin ira',
+  'bitcoin of america',
+  'btc markets',
+  'ether.fi',
+  'etherfi'
+]
+
 /** Tickers that are also words or common abbreviations: counted only as $TICKER or by name. */
 export const WORD_TICKERS: ReadonlySet<string> = new Set([
   'AI', 'ONE', 'GAS', 'NOT', 'ACT', 'BIG', 'HOT', 'KEY', 'UP', 'IO', 'OM', 'WIN', 'FUN', 'SUN', 'PEOPLE', 'TRUMP', 'MEME', 'NFT', 'DATA', 'REAL',
@@ -374,6 +421,12 @@ export function namedTickers(text: string, dictionary: AssetDictionary): string[
   // Names, longest first; the stretch a name covers is not read again by a shorter one.
   const lower = text.toLowerCase()
   const covered: [number, number][] = []
+  // A company's name is covered before any coin's, and names none.
+  const blocked: [number, number][] = []
+  for (const name of COMPANY_NAMES) {
+    for (const match of lower.matchAll(new RegExp(`(?<![a-z0-9])${escapeRegExp(name)}(?![a-z0-9])`, 'g'))) blocked.push([match.index ?? 0, (match.index ?? 0) + name.length])
+  }
+  covered.push(...blocked)
   for (const [name, ticker] of dictionary.names) {
     for (const match of lower.matchAll(new RegExp(`(?<![a-z0-9])${escapeRegExp(name)}(?![a-z0-9])`, 'g'))) {
       const start = match.index ?? 0
@@ -388,7 +441,9 @@ export function namedTickers(text: string, dictionary: AssetDictionary): string[
     const ticker = match[2]
     if (!dictionary.tickers.has(ticker)) continue
     if (match[1] === '' && WORD_TICKERS.has(ticker)) continue
-    found.push({ ticker, at: match.index ?? 0 })
+    const at = match.index ?? 0
+    if (blocked.some(([from, to]) => at < to && at + match[0].length > from)) continue
+    found.push({ ticker, at })
   }
   const order = new Map<string, number>()
   for (const entry of found.sort((a, b) => a.at - b.at)) if (!order.has(entry.ticker)) order.set(entry.ticker, entry.at)
@@ -406,7 +461,12 @@ export function storyAssets(story: Pick<FeedStory, 'title' | 'summary' | 'ticker
 // What kind of news, and how much it might matter.
 
 const TYPE_RULES: readonly [NewsEventType, RegExp][] = [
-  ['HACK', /\b(hack(ed|er|ers|s)?|stolen|breach(ed)?|heist|attacker)\b/i],
+  // A theft, and a sum lost from crypto (V9 Stage 2): "EU entity suspected of losing $106 million from crypto exchange
+  // accounts" was the first report of the $133M theft, and said no hack.
+  [
+    'HACK',
+    /\b(hack(ed|er|ers|s)?|stolen|steal(s|ing)?|stole|thefts?|breach(ed)?|heist|attacker|security (incident|breach))\b|\blos(es|ing|t)\s+(more than |over |about |nearly |almost |at least )?\$[\d.,]+\s*(k|m|b|bn|million|billion)?\s+(from|in|to)\s+(crypto|wallets?|exchanges?|accounts?|hacks?|exploits?|attacks?|thefts?)\b/i
+  ],
   ['EXPLOIT', /\b(exploit(ed|s|er|ers)?|drain(ed|s|er)?|flash[- ]loans?|re-?entrancy|vulnerabilit(y|ies))\b/i],
   ['DELISTING', /\b(delist(s|ed|ing)?|monitoring tag)\b/i],
   ['LISTING', /\b(will list|lists|listing|to list|launch(es)? trading|futures launch)\b/i],
@@ -425,13 +485,27 @@ const TYPE_RULES: readonly [NewsEventType, RegExp][] = [
   ['PARTNERSHIP', /\b(partner(s|ship|ships|ed)?|collaborat\w*|integrat\w*|teams? up)\b/i]
 ]
 
-/** The kind of news: the first of the rules above the title and summary meet; Binance's own kind
- * where the story is an announcement. */
+/** A hack or an exploit is one only where its headline says so (feed-v3, V9 Stage 2): a summary that mentions one
+ * is mostly a story of something else told after it -- "Coinbase hit with 50% price target cut" over "fallout from
+ * the Binance hack". */
+const HEADLINE_KINDS: ReadonlySet<NewsEventType> = new Set(['HACK', 'EXPLOIT'])
+/** Money leaving a fund is a drain, not a theft: a headline of an ETF's or an exchange's outflows that says "drain"
+ * tells no exploit. (On 18 October 2026 "Bitcoin ETFs Shed Nearly $1 Billion in Two Weeks" raised a CRITICAL exploit
+ * notice from "a $681.1 million drain" in its summary, which the headline rule alone now leaves out.) */
+const OUTFLOW_WORDS = /\b(etfs?|outflows?|inflows?|redemptions?)\b/i
+const DRAIN_WORDS = /\bdrain(ed|s|er)?\b/gi
+
+/** The kind of news: the first of the rules above the title and summary meet -- the title alone for a hack or an
+ * exploit, where a fund's outflow drains nothing; Binance's own kind where the story is an announcement. */
 export function eventTypeOf(story: Pick<FeedStory, 'title' | 'summary' | 'binanceCategory'>): NewsEventType {
   if (story.binanceCategory === 'DELISTING' || story.binanceCategory === 'MONITORING_TAG') return 'DELISTING'
   if (story.binanceCategory === 'SPOT_LISTING' || story.binanceCategory === 'FUTURES_LAUNCH') return 'LISTING'
   const text = `${story.title} ${story.summary}`
-  return TYPE_RULES.find(([, rule]) => rule.test(text))?.[0] ?? 'OTHER'
+  const meets = (type: NewsEventType, rule: RegExp): boolean => {
+    if (!HEADLINE_KINDS.has(type)) return rule.test(text)
+    return rule.test(type === 'EXPLOIT' && OUTFLOW_WORDS.test(story.title) ? story.title.replace(DRAIN_WORDS, ' ') : story.title)
+  }
+  return TYPE_RULES.find(([type, rule]) => meets(type, rule))?.[0] ?? 'OTHER'
 }
 
 /** Which way a kind of news would move its coin, where it says. */
@@ -469,15 +543,21 @@ function freshness(ageSeconds: number): number {
   return Math.max(0.4, 1 - (0.6 * (ageSeconds - 3600)) / (86_400 - 3600))
 }
 
+/** How much a story might matter, 0 to 100: its kind's weight, how directly it names a coin (or the whole market),
+ * its source's credibility, how fresh it is, and half of it for recycled news. */
+export function impactOf(story: Pick<ReadStory, 'eventType' | 'assets' | 'marketWide' | 'credibility' | 'publishedAt'> & Pick<FeedStory, 'repeat'>, nowSec: number): number {
+  const relation = story.assets.some((asset) => asset.relationship === 'DIRECT') ? 1 : story.assets.length > 0 ? 0.6 : story.marketWide ? 0.8 : 0.4
+  // Recycled news is half the news: it was told once already.
+  const recycled = story.repeat === true ? REPEAT_IMPACT_FACTOR : 1
+  return Math.round(TYPE_WEIGHT[story.eventType] * relation * story.credibility * freshness(Math.max(0, nowSec - story.publishedAt)) * recycled)
+}
+
 /** A story read: its coins, its kind, its impact and whether it is old news. */
 export function readStory(story: FeedStory, dictionary: AssetDictionary, credibility: number, nowSec: number): Omit<ReadStory, 'alsoIn' | 'sources'> {
   const assets = storyAssets(story, dictionary)
   const eventType = eventTypeOf(story)
   const marketWide = assets.length === 0 && MARKET_WIDE.has(eventType)
-  const relation = assets.some((asset) => asset.relationship === 'DIRECT') ? 1 : assets.length > 0 ? 0.6 : marketWide ? 0.8 : 0.4
-  // Recycled news is half the news: it was told once already.
-  const recycled = story.repeat === true ? REPEAT_IMPACT_FACTOR : 1
-  const impact = Math.round(TYPE_WEIGHT[eventType] * relation * credibility * freshness(Math.max(0, nowSec - story.publishedAt)) * recycled)
+  const impact = impactOf({ ...story, assets, eventType, marketWide, credibility }, nowSec)
   return { ...story, assets, marketWide, eventType, credibility, impact, stale: story.seenAt - story.publishedAt > STALE_STORY_SECONDS }
 }
 

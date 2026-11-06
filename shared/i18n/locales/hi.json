@@ -2490,5 +2490,21 @@
   "Market now: {state}": "बाज़ार अभी: {state}",
   "Which way: unknown. No measured source calls Bitcoin's way now.": "दिशा: अज्ञात। अभी कोई मापा गया स्रोत बिटकॉइन की दिशा नहीं बताता।",
   "A frequency of the past, not a chance for today: chances read from Bitcoin's volatility ran too high from 2024 on.": "यह अतीत की आवृत्ति है, आज की संभावना नहीं: बिटकॉइन की अस्थिरता से निकाली गई संभावनाएँ 2024 से बहुत ऊँची निकलीं।",
-  "The best-ranked forecast is now on another pair. Predictions shows it.": "सबसे ऊँची रैंक वाला पूर्वानुमान अब किसी दूसरे पेयर पर है। भविष्यवाणियाँ पेज इसे दिखाता है।"
+  "The best-ranked forecast is now on another pair. Predictions shows it.": "सबसे ऊँची रैंक वाला पूर्वानुमान अब किसी दूसरे पेयर पर है। भविष्यवाणियाँ पेज इसे दिखाता है।",
+  "First report of a theft; who lost the funds is not named.": "चोरी की पहली खबर; किसने धन गँवाया, यह नहीं बताया गया है।",
+  "First report of a theft from {victim}.": "{victim} से चोरी की पहली खबर।",
+  "The sum named: {sum}.": "बताई गई राशि: {sum}।",
+  "The victim's own token: {token}.": "पीड़ित का अपना टोकन: {token}।",
+  "Which way: unknown. What prices do after a hack is not measured yet.": "दिशा: अज्ञात। हैक के बाद कीमतें क्या करती हैं, यह अभी मापा नहीं गया है।",
+  "{victim} ({token})": "{victim} ({token})",
+  "HIGH: market shock · {state}": "उच्च: बाज़ार में झटका · {state}",
+  "Bitcoin's last fifteen minutes moved {times} times its usual fifteen minutes.": "पिछले पंद्रह मिनट में बिटकॉइन अपने सामान्य पंद्रह मिनट की तुलना में {times} गुना चला।",
+  "Bitcoin moved {move} in fifteen minutes, {times} times its usual fifteen minutes.": "बिटकॉइन पंद्रह मिनट में {move} चला, अपने सामान्य पंद्रह मिनट का {times} गुना।",
+  "No story on file explains it yet; a loud story in the next two hours is told with it.": "अभी तक कोई दर्ज खबर इसकी वजह नहीं बताती; अगले दो घंटों में आई कोई अहम खबर इसके साथ बताई जाएगी।",
+  "It came {count} minutes after the market shock told at {time} UTC.": "यह {time} UTC पर बताए गए बाज़ार के झटके के {count} मिनट बाद आया।",
+  "Critical news": "गंभीर खबरें",
+  "No first report of a large theft in the last two days.": "पिछले दो दिनों में किसी बड़ी चोरी की पहली खबर नहीं आई।",
+  "Victim not named": "पीड़ित का नाम नहीं बताया गया",
+  "Last market shock: {time}.": "बाज़ार का पिछला झटका: {time}।",
+  "First reports of a theft in the last two days: of a victim whose own token trades, of a top exchange, or of $100 million or more.": "पिछले दो दिनों में चोरी की पहली खबरें: ऐसे पीड़ित की जिसका अपना टोकन ट्रेड होता है, किसी बड़े एक्सचेंज की, या 100 मिलियन डॉलर या उससे अधिक की।"
 }

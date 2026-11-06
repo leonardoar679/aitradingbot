@@ -1,6 +1,7 @@
 import { app, shell } from 'electron'
 import { readFile } from 'fs/promises'
 import { join } from 'path'
+import { incidentsOf } from '../../shared/incidents'
 import type { NewsItem } from '../../shared/news'
 import {
   BINANCE_SOURCE,
@@ -190,7 +191,9 @@ async function rebuild(): Promise<void> {
   }
   const credibility = new Map<string, number>([...FEED_SOURCES.map((source) => [source.id, source.credibility] as [string, number]), [BINANCE_SOURCE.id, BINANCE_SOURCE.credibility]])
   const read = [...raw, ...announcements].map((story) => readStory(story, dictionary as AssetDictionary, credibility.get(story.source) ?? 0.5, nowSec))
-  const stories: ReadStory[] = foldSameStories(read, storySources).slice(0, STORIES_SHOWN)
+  // A hack's incident (shared/incidents.ts, V9 Stage 2): its victim, its sum, and whether the week's stories told it
+  // first -- read over all of them before the same story from several sources is folded into one.
+  const stories: ReadStory[] = foldSameStories(incidentsOf(read, dictionary as AssetDictionary, nowSec), storySources).slice(0, STORIES_SHOWN)
   const reactions: Record<string, StoryReaction> = {}
   for (const reaction of finalReactions) reactions[reaction.storyId] = reaction
   for (const [id, reaction] of liveReactions) reactions[id] = reaction

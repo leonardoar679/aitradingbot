@@ -2490,5 +2490,21 @@
   "Market now: {state}": "Pasar sekarang: {state}",
   "Which way: unknown. No measured source calls Bitcoin's way now.": "Arah: tidak diketahui. Tidak ada sumber terukur yang menyebut arah Bitcoin sekarang.",
   "A frequency of the past, not a chance for today: chances read from Bitcoin's volatility ran too high from 2024 on.": "Ini frekuensi masa lalu, bukan peluang untuk hari ini: peluang yang dibaca dari volatilitas Bitcoin terlalu tinggi sejak 2024.",
-  "The best-ranked forecast is now on another pair. Predictions shows it.": "Prakiraan peringkat teratas kini ada di pasangan lain. Prediksi menampilkannya."
+  "The best-ranked forecast is now on another pair. Predictions shows it.": "Prakiraan peringkat teratas kini ada di pasangan lain. Prediksi menampilkannya.",
+  "First report of a theft; who lost the funds is not named.": "Laporan pertama tentang pencurian; siapa yang kehilangan dana tidak disebutkan.",
+  "First report of a theft from {victim}.": "Laporan pertama tentang pencurian dari {victim}.",
+  "The sum named: {sum}.": "Jumlah yang disebut: {sum}.",
+  "The victim's own token: {token}.": "Token milik korban: {token}.",
+  "Which way: unknown. What prices do after a hack is not measured yet.": "Arah: tidak diketahui. Apa yang dilakukan harga setelah peretasan belum diukur.",
+  "{victim} ({token})": "{victim} ({token})",
+  "HIGH: market shock · {state}": "TINGGI: guncangan pasar · {state}",
+  "Bitcoin's last fifteen minutes moved {times} times its usual fifteen minutes.": "Dalam lima belas menit terakhir Bitcoin bergerak {times} kali gerak lima belas menitnya yang biasa.",
+  "Bitcoin moved {move} in fifteen minutes, {times} times its usual fifteen minutes.": "Bitcoin bergerak {move} dalam lima belas menit, {times} kali gerak lima belas menitnya yang biasa.",
+  "No story on file explains it yet; a loud story in the next two hours is told with it.": "Belum ada berita tersimpan yang menjelaskannya; berita penting dalam dua jam berikutnya akan disampaikan bersamanya.",
+  "It came {count} minutes after the market shock told at {time} UTC.": "Berita ini datang {count} menit setelah guncangan pasar yang diberitahukan pukul {time} UTC.",
+  "Critical news": "Berita kritis",
+  "No first report of a large theft in the last two days.": "Tidak ada laporan pertama tentang pencurian besar dalam dua hari terakhir.",
+  "Victim not named": "Korban tidak disebutkan",
+  "Last market shock: {time}.": "Guncangan pasar terakhir: {time}.",
+  "First reports of a theft in the last two days: of a victim whose own token trades, of a top exchange, or of $100 million or more.": "Laporan pertama pencurian dalam dua hari terakhir: dari korban yang tokennya sendiri diperdagangkan, dari bursa besar, atau senilai $100 juta atau lebih."
 }

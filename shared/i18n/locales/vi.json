@@ -2490,5 +2490,21 @@
   "Market now: {state}": "Thị trường hiện tại: {state}",
   "Which way: unknown. No measured source calls Bitcoin's way now.": "Hướng: chưa biết. Hiện không có nguồn đã được đo lường nào chỉ hướng của Bitcoin.",
   "A frequency of the past, not a chance for today: chances read from Bitcoin's volatility ran too high from 2024 on.": "Đây là tần suất trong quá khứ, không phải khả năng của hôm nay: các khả năng đọc từ biến động của Bitcoin đã quá cao từ năm 2024.",
-  "The best-ranked forecast is now on another pair. Predictions shows it.": "Dự báo xếp hạng cao nhất giờ thuộc về một cặp khác. Dự đoán hiển thị nó."
+  "The best-ranked forecast is now on another pair. Predictions shows it.": "Dự báo xếp hạng cao nhất giờ thuộc về một cặp khác. Dự đoán hiển thị nó.",
+  "First report of a theft; who lost the funds is not named.": "Tin đầu tiên về một vụ đánh cắp; không nêu ai bị mất tiền.",
+  "First report of a theft from {victim}.": "Tin đầu tiên về một vụ đánh cắp tại {victim}.",
+  "The sum named: {sum}.": "Số tiền được nêu: {sum}.",
+  "The victim's own token: {token}.": "Token riêng của bên bị hại: {token}.",
+  "Which way: unknown. What prices do after a hack is not measured yet.": "Hướng: chưa biết. Giá biến động thế nào sau một vụ hack thì chưa được đo lường.",
+  "{victim} ({token})": "{victim} ({token})",
+  "HIGH: market shock · {state}": "CAO: cú sốc thị trường · {state}",
+  "Bitcoin's last fifteen minutes moved {times} times its usual fifteen minutes.": "Trong mười lăm phút qua, Bitcoin biến động gấp {times} lần mức thường thấy của mười lăm phút.",
+  "Bitcoin moved {move} in fifteen minutes, {times} times its usual fifteen minutes.": "Bitcoin biến động {move} trong mười lăm phút, gấp {times} lần mức thường thấy của mười lăm phút.",
+  "No story on file explains it yet; a loud story in the next two hours is told with it.": "Chưa có tin nào giải thích điều này; tin quan trọng trong hai giờ tới sẽ được báo kèm với nó.",
+  "It came {count} minutes after the market shock told at {time} UTC.": "Tin này đến {count} phút sau cú sốc thị trường được báo lúc {time} UTC.",
+  "Critical news": "Tin quan trọng",
+  "No first report of a large theft in the last two days.": "Không có tin đầu tiên nào về một vụ đánh cắp lớn trong hai ngày qua.",
+  "Victim not named": "Không nêu bên bị hại",
+  "Last market shock: {time}.": "Cú sốc thị trường gần nhất: {time}.",
+  "First reports of a theft in the last two days: of a victim whose own token trades, of a top exchange, or of $100 million or more.": "Tin đầu tiên về các vụ đánh cắp trong hai ngày qua: của bên bị hại có token riêng đang được giao dịch, của một sàn lớn, hoặc từ 100 triệu USD trở lên."
 }

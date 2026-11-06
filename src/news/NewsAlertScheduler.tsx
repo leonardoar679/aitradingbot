@@ -2,7 +2,28 @@ import { noticeI18n } from '../i18n/current'
 import { msg } from '../../shared/i18n/translate'
 import { useEffect } from 'react'
 import { AI_ADDITION_PROMPT_VERSIONS, newsReadingsOf } from '../../shared/aiAdditions'
-import { NOTICE_REPEAT_SECONDS, btcHourMovePct, crashNotice, crashStep, noticeCoins, noticeSeverity, repeatsNotice, storyNotice, storySeverity, type NoticedStory, type StoryFacts } from '../../shared/alerts'
+import {
+  NOTICE_REPEAT_SECONDS,
+  btcHourMovePct,
+  btcMovePct,
+  crashNotice,
+  crashStep,
+  noticeCoins,
+  noticeSeverity,
+  repeatsLoudIncident,
+  repeatsNotice,
+  shockAttachLine,
+  shockNotice,
+  shockStarts,
+  storyNotice,
+  storySeverity,
+  type LoudIncident,
+  type NoticedStory,
+  type StoryFacts
+} from '../../shared/alerts'
+import { INCIDENT_LINES, incidentKeys } from '../../shared/incidents'
+import type { MarketShockState } from '../../shared/forecast/marketShock'
+import { marketStateWord } from '../forecast/forecastWords'
 import type { LiveState } from '../../shared/liveMarket'
 import { heldPlaces, type Holdings } from '../../shared/newsActions'
 import type { NewsFeedState, ReadStory } from '../../shared/newsFeed'
@@ -11,6 +32,8 @@ import { addAlert, addToldAlert, seedAlerts } from './alertStore'
 /** A story published longer ago than this when first read is not news to raise. */
 const FRESH_SECONDS = 30 * 60
 const CRASH_LOOK_MS = 60_000
+/** A market state read longer ago than this is not the market now: no shock is opened on it. */
+const MARKET_STALE_SECONDS = 15 * 60
 /** How far before a story the watch's call on its coin is looked for. */
 const WATCH_CALL_SECONDS = 3 * 3600
 
@@ -76,6 +99,11 @@ async function readHoldings(): Promise<Holdings> {
  * notice that only tells again news a notice told in the last six hours is not raised. Once a minute
  * it also looks at Bitcoin's last hour on the live stream, and a fall of 5% is CRITICAL, told once.
  *
+ * Since 6 November 2026 (V9 Stage 2): a hack is told by its incident (shared/incidents.ts) and one loud notice is told
+ * per victim, or per sum, a day; and once a minute it reads the market's shock state from the forecast, and the
+ * market entering a shock -- Bitcoin's fifteen minutes past 2.5 of its usual moves -- is a HIGH notice of its own, before
+ * any story explains it. A loud story in the two hours after says how long after the shock it came.
+ *
  * Binance's own announcements are kept here too, but their notice is the news reader's own
  * (src/news/NewsScheduler.tsx), so none is raised for them twice. It reads, and tells; it opens,
  * closes, sells and asks nothing. */
@@ -86,6 +114,11 @@ export function NewsAlertScheduler(): null {
     const handled = new Set<string>()
     /** The stories a notice was raised or held back for in the last six hours. */
     let noticed: NoticedStory[] = []
+    /** The incidents told loud in the last day. */
+    let loud: LoudIncident[] = []
+    /** The market's shock state as last read, and when a shock was last told. */
+    let marketState: string | null = null
+    let lastShockAt: number | null = null
 
     const look = async (state: NewsFeedState): Promise<void> => {
       const nowSec = Math.floor(Date.now() / 1000)
@@ -108,11 +141,18 @@ export function NewsAlertScheduler(): null {
         const held = new Set(
           story.assets.filter((asset) => asset.relationship === 'DIRECT' && holdings !== null && heldPlaces(asset.ticker, holdings).length > 0).map((asset) => asset.ticker)
         )
-        const severity = storySeverity(story, held, state.reactions[story.id]?.verdict ?? null)
+        let severity = storySeverity(story, held, state.reactions[story.id]?.verdict ?? null)
+        // One loud notice per victim, or per sum, a day: a second report of the same theft is kept on its page.
+        loud = loud.filter((entry) => nowSec - entry.at < INCIDENT_LINES.loudOnceSeconds)
+        if (repeatsLoudIncident(story, severity, loud, nowSec)) severity = 'info'
+        else if ((severity === 'high' || severity === 'critical') && story.incident) loud.push({ keys: incidentKeys(story.incident), at: nowSec, severity })
         const places = holdings === null ? [] : [...held].flatMap((ticker) => heldPlaces(ticker, holdings as Holdings, noticeI18n()))
         const ticker = story.assets.find((asset) => asset.relationship === 'DIRECT')?.ticker ?? null
         const facts = ticker === null ? {} : await storyFactsOf(story, ticker, state, live, nowSec)
-        const notice = storyNotice(story, severity, places, facts, noticeI18n())
+        const told = storyNotice(story, severity, places, facts, noticeI18n())
+        // A loud story within two hours after a market shock is told with it.
+        const attached = severity === 'high' || severity === 'critical' ? shockAttachLine(story, lastShockAt, noticeI18n()) : null
+        const notice = attached === null ? told : { title: told.title, body: `${told.body} ${attached}` }
         addAlert({ id: story.id, severity, title: notice.title, body: notice.body, at: story.publishedAt, url: story.url, kind: 'NEWS_EVENT' })
         const level = noticeSeverity(severity)
         if (level === null || story.source === 'binance' || cancelled) continue
@@ -161,7 +201,31 @@ export function NewsAlertScheduler(): null {
         })
         .catch(() => undefined)
     }
-    const timer = setInterval(lookAtBitcoin, CRASH_LOOK_MS)
+    // The market's shock state, as the forecast last read it: a shock opened is told once, before any story.
+    const lookAtMarket = async (): Promise<void> => {
+      const reading = (await window.api.forecast.getState()).engine.market ?? null
+      const nowSec = Math.floor(Date.now() / 1000)
+      if (cancelled || reading === null || nowSec - reading.readAt > MARKET_STALE_SECONDS) return
+      const opens = shockStarts(marketState, reading.state)
+      marketState = reading.state
+      if (!opens) return
+      let move: number | null = null
+      try {
+        move = btcMovePct((await window.api.market.liveState()).btcMinutes, nowSec, 15)
+      } catch {
+        move = null
+      }
+      const i18n = noticeI18n()
+      const notice = shockNotice({ stateWord: marketStateWord(reading.state as MarketShockState, i18n), btc15: reading.btc15, movePct: move }, i18n)
+      const id = `market-shock:${nowSec}`
+      lastShockAt = nowSec
+      addAlert({ id, severity: 'high', title: notice.title, body: notice.body, at: nowSec, kind: 'MARKET_EVENT' })
+      void window.api.notify(notice.title, notice.body, 'high', { kind: 'MARKET_EVENT', thread: 'market-shock', id }).catch(() => undefined)
+    }
+    const timer = setInterval(() => {
+      lookAtBitcoin()
+      void lookAtMarket().catch(() => undefined)
+    }, CRASH_LOOK_MS)
 
     return (): void => {
       cancelled = true

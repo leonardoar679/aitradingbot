@@ -701,8 +701,9 @@ describe('AI code has no route to a real order', () => {
       expect(importsOf(path).filter((name) => LIVE_MODULES.has(name)), path).toEqual([])
       expect(importsOf(path).filter((name) => aiModuleNames.has(name)), path).toEqual([])
     }
-    // noticeService and notices (since 8 October 2026): every feed unread for half an hour is told.
-    expect(importsOf(join(SERVICES, 'newsFeedService.ts')).sort()).toEqual(['electron', 'jsonlStore', 'marketService', 'news', 'newsFeed', 'newsService', 'noticeService', 'notices', 'path', 'promises', 'singleFlight'])
+    // noticeService and notices (since 8 October 2026): every feed unread for half an hour is told. incidents (V9 Stage 2):
+    // a hack's victim and first report, read from the week's stories -- arithmetic on headlines.
+    expect(importsOf(join(SERVICES, 'newsFeedService.ts')).sort()).toEqual(['electron', 'incidents', 'jsonlStore', 'marketService', 'news', 'newsFeed', 'newsService', 'noticeService', 'notices', 'path', 'promises', 'singleFlight'])
     const service = readFileSync(join(SERVICES, 'newsFeedService.ts'), 'utf-8')
     expect(service).toContain("if (parsed.protocol !== 'https:' || !FEED_HOSTS.includes(parsed.hostname)) return false")
     expect(service).not.toMatch(/resolveTradingEndpoint|credentials|apiKey|setSettings/)
@@ -710,9 +711,12 @@ describe('AI code has no route to a real order', () => {
     expect(importsOf(join(ROOT, 'shared', 'newsFeed.ts'))).toEqual(['ipc', 'translate'])
     // translate (V6 Stage 14): the window has its sentences said in the person's language.
     expect(importsOf(join(ROOT, 'shared', 'moveExplanation.ts')).sort()).toEqual(['ipc', 'newsFeed', 'translate'])
-    // translate (V6 Stage 14): its words said in a language, English unless handed another.
-    expect(importsOf(join(ROOT, 'shared', 'alerts.ts')).sort()).toEqual(['ipc', 'newsFeed', 'translate'])
-    for (const file of ['newsFeed.ts', 'moveExplanation.ts', 'alerts.ts']) {
+    // translate (V6 Stage 14): its words said in a language, English unless handed another. incidents (V9 Stage 2): a
+    // hack is told by its incident.
+    expect(importsOf(join(ROOT, 'shared', 'alerts.ts')).sort()).toEqual(['incidents', 'ipc', 'newsFeed', 'translate'])
+    // The incident reader reads headlines against its victims' names, compiled into a file (V9 Stage 2).
+    expect(importsOf(join(ROOT, 'shared', 'incidents.ts')).sort()).toEqual(['incidentVictims.json', 'newsFeed'])
+    for (const file of ['newsFeed.ts', 'moveExplanation.ts', 'alerts.ts', 'incidents.ts']) {
       expect(readFileSync(join(ROOT, 'shared', file), 'utf-8'), file).not.toMatch(/window\.|ipcRenderer|electron\//)
     }
     const calls = (path: string): string[] => {
@@ -730,10 +734,11 @@ describe('AI code has no route to a real order', () => {
       [join(ROOT, 'src', 'agents', 'OpportunityTableCard.tsx'), ['feed.openLink']],
       // It reads what is held -- the settings and the balances a key can read -- the live stream
       // (Bitcoin, and since 8 October 2026 the story's pair for its price), and the ledger for the
-      // analyst's reading and the watch's call on the coin; and tells.
+      // analyst's reading and the watch's call on the coin; since V9 Stage 2 the forecast's state, for the market's
+      // shock; and tells.
       [
         join(ROOT, 'src', 'news', 'NewsAlertScheduler.tsx'),
-        ['ai.listCalls', 'credentials.balances', 'credentials.list', 'feed.getState', 'feed.onUpdate', 'market.liveState', 'notify', 'records.alerts', 'records.onTold', 'settings.get']
+        ['ai.listCalls', 'credentials.balances', 'credentials.list', 'feed.getState', 'feed.onUpdate', 'forecast.getState', 'market.liveState', 'notify', 'records.alerts', 'records.onTold', 'settings.get']
       ]
     ]
     for (const [path, expected] of views) {

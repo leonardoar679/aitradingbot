@@ -2490,5 +2490,21 @@
   "Market now: {state}": "現在の市場：{state}",
   "Which way: unknown. No measured source calls Bitcoin's way now.": "方向：不明。今ビットコインの方向を示す測定済みの根拠はありません。",
   "A frequency of the past, not a chance for today: chances read from Bitcoin's volatility ran too high from 2024 on.": "これは過去の頻度で、今日の確率ではありません。ビットコインのボラティリティから読んだ確率は、2024年以降高すぎました。",
-  "The best-ranked forecast is now on another pair. Predictions shows it.": "最上位の予測が別のペアに移りました。予測に表示されています。"
+  "The best-ranked forecast is now on another pair. Predictions shows it.": "最上位の予測が別のペアに移りました。予測に表示されています。",
+  "First report of a theft; who lost the funds is not named.": "盗難の第一報です。資金を失ったのが誰かは書かれていません。",
+  "First report of a theft from {victim}.": "{victim} からの盗難の第一報です。",
+  "The sum named: {sum}.": "記載された金額：{sum}。",
+  "The victim's own token: {token}.": "被害者自身のトークン：{token}。",
+  "Which way: unknown. What prices do after a hack is not measured yet.": "方向：不明。ハッキングの後に価格がどう動くかは、まだ測定されていません。",
+  "{victim} ({token})": "{victim}（{token}）",
+  "HIGH: market shock · {state}": "高：相場の急変 · {state}",
+  "Bitcoin's last fifteen minutes moved {times} times its usual fifteen minutes.": "ビットコインの直近15分の値動きは、通常の15分の {times} 倍でした。",
+  "Bitcoin moved {move} in fifteen minutes, {times} times its usual fifteen minutes.": "ビットコインは15分で {move} 動きました。通常の15分の {times} 倍です。",
+  "No story on file explains it yet; a loud story in the next two hours is told with it.": "これを説明する記事はまだありません。今後2時間に重要な記事が出れば、この急変と合わせて通知します。",
+  "It came {count} minutes after the market shock told at {time} UTC.": "{time} UTC に通知した相場の急変から {count} 分後に出た記事です。",
+  "Critical news": "重大ニュース",
+  "No first report of a large theft in the last two days.": "過去2日間に大きな盗難の第一報はありません。",
+  "Victim not named": "被害者は不明",
+  "Last market shock: {time}.": "直近の相場の急変：{time}。",
+  "First reports of a theft in the last two days: of a victim whose own token trades, of a top exchange, or of $100 million or more.": "過去2日間の盗難の第一報：自身のトークンが取引されている被害者、大手取引所、または1億ドル以上のもの。"
 }
