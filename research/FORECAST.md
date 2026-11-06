@@ -1151,6 +1151,30 @@ where three or more agree two to one, recorded as a call of the source 'top-trad
 | V9-COPY-FORWARD, V9-TOP-TRADERS-2 | not yet measurable | judged on the forward record once 100 copied round trips over 28 days, and 60 days of calls, are on file |
 | V9-NEWS-CLASS, V9-SHOCK, V9-S8-GATES | under way | the seven-day run, v9-7d, from 6 November |
 
+**The seven-day run (v9-7d).** From the build of bd9b507 on a scratch profile, OpenRouter faked: its clock started at
+06:29:56 UTC on 6 November and runs to 06:30 UTC on 13 November. Its first two tries were stopped before anything was
+measured. In the first, the app's first reading of the rankings, two minutes in, found five of the panel's eight before
+the harness had read them; finding is now off until the panel is followed (6aefdf3). In the second, a panel trader's
+record of 24,706 fills over 146 coins and 28 months was still being analysed after 45 minutes, and a finding turn waited
+for its analysis, so a long one across 00:00-02:00 UTC would have skipped that day's holdings read (bd9b507). By 08:13
+UTC the panel was read, analysed and followed on paper, and paper testing started:
+
+| trader | venue | trips judged | net on record | verdict | why |
+|---|---|---|---|---|---|
+| thank you JEFF | Hyperliquid | 780, on 53 trading days | +$434,631 | MARKET OR LUCK | both chance tests passed (p 0.0006 with the schedule shifted, 0.0013 with the sides flipped) and the edge was +0.18% a trip, but its 95% interval, -0.03% to +0.42%, reaches 0 |
+| 1491 | OKX | 1,167, on 35 days | +$1,169,684 (estimated) | MARKET OR LUCK | the same trades at other times did as well 9.0% of the time; interval -2.61% to +4.44% |
+| 010pp | OKX | 298, on 57 days | +$248,790 (estimated) | MARKET OR LUCK | other times did as well 4.4% of the time; interval -0.29% to +2.15% |
+| RTB 2 | Hyperliquid | 26 | +$603,286 | TOO FEW | under 30 round trips |
+| NAKED SHORTS ONLY | Hyperliquid | 5 | +$55,849 | TOO FEW | 5 round trips on 5 trading days |
+| 憨巴小龙 | Hyperliquid | 0 of 19 | -$191,136 | TOO FEW | every trip on Hyperliquid's own stock and commodity markets (crude oil, Brent, silver, chip makers), which neither Binance nor Bitget lists |
+| VidaBWE | Hyperliquid | 0 of 1 | -$2,223 | TOO FEW | the same: one trip, on a stock market of Hyperliquid's |
+| Trader KS | OKX | none | none | not read | OKX answered 60004, "Trader doesn't exist", for their positions while its ranking listed them leading 737 days with 497 copiers and gave their figures: left out, as the registration says (the app said they may have stopped leading until 7656368, after the run's build) |
+
+A Hyperliquid trader's net is over the fills on file, realized less fees plus funding; an OKX trader's is the app's
+estimate of their positions. A clone runs on paper where a rule fitted (thank you JEFF, RTB 2, 1491, 010pp); none is
+REPLICABLE. Following leaders by profit picks up traders of markets the copy book cannot trade: two of the five
+Hyperliquid names trade only its stock and commodity markets.
+
 **What V9 can say so far.** The forecast knows how far coins move, and since V9 Home shows it at the sizes the user
 asked about, with how soon such moves came. No source measured on past cases gives the way after a hack or a U.S.
 release: the hacked token's short was a coin toss after costs, and Bitcoin's first fifteen minutes did not carry over
