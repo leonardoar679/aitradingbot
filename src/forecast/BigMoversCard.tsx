@@ -11,8 +11,9 @@ import { msg, useI18n } from '../i18n'
 
 // THE BIG MOVERS, ON PREDICTIONS (V8 Stage 10, 27 October 2026; shared/forecast/bigMovers.ts) AND ON HOME (V9 Stage 1, 6
 // November 2026). The coins most likely to move a size worth trading at each horizon -- 1% within an hour, 2% within
-// four, 5% within a day, either way -- ranked by how often each moved that much over its last ninety days, as
-// V8-R1-SIZE's registration says until one of its rankers passes. Size alone: no side is called by the list. On Home,
+// four, 5% within a day, either way -- within an hour by the width of the forecast's 80% range, which V9-SIZE-RANK found
+// ranks such moves better, and within four hours and a day by how often each moved that much over its last ninety days,
+// where it did not. Size alone: no side is called by the list. On Home,
 // at four hours and a day, each coin also says how soon such a move came when it came (the median time to its first
 // touch over the ninety days), and a way only where a measured source calls one. The same list is recorded each hour
 // and scored on Performance.
@@ -53,7 +54,9 @@ export function BigMoversView({
         </p>
       )}
       <p style={noteStyle}>
-        {t("The coins most likely to move a size worth trading, either way, ranked by how often each moved that much over its last 90 days. Measured on March to September 2026, the forecast's ranges ranked such moves better, but their chances were not accurate enough to be adopted. Size, not direction: no side is called.")}
+        {horizons.includes('hour1')
+          ? t("The coins most likely to move a size worth trading, either way. Within an hour they are ranked by the width of the forecast's 80% range, which ranked such moves better than the coins' own rates on a year apart; within four hours and a day by how often each moved that much over its last 90 days. The chance shown is that 90-day rate. Size, not direction: no side is called.")
+          : t("The coins most likely to move a size worth trading, either way, ranked by how often each moved that much over its last 90 days: on a year apart, the forecast's ranges ranked moves of four hours and a day no better. Size, not direction: no side is called.")}
       </p>
       {calls !== null && !anyWay && <p style={noteStyle}>{t('Which way is unknown: no measured source calls one for these coins now.')}</p>}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(12rem, 1fr))', gap: '1rem', marginTop: '0.6rem' }}>

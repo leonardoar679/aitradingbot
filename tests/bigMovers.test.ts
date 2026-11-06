@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { BIG_MOVERS_LINES, bigMoverPredictionsOf, bigMoversOf, dayMoveRatesOf } from '../shared/forecast/bigMovers'
 import type { ForecastBar } from '../shared/forecast/bars'
 import type { MoveRates } from '../shared/forecast/moveRates'
+import type { PricePrediction } from '../shared/forecast/prediction'
 import { readSourcePrediction } from '../shared/evaluation/predictionRecord'
 
-// THE BIG MOVERS (shared/forecast/bigMovers.ts; V8 Stage 10, V8-R1-SIZE): at each horizon the coins whose close moved
-// the horizon's size most often over their ninety days, size alone; their entries as size calls of the source
-// 'big-movers'; and the day moves of 5% and 10% studied apart, read at each hour's close where a day's bars are whole.
+// THE BIG MOVERS (shared/forecast/bigMovers.ts; V8 Stage 10, V8-R1-SIZE, V9-SIZE-RANK): within an hour the coins with the
+// widest shown P10-P90 range, within four hours and a day those whose close moved the horizon's size most often over
+// their ninety days, size alone; their entries as size calls of the source 'big-movers'; and the day moves of 5% and
+// 10% studied apart, read at each hour's close where a day's bars are whole.
 
 const rates = (hour1: number, hours4: number, hours24: number): MoveRates =>
   ({
@@ -20,32 +22,45 @@ const rates = (hour1: number, hours4: number, hours24: number): MoveRates =>
     ]
   }) as unknown as MoveRates
 
+/** A forecast's shown P10-P90 width at the hour, and at four hours and a day. */
+const widths = (hour1: number | null, rest = 3): PricePrediction['horizons'] =>
+  ({ ...(hour1 === null ? {} : { hour1: { width80Pct: hour1 } }), hours4: { width80Pct: rest }, hours24: { width80Pct: rest } }) as unknown as PricePrediction['horizons']
+
 describe('the list', () => {
-  it('ranks each horizon by its own rate at the size V8-R1-SIZE targets, the name breaking ties, the first five', () => {
+  it('ranks the hour by the shown width, as V9-SIZE-RANK found it ranks better, and four hours and a day by the rate', () => {
+    expect(BIG_MOVERS_LINES.rankers).toEqual({ hour1: 'width-p10-p90', hours4: 'move-rates-90d', hours24: 'move-rates-90d' })
     const predictions = [
-      { pair: 'CCCUSDT', currentPrice: 3, moveRates: rates(0.3, 0.05, 0.2) },
-      { pair: 'AAAUSDT', currentPrice: 1, moveRates: rates(0.2, 0.1, 0.05) },
-      { pair: 'BBBUSDT', currentPrice: 2, moveRates: rates(0.3, 0.1, 0.01) },
-      { pair: 'DDDUSDT', currentPrice: 4, moveRates: null },
-      { pair: 'EEEUSDT', currentPrice: 0, moveRates: rates(0.9, 0.9, 0.9) },
-      ...Array.from({ length: 6 }, (_, k) => ({ pair: `Z${k}USDT`, currentPrice: 1, moveRates: rates(0.01, 0.01, 0.01) }))
+      { pair: 'CCCUSDT', currentPrice: 3, moveRates: rates(0.3, 0.05, 0.2), horizons: widths(1.2) },
+      { pair: 'AAAUSDT', currentPrice: 1, moveRates: rates(0.2, 0.1, 0.05), horizons: widths(2.5) },
+      { pair: 'BBBUSDT', currentPrice: 2, moveRates: rates(0.3, 0.1, 0.01), horizons: widths(0.8) },
+      { pair: 'DDDUSDT', currentPrice: 4, moveRates: null, horizons: widths(9) },
+      { pair: 'EEEUSDT', currentPrice: 0, moveRates: rates(0.9, 0.9, 0.9), horizons: widths(9) },
+      // No range at the hour: left out of the hour's list, which is ranked by it, and kept in the others.
+      { pair: 'FFFUSDT', currentPrice: 5, moveRates: rates(0.9, 0.2, 0.3), horizons: widths(null) },
+      ...Array.from({ length: 6 }, (_, k) => ({ pair: `Z${k}USDT`, currentPrice: 1, moveRates: rates(0.01, 0.01, 0.01), horizons: widths(0.1) }))
     ]
     const lists = bigMoversOf(predictions)
-    expect(lists.hour1.map((entry) => entry.pair)).toEqual(['BBBUSDT', 'CCCUSDT', 'AAAUSDT', 'Z0USDT', 'Z1USDT'])
-    expect(lists.hours4.map((entry) => entry.pair).slice(0, 3)).toEqual(['AAAUSDT', 'BBBUSDT', 'CCCUSDT'])
-    expect(lists.hours24[0]).toEqual({ pair: 'CCCUSDT', horizon: 'hours24', sizePct: 5, rate: 0.2, price: 3 })
+    expect(lists.hour1.map((entry) => entry.pair)).toEqual(['AAAUSDT', 'CCCUSDT', 'BBBUSDT', 'Z0USDT', 'Z1USDT'])
+    expect(lists.hours4.map((entry) => entry.pair).slice(0, 4)).toEqual(['FFFUSDT', 'AAAUSDT', 'BBBUSDT', 'CCCUSDT'])
+    expect(lists.hours24[0]).toEqual({ pair: 'FFFUSDT', horizon: 'hours24', sizePct: 5, rate: 0.3, widthPct: 3, price: 5 })
+    // The chance an entry shows is its ninety-day rate, whatever ranked it.
+    expect(lists.hour1[0]).toMatchObject({ rate: 0.2, widthPct: 2.5 })
     expect(lists.hour1).toHaveLength(BIG_MOVERS_LINES.listed)
+    // A coin with no range at the hour is not ranked there at all, even with room on the list.
+    expect(bigMoversOf(predictions.filter((entry) => entry.pair === 'FFFUSDT' || entry.pair === 'AAAUSDT')).hour1.map((entry) => entry.pair)).toEqual(['AAAUSDT'])
   })
 
-  it("is recorded as size calls of the source 'big-movers', whole lines the record reads back", () => {
-    const lists = bigMoversOf([{ pair: 'AAAUSDT', currentPrice: 1.5, moveRates: rates(0.2, 0.1, 0.05) }])
+  it("is recorded as size calls of the source 'big-movers', each naming its ranker, whole lines the record reads back", () => {
+    const lists = bigMoversOf([{ pair: 'AAAUSDT', currentPrice: 1.5, moveRates: rates(0.2, 0.1, 0.05), horizons: widths(2.5) }])
     const made = bigMoverPredictionsOf(lists, 1_793_102_400, { engine: 'e', config: 'c' })
-    expect(made.map((line) => [line.id, line.horizonSec, line.movePct])).toEqual([
-      ['big-movers:AAAUSDT:1793102400:1', 3600, 1],
-      ['big-movers:AAAUSDT:1793102400:2', 14_400, 2],
-      ['big-movers:AAAUSDT:1793102400:3', 86_400, 5]
+    expect(made.map((line) => [line.id, line.horizonSec, line.movePct, line.sourceVersion])).toEqual([
+      ['big-movers:AAAUSDT:1793102400:1', 3600, 1, 'big-movers-v2@width-p10-p90'],
+      ['big-movers:AAAUSDT:1793102400:2', 14_400, 2, 'big-movers-v2@move-rates-90d'],
+      ['big-movers:AAAUSDT:1793102400:3', 86_400, 5, 'big-movers-v2@move-rates-90d']
     ])
-    expect(made[0]).toMatchObject({ source: 'big-movers', kind: 'size', side: null, refPrice: 1.5, venue: 'binance', unit: Math.floor(1_793_102_400 / 3600), sourceVersion: 'big-movers-v1@move-rates-90d' })
+    expect(made[0]).toMatchObject({ source: 'big-movers', kind: 'size', side: null, refPrice: 1.5, venue: 'binance', unit: Math.floor(1_793_102_400 / 3600) })
+    expect(made[0].reason).toBe("ranked by the forecast's P10-P90 width, 2.50%; its ninety-day rate of a close 1% away either way: 20.0%")
+    expect(made[1].reason).toBe('ranked by its ninety-day rate of a close 2% away either way: 10.0%')
     for (const line of made) expect(readSourcePrediction(line), line.id).not.toBeNull()
   })
 })

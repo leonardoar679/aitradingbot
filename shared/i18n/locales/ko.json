@@ -2329,7 +2329,6 @@
   "24h volume ({asset})": "24시간 거래량 ({asset})",
   "Live price for {symbol} is unavailable ({error}). The chart below uses a separate connection and may keep updating, so ignore it for the current price. Retrying automatically.": "{symbol}의 실시간 가격을 사용할 수 없습니다({error}). 아래 차트는 별도 연결을 쓰므로 계속 갱신될 수 있지만, 현재 가격으로는 참고하지 마세요. 자동으로 다시 시도합니다.",
   "Big movers": "변동폭이 큰 코인",
-  "The coins most likely to move a size worth trading, either way, ranked by how often each moved that much over its last 90 days. Measured on March to September 2026, the forecast's ranges ranked such moves better, but their chances were not accurate enough to be adopted. Size, not direction: no side is called.": "거래할 만한 크기로 어느 쪽으로든 움직일 가능성이 가장 높은 코인을, 각 코인이 최근 90일 동안 그만큼 움직인 빈도순으로 보여 줍니다. 2026년 3월부터 9월까지를 대상으로 측정한 결과, 예측의 범위는 그런 움직임의 순위를 더 잘 매겼지만 그 확률은 채택할 만큼 정확하지 않았습니다. 방향이 아니라 크기입니다: 어느 쪽인지는 제시하지 않습니다.",
   "{size} or more within {span}": "{span} 안에 {size} 이상",
   "News book": "뉴스 계좌",
   "Copy book": "카피 계좌",
@@ -2506,5 +2505,7 @@
   "No first report of a large theft in the last two days.": "지난 이틀 동안 큰 탈취 사건의 첫 보도는 없었습니다.",
   "Victim not named": "피해자 미상",
   "Last market shock: {time}.": "최근 시장 충격: {time}.",
-  "First reports of a theft in the last two days: of a victim whose own token trades, of a top exchange, or of $100 million or more.": "지난 이틀 동안의 탈취 사건 첫 보도: 자체 토큰이 거래되는 피해자, 대형 거래소, 또는 1억 달러 이상인 경우."
+  "First reports of a theft in the last two days: of a victim whose own token trades, of a top exchange, or of $100 million or more.": "지난 이틀 동안의 탈취 사건 첫 보도: 자체 토큰이 거래되는 피해자, 대형 거래소, 또는 1억 달러 이상인 경우.",
+  "The coins most likely to move a size worth trading, either way. Within an hour they are ranked by the width of the forecast's 80% range, which ranked such moves better than the coins' own rates on a year apart; within four hours and a day by how often each moved that much over its last 90 days. The chance shown is that 90-day rate. Size, not direction: no side is called.": "거래할 만한 크기로 어느 쪽으로든 움직일 가능성이 가장 높은 코인입니다. 1시간 안의 목록은 예측의 80% 범위 폭 순서이며, 이 폭은 별도의 한 해 동안 코인 자체의 빈도보다 그런 움직임의 순위를 더 잘 매겼습니다. 4시간과 하루 안의 목록은 각 코인이 최근 90일 동안 그만큼 움직인 빈도순입니다. 표시되는 확률은 그 90일 빈도입니다. 방향이 아니라 크기입니다: 어느 쪽인지는 제시하지 않습니다.",
+  "The coins most likely to move a size worth trading, either way, ranked by how often each moved that much over its last 90 days: on a year apart, the forecast's ranges ranked moves of four hours and a day no better. Size, not direction: no side is called.": "거래할 만한 크기로 어느 쪽으로든 움직일 가능성이 가장 높은 코인을, 각 코인이 최근 90일 동안 그만큼 움직인 빈도순으로 보여 줍니다. 별도의 한 해 동안 예측의 범위는 4시간과 하루의 움직임을 이보다 더 잘 순위 매기지 못했습니다. 방향이 아니라 크기입니다: 어느 쪽인지는 제시하지 않습니다."
 }

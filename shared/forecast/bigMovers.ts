@@ -7,18 +7,25 @@ import type { PricePrediction } from './prediction'
 // THE BIG MOVERS (V8 Stage 10, 27 October 2026; V8-R1-SIZE, registered 26 October). Which coins are most likely to move
 // a size worth trading -- 1% within an hour, 2% within four, 5% within a day, either way -- said as size alone: no
 // side. V8-R1-SIZE's registration sets how the list is ranked: by the first of its rankers that passes at a horizon,
-// and by the coin's own ninety-day rates (shared/forecast/moveRates.ts) where none does, saying so. None has been
-// measured yet, so every horizon is ranked by the ninety-day rates. Each hour the list's entries are recorded as size
+// and by the coin's own ninety-day rates (shared/forecast/moveRates.ts) where none does, saying so. None passed on March
+// to September 2026. V9-SIZE-RANK (6 November 2026) asked the forecast's shown P10-P90 width again on the year before,
+// October 2024 to September 2025, which no ranking had been measured on: at an hour it ranked the coins that moved 1%
+// better than their rates (Brier skill +8.6%, its top tenth moving 1.33 times as often as the rates' top tenth); at four
+// hours and a day it did not. So the hour's list is ranked by the width, and the others by the rates; the chance each
+// entry shows is its ninety-day rate either way. Each hour the list's entries are recorded as size
 // calls of the source 'big-movers' (shared/evaluation/predictionRecord.ts) and scored like every other source. Beside
 // it, for the Forecast Lab, the share of days that closed 5% and 10% away over the same ninety days: the moves studied
 // apart. Arithmetic: no key, no model, no order.
 
 export type BigMoverHorizon = 'hour1' | 'hours4' | 'hours24'
 
+/** How a horizon's list is ranked: by the coin's ninety-day rate of the move, or by the forecast's shown P10-P90 width. */
+export type BigMoverRanker = 'move-rates-90d' | 'width-p10-p90'
+
 export const BIG_MOVERS_LINES = {
-  version: 'big-movers-v1',
-  /** The ranker each horizon is read by until one of V8-R1-SIZE's passes there. */
-  ranker: 'move-rates-90d',
+  version: 'big-movers-v2',
+  /** The ranker each horizon is read by: the width where V9-SIZE-RANK passed, the ninety-day rate elsewhere. */
+  rankers: { hour1: 'width-p10-p90', hours4: 'move-rates-90d', hours24: 'move-rates-90d' } as Readonly<Record<BigMoverHorizon, BigMoverRanker>>,
   /** Coins listed a horizon. */
   listed: 5,
   /** V8-R1-SIZE's targets: the size a horizon's list is about, in percent either way, and the horizon in seconds. */
@@ -36,23 +43,29 @@ export interface BigMover {
   sizePct: number
   /** The share of the coin's moments over ninety days whose close at the horizon was at least the size away. */
   rate: number
+  /** The forecast's shown P10-P90 width at the horizon, in percent; null where it has none. */
+  widthPct: number | null
   /** The forecast's price at its close. */
   price: number
 }
 
-/** The list at each horizon: the pairs whose close moved the horizon's size most often over their ninety days, the
- * most often first, the pair's name breaking ties. */
-export function bigMoversOf(predictions: readonly Pick<PricePrediction, 'pair' | 'moveRates' | 'currentPrice'>[], lines = BIG_MOVERS_LINES): Record<BigMoverHorizon, BigMover[]> {
+/** The list at each horizon: the pairs ranked by the horizon's ranker -- the widest shown range first, or the move most
+ * often over their ninety days first -- the pair's name breaking ties. A pair the ranker cannot read is left out. */
+export function bigMoversOf(predictions: readonly Pick<PricePrediction, 'pair' | 'moveRates' | 'currentPrice' | 'horizons'>[], lines = BIG_MOVERS_LINES): Record<BigMoverHorizon, BigMover[]> {
   const out = { hour1: [], hours4: [], hours24: [] } as Record<BigMoverHorizon, BigMover[]>
   for (const horizon of BIG_MOVER_HORIZONS) {
     const sizePct = lines.horizons[horizon].sizePct
+    const byWidth = lines.rankers[horizon] === 'width-p10-p90'
     const rows: BigMover[] = []
     for (const prediction of predictions) {
       const rate = rateAt(prediction.moveRates, horizon, sizePct)
-      if (rate === null || !(prediction.currentPrice > 0)) continue
-      rows.push({ pair: prediction.pair, horizon, sizePct, rate, price: prediction.currentPrice })
+      const width = prediction.horizons?.[horizon]?.width80Pct
+      const widthPct = typeof width === 'number' && Number.isFinite(width) ? width : null
+      if (rate === null || !(prediction.currentPrice > 0) || (byWidth && widthPct === null)) continue
+      rows.push({ pair: prediction.pair, horizon, sizePct, rate, widthPct, price: prediction.currentPrice })
     }
-    out[horizon] = rows.sort((a, b) => b.rate - a.rate || a.pair.localeCompare(b.pair)).slice(0, lines.listed)
+    const key = (row: BigMover): number => (byWidth ? (row.widthPct as number) : row.rate)
+    out[horizon] = rows.sort((a, b) => key(b) - key(a) || a.pair.localeCompare(b.pair)).slice(0, lines.listed)
   }
   return out
 }
@@ -72,7 +85,7 @@ export function bigMoverPredictionsOf(lists: Record<BigMoverHorizon, BigMover[]>
         v: SOURCE_RECORD_VERSION,
         id: sourcePredictionId('big-movers', entry.pair, madeAt, seq + 1),
         source: 'big-movers',
-        sourceVersion: `${lines.version}@${lines.ranker}`,
+        sourceVersion: `${lines.version}@${lines.rankers[horizon]}`,
         kind: 'size',
         pair: entry.pair,
         venue: 'binance',
@@ -88,7 +101,10 @@ export function bigMoverPredictionsOf(lists: Record<BigMoverHorizon, BigMover[]>
         scenarios: null,
         cost: null,
         expectedNet: null,
-        reason: `ranked by its ninety-day rate of a close ${entry.sizePct}% away either way: ${(entry.rate * 100).toFixed(1)}%`,
+        reason:
+          lines.rankers[horizon] === 'width-p10-p90' && entry.widthPct !== null
+            ? `ranked by the forecast's P10-P90 width, ${entry.widthPct.toFixed(2)}%; its ninety-day rate of a close ${entry.sizePct}% away either way: ${(entry.rate * 100).toFixed(1)}%`
+            : `ranked by its ninety-day rate of a close ${entry.sizePct}% away either way: ${(entry.rate * 100).toFixed(1)}%`,
         evidence: [`move-rates:${entry.pair}`],
         unit: hourUnitOf(madeAt),
         versions

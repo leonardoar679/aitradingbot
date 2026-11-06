@@ -72,8 +72,9 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 // V8-S9-BOOKS before the first Start (V8 Stage 9), from ff3c16adfc9b. The big-mover list's lines and the Forecast
 // Lab's day moves (V8 Stage 10; infrastructure), from 252036aa0bd4. 6 November 2026: the move rates' 3%, 4% and 5% touches
 // (move-rates-v2; V9 Stage 1; infrastructure), from 343e001c658d. A hack or exploit read from the headline alone, a
-// company's name naming no coin, and a hack's coins read from its incident (feed-v3; V9 Stage 2), from 666e77f3b281.
-const PINNED_ENGINE_VERSION = '33a7fa2ee848'
+// company's name naming no coin, and a hack's coins read from its incident (feed-v3; V9 Stage 2), from 666e77f3b281. The
+// hour's big movers ranked by the shown width, where V9-SIZE-RANK held (big-movers-v2), from 33a7fa2ee848.
+const PINNED_ENGINE_VERSION = '184d7be797df'
 
 describe('the engine version', () => {
   it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {

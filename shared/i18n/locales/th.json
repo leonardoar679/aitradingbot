@@ -2329,7 +2329,6 @@
   "24h volume ({asset})": "ปริมาณซื้อขาย 24 ชม. ({asset})",
   "Live price for {symbol} is unavailable ({error}). The chart below uses a separate connection and may keep updating, so ignore it for the current price. Retrying automatically.": "ไม่มีราคาสดของ {symbol} ({error}) กราฟด้านล่างใช้การเชื่อมต่อแยกต่างหากและอาจรีเฟรชต่อไป จึงอย่าใช้กราฟดูราคาปัจจุบัน กำลังลองใหม่โดยอัตโนมัติ",
   "Big movers": "เหรียญที่ขยับแรง",
-  "The coins most likely to move a size worth trading, either way, ranked by how often each moved that much over its last 90 days. Measured on March to September 2026, the forecast's ranges ranked such moves better, but their chances were not accurate enough to be adopted. Size, not direction: no side is called.": "เหรียญที่น่าจะขยับในขนาดที่คุ้มค่าแก่การเทรดมากที่สุด ไม่ว่าจะขึ้นหรือลง จัดอันดับตามความถี่ที่แต่ละเหรียญเคยขยับได้ขนาดนั้นใน 90 วันล่าสุด เมื่อวัดผลตั้งแต่มีนาคมถึงกันยายน 2026 ช่วงของการคาดการณ์จัดอันดับการขยับขนาดนั้นได้ดีกว่า แต่ความน่าจะเป็นของช่วงเหล่านั้นไม่แม่นยำพอที่จะนำมาใช้ ขนาด ไม่ใช่ทิศทาง: ไม่ชี้ฝั่งใด",
   "{size} or more within {span}": "{size} ขึ้นไปภายใน{span}",
   "News book": "พอร์ตข่าว",
   "Copy book": "พอร์ตคัดลอก",
@@ -2506,5 +2505,7 @@
   "No first report of a large theft in the last two days.": "ไม่มีรายงานแรกของการโจรกรรมครั้งใหญ่ในสองวันที่ผ่านมา",
   "Victim not named": "ไม่ระบุผู้เสียหาย",
   "Last market shock: {time}.": "ตลาดช็อกครั้งล่าสุด: {time}",
-  "First reports of a theft in the last two days: of a victim whose own token trades, of a top exchange, or of $100 million or more.": "รายงานแรกของการโจรกรรมในสองวันที่ผ่านมา: ของผู้เสียหายที่มีโทเคนของตนเองซื้อขายอยู่ ของกระดานเทรดรายใหญ่ หรือมูลค่า 100 ล้านดอลลาร์ขึ้นไป"
+  "First reports of a theft in the last two days: of a victim whose own token trades, of a top exchange, or of $100 million or more.": "รายงานแรกของการโจรกรรมในสองวันที่ผ่านมา: ของผู้เสียหายที่มีโทเคนของตนเองซื้อขายอยู่ ของกระดานเทรดรายใหญ่ หรือมูลค่า 100 ล้านดอลลาร์ขึ้นไป",
+  "The coins most likely to move a size worth trading, either way. Within an hour they are ranked by the width of the forecast's 80% range, which ranked such moves better than the coins' own rates on a year apart; within four hours and a day by how often each moved that much over its last 90 days. The chance shown is that 90-day rate. Size, not direction: no side is called.": "เหรียญที่น่าจะขยับในขนาดที่คุ้มค่าแก่การเทรดมากที่สุด ไม่ว่าจะขึ้นหรือลง ภายในหนึ่งชั่วโมงจัดอันดับตามความกว้างของช่วง 80% ของการคาดการณ์ ซึ่งจัดอันดับการขยับแบบนี้ได้ดีกว่าอัตราของเหรียญเองในอีกปีหนึ่ง ภายในสี่ชั่วโมงและหนึ่งวันจัดอันดับตามความถี่ที่แต่ละเหรียญเคยขยับได้ขนาดนั้นใน 90 วันล่าสุด โอกาสที่แสดงคืออัตรา 90 วันนั้น ขนาด ไม่ใช่ทิศทาง: ไม่ชี้ฝั่งใด",
+  "The coins most likely to move a size worth trading, either way, ranked by how often each moved that much over its last 90 days: on a year apart, the forecast's ranges ranked moves of four hours and a day no better. Size, not direction: no side is called.": "เหรียญที่น่าจะขยับในขนาดที่คุ้มค่าแก่การเทรดมากที่สุด ไม่ว่าจะขึ้นหรือลง จัดอันดับตามความถี่ที่แต่ละเหรียญเคยขยับได้ขนาดนั้นใน 90 วันล่าสุด: ในอีกปีหนึ่ง ช่วงของการคาดการณ์ไม่ได้จัดอันดับการขยับในสี่ชั่วโมงและหนึ่งวันได้ดีกว่านี้ ขนาด ไม่ใช่ทิศทาง: ไม่ชี้ฝั่งใด"
 }

@@ -2329,7 +2329,6 @@
   "24h volume ({asset})": "24 小時成交量（{asset}）",
   "Live price for {symbol} is unavailable ({error}). The chart below uses a separate connection and may keep updating, so ignore it for the current price. Retrying automatically.": "無法取得 {symbol} 的即時價格（{error}）。下方的圖表使用另一條連線，可能仍會持續更新，因此請不要把它當作目前價格。正在自動重試。",
   "Big movers": "大幅波動幣種",
-  "The coins most likely to move a size worth trading, either way, ranked by how often each moved that much over its last 90 days. Measured on March to September 2026, the forecast's ranges ranked such moves better, but their chances were not accurate enough to be adopted. Size, not direction: no side is called.": "最有可能出現值得交易之波動幅度的幣，不論漲跌，依各幣在最近 90 天內出現同樣幅度波動的頻率排名。在 2026 年 3 月至 9 月的測量中，預測區間對這類波動的排名較佳，但其機率的準確度不足以採用。只看波動幅度，不看方向：不做任何方向判斷。",
   "{size} or more within {span}": "{span}內波動達 {size} 以上",
   "News book": "新聞帳本",
   "Copy book": "跟單帳本",
@@ -2506,5 +2505,7 @@
   "No first report of a large theft in the last two days.": "過去兩天沒有大額盜竊的首次報導。",
   "Victim not named": "受害方未披露",
   "Last market shock: {time}.": "最近一次市場衝擊：{time}。",
-  "First reports of a theft in the last two days: of a victim whose own token trades, of a top exchange, or of $100 million or more.": "過去兩天的盜竊首次報導：受害方自己的代幣有交易、屬於大型交易所，或金額達 1 億美元及以上。"
+  "First reports of a theft in the last two days: of a victim whose own token trades, of a top exchange, or of $100 million or more.": "過去兩天的盜竊首次報導：受害方自己的代幣有交易、屬於大型交易所，或金額達 1 億美元及以上。",
+  "The coins most likely to move a size worth trading, either way. Within an hour they are ranked by the width of the forecast's 80% range, which ranked such moves better than the coins' own rates on a year apart; within four hours and a day by how often each moved that much over its last 90 days. The chance shown is that 90-day rate. Size, not direction: no side is called.": "最有可能出現值得交易之波動幅度的幣，不論漲跌。一小時內依預測 80% 區間的寬度排名——在另一年的資料上，它對這類波動的排名優於幣本身的頻率；四小時和一天內則依各幣在最近 90 天內出現同樣幅度波動的頻率排名。顯示的機率就是這個 90 天頻率。只看波動幅度，不看方向：不做任何方向判斷。",
+  "The coins most likely to move a size worth trading, either way, ranked by how often each moved that much over its last 90 days: on a year apart, the forecast's ranges ranked moves of four hours and a day no better. Size, not direction: no side is called.": "最有可能出現值得交易之波動幅度的幣，不論漲跌，依各幣在最近 90 天內出現同樣幅度波動的頻率排名：在另一年的資料上，預測區間對四小時和一天波動的排名並沒有更好。只看波動幅度，不看方向：不做任何方向判斷。"
 }

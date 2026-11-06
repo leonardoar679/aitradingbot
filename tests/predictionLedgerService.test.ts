@@ -180,7 +180,8 @@ describe("the big-mover list's entries", () => {
         { horizon: 'hours24', moments: 2000, close: [{ pct: 5, up: 0.1, down: 0.1, either: 0.2 }], touch: [] }
       ]
     }
-    const predictions = [{ pair: 'BTCUSDT', currentPrice: 70_000, moveRates }, { pair: 'ETHUSDT', currentPrice: 2_500, moveRates: null }] as never
+    // The hour's list is ranked by the shown width (V9-SIZE-RANK): a coin is listed there with a range at the hour.
+    const predictions = [{ pair: 'BTCUSDT', currentPrice: 70_000, moveRates, horizons: { hour1: { width80Pct: 1.1 } } }, { pair: 'ETHUSDT', currentPrice: 2_500, moveRates: null, horizons: {} }] as never
     expect(await ledger.recordBigMovers(HOUR + 300, predictions, { engine: 'e', config: 'c' })).toBe(0)
     expect(await ledger.recordBigMovers(HOUR, predictions, { engine: 'e', config: 'c' })).toBe(3)
     expect(await ledger.recordBigMovers(HOUR, predictions, { engine: 'e', config: 'c' })).toBe(0)
