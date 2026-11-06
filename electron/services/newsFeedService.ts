@@ -10,6 +10,7 @@ import {
   FEED_READ_MS,
   FEED_SOURCES,
   NEWS_FEED_VERSION,
+  REACTIONS_EVERY_MS,
   REACTION_FINAL_SECONDS,
   STORY_HISTORY_MAX_SECONDS,
   assetDictionary,
@@ -42,9 +43,9 @@ import { tell } from './noticeService'
 // THE NEWS FEED: FOUR FREE MEDIA FEEDS AND BINANCE'S OWN ANNOUNCEMENTS, AS STORIES (the second V3
 // document, §11-14; the arithmetic is shared/newsFeed.ts).
 //
-// Every three minutes it reads CoinDesk, The Block, Cointelegraph and Decrypt -- public RSS, no key,
-// no cost -- keeps each new item once in news/feed-YYYY-MM.jsonl, and sets Binance's announcements,
-// as the news reader holds them, beside them. Then, for each story that names a coin traded on
+// Every minute it reads CoinDesk, The Block, Cointelegraph and Decrypt -- public RSS, no key, no cost, each asked only
+// for what changed since -- keeps each new item once in news/feed-YYYY-MM.jsonl, and sets Binance's announcements,
+// as the news reader holds them, beside them. Then, every three minutes, for each story that names a coin traded on
 // Binance, it reads that coin's minutes to say what the price did around it; a reaction measured to
 // its end (four hours) is kept in news/reactions-YYYY-MM.jsonl, and what each kind of news did is
 // worked out from those once there are enough.
@@ -72,6 +73,9 @@ let pairByBase = new Map<string, string>()
 const FEEDS_DEAD_SECONDS = 30 * 60
 let lastAnyRead: number | null = Math.floor(Date.now() / 1000)
 let feedsDeadTold = false
+/** Each feed's last answer's validators, sent with the next read: an unchanged feed answers 304. */
+const validators = new Map<string, { etag: string | null; lastModified: string | null }>()
+let lastReactionsMs: number | null = null
 let sources: FeedSourceStatus[] = FEED_SOURCES.map((source) => ({ id: source.id, name: source.name, lastReadAt: null, ok: null, error: null, items: 0 }))
 /** Another feed's copy of a story on file, recorded as such (shared/newsFeed.ts StorySource). */
 const storySources: StorySource[] = []
@@ -242,6 +246,9 @@ async function measureReactions(): Promise<void> {
 }
 
 const readFeeds = singleFlight(async (): Promise<void> => {
+  // The read's own moment, from its clock's tick: the reactions' three minutes are counted from it, not from the end of
+  // reads that take their own seconds.
+  const passMs = Date.now()
   try {
     await ensureDictionary()
   } catch (error) {
@@ -252,8 +259,19 @@ const readFeeds = singleFlight(async (): Promise<void> => {
   for (const source of FEED_SOURCES) {
     const nowSec = Math.floor(Date.now() / 1000)
     try {
-      const response = await fetch(source.url, { signal: AbortSignal.timeout(SOURCE_TIMEOUT_MS), headers: { 'User-Agent': 'Mozilla/5.0 (TraderSpider news reader)' } })
+      const held = validators.get(source.id)
+      const headers: Record<string, string> = { 'User-Agent': 'Mozilla/5.0 (TraderSpider news reader)' }
+      if (held !== undefined && held.etag !== null) headers['If-None-Match'] = held.etag
+      if (held !== undefined && held.lastModified !== null) headers['If-Modified-Since'] = held.lastModified
+      const response = await fetch(source.url, { signal: AbortSignal.timeout(SOURCE_TIMEOUT_MS), headers })
+      // Nothing new since the last read: the feed is read, its items as they were.
+      if (response.status === 304 && held !== undefined) {
+        const before = sources.find((entry) => entry.id === source.id)
+        next.push({ id: source.id, name: source.name, lastReadAt: nowSec, ok: true, error: null, items: before?.items ?? 0 })
+        continue
+      }
       if (!response.ok) throw new Error(`it answered ${response.status}`)
+      validators.set(source.id, { etag: response.headers.get('etag'), lastModified: response.headers.get('last-modified') })
       const items = parseRss(await response.text())
       for (const item of items) {
         const story = toStory(item, source, nowSec)
@@ -294,7 +312,11 @@ const readFeeds = singleFlight(async (): Promise<void> => {
   }
   if (next.some((entry) => entry.ok)) feedsDeadTold = false
   await rebuild()
-  await measureReactions()
+  // Every third read: half a read's slack, so a tick a little early still counts.
+  if (lastReactionsMs === null || passMs - lastReactionsMs >= REACTIONS_EVERY_MS - FEED_READ_MS / 2) {
+    lastReactionsMs = passMs
+    await measureReactions()
+  }
 }, () => undefined)
 
 /** The media feeds' stories published between `fromSec` and `toSec` (at most

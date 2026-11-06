@@ -7,7 +7,7 @@ import { ENGLISH, msg, type I18n } from './i18n/translate'
 // The app already reads Binance's own announcements (shared/news.ts). Since 6 October 2026 it also
 // reads four free media feeds -- CoinDesk, Cointelegraph, Decrypt and The Block -- with no key and
 // at no cost (the user chose free sources; CoinGecko's news needs a paid plan). The main process's
-// newsFeedService.ts reads them every three minutes; this file is the arithmetic on what it read:
+// newsFeedService.ts reads them every minute; this file is the arithmetic on what it read:
 // each item made a story, the coins it names, what kind of news it is, how much it might matter,
 // whether the same story came from another source, and -- from the coin's own minutes -- what the
 // price did around it.
@@ -24,7 +24,12 @@ import { ENGLISH, msg, type I18n } from './i18n/translate'
 // IT READS. Nothing here asks a model, places anything or holds a key.
 
 export const NEWS_FEED_VERSION = 'feed-v3'
-export const FEED_READ_MS = 3 * 60_000
+/** The media feeds are read every minute (V9 Stage 2's line, from three before): a theft's first report is told within
+ * a minute of its feed carrying it. A read asks each feed only for what changed (its ETag or Last-Modified), so an
+ * unchanged feed answers 304 with nothing. */
+export const FEED_READ_MS = 60_000
+/** What the price did around a story is measured every three minutes, as when the feeds were read so. */
+export const REACTIONS_EVERY_MS = 3 * 60_000
 /** Stories kept on screen and in memory: a week of them. */
 export const FEED_KEEP_SECONDS = 7 * 86_400
 /** A story published this long before it was first read is old news reposted, or a backlog. */

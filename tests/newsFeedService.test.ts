@@ -14,9 +14,10 @@ const NOW = Date.parse('2026-10-06T12:00:00Z') / 1000
 const rig = vi.hoisted(() => ({
   dir: '',
   opened: [] as string[],
-  feeds: {} as Record<string, { status: number; body: string }>,
+  feeds: {} as Record<string, { status: number; body: string; etag?: string }>,
   candles: {} as Record<string, Candle[]>,
-  requests: [] as string[]
+  requests: [] as string[],
+  asked: [] as { url: string; headers: Record<string, string> }[]
 }))
 
 vi.mock('electron', () => ({
@@ -101,6 +102,7 @@ beforeAll(async () => {
   rig.feeds = {
     'https://www.coindesk.com/arc/outboundfeeds/rss': {
       status: 200,
+      etag: '"cd-1"',
       body: rss([
         { title: 'Coinbase will list SOL futures for US traders', link: 'https://www.coindesk.com/sol-futures', guid: 'sol-1', at: SOL_AT },
         { title: 'An older story', link: 'https://www.coindesk.com/old', guid: 'old-1', at: OLD_AT }
@@ -117,9 +119,13 @@ beforeAll(async () => {
     }
   }
   rig.candles = { SOLUSDT: minutes(SOL_AT), BTCUSDT: minutes(BTC_AT, { 15: 101.5, 60: 102, 240: 103 }) }
-  vi.stubGlobal('fetch', async (url: string) => {
+  vi.stubGlobal('fetch', async (url: string, init?: { headers?: Record<string, string> }) => {
     const feed = rig.feeds[url]
-    return { ok: feed !== undefined && feed.status === 200, status: feed?.status ?? 404, text: async () => feed?.body ?? '' }
+    const headers = init?.headers ?? {}
+    rig.asked.push({ url, headers })
+    // A feed asked with the ETag it last gave, and unchanged since, answers 304 with nothing.
+    if (feed !== undefined && feed.status === 200 && feed.etag !== undefined && headers['If-None-Match'] === feed.etag) return { ok: false, status: 304, headers: new Headers(), text: async () => '' }
+    return { ok: feed !== undefined && feed.status === 200, status: feed?.status ?? 404, headers: new Headers(feed?.etag === undefined ? {} : { etag: feed.etag }), text: async () => feed?.body ?? '' }
   })
   await startNewsFeed()
   await vi.waitFor(() => expect(getNewsFeedState().measured).toBe(1))
@@ -227,11 +233,39 @@ describe('the news feed', () => {
   })
 })
 
+describe('the reads', () => {
+  it("reads every minute, asks a feed only for what changed since, and measures the stories' prices every three minutes", async () => {
+    const coindesk = 'https://www.coindesk.com/arc/outboundfeeds/rss'
+    const stories = getNewsFeedState().stories.map((story) => story.id)
+    const measured = rig.requests.length
+    // A minute on the clock, and the read it starts done: its files are written in real time.
+    const minuteOn = async (sec: number): Promise<void> => {
+      await vi.advanceTimersByTimeAsync(60_000)
+      await vi.waitFor(() => expect(getNewsFeedState().sources[0].lastReadAt).toBe(sec))
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    rig.asked.length = 0
+    await minuteOn(NOW + 60)
+    // A minute on: every feed read again, CoinDesk with the ETag it gave, answering 304 and read as before.
+    expect(rig.asked.map((ask) => ask.url)).toEqual(FEED_SOURCES.map((source) => source.url))
+    expect(rig.asked.find((ask) => ask.url === coindesk)?.headers['If-None-Match']).toBe('"cd-1"')
+    expect(rig.asked.find((ask) => ask.url === 'https://decrypt.co/feed')?.headers['If-None-Match']).toBeUndefined()
+    expect(getNewsFeedState().sources.find((source) => source.id === 'coindesk')).toMatchObject({ ok: true, items: 2, error: null, lastReadAt: NOW + 60 })
+    expect(getNewsFeedState().stories.map((story) => story.id)).toEqual(stories)
+    // The prices around the stories wait their three minutes.
+    expect(rig.requests).toHaveLength(measured)
+    await minuteOn(NOW + 120)
+    expect(rig.requests).toHaveLength(measured)
+    await minuteOn(NOW + 180)
+    await vi.waitFor(() => expect(rig.requests.length).toBeGreaterThan(measured))
+  })
+})
+
 describe('the feeds dead', () => {
   it('is told once every feed has failed for half an hour, and not while one still answers', async () => {
     told.length = 0
     for (const url of Object.keys(rig.feeds)) rig.feeds[url] = { status: 503, body: '' }
-    // Ten reads, three minutes apart: the first nine are under half an hour since the last good read.
+    // Reads a minute apart: those under half an hour since the last good read tell nothing.
     await vi.advanceTimersByTimeAsync(27 * 60_000)
     expect(told).toEqual([])
     await vi.advanceTimersByTimeAsync(6 * 60_000)
