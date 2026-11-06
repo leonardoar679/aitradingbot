@@ -33,6 +33,7 @@ import { getLiveState, heldBook, readPassBooks, startLiveMarket } from './servic
 import { startExchangeHealth } from './services/exchangeHealthService'
 import { startNewsReader } from './services/newsService'
 import { startNewsFeed } from './services/newsFeedService'
+import { startIncidentVictims } from './services/incidentVictimsService'
 import { startAiAdditions } from './services/aiAdditionsService'
 import { startLiveUserStream } from './services/liveUserStreamService'
 import { startLiveReconcile } from './services/liveReconcileService'
@@ -319,10 +320,13 @@ if (!gotSingleInstanceLock) {
     // list, no key, no model, no order; started here only if it was left switched on. See
     // newsService.ts.
     void startNewsReader().catch((error) => console.error('News reader failed to start:', error))
-    // Reads four free media feeds every three minutes, sets Binance's announcements beside them, and
+    // Reads four free media feeds every minute, sets Binance's announcements beside them, and
     // measures what the price did around each story. Public data; no key, model or order. See
     // newsFeedService.ts.
     void startNewsFeed().catch((error) => console.error('News feed failed to start:', error))
+    // The table a hack's victim is named by, read again from DefiLlama's two public lists once it is
+    // a week old. See incidentVictimsService.ts.
+    void startIncidentVictims().catch((error) => console.error('The hack victims table failed to start:', error))
     // The AI additions that ask by themselves (shared/aiAdditions.ts): the news analyst, on each
     // story of high impact the feed reads -- only while the watch is on, within its own daily limit
     // and the budget. It places nothing. See aiAdditionsService.ts.

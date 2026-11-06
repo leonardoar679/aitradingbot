@@ -9,6 +9,7 @@
 
 import { extractArticle, type ExtractedArticle } from './articleExtract'
 import { pairRatesOf, type PairRates } from './forecast/pairRates'
+import { victimsOf, type VictimRow } from './incidentVictimsBuild'
 import { hyperliquidBoardRead, type HyperliquidBoardRead } from './traders/discovery'
 import { traderFileOf, type TraderFileRead } from './traders/traderFile'
 import { traderTestsOf, type TraderTestsResult } from './traders/traderTests'
@@ -31,6 +32,9 @@ export interface TaskTable {
   /** Hyperliquid's leaderboard read (V9 Stage 3; shared/traders/discovery.ts): the payload is its text, about 39 MB; the
    * answer is how many rows it held and those who pass the finding rule. */
   traderBoard: (payload: unknown) => HyperliquidBoardRead
+  /** A hack's victims by name read again (V9 Stage 8; shared/incidentVictimsBuild.ts): the payload is DefiLlama's two
+   * lists' texts, the protocols' about 10 MB, and the tokens Binance trades against USDT. */
+  incidentVictims: (payload: unknown) => VictimRow[]
 }
 
 export type TaskName = keyof TaskTable
@@ -54,6 +58,15 @@ export const TASKS: TaskTable = {
     const input = payload as { text?: unknown } | null
     if (typeof input?.text !== 'string') throw new Error("Hyperliquid's leaderboard is read from its text.")
     return hyperliquidBoardRead(input.text)
+  },
+  incidentVictims: (payload) => {
+    const input = payload as { protocolsText?: unknown; chainsText?: unknown; tradable?: unknown } | null
+    const tradable = input?.tradable
+    if (typeof input?.protocolsText !== 'string' || typeof input.chainsText !== 'string' || !Array.isArray(tradable) || !tradable.every((token) => typeof token === 'string')) throw new Error("A hack's victims are read from DefiLlama's two lists and the tokens Binance trades.")
+    const protocols: unknown = JSON.parse(input.protocolsText)
+    const chains: unknown = JSON.parse(input.chainsText)
+    if (!Array.isArray(protocols) || !Array.isArray(chains)) throw new Error("DefiLlama's lists are not lists.")
+    return victimsOf(protocols, chains, new Set(tradable as string[]))
   }
 }
 

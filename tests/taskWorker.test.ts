@@ -30,8 +30,25 @@ describe('the tasks', () => {
     expect(runTask({ id: 1, task: 'echo', payload: { a: 1 } })).toEqual({ id: 1, ok: true, result: { a: 1 } })
     expect(runTask({ id: 2, task: 'toString', payload: null })).toEqual({ id: 2, ok: false, message: 'No task is named toString' })
     expect(runTask({ id: 3, task: '__proto__', payload: null }).ok).toBe(false)
-    // Since V8 Stage 4 a pasted article's page is read in the worker too, and since Stage 10 a pair's ninety days.
-    expect(Object.keys(TASKS)).toEqual(['echo', 'extractArticle', 'traderTests', 'traderFile', 'pairRates', 'traderBoard'])
+    // Since V8 Stage 4 a pasted article's page is read in the worker too, and since Stage 10 a pair's ninety days; since
+    // V9 Hyperliquid's leaderboard, and DefiLlama's lists a hack's victims are named from.
+    expect(Object.keys(TASKS)).toEqual(['echo', 'extractArticle', 'traderTests', 'traderFile', 'pairRates', 'traderBoard', 'incidentVictims'])
+  })
+
+  it("reads a hack's victims from DefiLlama's two lists' texts and Binance's tokens, and refuses anything else", () => {
+    const protocols = JSON.stringify([{ name: 'Aave V3', symbol: 'AAVE', tvl: 3e10 }])
+    const chains = JSON.stringify([{ name: 'Initia', tokenSymbol: 'INIT' }])
+    expect(runTask({ id: 4, task: 'incidentVictims', payload: { protocolsText: protocols, chainsText: chains, tradable: ['AAVE', 'INIT'] } })).toEqual({
+      id: 4,
+      ok: true,
+      result: [
+        ['aave', 'AAVE', 'protocol'],
+        ['aave v3', 'AAVE', 'protocol'],
+        ['initia', 'INIT', 'chain']
+      ]
+    })
+    expect(runTask({ id: 5, task: 'incidentVictims', payload: { protocolsText: protocols, chainsText: '{}', tradable: [] } }).ok).toBe(false)
+    expect(runTask({ id: 6, task: 'incidentVictims', payload: { protocolsText: protocols, tradable: ['AAVE'] } }).ok).toBe(false)
   })
 
   it('says what failed when a task throws', () => {

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import victimsFile from '../shared/incidentVictims.json'
-import { EXCHANGES, INCIDENT_LINES, amountsOf, incidentKeys, incidentsOf, mainClause, readIncident, victimNames, victimOf } from '../shared/incidents'
+import { COMMITTED_VICTIMS, EXCHANGES, INCIDENT_LINES, amountsOf, incidentKeys, incidentsOf, mainClause, readIncident, setVictims, victimNames, victimOf } from '../shared/incidents'
 import { assetDictionary, eventTypeOf, namedTickers, readStory, type FeedStory } from '../shared/newsFeed'
 
 // shared/incidents.ts: a hack story read for its incident -- its victim, its sum, and whether it is the first report
@@ -222,10 +222,20 @@ describe('the victims on file (shared/incidentVictims.json, research/fetch-incid
     expect(EXCHANGES.filter((exchange) => exchange.top).map((exchange) => exchange.name)).toEqual(['Binance', 'Coinbase', 'OKX', 'Bybit', 'Upbit', 'Kraken', 'Bitget'])
   })
 
-  it('is compiled by a script that reads public lists and writes the one file', () => {
-    const script = readFileSync(join(__dirname, '..', 'research', 'fetch-incident-victims.mjs'), 'utf-8')
+  it('is compiled by a script that reads public lists and writes the one file, by the rules the app reads them again by', () => {
+    const script = readFileSync(join(__dirname, '..', 'research', 'fetch-incident-victims.ts'), 'utf-8')
     expect(script).toContain("'https://api.llama.fi/protocols'")
     expect(script).toContain("OUT ?? 'shared/incidentVictims.json'")
+    expect(script).toContain("from '../shared/incidentVictimsBuild'")
     expect(script).not.toMatch(/apiKey|credentials|\/order|newOrder/)
+  })
+
+  it('reads the stories by the table the app read again, and by the committed one when told so', () => {
+    const headline = 'Zyntharion exploited for $12 million in a price oracle attack'
+    expect(victimOf(headline)).toBeNull()
+    setVictims([...COMMITTED_VICTIMS, ['zyntharion', 'ZYN', 'protocol']])
+    expect(victimOf(headline)).toMatchObject({ written: 'Zyntharion', tight: true, victim: { name: 'zyntharion', token: 'ZYN', kind: 'protocol' } })
+    setVictims(null)
+    expect(victimOf(headline)).toBeNull()
   })
 })

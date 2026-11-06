@@ -714,9 +714,18 @@ describe('AI code has no route to a real order', () => {
     // translate (V6 Stage 14): its words said in a language, English unless handed another. incidents (V9 Stage 2): a
     // hack is told by its incident.
     expect(importsOf(join(ROOT, 'shared', 'alerts.ts')).sort()).toEqual(['incidents', 'ipc', 'newsFeed', 'translate'])
-    // The incident reader reads headlines against its victims' names, compiled into a file (V9 Stage 2).
-    expect(importsOf(join(ROOT, 'shared', 'incidents.ts')).sort()).toEqual(['incidentVictims.json', 'newsFeed'])
-    for (const file of ['newsFeed.ts', 'moveExplanation.ts', 'alerts.ts', 'incidents.ts']) {
+    // The incident reader reads headlines against its victims' names, compiled into a file (V9 Stage 2), by rules of
+    // their own (V9 Stage 8: their row's type), which import nothing.
+    expect(importsOf(join(ROOT, 'shared', 'incidents.ts')).sort()).toEqual(['incidentVictims.json', 'incidentVictimsBuild', 'newsFeed'])
+    expect(importsOf(join(ROOT, 'shared', 'incidentVictimsBuild.ts'))).toEqual([])
+    // The table read again every week (V9 Stage 8): two public lists in the background lane, the table made in the
+    // worker, kept by an atomic write, Binance's pairs the app holds. No order, no key, no model.
+    const victims = join(SERVICES, 'incidentVictimsService.ts')
+    expect(importsOf(victims).filter((name) => LIVE_MODULES.has(name))).toEqual([])
+    expect(importsOf(victims).filter((name) => aiModuleNames.has(name))).toEqual([])
+    expect(importsOf(victims).sort()).toEqual(['atomicWrite', 'electron', 'httpPacing', 'incidentVictimsBuild', 'incidents', 'marketService', 'path', 'promises', 'taskWorkerService'])
+    expect(readFileSync(victims, 'utf-8')).not.toMatch(/resolveTradingEndpoint|credentials|apiKey|setSettings/)
+    for (const file of ['newsFeed.ts', 'moveExplanation.ts', 'alerts.ts', 'incidents.ts', 'incidentVictimsBuild.ts']) {
       expect(readFileSync(join(ROOT, 'shared', file), 'utf-8'), file).not.toMatch(/window\.|ipcRenderer|electron\//)
     }
     const calls = (path: string): string[] => {

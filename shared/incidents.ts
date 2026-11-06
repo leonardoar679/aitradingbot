@@ -1,4 +1,5 @@
 import victimsFile from './incidentVictims.json'
+import type { VictimRow } from './incidentVictimsBuild'
 import { impactOf, type AssetDictionary, type ReadStory, type StoryAsset, type StoryIncident } from './newsFeed'
 
 // A HACK, READ FOR ITS INCIDENT (V9 Stage 2, 6 November 2026).
@@ -19,7 +20,7 @@ import { impactOf, type AssetDictionary, type ReadStory, type StoryAsset, type S
 //      "days after ..." that dates an old one;
 //   2. its victim: who lost the funds, by the names of the exchanges below and of the protocols and chains whose
 //      own token trades on Binance (shared/incidentVictims.json, compiled from DefiLlama by
-//      research/fetch-incident-victims.mjs). A victim named at its loss ("Binance drained", "the Binance hack",
+//      research/fetch-incident-victims.ts; read again every week by the app, setVictims). A victim named at its loss ("Binance drained", "the Binance hack",
 //      "Initia halts network") is read tightly, and only then its token is the story's coin and a top exchange's
 //      hack concerns the whole market; one named only somewhere in the headline is read loosely;
 //   3. the sum: the largest dollar amount of the main clause;
@@ -108,10 +109,12 @@ export interface VictimName {
   top: boolean
 }
 
-type VictimRow = [string, string, string]
+/** The committed table (shared/incidentVictims.json) and the day its lists were read. */
+export const COMMITTED_VICTIMS: readonly VictimRow[] = victimsFile.victims as unknown as VictimRow[]
+export const COMMITTED_VICTIMS_READ_AT: string = victimsFile.readAt
 
 /** The names: every exchange's, then the protocols' and chains' from the compiled file, an exchange's name first. */
-export function victimNames(rows: readonly VictimRow[] = victimsFile.victims as unknown as VictimRow[]): VictimName[] {
+export function victimNames(rows: readonly VictimRow[] = COMMITTED_VICTIMS): VictimName[] {
   const names: VictimName[] = EXCHANGES.flatMap((exchange) => exchange.names.map((name) => ({ name, label: exchange.name, token: exchange.token, kind: 'exchange' as const, top: exchange.top })))
   const taken = new Set(names.map((entry) => entry.name))
   for (const [name, token, kind] of rows) {
@@ -123,7 +126,13 @@ export function victimNames(rows: readonly VictimRow[] = victimsFile.victims as 
   return names.sort((a, b) => b.name.length - a.name.length || a.name.localeCompare(b.name))
 }
 
-const NAMES = victimNames()
+let NAMES = victimNames()
+
+/** The table the stories are read by from now on: the app's weekly reading of DefiLlama's lists
+ * (the main process's incidentVictimsService.ts), or, given null, the committed one. */
+export function setVictims(rows: readonly VictimRow[] | null): void {
+  NAMES = victimNames(rows ?? COMMITTED_VICTIMS)
+}
 
 // ---------------------------------------------------------------------------------------------
 // The words.
