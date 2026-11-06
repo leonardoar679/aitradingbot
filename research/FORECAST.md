@@ -1175,6 +1175,13 @@ estimate of their positions. A clone runs on paper where a rule fitted (thank yo
 REPLICABLE. Following leaders by profit picks up traders of markets the copy book cannot trade: two of the five
 Hyperliquid names trade only its stock and commodity markets.
 
+**The found traders taken together.** V9-COPY-FORWARD registered that the found traders' verdicts be reported with
+the number analysed and the Benjamini-Hochberg adjustment across all of them, since they were picked for the profit the
+tests read. Found for you showed the first only, until 55bd81e (after the run's build): each analysed one's skill p,
+the larger of its two nulls', 1 where the test ran none, is now adjusted across all the found traders analysed, a
+trader pasted by hand never among them, and a SKILL is counted beyond chance only where its adjusted p is within the
+test's 0.01. The run's report gives the same count for the traders the run found.
+
 **Three of Stage 2's lines, late or left.** The feeds were to be read every minute, from three; the victims' names read
 again from DefiLlama every week; and a story's severity worked out in the main process. The first two were built only
 after the run's build, so the run reads the feeds every three minutes and names victims by the table of 6 November
