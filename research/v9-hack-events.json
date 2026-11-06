@@ -1,0 +1,3863 @@
+{
+ "version": "v9-hack-events-v1",
+ "readAt": "2026-11-06T04:39:31.737Z",
+ "sources": [
+  "https://api.llama.fi/hacks",
+  "https://api.llama.fi/protocols",
+  "https://fapi.binance.com/fapi/v1/exchangeInfo",
+  "https://api.bitget.com/api/v2/mix/market/contracts?productType=USDT-FUTURES"
+ ],
+ "minUsd": 5000000,
+ "from": "2020-01-01",
+ "to": "2026-10-31",
+ "counts": {
+  "hacks": 283,
+  "kept": 35,
+  "noToken": 144,
+  "noPerp": 104
+ },
+ "events": [
+  {
+   "date": "2021-02-05",
+   "day": 1612483200,
+   "name": "Yearn Finance",
+   "amountUsd": 11000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "YFI",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol Yearn Finance",
+   "venue": "binance",
+   "symbol": "YFIUSDT",
+   "listedAt": "2020-08-31",
+   "multiple": 1
+  },
+  {
+   "date": "2021-07-15",
+   "day": 1626307200,
+   "name": "THORChain DEX",
+   "amountUsd": 5000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": true,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "RUNE",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol THORChain DEX",
+   "venue": "binance",
+   "symbol": "RUNEUSDT",
+   "listedAt": "2020-09-04",
+   "multiple": 1
+  },
+  {
+   "date": "2021-07-22",
+   "day": 1626912000,
+   "name": "THORChain DEX",
+   "amountUsd": 8000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": true,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "RUNE",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol THORChain DEX",
+   "venue": "binance",
+   "symbol": "RUNEUSDT",
+   "listedAt": "2020-09-04",
+   "multiple": 1
+  },
+  {
+   "date": "2021-09-29",
+   "day": 1632873600,
+   "name": "Compound V2",
+   "amountUsd": 147000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "COMP",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol Compound V2",
+   "venue": "binance",
+   "symbol": "COMPUSDT",
+   "listedAt": "2020-06-30",
+   "multiple": 1
+  },
+  {
+   "date": "2022-06-23",
+   "day": 1655942400,
+   "name": "Harmony Bridge",
+   "amountUsd": 100000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": true,
+   "chain": [
+    "Ethereum",
+    "BSC"
+   ],
+   "token": "ONE",
+   "rule": "hand",
+   "ruleWhy": "Harmony's own Horizon bridge",
+   "venue": "binance",
+   "symbol": "ONEUSDT",
+   "listedAt": "2021-03-17",
+   "multiple": 1
+  },
+  {
+   "date": "2022-10-06",
+   "day": 1665014400,
+   "name": "Binance Bridge",
+   "amountUsd": 570000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": true,
+   "chain": [
+    "BSC"
+   ],
+   "token": "BNB",
+   "rule": "hand",
+   "ruleWhy": "Binance's BNB Chain bridge (BSC Token Hub), 6 October 2022",
+   "venue": "binance",
+   "symbol": "BNBUSDT",
+   "listedAt": "2020-02-10",
+   "multiple": 1
+  },
+  {
+   "date": "2022-12-02",
+   "day": 1669939200,
+   "name": "Ankr",
+   "amountUsd": 5000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "BSC"
+   ],
+   "token": "ANKR",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol Ankr",
+   "venue": "binance",
+   "symbol": "ANKRUSDT",
+   "listedAt": "2021-01-25",
+   "multiple": 1
+  },
+  {
+   "date": "2023-04-13",
+   "day": 1681344000,
+   "name": "Yearn Finance",
+   "amountUsd": 11539000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "YFI",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol Yearn Finance",
+   "venue": "binance",
+   "symbol": "YFIUSDT",
+   "listedAt": "2020-08-31",
+   "multiple": 1
+  },
+  {
+   "date": "2023-07-30",
+   "day": 1690675200,
+   "name": "Curve DEX",
+   "amountUsd": 61700000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "CRV",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol Curve DEX",
+   "venue": "binance",
+   "symbol": "CRVUSDT",
+   "listedAt": "2020-09-01",
+   "multiple": 1
+  },
+  {
+   "date": "2023-11-18",
+   "day": 1700265600,
+   "name": "dYdX V3",
+   "amountUsd": 9000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "DYDX",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol dYdX V3",
+   "venue": "binance",
+   "symbol": "DYDXUSDT",
+   "listedAt": "2021-09-09",
+   "multiple": 1
+  },
+  {
+   "date": "2023-11-22",
+   "day": 1700611200,
+   "name": "KyberSwap Elastic",
+   "amountUsd": 48000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "Base",
+    "Polygon",
+    "Optimism",
+    "Arbitrum"
+   ],
+   "token": "KNC",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol KyberSwap Elastic",
+   "venue": "binance",
+   "symbol": "KNCUSDT",
+   "listedAt": "2020-06-22",
+   "multiple": 1
+  },
+  {
+   "date": "2024-01-30",
+   "day": 1706572800,
+   "name": "Abracadabra Spell",
+   "amountUsd": 6500000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "SPELL",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol Abracadabra Spell",
+   "venue": "binance",
+   "symbol": "SPELLUSDT",
+   "listedAt": "2022-09-05",
+   "multiple": 1
+  },
+  {
+   "date": "2024-03-05",
+   "day": 1709596800,
+   "name": "WOOFi Swap",
+   "amountUsd": 8750000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Arbitrum"
+   ],
+   "token": "WOO",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol WOOFi Swap",
+   "venue": "binance",
+   "symbol": "WOOUSDT",
+   "listedAt": "2022-04-07",
+   "multiple": 1
+  },
+  {
+   "date": "2024-05-20",
+   "day": 1716163200,
+   "name": "Gala",
+   "amountUsd": 22300000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "GALA",
+   "rule": "name",
+   "ruleWhy": "the victims compiled from DefiLlama (shared/incidentVictims.json)",
+   "venue": "binance",
+   "symbol": "GALAUSDT",
+   "listedAt": "2021-09-17",
+   "multiple": 1
+  },
+  {
+   "date": "2024-06-09",
+   "day": 1717891200,
+   "name": "Loopring",
+   "amountUsd": 5000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Loopring"
+   ],
+   "token": "LRC",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol Loopring",
+   "venue": "binance",
+   "symbol": "LRCUSDT",
+   "listedAt": "2020-10-19",
+   "multiple": 1
+  },
+  {
+   "date": "2024-07-02",
+   "day": 1719878400,
+   "name": "Bittensor",
+   "amountUsd": 8000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [],
+   "token": "TAO",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol Bittensor",
+   "venue": "binance",
+   "symbol": "TAOUSDT",
+   "listedAt": "2024-04-11",
+   "multiple": 1
+  },
+  {
+   "date": "2024-10-05",
+   "day": 1728086400,
+   "name": "EigenLayer",
+   "amountUsd": 5700000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "EIGEN",
+   "rule": "name",
+   "ruleWhy": "the victims compiled from DefiLlama (shared/incidentVictims.json)",
+   "venue": "binance",
+   "symbol": "EIGENUSDT",
+   "listedAt": "2024-10-01",
+   "multiple": 1
+  },
+  {
+   "date": "2024-10-16",
+   "day": 1729036800,
+   "name": "Radiant V2",
+   "amountUsd": 50000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "BSC",
+    "Arbitrum"
+   ],
+   "token": "RDNT",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol Radiant V2",
+   "venue": "binance",
+   "symbol": "RDNTUSDT",
+   "listedAt": "2023-04-04",
+   "multiple": 1
+  },
+  {
+   "date": "2025-03-07",
+   "day": 1741305600,
+   "name": "1inch Swap",
+   "amountUsd": 5000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "1INCH",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol 1inch Swap",
+   "venue": "binance",
+   "symbol": "1INCHUSDT",
+   "listedAt": "2020-12-25",
+   "multiple": 1
+  },
+  {
+   "date": "2025-03-25",
+   "day": 1742860800,
+   "name": "Abracadabra Spell",
+   "amountUsd": 13000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Arbitrum"
+   ],
+   "token": "SPELL",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol Abracadabra Spell",
+   "venue": "binance",
+   "symbol": "SPELLUSDT",
+   "listedAt": "2022-09-05",
+   "multiple": 1
+  },
+  {
+   "date": "2025-05-22",
+   "day": 1747872000,
+   "name": "Cetus CLMM",
+   "amountUsd": 223000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Sui"
+   ],
+   "token": "CETUS",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol Cetus CLMM",
+   "venue": "binance",
+   "symbol": "CETUSUSDT",
+   "listedAt": "2024-11-06",
+   "multiple": 1
+  },
+  {
+   "date": "2025-07-09",
+   "day": 1752019200,
+   "name": "GMX V1 EVM",
+   "amountUsd": 42000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Arbitrum"
+   ],
+   "token": "GMX",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol GMX V1 EVM",
+   "venue": "binance",
+   "symbol": "GMXUSDT",
+   "listedAt": "2023-02-16",
+   "multiple": 1
+  },
+  {
+   "date": "2025-07-24",
+   "day": 1753315200,
+   "name": "WOO X",
+   "amountUsd": 14000000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Bitcoin",
+    "Ethereum",
+    "Arbitrum",
+    "BSC"
+   ],
+   "token": "WOO",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol WOO X",
+   "venue": "binance",
+   "symbol": "WOOUSDT",
+   "listedAt": "2022-04-07",
+   "multiple": 1
+  },
+  {
+   "date": "2025-09-14",
+   "day": 1757808000,
+   "name": "Yala",
+   "amountUsd": 7640000,
+   "targetType": "Token",
+   "bridgeHack": false,
+   "chain": [
+    "Solana",
+    "Ethereum"
+   ],
+   "token": "YALA",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol Yala",
+   "venue": "binance",
+   "symbol": "YALAUSDT",
+   "listedAt": "2025-08-07",
+   "multiple": 1
+  },
+  {
+   "date": "2025-09-22",
+   "day": 1758499200,
+   "name": "UXLINK",
+   "amountUsd": 11300000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "Arbitrum"
+   ],
+   "token": "UXLINK",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol UXLINK",
+   "venue": "binance",
+   "symbol": "UXLINKUSDT",
+   "listedAt": "2024-09-15",
+   "multiple": 1
+  },
+  {
+   "date": "2025-11-03",
+   "day": 1762128000,
+   "name": "Balancer V2",
+   "amountUsd": 128000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "Arbitrum",
+    "Base",
+    "Polygon",
+    "Sonic",
+    "Optimism"
+   ],
+   "token": "BAL",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol Balancer V2",
+   "venue": "binance",
+   "symbol": "BALUSDT",
+   "listedAt": "2020-09-01",
+   "multiple": 1
+  },
+  {
+   "date": "2025-11-30",
+   "day": 1764460800,
+   "name": "Yearn Ether",
+   "amountUsd": 9000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "YFI",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol Yearn Ether",
+   "venue": "binance",
+   "symbol": "YFIUSDT",
+   "listedAt": "2020-08-31",
+   "multiple": 1
+  },
+  {
+   "date": "2025-12-25",
+   "day": 1766620800,
+   "name": "Trust Wallet Wallet",
+   "amountUsd": 8500000,
+   "targetType": "Wallet",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "Bitcoin",
+    "Solana"
+   ],
+   "token": "TWT",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol Trust Wallet Wallet",
+   "venue": "binance",
+   "symbol": "TWTUSDT",
+   "listedAt": "2023-11-03",
+   "multiple": 1
+  },
+  {
+   "date": "2026-01-21",
+   "day": 1768953600,
+   "name": "Saga",
+   "amountUsd": 7000000,
+   "targetType": "Chain",
+   "bridgeHack": false,
+   "chain": [
+    "Saga"
+   ],
+   "token": "SAGA",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol Saga",
+   "venue": "binance",
+   "symbol": "SAGAUSDT",
+   "listedAt": "2024-04-09",
+   "multiple": 1
+  },
+  {
+   "date": "2026-03-21",
+   "day": 1774051200,
+   "name": "Resolv USR",
+   "amountUsd": 24500000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "RESOLV",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol Resolv USR",
+   "venue": "binance",
+   "symbol": "RESOLVUSDT",
+   "listedAt": "2025-06-10",
+   "multiple": 1
+  },
+  {
+   "date": "2026-04-01",
+   "day": 1775001600,
+   "name": "Drift Trade",
+   "amountUsd": 295000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Solana"
+   ],
+   "token": "DRIFT",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol Drift Trade",
+   "venue": "binance",
+   "symbol": "DRIFTUSDT",
+   "listedAt": "2024-11-08",
+   "multiple": 1
+  },
+  {
+   "date": "2026-04-18",
+   "day": 1776470400,
+   "name": "Kelp",
+   "amountUsd": 293000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": true,
+   "chain": [
+    "Ethereum",
+    "Arbitrum"
+   ],
+   "token": "KERNEL",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol Kelp",
+   "venue": "binance",
+   "symbol": "KERNELUSDT",
+   "listedAt": "2025-04-14",
+   "multiple": 1
+  },
+  {
+   "date": "2026-05-15",
+   "day": 1778803200,
+   "name": "THORChain DEX",
+   "amountUsd": 10700000,
+   "targetType": "Chain",
+   "bridgeHack": true,
+   "chain": [
+    "Bitcoin",
+    "Ethereum",
+    "Base",
+    "BSC"
+   ],
+   "token": "RUNE",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol THORChain DEX",
+   "venue": "binance",
+   "symbol": "RUNEUSDT",
+   "listedAt": "2020-09-04",
+   "multiple": 1
+  },
+  {
+   "date": "2026-06-08",
+   "day": 1780876800,
+   "name": "Humanity",
+   "amountUsd": 32000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "BSC"
+   ],
+   "token": "H",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol Humanity",
+   "venue": "binance",
+   "symbol": "HUSDT",
+   "listedAt": "2025-06-25",
+   "multiple": 1
+  },
+  {
+   "date": "2026-10-29",
+   "day": 1793232000,
+   "name": "Binance CEX",
+   "amountUsd": 6360000000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "Bitcoin",
+    "TRON",
+    "Avalanche",
+    "Optimism",
+    "Arbitrum",
+    "Base"
+   ],
+   "token": "BNB",
+   "rule": "id",
+   "ruleWhy": "DefiLlama's protocol Binance CEX",
+   "venue": "binance",
+   "symbol": "BNBUSDT",
+   "listedAt": "2020-02-10",
+   "multiple": 1
+  }
+ ],
+ "leftOut": [
+  {
+   "date": "2020-03-12",
+   "day": 1583971200,
+   "name": "MakerDAO",
+   "amountUsd": 8320000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2020-04-19",
+   "day": 1587254400,
+   "name": "dForce Lending",
+   "amountUsd": 25000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "DF",
+   "why": "no USDT perpetual of DF on Binance or Bitget listed before the day (by id: DefiLlama's protocol dForce Lending)"
+  },
+  {
+   "date": "2020-08-18",
+   "day": 1597708800,
+   "name": "OKEx",
+   "amountUsd": 5600000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum Classic"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2020-09-08",
+   "day": 1599523200,
+   "name": "Eterbase",
+   "amountUsd": 5400000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Bitcoin",
+    "Ethereum",
+    "XRP",
+    "Tezos",
+    "Algorand",
+    "TRON"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2020-09-28",
+   "day": 1601251200,
+   "name": "Eminence",
+   "amountUsd": 15000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2020-09-29",
+   "day": 1601337600,
+   "name": "KuCoin",
+   "amountUsd": 281000000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "KCS",
+   "why": "no USDT perpetual of KCS on Binance or Bitget listed before the day (by hand: KuCoin's exchange token)"
+  },
+  {
+   "date": "2020-10-26",
+   "day": 1603670400,
+   "name": "Harvest Finance",
+   "amountUsd": 24000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "FARM",
+   "why": "no USDT perpetual of FARM on Binance or Bitget listed before the day (by id: DefiLlama's protocol Harvest Finance)"
+  },
+  {
+   "date": "2020-11-14",
+   "day": 1605312000,
+   "name": "ValueDefi",
+   "amountUsd": 7400000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "VALUE",
+   "why": "no USDT perpetual of VALUE on Binance or Bitget listed before the day (by id: DefiLlama's protocol ValueDefi)"
+  },
+  {
+   "date": "2020-11-17",
+   "day": 1605571200,
+   "name": "Origin Protocol",
+   "amountUsd": 7700000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2020-11-22",
+   "day": 1606003200,
+   "name": "Pickle",
+   "amountUsd": 19700000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "PICKLE",
+   "why": "no USDT perpetual of PICKLE on Binance or Bitget listed before the day (by id: DefiLlama's protocol Pickle)"
+  },
+  {
+   "date": "2020-12-02",
+   "day": 1606867200,
+   "name": "Compounder Finance",
+   "amountUsd": 12464316,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2020-12-08",
+   "day": 1607385600,
+   "name": "Aeternity",
+   "amountUsd": 5201000,
+   "targetType": "Chain",
+   "bridgeHack": false,
+   "chain": [
+    "Aeternity"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2020-12-14",
+   "day": 1607904000,
+   "name": "Nexus Mutual",
+   "amountUsd": 8000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2020-12-18",
+   "day": 1608249600,
+   "name": "Warp Protocol",
+   "amountUsd": 7800000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "WARP",
+   "why": "no USDT perpetual of WARP on Binance or Bitget listed before the day (by id: DefiLlama's protocol Warp Protocol)"
+  },
+  {
+   "date": "2020-12-21",
+   "day": 1608508800,
+   "name": "Exmo",
+   "amountUsd": 10500000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Multiple"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2020-12-28",
+   "day": 1609113600,
+   "name": "LuBian",
+   "amountUsd": 3500000000,
+   "targetType": "Other",
+   "bridgeHack": false,
+   "chain": [
+    "Bitcoin"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2020-12-29",
+   "day": 1609200000,
+   "name": "Cover Protocol",
+   "amountUsd": 9400000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "COVER",
+   "why": "no USDT perpetual of COVER on Binance or Bitget listed before the day (by id: DefiLlama's protocol Cover Protocol)"
+  },
+  {
+   "date": "2021-02-13",
+   "day": 1613174400,
+   "name": "Alpha Finance",
+   "amountUsd": 37500000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2021-02-27",
+   "day": 1614384000,
+   "name": "Furucombo",
+   "amountUsd": 14000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "COMBO",
+   "why": "no USDT perpetual of COMBO on Binance or Bitget listed before the day (by id: DefiLlama's protocol Furucombo)"
+  },
+  {
+   "date": "2021-03-04",
+   "day": 1614816000,
+   "name": "Meerkat Finance",
+   "amountUsd": 31000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "BSC"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2021-03-05",
+   "day": 1614902400,
+   "name": "Paid Network",
+   "amountUsd": 27000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2021-03-14",
+   "day": 1615680000,
+   "name": "Roll",
+   "amountUsd": 5700000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2021-03-15",
+   "day": 1615766400,
+   "name": "TSD (True Seigniorage Dollar)",
+   "amountUsd": 7095000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "BSC"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2021-04-19",
+   "day": 1618790400,
+   "name": "EasyFi",
+   "amountUsd": 59000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Polygon"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2021-04-28",
+   "day": 1619568000,
+   "name": "Uranium Finance",
+   "amountUsd": 57200000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "BSC"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2021-05-02",
+   "day": 1619913600,
+   "name": "Spartan",
+   "amountUsd": 30500000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "BSC"
+   ],
+   "token": "SPARTA",
+   "why": "no USDT perpetual of SPARTA on Binance or Bitget listed before the day (by id: DefiLlama's protocol Spartan)"
+  },
+  {
+   "date": "2021-05-05",
+   "day": 1620172800,
+   "name": "ValueDefi",
+   "amountUsd": 10000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "BSC"
+   ],
+   "token": "VALUE",
+   "why": "no USDT perpetual of VALUE on Binance or Bitget listed before the day (by id: DefiLlama's protocol ValueDefi)"
+  },
+  {
+   "date": "2021-05-07",
+   "day": 1620345600,
+   "name": "ValueDefi",
+   "amountUsd": 11000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "BSC"
+   ],
+   "token": "VALUE",
+   "why": "no USDT perpetual of VALUE on Binance or Bitget listed before the day (by id: DefiLlama's protocol ValueDefi)"
+  },
+  {
+   "date": "2021-05-08",
+   "day": 1620432000,
+   "name": "Rari Capital",
+   "amountUsd": 10000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "RGT",
+   "why": "no USDT perpetual of RGT on Binance or Bitget listed before the day (by id: DefiLlama's protocol Rari Capital)"
+  },
+  {
+   "date": "2021-05-12",
+   "day": 1620777600,
+   "name": "xToken",
+   "amountUsd": 24000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "XTK",
+   "why": "no USDT perpetual of XTK on Binance or Bitget listed before the day (by id: DefiLlama's protocol xToken)"
+  },
+  {
+   "date": "2021-05-14",
+   "day": 1620950400,
+   "name": "flash.sx / vaults.sx",
+   "amountUsd": 13000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "EOS"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2021-05-17",
+   "day": 1621209600,
+   "name": "BearnFi",
+   "amountUsd": 18000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "BSC"
+   ],
+   "token": "BFI",
+   "why": "no USDT perpetual of BFI on Binance or Bitget listed before the day (by id: DefiLlama's protocol BearnFi)"
+  },
+  {
+   "date": "2021-05-17",
+   "day": 1621209600,
+   "name": "FinNexus",
+   "amountUsd": 7000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "BSC"
+   ],
+   "token": "FNX",
+   "why": "no USDT perpetual of FNX on Binance or Bitget listed before the day (by id: DefiLlama's protocol FinNexus)"
+  },
+  {
+   "date": "2021-05-18",
+   "day": 1621296000,
+   "name": "Venus Protocol",
+   "amountUsd": 100000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "BSC"
+   ],
+   "token": "XVS",
+   "why": "no USDT perpetual of XVS on Binance or Bitget listed before the day (by name: the victims compiled from DefiLlama (shared/incidentVictims.json))"
+  },
+  {
+   "date": "2021-05-19",
+   "day": 1621382400,
+   "name": "Bunny",
+   "amountUsd": 45000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "BSC"
+   ],
+   "token": "BUNNY",
+   "why": "no USDT perpetual of BUNNY on Binance or Bitget listed before the day (by id: DefiLlama's protocol Bunny)"
+  },
+  {
+   "date": "2021-05-28",
+   "day": 1622160000,
+   "name": "BurgerSwap",
+   "amountUsd": 7200000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "BSC"
+   ],
+   "token": "BURGER",
+   "why": "no USDT perpetual of BURGER on Binance or Bitget listed before the day (by id: DefiLlama's protocol BurgerSwap)"
+  },
+  {
+   "date": "2021-05-29",
+   "day": 1622246400,
+   "name": "Belt Finance",
+   "amountUsd": 6300000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "BSC"
+   ],
+   "token": "BELT",
+   "why": "no USDT perpetual of BELT on Binance or Bitget listed before the day (by id: DefiLlama's protocol Belt Finance)"
+  },
+  {
+   "date": "2021-06-16",
+   "day": 1623801600,
+   "name": "Alchemix V2",
+   "amountUsd": 6500000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "ALCX",
+   "why": "no USDT perpetual of ALCX on Binance or Bitget listed before the day (by id: DefiLlama's protocol Alchemix V2)"
+  },
+  {
+   "date": "2021-06-21",
+   "day": 1624233600,
+   "name": "StakeHound / Fireblocks",
+   "amountUsd": 72000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2021-06-23",
+   "day": 1624406400,
+   "name": "StableMagnet",
+   "amountUsd": 27000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "BSC"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2021-07-03",
+   "day": 1625270400,
+   "name": "Haven Protocol",
+   "amountUsd": 8187000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Haven"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2021-07-10",
+   "day": 1625875200,
+   "name": "Multichain",
+   "amountUsd": 7900000,
+   "targetType": "CEX",
+   "bridgeHack": true,
+   "chain": [
+    "Ethereum",
+    "BSC",
+    "Fantom"
+   ],
+   "token": "MULTI",
+   "why": "no USDT perpetual of MULTI on Binance or Bitget listed before the day (by hand: Multichain's token)"
+  },
+  {
+   "date": "2021-07-15",
+   "day": 1626307200,
+   "name": "Bondly",
+   "amountUsd": 5900000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2021-08-03",
+   "day": 1627948800,
+   "name": "Popsicle Finance",
+   "amountUsd": 20700000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "ICE",
+   "why": "no USDT perpetual of ICE on Binance or Bitget listed before the day (by id: DefiLlama's protocol Popsicle Finance)"
+  },
+  {
+   "date": "2021-08-10",
+   "day": 1628553600,
+   "name": "Poly Network",
+   "amountUsd": 611000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": true,
+   "chain": [
+    "Ethereum",
+    "BSC",
+    "Polygon"
+   ],
+   "why": "Poly Network had no token of its own"
+  },
+  {
+   "date": "2021-08-10",
+   "day": 1628553600,
+   "name": "Punk Protocol",
+   "amountUsd": 8950000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2021-08-12",
+   "day": 1628726400,
+   "name": "DAO Maker Vesting",
+   "amountUsd": 7000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "DAO",
+   "why": "no USDT perpetual of DAO on Binance or Bitget listed before the day (by id: DefiLlama's protocol DAO Maker Vesting)"
+  },
+  {
+   "date": "2021-08-17",
+   "day": 1629158400,
+   "name": "SurgeBNB",
+   "amountUsd": 5000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "BSC"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2021-08-19",
+   "day": 1629331200,
+   "name": "Liquid Global",
+   "amountUsd": 91350000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2021-08-29",
+   "day": 1630195200,
+   "name": "Bilaxy",
+   "amountUsd": 21700000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2021-08-30",
+   "day": 1630281600,
+   "name": "CREAM Lending",
+   "amountUsd": 18800000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "CREAM",
+   "why": "no USDT perpetual of CREAM on Binance or Bitget listed before the day (by id: DefiLlama's protocol CREAM Lending)"
+  },
+  {
+   "date": "2021-09-21",
+   "day": 1632182400,
+   "name": "Vee Finance",
+   "amountUsd": 34000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Avalanche"
+   ],
+   "token": "VEE",
+   "why": "no USDT perpetual of VEE on Binance or Bitget listed before the day (by id: DefiLlama's protocol Vee Finance)"
+  },
+  {
+   "date": "2021-10-04",
+   "day": 1633305600,
+   "name": "pNetwork",
+   "amountUsd": 13000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": true,
+   "chain": [
+    "BSC",
+    "Bitcoin"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2021-10-08",
+   "day": 1633651200,
+   "name": "Mirror",
+   "amountUsd": 90000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Terra"
+   ],
+   "token": "MIR",
+   "why": "no USDT perpetual of MIR on Binance or Bitget listed before the day (by id: DefiLlama's protocol Mirror)"
+  },
+  {
+   "date": "2021-10-14",
+   "day": 1634169600,
+   "name": "Indexed Finance",
+   "amountUsd": 16000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "NDX",
+   "why": "no USDT perpetual of NDX on Binance or Bitget listed before the day (by id: DefiLlama's protocol Indexed Finance)"
+  },
+  {
+   "date": "2021-10-27",
+   "day": 1635292800,
+   "name": "CREAM Lending",
+   "amountUsd": 130000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "CREAM",
+   "why": "no USDT perpetual of CREAM on Binance or Bitget listed before the day (by id: DefiLlama's protocol CREAM Lending)"
+  },
+  {
+   "date": "2021-10-29",
+   "day": 1635465600,
+   "name": "AnubisDAO",
+   "amountUsd": 60000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2021-10-30",
+   "day": 1635552000,
+   "name": "BXH",
+   "amountUsd": 139000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "BSC"
+   ],
+   "token": "BXH",
+   "why": "no USDT perpetual of BXH on Binance or Bitget listed before the day (by id: DefiLlama's protocol BXH)"
+  },
+  {
+   "date": "2021-11-05",
+   "day": 1636070400,
+   "name": "Ooki",
+   "amountUsd": 55000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Polygon",
+    "BSC"
+   ],
+   "token": "OOKI",
+   "why": "no USDT perpetual of OOKI on Binance or Bitget listed before the day (by id: DefiLlama's protocol Ooki)"
+  },
+  {
+   "date": "2021-11-25",
+   "day": 1637798400,
+   "name": "Snowdog",
+   "amountUsd": 18100000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Avalanche"
+   ],
+   "token": "SDOG",
+   "why": "no USDT perpetual of SDOG on Binance or Bitget listed before the day (by id: DefiLlama's protocol Snowdog)"
+  },
+  {
+   "date": "2021-11-30",
+   "day": 1638230400,
+   "name": "MonoX",
+   "amountUsd": 31400000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "Polygon"
+   ],
+   "token": "MONO",
+   "why": "no USDT perpetual of MONO on Binance or Bitget listed before the day (by id: DefiLlama's protocol MonoX)"
+  },
+  {
+   "date": "2021-12-02",
+   "day": 1638403200,
+   "name": "Badger DAO",
+   "amountUsd": 120000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "BADGER",
+   "why": "no USDT perpetual of BADGER on Binance or Bitget listed before the day (by id: DefiLlama's protocol Badger DAO)"
+  },
+  {
+   "date": "2021-12-04",
+   "day": 1638576000,
+   "name": "BitMart",
+   "amountUsd": 196000000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "BSC"
+   ],
+   "token": "BMX",
+   "why": "no USDT perpetual of BMX on Binance or Bitget listed before the day (by hand: BitMart's exchange token)"
+  },
+  {
+   "date": "2021-12-05",
+   "day": 1638662400,
+   "name": "Pizza DeFi",
+   "amountUsd": 5000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "EOS"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2021-12-11",
+   "day": 1639180800,
+   "name": "AscenDEX",
+   "amountUsd": 77000000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "BSC",
+    "Polygon"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2021-12-13",
+   "day": 1639353600,
+   "name": "Vulcan Forged",
+   "amountUsd": 140000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "Polygon"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2021-12-18",
+   "day": 1639785600,
+   "name": "Grim Finance",
+   "amountUsd": 30000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Fantom"
+   ],
+   "token": "GRIM",
+   "why": "no USDT perpetual of GRIM on Binance or Bitget listed before the day (by id: DefiLlama's protocol Grim Finance)"
+  },
+  {
+   "date": "2021-12-21",
+   "day": 1640044800,
+   "name": "Gamma",
+   "amountUsd": 8200000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "GAMMA",
+   "why": "no USDT perpetual of GAMMA on Binance or Bitget listed before the day (by id: DefiLlama's protocol Gamma)"
+  },
+  {
+   "date": "2022-01-04",
+   "day": 1641254400,
+   "name": "Arbix Finance",
+   "amountUsd": 10000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "BSC"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2022-01-08",
+   "day": 1641600000,
+   "name": "LCX",
+   "amountUsd": 7940000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2022-01-10",
+   "day": 1641772800,
+   "name": "Lympo",
+   "amountUsd": 18700000,
+   "targetType": "NFTfi",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "SPORT",
+   "why": "no USDT perpetual of SPORT on Binance or Bitget listed before the day (by id: DefiLlama's protocol Lympo)"
+  },
+  {
+   "date": "2022-01-18",
+   "day": 1642464000,
+   "name": "Crypto-com",
+   "amountUsd": 33700000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "Bitcoin"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2022-01-28",
+   "day": 1643328000,
+   "name": "Qubit",
+   "amountUsd": 80000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": true,
+   "chain": [
+    "BSC"
+   ],
+   "token": "QBT",
+   "why": "no USDT perpetual of QBT on Binance or Bitget listed before the day (by id: DefiLlama's protocol Qubit)"
+  },
+  {
+   "date": "2022-02-01",
+   "day": 1643673600,
+   "name": "BNS",
+   "amountUsd": 7500000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2022-02-02",
+   "day": 1643760000,
+   "name": "Portal",
+   "amountUsd": 326000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": true,
+   "chain": [
+    "Solana"
+   ],
+   "token": "W",
+   "why": "no USDT perpetual of W on Binance or Bitget listed before the day (by id: DefiLlama's protocol Portal)"
+  },
+  {
+   "date": "2022-02-06",
+   "day": 1644105600,
+   "name": "Meter",
+   "amountUsd": 7700000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": true,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2022-02-08",
+   "day": 1644278400,
+   "name": "Superfluid",
+   "amountUsd": 8700000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Polygon"
+   ],
+   "token": "SUP",
+   "why": "no USDT perpetual of SUP on Binance or Bitget listed before the day (by id: DefiLlama's protocol Superfluid)"
+  },
+  {
+   "date": "2022-02-10",
+   "day": 1644451200,
+   "name": "Dego Finance",
+   "amountUsd": 10000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "BSC",
+    "Cronos"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2022-02-12",
+   "day": 1644624000,
+   "name": "IRA Financial / Gemini",
+   "amountUsd": 36000000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2022-03-15",
+   "day": 1647302400,
+   "name": "Agave",
+   "amountUsd": 5500000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Gnosis Chain"
+   ],
+   "token": "AGVE",
+   "why": "no USDT perpetual of AGVE on Binance or Bitget listed before the day (by id: DefiLlama's protocol Agave)"
+  },
+  {
+   "date": "2022-03-15",
+   "day": 1647302400,
+   "name": "Hundred Finance",
+   "amountUsd": 6200000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Gnosis Chain"
+   ],
+   "token": "HND",
+   "why": "no USDT perpetual of HND on Binance or Bitget listed before the day (by id: DefiLlama's protocol Hundred Finance)"
+  },
+  {
+   "date": "2022-03-23",
+   "day": 1647993600,
+   "name": "Cashio",
+   "amountUsd": 52800000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Solana"
+   ],
+   "token": "CASH",
+   "why": "no USDT perpetual of CASH on Binance or Bitget listed before the day (by id: DefiLlama's protocol Cashio)"
+  },
+  {
+   "date": "2022-03-23",
+   "day": 1647993600,
+   "name": "Ronin Bridge",
+   "amountUsd": 624000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": true,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "RON",
+   "why": "no USDT perpetual of RON on Binance or Bitget listed before the day (by hand: the Ronin chain's own token)"
+  },
+  {
+   "date": "2022-04-02",
+   "day": 1648857600,
+   "name": "Inverse Finance Frontier",
+   "amountUsd": 15600000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "INV",
+   "why": "no USDT perpetual of INV on Binance or Bitget listed before the day (by id: DefiLlama's protocol Inverse Finance Frontier)"
+  },
+  {
+   "date": "2022-04-12",
+   "day": 1649721600,
+   "name": "Elephant Money",
+   "amountUsd": 22200000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "BSC"
+   ],
+   "token": "ELEPHANT",
+   "why": "no USDT perpetual of ELEPHANT on Binance or Bitget listed before the day (by id: DefiLlama's protocol Elephant Money)"
+  },
+  {
+   "date": "2022-04-17",
+   "day": 1650153600,
+   "name": "Beanstalk",
+   "amountUsd": 181000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "BEAN",
+   "why": "no USDT perpetual of BEAN on Binance or Bitget listed before the day (by id: DefiLlama's protocol Beanstalk)"
+  },
+  {
+   "date": "2022-04-28",
+   "day": 1651104000,
+   "name": "DEUS Finance",
+   "amountUsd": 13400000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Fantom"
+   ],
+   "token": "DEUS",
+   "why": "no USDT perpetual of DEUS on Binance or Bitget listed before the day (by id: DefiLlama's protocol DEUS Finance)"
+  },
+  {
+   "date": "2022-04-30",
+   "day": 1651276800,
+   "name": "Saddle Finance",
+   "amountUsd": 11000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "SDL",
+   "why": "no USDT perpetual of SDL on Binance or Bitget listed before the day (by id: DefiLlama's protocol Saddle Finance)"
+  },
+  {
+   "date": "2022-05-01",
+   "day": 1651363200,
+   "name": "Rari Capital",
+   "amountUsd": 80000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "Arbitrum"
+   ],
+   "token": "RGT",
+   "why": "no USDT perpetual of RGT on Binance or Bitget listed before the day (by id: DefiLlama's protocol Rari Capital)"
+  },
+  {
+   "date": "2022-05-11",
+   "day": 1652227200,
+   "name": "Drift Trade",
+   "amountUsd": 14500000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Solana"
+   ],
+   "token": "DRIFT",
+   "why": "no USDT perpetual of DRIFT on Binance or Bitget listed before the day (by id: DefiLlama's protocol Drift Trade)"
+  },
+  {
+   "date": "2022-05-12",
+   "day": 1652313600,
+   "name": "Venus Protocol",
+   "amountUsd": 11200000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Binance Smart Chain"
+   ],
+   "token": "XVS",
+   "why": "no USDT perpetual of XVS on Binance or Bitget listed before the day (by name: the victims compiled from DefiLlama (shared/incidentVictims.json))"
+  },
+  {
+   "date": "2022-05-13",
+   "day": 1652400000,
+   "name": "Blizz Finance",
+   "amountUsd": 8300000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Avalanche"
+   ],
+   "token": "BLZZ",
+   "why": "no USDT perpetual of BLZZ on Binance or Bitget listed before the day (by id: DefiLlama's protocol Blizz Finance)"
+  },
+  {
+   "date": "2022-06-05",
+   "day": 1654387200,
+   "name": "Elrond",
+   "amountUsd": 113000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Elrond"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2022-06-05",
+   "day": 1654387200,
+   "name": "Wintermute",
+   "amountUsd": 17600000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Optimism"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2022-06-08",
+   "day": 1654646400,
+   "name": "Osmosis",
+   "amountUsd": 5000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Osmosis"
+   ],
+   "token": "OSMO",
+   "why": "no USDT perpetual of OSMO on Binance or Bitget listed before the day (by name: the victims compiled from DefiLlama (shared/incidentVictims.json))"
+  },
+  {
+   "date": "2022-06-16",
+   "day": 1655337600,
+   "name": "Inverse Finance Frontier",
+   "amountUsd": 5800000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "INV",
+   "why": "no USDT perpetual of INV on Binance or Bitget listed before the day (by id: DefiLlama's protocol Inverse Finance Frontier)"
+  },
+  {
+   "date": "2022-07-02",
+   "day": 1656720000,
+   "name": "Crema Finance",
+   "amountUsd": 8800000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Solana"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2022-07-11",
+   "day": 1657497600,
+   "name": "Uniswap (Phishing Attack)",
+   "amountUsd": 8000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2022-07-16",
+   "day": 1657929600,
+   "name": "Impermax",
+   "amountUsd": 9000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "Polygon"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2022-07-25",
+   "day": 1658707200,
+   "name": "Audius",
+   "amountUsd": 6000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2022-08-01",
+   "day": 1659312000,
+   "name": "Nomad",
+   "amountUsd": 190000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": true,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2022-09-20",
+   "day": 1663632000,
+   "name": "Wintermute",
+   "amountUsd": 160000000,
+   "targetType": "Other",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2022-10-02",
+   "day": 1664668800,
+   "name": "Transit Swap",
+   "amountUsd": 28900000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "BSC"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2022-10-11",
+   "day": 1665446400,
+   "name": "Mango Markets V3",
+   "amountUsd": 115000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Solana"
+   ],
+   "token": "MNGO",
+   "why": "no USDT perpetual of MNGO on Binance or Bitget listed before the day (by id: DefiLlama's protocol Mango Markets V3)"
+  },
+  {
+   "date": "2022-10-18",
+   "day": 1666051200,
+   "name": "Moola Market",
+   "amountUsd": 8400000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Celo"
+   ],
+   "token": "MOO",
+   "why": "no USDT perpetual of MOO on Binance or Bitget listed before the day (by id: DefiLlama's protocol Moola Market)"
+  },
+  {
+   "date": "2022-10-27",
+   "day": 1666828800,
+   "name": "Team Finance",
+   "amountUsd": 15800000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "SWAP",
+   "why": "no USDT perpetual of SWAP on Binance or Bitget listed before the day (by id: DefiLlama's protocol Team Finance)"
+  },
+  {
+   "date": "2022-11-01",
+   "day": 1667260800,
+   "name": "Deribit",
+   "amountUsd": 28000000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [],
+   "why": "the exchange table (shared/incidents.ts)"
+  },
+  {
+   "date": "2022-11-06",
+   "day": 1667692800,
+   "name": "Pando Rings",
+   "amountUsd": 22000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Mixin"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2022-11-12",
+   "day": 1668211200,
+   "name": "FTX",
+   "amountUsd": 450000000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "Solana"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2022-12-10",
+   "day": 1670630400,
+   "name": "Lodestar V0",
+   "amountUsd": 6900000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Arbitrum"
+   ],
+   "token": "LODE",
+   "why": "no USDT perpetual of LODE on Binance or Bitget listed before the day (by id: DefiLlama's protocol Lodestar V0)"
+  },
+  {
+   "date": "2022-12-11",
+   "day": 1670716800,
+   "name": "3Commas",
+   "amountUsd": 20000000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Multi-Chain"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2022-12-24",
+   "day": 1671840000,
+   "name": "Defrost",
+   "amountUsd": 12000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Avalanche"
+   ],
+   "token": "MELT",
+   "why": "no USDT perpetual of MELT on Binance or Bitget listed before the day (by id: DefiLlama's protocol Defrost)"
+  },
+  {
+   "date": "2023-01-16",
+   "day": 1673827200,
+   "name": "LendHub",
+   "amountUsd": 6000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Heco"
+   ],
+   "token": "LHB",
+   "why": "no USDT perpetual of LHB on Binance or Bitget listed before the day (by id: DefiLlama's protocol LendHub)"
+  },
+  {
+   "date": "2023-02-16",
+   "day": 1676505600,
+   "name": "Platypus Finance",
+   "amountUsd": 8500000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Avalanche"
+   ],
+   "token": "PTP",
+   "why": "no USDT perpetual of PTP on Binance or Bitget listed before the day (by id: DefiLlama's protocol Platypus Finance)"
+  },
+  {
+   "date": "2023-02-27",
+   "day": 1677456000,
+   "name": "MyAlgo",
+   "amountUsd": 9200000,
+   "targetType": "Wallet",
+   "bridgeHack": false,
+   "chain": [
+    "Algorand"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2023-03-13",
+   "day": 1678665600,
+   "name": "Euler V1",
+   "amountUsd": 197000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "EUL",
+   "why": "no USDT perpetual of EUL on Binance or Bitget listed before the day (by id: DefiLlama's protocol Euler V1)"
+  },
+  {
+   "date": "2023-03-17",
+   "day": 1679011200,
+   "name": "ParaSpace Lending V1",
+   "amountUsd": 5000000,
+   "targetType": "NFTfi",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2023-03-28",
+   "day": 1679961600,
+   "name": "Safemoon",
+   "amountUsd": 8900000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "BSC"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2023-04-03",
+   "day": 1680480000,
+   "name": "MEV-Boost Relay",
+   "amountUsd": 20000000,
+   "targetType": "Other",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2023-04-08",
+   "day": 1680912000,
+   "name": "GDAC",
+   "amountUsd": 13900000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2023-04-14",
+   "day": 1681430400,
+   "name": "Bitrue",
+   "amountUsd": 23000000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2023-04-15",
+   "day": 1681516800,
+   "name": "Hundred Finance",
+   "amountUsd": 7400000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Optimism"
+   ],
+   "token": "HND",
+   "why": "no USDT perpetual of HND on Binance or Bitget listed before the day (by id: DefiLlama's protocol Hundred Finance)"
+  },
+  {
+   "date": "2023-05-05",
+   "day": 1683244800,
+   "name": "DEUS Finance",
+   "amountUsd": 6500000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Arbitrum",
+    "BSC",
+    "Ethereum"
+   ],
+   "token": "DEUS",
+   "why": "no USDT perpetual of DEUS on Binance or Bitget listed before the day (by id: DefiLlama's protocol DEUS Finance)"
+  },
+  {
+   "date": "2023-05-28",
+   "day": 1685232000,
+   "name": "Jimbos Protocol",
+   "amountUsd": 7500000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Arbitrum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2023-06-03",
+   "day": 1685750400,
+   "name": "Atomic Wallet",
+   "amountUsd": 100000000,
+   "targetType": "Wallet",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "Tron",
+    "BSC",
+    "Bitcoin",
+    "Polkadot",
+    "Avalanche"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2023-06-11",
+   "day": 1686441600,
+   "name": "Floating Point Group",
+   "amountUsd": 15000000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2023-07-02",
+   "day": 1688256000,
+   "name": "Poly Network",
+   "amountUsd": 5000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": true,
+   "chain": [
+    "Ethereum",
+    "BSC",
+    "Polygon"
+   ],
+   "why": "Poly Network had no token of its own"
+  },
+  {
+   "date": "2023-07-07",
+   "day": 1688688000,
+   "name": "Multichain",
+   "amountUsd": 126000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": true,
+   "chain": [
+    "Moonriver",
+    "BSC",
+    "Fantom"
+   ],
+   "token": "MULTI",
+   "why": "no USDT perpetual of MULTI on Binance or Bitget listed before the day (by hand: Multichain's token)"
+  },
+  {
+   "date": "2023-07-22",
+   "day": 1689984000,
+   "name": "CoinsPaid",
+   "amountUsd": 37300000,
+   "targetType": "Other",
+   "bridgeHack": false,
+   "chain": [],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2023-07-26",
+   "day": 1690329600,
+   "name": "AlphaPo",
+   "amountUsd": 60000000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "Tron"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2023-08-02",
+   "day": 1690934400,
+   "name": "Bald",
+   "amountUsd": 23000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Base"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2023-08-18",
+   "day": 1692316800,
+   "name": "Exactly",
+   "amountUsd": 7600000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Optimism"
+   ],
+   "token": "EXA",
+   "why": "no USDT perpetual of EXA on Binance or Bitget listed before the day (by id: DefiLlama's protocol Exactly)"
+  },
+  {
+   "date": "2023-08-25",
+   "day": 1692921600,
+   "name": "Magnate Finance",
+   "amountUsd": 6500000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Base"
+   ],
+   "token": "MAG",
+   "why": "no USDT perpetual of MAG on Binance or Bitget listed before the day (by id: DefiLlama's protocol Magnate Finance)"
+  },
+  {
+   "date": "2023-08-26",
+   "day": 1693008000,
+   "name": "PEPE",
+   "amountUsd": 15080000,
+   "targetType": "Token",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2023-09-04",
+   "day": 1693785600,
+   "name": "Stake.com",
+   "amountUsd": 41300000,
+   "targetType": "Other",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "BSC",
+    "Polygon"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2023-09-07",
+   "day": 1694044800,
+   "name": "Fortress Trust",
+   "amountUsd": 12000000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "Bitcoin"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2023-09-12",
+   "day": 1694476800,
+   "name": "CoinEx",
+   "amountUsd": 55000000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "BSC",
+    "Bitcoin",
+    "Tron",
+    "Kadena",
+    "Solana",
+    "Dagger",
+    "XRP",
+    "BitcoinCash",
+    "Polygon",
+    "Stellar",
+    "Arbitrum"
+   ],
+   "token": "CET",
+   "why": "no USDT perpetual of CET on Binance or Bitget listed before the day (by id: DefiLlama's protocol CoinEx)"
+  },
+  {
+   "date": "2023-09-23",
+   "day": 1695427200,
+   "name": "Mixin Network",
+   "amountUsd": 200000000,
+   "targetType": "Other",
+   "bridgeHack": false,
+   "chain": [
+    "Mixin"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2023-09-25",
+   "day": 1695600000,
+   "name": "HTX",
+   "amountUsd": 8000000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "HT",
+   "why": "no USDT perpetual of HT on Binance or Bitget listed before the day (by hand: HTX's exchange token, HT, at the time)"
+  },
+  {
+   "date": "2023-11-10",
+   "day": 1699574400,
+   "name": "Poloniex",
+   "amountUsd": 126000000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Tron",
+    "Ethereum",
+    "Bitcoin"
+   ],
+   "why": "the exchange table (shared/incidents.ts)"
+  },
+  {
+   "date": "2023-11-18",
+   "day": 1700265600,
+   "name": "Kronos Research",
+   "amountUsd": 26000000,
+   "targetType": "Other",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2023-11-22",
+   "day": 1700611200,
+   "name": "Heco Bridge",
+   "amountUsd": 86600000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": true,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "HT",
+   "why": "no USDT perpetual of HT on Binance or Bitget listed before the day (by hand: HTX's HECO chain bridge; HT is the chain's token)"
+  },
+  {
+   "date": "2023-11-22",
+   "day": 1700611200,
+   "name": "HTX",
+   "amountUsd": 13600000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "HT",
+   "why": "no USDT perpetual of HT on Binance or Bitget listed before the day (by hand: HTX's exchange token, HT, at the time)"
+  },
+  {
+   "date": "2023-12-31",
+   "day": 1703980800,
+   "name": "Orbit Bridge",
+   "amountUsd": 81700000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": true,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "ORC",
+   "why": "no USDT perpetual of ORC on Binance or Bitget listed before the day (by id: DefiLlama's protocol Orbit Bridge)"
+  },
+  {
+   "date": "2024-01-06",
+   "day": 1704499200,
+   "name": "CoinsPaid",
+   "amountUsd": 7500000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "Binance Smart Chain"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2024-01-23",
+   "day": 1705968000,
+   "name": "Gamee",
+   "amountUsd": 7000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Polygon"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2024-01-27",
+   "day": 1706313600,
+   "name": "Somesing",
+   "amountUsd": 11580000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2024-02-09",
+   "day": 1707436800,
+   "name": "PlayDapp",
+   "amountUsd": 290000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2024-02-18",
+   "day": 1708214400,
+   "name": "FixedFloat",
+   "amountUsd": 26100000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "Bitcoin"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2024-02-28",
+   "day": 1709078400,
+   "name": "Seneca",
+   "amountUsd": 6400000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "Arbitrum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2024-03-17",
+   "day": 1710633600,
+   "name": "Remilia",
+   "amountUsd": 6000000,
+   "targetType": "NFTfi",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2024-03-25",
+   "day": 1711324800,
+   "name": "Curio",
+   "amountUsd": 16000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2024-03-26",
+   "day": 1711411200,
+   "name": "Munchables",
+   "amountUsd": 62500000,
+   "targetType": "Gaming",
+   "bridgeHack": false,
+   "chain": [
+    "Blast"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2024-03-28",
+   "day": 1711584000,
+   "name": "PrismaLST",
+   "amountUsd": 11600000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "PRISMA",
+   "why": "no USDT perpetual of PRISMA on Binance or Bitget listed before the day (by id: DefiLlama's protocol PrismaLST)"
+  },
+  {
+   "date": "2024-04-19",
+   "day": 1713484800,
+   "name": "Hedgey",
+   "amountUsd": 44700000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Arbitrum",
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2024-04-29",
+   "day": 1714348800,
+   "name": "Rain",
+   "amountUsd": 14800000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Bitcoin",
+    "Ethereum",
+    "XRP",
+    "Solana"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2024-05-15",
+   "day": 1715731200,
+   "name": "Sonne Finance",
+   "amountUsd": 20000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Optimism"
+   ],
+   "token": "SONNE",
+   "why": "no USDT perpetual of SONNE on Binance or Bitget listed before the day (by id: DefiLlama's protocol Sonne Finance)"
+  },
+  {
+   "date": "2024-05-31",
+   "day": 1717113600,
+   "name": "DMM Bitcoin",
+   "amountUsd": 305000000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Bitcoin"
+   ],
+   "why": "the exchange table (shared/incidents.ts)"
+  },
+  {
+   "date": "2024-06-02",
+   "day": 1717286400,
+   "name": "Velocore V2",
+   "amountUsd": 6800000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Linea",
+    "zkSync Era"
+   ],
+   "token": "VC",
+   "why": "no USDT perpetual of VC on Binance or Bitget listed before the day (by id: DefiLlama's protocol Velocore V2)"
+  },
+  {
+   "date": "2024-06-04",
+   "day": 1717459200,
+   "name": "Lykke",
+   "amountUsd": 22400000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "Bitcoin"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2024-06-10",
+   "day": 1717977600,
+   "name": "UwU Lend",
+   "amountUsd": 20000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "UWU",
+   "why": "no USDT perpetual of UWU on Binance or Bitget listed before the day (by id: DefiLlama's protocol UwU Lend)"
+  },
+  {
+   "date": "2024-06-22",
+   "day": 1719014400,
+   "name": "BtcTurk",
+   "amountUsd": 54000000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [],
+   "why": "the exchange table (shared/incidents.ts)"
+  },
+  {
+   "date": "2024-07-16",
+   "day": 1721088000,
+   "name": "LiFi Finance",
+   "amountUsd": 9730000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": true,
+   "chain": [
+    "zkSync Era",
+    "Linea",
+    "Metis"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2024-07-18",
+   "day": 1721260800,
+   "name": "WazirX: India",
+   "amountUsd": 234900000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2024-07-19",
+   "day": 1721347200,
+   "name": "Rho Markets",
+   "amountUsd": 7600000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Scroll"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2024-07-26",
+   "day": 1721952000,
+   "name": "Solrise Finance",
+   "amountUsd": 6700000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Casper"
+   ],
+   "token": "SLRS",
+   "why": "no USDT perpetual of SLRS on Binance or Bitget listed before the day (by id: DefiLlama's protocol Solrise Finance)"
+  },
+  {
+   "date": "2024-07-31",
+   "day": 1722384000,
+   "name": "Terra 2.0",
+   "amountUsd": 6400000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Terra2"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2024-08-06",
+   "day": 1722902400,
+   "name": "Ronin Bridge",
+   "amountUsd": 12000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": true,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "RON",
+   "why": "no USDT perpetual of RON on Binance or Bitget listed before the day (by hand: the Ronin chain's own token)"
+  },
+  {
+   "date": "2024-08-12",
+   "day": 1723420800,
+   "name": "PolyNetwork",
+   "amountUsd": 5000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": true,
+   "chain": [
+    "PolyNetwork"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2024-09-03",
+   "day": 1725321600,
+   "name": "Penpie",
+   "amountUsd": 27000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "PNP",
+   "why": "no USDT perpetual of PNP on Binance or Bitget listed before the day (by id: DefiLlama's protocol Penpie)"
+  },
+  {
+   "date": "2024-09-10",
+   "day": 1725926400,
+   "name": "Indodax",
+   "amountUsd": 25200000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "Polygon",
+    "Optimism"
+   ],
+   "why": "the exchange table (shared/incidents.ts)"
+  },
+  {
+   "date": "2024-09-16",
+   "day": 1726444800,
+   "name": "DeltaPrime",
+   "amountUsd": 5980000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Arbitrum"
+   ],
+   "token": "PRIME",
+   "why": "no USDT perpetual of PRIME on Binance or Bitget listed before the day (by id: DefiLlama's protocol DeltaPrime)"
+  },
+  {
+   "date": "2024-09-20",
+   "day": 1726790400,
+   "name": "BingX",
+   "amountUsd": 43300000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "the exchange table (shared/incidents.ts)"
+  },
+  {
+   "date": "2024-09-25",
+   "day": 1727222400,
+   "name": "Truflation",
+   "amountUsd": 5200000,
+   "targetType": "Other",
+   "bridgeHack": false,
+   "chain": [],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2024-10-24",
+   "day": 1729728000,
+   "name": "US Government Crypto Wallet",
+   "amountUsd": 20000000,
+   "targetType": "Other",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2024-10-31",
+   "day": 1730332800,
+   "name": "M2 Exchange",
+   "amountUsd": 13700000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "Solana",
+    "Bitcoin"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2024-11-15",
+   "day": 1731628800,
+   "name": "ThalaSwap",
+   "amountUsd": 25500000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Aptos"
+   ],
+   "token": "THL",
+   "why": "no USDT perpetual of THL on Binance or Bitget listed before the day (by id: DefiLlama's protocol ThalaSwap)"
+  },
+  {
+   "date": "2024-11-16",
+   "day": 1731715200,
+   "name": "DEXX",
+   "amountUsd": 21000000,
+   "targetType": "Wallet",
+   "bridgeHack": false,
+   "chain": [
+    "Solana"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2024-11-16",
+   "day": 1731715200,
+   "name": "Polter Finance",
+   "amountUsd": 8700000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Fantom"
+   ],
+   "token": "POLTER",
+   "why": "no USDT perpetual of POLTER on Binance or Bitget listed before the day (by id: DefiLlama's protocol Polter Finance)"
+  },
+  {
+   "date": "2025-01-01",
+   "day": 1735689600,
+   "name": "NoOnes",
+   "amountUsd": 7900000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": true,
+   "chain": [
+    "Ethereum",
+    "Binance",
+    "Solana",
+    "Tron"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2025-01-23",
+   "day": 1737590400,
+   "name": "Phemex",
+   "amountUsd": 85000000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "Solana",
+    "XRP",
+    "Bitcoin",
+    "BSC",
+    "Sui",
+    "Base",
+    "Tron",
+    "Arbitrum",
+    "Avalanche",
+    "Polygon",
+    "Optimism",
+    "zkSync Era"
+   ],
+   "token": "PT",
+   "why": "no USDT perpetual of PT on Binance or Bitget listed before the day (by id: DefiLlama's protocol Phemex)"
+  },
+  {
+   "date": "2025-01-28",
+   "day": 1738022400,
+   "name": "DogWifTools",
+   "amountUsd": 10000000,
+   "targetType": "Other",
+   "bridgeHack": false,
+   "chain": [
+    "Solana"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2025-02-04",
+   "day": 1738627200,
+   "name": "Ionic Protocol",
+   "amountUsd": 8600000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Mode"
+   ],
+   "token": "ION",
+   "why": "no USDT perpetual of ION on Binance or Bitget listed before the day (by id: DefiLlama's protocol Ionic Protocol)"
+  },
+  {
+   "date": "2025-02-11",
+   "day": 1739232000,
+   "name": "zkLend",
+   "amountUsd": 9550000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Starknet"
+   ],
+   "token": "ZEND",
+   "why": "no USDT perpetual of ZEND on Binance or Bitget listed before the day (by id: DefiLlama's protocol zkLend)"
+  },
+  {
+   "date": "2025-02-21",
+   "day": 1740096000,
+   "name": "Bybit",
+   "amountUsd": 1400000000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "Bybit has no token of its own"
+  },
+  {
+   "date": "2025-02-24",
+   "day": 1740355200,
+   "name": "Infini",
+   "amountUsd": 49500000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2025-02-28",
+   "day": 1740700800,
+   "name": "Wemix",
+   "amountUsd": 6220000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Wemix"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2025-03-21",
+   "day": 1742515200,
+   "name": "Zoth ZeUSD",
+   "amountUsd": 8850000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2025-04-01",
+   "day": 1743465600,
+   "name": "UPCX",
+   "amountUsd": 70000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2025-04-14",
+   "day": 1744588800,
+   "name": "KiloEx",
+   "amountUsd": 7500000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "BSC",
+    "Base",
+    "Taiko"
+   ],
+   "token": "KILO",
+   "why": "no USDT perpetual of KILO on Binance or Bitget listed before the day (by id: DefiLlama's protocol KiloEx)"
+  },
+  {
+   "date": "2025-04-15",
+   "day": 1744675200,
+   "name": "ZKsync",
+   "amountUsd": 5000000,
+   "targetType": "Other",
+   "bridgeHack": false,
+   "chain": [
+    "zkSync Era"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2025-04-20",
+   "day": 1745107200,
+   "name": "Bitget",
+   "amountUsd": 100000000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [],
+   "token": "BGB",
+   "why": "no USDT perpetual of BGB on Binance or Bitget listed before the day (by name: the exchange table (shared/incidents.ts))"
+  },
+  {
+   "date": "2025-04-26",
+   "day": 1745625600,
+   "name": "Loopscale",
+   "amountUsd": 5800000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Solana"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2025-05-08",
+   "day": 1746662400,
+   "name": "BitoPro",
+   "amountUsd": 11500000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "Tron",
+    "Solana",
+    "Polygon"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2025-05-28",
+   "day": 1748390400,
+   "name": "Cork V1",
+   "amountUsd": 12000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2025-06-06",
+   "day": 1749168000,
+   "name": "ALEX",
+   "amountUsd": 8373000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Stacks"
+   ],
+   "token": "ALEX",
+   "why": "no USDT perpetual of ALEX on Binance or Bitget listed before the day (by id: DefiLlama's protocol ALEX)"
+  },
+  {
+   "date": "2025-06-18",
+   "day": 1750204800,
+   "name": "Nobitex",
+   "amountUsd": 82000000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Tron",
+    "Ethereum",
+    "BSC",
+    "Avalanche",
+    "Arbitrum",
+    "Polygon",
+    "Bitcoin"
+   ],
+   "why": "the exchange table (shared/incidents.ts)"
+  },
+  {
+   "date": "2025-06-25",
+   "day": 1750809600,
+   "name": "Resupply",
+   "amountUsd": 9600000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "RSUP",
+   "why": "no USDT perpetual of RSUP on Binance or Bitget listed before the day (by id: DefiLlama's protocol Resupply)"
+  },
+  {
+   "date": "2025-07-09",
+   "day": 1752019200,
+   "name": "ZKSwap",
+   "amountUsd": 5000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": true,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2025-07-16",
+   "day": 1752624000,
+   "name": "BigONE",
+   "amountUsd": 27000000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Bitcoin",
+    "BSC",
+    "Ethereum",
+    "Solana",
+    "TRON"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2025-07-19",
+   "day": 1752883200,
+   "name": "CoinDCX",
+   "amountUsd": 44200000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [],
+   "why": "the exchange table (shared/incidents.ts)"
+  },
+  {
+   "date": "2025-08-12",
+   "day": 1754956800,
+   "name": "Odin.Fun",
+   "amountUsd": 7000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "ICP"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2025-08-14",
+   "day": 1755129600,
+   "name": "BtcTurk",
+   "amountUsd": 48000000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "Avalanche",
+    "Arbitrum",
+    "Base",
+    "Optimism",
+    "Mantle",
+    "Polygon"
+   ],
+   "why": "the exchange table (shared/incidents.ts)"
+  },
+  {
+   "date": "2025-08-26",
+   "day": 1756166400,
+   "name": "BetterBank",
+   "amountUsd": 5000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "PulseChain"
+   ],
+   "token": "ESTEEM",
+   "why": "no USDT perpetual of ESTEEM on Binance or Bitget listed before the day (by id: DefiLlama's protocol BetterBank)"
+  },
+  {
+   "date": "2025-09-02",
+   "day": 1756771200,
+   "name": "Bunni V2",
+   "amountUsd": 8400000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "Unichain"
+   ],
+   "token": "BUNNI",
+   "why": "no USDT perpetual of BUNNI on Binance or Bitget listed before the day (by id: DefiLlama's protocol Bunni V2)"
+  },
+  {
+   "date": "2025-09-09",
+   "day": 1757376000,
+   "name": "SwissBorg",
+   "amountUsd": 41500000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Solana"
+   ],
+   "token": "BORG",
+   "why": "no USDT perpetual of BORG on Binance or Bitget listed before the day (by id: DefiLlama's protocol SwissBorg)"
+  },
+  {
+   "date": "2025-09-24",
+   "day": 1758672000,
+   "name": "SBI Crypto",
+   "amountUsd": 21000000,
+   "targetType": "Other",
+   "bridgeHack": false,
+   "chain": [
+    "Bitcoin",
+    "Ethereum",
+    "Litecoin",
+    "Doge",
+    "BitcoinCash"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2025-10-19",
+   "day": 1760832000,
+   "name": "Astra Nova",
+   "amountUsd": 9090000,
+   "targetType": "AI Agent",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2025-10-30",
+   "day": 1761782400,
+   "name": "Garden",
+   "amountUsd": 11400000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": true,
+   "chain": [
+    "Ethereum",
+    "Arbitrum",
+    "Base",
+    "Solana"
+   ],
+   "token": "SEED",
+   "why": "no USDT perpetual of SEED on Binance or Bitget listed before the day (by id: DefiLlama's protocol Garden)"
+  },
+  {
+   "date": "2025-11-26",
+   "day": 1764115200,
+   "name": "Upbit",
+   "amountUsd": 36000000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Solana"
+   ],
+   "why": "the exchange table (shared/incidents.ts)"
+  },
+  {
+   "date": "2026-01-08",
+   "day": 1767830400,
+   "name": "Truebit",
+   "amountUsd": 26400000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2026-01-25",
+   "day": 1769299200,
+   "name": "Matcha",
+   "amountUsd": 13430000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Base",
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2026-01-31",
+   "day": 1769817600,
+   "name": "Step Finance",
+   "amountUsd": 40000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Solana"
+   ],
+   "token": "STEP",
+   "why": "no USDT perpetual of STEP on Binance or Bitget listed before the day (by id: DefiLlama's protocol Step Finance)"
+  },
+  {
+   "date": "2026-02-22",
+   "day": 1771718400,
+   "name": "Blend Pools V2",
+   "amountUsd": 10970000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Stellar"
+   ],
+   "token": "BLND",
+   "why": "no USDT perpetual of BLND on Binance or Bitget listed before the day (by id: DefiLlama's protocol Blend Pools V2)"
+  },
+  {
+   "date": "2026-03-22",
+   "day": 1774137600,
+   "name": "Cyrus Finance",
+   "amountUsd": 5000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "BSC"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2026-04-16",
+   "day": 1776297600,
+   "name": "Grinex",
+   "amountUsd": 13740000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Tron",
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2026-04-16",
+   "day": 1776297600,
+   "name": "Rhea Lend",
+   "amountUsd": 18400000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Near"
+   ],
+   "token": "RHEA",
+   "why": "no USDT perpetual of RHEA on Binance or Bitget listed before the day (by id: DefiLlama's protocol Rhea Lend)"
+  },
+  {
+   "date": "2026-04-30",
+   "day": 1777507200,
+   "name": "Wasabi Perps",
+   "amountUsd": 5500000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "Base",
+    "Berachain",
+    "Blast"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2026-05-07",
+   "day": 1778112000,
+   "name": "TrustedVolumes",
+   "amountUsd": 6700000,
+   "targetType": "Other",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2026-05-17",
+   "day": 1778976000,
+   "name": "Verus-Ethereum Bridge",
+   "amountUsd": 11500000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": true,
+   "chain": [
+    "Verus"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2026-05-27",
+   "day": 1779840000,
+   "name": "SUPERFORTUNE AI",
+   "amountUsd": 15180000,
+   "targetType": "Token",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2026-05-28",
+   "day": 1779926400,
+   "name": "DxSale",
+   "amountUsd": 7300000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "BSC"
+   ],
+   "token": "DX",
+   "why": "no USDT perpetual of DX on Binance or Bitget listed before the day (by id: DefiLlama's protocol DxSale)"
+  },
+  {
+   "date": "2026-05-30",
+   "day": 1780099200,
+   "name": "Gravity Bridge",
+   "amountUsd": 5400000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": true,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "GRAV",
+   "why": "no USDT perpetual of GRAV on Binance or Bitget listed before the day (by id: DefiLlama's protocol Gravity Bridge)"
+  },
+  {
+   "date": "2026-06-07",
+   "day": 1780790400,
+   "name": "Syscoin Bridge",
+   "amountUsd": 10000000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": true,
+   "chain": [
+    "Syscoin"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2026-06-20",
+   "day": 1781913600,
+   "name": "JaredFromSubway MEV Bot",
+   "amountUsd": 7500000,
+   "targetType": "Other",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2026-07-05",
+   "day": 1783209600,
+   "name": "Lazy Summer Protocol",
+   "amountUsd": 6040000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "token": "SUMR",
+   "why": "no USDT perpetual of SUMR on Binance or Bitget listed before the day (by id: DefiLlama's protocol Lazy Summer Protocol)"
+  },
+  {
+   "date": "2026-07-06",
+   "day": 1783296000,
+   "name": "BonkDAO",
+   "amountUsd": 20000000,
+   "targetType": "Token",
+   "bridgeHack": false,
+   "chain": [
+    "Solana"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2026-07-11",
+   "day": 1783728000,
+   "name": "Bonzo Lend",
+   "amountUsd": 9050000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Hedera"
+   ],
+   "token": "BONZO",
+   "why": "no USDT perpetual of BONZO on Binance or Bitget listed before the day (by id: DefiLlama's protocol Bonzo Lend)"
+  },
+  {
+   "date": "2026-07-15",
+   "day": 1784073600,
+   "name": "Ostium",
+   "amountUsd": 23750000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Arbitrum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2026-07-21",
+   "day": 1784592000,
+   "name": "Wanchain",
+   "amountUsd": 10000000,
+   "targetType": "Chain",
+   "bridgeHack": true,
+   "chain": [
+    "Cardano"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2026-07-22",
+   "day": 1784678400,
+   "name": "AFX Bridge",
+   "amountUsd": 24150000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": true,
+   "chain": [
+    "Arbitrum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2026-07-22",
+   "day": 1784678400,
+   "name": "Verus-Ethereum Bridge",
+   "amountUsd": 7530000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": true,
+   "chain": [
+    "Verus"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2026-07-24",
+   "day": 1784851200,
+   "name": "Triple-A",
+   "amountUsd": 9700000,
+   "targetType": "Payments",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "Tron",
+    "Arbitrum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2026-07-28",
+   "day": 1785196800,
+   "name": "Crypto DAO",
+   "amountUsd": 8200000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "BSC"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2026-07-31",
+   "day": 1785456000,
+   "name": "COLDCARD",
+   "amountUsd": 116000000,
+   "targetType": "Wallet",
+   "bridgeHack": false,
+   "chain": [
+    "Bitcoin"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2026-08-05",
+   "day": 1785888000,
+   "name": "KITE Foundation",
+   "amountUsd": 13340000,
+   "targetType": "Wallet",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2026-08-09",
+   "day": 1786233600,
+   "name": "Coinsbuy",
+   "amountUsd": 7900000,
+   "targetType": "Wallet",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "Tron"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2026-08-22",
+   "day": 1787356800,
+   "name": "KiiChain",
+   "amountUsd": 9700000,
+   "targetType": "Chain",
+   "bridgeHack": false,
+   "chain": [
+    "KiiChain"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2026-08-22",
+   "day": 1787356800,
+   "name": "TAC",
+   "amountUsd": 7500000,
+   "targetType": "Chain",
+   "bridgeHack": false,
+   "chain": [
+    "TAC"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2026-08-23",
+   "day": 1787443200,
+   "name": "TermFinance Vaults",
+   "amountUsd": 8500000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2026-08-24",
+   "day": 1787529600,
+   "name": "Nesa",
+   "amountUsd": 50000000,
+   "targetType": "Chain",
+   "bridgeHack": false,
+   "chain": [
+    "Nesa"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2026-08-27",
+   "day": 1787788800,
+   "name": "Moonwell Lending",
+   "amountUsd": 8700000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Base"
+   ],
+   "token": "WELL",
+   "why": "no USDT perpetual of WELL on Binance or Bitget listed before the day (by id: DefiLlama's protocol Moonwell Lending)"
+  },
+  {
+   "date": "2026-08-30",
+   "day": 1788048000,
+   "name": "Tectonic",
+   "amountUsd": 124470000,
+   "targetType": "DeFi Protocol",
+   "bridgeHack": false,
+   "chain": [
+    "Cronos"
+   ],
+   "token": "TONIC",
+   "why": "no USDT perpetual of TONIC on Binance or Bitget listed before the day (by id: DefiLlama's protocol Tectonic)"
+  },
+  {
+   "date": "2026-09-06",
+   "day": 1788652800,
+   "name": "Liquid Network",
+   "amountUsd": 320000000,
+   "targetType": "Chain",
+   "bridgeHack": true,
+   "chain": [
+    "Liquid"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2026-09-24",
+   "day": 1790208000,
+   "name": "Bitget",
+   "amountUsd": 387000000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "XRP",
+    "Tron",
+    "Zcash"
+   ],
+   "token": "BGB",
+   "why": "no USDT perpetual of BGB on Binance or Bitget listed before the day (by name: the exchange table (shared/incidents.ts))"
+  },
+  {
+   "date": "2026-09-24",
+   "day": 1790208000,
+   "name": "Duelbits",
+   "amountUsd": 7000000,
+   "targetType": "Gambling Platform",
+   "bridgeHack": false,
+   "chain": [
+    "Ethereum",
+    "BSC",
+    "Bitcoin",
+    "Tron"
+   ],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2026-10-09",
+   "day": 1791504000,
+   "name": "Ledger (Supply Chain)",
+   "amountUsd": 93000000,
+   "targetType": "Wallet",
+   "bridgeHack": false,
+   "chain": [],
+   "why": "no token found for the victim"
+  },
+  {
+   "date": "2026-10-21",
+   "day": 1792540800,
+   "name": "CoinDCX",
+   "amountUsd": 16000000,
+   "targetType": "CEX",
+   "bridgeHack": false,
+   "chain": [
+    "TRON"
+   ],
+   "why": "the exchange table (shared/incidents.ts)"
+  }
+ ]
+}
