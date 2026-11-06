@@ -92,7 +92,10 @@ async function setup(): Promise<{
   })
   seam.read = async (id) => {
     calls.push({ what: `read ${id}`, lane: laneNow() })
-    return refuse.has(id) ? { refused: 'OKX has no lead trader with that code: they may have stopped leading.' } : ({ ref: { key: id } } as never)
+    if (refuse.has(id)) return { refused: 'OKX has no lead trader with that code: they may have stopped leading.' }
+    // An address ending in f trades too fast: Hyperliquid's window of its fills covers a day.
+    if (id.endsWith('f')) return { ref: { key: id }, source: 'hyperliquid', capped: true, records: 12_000, firstMs: clock.now - 86_400_000, lastMs: clock.now } as never
+    return { ref: { key: id }, source: id.startsWith('0x') ? 'hyperliquid' : 'okx', capped: false, records: 500, firstMs: clock.now - 90 * 86_400_000, lastMs: clock.now } as never
   }
   seam.analyze = async (key) => {
     calls.push({ what: `analyse ${key}`, lane: laneNow() })
@@ -176,6 +179,15 @@ describe('finding traders', () => {
     clock.now = T0 + 30 * 60_000
     await service.discoveryTurn()
     expect(calls.map((call) => call.what)).toEqual(['read AAAAAAAAAAAAAAA1', 'analyse okx-AAAAAAAAAAAAAAA1'])
+  })
+
+  it('keeps a record too short for the tests as a skip, unanalysed', async () => {
+    const { service, dir, calls } = await setup()
+    service.discoverySeam.readBoard = async () => ({ total: 1, passed: [hl(15, 'Too fast', 9e9)] })
+    service.discoverySeam.okxPage = async () => okxPage([], 1)
+    await service.discoveryTurn()
+    expect(calls.some((call) => call.what.startsWith('analyse'))).toBe(false)
+    expect(linesOf(dir).find((line) => line.kind === 'skipped')?.why).toContain('cover 24 hours, under the 30 days the tests need')
   })
 
   it('reads nothing when switched off, and starts again when switched on', async () => {

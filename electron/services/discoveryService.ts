@@ -13,6 +13,7 @@ import {
   pickCandidates,
   queueOf,
   readDiscoveryLine,
+  shortRecordOf,
   type BoardRow,
   type BoardsSource,
   type DiscoveryLine,
@@ -270,7 +271,11 @@ async function analyseNext(): Promise<void> {
   await publish()
   try {
     const read = await discoverySeam.read(found.board.id)
+    // A venue's refusal, or a record too short for the tests (an account trading too fast for Hyperliquid's window of
+    // fills), is kept as a skip with why; only a record the tests can read is analysed.
+    const short = 'refused' in read ? null : shortRecordOf(read)
     if ('refused' in read) await keep([{ kind: 'skipped', at: Math.floor(discoverySeam.nowMs() / 1000), key, why: read.refused }])
+    else if (short !== null) await keep([{ kind: 'skipped', at: Math.floor(discoverySeam.nowMs() / 1000), key, why: short }])
     else await discoverySeam.analyze(key)
   } catch (error) {
     const tried = (attempts.get(key) ?? 0) + 1

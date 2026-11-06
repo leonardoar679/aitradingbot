@@ -11,6 +11,7 @@ import {
   pickCandidates,
   queueOf,
   readDiscoveryLine,
+  shortRecordOf,
   type BoardRow,
   type DiscoveryLine,
   type FoundAnalysis
@@ -122,6 +123,20 @@ describe('the rule', () => {
     expect(pickCandidates(many, new Set())).toHaveLength(DISCOVERY_LINES.newPerDay)
     expect(boardKeyOf(rows[0])).toBe(`hyperliquid-${address(1)}`)
     expect(boardKeyOf(rows[5])).toBe('okx-AAAAAAAAAAAAAAA1')
+  })
+})
+
+describe('a record too short to analyse', () => {
+  it("is a Hyperliquid account's capped window under the tests' days, said with its fills and its span", () => {
+    const now = Date.UTC(2026, 10, 6, 4, 22)
+    expect(shortRecordOf({ source: 'hyperliquid', capped: true, records: 17_892, firstMs: now - 20 * 3_600_000, lastMs: now })).toBe(
+      "Hyperliquid gives only an account's most recent fills: this one's last 17892 cover 20 hours, under the 30 days the tests need. An account this fast cannot be analysed here, nor copied on paper."
+    )
+    expect(shortRecordOf({ source: 'hyperliquid', capped: true, records: 10_000, firstMs: now - 9 * 86_400_000, lastMs: now })).toContain('cover 9 days')
+    // Long enough, not capped, or not Hyperliquid's: analysed.
+    expect(shortRecordOf({ source: 'hyperliquid', capped: true, records: 10_000, firstMs: now - 30 * 86_400_000, lastMs: now })).toBeNull()
+    expect(shortRecordOf({ source: 'hyperliquid', capped: false, records: 50, firstMs: now - 86_400_000, lastMs: now })).toBeNull()
+    expect(shortRecordOf({ source: 'okx', capped: true, records: 900, firstMs: now - 86_400_000, lastMs: now })).toBeNull()
   })
 })
 

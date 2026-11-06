@@ -1,4 +1,6 @@
+import { SKILL_LINES } from './skill'
 import type { CoinConsensus } from './topTraders'
+import type { TraderMeta } from './traderAnalysis'
 import { refOf } from './traderRef'
 
 // TRADERS FOUND BY THE APP (V9 Stage 3, 6 November 2026). The user asked the app to find good, famous traders online
@@ -179,6 +181,19 @@ export function pickCandidates(rows: readonly BoardRow[], known: ReadonlySet<str
     }
   }
   return picked
+}
+
+/** Why a found trader's record, once read, is too short to analyse; null where it is long enough. Hyperliquid gives an
+ * address's most recent fills only (about ten thousand): on 6 November 2026 the first trader found, a $49 million account,
+ * had made 17,892 fills that day alone, so its record spanned hours and held no round trip. The tests need
+ * SKILL_LINES.minSpanDays of record; an account this fast could not be copied on paper either. */
+export function shortRecordOf(meta: Pick<TraderMeta, 'source' | 'capped' | 'firstMs' | 'lastMs' | 'records'>, minSpanDays: number = SKILL_LINES.minSpanDays): string | null {
+  if (meta.source !== 'hyperliquid' || !meta.capped) return null
+  const spanMs = meta.firstMs === null || meta.lastMs === null ? 0 : meta.lastMs - meta.firstMs
+  if (spanMs >= minSpanDays * 86_400_000) return null
+  const hours = spanMs / 3_600_000
+  const span = hours < 48 ? `${Math.max(1, Math.round(hours))} hours` : `${Math.round(hours / 24)} days`
+  return `Hyperliquid gives only an account's most recent fills: this one's last ${meta.records} cover ${span}, under the ${minSpanDays} days the tests need. An account this fast cannot be analysed here, nor copied on paper.`
 }
 
 /** What the worker hands back of Hyperliquid's leaderboard: how many rows it held, and those who pass the rule. */
