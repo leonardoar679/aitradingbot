@@ -12,6 +12,7 @@ import {
   queueOf,
   readDiscoveryLine,
   shortRecordOf,
+  skillBeyondChance,
   type BoardRow,
   type DiscoveryLine,
   type FoundAnalysis
@@ -164,7 +165,7 @@ describe('the record of what was found', () => {
       { kind: 'skipped', at: 2_500, key: boardKeyOf(third), why: 'OKX has no lead trader with that code' },
       { kind: 'found', version: DISCOVERY_LINES.version, at: 0, key: 'hyperliquid-0xold', rank: 1, board: row({ id: '0xold' }) }
     ]
-    const analysis: FoundAnalysis = { at: 3_000, trips: 40, netUsd: 120, skill: 'MARKET OR LUCK', clone: null, followerNetPct: -0.05 }
+    const analysis: FoundAnalysis = { at: 3_000, trips: 40, netUsd: 120, skill: 'MARKET OR LUCK', clone: null, followerNetPct: -0.05, pSkill: 0.2 }
     const now = DISCOVERY_LINES.shownDays * 86_400 + 500
     const list = foundTradersOf(lines, new Map([[found.key, analysis]]), boardKeyOf(other), now)
     expect(list.map((entry) => [entry.key, entry.status])).toEqual([
@@ -181,5 +182,24 @@ describe('the record of what was found', () => {
     // Found again after a skip, a trader waits again.
     const again = foundTradersOf([...lines, { kind: 'found', version: DISCOVERY_LINES.version, at: 3_000, key: boardKeyOf(third), rank: 1, board: third }], new Map(), null, now)
     expect(again.find((entry) => entry.key === boardKeyOf(third))).toMatchObject({ status: 'queued', why: null })
+  })
+})
+
+describe('the found traders taken together', () => {
+  const analysis = (skill: string | null, pSkill: number | null): FoundAnalysis => ({ at: 1, trips: 100, netUsd: 1, skill, clone: null, followerNetPct: null, pSkill })
+  it("counts a SKILL as beyond chance only where its p, adjusted across all of them analysed, is within the test's line", () => {
+    // One SKILL among a hundred analysed: its p of 0.0001 adjusts to 0.01, within the line; 0.0002 adjusts to 0.02.
+    const rest = Array.from({ length: 99 }, () => analysis('MARKET OR LUCK', 0.5))
+    expect(skillBeyondChance([analysis('SKILL', 0.0001), ...rest])).toBe(1)
+    expect(skillBeyondChance([analysis('SKILL', 0.0002), ...rest])).toBe(0)
+    // Alone, the same SKILL stands; a trader the test could not judge counts among them all, at a p of 1.
+    expect(skillBeyondChance([analysis('SKILL', 0.0002)])).toBe(1)
+    expect(skillBeyondChance([analysis('SKILL', 0.006), analysis('TOO FEW', null)])).toBe(0)
+    // Two at 0.006: the larger's own 0.006 carries down to the smaller, whose 0.012 alone would be over the line.
+    expect(skillBeyondChance([analysis('SKILL', 0.006), analysis('SKILL', 0.006)])).toBe(2)
+    // Of two, the smaller p doubles to 0.008, within the line; a small p of another verdict is not counted.
+    expect(skillBeyondChance([analysis('SKILL', 0.004), analysis('MARKET OR LUCK', 0.01)])).toBe(1)
+    expect(skillBeyondChance([analysis('MARKET OR LUCK', 0.00001)])).toBe(0)
+    expect(skillBeyondChance([])).toBe(0)
   })
 })

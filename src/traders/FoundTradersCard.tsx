@@ -171,6 +171,12 @@ export function FoundTradersView({ state, busy, onToggle, onOpen }: { state: Dis
       )}
       <p style={{ ...noteStyle, marginTop: '0.5rem' }}>
         {t('{count} found traders analysed. They were picked for their past profit, so their tests describe them and prove nothing: what is judged is following them on paper from the day they were found, all of them together.', { count: state?.analysed ?? 0 })}
+        {(state?.analysed ?? 0) > 0 && (
+          <>
+            {' '}
+            {t('Allowing for how many were analysed, {beyond} of them still read as skill.', { beyond: num(state?.beyondChance ?? 0, 0, 0) })}
+          </>
+        )}
       </p>
       <p style={{ ...noteStyle, marginTop: '0.3rem' }}>
         {t("To follow one on paper, open them and press Follow on paper there; until paper testing is started, a follow only records what it would have done. Hyperliquid's leaderboard is the site's own data, not part of its documented API.")}

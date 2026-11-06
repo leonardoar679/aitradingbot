@@ -289,6 +289,25 @@ export interface FoundAnalysis {
   clone: string | null
   /** A follower a minute late, at the venue's costs: the mean net of a copied trip, in percent; null where not measured. */
   followerNetPct: number | null
+  /** The skill test's p: the larger of its two nulls' (both must be within its line); null where it ran neither. */
+  pSkill: number | null
+}
+
+/** How many found traders still read as skill when their tests are taken together (V9-COPY-FORWARD: picked for their
+ * past profit, their verdicts are reported with the number analysed and the Benjamini-Hochberg adjustment across all of
+ * them). Each analysed one's p -- 1 where its test ran no null -- is adjusted by the step-up over all of them; those
+ * whose verdict is SKILL and whose adjusted p is within the test's own line are counted. */
+export function skillBeyondChance(analyses: readonly FoundAnalysis[]): number {
+  const count = analyses.length
+  if (count === 0) return 0
+  const order = analyses.map((analysis, index) => ({ index, p: analysis.pSkill ?? 1 })).sort((a, b) => a.p - b.p)
+  const adjusted = new Array<number>(count).fill(1)
+  let least = 1
+  for (let rank = count; rank >= 1; rank--) {
+    least = Math.min(least, (order[rank - 1].p * count) / rank)
+    adjusted[order[rank - 1].index] = least
+  }
+  return analyses.filter((analysis, index) => analysis.skill === 'SKILL' && adjusted[index] <= SKILL_LINES.alpha).length
 }
 
 export type FoundStatus = 'queued' | 'analysing' | 'analysed' | 'skipped'
@@ -312,6 +331,8 @@ export interface DiscoveryState {
   found: FoundTrader[]
   /** Found traders analysed, all told: what their verdicts are read beside. */
   analysed: number
+  /** Of them, how many still read as skill when their tests are taken together (skillBeyondChance). */
+  beyondChance: number
   /** Waiting to be analysed, and the one being analysed now. */
   queued: number
   analysing: string | null
@@ -321,7 +342,7 @@ export interface DiscoveryState {
   holdings: HoldingsLine | null
 }
 
-export const EMPTY_DISCOVERY: DiscoveryState = { enabled: true, lastReadAt: null, sources: [], found: [], analysed: 0, queued: 0, analysing: null, nextAnalysisAt: null, holdings: null }
+export const EMPTY_DISCOVERY: DiscoveryState = { enabled: true, lastReadAt: null, sources: [], found: [], analysed: 0, beyondChance: 0, queued: 0, analysing: null, nextAnalysisAt: null, holdings: null }
 
 /** The found traders waiting for an analysis, the first found first: queued, and not tried too often this session. */
 export function queueOf(found: readonly FoundTrader[], attempts: ReadonlyMap<string, number>, maxAttempts: number = DISCOVERY_LINES.maxAttempts): string[] {

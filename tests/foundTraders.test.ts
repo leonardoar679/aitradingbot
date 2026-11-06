@@ -35,7 +35,7 @@ const state: DiscoveryState = {
       board: { venue: 'hyperliquid', id: '0x7fdafde5cfb5465924316eced2d3715494c517d1', name: 'BobbyBigSize', accountUsd: 47_859_298, pnlAllTime: 159_854_473, last30d: 33_262_401, volume30d: 2.46e9, leadDays: null, copiers: null, winRatio: null },
       status: 'analysed',
       why: null,
-      latest: { at: FOUND_AT + 600, trips: 412, netUsd: 1_250_000, skill: 'MARKET OR LUCK', clone: null, followerNetPct: -0.04 }
+      latest: { at: FOUND_AT + 600, trips: 412, netUsd: 1_250_000, skill: 'MARKET OR LUCK', clone: null, followerNetPct: -0.04, pSkill: 0.3 }
     },
     {
       key: 'okx-F6476365DB0D09A3',
@@ -57,6 +57,7 @@ const state: DiscoveryState = {
     }
   ],
   analysed: 1,
+  beyondChance: 0,
   queued: 1,
   analysing: null,
   nextAnalysisAt: null,
@@ -95,6 +96,8 @@ describe('Found for you', () => {
     // Open only where there is an analysis to open.
     expect(html.match(/>Open</g)).toHaveLength(1)
     expect(html).toContain('1 found trader analysed. They were picked for their past profit, so their tests describe them and prove nothing')
+    // Their tests taken together: how many still read as skill once allowed for how many were analysed.
+    expect(html).toContain('all of them together. Allowing for how many were analysed, 0 of them still read as skill.')
     expect(html).toContain('press Follow on paper there')
     expect(html).toContain("Hyperliquid's leaderboard is the site's own data, not part of its documented API.")
     // What they hold: context, never a call.
@@ -105,7 +108,9 @@ describe('Found for you', () => {
 
   it('says when none is found yet, and when finding is off', async () => {
     const { FoundTradersView } = await import('../src/traders/FoundTradersCard')
-    expect(await render(createElement(FoundTradersView, { state: { ...state, found: [] }, busy: false, onToggle: () => undefined, onOpen: () => undefined }))).toContain('None found yet')
+    const none = await render(createElement(FoundTradersView, { state: { ...state, found: [], analysed: 0 }, busy: false, onToggle: () => undefined, onOpen: () => undefined }))
+    expect(none).toContain('None found yet')
+    expect(none).not.toContain('Allowing for how many were analysed')
     expect(await render(createElement(FoundTradersView, { state: { ...state, enabled: false, found: [] }, busy: false, onToggle: () => undefined, onOpen: () => undefined }))).toContain('Finding traders is off.')
   })
 })

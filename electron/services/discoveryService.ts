@@ -14,6 +14,7 @@ import {
   queueOf,
   readDiscoveryLine,
   shortRecordOf,
+  skillBeyondChance,
   type BoardRow,
   type BoardsSource,
   type DiscoveryLine,
@@ -155,7 +156,8 @@ export function foundAnalysisOf(analysis: TraderAnalysis): FoundAnalysis {
     netUsd: analysis.figures.money.net,
     skill: analysis.skill?.verdict ?? null,
     clone: analysis.clone?.verdict ?? null,
-    followerNetPct: late?.meanNetPct ?? null
+    followerNetPct: late?.meanNetPct ?? null,
+    pSkill: typeof analysis.skill?.pShift === 'number' && typeof analysis.skill.pFlip === 'number' ? Math.max(analysis.skill.pShift, analysis.skill.pFlip) : null
   }
 }
 
@@ -175,6 +177,8 @@ async function publish(): Promise<void> {
     sources: last?.kind === 'boards' ? last.sources : [],
     found,
     analysed: [...everFound].filter((key) => analyses.has(key)).length,
+    // Over the found traders alone: a trader pasted by hand was not picked by the rule.
+    beyondChance: skillBeyondChance([...everFound].flatMap((key) => analyses.get(key) ?? [])),
     queued: queueOf(found, attempts).length,
     analysing,
     nextAnalysisAt,

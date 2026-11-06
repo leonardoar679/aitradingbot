@@ -144,7 +144,30 @@ describe('finding traders', () => {
       { venue: 'okx', ok: true, rows: 3, passed: 3, error: null },
       { venue: 'hyperliquid', ok: true, rows: 48_234, passed: 3, error: null }
     ])
-    expect(state.found.find((entry) => entry.key === `hyperliquid-${address(2)}`)).toMatchObject({ status: 'analysed', latest: { trips: 12, netUsd: 34, skill: 'MARKET OR LUCK', followerNetPct: -0.04 } })
+    expect(state.found.find((entry) => entry.key === `hyperliquid-${address(2)}`)).toMatchObject({ status: 'analysed', latest: { trips: 12, netUsd: 34, skill: 'MARKET OR LUCK', followerNetPct: -0.04, pSkill: null } })
+    expect(state.beyondChance).toBe(0)
+  })
+
+  it('counts the found traders that still read as skill taken together, and never a trader pasted by hand', async () => {
+    const { service } = await setup()
+    const skilled = (key: string, pShift: number, pFlip: number): TraderAnalysis =>
+      ({ at: Math.floor(T0 / 1000), figures: { trips: 300, money: { net: 9 } }, skill: { verdict: 'SKILL', pShift, pFlip }, clone: null, delay: null, key }) as unknown as TraderAnalysis
+    const analyze = service.discoverySeam.analyze
+    service.discoverySeam.analyze = async (key) => {
+      await analyze(key)
+      return skilled(key, 0.0001, 0.0002)
+    }
+    const list = service.discoverySeam.list
+    // The found one's own analysis, and a trader pasted by hand whose test read SKILL too.
+    service.discoverySeam.list = async () => {
+      const held = await list()
+      const traders = held.traders.map((entry) => (entry.latest === null ? entry : { ...entry, latest: skilled(entry.meta.ref.key, 0.0001, 0.0002) }))
+      return { ...held, traders: [...traders, { meta: { ref: { key: 'hyperliquid-0xpasted' } }, latest: skilled('hyperliquid-0xpasted', 0.00001, 0.00001) }] as unknown as TraderList['traders'] }
+    }
+    await service.discoveryTurn()
+    const state = service.discoveryState()
+    expect(state.found.find((entry) => entry.key === `hyperliquid-${address(2)}`)?.latest).toMatchObject({ skill: 'SKILL', pSkill: 0.0002 })
+    expect(state).toMatchObject({ analysed: 1, beyondChance: 1 })
   })
 
   it('reads the rankings once a day and analyses half an hour apart, the first found first', async () => {
