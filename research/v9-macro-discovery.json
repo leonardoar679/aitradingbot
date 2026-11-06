@@ -1,0 +1,76 @@
+{
+ "version": "v9-macro-discovery-v1",
+ "phase": "discovery",
+ "calendarSha256": "77cc1dbcf011294fe49231f05975b8047a673cac829e6d7cacef478be701b115",
+ "lines": {
+  "signalPct": 0.2,
+  "roundTripPct": 0.24,
+  "horizonsH": [
+   1,
+   4,
+   24
+  ],
+  "heldOutFrom": 1672531200,
+  "draws": 10000,
+  "z": 1.6448536269514722
+ },
+ "missing": 1,
+ "groups": {
+  "releases": {
+   "releases": 179,
+   "called": 102,
+   "byHorizon": [
+    {
+     "hours": 1,
+     "n": 102,
+     "mean": -0.2854548069825232,
+     "t": -3.7087217440316547,
+     "shareRight": 0.47058823529411764
+    },
+    {
+     "hours": 4,
+     "n": 102,
+     "mean": -0.5131426879380327,
+     "t": -2.6013600964876447,
+     "shareRight": 0.47058823529411764
+    },
+    {
+     "hours": 24,
+     "n": 102,
+     "mean": 0.2730316149119649,
+     "t": 0.573970252151837,
+     "shareRight": 0.49019607843137253
+    }
+   ],
+   "chosenHours": 24
+  },
+  "fomc": {
+   "releases": 39,
+   "called": 21,
+   "byHorizon": [
+    {
+     "hours": 1,
+     "n": 21,
+     "mean": -0.39847998561757936,
+     "t": -0.9411037257570869,
+     "shareRight": 0.5238095238095238
+    },
+    {
+     "hours": 4,
+     "n": 21,
+     "mean": -0.30359071465910525,
+     "t": -0.4488264516074174,
+     "shareRight": 0.47619047619047616
+    },
+    {
+     "hours": 24,
+     "n": 21,
+     "mean": 0.37322052175632475,
+     "t": 0.49150466582543806,
+     "shareRight": 0.47619047619047616
+    }
+   ],
+   "chosenHours": 24
+  }
+ }
+}
