@@ -216,6 +216,18 @@ export async function recordBigMovers(atSec: number, predictions: readonly Price
   return written
 }
 
+/** WHAT THE FOUND TRADERS HOLD (V9 Stage 4; shared/traders/topTraders.ts): a day's calls of the source 'top-traders',
+ * each once -- a read made again the same day finds them on file. Returns how many were written. */
+export async function recordTopTraderCalls(predictions: readonly SourcePrediction[]): Promise<number> {
+  let written = 0
+  for (const prediction of predictions) {
+    if (prediction.source !== 'top-traders' || owed.has(prediction.id) || settled.has(prediction.id)) continue
+    await recordSourcePrediction(prediction)
+    written++
+  }
+  return written
+}
+
 /** The large moves on file since a moment, oldest first; for the Performance page and a run's report. */
 export async function moveRecord(sinceSec = 0): Promise<MoveLine[]> {
   const dir = predictionLedgerSeam.dir()

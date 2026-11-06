@@ -12,7 +12,12 @@ vi.mock('electron', () => ({ app: { getPath: () => tmpdir() } }))
 vi.mock('../electron/services/settingsService', () => ({ getSettings: async () => ({}), setSettings: async () => ({}) }))
 vi.mock('../electron/services/traderService', () => ({ listTraders: async () => ({ traders: [], analysed: 0 }), importTrader: async () => ({ refused: 'no' }), analyzeTrader: async () => null }))
 vi.mock('../electron/services/taskWorkerService', () => ({ runInWorker: async () => ({ ok: false, reason: 'error', message: 'no worker in a test' }) }))
-vi.mock('../electron/services/okxClient', () => ({ okxGet: async () => [] }))
+vi.mock('../electron/services/okxClient', () => ({ okxGet: async () => [], OKX_PATHS: { current: '/current' } }))
+vi.mock('../electron/services/hyperliquidClient', () => ({ hyperliquidInfo: async () => null }))
+vi.mock('../electron/services/forecastService', () => ({ latestForecasts: () => [] }))
+vi.mock('../electron/services/predictionLedgerService', () => ({ recordTopTraderCalls: async () => 0 }))
+vi.mock('../electron/services/effectiveConfigService', () => ({ getEffectiveConfig: async () => ({ engineVersion: 'e', configVersion: 'c' }) }))
+import type { SourcePrediction } from '../shared/evaluation/predictionRecord'
 
 const T0 = Date.UTC(2026, 10, 6, 6, 0, 0)
 const address = (n: number): string => `0x${n.toString(16).padStart(40, '0')}`
@@ -44,6 +49,8 @@ async function setup(): Promise<{
   enabled: { on: boolean }
   fail: { boards: boolean }
   refuse: Set<string>
+  recorded: SourcePrediction[]
+  held: Map<string, { coin: string; size: number }[] | Error>
 }> {
   vi.resetModules()
   const service = await import('../electron/services/discoveryService')
@@ -55,6 +62,8 @@ async function setup(): Promise<{
   const enabled = { on: true }
   const fail = { boards: false }
   const refuse = new Set<string>()
+  const recorded: SourcePrediction[] = []
+  const held = new Map<string, { coin: string; size: number }[] | Error>()
   const analysed = new Map<string, TraderAnalysis>()
   const seam = service.discoverySeam
   seam.dir = () => dir
@@ -91,7 +100,19 @@ async function setup(): Promise<{
     analysed.set(key, analysis)
     return analysis
   }
-  return { service, calls, dir, clock, enabled, fail, refuse }
+  seam.positions = async (venue, id) => {
+    calls.push({ what: `positions ${id}`, lane: laneNow() })
+    const answer = held.get(id) ?? []
+    if (answer instanceof Error) throw answer
+    return answer
+  }
+  seam.forecasts = () => [{ pair: 'BTCUSDT', currentPrice: 70_000 }, { pair: 'ETHUSDT', currentPrice: 2_500 }] as never
+  seam.versions = async () => ({ engine: 'e', config: 'c' })
+  seam.record = async (predictions) => {
+    recorded.push(...predictions)
+    return predictions.length
+  }
+  return { service, calls, dir, clock, enabled, fail, refuse, recorded, held }
 }
 
 const linesOf = (dir: string): { kind: string; key?: string; rank?: number; picked?: string[]; why?: string }[] =>
@@ -165,6 +186,57 @@ describe('finding traders', () => {
     expect(service.discoveryState().enabled).toBe(false)
     const state = await service.setDiscovery(true)
     expect(state.enabled).toBe(true)
+  })
+
+  it('reads what the analysed found traders hold once a UTC day, and records the calls the rule makes', async () => {
+    const { service, calls, clock, recorded, held, dir } = await setup()
+    // The first turn finds the ten and analyses the first: there is no one analysed to read before that.
+    await service.discoveryTurn()
+    expect(calls.some((call) => call.what.startsWith('positions'))).toBe(false)
+    // Two more analysed, half an hour apart.
+    clock.now = T0 + 30 * 60_000
+    await service.discoveryTurn()
+    clock.now = T0 + 60 * 60_000
+    await service.discoveryTurn()
+    expect(service.discoveryState().analysed).toBe(3)
+    // The next UTC day: each analysed one's positions; three hold BTC, all long; ETH is held by two; DOGE is no coin of
+    // the forecast's.
+    held.set(address(2), [{ coin: 'BTC', size: 1 }, { coin: 'ETH', size: -1 }, { coin: 'DOGE', size: 5 }])
+    held.set('AAAAAAAAAAAAAAA1', [{ coin: 'BTC', size: 2 }, { coin: 'ETH', size: 1 }])
+    held.set(address(1), [{ coin: 'BTC', size: 3 }, { coin: 'DOGE', size: 1 }])
+    calls.length = 0
+    clock.now = Date.UTC(2026, 10, 7, 0, 4)
+    await service.discoveryTurn()
+    expect(calls.filter((call) => call.what.startsWith('positions')).map((call) => call.lane)).toEqual(['background', 'background', 'background'])
+    expect(recorded.map((line) => [line.source, line.pair, line.side, line.refPrice])).toEqual([['top-traders', 'BTCUSDT', 'up', 70_000]])
+    const holdings = service.discoveryState().holdings
+    expect(holdings).toMatchObject({ kind: 'holdings', day: Date.UTC(2026, 10, 7) / 1000, traders: 3, failed: 0, calls: 1 })
+    expect(holdings?.consensus).toEqual([
+      { coin: 'BTC', longs: 3, shorts: 0, holders: 3, side: 'up' },
+      { coin: 'ETH', longs: 1, shorts: 1, holders: 2, side: null }
+    ])
+    expect(linesOf(dir).filter((line) => line.kind === 'holdings')).toHaveLength(1)
+    // Once a day: a turn later the same morning, or the same day, reads no positions again.
+    calls.length = 0
+    clock.now = Date.UTC(2026, 10, 7, 0, 45)
+    await service.discoveryTurn()
+    expect(calls.some((call) => call.what.startsWith('positions'))).toBe(false)
+    clock.now = Date.UTC(2026, 10, 7, 3, 0)
+    await service.discoveryTurn()
+    expect(calls.some((call) => call.what.startsWith('positions'))).toBe(false)
+    // A day whose first two hours the app missed has no read: every call is made at the same hour.
+    clock.now = Date.UTC(2026, 10, 8, 2, 0)
+    await service.discoveryTurn()
+    expect(calls.some((call) => call.what.startsWith('positions'))).toBe(false)
+  })
+
+  it('counts a found trader whose positions cannot be read as failed, and goes on', async () => {
+    const { service, clock, held } = await setup()
+    await service.discoveryTurn()
+    held.set(address(2), new Error('Hyperliquid answered 500'))
+    clock.now = Date.UTC(2026, 10, 7, 0, 4)
+    await service.discoveryTurn()
+    expect(service.discoveryState().holdings).toMatchObject({ traders: 0, failed: 1, consensus: [], calls: 0 })
   })
 
   it('tries a read that found neither ranking again after an hour, not before', async () => {

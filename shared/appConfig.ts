@@ -125,6 +125,7 @@ import { OKX_LINES } from './traders/okx'
 import { TRADER_FILE_LINES } from './traders/traderFile'
 import { FOLLOW_LINES } from './traders/follow'
 import { DISCOVERY_LINES } from './traders/discovery'
+import { TOP_TRADERS_LINES } from './traders/topTraders'
 
 export type { EffectiveStores } from './appDefaults'
 
@@ -318,8 +319,8 @@ export const ENGINE_CONSTANTS = {
   // tests a trader's record is judged by, V8-S6-SKILL and V8-S6-DELAY, what an analysis fetches for them, the lines of
   // the clone, V8-S7-CLONE, how an OKX lead trader's record is read and estimated, how a file is read, and how a follow
   // reads its trader and trades on paper (V8 Stage 8), and how the app finds traders by the rule of V9-COPY-FORWARD (V9
-  // Stage 3) (shared/traders/).
-  traders: { ref: TRADER_REF_LINES, roundTrips: ROUND_TRIP_VERSION, skill: SKILL_LINES, delay: DELAY_LINES, analysis: TRADER_ANALYSIS_LINES, clone: CLONE_LINES, okx: OKX_LINES, file: TRADER_FILE_LINES, follow: FOLLOW_LINES, discovery: DISCOVERY_LINES }
+  // Stage 3), and how what they hold is called (V9-TOP-TRADERS-2; V9 Stage 4) (shared/traders/).
+  traders: { ref: TRADER_REF_LINES, roundTrips: ROUND_TRIP_VERSION, skill: SKILL_LINES, delay: DELAY_LINES, analysis: TRADER_ANALYSIS_LINES, clone: CLONE_LINES, okx: OKX_LINES, file: TRADER_FILE_LINES, follow: FOLLOW_LINES, discovery: DISCOVERY_LINES, topTraders: TOP_TRADERS_LINES }
 } as const
 
 /** One value the heal changed on the way from a file to the store the app runs on. */

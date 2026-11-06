@@ -59,7 +59,19 @@ const state: DiscoveryState = {
   analysed: 1,
   queued: 1,
   analysing: null,
-  nextAnalysisAt: null
+  nextAnalysisAt: null,
+  holdings: {
+    kind: 'holdings',
+    at: Date.UTC(2026, 10, 7, 0, 4) / 1000,
+    day: Date.UTC(2026, 10, 7) / 1000,
+    traders: 6,
+    failed: 0,
+    consensus: [
+      { coin: 'BTC', longs: 5, shorts: 1, holders: 6, side: 'up' },
+      { coin: 'ETH', longs: 1, shorts: 2, holders: 3, side: 'down' }
+    ],
+    calls: 2
+  }
 }
 
 describe('Found for you', () => {
@@ -85,6 +97,10 @@ describe('Found for you', () => {
     expect(html).toContain('1 found trader analysed. They were picked for their past profit, so their tests describe them and prove nothing')
     expect(html).toContain('press Follow on paper there')
     expect(html).toContain("Hyperliquid's leaderboard is the site's own data, not part of its documented API.")
+    // What they hold: context, never a call.
+    expect(html).toContain('What they held when read, 7 Nov 00:04 UTC:')
+    expect(html).toContain('BTC: 5 long, 1 short · ETH: 1 long, 2 short')
+    expect(html).toContain('Context, not a call.')
   })
 
   it('says when none is found yet, and when finding is off', async () => {
@@ -98,10 +114,15 @@ describe('the finding service', () => {
   const source = readFileSync(join(__dirname, '..', 'electron', 'services', 'discoveryService.ts'), 'utf-8')
 
   it('reads two public rankings and the traders it found, and does nothing else', () => {
-    // Its reads: OKX's ranking through the OKX client and its budget, and one file of Hyperliquid's.
+    // Its reads: OKX's ranking through the OKX client and its budget, and one file of Hyperliquid's; and what the found
+    // traders hold, through each venue's client (V9 Stage 4).
     expect(source).toContain('okxGet(OKX_LEADERS_PATH,')
     expect(source).toContain('fetch(HYPERLIQUID_BOARD_URL,')
     expect([...source.matchAll(/fetch\(/g)]).toHaveLength(1)
+    expect(source).toContain("okxGet(OKX_PATHS.current, { instType: 'SWAP', uniqueCode: id, limit: '100' })")
+    expect(source).toContain("hyperliquidInfo<unknown>('clearinghouseState', { user: id })")
+    // What it records is the source 'top-traders' alone.
+    expect(source).toContain('recordTopTraderCalls(predictions)')
     // It follows, clones, places and asks nothing, and writes only its own switch to the settings.
     expect(source).not.toMatch(/setFollow|setClone|traders\.follow|placeOrder|liveTrading|credentials|apiKey|aiService|openrouter/i)
     expect([...source.matchAll(/setSettings\([^\r\n]*/g)].map((match) => match[0])).toEqual(['setSettings({ discovery: { enabled: on } })'])

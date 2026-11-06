@@ -74,8 +74,9 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 // (move-rates-v2; V9 Stage 1; infrastructure), from 343e001c658d. A hack or exploit read from the headline alone, a
 // company's name naming no coin, and a hack's coins read from its incident (feed-v3; V9 Stage 2), from 666e77f3b281. The
 // hour's big movers ranked by the shown width, where V9-SIZE-RANK held (big-movers-v2), from 33a7fa2ee848. Finding
-// traders by V9-COPY-FORWARD's rule, and the request budgets' background lane (V9 Stage 3), from 184d7be797df.
-const PINNED_ENGINE_VERSION = 'a7ff551d56a6'
+// traders by V9-COPY-FORWARD's rule, and the request budgets' background lane (V9 Stage 3), from 184d7be797df. What the
+// found traders hold, called by V9-TOP-TRADERS-2's rule once a day (V9 Stage 4), from a7ff551d56a6.
+const PINNED_ENGINE_VERSION = 'f5892efc8e32'
 
 describe('the engine version', () => {
   it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {

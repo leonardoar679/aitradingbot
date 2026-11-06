@@ -18,12 +18,21 @@ import {
   type DiscoveryLine,
   type DiscoveryState,
   type FoundAnalysis,
+  type HoldingsLine,
   type HyperliquidBoardRead
 } from '../../shared/traders/discovery'
+import type { SourcePrediction } from '../../shared/evaluation/predictionRecord'
+import type { PricePrediction } from '../../shared/forecast/prediction'
+import { hyperliquidStateOf, type OpenPosition } from '../../shared/traders/hyperliquid'
+import { TOP_TRADERS_LINES, consensusOf, holdingsOf, okxSidesOf, topTraderPredictionsOf, type TraderHolding } from '../../shared/traders/topTraders'
 import type { TraderAnalysis, TraderList } from '../../shared/traders/traderAnalysis'
+import { getEffectiveConfig } from './effectiveConfigService'
+import { latestForecasts } from './forecastService'
 import { inBackground } from './httpPacing'
+import { hyperliquidInfo } from './hyperliquidClient'
 import { appendJsonLines, listMonthFiles } from './jsonlStore'
-import { okxGet } from './okxClient'
+import { OKX_PATHS, okxGet } from './okxClient'
+import { recordTopTraderCalls } from './predictionLedgerService'
 import { getSettings, setSettings } from './settingsService'
 import { runInWorker } from './taskWorkerService'
 import { analyzeTrader, importTrader, listTraders } from './traderService'
@@ -35,6 +44,12 @@ import { analyzeTrader, importTrader, listTraders } from './traderService'
 // is (traderService.ts importTrader and analyzeTrader). Everything here runs in the background lane of the request
 // budgets (httpPacing.ts inBackground): a paper follow's reads go first. Switched off (settings `discovery.enabled`
 // false), it reads nothing. It reads public data and keeps what it read: no key, no model, no order, no one followed.
+//
+// And once a day (V9 Stage 4; shared/traders/topTraders.ts), at the first turn of the UTC day's first two hours, what the analysed found
+// traders hold now: each one's open positions, counted coin by coin over the forecast's universe; where at least three
+// hold a coin and two thirds of them one way, that way is recorded as a call of the source 'top-traders' for the next
+// day (predictionLedgerService.ts), to be judged after sixty days as V9-TOP-TRADERS-2 says. Shown on Copy Traders as
+// context only: never on Home, never a card's side.
 
 const FILE = /^discovery-(\d{4}-\d{2})\.jsonl$/
 const TICK_MS = 5 * 60_000
@@ -61,7 +76,20 @@ export const discoverySeam = {
   },
   list: (): Promise<TraderList> => listTraders(),
   read: (id: string): ReturnType<typeof importTrader> => importTrader(id),
-  analyze: (key: string): Promise<TraderAnalysis> => analyzeTrader(key)
+  analyze: (key: string): Promise<TraderAnalysis> => analyzeTrader(key),
+  /** A found trader's open positions now: Hyperliquid's account state, or OKX's current positions. */
+  positions: async (venue: 'hyperliquid' | 'okx', id: string): Promise<Pick<OpenPosition, 'coin' | 'size'>[]> => {
+    if (venue === 'okx') return okxSidesOf(await okxGet(OKX_PATHS.current, { instType: 'SWAP', uniqueCode: id, limit: '100' }))
+    const state = hyperliquidStateOf(await hyperliquidInfo<unknown>('clearinghouseState', { user: id }))
+    if (state === null) throw new Error('Hyperliquid gave no account state')
+    return state.positions
+  },
+  forecasts: (): PricePrediction[] => latestForecasts(),
+  versions: async (): Promise<{ engine: string; config: string }> => {
+    const config = await getEffectiveConfig()
+    return { engine: config.engineVersion, config: config.configVersion }
+  },
+  record: (predictions: readonly SourcePrediction[]): Promise<number> => recordTopTraderCalls(predictions)
 }
 
 let lines: DiscoveryLine[] = []
@@ -138,6 +166,7 @@ async function publish(): Promise<void> {
   const found = foundTradersOf(lines, analyses, analysing, nowSec)
   const everFound = new Set(lines.filter((line) => line.kind === 'found').map((line) => (line.kind === 'found' ? line.key : '')))
   const last = [...lines].reverse().find((line) => line.kind === 'boards')
+  const held = [...lines].reverse().find((line): line is HoldingsLine => line.kind === 'holdings') ?? null
   const nextAnalysisAt = lastAnalysisEndMs === null ? null : Math.floor(lastAnalysisEndMs / 1000) + DISCOVERY_LINES.analysisGapSeconds
   state = {
     enabled: await discoverySeam.enabled().catch(() => true),
@@ -147,7 +176,8 @@ async function publish(): Promise<void> {
     analysed: [...everFound].filter((key) => analyses.has(key)).length,
     queued: queueOf(found, attempts).length,
     analysing,
-    nextAnalysisAt
+    nextAnalysisAt,
+    holdings: held
   }
   for (const listener of listeners) {
     try {
@@ -201,6 +231,33 @@ async function readBoards(): Promise<void> {
   ])
 }
 
+/** What the analysed found traders hold, read once a UTC day: each one's positions, the coins of the forecast's universe
+ * counted, the rule's calls recorded, and the day's line kept. A trader who cannot be read is counted as failed. */
+async function readHoldings(): Promise<void> {
+  const nowSec = Math.floor(discoverySeam.nowMs() / 1000)
+  const day = Math.floor(nowSec / 86_400) * 86_400
+  if (nowSec - day >= TOP_TRADERS_LINES.readWindowSec || lines.some((line) => line.kind === 'holdings' && line.day === day)) return
+  const analysed = state.found.filter((entry) => entry.latest !== null)
+  if (analysed.length === 0) return
+  const holdings: TraderHolding[] = []
+  let failed = 0
+  for (const entry of analysed) {
+    try {
+      holdings.push(...holdingsOf(entry.key, await discoverySeam.positions(entry.board.venue, entry.board.id)))
+    } catch (error) {
+      failed++
+      console.warn(`Discovery: what ${entry.key} holds could not be read:`, describe(error))
+    }
+  }
+  const forecasts = discoverySeam.forecasts()
+  const universe = new Set(forecasts.map((prediction) => prediction.pair.replace(/USDT$/, '')))
+  const prices = new Map(forecasts.map((prediction) => [prediction.pair, prediction.currentPrice] as const))
+  const consensus = consensusOf(holdings, universe)
+  const calls = topTraderPredictionsOf(consensus, nowSec, prices, analysed.length - failed, await discoverySeam.versions())
+  const recorded = calls.length === 0 ? 0 : await discoverySeam.record(calls)
+  await keep([{ kind: 'holdings', at: nowSec, day, traders: analysed.length - failed, failed, consensus, calls: recorded }])
+}
+
 /** Reads and analyses the first found trader waiting, where the half hour since the last has passed. */
 async function analyseNext(): Promise<void> {
   const nowMs = discoverySeam.nowMs()
@@ -244,6 +301,7 @@ export async function discoveryTurn(): Promise<void> {
       const dueSec = last === undefined ? 0 : last.at + (lastOk ? DISCOVERY_LINES.readEverySeconds : DISCOVERY_LINES.retrySeconds)
       if (nowMs / 1000 >= dueSec && (lastAttemptMs === null || nowMs - lastAttemptMs >= DISCOVERY_LINES.retrySeconds * 1000)) await readBoards()
       await publish()
+      await readHoldings().catch((error) => console.warn("Discovery: the found traders' holdings could not be read:", describe(error)))
       await analyseNext()
     })
     await publish()

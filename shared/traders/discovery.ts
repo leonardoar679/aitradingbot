@@ -1,3 +1,4 @@
+import type { CoinConsensus } from './topTraders'
 import { refOf } from './traderRef'
 
 // TRADERS FOUND BY THE APP (V9 Stage 3, 6 November 2026). The user asked the app to find good, famous traders online
@@ -230,7 +231,20 @@ export interface SkipLine {
   why: string
 }
 
-export type DiscoveryLine = BoardsLine | FoundLine | SkipLine
+/** A day's read of what the analysed found traders hold (V9 Stage 4; shared/traders/topTraders.ts): how many were read
+ * and how many could not be, each coin of the forecast's universe they hold, and how many calls it made. */
+export interface HoldingsLine {
+  kind: 'holdings'
+  at: number
+  /** The UTC day it is the read of, in seconds. */
+  day: number
+  traders: number
+  failed: number
+  consensus: CoinConsensus[]
+  calls: number
+}
+
+export type DiscoveryLine = BoardsLine | FoundLine | SkipLine | HoldingsLine
 
 const isRow = (value: unknown): value is BoardRow => {
   const row = value as Partial<BoardRow> | null
@@ -239,11 +253,12 @@ const isRow = (value: unknown): value is BoardRow => {
 
 /** A stored line read as one; null for one out of shape. */
 export function readDiscoveryLine(value: unknown): DiscoveryLine | null {
-  const line = value as { kind?: unknown; at?: unknown; sources?: unknown; picked?: unknown; key?: unknown; rank?: unknown; board?: unknown; why?: unknown } | null
+  const line = value as { kind?: unknown; at?: unknown; sources?: unknown; picked?: unknown; key?: unknown; rank?: unknown; board?: unknown; why?: unknown; day?: unknown; consensus?: unknown } | null
   if (typeof line !== 'object' || line === null || typeof line.at !== 'number') return null
   if (line.kind === 'boards' && Array.isArray(line.sources) && Array.isArray(line.picked)) return line as unknown as BoardsLine
   if (line.kind === 'found' && typeof line.key === 'string' && typeof line.rank === 'number' && isRow(line.board) && boardKeyOf(line.board) === line.key) return line as unknown as FoundLine
   if (line.kind === 'skipped' && typeof line.key === 'string' && typeof line.why === 'string') return line as unknown as SkipLine
+  if (line.kind === 'holdings' && typeof line.day === 'number' && Array.isArray(line.consensus)) return line as unknown as HoldingsLine
   return null
 }
 
@@ -287,9 +302,11 @@ export interface DiscoveryState {
   analysing: string | null
   /** When the next analysis may start. */
   nextAnalysisAt: number | null
+  /** What the analysed found traders held when last read (V9 Stage 4): context, never a call shown. */
+  holdings: HoldingsLine | null
 }
 
-export const EMPTY_DISCOVERY: DiscoveryState = { enabled: true, lastReadAt: null, sources: [], found: [], analysed: 0, queued: 0, analysing: null, nextAnalysisAt: null }
+export const EMPTY_DISCOVERY: DiscoveryState = { enabled: true, lastReadAt: null, sources: [], found: [], analysed: 0, queued: 0, analysing: null, nextAnalysisAt: null, holdings: null }
 
 /** The found traders waiting for an analysis, the first found first: queued, and not tried too often this session. */
 export function queueOf(found: readonly FoundTrader[], attempts: ReadonlyMap<string, number>, maxAttempts: number = DISCOVERY_LINES.maxAttempts): string[] {

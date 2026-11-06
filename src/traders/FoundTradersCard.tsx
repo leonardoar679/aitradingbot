@@ -12,7 +12,11 @@ import { utcWhen } from './traderText'
 // app has read and analysed them, what their record made after fees, the skill test's verdict and what a follower a
 // minute late would have made a trip. Their verdicts describe them: they were picked for their past profit. Opening one
 // shows their cards below, with Follow on paper -- the person's own click; the app follows no one by itself. The switch
-// stops or starts the daily reading.
+// stops or starts the daily reading. Since V9 Stage 4 the card also says what the analysed found traders held when last
+// read, coin by coin: context, never a call shown (V9-TOP-TRADERS-2 judges it after sixty days).
+
+/** Coins listed of what they hold, the most held first. */
+const HELD_SHOWN = 8
 
 /** The venues by their own names, which no language changes. */
 const VENUE_NAMES: Record<string, string> = { okx: 'OKX', hyperliquid: 'Hyperliquid' }
@@ -149,6 +153,20 @@ export function FoundTradersView({ state, busy, onToggle, onOpen }: { state: Dis
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+      {state?.holdings != null && state.holdings.consensus.length > 0 && (
+        <div style={{ marginTop: '0.6rem', fontSize: '0.84rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+          <span>{t('What they held when read, {when}:', { when: utcWhen(i18n, state.holdings.at * 1000) })}</span>
+          <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {state.holdings.consensus
+              .slice(0, HELD_SHOWN)
+              .map((entry) => t('{coin}: {longs} long, {shorts} short', { coin: entry.coin, longs: num(entry.longs, 0, 0), shorts: num(entry.shorts, 0, 0) }))
+              .join(' · ')}
+          </span>
+          <p style={{ ...noteStyle, margin: 0 }}>
+            {t('Context, not a call. Where three or more hold a coin and two thirds of them one way, that way is recorded once a day as a call of its own, judged after 60 days against the share of coins that moved that way; until then it is never shown on Home or taken as a side.')}
+          </p>
         </div>
       )}
       <p style={{ ...noteStyle, marginTop: '0.5rem' }}>
