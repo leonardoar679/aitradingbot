@@ -69,6 +69,10 @@
 //   PAPER_TESTING  1 starts paper testing once the run is set up -- the three books, Binance's announcements read
 //                  every minute, the delisting rule's short, the baseline -- and stops it at the run's end, so that
 //                  what Stop puts back is on file (V8 Stage 9)                                                [0]
+//   DAY_SUMMARY_MINUTES  how often the day's summary is saved into day-summaries/ (V9 Stage 8; the user's answer of
+//                  5 November 2026: a seven-day run with a daily summary): the three books, the traders the app found
+//                  and analysed and what they hold, the day's loud notices and market shocks, the critical news
+//                  reported first, and the forecast's state, as JSON and as a few lines of text; 0 saves none      [0]
 //
 // AT EVERY START every key file -- aiCredentials.json, credentials.json, the Local State that unlocks them -- is
 // removed from every scratch profile under SHADOW_ROOT, by name, unread, before anything is copied (V8 Stage 12); the
@@ -178,6 +182,7 @@ const MODELS_FROM = process.env.MODELS_FROM ?? path.join(process.env.APPDATA ?? 
 const STATUS_EVERY_MS = 10 * 60_000
 const SHOT_EVERY_MS = 30 * 60_000
 const HOUR_REPORT_EVERY_MS = Number(process.env.HOUR_REPORT_MINUTES ?? 60) * 60_000
+const DAY_SUMMARY_EVERY_MS = Number(process.env.DAY_SUMMARY_MINUTES ?? 0) * 60_000
 const FAKE_KEY = 'sk-or-v1-check-only-not-a-real-key'
 /** The window's title for the whole run (13 October 2026: a check window was taken for the app, and a
  * key typed into it): it and the page's banner say what it is. */
@@ -241,6 +246,7 @@ if (RESUME) {
   fs.writeFileSync(MARKER, JSON.stringify({ createdBy: 'scripts/shadow-run.mjs', runName: RUN_NAME, createdAt: new Date().toISOString(), key: 'fake' }, null, 2))
 }
 fs.mkdirSync(path.join(OUT, 'hour-reports'), { recursive: true })
+if (DAY_SUMMARY_EVERY_MS > 0) fs.mkdirSync(path.join(OUT, 'day-summaries'), { recursive: true })
 
 // --- the key copies swept at every start (V8 Stage 12; the user's answer of 26 October 2026) --------------------------
 // A run killed before its end (a power loss, as on 25 October) leaves its copies of the user's encrypted keys in its
@@ -265,7 +271,7 @@ fs.mkdirSync(path.join(OUT, 'hour-reports'), { recursive: true })
 // The run's own settings, kept at its first start (OUT/run-env.json) so that a run cut by a power loss, which takes the
 // supervisor down with it, is resumed as it began: every knob of this script's that was set, none of them a key.
 if (!RESUME) {
-  const KNOBS = ['RUN_NAME', 'RUN_MINUTES', 'MIN_BAND', 'EXPERIMENT', 'UNIVERSE_SIZE', 'SHADOW_ROOT', 'APP_ENTRY', 'MODELS_FROM', 'HOUR_REPORT_MINUTES', 'WATCH_MODELS', 'FIRST_GATES', 'WATCH_PAPER', 'FORECAST_TRADER', 'LAB', 'PAPER_TESTING', 'TRADERS', 'DEMO_KEY', 'DEMO_CHECK', 'FORECAST_DATA_FROM', 'WAIT_FORECAST', 'SETTLE_MINUTES', 'REAL_AI', 'CEILING_USD', 'FROM_PROFILE', 'MOVE_ROLES', 'MOVE_DISABLE', 'SEED_SHADOW', 'SEED_SHADOW_DAYS', 'MAX_RESUMES']
+  const KNOBS = ['RUN_NAME', 'RUN_MINUTES', 'MIN_BAND', 'EXPERIMENT', 'UNIVERSE_SIZE', 'SHADOW_ROOT', 'APP_ENTRY', 'MODELS_FROM', 'HOUR_REPORT_MINUTES', 'WATCH_MODELS', 'FIRST_GATES', 'WATCH_PAPER', 'FORECAST_TRADER', 'LAB', 'PAPER_TESTING', 'TRADERS', 'DAY_SUMMARY_MINUTES', 'DEMO_KEY', 'DEMO_CHECK', 'FORECAST_DATA_FROM', 'WAIT_FORECAST', 'SETTLE_MINUTES', 'REAL_AI', 'CEILING_USD', 'FROM_PROFILE', 'MOVE_ROLES', 'MOVE_DISABLE', 'SEED_SHADOW', 'SEED_SHADOW_DAYS', 'MAX_RESUMES']
   fs.writeFileSync(path.join(OUT, 'run-env.json'), JSON.stringify(Object.fromEntries(KNOBS.filter((name) => process.env[name] !== undefined).map((name) => [name, process.env[name]])), null, 2))
 }
 
@@ -924,6 +930,12 @@ async function main() {
   let nextStatus = Date.now() + 60_000
   let nextShot = Date.now() + SHOT_EVERY_MS
   let nextHourReport = Date.now() + HOUR_REPORT_EVERY_MS
+  // A resumed segment goes on numbering the run's days from the summaries on file, each a whole day of the run's clock:
+  // the next one is due when the run's minutes, those of the segments before and this one's, reach its day.
+  const daysDone = DAY_SUMMARY_EVERY_MS > 0 ? fs.readdirSync(path.join(OUT, 'day-summaries')).filter((name) => /^day-\d+\.json$/.test(name)).length : 0
+  let days = daysDone
+  const ranBeforeMs = RUN_MINUTES * 60_000 - remainingMs
+  let nextDaySummary = DAY_SUMMARY_EVERY_MS > 0 ? clockStart + (daysDone + 1) * DAY_SUMMARY_EVERY_MS - ranBeforeMs : Infinity
   let shots = 1
   let hours = 0
   let nextCeiling = Date.now() + 60_000
@@ -946,8 +958,14 @@ async function main() {
       await hourReport(++hours)
       nextHourReport += HOUR_REPORT_EVERY_MS
     }
+    if (Date.now() >= nextDaySummary) {
+      await daySummary(++days)
+      nextDaySummary += DAY_SUMMARY_EVERY_MS
+    }
   }
   await status()
+  // The last part of a day the clock ran, summarised at the run's end where a summary is kept.
+  if (DAY_SUMMARY_EVERY_MS > 0) await daySummary(++days)
 
   // The reports.
   await nav('Performance')
@@ -1290,6 +1308,82 @@ async function hourReport(n) {
     await nav('Home')
   } catch (failure) {
     say(`hour report ${n} failed: ${failure}`)
+  }
+}
+
+/** THE DAY'S SUMMARY (V9 Stage 8), every DAY_SUMMARY_MINUTES of the run, into day-summaries/: what the window's own
+ * readers say now -- the three books' standings, the traders found and analysed and what they hold, the follows, the
+ * last day's alerts by kind and severity with each loud one's title, the critical news reported first in the last day,
+ * the forecast engine's state and Bitcoin's day -- kept whole as JSON, and a few lines of it as text. It reads; a
+ * reader that fails is said so in the summary and the rest is kept. */
+async function daySummary(n) {
+  try {
+    const summary = await page.evaluate(async (dayNumber) => {
+      const nowSec = Math.floor(Date.now() / 1000)
+      const sinceSec = nowSec - 86_400
+      const safely = async (read) => {
+        try {
+          return await read()
+        } catch (failure) {
+          return { failed: String(failure) }
+        }
+      }
+      const books = await safely(() => window.api.books.state())
+      const discovery = await safely(() => window.api.traders.discovery())
+      const follows = await safely(() => window.api.traders.followStatus())
+      const alerts = await safely(async () => (await window.api.records.alerts({ sinceSec })).rows)
+      const feed = await safely(() => window.api.feed.getState())
+      const forecast = await safely(() => window.api.forecast.getState())
+      const btc = await safely(() => window.api.forecast.btcToday())
+      const counts = {}
+      for (const alert of Array.isArray(alerts) ? alerts : []) {
+        const key = `${alert.kind ?? 'none'}:${alert.severity}`
+        counts[key] = (counts[key] ?? 0) + 1
+      }
+      const loud = (Array.isArray(alerts) ? alerts : []).filter((alert) => alert.severity === 'high' || alert.severity === 'critical').map((alert) => ({ at: alert.at, kind: alert.kind ?? null, severity: alert.severity, title: alert.title }))
+      const firstReports = (Array.isArray(feed?.stories) ? feed.stories : [])
+        .filter((story) => story.incident?.report === 'first' && story.publishedAt >= sinceSec)
+        .map((story) => ({ at: story.publishedAt, title: story.title, victim: story.incident.victim, token: story.incident.victimToken, sumUsd: story.incident.amountUsd }))
+      return {
+        day: dayNumber,
+        at: nowSec,
+        books: books?.standings ?? books,
+        booksRunning: books?.running ?? null,
+        discovery: discovery?.found
+          ? {
+              lastReadAt: discovery.lastReadAt,
+              sources: discovery.sources,
+              found: discovery.found.length,
+              analysed: discovery.analysed,
+              queued: discovery.queued,
+              skipped: discovery.found.filter((entry) => entry.status === 'skipped').length,
+              traders: discovery.found.map((entry) => ({ key: entry.key, name: entry.board.name, status: entry.status, latest: entry.latest, why: entry.why })),
+              holdings: discovery.holdings
+            }
+          : discovery,
+        follows,
+        alertCounts: counts,
+        loud,
+        firstReports,
+        forecast: forecast?.engine ? { status: forecast.engine.status, lastPassAt: forecast.engine.lastPassAt, predictions: forecast.engine.predictions, recorded: forecast.engine.recorded, outcomes: forecast.engine.outcomes, market: forecast.engine.market ?? null } : forecast,
+        btc
+      }
+    }, n)
+    fs.writeFileSync(path.join(OUT, 'day-summaries', `day-${n}.json`), JSON.stringify(summary, null, 2))
+    const money = (value) => (typeof value === 'number' ? value.toFixed(2) : String(value))
+    const lines = [
+      `Day ${n} of run ${RUN_NAME}, at ${new Date(summary.at * 1000).toISOString()}.`,
+      `Books: ${Array.isArray(summary.books) ? summary.books.map((book) => `${book.id} ${money(book.equity ?? book.settledEquity)} USDT (${book.closed} closed, ${book.open} open)`).join('; ') : JSON.stringify(summary.books)}.`,
+      `Found traders: ${summary.discovery?.found ?? '?'} found, ${summary.discovery?.analysed ?? '?'} analysed, ${summary.discovery?.skipped ?? '?'} set aside, ${summary.discovery?.queued ?? '?'} waiting.`,
+      `What they hold: ${(summary.discovery?.holdings?.consensus ?? []).slice(0, 8).map((entry) => `${entry.coin} ${entry.longs}L/${entry.shorts}S${entry.side ? ` -> ${entry.side}` : ''}`).join(', ') || 'not read yet'}.`,
+      `Loud notices in the last day: ${summary.loud.length}${summary.loud.length > 0 ? ` -- ${summary.loud.map((alert) => alert.title).join(' | ')}` : ''}.`,
+      `First reports of a theft in the last day: ${summary.firstReports.length}${summary.firstReports.length > 0 ? ` -- ${summary.firstReports.map((story) => story.title).join(' | ')}` : ''}.`,
+      `Forecast: ${summary.forecast?.status ?? '?'}, last pass ${summary.forecast?.lastPassAt ? new Date(summary.forecast.lastPassAt * 1000).toISOString() : 'none'}, market ${summary.forecast?.market?.state ?? '?'}.`
+    ]
+    fs.writeFileSync(path.join(OUT, 'day-summaries', `day-${n}.txt`), `${lines.join('\n')}\n`)
+    say(`day ${n}: ${lines.slice(1, 4).join(' ')}`)
+  } catch (failure) {
+    say(`day summary ${n} failed: ${failure}`)
   }
 }
 
