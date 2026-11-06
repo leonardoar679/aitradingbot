@@ -539,6 +539,26 @@ if not founds:
 else:
     gate_line('analyses', 'pass' if not problems else 'fail', f'{len(analyses)} analysed, {len(skipped_keys)} set aside, {len(waiting)} still waiting of {len(founds)} found' + (f'; {"; ".join(problems[:3])}' if problems else ''))
 
+# Taken together (V9-COPY-FORWARD's report, not a gate; shared/traders/discovery.ts skillBeyondChance): each analysed
+# found trader's first skill p after it was found, the larger of its two nulls' (1 where the test ran none), adjusted
+# by the Benjamini-Hochberg step-up across all of them; a SKILL is beyond chance where its adjusted p is within 0.01.
+judged = []
+for f in founds:
+    after = [l for l in jsonl(os.path.join(PROFILE, 'traders', f['key'], 'analyses-*.jsonl')) if l.get('at', 0) >= f['at']]
+    if after:
+        skill = after[0].get('skill') or {}
+        both = isinstance(skill.get('pShift'), (int, float)) and isinstance(skill.get('pFlip'), (int, float))
+        judged.append((f['key'], skill.get('verdict'), max(skill['pShift'], skill['pFlip']) if both else 1.0))
+order = sorted(range(len(judged)), key=lambda k: judged[k][2])
+adjusted = [1.0] * len(judged)
+least = 1.0
+for rank in range(len(judged), 0, -1):
+    least = min(least, judged[order[rank - 1]][2] * len(judged) / rank)
+    adjusted[order[rank - 1]] = least
+alone = [key for key, verdict, _ in judged if verdict == 'SKILL']
+beyond = [judged[k][0] for k in range(len(judged)) if judged[k][1] == 'SKILL' and adjusted[k] <= 0.01]
+print(f'  found traders taken together: {len(judged)} analysed, {len(alone)} read SKILL alone, {len(beyond)} beyond chance after the Benjamini-Hochberg adjustment' + (f' ({", ".join(beyond)})' if beyond else ''))
+
 # Holdings: a holdings line on each UTC day whose first two hours a span covers with an analysed found trader before,
 # and each day's 'top-traders' calls on file in the record.
 problems = []
@@ -579,13 +599,21 @@ run_minutes = int(os.environ.get('RUN_MINUTES_EXPECTED', '10080'))
 owed_days = run_minutes // 1440
 gate_line('summaries', ('pass' if len(summaries) >= owed_days else 'fail') if ended else 'not measured', f'{len(summaries)} day summaries of the {owed_days} the run\'s clock owes' + ('' if ended else ' -- the run has not ended'))
 
-# AI: nothing reached OpenRouter -- the harness's fake answered every request, and the ledger spent nothing.
+# AI: nothing reached OpenRouter -- every call the app made was answered by the harness's fake, whose answers carry a
+# made-up cost (its usage, so the budget's arithmetic runs): every call on the ledger in the run has the fake's provider,
+# none another's, and once the run has ended the fake's own record of each segment is on file. (Until 6 November its
+# implementation wanted the ledger's cost at nought, which the fake's made-up cost never is: a dry read of v9-7d,
+# three hours in, failed it on $0.0068 the fake made up. Fixed to the registered line before the run's end.)
 fakes = [load(f) or {} for f in sorted(glob.glob(os.path.join(OUT, 'main-fake-*.json')))]
-spent = sum((c.get('usage') or {}).get('costUsd') or 0 for c in jsonl(os.path.join(PROFILE, 'aiLedger', '*.jsonl')) if c.get('at', 0) >= run_start)
+ai_calls = [c for c in jsonl(os.path.join(PROFILE, 'aiLedger', 'calls-*.jsonl')) if c.get('at', 0) >= run_start]
+by_fake = [c for c in ai_calls if c.get('provider') == 'Check']
+by_other = [c for c in ai_calls if isinstance(c.get('provider'), str) and c['provider'] not in ('', 'Check')]
+cost_of = lambda rows: sum((c.get('usage') or {}).get('costUsd') or 0 for c in rows)  # noqa: E731 -- a sum named for its use
 if real_ai_run:
     gate_line('ai', 'not measured', 'This run asked the real models.')
 else:
-    gate_line('ai', 'pass' if fakes and spent == 0 else 'fail', f'{len(fakes)} segment fake(s) on file, {sum(len(f.get("asked", [])) for f in fakes)} request(s) answered by it; ${spent:.4f} spent')
+    ok = not by_other and (bool(fakes) or not ended)
+    gate_line('ai', 'pass' if ok else 'fail', f'{len(ai_calls)} call(s) in the run: {len(by_fake)} answered by the fake (its made-up cost ${cost_of(by_fake):.4f}), {len(by_other)} by anyone else (${cost_of(by_other):.4f}); {len(fakes)} segment record(s) of the fake on file, {sum(len(f.get("asked", [])) for f in fakes)} request(s) in them' + ('' if ended else ' -- the run has not ended'))
 
 # --- the records on file, over every segment -----------------------------------------------------
 print('\n===== raw records')
