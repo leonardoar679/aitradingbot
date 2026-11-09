@@ -23,7 +23,9 @@ import { ENGLISH, msg, type I18n } from './i18n/translate'
 //
 // IT READS. Nothing here asks a model, places anything or holds a key.
 
-export const NEWS_FEED_VERSION = 'feed-v3'
+/** feed-v4 since 9 November 2026: a breach that reports data alone is no theft, and a theft named as one already known
+ * ("the $270 million Drift hack") is a follow-up (shared/incidents.ts). */
+export const NEWS_FEED_VERSION = 'feed-v4'
 /** The media feeds are read every minute (V9 Stage 2's line, from three before): a theft's first report is told within
  * a minute of its feed carrying it. A read asks each feed only for what changed (its ETag or Last-Modified), so an
  * unchanged feed answers 304 with nothing. */

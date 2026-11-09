@@ -77,8 +77,9 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 // traders by V9-COPY-FORWARD's rule, and the request budgets' background lane (V9 Stage 3), from 184d7be797df. What the
 // found traders hold, called by V9-TOP-TRADERS-2's rule once a day (V9 Stage 4), from a7ff551d56a6. 9 November 2026: an OKX
 // follow entering up to seven minutes late, and the copy book's last places and hour's opens kept for follows (V9 Stage 8),
-// from f5892efc8e32.
-const PINNED_ENGINE_VERSION = 'fc1f711b8c8a'
+// from f5892efc8e32. A breach of data alone read as no theft, and a theft named as known read as a follow-up (feed-v4;
+// V9 Stage 8), from fc1f711b8c8a.
+const PINNED_ENGINE_VERSION = '37f37138e51d'
 
 describe('the engine version', () => {
   it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {

@@ -19,6 +19,30 @@ function story(title: string, over: Partial<FeedStory> & { at?: number } = {}): 
 
 const read = (title: string, over: Partial<FeedStory> & { at?: number } = {}) => readIncident(story(title, over), DICTIONARY)
 
+describe("what the run's third try told loudly and should not have (v9-7d, 6-9 November 2026)", () => {
+  it('reads a breach of data alone, with no sum and no funds lost, as no theft', () => {
+    expect(read('Crypto Card Provider Gnosis Pay Says Hackers Accessed Customer Data')).toBeNull()
+    expect(read('Chainalysis says breach exposed password hashes and live tokens')).toBeNull()
+    expect(read('Gnosis Pay breach exposes card details, personal data and crypto wallet information')).toBeNull()
+    // The archives' own breaches of data, read as thefts before.
+    expect(read('Chainalysis says hacker using ‘offensive agentic techniques’ accessed its customers’ names and emails')).toBeNull()
+    expect(read('Keystone customers say breach exposed data the hardware wallet maker promised to delete')).toBeNull()
+    expect(read('Keystone says website breach exposed hardware wallet buyers’ addresses')).toBeNull()
+    // A wallet bug that let funds be stolen is a theft, data or no.
+    expect(read('Bitcoin wallet bug let rogue servers steal funds when users tried to speed up payments')).toMatchObject({ report: 'first' })
+    // A breach with a sum, or with funds lost, is still a theft.
+    expect(read('Hackers drain $12 million in a data breach at Zyx Exchange')).toMatchObject({ report: 'first', amountUsd: 12e6 })
+    expect(read('Hackers accessed customer data and drained user funds at Zyx Exchange')).toMatchObject({ report: 'first' })
+    expect(read('Zyx Exchange says hackers took $3 million in a customer data breach')).toMatchObject({ report: 'first', amountUsd: 3e6 })
+  })
+
+  it('reads a theft named as one already known, with no news of a loss, as a follow-up', () => {
+    expect(read('Solana moves to scrap the transaction feature used in the $270 million Drift hack')).toMatchObject({ report: 'follow-up', why: 'past', amountUsd: 270e6 })
+    // Told as news, a hack named with "the" is still a first report.
+    expect(read('Zyx Exchange drained of $270 million in the hack of its hot wallet')).toMatchObject({ report: 'first', amountUsd: 270e6 })
+  })
+})
+
 describe('a headline that reports a theft', () => {
   it('is read as the first report, its victim named at its loss with its own token, and its sum', () => {
     expect(read('Binance Drained of $5.5 Billion in Suspected Hack, Tether and Circle Freeze $1.8 Billion')).toEqual({
@@ -37,7 +61,8 @@ describe('a headline that reports a theft', () => {
     expect(read('EU entity suspected of losing $106 million from crypto exchange accounts, ZachXBT says')).toMatchObject({ report: 'first', victim: null, amountUsd: 106e6 })
     expect(read('Polymarket Pauses Trading as Prediction Market Investigates Security Incident')).toMatchObject({ report: 'first', victim: null })
     expect(read('CoinDCX confirms $16 million loss from retired wallets days after CEO called breach reports a ‘false alarm’')).toMatchObject({ report: 'first', victim: 'CoinDCX', amountUsd: 16e6 })
-    expect(read('Bithumb discloses data leak after internal system breach: Report')).toMatchObject({ report: 'first', victim: 'Bithumb' })
+    // A leak of data with no funds lost is no theft (since 9 November 2026; it was read as a first report before).
+    expect(read('Bithumb discloses data leak after internal system breach: Report')).toBeNull()
     expect(read('Hackers hijack a dozen DeFi websites, all registered with Name.com, and steal about $138,000')).toMatchObject({ report: 'first', amountUsd: 138_000 })
   })
 
@@ -65,7 +90,8 @@ describe('a headline that reports a theft', () => {
     expect(why('Bitmine Buys More Ethereum as Tom Lee Calls the Binance Hack Bullish')).toBe('opinion')
     expect(why('Worried About Crypto Hacks? Buy Bitcoin Proxies in Stock Market Instead, Say Wall Street Firms')).toBe('opinion')
     expect(why('Trezor lifts password ceiling after Coldcard’s $100M wallet thefts')).toBe('past')
-    expect(why('Coinbase denies systems breach, says vendor exposed customer data')).toBe('attribution')
+    // Customer data exposed, no funds lost: no theft at all (since 9 November 2026; an attribution before).
+    expect(read('Coinbase denies systems breach, says vendor exposed customer data')).toBeNull()
     expect(why('Coinbase Customer Data Hit in Analytics Vendor Breach, Funds ‘Not Impacted’')).toBe('denial')
     expect(why('Coinbase Says 99% of Customer Crypto Is Offline and Out of Hackers’ Reach')).toBe('denial')
     expect(why('Suspected EU crypto theft estimate rises to $133M: ZachXBT')).toBe('estimate')

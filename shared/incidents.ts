@@ -176,6 +176,15 @@ const AFTERMATH: readonly [string, RegExp][] = [
  * Case matters for the name's capital. */
 const ROUNDUP = (AFTERMATH.find(([reason]) => reason === 'roundup') as [string, RegExp])[1]
 const AFTER_AN_OLD_ONE = /\b(after|following|since|amid|in the wake of)\s+(a|an|the|its|their|last|this|that|[A-Z][\w.&-]*['’]s)\s[^,;:]{0,50}?\b(hack|exploit|breach|heist|theft|thefts|attack|drain)/
+/** A theft named as one already known: "the" and at most a sum and three words before it, where no news of a loss is
+ * told ("Solana moves to scrap the transaction feature used in the $270 million Drift hack", v9-7d's third try, 9
+ * November 2026, a Drift hack older than the week the feed keeps). */
+const THE_KNOWN_ONE = /\bthe\s+(\$[\d.,]+\s*(k|m|mn|b|bn|million|billion)?\s+)?([\w.&'’-]+\s+){0,3}(hack|exploit|breach|heist|theft)\b/i
+/** A breach that reports data alone: what was read or exposed is data -- a customer's, a card's, a password's -- with no
+ * sum and no word of funds lost ("Crypto Card Provider Gnosis Pay Says Hackers Accessed Customer Data", told HIGH in
+ * v9-7d's third try; its funds were unaffected). It reports no theft. */
+const DATA_ONLY = /\b((customers?|users?|clients?|buyers?|personal|account|card|kyc|identity)['’]?\s+(names?|emails?|addresses|data|info|information|details|records|numbers)|exposed\s+([\w-]+\s+){0,2}(data|records|details|information)|data\s+(breach|leak)s?|password(s|\s+hashes)?|email\s+addresses|home\s+addresses)\b/i
+const FUNDS_LOST = /\b(funds|drain(s|ed|ing)?|siphon(s|ed)?|heist|loss(es)?|lost|withdrawals?|assets\s+(stolen|taken|moved))\b/i
 
 /** Words that make a first report concern crypto at all: without one, a victim or a sum, a hack of freezers or of an
  * agency's staff list raises nothing. */
@@ -266,6 +275,8 @@ export function readIncident(story: Pick<ReadStory, 'title' | 'repeat'>, diction
   if (!LOSS.test(main)) return null
   const amounts = amountsOf(main)
   const amountUsd = amounts.length === 0 ? null : Math.max(...amounts)
+  // Data read or exposed, no sum and no funds: a breach of records, not a theft.
+  if (amountUsd === null && DATA_ONLY.test(main) && !FUNDS_LOST.test(main)) return null
   const read = victimOf(main, names)
   const token = read !== null && read.tight && read.victim.token !== null && dictionary.tickers.has(read.victim.token) ? read.victim.token : null
   const victim = read === null ? null : (read.victim.label ?? read.written)
@@ -275,7 +286,7 @@ export function readIncident(story: Pick<ReadStory, 'title' | 'repeat'>, diction
   else if (ROUNDUP.test(main)) why = 'roundup'
   else if (!news) {
     why = AFTERMATH.find(([reason, rule]) => (reason !== 'denial' || amountUsd === null) && rule.test(main))?.[0] ?? null
-    if (why === null && AFTER_AN_OLD_ONE.test(main)) why = 'past'
+    if (why === null && (AFTER_AN_OLD_ONE.test(main) || THE_KNOWN_ONE.test(main))) why = 'past'
   }
   return { report: why === null ? 'first' : 'follow-up', why, victim, victimToken: token, topExchange: read !== null && read.tight && read.victim.top, amountUsd }
 }
