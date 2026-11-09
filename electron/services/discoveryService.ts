@@ -24,6 +24,7 @@ import {
   type HyperliquidBoardRead
 } from '../../shared/traders/discovery'
 import type { SourcePrediction } from '../../shared/evaluation/predictionRecord'
+import { DELAY_LINES } from '../../shared/traders/delay'
 import type { PricePrediction } from '../../shared/forecast/prediction'
 import { hyperliquidStateOf, type OpenPosition } from '../../shared/traders/hyperliquid'
 import { TOP_TRADERS_LINES, consensusOf, holdingsOf, okxSidesOf, topTraderPredictionsOf, type TraderHolding } from '../../shared/traders/topTraders'
@@ -147,9 +148,10 @@ async function keep(rows: DiscoveryLine[]): Promise<void> {
   for (const [month, monthRows] of byMonth) await appendJsonLines(join(discoverySeam.dir(), `discovery-${month}.jsonl`), monthRows)
 }
 
-/** An analysis as the page shows it: its trips, net, verdicts, and a follower's net a minute late at the venue's costs. */
+/** An analysis as the page shows it: its trips, net, verdicts, and a follower's net at the delay test's shortest delay
+ * (two minutes; until 9 November it looked for a one-minute row the test never makes, so the page showed none). */
 export function foundAnalysisOf(analysis: TraderAnalysis): FoundAnalysis {
-  const late = analysis.delay?.rows.find((row) => row.delayMin === 1 && row.costMultiplier === 1) ?? null
+  const late = analysis.delay?.rows.find((row) => row.delayMin === DELAY_LINES.delaysMin[0] && row.costMultiplier === 1) ?? null
   return {
     at: analysis.at,
     trips: analysis.figures.trips,

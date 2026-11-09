@@ -287,7 +287,8 @@ export interface FoundAnalysis {
   netUsd: number
   skill: string | null
   clone: string | null
-  /** A follower a minute late, at the venue's costs: the mean net of a copied trip, in percent; null where not measured. */
+  /** A follower at the delay test's shortest delay (two minutes), at the venue's costs: the mean net of a copied trip,
+   * in percent; null where not measured. */
   followerNetPct: number | null
   /** The skill test's p: the larger of its two nulls' (both must be within its line); null where it ran neither. */
   pSkill: number | null

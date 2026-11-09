@@ -2526,7 +2526,7 @@
   "analysed@@a found trader's status": "विश्लेषण हो चुका",
   "could not be read": "पढ़ा नहीं जा सका",
   "{trips} trips, {net} after fees": "{trips} ट्रिप, शुल्क के बाद {net}",
-  "A follower a minute late: {net} a trip": "एक मिनट देर से फ़ॉलो करने वाला: प्रति ट्रिप {net}",
+  "A follower two minutes late: {net} a trip": "दो मिनट देर से फ़ॉलो करने वाला: प्रति ट्रिप {net}",
   "Open@@a button: shows a trader found": "खोलें",
   "{count} found traders analysed. They were picked for their past profit, so their tests describe them and prove nothing: what is judged is following them on paper from the day they were found, all of them together.": "{count} खोजे गए ट्रेडरों का विश्लेषण हुआ। उन्हें उनके पिछले मुनाफ़े के लिए चुना गया था, इसलिए उनके परीक्षण उनका वर्णन करते हैं और कुछ साबित नहीं करते: जिसे परखा जाता है वह है उन्हें मिलने के दिन से पेपर पर फ़ॉलो करना, सबको एक साथ।",
   "To follow one on paper, open them and press Follow on paper there; until paper testing is started, a follow only records what it would have done. Hyperliquid's leaderboard is the site's own data, not part of its documented API.": "किसी को पेपर पर फ़ॉलो करने के लिए उसे खोलें और वहाँ «पेपर पर फ़ॉलो करें» दबाएँ; जब तक पेपर टेस्टिंग शुरू नहीं होती, फ़ॉलो केवल यह दर्ज करता है कि वह क्या करता। Hyperliquid का लीडरबोर्ड साइट का अपना डेटा है, उसके दस्तावेज़ित API का हिस्सा नहीं।",

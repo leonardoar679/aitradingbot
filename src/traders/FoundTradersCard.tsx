@@ -9,8 +9,8 @@ import { utcWhen } from './traderText'
 
 // FOUND FOR YOU (V9 Stage 3, 6 November 2026; shared/traders/discovery.ts): the traders the app found on OKX's and
 // Hyperliquid's public rankings by its fixed rule, each with the ranking's figures on the day it was found and, once the
-// app has read and analysed them, what their record made after fees, the skill test's verdict and what a follower a
-// minute late would have made a trip. Their verdicts describe them: they were picked for their past profit. Opening one
+// app has read and analysed them, what their record made after fees, the skill test's verdict and what a follower
+// two minutes late, the delay test's shortest delay, would have made a trip. Their verdicts describe them: they were picked for their past profit. Opening one
 // shows their cards below, with Follow on paper -- the person's own click; the app follows no one by itself. The switch
 // stops or starts the daily reading. Since V9 Stage 4 the card also says what the analysed found traders held when last
 // read, coin by coin: context, never a call shown (V9-TOP-TRADERS-2 judges it after sixty days).
@@ -137,7 +137,7 @@ export function FoundTradersView({ state, busy, onToggle, onOpen }: { state: Dis
                           </>
                         )}
                         {trader.latest.followerNetPct !== null && (
-                          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{t('A follower a minute late: {net} a trip', { net: i18n.pct(trader.latest.followerNetPct, 2) })}</div>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{t('A follower two minutes late: {net} a trip', { net: i18n.pct(trader.latest.followerNetPct, 2) })}</div>
                         )}
                       </span>
                     )}

@@ -99,7 +99,7 @@ async function setup(): Promise<{
   }
   seam.analyze = async (key) => {
     calls.push({ what: `analyse ${key}`, lane: laneNow() })
-    const analysis = { at: Math.floor(clock.now / 1000), figures: { trips: 12, money: { net: 34 } }, skill: { verdict: 'MARKET OR LUCK' }, clone: null, delay: { rows: [{ delayMin: 1, costMultiplier: 1, meanNetPct: -0.04 }] } } as unknown as TraderAnalysis
+    const analysis = { at: Math.floor(clock.now / 1000), figures: { trips: 12, money: { net: 34 } }, skill: { verdict: 'MARKET OR LUCK' }, clone: null, delay: { rows: [{ delayMin: 2, costMultiplier: 1, meanNetPct: -0.04 }, { delayMin: 5, costMultiplier: 1, meanNetPct: -0.09 }] } } as unknown as TraderAnalysis
     analysed.set(key, analysis)
     return analysis
   }

@@ -4,6 +4,7 @@ import { createElement, type ReactElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import { DISCOVERY_LINES, type DiscoveryState } from '../shared/traders/discovery'
+import { DELAY_LINES } from '../shared/traders/delay'
 
 // FOUND FOR YOU (src/traders/FoundTradersCard.tsx; V9 Stage 3): the traders the app found, each with the ranking's
 // figures and its analysis or its status, the rule in words, that their verdicts describe them, that following is the
@@ -87,7 +88,9 @@ describe('Found for you', () => {
     expect(html).toContain('+$159.9M')
     expect(html).toContain('412 trips, +$1.3M after fees')
     expect(html).toContain('MARKET OR LUCK')
-    expect(html).toContain('A follower a minute late: -0.04% a trip')
+    expect(html).toContain('A follower two minutes late: -0.04% a trip')
+    // The words name the delay test's shortest delay, the row the page reads.
+    expect(DELAY_LINES.delaysMin[0]).toBe(2)
     // OKX's thirty days are a return; its account, the assets its copiers put behind it.
     expect(html).toContain('+12.0%')
     expect(html).toContain("copiers' assets")

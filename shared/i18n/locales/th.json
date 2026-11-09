@@ -2526,7 +2526,7 @@
   "analysed@@a found trader's status": "วิเคราะห์แล้ว",
   "could not be read": "อ่านไม่ได้",
   "{trips} trips, {net} after fees": "{trips} รอบ หลังหักค่าธรรมเนียม {net}",
-  "A follower a minute late: {net} a trip": "ผู้ติดตามที่ช้าไปหนึ่งนาที: {net} ต่อรอบ",
+  "A follower two minutes late: {net} a trip": "ผู้ติดตามที่ช้าไปสองนาที: {net} ต่อรอบ",
   "Open@@a button: shows a trader found": "เปิด",
   "{count} found traders analysed. They were picked for their past profit, so their tests describe them and prove nothing: what is judged is following them on paper from the day they were found, all of them together.": "วิเคราะห์เทรดเดอร์ที่ค้นพบแล้ว {count} คน พวกเขาถูกเลือกเพราะกำไรในอดีต ผลทดสอบจึงเป็นเพียงการบรรยายและไม่ได้พิสูจน์อะไร สิ่งที่ถูกตัดสินคือการติดตามแบบจำลองตั้งแต่วันที่ค้นพบ รวมทุกคนเข้าด้วยกัน",
   "To follow one on paper, open them and press Follow on paper there; until paper testing is started, a follow only records what it would have done. Hyperliquid's leaderboard is the site's own data, not part of its documented API.": "หากต้องการติดตามใครแบบจำลอง ให้เปิดเทรดเดอร์คนนั้นแล้วกด «เทรดตามแบบจำลอง» ที่นั่น จนกว่าจะเริ่มการทดสอบจำลอง การติดตามจะบันทึกเพียงสิ่งที่มันจะทำ กระดานผู้นำของ Hyperliquid เป็นข้อมูลของเว็บไซต์เอง ไม่ได้เป็นส่วนหนึ่งของ API ที่มีเอกสารกำกับ",

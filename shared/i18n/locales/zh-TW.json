@@ -2526,7 +2526,7 @@
   "analysed@@a found trader's status": "已分析",
   "could not be read": "無法讀取",
   "{trips} trips, {net} after fees": "{trips} 筆往返交易，扣除手續費後 {net}",
-  "A follower a minute late: {net} a trip": "晚一分鐘的跟單者：每筆 {net}",
+  "A follower two minutes late: {net} a trip": "晚兩分鐘的跟單者：每筆 {net}",
   "Open@@a button: shows a trader found": "打開",
   "{count} found traders analysed. They were picked for their past profit, so their tests describe them and prove nothing: what is judged is following them on paper from the day they were found, all of them together.": "已分析 {count} 名找到的交易員。他們是因過去的獲利被選中的，所以測試只是描述他們，不能證明什麼：要評判的是從找到之日起模擬跟隨他們的結果，所有人合在一起看。",
   "To follow one on paper, open them and press Follow on paper there; until paper testing is started, a follow only records what it would have done. Hyperliquid's leaderboard is the site's own data, not part of its documented API.": "要模擬跟單某人，請打開該交易員並在那裡點「模擬跟單」；在開始模擬測試之前，跟單只會記錄它本會做的交易。Hyperliquid 的排行榜是該網站自己的資料，不屬於其公開文件中的 API。",

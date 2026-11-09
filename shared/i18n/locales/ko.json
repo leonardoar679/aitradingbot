@@ -2526,7 +2526,7 @@
   "analysed@@a found trader's status": "분석 완료",
   "could not be read": "읽을 수 없었습니다",
   "{trips} trips, {net} after fees": "{trips}회 왕복, 수수료 차감 후 {net}",
-  "A follower a minute late: {net} a trip": "1분 늦은 팔로워: 왕복당 {net}",
+  "A follower two minutes late: {net} a trip": "2분 늦은 팔로워: 왕복당 {net}",
   "Open@@a button: shows a trader found": "열기",
   "{count} found traders analysed. They were picked for their past profit, so their tests describe them and prove nothing: what is judged is following them on paper from the day they were found, all of them together.": "찾은 트레이더 중 {count}명을 분석했습니다. 과거 수익 때문에 고른 사람들이라 테스트는 그들을 설명할 뿐 아무것도 증명하지 않습니다. 평가하는 것은 찾은 날부터 모의로 팔로우한 결과를 모두 합친 것입니다.",
   "To follow one on paper, open them and press Follow on paper there; until paper testing is started, a follow only records what it would have done. Hyperliquid's leaderboard is the site's own data, not part of its documented API.": "모의로 팔로우하려면 트레이더를 열고 거기서 「모의로 팔로우」를 누르세요. 모의 테스트를 시작하기 전까지 팔로우는 했을 거래를 기록만 합니다. Hyperliquid의 리더보드는 사이트 자체 데이터이며 문서화된 API의 일부가 아닙니다.",

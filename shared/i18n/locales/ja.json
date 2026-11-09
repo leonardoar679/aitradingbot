@@ -2526,7 +2526,7 @@
   "analysed@@a found trader's status": "分析済み",
   "could not be read": "読み込めませんでした",
   "{trips} trips, {net} after fees": "{trips} 回の往復、手数料控除後 {net}",
-  "A follower a minute late: {net} a trip": "1分遅れのフォロワー：1回あたり {net}",
+  "A follower two minutes late: {net} a trip": "2分遅れのフォロワー：1回あたり {net}",
   "Open@@a button: shows a trader found": "開く",
   "{count} found traders analysed. They were picked for their past profit, so their tests describe them and prove nothing: what is judged is following them on paper from the day they were found, all of them together.": "見つけたトレーダーのうち {count} 人を分析しました。過去の利益で選ばれたため、テストは彼らを説明するだけで何も証明しません。判断の対象は、見つけた日からペーパーでフォローした結果を全員まとめて見たものです。",
   "To follow one on paper, open them and press Follow on paper there; until paper testing is started, a follow only records what it would have done. Hyperliquid's leaderboard is the site's own data, not part of its documented API.": "ペーパーでフォローするには、そのトレーダーを開いて「ペーパーでフォロー」を押します。ペーパー検証を開始するまでは、フォローは行ったはずの取引を記録するだけです。Hyperliquidのリーダーボードはサイト独自のデータで、文書化されたAPIの一部ではありません。",

@@ -2526,7 +2526,7 @@
   "analysed@@a found trader's status": "sudah dianalisis",
   "could not be read": "tidak dapat dibaca",
   "{trips} trips, {net} after fees": "{trips} trip, {net} setelah biaya",
-  "A follower a minute late: {net} a trip": "Pengikut yang terlambat satu menit: {net} per trip",
+  "A follower two minutes late: {net} a trip": "Pengikut yang terlambat dua menit: {net} per trip",
   "Open@@a button: shows a trader found": "Buka",
   "{count} found traders analysed. They were picked for their past profit, so their tests describe them and prove nothing: what is judged is following them on paper from the day they were found, all of them together.": "{count} trader temuan telah dianalisis. Mereka dipilih karena keuntungan masa lalunya, jadi tes mereka hanya menggambarkan dan tidak membuktikan apa pun: yang dinilai adalah mengikuti mereka secara simulasi sejak hari mereka ditemukan, semuanya bersama-sama.",
   "To follow one on paper, open them and press Follow on paper there; until paper testing is started, a follow only records what it would have done. Hyperliquid's leaderboard is the site's own data, not part of its documented API.": "Untuk mengikuti seseorang secara simulasi, buka dia lalu tekan «Ikuti secara simulasi» di sana; sampai pengujian simulasi dimulai, sebuah follow hanya mencatat apa yang akan dilakukannya. Papan peringkat Hyperliquid adalah data situs itu sendiri, bukan bagian dari API yang didokumentasikannya.",
