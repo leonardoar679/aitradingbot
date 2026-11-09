@@ -617,6 +617,43 @@ else:
     ok = not by_other and (bool(fakes) or not ended)
     gate_line('ai', 'pass' if ok else 'fail', f'{len(ai_calls)} call(s) in the run: {len(by_fake)} answered by the fake (its made-up cost ${cost_of(by_fake):.4f}), {len(by_other)} by anyone else (${cost_of(by_other):.4f}); {len(fakes)} segment record(s) of the fake on file, {sum(len(f.get("asked", [])) for f in fakes)} request(s) in them' + ('' if ended else ' -- the run has not ended'))
 
+# Copied (V9-S8-GATES-2): every opening of a followed trader -- a position from flat, or a flip -- seen after the follow
+# began and inside a span, on a coin Binance or Bitget lists, entered as a follow or kept as a miss with why; the
+# follows entered, and their delay after the leader's trade, by venue.
+follows_on = (settings_now.get('copyTrading') or {}).get('follows') or {}
+
+
+def opens_position(event):
+    before, after = event.get('before') or 0, event.get('after') or 0
+    return abs(after) > 1e-12 and (abs(before) <= 1e-12 or (before > 0) != (after > 0))
+
+
+openings = [
+    e for e in events_by_key.values()
+    if e.get('via') != 'snapshot' and e.get('perp') and e.get('traderKey') in follows_on and opens_position(e)
+    and (e.get('timeMs') or 0) >= (follows_on[e['traderKey']].get('since') or 0)
+    and any(a <= (e.get('receivedMs') or 0) / 1000 <= b for a, b in spans)
+]
+entered_keys = {leg.get('eventKey') for e in copy_trades for leg in (e.get('follow') or {}).get('legs', [])}
+follow_misses = {m.get('eventKey'): m for m in jsonl(os.path.join(PROFILE, 'paperBooks', 'misses-*.jsonl')) if m.get('writer') == 'follow'}
+entered = [e for e in openings if e['key'] in entered_keys]
+missed = [e for e in openings if e['key'] not in entered_keys and e['key'] in follow_misses]
+silent = [e for e in openings if e['key'] not in entered_keys and e['key'] not in follow_misses]
+delays = {}
+for e in copy_trades:
+    stamp = e.get('follow') or {}
+    if isinstance(stamp.get('delaySec'), (int, float)):
+        delays.setdefault('OKX' if str(stamp.get('traderKey', '')).startswith('okx-') else 'Hyperliquid', []).append(stamp['delaySec'])
+said_delays = ', '.join(f'{venue} {len(xs)}, a median {sorted(xs)[len(xs) // 2]:.0f} s late' for venue, xs in sorted(delays.items())) or 'none'
+stages = {}
+for e in missed:
+    stage = follow_misses[e['key']].get('stage')
+    stages[stage] = stages.get(stage, 0) + 1
+if not follows_on:
+    gate_line('copied', 'not measured', 'No trader was followed in the run.')
+else:
+    gate_line('copied', 'pass' if not silent else 'fail', f'{len(openings)} opening(s) of the followed traders on listed coins: {len(entered)} entered, {len(missed)} missed with why ({", ".join(f"{k} {v}" for k, v in sorted(stages.items())) or "none"}), {len(silent)} in silence; follows by venue: {said_delays}' + (f'; first in silence: {silent[0]["key"]}' if silent else ''))
+
 # --- the records on file, over every segment -----------------------------------------------------
 print('\n===== raw records')
 events = jsonl(os.path.join(PROFILE, 'marketEvents', '*.jsonl'))

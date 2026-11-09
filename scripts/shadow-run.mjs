@@ -66,6 +66,8 @@
 //   SEED_SHADOW_DAYS  the seeded week's length in days, so that it can end within a run               [7]
 //   TRADERS        pastes -- Hyperliquid addresses, OKX lead traders' codes -- read, analysed and followed on paper
 //                  once the run is set up, each one's clone run where its analysis fitted a rule (V8 Stage 12)  [none]
+//   CLONES         0 runs no trader's clone, so the copy book is the follows' alone (v9-7d's third try: four clones
+//                  held all fifteen of its places for three days and no follow could enter)                     [1]
 //   PAPER_TESTING  1 starts paper testing once the run is set up -- the three books, Binance's announcements read
 //                  every minute, the delisting rule's short, the baseline -- and stops it at the run's end, so that
 //                  what Stop puts back is on file (V8 Stage 9)                                                [0]
@@ -118,6 +120,7 @@ const WATCH_PAPER = process.env.WATCH_PAPER !== '0'
 const FORECAST_TRADER = process.env.FORECAST_TRADER === '1'
 const LAB = process.env.LAB === '1'
 const PAPER_TESTING = process.env.PAPER_TESTING === '1'
+const CLONES = process.env.CLONES !== '0'
 const TRADERS = (process.env.TRADERS ?? '')
   .split(',')
   .map((paste) => paste.trim())
@@ -271,7 +274,7 @@ if (DAY_SUMMARY_EVERY_MS > 0) fs.mkdirSync(path.join(OUT, 'day-summaries'), { re
 // The run's own settings, kept at its first start (OUT/run-env.json) so that a run cut by a power loss, which takes the
 // supervisor down with it, is resumed as it began: every knob of this script's that was set, none of them a key.
 if (!RESUME) {
-  const KNOBS = ['RUN_NAME', 'RUN_MINUTES', 'MIN_BAND', 'EXPERIMENT', 'UNIVERSE_SIZE', 'SHADOW_ROOT', 'APP_ENTRY', 'MODELS_FROM', 'HOUR_REPORT_MINUTES', 'WATCH_MODELS', 'FIRST_GATES', 'WATCH_PAPER', 'FORECAST_TRADER', 'LAB', 'PAPER_TESTING', 'TRADERS', 'DAY_SUMMARY_MINUTES', 'DEMO_KEY', 'DEMO_CHECK', 'FORECAST_DATA_FROM', 'WAIT_FORECAST', 'SETTLE_MINUTES', 'REAL_AI', 'CEILING_USD', 'FROM_PROFILE', 'MOVE_ROLES', 'MOVE_DISABLE', 'SEED_SHADOW', 'SEED_SHADOW_DAYS', 'MAX_RESUMES']
+  const KNOBS = ['RUN_NAME', 'RUN_MINUTES', 'MIN_BAND', 'EXPERIMENT', 'UNIVERSE_SIZE', 'SHADOW_ROOT', 'APP_ENTRY', 'MODELS_FROM', 'HOUR_REPORT_MINUTES', 'WATCH_MODELS', 'FIRST_GATES', 'WATCH_PAPER', 'FORECAST_TRADER', 'LAB', 'PAPER_TESTING', 'TRADERS', 'CLONES', 'DAY_SUMMARY_MINUTES', 'DEMO_KEY', 'DEMO_CHECK', 'FORECAST_DATA_FROM', 'WAIT_FORECAST', 'SETTLE_MINUTES', 'REAL_AI', 'CEILING_USD', 'FROM_PROFILE', 'MOVE_ROLES', 'MOVE_DISABLE', 'SEED_SHADOW', 'SEED_SHADOW_DAYS', 'MAX_RESUMES']
   fs.writeFileSync(path.join(OUT, 'run-env.json'), JSON.stringify(Object.fromEntries(KNOBS.filter((name) => process.env[name] !== undefined).map((name) => [name, process.env[name]])), null, 2))
 }
 
@@ -876,7 +879,7 @@ async function main() {
   // followed already. An analysis of a long record takes minutes.
   for (const raw of TRADERS) {
     const read = await page
-      .evaluate(async (paste) => {
+      .evaluate(async ({ paste, cloning }) => {
         const meta = await window.api.traders.import(paste)
         if ('refused' in meta) return { paste, refused: meta.refused }
         const key = meta.ref.key
@@ -885,9 +888,10 @@ async function main() {
         const analysis = await window.api.traders.analyze(key)
         const follows = await window.api.traders.follow(key, true)
         const rule = analysis.clone?.rule ?? null
+        if (rule !== null && !cloning) return { key, verdict: analysis.skill?.verdict ?? null, records: analysis.record?.records ?? null, followed: follows.some((status) => status.key === key), clone: 'off in this run' }
         const clones = rule === null ? null : await window.api.traders.clone(key, true)
         return { key, verdict: analysis.skill?.verdict ?? null, records: analysis.record?.records ?? null, followed: follows.some((status) => status.key === key), clone: rule === null ? 'no rule fitted' : Object.keys(clones ?? {}).includes(key) }
-      }, raw)
+      }, { paste: raw, cloning: CLONES })
       .catch((failure) => ({ paste: raw, failed: String(failure).slice(0, 300) }))
     say(`trader: ${JSON.stringify(read)}`)
   }
