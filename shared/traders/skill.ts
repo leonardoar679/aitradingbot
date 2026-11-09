@@ -7,7 +7,7 @@ import type { RoundTrip } from './roundTrips'
 // same side over the same hold: Bitcoin's mean hourly return over the 720 hours before the trip's day, times the coin's
 // beta to Bitcoin over those hours, times the hours held. The mean of what is left is the trader's edge per trip.
 //
-// It is called skill only when chance explains it under two nulls and the record holds it up:
+// It is called skill only where chance explains it under neither of two nulls and the record holds it up:
 // - null A, the schedule shifted: every trip moved by one random offset within the record's span, keeping its coin, its
 //   side and its hold, and measured on the venue's bars -- what the same trades at other times would have made, with
 //   the observed figure measured on the same bars at no offset;
