@@ -1189,7 +1189,12 @@ more changes came from the third try's records, after its build and in the fourt
 Bitcoin's fifteen minutes moved half a percent (243f0b3), since 7 of its 14 shock notices named moves of 0.14% to 0.19%
 on quiet days; and Found for you shows a follower two minutes late, the delay test's shortest row, where it had looked
 for a one-minute row the test never makes and so showed none (0e5d238). Of the third try's 26 found traders analysed,
-none read SKILL.
+none read SKILL. Both of its loud hack notices were wrong, and it held no first report of a theft to catch:
+"Gnosis Pay Says Hackers Accessed Customer Data", whose funds were unaffected, and "Solana moves to scrap the
+transaction feature used in the $270 million Drift hack", a hack older than the feed's week. So, after the fourth try's
+build (e8c1b3b, feed-v4), a breach that reports data alone is no theft, and a theft named with "the", where no news of a
+loss is told, is a follow-up; on both archives every theft read as a first report before still is. The fourth try
+reads its news as feed-v3, and V9-NEWS-CLASS judges it so.
 
 **The found traders taken together.** V9-COPY-FORWARD registered that the found traders' verdicts be reported with
 the number analysed and the Benjamini-Hochberg adjustment across all of them, since they were picked for the profit the
