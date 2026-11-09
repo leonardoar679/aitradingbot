@@ -150,10 +150,12 @@ export async function cloneSignal(signal: CloneSignal, deps: CloneDeps): Promise
     const lagSec = (nowMs - signal.receivedMs) / 1000
     if (lagSec > FOLLOW_LINES.maxEntryLagSec) return miss('late', `acted on ${Math.round(lagSec)} s after its close was read, past ${FOLLOW_LINES.maxEntryLagSec} s`)
     if (px === null || !(px > 0)) return miss('gate', "the perpetual's price could not be read")
+    // A clone leaves the follows their room: the hour's last opens and the book's last places are theirs.
     const opens = copyOpensLastHour(executors, nowMs)
-    if (opens >= FOLLOW_LINES.maxOpensPerHour) return miss('cap', `${opens} opened in the last hour, the most`)
+    if (opens >= FOLLOW_LINES.maxOpensPerHour - FOLLOW_LINES.followReserve) return miss('cap', `${opens} opened in the last hour; the hour's last ${FOLLOW_LINES.followReserve} are kept for follows`)
     const books = healPaperBooks(fresh.paperBooks)
     const open = bookExecutors(executors, 'copy', books.startedAt ?? 0).filter((executor) => executor.status === 'active')
+    if (books.running && open.length >= books.books.copy.maxOpen - FOLLOW_LINES.followReserve) return miss('cap', `The copy book has ${open.length} trades open; its last ${FOLLOW_LINES.followReserve} places are kept for follows.`)
     if (standing === null) return miss('cap', "the copy book's standing could not be read")
     const room = { ...standing, open: open.length }
     const stakeQuote = books.books.copy.maxStakeShare * room.settledEquity

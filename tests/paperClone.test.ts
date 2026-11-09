@@ -138,19 +138,39 @@ describe("a clone's signal", () => {
     expect(off.misses).toEqual([])
   })
 
-  it("is one trade a coin at a time, another coin's open trade no bar, and ten opened in the copy book's hour the most", async () => {
+  it("is one trade a coin at a time, another coin's open trade no bar, and leaves the follows the hour's last five opens", async () => {
     const { settings, misses, deps } = harness()
     await cloneSignal(signal(), deps)
     expect(await cloneSignal(signal({ key: 'btc', coin: 'BTC', symbol: 'BTCUSDT' }), deps)).toMatch(/^entered short BTC/)
     expect(settings.executors).toHaveLength(2)
-    const busy = harness()
-    busy.settings.executors = Array.from(
-      { length: 10 },
-      (_, k) => ({ id: `old${k}`, type: 'position', mode: 'paper', status: 'stopped', createdAt: Math.floor(T0 / 1000) - 600, params: {}, book: { id: 'copy', startedAt: STARTED, ledger: 'follow', result: { netQuote: 0, netPct: 0, feesQuote: 0, fundingQuote: 0, closedAt: Math.floor(T0 / 1000) - 60 } } }) as unknown as ExecutorConfig
-    )
-    await cloneSignal(signal(), busy.deps)
-    expect(busy.misses.map((miss) => [miss.stage, miss.reason])).toEqual([['cap', '10 opened in the last hour, the most']])
+    const busy = (opened: number): ReturnType<typeof harness> => {
+      const made = harness()
+      made.settings.executors = Array.from(
+        { length: opened },
+        (_, k) => ({ id: `old${k}`, type: 'position', mode: 'paper', status: 'stopped', createdAt: Math.floor(T0 / 1000) - 600, params: {}, book: { id: 'copy', startedAt: STARTED, ledger: 'follow', result: { netQuote: 0, netPct: 0, feesQuote: 0, fundingQuote: 0, closedAt: Math.floor(T0 / 1000) - 60 } } }) as unknown as ExecutorConfig
+      )
+      return made
+    }
+    // Of the hour's ten, a clone takes five at most: v9-7d's four clones took every open and every place for three days.
+    const five = busy(5)
+    await cloneSignal(signal(), five.deps)
+    expect(five.misses.map((miss) => [miss.stage, miss.reason])).toEqual([['cap', "5 opened in the last hour; the hour's last 5 are kept for follows"]])
+    expect(await cloneSignal(signal(), busy(4).deps)).toMatch(/^entered short ETH/)
     expect(misses).toEqual([])
+  })
+
+  it("leaves the follows the copy book's last five places", async () => {
+    // Trades of the book open since before the hour, followed and not cloned, so the hour's opens do not count them.
+    const full = (open: number): ReturnType<typeof harness> => {
+      const made = harness()
+      made.settings.paperBooks = { ...made.settings.paperBooks, startedAt: STARTED - 7200 }
+      made.settings.executors = Array.from({ length: open }, (_, k) => ({ id: `held${k}`, type: 'position', mode: 'paper', status: 'active', createdAt: STARTED - 3600, params: {}, book: { id: 'copy', startedAt: STARTED - 7200, ledger: 'follow' } }) as unknown as ExecutorConfig)
+      return made
+    }
+    const ten = full(10)
+    await cloneSignal(signal(), ten.deps)
+    expect(ten.misses.map((miss) => [miss.stage, miss.reason])).toEqual([['cap', 'The copy book has 10 trades open; its last 5 places are kept for follows.']])
+    expect(await cloneSignal(signal(), full(9).deps)).toMatch(/^entered short ETH/)
   })
 })
 

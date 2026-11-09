@@ -150,6 +150,9 @@ export function PaperCopyView({
           <button type="button" style={buttonStyle(following === null ? 'primary' : 'secondary', busy)} disabled={busy || analysis === null} onClick={() => onFollow(following === null)}>
             {following === null ? t('Follow on paper') : t('Stop following')}
           </button>
+          {meta.source === 'okx' && (
+            <p style={{ ...noteStyle, marginTop: '0.4rem' }}>{t("OKX shows a lead trader's positions about five minutes after they trade, so a follow enters up to seven minutes late.")}</p>
+          )}
           {following !== null && (
             <div style={{ ...noteStyle, marginTop: '0.4rem' }}>
               <p style={{ margin: 0 }}>

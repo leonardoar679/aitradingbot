@@ -137,7 +137,9 @@ export function FoundTradersView({ state, busy, onToggle, onOpen }: { state: Dis
                           </>
                         )}
                         {trader.latest.followerNetPct !== null && (
-                          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{t('A follower two minutes late: {net} a trip', { net: i18n.pct(trader.latest.followerNetPct, 2) })}</div>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{trader.latest.followerDelayMin === 5
+                            ? t('A follower five minutes late, as OKX shows positions: {net} a trip', { net: i18n.pct(trader.latest.followerNetPct, 2) })
+                            : t('A follower two minutes late: {net} a trip', { net: i18n.pct(trader.latest.followerNetPct, 2) })}</div>
                         )}
                       </span>
                     )}

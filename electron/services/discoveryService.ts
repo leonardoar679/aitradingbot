@@ -40,6 +40,9 @@ import { getSettings, setSettings } from './settingsService'
 import { runInWorker } from './taskWorkerService'
 import { analyzeTrader, importTrader, listTraders } from './traderService'
 
+/** The delay test's row an OKX trader's follower is read at: OKX's public positions come about five minutes late. */
+const OKX_FOLLOWER_DELAY_MIN = 5
+
 // TRADERS FOUND BY THE APP (V9 Stage 3; the rule is shared/traders/discovery.ts). Once a day OKX's lead-trader ranking
 // (through okxGet, its budget) and Hyperliquid's leaderboard (one GET of a 39 MB file, read in the worker) are read, the
 // rule picks at most ten traders not on file yet, and each is kept as found in discovery/discovery-YYYY-MM.jsonl. Then,
@@ -151,7 +154,9 @@ async function keep(rows: DiscoveryLine[]): Promise<void> {
 /** An analysis as the page shows it: its trips, net, verdicts, and a follower's net at the delay test's shortest delay
  * (two minutes; until 9 November it looked for a one-minute row the test never makes, so the page showed none). */
 export function foundAnalysisOf(analysis: TraderAnalysis): FoundAnalysis {
-  const late = analysis.delay?.rows.find((row) => row.delayMin === DELAY_LINES.delaysMin[0] && row.costMultiplier === 1) ?? null
+  // OKX shows a lead trader's positions about five minutes after they trade: its follower is read at five minutes.
+  const delayMin = analysis.record?.source === 'okx' ? OKX_FOLLOWER_DELAY_MIN : DELAY_LINES.delaysMin[0]
+  const late = analysis.delay?.rows.find((row) => row.delayMin === delayMin && row.costMultiplier === 1) ?? null
   return {
     at: analysis.at,
     trips: analysis.figures.trips,
@@ -159,6 +164,7 @@ export function foundAnalysisOf(analysis: TraderAnalysis): FoundAnalysis {
     skill: analysis.skill?.verdict ?? null,
     clone: analysis.clone?.verdict ?? null,
     followerNetPct: late?.meanNetPct ?? null,
+    followerDelayMin: late === null ? null : delayMin,
     pSkill: typeof analysis.skill?.pShift === 'number' && typeof analysis.skill.pFlip === 'number' ? Math.max(analysis.skill.pShift, analysis.skill.pFlip) : null
   }
 }

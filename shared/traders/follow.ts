@@ -22,6 +22,13 @@ export const FOLLOW_LINES = {
   priceAgreePct: 2,
   /** A leader's fill the follow meets later than this is not entered: too late to call it the same trade. */
   maxEntryLagSec: 120,
+  /** OKX's public data shows a lead trader's positions about five minutes after they trade -- in v9-7d every one of
+   * 010pp's twelve openings was seen 300 to 380 s after it, read each minute -- so an OKX follow may enter this late
+   * (the user's choice of 9 November 2026); the page says so, beside the delay test's five-minute row. */
+  okxEntryLagSec: 420,
+  /** Places of the copy book, and opens of its hour, a clone leaves to the follows: a clone opens only while more than
+   * this many of each are free (v9-7d: four clones held all 15 places for three days, and no follow could enter). */
+  followReserve: 5,
   /** A follow is closed by time at the leader's longest hold, at most this. */
   maxHoldDays: 7,
   /** Reads of the leader missed in a row before the follow closes as "leader lost". */
@@ -246,10 +253,15 @@ export function followDecisionsOf(event: LeaderEvent, startedAtMs: number, held:
   return [{ kind: 'resize', positionId, targetSize: held.size * (Math.abs(after) / Math.abs(before)) }]
 }
 
+/** How late a follow of a venue's trader may enter: OKX's public positions come about five minutes after the trade. */
+export function entryLagSecOf(venue: LeaderEvent['venue'], lines: typeof FOLLOW_LINES = FOLLOW_LINES): number {
+  return venue === 'okx' ? lines.okxEntryLagSec : lines.maxEntryLagSec
+}
+
 /** Why a follow may not enter a leader's new position now, or null where it may: too late, a price that disagrees,
  * or a cap. The copy book's own room is the book's (shared/paperBooks.ts bookRoomProblem). */
 export function followGateOf(input: {
-  event: Pick<LeaderEvent, 'px' | 'timeMs'>
+  event: Pick<LeaderEvent, 'px' | 'timeMs' | 'venue'>
   nowMs: number
   venuePx: number | null
   openForTrader: number
@@ -258,7 +270,8 @@ export function followGateOf(input: {
 }): { stage: 'late' | 'gate' | 'cap'; reason: string } | null {
   const lines = input.lines ?? FOLLOW_LINES
   const lagSec = (input.nowMs - input.event.timeMs) / 1000
-  if (lagSec > lines.maxEntryLagSec) return { stage: 'late', reason: `seen ${Math.round(lagSec)} s after the leader traded, past ${lines.maxEntryLagSec} s` }
+  const lagLine = entryLagSecOf(input.event.venue, lines)
+  if (lagSec > lagLine) return { stage: 'late', reason: `seen ${Math.round(lagSec)} s after the leader traded, past ${lagLine} s` }
   if (input.venuePx === null || !(input.venuePx > 0)) return { stage: 'gate', reason: "the perpetual's price could not be read" }
   const apartPct = Math.abs(input.venuePx / input.event.px - 1) * 100
   if (apartPct > lines.priceAgreePct + 1e-9) return { stage: 'gate', reason: `the perpetual's price is ${apartPct.toFixed(2)}% from the leader's fill, over ${lines.priceAgreePct}%` }

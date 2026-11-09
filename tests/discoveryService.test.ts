@@ -144,7 +144,7 @@ describe('finding traders', () => {
       { venue: 'okx', ok: true, rows: 3, passed: 3, error: null },
       { venue: 'hyperliquid', ok: true, rows: 48_234, passed: 3, error: null }
     ])
-    expect(state.found.find((entry) => entry.key === `hyperliquid-${address(2)}`)).toMatchObject({ status: 'analysed', latest: { trips: 12, netUsd: 34, skill: 'MARKET OR LUCK', followerNetPct: -0.04, pSkill: null } })
+    expect(state.found.find((entry) => entry.key === `hyperliquid-${address(2)}`)).toMatchObject({ status: 'analysed', latest: { trips: 12, netUsd: 34, skill: 'MARKET OR LUCK', followerNetPct: -0.04, followerDelayMin: 2, pSkill: null } })
     expect(state.beyondChance).toBe(0)
   })
 
@@ -190,6 +190,24 @@ describe('finding traders', () => {
     await service.discoveryTurn()
     // A day on (twenty hours): the rankings again; everyone they name is known now, so nothing new is found.
     expect(calls.map((call) => call.what).slice(0, 3)).toEqual(['okx page 1', 'okx page 2', 'board'])
+  })
+
+  it("reads an OKX found trader's follower five minutes late, as OKX shows positions, and a Hyperliquid one at two", async () => {
+    const { service, clock } = await setup()
+    const list = service.discoverySeam.list
+    service.discoverySeam.list = async () => {
+      const held = await list()
+      return {
+        ...held,
+        traders: held.traders.map((entry) => (entry.latest === null ? entry : { ...entry, latest: { ...entry.latest, record: { source: entry.meta.ref.key.startsWith('okx-') ? 'okx' : 'hyperliquid' } } })) as unknown as TraderList['traders']
+      }
+    }
+    await service.discoveryTurn()
+    clock.now = T0 + 30 * 60_000
+    await service.discoveryTurn()
+    const state = service.discoveryState()
+    expect(state.found.find((entry) => entry.key === `hyperliquid-${address(2)}`)?.latest).toMatchObject({ followerNetPct: -0.04, followerDelayMin: 2 })
+    expect(state.found.find((entry) => entry.key === 'okx-AAAAAAAAAAAAAAA1')?.latest).toMatchObject({ followerNetPct: -0.09, followerDelayMin: 5 })
   })
 
   it("keeps a venue's refusal as a skip, and goes on to the next", async () => {

@@ -2534,5 +2534,7 @@
   "{coin}: {longs} long, {shorts} short": "{coin}: {longs} mua, {shorts} bán",
   "Context, not a call. Where three or more hold a coin and two thirds of them one way, that way is recorded once a day as a call of its own, judged after 60 days against the share of coins that moved that way; until then it is never shown on Home or taken as a side.": "Chỉ là bối cảnh, không phải tín hiệu. Khi từ ba người trở lên nắm giữ một coin và hai phần ba trong số đó cùng một hướng, hướng đó được ghi lại mỗi ngày một lần như một tín hiệu riêng, được đánh giá sau 60 ngày so với tỷ lệ các coin đã đi theo hướng đó; cho đến lúc đó, nó không bao giờ hiển thị trên Trang chủ hay được dùng làm hướng.",
   "Which way: unknown. On 24 hacks of 2024 to 2026, a short of the victim's own token from the second day made money in 12 and lost in 12: no way to trade it.": "Hướng: chưa biết. Trên 24 vụ hack từ 2024 đến 2026, bán khống token riêng của bên bị hại từ ngày thứ hai có lãi 12 lần và lỗ 12 lần: không có hướng đáng tin cậy.",
-  "Allowing for how many were analysed, {beyond} of them still read as skill.": "Khi tính đến số người đã được phân tích, vẫn còn {beyond} người được xem là có kỹ năng."
+  "Allowing for how many were analysed, {beyond} of them still read as skill.": "Khi tính đến số người đã được phân tích, vẫn còn {beyond} người được xem là có kỹ năng.",
+  "A follower five minutes late, as OKX shows positions: {net} a trip": "Người theo sau trễ năm phút, như OKX hiển thị vị thế: {net} mỗi lượt",
+  "OKX shows a lead trader's positions about five minutes after they trade, so a follow enters up to seven minutes late.": "OKX hiển thị vị thế của nhà giao dịch dẫn dắt khoảng năm phút sau khi họ giao dịch, nên lệnh theo vào trễ tới bảy phút."
 }

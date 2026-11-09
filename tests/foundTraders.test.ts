@@ -36,7 +36,7 @@ const state: DiscoveryState = {
       board: { venue: 'hyperliquid', id: '0x7fdafde5cfb5465924316eced2d3715494c517d1', name: 'BobbyBigSize', accountUsd: 47_859_298, pnlAllTime: 159_854_473, last30d: 33_262_401, volume30d: 2.46e9, leadDays: null, copiers: null, winRatio: null },
       status: 'analysed',
       why: null,
-      latest: { at: FOUND_AT + 600, trips: 412, netUsd: 1_250_000, skill: 'MARKET OR LUCK', clone: null, followerNetPct: -0.04, pSkill: 0.3 }
+      latest: { at: FOUND_AT + 600, trips: 412, netUsd: 1_250_000, skill: 'MARKET OR LUCK', clone: null, followerNetPct: -0.04, followerDelayMin: 2, pSkill: 0.3 }
     },
     {
       key: 'okx-F6476365DB0D09A3',
@@ -91,6 +91,11 @@ describe('Found for you', () => {
     expect(html).toContain('A follower two minutes late: -0.04% a trip')
     // The words name the delay test's shortest delay, the row the page reads.
     expect(DELAY_LINES.delaysMin[0]).toBe(2)
+    // An OKX trader's follower is read five minutes late, as OKX shows positions.
+    const okx = { ...state, found: state.found.map((entry) => (entry.latest === null ? entry : { ...entry, latest: { ...entry.latest, followerNetPct: 0.91, followerDelayMin: 5 } })) }
+    const okxHtml = await render(createElement(FoundTradersView, { state: okx, busy: false, onToggle: () => undefined, onOpen: () => undefined }))
+    expect(okxHtml).toContain('A follower five minutes late, as OKX shows positions: +0.91% a trip')
+    expect(DELAY_LINES.delaysMin).toContain(5)
     // OKX's thirty days are a return; its account, the assets its copiers put behind it.
     expect(html).toContain('+12.0%')
     expect(html).toContain("copiers' assets")

@@ -2534,5 +2534,7 @@
   "{coin}: {longs} long, {shorts} short": "{coin}: {longs} लॉन्ग, {shorts} शॉर्ट",
   "Context, not a call. Where three or more hold a coin and two thirds of them one way, that way is recorded once a day as a call of its own, judged after 60 days against the share of coins that moved that way; until then it is never shown on Home or taken as a side.": "संदर्भ, कोई कॉल नहीं। जहाँ तीन या अधिक किसी कॉइन को रखते हैं और उनमें से दो-तिहाई एक ही दिशा में, वह दिशा दिन में एक बार अपनी अलग कॉल के रूप में दर्ज होती है और 60 दिनों बाद उन कॉइन के अनुपात से परखी जाती है जो उस दिशा में चले; तब तक यह कभी होम पर नहीं दिखती और न ही दिशा मानी जाती है।",
   "Which way: unknown. On 24 hacks of 2024 to 2026, a short of the victim's own token from the second day made money in 12 and lost in 12: no way to trade it.": "दिशा: अज्ञात। 2024 से 2026 के 24 हैक में, दूसरे दिन से पीड़ित के अपने टोकन पर शॉर्ट 12 में मुनाफ़े में और 12 में घाटे में रहा: कोई भरोसेमंद दिशा नहीं।",
-  "Allowing for how many were analysed, {beyond} of them still read as skill.": "कितनों का विश्लेषण हुआ, यह ध्यान में रखने पर भी उनमें से {beyond} अब भी कौशल के रूप में पढ़े जाते हैं।"
+  "Allowing for how many were analysed, {beyond} of them still read as skill.": "कितनों का विश्लेषण हुआ, यह ध्यान में रखने पर भी उनमें से {beyond} अब भी कौशल के रूप में पढ़े जाते हैं।",
+  "A follower five minutes late, as OKX shows positions: {net} a trip": "पाँच मिनट देर से फ़ॉलो करने वाला, जैसे OKX पोज़िशन दिखाता है: प्रति ट्रिप {net}",
+  "OKX shows a lead trader's positions about five minutes after they trade, so a follow enters up to seven minutes late.": "OKX किसी लीड ट्रेडर की पोज़िशन उनके ट्रेड के लगभग पाँच मिनट बाद दिखाता है, इसलिए फ़ॉलो सात मिनट तक देर से प्रवेश करता है।"
 }

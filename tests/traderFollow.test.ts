@@ -97,7 +97,16 @@ describe("the follow's answer", () => {
 })
 
 describe('the gates of an entry, and its size', () => {
-  const at = { event: { px: 2000, timeMs: T0 }, nowMs: T0 + 30_000, venuePx: 2010, openForTrader: 0, opensLastHour: 0 }
+  const at = { event: { px: 2000, timeMs: T0, venue: 'hyperliquid' as const }, nowMs: T0 + 30_000, venuePx: 2010, openForTrader: 0, opensLastHour: 0 }
+  it("enters an OKX trader's position up to seven minutes after they traded, since OKX shows it about five late", () => {
+    const okx = { ...at, event: { ...at.event, venue: 'okx' as const } }
+    // v9-7d: 010pp's openings were seen 300 to 380 s after; Hyperliquid's stream within a second or two.
+    expect(FOLLOW_LINES.okxEntryLagSec).toBe(420)
+    expect(followGateOf({ ...okx, nowMs: T0 + 380_000 })).toBeNull()
+    expect(followGateOf({ ...okx, nowMs: T0 + 420_000 })).toBeNull()
+    expect(followGateOf({ ...okx, nowMs: T0 + 421_000 })).toMatchObject({ stage: 'late', reason: 'seen 421 s after the leader traded, past 420 s' })
+    expect(followGateOf({ ...at, nowMs: T0 + 380_000 })).toMatchObject({ stage: 'late', reason: 'seen 380 s after the leader traded, past 120 s' })
+  })
   it('refuses one seen too late, a price too far from the leader\'s or not read, and one past a cap', () => {
     expect(followGateOf(at)).toBeNull()
     expect(followGateOf({ ...at, nowMs: T0 + (FOLLOW_LINES.maxEntryLagSec + 1) * 1000 })).toMatchObject({ stage: 'late' })

@@ -2534,5 +2534,7 @@
   "{coin}: {longs} long, {shorts} short": "{coin}: 롱 {longs}, 숏 {shorts}",
   "Context, not a call. Where three or more hold a coin and two thirds of them one way, that way is recorded once a day as a call of its own, judged after 60 days against the share of coins that moved that way; until then it is never shown on Home or taken as a side.": "참고 정보이며 판단이 아닙니다. 세 명 이상이 한 코인을 보유하고 그중 3분의 2가 같은 방향이면, 그 방향은 하루에 한 번 별도의 판단으로 기록되고 60일 뒤 그 방향으로 움직인 코인의 비율과 비교해 평가됩니다. 그때까지는 홈에 표시되지도, 방향으로 쓰이지도 않습니다.",
   "Which way: unknown. On 24 hacks of 2024 to 2026, a short of the victim's own token from the second day made money in 12 and lost in 12: no way to trade it.": "방향: 알 수 없음. 2024~2026년의 해킹 24건에서 둘째 날부터 피해자 자체 토큰을 숏하면 12건은 수익, 12건은 손실이었습니다. 믿을 만한 방향이 없습니다.",
-  "Allowing for how many were analysed, {beyond} of them still read as skill.": "분석한 인원수를 감안해도 그중 {beyond}명은 여전히 실력으로 읽힙니다."
+  "Allowing for how many were analysed, {beyond} of them still read as skill.": "분석한 인원수를 감안해도 그중 {beyond}명은 여전히 실력으로 읽힙니다.",
+  "A follower five minutes late, as OKX shows positions: {net} a trip": "5분 늦은 팔로워(OKX가 포지션을 보여 주는 시차): 왕복당 {net}",
+  "OKX shows a lead trader's positions about five minutes after they trade, so a follow enters up to seven minutes late.": "OKX는 리드 트레이더의 포지션을 거래 후 약 5분 뒤에 보여 주므로, 팔로우는 최대 7분 늦게 진입합니다."
 }

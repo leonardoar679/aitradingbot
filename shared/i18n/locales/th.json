@@ -2534,5 +2534,7 @@
   "{coin}: {longs} long, {shorts} short": "{coin}: ลอง {longs} ช็อต {shorts}",
   "Context, not a call. Where three or more hold a coin and two thirds of them one way, that way is recorded once a day as a call of its own, judged after 60 days against the share of coins that moved that way; until then it is never shown on Home or taken as a side.": "เป็นบริบท ไม่ใช่สัญญาณ เมื่อมีสามคนขึ้นไปถือเหรียญเดียวกันและสองในสามถือไปทางเดียวกัน ทิศทางนั้นจะถูกบันทึกวันละครั้งเป็นสัญญาณของตัวเอง และตัดสินหลัง 60 วันเทียบกับสัดส่วนของเหรียญที่ขยับไปทางนั้น จนกว่าจะถึงตอนนั้นจะไม่แสดงในหน้าแรกและไม่ถูกใช้เป็นทิศทาง",
   "Which way: unknown. On 24 hacks of 2024 to 2026, a short of the victim's own token from the second day made money in 12 and lost in 12: no way to trade it.": "ทิศทาง: ไม่ทราบ จากการแฮ็ก 24 ครั้งในปี 2024 ถึง 2026 การชอร์ตโทเคนของผู้เสียหายเองตั้งแต่วันที่สองได้กำไร 12 ครั้งและขาดทุน 12 ครั้ง: ไม่มีทิศทางที่เชื่อถือได้",
-  "Allowing for how many were analysed, {beyond} of them still read as skill.": "เมื่อคำนึงถึงจำนวนที่วิเคราะห์แล้ว ยังมี {beyond} คนที่อ่านได้ว่าเป็นฝีมือ"
+  "Allowing for how many were analysed, {beyond} of them still read as skill.": "เมื่อคำนึงถึงจำนวนที่วิเคราะห์แล้ว ยังมี {beyond} คนที่อ่านได้ว่าเป็นฝีมือ",
+  "A follower five minutes late, as OKX shows positions: {net} a trip": "ผู้ติดตามที่ช้าไปห้านาที ตามที่ OKX แสดงโพซิชัน: {net} ต่อรอบ",
+  "OKX shows a lead trader's positions about five minutes after they trade, so a follow enters up to seven minutes late.": "OKX แสดงโพซิชันของเทรดเดอร์นำประมาณห้านาทีหลังจากที่เขาเทรด การติดตามจึงเข้าช้าได้ถึงเจ็ดนาที"
 }
