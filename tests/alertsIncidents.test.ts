@@ -1,6 +1,9 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   SHOCK_ATTACH_SECONDS,
+  SHOCK_NOTICE_MIN_MOVE_PCT,
   btcHourMovePct,
   btcMovePct,
   incidentLines,
@@ -9,6 +12,7 @@ import {
   shockAttachLine,
   shockNotice,
   shockStarts,
+  shockWorthTelling,
   storyNotice,
   storySeverity,
   sumWords
@@ -119,6 +123,23 @@ describe('the market before the news', () => {
     expect(shockStarts('LIQUIDATION_SHOCK', 'RECOVERY')).toBe(false)
     expect(shockStarts('NORMAL', 'PRE_EVENT')).toBe(false)
     expect(shockStarts('NORMAL', null)).toBe(false)
+  })
+
+  it("tells a shock only where Bitcoin's fifteen minutes moved half a percent either way, not a quiet day's small move", () => {
+    // v9-7d's notices: +0.83% and -0.53% were moves; +0.17%, "2.9 times usual" on a quiet Sunday, was not.
+    expect(SHOCK_NOTICE_MIN_MOVE_PCT).toBe(0.5)
+    expect(shockWorthTelling(0.83)).toBe(true)
+    expect(shockWorthTelling(-0.53)).toBe(true)
+    expect(shockWorthTelling(0.5)).toBe(true)
+    expect(shockWorthTelling(0.17)).toBe(false)
+    expect(shockWorthTelling(-0.49)).toBe(false)
+    expect(shockWorthTelling(null)).toBe(false)
+    // The window's scheduler asks before it raises the notice, and before the shock is kept for stories to attach to.
+    const scheduler = readFileSync(join(__dirname, '..', 'src', 'news', 'NewsAlertScheduler.tsx'), 'utf-8')
+    const asked = scheduler.indexOf('if (!shockWorthTelling(move)) return')
+    expect(asked).toBeGreaterThan(0)
+    expect(asked).toBeLessThan(scheduler.indexOf('lastShockAt = nowSec'))
+    expect(asked).toBeLessThan(scheduler.indexOf("const id = `market-shock:${nowSec}`"))
   })
 
   it('tells the shock with its fifteen minutes in percent where known, and in its usual moves', () => {

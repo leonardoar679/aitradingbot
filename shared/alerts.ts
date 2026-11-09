@@ -276,9 +276,22 @@ export const SHOCK_NOTICE_STATES: readonly string[] = ['POST_EVENT_SHOCK', 'TREN
 /** A loud story within this long after a shock notice is told with it. */
 export const SHOCK_ATTACH_SECONDS = 2 * 3600
 
+/** Bitcoin's fifteen minutes, in percent either way, that a shock notice needs as well (since 9 November 2026). The
+ * state is read against Bitcoin's own usual fifteen minutes, which on a quiet day are a few hundredths of a percent:
+ * in v9-7d's first three days 7 of 14 shock notices named moves of 0.14% to 0.19%, "2.5 to 4.9 times usual", and the
+ * other 7 moves of 0.53% to 0.94%. The forecast still widens its ranges by the state alone; the notice also wants this
+ * much of a move. */
+export const SHOCK_NOTICE_MIN_MOVE_PCT = 0.5
+
 /** Whether the market's state now opens a shock: it is a shock state and the state before it, read last, was none. */
 export function shockStarts(previous: string | null, current: string | null): boolean {
   return current !== null && SHOCK_NOTICE_STATES.includes(current) && (previous === null || !SHOCK_NOTICE_STATES.includes(previous))
+}
+
+/** Whether a shock opened is told: where Bitcoin's last fifteen minutes, read from its minutes, moved the notice's
+ * least either way; a move that could not be read is not told. */
+export function shockWorthTelling(movePct: number | null): boolean {
+  return movePct !== null && Math.abs(movePct) >= SHOCK_NOTICE_MIN_MOVE_PCT
 }
 
 /** What the desktop is told of a shock, in a language: the state's words, Bitcoin's fifteen minutes in percent where

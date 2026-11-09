@@ -15,6 +15,7 @@ import {
   shockAttachLine,
   shockNotice,
   shockStarts,
+  shockWorthTelling,
   storyNotice,
   storySeverity,
   type LoudIncident,
@@ -215,6 +216,8 @@ export function NewsAlertScheduler(): null {
       } catch {
         move = null
       }
+      // A quiet day's usual fifteen minutes make a small move read as a shock: told only where Bitcoin moved enough.
+      if (!shockWorthTelling(move)) return
       const i18n = noticeI18n()
       const notice = shockNotice({ stateWord: marketStateWord(reading.state as MarketShockState, i18n), btc15: reading.btc15, movePct: move }, i18n)
       const id = `market-shock:${nowSec}`
