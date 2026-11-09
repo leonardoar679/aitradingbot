@@ -1149,15 +1149,16 @@ where three or more agree two to one, recorded as a call of the source 'top-trad
 | V9-HACK-2 | **failed** | 35 hacks of $5M or more from 2020 whose victim's own token had a perpetual listed before the day; on the 24 held out (2024 to October 2026) a short from the second day's open, held the day the discovery half chose, netted +1.52% a week cluster after costs, t 0.90, 90% [-0.95%, +4.43%]; 12 made money and 12 lost. Bitcoin after the 19 largest exchange, bridge and chain hacks went no consistent way |
 | V9-MACRO-2 | **failed** | 377 releases from 2018 to August 2026; from 2023 on, following Bitcoin's first fifteen minutes for a day after CPI, PPI and jobs was right 47.6% of the time (lower bound 38.7%) and netted -0.30%; after FOMC statements 13 of 19 went on that way (+1.33%, lower bound +0.25%) but the share's lower bound was 49.6%, under the 50% line |
 | V9-COPY-FORWARD, V9-TOP-TRADERS-2 | not yet measurable | judged on the forward record once 100 copied round trips over 28 days, and 60 days of calls, are on file |
-| V9-NEWS-CLASS, V9-SHOCK, V9-S8-GATES | under way | the seven-day run, v9-7d, from 6 November |
+| V9-S8-GATES | not measured | superseded by V9-S8-GATES-2 before any of it was judged: the run's third try copied no trader in 3.1 days, and it started again (below) |
+| V9-NEWS-CLASS, V9-SHOCK, V9-S8-GATES-2 | under way | the seven-day run, v9-7d, its fourth try from 9 November |
 
-**The seven-day run (v9-7d).** From the build of bd9b507 on a scratch profile, OpenRouter faked: its clock started at
-06:29:56 UTC on 6 November and runs to 06:30 UTC on 13 November. Its first two tries were stopped before anything was
-measured. In the first, the app's first reading of the rankings, two minutes in, found five of the panel's eight before
+**The seven-day run (v9-7d).** On a scratch profile, OpenRouter faked. Its first two tries were stopped before anything
+was measured. In the first, the app's first reading of the rankings, two minutes in, found five of the panel's eight before
 the harness had read them; finding is now off until the panel is followed (6aefdf3). In the second, a panel trader's
 record of 24,706 fills over 146 coins and 28 months was still being analysed after 45 minutes, and a finding turn waited
-for its analysis, so a long one across 00:00-02:00 UTC would have skipped that day's holdings read (bd9b507). By 08:13
-UTC the panel was read, analysed and followed on paper, and paper testing started:
+for its analysis, so a long one across 00:00-02:00 UTC would have skipped that day's holdings read (bd9b507). The third,
+on the build of bd9b507, started its clock at 06:29:56 UTC on 6 November; by 08:13 UTC the panel was read, analysed and
+followed on paper, and paper testing started:
 
 | trader | venue | trips judged | net on record | verdict | why |
 |---|---|---|---|---|---|
@@ -1174,6 +1175,21 @@ A Hyperliquid trader's net is over the fills on file, realized less fees plus fu
 estimate of their positions. A clone runs on paper where a rule fitted (thank you JEFF, RTB 2, 1491, 010pp); none is
 REPLICABLE. Following leaders by profit picks up traders of markets the copy book cannot trade: two of the five
 Hyperliquid names trade only its stock and commodity markets.
+
+**The third try's three days, and the fourth.** The third try ran 3.1 days with every gate read dry passing or not yet
+due, and copied no trader. Four clones of the panel's traders -- thank you JEFF's, RTB 2's, 1491's and 010pp's, none
+REPLICABLE -- held all fifteen of the copy book's places for the three days, and the book lost 6.6% on them, $10,000 to
+$9,337. RTB 2's three fresh openings were refused for room, and all twelve of 010pp's openings on OKX were seen 300 to
+380 seconds after the trade, past the 120-second line: OKX's public data shows a lead trader's positions about five
+minutes late, though the app reads it every minute. At the user's choice of 9 November the run started again at 12:08
+UTC on the build of 17d53fb, with no clone and OKX's follows allowed seven minutes (V9-S8-GATES-2, registered first in
+71f7f8d, with a gate that every opening of a followed trader on a listed coin is entered or kept as a miss with why).
+The app itself now keeps the copy book's last five places and the hour's last five opens for follows (3433118). Two
+more changes came from the third try's records, after its build and in the fourth's: a market shock is told only where
+Bitcoin's fifteen minutes moved half a percent (243f0b3), since 7 of its 14 shock notices named moves of 0.14% to 0.19%
+on quiet days; and Found for you shows a follower two minutes late, the delay test's shortest row, where it had looked
+for a one-minute row the test never makes and so showed none (0e5d238). Of the third try's 26 found traders analysed,
+none read SKILL.
 
 **The found traders taken together.** V9-COPY-FORWARD registered that the found traders' verdicts be reported with
 the number analysed and the Benjamini-Hochberg adjustment across all of them, since they were picked for the profit the
