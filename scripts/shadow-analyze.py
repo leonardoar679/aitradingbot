@@ -564,7 +564,9 @@ print(f'  found traders taken together: {len(judged)} analysed, {len(alone)} rea
 problems = []
 owed = 0
 calls_on_file = [p for p in sources if p.get('source') == 'top-traders']
-for d in sorted({int(a // DAY) * DAY for a, b in spans} | {int(a // DAY + 1) * DAY for a, b in spans}):
+# Every UTC day a span reaches (until 9 November only each span's first two days were looked at: a dry read of v9-7d,
+# three days in, owed one day for three mornings read).
+for d in sorted({d for a, b in spans for d in range(int(a // DAY) * DAY, int(b) + 1, DAY)}):
     if not any(a <= d and d + 7200 <= b for a, b in spans):
         continue
     if not any(at < d + 7200 for at, _ in analyses):
