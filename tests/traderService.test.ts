@@ -224,6 +224,11 @@ describe('an OKX lead trader', () => {
     expect(await traders.importTrader(CODE)).toEqual({ refused: "OKX gives this lead trader's figures but not their positions, so their trades cannot be read or followed." })
     okxFigures = new Error("OKX answered 60004: Trader doesn't exist")
     expect(await traders.importTrader(CODE)).toEqual({ refused: 'OKX has no lead trader with that code: they may have stopped leading.' })
+    // OKX's other code for it, refused at once rather than tried again (v9-7d: three tries 35 minutes apart, twice).
+    traders.traderSeam.okx = async () => {
+      throw new Error("OKX answered 59269: This futures lead trader doesn't exist")
+    }
+    expect(await traders.importTrader(CODE)).toEqual({ refused: 'OKX has no lead trader with that code: they may have stopped leading.' })
     // Any other failure is said as it is.
     traders.traderSeam.okx = async () => {
       throw new Error('OKX could not be read: OKX answered 503')

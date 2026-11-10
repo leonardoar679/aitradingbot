@@ -249,9 +249,10 @@ async function importOkx(ref: TraderRef): Promise<{ refused: string } | TraderMe
   try {
     answers = await traderSeam.okx(ref.id, (step) => tell({ key: ref.key, step: `reading OKX: ${step}`, done: false }))
   } catch (error) {
-    // OKX's own refusal of a code's positions (60004, "Trader doesn't exist"): a lead trader who stopped leading, or one
-    // it still ranks, with their figures, whose positions it does not give (Trader KS on 6 November, 497 copiers).
-    if (error instanceof Error && /\b60004\b/.test(error.message)) {
+    // OKX's own refusal of a code's positions (60004, "Trader doesn't exist"; 59269, "This futures lead trader doesn't
+    // exist", which v9-7d's finding tried three times, 35 minutes apart, for each of two leaders): a lead trader who
+    // stopped leading, or one it still ranks, with their figures, whose positions it does not give (Trader KS).
+    if (error instanceof Error && /\b(60004|59269)\b/.test(error.message)) {
       const ranked = await traderSeam.okxFigures(ref.id).catch(() => false)
       return { refused: ranked ? "OKX gives this lead trader's figures but not their positions, so their trades cannot be read or followed." : 'OKX has no lead trader with that code: they may have stopped leading.' }
     }
