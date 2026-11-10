@@ -1,0 +1,73 @@
+{
+ "version": "v9-premium-discovery-v1",
+ "phase": "discovery",
+ "coinbaseSha256": "3c356945930721acbcb324920466af1d3b35338bb0047b59ad6458d0708d1c0e",
+ "binanceSha256": "53e74ddb737a239c7142dc03503cc4e9503d21d27873c305bb1e82b6fa32804c",
+ "span": {
+  "hours": 75715,
+  "withZ": 75115,
+  "first": "2018-01-01T00:00:00.000Z",
+  "last": "2026-08-28T13:00:00.000Z"
+ },
+ "lines": {
+  "fromSec": 1514764800,
+  "heldOutFrom": 1672531200,
+  "windowHours": 720,
+  "minWindowHours": 600,
+  "zLine": 2,
+  "horizonsH": [
+   4,
+   24
+  ],
+  "sides": [
+   "with",
+   "against"
+  ],
+  "roundTripPct": 0.24,
+  "minCalls": 30,
+  "draws": 10000,
+  "z": 1.6448536269514722
+ },
+ "options": [
+  {
+   "horizonH": 4,
+   "side": "with",
+   "calls": 936,
+   "up": 388,
+   "meanNet": -0.02361786742763482,
+   "t": -0.35552046238115015,
+   "shareRight": 0.5256410256410257
+  },
+  {
+   "horizonH": 4,
+   "side": "against",
+   "calls": 936,
+   "up": 388,
+   "meanNet": -0.4563821325723652,
+   "t": -6.869933845287541,
+   "shareRight": 0.47435897435897434
+  },
+  {
+   "horizonH": 24,
+   "side": "with",
+   "calls": 453,
+   "up": 190,
+   "meanNet": 0.5423396213923883,
+   "t": 2.6055430794554115,
+   "shareRight": 0.5342163355408388
+  },
+  {
+   "horizonH": 24,
+   "side": "against",
+   "calls": 453,
+   "up": 190,
+   "meanNet": -1.022339621392387,
+   "t": -4.91159011862928,
+   "shareRight": 0.46578366445916114
+  }
+ ],
+ "chosen": {
+  "horizonH": 24,
+  "side": "with"
+ }
+}
