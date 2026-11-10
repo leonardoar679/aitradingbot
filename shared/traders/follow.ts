@@ -31,8 +31,10 @@ export const FOLLOW_LINES = {
   followReserve: 5,
   /** A follow is closed by time at the leader's longest hold, at most this. */
   maxHoldDays: 7,
-  /** Reads of the leader missed in a row before the follow closes as "leader lost". */
-  missedReads: 2,
+  /** Reads of the leader missed in a row before the follow closes as "leader lost": ten, about ten minutes of OKX's reads
+   * a minute (two until 9 November 2026: in v9-7d's fourth try two of its first four follows were closed so by outages of
+   * a few minutes while their leaders still held; a close the outage hid is still read when the reads come back). */
+  missedReads: 10,
   /** Hyperliquid's stream for at most this many addresses, a ping each `pingSec`; the others read each `pollSec`. */
   maxStreams: 5,
   pingSec: 50,

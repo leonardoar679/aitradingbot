@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Candle } from '../shared/ipc'
 import { DEFAULT_COPY_TRADING, type CopyTradingSettings } from '../shared/traders/copyTrading'
-import type { CloneSignal, FollowStatus, LeaderEvent } from '../shared/traders/follow'
+import { FOLLOW_LINES, type CloneSignal, type FollowStatus, type LeaderEvent } from '../shared/traders/follow'
 import type { TraderAnalysis } from '../shared/traders/traderAnalysis'
 
 // FOLLOWING TRADERS AND RUNNING CLONES ON PAPER, THE READING HALF (electron/services/followService.ts; V8 Stage 8):
@@ -201,22 +201,26 @@ describe('the follows read', () => {
     expect((await module.recentFollowRecords(T0 - 3 * DAY)).events.map((event) => event.key)).toEqual([`${keyOf(1)}:2`])
   })
 
-  it('calls a leader lost after two reads missed in a row, and found again on the next read', async () => {
+  it('calls a leader lost after ten reads missed in a row, not before, and found again on the next read', async () => {
     copy = { follows: Object.fromEntries([1, 2, 3, 4, 5, 6].map((k) => [keyOf(k), { since: T0 - k * 1000, maxHoldSec: 3600 }])), clones: {} }
     pollAnswer = () => {
       throw new Error('Hyperliquid could not be read')
     }
     const { module } = await service()
     await module.startFollowing()
+    // An outage of a few minutes is not a lost leader (v9-7d: two of four follows were closed by such outages).
+    expect(FOLLOW_LINES.missedReads).toBe(10)
+    for (let read = 1; read < FOLLOW_LINES.missedReads; read++) await turn()
+    expect(module.followStatuses().find((status) => status.key === keyOf(1))).toMatchObject({ missedReads: 9, lost: false })
     await turn()
-    expect(module.followStatuses().find((status) => status.key === keyOf(1))).toMatchObject({ missedReads: 1, lost: false })
-    await turn()
-    expect(module.followStatuses().find((status) => status.key === keyOf(1))).toMatchObject({ missedReads: 2, lost: true })
+    expect(module.followStatuses().find((status) => status.key === keyOf(1))).toMatchObject({ missedReads: 10, lost: true })
     pollAnswer = () => []
     await turn()
     expect(module.followStatuses().find((status) => status.key === keyOf(1))).toMatchObject({ missedReads: 0, lost: false })
-    // The stream's traders: two failed connects in a row; found again when it opens.
-    streams[0].handlers.onConnectFailed(2)
+    // The stream's traders: ten failed connects in a row, and not nine; found again when it opens.
+    streams[0].handlers.onConnectFailed(9)
+    expect(module.followStatuses().find((status) => status.key === keyOf(6))).toMatchObject({ lost: false })
+    streams[0].handlers.onConnectFailed(10)
     expect(module.followStatuses().find((status) => status.key === keyOf(6))).toMatchObject({ lost: true })
     now = T0 + 90_000
     streams[0].handlers.onOpen()
