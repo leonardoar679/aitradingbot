@@ -1243,7 +1243,8 @@ After its build, none of it in the run: a followed leader is lost after ten miss
 answer 59269 is refused at once (43606d7); a holdings read that reads none is tried again at the next turn inside the
 window (cab76eb); and the news reader names a victim with a word of its part before its loss ("Kava Lend loses") and
 reads a theft told as an authority's word as its attribution (0b8bb1f, feed-v5), the four archives changing in those two
-headlines alone.
+headlines alone; and a run's news reactions gate leaves out a story a feed first carried more than twelve hours after
+its publication, which the app never measures, and says how many (e15a5a0).
 
 **The found traders taken together.** V9-COPY-FORWARD registered that the found traders' verdicts be reported with
 the number analysed and the Benjamini-Hochberg adjustment across all of them, since they were picked for the profit the
