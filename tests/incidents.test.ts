@@ -9,7 +9,7 @@ import { assetDictionary, eventTypeOf, namedTickers, readStory, type FeedStory }
 // (V9 Stage 2, 6 November 2026). The headlines are the two archives' own, from the user's profile and V8's three-day
 // run, as the feeds wrote them.
 
-const DICTIONARY = assetDictionary(['BTC', 'ETH', 'SOL', 'BNB', 'INIT', 'RUNE', 'ARB', 'CETUS', 'HYPE', 'AAVE', 'POL', 'OKB', 'W'])
+const DICTIONARY = assetDictionary(['BTC', 'ETH', 'SOL', 'BNB', 'INIT', 'RUNE', 'ARB', 'CETUS', 'HYPE', 'AAVE', 'POL', 'OKB', 'W', 'KAVA'])
 const AT = Date.parse('2026-10-29T21:36:00Z') / 1000
 
 function story(title: string, over: Partial<FeedStory> & { at?: number } = {}): FeedStory {
@@ -18,6 +18,21 @@ function story(title: string, over: Partial<FeedStory> & { at?: number } = {}): 
 }
 
 const read = (title: string, over: Partial<FeedStory> & { at?: number } = {}) => readIncident(story(title, over), DICTIONARY)
+
+describe("what the run's fourth try told wrong (v9-7d, 9-16 November 2026)", () => {
+  it('names a victim with a word of its part between its name and its loss', () => {
+    // Told WATCH with no victim: "Lend" stood between the name and "loses". KAVA fell nearly 40%.
+    expect(read('Kava Lend loses roughly $3.8 million to hack, sending KAVA token down nearly 40%')).toEqual({ report: 'first', why: null, victim: 'Kava', victimToken: 'KAVA', topExchange: false, amountUsd: 3.8e6 })
+    // A word that is no part of a name still keeps the victim loose: the trader lost, not the protocol.
+    expect(read('Uniswap trader loses $5 million to sandwich attack')).toMatchObject({ victim: null, victimToken: null })
+  })
+
+  it("reads a theft told as an authority's word as its attribution, whatever news of a loss it carries", () => {
+    expect(read('North Korea Stole $400 Million in Crypto Using Deepfake Video Calls, DOJ Says')).toMatchObject({ report: 'follow-up', why: 'attribution', amountUsd: 400e6 })
+    // An authority named beside a loss told as news, saying nothing, leaves it a first report.
+    expect(read('Zyx Exchange hacked for $20 million as FBI opens probe')).toMatchObject({ report: 'first', amountUsd: 20e6 })
+  })
+})
 
 describe("what the run's third try told loudly and should not have (v9-7d, 6-9 November 2026)", () => {
   it('reads a breach of data alone, with no sum and no funds lost, as no theft', () => {

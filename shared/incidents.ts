@@ -180,6 +180,10 @@ const AFTER_AN_OLD_ONE = /\b(after|following|since|amid|in the wake of)\s+(a|an|
  * told ("Solana moves to scrap the transaction feature used in the $270 million Drift hack", v9-7d's third try, 9
  * November 2026, a Drift hack older than the week the feed keeps). */
 const THE_KNOWN_ONE = /\bthe\s+(\$[\d.,]+\s*(k|m|mn|b|bn|million|billion)?\s+)?([\w.&'’-]+\s+){0,3}(hack|exploit|breach|heist|theft)\b/i
+/** A theft told as an authority's word -- the DOJ's, the FBI's, prosecutors', a regulator's -- is its attribution or
+ * its case, whatever news of a loss it carries ("North Korea Stole $400 Million in Crypto Using Deepfake Video Calls,
+ * DOJ Says", told HIGH in v9-7d, 12 November 2026); in the four archives on file every such headline is aftermath. */
+const AUTHORITY_SAYS = /\b(doj|fbi|prosecutors?|justice department|department of justice|treasury|ofac|police|sec|cftc|interpol|europol)\s+(says?|said|alleges?|claims?)\b/i
 /** A breach that reports data alone: what was read or exposed is data -- a customer's, a card's, a password's -- with no
  * sum and no word of funds lost ("Crypto Card Provider Gnosis Pay Says Hackers Accessed Customer Data", told HIGH in
  * v9-7d's third try; its funds were unaffected). It reports no theft. */
@@ -233,7 +237,10 @@ const BEFORE_NAME: readonly RegExp[] = [
   /\b(hack|exploit|breach|attack|heist|theft|drain)(s|ed|er|ers)?\s+(of|on|at|against|hits?|targets?|from)\s+(the\s+)?$/,
   /\b(drains?|drained|steals?|stole|stolen|loots?|siphon(s|ed)?)\b[^,;:]{0,40}\bfrom\s+(the\s+)?$/
 ]
-const AFTER_NAME_WEAK = /^(['’]s)?\s+(halts?|halted|paus(es|ed)|suspends?|suspended|freezes|froze|loses|lost|confirms|discloses|reports|investigat\w*|hit by|hit with|suffers?|suffered)\b/
+/** The weakest: it halting or confirming something, right after its name or after one word that only says which part
+ * of it is meant ("Kava Lend loses roughly $3.8 million to hack, sending KAVA token down nearly 40%", told WATCH with no
+ * victim in v9-7d, 14 November 2026, since "Lend" stood between the name and its loss). */
+const AFTER_NAME_WEAK = /^(['’]s)?(\s+(lend|lending|swap|dex|bridge|finance|protocol|network|labs|exchange|vaults?|perps?|staking|earn|v\d+))?\s+(halts?|halted|paus(es|ed)|suspends?|suspended|freezes|froze|loses|lost|confirms|discloses|reports|investigat\w*|hit by|hit with|suffers?|suffered)\b/
 
 /** The victim a headline names: the surest name at its loss, the first in the headline among equals; else, loosely,
  * the first exchange it names. Null where it names no victim the tables know. */
@@ -284,6 +291,7 @@ export function readIncident(story: Pick<ReadStory, 'title' | 'repeat'>, diction
   let why: string | null = null
   if (story.repeat === true) why = 'recycled'
   else if (ROUNDUP.test(main)) why = 'roundup'
+  else if (AUTHORITY_SAYS.test(story.title)) why = 'attribution'
   else if (!news) {
     why = AFTERMATH.find(([reason, rule]) => (reason !== 'denial' || amountUsd === null) && rule.test(main))?.[0] ?? null
     if (why === null && (AFTER_AN_OLD_ONE.test(main) || THE_KNOWN_ONE.test(main))) why = 'past'
