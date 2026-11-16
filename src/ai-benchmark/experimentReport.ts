@@ -29,7 +29,7 @@ export interface ExperimentReportDeps {
   alertsOnFile: (sinceSec: number) => Promise<readonly { at: number; sound?: string }[]>
   /** The stories read, each marked where it names directly a coin with a USDT pair on Binance, and what
    * the price did around each (V6 Stage 16); null where they cannot be read. */
-  storyReactions: () => Promise<{ stories: { id: string; publishedAt: number; tradable: boolean }[]; reactions: Record<string, { after: { h4: number | null } }> } | null>
+  storyReactions: () => Promise<{ stories: { id: string; publishedAt: number; tradable: boolean; seenAt?: number }[]; reactions: Record<string, { after: { h4: number | null } }> } | null>
 }
 
 /** "Does AI help?" over the span's events, one entry a model the watch asked. A model that answered
@@ -96,7 +96,7 @@ export const experimentReportBrowserDeps: ExperimentReportDeps = {
     const [feed, symbols] = await Promise.all([window.api.feed.getState(), window.api.market.listSymbols('binance')])
     const bases = new Set(symbols.filter((symbol) => symbol.quoteAsset === 'USDT').map((symbol) => symbol.baseAsset))
     return {
-      stories: feed.stories.map((story) => ({ id: story.id, publishedAt: story.publishedAt, tradable: story.assets.some((asset) => asset.relationship === 'DIRECT' && bases.has(asset.ticker)) })),
+      stories: feed.stories.map((story) => ({ id: story.id, publishedAt: story.publishedAt, seenAt: story.seenAt, tradable: story.assets.some((asset) => asset.relationship === 'DIRECT' && bases.has(asset.ticker)) })),
       reactions: feed.reactions
     }
   }

@@ -48,6 +48,10 @@ export const REPEAT_SECONDS = 7 * 86_400
 export const REPEAT_IMPACT_FACTOR = 0.5
 /** Reactions are measured up to four hours after; one this old is final. */
 export const REACTION_FINAL_SECONDS = 4 * 3600 + 120
+/** A story older than this when first measured is left unmeasured: its minutes are too far back. So a story a feed first
+ * carries later than this after its publication is never measured (CoinDesk's "Changing of Lagarde", carried 47 hours
+ * late in v9-7d's fourth try), and a run's gate leaves it out. */
+export const REACTION_OLDEST_SECONDS = 12 * 3600
 /** Fewer stories of a kind than this, and no history is shown for it. */
 export const IMPACT_MIN_STORIES = 30
 

@@ -1467,7 +1467,7 @@ async function forecastSection(fromSec, toSec) {
         record: await window.api.forecast.record(from, to),
         alerts: (await window.api.records.alerts({ sinceSec: from })).rows.map((row) => ({ at: row.at, sound: row.sound })),
         executors: (await window.api.settings.get()).executors,
-        stories: feed.stories.map((story) => ({ id: story.id, publishedAt: story.publishedAt, tradable: story.assets.some((asset) => asset.relationship === 'DIRECT' && bases.has(asset.ticker)) })),
+        stories: feed.stories.map((story) => ({ id: story.id, publishedAt: story.publishedAt, seenAt: story.seenAt, tradable: story.assets.some((asset) => asset.relationship === 'DIRECT' && bases.has(asset.ticker)) })),
         reactions: feed.reactions
       }
     },

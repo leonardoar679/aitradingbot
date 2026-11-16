@@ -1,5 +1,6 @@
 import { positionFeeRate, positionSlippageRate } from '../fees'
 import type { ExecutorConfig } from '../ipc'
+import { REACTION_OLDEST_SECONDS } from '../newsFeed'
 import { HORIZON_BARS, type Horizon } from './features'
 import type { MissingOutcomeLine, OutcomeLine, PredictionLine } from './forecastRecord'
 import { liveLab, type LabMetrics, type LiveVariant, type TimingMetrics } from './lab'
@@ -156,8 +157,9 @@ export interface ForecastRunInput {
   asOfSec?: number
   /** The stories read, each with the coins it names directly that trade against USDT on Binance, and
    * what the price did around each (shared/newsFeed.ts): a story measured to four hours has `h4`. Absent
-   * where they could not be read: the gate is then not measured. */
-  stories?: readonly { id: string; publishedAt: number; tradable: boolean }[]
+   * where they could not be read: the gate is then not measured. `seenAt`, when the app first read a story: one a feed
+   * carried later than its reaction can be measured is left out of the gate. */
+  stories?: readonly { id: string; publishedAt: number; tradable: boolean; seenAt?: number }[]
   reactions?: Readonly<Record<string, { after: { h4: number | null } }>>
   /** The pairs each recorded close's pass held bars for (forecasts/passes-*.jsonl, since V6 Stage 16).
    * Absent on an older record: a pair is then wanted at every close from its first to its last. */
@@ -450,18 +452,23 @@ function outcomesGate(lines: readonly PredictionLine[], judged: readonly (Outcom
 }
 
 /** §114, news correlation complete: every story of the span naming a coin traded on Binance, once four
- * hours have passed, has what the price did around it measured to four hours. */
+ * hours have passed, has what the price did around it measured to four hours -- save a story a feed first
+ * carried more than REACTION_OLDEST_SECONDS after it was published, which the app by its rule never measures
+ * (v9-7d, 16 November 2026: CoinDesk carried one 47 hours late, and the gate failed on it). */
 function reactionsGate(input: ForecastRunInput, span: { fromSec: number; toSec: number }, asOfSec: number): ForecastRunGate {
   const label = 'Every story is measured to four hours'
   if (input.stories === undefined || input.reactions === undefined) return { id: 'news_reactions', label, status: 'not measured', detail: "The stories' reactions could not be read." }
-  const due = input.stories.filter((story) => story.tradable && within(story.publishedAt, span) && story.publishedAt + RUN_LINES.storySeconds <= asOfSec)
-  if (due.length === 0) return { id: 'news_reactions', label, status: 'not measured', detail: 'No story of the span naming a traded coin has had four hours yet.' }
+  const inSpan = input.stories.filter((story) => story.tradable && within(story.publishedAt, span) && story.publishedAt + RUN_LINES.storySeconds <= asOfSec)
+  const late = inSpan.filter((story) => story.seenAt !== undefined && story.seenAt - story.publishedAt > REACTION_OLDEST_SECONDS)
+  const due = inSpan.filter((story) => !late.includes(story))
+  const leftOut = late.length === 0 ? '' : ` ${plural(late.length, 'story', 'stories')} first carried more than ${REACTION_OLDEST_SECONDS / 3600} hours after ${late.length === 1 ? 'it was' : 'they were'} published, which the app does not measure, left out.`
+  if (due.length === 0) return { id: 'news_reactions', label, status: 'not measured', detail: `No story of the span naming a traded coin has had four hours yet.${leftOut}` }
   const unmeasured = due.filter((story) => (input.reactions![story.id]?.after.h4 ?? null) === null)
   return {
     id: 'news_reactions',
     label,
     status: unmeasured.length === 0 ? 'pass' : 'fail',
-    detail: unmeasured.length === 0 ? `Each of the ${plural(due.length, 'story', 'stories')} naming a traded coin has its four hours measured.` : `${plural(unmeasured.length, 'story has', 'stories have')} no four-hour reaction.`
+    detail: (unmeasured.length === 0 ? `Each of the ${plural(due.length, 'story', 'stories')} naming a traded coin has its four hours measured.` : `${plural(unmeasured.length, 'story has', 'stories have')} no four-hour reaction.`) + leftOut
   }
 }
 

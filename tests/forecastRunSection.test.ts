@@ -373,6 +373,19 @@ describe("the twelve-hour run's report (§48-49, §114)", () => {
     expect(gate({ ...run, stories, reactions: { a: { after: { h4: 1.2 } }, c: { after: { h4: -0.4 } } }, asOfSec: asOf }, 'news_reactions').status).toBe('pass')
   })
 
+  it('leaves out a story a feed first carried more than twelve hours after it was published, which the app never measures', () => {
+    const run = hourRun({ toSec: T + 3600 })
+    const asOf = T + 3600 + RUN_LINES.storySeconds + 13 * 3600
+    const measured = { a: { after: { h4: 1.2 } } }
+    // v9-7d: CoinDesk carried one 47 hours late; the app does not measure it, and the gate failed on it.
+    const late = [{ id: 'a', publishedAt: T + 60, seenAt: T + 120, tradable: true }, { id: 'late', publishedAt: T + 600, seenAt: T + 600 + 13 * 3600, tradable: true }]
+    const ruled = gate({ ...run, stories: late, reactions: measured, asOfSec: asOf }, 'news_reactions')
+    expect(ruled).toMatchObject({ status: 'pass', detail: 'Each of the 1 story naming a traded coin has its four hours measured. 1 story first carried more than 12 hours after it was published, which the app does not measure, left out.' })
+    // Seen eleven hours late, it is still measured by the app, and still wanted.
+    const lateButMeasurable = [late[0], { ...late[1], seenAt: T + 600 + 11 * 3600 }]
+    expect(gate({ ...run, stories: lateButMeasurable, reactions: measured, asOfSec: asOf }, 'news_reactions').status).toBe('fail')
+  })
+
   it("wants every forecast trade's record whole: its forecast, levels and plan, and once stopped its end", () => {
     const mark = { predictionId: 'p0', barTime: T + 240, openedAt: T + 300, horizon: 'hour1', side: 'BUY', classKey: 'k', verdict: 'APPROVED', quantilesPct: [-2, -1, 0.5, 2, 3], pUp: 0.6, edgePct: 0.3, pProfit: 0.6, plan: { entryMin: 1, entryMax: 1, stopPct: 1, targetPct: 1, targetLevel: 'P75', holdSec: 3600, validUntil: T + 540 } }
     const of = (patch: Record<string, unknown>, status = 'active'): ExecutorConfig => ({ id: 'x', symbol: 'SOLUSDT', status, params: { amountQuote: 100 }, forecast: { ...mark, ...patch } }) as unknown as ExecutorConfig

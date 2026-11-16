@@ -12,6 +12,7 @@ import {
   NEWS_FEED_VERSION,
   REACTIONS_EVERY_MS,
   REACTION_FINAL_SECONDS,
+  REACTION_OLDEST_SECONDS,
   STORY_HISTORY_MAX_SECONDS,
   assetDictionary,
   foldSameStories,
@@ -59,8 +60,6 @@ const SOURCE_TIMEOUT_MS = 15_000
 const STORIES_SHOWN = 300
 /** Coins' minutes read in one pass, at most. */
 const REACTION_READS = 20
-/** A story older than this when first measured is left unmeasured: its minutes are too far back. */
-const REACTION_OLDEST_SECONDS = 12 * 3600
 
 let raw: FeedStory[] = []
 const seen = new Set<string>()
