@@ -315,10 +315,47 @@ describe('finding traders', () => {
   it('counts a found trader whose positions cannot be read as failed, and goes on', async () => {
     const { service, clock, held } = await setup()
     await service.discoveryTurn()
+    clock.now = T0 + 30 * 60_000
+    await service.discoveryTurn()
+    // Two analysed: one cannot be read, the other can, and the day's line counts the one as failed.
     held.set(address(2), new Error('Hyperliquid answered 500'))
+    held.set('AAAAAAAAAAAAAAA1', [{ coin: 'BTC', size: 1 }])
     clock.now = Date.UTC(2026, 10, 7, 0, 4)
     await service.discoveryTurn()
-    expect(service.discoveryState().holdings).toMatchObject({ traders: 0, failed: 1, consensus: [], calls: 0 })
+    expect(service.discoveryState().holdings).toMatchObject({ traders: 1, failed: 1, calls: 0 })
+  })
+
+  it('reads again at the next turn where none could be read, and keeps the day without a read only at its last turn', async () => {
+    const { service, clock, dir } = await setup()
+    // A network outage: every trader's positions fail to read while it lasts.
+    let outage = true
+    const positions = service.discoverySeam.positions
+    service.discoverySeam.positions = async (venue, id) => {
+      if (outage) throw new Error('Hyperliquid could not be read: fetch failed')
+      return positions(venue, id)
+    }
+    const kept = (): number => linesOf(dir).filter((line) => line.kind === 'holdings').length
+    await service.discoveryTurn()
+    // At the day's first turn none is read and nothing kept; the next turn reads (v9-7d, 15 November).
+    clock.now = Date.UTC(2026, 10, 7, 0, 4)
+    await service.discoveryTurn()
+    expect(service.discoveryState().holdings).toBeNull()
+    expect(kept()).toBe(0)
+    outage = false
+    clock.now = Date.UTC(2026, 10, 7, 0, 9)
+    await service.discoveryTurn()
+    expect(service.discoveryState().holdings).toMatchObject({ day: Date.UTC(2026, 10, 7) / 1000, failed: 0 })
+    expect(kept()).toBe(1)
+    // The next day the outage lasts the window: at its last turn the day is kept, none read.
+    outage = true
+    clock.now = Date.UTC(2026, 10, 8, 1, 50)
+    await service.discoveryTurn()
+    expect(kept()).toBe(1)
+    clock.now = Date.UTC(2026, 10, 8, 1, 56)
+    await service.discoveryTurn()
+    expect(service.discoveryState().holdings).toMatchObject({ day: Date.UTC(2026, 10, 8) / 1000, traders: 0, consensus: [], calls: 0 })
+    expect(service.discoveryState().holdings?.failed).toBeGreaterThan(0)
+    expect(kept()).toBe(2)
   })
 
   it('tries a read that found neither ranking again after an hour, not before', async () => {

@@ -245,7 +245,9 @@ async function readBoards(): Promise<void> {
 }
 
 /** What the analysed found traders hold, read once a UTC day: each one's positions, the coins of the forecast's universe
- * counted, the rule's calls recorded, and the day's line kept. A trader who cannot be read is counted as failed. */
+ * counted, the rule's calls recorded, and the day's line kept. A trader who cannot be read is counted as failed. Where
+ * none could be read and a turn is still to come inside the day's window, nothing is kept and the next turn reads again
+ * (v9-7d, 15 November 2026: every one of 44 failed in a network outage at 00:03, and the day had no read). */
 async function readHoldings(): Promise<void> {
   const nowSec = Math.floor(discoverySeam.nowMs() / 1000)
   const day = Math.floor(nowSec / 86_400) * 86_400
@@ -261,6 +263,10 @@ async function readHoldings(): Promise<void> {
       failed++
       console.warn(`Discovery: what ${entry.key} holds could not be read:`, describe(error))
     }
+  }
+  if (failed === analysed.length && Math.floor(discoverySeam.nowMs() / 1000) + TICK_MS / 1000 < day + TOP_TRADERS_LINES.readWindowSec) {
+    console.warn(`Discovery: none of the ${failed} found traders' holdings could be read; read again at the next turn.`)
+    return
   }
   const forecasts = discoverySeam.forecasts()
   const universe = new Set(forecasts.map((prediction) => prediction.pair.replace(/USDT$/, '')))
