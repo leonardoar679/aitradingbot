@@ -1151,7 +1151,9 @@ where three or more agree two to one, recorded as a call of the source 'top-trad
 | V9-PREMIUM | **failed** | registered 10 November at the user's choice of a new direction study: Coinbase's BTC-USD premium over Binance's BTCUSDT, its z against the 720 hours before crossing 2 either way, followed for the day and on the side the discovery half (2018 to 2022) chose -- a day, with the premium, +0.542% a call on 453 (t 2.61); held out (2023 to 28 August 2026), 324 calls were right 54.3% (lower bound 49.8%) and netted +0.168% (lower bound -0.075%, t 1.12) after a 0.24% round trip: a third of the edge, within chance. Nothing is shown |
 | V9-COPY-FORWARD, V9-TOP-TRADERS-2 | not yet measurable | judged on the forward record once 100 copied round trips over 28 days, and 60 days of calls, are on file |
 | V9-S8-GATES | not measured | superseded by V9-S8-GATES-2 before any of it was judged: the run's third try copied no trader in 3.1 days, and it started again (below) |
-| V9-NEWS-CLASS, V9-SHOCK, V9-S8-GATES-2 | under way | the seven-day run, v9-7d, its fourth try from 9 November |
+| V9-S8-GATES-2 | **failed** | the fourth try, 9 to 16 November, in one segment: every gate of the session reports, V8's and V9's passed, the copied gate among them (23 openings of the followed traders on listed coins: 21 entered, 2 kept as too late, none in silence); the forecast section failed three -- forecasts at 653 of 672 quarter-hour closes and 14 pairs skipping a close at 4 more, each inside an outage of this machine's network, and one story with no four-hour reaction, carried by CoinDesk's feed 47 hours after it was published, which the app by its rule does not measure |
+| V9-NEWS-CLASS | **failed** | recall: of 6 first reports of a theft read by hand, 4 raised a notice (66.7%, under 80%), Unocoin's outgoing transfers and Luxor's hijacked hashrate none at their first report; precision not measured: 2 loud hack notices, under 5, Initia's right and the DOJ's word on North Korea wrong |
+| V9-SHOCK | not measured | 39 shock notices in seven days, none followed within two hours by a loud story: the share no story explained is 39 of 39, and no lead time could be measured |
 
 **The seven-day run (v9-7d).** On a scratch profile, OpenRouter faked. Its first two tries were stopped before anything
 was measured. In the first, the app's first reading of the rankings, two minutes in, found five of the panel's eight before
@@ -1197,17 +1199,63 @@ build (e8c1b3b, feed-v4), a breach that reports data alone is no theft, and a th
 loss is told, is a follow-up; on both archives every theft read as a first report before still is. The fourth try
 reads its news as feed-v3, and V9-NEWS-CLASS judges it so.
 
+**The fourth try's seven days (9 to 16 November).** It ran unattended in one segment from 12:24:47 UTC on 9 November
+to 12:24:47 UTC on 16 November on the build of 17d53fb, settled 65 minutes, OpenRouter faked (28 calls, each answered by
+the fake). Over 17,789 forecasts the 80% ranges held 80.3% at 5 minutes, 80.0% at 15, 81.4% at an hour, 80.3% at four
+hours and 81.5% at a day. The forecast missed 19 of 672 quarter-hour closes, and 14 pairs skipped a close at 4 more,
+each inside an outage of this machine's network logged in the 15 minutes before it (reads failing, Binance's names not
+resolving, the data pass stopped at its deadline): the app went on and caught up every time, but nothing is forecast
+without bars.
+
+The copy book followed the panel with no clone, and every opening of a followed trader on a coin Binance or Bitget lists
+was entered or kept as a miss with why: 23 openings, 21 entered, 2 too late. Only two of the eight traded:
+
+| leader | venue | follows | entered after the leader | closed net |
+|---|---|---|---|---|
+| 010pp | OKX | 16 | a median 338 s | -$200.36, after $17.06 of fees |
+| RTB 2 | Hyperliquid | 5 | a median 5 s | -$86.39 |
+
+All 21 closed, 7 at a profit, for -$286.75: 2.9% of the book's $10,000. Six were closed as "leader lost", after two
+reads of the leader failed in a row in an outage (RTB 2 still held its first, and made no fill for hours after); two at
+the run's end. 010pp's own record read +0.86% a trip for a follower five minutes late; following it forward lost about
+1.26% a follow. The news book and the baseline made no trade.
+
+Finding traders read the rankings 9 times on 6 whole days and found 70; 56 were analysed and 14 set aside, 11 of them
+trading too fast for Hyperliquid's window of fills. Two read SKILL, and still did with the 56 taken together:
+"ChinaToxicFlow1" and "ChinaToxicFlow2", likely one operator, with edges of +2.8% and +3.4% a trip, both chance tests at
+p 0.0001 and both halves of each record positive. They cannot be followed: they hold a median 2.3 and 3.0 minutes, a
+follower two minutes late loses 0.89% a trip on the first's record, neither clone is REPLICABLE, and each made about
+$1,100 in its last 30 days. The second's delay test could not run at all: it was analysed at 22:06 UTC on 14 November in
+an outage, its coins' minutes unread, and its skill test read 145 of its 219 trips; a trader analysed in an outage keeps
+that analysis. What the found traders held was read every morning, five calls of the source 'top-traders' on file for
+V9-TOP-TRADERS-2's sixty days; on 15 November an outage failed all 44 reads.
+
+The news, read by hand (V9-NEWS-CLASS): of 6 first reports of a theft, 4 raised a notice -- Across Protocol's drained
+wallets, LNbits's reported wallet thefts and Kava Lend's $3.8M hack as WATCH, Initia's second exploit as HIGH -- and
+Unocoin's outgoing transfers and Luxor's hijacked hashrate none at their first report: 66.7%, under the line. Of the 2
+loud hack notices, Initia's was right and "North Korea Stole $400 Million in Crypto Using Deepfake Video Calls, DOJ Says"
+wrong, too few to judge precision. Kava's notice named no victim though KAVA fell nearly 40%, since "Lend" stood between
+the name and its loss. The 39 shock notices (V9-SHOCK) came with no loud story in the two hours after any of them. One
+story of the run has no four-hour reaction: CoinDesk's feed carried "Changing of Lagarde" 47 hours after it was
+published, and the app does not measure a story first seen more than 12 hours late, which the gate counts all the same.
+
+After its build, none of it in the run: a followed leader is lost after ten missed reads, not two (3ac4e6f); OKX's
+answer 59269 is refused at once (43606d7); a holdings read that reads none is tried again at the next turn inside the
+window (cab76eb); and the news reader names a victim with a word of its part before its loss ("Kava Lend loses") and
+reads a theft told as an authority's word as its attribution (0b8bb1f, feed-v5), the four archives changing in those two
+headlines alone.
+
 **The found traders taken together.** V9-COPY-FORWARD registered that the found traders' verdicts be reported with
 the number analysed and the Benjamini-Hochberg adjustment across all of them, since they were picked for the profit the
-tests read. Found for you showed the first only, until 55bd81e (after the run's build): each analysed one's skill p,
+tests read. Found for you showed the first only, until 55bd81e (after the third try's build, in the fourth's): each analysed one's skill p,
 the larger of its two nulls', 1 where the test ran none, is now adjusted across all the found traders analysed, a
 trader pasted by hand never among them, and a SKILL is counted beyond chance only where its adjusted p is within the
 test's 0.01. The run's report gives the same count for the traders the run found.
 
 **Three of Stage 2's lines, late or left.** The feeds were to be read every minute, from three; the victims' names read
-again from DefiLlama every week; and a story's severity worked out in the main process. The first two were built only
-after the run's build, so the run reads the feeds every three minutes and names victims by the table of 6 November
-throughout. The feeds (b0c57ee): each is now asked only for what changed since its last answer, and on 6 November The
+again from DefiLlama every week; and a story's severity worked out in the main process. The first two were built after the third
+try's build and are in the fourth's, whose table of victims was read again once, at 00:08 UTC on 13 November (245
+names). The feeds (b0c57ee): each is now asked only for what changed since its last answer, and on 6 November The
 Block (by its ETag) and Cointelegraph (by its date) answered 304 with nothing, while CoinDesk gives neither and Decrypt
 answered in full, about 72 KB a minute in all; the prices around the stories are still measured every three minutes.
 The victims (6ce3ee3): once the table in use is a week old, DefiLlama's two lists are read again in the background lane
@@ -1217,9 +1265,10 @@ where it holds 150 names or more and keeps 60% of those in use, else the table i
 severity is still worked out in the window, which runs on, its timers unthrottled, while the window is hidden
 (backgroundThrottling off), so a notice is not held back by the window being closed to the tray.
 
-**What V9 can say so far.** The forecast knows how far coins move, and since V9 Home shows it at the sizes the user
-asked about, with how soon such moves came. No source measured on past cases gives the way after a hack or a U.S.
-release: the hacked token's short was a coin toss after costs, and Bitcoin's first fifteen minutes did not carry over
-the day. The one measured way is still a Binance delisting. Critical news is now told once, for its first report, by
-its victim; the traders the rankings name are found and analysed every day, and what following them on paper makes is
-the run's to show.
+**What V9 can say.** The forecast knows how far coins move: its ranges held at 80% through a week on the real market,
+and since V9 Home shows the moves at the sizes the user asked about, with how soon such moves came. No source measured
+on past cases gives the way after a hack, a U.S. release or a turn in Coinbase's premium. The one measured way is still
+a Binance delisting. Critical news is told once, for its first report, by its victim, but in its week the reader caught
+4 of 6 thefts' first reports, and too few loud notices came to judge whether they were right. The rankings found two
+traders whose records read as skill beyond chance, and neither can be followed; following the panel on paper lost 2.9%
+in a week. V9-COPY-FORWARD and V9-TOP-TRADERS-2 are judged on the forward record once it is long enough.
