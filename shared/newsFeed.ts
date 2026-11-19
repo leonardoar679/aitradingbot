@@ -26,8 +26,9 @@ import { ENGLISH, msg, type I18n } from './i18n/translate'
 /** feed-v4 since 9 November 2026: a breach that reports data alone is no theft, and a theft named as one already known
  * ("the $270 million Drift hack") is a follow-up (shared/incidents.ts). feed-v5 since 16 November 2026: a victim named
  * with a word of its part before its loss ("Kava Lend loses") is named, and a theft told as an authority's word ("..., DOJ
- * Says") is its attribution. */
-export const NEWS_FEED_VERSION = 'feed-v5'
+ * Says") is its attribution. feed-v6 since 19 November 2026: funds moved out unasked, said as suspect or unauthorized
+ * transfers or outgoing ones flagged, are a theft (Unocoin's), and a miners' theft concerns crypto (Luxor's). */
+export const NEWS_FEED_VERSION = 'feed-v6'
 /** The media feeds are read every minute (V9 Stage 2's line, from three before): a theft's first report is told within
  * a minute of its feed carrying it. A read asks each feed only for what changed (its ETag or Last-Modified), so an
  * unchanged feed answers 304 with nothing. */
@@ -475,10 +476,11 @@ export function storyAssets(story: Pick<FeedStory, 'title' | 'summary' | 'ticker
 
 const TYPE_RULES: readonly [NewsEventType, RegExp][] = [
   // A theft, and a sum lost from crypto (V9 Stage 2): "EU entity suspected of losing $106 million from crypto exchange
-  // accounts" was the first report of the $133M theft, and said no hack.
+  // accounts" was the first report of the $133M theft, and said no hack. Funds moved out unasked, said as suspect or
+  // unauthorized transfers or outgoing ones flagged, since 19 November 2026 (Unocoin's, missed in v9-7d).
   [
     'HACK',
-    /\b(hack(ed|er|ers|s)?|stolen|steal(s|ing)?|stole|thefts?|breach(ed)?|heist|attacker|security (incident|breach))\b|\blos(es|ing|t)\s+(more than |over |about |nearly |almost |at least )?\$[\d.,]+\s*(k|m|b|bn|million|billion)?\s+(from|in|to)\s+(crypto|wallets?|exchanges?|accounts?|hacks?|exploits?|attacks?|thefts?)\b/i
+    /\b(hack(ed|er|ers|s)?|stolen|steal(s|ing)?|stole|thefts?|breach(ed)?|heist|attacker|security (incident|breach))\b|\blos(es|ing|t)\s+(more than |over |about |nearly |almost |at least )?\$[\d.,]+\s*(k|m|b|bn|million|billion)?\s+(from|in|to)\s+(crypto|wallets?|exchanges?|accounts?|hacks?|exploits?|attacks?|thefts?)\b|\b(suspicious|suspect|unauthori[sz]ed)\s+(\w+\s+){0,2}(transfers?|transactions?|withdrawals?|outflows?)\b|\bflags?\s+(outgoing|suspicious)\b[^,;:]{0,40}\b(transactions?|transfers?)\b/i
   ],
   ['EXPLOIT', /\b(exploit(ed|s|er|ers)?|drain(ed|s|er)?|flash[- ]loans?|re-?entrancy|vulnerabilit(y|ies))\b/i],
   ['DELISTING', /\b(delist(s|ed|ing)?|monitoring tag)\b/i],

@@ -32,6 +32,22 @@ describe("what the run's fourth try told wrong (v9-7d, 9-16 November 2026)", () 
     // An authority named beside a loss told as news, saying nothing, leaves it a first report.
     expect(read('Zyx Exchange hacked for $20 million as FBI opens probe')).toMatchObject({ report: 'first', amountUsd: 20e6 })
   })
+
+  it('reads funds moved out unasked as a theft, its first report first and the next told before', () => {
+    // Neither of Unocoin's two stories raised a notice: no word of a hack in either.
+    const flagged = 'Unocoin ‘login suspension’ continues as exchange flags outgoing BitGo ETH transactions'
+    expect(eventTypeOf({ title: flagged, summary: '' })).toBe('HACK')
+    expect(read(flagged)).toEqual({ report: 'first', why: null, victim: 'Unocoin', victimToken: null, topExchange: false, amountUsd: null })
+    const [first, next] = incidentsOf(
+      [story(flagged, { id: 'theblock:u' }), story('Unocoin keeps deposits and withdrawals halted over suspect transfers', { id: 'cointelegraph:u', at: AT + 18 * 3600 })].map((entry) => readStory(entry, DICTIONARY, 0.8, entry.publishedAt + 60)),
+      DICTIONARY,
+      AT + 7 * 86_400
+    )
+    expect(first.incident).toMatchObject({ report: 'first', victim: 'Unocoin' })
+    expect(next.incident).toMatchObject({ report: 'follow-up', why: 'told before' })
+    // A transfer that is only large is no theft.
+    expect(read('Whale makes large transfers of ETH to Binance ahead of the Fed')).toBeNull()
+  })
 })
 
 describe("what the run's third try told loudly and should not have (v9-7d, 6-9 November 2026)", () => {

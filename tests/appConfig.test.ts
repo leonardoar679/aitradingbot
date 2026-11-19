@@ -80,8 +80,9 @@ const sha256 = (text: string): string => createHash('sha256').update(text).diges
 // from f5892efc8e32. A breach of data alone read as no theft, and a theft named as known read as a follow-up (feed-v4;
 // V9 Stage 8), from fc1f711b8c8a. 10 November 2026: a follow's leader lost after ten reads missed in a row, not two (V9
 // Stage 8), from 37f37138e51d. 16 November 2026: a victim named with a word of its part before its loss, and a theft told
-// as an authority's word read as its attribution (feed-v5; V9 Stage 8), from fb6ce8ade82b.
-const PINNED_ENGINE_VERSION = '032fcf5e5d30'
+// as an authority's word read as its attribution (feed-v5; V9 Stage 8), from fb6ce8ade82b. 19 November 2026: funds moved out
+// unasked read as a theft, and a miners' theft as about crypto (feed-v6; V9 Stage 9), from 032fcf5e5d30.
+const PINNED_ENGINE_VERSION = '3b8dc5d5951f'
 
 describe('the engine version', () => {
   it('is the first twelve characters of the hash of the constants, in a fixed key order', () => {

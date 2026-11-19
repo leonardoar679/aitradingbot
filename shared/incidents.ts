@@ -83,6 +83,7 @@ export const EXCHANGES: readonly Exchange[] = [
   { name: 'Mercado Bitcoin', names: ['mercado bitcoin'], token: null, top: false },
   { name: 'CoinDCX', names: ['coindcx'], token: null, top: false },
   { name: 'WazirX', names: ['wazirx'], token: null, top: false },
+  { name: 'Unocoin', names: ['unocoin'], token: null, top: false },
   { name: 'BtcTurk', names: ['btcturk'], token: null, top: false },
   { name: 'Bitstamp', names: ['bitstamp'], token: null, top: false },
   { name: 'Deribit', names: ['deribit'], token: null, top: false },
@@ -137,12 +138,13 @@ export function setVictims(rows: readonly VictimRow[] | null): void {
 // ---------------------------------------------------------------------------------------------
 // The words.
 
-/** A loss: a theft, an attack, a breach, or a sum lost. */
+/** A loss: a theft, an attack, a breach, or a sum lost; since 19 November 2026 also funds moved out unasked, said as
+ * transfers that are suspect or unauthorized, or outgoing ones flagged (Unocoin's, missed in v9-7d's fourth try). */
 const LOSS =
-  /\b(hack(s|ed|er|ers|ing)?|exploit(s|ed|er|ers)?|drain(s|ed|er|ing)?|stolen|steal(s|ing)?|stole|thefts?|heist|breach(es|ed)?|attack(s|ed|er|ers)?|compromised|security incident|loot(s|ed)?|rug ?pull(s|ed)?)\b|\blos(es|ing|t)\s+(more than |over |about |nearly |almost |at least |up to )?\$|\$[\d.,]+\s*(k|m|mn|b|bn|million|billion)?\s+(loss|lost)\b/i
+  /\b(hack(s|ed|er|ers|ing)?|exploit(s|ed|er|ers)?|drain(s|ed|er|ing)?|stolen|steal(s|ing)?|stole|thefts?|heist|breach(es|ed)?|attack(s|ed|er|ers)?|compromised|security incident|loot(s|ed)?|rug ?pull(s|ed)?)\b|\blos(es|ing|t)\s+(more than |over |about |nearly |almost |at least |up to )?\$|\$[\d.,]+\s*(k|m|mn|b|bn|million|billion)?\s+(loss|lost)\b|\b(suspicious|suspect|unauthori[sz]ed)\s+(\w+\s+){0,2}(transfers?|transactions?|withdrawals?|outflows?)\b|\bflags?\s+(outgoing|suspicious)\b[^,;:]{0,40}\b(transactions?|transfers?)\b/i
 /** The loss said as news: what a first report says, which no word of the aftermath turns into a follow-up. */
 const NEWS_OF_LOSS =
-  /\b(hacked|exploited|drained|breached|robbed|suffers?|suffered|hit by|halts?|halted|paus(es|ed)|suspends?|suspended|freezes\s+(its\s+)?(chain|network|bridge|withdrawals|deposits|contracts|trading)|loses|losing|lost\s+(more than |over |about |nearly |almost )?\$|(confirms?|discloses?|reports?|admits?)\b[^,;:]{0,40}\b(loss|hack|breach|exploit|attack|theft|leak)|investigat\w*\b[^,;:]{0,30}\b(hack|breach|exploit|incident|attack|theft)|(attackers?|hackers?|exploiters?)\s+(drains?|mints?|steals?|stole|loots?|siphons?)|loots?\s+\$|stole\s+\$|steals?\s+\$|security incident)\b/i
+  /\b(hacked|exploited|drained|breached|robbed|suffers?|suffered|hit by|halts?|halted|paus(es|ed)|suspends?|suspended|freezes\s+(its\s+)?(chain|network|bridge|withdrawals|deposits|contracts|trading)|loses|losing|lost\s+(more than |over |about |nearly |almost )?\$|(confirms?|discloses?|reports?|admits?)\b[^,;:]{0,40}\b(loss|hack|breach|exploit|attack|theft|leak)|investigat\w*\b[^,;:]{0,30}\b(hack|breach|exploit|incident|attack|theft)|(attackers?|hackers?|exploiters?)\s+(drains?|mints?|steals?|stole|loots?|siphons?)|loots?\s+\$|stole\s+\$|steals?\s+\$|security incident|flags?\s+(outgoing|suspicious))\b/i
 
 /** The aftermath, by what it is. A roundup is never a first report, even where it tells the loss again ("Inside the
  * largest crypto hack on record: How attackers breached Binance"); any other is one only where the headline does not
@@ -191,8 +193,9 @@ const DATA_ONLY = /\b((customers?|users?|clients?|buyers?|personal|account|card|
 const FUNDS_LOST = /\b(funds|drain(s|ed|ing)?|siphon(s|ed)?|heist|loss(es)?|lost|withdrawals?|assets\s+(stolen|taken|moved))\b/i
 
 /** Words that make a first report concern crypto at all: without one, a victim or a sum, a hack of freezers or of an
- * agency's staff list raises nothing. */
-const CRYPTO_WORDS = /\b(crypto\w*|wallets?|exchanges?|protocols?|bridges?|defi|blockchains?|chains?|tokens?|stablecoins?|onchain|on-chain|validators?|smart contracts?)\b/i
+ * agency's staff list raises nothing. Mining's words since 19 November 2026: "Luxor hit by AI-enabled attack that
+ * redirected client hashrate", the first report of a theft of miners' rewards in v9-7d, raised nothing. */
+const CRYPTO_WORDS = /\b(crypto\w*|wallets?|exchanges?|protocols?|bridges?|defi|blockchains?|chains?|tokens?|stablecoins?|onchain|on-chain|validators?|smart contracts?|hashrate|hash rate|mining pools?|miners?)\b/i
 
 /** The headline without a clause that dates an old theft: "... days after Binance hack", "... two months after". */
 export function mainClause(title: string): string {

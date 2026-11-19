@@ -58,6 +58,10 @@ describe('a hack told by its incident', () => {
     expect(
       storySeverity(story(first({ victim: null, victimToken: null, topExchange: false, amountUsd: null }), { title: 'Hackers Publish Work Details of 41,000 Homeland Security Employees', summary: 'A hacktivist group says it took names.' }), new Set())
     ).toBe('info')
+    // A theft of miners' rewards concerns crypto (v9-7d, 16 November 2026: its first report told nothing).
+    expect(
+      storySeverity(story(first({ victim: null, victimToken: null, topExchange: false, amountUsd: null }), { title: 'Luxor hit by AI-enabled attack that redirected client hashrate, says vulnerability patched', summary: 'The pool says the flaw is fixed.' }), new Set())
+    ).toBe('watch')
   })
 
   it('is INFO as a follow-up, as a story that reports no theft, and as old news, held or not', () => {
