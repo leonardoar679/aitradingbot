@@ -34,7 +34,8 @@ const STEP = process.env.STEP || 'all'
 /** KEEP_DAILY=1 keeps each pair's daily klines the ranking reads, as bar lines in <OUT>/daily/<PAIR>-YYYY-MM.jsonl: every
  * USDT pair of every month, delisted ones included, for the daily direction studies (V10 Stage 5, 19 November 2026). */
 const KEEP_DAILY = process.env.KEEP_DAILY === '1'
-const WORKERS = 6
+/** Requests at once (WORKERS=24 for the many small daily files of V10's daily archive). */
+const WORKERS = Number(process.env.WORKERS || 6)
 /** Bitcoin and ether are in every month: the market's figures are read from them. */
 const ALWAYS = ['BTCUSDT', 'ETHUSDT']
 /** Bases that are a currency, a stable coin or a wrapped or pegged one, not a coin whose price is forecast: the
