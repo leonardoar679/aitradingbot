@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CALIBRATION_LINES, aciUpdate, buildCell, calibrate, shiftAt } from '../shared/forecast/calibration'
+import { BAND_MISSES, CALIBRATION_LINES, aciBandUpdate, aciGammaFor, aciUpdate, bandCentreOf, buildBandCell, buildCell, calibrate, calibrateBand, shiftAt } from '../shared/forecast/calibration'
 import { CALIBRATION_FILE_VERSION, parseRunCalibration, serializeRunCalibration } from '../shared/forecast/calibrationFile'
 import { DIRECTION_LINES, calibratedPUp, fitPUp, mergeSmallSteps, rawPUp } from '../shared/forecast/direction'
 import { ENSEMBLE_LINES, combine, halfWidth, lossesOf, weightsFromLosses, widenAround } from '../shared/forecast/ensemble'
@@ -167,6 +167,79 @@ describe('the calibration', () => {
     expect(next.slice(1)).toEqual([0.25, 0.5, 0.75, 0.9])
     expect(aciUpdate([0.0101, 0.25, 0.5, 0.75, 0.9], [1, 0.25, 0.5, 0.75, 0.9], 1)[0]).toBe(CALIBRATION_LINES.aciLow)
     expect(aciUpdate([0.1, 0.25, 0.5, 0.75, 0.9], [Number.NaN, 0.25, 0.5, 0.75, 0.9])[0]).toBe(0.1)
+  })
+})
+
+describe('a calibration that does not move the centre (V10-LEAN)', () => {
+  /** Rows of a model centred at no move whose ranges are `narrow` times too narrow, the outcomes off by `drift`. */
+  function rowsFrom(seed: number, count: number, narrow: number, drift: number): { quantiles: number[]; z: number }[] {
+    const random = rng(seed)
+    const gauss = gaussOf(random)
+    return Array.from({ length: count }, () => {
+      const sigma = 0.5 + random()
+      return { quantiles: scaled(sigma / narrow), z: sigma * gauss() + drift * sigma }
+    })
+  }
+  const holds = (rows: { quantiles: number[]; z: number }[], calibrated: (quantiles: number[]) => number[]): { c80: number; c50: number; below10: number; above90: number } => {
+    const made = rows.map((row) => ({ q: calibrated(row.quantiles), z: row.z }))
+    return {
+      c80: made.filter((row) => row.z >= row.q[0] && row.z <= row.q[4]).length / rows.length,
+      c50: made.filter((row) => row.z >= row.q[1] && row.z <= row.q[3]).length / rows.length,
+      below10: made.filter((row) => row.z < row.q[0]).length / rows.length,
+      above90: made.filter((row) => row.z > row.q[4]).length / rows.length
+    }
+  }
+
+  it('fits the ranges to hold what they say, symmetric about no move or the models, where the levels would lean', () => {
+    // Weeks the market fell half a usual move: the level calibration carries the fall into its median, the band does not.
+    const weeks = rowsFrom(11, 6000, 1.6, -0.5)
+    const level = buildCell(weeks)
+    const band = buildBandCell(weeks, 'zero')
+    expect(band.n).toBe(6000)
+    expect(band.grid).toHaveLength(CALIBRATION_LINES.gridLevels)
+    const shown = scaled(1)
+    expect(calibrate(shown, level)[2]).toBeLessThan(-0.3)
+    const centred = calibrateBand(shown, band, 'zero')
+    expect(centred[2]).toBe(0)
+    expect(centred[0]).toBeCloseTo(-centred[4], 12)
+    expect(centred[1]).toBeCloseTo(-centred[3], 12)
+    // On weeks with no drift the band holds both ranges and both tails; the leaning levels miss on one side.
+    const fresh = rowsFrom(12, 6000, 1.6, 0)
+    const still = buildBandCell(rowsFrom(13, 6000, 1.6, 0), 'zero')
+    const banded = holds(fresh, (q) => calibrateBand(q, still, 'zero'))
+    expect(Math.abs(banded.c80 - 0.8)).toBeLessThan(0.02)
+    expect(Math.abs(banded.c50 - 0.5)).toBeLessThan(0.02)
+    expect(Math.abs(banded.below10 - 0.1)).toBeLessThan(0.02)
+    expect(Math.abs(banded.above90 - 0.1)).toBeLessThan(0.02)
+    const leaning = holds(fresh, (q) => calibrate(q, level))
+    expect(leaning.above90 - leaning.below10).toBeGreaterThan(0.08)
+    // Centred on the models, the band keeps their middle where it is.
+    const off = scaled(1, 0.3)
+    const models = calibrateBand(off, buildBandCell(weeks, 'models'), 'models')
+    expect(models[2]).toBeCloseTo(off[2], 12)
+    expect(bandCentreOf(off, 'zero')).toBe(0)
+    expect(bandCentreOf(off, 'models')).toBe(off[2])
+  })
+
+  it('reads a range wider where the adaptive step has lowered its miss, and steps each range by its own misses', () => {
+    const cell = buildBandCell(rowsFrom(14, 6000, 1, 0), 'zero')
+    const nominal = calibrateBand(scaled(1), cell, 'zero')
+    const wider = calibrateBand(scaled(1), cell, 'zero', [0.4, 0.1])
+    expect(wider[4]).toBeGreaterThan(nominal[4])
+    expect(wider[3]).toBeGreaterThan(nominal[3])
+    // A moment whose outcomes missed the 80% range three times in ten: its miss is read lower, the 50% range's not moved.
+    const next = aciBandUpdate([...BAND_MISSES], [0.5, 0.3], 0.01)
+    expect(next[0]).toBeCloseTo(0.5, 12)
+    expect(next[1]).toBeCloseTo(0.2 - 0.01 * 0.1, 12)
+    expect(aciBandUpdate([0.5, 0.0101], [0.5, 1], 1)[1]).toBe(CALIBRATION_LINES.aciLow)
+    expect(aciBandUpdate([0.5, 0.2], [Number.NaN, Number.NaN], 0.01)).toEqual([0.5, 0.2])
+  })
+
+  it('steps once a horizon of outcomes, not once a quarter hour: the whole step at fifteen minutes and under, a 96th at a day', () => {
+    expect(aciGammaFor(300)).toBe(CALIBRATION_LINES.aciGamma)
+    expect(aciGammaFor(900)).toBe(CALIBRATION_LINES.aciGamma)
+    expect(aciGammaFor(3600)).toBeCloseTo(CALIBRATION_LINES.aciGamma / 4, 15)
+    expect(aciGammaFor(86_400)).toBeCloseTo(CALIBRATION_LINES.aciGamma / 96, 15)
   })
 })
 

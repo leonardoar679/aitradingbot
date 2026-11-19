@@ -289,9 +289,9 @@ export function rowsOf(record: OosRecord): Row[] {
   return out
 }
 
-type Members = VariantId | 'persistence'
+export type Members = VariantId | 'persistence'
 
-interface Fitted {
+export interface Fitted {
   weights: VariantCalibration['weights']
   cells: VariantCalibration['cells']
   usualWidth80Pct: VariantCalibration['usualWidth80Pct']
@@ -323,7 +323,7 @@ function median(values: number[]): number {
 }
 
 /** Weights, cells and the usual widths from rows of the record. */
-function fit(rows: readonly Row[], members: Members, promoted: ReadonlySet<ForecastModelId>): Fitted {
+export function fit(rows: readonly Row[], members: Members, promoted: ReadonlySet<ForecastModelId>): Fitted {
   const classes = byClassOf(rows)
   const pooledWeights = weightsFor(members, rows, promoted)
   const weightsByClass: Partial<Record<PairClass, MemberWeight[]>> = {}
@@ -345,7 +345,7 @@ function fit(rows: readonly Row[], members: Members, promoted: ReadonlySet<Forec
 }
 
 /** One row's calibrated quantiles by a fitted calibration. */
-function apply(fitted: Fitted, row: Row): number[] {
+export function apply(fitted: Fitted, row: Row): number[] {
   const combined = combine(row.quantiles, fitted.weights.byClass[row.cls] ?? fitted.weights.pooled)
   return calibrate(combined.quantiles, fitted.cells.byClass[row.cls] ?? fitted.cells.pooled)
 }

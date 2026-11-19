@@ -51,14 +51,78 @@ export function buildCell(rows: readonly { quantiles: readonly number[]; z: numb
   return { n: usable.length, grid }
 }
 
-/** The error at level `tau` of a quantile level's errors, read off the grid. */
-export function shiftAt(cell: CalibrationCell, level: number, tau: number): number {
-  const values = cell.grid[level]
+/** The value at level `tau` of values kept at the grid's levels; 0 where there are none. */
+function gridAt(values: readonly number[] | undefined, tau: number): number {
   if (values === undefined || values.length === 0 || !values.every(Number.isFinite)) return 0
   const position = Math.min(GRID.length - 1, Math.max(0, tau * (GRID.length + 1) - 1))
   const low = Math.floor(position)
   const high = Math.min(GRID.length - 1, low + 1)
   return values[low] + (values[high] - values[low]) * (position - low)
+}
+
+/** The error at level `tau` of a quantile level's errors, read off the grid. */
+export function shiftAt(cell: CalibrationCell, level: number, tau: number): number {
+  return gridAt(cell.grid[level], tau)
+}
+
+// A CALIBRATION THAT DOES NOT MOVE THE CENTRE (V10 Stage 1, 19 November 2026; registered as V10-LEAN). Moving the
+// median by the test weeks' median error, and stepping every level once a quarter hour at every horizon, made the
+// forecast lean: in the seven-day run of 9-16 November every coin's 24-hour median sat below no move all week, -1.79%
+// where the models' own centre was +0.04%, a way nobody measured -- right while Bitcoin fell 14%, wrong on the day it
+// rose. A BAND calibration keeps the centre where it is told -- at no move ('zero') or the models' own middle
+// ('models') -- and fits only the ranges' widths: the sizes of the errors around that centre, in the forecast's own
+// half-width, at the 50% and 80% ranges. Its adaptive step reads how often each range is missed, by a step scaled to
+// the horizon (once a horizon's length of outcomes). Measured first; the forecast keeps 'level' until V10-LEAN says
+// otherwise.
+
+export type CalibrationCentre = 'level' | 'zero' | 'models'
+export type BandCentre = Exclude<CalibrationCentre, 'level'>
+
+/** The sizes of the errors around a centre, in half-widths, at the grid's levels, ascending. */
+export interface BandCell {
+  n: number
+  grid: number[]
+}
+
+/** The two ranges a band calibration reads, by their nominal miss: the 50% range's and the 80% range's. */
+export const BAND_MISSES = [0.5, 0.2] as const
+
+/** Where a band calibration centres a forecast: at no move, or at its models' own middle. */
+export const bandCentreOf = (quantiles: readonly number[], centre: BandCentre): number => (centre === 'zero' ? 0 : quantiles[2])
+
+/** A band cell from rows of quantiles and the outcomes after them, all in units of the usual move. */
+export function buildBandCell(rows: readonly { quantiles: readonly number[]; z: number }[], centre: BandCentre): BandCell {
+  const usable = rows.filter((row) => Number.isFinite(row.z) && row.quantiles.every(Number.isFinite) && halfWidth(row.quantiles) > 0)
+  const sizes = Float64Array.from(usable, (row) => Math.abs(row.z - bandCentreOf(row.quantiles, centre)) / halfWidth(row.quantiles)).sort()
+  return { n: usable.length, grid: GRID.map((tau) => quantileOfSorted(sizes, tau)) }
+}
+
+/** Quantiles by a band cell: the centre, and each range's half the size within which its share of the errors fell
+ * (one less its miss, or the miss the adaptive step reads it at), in the forecast's own half-width -- symmetric about
+ * the centre. */
+export function calibrateBand(quantiles: readonly number[], cell: BandCell, centre: BandCentre, misses: readonly number[] = BAND_MISSES): number[] {
+  const scale = halfWidth(quantiles)
+  const middle = bandCentreOf(quantiles, centre)
+  const inner = scale * gridAt(cell.grid, 1 - misses[0])
+  const outer = scale * gridAt(cell.grid, 1 - misses[1])
+  return rearrange([middle - outer, middle - inner, middle, middle + inner, middle + outer])
+}
+
+/** One adaptive step of a band calibration (Gibbs and Candès's step on the miss): each range's miss moved by its
+ * nominal miss less the share of a moment's outcomes that fell outside it. */
+export function aciBandUpdate(misses: readonly number[], outside: readonly number[], gamma: number): number[] {
+  return misses.map((miss, range) => {
+    const share = outside[range]
+    if (!Number.isFinite(share)) return miss
+    const next = miss + gamma * (BAND_MISSES[range] - share)
+    return Math.min(CALIBRATION_LINES.aciHigh, Math.max(CALIBRATION_LINES.aciLow, next))
+  })
+}
+
+/** The adaptive step a moment at a horizon: the step once a horizon's length of outcomes -- the whole step at a quarter
+ * hour and under, a 96th of it at a day, whose outcomes due at each quarter hour all but repeat one another. */
+export function aciGammaFor(horizonSec: number, gamma: number = CALIBRATION_LINES.aciGamma, momentSec = 900): number {
+  return gamma * Math.min(1, momentSec / horizonSec)
 }
 
 /** Quantiles calibrated by a cell: each level moved by the error at its level (or at the level the
