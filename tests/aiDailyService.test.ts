@@ -16,7 +16,10 @@ vi.mock('electron', () => ({ app: { getPath: () => tmpdir() } }))
 vi.mock('../electron/services/aiAdditionsService', () => ({ askAddition: async () => ({ status: 'skipped', reason: 'not in this test' }), additionCacheKey: (kind: string, model: string) => `${kind}:${model}:key` }))
 vi.mock('../electron/services/aiLedgerService', () => ({ listAiCalls: async () => ({ rows: [] }) }))
 vi.mock('../electron/services/effectiveConfigService', () => ({ getEffectiveConfig: async () => ({ engineVersion: 'e1', configVersion: 'c1' }) }))
-vi.mock('../electron/services/forecastService', () => ({ latestForecasts: () => [] }))
+// The live forecasts as forecastService gives them, in the pairs' alphabetical order, and the universe most traded first.
+const live = vi.hoisted(() => ({ forecasts: [] as { pair: string; currentPrice: number; horizons: { hours24?: { quantilesPct: number[] } } }[], universe: [] as string[] }))
+vi.mock('../electron/services/forecastService', () => ({ latestForecasts: () => [...live.forecasts].sort((a, b) => a.pair.localeCompare(b.pair)) }))
+vi.mock('../electron/services/forecastDataService', () => ({ forecastUniverse: () => [...live.universe] }))
 vi.mock('../electron/services/newsFeedService', () => ({ getNewsFeedState: () => ({ stories: [] }) }))
 vi.mock('../electron/services/predictionLedgerService', () => ({ recordSourcePrediction: async () => undefined }))
 
@@ -129,6 +132,20 @@ describe('when it asks', () => {
 })
 
 describe('what it asks about', () => {
+  it("reads the forecast's coins most traded first, not by name, each with its price and its day's expected move", async () => {
+    vi.resetModules()
+    const { aiDailySeam, mostTradedFirst } = await import('../electron/services/aiDailyService')
+    live.universe = [...PAIRS]
+    live.forecasts = PAIRS.map((pair, index) => ({ pair, currentPrice: 10 + index, horizons: { hours24: { quantilesPct: [-4, -1.5, 0, 1.5, 4] } } }))
+    live.forecasts.push({ pair: 'AAVEUSDT', currentPrice: 1, horizons: {} })
+    const read = aiDailySeam.forecasts()
+    expect(read.map((entry) => entry.pair)).toEqual([...PAIRS, 'AAVEUSDT'])
+    expect(read[0]).toEqual({ pair: 'BTCUSDT', price: 10, expectedMove24hPct: read[0].expectedMove24hPct })
+    expect(read[0].expectedMove24hPct).toBeGreaterThan(1)
+    expect(read[read.length - 1].expectedMove24hPct).toBeNull()
+    expect(mostTradedFirst([{ pair: 'B' }, { pair: 'Z' }, { pair: 'A' }], ['A', 'B']).map((entry) => entry.pair)).toEqual(['A', 'B', 'Z'])
+  })
+
   it("asks about the forecast's ten most traded when it first asks, and keeps them", async () => {
     const { service, clock, asked, state } = await setup()
     await service.aiDailyTurn()

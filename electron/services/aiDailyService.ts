@@ -8,6 +8,7 @@ import { additionCacheKey, askAddition } from './aiAdditionsService'
 import { listAiCalls } from './aiLedgerService'
 import { writeJsonAtomic } from './atomicWrite'
 import { getEffectiveConfig } from './effectiveConfigService'
+import { forecastUniverse } from './forecastDataService'
 import { latestForecasts } from './forecastService'
 import { getNewsFeedState } from './newsFeedService'
 import { recordSourcePrediction } from './predictionLedgerService'
@@ -27,12 +28,20 @@ const DAY = 86_400
 const TICK_MS = 5 * 60_000
 const FIRST_TICK_MS = 3 * 60_000
 
+/** The forecasts in the universe's order, the most traded first with Bitcoin and ether leading (forecastUniverse);
+ * one the universe no longer holds goes last. latestForecasts() is in the pairs' alphabetical order: the test's ten
+ * would otherwise be the first ten names. */
+export function mostTradedFirst<T extends { pair: string }>(forecasts: readonly T[], universe: readonly string[]): T[] {
+  const place = new Map(universe.map((pair, index) => [pair, index]))
+  return [...forecasts].sort((a, b) => (place.get(a.pair) ?? universe.length) - (place.get(b.pair) ?? universe.length))
+}
+
 export const aiDailySeam = {
   dir: (): string => app.getPath('userData'),
   nowSec: (): number => Math.floor(Date.now() / 1000),
   /** The forecast's coins, the most traded first, with their prices now and their day's expected move. */
   forecasts: (): { pair: string; price: number; expectedMove24hPct: number | null }[] =>
-    latestForecasts().map((prediction) => {
+    mostTradedFirst(latestForecasts(), forecastUniverse()).map((prediction) => {
       const day = prediction.horizons.hours24
       const size = day === undefined ? Number.NaN : expectedMove(day.quantilesPct)
       return { pair: prediction.pair, price: prediction.currentPrice, expectedMove24hPct: Number.isFinite(size) ? Math.round(size * 100) / 100 : null }
