@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { CALIBRATION_LINES, type CalibrationCentre } from '../shared/forecast/calibration'
 import { DIRECTION_LINES, classify, confidenceOf, type CallInput } from '../shared/forecast/direction'
 import type { Horizon } from '../shared/forecast/features'
 import { FORECAST_MODELS, type ForecastModelId } from '../shared/forecast/models'
@@ -18,10 +19,12 @@ const call = (patch: Partial<CallInput> = {}): ReturnType<typeof classify> =>
   classify({ pUp: 0.6, medianPct: 0.5, p10Pct: -0.5, p90Pct: 1.5, width80Pct: 2, usualWidth80Pct: 2, quality: null, directionSkill: 0.02, ...patch })
 
 describe('the call', () => {
-  it('is BULLISH at 58% with the median above zero and a direction that was skilful, and NEUTRAL short of any line', () => {
+  it('is BULLISH at 58% with the median not below zero and a direction that was skilful, and NEUTRAL short of any line', () => {
     expect(call()).toEqual({ direction: 'BULLISH', strong: false, uncertain: false })
     expect(call({ pUp: 0.579 }).direction).toBe('NEUTRAL')
-    expect(call({ medianPct: 0 }).direction).toBe('NEUTRAL')
+    // Since V10 Stage 1 the middle sits at no move (V10-LEAN): at no move it stands in no way's path; against it, it does.
+    expect(call({ medianPct: 0 }).direction).toBe('BULLISH')
+    expect(call({ medianPct: -0.01 }).direction).toBe('NEUTRAL')
     expect(call({ directionSkill: 0.0099 }).direction).toBe('NEUTRAL')
     expect(call({ directionSkill: null }).direction).toBe('NEUTRAL')
     expect(call({ directionSkill: Number.NaN }).direction).toBe('NEUTRAL')
@@ -31,7 +34,8 @@ describe('the call', () => {
   it('is BEARISH mirrored', () => {
     expect(call({ pUp: 0.42, medianPct: -0.5, p10Pct: -1.5, p90Pct: 0.5 }).direction).toBe('BEARISH')
     expect(call({ pUp: 0.421, medianPct: -0.5 }).direction).toBe('NEUTRAL')
-    expect(call({ pUp: 0.42, medianPct: 0 }).direction).toBe('NEUTRAL')
+    expect(call({ pUp: 0.42, medianPct: 0, p10Pct: -1, p90Pct: 1 }).direction).toBe('BEARISH')
+    expect(call({ pUp: 0.42, medianPct: 0.01 }).direction).toBe('NEUTRAL')
   })
 
   it('is STRONG only with 65%, a median of 1%, a quality of 75 and the bad case no further than the median', () => {
@@ -98,7 +102,20 @@ const FLAT: RunCalibration = buildRunCalibration(
   [...promoted('hour1', ['persistence', 'gbt']), ...promoted('hours4', ['persistence', 'gbt'])],
   'run-flat'
 )
-const KNOWING: RunCalibration = buildRunCalibration(new Map([['hour1', recordOf({ rows: 12_000, seed: 33, drift: 0.6, horizon: 'hour1' })]]), promoted('hour1', ['persistence', 'gbt']), 'run-knowing')
+/** A calibration made by the level lines of V6 to V9 ('level'), whose distribution reads the way its models' centres
+ * lean: what the call tests below need. Since V10 Stage 1 the band holds the centre at no move (V10-LEAN), and a way
+ * comes only from a measured direction model (tests/forecastDirection.test.ts). */
+function levelCalibration<T>(make: () => T): T {
+  const lines = CALIBRATION_LINES as { centre: CalibrationCentre }
+  const was = lines.centre
+  lines.centre = 'level'
+  try {
+    return make()
+  } finally {
+    lines.centre = was
+  }
+}
+const KNOWING: RunCalibration = levelCalibration(() => buildRunCalibration(new Map([['hour1', recordOf({ rows: 12_000, seed: 33, drift: 0.6, horizon: 'hour1' })]]), promoted('hour1', ['persistence', 'gbt']), 'run-knowing'))
 const FLOOR = scaled(1.25)
 
 function input(calibration: RunCalibration, mu: number, patch: Partial<PredictionInput> = {}): PredictionInput {
@@ -242,7 +259,8 @@ describe('the prediction', () => {
       input(FLAT, 0, {
         levels: (horizon, variant, cell) => {
           asked.push(`${horizon}/${variant}/${cell}`)
-          return [0.05, 0.25, 0.5, 0.75, 0.95]
+          // The band's two readings (V10-LEAN): both ranges read at lower misses, so wider.
+          return [0.4, 0.1]
         }
       })
     )!.horizons.hour1!

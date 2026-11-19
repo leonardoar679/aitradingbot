@@ -1,5 +1,5 @@
 import type { MarketRegime } from '../marketResearch'
-import { CALIBRATION_VERSION, calibrate } from './calibration'
+import { CALIBRATION_VERSION, calibrateShown } from './calibration'
 import { DIRECTION_LINES, calibratedPUp, classify, confidenceOf, rawPUp, type Direction } from './direction'
 import { ENSEMBLE_VERSION, combine, halfWidth, sigmaOf, widenAround } from './ensemble'
 import { FEATURES_VERSION, HORIZONS, HORIZON_BARS, type Horizon, type PairClass } from './features'
@@ -287,7 +287,7 @@ function rangeOf(input: PredictionInput, horizon: Horizon): ForecastRange | null
   for (const variant of VARIANTS) {
     const read = cellOf(calibration.variants[variant], input.pairClass)
     const combined = combine(models, read.weights)
-    const quantiles = calibrate(combined.quantiles, read.cell, input.levels?.(horizon, variant, read.ownClass ? input.pairClass : 'pooled') ?? QUANTILE_LEVELS)
+    const quantiles = calibrateShown(combined.quantiles, read.cell, read.band, input.levels?.(horizon, variant, read.ownClass ? input.pairClass : 'pooled'))
     if (!quantiles.every(Number.isFinite)) return null
     const pUpMapped = calibratedPUp(calibration.variants[variant].pUp, rawPUp(quantiles))
     const skilful = read.honest !== null && read.honest.directionSkill >= DIRECTION_LINES.minDirectionSkill
@@ -317,7 +317,7 @@ function rangeOf(input: PredictionInput, horizon: Horizon): ForecastRange | null
       variants[variant] = variants.v2
       continue
     }
-    const levelled = calibrate(v2.combined.quantiles, v2.read.cell, input.levels?.(horizon, variant, cell) ?? QUANTILE_LEVELS)
+    const levelled = calibrateShown(v2.combined.quantiles, v2.read.cell, v2.read.band, input.levels?.(horizon, variant, cell))
     const shiftZ = Math.log(1 + effect.shiftPct / 100) / usual
     const shifted = levelled.map((q) => q + shiftZ)
     const quantiles = widenAround(shifted, effect.widenPct > 0 ? effect.widenPct / 100 / usual : effect.widenShare * sigmaOf(shifted))
@@ -383,8 +383,9 @@ function rangeOf(input: PredictionInput, horizon: Horizon): ForecastRange | null
         }
   const table = input.calibration.touch
   const hourly = usualMove(input.rv24h, 12)
+  // No time to reach a middle at no move (since V10 Stage 1, V10-LEAN): the price is already there.
   const arrival: ForecastRange['arrival'] =
-    table === undefined || !(hourly > 0) || !Number.isFinite(logs[P50])
+    table === undefined || !(hourly > 0) || !Number.isFinite(logs[P50]) || logs[P50] === 0
       ? undefined
       : ((): ForecastRange['arrival'] => {
           const k = Math.abs(logs[P50]) / hourly

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { coarseBars, type ForecastBar } from '../shared/forecast/bars'
-import { aciUpdate } from '../shared/forecast/calibration'
+import { BAND_MISSES, aciBandUpdate, aciGammaFor } from '../shared/forecast/calibration'
 import { FEATURE_NAMES, HORIZONS, type Horizon } from '../shared/forecast/features'
 import type { FlatTree } from '../shared/forecast/ml/tree'
 import type { FittedHorizon } from '../shared/forecast/models'
@@ -148,6 +148,12 @@ function btcFalling(close: number): Map<string, ForecastBar[]> {
 }
 
 const dir = (): string => join(process.env.AI_TEST_USER_DATA as string, 'forecasts')
+/** The shares of outcomes outside the 50% and the 80% range, from where each close fell against the levels. */
+const outsideOf = (outcomes: readonly Record<string, unknown>[], key: 'below' | 'v2below'): number[] => {
+  const flags = outcomes.map((line) => line[key] as string)
+  return [flags.filter((f) => f[1] === '1' || f[3] === '0').length / flags.length, flags.filter((f) => f[0] === '1' || f[4] === '0').length / flags.length]
+}
+
 const lines = (name: string): Record<string, unknown>[] => {
   const path = join(dir(), name)
   return existsSync(path) ? readFileSync(path, 'utf-8').trim().split('\n').filter(Boolean).map((line) => JSON.parse(line)) : []
@@ -657,9 +663,9 @@ describe('the record', () => {
     expect(aci.calibrationRun).toBe('run-folds')
     expect(aci.updatedAt).toBe(HOUR + 300)
     expect(Object.keys(aci.levels).sort()).toEqual(['minutes5/v1/pooled', 'minutes5/v2/pooled'])
-    // One step for the moment, by the share of its four outcomes below each level.
-    const share = [0, 1, 2, 3, 4].map((level) => outcomes.filter((line) => (line.below as string)[level] === '1').length / outcomes.length)
-    expect(aci.levels['minutes5/v2/pooled']).toEqual(aciUpdate([0.1, 0.25, 0.5, 0.75, 0.9], share))
+    // One step for the moment, by the share of its four outcomes outside each range (the band, V10-LEAN), the whole step
+    // at five minutes.
+    expect(aci.levels['minutes5/v2/pooled']).toEqual(aciBandUpdate([...BAND_MISSES], outsideOf(outcomes, 'below'), aciGammaFor(300)))
     // Passed again at the same close: nothing written twice, the levels not moved again.
     await closeAt(live, HOUR + 300)
     expect(lines(`outcomes-${month}.jsonl`)).toHaveLength(4)
@@ -698,14 +704,15 @@ describe('the record', () => {
     // The widening moved where the closes fell against the shown levels: V2's learn from V2's own.
     expect(shareOf('v2below')).not.toEqual(shareOf('below'))
     const aci = JSON.parse(readFileSync(join(dir(), 'aci.json'), 'utf-8'))
-    expect(aci.levels['minutes5/v2/pooled']).toEqual(aciUpdate([0.1, 0.25, 0.5, 0.75, 0.9], shareOf('v2below')))
+    expect(aci.levels['minutes5/v2/pooled']).toEqual(aciBandUpdate([...BAND_MISSES], outsideOf(outcomes, 'v2below'), aciGammaFor(300)))
   })
 
   it('reads each forecast at the levels the adaptive step keeps for its cell', async () => {
     const live = await engine()
     await closeAt(live, HOUR)
     const plain = live.forecastOf('SOLUSDT')!.horizons.hour1!.width80Pct
-    live.forecastForTest.setAci({ calibrationRun: 'run-folds', levels: { 'hour1/v2/pooled': [0.02, 0.25, 0.5, 0.75, 0.98] }, updatedAt: HOUR })
+    // The band's two readings (V10-LEAN): both ranges read at lower misses.
+    live.forecastForTest.setAci({ calibrationRun: 'run-folds', levels: { 'hour1/v2/pooled': [0.4, 0.05] }, updatedAt: HOUR })
     await closeAt(live, HOUR)
     expect(live.forecastOf('SOLUSDT')!.horizons.hour1!.width80Pct).toBeGreaterThan(plain)
   })

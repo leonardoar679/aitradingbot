@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BAND_MISSES, CALIBRATION_LINES, aciBandUpdate, aciGammaFor, aciUpdate, bandCentreOf, buildBandCell, buildCell, calibrate, calibrateBand, shiftAt } from '../shared/forecast/calibration'
+import { BAND_MISSES, CALIBRATION_LINES, aciBandUpdate, aciGammaFor, aciUpdate, bandCentreOf, buildBandCell, buildCell, calibrate, calibrateBand, calibrateShown, shiftAt } from '../shared/forecast/calibration'
 import { CALIBRATION_FILE_VERSION, parseRunCalibration, serializeRunCalibration } from '../shared/forecast/calibrationFile'
 import { DIRECTION_LINES, calibratedPUp, fitPUp, mergeSmallSteps, rawPUp } from '../shared/forecast/direction'
 import { ENSEMBLE_LINES, combine, halfWidth, lossesOf, weightsFromLosses, widenAround } from '../shared/forecast/ensemble'
@@ -366,11 +366,17 @@ describe('the run\'s calibration', () => {
     expect(Object.keys(v2.cells.byClass).sort()).toEqual([...PAIR_CLASSES].sort())
   })
 
-  it('finds direction where a model knew it', { timeout: 60_000 }, () => {
+  // Since V10 Stage 1 (V10-LEAN held) the shown ranges sit about no move: where the models' centres knew the way, the
+  // distribution still says none -- a way comes only from a direction model's own reading, mapped and measured.
+  it('keeps the centre at no move where a model knew the way, its distribution saying no way', { timeout: 60_000 }, () => {
     const calibration = buildRunCalibration(new Map([['hour1', recordOf({ rows: 14_000, seed: 23, drift: 0.6 })]]), PROMOTIONS, 'run-test')
     const honest = calibration.horizons.hour1!.variants.v2.honest.pooled!
-    expect(honest.directionSkill).toBeGreaterThan(0.05)
-    expect(honest.direction).toBeGreaterThan(0.6)
+    expect(Math.abs(honest.directionSkill)).toBeLessThan(0.02)
+    const read = cellOf(calibration.horizons.hour1!.variants.v2, 'large')
+    expect(read.band).toBeDefined()
+    const shown = calibrateShown(scaled(1, 0.6), read.cell, read.band)
+    expect(shown[2]).toBe(0)
+    expect(shown[0]).toBeCloseTo(-shown[4], 12)
   })
 
   // Unhurried too: a calibration's every score now resamples the fixture's rows, each an hour of its own
@@ -409,7 +415,12 @@ describe('the run\'s calibration', () => {
     expect(damage((copy) => (copy.version = 'run-calibration-v1'))).toBeNull()
     expect(damage((copy) => copy.horizons.hour1.variants.v2.cells.pooled.grid[2].pop())).toBeNull()
     expect(damage((copy) => (copy.horizons.hour1.variants.v2.weights.pooled[0].model = 'lstm'))).toBeNull()
-    expect(damage((copy) => (copy.horizons.hour1.variants.v1.pUp.y = [0.5]))).toBeNull()
+    expect(damage((copy) => (copy.horizons.hour1.variants.v1.pUp.y = [...copy.horizons.hour1.variants.v1.pUp.y, 0.5]))).toBeNull()
+    // The band (since run-calibration-v8): read back as written, refused damaged.
+    expect(back!.horizons.hour1!.variants.v2.bands!.pooled.grid[50]).toBeCloseTo(calibration.horizons.hour1!.variants.v2.bands!.pooled.grid[50], 5)
+    expect(calibration.horizons.hour1!.variants.v2.bands?.pooled.grid).toHaveLength(CALIBRATION_LINES.gridLevels)
+    expect(damage((copy) => copy.horizons.hour1.variants.v2.bands.pooled.grid.pop())).toBeNull()
+    expect(damage((copy) => (copy.horizons.hour1.variants.v2.bands = 'none'))).toBeNull()
     expect(damage((copy) => (copy.horizons.hour1.variants.v2.cells.byClass.whales = copy.horizons.hour1.variants.v2.cells.pooled))).toBeNull()
     expect(damage((copy) => delete copy.horizons.hour1.variants.v1)).toBeNull()
     expect(parseRunCalibration('not json')).toBeNull()

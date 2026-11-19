@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { CALIBRATION_LINES, type CalibrationCentre } from '../shared/forecast/calibration'
 import { FORECAST_BAR_SECONDS, coarseBars, type ForecastBar } from '../shared/forecast/bars'
 import { parseRunCalibration, serializeRunCalibration } from '../shared/forecast/calibrationFile'
 import { type PairSeries } from '../shared/forecast/features'
@@ -304,7 +305,13 @@ describe('the prediction', () => {
   const market = marketOf(1, 1)
   const panel = buildPanel(market, { stepSec: 900, fromSec: GRID_FROM, toSec: T0 + DAYS * 86_400 })
   const touch: FirstTouchTable = firstTouchTable(market, panel)
+  // Made by the level lines of V6 to V9, whose middle follows the models: the time to reach it is what these tests read.
+  // Since V10 Stage 1 the band holds the middle at no move (V10-LEAN), and a middle at no move has no time to reach.
+  const lines = CALIBRATION_LINES as { centre: CalibrationCentre }
+  lines.centre = 'level'
   const calibration: RunCalibration = buildRunCalibration(new Map([['hour1', recordOf({ rows: 6000, seed: 61, horizon: 'hour1' })]]), promoted('hour1', ['persistence', 'gbt']), 'run-time', touch)
+  lines.centre = 'zero'
+  const banded: RunCalibration = buildRunCalibration(new Map([['hour1', recordOf({ rows: 6000, seed: 61, horizon: 'hour1' })]]), promoted('hour1', ['persistence', 'gbt']), 'run-time', touch)
   calibration.horizons.hour1!.excursion = { version: 'excursion-v1', high: [1, 1.25, 1.5], low: [1, 1.25, 1.5], honest: { high: [0.5, 0.8, 0.9], low: [0.5, 0.8, 0.9], rawHigh: [0.4, 0.7, 0.8], rawLow: [0.4, 0.7, 0.8], n: 4000 } }
 
   const input = (patch: Partial<PredictionInput> = {}): PredictionInput => ({
@@ -344,6 +351,9 @@ describe('the prediction', () => {
     expect(far.arrival!.pWithin.hour1).toBeLessThan(FIRST_TOUCH.unlikely)
     expect(far.arrival!.unlikely).toBe(true)
     expect(hour.arrival!.unlikely).toBe(false)
+    // The band's middle at no move: no time to reach it.
+    expect(makePrediction(input({ calibration: banded }))!.horizons.hour1!.medianPct).toBe(0)
+    expect(makePrediction(input({ calibration: banded }))!.horizons.hour1!.arrival).toBeUndefined()
     // Without readings of the excursion models, no levels; without a table, no arrival.
     expect(makePrediction(input())!.horizons.hour1!.excursion).toBeUndefined()
     const tableless: RunCalibration = { ...calibration, touch: undefined }

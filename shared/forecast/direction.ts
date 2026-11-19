@@ -103,11 +103,13 @@ export function classify(input: CallInput): Call {
   if (uncertain) return { direction: 'NEUTRAL', strong: false, uncertain }
   if (input.directionSkill === null || !(input.directionSkill >= DIRECTION_LINES.minDirectionSkill)) return { direction: 'NEUTRAL', strong: false, uncertain }
   const sure = input.quality !== null && input.quality >= DIRECTION_LINES.strongQuality
-  if (input.pUp >= DIRECTION_LINES.bullish && input.medianPct > 0) {
+  // The middle not against the way (since V10 Stage 1): the ranges sit about no move unless a measured source moves them
+  // (V10-LEAN), so a way from a measured direction model is called with its middle at no move, never against it.
+  if (input.pUp >= DIRECTION_LINES.bullish && input.medianPct >= 0) {
     const strong = sure && input.pUp >= DIRECTION_LINES.strong && input.medianPct >= DIRECTION_LINES.strongMedianPct && input.p10Pct >= -input.medianPct
     return { direction: 'BULLISH', strong, uncertain }
   }
-  if (input.pUp <= 1 - DIRECTION_LINES.bullish && input.medianPct < 0) {
+  if (input.pUp <= 1 - DIRECTION_LINES.bullish && input.medianPct <= 0) {
     const strong = sure && input.pUp <= 1 - DIRECTION_LINES.strong && input.medianPct <= -DIRECTION_LINES.strongMedianPct && input.p90Pct <= -input.medianPct
     return { direction: 'BEARISH', strong, uncertain }
   }

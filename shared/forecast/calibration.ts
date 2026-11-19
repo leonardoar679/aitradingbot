@@ -21,9 +21,15 @@ import { QUANTILE_LEVELS, quantileOfSorted, rearrange } from './ml/quantile'
 // models. One step a moment, of the share of the pairs due at it -- not a step a pair, which on a day
 // every coin fell together would move it thirty-seven times for one surprise.
 
-export const CALIBRATION_VERSION = 'calibration-v1'
+// SINCE V10 STAGE 1 (19 November 2026; V10-LEAN held): THE CENTRE STAYS AT NO MOVE. The forecast's ranges are the band
+// calibration's below (centre 'zero'), symmetric about no move, their adaptive step reading only how often each range is
+// missed, once a horizon's length of outcomes; the level calibration above is kept for the lines' 'level' and for a
+// calibration fitted before. A way away from no move comes only from a source whose own test passed.
+export const CALIBRATION_VERSION = 'calibration-v2'
 
 export const CALIBRATION_LINES = {
+  /** Where the shown ranges are centred (V10-LEAN): at no move; 'level' was V6 to V9's per-level calibration. */
+  centre: 'zero' as CalibrationCentre,
   /** The errors are kept at the levels 0.01, 0.02, ... 0.99. */
   gridLevels: 99,
   /** How far one moment's outcomes move a level, and the levels it may be read between. */
@@ -123,6 +129,18 @@ export function aciBandUpdate(misses: readonly number[], outside: readonly numbe
  * hour and under, a 96th of it at a day, whose outcomes due at each quarter hour all but repeat one another. */
 export function aciGammaFor(horizonSec: number, gamma: number = CALIBRATION_LINES.aciGamma, momentSec = 900): number {
   return gamma * Math.min(1, momentSec / horizonSec)
+}
+
+/** Whether the lines calibrate by the band (V10-LEAN), with the band's centre. */
+export const bandCentre = (): BandCentre | null => (CALIBRATION_LINES.centre === 'level' ? null : CALIBRATION_LINES.centre)
+
+/** A forecast's shown levels: by the band about the lines' centre where the lines say so and the calibration has a band
+ * cell, else each level by its own error. `reading` is where the adaptive step reads them: the band's two misses, or the
+ * five levels; a reading of the other kind (one kept before a change of the lines) is left for the nominal one. */
+export function calibrateShown(quantiles: readonly number[], cell: CalibrationCell, band: BandCell | undefined, reading?: readonly number[]): number[] {
+  const centre = bandCentre()
+  if (centre !== null && band !== undefined) return calibrateBand(quantiles, band, centre, reading !== undefined && reading.length === BAND_MISSES.length ? reading : BAND_MISSES)
+  return calibrate(quantiles, cell, reading !== undefined && reading.length === QUANTILE_LEVELS.length ? reading : QUANTILE_LEVELS)
 }
 
 /** Quantiles calibrated by a cell: each level moved by the error at its level (or at the level the

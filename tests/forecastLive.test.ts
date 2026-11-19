@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { cellKey, emptyAciTable, levelsOf, parseAciTable, stepAciTable } from '../shared/forecast/aciTable'
-import { CALIBRATION_LINES } from '../shared/forecast/calibration'
+import { CALIBRATION_LINES, aciGammaFor } from '../shared/forecast/calibration'
 import { FORECAST_RECORD_VERSION, isMissing, missingOutcomeLine, outcomeLine, parseOutcomeLine, parsePredictionLine, predictionLine, recordMonth, recordedHorizons } from '../shared/forecast/forecastRecord'
 import type { TradeDecision } from '../shared/forecast/tradeDecision'
 import { QUANTILE_LEVELS } from '../shared/forecast/ml/quantile'
@@ -230,15 +230,28 @@ describe('a forecast made again before the next close', () => {
 describe('the adaptive levels', () => {
   const key = cellKey('hour1', 'v2', 'mid')
 
-  it('start at the nominal levels and move once a moment by each cell\'s share below', () => {
+  // Since V10 Stage 1 (V10-LEAN) a cell keeps two readings, the misses of its 50% and 80% ranges, each stepped by how
+  // often its range was missed, once a horizon's length of outcomes: the whole step at a quarter hour, a quarter of it at
+  // an hour, a 96th at a day.
+  it('start at the nominal misses and move once a moment by each range missed, the step scaled to the horizon', () => {
     const table = emptyAciTable('run-y')
     expect(levelsOf(table, key)).toEqual(QUANTILE_LEVELS)
     expect(levelsOf(null, key)).toEqual(QUANTILE_LEVELS)
-    // Three outcomes at a moment, all below the P10: one step, not three.
+    // Three outcomes at a moment, all below the P10: both ranges missed by each; one step, not three.
     const below = [true, true, true, true, true]
     const next = stepAciTable(table, [{ key, below }, { key, below }, { key, below }], T)
-    expect(next.levels[key]![0]).toBeCloseTo(0.1 - CALIBRATION_LINES.aciGamma * 0.9, 12)
-    expect(next.levels[key]![4]).toBeCloseTo(0.9 - CALIBRATION_LINES.aciGamma * 0.1, 12)
+    const step = aciGammaFor(3600)
+    expect(step).toBeCloseTo(CALIBRATION_LINES.aciGamma / 4, 15)
+    expect(next.levels[key]).toHaveLength(2)
+    expect(next.levels[key]![0]).toBeCloseTo(0.5 - step * 0.5, 12)
+    expect(next.levels[key]![1]).toBeCloseTo(0.2 - step * 0.8, 12)
+    // Inside both ranges: each miss read higher, the ranges narrower.
+    const inside = stepAciTable(table, [{ key, below: [false, false, true, true, true] }], T)
+    expect(inside.levels[key]![0]).toBeCloseTo(0.5 + step * 0.5, 12)
+    expect(inside.levels[key]![1]).toBeCloseTo(0.2 + step * 0.2, 12)
+    // A day's cell moves a 96th of the step a moment.
+    const day = cellKey('hours24', 'v2', 'mid')
+    expect(stepAciTable(table, [{ key: day, below }], T).levels[day]![1]).toBeCloseTo(0.2 - (CALIBRATION_LINES.aciGamma / 96) * 0.8, 12)
     expect(next.updatedAt).toBe(T)
     expect(next.levels[cellKey('hour1', 'v1', 'mid')]).toBeUndefined()
     // A moment with no outcome moves nothing.
@@ -249,6 +262,8 @@ describe('the adaptive levels', () => {
     const table = stepAciTable(emptyAciTable('run-y'), [{ key, below: [false, false, true, true, true] }], T)
     expect(parseAciTable(JSON.parse(JSON.stringify(table)))).toEqual(table)
     expect(parseAciTable({ ...table, levels: { [key]: [0.1, 0.25, 0.5] } })).toBeNull()
+    // A table kept before V10 (five levels) still reads; the band reads such a cell at its nominal misses.
+    expect(parseAciTable({ ...table, levels: { [key]: [0.1, 0.25, 0.5, 0.75, 0.9] } })).not.toBeNull()
     expect(parseAciTable({ ...table, levels: { [key]: [0, 0.25, 0.5, 0.75, 0.9] } })).toBeNull()
     expect(parseAciTable({ ...table, levels: { 'hour1/v9/mid': [0.1, 0.25, 0.5, 0.75, 0.9] } })).toBeNull()
     expect(parseAciTable(null)).toBeNull()

@@ -250,8 +250,13 @@ describe('the prediction', () => {
     expect(down.pUpSource).toBe('dir-gbt')
     expect(down.pUp).toBeLessThan(1 - DIRECTION_LINES.bullish)
     expect(down.direction).toBe('BEARISH')
-    // The reading says up but the median says down: the lines hold, and it is NEUTRAL.
-    expect(makePrediction(input(CALIBRATION, -0.4, { direction: { hour1: { 'dir-gbt': 0.9 } } }))!.horizons.hour1!.direction).toBe('NEUTRAL')
+    // Since V10 Stage 1 the middle sits at no move whatever the models' centre (V10-LEAN): it never stands against a
+    // measured reading, and a reading of up with the models leaning down is called up.
+    const leaning = makePrediction(input(CALIBRATION, -0.4, { direction: { hour1: { 'dir-gbt': 0.9 } } }))!.horizons.hour1!
+    expect(leaning.medianPct).toBe(0)
+    expect(leaning.direction).toBe('BULLISH')
+    // Without a measured reading the same models call no way.
+    expect(makePrediction(input(CALIBRATION, -0.4))!.horizons.hour1!.direction).toBe('NEUTRAL')
     // The distribution's own reading stays on its variant.
     expect(up.variants.v2!.pUp).toBe(cellOf(CALIBRATION.horizons.hour1!.variants.v2, 'mid').honest!.upShare)
   })

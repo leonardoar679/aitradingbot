@@ -371,13 +371,12 @@ describe('the walk forward', () => {
     expect(made.lab.byHour!.rows).toBe(shown.length)
     expect(made.lab.byHour!.hours).toHaveLength(24)
     expect(made.lab.byHour!.hours.reduce((sum, band) => sum + band.pooled.n, 0)).toBe(shown.length)
-    // Week 1 has no P(up) map, week 2 no skill read from a week before it: only week 3 calls.
+    // Since V10 Stage 1 the ranges sit about no move (V10-LEAN): though gbt knew the drift's sign, the distribution calls
+    // no way in any week, and the trader as the rules stand trades nothing on it.
     const lastWeek = record.time[Math.floor((3 * record.rows) / 4)]
-    expect(shown.filter((entry) => entry.dir !== 'NEUTRAL').every((entry) => entry.t >= lastWeek)).toBe(true)
-    expect(shown.filter((entry) => entry.dir !== 'NEUTRAL').length).toBeGreaterThan(100)
-    // gbt knew the drift's sign: its calls were mostly right, and the trader as the rules stand traded them.
-    expect(made.lab.variants.v2.pooled.callsRight).toBeGreaterThan(0.6)
-    expect(made.lab.trader.rules.trades).toBeGreaterThan(0)
+    expect(shown.filter((entry) => entry.dir !== 'NEUTRAL')).toHaveLength(0)
+    expect(shown.every((entry) => entry.q[2] === 0)).toBe(true)
+    expect(made.lab.trader.rules.trades).toBe(0)
     // Every outcome of the last week turned around: not one call of that week changes.
     const flipped = { ...record, z: Float32Array.from(record.z, (value, row) => (record.time[row] >= lastWeek ? -value : value)), y: Float32Array.from(record.y, (value, row) => (record.time[row] >= lastWeek ? -value : value)) }
     const again = walkForwardLab(flipped, promotions, new Map(), []).cases.v2

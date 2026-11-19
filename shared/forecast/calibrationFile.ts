@@ -1,4 +1,4 @@
-import { CALIBRATION_LINES, type CalibrationCell } from './calibration'
+import { CALIBRATION_LINES, type BandCell, type CalibrationCell } from './calibration'
 import type { MemberWeight } from './ensemble'
 import { HORIZONS, PAIR_CLASSES, type Horizon, type PairClass } from './features'
 import type { IsotonicModel } from './ml/isotonic'
@@ -54,6 +54,12 @@ function readCell(value: unknown): CalibrationCell | null {
   if (!isObject(value) || !finite(value.n) || !Array.isArray(value.grid) || value.grid.length !== QUANTILE_LEVELS.length) return null
   if (!value.grid.every((level) => finiteList(level, CALIBRATION_LINES.gridLevels))) return null
   return { n: value.n, grid: value.grid as number[][] }
+}
+
+/** A band cell (V10-LEAN): its sizes at the grid's levels. */
+function readBandCell(value: unknown): BandCell | null {
+  if (!isObject(value) || !finite(value.n) || !finiteList(value.grid, CALIBRATION_LINES.gridLevels)) return null
+  return { n: value.n, grid: value.grid }
 }
 
 function readIsotonic(value: unknown): IsotonicModel | null {
@@ -135,9 +141,19 @@ function readVariant(value: unknown): VariantCalibration | null {
   const weeks = value.honest.weeks
   if (pooledWeights === null || weightsByClass === null || pooledCell === null || cellsByClass === null || pUp === null) return null
   if (pooledWidth === undefined || widthByClass === null || pooledScore === undefined || scoresByClass === null || !finiteList(weeks)) return null
+  // The band (since run-calibration-v8): read where kept, and a file whose band does not read is not one.
+  let bands: VariantCalibration['bands']
+  if (value.bands !== undefined) {
+    if (!isObject(value.bands)) return null
+    const pooledBand = readBandCell(value.bands.pooled)
+    const bandsByClass = byClass(value.bands.byClass, readBandCell)
+    if (pooledBand === null || bandsByClass === null) return null
+    bands = { pooled: pooledBand, byClass: bandsByClass }
+  }
   return {
     weights: { pooled: pooledWeights, byClass: weightsByClass },
     cells: { pooled: pooledCell, byClass: cellsByClass },
+    ...(bands === undefined ? {} : { bands }),
     pUp,
     usualWidth80Pct: { pooled: pooledWidth, byClass: widthByClass },
     honest: { pooled: pooledScore, byClass: scoresByClass as Partial<Record<PairClass, HonestScore>>, weeks }

@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { AciTable } from '../shared/forecast/aciTable'
+import { CALIBRATION_LINES, type CalibrationCentre } from '../shared/forecast/calibration'
 import { FIDELITY_LINES, levelsAgree, replayFidelity } from '../shared/forecast/fidelity'
 import { HORIZONS, PAIR_CLASSES, type Horizon } from '../shared/forecast/features'
 import { isMissing, parseOutcomeLine, parsePassLine, parsePredictionLine, type PassLine, type PredictionLine } from '../shared/forecast/forecastRecord'
@@ -27,6 +28,17 @@ const models = new Map<Horizon, FittedHorizon>(HORIZONS.map((horizon) => [horizo
 const input = () => ({ bars: MARKET, models, calibration: CALIBRATION, runId: 'run-models', predictions, passes })
 
 describe('the replay of a recorded run', () => {
+  // The record was made by the level calibration of V6 to V9: it is replayed by the lines it was made with. Since V10
+  // Stage 1 the forecast's lines are the band's (V10-LEAN).
+  const lines = CALIBRATION_LINES as { centre: CalibrationCentre }
+  const shipped = lines.centre
+  beforeAll(() => {
+    lines.centre = 'level'
+  })
+  afterAll(() => {
+    lines.centre = shipped
+  })
+
   it('reads the fixture whole: grid forecasts and refreshes, and the passes', () => {
     expect(predictions).toHaveLength(58)
     expect(predictions.filter((line) => line.why === 'grid')).toHaveLength(52)

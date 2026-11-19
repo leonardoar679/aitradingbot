@@ -1,4 +1,4 @@
-import { buildCell, calibrate, type CalibrationCell } from './calibration'
+import { bandCentre, buildBandCell, buildCell, calibrateShown, type BandCell, type CalibrationCell } from './calibration'
 import { DIRECTION_LINES, calibratedPUp, fitPUp, rawPUp } from './direction'
 import { ENSEMBLE_LINES, combine, lossesOf, weightsFromLosses, type MemberWeight } from './ensemble'
 import type { MarketRegime } from '../marketResearch'
@@ -76,7 +76,7 @@ import { SHARE, UNCERTAINTY_LINES, blockHoursOf, bootstrapOverHours, detectableS
 /** run-calibration-v7 (V7.2 Stage 2): the direction verdicts' lines, halves, edge and the run before's
  * verdict. An older file is made again from its record at the next start (without what the record does
  * not hold, and with no run before: a source then needs the next walk forward). */
-export const RUN_CALIBRATION_VERSION = 'run-calibration-v7'
+export const RUN_CALIBRATION_VERSION = 'run-calibration-v8'
 
 /** Where a horizon's P(up) comes from: the base rate, the distribution's mapped reading, a direction
  * model's, or the news's own (shared/forecast/newsEffect.ts). */
@@ -210,6 +210,8 @@ export interface HonestInterval {
 export interface VariantCalibration {
   weights: { pooled: MemberWeight[]; byClass: Partial<Record<PairClass, MemberWeight[]>> }
   cells: { pooled: CalibrationCell; byClass: Partial<Record<PairClass, CalibrationCell>> }
+  /** The band about no move (V10-LEAN; since run-calibration-v8): the shown ranges' sizes. */
+  bands?: { pooled: BandCell; byClass: Partial<Record<PairClass, BandCell>> }
   pUp: IsotonicModel
   /** The median width of the calibrated 80% range, in percent. */
   usualWidth80Pct: { pooled: number; byClass: Partial<Record<PairClass, number>> }
@@ -294,6 +296,7 @@ export type Members = VariantId | 'persistence'
 export interface Fitted {
   weights: VariantCalibration['weights']
   cells: VariantCalibration['cells']
+  bands?: VariantCalibration['bands']
   usualWidth80Pct: VariantCalibration['usualWidth80Pct']
 }
 
@@ -334,12 +337,24 @@ export function fit(rows: readonly Row[], members: Members, promoted: ReadonlySe
   for (const [cls, mine] of byClassOf(combined)) {
     if (mine.length >= ENSEMBLE_LINES.minCellRows) cellsByClass[cls] = buildCell(mine.map((entry) => ({ quantiles: entry.quantiles, z: entry.row.z })))
   }
-  const widths = combined.map((entry) => ({ cls: entry.cls, width: widthPct(calibrate(entry.quantiles, cellsByClass[entry.cls] ?? pooledCell), entry.row.usual) }))
+  // The band about the lines' centre (V10-LEAN), its sizes read off the same combined rows, by class where a class has the
+  // rows a cell needs.
+  const centre = bandCentre()
+  let bands: Fitted['bands']
+  if (centre !== null) {
+    const bandsByClass: Partial<Record<PairClass, BandCell>> = {}
+    for (const [cls, mine] of byClassOf(combined)) {
+      if (mine.length >= ENSEMBLE_LINES.minCellRows) bandsByClass[cls] = buildBandCell(mine.map((entry) => ({ quantiles: entry.quantiles, z: entry.row.z })), centre)
+    }
+    bands = { pooled: buildBandCell(combined.map((entry) => ({ quantiles: entry.quantiles, z: entry.row.z })), centre), byClass: bandsByClass }
+  }
+  const widths = combined.map((entry) => ({ cls: entry.cls, width: widthPct(calibrateShown(entry.quantiles, cellsByClass[entry.cls] ?? pooledCell, bands === undefined ? undefined : (bands.byClass[entry.cls] ?? bands.pooled)), entry.row.usual) }))
   const widthByClass: Partial<Record<PairClass, number>> = {}
   for (const [cls, mine] of byClassOf(widths)) widthByClass[cls] = median(mine.map((entry) => entry.width))
   return {
     weights: { pooled: pooledWeights, byClass: weightsByClass },
     cells: { pooled: pooledCell, byClass: cellsByClass },
+    ...(bands === undefined ? {} : { bands }),
     usualWidth80Pct: { pooled: median(widths.map((entry) => entry.width)), byClass: widthByClass }
   }
 }
@@ -347,7 +362,7 @@ export function fit(rows: readonly Row[], members: Members, promoted: ReadonlySe
 /** One row's calibrated quantiles by a fitted calibration. */
 export function apply(fitted: Fitted, row: Row): number[] {
   const combined = combine(row.quantiles, fitted.weights.byClass[row.cls] ?? fitted.weights.pooled)
-  return calibrate(combined.quantiles, fitted.cells.byClass[row.cls] ?? fitted.cells.pooled)
+  return calibrateShown(combined.quantiles, fitted.cells.byClass[row.cls] ?? fitted.cells.pooled, fitted.bands === undefined ? undefined : (fitted.bands.byClass[row.cls] ?? fitted.bands.pooled))
 }
 
 /** A row forecast out of sample: its calibrated quantiles and raw P(up), persistence's beside them,
@@ -778,11 +793,12 @@ export function directionSourceOf(entry: HorizonCalibration, cls: PairClass): { 
 
 /** What a pair of a class reads of a variant's calibration: its class's own where it had enough
  * outcomes, the horizon's otherwise. */
-export function cellOf(variant: VariantCalibration, cls: PairClass): { weights: MemberWeight[]; cell: CalibrationCell; usualWidth80Pct: number; honest: HonestScore | null; ownClass: boolean } {
+export function cellOf(variant: VariantCalibration, cls: PairClass): { weights: MemberWeight[]; cell: CalibrationCell; band: BandCell | undefined; usualWidth80Pct: number; honest: HonestScore | null; ownClass: boolean } {
   const ownClass = variant.cells.byClass[cls] !== undefined
   return {
     weights: variant.weights.byClass[cls] ?? variant.weights.pooled,
     cell: variant.cells.byClass[cls] ?? variant.cells.pooled,
+    band: variant.bands === undefined ? undefined : (variant.bands.byClass[cls] ?? variant.bands.pooled),
     usualWidth80Pct: variant.usualWidth80Pct.byClass[cls] ?? variant.usualWidth80Pct.pooled,
     honest: (ownClass ? variant.honest.byClass[cls] : undefined) ?? variant.honest.pooled,
     ownClass
