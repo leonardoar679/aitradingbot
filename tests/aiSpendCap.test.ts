@@ -142,7 +142,7 @@ describe('the budget in the main process', () => {
       callsPerMinute: 30,
       // The AI additions are on, as the user chose on 6 October 2026; the ones that ask by themselves
       // still wait for the watch, which is off. The article reading, asked on a click, ships off (V8 Stage 5).
-      additions: { news: true, why: true, exit: true, review: true, daily: true, article: false },
+      additions: { news: true, why: true, exit: true, review: true, daily: true, article: false, direction: false },
       // No roles until a move to them is applied (V7.2-R Stage 1): every caller asks what it asked before.
       roles: null
     })

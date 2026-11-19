@@ -21,7 +21,8 @@ const SOURCE_NAMES: Record<string, string> = {
   article: msg("Articles' readings"),
   user: msg('Your own views'),
   'big-movers': msg('The big-mover list'),
-  'top-traders': msg("The found traders' consensus")
+  'top-traders': msg("The found traders' consensus"),
+  'ai-daily': msg('The AI daily direction test')
 }
 
 const tileStyle: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: '0.5rem' }

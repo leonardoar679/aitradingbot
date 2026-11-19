@@ -10,6 +10,7 @@ import { startVenueQuotes } from './services/venueQuotesService'
 import { startPredictionLedger } from './services/predictionLedgerService'
 import { startAccuracyBoard } from './services/accuracyBoardService'
 import { startDailyForecast } from './services/dailyForecastService'
+import { startAiDaily } from './services/aiDailyService'
 import { startBookMarks } from './services/booksService'
 import { startPrimaryCall } from './services/primaryCallService'
 import { startNewsUrls } from './services/newsUrlService'
@@ -227,6 +228,9 @@ if (!gotSingleInstanceLock) {
     // The daily forecast (V10 Stage 4; dailyForecastService.ts): sizes over one, three and seven days, made a little after
     // each UTC day opens from Binance's public daily bars. Calls no way, places nothing.
     startDailyForecast()
+    // The daily direction test (V10 Stage 7; aiDailyService.ts): off until switched on under Settings › AI, then one call
+    // a day to the deciding model while the watch is on, at most $1; its calls recorded and scored. Places nothing.
+    startAiDaily()
     // V8's three paper books marked once an hour while they run (V8 Stage 2; booksService.ts): nothing while stopped.
     startBookMarks()
     // The primary call weighed every minute and as the announcements are read (V8 Stage 3; primaryCallService.ts): a

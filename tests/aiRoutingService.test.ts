@@ -168,8 +168,9 @@ describe('the move to roles', () => {
     const { previewAiRoles } = await services()
     const preview = await previewAiRoles(CHOICE)
     const additions = preview.costs.filter((entry) => entry.id.startsWith('addition:'))
-    // Six since V8 Stage 5: the article reading, healed off in a file written before it.
-    expect(additions).toHaveLength(6)
+    // Six since V8 Stage 5: the article reading, healed off in a file written before it; seven since V10 Stage 7, the
+    // daily direction test healed off the same way.
+    expect(additions).toHaveLength(7)
     expect(additions.every((entry) => !entry.on)).toBe(true)
     // Off, they count in neither total.
     expect(preview.mostDailyUsd).toBeCloseTo(preview.costs.filter((entry) => entry.on).reduce((sum, entry) => sum + (entry.mostCallsADay === null ? (entry.expectedUsd ?? 0) : (entry.mostUsd ?? 0)), 0), 10)
@@ -224,7 +225,7 @@ describe('the move to roles', () => {
     expect(await getAiConfig()).toMatchObject({ defaultModel: OPUS, roles: { gate: ARGON, summarize: LUNA }, watch: { enabled: true, models: [ARGON, OPUS] }, watchPaper: { enabled: true, model: OPUS } })
     const status = await getAiAdditionsStatus()
     expect(status.byRole).toBe(true)
-    expect(status.models).toEqual({ news: LUNA, why: LUNA, exit: OPUS, review: OPUS, daily: LUNA, article: OPUS })
+    expect(status.models).toEqual({ news: LUNA, why: LUNA, exit: OPUS, review: OPUS, daily: LUNA, article: OPUS, direction: OPUS })
   })
 })
 

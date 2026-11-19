@@ -620,6 +620,13 @@ const SAMPLE_PAYLOAD: Record<AiAdditionKind, unknown> = {
     ],
     subject: 'SOL',
     askedAt: 0
+  },
+  // Ten coins of thirty closes and twenty headlines (V10 Stage 7).
+  direction: {
+    day: '2026-11-19',
+    askedAt: 0,
+    coins: Array.from({ length: 10 }, (_, k) => ({ pair: `COIN${k}USDT`, closes: Array.from({ length: 30 }, () => 12345.678), expectedMove24hPct: 3.21 })),
+    headlines: Array.from({ length: 20 }, () => ({ title: 'x'.repeat(160), source: 'CoinDesk', hoursAgo: 5 }))
   }
 }
 

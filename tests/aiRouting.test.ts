@@ -35,7 +35,7 @@ const FOUND: Pick<AiConfig, 'defaultModel' | 'watch' | 'watchPaper' | 'additions
   watch: { enabled: true, models: [MINI], maxEventsPerDay: 10, minBand: 'urgent', firstModelGates: false, confirmLive: true, askAt: 'detected' },
   watchPaper: { enabled: true, model: MINI, stakeQuote: 100, maxOpen: 3, maxSameSide: 2, pauseAfterLosses: 3, dropOnBtcMovePct: 1 },
   // The article reading ships off (V8 Stage 5).
-  additions: { news: true, why: true, exit: true, review: true, daily: true, article: false },
+  additions: { news: true, why: true, exit: true, review: true, daily: true, article: false, direction: false },
   roles: null
 }
 const BOTS: RoutedBot[] = [
@@ -49,7 +49,7 @@ const CHOICE = { decide: OPUS, gate: ARGON, summarize: LUNA }
 describe('the routing table', () => {
   it('shows every caller of the profile as found asking GPT-5 Mini, whatever the default', () => {
     const table = routingTableOf(FOUND, BOTS)
-    expect(table.map((row) => row.id)).toEqual(['watch', 'watch-paper', 'addition:news', 'addition:why', 'addition:exit', 'addition:review', 'addition:daily', 'addition:article', 'bot:gpt', 'bot:review'])
+    expect(table.map((row) => row.id)).toEqual(['watch', 'watch-paper', 'addition:news', 'addition:why', 'addition:exit', 'addition:review', 'addition:daily', 'addition:article', 'addition:direction', 'bot:gpt', 'bot:review'])
     for (const row of table.filter((entry) => entry.on)) expect(row.asks, row.id).toEqual([MINI])
     expect(table.find((row) => row.id === 'addition:news')).toMatchObject({ follows: "the watch's paper-trade model", role: 'summarize', on: true })
     expect(table.find((row) => row.id === 'addition:exit')!.role).toBe('decide')
@@ -108,6 +108,7 @@ describe('a move to roles', () => {
       'addition:review': [OPUS],
       'addition:daily': [LUNA],
       'addition:article': [OPUS],
+      'addition:direction': [OPUS],
       'bot:gpt': [OPUS],
       'bot:review': [OPUS]
     })

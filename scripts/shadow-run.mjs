@@ -51,6 +51,14 @@
 //                  leaves, and at the ceiling the key is removed and the AI switched off. The copies
 //                  are deleted at the end (by hand, from the profile, if a run is killed).     [0]
 //   CEILING_USD    the ceiling of every REAL_AI run together                                           [3]
+//   REAL_DIRECTION 1 asks the real deciding model the daily direction test's one question a day and nothing else
+//                  (V10 Stage 8; the user's answer of 19 November 2026): the key is copied in as REAL_AI copies
+//                  it, the fake stays installed for every other question, and only a request whose answer's
+//                  shape is daily_direction reaches OpenRouter. Its spend, read from the ledger rows of its own
+//                  prompt, is held under DIRECTION_CEILING_USD for every such run together, in a book of its
+//                  own; at the ceiling the pass-through is closed and the test switched off. Not with REAL_AI
+//                  or FROM_PROFILE.                                                                  [0]
+//   DIRECTION_CEILING_USD  that ceiling                                                                [30]
 //   FROM_PROFILE   a profile whose own files are copied in, so that the run is that profile's next
 //                  launch (15 October 2026): its settings, AI setup, bots, executors, ledger and events
 //                  as they are, and its watch, the watch's paper trades and its cap left as it has
@@ -139,11 +147,21 @@ const CEILING_USD = Number(process.env.CEILING_USD ?? 3)
 if (!Number.isFinite(CEILING_USD) || CEILING_USD <= 0 || CEILING_USD > 3) throw new Error(`CEILING_USD is above nought and at most 3, the user's ceiling: ${process.env.CEILING_USD}`)
 /** What is kept back from the ceiling: a call's cost is known only once it has been made. */
 const CEILING_MARGIN_USD = 0.1
+const REAL_DIRECTION = process.env.REAL_DIRECTION === '1'
+const DIRECTION_CEILING_USD = Number(process.env.DIRECTION_CEILING_USD ?? 30)
+if (!Number.isFinite(DIRECTION_CEILING_USD) || DIRECTION_CEILING_USD <= 0 || DIRECTION_CEILING_USD > 30) throw new Error(`DIRECTION_CEILING_USD is above nought and at most 30, the user's ceiling: ${process.env.DIRECTION_CEILING_USD}`)
+if (REAL_DIRECTION && REAL_AI) throw new Error('REAL_DIRECTION asks the real model the daily direction test alone: not with REAL_AI')
+/** The one question REAL_DIRECTION sends to the real model, by its answer's shape, and the prompt its ledger rows carry. */
+const DIRECTION_SCHEMA = 'daily_direction'
+const DIRECTION_PROMPT = 'daily-direction-v1'
+/** A real key is copied into the scratch profile (REAL_AI or REAL_DIRECTION) and deleted at the end. */
+const REAL_KEY = REAL_AI || REAL_DIRECTION
 const REAL_PROFILE = path.join(process.env.APPDATA ?? '', 'newtradingbot')
 const KEY_FILES = ['aiCredentials.json', 'Local State']
 const FROM_PROFILE = process.env.FROM_PROFILE === undefined || process.env.FROM_PROFILE === '' ? '' : path.resolve(process.env.FROM_PROFILE)
 if (FROM_PROFILE !== '' && !fs.existsSync(path.join(FROM_PROFILE, 'settings.json'))) throw new Error(`FROM_PROFILE: no settings.json in ${FROM_PROFILE}`)
 if (FROM_PROFILE !== '' && REAL_AI) throw new Error('FROM_PROFILE is a rehearsal, with OpenRouter faked: not with REAL_AI')
+if (FROM_PROFILE !== '' && REAL_DIRECTION) throw new Error('FROM_PROFILE is a rehearsal, with OpenRouter faked: not with REAL_DIRECTION')
 if (FROM_PROFILE !== '' && DEMO_KEY) throw new Error('FROM_PROFILE is a rehearsal without keys: not with DEMO_KEY')
 /** A move to roles at the start (V7.2-R Stage 1): {"decide":…,"gate":…,"summarize":…}, applied through the
  * app's own preview and apply right after launch, as the button on Settings › AI does after its confirmation;
@@ -193,6 +211,8 @@ const TEST_TITLE = 'TEST WINDOW - an automated check on a scratch profile - not 
 const MARKER = path.join(PROFILE, 'shadow-run.json')
 /** Every REAL_AI run's spend: the runs (whose profiles' ledgers are read) and what retired profiles spent. */
 const SPEND_FILE = path.join(SHADOW_ROOT, 'real-ai-spend.json')
+/** Every REAL_DIRECTION run's spend on the daily direction test: a book of its own (V10 Stage 8). */
+const DIRECTION_SPEND_FILE = path.join(SHADOW_ROOT, 'real-ai-direction-spend.json')
 
 // --- the refusals ------------------------------------------------------------------------------
 const appData = process.env.APPDATA ?? ''
@@ -274,13 +294,13 @@ if (DAY_SUMMARY_EVERY_MS > 0) fs.mkdirSync(path.join(OUT, 'day-summaries'), { re
 // The run's own settings, kept at its first start (OUT/run-env.json) so that a run cut by a power loss, which takes the
 // supervisor down with it, is resumed as it began: every knob of this script's that was set, none of them a key.
 if (!RESUME) {
-  const KNOBS = ['RUN_NAME', 'RUN_MINUTES', 'MIN_BAND', 'EXPERIMENT', 'UNIVERSE_SIZE', 'SHADOW_ROOT', 'APP_ENTRY', 'MODELS_FROM', 'HOUR_REPORT_MINUTES', 'WATCH_MODELS', 'FIRST_GATES', 'WATCH_PAPER', 'FORECAST_TRADER', 'LAB', 'PAPER_TESTING', 'TRADERS', 'CLONES', 'DAY_SUMMARY_MINUTES', 'DEMO_KEY', 'DEMO_CHECK', 'FORECAST_DATA_FROM', 'WAIT_FORECAST', 'SETTLE_MINUTES', 'REAL_AI', 'CEILING_USD', 'FROM_PROFILE', 'MOVE_ROLES', 'MOVE_DISABLE', 'SEED_SHADOW', 'SEED_SHADOW_DAYS', 'MAX_RESUMES']
+  const KNOBS = ['RUN_NAME', 'RUN_MINUTES', 'MIN_BAND', 'EXPERIMENT', 'UNIVERSE_SIZE', 'SHADOW_ROOT', 'APP_ENTRY', 'MODELS_FROM', 'HOUR_REPORT_MINUTES', 'WATCH_MODELS', 'FIRST_GATES', 'WATCH_PAPER', 'FORECAST_TRADER', 'LAB', 'PAPER_TESTING', 'TRADERS', 'CLONES', 'DAY_SUMMARY_MINUTES', 'DEMO_KEY', 'DEMO_CHECK', 'FORECAST_DATA_FROM', 'WAIT_FORECAST', 'SETTLE_MINUTES', 'REAL_AI', 'CEILING_USD', 'FROM_PROFILE', 'MOVE_ROLES', 'MOVE_DISABLE', 'SEED_SHADOW', 'SEED_SHADOW_DAYS', 'MAX_RESUMES', 'REAL_DIRECTION', 'DIRECTION_CEILING_USD']
   fs.writeFileSync(path.join(OUT, 'run-env.json'), JSON.stringify(Object.fromEntries(KNOBS.filter((name) => process.env[name] !== undefined).map((name) => [name, process.env[name]])), null, 2))
 }
 
 // --- the real models' spend (REAL_AI) --------------------------------------------------------------
 /** What a profile's own ledger says it spent, in dollars, from `sinceSec` on: every call on file. */
-function ledgerSpendUsd(profile, sinceSec = 0) {
+function ledgerSpendUsd(profile, sinceSec = 0, promptVersion = null) {
   const dir = path.join(profile, 'aiLedger')
   if (!fs.existsSync(dir)) return 0
   let total = 0
@@ -290,7 +310,7 @@ function ledgerSpendUsd(profile, sinceSec = 0) {
       try {
         const row = JSON.parse(line)
         const cost = row?.usage?.costUsd
-        if (typeof cost === 'number' && Number.isFinite(cost) && cost > 0 && (row.at ?? 0) >= sinceSec) total += cost
+        if (typeof cost === 'number' && Number.isFinite(cost) && cost > 0 && (row.at ?? 0) >= sinceSec && (promptVersion === null || row.promptVersion === promptVersion)) total += cost
       } catch {
         // A torn line: not a call.
       }
@@ -312,6 +332,23 @@ function realSpendUsd() {
   for (const run of book.runs) total += ledgerSpendUsd(path.join(SHADOW_ROOT, `${run}-profile`))
   return total
 }
+/** The daily direction test's book: the retired runs' spend on it, and the runs whose ledgers are read. */
+function readDirectionBook() {
+  const read = fs.existsSync(DIRECTION_SPEND_FILE) ? JSON.parse(fs.readFileSync(DIRECTION_SPEND_FILE, 'utf8')) : null
+  return { retiredUsd: typeof read?.retiredUsd === 'number' ? read.retiredUsd : 0, runs: Array.isArray(read?.runs) ? read.runs : [] }
+}
+function writeDirectionBook(book) {
+  fs.writeFileSync(DIRECTION_SPEND_FILE, JSON.stringify({ ...book, ceilingUsd: DIRECTION_CEILING_USD, prompt: DIRECTION_PROMPT, updatedAt: new Date().toISOString() }, null, 2))
+}
+/** What every REAL_DIRECTION run has spent on the test together: its prompt's rows alone (the fake's made-up costs of
+ * every other question are no spend). */
+function directionSpendUsd() {
+  const book = readDirectionBook()
+  let total = book.retiredUsd
+  for (const run of book.runs) total += ledgerSpendUsd(path.join(SHADOW_ROOT, `${run}-profile`), 0, DIRECTION_PROMPT)
+  return total
+}
+
 /** The key files out of the scratch profile: the app's own removal first, then what is left. */
 function removeKeyCopies() {
   const left = []
@@ -332,6 +369,16 @@ if (REAL_AI) {
   writeSpendBook(book)
   const spent = realSpendUsd()
   if (spent >= CEILING_USD - CEILING_MARGIN_USD) throw new Error(`REAL_AI: the runs have spent $${spent.toFixed(4)} of the $${CEILING_USD} ceiling: nothing is left to ask with`)
+  // Copied, byte for byte, never read here: the key stays encrypted to this Windows account.
+  for (const name of KEY_FILES) fs.copyFileSync(path.join(REAL_PROFILE, name), path.join(PROFILE, name))
+}
+if (REAL_DIRECTION) {
+  if (!fs.existsSync(path.join(REAL_PROFILE, 'aiCredentials.json')) || !fs.existsSync(path.join(REAL_PROFILE, 'Local State'))) throw new Error('REAL_DIRECTION: the real profile holds no saved key to copy')
+  const book = readDirectionBook()
+  if (!book.runs.includes(RUN_NAME)) book.runs.push(RUN_NAME)
+  writeDirectionBook(book)
+  const spent = directionSpendUsd()
+  if (spent >= DIRECTION_CEILING_USD - CEILING_MARGIN_USD) throw new Error(`REAL_DIRECTION: the test has spent $${spent.toFixed(4)} of its $${DIRECTION_CEILING_USD} ceiling`)
   // Copied, byte for byte, never read here: the key stays encrypted to this Windows account.
   for (const name of KEY_FILES) fs.copyFileSync(path.join(REAL_PROFILE, name), path.join(PROFILE, name))
 }
@@ -479,7 +526,7 @@ async function main() {
 
   // BEFORE anything can ask a model: OpenRouter faked (unless REAL_AI); notices kept off the desktop;
   // saves into OUT.
-  const stubbed = await app.evaluate(({ ipcMain, dialog, BrowserWindow, Notification, shell }, [outDir, realAi]) => {
+  const stubbed = await app.evaluate(({ ipcMain, dialog, BrowserWindow, Notification, shell }, [outDir, realAi, realOnly]) => {
     // Notices: nothing on the desktop and no sound, but the app's own handler still runs, so the
     // thread rule applies and every notice told is on file (alerts/) as it is for the user -- the
     // experiment's report and the daily report read them there. Each request is recorded here as
@@ -579,6 +626,11 @@ async function main() {
         const verdict = hash(`${question.event.pair}:${question.call.entryMin}`) % 4 === 0 ? 'REJECT' : 'APPROVE'
         return { verdict, confidence: 0.6, reason: `Fake review for the check: ${question.triggers.join(', ')}.` }
       },
+      // The daily direction test (V10 Stage 7), faked unless REAL_DIRECTION sends it to the real model: each coin called
+      // by a hash, at a little over even odds.
+      daily_direction(question) {
+        return { calls: question.coins.map((coin) => ({ pair: coin.pair, way: hash(`${question.day}:${coin.pair}`) % 2 === 0 ? 'up' : 'down', confidence: 0.55 })) }
+      },
       daily_summary(question) {
         return {
           summary: `Fake summary for the check: on ${question.day} Bitcoin ${question.market.btcDayPct ?? 'unread'}%, ${question.news.length} major stories, ${question.trades.opened} paper trades opened and ${question.trades.ended} ended, ${question.models.length} models ranked, AI spent ${question.risk.aiSpentUsd} of ${question.risk.aiCapUsd}.`,
@@ -624,6 +676,8 @@ async function main() {
     const real = globalThis.fetch
     globalThis.__asked = []
     globalThis.__other = []
+    // REAL_DIRECTION: the one question the real model is asked, while its ceiling is open (holdCeiling closes it).
+    globalThis.__realOnlyOpen = realOnly !== null
     if (realAi) return `${globalThis.__noticesOnFile ? 'notices on file as the app writes them' : 'notices recorded only'}; REAL models asked, no fake installed`
     const reply = (body, status = 200) => ({
       ok: status === 200, status, statusText: status === 200 ? 'OK' : 'Error', headers: { get: () => null },
@@ -641,6 +695,17 @@ async function main() {
         const name = body.response_format?.json_schema?.name ?? '?'
         const system = String(body.messages?.[0]?.content ?? '')
         const user = String(body.messages?.[1]?.content ?? '')
+        // REAL_DIRECTION: the daily direction test's question alone goes to the real model, with the key the app holds;
+        // once its ceiling is reached it is refused, never faked, so that no made-up call is recorded as the test's.
+        if (realOnly !== null && name === realOnly) {
+          if (!globalThis.__realOnlyOpen) {
+            globalThis.__asked.push({ at: started, name, model: body.model, ms: 0, status: 403, real: true })
+            return reply({ error: { code: 403, message: 'the daily direction test has reached its ceiling' } }, 403)
+          }
+          const answered = await real(url, init)
+          globalThis.__asked.push({ at: started, name, model: body.model, ms: Date.now() - started, status: answered.status, real: true })
+          return answered
+        }
         const make = answers[name]
         await new Promise((resolve) => setTimeout(resolve, 1500 + (hash(user) % 4500)))
         if (!make) {
@@ -659,7 +724,7 @@ async function main() {
         const cost = promptTokens * 0.25e-6 + completionTokens * 2e-6
         globalThis.__asked.push({
           at: started, name, model: body.model, ms: Date.now() - started, status: 200,
-          said: answer.recommendation ?? answer.verdict ?? answer.direction ?? (answer.cites ? 'cites ' + answer.cites.join(',') : '?')
+          said: answer.recommendation ?? answer.verdict ?? answer.direction ?? (answer.cites ? 'cites ' + answer.cites.join(',') : answer.calls ? `${answer.calls.length} calls` : '?')
         })
         return reply({
           id: `gen-check-${started}`,
@@ -673,8 +738,8 @@ async function main() {
       return reply({ error: { code: 404, message: 'not faked in this check' } }, 404)
     }
     return globalThis.__noticesOnFile ? 'stubbed; notices on file as the app writes them' : 'stubbed; notices recorded only (the handler could not be wrapped)'
-  }, [OUT, REAL_AI])
-  say(`main process: ${stubbed}`)
+  }, [OUT, REAL_AI, REAL_DIRECTION ? DIRECTION_SCHEMA : null])
+  say(`main process: ${stubbed}${REAL_DIRECTION ? `; the real model asked ${DIRECTION_SCHEMA} alone, every other question faked` : ''}`)
 
   page = await app.firstWindow()
   await app.evaluate(({ app: electronApp, BrowserWindow }, title) => {
@@ -813,20 +878,24 @@ async function main() {
     const offFile = path.join(OUT, 'additions-before-off.json')
     const restore = RESUME && fs.existsSync(offFile) ? JSON.parse(fs.readFileSync(offFile, 'utf8')).additions ?? null : null
     const setup = await page.evaluate(
-      async ([minBand, fakeKey, models, gates, paperOn, realAi, cap, paperModel, additions]) => {
-        const key = realAi ? await window.api.ai.credentialsStatus() : await window.api.ai.setCredentials(fakeKey)
+      async ([minBand, fakeKey, models, gates, paperOn, realAi, cap, paperModel, additions, realDirection]) => {
+        const key = realAi || realDirection ? await window.api.ai.credentialsStatus() : await window.api.ai.setCredentials(fakeKey)
         await window.api.ai.setConfig({ dailyCapUsd: cap, callsPerMinute: 30 })
         if (additions !== null) await window.api.ai.setConfig({ additions })
         const watch = await window.api.ai.setConfig({
           watch: { enabled: true, models, maxEventsPerDay: 10, minBand, firstModelGates: gates }
         })
-        const paper = await window.api.ai.setConfig({ watchPaper: { enabled: paperOn, model: paperModel ?? models[0], stakeQuote: 100, maxOpen: 3 } })
+        let paper = await window.api.ai.setConfig({ watchPaper: { enabled: paperOn, model: paperModel ?? models[0], stakeQuote: 100, maxOpen: 3 } })
+        // The daily direction test on (REAL_DIRECTION), after the watch it asks beside: its own dollar a day holds it.
+        if (realDirection) paper = await window.api.ai.setConfig({ additions: { direction: true } })
         return { key: key.configured, watch: watch.watch, watchPaper: paper.watchPaper, additions: paper.additions, cap: paper.dailyCapUsd, roles: paper.roles ?? null, defaultModel: paper.defaultModel }
       },
-      [MIN_BAND, FAKE_KEY, watchModels, firstGates, WATCH_PAPER, REAL_AI, REAL_AI ? capForCeiling() : 5, moved, restore]
+      [MIN_BAND, FAKE_KEY, watchModels, firstGates, WATCH_PAPER, REAL_AI, REAL_AI ? capForCeiling() : 5, moved, restore, REAL_DIRECTION]
     )
     say(`setup: ${JSON.stringify(setup)}`)
     if (REAL_AI && !setup.key) throw new Error('REAL_AI: the copied key could not be read by the scratch profile')
+    if (REAL_DIRECTION && !setup.key) throw new Error('REAL_DIRECTION: the copied key could not be read by the scratch profile')
+    if (REAL_DIRECTION && setup.additions?.direction !== true) throw new Error('REAL_DIRECTION: the daily direction test did not switch on')
   }
   if (FORECAST_TRADER) {
     const trader = await page.evaluate(async () => {
@@ -1030,7 +1099,8 @@ async function main() {
   }
 
   // The AI off before anything waits: nothing more is asked or spent.
-  if (REAL_AI) await aiOff('the run has ended')
+  if (REAL_KEY) await aiOff('the run has ended')
+  if (REAL_DIRECTION) say(`the daily direction test: this run spent $${ledgerSpendUsd(PROFILE, 0, DIRECTION_PROMPT).toFixed(4)}; every such run together $${directionSpendUsd().toFixed(4)} of $${DIRECTION_CEILING_USD}`)
   if (REAL_AI) say(`real models: this run spent $${ledgerSpendUsd(PROFILE).toFixed(4)}; every real run together $${realSpendUsd().toFixed(4)} of $${CEILING_USD}`)
 
   // The forecasts of the run's last hour come due, then the forecast's section over the run is saved
@@ -1135,6 +1205,19 @@ function capForCeiling() {
 let ceilingReached = false
 /** The ceiling held: the cap set again, or at it the key removed and the AI switched off. */
 async function holdCeiling() {
+  if (REAL_DIRECTION && !ceilingReached && page !== null) {
+    const spent = directionSpendUsd()
+    if (spent >= DIRECTION_CEILING_USD - CEILING_MARGIN_USD) {
+      ceilingReached = true
+      // The pass-through closed first, then the test switched off: nothing more reaches the real model.
+      await app.evaluate(() => {
+        globalThis.__realOnlyOpen = false
+      }).catch((failure) => say(`the pass-through could not be closed: ${failure}`))
+      const off = await page.evaluate(async () => (await window.api.ai.setConfig({ additions: { direction: false } })).additions.direction).catch((failure) => `not switched off: ${failure}`)
+      say(`the daily direction test has spent $${spent.toFixed(4)} of its $${DIRECTION_CEILING_USD} ceiling: switched off (${off})`)
+    }
+    return
+  }
   if (!REAL_AI || ceilingReached || page === null) return
   const spent = realSpendUsd()
   if (spent >= CEILING_USD - CEILING_MARGIN_USD) {
@@ -1160,7 +1243,7 @@ async function aiOff(why) {
     const off = await page.evaluate(async () => {
       const watch = await window.api.ai.setConfig({ watch: { enabled: false } })
       const paper = await window.api.ai.setConfig({ watchPaper: { enabled: false } })
-      const additions = await window.api.ai.setConfig({ additions: { news: false, why: false, exit: false, review: false, daily: false, article: false } })
+      const additions = await window.api.ai.setConfig({ additions: { news: false, why: false, exit: false, review: false, daily: false, article: false, direction: false } })
       await window.api.ai.removeCredentials()
       return { watch: watch.watch.enabled, paper: paper.watchPaper.enabled, additions: additions.additions, key: (await window.api.ai.credentialsStatus()).configured }
     })
@@ -1588,17 +1671,17 @@ async function shutDown() {
     // The exchange keys' copies go, whatever happened; Local State too, unless REAL_AI copied it as well
     // and removes it below.
     await new Promise((r) => setTimeout(r, 2000))
-    for (const name of REAL_AI ? ['credentials.json'] : EXCHANGE_KEY_FILES) {
+    for (const name of REAL_KEY ? ['credentials.json'] : EXCHANGE_KEY_FILES) {
       try {
         fs.rmSync(path.join(PROFILE, name), { force: true })
       } catch (failure) {
         say(`DELETE BY HAND from ${PROFILE}: ${name} (${failure})`)
       }
     }
-    const still = EXCHANGE_KEY_FILES.filter((name) => fs.existsSync(path.join(PROFILE, name)) && (name !== 'Local State' || !REAL_AI))
+    const still = EXCHANGE_KEY_FILES.filter((name) => fs.existsSync(path.join(PROFILE, name)) && (name !== 'Local State' || !REAL_KEY))
     say(still.length === 0 ? 'the exchange key copies are deleted from the scratch profile' : `DELETE BY HAND from ${PROFILE}: ${still.join(', ')}`)
   }
-  if (REAL_AI) {
+  if (REAL_KEY) {
     await new Promise((r) => setTimeout(r, 2000))
     const left = removeKeyCopies()
     const still = KEY_FILES.filter((name) => fs.existsSync(path.join(PROFILE, name)))

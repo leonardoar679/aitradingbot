@@ -39,11 +39,11 @@ import type { UrlRecord } from './newsUrl'
 // no coin of its own, no side and no trade; it ships switched off; and nothing reads it but its own panel and the
 // prediction record: not the alerts, the watch or the signal score.
 
-export const AI_ADDITION_KINDS = ['news', 'why', 'exit', 'review', 'daily', 'article'] as const
+export const AI_ADDITION_KINDS = ['news', 'why', 'exit', 'review', 'daily', 'article', 'direction'] as const
 export type AiAdditionKind = (typeof AI_ADDITION_KINDS)[number]
 
 /** Calls a day each may make, at most: the plan's limits, chosen with the user's $5 day. */
-export const AI_ADDITION_DAILY_LIMITS: Record<AiAdditionKind, number> = { news: 40, why: 20, exit: 30, review: 20, daily: 1, article: 20 }
+export const AI_ADDITION_DAILY_LIMITS: Record<AiAdditionKind, number> = { news: 40, why: 20, exit: 30, review: 20, daily: 1, article: 20, direction: 1 }
 
 /** Each addition's question and answer, versioned as every prompt here is: part of the cache key and
  * of every ledger row, and pinned by a hash (tests/aiAdditions.test.ts). */
@@ -53,7 +53,8 @@ export const AI_ADDITION_PROMPT_VERSIONS: Record<AiAdditionKind, string> = {
   exit: 'exit-check-v1',
   review: 'reviewer-v1',
   daily: 'daily-summary-v1',
-  article: 'article-reader-v1'
+  article: 'article-reader-v1',
+  direction: 'daily-direction-v1'
 }
 export const AI_ADDITION_SCHEMA_VERSIONS: Record<AiAdditionKind, string> = {
   news: 'news-reading-v1',
@@ -61,7 +62,8 @@ export const AI_ADDITION_SCHEMA_VERSIONS: Record<AiAdditionKind, string> = {
   exit: 'exit-verdict-v1',
   review: 'review-verdict-v1',
   daily: 'daily-summary-v1',
-  article: 'article-reading-v1'
+  article: 'article-reading-v1',
+  direction: 'daily-direction-v1'
 }
 
 export const AI_ADDITION_INFO: Record<AiAdditionKind, { name: string; what: string; automatic: boolean }> = {
@@ -94,13 +96,18 @@ export const AI_ADDITION_INFO: Record<AiAdditionKind, { name: string; what: stri
     name: 'Article reading',
     what: "Reads a news link pasted on News URLs, only on a click there at the price shown: what the article reports, citing its numbered passages, how firmly it says it, whether it is new, which of the coins the rules found it is about, and whether the first of them is likely to move at least 1% in an hour, 2% in four hours or 5% in a day, either way -- each such call recorded and scored. It names no coin of its own, no side and no trade, and nothing else reads it: not the alerts, the watch or the signal score.",
     automatic: false
+  },
+  direction: {
+    name: 'Daily direction test',
+    what: "Once a day after 00:05 UTC, by itself while the watch is on, asks the deciding model which way each of ten coins will close 24 hours on, up or down, with a confidence: one call a day, at most $1. Each answer is recorded and scored on Performance against what the coins did, as the forward test of AI's way the user approved on 19 November 2026. It names no trade and nothing trades on it.",
+    automatic: true
   }
 }
 
 /** On or off, each. The first five are on unless switched off: on 6 October 2026 the user chose them on. The article
  * reading ships off (V8 Stage 5): it spends on a click, and is switched on under Settings › AI first. */
 export type AiAdditionsConfig = Record<AiAdditionKind, boolean>
-export const DEFAULT_AI_ADDITIONS: AiAdditionsConfig = { news: true, why: true, exit: true, review: true, daily: true, article: false }
+export const DEFAULT_AI_ADDITIONS: AiAdditionsConfig = { news: true, why: true, exit: true, review: true, daily: true, article: false, direction: false }
 
 /** What came of asking an addition: an answer, from the cache or paid for; an answer refused and
  * kept; nothing asked, and why; or a call that got no answer. */
@@ -145,13 +152,15 @@ export function healAiAdditions(value: unknown): AiAdditionsConfig {
 /** The role each addition plays once roles are applied (shared/aiRouting.ts; V7.2-R Stage 1): the two
  * that judge one of the app's trades decide; the three that read or write summarize. The article reading
  * decides (V8 Stage 5): the user chose Opus 5.5, the deciding model, for it. */
-export const AI_ADDITION_ROLES: Record<AiAdditionKind, 'decide' | 'summarize'> = { news: 'summarize', why: 'summarize', exit: 'decide', review: 'decide', daily: 'summarize', article: 'decide' }
+export const AI_ADDITION_ROLES: Record<AiAdditionKind, 'decide' | 'summarize'> = { news: 'summarize', why: 'summarize', exit: 'decide', review: 'decide', daily: 'summarize', article: 'decide', direction: 'decide' }
 
 /** The model an addition asks. Once roles are applied (V7.2-R Stage 1): the summarizing model for the
  * three that read or write, else the decider; the decider (the default model) for the exit check, the
  * reviewer and the article reading. Before: the one the watch's paper trades follow, else the first the watch asks, else the
  * default -- the watch's own model, which the user chose and priced. */
 export function additionsModelOf(config: Pick<AiConfig, 'defaultModel' | 'watch' | 'watchPaper'> & { roles?: AiConfig['roles'] }, kind: AiAdditionKind = 'news'): string {
+  // The daily direction test asks the deciding model always (V10 Stage 7: the user's answer of 19 November 2026).
+  if (kind === 'direction') return config.defaultModel
   if (config.roles !== null && config.roles !== undefined) {
     return AI_ADDITION_ROLES[kind] === 'summarize' ? (config.roles.summarize ?? config.defaultModel) : config.defaultModel
   }
@@ -1291,4 +1300,65 @@ export interface ArticleReadingResult {
   predictionIds: string[]
   /** Why a call it made was not recorded, where one was not. */
   note: string | null
+}
+
+// ---------------------------------------------------------------------------------------------
+// The daily direction test (V10 Stage 7, 19 November 2026; registered as V10-AI-FORWARD). The person approved a forward
+// test of AI's way at $1 a day: once a day the deciding model is asked which way each of ten coins will close a day on.
+// The 436 buy and sell calls on file had been right 48.9% of the time [41, 56] at their own four hours, 424 of them buys;
+// a forward test of thirty days can show only a model right about 65% of the time or more. Its answers are recorded as
+// the source 'ai-daily' and scored like every other source; nothing trades on them.
+
+export const AI_DAILY_LINES = {
+  /** The coins asked about: the forecast's ten most traded when the test first asks, kept from then on. */
+  coins: 10,
+  /** The daily closes each coin is shown, oldest first, the last one the day before. */
+  closes: 30,
+  /** The latest headlines shown, at most. */
+  headlines: 20,
+  headlineChars: 160,
+  /** How far each call looks: a day from the answer. */
+  horizonSec: 86_400,
+  /** Asked once a day, this long after the day opens. */
+  askAfterSec: 300,
+  /** What the test may spend a day, in dollars: the person's line. */
+  dailyCapUsd: 1,
+  /** The round trip a call's net is read after, flat. */
+  roundTripPct: 0.24
+} as const
+
+export interface DailyDirectionQuestion {
+  /** The UTC day asked about, YYYY-MM-DD, and when. */
+  day: string
+  askedAt: number
+  coins: { pair: string; closes: number[]; expectedMove24hPct: number | null }[]
+  headlines: { title: string; source: string; hoursAgo: number }[]
+}
+
+export interface DailyDirectionCall {
+  pair: string
+  way: 'up' | 'down'
+  confidence: number
+}
+
+export interface DailyDirectionAnswer {
+  calls: DailyDirectionCall[]
+}
+
+/** The answer read against its question: every coin asked about exactly once, up or down, a confidence from 0.5 to 1. */
+export function validateDailyDirection(value: unknown, question: Pick<DailyDirectionQuestion, 'coins'>): { ok: true; answer: DailyDirectionAnswer } | { ok: false; reason: string } {
+  const raw = value as { calls?: unknown } | null
+  if (typeof raw !== 'object' || raw === null || !Array.isArray(raw.calls)) return { ok: false, reason: 'no calls' }
+  const asked = new Set(question.coins.map((coin) => coin.pair))
+  const calls: DailyDirectionCall[] = []
+  for (const entry of raw.calls as unknown[]) {
+    const call = entry as Partial<DailyDirectionCall> | null
+    if (typeof call !== 'object' || call === null || typeof call.pair !== 'string' || !asked.has(call.pair)) return { ok: false, reason: 'a call on a coin not asked about' }
+    if (call.way !== 'up' && call.way !== 'down') return { ok: false, reason: `${call.pair}: the way is neither up nor down` }
+    if (typeof call.confidence !== 'number' || !(call.confidence >= 0.5 && call.confidence <= 1)) return { ok: false, reason: `${call.pair}: the confidence is not from 0.5 to 1` }
+    if (calls.some((made) => made.pair === call.pair)) return { ok: false, reason: `${call.pair}: called twice` }
+    calls.push({ pair: call.pair, way: call.way, confidence: call.confidence })
+  }
+  if (calls.length !== asked.size) return { ok: false, reason: `${asked.size - calls.length} of the coins asked about not called` }
+  return { ok: true, answer: { calls } }
 }

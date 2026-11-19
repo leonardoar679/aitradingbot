@@ -89,6 +89,12 @@ export const AI_ADDITION_SYSTEM_PROMPTS: Record<AiAdditionKind, string> = {
     'confidence: 0 to 1. How clearly the passages support your reading. It is not a probability; never claim certainty.',
     `reasons: at most ${ARTICLE_READING_LINES.maxReasons} characters, plain text: what your reading rests on.`,
     'You do not decide whether to trade: you name no side and no trade, and no coin but those listed.'
+  ].join('\n'),
+  direction: [
+    'You are asked once a day which way each of a few crypto coins will close 24 hours from now, against its price now.',
+    "You are given each coin's last daily closes in US dollars (oldest first, the last one yesterday's close), the size of move the app's own forecast expects over the next 24 hours either way, in percent (it knows the size, not the way), and the day's latest headlines with how many hours ago each was published.",
+    'calls: for every coin listed, exactly once, by its pair as given: way, up or down -- one of the two, never none -- and confidence, from 0.5 (no better than a coin toss) to 1.',
+    'You do not decide whether to trade: you name no trade, no size and no coin but those listed.'
   ].join('\n')
 }
 
@@ -192,6 +198,25 @@ export const AI_ADDITION_SCHEMAS: Record<AiAdditionKind, { name: string; schema:
         reasons: { type: 'string' }
       },
       required: ['summary', 'cites', 'stance', 'novelty', 'coins', 'bigMove', 'instructions', 'confidence', 'reasons']
+    }
+  },
+  direction: {
+    name: 'daily_direction',
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        calls: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: { pair: { type: 'string' }, way: { type: 'string', enum: ['up', 'down'] }, confidence: { type: 'number' } },
+            required: ['pair', 'way', 'confidence']
+          }
+        }
+      },
+      required: ['calls']
     }
   }
 }

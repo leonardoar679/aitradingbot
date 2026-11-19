@@ -76,17 +76,19 @@ const READING: NewsReading = { ticker: 'SOL', relationship: 'DIRECT', direction:
 
 describe('the setting', () => {
   it('is on unless switched off, each, and only false switches one off', () => {
-    // The article reading ships off (V8 Stage 5): it spends on a click, and is switched on first.
-    expect(DEFAULT_AI_ADDITIONS).toEqual({ news: true, why: true, exit: true, review: true, daily: true, article: false })
-    expect(healAiAdditions(undefined)).toEqual({ news: true, why: true, exit: true, review: true, daily: true, article: false })
-    expect(healAiAdditions({ news: false })).toEqual({ news: false, why: true, exit: true, review: true, daily: true, article: false })
-    expect(healAiAdditions({ news: 'no', why: false, exit: false, review: false, daily: false, article: 'yes' })).toEqual({ news: true, why: false, exit: false, review: false, daily: false, article: false })
-    expect(healAiAdditions([false])).toEqual({ news: true, why: true, exit: true, review: true, daily: true, article: false })
+    // The article reading ships off (V8 Stage 5): it spends on a click, and is switched on first. So does the daily
+    // direction test (V10 Stage 7): it spends by itself, and the person switches it on.
+    expect(DEFAULT_AI_ADDITIONS).toEqual({ news: true, why: true, exit: true, review: true, daily: true, article: false, direction: false })
+    expect(healAiAdditions(undefined)).toEqual({ news: true, why: true, exit: true, review: true, daily: true, article: false, direction: false })
+    expect(healAiAdditions({ news: false })).toEqual({ news: false, why: true, exit: true, review: true, daily: true, article: false, direction: false })
+    expect(healAiAdditions({ news: 'no', why: false, exit: false, review: false, daily: false, article: 'yes', direction: 'yes' })).toEqual({ news: true, why: false, exit: false, review: false, daily: false, article: false, direction: false })
+    expect(healAiAdditions({ direction: true })).toMatchObject({ article: false, direction: true })
+    expect(healAiAdditions([false])).toEqual({ news: true, why: true, exit: true, review: true, daily: true, article: false, direction: false })
     // A setting saved before the exit check existed reads with it on: the user chose all four on; one saved before the
     // article reading existed reads with it off.
-    expect(healAiAdditions({ news: true, why: false, review: true })).toEqual({ news: true, why: false, exit: true, review: true, daily: true, article: false })
-    expect(healAiAdditions({ article: true })).toEqual({ news: true, why: true, exit: true, review: true, daily: true, article: true })
-    expect(AI_ADDITION_DAILY_LIMITS).toEqual({ news: 40, why: 20, exit: 30, review: 20, daily: 1, article: 20 })
+    expect(healAiAdditions({ news: true, why: false, review: true })).toEqual({ news: true, why: false, exit: true, review: true, daily: true, article: false, direction: false })
+    expect(healAiAdditions({ article: true })).toEqual({ news: true, why: true, exit: true, review: true, daily: true, article: true, direction: false })
+    expect(AI_ADDITION_DAILY_LIMITS).toEqual({ news: 40, why: 20, exit: 30, review: 20, daily: 1, article: 20, direction: 1 })
   })
 
   it("asks the watch's own model: the one its paper trades follow, else the first it asks, else the default", () => {
@@ -891,7 +893,8 @@ describe('the daily summary, pinned', () => {
     const harness = readFileSync(join(__dirname, '..', 'scripts', 'shadow-run.mjs'), 'utf-8')
     const faked = new Set([...harness.matchAll(/^ {6}(\w+)\((?:question)?\) \{$/gm)].map((match) => match[1]))
     for (const kind of AI_ADDITION_KINDS) expect({ kind, faked: faked.has(AI_ADDITION_SCHEMAS[kind].name) }).toEqual({ kind, faked: true })
-    const off = /setConfig\(\{ additions: \{([^}]*)\} \}\)/.exec(harness)?.[1] ?? ''
+    // The run's end switches every addition off at once: the one call naming them all (another switches one on or off).
+    const off = [...harness.matchAll(/setConfig\(\{ additions: \{([^}]*)\} \}\)/g)].map((match) => match[1]).find((list) => list.includes('news: false')) ?? ''
     expect(off.split(',').map((part) => part.trim()).sort()).toEqual(AI_ADDITION_KINDS.map((kind) => `${kind}: false`).sort())
   })
 

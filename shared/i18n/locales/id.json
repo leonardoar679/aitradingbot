@@ -2576,5 +2576,6 @@
   "Each coin's expected move either way over one, three and seven days from today's open, and its 80% range. The size held on January 2024 to October 2026: eight outcomes in ten inside the range, the real moves 1.00 to 1.06 times the size. Which way is unknown: the test of a way over these days failed.": "Gerak yang diperkirakan setiap koin ke arah mana pun dalam satu, tiga, dan tujuh hari dari pembukaan hari ini, dan rentang 80%-nya. Ukurannya bertahan pada Januari 2024 hingga Oktober 2026: delapan dari sepuluh hasil di dalam rentang, gerak nyata 1,00 hingga 1,06 kali ukurannya. Arahnya tidak diketahui: uji arah untuk hari-hari ini gagal.",
   "No daily forecast yet: it is made a little after each day opens at 00:00 UTC.": "Belum ada prakiraan harian: dibuat sesaat setelah setiap hari dibuka pada 00:00 UTC.",
   "Made {when}, from the day's open.": "Dibuat {when}, dari pembukaan hari ini.",
-  "Expected move either way from today's open: ±{day1} in a day, ±{days3} in three, ±{days7} in seven.": "Gerak yang diperkirakan ke arah mana pun dari pembukaan hari ini: ±{day1} dalam sehari, ±{days3} dalam tiga, ±{days7} dalam tujuh."
+  "Expected move either way from today's open: ±{day1} in a day, ±{days3} in three, ±{days7} in seven.": "Gerak yang diperkirakan ke arah mana pun dari pembukaan hari ini: ±{day1} dalam sehari, ±{days3} dalam tiga, ±{days7} dalam tujuh.",
+  "The AI daily direction test": "Uji arah harian AI"
 }
