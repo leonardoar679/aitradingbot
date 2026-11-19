@@ -14,6 +14,7 @@ import { AttributionCard } from './AttributionCard'
 import { SessionReportCard } from './SessionReportCard'
 import { DailyReportCard } from './DailyReportCard'
 import { CameTrueCard } from './CameTrueCard'
+import { AccuracyBoardCard } from './AccuracyBoardCard'
 import { BooksReportCard } from './BooksReportCard'
 import { ExportCard } from './ExportCard'
 import { ChampionCard } from './ChampionCard'
@@ -88,6 +89,7 @@ export function PerformancePage(): React.JSX.Element {
           <PortfolioHistory />
         </EnglishOnly>
       </div>
+      <AccuracyBoardCard />
       <CameTrueCard />
       <BooksReportCard />
       <PaperRCurveCard executors={executors} />

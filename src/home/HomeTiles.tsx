@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Card } from '../components/Card'
 import { buttonStyle, inputStyle, noteStyle } from '../agents/agentStyles'
+import type { AccuracyBoard } from '../../shared/evaluation/accuracyBoard'
 import type { SourceFiguresRow } from '../../shared/evaluation/predictionRecord'
+import { HORIZON_NAME } from '../../shared/forecast/words'
 import type { BookId } from '../../shared/paperBooks'
 import type { PaperTestingState } from '../../shared/paperTesting'
 import { msg, useI18n } from '../i18n'
@@ -18,7 +20,8 @@ const SOURCE_NAMES: Record<string, string> = {
   'direction-model': msg('A direction model'),
   article: msg("Articles' readings"),
   user: msg('Your own views'),
-  'big-movers': msg('The big-mover list')
+  'big-movers': msg('The big-mover list'),
+  'top-traders': msg("The found traders' consensus")
 }
 
 const tileStyle: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: '0.5rem' }
@@ -52,13 +55,22 @@ export function TraderPasteTile({ onPaste }: { onPaste: (text: string) => void }
   return <PasteTile title={t('Paste a trader')} note={t('Read on Copy Traders: what the record made after fees and funding, and whether it looks like skill.')} placeholder={t('0x… or an OKX code')} button={t('Read and analyse')} onPaste={onPaste} />
 }
 
-/** How the recorded calls came out, a line a source with a side: so many scored, so many right. */
-export function PerformanceTileView({ rows, onOpen }: { rows: readonly SourceFiguresRow[] | null; onOpen: () => void }): React.JSX.Element {
+/** How the forecast and the recorded calls came out (since V10 Stage 2): the forecast's size against the real moves at
+ * four hours and a day, and each source with a side, right on the rises and on the falls apart -- a source always on
+ * one side is right on every move one way and on none the other. */
+export function PerformanceTileView({ rows, board, onOpen }: { rows: readonly SourceFiguresRow[] | null; board?: AccuracyBoard | null; onOpen: () => void }): React.JSX.Element {
   const { t, num, pctPlain } = useI18n()
   const scored = (rows ?? []).filter((row) => row.kind === 'direction' && row.figures.n > 0)
+  const share = (value: number | undefined): string => (value === undefined ? '—' : pctPlain(value * 100, 0))
+  const forecast = (board?.horizons ?? []).filter((row) => (row.h === 'hours4' || row.h === 'hours24') && row.sizeRatio !== null && row.in80 !== null)
   return (
     <Card title={t('Did it come true?')}>
       <div style={tileStyle}>
+        {forecast.map((row) => (
+          <p key={row.h} style={{ ...noteStyle, color: 'var(--text-primary)' }}>
+            {t('The forecast at {horizon}: real moves {ratio} the size it expected, {in80} inside its 80% range', { horizon: t(HORIZON_NAME[row.h]), ratio: t('{value}×', { value: num(row.sizeRatio!.value, 2, 2) }), in80: share(row.in80!.value) })}
+          </p>
+        ))}
         {rows === null ? (
           <p style={noteStyle}>{t('Reading the record…')}</p>
         ) : scored.length === 0 ? (
@@ -66,9 +78,10 @@ export function PerformanceTileView({ rows, onOpen }: { rows: readonly SourceFig
         ) : (
           scored.map((row) => (
             <p key={row.source} style={{ ...noteStyle, color: 'var(--text-primary)' }}>
-              {t('{source}: {right} right of {scored} scored', {
+              {t('{source}: right on {rising} of the rises and {falling} of the falls, {scored} scored', {
                 source: SOURCE_NAMES[row.source] === undefined ? row.source : t(SOURCE_NAMES[row.source]),
-                right: row.figures.right === null ? '—' : pctPlain(row.figures.right.value * 100, 0),
+                rising: share(row.figures.rightOnRising?.value),
+                falling: share(row.figures.rightOnFalling?.value),
                 scored: num(row.figures.n)
               })}
             </p>
@@ -86,6 +99,7 @@ export function PerformanceTileView({ rows, onOpen }: { rows: readonly SourceFig
 
 export function PerformanceTile({ onOpen }: { onOpen: () => void }): React.JSX.Element {
   const [rows, setRows] = useState<SourceFiguresRow[] | null>(null)
+  const [board, setBoard] = useState<AccuracyBoard | null>(null)
   useEffect(() => {
     let live = true
     void window.api.predictions
@@ -96,11 +110,17 @@ export function PerformanceTile({ onOpen }: { onOpen: () => void }): React.JSX.E
       .catch(() => {
         if (live) setRows([])
       })
+    void window.api.forecast.board().then(
+      (read) => {
+        if (live) setBoard(read)
+      },
+      () => undefined
+    )
     return (): void => {
       live = false
     }
   }, [])
-  return <PerformanceTileView rows={rows} onOpen={onOpen} />
+  return <PerformanceTileView rows={rows} board={board} onOpen={onOpen} />
 }
 
 /** The three books: their starting money and Start before paper testing runs, each one's money while it does. */

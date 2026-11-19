@@ -76,6 +76,7 @@ export const IpcChannel = {
   /** Bitcoin's day so far and its big days over the last 90, for Home (V9 Stage 1). */
   ForecastBtcToday: 'forecast:btcToday',
   ForecastRecord: 'forecast:record',
+  ForecastBoard: 'forecast:board',
   ForecastUpdate: 'forecast:update',
   FeedUpdate: 'feed:update',
   FeedOpenLink: 'feed:openLink',

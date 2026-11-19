@@ -334,8 +334,10 @@ describe('AI code has no route to a real order', () => {
     // size calls with the engine's and configuration's versions (bigMovers, effectiveConfigService), and the day moves
     // of its pairs for the Forecast Lab: arithmetic on the bars it keeps, a record, no trade. Its pairs' ninety-day
     // rates are read from the bars on file once an hour, in workers (pairRatesService) -- arithmetic, no trade. Since V9
-    // Stage 1 Bitcoin's day so far for Home (btcDay): arithmetic on the bars it holds, no trade.
+    // Stage 1 Bitcoin's day so far for Home (btcDay): arithmetic on the bars it holds, no trade. Since V10 Stage 2 each
+    // close's settled outcomes counted on the accuracy board (accuracyBoardService): its own small file, no trade.
     expect(importsOf(engine).sort()).toEqual([
+      'accuracyBoardService',
       'aciTable',
       'atomicWrite',
       'bars',
@@ -1170,8 +1172,9 @@ describe('AI code has no route to a real order', () => {
     const read = (...parts: string[]): string => readFileSync(join(ROOT, ...parts), 'utf-8')
     // Each reads its own channel and no other; none writes a setting or an executor, asks a model or places anything.
     for (const [path, bridges] of [
-      [['src', 'home', 'HomeTiles.tsx'], ['books.testing', 'predictions.figures']],
+      [['src', 'home', 'HomeTiles.tsx'], ['books.testing', 'forecast.board', 'predictions.figures']],
       [['src', 'performance', 'CameTrueCard.tsx'], ['predictions.figures']],
+      [['src', 'performance', 'AccuracyBoardCard.tsx'], ['forecast.board', 'forecast.onUpdate']],
       [['src', 'performance', 'BooksReportCard.tsx'], ['books.report']],
       [['src', 'performance', 'ChampionCard.tsx'], ['forecast.getState']],
       [['src', 'performance', 'ExportCard.tsx'], ['researchFolder.exportNow', 'researchFolder.open']],

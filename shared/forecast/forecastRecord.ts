@@ -10,6 +10,7 @@ import type { PricePrediction } from './prediction'
 import type { RefreshReason } from './refresh'
 import type { PUpSource } from './runCalibration'
 import type { TradeDecision } from './tradeDecision'
+import { expectedMove } from './size'
 
 // THE FORECAST ON RECORD (the V6 document, §26-28, §42, §49 and §94; V6 Stage 7, 13 October 2026):
 // forecasts/predictions-YYYY-MM.jsonl and forecasts/outcomes-YYYY-MM.jsonl, a JSON line each, by the
@@ -294,6 +295,11 @@ export interface OutcomeLine {
    * came late. The adaptive levels step once a close by the outcomes settled at it, so a replay needs the
    * moment, not the due. Absent on an outcome written before. */
   at?: number
+  /** The shown middle (P50) and the move the forecast expected either way (shared/forecast/size.ts expectedMove), in
+   * percent (V10 Stage 2): what the accuracy board reads the way pointed and the size against the move from, without the
+   * forecast's own line. Absent on an outcome written before. */
+  mid?: number
+  size?: number
 }
 
 /** A horizon whose outcome could not be read. */
@@ -339,6 +345,8 @@ export function outcomeLine(recorded: PredictionLine, horizon: Horizon, outcome:
     cls: recorded.cls,
     errors: outcome.errors,
     touch: [outcome.touch.target, outcome.touch.upper, outcome.touch.lower],
+    mid: line.q[2],
+    size: pct4(expectedMove(line.q)),
     ...(line.v2 === undefined ? {} : { v2below: flags(line.v2.map((level) => outcome.movePct <= level)) }),
     ...(line.news?.v3 === undefined ? {} : { v3below: flags(line.news.v3.q.map((level) => outcome.movePct <= level)) }),
     ...(line.news?.v4 === undefined ? {} : { v4below: flags(line.news.v4.q.map((level) => outcome.movePct <= level)), newsPUp: line.news.v4.pUpMapped, newsShift: line.news.v4.shift })

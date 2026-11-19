@@ -8,6 +8,7 @@ import { registerIpcHandlers } from './ipc'
 import { startResearchFolder } from './services/researchFolderService'
 import { startVenueQuotes } from './services/venueQuotesService'
 import { startPredictionLedger } from './services/predictionLedgerService'
+import { startAccuracyBoard } from './services/accuracyBoardService'
 import { startBookMarks } from './services/booksService'
 import { startPrimaryCall } from './services/primaryCallService'
 import { startNewsUrls } from './services/newsUrlService'
@@ -220,6 +221,8 @@ if (!gotSingleInstanceLock) {
     // The record of every prediction that is not the forecast's own, each settled from its venue's bars once its
     // horizon has passed; owed ones read back (V8 Stage 2; predictionLedgerService.ts). Public data only.
     void startPredictionLedger().catch((error) => console.error('The prediction record could not start:', error))
+    // The accuracy board (V10 Stage 2; accuracyBoardService.ts): what it kept read back, or the days before read once.
+    void startAccuracyBoard().catch((error) => console.error('The accuracy board could not start:', error))
     // V8's three paper books marked once an hour while they run (V8 Stage 2; booksService.ts): nothing while stopped.
     startBookMarks()
     // The primary call weighed every minute and as the announcements are read (V8 Stage 3; primaryCallService.ts): a

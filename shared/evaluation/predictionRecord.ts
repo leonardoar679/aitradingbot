@@ -167,6 +167,40 @@ export interface SourceFigures {
   net: Figure | null
   sizeError: Figure | null
   touched: Figure | null
+  /** A side's predictions read on the moves that rose and on those that fell apart (V10 Stage 2): the share right of
+   * each, and their mean, which a source always on one side scores at 50% whatever the market did. */
+  rightOnRising?: Figure | null
+  rightOnFalling?: Figure | null
+  balanced?: Figure | null
+}
+
+/** A side's record read on the rises and the falls apart, intervals by unit: each row's [rose, rose and right, fell, fell
+ * and right]. */
+function wayFiguresOf(scored: readonly { prediction: SourcePrediction; outcome: SourceOutcome }[]): Pick<SourceFigures, 'rightOnRising' | 'rightOnFalling' | 'balanced'> {
+  const rows: HourSample[] = []
+  for (const entry of scored) {
+    const move = entry.outcome.movePct
+    if (entry.outcome.right === null || move === null || move === 0 || !Number.isFinite(move)) continue
+    const rose = move > 0 ? 1 : 0
+    const right = entry.outcome.right ? 1 : 0
+    rows.push({ hour: entry.prediction.unit, sample: [rose, rose * right, 1 - rose, (1 - rose) * right] })
+  }
+  if (rows.length === 0) return { rightOnRising: null, rightOnFalling: null, balanced: null }
+  const rising = (sums: Float64Array): number => (sums[0] > 0 ? sums[1] / sums[0] : Number.NaN)
+  const falling = (sums: Float64Array): number => (sums[2] > 0 ? sums[3] / sums[2] : Number.NaN)
+  const statistics = [rising, falling, (sums: Float64Array): number => (rising(sums) + falling(sums)) / 2]
+  const total = new Float64Array(4)
+  for (const row of rows) for (let k = 0; k < 4; k++) total[k] += row.sample[k]
+  const resampled = bootstrapOverHours(rows, statistics, 1)
+  const figure = (index: number): Figure | null => {
+    const value = statistics[index](total)
+    if (!Number.isFinite(value)) return null
+    const raw = resampled?.figures[index]
+    if (raw === undefined || !Number.isFinite(raw.low) || !Number.isFinite(raw.high)) return { value, low: Number.NaN, high: Number.NaN, sd: Number.NaN }
+    const bounded = intervalOf(raw, SHARE)
+    return { ...raw, value, low: bounded?.low ?? raw.low, high: bounded?.high ?? raw.high }
+  }
+  return { rightOnRising: figure(0), rightOnFalling: figure(1), balanced: figure(2) }
 }
 
 /** The figures of a source's predictions joined to their outcomes, intervals by unit (1,000 seeded draws). */
@@ -197,7 +231,8 @@ export function sourceFiguresOf(pairs: readonly { prediction: SourcePrediction; 
     right: figure((entry) => (entry.outcome.right === null ? null : entry.outcome.right ? 1 : 0), SHARE),
     net: figure((entry) => entry.outcome.netPct),
     sizeError: figure((entry) => entry.outcome.sizeErrorPct),
-    touched: figure((entry) => (entry.outcome.touched === null ? null : entry.outcome.touched ? 1 : 0), SHARE)
+    touched: figure((entry) => (entry.outcome.touched === null ? null : entry.outcome.touched ? 1 : 0), SHARE),
+    ...wayFiguresOf(scored)
   }
 }
 

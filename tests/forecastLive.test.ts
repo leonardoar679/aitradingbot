@@ -8,6 +8,7 @@ import { OUTCOME_LINES, dueAt, errorsOf, outcomeOf, type ForecastedHorizon } fro
 import type { ForecastRange, PricePrediction } from '../shared/forecast/prediction'
 import { REFRESH_LINES, acrossMedian, refreshReasons } from '../shared/forecast/refresh'
 import { forecastView } from '../shared/forecast/view'
+import { expectedMove } from '../shared/forecast/size'
 
 // THE FORECAST LIVE, RULE BY RULE (shared/forecast/{view,outcome,refresh,aciTable,forecastRecord}.ts;
 // the V6 document, §38-43 and §57): a forecast re-expressed from the live price and expiring at its
@@ -298,6 +299,9 @@ describe('the record', () => {
     const written = outcomeLine(line, 'hour1', outcome)
     expect(written).toMatchObject({ id: line.id, h: 'hour1', due: T + 3600, below: '00011', v1below: '00001', in80: true, cell: 'large' })
     expect(parseOutcomeLine(JSON.parse(JSON.stringify(written)))).toEqual(written)
+    // The middle and the size the forecast expected (V10 Stage 2): what the accuracy board reads without the forecast's line.
+    expect(written.mid).toBe(line.h.hour1!.q[2])
+    expect(written.size).toBeCloseTo(expectedMove(line.h.hour1!.q), 4)
     expect(parseOutcomeLine({ ...written, below: '0001' })).toBeNull()
     // Where a story moved V3 and not V4 (the analyst read it as another coin's), only V3's levels.
     const moved = { ...line, h: { hour1: { ...line.h.hour1!, news: { v3: { q: [-1, 0, 1, 2.5, 4], pUpMapped: 0.6, story: 's1', kind: 'LISTING', impact: 80, shift: 1, widen: 0.5, widenShare: 0, fromLibrary: true } } } } }

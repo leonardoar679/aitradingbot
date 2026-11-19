@@ -33,6 +33,7 @@ import { BIG_MOVERS_LINES } from '../../shared/forecast/bigMovers'
 import { getEffectiveConfig } from './effectiveConfigService'
 import { MISS_VERSION } from '../../shared/misses'
 import { VENUE_STAKE_QUOTE } from '../../shared/venueCosts'
+import { takeBoardOutcomes } from './accuracyBoardService'
 
 // THE FORECAST, LIVE (the V6 document, §38-43; V6 Stage 7, 13 October 2026).
 //
@@ -363,6 +364,8 @@ export function owedForecastPairs(): string[] {
 async function applySettled(settled: Settled): Promise<void> {
   if (settled.lines.length === 0) return
   await writeLines('outcomes', settled.lines)
+  // Counted on the accuracy board as they are written (V10 Stage 2), never read again for it.
+  takeBoardOutcomes(settled.lines)
   state.outcomes += settled.lines.length
   state.missing += settled.lines.length - settled.measured
   if (settled.drift !== null) state.drift = settled.drift

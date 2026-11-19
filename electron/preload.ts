@@ -21,6 +21,7 @@ import type { FundingRate } from '../shared/traders/delay'
 import type { CloneSignal, FollowStatus, LeaderEvent } from '../shared/traders/follow'
 import type { DiscoveryState } from '../shared/traders/discovery'
 import type { ForecastLabView, ForecastReplay } from '../shared/forecast/labView'
+import type { AccuracyBoard } from '../shared/evaluation/accuracyBoard'
 import type { ForecastRanking as ForecastRankingView } from '../shared/forecast/ranking'
 import type { SymbolTradingRules } from '../shared/exchangeMinimums'
 import type {
@@ -221,6 +222,8 @@ const api = {
     btcToday: (): Promise<BtcTodayView> => ipcRenderer.invoke(IpcChannel.ForecastBtcToday),
     /** Every pair's forecasts made in a span, and their outcomes on file: what a run's report judges. */
     record: (fromSec: number, toSec: number): Promise<ForecastHistory> => ipcRenderer.invoke(IpcChannel.ForecastRecord, fromSec, toSec),
+    /** The accuracy board (V10 Stage 2): way, size and range of the settled forecasts, by day and horizon. */
+    board: (): Promise<AccuracyBoard> => ipcRenderer.invoke(IpcChannel.ForecastBoard),
     onUpdate: (listener: (closedAt: number | null) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, closedAt: number | null): void => listener(closedAt)
       ipcRenderer.on(IpcChannel.ForecastUpdate, handler)

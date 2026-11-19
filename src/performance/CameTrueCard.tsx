@@ -16,7 +16,8 @@ const SOURCE_NAMES: Record<string, string> = {
   'direction-model': msg('A direction model'),
   article: msg("Articles' readings"),
   user: msg('Your own views'),
-  'big-movers': msg('The big-mover list')
+  'big-movers': msg('The big-mover list'),
+  'top-traders': msg("The found traders' consensus")
 }
 
 const KIND_NAMES = { direction: msg('side and size'), size: msg('size alone') } as const
@@ -55,6 +56,8 @@ export function CameTrueView({ rows }: { rows: readonly SourceFiguresRow[] | nul
                 <th style={headCellStyle}>{t('Source')}</th>
                 <th style={headCellStyle}>{t('Scored')}</th>
                 <th style={headCellStyle}>{t('Side right')}</th>
+                <th style={headCellStyle}>{t('Right when it rose')}</th>
+                <th style={headCellStyle}>{t('Right when it fell')}</th>
                 <th style={headCellStyle}>{t('Net after costs')}</th>
                 <th style={headCellStyle}>{t('Size off by')}</th>
                 <th style={headCellStyle}>{t('Reached its target')}</th>
@@ -68,6 +71,8 @@ export function CameTrueView({ rows }: { rows: readonly SourceFiguresRow[] | nul
                   </td>
                   <td style={cellStyle}>{t('{scored} of {made}', { scored: num(row.figures.n), made: num(row.total) })}</td>
                   <td style={cellStyle}>{row.kind === 'size' ? '—' : shareText(row.figures.right, i18n)}</td>
+                  <td style={cellStyle}>{row.kind === 'size' ? '—' : shareText(row.figures.rightOnRising ?? null, i18n)}</td>
+                  <td style={cellStyle}>{row.kind === 'size' ? '—' : shareText(row.figures.rightOnFalling ?? null, i18n)}</td>
                   <td style={cellStyle}>{moveText(row.figures.net, i18n)}</td>
                   <td style={cellStyle}>{moveText(row.figures.sizeError, i18n)}</td>
                   <td style={cellStyle}>{shareText(row.figures.touched, i18n)}</td>

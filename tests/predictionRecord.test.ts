@@ -129,12 +129,29 @@ describe("a source's figures", () => {
     expect(sourceFiguresOf(rows).net).toEqual(figures.net)
   })
 
+  it('reads a side on the moves that rose and on those that fell apart: always one side is 50% balanced, however often right', () => {
+    // A source always calling down, in hours that mostly fell: right three times in four, and on no rise.
+    const rows = [scored(1000, true, 5), scored(1001, true, 4), scored(1002, true, 6), scored(1003, false, 2)]
+    const figures = sourceFiguresOf(rows)
+    expect(figures.right!.value).toBeCloseTo(0.75, 10)
+    expect(figures.rightOnFalling!.value).toBe(1)
+    expect(figures.rightOnRising!.value).toBe(0)
+    expect(figures.balanced!.value).toBe(0.5)
+    expect(figures.balanced!.low).toBeGreaterThanOrEqual(0)
+    expect(figures.balanced!.high).toBeLessThanOrEqual(1)
+    // Where nothing rose, the rises read nothing and their mean with them.
+    const falls = sourceFiguresOf([scored(1000, true, 5), scored(1001, true, 4)])
+    expect(falls.rightOnRising).toBeNull()
+    expect(falls.balanced).toBeNull()
+    expect(falls.rightOnFalling!.value).toBe(1)
+  })
+
   it('has no interval on a single unit, and no figure where nothing is scored', () => {
     const one = sourceFiguresOf([scored(1000, true, 5), scored(1000, true, 3)])
     expect(one.units).toBe(1)
     expect(one.net!.value).toBeCloseTo(4, 6)
     expect(Number.isNaN(one.net!.low)).toBe(true)
-    expect(sourceFiguresOf([])).toEqual({ n: 0, units: 0, missing: 0, right: null, net: null, sizeError: null, touched: null })
+    expect(sourceFiguresOf([])).toEqual({ n: 0, units: 0, missing: 0, right: null, net: null, sizeError: null, touched: null, rightOnRising: null, rightOnFalling: null, balanced: null })
   })
 
   it('reads days and hours as the units they are', () => {

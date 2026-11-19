@@ -105,13 +105,13 @@ describe("Performance's cards", () => {
 })
 
 describe("Home's tiles", () => {
-  it('say how the scored calls came out, a line a source with a side', () => {
+  it('say how the scored calls came out, a line a source with a side, on the rises and the falls apart', () => {
     const rows = [
-      { source: 'delisting-rule', kind: 'direction' as const, total: 4, owed: 0, firstAt: 1, lastAt: 2, figures: { n: 4, units: 2, missing: 0, right: figure(0.75, 0.3, 1), net: null, sizeError: null, touched: null } },
+      { source: 'delisting-rule', kind: 'direction' as const, total: 4, owed: 0, firstAt: 1, lastAt: 2, figures: { n: 4, units: 2, missing: 0, right: figure(0.75, 0.3, 1), net: null, sizeError: null, touched: null, rightOnRising: figure(1, 1, 1), rightOnFalling: figure(0.5, 0, 1), balanced: figure(0.75, 0.5, 1) } },
       { source: 'big-movers', kind: 'size' as const, total: 9, owed: 0, firstAt: 1, lastAt: 2, figures: { n: 9, units: 3, missing: 0, right: null, net: null, sizeError: null, touched: figure(0.4, 0.2, 0.6) } }
     ]
     const html = draw(createElement(PerformanceTileView, { rows, onOpen: () => undefined }))
-    expect(html).toContain('The delisting rule: 75% right of 4 scored')
+    expect(html).toContain('The delisting rule: right on 100% of the rises and 50% of the falls, 4 scored')
     expect(html).not.toContain('big-mover')
     expect(draw(createElement(PerformanceTileView, { rows: [], onOpen: () => undefined }))).toContain('No call has been scored yet')
   })
