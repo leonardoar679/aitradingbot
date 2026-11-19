@@ -1226,8 +1226,8 @@ trading too fast for Hyperliquid's window of fills. Two read SKILL, and still di
 p 0.0001 and both halves of each record positive. They cannot be followed: they hold a median 2.3 and 3.0 minutes, a
 follower two minutes late loses 0.89% a trip on the first's record, neither clone is REPLICABLE, and each made about
 $1,100 in its last 30 days. The second's delay test could not run at all: it was analysed at 22:06 UTC on 14 November in
-an outage, its coins' minutes unread, and its skill test read 145 of its 219 trips; a trader analysed in an outage keeps
-that analysis. What the found traders held was read every morning, five calls of the source 'top-traders' on file for
+an outage, its coins' minutes unread, and its skill test read 145 of its 219 trips; a trader analysed in an outage kept
+that analysis, as 26 of the 63 analysed did some reads lost. What the found traders held was read every morning, five calls of the source 'top-traders' on file for
 V9-TOP-TRADERS-2's sixty days; on 15 November an outage failed all 44 reads.
 
 The news, read by hand (V9-NEWS-CLASS): of 6 first reports of a theft, 4 raised a notice -- Across Protocol's drained
@@ -1248,7 +1248,10 @@ publication, which the app never measures, and says how many (e15a5a0); and the 
 told as suspect or unauthorized transfers or as outgoing ones flagged, for a theft, and a theft of miners' hashrate as
 about crypto (f4c207a, feed-v6), so that Unocoin's and Luxor's first reports now raise WATCH, the four archives changing
 in those three stories alone. Those rules were written from the two misses, so the six thefts read again by them are no
-measure of recall; the next run's news is.
+measure of recall; the next run's news is. And a page of bars that fails is asked once more two seconds later, and a
+found trader whose analysis lost reads is analysed again from the record on file six hours on, twice at most, Found for
+you saying the analysis was partly read (dc611af): of the run's 26 analyses with reads lost, 17 lost one to three coins'
+bars to one stalled page, and 9 lost six to sixty coins' to outages.
 
 **The found traders taken together.** V9-COPY-FORWARD registered that the found traders' verdicts be reported with
 the number analysed and the Benjamini-Hochberg adjustment across all of them, since they were picked for the profit the
